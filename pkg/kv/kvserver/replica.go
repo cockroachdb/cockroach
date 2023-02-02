@@ -397,12 +397,12 @@ type Replica struct {
 		mergeTxnID uuid.UUID
 		// The state of the Raft state machine.
 		state kvserverpb.ReplicaState
-		// Last index/term written to the raft log (not necessarily durable
-		// locally or committed by the group). Note that lastTerm may be 0 (and
-		// thus invalid) even when lastIndex is known, in which case the term
-		// will have to be retrieved from the Raft log entry. Use the
+		// Last index/term written to the raft log (not necessarily durable locally
+		// or committed by the group). Note that lastTermNotDurable may be 0 (and
+		// thus invalid) even when lastIndexNotDurable is known, in which case the
+		// term will have to be retrieved from the Raft log entry. Use the
 		// invalidLastTerm constant for this case.
-		lastIndex, lastTerm uint64
+		lastIndexNotDurable, lastTermNotDurable uint64
 		// A map of raft log index of pending snapshots to deadlines.
 		// Used to prohibit raft log truncations that would leave a gap between
 		// the snapshot and the new first index. The map entry has a zero
@@ -1294,7 +1294,7 @@ func (r *Replica) State(ctx context.Context) kvserverpb.RangeInfo {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	ri.ReplicaState = *(protoutil.Clone(&r.mu.state)).(*kvserverpb.ReplicaState)
-	ri.LastIndex = r.mu.lastIndex
+	ri.LastIndex = r.mu.lastIndexNotDurable
 	ri.NumPending = uint64(r.numPendingProposalsRLocked())
 	ri.RaftLogSize = r.mu.raftLogSize
 	ri.RaftLogSizeTrusted = r.mu.raftLogSizeTrusted

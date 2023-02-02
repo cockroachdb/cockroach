@@ -111,19 +111,19 @@ func (r *Replica) raftEntriesLocked(lo, hi, maxBytes uint64) ([]raftpb.Entry, er
 	return (*replicaRaftStorage)(r).Entries(lo, hi, maxBytes)
 }
 
-// invalidLastTerm is an out-of-band value for r.mu.lastTerm that
-// invalidates lastTerm caching and forces retrieval of Term(lastTerm)
-// from the raftEntryCache/RocksDB.
+// invalidLastTerm is an out-of-band value for r.mu.lastTermNotDurable that
+// invalidates lastTermNotDurable caching and forces retrieval of
+// Term(lastIndexNotDurable) from the raftEntryCache/Pebble.
 const invalidLastTerm = 0
 
 // Term implements the raft.Storage interface.
 // Term requires that r.mu is held for writing because it requires exclusive
 // access to r.mu.stateLoader.
 func (r *replicaRaftStorage) Term(i uint64) (uint64, error) {
-	// TODO(nvanbenschoten): should we set r.mu.lastTerm when
-	//   r.mu.lastIndex == i && r.mu.lastTerm == invalidLastTerm?
-	if r.mu.lastIndex == i && r.mu.lastTerm != invalidLastTerm {
-		return r.mu.lastTerm, nil
+	// TODO(nvanbenschoten): should we set r.mu.lastTermNotDurable when
+	//   r.mu.lastIndexNotDurable == i && r.mu.lastTermNotDurable == invalidLastTerm?
+	if r.mu.lastIndexNotDurable == i && r.mu.lastTermNotDurable != invalidLastTerm {
+		return r.mu.lastTermNotDurable, nil
 	}
 	ctx := r.AnnotateCtx(context.TODO())
 	return logstore.LoadTerm(ctx, r.mu.stateLoader.StateLoader, r.store.Engine(), r.RangeID,
@@ -145,7 +145,7 @@ func (r *Replica) GetTerm(i uint64) (uint64, error) {
 
 // raftLastIndexRLocked requires that r.mu is held for reading.
 func (r *Replica) raftLastIndexRLocked() uint64 {
-	return r.mu.lastIndex
+	return r.mu.lastIndexNotDurable
 }
 
 // LastIndex implements the raft.Storage interface.
@@ -731,13 +731,13 @@ func (r *Replica) applySnapshot(
 	// performance implications are not likely to be drastic. If our
 	// feelings about this ever change, we can add a LastIndex field to
 	// raftpb.SnapshotMetadata.
-	r.mu.lastIndex = state.RaftAppliedIndex
+	r.mu.lastIndexNotDurable = state.RaftAppliedIndex
 
 	// TODO(sumeer): We should be able to set this to
 	// nonemptySnap.Metadata.Term. See
 	// https://github.com/cockroachdb/cockroach/pull/75675#pullrequestreview-867926687
 	// for a discussion regarding this.
-	r.mu.lastTerm = invalidLastTerm
+	r.mu.lastTermNotDurable = invalidLastTerm
 	r.mu.raftLogSize = 0
 	// Update the store stats for the data in the snapshot.
 	r.store.metrics.subtractMVCCStats(ctx, r.tenantMetricsRef, *r.mu.state.Stats)
