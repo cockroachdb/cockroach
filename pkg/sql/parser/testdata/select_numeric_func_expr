@@ -1,0 +1,55 @@
+parse
+SELECT [FUNCTION 1074]()
+----
+SELECT [FUNCTION 1074]()
+SELECT ([FUNCTION 1074]()) -- fully parenthesized
+SELECT [FUNCTION 1074]() -- literals removed
+SELECT [FUNCTION 1074]() -- identifiers removed
+
+parse
+SELECT [FUNCTION 1074]('hello,world', ',')
+----
+SELECT [FUNCTION 1074]('hello,world', ',')
+SELECT ([FUNCTION 1074](('hello,world'), (','))) -- fully parenthesized
+SELECT [FUNCTION 1074]('_', '_') -- literals removed
+SELECT [FUNCTION 1074]('hello,world', ',') -- identifiers removed
+
+parse
+SELECT [FUNCTION 1074]([FUNCTION 1074]('hello,world', ','))
+----
+SELECT [FUNCTION 1074]([FUNCTION 1074]('hello,world', ','))
+SELECT ([FUNCTION 1074](([FUNCTION 1074](('hello,world'), (','))))) -- fully parenthesized
+SELECT [FUNCTION 1074]([FUNCTION 1074]('_', '_')) -- literals removed
+SELECT [FUNCTION 1074]([FUNCTION 1074]('hello,world', ',')) -- identifiers removed
+
+parse
+SELECT [FUNCTION 1074](*)
+----
+SELECT [FUNCTION 1074](*)
+SELECT ([FUNCTION 1074]((*))) -- fully parenthesized
+SELECT [FUNCTION 1074](*) -- literals removed
+SELECT [FUNCTION 1074](*) -- identifiers removed
+
+parse
+SELECT [FUNCTION 1074]('hello','word' ORDER BY a)
+----
+SELECT [FUNCTION 1074]('hello', 'word' ORDER BY a) -- normalized!
+SELECT ([FUNCTION 1074](('hello'), ('word') ORDER BY (a))) -- fully parenthesized
+SELECT [FUNCTION 1074]('_', '_' ORDER BY a) -- literals removed
+SELECT [FUNCTION 1074]('hello', 'word' ORDER BY _) -- identifiers removed
+
+parse
+SELECT [FUNCTION 1074](ALL 'hello', 'world' ORDER BY a)
+----
+SELECT [FUNCTION 1074](ALL 'hello', 'world' ORDER BY a)
+SELECT ([FUNCTION 1074](ALL ('hello'), ('world') ORDER BY (a))) -- fully parenthesized
+SELECT [FUNCTION 1074](ALL '_', '_' ORDER BY a) -- literals removed
+SELECT [FUNCTION 1074](ALL 'hello', 'world' ORDER BY _) -- identifiers removed
+
+parse
+SELECT [FUNCTION 1074](DISTINCT 'hello', 'world')
+----
+SELECT [FUNCTION 1074](DISTINCT 'hello', 'world')
+SELECT ([FUNCTION 1074](DISTINCT ('hello'), ('world'))) -- fully parenthesized
+SELECT [FUNCTION 1074](DISTINCT '_', '_') -- literals removed
+SELECT [FUNCTION 1074](DISTINCT 'hello', 'world') -- identifiers removed
