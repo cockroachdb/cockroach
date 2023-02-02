@@ -50,8 +50,10 @@ type testProposer struct {
 	// If not nil, this is called by RejectProposalWithRedirectLocked(). If nil,
 	// RejectProposalWithRedirectLocked() panics.
 	onRejectProposalWithRedirectLocked func(prop *ProposalData, redirectTo roachpb.ReplicaID)
-	// ownsValidLease is returned by ownsValidLeaseRLocked()
-	ownsValidLease bool
+	// validLease is returned by ownsValidLease()
+	validLease bool
+	// leaderNotLive is returned from shouldCampaignOnRedirect().
+	leaderNotLive bool
 
 	// leaderReplicaInDescriptor is set if the leader (as indicated by raftGroup)
 	// is known, and that leader is part of the range's descriptor (as seen by the
@@ -73,7 +75,8 @@ type testProposerRaft struct {
 	status raft.BasicStatus
 	// proposals are the commands that the propBuf flushed (i.e. passed to the
 	// Raft group) and have not yet been consumed with consumeProposals().
-	proposals []kvserverpb.RaftCommand
+	proposals  []kvserverpb.RaftCommand
+	campaigned bool
 }
 
 var _ proposerRaft = &testProposerRaft{}
@@ -106,6 +109,11 @@ func (t testProposerRaft) BasicStatus() raft.BasicStatus {
 
 func (t testProposerRaft) ProposeConfChange(i raftpb.ConfChangeI) error {
 	// TODO(andrei, nvanbenschoten): Capture the message and test against it.
+	return nil
+}
+
+func (t *testProposerRaft) Campaign() error {
+	t.campaigned = true
 	return nil
 }
 
@@ -160,14 +168,9 @@ func (t *testProposer) registerProposalLocked(p *ProposalData) {
 	t.registered++
 }
 
-func (t *testProposer) ownsValidLeaseRLocked(ctx context.Context, now hlc.ClockTimestamp) bool {
-	return t.ownsValidLease
-}
-
-func (t *testProposer) leaderStatusRLocked(
-	ctx context.Context, raftGroup proposerRaft,
-) rangeLeaderInfo {
-	leaderKnown := raftGroup.BasicStatus().Lead != raft.None
+func (t *testProposer) leaderStatus(ctx context.Context, raftGroup proposerRaft) rangeLeaderInfo {
+	lead := raftGroup.BasicStatus().Lead
+	leaderKnown := lead != raft.None
 	var leaderRep roachpb.ReplicaID
 	var iAmTheLeader, leaderEligibleForLease bool
 	if leaderKnown {
@@ -192,11 +195,19 @@ func (t *testProposer) leaderStatusRLocked(
 		}
 	}
 	return rangeLeaderInfo{
+		iAmTheLeader:           iAmTheLeader,
 		leaderKnown:            leaderKnown,
 		leader:                 leaderRep,
-		iAmTheLeader:           iAmTheLeader,
 		leaderEligibleForLease: leaderEligibleForLease,
 	}
+}
+
+func (t *testProposer) ownsValidLease(ctx context.Context, now hlc.ClockTimestamp) bool {
+	return t.validLease
+}
+
+func (t *testProposer) shouldCampaignOnRedirect(raftGroup proposerRaft) bool {
+	return t.leaderNotLive
 }
 
 func (t *testProposer) rejectProposalWithRedirectLocked(
@@ -460,10 +471,14 @@ func TestProposalBufferRejectLeaseAcqOnFollower(t *testing.T) {
 		// Set to simulate situations where the local replica is so behind that the
 		// leader is not even part of the range descriptor.
 		leaderNotInRngDesc bool
+		// Set to simulate situations where the Raft leader is not live in the node
+		// liveness map.
+		leaderNotLive bool
 		// If true, the follower has a valid lease.
 		ownsValidLease bool
 
 		expRejection bool
+		expCampaign  bool
 	}{
 		{
 			name:   "leader",
@@ -519,6 +534,17 @@ func TestProposalBufferRejectLeaseAcqOnFollower(t *testing.T) {
 			// FlushLockedWithRaftGroup().
 			expRejection: false,
 		},
+		{
+			name:  "follower, known eligible non-live leader",
+			state: raft.StateFollower,
+			// Someone else is leader.
+			leader:        self + 1,
+			leaderNotLive: true,
+			// Rejection - a follower can't request a lease.
+			expRejection: true,
+			// The leader is non-live, so we should campaign.
+			expCampaign: true,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var p testProposer
@@ -554,7 +580,8 @@ func TestProposalBufferRejectLeaseAcqOnFollower(t *testing.T) {
 			p.raftGroup = r
 			p.leaderReplicaInDescriptor = !tc.leaderNotInRngDesc
 			p.leaderReplicaType = tc.leaderRepType
-			p.ownsValidLease = tc.ownsValidLease
+			p.validLease = tc.ownsValidLease
+			p.leaderNotLive = tc.leaderNotLive
 
 			var b propBuf
 			clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
@@ -571,6 +598,7 @@ func TestProposalBufferRejectLeaseAcqOnFollower(t *testing.T) {
 			} else {
 				require.Equal(t, roachpb.ReplicaID(0), rejected)
 			}
+			require.Equal(t, tc.expCampaign, r.campaigned)
 			require.Zero(t, tracker.Count())
 		})
 	}

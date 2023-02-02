@@ -1839,7 +1839,7 @@ func shouldCampaignOnWake(
 	if raftStatus.RaftState != raft.StateFollower {
 		return false
 	}
-	// If we dont know who the leader is, then campaign.
+	// If we don't know who the leader is, then campaign.
 	if raftStatus.Lead == raft.None {
 		return true
 	}
@@ -1885,6 +1885,75 @@ func (r *Replica) maybeCampaignOnWakeLocked(ctx context.Context) {
 	if shouldCampaignOnWake(leaseStatus, r.store.StoreID(), raftStatus, livenessMap, r.descRLocked(), r.requiresExpiringLeaseRLocked()) {
 		r.campaignLocked(ctx)
 	}
+}
+
+// shouldCampaignOnLeaseRequestRedirect returns whether a replica that is
+// redirecting a lease request to its range's Raft leader should simultaneously
+// campaign to acquire Raft leadership itself. A follower replica may want to
+// campaign in such a case if it determines that the Raft leader is non-live
+// according to node liveness despite being able to retain Raft leadership
+// within the range. In such cases, the Raft leader will be unable to acquire an
+// epoch-based lease until it heartbeats its liveness record, so it would be
+// beneficial for one of the followers to step forward as leader/leaseholder.
+//
+// In these cases, campaigning for Raft leadership is safer than blindly
+// allowing the lease request to be proposed (through a redirected proposal).
+// This is because the follower may be arbitrarily far behind on its Raft log
+// and acquiring the lease in such cases could cause unavailability. By instead
+// calling a Raft pre-vote election, the follower can determine whether it is
+// behind on its log without risking disruption. If not, it will eventually
+// become leader and can proceed with a future attempt to acquire the lease.
+func shouldCampaignOnLeaseRequestRedirect(
+	raftStatus raft.BasicStatus,
+	livenessMap liveness.IsLiveMap,
+	desc *roachpb.RangeDescriptor,
+	requiresExpiringLease bool,
+	now hlc.Timestamp,
+) bool {
+	// If we're already campaigning don't start a new term.
+	if raftStatus.RaftState != raft.StateFollower {
+		return false
+	}
+	// If we don't know who the leader is, then campaign.
+	// NOTE: at the time of writing, we only reject lease requests and call this
+	// function when the leader is known, so this check is not needed. However, if
+	// that ever changes, and we do decide to reject a lease request when the
+	// leader is not known, we should immediately campaign.
+	if raftStatus.Lead == raft.None {
+		return true
+	}
+	// Avoid a circular dependency on liveness and skip the is leader alive check
+	// for ranges that always use expiration based leases. These ranges don't need
+	// to campaign based on liveness state because there can never be a case where
+	// a node can retain Raft leadership but still be unable to acquire the lease.
+	// This is possible on ranges that use epoch-based leases because the Raft
+	// leader may be partitioned from the liveness range.
+	// See TestRequestsOnFollowerWithNonLiveLeaseholder for an example of a test
+	// that demonstrates this case.
+	if requiresExpiringLease {
+		return false
+	}
+	// Determine if we think the leader is alive, if we don't have the leader in
+	// the descriptor we assume it is, since it could be an indication that this
+	// replica is behind.
+	replDesc, ok := desc.GetReplicaDescriptorByID(roachpb.ReplicaID(raftStatus.Lead))
+	if !ok {
+		return false
+	}
+	// If we don't know about the leader in our liveness map, then we err on the
+	// side of caution and don't campaign.
+	livenessEntry, ok := livenessMap[replDesc.NodeID]
+	if !ok {
+		return false
+	}
+	// Otherwise, we check if the leader is live according to node liveness and
+	// campaign if it is not.
+	// NOTE: we intentionally do not look at the IsLiveMapEntry.IsLive field,
+	// which accounts for whether the leader is reachable from this node (see
+	// Store.updateLivenessMap). We only care whether the leader is currently live
+	// according to node liveness because this determines whether it will be able
+	// to acquire an epoch-based lease.
+	return !livenessEntry.Liveness.IsLive(now.GoTime())
 }
 
 func (r *Replica) campaignLocked(ctx context.Context) {

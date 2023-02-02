@@ -106,6 +106,17 @@ type TestClusterInterface interface {
 		t testing.TB, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 	) roachpb.RangeDescriptor
 
+	// RebalanceVoter rebalances a voting replica from src to dest.
+	RebalanceVoter(
+		ctx context.Context, startKey roachpb.Key, src, dest roachpb.ReplicationTarget,
+	) (*roachpb.RangeDescriptor, error)
+
+	// RebalanceVoterOrFatal rebalances a voting replica from src to dest but wil
+	// fatal if it fails.
+	RebalanceVoterOrFatal(
+		ctx context.Context, t *testing.T, startKey roachpb.Key, src, dest roachpb.ReplicationTarget,
+	) *roachpb.RangeDescriptor
+
 	// SwapVoterWithNonVoter atomically "swaps" the voting replica located on
 	// `voterTarget` with the non-voting replica located on `nonVoterTarget`. A
 	// sequence of ReplicationChanges is considered to have "swapped" a voter on

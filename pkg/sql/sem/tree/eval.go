@@ -3984,7 +3984,7 @@ func TimestampToInexactDTimestamp(ts hlc.Timestamp) *DTimestamp {
 	return MustMakeDTimestamp(timeutil.Unix(0, ts.WallTime), time.Microsecond)
 }
 
-// GetRelativeParseTime implements ParseTimeContext.
+// GetRelativeParseTime implements ParseContext.
 func (ctx *EvalContext) GetRelativeParseTime() time.Time {
 	ret := ctx.TxnTimestamp
 	if ret.IsZero() {
@@ -4069,6 +4069,11 @@ func (ctx *EvalContext) GetDateStyle() pgdate.DateStyle {
 		return pgdate.DefaultDateStyle()
 	}
 	return ctx.SessionData().GetDateStyle()
+}
+
+// GetCollationEnv returns the collation env.
+func (ctx *EvalContext) GetCollationEnv() *CollationEnvironment {
+	return &ctx.CollationEnv
 }
 
 // Ctx returns the session's context.
