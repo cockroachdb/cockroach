@@ -42,7 +42,6 @@ type rangefeedMuxer struct {
 	demuxLoopDone chan struct{}
 
 	mu struct {
-		// lock used to coordinate establishment and tear down of client connections.
 		syncutil.Mutex
 
 		// map of active MuxRangeFeed clients.
@@ -67,8 +66,8 @@ type muxClientState struct {
 	client roachpb.Internal_MuxRangeFeedClient
 	cancel context.CancelFunc
 
-	initCtx terminationContext // Signaled when initialization completes.
-	doneCtx terminationContext // Signaled when client shuts down.
+	initCtx terminationContext // signaled when client ready to be used.
+	doneCtx terminationContext // signaled when client shuts down.
 
 	// Number of consumers (ranges) running on this node; accessed under rangefeedMuxer lock.
 	numStreams int
@@ -185,10 +184,10 @@ func (m *rangefeedMuxer) establishMuxConnection(
 		// It is important that we start MuxRangeFeed RPC using long-lived
 		// context available in the main context group used for this muxer.
 		m.g.GoCtx(func(ctx context.Context) error {
-			return m.startNodeMuxRangeFeedLocked(ctx, ms, client, nodeID)
+			return m.startNodeMuxRangeFeed(ctx, ms, client, nodeID)
 		})
+		m.mu.clients[nodeID] = ms
 	}
-	m.mu.clients[nodeID] = ms
 	m.mu.Unlock()
 
 	// Ensure mux client is ready.
@@ -201,7 +200,7 @@ func (m *rangefeedMuxer) establishMuxConnection(
 }
 
 // startNodeMuxRangeFeedLocked establishes MuxRangeFeed RPC with the node.
-func (m *rangefeedMuxer) startNodeMuxRangeFeedLocked(
+func (m *rangefeedMuxer) startNodeMuxRangeFeed(
 	ctx context.Context,
 	ms *muxClientState,
 	client rpc.RestrictedInternalClient,
