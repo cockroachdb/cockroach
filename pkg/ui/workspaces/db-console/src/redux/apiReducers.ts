@@ -507,6 +507,12 @@ const rawTraceReducerObj = new KeyedCachedDataReducer(
 );
 export const refreshRawTrace = rawTraceReducerObj.refresh;
 
+const networkLatencyReducerObj = new CachedDataReducer(
+  api.getNetworkConnectivity,
+  "networkLatency",
+);
+export const refreshNetworkLatency = networkLatencyReducerObj.refresh;
+
 export interface APIReducersState {
   cluster: CachedDataReducerState<api.ClusterResponseMessage>;
   events: CachedDataReducerState<clusterUiApi.EventsResponse>;
@@ -551,6 +557,7 @@ export interface APIReducersState {
   snapshots: KeyedCachedDataReducerState<clusterUiApi.ListTracingSnapshotsResponse>;
   snapshot: KeyedCachedDataReducerState<clusterUiApi.GetTracingSnapshotResponse>;
   rawTrace: KeyedCachedDataReducerState<clusterUiApi.GetTraceResponse>;
+  networkLatency: CachedDataReducerState<api.NetworkConnectivityResponse>;
 }
 
 export const apiReducersReducer = combineReducers<APIReducersState>({
@@ -602,6 +609,7 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [snapshotsReducerObj.actionNamespace]: snapshotsReducerObj.reducer,
   [snapshotReducerObj.actionNamespace]: snapshotReducerObj.reducer,
   [rawTraceReducerObj.actionNamespace]: rawTraceReducerObj.reducer,
+  [networkLatencyReducerObj.actionNamespace]: networkLatencyReducerObj.reducer,
 });
 
 export { CachedDataReducerState, KeyedCachedDataReducerState };

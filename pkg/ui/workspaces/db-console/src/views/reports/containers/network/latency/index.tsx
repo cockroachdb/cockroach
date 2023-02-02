@@ -22,7 +22,7 @@ import { getValueFromString, Identity } from "..";
 import "./latency.styl";
 import { Empty } from "src/components/empty";
 
-interface StdDev {
+export interface StdDev {
   stddev: number;
   stddevMinus2: number;
   stddevMinus1: number;

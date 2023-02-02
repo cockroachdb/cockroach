@@ -41,10 +41,14 @@ import { Legend } from "./legend";
 import Sort from "./sort";
 import { getMatchParamByName } from "src/util/query";
 import "./network.styl";
+import { createIdentityArray, selectValidLatencies } from "./selectors";
+import { createStdDev, getMean } from "./utils";
 
 interface NetworkOwnProps {
   nodesSummary: NodesSummary;
   nodeSummaryErrors: Error[];
+  identityArray: Identity[];
+  latencies: number[];
   refreshNodes: typeof refreshNodes;
   refreshLiveness: typeof refreshLiveness;
 }
@@ -214,20 +218,10 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
     noConnections: NoConnection[],
   ) {
     const { match } = this.props;
-    const nodeId = getMatchParamByName(match, "node_id");
     const { collapsed, filter } = this.state;
-    const mean = d3Mean(latencies);
+    const nodeId = getMatchParamByName(match, "node_id");
     const sortParams = this.getSortParams(displayIdentities);
-    let stddev = d3Deviation(latencies);
-    if (_.isUndefined(stddev)) {
-      stddev = 0;
-    }
-    // If there is no stddev, we should not display a legend. So there is no
-    // need to set these values.
-    const stddevPlus1 = stddev > 0 ? mean + stddev : 0;
-    const stddevPlus2 = stddev > 0 ? stddevPlus1 + stddev : 0;
-    const stddevMinus1 = stddev > 0 ? _.max([mean - stddev, 0]) : 0;
-    const stddevMinus2 = stddev > 0 ? _.max([stddevMinus1 - stddev, 0]) : 0;
+    const stdDev = createStdDev(latencies);
     const latencyTable = (
       <Latency
         displayIdentities={this.filteredDisplayIdentities(displayIdentities)}
@@ -236,17 +230,11 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
         node_id={nodeId}
         collapsed={collapsed}
         nodesSummary={nodesSummary}
-        std={{
-          stddev,
-          stddevMinus2,
-          stddevMinus1,
-          stddevPlus1,
-          stddevPlus2,
-        }}
+        std={stdDev}
       />
     );
 
-    if (stddev === 0) {
+    if (stdDev.stddev === 0) {
       return latencyTable;
     }
 
@@ -262,11 +250,11 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
       />,
       <div className="section">
         <Legend
-          stddevMinus2={stddevMinus2}
-          stddevMinus1={stddevMinus1}
-          mean={mean}
-          stddevPlus1={stddevPlus1}
-          stddevPlus2={stddevPlus2}
+          stddevMinus2={stdDev.stddevMinus2}
+          stddevMinus1={stdDev.stddevMinus1}
+          mean={getMean(latencies)}
+          stddevPlus1={stdDev.stddevPlus1}
+          stddevPlus2={stdDev.stddevPlus2}
           noConnections={noConnections}
         />
         {latencyTable}
@@ -328,31 +316,27 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
     return sort;
   };
 
-  getDisplayIdentities = (
-    healthyIDsContext: _.CollectionChain<number>,
-    staleIDsContext: _.CollectionChain<number>,
-    identityByID: Map<number, Identity>,
-  ) => {
-    const { match } = this.props;
+  // Applies user selected sort.
+  sortDisplayIdentities = () => {
+    const { match, identityArray } = this.props;
     const nodeId = getMatchParamByName(match, "node_id");
-    const identityContent = healthyIDsContext
-      .union(staleIDsContext.value())
-      .map(nodeID => identityByID.get(nodeID))
-      .sortBy(identity => identity.nodeID);
-    const sort = this.getSortParams(identityContent.value());
+    const sortedIdentityArray = _.chain(identityArray).sortBy(
+      identity => identity.nodeID,
+    );
+    const sort = this.getSortParams(sortedIdentityArray.value());
     if (sort.some(x => x.id === nodeId)) {
-      return identityContent
+      return sortedIdentityArray
         .sortBy(identity => getValueFromString(nodeId, identity.locality, true))
         .value();
     }
-    return identityContent.value();
+    return sortedIdentityArray.value();
   };
 
   renderContent(nodesSummary: NodesSummary, filters: NodeFilterListProps) {
     if (!contentAvailable(nodesSummary)) {
       return null;
     }
-    // List of node identities.
+    // @santamaura to remove.
     const identityByID: Map<number, Identity> = new Map();
     _.forEach(nodesSummary.nodeStatuses, status => {
       identityByID.set(status.desc.node_id, {
@@ -363,7 +347,8 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
       });
     });
 
-    // Calculate the mean and sampled standard deviation.
+    // @santamaura to remove these and replace with selector call
+    // for membership liveness.
     let healthyIDsContext = _.chain(nodesSummary.nodeIDs)
       .filter(
         nodeID =>
@@ -401,11 +386,8 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
     }
     const healthyIDs = healthyIDsContext.value();
     const staleIDs = new Set(staleIDsContext.value());
-    const displayIdentities: Identity[] = this.getDisplayIdentities(
-      healthyIDsContext,
-      staleIDsContext,
-      identityByID,
-    );
+    const displayIdentities: Identity[] = this.sortDisplayIdentities();
+    // @santamaura replace with values from selectValidLatencies.
     const latencies = _.flatMap(healthyIDs, nodeIDa =>
       _.chain(healthyIDs)
         .without(nodeIDa)
@@ -452,11 +434,7 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
         noConnections,
       );
     }
-    return [
-      content,
-      // staleTable(staleIdentities),
-      // noConnectionTable(noConnections),
-    ];
+    return [content];
   }
 
   render() {
@@ -495,6 +473,8 @@ const nodeSummaryErrors = createSelector(
 const mapStateToProps = (state: AdminUIState) => ({
   nodesSummary: nodesSummarySelector(state),
   nodeSummaryErrors: nodeSummaryErrors(state),
+  identityArray: createIdentityArray(state),
+  latencies: selectValidLatencies(state),
 });
 
 const mapDispatchToProps = {

@@ -215,6 +215,11 @@ export type ListTracingSnapshotsRequestMessage =
 export type ListTracingSnapshotsResponseMessage =
   protos.cockroach.server.serverpb.ListTracingSnapshotsResponse;
 
+export type NetworkConnectivityRequest =
+  protos.cockroach.server.serverpb.NetworkConnectivityRequest;
+export type NetworkConnectivityResponse =
+  protos.cockroach.server.serverpb.NetworkConnectivityResponse;
+
 // API constants
 
 export const API_PREFIX = "_admin/v1";
@@ -873,6 +878,18 @@ export function getKeyVisualizerSamples(
   return timeoutFetch(
     serverpb.KeyVisSamplesResponse,
     `${STATUS_PREFIX}/keyvissamples`,
+    req as any,
+    timeout,
+  );
+}
+
+export function getNetworkConnectivity(
+  req: NetworkConnectivityRequest,
+  timeout?: moment.Duration,
+): Promise<NetworkConnectivityResponse> {
+  return timeoutFetch(
+    serverpb.NetworkConnectivityResponse,
+    `${STATUS_PREFIX}/connectivity`,
     req as any,
     timeout,
   );
