@@ -743,6 +743,7 @@ CREATE TABLE system.privileges (
 	user_id OID,
 	CONSTRAINT "primary" PRIMARY KEY (username, path),
 	UNIQUE INDEX (path, user_id) STORING (privileges, grant_options),
+	UNIQUE INDEX (path, username) STORING (privileges, grant_options),
 	FAMILY "primary" (username, path, privileges, grant_options, user_id)
 );`
 
@@ -2939,6 +2940,16 @@ var (
 				StoreColumnNames:    []string{"privileges", "grant_options"},
 				StoreColumnIDs:      []descpb.ColumnID{3, 4},
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+			},
+			descpb.IndexDescriptor{
+				Name:                "privileges_path_username_idx_key",
+				ID:                  3,
+				Unique:              true,
+				KeyColumnNames:      []string{"path", "username"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{2, 1},
+				StoreColumnNames:    []string{"privileges", "grant_options"},
+				StoreColumnIDs:      []descpb.ColumnID{3, 4},
 			},
 		),
 	)
