@@ -341,6 +341,7 @@ func (s *innerStmtStats) jsonFields() jsonFields {
 		{"planGists", (*stringArray)(&s.PlanGists)},
 		{"indexes", (*stringArray)(&s.Indexes)},
 		{"latencyInfo", (*latencyInfo)(&s.LatencyInfo)},
+		{"lastErrorCode", (*jsonString)(&s.LastErrorCode)},
 	}
 }
 

@@ -1,0 +1,40 @@
+# Check that error messages and error codes are being surfaced correctly
+
+# Test 1: division by zero
+statement error division by zero
+SELECT 2/0;
+
+query T
+SELECT last_error_code FROM crdb_internal.node_statement_statistics WHERE last_error_code!='NULL';
+----
+22012
+
+# Test 2: database does not exist
+query TTTTTT colnames
+SHOW DATABASES
+----
+database_name  owner  primary_region  secondary_region  regions  survival_goal
+defaultdb      root   NULL            NULL              {}       NULL
+postgres       root   NULL            NULL              {}       NULL
+system         node   NULL            NULL              {}       NULL
+test           root   NULL            NULL              {}       NULL
+
+statement error pq: database "posgres" does not exist
+use posgres
+
+query T
+SELECT last_error_code FROM crdb_internal.node_statement_statistics WHERE last_error_code!='NULL';
+----
+22012
+3D000
+
+# Test 3: Nonexistant user
+statement error pq: role/user "who" does not exist
+ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES to who
+
+query T
+SELECT last_error_code FROM crdb_internal.node_statement_statistics WHERE last_error_code!='NULL';
+----
+42704
+22012
+3D000

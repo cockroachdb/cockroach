@@ -123,6 +123,9 @@ message StatementStatistics {
   // LatencyInfo is the information about latency, such min, max, p50, p90 and p99.
   optional LatencyInfo latency_info = 31 [(gogoproto.nullable) = false];
 
+  // last_error_code is the last error code for a failed statement, if it exists.
+  optional string last_error_code = 32 [(gogoproto.nullable) = false];
+
   // Note: be sure to update `sql/app_stats.go` when adding/removing fields here!
 
   reserved 13, 14, 17, 18, 19, 20;

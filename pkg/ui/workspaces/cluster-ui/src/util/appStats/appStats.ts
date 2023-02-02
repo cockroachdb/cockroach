@@ -250,6 +250,7 @@ export function addStatementStats(
     index_recommendations: indexRec,
     indexes: indexes,
     latency_info: aggregateLatencyInfo(a, b),
+    last_error_code: "",
   };
 }
 
