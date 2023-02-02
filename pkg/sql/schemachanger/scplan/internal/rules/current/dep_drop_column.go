@@ -123,3 +123,58 @@ func init() {
 		},
 	)
 }
+
+// Special rules partial predicate expressions, which ensure that any columns
+// used by them are not cleaned up before the partial index peredicate is
+// removed.
+func init() {
+	registerDepRuleForDrop(
+		"secondary index partial no longer public before referenced column",
+		scgraph.Precedence,
+		"secondary-partial-index", "column",
+		scpb.Status_DELETE_ONLY, scpb.Status_WRITE_ONLY,
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.Type((*scpb.SecondaryIndex)(nil)),
+				to.Type((*scpb.Column)(nil)),
+				JoinOnDescID(from, to, "table-id"),
+				descriptorIsNotBeingDropped(from.El),
+				FilterElements("secondaryIndexReferencesColumn", from, to,
+					func(index *scpb.SecondaryIndex, column *scpb.Column) bool {
+						if index.EmbeddedExpr == nil {
+							return false
+						}
+						for _, refColumns := range index.EmbeddedExpr.ReferencedColumnIDs {
+							if refColumns == column.ColumnID {
+								return true
+							}
+						}
+						return false
+					}),
+			}
+		},
+	)
+	registerDepRuleForDrop(
+		"secondary index partial no longer public before referenced column",
+		scgraph.Precedence,
+		"secondary-partial-index", "column",
+		scpb.Status_DELETE_ONLY, scpb.Status_WRITE_ONLY,
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.Type((*scpb.SecondaryIndexPartial)(nil)),
+				to.Type((*scpb.Column)(nil)),
+				JoinOnDescID(from, to, "table-id"),
+				descriptorIsNotBeingDropped(from.El),
+				FilterElements("secondaryIndexReferencesColumn", from, to,
+					func(index *scpb.SecondaryIndexPartial, column *scpb.Column) bool {
+						for _, refColumns := range index.ReferencedColumnIDs {
+							if refColumns == column.ColumnID {
+								return true
+							}
+						}
+						return false
+					}),
+			}
+		},
+	)
+}
