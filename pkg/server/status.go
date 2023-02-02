@@ -278,51 +278,62 @@ func (b *baseStatusServer) checkCancelPrivilege(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = b.AnnotateCtx(ctx)
 
-	ctxUsername, isAdmin, err := b.privilegeChecker.getUserAndRole(ctx)
+	ctxUsername, isCtxAdmin, err := b.privilegeChecker.getUserAndRole(ctx)
 	if err != nil {
 		return serverError(ctx, err)
 	}
 	if reqUsername.Undefined() {
 		reqUsername = ctxUsername
-	} else if reqUsername != ctxUsername && !isAdmin {
+	} else if reqUsername != ctxUsername && !isCtxAdmin {
 		// When CANCEL QUERY is run as a SQL statement, sessionUser is always root
 		// and the user who ran the statement is passed as req.Username.
 		return errRequiresAdmin
 	}
 
-	hasAdmin, err := b.privilegeChecker.hasAdminRole(ctx, reqUsername)
+	// A user can always cancel their own sessions/queries.
+	if sessionUsername == reqUsername {
+		return nil
+	}
+
+	// If reqUsername equals ctxUsername then isReqAdmin is isCtxAdmin and was
+	// checked inside getUserAndRole above.
+	isReqAdmin := isCtxAdmin
+	if reqUsername != ctxUsername {
+		isReqAdmin, err = b.privilegeChecker.hasAdminRole(ctx, reqUsername)
+		if err != nil {
+			return serverError(ctx, err)
+		}
+	}
+
+	// Admin users can cancel sessions/queries.
+	if isReqAdmin {
+		return nil
+	}
+
+	// Must have CANCELQUERY privilege to cancel other users'
+	// sessions/queries.
+	hasGlobalCancelQuery, err := b.privilegeChecker.hasGlobalPrivilege(ctx, reqUsername, privilege.CANCELQUERY)
 	if err != nil {
 		return serverError(ctx, err)
 	}
-
-	if !hasAdmin {
-		// Check if the user has permission to see the session.
-		if sessionUsername != reqUsername {
-			// Must have CANCELQUERY privilege to cancel other users'
-			// sessions/queries.
-			hasCancelQuery, err := b.privilegeChecker.hasGlobalPrivilege(ctx, reqUsername, privilege.CANCELQUERY)
-			if err != nil {
-				return serverError(ctx, err)
-			}
-			if !hasCancelQuery {
-				ok, err := b.privilegeChecker.hasRoleOption(ctx, reqUsername, roleoption.CANCELQUERY)
-				if err != nil {
-					return serverError(ctx, err)
-				}
-				if !ok {
-					return errRequiresRoleOption(roleoption.CANCELQUERY)
-				}
-			}
-			// Non-admins cannot cancel admins' sessions/queries.
-			isAdminSession, err := b.privilegeChecker.hasAdminRole(ctx, sessionUsername)
-			if err != nil {
-				return serverError(ctx, err)
-			}
-			if isAdminSession {
-				return status.Error(
-					codes.PermissionDenied, "permission denied to cancel admin session")
-			}
+	if !hasGlobalCancelQuery {
+		hasRoleCancelQuery, err := b.privilegeChecker.hasRoleOption(ctx, reqUsername, roleoption.CANCELQUERY)
+		if err != nil {
+			return serverError(ctx, err)
 		}
+		if !hasRoleCancelQuery {
+			return errRequiresRoleOption(roleoption.CANCELQUERY)
+		}
+	}
+
+	// Non-admins cannot cancel admins' sessions/queries.
+	isSessionAdmin, err := b.privilegeChecker.hasAdminRole(ctx, sessionUsername)
+	if err != nil {
+		return serverError(ctx, err)
+	}
+	if isSessionAdmin {
+		return status.Error(
+			codes.PermissionDenied, "permission denied to cancel admin session")
 	}
 
 	return nil
