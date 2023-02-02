@@ -31,6 +31,7 @@ func TestCPUProfiler(t *testing.T) {
 	sv := &s.SV
 	s.Version = clusterversion.MakeVersionHandle(sv)
 	sv.Init(ctx, s.Version)
+	cpuProfileInterval.Override(ctx, sv, time.Hour)
 	pastTime := time.Date(2023, 1, 1, 1, 1, 1, 1, time.UTC)
 	cases := []struct {
 		name             string
@@ -50,7 +51,7 @@ func TestCPUProfiler(t *testing.T) {
 			lastProfileTime:  pastTime,
 			expectNewProfile: false,
 		},
-		{
+		{ // TODO(santamaura): this test case is broken since there is no last profile.
 			name:             "no profile due to last profile being within the time interval",
 			cpuUsage:         90,
 			lastProfileTime:  timeutil.Now(),
@@ -59,17 +60,19 @@ func TestCPUProfiler(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
+			p := makeProfiler(
+				newProfileStore(dumpStore, CpuProfFileNamePrefix, HeapFileNameSuffix, s),
+				func() int64 { return cpuUsageCombined.Get(sv) },
+				func() time.Duration { return cpuProfileInterval.Get(sv) },
+			)
+			p.knobs = testingKnobs{
+				dontWriteProfiles: true,
+			}
+			p.lastProfileTime = c.lastProfileTime
+
 			cpuProfiler := CpuProfiler{
-				profiler: profiler{
-					store:           newProfileStore(dumpStore, CpuProfFileNamePrefix, HeapFileNameSuffix, s),
-					lastProfileTime: c.lastProfileTime,
-					highWaterMark:   cpuUsageCombined.Get(sv),
-					resetInterval:   cpuProfileInterval.Get(sv),
-					knobs: testingKnobs{
-						dontWriteProfiles: true,
-					},
-				},
-				st: s,
+				profiler: p,
+				st:       s,
 			}
 			cpuProfiler.MaybeTakeProfile(ctx, c.cpuUsage)
 			if c.expectNewProfile {
