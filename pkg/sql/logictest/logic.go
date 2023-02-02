@@ -380,14 +380,13 @@ import (
 //    in the cluster with index N (note this is 0-indexed, while
 //    node IDs themselves are 1-indexed). Otherwise, it will connect
 //    to the node with index 0 (node ID 1).
+//    A "host-cluster-" prefix can be prepended to the user, which will force
+//    the user session to be against the host cluster (useful for multi-tenant
+//    configurations).
 //
 //  - upgrade N
 //    When using a cockroach-go/testserver logictest, upgrades the node at
 //    index N to the version specified by the logictest config.
-//
-//    A "host-cluster-" prefix can be prepended to the user, which will force
-//    the user session to be against the host cluster (useful for multi-tenant
-//    configurations).
 //
 //  - skipif <mysql/mssql/postgresql/cockroachdb/config CONFIG [ISSUE]>
 //    Skips the following `statement` or `query` if the argument is
