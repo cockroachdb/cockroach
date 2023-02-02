@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/lib/pq/oid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -171,45 +172,62 @@ func TestAddResolvedFuncDef(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testCases := []struct {
-		def      *tree.FunctionDefinition
-		resolved map[string]*tree.ResolvedFunctionDefinition
+		def           *tree.FunctionDefinition
+		resolved      map[string]*tree.ResolvedFunctionDefinition
+		oidToOverload map[oid.Oid]tree.QualifiedOverload
 	}{
 		{
-			def: &tree.FunctionDefinition{Name: "crdb_internal.fun", Definition: []*tree.Overload{{}, {}}},
+			def: &tree.FunctionDefinition{Name: "crdb_internal.fun", Definition: []*tree.Overload{{Oid: 1}, {Oid: 2}}},
 			resolved: map[string]*tree.ResolvedFunctionDefinition{
 				"crdb_internal.fun": {
 					Name: "crdb_internal.fun",
 					Overloads: []tree.QualifiedOverload{
 						{
 							Schema:   "crdb_internal",
-							Overload: &tree.Overload{},
+							Overload: &tree.Overload{Oid: 1},
 						},
 						{
 							Schema:   "crdb_internal",
-							Overload: &tree.Overload{},
+							Overload: &tree.Overload{Oid: 2},
 						},
 					},
 				},
 			},
+			oidToOverload: map[oid.Oid]tree.QualifiedOverload{
+				1: {
+					Schema:   "crdb_internal",
+					Overload: &tree.Overload{Oid: 1},
+				},
+				2: {
+					Schema:   "crdb_internal",
+					Overload: &tree.Overload{Oid: 2},
+				},
+			},
 		},
 		{
-			def: &tree.FunctionDefinition{Name: "fun", Definition: []*tree.Overload{{}}},
+			def: &tree.FunctionDefinition{Name: "fun", Definition: []*tree.Overload{{Oid: 1}}},
 			resolved: map[string]*tree.ResolvedFunctionDefinition{
 				"pg_catalog.fun": {
 					Name: "fun",
 					Overloads: []tree.QualifiedOverload{
 						{
 							Schema:   "pg_catalog",
-							Overload: &tree.Overload{},
+							Overload: &tree.Overload{Oid: 1},
 						},
 					},
+				},
+			},
+			oidToOverload: map[oid.Oid]tree.QualifiedOverload{
+				1: {
+					Schema:   "pg_catalog",
+					Overload: &tree.Overload{Oid: 1},
 				},
 			},
 		},
 		{
 			def: &tree.FunctionDefinition{
 				Name:               "fun",
-				Definition:         []*tree.Overload{{}},
+				Definition:         []*tree.Overload{{Oid: 1}},
 				FunctionProperties: tree.FunctionProperties{AvailableOnPublicSchema: true},
 			},
 			resolved: map[string]*tree.ResolvedFunctionDefinition{
@@ -218,7 +236,7 @@ func TestAddResolvedFuncDef(t *testing.T) {
 					Overloads: []tree.QualifiedOverload{
 						{
 							Schema:   "pg_catalog",
-							Overload: &tree.Overload{},
+							Overload: &tree.Overload{Oid: 1},
 						},
 					},
 				},
@@ -227,9 +245,15 @@ func TestAddResolvedFuncDef(t *testing.T) {
 					Overloads: []tree.QualifiedOverload{
 						{
 							Schema:   "public",
-							Overload: &tree.Overload{},
+							Overload: &tree.Overload{Oid: 1},
 						},
 					},
+				},
+			},
+			oidToOverload: map[oid.Oid]tree.QualifiedOverload{
+				1: {
+					Schema:   "pg_catalog",
+					Overload: &tree.Overload{Oid: 1},
 				},
 			},
 		},
@@ -238,7 +262,8 @@ func TestAddResolvedFuncDef(t *testing.T) {
 	for i, tc := range testCases {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			resolved := make(map[string]*tree.ResolvedFunctionDefinition)
-			addResolvedFuncDef(resolved, tc.def)
+			oidToOverload := make(map[oid.Oid]tree.QualifiedOverload)
+			addResolvedFuncDef(resolved, oidToOverload, tc.def)
 			require.Equal(t, tc.resolved, resolved)
 		})
 	}
