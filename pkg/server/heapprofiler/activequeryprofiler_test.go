@@ -51,13 +51,15 @@ func TestNewActiveQueryProfiler(t *testing.T) {
 			wantErr:  false,
 			storeDir: heapProfilerDirName,
 			profiler: &ActiveQueryProfiler{
-				profiler: profiler{
-					store: newProfileStore(
+				profiler: makeProfiler(
+					newProfileStore(
 						dumpstore.NewStore(heapProfilerDirName, maxCombinedFileSize, nil),
 						QueryFileNamePrefix,
 						QueryFileNameSuffix,
 						nil),
-				},
+					zeroFloor,
+					envMemprofInterval,
+				),
 				cgroupMemLimit: mbToBytes(256),
 			},
 			limitFn: cgroupFnWithReturn(mbToBytes(256), "", nil),
@@ -72,6 +74,13 @@ func TestNewActiveQueryProfiler(t *testing.T) {
 				require.EqualError(t, err, test.errMsg)
 				return
 			}
+			require.Equal(t, test.profiler.highWaterMarkFloor(), profiler.highWaterMarkFloor())
+			test.profiler.highWaterMarkFloor = nil
+			profiler.highWaterMarkFloor = nil
+			require.Equal(t, test.profiler.resetInterval(), profiler.resetInterval())
+			test.profiler.resetInterval = nil
+			profiler.resetInterval = nil
+			require.Equal(t, test.profiler, profiler)
 			require.Equal(t, test.profiler, profiler)
 		})
 	}
