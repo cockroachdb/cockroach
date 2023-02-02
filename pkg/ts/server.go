@@ -12,12 +12,15 @@ package ts
 
 import (
 	"context"
+	"fmt"
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/ts/catalog"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -96,6 +99,8 @@ type Server struct {
 	workerMemMonitor *mon.BytesMonitor
 	resultMemMonitor *mon.BytesMonitor
 	workerSem        *quotapool.IntPool
+
+	AdminServer serverpb.AdminServer
 }
 
 var _ tspb.TimeSeriesServer = &Server{}
@@ -265,6 +270,16 @@ func (s *Server) Query(
 		NowNanos:            timeutil.Now().UnixNano(),
 	}
 
+	tenantList, err := s.AdminServer.ListTenants(ctx, &serverpb.ListTenantsRequest{})
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO(aadityas): figure out how to populate this
+	queryTenantOrigin := catconstants.SystemTenantName
+
+	log.Errorf(ctx, "HELLO 1 ! %v", tenantList)
+
 	// Start a task which is itself responsible for starting per-query worker
 	// tasks. This is needed because RunAsyncTaskEx can block; in the
 	// case where a single request has more queries than the semaphore limit,
@@ -275,6 +290,26 @@ func (s *Server) Query(
 		for queryIdx, query := range request.Queries {
 			queryIdx := queryIdx
 			query := query
+			var tenantPrefix string
+
+			if len(query.Sources) > 0 {
+				var tenantSources []string
+				for _, source := range query.Sources {
+					if queryTenantOrigin == catconstants.SystemTenantName {
+						for _, tenant := range tenantList.Tenants {
+							tenantSources = append(tenantSources, fmt.Sprintf("%s-%s", tenant.TenantName, source))
+						}
+					} else {
+						tenantSources = append(tenantSources, fmt.Sprintf("%s-%s", queryTenantOrigin, source))
+					}
+				}
+				query.Sources = tenantSources
+				log.Errorf(ctx, "HELLO 2 ! %v", query.Sources)
+			}
+
+			if len(query.Sources) == 0 && queryTenantOrigin != catconstants.SystemTenantName {
+				tenantPrefix = queryTenantOrigin
+			}
 
 			if err := s.stopper.RunAsyncTaskEx(
 				ctx,
@@ -310,6 +345,7 @@ func (s *Server) Query(
 						Resolution10s,
 						timespan,
 						memContexts[queryIdx],
+						tenantPrefix,
 					)
 					if err == nil {
 						response.Results[queryIdx] = tspb.TimeSeriesQueryResponse_Result{
@@ -351,6 +387,7 @@ func (s *Server) Query(
 		}
 	}
 
+	log.Errorf(ctx, "HELLO 3! %v", response.Results[0].Sources)
 	return &response, nil
 }
 

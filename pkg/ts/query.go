@@ -443,6 +443,7 @@ func (db *DB) Query(
 	diskResolution Resolution,
 	timespan QueryTimespan,
 	mem QueryMemoryContext,
+	tenantPrefix string,
 ) ([]tspb.TimeSeriesDatapoint, []string, error) {
 	timespan.normalize()
 
@@ -487,7 +488,7 @@ func (db *DB) Query(
 
 		if maxTimespanWidth > timespan.width() {
 			if err := db.queryChunk(
-				ctx, query, resolution, timespan, mem, &result, sourceSet,
+				ctx, query, resolution, timespan, mem, &result, sourceSet, tenantPrefix,
 			); err != nil {
 				return nil, nil, err
 			}
@@ -503,7 +504,7 @@ func (db *DB) Query(
 					chunkTime.EndNanos = timespan.EndNanos
 				}
 				if err := db.queryChunk(
-					ctx, query, resolution, chunkTime, mem, &result, sourceSet,
+					ctx, query, resolution, chunkTime, mem, &result, sourceSet, tenantPrefix,
 				); err != nil {
 					return nil, nil, err
 				}
@@ -541,6 +542,7 @@ func (db *DB) queryChunk(
 	mem QueryMemoryContext,
 	dest *[]tspb.TimeSeriesDatapoint,
 	sourceSet map[string]struct{},
+	tenantPrefix string,
 ) error {
 	acc := mem.workerMonitor.MakeBoundAccount()
 	defer acc.Close(ctx)
@@ -552,7 +554,7 @@ func (db *DB) queryChunk(
 	var data []kv.KeyValue
 	var err error
 	if len(query.Sources) == 0 {
-		data, err = db.readAllSourcesFromDatabase(ctx, query.Name, diskResolution, diskTimespan)
+		data, err = db.readAllSourcesFromDatabase(ctx, query.Name, diskResolution, diskTimespan, tenantPrefix)
 	} else {
 		data, err = db.readFromDatabase(ctx, query.Name, diskResolution, diskTimespan, query.Sources)
 	}
@@ -860,17 +862,21 @@ func (db *DB) readFromDatabase(
 // optional limit is used when memory usage is being limited by the number of
 // keys, rather than by timespan.
 func (db *DB) readAllSourcesFromDatabase(
-	ctx context.Context, seriesName string, diskResolution Resolution, timespan QueryTimespan,
+	ctx context.Context,
+	seriesName string,
+	diskResolution Resolution,
+	timespan QueryTimespan,
+	tenantPrefix string,
 ) ([]kv.KeyValue, error) {
 	// Based on the supplied timestamps and resolution, construct start and
 	// end keys for a scan that will return every key with data relevant to
 	// the query. Query slightly before and after the actual queried range
 	// to allow interpolation of points at the start and end of the range.
 	startKey := MakeDataKey(
-		seriesName, "" /* source */, diskResolution, timespan.StartNanos,
+		seriesName, tenantPrefix, diskResolution, timespan.StartNanos,
 	)
 	endKey := MakeDataKey(
-		seriesName, "" /* source */, diskResolution, timespan.EndNanos,
+		seriesName, tenantPrefix, diskResolution, timespan.EndNanos,
 	).PrefixEnd()
 	b := &kv.Batch{}
 	b.Scan(startKey, endKey)

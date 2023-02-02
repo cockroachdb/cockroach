@@ -1052,6 +1052,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		lateBoundServer,
 	)
 
+	sTS.AdminServer = sAdmin
+
 	// Connect the various servers to RPC.
 	for i, gw := range []grpcGatewayServer{sAdmin, sStatus, sAuth, &sTS} {
 		if reflect.ValueOf(gw).IsNil() {
