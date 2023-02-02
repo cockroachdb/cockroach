@@ -118,6 +118,7 @@ const statementStats: Required<IStatementStatistics> = {
     seconds: Long.fromInt(1599670292),
     nanos: 111613000,
   },
+  last_error_code: "",
   sensitive_info: {
     last_err: "",
     most_recent_plan_description: {
