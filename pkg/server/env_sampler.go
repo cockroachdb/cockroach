@@ -93,7 +93,7 @@ func startSampleEnvironment(
 	var nonGoAllocProfiler *heapprofiler.NonGoAllocProfiler
 	var statsProfiler *heapprofiler.StatsProfiler
 	var queryProfiler *heapprofiler.ActiveQueryProfiler
-	var cpuProfiler *heapprofiler.CpuProfiler
+	var cpuProfiler *heapprofiler.CPUProfiler
 	if cfg.heapProfileDirName != "" {
 		hasValidDumpDir := true
 		if err := os.MkdirAll(cfg.heapProfileDirName, 0755); err != nil {
