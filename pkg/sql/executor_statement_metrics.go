@@ -238,6 +238,10 @@ func (ex *connExecutor) recordStatementSummary(
 			ex.server.cfg.ContentionRegistry.AddContentionEvent(contentionEvent)
 		}
 
+		if queryLevelStats.ContentionTime > 0 {
+			ex.planner.DistSQLPlanner().distSQLSrv.Metrics.ContendedQueriesCount.Inc(1)
+		}
+
 		err = ex.statsCollector.RecordStatementExecStats(recordedStmtStatsKey, *queryLevelStats)
 		if err != nil {
 			if log.V(2 /* level */) {
