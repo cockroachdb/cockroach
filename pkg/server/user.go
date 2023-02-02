@@ -22,7 +22,7 @@ import (
 func (s *baseStatusServer) UserSQLRoles(
 	ctx context.Context, req *serverpb.UserSQLRolesRequest,
 ) (_ *serverpb.UserSQLRolesResponse, retErr error) {
-	ctx = propagateGatewayMetadata(ctx)
+	ctx = forwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
 	username, isAdmin, err := s.privilegeChecker.getUserAndRole(ctx)

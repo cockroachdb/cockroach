@@ -33,7 +33,7 @@ func (s *statusServer) Statements(
 		return s.CombinedStatementStats(ctx, &combinedRequest)
 	}
 
-	ctx = propagateGatewayMetadata(ctx)
+	ctx = forwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
 	if err := s.privilegeChecker.requireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {

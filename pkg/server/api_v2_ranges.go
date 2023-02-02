@@ -106,7 +106,7 @@ type nodesResponse struct {
 func (a *apiV2SystemServer) listNodes(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	limit, offset := getSimplePaginationValues(r)
-	ctx = apiToOutgoingGatewayCtx(ctx, r)
+	ctx = forwardHTTPAuthInfoToRPCCalls(ctx, r)
 
 	nodes, next, err := a.systemStatus.nodesHelper(ctx, limit, offset)
 	if err != nil {
@@ -195,7 +195,7 @@ type rangeResponse struct {
 //	    "$ref": "#/definitions/rangeResponse"
 func (a *apiV2Server) listRange(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	ctx = apiToOutgoingGatewayCtx(ctx, r)
+	ctx = forwardHTTPAuthInfoToRPCCalls(ctx, r)
 	vars := mux.Vars(r)
 	rangeID, err := strconv.ParseInt(vars["range_id"], 10, 64)
 	if err != nil {
@@ -378,7 +378,7 @@ type nodeRangesResponse struct {
 //	    "$ref": "#/definitions/nodeRangesResponse"
 func (a *apiV2SystemServer) listNodeRanges(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	ctx = apiToOutgoingGatewayCtx(ctx, r)
+	ctx = forwardHTTPAuthInfoToRPCCalls(ctx, r)
 	vars := mux.Vars(r)
 	nodeIDStr := vars["node_id"]
 	if nodeIDStr != "local" {
@@ -497,7 +497,7 @@ type hotRangeInfo struct {
 //	    "$ref": "#/definitions/hotRangesResponse"
 func (a *apiV2Server) listHotRanges(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	ctx = apiToOutgoingGatewayCtx(ctx, r)
+	ctx = forwardHTTPAuthInfoToRPCCalls(ctx, r)
 	nodeIDStr := r.URL.Query().Get("node_id")
 	limit, start := getRPCPaginationValues(r)
 
