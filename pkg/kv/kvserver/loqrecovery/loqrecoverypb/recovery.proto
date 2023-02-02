@@ -114,6 +114,11 @@ message ReplicaUpdatePlan {
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
   // ClusterID contains id of the cluster from which info was collected.
   string cluster_id = 4 [(gogoproto.customname) = "ClusterID"];
+  // StaleLeaseholderNodeIDs is a set of node IDs that need to be restarted even
+  // they have no scheduled changes. This is needed to get rid of range leases
+  // that they hold and that can't be shed because quorum is lost on the ranges.
+  repeated int32 stale_leaseholder_node_ids = 5 [(gogoproto.customname) = "StaleLeaseholderNodeIDs",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
 }
 
 // ReplicaRecoveryRecord is a struct that loss of quorum recovery commands
