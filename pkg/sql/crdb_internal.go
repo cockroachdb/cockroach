@@ -1337,6 +1337,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
   first_attempt_count INT NOT NULL,
   max_retries         INT NOT NULL,
   last_error          STRING,
+  last_error_code     STRING,
   rows_avg            FLOAT NOT NULL,
   rows_var            FLOAT NOT NULL,
   idle_lat_avg        FLOAT NOT NULL,
@@ -1405,6 +1406,12 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 			if stats.Stats.SensitiveInfo.LastErr != "" {
 				errString = tree.NewDString(stats.Stats.SensitiveInfo.LastErr)
 			}
+
+			errCode := tree.DNull
+			if stats.Stats.LastErrorCode != "" {
+				errCode = tree.NewDString(stats.Stats.LastErrorCode)
+			}
+
 			var flags string
 			if stats.Key.DistSQL {
 				flags = "+"
@@ -1446,6 +1453,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 				tree.NewDInt(tree.DInt(stats.Stats.FirstAttemptCount)),    // first_attempt_count
 				tree.NewDInt(tree.DInt(stats.Stats.MaxRetries)),           // max_retries
 				errString, // last_error
+				errCode,   // last_error_code
 				tree.NewDFloat(tree.DFloat(stats.Stats.NumRows.Mean)),                               // rows_avg
 				tree.NewDFloat(tree.DFloat(stats.Stats.NumRows.GetVariance(stats.Stats.Count))),     // rows_var
 				tree.NewDFloat(tree.DFloat(stats.Stats.IdleLat.Mean)),                               // idle_lat_avg

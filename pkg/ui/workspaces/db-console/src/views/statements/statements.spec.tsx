@@ -530,6 +530,7 @@ function makeStats(): Required<StatementStatistics> {
     plan_gists: ["Ais="],
     index_recommendations: [],
     indexes: ["123@456"],
+    error_code: "",
   };
 }
 

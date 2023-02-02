@@ -1976,6 +1976,13 @@ func TestLogic_statement_statistics(
 	runLogicTest(t, "statement_statistics")
 }
 
+func TestLogic_statement_statistics_errors(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "statement_statistics_errors")
+}
+
 func TestLogic_stats(
 	t *testing.T,
 ) {
