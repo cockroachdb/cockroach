@@ -49,7 +49,6 @@ type rangefeedMuxer struct {
 		// that we always send the event to the correct consumer -- even if the
 		// range feed is terminated and re-established rapidly.
 		nextStreamID int64
-		connectDone  chan error // Channel to communicate connect attempt completion.
 
 		// map of active MuxRangeFeed clients.
 		clients map[roachpb.NodeID]*muxClientState
@@ -66,7 +65,7 @@ type muxClientState struct {
 	client roachpb.Internal_MuxRangeFeedClient
 	cancel context.CancelFunc
 
-	done    chan struct{} // Signaled to indicate MuxRangeFeed shutdown.
+	done    chan struct{} // signaled to indicate that `client` shut down.
 	recvErr error         // Set when shutdown.
 
 	// Number of consumers (ranges) running on this node; accessed under rangefeedMuxer lock.
@@ -95,10 +94,10 @@ type channelRangeFeedEventProducer struct {
 	// caller blocks in Recv(), we have to respect cancellations in both contexts.
 	// streamCtx may be canceled by the caller if, for example, range becomes
 	// stuck (or parent context cancels). The muxCtx gets notified when
-	// receveEvents exits -- this may happen if connection was broken, or perhaps
+	// receiveEvents exits -- this may happen if connection was broken, or perhaps
 	// node is being shut down, etc.
 	streamCtx context.Context
-	muxCtx    terminationContext
+	muxCtx    terminationContext // NB: actually a *muxClientState
 
 	streamID int64                        // stream ID for this producer.
 	eventCh  chan *roachpb.RangeFeedEvent // consumer event channel.
@@ -124,6 +123,10 @@ func (c *channelRangeFeedEventProducer) Recv() (*roachpb.RangeFeedEvent, error) 
 func (m *rangefeedMuxer) startMuxRangeFeed(
 	ctx context.Context, client rpc.RestrictedInternalClient, req *roachpb.RangeFeedRequest,
 ) (roachpb.RangeFeedEventProducer, func(), error) {
+	// NB: the `ctx` in scope here belongs to a client for a single range feed, and must
+	// not influence the lifetime of the mux connection. At the time of writing, the caller
+	// is `singleRangeFeed` which calls into this method through its streamProducerFactory
+	// argument.
 	streamID, ms, err := m.establishMuxConnection(client, req.Replica.NodeID)
 	if err != nil {
 		return nil, nil, err
@@ -179,7 +182,7 @@ func (m *rangefeedMuxer) establishMuxConnection(
 	ms, found := m.mu.clients[nodeID]
 	if !found {
 		// Establish new MuxRangefeed for this node.
-		ms, err = m.startNodeMuxRangeFeed(client, nodeID)
+		ms, err = m.startNodeMuxRangeFeedLocked(client, nodeID)
 		if err != nil {
 			return 0, nil, err
 		}
@@ -191,14 +194,12 @@ func (m *rangefeedMuxer) establishMuxConnection(
 	return m.mu.nextStreamID, ms, nil
 }
 
-// startNodeMuxRangeFeed establishes MuxRangeFeed RPC with the node.
-// Runs under mux lock.
-func (m *rangefeedMuxer) startNodeMuxRangeFeed(
+// startNodeMuxRangeFeedLocked establishes MuxRangeFeed RPC with the node.
+// m.mu must be held.
+func (m *rangefeedMuxer) startNodeMuxRangeFeedLocked(
 	client rpc.RestrictedInternalClient, nodeID roachpb.NodeID,
 ) (*muxClientState, error) {
-	if m.mu.connectDone == nil {
-		m.mu.connectDone = make(chan error, 1)
-	}
+	connectErr := make(chan error, 1)
 
 	ms := &muxClientState{done: make(chan struct{})}
 
@@ -225,14 +226,21 @@ func (m *rangefeedMuxer) startNodeMuxRangeFeed(
 		defer ms.cancel()
 
 		ms.client, err = client.MuxRangeFeed(ctx)
-		m.mu.connectDone <- err
+		connectErr <- err
 		if err != nil {
+			// TODO(during review): should this not be a `return nil`?
+			// We don't expect an error here, but still.
 			return err
 		}
 		return m.receiveEventsFromNode(ms)
 	})
 
-	return ms, <-m.mu.connectDone
+	// NB: we hold the mutex here, across the call to `client.MuxRangeFeed` above.
+	// If that call blocked, we might delay connection attempts to other nodes.
+	// However `MuxRangeFeed` is not an operation expected to block - it
+	// instantiates a new stream on the existing InternalClient wrapping a
+	// (moments ago, or we wouldn't be using it) connection.
+	return ms, <-connectErr
 }
 
 // demuxLoop de-multiplexes events and sends them to appropriate rangefeed event
