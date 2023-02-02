@@ -63,7 +63,7 @@ func (e *explainPlanNode) startExec(params runParams) error {
 		// after the plan is finalized (when the physical plan is successfully
 		// created).
 		distribution := getPlanDistribution(
-			params.ctx, params.p, params.extendedEvalCtx.ExecCfg.NodeInfo.NodeID,
+			params.ctx, params.p.Descriptors().HasUncommittedTypes(),
 			params.extendedEvalCtx.SessionData().DistSQLMode, plan.main,
 		)
 
@@ -90,7 +90,7 @@ func (e *explainPlanNode) startExec(params runParams) error {
 		} else {
 			// There might be an issue making the physical plan, but that should not
 			// cause an error or panic, so swallow the error. See #40677 for example.
-			distSQLPlanner.finalizePlanWithRowCount(params.ctx, planCtx, physicalPlan, plan.mainRowCount)
+			finalizePlanWithRowCount(params.ctx, planCtx, physicalPlan, plan.mainRowCount)
 			ob.AddDistribution(physicalPlan.Distribution.String())
 			flows := physicalPlan.GenerateFlowSpecs()
 
