@@ -11,8 +11,10 @@
 package loqrecovery_test
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"os/exec"
 	"strconv"
 	"sync/atomic"
 	"testing"
@@ -514,4 +516,15 @@ func makeTestRecoveryPlan(
 		PlanID:    uuid.MakeV4(),
 		ClusterID: cr.ClusterID,
 	}
+}
+
+func TestGetTestEnvironment(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	cmd := exec.Command("ps", "ax")
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	require.NoError(t, cmd.Run(), "failed to run ps")
+	t.Logf("%s", out.String())
+	t.Fatal("done")
 }
