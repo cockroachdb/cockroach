@@ -120,3 +120,18 @@ regions: <hidden>
       estimated row count: 1,000 (missing stats)
       table: ab@ab_pkey
       spans: FULL SCAN
+
+statement ok
+GRANT SELECT ON crdb_internal.tables TO root;
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM system.privileges WHERE path = 'vtable/crdb_internal/tables';
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (username, path, privileges, grant_options, user_id)
+  estimated row count: 10 (missing stats)
+  table: privileges@privileges_path_user_id_key
+  spans: /"vtable/crdb_internal/tables"-/"vtable/crdb_internal/tables"/PrefixEnd
