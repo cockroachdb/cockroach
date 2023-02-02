@@ -431,6 +431,6 @@ func (r fkResolver) ResolveFunction(
 // ResolveFunctionByOID implements the resolver.SchemaResolver interface.
 func (r fkResolver) ResolveFunctionByOID(
 	ctx context.Context, oid oid.Oid,
-) (string, *tree.Overload, error) {
-	return "", nil, errSchemaResolver
+) (*tree.FunctionName, *tree.Overload, error) {
+	return nil, nil, errSchemaResolver
 }

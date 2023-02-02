@@ -344,7 +344,7 @@ func (oc *optCatalog) ResolveFunction(
 
 func (oc *optCatalog) ResolveFunctionByOID(
 	ctx context.Context, oid oid.Oid,
-) (string, *tree.Overload, error) {
+) (*tree.FunctionName, *tree.Overload, error) {
 	return oc.planner.ResolveFunctionByOID(ctx, oid)
 }
 

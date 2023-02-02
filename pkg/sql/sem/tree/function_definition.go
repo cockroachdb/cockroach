@@ -198,6 +198,10 @@ var ResolvedBuiltinFuncDefs map[string]*ResolvedFunctionDefinition
 // package because of dependency issues: we can't use oidHasher from this file.
 var OidToBuiltinName map[oid.Oid]string
 
+// OidToQualifiedBuiltinOverload is a map from builtin function OID to an
+// qualified overload.
+var OidToQualifiedBuiltinOverload map[oid.Oid]QualifiedOverload
+
 // Format implements the NodeFormatter interface.
 func (fd *FunctionDefinition) Format(ctx *FmtCtx) {
 	ctx.WriteString(fd.Name)

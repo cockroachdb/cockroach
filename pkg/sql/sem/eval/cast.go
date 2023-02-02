@@ -998,7 +998,7 @@ func performIntToOidCast(
 			}
 			return nil, err
 		}
-		return tree.NewDOidWithTypeAndName(o, t, name), nil
+		return tree.NewDOidWithTypeAndName(o, t, name.Object()), nil
 
 	default:
 		if v == 0 {
