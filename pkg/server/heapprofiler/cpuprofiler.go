@@ -64,11 +64,11 @@ func NewCPUProfiler(ctx context.Context, dir string, st *cluster.Settings) (*Cpu
 	log.Infof(ctx, "writing cpu profile dumps to %s", log.SafeManaged(dir))
 	dumpStore := dumpstore.NewStore(dir, MaxCombinedCPUProfFileSize, st)
 	cp := &CpuProfiler{
-		profiler: profiler{
-			store:              newProfileStore(dumpStore, CpuProfFileNamePrefix, HeapFileNameSuffix, st),
-			highwaterMarkBytes: cpuUsageCombined.Get(&st.SV),
-			resetInterval:      cpuProfileInterval.Get(&st.SV),
-		},
+		profiler: makeProfiler(
+			newProfileStore(dumpStore, CpuProfFileNamePrefix, HeapFileNameSuffix, st),
+			func() int64 { return cpuUsageCombined.Get(&st.SV) },
+			func() time.Duration { return cpuProfileInterval.Get(&st.SV) },
+		),
 		st: st,
 	}
 	return cp, nil
@@ -80,8 +80,9 @@ func (cp *CpuProfiler) MaybeTakeProfile(ctx context.Context, currentCpuUsage int
 }
 
 func (cp *CpuProfiler) takeCpuProfile(ctx context.Context, path string) (success bool) {
+	// TODO(santamaura): not CPUProfileWithLabels?
 	if err := debug.CPUProfileDo(cp.st, cluster.CPUProfileDefault, func() error {
-		// Try writing a go heap profile.
+		// Try writing a CPU profile.
 		f, err := os.Create(path)
 		if err != nil {
 			log.Warningf(ctx, "error creating go heap profile %s: %v", path, err)
