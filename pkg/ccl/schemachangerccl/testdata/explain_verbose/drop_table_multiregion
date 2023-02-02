@@ -54,8 +54,9 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │   ├── • ObjectParent:{DescID: 108, ReferencedDescID: 105}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 108}
+│       │   │   └── • SameStagePrecedence dependency from DROPPED Table:{DescID: 108}
 │       │   │         rule: "descriptor dropped before dependent element removal"
+│       │   │         rule: "descriptor dropped right before removing back-reference in its parent descriptor"
 │       │   │
 │       │   ├── • TablePartitioning:{DescID: 108}
 │       │   │   │ PUBLIC → ABSENT
@@ -114,6 +115,9 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │   ├── • ColumnNotNull:{DescID: 108, ColumnID: 1, IndexID: 0}
 │       │   │   │ PUBLIC → VALIDATED
 │       │   │   │
+│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108}
+│       │   │   │     rule: "relation dropped before dependent constraint"
+│       │   │   │
 │       │   │   └── • skip PUBLIC → VALIDATED operations
 │       │   │         rule: "skip constraint removal ops on relation drop"
 │       │   │
@@ -152,6 +156,9 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │   │
 │       │   ├── • ColumnNotNull:{DescID: 108, ColumnID: 2, IndexID: 0}
 │       │   │   │ PUBLIC → VALIDATED
+│       │   │   │
+│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108}
+│       │   │   │     rule: "relation dropped before dependent constraint"
 │       │   │   │
 │       │   │   └── • skip PUBLIC → VALIDATED operations
 │       │   │         rule: "skip constraint removal ops on relation drop"
@@ -467,8 +474,9 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │   ├── • ObjectParent:{DescID: 108, ReferencedDescID: 105}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 108}
+│       │   │   └── • SameStagePrecedence dependency from DROPPED Table:{DescID: 108}
 │       │   │         rule: "descriptor dropped before dependent element removal"
+│       │   │         rule: "descriptor dropped right before removing back-reference in its parent descriptor"
 │       │   │
 │       │   ├── • TablePartitioning:{DescID: 108}
 │       │   │   │ PUBLIC → ABSENT
@@ -545,6 +553,9 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │   ├── • ColumnNotNull:{DescID: 108, ColumnID: 1, IndexID: 0}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108}
+│       │   │   │     rule: "relation dropped before dependent constraint"
+│       │   │   │
 │       │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 108, ColumnID: 1}
 │       │   │   │     rule: "column no longer public before dependents"
 │       │   │   │
@@ -607,6 +618,9 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │   │
 │       │   ├── • ColumnNotNull:{DescID: 108, ColumnID: 2, IndexID: 0}
 │       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108}
+│       │   │   │     rule: "relation dropped before dependent constraint"
 │       │   │   │
 │       │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 108, ColumnID: 2}
 │       │   │   │     rule: "column no longer public before dependents"

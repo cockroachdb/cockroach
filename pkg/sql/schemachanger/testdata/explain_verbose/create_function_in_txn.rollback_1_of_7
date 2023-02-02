@@ -50,8 +50,9 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
     │   │   ├── • ObjectParent:{DescID: 105, ReferencedDescID: 101}
     │   │   │   │ PUBLIC → ABSENT
     │   │   │   │
-    │   │   │   └── • Precedence dependency from DROPPED Function:{DescID: 105}
+    │   │   │   └── • SameStagePrecedence dependency from DROPPED Function:{DescID: 105}
     │   │   │         rule: "descriptor dropped before dependent element removal"
+    │   │   │         rule: "descriptor dropped right before removing back-reference in its parent descriptor"
     │   │   │
     │   │   ├── • FunctionName:{DescID: 105}
     │   │   │   │ PUBLIC → ABSENT

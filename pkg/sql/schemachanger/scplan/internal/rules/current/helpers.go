@@ -65,7 +65,7 @@ func isSubjectTo2VersionInvariant(e scpb.Element) bool {
 	// TODO(ajwerner): This should include constraints and enum values but it
 	// currently does not because we do not support dropping them unless we're
 	// dropping the descriptor and we do not support adding them.
-	return isIndex(e) || isColumn(e) || isSupportedNonIndexBackedConstraint(e)
+	return isIndex(e) || isColumn(e) || isNonIndexBackedConstraint(e)
 }
 
 func isIndex(e scpb.Element) bool {
@@ -184,11 +184,8 @@ func isIndexDependent(e scpb.Element) bool {
 	return false
 }
 
-// isSupportedNonIndexBackedConstraint a non-index-backed constraint is one of {Check, FK, UniqueWithoutIndex}. We only
-// support Check for now.
-// TODO (xiang): Expand this predicate to include other non-index-backed constraints
-// when we properly support adding/dropping them in the new schema changer.
-func isSupportedNonIndexBackedConstraint(e scpb.Element) bool {
+// isNonIndexBackedConstraint a non-index-backed constraint.
+func isNonIndexBackedConstraint(e scpb.Element) bool {
 	switch e.(type) {
 	case *scpb.CheckConstraint, *scpb.ForeignKeyConstraint, *scpb.UniqueWithoutIndexConstraint,
 		*scpb.ColumnNotNull:
@@ -202,6 +199,21 @@ func isConstraint(e scpb.Element) bool {
 	case *scpb.PrimaryIndex, *scpb.SecondaryIndex, *scpb.TemporaryIndex:
 		return true
 	case *scpb.CheckConstraint, *scpb.UniqueWithoutIndexConstraint, *scpb.ForeignKeyConstraint:
+		return true
+	}
+	return false
+}
+
+// isCrossDescriptorConstraint are constraints that might reference
+// other descriptors:
+//   - FKs can reference other table
+//   - Checks can reference other sequences/types
+//
+// Those constraints need to be dropped first when we are dropping either
+// the referencing or reference descriptor.
+func isCrossDescriptorConstraint(e scpb.Element) bool {
+	switch e.(type) {
+	case *scpb.ForeignKeyConstraint, *scpb.CheckConstraint:
 		return true
 	}
 	return false
@@ -224,6 +236,14 @@ func isData(e scpb.Element) bool {
 	case *scpb.TableData:
 		return true
 	case *scpb.IndexData:
+		return true
+	}
+	return false
+}
+
+func isDescriptorParentReference(e scpb.Element) bool {
+	switch e.(type) {
+	case *scpb.ObjectParent, *scpb.SchemaParent:
 		return true
 	}
 	return false

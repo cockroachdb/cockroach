@@ -11991,12 +11991,11 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 				pt.PushTo = now
 				return sendWrappedWithErr(roachpb.Header{}, &pt)
 			},
-			expTxn: func(txn *roachpb.Transaction, pushTs hlc.Timestamp) roachpb.TransactionRecord {
-				record := txn.AsRecord()
-				record.WriteTimestamp.Forward(pushTs)
-				record.Priority = pusher.Priority - 1
-				return record
-			},
+			// The transaction record **is not** updated in this case. Instead, the
+			// push is communicated through the timestamp cache. When the pushee goes
+			// to commit, it will consult the timestamp cache and find that it must
+			// commit above the push timestamp.
+			expTxn: txnWithoutChanges,
 		},
 		{
 			name: "push transaction (abort) after heartbeat transaction",
@@ -12290,9 +12289,9 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 				return sendWrappedWithErr(roachpb.Header{}, &pt)
 			},
 			expTxn: func(txn *roachpb.Transaction, pushTs hlc.Timestamp) roachpb.TransactionRecord {
-				record := txn.AsRecord()
+				record := txnWithStatus(roachpb.ABORTED)(txn, pushTs)
 				record.Epoch = txn.Epoch + 1
-				record.WriteTimestamp.Forward(pushTs)
+				record.WriteTimestamp = record.WriteTimestamp.Add(0, 1)
 				record.Priority = pusher.Priority - 1
 				return record
 			},

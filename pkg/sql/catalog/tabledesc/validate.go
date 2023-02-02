@@ -68,11 +68,11 @@ func (desc *wrapper) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
 		ids.Add(desc.GetParentSchemaID())
 	}
 	// Collect referenced table IDs in foreign keys.
-	for _, fk := range desc.OutboundFKs {
-		ids.Add(fk.ReferencedTableID)
+	for _, fk := range desc.OutboundForeignKeys() {
+		ids.Add(fk.GetReferencedTableID())
 	}
-	for _, fk := range desc.InboundFKs {
-		ids.Add(fk.OriginTableID)
+	for _, fk := range desc.InboundForeignKeys() {
+		ids.Add(fk.GetOriginTableID())
 	}
 	// Collect user defined type Oids and sequence references in columns.
 	for _, col := range desc.DeletableColumns() {
@@ -189,14 +189,14 @@ func (desc *wrapper) ValidateForwardReferences(
 	// Row-level TTL is not compatible with foreign keys.
 	// This check should be in ValidateSelf but interferes with AllocateIDs.
 	if desc.HasRowLevelTTL() {
-		if len(desc.OutboundFKs) > 0 {
+		if len(desc.OutboundForeignKeys()) > 0 {
 			vea.Report(unimplemented.NewWithIssuef(
 				76407,
 				`foreign keys from table with TTL %q are not permitted`,
 				desc.GetName(),
 			))
 		}
-		if len(desc.InboundFKs) > 0 {
+		if len(desc.InboundForeignKeys()) > 0 {
 			vea.Report(unimplemented.NewWithIssuef(
 				76407,
 				`foreign keys to table with TTL %q are not permitted`,
@@ -205,9 +205,9 @@ func (desc *wrapper) ValidateForwardReferences(
 		}
 	}
 
-	// Check foreign keys.
-	for i := range desc.OutboundFKs {
-		vea.Report(desc.validateOutboundFK(&desc.OutboundFKs[i], vdg))
+	// Check enforced outbound foreign keys.
+	for _, fk := range desc.EnforcedOutboundForeignKeys() {
+		vea.Report(desc.validateOutboundFK(fk.ForeignKeyDesc(), vdg))
 	}
 
 	// Check partitioning is correctly set.

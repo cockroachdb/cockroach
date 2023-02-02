@@ -149,12 +149,6 @@ StatementPhase stage 1 of 1 with 36 MutationType ops
     *scop.RemoveUserPrivileges
       DescriptorID: 100
       User: r
-    *scop.MarkDescriptorAsDropped
-      DescriptorID: 105
-    *scop.RemoveSchemaParent
-      Parent:
-        ParentDatabaseID: 100
-        SchemaID: 105
     *scop.RemoveUserPrivileges
       DescriptorID: 104
       User: r
@@ -227,11 +221,12 @@ StatementPhase stage 1 of 1 with 36 MutationType ops
     *scop.RemoveObjectParent
       ObjectID: 113
       ParentSchemaID: 105
-    *scop.DrainDescriptorName
-      Namespace:
-        DatabaseID: 100
-        DescriptorID: 105
-        Name: s
+    *scop.MarkDescriptorAsDropped
+      DescriptorID: 105
+    *scop.RemoveSchemaParent
+      Parent:
+        ParentDatabaseID: 100
+        SchemaID: 105
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
@@ -280,6 +275,11 @@ StatementPhase stage 1 of 1 with 36 MutationType ops
         DescriptorID: 113
         Name: v2
         SchemaID: 105
+    *scop.DrainDescriptorName
+      Namespace:
+        DatabaseID: 100
+        DescriptorID: 105
+        Name: s
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
     [[UserPrivileges:{DescID: 100, Name: r}, ABSENT], ABSENT] -> PUBLIC
@@ -543,12 +543,6 @@ PreCommitPhase stage 2 of 2 with 67 MutationType ops
     *scop.RemoveUserPrivileges
       DescriptorID: 100
       User: r
-    *scop.MarkDescriptorAsDropped
-      DescriptorID: 105
-    *scop.RemoveSchemaParent
-      Parent:
-        ParentDatabaseID: 100
-        SchemaID: 105
     *scop.RemoveUserPrivileges
       DescriptorID: 104
       User: r
@@ -621,11 +615,12 @@ PreCommitPhase stage 2 of 2 with 67 MutationType ops
     *scop.RemoveObjectParent
       ObjectID: 113
       ParentSchemaID: 105
-    *scop.DrainDescriptorName
-      Namespace:
-        DatabaseID: 100
-        DescriptorID: 105
-        Name: s
+    *scop.MarkDescriptorAsDropped
+      DescriptorID: 105
+    *scop.RemoveSchemaParent
+      Parent:
+        ParentDatabaseID: 100
+        SchemaID: 105
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
@@ -680,6 +675,11 @@ PreCommitPhase stage 2 of 2 with 67 MutationType ops
         DescriptorID: 113
         Name: v2
         SchemaID: 105
+    *scop.DrainDescriptorName
+      Namespace:
+        DatabaseID: 100
+        DescriptorID: 105
+        Name: s
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 2
       TableID: 109
