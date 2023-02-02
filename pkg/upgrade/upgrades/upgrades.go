@@ -286,6 +286,12 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		backfillWebSessionsTableUserIDColumn,
 	),
+	upgrade.NewTenantUpgrade(
+		"add secondary index on (path,username) to table system.privileges",
+		toCV(clusterversion.V23_1AlterSystemPrivilegesAddIndexOnPathAndUsername),
+		upgrade.NoPrecondition,
+		alterSystemPrivilegesAddSecondaryIndex,
+	),
 }
 
 func init() {
