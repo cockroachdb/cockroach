@@ -133,15 +133,15 @@ func (p *planner) CheckPrivilegeForUser(
 		return errors.AssertionFailedf("cannot use CheckPrivilege without a txn")
 	}
 
-	// root, admin and node user should always have privileges.
-	// However, this allows us to short-circuit privilege checks for
+	// root, admin and node user should always have privileges, except NOSQLLOGIN.
+	// This allows us to short-circuit privilege checks for
 	// virtual object such that we don't have to query the system.privileges
-	// table. This is especially import for internal executor queries.
-	// Right now we only short-circuit non-descriptor backed objects.
-	// There are certain descriptor backed objects that we can't
-	// short-circuit, ie system tables.
+	// table. This is especially import for internal executor queries. Right now
+	// we only short-circuit non-descriptor backed objects. There are certain
+	// descriptor backed objects that we can't short-circuit, ie system tables.
 	if (user.IsRootUser() || user.IsAdminRole() || user.IsNodeUser()) &&
-		!privilegeObject.GetObjectType().IsDescriptorBacked() {
+		!privilegeObject.GetObjectType().IsDescriptorBacked() &&
+		privilegeKind != privilege.NOSQLLOGIN {
 		if privilege.GetValidPrivilegesForObject(
 			privilegeObject.GetObjectType(),
 		).Contains(privilegeKind) {
