@@ -385,24 +385,32 @@ func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) (LoadedRe
 	// the state of the Replica.
 	// INVARIANT: the descriptor for range [a,z) is located at RangeDescriptorKey(a).
 	// This is checked in IterateRangeDescriptorsFromDisk.
-	if err := IterateRangeDescriptorsFromDisk(
-		ctx, eng, func(desc roachpb.RangeDescriptor) error {
-			// INVARIANT: a Replica's RangeDescriptor always contains the local Store,
-			// i.e. a Store is a member of all of its local Replicas.
-			repDesc, found := desc.GetReplicaDescriptor(ident.StoreID)
-			if !found {
-				return errors.AssertionFailedf(
-					"RangeDescriptor does not contain local s%d: %s",
-					ident.StoreID, desc)
-			}
+	{
+		var lastDesc roachpb.RangeDescriptor
+		if err := IterateRangeDescriptorsFromDisk(
+			ctx, eng, func(desc roachpb.RangeDescriptor) error {
+				if lastDesc.RangeID != 0 && desc.StartKey.Less(lastDesc.EndKey) {
+					return errors.AssertionFailedf("overlapping descriptors %s and %s", lastDesc, desc)
+				}
+				lastDesc = desc
 
-			if err := s.setDesc(desc.RangeID, desc); err != nil {
-				return err
-			}
-			s.setDescReplicaID(desc.RangeID, repDesc.ReplicaID)
-			return nil
-		}); err != nil {
-		return LoadedReplicas{}, err
+				// INVARIANT: a Replica's RangeDescriptor always contains the local Store,
+				// i.e. a Store is a member of all of its local Replicas.
+				repDesc, found := desc.GetReplicaDescriptor(ident.StoreID)
+				if !found {
+					return errors.AssertionFailedf(
+						"RangeDescriptor does not contain local s%d: %s",
+						ident.StoreID, desc)
+				}
+
+				if err := s.setDesc(desc.RangeID, desc); err != nil {
+					return err
+				}
+				s.setDescReplicaID(desc.RangeID, repDesc.ReplicaID)
+				return nil
+			}); err != nil {
+			return LoadedReplicas{}, err
+		}
 	}
 
 	// INVARIANT: all replicas have a persisted full ReplicaID (i.e. a "ReplicaID from disk").
