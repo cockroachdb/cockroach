@@ -19,11 +19,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -73,16 +71,6 @@ func TestCacheInvalidation(t *testing.T) {
 		return settings, didReadFromSystemTable, err
 	}
 	getAuthInfoFromCache := func() (sessioninit.AuthInfo, bool, error) {
-		makePlanner := func(opName string) (interface{}, func()) {
-			return sql.NewInternalPlanner(
-				opName,
-				execCfg.DB.NewTxn(ctx, opName),
-				username.RootUserName(),
-				&sql.MemoryMetrics{},
-				s.ExecutorConfig().(*sql.ExecutorConfig),
-				sessiondatapb.SessionData{},
-			)
-		}
 		didReadFromSystemTable := false
 		settings := s.ClusterSettings()
 		aInfo, err := execCfg.SessionInitCache.GetAuthInfo(
@@ -90,11 +78,10 @@ func TestCacheInvalidation(t *testing.T) {
 			settings,
 			s.InternalDB().(descs.DB),
 			username.TestUserName(),
-			func(ctx context.Context, f descs.DB, userName username.SQLUsername, makePlanner func(opName string) (interface{}, func()), settings *cluster.Settings) (sessioninit.AuthInfo, error) {
+			func(ctx context.Context, f descs.DB, userName username.SQLUsername) (sessioninit.AuthInfo, error) {
 				didReadFromSystemTable = true
 				return sessioninit.AuthInfo{}, nil
-			},
-			makePlanner)
+			})
 		return aInfo, didReadFromSystemTable, err
 	}
 
@@ -228,17 +215,6 @@ func TestCacheSingleFlight(t *testing.T) {
 	wgFirstGetAuthInfoCallInProgress.Add(1)
 	wgForTestComplete.Add(3)
 
-	makePlanner := func(opName string) (interface{}, func()) {
-		return sql.NewInternalPlanner(
-			opName,
-			execCfg.DB.NewTxn(ctx, opName),
-			username.RootUserName(),
-			&sql.MemoryMetrics{},
-			s.ExecutorConfig().(*sql.ExecutorConfig),
-			sessiondatapb.SessionData{},
-		)
-	}
-
 	go func() {
 		didReadFromSystemTable := false
 		_, err := c.GetAuthInfo(
@@ -248,15 +224,13 @@ func TestCacheSingleFlight(t *testing.T) {
 				ctx context.Context,
 				f descs.DB,
 				userName username.SQLUsername,
-				makePlanner func(opName string) (interface{}, func()),
-				settings *cluster.Settings,
 			) (sessioninit.AuthInfo, error) {
 				wgFirstGetAuthInfoCallInProgress.Done()
 				wgForConcurrentReadWrite.Wait()
 				didReadFromSystemTable = true
 				return sessioninit.AuthInfo{}, nil
 			},
-			makePlanner)
+		)
 		require.NoError(t, err)
 		require.True(t, didReadFromSystemTable)
 		wgForTestComplete.Done()
@@ -280,13 +254,11 @@ func TestCacheSingleFlight(t *testing.T) {
 					ctx context.Context,
 					f descs.DB,
 					userName username.SQLUsername,
-					makePlanner func(opName string) (interface{}, func()),
-					settings *cluster.Settings,
 				) (sessioninit.AuthInfo, error) {
 					didReadFromSystemTable = true
 					return sessioninit.AuthInfo{}, nil
 				},
-				makePlanner)
+			)
 			require.NoError(t, err)
 			require.False(t, didReadFromSystemTable)
 			wgForTestComplete.Done()
@@ -309,13 +281,11 @@ func TestCacheSingleFlight(t *testing.T) {
 			ctx context.Context,
 			f descs.DB,
 			userName username.SQLUsername,
-			makePlanner func(opName string) (interface{}, func()),
-			settings *cluster.Settings,
 		) (sessioninit.AuthInfo, error) {
 			didReadFromSystemTable = true
 			return sessioninit.AuthInfo{}, nil
 		},
-		makePlanner)
+	)
 
 	require.NoError(t, err)
 	require.True(t, didReadFromSystemTable)
