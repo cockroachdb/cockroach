@@ -3778,6 +3778,8 @@ var charts = []sectionDescription{
 					"admission.granter.slots_exhausted_duration.kv",
 					"admission.granter.cpu_load_short_period_duration.kv",
 					"admission.granter.cpu_load_long_period_duration.kv",
+					"admission.granter.cpu_non_work_conserving_duration.kv",
+					"admission.granter.cpu_non_work_conserving_due_to_admission_duration.kv",
 				},
 			},
 			{
