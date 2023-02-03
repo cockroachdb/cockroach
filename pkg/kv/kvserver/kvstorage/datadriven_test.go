@@ -165,7 +165,7 @@ func TestDataDriven(t *testing.T) {
 					fmt.Fprintln(&buf, err)
 					break
 				}
-				for _, repl := range replicas.Sorted() {
+				for _, repl := range replicas {
 					fmt.Fprintf(&buf, "%s: ", repl.ID())
 					if desc := repl.Desc; desc != nil {
 						fmt.Fprint(&buf, desc)

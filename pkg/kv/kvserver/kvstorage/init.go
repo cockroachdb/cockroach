@@ -312,11 +312,11 @@ func (r Replica) ID() storage.FullReplicaID {
 	}
 }
 
-// A ReplicaMap organizes a set of Replicas with unique RangeIDs.
-type ReplicaMap map[roachpb.RangeID]Replica
+// A replicaMap organizes a set of Replicas with unique RangeIDs.
+type replicaMap map[roachpb.RangeID]Replica
 
 // Sorted returns the contents of the map as a RangeID-sorted slice.
-func (m ReplicaMap) Sorted() []Replica {
+func (m replicaMap) Sorted() []Replica {
 	sl := make([]Replica, 0, len(m))
 	for _, repl := range m {
 		sl = append(sl, repl)
@@ -327,26 +327,26 @@ func (m ReplicaMap) Sorted() []Replica {
 	return sl
 }
 
-func (m ReplicaMap) getOrMake(rangeID roachpb.RangeID) Replica {
+func (m replicaMap) getOrMake(rangeID roachpb.RangeID) Replica {
 	ent := m[rangeID]
 	ent.RangeID = rangeID
 	return ent
 }
 
-func (m ReplicaMap) setReplicaID(rangeID roachpb.RangeID, replicaID roachpb.ReplicaID) Replica {
+func (m replicaMap) setReplicaID(rangeID roachpb.RangeID, replicaID roachpb.ReplicaID) Replica {
 	ent := m.getOrMake(rangeID)
 	ent.ReplicaID = replicaID
 	m[rangeID] = ent
 	return ent
 }
 
-func (m ReplicaMap) setHardState(rangeID roachpb.RangeID, hs raftpb.HardState) {
+func (m replicaMap) setHardState(rangeID roachpb.RangeID, hs raftpb.HardState) {
 	ent := m.getOrMake(rangeID)
 	ent.hardState = hs
 	m[rangeID] = ent
 }
 
-func (m ReplicaMap) setDesc(rangeID roachpb.RangeID, desc roachpb.RangeDescriptor) error {
+func (m replicaMap) setDesc(rangeID roachpb.RangeID, desc roachpb.RangeDescriptor) error {
 	ent := m.getOrMake(rangeID)
 	if ent.Desc != nil {
 		return errors.AssertionFailedf("overlapping descriptors %v and %v", ent.Desc, &desc)
@@ -358,15 +358,16 @@ func (m ReplicaMap) setDesc(rangeID roachpb.RangeID, desc roachpb.RangeDescripto
 
 // LoadAndReconcileReplicas loads the Replicas present on this
 // store. It reconciles inconsistent state and runs validation checks.
+// The returned slice is sorted by ReplicaID.
 //
 // TODO(sep-raft-log): consider a callback-visitor pattern here.
-func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) (ReplicaMap, error) {
+func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) ([]Replica, error) {
 	ident, err := ReadStoreIdent(ctx, eng)
 	if err != nil {
 		return nil, err
 	}
 
-	s := ReplicaMap{}
+	s := replicaMap{}
 
 	// INVARIANT: the latest visible committed version of the RangeDescriptor
 	// (which is what IterateRangeDescriptorsFromDisk returns) is the one reflecting
@@ -431,10 +432,13 @@ func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) (ReplicaM
 		}
 	}
 
+	sl := s.Sorted()
+	s = nil // prevent reuse below, we're only using `sl` now.
+
 	// Check invariants. Sorted order for deterministic unit tests.
 	//
 	// Migrate into RaftReplicaID for all replicas that need it.
-	for _, repl := range s.Sorted() {
+	for idx, repl := range sl {
 		var descReplicaID roachpb.ReplicaID
 		if repl.Desc != nil {
 			// INVARIANT: a Replica's RangeDescriptor always contains the local Store,
@@ -463,7 +467,8 @@ func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) (ReplicaM
 			if err := logstore.NewStateLoader(repl.RangeID).SetRaftReplicaID(ctx, eng, descReplicaID); err != nil {
 				return nil, errors.Wrapf(err, "backfilling ReplicaID for r%d", repl.RangeID)
 			}
-			repl = s.setReplicaID(repl.RangeID, descReplicaID) // set ReplicaID and reload
+			repl.ReplicaID = descReplicaID
+			sl[idx] = repl
 			log.Eventf(ctx, "backfilled replicaID for initialized replica %s", repl.ID())
 		} else {
 			// We found an uninitialized replica that did not have a persisted
@@ -478,12 +483,12 @@ func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) (ReplicaM
 			if err := eng.ClearUnversioned(logstore.NewStateLoader(repl.RangeID).RaftHardStateKey()); err != nil {
 				return nil, errors.Wrapf(err, "removing HardState for r%d", repl.RangeID)
 			}
-			delete(s, repl.RangeID)
 			log.Eventf(ctx, "removed legacy uninitialized replica for r%s", repl.RangeID)
+			sl = append(sl[:idx], sl[idx+1:]...)
 		}
 	}
 
-	return s, nil
+	return sl, nil
 }
 
 // A NotBootstrappedError indicates that an engine has not yet been
