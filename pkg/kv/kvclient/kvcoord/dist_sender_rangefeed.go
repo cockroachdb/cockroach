@@ -416,6 +416,10 @@ func (ds *DistSender) partialRangeFeed(
 		}
 
 		// Establish a RangeFeed for a single Range.
+		if log.V(1) {
+			log.Infof(ctx, "RangeFeed starting for range %d@%s (%s)", token.Desc().RangeID, startAfter, span)
+		}
+
 		maxTS, err := ds.singleRangeFeed(
 			ctx, span, startAfter, withDiff, token.Desc(),
 			catchupSem, eventCh, streamProducerFactory, active.onRangeEvent, cfg)
@@ -427,8 +431,8 @@ func (ds *DistSender) partialRangeFeed(
 			active.setLastError(err)
 
 			if log.V(1) {
-				log.Infof(ctx, "RangeFeed %s disconnected with last checkpoint %s ago: %v",
-					span, timeutil.Since(startAfter.GoTime()), err)
+				log.Infof(ctx, "RangeFeed %s@%s disconnected with last checkpoint %s ago: %v",
+					span, startAfter, timeutil.Since(startAfter.GoTime()), err)
 			}
 			switch {
 			case errors.HasType(err, (*roachpb.StoreNotFoundError)(nil)) ||
@@ -507,10 +511,15 @@ func (ds *DistSender) singleRangeFeed(
 	streamProducerFactory rangeFeedEventProducerFactory,
 	onRangeEvent onRangeEventCb,
 	cfg rangeFeedConfig,
-) (hlc.Timestamp, error) {
+) (_ hlc.Timestamp, retErr error) {
 	// Ensure context is cancelled on all errors, to prevent gRPC stream leaks.
 	ctx, cancelFeed := context.WithCancel(ctx)
-	defer cancelFeed()
+	defer func() {
+		if log.V(1) {
+			log.Infof(ctx, "singleRangeFeed terminating with err=%v", retErr)
+		}
+		cancelFeed()
+	}()
 
 	admissionPri := admissionpb.BulkNormalPri
 	if cfg.overSystemTable {
@@ -640,6 +649,7 @@ func (ds *DistSender) singleRangeFeed(
 				event, err = stream.Recv()
 				return err
 			}); err != nil {
+				log.VErrEventf(ctx, 2, "RPC error: %s", err)
 				if err == io.EOF {
 					return args.Timestamp, nil
 				}
