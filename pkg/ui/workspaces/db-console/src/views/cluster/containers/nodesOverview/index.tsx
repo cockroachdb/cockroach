@@ -213,6 +213,20 @@ const NodeLocalityColumn: React.FC<{ record: NodeStatusRow }> = ({
   );
 };
 
+const formatWithPossibleStaleIndicator = (
+  text: string,
+  record: NodeStatusRow,
+): string => {
+  if (
+    record.status === LivenessStatus.NODE_STATUS_DEAD ||
+    record.status === AggregatedNodeStatus.DEAD
+  ) {
+    return `${text} (stale)`;
+  }
+
+  return text;
+};
+
 /**
  * LiveNodeList displays a sortable table of all "live" nodes, which includes
  * both healthy and suspect nodes. Included is a side-bar with summary
@@ -268,6 +282,7 @@ export class NodeList extends React.Component<LiveNodeListProps> {
     {
       key: "uptime",
       dataIndex: "uptime",
+      render: formatWithPossibleStaleIndicator,
       title: <UptimeTooltip>Uptime</UptimeTooltip>,
       sorter: true,
       className: "column--align-right",
@@ -277,6 +292,7 @@ export class NodeList extends React.Component<LiveNodeListProps> {
     {
       key: "replicas",
       dataIndex: "replicas",
+      render: formatWithPossibleStaleIndicator,
       title: <ReplicasTooltip>Replicas</ReplicasTooltip>,
       sorter: true,
       className: "column--align-right",
@@ -290,7 +306,10 @@ export class NodeList extends React.Component<LiveNodeListProps> {
         </NodelistCapacityUsageTooltip>
       ),
       render: (_text: string, record: NodeStatusRow) =>
-        util.Percentage(record.usedCapacity, record.availableCapacity),
+        formatWithPossibleStaleIndicator(
+          util.Percentage(record.usedCapacity, record.availableCapacity),
+          record,
+        ),
       sorter: (a: NodeStatusRow, b: NodeStatusRow) =>
         a.usedCapacity / a.availableCapacity -
         b.usedCapacity / b.availableCapacity,
@@ -301,7 +320,10 @@ export class NodeList extends React.Component<LiveNodeListProps> {
       key: "memoryUse",
       title: <MemoryUseTooltip>Memory Use</MemoryUseTooltip>,
       render: (_text: string, record: NodeStatusRow) =>
-        util.Percentage(record.usedMemory, record.availableMemory),
+        formatWithPossibleStaleIndicator(
+          util.Percentage(record.usedMemory, record.availableMemory),
+          record,
+        ),
       sorter: (a: NodeStatusRow, b: NodeStatusRow) =>
         a.usedMemory / a.availableMemory - b.usedMemory / b.availableMemory,
       className: "column--align-right",
