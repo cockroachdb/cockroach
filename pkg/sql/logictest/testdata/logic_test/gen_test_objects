@@ -123,8 +123,8 @@ ORDER BY table_name, column_name
 "                u3"      y        text
 "*t""1"          "%56x"   numeric
 "*t""1"          rowid    bigint
-"\\U3F862049u4"  rowid    bigint
-"\\U3F862049u4"  "y "     text
+"\\U00051202u4"  rowid    bigint
+"\\U00051202u4"  "y "     text
 "t%q3"           rowid    bigint
 "t%q3"           x        numeric
 t2               rowid    bigint
@@ -148,7 +148,7 @@ ORDER BY table_name, constraint_name
 ----
 "                u3"          pr̫imary
 "*t""1"          "PrimaRy̧"
-"\\U3F862049u4"  "primary"
+"\\U00051202u4"  "primary"
 "t%q3"           "primary"
 t2               "primary"
 t4               "primar'y"
