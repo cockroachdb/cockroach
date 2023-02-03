@@ -427,14 +427,16 @@ func makeRegularGrantCoordinator(
 	}
 
 	kvSlotAdjuster := &kvSlotAdjuster{
-		settings:                         st,
-		minCPUSlots:                      opts.MinCPUSlots,
-		maxCPUSlots:                      opts.MaxCPUSlots,
-		totalSlotsMetric:                 metrics.KVTotalSlots,
-		cpuLoadShortPeriodDurationMetric: metrics.KVCPULoadShortPeriodDuration,
-		cpuLoadLongPeriodDurationMetric:  metrics.KVCPULoadLongPeriodDuration,
-		slotAdjusterIncrementsMetric:     metrics.KVSlotAdjusterIncrements,
-		slotAdjusterDecrementsMetric:     metrics.KVSlotAdjusterDecrements,
+		settings:                            st,
+		minCPUSlots:                         opts.MinCPUSlots,
+		maxCPUSlots:                         opts.MaxCPUSlots,
+		totalSlotsMetric:                    metrics.KVTotalSlots,
+		cpuLoadShortPeriodDurationMetric:    metrics.KVCPULoadShortPeriodDuration,
+		cpuLoadLongPeriodDurationMetric:     metrics.KVCPULoadLongPeriodDuration,
+		cpuNonWorkConservingDuration:        metrics.KVCPUNonWorkConservingDuration,
+		cpuNonWorkConservingDueToACDuration: metrics.KVCPUNonWorkConservingDueToACDuration,
+		slotAdjusterIncrementsMetric:        metrics.KVSlotAdjusterIncrements,
+		slotAdjusterDecrementsMetric:        metrics.KVSlotAdjusterDecrements,
 	}
 	coord := &GrantCoordinator{
 		ambientCtx:                    ambientCtx,
@@ -651,7 +653,9 @@ func (coord *GrantCoordinator) GetWorkQueue(workKind WorkKind) *WorkQueue {
 // burst tokens since synchronizing the two means that the refilled burst can
 // take into account the latest schedulers stats (indirectly, via the
 // implementation of cpuOverloadIndicator).
-func (coord *GrantCoordinator) CPULoad(runnable int, procs int, samplePeriod time.Duration) {
+func (coord *GrantCoordinator) CPULoad(
+	runnable int, procs int, idleProcs int, samplePeriod time.Duration,
+) {
 	ctx := coord.ambientCtx.AnnotateCtx(context.Background())
 
 	if log.V(1) {
@@ -665,7 +669,7 @@ func (coord *GrantCoordinator) CPULoad(runnable int, procs int, samplePeriod tim
 	coord.mu.Lock()
 	defer coord.mu.Unlock()
 	coord.numProcs = procs
-	coord.cpuLoadListener.CPULoad(runnable, procs, samplePeriod)
+	coord.cpuLoadListener.CPULoad(runnable, procs, idleProcs, samplePeriod)
 
 	// Slot adjustment and token refilling requires 1ms periods to work well. If
 	// the CPULoad ticks are less frequent, there is no guarantee that the
@@ -936,16 +940,18 @@ func (coord *GrantCoordinator) SafeFormat(s redact.SafePrinter, verb rune) {
 
 // GrantCoordinatorMetrics are metrics associated with a GrantCoordinator.
 type GrantCoordinatorMetrics struct {
-	KVTotalSlots                 *metric.Gauge
-	KVUsedSlots                  *metric.Gauge
-	KVSlotsExhaustedDuration     *metric.Counter
-	KVCPULoadShortPeriodDuration *metric.Counter
-	KVCPULoadLongPeriodDuration  *metric.Counter
-	KVSlotAdjusterIncrements     *metric.Counter
-	KVSlotAdjusterDecrements     *metric.Counter
-	KVIOTokensExhaustedDuration  *metric.Counter
-	SQLLeafStartUsedSlots        *metric.Gauge
-	SQLRootStartUsedSlots        *metric.Gauge
+	KVTotalSlots                          *metric.Gauge
+	KVUsedSlots                           *metric.Gauge
+	KVSlotsExhaustedDuration              *metric.Counter
+	KVCPULoadShortPeriodDuration          *metric.Counter
+	KVCPULoadLongPeriodDuration           *metric.Counter
+	KVCPUNonWorkConservingDuration        *metric.Counter
+	KVCPUNonWorkConservingDueToACDuration *metric.Counter
+	KVSlotAdjusterIncrements              *metric.Counter
+	KVSlotAdjusterDecrements              *metric.Counter
+	KVIOTokensExhaustedDuration           *metric.Counter
+	SQLLeafStartUsedSlots                 *metric.Gauge
+	SQLRootStartUsedSlots                 *metric.Gauge
 }
 
 // MetricStruct implements the metric.Struct interface.
@@ -953,16 +959,18 @@ func (GrantCoordinatorMetrics) MetricStruct() {}
 
 func makeGrantCoordinatorMetrics() GrantCoordinatorMetrics {
 	m := GrantCoordinatorMetrics{
-		KVTotalSlots:                 metric.NewGauge(totalSlots),
-		KVUsedSlots:                  metric.NewGauge(addName(workKindString(KVWork), usedSlots)),
-		KVSlotsExhaustedDuration:     metric.NewCounter(kvSlotsExhaustedDuration),
-		KVCPULoadShortPeriodDuration: metric.NewCounter(kvCPULoadShortPeriodDuration),
-		KVCPULoadLongPeriodDuration:  metric.NewCounter(kvCPULoadLongPeriodDuration),
-		KVSlotAdjusterIncrements:     metric.NewCounter(kvSlotAdjusterIncrements),
-		KVSlotAdjusterDecrements:     metric.NewCounter(kvSlotAdjusterDecrements),
-		KVIOTokensExhaustedDuration:  metric.NewCounter(kvIOTokensExhaustedDuration),
-		SQLLeafStartUsedSlots:        metric.NewGauge(addName(workKindString(SQLStatementLeafStartWork), usedSlots)),
-		SQLRootStartUsedSlots:        metric.NewGauge(addName(workKindString(SQLStatementRootStartWork), usedSlots)),
+		KVTotalSlots:                          metric.NewGauge(totalSlots),
+		KVUsedSlots:                           metric.NewGauge(addName(workKindString(KVWork), usedSlots)),
+		KVSlotsExhaustedDuration:              metric.NewCounter(kvSlotsExhaustedDuration),
+		KVCPULoadShortPeriodDuration:          metric.NewCounter(kvCPULoadShortPeriodDuration),
+		KVCPULoadLongPeriodDuration:           metric.NewCounter(kvCPULoadLongPeriodDuration),
+		KVCPUNonWorkConservingDuration:        metric.NewCounter(kvCPUNonWorkConservingDuration),
+		KVCPUNonWorkConservingDueToACDuration: metric.NewCounter(kvCPUNonWorkConservingDueToACDuration),
+		KVSlotAdjusterIncrements:              metric.NewCounter(kvSlotAdjusterIncrements),
+		KVSlotAdjusterDecrements:              metric.NewCounter(kvSlotAdjusterDecrements),
+		KVIOTokensExhaustedDuration:           metric.NewCounter(kvIOTokensExhaustedDuration),
+		SQLLeafStartUsedSlots:                 metric.NewGauge(addName(workKindString(SQLStatementLeafStartWork), usedSlots)),
+		SQLRootStartUsedSlots:                 metric.NewGauge(addName(workKindString(SQLStatementRootStartWork), usedSlots)),
 	}
 	return m
 }

@@ -19,10 +19,12 @@ package goschedstats
 
 import (
 	"sync/atomic"
-	_ "unsafe" // required by go:linkname
+	"unsafe"
 )
 
 type puintptr uintptr
+
+func (pp puintptr) ptr() *p { return (*p)(unsafe.Pointer(pp)) }
 
 type muintptr uintptr
 
@@ -136,7 +138,7 @@ func lock(l *mutex)
 //go:linkname unlock runtime.unlock
 func unlock(l *mutex)
 
-func numRunnableGoroutines() (numRunnable int, numProcs int) {
+func numRunnableGoroutines() (numRunnable int, numProcs int, idleProcs int) {
 	lock(&sched.lock)
 	numRunnable = int(sched.runqsize)
 	numProcs = len(allp)
@@ -161,6 +163,10 @@ func numRunnableGoroutines() (numRunnable int, numProcs int) {
 			break
 		}
 	}
+	idleProcs = 0
+	for p := sched.pidle.ptr(); p != nil; p = p.link.ptr() {
+		idleProcs++
+	}
 	unlock(&sched.lock)
-	return numRunnable, numProcs
+	return numRunnable, numProcs, idleProcs
 }

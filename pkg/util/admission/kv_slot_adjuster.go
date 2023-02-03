@@ -43,17 +43,21 @@ type kvSlotAdjuster struct {
 	minCPUSlots int
 	maxCPUSlots int
 
-	totalSlotsMetric                 *metric.Gauge
-	cpuLoadShortPeriodDurationMetric *metric.Counter
-	cpuLoadLongPeriodDurationMetric  *metric.Counter
-	slotAdjusterIncrementsMetric     *metric.Counter
-	slotAdjusterDecrementsMetric     *metric.Counter
+	totalSlotsMetric                    *metric.Gauge
+	cpuLoadShortPeriodDurationMetric    *metric.Counter
+	cpuLoadLongPeriodDurationMetric     *metric.Counter
+	cpuNonWorkConservingDuration        *metric.Counter
+	cpuNonWorkConservingDueToACDuration *metric.Counter
+	slotAdjusterIncrementsMetric        *metric.Counter
+	slotAdjusterDecrementsMetric        *metric.Counter
 }
 
 var _ cpuOverloadIndicator = &kvSlotAdjuster{}
 var _ CPULoadListener = &kvSlotAdjuster{}
 
-func (kvsa *kvSlotAdjuster) CPULoad(runnable int, procs int, samplePeriod time.Duration) {
+func (kvsa *kvSlotAdjuster) CPULoad(
+	runnable int, procs int, idleProcs int, samplePeriod time.Duration,
+) {
 	threshold := int(KVSlotAdjusterOverloadThreshold.Get(&kvsa.settings.SV))
 
 	periodDurationMicros := samplePeriod.Microseconds()
@@ -61,6 +65,26 @@ func (kvsa *kvSlotAdjuster) CPULoad(runnable int, procs int, samplePeriod time.D
 		kvsa.cpuLoadLongPeriodDurationMetric.Inc(periodDurationMicros)
 	} else {
 		kvsa.cpuLoadShortPeriodDurationMetric.Inc(periodDurationMicros)
+	}
+	if idleProcs > 0 && samplePeriod <= time.Millisecond {
+		// Compute whether AC queueing is causing the system to be non
+		// work-conserving, i.e., idle CPU with waiting requests. We don't do this
+		// computation if the samplePeriod is long to avoid polluting this metric,
+		// and because there is no AC slot enforcement when samplePeriod is long.
+
+		// We have seen situations with P's being idle when there are runnable
+		// goroutines. Adjust for that since those idle P's are not the fault of
+		// AC queueing.
+		adjustedIdleProcs := idleProcs - runnable
+		if adjustedIdleProcs < 0 {
+			adjustedIdleProcs = 0
+		}
+		if kvsa.granter.requesterHasWaitingRequests() {
+			kvsa.cpuNonWorkConservingDuration.Inc(periodDurationMicros * int64(idleProcs))
+			if adjustedIdleProcs > 0 {
+				kvsa.cpuNonWorkConservingDueToACDuration.Inc(periodDurationMicros * int64(adjustedIdleProcs))
+			}
+		}
 	}
 
 	// Simple heuristic, which worked ok in experiments. More sophisticated ones

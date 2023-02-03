@@ -315,7 +315,7 @@ type cpuOverloadIndicator interface {
 // underloaded. If the samplePeriod is > 1ms, admission control enforcement
 // for CPU is disabled.
 type CPULoadListener interface {
-	CPULoad(runnable int, procs int, samplePeriod time.Duration)
+	CPULoad(runnable int, procs int, idleProcs int, samplePeriod time.Duration)
 }
 
 // storeRequester is used to abstract *StoreWorkQueue for testing.

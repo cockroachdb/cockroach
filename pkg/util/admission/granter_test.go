@@ -196,6 +196,10 @@ func TestGranterBasic(t *testing.T) {
 			var runnable, procs int
 			d.ScanArgs(t, "runnable", &runnable)
 			d.ScanArgs(t, "procs", &procs)
+			idleProcs := 0
+			if d.HasArg("idle-procs") {
+				d.ScanArgs(t, "idle-procs", &idleProcs)
+			}
 			infrequent := false
 			if d.HasArg("infrequent") {
 				d.ScanArgs(t, "infrequent", &infrequent)
@@ -205,17 +209,20 @@ func TestGranterBasic(t *testing.T) {
 			if infrequent {
 				samplePeriod = 250 * time.Millisecond
 			}
-			coord.CPULoad(runnable, procs, samplePeriod)
+			coord.CPULoad(runnable, procs, idleProcs, samplePeriod)
 			str := flushAndReset()
 			kvsa := coord.cpuLoadListener.(*kvSlotAdjuster)
 			microsToMillis := func(micros int64) int64 {
 				return micros * int64(time.Microsecond) / int64(time.Millisecond)
 			}
-			return fmt.Sprintf("%sSlotAdjuster metrics: slots: %d, duration (short, long) millis: (%d, %d), inc: %d, dec: %d\n",
+			return fmt.Sprintf("%sSlotAdjuster metrics: slots: %d, duration (short, long) millis: (%d, %d),"+
+				"inc: %d, dec: %d, non-wc millis (adjusted): %d (%d)\n",
 				str, kvsa.totalSlotsMetric.Value(),
 				microsToMillis(kvsa.cpuLoadShortPeriodDurationMetric.Count()),
 				microsToMillis(kvsa.cpuLoadLongPeriodDurationMetric.Count()),
 				kvsa.slotAdjusterIncrementsMetric.Count(), kvsa.slotAdjusterDecrementsMetric.Count(),
+				microsToMillis(kvsa.cpuNonWorkConservingDuration.Count()),
+				microsToMillis(kvsa.cpuNonWorkConservingDueToACDuration.Count()),
 			)
 
 		case "set-io-tokens":
