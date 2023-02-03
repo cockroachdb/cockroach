@@ -35,7 +35,7 @@ func New(
 	maxStmtFingerprints *settings.IntSetting,
 	maxTxnFingerprints *settings.IntSetting,
 	curMemoryBytesCount *metric.Gauge,
-	maxMemoryBytesHist *metric.Histogram,
+	maxMemoryBytesHist metric.IHistogram,
 	insightsWriter insights.WriterProvider,
 	pool *mon.BytesMonitor,
 	reportingSink Sink,

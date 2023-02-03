@@ -385,7 +385,12 @@ func TestMetricsRecorder(t *testing.T) {
 				c.Inc((data.val))
 				addExpected(reg.prefix, data.name, reg.source, 100, data.val, reg.isNode)
 			case "histogram":
-				h := metric.NewHistogram(metric.Metadata{Name: reg.prefix + data.name}, time.Second, []float64{1.0, 10.0, 100.0, 1000.0})
+				h := metric.NewHistogram(metric.HistogramOptions{
+					Metadata: metric.Metadata{Name: reg.prefix + data.name},
+					Duration: time.Second,
+					Buckets:  []float64{1.0, 10.0, 100.0, 1000.0},
+					Mode:     metric.HistogramModePrometheus,
+				})
 				reg.reg.AddMetric(h)
 				h.RecordValue(data.val)
 				for _, q := range recordHistogramQuantiles {

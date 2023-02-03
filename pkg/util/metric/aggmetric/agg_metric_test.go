@@ -13,6 +13,7 @@ package aggmetric_test
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"sort"
 	"strings"
 	"testing"
@@ -63,10 +64,15 @@ func TestAggMetric(t *testing.T) {
 		Name: "baz_gauge",
 	}, "tenant_id")
 	r.AddMetric(f)
-
-	h := aggmetric.NewHistogram(metric.Metadata{
-		Name: "histo_gram",
-	}, base.DefaultHistogramWindowInterval(), metric.Count1KBuckets, "tenant_id")
+	h := aggmetric.NewHistogram(metric.HistogramOptions{
+		Metadata: metric.Metadata{
+			Name: "histo_gram",
+		},
+		Duration: base.DefaultHistogramWindowInterval(),
+		MaxVal:   100,
+		SigFigs:  1,
+		Buckets:  metric.Count1KBuckets,
+	}, "tenant_id")
 	r.AddMetric(h)
 
 	tenant2 := roachpb.MustMakeTenantID(2)
@@ -87,18 +93,28 @@ func TestAggMetric(t *testing.T) {
 		g3.Inc(3)
 		g3.Dec(1)
 		f2.Update(1.5)
+		fmt.Println(r)
 		f3.Update(2.5)
 		h2.RecordValue(10)
 		h3.RecordValue(90)
-		echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, "basic.txt"))
+		testFile := "basic.txt"
+		if metric.HdrEnabled() {
+			testFile = "basic_hdr.txt"
+		}
+		echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, testFile))
 	})
 
 	t.Run("destroy", func(t *testing.T) {
+		fmt.Println(r)
 		g3.Unlink()
 		c2.Unlink()
 		f3.Unlink()
 		h3.Unlink()
-		echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, "destroy.txt"))
+		testFile := "destroy.txt"
+		if metric.HdrEnabled() {
+			testFile = "destroy_hdr.txt"
+		}
+		echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, testFile))
 	})
 
 	t.Run("panic on already exists", func(t *testing.T) {
@@ -119,7 +135,11 @@ func TestAggMetric(t *testing.T) {
 		c2 = c.AddChild(tenant2.String())
 		f3 = f.AddChild(tenant3.String())
 		h3 = h.AddChild(tenant3.String())
-		echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, "add_after_destroy.txt"))
+		testFile := "add_after_destroy.txt"
+		if metric.HdrEnabled() {
+			testFile = "add_after_destroy_hdr.txt"
+		}
+		echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, testFile))
 	})
 
 	t.Run("panic on label length mismatch", func(t *testing.T) {
@@ -135,8 +155,13 @@ func TestAggMetricBuilder(t *testing.T) {
 	c := b.Counter(metric.Metadata{Name: "foo_counter"})
 	g := b.Gauge(metric.Metadata{Name: "bar_gauge"})
 	f := b.GaugeFloat64(metric.Metadata{Name: "baz_gauge"})
-	h := b.Histogram(metric.Metadata{Name: "histo_gram"},
-		base.DefaultHistogramWindowInterval(), metric.Count1KBuckets)
+	h := b.Histogram(metric.HistogramOptions{
+		Metadata: metric.Metadata{Name: "histo_gram"},
+		Duration: base.DefaultHistogramWindowInterval(),
+		MaxVal:   100,
+		SigFigs:  1,
+		Buckets:  metric.Count1KBuckets,
+	})
 
 	for i := 5; i < 10; i++ {
 		tenantLabel := roachpb.MustMakeTenantID(uint64(i)).String()

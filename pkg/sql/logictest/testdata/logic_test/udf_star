@@ -1,0 +1,222 @@
+statement ok
+CREATE TABLE t_onecol (a INT);
+INSERT INTO t_onecol VALUES (1)
+
+statement ok
+CREATE TABLE t_twocol (a INT, b INT);
+INSERT INTO t_twocol VALUES (1,2)
+
+statement ok
+CREATE FUNCTION f_unqualified_onecol() RETURNS INT AS
+$$
+  SELECT * FROM t_onecol;
+$$ LANGUAGE SQL;
+
+statement ok
+CREATE FUNCTION f_subquery() RETURNS INT AS
+$$
+  SELECT * FROM (SELECT a FROM (SELECT * FROM t_onecol) AS foo) AS bar;
+$$ LANGUAGE SQL;
+
+statement error pq: unimplemented: unaliased subquery inside a function definition
+CREATE FUNCTION f_subquery_unaliased() RETURNS INT AS
+$$
+  SELECT * FROM (SELECT a FROM (SELECT * FROM t_onecol));
+$$ LANGUAGE SQL;
+
+statement ok
+CREATE FUNCTION f_unqualified_twocol() RETURNS t_twocol AS
+$$
+  SELECT * FROM t_twocol;
+$$ LANGUAGE SQL;
+
+statement ok
+CREATE FUNCTION f_allcolsel() RETURNS t_twocol AS
+$$
+  SELECT t_twocol.* FROM t_twocol;
+$$ LANGUAGE SQL;
+
+statement ok
+CREATE FUNCTION f_allcolsel_alias() RETURNS t_twocol AS
+$$
+  SELECT t1.* FROM t_twocol AS t1, t_twocol AS t2 WHERE t1.a = t2.a;
+$$ LANGUAGE SQL;
+
+statement ok
+CREATE FUNCTION f_tuplestar() RETURNS t_twocol AS
+$$
+  SELECT (t_twocol.*).* FROM t_twocol;
+$$ LANGUAGE SQL;
+
+statement ok
+CREATE FUNCTION f_unqualified_multicol() RETURNS INT AS
+$$
+  SELECT *, a FROM t_onecol;
+  SELECT 1;
+$$ LANGUAGE SQL;
+
+statement ok
+CREATE FUNCTION f_unqualified_doublestar() RETURNS INT AS
+$$
+  SELECT *, * FROM t_onecol;
+  SELECT 1;
+$$ LANGUAGE SQL;
+
+statement ok
+CREATE FUNCTION f_exprstar() RETURNS STRING AS
+$$
+  SELECT word FROM (SELECT (pg_get_keywords()).* ORDER BY word LIMIT 1) AS foo;
+$$ LANGUAGE SQL;
+
+statement error pq: unimplemented: unaliased subquery inside a function definition
+CREATE FUNCTION f_ambiguous() RETURNS INT AS
+$$
+  SELECT * FROM (SELECT a FROM t_onecol) JOIN (SELECT a FROM t_twocol) ON true;
+  SELECT 1;
+$$ LANGUAGE SQL;
+
+statement error pq: column reference "a" is ambiguous
+CREATE FUNCTION f_ambiguous() RETURNS INT AS
+$$
+  SELECT a FROM (SELECT * FROM (SELECT a FROM t_onecol) AS foo JOIN (SELECT a FROM t_twocol) AS bar ON true) AS baz;
+  SELECT 1;
+$$ LANGUAGE SQL;
+
+query TTT
+SELECT oid, proname, prosrc
+FROM pg_catalog.pg_proc WHERE proname LIKE 'f\_%' ORDER BY oid;
+----
+100108  f_unqualified_onecol      SELECT t_onecol.a FROM test.public.t_onecol;
+100109  f_subquery                SELECT bar.a FROM (SELECT a FROM (SELECT t_onecol.a FROM test.public.t_onecol) AS foo) AS bar;
+100110  f_unqualified_twocol      SELECT t_twocol.a, t_twocol.b FROM test.public.t_twocol;
+100111  f_allcolsel               SELECT t_twocol.a, t_twocol.b FROM test.public.t_twocol;
+100112  f_allcolsel_alias         SELECT t1.a, t1.b FROM test.public.t_twocol AS t1, test.public.t_twocol AS t2 WHERE t1.a = t2.a;
+100113  f_tuplestar               SELECT t_twocol.a, t_twocol.b FROM test.public.t_twocol;
+100114  f_unqualified_multicol    SELECT t_onecol.a, a FROM test.public.t_onecol;
+                                  SELECT 1;
+100115  f_unqualified_doublestar  SELECT t_onecol.a, t_onecol.a FROM test.public.t_onecol;
+                                  SELECT 1;
+100116  f_exprstar                SELECT word FROM (SELECT (pg_get_keywords()).word, (pg_get_keywords()).catcode, (pg_get_keywords()).catdesc ORDER BY word LIMIT 1) AS foo;
+
+
+query TT
+SHOW CREATE FUNCTION f_subquery
+----
+f_subquery  CREATE FUNCTION public.f_subquery()
+              RETURNS INT8
+              VOLATILE
+              NOT LEAKPROOF
+              CALLED ON NULL INPUT
+              LANGUAGE SQL
+              AS $$
+              SELECT bar.a FROM (SELECT a FROM (SELECT t_onecol.a FROM test.public.t_onecol) AS foo) AS bar;
+            $$
+
+query TT
+SHOW CREATE FUNCTION f_allcolsel_alias
+----
+f_allcolsel_alias  CREATE FUNCTION public.f_allcolsel_alias()
+                     RETURNS T_TWOCOL
+                     VOLATILE
+                     NOT LEAKPROOF
+                     CALLED ON NULL INPUT
+                     LANGUAGE SQL
+                     AS $$
+                     SELECT t1.a, t1.b FROM test.public.t_twocol AS t1, test.public.t_twocol AS t2 WHERE t1.a = t2.a;
+                   $$
+
+query I
+SELECT f_unqualified_onecol()
+----
+1
+
+query I
+SELECT f_subquery()
+----
+1
+
+query T
+SELECT f_exprstar()
+----
+abort
+
+# Adding a column to a table should not change the UDFs that reference it.
+statement ok
+ALTER TABLE t_onecol ADD COLUMN b INT DEFAULT 5;
+
+query I
+SELECT f_unqualified_onecol()
+----
+1
+
+query I
+SELECT f_subquery()
+----
+1
+
+# It's ok to drop a column that was not used by the original UDF.
+statement ok
+ALTER TABLE t_onecol DROP COLUMN b;
+
+query T
+SELECT f_unqualified_twocol()
+----
+(1,2)
+
+query T
+SELECT f_allcolsel()
+----
+(1,2)
+
+query T
+SELECT f_allcolsel_alias()
+----
+(1,2)
+
+statement ok
+ALTER TABLE t_twocol ADD COLUMN c INT DEFAULT 5;
+
+# TODO(#95558): With early binding, postgres returns an error after adding a
+# column when the table is used as the return type. Note that this behavior is
+# ok for late binding.
+query T
+SELECT f_unqualified_twocol()
+----
+(1,2)
+
+# Altering a column type is not allowed in postgres or CRDB.
+statement error pq: cannot alter type of column "b" because function "f_unqualified_twocol" depends on it
+ALTER TABLE t_twocol ALTER b TYPE FLOAT;
+
+# TODO(harding): Postgres allows column renaming when only referenced by UDFs.
+statement error pq: cannot rename column "a" because function "f_unqualified_twocol" depends on it
+ALTER TABLE t_twocol RENAME COLUMN a TO d;
+
+# TODO(harding): Postgres allows table renaming when only referenced by UDFs.
+statement error pq: cannot rename relation "t_twocol" because function "f_unqualified_twocol" depends on it
+ALTER TABLE t_twocol RENAME TO t_twocol_prime;
+
+# Dropping a column a UDF depends on is not allowed.
+statement error pq: cannot drop column "b" because function "f_unqualified_twocol" depends on it
+ALTER TABLE t_twocol DROP COLUMN b;
+
+# Drop all but one of the functions with an implicit record return value.
+# TODO(96368): Allow these UDFs to be dropped in the CASCADE when the cross-
+# references are fixed instead.
+statement ok
+DROP FUNCTION f_tuplestar;
+DROP FUNCTION f_allcolsel_alias;
+
+# Dropping a column using CASCADE is ok.
+statement ok
+ALTER TABLE t_twocol DROP COLUMN b CASCADE;
+
+statement ok
+DROP TABLE t_onecol CASCADE;
+
+# The only remaining function should not reference the tables.
+query TTT
+SELECT oid, proname, prosrc
+FROM pg_catalog.pg_proc WHERE proname LIKE 'f\_%' ORDER BY oid;
+----
+100116  f_exprstar                SELECT word FROM (SELECT (pg_get_keywords()).word, (pg_get_keywords()).catcode, (pg_get_keywords()).catdesc ORDER BY word LIMIT 1) AS foo;

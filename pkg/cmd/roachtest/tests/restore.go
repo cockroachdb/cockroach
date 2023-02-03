@@ -696,7 +696,7 @@ func registerRestore(r registry.Registry) {
 				aost:     "'2023-01-12 03:00:00'",
 				workload: tpceRestore{customers: 2000000}}),
 			timeout: 24 * time.Hour,
-			tags:    []string{"weekly"},
+			tags:    []string{"weekly", "aws-weekly"},
 		},
 		// TODO(msbutler): add the following tests once roachperf/grafana is hooked up and old tests are
 		// removed:

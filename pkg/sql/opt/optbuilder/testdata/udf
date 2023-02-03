@@ -1166,3 +1166,82 @@ project
                           │    └── projections
                           │         └── variable: i:10 [as=i:13]
                           └── const: 1
+
+# --------------------------------------------------
+# UDFs with * expressions.
+# --------------------------------------------------
+
+exec-ddl
+CREATE TABLE tstar (
+  a INT
+)
+----
+
+exec-ddl
+CREATE FUNCTION fn_star() RETURNS INT LANGUAGE SQL AS 'SELECT * FROM tstar'
+----
+
+build format=show-scalars
+SELECT fn_star()
+----
+project
+ ├── columns: fn_star:5
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: fn_star [as=fn_star:5]
+           └── body
+                └── limit
+                     ├── columns: a:1
+                     ├── project
+                     │    ├── columns: a:1
+                     │    └── scan tstar
+                     │         └── columns: a:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+                     └── const: 1
+
+exec-ddl
+CREATE TABLE tstar2 (
+  a INT,
+  b INT
+)
+----
+
+exec-ddl
+CREATE FUNCTION fn_star2() RETURNS INT LANGUAGE SQL AS 'SELECT * FROM tstar, tstar2 WHERE tstar.a = tstar2.b'
+----
+
+build format=show-scalars
+SELECT fn_star2()
+----
+project
+ ├── columns: fn_star2:11
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: fn_star2 [as=fn_star2:11]
+           └── body
+                └── project
+                     ├── columns: column10:10
+                     ├── limit
+                     │    ├── columns: tstar.a:1!null tstar2.a:5 b:6!null
+                     │    ├── project
+                     │    │    ├── columns: tstar.a:1!null tstar2.a:5 b:6!null
+                     │    │    └── select
+                     │    │         ├── columns: tstar.a:1!null tstar.rowid:2!null tstar.crdb_internal_mvcc_timestamp:3 tstar.tableoid:4 tstar2.a:5 b:6!null tstar2.rowid:7!null tstar2.crdb_internal_mvcc_timestamp:8 tstar2.tableoid:9
+                     │    │         ├── inner-join (cross)
+                     │    │         │    ├── columns: tstar.a:1 tstar.rowid:2!null tstar.crdb_internal_mvcc_timestamp:3 tstar.tableoid:4 tstar2.a:5 b:6 tstar2.rowid:7!null tstar2.crdb_internal_mvcc_timestamp:8 tstar2.tableoid:9
+                     │    │         │    ├── scan tstar
+                     │    │         │    │    └── columns: tstar.a:1 tstar.rowid:2!null tstar.crdb_internal_mvcc_timestamp:3 tstar.tableoid:4
+                     │    │         │    ├── scan tstar2
+                     │    │         │    │    └── columns: tstar2.a:5 b:6 tstar2.rowid:7!null tstar2.crdb_internal_mvcc_timestamp:8 tstar2.tableoid:9
+                     │    │         │    └── filters (true)
+                     │    │         └── filters
+                     │    │              └── eq
+                     │    │                   ├── variable: tstar.a:1
+                     │    │                   └── variable: b:6
+                     │    └── const: 1
+                     └── projections
+                          └── tuple [as=column10:10]
+                               ├── variable: tstar.a:1
+                               ├── variable: tstar2.a:5
+                               └── variable: b:6

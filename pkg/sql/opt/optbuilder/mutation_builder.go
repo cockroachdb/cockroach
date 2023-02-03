@@ -1019,7 +1019,7 @@ func (mb *mutationBuilder) mapToReturnColID(tabOrd int) opt.ColumnID {
 
 // buildReturning wraps the input expression with a Project operator that
 // projects the given RETURNING expressions.
-func (mb *mutationBuilder) buildReturning(returning tree.ReturningExprs) {
+func (mb *mutationBuilder) buildReturning(returning *tree.ReturningExprs) {
 	// Handle case of no RETURNING clause.
 	if returning == nil {
 		expr := mb.outScope.expr
