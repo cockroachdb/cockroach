@@ -193,6 +193,8 @@ func HdrEnabled() bool {
 	return hdrEnabled
 }
 
+// HistogramMode specifies which type of histogram should be preferred
+// under various circumstances. See various constants for details.
 type HistogramMode byte
 
 const (
@@ -215,6 +217,8 @@ const (
 	HistogramModePreferHdrLatency
 )
 
+// HistogramOptions offers various configuration options available when
+// creating a new Histogram.
 type HistogramOptions struct {
 	// Metadata is the metric Metadata associated with the histogram.
 	Metadata Metadata
@@ -235,16 +239,17 @@ type HistogramOptions struct {
 	Mode HistogramMode
 }
 
+// NewHistogram creates a new IHistogram. The returned type is determined
+// based on the provided HistogramOptions, and/or the value of the
+// useHdrHistogramsEnvVar environment variable.
 func NewHistogram(opt HistogramOptions) IHistogram {
 	if hdrEnabled && opt.Mode != HistogramModePrometheus {
 		if opt.Mode == HistogramModePreferHdrLatency {
 			return NewHdrLatency(opt.Metadata, opt.Duration)
-		} else {
-			return NewHdrHistogram(opt.Metadata, opt.Duration, opt.MaxVal, opt.SigFigs)
 		}
-	} else {
-		return newHistogram(opt.Metadata, opt.Duration, opt.Buckets)
+		return NewHdrHistogram(opt.Metadata, opt.Duration, opt.MaxVal, opt.SigFigs)
 	}
+	return newHistogram(opt.Metadata, opt.Duration, opt.Buckets)
 }
 
 // NewHistogram is a prometheus-backed histogram. Depending on the value of
@@ -307,6 +312,8 @@ type Histogram struct {
 	}
 }
 
+// IHistogram is the interface that all core histogram
+// implementations should adhere to.
 type IHistogram interface {
 	Iterable
 	PrometheusExportable
