@@ -198,6 +198,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					toDrain[i] = createMetadataSourceForID(i)
 				}
 				hashRouter, hashRouterOutputs := colflow.NewHashRouter(
+					&execinfra.FlowCtx{Gateway: false},
 					allocators,
 					colexecargs.OpWithMetaInfo{
 						Root:            hashRouterInput,
@@ -231,7 +232,8 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				// matter which context we use since it'll only be used by the
 				// memory accounting system.
 				syncAllocator := colmem.NewAllocator(ctx, &syncMemAccount, testColumnFactory)
-				synchronizer := colexec.NewParallelUnorderedSynchronizer(syncAllocator, synchronizerInputs, &wg)
+				syncFlowCtx := &execinfra.FlowCtx{Local: false, Gateway: !addAnotherRemote}
+				synchronizer := colexec.NewParallelUnorderedSynchronizer(syncFlowCtx, syncAllocator, synchronizerInputs, &wg)
 				inputMetadataSource := colexecop.MetadataSource(synchronizer)
 				flowID := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 
@@ -246,6 +248,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					outboxMetadataSources []colexecop.MetadataSource,
 				) {
 					outbox, err := colrpc.NewOutbox(
+						&execinfra.FlowCtx{Gateway: false},
 						colmem.NewAllocator(outboxCtx, outboxMemAcc, testColumnFactory),
 						outboxConverterMemAcc,
 						colexecargs.OpWithMetaInfo{

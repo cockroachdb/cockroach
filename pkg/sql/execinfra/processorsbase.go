@@ -675,8 +675,10 @@ func (pb *ProcessorBaseNoHelper) moveToTrailingMeta() {
 				pb.span.RecordStructured(stats)
 			}
 		}
-		if trace := pb.span.GetConfiguredRecording(); trace != nil {
-			pb.trailingMeta = append(pb.trailingMeta, execinfrapb.ProducerMetadata{TraceData: trace})
+		if !pb.FlowCtx.Gateway {
+			if trace := pb.span.GetConfiguredRecording(); trace != nil {
+				pb.trailingMeta = append(pb.trailingMeta, execinfrapb.ProducerMetadata{TraceData: trace})
+			}
 		}
 		if pb.storeExecStatsTrace {
 			if trace := pb.span.GetStructuredRecordingUpToBarrier(); trace != nil {
@@ -839,22 +841,28 @@ func (pb *ProcessorBase) AppendTrailingMeta(meta execinfrapb.ProducerMetadata) {
 
 // ProcessorSpan creates a child span for a processor (if we are doing any
 // tracing). The returned span needs to be finished using tracing.FinishSpan.
-func ProcessorSpan(ctx context.Context, name string) (context.Context, *tracing.Span) {
+func ProcessorSpan(
+	ctx context.Context, flowCtx *FlowCtx, name string,
+) (context.Context, *tracing.Span) {
 	sp := tracing.SpanFromContext(ctx)
 	if sp == nil {
 		return ctx, nil
 	}
-	return sp.Tracer().StartSpanCtx(ctx, name,
-		tracing.WithParent(sp),
+	var opts [2]tracing.SpanOption
+	opts[0] = tracing.WithParent(sp)
+	if flowCtx.Gateway {
 		// Use the barrier option in order to be able to collect the structured
 		// recording only for this processor, ignoring any payload from the
 		// child processors.
-		tracing.WithHasBarrier(),
-		// The trace from each processor is currently imported into the span of
-		// the flow on the gateway, in DistSQLReceiver.pushMeta, so we always
-		// detach the recording.
-		tracing.WithDetachedRecording(),
-	)
+		opts[1] = tracing.WithHasBarrier()
+	} else {
+		// The trace from each processor will be imported into the span of the
+		// flow on the gateway, in DistSQLReceiver.pushMeta.
+		// TODO(yuzefovich): only use the detached recording for the root
+		// components of the remote flows.
+		opts[1] = tracing.WithDetachedRecording()
+	}
+	return sp.Tracer().StartSpanCtx(ctx, name, opts[:]...)
 }
 
 // StartInternal prepares the ProcessorBase for execution. It returns the
@@ -874,7 +882,7 @@ func (pb *ProcessorBaseNoHelper) StartInternal(ctx context.Context, name string)
 	noSpan := pb.FlowCtx != nil && pb.FlowCtx.Cfg != nil &&
 		pb.FlowCtx.Cfg.TestingKnobs.ProcessorNoTracingSpan
 	if !noSpan {
-		pb.ctx, pb.span = ProcessorSpan(ctx, name)
+		pb.ctx, pb.span = ProcessorSpan(ctx, pb.FlowCtx, name)
 		if pb.span != nil && pb.span.IsVerbose() {
 			pb.span.SetTag(execinfrapb.FlowIDTagKey, attribute.StringValue(pb.FlowCtx.ID.String()))
 			pb.span.SetTag(execinfrapb.ProcessorIDTagKey, attribute.IntValue(int(pb.ProcessorID)))

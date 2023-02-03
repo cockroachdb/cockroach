@@ -36,7 +36,8 @@ import (
 // stream are assumed to be ordered according to the same set of columns.
 type OrderedSynchronizer struct {
 	colexecop.InitHelper
-	span *tracing.Span
+	flowCtx *execinfra.FlowCtx
+	span    *tracing.Span
 
 	accountingHelper      colmem.SetAccountingHelper
 	inputs                []colexecargs.OpWithMetaInfo
@@ -86,6 +87,7 @@ func (o *OrderedSynchronizer) Child(nth int, verbose bool) execopnode.OpNode {
 // - tuplesToMerge, if positive, indicates the total number of tuples that will
 // be emitted by all inputs, use 0 if unknown.
 func NewOrderedSynchronizer(
+	flowCtx *execinfra.FlowCtx,
 	allocator *colmem.Allocator,
 	memoryLimit int64,
 	inputs []colexecargs.OpWithMetaInfo,
@@ -94,6 +96,7 @@ func NewOrderedSynchronizer(
 	tuplesToMerge int64,
 ) *OrderedSynchronizer {
 	os := &OrderedSynchronizer{
+		flowCtx:               flowCtx,
 		inputs:                inputs,
 		ordering:              ordering,
 		typs:                  typs,
@@ -284,7 +287,7 @@ func (o *OrderedSynchronizer) Init(ctx context.Context) {
 	if !o.InitHelper.Init(ctx) {
 		return
 	}
-	o.Ctx, o.span = execinfra.ProcessorSpan(o.Ctx, "ordered sync")
+	o.Ctx, o.span = execinfra.ProcessorSpan(o.Ctx, o.flowCtx, "ordered sync")
 	o.inputIndices = make([]int, len(o.inputs))
 	for i := range o.inputs {
 		o.inputs[i].Root.Init(o.Ctx)
@@ -304,7 +307,7 @@ func (o *OrderedSynchronizer) DrainMeta() []execinfrapb.ProducerMetadata {
 				o.span.RecordStructured(stats.GetStats())
 			}
 		}
-		if meta := execinfra.GetTraceDataAsMetadata(o.span); meta != nil {
+		if meta := execinfra.GetTraceDataAsMetadata(o.flowCtx, o.span); meta != nil {
 			bufferedMeta = append(bufferedMeta, *meta)
 		}
 	}

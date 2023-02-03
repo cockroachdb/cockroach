@@ -63,10 +63,11 @@ type spanOptions struct {
 	// (for example for the purposes of the active spans registry), so the child
 	// span cannot simply be created as a root.
 	//
-	// For example, in the case of DistSQL, each processor in a flow has its own
-	// span, as a child of the flow. The DistSQL infrastructure organizes the
-	// collection of each processor span recording independently, without relying
-	// on collecting the recording of the flow's span.
+	// For example, in the case of DistSQL, each processor in a remote flow has
+	// its own span, as a child of the flow. The DistSQL infrastructure
+	// organizes the collection of each processor span recording (on the remote
+	// nodes) independently, without relying on collecting the recording of the
+	// flow's span.
 	ParentDoesNotCollectRecording bool
 	RemoteParent                  SpanMeta               // see WithRemoteParentFromSpanMeta
 	RefType                       spanReferenceType      // see WithFollowsFrom
@@ -328,10 +329,11 @@ func (o detachedRecording) apply(opts spanOptions) spanOptions {
 // relationship is still useful (for example for the purposes of the active
 // spans registry), so the child span cannot simply be created as a root.
 //
-// For example, in the case of DistSQL, each processor in a flow has its own
-// span, as a child of the flow. The DistSQL infrastructure organizes the
-// collection of each processor span recording independently, without relying
-// on collecting the recording of the flow's span.
+// For example, in the case of DistSQL, each processor in a remote flow has its
+// own span, as a child of the flow. The DistSQL infrastructure organizes the
+// collection of each processor span recording (on the remote nodes)
+// independently, without relying on collecting the recording of the flow's
+// span.
 //
 // In the case when the parent's recording is collected through the span
 // registry, this option is ignore since, in that case, we want as much info as
@@ -524,7 +526,8 @@ func (o hasBarrier) apply(opts spanOptions) spanOptions {
 // trace from the child while also providing a way for the parent to examine the
 // structured events that were recorded directly into the parent or its children
 // with no barrier. For example, this behavior allows us to attribute the
-// contention events precisely to the DistSQL processor that ran into them.
+// contention events precisely to the DistSQL processor, running on the gateway,
+// that ran into them.
 func WithHasBarrier() SpanOption {
 	return hasBarrierSingleton
 }

@@ -48,6 +48,7 @@ type flowStreamClient interface {
 // given remote endpoint.
 type Outbox struct {
 	colexecop.OneInputNode
+	flowCtx *execinfra.FlowCtx
 	// inputMetaInfo contains all of the meta components that the outbox is
 	// responsible for. OneInputNode.Input is the deselector operator with Root
 	// field as its input. Notably StatsCollectors are not accessed directly -
@@ -85,6 +86,7 @@ type Outbox struct {
 //   - getStats, when non-nil, returns all of the execution statistics of the
 //     operators that are in the same tree as this Outbox.
 func NewOutbox(
+	flowCtx *execinfra.FlowCtx,
 	unlimitedAllocator *colmem.Allocator,
 	converterMemAcc *mon.BoundAccount,
 	input colexecargs.OpWithMetaInfo,
@@ -103,6 +105,7 @@ func NewOutbox(
 		// Add a deselector as selection vectors are not serialized (nor should they
 		// be).
 		OneInputNode:       colexecop.NewOneInputNode(colexecutils.NewDeselectorOp(unlimitedAllocator, input.Root, typs)),
+		flowCtx:            flowCtx,
 		inputMetaInfo:      input,
 		typs:               typs,
 		unlimitedAllocator: unlimitedAllocator,
@@ -165,7 +168,7 @@ func (o *Outbox) Run(
 	// be safe.
 	defer outboxCtxCancel()
 
-	ctx, o.span = execinfra.ProcessorSpan(ctx, "outbox")
+	ctx, o.span = execinfra.ProcessorSpan(ctx, o.flowCtx, "outbox")
 	if o.span != nil {
 		defer o.span.Finish()
 		o.span.SetTag(execinfrapb.FlowIDTagKey, attribute.StringValue(flowID.String()))
@@ -336,14 +339,16 @@ func (o *Outbox) sendMetadata(ctx context.Context, stream flowStreamClient, errT
 			msg.Data.Metadata = append(msg.Data.Metadata, execinfrapb.LocalMetaToRemoteProducerMeta(ctx, meta))
 		}
 	}
-	if trace := tracing.SpanFromContext(ctx).GetConfiguredRecording(); trace != nil {
-		msg.Data.Metadata = append(msg.Data.Metadata, execinfrapb.RemoteProducerMetadata{
-			Value: &execinfrapb.RemoteProducerMetadata_TraceData_{
-				TraceData: &execinfrapb.RemoteProducerMetadata_TraceData{
-					CollectedSpans: trace,
+	if !o.flowCtx.Gateway {
+		if trace := tracing.SpanFromContext(ctx).GetConfiguredRecording(); trace != nil {
+			msg.Data.Metadata = append(msg.Data.Metadata, execinfrapb.RemoteProducerMetadata{
+				Value: &execinfrapb.RemoteProducerMetadata_TraceData_{
+					TraceData: &execinfrapb.RemoteProducerMetadata_TraceData{
+						CollectedSpans: trace,
+					},
 				},
-			},
-		})
+			})
+		}
 	}
 	if len(msg.Data.Metadata) == 0 {
 		return nil

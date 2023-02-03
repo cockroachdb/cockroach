@@ -49,7 +49,6 @@ type sketchInfo struct {
 type samplerProcessor struct {
 	execinfra.ProcessorBase
 
-	flowCtx         *execinfra.FlowCtx
 	input           execinfra.RowSource
 	memAcc          mon.BoundAccount
 	sr              stats.SampleReservoir
@@ -119,7 +118,6 @@ func newSamplerProcessor(
 	// enough.
 	memMonitor := execinfra.NewLimitedMonitor(ctx, flowCtx.Mon, flowCtx, "sampler-mem")
 	s := &samplerProcessor{
-		flowCtx:         flowCtx,
 		input:           input,
 		memAcc:          memMonitor.MakeBoundAccount(),
 		sketches:        make([]sketchInfo, len(spec.Sketches)),
@@ -218,7 +216,7 @@ func newSamplerProcessor(
 }
 
 func (s *samplerProcessor) pushTrailingMeta(ctx context.Context) {
-	execinfra.SendTraceData(ctx, s.Output)
+	execinfra.SendTraceData(ctx, s.FlowCtx, s.Output)
 }
 
 // Run is part of the Processor interface.
@@ -278,7 +276,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 				//  - if it is lower than cpuUsageMinThrottle, we do not throttle;
 				//  - if it is higher than cpuUsageMaxThrottle, we throttle all the way;
 				//  - in-between, we scale the idle time proportionally.
-				usage := s.flowCtx.Cfg.RuntimeStats.GetCPUCombinedPercentNorm()
+				usage := s.FlowCtx.Cfg.RuntimeStats.GetCPUCombinedPercentNorm()
 
 				if usage > cpuUsageMinThrottle {
 					fractionIdle := s.maxFractionIdle
@@ -308,7 +306,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 					case <-timer.C:
 						timer.Read = true
 						break
-					case <-s.flowCtx.Stopper().ShouldQuiesce():
+					case <-s.FlowCtx.Stopper().ShouldQuiesce():
 						break
 					}
 				}

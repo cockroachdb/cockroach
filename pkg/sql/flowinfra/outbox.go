@@ -227,7 +227,7 @@ func (m *Outbox) mainLoop(ctx context.Context, wg *sync.WaitGroup) (retErr error
 	ctx, m.outboxCtxCancel = context.WithCancel(ctx)
 
 	var span *tracing.Span
-	ctx, span = execinfra.ProcessorSpan(ctx, "outbox")
+	ctx, span = execinfra.ProcessorSpan(ctx, m.flowCtx, "outbox")
 	defer span.Finish()
 	if span != nil {
 		m.statsCollectionEnabled = span.RecordingType() != tracingpb.RecordingOff
@@ -310,10 +310,12 @@ func (m *Outbox) mainLoop(ctx context.Context, wg *sync.WaitGroup) (retErr error
 						m.stats.FlowStats.ConsumedRU.Set(uint64(m.flowCtx.TenantCPUMonitor.EndCollection(ctx)))
 					}
 					span.RecordStructured(&m.stats)
-					if trace := tracing.SpanFromContext(ctx).GetConfiguredRecording(); trace != nil {
-						err := m.AddRow(ctx, nil, &execinfrapb.ProducerMetadata{TraceData: trace})
-						if err != nil {
-							return err
+					if !m.flowCtx.Gateway {
+						if trace := tracing.SpanFromContext(ctx).GetConfiguredRecording(); trace != nil {
+							err := m.AddRow(ctx, nil, &execinfrapb.ProducerMetadata{TraceData: trace})
+							if err != nil {
+								return err
+							}
 						}
 					}
 				}

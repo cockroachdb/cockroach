@@ -107,10 +107,10 @@ const indexBackfillMergeProgressReportInterval = 10 * time.Second
 func (ibm *IndexBackfillMerger) Run(ctx context.Context) {
 	opName := "IndexBackfillMerger"
 	ctx = logtags.AddTag(ctx, opName, int(ibm.spec.Table.ID))
-	ctx, span := execinfra.ProcessorSpan(ctx, opName)
+	ctx, span := execinfra.ProcessorSpan(ctx, ibm.flowCtx, opName)
 	defer span.Finish()
 	defer ibm.output.ProducerDone()
-	defer execinfra.SendTraceData(ctx, ibm.output)
+	defer execinfra.SendTraceData(ctx, ibm.flowCtx, ibm.output)
 
 	mu := struct {
 		syncutil.Mutex

@@ -343,10 +343,10 @@ func (ib *indexBackfiller) Run(ctx context.Context) {
 	opName := "indexBackfillerProcessor"
 	ctx = logtags.AddTag(ctx, "job", ib.spec.JobID)
 	ctx = logtags.AddTag(ctx, opName, int(ib.spec.Table.ID))
-	ctx, span := execinfra.ProcessorSpan(ctx, opName)
+	ctx, span := execinfra.ProcessorSpan(ctx, ib.flowCtx, opName)
 	defer span.Finish()
 	defer ib.output.ProducerDone()
-	defer execinfra.SendTraceData(ctx, ib.output)
+	defer execinfra.SendTraceData(ctx, ib.flowCtx, ib.output)
 	defer ib.Close(ctx)
 
 	progCh := make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)

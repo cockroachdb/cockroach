@@ -136,11 +136,7 @@ func (s *ColIndexJoin) Init(ctx context.Context) {
 	if !s.InitHelper.Init(ctx) {
 		return
 	}
-	// If tracing is enabled, we need to start a child span so that the only
-	// contention events present in the recording would be because of this
-	// cFetcher. Note that ProcessorSpan method itself will check whether
-	// tracing is enabled.
-	s.Ctx, s.tracingSpan = execinfra.ProcessorSpan(s.Ctx, "colindexjoin")
+	s.Ctx, s.tracingSpan = execinfra.ProcessorSpan(s.Ctx, s.flowCtx, "colindexjoin")
 	s.Input.Init(s.Ctx)
 }
 
@@ -373,8 +369,10 @@ func (s *ColIndexJoin) DrainMeta() []execinfrapb.ProducerMetadata {
 	meta.Metrics.BytesRead = s.GetBytesRead()
 	meta.Metrics.RowsRead = s.GetRowsRead()
 	trailingMeta = append(trailingMeta, *meta)
-	if trace := tracing.SpanFromContext(s.Ctx).GetConfiguredRecording(); trace != nil {
-		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{TraceData: trace})
+	if !s.flowCtx.Gateway {
+		if trace := tracing.SpanFromContext(s.Ctx).GetConfiguredRecording(); trace != nil {
+			trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{TraceData: trace})
+		}
 	}
 	return trailingMeta
 }

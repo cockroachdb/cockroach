@@ -52,11 +52,7 @@ func (s *ColBatchDirectScan) Init(ctx context.Context) {
 	if !s.InitHelper.Init(ctx) {
 		return
 	}
-	// If tracing is enabled, we need to start a child span so that the only
-	// contention events present in the recording would be because of this
-	// fetcher. Note that ProcessorSpan method itself will check whether tracing
-	// is enabled.
-	s.Ctx, s.tracingSpan = execinfra.ProcessorSpan(s.Ctx, "colbatchdirectscan")
+	s.Ctx, s.tracingSpan = execinfra.ProcessorSpan(s.Ctx, s.flowCtx, "colbatchdirectscan")
 	var err error
 	s.deser, err = colserde.NewRecordBatchSerializer(s.resultTypes)
 	if err != nil {

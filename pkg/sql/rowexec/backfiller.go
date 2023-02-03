@@ -90,10 +90,10 @@ func (*backfiller) MustBeStreaming() bool {
 func (b *backfiller) Run(ctx context.Context) {
 	opName := fmt.Sprintf("%sBackfiller", b.name)
 	ctx = logtags.AddTag(ctx, opName, int(b.spec.Table.ID))
-	ctx, span := execinfra.ProcessorSpan(ctx, opName)
+	ctx, span := execinfra.ProcessorSpan(ctx, b.flowCtx, opName)
 	defer span.Finish()
 	meta := b.doRun(ctx)
-	execinfra.SendTraceData(ctx, b.output)
+	execinfra.SendTraceData(ctx, b.flowCtx, b.output)
 	if emitHelper(ctx, b.output, &b.out, nil /* row */, meta, func(ctx context.Context) {}) {
 		b.output.ProducerDone()
 	}

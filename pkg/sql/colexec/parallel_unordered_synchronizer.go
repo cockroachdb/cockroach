@@ -66,16 +66,14 @@ const (
 type ParallelUnorderedSynchronizer struct {
 	colexecop.InitHelper
 
+	flowCtx   *execinfra.FlowCtx
 	allocator *colmem.Allocator
 	inputs    []colexecargs.OpWithMetaInfo
 	inputCtxs []context.Context
 	// cancelLocalInput stores context cancellation functions for each of the
-	// inputs. The functions are populated only if LocalPlan is true.
+	// inputs. The functions are populated only if localPlan is true.
 	cancelLocalInput []context.CancelFunc
-	// LocalPlan indicates whether this synchronizer is a part of the fully
-	// local plan.
-	LocalPlan    bool
-	tracingSpans []*tracing.Span
+	tracingSpans     []*tracing.Span
 	// readNextBatch is a slice of channels, where each channel corresponds to the
 	// input at the same index in inputs. It is used as a barrier for input
 	// goroutines to wait on until the Next goroutine signals that it is safe to
@@ -134,7 +132,10 @@ func (s *ParallelUnorderedSynchronizer) Child(nth int, verbose bool) execopnode.
 // zero-length batch received from Next.
 // - allocator must use a memory account that is not shared with any other user.
 func NewParallelUnorderedSynchronizer(
-	allocator *colmem.Allocator, inputs []colexecargs.OpWithMetaInfo, wg *sync.WaitGroup,
+	flowCtx *execinfra.FlowCtx,
+	allocator *colmem.Allocator,
+	inputs []colexecargs.OpWithMetaInfo,
+	wg *sync.WaitGroup,
 ) *ParallelUnorderedSynchronizer {
 	readNextBatch := make([]chan struct{}, len(inputs))
 	for i := range readNextBatch {
@@ -143,6 +144,7 @@ func NewParallelUnorderedSynchronizer(
 		readNextBatch[i] = make(chan struct{}, 1)
 	}
 	return &ParallelUnorderedSynchronizer{
+		flowCtx:           flowCtx,
 		allocator:         allocator,
 		inputs:            inputs,
 		inputCtxs:         make([]context.Context, len(inputs)),
@@ -172,13 +174,13 @@ func (s *ParallelUnorderedSynchronizer) Init(ctx context.Context) {
 		return
 	}
 	for i, input := range s.inputs {
-		s.inputCtxs[i], s.tracingSpans[i] = execinfra.ProcessorSpan(s.Ctx, fmt.Sprintf("parallel unordered sync input %d", i))
-		if s.LocalPlan {
-			// If there plan is local, there are no colrpc.Inboxes in this input
+		s.inputCtxs[i], s.tracingSpans[i] = execinfra.ProcessorSpan(s.Ctx, s.flowCtx, fmt.Sprintf("parallel unordered sync input %d", i))
+		if s.flowCtx.Local {
+			// If the plan is local, there are no colrpc.Inboxes in this input
 			// tree, and the synchronizer can cancel the current work eagerly
 			// when transitioning into draining.
 			//
-			// If there plan is distributed, there might be an inbox in the
+			// If the plan is distributed, there might be an inbox in the
 			// input tree, and the synchronizer cannot cancel the work eagerly
 			// because canceling the context would break the gRPC stream and
 			// make it impossible to fetch the remote metadata. Furthermore, it
@@ -287,7 +289,7 @@ func (s *ParallelUnorderedSynchronizer) init() {
 						for _, s := range input.StatsCollectors {
 							span.RecordStructured(s.GetStats())
 						}
-						if meta := execinfra.GetTraceDataAsMetadata(span); meta != nil {
+						if meta := execinfra.GetTraceDataAsMetadata(s.flowCtx, span); meta != nil {
 							msg.meta = append(msg.meta, *meta)
 						}
 					}

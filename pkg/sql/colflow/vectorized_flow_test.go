@@ -47,6 +47,7 @@ type callbackRemoteComponentCreator struct {
 var _ remoteComponentCreator = &callbackRemoteComponentCreator{}
 
 func (c callbackRemoteComponentCreator) newOutbox(
+	_ *execinfra.FlowCtx,
 	allocator *colmem.Allocator,
 	converterMemAcc *mon.BoundAccount,
 	input colexecargs.OpWithMetaInfo,
@@ -219,7 +220,7 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 			require.Len(t, input.MetadataSources, 1)
 			inbox := colexec.MaybeUnwrapInvariantsChecker(input.MetadataSources[0].(colexecop.Operator)).(*colrpc.Inbox)
 			require.Len(t, inboxToNumInputTypes[inbox], numInputTypesToOutbox)
-			return colrpc.NewOutbox(allocator, converterMemAcc, input, typs, nil /* getStats */)
+			return colrpc.NewOutbox(&execinfra.FlowCtx{Gateway: false}, allocator, converterMemAcc, input, typs, nil /* getStats */)
 		},
 		newInboxFn: func(allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error) {
 			inbox, err := colrpc.NewInbox(allocator, typs, streamID)

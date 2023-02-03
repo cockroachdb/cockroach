@@ -435,6 +435,7 @@ func (r opResult) createDiskBackedSort(
 			outputUnlimitedAllocator := colmem.NewAllocator(ctx, accounts[2], factory)
 			diskAccount := args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, opName, processorID)
 			es := colexecdisk.NewExternalSorter(
+				flowCtx,
 				sortUnlimitedAllocator,
 				mergeUnlimitedAllocator,
 				outputUnlimitedAllocator,

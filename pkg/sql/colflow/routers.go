@@ -424,6 +424,7 @@ const (
 // returned by the constructor.
 type HashRouter struct {
 	colexecop.OneInputNode
+	flowCtx *execinfra.FlowCtx
 	// inputMetaInfo contains all of the meta components that the hash router
 	// is responsible for. Root field is exactly the same as OneInputNode.Input.
 	inputMetaInfo colexecargs.OpWithMetaInfo
@@ -469,6 +470,7 @@ type HashRouter struct {
 // needs to have a separate disk account and a separate converter memory
 // account.
 func NewHashRouter(
+	flowCtx *execinfra.FlowCtx,
 	unlimitedAllocators []*colmem.Allocator,
 	input colexecargs.OpWithMetaInfo,
 	types []*types.T,
@@ -512,7 +514,9 @@ func NewHashRouter(
 		outputs[i] = op
 		outputsAsOps[i] = op
 	}
-	return newHashRouterWithOutputs(input, hashCols, unblockEventsChan, outputs), outputsAsOps
+	r := newHashRouterWithOutputs(input, hashCols, unblockEventsChan, outputs)
+	r.flowCtx = flowCtx
+	return r, outputsAsOps
 }
 
 func newHashRouterWithOutputs(
@@ -567,7 +571,7 @@ func (r *HashRouter) getDrainState() hashRouterDrainState {
 // early.
 func (r *HashRouter) Run(ctx context.Context) {
 	var span *tracing.Span
-	ctx, span = execinfra.ProcessorSpan(ctx, "hash router")
+	ctx, span = execinfra.ProcessorSpan(ctx, r.flowCtx, "hash router")
 	if span != nil {
 		defer span.Finish()
 	}
@@ -641,7 +645,7 @@ func (r *HashRouter) Run(ctx context.Context) {
 			for _, s := range r.inputMetaInfo.StatsCollectors {
 				span.RecordStructured(s.GetStats())
 			}
-			if meta := execinfra.GetTraceDataAsMetadata(span); meta != nil {
+			if meta := execinfra.GetTraceDataAsMetadata(r.flowCtx, span); meta != nil {
 				bufferedMeta = append(bufferedMeta, *meta)
 			}
 		}

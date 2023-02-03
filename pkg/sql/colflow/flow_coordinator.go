@@ -267,7 +267,7 @@ func (f *BatchFlowCoordinator) pushError(err error) execinfra.ConsumerStatus {
 func (f *BatchFlowCoordinator) Run(ctx context.Context) {
 	status := execinfra.NeedMoreRows
 
-	ctx, span := execinfra.ProcessorSpan(ctx, "batch flow coordinator")
+	ctx, span := execinfra.ProcessorSpan(ctx, f.flowCtx, "batch flow coordinator")
 	if span != nil {
 		if span.IsVerbose() {
 			span.SetTag(execinfrapb.FlowIDTagKey, attribute.StringValue(f.flowCtx.ID.String()))
@@ -314,7 +314,7 @@ func (f *BatchFlowCoordinator) Run(ctx context.Context) {
 		for _, s := range f.input.StatsCollectors {
 			span.RecordStructured(s.GetStats())
 		}
-		if meta := execinfra.GetTraceDataAsMetadata(span); meta != nil {
+		if meta := execinfra.GetTraceDataAsMetadata(f.flowCtx, span); meta != nil {
 			status = f.output.PushBatch(nil /* batch */, meta)
 			if status == execinfra.ConsumerClosed {
 				return
