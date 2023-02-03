@@ -226,6 +226,8 @@ func (h *HdrHistogram) GetMetadata() Metadata {
 	return baseMetadata
 }
 
+// ValueAtQuantileWindowed calculates the windowed quantile value for
+// this HdrHistogram.
 func (h *HdrHistogram) ValueAtQuantileWindowed(q float64) float64 {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -233,6 +235,7 @@ func (h *HdrHistogram) ValueAtQuantileWindowed(q float64) float64 {
 	return ValueAtQuantileWindowed(h.toPrometheusMetricWindowedLocked().Histogram, q)
 }
 
+// Mean calculates the cumulative mean value for this HdrHistogram.
 func (h *HdrHistogram) Mean() float64 {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -240,6 +243,7 @@ func (h *HdrHistogram) Mean() float64 {
 	return h.mu.cumulative.Mean()
 }
 
+// TotalSum calculates the cumulative sample sum value for this HdrHistogram.
 func (h *HdrHistogram) TotalSum() float64 {
 	h.mu.Lock()
 	defer h.mu.Unlock()
