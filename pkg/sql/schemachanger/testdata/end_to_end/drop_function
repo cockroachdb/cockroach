@@ -9,7 +9,7 @@ CREATE TABLE t(
 CREATE SEQUENCE sq1;
 CREATE VIEW v AS SELECT a FROM t;
 CREATE TYPE notmyworkday AS ENUM ('Monday', 'Tuesday');
-CREATE FUNCTION f(a notmyworkday) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+CREATE FUNCTION f(a notmyworkday) RETURNS INT VOLATILE LANGUAGE SQL AS $$
   SELECT a FROM t;
   SELECT b FROM t@t_idx_b;
   SELECT c FROM t@t_idx_c;
@@ -131,7 +131,7 @@ upsert descriptor #109
   -  version: "1"
   +  state: DROP
   +  version: "2"
-     volatility: IMMUTABLE
+     volatility: VOLATILE
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
@@ -283,7 +283,7 @@ upsert descriptor #109
   -  version: "1"
   +  state: DROP
   +  version: "2"
-     volatility: IMMUTABLE
+     volatility: VOLATILE
 persist all catalog changes to storage
 create job #1 (non-cancelable: true): "DROP FUNCTION \"\".\"\".f"
   descriptor IDs: [104 105 106 107 108 109]

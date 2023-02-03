@@ -20,7 +20,7 @@ CREATE TABLE t2(a notmyworkday);
 +object {100 101 t2} -> 109
 
 test
-CREATE FUNCTION f(a notmyworkday) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+CREATE FUNCTION f(a notmyworkday) RETURNS INT VOLATILE LANGUAGE SQL AS $$
   SELECT a FROM t;
   SELECT b FROM t@t_idx_b;
   SELECT c FROM t@t_idx_c;
@@ -80,7 +80,7 @@ upsert descriptor #110
   +      width: 64
   +  state: ADD
   +  version: "1"
-  +  volatility: IMMUTABLE
+  +  volatility: VOLATILE
 upsert descriptor #101
    schema:
   +  functions:
@@ -222,7 +222,7 @@ upsert descriptor #110
   +      oid: 20
   +      width: 64
   +  version: "1"
-  +  volatility: IMMUTABLE
+  +  volatility: VOLATILE
 upsert descriptor #101
    schema:
   +  functions:
