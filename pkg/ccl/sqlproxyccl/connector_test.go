@@ -369,6 +369,90 @@ func TestConnector_dialTenantCluster(t *testing.T) {
 		require.Nil(t, conn)
 	})
 
+	t.Run("context canceled after dial fails", func(t *testing.T) {
+		// This is a short test, and is expected to finish within ms.
+		ctx, cancel := context.WithTimeout(bgCtx, 2*time.Second)
+		defer cancel()
+
+		stopper := stop.NewStopper()
+		defer stopper.Stop(ctx)
+
+		c := &connector{
+			TenantID: roachpb.MakeTenantID(42),
+			DialTenantLatency: metric.NewHistogram(
+				metaDialTenantLatency, time.Millisecond, metric.NetworkLatencyBuckets,
+			),
+			DialTenantRetries: metric.NewCounter(metaDialTenantRetries),
+		}
+		dc := &testTenantDirectoryCache{}
+		c.DirectoryCache = dc
+		b, err := balancer.NewBalancer(
+			ctx,
+			stopper,
+			balancer.NewMetrics(),
+			c.DirectoryCache,
+			balancer.NoRebalanceLoop(),
+		)
+		require.NoError(t, err)
+		c.Balancer = b
+
+		var dialSQLServerCount int
+		c.testingKnobs.lookupAddr = func(ctx context.Context) (string, error) {
+			return "127.0.0.10:42", nil
+		}
+		c.testingKnobs.dialSQLServer = func(serverAssignment *balancer.ServerAssignment) (net.Conn, error) {
+			require.Equal(t, serverAssignment.Addr(), "127.0.0.10:42")
+			dialSQLServerCount++
+
+			// Cancel context to trigger loop exit on next retry.
+			cancel()
+			return nil, markAsRetriableConnectorError(errors.New("bar"))
+		}
+
+		var reportFailureFnCount int
+
+		// Invoke dial tenant with a success to ReportFailure.
+		// ---------------------------------------------------
+		dc.reportFailureFn = func(fnCtx context.Context, tenantID roachpb.TenantID, addr string) error {
+			reportFailureFnCount++
+			require.Equal(t, ctx, fnCtx)
+			require.Equal(t, c.TenantID, tenantID)
+			require.Equal(t, "127.0.0.10:42", addr)
+			return nil
+		}
+		conn, err := c.dialTenantCluster(ctx, nil /* requester */)
+		require.EqualError(t, err, "bar")
+		require.True(t, errors.Is(err, context.Canceled))
+		require.Nil(t, conn)
+
+		// Assert existing calls.
+		require.Equal(t, 1, dialSQLServerCount)
+		require.Equal(t, 1, reportFailureFnCount)
+		require.Equal(t, c.DialTenantLatency.TotalCount(), int64(1))
+		require.Equal(t, c.DialTenantRetries.Count(), int64(0))
+
+		// Invoke dial tenant with a failure to ReportFailure. Final error
+		// should include the secondary failure.
+		// ---------------------------------------------------------------
+		dc.reportFailureFn = func(fnCtx context.Context, tenantID roachpb.TenantID, addr string) error {
+			reportFailureFnCount++
+			require.Equal(t, ctx, fnCtx)
+			require.Equal(t, c.TenantID, tenantID)
+			require.Equal(t, "127.0.0.10:42", addr)
+			return errors.New("failure to report")
+		}
+		conn, err = c.dialTenantCluster(ctx, nil /* requester */)
+		require.EqualError(t, err, "reporting failure: failure to report: bar")
+		require.True(t, errors.Is(err, context.Canceled))
+		require.Nil(t, conn)
+
+		// Assert existing calls.
+		require.Equal(t, 2, dialSQLServerCount)
+		require.Equal(t, 2, reportFailureFnCount)
+		require.Equal(t, c.DialTenantLatency.TotalCount(), int64(2))
+		require.Equal(t, c.DialTenantRetries.Count(), int64(0))
+	})
+
 	t.Run("non-transient error", func(t *testing.T) {
 		// This is a short test, and is expected to finish within ms.
 		ctx, cancel := context.WithTimeout(bgCtx, 2*time.Second)

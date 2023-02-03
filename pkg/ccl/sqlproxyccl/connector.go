@@ -250,18 +250,20 @@ func (c *connector) dialTenantCluster(
 				// Report the failure to the directory cache so that it can
 				// refresh any stale information that may have caused the
 				// problem.
-				if err = reportFailureToDirectoryCache(
+				if reportErr := reportFailureToDirectoryCache(
 					ctx, c.TenantID, serverAssignment.Addr(), c.DirectoryCache,
-				); err != nil {
+				); reportErr != nil {
 					reportFailureErrs++
 					if reportFailureErr.ShouldLog() {
 						log.Ops.Errorf(ctx,
 							"report failure (%d errors skipped): %v",
 							reportFailureErrs,
-							err,
+							reportErr,
 						)
 						reportFailureErrs = 0
 					}
+					// nolint:errwrap
+					err = errors.Wrapf(err, "reporting failure: %s", reportErr.Error())
 				}
 				continue
 			}
@@ -274,7 +276,14 @@ func (c *connector) dialTenantCluster(
 	// a bounded number of times. In our case, since we retry infinitely, the
 	// only possibility is when ctx's Done channel is closed (which implies that
 	// ctx.Err() != nil).
-	//
+	if err == nil || ctx.Err() == nil {
+		// nolint:errwrap
+		return nil, errors.AssertionFailedf(
+			"unexpected retry loop exit, err=%v, ctxErr=%v",
+			err,
+			ctx.Err(),
+		)
+	}
 	// If the error is already marked, just return that.
 	if errors.IsAny(err, context.Canceled, context.DeadlineExceeded) {
 		return nil, err
