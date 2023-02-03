@@ -114,7 +114,7 @@ func TestValidateSchemaSelf(t *testing.T) {
 				Name:       "schema1",
 				Privileges: defaultPrivilege,
 				Functions: map[string]descpb.SchemaDescriptor_Function{
-					"f": {Overloads: []descpb.SchemaDescriptor_FunctionOverload{{ID: 0}}},
+					"f": {Signatures: []descpb.SchemaDescriptor_FunctionSignature{{ID: 0}}},
 				},
 			},
 		},
@@ -211,7 +211,7 @@ func TestValidateCrossSchemaReferences(t *testing.T) {
 				ParentID: 51,
 				Name:     "schema1",
 				Functions: map[string]descpb.SchemaDescriptor_Function{
-					"f": {Overloads: []descpb.SchemaDescriptor_FunctionOverload{{ID: 500}}},
+					"f": {Signatures: []descpb.SchemaDescriptor_FunctionSignature{{ID: 500}}},
 				},
 			},
 			dbDesc: descpb.DatabaseDescriptor{

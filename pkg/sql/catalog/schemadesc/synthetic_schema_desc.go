@@ -132,9 +132,9 @@ func (p synthetic) GetFunction(name string) (descpb.SchemaDescriptor_Function, b
 	return descpb.SchemaDescriptor_Function{}, false
 }
 
-// ForEachFunctionOverload implements the SchemaDescriptor interface.
-func (p synthetic) ForEachFunctionOverload(
-	fn func(overload descpb.SchemaDescriptor_FunctionOverload) error,
+// ForEachFunctionSignature implements the SchemaDescriptor interface.
+func (p synthetic) ForEachFunctionSignature(
+	fn func(sig descpb.SchemaDescriptor_FunctionSignature) error,
 ) error {
 	return nil
 }

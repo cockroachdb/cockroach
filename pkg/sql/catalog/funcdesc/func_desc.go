@@ -289,14 +289,14 @@ func (desc *immutable) validateFuncExistsInSchema(scDesc catalog.SchemaDescripto
 	}
 
 	function, _ := scDesc.GetFunction(desc.GetName())
-	for _, overload := range function.Overloads {
+	for _, sig := range function.Signatures {
 		// TODO (Chengxiong) maybe a overkill, but we could also validate function
 		// signature matches.
-		if overload.ID == desc.GetID() {
+		if sig.ID == desc.GetID() {
 			return nil
 		}
 	}
-	return errors.AssertionFailedf("function overload %q (%d) cannot be found in schema %q (%d)",
+	return errors.AssertionFailedf("function sig %q (%d) cannot be found in schema %q (%d)",
 		desc.GetName(), desc.GetID(), scDesc.GetName(), scDesc.GetID())
 }
 

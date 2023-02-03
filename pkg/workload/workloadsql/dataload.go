@@ -18,6 +18,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -62,9 +63,10 @@ func (l InsertsDataLoader) InitialDataLoad(
 	}
 
 	for _, table := range tables {
-		createStmt := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS "%s" %s`, table.Name, table.Schema)
+		createStmt := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s %s`, tree.NameString(table.Name), table.Schema)
 		if _, err := db.ExecContext(ctx, createStmt); err != nil {
-			return 0, errors.Wrapf(err, "could not create table: %s", table.Name)
+			return 0, errors.WithDetailf(errors.Wrapf(err, "could not create table: %q", table.Name),
+				"SQL: %s", createStmt)
 		}
 	}
 
@@ -107,7 +109,7 @@ func (l InsertsDataLoader) InitialDataLoad(
 						}
 					}
 					insertStmtBuf.Reset()
-					fmt.Fprintf(&insertStmtBuf, `INSERT INTO "%s" VALUES `, table.Name)
+					fmt.Fprintf(&insertStmtBuf, `INSERT INTO %s VALUES `, tree.NameString(table.Name))
 					params = params[:0]
 					numRows = 0
 					return nil

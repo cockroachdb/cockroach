@@ -2974,12 +2974,12 @@ CREATE TABLE crdb_internal.create_function_statements (
 		fnIDToDBID := make(map[descpb.ID]descpb.ID)
 		for _, curDB := range dbDescs {
 			err := forEachSchema(ctx, p, curDB, true /* requiresPrivileges */, func(sc catalog.SchemaDescriptor) error {
-				return sc.ForEachFunctionOverload(func(overload descpb.SchemaDescriptor_FunctionOverload) error {
-					fnIDs = append(fnIDs, overload.ID)
-					fnIDToScName[overload.ID] = sc.GetName()
-					fnIDToScID[overload.ID] = sc.GetID()
-					fnIDToDBName[overload.ID] = curDB.GetName()
-					fnIDToDBID[overload.ID] = curDB.GetID()
+				return sc.ForEachFunctionSignature(func(sig descpb.SchemaDescriptor_FunctionSignature) error {
+					fnIDs = append(fnIDs, sig.ID)
+					fnIDToScName[sig.ID] = sc.GetName()
+					fnIDToScID[sig.ID] = sc.GetID()
+					fnIDToDBName[sig.ID] = curDB.GetName()
+					fnIDToDBID[sig.ID] = curDB.GetID()
 					return nil
 				})
 			})

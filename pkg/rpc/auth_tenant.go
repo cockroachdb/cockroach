@@ -444,7 +444,7 @@ func validateSpan(tenID roachpb.TenantID, sp roachpb.Span) error {
 	return checkSpanBounds(rSpan, tenSpan)
 }
 
-const tenantLoggingTag = "tenant"
+const tenantLoggingTag = "client-tenant"
 
 // contextWithClientTenant inserts a tenant identifier in the context,
 // identifying the tenant that's the client for an RPC. The identifier can be

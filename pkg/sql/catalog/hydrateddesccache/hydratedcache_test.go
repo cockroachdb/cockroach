@@ -287,10 +287,10 @@ func TestHydratedCache(t *testing.T) {
 		require.NotEqual(t, tableDescUDT, hydrated)
 		fns, found := hydrated.GetFunction("f_udt")
 		require.True(t, found)
-		require.Equal(t, 1, len(fns.Overloads))
-		require.EqualValues(t, fns.Overloads[0].ArgTypes[0], typ1T)
-		require.EqualValues(t, fns.Overloads[0].ArgTypes[1], typ2T)
-		require.EqualValues(t, fns.Overloads[0].ReturnType, typ1T)
+		require.Equal(t, 1, len(fns.Signatures))
+		require.EqualValues(t, fns.Signatures[0].ArgTypes[0], typ1T)
+		require.EqualValues(t, fns.Signatures[0].ArgTypes[1], typ2T)
+		require.EqualValues(t, fns.Signatures[0].ReturnType, typ1T)
 
 		// Try again and ensure we get pointer-for-pointer the same descriptor.
 		res.calls = 0
@@ -420,7 +420,7 @@ var (
 		Functions: map[string]descpb.SchemaDescriptor_Function{
 			"f_udt": {
 				Name: "f_udt",
-				Overloads: []descpb.SchemaDescriptor_FunctionOverload{
+				Signatures: []descpb.SchemaDescriptor_FunctionSignature{
 					{
 						ID:         funcUDTID,
 						ArgTypes:   []*types.T{typ1TSerialized, typ2TSerialized},
@@ -437,7 +437,7 @@ var (
 		Functions: map[string]descpb.SchemaDescriptor_Function{
 			"f_no_udt": {
 				Name: "f_no_udt",
-				Overloads: []descpb.SchemaDescriptor_FunctionOverload{
+				Signatures: []descpb.SchemaDescriptor_FunctionSignature{
 					{ID: funcNoUDTID, ArgTypes: []*types.T{types.Int}, ReturnType: types.Void},
 				},
 			},

@@ -77,7 +77,7 @@ func TestValidateFuncDesc(t *testing.T) {
 		ParentID: dbID,
 		Name:     "schema",
 		Functions: map[string]descpb.SchemaDescriptor_Function{
-			"f": {Overloads: []descpb.SchemaDescriptor_FunctionOverload{{ID: funcDescID}}},
+			"f": {Signatures: []descpb.SchemaDescriptor_FunctionSignature{{ID: funcDescID}}},
 		},
 	}).BuildImmutable())
 	cb.UpsertDescriptor(typedesc.NewBuilder(&descpb.TypeDescriptor{

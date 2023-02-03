@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuptestutils"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -98,9 +99,10 @@ database_name = 'rand' AND schema_name = 'public'`)
 	expectedCreateTableStmt := make(map[string]string)
 	expectedData := make(map[string][][]string)
 	for _, tableName := range tableNames {
-		expectedCreateTableStmt[tableName] = sqlDB.QueryStr(t, fmt.Sprintf(`SELECT create_statement FROM [SHOW CREATE TABLE %s]`, tableName))[0][0]
+		expectedCreateTableStmt[tableName] = sqlDB.QueryStr(t,
+			fmt.Sprintf(`SELECT create_statement FROM [SHOW CREATE TABLE %s]`, tree.NameString(tableName)))[0][0]
 		if runSchemaOnlyExtension == "" {
-			expectedData[tableName] = sqlDB.QueryStr(t, fmt.Sprintf(`SELECT * FROM %s`, tableName))
+			expectedData[tableName] = sqlDB.QueryStr(t, fmt.Sprintf(`SELECT * FROM %s`, tree.NameString(tableName)))
 		}
 	}
 
@@ -126,8 +128,8 @@ database_name = 'rand' AND schema_name = 'public'`)
 	// generated tables.
 	verifyTables := func(t *testing.T, tableNames []string) {
 		for _, tableName := range tableNames {
-			t.Logf("Verifying table %s", tableName)
-			restoreTable := "restoredb." + tableName
+			t.Logf("Verifying table %q", tableName)
+			restoreTable := "restoredb." + tree.NameString(tableName)
 			createStmt := sqlDB.QueryStr(t,
 				fmt.Sprintf(`SELECT create_statement FROM [SHOW CREATE TABLE %s]`, restoreTable))[0][0]
 			assert.Equal(t, expectedCreateTableStmt[tableName], createStmt,
@@ -172,7 +174,14 @@ database_name = 'rand' AND schema_name = 'public'`)
 		if len(combo) == 0 {
 			continue
 		}
-		tables := strings.Join(combo, ", ")
+		var buf strings.Builder
+		comma := ""
+		for _, t := range combo {
+			buf.WriteString(comma)
+			buf.WriteString(tree.NameString(t))
+			comma = ", "
+		}
+		tables := buf.String()
 		t.Logf("Testing subset backup/restore %s", tables)
 		sqlDB.Exec(t, fmt.Sprintf(`BACKUP TABLE %s INTO $1`, tables), backupTarget)
 		_, err := tc.Conns[0].Exec(
