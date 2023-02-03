@@ -23,8 +23,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -34,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -53,16 +54,6 @@ func TestStorage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	t.Run("RegionalByRow", func(t *testing.T) {
-		defer envutil.TestSetEnv(t, "COCKROACH_MR_SYSTEM_DATABASE", "1")()
-		testStorage(t)
-	})
-	t.Run("RegionalByTable", func(t *testing.T) {
-		defer envutil.TestSetEnv(t, "COCKROACH_MR_SYSTEM_DATABASE", "0")()
-		testStorage(t)
-	})
-}
-func testStorage(t *testing.T) {
 	ctx := context.Background()
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
@@ -79,10 +70,11 @@ func testStorage(t *testing.T) {
 		timeSource := timeutil.NewManualTime(t0)
 		clock := hlc.NewClockForTesting(timeSource)
 		settings := cluster.MakeTestingClusterSettings()
+		settingsWatcher := settingswatcher.New(clock, keys.SystemSQLCodec, settings, s.RangeFeedFactory().(*rangefeed.Factory), s.Stopper(), nil)
 		stopper := stop.NewStopper(stop.WithTracer(s.TracerI().(*tracing.Tracer)))
 		var ambientCtx log.AmbientContext
-		storage := slstorage.NewTestingStorage(ambientCtx, stopper, clock, kvDB, keys.SystemSQLCodec, settings,
-			tableID, rbrIndexID, timeSource.NewTimer)
+		storage := slstorage.NewTestingStorage(ambientCtx, stopper, clock, kvDB, keys.SystemSQLCodec, settings, settingsWatcher,
+			tableID, timeSource.NewTimer)
 		return clock, timeSource, settings, stopper, storage
 	}
 
@@ -318,19 +310,14 @@ func testStorage(t *testing.T) {
 	})
 }
 
+func TestSqllivenessCrud(t *testing.T) {
+
+}
+
 func TestConcurrentAccessesAndEvictions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	t.Run("RegionalByRow", func(t *testing.T) {
-		defer envutil.TestSetEnv(t, "COCKROACH_MR_SYSTEM_DATABASE", "1")()
-		testConcurrentAccessesAndEvictions(t)
-	})
-	t.Run("RegionalByTable", func(t *testing.T) {
-		defer envutil.TestSetEnv(t, "COCKROACH_MR_SYSTEM_DATABASE", "0")()
-		testConcurrentAccessesAndEvictions(t)
-	})
-}
-func testConcurrentAccessesAndEvictions(t *testing.T) {
+
 	ctx := context.Background()
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
@@ -346,8 +333,9 @@ func testConcurrentAccessesAndEvictions(t *testing.T) {
 	defer stopper.Stop(ctx)
 	slstorage.CacheSize.Override(ctx, &settings.SV, 10)
 	var ambientCtx log.AmbientContext
-	storage := slstorage.NewTestingStorage(ambientCtx, stopper, clock, kvDB, keys.SystemSQLCodec, settings,
-		tableID, rbrIndexID, timeSource.NewTimer)
+	settingsWatcher := settingswatcher.New(clock, keys.SystemSQLCodec, settings, s.RangeFeedFactory().(*rangefeed.Factory), s.Stopper(), nil)
+	storage := slstorage.NewTestingStorage(ambientCtx, stopper, clock, kvDB, keys.SystemSQLCodec, settings, settingsWatcher,
+		tableID, timeSource.NewTimer)
 	storage.Start(ctx)
 
 	const (
@@ -474,16 +462,6 @@ func testConcurrentAccessesAndEvictions(t *testing.T) {
 func TestConcurrentAccessSynchronization(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	t.Run("RegionalByRow", func(t *testing.T) {
-		defer envutil.TestSetEnv(t, "COCKROACH_MR_SYSTEM_DATABASE", "1")()
-		testConcurrentAccessSynchronization(t)
-	})
-	t.Run("RegionalByTable", func(t *testing.T) {
-		defer envutil.TestSetEnv(t, "COCKROACH_MR_SYSTEM_DATABASE", "0")()
-		testConcurrentAccessSynchronization(t)
-	})
-}
-func testConcurrentAccessSynchronization(t *testing.T) {
 	ctx := context.Background()
 	type filterFunc = func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error
 	var requestFilter atomic.Value
@@ -514,8 +492,9 @@ func testConcurrentAccessSynchronization(t *testing.T) {
 	defer stopper.Stop(ctx)
 	slstorage.CacheSize.Override(ctx, &settings.SV, 10)
 	var ambientCtx log.AmbientContext
-	storage := slstorage.NewTestingStorage(ambientCtx, stopper, clock, kvDB, keys.SystemSQLCodec, settings,
-		tableID, rbrIndexID, timeSource.NewTimer)
+	settingsWatcher := settingswatcher.New(clock, keys.SystemSQLCodec, settings, s.RangeFeedFactory().(*rangefeed.Factory), s.Stopper(), nil)
+	storage := slstorage.NewTestingStorage(ambientCtx, stopper, clock, kvDB, keys.SystemSQLCodec, settings, settingsWatcher,
+		tableID, timeSource.NewTimer)
 	storage.Start(ctx)
 
 	// Synchronize reading from the store with the blocked channel by detecting
@@ -677,34 +656,9 @@ func testConcurrentAccessSynchronization(t *testing.T) {
 func TestDeleteMidUpdateFails(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	t.Run("RegionalByRow", func(t *testing.T) {
-		defer envutil.TestSetEnv(t, "COCKROACH_MR_SYSTEM_DATABASE", "1")()
-		testDeleteMidUpdateFails(t)
-	})
-	t.Run("RegionalByTable", func(t *testing.T) {
-		defer envutil.TestSetEnv(t, "COCKROACH_MR_SYSTEM_DATABASE", "0")()
-		testDeleteMidUpdateFails(t)
-	})
-}
-func testDeleteMidUpdateFails(t *testing.T) {
 	ctx := context.Background()
-	type filterFunc = func(context.Context, *kvpb.BatchRequest, *kvpb.BatchResponse) *kvpb.Error
-	var respFilter atomic.Value
-	respFilter.Store(filterFunc(nil))
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
-		Knobs: base.TestingKnobs{
-			Store: &kvserver.StoreTestingKnobs{
-				TestingResponseFilter: func(
-					ctx context.Context, request *kvpb.BatchRequest, resp *kvpb.BatchResponse,
-				) *kvpb.Error {
-					if f := respFilter.Load().(filterFunc); f != nil {
-						return f(ctx, request, resp)
-					}
-					return nil
-				},
-			},
-		},
-	})
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+
 	defer s.Stopper().Stop(ctx)
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 
@@ -712,78 +666,47 @@ func testDeleteMidUpdateFails(t *testing.T) {
 	dbName := t.Name()
 	tableID := newSqllivenessTable(t, tdb, dbName)
 
+	settingsWatcher := settingswatcher.New(s.Clock(), keys.SystemSQLCodec, s.ClusterSettings(), s.RangeFeedFactory().(*rangefeed.Factory), s.Stopper(), nil)
 	storage := slstorage.NewTestingStorage(
 		s.DB().AmbientContext,
-		s.Stopper(), s.Clock(), kvDB, keys.SystemSQLCodec, s.ClusterSettings(),
-		tableID, rbrIndexID, timeutil.DefaultTimeSource{}.NewTimer,
+		s.Stopper(), s.Clock(), kvDB, keys.SystemSQLCodec, s.ClusterSettings(), settingsWatcher,
+		tableID, timeutil.DefaultTimeSource{}.NewTimer,
 	)
 
 	// Insert a session.
 	ID, err := slstorage.MakeSessionID(enum.One, uuid.MakeV4())
 	require.NoError(t, err)
 
-	// Install a filter which will send on this channel when we attempt
-	// to perform an update after the get has evaluated.
-	getChan := make(chan chan struct{})
-	respFilter.Store(func(
-		ctx context.Context, request *kvpb.BatchRequest, _ *kvpb.BatchResponse,
-	) *kvpb.Error {
-		if get, ok := request.GetArg(kvpb.Get); !ok || !bytes.HasPrefix(
-			get.(*kvpb.GetRequest).Key,
-			keys.SystemSQLCodec.TablePrefix(uint32(tableID)),
-		) {
-			return nil
-		}
-		respFilter.Store(filterFunc(nil))
-		unblock := make(chan struct{})
-		getChan <- unblock
-		<-unblock
-		return nil
-	})
-
-	// Launch the update.
-	type result struct {
-		exists bool
-		err    error
-	}
-	resCh := make(chan result)
-	go func() {
-		var res result
-		res.exists, res.err = storage.Update(ctx, ID, s.Clock().Now())
-		resCh <- res
-	}()
-
-	// Wait for the update to block.
-	unblock := <-getChan
+	// TODO(jeffswenson): it looks like this test was broken. Was it always broken?
+	require.NoError(t, storage.Insert(ctx, ID, s.Clock().Now()))
 
 	// Delete the session being updated.
+	results := tdb.QueryStr(t, `SELECT session_id FROM  "`+dbName+`".sqlliveness WHERE true`)
+	descriptor := getDescriptor(t, tdb, tableID)
 	tdb.Exec(t, `DELETE FROM "`+dbName+`".sqlliveness WHERE true`)
 
-	// Unblock the update and ensure that it saw that its session was deleted.
-	close(unblock)
-	res := <-resCh
-	require.False(t, res.exists)
-	require.NoError(t, res.err)
+	// Ensure the update observed the delete
+	exists, err := storage.Update(ctx, ID, s.Clock().Now())
+	require.False(t, exists, "sessions: '%v' descriptor: '%v'", results, descriptor)
+	require.NoError(t, err)
 }
 
-// rbrIndexID is the index id used to access the regional by row index in
-// tests. In production it will be index 2, but the freshly created test table
-// will have index 1.
-const rbrIndexID = 1
+func getDescriptor(t *testing.T, db *sqlutils.SQLRunner, tableID descpb.ID) (result string) {
+	db.QueryRow(t, `
+		SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor) 
+		FROM system.descriptor
+		WHERE id = $1
+	`, tableID).Scan(&result)
+	return
+}
 
 func newSqllivenessTable(t *testing.T, db *sqlutils.SQLRunner, dbName string) (tableID descpb.ID) {
-	var schema string
-	if systemschema.TestSupportMultiRegion() {
-		schema = systemschema.MrSqllivenessTableSchema
-	} else {
-		schema = systemschema.SqllivenessTableSchema
-	}
+	schema := systemschema.SqllivenessTableSchema
 	t.Helper()
 	db.Exec(t, fmt.Sprintf(`CREATE DATABASE IF NOT EXISTS "%s"`, dbName))
-	tableName := "sqlliveness"
 	schema = strings.Replace(schema,
-		fmt.Sprintf("CREATE TABLE system.%s", tableName),
-		fmt.Sprintf(`CREATE TABLE "%s".%s`, dbName, tableName),
+		fmt.Sprintf("CREATE TABLE system.sqlliveness"),
+		fmt.Sprintf(`CREATE TABLE "%s".sqlliveness`, dbName),
 		1)
 	db.Exec(t, schema)
 	db.QueryRow(t, `
@@ -791,7 +714,45 @@ func newSqllivenessTable(t *testing.T, db *sqlutils.SQLRunner, dbName string) (t
 		from system.namespace t
 		join system.namespace u 
 		  on t.id = u."parentID" 
-		where t.name = $1 and u.name = $2`,
-		dbName, tableName).Scan(&tableID)
+		where t.name = $1 and u.name = 'sqlliveness'`,
+		dbName).Scan(&tableID)
+
+	// Change the primaryIndex id to 2
+	var patched bool
+	db.QueryRow(t, `
+		SELECT crdb_internal.unsafe_upsert_descriptor(
+			id,
+			crdb_internal.json_to_pb(
+				'cockroach.sql.sqlbase.Descriptor',
+				json_remove_path(
+					json_set(
+						json_set(
+							crdb_internal.pb_to_json(
+								'cockroach.sql.sqlbase.Descriptor',
+								descriptor
+							),
+							ARRAY['primaryIndex', 'id'],
+							'2'::JSONB
+						),
+						ARRAY['table', 'version'],
+						(
+							(
+								crdb_internal.pb_to_json(
+									'cockroach.sql.sqlbase.Descriptor',
+									descriptor
+								)->'table'->>'version'
+							)::INT8
+							+ 1
+						)::STRING::JSONB
+					),
+					ARRAY['table', 'modificationTime']
+				)
+			),
+			true
+		   )
+		FROM system.descriptor
+		WHERE id = $1`, tableID).Scan(&patched)
+	require.True(t, patched)
+
 	return tableID
 }

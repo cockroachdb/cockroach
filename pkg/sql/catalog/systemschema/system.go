@@ -484,14 +484,6 @@ CREATE TABLE system.scheduled_jobs (
 
 	SqllivenessTableSchema = `
 CREATE TABLE system.sqlliveness (
-    session_id       BYTES NOT NULL,
-    expiration       DECIMAL NOT NULL,
-    CONSTRAINT "primary" PRIMARY KEY (session_id),
-    FAMILY fam0_session_id_expiration (session_id, expiration)
-)`
-
-	MrSqllivenessTableSchema = `
-CREATE TABLE system.sqlliveness (
     session_id           BYTES NOT NULL,
     expiration           DECIMAL NOT NULL,
     crdb_region          BYTES NOT NULL,
@@ -2305,36 +2297,6 @@ var (
 	// TODO(jeffswenson): remove the function wrapper around the
 	// SqllivenessTable descriptor. See TestSupportMultiRegion for context.
 	SqllivenessTable = func() SystemTable {
-		if TestSupportMultiRegion() {
-			return makeSystemTable(
-				MrSqllivenessTableSchema,
-				systemTable(
-					catconstants.SqllivenessTableName,
-					keys.SqllivenessID,
-					[]descpb.ColumnDescriptor{
-						{Name: "session_id", ID: 1, Type: types.Bytes, Nullable: false},
-						{Name: "expiration", ID: 2, Type: types.Decimal, Nullable: false},
-						{Name: "crdb_region", ID: 3, Type: types.Bytes, Nullable: false},
-					},
-					[]descpb.ColumnFamilyDescriptor{
-						{
-							Name:            "primary",
-							ID:              0,
-							ColumnNames:     []string{"session_id", "expiration", "crdb_region"},
-							ColumnIDs:       []descpb.ColumnID{1, 2, 3},
-							DefaultColumnID: 2,
-						},
-					},
-					descpb.IndexDescriptor{
-						Name:                "primary",
-						ID:                  2,
-						Unique:              true,
-						KeyColumnNames:      []string{"crdb_region", "session_id"},
-						KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
-						KeyColumnIDs:        []descpb.ColumnID{3, 1},
-					},
-				))
-		}
 		return makeSystemTable(
 			SqllivenessTableSchema,
 			systemTable(
@@ -2343,17 +2305,25 @@ var (
 				[]descpb.ColumnDescriptor{
 					{Name: "session_id", ID: 1, Type: types.Bytes, Nullable: false},
 					{Name: "expiration", ID: 2, Type: types.Decimal, Nullable: false},
+					{Name: "crdb_region", ID: 3, Type: types.Bytes, Nullable: false},
 				},
 				[]descpb.ColumnFamilyDescriptor{
 					{
-						Name:            "fam0_session_id_expiration",
+						Name:            "primary",
 						ID:              0,
-						ColumnNames:     []string{"session_id", "expiration"},
-						ColumnIDs:       []descpb.ColumnID{1, 2},
+						ColumnNames:     []string{"session_id", "expiration", "crdb_region"},
+						ColumnIDs:       []descpb.ColumnID{1, 2, 3},
 						DefaultColumnID: 2,
 					},
 				},
-				pk("session_id"),
+				descpb.IndexDescriptor{
+					Name:                "primary",
+					ID:                  2,
+					Unique:              true,
+					KeyColumnNames:      []string{"crdb_region", "session_id"},
+					KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
+					KeyColumnIDs:        []descpb.ColumnID{3, 1},
+				},
 			))
 	}
 

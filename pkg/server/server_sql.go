@@ -548,7 +548,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	}
 	cfg.sqlLivenessProvider = slprovider.New(
 		cfg.AmbientCtx,
-		cfg.stopper, cfg.clock, cfg.db, codec, cfg.Settings, sqllivenessKnobs, sessionEventsConsumer,
+		cfg.stopper, cfg.clock, cfg.db, codec, cfg.Settings, settingsWatcher, sqllivenessKnobs, sessionEventsConsumer,
 	)
 
 	cfg.sqlInstanceStorage = instancestorage.NewStorage(

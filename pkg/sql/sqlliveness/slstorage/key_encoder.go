@@ -15,12 +15,34 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
 )
+
+type MigrationKeyMapper struct {
+	oldKeyCodec keyCodec
+	newKeyCodec keyCodec
+}
+
+func MakeMigrationKeyMapper(codec keys.SQLCodec) MigrationKeyMapper {
+	return MigrationKeyMapper {
+			newKeyCodec: &rbrEncoder{codec.IndexPrefix(uint32(keys.SqllivenessID), 2)},
+			oldKeyCodec: &rbtEncoder{codec.IndexPrefix(uint32(keys.SqllivenessID), 1)},
+	}
+}
+
+func (m *MigrationKeyMapper) OldToNew(key roachpb.Key) (roachpb.Key, error) {
+	id, err := m.oldKeyCodec.decode(key)
+	if err != nil {
+		return nil, err
+	}
+	return m.newKeyCodec.encode(id)
+}
+
+func (m *MigrationKeyMapper) SourcePrefix() roachpb.Key {
+	return m.oldKeyCodec.indexPrefix()
+}
 
 // keyCodec manages the SessionID <-> roachpb.Key mapping.
 type keyCodec interface {
@@ -33,17 +55,6 @@ type keyCodec interface {
 	// indexPrefix() and indexPrefix.PrefixEnd() may be used to scan the
 	// content of the table.
 	indexPrefix() roachpb.Key
-}
-
-// makeKeyCodec constructs a key codec. It consults the
-// COCKROACH_MR_SYSTEM_DATABASE environment variable to determine if it should
-// use the regional by table or regional by row index format.
-func makeKeyCodec(codec keys.SQLCodec, tableID catid.DescID, rbrIndex catid.IndexID) keyCodec {
-	if systemschema.TestSupportMultiRegion() {
-		return &rbrEncoder{codec.IndexPrefix(uint32(tableID), uint32(rbrIndex))}
-	}
-	const rbtIndexID = 1
-	return &rbtEncoder{codec.IndexPrefix(uint32(tableID), rbtIndexID)}
 }
 
 type rbrEncoder struct {
