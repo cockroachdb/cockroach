@@ -359,7 +359,7 @@ func (a *apiV2Server) execSQL(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// The SQL username that owns this session.
-	username := getSQLUsername(ctx)
+	username := userFromHTTPAuthInfoContext(ctx)
 
 	options := []isql.TxnOption{
 		isql.WithPriority(admissionpb.NormalPri),
