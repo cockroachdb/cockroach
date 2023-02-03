@@ -15,15 +15,16 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // EvalRoutineExpr returns the result of evaluating the routine. It calls the
-// routine's PlanFn to generate a plan for each statement in the routine, then
-// runs the plans. The resulting value of the last statement in the routine is
-// returned.
+// routine's ForEachPlan closure to generate a plan for each statement in the
+// routine, then runs the plans. The resulting value of the last statement in
+// the routine is returned.
 func (p *planner) EvalRoutineExpr(
 	ctx context.Context, expr *tree.RoutineExpr, args tree.Datums,
 ) (result tree.Datum, err error) {
@@ -32,19 +33,78 @@ func (p *planner) EvalRoutineExpr(
 		return expr.CachedResult, nil
 	}
 
-	// The result of the routine is the result of the last statement. The result
-	// of any preceding statements is ignored. We set up a rowResultWriter that
-	// can store the results of the final statement here.
-	var rch rowContainerHelper
-	retTypes := []*types.T{expr.ResolvedType()}
-	rch.Init(ctx, retTypes, p.ExtendedEvalContext(), "routine" /* opName */)
-	defer rch.Close(ctx)
-	rrw := NewRowResultWriter(&rch)
+	var g routineGenerator
+	g.init(ctx, p, expr, args)
+	defer g.Close(ctx)
+	err = g.Start(ctx, p.Txn())
+	if err != nil {
+		return nil, err
+	}
 
+	hasNext, err := g.Next(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var res tree.Datum
+	if !hasNext {
+		// The result is NULL if no rows were returned by the last statement in
+		// the routine.
+		res = tree.DNull
+	} else {
+		// The result is the first and only column in the row returned by the
+		// last statement in the routine.
+		row, err := g.Values()
+		if err != nil {
+			return nil, err
+		}
+		res = row[0]
+	}
+	if len(expr.Args) == 0 && !expr.EnableStepping {
+		// Cache the result if there are zero arguments and stepping is
+		// disabled.
+		expr.CachedResult = res
+	}
+	return res, nil
+}
+
+// routineGenerator is an eval.ValueGenerator that produces the result of a
+// routine.
+type routineGenerator struct {
+	p        *planner
+	expr     *tree.RoutineExpr
+	args     tree.Datums
+	rch      rowContainerHelper
+	rci      *rowContainerIterator
+	currVals tree.Datums
+}
+
+var _ eval.ValueGenerator = &routineGenerator{}
+
+// init initializes a routineGenerator.
+func (g *routineGenerator) init(
+	ctx context.Context, p *planner, expr *tree.RoutineExpr, args tree.Datums,
+) {
+	*g = routineGenerator{
+		p:    p,
+		expr: expr,
+		args: args,
+	}
+	retTypes := []*types.T{expr.ResolvedType()}
+	g.rch.Init(ctx, retTypes, p.ExtendedEvalContext(), "routine" /* opName */)
+	g.rci = newRowContainerIterator(ctx, g.rch, retTypes)
+}
+
+// ResolvedType is part of the ValueGenerator interface.
+func (g *routineGenerator) ResolvedType() *types.T {
+	return g.expr.ResolvedType()
+}
+
+// Start is part of the ValueGenerator interface.
+func (g *routineGenerator) Start(ctx context.Context, txn *kv.Txn) (err error) {
 	// Configure stepping for volatile routines so that mutations made by the
 	// invoking statement are visible to the routine.
-	txn := p.Txn()
-	if expr.EnableStepping {
+	if g.expr.EnableStepping {
 		prevSteppingMode := txn.ConfigureStepping(ctx, kv.SteppingEnabled)
 		prevSeqNum := txn.GetLeafTxnInputState(ctx).ReadSeqNum
 		defer func() {
@@ -52,7 +112,7 @@ func (p *planner) EvalRoutineExpr(
 			// there is no need to reconfigure stepping or revert to the
 			// original sequence number.
 			if err == nil {
-				_ = p.Txn().ConfigureStepping(ctx, prevSteppingMode)
+				_ = txn.ConfigureStepping(ctx, prevSteppingMode)
 				err = txn.SetReadSeqNum(prevSeqNum)
 			}
 		}()
@@ -60,10 +120,11 @@ func (p *planner) EvalRoutineExpr(
 
 	// Execute each statement in the routine sequentially.
 	stmtIdx := 0
-	ef := newExecFactory(ctx, p)
-	err = expr.ForEachPlan(ctx, ef, args, func(plan tree.RoutinePlan, isFinalPlan bool) error {
+	ef := newExecFactory(ctx, g.p)
+	rrw := NewRowResultWriter(&g.rch)
+	return g.expr.ForEachPlan(ctx, ef, g.args, func(plan tree.RoutinePlan, isFinalPlan bool) error {
 		stmtIdx++
-		opName := "udf-stmt-" + expr.Name + "-" + strconv.Itoa(stmtIdx)
+		opName := "udf-stmt-" + g.expr.Name + "-" + strconv.Itoa(stmtIdx)
 		ctx, sp := tracing.ChildSpan(ctx, opName)
 		defer sp.Finish()
 
@@ -78,47 +139,44 @@ func (p *planner) EvalRoutineExpr(
 
 		// Place a sequence point before each statement in the routine for
 		// volatile functions.
-		if expr.EnableStepping {
+		if g.expr.EnableStepping {
 			if err := txn.Step(ctx); err != nil {
 				return err
 			}
 		}
 
 		// Run the plan.
-		err = runPlanInsidePlan(ctx, p.RunParams(ctx), plan.(*planComponents), w)
+		err = runPlanInsidePlan(ctx, g.p.RunParams(ctx), plan.(*planComponents), w)
 		if err != nil {
 			return err
 		}
 
 		return nil
 	})
-	if err != nil {
-		return nil, err
-	}
+}
 
-	// Fetch the first row from the row container and return the first
-	// datum.
-	rightRowsIterator := newRowContainerIterator(ctx, rch, retTypes)
-	defer rightRowsIterator.Close()
-	row, err := rightRowsIterator.Next()
+// Next is part of the ValueGenerator interface.
+func (g *routineGenerator) Next(ctx context.Context) (bool, error) {
+	var err error
+	g.currVals, err = g.rci.Next()
 	if err != nil {
-		return nil, err
+		return false, err
 	}
-	var res tree.Datum
-	if row == nil {
-		// The result is NULL if no rows were returned by the last statement.
-		res = tree.DNull
-	} else {
-		// The result is the first and only column in the row returned by the
-		// last statement.
-		res = row[0]
+	return g.currVals != nil, nil
+}
+
+// Values is part of the ValueGenerator interface.
+func (g *routineGenerator) Values() (tree.Datums, error) {
+	return g.currVals, nil
+}
+
+// Close is part of the ValueGenerator interface.
+func (g *routineGenerator) Close(ctx context.Context) {
+	if g.rci != nil {
+		g.rci.Close()
+		g.rci = nil
 	}
-	if len(expr.Args) == 0 && !expr.EnableStepping {
-		// Cache the result if there are zero arguments and stepping is
-		// disabled.
-		expr.CachedResult = res
-	}
-	return res, nil
+	g.rch.Close(ctx)
 }
 
 // droppingResultWriter drops all rows that are added to it. It only tracks
