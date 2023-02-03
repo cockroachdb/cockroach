@@ -867,7 +867,6 @@ func makeTenantSQLServerArgs(
 	if lsi := sqlCfg.LocalKVServerInfo; lsi != nil {
 		rpcContext.SetLocalInternalServer(
 			lsi.InternalServer,
-			true, // tenant
 			lsi.ServerInterceptors,
 			rpcContext.ClientInterceptors())
 	}
