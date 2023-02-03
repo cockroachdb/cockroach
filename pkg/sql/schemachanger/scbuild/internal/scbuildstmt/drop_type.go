@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -24,9 +23,6 @@ import (
 
 // DropType implements DROP TYPE.
 func DropType(b BuildCtx, n *tree.DropType) {
-	if n.DropBehavior == tree.DropCascade {
-		panic(scerrors.NotImplementedErrorf(n, "DROP TYPE CASCADE is not yet supported"))
-	}
 	var toCheckBackrefs []catid.DescID
 	arrayTypesToAlsoCheck := make(map[catid.DescID]catid.DescID)
 	for _, name := range n.Names {
@@ -53,7 +49,7 @@ func DropType(b BuildCtx, n *tree.DropType) {
 		b.SetUnresolvedNameAnnotation(name, &tn)
 		// Drop the type.
 		if n.DropBehavior == tree.DropCascade {
-			dropCascadeDescriptor(b, typeID)
+			dropCascadeDescriptor(b, n, typeID)
 		} else {
 			if dropRestrictDescriptor(b, typeID) {
 				toCheckBackrefs = append(toCheckBackrefs, typeID)

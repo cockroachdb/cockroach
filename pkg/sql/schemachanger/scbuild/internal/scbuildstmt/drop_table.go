@@ -47,7 +47,7 @@ func DropTable(b BuildCtx, n *tree.DropTable) {
 		// Only decompose the tables first into elements, next we will check for
 		// dependent objects, in case they are all dropped *together*.
 		if n.DropBehavior == tree.DropCascade {
-			dropCascadeDescriptor(b, tbl.TableID)
+			dropCascadeDescriptor(b, n, tbl.TableID)
 		} else {
 			// Handle special case of owned sequences
 			var ownedIDs catalog.DescriptorIDSet

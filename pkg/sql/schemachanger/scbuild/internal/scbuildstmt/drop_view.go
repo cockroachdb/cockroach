@@ -51,7 +51,7 @@ func DropView(b BuildCtx, n *tree.DropView) {
 			panic(pgerror.Newf(pgcode.WrongObjectType, "%q is not a materialized view", name.ObjectName))
 		}
 		if n.DropBehavior == tree.DropCascade {
-			dropCascadeDescriptor(b, view.ViewID)
+			dropCascadeDescriptor(b, n, view.ViewID)
 		} else if dropRestrictDescriptor(b, view.ViewID) {
 			toCheckBackrefs = append(toCheckBackrefs, view.ViewID)
 		}

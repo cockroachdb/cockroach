@@ -43,11 +43,11 @@ func alterTableDropConstraint(
 	// Dropping UNIQUE constraint: error out as not implemented.
 	droppingUniqueConstraintNotImplemented(constraintElems, t)
 
-	constraintElems.ForEachElementStatus(func(
-		_ scpb.Status, _ scpb.TargetStatus, e scpb.Element,
-	) {
-		b.Drop(e)
-	})
+	constraintElems.Filter(notAbsentTargetFilter).ForEachElementStatus(
+		func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
+			b.Drop(e)
+		},
+	)
 }
 
 func fallBackIfDroppingPrimaryKey(

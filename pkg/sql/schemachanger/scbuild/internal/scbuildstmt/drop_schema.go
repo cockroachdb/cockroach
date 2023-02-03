@@ -43,7 +43,7 @@ func DropSchema(b BuildCtx, n *tree.DropSchema) {
 			panic(scerrors.NotImplementedErrorf(n, "dropping a temporary schema"))
 		}
 		if n.DropBehavior == tree.DropCascade {
-			dropCascadeDescriptor(b, sc.SchemaID)
+			dropCascadeDescriptor(b, n, sc.SchemaID)
 			toCheckBackrefs = append(toCheckBackrefs, sc.SchemaID)
 		} else if dropRestrictDescriptor(b, sc.SchemaID) {
 			toCheckBackrefs = append(toCheckBackrefs, sc.SchemaID)
