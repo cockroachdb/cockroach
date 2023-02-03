@@ -111,6 +111,14 @@ func TestMatchOverload(t *testing.T) {
 				Schema:   "sc2",
 				Overload: &tree.Overload{Oid: 4, IsUDF: true, Types: tree.ParamTypes{tree.ParamType{Typ: types.Int}}},
 			},
+			{
+				Schema: "sc3",
+				Overload: &tree.Overload{Oid: 5, IsUDF: true,
+					Types: tree.ParamTypes{
+						tree.ParamType{Typ: types.Int2}, tree.ParamType{Typ: types.Int4},
+					},
+				},
+			},
 		},
 	}
 
@@ -191,6 +199,18 @@ func TestMatchOverload(t *testing.T) {
 			path:        []string{"sc2", "sc1", "pg_catalog"},
 			expectedErr: `function f\(string\) does not exist`,
 		},
+		{
+			testName:    "multiple parameters exact match on same family type",
+			argTypes:    []*types.T{types.Int2, types.Int4},
+			path:        []string{"sc3", "sc3", "pg_catalog"},
+			expectedOid: 5,
+		},
+		{
+			testName:    "multiple parameters exact match on same family type not exists",
+			argTypes:    []*types.T{types.Int, types.Int4},
+			path:        []string{"sc3", "sc3", "pg_catalog"},
+			expectedErr: `function f\(int,int4\) does not exist: function undefined`,
+		},
 	}
 
 	for _, tc := range testCase {
@@ -205,4 +225,5 @@ func TestMatchOverload(t *testing.T) {
 			require.Equal(t, tc.expectedOid, ol.Oid)
 		})
 	}
+
 }
