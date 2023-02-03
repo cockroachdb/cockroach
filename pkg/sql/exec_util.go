@@ -1640,6 +1640,10 @@ type BackupRestoreTestingKnobs struct {
 	// execution.
 	CaptureResolvedTableDescSpans func([]roachpb.Span)
 
+	// RunAfterSplitAndScatteringEntry allows blocking the RESTORE job after a
+	// single RestoreSpanEntry has been split and scattered.
+	RunAfterSplitAndScatteringEntry func(ctx context.Context)
+
 	// RunAfterProcessingRestoreSpanEntry allows blocking the RESTORE job after a
 	// single RestoreSpanEntry has been processed and added to the SSTBatcher.
 	RunAfterProcessingRestoreSpanEntry func(ctx context.Context)

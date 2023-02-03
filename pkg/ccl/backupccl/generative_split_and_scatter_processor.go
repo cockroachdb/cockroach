@@ -321,14 +321,22 @@ func runGenerativeSplitAndScatter(
 			idx++
 			if len(chunk.entries) == int(spec.ChunkSize) {
 				chunk.splitKey = entry.Span.Key
-				restoreEntryChunksCh <- chunk
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case restoreEntryChunksCh <- chunk:
+				}
 				chunk = restoreEntryChunk{}
 			}
 			chunk.entries = append(chunk.entries, entry)
 		}
 
 		if len(chunk.entries) > 0 {
-			restoreEntryChunksCh <- chunk
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case restoreEntryChunksCh <- chunk:
+			}
 		}
 		return nil
 	})
@@ -419,6 +427,12 @@ func runGenerativeSplitAndScatter(
 					scatteredEntry := entryNode{
 						entry: importEntry,
 						node:  chunkDestination,
+					}
+
+					if restoreKnobs, ok := flowCtx.TestingKnobs().BackupRestoreTestingKnobs.(*sql.BackupRestoreTestingKnobs); ok {
+						if restoreKnobs.RunAfterSplitAndScatteringEntry != nil {
+							restoreKnobs.RunAfterSplitAndScatteringEntry(ctx)
+						}
 					}
 
 					select {
