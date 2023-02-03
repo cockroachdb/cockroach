@@ -14,7 +14,6 @@ option go_package = "kvserverpb";
 
 import "errorspb/errors.proto";
 import "roachpb/errors.proto";
-import "roachpb/internal_raft.proto";
 import "roachpb/metadata.proto";
 import "kv/kvserver/liveness/livenesspb/liveness.proto";
 import "kv/kvserver/kvserverpb/state.proto";
@@ -226,7 +225,7 @@ message SnapshotRequest {
 
   Header header = 1;
 
-  // A RocksDB BatchRepr. Multiple kv_batches may be sent across multiple request messages.
+  // A BatchRepr. Multiple kv_batches may be sent across multiple request messages.
   bytes kv_batch = 2 [(gogoproto.customname) = "KVBatch"];
 
   bool final = 4;
@@ -261,8 +260,15 @@ message SnapshotResponse {
   errorspb.EncodedError encoded_error = 5 [(gogoproto.nullable) = false];
 }
 
-// DelegateSnapshotRequest is the request used to delegate send snapshot requests.
+// TODO(baptist): Extend this if necessary to separate out the request for the throttle.
 message DelegateSnapshotRequest {
+  oneof value {
+    DelegateSendSnapshotRequest send = 1;
+  }
+}
+
+// DelegateSnapshotRequest is the request used to delegate send snapshot requests.
+message DelegateSendSnapshotRequest {
   uint64 range_id = 1 [(gogoproto.customname) = "RangeID",
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
 
@@ -277,7 +283,19 @@ message DelegateSnapshotRequest {
   roachpb.ReplicaDescriptor delegated_sender = 4 [(gogoproto.nullable) = false];
 
   // The priority of the snapshot.
+  // TODO(abaptist): Remove this field for v23.1.
   SnapshotRequest.Priority priority = 5;
+
+  // The type of the snapshot.
+  // TODO(abaptist): Remove this field for v23.1.
+  SnapshotRequest.Type type = 6;
+
+  // The Raft term of the coordinator (in most cases the leaseholder) replica.
+  // The term is used during snapshot receiving to reject messages from an older term.
+  uint64 term = 7;
+
+  // The first index of the Raft log on the coordinator replica.
+  uint64 first_index = 8;
 
   // The sending queue's name.
   SnapshotRequest.QueueName sender_queue_name = 9;
@@ -285,22 +303,30 @@ message DelegateSnapshotRequest {
   // The sending queue's priority.
   double sender_queue_priority = 10;
 
-  // The type of the snapshot.
-  SnapshotRequest.Type type = 6;
+  // The generation of the leaseholders descriptor.
+  uint64 descriptor_generation = 11 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeGeneration"];
 
-  // The Raft term of the coordinator (in most cases the leaseholder) replica.
-  // The term is used during snapshot receiving to reject messages from an older term.
-  uint64 term = 7;
+  // Max queue length on the delegate before this request is rejected.
+  int64 queue_on_delegate_len = 12;
 
-  // The truncated state of the Raft log on the coordinator replica.
-  roachpb.RaftTruncatedState truncated_state = 8;
+  // Id of this snapshot which is maintained from coordinator to receiver.
+  bytes snap_id = 13 [
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.nullable) = false];
 }
 
 message DelegateSnapshotResponse {
-  SnapshotResponse snapResponse = 1;
+  enum Status {
+    ERROR = 0;
+    APPLIED = 1;
+  }
+
+  Status status = 1;
+  errorspb.EncodedError encoded_error = 2 [(gogoproto.nullable) = false];
+
   // collected_spans stores trace spans recorded during the execution of this
   // request.
-  repeated util.tracing.tracingpb.RecordedSpan collected_spans = 2 [(gogoproto.nullable) = false];
+  repeated util.tracing.tracingpb.RecordedSpan collected_spans = 3 [(gogoproto.nullable) = false];
 }
 
 // ConfChangeContext is encoded in the raftpb.ConfChange.Context field.
