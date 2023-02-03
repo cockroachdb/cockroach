@@ -359,12 +359,9 @@ func loadReplicas(ctx context.Context, eng storage.Engine) ([]Replica, error) {
 					return errors.AssertionFailedf("overlapping descriptors %s and %s", lastDesc, desc)
 				}
 				lastDesc = desc
-
-				if err := s.setDesc(desc.RangeID, desc); err != nil {
-					return err
-				}
-				return nil
-			}); err != nil {
+				return s.setDesc(desc.RangeID, desc)
+			},
+		); err != nil {
 			return nil, err
 		}
 	}
