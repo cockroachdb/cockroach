@@ -253,7 +253,6 @@ func TestConnHealthInternal(t *testing.T) {
 	rpcCtx := newTestContext(clock, maxOffset, stopper)
 	rpcCtx.SetLocalInternalServer(
 		&internalServer{},
-		false, // tenant
 		rpc.ServerInterceptorInfo{}, rpc.ClientInterceptorInfo{})
 	rpcCtx.NodeID.Set(ctx, staticNodeID)
 	rpcCtx.Config.AdvertiseAddr = localAddr.String()
