@@ -80,13 +80,33 @@ func testFuncB(ctx context.Context) error {
 	return ctx.Err()
 }
 
-func TestRunWithTimeoutCtxWithStacktrace(t *testing.T) {
+func TestRunWithTimeoutContextWithStacktrace(t *testing.T) {
 	ctx := context.Background()
-	err := RunWithTimeout(ctx, "foo", 1, testFuncA)
+	err := RunWithTimeout(ctx, "foo", 1, func(ctx context.Context) error {
+		err := testFuncA(ctx)
+		require.Error(t, err)
+		require.Equal(t, context.DeadlineExceeded, err)
+		return err
+	})
 	require.Error(t, err)
 	stacktrace := fmt.Sprintf("%+v", err)
 	require.Contains(t, stacktrace, "testFuncB")
 	require.Contains(t, stacktrace, "testFuncA")
+}
+
+func TestRunWithTimeoutContextWithStacktraceChildContext(t *testing.T) {
+	ctx := context.Background()
+	err := RunWithTimeout(ctx, "foo", 1, func(ctx context.Context) error {
+		ctx, _ = context.WithTimeout(ctx, 1)
+		err := testFuncA(ctx)
+		require.Error(t, err)
+		require.Equal(t, context.DeadlineExceeded, err)
+		return err
+	})
+	require.Error(t, err)
+	stacktrace := fmt.Sprintf("%+v", err)
+	require.NotContains(t, stacktrace, "testFuncB")
+	require.NotContains(t, stacktrace, "testFuncA")
 }
 
 // TestRunWithTimeoutWithoutDeadlineExceeded ensures that when a timeout on the
