@@ -13,10 +13,8 @@ package kvserver
 import (
 	"context"
 	"fmt"
-	math "math"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -28,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/errors"
 )
 
 // Stores provides methods to access a collection of stores. There's
@@ -298,118 +295,6 @@ func (ls *Stores) updateBootstrapInfoLocked(bi *gossip.BootstrapInfo) error {
 		return err == nil
 	})
 	return err
-}
-
-// WriteClusterVersionToEngines writes the given version to the given engines,
-// Returns nil on success; otherwise returns first error encountered writing to
-// the stores. It makes no attempt to validate the supplied version.
-//
-// At the time of writing this is used during bootstrap, initial server start
-// (to perhaps fill into additional stores), and during cluster version bumps.
-func WriteClusterVersionToEngines(
-	ctx context.Context, engines []storage.Engine, cv clusterversion.ClusterVersion,
-) error {
-	for _, eng := range engines {
-		if err := WriteClusterVersion(ctx, eng, cv); err != nil {
-			return errors.Wrapf(err, "error writing version to engine %s", eng)
-		}
-	}
-	return nil
-}
-
-// SynthesizeClusterVersionFromEngines returns the cluster version that was read
-// from the engines or, if none are initialized, binaryMinSupportedVersion.
-// Typically all initialized engines will have the same version persisted,
-// though ill-timed crashes can result in situations where this is not the
-// case. Then, the largest version seen is returned.
-//
-// binaryVersion is the version of this binary. An error is returned if
-// any engine has a higher version, as this would indicate that this node
-// has previously acked the higher cluster version but is now running an
-// old binary, which is unsafe.
-//
-// binaryMinSupportedVersion is the minimum version supported by this binary. An
-// error is returned if any engine has a version lower that this.
-func SynthesizeClusterVersionFromEngines(
-	ctx context.Context,
-	engines []storage.Engine,
-	binaryVersion, binaryMinSupportedVersion roachpb.Version,
-) (clusterversion.ClusterVersion, error) {
-	// Find the most recent bootstrap info.
-	type originVersion struct {
-		roachpb.Version
-		origin string
-	}
-
-	maxPossibleVersion := roachpb.Version{Major: math.MaxInt32} // Sort above any real version.
-	minStoreVersion := originVersion{
-		Version: maxPossibleVersion,
-		origin:  "(no store)",
-	}
-
-	// We run this twice because it's only after having seen all the versions
-	// that we can decide whether the node catches a version error. However, we
-	// also want to name at least one engine that violates the version
-	// constraints, which at the latest the second loop will achieve (because
-	// then minStoreVersion don't change any more).
-	for _, eng := range engines {
-		eng := eng.(storage.Reader) // we're read only
-		var cv clusterversion.ClusterVersion
-		cv, err := ReadClusterVersion(ctx, eng)
-		if err != nil {
-			return clusterversion.ClusterVersion{}, err
-		}
-		if cv.Version == (roachpb.Version{}) {
-			// This is needed when a node first joins an existing cluster, in
-			// which case it won't know what version to use until the first
-			// Gossip update comes in.
-			cv.Version = binaryMinSupportedVersion
-		}
-
-		// Avoid running a binary with a store that is too new. For example,
-		// restarting into 1.1 after having upgraded to 1.2 doesn't work.
-		if binaryVersion.Less(cv.Version) {
-			return clusterversion.ClusterVersion{}, errors.Errorf(
-				"cockroach version v%s is incompatible with data in store %s; use version v%s or later",
-				binaryVersion, eng, cv.Version)
-		}
-
-		// Track smallest use version encountered.
-		if cv.Version.Less(minStoreVersion.Version) {
-			minStoreVersion.Version = cv.Version
-			minStoreVersion.origin = fmt.Sprint(eng)
-		}
-	}
-
-	// If no use version was found, fall back to our binaryMinSupportedVersion. This
-	// is the case when a brand new node is joining an existing cluster (which
-	// may be on any older version this binary supports).
-	if minStoreVersion.Version == maxPossibleVersion {
-		minStoreVersion.Version = binaryMinSupportedVersion
-	}
-
-	cv := clusterversion.ClusterVersion{
-		Version: minStoreVersion.Version,
-	}
-	log.Eventf(ctx, "read clusterVersion %+v", cv)
-
-	// Avoid running a binary too new for this store. This is what you'd catch
-	// if, say, you restarted directly from 1.0 into 1.2 (bumping the min
-	// version) without going through 1.1 first. It would also be what you catch if
-	// you are starting 1.1 for the first time (after 1.0), but it crashes
-	// half-way through the startup sequence (so now some stores have 1.1, but
-	// some 1.0), in which case you are expected to run 1.1 again (hopefully
-	// without the crash this time) which would then rewrite all the stores.
-	//
-	// We only verify this now because as we iterate through the stores, we
-	// may not yet have picked up the final versions we're actually planning
-	// to use.
-	if minStoreVersion.Version.Less(binaryMinSupportedVersion) {
-		return clusterversion.ClusterVersion{}, errors.Errorf("store %s, last used with cockroach version v%s, "+
-			"is too old for running version v%s (which requires data from v%s or later)",
-			minStoreVersion.origin, minStoreVersion.Version, binaryVersion, binaryMinSupportedVersion)
-	}
-	return cv, nil
 }
 
 func (ls *Stores) engines() []storage.Engine {

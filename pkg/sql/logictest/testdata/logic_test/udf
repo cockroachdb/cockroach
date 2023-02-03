@@ -52,24 +52,6 @@ CREATE FUNCTION err(i INT) RETURNS INT LANGUAGE SQL AS 'SELECT j'
 statement error pgcode 42703 column \"j\" does not exist
 CREATE FUNCTION err(i INT) RETURNS INT LANGUAGE SQL AS 'SELECT a FROM ab WHERE a = j'
 
-statement error pgcode 0A000 functions do not currently support \* expressions
-CREATE FUNCTION err(i INT) RETURNS ab LANGUAGE SQL AS 'SELECT * FROM ab'
-
-statement error pgcode 0A000 functions do not currently support \* expressions
-CREATE FUNCTION err(i INT) RETURNS ab LANGUAGE SQL AS 'SELECT ab.* FROM ab'
-
-statement error pgcode 0A000 functions do not currently support \* expressions
-CREATE FUNCTION err(i INT) RETURNS ab LANGUAGE SQL AS $$
-  SELECT 1;
-  SELECT * FROM ab;
-$$
-
-statement error pgcode 0A000 functions do not currently support \* expressions
-CREATE FUNCTION err(i INT) RETURNS INT LANGUAGE SQL AS $$
-  SELECT * FROM ab;
-  SELECT 1;
-$$
-
 statement ok
 CREATE FUNCTION d(i INT2) RETURNS INT4 LANGUAGE SQL AS 'SELECT i'
 

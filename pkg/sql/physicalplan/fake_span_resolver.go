@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan/replicaoracle"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
@@ -65,7 +66,9 @@ type fakeSpanResolverIterator struct {
 }
 
 // NewSpanResolverIterator is part of the SpanResolver interface.
-func (fsr *fakeSpanResolver) NewSpanResolverIterator(txn *kv.Txn) SpanResolverIterator {
+func (fsr *fakeSpanResolver) NewSpanResolverIterator(
+	txn *kv.Txn, optionalOracle replicaoracle.Oracle,
+) SpanResolverIterator {
 	rng, _ := randutil.NewTestRand()
 	return &fakeSpanResolverIterator{fsr: fsr, db: txn.DB(), rng: rng}
 }
