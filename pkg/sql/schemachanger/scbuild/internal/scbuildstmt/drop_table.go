@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 )
 
 // DropTable implements DROP TABLE.
@@ -47,7 +48,7 @@ func DropTable(b BuildCtx, n *tree.DropTable) {
 		// Only decompose the tables first into elements, next we will check for
 		// dependent objects, in case they are all dropped *together*.
 		if n.DropBehavior == tree.DropCascade {
-			dropCascadeDescriptor(b, tbl.TableID)
+			dropCascadeDescriptor(b, n, tbl.TableID)
 		} else {
 			// Handle special case of owned sequences
 			var ownedIDs catalog.DescriptorIDSet
@@ -86,8 +87,8 @@ func DropTable(b BuildCtx, n *tree.DropTable) {
 		_, _, ns := scpb.FindNamespace(b.QueryByID(tableID))
 		maybePanicOnDependentView(b, ns, backrefs)
 		if _, _, fk := scpb.FindForeignKeyConstraint(backrefs); fk != nil {
-			panic(pgerror.Newf(pgcode.DependentObjectsStillExist,
-				"%q is referenced by foreign key from table %q", ns.Name, simpleName(b, fk.TableID)))
+			tn := simpleName(b, fk.TableID)
+			panic(sqlerrors.NewUniqueConstraintReferencedByForeignKeyError(ns.Name, tn))
 		}
 		panic(pgerror.Newf(pgcode.DependentObjectsStillExist,
 			"cannot drop table %s because other objects depend on it", ns.Name))

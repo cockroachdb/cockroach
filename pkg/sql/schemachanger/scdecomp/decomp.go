@@ -441,6 +441,14 @@ func (w *walkCtx) walkColumn(tbl catalog.TableDescriptor, col catalog.Column) {
 			expr, err := w.newExpression(col.GetComputeExpr())
 			onErrPanic(err)
 			columnType.ComputeExpr = expr
+			// TODO (postamar): move the computed expression to a separate element
+			// In the meantime we recompute the ClosedTypeIDs to ensure that
+			// DROP TYPE ... CASCADE works correctly.
+			newClosedTypeIDs := catalog.MakeDescriptorIDSet(columnType.ClosedTypeIDs...)
+			for _, id := range columnType.ComputeExpr.UsesTypeIDs {
+				newClosedTypeIDs.Add(id)
+			}
+			columnType.ClosedTypeIDs = newClosedTypeIDs.Ordered()
 		}
 		w.ev(scpb.Status_PUBLIC, columnType)
 	}

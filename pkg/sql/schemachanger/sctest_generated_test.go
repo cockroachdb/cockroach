@@ -795,3 +795,28 @@ func TestRollback_drop_table(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	sctest.Rollback(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_table", sctest.SingleNodeCluster)
 }
+func TestEndToEndSideEffects_drop_type_cascade(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.EndToEndSideEffects(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_type_cascade", sctest.SingleNodeCluster)
+}
+func TestExecuteWithDMLInjection_drop_type_cascade(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.ExecuteWithDMLInjection(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_type_cascade", sctest.SingleNodeCluster)
+}
+func TestGenerateSchemaChangeCorpus_drop_type_cascade(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.GenerateSchemaChangeCorpus(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_type_cascade", sctest.SingleNodeCluster)
+}
+func TestPause_drop_type_cascade(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.Pause(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_type_cascade", sctest.SingleNodeCluster)
+}
+func TestRollback_drop_type_cascade(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.Rollback(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_type_cascade", sctest.SingleNodeCluster)
+}

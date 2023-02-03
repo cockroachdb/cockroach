@@ -20,7 +20,6 @@ go_library(
         "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
-        "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/schemachanger/screl",
         "//pkg/sql/sem/catid",
         "//pkg/sql/sem/tree",

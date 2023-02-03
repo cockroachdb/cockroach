@@ -42,7 +42,7 @@ func DropSequence(b BuildCtx, n *tree.DropSequence) {
 			panic(scerrors.NotImplementedErrorf(n, "dropping a temporary sequence"))
 		}
 		if n.DropBehavior == tree.DropCascade {
-			dropCascadeDescriptor(b, seq.SequenceID)
+			dropCascadeDescriptor(b, n, seq.SequenceID)
 		} else if dropRestrictDescriptor(b, seq.SequenceID) {
 			// Drop sequence owner even for RESTRICT.
 			scpb.ForEachSequenceOwner(

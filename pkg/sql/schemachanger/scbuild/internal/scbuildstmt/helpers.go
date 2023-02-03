@@ -100,12 +100,15 @@ func undroppedElements(b BuildCtx, id catid.DescID) ElementResultSet {
 			}
 			// Ignore any other elements with undefined targets.
 			return false
-		case scpb.ToAbsent, scpb.Transient:
-			// If the target is already ABSENT or TRANSIENT then the element is going
-			// away anyway and so it doesn't need to have a target set for this DROP.
+		case scpb.ToAbsent:
+			// If the target is already ABSENT then the element is going away anyway
+			// so it doesn't need to have a target set for this DROP.
 			return false
 		}
 		// Otherwise, return true to signal the removal of the element.
+		// TRANSIENT targets also need to be considered here, as we do not want
+		// them to come into existence at all, even if they are to go away
+		// eventually.
 		return true
 	})
 }
@@ -147,15 +150,41 @@ func errMsgPrefix(b BuildCtx, id catid.DescID) string {
 
 // dropCascadeDescriptor contains the common logic for dropping something with
 // CASCADE.
-func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
-	undropped := undroppedElements(b, id)
-	// Exit early if all elements already have ABSENT targets.
-	if undropped.IsEmpty() {
+func dropCascadeDescriptor(b BuildCtx, n tree.NodeFormatter, id catid.DescID) {
+	var s dropCascadeState
+	// First, we recursively visit the descriptors to which the drop cascades.
+	s.visitRecursive(b, id)
+	// Do all known whole-descriptor drops first.
+	// This way, we straightforwardly set a large number of to-ABSENT targets.
+	for _, qe := range s.q {
+		qe.dropWholeDescriptor()
+	}
+	// Afterwards, we can deal with any remaining column, index, constraint or
+	// other element removals when their parent descriptor-element isn't dropped.
+	for _, qe := range s.q {
+		qe.dropUndroppedBackReferencedElements(n)
+	}
+}
+
+type dropCascadeState struct {
+	ids catalog.DescriptorIDSet
+	q   []dropCascadeQueueElement
+}
+
+func (s *dropCascadeState) visitRecursive(b BuildCtx, id catid.DescID) {
+	if s.ids.Contains(id) {
 		return
 	}
+	s.ids.Add(id)
+	undropped := undroppedElements(b, id)
+	if undropped.IsEmpty() {
+		// Exit early if all elements already have ABSENT targets.
+		return
+	}
+	s.q = append(s.q, dropCascadeQueueElement{b: b, id: id})
+	qe := &s.q[len(s.q)-1]
 	// Check privileges and decide which actions to take or not.
-	var isVirtualSchema bool
-	undropped.ForEachElementStatus(func(current scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
+	undropped.ForEachElementStatus(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
 		switch t := e.(type) {
 		case *scpb.Database:
 			break
@@ -163,7 +192,7 @@ func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
 			if t.IsTemporary {
 				panic(scerrors.NotImplementedErrorf(nil, "dropping a temporary schema"))
 			}
-			isVirtualSchema = t.IsVirtual
+			qe.isVirtualSchema = t.IsVirtual
 			// Return early to skip checking privileges on schemas.
 			return
 		case *scpb.Table:
@@ -185,55 +214,107 @@ func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
 		}
 		b.CheckPrivilege(e, privilege.DROP)
 	})
-	// Mark element targets as ABSENT.
 	next := b.WithNewSourceElementID()
 	undropped.ForEachElementStatus(func(_ scpb.Status, target scpb.TargetStatus, e scpb.Element) {
-		if isVirtualSchema {
-			// Don't actually drop any elements of virtual schemas.
-			return
-		}
-		b.Drop(e)
 		switch t := e.(type) {
 		case *scpb.EnumType:
-			dropCascadeDescriptor(next, t.ArrayTypeID)
+			s.visitRecursive(next, t.ArrayTypeID)
 		case *scpb.CompositeType:
-			dropCascadeDescriptor(next, t.ArrayTypeID)
+			s.visitRecursive(next, t.ArrayTypeID)
 		case *scpb.SequenceOwner:
-			dropCascadeDescriptor(next, t.SequenceID)
+			s.visitRecursive(next, t.SequenceID)
 		}
 	})
-	// Recurse on back-referenced elements.
+	// Recurse on back-referenced descriptor elements.
 	ub := undroppedBackrefs(b, id)
 	ub.ForEachElementStatus(func(_ scpb.Status, target scpb.TargetStatus, e scpb.Element) {
 		switch t := e.(type) {
 		case *scpb.SchemaParent:
-			dropCascadeDescriptor(next, t.SchemaID)
+			s.visitRecursive(next, t.SchemaID)
 		case *scpb.ObjectParent:
-			dropCascadeDescriptor(next, t.ObjectID)
+			s.visitRecursive(next, t.ObjectID)
 		case *scpb.View:
-			dropCascadeDescriptor(next, t.ViewID)
+			s.visitRecursive(next, t.ViewID)
 		case *scpb.Sequence:
-			dropCascadeDescriptor(next, t.SequenceID)
+			s.visitRecursive(next, t.SequenceID)
 		case *scpb.AliasType:
-			dropCascadeDescriptor(next, t.TypeID)
+			s.visitRecursive(next, t.TypeID)
 		case *scpb.EnumType:
-			dropCascadeDescriptor(next, t.TypeID)
+			s.visitRecursive(next, t.TypeID)
 		case *scpb.CompositeType:
-			dropCascadeDescriptor(next, t.TypeID)
+			s.visitRecursive(next, t.TypeID)
 		case *scpb.FunctionBody:
-			dropCascadeDescriptor(next, t.FunctionID)
-		case *scpb.Column, *scpb.ColumnType, *scpb.SecondaryIndexPartial:
-			// These only have type references.
-			break
+			s.visitRecursive(next, t.FunctionID)
+		}
+	})
+}
+
+type dropCascadeQueueElement struct {
+	b               BuildCtx
+	id              catid.DescID
+	isVirtualSchema bool
+}
+
+func (qe dropCascadeQueueElement) dropWholeDescriptor() {
+	if qe.isVirtualSchema {
+		return
+	}
+	undroppedElements(qe.b, qe.id).ForEachElementStatus(
+		func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
+			qe.b.Drop(e)
+		},
+	)
+}
+
+func (qe dropCascadeQueueElement) dropUndroppedBackReferencedElements(n tree.NodeFormatter) {
+	ub := undroppedBackrefs(qe.b, qe.id)
+	ub.ForEachElementStatus(func(_ scpb.Status, target scpb.TargetStatus, e scpb.Element) {
+		switch t := e.(type) {
+		case *scpb.Column:
+			dropColumnByID(qe.b, n, t.TableID, t.ColumnID)
+		case *scpb.ColumnType:
+			dropColumnByID(qe.b, n, t.TableID, t.ColumnID)
+		case *scpb.SecondaryIndexPartial:
+			scpb.ForEachSecondaryIndex(
+				qe.b.QueryByID(t.TableID).Filter(publicTargetFilter).Filter(hasIndexIDAttrFilter(t.IndexID)),
+				func(_ scpb.Status, _ scpb.TargetStatus, sie *scpb.SecondaryIndex) {
+					dropSecondaryIndex(qe.b, n, tree.DropCascade, sie)
+				},
+			)
+		case *scpb.CheckConstraint:
+			dropConstraintByID(qe.b, t.TableID, t.ConstraintID)
+		case *scpb.ForeignKeyConstraint:
+			dropConstraintByID(qe.b, t.TableID, t.ConstraintID)
+		case *scpb.UniqueWithoutIndexConstraint:
+			dropConstraintByID(qe.b, t.TableID, t.ConstraintID)
 		case
 			*scpb.ColumnDefaultExpression,
 			*scpb.ColumnOnUpdateExpression,
-			*scpb.CheckConstraint,
-			*scpb.ForeignKeyConstraint,
 			*scpb.SequenceOwner,
 			*scpb.DatabaseRegionConfig:
-			b.Drop(e)
+			qe.b.Drop(e)
 		}
+	})
+}
+
+func dropColumnByID(
+	b BuildCtx, n tree.NodeFormatter, relationID catid.DescID, columnID catid.ColumnID,
+) {
+	relationElts := b.QueryByID(relationID).Filter(publicTargetFilter)
+	colElts := relationElts.Filter(hasColumnIDAttrFilter(columnID))
+	_, _, col := scpb.FindColumn(colElts)
+	_, _, tbl := scpb.FindTable(relationElts)
+	if tbl == nil {
+		return
+	}
+	dropColumn(b, n, tbl, col, colElts, tree.DropCascade)
+}
+
+func dropConstraintByID(b BuildCtx, tableID catid.DescID, constraintID catid.ConstraintID) {
+	tableElts := b.QueryByID(tableID).Filter(publicTargetFilter)
+	constraintElts := tableElts.Filter(hasConstraintIDAttrFilter(constraintID))
+	constraintElts.ForEachElementStatus(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
+		b.Drop(e)
 	})
 }
 
@@ -248,26 +329,6 @@ func descIDs(input ElementResultSet) (ids catalog.DescriptorIDSet) {
 		ids.Add(screl.GetDescID(e))
 	})
 	return ids
-}
-
-func columnElements(b BuildCtx, relationID catid.DescID, columnID catid.ColumnID) ElementResultSet {
-	return b.QueryByID(relationID).Filter(func(
-		current scpb.Status, target scpb.TargetStatus, e scpb.Element,
-	) bool {
-		idI, _ := screl.Schema.GetAttribute(screl.ColumnID, e)
-		return idI != nil && idI.(catid.ColumnID) == columnID
-	})
-}
-
-func constraintElements(
-	b BuildCtx, relationID catid.DescID, constraintID catid.ConstraintID,
-) ElementResultSet {
-	return b.QueryByID(relationID).Filter(func(
-		current scpb.Status, target scpb.TargetStatus, e scpb.Element,
-	) bool {
-		idI, _ := screl.Schema.GetAttribute(screl.ConstraintID, e)
-		return idI != nil && idI.(catid.ConstraintID) == constraintID
-	})
 }
 
 // indexColumnIDs return an index's key column IDs, key suffix column IDs,
@@ -419,6 +480,15 @@ func hasColumnIDAttrFilter(
 	return func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) (included bool) {
 		idI, _ := screl.Schema.GetAttribute(screl.ColumnID, e)
 		return idI != nil && idI.(catid.ColumnID) == columnID
+	}
+}
+
+func hasConstraintIDAttrFilter(
+	constraintID catid.ConstraintID,
+) func(_ scpb.Status, _ scpb.TargetStatus, _ scpb.Element) bool {
+	return func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) (included bool) {
+		idI, _ := screl.Schema.GetAttribute(screl.ConstraintID, e)
+		return idI != nil && idI.(catid.ConstraintID) == constraintID
 	}
 }
 

@@ -498,11 +498,22 @@ upsert descriptor #104
   +  version: "7"
 upsert descriptor #105
   ...
-             1 $$"
-           statementTag: CREATE FUNCTION
+       authorization:
+         userName: root
+  -    currentStatuses: <redacted>
+       jobId: "1"
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: "CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()\n\tRETURNS
+  -          INT8\n\tLANGUAGE SQL\n\tAS $$SELECT 1;$$"
+  -        statement: "CREATE FUNCTION t()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$ SELECT
+  -          1 $$"
+  -        statementTag: CREATE FUNCTION
   -    revertible: true
-       targetRanks: <redacted>
-       targets: <redacted>
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     functionBody: SELECT 1;
+     id: 105
   ...
          oid: 20
          width: 64
@@ -578,17 +589,7 @@ upsert descriptor #105
   -  declarativeSchemaChangerState:
   -    authorization:
   -      userName: root
-  -    currentStatuses: <redacted>
   -    jobId: "1"
-  -    relevantStatements:
-  -    - statement:
-  -        redactedStatement: "CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()\n\tRETURNS
-  -          INT8\n\tLANGUAGE SQL\n\tAS $$SELECT 1;$$"
-  -        statement: "CREATE FUNCTION t()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$ SELECT
-  -          1 $$"
-  -        statementTag: CREATE FUNCTION
-  -    targetRanks: <redacted>
-  -    targets: <redacted>
      functionBody: SELECT 1;
      id: 105
   ...

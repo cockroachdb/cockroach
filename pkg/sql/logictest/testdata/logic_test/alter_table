@@ -1742,7 +1742,7 @@ uwi_child  uwi_child_d_fkey  FOREIGN KEY  FOREIGN KEY (d) REFERENCES unique_with
 uwi_child  uwi_child_pkey    PRIMARY KEY  PRIMARY KEY (rowid ASC)                                   true
 
 # Attempting to drop a column with a foreign key reference fails.
-statement error pq: "unique_d" is referenced by foreign key from table "uwi_child"
+statement error pgcode 2BP01 is referenced by foreign key from table "uwi_child"
 ALTER TABLE unique_without_index DROP COLUMN d
 
 # It succeeds if we use CASCADE, and also drops the fk reference.

@@ -35,7 +35,7 @@ func DropDatabase(b BuildCtx, n *tree.DropDatabase) {
 	b.IncrementSchemaChangeDropCounter("database")
 	// Perform explicit or implicit DROP DATABASE CASCADE.
 	if n.DropBehavior == tree.DropCascade || (n.DropBehavior == tree.DropDefault && !b.SessionData().SafeUpdates) {
-		dropCascadeDescriptor(b, db.DatabaseID)
+		dropCascadeDescriptor(b, n, db.DatabaseID)
 		b.LogEventForExistingTarget(db)
 		return
 	}

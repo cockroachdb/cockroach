@@ -1,0 +1,340 @@
+/* setup */
+SET experimental_enable_unique_without_index_constraints = true;
+CREATE TYPE greeting AS ENUM('hello', 'hi');
+CREATE VIEW view AS SELECT 'hi'::greeting::string AS c;
+CREATE TABLE tbl (
+  id INT PRIMARY KEY,
+  gs greeting AS ('hi'::greeting) STORED,
+  gv string AS ('hello'::greeting::STRING) VIRTUAL,
+  other greeting[],
+  name STRING NOT NULL DEFAULT 'noname',
+  CONSTRAINT mycheck CHECK (gs::STRING = name),
+  CONSTRAINT myuwi UNIQUE WITHOUT INDEX (name) WHERE ('hi'::greeting::STRING = 'hi'),
+  INDEX partial (name) WHERE (gs::STRING = 'hi')
+);
+
+/* test */
+DROP TYPE greeting CASCADE;
+EXPLAIN (ddl, verbose) rollback at post-commit stage 3 of 7;
+----
+• Schema change plan for rolling back DROP TYPE ‹defaultdb›.‹public›.‹greeting› CASCADE;
+│
+└── • PostCommitNonRevertiblePhase
+    │
+    ├── • Stage 1 of 2 in PostCommitNonRevertiblePhase
+    │   │
+    │   ├── • 11 elements transitioning toward PUBLIC
+    │   │   │
+    │   │   ├── • Column:{DescID: 107, ColumnID: 2}
+    │   │   │   │ WRITE_ONLY → PUBLIC
+    │   │   │   │
+    │   │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY Column:{DescID: 107, ColumnID: 2}
+    │   │   │   │     rule: "Column transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->PUBLIC"
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from PUBLIC ColumnName:{DescID: 107, Name: gs, ColumnID: 2}
+    │   │   │   │     rule: "column dependents exist before column becomes public"
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from PUBLIC ColumnType:{DescID: 107, ReferencedTypeIDs: [104 105], ColumnFamilyID: 0, ColumnID: 2}
+    │   │   │   │     rule: "column dependents exist before column becomes public"
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from PUBLIC IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 1}
+    │   │   │         rule: "column dependents exist before column becomes public"
+    │   │   │
+    │   │   ├── • ColumnName:{DescID: 107, Name: gs, ColumnID: 2}
+    │   │   │     ABSENT → PUBLIC
+    │   │   │
+    │   │   ├── • Column:{DescID: 107, ColumnID: 3}
+    │   │   │   │ WRITE_ONLY → PUBLIC
+    │   │   │   │
+    │   │   │   ├── • SameStagePrecedence dependency from PUBLIC Column:{DescID: 107, ColumnID: 2}
+    │   │   │   │     rule: "ensure columns are in increasing order"
+    │   │   │   │
+    │   │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY Column:{DescID: 107, ColumnID: 3}
+    │   │   │   │     rule: "Column transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->PUBLIC"
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from PUBLIC ColumnName:{DescID: 107, Name: gv, ColumnID: 3}
+    │   │   │   │     rule: "column dependents exist before column becomes public"
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from PUBLIC ColumnType:{DescID: 107, ReferencedTypeIDs: [104 105], ColumnFamilyID: 0, ColumnID: 3}
+    │   │   │         rule: "column dependents exist before column becomes public"
+    │   │   │
+    │   │   ├── • ColumnName:{DescID: 107, Name: gv, ColumnID: 3}
+    │   │   │     ABSENT → PUBLIC
+    │   │   │
+    │   │   ├── • Column:{DescID: 107, ColumnID: 4}
+    │   │   │   │ WRITE_ONLY → PUBLIC
+    │   │   │   │
+    │   │   │   ├── • SameStagePrecedence dependency from PUBLIC Column:{DescID: 107, ColumnID: 2}
+    │   │   │   │     rule: "ensure columns are in increasing order"
+    │   │   │   │
+    │   │   │   ├── • SameStagePrecedence dependency from PUBLIC Column:{DescID: 107, ColumnID: 3}
+    │   │   │   │     rule: "ensure columns are in increasing order"
+    │   │   │   │
+    │   │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY Column:{DescID: 107, ColumnID: 4}
+    │   │   │   │     rule: "Column transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->PUBLIC"
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from PUBLIC ColumnName:{DescID: 107, Name: other, ColumnID: 4}
+    │   │   │   │     rule: "column dependents exist before column becomes public"
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from PUBLIC ColumnType:{DescID: 107, ReferencedTypeIDs: [104 105], ColumnFamilyID: 0, ColumnID: 4}
+    │   │   │   │     rule: "column dependents exist before column becomes public"
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from PUBLIC IndexColumn:{DescID: 107, ColumnID: 4, IndexID: 1}
+    │   │   │         rule: "column dependents exist before column becomes public"
+    │   │   │
+    │   │   ├── • ColumnName:{DescID: 107, Name: other, ColumnID: 4}
+    │   │   │     ABSENT → PUBLIC
+    │   │   │
+    │   │   ├── • SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 0}
+    │   │   │   │ VALIDATED → PUBLIC
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 107, ColumnID: 5, IndexID: 2}
+    │   │   │   │     rule: "index dependents exist before index becomes public"
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 2}
+    │   │   │   │     rule: "index dependents exist before index becomes public"
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from PUBLIC SecondaryIndexPartial:{DescID: 107, IndexID: 2}
+    │   │   │   │     rule: "index dependents exist before index becomes public"
+    │   │   │   │
+    │   │   │   ├── • PreviousStagePrecedence dependency from VALIDATED SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 0}
+    │   │   │   │     rule: "SecondaryIndex transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC"
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from PUBLIC IndexName:{DescID: 107, Name: partial, IndexID: 2}
+    │   │   │         rule: "index dependents exist before index becomes public"
+    │   │   │
+    │   │   ├── • UniqueWithoutIndexConstraint:{DescID: 107, ConstraintID: 3}
+    │   │   │   │ VALIDATED → PUBLIC
+    │   │   │   │
+    │   │   │   ├── • PreviousStagePrecedence dependency from VALIDATED UniqueWithoutIndexConstraint:{DescID: 107, ConstraintID: 3}
+    │   │   │   │     rule: "UniqueWithoutIndexConstraint transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC"
+    │   │   │   │
+    │   │   │   └── • SameStagePrecedence dependency from PUBLIC ConstraintWithoutIndexName:{DescID: 107, Name: myuwi, ConstraintID: 3}
+    │   │   │         rule: "constraint dependent public right before constraint"
+    │   │   │
+    │   │   ├── • ConstraintWithoutIndexName:{DescID: 107, Name: myuwi, ConstraintID: 3}
+    │   │   │     ABSENT → PUBLIC
+    │   │   │
+    │   │   ├── • CheckConstraint:{DescID: 107, IndexID: 0, ConstraintID: 2}
+    │   │   │   │ VALIDATED → PUBLIC
+    │   │   │   │
+    │   │   │   ├── • PreviousStagePrecedence dependency from VALIDATED CheckConstraint:{DescID: 107, IndexID: 0, ConstraintID: 2}
+    │   │   │   │     rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC"
+    │   │   │   │
+    │   │   │   └── • SameStagePrecedence dependency from PUBLIC ConstraintWithoutIndexName:{DescID: 107, Name: mycheck, ConstraintID: 2}
+    │   │   │         rule: "constraint dependent public right before constraint"
+    │   │   │
+    │   │   └── • ConstraintWithoutIndexName:{DescID: 107, Name: mycheck, ConstraintID: 2}
+    │   │         ABSENT → PUBLIC
+    │   │
+    │   ├── • 6 elements transitioning toward ABSENT
+    │   │   │
+    │   │   ├── • PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 4, TemporaryIndexID: 4, SourceIndexID: 1}
+    │   │   │   │ BACKFILL_ONLY → ABSENT
+    │   │   │   │
+    │   │   │   ├── • PreviousStagePrecedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 4, TemporaryIndexID: 4, SourceIndexID: 1}
+    │   │   │   │     rule: "PrimaryIndex transitions to ABSENT uphold 2-version invariant: BACKFILL_ONLY->DELETE_ONLY"
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from ABSENT IndexName:{DescID: 107, Name: tbl_pkey, IndexID: 3}
+    │   │   │   │     rule: "dependents removed before index"
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 3}
+    │   │   │   │     rule: "dependents removed before index"
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from ABSENT IndexColumn:{DescID: 107, ColumnID: 5, IndexID: 3}
+    │   │   │         rule: "dependents removed before index"
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 3}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   └── • skip PUBLIC → ABSENT operations
+    │   │   │         rule: "skip index-column removal ops on index removal"
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 107, ColumnID: 5, IndexID: 3}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   └── • skip PUBLIC → ABSENT operations
+    │   │   │         rule: "skip index-column removal ops on index removal"
+    │   │   │
+    │   │   ├── • TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 5, SourceIndexID: 1}
+    │   │   │   │ WRITE_ONLY → DELETE_ONLY
+    │   │   │   │
+    │   │   │   └── • PreviousStagePrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 5, SourceIndexID: 1}
+    │   │   │         rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY"
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 4}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   └── • skip PUBLIC → ABSENT operations
+    │   │   │         rule: "skip index-column removal ops on index removal"
+    │   │   │
+    │   │   └── • IndexColumn:{DescID: 107, ColumnID: 5, IndexID: 4}
+    │   │       │ PUBLIC → ABSENT
+    │   │       │
+    │   │       └── • skip PUBLIC → ABSENT operations
+    │   │             rule: "skip index-column removal ops on index removal"
+    │   │
+    │   └── • 22 Mutation operations
+    │       │
+    │       ├── • SetColumnName
+    │       │     ColumnID: 2
+    │       │     Name: gs
+    │       │     TableID: 107
+    │       │
+    │       ├── • SetColumnName
+    │       │     ColumnID: 3
+    │       │     Name: gv
+    │       │     TableID: 107
+    │       │
+    │       ├── • SetColumnName
+    │       │     ColumnID: 4
+    │       │     Name: other
+    │       │     TableID: 107
+    │       │
+    │       ├── • MakeValidatedSecondaryIndexPublic
+    │       │     IndexID: 2
+    │       │     TableID: 107
+    │       │
+    │       ├── • RefreshStats
+    │       │     TableID: 107
+    │       │
+    │       ├── • SetConstraintName
+    │       │     ConstraintID: 3
+    │       │     Name: myuwi
+    │       │     TableID: 107
+    │       │
+    │       ├── • SetConstraintName
+    │       │     ConstraintID: 2
+    │       │     Name: mycheck
+    │       │     TableID: 107
+    │       │
+    │       ├── • MakeWriteOnlyIndexDeleteOnly
+    │       │     IndexID: 4
+    │       │     TableID: 107
+    │       │
+    │       ├── • MakeWriteOnlyColumnPublic
+    │       │     ColumnID: 2
+    │       │     TableID: 107
+    │       │
+    │       ├── • RefreshStats
+    │       │     TableID: 107
+    │       │
+    │       ├── • MakeWriteOnlyColumnPublic
+    │       │     ColumnID: 3
+    │       │     TableID: 107
+    │       │
+    │       ├── • RefreshStats
+    │       │     TableID: 107
+    │       │
+    │       ├── • MakeWriteOnlyColumnPublic
+    │       │     ColumnID: 4
+    │       │     TableID: 107
+    │       │
+    │       ├── • RefreshStats
+    │       │     TableID: 107
+    │       │
+    │       ├── • MakeValidatedUniqueWithoutIndexConstraintPublic
+    │       │     ConstraintID: 3
+    │       │     TableID: 107
+    │       │
+    │       ├── • MakeValidatedCheckConstraintPublic
+    │       │     ConstraintID: 2
+    │       │     TableID: 107
+    │       │
+    │       ├── • MakeIndexAbsent
+    │       │     IndexID: 3
+    │       │     TableID: 107
+    │       │
+    │       ├── • SetJobStateOnDescriptor
+    │       │     DescriptorID: 104
+    │       │
+    │       ├── • SetJobStateOnDescriptor
+    │       │     DescriptorID: 105
+    │       │
+    │       ├── • SetJobStateOnDescriptor
+    │       │     DescriptorID: 106
+    │       │
+    │       ├── • SetJobStateOnDescriptor
+    │       │     DescriptorID: 107
+    │       │
+    │       └── • UpdateSchemaChangerJob
+    │             IsNonCancelable: true
+    │             JobID: 1
+    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 2 with 3 MutationType ops pending
+    │
+    └── • Stage 2 of 2 in PostCommitNonRevertiblePhase
+        │
+        ├── • 3 elements transitioning toward ABSENT
+        │   │
+        │   ├── • IndexData:{DescID: 107, IndexID: 3}
+        │   │   │ PUBLIC → ABSENT
+        │   │   │
+        │   │   └── • Precedence dependency from ABSENT PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 4, TemporaryIndexID: 4, SourceIndexID: 1}
+        │   │         rule: "index removed before garbage collection"
+        │   │
+        │   ├── • TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 5, SourceIndexID: 1}
+        │   │   │ DELETE_ONLY → ABSENT
+        │   │   │
+        │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 5, SourceIndexID: 1}
+        │   │   │     rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 4}
+        │   │   │     rule: "dependents removed before index"
+        │   │   │
+        │   │   └── • Precedence dependency from ABSENT IndexColumn:{DescID: 107, ColumnID: 5, IndexID: 4}
+        │   │         rule: "dependents removed before index"
+        │   │
+        │   └── • IndexData:{DescID: 107, IndexID: 4}
+        │       │ PUBLIC → ABSENT
+        │       │
+        │       ├── • SameStagePrecedence dependency from DROPPED IndexData:{DescID: 107, IndexID: 3}
+        │       │     rule: "schedule all GC jobs for a descriptor in the same stage"
+        │       │
+        │       └── • Precedence dependency from ABSENT TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 5, SourceIndexID: 1}
+        │             rule: "index removed before garbage collection"
+        │
+        └── • 8 Mutation operations
+            │
+            ├── • CreateGCJobForIndex
+            │     IndexID: 3
+            │     StatementForDropJob:
+            │       Rollback: true
+            │       Statement: DROP TYPE defaultdb.public.greeting CASCADE
+            │     TableID: 107
+            │
+            ├── • MakeIndexAbsent
+            │     IndexID: 4
+            │     TableID: 107
+            │
+            ├── • CreateGCJobForIndex
+            │     IndexID: 4
+            │     StatementForDropJob:
+            │       Rollback: true
+            │       Statement: DROP TYPE defaultdb.public.greeting CASCADE
+            │     TableID: 107
+            │
+            ├── • RemoveJobStateFromDescriptor
+            │     DescriptorID: 104
+            │     JobID: 1
+            │
+            ├── • RemoveJobStateFromDescriptor
+            │     DescriptorID: 105
+            │     JobID: 1
+            │
+            ├── • RemoveJobStateFromDescriptor
+            │     DescriptorID: 106
+            │     JobID: 1
+            │
+            ├── • RemoveJobStateFromDescriptor
+            │     DescriptorID: 107
+            │     JobID: 1
+            │
+            └── • UpdateSchemaChangerJob
+                  DescriptorIDsToRemove:
+                  - 104
+                  - 105
+                  - 106
+                  - 107
+                  IsNonCancelable: true
+                  JobID: 1
+                  RunningStatus: all stages completed

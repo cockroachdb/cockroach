@@ -943,7 +943,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
     │   │       └── • SameStagePrecedence dependency from ABSENT View:{DescID: 106}
     │   │             rule: "table removed right before garbage collection"
     │   │
-    │   └── • 6 Mutation operations
+    │   └── • 7 Mutation operations
     │       │
     │       ├── • CreateGCJobForTable
     │       │     DatabaseID: 100
@@ -968,6 +968,10 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
     │       │
     │       ├── • SetJobStateOnDescriptor
     │       │     DescriptorID: 105
+    │       │
+    │       ├── • RemoveJobStateFromDescriptor
+    │       │     DescriptorID: 106
+    │       │     JobID: 1
     │       │
     │       └── • UpdateSchemaChangerJob
     │             DescriptorIDsToRemove:

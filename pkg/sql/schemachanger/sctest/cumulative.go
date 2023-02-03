@@ -669,7 +669,11 @@ func Rollback(t *testing.T, relPath string, newCluster NewClusterFunc) {
 // minus any COMMENT ON statements because these aren't consistently backed up.
 const fetchDescriptorStateQuery = `
 SELECT
-	split_part(create_statement, ';', 1) AS create_statement
+	regexp_replace(
+	    split_part(create_statement, ';', 1),
+	    'CREATE VIEW (.*) AS SELECT .*',
+	    'CREATE VIEW \1 AS SELECT ...'
+	) AS create_statement
 FROM
 	( 
 		SELECT descriptor_id, create_statement FROM crdb_internal.create_schema_statements

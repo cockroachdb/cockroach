@@ -244,7 +244,7 @@ notified job registry to adopt jobs: [1]
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitNonRevertiblePhase stage 1 of 2 with 6 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 2 with 7 MutationType ops
 upsert descriptor #105
   ...
          keySuffixColumnIds:
@@ -265,6 +265,30 @@ upsert descriptor #105
   -  version: "11"
   +  version: "12"
      viewQuery: SELECT i, j FROM defaultdb.public.t1
+upsert descriptor #106
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses: <redacted>
+  -    jobId: "1"
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx› CASCADE
+  -        statement: DROP INDEX idx CASCADE
+  -        statementTag: DROP INDEX
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     dependsOn:
+     - 105
+  ...
+     state: DROP
+     unexposedParentSchemaId: 101
+  -  version: "3"
+  +  version: "4"
+     viewQuery: SELECT j FROM defaultdb.public.v2@idx
 persist all catalog changes to storage
 create job #2 (non-cancelable: true): "GC for DROP INDEX defaultdb.public.v2@idx CASCADE"
   descriptor IDs: [106]

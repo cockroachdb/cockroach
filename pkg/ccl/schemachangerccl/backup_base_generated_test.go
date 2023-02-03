@@ -173,3 +173,8 @@ func TestBackup_base_drop_table(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_table", newCluster)
 }
+func TestBackup_base_drop_type_cascade(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_type_cascade", newCluster)
+}

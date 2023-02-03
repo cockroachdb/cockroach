@@ -122,14 +122,7 @@ func (i *immediateVisitor) MakeValidatedCheckConstraintPublic(
 		if c := mutation.GetConstraint(); c != nil &&
 			c.ConstraintType == descpb.ConstraintToUpdate_CHECK &&
 			c.Check.ConstraintID == op.ConstraintID {
-			// Remove the mutation from the mutation slice. The `MakeMutationComplete`
-			// call will mark the check in the public "Checks" slice as VALIDATED.
-			err = tbl.MakeMutationComplete(mutation)
-			if err != nil {
-				return err
-			}
 			tbl.Mutations = append(tbl.Mutations[:idx], tbl.Mutations[idx+1:]...)
-
 			found = true
 			break
 		}
@@ -138,6 +131,13 @@ func (i *immediateVisitor) MakeValidatedCheckConstraintPublic(
 	if !found {
 		return errors.AssertionFailedf("failed to find check constraint %d in table %q (%d)",
 			op.ConstraintID, tbl.GetName(), tbl.GetID())
+	}
+
+	for _, c := range tbl.Checks {
+		if c.ConstraintID == op.ConstraintID {
+			c.Validity = descpb.ConstraintValidity_Validated
+			break
+		}
 	}
 
 	if len(tbl.Mutations) == 0 {
@@ -160,25 +160,8 @@ func (i *immediateVisitor) MakeValidatedColumnNotNullPublic(
 		if c := mutation.GetConstraint(); c != nil &&
 			c.ConstraintType == descpb.ConstraintToUpdate_NOT_NULL &&
 			c.NotNullColumn == op.ColumnID {
-			col := catalog.FindColumnByID(tbl, op.ColumnID)
-			if col == nil {
-				return errors.AssertionFailedf("column-id \"%d\" does not exist", op.ColumnID)
-			}
-			col.ColumnDesc().Nullable = false
 			tbl.Mutations = append(tbl.Mutations[:idx], tbl.Mutations[idx+1:]...)
-			if len(tbl.Mutations) == 0 {
-				tbl.Mutations = nil
-			}
 			found = true
-
-			// Don't forget to also remove the dummy check in the "Checks" slice!
-			for idx, ck := range tbl.Checks {
-				if ck.IsNonNullConstraint && ck.ColumnIDs[0] == op.ColumnID {
-					tbl.Checks = append(tbl.Checks[:idx], tbl.Checks[idx+1:]...)
-					break
-				}
-			}
-
 			break
 		}
 	}
@@ -187,6 +170,25 @@ func (i *immediateVisitor) MakeValidatedColumnNotNullPublic(
 		return errors.AssertionFailedf("failed to find NOT NULL mutation for column %d "+
 			"in table %q (%d)", op.ColumnID, tbl.GetName(), tbl.GetID())
 	}
+
+	if len(tbl.Mutations) == 0 {
+		tbl.Mutations = nil
+	}
+
+	col, err := catalog.MustFindColumnByID(tbl, op.ColumnID)
+	if err != nil {
+		return errors.HandleAsAssertionFailure(err)
+	}
+	col.ColumnDesc().Nullable = false
+
+	// Don't forget to also remove the dummy check in the "Checks" slice!
+	for idx, ck := range tbl.Checks {
+		if ck.IsNonNullConstraint && ck.ColumnIDs[0] == op.ColumnID {
+			tbl.Checks = append(tbl.Checks[:idx], tbl.Checks[idx+1:]...)
+			break
+		}
+	}
+
 	return nil
 }
 
@@ -426,14 +428,6 @@ func (i *immediateVisitor) MakeValidatedForeignKeyConstraintPublic(
 			c.ForeignKey.Validity = descpb.ConstraintValidity_Validated
 			out.OutboundFKs = append(out.OutboundFKs, c.ForeignKey)
 			out.Mutations = append(out.Mutations[:idx], out.Mutations[idx+1:]...)
-
-			// Update the back-reference in the referenced table.
-			for i, inboundFK := range in.InboundFKs {
-				if inboundFK.OriginTableID == out.GetID() && inboundFK.ConstraintID == op.ConstraintID {
-					in.InboundFKs[i].Validity = descpb.ConstraintValidity_Validated
-				}
-			}
-
 			found = true
 			break
 		}
@@ -446,6 +440,13 @@ func (i *immediateVisitor) MakeValidatedForeignKeyConstraintPublic(
 
 	if len(out.Mutations) == 0 {
 		out.Mutations = nil
+	}
+
+	// Update the back-reference in the referenced table.
+	for i, inboundFK := range in.InboundFKs {
+		if inboundFK.OriginTableID == out.GetID() && inboundFK.ConstraintID == op.ConstraintID {
+			in.InboundFKs[i].Validity = descpb.ConstraintValidity_Validated
+		}
 	}
 
 	return nil
@@ -533,23 +534,10 @@ func (i *immediateVisitor) MakeValidatedUniqueWithoutIndexConstraintPublic(
 		if c := mutation.GetConstraint(); c != nil &&
 			c.ConstraintType == descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX &&
 			c.UniqueWithoutIndexConstraint.ConstraintID == op.ConstraintID {
-			tbl.UniqueWithoutIndexConstraints = append(tbl.UniqueWithoutIndexConstraints, c.UniqueWithoutIndexConstraint)
-
-			// Remove the mutation from the mutation slice. The `MakeMutationComplete`
-			// call will also mark the above added unique_without_index as VALIDATED.
-			// If this is a rollback of a drop, we are trying to add the
-			// unique_without_index constraint back, so swap the direction before
-			// making it complete.
-			mutation.Direction = descpb.DescriptorMutation_ADD
-			err = tbl.MakeMutationComplete(mutation)
-			if err != nil {
-				return err
-			}
+			uwi := c.UniqueWithoutIndexConstraint
+			uwi.Validity = descpb.ConstraintValidity_Validated
+			tbl.UniqueWithoutIndexConstraints = append(tbl.UniqueWithoutIndexConstraints, uwi)
 			tbl.Mutations = append(tbl.Mutations[:idx], tbl.Mutations[idx+1:]...)
-			if len(tbl.Mutations) == 0 {
-				tbl.Mutations = nil
-			}
-
 			found = true
 			break
 		}
@@ -558,6 +546,10 @@ func (i *immediateVisitor) MakeValidatedUniqueWithoutIndexConstraintPublic(
 	if !found {
 		return errors.AssertionFailedf("failed to find unique_without_index constraint %d in table %q (%d)",
 			op.ConstraintID, tbl.GetName(), tbl.GetID())
+	}
+
+	if len(tbl.Mutations) == 0 {
+		tbl.Mutations = nil
 	}
 
 	return nil

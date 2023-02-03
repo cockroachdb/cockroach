@@ -276,6 +276,12 @@ func ForEachExprStringInTableDesc(descI catalog.TableDescriptor, f func(expr *st
 	doCheck := func(c *descpb.TableDescriptor_CheckConstraint) error {
 		return f(&c.Expr)
 	}
+	doUniqueWithoutIndex := func(c *descpb.UniqueWithoutIndexConstraint) error {
+		if !c.IsPartial() {
+			return nil
+		}
+		return f(&c.Predicate)
+	}
 
 	// Process columns.
 	for i := range desc.Columns {
@@ -300,6 +306,13 @@ func ForEachExprStringInTableDesc(descI catalog.TableDescriptor, f func(expr *st
 		}
 	}
 
+	// Process unique without index constraints.
+	for i := range desc.UniqueWithoutIndexConstraints {
+		if err := doUniqueWithoutIndex(&desc.UniqueWithoutIndexConstraints[i]); err != nil {
+			return err
+		}
+	}
+
 	// Process all non-index mutations.
 	for _, mut := range desc.Mutations {
 		if c := mut.GetColumn(); c != nil {
@@ -307,10 +320,16 @@ func ForEachExprStringInTableDesc(descI catalog.TableDescriptor, f func(expr *st
 				return err
 			}
 		}
-		if c := mut.GetConstraint(); c != nil &&
-			c.ConstraintType == descpb.ConstraintToUpdate_CHECK {
-			if err := doCheck(&c.Check); err != nil {
-				return err
+		if c := mut.GetConstraint(); c != nil {
+			switch c.ConstraintType {
+			case descpb.ConstraintToUpdate_CHECK:
+				if err := doCheck(&c.Check); err != nil {
+					return err
+				}
+			case descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX:
+				if err := doUniqueWithoutIndex(&c.UniqueWithoutIndexConstraint); err != nil {
+					return err
+				}
 			}
 		}
 	}

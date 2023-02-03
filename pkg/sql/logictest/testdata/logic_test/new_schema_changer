@@ -364,6 +364,20 @@ CREATE VIEW v7_dep AS (SELECT i FROM t6@idx WHERE k < 'a'::typ6)
 statement error annot drop type "typ6" because other objects \(\[test.public.t6 test.public.v7_dep\]\) still depend on it
 DROP TYPE typ6
 
+statement ok
+DROP TYPE typ6 CASCADE
+
+statement ok
+DROP TYPE typ5 CASCADE
+
+statement ok
+DROP TYPE typ4 CASCADE
+
+statement ok
+DROP TYPE typ3 CASCADE
+
+statement ok
+DROP TYPE typ CASCADE
 
 subtest view_sanity
 

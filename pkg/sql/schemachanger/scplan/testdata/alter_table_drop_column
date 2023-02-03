@@ -460,7 +460,7 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 25 MutationType ops
     *scop.UpdateSchemaChangerJob
       IsNonCancelable: true
       JobID: 1
-PostCommitNonRevertiblePhase stage 2 of 3 with 8 MutationType ops
+PostCommitNonRevertiblePhase stage 2 of 3 with 9 MutationType ops
   transitions:
     [[PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, ABSENT], VALIDATED] -> DELETE_ONLY
     [[SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
@@ -484,6 +484,9 @@ PostCommitNonRevertiblePhase stage 2 of 3 with 8 MutationType ops
       DescriptorID: 105
     *scop.SetJobStateOnDescriptor
       DescriptorID: 107
+    *scop.RemoveJobStateFromDescriptor
+      DescriptorID: 108
+      JobID: 1
     *scop.UpdateSchemaChangerJob
       DescriptorIDsToRemove:
       - 108
@@ -1556,7 +1559,7 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 27 MutationType ops
     *scop.UpdateSchemaChangerJob
       IsNonCancelable: true
       JobID: 1
-PostCommitNonRevertiblePhase stage 2 of 3 with 9 MutationType ops
+PostCommitNonRevertiblePhase stage 2 of 3 with 10 MutationType ops
   transitions:
     [[PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, ABSENT], VALIDATED] -> DELETE_ONLY
     [[SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
@@ -1582,6 +1585,9 @@ PostCommitNonRevertiblePhase stage 2 of 3 with 9 MutationType ops
       DescriptorID: 106
     *scop.SetJobStateOnDescriptor
       DescriptorID: 107
+    *scop.RemoveJobStateFromDescriptor
+      DescriptorID: 108
+      JobID: 1
     *scop.UpdateSchemaChangerJob
       DescriptorIDsToRemove:
       - 108

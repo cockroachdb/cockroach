@@ -1,0 +1,80 @@
+/* setup */
+SET experimental_enable_unique_without_index_constraints = true;
+CREATE TYPE greeting AS ENUM('hello', 'hi');
+CREATE VIEW view AS SELECT 'hi'::greeting::string AS c;
+CREATE TABLE tbl (
+  id INT PRIMARY KEY,
+  gs greeting AS ('hi'::greeting) STORED,
+  gv string AS ('hello'::greeting::STRING) VIRTUAL,
+  other greeting[],
+  name STRING NOT NULL DEFAULT 'noname',
+  CONSTRAINT mycheck CHECK (gs::STRING = name),
+  CONSTRAINT myuwi UNIQUE WITHOUT INDEX (name) WHERE ('hi'::greeting::STRING = 'hi'),
+  INDEX partial (name) WHERE (gs::STRING = 'hi')
+);
+
+/* test */
+DROP TYPE greeting CASCADE;
+EXPLAIN (ddl) rollback at post-commit stage 7 of 7;
+----
+Schema change plan for rolling back DROP TYPE ‹defaultdb›.‹public›.‹greeting› CASCADE;
+ └── PostCommitNonRevertiblePhase
+      ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
+      │    ├── 11 elements transitioning toward PUBLIC
+      │    │    ├── WRITE_ONLY → PUBLIC      Column:{DescID: 107, ColumnID: 2}
+      │    │    ├── ABSENT     → PUBLIC      ColumnName:{DescID: 107, Name: gs, ColumnID: 2}
+      │    │    ├── WRITE_ONLY → PUBLIC      Column:{DescID: 107, ColumnID: 3}
+      │    │    ├── ABSENT     → PUBLIC      ColumnName:{DescID: 107, Name: gv, ColumnID: 3}
+      │    │    ├── WRITE_ONLY → PUBLIC      Column:{DescID: 107, ColumnID: 4}
+      │    │    ├── ABSENT     → PUBLIC      ColumnName:{DescID: 107, Name: other, ColumnID: 4}
+      │    │    ├── VALIDATED  → PUBLIC      SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 0}
+      │    │    ├── VALIDATED  → PUBLIC      UniqueWithoutIndexConstraint:{DescID: 107, ConstraintID: 3}
+      │    │    ├── ABSENT     → PUBLIC      ConstraintWithoutIndexName:{DescID: 107, Name: myuwi, ConstraintID: 3}
+      │    │    ├── VALIDATED  → PUBLIC      CheckConstraint:{DescID: 107, IndexID: 0, ConstraintID: 2}
+      │    │    └── ABSENT     → PUBLIC      ConstraintWithoutIndexName:{DescID: 107, Name: mycheck, ConstraintID: 2}
+      │    ├── 6 elements transitioning toward ABSENT
+      │    │    ├── WRITE_ONLY → DELETE_ONLY PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 4, TemporaryIndexID: 4, SourceIndexID: 1}
+      │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 3}
+      │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 107, ColumnID: 5, IndexID: 3}
+      │    │    ├── WRITE_ONLY → DELETE_ONLY TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 5, SourceIndexID: 1}
+      │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 4}
+      │    │    └── PUBLIC     → ABSENT      IndexColumn:{DescID: 107, ColumnID: 5, IndexID: 4}
+      │    └── 22 Mutation operations
+      │         ├── SetColumnName {"ColumnID":2,"Name":"gs","TableID":107}
+      │         ├── SetColumnName {"ColumnID":3,"Name":"gv","TableID":107}
+      │         ├── SetColumnName {"ColumnID":4,"Name":"other","TableID":107}
+      │         ├── MakeValidatedSecondaryIndexPublic {"IndexID":2,"TableID":107}
+      │         ├── RefreshStats {"TableID":107}
+      │         ├── SetConstraintName {"ConstraintID":3,"Name":"myuwi","TableID":107}
+      │         ├── SetConstraintName {"ConstraintID":2,"Name":"mycheck","TableID":107}
+      │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":3,"TableID":107}
+      │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":4,"TableID":107}
+      │         ├── MakeWriteOnlyColumnPublic {"ColumnID":2,"TableID":107}
+      │         ├── RefreshStats {"TableID":107}
+      │         ├── MakeWriteOnlyColumnPublic {"ColumnID":3,"TableID":107}
+      │         ├── RefreshStats {"TableID":107}
+      │         ├── MakeWriteOnlyColumnPublic {"ColumnID":4,"TableID":107}
+      │         ├── RefreshStats {"TableID":107}
+      │         ├── MakeValidatedUniqueWithoutIndexConstraintPublic {"ConstraintID":3,"TableID":107}
+      │         ├── MakeValidatedCheckConstraintPublic {"ConstraintID":2,"TableID":107}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":105}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":107}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      └── Stage 2 of 2 in PostCommitNonRevertiblePhase
+           ├── 4 elements transitioning toward ABSENT
+           │    ├── DELETE_ONLY → ABSENT PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 4, TemporaryIndexID: 4, SourceIndexID: 1}
+           │    ├── PUBLIC      → ABSENT IndexData:{DescID: 107, IndexID: 3}
+           │    ├── DELETE_ONLY → ABSENT TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 5, SourceIndexID: 1}
+           │    └── PUBLIC      → ABSENT IndexData:{DescID: 107, IndexID: 4}
+           └── 9 Mutation operations
+                ├── MakeIndexAbsent {"IndexID":3,"TableID":107}
+                ├── CreateGCJobForIndex {"IndexID":3,"TableID":107}
+                ├── MakeIndexAbsent {"IndexID":4,"TableID":107}
+                ├── CreateGCJobForIndex {"IndexID":4,"TableID":107}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":105}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":106}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":107}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

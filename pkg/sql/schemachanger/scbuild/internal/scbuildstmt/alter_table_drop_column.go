@@ -40,7 +40,7 @@ func alterTableDropColumn(
 	}
 	checkRowLevelTTLColumn(b, tn, tbl, n, col)
 	checkColumnNotInaccessible(col, n)
-	dropColumn(b, tn, tbl, n, col, elts, n.DropBehavior)
+	dropColumn(b, n, tbl, col, elts, n.DropBehavior)
 	b.LogEventForExistingTarget(col)
 }
 
@@ -173,9 +173,8 @@ func checkColumnNotInaccessible(col *scpb.Column, n *tree.AlterTableDropColumn) 
 
 func dropColumn(
 	b BuildCtx,
-	tn *tree.TableName,
-	tbl *scpb.Table,
 	n tree.NodeFormatter,
+	tbl *scpb.Table,
 	col *scpb.Column,
 	colElts ElementResultSet,
 	behavior tree.DropBehavior,
@@ -194,7 +193,7 @@ func dropColumn(
 				_, _, computedColName := scpb.FindColumnName(elts.Filter(publicTargetFilter))
 				panic(sqlerrors.NewColumnReferencedByComputedColumnError(cn.Name, computedColName.Name))
 			}
-			dropColumn(b, tn, tbl, n, e, elts, behavior)
+			dropColumn(b, n, tbl, e, elts, behavior)
 		case *scpb.PrimaryIndex:
 			tableElts := b.QueryByID(e.TableID).Filter(publicTargetFilter)
 			scpb.ForEachIndexColumn(tableElts, func(_ scpb.Status, _ scpb.TargetStatus, ic *scpb.IndexColumn) {
@@ -205,32 +204,17 @@ func dropColumn(
 				}
 			})
 		case *scpb.SecondaryIndex:
-			indexElts := b.QueryByID(e.TableID).Filter(hasIndexIDAttrFilter(e.IndexID))
-			_, _, indexName := scpb.FindIndexName(indexElts.Filter(publicTargetFilter))
-			name := tree.TableIndexName{
-				Table: *tn,
-				Index: tree.UnrestrictedName(indexName.Name),
-			}
-			dropSecondaryIndex(b, &name, behavior, e)
+			dropSecondaryIndex(b, n, behavior, e)
 		case *scpb.UniqueWithoutIndexConstraint:
-			// TODO(ajwerner): Support dropping UNIQUE WITHOUT INDEX constraints.
-			panic(errors.Wrap(scerrors.NotImplementedError(n),
-				"dropping of UNIQUE WITHOUT INDEX constraints not supported"))
+			dropConstraintByID(b, e.TableID, e.ConstraintID)
 		case *scpb.CheckConstraint:
-			// TODO(ajwerner): Support dropping CHECK constraints.
-			// We might need to extend and add check constraint to dep-rule
-			// "column constraint removed right before column reaches delete only"
-			// in addition to just `b.Drop(e)`. Read its comment for more details.
-			panic(errors.Wrap(scerrors.NotImplementedError(n),
-				"dropping of CHECK constraints not supported"))
+			dropConstraintByID(b, e.TableID, e.ConstraintID)
 		case *scpb.ForeignKeyConstraint:
-			if e.TableID != col.TableID && behavior != tree.DropCascade {
-				panic(pgerror.Newf(pgcode.DependentObjectsStillExist,
-					"cannot drop column %s because other objects depend on it", cn.Name))
+			if col.TableID != e.TableID && behavior != tree.DropCascade {
+				tn := simpleName(b, e.TableID)
+				panic(sqlerrors.NewUniqueConstraintReferencedByForeignKeyError(cn.Name, tn))
 			}
-			// TODO(ajwerner): Support dropping FOREIGN KEY constraints.
-			panic(errors.Wrap(scerrors.NotImplementedError(n),
-				"dropping of FOREIGN KEY constraints not supported"))
+			dropConstraintByID(b, e.TableID, e.ConstraintID)
 		case *scpb.View:
 			if behavior != tree.DropCascade {
 				_, _, ns := scpb.FindNamespace(b.QueryByID(col.TableID))
@@ -245,7 +229,7 @@ func dropColumn(
 					"cannot drop column %q because view %q depends on it",
 					cn.Name, nsDep.Name))
 			}
-			dropCascadeDescriptor(b, e.ViewID)
+			dropCascadeDescriptor(b, n, e.ViewID)
 		case *scpb.Sequence:
 			// Find all the sequences owned by this column and drop them either restrict
 			// or cascade. Then, we'll need to check whether these sequences have any
@@ -259,7 +243,7 @@ func dropColumn(
 			//  2BP01: cannot drop column i of table t because other objects depend on it
 			//
 			if behavior == tree.DropCascade {
-				dropCascadeDescriptor(b, e.SequenceID)
+				dropCascadeDescriptor(b, n, e.SequenceID)
 			} else {
 				dropRestrictDescriptor(b, e.SequenceID)
 				undroppedSeqBackrefsToCheck.Add(e.SequenceID)
@@ -272,7 +256,7 @@ func dropColumn(
 					cn.Name, fnName.Name),
 				)
 			}
-			dropCascadeDescriptor(b, e.FunctionID)
+			dropCascadeDescriptor(b, n, e.FunctionID)
 		default:
 			b.Drop(e)
 		}

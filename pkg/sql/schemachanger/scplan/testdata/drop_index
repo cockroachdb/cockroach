@@ -782,7 +782,7 @@ PreCommitPhase stage 2 of 2 with 11 MutationType ops
       - statement: DROP INDEX idx4 CASCADE
         redactedstatement: DROP INDEX ‹defaultdb›.public.‹t1›@‹idx4› CASCADE
         statementtag: DROP INDEX
-PostCommitNonRevertiblePhase stage 1 of 2 with 5 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 2 with 6 MutationType ops
   transitions:
     [[SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5}, ABSENT], VALIDATED] -> DELETE_ONLY
     [[IndexName:{DescID: 104, Name: idx4, IndexID: 8}, ABSENT], PUBLIC] -> ABSENT
@@ -799,6 +799,9 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 5 MutationType ops
       TableID: 104
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
+    *scop.RemoveJobStateFromDescriptor
+      DescriptorID: 105
+      JobID: 1
     *scop.UpdateSchemaChangerJob
       DescriptorIDsToRemove:
       - 105
@@ -1224,7 +1227,7 @@ PreCommitPhase stage 2 of 2 with 14 MutationType ops
       - statement: DROP INDEX v2@idx CASCADE
         redactedstatement: DROP INDEX ‹defaultdb›.public.‹v2›@‹idx› CASCADE
         statementtag: DROP INDEX
-PostCommitNonRevertiblePhase stage 1 of 2 with 6 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 2 with 7 MutationType ops
   transitions:
     [[SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0}, ABSENT], VALIDATED] -> DELETE_ONLY
     [[IndexName:{DescID: 106, Name: idx, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
@@ -1251,6 +1254,9 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 6 MutationType ops
       TableID: 107
     *scop.SetJobStateOnDescriptor
       DescriptorID: 106
+    *scop.RemoveJobStateFromDescriptor
+      DescriptorID: 107
+      JobID: 1
     *scop.UpdateSchemaChangerJob
       DescriptorIDsToRemove:
       - 107

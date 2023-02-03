@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -48,7 +47,7 @@ func DropIndex(b BuildCtx, n *tree.DropIndex) {
 
 	var anyIndexesDropped bool
 	for _, index := range n.IndexList {
-		if droppedIndex := maybeDropIndex(b, index, n.IfExists, n.DropBehavior); droppedIndex != nil {
+		if droppedIndex := maybeDropIndex(b, n, index); droppedIndex != nil {
 			b.LogEventForExistingTarget(droppedIndex)
 			anyIndexesDropped = true
 		}
@@ -73,10 +72,10 @@ func DropIndex(b BuildCtx, n *tree.DropIndex) {
 // maybeDropIndex resolves `index` and mark its constituent elements as ToAbsent
 // in the builder state enclosed by `b`.
 func maybeDropIndex(
-	b BuildCtx, indexName *tree.TableIndexName, ifExists bool, dropBehavior tree.DropBehavior,
+	b BuildCtx, n *tree.DropIndex, indexName *tree.TableIndexName,
 ) (droppedIndex *scpb.SecondaryIndex) {
 	toBeDroppedIndexElms := b.ResolveIndexByName(indexName, ResolveParams{
-		IsExistenceOptional: ifExists,
+		IsExistenceOptional: n.IfExists,
 		RequiredPrivilege:   privilege.CREATE,
 	})
 	if toBeDroppedIndexElms == nil {
@@ -102,35 +101,36 @@ func maybeDropIndex(
 	// throw an unsupported error.
 	fallBackIfZoneConfigExists(b, nil, sie.TableID)
 	// Cannot drop the index if not CASCADE and a unique constraint depends on it.
-	if dropBehavior != tree.DropCascade && sie.IsUnique && !sie.IsCreatedExplicitly {
+	if n.DropBehavior != tree.DropCascade && sie.IsUnique && !sie.IsCreatedExplicitly {
 		panic(errors.WithHint(
 			pgerror.Newf(pgcode.DependentObjectsStillExist,
 				"index %q is in use as unique constraint", indexName.Index.String()),
 			"use CASCADE if you really want to drop it.",
 		))
 	}
-	dropSecondaryIndex(b, indexName, dropBehavior, sie)
+	dropSecondaryIndex(b, n, n.DropBehavior, sie)
 	return sie
 }
 
 // dropSecondaryIndex is a helper to drop a secondary index which may be used
 // both in DROP INDEX and as a cascade from another operation.
 func dropSecondaryIndex(
-	b BuildCtx,
-	indexName *tree.TableIndexName,
-	dropBehavior tree.DropBehavior,
-	sie *scpb.SecondaryIndex,
+	b BuildCtx, n tree.NodeFormatter, dropBehavior tree.DropBehavior, sie *scpb.SecondaryIndex,
 ) {
+	indexElts := b.QueryByID(sie.TableID).
+		Filter(hasIndexIDAttrFilter(sie.IndexID)).
+		Filter(publicTargetFilter)
+	_, _, indexName := scpb.FindIndexName(indexElts)
 	{
 		next := b.WithNewSourceElementID()
 		// Maybe drop dependent views.
 		// If CASCADE and there are "dependent" views (i.e. views that use this
 		// to-be-dropped index), then we will drop all dependent views and their
 		// dependents.
-		maybeDropDependentViews(next, sie, indexName.Index.String(), dropBehavior)
+		maybeDropDependentViews(next, n, sie, indexName, dropBehavior)
 
 		// Maybe drop dependent functions.
-		maybeDropDependentFunctions(next, sie, indexName.Index.String(), dropBehavior)
+		maybeDropDependentFunctions(next, n, sie, indexName, dropBehavior)
 
 		// Maybe drop dependent FK constraints.
 		// A PK or unique constraint is required to serve an inbound FK constraint.
@@ -138,24 +138,21 @@ func dropSecondaryIndex(
 		// served by a unique constraint 'uc' that is provided by a unique index 'ui'.
 		// In this case, if we were to drop 'ui' and no other unique constraint can be
 		// found to replace 'uc' (to continue to serve 'fk'), we will require CASCADE
-		//and drop 'fk' as well.
+		// and drop 'fk' as well.
 		maybeDropDependentFKConstraints(next, sie, indexName, dropBehavior)
 
 		// If shard index, also drop the shard column and all check constraints that
 		// uses this shard column if no other index uses the shard column.
-		maybeDropAdditionallyForShardedIndex(next, sie, indexName.Index.String(), dropBehavior)
+		maybeDropAdditionallyForShardedIndex(next, sie, indexName, dropBehavior)
 
 		// If expression index, also drop the expression column if no other index is
 		// using the expression column.
 		dropAdditionallyForExpressionIndex(next, sie)
 	}
 	// Finally, drop the index's public elements and trigger a GC job.
-	b.QueryByID(sie.TableID).
-		Filter(hasIndexIDAttrFilter(sie.IndexID)).
-		Filter(publicTargetFilter).
-		ForEachElementStatus(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
-			b.Drop(e)
-		})
+	indexElts.ForEachElementStatus(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
+		b.Drop(e)
+	})
 }
 
 // maybeDropDependentViews attempts to drop all views that depend
@@ -163,8 +160,9 @@ func dropSecondaryIndex(
 // Panic if there is a dependent view but drop behavior is not CASCADE.
 func maybeDropDependentViews(
 	b BuildCtx,
+	n tree.NodeFormatter,
 	toBeDroppedIndex *scpb.SecondaryIndex,
-	toBeDroppedIndexName string,
+	toBeDroppedIndexName *scpb.IndexName,
 	dropBehavior tree.DropBehavior,
 ) {
 	scpb.ForEachView(b.BackReferences(toBeDroppedIndex.TableID), func(
@@ -181,9 +179,9 @@ func maybeDropDependentViews(
 				_, _, ns := scpb.FindNamespace(b.QueryByID(ve.ViewID))
 				panic(errors.WithHintf(
 					sqlerrors.NewDependentObjectErrorf("cannot drop index %q because view %q depends on it",
-						toBeDroppedIndexName, ns.Name), "you can drop %q instead.", ns.Name))
+						toBeDroppedIndexName.Name, ns.Name), "you can drop %q instead.", ns.Name))
 			} else {
-				dropCascadeDescriptor(b, ve.ViewID)
+				dropCascadeDescriptor(b, n, ve.ViewID)
 			}
 		}
 	})
@@ -191,8 +189,9 @@ func maybeDropDependentViews(
 
 func maybeDropDependentFunctions(
 	b BuildCtx,
+	n tree.NodeFormatter,
 	toBeDroppedIndex *scpb.SecondaryIndex,
-	toBeDroppedIndexName string,
+	toBeDroppedIndexName *scpb.IndexName,
 	dropBehavior tree.DropBehavior,
 ) {
 	scpb.ForEachFunctionBody(b.BackReferences(toBeDroppedIndex.TableID), func(
@@ -208,9 +207,9 @@ func maybeDropDependentFunctions(
 				_, _, fnName := scpb.FindFunctionName(b.QueryByID(e.FunctionID))
 				panic(errors.WithHintf(
 					sqlerrors.NewDependentObjectErrorf("cannot drop index %q because function %q depends on it",
-						toBeDroppedIndexName, fnName.Name), "you can drop %q instead.", fnName.Name))
+						toBeDroppedIndexName.Name, fnName.Name), "you can drop %q instead.", fnName.Name))
 			} else {
-				dropCascadeDescriptor(b, e.FunctionID)
+				dropCascadeDescriptor(b, n, e.FunctionID)
 			}
 		}
 	})
@@ -230,7 +229,7 @@ func maybeDropDependentFunctions(
 func maybeDropDependentFKConstraints(
 	b BuildCtx,
 	toBeDroppedIndex *scpb.SecondaryIndex,
-	toBeDroppedIndexName *tree.TableIndexName,
+	indexName *scpb.IndexName,
 	dropBehavior tree.DropBehavior,
 ) {
 	scpb.ForEachForeignKeyConstraint(b.BackReferences(toBeDroppedIndex.TableID), func(
@@ -254,12 +253,10 @@ func maybeDropDependentFKConstraints(
 		// constraint as well.
 		if dropBehavior != tree.DropCascade {
 			_, _, ns := scpb.FindNamespace(b.QueryByID(e.TableID))
-			panic(fmt.Errorf("%q is referenced by foreign key from table %q", toBeDroppedIndexName.Index, ns.Name))
+			panic(sqlerrors.NewUniqueConstraintReferencedByForeignKeyError(indexName.Name, ns.Name))
 		}
 
-		// TODO (xiang): enable resolving and dropping FK constraint elements.
-		panic(scerrors.NotImplementedErrorf(nil, "dropping FK constraints"+
-			" as a result of `DROP INDEX CASCADE` is not supported yet."))
+		dropConstraintByID(b, e.TableID, e.ConstraintID)
 	})
 }
 
@@ -271,7 +268,7 @@ func maybeDropDependentFKConstraints(
 func maybeDropAdditionallyForShardedIndex(
 	b BuildCtx,
 	toBeDroppedIndex *scpb.SecondaryIndex,
-	toBeDroppedIndexName string,
+	toBeDroppedIndexName *scpb.IndexName,
 	dropBehavior tree.DropBehavior,
 ) {
 	if toBeDroppedIndex.Sharding == nil || !toBeDroppedIndex.Sharding.IsSharded {
@@ -294,7 +291,7 @@ func maybeDropAdditionallyForShardedIndex(
 			pgnotice.Newf("The accompanying shard column %q is a physical column and dropping it can be "+
 				"expensive, so, we dropped the index %q but skipped dropping %q. Issue another "+
 				"'ALTER TABLE %v DROP COLUMN %v' query if you want to drop column %q.",
-				scne.Name, toBeDroppedIndexName, scne.Name, ns.Name, scne.Name, scne.Name),
+				scne.Name, toBeDroppedIndexName.Name, scne.Name, ns.Name, scne.Name, scne.Name),
 		)
 		return
 	}
@@ -314,13 +311,7 @@ func maybeDropAdditionallyForShardedIndex(
 		}
 
 		// This check constraint uses the shard column. Resolve it and drop its elements.
-		constraintElements(b, toBeDroppedIndex.TableID, e.ConstraintID).ForEachElementStatus(func(
-			current scpb.Status, target scpb.TargetStatus, e scpb.Element,
-		) {
-			if target != scpb.ToAbsent {
-				b.Drop(e)
-			}
-		})
+		dropConstraintByID(b, toBeDroppedIndex.TableID, e.ConstraintID)
 	})
 
 	// Drop the shard column's resolved elements.
@@ -336,8 +327,9 @@ func maybeDropAdditionallyForShardedIndex(
 // and no other index uses this expression column.
 func dropAdditionallyForExpressionIndex(b BuildCtx, toBeDroppedIndex *scpb.SecondaryIndex) {
 	keyColumnIDs, _, _ := getSortedColumnIDsInIndex(b, toBeDroppedIndex.TableID, toBeDroppedIndex.IndexID)
-	scpb.ForEachColumn(b.QueryByID(toBeDroppedIndex.TableID), func(
-		current scpb.Status, target scpb.TargetStatus, ce *scpb.Column,
+	tableElts := b.QueryByID(toBeDroppedIndex.TableID).Filter(notAbsentTargetFilter)
+	scpb.ForEachColumn(tableElts, func(
+		_ scpb.Status, target scpb.TargetStatus, ce *scpb.Column,
 	) {
 		if !descpb.ColumnIDs(keyColumnIDs).Contains(ce.ColumnID) {
 			return
@@ -352,13 +344,12 @@ func dropAdditionallyForExpressionIndex(b BuildCtx, toBeDroppedIndex *scpb.Secon
 		// This expression column was created when we created the to-be-dropped as an "expression" index.
 		// We also know no other index uses this column, so we will need to resolve this column and
 		// drop its constituent elements.
-		columnElements(b, toBeDroppedIndex.TableID, ce.ColumnID).ForEachElementStatus(func(
-			current scpb.Status, target scpb.TargetStatus, e scpb.Element,
-		) {
-			if target != scpb.ToAbsent {
+
+		tableElts.Filter(hasColumnIDAttrFilter(ce.ColumnID)).ForEachElementStatus(
+			func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
 				b.Drop(e)
-			}
-		})
+			},
+		)
 	})
 }
 
@@ -425,7 +416,8 @@ func explicitKeyColumnIDsWithoutShardColumn(b BuildCtx, ie *scpb.Index) descpb.C
 	explicitColIDs := indexKeyColumnIDs[explicitColumnStartIdx(b, ie):]
 	explicitColNames := make([]string, len(explicitColIDs))
 	for i, colID := range explicitColIDs {
-		_, _, cne := scpb.FindColumnName(columnElements(b, ie.TableID, colID))
+		columnElts := b.QueryByID(ie.TableID).Filter(hasColumnIDAttrFilter(colID))
+		_, _, cne := scpb.FindColumnName(columnElts)
 		if cne == nil {
 			panic(fmt.Sprintf("No column name is found for column ID %v", colID))
 		}

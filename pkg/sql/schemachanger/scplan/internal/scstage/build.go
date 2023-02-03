@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/current"
+	rules "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/current"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -732,13 +732,13 @@ func (bc buildContext) computeExtraOps(cur, next *Stage) []scop.Op {
 	}
 	// Build the ops which update or remove the job state on each descriptor.
 	descIDsPresentBefore.ForEach(func(descID descpb.ID) {
-		if next == nil {
-			// Remove job state and reference from descriptor at terminal stage.
-			addOp(bc.removeJobReferenceOp(descID))
-		} else if descIDsPresentAfter.Contains(descID) {
-			// Update job state in descriptor in non-terminal stage, as long as the
-			// descriptor is still present after the execution of the stage.
+		if next != nil && descIDsPresentAfter.Contains(descID) {
+			// Update job state in descriptor as long as the descriptor is
+			// is still present after the execution of the stage.
 			addOp(bc.setJobStateOnDescriptorOp(initializeSchemaChangeJob, descID, *ds[descID]))
+		} else {
+			// Otherwise remove job state and reference from descriptor.
+			addOp(bc.removeJobReferenceOp(descID))
 		}
 	})
 	// Build the op which creates or updates the job.
@@ -857,9 +857,15 @@ func (bc buildContext) makeDescriptorStates(cur, next *Stage) map[descpb.ID]*scp
 			state.RelevantStatements, stmtRank,
 		)
 	}
+	isPruned := cur.Phase == scop.PostCommitNonRevertiblePhase
 	for i, t := range bc.targetState.Targets {
 		descID := screl.GetDescID(t.Element())
 		state := ds[descID]
+		if isPruned && cur.After[i] == t.TargetStatus {
+			// Remove satisfied targets once the schema change is no longer
+			// revertible.
+			continue
+		}
 		stmtID := t.Metadata.StatementID
 		noteRelevantStatement(state, stmtID)
 		state.Targets = append(state.Targets, t)
@@ -878,17 +884,18 @@ func (bc buildContext) makeDescriptorStates(cur, next *Stage) map[descpb.ID]*scp
 	//
 	// Descriptor removal is non-revertible in nature, so we needn't do anything
 	// if we haven't reached the non-revertible post-commit phase yet.
-	if cur.Phase == scop.PostCommitNonRevertiblePhase {
-		for i, t := range bc.targetState.Targets {
-			if !current.IsDescriptor(t.Element()) || t.TargetStatus != scpb.Status_ABSENT {
-				continue
-			}
-			descID := screl.GetDescID(t.Element())
-			if cur.Before[i] == scpb.Status_ABSENT {
-				delete(ds, descID)
-			} else if cur.After[i] == scpb.Status_ABSENT {
-				ds[descID] = nil
-			}
+	if !isPruned {
+		return ds
+	}
+	for i, t := range bc.targetState.Targets {
+		if !rules.IsDescriptor(t.Element()) || t.TargetStatus != scpb.Status_ABSENT {
+			continue
+		}
+		descID := screl.GetDescID(t.Element())
+		if cur.Before[i] == scpb.Status_ABSENT {
+			delete(ds, descID)
+		} else if cur.After[i] == scpb.Status_ABSENT {
+			ds[descID] = nil
 		}
 	}
 	return ds

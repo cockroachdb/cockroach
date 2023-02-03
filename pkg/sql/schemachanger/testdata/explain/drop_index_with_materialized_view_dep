@@ -132,12 +132,13 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
       │    │    ├── DROPPED   → ABSENT      View:{DescID: 106}
       │    │    ├── PUBLIC    → ABSENT      IndexData:{DescID: 106, IndexID: 1}
       │    │    └── PUBLIC    → ABSENT      TableData:{DescID: 106, ReferencedDescID: 100}
-      │    └── 6 Mutation operations
+      │    └── 7 Mutation operations
       │         ├── CreateGCJobForTable {"DatabaseID":100,"TableID":106}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":2,"TableID":105}
       │         ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":105}
       │         ├── CreateGCJobForIndex {"IndexID":1,"TableID":106}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":105}
+      │         ├── RemoveJobStateFromDescriptor {"DescriptorID":106}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
       └── Stage 2 of 2 in PostCommitNonRevertiblePhase
            ├── 2 elements transitioning toward ABSENT

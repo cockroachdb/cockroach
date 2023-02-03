@@ -1,0 +1,1336 @@
+setup
+SET experimental_enable_unique_without_index_constraints = true;
+CREATE TYPE greeting AS ENUM('hello', 'hi');
+CREATE VIEW view AS SELECT 'hi'::greeting::string AS c;
+CREATE TABLE tbl (
+  id INT PRIMARY KEY,
+  gs greeting AS ('hi'::greeting) STORED,
+  gv string AS ('hello'::greeting::STRING) VIRTUAL,
+  other greeting[],
+  name STRING NOT NULL DEFAULT 'noname',
+  CONSTRAINT mycheck CHECK (gs::STRING = name),
+  CONSTRAINT myuwi UNIQUE WITHOUT INDEX (name) WHERE ('hi'::greeting::STRING = 'hi'),
+  INDEX partial (name) WHERE (gs::STRING = 'hi')
+);
+----
+...
++object {100 101 greeting} -> 104
++object {100 101 _greeting} -> 105
++object {100 101 view} -> 106
++object {100 101 tbl} -> 107
+
+stage-exec phase=PostCommitPhase stage=:
+INSERT INTO tbl VALUES($stageKey);
+INSERT INTO tbl VALUES($stageKey + 1);
+----
+
+# Each insert will be injected twice per stage, so we should always,
+# see a count of 2.
+stage-query phase=PostCommitPhase stage=:
+SELECT count(*)=$successfulStageCount*2 FROM tbl;
+----
+true
+
+
+stage-exec phase=PostCommitNonRevertiblePhase stage=:
+INSERT INTO tbl VALUES($stageKey);
+INSERT INTO tbl VALUES($stageKey + 1);
+----
+
+# Each insert will be injected twice per stage, so we should always,
+# see a count of 2.
+stage-query phase=PostCommitNonRevertiblePhase stage=:
+SELECT count(*)=$successfulStageCount*2 FROM tbl;
+----
+true
+
+test
+DROP TYPE greeting CASCADE
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: DROP TYPE
+increment telemetry for sql.udts.drop_enum
+write *eventpb.DropType to event log:
+  sql:
+    descriptorId: 104
+    statement: DROP TYPE ‹defaultdb›.‹public›.‹greeting› CASCADE
+    tag: DROP TYPE
+    user: root
+  typeName: defaultdb.public.greeting
+## StatementPhase stage 1 of 1 with 21 MutationType ops
+delete object namespace entry {100 101 view} -> 106
+upsert descriptor #104
+  ...
+       version: 2
+     referencingDescriptorIds:
+  -  - 106
+     - 107
+  -  version: "3"
+  +  version: "4"
+upsert descriptor #105
+  ...
+       version: 2
+     referencingDescriptorIds:
+  -  - 106
+     - 107
+  -  version: "3"
+  +  version: "4"
+upsert descriptor #106
+  ...
+     replacementOf:
+       time: {}
+  +  state: DROP
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
+     viewQuery: SELECT b'\x80':::@100104::STRING AS c
+upsert descriptor #107
+  ...
+       - 5
+       constraintId: 2
+  -    expr: gs::STRING = name
+  -    name: mycheck
+  +    expr: crdb_internal_column_2_name_placeholder::STRING = name
+  +    name: crdb_internal_constraint_2_name_placeholder
+  +    validity: Dropping
+     columns:
+     - id: 1
+  ...
+         oid: 20
+         width: 64
+  -  - computeExpr: x'80':::@100104
+  -    id: 2
+  -    name: gs
+  -    nullable: true
+  -    type:
+  -      family: EnumFamily
+  -      oid: 100104
+  -      udtMetadata:
+  -        arrayTypeOid: 100105
+  -  - computeExpr: x'40':::@100104::STRING
+  -    id: 3
+  -    name: gv
+  -    nullable: true
+  -    type:
+  -      family: StringFamily
+  -      oid: 25
+  -    virtual: true
+  -  - id: 4
+  -    name: other
+  -    nullable: true
+  -    type:
+  -      arrayContents:
+  -        family: EnumFamily
+  -        oid: 100104
+  -        udtMetadata:
+  -          arrayTypeOid: 100105
+  -      arrayElemType: EnumFamily
+  -      family: ArrayFamily
+  -      oid: 100105
+     - defaultExpr: '''noname'':::STRING'
+       id: 5
+  ...
+       columnNames:
+       - id
+  -    - gs
+  -    - other
+  +    - crdb_internal_column_2_name_placeholder
+  +    - crdb_internal_column_4_name_placeholder
+       - name
+       name: primary
+     formatVersion: 3
+     id: 107
+  -  indexes:
+  -  - createdAtNanos: "1640995200000000000"
+  -    foreignKey: {}
+  -    geoConfig: {}
+  -    id: 2
+  -    interleave: {}
+  -    keyColumnDirections:
+  -    - ASC
+  -    keyColumnIds:
+  -    - 5
+  -    keyColumnNames:
+  -    - name
+  -    keySuffixColumnIds:
+  -    - 1
+  -    name: partial
+  -    partitioning: {}
+  -    predicate: gs::STRING = 'hi':::STRING
+  -    sharded: {}
+  -    version: 3
+  +  indexes: []
+     modificationTime: {}
+  +  mutations:
+  +  - column:
+  +      computeExpr: b'\x80':::@100104
+  +      id: 2
+  +      name: crdb_internal_column_2_name_placeholder
+  +      nullable: true
+  +      type:
+  +        family: EnumFamily
+  +        oid: 100104
+  +        udtMetadata:
+  +          arrayTypeOid: 100105
+  +    direction: DROP
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+  +  - column:
+  +      computeExpr: b'@':::@100104::STRING
+  +      id: 3
+  +      name: crdb_internal_column_3_name_placeholder
+  +      nullable: true
+  +      type:
+  +        family: StringFamily
+  +        oid: 25
+  +      virtual: true
+  +    direction: DROP
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+  +  - column:
+  +      id: 4
+  +      name: crdb_internal_column_4_name_placeholder
+  +      nullable: true
+  +      type:
+  +        arrayContents:
+  +          family: EnumFamily
+  +          oid: 100104
+  +          udtMetadata:
+  +            arrayTypeOid: 100105
+  +        arrayElemType: EnumFamily
+  +        family: ArrayFamily
+  +        oid: 100105
+  +    direction: DROP
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+  +  - direction: DROP
+  +    index:
+  +      createdAtNanos: "1640995200000000000"
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 2
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      keyColumnIds:
+  +      - 5
+  +      keyColumnNames:
+  +      - name
+  +      keySuffixColumnIds:
+  +      - 1
+  +      name: partial
+  +      partitioning: {}
+  +      predicate: crdb_internal_column_2_name_placeholder::STRING = 'hi':::STRING
+  +      sharded: {}
+  +      version: 3
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+  +  - constraint:
+  +      check: {}
+  +      constraintType: UNIQUE_WITHOUT_INDEX
+  +      foreignKey: {}
+  +      name: myuwi
+  +      uniqueWithoutIndexConstraint:
+  +        columnIds:
+  +        - 5
+  +        constraintId: 3
+  +        name: crdb_internal_constraint_3_name_placeholder
+  +        predicate: x'80':::@100104::STRING = 'hi':::STRING
+  +        tableId: 107
+  +        validity: Dropping
+  +    direction: DROP
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+  +  - constraint:
+  +      check:
+  +        columnIds:
+  +        - 2
+  +        - 5
+  +        constraintId: 2
+  +        expr: crdb_internal_column_2_name_placeholder::STRING = name
+  +        name: mycheck
+  +        validity: Dropping
+  +      foreignKey: {}
+  +      name: mycheck
+  +      uniqueWithoutIndexConstraint: {}
+  +    direction: DROP
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+  +  - direction: ADD
+  +    index:
+  +      constraintId: 4
+  +      createdExplicitly: true
+  +      encodingType: 1
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 3
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      keyColumnIds:
+  +      - 1
+  +      keyColumnNames:
+  +      - id
+  +      name: crdb_internal_index_3_name_placeholder
+  +      partitioning: {}
+  +      sharded: {}
+  +      storeColumnIds:
+  +      - 5
+  +      storeColumnNames:
+  +      - name
+  +      unique: true
+  +      version: 4
+  +    mutationId: 1
+  +    state: BACKFILLING
+  +  - direction: ADD
+  +    index:
+  +      constraintId: 5
+  +      createdExplicitly: true
+  +      encodingType: 1
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 4
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      keyColumnIds:
+  +      - 1
+  +      keyColumnNames:
+  +      - id
+  +      name: crdb_internal_index_4_name_placeholder
+  +      partitioning: {}
+  +      sharded: {}
+  +      storeColumnIds:
+  +      - 5
+  +      storeColumnNames:
+  +      - name
+  +      unique: true
+  +      useDeletePreservingEncoding: true
+  +      version: 4
+  +    mutationId: 1
+  +    state: DELETE_ONLY
+     name: tbl
+     nextColumnId: 6
+  -  nextConstraintId: 4
+  +  nextConstraintId: 6
+     nextFamilyId: 1
+  -  nextIndexId: 3
+  +  nextIndexId: 5
+     nextMutationId: 1
+     parentId: 100
+  ...
+       - 5
+       storeColumnNames:
+  -    - gs
+  -    - other
+  +    - crdb_internal_column_2_name_placeholder
+  +    - crdb_internal_column_4_name_placeholder
+       - name
+       unique: true
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  uniqueWithoutIndexConstraints:
+  -  - columnIds:
+  -    - 5
+  -    constraintId: 3
+  -    name: myuwi
+  -    predicate: x'80':::@100104::STRING = 'hi':::STRING
+  -    tableId: 107
+  -  version: "1"
+  +  version: "2"
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 24 MutationType ops
+upsert descriptor #104
+   type:
+     arrayTypeId: 105
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses: <redacted>
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP TYPE ‹defaultdb›.‹public›.‹greeting› CASCADE
+  +        statement: DROP TYPE greeting CASCADE
+  +        statementTag: DROP TYPE
+  +    revertible: true
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
+     enumMembers:
+     - logicalRepresentation: hello
+  ...
+     - 106
+     - 107
+  -  version: "3"
+  +  version: "4"
+upsert descriptor #105
+  ...
+       family: ArrayFamily
+       oid: 100105
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses: <redacted>
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP TYPE ‹defaultdb›.‹public›.‹greeting› CASCADE
+  +        statement: DROP TYPE greeting CASCADE
+  +        statementTag: DROP TYPE
+  +    revertible: true
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
+     id: 105
+     kind: ALIAS
+  ...
+     - 106
+     - 107
+  -  version: "3"
+  +  version: "4"
+upsert descriptor #106
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses: <redacted>
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP TYPE ‹defaultdb›.‹public›.‹greeting› CASCADE
+  +        statement: DROP TYPE greeting CASCADE
+  +        statementTag: DROP TYPE
+  +    revertible: true
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
+     dependsOnTypes:
+     - 104
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
+     viewQuery: SELECT b'\x80':::@100104::STRING AS c
+upsert descriptor #107
+  ...
+       - 5
+       constraintId: 2
+  -    expr: gs::STRING = name
+  -    name: mycheck
+  +    expr: crdb_internal_column_2_name_placeholder::STRING = name
+  +    name: crdb_internal_constraint_2_name_placeholder
+  +    validity: Dropping
+     columns:
+     - id: 1
+  ...
+         oid: 20
+         width: 64
+  -  - computeExpr: x'80':::@100104
+  -    id: 2
+  -    name: gs
+  -    nullable: true
+  -    type:
+  -      family: EnumFamily
+  -      oid: 100104
+  -      udtMetadata:
+  -        arrayTypeOid: 100105
+  -  - computeExpr: x'40':::@100104::STRING
+  -    id: 3
+  -    name: gv
+  -    nullable: true
+  -    type:
+  -      family: StringFamily
+  -      oid: 25
+  -    virtual: true
+  -  - id: 4
+  -    name: other
+  -    nullable: true
+  -    type:
+  -      arrayContents:
+  -        family: EnumFamily
+  -        oid: 100104
+  -        udtMetadata:
+  -          arrayTypeOid: 100105
+  -      arrayElemType: EnumFamily
+  -      family: ArrayFamily
+  -      oid: 100105
+     - defaultExpr: '''noname'':::STRING'
+       id: 5
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses: <redacted>
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP TYPE ‹defaultdb›.‹public›.‹greeting› CASCADE
+  +        statement: DROP TYPE greeting CASCADE
+  +        statementTag: DROP TYPE
+  +    revertible: true
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+       columnNames:
+       - id
+  -    - gs
+  -    - other
+  +    - crdb_internal_column_2_name_placeholder
+  +    - crdb_internal_column_4_name_placeholder
+       - name
+       name: primary
+     formatVersion: 3
+     id: 107
+  -  indexes:
+  -  - createdAtNanos: "1640995200000000000"
+  -    foreignKey: {}
+  -    geoConfig: {}
+  -    id: 2
+  -    interleave: {}
+  -    keyColumnDirections:
+  -    - ASC
+  -    keyColumnIds:
+  -    - 5
+  -    keyColumnNames:
+  -    - name
+  -    keySuffixColumnIds:
+  -    - 1
+  -    name: partial
+  -    partitioning: {}
+  -    predicate: gs::STRING = 'hi':::STRING
+  -    sharded: {}
+  -    version: 3
+  +  indexes: []
+     modificationTime: {}
+  +  mutations:
+  +  - column:
+  +      computeExpr: b'\x80':::@100104
+  +      id: 2
+  +      name: crdb_internal_column_2_name_placeholder
+  +      nullable: true
+  +      type:
+  +        family: EnumFamily
+  +        oid: 100104
+  +        udtMetadata:
+  +          arrayTypeOid: 100105
+  +    direction: DROP
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+  +  - column:
+  +      computeExpr: b'@':::@100104::STRING
+  +      id: 3
+  +      name: crdb_internal_column_3_name_placeholder
+  +      nullable: true
+  +      type:
+  +        family: StringFamily
+  +        oid: 25
+  +      virtual: true
+  +    direction: DROP
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+  +  - column:
+  +      id: 4
+  +      name: crdb_internal_column_4_name_placeholder
+  +      nullable: true
+  +      type:
+  +        arrayContents:
+  +          family: EnumFamily
+  +          oid: 100104
+  +          udtMetadata:
+  +            arrayTypeOid: 100105
+  +        arrayElemType: EnumFamily
+  +        family: ArrayFamily
+  +        oid: 100105
+  +    direction: DROP
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+  +  - direction: DROP
+  +    index:
+  +      createdAtNanos: "1640995200000000000"
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 2
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      keyColumnIds:
+  +      - 5
+  +      keyColumnNames:
+  +      - name
+  +      keySuffixColumnIds:
+  +      - 1
+  +      name: partial
+  +      partitioning: {}
+  +      predicate: crdb_internal_column_2_name_placeholder::STRING = 'hi':::STRING
+  +      sharded: {}
+  +      version: 3
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+  +  - constraint:
+  +      check: {}
+  +      constraintType: UNIQUE_WITHOUT_INDEX
+  +      foreignKey: {}
+  +      name: myuwi
+  +      uniqueWithoutIndexConstraint:
+  +        columnIds:
+  +        - 5
+  +        constraintId: 3
+  +        name: crdb_internal_constraint_3_name_placeholder
+  +        predicate: x'80':::@100104::STRING = 'hi':::STRING
+  +        tableId: 107
+  +        validity: Dropping
+  +    direction: DROP
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+  +  - constraint:
+  +      check:
+  +        columnIds:
+  +        - 2
+  +        - 5
+  +        constraintId: 2
+  +        expr: crdb_internal_column_2_name_placeholder::STRING = name
+  +        name: mycheck
+  +        validity: Dropping
+  +      foreignKey: {}
+  +      name: mycheck
+  +      uniqueWithoutIndexConstraint: {}
+  +    direction: DROP
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+  +  - direction: ADD
+  +    index:
+  +      constraintId: 4
+  +      createdExplicitly: true
+  +      encodingType: 1
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 3
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      keyColumnIds:
+  +      - 1
+  +      keyColumnNames:
+  +      - id
+  +      name: crdb_internal_index_3_name_placeholder
+  +      partitioning: {}
+  +      sharded: {}
+  +      storeColumnIds:
+  +      - 5
+  +      storeColumnNames:
+  +      - name
+  +      unique: true
+  +      version: 4
+  +    mutationId: 1
+  +    state: BACKFILLING
+  +  - direction: ADD
+  +    index:
+  +      constraintId: 5
+  +      createdExplicitly: true
+  +      encodingType: 1
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 4
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      keyColumnIds:
+  +      - 1
+  +      keyColumnNames:
+  +      - id
+  +      name: crdb_internal_index_4_name_placeholder
+  +      partitioning: {}
+  +      sharded: {}
+  +      storeColumnIds:
+  +      - 5
+  +      storeColumnNames:
+  +      - name
+  +      unique: true
+  +      useDeletePreservingEncoding: true
+  +      version: 4
+  +    mutationId: 1
+  +    state: DELETE_ONLY
+     name: tbl
+     nextColumnId: 6
+  -  nextConstraintId: 4
+  +  nextConstraintId: 6
+     nextFamilyId: 1
+  -  nextIndexId: 3
+  +  nextIndexId: 5
+     nextMutationId: 1
+     parentId: 100
+  ...
+       - 5
+       storeColumnNames:
+  -    - gs
+  -    - other
+  +    - crdb_internal_column_2_name_placeholder
+  +    - crdb_internal_column_4_name_placeholder
+       - name
+       unique: true
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  uniqueWithoutIndexConstraints:
+  -  - columnIds:
+  -    - 5
+  -    constraintId: 3
+  -    name: myuwi
+  -    predicate: x'80':::@100104::STRING = 'hi':::STRING
+  -    tableId: 107
+  -  version: "1"
+  +  version: "2"
+persist all catalog changes to storage
+create job #1 (non-cancelable: false): "DROP TYPE defaultdb.public.greeting CASCADE"
+  descriptor IDs: [104 105 106 107]
+# end PreCommitPhase
+commit transaction #1
+notified job registry to adopt jobs: [1]
+# begin PostCommitPhase
+begin transaction #2
+commit transaction #2
+begin transaction #3
+## PostCommitPhase stage 1 of 7 with 6 MutationType ops
+upsert descriptor #104
+  ...
+     - 106
+     - 107
+  -  version: "4"
+  +  version: "5"
+upsert descriptor #105
+  ...
+     - 106
+     - 107
+  -  version: "4"
+  +  version: "5"
+upsert descriptor #106
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "2"
+  +  version: "3"
+     viewQuery: SELECT b'\x80':::@100104::STRING AS c
+upsert descriptor #107
+  ...
+         version: 4
+       mutationId: 1
+  -    state: DELETE_ONLY
+  +    state: WRITE_ONLY
+     name: tbl
+     nextColumnId: 6
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "2"
+  +  version: "3"
+persist all catalog changes to storage
+update progress of schema change job #1: "PostCommitPhase stage 2 of 7 with 1 BackfillType op pending"
+commit transaction #3
+begin transaction #4
+## PostCommitPhase stage 2 of 7 with 1 BackfillType op
+backfill indexes [3] from index #1 in table #107
+commit transaction #4
+begin transaction #5
+## PostCommitPhase stage 3 of 7 with 6 MutationType ops
+upsert descriptor #104
+  ...
+     - 106
+     - 107
+  -  version: "5"
+  +  version: "6"
+upsert descriptor #105
+  ...
+     - 106
+     - 107
+  -  version: "5"
+  +  version: "6"
+upsert descriptor #106
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "3"
+  +  version: "4"
+     viewQuery: SELECT b'\x80':::@100104::STRING AS c
+upsert descriptor #107
+  ...
+         version: 4
+       mutationId: 1
+  -    state: BACKFILLING
+  +    state: DELETE_ONLY
+     - direction: ADD
+       index:
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "3"
+  +  version: "4"
+persist all catalog changes to storage
+update progress of schema change job #1: "PostCommitPhase stage 4 of 7 with 1 MutationType op pending"
+commit transaction #5
+begin transaction #6
+## PostCommitPhase stage 4 of 7 with 6 MutationType ops
+upsert descriptor #104
+  ...
+     - 106
+     - 107
+  -  version: "6"
+  +  version: "7"
+upsert descriptor #105
+  ...
+     - 106
+     - 107
+  -  version: "6"
+  +  version: "7"
+upsert descriptor #106
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "4"
+  +  version: "5"
+     viewQuery: SELECT b'\x80':::@100104::STRING AS c
+upsert descriptor #107
+  ...
+         version: 4
+       mutationId: 1
+  -    state: DELETE_ONLY
+  +    state: MERGING
+     - direction: ADD
+       index:
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "4"
+  +  version: "5"
+persist all catalog changes to storage
+update progress of schema change job #1: "PostCommitPhase stage 5 of 7 with 1 BackfillType op pending"
+commit transaction #6
+begin transaction #7
+## PostCommitPhase stage 5 of 7 with 1 BackfillType op
+merge temporary indexes [4] into backfilled indexes [3] in table #107
+commit transaction #7
+begin transaction #8
+## PostCommitPhase stage 6 of 7 with 6 MutationType ops
+upsert descriptor #104
+  ...
+     - 106
+     - 107
+  -  version: "7"
+  +  version: "8"
+upsert descriptor #105
+  ...
+     - 106
+     - 107
+  -  version: "7"
+  +  version: "8"
+upsert descriptor #106
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "5"
+  +  version: "6"
+     viewQuery: SELECT b'\x80':::@100104::STRING AS c
+upsert descriptor #107
+  ...
+         version: 4
+       mutationId: 1
+  -    state: MERGING
+  +    state: WRITE_ONLY
+     - direction: ADD
+       index:
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "5"
+  +  version: "6"
+persist all catalog changes to storage
+update progress of schema change job #1: "PostCommitPhase stage 7 of 7 with 1 ValidationType op pending"
+commit transaction #8
+begin transaction #9
+## PostCommitPhase stage 7 of 7 with 1 ValidationType op
+validate forward indexes [3] in table #107
+commit transaction #9
+begin transaction #10
+## PostCommitNonRevertiblePhase stage 1 of 4 with 24 MutationType ops
+delete object namespace entry {100 101 view} -> 106
+upsert descriptor #104
+  ...
+           statement: DROP TYPE greeting CASCADE
+           statementTag: DROP TYPE
+  -    revertible: true
+       targetRanks: <redacted>
+       targets: <redacted>
+  ...
+       version: 2
+     referencingDescriptorIds:
+  -  - 106
+     - 107
+  -  version: "8"
+  +  version: "9"
+upsert descriptor #105
+  ...
+           statement: DROP TYPE greeting CASCADE
+           statementTag: DROP TYPE
+  -    revertible: true
+       targetRanks: <redacted>
+       targets: <redacted>
+  ...
+       version: 2
+     referencingDescriptorIds:
+  -  - 106
+     - 107
+  -  version: "8"
+  +  version: "9"
+upsert descriptor #106
+  ...
+           statement: DROP TYPE greeting CASCADE
+           statementTag: DROP TYPE
+  -    revertible: true
+       targetRanks: <redacted>
+       targets: <redacted>
+  ...
+     replacementOf:
+       time: {}
+  +  state: DROP
+     unexposedParentSchemaId: 101
+  -  version: "6"
+  +  version: "7"
+     viewQuery: SELECT b'\x80':::@100104::STRING AS c
+upsert descriptor #107
+   table:
+  -  checks:
+  -  - columnIds:
+  -    - 2
+  -    - 5
+  -    constraintId: 2
+  -    expr: crdb_internal_column_2_name_placeholder::STRING = name
+  -    name: crdb_internal_constraint_2_name_placeholder
+  -    validity: Dropping
+  +  checks: []
+     columns:
+     - id: 1
+  ...
+           statement: DROP TYPE greeting CASCADE
+           statementTag: DROP TYPE
+  -    revertible: true
+       targetRanks: <redacted>
+       targets: <redacted>
+  ...
+       direction: DROP
+       mutationId: 1
+  -    state: WRITE_ONLY
+  +    state: DELETE_ONLY
+     - column:
+         computeExpr: b'@':::@100104::STRING
+  ...
+       direction: DROP
+       mutationId: 1
+  -    state: WRITE_ONLY
+  +    state: DELETE_ONLY
+     - column:
+         id: 4
+  ...
+       direction: DROP
+       mutationId: 1
+  -    state: WRITE_ONLY
+  +    state: DELETE_ONLY
+     - direction: DROP
+       index:
+  ...
+         keySuffixColumnIds:
+         - 1
+  -      name: partial
+  +      name: crdb_internal_index_2_name_placeholder
+         partitioning: {}
+         predicate: crdb_internal_column_2_name_placeholder::STRING = 'hi':::STRING
+  ...
+         version: 3
+       mutationId: 1
+  -    state: WRITE_ONLY
+  -  - constraint:
+  -      check: {}
+  -      constraintType: UNIQUE_WITHOUT_INDEX
+  -      foreignKey: {}
+  -      name: myuwi
+  -      uniqueWithoutIndexConstraint:
+  -        columnIds:
+  -        - 5
+  -        constraintId: 3
+  -        name: crdb_internal_constraint_3_name_placeholder
+  -        predicate: x'80':::@100104::STRING = 'hi':::STRING
+  -        tableId: 107
+  -        validity: Dropping
+  -    direction: DROP
+  -    mutationId: 1
+  -    state: WRITE_ONLY
+  -  - constraint:
+  -      check:
+  -        columnIds:
+  -        - 2
+  -        - 5
+  -        constraintId: 2
+  -        expr: crdb_internal_column_2_name_placeholder::STRING = name
+  -        name: mycheck
+  -        validity: Dropping
+  -      foreignKey: {}
+  -      name: mycheck
+  -      uniqueWithoutIndexConstraint: {}
+  -    direction: DROP
+  -    mutationId: 1
+  -    state: WRITE_ONLY
+  -  - direction: ADD
+  +    state: DELETE_ONLY
+  +  - direction: DROP
+       index:
+  -      constraintId: 4
+  +      constraintId: 5
+         createdExplicitly: true
+         encodingType: 1
+         foreignKey: {}
+         geoConfig: {}
+  -      id: 3
+  +      id: 4
+         interleave: {}
+         keyColumnDirections:
+  ...
+         keyColumnNames:
+         - id
+  -      name: crdb_internal_index_3_name_placeholder
+  +      name: crdb_internal_index_4_name_placeholder
+         partitioning: {}
+         sharded: {}
+  ...
+         - name
+         unique: true
+  +      useDeletePreservingEncoding: true
+         version: 4
+       mutationId: 1
+  -    state: WRITE_ONLY
+  -  - direction: ADD
+  +    state: DELETE_ONLY
+  +  - direction: DROP
+       index:
+  -      constraintId: 5
+  -      createdExplicitly: true
+  +      constraintId: 1
+  +      createdAtNanos: "1640995200000000000"
+         encodingType: 1
+         foreignKey: {}
+         geoConfig: {}
+  -      id: 4
+  +      id: 1
+         interleave: {}
+         keyColumnDirections:
+  ...
+         keyColumnNames:
+         - id
+  -      name: crdb_internal_index_4_name_placeholder
+  +      name: crdb_internal_index_1_name_placeholder
+         partitioning: {}
+         sharded: {}
+         storeColumnIds:
+  +      - 2
+  +      - 4
+         - 5
+         storeColumnNames:
+  +      - crdb_internal_column_2_name_placeholder
+  +      - crdb_internal_column_4_name_placeholder
+         - name
+         unique: true
+  -      useDeletePreservingEncoding: true
+         version: 4
+       mutationId: 1
+  ...
+     parentId: 100
+     primaryIndex:
+  -    constraintId: 1
+  -    createdAtNanos: "1640995200000000000"
+  +    constraintId: 4
+  +    createdExplicitly: true
+       encodingType: 1
+       foreignKey: {}
+       geoConfig: {}
+  -    id: 1
+  +    id: 3
+       interleave: {}
+       keyColumnDirections:
+  ...
+       sharded: {}
+       storeColumnIds:
+  -    - 2
+  -    - 4
+       - 5
+       storeColumnNames:
+  -    - crdb_internal_column_2_name_placeholder
+  -    - crdb_internal_column_4_name_placeholder
+       - name
+       unique: true
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "6"
+  +  version: "7"
+persist all catalog changes to storage
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 4 with 5 MutationType ops pending"
+set schema change job #1 to non-cancellable
+commit transaction #10
+begin transaction #11
+## PostCommitNonRevertiblePhase stage 2 of 4 with 10 MutationType ops
+upsert descriptor #104
+  ...
+     referencingDescriptorIds:
+     - 107
+  -  version: "9"
+  +  version: "10"
+upsert descriptor #105
+  ...
+     referencingDescriptorIds:
+     - 107
+  -  version: "9"
+  +  version: "10"
+upsert descriptor #107
+  ...
+     - direction: DROP
+       index:
+  -      createdAtNanos: "1640995200000000000"
+  -      foreignKey: {}
+  -      geoConfig: {}
+  -      id: 2
+  -      interleave: {}
+  -      keyColumnDirections:
+  -      - ASC
+  -      keyColumnIds:
+  -      - 5
+  -      keyColumnNames:
+  -      - name
+  -      keySuffixColumnIds:
+  -      - 1
+  -      name: crdb_internal_index_2_name_placeholder
+  -      partitioning: {}
+  -      predicate: crdb_internal_column_2_name_placeholder::STRING = 'hi':::STRING
+  -      sharded: {}
+  -      version: 3
+  -    mutationId: 1
+  -    state: DELETE_ONLY
+  -  - direction: DROP
+  -    index:
+  -      constraintId: 5
+  -      createdExplicitly: true
+  -      encodingType: 1
+  -      foreignKey: {}
+  -      geoConfig: {}
+  -      id: 4
+  -      interleave: {}
+  -      keyColumnDirections:
+  -      - ASC
+  -      keyColumnIds:
+  -      - 1
+  -      keyColumnNames:
+  -      - id
+  -      name: crdb_internal_index_4_name_placeholder
+  -      partitioning: {}
+  -      sharded: {}
+  -      storeColumnIds:
+  -      - 5
+  -      storeColumnNames:
+  -      - name
+  -      unique: true
+  -      useDeletePreservingEncoding: true
+  -      version: 4
+  -    mutationId: 1
+  -    state: DELETE_ONLY
+  -  - direction: DROP
+  -    index:
+         constraintId: 1
+         createdAtNanos: "1640995200000000000"
+  ...
+         version: 4
+       mutationId: 1
+  -    state: WRITE_ONLY
+  +    state: DELETE_ONLY
+     name: tbl
+     nextColumnId: 6
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "7"
+  +  version: "8"
+delete descriptor #106
+persist all catalog changes to storage
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 3 of 4 with 19 MutationType ops pending"
+set schema change job #1 to non-cancellable
+updated schema change job #1 descriptor IDs to [104 105 107]
+commit transaction #11
+begin transaction #12
+## PostCommitNonRevertiblePhase stage 3 of 4 with 23 MutationType ops
+delete object namespace entry {100 101 greeting} -> 104
+delete object namespace entry {100 101 _greeting} -> 105
+upsert descriptor #104
+  ...
+     referencingDescriptorIds:
+     - 107
+  -  version: "10"
+  +  state: DROP
+  +  version: "11"
+upsert descriptor #105
+  ...
+     referencingDescriptorIds:
+     - 107
+  -  version: "10"
+  +  state: DROP
+  +  version: "11"
+upsert descriptor #107
+  ...
+       authorization:
+         userName: root
+  -    currentStatuses: <redacted>
+       jobId: "1"
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: DROP TYPE ‹defaultdb›.‹public›.‹greeting› CASCADE
+  -        statement: DROP TYPE greeting CASCADE
+  -        statementTag: DROP TYPE
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     families:
+     - columnIds:
+       - 1
+  -    - 2
+  -    - 4
+       - 5
+       columnNames:
+       - id
+  -    - crdb_internal_column_2_name_placeholder
+  -    - crdb_internal_column_4_name_placeholder
+       - name
+       name: primary
+  ...
+     indexes: []
+     modificationTime: {}
+  -  mutations:
+  -  - column:
+  -      computeExpr: b'\x80':::@100104
+  -      id: 2
+  -      name: crdb_internal_column_2_name_placeholder
+  -      nullable: true
+  -      type:
+  -        family: EnumFamily
+  -        oid: 100104
+  -        udtMetadata:
+  -          arrayTypeOid: 100105
+  -    direction: DROP
+  -    mutationId: 1
+  -    state: DELETE_ONLY
+  -  - column:
+  -      computeExpr: b'@':::@100104::STRING
+  -      id: 3
+  -      name: crdb_internal_column_3_name_placeholder
+  -      nullable: true
+  -      type:
+  -        family: StringFamily
+  -        oid: 25
+  -      virtual: true
+  -    direction: DROP
+  -    mutationId: 1
+  -    state: DELETE_ONLY
+  -  - column:
+  -      id: 4
+  -      name: crdb_internal_column_4_name_placeholder
+  -      nullable: true
+  -      type:
+  -        arrayContents:
+  -          family: EnumFamily
+  -          oid: 100104
+  -          udtMetadata:
+  -            arrayTypeOid: 100105
+  -        arrayElemType: EnumFamily
+  -        family: ArrayFamily
+  -        oid: 100105
+  -    direction: DROP
+  -    mutationId: 1
+  -    state: DELETE_ONLY
+  -  - direction: DROP
+  -    index:
+  -      constraintId: 1
+  -      createdAtNanos: "1640995200000000000"
+  -      encodingType: 1
+  -      foreignKey: {}
+  -      geoConfig: {}
+  -      id: 1
+  -      interleave: {}
+  -      keyColumnDirections:
+  -      - ASC
+  -      keyColumnIds:
+  -      - 1
+  -      keyColumnNames:
+  -      - id
+  -      name: crdb_internal_index_1_name_placeholder
+  -      partitioning: {}
+  -      sharded: {}
+  -      storeColumnIds:
+  -      - 2
+  -      - 4
+  -      - 5
+  -      storeColumnNames:
+  -      - crdb_internal_column_2_name_placeholder
+  -      - crdb_internal_column_4_name_placeholder
+  -      - name
+  -      unique: true
+  -      version: 4
+  -    mutationId: 1
+  -    state: DELETE_ONLY
+  +  mutations: []
+     name: tbl
+     nextColumnId: 6
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "8"
+  +  version: "9"
+persist all catalog changes to storage
+create job #2 (non-cancelable: true): "GC for DROP TYPE defaultdb.public.greeting CASCADE"
+  descriptor IDs: [107]
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 4 of 4 with 2 MutationType ops pending"
+commit transaction #12
+notified job registry to adopt jobs: [2]
+begin transaction #13
+## PostCommitNonRevertiblePhase stage 4 of 4 with 6 MutationType ops
+upsert descriptor #107
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    jobId: "1"
+     families:
+     - columnIds:
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "9"
+  +  version: "10"
+delete descriptor #104
+delete descriptor #105
+persist all catalog changes to storage
+update progress of schema change job #1: "all stages completed"
+set schema change job #1 to non-cancellable
+updated schema change job #1 descriptor IDs to [106]
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 104
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 107
+commit transaction #13
+# end PostCommitPhase

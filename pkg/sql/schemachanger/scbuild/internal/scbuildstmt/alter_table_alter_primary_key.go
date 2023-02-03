@@ -180,7 +180,7 @@ func alterPrimaryKey(b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t alterPri
 	// Drop the rowid column, if applicable.
 	if rowidToDrop != nil {
 		elts := b.QueryByID(rowidToDrop.TableID).Filter(hasColumnIDAttrFilter(rowidToDrop.ColumnID))
-		dropColumn(b, tn, tbl, t.n, rowidToDrop, elts, tree.DropRestrict)
+		dropColumn(b, t.n, tbl, rowidToDrop, elts, tree.DropRestrict)
 	}
 
 	// Construct and add elements for a unique secondary index created on

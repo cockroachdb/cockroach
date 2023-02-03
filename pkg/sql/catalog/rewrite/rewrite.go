@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -572,32 +571,38 @@ func rewriteSchemaChangerState(
 			err = errors.Wrap(err, "rewriting declarative schema changer state")
 		}
 	}()
+	selfRewrite := descriptorRewrites[d.GetID()]
 	for i := 0; i < len(state.Targets); i++ {
 		t := &state.Targets[i]
 		if err := screl.WalkDescIDs(t.Element(), func(id *descpb.ID) error {
-			if *id == descpb.InvalidID {
+			switch *id {
+			case descpb.InvalidID:
 				// Some descriptor ID fields in elements may be deliberately unset.
 				// Skip these as they are not subject to rewrite.
 				return nil
+			case d.GetID():
+				*id = selfRewrite.ID
+				return nil
+			case d.GetParentSchemaID():
+				*id = selfRewrite.ParentSchemaID
+				return nil
+			case d.GetParentID():
+				*id = selfRewrite.ParentID
+				return nil
 			}
-			rewrite, ok := descriptorRewrites[*id]
-			if !ok {
-				return errors.Errorf("missing rewrite for id %d in %s", *id, screl.ElementString(t.Element()))
+			if rewrite, ok := descriptorRewrites[*id]; ok {
+				*id = rewrite.ID
+				return nil
 			}
-			*id = rewrite.ID
-			return nil
+			return errors.Errorf("missing rewrite for id %d in %s", *id, screl.ElementString(t.Element()))
 		}); err != nil {
-			// We'll permit this in the special case of a schema parent element.
-			switch el := t.Element().(type) {
-			case *scpb.SchemaParent:
-				_, scExists := descriptorRewrites[el.SchemaID]
-				if !scExists && state.CurrentStatuses[i] == scpb.Status_ABSENT {
-					state.Targets = append(state.Targets[:i], state.Targets[i+1:]...)
-					state.CurrentStatuses = append(state.CurrentStatuses[:i], state.CurrentStatuses[i+1:]...)
-					state.TargetRanks = append(state.TargetRanks[:i], state.TargetRanks[i+1:]...)
-					i--
-					continue
-				}
+			// We'll permit this in the special case of a satisfied target.
+			if t.TargetStatus == state.CurrentStatuses[i] {
+				state.Targets = append(state.Targets[:i], state.Targets[i+1:]...)
+				state.CurrentStatuses = append(state.CurrentStatuses[:i], state.CurrentStatuses[i+1:]...)
+				state.TargetRanks = append(state.TargetRanks[:i], state.TargetRanks[i+1:]...)
+				i--
+				continue
 			}
 			return errors.Wrap(err, "rewriting descriptor ids")
 		}
