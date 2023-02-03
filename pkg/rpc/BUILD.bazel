@@ -27,7 +27,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
-        "//pkg/base/serverident",
         "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/roachpb",

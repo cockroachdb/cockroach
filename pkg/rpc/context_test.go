@@ -465,7 +465,6 @@ func TestInternalServerAddress(t *testing.T) {
 	internal := &internalServer{}
 	serverCtx.SetLocalInternalServer(
 		internal,
-		false, // tenant
 		ServerInterceptorInfo{}, ClientInterceptorInfo{})
 
 	ic := serverCtx.GetLocalInternalClientForAddr(1)
@@ -542,7 +541,6 @@ func TestInternalClientAdapterRunsInterceptors(t *testing.T) {
 	internal := &internalServer{}
 	serverCtx.SetLocalInternalServer(
 		internal,
-		false, // tenant
 		serverInterceptors, clientInterceptors)
 	ic := serverCtx.GetLocalInternalClientForAddr(1)
 	lic, ok := ic.(internalClientAdapter)
@@ -615,7 +613,6 @@ func TestInternalClientAdapterWithClientStreamInterceptors(t *testing.T) {
 		internal := &internalServer{rangeFeedEvents: []roachpb.RangeFeedEvent{{}, {}}}
 		serverCtx.SetLocalInternalServer(
 			internal,
-			false, // tenant
 			serverInterceptors, clientInterceptors)
 		ic := serverCtx.GetLocalInternalClientForAddr(1)
 		lic, ok := ic.(internalClientAdapter)
@@ -696,7 +693,6 @@ func TestInternalClientAdapterWithServerStreamInterceptors(t *testing.T) {
 		internal := &internalServer{rangeFeedEvents: []roachpb.RangeFeedEvent{{}, {}}}
 		serverCtx.SetLocalInternalServer(
 			internal,
-			false, // tenant
 			serverInterceptors, ClientInterceptorInfo{})
 		ic := serverCtx.GetLocalInternalClientForAddr(1)
 		lic, ok := ic.(internalClientAdapter)
@@ -832,7 +828,6 @@ func BenchmarkInternalClientAdapter(b *testing.B) {
 	internal := &internalServer{}
 	serverCtx.SetLocalInternalServer(
 		internal,
-		false, // tenant
 		interceptors, ClientInterceptorInfo{})
 	ic := serverCtx.GetLocalInternalClientForAddr(roachpb.NodeID(1))
 	lic, ok := ic.(internalClientAdapter)
@@ -1022,7 +1017,6 @@ func TestHeartbeatHealth(t *testing.T) {
 	// server has been registered.
 	clientCtx.SetLocalInternalServer(
 		&internalServer{},
-		false, // tenant
 		ServerInterceptorInfo{}, ClientInterceptorInfo{})
 	require.NoError(t, clientCtx.TestingConnHealth(clientCtx.Config.AdvertiseAddr, clientNodeID))
 
