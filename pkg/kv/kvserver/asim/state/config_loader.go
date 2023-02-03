@@ -10,7 +10,12 @@
 
 package state
 
-import "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
+import (
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+)
 
 // SingleRegionConfig is a simple cluster config with a single region and 3
 // zones, all have the same number of nodes.
@@ -89,6 +94,41 @@ var ComplexConfig = ClusterInfo{
 	},
 }
 
+// SingleRangeConfig is a single range config where there are 3 replicas on
+// stores 1, 2 and 3. Store is the leaseholder.
+var SingleRangeConfig = []RangeInfo{
+	{
+		StartKey:    MinKey,
+		Config:      defaultSpanConfig,
+		Replicas:    []StoreID{1, 2, 3},
+		Leaseholder: 1,
+	},
+}
+
+// MultiRangeConfig is a ranges config where there are three ranges and stores
+// 1,2,3 have replicas for each range. There is 1 leaseholder on each of store
+// 1,2,3.
+var MultiRangeConfig = []RangeInfo{
+	{
+		StartKey:    MinKey,
+		Config:      defaultSpanConfig,
+		Replicas:    []StoreID{1, 2, 3},
+		Leaseholder: 1,
+	},
+	{
+		StartKey:    MinKey + 1000,
+		Config:      defaultSpanConfig,
+		Replicas:    []StoreID{1, 2, 3},
+		Leaseholder: 2,
+	},
+	{
+		StartKey:    MinKey + 2000,
+		Config:      defaultSpanConfig,
+		Replicas:    []StoreID{1, 2, 3},
+		Leaseholder: 3,
+	},
+}
+
 // Zone is a simulated availability zone.
 type Zone struct {
 	Name      string
@@ -108,10 +148,27 @@ type ClusterInfo struct {
 	Regions        []Region
 }
 
+type RangeInfo struct {
+	StartKey    Key
+	Config      roachpb.SpanConfig
+	Replicas    []StoreID
+	Leaseholder StoreID
+}
+
+type RangesInfo []RangeInfo
+
 // LoadConfig loads a predefined configuration which contains cluster
+// information, range info and initial replica/lease placement.
+func LoadConfig(c ClusterInfo, r RangesInfo, settings *config.SimulationSettings) State {
+	s := LoadClusterInfo(c, settings)
+	LoadRangeInfo(s, r...)
+	return s
+}
+
+// LoadClusterInfo loads a predefined configuration which contains cluster
 // information such as regions, zones, etc.
-func LoadConfig(c ClusterInfo) State {
-	s := newState(config.DefaultSimulationSettings())
+func LoadClusterInfo(c ClusterInfo, settings *config.SimulationSettings) State {
+	s := newState(settings)
 	// A new state has a single range - add the replica load for that range.
 	s.clusterinfo = c
 	// TODO(lidor): load locality info to be used by the allocator. Do we need a
@@ -120,19 +177,70 @@ func LoadConfig(c ClusterInfo) State {
 		for _, z := range r.Zones {
 			for i := 0; i < z.NodeCount; i++ {
 				node := s.AddNode()
-				store, _ := s.AddStore(node.NodeID())
-
-				// A new state has a range before stores were added, if this new store
-				// is one of the first to be added, make sure we create replicas for
-				// that first range on the new store.
-				// TODO(lidor): clean this up, and potentially merge LoadConfig() with
-				// NewTestState().
-				r, ok := s.Range(1)
-				if ok && len(r.Replicas()) < 3 {
-					s.addReplica(1, store.StoreID())
+				if _, ok := s.AddStore(node.NodeID()); !ok {
+					panic(fmt.Sprintf(
+						"Unable to load config: cannot add store %d",
+						node.NodeID(),
+					))
 				}
 			}
 		}
 	}
 	return s
+}
+
+// LoadRangesConfig loads the ranges specified in RangesInfo into state. If any
+// operation fails this function panics.
+func LoadRangeInfo(s State, rangeInfos ...RangeInfo) {
+	for _, r := range rangeInfos {
+		var rng Range
+		var ok bool
+
+		// When the state is initialized there will always be at least one
+		// range that spans the entire keyspace. All other ranges are split off
+		// of this one. If the range info has a start key that is equal to
+		// MinKey, then we assume that this refers to the start range - use
+		// that existing range rather than splitting.
+		if r.StartKey == MinKey {
+			rng, ok = s.RangeFor(r.StartKey), true
+		} else {
+			_, rng, ok = s.SplitRange(r.StartKey)
+		}
+		if !ok {
+			panic(fmt.Sprintf(
+				"Unable to load config: failed create range %d",
+				r.StartKey,
+			))
+		}
+
+		if !s.SetSpanConfig(rng.RangeID(), r.Config) {
+			panic(fmt.Sprintf(
+				"Unable to load config: cannot set span config for range %s",
+				rng,
+			))
+		}
+	}
+
+	// Create the replicas for each range and transfer the range lease to the
+	// specified leaseholder. If this were done in the above loop, it would be
+	// necessary to delete all existing replicas that were carried over from
+	// the lhs split, before adding the new replicas to the rhs.
+	for _, r := range rangeInfos {
+		rng := s.RangeFor(r.StartKey)
+		for _, storeID := range r.Replicas {
+			if _, ok := s.AddReplica(rng.RangeID(), storeID); !ok {
+				panic(fmt.Sprintf(
+					"Unable to load config: add replica to store %d failed at "+
+						"for range %s replicas %s",
+					storeID, rng, rng.Replicas()))
+			}
+		}
+		if store, _ := s.LeaseholderStore(rng.RangeID()); store.StoreID() != r.Leaseholder {
+			if !s.TransferLease(rng.RangeID(), r.Leaseholder) {
+				panic(fmt.Sprintf(
+					"Unable to load config: transfer lease to %d failed at for range %s",
+					r.Leaseholder, rng))
+			}
+		}
+	}
 }
