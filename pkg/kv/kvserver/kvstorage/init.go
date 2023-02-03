@@ -293,12 +293,6 @@ func IterateRangeDescriptorsFromDisk(
 	return err
 }
 
-// LoadedReplicas represents the Replicas present on a storage engine.
-type LoadedReplicas struct {
-	Uninitialized ReplicaMap
-	Initialized   ReplicaMap
-}
-
 // A Replica references a CockroachDB Replica. The data in this struct does not
 // represent the data of the Replica but is sufficient to access all of its
 // contents via additional calls to the storage engine.
@@ -368,14 +362,14 @@ func (m ReplicaMap) setDescReplicaID(rangeID roachpb.RangeID, descReplicaID roac
 	m[rangeID] = ent
 }
 
-// LoadAndReconcileReplicas loads the LoadedReplicas present on this
+// LoadAndReconcileReplicas loads the Replicas present on this
 // store. It reconciles inconsistent state and runs validation checks.
 //
 // TODO(sep-raft-log): consider a callback-visitor pattern here.
-func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) (LoadedReplicas, error) {
+func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) (ReplicaMap, error) {
 	ident, err := ReadStoreIdent(ctx, eng)
 	if err != nil {
-		return LoadedReplicas{}, err
+		return nil, err
 	}
 
 	s := ReplicaMap{}
@@ -409,7 +403,7 @@ func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) (LoadedRe
 				s.setDescReplicaID(desc.RangeID, repDesc.ReplicaID)
 				return nil
 			}); err != nil {
-			return LoadedReplicas{}, err
+			return nil, err
 		}
 	}
 
@@ -418,7 +412,7 @@ func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) (LoadedRe
 	// This invariant is true for replicas created in 22.1. Without further action, it
 	// would be violated for clusters that originated before 22.1. In this method, we
 	// backfill the ReplicaID (for initialized replicas) and we remove uninitialized
-	// replicas (see below for rationale).
+	// replicas lacking a ReplicaID (see below for rationale).
 	//
 	// The migration can be removed when the KV host cluster MinSupportedVersion
 	// matches or exceeds 23.1 (i.e. once we know that a store has definitely
@@ -439,7 +433,7 @@ func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) (LoadedRe
 			s.setReplicaID(rangeID, msg.ReplicaID)
 			return nil
 		}); err != nil {
-			return LoadedReplicas{}, err
+			return nil, err
 		}
 
 		var hs raftpb.HardState
@@ -449,7 +443,7 @@ func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) (LoadedRe
 			s.setHardState(rangeID, hs)
 			return nil
 		}); err != nil {
-			return LoadedReplicas{}, err
+			return nil, err
 		}
 	}
 
@@ -460,7 +454,7 @@ func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) (LoadedRe
 			// If we have both a RaftReplicaID and a descriptor, the ReplicaIDs
 			// need to match.
 			if repl.descReplicaID != 0 && repl.descReplicaID != repl.ReplicaID {
-				return LoadedReplicas{}, errors.AssertionFailedf("conflicting RaftReplicaID %d for %s", repl.ReplicaID, repl.Desc)
+				return nil, errors.AssertionFailedf("conflicting RaftReplicaID %d for %s", repl.ReplicaID, repl.Desc)
 			}
 			// We have a RaftReplicaID, no need to migrate.
 			continue
@@ -468,7 +462,7 @@ func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) (LoadedRe
 		if repl.descReplicaID != 0 {
 			// Backfill RaftReplicaID for an initialized Replica.
 			if err := logstore.NewStateLoader(repl.RangeID).SetRaftReplicaID(ctx, eng, repl.descReplicaID); err != nil {
-				return LoadedReplicas{}, errors.Wrapf(err, "backfilling ReplicaID for r%d", repl.RangeID)
+				return nil, errors.Wrapf(err, "backfilling ReplicaID for r%d", repl.RangeID)
 			}
 			s.setReplicaID(repl.RangeID, repl.descReplicaID)
 			log.Eventf(ctx, "backfilled replicaID for initialized replica %s", s.getOrMake(repl.RangeID).ID())
@@ -483,24 +477,14 @@ func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) (LoadedRe
 			// effectively even if for some reason we had in the past written state
 			// other than the HardState here (not supposed to happen, but still).
 			if err := eng.ClearUnversioned(logstore.NewStateLoader(repl.RangeID).RaftHardStateKey()); err != nil {
-				return LoadedReplicas{}, errors.Wrapf(err, "removing HardState for r%d", repl.RangeID)
+				return nil, errors.Wrapf(err, "removing HardState for r%d", repl.RangeID)
 			}
 			delete(s, repl.RangeID)
 			log.Eventf(ctx, "removed legacy uninitialized replica for r%s", repl.RangeID)
 		}
 	}
 
-	init := ReplicaMap{}
-	uninit := ReplicaMap{}
-	for rangeID, state := range s {
-		if state.Desc != nil {
-			init[rangeID] = state
-		} else {
-			uninit[rangeID] = state
-		}
-	}
-
-	return LoadedReplicas{Initialized: init, Uninitialized: uninit}, nil
+	return s, nil
 }
 
 // A NotBootstrappedError indicates that an engine has not yet been

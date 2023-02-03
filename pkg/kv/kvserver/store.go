@@ -1851,7 +1851,11 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	if err != nil {
 		return err
 	}
-	for _, state := range repls.Initialized {
+	for _, state := range repls {
+		if state.Desc == nil {
+			// Uninitialized Replicas are not currently instantiated at store start.
+			continue
+		}
 		rep, err := newReplica(ctx, state.Desc, s, state.ReplicaID)
 		if err != nil {
 			return err

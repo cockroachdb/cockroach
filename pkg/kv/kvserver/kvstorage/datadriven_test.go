@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"regexp"
-	"sort"
 	"strings"
 	"testing"
 
@@ -161,24 +160,14 @@ func TestDataDriven(t *testing.T) {
 					fmt.Fprintln(&buf, desc)
 				}
 			case "load-and-reconcile":
-				rs, err := LoadAndReconcileReplicas(ctx, e.eng)
+				replicas, err := LoadAndReconcileReplicas(ctx, e.eng)
 				if err != nil {
 					fmt.Fprintln(&buf, err)
 					break
 				}
-				var merged []storage.FullReplicaID
-				for _, repl := range rs.Initialized {
-					merged = append(merged, repl.ID())
-				}
-				for _, repl := range rs.Uninitialized {
-					merged = append(merged, repl.ID())
-				}
-				sort.Slice(merged, func(i, j int) bool {
-					return merged[i].RangeID < merged[j].RangeID
-				})
-				for _, id := range merged {
-					fmt.Fprintf(&buf, "%s: ", id)
-					if desc := rs.Initialized[id.RangeID].Desc; desc != nil {
+				for _, repl := range replicas.Sorted() {
+					fmt.Fprintf(&buf, "%s: ", repl.ID())
+					if desc := repl.Desc; desc != nil {
 						fmt.Fprint(&buf, desc)
 					} else {
 						fmt.Fprintf(&buf, "uninitialized")
