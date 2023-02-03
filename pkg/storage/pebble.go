@@ -1931,11 +1931,6 @@ func (p *Pebble) SetMinVersion(version roachpb.Version) error {
 	return nil
 }
 
-// MinVersionIsAtLeastTargetVersion implements the Engine interface.
-func (p *Pebble) MinVersionIsAtLeastTargetVersion(target roachpb.Version) (bool, error) {
-	return MinVersionIsAtLeastTargetVersion(p.unencryptedFS, p.path, target)
-}
-
 // BufferedSize implements the Engine interface.
 func (p *Pebble) BufferedSize() int {
 	return 0

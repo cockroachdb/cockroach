@@ -128,13 +128,13 @@ func TestMinVersion_IsNotEncrypted(t *testing.T) {
 	v1 := roachpb.Version{Major: 21, Minor: 1, Patch: 0, Internal: 122}
 	v2 := roachpb.Version{Major: 21, Minor: 1, Patch: 0, Internal: 126}
 
-	ok, err := p.MinVersionIsAtLeastTargetVersion(v1)
+	ok, err := MinVersionIsAtLeastTargetVersion(p.unencryptedFS, p.path, v1)
 	require.NoError(t, err)
 	require.False(t, ok)
 
 	require.NoError(t, p.SetMinVersion(v2))
 
-	ok, err = p.MinVersionIsAtLeastTargetVersion(v1)
+	ok, err = MinVersionIsAtLeastTargetVersion(p.unencryptedFS, p.path, v1)
 	require.NoError(t, err)
 	require.True(t, ok)
 
