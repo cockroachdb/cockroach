@@ -315,29 +315,16 @@ func (r Replica) ID() storage.FullReplicaID {
 // A replicaMap organizes a set of Replicas with unique RangeIDs.
 type replicaMap map[roachpb.RangeID]Replica
 
-// Sorted returns the contents of the map as a RangeID-sorted slice.
-func (m replicaMap) Sorted() []Replica {
-	sl := make([]Replica, 0, len(m))
-	for _, repl := range m {
-		sl = append(sl, repl)
-	}
-	sort.Slice(sl, func(i, j int) bool {
-		return sl[i].RangeID < sl[j].RangeID
-	})
-	return sl
-}
-
 func (m replicaMap) getOrMake(rangeID roachpb.RangeID) Replica {
 	ent := m[rangeID]
 	ent.RangeID = rangeID
 	return ent
 }
 
-func (m replicaMap) setReplicaID(rangeID roachpb.RangeID, replicaID roachpb.ReplicaID) Replica {
+func (m replicaMap) setReplicaID(rangeID roachpb.RangeID, replicaID roachpb.ReplicaID) {
 	ent := m.getOrMake(rangeID)
 	ent.ReplicaID = replicaID
 	m[rangeID] = ent
-	return ent
 }
 
 func (m replicaMap) setHardState(rangeID roachpb.RangeID, hs raftpb.HardState) {
@@ -367,73 +354,83 @@ func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) ([]Replic
 		return nil, err
 	}
 
-	s := replicaMap{}
+	sl, err := func() ([]Replica, error) {
+		s := replicaMap{}
 
-	// INVARIANT: the latest visible committed version of the RangeDescriptor
-	// (which is what IterateRangeDescriptorsFromDisk returns) is the one reflecting
-	// the state of the Replica.
-	// INVARIANT: the descriptor for range [a,z) is located at RangeDescriptorKey(a).
-	// This is checked in IterateRangeDescriptorsFromDisk.
-	{
-		var lastDesc roachpb.RangeDescriptor
-		if err := IterateRangeDescriptorsFromDisk(
-			ctx, eng, func(desc roachpb.RangeDescriptor) error {
-				if lastDesc.RangeID != 0 && desc.StartKey.Less(lastDesc.EndKey) {
-					return errors.AssertionFailedf("overlapping descriptors %s and %s", lastDesc, desc)
-				}
-				lastDesc = desc
+		// INVARIANT: the latest visible committed version of the RangeDescriptor
+		// (which is what IterateRangeDescriptorsFromDisk returns) is the one reflecting
+		// the state of the Replica.
+		// INVARIANT: the descriptor for range [a,z) is located at RangeDescriptorKey(a).
+		// This is checked in IterateRangeDescriptorsFromDisk.
+		{
+			var lastDesc roachpb.RangeDescriptor
+			if err := IterateRangeDescriptorsFromDisk(
+				ctx, eng, func(desc roachpb.RangeDescriptor) error {
+					if lastDesc.RangeID != 0 && desc.StartKey.Less(lastDesc.EndKey) {
+						return errors.AssertionFailedf("overlapping descriptors %s and %s", lastDesc, desc)
+					}
+					lastDesc = desc
 
-				if err := s.setDesc(desc.RangeID, desc); err != nil {
-					return err
-				}
+					if err := s.setDesc(desc.RangeID, desc); err != nil {
+						return err
+					}
+					return nil
+				}); err != nil {
+				return nil, err
+			}
+		}
+
+		// INVARIANT: all replicas have a persisted full ReplicaID (i.e. a "ReplicaID from disk").
+		//
+		// This invariant is true for replicas created in 22.1. Without further action, it
+		// would be violated for clusters that originated before 22.1. In this method, we
+		// backfill the ReplicaID (for initialized replicas) and we remove uninitialized
+		// replicas lacking a ReplicaID (see below for rationale).
+		//
+		// The migration can be removed when the KV host cluster MinSupportedVersion
+		// matches or exceeds 23.1 (i.e. once we know that a store has definitely
+		// started up on >=23.1 at least once).
+
+		// Collect all the RangeIDs that either have a RaftReplicaID or HardState. For
+		// unmigrated replicas we see only the HardState - that is how we detect
+		// replicas that still need to be migrated.
+		//
+		// TODO(tbg): tighten up the case where we see a RaftReplicaID but no HardState.
+		// This leads to the general desire to validate the internal consistency of the
+		// entire raft state (i.e. HardState, TruncatedState, Log).
+		{
+			var msg roachpb.RaftReplicaID
+			if err := IterateIDPrefixKeys(ctx, eng, func(rangeID roachpb.RangeID) roachpb.Key {
+				return keys.RaftReplicaIDKey(rangeID)
+			}, &msg, func(rangeID roachpb.RangeID) error {
+				s.setReplicaID(rangeID, msg.ReplicaID)
 				return nil
 			}); err != nil {
-			return nil, err
+				return nil, err
+			}
+
+			var hs raftpb.HardState
+			if err := IterateIDPrefixKeys(ctx, eng, func(rangeID roachpb.RangeID) roachpb.Key {
+				return keys.RaftHardStateKey(rangeID)
+			}, &hs, func(rangeID roachpb.RangeID) error {
+				s.setHardState(rangeID, hs)
+				return nil
+			}); err != nil {
+				return nil, err
+			}
 		}
+		sl := make([]Replica, 0, len(s))
+		for _, repl := range s {
+			sl = append(sl, repl)
+		}
+		sort.Slice(sl, func(i, j int) bool {
+			return sl[i].RangeID < sl[j].RangeID
+		})
+		return sl, nil
+	}()
+	if err != nil {
+		return nil, err
 	}
-
-	// INVARIANT: all replicas have a persisted full ReplicaID (i.e. a "ReplicaID from disk").
-	//
-	// This invariant is true for replicas created in 22.1. Without further action, it
-	// would be violated for clusters that originated before 22.1. In this method, we
-	// backfill the ReplicaID (for initialized replicas) and we remove uninitialized
-	// replicas lacking a ReplicaID (see below for rationale).
-	//
-	// The migration can be removed when the KV host cluster MinSupportedVersion
-	// matches or exceeds 23.1 (i.e. once we know that a store has definitely
-	// started up on >=23.1 at least once).
-
-	// Collect all the RangeIDs that either have a RaftReplicaID or HardState. For
-	// unmigrated replicas we see only the HardState - that is how we detect
-	// replicas that still need to be migrated.
-	//
-	// TODO(tbg): tighten up the case where we see a RaftReplicaID but no HardState.
-	// This leads to the general desire to validate the internal consistency of the
-	// entire raft state (i.e. HardState, TruncatedState, Log).
-	{
-		var msg roachpb.RaftReplicaID
-		if err := IterateIDPrefixKeys(ctx, eng, func(rangeID roachpb.RangeID) roachpb.Key {
-			return keys.RaftReplicaIDKey(rangeID)
-		}, &msg, func(rangeID roachpb.RangeID) error {
-			s.setReplicaID(rangeID, msg.ReplicaID)
-			return nil
-		}); err != nil {
-			return nil, err
-		}
-
-		var hs raftpb.HardState
-		if err := IterateIDPrefixKeys(ctx, eng, func(rangeID roachpb.RangeID) roachpb.Key {
-			return keys.RaftHardStateKey(rangeID)
-		}, &hs, func(rangeID roachpb.RangeID) error {
-			s.setHardState(rangeID, hs)
-			return nil
-		}); err != nil {
-			return nil, err
-		}
-	}
-
-	sl := s.Sorted()
-	s = nil // prevent reuse below, we're only using `sl` now.
 
 	// Check invariants. Sorted order for deterministic unit tests.
 	//
