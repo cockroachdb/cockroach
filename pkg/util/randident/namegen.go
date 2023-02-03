@@ -16,6 +16,7 @@ import (
 	"math/rand"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -58,7 +59,7 @@ var escGenerators = []func(s *strings.Builder, r *rand.Rand){
 	func(s *strings.Builder, r *rand.Rand) { fmt.Fprintf(s, `%%%02x`, r.Int31n(256)) },
 	// SQL escape sequences.
 	func(s *strings.Builder, r *rand.Rand) { fmt.Fprintf(s, `\\u%04X`, r.Int31n(65536)) },
-	func(s *strings.Builder, r *rand.Rand) { fmt.Fprintf(s, `\\U%08X`, r.Uint32()) },
+	func(s *strings.Builder, r *rand.Rand) { fmt.Fprintf(s, `\\U%08X`, r.Int31n(utf8.MaxRune+1)) },
 }
 
 // GenerateOne generates one random name.
