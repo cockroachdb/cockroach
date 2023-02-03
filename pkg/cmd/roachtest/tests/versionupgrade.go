@@ -112,17 +112,7 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 		return err
 	})
 	mvt.InMixedVersion("test features", func(l *logger.Logger, db *gosql.DB) error {
-		for _, featureTest := range versionUpgradeTestFeatures {
-			l.Printf("running feature test %q", featureTest.name)
-			_, err := db.ExecContext(ctx, featureTest.statement)
-			if err != nil {
-				l.Printf("%q: ERROR (%s)", featureTest.name, err)
-				return err
-			}
-			l.Printf("%q: OK", featureTest.name)
-		}
-
-		return nil
+		return fmt.Errorf("failed")
 	})
 	mvt.AfterUpgradeFinalized("check if GC TTL is pinned", func(l *logger.Logger, db *gosql.DB) error {
 		// TODO(irfansharif): This can be removed when the predecessor version
