@@ -958,10 +958,6 @@ type Engine interface {
 	// version that it must maintain compatibility with.
 	SetMinVersion(version roachpb.Version) error
 
-	// MinVersionIsAtLeastTargetVersion returns whether the engine's recorded
-	// storage min version is at least the target version.
-	MinVersionIsAtLeastTargetVersion(target roachpb.Version) (bool, error)
-
 	// SetCompactionConcurrency is used to set the engine's compaction
 	// concurrency. It returns the previous compaction concurrency.
 	SetCompactionConcurrency(n uint64) uint64
