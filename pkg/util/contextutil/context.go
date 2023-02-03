@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -79,16 +80,42 @@ func wrap(ctx context.Context, cancel context.CancelFunc) (context.Context, cont
 	}
 }
 
-// ctxWithStacktrace overrides Err to annotate context.DeadlineExceeded and
+// contextWithStacktrace overrides Err to annotate context.DeadlineExceeded and
 // context.Canceled errors with a stacktrace.
 // See: https://github.com/cockroachdb/cockroach/issues/95794
-type ctxWithStacktrace struct {
+type contextWithStacktrace struct {
 	context.Context
+
+	mu struct {
+		syncutil.Mutex
+		capturedErr error
+	}
+}
+
+// capturedErr returns the error (wrapped with errors.WithStack) that is
+// "captured" on the first call to Err() that returns a non-nil error.
+// The stacktrace of this error is from the point it was first "detected".
+// If Err() is called on a child context created under contextWithStacktrace,
+// an error will not be captured.
+func (ctx *contextWithStacktrace) capturedErr() error {
+	ctx.mu.Lock()
+	defer ctx.mu.Unlock()
+	return ctx.mu.capturedErr
 }
 
 // Err implements the context.Context interface.
-func (ctx *ctxWithStacktrace) Err() error {
-	return errors.WithStack(ctx.Context.Err())
+func (ctx *contextWithStacktrace) Err() error {
+	err := ctx.Context.Err()
+	if err == nil {
+		return nil
+	}
+	ctx.mu.Lock()
+	defer ctx.mu.Unlock()
+	// Capture first non-nil result from Context.Err().
+	if ctx.mu.capturedErr == nil {
+		ctx.mu.capturedErr = errors.Wrap(err, "captured context error")
+	}
+	return err
 }
 
 // RunWithTimeout runs a function with a timeout, the same way you'd do with
@@ -98,16 +125,18 @@ func RunWithTimeout(
 	ctx context.Context, op string, timeout time.Duration, fn func(ctx context.Context) error,
 ) error {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
-	ctx = &ctxWithStacktrace{Context: ctx}
+	ctxWithStacktrace := &contextWithStacktrace{Context: ctx}
 	defer cancel()
 	start := timeutil.Now()
-	err := fn(ctx)
-	if err != nil && errors.Is(ctx.Err(), context.DeadlineExceeded) {
+	err := fn(ctxWithStacktrace)
+	if err != nil && errors.Is(ctxWithStacktrace.Err(), context.DeadlineExceeded) {
 		err = &TimeoutError{
 			operation: op,
 			timeout:   timeout,
 			took:      timeutil.Since(start),
-			cause:     err,
+			// err may have been customized so combine it with capturedErr
+			// to retain both the customization and the stacktrace.
+			cause: errors.CombineErrors(err, ctxWithStacktrace.capturedErr()),
 		}
 	}
 	return err
