@@ -195,8 +195,23 @@ EXPLAIN (ddl, verbose) DROP SCHEMA db.sc;
         │   └── • Schema:{DescID: 106}
         │       │ DROPPED → ABSENT
         │       │
-        │       └── • PreviousStagePrecedence dependency from DROPPED Schema:{DescID: 106}
-        │             rule: "descriptor dropped in transaction before removal"
+        │       ├── • Precedence dependency from ABSENT Namespace:{DescID: 106, Name: sc, ReferencedDescID: 104}
+        │       │     rule: "non-data dependents removed before descriptor"
+        │       │
+        │       ├── • Precedence dependency from ABSENT Owner:{DescID: 106}
+        │       │     rule: "non-data dependents removed before descriptor"
+        │       │
+        │       ├── • Precedence dependency from ABSENT UserPrivileges:{DescID: 106, Name: admin}
+        │       │     rule: "non-data dependents removed before descriptor"
+        │       │
+        │       ├── • Precedence dependency from ABSENT UserPrivileges:{DescID: 106, Name: root}
+        │       │     rule: "non-data dependents removed before descriptor"
+        │       │
+        │       ├── • PreviousStagePrecedence dependency from DROPPED Schema:{DescID: 106}
+        │       │     rule: "descriptor dropped in transaction before removal"
+        │       │
+        │       └── • Precedence dependency from ABSENT SchemaParent:{DescID: 106, ReferencedDescID: 104}
+        │             rule: "non-data dependents removed before descriptor"
         │
         └── • 4 Mutation operations
             │
