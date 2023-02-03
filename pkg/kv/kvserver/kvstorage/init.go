@@ -333,10 +333,11 @@ func (m ReplicaMap) getOrMake(rangeID roachpb.RangeID) Replica {
 	return ent
 }
 
-func (m ReplicaMap) setReplicaID(rangeID roachpb.RangeID, replicaID roachpb.ReplicaID) {
+func (m ReplicaMap) setReplicaID(rangeID roachpb.RangeID, replicaID roachpb.ReplicaID) Replica {
 	ent := m.getOrMake(rangeID)
 	ent.ReplicaID = replicaID
 	m[rangeID] = ent
+	return ent
 }
 
 func (m ReplicaMap) setHardState(rangeID roachpb.RangeID, hs raftpb.HardState) {
@@ -380,15 +381,6 @@ func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) (ReplicaM
 					return errors.AssertionFailedf("overlapping descriptors %s and %s", lastDesc, desc)
 				}
 				lastDesc = desc
-
-				// INVARIANT: a Replica's RangeDescriptor always contains the local Store,
-				// i.e. a Store is a member of all of its local Replicas.
-				repDesc, found := desc.GetReplicaDescriptor(ident.StoreID)
-				if !found {
-					return errors.AssertionFailedf(
-						"RangeDescriptor does not contain local s%d: %s",
-						ident.StoreID, desc)
-				}
 
 				if err := s.setDesc(desc.RangeID, desc); err != nil {
 					return err
@@ -445,6 +437,8 @@ func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) (ReplicaM
 	for _, repl := range s.Sorted() {
 		var descReplicaID roachpb.ReplicaID
 		if repl.Desc != nil {
+			// INVARIANT: a Replica's RangeDescriptor always contains the local Store,
+			// i.e. a Store is a member of all of its local initialized Replicas.
 			replDesc, found := repl.Desc.GetReplicaDescriptor(ident.StoreID)
 			if !found {
 				return nil, errors.AssertionFailedf("s%d not found in %s", ident.StoreID.String(), repl.Desc)
@@ -469,8 +463,8 @@ func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) (ReplicaM
 			if err := logstore.NewStateLoader(repl.RangeID).SetRaftReplicaID(ctx, eng, descReplicaID); err != nil {
 				return nil, errors.Wrapf(err, "backfilling ReplicaID for r%d", repl.RangeID)
 			}
-			s.setReplicaID(repl.RangeID, descReplicaID)
-			log.Eventf(ctx, "backfilled replicaID for initialized replica %s", s.getOrMake(repl.RangeID).ID())
+			repl = s.setReplicaID(repl.RangeID, descReplicaID) // set ReplicaID and reload
+			log.Eventf(ctx, "backfilled replicaID for initialized replica %s", repl.ID())
 		} else {
 			// We found an uninitialized replica that did not have a persisted
 			// ReplicaID. We can't determine the ReplicaID now, so we migrate by
