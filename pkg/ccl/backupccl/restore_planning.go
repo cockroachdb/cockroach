@@ -1462,9 +1462,7 @@ func doRestorePlan(
 	}()
 
 	ioConf := baseStores[0].ExternalIOConf()
-	kmsEnv := backupencryption.MakeBackupKMSEnv(
-		p.ExecCfg().Settings, &ioConf, p.ExecCfg().InternalDB, p.User(),
-	)
+	kmsEnv := backupencryption.MakeBackupKMSEnv(p.ExecCfg().Settings, &ioConf, p.ExecCfg().InternalDB, p.User(), p.ExecCfg().ExternalConnectionTestingKnobs, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI)
 
 	var encryption *jobspb.BackupEncryptionOptions
 	if restoreStmt.Options.EncryptionPassphrase != nil {

@@ -233,8 +233,7 @@ func makeBackupMetadata(
 
 	execCfg := flowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig)
 
-	kmsEnv := backupencryption.MakeBackupKMSEnv(execCfg.Settings, &execCfg.ExternalIODirConfig,
-		execCfg.InternalDB, spec.User())
+	kmsEnv := backupencryption.MakeBackupKMSEnv(execCfg.Settings, &execCfg.ExternalIODirConfig, execCfg.InternalDB, spec.User(), execCfg.ExternalConnectionTestingKnobs, execCfg.DistSQLSrv.ExternalStorageFromURI)
 
 	backupManifests, _, err := backupinfo.LoadBackupManifestsAtTime(ctx, nil, spec.URIs,
 		spec.User(), execCfg.DistSQLSrv.ExternalStorageFromURI, spec.Encryption, &kmsEnv, spec.EndTime)

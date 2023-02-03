@@ -11,6 +11,7 @@ go_library(
         "//pkg/ccl/backupccl/backupbase",
         "//pkg/ccl/storageccl",
         "//pkg/cloud",
+        "//pkg/cloud/externalconn",
         "//pkg/jobs/jobspb",
         "//pkg/security/username",
         "//pkg/settings/cluster",

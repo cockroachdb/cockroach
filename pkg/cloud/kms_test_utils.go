@@ -52,6 +52,17 @@ func (e *TestKMSEnv) User() username.SQLUsername {
 	return e.Username
 }
 
+// ExternalConnTestingKnobs returns the testing knobs for external connections.
+func (e *TestKMSEnv) ExternalConnTestingKnobs() ExternalConnTestingKnobs {
+	return nil
+}
+
+// ExternalStorageFromURI returns a function for getting the external storage from
+// a uri.
+func (e *TestKMSEnv) ExternalStorageFromURI() ExternalStorageFromURIFactory {
+	return nil
+}
+
 // KMSEncryptDecrypt is the method used to test if the given KMS can
 // correctly encrypt and decrypt a string
 func KMSEncryptDecrypt(t *testing.T, kmsURI string, env KMSEnv) {
@@ -87,4 +98,13 @@ func CheckNoKMSAccess(t *testing.T, kmsURI string, env KMSEnv) {
 	}
 
 	require.Regexp(t, "(PermissionDenied|AccessDenied|PERMISSION_DENIED)", err)
+}
+
+// ExternalConnTestingKnobs is the interface for externalconn.TestingKnobs.
+type ExternalConnTestingKnobs interface {
+	// GetSkipCheckingExternalStorageConnection returns the
+	// SkipCheckingExternalStorageConnection function.
+	GetSkipCheckingExternalStorageConnection() func() bool
+	// GetSkipCheckingKMSConnection returns the SkipCheckingKMSConnection function.
+	GetSkipCheckingKMSConnection() func() bool
 }

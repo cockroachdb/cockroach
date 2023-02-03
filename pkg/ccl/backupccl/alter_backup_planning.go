@@ -149,9 +149,7 @@ func doAlterBackupPlan(
 	}
 
 	ioConf := baseStore.ExternalIOConf()
-	kmsEnv := backupencryption.MakeBackupKMSEnv(
-		baseStore.Settings(), &ioConf, p.ExecCfg().InternalDB, p.User(),
-	)
+	kmsEnv := backupencryption.MakeBackupKMSEnv(baseStore.Settings(), &ioConf, p.ExecCfg().InternalDB, p.User(), p.ExecCfg().ExternalConnectionTestingKnobs, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI)
 
 	// Check that at least one of the old keys has been used to encrypt the backup in the past.
 	// Use the first one that works to decrypt the ENCRYPTION-INFO file(s).

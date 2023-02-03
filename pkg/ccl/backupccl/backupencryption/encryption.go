@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -58,18 +59,28 @@ type BackupKMSEnv struct {
 	DB isql.DB
 	// Username is the use that applies to the BackupKMSEnv.
 	Username username.SQLUsername
+	// ExternalConnectionTestingKnobs is used for testing.
+	ExternalConnectionTestingKnobs cloud.ExternalConnTestingKnobs
+	ExternalStorageFromURIFunc     cloud.ExternalStorageFromURIFactory
 }
 
 // MakeBackupKMSEnv returns an instance of `BackupKMSEnv` that defines the
 // environment in which KMS is configured and used.
 func MakeBackupKMSEnv(
-	settings *cluster.Settings, conf *base.ExternalIODirConfig, db isql.DB, user username.SQLUsername,
+	settings *cluster.Settings,
+	conf *base.ExternalIODirConfig,
+	db isql.DB,
+	user username.SQLUsername,
+	externalConnTestingKnobs *externalconn.TestingKnobs,
+	externalStorageFromURIFunc cloud.ExternalStorageFromURIFactory,
 ) BackupKMSEnv {
 	return BackupKMSEnv{
-		Settings: settings,
-		Conf:     conf,
-		DB:       db,
-		Username: user,
+		Settings:                       settings,
+		Conf:                           conf,
+		DB:                             db,
+		Username:                       user,
+		ExternalConnectionTestingKnobs: externalConnTestingKnobs,
+		ExternalStorageFromURIFunc:     externalStorageFromURIFunc,
 	}
 }
 
@@ -93,6 +104,17 @@ func (p *BackupKMSEnv) DBHandle() isql.DB {
 // User returns the user associated with the KMSEnv.
 func (p *BackupKMSEnv) User() username.SQLUsername {
 	return p.Username
+}
+
+// ExternalConnTestingKnobs returns the testing knobs for external connections.
+func (p *BackupKMSEnv) ExternalConnTestingKnobs() cloud.ExternalConnTestingKnobs {
+	return p.ExternalConnectionTestingKnobs
+}
+
+// ExternalStorageFromURI returns a function for getting the external storage from
+// a uri.
+func (p *BackupKMSEnv) ExternalStorageFromURI() cloud.ExternalStorageFromURIFactory {
+	return p.ExternalStorageFromURIFunc
 }
 
 type (

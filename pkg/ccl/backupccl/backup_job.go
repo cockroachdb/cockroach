@@ -140,12 +140,7 @@ func backup(
 	var lastCheckpoint time.Time
 
 	var completedSpans, completedIntroducedSpans []roachpb.Span
-	kmsEnv := backupencryption.MakeBackupKMSEnv(
-		execCtx.ExecCfg().Settings,
-		&execCtx.ExecCfg().ExternalIODirConfig,
-		execCtx.ExecCfg().InternalDB,
-		execCtx.User(),
-	)
+	kmsEnv := backupencryption.MakeBackupKMSEnv(execCtx.ExecCfg().Settings, &execCtx.ExecCfg().ExternalIODirConfig, execCtx.ExecCfg().InternalDB, execCtx.User(), execCtx.ExecCfg().ExternalConnectionTestingKnobs, execCtx.ExecCfg().DistSQLSrv.ExternalStorageFromURI)
 	// TODO(benesch): verify these files, rather than accepting them as truth
 	// blindly.
 	// No concurrency yet, so these assignments are safe.
@@ -450,12 +445,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	// The span is finished by the registry executing the job.
 	details := b.job.Details().(jobspb.BackupDetails)
 	p := execCtx.(sql.JobExecContext)
-	kmsEnv := backupencryption.MakeBackupKMSEnv(
-		p.ExecCfg().Settings,
-		&p.ExecCfg().ExternalIODirConfig,
-		p.ExecCfg().InternalDB,
-		p.User(),
-	)
+	kmsEnv := backupencryption.MakeBackupKMSEnv(p.ExecCfg().Settings, &p.ExecCfg().ExternalIODirConfig, p.ExecCfg().InternalDB, p.User(), p.ExecCfg().ExternalConnectionTestingKnobs, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI)
 
 	// Resolve the backup destination. We can skip this step if we
 	// have already resolved and persisted the destination either
@@ -852,12 +842,7 @@ func getBackupDetailAndManifest(
 ) (jobspb.BackupDetails, backuppb.BackupManifest, error) {
 	makeCloudStorage := execCfg.DistSQLSrv.ExternalStorageFromURI
 
-	kmsEnv := backupencryption.MakeBackupKMSEnv(
-		execCfg.Settings,
-		&execCfg.ExternalIODirConfig,
-		execCfg.InternalDB,
-		user,
-	)
+	kmsEnv := backupencryption.MakeBackupKMSEnv(execCfg.Settings, &execCfg.ExternalIODirConfig, execCfg.InternalDB, user, execCfg.ExternalConnectionTestingKnobs, execCfg.DistSQLSrv.ExternalStorageFromURI)
 
 	mem := execCfg.RootMemoryMonitor.MakeBoundAccount()
 	defer mem.Close(ctx)

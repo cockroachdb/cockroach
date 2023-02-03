@@ -13,17 +13,15 @@ package gcp
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/utils"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/errors"
 )
 
-func validateGCPKMSConnectionURI(
-	ctx context.Context, execCfg interface{}, user username.SQLUsername, uri string,
-) error {
-	if err := utils.CheckKMSConnection(ctx, execCfg, user, uri); err != nil {
+func validateGCPKMSConnectionURI(ctx context.Context, env cloud.KMSEnv, uri string) error {
+	if err := utils.CheckKMSConnection(ctx, env, uri); err != nil {
 		return errors.Wrap(err, "failed to create GCP KMS external connection")
 	}
 

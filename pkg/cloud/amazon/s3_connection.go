@@ -13,17 +13,15 @@ package amazon
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/utils"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/errors"
 )
 
-func validateS3ConnectionURI(
-	ctx context.Context, execCfg interface{}, user username.SQLUsername, uri string,
-) error {
-	if err := utils.CheckExternalStorageConnection(ctx, execCfg, user, uri); err != nil {
+func validateS3ConnectionURI(ctx context.Context, env cloud.KMSEnv, uri string) error {
+	if err := utils.CheckExternalStorageConnection(ctx, env, uri); err != nil {
 		return errors.Wrap(err, "failed to create s3 external connection")
 	}
 

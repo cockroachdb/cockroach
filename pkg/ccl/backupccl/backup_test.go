@@ -4358,10 +4358,12 @@ func TestRegionalKMSEncryptedBackup(t *testing.T) {
 }
 
 type testKMSEnv struct {
-	settings         *cluster.Settings
-	externalIOConfig *base.ExternalIODirConfig
-	db               isql.DB
-	user             username.SQLUsername
+	settings                       *cluster.Settings
+	externalIOConfig               *base.ExternalIODirConfig
+	db                             isql.DB
+	user                           username.SQLUsername
+	externalConnectionTestingKnobs cloud.ExternalConnTestingKnobs
+	externalStorageFromURIFunc     cloud.ExternalStorageFromURIFactory
 }
 
 var _ cloud.KMSEnv = &testKMSEnv{}
@@ -4380,6 +4382,14 @@ func (e *testKMSEnv) DBHandle() isql.DB {
 
 func (e *testKMSEnv) User() username.SQLUsername {
 	return e.user
+}
+
+func (e *testKMSEnv) ExternalConnTestingKnobs() cloud.ExternalConnTestingKnobs {
+	return e.externalConnectionTestingKnobs
+}
+
+func (p *testKMSEnv) ExternalStorageFromURI() cloud.ExternalStorageFromURIFactory {
+	return p.externalStorageFromURIFunc
 }
 
 type testKMS struct {
@@ -4492,10 +4502,12 @@ func TestValidateKMSURIsAgainstFullBackup(t *testing.T) {
 		}
 
 		kmsEnv := &testKMSEnv{
-			settings:         cluster.NoSettings,
-			externalIOConfig: &base.ExternalIODirConfig{},
-			db:               nil,
-			user:             username.RootUserName(),
+			settings:                       cluster.NoSettings,
+			externalIOConfig:               &base.ExternalIODirConfig{},
+			db:                             nil,
+			user:                           username.RootUserName(),
+			externalConnectionTestingKnobs: nil,
+			externalStorageFromURIFunc:     nil,
 		}
 		kmsInfo, err := backupencryption.ValidateKMSURIsAgainstFullBackup(
 			ctx, tc.incrementalBackupURIs, masterKeyIDToDataKey, kmsEnv)
@@ -5832,10 +5844,12 @@ func TestBackupRestoreCorruptedStatsIgnored(t *testing.T) {
 		Statistics: []*stats.TableStatisticProto{{TableID: descpb.ID(tableID + 1), Name: "notbank"}},
 	}
 	kmsEnv := &testKMSEnv{
-		settings:         execCfg.Settings,
-		externalIOConfig: &execCfg.ExternalIODirConfig,
-		db:               execCfg.InternalDB,
-		user:             username.RootUserName(),
+		settings:                       execCfg.Settings,
+		externalIOConfig:               &execCfg.ExternalIODirConfig,
+		db:                             execCfg.InternalDB,
+		user:                           username.RootUserName(),
+		externalConnectionTestingKnobs: execCfg.ExternalConnectionTestingKnobs,
+		externalStorageFromURIFunc:     execCfg.DistSQLSrv.ExternalStorageFromURI,
 	}
 	require.NoError(t, backupinfo.WriteTableStatistics(ctx, store, nil, /* encryption */
 		kmsEnv, &statsTable))
@@ -8218,10 +8232,12 @@ func TestReadBackupManifestMemoryMonitoring(t *testing.T) {
 		desc.Files = append(desc.Files, backuppb.BackupManifest_File{Path: fmt.Sprintf("%d-file-%d", i, i)})
 	}
 	kmsEnv := testKMSEnv{
-		settings:         st,
-		externalIOConfig: &base.ExternalIODirConfig{},
-		db:               nil,
-		user:             username.RootUserName(),
+		settings:                       st,
+		externalIOConfig:               &base.ExternalIODirConfig{},
+		db:                             nil,
+		user:                           username.RootUserName(),
+		externalConnectionTestingKnobs: nil,
+		externalStorageFromURIFunc:     nil,
 	}
 	require.NoError(t, backupinfo.WriteBackupManifest(ctx, storage, "testmanifest", encOpts,
 		&kmsEnv, desc))

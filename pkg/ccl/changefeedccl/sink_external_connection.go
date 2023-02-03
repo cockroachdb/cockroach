@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/errors"
@@ -66,30 +65,32 @@ func makeExternalConnectionSink(
 }
 
 func validateExternalConnectionSinkURI(
-	ctx context.Context, execCfg interface{}, user username.SQLUsername, uri string,
+	ctx context.Context, env externalconn.ExternalConnEnv, uri string,
 ) error {
 
-	serverCfg := execinfra.ServerConfig{ExternalStorageFromURI: func(ctx context.Context, uri string,
+	serverCfg := &execinfra.ServerConfig{ExternalStorageFromURI: func(ctx context.Context, uri string,
 		user username.SQLUsername, opts ...cloud.ExternalStorageOption) (cloud.ExternalStorage, error) {
 		return nil, nil
 	}}
 
 	// Pass through the server config, except for the WrapSink testing knob since that often assumes it's
 	// inside a job.
-	if actualExecCfg, ok := execCfg.(*sql.ExecutorConfig); ok {
-		serverCfg = actualExecCfg.DistSQLSrv.ServerConfig
-		if knobs, ok := serverCfg.TestingKnobs.Changefeed.(*TestingKnobs); ok && knobs.WrapSink != nil {
-			wrapSink := knobs.WrapSink
-			knobs.WrapSink = nil
-			defer func() { knobs.WrapSink = wrapSink }()
-		}
+
+	if env.ServerCfg != nil {
+		serverCfg = env.ServerCfg
+	}
+
+	if knobs, ok := serverCfg.TestingKnobs.Changefeed.(*TestingKnobs); ok && knobs.WrapSink != nil {
+		wrapSink := knobs.WrapSink
+		knobs.WrapSink = nil
+		defer func() { knobs.WrapSink = wrapSink }()
 	}
 
 	// Validate the URI by creating a canary sink.
 	//
 	// TODO(adityamaru): When we add `CREATE EXTERNAL CONNECTION ... WITH` support
 	// to accept JSONConfig we should validate that here too.
-	_, err := getSink(ctx, &serverCfg, jobspb.ChangefeedDetails{SinkURI: uri}, nil, user,
+	_, err := getSink(ctx, serverCfg, jobspb.ChangefeedDetails{SinkURI: uri}, nil, env.User(),
 		jobspb.JobID(0), nil)
 	if err != nil {
 		return errors.Wrap(err, "invalid changefeed sink URI")
@@ -121,7 +122,7 @@ func init() {
 			externalconn.SimpleURIFactory,
 		)
 
-		externalconn.RegisterNamedValidation(
+		externalconn.RegisterNamedValidationForSink(
 			scheme,
 			`changefeed`,
 			validateExternalConnectionSinkURI,

@@ -102,8 +102,7 @@ func checkMetadata(
 
 	srv := tc.Servers[0]
 	execCfg := srv.ExecutorConfig().(sql.ExecutorConfig)
-	kmsEnv := backupencryption.MakeBackupKMSEnv(srv.ClusterSettings(), &base.ExternalIODirConfig{},
-		execCfg.InternalDB, username.RootUserName())
+	kmsEnv := backupencryption.MakeBackupKMSEnv(srv.ClusterSettings(), &base.ExternalIODirConfig{}, execCfg.InternalDB, username.RootUserName(), execCfg.ExternalConnectionTestingKnobs, execCfg.DistSQLSrv.ExternalStorageFromURI)
 	bm, err := backupinfo.NewBackupMetadata(ctx, store, backupinfo.MetadataSSTName,
 		nil /* encryption */, &kmsEnv)
 	if err != nil {

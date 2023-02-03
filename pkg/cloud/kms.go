@@ -43,6 +43,8 @@ type KMSEnv interface {
 	KMSConfig() *base.ExternalIODirConfig
 	DBHandle() isql.DB
 	User() username.SQLUsername
+	ExternalConnTestingKnobs() ExternalConnTestingKnobs
+	ExternalStorageFromURI() ExternalStorageFromURIFactory
 }
 
 // KMSFromURIFactory describes a factory function for KMS given a URI.

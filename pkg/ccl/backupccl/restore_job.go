@@ -1563,12 +1563,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		return err
 	}
 
-	kmsEnv := backupencryption.MakeBackupKMSEnv(
-		p.ExecCfg().Settings,
-		&p.ExecCfg().ExternalIODirConfig,
-		p.ExecCfg().InternalDB,
-		p.User(),
-	)
+	kmsEnv := backupencryption.MakeBackupKMSEnv(p.ExecCfg().Settings, &p.ExecCfg().ExternalIODirConfig, p.ExecCfg().InternalDB, p.User(), p.ExecCfg().ExternalConnectionTestingKnobs, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI)
 	backupManifests, latestBackupManifest, sqlDescs, memSize, err := loadBackupSQLDescs(
 		ctx, &mem, p, details, details.Encryption, &kmsEnv,
 	)
