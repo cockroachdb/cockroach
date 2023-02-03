@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/grpcutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -29,6 +30,8 @@ import (
 	"github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // testStructuredImpl is a testing implementation of Structured event.
@@ -46,6 +49,10 @@ func newTestStructured(s string) *testStructuredImpl {
 	return &testStructuredImpl{
 		&types.StringValue{Value: s},
 	}
+}
+
+func testFuncA(ctx context.Context, f func(context.Context) error) error {
+	return f(ctx)
 }
 
 // TestGRPCInterceptors verifies that the streaming and unary tracing
@@ -113,12 +120,33 @@ func TestGRPCInterceptors(t *testing.T) {
 		// expSpanName is the expected name of the RPC spans (client-side and
 		// server-side). If not specified, the test's name is used.
 		expSpanName string
-		do          func(context.Context, grpcutils.GRPCTestClient) (*types.Any, error)
+		// expError is the error that do is expected to return on failure.
+		expError string
+		do       func(context.Context, grpcutils.GRPCTestClient) (*types.Any, error)
 	}{
 		{
 			name: "UnaryUnary",
 			do: func(ctx context.Context, c grpcutils.GRPCTestClient) (*types.Any, error) {
 				return c.UnaryUnary(ctx, unusedAny)
+			},
+		},
+		{
+			name:     "UnaryUnary_ContextTimeout_DeadlineExceeded",
+			expError: "testFuncA",
+			do: func(ctx context.Context, c grpcutils.GRPCTestClient) (*types.Any, error) {
+				err := contextutil.RunWithTimeout(ctx, "foo", 1, func(ctx context.Context) error {
+					return testFuncA(ctx, func(ctx context.Context) error {
+						<-ctx.Done()
+						_, err := c.UnaryUnary(ctx, unusedAny)
+						require.Error(t, err)
+						statusError := status.Convert(err)
+						// Context.Err() must return context.DeadlineExceeded inside gRPC to
+						// correctly return codes.DeadlineExceeded.
+						require.Equal(t, codes.DeadlineExceeded, statusError.Code())
+						return err
+					})
+				})
+				return nil, err
 			},
 		},
 		{
@@ -146,6 +174,25 @@ func TestGRPCInterceptors(t *testing.T) {
 					}
 				}
 				return firstResponse, nil
+			},
+		},
+		{
+			name:     "UnaryStream_ContextTimeout_DeadlineExceeded",
+			expError: "testFuncA",
+			do: func(ctx context.Context, c grpcutils.GRPCTestClient) (*types.Any, error) {
+				err := contextutil.RunWithTimeout(ctx, "foo", 1, func(ctx context.Context) error {
+					return testFuncA(ctx, func(ctx context.Context) error {
+						<-ctx.Done()
+						_, err := c.UnaryStream(ctx, unusedAny)
+						require.Error(t, err)
+						statusError := status.Convert(err)
+						// Context.Err() must return context.DeadlineExceeded inside gRPC to
+						// correctly return codes.DeadlineExceeded.
+						require.Equal(t, codes.DeadlineExceeded, statusError.Code())
+						return err
+					})
+				})
+				return nil, err
 			},
 		},
 		{
@@ -183,6 +230,25 @@ func TestGRPCInterceptors(t *testing.T) {
 			},
 		},
 		{
+			name:     "StreamUnary_ContextTimeout_DeadlineExceeded",
+			expError: "testFuncA",
+			do: func(ctx context.Context, c grpcutils.GRPCTestClient) (*types.Any, error) {
+				err := contextutil.RunWithTimeout(ctx, "foo", 1, func(ctx context.Context) error {
+					return testFuncA(ctx, func(ctx context.Context) error {
+						<-ctx.Done()
+						_, err := c.StreamUnary(ctx)
+						require.Error(t, err)
+						statusError := status.Convert(err)
+						// Context.Err() must return context.DeadlineExceeded inside gRPC to
+						// correctly return codes.DeadlineExceeded.
+						require.Equal(t, codes.DeadlineExceeded, statusError.Code())
+						return err
+					})
+				})
+				return nil, err
+			},
+		},
+		{
 			name: "StreamStream",
 			do: func(ctx context.Context, c grpcutils.GRPCTestClient) (*types.Any, error) {
 				sc, err := c.StreamStream(ctx)
@@ -210,6 +276,25 @@ func TestGRPCInterceptors(t *testing.T) {
 					}
 				}
 				return firstResponse, nil
+			},
+		},
+		{
+			name:     "StreamStream_ContextTimeout_DeadlineExceeded",
+			expError: "testFuncA",
+			do: func(ctx context.Context, c grpcutils.GRPCTestClient) (*types.Any, error) {
+				err := contextutil.RunWithTimeout(ctx, "foo", 1, func(ctx context.Context) error {
+					return testFuncA(ctx, func(ctx context.Context) error {
+						<-ctx.Done()
+						_, err := c.StreamStream(ctx)
+						require.Error(t, err)
+						statusError := status.Convert(err)
+						// Context.Err() must return context.DeadlineExceeded inside gRPC to
+						// correctly return codes.DeadlineExceeded.
+						require.Equal(t, codes.DeadlineExceeded, statusError.Code())
+						return err
+					})
+				})
+				return nil, err
 			},
 		},
 	} {
@@ -247,63 +332,70 @@ func TestGRPCInterceptors(t *testing.T) {
 
 			ctx, sp := tr.StartSpanCtx(bgCtx, "root", tracing.WithRecording(tracingpb.RecordingVerbose))
 			recAny, err := tc.do(ctx, c)
-			require.NoError(t, err)
-			var rec tracingpb.RecordedSpan
-			require.NoError(t, types.UnmarshalAny(recAny, &rec))
-			require.Len(t, rec.StructuredRecords, 1)
-			sp.ImportRemoteRecording([]tracingpb.RecordedSpan{rec})
-			var n int
-			finalRecs := sp.FinishAndGetRecording(tracingpb.RecordingVerbose)
-			for i := range finalRecs {
-				rec := &finalRecs[i]
-				n += len(rec.StructuredRecords)
-				// Remove all of the _unfinished tags. These crop up because
-				// in this test we are pulling the recorder in the handler impl,
-				// but the span is only closed in the interceptor. Additionally,
-				// this differs between the streaming and unary interceptor, and
-				// it's not worth having to have a separate expectation for each.
-				// Note that we check that we're not leaking spans at the end of
-				// the test.
-				anonymousTagGroup := rec.FindTagGroup(tracingpb.AnonymousTagGroupName)
-				if anonymousTagGroup == nil {
-					continue
-				}
-
-				filteredAnonymousTagGroup := make([]tracingpb.Tag, 0)
-				for _, tag := range anonymousTagGroup.Tags {
-					if tag.Key == "_unfinished" {
+			expError := tc.expError
+			if expError == "" {
+				require.NoError(t, err)
+				var rec tracingpb.RecordedSpan
+				require.NoError(t, types.UnmarshalAny(recAny, &rec))
+				require.Len(t, rec.StructuredRecords, 1)
+				sp.ImportRemoteRecording([]tracingpb.RecordedSpan{rec})
+				var n int
+				finalRecs := sp.FinishAndGetRecording(tracingpb.RecordingVerbose)
+				for i := range finalRecs {
+					rec := &finalRecs[i]
+					n += len(rec.StructuredRecords)
+					// Remove all of the _unfinished tags. These crop up because
+					// in this test we are pulling the recorder in the handler impl,
+					// but the span is only closed in the interceptor. Additionally,
+					// this differs between the streaming and unary interceptor, and
+					// it's not worth having to have a separate expectation for each.
+					// Note that we check that we're not leaking spans at the end of
+					// the test.
+					anonymousTagGroup := rec.FindTagGroup(tracingpb.AnonymousTagGroupName)
+					if anonymousTagGroup == nil {
 						continue
 					}
-					if tag.Key == "_verbose" {
-						continue
-					}
-					filteredAnonymousTagGroup = append(filteredAnonymousTagGroup, tag)
-				}
-				anonymousTagGroup.Tags = filteredAnonymousTagGroup
-			}
-			require.Equal(t, 1, n)
 
-			expSpanName := tc.expSpanName
-			if expSpanName == "" {
-				expSpanName = tc.name
-			}
-			exp := fmt.Sprintf(`
+					filteredAnonymousTagGroup := make([]tracingpb.Tag, 0)
+					for _, tag := range anonymousTagGroup.Tags {
+						if tag.Key == "_unfinished" {
+							continue
+						}
+						if tag.Key == "_verbose" {
+							continue
+						}
+						filteredAnonymousTagGroup = append(filteredAnonymousTagGroup, tag)
+					}
+					anonymousTagGroup.Tags = filteredAnonymousTagGroup
+				}
+				require.Equal(t, 1, n)
+
+				expSpanName := tc.expSpanName
+				if expSpanName == "" {
+					expSpanName = tc.name
+				}
+				exp := fmt.Sprintf(`
 				span: root
 					span: /cockroach.testutils.grpcutils.GRPCTest/%[1]s
 						tags: span.kind=client
 					span: /cockroach.testutils.grpcutils.GRPCTest/%[1]s
 						tags: span.kind=server
 						event: structured=magic-value`, expSpanName)
-			require.NoError(t, tracing.CheckRecordedSpans(finalRecs, exp))
-			// Check that all the RPC spans (client-side and server-side) have been
-			// closed. SucceedsSoon because the closing of the span is async (although
-			// immediate) in the ctx cancellation subtest.
-			testutils.SucceedsSoon(t, func() error {
-				return tr.VisitSpans(func(sp tracing.RegistrySpan) error {
-					rec := sp.GetFullRecording(tracingpb.RecordingVerbose).Root
-					return errors.Newf("leaked span: %s %s", rec.Operation, rec.TagGroups)
+				require.NoError(t, tracing.CheckRecordedSpans(finalRecs, exp))
+				// Check that all the RPC spans (client-side and server-side) have been
+				// closed. SucceedsSoon because the closing of the span is async (although
+				// immediate) in the ctx cancellation subtest.
+				testutils.SucceedsSoon(t, func() error {
+					return tr.VisitSpans(func(sp tracing.RegistrySpan) error {
+						rec := sp.GetFullRecording(tracingpb.RecordingVerbose).Root
+						return errors.Newf("leaked span: %s %s", rec.Operation, rec.TagGroups)
+					})
 				})
-			})
+			} else {
+				require.Error(t, err)
+				stacktrace := fmt.Sprintf("%+v", err)
+				require.Contains(t, stacktrace, expError)
+			}
 		})
 	}
 }

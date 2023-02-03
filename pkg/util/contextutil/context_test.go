@@ -80,7 +80,7 @@ func testFuncB(ctx context.Context) error {
 	return ctx.Err()
 }
 
-func TestRunWithTimeoutCtxWithStacktrace(t *testing.T) {
+func TestRunWithTimeoutContextWithStacktrace(t *testing.T) {
 	ctx := context.Background()
 	err := RunWithTimeout(ctx, "foo", 1, testFuncA)
 	require.Error(t, err)
