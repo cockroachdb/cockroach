@@ -26,6 +26,7 @@ go_test(
         "//pkg/testutils",
         "//pkg/testutils/grpcutils",
         "//pkg/util",
+        "//pkg/util/contextutil",
         "//pkg/util/leaktest",
         "//pkg/util/stop",
         "//pkg/util/tracing",
@@ -34,6 +35,8 @@ go_test(
         "@com_github_gogo_protobuf//types",
         "@com_github_stretchr_testify//require",
         "@org_golang_google_grpc//:go_default_library",
+        "@org_golang_google_grpc//codes",
+        "@org_golang_google_grpc//status",
     ],
 )
 
