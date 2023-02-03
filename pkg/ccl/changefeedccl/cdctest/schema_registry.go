@@ -44,12 +44,17 @@ func StartTestSchemaRegistry() *SchemaRegistry {
 
 // StartTestSchemaRegistryWithTLS creates and starts schema registry
 // for tests with TLS enabled.
-func StartTestSchemaRegistryWithTLS(certificate *tls.Certificate) (*SchemaRegistry, error) {
+func StartTestSchemaRegistryWithTLS(
+	certificate *tls.Certificate, requireClientCert bool,
+) (*SchemaRegistry, error) {
 	r := makeTestSchemaRegistry()
 	if certificate != nil {
 		r.server.TLS = &tls.Config{
 			Certificates: []tls.Certificate{*certificate},
 		}
+	}
+	if requireClientCert {
+		r.server.TLS.ClientAuth = tls.RequireAnyClientCert
 	}
 	r.server.StartTLS()
 	return r, nil
