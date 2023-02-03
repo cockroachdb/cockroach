@@ -30,7 +30,7 @@ const testingMetricsInterval = 10 * time.Second
 func Example_noWriters() {
 	ctx := context.Background()
 	start := state.TestingStartTime()
-	s := state.LoadConfig(state.ComplexConfig)
+	s := state.LoadConfig(state.ComplexConfig, state.SingleRangeConfig, config.DefaultSimulationSettings())
 	m := metrics.NewTracker(testingMetricsInterval)
 
 	m.Tick(ctx, start, s)
@@ -40,7 +40,7 @@ func Example_noWriters() {
 func Example_tickEmptyState() {
 	ctx := context.Background()
 	start := state.TestingStartTime()
-	s := state.LoadConfig(state.ComplexConfig)
+	s := state.LoadConfig(state.ComplexConfig, state.SingleRangeConfig, config.DefaultSimulationSettings())
 	m := metrics.NewTracker(testingMetricsInterval, metrics.NewClusterMetricsTracker(os.Stdout))
 
 	m.Tick(ctx, start, s)
@@ -52,7 +52,7 @@ func Example_tickEmptyState() {
 func TestTickEmptyState(t *testing.T) {
 	ctx := context.Background()
 	start := state.TestingStartTime()
-	s := state.LoadConfig(state.ComplexConfig)
+	s := state.LoadConfig(state.ComplexConfig, state.SingleRangeConfig, config.DefaultSimulationSettings())
 
 	var buf bytes.Buffer
 	m := metrics.NewTracker(testingMetricsInterval, metrics.NewClusterMetricsTracker(&buf))
@@ -68,7 +68,7 @@ func TestTickEmptyState(t *testing.T) {
 func Example_multipleWriters() {
 	ctx := context.Background()
 	start := state.TestingStartTime()
-	s := state.LoadConfig(state.ComplexConfig)
+	s := state.LoadConfig(state.ComplexConfig, state.SingleRangeConfig, config.DefaultSimulationSettings())
 	m := metrics.NewTracker(testingMetricsInterval, metrics.NewClusterMetricsTracker(os.Stdout, os.Stdout))
 
 	m.Tick(ctx, start, s)
@@ -82,7 +82,7 @@ func Example_multipleWriters() {
 func Example_leaseTransfer() {
 	ctx := context.Background()
 	start := state.TestingStartTime()
-	s := state.LoadConfig(state.ComplexConfig)
+	s := state.LoadConfig(state.ComplexConfig, state.SingleRangeConfig, config.DefaultSimulationSettings())
 	m := metrics.NewTracker(testingMetricsInterval, metrics.NewClusterMetricsTracker(os.Stdout))
 
 	changer := state.NewReplicaChanger()
@@ -102,7 +102,7 @@ func Example_leaseTransfer() {
 func Example_rebalance() {
 	ctx := context.Background()
 	start := state.TestingStartTime()
-	s := state.LoadConfig(state.ComplexConfig)
+	s := state.LoadConfig(state.ComplexConfig, state.SingleRangeConfig, config.DefaultSimulationSettings())
 	m := metrics.NewTracker(testingMetricsInterval, metrics.NewClusterMetricsTracker(os.Stdout))
 
 	// Apply load, to get a replica size greater than 0.
@@ -127,7 +127,7 @@ func Example_workload() {
 	rwg[0] = workload.TestCreateWorkloadGenerator(settings.Seed, settings.StartTime, 10, 10000)
 	m := metrics.NewTracker(testingMetricsInterval, metrics.NewClusterMetricsTracker(os.Stdout))
 
-	s := state.LoadConfig(state.ComplexConfig)
+	s := state.LoadConfig(state.ComplexConfig, state.SingleRangeConfig, settings)
 
 	sim := asim.NewSimulator(duration, rwg, s, settings, m)
 	sim.RunSim(ctx)
