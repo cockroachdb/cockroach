@@ -17,6 +17,7 @@ import { connect } from "react-redux";
 import { actions as indexStatsActions } from "src/store/indexStats/indexStats.reducer";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { actions as nodesActions } from "../store/nodes";
+import { actions as analyticsActions } from "../store/analytics";
 
 const mapStateToProps = (state: AppState, props: RouteComponentProps) => {
   return selectIndexDetails(state, props);
@@ -38,6 +39,12 @@ const mapDispatchToProps = (dispatch: Dispatch): IndexDetailPageActions => ({
       indexStatsActions.reset({
         database,
         table,
+      }),
+    );
+    dispatch(
+      analyticsActions.track({
+        name: "Reset Index Usage",
+        page: "Index Details",
       }),
     );
   },
