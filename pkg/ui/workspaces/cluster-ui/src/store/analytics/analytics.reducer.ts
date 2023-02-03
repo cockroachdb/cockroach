@@ -12,15 +12,62 @@ import { createAction } from "@reduxjs/toolkit";
 import { DOMAIN_NAME } from "../utils";
 
 type Page =
-  | "Statements"
-  | "Statement Details"
+  | "Index Details"
+  | "Jobs"
+  | "Schema Insights"
   | "Sessions"
   | "Sessions Details"
+  | "Statements"
+  | "Statement Details"
+  | "Statement Insight Details"
   | "Transactions"
-  | "Transaction Details";
+  | "Transaction Details"
+  | "Transaction Insight Details"
+  | "Workload Insights - Statement"
+  | "Workload Insights - Transaction";
+
+type BackButtonClick = {
+  name: "Back Clicked";
+  page: Page;
+};
+
+type ColumnsChangeEvent = {
+  name: "Columns Selected change";
+  page: Page;
+  value: string;
+};
+
+type FilterEvent = {
+  name: "Filter Clicked";
+  page: Page;
+  filterName: string;
+  value: string;
+};
+
+type JobTypeEvent = {
+  name: "Job Type Selected";
+  page: Page;
+  value: string;
+};
+
+type ResetStats = {
+  name: "Reset Index Usage" | "Reset Stats";
+  page: Page;
+};
 
 type SearchEvent = {
   name: "Keyword Searched";
+  page: Page;
+};
+
+type SessionActionsClicked = {
+  name: "Session Actions Clicked";
+  page: Page;
+  action: "Cancel Statement" | "Cancel Session";
+};
+
+type SessionClicked = {
+  name: "Session Clicked";
   page: Page;
 };
 
@@ -29,6 +76,11 @@ type SortingEvent = {
   page: Page;
   tableName: string;
   columnName: string;
+};
+
+type StatementClicked = {
+  name: "Statement Clicked";
+  page: Page;
 };
 
 type StatementDiagnosticEvent = {
@@ -43,50 +95,32 @@ type TabChangedEvent = {
   page: Page;
 };
 
-type BackButtonClick = {
-  name: "Back Clicked";
+type TimeScaleChangeEvent = {
+  name: "TimeScale changed";
   page: Page;
-};
-
-type StatementClicked = {
-  name: "Statement Clicked";
-  page: Page;
-};
-
-type SessionClicked = {
-  name: "Session Clicked";
-  page: Page;
-};
-
-type SessionActionsClicked = {
-  name: "Session Actions Clicked";
-  page: Page;
-  action: "Cancel Statement" | "Cancel Session";
-};
-
-type FilterEvent = {
-  name: "Filter Clicked";
-  page: Page;
-  filterName: string;
   value: string;
 };
 
 type AnalyticsEvent =
-  | SortingEvent
-  | StatementDiagnosticEvent
-  | SearchEvent
-  | TabChangedEvent
   | BackButtonClick
+  | ColumnsChangeEvent
   | FilterEvent
-  | StatementClicked
+  | JobTypeEvent
+  | ResetStats
+  | SearchEvent
+  | SessionActionsClicked
   | SessionClicked
-  | SessionActionsClicked;
+  | SortingEvent
+  | StatementClicked
+  | StatementDiagnosticEvent
+  | TabChangedEvent
+  | TimeScaleChangeEvent;
 
 const PREFIX = `${DOMAIN_NAME}/analytics`;
 
 /**
  * actions accept payload with "page" field which specifies the page where
- * action occurs and a value expected expected by specific action.
+ * action occurs and a value expected by specific action.
  */
 export const actions = {
   track: createAction(`${PREFIX}/track`, (event: AnalyticsEvent) => ({
