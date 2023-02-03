@@ -70,7 +70,6 @@ go_library(
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/grpcutil",
         "//pkg/util/hlc",
-        "//pkg/util/intsets",
         "//pkg/util/iterutil",
         "//pkg/util/limit",
         "//pkg/util/log",
