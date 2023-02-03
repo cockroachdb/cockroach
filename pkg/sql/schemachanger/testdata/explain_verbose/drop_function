@@ -331,8 +331,35 @@ EXPLAIN (ddl, verbose) DROP FUNCTION f;
         │   └── • Function:{DescID: 109}
         │       │ DROPPED → ABSENT
         │       │
-        │       └── • PreviousStagePrecedence dependency from DROPPED Function:{DescID: 109}
-        │             rule: "descriptor dropped in transaction before removal"
+        │       ├── • Precedence dependency from ABSENT Owner:{DescID: 109}
+        │       │     rule: "non-data dependents removed before descriptor"
+        │       │
+        │       ├── • Precedence dependency from ABSENT UserPrivileges:{DescID: 109, Name: admin}
+        │       │     rule: "non-data dependents removed before descriptor"
+        │       │
+        │       ├── • Precedence dependency from ABSENT UserPrivileges:{DescID: 109, Name: root}
+        │       │     rule: "non-data dependents removed before descriptor"
+        │       │
+        │       ├── • PreviousStagePrecedence dependency from DROPPED Function:{DescID: 109}
+        │       │     rule: "descriptor dropped in transaction before removal"
+        │       │
+        │       ├── • Precedence dependency from ABSENT ObjectParent:{DescID: 109, ReferencedDescID: 101}
+        │       │     rule: "non-data dependents removed before descriptor"
+        │       │
+        │       ├── • Precedence dependency from ABSENT FunctionName:{DescID: 109}
+        │       │     rule: "non-data dependents removed before descriptor"
+        │       │
+        │       ├── • Precedence dependency from ABSENT FunctionVolatility:{DescID: 109}
+        │       │     rule: "non-data dependents removed before descriptor"
+        │       │
+        │       ├── • Precedence dependency from ABSENT FunctionLeakProof:{DescID: 109}
+        │       │     rule: "non-data dependents removed before descriptor"
+        │       │
+        │       ├── • Precedence dependency from ABSENT FunctionNullInputBehavior:{DescID: 109}
+        │       │     rule: "non-data dependents removed before descriptor"
+        │       │
+        │       └── • Precedence dependency from ABSENT FunctionBody:{DescID: 109}
+        │             rule: "non-data dependents removed before descriptor"
         │
         └── • 8 Mutation operations
             │
