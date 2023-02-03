@@ -3043,3 +3043,24 @@ query I
 SELECT count(descriptor) FROM system.descriptor WHERE id = $dropped_fn_id;
 ----
 0
+
+# Regression test for #94146
+statement ok
+CREATE FUNCTION f_94146(i INT2) RETURNS INT STRICT LANGUAGE SQL AS 'SELECT 2';
+CREATE FUNCTION f_94146(i INT4) RETURNS INT STRICT LANGUAGE SQL AS 'SELECT 4';
+CREATE FUNCTION f_94146(i INT8) RETURNS INT STRICT LANGUAGE SQL AS 'SELECT 8';
+
+query I
+SELECT f_94146(1::INT8)
+----
+8
+
+query I
+SELECT f_94146(1::INT4)
+----
+4
+
+query I
+SELECT f_94146(1::INT2)
+----
+2

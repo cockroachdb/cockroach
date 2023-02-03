@@ -1152,7 +1152,7 @@ func (expr *FuncExpr) TypeCheck(
 
 	// Get overloads from the most significant schema in search path.
 	favoredOverload, err := getMostSignificantOverload(
-		def.Overloads, s.overloads, s.overloadIdxs, searchPath, expr,
+		def.Overloads, s.overloads, s.overloadIdxs, searchPath, expr, s.typedExprs,
 		func() string { return getFuncSig(expr, s.typedExprs, desired) },
 	)
 	if err != nil {
@@ -3012,6 +3012,7 @@ func getMostSignificantOverload(
 	filter []uint8,
 	searchPath SearchPath,
 	expr *FuncExpr,
+	typedInputExprs []TypedExpr,
 	getFuncSig func() string,
 ) (QualifiedOverload, error) {
 	ambiguousError := func() error {
@@ -3026,9 +3027,29 @@ func getMostSignificantOverload(
 	}
 	checkAmbiguity := func(oImpls []uint8) (QualifiedOverload, error) {
 		if len(oImpls) != 1 {
-			// Throw ambiguity error if there are more than one candidate overloads from
-			// same schema.
-			return QualifiedOverload{}, ambiguousError()
+			// Since there are ambiguity errors when udf with the same family
+			// parameter types, function signature has to be sorted out
+			// to directly match specific udf function for execution, e2e tests added
+			var expTypes []*types.T
+			for _, exp := range typedInputExprs {
+				expTypes = append(expTypes, exp.ResolvedType())
+			}
+
+			matchIdx := -1
+			for k, idx := range oImpls {
+				candidate := overloads[idx]
+				srcParams := candidate.params()
+				if srcParams.MatchIdentical(expTypes) {
+					if matchIdx != -1 {
+						// Throw ambiguity error if there are more than one
+						// candidate overloads from same schema.
+						return QualifiedOverload{}, ambiguousError()
+					}
+					matchIdx = k
+				}
+			}
+
+			return qualifiedOverloads[oImpls[matchIdx]], nil
 		}
 		return qualifiedOverloads[oImpls[0]], nil
 	}
