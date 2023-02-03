@@ -575,6 +575,10 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
   to:   [IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 2}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
+- from: [Column:{DescID: 108, ColumnID: 1}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [Column:{DescID: 108, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 108, Name: k, ColumnID: 1}, ABSENT]
   kind: Precedence
@@ -583,6 +587,10 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
   to:   [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
+- from: [Column:{DescID: 108, ColumnID: 2}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [Column:{DescID: 108, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 108, Name: v1, ColumnID: 2}, ABSENT]
   kind: Precedence
@@ -591,6 +599,10 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
   to:   [ColumnType:{DescID: 108, ReferencedTypeIDs: [104 105], ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
+- from: [Column:{DescID: 108, ColumnID: 3}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [Column:{DescID: 108, ColumnID: 3}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 108, Name: v2, ColumnID: 3}, ABSENT]
   kind: Precedence
@@ -599,6 +611,10 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
   to:   [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
+- from: [Column:{DescID: 108, ColumnID: 4294967294}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [Column:{DescID: 108, ColumnID: 4294967294}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
@@ -607,6 +623,10 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
   to:   [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
+- from: [Column:{DescID: 108, ColumnID: 4294967295}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [Column:{DescID: 108, ColumnID: 4294967295}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
@@ -623,22 +643,42 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
   to:   [Column:{DescID: 108, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [ColumnName:{DescID: 108, Name: k, ColumnID: 1}, ABSENT]
   to:   [Column:{DescID: 108, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnName:{DescID: 108, Name: k, ColumnID: 1}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}, ABSENT]
   to:   [Column:{DescID: 108, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [ColumnName:{DescID: 108, Name: v1, ColumnID: 2}, ABSENT]
   to:   [Column:{DescID: 108, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnName:{DescID: 108, Name: v1, ColumnID: 2}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [ColumnName:{DescID: 108, Name: v2, ColumnID: 3}, ABSENT]
   to:   [Column:{DescID: 108, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnName:{DescID: 108, Name: v2, ColumnID: 3}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [ColumnType:{DescID: 107, ReferencedTypeIDs: [104 105], ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   to:   [Column:{DescID: 107, ColumnID: 2}, ABSENT]
   kind: SameStagePrecedence
@@ -647,22 +687,42 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
   to:   [Column:{DescID: 108, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
   to:   [Column:{DescID: 108, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
   to:   [Column:{DescID: 108, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
   to:   [Column:{DescID: 108, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [ColumnType:{DescID: 108, ReferencedTypeIDs: [104 105], ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   to:   [Column:{DescID: 108, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnType:{DescID: 108, ReferencedTypeIDs: [104 105], ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 1}, ABSENT]
   to:   [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, ABSENT]
   kind: Precedence
@@ -751,6 +811,18 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
   to:   [SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
+- from: [Namespace:{DescID: 108, Name: fooview, ReferencedDescID: 100}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ObjectParent:{DescID: 108, ReferencedDescID: 101}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Owner:{DescID: 108}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, ABSENT]
   to:   [Column:{DescID: 107, ColumnID: 2}, ABSENT]
   kind: Precedence
@@ -915,6 +987,14 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
   to:   [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_DELETE_ONLY]
   kind: PreviousStagePrecedence
   rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: WRITE_ONLY->TRANSIENT_DELETE_ONLY
+- from: [UserPrivileges:{DescID: 108, Name: admin}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [UserPrivileges:{DescID: 108, Name: root}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [View:{DescID: 108}, DROPPED]
   to:   [Column:{DescID: 108, ColumnID: 1}, WRITE_ONLY]
   kind: Precedence
@@ -1606,6 +1686,10 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
   to:   [IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 2}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
+- from: [Column:{DescID: 108, ColumnID: 1}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [Column:{DescID: 108, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 108, Name: k, ColumnID: 1}, ABSENT]
   kind: Precedence
@@ -1614,6 +1698,10 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
   to:   [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
+- from: [Column:{DescID: 108, ColumnID: 2}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [Column:{DescID: 108, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 108, Name: v1, ColumnID: 2}, ABSENT]
   kind: Precedence
@@ -1622,6 +1710,10 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
   to:   [ColumnType:{DescID: 108, ReferencedTypeIDs: [104 105], ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
+- from: [Column:{DescID: 108, ColumnID: 3}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [Column:{DescID: 108, ColumnID: 3}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 108, Name: v2, ColumnID: 3}, ABSENT]
   kind: Precedence
@@ -1630,6 +1722,10 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
   to:   [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
+- from: [Column:{DescID: 108, ColumnID: 4294967294}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [Column:{DescID: 108, ColumnID: 4294967294}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
@@ -1638,6 +1734,10 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
   to:   [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
+- from: [Column:{DescID: 108, ColumnID: 4294967295}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [Column:{DescID: 108, ColumnID: 4294967295}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
@@ -1662,22 +1762,42 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
   to:   [Column:{DescID: 108, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [ColumnName:{DescID: 108, Name: k, ColumnID: 1}, ABSENT]
   to:   [Column:{DescID: 108, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnName:{DescID: 108, Name: k, ColumnID: 1}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}, ABSENT]
   to:   [Column:{DescID: 108, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [ColumnName:{DescID: 108, Name: v1, ColumnID: 2}, ABSENT]
   to:   [Column:{DescID: 108, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnName:{DescID: 108, Name: v1, ColumnID: 2}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [ColumnName:{DescID: 108, Name: v2, ColumnID: 3}, ABSENT]
   to:   [Column:{DescID: 108, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnName:{DescID: 108, Name: v2, ColumnID: 3}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [ColumnNotNull:{DescID: 107, ColumnID: 3, IndexID: 0}, ABSENT]
   to:   [Column:{DescID: 107, ColumnID: 3}, ABSENT]
   kind: Precedence
@@ -1702,22 +1822,42 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
   to:   [Column:{DescID: 108, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
   to:   [Column:{DescID: 108, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
   to:   [Column:{DescID: 108, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
   to:   [Column:{DescID: 108, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [ColumnType:{DescID: 108, ReferencedTypeIDs: [104 105], ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   to:   [Column:{DescID: 108, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnType:{DescID: 108, ReferencedTypeIDs: [104 105], ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 1}, ABSENT]
   to:   [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, ABSENT]
   kind: Precedence
@@ -1806,6 +1946,18 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
   to:   [SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
+- from: [Namespace:{DescID: 108, Name: fooview, ReferencedDescID: 100}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ObjectParent:{DescID: 108, ReferencedDescID: 101}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Owner:{DescID: 108}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, ABSENT]
   to:   [Column:{DescID: 107, ColumnID: 3}, ABSENT]
   kind: Precedence
@@ -1974,6 +2126,14 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
   to:   [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_DELETE_ONLY]
   kind: PreviousStagePrecedence
   rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: WRITE_ONLY->TRANSIENT_DELETE_ONLY
+- from: [UserPrivileges:{DescID: 108, Name: admin}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [UserPrivileges:{DescID: 108, Name: root}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [View:{DescID: 108}, DROPPED]
   to:   [Column:{DescID: 108, ColumnID: 1}, WRITE_ONLY]
   kind: Precedence

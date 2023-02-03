@@ -829,6 +829,10 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
 deps
 DROP INDEX idx4 CASCADE
 ----
+- from: [Column:{DescID: 105, ColumnID: 1}, ABSENT]
+  to:   [View:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [Column:{DescID: 105, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 105, Name: count, ColumnID: 1}, ABSENT]
   kind: Precedence
@@ -837,6 +841,10 @@ DROP INDEX idx4 CASCADE
   to:   [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
+- from: [Column:{DescID: 105, ColumnID: 4294967294}, ABSENT]
+  to:   [View:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [Column:{DescID: 105, ColumnID: 4294967294}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 105, Name: tableoid, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
@@ -845,6 +853,10 @@ DROP INDEX idx4 CASCADE
   to:   [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
+- from: [Column:{DescID: 105, ColumnID: 4294967295}, ABSENT]
+  to:   [View:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [Column:{DescID: 105, ColumnID: 4294967295}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 105, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
@@ -857,26 +869,50 @@ DROP INDEX idx4 CASCADE
   to:   [Column:{DescID: 105, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnName:{DescID: 105, Name: count, ColumnID: 1}, ABSENT]
+  to:   [View:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [ColumnName:{DescID: 105, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
   to:   [Column:{DescID: 105, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnName:{DescID: 105, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  to:   [View:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [ColumnName:{DescID: 105, Name: tableoid, ColumnID: 4294967294}, ABSENT]
   to:   [Column:{DescID: 105, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnName:{DescID: 105, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  to:   [View:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   to:   [Column:{DescID: 105, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
+  to:   [View:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
   to:   [Column:{DescID: 105, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
+  to:   [View:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
   to:   [Column:{DescID: 105, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
+  to:   [View:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 8}, ABSENT]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5}, ABSENT]
   kind: Precedence
@@ -889,6 +925,18 @@ DROP INDEX idx4 CASCADE
   to:   [SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
+- from: [Namespace:{DescID: 105, Name: v, ReferencedDescID: 100}, ABSENT]
+  to:   [View:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ObjectParent:{DescID: 105, ReferencedDescID: 101}, ABSENT]
+  to:   [View:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Owner:{DescID: 105}, ABSENT]
+  to:   [View:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5}, ABSENT]
   to:   [IndexData:{DescID: 104, IndexID: 8}, DROPPED]
   kind: Precedence
@@ -925,6 +973,14 @@ DROP INDEX idx4 CASCADE
   to:   [View:{DescID: 105}, ABSENT]
   kind: Precedence
   rule: secondary index should be validated before dependent view can be absent
+- from: [UserPrivileges:{DescID: 105, Name: admin}, ABSENT]
+  to:   [View:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [UserPrivileges:{DescID: 105, Name: root}, ABSENT]
+  to:   [View:{DescID: 105}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [View:{DescID: 105}, ABSENT]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 5}, ABSENT]
   kind: Precedence

@@ -1378,8 +1378,29 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
         │   ├── • Database:{DescID: 104}
         │   │   │ DROPPED → ABSENT
         │   │   │
-        │   │   └── • PreviousStagePrecedence dependency from DROPPED Database:{DescID: 104}
-        │   │         rule: "descriptor dropped in transaction before removal"
+        │   │   ├── • Precedence dependency from ABSENT Namespace:{DescID: 104, Name: multi_region_test_db, ReferencedDescID: 0}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT Owner:{DescID: 104}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT UserPrivileges:{DescID: 104, Name: admin}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT UserPrivileges:{DescID: 104, Name: public}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT UserPrivileges:{DescID: 104, Name: root}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • PreviousStagePrecedence dependency from DROPPED Database:{DescID: 104}
+        │   │   │     rule: "descriptor dropped in transaction before removal"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT DatabaseRoleSetting:{DescID: 104, Name: __placeholder_role_name__}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   └── • Precedence dependency from ABSENT DatabaseRegionConfig:{DescID: 104, ReferencedDescID: 106}
+        │   │         rule: "non-data dependents removed before descriptor"
         │   │
         │   ├── • DatabaseData:{DescID: 104}
         │   │   │ PUBLIC → ABSENT
@@ -1390,26 +1411,149 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
         │   ├── • Schema:{DescID: 105}
         │   │   │ DROPPED → ABSENT
         │   │   │
-        │   │   └── • PreviousStagePrecedence dependency from DROPPED Schema:{DescID: 105}
-        │   │         rule: "descriptor dropped in transaction before removal"
+        │   │   ├── • Precedence dependency from ABSENT Namespace:{DescID: 105, Name: public, ReferencedDescID: 104}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT Owner:{DescID: 105}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT UserPrivileges:{DescID: 105, Name: admin}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT UserPrivileges:{DescID: 105, Name: public}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT UserPrivileges:{DescID: 105, Name: root}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • PreviousStagePrecedence dependency from DROPPED Schema:{DescID: 105}
+        │   │   │     rule: "descriptor dropped in transaction before removal"
+        │   │   │
+        │   │   └── • Precedence dependency from ABSENT SchemaParent:{DescID: 105, ReferencedDescID: 104}
+        │   │         rule: "non-data dependents removed before descriptor"
         │   │
         │   ├── • EnumType:{DescID: 106}
         │   │   │ DROPPED → ABSENT
         │   │   │
-        │   │   └── • PreviousStagePrecedence dependency from DROPPED EnumType:{DescID: 106}
-        │   │         rule: "descriptor dropped in transaction before removal"
+        │   │   ├── • Precedence dependency from ABSENT Namespace:{DescID: 106, Name: crdb_internal_region, ReferencedDescID: 104}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT Owner:{DescID: 106}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT UserPrivileges:{DescID: 106, Name: admin}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT UserPrivileges:{DescID: 106, Name: public}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT UserPrivileges:{DescID: 106, Name: root}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • PreviousStagePrecedence dependency from DROPPED EnumType:{DescID: 106}
+        │   │   │     rule: "descriptor dropped in transaction before removal"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT EnumTypeValue:{DescID: 106, Name: us-east1}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT EnumTypeValue:{DescID: 106, Name: us-east2}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT EnumTypeValue:{DescID: 106, Name: us-east3}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   └── • Precedence dependency from ABSENT ObjectParent:{DescID: 106, ReferencedDescID: 105}
+        │   │         rule: "non-data dependents removed before descriptor"
         │   │
         │   ├── • AliasType:{DescID: 107, ReferencedTypeIDs: [106 107]}
         │   │   │ DROPPED → ABSENT
         │   │   │
-        │   │   └── • PreviousStagePrecedence dependency from DROPPED AliasType:{DescID: 107, ReferencedTypeIDs: [106 107]}
-        │   │         rule: "descriptor dropped in transaction before removal"
+        │   │   ├── • Precedence dependency from ABSENT Namespace:{DescID: 107, Name: _crdb_internal_region, ReferencedDescID: 104}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT Owner:{DescID: 107}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT UserPrivileges:{DescID: 107, Name: admin}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT UserPrivileges:{DescID: 107, Name: public}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT UserPrivileges:{DescID: 107, Name: root}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • PreviousStagePrecedence dependency from DROPPED AliasType:{DescID: 107, ReferencedTypeIDs: [106 107]}
+        │   │   │     rule: "descriptor dropped in transaction before removal"
+        │   │   │
+        │   │   └── • Precedence dependency from ABSENT ObjectParent:{DescID: 107, ReferencedDescID: 105}
+        │   │         rule: "non-data dependents removed before descriptor"
         │   │
         │   ├── • Table:{DescID: 108}
         │   │   │ DROPPED → ABSENT
         │   │   │
-        │   │   └── • PreviousStagePrecedence dependency from DROPPED Table:{DescID: 108}
-        │   │         rule: "descriptor dropped in transaction before removal"
+        │   │   ├── • Precedence dependency from ABSENT Namespace:{DescID: 108, Name: table_regional_by_table, ReferencedDescID: 104}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT Owner:{DescID: 108}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT UserPrivileges:{DescID: 108, Name: admin}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT UserPrivileges:{DescID: 108, Name: root}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • PreviousStagePrecedence dependency from DROPPED Table:{DescID: 108}
+        │   │   │     rule: "descriptor dropped in transaction before removal"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT ObjectParent:{DescID: 108, ReferencedDescID: 105}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT TableLocalitySecondaryRegion:{DescID: 108, ReferencedDescID: 106}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT ColumnFamily:{DescID: 108, Name: primary, ColumnFamilyID: 0}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT Column:{DescID: 108, ColumnID: 1}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 108, Name: a, ColumnID: 1}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT ColumnNotNull:{DescID: 108, ColumnID: 1, IndexID: 0}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT Column:{DescID: 108, ColumnID: 4294967295}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT Column:{DescID: 108, ColumnID: 4294967294}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 108, ColumnID: 1, IndexID: 1}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   └── • Precedence dependency from ABSENT IndexName:{DescID: 108, Name: table_regional_by_table_pkey, IndexID: 1}
+        │   │         rule: "non-data dependents removed before descriptor"
         │   │
         │   ├── • IndexData:{DescID: 108, IndexID: 1}
         │   │   │ PUBLIC → ABSENT
