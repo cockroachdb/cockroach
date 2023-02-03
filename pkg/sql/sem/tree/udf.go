@@ -560,3 +560,16 @@ func ValidateFuncOptions(options FunctionOptions) error {
 
 	return nil
 }
+
+// GetFuncVolatility tries to find a function volatility from the given list of
+// function options. If there is no volatility found, FunctionVolatile is
+// returned as the default.
+func GetFuncVolatility(options FunctionOptions) FunctionVolatility {
+	for _, option := range options {
+		switch t := option.(type) {
+		case FunctionVolatility:
+			return t
+		}
+	}
+	return FunctionVolatile
+}

@@ -133,10 +133,18 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 		panic(err)
 	}
 
+	targetVolatility := tree.GetFuncVolatility(cf.Options)
 	// Validate each statement and collect the dependencies.
 	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
 	for i, stmt := range stmts {
-		stmtScope := b.buildStmt(stmts[i].AST, nil /* desiredTypes */, bodyScope)
+		var stmtScope *scope
+		// We need to disable stable function folding because we want to catch the
+		// volatility of stable functions. If folded, we only get a scalar and lose
+		// the volatility.
+		b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
+			stmtScope = b.buildStmt(stmts[i].AST, nil /* desiredTypes */, bodyScope)
+		})
+		checkStmtVolatility(targetVolatility, stmtScope, stmt.AST)
 
 		// Format the statements with qualified datasource names.
 		formatFuncBodyStmt(fmtCtx, stmt.AST, i > 0 /* newLine */)
@@ -158,6 +166,15 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 		// Reset the tracked dependencies for next statement.
 		b.schemaDeps = nil
 		b.schemaTypeDeps = intsets.Fast{}
+	}
+
+	if targetVolatility == tree.FunctionImmutable && len(deps) > 0 {
+		panic(
+			pgerror.Newf(
+				pgcode.InvalidParameterValue,
+				"referencing relations is not allowed in immutable function",
+			),
+		)
 	}
 
 	// Override the function body so that references are fully qualified.
@@ -269,4 +286,22 @@ func validateReturnType(expected *types.T, cols []scopeColumn) error {
 	}
 
 	return nil
+}
+
+func checkStmtVolatility(
+	expectedVolatility tree.FunctionVolatility, stmtScope *scope, stmt tree.Statement,
+) {
+	switch expectedVolatility {
+	case tree.FunctionImmutable:
+		if stmtScope.expr.Relational().VolatilitySet.HasVolatile() {
+			panic(pgerror.Newf(pgcode.InvalidParameterValue, "volatile statement not allowed in immutable function: %s", stmt.String()))
+		}
+		if stmtScope.expr.Relational().VolatilitySet.HasStable() {
+			panic(pgerror.Newf(pgcode.InvalidParameterValue, "stable statement not allowed in immutable function: %s", stmt.String()))
+		}
+	case tree.FunctionStable:
+		if stmtScope.expr.Relational().VolatilitySet.HasVolatile() {
+			panic(pgerror.Newf(pgcode.InvalidParameterValue, "volatile statement not allowed in stable function: %s", stmt.String()))
+		}
+	}
 }
