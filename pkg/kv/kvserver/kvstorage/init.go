@@ -301,8 +301,7 @@ type Replica struct {
 	ReplicaID roachpb.ReplicaID
 	Desc      *roachpb.RangeDescriptor // nil for uninitialized Replica
 
-	descReplicaID roachpb.ReplicaID // internal to kvstorage
-	hardState     raftpb.HardState  // internal to kvstorage
+	hardState raftpb.HardState // internal to kvstorage, see migration in LoadAndReconcileReplicas
 }
 
 // ID returns the FullReplicaID.
@@ -356,12 +355,6 @@ func (m ReplicaMap) setDesc(rangeID roachpb.RangeID, desc roachpb.RangeDescripto
 	return nil
 }
 
-func (m ReplicaMap) setDescReplicaID(rangeID roachpb.RangeID, descReplicaID roachpb.ReplicaID) {
-	ent := m.getOrMake(rangeID)
-	ent.descReplicaID = descReplicaID
-	m[rangeID] = ent
-}
-
 // LoadAndReconcileReplicas loads the Replicas present on this
 // store. It reconciles inconsistent state and runs validation checks.
 //
@@ -400,7 +393,6 @@ func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) (ReplicaM
 				if err := s.setDesc(desc.RangeID, desc); err != nil {
 					return err
 				}
-				s.setDescReplicaID(desc.RangeID, repDesc.ReplicaID)
 				return nil
 			}); err != nil {
 			return nil, err
@@ -447,24 +439,37 @@ func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) (ReplicaM
 		}
 	}
 
-	// Migrate for all replicas that need it. Sorted order for deterministic unit
-	// tests.
+	// Check invariants. Sorted order for deterministic unit tests.
+	//
+	// Migrate into RaftReplicaID for all replicas that need it.
 	for _, repl := range s.Sorted() {
-		if repl.ReplicaID != 0 {
-			// If we have both a RaftReplicaID and a descriptor, the ReplicaIDs
-			// need to match.
-			if repl.descReplicaID != 0 && repl.descReplicaID != repl.ReplicaID {
+		var descReplicaID roachpb.ReplicaID
+		if repl.Desc != nil {
+			replDesc, found := repl.Desc.GetReplicaDescriptor(ident.StoreID)
+			if !found {
+				return nil, errors.AssertionFailedf("s%d not found in %s", ident.StoreID.String(), repl.Desc)
+			}
+			if repl.ReplicaID != 0 && replDesc.ReplicaID != repl.ReplicaID {
 				return nil, errors.AssertionFailedf("conflicting RaftReplicaID %d for %s", repl.ReplicaID, repl.Desc)
 			}
-			// We have a RaftReplicaID, no need to migrate.
+			descReplicaID = replDesc.ReplicaID
+		}
+
+		if repl.ReplicaID != 0 {
+			// RaftReplicaID present, no need to migrate.
 			continue
 		}
-		if repl.descReplicaID != 0 {
+
+		// Migrate into RaftReplicaID. This migration can be removed once the
+		// BinaryMinSupportedVersion is >= 23.1, and we can assert that
+		// repl.ReplicaID != 0 always holds.
+
+		if descReplicaID != 0 {
 			// Backfill RaftReplicaID for an initialized Replica.
-			if err := logstore.NewStateLoader(repl.RangeID).SetRaftReplicaID(ctx, eng, repl.descReplicaID); err != nil {
+			if err := logstore.NewStateLoader(repl.RangeID).SetRaftReplicaID(ctx, eng, descReplicaID); err != nil {
 				return nil, errors.Wrapf(err, "backfilling ReplicaID for r%d", repl.RangeID)
 			}
-			s.setReplicaID(repl.RangeID, repl.descReplicaID)
+			s.setReplicaID(repl.RangeID, descReplicaID)
 			log.Eventf(ctx, "backfilled replicaID for initialized replica %s", s.getOrMake(repl.RangeID).ID())
 		} else {
 			// We found an uninitialized replica that did not have a persisted
