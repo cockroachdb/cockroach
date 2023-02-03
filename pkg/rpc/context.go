@@ -2137,7 +2137,7 @@ func (m *connMap) OnDisconnect(k connKey, conn *Connection) error {
 	defer m.mu.Unlock()
 	mConn, found := m.mu.m[k]
 	if !found {
-		return errors.AssertionFailedf("no conn found for %+v", k)
+		return nil
 	}
 	if mConn.c != conn {
 		return errors.AssertionFailedf("conn for %+v not identical to those for which removal was requested", k)
@@ -2281,7 +2281,7 @@ func (rpcCtx *Context) runHeartbeat(ctx context.Context, conn *Connection, k con
 		if retErr != nil {
 			conn.err.Store(retErr)
 			if ctx.Err() == nil {
-				// If the remote Peer is down, we'll get fail-fast errors and since we
+				// If the remote peer is down, we'll get fail-fast errors and since we
 				// don't have circuit breakers at the rpcCtx level, we need to avoid a
 				// busy loop of corresponding logging. We ask the EveryN only if we're
 				// looking at an InitialHeartbeatFailedError; if we did manage to
@@ -2292,7 +2292,7 @@ func (rpcCtx *Context) runHeartbeat(ctx context.Context, conn *Connection, k con
 				); !neverHealthy || rpcCtx.logClosingConnEvery.ShouldLog() {
 					var buf redact.StringBuilder
 					if neverHealthy {
-						buf.Printf("unable to connect (is the Peer up and reachable?): %v", retErr)
+						buf.Printf("unable to connect (is the peer up and reachable?): %v", retErr)
 					} else {
 						buf.Printf("closing connection after: %s", retErr)
 					}
@@ -2510,4 +2510,9 @@ func (rpcCtx *Context) NewHeartbeatService() *HeartbeatService {
 		onHandlePing:                          rpcCtx.OnIncomingPing,
 		testingAllowNamedRPCToAnonymousServer: rpcCtx.TestingAllowNamedRPCToAnonymousServer,
 	}
+}
+
+// RemoveNodeConnections removes all known connections to target node.
+func (rpcCtx *Context) RemoveNodeConnections(nodeID roachpb.NodeID) error {
+	return rpcCtx.m.RemoveNodeConnections(nodeID)
 }

@@ -189,7 +189,7 @@ func TestPeersReconnect(t *testing.T) {
 		remoteClockMonitor: serverCtx.RemoteClocks,
 		clusterID:          serverCtx.StorageClusterID,
 		nodeID:             serverCtx.NodeID,
-		settings:           serverCtx.Settings,
+		version:            serverCtx.Settings.Version,
 	})
 
 	ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
@@ -206,7 +206,7 @@ func TestPeersReconnect(t *testing.T) {
 		t.Fatal(err)
 	}
 	clock.Advance(time.Second)
-	conn.Close()
+	conn.Close() // nolint:grpcconnclose
 	clock.Advance(time.Second)
 	testutils.SucceedsSoon(t, func() error {
 		k := connKey{
@@ -1144,8 +1144,12 @@ func TestConnectionRemoveNodeIDZero(t *testing.T) {
 		var keys []connKey
 		clientCtx.m.mu.RLock()
 		defer clientCtx.m.mu.RUnlock()
-		for k := range clientCtx.m.mu.m {
-			keys = append(keys, k)
+		for k, pc := range clientCtx.m.mu.m {
+			pc.mu.RLock()
+			if pc.mu.disconnected.IsZero() {
+				keys = append(keys, k)
+			}
+			pc.mu.RUnlock()
 		}
 		if len(keys) > 0 {
 			return errors.Errorf("still have connections %v", keys)
@@ -2176,9 +2180,9 @@ func TestClusterNameMismatch(t *testing.T) {
 	}{
 		{"", false, "", false, ``},
 		// The name check is enabled if both the client and server want it.
-		{"a", false, "", false, `Peer node expects cluster name "a", use --cluster-name to configure`},
-		{"", false, "a", false, `Peer node does not have a cluster name configured, cannot use --cluster-name`},
-		{"a", false, "b", false, `local cluster name "b" does not match Peer cluster name "a"`},
+		{"a", false, "", false, `peer node expects cluster name "a", use --cluster-name to configure`},
+		{"", false, "a", false, `peer node does not have a cluster name configured, cannot use --cluster-name`},
+		{"a", false, "b", false, `local cluster name "b" does not match peer cluster name "a"`},
 		// It's disabled if either doesn't want it.
 		// However in any case if the name is not empty it has to match.
 		{"a", true, "", false, ``},

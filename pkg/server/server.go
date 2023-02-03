@@ -495,6 +495,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			}
 
 			decomNodeMap.onNodeDecommissioned(liveness.NodeID)
+			rpcContext.RemoveNodeConnections(liveness.NodeID)
 		},
 	})
 	registry.AddMetricStruct(nodeLiveness.Metrics())
