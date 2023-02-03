@@ -191,6 +191,23 @@ func init() {
 	)
 }
 
+// These rules ensure that dependents get removed before the descriptor.
+// Some operations might require the descriptor to actually be present.
+func init() {
+	registerDepRule(
+		"non-data dependents removed before descriptor",
+		scgraph.Precedence,
+		"dependent", "descriptor",
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.TypeFilter(rulesVersionKey, Not(isDescriptor), Not(isData)),
+				to.TypeFilter(rulesVersionKey, isDescriptor),
+				JoinOnDescID(from, to, "desc-id"),
+				StatusesToAbsent(from, scpb.Status_ABSENT, to, scpb.Status_ABSENT),
+			}
+		})
+}
+
 // These rules ensures we drop cross-descriptor constraints before dropping
 // descriptors, both the referencing and referenced. Namely,
 //  1. cross-descriptor constraints are absent before referenced descriptor

@@ -241,6 +241,18 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops
 deps
 DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
+- from: [Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100}, ABSENT]
+  to:   [Sequence:{DescID: 104}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ObjectParent:{DescID: 104, ReferencedDescID: 101}, ABSENT]
+  to:   [Sequence:{DescID: 104}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Owner:{DescID: 104}, ABSENT]
+  to:   [Sequence:{DescID: 104}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [Sequence:{DescID: 104}, ABSENT]
   to:   [TableData:{DescID: 104, ReferencedDescID: 100}, DROPPED]
   kind: SameStagePrecedence
@@ -277,3 +289,11 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
   to:   [UserPrivileges:{DescID: 104, Name: root}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
+- from: [UserPrivileges:{DescID: 104, Name: admin}, ABSENT]
+  to:   [Sequence:{DescID: 104}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [UserPrivileges:{DescID: 104, Name: root}, ABSENT]
+  to:   [Sequence:{DescID: 104}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor

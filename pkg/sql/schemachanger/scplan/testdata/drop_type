@@ -210,6 +210,58 @@ DROP TYPE defaultdb.typ
   to:   [UserPrivileges:{DescID: 104, Name: root}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
+- from: [EnumTypeValue:{DescID: 104, Name: a}, ABSENT]
+  to:   [EnumType:{DescID: 104}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Namespace:{DescID: 104, Name: typ, ReferencedDescID: 100}, ABSENT]
+  to:   [EnumType:{DescID: 104}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Namespace:{DescID: 105, Name: _typ, ReferencedDescID: 100}, ABSENT]
+  to:   [AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ObjectParent:{DescID: 104, ReferencedDescID: 101}, ABSENT]
+  to:   [EnumType:{DescID: 104}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ObjectParent:{DescID: 105, ReferencedDescID: 101}, ABSENT]
+  to:   [AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Owner:{DescID: 104}, ABSENT]
+  to:   [EnumType:{DescID: 104}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Owner:{DescID: 105}, ABSENT]
+  to:   [AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [UserPrivileges:{DescID: 104, Name: admin}, ABSENT]
+  to:   [EnumType:{DescID: 104}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [UserPrivileges:{DescID: 104, Name: public}, ABSENT]
+  to:   [EnumType:{DescID: 104}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [UserPrivileges:{DescID: 104, Name: root}, ABSENT]
+  to:   [EnumType:{DescID: 104}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [UserPrivileges:{DescID: 105, Name: admin}, ABSENT]
+  to:   [AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [UserPrivileges:{DescID: 105, Name: public}, ABSENT]
+  to:   [AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [UserPrivileges:{DescID: 105, Name: root}, ABSENT]
+  to:   [AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 
 ops
 DROP TYPE defaultdb.ctyp
@@ -440,3 +492,63 @@ DROP TYPE defaultdb.ctyp
   to:   [UserPrivileges:{DescID: 106, Name: root}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
+- from: [CompositeTypeAttrName:{DescID: 106, Name: a}, ABSENT]
+  to:   [CompositeType:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [CompositeTypeAttrName:{DescID: 106, Name: b}, ABSENT]
+  to:   [CompositeType:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [CompositeTypeAttrType:{DescID: 106}, ABSENT]
+  to:   [CompositeType:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Namespace:{DescID: 106, Name: ctyp, ReferencedDescID: 100}, ABSENT]
+  to:   [CompositeType:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Namespace:{DescID: 107, Name: _ctyp, ReferencedDescID: 100}, ABSENT]
+  to:   [AliasType:{DescID: 107, ReferencedTypeIDs: [106 107]}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ObjectParent:{DescID: 106, ReferencedDescID: 101}, ABSENT]
+  to:   [CompositeType:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ObjectParent:{DescID: 107, ReferencedDescID: 101}, ABSENT]
+  to:   [AliasType:{DescID: 107, ReferencedTypeIDs: [106 107]}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Owner:{DescID: 106}, ABSENT]
+  to:   [CompositeType:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Owner:{DescID: 107}, ABSENT]
+  to:   [AliasType:{DescID: 107, ReferencedTypeIDs: [106 107]}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [UserPrivileges:{DescID: 106, Name: admin}, ABSENT]
+  to:   [CompositeType:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [UserPrivileges:{DescID: 106, Name: public}, ABSENT]
+  to:   [CompositeType:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [UserPrivileges:{DescID: 106, Name: root}, ABSENT]
+  to:   [CompositeType:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [UserPrivileges:{DescID: 107, Name: admin}, ABSENT]
+  to:   [AliasType:{DescID: 107, ReferencedTypeIDs: [106 107]}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [UserPrivileges:{DescID: 107, Name: public}, ABSENT]
+  to:   [AliasType:{DescID: 107, ReferencedTypeIDs: [106 107]}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [UserPrivileges:{DescID: 107, Name: root}, ABSENT]
+  to:   [AliasType:{DescID: 107, ReferencedTypeIDs: [106 107]}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
