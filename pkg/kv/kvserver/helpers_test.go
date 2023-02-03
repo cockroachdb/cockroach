@@ -356,7 +356,7 @@ func (r *Replica) GetRaftLogSize() (int64, bool) {
 func (r *Replica) GetCachedLastTerm() uint64 {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.mu.lastTerm
+	return r.mu.lastTermNotDurable
 }
 
 func (r *Replica) IsRaftGroupInitialized() bool {
