@@ -489,7 +489,7 @@ func testRaftSnapshotsToNonVoters(t *testing.T, drainReceivingNode bool) {
 		return atomic.LoadInt64(&skipInitialSnapshot) == 1
 	}
 	// Synchronize with the removal of the "best effort" lock on log truncation.
-	// See (*Replica).lockLearnerSnapshot for details.
+	// See (*Replica).lockLogTruncationAndLearnerSnaps for details.
 	nonVoterSnapLockRemoved := make(chan struct{}, 1)
 	ltk.storeKnobs.NonVoterAfterInitialization = func() {
 		nonVoterSnapLockRemoved <- struct{}{}
