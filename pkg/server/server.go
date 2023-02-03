@@ -1258,7 +1258,6 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// local node.
 	s.rpcContext.SetLocalInternalServer(
 		s.node,
-		false, // tenant
 		s.grpc.serverInterceptorsInfo, s.rpcContext.ClientInterceptors())
 
 	// Load the TLS configuration for the HTTP server.
