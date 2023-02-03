@@ -134,7 +134,7 @@ export const SessionsPageConnected = withRouter(
           analyticsActions.track({
             name: "Filter Clicked",
             page: "Sessions",
-            filterName: "app",
+            filterName: "filters",
             value: value.toString(),
           }),
         );

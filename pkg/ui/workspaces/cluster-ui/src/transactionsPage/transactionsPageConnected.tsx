@@ -132,7 +132,7 @@ export const TransactionsPageConnected = withRouter(
             analyticsActions.track({
               name: "Filter Clicked",
               page: "Transactions",
-              filterName: "app",
+              filterName: "filters",
               value: value.toString(),
             }),
           );
