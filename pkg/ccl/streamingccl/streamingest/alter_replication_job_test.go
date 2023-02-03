@@ -366,3 +366,29 @@ func TestTenantReplicationStatus(t *testing.T) {
 	require.ErrorContains(t, err, "is not a stream ingestion job")
 	require.Equal(t, "replication error", status)
 }
+
+// TestAlterTenantHandleFutureProtectedTimestamp verifies that cutting over "TO
+// LATEST" doesn't fail if the destination cluster clock is ahead of the source
+// cluster clock. See issue #96477.
+func TestAlterTenantHandleFutureProtectedTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	args := replicationtestutils.DefaultTenantStreamingClustersArgs
+	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+
+	// Push the clock on the destination cluster forward.
+	destNow := c.DestCluster.Server(0).Clock().NowAsClockTimestamp()
+	destNow.WallTime += (200 * time.Millisecond).Nanoseconds()
+	c.DestCluster.Server(0).Clock().Update(destNow)
+
+	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
+
+	jobutils.WaitForJobToRun(t, c.SrcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(t, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+	c.WaitUntilHighWatermark(c.SrcCluster.Server(0).Clock().Now(), jobspb.JobID(ingestionJobID))
+
+	c.DestSysSQL.Exec(c.T, `ALTER TENANT $1 COMPLETE REPLICATION TO LATEST`, args.DestTenantName)
+}
