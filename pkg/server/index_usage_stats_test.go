@@ -360,7 +360,7 @@ CREATE TABLE schema.test_table (
 `)
 
 	// Get Table IDs.
-	userName, err := userFromContext(ctx)
+	userName, err := userFromIncomingRPCContext(ctx)
 	require.NoError(t, err)
 
 	testCases := []struct {

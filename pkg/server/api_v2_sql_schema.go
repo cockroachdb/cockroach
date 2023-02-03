@@ -62,7 +62,7 @@ type usersResponse struct {
 func (a *apiV2Server) listUsers(w http.ResponseWriter, r *http.Request) {
 	limit, offset := getSimplePaginationValues(r)
 	ctx := r.Context()
-	username := getSQLUsername(ctx)
+	username := userFromHTTPAuthInfoContext(ctx)
 	ctx = a.sqlServer.AnnotateCtx(ctx)
 
 	query := `SELECT username FROM system.users WHERE "isRole" = false ORDER BY username`
@@ -149,7 +149,7 @@ type eventsResponse struct {
 func (a *apiV2Server) listEvents(w http.ResponseWriter, r *http.Request) {
 	limit, offset := getSimplePaginationValues(r)
 	ctx := r.Context()
-	username := getSQLUsername(ctx)
+	username := userFromHTTPAuthInfoContext(ctx)
 	ctx = a.sqlServer.AnnotateCtx(ctx)
 	queryValues := r.URL.Query()
 
@@ -213,7 +213,7 @@ type databasesResponse struct {
 func (a *apiV2Server) listDatabases(w http.ResponseWriter, r *http.Request) {
 	limit, offset := getSimplePaginationValues(r)
 	ctx := r.Context()
-	username := getSQLUsername(ctx)
+	username := userFromHTTPAuthInfoContext(ctx)
 	ctx = a.sqlServer.AnnotateCtx(ctx)
 
 	var resp databasesResponse
@@ -263,7 +263,7 @@ type databaseDetailsResponse struct {
 //	  description: Database not found
 func (a *apiV2Server) databaseDetails(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	username := getSQLUsername(ctx)
+	username := userFromHTTPAuthInfoContext(ctx)
 	ctx = a.sqlServer.AnnotateCtx(ctx)
 	pathVars := mux.Vars(r)
 	req := &serverpb.DatabaseDetailsRequest{
@@ -337,7 +337,7 @@ type databaseGrantsResponse struct {
 func (a *apiV2Server) databaseGrants(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	limit, offset := getSimplePaginationValues(r)
-	username := getSQLUsername(ctx)
+	username := userFromHTTPAuthInfoContext(ctx)
 	ctx = a.sqlServer.AnnotateCtx(ctx)
 	pathVars := mux.Vars(r)
 	req := &serverpb.DatabaseDetailsRequest{
@@ -412,7 +412,7 @@ type databaseTablesResponse struct {
 func (a *apiV2Server) databaseTables(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	limit, offset := getSimplePaginationValues(r)
-	username := getSQLUsername(ctx)
+	username := userFromHTTPAuthInfoContext(ctx)
 	ctx = a.sqlServer.AnnotateCtx(ctx)
 	pathVars := mux.Vars(r)
 	req := &serverpb.DatabaseDetailsRequest{
@@ -473,7 +473,7 @@ type tableDetailsResponse serverpb.TableDetailsResponse
 //	  description: Database or table not found
 func (a *apiV2Server) tableDetails(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	username := getSQLUsername(ctx)
+	username := userFromHTTPAuthInfoContext(ctx)
 	ctx = a.sqlServer.AnnotateCtx(ctx)
 	pathVars := mux.Vars(r)
 	req := &serverpb.TableDetailsRequest{

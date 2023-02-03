@@ -40,7 +40,7 @@ import (
 func (s *statusServer) IndexUsageStatistics(
 	ctx context.Context, req *serverpb.IndexUsageStatisticsRequest,
 ) (*serverpb.IndexUsageStatisticsResponse, error) {
-	ctx = propagateGatewayMetadata(ctx)
+	ctx = forwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
 	if err := s.privilegeChecker.requireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
@@ -130,7 +130,7 @@ func indexUsageStatsLocal(
 func (s *statusServer) ResetIndexUsageStats(
 	ctx context.Context, req *serverpb.ResetIndexUsageStatsRequest,
 ) (*serverpb.ResetIndexUsageStatsResponse, error) {
-	ctx = propagateGatewayMetadata(ctx)
+	ctx = forwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
 	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
@@ -207,7 +207,7 @@ func (s *statusServer) ResetIndexUsageStats(
 func (s *statusServer) TableIndexStats(
 	ctx context.Context, req *serverpb.TableIndexStatsRequest,
 ) (*serverpb.TableIndexStatsResponse, error) {
-	ctx = propagateGatewayMetadata(ctx)
+	ctx = forwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
 	if err := s.privilegeChecker.requireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
@@ -228,7 +228,7 @@ func getTableIndexUsageStats(
 	st *cluster.Settings,
 	execConfig *sql.ExecutorConfig,
 ) (*serverpb.TableIndexStatsResponse, error) {
-	userName, err := userFromContext(ctx)
+	userName, err := userFromIncomingRPCContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -384,7 +384,7 @@ func getDatabaseIndexRecommendations(
 		return []*serverpb.IndexRecommendation{}, nil
 	}
 
-	userName, err := userFromContext(ctx)
+	userName, err := userFromIncomingRPCContext(ctx)
 	if err != nil {
 		return []*serverpb.IndexRecommendation{}, err
 	}

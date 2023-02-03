@@ -111,8 +111,9 @@ func (s *httpServer) setupRoutes(
 		NodeID:   s.cfg.IDContainer,
 		OIDC:     oidc,
 		GetUser: func(ctx context.Context) *string {
-			if u, ok := ctx.Value(webSessionUserKey{}).(string); ok {
-				return &u
+			if user, ok := maybeUserFromHTTPAuthInfoContext(ctx); ok {
+				ustring := user.Normalized()
+				return &ustring
 			}
 			return nil
 		},
@@ -183,7 +184,7 @@ func makeAdminAuthzCheckHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		// Retrieve the username embedded in the grpc metadata, if any.
 		// This will be provided by the authenticationMux.
-		md := forwardAuthenticationMetadata(req.Context(), req)
+		md := translateHTTPAuthInfoToGRPCMetadata(req.Context(), req)
 		authCtx := metadata.NewIncomingContext(req.Context(), md)
 		// Check the privileges of the requester.
 		err := adminAuthzCheck.requireViewDebugPermission(authCtx)

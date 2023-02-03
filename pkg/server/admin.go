@@ -361,7 +361,7 @@ func (s *adminServer) Databases(
 ) (_ *serverpb.DatabasesResponse, retErr error) {
 	ctx = s.AnnotateCtx(ctx)
 
-	sessionUser, err := userFromContext(ctx)
+	sessionUser, err := userFromIncomingRPCContext(ctx)
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
@@ -431,7 +431,7 @@ func (s *adminServer) DatabaseDetails(
 	ctx context.Context, req *serverpb.DatabaseDetailsRequest,
 ) (_ *serverpb.DatabaseDetailsResponse, retErr error) {
 	ctx = s.AnnotateCtx(ctx)
-	userName, err := userFromContext(ctx)
+	userName, err := userFromIncomingRPCContext(ctx)
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
@@ -799,7 +799,7 @@ func (s *adminServer) TableDetails(
 	ctx context.Context, req *serverpb.TableDetailsRequest,
 ) (_ *serverpb.TableDetailsResponse, retErr error) {
 	ctx = s.AnnotateCtx(ctx)
-	userName, err := userFromContext(ctx)
+	userName, err := userFromIncomingRPCContext(ctx)
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
@@ -1202,7 +1202,7 @@ func (s *adminServer) TableStats(
 ) (*serverpb.TableStatsResponse, error) {
 	ctx = s.AnnotateCtx(ctx)
 
-	userName, err := userFromContext(ctx)
+	userName, err := userFromIncomingRPCContext(ctx)
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
@@ -1443,7 +1443,7 @@ func (s *adminServer) Users(
 	ctx context.Context, req *serverpb.UsersRequest,
 ) (_ *serverpb.UsersResponse, retErr error) {
 	ctx = s.AnnotateCtx(ctx)
-	userName, err := userFromContext(ctx)
+	userName, err := userFromIncomingRPCContext(ctx)
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
@@ -1647,7 +1647,7 @@ func (s *adminServer) RangeLog(
 	ctx = s.AnnotateCtx(ctx)
 
 	// Range keys, even when pretty-printed, contain PII.
-	user, err := userFromContext(ctx)
+	user, err := userFromIncomingRPCContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1881,7 +1881,7 @@ func (s *adminServer) SetUIData(
 ) (*serverpb.SetUIDataResponse, error) {
 	ctx = s.AnnotateCtx(ctx)
 
-	userName, err := userFromContext(ctx)
+	userName, err := userFromIncomingRPCContext(ctx)
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
@@ -1920,7 +1920,7 @@ func (s *adminServer) GetUIData(
 ) (*serverpb.GetUIDataResponse, error) {
 	ctx = s.AnnotateCtx(ctx)
 
-	userName, err := userFromContext(ctx)
+	userName, err := userFromIncomingRPCContext(ctx)
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
@@ -2188,7 +2188,7 @@ func getLivenessResponse(
 func (s *adminServer) Liveness(
 	ctx context.Context, req *serverpb.LivenessRequest,
 ) (*serverpb.LivenessResponse, error) {
-	ctx = propagateGatewayMetadata(ctx)
+	ctx = forwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
 	return s.sqlServer.tenantConnect.Liveness(ctx, req)
@@ -2210,7 +2210,7 @@ func (s *adminServer) Jobs(
 ) (_ *serverpb.JobsResponse, retErr error) {
 	ctx = s.AnnotateCtx(ctx)
 
-	userName, err := userFromContext(ctx)
+	userName, err := userFromIncomingRPCContext(ctx)
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
@@ -2405,7 +2405,7 @@ func (s *adminServer) Job(
 ) (_ *serverpb.JobResponse, retErr error) {
 	ctx = s.AnnotateCtx(ctx)
 
-	userName, err := userFromContext(ctx)
+	userName, err := userFromIncomingRPCContext(ctx)
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
@@ -2466,7 +2466,7 @@ func (s *adminServer) Locations(
 	ctx = s.AnnotateCtx(ctx)
 
 	// Require authentication.
-	_, err := userFromContext(ctx)
+	_, err := userFromIncomingRPCContext(ctx)
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
@@ -2536,7 +2536,7 @@ func (s *adminServer) QueryPlan(
 ) (*serverpb.QueryPlanResponse, error) {
 	ctx = s.AnnotateCtx(ctx)
 
-	userName, err := userFromContext(ctx)
+	userName, err := userFromIncomingRPCContext(ctx)
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
@@ -2579,7 +2579,7 @@ func (s *adminServer) QueryPlan(
 // getStatementBundle retrieves the statement bundle with the given id and
 // writes it out as an attachment.
 func (s *adminServer) getStatementBundle(ctx context.Context, id int64, w http.ResponseWriter) {
-	sessionUser, err := userFromContext(ctx)
+	sessionUser, err := userFromIncomingRPCContext(ctx)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -2904,7 +2904,7 @@ func (s *adminServer) DataDistribution(
 		return nil, err
 	}
 
-	userName, err := userFromContext(ctx)
+	userName, err := userFromIncomingRPCContext(ctx)
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
@@ -3109,7 +3109,7 @@ func (s *adminServer) dataDistributionHelper(
 func (s *systemAdminServer) EnqueueRange(
 	ctx context.Context, req *serverpb.EnqueueRangeRequest,
 ) (*serverpb.EnqueueRangeResponse, error) {
-	ctx = propagateGatewayMetadata(ctx)
+	ctx = forwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
 	if _, err := s.requireAdminUser(ctx); err != nil {
@@ -3981,7 +3981,7 @@ func (c *adminPrivilegeChecker) requireViewDebugPermission(ctx context.Context) 
 func (c *adminPrivilegeChecker) getUserAndRole(
 	ctx context.Context,
 ) (userName username.SQLUsername, isAdmin bool, err error) {
-	userName, err = userFromContext(ctx)
+	userName, err = userFromIncomingRPCContext(ctx)
 	if err != nil {
 		return userName, false, err
 	}
