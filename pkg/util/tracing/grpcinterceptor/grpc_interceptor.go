@@ -29,7 +29,7 @@ import (
 func ExtractSpanMetaFromGRPCCtx(
 	ctx context.Context, tracer *tracing.Tracer,
 ) (tracing.SpanMeta, error) {
-	md, ok := metadata.FromIncomingContext(ctx)
+	md, ok := grpcutil.FastFromIncomingContext(ctx)
 	if !ok {
 		return tracing.SpanMeta{}, nil
 	}
