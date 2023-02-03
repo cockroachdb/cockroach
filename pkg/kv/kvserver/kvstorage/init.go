@@ -322,8 +322,8 @@ func (r Replica) ID() storage.FullReplicaID {
 // A ReplicaMap organizes a set of Replicas with unique RangeIDs.
 type ReplicaMap map[roachpb.RangeID]Replica
 
-// SortedSlice returns the contents of the map as a RangeID-sorted slice.
-func (m ReplicaMap) SortedSlice() []Replica {
+// Sorted returns the contents of the map as a RangeID-sorted slice.
+func (m ReplicaMap) Sorted() []Replica {
 	var sl []Replica
 	for _, repl := range m {
 		sl = append(sl, repl)
@@ -455,7 +455,7 @@ func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) (LoadedRe
 
 	// Migrate for all replicas that need it. Sorted order for deterministic unit
 	// tests.
-	for _, repl := range s.SortedSlice() {
+	for _, repl := range s.Sorted() {
 		if repl.ReplicaID != 0 {
 			// If we have both a RaftReplicaID and a descriptor, the ReplicaIDs
 			// need to match.
