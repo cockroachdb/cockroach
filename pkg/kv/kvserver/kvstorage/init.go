@@ -324,7 +324,7 @@ type ReplicaMap map[roachpb.RangeID]Replica
 
 // Sorted returns the contents of the map as a RangeID-sorted slice.
 func (m ReplicaMap) Sorted() []Replica {
-	var sl []Replica
+	sl := make([]Replica, 0, len(m))
 	for _, repl := range m {
 		sl = append(sl, repl)
 	}
