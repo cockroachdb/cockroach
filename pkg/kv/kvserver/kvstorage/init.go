@@ -441,7 +441,7 @@ func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) (ReplicaM
 			// i.e. a Store is a member of all of its local initialized Replicas.
 			replDesc, found := repl.Desc.GetReplicaDescriptor(ident.StoreID)
 			if !found {
-				return nil, errors.AssertionFailedf("s%d not found in %s", ident.StoreID.String(), repl.Desc)
+				return nil, errors.AssertionFailedf("s%d not found in %s", ident.StoreID, repl.Desc)
 			}
 			if repl.ReplicaID != 0 && replDesc.ReplicaID != repl.ReplicaID {
 				return nil, errors.AssertionFailedf("conflicting RaftReplicaID %d for %s", repl.ReplicaID, repl.Desc)
