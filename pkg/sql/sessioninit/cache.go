@@ -67,10 +67,10 @@ type Cache struct {
 type AuthInfo struct {
 	// UserExists is set to true if the user has a row in system.users.
 	UserExists bool
-	// CanLoginSQL is set to false if the user has the NOLOGIN or NOSQLLOGIN role option.
-	CanLoginSQL bool
-	// CanLoginDBConsole is set to false if the user has NOLOGIN role option.
-	CanLoginDBConsole bool
+	// CanLoginSQLRoleOpt is set to false if the user has the NOLOGIN or NOSQLLOGIN role option.
+	CanLoginSQLRoleOpt bool
+	// CanLoginDBConsoleRoleOpt is set to false if the user has NOLOGIN role option.
+	CanLoginDBConsoleRoleOpt bool
 	// HashedPassword is the hashed password and can be nil.
 	HashedPassword password.PasswordHash
 	// ValidUntil is the VALID UNTIL role option.
@@ -112,13 +112,10 @@ func (a *Cache) GetAuthInfo(
 		ctx context.Context,
 		f descs.TxnManager,
 		username username.SQLUsername,
-		makePlanner func(opName string) (interface{}, func()),
-		settings *cluster.Settings,
 	) (AuthInfo, error),
-	makePlanner func(opName string) (interface{}, func()),
 ) (aInfo AuthInfo, err error) {
 	if !CacheEnabled.Get(&settings.SV) {
-		return readFromSystemTables(ctx, f, username, makePlanner, settings)
+		return readFromSystemTables(ctx, f, username)
 	}
 
 	var usersTableDesc catalog.TableDescriptor
@@ -165,7 +162,7 @@ func (a *Cache) GetAuthInfo(
 	val, err := a.loadValueOutsideOfCache(
 		ctx, fmt.Sprintf("authinfo-%s-%d-%d", username.Normalized(), usersTableVersion, roleOptionsTableVersion),
 		func(loadCtx context.Context) (interface{}, error) {
-			return readFromSystemTables(loadCtx, f, username, makePlanner, settings)
+			return readFromSystemTables(loadCtx, f, username)
 		})
 	if err != nil {
 		return aInfo, err

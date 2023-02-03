@@ -76,6 +76,8 @@ func TestVerifyPassword(t *testing.T) {
 
 		{"richardc", "12345", "NOLOGIN", "", nil},
 		{"richardc2", "12345", "NOSQLLOGIN", "", nil},
+		{"has_global_nosqlogin", "12345", "", "", nil},
+		{"inherits_global_nosqlogin", "12345", "", "", nil},
 		{"before_epoch", "12345", "", "VALID UNTIL '1969-01-01'", nil},
 		{"epoch", "12345", "", "VALID UNTIL '1970-01-01'", nil},
 		{"cockroach", "12345", "", "VALID UNTIL '2100-01-01'", nil},
@@ -101,6 +103,12 @@ func TestVerifyPassword(t *testing.T) {
 		t.Fatalf("failed to grant admin: %s", err)
 	}
 
+	// Set up NOSQLLOGIN global privilege.
+	_, err = db.Exec("GRANT SYSTEM NOSQLLOGIN TO has_global_nosqlogin")
+	require.NoError(t, err)
+	_, err = db.Exec("GRANT has_global_nosqlogin TO inherits_global_nosqlogin")
+	require.NoError(t, err)
+
 	for _, tc := range []struct {
 		testName                    string
 		username                    string
@@ -125,8 +133,11 @@ func TestVerifyPassword(t *testing.T) {
 		{"username does not exist should fail", "doesntexist", "zxcvbn", false, false, false},
 
 		{"user with NOLOGIN role option should fail", "richardc", "12345", false, false, false},
-		// This is the one test case where SQL and DB Console login outcomes differ.
+		// The NOSQLLOGIN cases are the only cases where SQL and DB Console login outcomes differ.
 		{"user with NOSQLLOGIN role option should fail SQL but succeed on DB Console", "richardc2", "12345", false, false, true},
+		{"user with NOSQLLOGIN global privilege should fail SQL but succeed on DB Console", "has_global_nosqlogin", "12345", false, false, true},
+		{"user who inherits NOSQLLOGIN global privilege should fail SQL but succeed on DB Console", "inherits_global_nosqlogin", "12345", false, false, true},
+
 		{"user with VALID UNTIL before the Unix epoch should fail", "before_epoch", "12345", false, false, false},
 		{"user with VALID UNTIL at Unix epoch should fail", "epoch", "12345", false, false, false},
 		{"user with VALID UNTIL future date should succeed", "cockroach", "12345", false, true, true},
