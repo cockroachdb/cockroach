@@ -37,7 +37,7 @@ func TestRunAllocatorSimulator(t *testing.T) {
 	rwg := make([]workload.Generator, 1)
 	rwg[0] = workload.TestCreateWorkloadGenerator(settings.Seed, settings.StartTime, 1, 10)
 	m := metrics.NewTracker(settings.MetricsInterval, metrics.NewClusterMetricsTracker(os.Stdout))
-	s := state.LoadConfig(state.ComplexConfig)
+	s := state.LoadConfig(state.ComplexConfig, state.SingleRangeConfig, settings)
 
 	sim := asim.NewSimulator(duration, rwg, s, settings, m)
 	sim.RunSim(ctx)
