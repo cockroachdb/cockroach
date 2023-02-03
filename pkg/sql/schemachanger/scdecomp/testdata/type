@@ -1,4 +1,5 @@
 setup
+SET experimental_enable_unique_without_index_constraints = true;
 CREATE TYPE greeting AS ENUM('hello', 'hi');
 CREATE TYPE salutation AS ENUM('bonjour', 'hi');
 CREATE TABLE tbl (
@@ -8,6 +9,7 @@ CREATE TABLE tbl (
   other greeting[],
   name STRING NOT NULL,
   CONSTRAINT mycheck CHECK (s::STRING = name),
+  CONSTRAINT myuwi UNIQUE WITHOUT INDEX (name) WHERE ('hi'::greeting::STRING = 'hi'),
   INDEX partial (g) WHERE (g::STRING = 'hi')
 );
 ----
@@ -177,6 +179,20 @@ ElementState:
     sourceIndexId: 0
     tableId: 108
     temporaryIndexId: 0
+  Status: PUBLIC
+- UniqueWithoutIndexConstraint:
+    columnIds:
+    - 5
+    constraintId: 3
+    indexIdForValidation: 0
+    predicate:
+      expr: x'80':::@100104::STRING = 'hi':::STRING
+      referencedColumnIds: []
+      usesSequenceIds: []
+      usesTypeIds:
+      - 104
+      - 105
+    tableId: 108
   Status: PUBLIC
 - CheckConstraint:
     columnIds:
@@ -557,6 +573,11 @@ ElementState:
 - ConstraintWithoutIndexName:
     constraintId: 2
     name: mycheck
+    tableId: 108
+  Status: PUBLIC
+- ConstraintWithoutIndexName:
+    constraintId: 3
+    name: myuwi
     tableId: 108
   Status: PUBLIC
 - Namespace:
