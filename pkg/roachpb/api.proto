@@ -1649,6 +1649,12 @@ message ExportRequest {
   // range keys.
   bool export_fingerprint = 14;
 
+  // MaxAllowedFileSizeOverage controls the maximum size in excess of the
+  // TargetFileSize which an exported SST may be. If this value is positive and
+  // an SST would exceed this size (due to large rows or large numbers of
+  // versions), then the export will fail.
+  int64 max_allowed_file_size_overage = 15;
+
   reserved 2, 5, 7, 8, 11;
 
   // Next ID: 15

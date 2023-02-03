@@ -365,12 +365,13 @@ func runBackupProcessor(
 					}
 
 					req := &roachpb.ExportRequest{
-						RequestHeader:  roachpb.RequestHeaderFromSpan(span.span),
-						ResumeKeyTS:    span.firstKeyTS,
-						StartTime:      span.start,
-						MVCCFilter:     spec.MVCCFilter,
-						TargetFileSize: batcheval.ExportRequestTargetFileSize.Get(&clusterSettings.SV),
-						SplitMidKey:    splitMidKey,
+						RequestHeader:             roachpb.RequestHeaderFromSpan(span.span),
+						ResumeKeyTS:               span.firstKeyTS,
+						StartTime:                 span.start,
+						MVCCFilter:                spec.MVCCFilter,
+						TargetFileSize:            batcheval.ExportRequestTargetFileSize.Get(&clusterSettings.SV),
+						MaxAllowedFileSizeOverage: batcheval.ExportRequestMaxAllowedFileSizeOverage.Get(&clusterSettings.SV),
+						SplitMidKey:               splitMidKey,
 					}
 
 					// If we're doing re-attempts but are not yet in the priority regime,

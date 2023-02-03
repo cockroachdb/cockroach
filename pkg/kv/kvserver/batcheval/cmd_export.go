@@ -48,9 +48,10 @@ var ExportRequestTargetFileSize = settings.RegisterByteSizeSetting(
 const MaxExportOverageSetting = "kv.bulk_sst.max_allowed_overage"
 
 // ExportRequestMaxAllowedFileSizeOverage controls the maximum size in excess of
-// the target file size which an exported SST may be. If this value is positive
-// and an SST would exceed this size (due to large rows or large numbers of
-// versions), then the export will fail.
+// the target file size that an exported SST can be, when writing versions of a
+// single key into the SST. If this value is positive and an SST would exceed
+// this size (due to large rows or large numbers of versions), then the export
+// will paginate as long as `splitKeysOnTimestamps` is set to true.
 var ExportRequestMaxAllowedFileSizeOverage = settings.RegisterByteSizeSetting(
 	settings.TenantWritable,
 	MaxExportOverageSetting,
@@ -134,19 +135,20 @@ func evalExport(
 	}
 
 	targetSize := uint64(args.TargetFileSize)
-	// TODO(adityamaru): Remove this once we are able to set tenant specific
-	// cluster settings. This takes the minimum of the system tenant's cluster
-	// setting and the target size sent as part of the ExportRequest from the
-	// tenant.
-	clusterSettingTargetSize := uint64(ExportRequestTargetFileSize.Get(&cArgs.EvalCtx.ClusterSettings().SV))
-	if targetSize > clusterSettingTargetSize {
-		targetSize = clusterSettingTargetSize
-	}
-
 	var maxSize uint64
-	allowedOverage := ExportRequestMaxAllowedFileSizeOverage.Get(&cArgs.EvalCtx.ClusterSettings().SV)
+	allowedOverage := uint64(args.MaxAllowedFileSizeOverage)
+	// ExportRequests from pre-23.1 nodes do not populate
+	// `args.MaxAllowedFileSizeOverage` and so we must consult the cluster setting
+	// if the value is unset.
+	//
+	// TODO(adityamaru): Remove once we are outside the compatability window of
+	// 22.2.
+	if allowedOverage == 0 {
+		allowedOverage = uint64(ExportRequestMaxAllowedFileSizeOverage.Get(
+			&cArgs.EvalCtx.ClusterSettings().SV))
+	}
 	if targetSize > 0 && allowedOverage > 0 {
-		maxSize = targetSize + uint64(allowedOverage)
+		maxSize = targetSize + allowedOverage
 	}
 
 	var maxIntents uint64

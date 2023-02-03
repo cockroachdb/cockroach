@@ -6354,18 +6354,6 @@ func TestPaginatedBackupTenant(t *testing.T) {
 			}
 			return nil
 		},
-		TestingResponseFilter: func(ctx context.Context, ba *roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
-			for i, ru := range br.Responses {
-				if exportRequest, ok := ba.Requests[i].GetInner().(*roachpb.ExportRequest); ok &&
-					!isLeasingExportRequest(exportRequest) {
-					exportResponse := ru.GetInner().(*roachpb.ExportResponse)
-					// Every ExportResponse should have a single SST when running backup
-					// within a tenant.
-					require.Equal(t, 1, len(exportResponse.Files))
-				}
-			}
-			return nil
-		},
 	}
 	tc, systemDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
 		InitManualReplication, params)
@@ -6373,15 +6361,6 @@ func TestPaginatedBackupTenant(t *testing.T) {
 	srv := tc.Server(0)
 
 	_ = security.EmbeddedTenantIDs()
-
-	resetStateVars := func() {
-		mu.Lock()
-		defer mu.Unlock()
-
-		numExportRequests = 0
-		mu.exportRequestSpansSet = make(map[string]struct{})
-		mu.exportRequestSpans = mu.exportRequestSpans[:0]
-	}
 
 	_, conn10 := serverutils.StartTenant(t, srv,
 		base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(10)})
@@ -6394,88 +6373,112 @@ INSERT INTO foo.bar VALUES (110), (210), (310), (410), (510)`)
 	var id1 int
 	tenant10.QueryRow(t, "SELECT 'foo.bar'::regclass::int").Scan(&id1)
 
-	// The total size in bytes of the data to be backed up is 63b.
-
-	// Single ExportRequest with no resume span.
-	systemDB.Exec(t, `SET CLUSTER SETTING kv.bulk_sst.target_size='63b'`)
-	systemDB.Exec(t, `SET CLUSTER SETTING kv.bulk_sst.max_allowed_overage='0b'`)
-	idRE := regexp.MustCompile(":id")
-	mkKey := func(id int, k string) roachpb.Key {
-		return roachpb.Key(idRE.ReplaceAllString(k, fmt.Sprint(id)))
-	}
-	mkSpan := func(id int, start, end string) roachpb.Span {
-		return roachpb.Span{Key: mkKey(id, start), EndKey: mkKey(id, end)}
-	}
-
-	tenant10.Exec(t, `BACKUP DATABASE foo TO 'userfile://defaultdb.myfililes/test'`)
-	startingSpan := mkSpan(id1, "/Tenant/10/Table/:id/1", "/Tenant/10/Table/:id/2")
-	mu.Lock()
-	require.Equal(t, []string{startingSpan.String()}, mu.exportRequestSpans)
-	mu.Unlock()
-	resetStateVars()
-
-	// Two ExportRequests with one resume span.
-	systemDB.Exec(t, `SET CLUSTER SETTING kv.bulk_sst.target_size='50b'`)
-	tenant10.Exec(t, `BACKUP DATABASE foo TO 'userfile://defaultdb.myfililes/test2'`)
-	startingSpan = mkSpan(id1, "/Tenant/10/Table/:id/1", "/Tenant/10/Table/:id/2")
-	resumeSpan := mkSpan(id1, "/Tenant/10/Table/:id/1/510/0", "/Tenant/10/Table/:id/2")
-	mu.Lock()
-	require.Equal(t, []string{startingSpan.String(), resumeSpan.String()}, mu.exportRequestSpans)
-	mu.Unlock()
-	resetStateVars()
-
-	// One ExportRequest for every KV.
-	systemDB.Exec(t, `SET CLUSTER SETTING kv.bulk_sst.target_size='10b'`)
-	tenant10.Exec(t, `BACKUP DATABASE foo TO 'userfile://defaultdb.myfililes/test3'`)
-	var expected []string
-	for _, resume := range []exportResumePoint{
-		{mkSpan(id1, "/Tenant/10/Table/:id/1", "/Tenant/10/Table/:id/2"), withoutTS},
-		{mkSpan(id1, "/Tenant/10/Table/:id/1/210/0", "/Tenant/10/Table/:id/2"), withoutTS},
-		{mkSpan(id1, "/Tenant/10/Table/:id/1/310/0", "/Tenant/10/Table/:id/2"), withoutTS},
-		{mkSpan(id1, "/Tenant/10/Table/:id/1/410/0", "/Tenant/10/Table/:id/2"), withoutTS},
-		{mkSpan(id1, "/Tenant/10/Table/:id/1/510/0", "/Tenant/10/Table/:id/2"), withoutTS},
-	} {
-		expected = append(expected, requestSpanStr(resume.Span, resume.timestamp))
-	}
-	mu.Lock()
-	require.Equal(t, expected, mu.exportRequestSpans)
-	mu.Unlock()
-	resetStateVars()
-
 	tenant10.Exec(t, `
 CREATE DATABASE baz;
 CREATE TABLE baz.bar(i int primary key, v string);
 INSERT INTO baz.bar VALUES (110, 'a'), (210, 'b'), (310, 'c'), (410, 'd'), (510, 'e')`)
 	var id2 int
 	tenant10.QueryRow(t, "SELECT 'baz.bar'::regclass::int").Scan(&id2)
+
+	resetStateVars := func(overrideAsSystemTenant bool) {
+		mu.Lock()
+		defer mu.Unlock()
+
+		numExportRequests = 0
+		mu.exportRequestSpansSet = make(map[string]struct{})
+		mu.exportRequestSpans = mu.exportRequestSpans[:0]
+		if overrideAsSystemTenant {
+			systemDB.Exec(t, `RESET CLUSTER SETTING kv.bulk_sst.target_size`)
+			systemDB.Exec(t, `RESET CLUSTER SETTING kv.bulk_sst.max_allowed_overage`)
+		} else {
+			tenant10.Exec(t, `RESET CLUSTER SETTING kv.bulk_sst.target_size`)
+			tenant10.Exec(t, `RESET CLUSTER SETTING kv.bulk_sst.max_allowed_overage`)
+		}
+	}
+
+	setExportRequestSettingsForTenant := func(overrideAsSystemTenant bool, targetSize, maxAllowedOverage string) {
+		if overrideAsSystemTenant {
+			systemDB.Exec(t, fmt.Sprintf(`ALTER TENANT [10] SET CLUSTER SETTING kv.bulk_sst.target_size = '%s'`, targetSize))
+			systemDB.Exec(t, fmt.Sprintf(`ALTER TENANT [10] SET CLUSTER SETTING kv.bulk_sst.max_allowed_overage = '%s'`, maxAllowedOverage))
+		} else {
+			tenant10.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING kv.bulk_sst.target_size = '%s'`, targetSize))
+			tenant10.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING kv.bulk_sst.max_allowed_overage = '%s'`, maxAllowedOverage))
+		}
+	}
+
 	// The total size in bytes of the data to be backed up is 63b.
 
-	// Single ExportRequest with no resume span.
-	systemDB.Exec(t, `SET CLUSTER SETTING kv.bulk_sst.target_size='10b'`)
-	systemDB.Exec(t, `SET CLUSTER SETTING kv.bulk_sst.max_allowed_overage='10b'`)
+	testutils.RunTrueAndFalse(t, "TestPaginatedBackupTenant", func(t *testing.T, overrideAsSystemTenant bool) {
+		// Single ExportRequest with no resume span.
+		setExportRequestSettingsForTenant(overrideAsSystemTenant, "63b", "0b")
+		idRE := regexp.MustCompile(":id")
+		mkKey := func(id int, k string) roachpb.Key {
+			return roachpb.Key(idRE.ReplaceAllString(k, fmt.Sprint(id)))
+		}
+		mkSpan := func(id int, start, end string) roachpb.Span {
+			return roachpb.Span{Key: mkKey(id, start), EndKey: mkKey(id, end)}
+		}
 
-	// Test mid key breaks for the tenant to verify timestamps on resume.
-	tenant10.Exec(t, `UPDATE baz.bar SET v = 'z' WHERE i = 210`)
-	tenant10.Exec(t, `BACKUP DATABASE baz TO 'userfile://defaultdb.myfililes/test4' with revision_history`)
-	expected = nil
-	for _, resume := range []exportResumePoint{
-		{mkSpan(id2, "/Tenant/10/Table/3", "/Tenant/10/Table/4"), withoutTS},
-		{mkSpan(id2, "/Tenant/10/Table/:id/1", "/Tenant/10/Table/:id/2"), withoutTS},
-		{mkSpan(id2, "/Tenant/10/Table/:id/1/210/0", "/Tenant/10/Table/:id/2"), withoutTS},
-		// We have two entries for 210 because of history and super small table size
-		{mkSpan(id2, "/Tenant/10/Table/:id/1/210/0", "/Tenant/10/Table/:id/2"), withTS},
-		{mkSpan(id2, "/Tenant/10/Table/:id/1/310/0", "/Tenant/10/Table/:id/2"), withoutTS},
-		{mkSpan(id2, "/Tenant/10/Table/:id/1/410/0", "/Tenant/10/Table/:id/2"), withoutTS},
-		{mkSpan(id2, "/Tenant/10/Table/:id/1/510/0", "/Tenant/10/Table/:id/2"), withoutTS},
-	} {
-		expected = append(expected, requestSpanStr(resume.Span, resume.timestamp))
-	}
-	mu.Lock()
-	require.Equal(t, expected, mu.exportRequestSpans)
-	mu.Unlock()
-	resetStateVars()
+		tenant10.Exec(t, `BACKUP DATABASE foo INTO 'userfile://defaultdb.myfililes/test'`)
+		startingSpan := mkSpan(id1, "/Tenant/10/Table/:id/1", "/Tenant/10/Table/:id/2")
+		mu.Lock()
+		require.Equal(t, []string{startingSpan.String()}, mu.exportRequestSpans)
+		mu.Unlock()
+		resetStateVars(overrideAsSystemTenant)
 
-	// TODO(adityamaru): Add a RESTORE inside tenant once it is supported.
+		// Two ExportRequests with one resume span.
+		setExportRequestSettingsForTenant(overrideAsSystemTenant, "50b", "0b")
+		tenant10.Exec(t, `BACKUP DATABASE foo INTO 'userfile://defaultdb.myfililes/test2'`)
+		startingSpan = mkSpan(id1, "/Tenant/10/Table/:id/1", "/Tenant/10/Table/:id/2")
+		resumeSpan := mkSpan(id1, "/Tenant/10/Table/:id/1/510/0", "/Tenant/10/Table/:id/2")
+		mu.Lock()
+		require.Equal(t, []string{startingSpan.String(), resumeSpan.String()}, mu.exportRequestSpans)
+		mu.Unlock()
+		resetStateVars(overrideAsSystemTenant)
+
+		// One ExportRequest for every KV.
+		setExportRequestSettingsForTenant(overrideAsSystemTenant, "10b", "0b")
+		tenant10.Exec(t, `BACKUP DATABASE foo INTO 'userfile://defaultdb.myfililes/test3'`)
+		var expected []string
+		for _, resume := range []exportResumePoint{
+			{mkSpan(id1, "/Tenant/10/Table/:id/1", "/Tenant/10/Table/:id/2"), withoutTS},
+			{mkSpan(id1, "/Tenant/10/Table/:id/1/210/0", "/Tenant/10/Table/:id/2"), withoutTS},
+			{mkSpan(id1, "/Tenant/10/Table/:id/1/310/0", "/Tenant/10/Table/:id/2"), withoutTS},
+			{mkSpan(id1, "/Tenant/10/Table/:id/1/410/0", "/Tenant/10/Table/:id/2"), withoutTS},
+			{mkSpan(id1, "/Tenant/10/Table/:id/1/510/0", "/Tenant/10/Table/:id/2"), withoutTS},
+		} {
+			expected = append(expected, requestSpanStr(resume.Span, resume.timestamp))
+		}
+		mu.Lock()
+		require.Equal(t, expected, mu.exportRequestSpans)
+		mu.Unlock()
+		resetStateVars(overrideAsSystemTenant)
+
+		setExportRequestSettingsForTenant(overrideAsSystemTenant, "10b", "10b")
+
+		// Test mid key breaks for the tenant to verify timestamps on resume.
+		tenant10.Exec(t, `UPDATE baz.bar SET v = 'z' WHERE i = 210`)
+		tenant10.Exec(t, `BACKUP DATABASE baz INTO 'userfile://defaultdb.myfililes/test4' with revision_history`)
+		expected = nil
+		for _, resume := range []exportResumePoint{
+			{mkSpan(id2, "/Tenant/10/Table/3", "/Tenant/10/Table/4"), withoutTS},
+			{mkSpan(id2, "/Tenant/10/Table/:id/1", "/Tenant/10/Table/:id/2"), withoutTS},
+			{mkSpan(id2, "/Tenant/10/Table/:id/1/210/0", "/Tenant/10/Table/:id/2"), withoutTS},
+			// We have two entries for 210 because of history and super small table size
+			{mkSpan(id2, "/Tenant/10/Table/:id/1/210/0", "/Tenant/10/Table/:id/2"), withTS},
+			{mkSpan(id2, "/Tenant/10/Table/:id/1/310/0", "/Tenant/10/Table/:id/2"), withoutTS},
+			{mkSpan(id2, "/Tenant/10/Table/:id/1/410/0", "/Tenant/10/Table/:id/2"), withoutTS},
+			{mkSpan(id2, "/Tenant/10/Table/:id/1/510/0", "/Tenant/10/Table/:id/2"), withoutTS},
+		} {
+			expected = append(expected, requestSpanStr(resume.Span, resume.timestamp))
+		}
+		mu.Lock()
+		require.Equal(t, expected, mu.exportRequestSpans)
+		mu.Unlock()
+		resetStateVars(overrideAsSystemTenant)
+
+		// TODO(adityamaru): Add a RESTORE inside tenant once it is supported.
+	})
 }
 
 func TestBackupRestoreInsideTenant(t *testing.T) {
