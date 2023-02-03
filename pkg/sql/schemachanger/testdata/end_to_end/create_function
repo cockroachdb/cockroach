@@ -85,7 +85,7 @@ upsert descriptor #101
    schema:
   +  functions:
   +    f:
-  +      overloads:
+  +      signatures:
   +      - argTypes:
   +        - family: EnumFamily
   +          oid: 100107
@@ -227,7 +227,7 @@ upsert descriptor #101
    schema:
   +  functions:
   +    f:
-  +      overloads:
+  +      signatures:
   +      - argTypes:
   +        - family: EnumFamily
   +          oid: 100107

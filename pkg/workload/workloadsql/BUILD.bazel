@@ -11,6 +11,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/sql/lexbase",
+        "//pkg/sql/sem/tree",
         "//pkg/util/ctxgroup",
         "//pkg/util/errorutil",
         "//pkg/util/log",
@@ -38,6 +39,7 @@ go_test(
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
+        "//pkg/sql/sem/tree",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",

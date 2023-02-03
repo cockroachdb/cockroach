@@ -144,7 +144,7 @@ func (n *createFunctionNode) createNewFunction(
 	}
 	scDesc.AddFunction(
 		udfDesc.GetName(),
-		descpb.SchemaDescriptor_FunctionOverload{
+		descpb.SchemaDescriptor_FunctionSignature{
 			ID:         udfDesc.GetID(),
 			ArgTypes:   paramTypes,
 			ReturnType: returnType,
