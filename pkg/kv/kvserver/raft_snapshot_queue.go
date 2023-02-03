@@ -142,7 +142,7 @@ func (rq *raftSnapshotQueue) processRaftSnapshot(
 		}
 	}
 
-	err := repl.sendSnapshot(ctx, repDesc, snapType, kvserverpb.SnapshotRequest_RECOVERY, kvserverpb.SnapshotRequest_RAFT_SNAPSHOT_QUEUE, raftSnapshotPriority)
+	err := repl.sendSnapshotUsingDelegate(ctx, repDesc, snapType, kvserverpb.SnapshotRequest_RECOVERY, kvserverpb.SnapshotRequest_RAFT_SNAPSHOT_QUEUE, raftSnapshotPriority)
 
 	// NB: if the snapshot fails because of an overlapping replica on the
 	// recipient which is also waiting for a snapshot, the "smart" thing is to
