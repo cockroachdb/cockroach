@@ -177,7 +177,7 @@ func TestDataDriven(t *testing.T) {
 					return merged[i].RangeID < merged[j].RangeID
 				})
 				for _, id := range merged {
-					fmt.Fprintf(&buf, "r%d/%d: ", id.RangeID, id.ReplicaID)
+					fmt.Fprintf(&buf, "%s: ", id)
 					if desc := rs.Initialized[id.RangeID].Desc; desc != nil {
 						fmt.Fprint(&buf, desc)
 					} else {
