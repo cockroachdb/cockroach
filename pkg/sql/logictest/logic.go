@@ -1187,7 +1187,7 @@ func (t *logicTest) getOrOpenClient(user string, nodeIdx int) *gosql.DB {
 		}
 		var cleanupFunc func()
 		pgURL, cleanupFunc = sqlutils.PGUrl(t.rootT, addr, "TestLogic", url.User(pgUser))
-		t.clusterCleanupFuncs = append(t.clusterCleanupFuncs, cleanupFunc)
+		defer cleanupFunc()
 	}
 	pgURL.Path = "test"
 
