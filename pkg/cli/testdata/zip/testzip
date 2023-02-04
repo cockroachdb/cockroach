@@ -108,7 +108,7 @@ debug zip --concurrency=1 --cpu-profile-duration=1s /dev/null
 [node 1] requesting heap file list... received response... done
 [node ?] ? heap profiles found
 [node 1] requesting goroutine dump list... received response... done
-[node 1] 0 goroutine dumps found
+[node ?] ? goroutine dumps found
 [node 1] requesting log file ...
 [node 1] 0 log file ...
 [node 1] requesting ranges... received response... done
