@@ -444,6 +444,16 @@ or both forms can be used together, for example:
   --join=localhost:1234,localhost:2345 --join=localhost:3456</PRE>`,
 	}
 
+	DisablePreStartTenantServers = FlagInfo{
+		Name:   "disable-prestart-tenant-servers",
+		EnvVar: "COCKROACH_DISABLE_PRESTART_TENANT_SERVERS",
+		Description: `
+When set, the server will immediately start up and not wait for
+secondary tenant servers. This flag ensures the operator still can
+access the SQL interface to the system even when a tenant server is
+unable to function properly.`,
+	}
+
 	JoinPreferSRVRecords = FlagInfo{
 		Name: "experimental-dns-srv",
 		Description: `

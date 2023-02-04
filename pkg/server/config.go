@@ -235,6 +235,11 @@ type BaseConfig struct {
 	// other service (typically, the serverController) will accept and
 	// route SQL connections instead.
 	DisableSQLListener bool
+
+	// DisablePreStartTenantServers prevents the serverController from
+	// starting up and waiting on initialization of shared-process
+	// secondary tenant servers.
+	DisablePreStartTenantServers bool
 }
 
 // MakeBaseConfig returns a BaseConfig with default values.

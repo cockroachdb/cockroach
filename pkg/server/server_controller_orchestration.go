@@ -78,12 +78,18 @@ type serverState struct {
 
 // start monitors changes to the service mode and updates
 // the running servers accordingly.
-func (c *serverController) start(ctx context.Context, ie isql.Executor) error {
-	// We perform one round of updates synchronously, to ensure that
-	// any tenants already in service mode SHARED get a chance to boot
-	// up before we signal readiness.
-	if err := c.startInitialSecondaryTenantServers(ctx, ie); err != nil {
-		return err
+func (c *serverController) start(
+	ctx context.Context, ie isql.Executor, autoStartAndWaitForSharedServers bool,
+) error {
+	if autoStartAndWaitForSharedServers {
+		// We perform one round of updates synchronously, to ensure that
+		// any tenants already in service mode SHARED get a chance to boot
+		// up before we signal readiness.
+		if err := c.startInitialSecondaryTenantServers(ctx, ie); err != nil {
+			return err
+		}
+	} else {
+		log.Infof(ctx, "not waiting for secondary tenant servers to become ready")
 	}
 
 	// Run the detection of which servers should be started or stopped.

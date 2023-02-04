@@ -383,12 +383,16 @@ func init() {
 			_ = f.MarkHidden(cliflags.InitToken.Name)
 		}
 
-		// Node attributes.
-		//
-		// TODO(knz): do we want SQL-only servers to have node-level
-		// attributes too? Would this be useful for e.g. SQL query
-		// planning?
 		if cmd != connectInitCmd && cmd != connectJoinCmd {
+			// Allow an operator to "break the glass" and avoid
+			// waiting for (broken) secondary tenants to become ready.
+			cliflagcfg.BoolFlag(f, &serverCfg.DisablePreStartTenantServers, cliflags.DisablePreStartTenantServers)
+
+			// Node attributes.
+			//
+			// TODO(knz): do we want SQL-only servers to have node-level
+			// attributes too? Would this be useful for e.g. SQL query
+			// planning?
 			cliflagcfg.StringFlag(f, &serverCfg.Attrs, cliflags.Attrs)
 		}
 	}
