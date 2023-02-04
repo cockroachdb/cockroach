@@ -12,6 +12,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/ccl/streamingccl",
+        "//pkg/cloud/externalconn",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/repstream/streampb",
@@ -23,6 +24,7 @@ go_library(
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/isql",
         "//pkg/sql/rowenc",
         "//pkg/sql/rowenc/valueside",
         "//pkg/sql/sem/tree",
