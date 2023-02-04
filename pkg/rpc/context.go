@@ -622,6 +622,10 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 		panic("tenant ID not set")
 	}
 
+	if opts.ClientOnly && opts.Config.User.Undefined() {
+		panic("client username not set")
+	}
+
 	if !opts.TenantID.IsSystem() {
 		rpcCtx.clientCreds = newTenantClientCreds(opts.TenantID)
 	}
