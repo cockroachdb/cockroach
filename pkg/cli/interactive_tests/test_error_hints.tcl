@@ -43,7 +43,7 @@ end_test
 # Check what happens when attempting to connect securely to an
 # insecure server.
 
-send "$argv start-single-node --insecure\r"
+send "$argv start-single-node --insecure --store=logs/db\r"
 eexpect "initialized new cluster"
 
 spawn /bin/bash
@@ -73,8 +73,23 @@ interrupt
 interrupt
 eexpect ":/# "
 
-send "$argv start-single-node --listen-addr=localhost --certs-dir=$certs_dir\r"
+send "$argv start-single-node --listen-addr=localhost --certs-dir=$certs_dir --store=logs/db\r"
 eexpect "restarted pre-existing node"
+
+set spawn_id $client_spawn_id
+start_test "Connecting an insecure RPC client to a secure server"
+send "$argv node drain 1 --insecure\r"
+eexpect "ERROR"
+eexpect "failed to connect to the node"
+eexpect ":/# "
+end_test
+
+start_test "Connecting an insecure SQL client to a secure server"
+send "$argv sql -e 'select 1' --insecure\r"
+eexpect "ERROR: node is running secure mode, SSL connection required"
+eexpect ":/# "
+end_test
+
 
 # Check what happens when attempting to connect to something
 # that is not a CockroachDB server.
