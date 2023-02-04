@@ -30,23 +30,23 @@ func ShouldCollectStats(ctx context.Context, collectStats bool) bool {
 	return collectStats && tracing.SpanFromContext(ctx) != nil
 }
 
-// GetCumulativeContentionTime is a helper function to return all the contention
-// events from trace and the cumulative contention time. It calculates the
+// GetCumulativeContentionInfo is a helper function to return all the contention
+// events from the trace and the cumulative contention time. It calculates the
 // cumulative contention time from the given recording or, if the recording is
 // nil, from the tracing span from the context. All contention events found in
-// the trace are included.
-func GetCumulativeContentionTime(
-	ctx context.Context, recording tracingpb.Recording,
+// the span (up to the tracing barrier) are included.
+func GetCumulativeContentionInfo(
+	ctx context.Context, recordingUpToBarrier tracingpb.Recording,
 ) (time.Duration, []roachpb.ContentionEvent) {
 	var cumulativeContentionTime time.Duration
-	if recording == nil {
-		recording = tracing.SpanFromContext(ctx).GetConfiguredRecording()
+	if recordingUpToBarrier == nil {
+		recordingUpToBarrier = tracing.SpanFromContext(ctx).GetStructuredRecordingUpToBarrier()
 	}
 
 	var contentionEvents []roachpb.ContentionEvent
 	var ev roachpb.ContentionEvent
-	for i := range recording {
-		recording[i].Structured(func(any *pbtypes.Any, _ time.Time) {
+	for i := range recordingUpToBarrier {
+		recordingUpToBarrier[i].Structured(func(any *pbtypes.Any, _ time.Time) {
 			if !pbtypes.Is(any, &ev) {
 				return
 			}
@@ -92,16 +92,18 @@ func PopulateKVMVCCStats(kvStats *execinfrapb.KVStats, ss *ScanStats) {
 }
 
 // GetScanStats is a helper function to calculate scan stats from the given
-// recording or, if the recording is nil, from the tracing span from the
-// context.
-func GetScanStats(ctx context.Context, recording tracingpb.Recording) (scanStats ScanStats) {
-	if recording == nil {
-		recording = tracing.SpanFromContext(ctx).GetRecording(tracingpb.RecordingStructured)
+// recording or, if the recording is nil, from the tracing span (up to the
+// tracing barrier) from the context.
+func GetScanStats(
+	ctx context.Context, recordingUpToBarrier tracingpb.Recording,
+) (scanStats ScanStats) {
+	if recordingUpToBarrier == nil {
+		recordingUpToBarrier = tracing.SpanFromContext(ctx).GetStructuredRecordingUpToBarrier()
 	}
 	var ss roachpb.ScanStats
 	var tc roachpb.TenantConsumption
-	for i := range recording {
-		recording[i].Structured(func(any *pbtypes.Any, _ time.Time) {
+	for i := range recordingUpToBarrier {
+		recordingUpToBarrier[i].Structured(func(any *pbtypes.Any, _ time.Time) {
 			if pbtypes.Is(any, &ss) {
 				if err := pbtypes.UnmarshalAny(any, &ss); err != nil {
 					return

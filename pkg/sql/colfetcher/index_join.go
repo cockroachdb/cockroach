@@ -409,7 +409,7 @@ func (s *ColIndexJoin) GetKVCPUTime() time.Duration {
 
 // GetContentionInfo is part of the colexecop.KVReader interface.
 func (s *ColIndexJoin) GetContentionInfo() (time.Duration, []roachpb.ContentionEvent) {
-	return execstats.GetCumulativeContentionTime(s.Ctx, nil /* recording */)
+	return execstats.GetCumulativeContentionInfo(s.Ctx, nil /* recordingUpToBarrier */)
 }
 
 // inputBatchSizeLimit is a batch size limit for the number of input rows that
@@ -663,7 +663,7 @@ func adjustMemEstimate(estimate int64) int64 {
 
 // GetScanStats is part of the colexecop.KVReader interface.
 func (s *ColIndexJoin) GetScanStats() execstats.ScanStats {
-	return execstats.GetScanStats(s.Ctx, nil /* recording */)
+	return execstats.GetScanStats(s.Ctx, nil /* recordingUpToBarrier */)
 }
 
 // Release implements the execinfra.Releasable interface.

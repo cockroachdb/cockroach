@@ -89,6 +89,7 @@ func TestNewSpanFields(t *testing.T) {
 		StructuredRecords          []tracingpb.StructuredRecord
 		StructuredRecordsSizeBytes int64
 		ChildrenMetadata           map[string]tracingpb.OperationMetadata
+		HasBarrier                 bool
 	}
 	_ = (*calcifiedRecordedSpan)((*tracingpb.RecordedSpan)(nil))
 }

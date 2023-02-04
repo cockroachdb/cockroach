@@ -763,8 +763,8 @@ func (ij *invertedJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 	if !ok {
 		return nil
 	}
-	ij.scanStats = execstats.GetScanStats(ij.Ctx(), ij.ExecStatsTrace)
-	contentionTime, contentionEvents := execstats.GetCumulativeContentionTime(ij.Ctx(), ij.ExecStatsTrace)
+	ij.scanStats = execstats.GetScanStats(ij.Ctx(), ij.StructuredUpToBarrier)
+	contentionTime, contentionEvents := execstats.GetCumulativeContentionInfo(ij.Ctx(), ij.StructuredUpToBarrier)
 	ret := execinfrapb.ComponentStats{
 		Inputs: []execinfrapb.InputStats{is},
 		KV: execinfrapb.KVStats{

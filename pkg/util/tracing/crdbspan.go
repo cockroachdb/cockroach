@@ -61,6 +61,10 @@ type crdbSpan struct {
 	// whenever a Structured event is recorded by the span and its children.
 	eventListeners []EventListener
 
+	// hasBarrier, if set, indicates that there is a "barrier" between this
+	// span and its parent. See the comment on WithHasBarrier for details.
+	hasBarrier bool
+
 	// Locking rules:
 	// - If locking both a parent and a child, the parent must be locked first. In
 	// practice, children don't take the parent's lock.
@@ -241,6 +245,10 @@ type Trace struct {
 	// DroppedIndirectChildren maintains info about whether any indirect children
 	// were omitted from Children because of recording limits.
 	DroppedIndirectChildren bool
+
+	// HasBarrier, if set, indicates that there is a "barrier" between this
+	// span and its parent. See the comment on WithHasBarrier for details.
+	HasBarrier bool
 }
 
 // MakeTrace constructs a Trace.
@@ -249,6 +257,7 @@ func MakeTrace(root tracingpb.RecordedSpan) Trace {
 		Root:                       root,
 		NumSpans:                   1,
 		StructuredRecordsSizeBytes: root.StructuredRecordsSizeBytes,
+		HasBarrier:                 root.HasBarrier,
 	}
 }
 
@@ -338,7 +347,7 @@ func (t *Trace) trimSpansRecursive(toDrop int) {
 				j++
 				// Copy the structured events from the dropped child to the parent.
 				// Note that t.StructuredRecordsSizeBytes doesn't change.
-				buf := t.Children[i].appendStructuredEventsRecursively(nil /* buffer */)
+				buf := t.Children[i].appendStructuredEventsRecursively(nil /* buffer */, false /* upToBarrier */)
 				for i := range buf {
 					t.Root.AddStructuredRecord(buf[i])
 				}
@@ -465,11 +474,11 @@ func (t *Trace) Empty() bool {
 }
 
 func (t *Trace) appendStructuredEventsRecursively(
-	buffer []tracingpb.StructuredRecord,
+	buffer []tracingpb.StructuredRecord, upToBarrier bool,
 ) []tracingpb.StructuredRecord {
 	buffer = append(buffer, t.Root.StructuredRecords...)
 	for i := range t.Children {
-		buffer = t.Children[i].appendStructuredEventsRecursively(buffer)
+		buffer = t.Children[i].appendStructuredEventsRecursively(buffer, upToBarrier)
 	}
 	return buffer
 }
@@ -697,7 +706,7 @@ func (s *crdbSpan) getRecordingImpl(
 	case tracingpb.RecordingVerbose:
 		return s.getVerboseRecording(includeDetachedChildren, finishing)
 	case tracingpb.RecordingStructured:
-		return MakeTrace(s.getStructuredRecording(includeDetachedChildren))
+		return MakeTrace(s.getStructuredRecording(includeDetachedChildren, false /* upToBarrier */))
 	case tracingpb.RecordingOff:
 		return Trace{}
 	default:
@@ -800,7 +809,9 @@ func (s *crdbSpan) getVerboseRecording(includeDetachedChildren bool, finishing b
 //
 // The caller does not take ownership of the events; the event payloads must be
 // treated as immutable since they're shared with the receiver.
-func (s *crdbSpan) getStructuredRecording(includeDetachedChildren bool) tracingpb.RecordedSpan {
+func (s *crdbSpan) getStructuredRecording(
+	includeDetachedChildren bool, upToBarrier bool,
+) tracingpb.RecordedSpan {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -814,7 +825,7 @@ func (s *crdbSpan) getStructuredRecording(includeDetachedChildren bool) tracingp
 	res.StructuredRecords = res.StructuredRecords[:0]
 	// Recursively fetch the StructuredEvents for s' and its children, both
 	// finished and open.
-	buf := s.appendStructuredEventsRecursivelyLocked(res.StructuredRecords, includeDetachedChildren)
+	buf := s.appendStructuredEventsRecursivelyLocked(res.StructuredRecords, includeDetachedChildren, upToBarrier)
 	for i := range buf {
 		res.AddStructuredRecord(buf[i])
 	}
@@ -822,8 +833,10 @@ func (s *crdbSpan) getStructuredRecording(includeDetachedChildren bool) tracingp
 	// Recursively fetch the OperationMetadata for s' children, both finished and
 	// open.
 	res.ChildrenMetadata = make(map[string]tracingpb.OperationMetadata)
-	s.getChildrenMetadataRecursivelyLocked(res.ChildrenMetadata,
-		false /* includeRootMetadata */, includeDetachedChildren)
+	s.getChildrenMetadataRecursivelyLocked(
+		res.ChildrenMetadata, false, /* includeRootMetadata */
+		includeDetachedChildren, upToBarrier,
+	)
 
 	return res
 }
@@ -838,7 +851,7 @@ func (s *crdbSpan) recordFinishedChildren(childRecording Trace) {
 
 	// Notify the event listeners registered with s of the StructuredEvents on the
 	// children being added to s.
-	events := childRecording.appendStructuredEventsRecursively(nil)
+	events := childRecording.appendStructuredEventsRecursively(nil, false /* upToBarrier */)
 	for _, record := range events {
 		var d types.DynamicAny
 		if err := types.UnmarshalAny(record.Payload, &d); err != nil {
@@ -870,7 +883,7 @@ func (s *crdbSpan) recordFinishedChildrenLocked(childRec Trace) {
 		childRec.Root.ParentSpanID = s.spanID
 		s.mu.recording.finishedChildren.addChildren([]Trace{childRec}, maxRecordedSpansPerTrace, maxStructuredBytesPerTrace)
 	case tracingpb.RecordingStructured:
-		buf := childRec.appendStructuredEventsRecursively(nil /* buffer */)
+		buf := childRec.appendStructuredEventsRecursively(nil /* buffer */, false /* upToBarrier */)
 		for i := range buf {
 			event := &buf[i]
 			if s.mu.recording.finishedChildren.StructuredRecordsSizeBytes+int64(event.MemorySize()) < maxStructuredBytesPerTrace {
@@ -1062,18 +1075,21 @@ func recordInternal[PL memorySizable](s *crdbSpan, payload PL, buffer *sizeLimit
 // accumulated by s' and its finished and still-open children to buffer, and
 // returns the resulting slice.
 func (s *crdbSpan) appendStructuredEventsRecursivelyLocked(
-	buffer []tracingpb.StructuredRecord, includeDetachedChildren bool,
+	buffer []tracingpb.StructuredRecord, includeDetachedChildren bool, upToBarrier bool,
 ) []tracingpb.StructuredRecord {
 	buffer = s.appendStructuredEventsLocked(buffer)
 	for _, c := range s.mu.openChildren {
 		if c.collectRecording || includeDetachedChildren {
 			sp := c.span()
+			if upToBarrier && sp.hasBarrier {
+				continue
+			}
 			sp.mu.Lock()
-			buffer = sp.appendStructuredEventsRecursivelyLocked(buffer, includeDetachedChildren)
+			buffer = sp.appendStructuredEventsRecursivelyLocked(buffer, includeDetachedChildren, upToBarrier)
 			sp.mu.Unlock()
 		}
 	}
-	return s.mu.recording.finishedChildren.appendStructuredEventsRecursively(buffer)
+	return s.mu.recording.finishedChildren.appendStructuredEventsRecursively(buffer, upToBarrier)
 }
 
 // getChildrenMetadataRecursivelyLocked populates `childrenMetadata` with
@@ -1084,7 +1100,7 @@ func (s *crdbSpan) appendStructuredEventsRecursivelyLocked(
 // if `includeRootMetadata` is true.
 func (s *crdbSpan) getChildrenMetadataRecursivelyLocked(
 	childrenMetadata map[string]tracingpb.OperationMetadata,
-	includeRootMetadata, includeDetachedChildren bool,
+	includeRootMetadata, includeDetachedChildren, upToBarrier bool,
 ) {
 	if includeRootMetadata {
 		// Record an entry for s' metadata.
@@ -1106,9 +1122,16 @@ func (s *crdbSpan) getChildrenMetadataRecursivelyLocked(
 	for _, c := range s.mu.openChildren {
 		if c.collectRecording || includeDetachedChildren {
 			sp := c.span()
+			if upToBarrier && sp.hasBarrier {
+				continue
+			}
 			sp.mu.Lock()
-			sp.getChildrenMetadataRecursivelyLocked(childrenMetadata,
-				true /*includeRootMetadata */, includeDetachedChildren)
+			sp.getChildrenMetadataRecursivelyLocked(
+				childrenMetadata,
+				// TODO: why is this always true?
+				true, /* includeRootMetadata */
+				includeDetachedChildren, upToBarrier,
+			)
 			sp.mu.Unlock()
 		}
 	}
@@ -1147,6 +1170,7 @@ func (s *crdbSpan) getRecordingNoChildrenLocked(
 		Duration:      s.mu.duration,
 		Verbose:       s.recordingType() == tracingpb.RecordingVerbose,
 		RecordingMode: s.recordingType().ToProto(),
+		HasBarrier:    s.hasBarrier,
 	}
 
 	if rs.Duration == -1 {

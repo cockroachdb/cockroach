@@ -76,6 +76,7 @@ type spanOptions struct {
 	SpanKind                      oteltrace.SpanKind     // see WithSpanKind
 	Sterile                       bool                   // see WithSterile
 	EventListeners                []EventListener        // see WithEventListeners
+	HasBarrier                    bool                   // see WithHasBarrier
 
 	// recordingTypeExplicit is set if the WithRecording() option was used. In
 	// that case, spanOptions.recordingType() returns recordingTypeOpt below. If
@@ -141,6 +142,7 @@ func (opts *spanOptions) otelContext() (oteltrace.Span, oteltrace.SpanContext) {
 // - WithTags: adds tags to a Span on creation.
 // - WithForceRealSpan: prevents optimizations that can avoid creating a real span.
 // - WithDetachedRecording: don't include the recording in the parent.
+// - WithHasBarrier: introduce a "barrier" between this Span and its parent.
 type SpanOption interface {
 	apply(spanOptions) spanOptions
 }
@@ -502,4 +504,27 @@ func (ev eventListenersOption) apply(opts spanOptions) spanOptions {
 // WithEventListeners.
 func WithEventListeners(eventListeners ...EventListener) SpanOption {
 	return (eventListenersOption)(eventListeners)
+}
+
+type hasBarrier struct{}
+
+var hasBarrierSingleton = SpanOption(hasBarrier{})
+
+func (o hasBarrier) apply(opts spanOptions) spanOptions {
+	opts.HasBarrier = true
+	return opts
+}
+
+// WithHasBarrier configures the span to have a "barrier" from its parent. It is
+// a lot weaker "disconnect" from the parent than WithDetachedRecording since
+// this barrier only plays a role when retrieving a structured recording up the
+// barrier via GetStructuredRecordingUpToBarrier().
+//
+// This barrier is needed to keep the parent responsible for collecting the
+// trace from the child while also providing a way for the parent to examine the
+// structured events that were recorded directly into the parent or its children
+// with no barrier. For example, this behavior allows us to attribute the
+// contention events precisely to the DistSQL processor that ran into them.
+func WithHasBarrier() SpanOption {
+	return hasBarrierSingleton
 }

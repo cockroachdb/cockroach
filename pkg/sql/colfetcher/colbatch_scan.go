@@ -85,12 +85,12 @@ func (s *colBatchScanBase) GetRowsRead() int64 {
 
 // GetContentionInfo is part of the colexecop.KVReader interface.
 func (s *colBatchScanBase) GetContentionInfo() (time.Duration, []roachpb.ContentionEvent) {
-	return execstats.GetCumulativeContentionTime(s.Ctx, nil /* recording */)
+	return execstats.GetCumulativeContentionInfo(s.Ctx, nil /* recordingUpToBarrier */)
 }
 
 // GetScanStats is part of the colexecop.KVReader interface.
 func (s *colBatchScanBase) GetScanStats() execstats.ScanStats {
-	return execstats.GetScanStats(s.Ctx, nil /* recording */)
+	return execstats.GetScanStats(s.Ctx, nil /* recordingUpToBarrier */)
 }
 
 // Release implements the execreleasable.Releasable interface.

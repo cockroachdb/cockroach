@@ -308,8 +308,8 @@ func (tr *tableReader) execStatsForTrace() *execinfrapb.ComponentStats {
 	if !ok {
 		return nil
 	}
-	tr.scanStats = execstats.GetScanStats(tr.Ctx(), tr.ExecStatsTrace)
-	contentionTime, contentionEvents := execstats.GetCumulativeContentionTime(tr.Ctx(), tr.ExecStatsTrace)
+	tr.scanStats = execstats.GetScanStats(tr.Ctx(), tr.StructuredUpToBarrier)
+	contentionTime, contentionEvents := execstats.GetCumulativeContentionInfo(tr.Ctx(), tr.StructuredUpToBarrier)
 	ret := &execinfrapb.ComponentStats{
 		KV: execinfrapb.KVStats{
 			BytesRead:           optional.MakeUint(uint64(tr.fetcher.GetBytesRead())),

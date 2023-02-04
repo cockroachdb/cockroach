@@ -986,6 +986,7 @@ func (t *Tracer) newSpan(
 	otelSpan oteltrace.Span,
 	netTr trace.Trace,
 	sterile bool,
+	hasBarrier bool,
 ) *Span {
 	if t.testing.MaintainAllocationCounters {
 		atomic.AddInt32(&t.spansCreated, 1)
@@ -994,7 +995,7 @@ func (t *Tracer) newSpan(
 	h.span.reset(
 		traceID, spanID, operation, goroutineID,
 		startTime, logTags, eventListeners, kind,
-		otelSpan, netTr, sterile)
+		otelSpan, netTr, sterile, hasBarrier)
 	return &h.span
 }
 
@@ -1199,7 +1200,7 @@ child operation: %s, tracer created at:
 	s := t.newSpan(
 		traceID, spanID, opName, uint64(goid.Get()),
 		startTime, opts.LogTags, opts.EventListeners, opts.SpanKind,
-		otelSpan, netTr, opts.Sterile)
+		otelSpan, netTr, opts.Sterile, opts.HasBarrier)
 
 	s.i.crdb.SetRecordingType(opts.recordingType())
 	s.i.crdb.parentSpanID = opts.parentSpanID()

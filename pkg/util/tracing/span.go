@@ -352,6 +352,27 @@ func (sp *Span) GetConfiguredRecording() tracingpb.Recording {
 	return sp.i.GetRecording(recType, false /* finishing */)
 }
 
+// GetStructuredRecordingUpToBarrier returns the structured recording of this
+// span and all of its children, if the Span has recording enabled. When a
+// descendant span is found with a barrier, that span along with its own
+// children is not included into the recording.
+//
+// Returns nil if the span is not currently recording (even if it had been
+// recording in the past).
+func (sp *Span) GetStructuredRecordingUpToBarrier() tracingpb.Recording {
+	if sp.detectUseAfterFinish() {
+		return nil
+	}
+	if sp.RecordingType() == tracingpb.RecordingOff || sp.IsNoop() {
+		return nil
+	}
+	t := MakeTrace(sp.i.crdb.getStructuredRecording(
+		false, /* includeDetachedChildren */
+		true,  /* upToBarrier */
+	))
+	return t.ToRecording()
+}
+
 // GetTraceRecording returns the span's recording as a Trace.
 //
 // See also GetRecording(), which returns a tracingpb.Recording.
@@ -612,6 +633,7 @@ func (sp *Span) reset(
 	otelSpan oteltrace.Span,
 	netTr trace.Trace,
 	sterile bool,
+	hasBarrier bool,
 ) {
 	if sp.i.crdb == nil {
 		// We assume that spans being reset have come from the sync.Pool.
@@ -671,6 +693,7 @@ func (sp *Span) reset(
 		panic(fmt.Sprintf("unexpected event listeners in span being reset: %v", c.eventListeners))
 	}
 	c.eventListeners = eventListeners
+	c.hasBarrier = hasBarrier
 	{
 		// Nobody is supposed to have a reference to the span at this point, but let's
 		// take the lock anyway to protect against buggy clients accessing the span

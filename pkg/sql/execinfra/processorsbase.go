@@ -374,14 +374,16 @@ type ProcessorBaseNoHelper struct {
 	//
 	// Can return nil.
 	ExecStatsForTrace func() *execinfrapb.ComponentStats
-	// storeExecStatsTrace indicates whether ExecStatsTrace should be populated
-	// in InternalClose.
+	// storeExecStatsTrace indicates whether StructuredUpToBarrier should be
+	// populated in InternalClose.
 	storeExecStatsTrace bool
-	// ExecStatsTrace stores the recording in case HijackExecStatsForTrace has
-	// been called. This is needed in order to provide the access to the
-	// recording after the span has been finished in InternalClose. Only set if
-	// storeExecStatsTrace is true.
-	ExecStatsTrace tracingpb.Recording
+	// StructuredUpToBarrier stores the structured recording up to the tracing
+	// barrier (meaning that the recording doesn't include anything from the
+	// child processors) in case HijackExecStatsForTrace has been called. This
+	// is needed in order to provide the access to the recording after the span
+	// has been finished in InternalClose. Only set if storeExecStatsTrace is
+	// true.
+	StructuredUpToBarrier tracingpb.Recording
 	// trailingMetaCallback, if set, will be called by moveToTrailingMeta(). The
 	// callback is expected to close all inputs, do other cleanup on the processor
 	// (including calling InternalClose()) and generate the trailing meta that
@@ -639,7 +641,7 @@ func (pb *ProcessorBase) HijackExecStatsForTrace() func() *execinfrapb.Component
 	return func() *execinfrapb.ComponentStats {
 		cs := execStatsForTrace()
 		// Make sure to unset the trace since we don't need it anymore.
-		pb.ExecStatsTrace = nil
+		pb.StructuredUpToBarrier = nil
 		return cs
 	}
 }
@@ -675,8 +677,10 @@ func (pb *ProcessorBaseNoHelper) moveToTrailingMeta() {
 		}
 		if trace := pb.span.GetConfiguredRecording(); trace != nil {
 			pb.trailingMeta = append(pb.trailingMeta, execinfrapb.ProducerMetadata{TraceData: trace})
-			if pb.storeExecStatsTrace {
-				pb.ExecStatsTrace = trace
+		}
+		if pb.storeExecStatsTrace {
+			if trace := pb.span.GetStructuredRecordingUpToBarrier(); trace != nil {
+				pb.StructuredUpToBarrier = trace
 			}
 		}
 	}
@@ -841,7 +845,16 @@ func ProcessorSpan(ctx context.Context, name string) (context.Context, *tracing.
 		return ctx, nil
 	}
 	return sp.Tracer().StartSpanCtx(ctx, name,
-		tracing.WithParent(sp), tracing.WithDetachedRecording())
+		tracing.WithParent(sp),
+		// Use the barrier option in order to be able to collect the structured
+		// recording only for this processor, ignoring any payload from the
+		// child processors.
+		tracing.WithHasBarrier(),
+		// The trace from each processor is currently imported into the span of
+		// the flow on the gateway, in DistSQLReceiver.pushMeta, so we always
+		// detach the recording.
+		tracing.WithDetachedRecording(),
+	)
 }
 
 // StartInternal prepares the ProcessorBase for execution. It returns the

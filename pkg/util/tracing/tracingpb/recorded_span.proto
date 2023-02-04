@@ -133,6 +133,9 @@ message RecordedSpan {
   // view of the various operations that are being traced as part of a span.
   map<string, OperationMetadata> children_metadata = 19 [(gogoproto.nullable) = false];
 
+  // True if there is a barrier between this span and its parent.
+  bool has_barrier = 21;
+
   reserved 5,6,10,11,15;
 }
 

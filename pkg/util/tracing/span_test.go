@@ -631,12 +631,12 @@ func TestTrimPreservesStructuredLogs(t *testing.T) {
 
 	trace := sp.i.crdb.GetRecording(tracingpb.RecordingVerbose, false /* finishing */)
 	// Check that we have two events in the trace (one per span).
-	require.Len(t, trace.appendStructuredEventsRecursively(nil), 2)
+	require.Len(t, trace.appendStructuredEventsRecursively(nil, false /* upToBarrier */), 2)
 	// Trim the recording to just the root span and check that only one event
 	// remains. The child's event gets dropped because it doesn't fit into the
 	// root's byte limit.
 	trace.trimSpans(1)
-	require.Len(t, trace.appendStructuredEventsRecursively(nil), 2)
+	require.Len(t, trace.appendStructuredEventsRecursively(nil, false /* upToBarrier */), 2)
 	trace.check(t)
 }
 
@@ -665,7 +665,7 @@ func TestTrimStructuredLogLimit(t *testing.T) {
 	// Add a child with a large structured event. The eventSize limit allows for
 	// only one resulting event.
 	trace.addChildren([]Trace{MakeTrace(makeSpan())}, 1000 /* maxSpans */, eventSize /* maxStructuredBytes */)
-	require.Len(t, trace.appendStructuredEventsRecursively(nil /* buffer */), 1)
+	require.Len(t, trace.appendStructuredEventsRecursively(nil /* buffer */, false /* upToBarrier */), 1)
 	require.Equal(t, eventSize, trace.StructuredRecordsSizeBytes)
 }
 
@@ -704,7 +704,7 @@ func TestRecordingStructuredLogLimit(t *testing.T) {
 
 			trace := sp.i.crdb.GetRecording(tracingpb.RecordingVerbose, false /* finishing */)
 			// Check that we have two events in the trace (one per span).
-			require.Less(t, len(trace.appendStructuredEventsRecursively(nil /* buffer */)), int(numMessages))
+			require.Less(t, len(trace.appendStructuredEventsRecursively(nil /* buffer */, false /* upToBarrier */)), int(numMessages))
 			require.LessOrEqual(t, trace.StructuredRecordsSizeBytes, int64(maxStructuredBytesPerTrace))
 		})
 	}
@@ -1509,4 +1509,28 @@ func TestFinishGetRecordingRace(t *testing.T) {
 		root.GetConfiguredRecording()
 		root.Finish()
 	}
+}
+
+func TestGetStructuredRecordingUpToBarrier(t *testing.T) {
+	tr := NewTracer()
+	sp := tr.StartSpan("root", WithRecording(tracingpb.RecordingStructured))
+	defer sp.Finish()
+	ch1 := tr.StartSpan("child_no_barrier", WithParent(sp))
+	defer ch1.Finish()
+	ch2 := tr.StartSpan("child_with_barrier", WithParent(sp), WithHasBarrier())
+	defer ch2.Finish()
+	gch1 := tr.StartSpan("grandchild_no_barrier", WithParent(ch1))
+	defer gch1.Finish()
+	gch2 := tr.StartSpan("grandchild_with_barrier", WithParent(ch1), WithHasBarrier())
+	defer gch2.Finish()
+	sp.RecordStructured(&types.Int32Value{Value: 1})
+	ch1.RecordStructured(&types.Int32Value{Value: 2})
+	ch2.RecordStructured(&types.Int32Value{Value: 3})
+	gch1.RecordStructured(&types.Int32Value{Value: 4})
+	gch2.RecordStructured(&types.Int32Value{Value: 5})
+	// We expect that items from sp, ch1, and gch1 to be included here.
+	rec := sp.GetStructuredRecordingUpToBarrier()
+	require.Len(t, rec, 1)
+	require.Len(t, rec[0].StructuredRecords, 3)
+	require.Len(t, rec[0].ChildrenMetadata, 2)
 }

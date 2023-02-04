@@ -262,7 +262,7 @@ func (p *planNodeToRowSource) execStatsForTrace() *execinfrapb.ComponentStats {
 	// Propagate RUs from IO requests.
 	// TODO(drewk): we should consider propagating other stats for planNode
 	// operators.
-	scanStats := execstats.GetScanStats(p.Ctx(), p.ExecStatsTrace)
+	scanStats := execstats.GetScanStats(p.Ctx(), p.StructuredUpToBarrier)
 	if scanStats.ConsumedRU == 0 {
 		return nil
 	}
