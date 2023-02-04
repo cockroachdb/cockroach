@@ -1649,6 +1649,10 @@ var charts = []sectionDescription{
 				Title:   "Job Progress Updates",
 				Metrics: []string{"replication.job_progress_updates"},
 			},
+			{
+				Title:   "Ranges To Revert",
+				Metrics: []string{"replication.cutover_progress"},
+			},
 		},
 	},
 	{

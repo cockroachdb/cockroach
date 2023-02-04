@@ -117,6 +117,17 @@ var (
 		Measurement: "Job Updates",
 		Unit:        metric.Unit_COUNT,
 	}
+	// This metric would be 0 until cutover begins, and then it will be updated to
+	// the total number of ranges that need to be reverted, and then gradually go
+	// down to 0 again. NB: that the number of ranges is the total number of
+	// ranges left to be reverted, but some may not have writes and therefore the
+	// revert will be a no-op for those ranges.
+	metaReplicationCutoverProgress = metric.Metadata{
+		Name:        "replication.cutover_progress",
+		Help:        "The number of ranges left to revert in order to complete an inflight cutover",
+		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // Metrics are for production monitoring of stream ingestion jobs.
@@ -136,6 +147,7 @@ type Metrics struct {
 	DataCheckpointSpanCount     *metric.Gauge
 	FrontierCheckpointSpanCount *metric.Gauge
 	FrontierLagSeconds          *metric.GaugeFloat64
+	ReplicationCutoverProgress  *metric.Gauge
 }
 
 // MetricStruct implements the metric.Struct interface.
@@ -177,6 +189,7 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 		DataCheckpointSpanCount:     metric.NewGauge(metaDataCheckpointSpanCount),
 		FrontierCheckpointSpanCount: metric.NewGauge(metaFrontierCheckpointSpanCount),
 		FrontierLagSeconds:          metric.NewGaugeFloat64(metaFrontierLagSeconds),
+		ReplicationCutoverProgress:  metric.NewGauge(metaReplicationCutoverProgress),
 	}
 	return m
 }
