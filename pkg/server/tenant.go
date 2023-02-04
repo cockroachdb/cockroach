@@ -827,6 +827,7 @@ func makeTenantSQLServerArgs(
 	}
 	rpcContext := rpc.NewContext(startupCtx, rpc.ContextOptions{
 		TenantID:         sqlCfg.TenantID,
+		UseNodeAuth:      sqlCfg.LocalKVServerInfo != nil,
 		NodeID:           baseCfg.IDContainer,
 		StorageClusterID: baseCfg.ClusterIDContainer,
 		Config:           baseCfg.Config,
@@ -845,10 +846,8 @@ func makeTenantSQLServerArgs(
 		if _, err := rpcContext.GetServerTLSConfig(); err != nil {
 			return sqlServerArgs{}, err
 		}
-		// Needed for outgoing connections, until this issue
-		// is fixed:
-		// https://github.com/cockroachdb/cockroach/issues/96215
-		if _, err := rpcContext.GetTenantTLSConfig(); err != nil {
+		// Needed for outgoing connections.
+		if _, err := rpcContext.GetClientTLSConfig(); err != nil {
 			return sqlServerArgs{}, err
 		}
 		cm, err := rpcContext.GetCertificateManager()

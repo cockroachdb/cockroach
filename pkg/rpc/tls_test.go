@@ -67,12 +67,13 @@ func TestClientSSLSettings(t *testing.T) {
 			stopper := stop.NewStopper()
 			defer stopper.Stop(ctx)
 			rpcContext := NewContext(ctx, ContextOptions{
-				TenantID:  roachpb.SystemTenantID,
-				Clock:     &timeutil.DefaultTimeSource{},
-				MaxOffset: time.Nanosecond,
-				Stopper:   stopper,
-				Settings:  cluster.MakeTestingClusterSettings(),
-				Config:    cfg,
+				TenantID:   roachpb.SystemTenantID,
+				ClientOnly: true,
+				Clock:      &timeutil.DefaultTimeSource{},
+				MaxOffset:  time.Nanosecond,
+				Stopper:    stopper,
+				Settings:   cluster.MakeTestingClusterSettings(),
+				Config:     cfg,
 			})
 
 			if cfg.HTTPRequestScheme() != tc.requestScheme {

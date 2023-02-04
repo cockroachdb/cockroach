@@ -499,6 +499,12 @@ type ContextOptions struct {
 	// utility, not a server, and thus misses server configuration, a
 	// cluster version, a node ID, etc.
 	ClientOnly bool
+
+	// UseNodeAuth is only used when ClientOnly is not set.
+	// When set, it indicates that this rpc.Context is running inside
+	// the same process as a KV layer and thus should feel empowered
+	// to use its node cert to perform outgoing RPC dials.
+	UseNodeAuth bool
 }
 
 func (c ContextOptions) validate() error {
@@ -609,6 +615,7 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 		security.ClusterTLSSettings(opts.Settings),
 		opts.TenantID,
 	)
+	secCtx.useNodeAuth = opts.UseNodeAuth
 
 	rpcCtx := &Context{
 		ContextOptions:  opts,
@@ -1603,6 +1610,42 @@ func (rpcCtx *Context) dialOptsLocal() ([]grpc.DialOption, error) {
 	return dialOpts, err
 }
 
+// GetClientTLSConfig decides which TLS client configuration (&
+// certificates) to use to reach the remote node.
+func (rpcCtx *Context) GetClientTLSConfig() (*tls.Config, error) {
+	if rpcCtx.config.Insecure {
+		return nil, nil
+	}
+
+	cm, err := rpcCtx.GetCertificateManager()
+	if err != nil {
+		return nil, wrapError(err)
+	}
+
+	switch {
+	case rpcCtx.ClientOnly:
+		// A CLI command is performing a remote RPC.
+		tlsCfg, err := cm.GetClientTLSConfig(rpcCtx.config.User)
+		return tlsCfg, wrapError(err)
+
+	case rpcCtx.UseNodeAuth || rpcCtx.tenID.IsSystem():
+		tlsCfg, err := cm.GetNodeClientTLSConfig()
+		return tlsCfg, wrapError(err)
+
+	case !rpcCtx.tenID.IsSystem():
+		// A SQL server running in a standalone server doesn't have access
+		// to the node certs, and thus must use the standalone tenant
+		// client cert.
+		tlsCfg, err := cm.GetTenantTLSConfig()
+		return tlsCfg, wrapError(err)
+
+	default:
+		// We don't currently support any other way to use the rpc context.
+		// go away.
+		return nil, errors.AssertionFailedf("programming error: rpc context not initialized correctly")
+	}
+}
+
 // dialOptsNetworkCredentials computes options that determines how the
 // RPC client authenticates itself to the remote server.
 func (rpcCtx *Context) dialOptsNetworkCredentials() ([]grpc.DialOption, error) {
@@ -1610,13 +1653,7 @@ func (rpcCtx *Context) dialOptsNetworkCredentials() ([]grpc.DialOption, error) {
 	if rpcCtx.Config.Insecure {
 		dialOpts = append(dialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	} else {
-		var tlsConfig *tls.Config
-		var err error
-		if rpcCtx.tenID == roachpb.SystemTenantID {
-			tlsConfig, err = rpcCtx.GetClientTLSConfig()
-		} else {
-			tlsConfig, err = rpcCtx.GetTenantTLSConfig()
-		}
+		tlsConfig, err := rpcCtx.GetClientTLSConfig()
 		if err != nil {
 			return nil, err
 		}
