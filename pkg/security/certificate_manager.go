@@ -568,6 +568,41 @@ func (cm *CertificateManager) getEmbeddedServerTLSConfig(
 	return cfg, nil
 }
 
+// GetNodeClientTLSConfig returns a client TLS config suitable for
+// dialing other KV nodes.
+func (cm *CertificateManager) GetNodeClientTLSConfig() (*tls.Config, error) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	// Return the cached config if we have one.
+	if cm.clientConfig != nil {
+		return cm.clientConfig, nil
+	}
+
+	ca, err := cm.getCACertLocked()
+	if err != nil {
+		return nil, err
+	}
+
+	clientCert, err := cm.getNodeClientCertLocked()
+	if err != nil {
+		return nil, err
+	}
+
+	cfg, err := newClientTLSConfig(
+		cm.tlsSettings,
+		clientCert.FileContents,
+		clientCert.KeyFileContents,
+		ca.FileContents)
+	if err != nil {
+		return nil, err
+	}
+
+	// Cache the config.
+	cm.clientConfig = cfg
+	return cfg, nil
+}
+
 // GetUIServerTLSConfig returns a server TLS config for the Admin UI with a
 // callback to fetch the latest TLS config. We still attempt to get the config to make sure
 // the initial call has a valid config loaded.
@@ -698,11 +733,6 @@ func (cm *CertificateManager) getClientCertLocked(user username.SQLUsername) (*C
 // cm.mu must be held.
 func (cm *CertificateManager) getNodeClientCertLocked() (*CertInfo, error) {
 	if cm.nodeClientCert == nil {
-		// No specific client cert for 'node': use multi-purpose node cert,
-		// but only if we are in the host cluster.
-		if cm.IsForTenant() {
-			return nil, errors.New("no node client cert for a SQL server")
-		}
 		return cm.getNodeCertLocked()
 	}
 
@@ -797,51 +827,37 @@ func (cm *CertificateManager) GetTenantSigningCert() (*CertInfo, error) {
 // Returns the dual-purpose node certs if user == NodeUser and there is no
 // separate client cert for 'node'.
 func (cm *CertificateManager) GetClientTLSConfig(user username.SQLUsername) (*tls.Config, error) {
+	if user.IsNodeUser() {
+		return cm.GetNodeClientTLSConfig()
+	}
+
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
-	// We always need the CA cert.
-	var ca *CertInfo
-	var err error
-	if !cm.IsForTenant() {
-		// Host cluster.
-		ca, err = cm.getCACertLocked()
+	// The client could be connecting to a KV node or a tenant server.
+	// We need at least one of the two CAs. If none is available, we
+	// won't be able to verify the server's identity.
+	if cm.caCert == nil && cm.tenantCACert == nil {
+		return nil, makeErrorf(errors.New("no CA certificate found, cannot authenticate remote server"),
+			"problem loading CA certificate")
+	}
+	var caBlob []byte
+	if cm.caCert != nil {
+		ca, err := cm.getCACertLocked()
 		if err != nil {
 			return nil, err
 		}
-	} else {
-		// Tenant server.
-		ca, err = cm.getTenantCACertLocked()
+		caBlob = AppendCertificatesToBlob(caBlob, ca.FileContents)
+	}
+	if cm.tenantCACert != nil {
+		ca, err := cm.getTenantCACertLocked()
 		if err != nil {
 			return nil, err
 		}
+		caBlob = AppendCertificatesToBlob(caBlob, ca.FileContents)
 	}
 
-	if !user.IsNodeUser() {
-		clientCert, err := cm.getClientCertLocked(user)
-		if err != nil {
-			return nil, err
-		}
-
-		cfg, err := newClientTLSConfig(
-			cm.tlsSettings,
-			clientCert.FileContents,
-			clientCert.KeyFileContents,
-			ca.FileContents)
-		if err != nil {
-			return nil, err
-		}
-
-		return cfg, nil
-	}
-
-	// We're the node user.
-	// Return the cached config if we have one.
-	if cm.clientConfig != nil {
-		return cm.clientConfig, nil
-	}
-
-	clientCert, err := cm.getNodeClientCertLocked()
+	clientCert, err := cm.getClientCertLocked(user)
 	if err != nil {
 		return nil, err
 	}
@@ -850,13 +866,11 @@ func (cm *CertificateManager) GetClientTLSConfig(user username.SQLUsername) (*tl
 		cm.tlsSettings,
 		clientCert.FileContents,
 		clientCert.KeyFileContents,
-		ca.FileContents)
+		caBlob)
 	if err != nil {
 		return nil, err
 	}
 
-	// Cache the config.
-	cm.clientConfig = cfg
 	return cfg, nil
 }
 
