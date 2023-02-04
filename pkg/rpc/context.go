@@ -618,6 +618,10 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 		logClosingConnEvery: log.Every(time.Second),
 	}
 
+	if !opts.TenantID.IsSet() {
+		panic("tenant ID not set")
+	}
+
 	if !opts.TenantID.IsSystem() {
 		rpcCtx.clientCreds = newTenantClientCreds(opts.TenantID)
 	}
@@ -1484,7 +1488,7 @@ func (rpcCtx *Context) SetLocalInternalServer(
 ) {
 	clientTenantID := rpcCtx.TenantID
 	separateTracers := false
-	if rpcCtx.TenantID.IsSet() && !rpcCtx.TenantID.IsSystem() {
+	if !clientTenantID.IsSystem() {
 		// This is a secondary tenant server in the same process as the KV
 		// layer (shared-process multitenancy). In this case, the caller
 		// and the callee use separate tracers, so we can't mix and match
