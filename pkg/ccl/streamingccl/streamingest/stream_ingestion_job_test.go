@@ -469,6 +469,9 @@ func TestCutoverFractionProgressed(t *testing.T) {
 		return jobs.UpdateHighwaterProgressed(cutover, md, ju)
 	}))
 
+	metrics := registry.MetricsStruct().StreamIngest.(*Metrics)
+	require.Equal(t, int64(0), metrics.ReplicationCutoverProgress.Value())
+
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(func(ctx context.Context) error {
 		defer close(respRecvd)
@@ -491,6 +494,7 @@ func TestCutoverFractionProgressed(t *testing.T) {
 		"0.67": false,
 		"0.83": false,
 	}
+	var expectedRanges int64 = 6
 	g.GoCtx(func(ctx context.Context) error {
 		for {
 			select {
@@ -506,6 +510,14 @@ func TestCutoverFractionProgressed(t *testing.T) {
 				if _, ok := progressMap[s]; !ok {
 					t.Fatalf("unexpected progress fraction %s", s)
 				}
+				// We sometimes see the same progress, which is valid, no need to update
+				// the expected range count.
+				if expectedRanges != metrics.ReplicationCutoverProgress.Value() {
+					// There is progress, which means that another range was reverted,
+					// updated the expected range count.
+					expectedRanges--
+				}
+				require.Equal(t, expectedRanges, metrics.ReplicationCutoverProgress.Value())
 				progressMap[s] = true
 				continueRevert <- struct{}{}
 			}
@@ -514,6 +526,7 @@ func TestCutoverFractionProgressed(t *testing.T) {
 	require.NoError(t, g.Wait())
 	sip := loadProgress()
 	require.Equal(t, sip.GetFractionCompleted(), float32(1))
+	require.Equal(t, int64(0), metrics.ReplicationCutoverProgress.Value())
 
 	// Ensure we have hit all our expected progress fractions.
 	for k, v := range progressMap {
