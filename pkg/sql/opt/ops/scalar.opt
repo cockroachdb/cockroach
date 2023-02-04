@@ -721,8 +721,7 @@ define Case {
 }
 
 # When represents a single WHEN ... THEN ... condition inside a CASE statement.
-# It is the type of each list item in Whens (except for the last item which is
-# a raw expression for the ELSE statement).
+# It is the type of each list item in Whens.
 [Scalar]
 define When {
     Condition ScalarExpr

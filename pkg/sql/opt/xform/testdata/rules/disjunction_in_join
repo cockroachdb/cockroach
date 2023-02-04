@@ -3744,7 +3744,7 @@ project
       │    │         └── bool-or [as=bool_or:20, outer=(19)]
       │    │              └── notnull:19
       │    └── projections
-      │         └── CASE WHEN bool_or:20 AND (t1.a2:2 IS NOT NULL) THEN true WHEN bool_or:20 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:21, outer=(2,20)]
+      │         └── ((bool_or:20 AND (t1.a2:2 IS NOT NULL)) IS true) OR (((bool_or:20 IS NULL) IS NOT true) AND CAST(NULL AS BOOL)) [as=case:21, outer=(2,20)]
       └── filters
            └── or [outer=(2,21), correlated-subquery]
                 ├── case:21
@@ -3801,7 +3801,7 @@ project
       │    │         └── bool-or [as=bool_or:20, outer=(19)]
       │    │              └── notnull:19
       │    └── projections
-      │         └── CASE WHEN bool_or:20 AND (t1.a2:2 IS NOT NULL) THEN true WHEN bool_or:20 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:21, outer=(2,20)]
+      │         └── ((bool_or:20 AND (t1.a2:2 IS NOT NULL)) IS true) OR (((bool_or:20 IS NULL) IS NOT true) AND CAST(NULL AS BOOL)) [as=case:21, outer=(2,20)]
       └── filters
            └── or [outer=(2,21), correlated-subquery]
                 ├── NOT case:21

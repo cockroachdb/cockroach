@@ -320,6 +320,30 @@ $input
 =>
 (SimplifyWhens $condition $whens $orElse)
 
+# SimplifyLeakproofBooleanCase replaces a boolean CASE statement with an
+# equivalent boolean expression using AND and OR expressions. This is
+# possible when the following conditions are satisfied:
+#
+#   1. The CASE statement returns a boolean value.
+#   2. The CASE statement is leak-proof.
+#   3. The CASE condition is a *constant* boolean value (True, False, NULL).
+#   4. Each WHEN branch returns a *constant* boolean value.
+#
+# See the ConvertCaseToCondition comment for details and an example.
+#
+# This is useful (for example) for strict UDFs, because they are implemented
+# using a CASE statement that checks whether the arguments are NULL.
+[SimplifyLeakproofBooleanCase, Normalize]
+(Case
+    $condition:* & (IsConstantBool $condition)
+    $whens:* & (WhensReturnConstBool $whens)
+    $orElse:* &
+        (CaseReturnsBoolean $whens $orElse) &
+        (IsCaseLeakproof $condition $whens $orElse)
+)
+=>
+(ConvertCaseToCondition $condition $whens $orElse)
+
 # InlineAnyValuesSingleCol converts Any with Values input to AnyScalar.
 # This version handles the case where there is a single column.
 [InlineAnyValuesSingleCol, Normalize]

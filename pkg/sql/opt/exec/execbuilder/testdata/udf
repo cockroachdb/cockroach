@@ -294,3 +294,84 @@ vectorized: true
   columns: (f88259)
   size: 1 column, 1 row
   row 0, expr 0: f88259(333, 444)
+
+# Regression test for #96218. The CASE statement used to enforce strict behavior
+# for UDFs should not prevent decorrelation for non-volatile UDFs. This query
+# should be fully decorrelated.
+query T
+EXPLAIN SELECT
+  c.relname,
+  CASE WHEN c.relispartition THEN 'p' WHEN c.relkind IN ('m', 'v') THEN 'v' ELSE 't' END,
+  obj_description(c.oid, 'pg_class')
+FROM pg_catalog.pg_class c
+LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+WHERE
+  c.relkind IN ('f', 'm', 'p', 'r', 'v')
+  AND n.nspname NOT IN ('pg_catalog', 'pg_toast')
+  AND pg_catalog.pg_table_is_visible(c.oid);
+----
+distribution: local
+vectorized: true
+·
+• render
+│
+└── • distinct
+    │ distinct on: rownum
+    │
+    └── • hash join (right outer)
+        │ equality: (objoid) = (oid)
+        │
+        ├── • hash join
+        │   │ equality: (relnamespace) = (oid)
+        │   │
+        │   ├── • virtual table lookup join
+        │   │   │ table: pg_class@pg_class_oid_idx
+        │   │   │ equality: (classoid) = (oid)
+        │   │   │ pred: relname = 'pg_class'
+        │   │   │
+        │   │   └── • filter
+        │   │       │ filter: objsubid = 0
+        │   │       │
+        │   │       └── • virtual table
+        │   │             table: pg_description@primary
+        │   │
+        │   └── • filter
+        │       │ filter: nspname = 'pg_catalog'
+        │       │
+        │       └── • virtual table
+        │             table: pg_namespace@primary
+        │
+        └── • ordinality
+            │
+            └── • filter
+                │ filter: nspname NOT IN ('pg_catalog', 'pg_toast')
+                │
+                └── • virtual table lookup join (left outer)
+                    │ table: pg_namespace@pg_namespace_oid_idx
+                    │ equality: (relnamespace) = (oid)
+                    │
+                    └── • filter
+                        │ filter: (((oid IS NULL) IS true) AND NULL) OR (((oid IS NULL) IS NOT true) AND "?column?")
+                        │
+                        └── • render
+                            │
+                            └── • distinct
+                                │ distinct on: rownum
+                                │
+                                └── • hash join
+                                    │ equality: (oid) = (oid)
+                                    │
+                                    ├── • virtual table lookup join
+                                    │   │ table: pg_namespace@pg_namespace_oid_idx
+                                    │   │ equality: (relnamespace) = (oid)
+                                    │   │
+                                    │   └── • virtual table
+                                    │         table: pg_class@primary
+                                    │
+                                    └── • filter
+                                        │ filter: relkind IN ('f', 'm', 'p', 'r', 'v')
+                                        │
+                                        └── • ordinality
+                                            │
+                                            └── • virtual table
+                                                  table: pg_class@primary
