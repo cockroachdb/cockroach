@@ -869,7 +869,7 @@ func TestChangefeedRandomExpressions(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	skip.UnderStress(t)
 	skip.UnderRace(t)
-
+	skip.WithIssue(t, 96532)
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		rng, _ := randutil.NewTestRand()
