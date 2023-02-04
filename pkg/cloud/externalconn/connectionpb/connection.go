@@ -20,10 +20,12 @@ func (d *ConnectionDetails) Type() ConnectionType {
 		return TypeStorage
 	case ConnectionProvider_gcp_kms, ConnectionProvider_aws_kms:
 		return TypeKMS
-	case ConnectionProvider_kafka, ConnectionProvider_http, ConnectionProvider_https, ConnectionProvider_sql,
+	case ConnectionProvider_kafka, ConnectionProvider_http, ConnectionProvider_https,
 		ConnectionProvider_webhookhttp, ConnectionProvider_webhookhttps, ConnectionProvider_gcpubsub:
 		// Changefeed sink providers are TypeStorage for now because they overlap with backup storage providers.
 		return TypeStorage
+	case ConnectionProvider_sql:
+		return TypeForeignData
 	default:
 		panic(errors.AssertionFailedf("ConnectionDetails.Type called on a details with an unknown type: %s", d.Provider.String()))
 	}

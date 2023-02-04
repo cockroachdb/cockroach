@@ -45,6 +45,7 @@ enum ConnectionType {
   UNSPECIFIED = 0 [(gogoproto.enumvalue_customname) = "TypeUnspecified"];
   STORAGE = 1 [(gogoproto.enumvalue_customname) = "TypeStorage"];
   KMS = 2 [(gogoproto.enumvalue_customname) = "TypeKMS"];
+  FOREIGNDATA = 3 [(gogoproto.enumvalue_customname) = "TypeForeignData"];
 }
 
 // SimpleURI encapsulates the information that represents an External Connection
