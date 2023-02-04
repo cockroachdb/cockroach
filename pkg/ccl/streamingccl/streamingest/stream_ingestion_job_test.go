@@ -125,8 +125,13 @@ SET enable_experimental_stream_replication = true;
 	sourceSQL.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&startTime)
 
 	destSQL.Exec(t,
-		`CREATE TENANT "destination-tenant" FROM REPLICATION OF "source-tenant" ON $1 `,
-		pgURL.String(),
+		fmt.Sprintf(`CREATE EXTERNAL CONNECTION "replication-source-addr" AS "%s"`,
+			pgURL.String()),
+	)
+
+	destSQL.Exec(t,
+		`CREATE TENANT "destination-tenant" FROM REPLICATION OF "source-tenant" ON $1`,
+		"external://replication-source-addr",
 	)
 	streamProducerJobID, ingestionJobID := replicationtestutils.GetStreamJobIds(t, ctx, destSQL, "destination-tenant")
 
@@ -203,6 +208,12 @@ func TestTenantStreamingCreationErrors(t *testing.T) {
 	DestSysSQL.Exec(t, "CREATE TENANT \"100\"")
 	DestSysSQL.ExpectErr(t, "pq: tenant with name \"100\" already exists",
 		`CREATE TENANT "100" FROM REPLICATION OF source ON $1`, srcPgURL.String())
+
+	badPgURL := srcPgURL
+	badPgURL.Host = "nonexistent_test_endpoint"
+	DestSysSQL.ExpectErr(t, "pq: failed to construct External Connection details: failed to connect",
+		fmt.Sprintf(`CREATE EXTERNAL CONNECTION "replication-source-addr" AS "%s"`,
+			badPgURL.String()))
 }
 
 func TestCutoverBuiltin(t *testing.T) {
