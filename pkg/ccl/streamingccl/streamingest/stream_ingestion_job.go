@@ -492,7 +492,8 @@ func maybeRevertToCutoverTimestamp(
 
 	p := execCtx.(sql.JobExecContext)
 	db := p.ExecCfg().DB
-	j, err := p.ExecCfg().JobRegistry.LoadJob(ctx, ingestionJobID)
+	jobRegistry := p.ExecCfg().JobRegistry
+	j, err := jobRegistry.LoadJob(ctx, ingestionJobID)
 	if err != nil {
 		return false, err
 	}
@@ -537,6 +538,8 @@ func maybeRevertToCutoverTimestamp(
 		if err != nil {
 			return err
 		}
+		m := jobRegistry.MetricsStruct().StreamIngest.(*Metrics)
+		m.ReplicationCutoverProgress.Update(int64(nRanges))
 		if origNRanges == -1 {
 			origNRanges = nRanges
 		}
