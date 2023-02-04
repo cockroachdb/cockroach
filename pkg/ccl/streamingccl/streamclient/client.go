@@ -12,8 +12,10 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
+	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -140,7 +142,7 @@ type Subscription interface {
 
 // NewStreamClient creates a new stream client based on the stream address.
 func NewStreamClient(
-	ctx context.Context, streamAddress streamingccl.StreamAddress,
+	ctx context.Context, streamAddress streamingccl.StreamAddress, db isql.DB,
 ) (Client, error) {
 	var streamClient Client
 	streamURL, err := streamAddress.URL()
@@ -153,6 +155,15 @@ func NewStreamClient(
 		// The canonical PostgreSQL URL scheme is "postgresql", however our
 		// own client commands also accept "postgres".
 		return NewPartitionedStreamClient(ctx, streamURL)
+	case "external":
+		if db == nil {
+			return nil, errors.AssertionFailedf("nil db handle can't be used to dereference external URI")
+		}
+		addr, err := lookupExternalConnection(ctx, streamURL.Host, db)
+		if err != nil {
+			return nil, err
+		}
+		return NewStreamClient(ctx, addr, db)
 	case RandomGenScheme:
 		streamClient, err = newRandomStreamClient(streamURL)
 		if err != nil {
@@ -165,6 +176,21 @@ func NewStreamClient(
 	return streamClient, nil
 }
 
+func lookupExternalConnection(
+	ctx context.Context, name string, localDB isql.DB,
+) (streamingccl.StreamAddress, error) {
+	// Retrieve the external connection object from the system table.
+	var ec externalconn.ExternalConnection
+	if err := localDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		var err error
+		ec, err = externalconn.LoadExternalConnection(ctx, name, txn)
+		return err
+	}); err != nil {
+		return "", errors.Wrap(err, "failed to load external connection object")
+	}
+	return streamingccl.StreamAddress(ec.ConnectionProto().UnredactedURI()), nil
+}
+
 // GetFirstActiveClient iterates through each provided stream address
 // and returns the first client it's able to successfully Dial.
 func GetFirstActiveClient(ctx context.Context, streamAddresses []string) (Client, error) {
@@ -174,7 +200,7 @@ func GetFirstActiveClient(ctx context.Context, streamAddresses []string) (Client
 	var combinedError error = nil
 	for _, address := range streamAddresses {
 		streamAddress := streamingccl.StreamAddress(address)
-		client, err := NewStreamClient(ctx, streamAddress)
+		client, err := NewStreamClient(ctx, streamAddress, nil)
 		if err == nil {
 			err = client.Dial(ctx)
 			if err == nil {
