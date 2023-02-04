@@ -66,6 +66,7 @@ type SecurityContext struct {
 		// httpClient uses the client TLS config. It is initialized lazily.
 		httpClient lazyHTTPClient
 	}
+	useNodeAuth bool
 }
 
 // NewSecurityContext instantiates a SecurityContext.
@@ -91,7 +92,7 @@ func NewSecurityContext(
 func (ctx *SecurityContext) GetCertificateManager() (*security.CertificateManager, error) {
 	ctx.lazy.certificateManager.Do(func() {
 		var opts []security.Option
-		if ctx.tenID != roachpb.SystemTenantID {
+		if !(ctx.useNodeAuth || ctx.tenID == roachpb.SystemTenantID) {
 			opts = append(opts, security.ForTenant(ctx.tenID.ToUint64()))
 		}
 		ctx.lazy.certificateManager.cm, ctx.lazy.certificateManager.err =
@@ -131,52 +132,6 @@ func (ctx *SecurityContext) GetServerTLSConfig() (*tls.Config, error) {
 	}
 
 	tlsCfg, err := cm.GetServerTLSConfig()
-	if err != nil {
-		return nil, wrapError(err)
-	}
-	return tlsCfg, nil
-}
-
-// GetClientTLSConfig returns the client TLS config, initializing it if needed.
-// If Insecure is true, return a nil config, otherwise ask the certificate
-// manager for a TLS config using certs for the config.User.
-// This TLSConfig might **NOT** be suitable to talk to the Admin UI, use GetUIClientTLSConfig instead.
-func (ctx *SecurityContext) GetClientTLSConfig() (*tls.Config, error) {
-	// Early out.
-	if ctx.config.Insecure {
-		return nil, nil
-	}
-
-	cm, err := ctx.GetCertificateManager()
-	if err != nil {
-		return nil, wrapError(err)
-	}
-
-	tlsCfg, err := cm.GetClientTLSConfig(ctx.config.User)
-	if err != nil {
-		return nil, wrapError(err)
-	}
-	return tlsCfg, nil
-}
-
-// GetTenantTLSConfig returns the client TLS config for the tenant, provided
-// the SecurityContext operates on behalf of a secondary tenant (i.e. not the
-// system tenant).
-//
-// If Insecure is true, return a nil config, otherwise retrieves the client
-// certificate for the configured tenant from the cert manager.
-func (ctx *SecurityContext) GetTenantTLSConfig() (*tls.Config, error) {
-	// Early out.
-	if ctx.config.Insecure {
-		return nil, nil
-	}
-
-	cm, err := ctx.GetCertificateManager()
-	if err != nil {
-		return nil, wrapError(err)
-	}
-
-	tlsCfg, err := cm.GetTenantTLSConfig()
 	if err != nil {
 		return nil, wrapError(err)
 	}

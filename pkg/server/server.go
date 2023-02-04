@@ -286,6 +286,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	rpcCtxOpts := rpc.ContextOptions{
 		TenantID:         roachpb.SystemTenantID,
+		UseNodeAuth:      true,
 		NodeID:           cfg.IDContainer,
 		StorageClusterID: cfg.ClusterIDContainer,
 		Config:           cfg.Config,
