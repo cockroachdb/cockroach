@@ -44,11 +44,11 @@ type lazyCertificateManager struct {
 }
 
 func wrapError(err error) error {
-	if !errors.HasType(err, (*security.Error)(nil)) {
-		return &security.Error{
-			Message: "problem using security settings",
-			Err:     err,
-		}
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, security.ErrCertManagement) {
+		err = errors.Wrap(err, "problem using security settings")
 	}
 	return err
 }
@@ -112,7 +112,9 @@ func (ctx *SecurityContext) GetCertificateManager() (*security.CertificateManage
 	return ctx.lazy.certificateManager.cm, ctx.lazy.certificateManager.err
 }
 
-var errNoCertificatesFound = errors.New("no certificates found; does certs dir exist?")
+var errNoCertificatesFound = errors.Mark(
+	errors.New("no certificates found; does certs dir exist?"),
+	security.ErrCertManagement)
 
 // GetServerTLSConfig returns the server TLS config, initializing it if needed.
 // If Insecure is true, return a nil config, otherwise ask the certificate
