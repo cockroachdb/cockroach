@@ -171,6 +171,9 @@ func (o *channelOrchestrator) startControlledServer(
 	// tenantName is the name of the tenant for which a server should
 	// be created.
 	tenantName roachpb.TenantName,
+	// retryStartupOnFailure indicates whether the server startup should
+	// retry until it succeeds.
+	retryStartupOnFailure bool,
 	// finalizeFn is called when the server is fully stopped.
 	// This is always called, even if there is a server startup error.
 	finalizeFn func(ctx context.Context, tenantName roachpb.TenantName),
@@ -304,7 +307,7 @@ func (o *channelOrchestrator) startControlledServer(
 			state.started.Set(false)
 			close(stoppedCh)
 			if !startedOrStoppedChAlreadyClosed {
-				state.startErr = errors.New("server stop before successful start")
+				state.startErr = errors.CombineErrors(state.startErr, errors.New("server stop before successful start"))
 				close(startedOrStoppedCh)
 			}
 
@@ -388,6 +391,9 @@ func (o *channelOrchestrator) startControlledServer(
 					"unable to start server for tenant %q (attempt %d, will retry): %v",
 					tenantName, retry.CurrentAttempt(), err)
 				state.startErr = err
+				if !retryStartupOnFailure {
+					return
+				}
 				continue
 			}
 			tenantServer = s
