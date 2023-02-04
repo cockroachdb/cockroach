@@ -29,5 +29,14 @@ eexpect "interrupted"
 eexpect $prompt
 end_test
 
+start_test "Check that the server properly fails to initialize if the pre-start tenants fail to start"
+send "$argv start-single-node --insecure --store=logs/db\r"
+eexpect ERROR
+eexpect "server startup failed"
+eexpect "failed to start the server controller"
+eexpect "does not exist"
+eexpect $prompt
+end_test
+
 send "exit\r"
 eexpect eof

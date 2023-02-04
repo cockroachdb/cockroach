@@ -12,6 +12,7 @@ package server
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -126,7 +127,7 @@ func (c *serverController) startInitialSecondaryTenantServers(
 			// We already pre-initialize the entry for the system tenant.
 			continue
 		}
-		if _, err := c.startAndWaitForRunningServer(ctx, name); err != nil {
+		if err := c.startAndWaitForRunningServer(ctx, name); err != nil {
 			return err
 		}
 	}
@@ -176,10 +177,16 @@ func (c *serverController) scanTenantsForRunnableServices(
 	return nil
 }
 
+// createServerEntryLocked starts an orchestration task for the given
+// tenant.
 func (c *serverController) createServerEntryLocked(
 	ctx context.Context, tenantName roachpb.TenantName,
 ) (*serverEntry, error) {
-	entry, err := c.startControlledServer(ctx, tenantName)
+	// We need to set singleShot to false because it is
+	// non-deterministic whether we use this code path synchronously or
+	// whether the controller has started the service asynchronously as
+	// part of scanTenantsForRunnableServices().
+	entry, err := c.startControlledServer(ctx, tenantName, false /* singleShot */)
 	if err != nil {
 		return nil, err
 	}
@@ -188,15 +195,21 @@ func (c *serverController) createServerEntryLocked(
 }
 
 // startControlledServer starts the orchestration task that starts,
-// then shuts down, the server for the given tenant.
+// then shuts down, the server for the given tenant. The singleShot
+// parameter, if true, indicates that the startup should be
+// synchronous: if the server startup fails, it is not retried and the
+// startup error is returned.
+//
+// Note: this function cannot access c.mu; otherwise there may be a
+// deadlock.
 func (c *serverController) startControlledServer(
-	ctx context.Context, tenantName roachpb.TenantName,
-) (*serverEntry, error) {
+	ctx context.Context, tenantName roachpb.TenantName, singleShot bool,
+) (entry *serverEntry, resErr error) {
 	var stoppedChClosed syncutil.AtomicBool
 	stopRequestCh := make(chan struct{})
 	stoppedCh := make(chan struct{})
 	startedOrStoppedCh := make(chan struct{})
-	entry := &serverEntry{
+	entry = &serverEntry{
 		nameContainer: roachpb.NewTenantNameContainer(tenantName),
 		state: serverState{
 			startedOrStopped: startedOrStoppedCh,
@@ -240,6 +253,23 @@ func (c *serverController) startControlledServer(
 		}
 	}); err != nil {
 		return nil, err
+	}
+
+	var singleShotErrCh chan error
+	if singleShot {
+		// Singleshot means we are not retrying the startup, and the
+		// caller is interested in the startup error if any.
+		singleShotErrCh = make(chan error, 1)
+		defer func() {
+			select {
+			case startupErr := <-singleShotErrCh:
+				resErr = errors.CombineErrors(resErr, startupErr)
+			case <-c.stopper.ShouldQuiesce():
+				resErr = errors.CombineErrors(resErr, errors.New("server shutting down"))
+			case <-topCtx.Done():
+				resErr = errors.CombineErrors(resErr, topCtx.Err())
+			}
+		}()
 	}
 
 	if err := c.stopper.RunAsyncTask(ctx, "managed-tenant-server", func(_ context.Context) {
@@ -291,6 +321,10 @@ func (c *serverController) startControlledServer(
 			if err != nil {
 				c.logStartEvent(ctx, roachpb.TenantID{}, 0,
 					entry.nameContainer.Get(), false /* success */, err)
+				if singleShot {
+					singleShotErrCh <- err
+					break
+				}
 				log.Warningf(ctx,
 					"unable to start server for tenant %q (attempt %d, will retry): %v",
 					tenantName, retry.CurrentAttempt(), err)
@@ -315,6 +349,9 @@ func (c *serverController) startControlledServer(
 		}))
 
 		// Indicate the server has started.
+		if singleShot {
+			close(singleShotErrCh)
+		}
 		entry.server = s
 		startedOrStoppedChAlreadyClosed = true
 		entry.state.started.Set(true)
@@ -373,10 +410,42 @@ ORDER BY name`, mtinfopb.ServiceModeShared, mtinfopb.DataStateReady)
 	return tenantNames, err
 }
 
-// startAndWaitForRunningServer either waits for an existing server to
-// have started already for the given tenant, or starts and wait for a
-// new server.
+// startAndWaitForRunningServer creates a server for the named tenant
+// and waits for it to start up. No retry is attempted.
 func (c *serverController) startAndWaitForRunningServer(
+	ctx context.Context, tenantName roachpb.TenantName,
+) error {
+	// Sanity check: this only works if the entry doesn't exist yet.
+	if hasEntry := func() bool {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		_, ok := c.mu.servers[tenantName]
+		return ok
+	}(); hasEntry {
+		return errors.AssertionFailedf("programming error: server already present for tenant %q", tenantName)
+	}
+
+	// Start the server and wait for _startup_ to complete.
+	entry, err := c.startControlledServer(ctx, tenantName, true /* singleShot */)
+	if err != nil {
+		return err
+	}
+
+	// The server has started: add a server entry for this tenant name.
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.mu.servers[tenantName] = entry
+	return nil
+}
+
+// waitForRunningServer waits until the server for the given tenant
+// has started up. It is valid to call this function after the server
+// has already began initialization; for example, running ALTER TENANT
+// START SERVICE SHARED will cause the server controller to begin
+// initializing the tenant server asynchronously; at which point
+// waitForRunningServer() merely picks up the in-progress startup and
+// simply waits for it to complete.
+func (c *serverController) waitForRunningServer(
 	ctx context.Context, tenantName roachpb.TenantName,
 ) (onDemandServer, error) {
 	entry, err := func() (*serverEntry, error) {
@@ -407,13 +476,10 @@ func (c *serverController) startServerInternal(
 	tenantName := nameContainer.Get()
 	testArgs := c.testArgs[tenantName]
 
+	serverIdx := atomic.AddUint32(&c.nextServerIdx, 1)
+	idx := int(serverIdx)
+
 	// Server does not exist yet: instantiate and start it.
-	idx := func() int {
-		c.mu.Lock()
-		defer c.mu.Unlock()
-		c.mu.nextServerIdx++
-		return c.mu.nextServerIdx
-	}()
 	return c.tenantServerCreator.newTenantServer(ctx, nameContainer, tenantStopper, idx, testArgs)
 }
 

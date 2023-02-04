@@ -110,11 +110,12 @@ type serverController struct {
 		// TODO(knz): Detect when the mapping of name to tenant ID has
 		// changed, and invalidate the entry.
 		servers map[roachpb.TenantName]*serverEntry
-
-		// nextServerIdx is the index to provide to the next call to
-		// newServerFn.
-		nextServerIdx int
 	}
+
+	// nextServerIdx is the index to provide to the next call to
+	// newServerFn. This is updated concurrently, use the atomic
+	// package to access.
+	nextServerIdx uint32
 }
 
 func newServerController(

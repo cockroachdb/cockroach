@@ -893,7 +893,7 @@ func (ts *TestServer) StartSharedProcessTenant(
 	}
 
 	// Instantiate the tenant server.
-	s, err := ts.Server.serverController.startAndWaitForRunningServer(ctx, args.TenantName)
+	s, err := ts.Server.serverController.waitForRunningServer(ctx, args.TenantName)
 	if err != nil {
 		return nil, nil, err
 	}
