@@ -257,6 +257,11 @@ type BaseConfig struct {
 	// These events are meant for the Observability Service, but they might pass
 	// through an OpenTelemetry Collector.
 	ObsServiceAddr string
+
+	// DisablePreStartTenantServers prevents the serverController from
+	// starting up and waiting on initialization of shared-process
+	// secondary tenant servers.
+	DisablePreStartTenantServers bool
 }
 
 // MakeBaseConfig returns a BaseConfig with default values.
