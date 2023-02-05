@@ -6,10 +6,12 @@ go_library(
     srcs = [
         "doc.go",
         "kvflowcontrol.go",
+        "testing_knobs.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/base",
         "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb",
         "//pkg/roachpb",
         "//pkg/util/admission/admissionpb",
