@@ -63,3 +63,12 @@ select "PG_CATALOG".@
 complete 0 20
 msg: ""
 (no completions generated)
+
+complete
+select information_schema . _pg_index@
+----
+complete 0 37
+msg: ""
+completions:
+- "functions":
+  "information_schema._pg_index_position(" (Not usable; exposed only for compatibility with PostgreSQL) -> "information_schema._pg_index_position(" (0, 30)

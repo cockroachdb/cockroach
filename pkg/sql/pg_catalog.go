@@ -2357,9 +2357,13 @@ func addPgProcBuiltinRow(name string, addRow func(...tree.Datum) error) error {
 	_, overloads := builtinsregistry.GetBuiltinProperties(name)
 	nspOid := tree.NewDOid(catconstants.PgCatalogID)
 	const crdbInternal = catconstants.CRDBInternalSchemaName + "."
+	const infoSchema = catconstants.InformationSchemaName + "."
 	if strings.HasPrefix(name, crdbInternal) {
 		nspOid = tree.NewDOid(catconstants.CrdbInternalID)
 		name = name[len(crdbInternal):]
+	} else if strings.HasPrefix(name, infoSchema) {
+		nspOid = tree.NewDOid(catconstants.InformationSchemaID)
+		name = name[len(infoSchema):]
 	}
 
 	for _, builtin := range overloads {
