@@ -36,15 +36,7 @@ completions:
 - "relation":
   "geography_columns" (Shows all defined geography columns. Matches PostGIS' geography_columns function) -> "geography_columns" (0, 0)
   "geometry_columns" (Shows all defined geometry columns. Matches PostGIS' geometry_columns functional) -> "geometry_columns" (0, 0)
-  "pg_aggregate" (aggregated built-in functions (incomplete)) -> "pg_aggregate" (0, 0)
-  "pg_am" (index access methods (incomplete)) -> "pg_am" (0, 0)
-  "pg_amop" (pg_amop was created for compatibility and is currently unimplemented) -> "pg_amop" (0, 0)
-  "pg_amproc" (pg_amproc was created for compatibility and is currently unimplemented) -> "pg_amproc" (0, 0)
-  "pg_attrdef" (column default values) -> "pg_attrdef" (0, 0)
-  "pg_attribute" (table columns (incomplete - see also information_schema.columns)) -> "pg_attribute" (0, 0)
-  "pg_auth_members" (role membership) -> "pg_auth_members" (0, 0)
-  "pg_authid" (authorization identifiers - differs from postgres as we do not display passwords) -> "pg_authid" (0, 0)
-  ... entries omitted ...
+  "spatial_ref_sys" (Shows all defined Spatial Reference Identifiers (SRIDs). Matches PostGIS' spatia) -> "spatial_ref_sys" (0, 0)
 - "schema":
   "crdb_internal" () -> "crdb_internal" (0, 0)
   "information_schema" () -> "information_schema" (0, 0)
@@ -124,3 +116,23 @@ completions:
 - "functions":
   "array_length(" ((from schema pg_catalog) Calculates the length of `input` on the provided `array_dimension`) -> "array_length(" (0, 7)
   "array_lower(" ((from schema pg_catalog) Calculates the minimum value of `input` on the provided `array_dimension`) -> "array_lower(" (0, 7)
+
+# Complete pg_catalog tables after a pg_catalog prefix.
+complete
+select * from pg_catalog.pg_pro@
+----
+complete 0 31
+msg: ""
+completions:
+- "relation":
+  "pg_proc" (built-in functions (incomplete)) -> "pg_proc" (0, 6)
+
+# Complete pg_catalog tables if the user has typed pg_ already.
+complete
+select * from pg_pro@
+----
+complete 0 20
+msg: ""
+completions:
+- "relation":
+  "pg_proc" (built-in functions (incomplete)) -> "pg_proc" (0, 6)
