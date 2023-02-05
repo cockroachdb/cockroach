@@ -1,4 +1,4 @@
-# Walk through the basics of the datadriven syntax.
+# Walk through the basics of the datadriven syntax for flow controller tests.
 init
 ----
 
@@ -7,17 +7,17 @@ init
 # it to get depleted in 8s. The remaining 8s of incoming work ends up getting
 # queued.
 timeline
-start=0s end=16s class=regular stream=t1/s1 adjust=-2MiB/s rate=100/s
-start=0s end=16s class=regular stream=t1/s2 adjust=-2MiB/s rate=100/s
+t=[0s,16s) class=regular stream=t1/s1 adjust=-2MiB/s rate=100/s
+t=[0s,16s) class=regular stream=t1/s2 adjust=-2MiB/s rate=100/s
 ----
 
 # Schedule the return of flow tokens at t=20s in similar increments.
 timeline
-start=20s end=36s class=regular stream=t1/s1 adjust=+2MiB/s rate=100/s
-start=20s end=36s class=regular stream=t1/s2 adjust=+2MiB/s rate=100/s
+t=[20s,36s) class=regular stream=t1/s1 adjust=+2MiB/s rate=100/s
+t=[20s,36s) class=regular stream=t1/s2 adjust=+2MiB/s rate=100/s
 ----
 
-simulate end=40s
+simulate t=[0s,40s)
 ----
 
 # There two replication streams, so we initially have 16*2=32MiB of regular
@@ -27,7 +27,7 @@ simulate end=40s
 # prioritization -- those tokens get depleted at t=4s. Both are deducted at
 # 4MiB/s (2MiB/s for each stream) until we have 0MiB regular tokens and -16MiB
 # elastic tokens.
-plot start=0s end=20s
+plot t=[0s,20s)
 kvadmission.flow_controller.{regular,elastic}_tokens_available unit=MiB
 kvadmission.flow_controller.{regular,elastic}_tokens_deducted  unit=MiB/s rate=true
 ----
@@ -76,7 +76,7 @@ kvadmission.flow_controller.{regular,elastic}_tokens_deducted  unit=MiB/s rate=t
 # 100 requests/s for two streams, we observe an aggregate admission rate of
 # ~200/s, and then later 200/s of waiting requests growth. There are no
 # errors.
-plot start=0s end=20s
+plot t=[0s,20s)
 kvadmission.flow_controller.regular_requests_{admitted,waiting} unit=reqs/s rate=true
 kvadmission.flow_controller.{regular,elastic}_requests_errored  unit=reqs/s rate=true
 ----
@@ -107,7 +107,7 @@ kvadmission.flow_controller.{regular,elastic}_requests_errored  unit=reqs/s rate
 
 # Confirm that there are two streams underneath, both of which eventually get
 # blocked for {regular,elastic} traffic, with the latter happening first.
-plot start=0s end=20s
+plot t=[0s,20s)
 kvadmission.flow_controller.regular_stream_count                   unit=streams
 kvadmission.flow_controller.{regular,elastic}_blocked_stream_count unit=streams
 ----
@@ -140,7 +140,7 @@ kvadmission.flow_controller.{regular,elastic}_blocked_stream_count unit=streams
 # at ~200/s, which matches the rate at which we're reducing the number of
 # waiting requests. By t=36s we'll have returned all {regular,elastic} flow
 # tokens, including for the requests that had to wait for admission.
-plot start=18s end=40s
+plot t=[18s,40s)
 kvadmission.flow_controller.regular_requests_{admitted,waiting} unit=reqs/s rate=true
 kvadmission.flow_controller.{regular,elastic}_tokens_available unit=MiB
 ----
@@ -185,4 +185,4 @@ kvadmission.flow_controller.{regular,elastic}_tokens_available unit=MiB
 ----
 ----
 
-# vim:ft=sh
+# vim:ft=conf

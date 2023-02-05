@@ -85,6 +85,13 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 
+	requestsBypassed = metric.Metadata{
+		Name:        "kvadmission.flow_controller.%s_requests_bypassed",
+		Help:        "Number of %s requests that bypassed the flow controller (due to disconnecting streams)",
+		Measurement: "Requests",
+		Unit:        metric.Unit_COUNT,
+	}
+
 	waitDuration = metric.Metadata{
 		Name:        "kvadmission.flow_controller.%s_wait_duration",
 		Help:        "Latency histogram for time %s requests spent waiting for flow tokens",
@@ -126,6 +133,7 @@ type metrics struct {
 	RequestsWaiting       [admissionpb.NumWorkClasses]*metric.Gauge
 	RequestsAdmitted      [admissionpb.NumWorkClasses]*metric.Counter
 	RequestsErrored       [admissionpb.NumWorkClasses]*metric.Counter
+	RequestsBypassed      [admissionpb.NumWorkClasses]*metric.Counter
 	WaitDuration          [admissionpb.NumWorkClasses]metric.IHistogram
 	TotalStreamCount      [admissionpb.NumWorkClasses]*metric.Gauge
 	BlockedStreamCount    [admissionpb.NumWorkClasses]*metric.Gauge
@@ -166,6 +174,9 @@ func newMetrics(c *Controller) *metrics {
 		)
 		m.RequestsAdmitted[wc] = metric.NewCounter(
 			annotateMetricTemplateWithWorkClass(wc, requestsAdmitted),
+		)
+		m.RequestsBypassed[wc] = metric.NewCounter(
+			annotateMetricTemplateWithWorkClass(wc, requestsBypassed),
 		)
 		m.RequestsErrored[wc] = metric.NewCounter(
 			annotateMetricTemplateWithWorkClass(wc, requestsErrored),
@@ -212,6 +223,10 @@ func (m *metrics) onAdmitted(class admissionpb.WorkClass, dur time.Duration) {
 	m.RequestsAdmitted[class].Inc(1)
 	m.RequestsWaiting[class].Dec(1)
 	m.WaitDuration[class].RecordValue(dur.Nanoseconds())
+}
+
+func (m *metrics) onBypassed(class admissionpb.WorkClass) {
+	m.RequestsBypassed[class].Inc(1)
 }
 
 func (m *metrics) onErrored(class admissionpb.WorkClass) {

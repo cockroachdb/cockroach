@@ -8,22 +8,22 @@ init
 # Set up an open-loop thread issuing 2MiB/s of regular writes from t=0s to
 # t=25s.
 timeline
-start=0s  end=25s class=regular stream=t1/s1 adjust=-2MiB/s   rate=10/s
+t=[0s,25s)  class=regular stream=t1/s1 adjust=-2MiB/s   rate=10/s
 ----
 
 # Set up choppy flow token returns starting at t=15s. The average rate of
 # returns is lower than 2MiB/s, so we should always have some waiting work.
 timeline
-start=15s end=16s class=regular stream=t1/s1 adjust=+0.9MiB/s rate=10/s
-start=16s end=17s class=regular stream=t1/s1 adjust=+2.1MiB/s rate=10/s
-start=17s end=18s class=regular stream=t1/s1 adjust=+0.1MiB/s rate=10/s
-start=18s end=19s class=regular stream=t1/s1 adjust=+0.9MiB/s rate=10/s
-start=19s end=20s class=regular stream=t1/s1 adjust=+2.1MiB/s rate=10/s
-start=20s end=21s class=regular stream=t1/s1 adjust=+0.1MiB/s rate=10/s
-start=21s end=22s class=regular stream=t1/s1 adjust=+0.9MiB/s rate=10/s
-start=22s end=23s class=regular stream=t1/s1 adjust=+2.1MiB/s rate=10/s
-start=23s end=24s class=regular stream=t1/s1 adjust=+0.1MiB/s rate=10/s
-start=24s end=25s class=regular stream=t1/s1 adjust=+0.9MiB/s rate=10/s
+t=[15s,16s) class=regular stream=t1/s1 adjust=+0.9MiB/s rate=10/s
+t=[16s,17s) class=regular stream=t1/s1 adjust=+2.1MiB/s rate=10/s
+t=[17s,18s) class=regular stream=t1/s1 adjust=+0.1MiB/s rate=10/s
+t=[18s,19s) class=regular stream=t1/s1 adjust=+0.9MiB/s rate=10/s
+t=[19s,20s) class=regular stream=t1/s1 adjust=+2.1MiB/s rate=10/s
+t=[20s,21s) class=regular stream=t1/s1 adjust=+0.1MiB/s rate=10/s
+t=[21s,22s) class=regular stream=t1/s1 adjust=+0.9MiB/s rate=10/s
+t=[22s,23s) class=regular stream=t1/s1 adjust=+2.1MiB/s rate=10/s
+t=[23s,24s) class=regular stream=t1/s1 adjust=+0.1MiB/s rate=10/s
+t=[24s,25s) class=regular stream=t1/s1 adjust=+0.9MiB/s rate=10/s
 ----
 
 simulate
@@ -102,7 +102,7 @@ kvadmission.flow_controller.regular_tokens_available            unit=MiB
 # are being returned choppily. Given the average rate of returns is lower
 # than what's being requested (2MiB/s), the total flow tokens available bounces
 # off of zero.
-plot start=15s end=30s
+plot t=[15s,30s)
 kvadmission.flow_controller.regular_tokens_available            unit=MiB
 ----
   0.2 ┤                              ╭╮
@@ -126,7 +126,7 @@ kvadmission.flow_controller.regular_tokens_available            unit=MiB
 
 # Note again the mirroring between token returns which immediately allows
 # admission, followed by token deductions.
-plot start=15s end=30s
+plot t=[15s,30s)
 kvadmission.flow_controller.regular_tokens_{deducted,returned}  unit=MiB rate=true
 ----
  2.1 ┤       ╭╮
@@ -151,7 +151,7 @@ kvadmission.flow_controller.regular_tokens_{deducted,returned}  unit=MiB rate=tr
 # So we're still admitting work choppily, and observe corresponding deductions
 # in the waiting request rate. But given the open-loop thread above, the # of
 # waiting request is still growing unboundedly.
-plot start=15s end=30s
+plot t=[15s,30s)
 kvadmission.flow_controller.regular_requests_{admitted,waiting} unit=reqs/s rate=true
 kvadmission.flow_controller.regular_requests_waiting unit=reqs
 ----
@@ -195,4 +195,4 @@ kvadmission.flow_controller.regular_requests_waiting unit=reqs
 ----
 ----
 
-# vim:ft=sh
+# vim:ft=conf

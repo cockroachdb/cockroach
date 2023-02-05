@@ -1,0 +1,100 @@
+# Demonstrate the effects of a slow stream (that's causing a build up of
+# waiting requests) being disconnected. This test is similar to the one in
+# handle_single_slow_stream, except the slow stream is eventually disconnected.
+
+init
+handle=h
+----
+
+# Set up a triply connected handle (to s1, s2, s3) and start issuing writes at
+# 1MiB/s. For two of the streams, return tokens at exactly the rate its being
+# deducted (1MiB/s). For the third stream (s3), we return flow tokens at only
+# 0.5MiB/s. At t=40s, disconnect the slow stream.
+timeline
+t=0s        handle=h op=connect    stream=t1/s1   log-position=4/0
+t=0s        handle=h op=connect    stream=t1/s2   log-position=4/0
+t=0s        handle=h op=connect    stream=t1/s3   log-position=4/0
+t=[0s,50s)   handle=h class=regular adjust=-1MiB/s   rate=10/s
+t=[0.2s,50s) handle=h class=regular adjust=+1MiB/s   rate=10/s stream=t1/s1
+t=[0.2s,50s) handle=h class=regular adjust=+1MiB/s   rate=10/s stream=t1/s2
+t=[0.2s,40s) handle=h class=regular adjust=+0.5MiB/s rate=10/s stream=t1/s3
+t=40s        handle=h op=disconnect stream=t1/s3
+----
+
+simulate
+----
+
+# Zoom in near the point where writes are being shaped by the slowest stream
+# (s3, at 0.5MiB/s). We see the blocked stream count bouncing between 0 and 1
+# as tokens get depleted and replenished (demand here is higher than the
+# replenishment rate).
+#
+# As soon as s3 is disconnected, we see a release of 16MiB of held tokens back
+# into the node-level controller (32MiB -> 48MiB). We see a burst in the number
+# of stream-specific requests bypassing Admit() due to the stream
+# disconnecting. 
+plot t=[30s,50s)
+kvadmission.flow_controller.regular_blocked_stream_count        unit=streams
+kvadmission.flow_controller.regular_tokens_available            unit=MiB
+kvadmission.flow_controller.regular_requests_bypassed           unit=reqs/s rate=true
+----
+----
+ 1.0 ┤         ╭╮       ╭╮
+ 0.9 ┤         ││       ││
+ 0.8 ┤       ╭╮││       ││
+ 0.8 ┤       ││││╭╮     ││
+ 0.7 ┤       ││││││   ╭╮││
+ 0.6 ┤       ││││││   ││││
+ 0.6 ┤     ╭╮││││││╭╮ ││││
+ 0.5 ┤    ╭╯││││││││╰╮││││
+ 0.5 ┤    │ ││││││││ │││││
+ 0.4 ┤   ╭╯ ││││││││ ╰╯│││
+ 0.3 ┤   │  ││││││╰╯   │││
+ 0.3 ┤   │  ╰╯││││     │││
+ 0.2 ┤   │    ││││     │││
+ 0.1 ┤   │    ││╰╯     ╰╯│
+ 0.1 ┤   │    ╰╯         │
+ 0.0 ┼───╯               ╰───────────────────
+       regular_blocked_stream_count (streams)
+
+
+ 47.6 ┤                   ╭───────────────────
+ 46.5 ┤                   │
+ 45.5 ┤                   │
+ 44.4 ┤                   │
+ 43.3 ┤                   │
+ 42.3 ┤                   │
+ 41.2 ┤                   │
+ 40.1 ┤                   │
+ 39.1 ┤                   │
+ 38.0 ┤                   │
+ 36.9 ┤                   │
+ 35.9 ┤                   │
+ 34.8 ┤                   │
+ 33.7 ┤                   │
+ 32.7 ┤                   │
+ 31.6 ┼───────────────────╯
+            regular_tokens_available (MiB)
+
+
+ 42.0 ┤                   ╭─╮
+ 39.2 ┤                   │ │
+ 36.4 ┤                   │ │
+ 33.6 ┤                   │ │
+ 30.8 ┤                   │ │
+ 28.0 ┤                   │ │
+ 25.2 ┤                   │ │
+ 22.4 ┤                   │ │
+ 19.6 ┤                   │ │
+ 16.8 ┤                   │ │
+ 14.0 ┤                   │ │
+ 11.2 ┤                   │ │
+  8.4 ┤                   │ │
+  5.6 ┤                   │ │
+  2.8 ┤                   │ │
+  0.0 ┼───────────────────╯ ╰─────────────────
+       rate(regular_requests_bypassed) (reqs/s)
+----
+----
+
+# vim:ft=conf

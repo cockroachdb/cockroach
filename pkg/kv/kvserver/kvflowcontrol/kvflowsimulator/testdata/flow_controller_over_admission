@@ -6,22 +6,22 @@ init
 # Take away all 16MiB of regular flow tokens; we want a buildup of waiting
 # requests to over-admit from.
 timeline
-start=0s  end=1s  class=regular stream=t1/s1 adjust=-16MiB/s rate=1/s
+t=[0s,1s) class=regular stream=t1/s1 adjust=-16MiB/s rate=1/s
 ----
 
 # Queue 10/s*10s=100 requests for admission, asking for 10*4MiB=40MiB of
 # tokens. For these requests, induce a 2s delay between Admit() and
 # DeductTokens().
 timeline
-start=10s end=20s class=regular stream=t1/s1 adjust=-4MiB/s  rate=10/s deduction-delay=2s
+t=[10s,20s) class=regular stream=t1/s1 adjust=-4MiB/s  rate=10/s deduction-delay=2s
 ----
 
 # Return 1KiB of flow tokens at t=30.
 timeline
-start=30s end=31s class=regular stream=t1/s1 adjust=+1KiB/s rate=1/s
+t=[30s,31s) class=regular stream=t1/s1 adjust=+1KiB/s rate=1/s
 ----
 
-simulate end=40s
+simulate t=[0s,40s)
 ----
 
 # Observe how the single 1KiB flow token return ends up admitting all 100
@@ -30,7 +30,7 @@ simulate end=40s
 # TODO(irfansharif): Introduce a "tentative deducted counter" on a per-stream
 # basis, to prevent this kind of over-admission. It's likely to occur any time
 # there's AC queueing due to CPU control, waiting on locks/latches, etc.
-plot start=0s end=40s
+plot t=[0s,40s)
 kvadmission.flow_controller.regular_tokens_available  unit=MiB
 kvadmission.flow_controller.regular_requests_admitted unit=reqs/s rate=true
 kvadmission.flow_controller.regular_requests_waiting  unit=reqs
@@ -94,4 +94,4 @@ kvadmission.flow_controller.regular_requests_waiting  unit=reqs
 ----
 ----
 
-# vim:ft=sh
+# vim:ft=conf

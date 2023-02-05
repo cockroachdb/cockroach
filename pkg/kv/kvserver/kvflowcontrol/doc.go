@@ -307,6 +307,26 @@ package kvflowcontrol
 //   stream is set to the raft log position of the command removing the replica,
 //   so stale AdmittedRaftLogEntries messages can be discarded.
 //
+// I11. What happens when a node is restarted and is being caught up rapidly
+//      through raft log appends? We know of cases where the initial log appends
+//      and subsequent state machine application be large enough to invert the
+//      LSM[^9]. Imagine large block writes with a uniform key distribution; we
+//      may persist log entries rapidly across many replicas (without inverting
+//      the LSM, so follower pausing is also of no help) and during state
+//      application, create lots of overlapping files/sublevels in L0.
+// - We want to pace the initial rate of log appends while factoring in the
+//   effect of the subsequent state machine application on L0 (modulo [^9]). We
+//   can use flow tokens for this too. In I3a we outlined how for quorum writes
+//   that includes a replica on some recently re-started node, we need to wait
+//   for it to be sufficiently caught before deducting/blocking for flow tokens.
+//   Until that point we can use flow tokens on sender nodes that wish to send
+//   MsgApps to the newly-restarted node. Similar to the steady state, flow
+//   tokens will only be returned once the entries are logically admitted (which
+//   takes into account any apply-time write amplification, modulo [^9]). Once
+//   the node is sufficiently caught up with respect to all its raft logs, it
+//   can transition into the mode described in I3a where we deduct/block for
+//   flow tokens for subsequent quorum writes.
+//
 // ---
 //
 // [^1]: kvserverpb.RaftMessageRequest is the unit of what's sent
@@ -315,9 +335,8 @@ package kvflowcontrol
 // [^2]: Over which we're dispatching kvflowcontrolpb.AdmittedRaftLogEntries.
 // [^3]: kvflowcontrol.DispatchReader implementations do this as part of
 //       PendingDispatchFor.
-// [^4]: Using DeductedTokensUpto + ReturnAllTokensUpto on
-//       kvflowcontrol.Handler.
-// [^5]: Using ReturnAllTokensUpto on kvflowcontrol.Handler.
+// [^4]: Using DisconnectStream on kvflowcontrol.Handler.
+// [^5]: Using ConnectStream on kvflowcontrol.Handler.
 // [^6]: DeductTokens on kvflowcontrol.Controller returns whether the deduction
 //       was done.
 // [^7]: When a node is crashed, instead of ignoring the underlying flow token
@@ -331,6 +350,22 @@ package kvflowcontrol
 //       Admit(), or (ii) don't DeductTokens (Admit() is rendered a no-op),
 //       we're being somewhat optimistic, which is fine.
 // [^8]: Using ReturnTokensUpto on kvflowcontrol.Handle.
+// [^9]: With async raft storage writes, there's no interleaving of raft log
+//       appends and state machine applications. So we could append at a higher
+//       rate than applying. Since application can be arbitrarily deferred, we
+//       cause severe LSM inversions. Do we want some form of pacing of log
+//       appends then, relative to observed state machine application?
+//       Perhaps specifically in cases where we're more likely to append faster
+//       than apply, like node restarts. We're likely to defeat AC's IO control
+//       otherwise.
+//       - For what it's worth, this "deferred application with high read-amp"
+//         was also a problem before async raft storage writes. Consider many
+//         replicas on an LSM, all of which appended a few raft log entries
+//         without applying, and at apply time across all those replicas, we end
+//         up inverting the LSM.
+//       - Since we don't want to wait below raft, one way bound the lag between
+//         appended entries and applied ones is to only release flow tokens for
+//         an entry at position P once the applied state position >= P - delta.
 //
 // TODO(irfansharif): These descriptions are too high-level, imprecise and
 // possibly wrong. Fix that. After implementing these interfaces and integrating

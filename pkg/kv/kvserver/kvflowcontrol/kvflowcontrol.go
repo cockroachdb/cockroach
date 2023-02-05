@@ -33,6 +33,17 @@ type Stream struct {
 	StoreID  roachpb.StoreID
 }
 
+// ConnectedStream models a stream over which we're actively replicating data
+// traffic. The embedded channel is signaled when the stream is disconnected,
+// for example when (i) the remote node has crashed, (ii) bidirectional gRPC
+// streams break, (iii) we've paused replication traffic to it, (iv) truncated
+// our raft log ahead it, and more. Whenever that happens, we unblock inflight
+// requests waiting for flow tokens.
+type ConnectedStream interface {
+	Stream() Stream
+	Disconnected() <-chan struct{}
+}
+
 // Tokens represent the finite capacity of a given stream, expressed in bytes
 // for data we're looking to replicate. Use of replication streams are
 // predicated on tokens being available.
@@ -46,12 +57,13 @@ type Tokens int64
 type Controller interface {
 	// Admit seeks admission to replicate data, regardless of size, for work
 	// with the given priority, create-time, and over the given stream. This
-	// blocks until there are flow tokens available.
-	Admit(context.Context, admissionpb.WorkPriority, time.Time, Stream) error
+	// blocks until there are flow tokens available or the stream disconnects,
+	// subject to context cancellation.
+	Admit(context.Context, admissionpb.WorkPriority, time.Time, ConnectedStream) error
 	// DeductTokens deducts (without blocking) flow tokens for replicating work
 	// with given priority over the given stream. Requests are expected to
 	// have been Admit()-ed first.
-	DeductTokens(context.Context, admissionpb.WorkPriority, Tokens, Stream) (deducted bool)
+	DeductTokens(context.Context, admissionpb.WorkPriority, Tokens, Stream)
 	// ReturnTokens returns flow tokens for the given stream. These tokens are
 	// expected to have been deducted earlier with the same priority provided
 	// here.
@@ -67,7 +79,8 @@ type Controller interface {
 // Handle is used to interface with replication flow control; it's typically
 // backed by a node-level kvflowcontrol.Controller. Handles are held on replicas
 // initiating replication traffic, i.e. are both the leaseholder and raft
-// leader, and manage multiple Streams (one per active replica) underneath.
+// leader, and manage multiple streams underneath (typically one per active
+// member of the raft group).
 //
 // When replicating log entries, these replicas choose the log position
 // (term+index) the data is to end up at, and use this handle to track the token
@@ -79,34 +92,42 @@ type Controller interface {
 type Handle interface {
 	// Admit seeks admission to replicate data, regardless of size, for work
 	// with the given priority and create-time. This blocks until there are
-	// flow tokens available.
-	Admit(context.Context, admissionpb.WorkPriority, time.Time)
+	// flow tokens available for all connected streams.
+	Admit(context.Context, admissionpb.WorkPriority, time.Time) error
 	// DeductTokensFor deducts (without blocking) flow tokens for replicating
-	// work with given priority to members of the raft group. The deduction,
+	// work with given priority along connected streams. The deduction,
 	// if successful, is tracked with respect to the specific raft log position
 	// it's expecting it to end up in. Requests are assumed to have been
 	// Admit()-ed first.
 	DeductTokensFor(context.Context, admissionpb.WorkPriority, kvflowcontrolpb.RaftLogPosition, Tokens)
-	// DeductedTokensUpto returns the highest log position for which we've
-	// deducted flow tokens for, over the given stream.
-	DeductedTokensUpto(context.Context, Stream) kvflowcontrolpb.RaftLogPosition
 	// ReturnTokensUpto returns all previously deducted tokens of a given
 	// priority for all log positions less than or equal to the one specified.
 	// It does for the specific stream. Once returned, subsequent attempts to
-	// return tokens upto the same position or lower are no-ops.
-	ReturnTokensUpto(context.Context, admissionpb.WorkPriority, kvflowcontrolpb.RaftLogPosition, Stream)
-	// ReturnAllTokensUpto is like ReturnTokensUpto but does so across all
-	// priorities.
+	// return tokens upto the same position or lower are no-ops. It's used when
+	// entries at specific log positions have been admitted below-raft.
 	//
-	// NB: This is used when a replica on the other end of a stream gets caught
-	// up via snapshot (say, after a log truncation), where we then don't expect
-	// dispatches for the individual AdmittedRaftLogEntries between what it
-	// admitted last and its latest RaftLogPosition. Another use is during
-	// successive lease changes (out and back) within the same raft term -- we
-	// want to both free up tokens from when we lost the lease, and also ensure
-	// that attempts to return them (on hearing about AdmittedRaftLogEntries
-	// replicated under the earlier lease), we discard the attempts.
-	ReturnAllTokensUpto(context.Context, kvflowcontrolpb.RaftLogPosition, Stream)
+	// NB: Another use is during successive lease changes (out and back) within
+	// the same raft term -- we want to both free up tokens from when we lost
+	// the lease, and also ensure we discard attempts to return them (on hearing
+	// about AdmittedRaftLogEntries replicated under the earlier lease).
+	ReturnTokensUpto(context.Context, admissionpb.WorkPriority, kvflowcontrolpb.RaftLogPosition, Stream)
+	// ConnectStream connects a stream (typically pointing to an active member
+	// of the raft group) to the handle. Subsequent calls to Admit() will block
+	// until flow tokens are available for the stream, or for it to be
+	// disconnected via DisconnectStream. DeductTokensFor will also deduct
+	// tokens for all connected streams.
+	ConnectStream(context.Context, kvflowcontrolpb.RaftLogPosition, Stream)
+	// DisconnectStream disconnects a stream from the handle. When disconnecting
+	// a stream, all previously held flow tokens are released and we unblock all
+	// requests waiting in Admit() for this stream's flow tokens in particular.
+	//
+	// NB: This is typically used when we're no longer replicating data to a
+	// member of the raft group, because it's crashed, no longer part of the
+	// raft group, we've decided to pause it, we've truncated the raft log ahead
+	// of it and expect it to be caught up via snapshot, etc. In all these cases
+	// we don't expect dispatches for individual AdmittedRaftLogEntries between
+	// what it admitted last and its latest RaftLogPosition.
+	DisconnectStream(context.Context, Stream)
 	// Close closes the handle and returns all held tokens back to the
 	// underlying controller. Typically used when the replica loses its lease
 	// and/or raft leadership, or ends up getting GC-ed (if it's being
@@ -134,7 +155,7 @@ type DispatchWriter interface {
 // piggybacking) has not taken place.
 //
 // NB: PendingDispatchFor is expected to remove dispatches from the pending
-// list. If the GRPC stream we're sending it over happens to break, we drop
+// list. If the gRPC stream we're sending it over happens to break, we drop
 // these dispatches. The node waiting these dispatches is expected to react to
 // the stream breaking by freeing up all held tokens.
 type DispatchReader interface {

@@ -119,7 +119,10 @@ func New(registry *metric.Registry, settings *cluster.Settings, clock *hlc.Clock
 // there are flow tokens available for replication over the given stream for
 // work of the given priority.
 func (c *Controller) Admit(
-	ctx context.Context, pri admissionpb.WorkPriority, _ time.Time, stream kvflowcontrol.Stream,
+	ctx context.Context,
+	pri admissionpb.WorkPriority,
+	_ time.Time,
+	connection kvflowcontrol.ConnectedStream,
 ) error {
 	class := admissionpb.WorkClassFromPri(pri)
 	c.metrics.onWaiting(class)
@@ -128,14 +131,14 @@ func (c *Controller) Admit(
 	tstart := c.clock.PhysicalTime()
 	for {
 		c.mu.Lock()
-		b := c.getBucketLocked(stream)
+		b := c.getBucketLocked(connection.Stream())
 		tokens := b.tokens[class]
 		c.mu.Unlock()
 
 		if tokens > 0 {
 			if log.ExpensiveLogEnabled(ctx, 2) {
 				log.Infof(ctx, "flow tokens available (pri=%s stream=%s tokens=%s wait-duration=%s)",
-					pri, stream, tokens, c.clock.PhysicalTime().Sub(tstart))
+					pri, connection.Stream(), tokens, c.clock.PhysicalTime().Sub(tstart))
 			}
 
 			// TODO(irfansharif): Right now we continue forwarding admission
@@ -163,12 +166,15 @@ func (c *Controller) Admit(
 
 		if !logged && log.ExpensiveLogEnabled(ctx, 2) {
 			log.Infof(ctx, "waiting for flow tokens (pri=%s stream=%s tokens=%s)",
-				pri, stream, tokens)
+				pri, connection.Stream(), tokens)
 			logged = true
 		}
 
 		select {
 		case <-b.wait(): // wait for a signal
+		case <-connection.Disconnected():
+			c.metrics.onBypassed(class)
+			return nil
 		case <-ctx.Done():
 			if ctx.Err() != nil {
 				c.metrics.onErrored(class)
@@ -187,13 +193,12 @@ func (c *Controller) DeductTokens(
 	pri admissionpb.WorkPriority,
 	tokens kvflowcontrol.Tokens,
 	stream kvflowcontrol.Stream,
-) bool {
+) {
 	if tokens < 0 {
 		log.Fatalf(ctx, "malformed argument: -ve tokens deducted (pri=%s tokens=%s stream=%s)",
 			pri, tokens, stream)
 	}
 	c.adjustTokens(ctx, pri, -tokens, stream)
-	return true
 }
 
 // ReturnTokens is part of the kvflowcontrol.Controller interface.
@@ -204,10 +209,10 @@ func (c *Controller) ReturnTokens(
 	stream kvflowcontrol.Stream,
 ) {
 	if tokens < 0 {
-		log.Fatalf(ctx, "malformed argument: -ve tokens deducted (pri=%s tokens=%s stream=%s)",
+		log.Fatalf(ctx, "malformed argument: -ve tokens returned (pri=%s tokens=%s stream=%s)",
 			pri, tokens, stream)
 	}
-	c.adjustTokens(ctx, pri, tokens, stream)
+	c.adjustTokens(ctx, pri, +tokens, stream)
 }
 
 func (c *Controller) adjustTokens(
@@ -369,7 +374,7 @@ func (c *Controller) testingGetLimit() tokensPerWorkClass {
 	return c.mu.limit
 }
 
-// testingNonBlockingAdmit is a non-blocking alternative to Admit() for use in
+// TestingNonBlockingAdmit is a non-blocking alternative to Admit() for use in
 // tests.
 // - it checks if we have a non-zero number of flow tokens
 // - if we do, we return immediately with admitted=true
@@ -378,16 +383,28 @@ func (c *Controller) testingGetLimit() tokensPerWorkClass {
 //     admitting again;
 //   - admit, which can be used to try and admit again. If still not admitted,
 //     callers are to wait until they're signaled again.
-func (c *Controller) testingNonBlockingAdmit(
-	pri admissionpb.WorkPriority, stream kvflowcontrol.Stream,
+//
+// TODO(irfansharif): Fold in ctx cancelation into this non-blocking interface
+// (signaled return true if ctx is canceled), and admit can increment the right
+// errored metric underneath. We'll have to plumb this to the (test) caller too
+// to prevent it from deducting tokens for canceled requests.
+func (c *Controller) TestingNonBlockingAdmit(
+	pri admissionpb.WorkPriority, connection kvflowcontrol.ConnectedStream,
 ) (admitted bool, signaled func() bool, admit func() bool) {
 	class := admissionpb.WorkClassFromPri(pri)
 	c.metrics.onWaiting(class)
 
 	tstart := c.clock.PhysicalTime()
 	admit = func() bool {
+		select {
+		case <-connection.Disconnected():
+			c.metrics.onBypassed(class)
+			return true
+		default:
+		}
+
 		c.mu.Lock()
-		b := c.getBucketLocked(stream)
+		b := c.getBucketLocked(connection.Stream())
 		tokens := b.tokens[class]
 		c.mu.Unlock()
 
@@ -404,8 +421,23 @@ func (c *Controller) testingNonBlockingAdmit(
 		return true, nil, nil
 	}
 
-	b := c.testingGetBucket(stream)
-	return false, b.testingSignaled, admit
+	b := c.testingGetBucket(connection.Stream())
+	return false, b.testingSignaled(connection), admit
+}
+
+// TestingAdjustTokens exports adjustTokens for testing purposes.
+func (c *Controller) TestingAdjustTokens(
+	ctx context.Context,
+	pri admissionpb.WorkPriority,
+	delta kvflowcontrol.Tokens,
+	stream kvflowcontrol.Stream,
+) {
+	c.adjustTokens(ctx, pri, delta, stream)
+}
+
+// TestingMetrics returns the underlying metrics struct for testing purposes.
+func (c *Controller) TestingMetrics() interface{} {
+	return c.metrics
 }
 
 func (c *Controller) testingGetBucket(stream kvflowcontrol.Stream) bucket {
@@ -414,11 +446,15 @@ func (c *Controller) testingGetBucket(stream kvflowcontrol.Stream) bucket {
 	return c.getBucketLocked(stream)
 }
 
-func (b *bucket) testingSignaled() bool {
-	select {
-	case <-b.wait(): // check if signaled
-		return true
-	default:
-		return false
+func (b *bucket) testingSignaled(connection kvflowcontrol.ConnectedStream) func() bool {
+	return func() bool {
+		select {
+		case <-connection.Disconnected():
+			return true
+		case <-b.wait(): // check if signaled
+			return true
+		default:
+			return false
+		}
 	}
 }

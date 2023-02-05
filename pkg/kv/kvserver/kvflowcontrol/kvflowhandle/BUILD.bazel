@@ -1,0 +1,22 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "kvflowhandle",
+    srcs = [
+        "connected_stream.go",
+        "kvflowhandle.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowhandle",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver/kvflowcontrol",
+        "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb",
+        "//pkg/kv/kvserver/kvflowcontrol/kvflowtokentracker",
+        "//pkg/util/admission/admissionpb",
+        "//pkg/util/log",
+        "//pkg/util/syncutil",
+    ],
+)
+
+get_x_data(name = "get_x_data")
