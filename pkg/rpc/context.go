@@ -362,7 +362,7 @@ func (c *Connection) Health() error {
 // thing.
 type Context struct {
 	ContextOptions
-	SecurityContext
+	*SecurityContext
 
 	breakerClock breakerClock
 	RemoteClocks *RemoteClockMonitor
@@ -604,9 +604,15 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 
 	masterCtx, _ := opts.Stopper.WithCancelOnQuiesce(ctx)
 
+	secCtx := NewSecurityContext(
+		opts.Config,
+		security.ClusterTLSSettings(opts.Settings),
+		opts.TenantID,
+	)
+
 	rpcCtx := &Context{
 		ContextOptions:  opts,
-		SecurityContext: MakeSecurityContext(opts.Config, security.ClusterTLSSettings(opts.Settings), opts.TenantID),
+		SecurityContext: secCtx,
 		breakerClock: breakerClock{
 			clock: opts.Clock,
 		},

@@ -68,16 +68,16 @@ type SecurityContext struct {
 	}
 }
 
-// MakeSecurityContext makes a SecurityContext.
+// NewSecurityContext instantiates a SecurityContext.
 //
 // TODO(tbg): don't take a whole Config. This can be trimmed down significantly.
-func MakeSecurityContext(
+func NewSecurityContext(
 	cfg *base.Config, tlsSettings security.TLSSettings, tenID roachpb.TenantID,
-) SecurityContext {
+) *SecurityContext {
 	if tenID.ToUint64() == 0 {
 		panic(errors.AssertionFailedf("programming error: tenant ID not defined"))
 	}
-	return SecurityContext{
+	return &SecurityContext{
 		Locator:     certnames.MakeLocator(cfg.SSLCertsDir),
 		TLSSettings: tlsSettings,
 		config:      cfg,
