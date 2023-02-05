@@ -32,7 +32,8 @@ func TestSyncWaiterLoop(t *testing.T) {
 	// Enqueue a waiter while the loop is running.
 	c := make(chan struct{})
 	wg1 := make(chanSyncWaiter)
-	w.enqueue(ctx, wg1, func() { close(c) })
+	cb1 := funcSyncWaiterCallback(func() { close(c) })
+	w.enqueue(ctx, wg1, cb1)
 
 	// Callback is not called before SyncWait completes.
 	select {
@@ -49,8 +50,9 @@ func TestSyncWaiterLoop(t *testing.T) {
 	// regardless of how many times it is called.
 	stopper.Stop(ctx)
 	wg2 := make(chanSyncWaiter)
+	cb2 := funcSyncWaiterCallback(func() { t.Fatalf("callback unexpectedly called") })
 	for i := 0; i < 2*cap(w.q); i++ {
-		w.enqueue(ctx, wg2, func() { t.Fatalf("callback unexpectedly called") })
+		w.enqueue(ctx, wg2, cb2)
 	}
 
 	// Callback should not be called, even after SyncWait completes.
@@ -72,7 +74,7 @@ func BenchmarkSyncWaiterLoop(b *testing.B) {
 	// performance of operations inside the SyncWaiterLoop.
 	wg := make(chanSyncWaiter)
 	c := make(chan struct{})
-	cb := func() { c <- struct{}{} }
+	cb := funcSyncWaiterCallback(func() { c <- struct{}{} })
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -91,3 +93,8 @@ func (c chanSyncWaiter) SyncWait() error {
 }
 
 func (c chanSyncWaiter) Close() {}
+
+// funcSyncWaiterCallback implements the syncWaiterCallback interface.
+type funcSyncWaiterCallback func()
+
+func (f funcSyncWaiterCallback) run() { f() }
