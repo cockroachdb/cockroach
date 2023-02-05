@@ -19,7 +19,7 @@ completions:
   "\"extract_duration\"(" ((from schema pg_catalog) Extracts `element` from `input`) -> "\"extract_duration\"(" (0, 0)
   "\"family\"(" ((from schema pg_catalog) Extracts the IP family of the value; 4 for IPv4, 6 for IPv6) -> "\"family\"(" (0, 0)
   "\"greatest\"(" ((from schema pg_catalog) Returns the element with the greatest value) -> "\"greatest\"(" (0, 0)
-  "\"information_schema._pg_char_max_length\"(" ((from schema pg_catalog) Not usable; exposed only for compatibility with PostgreSQL) -> "\"information_schema._pg_char_max_length\"(" (0, 0)
+  "\"least\"(" ((from schema pg_catalog) Returns the element with the lowest value) -> "\"least\"(" (0, 0)
   ... entries omitted ...
 - "keyword":
   "ABORT" (unreserved) -> "ABORT" (0, 0)
