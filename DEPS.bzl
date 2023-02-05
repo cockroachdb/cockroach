@@ -5123,20 +5123,20 @@ def go_deps():
         name = "com_github_knz_bubbline",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/knz/bubbline",
-        sha256 = "0da0560f0116618e6e8762810ffa3fb3f2373e2478bebac6e977ed9c23f7611e",
-        strip_prefix = "github.com/knz/bubbline@v0.0.0-20230124184034-a0b62576595b",
+        sha256 = "0922c6fae4190a73e2023b1a56401347e29afddf1174990b8fd881433b9c75a9",
+        strip_prefix = "github.com/knz/bubbline@v0.0.0-20230205122847-05558f88fdc4",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/knz/bubbline/com_github_knz_bubbline-v0.0.0-20230124184034-a0b62576595b.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/knz/bubbline/com_github_knz_bubbline-v0.0.0-20230205122847-05558f88fdc4.zip",
         ],
     )
     go_repository(
         name = "com_github_knz_catwalk",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/knz/catwalk",
-        sha256 = "7b44ddd491c68b186426e5f98fcb9410c4d26a5c4fa82205b3ff2797ffc3b51b",
-        strip_prefix = "github.com/knz/catwalk@v0.1.2",
+        sha256 = "f422f7974090494e54226262586c7b34fe57b33ab7d668151ca55eba8e309c1e",
+        strip_prefix = "github.com/knz/catwalk@v0.1.4",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/knz/catwalk/com_github_knz_catwalk-v0.1.2.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/knz/catwalk/com_github_knz_catwalk-v0.1.4.zip",
         ],
     )
     go_repository(
