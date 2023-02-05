@@ -30,7 +30,7 @@ SELECT DISTINCT
        $2:::INT AS start,
        $3:::INT AS end
   FROM p
-ORDER BY 1,2,3,4,5
+ORDER BY 1,3,4,5
 --placeholders: []interface {}{"xor", 7, 10, ""}
 
 comp at=12
@@ -59,7 +59,7 @@ SELECT DISTINCT
        $2:::INT AS start,
        $3:::INT AS end
   FROM p
-ORDER BY 1,2,3,4,5
+ORDER BY 1,3,4,5
 --placeholders: []interface {}{"", 12, 12, ""}
 
 subtest end
@@ -92,7 +92,7 @@ SELECT DISTINCT
        $2:::INT AS start,
        $3:::INT AS end
   FROM p
-ORDER BY 1,2,3,4,5
+ORDER BY 1,3,4,5
 --placeholders: []interface {}{"xor", 7, 12, "a"}
 
 comp at=10
@@ -121,7 +121,7 @@ SELECT DISTINCT
        $2:::INT AS start,
        $3:::INT AS end
   FROM p
-ORDER BY 1,2,3,4,5
+ORDER BY 1,3,4,5
 --placeholders: []interface {}{"", 7, 9, "a"}
 
 subtest end
@@ -154,7 +154,7 @@ SELECT DISTINCT
        $2:::INT AS start,
        $3:::INT AS end
   FROM p
-ORDER BY 1,2,3,4,5
+ORDER BY 1,3,4,5
 --placeholders: []interface {}{"xor", 7, 24, "crdb_internal"}
 
 comp at=21
@@ -183,7 +183,7 @@ SELECT DISTINCT
        $2:::INT AS start,
        $3:::INT AS end
   FROM p
-ORDER BY 1,2,3,4,5
+ORDER BY 1,3,4,5
 --placeholders: []interface {}{"", 7, 21, "crdb_internal"}
 
 
@@ -213,7 +213,7 @@ SELECT DISTINCT
        $2:::INT AS start,
        $3:::INT AS end
   FROM p
-ORDER BY 1,2,3,4,5
+ORDER BY 1,3,4,5
 --placeholders: []interface {}{"xor", 7, 21, "pg_catalog"}
 
 comp at=18
@@ -242,7 +242,7 @@ SELECT DISTINCT
        $2:::INT AS start,
        $3:::INT AS end
   FROM p
-ORDER BY 1,2,3,4,5
+ORDER BY 1,3,4,5
 --placeholders: []interface {}{"", 7, 18, "pg_catalog"}
 
 
@@ -272,7 +272,7 @@ SELECT DISTINCT
        $2:::INT AS start,
        $3:::INT AS end
   FROM p
-ORDER BY 1,2,3,4,5
+ORDER BY 1,3,4,5
 --placeholders: []interface {}{"xor", 7, 29, "information_schema"}
 
 comp at=26
@@ -301,7 +301,7 @@ SELECT DISTINCT
        $2:::INT AS start,
        $3:::INT AS end
   FROM p
-ORDER BY 1,2,3,4,5
+ORDER BY 1,3,4,5
 --placeholders: []interface {}{"", 7, 26, "information_schema"}
 
 subtest end
@@ -334,7 +334,7 @@ SELECT DISTINCT
        $2:::INT AS start,
        $3:::INT AS end
   FROM p
-ORDER BY 1,2,3,4,5
+ORDER BY 1,3,4,5
 --placeholders: []interface {}{"xor", 7, 23, "pg_catalog"}
 
 # Quoted uppercase is an entire schema entirely.
@@ -364,7 +364,7 @@ SELECT DISTINCT
        $2:::INT AS start,
        $3:::INT AS end
   FROM p
-ORDER BY 1,2,3,4,5
+ORDER BY 1,3,4,5
 --placeholders: []interface {}{"xor", 7, 23, "PG_CATALOG"}
 
 

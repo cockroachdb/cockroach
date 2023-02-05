@@ -21,6 +21,7 @@ SELECT nspname AS completion,
 LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
     ON t.oid = cc.object_id AND cc.type = 'SchemaCommentType'
  WHERE left(nspname, length($1:::STRING)) = $1::STRING
+ORDER BY 1,3,4,5
 --placeholders: []interface {}{"xor", 7, 10}
 
 comp at=12
@@ -40,6 +41,7 @@ SELECT nspname AS completion,
 LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
     ON t.oid = cc.object_id AND cc.type = 'SchemaCommentType'
  WHERE left(nspname, length($1:::STRING)) = $1::STRING
+ORDER BY 1,3,4,5
 --placeholders: []interface {}{"", 12, 12}
 
 subtest end
@@ -92,6 +94,7 @@ SELECT nspname AS completion,
 LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
     ON t.oid = cc.object_id AND cc.type = 'SchemaCommentType'
  WHERE left(nspname, length($1:::STRING)) = $1::STRING
+ORDER BY 1,3,4,5
 --placeholders: []interface {}{"pg_", 7, 11}
 
 # Quoted uppercase is an entire schema entirely.
@@ -112,6 +115,7 @@ SELECT nspname AS completion,
 LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
     ON t.oid = cc.object_id AND cc.type = 'SchemaCommentType'
  WHERE left(nspname, length($1:::STRING)) = $1::STRING
+ORDER BY 1,3,4,5
 --placeholders: []interface {}{"PG_", 7, 11}
 
 

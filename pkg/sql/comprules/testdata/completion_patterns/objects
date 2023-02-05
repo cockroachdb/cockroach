@@ -23,6 +23,7 @@ SELECT relname AS completion,
 LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
     ON t.oid = cc.object_id AND cc.type = 'TableCommentType'
  WHERE left(relname, length($1:::STRING)) = $1::STRING
+ORDER BY 1,3,4,5
 --placeholders: []interface {}{"", 8, 8}
 
 subtest end
@@ -48,6 +49,7 @@ SELECT relname AS completion,
 LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
     ON t.oid = cc.object_id AND cc.type = 'TableCommentType'
  WHERE left(relname, length($1:::STRING)) = $1::STRING
+ORDER BY 1,3,4,5
 --placeholders: []interface {}{"xor", 7, 10}
 
 comp at=12
@@ -69,6 +71,7 @@ SELECT relname AS completion,
 LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
     ON t.oid = cc.object_id AND cc.type = 'TableCommentType'
  WHERE left(relname, length($1:::STRING)) = $1::STRING
+ORDER BY 1,3,4,5
 --placeholders: []interface {}{"", 12, 12}
 
 subtest end
@@ -94,6 +97,7 @@ SELECT relname AS completion,
 LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
     ON t.oid = cc.object_id AND cc.type = 'TableCommentType'
  WHERE left(relname, length($1:::STRING)) = $1::STRING
+ORDER BY 1,3,4,5
 --placeholders: []interface {}{"xor", 9, 12}
 
 comp at=10
@@ -115,6 +119,7 @@ SELECT relname AS completion,
 LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
     ON t.oid = cc.object_id AND cc.type = 'TableCommentType'
  WHERE left(relname, length($1:::STRING)) = $1::STRING
+ORDER BY 1,3,4,5
 --placeholders: []interface {}{"", 10, 10}
 
 comp at=9
@@ -136,6 +141,7 @@ SELECT relname AS completion,
 LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
     ON t.oid = cc.object_id AND cc.type = 'TableCommentType'
  WHERE left(relname, length($1:::STRING)) = $1::STRING
+ORDER BY 1,3,4,5
 --placeholders: []interface {}{"", 9, 9}
 
 
@@ -162,6 +168,7 @@ SELECT relname AS completion,
 LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
     ON t.oid = cc.object_id AND cc.type = 'TableCommentType'
  WHERE left(relname, length($1:::STRING)) = $1::STRING
+ORDER BY 1,3,4,5
 --placeholders: []interface {}{"xor", 20, 23}
 
 # Quoted uppercase is a different schema entirely.
@@ -184,6 +191,7 @@ SELECT relname AS completion,
 LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
     ON t.oid = cc.object_id AND cc.type = 'TableCommentType'
  WHERE left(relname, length($1:::STRING)) = $1::STRING
+ORDER BY 1,3,4,5
 --placeholders: []interface {}{"xor", 20, 23}
 
 
