@@ -12,13 +12,13 @@ package kvflowcontrolpb
 
 import "github.com/cockroachdb/redact"
 
-func (p *RaftLogPosition) String() string {
+func (p RaftLogPosition) String() string {
 	return redact.StringWithoutMarkers(p)
 }
 
 // SafeFormat implements the redact.SafeFormatter interface.
-func (p *RaftLogPosition) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("position=%d/%d", p.Term, p.Index)
+func (p RaftLogPosition) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("log-position=%d/%d", p.Term, p.Index)
 }
 
 // Equal returns whether the two raft log positions are identical.
