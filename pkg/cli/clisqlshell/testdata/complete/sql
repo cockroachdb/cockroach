@@ -33,6 +33,18 @@ completions:
   "ALL" (reserved) -> "ALL" (0, 0)
   "ALTER" (unreserved) -> "ALTER" (0, 0)
   ... entries omitted ...
+- "relation":
+  "pg_aggregate" (aggregated built-in functions (incomplete)) -> "pg_aggregate" (0, 0)
+  "pg_am" (index access methods (incomplete)) -> "pg_am" (0, 0)
+  "pg_amop" (pg_amop was created for compatibility and is currently unimplemented) -> "pg_amop" (0, 0)
+  "pg_amproc" (pg_amproc was created for compatibility and is currently unimplemented) -> "pg_amproc" (0, 0)
+  "pg_attrdef" (column default values) -> "pg_attrdef" (0, 0)
+  "pg_attribute" (table columns (incomplete - see also information_schema.columns)) -> "pg_attribute" (0, 0)
+  "pg_auth_members" (role membership) -> "pg_auth_members" (0, 0)
+  "pg_authid" (authorization identifiers - differs from postgres as we do not display passwords) -> "pg_authid" (0, 0)
+  "pg_available_extension_versions" (pg_available_extension_versions was created for compatibility and is currently u) -> "pg_available_extension_versions" (0, 0)
+  "pg_available_extensions" (available extensions) -> "pg_available_extensions" (0, 0)
+  ... entries omitted ...
 - "schema":
   "crdb_internal" () -> "crdb_internal" (0, 0)
   "information_schema" () -> "information_schema" (0, 0)

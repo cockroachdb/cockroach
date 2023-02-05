@@ -2,6 +2,31 @@ filter
 objects:
 ----
 
+subtest after_keyword
+
+comp at=8
+select
+----
+i_
+ ^
+--
+objects: completing for "" (8,8), schema: IN (TABLE unnest(current_schemas(true)))
+--sql:
+WITH n AS (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname IN (TABLE unnest(current_schemas(true)))),
+     t AS (SELECT oid, relname FROM pg_catalog.pg_class WHERE reltype != 0 AND relnamespace IN (TABLE n))
+SELECT relname AS completion,
+       'relation' AS category,
+       substr(COALESCE(cc.comment, ''), e'[^\n]{0,80}') as description,
+       $2:::INT AS start,
+       $3:::INT AS end
+  FROM t
+LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
+    ON t.oid = cc.object_id AND cc.type = 'TableCommentType'
+ WHERE left(relname, length($1:::STRING)) = $1::STRING
+--placeholders: []interface {}{"", 8, 8}
+
+subtest end
+
 subtest at_ident
 
 comp at=8
@@ -31,7 +56,7 @@ select xor
 ii_
   ^
 --
-objects: completing for "xor" (7,10), schema: IN (TABLE unnest(current_schemas(true)))
+objects: completing for "" (12,12), schema: IN (TABLE unnest(current_schemas(true)))
 --sql:
 WITH n AS (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname IN (TABLE unnest(current_schemas(true)))),
      t AS (SELECT oid, relname FROM pg_catalog.pg_class WHERE reltype != 0 AND relnamespace IN (TABLE n))
@@ -44,7 +69,7 @@ SELECT relname AS completion,
 LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
     ON t.oid = cc.object_id AND cc.type = 'TableCommentType'
  WHERE left(relname, length($1:::STRING)) = $1::STRING
---placeholders: []interface {}{"xor", 7, 10}
+--placeholders: []interface {}{"", 12, 12}
 
 subtest end
 
