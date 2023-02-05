@@ -165,7 +165,7 @@ SELECT DISTINCT
        $2:::INT AS start,
        $3:::INT AS end
   FROM p
-ORDER BY 1,2,3,4,5
+ORDER BY 1,3,4,5
 `
 	iter, err := c.Query(ctx, query, prefix, start, end, schemaName)
 	return iter, err
@@ -208,6 +208,7 @@ LEFT OUTER JOIN system.public.comments sc
     ON d.oid = sc.object_id
    AND sc.type = 0
  WHERE left(datname, length($1:::STRING)) = $1::STRING
+ORDER BY 1,3,4,5
 `
 	iter, err := c.Query(ctx, query, prefix, start, end)
 	return iter, err
@@ -268,6 +269,7 @@ SELECT relname AS completion,
 LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
     ON t.oid = cc.object_id AND cc.type = 'TableCommentType'
  WHERE left(relname, length($1:::STRING)) = $1::STRING
+ORDER BY 1,3,4,5
 `
 	query := fmt.Sprintf(queryT, schema)
 	iter, err := c.Query(ctx, query, prefix, start, end)
@@ -308,6 +310,7 @@ SELECT nspname AS completion,
 LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
     ON t.oid = cc.object_id AND cc.type = 'SchemaCommentType'
  WHERE left(nspname, length($1:::STRING)) = $1::STRING
+ORDER BY 1,3,4,5
 `
 	iter, err := c.Query(ctx, query, prefix, start, end)
 	return iter, err
@@ -358,6 +361,7 @@ SELECT schema_name AS completion,
   FROM "".information_schema.schemata
  WHERE catalog_name = $4:::STRING
    AND left(schema_name, length($1:::STRING)) = $1:::STRING
+ORDER BY 1,3,4,5
 `
 	iter, err := c.Query(ctx, query, prefix, start, end, dbname)
 	return iter, err
@@ -426,6 +430,7 @@ SELECT name AS completion,
   FROM t
 LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
     ON t.table_id = cc.object_id AND cc.type = 'TableCommentType'
+ORDER BY 1,3,4,5
 `
 	iter, err := c.Query(ctx, query, prefix, start, end, dbname, schema)
 	return iter, err
