@@ -90,11 +90,13 @@ SELECT upper(word),
 	return iter, err
 }
 
-// A surely not qualified possible builtin name.
-var compNotQualProcRe = regexp.MustCompile(`[^.](i'|_)`)
+// A surely not qualified possible function name.
+// Also, function names cannot appear directly after a semicolon.
+var compNotQualProcRe = regexp.MustCompile(`[^.;](i'|_)`)
 
-// A qualified possible builtin name.
-var compMaybeQualProcRe = regexp.MustCompile(`i\.['_]|i\.i'`)
+// A schema-qualified possible builtin name.
+// Also, function names cannot appear directly after a semicolon.
+var compMaybeQualProcRe = regexp.MustCompile(`[^.;]i\.(['_]|i')`)
 
 func completeFunction(ctx context.Context, c compengine.Context) (compengine.Rows, error) {
 	// Complete function names:
@@ -114,8 +116,6 @@ func completeFunction(ctx context.Context, c compengine.Context) (compengine.Row
 		if atWord {
 			start = int(c.RelToken(-2).Start)
 			schemaName = c.RelToken(-2).Str
-		}
-		if atWord {
 			prefix = c.RelToken(0).Str
 		}
 		end = int(c.RelToken(0).End)
@@ -172,7 +172,7 @@ ORDER BY 1,2,3,4,5
 }
 
 // A database name can only occur after a keyword or a comma (,).
-var compDbRe = regexp.MustCompile(`i(i'|_)|,(_|i')`)
+var compDbRe = regexp.MustCompile(`[i,](i'|_)`)
 
 func completeDatabase(ctx context.Context, c compengine.Context) (compengine.Rows, error) {
 	var prefix string
@@ -245,7 +245,7 @@ func completeObjectInCurrentDatabase(
 	var prefix string
 	var start, end int
 	switch {
-	case atWord:
+	case c.CursorInToken() && atWord:
 		curTok := c.RelToken(0)
 		prefix = curTok.Str
 		start = int(curTok.Start)
@@ -287,14 +287,14 @@ func completeSchemaInCurrentDatabase(
 	var prefix string
 	var start, end int
 	switch {
-	case c.CursorInSpace():
-		start = c.QueryPos()
-		end = start
-	default:
+	case c.CursorInToken() && c.AtWord():
 		curTok := c.RelToken(0)
 		prefix = curTok.Str
 		start = int(curTok.Start)
 		end = int(curTok.End)
+	default:
+		start = c.QueryPos()
+		end = start
 	}
 
 	c.Trace("completing for %q (%d,%d)", prefix, start, end)
@@ -372,14 +372,21 @@ func completeObjectInOtherDatabase(
 	var schema string
 	atWord := c.AtWord()
 	sketch := c.Sketch()
+	var dbTok scanner.InspectToken
 	switch {
 	case compOneQualPrefixRe.MatchString(sketch):
 		schema = "public"
+		dbTok = c.RelToken(-1)
+		if atWord {
+			dbTok = c.RelToken(-2)
+		}
 
 	case compTwoQualPrefixRe.MatchString(sketch):
 		schemaTok := c.RelToken(-1)
+		dbTok = c.RelToken(-3)
 		if atWord {
 			schemaTok = c.RelToken(-2)
+			dbTok = c.RelToken(-4)
 		}
 		schema = schemaTok.Str
 
@@ -387,27 +394,12 @@ func completeObjectInOtherDatabase(
 		c.Trace("not completing")
 		return nil, nil
 	}
-
-	var dbTok scanner.InspectToken
-	switch {
-	case compOneQualPrefixRe.MatchString(sketch):
-		dbTok = c.RelToken(-1)
-		if atWord {
-			dbTok = c.RelToken(-2)
-		}
-
-	case compTwoQualPrefixRe.MatchString(sketch):
-		dbTok = c.RelToken(-3)
-		if atWord {
-			dbTok = c.RelToken(-4)
-		}
-	}
 	dbname := dbTok.Str
 
 	var prefix string
 	var start, end int
 	switch {
-	case atWord:
+	case c.CursorInToken() && atWord:
 		curTok := c.RelToken(0)
 		prefix = curTok.Str
 		start = int(curTok.Start)
