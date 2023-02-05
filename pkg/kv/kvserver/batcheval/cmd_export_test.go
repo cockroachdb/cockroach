@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -51,27 +50,30 @@ func TestExportCmd(t *testing.T) {
 	kvDB := tc.Server(0).DB()
 
 	export := func(
-		t *testing.T, start hlc.Timestamp, mvccFilter roachpb.MVCCFilter, maxResponseSSTBytes int64,
+		t *testing.T, startTime, endTime hlc.Timestamp, startKey roachpb.Key, mvccFilter roachpb.MVCCFilter,
 	) (roachpb.Response, *roachpb.Error) {
 		req := &roachpb.ExportRequest{
-			RequestHeader:  roachpb.RequestHeader{Key: bootstrap.TestingUserTableDataMin(), EndKey: keys.MaxKey},
-			StartTime:      start,
-			MVCCFilter:     mvccFilter,
-			TargetFileSize: batcheval.ExportRequestTargetFileSize.Get(&tc.Server(0).ClusterSettings().SV),
+			RequestHeader:             roachpb.RequestHeader{Key: startKey, EndKey: keys.MaxKey},
+			StartTime:                 startTime,
+			MVCCFilter:                mvccFilter,
+			SplitMidKey:               true,
+			DeprecatedTargetFileSize:  batcheval.ExportRequestTargetFileSize.Get(&tc.Server(0).ClusterSettings().SV),
+			MaxAllowedFileSizeOverage: batcheval.ExportRequestMaxAllowedFileSizeOverage.Get(&tc.Server(0).ClusterSettings().SV),
 		}
 		var h roachpb.Header
-		h.TargetBytes = maxResponseSSTBytes
+		h.TargetBytes = batcheval.ExportRequestTargetFileSize.Get(&tc.Server(0).ClusterSettings().SV)
+		h.Timestamp = endTime
 		return kv.SendWrappedWith(ctx, kvDB.NonTransactionalSender(), h, req)
 	}
 
+	// exportAndSlurpOne sends a single ExportRequest and processes its response.
 	exportAndSlurpOne := func(
-		t *testing.T, start hlc.Timestamp, mvccFilter roachpb.MVCCFilter, maxResponseSSTBytes int64,
+		t *testing.T, startTime, endTime hlc.Timestamp, startKey roachpb.Key, mvccFilter roachpb.MVCCFilter,
 	) ([]string, []storage.MVCCKeyValue, roachpb.ResponseHeader) {
-		res, pErr := export(t, start, mvccFilter, maxResponseSSTBytes)
+		res, pErr := export(t, startTime, endTime, startKey, mvccFilter)
 		if pErr != nil {
 			t.Fatalf("%+v", pErr)
 		}
-
 		var paths []string
 		var kvs []storage.MVCCKeyValue
 		for _, file := range res.(*roachpb.ExportResponse).Files {
@@ -86,7 +88,6 @@ func TestExportCmd(t *testing.T) {
 				t.Fatalf("%+v", err)
 			}
 			defer sst.Close()
-
 			sst.SeekGE(storage.MVCCKey{Key: keys.MinKey})
 			for {
 				if valid, err := sst.Valid(); !valid || err != nil {
@@ -105,73 +106,71 @@ func TestExportCmd(t *testing.T) {
 				sst.Next()
 			}
 		}
-
 		return paths, kvs, res.(*roachpb.ExportResponse).Header()
 	}
-	type ExportAndSlurpResult struct {
+	type exportAndSlurpResult struct {
 		end                      hlc.Timestamp
+		filter                   roachpb.MVCCFilter
 		mvccLatestFiles          []string
 		mvccLatestKVs            []storage.MVCCKeyValue
 		mvccAllFiles             []string
 		mvccAllKVs               []storage.MVCCKeyValue
 		mvccLatestResponseHeader roachpb.ResponseHeader
 		mvccAllResponseHeader    roachpb.ResponseHeader
+		resumeSpans              []string
 	}
-	exportAndSlurp := func(t *testing.T, start hlc.Timestamp,
-		maxResponseSSTBytes int64) ExportAndSlurpResult {
-		var ret ExportAndSlurpResult
+	// exportAndSlurp runs ExportRequests until all resume spans have been
+	// exhausted. It returns an ExportAndSlurpResult aggregated across
+	// ExportRequests.
+	exportAndSlurp := func(t *testing.T, start hlc.Timestamp, filter roachpb.MVCCFilter) exportAndSlurpResult {
+		var ret exportAndSlurpResult
 		ret.end = hlc.NewClockWithSystemTimeSource(time.Nanosecond).Now( /* maxOffset */ )
-		ret.mvccLatestFiles, ret.mvccLatestKVs, ret.mvccLatestResponseHeader = exportAndSlurpOne(t,
-			start, roachpb.MVCCFilter_Latest, maxResponseSSTBytes)
-		ret.mvccAllFiles, ret.mvccAllKVs, ret.mvccAllResponseHeader = exportAndSlurpOne(t, start,
-			roachpb.MVCCFilter_All, maxResponseSSTBytes)
-		return ret
+		ret.filter = filter
+		todo := make(chan roachpb.Key, 1)
+		todo <- bootstrap.TestingUserTableDataMin()
+		for {
+			select {
+			case span := <-todo:
+				mvccFiles, mvccKVs, respHeader := exportAndSlurpOne(t, start, ret.end, span, filter)
+				switch filter {
+				case roachpb.MVCCFilter_All:
+					ret.mvccAllFiles = append(ret.mvccAllFiles, mvccFiles...)
+					ret.mvccAllKVs = append(ret.mvccAllKVs, mvccKVs...)
+				case roachpb.MVCCFilter_Latest:
+					ret.mvccLatestFiles = append(ret.mvccLatestFiles, mvccFiles...)
+					ret.mvccLatestKVs = append(ret.mvccLatestKVs, mvccKVs...)
+				}
+				if respHeader.ResumeSpan != nil {
+					ret.resumeSpans = append(ret.resumeSpans, respHeader.ResumeSpan.String())
+					todo <- respHeader.ResumeSpan.Key
+				}
+			default:
+				return ret
+			}
+		}
 	}
 
 	expect := func(
-		t *testing.T, res ExportAndSlurpResult,
-		mvccLatestFilesLen int, mvccLatestKVsLen int, mvccAllFilesLen int, mvccAllKVsLen int,
+		t *testing.T, res exportAndSlurpResult,
+		mvccFilesLen int, mvccKVsLen int, resumeSpans ...string,
 	) {
 		t.Helper()
-		require.Len(t, res.mvccLatestFiles, mvccLatestFilesLen, "unexpected files in latest export")
-		require.Len(t, res.mvccLatestKVs, mvccLatestKVsLen, "unexpected kvs in latest export")
-		require.Len(t, res.mvccAllFiles, mvccAllFilesLen, "unexpected files in all export")
-		require.Len(t, res.mvccAllKVs, mvccAllKVsLen, "unexpected kvs in all export")
-	}
-
-	expectResponseHeader := func(
-		t *testing.T, res ExportAndSlurpResult, mvccLatestResponseHeader roachpb.ResponseHeader,
-		mvccAllResponseHeader roachpb.ResponseHeader) {
-		t.Helper()
-		requireResumeSpan := func(expect, actual *roachpb.Span, msgAndArgs ...interface{}) {
-			t.Helper()
-			if expect == nil {
-				require.Nil(t, actual, msgAndArgs...)
-			} else {
-				require.NotNil(t, actual, msgAndArgs...)
-				require.Equal(t, expect.String(), actual.String(), msgAndArgs...)
-			}
+		switch res.filter {
+		case roachpb.MVCCFilter_Latest:
+			require.Len(t, res.mvccLatestFiles, mvccFilesLen, "unexpected files in latest export")
+			require.Len(t, res.mvccLatestKVs, mvccKVsLen, "unexpected kvs in latest export")
+		case roachpb.MVCCFilter_All:
+			require.Len(t, res.mvccAllFiles, mvccFilesLen, "unexpected files in all export")
+			require.Len(t, res.mvccAllKVs, mvccKVsLen, "unexpected kvs in all export")
+		default:
+			t.Fatal("unknown filter value")
 		}
-		require.Equal(t, mvccLatestResponseHeader.NumBytes, res.mvccLatestResponseHeader.NumBytes,
-			"unexpected NumBytes in latest export")
-		requireResumeSpan(mvccLatestResponseHeader.ResumeSpan, res.mvccLatestResponseHeader.ResumeSpan,
-			"unexpected ResumeSpan in latest export")
-		require.Equal(t, mvccLatestResponseHeader.ResumeReason, res.mvccLatestResponseHeader.ResumeReason,
-			"unexpected ResumeReason in latest export")
-		require.Equal(t, mvccAllResponseHeader.NumBytes, res.mvccAllResponseHeader.NumBytes,
-			"unexpected NumBytes in all export")
-		requireResumeSpan(mvccAllResponseHeader.ResumeSpan, res.mvccAllResponseHeader.ResumeSpan,
-			"unexpected ResumeSpan in all export")
-		require.Equal(t, mvccAllResponseHeader.ResumeReason, res.mvccAllResponseHeader.ResumeReason,
-			"unexpected ResumeReason in latest export")
+		require.Equal(t, resumeSpans, res.resumeSpans)
 	}
 
 	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
 	sqlDB.Exec(t, `CREATE DATABASE mvcclatest`)
 	sqlDB.Exec(t, `CREATE TABLE mvcclatest.export (id INT PRIMARY KEY, value INT)`)
-	tableID := descpb.ID(sqlutils.QueryTableID(
-		t, sqlDB.DB, "mvcclatest", "public", "export",
-	))
 
 	const (
 		targetSizeSetting = "kv.bulk_sst.target_size"
@@ -198,220 +197,257 @@ func TestExportCmd(t *testing.T) {
 		}
 	)
 
-	var res1 ExportAndSlurpResult
-	var noTargetBytes int64
+	var endTimeTS1 hlc.Timestamp
 	t.Run("ts1", func(t *testing.T) {
-		// When run with MVCCFilter_Latest and a startTime of 0 (full backup of
-		// only the latest values), Export special cases and skips keys that are
-		// deleted before the export timestamp.
+		// When run with MVCCFilter_Latest and a startTime of 0 (full backup of only
+		// the latest values), Export special cases and skips keys that are deleted
+		// before the export timestamp.
 		sqlDB.Exec(t, `INSERT INTO mvcclatest.export VALUES (1, 1), (3, 3), (4, 4)`)
 		sqlDB.Exec(t, `DELETE from mvcclatest.export WHERE id = 4`)
-		res1 = exportAndSlurp(t, hlc.Timestamp{}, noTargetBytes)
-		expect(t, res1, 1, 2, 1, 4)
+		latest := exportAndSlurp(t, hlc.Timestamp{}, roachpb.MVCCFilter_Latest)
+		expect(t, latest, 1, 2)
+		all := exportAndSlurp(t, hlc.Timestamp{}, roachpb.MVCCFilter_All)
+		expect(t, all, 1, 4)
+
+		// At this point `mvcclatest.export` has:
+		//
+		// (1, 1):latest
+		// (3, 3):latest
+		// deletionTombstone:latest <- (4, 4)
+		//
+		// The total size of the latest KV revisions in `mvcclatest.export` is 22
+		// bytes (2 KVs * 11 bytes), and the total size of all KV revisions is 37
+		// bytes (22 bytes + 4 bytes for the deletion tombstone + 11 bytes for the
+		// older revision).
+		//
+		// Setting the target file size to 1 byte means that we will only fit one KV
+		// of size 11 bytes in the SST returned by a single ExportRequest because
+		// that is all we can fit in `kv.bulk_sst.target_size` +
+		// `kv.bulk_sst.max_allowed_overage`.
 		defer resetExportTargetSize(t)
 		setExportTargetSize(t, "'1b'")
-		res1 = exportAndSlurp(t, hlc.Timestamp{}, noTargetBytes)
-		expect(t, res1, 2, 2, 3, 4)
+		latest = exportAndSlurp(t, hlc.Timestamp{}, roachpb.MVCCFilter_Latest)
+		expect(t, latest, 2, 2, []string{"/{Table/106/1/3/0-Max}"}...)
+		all = exportAndSlurp(t, hlc.Timestamp{}, roachpb.MVCCFilter_All)
+		expect(t, all, 3, 4, []string{"/{Table/106/1/3/0-Max}", "/{Table/106/1/4/0-Max}"}...)
+		endTimeTS1 = latest.end
 	})
 
-	var res2 ExportAndSlurpResult
+	var endTimeTS2 hlc.Timestamp
 	t.Run("ts2", func(t *testing.T) {
-		// If nothing has changed, nothing should be exported.
-		res2 = exportAndSlurp(t, res1.end, noTargetBytes)
-		expect(t, res2, 0, 0, 0, 0)
+		// If nothing has changed since the last ExportRequest, nothing should be
+		// exported.
+		latest := exportAndSlurp(t, endTimeTS1, roachpb.MVCCFilter_Latest)
+		expect(t, latest, 0, 0)
+		all := exportAndSlurp(t, endTimeTS1, roachpb.MVCCFilter_All)
+		expect(t, all, 0, 0)
+		endTimeTS2 = latest.end
 	})
 
-	var res3 ExportAndSlurpResult
+	var endTimeTS3 hlc.Timestamp
 	t.Run("ts3", func(t *testing.T) {
-		// MVCCFilter_All saves all values.
 		sqlDB.Exec(t, `INSERT INTO mvcclatest.export VALUES (2, 2)`)
 		sqlDB.Exec(t, `UPSERT INTO mvcclatest.export VALUES (2, 8)`)
-		res3 = exportAndSlurp(t, res2.end, noTargetBytes)
-		expect(t, res3, 1, 1, 1, 2)
+
+		// At this point `mvcclatest.export` has:
+		//
+		// (1, 1):latest
+		// (2, 8):latest <- (2, 2)
+		// (3, 3):latest
+		// deletionTombstone:latest <- (4, 4)
+		//
+		// With target size and max overage set to their defaults of 16MiB and 64MiB
+		// we should fit all KVs in a single file.
+		latest := exportAndSlurp(t, endTimeTS2, roachpb.MVCCFilter_Latest)
+		expect(t, latest, 1, 1)
+		all := exportAndSlurp(t, endTimeTS2, roachpb.MVCCFilter_All)
+		expect(t, all, 1, 2)
+		endTimeTS3 = latest.end
 	})
 
-	var res4 ExportAndSlurpResult
 	t.Run("ts4", func(t *testing.T) {
 		sqlDB.Exec(t, `DELETE FROM mvcclatest.export WHERE id = 3`)
-		res4 = exportAndSlurp(t, res3.end, noTargetBytes)
-		expect(t, res4, 1, 1, 1, 1)
-		if len(res4.mvccLatestKVs[0].Value) != 0 {
-			v := roachpb.Value{RawBytes: res4.mvccLatestKVs[0].Value}
+
+		// At this point `mvcclatest.export` has:
+		//
+		// (1, 1):latest
+		// (2, 8):latest <- (2, 2)
+		// deletionTombstone:latest <- (3, 3)
+		// deletionTombstone:latest <- (4, 4)
+		//
+		// With `endTimeTS3` as the StartTime both ExportRequests will see only the
+		// deletion tombstone that fits in our default target size of 16MiB.
+		latest := exportAndSlurp(t, endTimeTS3, roachpb.MVCCFilter_Latest)
+		expect(t, latest, 1, 1)
+		all := exportAndSlurp(t, endTimeTS3, roachpb.MVCCFilter_All)
+		expect(t, all, 1, 1)
+		if len(latest.mvccLatestKVs[0].Value) != 0 {
+			v := roachpb.Value{RawBytes: latest.mvccLatestKVs[0].Value}
 			t.Errorf("expected a deletion tombstone got %s", v.PrettyPrint())
 		}
-		if len(res4.mvccAllKVs[0].Value) != 0 {
-			v := roachpb.Value{RawBytes: res4.mvccAllKVs[0].Value}
+		if len(all.mvccAllKVs[0].Value) != 0 {
+			v := roachpb.Value{RawBytes: all.mvccAllKVs[0].Value}
 			t.Errorf("expected a deletion tombstone got %s", v.PrettyPrint())
 		}
 	})
 
-	var res5 ExportAndSlurpResult
+	var endTimeTS5 hlc.Timestamp
 	t.Run("ts5", func(t *testing.T) {
 		sqlDB.Exec(t, `ALTER TABLE mvcclatest.export SPLIT AT VALUES (2)`)
-		res5 = exportAndSlurp(t, hlc.Timestamp{}, noTargetBytes)
-		expect(t, res5, 2, 2, 2, 7)
 
-		// Re-run the test with a 1b target size which will lead to more files.
+		// At this point `mvcclatest.export` has:
+		// (1, 1):latest
+		// (2, 8):latest <- (2,2)
+		// deletionTombstone <- (3, 3)
+		// deletionTombstone <- (4, 4)
+		latest := exportAndSlurp(t, hlc.Timestamp{}, roachpb.MVCCFilter_Latest)
+		expect(t, latest, 2, 2)
+		all := exportAndSlurp(t, hlc.Timestamp{}, roachpb.MVCCFilter_All)
+		expect(t, all, 2, 7)
+
+		// Re-run the test with a 1b target size which will result in a single KV
+		// (and its revisions) per file.
 		defer resetExportTargetSize(t)
 		setExportTargetSize(t, "'1b'")
-		res5 = exportAndSlurp(t, hlc.Timestamp{}, noTargetBytes)
-		expect(t, res5, 2, 2, 4, 7)
+		latest = exportAndSlurp(t, hlc.Timestamp{}, roachpb.MVCCFilter_Latest)
+		expect(t, latest, 2, 2, []string{"/{Table/106/1/2-Max}"}...)
+		all = exportAndSlurp(t, hlc.Timestamp{}, roachpb.MVCCFilter_All)
+		expect(t, all, 4, 7, []string{"/{Table/106/1/2-Max}", "/{Table/106/1/3/0-Max}", "/{Table/106/1/4/0-Max}"}...)
+		endTimeTS5 = all.end
 	})
 
-	var res6 ExportAndSlurpResult
 	t.Run("ts6", func(t *testing.T) {
 		// Add 100 rows to the table.
 		sqlDB.Exec(t, `WITH RECURSIVE
-    t (id, value)
-        AS (VALUES (1, 1) UNION ALL SELECT id + 1, value FROM t WHERE id < 100)
-UPSERT
-INTO
-    mvcclatest.export
-(SELECT id, value FROM t);`)
+	   t (id, value)
+	       AS (VALUES (1, 1) UNION ALL SELECT id + 1, value FROM t WHERE id < 100)
+	UPSERT
+	INTO
+	   mvcclatest.export
+	(SELECT id, value FROM t);`)
 
-		// Run the test with the default target size which will lead to 2 files due
-		// to the above split.
-		res6 = exportAndSlurp(t, res5.end, noTargetBytes)
-		expect(t, res6, 2, 100, 2, 100)
+		// Run the test with the default target size of 16 MiB which will lead to 2
+		// files due to the above range split. Note how we do not see any resume
+		// spans because the dist sender divides the ExportRequest to send to the
+		// LHS and RHS of the split range and then combines the responses from both
+		// ranges before returning.
+		latest := exportAndSlurp(t, endTimeTS5, roachpb.MVCCFilter_Latest)
+		expect(t, latest, 2, 100)
+		all := exportAndSlurp(t, endTimeTS5, roachpb.MVCCFilter_All)
+		expect(t, all, 2, 100)
 
-		// Re-run the test with a 1b target size which will lead to 100 files.
+		// Re-run the test with a 1b target size which means that only a single KV
+		// (and its revisions) will fit in an SST before we paginate.
 		defer resetExportTargetSize(t)
 		setExportTargetSize(t, "'1b'")
-		res6 = exportAndSlurp(t, res5.end, noTargetBytes)
-		expect(t, res6, 100, 100, 100, 100)
+		latest = exportAndSlurp(t, endTimeTS5, roachpb.MVCCFilter_Latest)
+		expect(t, latest, 100, 100, []string{"/{Table/106/1/2-Max}", "/{Table/106/1/3/0-Max}", "/{Table/106/1/4/0-Max}", "/{Table/106/1/5/0-Max}", "/{Table/106/1/6/0-Max}", "/{Table/106/1/7/0-Max}", "/{Table/106/1/8/0-Max}",
+			"/{Table/106/1/9/0-Max}", "/{Table/106/1/10/0-Max}", "/{Table/106/1/11/0-Max}", "/{Table/106/1/12/0-Max}", "/{Table/106/1/13/0-Max}", "/{Table/106/1/14/0-Max}", "/{Table/106/1/15/0-Max}", "/{Table/106/1/16/0-Max}", "/{Table/106/1/17/0-Max}",
+			"/{Table/106/1/18/0-Max}", "/{Table/106/1/19/0-Max}", "/{Table/106/1/20/0-Max}", "/{Table/106/1/21/0-Max}", "/{Table/106/1/22/0-Max}", "/{Table/106/1/23/0-Max}", "/{Table/106/1/24/0-Max}", "/{Table/106/1/25/0-Max}", "/{Table/106/1/26/0-Max}",
+			"/{Table/106/1/27/0-Max}", "/{Table/106/1/28/0-Max}", "/{Table/106/1/29/0-Max}", "/{Table/106/1/30/0-Max}", "/{Table/106/1/31/0-Max}", "/{Table/106/1/32/0-Max}", "/{Table/106/1/33/0-Max}", "/{Table/106/1/34/0-Max}", "/{Table/106/1/35/0-Max}",
+			"/{Table/106/1/36/0-Max}", "/{Table/106/1/37/0-Max}", "/{Table/106/1/38/0-Max}", "/{Table/106/1/39/0-Max}", "/{Table/106/1/40/0-Max}", "/{Table/106/1/41/0-Max}", "/{Table/106/1/42/0-Max}", "/{Table/106/1/43/0-Max}",
+			"/{Table/106/1/44/0-Max}", "/{Table/106/1/45/0-Max}", "/{Table/106/1/46/0-Max}", "/{Table/106/1/47/0-Max}", "/{Table/106/1/48/0-Max}", "/{Table/106/1/49/0-Max}", "/{Table/106/1/50/0-Max}", "/{Table/106/1/51/0-Max}", "/{Table/106/1/52/0-Max}",
+			"/{Table/106/1/53/0-Max}", "/{Table/106/1/54/0-Max}", "/{Table/106/1/55/0-Max}", "/{Table/106/1/56/0-Max}", "/{Table/106/1/57/0-Max}", "/{Table/106/1/58/0-Max}", "/{Table/106/1/59/0-Max}", "/{Table/106/1/60/0-Max}", "/{Table/106/1/61/0-Max}",
+			"/{Table/106/1/62/0-Max}", "/{Table/106/1/63/0-Max}", "/{Table/106/1/64/0-Max}", "/{Table/106/1/65/0-Max}", "/{Table/106/1/66/0-Max}", "/{Table/106/1/67/0-Max}", "/{Table/106/1/68/0-Max}", "/{Table/106/1/69/0-Max}", "/{Table/106/1/70/0-Max}",
+			"/{Table/106/1/71/0-Max}", "/{Table/106/1/72/0-Max}", "/{Table/106/1/73/0-Max}", "/{Table/106/1/74/0-Max}", "/{Table/106/1/75/0-Max}", "/{Table/106/1/76/0-Max}", "/{Table/106/1/77/0-Max}", "/{Table/106/1/78/0-Max}", "/{Table/106/1/79/0-Max}",
+			"/{Table/106/1/80/0-Max}", "/{Table/106/1/81/0-Max}", "/{Table/106/1/82/0-Max}", "/{Table/106/1/83/0-Max}", "/{Table/106/1/84/0-Max}", "/{Table/106/1/85/0-Max}", "/{Table/106/1/86/0-Max}", "/{Table/106/1/87/0-Max}", "/{Table/106/1/88/0-Max}",
+			"/{Table/106/1/89/0-Max}", "/{Table/106/1/90/0-Max}", "/{Table/106/1/91/0-Max}", "/{Table/106/1/92/0-Max}", "/{Table/106/1/93/0-Max}", "/{Table/106/1/94/0-Max}", "/{Table/106/1/95/0-Max}", "/{Table/106/1/96/0-Max}", "/{Table/106/1/97/0-Max}",
+			"/{Table/106/1/98/0-Max}", "/{Table/106/1/99/0-Max}", "/{Table/106/1/100/0-Max}"}...)
+		all = exportAndSlurp(t, endTimeTS5, roachpb.MVCCFilter_All)
+		expect(t, all, 100, 100, []string{"/{Table/106/1/2-Max}", "/{Table/106/1/3/0-Max}", "/{Table/106/1/4/0-Max}", "/{Table/106/1/5/0-Max}", "/{Table/106/1/6/0-Max}", "/{Table/106/1/7/0-Max}", "/{Table/106/1/8/0-Max}",
+			"/{Table/106/1/9/0-Max}", "/{Table/106/1/10/0-Max}", "/{Table/106/1/11/0-Max}", "/{Table/106/1/12/0-Max}", "/{Table/106/1/13/0-Max}", "/{Table/106/1/14/0-Max}", "/{Table/106/1/15/0-Max}", "/{Table/106/1/16/0-Max}", "/{Table/106/1/17/0-Max}",
+			"/{Table/106/1/18/0-Max}", "/{Table/106/1/19/0-Max}", "/{Table/106/1/20/0-Max}", "/{Table/106/1/21/0-Max}", "/{Table/106/1/22/0-Max}", "/{Table/106/1/23/0-Max}", "/{Table/106/1/24/0-Max}", "/{Table/106/1/25/0-Max}", "/{Table/106/1/26/0-Max}",
+			"/{Table/106/1/27/0-Max}", "/{Table/106/1/28/0-Max}", "/{Table/106/1/29/0-Max}", "/{Table/106/1/30/0-Max}", "/{Table/106/1/31/0-Max}", "/{Table/106/1/32/0-Max}", "/{Table/106/1/33/0-Max}", "/{Table/106/1/34/0-Max}", "/{Table/106/1/35/0-Max}",
+			"/{Table/106/1/36/0-Max}", "/{Table/106/1/37/0-Max}", "/{Table/106/1/38/0-Max}", "/{Table/106/1/39/0-Max}", "/{Table/106/1/40/0-Max}", "/{Table/106/1/41/0-Max}", "/{Table/106/1/42/0-Max}", "/{Table/106/1/43/0-Max}",
+			"/{Table/106/1/44/0-Max}", "/{Table/106/1/45/0-Max}", "/{Table/106/1/46/0-Max}", "/{Table/106/1/47/0-Max}", "/{Table/106/1/48/0-Max}", "/{Table/106/1/49/0-Max}", "/{Table/106/1/50/0-Max}", "/{Table/106/1/51/0-Max}", "/{Table/106/1/52/0-Max}",
+			"/{Table/106/1/53/0-Max}", "/{Table/106/1/54/0-Max}", "/{Table/106/1/55/0-Max}", "/{Table/106/1/56/0-Max}", "/{Table/106/1/57/0-Max}", "/{Table/106/1/58/0-Max}", "/{Table/106/1/59/0-Max}", "/{Table/106/1/60/0-Max}", "/{Table/106/1/61/0-Max}",
+			"/{Table/106/1/62/0-Max}", "/{Table/106/1/63/0-Max}", "/{Table/106/1/64/0-Max}", "/{Table/106/1/65/0-Max}", "/{Table/106/1/66/0-Max}", "/{Table/106/1/67/0-Max}", "/{Table/106/1/68/0-Max}", "/{Table/106/1/69/0-Max}", "/{Table/106/1/70/0-Max}",
+			"/{Table/106/1/71/0-Max}", "/{Table/106/1/72/0-Max}", "/{Table/106/1/73/0-Max}", "/{Table/106/1/74/0-Max}", "/{Table/106/1/75/0-Max}", "/{Table/106/1/76/0-Max}", "/{Table/106/1/77/0-Max}", "/{Table/106/1/78/0-Max}", "/{Table/106/1/79/0-Max}",
+			"/{Table/106/1/80/0-Max}", "/{Table/106/1/81/0-Max}", "/{Table/106/1/82/0-Max}", "/{Table/106/1/83/0-Max}", "/{Table/106/1/84/0-Max}", "/{Table/106/1/85/0-Max}", "/{Table/106/1/86/0-Max}", "/{Table/106/1/87/0-Max}", "/{Table/106/1/88/0-Max}",
+			"/{Table/106/1/89/0-Max}", "/{Table/106/1/90/0-Max}", "/{Table/106/1/91/0-Max}", "/{Table/106/1/92/0-Max}", "/{Table/106/1/93/0-Max}", "/{Table/106/1/94/0-Max}", "/{Table/106/1/95/0-Max}", "/{Table/106/1/96/0-Max}", "/{Table/106/1/97/0-Max}",
+			"/{Table/106/1/98/0-Max}", "/{Table/106/1/99/0-Max}", "/{Table/106/1/100/0-Max}"}...)
 
-		// Set the MaxOverage to 1b and ensure that we get errors due to
-		// the max overage being exceeded.
+		// Set `kv.bulk_sst.max_allowed_overage` to 1b and ensure that we get errors
+		// due to the max size of a KV (and its revisions) being exceeded.
 		defer resetMaxOverage(t)
 		setMaxOverage(t, "'1b'")
+		_, pErr := export(t, endTimeTS5,
+			hlc.NewClockWithSystemTimeSource(time.Nanosecond).Now( /* maxOffset */ ),
+			bootstrap.TestingUserTableDataMin(), roachpb.MVCCFilter_Latest)
 		const expectedError = `export size \(11 bytes\) exceeds max size \(2 bytes\)`
-		_, pErr := export(t, res5.end, roachpb.MVCCFilter_Latest, noTargetBytes)
 		require.Regexp(t, expectedError, pErr)
 		hints := errors.GetAllHints(pErr.GoError())
 		require.Equal(t, 1, len(hints))
 		const expectedHint = `consider increasing cluster setting "kv.bulk_sst.max_allowed_overage"`
 		require.Regexp(t, expectedHint, hints[0])
-		_, pErr = export(t, res5.end, roachpb.MVCCFilter_All, noTargetBytes)
+		_, pErr = export(t, endTimeTS5, hlc.NewClockWithSystemTimeSource(time.Nanosecond).Now( /* maxOffset */ ),
+			bootstrap.TestingUserTableDataMin(), roachpb.MVCCFilter_All)
 		require.Regexp(t, expectedError, pErr)
 
-		// Disable the TargetSize and ensure that we don't get any errors
+		// Disable `kv.bulk_sst.target_size` and ensure that we don't get any errors
 		// to the max overage being exceeded.
 		setExportTargetSize(t, "'0b'")
-		res6 = exportAndSlurp(t, res5.end, noTargetBytes)
-		expect(t, res6, 2, 100, 2, 100)
+		latest = exportAndSlurp(t, endTimeTS5, roachpb.MVCCFilter_Latest)
+		expect(t, latest, 2, 100)
+		all = exportAndSlurp(t, endTimeTS5, roachpb.MVCCFilter_All)
+		expect(t, all, 2, 100)
 	})
 
-	var res7 ExportAndSlurpResult
 	t.Run("ts7", func(t *testing.T) {
-		var maxResponseSSTBytes int64
-		kvByteSize := int64(11)
 		// Because of the above split, there are going to be two ExportRequests by
 		// the DistSender. One for the first KV and the next one for the remaining
-		// KVs.
-		// This allows us to test both the TargetBytes limit within a single export
-		// request and across subsequent requests.
+		// KVs. This allows us to test both the TargetBytes limit within a single
+		// export request and across subsequent requests.
 
-		// No TargetSize and TargetBytes is greater than the size of a single KV.
-		// The first ExportRequest should reduce the byte limit for the next
-		// ExportRequest but since there is no TargetSize we should see all KVs
-		// exported.
-		maxResponseSSTBytes = kvByteSize + 1
-		res7 = exportAndSlurp(t, res5.end, maxResponseSSTBytes)
-		expect(t, res7, 2, 100, 2, 100)
-		latestRespHeader := roachpb.ResponseHeader{
-			NumBytes: maxResponseSSTBytes,
-		}
-		allRespHeader := roachpb.ResponseHeader{
-			NumBytes: maxResponseSSTBytes,
-		}
-		expectResponseHeader(t, res7, latestRespHeader, allRespHeader)
-
-		// No TargetSize and TargetBytes is equal to the size of a single KV. The
-		// first ExportRequest will reduce the limit for the second request to zero
-		// and so we should only see a single ExportRequest and an accurate
-		// ResumeSpan.
-		maxResponseSSTBytes = kvByteSize
-		res7 = exportAndSlurp(t, res5.end, maxResponseSSTBytes)
-		expect(t, res7, 1, 1, 1, 1)
-		latestRespHeader = roachpb.ResponseHeader{
-			ResumeSpan: &roachpb.Span{
-				Key:    []byte(fmt.Sprintf("/Table/%d/1/2", tableID)),
-				EndKey: []byte("/Max"),
-			},
-			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
-			NumBytes:     maxResponseSSTBytes,
-		}
-		allRespHeader = roachpb.ResponseHeader{
-			ResumeSpan: &roachpb.Span{
-				Key:    []byte(fmt.Sprintf("/Table/%d/1/2", tableID)),
-				EndKey: []byte("/Max"),
-			},
-			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
-			NumBytes:     maxResponseSSTBytes,
-		}
-		expectResponseHeader(t, res7, latestRespHeader, allRespHeader)
-
-		// TargetSize to one KV and TargetBytes to two KVs. We should see one KV in
-		// each ExportRequest SST.
+		// Setting `kv.bulk_sst.target_size` to the size of a single KV.
+		//
+		// The ExportRequest to the first range will return a single KV SST (11
+		// bytes), and reduce the byte limit for the ExportRequest to the next range
+		// to 0.
+		endTime := hlc.NewClockWithSystemTimeSource(time.Nanosecond).Now( /* maxOffset */ )
 		setExportTargetSize(t, "'11b'")
-		maxResponseSSTBytes = 2 * kvByteSize
-		res7 = exportAndSlurp(t, res5.end, maxResponseSSTBytes)
-		expect(t, res7, 2, 2, 2, 2)
-		latestRespHeader = roachpb.ResponseHeader{
-			ResumeSpan: &roachpb.Span{
-				Key:    []byte(fmt.Sprintf("/Table/%d/1/3/0", tableID)),
-				EndKey: []byte("/Max"),
-			},
-			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
-			NumBytes:     maxResponseSSTBytes,
-		}
-		allRespHeader = roachpb.ResponseHeader{
-			ResumeSpan: &roachpb.Span{
-				Key:    []byte(fmt.Sprintf("/Table/%d/1/3/0", tableID)),
-				EndKey: []byte("/Max"),
-			},
-			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
-			NumBytes:     maxResponseSSTBytes,
-		}
-		expectResponseHeader(t, res7, latestRespHeader, allRespHeader)
+		resp, pErr := export(t, endTimeTS5, endTime, bootstrap.TestingUserTableDataMin(), roachpb.MVCCFilter_Latest)
+		require.NoError(t, pErr.GoError())
+		require.Equal(t, int64(11), resp.(*roachpb.ExportResponse).NumBytes)
+		require.Equal(t, "/{Table/106/1/2-Max}", resp.(*roachpb.ExportResponse).ResumeSpan.String())
 
-		// TargetSize to one KV and TargetBytes to one less than the total KVs.
-		setExportTargetSize(t, "'11b'")
-		maxResponseSSTBytes = 99 * kvByteSize
-		res7 = exportAndSlurp(t, res5.end, maxResponseSSTBytes)
-		expect(t, res7, 99, 99, 99, 99)
-		latestRespHeader = roachpb.ResponseHeader{
-			ResumeSpan: &roachpb.Span{
-				Key:    []byte(fmt.Sprintf("/Table/%d/1/100/0", tableID)),
-				EndKey: []byte("/Max"),
-			},
-			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
-			NumBytes:     maxResponseSSTBytes,
-		}
-		allRespHeader = roachpb.ResponseHeader{
-			ResumeSpan: &roachpb.Span{
-				Key:    []byte(fmt.Sprintf("/Table/%d/1/100/0", tableID)),
-				EndKey: []byte("/Max"),
-			},
-			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
-			NumBytes:     maxResponseSSTBytes,
-		}
-		expectResponseHeader(t, res7, latestRespHeader, allRespHeader)
+		// Setting `kv.bulk_sst.target_size` to a size greater than a single KV.
+		//
+		// The ExportRequest to the first range will return an SST with one KV (11
+		// bytes), this reduces the TargetBytes for the ExportRequest to the next
+		// range to 1 byte which means we will fit 1 KV in the SST before
+		// paginating.
+		setExportTargetSize(t, "'12b'")
+		resp, pErr = export(t, endTimeTS5, endTime, bootstrap.TestingUserTableDataMin(), roachpb.MVCCFilter_Latest)
+		require.NoError(t, pErr.GoError())
+		require.Equal(t, int64(22), resp.(*roachpb.ExportResponse).NumBytes)
+		require.Equal(t, "/{Table/106/1/3/0-Max}", resp.(*roachpb.ExportResponse).ResumeSpan.String())
 
-		// Target Size to one KV and TargetBytes to greater than all KVs. Checks if
-		// final NumBytes is accurate.
-		defer resetExportTargetSize(t)
-		setExportTargetSize(t, "'11b'")
-		maxResponseSSTBytes = 101 * kvByteSize
-		res7 = exportAndSlurp(t, res5.end, maxResponseSSTBytes)
-		expect(t, res7, 100, 100, 100, 100)
-		latestRespHeader = roachpb.ResponseHeader{
-			NumBytes: 100 * kvByteSize,
-		}
-		allRespHeader = roachpb.ResponseHeader{
-			NumBytes: 100 * kvByteSize,
-		}
-		expectResponseHeader(t, res7, latestRespHeader, allRespHeader)
+		// Setting `kv.bulk_sst.target_size` to a size greater than all KVs.
+		setExportTargetSize(t, "'1111b'")
+		resp, pErr = export(t, endTimeTS5, endTime, bootstrap.TestingUserTableDataMin(), roachpb.MVCCFilter_Latest)
+		require.NoError(t, pErr.GoError())
+		require.Equal(t, int64(1100), resp.(*roachpb.ExportResponse).NumBytes)
+		require.Nil(t, resp.(*roachpb.ExportResponse).ResumeSpan)
+
+		// Setting `kv.bulk_sst.target_size` to a size just less than all KVs.
+		setExportTargetSize(t, "'1089b'")
+		resp, pErr = export(t, endTimeTS5, endTime, bootstrap.TestingUserTableDataMin(), roachpb.MVCCFilter_Latest)
+		require.NoError(t, pErr.GoError())
+		require.Equal(t, int64(1089), resp.(*roachpb.ExportResponse).NumBytes)
+		require.Equal(t, resp.(*roachpb.ExportResponse).ResumeSpan.String(), "/{Table/106/1/100/0-Max}")
+
+		// Setting `kv.bulk_sst.target_size` to the size of two KVs.
+		//
+		// The ExportRequest to the first range will return an SST with one KV (11
+		// bytes), this reduces the TargetBytes for the ExportRequest to the next
+		// range to 11 bytes which means we will fit 1 KV in the SST before
+		// paginating.
+		setExportTargetSize(t, "'22b'")
+		resp, pErr = export(t, endTimeTS5, endTime, bootstrap.TestingUserTableDataMin(), roachpb.MVCCFilter_Latest)
+		require.NoError(t, pErr.GoError())
+		require.Equal(t, int64(22), resp.(*roachpb.ExportResponse).NumBytes)
+		require.Equal(t, "/{Table/106/1/3/0-Max}", resp.(*roachpb.ExportResponse).ResumeSpan.String())
 	})
 }
 

@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -134,7 +135,21 @@ func evalExport(
 		return result.Result{}, errors.Errorf("unknown MVCC filter: %s", args.MVCCFilter)
 	}
 
-	targetSize := uint64(args.TargetFileSize)
+	var targetSize int64
+	if cArgs.EvalCtx.ClusterSettings().Version.IsActive(ctx, clusterversion.V23_1) {
+		// In a 23.1 cluster we use the header.TargetBytes as the target size for
+		// the generated SST.
+		targetSize = h.TargetBytes
+	} else {
+		// In a mixed-version cluster, nodes use the DeprecatedTargetFileSize field
+		// to convey the target SST size. The header.TargetBytes if set is set to a
+		// sentinel value of 1 to force the ExportRequest to paginate after creating
+		// a single SST.
+		//
+		// TODO(adityamaru): Remove once we are outside the compatability window of
+		// 22.2.
+		targetSize = args.DeprecatedTargetFileSize
+	}
 	var maxSize uint64
 	allowedOverage := uint64(args.MaxAllowedFileSizeOverage)
 	// ExportRequests from pre-23.1 nodes do not populate
@@ -148,7 +163,7 @@ func evalExport(
 			&cArgs.EvalCtx.ClusterSettings().SV))
 	}
 	if targetSize > 0 && allowedOverage > 0 {
-		maxSize = targetSize + allowedOverage
+		maxSize = uint64(targetSize) + allowedOverage
 	}
 
 	var maxIntents uint64
@@ -170,7 +185,6 @@ func evalExport(
 		return err
 	}
 
-	var curSizeOfExportedSSTs int64
 	for start := args.Key; start != nil; {
 		destFile := &storage.MemFile{}
 		opts := storage.MVCCExportOptions{
@@ -179,7 +193,7 @@ func evalExport(
 			StartTS:            args.StartTime,
 			EndTS:              h.Timestamp,
 			ExportAllRevisions: exportAllRevisions,
-			TargetSize:         targetSize,
+			TargetSize:         uint64(targetSize),
 			MaxSize:            maxSize,
 			MaxIntents:         maxIntents,
 			StopMidKey:         args.SplitMidKey,
@@ -268,34 +282,15 @@ func evalExport(
 		resumeKeyTS = resume.Timestamp
 
 		if h.TargetBytes > 0 {
-			curSizeOfExportedSSTs += summary.DataSize
-			// There could be a situation where the size of exported SSTs is larger
-			// than the TargetBytes. In such a scenario, we want to report back
-			// TargetBytes as the size of the processed SSTs otherwise the DistSender
-			// will error out with an "exceeded limit". In every other case we want to
-			// report back the actual size so that the DistSender can shrink the limit
-			// for subsequent range requests.
-			// This is semantically OK for two reasons:
-			//
-			// - DistSender does not parallelize requests with TargetBytes > 0.
-			//
-			// - DistSender uses NumBytes to shrink the limit for subsequent requests.
-			// By returning TargetBytes, no more requests will be processed (and there
-			// are no parallel running requests) which is what we expect.
-			//
-			// The ResumeSpan is what is used as the source of truth by the caller
-			// issuing the request, and that contains accurate information about what
-			// is left to be exported.
-			targetSize := h.TargetBytes
-			if curSizeOfExportedSSTs < targetSize {
-				targetSize = curSizeOfExportedSSTs
-			}
-			reply.NumBytes = targetSize
-			// NB: This condition means that we will allow another SST to be created
-			// even if we have less room in our TargetBytes than the target size of
-			// the next SST. In the worst case this could lead to us exceeding our
-			// TargetBytes by SST target size + overage.
-			if reply.NumBytes == h.TargetBytes {
+			// DistSender will use the `NumBytes` to decide whether ExportRequests on
+			// subsequent ranges should be processed after this one or if the request
+			// should paginate.
+			reply.NumBytes += summary.DataSize
+
+			// If the size of the SST files in our response are >= the ExportRequest's
+			// TargetBytes, we return with a ResumeSpan. Otherwise, we continue
+			// creating SSTs for the remainder of the span.
+			if reply.NumBytes >= h.TargetBytes {
 				if resume.Key != nil {
 					reply.ResumeSpan = &roachpb.Span{
 						Key:    resume.Key,

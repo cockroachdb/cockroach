@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
@@ -369,9 +370,26 @@ func runBackupProcessor(
 						ResumeKeyTS:               span.firstKeyTS,
 						StartTime:                 span.start,
 						MVCCFilter:                spec.MVCCFilter,
-						TargetFileSize:            batcheval.ExportRequestTargetFileSize.Get(&clusterSettings.SV),
 						MaxAllowedFileSizeOverage: batcheval.ExportRequestMaxAllowedFileSizeOverage.Get(&clusterSettings.SV),
 						SplitMidKey:               splitMidKey,
+					}
+
+					header := roachpb.Header{
+						Timestamp:             span.end,
+						ReturnOnRangeBoundary: true,
+					}
+
+					if clusterSettings.Version.IsActive(ctx, clusterversion.V23_1) {
+						// We set the DistSender response target bytes field to the target
+						// file size that controls how large each SST constructed as part of
+						// the ExportRequest should be.
+						header.TargetBytes = batcheval.ExportRequestTargetFileSize.Get(&clusterSettings.SV)
+					} else {
+						req.DeprecatedTargetFileSize = batcheval.ExportRequestTargetFileSize.Get(&clusterSettings.SV)
+						// We set the DistSender response target bytes field to a sentinel
+						// value. The sentinel value of 1 forces the ExportRequest to paginate
+						// after creating a single SST.
+						header.TargetBytes = 1
 					}
 
 					// If we're doing re-attempts but are not yet in the priority regime,
@@ -395,13 +413,6 @@ func runBackupProcessor(
 						priority = timeutil.Since(readTime) > priorityAfter.Get(&clusterSettings.SV)
 					}
 
-					header := roachpb.Header{
-						// We set the DistSender response target bytes field to a sentinel
-						// value. The sentinel value of 1 forces the ExportRequest to paginate
-						// after creating a single SST.
-						TargetBytes: 1,
-						Timestamp:   span.end,
-					}
 					if priority {
 						// This re-attempt is reading far enough in the past that we just want
 						// to abort any transactions it hits.
