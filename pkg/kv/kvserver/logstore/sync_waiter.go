@@ -50,10 +50,13 @@ type syncBatch struct {
 // NewSyncWaiterLoop constructs a SyncWaiterLoop. It must be Started before use.
 func NewSyncWaiterLoop() *SyncWaiterLoop {
 	return &SyncWaiterLoop{
-		// We size the waiter loop's queue to the same size as Pebble's sync
-		// concurrency. This is the maximum number of pending syncWaiter's that
-		// pebble allows.
-		q:                      make(chan syncBatch, record.SyncConcurrency),
+		// We size the waiter loop's queue to twice the size of Pebble's sync
+		// concurrency, which is the maximum number of pending syncWaiter's that
+		// pebble allows. Doubling the size gives us headroom to prevent the sync
+		// waiter loop from blocking on calls to enqueue, even if consumption from
+		// the queue is delayed. If the pipeline is going to block, we'd prefer for
+		// it to do so during the call to batch.CommitNoSyncWait.
+		q:                      make(chan syncBatch, 2*record.SyncConcurrency),
 		stopped:                make(chan struct{}),
 		logEveryEnqueueBlocked: log.Every(1 * time.Second),
 	}
@@ -108,9 +111,10 @@ func (w *SyncWaiterLoop) enqueue(ctx context.Context, wg syncWaiter, cb func()) 
 	default:
 		if w.logEveryEnqueueBlocked.ShouldLog() {
 			// NOTE: we don't expect to hit this because we size the enqueue channel
-			// with enough capacity to hold as many in-progress sync operations as
-			// Pebble allows (pebble/record.SyncConcurrency).
-			log.Warningf(ctx, "SyncWaiterLoop.enqueue blocking due to insufficient channel capacity")
+			// with enough capacity to hold more in-progress sync operations than
+			// Pebble allows (pebble/record.SyncConcurrency). However, we can still
+			// see this in cases where consumption from the queue is delayed.
+			log.VWarningf(ctx, 1, "SyncWaiterLoop.enqueue blocking due to insufficient channel capacity")
 		}
 		select {
 		case w.q <- b:
