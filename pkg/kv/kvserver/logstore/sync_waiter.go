@@ -31,6 +31,15 @@ type syncWaiter interface {
 
 var _ syncWaiter = storage.Batch(nil)
 
+// syncWaiterCallback is a callback provided to a SyncWaiterLoop.
+// The callback is structured as an interface instead of a closure to allow
+// users to batch the callback and its inputs into a single heap object, and
+// then pool the allocation of that object.
+type syncWaiterCallback interface {
+	// run executes the callback.
+	run()
+}
+
 // SyncWaiterLoop waits on a sequence of in-progress disk writes, notifying
 // callbacks when their corresponding disk writes have completed.
 // Invariant: The callbacks are notified in the order that they were enqueued
@@ -44,7 +53,7 @@ type SyncWaiterLoop struct {
 
 type syncBatch struct {
 	wg syncWaiter
-	cb func()
+	cb syncWaiterCallback
 }
 
 // NewSyncWaiterLoop constructs a SyncWaiterLoop. It must be Started before use.
@@ -87,7 +96,7 @@ func (w *SyncWaiterLoop) waitLoop(ctx context.Context, stopper *stop.Stopper) {
 				log.Fatalf(ctx, "SyncWait error: %+v", err)
 			}
 			w.wg.Close()
-			w.cb()
+			w.cb.run()
 		case <-stopper.ShouldQuiesce():
 			return
 		}
@@ -103,7 +112,7 @@ func (w *SyncWaiterLoop) waitLoop(ctx context.Context, stopper *stop.Stopper) {
 //
 // If the SyncWaiterLoop has already been stopped, the callback will never be
 // called.
-func (w *SyncWaiterLoop) enqueue(ctx context.Context, wg syncWaiter, cb func()) {
+func (w *SyncWaiterLoop) enqueue(ctx context.Context, wg syncWaiter, cb syncWaiterCallback) {
 	b := syncBatch{wg, cb}
 	select {
 	case w.q <- b:
