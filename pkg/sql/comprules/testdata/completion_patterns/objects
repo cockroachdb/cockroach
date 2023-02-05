@@ -12,8 +12,12 @@ i_
 --
 objects: completing for "" (8,8), schema: IN (TABLE unnest(current_schemas(true)))
 --sql:
-WITH n AS (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname IN (TABLE unnest(current_schemas(true)))),
-     t AS (SELECT oid, relname FROM pg_catalog.pg_class WHERE reltype != 0 AND relnamespace IN (TABLE n))
+WITH n AS (SELECT oid, nspname FROM pg_catalog.pg_namespace WHERE nspname IN (TABLE unnest(current_schemas(true)))),
+     t AS (SELECT c.oid, relname FROM pg_catalog.pg_class c
+             JOIN n ON n.oid = c.relnamespace
+            WHERE reltype != 0
+              AND left(relname, length($1:::STRING)) = $1::STRING
+              AND (nspname != 'pg_catalog' OR $4:::BOOL OR left($1:::STRING, 3) = 'pg_'))
 SELECT relname AS completion,
        'relation' AS category,
        substr(COALESCE(cc.comment, ''), e'[^\n]{0,80}') as description,
@@ -22,9 +26,8 @@ SELECT relname AS completion,
   FROM t
 LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
     ON t.oid = cc.object_id AND cc.type = 'TableCommentType'
- WHERE left(relname, length($1:::STRING)) = $1::STRING
 ORDER BY 1,3,4,5
---placeholders: []interface {}{"", 8, 8}
+--placeholders: []interface {}{"", 8, 8, false}
 
 subtest end
 
@@ -38,8 +41,12 @@ ii'
 --
 objects: completing for "xor" (7,10), schema: IN (TABLE unnest(current_schemas(true)))
 --sql:
-WITH n AS (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname IN (TABLE unnest(current_schemas(true)))),
-     t AS (SELECT oid, relname FROM pg_catalog.pg_class WHERE reltype != 0 AND relnamespace IN (TABLE n))
+WITH n AS (SELECT oid, nspname FROM pg_catalog.pg_namespace WHERE nspname IN (TABLE unnest(current_schemas(true)))),
+     t AS (SELECT c.oid, relname FROM pg_catalog.pg_class c
+             JOIN n ON n.oid = c.relnamespace
+            WHERE reltype != 0
+              AND left(relname, length($1:::STRING)) = $1::STRING
+              AND (nspname != 'pg_catalog' OR $4:::BOOL OR left($1:::STRING, 3) = 'pg_'))
 SELECT relname AS completion,
        'relation' AS category,
        substr(COALESCE(cc.comment, ''), e'[^\n]{0,80}') as description,
@@ -48,9 +55,8 @@ SELECT relname AS completion,
   FROM t
 LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
     ON t.oid = cc.object_id AND cc.type = 'TableCommentType'
- WHERE left(relname, length($1:::STRING)) = $1::STRING
 ORDER BY 1,3,4,5
---placeholders: []interface {}{"xor", 7, 10}
+--placeholders: []interface {}{"xor", 7, 10, false}
 
 comp at=12
 select xor
@@ -60,8 +66,12 @@ ii_
 --
 objects: completing for "" (12,12), schema: IN (TABLE unnest(current_schemas(true)))
 --sql:
-WITH n AS (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname IN (TABLE unnest(current_schemas(true)))),
-     t AS (SELECT oid, relname FROM pg_catalog.pg_class WHERE reltype != 0 AND relnamespace IN (TABLE n))
+WITH n AS (SELECT oid, nspname FROM pg_catalog.pg_namespace WHERE nspname IN (TABLE unnest(current_schemas(true)))),
+     t AS (SELECT c.oid, relname FROM pg_catalog.pg_class c
+             JOIN n ON n.oid = c.relnamespace
+            WHERE reltype != 0
+              AND left(relname, length($1:::STRING)) = $1::STRING
+              AND (nspname != 'pg_catalog' OR $4:::BOOL OR left($1:::STRING, 3) = 'pg_'))
 SELECT relname AS completion,
        'relation' AS category,
        substr(COALESCE(cc.comment, ''), e'[^\n]{0,80}') as description,
@@ -70,9 +80,8 @@ SELECT relname AS completion,
   FROM t
 LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
     ON t.oid = cc.object_id AND cc.type = 'TableCommentType'
- WHERE left(relname, length($1:::STRING)) = $1::STRING
 ORDER BY 1,3,4,5
---placeholders: []interface {}{"", 12, 12}
+--placeholders: []interface {}{"", 12, 12, false}
 
 subtest end
 
@@ -86,8 +95,12 @@ ii.i'
 --
 objects: completing for "xor" (9,12), schema: = 'a'
 --sql:
-WITH n AS (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = 'a'),
-     t AS (SELECT oid, relname FROM pg_catalog.pg_class WHERE reltype != 0 AND relnamespace IN (TABLE n))
+WITH n AS (SELECT oid, nspname FROM pg_catalog.pg_namespace WHERE nspname = 'a'),
+     t AS (SELECT c.oid, relname FROM pg_catalog.pg_class c
+             JOIN n ON n.oid = c.relnamespace
+            WHERE reltype != 0
+              AND left(relname, length($1:::STRING)) = $1::STRING
+              AND (nspname != 'pg_catalog' OR $4:::BOOL OR left($1:::STRING, 3) = 'pg_'))
 SELECT relname AS completion,
        'relation' AS category,
        substr(COALESCE(cc.comment, ''), e'[^\n]{0,80}') as description,
@@ -96,9 +109,8 @@ SELECT relname AS completion,
   FROM t
 LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
     ON t.oid = cc.object_id AND cc.type = 'TableCommentType'
- WHERE left(relname, length($1:::STRING)) = $1::STRING
 ORDER BY 1,3,4,5
---placeholders: []interface {}{"xor", 9, 12}
+--placeholders: []interface {}{"xor", 9, 12, true}
 
 comp at=10
 select a.
@@ -108,8 +120,12 @@ ii._
 --
 objects: completing for "" (10,10), schema: = 'a'
 --sql:
-WITH n AS (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = 'a'),
-     t AS (SELECT oid, relname FROM pg_catalog.pg_class WHERE reltype != 0 AND relnamespace IN (TABLE n))
+WITH n AS (SELECT oid, nspname FROM pg_catalog.pg_namespace WHERE nspname = 'a'),
+     t AS (SELECT c.oid, relname FROM pg_catalog.pg_class c
+             JOIN n ON n.oid = c.relnamespace
+            WHERE reltype != 0
+              AND left(relname, length($1:::STRING)) = $1::STRING
+              AND (nspname != 'pg_catalog' OR $4:::BOOL OR left($1:::STRING, 3) = 'pg_'))
 SELECT relname AS completion,
        'relation' AS category,
        substr(COALESCE(cc.comment, ''), e'[^\n]{0,80}') as description,
@@ -118,9 +134,8 @@ SELECT relname AS completion,
   FROM t
 LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
     ON t.oid = cc.object_id AND cc.type = 'TableCommentType'
- WHERE left(relname, length($1:::STRING)) = $1::STRING
 ORDER BY 1,3,4,5
---placeholders: []interface {}{"", 10, 10}
+--placeholders: []interface {}{"", 10, 10, true}
 
 comp at=9
 select a.
@@ -130,8 +145,12 @@ ii.'
 --
 objects: completing for "" (9,9), schema: = 'a'
 --sql:
-WITH n AS (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = 'a'),
-     t AS (SELECT oid, relname FROM pg_catalog.pg_class WHERE reltype != 0 AND relnamespace IN (TABLE n))
+WITH n AS (SELECT oid, nspname FROM pg_catalog.pg_namespace WHERE nspname = 'a'),
+     t AS (SELECT c.oid, relname FROM pg_catalog.pg_class c
+             JOIN n ON n.oid = c.relnamespace
+            WHERE reltype != 0
+              AND left(relname, length($1:::STRING)) = $1::STRING
+              AND (nspname != 'pg_catalog' OR $4:::BOOL OR left($1:::STRING, 3) = 'pg_'))
 SELECT relname AS completion,
        'relation' AS category,
        substr(COALESCE(cc.comment, ''), e'[^\n]{0,80}') as description,
@@ -140,9 +159,8 @@ SELECT relname AS completion,
   FROM t
 LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
     ON t.oid = cc.object_id AND cc.type = 'TableCommentType'
- WHERE left(relname, length($1:::STRING)) = $1::STRING
 ORDER BY 1,3,4,5
---placeholders: []interface {}{"", 9, 9}
+--placeholders: []interface {}{"", 9, 9, true}
 
 
 subtest end
@@ -157,8 +175,12 @@ ii.i'
 --
 objects: completing for "xor" (20,23), schema: = 'pg_catalog'
 --sql:
-WITH n AS (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = 'pg_catalog'),
-     t AS (SELECT oid, relname FROM pg_catalog.pg_class WHERE reltype != 0 AND relnamespace IN (TABLE n))
+WITH n AS (SELECT oid, nspname FROM pg_catalog.pg_namespace WHERE nspname = 'pg_catalog'),
+     t AS (SELECT c.oid, relname FROM pg_catalog.pg_class c
+             JOIN n ON n.oid = c.relnamespace
+            WHERE reltype != 0
+              AND left(relname, length($1:::STRING)) = $1::STRING
+              AND (nspname != 'pg_catalog' OR $4:::BOOL OR left($1:::STRING, 3) = 'pg_'))
 SELECT relname AS completion,
        'relation' AS category,
        substr(COALESCE(cc.comment, ''), e'[^\n]{0,80}') as description,
@@ -167,9 +189,8 @@ SELECT relname AS completion,
   FROM t
 LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
     ON t.oid = cc.object_id AND cc.type = 'TableCommentType'
- WHERE left(relname, length($1:::STRING)) = $1::STRING
 ORDER BY 1,3,4,5
---placeholders: []interface {}{"xor", 20, 23}
+--placeholders: []interface {}{"xor", 20, 23, true}
 
 # Quoted uppercase is a different schema entirely.
 comp at=22
@@ -180,8 +201,12 @@ ii.i'
 --
 objects: completing for "xor" (20,23), schema: = 'PG_CATALOG'
 --sql:
-WITH n AS (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = 'PG_CATALOG'),
-     t AS (SELECT oid, relname FROM pg_catalog.pg_class WHERE reltype != 0 AND relnamespace IN (TABLE n))
+WITH n AS (SELECT oid, nspname FROM pg_catalog.pg_namespace WHERE nspname = 'PG_CATALOG'),
+     t AS (SELECT c.oid, relname FROM pg_catalog.pg_class c
+             JOIN n ON n.oid = c.relnamespace
+            WHERE reltype != 0
+              AND left(relname, length($1:::STRING)) = $1::STRING
+              AND (nspname != 'pg_catalog' OR $4:::BOOL OR left($1:::STRING, 3) = 'pg_'))
 SELECT relname AS completion,
        'relation' AS category,
        substr(COALESCE(cc.comment, ''), e'[^\n]{0,80}') as description,
@@ -190,9 +215,8 @@ SELECT relname AS completion,
   FROM t
 LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
     ON t.oid = cc.object_id AND cc.type = 'TableCommentType'
- WHERE left(relname, length($1:::STRING)) = $1::STRING
 ORDER BY 1,3,4,5
---placeholders: []interface {}{"xor", 20, 23}
+--placeholders: []interface {}{"xor", 20, 23, true}
 
 
 subtest end

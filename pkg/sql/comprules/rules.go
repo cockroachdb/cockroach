@@ -227,6 +227,7 @@ func completeObjectInCurrentDatabase(
 	var schema string
 	atWord := c.AtWord()
 	sketch := c.Sketch()
+	hasSchemaPrefix := false
 	switch {
 	case compLocalTableRe.MatchString(sketch):
 		schema = "IN (TABLE unnest(current_schemas(true)))"
@@ -237,6 +238,7 @@ func completeObjectInCurrentDatabase(
 			schemaTok = c.RelToken(-2)
 		}
 		schema = "= " + lexbase.EscapeSQLString(schemaTok.Str)
+		hasSchemaPrefix = true
 
 	default:
 		c.Trace("not completing")
@@ -257,9 +259,19 @@ func completeObjectInCurrentDatabase(
 	}
 
 	c.Trace("completing for %q (%d,%d), schema: %s", prefix, start, end, schema)
+	// We only include pg_catalog relations in the following cases:
+	//
+	//    - when the cursor is position after an explicit schema qualification;
+	//      in which case we're going to filter to that schema anyway.
+	//    - when the completion prefix already includes the `pg_` prefix,
+	//      in which case we can assume the user wants to see these tables.
 	const queryT = `
-WITH n AS (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname %s),
-     t AS (SELECT oid, relname FROM pg_catalog.pg_class WHERE reltype != 0 AND relnamespace IN (TABLE n))
+WITH n AS (SELECT oid, nspname FROM pg_catalog.pg_namespace WHERE nspname %s),
+     t AS (SELECT c.oid, relname FROM pg_catalog.pg_class c
+             JOIN n ON n.oid = c.relnamespace
+            WHERE reltype != 0
+              AND left(relname, length($1:::STRING)) = $1::STRING
+              AND (nspname != 'pg_catalog' OR $4:::BOOL OR left($1:::STRING, 3) = 'pg_'))
 SELECT relname AS completion,
        'relation' AS category,
        substr(COALESCE(cc.comment, ''), e'[^\n]{0,80}') as description,
@@ -268,11 +280,10 @@ SELECT relname AS completion,
   FROM t
 LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
     ON t.oid = cc.object_id AND cc.type = 'TableCommentType'
- WHERE left(relname, length($1:::STRING)) = $1::STRING
 ORDER BY 1,3,4,5
 `
 	query := fmt.Sprintf(queryT, schema)
-	iter, err := c.Query(ctx, query, prefix, start, end)
+	iter, err := c.Query(ctx, query, prefix, start, end, hasSchemaPrefix)
 	return iter, err
 }
 
