@@ -1625,13 +1625,15 @@ message ExportRequest {
 
   FileEncryptionOptions encryption = 9;
 
-  // TargetFileSize is the byte size target for individual files in the
-  // response. If the MVCCFilter is Latest, the returned files will only be
+  // DeprecatedTargetFileSize is the byte size target for individual files in
+  // the response. If the MVCCFilter is Latest, the returned files will only be
   // larger than this value if an individual KV pair is larger than this value.
   // If the MVCCFilter is All then the file may exceed this value by at most the
   // size of all versions of a single key. If TargetFileSize is non-positive
   // then there is no limit.
-  int64 target_file_size = 10;
+  //
+  // TODO(adityamaru): Remove once 23.1 compatability is dropped.
+  int64 deprecated_target_file_size = 10;
 
   // ExportFingerprint when set to true will result in ExportRequest command
   // evaluation generating an fnv64 hash for every key/timestamp and value, for
