@@ -154,7 +154,7 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 	// it once the in-progress disk writes complete.
 	defer func() {
 		if batch != nil {
-			defer batch.Close()
+			batch.Close()
 		}
 	}()
 
