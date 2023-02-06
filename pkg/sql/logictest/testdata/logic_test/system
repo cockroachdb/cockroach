@@ -250,10 +250,10 @@ descriptor  BYTES  true   NULL  ·  {primary}  false
 query TTBTTTB
 SHOW COLUMNS FROM system.users
 ----
-username        STRING  false  NULL  ·  {primary,users_user_id_idx}  false
-hashedPassword  BYTES   true   NULL  ·  {primary}                    false
-isRole          BOOL    false  f     ·  {primary}                    false
-user_id         OID     false  NULL  ·  {primary,users_user_id_idx}  false
+username        STRING  false  NULL   ·  {primary,users_user_id_idx}  false
+hashedPassword  BYTES   true   NULL   ·  {primary}                    false
+isRole          BOOL    false  false  ·  {primary}                    false
+user_id         OID     false  NULL   ·  {primary,users_user_id_idx}  false
 
 query TTBTTTB
 SHOW COLUMNS FROM system.zones
