@@ -73,14 +73,14 @@ func (s destroyStatus) Removed() bool {
 // don't know the current replica ID.
 const mergedTombstoneReplicaID roachpb.ReplicaID = math.MaxInt32
 
-func (r *Replica) preDestroyRaftMuLocked(
+func preDestroyRaftMuLocked(
 	ctx context.Context,
+	rangeID roachpb.RangeID,
 	reader storage.Reader,
 	writer storage.Writer,
 	nextReplicaID roachpb.ReplicaID,
 	opts clearRangeDataOptions,
 ) error {
-	rangeID := r.RangeID
 	diskReplicaID, err := logstore.NewStateLoader(rangeID).LoadRaftReplicaID(ctx, reader)
 	if err != nil {
 		return err
@@ -179,13 +179,7 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 		ClearReplicatedByRangeID:   inited,
 		ClearUnreplicatedByRangeID: true,
 	}
-	if err := r.preDestroyRaftMuLocked(
-		ctx,
-		r.Engine(),
-		batch,
-		nextReplicaID,
-		opts,
-	); err != nil {
+	if err := preDestroyRaftMuLocked(ctx, r.RangeID, r.Engine(), batch, nextReplicaID, opts); err != nil {
 		return err
 	}
 	preTime := timeutil.Now()
