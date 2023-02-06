@@ -47,6 +47,7 @@ type Metrics struct {
 type JobTypeMetrics struct {
 	CurrentlyRunning       *metric.Gauge
 	CurrentlyIdle          *metric.Gauge
+	CurrentlyPaused        *metric.Gauge
 	ResumeCompleted        *metric.Counter
 	ResumeRetryError       *metric.Counter
 	ResumeFailed           *metric.Counter
@@ -75,6 +76,17 @@ func makeMetaCurrentlyIdle(typeStr string) metric.Metadata {
 	return metric.Metadata{
 		Name: fmt.Sprintf("jobs.%s.currently_idle", typeStr),
 		Help: fmt.Sprintf("Number of %s jobs currently considered Idle and can be freely shut down",
+			typeStr),
+		Measurement: "jobs",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_GAUGE,
+	}
+}
+
+func makeMetaCurrentlyPaused(typeStr string) metric.Metadata {
+	return metric.Metadata{
+		Name: fmt.Sprintf("jobs.%s.currently_paused", typeStr),
+		Help: fmt.Sprintf("Number of %s jobs currently considered Paused",
 			typeStr),
 		Measurement: "jobs",
 		Unit:        metric.Unit_COUNT,
@@ -214,6 +226,7 @@ func (m *Metrics) init(histogramWindowInterval time.Duration) {
 		m.JobMetrics[jt] = &JobTypeMetrics{
 			CurrentlyRunning:       metric.NewGauge(makeMetaCurrentlyRunning(typeStr)),
 			CurrentlyIdle:          metric.NewGauge(makeMetaCurrentlyIdle(typeStr)),
+			CurrentlyPaused:        metric.NewGauge(makeMetaCurrentlyPaused(typeStr)),
 			ResumeCompleted:        metric.NewCounter(makeMetaResumeCompeted(typeStr)),
 			ResumeRetryError:       metric.NewCounter(makeMetaResumeRetryError(typeStr)),
 			ResumeFailed:           metric.NewCounter(makeMetaResumeFailed(typeStr)),

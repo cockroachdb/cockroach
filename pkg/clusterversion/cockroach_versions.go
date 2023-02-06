@@ -410,6 +410,10 @@ const (
 
 	V23_1_DeleteDroppedFunctionDescriptors
 
+	// V23_1_CreateJobsMetricsPollingJob creates the permanent job
+	// responsible for polling the jobs table for metrics.
+	V23_1_CreateJobsMetricsPollingJob
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -706,6 +710,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1_DeleteDroppedFunctionDescriptors,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 36},
+	},
+	{
+		Key:     V23_1_CreateJobsMetricsPollingJob,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 38},
 	},
 
 	// *************************************************

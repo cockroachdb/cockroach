@@ -556,6 +556,7 @@ func (m *Manager) runMigration(
 				LeaseManager:     m.lm,
 				InternalExecutor: m.ie,
 				JobRegistry:      m.jr,
+				TestingKnobs:     &m.knobs,
 			}); err != nil {
 				return err
 			}
