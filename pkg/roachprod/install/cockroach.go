@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ssh"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -225,7 +226,9 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 	}, DefaultSSHRetryOpts); err != nil {
 		return err
 	}
-	if startOpts.ScheduleBackups {
+
+	// Only after a successful cluster initialization should we attempt to schedule backups.
+	if startOpts.ScheduleBackups && !startOpts.SkipInit {
 		return c.createFixedBackupSchedule(ctx, l, startOpts.ScheduleBackupArgs)
 	}
 	return nil
@@ -290,37 +293,30 @@ func (c *SyncedCluster) NodeUIPort(node Node) int {
 	return c.VMs[node-1].AdminUIPort
 }
 
-// SQL runs `cockroach sql`, which starts a SQL shell or runs a SQL command.
+// ExecOrInteractiveSQL ssh's onto a single node and executes `./ cockroach sql`
+// with the provided args, potentially opening an interactive session. Note
+// that the caller can pass the `--e` flag to execute sql cmds and exit the
+// session. See `./cockroch sql -h` for more options.
 //
-// In interactive mode, there must be exactly one node target (as per
-// TargetNodes).
-//
-// In non-interactive mode, a command specified via the `-e` flag is run against
-// all nodes.
-func (c *SyncedCluster) SQL(
+// CAUTION: this function should not be used by roachtest writers. Use ExecSQL below.
+func (c *SyncedCluster) ExecOrInteractiveSQL(
 	ctx context.Context, l *logger.Logger, tenantName string, args []string,
 ) error {
-	if len(args) == 0 || len(c.Nodes) == 1 {
-		// If no arguments, we're going to get an interactive SQL shell. Require
-		// exactly one target and ask SSH to provide a pseudoterminal.
-		if len(args) == 0 && len(c.Nodes) != 1 {
-			return fmt.Errorf("invalid number of nodes for interactive sql: %d", len(c.Nodes))
-		}
-		url := c.NodeURL("localhost", c.NodePort(c.Nodes[0]), tenantName)
-		binary := cockroachNodeBinary(c, c.Nodes[0])
-		allArgs := []string{binary, "sql", "--url", url}
-		allArgs = append(allArgs, ssh.Escape(args))
-		return c.SSH(ctx, l, []string{"-t"}, allArgs)
+	if len(c.Nodes) != 1 {
+		return fmt.Errorf("invalid number of nodes for interactive sql: %d", len(c.Nodes))
 	}
-
-	// Otherwise, assume the user provided the "-e" flag, so we can reasonably
-	// execute the query on all specified nodes.
-	return c.RunSQL(ctx, l, args)
+	url := c.NodeURL("localhost", c.NodePort(c.Nodes[0]), tenantName)
+	binary := cockroachNodeBinary(c, c.Nodes[0])
+	allArgs := []string{binary, "sql", "--url", url}
+	allArgs = append(allArgs, ssh.Escape(args))
+	return c.SSH(ctx, l, []string{"-t"}, allArgs)
 }
 
-// RunSQL runs a `cockroach sql` command.
+// ExecSQL runs a `cockroach sql` .
 // It is assumed that the args include the -e flag.
-func (c *SyncedCluster) RunSQL(ctx context.Context, l *logger.Logger, args []string) error {
+func (c *SyncedCluster) ExecSQL(
+	ctx context.Context, l *logger.Logger, tenantName string, args []string,
+) error {
 	type result struct {
 		node   Node
 		output string
@@ -336,7 +332,7 @@ func (c *SyncedCluster) RunSQL(ctx context.Context, l *logger.Logger, args []str
 			cmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
 		}
 		cmd += cockroachNodeBinary(c, node) + " sql --url " +
-			c.NodeURL("localhost", c.NodePort(node), "" /* tenantName */) + " " +
+			c.NodeURL("localhost", c.NodePort(node), tenantName) + " " +
 			ssh.Escape(args)
 
 		sess := c.newSession(l, node, cmd, withDebugName("run-sql"))
@@ -804,6 +800,7 @@ func (c *SyncedCluster) shouldAdvertisePublicIP() bool {
 // `roachprod create`, the user can provide a different recurrence using the
 // 'schedule-backup-args' flag. If roachprod is local, the backups get stored in
 // nodelocal, and otherwise in 'gs://cockroachdb-backup-testing'.
+// This cmd also ensures that only one schedule will be created for the cluster.
 func (c *SyncedCluster) createFixedBackupSchedule(
 	ctx context.Context, l *logger.Logger, scheduledBackupArgs string,
 ) error {
@@ -812,10 +809,17 @@ func (c *SyncedCluster) createFixedBackupSchedule(
 	if c.IsLocal() {
 		externalStoragePath = `nodelocal://1`
 	}
+	for _, cloud := range c.Clouds() {
+		if !strings.Contains(cloud, gce.ProviderName) {
+			l.Printf(`no scheduled backup created as there exists a vm not on google cloud`)
+			return nil
+		}
+	}
 	l.Printf("%s: creating backup schedule", c.Name)
+	auth := "AUTH=implicit"
 
-	collectionPath := fmt.Sprintf(`%s/roachprod-scheduled-backups/%s/%v`,
-		externalStoragePath, c.Name, timeutil.Now().UnixNano())
+	collectionPath := fmt.Sprintf(`%s/roachprod-scheduled-backups/%s/%v?%s`,
+		externalStoragePath, c.Name, timeutil.Now().UnixNano(), auth)
 
 	// Default scheduled backup runs a full backup every hour and an incremental
 	// every 15 minutes.
@@ -830,7 +834,7 @@ WITH SCHEDULE OPTIONS first_run = 'now'`
 	createScheduleCmd := fmt.Sprintf(`-e
 CREATE SCHEDULE IF NOT EXISTS test_only_backup FOR BACKUP INTO '%s' %s`,
 		collectionPath, scheduleArgs)
-	return c.SQL(ctx, l, "" /* tenantName */, []string{createScheduleCmd})
+	return c.ExecSQL(ctx, l, "" /*tenantName*/, []string{createScheduleCmd})
 }
 
 // getEnvVars returns all COCKROACH_* environment variables, in the form

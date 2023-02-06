@@ -419,7 +419,14 @@ func RunWithDetails(
 	return c.RunWithDetails(ctx, l, c.Nodes, title, cmd)
 }
 
-// SQL runs `cockroach sql` on a remote cluster.
+// SQL runs `cockroach sql` on a remote cluster. If a single node is passed,
+// an interactive session may start.
+//
+// NOTE: When querying a single-node in a cluster, a pseudo-terminal is attached
+// to ssh which may result in an _interactive_ ssh session.
+//
+// CAUTION: this function should not be used by roachtest writers. Use syncedCluser.ExecSQL()
+// instead.
 func SQL(
 	ctx context.Context,
 	l *logger.Logger,
@@ -435,7 +442,10 @@ func SQL(
 	if err != nil {
 		return err
 	}
-	return c.SQL(ctx, l, tenantName, cmdArray)
+	if len(c.Nodes) == 1 {
+		return c.ExecOrInteractiveSQL(ctx, l, tenantName, cmdArray)
+	}
+	return c.ExecSQL(ctx, l, tenantName, cmdArray)
 }
 
 // IP gets the ip addresses of the nodes in a cluster.
