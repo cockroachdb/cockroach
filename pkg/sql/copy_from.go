@@ -986,7 +986,7 @@ func (c *copyMachine) readTextTuple(ctx context.Context, line []byte) error {
 			types.TimestampFamily,
 			types.TimestampTZFamily,
 			types.UuidFamily:
-			s = decodeCopy(s)
+			s = DecodeCopy(s)
 		}
 
 		var d tree.Datum
@@ -1008,10 +1008,10 @@ func (c *copyMachine) readTextTuple(ctx context.Context, line []byte) error {
 	return err
 }
 
-// decodeCopy unescapes a single COPY field.
+// DecodeCopy unescapes a single COPY field.
 //
 // See: https://www.postgresql.org/docs/9.5/static/sql-copy.html#AEN74432
-func decodeCopy(in string) string {
+func DecodeCopy(in string) string {
 	var buf strings.Builder
 	start := 0
 	for i, n := 0, len(in); i < n; i++ {
