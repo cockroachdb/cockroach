@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 )
 
@@ -141,7 +140,6 @@ func (s *Server) startTenantServerInternal(
 
 	// New context, since we're using a separate tracer.
 	startCtx := ambientCtx.AnnotateCtx(context.Background())
-	startCtx = logtags.AddTags(startCtx, logtags.FromContext(ctx))
 
 	// Inform the logs we're starting a new server.
 	log.Infof(startCtx, "starting tenant server")
