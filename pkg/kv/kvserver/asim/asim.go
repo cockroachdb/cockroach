@@ -54,6 +54,19 @@ type Simulator struct {
 	shuffler func(n int, swap func(i, j int))
 
 	metrics *metrics.Tracker
+	history History
+}
+
+// History contains recorded information that summarizes a simulation run.
+// Currently it only contains the store metrics of the run.
+// TODO(kvoli): Add a range log like structure to the history.
+type History struct {
+	Recorded [][]metrics.StoreMetrics
+}
+
+// Listen implements the metrics.StoreMetricListener interface.
+func (h *History) Listen(ctx context.Context, sms []metrics.StoreMetrics) {
+	h.Recorded = append(h.Recorded, sms)
 }
 
 // NewSimulator constructs a valid Simulator.
@@ -62,7 +75,7 @@ func NewSimulator(
 	wgs []workload.Generator,
 	initialState state.State,
 	settings *config.SimulationSettings,
-	metrics *metrics.Tracker,
+	m *metrics.Tracker,
 ) *Simulator {
 	pacers := make(map[state.StoreID]queue.ReplicaPacer)
 	rqs := make(map[state.StoreID]queue.RangeQueue)
@@ -118,7 +131,7 @@ func NewSimulator(
 		)
 	}
 
-	return &Simulator{
+	s := &Simulator{
 		curr:        settings.StartTime,
 		end:         settings.StartTime.Add(duration),
 		interval:    settings.TickInterval,
@@ -131,9 +144,12 @@ func NewSimulator(
 		srs:         srs,
 		pacers:      pacers,
 		gossip:      gossip.NewGossip(initialState, settings),
-		metrics:     metrics,
+		metrics:     m,
 		shuffler:    state.NewShuffler(settings.Seed),
+		history:     History{Recorded: [][]metrics.StoreMetrics{}},
 	}
+	m.Register(&s.history)
+	return s
 }
 
 // GetNextTickTime returns a simulated tick time, or an indication that the
@@ -144,6 +160,12 @@ func (s *Simulator) GetNextTickTime() (done bool, tick time.Time) {
 		return true, time.Time{}
 	}
 	return false, s.curr
+}
+
+// History returns the current recorded history of a simulation run. Calling
+// this on a Simulator that has not begun will return an empty history.
+func (s *Simulator) History() History {
+	return s.history
 }
 
 // RunSim runs a simulation until GetNextTickTime() is done. A simulation is
