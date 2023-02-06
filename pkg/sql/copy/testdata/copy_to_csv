@@ -1,0 +1,132 @@
+exec-ddl
+CREATE TABLE t (id int primary key, t text);
+----
+
+exec-ddl
+INSERT INTO t VALUES
+  (1, 'a tab' || chr(9) || ' separates us'),
+  (2, 'some pipe || characters'),
+  (3, 'new line chars!' || chr(10) || ' ok?'),
+  (4, NULL),
+  (5, 'a backslash IS\NT a biggie'),
+  (6, 'a quote " character should be escaped'),
+  (7, '');
+----
+
+# Test error conditions.
+copy-to-error
+COPY non_existent_table TO STDOUT
+----
+ERROR: COPY non_existent_table TO STDOUT: relation "non_existent_table" does not exist (SQLSTATE 42P01)
+
+# Test all the COPY permutations.
+copy-to
+COPY t TO STDOUT CSV
+----
+1,a tab	 separates us
+2,some pipe || characters
+3,"new line chars!
+ ok?"
+4,
+5,a backslash IS\NT a biggie
+6,"a quote "" character should be escaped"
+7,""
+
+copy-to
+COPY t (t, id, id, t) TO STDOUT CSV
+----
+a tab	 separates us,1,1,a tab	 separates us
+some pipe || characters,2,2,some pipe || characters
+"new line chars!
+ ok?",3,3,"new line chars!
+ ok?"
+,4,4,
+a backslash IS\NT a biggie,5,5,a backslash IS\NT a biggie
+"a quote "" character should be escaped",6,6,"a quote "" character should be escaped"
+"",7,7,""
+
+copy-to
+COPY (SELECT id+1, t FROM t) TO STDOUT CSV
+----
+2,a tab	 separates us
+3,some pipe || characters
+4,"new line chars!
+ ok?"
+5,
+6,a backslash IS\NT a biggie
+7,"a quote "" character should be escaped"
+8,""
+
+copy-to
+COPY t TO STDOUT DELIMITER '|' CSV
+----
+1|a tab	 separates us
+2|"some pipe || characters"
+3|"new line chars!
+ ok?"
+4|
+5|a backslash IS\NT a biggie
+6|"a quote "" character should be escaped"
+7|""
+
+copy-to
+COPY t TO STDOUT NULL 'attNULL' CSV
+----
+1,a tab	 separates us
+2,some pipe || characters
+3,"new line chars!
+ ok?"
+4,attNULL
+5,a backslash IS\NT a biggie
+6,"a quote "" character should be escaped"
+7,""
+
+copy-to
+COPY t TO STDOUT ESCAPE '|' DELIMITER '|' CSV
+----
+1|a tab	 separates us
+2|"some pipe |||| characters"
+3|"new line chars!
+ ok?"
+4|
+5|a backslash IS\NT a biggie
+6|"a quote |" character should be escaped"
+7|""
+
+copy-to
+COPY t TO STDOUT ESCAPE '|' DELIMITER '|' HEADER CSV
+----
+id|t
+1|a tab	 separates us
+2|"some pipe |||| characters"
+3|"new line chars!
+ ok?"
+4|
+5|a backslash IS\NT a biggie
+6|"a quote |" character should be escaped"
+7|""
+
+# Test session settings are applied.
+exec-ddl
+SET IntervalStyle = 'iso_8601'
+----
+
+exec-ddl
+SET TIME ZONE 'Pacific/Honolulu'
+----
+
+copy-to
+COPY (SELECT '2020-01-03 15:16:17.123456'::timestamptz, '1 month 3 days 01:02:15.16'::interval)
+TO STDOUT CSV
+----
+2020-01-03 15:16:17.123456-10,P1M3DT1H2M15.16S
+
+copy-to
+COPY (
+  SELECT
+    '\xdeadbeef'::bytea,
+    array['\xdeadbeef']::bytea[],
+    ('2020-01-03 15:16:17.123456'::timestamptz, 'f'::bool)
+) TO STDOUT CSV
+----
+\xdeadbeef,"{""\\xdeadbeef""}","(""2020-01-03 15:16:17.123456-10"",f)"
