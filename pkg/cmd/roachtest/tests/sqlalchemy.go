@@ -30,14 +30,10 @@ import (
 var sqlAlchemyResultRegex = regexp.MustCompile(`^(?P<test>test.*::.*::[^ \[\]]*(?:\[.*])?) (?P<result>\w+)\s+\[.+]$`)
 var sqlAlchemyReleaseTagRegex = regexp.MustCompile(`^rel_(?P<major>\d+)_(?P<minor>\d+)_(?P<point>\d+)$`)
 
-// TODO(arul): Investigate why we need this and can't install sql alchemy using
-//
-//	pip.
-var supportedSQLAlchemyTag = "rel_1_4_26"
+var supportedSQLAlchemyTag = "1.4.46"
 
 // This test runs the SQLAlchemy dialect test suite against a single Cockroach
 // node.
-
 func registerSQLAlchemy(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:    "sqlalchemy",
@@ -98,10 +94,10 @@ func runSQLAlchemy(ctx context.Context, t test.Test, c cluster.Cluster) {
 		t.Fatal(err)
 	}
 
-	if err := repeatRunE(ctx, t, c, node, "install pytest", `
+	if err := repeatRunE(ctx, t, c, node, "install pytest", fmt.Sprintf(`
 		source venv/bin/activate &&
-			pip3 install --upgrade --force-reinstall setuptools pytest==6.0.1 pytest-xdist psycopg2 alembic
-	`); err != nil {
+			pip3 install --upgrade --force-reinstall setuptools pytest==6.0.1 pytest-xdist psycopg2 alembic sqlalchemy==%s`,
+		supportedSQLAlchemyTag)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -120,25 +116,6 @@ func runSQLAlchemy(ctx context.Context, t test.Test, c cluster.Cluster) {
 	t.Status("installing sqlalchemy-cockroachdb")
 	if err := repeatRunE(ctx, t, c, node, "installing sqlalchemy=cockroachdb", `
 		source venv/bin/activate && cd /mnt/data1/sqlalchemy-cockroachdb && pip3 install .
-	`); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := repeatRunE(ctx, t, c, node, "remove old sqlalchemy", `
-		sudo rm -rf /mnt/data1/sqlalchemy
-	`); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := repeatGitCloneE(ctx, t, c,
-		"https://github.com/sqlalchemy/sqlalchemy.git", "/mnt/data1/sqlalchemy",
-		supportedSQLAlchemyTag, node); err != nil {
-		t.Fatal(err)
-	}
-
-	t.Status("building sqlalchemy")
-	if err := repeatRunE(ctx, t, c, node, "building sqlalchemy", `
-		source venv/bin/activate && cd /mnt/data1/sqlalchemy && python3 setup.py build
 	`); err != nil {
 		t.Fatal(err)
 	}
