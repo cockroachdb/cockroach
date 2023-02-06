@@ -620,14 +620,14 @@ func (sp *StorePool) UpdateLocalStoreAfterRelocate(
 
 	updateTargets := func(targets []roachpb.ReplicationTarget) {
 		for _, target := range targets {
-			if toDetail := sp.GetStoreDetailLocked(target.StoreID); toDetail != nil {
+			if toDetail := sp.GetStoreDetailLocked(target.StoreID); toDetail.Desc != nil {
 				toDetail.Desc.Capacity.RangeCount++
 			}
 		}
 	}
 	updatePrevious := func(previous []roachpb.ReplicaDescriptor) {
 		for _, old := range previous {
-			if toDetail := sp.GetStoreDetailLocked(old.StoreID); toDetail != nil {
+			if toDetail := sp.GetStoreDetailLocked(old.StoreID); toDetail.Desc != nil {
 				toDetail.Desc.Capacity.RangeCount--
 			}
 		}

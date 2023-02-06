@@ -71,9 +71,11 @@ type Context interface {
 	// returned.
 	RelToken(pos int) scanner.InspectToken
 
-	// AtWord is equivalent to .RelMarker(0) == MarkIdentOrKeyword,
-	// and is provided for convenience.
-	AtWord() bool
+	// AtWordOrInSpaceFollowingWord is equivalent to .RelMarker(0) ==
+	// MarkIdentOrKeyword, and is provided for convenience. This returns
+	// true both when the cursor is _on_ an identifier/keyword, or _at
+	// any whitespace position afterwards_.
+	AtWordOrInSpaceFollowingWord() bool
 
 	// Query perform a SQL query.
 	Query(ctx context.Context, query string, args ...interface{}) (Rows, error)

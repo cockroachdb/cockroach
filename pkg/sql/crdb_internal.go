@@ -2753,9 +2753,13 @@ CREATE TABLE crdb_internal.builtin_functions (
 			props, overloads := builtinsregistry.GetBuiltinProperties(name)
 			schema := catconstants.PgCatalogName
 			const crdbInternal = catconstants.CRDBInternalSchemaName + "."
+			const infoSchema = catconstants.InformationSchemaName + "."
 			if strings.HasPrefix(name, crdbInternal) {
 				name = name[len(crdbInternal):]
 				schema = catconstants.CRDBInternalSchemaName
+			} else if strings.HasPrefix(name, infoSchema) {
+				name = name[len(infoSchema):]
+				schema = catconstants.InformationSchemaName
 			}
 			for _, f := range overloads {
 				if err := addRow(
