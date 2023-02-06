@@ -3,35 +3,35 @@ CREATE TABLE t (a int)
 ----
 
 # copy quote without CSV not allowed.
-copy-error
+copy-from-error
 COPY t FROM STDIN QUOTE '"'
 ----
 ERROR: QUOTE only supported with CSV format (SQLSTATE 0A000)
 
-copy-error
+copy-from-error
 COPY t FROM STDIN QUOTE 'x'
 ----
 ERROR: QUOTE only supported with CSV format (SQLSTATE 0A000)
 
 # builtins not allowed
-copy-error
+copy-from-error
 COPY t FROM STDIN
 random()
 ----
 ERROR: could not parse "random()" as type int: strconv.ParseInt: parsing "random()": invalid syntax (SQLSTATE 22P02)
 
-copy
+copy-from
 COPY t FROM STDIN QUOTE '"' CSV
 ----
 0
 
-copy
+copy-from
 COPY t FROM STDIN
 1
 ----
 1
 
-copy
+copy-from
 COPY t FROM STDIN
 1
 2
@@ -49,7 +49,7 @@ exec-ddl
 CREATE TABLE t2 (i INT, d DATE, dec DECIMAL, t TIMESTAMP)
 ----
 
-copy
+copy-from
 COPY t2 FROM STDIN
 1	1996-03-13	12.123	2016-01-25 10:10:10.555555
 ----
@@ -60,58 +60,58 @@ SELECT i,dec FROM t2
 ----
 1|12.123
 
-copy-error
+copy-from-error
 COPY t2 FROM STDIN
 a	1996-03-13	12.123	2016-01-25 10:10:10.555555
 ----
 ERROR: could not parse "a" as type int: strconv.ParseInt: parsing "a": invalid syntax (SQLSTATE 22P02)
 
-copy-error
+copy-from-error
 COPY t2 FROM STDIN
 1	2	12.123	2016-01-25 10:10:10.555555
 ----
 ERROR: parsing as type date: missing required date fields (SQLSTATE 22007)
 
-copy-error
+copy-from-error
 COPY t2 FROM STDIN
 1	1996-03-13	not a decimal	2016-01-25 10:10:10.555555
 ----
 ERROR: could not parse "not a decimal" as type decimal: parse exponent: cimal: strconv.ParseInt: parsing "cimal": invalid syntax (SQLSTATE 22P02)
 
-copy-error
+copy-from-error
 COPY t2 FROM STDIN
 1	1996-03-13	12.123	not a timestamp
 ----
 ERROR: parsing as type timestamp: could not parse "not a timestamp" (SQLSTATE 22007)
 
-copy-error
+copy-from-error
 COPY t2 FROM STDIN
 1	1996-03-13	12.123
 ----
 ERROR: expected 4 values, got 3 (SQLSTATE 22P04)
 
-copy-error
+copy-from-error
 COPY t2 FROM STDIN
 1	1996-03-13	12.123	2016-01-25 10:10:10.555555	extra col
 ----
 ERROR: expected 4 values, got 5 (SQLSTATE 22P04)
 
 # now is allowed
-copy
+copy-from
 COPY t2 FROM STDIN
 2	1996-03-13	12.123	now
 ----
 1
 
 # now is allowed
-copy
+copy-from
 COPY t2 FROM STDIN
 3	1996-03-13	12.123	now()
 ----
 1
 
 # expressions are not allowed
-copy-error
+copy-from-error
 COPY t2 FROM STDIN
 2	1996-03-13	12.123	now()-1
 ----
@@ -122,13 +122,13 @@ SELECT count(t) FROM t2 WHERE t > now()
 ----
 0
 
-copy
+copy-from
 COPY t2 FROM STDIN
 \N	\N	\N	\N
 ----
 1
 
-copy-error
+copy-from-error
 COPY t2 FROM STDIN WITH DESTINATION = 'foo.csv'
 \N	\N	\N	\N
 ----
@@ -140,7 +140,7 @@ exec-ddl
 CREATE TABLE t3 (i INT CHECK (i > 0))
 ----
 
-copy-error
+copy-from-error
 COPY t3 FROM STDIN
 0
 ----
@@ -153,7 +153,7 @@ CREATE TABLE parent (k INT PRIMARY KEY);
 CREATE TABLE child (k INT PRIMARY KEY REFERENCES parent)
 ----
 
-copy-error
+copy-from-error
 COPY child FROM STDIN
 1
 ----
@@ -163,7 +163,7 @@ exec-ddl
 CREATE TABLE t4 (i INT UNIQUE)
 ----
 
-copy-error
+copy-from-error
 COPY t4 FROM STDIN
 1
 1
@@ -178,19 +178,19 @@ CREATE table tdefaults (i INT PRIMARY KEY DEFAULT unique_rowid(), d INT NOT NULL
 DEFAULT -1, x INT)
 ----
 
-copy
+copy-from
 COPY tdefaults(x) FROM STDIN
 1
 ----
 1
 
-copy
+copy-from
 COPY tdefaults(x,d) FROM STDIN
 1	2
 ----
 1
 
-copy
+copy-from
 COPY tdefaults FROM STDIN
 1	1	1
 ----
@@ -210,7 +210,7 @@ exec-ddl
 CREATE TABLE test_copy_array (id INT PRIMARY KEY, data TEXT[])
 ----
 
-copy
+copy-from
 COPY test_copy_array(id,data) FROM STDIN
 1	{}
 2	{}
@@ -498,7 +498,7 @@ CREATE TABLE tab_child (
 )
 ----
 
-copy-error
+copy-from-error
 COPY tab_child FROM STDIN
 'high'	'straight'	'writer'	'develop'	'shells'	'bean'
 'basic'	'tent'	'compound'	'it'	'future'	'held'
