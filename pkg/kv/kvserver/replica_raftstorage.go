@@ -750,7 +750,7 @@ func clearSubsumedReplicaDiskData(
 			ClearUnreplicatedByRangeID: true,
 			MustUseClearRange:          true,
 		}
-		if err := preDestroyRaftMuLocked(ctx, sr.RangeID, reader, &subsumedReplSST, subsumedNextReplicaID, opts); err != nil {
+		if err := kvstorage.DestroyReplica(ctx, sr.RangeID, reader, &subsumedReplSST, subsumedNextReplicaID, opts); err != nil {
 			subsumedReplSST.Close()
 			return err
 		}
