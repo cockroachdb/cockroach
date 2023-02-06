@@ -359,6 +359,43 @@ func generateRandomName() string {
 	return ng.GenerateOne(42)
 }
 
+func TestAdminAPIStatementDiagnosticsBundle(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+	ts := s.(*TestServer)
+
+	query := "EXPLAIN ANALYZE (DEBUG) SELECT 'secret'"
+	_, err := db.Exec(query)
+	require.NoError(t, err)
+
+	query = "SELECT id FROM system.statement_diagnostics LIMIT 1"
+	idRow, err := db.Query(query)
+	require.NoError(t, err)
+	var diagnosticRow string
+	if idRow.Next() {
+		err = idRow.Scan(&diagnosticRow)
+		require.NoError(t, err)
+	} else {
+		t.Fatal("no results")
+	}
+
+	client, err := ts.GetAuthenticatedHTTPClient(false, serverutils.SingleTenantSession)
+	require.NoError(t, err)
+	resp, err := client.Get(ts.AdminURL() + "/_admin/v1/stmtbundle/" + diagnosticRow)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, 500, resp.StatusCode)
+
+	adminClient, err := ts.GetAuthenticatedHTTPClient(true, serverutils.SingleTenantSession)
+	require.NoError(t, err)
+	adminResp, err := adminClient.Get(ts.AdminURL() + "/_admin/v1/stmtbundle/" + diagnosticRow)
+	require.NoError(t, err)
+	defer adminResp.Body.Close()
+	require.Equal(t, 200, adminResp.StatusCode)
+}
+
 func TestAdminAPIDatabases(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
