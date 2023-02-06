@@ -11,6 +11,7 @@ package changefeedccl
 import (
 	"context"
 	gosql "database/sql"
+	"encoding/base64"
 	"fmt"
 	"math/rand"
 	"net/url"
@@ -320,7 +321,6 @@ func TestAvroEncoder(t *testing.T) {
 func TestAvroEncoderWithTLS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
 	tableDesc, err := parseTableDesc(`CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 	require.NoError(t, err)
 	row := rowenc.EncDatumRow{
@@ -343,88 +343,96 @@ func TestAvroEncoderWithTLS(t *testing.T) {
 		resolved: `{"resolved":{"string":"1.0000000002"}}`,
 	}
 
-	t.Run("format=avro,envelope=key_only", func(t *testing.T) {
-		cert, certBase64, err := cdctest.NewCACertBase64Encoded()
-		require.NoError(t, err)
+	for _, setClientCert := range []bool{true, false} {
+		t.Run(fmt.Sprintf("setClientCert=%t", setClientCert), func(t *testing.T) {
+			cert, certBase64, err := cdctest.NewCACertBase64Encoded()
+			require.NoError(t, err)
 
-		var rowStringFn func([]byte, []byte) string
-		var resolvedStringFn func([]byte) string
-		reg, err := cdctest.StartTestSchemaRegistryWithTLS(cert)
-		require.NoError(t, err)
-		defer reg.Close()
+			var rowStringFn func([]byte, []byte) string
+			var resolvedStringFn func([]byte) string
+			reg, err := cdctest.StartTestSchemaRegistryWithTLS(cert, setClientCert)
+			require.NoError(t, err)
+			defer reg.Close()
 
-		params := url.Values{}
-		params.Add("ca_cert", certBase64)
-		regURL, err := url.Parse(reg.URL())
-		require.NoError(t, err)
-		regURL.RawQuery = params.Encode()
-		opts.SchemaRegistryURI = regURL.String()
+			params := url.Values{}
+			params.Add("ca_cert", certBase64)
+			if setClientCert {
+				clientCertPEM, clientKeyPEM, err := cdctest.GenerateClientCertAndKey(cert)
+				require.NoError(t, err)
+				params.Add("client_cert", base64.StdEncoding.EncodeToString(clientCertPEM))
+				params.Add("client_key", base64.StdEncoding.EncodeToString(clientKeyPEM))
+			}
+			regURL, err := url.Parse(reg.URL())
+			require.NoError(t, err)
+			regURL.RawQuery = params.Encode()
+			opts.SchemaRegistryURI = regURL.String()
 
-		rowStringFn = func(k, v []byte) string {
-			key, value := avroToJSON(t, reg, k), avroToJSON(t, reg, v)
-			return fmt.Sprintf(`%s->%s`, key, value)
-		}
-		resolvedStringFn = func(r []byte) string {
-			return string(avroToJSON(t, reg, r))
-		}
+			rowStringFn = func(k, v []byte) string {
+				key, value := avroToJSON(t, reg, k), avroToJSON(t, reg, v)
+				return fmt.Sprintf(`%s->%s`, key, value)
+			}
+			resolvedStringFn = func(r []byte) string {
+				return string(avroToJSON(t, reg, r))
+			}
 
-		targets := changefeedbase.Targets{}
-		targets.Add(changefeedbase.Target{
-			Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
-			TableID:           tableDesc.GetID(),
-			StatementTimeName: changefeedbase.StatementTimeName(tableDesc.GetName()),
+			targets := changefeedbase.Targets{}
+			targets.Add(changefeedbase.Target{
+				Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
+				TableID:           tableDesc.GetID(),
+				StatementTimeName: changefeedbase.StatementTimeName(tableDesc.GetName()),
+			})
+
+			e, err := getEncoder(opts, targets)
+			require.NoError(t, err)
+
+			rowInsert := cdcevent.TestingMakeEventRow(tableDesc, 0, row, false)
+			var prevRow cdcevent.Row
+			evCtx := eventContext{updated: ts}
+			keyInsert, err := e.EncodeKey(context.Background(), rowInsert)
+			require.NoError(t, err)
+			keyInsert = append([]byte(nil), keyInsert...)
+			valueInsert, err := e.EncodeValue(context.Background(), evCtx, rowInsert, prevRow)
+			require.NoError(t, err)
+			require.Equal(t, expected.insert, rowStringFn(keyInsert, valueInsert))
+
+			rowDelete := cdcevent.TestingMakeEventRow(tableDesc, 0, row, true)
+			prevRow = cdcevent.TestingMakeEventRow(tableDesc, 0, row, false)
+
+			keyDelete, err := e.EncodeKey(context.Background(), rowDelete)
+			require.NoError(t, err)
+			keyDelete = append([]byte(nil), keyDelete...)
+			valueDelete, err := e.EncodeValue(context.Background(), evCtx, rowDelete, prevRow)
+			require.NoError(t, err)
+			require.Equal(t, expected.delete, rowStringFn(keyDelete, valueDelete))
+
+			resolved, err := e.EncodeResolvedTimestamp(context.Background(), tableDesc.GetName(), ts)
+			require.NoError(t, err)
+			require.Equal(t, expected.resolved, resolvedStringFn(resolved))
+
+			noCertReg, err := cdctest.StartTestSchemaRegistryWithTLS(nil, false)
+			require.NoError(t, err)
+			defer noCertReg.Close()
+			opts.SchemaRegistryURI = noCertReg.URL()
+
+			enc, err := getEncoder(opts, targets)
+			require.NoError(t, err)
+			_, err = enc.EncodeKey(context.Background(), rowInsert)
+			require.Regexp(t, "x509", err)
+
+			wrongCert, _, err := cdctest.NewCACertBase64Encoded()
+			require.NoError(t, err)
+
+			wrongCertReg, err := cdctest.StartTestSchemaRegistryWithTLS(wrongCert, false)
+			require.NoError(t, err)
+			defer wrongCertReg.Close()
+			opts.SchemaRegistryURI = wrongCertReg.URL()
+
+			enc, err = getEncoder(opts, targets)
+			require.NoError(t, err)
+			_, err = enc.EncodeKey(context.Background(), rowInsert)
+			require.Regexp(t, `contacting confluent schema registry.*: x509`, err)
 		})
-
-		e, err := getEncoder(opts, targets)
-		require.NoError(t, err)
-
-		rowInsert := cdcevent.TestingMakeEventRow(tableDesc, 0, row, false)
-		var prevRow cdcevent.Row
-		evCtx := eventContext{updated: ts}
-		keyInsert, err := e.EncodeKey(context.Background(), rowInsert)
-		require.NoError(t, err)
-		keyInsert = append([]byte(nil), keyInsert...)
-		valueInsert, err := e.EncodeValue(context.Background(), evCtx, rowInsert, prevRow)
-		require.NoError(t, err)
-		require.Equal(t, expected.insert, rowStringFn(keyInsert, valueInsert))
-
-		rowDelete := cdcevent.TestingMakeEventRow(tableDesc, 0, row, true)
-		prevRow = cdcevent.TestingMakeEventRow(tableDesc, 0, row, false)
-
-		keyDelete, err := e.EncodeKey(context.Background(), rowDelete)
-		require.NoError(t, err)
-		keyDelete = append([]byte(nil), keyDelete...)
-		valueDelete, err := e.EncodeValue(context.Background(), evCtx, rowDelete, prevRow)
-		require.NoError(t, err)
-		require.Equal(t, expected.delete, rowStringFn(keyDelete, valueDelete))
-
-		resolved, err := e.EncodeResolvedTimestamp(context.Background(), tableDesc.GetName(), ts)
-		require.NoError(t, err)
-		require.Equal(t, expected.resolved, resolvedStringFn(resolved))
-
-		noCertReg, err := cdctest.StartTestSchemaRegistryWithTLS(nil)
-		require.NoError(t, err)
-		defer noCertReg.Close()
-		opts.SchemaRegistryURI = noCertReg.URL()
-
-		enc, err := getEncoder(opts, targets)
-		require.NoError(t, err)
-		_, err = enc.EncodeKey(context.Background(), rowInsert)
-		require.Regexp(t, "x509", err)
-
-		wrongCert, _, err := cdctest.NewCACertBase64Encoded()
-		require.NoError(t, err)
-
-		wrongCertReg, err := cdctest.StartTestSchemaRegistryWithTLS(wrongCert)
-		require.NoError(t, err)
-		defer wrongCertReg.Close()
-		opts.SchemaRegistryURI = wrongCertReg.URL()
-
-		enc, err = getEncoder(opts, targets)
-		require.NoError(t, err)
-		_, err = enc.EncodeKey(context.Background(), rowInsert)
-		require.Regexp(t, `contacting confluent schema registry.*: x509`, err)
-	})
+	}
 }
 
 func TestAvroArray(t *testing.T) {
