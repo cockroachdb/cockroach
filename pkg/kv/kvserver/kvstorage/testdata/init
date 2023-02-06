@@ -1,0 +1,41 @@
+# Uninitialized deprecated replica: doesn't have a RaftReplicaID, it's just a
+# HardState. We expect this to be removed by load-and-reconcile.
+new-replica range-id=5
+----
+ok
+
+# Uninitialized replica. Expect this to stay around and be returned as such.
+new-replica range-id=6 replica-id=60
+----
+ok
+
+# Initialized deprecated replica: no RaftReplicaID. Expect ID to be backfilled.
+new-replica range-id=7 replica-id=70 k=a ek=c skip-raft-replica-id=true
+----
+r7:{a-c} [(n1,s1):70, next=71, gen=0]
+
+# Initialized replica without a need for a backfill.
+new-replica range-id=8 replica-id=80 k=c ek=f
+----
+r8:{c-f} [(n1,s1):80, next=81, gen=0]
+
+# Loading the replicas returns only the ones that
+# had a ReplicaID.
+load-and-reconcile trace=true
+----
+r6/60: uninitialized
+r7/70: r7:{a-c} [(n1,s1):70, next=71, gen=0]
+r8/80: r8:{c-f} [(n1,s1):80, next=81, gen=0]
+beginning range descriptor iteration
+iterated over 2 keys to find 2 range descriptors (by suffix: map[rdsc:2])
+removed legacy uninitialized replica for r5
+backfilled replicaID for initialized replica r7/70
+
+# Idempotency.
+load-and-reconcile trace=true
+----
+r6/60: uninitialized
+r7/70: r7:{a-c} [(n1,s1):70, next=71, gen=0]
+r8/80: r8:{c-f} [(n1,s1):80, next=81, gen=0]
+beginning range descriptor iteration
+iterated over 2 keys to find 2 range descriptors (by suffix: map[rdsc:2])
