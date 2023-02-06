@@ -76,7 +76,7 @@ type connector struct {
 
 	// DialTenantLatency tracks how long it takes to retrieve the address for
 	// a tenant and set up a tcp connection to the address.
-	DialTenantLatency *metric.Histogram
+	DialTenantLatency metric.IHistogram
 
 	// DialTenantRetries counts how often dialing a tenant is retried.
 	DialTenantRetries *metric.Counter
