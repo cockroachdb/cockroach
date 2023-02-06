@@ -747,7 +747,7 @@ func (e *quorumRecoveryEnv) handleDumpStore(t *testing.T, d datadriven.TestData)
 				descriptorViews = append(descriptorViews, descriptorView(desc))
 
 				sl := stateloader.Make(desc.RangeID)
-				raftReplicaID, _, err := sl.LoadRaftReplicaID(ctx, store.engine)
+				raftReplicaID, err := sl.LoadRaftReplicaID(ctx, store.engine)
 				if err != nil {
 					t.Fatalf("failed to load Raft replica ID: %v", err)
 				}

@@ -3712,9 +3712,8 @@ func TestStoreGetOrCreateReplicaWritesRaftReplicaID(t *testing.T) {
 		})
 	require.NoError(t, err)
 	require.True(t, created)
-	replicaID, found, err := repl.mu.stateLoader.LoadRaftReplicaID(ctx, tc.store.Engine())
+	replicaID, err := repl.mu.stateLoader.LoadRaftReplicaID(ctx, tc.store.Engine())
 	require.NoError(t, err)
-	require.True(t, found)
 	require.Equal(t, roachpb.RaftReplicaID{ReplicaID: 7}, replicaID)
 }
 
