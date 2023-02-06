@@ -188,11 +188,10 @@ type DBContext struct {
 // DefaultDBContext returns (a copy of) the default options for
 // NewDBWithContext.
 func DefaultDBContext(stopper *stop.Stopper) DBContext {
-	var c base.NodeIDContainer
 	return DBContext{
 		UserPriority: roachpb.NormalUserPriority,
 		// TODO(tbg): this is ugly. Force callers to pass in an SQLIDContainer.
-		NodeID:  base.NewSQLIDContainerForNode(&c),
+		NodeID:  &base.SQLIDContainer{},
 		Stopper: stopper,
 	}
 }
