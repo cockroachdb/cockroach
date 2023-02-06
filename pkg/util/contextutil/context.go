@@ -79,18 +79,6 @@ func wrap(ctx context.Context, cancel context.CancelFunc) (context.Context, cont
 	}
 }
 
-// ctxWithStacktrace overrides Err to annotate context.DeadlineExceeded and
-// context.Canceled errors with a stacktrace.
-// See: https://github.com/cockroachdb/cockroach/issues/95794
-type ctxWithStacktrace struct {
-	context.Context
-}
-
-// Err implements the context.Context interface.
-func (ctx *ctxWithStacktrace) Err() error {
-	return errors.WithStack(ctx.Context.Err())
-}
-
 // RunWithTimeout runs a function with a timeout, the same way you'd do with
 // context.WithTimeout. It improves the opaque error messages returned by
 // WithTimeout by augmenting them with the op string that is passed in.
@@ -98,7 +86,6 @@ func RunWithTimeout(
 	ctx context.Context, op string, timeout time.Duration, fn func(ctx context.Context) error,
 ) error {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
-	ctx = &ctxWithStacktrace{Context: ctx}
 	defer cancel()
 	start := timeutil.Now()
 	err := fn(ctx)

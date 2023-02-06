@@ -13,7 +13,6 @@ package aggmetric_test
 import (
 	"bufio"
 	"bytes"
-	"fmt"
 	"sort"
 	"strings"
 	"testing"
@@ -93,7 +92,6 @@ func TestAggMetric(t *testing.T) {
 		g3.Inc(3)
 		g3.Dec(1)
 		f2.Update(1.5)
-		fmt.Println(r)
 		f3.Update(2.5)
 		h2.RecordValue(10)
 		h3.RecordValue(90)
@@ -105,7 +103,6 @@ func TestAggMetric(t *testing.T) {
 	})
 
 	t.Run("destroy", func(t *testing.T) {
-		fmt.Println(r)
 		g3.Unlink()
 		c2.Unlink()
 		f3.Unlink()
