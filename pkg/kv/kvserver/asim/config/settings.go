@@ -13,6 +13,8 @@ package config
 import "time"
 
 const (
+	defaultTickInteval             = 500 * time.Millisecond
+	defaultMetricsInterval         = 10 * time.Second
 	defaultReplicaChangeBaseDelay  = 100 * time.Millisecond
 	defaultReplicaAddDelayFactor   = 16
 	defaultSplitQueueDelay         = 100 * time.Millisecond
@@ -46,6 +48,12 @@ type SimulationSettings struct {
 	// StartTime is the time to start the simulation at. This is also used to
 	// init the shared state simulation clock.
 	StartTime time.Time
+	// TickInterval is the duration between simulator ticks. The lower this
+	// setting, the higher resolution the simulation will be. A lower
+	// TickInterval will also take longer to execute so a tradeoff exists.
+	TickInterval time.Duration
+	// MetricsInterval is the interval at which metrics are recorded.
+	MetricsInterval time.Duration
 	// Seed is the random source that will be used for any simulator components
 	// that accept a seed.
 	Seed int64
@@ -113,6 +121,8 @@ type SimulationSettings struct {
 func DefaultSimulationSettings() *SimulationSettings {
 	return &SimulationSettings{
 		StartTime:               defaultStartTime,
+		TickInterval:            defaultTickInteval,
+		MetricsInterval:         defaultMetricsInterval,
 		Seed:                    defaultSeed,
 		ReplicaChangeBaseDelay:  defaultReplicaChangeBaseDelay,
 		ReplicaAddRate:          defaultReplicaAddDelayFactor,
