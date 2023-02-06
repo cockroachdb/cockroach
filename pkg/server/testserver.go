@@ -1101,7 +1101,7 @@ func (ts *TestServer) StartTenant(
 		baseCfg.SQLAddr, baseCfg.SQLAdvertiseAddr,
 		baseCfg.HTTPAddr, baseCfg.HTTPAdvertiseAddr,
 	)
-	sw, err := NewTenantServer(
+	sw, err := NewSeparateProcessTenantServer(
 		ctx,
 		stopper,
 		baseCfg,
