@@ -15,6 +15,7 @@ go_library(
         "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/kv/kvserver/logstore",
+        "//pkg/kv/kvserver/rditer",
         "//pkg/roachpb",
         "//pkg/storage",
         "//pkg/util/hlc",

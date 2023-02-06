@@ -10,7 +10,31 @@
 
 package kvstorage
 
-import "github.com/cockroachdb/cockroach/pkg/roachpb"
+import (
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+)
+
+const (
+	// ClearRangeThresholdPointKeys is the threshold (as number of point keys)
+	// beyond which we'll clear range data using a Pebble range tombstone rather
+	// than individual Pebble point tombstones.
+	//
+	// It is expensive for there to be many Pebble range tombstones in the same
+	// sstable because all of the tombstones in an sstable are loaded whenever the
+	// sstable is accessed. So we avoid using range deletion unless there is some
+	// minimum number of keys. The value here was pulled out of thin air. It might
+	// be better to make this dependent on the size of the data being deleted. Or
+	// perhaps we should fix Pebble to handle large numbers of range tombstones in
+	// an sstable better.
+	ClearRangeThresholdPointKeys = 64
+
+	// ClearRangeThresholdRangeKeys is the threshold (as number of range keys)
+	// beyond which we'll clear range data using a single RANGEKEYDEL across the
+	// span rather than clearing individual range keys.
+	ClearRangeThresholdRangeKeys = 8
+)
 
 // ClearRangeDataOptions specify which parts of a Replica are to be destroyed.
 type ClearRangeDataOptions struct {
@@ -31,4 +55,34 @@ type ClearRangeDataOptions struct {
 	// tombstone, since keys must be written in order. When this is false, a
 	// heuristic will be used instead.
 	MustUseClearRange bool
+}
+
+// ClearRangeData clears the data associated with a range descriptor selected
+// by the provided clearRangeDataOptions.
+//
+// TODO(tbg): could rename this to XReplica. The use of "Range" in both the
+// "CRDB Range" and "storage.ClearRange" context in the setting of this method could
+// be confusing.
+func ClearRangeData(
+	rangeID roachpb.RangeID, reader storage.Reader, writer storage.Writer, opts ClearRangeDataOptions,
+) error {
+	keySpans := rditer.Select(rangeID, rditer.SelectOpts{
+		ReplicatedBySpan:      opts.ClearReplicatedBySpan,
+		ReplicatedByRangeID:   opts.ClearReplicatedByRangeID,
+		UnreplicatedByRangeID: opts.ClearUnreplicatedByRangeID,
+	})
+
+	pointKeyThreshold, rangeKeyThreshold := ClearRangeThresholdPointKeys, ClearRangeThresholdRangeKeys
+	if opts.MustUseClearRange {
+		pointKeyThreshold, rangeKeyThreshold = 1, 1
+	}
+
+	for _, keySpan := range keySpans {
+		if err := storage.ClearRangeWithHeuristic(
+			reader, writer, keySpan.Key, keySpan.EndKey, pointKeyThreshold, rangeKeyThreshold,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
 }
