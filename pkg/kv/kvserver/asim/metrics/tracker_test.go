@@ -37,16 +37,15 @@ func TestTracker(t *testing.T) {
 	ctx := context.Background()
 	settings := config.DefaultSimulationSettings()
 	duration := 200 * time.Second
-	interval := 10 * time.Second
 	rwg := []workload.Generator{
 		workload.TestCreateWorkloadGenerator(settings.Seed, settings.StartTime, 10, 10000),
 	}
 	s := state.LoadConfig(state.ComplexConfig)
 	l1 := &mockListener{history: [][]metrics.StoreMetrics{}}
 	l2 := &mockListener{history: [][]metrics.StoreMetrics{}}
-	tracker := metrics.NewTracker(l1, l2)
+	tracker := metrics.NewTracker(testingMetricsInterval, l1, l2)
 
-	sim := asim.NewSimulator(duration, interval, interval, rwg, s, settings, tracker)
+	sim := asim.NewSimulator(duration, rwg, s, settings, tracker)
 	sim.RunSim(ctx)
 
 	require.Equal(t, l1.history, l2.history)

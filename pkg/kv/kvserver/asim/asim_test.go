@@ -33,13 +33,13 @@ func TestRunAllocatorSimulator(t *testing.T) {
 	ctx := context.Background()
 	settings := config.DefaultSimulationSettings()
 	duration := 1000 * time.Second
-	interval := 10 * time.Second
+	settings.TickInterval = 10 * time.Second
 	rwg := make([]workload.Generator, 1)
 	rwg[0] = workload.TestCreateWorkloadGenerator(settings.Seed, settings.StartTime, 1, 10)
-	m := metrics.NewTracker(metrics.NewClusterMetricsTracker(os.Stdout))
+	m := metrics.NewTracker(settings.MetricsInterval, metrics.NewClusterMetricsTracker(os.Stdout))
 	s := state.LoadConfig(state.ComplexConfig)
 
-	sim := asim.NewSimulator(duration, interval, interval, rwg, s, settings, m)
+	sim := asim.NewSimulator(duration, rwg, s, settings, m)
 	sim.RunSim(ctx)
 }
 
@@ -59,8 +59,7 @@ func TestAllocatorSimulatorSpeed(t *testing.T) {
 
 	// Run each simulation for 5 minutes.
 	duration := 5 * time.Minute
-	bgInterval := 10 * time.Second
-	interval := 2 * time.Second
+	settings.TickInterval = 2 * time.Second
 
 	stores := 32
 	replsPerRange := 3
@@ -76,7 +75,7 @@ func TestAllocatorSimulatorSpeed(t *testing.T) {
 	sample := func() int64 {
 		rwg := make([]workload.Generator, 1)
 		rwg[0] = workload.TestCreateWorkloadGenerator(settings.Seed, settings.StartTime, stores, int64(keyspace))
-		m := metrics.NewTracker() // no output
+		m := metrics.NewTracker(settings.MetricsInterval) // no output
 		replicaDistribution := make([]float64, stores)
 
 		// NB: Here create half of the stores with equal replica counts, the
@@ -91,7 +90,7 @@ func TestAllocatorSimulatorSpeed(t *testing.T) {
 		}
 
 		s := state.NewTestStateReplDistribution(replicaDistribution, ranges, replsPerRange, keyspace)
-		sim := asim.NewSimulator(duration, interval, bgInterval, rwg, s, settings, m)
+		sim := asim.NewSimulator(duration, rwg, s, settings, m)
 
 		startTime := timeutil.Now()
 		sim.RunSim(ctx)
@@ -127,8 +126,7 @@ func TestAllocatorSimulatorDeterministic(t *testing.T) {
 
 	runs := 3
 	duration := 15 * time.Minute
-	bgInterval := 10 * time.Second
-	interval := 2 * time.Second
+	settings.TickInterval = 2 * time.Second
 
 	stores := 7
 	replsPerRange := 3
@@ -146,7 +144,7 @@ func TestAllocatorSimulatorDeterministic(t *testing.T) {
 	for run := 0; run < runs; run++ {
 		rwg := make([]workload.Generator, 1)
 		rwg[0] = workload.TestCreateWorkloadGenerator(settings.Seed, settings.StartTime, stores, int64(keyspace))
-		m := metrics.NewTracker() // no output
+		m := metrics.NewTracker(settings.TickInterval) // no output
 		replicaDistribution := make([]float64, stores)
 
 		// NB: Here create half of the stores with equal replica counts, the
@@ -161,7 +159,7 @@ func TestAllocatorSimulatorDeterministic(t *testing.T) {
 		}
 
 		s := state.NewTestStateReplDistribution(replicaDistribution, ranges, replsPerRange, keyspace)
-		sim := asim.NewSimulator(duration, interval, bgInterval, rwg, s, settings, m)
+		sim := asim.NewSimulator(duration, rwg, s, settings, m)
 
 		ctx := context.Background()
 		sim.RunSim(ctx)

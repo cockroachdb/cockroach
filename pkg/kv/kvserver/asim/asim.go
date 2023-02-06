@@ -33,12 +33,6 @@ type Simulator struct {
 	// as the queues, store rebalancer and state changers. It should be set
 	// lower than the bgInterval, as updated occur more frequently.
 	interval time.Duration
-	// bgInterval is the step between ticks for background simulation
-	// components, such as the metrics, state exchange and workload generators.
-	// It should be set higher than the interval, as it is generally more
-	// costly and requires less frequent updates.
-	bgInterval time.Duration
-	bgLastTick time.Time
 
 	// The simulator can run multiple workload Generators in parallel.
 	generators []workload.Generator
@@ -65,7 +59,6 @@ type Simulator struct {
 // NewSimulator constructs a valid Simulator.
 func NewSimulator(
 	duration time.Duration,
-	interval, bgInterval time.Duration,
 	wgs []workload.Generator,
 	initialState state.State,
 	settings *config.SimulationSettings,
@@ -128,8 +121,7 @@ func NewSimulator(
 	return &Simulator{
 		curr:        settings.StartTime,
 		end:         settings.StartTime.Add(duration),
-		interval:    interval,
-		bgInterval:  bgInterval,
+		interval:    settings.TickInterval,
 		generators:  wgs,
 		state:       initialState,
 		changer:     changer,
@@ -168,6 +160,7 @@ func (s *Simulator) GetNextTickTime() (done bool, tick time.Time) {
 // TODO: simulation run settings should be loaded from a config such as a yaml
 // file or a "datadriven" style file.
 func (s *Simulator) RunSim(ctx context.Context) {
+
 	for {
 		done, tick := s.GetNextTickTime()
 		if done {
@@ -198,14 +191,6 @@ func (s *Simulator) RunSim(ctx context.Context) {
 
 		// Print tick metrics.
 		s.tickMetrics(ctx, tick)
-
-		// If we ticked the background tickable components, update the last
-		// tick time.
-		// TODO(kvoli): Variable component tick rates requires a proper
-		// abstraction.
-		if !s.bgLastTick.Add(s.bgInterval).After(tick) {
-			s.bgLastTick = tick
-		}
 	}
 }
 
@@ -302,7 +287,5 @@ func (s *Simulator) tickStoreRebalancers(ctx context.Context, tick time.Time, st
 
 // tickMetrics prints the metrics up to the given tick.
 func (s *Simulator) tickMetrics(ctx context.Context, tick time.Time) {
-	if !s.bgLastTick.Add(s.bgInterval).After(tick) {
-		s.metrics.Tick(ctx, tick, s.state)
-	}
+	s.metrics.Tick(ctx, tick, s.state)
 }

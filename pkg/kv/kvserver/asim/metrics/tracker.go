@@ -52,21 +52,31 @@ type StoreMetricsListener interface {
 // StoreMetrics information when ticked.
 type Tracker struct {
 	storeListeners []StoreMetricsListener
+	lastTick       time.Time
+	interval       time.Duration
 }
 
 // NewTracker returns a new MetricsTracker.
-func NewTracker(listeners ...StoreMetricsListener) *Tracker {
+func NewTracker(interval time.Duration, listeners ...StoreMetricsListener) *Tracker {
 	return &Tracker{
 		storeListeners: listeners,
+		interval:       interval,
 	}
 }
 
 // Tick updates all listeners attached to the metrics tracker with the state at
 // the tick given.
 func (mt *Tracker) Tick(ctx context.Context, tick time.Time, s state.State) {
-	if len(mt.storeListeners) == 0 {
+	if mt.lastTick.Add(mt.interval).After(tick) {
+		// Nothing to do yet.
 		return
 	}
+
+	if len(mt.storeListeners) < 1 {
+		// There are no listeners, so there is no point updating metrics here.
+		return
+	}
+
 	sms := []StoreMetrics{}
 	usage := s.ClusterUsageInfo()
 
