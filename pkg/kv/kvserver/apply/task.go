@@ -272,8 +272,8 @@ func (t *Task) ApplyCommittedEntries(ctx context.Context) error {
 				}); rejectErr != nil {
 					return rejectErr
 				}
-				return err
 			}
+			return err
 		}
 	}
 	iter.Close()
