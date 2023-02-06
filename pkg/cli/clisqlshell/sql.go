@@ -1925,6 +1925,8 @@ func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnu
 	return nextState
 }
 
+var copyToRe = regexp.MustCompile(`(?i)COPY.*TO\s+STDOUT`)
+
 // doRunStatements runs all the statements that have been accumulated by
 // concatLines.
 func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
@@ -1968,6 +1970,16 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 	// Now run the statement/query.
 	c.exitErr = c.runWithInterruptableCtx(func(ctx context.Context) error {
 		if scanner.FirstLexicalToken(c.concatLines) == lexbase.COPY {
+			// Ideally this is parsed using the parser, but we've avoided doing so
+			// for clisqlshell to be small.
+			if copyToRe.MatchString(c.concatLines) {
+				defer c.maybeFlushOutput()
+				// We don't print the tag, following psql.
+				if _, err := clisqlclient.BeginCopyTo(ctx, c.conn, c.iCtx.queryOutput, c.concatLines); err != nil {
+					return err
+				}
+				return nil
+			}
 			return c.beginCopyFrom(ctx, c.concatLines)
 		}
 		q := clisqlclient.MakeQuery(c.concatLines)
