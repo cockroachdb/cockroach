@@ -67,7 +67,7 @@ func completeKeyword(ctx context.Context, c compengine.Context) (compengine.Rows
 		start = c.QueryPos()
 		end = start
 
-	case c.AtWord() && !curTok.Quoted:
+	case c.AtWordOrInSpaceFollowingWord() && !curTok.Quoted:
 		prefix = curTok.Str
 		start = int(curTok.Start)
 		end = int(curTok.End)
@@ -107,7 +107,7 @@ func completeFunction(ctx context.Context, c compengine.Context) (compengine.Row
 	var prefix string
 	var start, end int
 	var schemaName string
-	atWord := c.AtWord()
+	atWord := c.AtWordOrInSpaceFollowingWord()
 	sketch := c.Sketch()
 	switch {
 	case compMaybeQualProcRe.MatchString(sketch):
@@ -183,7 +183,7 @@ func completeDatabase(ctx context.Context, c compengine.Context) (compengine.Row
 		c.Trace("not completing")
 		return nil, nil
 
-	case c.CursorInToken() && c.AtWord():
+	case c.CursorInToken() && c.AtWordOrInSpaceFollowingWord():
 		curTok := c.RelToken(0)
 		prefix = curTok.Str
 		start = int(curTok.Start)
@@ -225,7 +225,7 @@ func completeObjectInCurrentDatabase(
 	ctx context.Context, c compengine.Context,
 ) (compengine.Rows, error) {
 	var schema string
-	atWord := c.AtWord()
+	atWord := c.AtWordOrInSpaceFollowingWord()
 	sketch := c.Sketch()
 	hasSchemaPrefix := false
 	switch {
@@ -300,7 +300,7 @@ func completeSchemaInCurrentDatabase(
 	var prefix string
 	var start, end int
 	switch {
-	case c.CursorInToken() && c.AtWord():
+	case c.CursorInToken() && c.AtWordOrInSpaceFollowingWord():
 		curTok := c.RelToken(0)
 		prefix = curTok.Str
 		start = int(curTok.Start)
@@ -331,7 +331,7 @@ func completeSchemaInOtherDatabase(
 	ctx context.Context, c compengine.Context,
 ) (compengine.Rows, error) {
 	var dbname string
-	atWord := c.AtWord()
+	atWord := c.AtWordOrInSpaceFollowingWord()
 	switch {
 	case compOneQualPrefixRe.MatchString(c.Sketch()):
 		dbTok := c.RelToken(-1)
@@ -385,7 +385,7 @@ func completeObjectInOtherDatabase(
 	ctx context.Context, c compengine.Context,
 ) (compengine.Rows, error) {
 	var schema string
-	atWord := c.AtWord()
+	atWord := c.AtWordOrInSpaceFollowingWord()
 	sketch := c.Sketch()
 	var dbTok scanner.InspectToken
 	switch {
