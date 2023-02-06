@@ -59,6 +59,7 @@ go_library(
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_facebookgo_clock//:clock",
         "@com_github_gogo_protobuf//proto",
+        "@com_github_gogo_status//:status",
         "@com_github_golang_protobuf//proto:go_default_library",
         "@com_github_golang_snappy//:snappy",
         "@com_github_montanaflynn_stats//:stats",
