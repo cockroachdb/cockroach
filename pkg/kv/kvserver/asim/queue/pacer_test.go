@@ -24,9 +24,15 @@ import (
 // set.
 func TestScannerReplicaPacer(t *testing.T) {
 	start := state.TestingStartTime()
+	settings := config.DefaultSimulationSettings()
 
 	createNextRepls := func(replicas int) func() []state.Replica {
-		s := state.NewTestStateReplCounts(map[state.StoreID]int{1: replicas}, 1 /* replsPerRange */, 1000 /* keyspace */)
+		s := state.NewStateWithReplCounts(
+			map[state.StoreID]int{1: replicas},
+			1,    /* replsPerRange */
+			1000, /* keyspace */
+			settings,
+		)
 		return s.NextReplicasFn(state.StoreID(1))
 	}
 

@@ -25,7 +25,11 @@ func TestGossip(t *testing.T) {
 	settings := config.DefaultSimulationSettings()
 
 	tick := settings.StartTime
-	s := state.NewTestStateEvenDistribution(3, 100, 3, 1000)
+	s := state.NewStateEvenDistribution(3, 100, 3, 1000, settings)
+	// Transfer all the leases to store 1 initially.
+	for _, rng := range s.Ranges() {
+		s.TransferLease(rng.RangeID(), 1)
+	}
 	details := map[state.StoreID]*map[roachpb.StoreID]*storepool.StoreDetail{}
 
 	for _, store := range s.Stores() {
