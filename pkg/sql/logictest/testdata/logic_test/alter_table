@@ -1571,7 +1571,7 @@ ALTER TABLE unique_without_index ADD CONSTRAINT my_unique_e UNIQUE WITHOUT INDEX
 ALTER TABLE unique_without_index ADD CONSTRAINT my_unique_e2 UNIQUE WITHOUT INDEX (e) NOT VALID
 
 # Trying to validate one of the constraints will fail.
-statement error pgcode 23505 pq: could not create unique constraint "my_unique_e"\nDETAIL: Key \(e\)=\(1\) is duplicated\.
+statement error pgcode 23505 pq: could not create unique constraint ".*"\nDETAIL: Key \(e\)=\(1\) is duplicated\.
 ALTER TABLE unique_without_index VALIDATE CONSTRAINT my_unique_e
 
 # But after we delete a row, validation should succeed.
@@ -1632,7 +1632,7 @@ statement ok
 ALTER TABLE unique_without_index_partial ADD CONSTRAINT uniq_a_1 UNIQUE WITHOUT INDEX (a) WHERE b > 0 OR c > 0 NOT VALID
 
 # Trying to validate the constraint will fail.
-statement error pgcode 23505 pq: could not create unique constraint "uniq_a_1"\nDETAIL: Key \(a\)=\(1\) is duplicated\.
+statement error pgcode 23505 pq: could not create unique constraint ".*"\nDETAIL: Key \(a\)=\(1\) is duplicated\.
 ALTER TABLE unique_without_index_partial VALIDATE CONSTRAINT uniq_a_1
 
 # But after we delete a row, validation should succeed.

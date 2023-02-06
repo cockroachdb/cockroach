@@ -839,3 +839,20 @@ func maybeFailOnCrossDBTypeReference(b BuildCtx, typeID descpb.ID, parentDBID de
 			typeName.String()))
 	}
 }
+
+// shouldValidateConstraint returns true if the constraint ID identifies
+// an unvalidated, non-index-backed constraint, either public or to-be-public.
+func shouldValidateConstraint(
+	b BuildCtx, tableID catid.DescID, constraintID catid.ConstraintID,
+) (should bool) {
+	constraintElements(b, tableID, constraintID).Filter(publicTargetFilter).ForEachElementStatus(func(
+		current scpb.Status, target scpb.TargetStatus, e scpb.Element,
+	) {
+		switch e.(type) {
+		case *scpb.CheckConstraintUnvalidated, *scpb.UniqueWithoutIndexConstraintUnvalidated,
+			*scpb.ForeignKeyConstraintUnvalidated:
+			should = true
+		}
+	})
+	return should
+}
