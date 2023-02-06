@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -179,6 +180,42 @@ VALUES($1, $2, $3, $4, $5)`, id, secret, username, created, expires)
 	t.Logf("response 5:\n%#v", body)
 	require.Equal(t, len(body.Sessions), 1)
 	require.Equal(t, body.Sessions[0].ApplicationName, "hello system")
+}
+
+func TestServerControllerMultiNodeTenantStartup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	numNodes := 3
+	tc := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DisableDefaultTestTenant: true,
+		}})
+	defer tc.Stopper().Stop(ctx)
+
+	db := tc.ServerConn(0)
+	_, err := db.Exec("CREATE TENANT hello; ALTER TENANT hello START SERVICE SHARED")
+	require.NoError(t, err)
+
+	// Pick a random node, try to run some SQL inside that tenant.
+	rng, _ := randutil.NewTestRand()
+	sqlAddr := tc.Server(int(rng.Int31n(int32(numNodes)))).ServingSQLAddr()
+	testutils.SucceedsSoon(t, func() error {
+		tenantDB, err := serverutils.OpenDBConnE(sqlAddr, "cluster:hello", false, tc.Stopper())
+		if err != nil {
+			return err
+		}
+		defer tenantDB.Close()
+		if _, err := tenantDB.Exec("CREATE ROLE foo"); err != nil {
+			return err
+		}
+		if _, err := tenantDB.Exec("GRANT ADMIN TO foo"); err != nil {
+			return err
+		}
+		return nil
+	})
 }
 
 func TestServerStartStop(t *testing.T) {

@@ -148,18 +148,53 @@ func (s *SQLServerWrapper) Drain(
 	return s.drainServer.runDrain(ctx, verbose)
 }
 
-// NewTenantServer creates a tenant-specific, SQL-only server against a KV
-// backend.
+// NewSeparateProcessTenantServer creates a tenant-specific, SQL-only
+// server against a KV backend, with defaults appropriate for a
+// SQLServer that is not located in the same process as a KVServer.
 //
 // The caller is responsible for listening to the server's ShutdownRequested()
 // channel and stopping cfg.stopper when signaled.
-func NewTenantServer(
+func NewSeparateProcessTenantServer(
 	ctx context.Context,
 	stopper *stop.Stopper,
 	baseCfg BaseConfig,
 	sqlCfg SQLConfig,
 	parentRecorder *status.MetricsRecorder,
 	tenantNameContainer *roachpb.TenantNameContainer,
+) (*SQLServerWrapper, error) {
+	instanceIDContainer := baseCfg.IDContainer.SwitchToSQLIDContainerForStandaloneSQLInstance()
+	return newTenantServer(ctx, stopper, baseCfg, sqlCfg, parentRecorder, tenantNameContainer, instanceIDContainer)
+}
+
+// NewSeparateProcessTenantServer creates a tenant-specific, SQL-only
+// server against a KV backend, with defaults appropriate for a
+// SQLServer that is not located in the same process as a KVServer.
+//
+// The caller is responsible for listening to the server's ShutdownRequested()
+// channel and stopping cfg.stopper when signaled.
+func NewSharedProcessTenantServer(
+	ctx context.Context,
+	stopper *stop.Stopper,
+	baseCfg BaseConfig,
+	sqlCfg SQLConfig,
+	parentRecorder *status.MetricsRecorder,
+	tenantNameContainer *roachpb.TenantNameContainer,
+) (*SQLServerWrapper, error) {
+	if baseCfg.IDContainer.Get() == 0 {
+		return nil, errors.AssertionFailedf("programming error: NewSharedProcessTenantServer called before NodeID was assigned.")
+	}
+	instanceIDContainer := base.NewSQLIDContainerForNode(baseCfg.IDContainer)
+	return newTenantServer(ctx, stopper, baseCfg, sqlCfg, parentRecorder, tenantNameContainer, instanceIDContainer)
+}
+
+func newTenantServer(
+	ctx context.Context,
+	stopper *stop.Stopper,
+	baseCfg BaseConfig,
+	sqlCfg SQLConfig,
+	parentRecorder *status.MetricsRecorder,
+	tenantNameContainer *roachpb.TenantNameContainer,
+	instanceIDContainer *base.SQLIDContainer,
 ) (*SQLServerWrapper, error) {
 	// TODO(knz): Make the license application a per-server thing
 	// instead of a global thing.
@@ -171,8 +206,7 @@ func NewTenantServer(
 	// Inform the server identity provider that we're operating
 	// for a tenant server.
 	baseCfg.idProvider.SetTenant(sqlCfg.TenantID)
-
-	args, err := makeTenantSQLServerArgs(ctx, stopper, baseCfg, sqlCfg, parentRecorder, tenantNameContainer)
+	args, err := makeTenantSQLServerArgs(ctx, stopper, baseCfg, sqlCfg, parentRecorder, tenantNameContainer, instanceIDContainer)
 	if err != nil {
 		return nil, err
 	}
@@ -838,12 +872,12 @@ func makeTenantSQLServerArgs(
 	sqlCfg SQLConfig,
 	parentRecorder *status.MetricsRecorder,
 	tenantNameContainer *roachpb.TenantNameContainer,
+	instanceIDContainer *base.SQLIDContainer,
 ) (sqlServerArgs, error) {
 	st := baseCfg.Settings
 
 	// We want all log messages issued on behalf of this SQL instance to report
 	// the instance ID (once known) as a tag.
-	instanceIDContainer := baseCfg.IDContainer.SwitchToSQLIDContainer()
 	startupCtx = baseCfg.AmbientCtx.AnnotateCtx(startupCtx)
 
 	clock := hlc.NewClockWithSystemTimeSource(time.Duration(baseCfg.MaxOffset))
