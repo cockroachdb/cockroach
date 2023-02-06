@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary"
@@ -396,26 +397,6 @@ func (r *Replica) updateRangeInfo(ctx context.Context, desc *roachpb.RangeDescri
 	return nil
 }
 
-type clearRangeDataOptions struct {
-	// ClearReplicatedByRangeID indicates that replicated RangeID-based keys
-	// (abort span, etc) should be removed.
-	ClearReplicatedByRangeID bool
-	// ClearUnreplicatedByRangeID indicates that unreplicated RangeID-based keys
-	// (logstore state incl. HardState, etc) should be removed.
-	ClearUnreplicatedByRangeID bool
-	// ClearReplicatedBySpan causes the state machine data (i.e. the replicated state
-	// for the given RSpan) that is key-addressable (i.e. range descriptor, user keys,
-	// locks) to be removed. No data is removed if this is the zero span.
-	ClearReplicatedBySpan roachpb.RSpan
-
-	// If MustUseClearRange is true, a Pebble range tombstone will always be used
-	// to clear the key spans (unless empty). This is typically used when we need
-	// to write additional keys to an SST after this clear, e.g. a replica
-	// tombstone, since keys must be written in order. When this is false, a
-	// heuristic will be used instead.
-	MustUseClearRange bool
-}
-
 // clearRangeData clears the data associated with a range descriptor selected
 // by the provided clearRangeDataOptions.
 //
@@ -423,7 +404,10 @@ type clearRangeDataOptions struct {
 // "CRDB Range" and "storage.ClearRange" context in the setting of this method could
 // be confusing.
 func clearRangeData(
-	rangeID roachpb.RangeID, reader storage.Reader, writer storage.Writer, opts clearRangeDataOptions,
+	rangeID roachpb.RangeID,
+	reader storage.Reader,
+	writer storage.Writer,
+	opts kvstorage.ClearRangeDataOptions,
 ) error {
 	keySpans := rditer.Select(rangeID, rditer.SelectOpts{
 		ReplicatedBySpan:      opts.ClearReplicatedBySpan,
@@ -814,7 +798,7 @@ func clearSubsumedReplicaDiskData(
 		// NOTE: We set mustClearRange to true because we are setting
 		// RangeTombstoneKey. Since Clears and Puts need to be done in increasing
 		// order of keys, it is not safe to use ClearRangeIter.
-		opts := clearRangeDataOptions{
+		opts := kvstorage.ClearRangeDataOptions{
 			ClearReplicatedByRangeID:   true,
 			ClearUnreplicatedByRangeID: true,
 			MustUseClearRange:          true,

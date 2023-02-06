@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -79,7 +80,7 @@ func preDestroyRaftMuLocked(
 	reader storage.Reader,
 	writer storage.Writer,
 	nextReplicaID roachpb.ReplicaID,
-	opts clearRangeDataOptions,
+	opts kvstorage.ClearRangeDataOptions,
 ) error {
 	diskReplicaID, err := logstore.NewStateLoader(rangeID).LoadRaftReplicaID(ctx, reader)
 	if err != nil {
@@ -169,7 +170,7 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 	desc := r.Desc()
 	inited := desc.IsInitialized()
 
-	opts := clearRangeDataOptions{
+	opts := kvstorage.ClearRangeDataOptions{
 		ClearReplicatedBySpan: desc.RSpan(), // zero if !inited
 		// TODO(tbg): if it's uninitialized, we might as well clear
 		// the replicated state because there isn't any. This seems
