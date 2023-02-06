@@ -95,7 +95,7 @@ func splitPreApply(
 				log.Fatalf(ctx, "failed to load hard state for removed rhs: %v", err)
 			}
 		}
-		if err := clearRangeData(split.RightDesc.RangeID, readWriter, readWriter, kvstorage.ClearRangeDataOptions{
+		if err := kvstorage.ClearRangeData(split.RightDesc.RangeID, readWriter, readWriter, kvstorage.ClearRangeDataOptions{
 			// We know there isn't anything in these two replicated spans below in the
 			// right-hand side (before the current batch), so setting these options
 			// will in effect only clear the writes to the RHS replicated state we have

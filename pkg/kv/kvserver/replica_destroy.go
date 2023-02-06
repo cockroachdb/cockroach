@@ -89,7 +89,7 @@ func preDestroyRaftMuLocked(
 	if diskReplicaID.ReplicaID >= nextReplicaID {
 		return errors.AssertionFailedf("replica r%d/%d must not survive its own tombstone", rangeID, diskReplicaID)
 	}
-	if err := clearRangeData(rangeID, reader, writer, opts); err != nil {
+	if err := kvstorage.ClearRangeData(rangeID, reader, writer, opts); err != nil {
 		return err
 	}
 
