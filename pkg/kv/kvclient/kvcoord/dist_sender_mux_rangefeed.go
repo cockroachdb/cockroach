@@ -345,7 +345,7 @@ func (m *rangefeedMuxer) receiveEventsFromNode(ctx context.Context, ms *muxClien
 			// Normally, when ctx is done, we would receive streamErr above.
 			// But it's possible that the context was canceled right after the last Recv(),
 			// and in that case we must exit.
-			return nil
+			return ctx.Err()
 		case <-m.demuxLoopDone:
 			// demuxLoop exited, and so should we (happens when main context group completes)
 			return nil
