@@ -19,7 +19,7 @@ completions:
   "\"extract_duration\"(" ((from schema pg_catalog) Extracts `element` from `input`) -> "\"extract_duration\"(" (0, 0)
   "\"family\"(" ((from schema pg_catalog) Extracts the IP family of the value; 4 for IPv4, 6 for IPv6) -> "\"family\"(" (0, 0)
   "\"greatest\"(" ((from schema pg_catalog) Returns the element with the greatest value) -> "\"greatest\"(" (0, 0)
-  "\"information_schema._pg_char_max_length\"(" ((from schema pg_catalog) Not usable; exposed only for compatibility with PostgreSQL) -> "\"information_schema._pg_char_max_length\"(" (0, 0)
+  "\"least\"(" ((from schema pg_catalog) Returns the element with the lowest value) -> "\"least\"(" (0, 0)
   ... entries omitted ...
 - "keyword":
   "ABORT" (unreserved) -> "ABORT" (0, 0)
@@ -33,6 +33,10 @@ completions:
   "ALL" (reserved) -> "ALL" (0, 0)
   "ALTER" (unreserved) -> "ALTER" (0, 0)
   ... entries omitted ...
+- "relation":
+  "geography_columns" (Shows all defined geography columns. Matches PostGIS' geography_columns function) -> "geography_columns" (0, 0)
+  "geometry_columns" (Shows all defined geometry columns. Matches PostGIS' geometry_columns functional) -> "geometry_columns" (0, 0)
+  "spatial_ref_sys" (Shows all defined Spatial Reference Identifiers (SRIDs). Matches PostGIS' spatia) -> "spatial_ref_sys" (0, 0)
 - "schema":
   "crdb_internal" () -> "crdb_internal" (0, 0)
   "information_schema" () -> "information_schema" (0, 0)
@@ -112,3 +116,23 @@ completions:
 - "functions":
   "array_length(" ((from schema pg_catalog) Calculates the length of `input` on the provided `array_dimension`) -> "array_length(" (0, 7)
   "array_lower(" ((from schema pg_catalog) Calculates the minimum value of `input` on the provided `array_dimension`) -> "array_lower(" (0, 7)
+
+# Complete pg_catalog tables after a pg_catalog prefix.
+complete
+select * from pg_catalog.pg_pro@
+----
+complete 0 31
+msg: ""
+completions:
+- "relation":
+  "pg_proc" (built-in functions (incomplete)) -> "pg_proc" (0, 6)
+
+# Complete pg_catalog tables if the user has typed pg_ already.
+complete
+select * from pg_pro@
+----
+complete 0 20
+msg: ""
+completions:
+- "relation":
+  "pg_proc" (built-in functions (incomplete)) -> "pg_proc" (0, 6)
