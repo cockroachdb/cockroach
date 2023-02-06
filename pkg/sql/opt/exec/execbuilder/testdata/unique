@@ -1775,6 +1775,13 @@ ALTER TABLE uniq_overlaps_pk VALIDATE CONSTRAINT unique_a
 
 # Same test as the previous, but now that the constraint has been validated, it
 # can be treated as a key. This allows the joins to be more efficient.
+#
+# The implementation detail for VALIDATE CONSTRAINT is slightly different between
+# legacy and declarative schema changer, causing the output of the following
+# EXPLAIN UPDATE to be slightly different: the ordering of three same-level
+# constraint checks is different. We thus test on the same EXPLAIN UPDATE twice
+# with slightly different expected output.
+skipif config local
 query T
 EXPLAIN UPDATE uniq_overlaps_pk SET a = 1, b = 2, c = 3, d = 4 WHERE a = 5
 ----
@@ -1840,6 +1847,76 @@ vectorized: true
             │     missing stats
             │     table: uniq_overlaps_pk@uniq_overlaps_pk_pkey
             │     spans: FULL SCAN
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+onlyif config local
+query T
+EXPLAIN UPDATE uniq_overlaps_pk SET a = 1, b = 2, c = 3, d = 4 WHERE a = 5
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • update
+│   │ table: uniq_overlaps_pk
+│   │ set: a, b, c, d
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: uniq_overlaps_pk@uniq_overlaps_pk_pkey
+│                 spans: [/5 - /5]
+│                 locking strength: for update
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (b, c) = (b_new, c_new)
+│           │ right cols are key
+│           │ pred: a_new != a
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: uniq_overlaps_pk@uniq_overlaps_pk_pkey
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 label: buffer 1
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (c, d) = (c_new, d_new)
+│           │ right cols are key
+│           │ pred: (a_new != a) OR (b_new != b)
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: uniq_overlaps_pk@uniq_overlaps_pk_pkey
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (semi)
+            │ table: uniq_overlaps_pk@uniq_overlaps_pk_pkey
+            │ equality: (a_new) = (a)
+            │ pred: b_new != b
             │
             └── • scan buffer
                   label: buffer 1

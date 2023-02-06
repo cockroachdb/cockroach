@@ -1571,7 +1571,7 @@ ALTER TABLE unique_without_index ADD CONSTRAINT my_unique_e UNIQUE WITHOUT INDEX
 ALTER TABLE unique_without_index ADD CONSTRAINT my_unique_e2 UNIQUE WITHOUT INDEX (e) NOT VALID
 
 # Trying to validate one of the constraints will fail.
-statement error pgcode 23505 pq: could not create unique constraint "my_unique_e"\nDETAIL: Key \(e\)=\(1\) is duplicated\.
+statement error pgcode 23505 pq: could not create unique constraint ".*"\nDETAIL: Key \(e\)=\(1\) is duplicated\.
 ALTER TABLE unique_without_index VALIDATE CONSTRAINT my_unique_e
 
 # But after we delete a row, validation should succeed.
@@ -1632,7 +1632,7 @@ statement ok
 ALTER TABLE unique_without_index_partial ADD CONSTRAINT uniq_a_1 UNIQUE WITHOUT INDEX (a) WHERE b > 0 OR c > 0 NOT VALID
 
 # Trying to validate the constraint will fail.
-statement error pgcode 23505 pq: could not create unique constraint "uniq_a_1"\nDETAIL: Key \(a\)=\(1\) is duplicated\.
+statement error pgcode 23505 pq: could not create unique constraint ".*"\nDETAIL: Key \(a\)=\(1\) is duplicated\.
 ALTER TABLE unique_without_index_partial VALIDATE CONSTRAINT uniq_a_1
 
 # But after we delete a row, validation should succeed.
@@ -2903,3 +2903,40 @@ t_96115     t_96115_pkey     PRIMARY KEY      true
 
 statement ok
 DROP TABLE t_96115;
+
+# This subtest tests the behavior of adding/dropping a constraint and validating
+# the constraint in one ALTER TABLE statement.
+
+subtest 96648
+
+statement ok
+CREATE TABLE t_96648 (i INT PRIMARY KEY);
+
+statement error pq: constraint "check_i" in the middle of being added, try again later
+ALTER TABLE t_96648 ADD CONSTRAINT check_i CHECK (i > 0), VALIDATE CONSTRAINT check_i;
+
+statement ok
+ALTER TABLE t_96648 ADD CONSTRAINT check_i CHECK (i > 0);
+
+# Ensure check "check_i" is successfully added.
+statement error pq: failed to satisfy CHECK constraint \(i > 0:::INT8\)
+INSERT INTO t_96648 VALUES (0);
+
+statement ok
+ALTER TABLE t_96648 ADD CONSTRAINT check_i1 CHECK (i > 10) NOT VALID, VALIDATE CONSTRAINT check_i1;
+
+# Ensure check "check_i2" is successfully added.
+statement error pq: failed to satisfy CHECK constraint \(i > 10:::INT8\)
+INSERT INTO t_96648 VALUES (5)
+
+statement error pgcode 42704 constraint "check_i" of relation "t_96648" does not exist
+ALTER TABLE t_96648 DROP CONSTRAINT check_i, VALIDATE CONSTRAINT check_i;
+
+statement error pgcode 42704 constraint "check_i1" of relation "t_96648" does not exist
+ALTER TABLE t_96648 DROP CONSTRAINT check_i1, VALIDATE CONSTRAINT check_i1;
+
+statement ok
+ALTER TABLE t_96648 DROP CONSTRAINT check_i, DROP CONSTRAINT check_i1;
+
+statement ok
+DROP TABLE t_96648
