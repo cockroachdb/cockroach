@@ -197,5 +197,4 @@ func stmtSupportedInCurrentClusterVersion(b BuildCtx, n tree.Statement) bool {
 	}
 	minSupportedClusterVersion := supportedStatements[reflect.TypeOf(n)].minSupportedClusterVersion
 	return b.EvalCtx().Settings.Version.IsActive(b, minSupportedClusterVersion)
-
 }

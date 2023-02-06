@@ -185,11 +185,16 @@ func checkIsConstraintDependent(e scpb.Element) error {
 	return nil
 }
 
-// Assert that any element with a "ConstraintID" attr is either a constraint
-// or a constraintDependent.
-// If it's a constraint, then
-//   - it's either a NonIndexBackedConstraint or isIndex
-//   - it's either a CrossDescriptorConstraint or it does not a referencedDescID|ReferencedSequenceIDs|ReferencedTypeIDs attr
+// Assert the following partitions about constraints:
+//  1. An element `e` with ConstraintID attr is either a constraint
+//     or a constraint dependent.
+//  2. A constraint is either index-backed or non-index-backed.
+//
+// TODO (xiang): Add test for cross-descriptor partition. We currently
+// cannot have them until we added referenced.*ID attr for
+// UniqueWithoutIndex[NotValid] element, which is required to support
+// partial unique without index constraint with a predicate that references
+// other descriptors.
 func checkConstraintPartitions(e scpb.Element) error {
 	_, err := screl.Schema.GetAttribute(screl.ConstraintID, e)
 	if err != nil {
@@ -199,27 +204,10 @@ func checkConstraintPartitions(e scpb.Element) error {
 		return errors.New("has ConstraintID attr but is not a constraint nor a constraint dependent")
 	}
 	if isConstraintDependent(e) {
-		// The checks below only apply to constraints, so skip constraint dependents.
 		return nil
 	}
-	if isNonIndexBackedConstraint(e) == isIndex(e) {
-		if isIndex(e) {
-			return errors.New("verifies both isIndex and isNonIndexBackedConstraint")
-		} else {
-			return errors.New("doesn't verify isIndex nor isNonIndexBackedConstraint")
-		}
-	}
-	_, err1 := screl.Schema.GetAttribute(screl.ReferencedDescID, e)
-	_, err2 := screl.Schema.GetAttribute(screl.ReferencedSequenceIDs, e)
-	_, err3 := screl.Schema.GetAttribute(screl.ReferencedTypeIDs, e)
-	if isCrossDescriptorConstraint(e) {
-		if err1 != nil && err2 != nil && err3 != nil {
-			return errors.New("verifies isCrossDescriptorConstraint but does not have a Referenced.*ID attr")
-		}
-	} else {
-		if err1 == nil || err2 == nil || err3 == nil {
-			return errors.New("doesn't verify isCrossDescriptorConstraint but has a Referenced.*ID attr")
-		}
+	if !isNonIndexBackedConstraint(e) && !isIndex(e) {
+		return errors.New("verifies isConstraint but does not verify isNonIndexBackedConstraint nor isIndex")
 	}
 	return nil
 }

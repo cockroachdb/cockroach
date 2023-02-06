@@ -29,7 +29,7 @@ COMMENT ON CONSTRAINT fk_customers ON defaultdb.shipments IS 'customer is not go
 ops
 DROP TABLE defaultdb.shipments CASCADE;
 ----
-StatementPhase stage 1 of 1 with 5 MutationType ops
+StatementPhase stage 1 of 1 with 7 MutationType ops
   transitions:
     [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}, ABSENT], PUBLIC] -> VALIDATED
     [[ConstraintWithoutIndexName:{DescID: 109, Name: fk_customers, ConstraintID: 2}, ABSENT], PUBLIC] -> ABSENT
@@ -55,8 +55,14 @@ StatementPhase stage 1 of 1 with 5 MutationType ops
     [[ColumnName:{DescID: 111, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
   ops:
+    *scop.MakePublicForeignKeyConstraintValidated
+      ConstraintID: 2
+      TableID: 109
     *scop.RemoveConstraintComment
       ConstraintID: 2
+      TableID: 109
+    *scop.MakePublicForeignKeyConstraintValidated
+      ConstraintID: 3
       TableID: 109
     *scop.MarkDescriptorAsDropped
       DescriptorID: 111
@@ -101,7 +107,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 47 MutationType ops
+PreCommitPhase stage 2 of 2 with 49 MutationType ops
   transitions:
     [[Namespace:{DescID: 109, Name: shipments, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
@@ -181,8 +187,14 @@ PreCommitPhase stage 2 of 2 with 47 MutationType ops
     [[ColumnName:{DescID: 111, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
   ops:
+    *scop.MakePublicForeignKeyConstraintValidated
+      ConstraintID: 2
+      TableID: 109
     *scop.RemoveConstraintComment
       ConstraintID: 2
+      TableID: 109
+    *scop.MakePublicForeignKeyConstraintValidated
+      ConstraintID: 3
       TableID: 109
     *scop.MarkDescriptorAsDropped
       DescriptorID: 110
@@ -1481,11 +1493,14 @@ CREATE TABLE defaultdb.greeter (
 ops
 DROP TABLE defaultdb.greeter
 ----
-StatementPhase stage 1 of 1 with no ops
+StatementPhase stage 1 of 1 with 1 MutationType op
   transitions:
     [[CheckConstraint:{DescID: 114, ReferencedTypeIDs: [112 113], IndexID: 0, ConstraintID: 2}, ABSENT], PUBLIC] -> VALIDATED
     [[ConstraintWithoutIndexName:{DescID: 114, Name: check, ConstraintID: 2}, ABSENT], PUBLIC] -> ABSENT
-  no ops
+  ops:
+    *scop.MakePublicCheckConstraintValidated
+      ConstraintID: 2
+      TableID: 114
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
     [[CheckConstraint:{DescID: 114, ReferencedTypeIDs: [112 113], IndexID: 0, ConstraintID: 2}, ABSENT], VALIDATED] -> PUBLIC
@@ -1493,7 +1508,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 23 MutationType ops
+PreCommitPhase stage 2 of 2 with 24 MutationType ops
   transitions:
     [[Namespace:{DescID: 114, Name: greeter, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 114}, ABSENT], PUBLIC] -> ABSENT
@@ -1534,6 +1549,9 @@ PreCommitPhase stage 2 of 2 with 23 MutationType ops
     [[CheckConstraint:{DescID: 114, ReferencedTypeIDs: [112 113], IndexID: 0, ConstraintID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ConstraintWithoutIndexName:{DescID: 114, Name: check, ConstraintID: 2}, ABSENT], PUBLIC] -> ABSENT
   ops:
+    *scop.MakePublicCheckConstraintValidated
+      ConstraintID: 2
+      TableID: 114
     *scop.RemoveCheckConstraint
       ConstraintID: 2
       TableID: 114

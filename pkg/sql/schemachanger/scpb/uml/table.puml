@@ -90,6 +90,13 @@ UniqueWithoutIndexConstraint : []ColumnIDs
 UniqueWithoutIndexConstraint :  Predicate
 UniqueWithoutIndexConstraint :  IndexIDForValidation
 
+object UniqueWithoutIndexConstraintUnvalidated
+
+UniqueWithoutIndexConstraintUnvalidated :  TableID
+UniqueWithoutIndexConstraintUnvalidated :  ConstraintID
+UniqueWithoutIndexConstraintUnvalidated : []ColumnIDs
+UniqueWithoutIndexConstraintUnvalidated :  Predicate
+
 object CheckConstraint
 
 CheckConstraint :  TableID
@@ -98,6 +105,13 @@ CheckConstraint : []ColumnIDs
 CheckConstraint :  Expression
 CheckConstraint :  FromHashShardedColumn
 CheckConstraint :  IndexIDForValidation
+
+object CheckConstraintUnvalidated
+
+CheckConstraintUnvalidated :  TableID
+CheckConstraintUnvalidated :  ConstraintID
+CheckConstraintUnvalidated : []ColumnIDs
+CheckConstraintUnvalidated :  Expression
 
 object ForeignKeyConstraint
 
@@ -110,6 +124,17 @@ ForeignKeyConstraint :  OnUpdateAction
 ForeignKeyConstraint :  OnDeleteAction
 ForeignKeyConstraint :  CompositeKeyMatchMethod
 ForeignKeyConstraint :  IndexIDForValidation
+
+object ForeignKeyConstraintUnvalidated
+
+ForeignKeyConstraintUnvalidated :  TableID
+ForeignKeyConstraintUnvalidated :  ConstraintID
+ForeignKeyConstraintUnvalidated : []ColumnIDs
+ForeignKeyConstraintUnvalidated :  ReferencedTableID
+ForeignKeyConstraintUnvalidated : []ReferencedColumnIDs
+ForeignKeyConstraintUnvalidated :  OnUpdateAction
+ForeignKeyConstraintUnvalidated :  OnDeleteAction
+ForeignKeyConstraintUnvalidated :  CompositeKeyMatchMethod
 
 object TableComment
 
@@ -368,8 +393,11 @@ View <|-- SecondaryIndex
 Table <|-- TemporaryIndex
 View <|-- TemporaryIndex
 Table <|-- UniqueWithoutIndexConstraint
+Table <|-- UniqueWithoutIndexConstraintUnvalidated
 Table <|-- CheckConstraint
+Table <|-- CheckConstraintUnvalidated
 Table <|-- ForeignKeyConstraint
+Table <|-- ForeignKeyConstraintUnvalidated
 Table <|-- TableComment
 View <|-- TableComment
 Sequence <|-- TableComment

@@ -21,7 +21,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t1 ADD FOREIGN KEY (i) REFERENCES t2(i);
 │       │
 │       └── • 1 Mutation operation
 │           │
-│           └── • MakeAbsentForeignKeyConstraintWriteOnly
+│           └── • AddForeignKeyConstraint
 │                 ColumnIDs:
 │                 - 1
 │                 ConstraintID: 2
@@ -29,6 +29,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t1 ADD FOREIGN KEY (i) REFERENCES t2(i);
 │                 - 1
 │                 ReferencedTableID: 105
 │                 TableID: 104
+│                 Validity: 2
 │
 ├── • PreCommitPhase
 │   │
@@ -56,7 +57,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t1 ADD FOREIGN KEY (i) REFERENCES t2(i);
 │       │
 │       └── • 4 Mutation operations
 │           │
-│           ├── • MakeAbsentForeignKeyConstraintWriteOnly
+│           ├── • AddForeignKeyConstraint
 │           │     ColumnIDs:
 │           │     - 1
 │           │     ConstraintID: 2
@@ -64,6 +65,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t1 ADD FOREIGN KEY (i) REFERENCES t2(i);
 │           │     - 1
 │           │     ReferencedTableID: 105
 │           │     TableID: 104
+│           │     Validity: 2
 │           │
 │           ├── • SetJobStateOnDescriptor
 │           │     DescriptorID: 104
@@ -116,7 +118,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t1 ADD FOREIGN KEY (i) REFERENCES t2(i);
         │   │   │     rule: "ForeignKeyConstraint transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC"
         │   │   │
         │   │   └── • SameStagePrecedence dependency from PUBLIC ConstraintWithoutIndexName:{DescID: 104, Name: t1_i_fkey, ConstraintID: 2}
-        │   │         rule: "constraint dependent public right before constraint"
+        │   │         rule: "constraint dependent public right before complex constraint"
         │   │
         │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: t1_i_fkey, ConstraintID: 2}
         │         ABSENT → PUBLIC

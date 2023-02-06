@@ -88,7 +88,7 @@ func init() {
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.Type((*scpb.Table)(nil)),
-				to.TypeFilter(rulesVersionKey, isNonIndexBackedConstraint, Not(isCrossDescriptorConstraint)),
+				to.TypeFilter(rulesVersionKey, isNonIndexBackedConstraint, isSubjectTo2VersionInvariant, Not(isNonIndexBackedCrossDescriptorConstraint)),
 				JoinOnDescID(from, to, "desc-id"),
 				StatusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_VALIDATED),
 			}
@@ -239,7 +239,7 @@ func init() {
 		"cross-desc-constraint", "referenced-descriptor",
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.TypeFilter(rulesVersionKey, isCrossDescriptorConstraint),
+				from.TypeFilter(rulesVersionKey, isNonIndexBackedCrossDescriptorConstraint, isSubjectTo2VersionInvariant),
 				to.TypeFilter(rulesVersionKey, isDescriptor),
 				JoinReferencedDescID(from, to, "desc-id"),
 				StatusesToAbsent(from, scpb.Status_ABSENT, to, scpb.Status_DROPPED),
@@ -253,7 +253,7 @@ func init() {
 		"cross-desc-constraint", "referencing-descriptor",
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.TypeFilter(rulesVersionKey, isCrossDescriptorConstraint),
+				from.TypeFilter(rulesVersionKey, isNonIndexBackedCrossDescriptorConstraint, isSubjectTo2VersionInvariant),
 				to.TypeFilter(rulesVersionKey, isDescriptor),
 				JoinOnDescID(from, to, "desc-id"),
 				StatusesToAbsent(from, scpb.Status_ABSENT, to, scpb.Status_DROPPED),
