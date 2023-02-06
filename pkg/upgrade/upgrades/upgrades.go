@@ -263,6 +263,11 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		deleteDescriptorsOfDroppedFunctions,
 	),
+	upgrade.NewPermanentTenantUpgrade("create jobs metrics polling job",
+		toCV(clusterversion.V23_1_CreateJobsMetricsPollingJob),
+		createJobsMetricsPollingJob,
+		"create jobs metrics polling job",
+	),
 }
 
 func init() {

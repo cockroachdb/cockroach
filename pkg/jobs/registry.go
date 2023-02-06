@@ -289,6 +289,9 @@ const (
 	// KeyVisualizerJobID A static job ID is used to easily check if the
 	// Key Visualizer job already exists.
 	KeyVisualizerJobID = jobspb.JobID(100)
+
+	// JobMetricsPollerJobID A static job ID is used for the job metrics polling job.
+	JobMetricsPollerJobID = jobspb.JobID(101)
 )
 
 // MakeJobID generates a new job ID.
@@ -1131,6 +1134,83 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 			}
 		}
 	})
+}
+
+// PollMetricsTask polls the jobs table for certain metrics at an interval.
+func (r *Registry) PollMetricsTask(ctx context.Context) error {
+	var err error
+	t := timeutil.NewTimer()
+	defer t.Stop()
+	updateMetrics := func(ctx context.Context, s sqlliveness.Session) {
+		for {
+			t.Reset(PollJobsMetricsInterval.Get(&r.settings.SV))
+			select {
+			case <-ctx.Done():
+				err = ctx.Err()
+				return
+			case <-t.C:
+				t.Read = true
+				if err = r.updatePausedMetrics(ctx, s); err != nil {
+					log.Errorf(ctx, "failed to update paused metrics: %v", err)
+					return
+				}
+			}
+		}
+	}
+	r.withSession(ctx, updateMetrics)
+	return err
+}
+
+const pausedJobsCountQuery = string(`
+	SELECT job_type, count(*)
+	FROM system.jobs
+	WHERE status = '` + StatusPaused + `' 
+  GROUP BY job_type`)
+
+func (r *Registry) updatePausedMetrics(ctx context.Context, s sqlliveness.Session) error {
+	var metricUpdates map[jobspb.Type]int
+	err := r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		// In case of transaction retries, reset this map here.
+		metricUpdates = make(map[jobspb.Type]int)
+
+		// Run the claim transaction at low priority to ensure that it does not
+		// contend with foreground reads.
+		if err := txn.KV().SetUserPriority(roachpb.MinUserPriority); err != nil {
+			return err
+		}
+		rows, err := txn.QueryBufferedEx(
+			ctx, "poll-jobs-metrics-job", txn.KV(), sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
+			pausedJobsCountQuery, s.ID().UnsafeBytes(), r.ID(),
+		)
+		if err != nil {
+			return errors.Wrap(err, "could not query jobs table")
+		}
+
+		for _, row := range rows {
+			typeString := *row[0].(*tree.DString)
+			count := *row[1].(*tree.DInt)
+			typ, err := jobspb.TypeFromString(string(typeString))
+			if err != nil {
+				return err
+			}
+			metricUpdates[typ] = int(count)
+		}
+
+		return nil
+	})
+	if err == nil {
+		for _, v := range jobspb.Type_value {
+			if r.metrics.JobMetrics[v] != nil {
+				if _, ok := metricUpdates[jobspb.Type(v)]; ok {
+					r.metrics.JobMetrics[v].CurrentlyPaused.Update(int64(metricUpdates[jobspb.Type(v)]))
+				} else {
+					r.metrics.JobMetrics[v].CurrentlyPaused.Update(0)
+				}
+			}
+		}
+	}
+
+	return err
 }
 
 func (r *Registry) maybeCancelJobs(ctx context.Context, s sqlliveness.Session) {
