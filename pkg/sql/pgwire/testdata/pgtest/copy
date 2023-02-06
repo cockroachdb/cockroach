@@ -48,6 +48,22 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"SELECT 4"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
+send
+Query {"String": "COPY (SELECT * FROM t) TO STDOUT"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CopyOutResponse","ColumnFormatCodes":[0,0]}
+{"Type":"CopyData","Data":"3109626c61680a"}
+{"Type":"CopyData","Data":"32090a"}
+{"Type":"CopyData","Data":"33095c4e0a"}
+{"Type":"CopyData","Data":"340922220a"}
+{"Type":"CopyDone"}
+{"Type":"CommandComplete","CommandTag":"COPY 4"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
 # Extra fields.
 
 send crdb_only
