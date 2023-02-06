@@ -288,7 +288,11 @@ func formatExprForDisplayImpl(
 	if err != nil {
 		return "", err
 	}
-	f := tree.NewFmtCtx(fmtFlags, tree.FmtDataConversionConfig(sessionData.DataConversionConfig))
+	f := tree.NewFmtCtx(
+		fmtFlags,
+		tree.FmtDataConversionConfig(sessionData.DataConversionConfig),
+		tree.FmtLocation(sessionData.Location),
+	)
 	_, isFunc := expr.(*tree.FuncExpr)
 	if wrapNonFuncExprs && !isFunc {
 		f.WriteByte('(')
