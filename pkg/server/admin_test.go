@@ -714,7 +714,7 @@ func TestAdminAPITableDetails(t *testing.T) {
 		name, dbName, tblName, pkName string
 	}{
 		{name: "lower", dbName: "test", tblName: "tbl", pkName: "tbl_pkey"},
-		{name: "lower", dbName: "test", tblName: `testschema.tbl`, pkName: "tbl_pkey"},
+		{name: "lower other schema", dbName: "test", tblName: `testschema.tbl`, pkName: "tbl_pkey"},
 		{name: "lower with space", dbName: "test test", tblName: `"tbl tbl"`, pkName: "tbl tbl_pkey"},
 		{name: "upper", dbName: "TEST", tblName: `"TBL"`, pkName: "TBL_pkey"}, // Regression test for issue #14056
 	} {
@@ -778,7 +778,7 @@ func TestAdminAPITableDetails(t *testing.T) {
 				{Name: "nulls_allowed", Type: "INT8", Nullable: true, DefaultValue: ""},
 				{Name: "nulls_not_allowed", Type: "INT8", Nullable: false, DefaultValue: "1000"},
 				{Name: "default2", Type: "INT8", Nullable: true, DefaultValue: "2"},
-				{Name: "string_default", Type: "STRING", Nullable: true, DefaultValue: "default_string"},
+				{Name: "string_default", Type: "STRING", Nullable: true, DefaultValue: "'default_string'"},
 				{Name: "rowid", Type: "INT8", Nullable: false, DefaultValue: "unique_rowid()", Hidden: true},
 			}
 			testutils.SortStructs(expColumns, "Name")

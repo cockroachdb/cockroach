@@ -536,8 +536,8 @@ WHERE
 ORDER BY
   column_name
 ----
-y  hello
-z  hello IS OF (test.public.greeting, test.public.greeting)
+y  'hello'
+z  'hello' IS OF (test.public.greeting, test.public.greeting)
 
 # Test computed columns with enum values.
 statement ok
