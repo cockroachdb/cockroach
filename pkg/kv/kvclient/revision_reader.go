@@ -29,60 +29,84 @@ type VersionedValues struct {
 
 // GetAllRevisions scans all keys between startKey and endKey getting all
 // revisions between startTime and endTime.
-// TODO(dt): if/when client gets a ScanRevisionsRequest or similar, use that.
 func GetAllRevisions(
-	ctx context.Context, db *kv.DB, startKey, endKey roachpb.Key, startTime, endTime hlc.Timestamp,
-) ([]VersionedValues, error) {
-	// TODO(dt): version check.
-	header := roachpb.Header{Timestamp: endTime}
-	req := &roachpb.ExportRequest{
-		RequestHeader: roachpb.RequestHeader{Key: startKey, EndKey: endKey},
-		StartTime:     startTime,
-		MVCCFilter:    roachpb.MVCCFilter_All,
-	}
-	resp, pErr := kv.SendWrappedWith(ctx, db.NonTransactionalSender(), header, req)
-	if pErr != nil {
-		return nil, pErr.GoError()
-	}
-
-	var res []VersionedValues
-	for _, file := range resp.(*roachpb.ExportResponse).Files {
-		iterOpts := storage.IterOptions{
-			KeyTypes:   storage.IterKeyTypePointsOnly,
-			LowerBound: file.Span.Key,
-			UpperBound: file.Span.EndKey,
+	ctx context.Context,
+	db *kv.DB,
+	startKey, endKey roachpb.Key,
+	startTime, endTime hlc.Timestamp,
+	allRevs chan []VersionedValues,
+) error {
+	for {
+		header := roachpb.Header{Timestamp: endTime}
+		req := &roachpb.ExportRequest{
+			RequestHeader: roachpb.RequestHeader{Key: startKey, EndKey: endKey},
+			StartTime:     startTime,
+			MVCCFilter:    roachpb.MVCCFilter_All,
 		}
-		iter, err := storage.NewMemSSTIterator(file.SST, true, iterOpts)
-		if err != nil {
-			return nil, err
+		resp, pErr := kv.SendWrappedWith(ctx, db.NonTransactionalSender(), header, req)
+		if pErr != nil {
+			return pErr.GoError()
 		}
-		defer iter.Close()
-		iter.SeekGE(storage.MVCCKey{Key: startKey})
 
-		for ; ; iter.Next() {
-			if valid, err := iter.Valid(); !valid || err != nil {
-				if err != nil {
-					return nil, err
-				}
-				break
-			} else if iter.UnsafeKey().Key.Compare(endKey) >= 0 {
-				break
+		exportResp := resp.(*roachpb.ExportResponse)
+		var res []VersionedValues
+		for _, file := range exportResp.Files {
+			iterOpts := storage.IterOptions{
+				KeyTypes:   storage.IterKeyTypePointsOnly,
+				LowerBound: file.Span.Key,
+				UpperBound: file.Span.EndKey,
 			}
-			key := iter.UnsafeKey()
-			keyCopy := make([]byte, len(key.Key))
-			copy(keyCopy, key.Key)
-			key.Key = keyCopy
-			v, err := iter.UnsafeValue()
+			iter, err := storage.NewMemSSTIterator(file.SST, true, iterOpts)
 			if err != nil {
-				return nil, err
+				return err
 			}
-			value := make([]byte, len(v))
-			copy(value, v)
-			if len(res) == 0 || !res[len(res)-1].Key.Equal(key.Key) {
-				res = append(res, VersionedValues{Key: key.Key})
+			defer func() {
+				if iter != nil {
+					iter.Close()
+				}
+			}()
+			iter.SeekGE(storage.MVCCKey{Key: startKey})
+
+			for ; ; iter.Next() {
+				if valid, err := iter.Valid(); !valid || err != nil {
+					if err != nil {
+						return err
+					}
+					break
+				} else if iter.UnsafeKey().Key.Compare(endKey) >= 0 {
+					break
+				}
+				key := iter.UnsafeKey()
+				keyCopy := make([]byte, len(key.Key))
+				copy(keyCopy, key.Key)
+				key.Key = keyCopy
+				v, err := iter.UnsafeValue()
+				if err != nil {
+					return err
+				}
+				value := make([]byte, len(v))
+				copy(value, v)
+				if len(res) == 0 || !res[len(res)-1].Key.Equal(key.Key) {
+					res = append(res, VersionedValues{Key: key.Key})
+				}
+				res[len(res)-1].Values = append(res[len(res)-1].Values, roachpb.Value{Timestamp: key.Timestamp, RawBytes: value})
 			}
-			res[len(res)-1].Values = append(res[len(res)-1].Values, roachpb.Value{Timestamp: key.Timestamp, RawBytes: value})
+
+			// Close and nil out the iter to release the underlying resources.
+			iter.Close()
+			iter = nil
 		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case allRevs <- res:
+		}
+
+		// Check if the ExportRequest paginated with a resume span.
+		if exportResp.ResumeSpan == nil {
+			return nil
+		}
+		startKey = exportResp.ResumeSpan.Key
 	}
-	return res, nil
 }
