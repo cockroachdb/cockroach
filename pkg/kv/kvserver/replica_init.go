@@ -42,9 +42,9 @@ const (
 	mergeQueueThrottleDuration = 5 * time.Second
 )
 
-// loadInitializedReplica loads and constructs an initialized Replica, after
-// checking its invariants.
-func loadInitializedReplica(
+// loadInitializedReplicaForTesting loads and constructs an initialized Replica,
+// after checking its invariants.
+func loadInitializedReplicaForTesting(
 	ctx context.Context, store *Store, desc *roachpb.RangeDescriptor, replicaID roachpb.ReplicaID,
 ) (*Replica, error) {
 	if !desc.IsInitialized() {
@@ -180,7 +180,7 @@ func (r *Replica) setStartKeyLocked(startKey roachpb.RKey) {
 // loaded from storage. Must not be called more than once on a Replica.
 //
 // This method is called in:
-// - loadInitializedReplica, to finalize creating an initialized replica;
+// - loadInitializedReplicaForTesting, to finalize creating an initialized replica;
 // - splitPostApply, to initialize a previously uninitialized replica.
 func (r *Replica) initRaftMuLockedReplicaMuLocked(s kvstorage.LoadedReplicaState) error {
 	if err := s.Check(r.StoreID()); err != nil {

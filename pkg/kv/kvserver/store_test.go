@@ -546,7 +546,7 @@ func createReplica(s *Store, rangeID roachpb.RangeID, start, end roachpb.RKey) *
 	); err != nil {
 		panic(err)
 	}
-	r, err := loadInitializedReplica(ctx, s, desc, replicaID)
+	r, err := loadInitializedReplicaForTesting(ctx, s, desc, replicaID)
 	if err != nil {
 		panic(err)
 	}
