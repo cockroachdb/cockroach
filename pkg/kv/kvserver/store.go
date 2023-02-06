@@ -1861,10 +1861,12 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			// Uninitialized Replicas are not currently instantiated at store start.
 			continue
 		}
-		// TODO(sep-raft-log): construct the loaded Replica state directly in
-		// LoadAndReconcileReplicas, which loads and checks most of it already, then
-		// feed it to Replica creation, to avoid double-loading.
-		rep, err := loadInitializedReplica(ctx, s, repl.Desc, repl.ReplicaID)
+		// TODO(pavelkalinnikov): integrate into kvstorage.LoadAndReconcileReplicas.
+		state, err := repl.Load(ctx, s.Engine())
+		if err != nil {
+			return err
+		}
+		rep, err := newInitializedReplica(s, state)
 		if err != nil {
 			return err
 		}

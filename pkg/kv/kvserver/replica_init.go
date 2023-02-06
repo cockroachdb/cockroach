@@ -54,12 +54,17 @@ func loadInitializedReplica(
 	if err != nil {
 		return nil, err
 	}
-	r := newUninitializedReplica(store, desc.RangeID, replicaID)
+	return newInitializedReplica(store, state)
+}
+
+// newInitializedReplica creates an initialized Replica from its loaded state.
+func newInitializedReplica(store *Store, loaded kvstorage.LoadedReplicaState) (*Replica, error) {
+	r := newUninitializedReplica(store, loaded.ReplState.Desc.RangeID, loaded.ReplicaID)
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if err := r.initRaftMuLockedReplicaMuLocked(state); err != nil {
+	if err := r.initRaftMuLockedReplicaMuLocked(loaded); err != nil {
 		return nil, err
 	}
 	return r, nil
