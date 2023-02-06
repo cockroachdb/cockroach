@@ -17,7 +17,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"io/ioutil"
 	"math"
 	"os"
 	"os/exec"
@@ -1992,16 +1991,20 @@ func (c *SyncedCluster) Get(l *logger.Logger, nodes Nodes, src, dest string) err
 							return err
 						}
 
-						infos, err := ioutil.ReadDir(src)
+						infos, err := os.ReadDir(src)
 						if err != nil {
 							return err
 						}
 
-						for _, info := range infos {
+						for _, dirEntry := range infos {
+							fileInfo, err := dirEntry.Info()
+							if err != nil {
+								return err
+							}
 							if err := copy(
-								filepath.Join(src, info.Name()),
-								filepath.Join(dest, info.Name()),
-								info,
+								filepath.Join(src, fileInfo.Name()),
+								filepath.Join(dest, fileInfo.Name()),
+								fileInfo,
 							); err != nil {
 								return err
 							}
