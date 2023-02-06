@@ -89,7 +89,7 @@ func TestAllocatorSimulatorSpeed(t *testing.T) {
 			replicaDistribution[i] = 0
 		}
 
-		s := state.NewTestStateReplDistribution(replicaDistribution, ranges, replsPerRange, keyspace)
+		s := state.NewStateWithDistribution(replicaDistribution, ranges, replsPerRange, keyspace, settings)
 		sim := asim.NewSimulator(duration, rwg, s, settings, m)
 
 		startTime := timeutil.Now()
@@ -158,7 +158,7 @@ func TestAllocatorSimulatorDeterministic(t *testing.T) {
 			replicaDistribution[i] = 0
 		}
 
-		s := state.NewTestStateReplDistribution(replicaDistribution, ranges, replsPerRange, keyspace)
+		s := state.NewStateWithDistribution(replicaDistribution, ranges, replsPerRange, keyspace, settings)
 		sim := asim.NewSimulator(duration, rwg, s, settings, m)
 
 		ctx := context.Background()

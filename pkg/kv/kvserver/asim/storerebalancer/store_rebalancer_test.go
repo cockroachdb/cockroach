@@ -42,6 +42,8 @@ func TestStoreRebalancer(t *testing.T) {
 	testSettings.ReplicaChangeBaseDelay = 5 * time.Second
 	testSettings.StateExchangeDelay = 0
 
+	clusterInfo := state.ClusterInfoWithStoreCount(6)
+
 	// NB: We trigger lease rebalancing in this test, where the end result
 	// should be a perfectly balanced QPS of 500 per store. We only simulate
 	// store 1, it has an available replica on every store, it can transfer a
@@ -60,27 +62,15 @@ func TestStoreRebalancer(t *testing.T) {
 	//     transfer r4(1->4),  1500
 	//     transfer r5(1->5),  1000
 	//     transfer r6(1->6),  500
-	leaseState := state.NewTestState(
-		6, /* nodes */
-		1, /* stores per node */
-		[]state.Key{
-			/* range start keys */
-			100, 200, 300, 400, 500, 600,
-		},
-		map[state.Key][]state.StoreID{
-			/* rangekey -> repliica placement */
-			100: {1, 2, 3},
-			200: {1, 3, 4},
-			300: {1, 4, 5},
-			400: {1, 5, 6},
-			500: {1, 6, 2},
-			600: {1, 2, 3},
-		},
-		map[state.Key]state.StoreID{
-			/* rangekey -> leaseholder */
-			100: 1, 200: 1, 300: 1, 400: 1, 500: 1, 600: 1,
-		},
-	)
+	leaseRangesInfo := state.RangesInfo{
+		state.RangeInfoWithReplicas(100, []state.StoreID{1, 2, 3}, 1, nil),
+		state.RangeInfoWithReplicas(200, []state.StoreID{1, 3, 4}, 1, nil),
+		state.RangeInfoWithReplicas(300, []state.StoreID{1, 4, 5}, 1, nil),
+		state.RangeInfoWithReplicas(400, []state.StoreID{1, 5, 6}, 1, nil),
+		state.RangeInfoWithReplicas(500, []state.StoreID{1, 6, 2}, 1, nil),
+		state.RangeInfoWithReplicas(600, []state.StoreID{1, 2, 3}, 1, nil),
+	}
+	leaseState := state.LoadConfig(clusterInfo, leaseRangesInfo, testSettings)
 	for i := 2; i < 8; i++ {
 		state.TestingSetRangeQPS(leaseState, state.RangeID(i), 500)
 	}
@@ -98,27 +88,15 @@ func TestStoreRebalancer(t *testing.T) {
 	//   - expect
 	//     relocate r2([1,2,3]->[4,5,6]), 2400
 	//     relocate r3([1,2,3]->[4,5,6]), 1600
-	rangeState := state.NewTestState(
-		6, /* nodes */
-		1, /* stores per node */
-		[]state.Key{
-			/* range start keys */
-			100, 200, 300, 400, 500, 600,
-		},
-		map[state.Key][]state.StoreID{
-			/* rangekey -> repliica placement */
-			100: {1, 2, 3},
-			200: {1, 2, 3},
-			300: {1, 2, 3},
-			400: {1, 2, 3},
-			500: {1, 2, 3},
-			600: {1, 2, 3},
-		},
-		map[state.Key]state.StoreID{
-			/* rangekey -> leaseholder */
-			100: 1, 200: 1, 300: 1, 400: 1, 500: 2, 600: 3,
-		},
-	)
+	rangeRangesinfo := state.RangesInfo{
+		state.RangeInfoWithReplicas(100, []state.StoreID{1, 2, 3}, 1, nil),
+		state.RangeInfoWithReplicas(200, []state.StoreID{1, 2, 3}, 1, nil),
+		state.RangeInfoWithReplicas(300, []state.StoreID{1, 2, 3}, 1, nil),
+		state.RangeInfoWithReplicas(400, []state.StoreID{1, 2, 3}, 1, nil),
+		state.RangeInfoWithReplicas(500, []state.StoreID{1, 2, 3}, 2, nil),
+		state.RangeInfoWithReplicas(600, []state.StoreID{1, 2, 3}, 3, nil),
+	}
+	rangeState := state.LoadConfig(clusterInfo, rangeRangesinfo, testSettings)
 	for i := 2; i < 6; i++ {
 		state.TestingSetRangeQPS(rangeState, state.RangeID(i), 800)
 	}
@@ -281,7 +259,16 @@ func TestStoreRebalancerBalances(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 			ctx := context.Background()
-			s := state.NewTestStateReplDistribution([]float64{0.33, 0.33, 0.33}, 10, 3, 42)
+			s := state.NewStateWithDistribution([]float64{1, 0, 0}, 10, 3, 42, testSettings)
+			// NB: The leaseholder distribution influences the QPS of ranges
+			// when you wish to distribute QPS with a set count for each store.
+			// e.g. having 5 vs 1 leaseholder results in the QPS being 100 per
+			// range vs 500.  We are only interested in testing the store
+			// rebalancer on s1 and wish for the QPS per range to be calculated
+			// with 8 ranges on s1. Create 10 ranges, transfer the lease for a
+			// range to s2 and s3. This results in the desired QPS per range on
+			// s1 and the desired starting QPS counts on the other stores as
+			// well.
 			s.TransferLease(4, 2)
 			s.TransferLease(5, 3)
 			distributeQPS(s, tc.qpsCounts)

@@ -20,24 +20,34 @@ import (
 
 func TestLoadClusterInfo(t *testing.T) {
 	testCases := []struct {
-		desc              string
-		clusterInfo       ClusterInfo
-		expectedNodeCount int
+		desc               string
+		clusterInfo        ClusterInfo
+		expectedNodeCount  int
+		expectedStoreCount int
 	}{
 		{
-			desc:              "single region config",
-			clusterInfo:       SingleRegionConfig,
-			expectedNodeCount: 15,
+			desc:               "single region config",
+			clusterInfo:        SingleRegionConfig,
+			expectedNodeCount:  15,
+			expectedStoreCount: 15,
 		},
 		{
-			desc:              "multi region config",
-			clusterInfo:       MultiRegionConfig,
-			expectedNodeCount: 36,
+			desc:               "multi region config",
+			clusterInfo:        MultiRegionConfig,
+			expectedNodeCount:  36,
+			expectedStoreCount: 36,
 		},
 		{
-			desc:              "complex config",
-			clusterInfo:       ComplexConfig,
-			expectedNodeCount: 28,
+			desc:               "complex config",
+			clusterInfo:        ComplexConfig,
+			expectedNodeCount:  28,
+			expectedStoreCount: 28,
+		},
+		{
+			desc:               "single region multi-store config",
+			clusterInfo:        SingleRegionMultiStoreConfig,
+			expectedNodeCount:  3,
+			expectedStoreCount: 15,
 		},
 	}
 
@@ -45,6 +55,7 @@ func TestLoadClusterInfo(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			state := LoadClusterInfo(tc.clusterInfo, config.DefaultSimulationSettings())
 			require.Equal(t, tc.expectedNodeCount, len(state.Nodes()))
+			require.Equal(t, tc.expectedStoreCount, len(state.Stores()))
 		})
 	}
 }
@@ -92,7 +103,7 @@ func TestLoadRangesInfo(t *testing.T) {
 							},
 						},
 					},
-					Config:      defaultSpanConfig,
+					Config:      &defaultSpanConfig,
 					Leaseholder: 10,
 				},
 			},
@@ -116,7 +127,7 @@ func TestLoadRangesInfo(t *testing.T) {
 							},
 						},
 					},
-					Config:      defaultSpanConfig,
+					Config:      &defaultSpanConfig,
 					Leaseholder: 2,
 				},
 			},
@@ -140,7 +151,7 @@ func TestLoadRangesInfo(t *testing.T) {
 							},
 						},
 					},
-					Config:      defaultSpanConfig,
+					Config:      &defaultSpanConfig,
 					Leaseholder: 1,
 				},
 			},
