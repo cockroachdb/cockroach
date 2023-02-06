@@ -846,9 +846,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	// The collector requires nodeliveness to get a list of all the nodes in the
 	// cluster.
 	var getNodes func(ctx context.Context) ([]roachpb.NodeID, error)
-	var nodeDialer *nodedialer.Dialer
 	if isMixedSQLAndKVNode {
-		nodeDialer = cfg.nodeDialer
 		// TODO(dt): any reason not to just always use the instance reader? And just
 		// pass it directly instead of making a new closure here?
 		getNodes = func(ctx context.Context) ([]roachpb.NodeID, error) {
@@ -866,7 +864,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			return ns, nil
 		}
 	} else {
-		nodeDialer = cfg.podNodeDialer
 		getNodes = func(ctx context.Context) ([]roachpb.NodeID, error) {
 			instances, err := cfg.sqlInstanceReader.GetAllInstances(ctx)
 			if err != nil {
@@ -879,7 +876,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			return instanceIDs, err
 		}
 	}
-	traceCollector := collector.New(cfg.Tracer, getNodes, nodeDialer)
+	traceCollector := collector.New(cfg.Tracer, getNodes, cfg.podNodeDialer)
 	contentionMetrics := contention.NewMetrics()
 	cfg.registry.AddMetricStruct(contentionMetrics)
 
