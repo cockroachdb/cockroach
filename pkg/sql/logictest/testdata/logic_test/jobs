@@ -194,3 +194,9 @@ usage_count > 0
 ORDER BY feature_name DESC
 ----
 job.schema_change.successful
+
+# Ensure one POLL JOBS STATS job is running
+query I
+SELECT count(*) FROM [SHOW AUTOMATIC JOBS] WHERE job_type = 'POLL JOBS STATS' AND status = 'running'
+----
+1

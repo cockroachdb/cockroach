@@ -136,6 +136,7 @@ go_library(
         "inverted_join.go",
         "job_exec_context.go",
         "job_exec_context_test_util.go",
+        "job_statistics.go",
         "jobs_collection.go",
         "join.go",
         "join_predicate.go",
