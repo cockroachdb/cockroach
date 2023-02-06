@@ -296,7 +296,15 @@ func (s *adminServer) RegisterGateway(
 			http.Error(w, "invalid id", http.StatusBadRequest)
 			return
 		}
-		s.getStatementBundle(ctx, id, w)
+		// Add default user when running in Insecure mode because we don't
+		// retrieve the user from gRPC metadata (which falls back to `root`)
+		// but from HTTP metadata (which does not).
+		if s.sqlServer.cfg.Insecure {
+			ctx := req.Context()
+			ctx = context.WithValue(ctx, webSessionUserKey{}, username.RootUser)
+			req = req.WithContext(ctx)
+		}
+		s.getStatementBundle(req.Context(), id, w)
 	})
 
 	// Register the endpoints defined in the proto.
@@ -2612,14 +2620,10 @@ func (s *adminServer) QueryPlan(
 // getStatementBundle retrieves the statement bundle with the given id and
 // writes it out as an attachment.
 func (s *adminServer) getStatementBundle(ctx context.Context, id int64, w http.ResponseWriter) {
-	sessionUser, err := userFromIncomingRPCContext(ctx)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	sqlUsername := userFromHTTPAuthInfoContext(ctx)
 	row, err := s.internalExecutor.QueryRowEx(
 		ctx, "admin-stmt-bundle", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: sessionUser},
+		sessiondata.InternalExecutorOverride{User: sqlUsername},
 		"SELECT bundle_chunks FROM system.statement_diagnostics WHERE id=$1 AND bundle_chunks IS NOT NULL",
 		id,
 	)
@@ -2638,7 +2642,7 @@ func (s *adminServer) getStatementBundle(ctx context.Context, id int64, w http.R
 	for _, chunkID := range chunkIDs {
 		chunkRow, err := s.internalExecutor.QueryRowEx(
 			ctx, "admin-stmt-bundle", nil, /* txn */
-			sessiondata.InternalExecutorOverride{User: sessionUser},
+			sessiondata.InternalExecutorOverride{User: sqlUsername},
 			"SELECT data FROM system.statement_bundle_chunks WHERE id=$1",
 			chunkID,
 		)
