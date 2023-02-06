@@ -17,6 +17,7 @@ go_library(
         "//pkg/keys",
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/kv/kvserver/logstore",
+        "//pkg/kv/kvserver/rditer",
         "//pkg/kv/kvserver/stateloader",
         "//pkg/roachpb",
         "//pkg/storage",
