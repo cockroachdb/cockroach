@@ -156,21 +156,22 @@ func retrieveAllTenantsMetadata(
 ) ([]mtinfopb.TenantInfoWithUsage, error) {
 	rows, err := txn.QueryBuffered(
 		ctx, "backupccl.retrieveAllTenantsMetadata", txn.KV(),
-		// TODO(?): Should we add a `WHERE active`? We require the tenant to be active
-		// when it is specified.
-		// See: https://github.com/cockroachdb/cockroach/issues/89997
 		tenantMetadataQuery(ctx, settings)+` WHERE id != $1`,
 		roachpb.SystemTenantID.ToUint64(),
 	)
 	if err != nil {
 		return nil, err
 	}
-	res := make([]mtinfopb.TenantInfoWithUsage, len(rows))
+	res := make([]mtinfopb.TenantInfoWithUsage, 0, len(rows))
 	for i := range rows {
-		res[i], err = tenantMetadataFromRow(rows[i])
+		r, err := tenantMetadataFromRow(rows[i])
 		if err != nil {
 			return nil, err
 		}
+		if r.DataState != mtinfopb.DataStateReady {
+			continue
+		}
+		res = append(res, r)
 	}
 	return res, nil
 }
