@@ -449,7 +449,7 @@ func (c *Connector) RangeLookup(
 			log.Warningf(ctx, "error issuing RangeLookup RPC: %v", err)
 			if grpcutil.IsAuthError(err) {
 				// Authentication or authorization error. Propagate.
-				return nil, nil, err
+				return nil, nil, errors.WithStack(err)
 			}
 			// Soft RPC error. Drop client and retry.
 			c.tryForgetClient(ctx, client)
@@ -461,7 +461,7 @@ func (c *Connector) RangeLookup(
 		}
 		return resp.Descriptors, resp.PrefetchedDescriptors, nil
 	}
-	return nil, nil, ctx.Err()
+	return nil, nil, errors.WithStack(ctx.Err())
 }
 
 // NodesUI implements the serverpb.TenantStatusServer interface
@@ -544,7 +544,7 @@ func (c *Connector) NewIterator(
 			rangeDescriptors = append(rangeDescriptors, e.RangeDescriptors...)
 		}
 	}
-	return nil, ctx.Err()
+	return nil, errors.WithStack(ctx.Err())
 }
 
 // TokenBucket implements the kvtenant.TokenBucketProvider interface.
@@ -563,7 +563,7 @@ func (c *Connector) TokenBucket(
 			log.Warningf(ctx, "error issuing TokenBucket RPC: %v", err)
 			if grpcutil.IsAuthError(err) {
 				// Authentication or authorization error. Propagate.
-				return nil, err
+				return nil, errors.WithStack(err)
 			}
 			// Soft RPC error. Drop client and retry.
 			c.tryForgetClient(ctx, client)
@@ -575,7 +575,7 @@ func (c *Connector) TokenBucket(
 		}
 		return resp, nil
 	}
-	return nil, ctx.Err()
+	return nil, errors.WithStack(ctx.Err())
 }
 
 // GetSpanConfigRecords implements the spanconfig.KVAccessor interface.
@@ -587,7 +587,7 @@ func (c *Connector) GetSpanConfigRecords(
 			Targets: spanconfig.TargetsToProtos(targets),
 		})
 		if err != nil {
-			return err
+			return errors.WithStack(err)
 		}
 
 		records, err = spanconfig.EntriesToRecords(resp.SpanConfigEntries)
@@ -617,7 +617,7 @@ func (c *Connector) UpdateSpanConfigRecords(
 			MaxCommitTimestamp: maxCommitTS,
 		})
 		if err != nil {
-			return err
+			return errors.WithStack(err)
 		}
 		if resp.Error.IsSet() {
 			// Logical error; propagate as such.
@@ -643,7 +643,7 @@ func (c *Connector) SpanConfigConformance(
 		report = resp.Report
 		return nil
 	}); err != nil {
-		return roachpb.SpanConfigConformanceReport{}, err
+		return roachpb.SpanConfigConformanceReport{}, errors.WithStack(err)
 	}
 	return report, nil
 }
@@ -661,7 +661,7 @@ func (c *Connector) GetAllSystemSpanConfigsThatApply(
 				TenantID: id,
 			})
 		if err != nil {
-			return err
+			return errors.WithStack(err)
 		}
 
 		spanConfigs = resp.SpanConfigs
@@ -713,7 +713,7 @@ func (c *Connector) withClient(
 		}
 		return f(ctx, c)
 	}
-	return ctx.Err()
+	return errors.WithStack(ctx.Err())
 }
 
 // getClient returns the singleton InternalClient if one is currently active. If
