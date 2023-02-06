@@ -221,8 +221,8 @@ func (c *completions) RelToken(idx int) scanner.InspectToken {
 	return c.tokens[off]
 }
 
-// AtWord implements the Context interface.
-func (c *completions) AtWord() bool {
+// AtWordOrInSpaceFollowingWord implements the Context interface.
+func (c *completions) AtWordOrfollowingSpace() bool {
 	return c.RelMarker(0) == MarkIdentOrKeyword
 }
 
