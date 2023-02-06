@@ -164,8 +164,6 @@ type SQLServer struct {
 	// sqlMemMetrics are used to track memory usage of sql sessions.
 	sqlMemMetrics           sql.MemoryMetrics
 	stmtDiagnosticsRegistry *stmtdiagnostics.Registry
-	// sqlLivenessSessionID will be populated with a non-zero value for non-system
-	// tenants.
 	sqlLivenessSessionID           sqlliveness.SessionID
 	sqlLivenessProvider            sqlliveness.Provider
 	sqlInstanceReader              *instancestorage.Reader
@@ -545,7 +543,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		cfg.rangeFeedFactory,
 		codec, cfg.clock, cfg.stopper)
 
-	if isMixedSQLAndKVNode {
+	if codec.ForSystemTenant() {
 		cfg.podNodeDialer = cfg.nodeDialer
 	} else {
 		// In a multi-tenant environment, use the sqlInstanceReader to resolve

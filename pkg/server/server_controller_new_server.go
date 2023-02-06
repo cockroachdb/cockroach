@@ -169,8 +169,6 @@ func (s *Server) makeSharedProcessTenantConfig(
 	ctx context.Context, tenantID roachpb.TenantID, index int, stopper *stop.Stopper,
 ) (BaseConfig, SQLConfig, error) {
 	// Create a configuration for the new tenant.
-	// TODO(knz): Maybe enforce the SQL Instance ID to be equal to the KV node ID?
-	// See: https://github.com/cockroachdb/cockroach/issues/84602
 	parentCfg := s.cfg
 	localServerInfo := LocalKVServerInfo{
 		InternalServer:     s.node,
@@ -180,7 +178,8 @@ func (s *Server) makeSharedProcessTenantConfig(
 	if err != nil {
 		return BaseConfig{}, SQLConfig{}, err
 	}
-
+	// Inherit the node ID from the server.
+	baseCfg.IDContainer.Set(ctx, s.NodeID())
 	return baseCfg, sqlCfg, nil
 }
 
