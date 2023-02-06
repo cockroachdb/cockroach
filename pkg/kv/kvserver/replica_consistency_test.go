@@ -79,6 +79,99 @@ func TestReplicaChecksumVersion(t *testing.T) {
 	})
 }
 
+func TestStoreCheckpointSpans(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s := Store{}
+	s.mu.replicasByKey = newStoreReplicaBTree()
+	s.mu.replicaPlaceholders = map[roachpb.RangeID]*ReplicaPlaceholder{}
+
+	makeDesc := func(rangeID roachpb.RangeID, start, end string) roachpb.RangeDescriptor {
+		desc := roachpb.RangeDescriptor{RangeID: rangeID}
+		if start != "" {
+			desc.StartKey = roachpb.RKey(start)
+			desc.EndKey = roachpb.RKey(end)
+		}
+		return desc
+	}
+	var descs []roachpb.RangeDescriptor
+	addReplica := func(rangeID roachpb.RangeID, start, end string) {
+		desc := makeDesc(rangeID, start, end)
+		r := &Replica{RangeID: rangeID, startKey: desc.StartKey}
+		r.mu.state.Desc = &desc
+		r.isInitialized.Set(desc.IsInitialized())
+		require.NoError(t, s.addToReplicasByRangeIDLocked(r))
+		if r.IsInitialized() {
+			require.NoError(t, s.addToReplicasByKeyLocked(r))
+			descs = append(descs, desc)
+		}
+	}
+	addPlaceholder := func(rangeID roachpb.RangeID, start, end string) {
+		require.NoError(t, s.addPlaceholderLocked(
+			&ReplicaPlaceholder{rangeDesc: makeDesc(rangeID, start, end)},
+		))
+	}
+
+	addReplica(1, "a", "b")
+	addReplica(4, "b", "c")
+	addPlaceholder(5, "c", "d")
+	addReplica(2, "e", "f")
+	addReplica(3, "", "") // uninitialized
+
+	want := [][]string{{
+		// r1 with keys [a, b). The checkpoint includes range-ID replicated and
+		// unreplicated keyspace for ranges 1-2 and 4. Range 2 is included because
+		// it's a neighbour of r1 by range ID. The checkpoint also includes
+		// replicated user keyspace {a-c} owned by ranges 1 and 4.
+		"/Local/RangeID/{1/r\"\"-2/s\"\"}",
+		"/Local/RangeID/{1/u\"\"-2/v\"\"}",
+		"/Local/RangeID/4/{r\"\"-s\"\"}",
+		"/Local/RangeID/4/{u\"\"-v\"\"}",
+		"/Local/Range\"{a\"-c\"}",
+		"/Local/Lock/Intent/Local/Range\"{a\"-c\"}",
+		"/Local/Lock/Intent\"{a\"-c\"}",
+		"{a-c}",
+	}, {
+		// r4 with keys [b, c). The checkpoint includes range-ID replicated and
+		// unreplicated keyspace for ranges 3-4, 1 and 2. Range 3 is included
+		// because it's a neighbour of r4 by range ID. The checkpoint also includes
+		// replicated user keyspace {a-f} owned by ranges 1, 4, and 2.
+		"/Local/RangeID/{3/r\"\"-4/s\"\"}",
+		"/Local/RangeID/{3/u\"\"-4/v\"\"}",
+		"/Local/RangeID/1/{r\"\"-s\"\"}",
+		"/Local/RangeID/1/{u\"\"-v\"\"}",
+		"/Local/RangeID/2/{r\"\"-s\"\"}",
+		"/Local/RangeID/2/{u\"\"-v\"\"}",
+		"/Local/Range\"{a\"-f\"}",
+		"/Local/Lock/Intent/Local/Range\"{a\"-f\"}",
+		"/Local/Lock/Intent\"{a\"-f\"}",
+		"{a-f}",
+	}, {
+		// r2 with keys [e, f). The checkpoint includes range-ID replicated and
+		// unreplicated keyspace for ranges 1-3 and 4. Ranges 1 and 3 are included
+		// because they are neighbours of r2 by range ID. The checkpoint also
+		// includes replicated user keyspace {b-f} owned by ranges 4 and 2.
+		"/Local/RangeID/{1/r\"\"-3/s\"\"}",
+		"/Local/RangeID/{1/u\"\"-3/v\"\"}",
+		"/Local/RangeID/4/{r\"\"-s\"\"}",
+		"/Local/RangeID/4/{u\"\"-v\"\"}",
+		"/Local/Range\"{b\"-f\"}",
+		"/Local/Lock/Intent/Local/Range\"{b\"-f\"}",
+		"/Local/Lock/Intent\"{b\"-f\"}",
+		"{b-f}",
+	}}
+
+	require.Len(t, want, len(descs))
+	for i, desc := range descs {
+		spans := s.checkpointSpans(&desc)
+		got := make([]string, 0, len(spans))
+		for _, s := range spans {
+			got = append(got, s.String())
+		}
+		require.Equal(t, want[i], got, i)
+	}
+}
+
 func TestGetChecksumNotSuccessfulExitConditions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
