@@ -80,23 +80,47 @@ func (r *Replica) preDestroyRaftMuLocked(
 	nextReplicaID roachpb.ReplicaID,
 	opts clearRangeDataOptions,
 ) error {
-	diskReplicaID, err := logstore.NewStateLoader(r.RangeID).LoadRaftReplicaID(ctx, reader)
+	rangeID := r.RangeID
+	diskReplicaID, err := logstore.NewStateLoader(rangeID).LoadRaftReplicaID(ctx, reader)
 	if err != nil {
 		return err
 	}
 	if diskReplicaID.ReplicaID >= nextReplicaID {
-		return errors.AssertionFailedf("replica r%d/%d must not survive its own tombstone", r.RangeID, diskReplicaID)
+		return errors.AssertionFailedf("replica r%d/%d must not survive its own tombstone", rangeID, diskReplicaID)
 	}
-	if err := clearRangeData(r.RangeID, reader, writer, opts); err != nil {
+	if err := clearRangeData(rangeID, reader, writer, opts); err != nil {
 		return err
 	}
 
 	// Save a tombstone to ensure that replica IDs never get reused.
 	//
-	// NB: Legacy tombstones (which are in the replicated key space) are wiped
-	// in clearRangeData, but that's OK since we're writing a new one in the same
-	// batch (and in particular, sequenced *after* the wipe).
-	return setTombstoneKey(ctx, r.RangeID, reader, writer, nextReplicaID)
+	// TODO(tbg): put this on `stateloader.StateLoader` and consolidate the
+	// other read of the range tombstone key (in uninited replica creation
+	// as well).
+
+	tombstoneKey := keys.RangeTombstoneKey(rangeID)
+
+	// Assert that the provided tombstone moves the existing one strictly forward.
+	// Failure to do so indicates that something is going wrong in the replica
+	// lifecycle.
+	{
+		var tombstone roachpb.RangeTombstone
+		if _, err := storage.MVCCGetProto(
+			ctx, reader, tombstoneKey, hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
+		); err != nil {
+			return err
+		}
+		if tombstone.NextReplicaID >= nextReplicaID {
+			return errors.AssertionFailedf(
+				"cannot rewind tombstone from %d to %d", tombstone.NextReplicaID, nextReplicaID,
+			)
+		}
+	}
+
+	tombstone := roachpb.RangeTombstone{NextReplicaID: nextReplicaID}
+	// "Blind" because ms == nil and timestamp.IsEmpty().
+	return storage.MVCCBlindPutProto(ctx, writer, nil, tombstoneKey,
+		hlc.Timestamp{}, hlc.ClockTimestamp{}, &tombstone, nil)
 }
 
 func (r *Replica) postDestroyRaftMuLocked(ctx context.Context, ms enginepb.MVCCStats) error {
@@ -219,43 +243,4 @@ func (r *Replica) disconnectReplicationRaftMuLocked(ctx context.Context) {
 		})
 	}
 	r.mu.internalRaftGroup = nil
-}
-
-// setTombstoneKey writes a tombstone to disk to ensure that replica IDs never
-// get reused. It determines what the minimum next replica ID can be using
-// the provided nextReplicaID and the Replica's own ID.
-//
-// We have to be careful to set the right key, since a replica can be using an
-// ID that it hasn't yet received a RangeDescriptor for if it receives raft
-// requests for that replica ID (as seen in #14231).
-func setTombstoneKey(
-	ctx context.Context,
-	rangeID roachpb.RangeID,
-	reader storage.Reader,
-	writer storage.Writer,
-	externalNextReplicaID roachpb.ReplicaID,
-) error {
-	tombstoneKey := keys.RangeTombstoneKey(rangeID)
-
-	// Assert that the provided tombstone moves the existing one strictly forward.
-	// Failure to do so indicates that something is going wrong in the replica
-	// lifecycle.
-	{
-		var tombstone roachpb.RangeTombstone
-		if _, err := storage.MVCCGetProto(
-			ctx, reader, tombstoneKey, hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
-		); err != nil {
-			return err
-		}
-		if tombstone.NextReplicaID >= externalNextReplicaID {
-			return errors.AssertionFailedf(
-				"cannot rewind tombstone from %d to %d", tombstone.NextReplicaID, externalNextReplicaID,
-			)
-		}
-	}
-
-	tombstone := roachpb.RangeTombstone{NextReplicaID: externalNextReplicaID}
-	// "Blind" because ms == nil and timestamp.IsEmpty().
-	return storage.MVCCBlindPutProto(ctx, writer, nil, tombstoneKey,
-		hlc.Timestamp{}, hlc.ClockTimestamp{}, &tombstone, nil)
 }
