@@ -292,7 +292,7 @@ func TestParseTupleRandomDatums(t *testing.T) {
 		conv := sessiondatapb.DataConversionConfig{
 			ExtraFloatDigits: 1,
 		}
-		tupString := tree.AsStringWithFlags(tup, tree.FmtPgwireText, tree.FmtDataConversionConfig(conv))
+		tupString := tree.AsStringWithFlags(tup, tree.FmtPgwireText, tree.FmtDataConversionConfig(conv), tree.FmtLocation(time.UTC))
 
 		evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 		parsed, _, err := tree.ParseDTupleFromString(
