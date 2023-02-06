@@ -205,7 +205,7 @@ export const ConnectedStatementsPage = withRouter(
             analyticsActions.track({
               name: "Filter Clicked",
               page: "Statements",
-              filterName: "app",
+              filterName: "filters",
               value: value.toString(),
             }),
           );

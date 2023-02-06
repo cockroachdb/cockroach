@@ -39,14 +39,10 @@ import {
   selectFilters,
   selectSortSetting,
 } from "src/store/insights/transactionInsights";
-import { bindActionCreators, Dispatch } from "redux";
+import { Dispatch } from "redux";
 import { TimeScale } from "../../timeScaleDropdown";
 import { actions as sqlStatsActions } from "../../store/sqlStats";
-import {
-  StatementInsightDetails,
-  StatementInsightDetailsDispatchProps,
-  StatementInsightDetailsStateProps,
-} from "../workloadInsightDetails";
+import { actions as analyticsActions } from "../../store/analytics";
 
 const transactionMapStateToProps = (
   state: AppState,
@@ -72,24 +68,49 @@ const statementMapStateToProps = (
 const TransactionDispatchProps = (
   dispatch: Dispatch,
 ): TransactionInsightsViewDispatchProps => ({
-  onFiltersChange: (filters: WorkloadInsightEventFilters) =>
+  onFiltersChange: (filters: WorkloadInsightEventFilters) => {
     dispatch(
       localStorageActions.update({
         key: "filters/InsightsPage",
         value: filters,
       }),
-    ),
-  onSortChange: (ss: SortSetting) =>
+    );
+    dispatch(
+      analyticsActions.track({
+        name: "Filter Clicked",
+        page: "Workload Insights - Transaction",
+        filterName: "filters",
+        value: filters.toString(),
+      }),
+    );
+  },
+  onSortChange: (ss: SortSetting) => {
     dispatch(
       localStorageActions.update({
         key: "sortSetting/InsightsPage",
         value: ss,
       }),
-    ),
+    );
+    dispatch(
+      analyticsActions.track({
+        name: "Column Sorted",
+        page: "Workload Insights - Transaction",
+        tableName: "Workload Transaction Insights Table",
+        columnName: ss.columnTitle,
+      }),
+    );
+  },
   setTimeScale: (ts: TimeScale) => {
     dispatch(
       sqlStatsActions.updateTimeScale({
         ts: ts,
+      }),
+    );
+    dispatch(
+      analyticsActions.track({
+        name: "TimeScale changed",
+        page: "Workload Insights - Transaction",
+        value: ts.key,
       }),
     );
   },
@@ -101,35 +122,69 @@ const TransactionDispatchProps = (
 const StatementDispatchProps = (
   dispatch: Dispatch,
 ): StatementInsightsViewDispatchProps => ({
-  onFiltersChange: (filters: WorkloadInsightEventFilters) =>
+  onFiltersChange: (filters: WorkloadInsightEventFilters) => {
     dispatch(
       localStorageActions.update({
         key: "filters/InsightsPage",
         value: filters,
       }),
-    ),
-  onSortChange: (ss: SortSetting) =>
+    );
+    dispatch(
+      analyticsActions.track({
+        name: "Filter Clicked",
+        page: "Workload Insights - Statement",
+        filterName: "filters",
+        value: filters.toString(),
+      }),
+    );
+  },
+  onSortChange: (ss: SortSetting) => {
     dispatch(
       localStorageActions.update({
         key: "sortSetting/InsightsPage",
         value: ss,
       }),
-    ),
+    );
+    dispatch(
+      analyticsActions.track({
+        name: "Column Sorted",
+        page: "Workload Insights - Statement",
+        tableName: "Workload Statement Insights Table",
+        columnName: ss.columnTitle,
+      }),
+    );
+  },
   // We use `null` when the value was never set and it will show all columns.
   // If the user modifies the selection and no columns are selected,
   // the function will save the value as a blank space, otherwise
   // it gets saved as `null`.
-  onColumnsChange: (value: string[]) =>
+  onColumnsChange: (value: string[]) => {
+    const columns = value.length === 0 ? " " : value.join(",");
     dispatch(
       localStorageActions.update({
         key: "showColumns/StatementInsightsPage",
-        value: value.length === 0 ? " " : value.join(","),
+        value: columns,
       }),
-    ),
+    );
+    dispatch(
+      analyticsActions.track({
+        name: "Columns Selected change",
+        page: "Workload Insights - Statement",
+        value: columns,
+      }),
+    );
+  },
   setTimeScale: (ts: TimeScale) => {
     dispatch(
       sqlStatsActions.updateTimeScale({
         ts: ts,
+      }),
+    );
+    dispatch(
+      analyticsActions.track({
+        name: "TimeScale changed",
+        page: "Workload Insights - Statement",
+        value: ts.key,
       }),
     );
   },

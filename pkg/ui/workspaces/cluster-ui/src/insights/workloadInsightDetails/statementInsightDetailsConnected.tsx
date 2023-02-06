@@ -24,6 +24,7 @@ import {
 import { selectHasAdminRole, selectIsTenant } from "src/store/uiConfig";
 import { TimeScale } from "../../timeScaleDropdown";
 import { actions as sqlStatsActions } from "../../store/sqlStats";
+import { actions as analyticsActions } from "../../store/analytics";
 
 const mapStateToProps = (
   state: AppState,
@@ -49,6 +50,13 @@ const mapDispatchToProps = (
     dispatch(
       sqlStatsActions.updateTimeScale({
         ts: ts,
+      }),
+    );
+    dispatch(
+      analyticsActions.track({
+        name: "TimeScale changed",
+        page: "Statement Insight Details",
+        value: ts.key,
       }),
     );
   },

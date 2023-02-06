@@ -35,6 +35,7 @@ import { selectTimeScale } from "src/statementsPage/statementsPage.selectors";
 import { StatementsRequest } from "src/api/statementsApi";
 import { txnFingerprintIdAttr, getMatchParamByName } from "../util";
 import { TimeScale } from "../timeScaleDropdown";
+import { actions as analyticsActions } from "../store/analytics";
 
 export const selectTransaction = createSelector(
   (state: AppState) => state.adminUI?.sqlStats,
@@ -101,6 +102,13 @@ const mapDispatchToProps = (
     dispatch(
       sqlStatsActions.updateTimeScale({
         ts: ts,
+      }),
+    );
+    dispatch(
+      analyticsActions.track({
+        name: "TimeScale changed",
+        page: "Transaction Details",
+        value: ts.key,
       }),
     );
   },

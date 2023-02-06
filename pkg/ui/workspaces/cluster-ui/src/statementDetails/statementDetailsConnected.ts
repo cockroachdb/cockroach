@@ -101,6 +101,13 @@ const mapDispatchToProps = (
         ts: ts,
       }),
     );
+    dispatch(
+      analyticsActions.track({
+        name: "TimeScale changed",
+        page: "Statement Details",
+        value: ts.key,
+      }),
+    );
   },
   dismissStatementDiagnosticsAlertMessage: () =>
     dispatch(

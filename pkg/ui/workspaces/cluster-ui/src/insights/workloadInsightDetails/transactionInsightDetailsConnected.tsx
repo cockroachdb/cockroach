@@ -25,6 +25,7 @@ import { actions as sqlStatsActions } from "../../store/sqlStats";
 import { Dispatch } from "redux";
 import { TransactionInsightEventDetailsRequest } from "src/api";
 import { selectHasAdminRole } from "src/store/uiConfig";
+import { actions as analyticsActions } from "../../store/analytics";
 
 const mapStateToProps = (
   state: AppState,
@@ -51,6 +52,13 @@ const mapDispatchToProps = (
     dispatch(
       sqlStatsActions.updateTimeScale({
         ts: ts,
+      }),
+    );
+    dispatch(
+      analyticsActions.track({
+        name: "TimeScale changed",
+        page: "Transaction Insight Details",
+        value: ts.key,
       }),
     );
   },
