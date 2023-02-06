@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/stretchr/testify/require"
 )
 
@@ -119,8 +120,14 @@ func runChangeReplicasMixedVersion(ctx context.Context, t test.Test, c cluster.C
 				conn := u.c.Conn(ctx, t.L(), gateway)
 				defer conn.Close()
 
+				retryOpts := retry.Options{
+					InitialBackoff: 100 * time.Millisecond,
+					MaxBackoff:     5 * time.Second,
+					Multiplier:     2,
+					MaxRetries:     8,
+				}
 				var rangeErrors map[int]string
-				for attempt := 1; attempt <= 5; attempt++ {
+				for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 					if errCount := len(rangeErrors); errCount > 0 {
 						t.L().Printf("%d ranges failed, retrying", errCount)
 					}
