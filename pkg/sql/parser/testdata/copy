@@ -15,6 +15,14 @@ COPY t (a, b, c) FROM STDIN -- literals removed
 COPY _ (_, _, _) FROM STDIN -- identifiers removed
 
 parse
+COPY t FROM STDIN QUOTE '"'
+----
+COPY t FROM STDIN -- normalized!
+COPY t FROM STDIN -- fully parenthesized
+COPY t FROM STDIN -- literals removed
+COPY _ FROM STDIN -- identifiers removed
+
+parse
 COPY crdb_internal.file_upload FROM STDIN WITH destination = 'filename'
 ----
 COPY crdb_internal.file_upload FROM STDIN WITH destination = 'filename'

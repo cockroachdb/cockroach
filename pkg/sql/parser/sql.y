@@ -3977,7 +3977,10 @@ copy_options:
   }
 | QUOTE SCONST
   {
-    return unimplementedWithIssueDetail(sqllex, 41608, "quote")
+    if $2 != "\"" {
+      return unimplementedWithIssueDetail(sqllex, 41608, "quote")
+    }
+    $$.val = &tree.CopyOptions{Quote: tree.NewStrVal($2)}
   }
 | ESCAPE SCONST error
   {

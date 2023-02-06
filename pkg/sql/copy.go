@@ -192,6 +192,10 @@ func newCopyMachine(
 		return nil, pgerror.Newf(pgcode.FeatureNotSupported, "HEADER only supported with CSV format")
 	}
 
+	if n.Options.Quote != nil && c.format != tree.CopyFormatCSV {
+		return nil, pgerror.Newf(pgcode.FeatureNotSupported, "QUOTE only supported with CSV format")
+	}
+
 	exprEval := c.p.ExprEvaluator("COPY")
 	if n.Options.Delimiter != nil {
 		if c.format == tree.CopyFormatBinary {

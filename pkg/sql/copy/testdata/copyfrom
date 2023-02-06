@@ -2,6 +2,17 @@ exec-ddl
 CREATE TABLE t (a int)
 ----
 
+# copy quote without CSV not allowed.
+copy-error
+COPY t FROM STDIN QUOTE '"'
+----
+ERROR: QUOTE only supported with CSV format (SQLSTATE 0A000)
+
+copy-error
+COPY t FROM STDIN QUOTE 'x'
+----
+ERROR: at or near "x": syntax error: unimplemented: this syntax (SQLSTATE 0A000)
+
 # builtins not allowed
 copy-error
 COPY t FROM STDIN
@@ -10,7 +21,7 @@ random()
 ERROR: could not parse "random()" as type int: strconv.ParseInt: parsing "random()": invalid syntax (SQLSTATE 22P02)
 
 copy
-COPY t FROM STDIN
+COPY t FROM STDIN QUOTE '"' CSV
 ----
 0
 
