@@ -1,0 +1,503 @@
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:61:9: string("index out of bounds") escapes to heap
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:69:9: string("getting first from empty ring buffer") escapes to heap
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:77:9: string("getting last from empty ring buffer") escapes to heap
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:84:9: string("resizing to fewer elements than current length") escapes to heap
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:92:19: make([]go.shape.*uint8_0, ring.n) escapes to heap
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:150:9: string("removing first from empty ring buffer") escapes to heap
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:163:9: string("removing last from empty ring buffer") escapes to heap
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:180:9: string("reserving fewer elements than current length") escapes to heap
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:198:9: string("resizing to fewer elements than current length") escapes to heap
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:230:13: make([]go.shape.*uint8_0, ~R0) escapes to heap
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:61:9: string("index out of bounds") escapes to heap
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:69:9: string("getting first from empty ring buffer") escapes to heap
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:77:9: string("getting last from empty ring buffer") escapes to heap
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:84:9: string("resizing to fewer elements than current length") escapes to heap
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:92:19: make([]go.shape.struct { ID github.com/cockroachdb/cockroach/pkg/util/tracing.SnapshotID; github.com/cockroachdb/cockroach/pkg/util/tracing.SpansSnapshot }_0, ring.n) escapes to heap
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:150:9: string("removing first from empty ring buffer") escapes to heap
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:163:9: string("removing last from empty ring buffer") escapes to heap
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:180:9: string("reserving fewer elements than current length") escapes to heap
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:198:9: string("resizing to fewer elements than current length") escapes to heap
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:230:13: make([]go.shape.struct { ID github.com/cockroachdb/cockroach/pkg/util/tracing.SnapshotID; github.com/cockroachdb/cockroach/pkg/util/tracing.SpansSnapshot }_0, ~R0) escapes to heap
+INFO: From GoCompilePkg pkg/sql/contention/contention.a:
+pkg/sql/contention/event_store.go:56:6: can inline (*eventBatch).len
+pkg/sql/contention/event_store.go:58:17: inlining call to contentionpb.(*ExtendedContentionEvent).Valid
+pkg/sql/contention/event_store.go:58:17: inlining call to uuid.UUID.Equal
+pkg/sql/contention/event_store.go:66:7: can inline glob..func1
+pkg/sql/contention/resolver.go:118:6: can inline newResolver
+pkg/sql/contention/event_store.go:356:6: can inline entryBytes
+pkg/sql/contention/event_store.go:130:30: inlining call to newResolver
+pkg/sql/contention/event_store.go:136:38: inlining call to cache.NewUnorderedCache
+pkg/sql/contention/event_store.go:136:38: inlining call to cache.newBaseCache
+pkg/sql/contention/event_store.go:151:74: inlining call to contentionutils.NewConcurrentBufferGuard
+pkg/sql/contention/event_store.go:151:74: inlining call to sync.(*RWMutex).RLocker
+pkg/sql/contention/event_store.go:138:16: can inline newEventStore.func1
+pkg/sql/contention/event_store.go:139:33: inlining call to settings.(*IntSetting).Get
+pkg/sql/contention/event_store.go:139:33: inlining call to settings.(*valuesContainer).getInt64
+pkg/sql/contention/event_store.go:139:33: inlining call to settings.(*valuesContainer).checkForbidden
+pkg/sql/contention/event_store.go:145:33: inlining call to entryBytes
+pkg/sql/contention/event_store.go:152:3: can inline newEventStore.func3
+pkg/sql/contention/event_store.go:155:3: can inline newEventStore.func4
+pkg/sql/contention/event_store.go:341:59: inlining call to entryBytes
+pkg/sql/contention/event_store.go:343:17: inlining call to cache.(*baseCache).Add
+pkg/sql/contention/event_store.go:186:32: inlining call to stop.(*Stopper).RunAsyncTask
+pkg/sql/contention/event_store.go:180:24: inlining call to (*eventBatch).len
+pkg/sql/contention/event_store.go:180:24: inlining call to contentionpb.(*ExtendedContentionEvent).Valid
+pkg/sql/contention/event_store.go:180:24: inlining call to uuid.UUID.Equal
+pkg/sql/contention/event_store.go:191:32: inlining call to stop.(*Stopper).ShouldQuiesce
+pkg/sql/contention/event_store.go:348:45: inlining call to settings.(*DurationSetting).Get
+pkg/sql/contention/event_store.go:348:45: inlining call to settings.(*Values).getInt64
+pkg/sql/contention/event_store.go:348:45: inlining call to settings.(*valuesContainer).getInt64
+pkg/sql/contention/event_store.go:348:45: inlining call to settings.(*valuesContainer).checkForbidden
+pkg/sql/contention/event_store.go:352:75: inlining call to time.Duration.Nanoseconds
+pkg/sql/contention/event_store.go:202:26: inlining call to stop.(*Stopper).RunAsyncTask
+pkg/sql/contention/event_store.go:205:38: inlining call to settings.(*common).SetOnChange
+pkg/sql/contention/event_store.go:210:29: inlining call to timeutil.NewTimer
+pkg/sql/contention/event_store.go:223:14: inlining call to "github.com/cockroachdb/cockroach/pkg/util/log".V
+pkg/sql/contention/event_store.go:223:14: inlining call to "github.com/cockroachdb/cockroach/pkg/util/log".VDepth
+pkg/sql/contention/event_store.go:224:19: inlining call to "github.com/cockroachdb/cockroach/pkg/util/log".Warningf
+pkg/sql/contention/event_store.go:224:19: inlining call to "github.com/cockroachdb/cockroach/pkg/util/log".logfDepth
+pkg/sql/contention/event_store.go:230:32: inlining call to stop.(*Stopper).ShouldQuiesce
+pkg/sql/contention/event_store.go:205:49: can inline (*eventStore).startResolver.func1.1
+pkg/sql/contention/event_store.go:241:32: inlining call to settings.(*DurationSetting).Get
+pkg/sql/contention/event_store.go:241:32: inlining call to settings.(*Values).getInt64
+pkg/sql/contention/event_store.go:241:32: inlining call to settings.(*valuesContainer).getInt64
+pkg/sql/contention/event_store.go:241:32: inlining call to settings.(*valuesContainer).checkForbidden
+pkg/sql/contention/event_store.go:247:39: inlining call to settings.(*DurationSetting).Get
+pkg/sql/contention/event_store.go:247:39: inlining call to settings.(*Values).getInt64
+pkg/sql/contention/event_store.go:247:39: inlining call to settings.(*valuesContainer).getInt64
+pkg/sql/contention/event_store.go:247:39: inlining call to settings.(*valuesContainer).checkForbidden
+pkg/sql/contention/event_store.go:253:22: can inline (*eventStore).addEvent.func1
+pkg/sql/contention/event_store.go:291:12: inlining call to sync.(*RWMutex).RLock
+pkg/sql/contention/event_store.go:267:12: inlining call to sync.(*RWMutex).RLock
+pkg/sql/contention/event_store.go:268:42: inlining call to cache.(*baseCache).Len
+pkg/sql/contention/event_store.go:269:15: inlining call to cache.(*baseCache).Do
+pkg/sql/contention/event_store.go:269:16: can inline (*eventStore).ForEachEvent.func1
+pkg/sql/contention/event_store.go:269:15: inlining call to (*eventStore).ForEachEvent.func1
+pkg/sql/contention/event_store.go:272:14: inlining call to sync.(*RWMutex).RUnlock
+pkg/sql/contention/metrics.go:26:6: can inline Metrics.MetricStruct
+pkg/sql/contention/metrics.go:31:37: inlining call to metric.NewGauge
+pkg/sql/contention/metrics.go:37:37: inlining call to metric.NewCounter
+pkg/sql/contention/metrics.go:37:37: inlining call to metrics.NewCounter
+pkg/sql/contention/metrics.go:43:36: inlining call to metric.NewCounter
+pkg/sql/contention/metrics.go:43:36: inlining call to metrics.NewCounter
+pkg/sql/contention/registry.go:84:15: can inline glob..func2
+pkg/sql/contention/registry.go:91:15: can inline glob..func3
+pkg/sql/contention/registry.go:99:6: can inline comparableKey.Compare
+pkg/sql/contention/registry.go:100:31: inlining call to roachpb.Key.Compare
+pkg/sql/contention/registry.go:100:31: inlining call to bytes.Compare
+pkg/sql/contention/registry.go:127:37: inlining call to cache.NewUnorderedCache
+pkg/sql/contention/registry.go:127:37: inlining call to cache.newBaseCache
+pkg/sql/contention/registry.go:128:14: inlining call to cache.(*baseCache).Add
+pkg/sql/contention/registry.go:129:33: inlining call to cache.NewOrderedCache
+pkg/sql/contention/registry.go:129:33: inlining call to cache.newBaseCache
+pkg/sql/contention/registry.go:130:12: inlining call to cache.(*baseCache).Add
+pkg/sql/contention/registry.go:151:37: inlining call to cache.NewUnorderedCache
+pkg/sql/contention/registry.go:151:37: inlining call to cache.newBaseCache
+pkg/sql/contention/registry.go:152:22: inlining call to cache.(*baseCache).Add
+pkg/sql/contention/registry.go:154:38: inlining call to cache.(*baseCache).Add
+pkg/sql/contention/registry.go:166:41: inlining call to cache.NewUnorderedCache
+pkg/sql/contention/registry.go:166:41: inlining call to cache.newBaseCache
+pkg/sql/contention/registry.go:168:17: can inline newIndexMap.func1
+pkg/sql/contention/registry.go:192:21: inlining call to cache.(*baseCache).Add
+pkg/sql/contention/registry.go:212:37: inlining call to cache.NewUnorderedCache
+pkg/sql/contention/registry.go:212:37: inlining call to cache.newBaseCache
+pkg/sql/contention/registry.go:213:14: inlining call to cache.(*baseCache).Add
+pkg/sql/contention/registry.go:230:16: inlining call to cache.(*baseCache).Add
+pkg/sql/contention/registry.go:241:38: inlining call to cache.NewOrderedCache
+pkg/sql/contention/registry.go:241:38: inlining call to cache.newBaseCache
+pkg/sql/contention/registry.go:255:6: can inline (*Registry).Start
+pkg/sql/contention/registry.go:262:19: inlining call to sync.(*Mutex).Lock
+pkg/sql/contention/registry.go:271:23: inlining call to cache.(*baseCache).Add
+pkg/sql/contention/registry.go:291:6: can inline (*Registry).ForEachEvent
+pkg/sql/contention/registry.go:297:6: can inline (*Registry).FlushEventsForTest
+pkg/sql/contention/registry.go:378:19: can inline sortSingleTxnContention.func1
+pkg/sql/contention/registry.go:302:63: inlining call to cache.(*baseCache).Len
+pkg/sql/contention/registry.go:304:13: inlining call to cache.(*baseCache).Do
+pkg/sql/contention/registry.go:304:14: can inline serializeTxnCache.func1
+pkg/sql/contention/registry.go:304:13: inlining call to serializeTxnCache.func1
+pkg/sql/contention/registry.go:367:18: can inline sortIndexContentionEvents.func1
+pkg/sql/contention/registry.go:317:19: inlining call to sync.(*Mutex).Lock
+pkg/sql/contention/registry.go:322:102: inlining call to cache.(*baseCache).Len
+pkg/sql/contention/registry.go:324:29: inlining call to cache.(*baseCache).Do
+pkg/sql/contention/registry.go:347:96: inlining call to cache.(*baseCache).Len
+pkg/sql/contention/registry.go:332:76: inlining call to cache.(*baseCache).Len
+pkg/sql/contention/registry.go:388:16: inlining call to strings.(*Builder).WriteString
+pkg/sql/contention/registry.go:388:16: inlining call to strings.(*Builder).copyCheck
+pkg/sql/contention/registry.go:388:16: inlining call to strings.noescape
+pkg/sql/contention/registry.go:391:16: inlining call to strings.(*Builder).WriteString
+pkg/sql/contention/registry.go:391:16: inlining call to strings.(*Builder).copyCheck
+pkg/sql/contention/registry.go:391:16: inlining call to strings.noescape
+pkg/sql/contention/registry.go:393:17: inlining call to strings.(*Builder).String
+pkg/sql/contention/registry.go:578:42: inlining call to uuid.UUID.GetBytes
+pkg/sql/contention/registry.go:578:42: inlining call to uuid.UUID.bytes
+pkg/sql/contention/registry.go:578:70: inlining call to uuid.UUID.GetBytes
+pkg/sql/contention/registry.go:578:70: inlining call to uuid.UUID.bytes
+pkg/sql/contention/registry.go:578:18: inlining call to bytes.Equal
+pkg/sql/contention/registry.go:539:44: inlining call to roachpb.Key.Compare
+pkg/sql/contention/registry.go:539:44: inlining call to bytes.Compare
+pkg/sql/contention/registry.go:464:40: inlining call to roachpb.Key.Compare
+pkg/sql/contention/registry.go:464:40: inlining call to bytes.Compare
+pkg/sql/contention/resolver.go:137:33: inlining call to metric.(*Gauge).Inc
+pkg/sql/contention/resolver.go:308:6: can inline readUntilNextCoordinatorID
+pkg/sql/contention/resolver.go:354:30: inlining call to strconv.Itoa
+pkg/sql/contention/resolver.go:325:6: can inline extractResolvedAndInProgressTxnIDs
+pkg/sql/contention/resolver.go:234:6: can inline maybeUpdateTxnFingerprintID
+pkg/sql/contention/resolver.go:249:19: inlining call to uuid.UUID.Equal
+pkg/sql/contention/resolver.go:298:35: inlining call to metric.(*Gauge).Dec
+pkg/sql/contention/resolver.go:169:55: inlining call to readUntilNextCoordinatorID
+pkg/sql/contention/resolver.go:182:36: inlining call to "github.com/cockroachdb/errors".CombineErrors
+pkg/sql/contention/resolver.go:182:36: inlining call to secondary.CombineErrors
+pkg/sql/contention/resolver.go:182:36: inlining call to secondary.WithSecondaryError
+pkg/sql/contention/resolver.go:187:36: inlining call to "github.com/cockroachdb/errors".CombineErrors
+pkg/sql/contention/resolver.go:187:36: inlining call to secondary.CombineErrors
+pkg/sql/contention/resolver.go:187:36: inlining call to secondary.WithSecondaryError
+pkg/sql/contention/resolver.go:190:89: inlining call to extractResolvedAndInProgressTxnIDs
+pkg/sql/contention/resolver.go:191:87: inlining call to extractResolvedAndInProgressTxnIDs
+pkg/sql/contention/resolver.go:195:32: inlining call to maybeUpdateTxnFingerprintID
+pkg/sql/contention/resolver.go:195:32: inlining call to uuid.UUID.Equal
+pkg/sql/contention/resolver.go:203:32: inlining call to maybeUpdateTxnFingerprintID
+pkg/sql/contention/resolver.go:203:32: inlining call to uuid.UUID.Equal
+pkg/sql/contention/resolver.go:228:55: inlining call to readUntilNextCoordinatorID
+pkg/sql/contention/resolver.go:164:23: can inline (*resolverQueueImpl).resolveLocked.func1
+pkg/sql/contention/resolver.go:151:33: inlining call to metric.(*Gauge).Dec
+pkg/sql/contention/test_utils.go:27:6: can inline newFakeStatusServer
+pkg/sql/contention/test_utils.go:34:6: can inline (*fakeStatusServer).txnIDResolution
+pkg/sql/contention/test_utils.go:57:6: can inline (*fakeStatusServer).setTxnIDEntry
+pkg/sql/contention/test_utils.go:65:6: can inline newFakeStatusServerCluster
+pkg/sql/contention/test_utils.go:69:6: can inline fakeStatusServerCluster.getStatusServer
+pkg/sql/contention/test_utils.go:72:37: inlining call to newFakeStatusServer
+pkg/sql/contention/test_utils.go:81:26: inlining call to fakeStatusServerCluster.getStatusServer
+pkg/sql/contention/test_utils.go:81:26: inlining call to newFakeStatusServer
+pkg/sql/contention/test_utils.go:81:61: inlining call to (*fakeStatusServer).txnIDResolution
+pkg/sql/contention/test_utils.go:84:6: can inline fakeStatusServerCluster.setTxnIDEntry
+pkg/sql/contention/test_utils.go:87:19: inlining call to fakeStatusServerCluster.getStatusServer
+pkg/sql/contention/test_utils.go:87:19: inlining call to newFakeStatusServer
+pkg/sql/contention/test_utils.go:87:52: inlining call to (*fakeStatusServer).setTxnIDEntry
+pkg/sql/contention/test_utils.go:90:6: can inline fakeStatusServerCluster.setStatusServerError
+pkg/sql/contention/test_utils.go:91:19: inlining call to fakeStatusServerCluster.getStatusServer
+pkg/sql/contention/test_utils.go:91:19: inlining call to newFakeStatusServer
+pkg/sql/contention/test_utils.go:94:6: can inline fakeStatusServerCluster.clear
+pkg/sql/contention/test_utils.go:100:6: can inline fakeStatusServerCluster.clearErrors
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:40:21: can inline ring.(*Buffer[go.shape.*uint8_0]).Len
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:54:21: can inline ring.(*Buffer[go.shape.*uint8_0]).Cap
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:59:21: can inline ring.(*Buffer[go.shape.*uint8_0]).Get
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:60:43: inlining call to ring.(*Buffer[go.shape.*uint8_0]).Len
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:67:21: can inline ring.(*Buffer[go.shape.*uint8_0]).GetFirst
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:75:21: can inline ring.(*Buffer[go.shape.*uint8_0]).GetLast
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:224:21: can inline ring.(*Buffer[go.shape.*uint8_0]).Discard
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:101:21: can inline ring.(*Buffer[go.shape.*uint8_0]).copyTo
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:83:14: inlining call to ring.(*Buffer[go.shape.*uint8_0]).Len
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:88:12: inlining call to ring.(*Buffer[go.shape.*uint8_0]).Discard
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:93:10: inlining call to ring.(*Buffer[go.shape.*uint8_0]).copyTo
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:94:16: inlining call to ring.(*Buffer[go.shape.*uint8_0]).Len
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:119:10: inlining call to ring.(*Buffer[go.shape.*uint8_0]).Len
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:149:10: inlining call to ring.(*Buffer[go.shape.*uint8_0]).Len
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:162:10: inlining call to ring.(*Buffer[go.shape.*uint8_0]).Len
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:179:14: inlining call to ring.(*Buffer[go.shape.*uint8_0]).Len
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:197:14: inlining call to ring.(*Buffer[go.shape.*uint8_0]).Len
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:212:21: can inline ring.(*Buffer[go.shape.*uint8_0]).Reset
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:230:24: inlining call to ring.(*Buffer[go.shape.*uint8_0]).Len
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:231:10: inlining call to ring.(*Buffer[go.shape.*uint8_0]).copyTo
+github.com/cockroachdb/cockroach/pkg/util/tracing/crdbspan.go:542:34: can inline tracing.(*sizeLimitedBuffer[go.shape.*uint8_0]).Discard
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:40:21: can inline ring.(*Buffer[go.shape.struct { ID github.com/cockroachdb/cockroach/pkg/util/tracing.SnapshotID; github.com/cockroachdb/cockroach/pkg/util/tracing.SpansSnapshot }_0]).Len
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:54:21: can inline ring.(*Buffer[go.shape.struct { ID github.com/cockroachdb/cockroach/pkg/util/tracing.SnapshotID; github.com/cockroachdb/cockroach/pkg/util/tracing.SpansSnapshot }_0]).Cap
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:59:21: can inline ring.(*Buffer[go.shape.struct { ID github.com/cockroachdb/cockroach/pkg/util/tracing.SnapshotID; github.com/cockroachdb/cockroach/pkg/util/tracing.SpansSnapshot }_0]).Get
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:60:43: inlining call to ring.(*Buffer[go.shape.struct { ID github.com/cockroachdb/cockroach/pkg/util/tracing.SnapshotID; github.com/cockroachdb/cockroach/pkg/util/tracing.SpansSnapshot }_0]).Len
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:67:21: can inline ring.(*Buffer[go.shape.struct { ID github.com/cockroachdb/cockroach/pkg/util/tracing.SnapshotID; github.com/cockroachdb/cockroach/pkg/util/tracing.SpansSnapshot }_0]).GetFirst
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:75:21: can inline ring.(*Buffer[go.shape.struct { ID github.com/cockroachdb/cockroach/pkg/util/tracing.SnapshotID; github.com/cockroachdb/cockroach/pkg/util/tracing.SpansSnapshot }_0]).GetLast
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:224:21: can inline ring.(*Buffer[go.shape.struct { ID github.com/cockroachdb/cockroach/pkg/util/tracing.SnapshotID; github.com/cockroachdb/cockroach/pkg/util/tracing.SpansSnapshot }_0]).Discard
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:101:21: can inline ring.(*Buffer[go.shape.struct { ID github.com/cockroachdb/cockroach/pkg/util/tracing.SnapshotID; github.com/cockroachdb/cockroach/pkg/util/tracing.SpansSnapshot }_0]).copyTo
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:83:14: inlining call to ring.(*Buffer[go.shape.struct { ID github.com/cockroachdb/cockroach/pkg/util/tracing.SnapshotID; github.com/cockroachdb/cockroach/pkg/util/tracing.SpansSnapshot }_0]).Len
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:88:12: inlining call to ring.(*Buffer[go.shape.struct { ID github.com/cockroachdb/cockroach/pkg/util/tracing.SnapshotID; github.com/cockroachdb/cockroach/pkg/util/tracing.SpansSnapshot }_0]).Discard
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:93:10: inlining call to ring.(*Buffer[go.shape.struct { ID github.com/cockroachdb/cockroach/pkg/util/tracing.SnapshotID; github.com/cockroachdb/cockroach/pkg/util/tracing.SpansSnapshot }_0]).copyTo
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:94:16: inlining call to ring.(*Buffer[go.shape.struct { ID github.com/cockroachdb/cockroach/pkg/util/tracing.SnapshotID; github.com/cockroachdb/cockroach/pkg/util/tracing.SpansSnapshot }_0]).Len
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:119:10: inlining call to ring.(*Buffer[go.shape.struct { ID github.com/cockroachdb/cockroach/pkg/util/tracing.SnapshotID; github.com/cockroachdb/cockroach/pkg/util/tracing.SpansSnapshot }_0]).Len
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:149:10: inlining call to ring.(*Buffer[go.shape.struct { ID github.com/cockroachdb/cockroach/pkg/util/tracing.SnapshotID; github.com/cockroachdb/cockroach/pkg/util/tracing.SpansSnapshot }_0]).Len
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:162:10: inlining call to ring.(*Buffer[go.shape.struct { ID github.com/cockroachdb/cockroach/pkg/util/tracing.SnapshotID; github.com/cockroachdb/cockroach/pkg/util/tracing.SpansSnapshot }_0]).Len
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:179:14: inlining call to ring.(*Buffer[go.shape.struct { ID github.com/cockroachdb/cockroach/pkg/util/tracing.SnapshotID; github.com/cockroachdb/cockroach/pkg/util/tracing.SpansSnapshot }_0]).Len
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:197:14: inlining call to ring.(*Buffer[go.shape.struct { ID github.com/cockroachdb/cockroach/pkg/util/tracing.SnapshotID; github.com/cockroachdb/cockroach/pkg/util/tracing.SpansSnapshot }_0]).Len
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:212:21: can inline ring.(*Buffer[go.shape.struct { ID github.com/cockroachdb/cockroach/pkg/util/tracing.SnapshotID; github.com/cockroachdb/cockroach/pkg/util/tracing.SpansSnapshot }_0]).Reset
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:230:24: inlining call to ring.(*Buffer[go.shape.struct { ID github.com/cockroachdb/cockroach/pkg/util/tracing.SnapshotID; github.com/cockroachdb/cockroach/pkg/util/tracing.SpansSnapshot }_0]).Len
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:231:10: inlining call to ring.(*Buffer[go.shape.struct { ID github.com/cockroachdb/cockroach/pkg/util/tracing.SnapshotID; github.com/cockroachdb/cockroach/pkg/util/tracing.SpansSnapshot }_0]).copyTo
+pkg/sql/contention/cluster_settings.go:36:13: inlining call to settings.(*ByteSizeSetting).WithPublic
+pkg/sql/contention/cluster_settings.go:36:13: inlining call to settings.(*common).SetVisibility
+pkg/sql/contention/cluster_settings.go:47:13: inlining call to settings.(*DurationSetting).WithPublic
+pkg/sql/contention/cluster_settings.go:47:13: inlining call to settings.(*common).SetVisibility
+pkg/sql/contention/event_store.go:56:7: b does not escape
+pkg/sql/contention/event_store.go:67:10: &eventBatch{} escapes to heap
+pkg/sql/contention/event_store.go:126:2: leaking param: st
+pkg/sql/contention/event_store.go:126:24: leaking param: endpoint
+pkg/sql/contention/event_store.go:126:51: leaking param: timeSrc
+pkg/sql/contention/event_store.go:126:71: leaking param: metrics
+pkg/sql/contention/event_store.go:143:24: entry does not escape
+pkg/sql/contention/event_store.go:128:7: &eventStore{...} escapes to heap
+pkg/sql/contention/event_store.go:130:30: &resolverQueueImpl{...} escapes to heap
+pkg/sql/contention/event_store.go:130:30: make([]contentionpb.ExtendedContentionEvent, 0, sizeHint) escapes to heap
+pkg/sql/contention/event_store.go:130:30: make([]contentionpb.ExtendedContentionEvent, 0, sizeHint) escapes to heap
+pkg/sql/contention/event_store.go:130:30: make(map[uint64]uint32, sizeHint) escapes to heap
+pkg/sql/contention/event_store.go:138:16: func literal escapes to heap
+pkg/sql/contention/event_store.go:143:19: func literal escapes to heap
+pkg/sql/contention/event_store.go:136:38: &cache.UnorderedCache{...} escapes to heap
+pkg/sql/contention/event_store.go:152:3: func literal escapes to heap
+pkg/sql/contention/event_store.go:155:3: func literal escapes to heap
+pkg/sql/contention/event_store.go:151:74: &contentionutils.ConcurrentBufferGuard{...} escapes to heap
+pkg/sql/contention/event_store.go:333:7: leaking param: s
+pkg/sql/contention/event_store.go:333:34: leaking param content: events
+pkg/sql/contention/event_store.go:339:26: blockingTxnID escapes to heap
+pkg/sql/contention/event_store.go:343:32: (*contentionpb.ExtendedContentionEvent).Hash(events[i]) escapes to heap
+pkg/sql/contention/event_store.go:343:42: events[i] escapes to heap
+pkg/sql/contention/event_store.go:173:7: leaking param: s
+pkg/sql/contention/event_store.go:173:39: leaking param: ctx
+pkg/sql/contention/event_store.go:173:60: leaking param: stopper
+pkg/sql/contention/event_store.go:174:23: leaking param: batch
+pkg/sql/contention/event_store.go:179:23: leaking param: batch
+pkg/sql/contention/event_store.go:186:70: ctx does not escape
+pkg/sql/contention/event_store.go:174:18: func literal escapes to heap
+pkg/sql/contention/event_store.go:179:18: func literal escapes to heap
+pkg/sql/contention/event_store.go:186:65: func literal escapes to heap
+pkg/sql/contention/event_store.go:347:7: leaking param content: s
+pkg/sql/contention/event_store.go:312:7: leaking param: s
+pkg/sql/contention/event_store.go:312:38: leaking param: ctx
+pkg/sql/contention/event_store.go:201:7: leaking param: s
+pkg/sql/contention/event_store.go:201:36: leaking param: ctx
+pkg/sql/contention/event_store.go:201:57: leaking param: stopper
+pkg/sql/contention/event_store.go:202:66: leaking param: ctx
+pkg/sql/contention/event_store.go:205:54: ctx does not escape
+pkg/sql/contention/event_store.go:202:61: func literal escapes to heap
+pkg/sql/contention/event_store.go:205:49: func literal escapes to heap
+pkg/sql/contention/event_store.go:224:19: ... argument does not escape
+pkg/sql/contention/event_store.go:168:7: leaking param: s
+pkg/sql/contention/event_store.go:168:28: leaking param: ctx
+pkg/sql/contention/event_store.go:168:49: leaking param: stopper
+pkg/sql/contention/event_store.go:238:7: leaking param content: s
+pkg/sql/contention/event_store.go:238:31: leaking param: e
+pkg/sql/contention/event_store.go:253:22: func literal does not escape
+pkg/sql/contention/event_store.go:288:7: leaking param: s
+pkg/sql/contention/event_store.go:293:6: moved to heap: contentionEvent
+pkg/sql/contention/event_store.go:295:31: hash escapes to heap
+pkg/sql/contention/event_store.go:260:7: leaking param: s
+pkg/sql/contention/event_store.go:261:2: op does not escape
+pkg/sql/contention/event_store.go:269:21: entry does not escape
+pkg/sql/contention/event_store.go:268:14: make([]uint64, 0, ~R0) escapes to heap
+pkg/sql/contention/event_store.go:269:16: func literal does not escape
+pkg/sql/contention/event_store.go:356:17: event does not escape
+pkg/sql/contention/metrics.go:31:37: &metric.Gauge{...} escapes to heap
+pkg/sql/contention/metrics.go:31:37: new(int64) escapes to heap
+pkg/sql/contention/metrics.go:37:37: &metric.Counter{...} escapes to heap
+pkg/sql/contention/metrics.go:37:37: metrics.Counter(metrics.NilCounter{}) escapes to heap
+pkg/sql/contention/metrics.go:37:37: &metrics.StandardCounter{...} escapes to heap
+pkg/sql/contention/metrics.go:43:36: &metric.Counter{...} escapes to heap
+pkg/sql/contention/metrics.go:43:36: metrics.Counter(metrics.NilCounter{}) escapes to heap
+pkg/sql/contention/metrics.go:43:36: &metrics.StandardCounter{...} escapes to heap
+pkg/sql/contention/registry.go:99:7: c does not escape
+pkg/sql/contention/registry.go:99:32: other does not escape
+pkg/sql/contention/registry.go:126:23: leaking param: c
+pkg/sql/contention/registry.go:127:37: &cache.UnorderedCache{...} escapes to heap
+pkg/sql/contention/registry.go:128:24: c.TxnMeta.ID escapes to heap
+pkg/sql/contention/registry.go:128:35: uint64(1) escapes to heap
+pkg/sql/contention/registry.go:129:33: &cache.OrderedCache{...} escapes to heap
+pkg/sql/contention/registry.go:130:26: comparableKey(c.Key) escapes to heap
+pkg/sql/contention/registry.go:131:9: &indexMapValue{...} escapes to heap
+pkg/sql/contention/registry.go:140:7: leaking param content: v
+pkg/sql/contention/registry.go:140:44: leaking param: c
+pkg/sql/contention/registry.go:144:51: comparableKey(c.Key) escapes to heap
+pkg/sql/contention/registry.go:146:66: c.TxnMeta.ID escapes to heap
+pkg/sql/contention/registry.go:151:37: &cache.UnorderedCache{...} escapes to heap
+pkg/sql/contention/registry.go:152:36: comparableKey(c.Key) escapes to heap
+pkg/sql/contention/registry.go:154:48: c.TxnMeta.ID escapes to heap
+pkg/sql/contention/registry.go:154:82: numTimesThisTxnWasEncountered + 1 escapes to heap
+pkg/sql/contention/registry.go:165:9: &indexMap{...} escapes to heap
+pkg/sql/contention/registry.go:168:17: func literal escapes to heap
+pkg/sql/contention/registry.go:166:41: &cache.UnorderedCache{...} escapes to heap
+pkg/sql/contention/registry.go:177:7: leaking param content: m
+pkg/sql/contention/registry.go:180:32: m.scratchKey escapes to heap
+pkg/sql/contention/registry.go:189:7: leaking param content: m
+pkg/sql/contention/registry.go:189:67: leaking param: v
+pkg/sql/contention/registry.go:192:23: m.scratchKey escapes to heap
+pkg/sql/contention/registry.go:211:27: c does not escape
+pkg/sql/contention/registry.go:212:37: &cache.UnorderedCache{...} escapes to heap
+pkg/sql/contention/registry.go:213:24: c.TxnMeta.ID escapes to heap
+pkg/sql/contention/registry.go:213:35: uint64(1) escapes to heap
+pkg/sql/contention/registry.go:214:9: &nonSQLKeyMapValue{...} escapes to heap
+pkg/sql/contention/registry.go:223:7: leaking param content: v
+pkg/sql/contention/registry.go:223:48: c does not escape
+pkg/sql/contention/registry.go:227:45: c.TxnMeta.ID escapes to heap
+pkg/sql/contention/registry.go:230:26: c.TxnMeta.ID escapes to heap
+pkg/sql/contention/registry.go:230:60: numTimesThisTxnWasEncountered + 1 escapes to heap
+pkg/sql/contention/registry.go:240:9: &nonSQLKeysMap{...} escapes to heap
+pkg/sql/contention/registry.go:241:38: &cache.OrderedCache{...} escapes to heap
+pkg/sql/contention/registry.go:246:18: leaking param: st
+pkg/sql/contention/registry.go:246:40: leaking param: endpoint
+pkg/sql/contention/registry.go:246:67: leaking param: metrics
+pkg/sql/contention/registry.go:247:9: &Registry{...} escapes to heap
+pkg/sql/contention/registry.go:255:7: leaking param content: r
+pkg/sql/contention/registry.go:255:26: leaking param: ctx
+pkg/sql/contention/registry.go:255:47: leaking param: stopper
+pkg/sql/contention/registry.go:260:7: leaking param: r
+pkg/sql/contention/registry.go:260:39: leaking param: event
+pkg/sql/contention/registry.go:269:48: comparableKey(c.Key) escapes to heap
+pkg/sql/contention/registry.go:271:37: comparableKey(c.Key) escapes to heap
+pkg/sql/contention/registry.go:291:7: leaking param content: r
+pkg/sql/contention/registry.go:291:33: op does not escape
+pkg/sql/contention/registry.go:297:7: leaking param content: r
+pkg/sql/contention/registry.go:297:39: leaking param: ctx
+pkg/sql/contention/registry.go:377:30: leaking param: txns
+pkg/sql/contention/registry.go:378:12: txns escapes to heap
+pkg/sql/contention/registry.go:378:19: func literal does not escape
+pkg/sql/contention/registry.go:301:24: leaking param content: txnCache
+pkg/sql/contention/registry.go:304:19: e does not escape
+pkg/sql/contention/registry.go:302:14: make([]contentionpb.SingleTxnContention, ~R0) escapes to heap
+pkg/sql/contention/registry.go:304:14: func literal does not escape
+pkg/sql/contention/registry.go:366:32: leaking param: ice
+pkg/sql/contention/registry.go:367:12: ice escapes to heap
+pkg/sql/contention/registry.go:367:18: func literal does not escape
+pkg/sql/contention/registry.go:316:7: leaking param: r
+pkg/sql/contention/registry.go:324:35: leaking param content: e
+pkg/sql/contention/registry.go:334:27: leaking param content: k
+pkg/sql/contention/registry.go:334:30: leaking param content: txnCacheInterface
+pkg/sql/contention/registry.go:349:26: leaking param content: k
+pkg/sql/contention/registry.go:349:29: leaking param content: nonSQLKeyMapVal
+pkg/sql/contention/registry.go:322:35: make([]contentionpb.IndexContentionEvents, ~R0) escapes to heap
+pkg/sql/contention/registry.go:324:30: func literal does not escape
+pkg/sql/contention/registry.go:332:20: make([]contentionpb.SingleKeyContention, ~R0) escapes to heap
+pkg/sql/contention/registry.go:334:22: func literal does not escape
+pkg/sql/contention/registry.go:347:34: make([]contentionpb.SingleNonSQLKeyContention, ~R0) escapes to heap
+pkg/sql/contention/registry.go:349:21: func literal does not escape
+pkg/sql/contention/registry.go:384:7: leaking param: r
+pkg/sql/contention/registry.go:388:16: (interface {})(string("strings: illegal use of non-zero Builder copied by value")) escapes to heap
+pkg/sql/contention/registry.go:391:16: (interface {})(string("strings: illegal use of non-zero Builder copied by value")) escapes to heap
+pkg/sql/contention/registry.go:573:2: leaking param: first
+pkg/sql/contention/registry.go:573:9: second does not escape
+pkg/sql/contention/registry.go:578:18: string(bytes.a) does not escape
+pkg/sql/contention/registry.go:578:18: string(bytes.b) does not escape
+pkg/sql/contention/registry.go:503:2: leaking param content: first
+pkg/sql/contention/registry.go:503:44: leaking param content: second
+pkg/sql/contention/registry.go:506:20: fmt.Sprintf("attempting to merge contention events from different indexes\n%s%s", ... argument...) escapes to heap
+pkg/sql/contention/registry.go:506:20: ... argument does not escape
+pkg/sql/contention/registry.go:506:103: contentionpb.IndexContentionEvents.String(first) escapes to heap
+pkg/sql/contention/registry.go:506:120: contentionpb.IndexContentionEvents.String(second) escapes to heap
+pkg/sql/contention/registry.go:524:22: make([]contentionpb.SingleKeyContention, maxNumEvents) escapes to heap
+pkg/sql/contention/registry.go:410:2: leaking param: first
+pkg/sql/contention/registry.go:410:9: leaking param content: second
+pkg/sql/contention/registry.go:449:16: make([]contentionpb.SingleNonSQLKeyContention, maxNumNonSQLKeys) escapes to heap
+pkg/sql/contention/resolver.go:118:18: leaking param: endpoint
+pkg/sql/contention/resolver.go:118:45: leaking param: metrics
+pkg/sql/contention/resolver.go:119:7: &resolverQueueImpl{...} escapes to heap
+pkg/sql/contention/resolver.go:124:30: make([]contentionpb.ExtendedContentionEvent, 0, sizeHint) escapes to heap
+pkg/sql/contention/resolver.go:125:28: make([]contentionpb.ExtendedContentionEvent, 0, sizeHint) escapes to heap
+pkg/sql/contention/resolver.go:126:30: make(map[uint64]uint32, sizeHint) escapes to heap
+pkg/sql/contention/resolver.go:132:7: leaking param: q
+pkg/sql/contention/resolver.go:132:37: leaking param content: block
+pkg/sql/contention/resolver.go:351:2: batch does not escape
+pkg/sql/contention/resolver.go:353:21: &serverpb.TxnIDResolutionRequest{...} escapes to heap
+pkg/sql/contention/resolver.go:355:22: make([]uuid.UUID, 0, len(batch)) escapes to heap
+pkg/sql/contention/resolver.go:357:20: &serverpb.TxnIDResolutionRequest{...} escapes to heap
+pkg/sql/contention/resolver.go:359:22: make([]uuid.UUID, 0, len(batch)) escapes to heap
+pkg/sql/contention/resolver.go:273:7: leaking param content: q
+pkg/sql/contention/resolver.go:274:2: leaking param: event
+pkg/sql/contention/resolver.go:156:7: leaking param content: q
+pkg/sql/contention/resolver.go:156:43: leaking param: ctx
+pkg/sql/contention/resolver.go:157:18: make([]contentionpb.ExtendedContentionEvent, len(q.mu.unresolvedEvents)) escapes to heap
+pkg/sql/contention/resolver.go:164:12: queueCpy escapes to heap
+pkg/sql/contention/resolver.go:164:23: func literal does not escape
+pkg/sql/contention/resolver.go:182:36: &secondary.withSecondaryError{...} escapes to heap
+pkg/sql/contention/resolver.go:187:36: &secondary.withSecondaryError{...} escapes to heap
+pkg/sql/contention/resolver.go:190:89: make(map[uuid.UUID]appstatspb.TransactionFingerprintID, len(resp.ResolvedTxnIDs)) does not escape
+pkg/sql/contention/resolver.go:190:89: make(map[uuid.UUID]appstatspb.TransactionFingerprintID, len(resp.ResolvedTxnIDs)) does not escape
+pkg/sql/contention/resolver.go:191:87: make(map[uuid.UUID]appstatspb.TransactionFingerprintID, len(resp.ResolvedTxnIDs)) does not escape
+pkg/sql/contention/resolver.go:191:87: make(map[uuid.UUID]appstatspb.TransactionFingerprintID, len(resp.ResolvedTxnIDs)) does not escape
+pkg/sql/contention/resolver.go:141:7: leaking param: q
+pkg/sql/contention/resolver.go:142:2: leaking param: ctx
+pkg/sql/contention/resolver.go:236:2: existingTxnFingerprintID does not escape
+pkg/sql/contention/resolver.go:237:2: resolvedTxnIDs does not escape
+pkg/sql/contention/resolver.go:237:18: inProgressTxnIDs does not escape
+pkg/sql/contention/resolver.go:309:2: leaking param: sortedEvents to result eventsForFirstCoordinator level=0
+pkg/sql/contention/resolver.go:309:2: leaking param: sortedEvents to result remaining level=0
+pkg/sql/contention/resolver.go:326:2: resp does not escape
+pkg/sql/contention/resolver.go:332:23: make(map[uuid.UUID]appstatspb.TransactionFingerprintID, len(resp.ResolvedTxnIDs)) escapes to heap
+pkg/sql/contention/resolver.go:333:25: make(map[uuid.UUID]appstatspb.TransactionFingerprintID, len(resp.ResolvedTxnIDs)) escapes to heap
+pkg/sql/contention/test_utils.go:28:9: &fakeStatusServer{...} escapes to heap
+pkg/sql/contention/test_utils.go:29:22: make(map[uuid.UUID]appstatspb.TransactionFingerprintID) escapes to heap
+pkg/sql/contention/test_utils.go:34:7: leaking param: f to result ~r1 level=1
+pkg/sql/contention/test_utils.go:35:21: req does not escape
+pkg/sql/contention/test_utils.go:41:10: &serverpb.TxnIDResolutionResponse{...} escapes to heap
+pkg/sql/contention/test_utils.go:42:23: make([]contentionpb.ResolvedTxnID, 0) escapes to heap
+pkg/sql/contention/test_utils.go:57:7: f does not escape
+pkg/sql/contention/test_utils.go:66:13: make(fakeStatusServerCluster) escapes to heap
+pkg/sql/contention/test_utils.go:69:7: f does not escape
+pkg/sql/contention/test_utils.go:69:50: leaking param: coordinatorID
+pkg/sql/contention/test_utils.go:72:37: &fakeStatusServer{...} escapes to heap
+pkg/sql/contention/test_utils.go:72:37: make(map[uuid.UUID]appstatspb.TransactionFingerprintID) escapes to heap
+pkg/sql/contention/test_utils.go:78:7: f does not escape
+pkg/sql/contention/test_utils.go:79:2: ctx does not escape
+pkg/sql/contention/test_utils.go:79:23: leaking param content: req
+pkg/sql/contention/test_utils.go:81:26: &fakeStatusServer{...} escapes to heap
+pkg/sql/contention/test_utils.go:81:26: make(map[uuid.UUID]appstatspb.TransactionFingerprintID) escapes to heap
+pkg/sql/contention/test_utils.go:81:61: &serverpb.TxnIDResolutionResponse{...} escapes to heap
+pkg/sql/contention/test_utils.go:81:61: make([]contentionpb.ResolvedTxnID, 0) escapes to heap
+pkg/sql/contention/test_utils.go:84:7: f does not escape
+pkg/sql/contention/test_utils.go:85:2: leaking param: coordinatorNodeID
+pkg/sql/contention/test_utils.go:87:19: &fakeStatusServer{...} escapes to heap
+pkg/sql/contention/test_utils.go:87:19: make(map[uuid.UUID]appstatspb.TransactionFingerprintID) escapes to heap
+pkg/sql/contention/test_utils.go:90:7: f does not escape
+pkg/sql/contention/test_utils.go:90:55: leaking param: coordinatorNodeID
+pkg/sql/contention/test_utils.go:90:81: leaking param: err
+pkg/sql/contention/test_utils.go:91:19: &fakeStatusServer{...} escapes to heap
+pkg/sql/contention/test_utils.go:91:19: make(map[uuid.UUID]appstatspb.TransactionFingerprintID) escapes to heap
+pkg/sql/contention/test_utils.go:94:7: f does not escape
+pkg/sql/contention/test_utils.go:100:7: f does not escape
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:61:9: string("index out of bounds") escapes to heap
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:69:9: string("getting first from empty ring buffer") escapes to heap
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:77:9: string("getting last from empty ring buffer") escapes to heap
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:84:9: string("resizing to fewer elements than current length") escapes to heap
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:92:19: make([]go.shape.*uint8_0, ring.n) escapes to heap
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:150:9: string("removing first from empty ring buffer") escapes to heap
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:163:9: string("removing last from empty ring buffer") escapes to heap
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:180:9: string("reserving fewer elements than current length") escapes to heap
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:198:9: string("resizing to fewer elements than current length") escapes to heap
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:230:13: make([]go.shape.*uint8_0, ~R0) escapes to heap
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:61:9: string("index out of bounds") escapes to heap
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:69:9: string("getting first from empty ring buffer") escapes to heap
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:77:9: string("getting last from empty ring buffer") escapes to heap
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:84:9: string("resizing to fewer elements than current length") escapes to heap
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:92:19: make([]go.shape.struct { ID github.com/cockroachdb/cockroach/pkg/util/tracing.SnapshotID; github.com/cockroachdb/cockroach/pkg/util/tracing.SpansSnapshot }_0, ring.n) escapes to heap
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:150:9: string("removing first from empty ring buffer") escapes to heap
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:163:9: string("removing last from empty ring buffer") escapes to heap
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:180:9: string("reserving fewer elements than current length") escapes to heap
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:198:9: string("resizing to fewer elements than current length") escapes to heap
+github.com/cockroachdb/cockroach/pkg/util/ring/ring_buffer.go:230:13: make([]go.shape.struct { ID github.com/cockroachdb/cockroach/pkg/util/tracing.SnapshotID; github.com/cockroachdb/cockroach/pkg/util/tracing.SpansSnapshot }_0, ~R0) escapes to heap
+<autogenerated>:1: inlining call to Metrics.MetricStruct
+<autogenerated>:1: inlining call to comparableKey.Compare
+<autogenerated>:1: inlining call to roachpb.Key.Compare
+<autogenerated>:1: inlining call to bytes.Compare
+<autogenerated>:1: inlining call to cache.(*baseCache).Add
+<autogenerated>:1: inlining call to cache.(*baseCache).AddEntry
+<autogenerated>:1: inlining call to cache.(*baseCache).AddEntryAfter
+<autogenerated>:1: inlining call to cache.(*OrderedCache).Ceil
+<autogenerated>:1: inlining call to cache.(*baseCache).DelEntry
+<autogenerated>:1: inlining call to cache.(*OrderedCache).Floor
+<autogenerated>:1: inlining call to cache.(*baseCache).Len
+<autogenerated>:1: inlining call to cache.(*baseCache).StealthyGet
+<autogenerated>:1: inlining call to cache.(*OrderedCache).del
+<autogenerated>:1: inlining call to cache.(*OrderedCache).init
+<autogenerated>:1: inlining call to cache.(*OrderedCache).length
+<autogenerated>:1: inlining call to llrb.(*Tree).Len
+<autogenerated>:1: inlining call to contentionutils.(*ConcurrentBufferGuard).reserveMsgBlockIndex
+<autogenerated>:1: inlining call to contentionutils.(*ConcurrentBufferGuard).rewindBuffer
+<autogenerated>:1: inlining call to fakeStatusServerCluster.clear
+<autogenerated>:1: inlining call to fakeStatusServerCluster.clearErrors
+<autogenerated>:1: inlining call to fakeStatusServerCluster.getStatusServer
+<autogenerated>:1: inlining call to newFakeStatusServer
+<autogenerated>:1: &fakeStatusServer{...} escapes to heap
+<autogenerated>:1: make(map[uuid.UUID]appstatspb.TransactionFingerprintID) escapes to heap
+<autogenerated>:1: inlining call to fakeStatusServerCluster.setStatusServerError
+<autogenerated>:1: inlining call to fakeStatusServerCluster.getStatusServer
+<autogenerated>:1: inlining call to newFakeStatusServer
+<autogenerated>:1: &fakeStatusServer{...} escapes to heap
+<autogenerated>:1: make(map[uuid.UUID]appstatspb.TransactionFingerprintID) escapes to heap
+<autogenerated>:1: inlining call to fakeStatusServerCluster.setTxnIDEntry
+<autogenerated>:1: inlining call to fakeStatusServerCluster.getStatusServer
+<autogenerated>:1: inlining call to newFakeStatusServer
+<autogenerated>:1: inlining call to (*fakeStatusServer).setTxnIDEntry
+<autogenerated>:1: &fakeStatusServer{...} escapes to heap
+<autogenerated>:1: make(map[uuid.UUID]appstatspb.TransactionFingerprintID) escapes to heap
