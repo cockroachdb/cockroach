@@ -62,7 +62,9 @@ type legacySSTIterator struct {
 	sst  *sstable.Reader
 	iter sstable.Iterator
 
-	mvccKey   MVCCKey
+	// Unstable key.
+	mvccKey MVCCKey
+	// Unstable value.
 	value     []byte
 	iterValid bool
 	err       error
@@ -151,8 +153,8 @@ func (r *legacySSTIterator) SeekGE(key MVCCKey) {
 	if r.iterValid && r.err == nil && r.verify && r.mvccKey.IsValue() {
 		r.verifyValue()
 	}
-	r.prevSeekKey.Key = append(r.prevSeekKey.Key[:0], r.mvccKey.Key...)
-	r.prevSeekKey.Timestamp = r.mvccKey.Timestamp
+	r.prevSeekKey.Key = append(r.prevSeekKey.Key[:0], key.Key...)
+	r.prevSeekKey.Timestamp = key.Timestamp
 	r.seekGELastOp = true
 }
 
