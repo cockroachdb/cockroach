@@ -41,7 +41,8 @@ func runConnectionLatencyTest(
 	require.NoError(t, err)
 
 	settings := install.MakeClusterSettings(install.SecureOption(true))
-	err = c.StartE(ctx, t.L(), option.DefaultStartOpts(), settings)
+	// Don't start a backup schedule as this roachtest reports roachperf results.
+	err = c.StartE(ctx, t.L(), option.DefaultStartOptsNoBackups(), settings)
 	require.NoError(t, err)
 
 	var passwordFlag string

@@ -258,8 +258,8 @@ func runFailoverLiveness(
 
 	rng, _ := randutil.NewTestRand()
 
-	// Create cluster.
-	opts := option.DefaultStartOpts()
+	// Create cluster. Don't schedule a backup as this roachtest reports to roachperf.
+	opts := option.DefaultStartOptsNoBackups()
 	settings := install.MakeClusterSettings()
 
 	failer := makeFailer(t, c, failureMode, opts, settings)
