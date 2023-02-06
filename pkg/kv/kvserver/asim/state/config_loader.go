@@ -37,6 +37,22 @@ var SingleRegionConfig = ClusterInfo{
 	},
 }
 
+// SingleRegionMultiStoreConfig is a simple cluster config with a single region
+// and 3 zones, all zones have 1 node and 6 stores per node.
+var SingleRegionMultiStoreConfig = ClusterInfo{
+	DiskCapacityGB: 1024,
+	Regions: []Region{
+		{
+			Name: "US",
+			Zones: []Zone{
+				{Name: "US_1", NodeCount: 1, StoresPerNode: 5},
+				{Name: "US_2", NodeCount: 1, StoresPerNode: 5},
+				{Name: "US_3", NodeCount: 1, StoresPerNode: 5},
+			},
+		},
+	},
+}
+
 // MultiRegionConfig is a perfectly balanced cluster config with 3 regions.
 var MultiRegionConfig = ClusterInfo{
 	DiskCapacityGB: 2048,
@@ -108,19 +124,16 @@ var SingleRangeConfig = []RangeInfo{
 			InternalReplicas: []roachpb.ReplicaDescriptor{
 				{
 					StoreID: 1,
-					Type:    roachpb.VOTER_FULL,
 				},
 				{
 					StoreID: 2,
-					Type:    roachpb.VOTER_FULL,
 				},
 				{
 					StoreID: 3,
-					Type:    roachpb.VOTER_FULL,
 				},
 			},
 		},
-		Config:      defaultSpanConfig,
+		Config:      &defaultSpanConfig,
 		Leaseholder: 1,
 	},
 }
@@ -135,19 +148,16 @@ var MultiRangeConfig = []RangeInfo{
 			InternalReplicas: []roachpb.ReplicaDescriptor{
 				{
 					StoreID: 1,
-					Type:    roachpb.VOTER_FULL,
 				},
 				{
 					StoreID: 2,
-					Type:    roachpb.VOTER_FULL,
 				},
 				{
 					StoreID: 3,
-					Type:    roachpb.VOTER_FULL,
 				},
 			},
 		},
-		Config:      defaultSpanConfig,
+		Config:      &defaultSpanConfig,
 		Leaseholder: 1,
 	},
 	{
@@ -156,19 +166,16 @@ var MultiRangeConfig = []RangeInfo{
 			InternalReplicas: []roachpb.ReplicaDescriptor{
 				{
 					StoreID: 1,
-					Type:    roachpb.VOTER_FULL,
 				},
 				{
 					StoreID: 2,
-					Type:    roachpb.VOTER_FULL,
 				},
 				{
 					StoreID: 3,
-					Type:    roachpb.VOTER_FULL,
 				},
 			},
 		},
-		Config:      defaultSpanConfig,
+		Config:      &defaultSpanConfig,
 		Leaseholder: 2,
 	},
 	{
@@ -177,27 +184,42 @@ var MultiRangeConfig = []RangeInfo{
 			InternalReplicas: []roachpb.ReplicaDescriptor{
 				{
 					StoreID: 1,
-					Type:    roachpb.VOTER_FULL,
 				},
 				{
 					StoreID: 2,
-					Type:    roachpb.VOTER_FULL,
 				},
 				{
 					StoreID: 3,
-					Type:    roachpb.VOTER_FULL,
 				},
 			},
 		},
-		Config:      defaultSpanConfig,
+		Config:      &defaultSpanConfig,
 		Leaseholder: 3,
 	},
 }
 
-// Zone is a simulated availability zone.
+// RangeInfoWithReplicas returns a new RangeInfo using the supplied arguments.
+func RangeInfoWithReplicas(
+	startKey Key, replicas []StoreID, leaseholder StoreID, config *roachpb.SpanConfig,
+) RangeInfo {
+	desc := roachpb.RangeDescriptor{
+		StartKey:         startKey.ToRKey(),
+		InternalReplicas: make([]roachpb.ReplicaDescriptor, len(replicas)),
+	}
+	for i, storeID := range replicas {
+		desc.InternalReplicas[i] = roachpb.ReplicaDescriptor{
+			StoreID: roachpb.StoreID(storeID),
+		}
+	}
+	return RangeInfo{Descriptor: desc, Leaseholder: leaseholder, Config: config}
+}
+
+// Zone is a simulated availability zone. When StoresPerNode is 0, a default
+// value of 1 store per node is used instead.
 type Zone struct {
-	Name      string
-	NodeCount int
+	Name          string
+	NodeCount     int
+	StoresPerNode int
 }
 
 // Region is a simulated region which contains one or more zones.
@@ -215,7 +237,7 @@ type ClusterInfo struct {
 
 type RangeInfo struct {
 	Descriptor  roachpb.RangeDescriptor
-	Config      roachpb.SpanConfig
+	Config      *roachpb.SpanConfig
 	Leaseholder StoreID
 }
 
@@ -241,11 +263,17 @@ func LoadClusterInfo(c ClusterInfo, settings *config.SimulationSettings) State {
 		for _, z := range r.Zones {
 			for i := 0; i < z.NodeCount; i++ {
 				node := s.AddNode()
-				if _, ok := s.AddStore(node.NodeID()); !ok {
-					panic(fmt.Sprintf(
-						"Unable to load config: cannot add store %d",
-						node.NodeID(),
-					))
+				storesRequired := z.StoresPerNode
+				if storesRequired < 1 {
+					storesRequired = 1
+				}
+				for store := 0; store < storesRequired; store++ {
+					if _, ok := s.AddStore(node.NodeID()); !ok {
+						panic(fmt.Sprintf(
+							"Unable to load config: cannot add store %d",
+							node.NodeID(),
+						))
+					}
 				}
 			}
 		}
@@ -259,6 +287,12 @@ func LoadRangeInfo(s State, rangeInfos ...RangeInfo) {
 	for _, r := range rangeInfos {
 		var rng Range
 		var ok bool
+
+		// Use the default span config if not set in the configuration.
+		if r.Config == nil {
+			copiedDefaultConfig := defaultSpanConfig
+			r.Config = &copiedDefaultConfig
+		}
 
 		// When the state is initialized there will always be at least one
 		// range that spans the entire keyspace. All other ranges are split off
@@ -278,7 +312,7 @@ func LoadRangeInfo(s State, rangeInfos ...RangeInfo) {
 			))
 		}
 
-		if !s.SetSpanConfig(rng.RangeID(), r.Config) {
+		if !s.SetSpanConfig(rng.RangeID(), *r.Config) {
 			panic(fmt.Sprintf(
 				"Unable to load config: cannot set span config for range %s",
 				rng,
