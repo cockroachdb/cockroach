@@ -254,85 +254,102 @@ func getDescriptorsFromStoreForInterval(
 		Timestamp: upperBound.Prev(),
 	}
 	descriptorKey := catalogkeys.MakeDescMetadataKey(codec, id)
-	requestHeader := roachpb.RequestHeader{
-		Key:    descriptorKey,
-		EndKey: descriptorKey.PrefixEnd(),
-	}
-	req := &roachpb.ExportRequest{
-		RequestHeader: requestHeader,
-		StartTime:     lowerBound.Prev(),
-		MVCCFilter:    roachpb.MVCCFilter_All,
-	}
-
-	// Export request returns descriptors in decreasing modification time.
-	res, pErr := kv.SendWrappedWith(ctx, db.NonTransactionalSender(), batchRequestHeader, req)
-	if pErr != nil {
-		return nil, errors.Wrapf(pErr.GoError(), "error in retrieving descs between %s, %s",
-			lowerBound, upperBound)
-	}
-
 	// Unmarshal key span retrieved from export request to construct historical descs.
 	var descriptorsRead []historicalDescriptor
-	// Keep track of the most recently processed descriptor's modification time to
-	// set as the expiration for the next descriptor to process. Recall we process
-	// descriptors in decreasing modification time.
-	subsequentModificationTime := upperBound
-	for _, file := range res.(*roachpb.ExportResponse).Files {
-		if err := func() error {
-			it, err := kvstorage.NewMemSSTIterator(file.SST, false, /* verify */
-				kvstorage.IterOptions{
-					// NB: We assume there will be no MVCC range tombstones here.
-					KeyTypes:   kvstorage.IterKeyTypePointsOnly,
-					LowerBound: keys.MinKey,
-					UpperBound: keys.MaxKey,
-				})
-			if err != nil {
-				return err
-			}
-			defer it.Close()
-
-			// Convert each MVCC key value pair corresponding to the specified
-			// descriptor ID.
-			for it.SeekGE(kvstorage.NilKey); ; it.Next() {
-				if ok, err := it.Valid(); err != nil {
-					return err
-				} else if !ok {
-					return nil
-				}
-
-				// Decode key and value of descriptor.
-				k := it.UnsafeKey()
-				descContent, err := it.UnsafeValue()
-				if err != nil {
-					return err
-				}
-				if descContent == nil {
-					return errors.Wrapf(errors.New("unsafe value error"), "error "+
-						"extracting raw bytes of descriptor with key %s modified between "+
-						"%s, %s", k.String(), k.Timestamp, subsequentModificationTime)
-				}
-
-				// Construct a plain descriptor.
-				value := roachpb.Value{RawBytes: descContent, Timestamp: k.Timestamp}
-				descBuilder, err := descbuilder.FromSerializedValue(&value)
-				if err != nil {
-					return err
-				}
-
-				// Construct a historical descriptor with expiration.
-				histDesc := historicalDescriptor{
-					desc:       descBuilder.BuildImmutable(),
-					expiration: subsequentModificationTime,
-				}
-				descriptorsRead = append(descriptorsRead, histDesc)
-
-				// Update the expiration time for next descriptor.
-				subsequentModificationTime = k.Timestamp
-			}
-		}(); err != nil {
-			return nil, err
+	for {
+		requestHeader := roachpb.RequestHeader{
+			Key:    descriptorKey,
+			EndKey: descriptorKey.PrefixEnd(),
 		}
+		req := &roachpb.ExportRequest{
+			RequestHeader: requestHeader,
+			StartTime:     lowerBound.Prev(),
+			MVCCFilter:    roachpb.MVCCFilter_All,
+		}
+
+		// Export request returns descriptors in decreasing modification time.
+		res, pErr := kv.SendWrappedWith(ctx, db.NonTransactionalSender(), batchRequestHeader, req)
+		if pErr != nil {
+			return nil, errors.Wrapf(pErr.GoError(), "error in retrieving descs between %s, %s",
+				lowerBound, upperBound)
+		}
+
+		// Keep track of the most recently processed descriptor's modification time to
+		// set as the expiration for the next descriptor to process. Recall we process
+		// descriptors in decreasing modification time.
+		subsequentModificationTime := upperBound
+		exportResp := res.(*roachpb.ExportResponse)
+		for _, file := range exportResp.Files {
+			if err := func() error {
+				it, err := kvstorage.NewMemSSTIterator(file.SST, false, /* verify */
+					kvstorage.IterOptions{
+						// NB: We assume there will be no MVCC range tombstones here.
+						KeyTypes:   kvstorage.IterKeyTypePointsOnly,
+						LowerBound: keys.MinKey,
+						UpperBound: keys.MaxKey,
+					})
+				if err != nil {
+					return err
+				}
+				defer func() {
+					if it != nil {
+						it.Close()
+					}
+				}()
+
+				// Convert each MVCC key value pair corresponding to the specified
+				// descriptor ID.
+				for it.SeekGE(kvstorage.NilKey); ; it.Next() {
+					if ok, err := it.Valid(); err != nil {
+						return err
+					} else if !ok {
+						// Close and nil out the iter to release the underlying resources.
+						it.Close()
+						it = nil
+						return nil
+					}
+
+					// Decode key and value of descriptor.
+					k := it.UnsafeKey()
+					descContent, err := it.UnsafeValue()
+					if err != nil {
+						return err
+					}
+					if descContent == nil {
+						return errors.Wrapf(errors.New("unsafe value error"), "error "+
+							"extracting raw bytes of descriptor with key %s modified between "+
+							"%s, %s", k.String(), k.Timestamp, subsequentModificationTime)
+					}
+
+					// Construct a plain descriptor.
+					value := roachpb.Value{RawBytes: descContent, Timestamp: k.Timestamp}
+					descBuilder, err := descbuilder.FromSerializedValue(&value)
+					if err != nil {
+						return err
+					}
+
+					// Construct a historical descriptor with expiration.
+					histDesc := historicalDescriptor{
+						desc:       descBuilder.BuildImmutable(),
+						expiration: subsequentModificationTime,
+					}
+					descriptorsRead = append(descriptorsRead, histDesc)
+
+					// Update the expiration time for next descriptor.
+					subsequentModificationTime = k.Timestamp
+				}
+			}(); err != nil {
+				return nil, err
+			}
+		}
+
+		// Check if the ExportRequest paginated with a resume span.
+		if exportResp.ResumeSpan == nil {
+			break
+		}
+		descriptorKey = exportResp.ResumeSpan.Key
 	}
+
 	return descriptorsRead, nil
 }
 
