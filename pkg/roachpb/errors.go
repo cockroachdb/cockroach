@@ -320,24 +320,24 @@ func (e *Error) GoError() error {
 			if txnRestart := iface.canRestartTransaction(); txnRestart != TransactionRestart_NONE {
 				// TODO(tbg): revisit this unintuitive error wrapping here and see if
 				// a better solution can be found.
-				return &UnhandledRetryableError{
+				return errors.WithStack(&UnhandledRetryableError{
 					PErr: *e,
-				}
+				})
 			}
 		}
-		return err
+		return errors.WithStack(err)
 	}
 
 	// Everything below is legacy behavior that can be deleted in 21.2.
 	if e.TransactionRestart() != TransactionRestart_NONE {
-		return &UnhandledRetryableError{
+		return errors.WithStack(&UnhandledRetryableError{
 			PErr: *e,
-		}
+		})
 	}
 	if detail := e.GetDetail(); detail != nil {
-		return detail
+		return errors.WithStack(detail)
 	}
-	return (*internalError)(e)
+	return errors.WithStack((*internalError)(e))
 }
 
 // GetDetail returns an error detail associated with the error, or nil otherwise.
