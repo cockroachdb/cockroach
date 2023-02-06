@@ -956,7 +956,7 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 	// error condition this loop isn't capable of handling.
 	for {
 		if err := ctx.Err(); err != nil {
-			return err
+			return errors.Wrap(err, "txn exec")
 		}
 		err = fn(ctx, txn)
 

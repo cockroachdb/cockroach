@@ -9,6 +9,7 @@ go_library(
     deps = [
         "//pkg/util/grpcutil",
         "//pkg/util/tracing",
+        "@com_github_cockroachdb_errors//:errors",
         "@io_opentelemetry_go_otel//attribute",
         "@io_opentelemetry_go_otel//codes",
         "@org_golang_google_grpc//:go_default_library",
