@@ -819,13 +819,7 @@ func clearSubsumedReplicaDiskData(
 			ClearUnreplicatedByRangeID: true,
 			MustUseClearRange:          true,
 		}
-		if err := sr.preDestroyRaftMuLocked(
-			ctx,
-			reader,
-			&subsumedReplSST,
-			subsumedNextReplicaID,
-			opts,
-		); err != nil {
+		if err := preDestroyRaftMuLocked(ctx, sr.RangeID, reader, &subsumedReplSST, subsumedNextReplicaID, opts); err != nil {
 			subsumedReplSST.Close()
 			return err
 		}

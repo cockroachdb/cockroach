@@ -334,12 +334,10 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		// required for correctness, since the merge protocol should guarantee that
 		// no new replicas of the RHS can ever be created, but it doesn't hurt to
 		// be careful.
-		if err := rhsRepl.preDestroyRaftMuLocked(
-			ctx, b.batch, b.batch, mergedTombstoneReplicaID, clearRangeDataOptions{
-				ClearReplicatedByRangeID:   true,
-				ClearUnreplicatedByRangeID: true,
-			},
-		); err != nil {
+		if err := preDestroyRaftMuLocked(ctx, rhsRepl.RangeID, b.batch, b.batch, mergedTombstoneReplicaID, clearRangeDataOptions{
+			ClearReplicatedByRangeID:   true,
+			ClearUnreplicatedByRangeID: true,
+		}); err != nil {
 			return errors.Wrapf(err, "unable to destroy replica before merge")
 		}
 
@@ -476,17 +474,11 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		// We've set the replica's in-mem status to reflect the pending destruction
 		// above, and preDestroyRaftMuLocked will also add a range tombstone to the
 		// batch, so that when we commit it, the removal is finalized.
-		if err := b.r.preDestroyRaftMuLocked(
-			ctx,
-			b.batch,
-			b.batch,
-			change.NextReplicaID(),
-			clearRangeDataOptions{
-				ClearReplicatedBySpan:      span,
-				ClearReplicatedByRangeID:   true,
-				ClearUnreplicatedByRangeID: true,
-			},
-		); err != nil {
+		if err := preDestroyRaftMuLocked(ctx, b.r.RangeID, b.batch, b.batch, change.NextReplicaID(), clearRangeDataOptions{
+			ClearReplicatedBySpan:      span,
+			ClearReplicatedByRangeID:   true,
+			ClearUnreplicatedByRangeID: true,
+		}); err != nil {
 			return errors.Wrapf(err, "unable to destroy replica before removal")
 		}
 	}
