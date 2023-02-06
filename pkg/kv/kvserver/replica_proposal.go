@@ -353,26 +353,8 @@ func (r *Replica) leasePostApplyLocked(
 
 	now := r.store.Clock().NowAsClockTimestamp()
 
-	// If we hold the lease now and the lease was proposed "earlier", there
-	// must have been replication lag, and possibly reads and/or writes were
-	// delayed.
-	//
-	// We see this most commonly with lease transfers targeting a behind replica,
-	// or, in the worst case, a snapshot. We are constantly improving our
-	// heuristics for avoiding that[^1] but if it does happen it's good to know
-	// from the logs.
-	//
-	// In the case of a lease transfer, the two timestamps compared below are from
-	// different clocks, so there could be skew. We just pretend this is not the
-	// case, which is good enough here.
-	//
-	// [^1]: https://github.com/cockroachdb/cockroach/pull/82758
-	const slowLeaseWarnThreshold = 500 * time.Millisecond
-	if delta := time.Duration(now.WallTime - newLease.ProposedTS.WallTime); iAmTheLeaseHolder && leaseChangingHands && delta > slowLeaseWarnThreshold {
-		log.Warningf(ctx,
-			"lease %v active after replication lag of ~%.2fs; foreground traffic may have been impacted [prev=%v]",
-			newLease, delta.Seconds(), prevLease,
-		)
+	if iAmTheLeaseHolder && leaseChangingHands {
+		maybeLogSlowLeaseApplyWarning(ctx, time.Duration(now.WallTime-newLease.ProposedTS.WallTime), prevLease, newLease)
 	}
 
 	// Gossip the first range whenever its lease is acquired. We check to make
@@ -464,6 +446,49 @@ func (r *Replica) leasePostApplyLocked(
 	// Mark the new lease in the replica's lease history.
 	if r.leaseHistory != nil {
 		r.leaseHistory.add(*newLease)
+	}
+}
+
+// maybeLogSlowLeaseApplyWarning is called when the lease changes hands on the
+// new leaseholder. It logs if either the new lease was proposed well before it
+// became visible on the leaseholder (indicating replication lag) or if the
+// previous lease looks like we transferred a lease to a behind/offline replica.
+func maybeLogSlowLeaseApplyWarning(
+	ctx context.Context, newLeaseAppDelay time.Duration, prevLease, newLease *roachpb.Lease,
+) {
+	const slowLeaseApplyWarnThreshold = 500 * time.Millisecond
+	if newLeaseAppDelay > slowLeaseApplyWarnThreshold {
+		// If we hold the lease now and the lease was proposed "earlier", there
+		// must have been replication lag, and possibly reads and/or writes were
+		// delayed.
+		//
+		// We see this most commonly with lease transfers targeting a behind replica,
+		// or, in the worst case, a snapshot. We are constantly improving our
+		// heuristics for avoiding that[^1] but if it does happen it's good to know
+		// from the logs.
+		//
+		// In the case of a lease transfer, the two timestamps compared below are from
+		// different clocks, so there could be skew. We just pretend this is not the
+		// case, which is good enough here.
+		//
+		// [^1]: https://github.com/cockroachdb/cockroach/pull/82758
+		log.Warningf(ctx,
+			"lease %v active after replication lag of ~%.2fs; foreground traffic may have been impacted [prev=%v]",
+			newLease, newLeaseAppDelay.Seconds(), prevLease,
+		)
+	} else if prevLease.Type() == roachpb.LeaseExpiration &&
+		newLease.Type() == roachpb.LeaseEpoch &&
+		newLease.AcquisitionType == roachpb.LeaseAcquisitionType_Request {
+		// If the previous lease is expiration-based, but the new lease is not and
+		// the acquisition was non-cooperative, it is likely that a lease transfer
+		// (which is expiration-based) went to a follower that then couldn't hold
+		// the lease alive (for example, didn't apply it in time for it to
+		// actually serve any traffic). The result was likely an outage which
+		// resolves right now, so log to point this out.
+		log.Warningf(ctx,
+			"lease %v expired before being followed by lease %s; foreground traffic may have been impacted",
+			prevLease, newLease,
+		)
 	}
 }
 
