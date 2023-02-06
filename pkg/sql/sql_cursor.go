@@ -48,7 +48,12 @@ func (p *planner) DeclareCursor(ctx context.Context, s *tree.DeclareCursor) (pla
 				return nil, pgerror.Newf(pgcode.NoActiveSQLTransaction, "DECLARE CURSOR can only be used in transaction blocks")
 			}
 
-			ie := p.ExecCfg().InternalDB.NewInternalExecutor(p.SessionData())
+			sd := p.SessionData()
+			if !p.SessionData().DeclareCursorStatementTimeoutEnabled {
+				sd = sd.Clone()
+				sd.StmtTimeout = 0
+			}
+			ie := p.ExecCfg().InternalDB.NewInternalExecutor(sd)
 			if cursor := p.sqlCursors.getCursor(s.Name); cursor != nil {
 				return nil, pgerror.Newf(pgcode.DuplicateCursor, "cursor %q already exists", s.Name)
 			}
