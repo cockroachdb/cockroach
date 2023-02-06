@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -255,10 +256,10 @@ func (s *Store) tryGetOrCreateReplica(
 
 	// Make sure that storage invariants for this uninitialized replica hold.
 	uninitDesc := roachpb.RangeDescriptor{RangeID: rangeID}
-	state, err := loadReplicaState(ctx, s.engine, &uninitDesc, replicaID)
+	state, err := kvstorage.LoadReplicaState(ctx, s.engine, &uninitDesc, replicaID)
 	if err != nil {
 		return nil, false, err
-	} else if err := state.check(s.StoreID()); err != nil {
+	} else if err := state.Check(s.StoreID()); err != nil {
 		return nil, false, err
 	}
 

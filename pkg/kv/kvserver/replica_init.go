@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/tracker"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -36,87 +35,12 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"go.etcd.io/raft/v3"
-	"go.etcd.io/raft/v3/raftpb"
 )
 
 const (
 	splitQueueThrottleDuration = 5 * time.Second
 	mergeQueueThrottleDuration = 5 * time.Second
 )
-
-// loadedReplicaState represents the state of a Replica loaded from storage, and
-// is used to initialize the in-memory Replica instance.
-// TODO(pavelkalinnikov): move to kvstorage, integrate with kvstorage.Replica.
-type loadedReplicaState struct {
-	replicaID roachpb.ReplicaID
-	hardState raftpb.HardState
-	lastIndex uint64
-	replState kvserverpb.ReplicaState
-}
-
-// loadReplicaState loads the state necessary to create a Replica with the
-// specified range descriptor, which can be either initialized or uninitialized.
-// TODO(pavelkalinnikov): integrate with stateloader.
-func loadReplicaState(
-	ctx context.Context,
-	eng storage.Reader,
-	desc *roachpb.RangeDescriptor,
-	replicaID roachpb.ReplicaID,
-) (loadedReplicaState, error) {
-	sl := stateloader.Make(desc.RangeID)
-	id, found, err := sl.LoadRaftReplicaID(ctx, eng)
-	if err != nil {
-		return loadedReplicaState{}, err
-	} else if !found {
-		return loadedReplicaState{}, errors.AssertionFailedf(
-			"r%d: RaftReplicaID not found", desc.RangeID)
-	} else if loaded := id.ReplicaID; loaded != replicaID {
-		return loadedReplicaState{}, errors.AssertionFailedf(
-			"r%d: loaded RaftReplicaID %d does not match %d", desc.RangeID, loaded, replicaID)
-	}
-
-	ls := loadedReplicaState{replicaID: replicaID}
-	if ls.hardState, err = sl.LoadHardState(ctx, eng); err != nil {
-		return loadedReplicaState{}, err
-	}
-	if ls.lastIndex, err = sl.LoadLastIndex(ctx, eng); err != nil {
-		return loadedReplicaState{}, err
-	}
-	if ls.replState, err = sl.Load(ctx, eng, desc); err != nil {
-		return loadedReplicaState{}, err
-	}
-	return ls, nil
-}
-
-// check makes sure that the replica invariants hold for the loaded state.
-func (r loadedReplicaState) check(storeID roachpb.StoreID) error {
-	desc := r.replState.Desc
-	if r.replicaID == 0 {
-		return errors.AssertionFailedf("r%d: replicaID is 0", desc.RangeID)
-	}
-
-	if !desc.IsInitialized() {
-		// An uninitialized replica must have an empty HardState.Commit at all
-		// times. Failure to maintain this invariant indicates corruption. And yet,
-		// we have observed this in the wild. See #40213.
-		if hs := r.hardState; hs.Commit != 0 {
-			return errors.AssertionFailedf(
-				"r%d/%d: non-zero HardState.Commit on uninitialized replica: %+v", desc.RangeID, r.replicaID, hs)
-		}
-		// TODO(pavelkalinnikov): assert r.lastIndex == 0?
-		return nil
-	}
-	// desc.IsInitialized() == true
-
-	// INVARIANT: a replica's RangeDescriptor always contains the local Store.
-	if replDesc, ok := desc.GetReplicaDescriptor(storeID); !ok {
-		return errors.AssertionFailedf("%+v does not contain local store s%d", desc, storeID)
-	} else if replDesc.ReplicaID != r.replicaID {
-		return errors.AssertionFailedf(
-			"%+v does not contain replicaID %d for local store s%d", desc, r.replicaID, storeID)
-	}
-	return nil
-}
 
 // loadInitializedReplica loads and constructs an initialized Replica, after
 // checking its invariants.
@@ -126,7 +50,7 @@ func loadInitializedReplica(
 	if !desc.IsInitialized() {
 		return nil, errors.AssertionFailedf("can not load with uninitialized descriptor: %s", desc)
 	}
-	state, err := loadReplicaState(ctx, store.engine, desc, replicaID)
+	state, err := kvstorage.LoadReplicaState(ctx, store.engine, desc, replicaID)
 	if err != nil {
 		return nil, err
 	}
@@ -253,15 +177,15 @@ func (r *Replica) setStartKeyLocked(startKey roachpb.RKey) {
 // This method is called in:
 // - loadInitializedReplica, to finalize creating an initialized replica;
 // - splitPostApply, to initialize a previously uninitialized replica.
-func (r *Replica) initRaftMuLockedReplicaMuLocked(s loadedReplicaState) error {
-	if err := s.check(r.StoreID()); err != nil {
+func (r *Replica) initRaftMuLockedReplicaMuLocked(s kvstorage.LoadedReplicaState) error {
+	if err := s.Check(r.StoreID()); err != nil {
 		return err
 	}
-	desc := s.replState.Desc
+	desc := s.ReplState.Desc
 	// Ensure that the loaded state corresponds to the same replica.
-	if desc.RangeID != r.RangeID || s.replicaID != r.replicaID {
+	if desc.RangeID != r.RangeID || s.ReplicaID != r.replicaID {
 		return errors.AssertionFailedf(
-			"%s: trying to init with other replica's state r%d/%d", r, desc.RangeID, s.replicaID)
+			"%s: trying to init with other replica's state r%d/%d", r, desc.RangeID, s.ReplicaID)
 	}
 	// Ensure that we transition to initialized replica, and do it only once.
 	if !desc.IsInitialized() {
@@ -277,8 +201,8 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(s loadedReplicaState) error {
 	// group.
 	r.mu.internalRaftGroup = nil
 
-	r.mu.state = s.replState
-	r.mu.lastIndexNotDurable = s.lastIndex
+	r.mu.state = s.ReplState
+	r.mu.lastIndexNotDurable = s.LastIndex
 	r.mu.lastTermNotDurable = invalidLastTerm
 
 	r.setDescLockedRaftMuLocked(r.AnnotateCtx(context.TODO()), desc)
