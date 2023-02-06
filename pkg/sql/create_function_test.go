@@ -60,7 +60,7 @@ CREATE TYPE notmyworkday AS ENUM ('Monday', 'Tuesday');
 	)
 
 	tDB.Exec(t, `
-CREATE FUNCTION f(a notmyworkday) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+CREATE FUNCTION f(a notmyworkday) RETURNS INT VOLATILE LANGUAGE SQL AS $$
   SELECT a FROM t;
   SELECT b FROM t@t_idx_b;
   SELECT c FROM t@t_idx_c;
@@ -248,7 +248,7 @@ CREATE SEQUENCE sq2;
 CREATE VIEW v1 AS SELECT 1;
 CREATE VIEW v2 AS SELECT 2;
 CREATE TYPE notmyworkday AS ENUM ('Monday', 'Tuesday');
-CREATE FUNCTION f(a notmyworkday) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+CREATE FUNCTION f(a notmyworkday) RETURNS INT VOLATILE LANGUAGE SQL AS $$
   SELECT b FROM t1@t1_idx_b;
   SELECT a FROM v1;
   SELECT nextval('sq1');
@@ -292,7 +292,7 @@ SELECT nextval(106:::REGCLASS);`,
 	// Replace the function body with another group of objects and make sure
 	// references are modified correctly.
 	tDB.Exec(t, `
-CREATE OR REPLACE FUNCTION f(a notmyworkday) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+CREATE OR REPLACE FUNCTION f(a notmyworkday) RETURNS INT VOLATILE LANGUAGE SQL AS $$
   SELECT b FROM t2@t2_idx_b;
   SELECT a FROM v2;
   SELECT nextval('sq2');
