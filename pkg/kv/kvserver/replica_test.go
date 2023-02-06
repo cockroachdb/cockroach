@@ -8123,14 +8123,6 @@ func TestReplicaRefreshMultiple(t *testing.T) {
 	ba.Add(inc)
 	ba.Timestamp = tc.Clock().Now()
 
-	st := repl.CurrentLeaseStatus(ctx)
-	proposal, pErr := repl.requestToProposal(ctx, incCmdID, ba, allSpansGuard(), &st, uncertainty.Interval{})
-	if pErr != nil {
-		t.Fatal(pErr)
-	}
-	// Save this channel; it may get reset to nil before we read from it.
-	proposalDoneCh := proposal.doneCh
-
 	g, _, pErr := repl.concMgr.SequenceReq(ctx, nil /* guard */, concurrency.Request{
 		Txn:             ba.Txn,
 		Timestamp:       ba.Timestamp,
@@ -8143,6 +8135,14 @@ func TestReplicaRefreshMultiple(t *testing.T) {
 		LockSpans:       spanset.New(),
 	}, concurrency.PessimisticEval)
 	require.NoError(t, pErr.GoError())
+
+	st := repl.CurrentLeaseStatus(ctx)
+	proposal, pErr := repl.requestToProposal(ctx, incCmdID, ba, allSpansGuard(), &st, uncertainty.Interval{})
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	// Save this channel; it may get reset to nil before we read from it.
+	proposalDoneCh := proposal.doneCh
 
 	proposal.ec = endCmds{
 		repl: repl,
