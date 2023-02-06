@@ -15,10 +15,13 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"time"
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
+	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/lib/pq/oid"
 )
 
@@ -64,7 +67,9 @@ func (d *DTuple) pgwireFormat(ctx *FmtCtx) {
 			// Bytes cannot use the default case because they will be incorrectly
 			// double escaped.
 		case *DBytes:
+			ctx.WriteString(`"\`)
 			ctx.FormatNode(dv)
+			ctx.WriteString(`"`)
 		case *DJSON:
 			var buf bytes.Buffer
 			dv.JSON.Format(&buf)
@@ -74,7 +79,7 @@ func (d *DTuple) pgwireFormat(ctx *FmtCtx) {
 			b := PgwireFormatFloat(nil /*buf*/, fl, ctx.dataConversionConfig, t)
 			ctx.WriteString(string(b))
 		default:
-			s := AsStringWithFlags(v, ctx.flags, FmtDataConversionConfig(ctx.dataConversionConfig))
+			s := AsStringWithFlags(v, ctx.flags, FmtDataConversionConfig(ctx.dataConversionConfig), FmtLocation(ctx.location))
 			pgwireFormatStringInTuple(&ctx.Buffer, s)
 		}
 		comma = ","
@@ -145,7 +150,9 @@ func (d *DArray) pgwireFormat(ctx *FmtCtx) {
 			// Bytes cannot use the default case because they will be incorrectly
 			// double escaped.
 		case *DBytes:
+			ctx.WriteString(`"\`)
 			ctx.FormatNode(dv)
+			ctx.WriteString(`"`)
 		case *DFloat:
 			fl := float64(*dv)
 			floatTyp := d.ResolvedType().ArrayContents()
@@ -153,10 +160,10 @@ func (d *DArray) pgwireFormat(ctx *FmtCtx) {
 			ctx.WriteString(string(b))
 		case *DJSON:
 			flags := ctx.flags | fmtRawStrings
-			s := AsStringWithFlags(v, flags, FmtDataConversionConfig(ctx.dataConversionConfig))
+			s := AsStringWithFlags(v, flags, FmtDataConversionConfig(ctx.dataConversionConfig), FmtLocation(ctx.location))
 			pgwireFormatStringInArray(ctx, s)
 		default:
-			s := AsStringWithFlags(v, ctx.flags, FmtDataConversionConfig(ctx.dataConversionConfig))
+			s := AsStringWithFlags(v, ctx.flags, FmtDataConversionConfig(ctx.dataConversionConfig), FmtLocation(ctx.location))
 			pgwireFormatStringInArray(ctx, s)
 		}
 		delimiter = d.ParamTyp.Delimiter()
@@ -280,4 +287,95 @@ func (as *asciiSet) in(s string) bool {
 		}
 	}
 	return false
+}
+
+// This block contains all available PG time formats.
+const (
+	PGTimeFormat              = "15:04:05.999999"
+	PGDateFormat              = "2006-01-02"
+	PGTimeStampFormatNoOffset = PGDateFormat + " " + PGTimeFormat
+	PGTimeStampFormat         = PGTimeStampFormatNoOffset + "-07"
+	PGTime2400Format          = "24:00:00"
+	PGTimeTZFormat            = PGTimeFormat + "-07"
+)
+
+// PGWireFormatTime formats t into a format lib/pq understands, appending to the
+// provided tmp buffer and reallocating if needed. The function will then return
+// the resulting buffer.
+// TODO(#sql-sessions): merge implementation with DTime.Format.
+func PGWireFormatTime(t timeofday.TimeOfDay, tmp []byte) []byte {
+	// time.Time's AppendFormat does not recognize 2400, so special case it accordingly.
+	if t == timeofday.Time2400 {
+		return []byte(PGTime2400Format)
+	}
+	return t.ToTime().AppendFormat(tmp, PGTimeFormat)
+}
+
+// PGWireFormatTimeTZ formats t into a format lib/pq understands, appending to the
+// provided tmp buffer and reallocating if needed. The function will then return
+// the resulting buffer.
+// TODO(#sql-sessions): merge implementation with DTimeTZ.Format.
+func PGWireFormatTimeTZ(t timetz.TimeTZ, tmp []byte) []byte {
+	format := PGTimeTZFormat
+	if t.OffsetSecs%60 != 0 {
+		format += ":00:00"
+	} else if t.OffsetSecs%3600 != 0 {
+		format += ":00"
+	}
+	ret := t.ToTime().AppendFormat(tmp, format)
+	// time.Time's AppendFormat does not recognize 2400, so special case it accordingly.
+	if t.TimeOfDay == timeofday.Time2400 {
+		// It instead reads 00:00:00. Replace that text.
+		var newRet []byte
+		newRet = append(newRet, PGTime2400Format...)
+		newRet = append(newRet, ret[len(PGTime2400Format):]...)
+		ret = newRet
+	}
+	return ret
+}
+
+// PGWireFormatTimestamp formats t into a format lib/pq understands.
+// TODO(#sql-sessions): merge implementation with DTimestamp.Format.
+func PGWireFormatTimestamp(t time.Time, offset *time.Location, tmp []byte) (b []byte) {
+	var format string
+	if offset != nil {
+		format = PGTimeStampFormat
+		if _, offsetSeconds := t.In(offset).Zone(); offsetSeconds%60 != 0 {
+			format += ":00:00"
+		} else if offsetSeconds%3600 != 0 {
+			format += ":00"
+		}
+	} else {
+		format = PGTimeStampFormatNoOffset
+	}
+	return PGWireFormatTimestampWithFormat(format, t, offset, tmp)
+}
+
+// PGWireFormatTimestampWithFormat formats t with an optional offset into a format
+// lib/pq understands, appending to the provided tmp buffer and
+// reallocating if needed. The function will then return the resulting
+// buffer. PGWireFormatTimestampWithFormat is mostly cribbed from github.com/lib/pq.
+// TODO(#sql-sessions): merge implementation with DTimestampTZ.Format.
+func PGWireFormatTimestampWithFormat(
+	format string, t time.Time, offset *time.Location, tmp []byte,
+) (b []byte) {
+	// Need to send dates before 0001 A.D. with " BC" suffix, instead of the
+	// minus sign preferred by Go.
+	// Beware, "0000" in ISO is "1 BC", "-0001" is "2 BC" and so on
+	if offset != nil {
+		t = t.In(offset)
+	}
+
+	bc := false
+	if t.Year() <= 0 {
+		// flip year sign, and add 1, e.g: "0" will be "1", and "-10" will be "11"
+		t = t.AddDate((-t.Year())*2+1, 0, 0)
+		bc = true
+	}
+
+	b = t.AppendFormat(tmp, format)
+	if bc {
+		b = append(b, " BC"...)
+	}
+	return b
 }

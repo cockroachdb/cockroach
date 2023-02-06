@@ -446,15 +446,17 @@ func (ec *Context) Stop(c context.Context) {
 
 // FmtCtx creates a FmtCtx with the given options as well as the EvalContext's session data.
 func (ec *Context) FmtCtx(f tree.FmtFlags, opts ...tree.FmtCtxOption) *tree.FmtCtx {
+	applyOpts := make([]tree.FmtCtxOption, 0, 2+len(opts))
+	applyOpts = append(applyOpts, tree.FmtLocation(ec.GetLocation()))
 	if ec.SessionData() != nil {
-		opts = append(
-			[]tree.FmtCtxOption{tree.FmtDataConversionConfig(ec.SessionData().DataConversionConfig)},
-			opts...,
+		applyOpts = append(
+			applyOpts,
+			tree.FmtDataConversionConfig(ec.SessionData().DataConversionConfig),
 		)
 	}
 	return tree.NewFmtCtx(
 		f,
-		opts...,
+		append(applyOpts, opts...)...,
 	)
 }
 
