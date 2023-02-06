@@ -55,7 +55,7 @@ func TestCloser(t *testing.T) {
 	// First Wait call will not block.
 	require.NoError(t, limiter.Wait(ctx, tenantcostmodel.TestingRequestInfo(1, 1, 1)))
 	errCh := make(chan error, 1)
-	go func() { errCh <- limiter.Wait(ctx, tenantcostmodel.TestingRequestInfo(1, 1, 1<<31)) }()
+	go func() { errCh <- limiter.Wait(ctx, tenantcostmodel.TestingRequestInfo(1, 1, 1<<33)) }()
 	testutils.SucceedsSoon(t, func() error {
 		if timers := timeSource.Timers(); len(timers) != 1 {
 			return errors.Errorf("expected 1 timer, found %d", len(timers))
