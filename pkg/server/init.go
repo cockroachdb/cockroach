@@ -477,7 +477,7 @@ func (s *initServer) attemptJoinTo(
 
 		status, ok := grpcstatus.FromError(errors.UnwrapAll(err))
 		if !ok {
-			return nil, err
+			return nil, errors.WithStack(err)
 		}
 
 		// TODO(irfansharif): Here we're logging the error and also returning
@@ -490,7 +490,7 @@ func (s *initServer) attemptJoinTo(
 			return nil, ErrIncompatibleBinaryVersion
 		}
 
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	return resp, nil

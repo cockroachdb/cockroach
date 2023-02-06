@@ -316,5 +316,9 @@ func (tic TracingInternalClient) Batch(
 		ba = ba.ShallowCopy()
 		ba.TraceInfo = sp.Meta().ToProto()
 	}
-	return tic.InternalClient.Batch(ctx, ba, opts...)
+	resp, err := tic.InternalClient.Batch(ctx, ba, opts...)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	return resp, err
 }

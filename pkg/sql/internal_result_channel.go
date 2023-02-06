@@ -113,12 +113,12 @@ func (i *ieResultChannel) firstResult(
 ) (_ ieIteratorResult, done bool, err error) {
 	select {
 	case <-ctx.Done():
-		return ieIteratorResult{}, true, ctx.Err()
+		return ieIteratorResult{}, true, errors.WithStack(ctx.Err())
 	case <-i.doneCh:
-		return ieIteratorResult{}, true, ctx.Err()
+		return ieIteratorResult{}, true, errors.WithStack(ctx.Err())
 	case res, ok := <-i.dataCh:
 		if !ok {
-			return ieIteratorResult{}, true, ctx.Err()
+			return ieIteratorResult{}, true, errors.WithStack(ctx.Err())
 		}
 		return res, false, nil
 	}
@@ -130,9 +130,9 @@ func (i *ieResultChannel) maybeUnblockWriter(ctx context.Context) (done bool, er
 	}
 	select {
 	case <-ctx.Done():
-		return true, ctx.Err()
+		return true, errors.WithStack(ctx.Err())
 	case <-i.doneCh:
-		return true, ctx.Err()
+		return true, errors.WithStack(ctx.Err())
 	case i.waitCh <- struct{}{}:
 		return false, nil
 	}
@@ -183,11 +183,11 @@ var errIEResultChannelClosed = errors.New("ieResultReader closed")
 func (i *ieResultChannel) addResult(ctx context.Context, result ieIteratorResult) error {
 	select {
 	case <-ctx.Done():
-		return ctx.Err()
+		return errors.WithStack(ctx.Err())
 	case <-i.doneCh:
 		// Prefer the context error if there is one.
 		if ctxErr := ctx.Err(); ctxErr != nil {
-			return ctxErr
+			return errors.WithStack(ctxErr)
 		}
 		return errIEResultChannelClosed
 	case i.dataCh <- result:
@@ -201,11 +201,11 @@ func (i *ieResultChannel) maybeBlock(ctx context.Context) error {
 	}
 	select {
 	case <-ctx.Done():
-		return ctx.Err()
+		return errors.WithStack(ctx.Err())
 	case <-i.doneCh:
 		// Prefer the context error if there is one.
 		if ctxErr := ctx.Err(); ctxErr != nil {
-			return ctxErr
+			return errors.WithStack(ctxErr)
 		}
 		return errIEResultChannelClosed
 	case <-i.waitCh:

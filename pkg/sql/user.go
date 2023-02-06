@@ -84,7 +84,7 @@ func GetUserSessionInitInfo(
 	pwRetrieveFn func(ctx context.Context) (expired bool, hashedPassword password.PasswordHash, err error),
 	err error,
 ) {
-	runFn := getUserInfoRunFn(execCfg, user, "get-user-timeout")
+	runFn := getUserInfoRunFn(execCfg, user, "get-user-session")
 
 	if user.IsRootUser() {
 		// As explained above, for root we report that the user exists
@@ -706,7 +706,7 @@ func updateUserPasswordHash(
 	userName username.SQLUsername,
 	prevHash, newHash []byte,
 ) error {
-	runFn := getUserInfoRunFn(execCfg, userName, "set-hash-timeout")
+	runFn := getUserInfoRunFn(execCfg, userName, "set-user-password-hash")
 
 	return runFn(ctx, func(ctx context.Context) error {
 		return DescsTxn(ctx, execCfg, func(ctx context.Context, txn isql.Txn, d *descs.Collection) error {
