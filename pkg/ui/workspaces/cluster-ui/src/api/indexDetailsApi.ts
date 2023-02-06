@@ -20,7 +20,7 @@ import {
   StatementRawFormat,
 } from "src/api";
 import moment from "moment";
-import { TimeScale, toDateRange } from "../timeScaleDropdown";
+import { TimeScale, toRoundedDateRange } from "../timeScaleDropdown";
 import { AggregateStatistics } from "../statementsTable";
 import { INTERNAL_APP_NAME_PREFIX } from "../recentExecutions/recentStatementUtils";
 
@@ -79,7 +79,7 @@ export function StatementsListRequestFromDetails(
   ts: TimeScale,
 ): StatementsUsingIndexRequest {
   if (ts === null) return { table, index, database };
-  const [start, end] = toDateRange(ts);
+  const [start, end] = toRoundedDateRange(ts);
   return { table, index, database, start, end };
 }
 

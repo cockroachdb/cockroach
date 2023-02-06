@@ -13,7 +13,7 @@ CREATE TYPE notmyworkday AS ENUM ('Monday', 'Tuesday');
 ----
 
 build
-CREATE FUNCTION f(a notmyworkday) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+CREATE FUNCTION f(a notmyworkday) RETURNS INT VOLATILE LANGUAGE SQL AS $$
   SELECT a FROM t;
   SELECT b FROM t@t_idx_b;
   SELECT c FROM t@t_idx_c;
@@ -28,7 +28,7 @@ $$;
 - [[FunctionName:{DescID: 110}, PUBLIC], ABSENT]
   {functionId: 110, name: f}
 - [[FunctionVolatility:{DescID: 110}, PUBLIC], ABSENT]
-  {functionId: 110, volatility: {volatility: IMMUTABLE}}
+  {functionId: 110, volatility: {volatility: VOLATILE}}
 - [[Owner:{DescID: 110}, PUBLIC], ABSENT]
   {descriptorId: 110, owner: root}
 - [[UserPrivileges:{DescID: 110, Name: admin}, PUBLIC], ABSENT]

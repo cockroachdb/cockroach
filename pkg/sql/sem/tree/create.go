@@ -381,7 +381,8 @@ func (node *CreateType) Format(ctx *FmtCtx) {
 		ctx.WriteString(")")
 	case Composite:
 		ctx.WriteString("AS (")
-		for i, elem := range node.CompositeTypeList {
+		for i := range node.CompositeTypeList {
+			elem := &node.CompositeTypeList[i]
 			if i != 0 {
 				ctx.WriteString(", ")
 			}
@@ -2228,10 +2229,10 @@ func (node *SuperRegion) Format(ctx *FmtCtx) {
 	ctx.WriteString(" SUPER REGION ")
 	ctx.FormatNode(&node.Name)
 	ctx.WriteString(" VALUES ")
-	for i, region := range node.Regions {
+	for i := range node.Regions {
 		if i != 0 {
 			ctx.WriteString(",")
 		}
-		ctx.FormatNode(&region)
+		ctx.FormatNode(&node.Regions[i])
 	}
 }
