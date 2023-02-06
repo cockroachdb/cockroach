@@ -13,7 +13,10 @@ go_library(
     }),
     importpath = "github.com/cockroachdb/cockroach/pkg/storage/pebbleiter",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_cockroachdb_pebble//:pebble"],
+    deps = [
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_pebble//:pebble",
+    ],
 )
 
 REMOVE_GO_BUILD_CONSTRAINTS = "cat $< | grep -v '//go:build' | grep -v '// +build' > $@"
