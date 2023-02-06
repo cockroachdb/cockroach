@@ -111,8 +111,8 @@ type Registry struct {
 	adoptionCh  chan adoptionNotice
 	sqlInstance sqlliveness.Instance
 
-	// sessionBoundInternalExecutorFactory provides a way for jobs to create
-	// internal executors. This is rarely needed, and usually job resumers should
+	// internalDB provides a way for jobs to create internal executors.
+	// This is rarely needed, and usually job resumers should
 	// use the internal executor from the JobExecCtx. The intended user of this
 	// interface is the schema change job resumer, which needs to set the
 	// tableCollectionModifier on the internal executor to different values in

@@ -136,7 +136,7 @@ func (vd validator) makeHistoricalInternalExecTxnRunner() descs.HistoricalIntern
 			if err := txn.KV().SetFixedTimestamp(ctx, now); err != nil {
 				return err
 			}
-			return fn(ctx, txn, txn.Descriptors())
+			return fn(ctx, txn)
 		})
 	})
 }
