@@ -245,7 +245,6 @@ func (s *Store) tryGetOrCreateReplica(
 	//   this newer replica is harmless since it just limits the votes for
 	//   this replica.
 	//
-	//
 	// Compatibility:
 	// - v21.2 and v22.1: v22.1 unilaterally introduces RaftReplicaID (an
 	//   unreplicated range-id local key). If a v22.1 binary is rolled back at
@@ -253,34 +252,12 @@ func (s *Store) tryGetOrCreateReplica(
 	//   v21.2 node since it does not read it. When a v21.2 drops an
 	//   initialized range, the RaftReplicaID will also be deleted because the
 	//   whole range-ID local key space is deleted.
-	//
-	// - v22.2: we will start relying on the presence of RaftReplicaID, and
-	//   remove any unitialized replicas that have a HardState but no
-	//   RaftReplicaID. This removal will happen in ReplicasStorage.Init and
-	//   allow us to tighten invariants. Additionally, knowing the ReplicaID
-	//   for an unitialized range could allow a node to somehow contact the
-	//   raft group (say by broadcasting to all nodes in the cluster), and if
-	//   the ReplicaID is stale, would allow the node to remove the HardState
-	//   and RaftReplicaID. See
-	//   https://github.com/cockroachdb/cockroach/issues/75740.
-	//
-	//   There is a concern that there could be some replica that survived
-	//   from v21.2 to v22.1 to v22.2 in unitialized state and will be
-	//   incorrectly removed in ReplicasStorage.Init causing the loss of the
-	//   HardState.{Term,Vote} and lead to a "split-brain" wrt leader
-	//   election.
-	//
-	//   Even though this seems theoretically possible, it is considered
-	//   practically impossible, and not just because a replica's vote is
-	//   unlikely to stay relevant across 2 upgrades. For one, we're always
-	//   going through learners and don't promote until caught up, so
-	//   uninitialized replicas generally never get to vote. Second, even if
-	//   their vote somehow mattered (perhaps we sent a learner a snap which
-	//   was not durably persisted - which we also know is impossible, but
-	//   let's assume it - and then promoted the node and it immediately
-	//   power-cycled, losing the snapshot) the fire-and-forget way in which
-	//   raft votes are requested (in the same raft cycle) makes it extremely
-	//   unlikely that the restarted node would then receive it.
+	// - v22.2: no changes: RaftReplicaID is written, but old Replicas may not
+	//   have it yet.
+	// - v23.1: at startup, we remove any unitialized replicas that have a
+	//   HardState but no RaftReplicaID, see kvstorage.LoadAndReconcileReplicas.
+	//   So after first call to this method we have the invariant that all replicas
+	//   have a RaftReplicaID persisted.
 	if err := sl.SetRaftReplicaID(ctx, s.Engine(), replicaID); err != nil {
 		return nil, false, err
 	}

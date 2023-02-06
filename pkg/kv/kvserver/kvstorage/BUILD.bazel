@@ -16,27 +16,41 @@ go_library(
         "//pkg/kv/kvserver/logstore",
         "//pkg/roachpb",
         "//pkg/storage",
-        "//pkg/util/buildutil",
         "//pkg/util/hlc",
         "//pkg/util/iterutil",
         "//pkg/util/log",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+        "@io_etcd_go_raft_v3//raftpb",
     ],
 )
 
 go_test(
     name = "kvstorage_test",
-    srcs = ["cluster_version_test.go"],
+    srcs = [
+        "cluster_version_test.go",
+        "datadriven_test.go",
+    ],
     args = ["-test.timeout=295s"],
+    data = glob(["testdata/**"]),
     embed = [":kvstorage"],
     deps = [
         "//pkg/clusterversion",
+        "//pkg/keys",
+        "//pkg/kv/kvserver/logstore",
         "//pkg/roachpb",
         "//pkg/storage",
         "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
+        "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/tracing",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_stretchr_testify//require",
+        "@io_etcd_go_raft_v3//raftpb",
     ],
 )
 
