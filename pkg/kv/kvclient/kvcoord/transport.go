@@ -235,7 +235,7 @@ func (gt *grpcTransport) sendBatch(
 		}
 		span.ImportRemoteRecording(reply.CollectedSpans)
 	}
-	return reply, err
+	return reply, errors.Wrap(err, "send batch error")
 }
 
 // NextInternalClient returns the next InternalClient to use for performing

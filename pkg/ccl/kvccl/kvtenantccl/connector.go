@@ -461,7 +461,7 @@ func (c *Connector) RangeLookup(
 		}
 		return resp.Descriptors, resp.PrefetchedDescriptors, nil
 	}
-	return nil, nil, ctx.Err()
+	return nil, nil, errors.Wrap(ctx.Err(), "range lookup context error")
 }
 
 // NodesUI implements the serverpb.TenantStatusServer interface
@@ -544,7 +544,7 @@ func (c *Connector) NewIterator(
 			rangeDescriptors = append(rangeDescriptors, e.RangeDescriptors...)
 		}
 	}
-	return nil, ctx.Err()
+	return nil, errors.Wrap(ctx.Err(), "new iterator context error")
 }
 
 // TokenBucket implements the kvtenant.TokenBucketProvider interface.
@@ -575,7 +575,7 @@ func (c *Connector) TokenBucket(
 		}
 		return resp, nil
 	}
-	return nil, ctx.Err()
+	return nil, errors.Wrap(ctx.Err(), "token bucket context error")
 }
 
 // GetSpanConfigRecords implements the spanconfig.KVAccessor interface.
@@ -587,7 +587,7 @@ func (c *Connector) GetSpanConfigRecords(
 			Targets: spanconfig.TargetsToProtos(targets),
 		})
 		if err != nil {
-			return err
+			return errors.Wrap(err, "get span configs error")
 		}
 
 		records, err = spanconfig.EntriesToRecords(resp.SpanConfigEntries)
@@ -617,7 +617,7 @@ func (c *Connector) UpdateSpanConfigRecords(
 			MaxCommitTimestamp: maxCommitTS,
 		})
 		if err != nil {
-			return err
+			return errors.Wrap(err, "update span configs error")
 		}
 		if resp.Error.IsSet() {
 			// Logical error; propagate as such.
@@ -655,13 +655,12 @@ func (c *Connector) GetAllSystemSpanConfigsThatApply(
 ) ([]roachpb.SpanConfig, error) {
 	var spanConfigs []roachpb.SpanConfig
 	if err := c.withClient(ctx, func(ctx context.Context, c *client) error {
-		var err error
 		resp, err := c.GetAllSystemSpanConfigsThatApply(
 			ctx, &roachpb.GetAllSystemSpanConfigsThatApplyRequest{
 				TenantID: id,
 			})
 		if err != nil {
-			return err
+			return errors.Wrap(err, "get all system span configs that apply error")
 		}
 
 		spanConfigs = resp.SpanConfigs
@@ -713,7 +712,7 @@ func (c *Connector) withClient(
 		}
 		return f(ctx, c)
 	}
-	return ctx.Err()
+	return errors.Wrap(ctx.Err(), "with client context error")
 }
 
 // getClient returns the singleton InternalClient if one is currently active. If
@@ -778,7 +777,7 @@ func (c *Connector) dialAddrs(ctx context.Context) (*client, error) {
 			}, nil
 		}
 	}
-	return nil, ctx.Err()
+	return nil, errors.Wrap(ctx.Err(), "dial addrs context error")
 }
 
 func (c *Connector) dialAddr(ctx context.Context, addr string) (conn *grpc.ClientConn, err error) {

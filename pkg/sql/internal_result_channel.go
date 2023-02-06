@@ -111,14 +111,15 @@ func newSyncIEResultChannel() *ieResultChannel {
 func (i *ieResultChannel) firstResult(
 	ctx context.Context,
 ) (_ ieIteratorResult, done bool, err error) {
+	const wrapMsg = "first result context error"
 	select {
 	case <-ctx.Done():
-		return ieIteratorResult{}, true, ctx.Err()
+		return ieIteratorResult{}, true, errors.Wrap(ctx.Err(), wrapMsg)
 	case <-i.doneCh:
-		return ieIteratorResult{}, true, ctx.Err()
+		return ieIteratorResult{}, true, errors.Wrap(ctx.Err(), wrapMsg)
 	case res, ok := <-i.dataCh:
 		if !ok {
-			return ieIteratorResult{}, true, ctx.Err()
+			return ieIteratorResult{}, true, errors.Wrap(ctx.Err(), wrapMsg)
 		}
 		return res, false, nil
 	}
@@ -128,11 +129,12 @@ func (i *ieResultChannel) maybeUnblockWriter(ctx context.Context) (done bool, er
 	if i.async() {
 		return false, nil
 	}
+	const wrapMsg = "maybe unblock writer context error"
 	select {
 	case <-ctx.Done():
-		return true, ctx.Err()
+		return true, errors.Wrap(ctx.Err(), wrapMsg)
 	case <-i.doneCh:
-		return true, ctx.Err()
+		return true, errors.Wrap(ctx.Err(), wrapMsg)
 	case i.waitCh <- struct{}{}:
 		return false, nil
 	}
@@ -181,13 +183,14 @@ func (i *ieResultChannel) close() error {
 var errIEResultChannelClosed = errors.New("ieResultReader closed")
 
 func (i *ieResultChannel) addResult(ctx context.Context, result ieIteratorResult) error {
+	const wrapMsg = "add result context error"
 	select {
 	case <-ctx.Done():
-		return ctx.Err()
+		return errors.Wrap(ctx.Err(), wrapMsg)
 	case <-i.doneCh:
 		// Prefer the context error if there is one.
 		if ctxErr := ctx.Err(); ctxErr != nil {
-			return ctxErr
+			return errors.Wrap(ctx.Err(), wrapMsg)
 		}
 		return errIEResultChannelClosed
 	case i.dataCh <- result:
@@ -196,16 +199,17 @@ func (i *ieResultChannel) addResult(ctx context.Context, result ieIteratorResult
 }
 
 func (i *ieResultChannel) maybeBlock(ctx context.Context) error {
+	const wrapMsg = "maybe block context error"
 	if i.async() {
 		return nil
 	}
 	select {
 	case <-ctx.Done():
-		return ctx.Err()
+		return errors.Wrap(ctx.Err(), wrapMsg)
 	case <-i.doneCh:
 		// Prefer the context error if there is one.
 		if ctxErr := ctx.Err(); ctxErr != nil {
-			return ctxErr
+			return errors.Wrap(ctx.Err(), wrapMsg)
 		}
 		return errIEResultChannelClosed
 	case <-i.waitCh:

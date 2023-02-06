@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
+	"github.com/gogo/status"
 	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
@@ -325,7 +326,7 @@ func (c *Connection) Connect(ctx context.Context) (*grpc.ClientConn, error) {
 	select {
 	case <-c.initialHeartbeatDone:
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return nil, errors.Wrap(ctx.Err(), "connect context error")
 	}
 
 	if err, _ := c.err.Load().(error); err != nil {
@@ -662,10 +663,32 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 			tagger = func(span *tracing.Span) {}
 		}
 
-		rpcCtx.clientUnaryInterceptors = append(rpcCtx.clientUnaryInterceptors,
-			grpcinterceptor.ClientInterceptor(tracer, tagger))
-		rpcCtx.clientStreamInterceptors = append(rpcCtx.clientStreamInterceptors,
-			grpcinterceptor.StreamClientInterceptor(tracer, tagger))
+		clientInterceptor := grpcinterceptor.ClientInterceptor(tracer, tagger)
+		rpcCtx.clientUnaryInterceptors = append(
+			rpcCtx.clientUnaryInterceptors,
+			func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+				err := clientInterceptor(ctx, method, req, reply, cc, invoker, opts...)
+				_, ok := status.FromError(err)
+				if !ok {
+					// Wrapping status errors interferes with caller.
+					err = errors.Wrap(err, "client interceptor error")
+				}
+				return err
+			},
+		)
+		streamClientInterceptor := grpcinterceptor.StreamClientInterceptor(tracer, tagger)
+		rpcCtx.clientStreamInterceptors = append(
+			rpcCtx.clientStreamInterceptors,
+			func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+				stream, err := streamClientInterceptor(ctx, desc, cc, method, streamer, opts...)
+				_, ok := status.FromError(err)
+				if !ok {
+					// Wrapping status errors interferes with caller.
+					err = errors.Wrap(err, "stream client interceptor error")
+				}
+				return stream, err
+			},
+		)
 	}
 	// Note that we do not consult rpcCtx.Knobs.StreamClientInterceptor. That knob
 	// can add another interceptor, but it can only do it dynamically, based on
@@ -1307,7 +1330,7 @@ func (s *pipe) send(ctx context.Context, m interface{}) error {
 	case s.respC <- m:
 		return nil
 	case <-ctx.Done():
-		return ctx.Err()
+		return errors.Wrap(ctx.Err(), "send context error")
 	}
 }
 
@@ -1331,7 +1354,7 @@ func (s *pipe) recv(ctx context.Context) (interface{}, error) {
 			return nil, err
 		}
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return nil, errors.Wrap(ctx.Err(), "recv context error")
 	}
 }
 
