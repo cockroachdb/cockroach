@@ -28,7 +28,6 @@ go_test(
         "//pkg/kv/kvserver/asim/metrics",
         "//pkg/kv/kvserver/asim/state",
         "//pkg/kv/kvserver/asim/workload",
-        "//pkg/roachpb",
         "//pkg/testutils/skip",
         "//pkg/util/timeutil",
         "@com_github_stretchr_testify//require",
