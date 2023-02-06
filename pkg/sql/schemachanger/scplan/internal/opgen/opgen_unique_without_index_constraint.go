@@ -44,15 +44,6 @@ func init() {
 						BackReferencedTableID: this.TableID,
 					}
 				}),
-				emit(func(this *scpb.UniqueWithoutIndexConstraint) *scop.UpdateTableBackReferencesInSequences {
-					if this.Predicate == nil || this.Predicate.UsesSequenceIDs == nil || len(this.Predicate.UsesSequenceIDs) == 0 {
-						return nil
-					}
-					return &scop.UpdateTableBackReferencesInSequences{
-						SequenceIDs:           this.Predicate.UsesSequenceIDs,
-						BackReferencedTableID: this.TableID,
-					}
-				}),
 			),
 			to(scpb.Status_VALIDATED,
 				emit(func(this *scpb.UniqueWithoutIndexConstraint) *scop.ValidateConstraint {
@@ -90,6 +81,15 @@ func init() {
 					return &scop.RemoveUniqueWithoutIndexConstraint{
 						TableID:      this.TableID,
 						ConstraintID: this.ConstraintID,
+					}
+				}),
+				emit(func(this *scpb.UniqueWithoutIndexConstraint) *scop.UpdateTableBackReferencesInTypes {
+					if this.Predicate == nil || this.Predicate.UsesTypeIDs == nil || len(this.Predicate.UsesTypeIDs) == 0 {
+						return nil
+					}
+					return &scop.UpdateTableBackReferencesInTypes{
+						TypeIDs:               this.Predicate.UsesTypeIDs,
+						BackReferencedTableID: this.TableID,
 					}
 				}),
 			),
