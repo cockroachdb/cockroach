@@ -1,0 +1,62 @@
+/* setup */
+CREATE TABLE t (i INT PRIMARY KEY);
+ALTER TABLE t ADD CHECK (i > 0) NOT VALID;
+
+/* test */
+ALTER TABLE t VALIDATE CONSTRAINT check_i;
+EXPLAIN (ddl, verbose) rollback at post-commit stage 2 of 2;
+----
+• Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› VALIDATE CONSTRAINT ‹check_i›;
+│
+└── • PostCommitNonRevertiblePhase
+    │
+    └── • Stage 1 of 1 in PostCommitNonRevertiblePhase
+        │
+        ├── • 2 elements transitioning toward PUBLIC
+        │   │
+        │   ├── • CheckConstraintUnvalidated:{DescID: 104, ConstraintID: 2}
+        │   │     ABSENT → PUBLIC
+        │   │
+        │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}
+        │         ABSENT → PUBLIC
+        │
+        ├── • 1 element transitioning toward ABSENT
+        │   │
+        │   └── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 3}
+        │       │ WRITE_ONLY → ABSENT
+        │       │
+        │       ├── • PreviousStagePrecedence dependency from WRITE_ONLY CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 3}
+        │       │     rule: "CheckConstraint transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->VALIDATED"
+        │       │
+        │       └── • Precedence dependency from ABSENT ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 3}
+        │             rule: "dependents removed before constraint"
+        │
+        └── • 5 Mutation operations
+            │
+            ├── • AddCheckConstraint
+            │     CheckExpr: i > 0:::INT8
+            │     ColumnIDs:
+            │     - 1
+            │     ConstraintID: 2
+            │     TableID: 104
+            │     Validity: 1
+            │
+            ├── • SetConstraintName
+            │     ConstraintID: 2
+            │     Name: check_i
+            │     TableID: 104
+            │
+            ├── • RemoveCheckConstraint
+            │     ConstraintID: 3
+            │     TableID: 104
+            │
+            ├── • RemoveJobStateFromDescriptor
+            │     DescriptorID: 104
+            │     JobID: 1
+            │
+            └── • UpdateSchemaChangerJob
+                  DescriptorIDsToRemove:
+                  - 104
+                  IsNonCancelable: true
+                  JobID: 1
+                  RunningStatus: all stages completed

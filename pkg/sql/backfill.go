@@ -2667,10 +2667,9 @@ func getTargetTablesAndFk(
 	if srcTable.Version > srcTable.ClusterVersion().Version {
 		syntheticTable = srcTable
 	}
-	for i := range srcTable.OutboundFKs {
-		def := &srcTable.OutboundFKs[i]
-		if def.Name == fkName {
-			fk = def
+	for _, outbounfFK := range srcTable.OutboundForeignKeys() {
+		if outbounfFK.GetName() == fkName {
+			fk = outbounfFK.ForeignKeyDesc()
 			break
 		}
 	}
@@ -2741,10 +2740,9 @@ func validateUniqueWithoutIndexConstraintInTxn(
 		syntheticDescs = append(syntheticDescs, tableDesc)
 	}
 	var uc *descpb.UniqueWithoutIndexConstraint
-	for i := range tableDesc.UniqueWithoutIndexConstraints {
-		def := &tableDesc.UniqueWithoutIndexConstraints[i]
-		if def.Name == constraintName {
-			uc = def
+	for _, uwi := range tableDesc.UniqueConstraintsWithoutIndex() {
+		if uwi.GetName() == constraintName {
+			uc = uwi.UniqueWithoutIndexDesc()
 			break
 		}
 	}
