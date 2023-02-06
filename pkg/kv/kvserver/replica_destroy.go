@@ -15,17 +15,12 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/errors"
 )
 
 // DestroyReason indicates if a replica is alive, destroyed, corrupted or pending destruction.
@@ -73,56 +68,6 @@ func (s destroyStatus) Removed() bool {
 // know new replicas can never be created so this value is used even if we
 // don't know the current replica ID.
 const mergedTombstoneReplicaID roachpb.ReplicaID = math.MaxInt32
-
-func preDestroyRaftMuLocked(
-	ctx context.Context,
-	rangeID roachpb.RangeID,
-	reader storage.Reader,
-	writer storage.Writer,
-	nextReplicaID roachpb.ReplicaID,
-	opts kvstorage.ClearRangeDataOptions,
-) error {
-	diskReplicaID, err := logstore.NewStateLoader(rangeID).LoadRaftReplicaID(ctx, reader)
-	if err != nil {
-		return err
-	}
-	if diskReplicaID.ReplicaID >= nextReplicaID {
-		return errors.AssertionFailedf("replica r%d/%d must not survive its own tombstone", rangeID, diskReplicaID)
-	}
-	if err := kvstorage.ClearRangeData(rangeID, reader, writer, opts); err != nil {
-		return err
-	}
-
-	// Save a tombstone to ensure that replica IDs never get reused.
-	//
-	// TODO(tbg): put this on `stateloader.StateLoader` and consolidate the
-	// other read of the range tombstone key (in uninited replica creation
-	// as well).
-
-	tombstoneKey := keys.RangeTombstoneKey(rangeID)
-
-	// Assert that the provided tombstone moves the existing one strictly forward.
-	// Failure to do so indicates that something is going wrong in the replica
-	// lifecycle.
-	{
-		var tombstone roachpb.RangeTombstone
-		if _, err := storage.MVCCGetProto(
-			ctx, reader, tombstoneKey, hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
-		); err != nil {
-			return err
-		}
-		if tombstone.NextReplicaID >= nextReplicaID {
-			return errors.AssertionFailedf(
-				"cannot rewind tombstone from %d to %d", tombstone.NextReplicaID, nextReplicaID,
-			)
-		}
-	}
-
-	tombstone := roachpb.RangeTombstone{NextReplicaID: nextReplicaID}
-	// "Blind" because ms == nil and timestamp.IsEmpty().
-	return storage.MVCCBlindPutProto(ctx, writer, nil, tombstoneKey,
-		hlc.Timestamp{}, hlc.ClockTimestamp{}, &tombstone, nil)
-}
 
 func (r *Replica) postDestroyRaftMuLocked(ctx context.Context, ms enginepb.MVCCStats) error {
 	// NB: we need the nil check below because it's possible that we're GC'ing a
@@ -180,7 +125,7 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 		ClearReplicatedByRangeID:   inited,
 		ClearUnreplicatedByRangeID: true,
 	}
-	if err := preDestroyRaftMuLocked(ctx, r.RangeID, r.Engine(), batch, nextReplicaID, opts); err != nil {
+	if err := kvstorage.DestroyReplica(ctx, r.RangeID, r.Engine(), batch, nextReplicaID, opts); err != nil {
 		return err
 	}
 	preTime := timeutil.Now()

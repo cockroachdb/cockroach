@@ -11,9 +11,15 @@
 package kvstorage
 
 import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -85,4 +91,56 @@ func ClearRangeData(
 		}
 	}
 	return nil
+}
+
+// DestroyReplica destroys all or a part of the Replica's state, installing a
+// RangeTombstone in its place.
+func DestroyReplica(
+	ctx context.Context,
+	rangeID roachpb.RangeID,
+	reader storage.Reader,
+	writer storage.Writer,
+	nextReplicaID roachpb.ReplicaID,
+	opts ClearRangeDataOptions,
+) error {
+	diskReplicaID, err := logstore.NewStateLoader(rangeID).LoadRaftReplicaID(ctx, reader)
+	if err != nil {
+		return err
+	}
+	if diskReplicaID.ReplicaID >= nextReplicaID {
+		return errors.AssertionFailedf("replica r%d/%d must not survive its own tombstone", rangeID, diskReplicaID)
+	}
+	if err := ClearRangeData(rangeID, reader, writer, opts); err != nil {
+		return err
+	}
+
+	// Save a tombstone to ensure that replica IDs never get reused.
+	//
+	// TODO(tbg): put this on `stateloader.StateLoader` and consolidate the
+	// other read of the range tombstone key (in uninited replica creation
+	// as well).
+
+	tombstoneKey := keys.RangeTombstoneKey(rangeID)
+
+	// Assert that the provided tombstone moves the existing one strictly forward.
+	// Failure to do so indicates that something is going wrong in the replica
+	// lifecycle.
+	{
+		var tombstone roachpb.RangeTombstone
+		if _, err := storage.MVCCGetProto(
+			ctx, reader, tombstoneKey, hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
+		); err != nil {
+			return err
+		}
+		if tombstone.NextReplicaID >= nextReplicaID {
+			return errors.AssertionFailedf(
+				"cannot rewind tombstone from %d to %d", tombstone.NextReplicaID, nextReplicaID,
+			)
+		}
+	}
+
+	tombstone := roachpb.RangeTombstone{NextReplicaID: nextReplicaID}
+	// "Blind" because ms == nil and timestamp.IsEmpty().
+	return storage.MVCCBlindPutProto(ctx, writer, nil, tombstoneKey,
+		hlc.Timestamp{}, hlc.ClockTimestamp{}, &tombstone, nil)
 }
