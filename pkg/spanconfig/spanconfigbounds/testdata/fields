@@ -1,0 +1,70 @@
+bounds name=to_print_fields
+gc_ttl_seconds: <start: 123 end: 7000>
+range_min_bytes: <start: 10 end: 100>
+num_replicas: <start: 3 end: 8>
+num_voters: <start: 3 end: 6>
+constraint_bounds: <
+    allowed: <key: "region" value: "us-central1">
+    allowed: <key: "region" value: "us-east1">
+    allowed: <key: "region" value: "us-west1">
+    fallback: <constraints: <key: "region" value: "us-east1">>
+    fallback: <constraints: <key: "region" value: "us-central1">>
+    fallback: <constraints: <key: "region" value: "us-west1">>
+>
+----
+
+bounds-fields bounds=to_print_fields
+----
+range_min_bytes: [10, 100]
+range_max_bytes: *
+global_reads: *
+num_voters: [3, 6]
+num_replicas: [3, 8]
+gc.ttlseconds: [123, 7000]
+constraints: {allowed: [{+region=us-central1}, {+region=us-east1}, {+region=us-west1}], fallback: [[{+region=us-east1}], [{+region=us-central1}], [{+region=us-west1}]]}
+voter_constraints: {allowed: [{+region=us-central1}, {+region=us-east1}, {+region=us-west1}], fallback: [[{+region=us-east1}], [{+region=us-central1}], [{+region=us-west1}]]}
+lease_preferences: {allowed: [{+region=us-central1}, {+region=us-east1}, {+region=us-west1}], fallback: [[{+region=us-east1}], [{+region=us-central1}], [{+region=us-west1}]]}
+
+config name=to_print_fields
+gc_policy: <ttl_seconds: 127>
+range_min_bytes: 100
+range_max_bytes: 10
+num_voters: 3
+num_replicas: 5
+voter_constraints: <
+  num_replicas: 3
+  constraints: <key: "region" value: "us-central1">
+>
+constraints: <
+  num_replicas: 1
+  constraints: <key: "region" value: "us-east1">
+>
+constraints: <
+  num_replicas: 1
+  constraints: <key: "region" value: "us-central1">
+>
+constraints: <
+  num_replicas: 1
+  constraints: <key: "region" value: "us-west1">
+>
+lease_preferences: <
+  constraints: <key: "region" value: "us-east1">
+>
+lease_preferences: <
+  constraints: <key: "region" value: "us-west1">
+  constraints: <type: PROHIBITED value: "ssd">
+>
+----
+
+
+config-fields config=to_print_fields
+----
+range_min_bytes: 100
+range_max_bytes: 10
+global_reads: false
+num_voters: 3
+num_replicas: 5
+gc.ttlseconds: 127
+constraints: [+region=us-east1:1 +region=us-central1:1 +region=us-west1:1]
+voter_constraints: [+region=us-central1:3]
+lease_preferences: [{[+region=us-east1]} {[+region=us-west1 -ssd]}]
