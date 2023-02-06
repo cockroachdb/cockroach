@@ -91,13 +91,6 @@ func init() {
 			setter:       func(c *zonepb.ZoneConfig, d tree.Datum) { c.RangeMaxBytes = proto.Int64(int64(tree.MustBeDInt(d))) },
 		},
 		{
-			field:        config.GCTTL,
-			requiredType: types.Int,
-			setter: func(c *zonepb.ZoneConfig, d tree.Datum) {
-				c.GC = &zonepb.GCPolicy{TTLSeconds: int32(tree.MustBeDInt(d))}
-			},
-		},
-		{
 			field:        config.GlobalReads,
 			requiredType: types.Bool,
 			setter:       func(c *zonepb.ZoneConfig, d tree.Datum) { c.GlobalReads = proto.Bool(bool(tree.MustBeDBool(d))) },

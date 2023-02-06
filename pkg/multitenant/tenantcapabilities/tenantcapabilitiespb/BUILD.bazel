@@ -8,7 +8,10 @@ proto_library(
     srcs = ["capabilities.proto"],
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_gogo_protobuf//gogoproto:gogo_proto"],
+    deps = [
+        "//pkg/roachpb:roachpb_proto",
+        "@com_github_gogo_protobuf//gogoproto:gogo_proto",
+    ],
 )
 
 go_proto_library(
@@ -17,7 +20,10 @@ go_proto_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb",
     proto = ":tenantcapabilitiespb_proto",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_gogo_protobuf//gogoproto"],
+    deps = [
+        "//pkg/roachpb",
+        "@com_github_gogo_protobuf//gogoproto",
+    ],
 )
 
 go_library(

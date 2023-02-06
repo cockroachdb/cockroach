@@ -13,6 +13,7 @@ package cockroach.multitenant.tenantcapabilitiespb;
 option go_package = "tenantcapabilitiespb";
 
 import "gogoproto/gogo.proto";
+import "roachpb/span_config.proto";
 
 // TenantCapabilities encapsulates a set of capabilities[1] for a specific
 // tenant. Capabilities for a specific tenant are stored in the system.tenants
@@ -28,4 +29,113 @@ message TenantCapabilities {
   // CanAdminSplit, if set to true, grants grants the tenant the ability to
   // successfully perform `AdminSplit` requests.
   bool can_admin_split = 1;
+
+  // SpanConfigBounds, if set, bound the allowable values of span
+  // configurations enacted by the tenant. Note that the tenant can install
+  // span configs which do not conform to its bounds; the bounds result in
+  // post-hoc clamping of the span configs to conform. This model diverges
+  // from other capabilities because the span config infrastructure is
+  // stateful and asynchronous. The bounds may change after a span config
+  // has been accepted, in which case no error would flow to the user.
+  // Furthermore the span config reconciliation infrastructure is poorly
+  // positioned to surface errors to the user.
+  SpanConfigBounds span_config_bounds = 2;
 };
+
+// SpanConfigBound is used to constrain the possible values a SpanConfig may
+// contain.
+message SpanConfigBounds {
+  option (gogoproto.equal) = true;
+
+  // Int32Range is an interval of int32 representing [start, end].
+  // If end is less than start, it is interpreted to be equal
+  // start; there is no invalid representation.
+  message Int32Range {
+    option (gogoproto.equal) = true;
+    int32 start = 1;
+    int32 end = 2;
+  }
+
+  // Int64Range is an interval of int64 representing [start, end].
+  // If end is less than start, it is interpreted to be equal
+  // start; there is no invalid representation.
+  message Int64Range {
+    option (gogoproto.equal) = true;
+    int64 start = 1;
+    int64 end = 2;
+  }
+
+  // GcTtlSeconds bounds the configuration of gc.ttl_seconds.
+  Int32Range gc_ttl_seconds = 1;
+  // RangeMaxSize bounds the configuration of range_max_bytes.
+  Int64Range range_max_bytes = 2;
+  // RangeMinSize bounds the configuration of range_min_bytes.
+  Int64Range range_min_bytes = 3;
+
+  // ConstraintsConjunction is like the roachpb equivalent with the same name,
+  // but lacking a num_replicas field. This message is used when clamping a
+  // SpanConfig constraint which is out of conformance.
+  message ConstraintsConjunction {
+    option (gogoproto.equal) = true;
+    repeated cockroach.roachpb.Constraint constraints = 1 [(gogoproto.nullable) = false];
+  }
+
+  // ConstraintBounds represents bounds on voter_constraints, constraints,
+  // lease_preferences, num_voters, and num_replicas.
+  //
+  // The behavior of ConstraintBounds in the case of non-conformance may be
+  // surprising. The goals are:
+  //
+  //  1) Ensure data does not leave the intended servers as indicated by
+  //     the operator.
+  //  2) Minimize surprise when the span config violates the bounds.
+  //  3) Do something coherent with the MR primitives.
+  //
+  // Point (3) pushes the behavior of these constraints to behave differently
+  // in response to the structure of the requested constraints.
+  //
+  // The operator configures a set of allowed constraints, and, additionally,
+  // will configure a set of fallbacks to control the behavior when the
+  // requested constraints do not conform.
+  //
+  // The fallback constraints should conform to the allowed constraints; if
+  // they do not, then a clamped configuration will not conform. This is the
+  // one place where this can be true.
+  //
+  // TODO(ajwerner): Perhaps add a fallback rule on conformance to say that
+  // a constraint conforms if its constraints exactly match fallback. If we
+  // did that, then we would be able to say that a clamped constraint always
+  // conforms and we wouldn't have any sort of invalid state.
+  message ConstraintBounds {
+    option (gogoproto.equal) = true;
+    Int32Range num_replicas = 1;
+    Int32Range num_voters = 2;
+
+    // Constraints is a *sorted* slice of permitted constraints.
+    // If a constraint in a SpanConfig does not match a constraint in this
+    // slice, the entire field is considered invalid and will be clamped.
+    //
+    // The logic for clamping is to mirror the structure of the existing
+    // distribution of replicas, to the extent possible, but as applied to
+    // the fallback constraints.
+    repeated cockroach.roachpb.Constraint allowed = 3 [(gogoproto.nullable) = false];
+
+    // FallbackConstraints are used to determine the constraints to use when
+    // clamping a configuration which is out of conformance.
+    //
+    // If the existing constraint had just one entry with no numeric bound,
+    // the first element will be used as the constraint.
+    //
+    // If the existing constraint had just one entry with a numeric constraint,
+    // we'll clamp this to the num_replicas/2.
+    //
+    // If the existing constraint had more than one entry with numeric
+    // constraints, we'll clamp accordingly.
+    repeated ConstraintsConjunction fallback = 4 [(gogoproto.nullable) = false];
+  }
+
+  // ConstraintBounds is used to bound the replication constraint fields of
+  // a span config: constraints, voter_constraints, and
+  // leaseholder_preferences.
+  ConstraintBounds constraint_bounds = 5;
+}
