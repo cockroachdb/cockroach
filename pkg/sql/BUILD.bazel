@@ -666,6 +666,7 @@ go_test(
         "txn_restart_test.go",
         "txn_state_test.go",
         "type_change_test.go",
+        "unique_without_index_test.go",
         "unsplit_range_test.go",
         "unsplit_test.go",
         "upsert_test.go",
