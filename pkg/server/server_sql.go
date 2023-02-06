@@ -543,7 +543,13 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		cfg.rangeFeedFactory,
 		codec, cfg.clock, cfg.stopper)
 
-	if isMixedSQLAndKVNode {
+	// We can't use the nodeDailer as the podNodeDailer unless we
+	// are serving the system tenant despite the fact that we've
+	// arranged for pod IDs and instance IDs to match since the
+	// secondary tenant gRPC servers currently live on a different
+	// port.
+	canUseNodeDialerAsPodNodeDialer := isMixedSQLAndKVNode && codec.ForSystemTenant()
+	if canUseNodeDialerAsPodNodeDialer {
 		cfg.podNodeDialer = cfg.nodeDialer
 	} else {
 		// In a multi-tenant environment, use the sqlInstanceReader to resolve
