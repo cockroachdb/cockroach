@@ -5,6 +5,7 @@ go_library(
     name = "metrics",
     srcs = [
         "cluster_tracker.go",
+        "series.go",
         "tracker.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics",
