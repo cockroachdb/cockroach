@@ -31,12 +31,11 @@ import (
 type NodeIDContainer struct {
 	_ util.NoCopy
 
-	// nodeID represents either a NodeID or a SQLInstanceID (if
-	// sqlInstance is set). It is accessed atomically.
-	nodeID int32
+	// nodeID represents a NodeID. It is accessed atomically.
+	nodeID atomic.Int32
 
-	// sqlInstance is set to true when the node is a SQL instance.
-	sqlInstance bool
+	// SQLInstanceID represents a sqlInstanceID.
+	sqlInstanceID atomic.Int32
 
 	// If nodeID has been set, str represents nodeID converted to string. We
 	// precompute this value to speed up String() and keep it from allocating
@@ -51,9 +50,6 @@ type NodeIDContainer struct {
 func (n *NodeIDContainer) String() string {
 	s := n.str.Load()
 	if s == nil {
-		if n.sqlInstance {
-			return "sql?"
-		}
 		return "?"
 	}
 	return s.(string)
@@ -64,7 +60,7 @@ var _ redact.SafeValue = &NodeIDContainer{}
 // SafeValue implements the redact.SafeValue interface.
 func (n *NodeIDContainer) SafeValue() {}
 
-// Get returns the current node ID; 0 if it is unset.
+// Get returns the current node ID or sql instance ID; 0 if both are unset.
 //
 // Note that Get() returns a value of type roachpb.NodeID even though
 // the container is configured to store SQL instance IDs. This is
@@ -76,40 +72,46 @@ func (n *NodeIDContainer) SafeValue() {}
 // KV nodes or SQL instances.
 // See also: https://github.com/cockroachdb/cockroach/pull/73309
 func (n *NodeIDContainer) Get() roachpb.NodeID {
-	return roachpb.NodeID(atomic.LoadInt32(&n.nodeID))
+	v := n.nodeID.Load()
+	if v == 0 {
+		v = n.sqlInstanceID.Load()
+	}
+	return roachpb.NodeID(v)
+}
+
+func (n *NodeIDContainer) GetInstanceID() SQLInstanceID {
+	return SQLInstanceID(n.sqlInstanceID.Load())
 }
 
 // Set sets the current node ID. If it is already set, the value must match.
-func (n *NodeIDContainer) Set(ctx context.Context, val roachpb.NodeID) {
-	n.setInternal(ctx, int32(val), false)
+func (n *NodeIDContainer) Set(_ context.Context, val roachpb.NodeID) {
+	oldVal := n.swapAssertingEqual(int32(val), &n.nodeID)
+	n.str.Store(strconv.Itoa(int(val)))
+	if oldVal == 0 && n.OnSet != nil {
+		n.OnSet(val)
+	}
 }
 
-func (n *NodeIDContainer) setInternal(ctx context.Context, val int32, sqlInstance bool) {
+func (n *NodeIDContainer) swapAssertingEqual(val int32, dest *atomic.Int32) int32 {
 	if val <= 0 {
 		panic(errors.AssertionFailedf("trying to set invalid NodeID: %d", val))
 	}
-	oldVal := atomic.SwapInt32(&n.nodeID, val)
-	if n.sqlInstance != sqlInstance {
-		serverIs := map[bool]redact.SafeString{false: "SQL instance", true: "node"}
-		panic(errors.AssertionFailedf("server is a %v, cannot set %v ID", serverIs[!n.sqlInstance], serverIs[sqlInstance]))
-	} else if oldVal != 0 && oldVal != val {
+	oldVal := dest.Swap(val)
+	if oldVal != 0 && oldVal != val {
 		panic(errors.AssertionFailedf("different IDs set: %d, then %d", oldVal, val))
 	}
-	prefix := ""
-	if sqlInstance {
-		prefix = "sql"
-	}
-	n.str.Store(prefix + strconv.Itoa(int(val)))
-	if oldVal == 0 && n.OnSet != nil {
-		n.OnSet(roachpb.NodeID(val))
-	}
+	return oldVal
+}
+
+func (n *NodeIDContainer) AsSQLIDContainer() *SQLIDContainer {
+	return (*SQLIDContainer)(n)
 }
 
 // Reset changes the NodeID regardless of the old value.
 //
 // Should only be used in testing code.
 func (n *NodeIDContainer) Reset(val roachpb.NodeID) {
-	atomic.StoreInt32(&n.nodeID, int32(val))
+	n.nodeID.Store(int32(val))
 	n.str.Store(strconv.Itoa(int(val)))
 }
 
@@ -189,62 +191,63 @@ func (s SQLInstanceID) String() string {
 // SQLIDContainer is a variant of NodeIDContainer that contains SQL instance IDs.
 type SQLIDContainer NodeIDContainer
 
-// NewSQLIDContainerForNode sets up a SQLIDContainer which serves the underlying
+// NewSQLIDContainerForNode sets up a SQLIDContainer which the
 // NodeID as the SQL instance ID.
 func NewSQLIDContainerForNode(nodeID *NodeIDContainer) *SQLIDContainer {
-	if nodeID.sqlInstance {
+	if nodeID.GetInstanceID() != 0 {
 		// This assertion exists to prevent misuse of the API, where a
 		// caller would call NewSQLIDContainerForNode() once, cast the
 		// result type to `*NodeIDContainer`, then mistakenly call
 		// NewSQLIDContainerForNode() again.
 		panic(errors.AssertionFailedf("programming error: container is already for a SQL instance"))
 	}
-	return (*SQLIDContainer)(nodeID)
-}
 
-// SwitchToSQLIDContainer changes a NodeIDContainer to become able to
-// store SQL instance IDs. After it has been switched, the original
-// container will report the SQL instance ID value as NodeID via
-// its Get() method.
-func (n *NodeIDContainer) SwitchToSQLIDContainer() *SQLIDContainer {
-	sc := NewSQLIDContainerForNode(n)
-	sc.sqlInstance = true
+	sc := (*SQLIDContainer)(nodeID)
+
+	// Callers of NewSQLIDContainerForNode may not actually have a
+	// nodeID set yet. Whenever it is set, we want to also use it
+	// as the SQLInstanceID.
+	nodeID.OnSet = func(val roachpb.NodeID) {
+		sc.SetSQLInstanceID(SQLInstanceID(val))
+	}
+
+	current := SQLInstanceID(nodeID.Get())
+	if current != 0 {
+		sc.SetSQLInstanceID(current)
+	}
 	return sc
 }
 
-// SetSQLInstanceID sets the SQL instance ID. It returns an error if
-// we attempt to set an instance ID when the nodeID has already been
-// initialized.
-func (c *SQLIDContainer) SetSQLInstanceID(ctx context.Context, sqlInstanceID SQLInstanceID) error {
-	if !c.sqlInstance {
-		return errors.New("attempting to initialize instance ID when node ID is set")
-	}
-
-	(*NodeIDContainer)(c).setInternal(ctx, int32(sqlInstanceID), true)
-	return nil
+// SetSQLInstanceID sets the SQL instance ID.
+func (c *SQLIDContainer) SetSQLInstanceID(sqlInstanceID SQLInstanceID) {
+	nc := (*NodeIDContainer)(c)
+	nc.swapAssertingEqual(int32(sqlInstanceID), &nc.sqlInstanceID)
+	nc.str.CompareAndSwap(nil, "sql"+strconv.Itoa(int(sqlInstanceID)))
 }
 
 // OptionalNodeID returns the NodeID and true, if the former is exposed.
 // Otherwise, returns zero and false.
 func (c *SQLIDContainer) OptionalNodeID() (roachpb.NodeID, bool) {
-	if (*NodeIDContainer)(c).sqlInstance {
+	val := (*NodeIDContainer)(c).Get()
+	if val == 0 {
 		return 0, false
 	}
-	return (*NodeIDContainer)(c).Get(), true
+	return val, true
 }
 
 // OptionalNodeIDErr is like OptionalNodeID, but returns an error (referring to
 // the optionally supplied GitHub issues) if the ID is not present.
 func (c *SQLIDContainer) OptionalNodeIDErr(issue int) (roachpb.NodeID, error) {
-	if (*NodeIDContainer)(c).sqlInstance {
+	val := (*NodeIDContainer)(c).Get()
+	if val == 0 {
 		return 0, errorutil.UnsupportedWithMultiTenancy(issue)
 	}
-	return (*NodeIDContainer)(c).Get(), nil
+	return val, nil
 }
 
 // SQLInstanceID returns the wrapped SQLInstanceID.
 func (c *SQLIDContainer) SQLInstanceID() SQLInstanceID {
-	return SQLInstanceID((*NodeIDContainer)(c).Get())
+	return (*NodeIDContainer)(c).GetInstanceID()
 }
 
 // SafeValue implements the redact.SafeValue interface.
@@ -254,10 +257,7 @@ func (c *SQLIDContainer) String() string { return (*NodeIDContainer)(c).String()
 
 // TestingIDContainer is an SQLIDContainer with hard-coded SQLInstanceID of 10.
 var TestingIDContainer = func() *SQLIDContainer {
-	var c NodeIDContainer
-	sc := c.SwitchToSQLIDContainer()
-	if err := sc.SetSQLInstanceID(context.Background(), 10); err != nil {
-		panic(err)
-	}
+	sc := &SQLIDContainer{}
+	sc.SetSQLInstanceID(10)
 	return sc
 }()
