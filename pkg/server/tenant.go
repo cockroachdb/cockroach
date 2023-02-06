@@ -843,7 +843,7 @@ func makeTenantSQLServerArgs(
 
 	// We want all log messages issued on behalf of this SQL instance to report
 	// the instance ID (once known) as a tag.
-	instanceIDContainer := baseCfg.IDContainer.SwitchToSQLIDContainer()
+	instanceIDContainer := baseCfg.IDContainer.AsSQLIDContainer()
 	startupCtx = baseCfg.AmbientCtx.AnnotateCtx(startupCtx)
 
 	clock := hlc.NewClockWithSystemTimeSource(time.Duration(baseCfg.MaxOffset))
