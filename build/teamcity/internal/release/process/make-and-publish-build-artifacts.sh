@@ -96,9 +96,8 @@ tc_end_block "Make and push multiarch docker images"
 
 
 tc_start_block "Make and push FIPS docker image"
-# TODO: atm we use regulare linux build. Need to update the publishing script to generate fips-soecific platoform and files
 gcr_tag_fips="${gcr_repository}:${build_name}-fips"
-platform_name=amd64
+platform_name=amd64-fips
 rm -rf "build/deploy-${platform_name}"
 cp --recursive "build/deploy" "build/deploy-${platform_name}"
 tar \
@@ -113,7 +112,7 @@ cp --recursive licenses "build/deploy-${platform_name}"
 mv build/deploy-${platform_name}/lib/* build/deploy-${platform_name}/
 rmdir build/deploy-${platform_name}/lib
 
-docker build --no-cache --pull --platform "linux/${platform_name}" --tag="${gcr_tag_fips}" --build-arg additional_packages=openssl "build/deploy-${platform_name}"
+docker build --no-cache --pull --platform "linux/amd64" --tag="${gcr_tag_fips}" --build-arg additional_packages=openssl "build/deploy-${platform_name}"
 docker push "$gcr_tag_fips"
 
 tc_end_block "Make and push FIPS docker image"

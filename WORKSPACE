@@ -251,9 +251,9 @@ yarn_install(
         "--pure-lockfile",
     ],
     package_json = "//pkg/cmd/mirror/npm:package.json",
-    yarn_lock = "//pkg/cmd/mirror/npm:yarn.lock",
-    symlink_node_modules = True,
     strict_visibility = False,
+    symlink_node_modules = True,
+    yarn_lock = "//pkg/cmd/mirror/npm:yarn.lock",
 )
 
 # Install external dependencies for NPM packages in pkg/ui/ as separate bazel
@@ -648,8 +648,8 @@ new_local_repository(
 go_download_sdk(
     name = "go_sdk_fips",
     sdks = {
-        "linux_amd64": ("go1.19.4fips.linux-amd64.tar.gz", "630a8e85c17b2dfb0ac1ace51cecfda897a32e99fd06de725d28dc2c6c42807c"),
+        "linux_amd64": ("go1.19.5fips.linux-amd64.tar.gz", "b143b3c384d70700f3ad171dcf9fa1a4b434efa0012c4b1d4ebfb6a0cb7a50b6"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go-fips/20230206-163516/{}"],
-    version = "1.19.4fips",
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go-fips/20230207-040328/{}"],
+    version = "1.19.5fips",
 )

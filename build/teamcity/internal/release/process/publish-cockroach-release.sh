@@ -143,6 +143,39 @@ docker manifest create "${dockerhub_repository}:latest-${release_branch}" "${doc
 tc_end_block "Make and push multiarch docker images"
 
 
+tc_start_block "Make and push FIPS docker image"
+platform_name=amd64-fips
+cp --recursive "build/deploy" "build/deploy-${platform_name}"
+tar \
+  --directory="build/deploy-${platform_name}" \
+  --extract \
+  --file="artifacts/cockroach-${build_name}.linux-${platform_name}.tgz" \
+  --ungzip \
+  --ignore-zeros \
+  --strip-components=1
+cp --recursive licenses "build/deploy-${platform_name}"
+# Move the libs where Dockerfile expects them to be
+mv build/deploy-${platform_name}/lib/* build/deploy-${platform_name}/
+rmdir build/deploy-${platform_name}/lib
+
+dockerhub_tag_fips="${dockerhub_repository}:${build_name}-fips"
+gcr_tag_fips="${gcr_repository}:${build_name}-fips"
+
+# Tag the arch specific images with only one tag per repository. The manifests will reference the tags.
+docker build \
+  --label version="$version" \
+  --no-cache \
+  --pull \
+  --platform="linux/amd64" \
+  --tag="${dockerhub_tag_fips}" \
+  --tag="${gcr_tag_fips}" \
+  --build-arg additional_packages=openssl \
+  "build/deploy-${platform_name}"
+docker push "$gcr_tag_fips"
+docker push "$dockerhub_tag_fips"
+tc_end_block "Make and push FIPS docker image"
+
+
 tc_start_block "Push release tag to GitHub"
 configure_git_ssh_key
 git_wrapped push "ssh://git@github.com/${git_repo_for_tag}.git" "$build_name"
@@ -246,6 +279,49 @@ for img in "${images[@]}"; do
       error=1
     fi
   done
+done
+
+images=(
+  "${dockerhub_tag_fips}"
+  "${gcr_tag_fips}"
+)
+for img in "${images[@]}"; do
+  docker rmi "$img" || true
+  docker pull --platform="linux/amd64" "$img"
+  output=$(docker run --platform="linux/amd64" "$img" version)
+  build_type=$(grep "^Build Type:" <<< "$output" | cut -d: -f2 | sed 's/ //g')
+  sha=$(grep "^Build Commit ID:" <<< "$output" | cut -d: -f2 | sed 's/ //g')
+  build_tag=$(grep "^Build Tag:" <<< "$output" | cut -d: -f2 | sed 's/ //g')
+  go_version=$(grep "^Go Version:" <<< "$output" | cut -d: -f2 | sed 's/ //g')
+
+  # Build Type should always be "release"
+  if [ "$build_type" != "release" ]; then
+    echo "ERROR: Release type mismatch, expected 'release', got '$build_type'"
+    error=1
+  fi
+  if [ "$sha" != "$BUILD_VCS_NUMBER" ]; then
+    echo "ERROR: SHA mismatch, expected '$BUILD_VCS_NUMBER', got '$sha'"
+    error=1
+  fi
+  if [ "$build_tag" != "$build_name" ]; then
+    echo "ERROR: Build tag mismatch, expected '$build_name', got '$build_tag'"
+    error=1
+  fi
+  if [[ "$go_version" != *"fips" ]]; then
+    echo "ERROR: Go version '$go_version' does not contain 'fips'"
+    error=1
+  fi
+
+  build_tag_output=$(docker run --platform="linux/amd64" "$img" version --build-tag)
+  if [ "$build_tag_output" != "$build_name" ]; then
+    echo "ERROR: Build tag from 'cockroach version --build-tag' mismatch, expected '$build_name', got '$build_tag_output'"
+    error=1
+  fi
+  openssl_version_output=$(docker run --platform="linux/amd64" "$img" shell -c "openssl version")
+  if [[ $openssl_version_output != *"FIPS"* ]]; then
+    echo "ERROR: openssl version '$openssl_version_outpu' does not contain 'FIPS'"
+    error=1
+  fi
 done
 
 if [ $error = 1 ]; then

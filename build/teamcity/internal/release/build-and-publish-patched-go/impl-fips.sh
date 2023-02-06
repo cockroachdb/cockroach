@@ -22,8 +22,8 @@ cd go
 git checkout $GO_FIPS_COMMIT
 # Lower the requirements in case we need to bootstrap with an older Go version
 sed -i "s/go mod tidy/go mod tidy -go=1.16/g" scripts/create-secondary-patch.sh
-./scripts/full-initialize-repo.sh
-./scripts/configure-crypto-tests.sh
+./scripts/full-initialize-repo.sh go1.19.5
+# ./scripts/configure-crypto-tests.sh
 cd go/src
 # Apply the CRL patch
 patch -p2 < /bootstrap/diff.patch
