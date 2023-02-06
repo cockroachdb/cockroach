@@ -140,7 +140,7 @@ func (n *alterFunctionRenameNode) startExec(params runParams) error {
 
 	maybeExistingFuncObj := fnDesc.ToFuncObj()
 	maybeExistingFuncObj.FuncName.ObjectName = n.n.NewName
-	existing, err := params.p.matchUDF(params.ctx, &maybeExistingFuncObj, false /* required */)
+	existing, err := params.p.matchUDF(params.ctx, maybeExistingFuncObj, false /* required */)
 	if err != nil {
 		return err
 	}
@@ -148,7 +148,7 @@ func (n *alterFunctionRenameNode) startExec(params runParams) error {
 	if existing != nil {
 		return pgerror.Newf(
 			pgcode.DuplicateFunction, "function %s already exists in schema %q",
-			tree.AsString(&maybeExistingFuncObj), scDesc.GetName(),
+			tree.AsString(maybeExistingFuncObj), scDesc.GetName(),
 		)
 	}
 
@@ -305,14 +305,14 @@ func (n *alterFunctionSetSchemaNode) startExec(params runParams) error {
 	maybeExistingFuncObj := fnDesc.ToFuncObj()
 	maybeExistingFuncObj.FuncName.SchemaName = tree.Name(targetSc.GetName())
 	maybeExistingFuncObj.FuncName.ExplicitSchema = true
-	existing, err := params.p.matchUDF(params.ctx, &maybeExistingFuncObj, false /* required */)
+	existing, err := params.p.matchUDF(params.ctx, maybeExistingFuncObj, false /* required */)
 	if err != nil {
 		return err
 	}
 	if existing != nil {
 		return pgerror.Newf(
 			pgcode.DuplicateFunction, "function %s already exists in schema %q",
-			tree.AsString(&maybeExistingFuncObj), targetSc.GetName(),
+			tree.AsString(maybeExistingFuncObj), targetSc.GetName(),
 		)
 	}
 
