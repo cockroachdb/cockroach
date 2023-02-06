@@ -144,7 +144,7 @@ func (fs *encryptedFS) Create(name string) (vfs.File, error) {
 		}
 	}
 	ef := &encryptedFile{File: f, stream: stream}
-	return vfs.WithFd(f, ef), nil
+	return ef, nil
 }
 
 // Link implements vfs.FS.Link.
@@ -181,7 +181,7 @@ func (fs *encryptedFS) Open(name string, opts ...vfs.OpenOption) (vfs.File, erro
 		return nil, err
 	}
 	ef := &encryptedFile{File: f, stream: stream}
-	return vfs.WithFd(f, ef), nil
+	return ef, nil
 }
 
 // Remove implements vfs.FS.Remove.
