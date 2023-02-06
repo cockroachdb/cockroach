@@ -1571,7 +1571,7 @@ ALTER TABLE unique_without_index ADD CONSTRAINT my_unique_e UNIQUE WITHOUT INDEX
 ALTER TABLE unique_without_index ADD CONSTRAINT my_unique_e2 UNIQUE WITHOUT INDEX (e) NOT VALID
 
 # Trying to validate one of the constraints will fail.
-statement error pgcode 23505 pq: could not create unique constraint "my_unique_e"\nDETAIL: Key \(e\)=\(1\) is duplicated\.
+statement error pgcode 23505 pq: could not create unique constraint ".*"\nDETAIL: Key \(e\)=\(1\) is duplicated\.
 ALTER TABLE unique_without_index VALIDATE CONSTRAINT my_unique_e
 
 # But after we delete a row, validation should succeed.
@@ -1632,7 +1632,7 @@ statement ok
 ALTER TABLE unique_without_index_partial ADD CONSTRAINT uniq_a_1 UNIQUE WITHOUT INDEX (a) WHERE b > 0 OR c > 0 NOT VALID
 
 # Trying to validate the constraint will fail.
-statement error pgcode 23505 pq: could not create unique constraint "uniq_a_1"\nDETAIL: Key \(a\)=\(1\) is duplicated\.
+statement error pgcode 23505 pq: could not create unique constraint ".*"\nDETAIL: Key \(a\)=\(1\) is duplicated\.
 ALTER TABLE unique_without_index_partial VALIDATE CONSTRAINT uniq_a_1
 
 # But after we delete a row, validation should succeed.
@@ -2932,8 +2932,20 @@ ALTER TABLE t_96648 ADD CONSTRAINT check_i2 CHECK (i > 0) NOT VALID;
 statement error pgcode 42704 constraint "check_i" of relation "t_96648" does not exist
 ALTER TABLE t_96648 DROP CONSTRAINT check_i, VALIDATE CONSTRAINT check_i;
 
+# The following stmt is currently not properly supported in legacy schema changer,
+skipif config local-legacy-schema-changer
+skipif config local-mixed-22.2-23.1
+statement ok
+ALTER TABLE t_96648 DROP CONSTRAINT check_i, ADD CONSTRAINT check_i CHECK (i > 0), VALIDATE CONSTRAINT check_i;
+
 statement error pgcode 42704 constraint "check_i2" of relation "t_96648" does not exist
 ALTER TABLE t_96648 DROP CONSTRAINT check_i2, VALIDATE CONSTRAINT check_i2;
+
+# The following stmt is currently not properly supported in legacy schema changer.
+skipif config local-legacy-schema-changer
+skipif config local-mixed-22.2-23.1
+statement ok
+ALTER TABLE t_96648 DROP CONSTRAINT check_i2, ADD CONSTRAINT check_i2 CHECK (i > 0) NOT VALID, VALIDATE CONSTRAINT check_i2;
 
 statement ok
 ALTER TABLE t_96648 DROP CONSTRAINT check_i, DROP CONSTRAINT check_i1, DROP CONSTRAINT check_i2;

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -838,4 +839,40 @@ func maybeFailOnCrossDBTypeReference(b BuildCtx, typeID descpb.ID, parentDBID de
 			"cross database type references are not supported: %s",
 			typeName.String()))
 	}
+}
+
+// shouldSkipValidatingConstraint determines whether we should
+// skip validating this constraint.
+//
+// We skip validating the constraint if it's already validated.
+// We return non-nil error if the constraint is being dropped.
+func shouldSkipValidatingConstraint(
+	b BuildCtx, tableID catid.DescID, constraintID catid.ConstraintID,
+) (skip bool, err error) {
+	// Retrieve constraint and table name for potential error messages.
+	constraintElems := constraintElements(b, tableID, constraintID)
+	_, _, tableNameElem := scpb.FindNamespace(b.QueryByID(tableID))
+	_, _, constraintNameElem := scpb.FindConstraintWithoutIndexName(constraintElems)
+
+	constraintElems.ForEachElementStatus(func(
+		current scpb.Status, target scpb.TargetStatus, e scpb.Element,
+	) {
+		switch e.(type) {
+		case *scpb.CheckConstraint, *scpb.UniqueWithoutIndexConstraint,
+			*scpb.ForeignKeyConstraint:
+			if target == scpb.ToPublic {
+				skip = true
+			} else {
+				err = sqlerrors.NewUndefinedConstraintError(constraintNameElem.Name, tableNameElem.Name)
+			}
+		case *scpb.CheckConstraintUnvalidated, *scpb.UniqueWithoutIndexConstraintUnvalidated,
+			*scpb.ForeignKeyConstraintUnvalidated:
+			if target == scpb.ToPublic {
+				skip = false
+			} else {
+				err = sqlerrors.NewUndefinedConstraintError(constraintNameElem.Name, tableNameElem.Name)
+			}
+		}
+	})
+	return skip, err
 }
