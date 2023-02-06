@@ -315,6 +315,7 @@ go_test(
         "prefixer_test.go",
         "quit_test.go",
         "sqlfmt_test.go",
+        "start_linux_test.go",
         "start_test.go",
         "statement_bundle_test.go",
         "statement_diag_test.go",
