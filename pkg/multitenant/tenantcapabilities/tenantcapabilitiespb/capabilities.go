@@ -15,23 +15,15 @@ import "github.com/cockroachdb/errors"
 // TenantCapabilityName is a pseudo-enum of valid capability names.
 type TenantCapabilityName int32
 
-// valueOffset sets the iota offset to make sure the 0 value is not a valid
-// enum value.
-const valueOffset = 1
-
 // IsSet returns true if the capability name has a non-zero value.
 func (t TenantCapabilityName) IsSet() bool {
-	return t >= valueOffset
+	return t > 0
 }
 
 var stringToTenantCapabilityName = func() map[string]TenantCapabilityName {
-	numCapabilities := len(_TenantCapabilityName_index) - 1
 	m := make(map[string]TenantCapabilityName, numCapabilities)
-	for i := 0; i < numCapabilities; i++ {
-		startIndex := _TenantCapabilityName_index[i]
-		endIndex := _TenantCapabilityName_index[i+1]
-		s := _TenantCapabilityName_name[startIndex:endIndex]
-		m[s] = TenantCapabilityName(i + valueOffset)
+	for c := TenantCapabilityName(1); c <= maxCapabilityName; c++ {
+		m[c.String()] = c
 	}
 	return m
 }()
@@ -48,9 +40,11 @@ func TenantCapabilityNameFromString(s string) (TenantCapabilityName, error) {
 
 //go:generate stringer -type=TenantCapabilityName -linecomment
 const (
+	_ TenantCapabilityName = iota // the zero-value is not meaningful
+
 	// CanAdminSplit if set to true, grants the tenant the ability to
 	// successfully perform `AdminSplit` requests.
-	CanAdminSplit TenantCapabilityName = iota + valueOffset // can_admin_split
+	CanAdminSplit // can_admin_split
 	// CanViewNodeInfo if set to true, grants the tenant the ability
 	// retrieve node-level observability data at endpoints such as `_status/nodes`
 	// and in the DB Console overview page.
@@ -62,4 +56,10 @@ const (
 	// TODO(davidh): Revise this once tenant-scoped metrics are implemented in
 	// https://github.com/cockroachdb/cockroach/issues/96438
 	CanViewTSDBMetrics // can_view_tsdb_metrics
+	// TenantSpanConfigBounds contains the bounds for the tenant's
+	// span configs.
+	TenantSpanConfigBounds // span_config_bounds
+
+	maxCapabilityName TenantCapabilityName = iota - 1
+	numCapabilities                        = maxCapabilityName - 1
 )
