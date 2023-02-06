@@ -477,7 +477,7 @@ func (s *initServer) attemptJoinTo(
 
 		status, ok := grpcstatus.FromError(errors.UnwrapAll(err))
 		if !ok {
-			return nil, err
+			return nil, errors.Wrap(err, "failed to join cluster")
 		}
 
 		// TODO(irfansharif): Here we're logging the error and also returning
