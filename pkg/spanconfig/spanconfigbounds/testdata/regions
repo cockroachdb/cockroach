@@ -1,0 +1,326 @@
+bounds name=bound_to_three_regions
+gc_ttl_seconds: <start: 123 end: 7000>
+range_max_bytes: <start: 10 end: 200>
+range_min_bytes: <start: 10 end: 100>
+num_replicas: <start: 3 end: 8>
+num_voters: <start: 3 end: 6>
+constraint_bounds: <
+    allowed: <key: "region" value: "us-central1">
+    allowed: <key: "region" value: "us-east1">
+    allowed: <key: "region" value: "us-west1">
+    fallback: <constraints: <key: "region" value: "us-east1">>
+    fallback: <constraints: <key: "region" value: "us-central1">>
+    fallback: <constraints: <key: "region" value: "us-west1">>
+>
+----
+
+let $non_constraint_fields
+gc_policy: <ttl_seconds: 127>
+range_min_bytes: 100
+range_max_bytes: 10
+num_voters: 3
+num_replicas: 5
+----
+
+let $three_regions_one_replica_each
+constraints: <
+  num_replicas: 1
+  constraints: <key: "region" value: "us-east1">
+>
+constraints: <
+  num_replicas: 1
+  constraints: <key: "region" value: "us-central1">
+>
+constraints: <
+  num_replicas: 1
+  constraints: <key: "region" value: "us-west1">
+>
+----
+
+conforms bounds=bound_to_three_regions
+$non_constraint_fields
+voter_constraints: <
+  num_replicas: 3
+  constraints: <key: "region" value: "us-central1">
+>
+$three_regions_one_replica_each
+----
+true
+
+conforms bounds=bound_to_three_regions
+$non_constraint_fields
+voter_constraints: <
+  num_replicas: 3
+  constraints: <key: "region" value: "us-central1">
+  constraints: <type: PROHIBITED value: "ssd">
+>
+$three_regions_one_replica_each
+----
+false
+
+clamp bounds=bound_to_three_regions
+$non_constraint_fields
+voter_constraints: <
+  num_replicas: 3
+  constraints: <key: "region" value: "us-central1">
+  constraints: <type: PROHIBITED value: "ssd">
+>
+$three_regions_one_replica_each
+----
+----
+@@ -26,15 +26,11 @@
+     value: "us-west1"
+   >
+ >
+ voter_constraints: <
+-  num_replicas: 3
++  num_replicas: 1
+   constraints: <
+     key: "region"
+-    value: "us-central1"
+-  >
+-  constraints: <
+-    type: PROHIBITED
+-    value: "ssd"
++    value: "us-east1"
+   >
+ >
+ 
+----
+----
+
+check bounds=bound_to_three_regions
+$non_constraint_fields
+voter_constraints: <
+  num_replicas: 3
+  constraints: <key: "region" value: "us-central1">
+  constraints: <type: PROHIBITED value: "ssd">
+>
+$three_regions_one_replica_each
+----
+span config bounds violated for fields: voter_constraints
+span config bounds violated for fields: voter_constraints
+(1) span config bounds violated for fields: voter_constraints
+  | voter_constraints: [+region=us-central1,-ssd:3] does not conform to {allowed: [{+region=us-central1}, {+region=us-east1}, {+region=us-west1}], fallback: [[{+region=us-east1}], [{+region=us-central1}], [{+region=us-west1}]]}, will be clamped to [+region=us-east1:1]
+Error types: (1) *spanconfigbounds.ViolationError
+
+# Note that this case is interesting because we won't touch the out-of-bounds
+# num_replicas in the voter_constraints. It's invalid but it's okay because we
+# are clamping the outer num_replicas.
+clamp bounds=bound_to_three_regions
+gc_policy: <ttl_seconds: 127>
+range_min_bytes: 100
+range_max_bytes: 10
+num_replicas: 3
+num_voters: 3
+voter_constraints: <
+    num_replicas: 4
+    constraints: <type: REQUIRED key: "region" value: "us-central1">
+>
+----
+@@ -4,8 +4,29 @@
+   ttl_seconds: 127
+ >
+ num_replicas: 3
+ num_voters: 3
++constraints: <
++  num_replicas: 1
++  constraints: <
++    key: "region"
++    value: "us-east1"
++  >
++>
++constraints: <
++  num_replicas: 1
++  constraints: <
++    key: "region"
++    value: "us-central1"
++  >
++>
++constraints: <
++  num_replicas: 1
++  constraints: <
++    key: "region"
++    value: "us-west1"
++  >
++>
+ voter_constraints: <
+   num_replicas: 4
+   constraints: <
+     key: "region"
+
+
+# Show that when the user has requested all the voters to be in a
+# single region, we clamp the voters to be in a single region, but
+# choose the first entry of the fallback.
+clamp bounds=bound_to_three_regions
+gc_policy: <ttl_seconds: 127>
+range_min_bytes: 100
+range_max_bytes: 10
+num_replicas: 3
+num_voters: 3
+voter_constraints: <
+    constraints: <key: "region" value: "europe-west1">
+>
+----
+----
+@@ -4,11 +4,32 @@
+   ttl_seconds: 127
+ >
+ num_replicas: 3
+ num_voters: 3
++constraints: <
++  num_replicas: 1
++  constraints: <
++    key: "region"
++    value: "us-east1"
++  >
++>
++constraints: <
++  num_replicas: 1
++  constraints: <
++    key: "region"
++    value: "us-central1"
++  >
++>
++constraints: <
++  num_replicas: 1
++  constraints: <
++    key: "region"
++    value: "us-west1"
++  >
++>
+ voter_constraints: <
+   constraints: <
+     key: "region"
+-    value: "europe-west1"
++    value: "us-east1"
+   >
+ >
+ 
+----
+----
+
+# This is dealing with the weird situation where there was more than one
+# voter_constraints, and at least one of them did not conform. In this
+# case, we choose to spread the replicas over all the fallback regions.
+
+clamp bounds=bound_to_three_regions
+gc_policy: <ttl_seconds: 127>
+range_min_bytes: 100
+range_max_bytes: 10
+voter_constraints: <
+    num_replicas: 4
+    constraints: <type: REQUIRED key: "region" value: "us-central1">
+>
+voter_constraints: <
+    num_replicas: 4
+    constraints: <type: REQUIRED key: "region" value: "europe-west1">
+>
+----
+----
+@@ -2,19 +2,49 @@
+ range_max_bytes: 10
+ gc_policy: <
+   ttl_seconds: 127
+ >
++num_replicas: 3
++num_voters: 3
++constraints: <
++  num_replicas: 1
++  constraints: <
++    key: "region"
++    value: "us-east1"
++  >
++>
++constraints: <
++  num_replicas: 1
++  constraints: <
++    key: "region"
++    value: "us-central1"
++  >
++>
++constraints: <
++  num_replicas: 1
++  constraints: <
++    key: "region"
++    value: "us-west1"
++  >
++>
+ voter_constraints: <
+-  num_replicas: 4
++  num_replicas: 1
++  constraints: <
++    key: "region"
++    value: "us-east1"
++  >
++>
++voter_constraints: <
++  num_replicas: 1
+   constraints: <
+     key: "region"
+     value: "us-central1"
+   >
+ >
+ voter_constraints: <
+-  num_replicas: 4
++  num_replicas: 1
+   constraints: <
+     key: "region"
+-    value: "europe-west1"
++    value: "us-west1"
+   >
+ >
+ 
+----
+----
+
+
+config name=illegal_scalars
+gc_policy: <ttl_seconds: 1>
+range_min_bytes: 1
+range_max_bytes: 10000000000
+num_voters: 72
+num_replicas: 1
+voter_constraints: <
+  num_replicas: 3
+  constraints: <key: "region" value: "us-central1">
+>
+$three_regions_one_replica_each
+----
+
+conforms bounds=bound_to_three_regions config=illegal_scalars
+----
+false
+
+check bounds=bound_to_three_regions config=illegal_scalars
+----
+span config bounds violated for fields: range_min_bytes, range_max_bytes, num_voters, num_replicas, gc.ttlseconds
+span config bounds violated for fields: range_min_bytes, range_max_bytes, num_voters, num_replicas, gc.ttlseconds
+(1) span config bounds violated for fields: range_min_bytes, range_max_bytes, num_voters, num_replicas, gc.ttlseconds
+  | range_min_bytes: 1 does not conform to [10, 100], will be clamped to 10
+  | range_max_bytes: 10000000000 does not conform to [10, 200], will be clamped to 200
+  | num_voters: 72 does not conform to [3, 6], will be clamped to 6
+  | num_replicas: 1 does not conform to [3, 8], will be clamped to 3
+  | gc.ttlseconds: 1 does not conform to [123, 7000], will be clamped to 123
+Error types: (1) *spanconfigbounds.ViolationError
+
+clamp bounds=bound_to_three_regions config=illegal_scalars
+----
+@@ -1,11 +1,11 @@
+-range_min_bytes: 1
+-range_max_bytes: 10000000000
++range_min_bytes: 10
++range_max_bytes: 200
+ gc_policy: <
+-  ttl_seconds: 1
++  ttl_seconds: 123
+ >
+-num_replicas: 1
+-num_voters: 72
++num_replicas: 3
++num_voters: 6
+ constraints: <
+   num_replicas: 1
+   constraints: <
+     key: "region"
