@@ -84,7 +84,7 @@ func GetUserSessionInitInfo(
 	pwRetrieveFn func(ctx context.Context) (expired bool, hashedPassword password.PasswordHash, err error),
 	err error,
 ) {
-	runFn := getUserInfoRunFn(execCfg, user, "get-user-timeout")
+	runFn := getUserInfoRunFn(execCfg, user, "get-user-session")
 
 	if user.IsRootUser() {
 		// As explained above, for root we report that the user exists
@@ -225,7 +225,7 @@ func retrieveSessionInitInfoWithCache(
 			retrieveAuthInfo,
 		)
 		if retErr != nil {
-			return retErr
+			return errors.Wrap(retErr, "get auth info error")
 		}
 		// Avoid looking up default settings for root and non-existent users.
 		if userName.IsRootUser() || !aInfo.UserExists {
@@ -239,7 +239,7 @@ func retrieveSessionInitInfoWithCache(
 			databaseName,
 			retrieveDefaultSettings,
 		)
-		return retErr
+		return errors.Wrap(retErr, "get default settings error")
 	}(); err != nil {
 		// Failed to retrieve the user account. Report in logs for later investigation.
 		log.Warningf(ctx, "user lookup for %q failed: %v", userName, err)
@@ -706,7 +706,7 @@ func updateUserPasswordHash(
 	userName username.SQLUsername,
 	prevHash, newHash []byte,
 ) error {
-	runFn := getUserInfoRunFn(execCfg, userName, "set-hash-timeout")
+	runFn := getUserInfoRunFn(execCfg, userName, "set-user-password-hash")
 
 	return runFn(ctx, func(ctx context.Context) error {
 		return DescsTxn(ctx, execCfg, func(ctx context.Context, txn isql.Txn, d *descs.Collection) error {
