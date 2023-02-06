@@ -879,6 +879,34 @@ func (c *conn) handleSimpleQuery(
 			copyDone.Wait()
 			return nil
 		}
+		if cp, ok := stmts[i].AST.(*tree.CopyTo); ok {
+			if len(stmts) != 1 {
+				// NOTE(andrei): I don't know if Postgres supports receiving a COPY
+				// together with other statements in the "simple" protocol, but I'd
+				// rather not worry about it since execution of COPY is special - it
+				// takes control over the connection.
+				return c.stmtBuf.Push(
+					ctx,
+					sql.SendError{
+						Err: pgwirebase.NewProtocolViolationErrorf(
+							"COPY together with other statements in a query string is not supported"),
+					})
+			}
+			if err := c.stmtBuf.Push(
+				ctx,
+				sql.CopyOut{
+					Conn:         c,
+					ParsedStmt:   stmts[i],
+					Stmt:         cp,
+					TimeReceived: timeReceived,
+					ParseStart:   startParse,
+					ParseEnd:     endParse,
+				},
+			); err != nil {
+				return err
+			}
+			return nil
+		}
 
 		// Determine whether there is only SHOW COMMIT TIMESTAMP after this
 		// statement in the batch. That case should be treated as though it
@@ -1228,6 +1256,34 @@ func (c *conn) BeginCopyIn(
 	for range columns {
 		c.msgBuilder.putInt16(int16(format))
 	}
+	return c.msgBuilder.finishMsg(c.conn)
+}
+
+// BeginCopyOut is part of the pgwirebase.Conn interface.
+func (c *conn) BeginCopyOut(
+	ctx context.Context, columns []colinfo.ResultColumn, format pgwirebase.FormatCode,
+) error {
+	c.msgBuilder.initMsg(pgwirebase.ServerMsgCopyOutResponse)
+	c.msgBuilder.writeByte(byte(format))
+	c.msgBuilder.putInt16(int16(len(columns)))
+	for range columns {
+		c.msgBuilder.putInt16(int16(format))
+	}
+	return c.msgBuilder.finishMsg(c.conn)
+}
+
+// SendCopyData is part of the pgwirebase.Conn interface.
+func (c *conn) SendCopyData(ctx context.Context, copyData []byte) error {
+	c.msgBuilder.initMsg(pgwirebase.ServerMsgCopyDataCommand)
+	if _, err := c.msgBuilder.Write(copyData); err != nil {
+		return err
+	}
+	return c.msgBuilder.finishMsg(c.conn)
+}
+
+// SendCopyDone is part of the pgwirebase.Conn interface.
+func (c *conn) SendCopyDone(ctx context.Context) error {
+	c.msgBuilder.initMsg(pgwirebase.ServerMsgCopyDoneCommand)
 	return c.msgBuilder.finishMsg(c.conn)
 }
 
@@ -1791,6 +1847,11 @@ func (c *conn) CreateErrorResult(pos sql.CmdPos) sql.ErrorResult {
 
 // CreateCopyInResult is part of the sql.ClientComm interface.
 func (c *conn) CreateCopyInResult(pos sql.CmdPos) sql.CopyInResult {
+	return c.newMiscResult(pos, noCompletionMsg)
+}
+
+// CreateCopyOutResult is part of the sql.ClientComm interface.
+func (c *conn) CreateCopyOutResult(pos sql.CmdPos) sql.CopyOutResult {
 	return c.newMiscResult(pos, noCompletionMsg)
 }
 
