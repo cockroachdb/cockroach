@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -261,7 +262,7 @@ func prepareRightReplicaForSplit(
 	}
 
 	// Finish initialization of the RHS.
-	if state, err := loadReplicaState(
+	if state, err := kvstorage.LoadReplicaState(
 		ctx, r.store.engine, &split.RightDesc, rightRepl.replicaID,
 	); err != nil {
 		log.Fatalf(ctx, "%v", err)
