@@ -1917,8 +1917,8 @@ func revalidateIndexes(
 	// We don't actually need the 'historical' read the way the schema change does
 	// since our table is offline.
 	runner := descs.NewHistoricalInternalExecTxnRunner(hlc.Timestamp{}, func(ctx context.Context, fn descs.InternalExecFn) error {
-		return execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-			return fn(ctx, txn, descs.FromTxn(txn))
+		return execCfg.InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+			return fn(ctx, txn)
 		})
 	})
 
