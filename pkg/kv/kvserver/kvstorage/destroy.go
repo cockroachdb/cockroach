@@ -94,7 +94,13 @@ func ClearRangeData(
 }
 
 // DestroyReplica destroys all or a part of the Replica's state, installing a
-// RangeTombstone in its place.
+// RangeTombstone in its place. Due to merges, splits, etc, there is a need
+// to control which part of the state this method actually gets to remove,
+// which is done via the provided options[^1]; the caller is always responsible
+// for managing the remaining disk state accordingly.
+//
+// [^1] e.g., on a merge, the user data moves to the subsuming replica and must
+// not be cleared.
 func DestroyReplica(
 	ctx context.Context,
 	rangeID roachpb.RangeID,
