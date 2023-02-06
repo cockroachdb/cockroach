@@ -155,7 +155,6 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 			Buckets:  metric.BatchProcessLatencyBuckets,
 			MaxVal:   streamingFlushHistMaxLatency.Nanoseconds(),
 			SigFigs:  1,
-			Mode:     metric.HistogramModePreferHdrLatency,
 		}),
 		CommitLatency: metric.NewHistogram(metric.HistogramOptions{
 			Metadata: metaReplicationCommitLatency,
@@ -163,7 +162,6 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 			Buckets:  metric.BatchProcessLatencyBuckets,
 			MaxVal:   streamingCommitLatencyMaxValue.Nanoseconds(),
 			SigFigs:  1,
-			Mode:     metric.HistogramModePreferHdrLatency,
 		}),
 		AdmitLatency: metric.NewHistogram(metric.HistogramOptions{
 			Metadata: metaReplicationAdmitLatency,
@@ -171,7 +169,6 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 			Buckets:  metric.BatchProcessLatencyBuckets,
 			MaxVal:   streamingAdmitLatencyMaxValue.Nanoseconds(),
 			SigFigs:  1,
-			Mode:     metric.HistogramModePreferHdrLatency,
 		}),
 		RunningCount:                metric.NewGauge(metaStreamsRunning),
 		EarliestDataCheckpointSpan:  metric.NewGauge(metaEarliestDataCheckpointSpan),
