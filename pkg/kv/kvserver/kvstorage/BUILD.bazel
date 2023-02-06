@@ -5,6 +5,7 @@ go_library(
     name = "kvstorage",
     srcs = [
         "cluster_version.go",
+        "destroy.go",
         "doc.go",
         "init.go",
     ],
