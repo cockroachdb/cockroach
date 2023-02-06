@@ -19,6 +19,12 @@ import (
 	"github.com/jackc/pgconn"
 )
 
+// BeginCopyTo starts a COPY TO query.
+func BeginCopyTo(ctx context.Context, conn Conn, w io.Writer, query string) (CommandTag, error) {
+	copyConn := conn.(*sqlConn).conn.PgConn()
+	return copyConn.CopyTo(ctx, w, query)
+}
+
 // CopyFromState represents an in progress COPY FROM.
 type CopyFromState struct {
 	conn  *pgconn.PgConn
