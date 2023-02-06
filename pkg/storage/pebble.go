@@ -88,7 +88,7 @@ var valueBlocksEnabled = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"storage.value_blocks.enabled",
 	"set to true to enable writing of value blocks in sstables",
-	false).WithPublic()
+	true).WithPublic()
 
 // EngineKeyCompare compares cockroach keys, including the version (which
 // could be MVCC timestamps).
