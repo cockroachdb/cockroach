@@ -18,19 +18,15 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 # Load go bazel tools. This gives us access to the go bazel SDK/toolchains.
 http_archive(
     name = "io_bazel_rules_go",
-    sha256 = "94158ad689c256ebae989a472a17159e16a5786384362bdf167403df6b923125",
-    strip_prefix = "rules_go-match_sdk_repo",
+    sha256 = "f02f82e74033ea42cf81da4319b9f8e0d4c5fa49346537267bba84053dc68ceb",
+    strip_prefix = "cockroachdb-rules_go-993120e",
     urls = [
         # cockroachdb/rules_go as of 993120ee175025d8556a4dd8bec330e6c4b9ac13
         # (upstream release-0.37 plus a few patches).
-        "https://github.com/rail/rules_go/archive/refs/heads/match_sdk_repo.tar.gz",
+        "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_go-v0.27.0-240-g993120e.tar.gz",
     ],
 )
 
-# local_repository(
-#     name = "io_bazel_rules_go",
-#     path = "/Users/rail/go/src/github.com/cockroachdb/rules_go"
-# )
 # Like the above, but for nodeJS.
 http_archive(
     name = "build_bazel_rules_nodejs",
@@ -652,9 +648,8 @@ new_local_repository(
 go_download_sdk(
     name = "go_sdk_fips",
     sdks = {
-        "linux_amd64": ("go1.19.4.linux-amd64-fips.tar.gz", "ae787622e5288b78e1675979c2a348a12363765f0fe788b7cda2c7a92ff5c66e"),
-        "linux_arm64": ("go1.19.4.linux-arm64-fips.tar.gz", "60c3ff60470b383d1cf30d9a08592e4b2e5154368dc630648c7133bd19bd9f4f"),
+        "linux_amd64": ("go1.19.4fips.linux-amd64.tar.gz", "630a8e85c17b2dfb0ac1ace51cecfda897a32e99fd06de725d28dc2c6c42807c"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go-fips/20230127-044832/{}"],
-    version = "1.19.4",
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go-fips/20230206-163516/{}"],
+    version = "1.19.4fips",
 )
