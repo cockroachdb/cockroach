@@ -25,11 +25,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const testingMetricsInterval = 10 * time.Second
+
 func Example_noWriters() {
 	ctx := context.Background()
 	start := state.TestingStartTime()
 	s := state.LoadConfig(state.ComplexConfig)
-	m := metrics.NewTracker()
+	m := metrics.NewTracker(testingMetricsInterval)
 
 	m.Tick(ctx, start, s)
 	// Output:
@@ -39,7 +41,7 @@ func Example_tickEmptyState() {
 	ctx := context.Background()
 	start := state.TestingStartTime()
 	s := state.LoadConfig(state.ComplexConfig)
-	m := metrics.NewTracker(metrics.NewClusterMetricsTracker(os.Stdout))
+	m := metrics.NewTracker(testingMetricsInterval, metrics.NewClusterMetricsTracker(os.Stdout))
 
 	m.Tick(ctx, start, s)
 	// Output:
@@ -53,7 +55,7 @@ func TestTickEmptyState(t *testing.T) {
 	s := state.LoadConfig(state.ComplexConfig)
 
 	var buf bytes.Buffer
-	m := metrics.NewTracker(metrics.NewClusterMetricsTracker(&buf))
+	m := metrics.NewTracker(testingMetricsInterval, metrics.NewClusterMetricsTracker(&buf))
 
 	m.Tick(ctx, start, s)
 
@@ -67,7 +69,7 @@ func Example_multipleWriters() {
 	ctx := context.Background()
 	start := state.TestingStartTime()
 	s := state.LoadConfig(state.ComplexConfig)
-	m := metrics.NewTracker(metrics.NewClusterMetricsTracker(os.Stdout, os.Stdout))
+	m := metrics.NewTracker(testingMetricsInterval, metrics.NewClusterMetricsTracker(os.Stdout, os.Stdout))
 
 	m.Tick(ctx, start, s)
 	// Output:
@@ -81,7 +83,7 @@ func Example_leaseTransfer() {
 	ctx := context.Background()
 	start := state.TestingStartTime()
 	s := state.LoadConfig(state.ComplexConfig)
-	m := metrics.NewTracker(metrics.NewClusterMetricsTracker(os.Stdout))
+	m := metrics.NewTracker(testingMetricsInterval, metrics.NewClusterMetricsTracker(os.Stdout))
 
 	changer := state.NewReplicaChanger()
 	changer.Push(state.TestingStartTime(), &state.LeaseTransferChange{
@@ -101,7 +103,7 @@ func Example_rebalance() {
 	ctx := context.Background()
 	start := state.TestingStartTime()
 	s := state.LoadConfig(state.ComplexConfig)
-	m := metrics.NewTracker(metrics.NewClusterMetricsTracker(os.Stdout))
+	m := metrics.NewTracker(testingMetricsInterval, metrics.NewClusterMetricsTracker(os.Stdout))
 
 	// Apply load, to get a replica size greater than 0.
 	le := workload.LoadBatch{workload.LoadEvent{Writes: 1, WriteSize: 7, Reads: 2, ReadSize: 9, Key: 5}}
@@ -121,14 +123,13 @@ func Example_workload() {
 	ctx := context.Background()
 	settings := config.DefaultSimulationSettings()
 	duration := 200 * time.Second
-	interval := 10 * time.Second
 	rwg := make([]workload.Generator, 1)
 	rwg[0] = workload.TestCreateWorkloadGenerator(settings.Seed, settings.StartTime, 10, 10000)
-	m := metrics.NewTracker(metrics.NewClusterMetricsTracker(os.Stdout))
+	m := metrics.NewTracker(testingMetricsInterval, metrics.NewClusterMetricsTracker(os.Stdout))
 
 	s := state.LoadConfig(state.ComplexConfig)
 
-	sim := asim.NewSimulator(duration, interval, interval, rwg, s, settings, m)
+	sim := asim.NewSimulator(duration, rwg, s, settings, m)
 	sim.RunSim(ctx)
 	// WIP: non deterministic
 	// Output:
