@@ -1,0 +1,106 @@
+exec-ddl
+CREATE TABLE t (id int primary key, t text);
+----
+
+exec-ddl
+INSERT INTO t VALUES
+  (1, 'a tab' || chr(9) || ' separates us'),
+  (2, 'some pipe || characters'),
+  (3, 'new line chars!' || chr(10) || ' ok?'),
+  (4, NULL),
+  (5, 'a backslash IS\NT a biggie'),
+  (6, 'a quote " character should not be escaped'),
+  (7, '');
+----
+
+# Test error conditions.
+copy-to-error
+COPY non_existent_table TO STDOUT
+----
+ERROR: COPY non_existent_table TO STDOUT: relation "non_existent_table" does not exist (SQLSTATE 42P01)
+
+copy-to-error
+COPY t TO STDOUT ESCAPE '|'
+----
+ERROR: ESCAPE can only be specified for CSV (SQLSTATE 0A000)
+
+# Test all the COPY permutations.
+copy-to
+COPY t TO STDOUT
+----
+1	a tab\t separates us
+2	some pipe || characters
+3	new line chars!\n ok?
+4	\N
+5	a backslash IS\\NT a biggie
+6	a quote " character should not be escaped
+7	
+
+copy-to
+COPY t (t, t, id, id, t) TO STDOUT
+----
+a tab\t separates us	a tab\t separates us	1	1	a tab\t separates us
+some pipe || characters	some pipe || characters	2	2	some pipe || characters
+new line chars!\n ok?	new line chars!\n ok?	3	3	new line chars!\n ok?
+\N	\N	4	4	\N
+a backslash IS\\NT a biggie	a backslash IS\\NT a biggie	5	5	a backslash IS\\NT a biggie
+a quote " character should not be escaped	a quote " character should not be escaped	6	6	a quote " character should not be escaped
+		7	7	
+
+copy-to
+COPY (SELECT id+1, t FROM t) TO STDOUT
+----
+2	a tab\t separates us
+3	some pipe || characters
+4	new line chars!\n ok?
+5	\N
+6	a backslash IS\\NT a biggie
+7	a quote " character should not be escaped
+8	
+
+copy-to
+COPY t TO STDOUT DELIMITER '|'
+----
+1|a tab\t separates us
+2|some pipe \|\| characters
+3|new line chars!\n ok?
+4|\N
+5|a backslash IS\\NT a biggie
+6|a quote " character should not be escaped
+7|
+
+copy-to
+COPY t TO STDOUT NULL 'attNULL'
+----
+1	a tab\t separates us
+2	some pipe || characters
+3	new line chars!\n ok?
+4	attNULL
+5	a backslash IS\\NT a biggie
+6	a quote " character should not be escaped
+7	
+
+# Test session settings are applied.
+exec-ddl
+SET IntervalStyle = 'iso_8601'
+----
+
+exec-ddl
+SET TIME ZONE 'Pacific/Honolulu'
+----
+
+copy-to
+COPY (SELECT '2020-01-03 15:16:17.123456'::timestamptz, '1 month 3 days 01:02:15.16'::interval)
+TO STDOUT
+----
+2020-01-03 15:16:17.123456-10	P1M3DT1H2M15.16S
+
+copy-to
+COPY (
+  SELECT
+    '\xdeadbeef'::bytea,
+    array['\xdeadbeef']::bytea[],
+    ('2020-01-03 15:16:17.123456'::timestamptz, 'f'::bool)
+) TO STDOUT
+----
+\\xdeadbeef	{"\\\\xdeadbeef"}	("2020-01-03 15:16:17.123456-10",f)
