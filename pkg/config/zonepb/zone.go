@@ -16,11 +16,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
@@ -341,6 +341,11 @@ func (z *ZoneConfig) ValidateTandemFields() error {
 	return nil
 }
 
+// MinRangeMaxBytes is the minimum value for range max bytes.
+// The default, 64 MiB, is half of the default range_min_bytes
+var minRangeMaxBytes = envutil.EnvOrDefaultInt64("COCKROACH_MIN_RANGE_MAX_BYTES",
+	64<<20 /* 64 MiB */)
+
 // Validate returns an error if the ZoneConfig specifies a known-dangerous or
 // disallowed configuration.
 func (z *ZoneConfig) Validate() error {
@@ -382,9 +387,9 @@ func (z *ZoneConfig) Validate() error {
 		}
 	}
 
-	if z.RangeMaxBytes != nil && *z.RangeMaxBytes < base.MinRangeMaxBytes {
+	if z.RangeMaxBytes != nil && *z.RangeMaxBytes < minRangeMaxBytes {
 		return fmt.Errorf("RangeMaxBytes %d less than minimum allowed %d",
-			*z.RangeMaxBytes, base.MinRangeMaxBytes)
+			*z.RangeMaxBytes, minRangeMaxBytes)
 	}
 
 	if z.RangeMinBytes != nil && *z.RangeMinBytes < 0 {

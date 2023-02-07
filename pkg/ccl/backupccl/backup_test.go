@@ -9411,7 +9411,7 @@ func TestExportRequestBelowGCThresholdOnDataExcludedFromBackup(t *testing.T) {
 	_, err = conn.Exec("SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'") // speeds up the test
 	require.NoError(t, err)
 
-	const tableRangeMaxBytes = 1 << 18
+	const tableRangeMaxBytes = 100 << 20
 	_, err = conn.Exec("ALTER TABLE foo CONFIGURE ZONE USING "+
 		"gc.ttlseconds = 1, range_max_bytes = $1, range_min_bytes = 1<<10;", tableRangeMaxBytes)
 	require.NoError(t, err)
@@ -9495,7 +9495,7 @@ func TestExcludeDataFromBackupDoesNotHoldupGC(t *testing.T) {
 	// Exclude the table from backup so that it does not hold up GC.
 	runner.Exec(t, `ALTER TABLE test.foo SET (exclude_data_from_backup = true)`)
 
-	const tableRangeMaxBytes = 1 << 18
+	const tableRangeMaxBytes = 100 << 20
 	runner.Exec(t, "ALTER TABLE test.foo CONFIGURE ZONE USING "+
 		"gc.ttlseconds = 1, range_max_bytes = $1, range_min_bytes = 1<<10;", tableRangeMaxBytes)
 
