@@ -154,7 +154,7 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 	// it once the in-progress disk writes complete.
 	defer func() {
 		if batch != nil {
-			defer batch.Close()
+			batch.Close()
 		}
 	}()
 
@@ -243,19 +243,23 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 	if nonBlockingSync {
 		// If non-blocking synchronization is enabled, apply the batched updates to
 		// the engine and initiate a synchronous disk write, but don't wait for the
-		// write to complete. Instead, enqueue that waiting on the SyncWaiterLoop,
-		// who will signal the callback when the write completes.
+		// write to complete.
 		if err := batch.CommitNoSyncWait(); err != nil {
 			const expl = "while committing batch without sync wait"
 			return RaftState{}, errors.Wrap(err, expl)
 		}
 		stats.PebbleEnd = timeutil.Now()
-		s.SyncWaiter.enqueue(ctx, batch, func() {
-			// NOTE: run on the SyncWaiterLoop goroutine.
-			logCommitEnd := timeutil.Now()
-			s.Metrics.RaftLogCommitLatency.RecordValue(logCommitEnd.Sub(stats.PebbleBegin).Nanoseconds())
-			cb.OnLogSync(ctx, m.Responses)
-		})
+		// Instead, enqueue that waiting on the SyncWaiterLoop, who will signal the
+		// callback when the write completes.
+		waiterCallback := nonBlockingSyncWaiterCallbackPool.Get().(*nonBlockingSyncWaiterCallback)
+		*waiterCallback = nonBlockingSyncWaiterCallback{
+			ctx:            ctx,
+			cb:             cb,
+			msgs:           m.Responses,
+			metrics:        s.Metrics,
+			logCommitBegin: stats.PebbleBegin,
+		}
+		s.SyncWaiter.enqueue(ctx, batch, waiterCallback)
 		// Do not Close batch on return. Will be Closed by SyncWaiterLoop.
 		batch = nil
 	} else {
@@ -308,6 +312,38 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 	s.EntryCache.Add(s.RangeID, m.Entries, true /* truncate */)
 
 	return state, nil
+}
+
+// nonBlockingSyncWaiterCallback packages up the callback that is handed to the
+// SyncWaiterLoop during a non-blocking Raft log sync. Structuring the callback
+// as a struct with a method instead of an anonymous function avoids individual
+// fields escaping to the heap. It also provides the opportunity to pool the
+// callback.
+type nonBlockingSyncWaiterCallback struct {
+	// Used to run SyncCallback.
+	ctx  context.Context
+	cb   SyncCallback
+	msgs []raftpb.Message
+	// Used to record Metrics.
+	metrics        Metrics
+	logCommitBegin time.Time
+}
+
+// run is the callback's logic. It is executed on the SyncWaiterLoop goroutine.
+func (cb *nonBlockingSyncWaiterCallback) run() {
+	dur := timeutil.Since(cb.logCommitBegin).Nanoseconds()
+	cb.metrics.RaftLogCommitLatency.RecordValue(dur)
+	cb.cb.OnLogSync(cb.ctx, cb.msgs)
+	cb.release()
+}
+
+func (cb *nonBlockingSyncWaiterCallback) release() {
+	*cb = nonBlockingSyncWaiterCallback{}
+	nonBlockingSyncWaiterCallbackPool.Put(cb)
+}
+
+var nonBlockingSyncWaiterCallbackPool = sync.Pool{
+	New: func() interface{} { return new(nonBlockingSyncWaiterCallback) },
 }
 
 var valPool = sync.Pool{

@@ -1303,8 +1303,8 @@ func (c *transientCluster) generateCerts(ctx context.Context, certsDir string) (
 		nodeKeyExists && nodeCertExists &&
 		rootClientKeyExists && rootClientCertExists &&
 		demoClientKeyExists && demoClientCertExists &&
-		tenantSigningKeyExists && tenantSigningCertExists &&
-		tenantKeyExists && tenantCertExists {
+		(!c.demoCtx.Multitenant || (tenantSigningKeyExists && tenantSigningCertExists &&
+			(c.demoCtx.DisableServerController || (tenantKeyExists && tenantCertExists)))) {
 		// All good.
 		return nil
 	}
@@ -1430,33 +1430,37 @@ func (c *transientCluster) generateCerts(ctx context.Context, certsDir string) (
 		}
 	}
 
-	if !(tenantKeyExists && tenantCertExists) {
-		c.infoLog(ctx, "generating tenant server key/cert pair in %q", certsDir)
-		pair, err := security.CreateTenantPair(
-			certsDir,
-			caKeyPath,
-			c.demoCtx.DefaultKeySize,
-			c.demoCtx.DefaultCertLifetime,
-			2,
-			tlsServerNames,
-		)
-		if err != nil {
-			return err
+	if c.demoCtx.Multitenant {
+		if !(tenantSigningKeyExists && tenantSigningCertExists) {
+			c.infoLog(ctx, "generating tenant signing key/cert pair in %q", certsDir)
+			if err := security.CreateTenantSigningPair(
+				certsDir,
+				c.demoCtx.DefaultCertLifetime,
+				true, /* overwrite */
+				2,
+			); err != nil {
+				return err
+			}
 		}
-		if err := security.WriteTenantPair(certsDir, pair, true /* overwrite */); err != nil {
-			return err
-		}
-	}
 
-	if !(tenantSigningKeyExists && tenantSigningCertExists) {
-		c.infoLog(ctx, "generating tenant signing key/cert pair in %q", certsDir)
-		if err := security.CreateTenantSigningPair(
-			certsDir,
-			c.demoCtx.DefaultCertLifetime,
-			true, /* overwrite */
-			2,
-		); err != nil {
-			return err
+		if c.demoCtx.DisableServerController {
+			if !(tenantKeyExists && tenantCertExists) {
+				c.infoLog(ctx, "generating tenant server key/cert pair in %q", certsDir)
+				pair, err := security.CreateTenantPair(
+					certsDir,
+					caKeyPath,
+					c.demoCtx.DefaultKeySize,
+					c.demoCtx.DefaultCertLifetime,
+					2,
+					tlsServerNames,
+				)
+				if err != nil {
+					return err
+				}
+				if err := security.WriteTenantPair(certsDir, pair, true /* overwrite */); err != nil {
+					return err
+				}
+			}
 		}
 	}
 

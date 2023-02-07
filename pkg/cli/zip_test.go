@@ -345,15 +345,21 @@ func eraseNonDeterministicZipOutput(out string) string {
 	out = re.ReplaceAllString(out, `dial tcp ...`)
 	re = regexp.MustCompile(`(?m)rpc error: .*$`)
 	out = re.ReplaceAllString(out, `rpc error: ...`)
+	re = regexp.MustCompile(`(?m)timed out after.*$`)
+	out = re.ReplaceAllString(out, `timed out after...`)
 	re = regexp.MustCompile(`(?m)failed to connect to .*$`)
 	out = re.ReplaceAllString(out, `failed to connect to ...`)
 
 	// The number of memory profiles previously collected is not deterministic.
 	re = regexp.MustCompile(`(?m)^\[node \d+\] \d+ heap profiles found$`)
 	out = re.ReplaceAllString(out, `[node ?] ? heap profiles found`)
+	re = regexp.MustCompile(`(?m)^\[node \d+\] \d+ goroutine dumps found$`)
+	out = re.ReplaceAllString(out, `[node ?] ? goroutine dumps found`)
 	re = regexp.MustCompile(`(?m)^\[node \d+\] retrieving (memprof|memstats).*$` + "\n")
 	out = re.ReplaceAllString(out, ``)
 	re = regexp.MustCompile(`(?m)^\[node \d+\] writing profile.*$` + "\n")
+	out = re.ReplaceAllString(out, ``)
+	re = regexp.MustCompile(`(?m)^\[node \d+\] writing dump.*$` + "\n")
 	out = re.ReplaceAllString(out, ``)
 
 	//out = strings.ReplaceAll(out, "\n\n", "\n")
