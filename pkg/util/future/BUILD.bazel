@@ -1,0 +1,31 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "future",
+    srcs = ["future.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/future",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util",
+        "//pkg/util/log",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//errbase",
+    ],
+)
+
+go_test(
+    name = "future_test",
+    srcs = ["future_test.go"],
+    args = ["-test.timeout=295s"],
+    deps = [
+        ":future",
+        "//pkg/testutils",
+        "//pkg/util/ctxgroup",
+        "//pkg/util/leaktest",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+get_x_data(name = "get_x_data")
