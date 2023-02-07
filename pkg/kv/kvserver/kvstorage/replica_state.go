@@ -34,10 +34,12 @@ type LoadedReplicaState struct {
 
 // LoadReplicaState loads the state necessary to create a Replica with the
 // specified range descriptor, which can be either initialized or uninitialized.
+// It also verifies replica state invariants.
 // TODO(pavelkalinnikov): integrate with stateloader.
 func LoadReplicaState(
 	ctx context.Context,
 	eng storage.Reader,
+	storeID roachpb.StoreID,
 	desc *roachpb.RangeDescriptor,
 	replicaID roachpb.ReplicaID,
 ) (LoadedReplicaState, error) {
@@ -63,11 +65,15 @@ func LoadReplicaState(
 	if ls.ReplState, err = sl.Load(ctx, eng, desc); err != nil {
 		return LoadedReplicaState{}, err
 	}
+
+	if err := ls.check(storeID); err != nil {
+		return LoadedReplicaState{}, err
+	}
 	return ls, nil
 }
 
-// Check makes sure that the replica invariants hold for the loaded state.
-func (r LoadedReplicaState) Check(storeID roachpb.StoreID) error {
+// check makes sure that the replica invariants hold for the loaded state.
+func (r LoadedReplicaState) check(storeID roachpb.StoreID) error {
 	desc := r.ReplState.Desc
 	if r.ReplicaID == 0 {
 		return errors.AssertionFailedf("r%d: replicaID is 0", desc.RangeID)

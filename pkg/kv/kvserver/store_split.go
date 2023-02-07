@@ -263,7 +263,7 @@ func prepareRightReplicaForSplit(
 
 	// Finish initialization of the RHS.
 	if state, err := kvstorage.LoadReplicaState(
-		ctx, r.store.engine, &split.RightDesc, rightRepl.replicaID,
+		ctx, r.Engine(), r.StoreID(), &split.RightDesc, rightRepl.replicaID,
 	); err != nil {
 		log.Fatalf(ctx, "%v", err)
 	} else if err := rightRepl.initRaftMuLockedReplicaMuLocked(state); err != nil {

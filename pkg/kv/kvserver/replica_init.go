@@ -50,7 +50,7 @@ func loadInitializedReplicaForTesting(
 	if !desc.IsInitialized() {
 		return nil, errors.AssertionFailedf("can not load with uninitialized descriptor: %s", desc)
 	}
-	state, err := kvstorage.LoadReplicaState(ctx, store.engine, desc, replicaID)
+	state, err := kvstorage.LoadReplicaState(ctx, store.engine, store.StoreID(), desc, replicaID)
 	if err != nil {
 		return nil, err
 	}
@@ -183,9 +183,6 @@ func (r *Replica) setStartKeyLocked(startKey roachpb.RKey) {
 // - loadInitializedReplicaForTesting, to finalize creating an initialized replica;
 // - splitPostApply, to initialize a previously uninitialized replica.
 func (r *Replica) initRaftMuLockedReplicaMuLocked(s kvstorage.LoadedReplicaState) error {
-	if err := s.Check(r.StoreID()); err != nil {
-		return err
-	}
 	desc := s.ReplState.Desc
 	// Ensure that the loaded state corresponds to the same replica.
 	if desc.RangeID != r.RangeID || s.ReplicaID != r.replicaID {
