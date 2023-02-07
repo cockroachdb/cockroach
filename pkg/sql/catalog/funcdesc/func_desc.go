@@ -557,6 +557,9 @@ func (desc *immutable) ToOverload() (ret *tree.Overload, err error) {
 	if err != nil {
 		return nil, err
 	}
+	if desc.ReturnType.ReturnSet {
+		ret.Class = tree.GeneratorClass
+	}
 
 	return ret, nil
 }

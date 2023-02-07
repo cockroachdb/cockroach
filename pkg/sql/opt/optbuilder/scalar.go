@@ -669,24 +669,26 @@ func (b *Builder) buildUDF(
 
 	// Build an expression for each statement in the function body.
 	rels := make(memo.RelListExpr, len(stmts))
+	isSetReturning := o.Class == tree.GeneratorClass
 	for i := range stmts {
 		stmtScope := b.buildStmt(stmts[i].AST, nil /* desiredTypes */, bodyScope)
 		expr := stmtScope.expr
 		physProps := stmtScope.makePhysicalProps()
 
-		// Add a LIMIT 1 to the last statement. This is valid because any other
-		// rows after the first can simply be ignored. The limit could be
-		// beneficial because it could allow additional optimization.
+		// The last statement produces the output of the UDF.
 		if i == len(stmts)-1 {
-			b.buildLimit(&tree.Limit{Count: tree.NewDInt(1)}, b.allocScope(), stmtScope)
-			expr = stmtScope.expr
-			// The limit expression will maintain the desired ordering, if any,
-			// so the physical props ordering can be cleared. The presentation
-			// must remain.
-			// TODO(mgartner): For SETOF functions, we may need to maintain the
-			// ordering without the LIMIT. Make sure to account for this in
-			// ConvertUDFToSubquery.
-			physProps.Ordering = props.OrderingChoice{}
+			// Add a LIMIT 1 to the last statement if the UDF is not
+			// set-returning. This is valid because any other rows after the
+			// first can simply be ignored. The limit could be beneficial
+			// because it could allow additional optimization.
+			if !isSetReturning {
+				b.buildLimit(&tree.Limit{Count: tree.NewDInt(1)}, b.allocScope(), stmtScope)
+				expr = stmtScope.expr
+				// The limit expression will maintain the desired ordering, if any,
+				// so the physical props ordering can be cleared. The presentation
+				// must remain.
+				physProps.Ordering = props.OrderingChoice{}
+			}
 
 			// If there are multiple output columns, we must combine them into a
 			// tuple - only a single column can be returned from a UDF.
@@ -702,8 +704,10 @@ func (b *Builder) buildUDF(
 				physProps = stmtScope.makePhysicalProps()
 			}
 
-			// If necessary, add an assignment cast to the result column so that
-			// its type matches the function return type.
+			// We must preserve the presentation of columns as physical
+			// properties to prevent the optimizer from pruning the output
+			// column. If necessary, we add an assignment cast to the result
+			// column so that its type matches the function return type.
 			returnCol := physProps.Presentation[0].ID
 			returnColMeta := b.factory.Metadata().ColumnMeta(returnCol)
 			if !returnColMeta.Type.Identical(f.ResolvedType()) {
@@ -731,20 +735,24 @@ func (b *Builder) buildUDF(
 	out = b.factory.ConstructUDF(
 		args,
 		&memo.UDFPrivate{
-			Name:       def.Name,
-			Params:     params,
-			Body:       rels,
-			Typ:        f.ResolvedType(),
-			Volatility: o.Volatility,
+			Name:         def.Name,
+			Params:       params,
+			Body:         rels,
+			Typ:          f.ResolvedType(),
+			SetReturning: isSetReturning,
+			Volatility:   o.Volatility,
 		},
 	)
 
-	// If the UDF is strict, it should not be invoked when any of the arguments
-	// are NULL. To achieve this, we wrap the UDF in a CASE expression like:
+	// If the UDF is strict and non-set-returning, it should not be invoked when
+	// any of the arguments are NULL. To achieve this, we wrap the UDF in a CASE
+	// expression like:
 	//
 	//   CASE WHEN arg1 IS NULL OR arg2 IS NULL OR ... THEN NULL ELSE udf() END
 	//
-	if !o.CalledOnNullInput && len(args) > 0 {
+	// For strict, set-returning UDFs, the evaluation logic achieves this
+	// behavior.
+	if !isSetReturning && !o.CalledOnNullInput && len(args) > 0 {
 		var anyArgIsNull opt.ScalarExpr
 		for i := range args {
 			// Note: We do NOT use a TupleIsNullExpr here if the argument is a
@@ -774,6 +782,10 @@ func (b *Builder) buildUDF(
 		)
 	}
 
+	// Synthesize an output column for set-returning UDFs.
+	if isSetReturning && outCol == nil {
+		outCol = b.synthesizeColumn(outScope, scopeColName(""), f.ResolvedType(), nil /* expr */, out)
+	}
 	return b.finishBuildScalar(f, out, inScope, outScope, outCol)
 }
 
