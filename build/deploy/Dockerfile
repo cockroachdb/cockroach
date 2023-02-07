@@ -1,4 +1,5 @@
 FROM registry.access.redhat.com/ubi8/ubi-minimal
+ARG additional_packages
 
 # For deployment, we need the following additionally installed:
 # tzdata - for time zone functions; reinstalled to replace the missing
@@ -7,7 +8,7 @@ FROM registry.access.redhat.com/ubi8/ubi-minimal
 # tar - used by kubectl cp
 RUN microdnf update -y \
     && rpm --erase --nodeps tzdata \
-    && microdnf install tzdata hostname tar gzip xz -y \
+    && microdnf install tzdata hostname tar gzip xz $additional_packages -y \
     && rm -rf /var/cache/yum
 
 RUN mkdir /usr/local/lib/cockroach /cockroach /licenses /docker-entrypoint-initdb.d
