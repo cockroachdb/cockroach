@@ -345,13 +345,13 @@ statement ok
 ALTER INDEX partitioning.inheritance@inheritance_pkey PARTITION BY LIST (x) ( PARTITION p1 VALUES IN (1))
 
 statement ok
-ALTER DATABASE partitioning CONFIGURE ZONE USING range_min_bytes=64000, range_max_bytes=75000
+ALTER DATABASE partitioning CONFIGURE ZONE USING range_min_bytes=64000, range_max_bytes=75000000
 
 query TTTTTTTTT
 SHOW PARTITIONS FROM TABLE partitioning.inheritance
 ----
 partitioning  inheritance  p1  NULL  x  inheritance@inheritance_pkey  (1)  NULL  range_min_bytes = 64000,
-                                                                                 range_max_bytes = 75000,
+                                                                                 range_max_bytes = 75000000,
                                                                                  gc.ttlseconds = 14400,
                                                                                  num_replicas = 3,
                                                                                  constraints = '[]',
@@ -364,7 +364,7 @@ query TTTTTTTTT
 SHOW PARTITIONS FROM TABLE partitioning.inheritance
 ----
 partitioning  inheritance  p1  NULL  x  inheritance@inheritance_pkey  (1)  NULL  range_min_bytes = 64000,
-range_max_bytes = 75000,
+range_max_bytes = 75000000,
 gc.ttlseconds = 80000,
 num_replicas = 3,
 constraints = '[]',
@@ -377,7 +377,7 @@ query TTTTTTTTT
 SHOW PARTITIONS FROM TABLE partitioning.inheritance
 ----
 partitioning  inheritance  p1  NULL  x  inheritance@inheritance_pkey  (1)  NULL  range_min_bytes = 64000,
-range_max_bytes = 75000,
+range_max_bytes = 75000000,
 gc.ttlseconds = 80000,
 num_replicas = 5,
 constraints = '[]',
@@ -390,7 +390,7 @@ query TTTTTTTTT
 SHOW PARTITIONS FROM TABLE partitioning.inheritance
 ----
 partitioning  inheritance  p1  NULL  x  inheritance@inheritance_pkey  (1)  constraints = '[+dc=dc1]'  range_min_bytes = 64000,
-range_max_bytes = 75000,
+range_max_bytes = 75000000,
 gc.ttlseconds = 80000,
 num_replicas = 5,
 constraints = '[+dc=dc1]',
