@@ -1088,7 +1088,7 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 	tdb.Exec(t, "CREATE TABLE t ()")
 	var descID uint32
 	tdb.QueryRow(t, "SELECT 't'::regclass::int").Scan(&descID)
-	const maxBytes, minBytes = 1 << 16, 1 << 14
+	const maxBytes, minBytes = 100 << 20, 1 << 14
 	tdb.Exec(t, "ALTER TABLE t CONFIGURE ZONE USING range_max_bytes = $1, range_min_bytes = $2",
 		maxBytes, minBytes)
 
@@ -1164,7 +1164,7 @@ func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 	tdb.Exec(t, "CREATE TABLE t ()")
 	var descID uint32
 	tdb.QueryRow(t, "SELECT 't'::regclass::int").Scan(&descID)
-	const maxBytes, minBytes = 1 << 16, 1 << 14
+	const maxBytes, minBytes = 100 << 20, 1 << 14
 	tdb.Exec(t, "ALTER TABLE t CONFIGURE ZONE USING range_max_bytes = $1, range_min_bytes = $2",
 		maxBytes, minBytes)
 

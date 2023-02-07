@@ -51,5 +51,5 @@ const (
 	InflightTraceDir = "inflight_trace_dump"
 
 	// MinRangeMaxBytes is the minimum value for range max bytes.
-	MinRangeMaxBytes = 64 << 10 // 64 KB
+	MinRangeMaxBytes = 64 << 20 // 64 MiB, half of the default range_min_bytes
 )

@@ -71,7 +71,7 @@ translate database=db table=t
 # Configure a zone config field on the table, so that it is no longer a
 # placeholder zone config.
 exec-sql
-ALTER TABLE db.t CONFIGURE ZONE USING range_min_bytes = 1000, range_max_bytes=100000;
+ALTER TABLE db.t CONFIGURE ZONE USING range_min_bytes = 1000, range_max_bytes=100000000;
 ----
 
 query-sql
@@ -79,7 +79,7 @@ SHOW ZONE CONFIGURATION FOR INDEX db.t@idx
 ----
 INDEX db.public.t@idx ALTER INDEX db.public.t@idx CONFIGURE ZONE USING
 	range_min_bytes = 1000,
-	range_max_bytes = 100000,
+	range_max_bytes = 100000000,
 	gc.ttlseconds = 25,
 	num_replicas = 7,
 	num_voters = 5,
@@ -89,6 +89,6 @@ INDEX db.public.t@idx ALTER INDEX db.public.t@idx CONFIGURE ZONE USING
 
 translate database=db table=t
 ----
-/Table/106{-/2}                            range_max_bytes=100000 range_min_bytes=1000 ttl_seconds=3600 num_replicas=7
-/Table/106/{2-3}                           range_max_bytes=100000 range_min_bytes=1000 ttl_seconds=25 num_replicas=7 num_voters=5
-/Table/10{6/3-7}                           range_max_bytes=100000 range_min_bytes=1000 ttl_seconds=3600 num_replicas=7
+/Table/106{-/2}                            range_max_bytes=100000000 range_min_bytes=1000 ttl_seconds=3600 num_replicas=7
+/Table/106/{2-3}                           range_max_bytes=100000000 range_min_bytes=1000 ttl_seconds=25 num_replicas=7 num_voters=5
+/Table/10{6/3-7}                           range_max_bytes=100000000 range_min_bytes=1000 ttl_seconds=3600 num_replicas=7

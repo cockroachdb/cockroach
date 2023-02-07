@@ -1755,7 +1755,6 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 	skip.UnderDeadlockWithIssue(t, 38565)
 	ctx := context.Background()
 
-	// Create a cluster with really small ranges.
 	const rangeMaxSize = base.MinRangeMaxBytes
 	zcfg := zonepb.DefaultZoneConfig()
 	zcfg.RangeMinBytes = proto.Int64(rangeMaxSize / 2)
@@ -1776,12 +1775,13 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 	)
 	defer tc.Stopper().Stop(ctx)
 
-	// We're going to create a table with a big row and a small row. We'll split
-	// the table in between the rows, to produce a large range and a small one.
-	// Then we'll increase the replication factor to 5 and check that both ranges
-	// behave the same - i.e. they both get up-replicated. For the purposes of
-	// this test we're only worried about the large one up-replicating, but we
-	// test the small one as a control so that we don't fool ourselves.
+	// We're going to create a table with many versions of a big row and a small
+	// row. We'll split the table in between the rows, to produce a large range
+	// and a small one. Then we'll increase the replication factor to 5 and check
+	// that both ranges behave the same - i.e. they both get up-replicated. For
+	// the purposes of this test we're only worried about the large one
+	// up-replicating, but we test the small one as a control so that we don't
+	// fool ourselves.
 
 	// Disable the queues so they don't mess with our manual relocation. We'll
 	// re-enable them later.
@@ -1800,14 +1800,20 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 	toggleReplicationQueues(tc, true /* active */)
 	toggleSplitQueues(tc, true /* active */)
 
-	// We're going to create a row that's larger than range_max_bytes, but not
-	// large enough that write back-pressuring kicks in and refuses it.
+	// We're going to create a large row, but now large enough that write
+	// back-pressuring kicks in and refuses it.
 	var sb strings.Builder
-	for i := 0; i < 1.5*rangeMaxSize; i++ {
+	for i := 0; i < rangeMaxSize/8; i++ {
 		sb.WriteRune('a')
 	}
-	_, err = db.Exec("INSERT INTO t(i,s) VALUES (1, $1)", sb.String())
-	require.NoError(t, err)
+
+	// Write 16 versions of the same row. This way the range won't be able to split.
+	for i := 0; i < 16; i++ {
+		_, err = db.Exec("UPSERT INTO t(i,s) VALUES (1, $1)", sb.String())
+		require.NoError(t, err)
+	}
+
+	// Write a small row into the second range.
 	_, err = db.Exec("INSERT INTO t(i,s) VALUES (2, 'b')")
 	require.NoError(t, err)
 
