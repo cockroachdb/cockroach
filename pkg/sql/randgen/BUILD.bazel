@@ -55,6 +55,7 @@ go_test(
         "main_test.go",
         "mutator_test.go",
         "schema_test.go",
+        "types_test.go",
     ],
     embed = [":randgen"],
     deps = [
@@ -63,11 +64,13 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
         "//pkg/util/randutil",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )
