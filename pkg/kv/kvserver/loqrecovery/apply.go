@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
@@ -365,6 +366,18 @@ func MaybeApplyPendingRecoveryPlan(
 	}
 
 	applyPlan := func(nodeID roachpb.NodeID, plan loqrecoverypb.ReplicaUpdatePlan) error {
+		binaryVersion := clusterversion.ByKey(clusterversion.BinaryVersionKey)
+		binaryMinSupportedVersion := clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey)
+		clusterVersion, err := kvstorage.SynthesizeClusterVersionFromEngines(
+			ctx, engines, binaryVersion, binaryMinSupportedVersion,
+		)
+		if err != nil {
+			return errors.Wrap(err, "failed to get cluster version from storage")
+		}
+		if err := checkPlanVersionIsAllowed(plan.Version, clusterVersion.Version); err != nil {
+			return errors.Wrap(err, "incompatible stored plan")
+		}
+
 		log.Infof(ctx, "applying staged loss of quorum recovery plan %s", plan.PlanID)
 		batches := make(map[roachpb.StoreID]storage.Batch)
 		for _, e := range engines {

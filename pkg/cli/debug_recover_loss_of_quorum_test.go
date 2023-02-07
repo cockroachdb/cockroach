@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -86,6 +87,8 @@ func TestCollectInfoFromMultipleStores(t *testing.T) {
 		stores[r.StoreID] = struct{}{}
 	}
 	require.Equal(t, 2, len(stores), "collected replicas from stores")
+	require.Equal(t, clusterversion.ByKey(clusterversion.BinaryVersionKey), replicas.Version,
+		"collected version info from stores")
 }
 
 // TestCollectInfoFromOnlineCluster verifies that given a test cluster with
@@ -147,6 +150,8 @@ func TestCollectInfoFromOnlineCluster(t *testing.T) {
 	require.Equal(t, totalRanges*2, totalReplicas, "number of collected replicas")
 	require.Equal(t, totalRanges, len(replicas.Descriptors),
 		"number of collected descriptors from metadata")
+	require.Equal(t, clusterversion.ByKey(clusterversion.BinaryVersionKey), replicas.Version,
+		"collected version info from stores")
 }
 
 // TestLossOfQuorumRecovery performs a sanity check on end to end recovery workflow.
@@ -515,59 +520,6 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 	// Finally split scratch range to ensure metadata ranges are recovered.
 	_, _, err = tc.Server(0).SplitRange(testutils.MakeKey(sk, []byte{42}))
 	require.NoError(t, err, "failed to split range after recovery")
-}
-
-// TestJsonSerialization verifies that all fields serialized in JSON could be
-// read back. This specific test addresses issues where default naming scheme
-// may not work in combination with other tags correctly. e.g. repeated used
-// with omitempty seem to use camelcase unless explicitly specified.
-func TestJsonSerialization(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	nr := loqrecoverypb.ClusterReplicaInfo{
-		ClusterID: "id1",
-		LocalInfo: []loqrecoverypb.NodeReplicaInfo{
-			{
-				Replicas: []loqrecoverypb.ReplicaInfo{
-					{
-						NodeID:  1,
-						StoreID: 2,
-						Desc: roachpb.RangeDescriptor{
-							RangeID:  3,
-							StartKey: roachpb.RKey(keys.MetaMin),
-							EndKey:   roachpb.RKey(keys.MetaMax),
-							InternalReplicas: []roachpb.ReplicaDescriptor{
-								{
-									NodeID:    1,
-									StoreID:   2,
-									ReplicaID: 3,
-									Type:      roachpb.VOTER_INCOMING,
-								},
-							},
-							NextReplicaID: 4,
-							Generation:    7,
-						},
-						RaftAppliedIndex:   13,
-						RaftCommittedIndex: 19,
-						RaftLogDescriptorChanges: []loqrecoverypb.DescriptorChangeInfo{
-							{
-								ChangeType: 1,
-								Desc:       &roachpb.RangeDescriptor{},
-								OtherDesc:  &roachpb.RangeDescriptor{},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-	jsonpb := protoutil.JSONPb{Indent: "  "}
-	data, err := jsonpb.Marshal(&nr)
-	require.NoError(t, err)
-
-	var crFromJSON loqrecoverypb.ClusterReplicaInfo
-	require.NoError(t, jsonpb.Unmarshal(data, &crFromJSON))
-	require.Equal(t, nr, crFromJSON, "objects before and after serialization")
 }
 
 func TestUpdatePlanVsClusterDiff(t *testing.T) {
