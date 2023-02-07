@@ -366,8 +366,8 @@ type sqlServerArgs struct {
 	// grpc is the RPC service.
 	grpc *grpcServer
 
-	// eventsServer communicates with the Observability Service.
-	eventsServer *obs.EventsServer
+	// eventsExporter communicates with the Observability Service.
+	eventsExporter obs.EventsExporterInterface
 
 	// externalStorageBuilder is the constructor for accesses to external
 	// storage.
@@ -973,7 +973,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		RangeProber:                rangeprober.NewRangeProber(cfg.db),
 		DescIDGenerator:            descidgen.NewGenerator(cfg.Settings, codec, cfg.db),
 		RangeStatsFetcher:          rangeStatsFetcher,
-		EventsExporter:             cfg.eventsServer,
+		EventsExporter:             cfg.eventsExporter,
 		NodeDescs:                  cfg.nodeDescs,
 	}
 
