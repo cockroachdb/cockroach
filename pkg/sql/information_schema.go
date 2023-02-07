@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vtable"
+	"github.com/cockroachdb/cockroach/pkg/util/collatedstring"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/errors"
@@ -1532,7 +1533,7 @@ https://www.postgresql.org/docs/current/infoschema-collations.html`,
 				tree.NewDString("NO PAD"),
 			)
 		}
-		if err := add(tree.DefaultCollationTag); err != nil {
+		if err := add(collatedstring.DefaultCollationTag); err != nil {
 			return err
 		}
 		for _, tag := range collate.Supported() {
@@ -1565,7 +1566,7 @@ https://www.postgresql.org/docs/current/infoschema-collation-character-set-appli
 				tree.NewDString("UTF8"),   // character_set_name: UTF8 is the only available encoding
 			)
 		}
-		if err := add(tree.DefaultCollationTag); err != nil {
+		if err := add(collatedstring.DefaultCollationTag); err != nil {
 			return err
 		}
 		for _, tag := range collate.Supported() {

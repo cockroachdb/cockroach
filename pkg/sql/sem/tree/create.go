@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/collatedstring"
 	"github.com/cockroachdb/cockroach/pkg/util/pretty"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/text/language"
@@ -570,7 +571,7 @@ func NewColumnTableDef(
 			// In CRDB, collated strings are treated separately to string family types.
 			// To most behave like postgres, set the CollatedString type if a non-"default"
 			// collation is used.
-			if locale != DefaultCollationTag {
+			if locale != collatedstring.DefaultCollationTag {
 				_, err := language.Parse(locale)
 				if err != nil {
 					return nil, pgerror.Wrapf(err, pgcode.Syntax, "invalid locale %s", locale)
