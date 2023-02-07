@@ -18,6 +18,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -52,7 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
-	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -1408,20 +1409,24 @@ func (n *Node) RangeLookup(
 	return resp, nil
 }
 
-// RangeFeed implements the kvpb.InternalServer interface.
+// RangeFeed implements the roachpb.InternalServer interface.
 func (n *Node) RangeFeed(args *kvpb.RangeFeedRequest, stream kvpb.Internal_RangeFeedServer) error {
-	return n.singleRangeFeed(args, stream)
-}
+	ctx := n.AnnotateCtx(stream.Context())
+	ctx = logtags.AddTag(ctx, "r", args.RangeID)
+	ctx = logtags.AddTag(ctx, "s", args.Replica.StoreID)
+	_, restore := pprofutil.SetProfilerLabelsFromCtxTags(ctx)
+	defer restore()
 
-func (n *Node) singleRangeFeed(args *kvpb.RangeFeedRequest, stream kvpb.RangeFeedEventSink) error {
-	pErr := n.stores.RangeFeed(args, stream)
-	if pErr != nil {
+	if err := future.MakeAwaitableFuture(n.stores.RangeFeedPromise(args, stream)).Get(); err != nil {
+		// Got stream context error, probably won't be able to propagate it to the stream,
+		// but give it a try anyway.
 		var event kvpb.RangeFeedEvent
 		event.SetValue(&kvpb.RangeFeedError{
-			Error: *pErr,
+			Error: *kvpb.NewError(err),
 		})
 		return stream.Send(&event)
 	}
+
 	return nil
 }
 
@@ -1468,36 +1473,40 @@ func (s *lockedMuxStream) Send(e *kvpb.MuxRangeFeedEvent) error {
 	return s.wrapped.Send(e)
 }
 
-// MuxRangeFeed implements the kvpb.InternalServer interface.
+// MuxRangeFeed implements the roachpb.InternalServer interface.
 func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
-	ctx, cancelFeeds := n.stopper.WithCancelOnQuiesce(stream.Context())
-	defer cancelFeeds()
-	rfGrp := ctxgroup.WithContext(ctx)
-
 	muxStream := &lockedMuxStream{wrapped: stream}
+	var streams syncutil.IntMap
 	for {
 		req, err := stream.Recv()
 		if err != nil {
-			cancelFeeds()
-			return errors.CombineErrors(err, rfGrp.Wait())
+			return err
 		}
 
-		rfGrp.GoCtx(func(ctx context.Context) error {
-			ctx = n.AnnotateCtx(ctx)
-			ctx = logtags.AddTag(ctx, "r", req.RangeID)
-			ctx = logtags.AddTag(ctx, "s", req.Replica.StoreID)
-			ctx, restore := pprofutil.SetProfilerLabelsFromCtxTags(ctx)
-			defer restore()
-			ctx, span := tracing.ForkSpan(ctx, "mux-rf")
-			defer span.Finish()
+		streamCtx := n.AnnotateCtx(stream.Context())
+		streamCtx = logtags.AddTag(streamCtx, "r", req.RangeID)
+		streamCtx = logtags.AddTag(streamCtx, "s", req.Replica.StoreID)
 
-			sink := setRangeIDEventSink{
-				ctx:      ctx,
-				rangeID:  req.RangeID,
-				streamID: req.StreamID,
-				wrapped:  muxStream,
+		sink := setRangeIDEventSink{
+			ctx:      streamCtx,
+			rangeID:  req.RangeID,
+			streamID: req.StreamID,
+			wrapped:  muxStream,
+		}
+
+		f := n.stores.RangeFeedPromise(req, &sink)
+		streams.Store(req.StreamID, unsafe.Pointer(f))
+		f.WhenReady(func(err error) {
+			streams.Delete(req.StreamID)
+			if err != nil {
+				var event kvpb.RangeFeedEvent
+				event.SetValue(&kvpb.RangeFeedError{
+					Error: *kvpb.NewError(err),
+				})
+				// Sending could fail, but if it did, the stream is broken anyway, so
+				// nothing we can do with this error.
+				_ = sink.Send(&event)
 			}
-			return n.singleRangeFeed(req, &sink)
 		})
 	}
 }
