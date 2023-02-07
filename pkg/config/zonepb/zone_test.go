@@ -57,9 +57,9 @@ func TestZoneConfigValidate(t *testing.T) {
 		{
 			ZoneConfig{
 				NumReplicas:   proto.Int32(1),
-				RangeMaxBytes: proto.Int64(0),
+				RangeMaxBytes: proto.Int64(60 << 20),
 			},
-			"RangeMaxBytes 0 less than minimum allowed",
+			"RangeMaxBytes 62914560 less than minimum allowed",
 		},
 		{
 			ZoneConfig{

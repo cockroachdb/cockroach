@@ -75,7 +75,7 @@ SELECT zone_id, raw_config_sql FROM [SHOW ZONE CONFIGURATION FOR TABLE a]
 statement ok
 ALTER TABLE a CONFIGURE ZONE USING
   range_min_bytes = 200000 + 1,
-  range_max_bytes = 300000 + 1,
+  range_max_bytes = 100000000 + 1,
   gc.ttlseconds = 3000 + 600,
   num_replicas = floor(1.2)::int,
   constraints = '[+region=test]',
@@ -103,7 +103,7 @@ SELECT zone_id, raw_config_sql FROM [SHOW ZONE CONFIGURATION FOR TABLE a]
 ----
 106  ALTER TABLE a CONFIGURE ZONE USING
      range_min_bytes = 200001,
-     range_max_bytes = 300001,
+     range_max_bytes = 100000001,
      gc.ttlseconds = 3600,
      num_replicas = 1,
      constraints = '[+region=test]',
@@ -111,14 +111,14 @@ SELECT zone_id, raw_config_sql FROM [SHOW ZONE CONFIGURATION FOR TABLE a]
 
 # Check that we can set just one value without altering the others.
 statement ok
-ALTER TABLE a CONFIGURE ZONE USING range_max_bytes = 400000
+ALTER TABLE a CONFIGURE ZONE USING range_max_bytes = 400000000
 
 query IT
 SELECT zone_id, raw_config_sql FROM [SHOW ZONE CONFIGURATION FOR TABLE a]
 ----
 106  ALTER TABLE a CONFIGURE ZONE USING
      range_min_bytes = 200001,
-     range_max_bytes = 400000,
+     range_max_bytes = 400000000,
      gc.ttlseconds = 3600,
      num_replicas = 1,
      constraints = '[+region=test]',
@@ -154,7 +154,7 @@ SELECT zone_id, raw_config_sql FROM [SHOW ZONE CONFIGURATION FOR TABLE a]
 ----
 106  ALTER TABLE a CONFIGURE ZONE USING
      range_min_bytes = 200001,
-     range_max_bytes = 400000,
+     range_max_bytes = 400000000,
      gc.ttlseconds = 3600,
      num_replicas = 1,
      constraints = '[+region=test]',
@@ -170,7 +170,7 @@ a  CREATE TABLE public.a (
    );
    ALTER TABLE test.public.a CONFIGURE ZONE USING
      range_min_bytes = 200001,
-     range_max_bytes = 400000,
+     range_max_bytes = 400000000,
      gc.ttlseconds = 3600,
      num_replicas = 1,
      constraints = '[+region=test]',
