@@ -372,7 +372,7 @@ func (r *Replica) SideloadedRaftMuLocked() logstore.SideloadStorage {
 }
 
 // LargestPreviousMaxRangeSizeBytes returns the in-memory value used to mitigate
-// backpressure when the zone.RangeMaxSize is decreased.
+// backpressure when the zone.RangeMaxBytes is decreased.
 func (r *Replica) LargestPreviousMaxRangeSizeBytes() int64 {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
