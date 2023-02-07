@@ -1167,6 +1167,7 @@ project
                           │         └── variable: i:10 [as=i:13]
                           └── const: 1
 
+
 # --------------------------------------------------
 # UDFs with * expressions.
 # --------------------------------------------------
@@ -1245,3 +1246,86 @@ project
                                ├── variable: tstar.a:1
                                ├── variable: tstar2.a:5
                                └── variable: b:6
+
+
+# --------------------------------------------------
+# Set-returning UDFs.
+# --------------------------------------------------
+
+exec-ddl
+CREATE FUNCTION set_fn(i INT) RETURNS SETOF INT LANGUAGE SQL AS 'SELECT b FROM abc WHERE a > i'
+----
+
+build format=show-scalars
+SELECT set_fn(1)
+----
+project-set
+ ├── columns: set_fn:7
+ ├── values
+ │    └── tuple
+ └── zip
+      └── udf: set_fn
+           ├── params: i:1
+           ├── args
+           │    └── const: 1
+           └── body
+                └── project
+                     ├── columns: b:3
+                     └── select
+                          ├── columns: a:2!null b:3 c:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+                          ├── scan abc
+                          │    └── columns: a:2!null b:3 c:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+                          └── filters
+                               └── gt
+                                    ├── variable: a:2
+                                    └── variable: i:1
+
+build format=show-scalars
+SELECT * FROM set_fn(1)
+----
+project-set
+ ├── columns: set_fn:7
+ ├── values
+ │    └── tuple
+ └── zip
+      └── udf: set_fn
+           ├── params: i:1
+           ├── args
+           │    └── const: 1
+           └── body
+                └── project
+                     ├── columns: b:3
+                     └── select
+                          ├── columns: a:2!null b:3 c:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+                          ├── scan abc
+                          │    └── columns: a:2!null b:3 c:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+                          └── filters
+                               └── gt
+                                    ├── variable: a:2
+                                    └── variable: i:1
+
+build format=show-scalars
+SELECT a, set_fn(a) FROM abc
+----
+project
+ ├── columns: a:1!null set_fn:12
+ └── project-set
+      ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5 set_fn:12
+      ├── scan abc
+      │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      └── zip
+           └── udf: set_fn
+                ├── params: i:6
+                ├── args
+                │    └── variable: a:1
+                └── body
+                     └── project
+                          ├── columns: b:8
+                          └── select
+                               ├── columns: a:7!null b:8 c:9 crdb_internal_mvcc_timestamp:10 tableoid:11
+                               ├── scan abc
+                               │    └── columns: a:7!null b:8 c:9 crdb_internal_mvcc_timestamp:10 tableoid:11
+                               └── filters
+                                    └── gt
+                                         ├── variable: a:7
+                                         └── variable: i:6

@@ -214,6 +214,12 @@ type Planner interface {
 		ctx context.Context, expr *tree.RoutineExpr, args tree.Datums,
 	) (tree.Datum, error)
 
+	// RoutineExprGenerator returns a ValueGenerator that produces the results
+	// of the routine.
+	RoutineExprGenerator(
+		ctx context.Context, expr *tree.RoutineExpr, args tree.Datums,
+	) ValueGenerator
+
 	// GenerateTestObjects is used to generate a large number of
 	// objets quickly.
 	// Note: we pass parameters as a string to avoid a package

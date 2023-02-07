@@ -1251,6 +1251,9 @@ define UDFPrivate {
     # Typ is the return type of the function.
     Typ Type
 
+    # SetReturning is true if the UDF has a SETOF return type.
+    SetReturning bool
+
     # Volatility is the user-provided volatility of the function given during
     # CREATE FUNCTION.
     #
@@ -1261,6 +1264,11 @@ define UDFPrivate {
     # immutable, or leakproof function will see a snapshot of the data as of the
     # start of the statement calling the function.
     Volatility Volatility
+
+    # CalledOnNullInput is true if the function should be called when any of its
+    # inputs are NULL. If false, the function will not be evaluated in the
+    # presence of NULL inputs, and will instead evaluate directly to NULL.
+    CalledOnNullInput bool
 }
 
 # KVOptions is a set of KVOptionItems that specify arbitrary keys and values
