@@ -957,7 +957,7 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 	invisibleIndexesIsNotSupported, err := isClusterVersionLessThan(
 		ctx,
 		tx,
-		clusterversion.ByKey(clusterversion.V22_2Start))
+		clusterversion.ByKey(clusterversion.TODODelete_V22_2Start))
 	if err != nil {
 		return nil, err
 	}
@@ -1214,7 +1214,7 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 	trigramIsNotSupported, err := isClusterVersionLessThan(
 		ctx,
 		tx,
-		clusterversion.ByKey(clusterversion.V22_2TrigramInvertedIndexes))
+		clusterversion.ByKey(clusterversion.TODODelete_V22_2TrigramInvertedIndexes))
 	if err != nil {
 		return nil, err
 	}
@@ -1238,7 +1238,7 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 	invisibleIndexesIsNotSupported, err := isClusterVersionLessThan(
 		ctx,
 		tx,
-		clusterversion.ByKey(clusterversion.V22_2Start))
+		clusterversion.ByKey(clusterversion.TODODelete_V22_2Start))
 	if err != nil {
 		return nil, err
 	}
@@ -2432,7 +2432,7 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 	}
 	// If we aren't on 22.2 then disable the insert plugin, since 21.X
 	// can have schema instrospection queries fail due to an optimizer bug.
-	skipInserts, err := isClusterVersionLessThan(ctx, tx, clusterversion.ByKey(clusterversion.V22_2Start))
+	skipInserts, err := isClusterVersionLessThan(ctx, tx, clusterversion.ByKey(clusterversion.TODODelete_V22_2Start))
 	if err != nil {
 		return nil, err
 	}
@@ -3640,6 +3640,6 @@ func isClusterVersionLessThan(
 func isFkConstraintsEnabled(ctx context.Context, tx pgx.Tx) (bool, error) {
 	fkConstraintDisabledVersion, err := isClusterVersionLessThan(ctx,
 		tx,
-		clusterversion.ByKey(clusterversion.V22_2Start))
+		clusterversion.ByKey(clusterversion.TODODelete_V22_2Start))
 	return !fkConstraintDisabledVersion, err
 }

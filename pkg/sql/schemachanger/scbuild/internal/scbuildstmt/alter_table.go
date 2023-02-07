@@ -45,9 +45,9 @@ type supportedAlterTableCommand struct {
 // declarative schema  changer. Operations marked as non-fully supported can
 // only be with the use_declarative_schema_changer session variable.
 var supportedAlterTableStatements = map[reflect.Type]supportedAlterTableCommand{
-	reflect.TypeOf((*tree.AlterTableAddColumn)(nil)):       {fn: alterTableAddColumn, on: true, minSupportedClusterVersion: clusterversion.V22_2Start},
-	reflect.TypeOf((*tree.AlterTableDropColumn)(nil)):      {fn: alterTableDropColumn, on: true, minSupportedClusterVersion: clusterversion.V22_2Start},
-	reflect.TypeOf((*tree.AlterTableAlterPrimaryKey)(nil)): {fn: alterTableAlterPrimaryKey, on: true, minSupportedClusterVersion: clusterversion.V22_2Start},
+	reflect.TypeOf((*tree.AlterTableAddColumn)(nil)):       {fn: alterTableAddColumn, on: true, minSupportedClusterVersion: clusterversion.TODODelete_V22_2Start},
+	reflect.TypeOf((*tree.AlterTableDropColumn)(nil)):      {fn: alterTableDropColumn, on: true, minSupportedClusterVersion: clusterversion.TODODelete_V22_2Start},
+	reflect.TypeOf((*tree.AlterTableAlterPrimaryKey)(nil)): {fn: alterTableAlterPrimaryKey, on: true, minSupportedClusterVersion: clusterversion.TODODelete_V22_2Start},
 	reflect.TypeOf((*tree.AlterTableSetNotNull)(nil)):      {fn: alterTableSetNotNull, on: true, minSupportedClusterVersion: clusterversion.V23_1},
 	reflect.TypeOf((*tree.AlterTableAddConstraint)(nil)): {fn: alterTableAddConstraint, on: true, extraChecks: func(
 		t *tree.AlterTableAddConstraint,
@@ -80,7 +80,7 @@ var supportedAlterTableStatements = map[reflect.Type]supportedAlterTableCommand{
 // They key is constructed as "ADD" + constraint type + validation behavior, joined with "_".
 // E.g. "ADD_PRIMARY_KEY_DEFAULT", "ADD_CHECK_SKIP", "ADD_FOREIGN_KEY_DEFAULT", etc.
 var alterTableAddConstraintMinSupportedClusterVersion = map[string]clusterversion.Key{
-	"ADD_PRIMARY_KEY_DEFAULT":          clusterversion.V22_2Start,
+	"ADD_PRIMARY_KEY_DEFAULT":          clusterversion.TODODelete_V22_2Start,
 	"ADD_CHECK_DEFAULT":                clusterversion.V23_1Start,
 	"ADD_FOREIGN_KEY_DEFAULT":          clusterversion.V23_1Start,
 	"ADD_UNIQUE_WITHOUT_INDEX_DEFAULT": clusterversion.V23_1Start,

@@ -115,11 +115,11 @@ func MinVersion(el scpb.Element) clusterversion.Key {
 		*scpb.Namespace, *scpb.Owner, *scpb.UserPrivileges,
 		*scpb.DatabaseRegionConfig, *scpb.DatabaseRoleSetting, *scpb.DatabaseComment,
 		*scpb.SchemaParent, *scpb.SchemaComment, *scpb.ObjectParent:
-		return clusterversion.V22_1
+		return clusterversion.TODODelete_V22_1
 	case *scpb.CompositeType, *scpb.CompositeTypeAttrType, *scpb.CompositeTypeAttrName:
 		return clusterversion.V23_1
 	case *scpb.IndexColumn, *scpb.EnumTypeValue, *scpb.TableZoneConfig:
-		return clusterversion.V22_2UseDelRangeInGCJob
+		return clusterversion.TODODelete_V22_2UseDelRangeInGCJob
 	case *scpb.DatabaseData, *scpb.TableData, *scpb.IndexData, *scpb.TablePartitioning,
 		*scpb.Function, *scpb.FunctionName, *scpb.FunctionVolatility, *scpb.FunctionLeakProof,
 		*scpb.FunctionNullInputBehavior, *scpb.FunctionBody, *scpb.FunctionParamDefaultExpression:

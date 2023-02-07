@@ -225,7 +225,7 @@ func splitTxnAttempt(
 		return err
 	}
 
-	gcHintsAllowed := store.ClusterSettings().Version.IsActive(ctx, clusterversion.V22_2GCHintInReplicaState)
+	gcHintsAllowed := store.ClusterSettings().Version.IsActive(ctx, clusterversion.TODODelete_V22_2GCHintInReplicaState)
 
 	// End the transaction manually, instead of letting RunTransaction
 	// loop do it, in order to provide a split trigger.
@@ -761,7 +761,7 @@ func (r *Replica) AdminMerge(
 			return errors.Wrap(err, "waiting for all right-hand replicas to catch up")
 		}
 
-		gcHintsAllowed := r.ClusterSettings().Version.IsActive(ctx, clusterversion.V22_2GCHintInReplicaState)
+		gcHintsAllowed := r.ClusterSettings().Version.IsActive(ctx, clusterversion.TODODelete_V22_2GCHintInReplicaState)
 
 		// Successful subsume, so we're guaranteed that the right-hand range will
 		// not serve another request unless this transaction aborts. End the
@@ -2796,7 +2796,7 @@ func (r *Replica) sendSnapshotUsingDelegate(
 	//  them or the setting is disabled. TODO(baptist): Remove the version flag in
 	//  v23.1. Consider removing the cluster setting once we have verified this
 	//  works as expected in all cases.
-	if !r.store.ClusterSettings().Version.IsActive(ctx, clusterversion.V22_2PrioritizeSnapshots) ||
+	if !r.store.ClusterSettings().Version.IsActive(ctx, clusterversion.TODODelete_V22_2PrioritizeSnapshots) ||
 		!snapshotPrioritizationEnabled.Get(&r.store.ClusterSettings().SV) {
 		senderQueueName = 0
 		senderQueuePriority = 0

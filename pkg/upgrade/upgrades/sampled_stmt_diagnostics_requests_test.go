@@ -44,7 +44,7 @@ func TestSampledStmtDiagReqsMigration(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
-					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.V22_2SampledStmtDiagReqs - 1),
+					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.TODODelete_V22_2SampledStmtDiagReqs - 1),
 				},
 			},
 		},
@@ -93,7 +93,7 @@ func TestSampledStmtDiagReqsMigration(t *testing.T) {
 	upgrades.Upgrade(
 		t,
 		sqlDB,
-		clusterversion.V22_2SampledStmtDiagReqs,
+		clusterversion.TODODelete_V22_2SampledStmtDiagReqs,
 		nil,   /* done */
 		false, /* expectError */
 	)

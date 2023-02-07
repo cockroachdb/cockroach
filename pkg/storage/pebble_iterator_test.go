@@ -94,7 +94,7 @@ func randStr(fill []byte, rng *rand.Rand) {
 func TestPebbleIterator_ExternalCorruption(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	version := clusterversion.ByKey(clusterversion.V22_2EnsurePebbleFormatVersionRangeKeys)
+	version := clusterversion.ByKey(clusterversion.TODODelete_V22_2EnsurePebbleFormatVersionRangeKeys)
 	st := cluster.MakeTestingClusterSettingsWithVersions(version, version, true)
 	ctx := context.Background()
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))

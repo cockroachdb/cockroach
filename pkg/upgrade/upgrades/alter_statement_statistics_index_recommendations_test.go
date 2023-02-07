@@ -46,7 +46,7 @@ func TestAlterSystemStatementStatisticsTable(t *testing.T) {
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
 					BinaryVersionOverride: clusterversion.ByKey(
-						clusterversion.V22_2AlterSystemStatementStatisticsAddIndexRecommendations - 1),
+						clusterversion.TODODelete_V22_2AlterSystemStatementStatisticsAddIndexRecommendations - 1),
 				},
 			},
 		},
@@ -86,7 +86,7 @@ func TestAlterSystemStatementStatisticsTable(t *testing.T) {
 	upgrades.Upgrade(
 		t,
 		sqlDB,
-		clusterversion.V22_2AlterSystemStatementStatisticsAddIndexRecommendations,
+		clusterversion.TODODelete_V22_2AlterSystemStatementStatisticsAddIndexRecommendations,
 		nil,   /* done */
 		false, /* expectError */
 	)

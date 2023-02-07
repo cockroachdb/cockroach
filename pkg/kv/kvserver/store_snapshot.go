@@ -1361,7 +1361,7 @@ func SendEmptySnapshot(
 		return err
 	}
 
-	supportsGCHints := st.Version.IsActive(ctx, clusterversion.V22_2GCHintInReplicaState)
+	supportsGCHints := st.Version.IsActive(ctx, clusterversion.TODODelete_V22_2GCHintInReplicaState)
 	// SendEmptySnapshot is only used by the cockroach debug reset-quorum tool.
 	// It is experimental and unlikely to be used in cluster versions that are
 	// older than GCHintInReplicaState. We do not want the cluster version to

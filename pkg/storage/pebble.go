@@ -1520,7 +1520,7 @@ func shouldWriteLocalTimestamps(ctx context.Context, settings *cluster.Settings)
 		// is safe to write local timestamps.
 		return true
 	}
-	return ver.IsActive(clusterversion.V22_2LocalTimestamps)
+	return ver.IsActive(clusterversion.TODODelete_V22_2LocalTimestamps)
 }
 
 // ShouldWriteLocalTimestamps implements the Writer interface.
@@ -1970,17 +1970,17 @@ func (p *Pebble) SetMinVersion(version roachpb.Version) error {
 	case !version.Less(clusterversion.ByKey(clusterversion.V23_1EnsurePebbleFormatSSTableValueBlocks)):
 		formatVers = pebble.FormatSSTableValueBlocks
 
-	case !version.Less(clusterversion.ByKey(clusterversion.V22_2PebbleFormatPrePebblev1Marked)):
+	case !version.Less(clusterversion.ByKey(clusterversion.TODODelete_V22_2PebbleFormatPrePebblev1Marked)):
 		formatVers = pebble.FormatPrePebblev1Marked
 
-	case !version.Less(clusterversion.ByKey(clusterversion.V22_2EnsurePebbleFormatVersionRangeKeys)):
+	case !version.Less(clusterversion.ByKey(clusterversion.TODODelete_V22_2EnsurePebbleFormatVersionRangeKeys)):
 		formatVers = pebble.FormatRangeKeys
 
-	case !version.Less(clusterversion.ByKey(clusterversion.V22_2PebbleFormatSplitUserKeysMarkedCompacted)):
+	case !version.Less(clusterversion.ByKey(clusterversion.TODODelete_V22_2PebbleFormatSplitUserKeysMarkedCompacted)):
 		formatVers = pebble.FormatSplitUserKeysMarkedCompacted
 
 	default:
-		// Corresponds to V22_1.
+		// Corresponds to TODODelete_V22_1.
 		formatVers = pebble.FormatSplitUserKeysMarked
 	}
 

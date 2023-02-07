@@ -500,7 +500,7 @@ func (s *PersistedSQLStats) insertStatementStats(
 		statistics,                         // statistics
 		plan,                               // plan
 	)
-	if s.cfg.Settings.Version.IsActive(ctx, clusterversion.V22_2AlterSystemStatementStatisticsAddIndexRecommendations) {
+	if s.cfg.Settings.Version.IsActive(ctx, clusterversion.TODODelete_V22_2AlterSystemStatementStatisticsAddIndexRecommendations) {
 		values = values + ", $11"
 		indexRecommendations := tree.NewDArray(types.String)
 		for _, recommendation := range stats.Stats.IndexRecommendations {
