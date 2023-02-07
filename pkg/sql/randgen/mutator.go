@@ -218,6 +218,12 @@ func statisticsMutator(
 				return
 			}
 			colType := tree.MustBeStaticallyKnownType(col.Type)
+			if colType.Family() == types.CollatedStringFamily {
+				// Collated strings are not roundtrippable during
+				// encoding/decoding, so we cannot always make a valid
+				// histogram.
+				return
+			}
 			h := randHistogram(rng, colType)
 			stat := colStats[col.Name]
 			if err := stat.SetHistogram(&h); err != nil {

@@ -458,6 +458,19 @@ func GetTypeFromValidSQLSyntax(sql string) (tree.ResolvableTypeReference, error)
 	if err != nil {
 		return nil, err
 	}
+	return GetTypeFromCastOrCollate(expr)
+}
+
+// GetTypeFromCastOrCollate returns the type of the given tree.Expr. The method
+// assumes that the expression is either tree.CastExpr or tree.CollateExpr
+// (which wraps the tree.CastExpr).
+func GetTypeFromCastOrCollate(expr tree.Expr) (tree.ResolvableTypeReference, error) {
+	// COLLATE clause has lower precedence than the cast, so if we have
+	// something like `1::STRING COLLATE en`, it'll be parsed as
+	// CollateExpr(CastExpr).
+	if collate, ok := expr.(*tree.CollateExpr); ok {
+		return types.MakeCollatedString(types.String, collate.Locale), nil
+	}
 
 	cast, ok := expr.(*tree.CastExpr)
 	if !ok {

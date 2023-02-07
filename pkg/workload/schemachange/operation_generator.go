@@ -3582,11 +3582,11 @@ func (og *operationGenerator) typeFromTypeName(
 	if err != nil {
 		return nil, errors.Wrapf(err, "typeFromTypeName: %s", typeName)
 	}
-	typ, err := tree.ResolveType(
-		ctx,
-		stmt.AST.(*tree.Select).Select.(*tree.SelectClause).Exprs[0].Expr.(*tree.CastExpr).Type,
-		&txTypeResolver{tx: tx},
-	)
+	typRef, err := parser.GetTypeFromCastOrCollate(stmt.AST.(*tree.Select).Select.(*tree.SelectClause).Exprs[0].Expr)
+	if err != nil {
+		return nil, errors.Wrapf(err, "GetTypeFromCastOrCollate: %s", typeName)
+	}
+	typ, err := tree.ResolveType(ctx, typRef, &txTypeResolver{tx: tx})
 	if err != nil {
 		return nil, errors.Wrapf(err, "ResolveType: %v", typeName)
 	}
