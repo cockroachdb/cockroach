@@ -27,8 +27,26 @@ then
 fi
 
 bazel build //pkg/cmd/bazci --config=ci
-$(bazel info bazel-bin --config=ci)/pkg/cmd/bazci/bazci_/bazci -- build -c opt \
+BAZEL_BIN=$(bazel onfo bazel-bin --config=ci)
+"$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci" -- build -c opt \
 		       --config "$CONFIG" --config ci --config with_ui \
 		       //pkg/cmd/cockroach-short //pkg/cmd/cockroach \
 		       //pkg/cmd/cockroach-sql \
 		       //pkg/cmd/cockroach-oss //c-deps:libgeos $EXTRA_TARGETS
+
+if [[ $CONFIG == "crosslinuxfips" ]]; then
+    for bin in cockroach cockroach-short cockroach-sql cockroach-oss; do
+        if bazel run @go_sdk//:bin/go -- tool nm "$BAZEL_BIN/pkg/cmd/$bin/${bin}_/$bin" | grep -v golang-fips; then
+            echo "cannot find golang-fips in $bin, exiting"
+            exit 1
+        fi
+    done
+fi
+if [[ $CONFIG == "crosslinux" ]]; then
+    for bin in cockroach cockroach-short cockroach-sql cockroach-oss; do
+        if bazel run @go_sdk//:bin/go -- tool nm "$BAZEL_BIN/pkg/cmd/$bin/${bin}_/$bin" | grep golang-fips; then
+            echo "found golang-fips in $bin, exiting"
+            exit 1
+        fi
+    done
+fi
