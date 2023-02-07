@@ -95,6 +95,29 @@ docker manifest push "${gcr_tag}"
 tc_end_block "Make and push multiarch docker images"
 
 
+tc_start_block "Make and push FIPS docker image"
+gcr_tag_fips="${gcr_repository}:${build_name}-fips"
+platform_name=amd64-fips
+rm -rf "build/deploy-${platform_name}"
+cp --recursive "build/deploy" "build/deploy-${platform_name}"
+tar \
+  --directory="build/deploy-${platform_name}" \
+  --extract \
+  --file="artifacts/cockroach-${build_name}.linux-${platform_name}.tgz" \
+  --ungzip \
+  --ignore-zeros \
+  --strip-components=1
+cp --recursive licenses "build/deploy-${platform_name}"
+# Move the libs where Dockerfile expects them to be
+mv build/deploy-${platform_name}/lib/* build/deploy-${platform_name}/
+rmdir build/deploy-${platform_name}/lib
+
+docker build --no-cache --pull --platform "linux/amd64" --tag="${gcr_tag_fips}" --build-arg additional_packages=openssl "build/deploy-${platform_name}"
+docker push "$gcr_tag_fips"
+
+tc_end_block "Make and push FIPS docker image"
+
+
 
 # Make finding the tag name easy.
 cat << EOF
