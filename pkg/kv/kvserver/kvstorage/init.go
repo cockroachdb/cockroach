@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -310,6 +311,29 @@ func (r Replica) ID() storage.FullReplicaID {
 		RangeID:   r.RangeID,
 		ReplicaID: r.ReplicaID,
 	}
+}
+
+// Load loads the state necessary to instantiate a replica in memory.
+func (r Replica) Load(
+	ctx context.Context, eng storage.Reader, storeID roachpb.StoreID,
+) (LoadedReplicaState, error) {
+	ls := LoadedReplicaState{
+		ReplicaID: r.ReplicaID,
+		hardState: r.hardState,
+	}
+	sl := stateloader.Make(r.Desc.RangeID)
+	var err error
+	if ls.LastIndex, err = sl.LoadLastIndex(ctx, eng); err != nil {
+		return LoadedReplicaState{}, err
+	}
+	if ls.ReplState, err = sl.Load(ctx, eng, r.Desc); err != nil {
+		return LoadedReplicaState{}, err
+	}
+
+	if err := ls.check(storeID); err != nil {
+		return LoadedReplicaState{}, err
+	}
+	return ls, nil
 }
 
 // A replicaMap organizes a set of Replicas with unique RangeIDs.

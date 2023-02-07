@@ -1862,7 +1862,12 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			// Uninitialized Replicas are not currently instantiated at store start.
 			continue
 		}
-		rep, err := newReplica(ctx, repl.Desc, s, repl.ReplicaID)
+		// TODO(pavelkalinnikov): integrate into kvstorage.LoadAndReconcileReplicas.
+		state, err := repl.Load(ctx, s.Engine(), s.StoreID())
+		if err != nil {
+			return err
+		}
+		rep, err := newInitializedReplica(s, state)
 		if err != nil {
 			return err
 		}
