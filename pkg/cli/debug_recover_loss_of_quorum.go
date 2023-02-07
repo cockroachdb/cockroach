@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
@@ -28,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/strutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -353,10 +353,9 @@ func runDebugDeadReplicaCollect(cmd *cobra.Command, args []string) error {
 		defer outFile.Close()
 		writer = outFile
 	}
-	jsonpb := protoutil.JSONPb{Indent: "  "}
-	out, err := jsonpb.Marshal(&replicaInfo)
+	out, err := loqrecovery.MarshalReplicaInfo(replicaInfo)
 	if err != nil {
-		return errors.Wrap(err, "failed to marshal collected replica info")
+		return err
 	}
 	if _, err := writer.Write(out); err != nil {
 		return errors.Wrap(err, "failed to write collected replica info")
@@ -564,33 +563,41 @@ Discarded live replicas: %d
 		planFile = path.Base(debugRecoverPlanOpts.outputFileName)
 	}
 
-	jsonpb := protoutil.JSONPb{Indent: "  "}
 	var out []byte
-	if out, err = jsonpb.Marshal(&plan); err != nil {
-		return errors.Wrap(err, "failed to marshal recovery plan")
+	if out, err = loqrecovery.MarshalPlan(plan); err != nil {
+		return err
 	}
 	if _, err = writer.Write(out); err != nil {
 		return errors.Wrap(err, "failed to write recovery plan")
 	}
 
-	// No args means we collected connection info from cluster and need to
-	// preserve flags for subsequent invocation.
-	remoteArgs := getCLIClusterFlags(len(args) == 0, cmd, func(flag string) bool {
-		_, filter := planSpecificFlags[flag]
-		return filter
-	})
+	v := clusterversion.ClusterVersion{
+		Version: plan.Version,
+	}
+	if v.IsActive(clusterversion.V23_1) {
+		// No args means we collected connection info from cluster and need to
+		// preserve flags for subsequent invocation.
+		remoteArgs := getCLIClusterFlags(len(args) == 0, cmd, func(flag string) bool {
+			_, filter := planSpecificFlags[flag]
+			return filter
+		})
 
-	_, _ = fmt.Fprintf(stderr, `Plan created.
+		_, _ = fmt.Fprintf(stderr, `Plan created.
 To stage recovery application in half-online mode invoke:
 
 cockroach debug recover apply-plan %s %s
 
 Alternatively distribute plan to below nodes and invoke 'debug recover apply-plan --store=<store-dir> %s' on:
 `, remoteArgs, planFile, planFile)
-	for _, node := range report.UpdatedNodes {
-		_, _ = fmt.Fprintf(stderr, "- node n%d, store(s) %s\n", node.NodeID, strutil.JoinIDs("s", node.StoreIDs))
+	} else {
+		_, _ = fmt.Fprintf(stderr, `Plan created.
+To complete recovery, distribute plan to below nodes and invoke 'debug recover apply-plan --store=<store-dir> %s' on:
+`, planFile)
 	}
-
+	for _, node := range report.UpdatedNodes {
+		_, _ = fmt.Fprintf(stderr, "- node n%d, store(s) %s\n", node.NodeID,
+			strutil.JoinIDs("s", node.StoreIDs))
+	}
 	return nil
 }
 
@@ -602,9 +609,8 @@ func readReplicaInfoData(fileNames []string) (loqrecoverypb.ClusterReplicaInfo, 
 			return loqrecoverypb.ClusterReplicaInfo{}, errors.Wrapf(err, "failed to read replica info file %q", filename)
 		}
 
-		var nodeReplicas loqrecoverypb.ClusterReplicaInfo
-		jsonpb := protoutil.JSONPb{}
-		if err = jsonpb.Unmarshal(data, &nodeReplicas); err != nil {
+		nodeReplicas, err := loqrecovery.UnmarshalReplicaInfo(data)
+		if err != nil {
 			return loqrecoverypb.ClusterReplicaInfo{}, errors.WithHint(errors.Wrapf(err,
 				"failed to unmarshal replica info from file %q", filename),
 				"Ensure that replica info file is generated with the same binary version and file is not corrupted.")
@@ -633,8 +639,9 @@ See debug recover command help for more details on how to use this command.
 }
 
 var debugRecoverExecuteOpts struct {
-	Stores        base.StoreSpecList
-	confirmAction confirmActionFlag
+	Stores                base.StoreSpecList
+	confirmAction         confirmActionFlag
+	ignoreInternalVersion bool
 }
 
 // runDebugExecuteRecoverPlan is using the following pattern when performing command
@@ -655,20 +662,24 @@ func runDebugExecuteRecoverPlan(cmd *cobra.Command, args []string) error {
 		return errors.Wrapf(err, "failed to read plan file %q", planFile)
 	}
 
-	var nodeUpdates loqrecoverypb.ReplicaUpdatePlan
-	jsonpb := protoutil.JSONPb{Indent: "  "}
-	if err = jsonpb.Unmarshal(data, &nodeUpdates); err != nil {
+	nodeUpdates, err := loqrecovery.UnmarshalPlan(data)
+	if err != nil {
 		return errors.Wrapf(err, "failed to unmarshal plan from file %q", planFile)
 	}
 
 	if len(debugRecoverExecuteOpts.Stores.Specs) == 0 {
-		return stageRecoveryOntoCluster(ctx, cmd, planFile, nodeUpdates)
+		return stageRecoveryOntoCluster(ctx, cmd, planFile, nodeUpdates,
+			debugRecoverExecuteOpts.ignoreInternalVersion)
 	}
-	return applyRecoveryToLocalStore(ctx, nodeUpdates)
+	return applyRecoveryToLocalStore(ctx, nodeUpdates, debugRecoverExecuteOpts.ignoreInternalVersion)
 }
 
 func stageRecoveryOntoCluster(
-	ctx context.Context, cmd *cobra.Command, planFile string, plan loqrecoverypb.ReplicaUpdatePlan,
+	ctx context.Context,
+	cmd *cobra.Command,
+	planFile string,
+	plan loqrecoverypb.ReplicaUpdatePlan,
+	ignoreInternalVersion bool,
 ) error {
 	c, finish, err := getAdminClient(ctx, serverCfg)
 	if err != nil {
@@ -747,7 +758,11 @@ func stageRecoveryOntoCluster(
 			return err
 		}
 	}
-	sr, err := c.RecoveryStagePlan(ctx, &serverpb.RecoveryStagePlanRequest{Plan: &plan, AllNodes: true})
+	sr, err := c.RecoveryStagePlan(ctx, &serverpb.RecoveryStagePlanRequest{
+		Plan:                      &plan,
+		AllNodes:                  true,
+		ForceLocalInternalVersion: ignoreInternalVersion,
+	})
 	if err := maybeWrapStagingError("failed to stage loss of quorum recovery plan on cluster",
 		sr, err); err != nil {
 		return err
@@ -787,19 +802,21 @@ func sortedKeys[T ~int | ~int32 | ~int64](set map[T]any) []T {
 }
 
 func applyRecoveryToLocalStore(
-	ctx context.Context, nodeUpdates loqrecoverypb.ReplicaUpdatePlan,
+	ctx context.Context, nodeUpdates loqrecoverypb.ReplicaUpdatePlan, ignoreInternalVersion bool,
 ) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
 	var localNodeID roachpb.NodeID
 	batches := make(map[roachpb.StoreID]storage.Batch)
-	for _, storeSpec := range debugRecoverExecuteOpts.Stores.Specs {
+	stores := make([]storage.Engine, len(debugRecoverExecuteOpts.Stores.Specs))
+	for i, storeSpec := range debugRecoverExecuteOpts.Stores.Specs {
 		store, err := OpenEngine(storeSpec.Path, stopper, storage.MustExist)
 		if err != nil {
 			return errors.Wrapf(err, "failed to open store at path %q. ensure that store path is "+
 				"correct and that it is not used by another process", storeSpec.Path)
 		}
+		stores[i] = store
 		batch := store.NewBatch()
 		defer store.Close()
 		defer batch.Close()
@@ -816,6 +833,10 @@ func applyRecoveryToLocalStore(
 			localNodeID = storeIdent.NodeID
 		}
 		batches[storeIdent.StoreID] = batch
+	}
+
+	if err := loqrecovery.CheckEnginesVersion(ctx, stores, nodeUpdates, ignoreInternalVersion); err != nil {
+		return err
 	}
 
 	updateTime := timeutil.Now()
@@ -911,8 +932,8 @@ func runDebugVerify(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return errors.Wrapf(err, "failed to read plan file %q", planFile)
 		}
-		jsonpb := protoutil.JSONPb{Indent: "  "}
-		if err = jsonpb.Unmarshal(data, &updatePlan); err != nil {
+		updatePlan, err = loqrecovery.UnmarshalPlan(data)
+		if err != nil {
 			return errors.Wrapf(err, "failed to unmarshal plan from file %q", planFile)
 		}
 	}

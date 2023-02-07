@@ -119,10 +119,11 @@ func (s Server) ServeLocalReplicas(
 	_ *serverpb.RecoveryCollectLocalReplicaInfoRequest,
 	stream serverpb.Admin_RecoveryCollectLocalReplicaInfoServer,
 ) error {
+	v := s.settings.Version.ActiveVersion(ctx)
 	return s.stores.VisitStores(func(s *kvserver.Store) error {
 		reader := s.TODOEngine().NewSnapshot()
 		defer reader.Close()
-		return visitStoreReplicas(ctx, reader, s.StoreID(), s.NodeID(),
+		return visitStoreReplicas(ctx, reader, s.StoreID(), s.NodeID(), v,
 			func(info loqrecoverypb.ReplicaInfo) error {
 				return stream.Send(&serverpb.RecoveryCollectLocalReplicaInfoResponse{ReplicaInfo: &info})
 			})
@@ -136,6 +137,9 @@ func (s Server) ServeClusterReplicas(
 	kvDB *kv.DB,
 ) (err error) {
 	// Block requests that require fan-out to other nodes until upgrade is finalized.
+	// We can't assume that caller is up-to-date with cluster version and process
+	// regardless of version known by current node as recommended for RPC
+	// requests because caller is a CLI which that only knows its binary version.
 	if !s.settings.Version.IsActive(ctx, clusterversion.V23_1) {
 		return errors.Newf("loss of quorum recovery service requires cluster upgraded to 23.1")
 	}
@@ -149,6 +153,18 @@ func (s Server) ServeClusterReplicas(
 				nodes, replicas)
 		}
 	}()
+
+	v := s.settings.Version.ActiveVersion(ctx)
+	if err = outStream.Send(&serverpb.RecoveryCollectReplicaInfoResponse{
+		Info: &serverpb.RecoveryCollectReplicaInfoResponse_Metadata{
+			Metadata: &loqrecoverypb.ClusterMetadata{
+				ClusterID: s.clusterIDContainer.String(),
+				Version:   v.Version,
+			},
+		},
+	}); err != nil {
+		return err
+	}
 
 	err = contextutil.RunWithTimeout(ctx, "scan range descriptors", s.metadataQueryTimeout,
 		func(txnCtx context.Context) error {
@@ -245,6 +261,9 @@ func (s Server) StagePlan(
 	ctx context.Context, req *serverpb.RecoveryStagePlanRequest,
 ) (*serverpb.RecoveryStagePlanResponse, error) {
 	// Block requests that require fan-out to other nodes until upgrade is finalized.
+	// We can't assume that caller is up-to-date with cluster version and process
+	// regardless of version known by current node as recommended for RPC
+	// requests because caller is a CLI which that only knows its binary version.
 	if !s.settings.Version.IsActive(ctx, clusterversion.V23_1) {
 		return nil, errors.Newf("loss of quorum recovery service requires cluster upgraded to 23.1")
 	}
@@ -252,10 +271,19 @@ func (s Server) StagePlan(
 	if !req.ForcePlan && req.Plan == nil {
 		return nil, errors.New("stage plan request can't be used with empty plan without force flag")
 	}
-	clusterID := s.clusterIDContainer.Get().String()
-	if req.Plan != nil && req.Plan.ClusterID != clusterID {
-		return nil, errors.Newf("attempting to stage plan from cluster %s on cluster %s",
-			req.Plan.ClusterID, clusterID)
+	if p := req.Plan; p != nil {
+		clusterID := s.clusterIDContainer.Get().String()
+		if p.ClusterID != clusterID {
+			return nil, errors.Newf("attempting to stage plan from cluster %s on cluster %s",
+				p.ClusterID, clusterID)
+		}
+		version := s.settings.Version.ActiveVersion(ctx)
+		if err := checkPlanVersionMatches(p.Version, version.Version, req.ForceLocalInternalVersion); err != nil {
+			return nil, errors.Wrap(err, "incompatible plan")
+		}
+		// It is safe to always update internal to reflect active version since it
+		// is allowed by the check above or is not needed.
+		p.Version.Internal = version.Internal
 	}
 
 	localNodeID := s.nodeIDContainer.Get()
@@ -320,9 +348,10 @@ func (s Server) StagePlan(
 			func(nodeID roachpb.NodeID, client serverpb.AdminClient) error {
 				delete(foundNodes, nodeID)
 				res, err := client.RecoveryStagePlan(ctx, &serverpb.RecoveryStagePlanRequest{
-					Plan:      req.Plan,
-					AllNodes:  false,
-					ForcePlan: req.ForcePlan,
+					Plan:                      req.Plan,
+					AllNodes:                  false,
+					ForcePlan:                 req.ForcePlan,
+					ForceLocalInternalVersion: req.ForceLocalInternalVersion,
 				})
 				if err != nil {
 					nodeErrors = append(nodeErrors,

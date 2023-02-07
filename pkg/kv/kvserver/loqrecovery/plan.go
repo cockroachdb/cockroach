@@ -14,6 +14,7 @@ import (
 	"context"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -118,6 +119,14 @@ func (u PlannedReplicaUpdate) asReplicaUpdate() loqrecoverypb.ReplicaUpdate {
 // information not being atomically captured.
 // An error is returned in case of unrecoverable error in the collected data
 // that prevents creation of any sane plan or correctable user error.
+// Note on versions in clusterInfo.
+// Plan expects info collection and info reading functions to ensure that
+// provided clusterInfo is compatible with current binary.
+// It is planners responsibility to only use features supported by cluster
+// version specified in the clusterInfo. Newer features must not be used as it
+// may break the cluster if they are not backward compatible. Target versions
+// is copied into resulting plan so that cluster could reject higher versions
+// of plans.
 func PlanReplicas(
 	ctx context.Context,
 	clusterInfo loqrecoverypb.ClusterReplicaInfo,
@@ -182,12 +191,22 @@ func PlanReplicas(
 	}
 	sort.Sort(roachpb.NodeIDSlice(staleLeaseholderNodes))
 
+	v := clusterversion.ClusterVersion{
+		Version: clusterInfo.Version,
+	}
+	if v.IsActive(clusterversion.V23_1) {
+		return loqrecoverypb.ReplicaUpdatePlan{
+			Updates:                 updates,
+			PlanID:                  planID,
+			DecommissionedNodeIDs:   decommissionNodeIDs,
+			ClusterID:               clusterInfo.ClusterID,
+			StaleLeaseholderNodeIDs: staleLeaseholderNodes,
+			Version:                 clusterInfo.Version,
+		}, report, err
+	}
+
 	return loqrecoverypb.ReplicaUpdatePlan{
-		Updates:                 updates,
-		PlanID:                  planID,
-		DecommissionedNodeIDs:   decommissionNodeIDs,
-		ClusterID:               clusterInfo.ClusterID,
-		StaleLeaseholderNodeIDs: staleLeaseholderNodes,
+		Updates: updates,
 	}, report, err
 }
 
@@ -258,13 +277,10 @@ func planReplicasWithoutMeta(
 	for _, p := range proposedSurvivors {
 		u, ok := makeReplicaUpdateIfNeeded(ctx, p, availableStoreIDs)
 		if !ok {
-			log.Infof(ctx, "range r%d didn't lose quorum", p.rangeID())
 			continue
 		}
 		problems = append(problems, checkDescriptor(p)...)
 		updates = append(updates, u)
-		log.Infof(ctx, "replica has lost quorum, recovering: %s -> %s",
-			p.survivor().Desc, u.NewReplica)
 	}
 
 	sort.Slice(problems, func(i, j int) bool {

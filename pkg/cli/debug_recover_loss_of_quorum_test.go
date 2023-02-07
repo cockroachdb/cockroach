@@ -18,10 +18,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -86,6 +88,8 @@ func TestCollectInfoFromMultipleStores(t *testing.T) {
 		stores[r.StoreID] = struct{}{}
 	}
 	require.Equal(t, 2, len(stores), "collected replicas from stores")
+	require.Equal(t, clusterversion.ByKey(clusterversion.BinaryVersionKey), replicas.Version,
+		"collected version info from stores")
 }
 
 // TestCollectInfoFromOnlineCluster verifies that given a test cluster with
@@ -147,6 +151,8 @@ func TestCollectInfoFromOnlineCluster(t *testing.T) {
 	require.Equal(t, totalRanges*2, totalReplicas, "number of collected replicas")
 	require.Equal(t, totalRanges, len(replicas.Descriptors),
 		"number of collected descriptors from metadata")
+	require.Equal(t, clusterversion.ByKey(clusterversion.BinaryVersionKey), replicas.Version,
+		"collected version info from stores")
 }
 
 // TestLossOfQuorumRecovery performs a sanity check on end to end recovery workflow.
@@ -231,7 +237,7 @@ func TestLossOfQuorumRecovery(t *testing.T) {
 			planFile})
 	require.NoError(t, err, "failed to run apply plan")
 	// Check that there were at least one mention of replica being promoted.
-	require.Contains(t, out, "will be updated", "no replica updated were recorded")
+	require.Contains(t, out, "will be updated", "no replica updates were recorded")
 	require.Contains(t, out, fmt.Sprintf("Updated store(s): s%d", node1ID),
 		"apply plan was not executed on requested node")
 
@@ -301,6 +307,88 @@ func TestLossOfQuorumRecovery(t *testing.T) {
 	require.NoError(t,
 		tcAfter.Server(0).DB().Put(ctx, testutils.MakeKey(sk, []byte{1}), "value2"),
 		"failed to write value to scratch range after recovery")
+}
+
+// TestStageVersionCheck verifies that we can force plan with different internal
+// version onto cluster. To do this, we create a plan with internal version
+// above current but matching major and minor. Then we check that staging fails
+// and that force flag will update plan version to match local node.
+func TestStageVersionCheck(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderDeadlock(t, "slow under deadlock")
+
+	ctx := context.Background()
+	_, cleanupFn := testutils.TempDir(t)
+	defer cleanupFn()
+
+	c := NewCLITest(TestCLIParams{
+		NoServer: true,
+	})
+	defer c.Cleanup()
+
+	storeReg := server.NewStickyInMemEnginesRegistry()
+	defer storeReg.CloseAllStickyInMemEngines()
+	tc := testcluster.NewTestCluster(t, 4, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgsPerNode: map[int]base.TestServerArgs{
+			0: {
+				Knobs: base.TestingKnobs{
+					Server: &server.TestingKnobs{
+						StickyEngineRegistry: storeReg,
+					},
+				},
+				StoreSpecs: []base.StoreSpec{
+					{InMemory: true, StickyInMemoryEngineID: "1"},
+				},
+			},
+		},
+	})
+	tc.Start(t)
+	defer tc.Stopper().Stop(ctx)
+	tc.StopServer(3)
+
+	grpcConn, err := tc.Server(0).RPCContext().GRPCDialNode(tc.Server(0).ServingRPCAddr(),
+		tc.Server(0).NodeID(), rpc.DefaultClass).Connect(ctx)
+	require.NoError(t, err, "Failed to create test cluster after recovery")
+	adminClient := serverpb.NewAdminClient(grpcConn)
+	v := clusterversion.ByKey(clusterversion.BinaryVersionKey)
+	v.Internal++
+	// To avoid crafting real replicas we use StaleLeaseholderNodeIDs to force
+	// node to stage plan for verification.
+	p := loqrecoverypb.ReplicaUpdatePlan{
+		PlanID:                  uuid.FastMakeV4(),
+		Version:                 v,
+		ClusterID:               tc.Server(0).StorageClusterID().String(),
+		DecommissionedNodeIDs:   []roachpb.NodeID{4},
+		StaleLeaseholderNodeIDs: []roachpb.NodeID{1},
+	}
+	// Attempts to stage plan with different internal version must fail.
+	_, err = adminClient.RecoveryStagePlan(ctx, &serverpb.RecoveryStagePlanRequest{
+		Plan:                      &p,
+		AllNodes:                  true,
+		ForcePlan:                 false,
+		ForceLocalInternalVersion: false,
+	})
+	require.ErrorContains(t, err, "doesn't match cluster active version")
+	// Enable "stuck upgrade bypass" to stage plan on the cluster.
+	_, err = adminClient.RecoveryStagePlan(ctx, &serverpb.RecoveryStagePlanRequest{
+		Plan:                      &p,
+		AllNodes:                  true,
+		ForcePlan:                 false,
+		ForceLocalInternalVersion: true,
+	})
+	require.NoError(t, err, "force local must fix incorrect version")
+	// Check that stored plan has version matching cluster version.
+	fs, err := storeReg.GetUnderlyingFS(base.StoreSpec{InMemory: true, StickyInMemoryEngineID: "1"})
+	require.NoError(t, err, "failed to get shared store fs")
+	ps := loqrecovery.NewPlanStore("", fs)
+	p, ok, err := ps.LoadPlan()
+	require.NoError(t, err, "failed to read node 0 plan")
+	require.True(t, ok, "plan was not staged")
+	require.Equal(t, clusterversion.ByKey(clusterversion.BinaryVersionKey), p.Version,
+		"plan version was not updated")
 }
 
 func createIntentOnRangeDescriptor(
@@ -515,59 +603,6 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 	// Finally split scratch range to ensure metadata ranges are recovered.
 	_, _, err = tc.Server(0).SplitRange(testutils.MakeKey(sk, []byte{42}))
 	require.NoError(t, err, "failed to split range after recovery")
-}
-
-// TestJsonSerialization verifies that all fields serialized in JSON could be
-// read back. This specific test addresses issues where default naming scheme
-// may not work in combination with other tags correctly. e.g. repeated used
-// with omitempty seem to use camelcase unless explicitly specified.
-func TestJsonSerialization(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	nr := loqrecoverypb.ClusterReplicaInfo{
-		ClusterID: "id1",
-		LocalInfo: []loqrecoverypb.NodeReplicaInfo{
-			{
-				Replicas: []loqrecoverypb.ReplicaInfo{
-					{
-						NodeID:  1,
-						StoreID: 2,
-						Desc: roachpb.RangeDescriptor{
-							RangeID:  3,
-							StartKey: roachpb.RKey(keys.MetaMin),
-							EndKey:   roachpb.RKey(keys.MetaMax),
-							InternalReplicas: []roachpb.ReplicaDescriptor{
-								{
-									NodeID:    1,
-									StoreID:   2,
-									ReplicaID: 3,
-									Type:      roachpb.VOTER_INCOMING,
-								},
-							},
-							NextReplicaID: 4,
-							Generation:    7,
-						},
-						RaftAppliedIndex:   13,
-						RaftCommittedIndex: 19,
-						RaftLogDescriptorChanges: []loqrecoverypb.DescriptorChangeInfo{
-							{
-								ChangeType: 1,
-								Desc:       &roachpb.RangeDescriptor{},
-								OtherDesc:  &roachpb.RangeDescriptor{},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-	jsonpb := protoutil.JSONPb{Indent: "  "}
-	data, err := jsonpb.Marshal(&nr)
-	require.NoError(t, err)
-
-	var crFromJSON loqrecoverypb.ClusterReplicaInfo
-	require.NoError(t, jsonpb.Unmarshal(data, &crFromJSON))
-	require.Equal(t, nr, crFromJSON, "objects before and after serialization")
 }
 
 func TestUpdatePlanVsClusterDiff(t *testing.T) {

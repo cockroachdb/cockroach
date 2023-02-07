@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
@@ -365,6 +366,10 @@ func MaybeApplyPendingRecoveryPlan(
 	}
 
 	applyPlan := func(nodeID roachpb.NodeID, plan loqrecoverypb.ReplicaUpdatePlan) error {
+		if err := CheckEnginesVersion(ctx, engines, plan, false); err != nil {
+			return errors.Wrap(err, "failed to check cluster version against storage")
+		}
+
 		log.Infof(ctx, "applying staged loss of quorum recovery plan %s", plan.PlanID)
 		batches := make(map[roachpb.StoreID]storage.Batch)
 		for _, e := range engines {
@@ -435,4 +440,21 @@ func MaybeApplyPendingRecoveryPlan(
 		log.Errorf(ctx, "failed to write loss of quorum recovery results to store: %s", err)
 	}
 	return nil
+}
+
+func CheckEnginesVersion(
+	ctx context.Context,
+	engines []storage.Engine,
+	plan loqrecoverypb.ReplicaUpdatePlan,
+	ignoreInternal bool,
+) error {
+	binaryVersion := clusterversion.ByKey(clusterversion.BinaryVersionKey)
+	binaryMinSupportedVersion := clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey)
+	clusterVersion, err := kvstorage.SynthesizeClusterVersionFromEngines(
+		ctx, engines, binaryVersion, binaryMinSupportedVersion,
+	)
+	if err != nil {
+		return errors.Wrap(err, "failed to get cluster version from storage")
+	}
+	return checkPlanVersionMatches(plan.Version, clusterVersion.Version, ignoreInternal)
 }

@@ -367,6 +367,7 @@ go_test(
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/allocator/storepool",
         "//pkg/kv/kvserver/liveness/livenesspb",
+        "//pkg/kv/kvserver/loqrecovery",
         "//pkg/kv/kvserver/loqrecovery/loqrecoverypb",
         "//pkg/kv/kvserver/stateloader",
         "//pkg/roachpb",
