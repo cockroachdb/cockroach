@@ -88,6 +88,12 @@ func (s *testStream) Events() []*kvpb.RangeFeedEvent {
 	return s.mu.events
 }
 
+func waitRangeFeed(
+	store *kvserver.Store, req *kvpb.RangeFeedRequest, stream *testStream,
+) *kvpb.Error {
+	return kvpb.NewError(store.RangeFeedPromise(req, stream).Get())
+}
+
 func TestReplicaRangefeed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -158,7 +164,7 @@ func TestReplicaRangefeed(t *testing.T) {
 			}
 			timer := time.AfterFunc(10*time.Second, stream.Cancel)
 			defer timer.Stop()
-			streamErrC <- store.RangeFeed(&req, stream)
+			streamErrC <- waitRangeFeed(store, &req, stream)
 		}(i)
 	}
 
@@ -484,7 +490,7 @@ func TestReplicaRangefeed(t *testing.T) {
 			defer timer.Stop()
 			defer stream.Cancel()
 
-			if pErr := store.RangeFeed(&req, stream); !testutils.IsPError(
+			if pErr := waitRangeFeed(store, &req, stream); !testutils.IsPError(
 				pErr, `must be after replica GC threshold`,
 			) {
 				return pErr.GoError()
@@ -628,7 +634,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 			}
 			timer := time.AfterFunc(10*time.Second, stream.Cancel)
 			defer timer.Stop()
-			streamErrC <- store.RangeFeed(&req, stream)
+			streamErrC <- waitRangeFeed(store, &req, stream)
 		}()
 
 		// Wait for the first checkpoint event.
@@ -663,7 +669,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 			}
 			timer := time.AfterFunc(10*time.Second, stream.Cancel)
 			defer timer.Stop()
-			streamErrC <- store.RangeFeed(&req, stream)
+			streamErrC <- waitRangeFeed(store, &req, stream)
 		}()
 
 		// Wait for the first checkpoint event.
@@ -708,7 +714,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 			}
 			timer := time.AfterFunc(10*time.Second, streamLeft.Cancel)
 			defer timer.Stop()
-			streamLeftErrC <- store.RangeFeed(&req, streamLeft)
+			streamLeftErrC <- waitRangeFeed(store, &req, streamLeft)
 		}()
 
 		// Establish a rangefeed on the right replica.
@@ -724,7 +730,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 			}
 			timer := time.AfterFunc(10*time.Second, streamRight.Cancel)
 			defer timer.Stop()
-			streamRightErrC <- store.RangeFeed(&req, streamRight)
+			streamRightErrC <- waitRangeFeed(store, &req, streamRight)
 		}()
 
 		// Wait for the first checkpoint event on each stream.
@@ -782,7 +788,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 			}
 			timer := time.AfterFunc(10*time.Second, stream.Cancel)
 			defer timer.Stop()
-			streamErrC <- partitionStore.RangeFeed(&req, stream)
+			streamErrC <- waitRangeFeed(partitionStore, &req, stream)
 		}()
 
 		// Wait for the first checkpoint event.
@@ -910,7 +916,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 			kvserver.RangefeedEnabled.Override(ctx, &store.ClusterSettings().SV, true)
 			timer := time.AfterFunc(10*time.Second, stream.Cancel)
 			defer timer.Stop()
-			streamErrC <- store.RangeFeed(&req, stream)
+			streamErrC <- waitRangeFeed(store, &req, stream)
 		}()
 
 		// Wait for the first checkpoint event.
@@ -985,7 +991,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 			}
 			timer := time.AfterFunc(10*time.Second, stream.Cancel)
 			defer timer.Stop()
-			streamErrC <- store.RangeFeed(&req, stream)
+			streamErrC <- kvpb.NewError(store.RangeFeedPromise(&req, stream).Get())
 		}()
 
 		// Check the error.
@@ -1006,7 +1012,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 			}
 			timer := time.AfterFunc(10*time.Second, stream.Cancel)
 			defer timer.Stop()
-			streamErrC <- store.RangeFeed(&req, stream)
+			streamErrC <- kvpb.NewError(store.RangeFeedPromise(&req, stream).Get())
 		}()
 
 		// Wait for the first checkpoint event.
@@ -1051,7 +1057,7 @@ func TestReplicaRangefeedMVCCHistoryMutationError(t *testing.T) {
 		}
 		timer := time.AfterFunc(10*time.Second, stream.Cancel)
 		defer timer.Stop()
-		streamErrC <- store.RangeFeed(&req, stream)
+		streamErrC <- waitRangeFeed(store, &req, stream)
 	}()
 
 	// Wait for a checkpoint.
