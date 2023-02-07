@@ -29,7 +29,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -49,7 +48,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -1139,79 +1137,6 @@ func TestReplicaLeaseCounters(t *testing.T) {
 	// Check the lease history to ensure it did not record the failed lease.
 	if e, a := 2, len(tc.repl.leaseHistory.get()); e != a {
 		t.Fatalf("expected lease history count to be %d, got %d", e, a)
-	}
-}
-
-// TestReplicaGossipConfigsOnLease verifies that config info is gossiped
-// upon acquisition of the range lease.
-//
-// TODO(ajwerner): Delete this test in 22.2.
-func TestReplicaGossipConfigsOnLease(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-
-	tc := testContext{manualClock: timeutil.NewManualTime(timeutil.Unix(0, 123))}
-	cfg := TestStoreConfig(hlc.NewClockForTesting(tc.manualClock))
-	cfg.TestingKnobs.DisableAutomaticLeaseRenewal = true
-	// Use the TestingBinaryMinSupportedVersion for bootstrap because we won't
-	// gossip the system config once the current version is finalized.
-	cfg.Settings = cluster.MakeTestingClusterSettingsWithVersions(
-		clusterversion.TestingBinaryVersion,
-		clusterversion.TestingBinaryMinSupportedVersion,
-		false,
-	)
-	require.NoError(t, cfg.Settings.Version.SetActiveVersion(ctx, clusterversion.ClusterVersion{
-		Version: clusterversion.TestingBinaryMinSupportedVersion,
-	}))
-	tc.StartWithStoreConfigAndVersion(ctx, t, stopper, cfg,
-		clusterversion.TestingBinaryMinSupportedVersion)
-
-	secondReplica, err := tc.addBogusReplicaToRangeDesc(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Write some arbitrary data in the system config span.
-	key := keys.SystemSQLCodec.TablePrefix(keys.DeprecatedMaxSystemConfigDescID)
-	var val roachpb.Value
-	val.SetInt(42)
-	if err := storage.MVCCPut(context.Background(), tc.engine, nil, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, val, nil); err != nil {
-		t.Fatal(err)
-	}
-
-	// Expire our own lease which we automagically acquired due to being
-	// first range and config holder.
-	tc.manualClock.MustAdvanceTo(leaseExpiry(tc.repl))
-	now := tc.Clock().NowAsClockTimestamp()
-
-	// Give lease to someone else.
-	if err := sendLeaseRequest(tc.repl, &roachpb.Lease{
-		Start:      now,
-		Expiration: now.ToTimestamp().Add(10, 0).Clone(),
-		Replica:    secondReplica,
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	// Expire that lease.
-	tc.manualClock.Advance(11 + tc.Clock().MaxOffset()) // advance time
-	now = tc.Clock().NowAsClockTimestamp()
-
-	// Give lease to this range.
-	if err := sendLeaseRequest(tc.repl, &roachpb.Lease{
-		Start:      now.ToTimestamp().Add(11, 0).UnsafeToClockTimestamp(),
-		Expiration: now.ToTimestamp().Add(20, 0).Clone(),
-		Replica: roachpb.ReplicaDescriptor{
-			ReplicaID: 1,
-			NodeID:    1,
-			StoreID:   1,
-		},
-	}); err != nil {
-		t.Fatal(err)
 	}
 }
 
