@@ -11,8 +11,11 @@
 package scbuildstmt
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -21,6 +24,9 @@ func DropFunction(b BuildCtx, n *tree.DropFunction) {
 		// TODO(chengxiong): remove this when we allow UDF usage.
 		panic(scerrors.NotImplementedErrorf(n, "cascade dropping functions"))
 	}
+
+	var toCheckBackRefs []catid.DescID
+	var toCheckBackRefsNames []*scpb.FunctionName
 	for _, f := range n.Functions {
 		elts := b.ResolveUDF(&f, ResolveParams{
 			IsExistenceOptional: n.IfExists,
@@ -30,9 +36,25 @@ func DropFunction(b BuildCtx, n *tree.DropFunction) {
 			continue
 		}
 		f.FuncName.ObjectNamePrefix = b.NamePrefix(fn)
-		dropRestrictDescriptor(b, fn.FunctionID)
+		if dropRestrictDescriptor(b, fn.FunctionID) {
+			toCheckBackRefs = append(toCheckBackRefs, fn.FunctionID)
+			_, _, fnName := scpb.FindFunctionName(elts)
+			toCheckBackRefsNames = append(toCheckBackRefsNames, fnName)
+		}
 		b.LogEventForExistingTarget(fn)
 		b.IncrementSubWorkID()
 		b.IncrementSchemaChangeDropCounter("function")
+	}
+
+	for i, fnID := range toCheckBackRefs {
+		dependentNames := dependentTypeNames(b, fnID)
+		if len(dependentNames) > 0 {
+			panic(pgerror.Newf(
+				pgcode.DependentObjectsStillExist,
+				"cannot drop function %q because other objects (%v) still depend on it",
+				toCheckBackRefsNames[i].Name, dependentNames,
+			))
+
+		}
 	}
 }

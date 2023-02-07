@@ -283,14 +283,14 @@ CREATE TABLE tmp (x INT)
 statement ok
 DROP TABLE tmp
 
-statement error expected computed column expression to have type int, but .* has type string
+statement error expected STORED COMPUTED COLUMN expression to have type int, but ''not an integer!'::STRING' has type string
 CREATE TABLE y (
   a INT AS ('not an integer!'::STRING) STORED
 )
 
 # We utilize the types from other columns.
 
-statement error expected computed column expression to have type int, but 'a' has type string
+statement error expected STORED COMPUTED COLUMN expression to have type int, but 'a' has type string
 CREATE TABLE y (
   a STRING,
   b INT AS (a) STORED
@@ -301,57 +301,57 @@ CREATE TABLE x (
   a INT
 )
 
-statement error expected computed column expression to have type string, but .* has type int
+statement error expected STORED COMPUTED COLUMN expression to have type string, but .* has type int
 ALTER TABLE x ADD COLUMN err STRING AS (10::INT) STORED
 
 statement ok
 DROP TABLE x
 
-statement error context-dependent operators are not allowed in computed column
+statement error now\(\): context-dependent operators are not allowed in STORED COMPUTED COLUMN
 CREATE TABLE y (
   a TIMESTAMP AS (now()) STORED
 )
 
-statement error context-dependent operators are not allowed in computed column
+statement error string::timestamptz: context-dependent operators are not allowed in STORED COMPUTED COLUM
 CREATE TABLE y (
   a STRING,
   b TIMESTAMPTZ AS (a::TIMESTAMPTZ) STORED
 )
 
 # Make sure the error has a hint that mentions parse_timestamp().
-statement error context-dependent operators are not allowed in computed column.*\nHINT:.*use parse_timestamp
+statement error string::timestamp: context-dependent operators are not allowed in STORED COMPUTED COLUMN\nHINT:.*use parse_timestamp
 CREATE TABLE y (
   a STRING,
   b TIMESTAMP AS (a::TIMESTAMP) STORED
 )
 
 # Make sure the error has a hint that mentions AT TIME ZONE.
-statement error context-dependent operators are not allowed in computed column.*\nHINT:.*AT TIME ZONE
+statement error timestamptz::string: context-dependent operators are not allowed in STORED COMPUTED COLUMN\nHINT:.*AT TIME ZONE
 CREATE TABLE y (
   a TIMESTAMPTZ,
   b STRING AS (a::STRING) STORED
 )
 
 # Make sure the error has a hint that mentions AT TIME ZONE.
-statement error context-dependent operators are not allowed in computed column.*\nHINT:.*AT TIME ZONE
+statement error timestamptz::timestamp: context-dependent operators are not allowed in STORED COMPUTED COLUMN\nHINT: TIMESTAMPTZ to TIMESTAMP
 CREATE TABLE y (
   a TIMESTAMPTZ,
   b TIMESTAMP AS (a::TIMESTAMP) STORED
 )
 
-statement error context-dependent operators are not allowed in computed column
+statement error \+: context-dependent operators are not allowed in STORED COMPUTED COLUMN
 CREATE TABLE y (
   a TIMESTAMPTZ,
   b INTERVAL,
   c TIMESTAMPTZ AS (a+ b) STORED
 )
 
-statement error volatile functions are not allowed in computed column
+statement error concat\(\): uuid_v4\(\): volatile functions are not allowed in STORED COMPUTED COLUMN
 CREATE TABLE y (
   a STRING AS (concat('foo', uuid_v4()::STRING)) STORED
 )
 
-statement error computed column expression cannot reference computed columns
+statement error STORED COMPUTED COLUMN expression cannot reference computed columns
 CREATE TABLE y (
   a INT AS (3) STORED,
   b INT AS (a) STORED
@@ -362,12 +362,12 @@ CREATE TABLE y (
   b INT AS (a) STORED
 )
 
-statement error aggregate functions are not allowed in computed column
+statement error count\(\): aggregate functions are not allowed in STORED COMPUTED COLUMN
 CREATE TABLE y (
   b INT AS (count(1)) STORED
 )
 
-statement error computed column cannot have default values
+statement error STORED COMPUTED COLUMN cannot have default values
 CREATE TABLE y (
   a INT AS (3) STORED DEFAULT 4
 )
@@ -461,10 +461,10 @@ p_default  p_null  c_default  c_null
 statement ok
 CREATE TABLE tt (i INT8 AS (1) STORED)
 
-statement error variable sub-expressions are not allowed in computed column
+statement error variable sub-expressions are not allowed in STORED COMPUTED COLUMN
 ALTER TABLE tt ADD COLUMN c STRING AS ((SELECT NULL)) STORED
 
-statement error computed column expression cannot reference computed columns
+statement error STORED COMPUTED COLUMN expression cannot reference computed columns
 ALTER TABLE tt ADD COLUMN c INT8 AS (i) STORED
 
 # Composite FK.
@@ -505,7 +505,7 @@ ALTER TABLE y ADD FOREIGN KEY (r) REFERENCES x (a)
 statement ok
 DROP TABLE y
 
-statement error variable sub-expressions are not allowed in computed column
+statement error variable sub-expressions are not allowed in STORED COMPUTED COLUMN
 CREATE TABLE y (
   r INT AS ((SELECT 1)) STORED
 )
@@ -920,13 +920,13 @@ t42418  CREATE TABLE public.t42418 (
         )
 
 # Tests for computed column rewrites.
-statement error context-dependent operators are not allowed in computed column
+statement error timestamptz::string: context-dependent operators are not allowed in STORED COMPUTED COLUMN
 CREATE TABLE trewrite(k INT PRIMARY KEY, ts TIMESTAMPTZ, c STRING AS (ts::STRING) STORED, FAMILY (k,ts,c))
 
 statement ok
 SET experimental_computed_column_rewrites = "(ts :: STRING) -> ((ts AT TIME ZONE 'utc')::STRING)";
 
-statement error timestamp::string: context-dependent operators are not allowed in computed column
+statement error timestamp::string: context-dependent operators are not allowed in STORED COMPUTED COLUMN
 CREATE TABLE trewrite(k INT PRIMARY KEY, ts TIMESTAMPTZ, c STRING AS (ts::STRING) STORED, FAMILY (k,ts,c))
 
 statement ok

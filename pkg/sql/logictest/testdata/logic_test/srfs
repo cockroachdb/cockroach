@@ -862,7 +862,7 @@ CREATE TABLE uu (x INT DEFAULT generate_series(1, 3))
 statement error generator functions are not allowed in CHECK
 CREATE TABLE uu (x INT CHECK (generate_series(1, 3) < 3))
 
-statement error generator functions are not allowed in computed column
+statement error generate_series\(\): generator functions are not allowed in STORED COMPUTED COLUMN
 CREATE TABLE uu (x INT AS (generate_series(1, 3)) STORED)
 
 subtest correlated_srf

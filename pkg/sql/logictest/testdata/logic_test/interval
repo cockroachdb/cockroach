@@ -409,12 +409,12 @@ SET intervalstyle = 'sql_standard'
 statement ok
 SET intervalstyle = DEFAULT
 
-statement error context-dependent operators are not allowed in computed column\nHINT: INTERVAL to STRING casts depend on IntervalStyle; consider using to_char\(interval\)
+statement error interval::string: context-dependent operators are not allowed in STORED COMPUTED COLUMN\nHINT: INTERVAL to STRING casts depend on IntervalStyle; consider using to_char\(interval\)
 CREATE TABLE invalid_table (
   invalid_col string AS ('1 hour'::interval::string) STORED
 )
 
-statement error string::interval: context-dependent operators are not allowed in computed column\nHINT: STRING to INTERVAL casts depend on session IntervalStyle; use parse_interval\(string\) instead
+statement error string::interval: context-dependent operators are not allowed in STORED COMPUTED COLUMN\nHINT: STRING to INTERVAL casts depend on session IntervalStyle; use parse_interval\(string\) instead
 CREATE TABLE invalid_table (
   invalid_col interval AS ('1 hour'::string::interval) STORED
 )

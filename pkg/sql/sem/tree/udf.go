@@ -530,15 +530,50 @@ func (v *UDFDisallowanceVisitor) VisitPost(expr Expr) (newNode Expr) {
 }
 
 // MaybeFailOnUDFUsage returns an error if the given expression or any
-// sub-expression used a UDF.
+// sub-expression used a UDF unless it's explicitly listed as an allowed use
+// case.
 // TODO(chengxiong): remove this function when we start allowing UDF references.
-func MaybeFailOnUDFUsage(expr TypedExpr) error {
+func MaybeFailOnUDFUsage(expr TypedExpr, exprContext SchemaExprContext) error {
+	if _, ok := schemaExprContextAllowingUDF[exprContext]; ok {
+		return nil
+	}
 	visitor := &UDFDisallowanceVisitor{}
 	WalkExpr(visitor, expr)
 	if visitor.FoundUDF {
 		return unimplemented.NewWithIssue(83234, "usage of user-defined function from relations not supported")
 	}
 	return nil
+}
+
+// SchemaExprContext indicates in which schema change context an expression is being
+// used in. For example, DEFAULT VALUE of a column, CHECK CONSTRAINT's
+// expression, etc.
+type SchemaExprContext string
+
+const (
+	AlterColumnTypeUsingExpr        SchemaExprContext = "ALTER COLUMN TYPE USING EXPRESSION"
+	StoredComputedColumnExpr        SchemaExprContext = "STORED COMPUTED COLUMN"
+	VirtualComputedColumnExpr       SchemaExprContext = "VIRTUAL COMPUTED COLUMN"
+	ColumnOnUpdateExpr              SchemaExprContext = "ON UPDATE"
+	ColumnDefaultExpr               SchemaExprContext = "DEFAULT"
+	CheckConstraintExpr             SchemaExprContext = "CHECK"
+	UniqueWithoutIndexPredicateExpr SchemaExprContext = "UNIQUE WITHOUT INDEX PREDICATE"
+	IndexPredicateExpr              SchemaExprContext = "INDEX PREDICATE"
+	ExpressionIndexElementExpr      SchemaExprContext = "EXPRESSION INDEX ELEMENT"
+	TTLExpirationExpr               SchemaExprContext = "TTL EXPIRATION EXPRESSION"
+	TTLDefaultExpr                  SchemaExprContext = "TTL DEFAULT"
+	TTLUpdateExpr                   SchemaExprContext = "TTL UPDATE"
+)
+
+var schemaExprContextAllowingUDF = map[SchemaExprContext]struct{}{
+	CheckConstraintExpr: {},
+}
+
+func ComputedColumnExprContext(isVirtual bool) SchemaExprContext {
+	if isVirtual {
+		return VirtualComputedColumnExpr
+	}
+	return StoredComputedColumnExpr
 }
 
 // ValidateFuncOptions checks whether there are conflicting or redundant

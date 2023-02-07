@@ -6,6 +6,7 @@ go_library(
     srcs = [
         "collection.go",
         "descriptor.go",
+        "dist_sql_function_resolver.go",
         "dist_sql_type_resolver.go",
         "errors.go",
         "factory.go",

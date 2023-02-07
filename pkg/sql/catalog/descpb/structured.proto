@@ -968,6 +968,11 @@ message TableDescriptor {
   repeated uint32 dependsOnTypes = 45 [(gogoproto.customname) = "DependsOnTypes",
     (gogoproto.casttype) = "ID"];
 
+  // The IDs of all functions that this depends on.
+  // Only ever populated if this descriptor is for a view.
+  repeated uint32 depends_on_functions = 55 [(gogoproto.customname) = "DependsOnFunctions",
+    (gogoproto.casttype) = "ID"];
+
   message Reference {
     option (gogoproto.equal) = true;
     // The ID of the relation that depends on this one.
@@ -1165,7 +1170,7 @@ message TableDescriptor {
   // This field is non zero if this table is offline during an import.
   optional int64 import_start_wall_time = 54 [(gogoproto.nullable) = false, (gogoproto.customname) = "ImportStartWallTime"];
 
-  // Next ID: 55
+  // Next ID: 56
 }
 
 // SurvivalGoal is the survival goal for a database.

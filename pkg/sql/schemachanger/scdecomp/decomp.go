@@ -824,5 +824,8 @@ func (w *walkCtx) walkFunction(fnDesc catalog.FunctionDescriptor) {
 			}
 		}
 	}
+	for _, backRef := range fnDesc.GetDependedOnBy() {
+		w.backRefs.Add(backRef.ID)
+	}
 	w.ev(scpb.Status_PUBLIC, fnBody)
 }

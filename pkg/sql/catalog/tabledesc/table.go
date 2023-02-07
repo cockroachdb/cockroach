@@ -166,7 +166,7 @@ func MakeColumnDefDescs(
 		if err != nil {
 			return nil, err
 		}
-		if err := tree.MaybeFailOnUDFUsage(ret.DefaultExpr); err != nil {
+		if err := tree.MaybeFailOnUDFUsage(ret.DefaultExpr, tree.ColumnDefaultExpr); err != nil {
 			return nil, err
 		}
 
@@ -189,7 +189,7 @@ func MakeColumnDefDescs(
 		if err != nil {
 			return nil, err
 		}
-		if err := tree.MaybeFailOnUDFUsage(ret.OnUpdateExpr); err != nil {
+		if err := tree.MaybeFailOnUDFUsage(ret.OnUpdateExpr, tree.ColumnOnUpdateExpr); err != nil {
 			return nil, err
 		}
 

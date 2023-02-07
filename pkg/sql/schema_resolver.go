@@ -263,6 +263,18 @@ func (sr *schemaResolver) getQualifiedTableName(
 	return &tbName, nil
 }
 
+// GetQualifiedFunctionNameByID returns the qualified name of the table,
+// view or sequence represented by the provided ID and table kind.
+func (sr *schemaResolver) GetQualifiedFunctionNameByID(
+	ctx context.Context, id int64,
+) (*tree.FunctionName, error) {
+	fn, err := sr.descCollection.ByIDWithLeased(sr.txn).WithoutNonPublic().Get().Function(ctx, descpb.ID(id))
+	if err != nil {
+		return nil, err
+	}
+	return sr.getQualifiedFunctionName(ctx, fn)
+}
+
 func (sr *schemaResolver) getQualifiedFunctionName(
 	ctx context.Context, fnDesc catalog.FunctionDescriptor,
 ) (*tree.FunctionName, error) {

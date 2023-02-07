@@ -1,0 +1,19 @@
+/* setup */
+CREATE TABLE t (i INT PRIMARY KEY, b INT);
+CREATE FUNCTION f(b INT) RETURNS INT LANGUAGE SQL AS $$ SELECT b + 1 $$;
+
+/* test */
+ALTER TABLE t ADD CONSTRAINT check_b CHECK (f(b) > 1);
+EXPLAIN (ddl) rollback at post-commit stage 2 of 2;
+----
+Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› ADD CONSTRAINT ‹check_b› CHECK (f(‹b›) > ‹1›);
+ └── PostCommitNonRevertiblePhase
+      └── Stage 1 of 1 in PostCommitNonRevertiblePhase
+           ├── 1 element transitioning toward ABSENT
+           │    └── WRITE_ONLY → ABSENT CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+           └── 5 Mutation operations
+                ├── RemoveCheckConstraint {"ConstraintID":2,"TableID":104}
+                ├── RemoveTableConstraintBackReferencesFromFunctions {"BackReferencedConstraintID":2,"BackReferencedTableID":104}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":105}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

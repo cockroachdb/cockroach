@@ -19,6 +19,8 @@ ALTER TABLE tbl ADD CONSTRAINT mycheck2 CHECK (id < 10) NOT VALID;
 ALTER TABLE tbl ADD CONSTRAINT myuwi1 UNIQUE WITHOUT INDEX (price);
 ALTER TABLE tbl ADD CONSTRAINT myuwi2 UNIQUE WITHOUT INDEX (price) NOT VALID;
 ALTER TABLE tbl ADD CONSTRAINT myfk2 FOREIGN KEY (id) REFERENCES parent (id) NOT VALID;
+CREATE FUNCTION f(a INT) RETURNS INT LANGUAGE SQL AS $$ SELECT a + 1 $$;
+ALTER TABLE tbl ADD CONSTRAINT mycheck3 CHECK (f(id) > 1);
 ----
 
 decompose
@@ -325,6 +327,7 @@ ElementState:
     sourceIndexId: 0
     tableId: 105
     temporaryIndexId: 0
+    usesFunctionIds: []
     usesSequenceIds: []
     usesTypeIds: []
   Status: PUBLIC
@@ -353,6 +356,22 @@ ElementState:
     referencedColumnIds:
     - 1
     tableId: 105
+    usesFunctionIds: []
+    usesSequenceIds: []
+    usesTypeIds: []
+  Status: PUBLIC
+- CheckConstraint:
+    columnIds:
+    - 1
+    constraintId: 8
+    expr: '[FUNCTION 100106](id) > 1:::INT8'
+    fromHashShardedColumn: false
+    indexIdForValidation: 0
+    referencedColumnIds:
+    - 1
+    tableId: 105
+    usesFunctionIds:
+    - 106
     usesSequenceIds: []
     usesTypeIds: []
   Status: PUBLIC
@@ -364,6 +383,7 @@ ElementState:
     referencedColumnIds:
     - 1
     tableId: 105
+    usesFunctionIds: []
     usesSequenceIds: []
     usesTypeIds: []
   Status: PUBLIC
@@ -692,6 +712,11 @@ ElementState:
     name: myfk2
     tableId: 105
   Status: PUBLIC
+- ConstraintWithoutIndexName:
+    constraintId: 8
+    name: mycheck3
+    tableId: 105
+  Status: PUBLIC
 - ConstraintComment:
     comment: must have a parent
     constraintId: 2
@@ -1012,12 +1037,12 @@ BackReferencedIDs:
 ElementState:
 - Table:
     isTemporary: false
-    tableId: 108
+    tableId: 109
   Status: PUBLIC
 - ColumnFamily:
     familyId: 0
     name: primary
-    tableId: 108
+    tableId: 109
   Status: PUBLIC
 - Column:
     columnId: 1
@@ -1027,7 +1052,7 @@ ElementState:
     isInaccessible: false
     isSystemColumn: false
     pgAttributeNum: 1
-    tableId: 108
+    tableId: 109
   Status: PUBLIC
 - Column:
     columnId: 2
@@ -1037,7 +1062,7 @@ ElementState:
     isInaccessible: false
     isSystemColumn: false
     pgAttributeNum: 2
-    tableId: 108
+    tableId: 109
   Status: PUBLIC
 - Column:
     columnId: 4.294967294e+09
@@ -1047,7 +1072,7 @@ ElementState:
     isInaccessible: false
     isSystemColumn: true
     pgAttributeNum: 4.294967294e+09
-    tableId: 108
+    tableId: 109
   Status: PUBLIC
 - Column:
     columnId: 4.294967295e+09
@@ -1057,7 +1082,7 @@ ElementState:
     isInaccessible: false
     isSystemColumn: true
     pgAttributeNum: 4.294967295e+09
-    tableId: 108
+    tableId: 109
   Status: PUBLIC
 - PrimaryIndex:
     constraintId: 1
@@ -1070,49 +1095,50 @@ ElementState:
     isUnique: true
     sharding: null
     sourceIndexId: 0
-    tableId: 108
+    tableId: 109
     temporaryIndexId: 0
   Status: PUBLIC
 - TableData:
     databaseId: 100
-    tableId: 108
+    tableId: 109
   Status: PUBLIC
 - ColumnName:
     columnId: 1
     name: v
-    tableId: 108
+    tableId: 109
   Status: PUBLIC
 - ColumnName:
     columnId: 2
     name: rowid
-    tableId: 108
+    tableId: 109
   Status: PUBLIC
 - ColumnName:
     columnId: 4.294967294e+09
     name: tableoid
-    tableId: 108
+    tableId: 109
   Status: PUBLIC
 - ColumnName:
     columnId: 4.294967295e+09
     name: crdb_internal_mvcc_timestamp
-    tableId: 108
+    tableId: 109
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
     columnId: 1
     computeExpr:
-      expr: x'80':::@100106::STRING
+      expr: x'80':::@100107::STRING
       referencedColumnIds: []
+      usesFunctionIds: []
       usesSequenceIds: []
       usesTypeIds:
-      - 106
       - 107
+      - 108
     elementCreationMetadata:
       in231OrLater: true
     familyId: 0
     isNullable: true
     isVirtual: false
-    tableId: 108
+    tableId: 109
     type:
       arrayContents: null
       arrayDimensions: []
@@ -1139,7 +1165,7 @@ ElementState:
     familyId: 0
     isNullable: false
     isVirtual: false
-    tableId: 108
+    tableId: 109
     type:
       arrayContents: null
       arrayDimensions: []
@@ -1166,7 +1192,7 @@ ElementState:
     familyId: 0
     isNullable: true
     isVirtual: false
-    tableId: 108
+    tableId: 109
     type:
       arrayContents: null
       arrayDimensions: []
@@ -1193,7 +1219,7 @@ ElementState:
     familyId: 0
     isNullable: true
     isVirtual: false
-    tableId: 108
+    tableId: 109
     type:
       arrayContents: null
       arrayDimensions: []
@@ -1215,19 +1241,20 @@ ElementState:
     columnId: 2
     expr: unique_rowid()
     referencedColumnIds: []
-    tableId: 108
+    tableId: 109
+    usesFunctionIds: []
     usesSequenceIds: []
     usesTypeIds: []
   Status: PUBLIC
 - ColumnNotNull:
     columnId: 2
     indexIdForValidation: 0
-    tableId: 108
+    tableId: 109
   Status: PUBLIC
 - IndexName:
     indexId: 1
     name: greeter_pkey
-    tableId: 108
+    tableId: 109
   Status: PUBLIC
 - IndexColumn:
     columnId: 1
@@ -1237,7 +1264,7 @@ ElementState:
     invertedKind: 0
     kind: STORED
     ordinalInKind: 0
-    tableId: 108
+    tableId: 109
   Status: PUBLIC
 - IndexColumn:
     columnId: 2
@@ -1247,35 +1274,35 @@ ElementState:
     invertedKind: 0
     kind: KEY
     ordinalInKind: 0
-    tableId: 108
+    tableId: 109
   Status: PUBLIC
 - IndexData:
     indexId: 1
-    tableId: 108
+    tableId: 109
   Status: PUBLIC
 - Namespace:
     databaseId: 100
-    descriptorId: 108
+    descriptorId: 109
     name: greeter
     schemaId: 101
   Status: PUBLIC
 - Owner:
-    descriptorId: 108
+    descriptorId: 109
     owner: root
   Status: PUBLIC
 - UserPrivileges:
-    descriptorId: 108
+    descriptorId: 109
     privileges: "2"
     userName: admin
     withGrantOption: "2"
   Status: PUBLIC
 - UserPrivileges:
-    descriptorId: 108
+    descriptorId: 109
     privileges: "2"
     userName: root
     withGrantOption: "2"
   Status: PUBLIC
 - ObjectParent:
-    objectId: 108
+    objectId: 109
     parentSchemaId: 101
   Status: PUBLIC

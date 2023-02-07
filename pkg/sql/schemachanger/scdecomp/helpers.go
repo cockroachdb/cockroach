@@ -107,10 +107,15 @@ func (w *walkCtx) newExpression(expr string) (*scpb.Expression, error) {
 	if err != nil {
 		return nil, err
 	}
+	referencedFnIDs, err := schemaexpr.GetUdfIDs(e)
+	if err != nil {
+		return nil, err
+	}
 	return &scpb.Expression{
 		Expr:                catpb.Expression(expr),
 		UsesTypeIDs:         typIDs.Ordered(),
 		UsesSequenceIDs:     seqIDs.Ordered(),
+		UsesFunctionIDs:     referencedFnIDs.Ordered(),
 		ReferencedColumnIDs: referencedColumns.Ordered(),
 	}, nil
 }

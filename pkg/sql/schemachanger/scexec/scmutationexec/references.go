@@ -253,6 +253,47 @@ func (i *immediateVisitor) UpdateTableBackReferencesInSequences(
 	return nil
 }
 
+func (i *immediateVisitor) AddTableConstraintBackReferencesInFunctions(
+	ctx context.Context, op scop.AddTableConstraintBackReferencesInFunctions,
+) error {
+	for _, fnID := range op.FunctionIDs {
+		fnDesc, err := i.checkOutFunction(ctx, fnID)
+		if err != nil {
+			return err
+		}
+		if err := fnDesc.AddConstraintReference(op.BackReferencedTableID, op.BackReferencedConstraintID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (i *immediateVisitor) RemoveTableConstraintBackReferencesFromFunctions(
+	ctx context.Context, op scop.RemoveTableConstraintBackReferencesFromFunctions,
+) error {
+	for _, fnID := range op.FunctionIDs {
+		fnDesc, err := i.checkOutFunction(ctx, fnID)
+		if err != nil {
+			return err
+		}
+		fnDesc.RemoveConstraintReference(op.BackReferencedTableID, op.BackReferencedConstraintID)
+	}
+	return nil
+}
+
+func (i *immediateVisitor) RemoveAllTableBackReferencesFromFunctions(
+	ctx context.Context, op scop.RemoveAllTableBackReferencesFromFunctions,
+) error {
+	for _, fnID := range op.FunctionIDs {
+		fnDesc, err := i.checkOutFunction(ctx, fnID)
+		if err != nil {
+			return err
+		}
+		fnDesc.RemoveReference(op.BackReferencedTableID)
+	}
+	return nil
+}
+
 // Look through `seqID`'s dependedOnBy slice, find the back-reference to `tblID`,
 // and update it to either
 //   - upsert `colID` to ColumnIDs field of that back-reference, if `forwardRefs` contains `seqID`; or

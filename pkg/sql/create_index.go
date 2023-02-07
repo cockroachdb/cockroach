@@ -504,7 +504,7 @@ func replaceExpressionElemsWithVirtualCols(
 				desc,
 				colDef,
 				tn,
-				"index element",
+				tree.ExpressionIndexElementExpr,
 				semaCtx,
 			)
 			if err != nil {

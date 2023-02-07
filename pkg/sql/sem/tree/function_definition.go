@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -212,6 +213,15 @@ func (fd *FunctionDefinition) String() string { return AsString(fd) }
 
 // Format implements the NodeFormatter interface.
 func (fd *ResolvedFunctionDefinition) Format(ctx *FmtCtx) {
+	// This is necessary when deserializing function expressions for SHOW CREATE
+	// statements. When deserializing a function expression with function OID
+	// references, it's guaranteed that there'll be always one overload resolved.
+	// There is no need to show prefix for builtin functions since we don't
+	// serialize them.
+	if len(fd.Overloads) == 1 && catid.IsOIDUserDefined(fd.Overloads[0].Oid) {
+		ctx.WriteString(fd.Overloads[0].Schema)
+		ctx.WriteString(".")
+	}
 	ctx.WriteString(fd.Name)
 }
 

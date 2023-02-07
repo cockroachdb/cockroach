@@ -182,6 +182,7 @@ ElementState:
     sourceIndexId: 0
     tableId: 108
     temporaryIndexId: 0
+    usesFunctionIds: []
     usesSequenceIds: []
     usesTypeIds: []
   Status: PUBLIC
@@ -193,6 +194,7 @@ ElementState:
     predicate:
       expr: x'80':::@100104::STRING = 'hi':::STRING
       referencedColumnIds: []
+      usesFunctionIds: []
       usesSequenceIds: []
       usesTypeIds:
       - 104
@@ -211,6 +213,7 @@ ElementState:
     - 3
     - 5
     tableId: 108
+    usesFunctionIds: []
     usesSequenceIds: []
     usesTypeIds: []
   Status: PUBLIC
@@ -261,6 +264,7 @@ ElementState:
     computeExpr:
       expr: x'80':::@100104
       referencedColumnIds: []
+      usesFunctionIds: []
       usesSequenceIds: []
       usesTypeIds:
       - 104
@@ -342,6 +346,7 @@ ElementState:
     computeExpr:
       expr: x'80':::@100106
       referencedColumnIds: []
+      usesFunctionIds: []
       usesSequenceIds: []
       usesTypeIds:
       - 106
@@ -842,6 +847,7 @@ ElementState:
     sourceIndexId: 0
     tableId: 111
     temporaryIndexId: 0
+    usesFunctionIds: []
     usesSequenceIds: []
     usesTypeIds: []
   Status: PUBLIC
@@ -855,6 +861,7 @@ ElementState:
     referencedColumnIds:
     - 2
     tableId: 111
+    usesFunctionIds: []
     usesSequenceIds: []
     usesTypeIds: []
   Status: PUBLIC
@@ -1052,6 +1059,7 @@ ElementState:
     computeExpr:
       expr: (3:::INT8, 'foo':::STRING)
       referencedColumnIds: []
+      usesFunctionIds: []
       usesSequenceIds: []
       usesTypeIds: []
     elementCreationMetadata:
@@ -1117,6 +1125,7 @@ ElementState:
     computeExpr:
       expr: (4:::INT8, 'foo':::STRING)
       referencedColumnIds: []
+      usesFunctionIds: []
       usesSequenceIds: []
       usesTypeIds: []
     elementCreationMetadata:
@@ -1290,6 +1299,7 @@ ElementState:
       expr: (c).a
       referencedColumnIds:
       - 2
+      usesFunctionIds: []
       usesSequenceIds: []
       usesTypeIds: []
     elementCreationMetadata:

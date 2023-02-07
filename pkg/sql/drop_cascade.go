@@ -266,7 +266,7 @@ func (d *dropCascadeState) canDropType(
 	if len(referencedButNotDropping) == 0 {
 		return nil
 	}
-	dependentNames, err := p.getFullyQualifiedTableNamesFromIDs(ctx, referencedButNotDropping)
+	dependentNames, err := p.getFullyQualifiedNamesFromIDs(ctx, referencedButNotDropping)
 	if err != nil {
 		return errors.Wrapf(err, "type %q has dependent objects", typ.Name)
 	}

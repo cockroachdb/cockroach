@@ -28,7 +28,7 @@ subtest end
 
 subtest ttl_expiration_expression_must_be_timestamptz
 
-statement error expected ttl_expiration_expression expression to have type timestamptz, but 'text' has type string
+statement error expected TTL EXPIRATION EXPRESSION expression to have type timestamptz, but 'text' has type string
 CREATE TABLE tbl (id INT PRIMARY KEY, text TEXT) WITH (ttl_expiration_expression = 'text')
 
 subtest end
@@ -674,7 +674,7 @@ CREATE TABLE tbl_alter_table_ttl_expiration_expression (
   FAMILY (id, text, expire_at)
 )
 
-statement error expected ttl_expiration_expression expression to have type timestamptz, but 'text' has type string
+statement error expected TTL EXPIRATION EXPRESSION expression to have type timestamptz, but 'text' has type string
 ALTER TABLE tbl_alter_table_ttl_expiration_expression SET (ttl_expiration_expression = 'text')
 
 statement ok

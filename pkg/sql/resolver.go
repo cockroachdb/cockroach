@@ -562,9 +562,9 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 	return descs, nil
 }
 
-// getFullyQualifiedTableNamesFromIDs resolves a list of table IDs to their
+// getFullyQualifiedNamesFromIDs resolves a list of table IDs to their
 // fully qualified names.
-func (p *planner) getFullyQualifiedTableNamesFromIDs(
+func (p *planner) getFullyQualifiedNamesFromIDs(
 	ctx context.Context, ids []descpb.ID,
 ) (fullyQualifiedNames []string, _ error) {
 	for _, id := range ids {
