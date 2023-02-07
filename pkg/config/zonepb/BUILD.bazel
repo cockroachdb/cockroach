@@ -13,11 +13,11 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/config/zonepb",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/base",
         "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/roachpb",
         "//pkg/sql/sem/tree",
+        "//pkg/util/envutil",
         "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_gogo_protobuf//proto",

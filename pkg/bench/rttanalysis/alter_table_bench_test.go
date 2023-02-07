@@ -207,7 +207,7 @@ func init() {
 			Name:  "alter table configure zone ranges",
 			Setup: `CREATE TABLE alter_table(a INT);`,
 			Stmt: "ALTER TABLE alter_table CONFIGURE ZONE USING " +
-				"range_min_bytes = 0, range_max_bytes = 90000",
+				"range_min_bytes = 0, range_max_bytes = 500000000",
 		},
 	})
 }

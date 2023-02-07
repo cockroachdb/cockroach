@@ -123,14 +123,14 @@ statement ok
 ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING gc.ttlseconds = 5
 
 statement ok
-ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING range_min_bytes = 1000, range_max_bytes = 100000
+ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING range_min_bytes = 1000, range_max_bytes = 100000000
 
 query TT
 SHOW ZONE CONFIGURATION FOR DATABASE "mr-zone-configs"
 ----
 DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING
                             range_min_bytes = 1000,
-                            range_max_bytes = 100000,
+                            range_max_bytes = 100000000,
                             gc.ttlseconds = 5,
                             num_replicas = 5,
                             num_voters = 3,
@@ -149,7 +149,7 @@ SHOW ZONE CONFIGURATION FOR DATABASE "mr-zone-configs"
 ----
 DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING
                             range_min_bytes = 1000,
-                            range_max_bytes = 100000,
+                            range_max_bytes = 100000000,
                             gc.ttlseconds = 5,
                             num_replicas = 5,
                             num_voters = 3,
@@ -170,7 +170,7 @@ SHOW ZONE CONFIGURATION FOR DATABASE "mr-zone-configs"
 ----
 DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING
                             range_min_bytes = 1000,
-                            range_max_bytes = 100000,
+                            range_max_bytes = 100000000,
                             gc.ttlseconds = 5,
                             num_replicas = 5,
                             num_voters = 5,
@@ -243,7 +243,7 @@ SHOW ZONE CONFIGURATION FOR DATABASE "mr-zone-configs"
 ----
 DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING
                             range_min_bytes = 1000,
-                            range_max_bytes = 100000,
+                            range_max_bytes = 100000000,
                             gc.ttlseconds = 5,
                             num_replicas = 5,
                             num_voters = 3,
@@ -302,7 +302,7 @@ SHOW ZONE CONFIGURATION FOR DATABASE "mr-zone-configs"
 ----
 DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING
                             range_min_bytes = 1000,
-                            range_max_bytes = 100000,
+                            range_max_bytes = 100000000,
                             gc.ttlseconds = 100000,
                             num_replicas = 4,
                             num_voters = 3,
@@ -323,7 +323,7 @@ SHOW ZONE CONFIGURATION FOR DATABASE "mr-zone-configs"
 ----
 DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING
                             range_min_bytes = 1000,
-                            range_max_bytes = 100000,
+                            range_max_bytes = 100000000,
                             gc.ttlseconds = 100000,
                             num_replicas = 3,
                             num_voters = 3,
@@ -344,7 +344,7 @@ SHOW ZONE CONFIGURATION FOR DATABASE "mr-zone-configs"
 ----
 DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING
                             range_min_bytes = 1000,
-                            range_max_bytes = 100000,
+                            range_max_bytes = 100000000,
                             gc.ttlseconds = 100000,
                             num_replicas = 3,
                             num_voters = 3,
@@ -365,7 +365,7 @@ SHOW ZONE CONFIGURATION FOR DATABASE "mr-zone-configs"
 ----
 DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING
                             range_min_bytes = 1000,
-                            range_max_bytes = 100000,
+                            range_max_bytes = 100000000,
                             gc.ttlseconds = 100000,
                             num_replicas = 3,
                             constraints = '[]',
@@ -443,7 +443,7 @@ SHOW ZONE CONFIGURATION FOR TABLE regional_by_row
 ----
 TABLE regional_by_row  ALTER TABLE regional_by_row CONFIGURE ZONE USING
                        range_min_bytes = 1000,
-                       range_max_bytes = 100000,
+                       range_max_bytes = 100000000,
                        gc.ttlseconds = 10,
                        num_replicas = 10,
                        num_voters = 3,
@@ -504,7 +504,7 @@ SHOW ZONE CONFIGURATION FOR INDEX regional_by_row@regional_by_row_pkey
 ----
 TABLE regional_by_row  ALTER TABLE regional_by_row CONFIGURE ZONE USING
                        range_min_bytes = 1000,
-                       range_max_bytes = 100000,
+                       range_max_bytes = 100000000,
                        gc.ttlseconds = 10,
                        num_replicas = 5,
                        num_voters = 3,
@@ -517,7 +517,7 @@ SHOW ZONE CONFIGURATION FOR INDEX regional_by_row@regional_by_row_i_idx
 ----
 TABLE regional_by_row  ALTER TABLE regional_by_row CONFIGURE ZONE USING
                        range_min_bytes = 1000,
-                       range_max_bytes = 100000,
+                       range_max_bytes = 100000000,
                        gc.ttlseconds = 10,
                        num_replicas = 5,
                        num_voters = 3,
@@ -530,7 +530,7 @@ SHOW ZONE CONFIGURATION FOR TABLE regional_by_row
 ----
 TABLE regional_by_row  ALTER TABLE regional_by_row CONFIGURE ZONE USING
                        range_min_bytes = 1000,
-                       range_max_bytes = 100000,
+                       range_max_bytes = 100000000,
                        gc.ttlseconds = 10,
                        num_replicas = 5,
                        num_voters = 3,
@@ -598,7 +598,7 @@ SHOW ZONE CONFIGURATION FOR TABLE regional_by_row
 ----
 TABLE regional_by_row  ALTER TABLE regional_by_row CONFIGURE ZONE USING
                        range_min_bytes = 1000,
-                       range_max_bytes = 100000,
+                       range_max_bytes = 100000000,
                        gc.ttlseconds = 100000,
                        global_reads = false,
                        num_replicas = 5,
@@ -617,7 +617,7 @@ SHOW ZONE CONFIGURATION FOR TABLE regional_by_row
 ----
 TABLE regional_by_row  ALTER TABLE regional_by_row CONFIGURE ZONE USING
                        range_min_bytes = 1000,
-                       range_max_bytes = 100000,
+                       range_max_bytes = 100000000,
                        gc.ttlseconds = 100000,
                        global_reads = true,
                        num_replicas = 5,
@@ -667,7 +667,7 @@ SHOW ZONE CONFIGURATION FOR INDEX regional_by_row_as@regional_by_row_as_pkey
 ----
 INDEX regional_by_row_as@regional_by_row_as_pkey  ALTER INDEX regional_by_row_as@regional_by_row_as_pkey CONFIGURE ZONE USING
                                   range_min_bytes = 1000,
-                                  range_max_bytes = 100000,
+                                  range_max_bytes = 100000000,
                                   gc.ttlseconds = 100000,
                                   num_replicas = 10,
                                   num_voters = 3,
@@ -688,7 +688,7 @@ SHOW ZONE CONFIGURATION FOR INDEX regional_by_row_as@regional_by_row_as_pkey
 ----
 DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING
                             range_min_bytes = 1000,
-                            range_max_bytes = 100000,
+                            range_max_bytes = 100000000,
                             gc.ttlseconds = 100000,
                             num_replicas = 5,
                             num_voters = 3,
@@ -737,7 +737,7 @@ SHOW ZONE CONFIGURATION FOR DATABASE "mr-zone-configs"
 ----
 DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING
                             range_min_bytes = 1000,
-                            range_max_bytes = 100000,
+                            range_max_bytes = 100000000,
                             gc.ttlseconds = 100000,
                             num_replicas = 5,
                             num_voters = 3,

@@ -46,8 +46,8 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 	// range size parameters. We want something not too tiny but also not too big
 	// that it takes a while to load.
 	const (
-		rowSize  = 16 << 10  // 16 KiB
-		dataSize = 512 << 10 // 512 KiB
+		rowSize  = 1 << 20   // 1 MiB
+		dataSize = 512 << 20 // 512 MiB
 		numRows  = dataSize / rowSize
 	)
 
