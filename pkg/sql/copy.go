@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -190,6 +191,15 @@ func newCopyMachine(
 
 	if n.Options.Header && c.format != tree.CopyFormatCSV {
 		return nil, pgerror.Newf(pgcode.FeatureNotSupported, "HEADER only supported with CSV format")
+	}
+
+	if n.Options.Quote != nil {
+		if c.format != tree.CopyFormatCSV {
+			return nil, pgerror.Newf(pgcode.FeatureNotSupported, "QUOTE only supported with CSV format")
+		}
+		if n.Options.Quote.RawString() != `"` {
+			return nil, unimplemented.NewWithIssuef(85574, `QUOTE value %s unsupported`, n.Options.Quote.RawString())
+		}
 	}
 
 	exprEval := c.p.ExprEvaluator("COPY")
