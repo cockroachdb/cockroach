@@ -3,15 +3,18 @@ load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
+load("//build:STRINGER.bzl", "stringer")
 
 go_library(
     name = "config",
     srcs = [
+        "field.go",
         "keys.go",
         "provider.go",
         "system.go",
         "system_mask.go",
         "testutil.go",
+        ":field-stringer",  # keep
     ],
     embed = [":config_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/config",
@@ -26,6 +29,7 @@ go_library(
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 
@@ -89,6 +93,13 @@ disallowed_imports_test(
         "//pkg/sql/catalog/dbdesc",
         "//pkg/sql/catalog/typedesc",
     ],
+)
+
+stringer(
+    name = "field-stringer",
+    src = "field.go",
+    additional_args = ["--linecomment"],
+    typ = "Field",
 )
 
 get_x_data(name = "get_x_data")
