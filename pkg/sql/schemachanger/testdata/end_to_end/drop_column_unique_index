@@ -370,7 +370,7 @@ begin transaction #9
 validate forward indexes [6] in table #106
 commit transaction #9
 begin transaction #10
-## PostCommitNonRevertiblePhase stage 1 of 3 with 8 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 3 with 11 MutationType ops
 upsert descriptor #106
   ...
            statement: ALTER TABLE t.test DROP COLUMN pi
@@ -472,11 +472,11 @@ upsert descriptor #106
   -  version: "21"
   +  version: "22"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 3 with 2 MutationType ops pending"
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 3 with 6 MutationType ops pending"
 set schema change job #1 to non-cancellable
 commit transaction #10
 begin transaction #11
-## PostCommitNonRevertiblePhase stage 2 of 3 with 4 MutationType ops
+## PostCommitNonRevertiblePhase stage 2 of 3 with 8 MutationType ops
 upsert descriptor #106
   ...
      - direction: DROP

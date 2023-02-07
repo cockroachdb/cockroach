@@ -43,20 +43,20 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
         │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
         │   │   │ PUBLIC → ABSENT
         │   │   │
-        │   │   └── • skip PUBLIC → ABSENT operations
-        │   │         rule: "skip index-column removal ops on index removal"
+        │   │   └── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
+        │   │         rule: "index drop mutation visible before cleaning up index columns"
         │   │
         │   ├── • IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
         │   │   │ PUBLIC → ABSENT
         │   │   │
-        │   │   └── • skip PUBLIC → ABSENT operations
-        │   │         rule: "skip index-column removal ops on index removal"
+        │   │   └── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
+        │   │         rule: "index drop mutation visible before cleaning up index columns"
         │   │
         │   ├── • IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}
         │   │   │ PUBLIC → ABSENT
         │   │   │
-        │   │   └── • skip PUBLIC → ABSENT operations
-        │   │         rule: "skip index-column removal ops on index removal"
+        │   │   └── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
+        │   │         rule: "index drop mutation visible before cleaning up index columns"
         │   │
         │   ├── • IndexData:{DescID: 104, IndexID: 2}
         │   │   │ PUBLIC → ABSENT
@@ -94,26 +94,60 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
         │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
         │   │   │ PUBLIC → ABSENT
         │   │   │
-        │   │   └── • skip PUBLIC → ABSENT operations
-        │   │         rule: "skip index-column removal ops on index removal"
+        │   │   └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}
+        │   │         rule: "index drop mutation visible before cleaning up index columns"
         │   │
         │   ├── • IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
         │   │   │ PUBLIC → ABSENT
         │   │   │
-        │   │   └── • skip PUBLIC → ABSENT operations
-        │   │         rule: "skip index-column removal ops on index removal"
+        │   │   └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}
+        │   │         rule: "index drop mutation visible before cleaning up index columns"
         │   │
         │   └── • IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}
         │       │ PUBLIC → ABSENT
         │       │
-        │       └── • skip PUBLIC → ABSENT operations
-        │             rule: "skip index-column removal ops on index removal"
+        │       └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}
+        │             rule: "index drop mutation visible before cleaning up index columns"
         │
-        └── • 6 Mutation operations
+        └── • 12 Mutation operations
+            │
+            ├── • RemoveColumnFromIndex
+            │     ColumnID: 1
+            │     IndexID: 2
+            │     TableID: 104
+            │
+            ├── • RemoveColumnFromIndex
+            │     ColumnID: 2
+            │     IndexID: 2
+            │     Ordinal: 1
+            │     TableID: 104
+            │
+            ├── • RemoveColumnFromIndex
+            │     ColumnID: 3
+            │     IndexID: 2
+            │     Kind: 2
+            │     TableID: 104
             │
             ├── • SetIndexName
             │     IndexID: 2
             │     Name: crdb_internal_index_2_name_placeholder
+            │     TableID: 104
+            │
+            ├── • RemoveColumnFromIndex
+            │     ColumnID: 1
+            │     IndexID: 3
+            │     TableID: 104
+            │
+            ├── • RemoveColumnFromIndex
+            │     ColumnID: 2
+            │     IndexID: 3
+            │     Ordinal: 1
+            │     TableID: 104
+            │
+            ├── • RemoveColumnFromIndex
+            │     ColumnID: 3
+            │     IndexID: 3
+            │     Kind: 2
             │     TableID: 104
             │
             ├── • MakeIndexAbsent

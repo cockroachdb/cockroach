@@ -24,7 +24,15 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› A
            │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 4}
            │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 5}
            │    └── PUBLIC        → ABSENT IndexName:{DescID: 104, Name: t_i_key, IndexID: 4}
-           └── 9 Mutation operations
+           └── 17 Mutation operations
+                ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":2,"TableID":104}
+                ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":2,"Kind":2,"TableID":104}
+                ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":3,"TableID":104}
+                ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":3,"Kind":2,"TableID":104}
+                ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":4,"TableID":104}
+                ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":5,"TableID":104}
+                ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":4,"Kind":1,"TableID":104}
+                ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":5,"Kind":1,"TableID":104}
                 ├── SetIndexName {"IndexID":4,"Name":"crdb_internal_in...","TableID":104}
                 ├── MakeIndexAbsent {"IndexID":2,"TableID":104}
                 ├── CreateGCJobForIndex {"IndexID":2,"TableID":104}

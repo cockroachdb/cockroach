@@ -55,22 +55,16 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(b);
 │       │   │         rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: ABSENT->DELETE_ONLY"
 │       │   │
 │       │   ├── • IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
-│       │   │   │ ABSENT → TRANSIENT_ABSENT
+│       │   │   │ ABSENT → PUBLIC
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
-│       │   │   │     rule: "temp index existence precedes index dependents"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → TRANSIENT_ABSENT operations
-│       │   │         rule: "skip index-column removal ops on index removal"
+│       │   │   └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+│       │   │         rule: "temp index existence precedes index dependents"
 │       │   │
 │       │   └── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
-│       │       │ ABSENT → TRANSIENT_ABSENT
+│       │       │ ABSENT → PUBLIC
 │       │       │
-│       │       ├── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
-│       │       │     rule: "temp index existence precedes index dependents"
-│       │       │
-│       │       └── • skip PUBLIC → TRANSIENT_ABSENT operations
-│       │             rule: "skip index-column removal ops on index removal"
+│       │       └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+│       │             rule: "temp index existence precedes index dependents"
 │       │
 │       └── • 7 Mutation operations
 │           │
@@ -168,10 +162,10 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(b);
 │   │   │   │     DELETE_ONLY → ABSENT
 │   │   │   │
 │   │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
-│   │   │   │     TRANSIENT_ABSENT → ABSENT
+│   │   │   │     PUBLIC → ABSENT
 │   │   │   │
 │   │   │   └── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
-│   │   │         TRANSIENT_ABSENT → ABSENT
+│   │   │         PUBLIC → ABSENT
 │   │   │
 │   │   └── • 1 Mutation operation
 │   │       │
@@ -640,16 +634,16 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(b);
     │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
     │   │   │   │ PUBLIC → TRANSIENT_ABSENT
     │   │   │   │
-    │   │   │   └── • skip PUBLIC → TRANSIENT_ABSENT operations
-    │   │   │         rule: "skip index-column removal ops on index removal"
+    │   │   │   └── • Precedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+    │   │   │         rule: "index drop mutation visible before cleaning up index columns"
     │   │   │
     │   │   └── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
     │   │       │ PUBLIC → TRANSIENT_ABSENT
     │   │       │
-    │   │       └── • skip PUBLIC → TRANSIENT_ABSENT operations
-    │   │             rule: "skip index-column removal ops on index removal"
+    │   │       └── • Precedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+    │   │             rule: "index drop mutation visible before cleaning up index columns"
     │   │
-    │   └── • 7 Mutation operations
+    │   └── • 9 Mutation operations
     │       │
     │       ├── • MarkDescriptorAsPublic
     │       │     DescriptorID: 105
@@ -663,6 +657,17 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(b);
     │       │
     │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 3
+    │       │     TableID: 104
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 2
+    │       │     IndexID: 3
+    │       │     TableID: 104
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 1
+    │       │     IndexID: 3
+    │       │     Kind: 1
     │       │     TableID: 104
     │       │
     │       ├── • SetJobStateOnDescriptor

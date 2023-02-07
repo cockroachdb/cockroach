@@ -315,7 +315,7 @@ begin transaction #9
 validate forward indexes [2] in table #104
 commit transaction #9
 begin transaction #10
-## PostCommitNonRevertiblePhase stage 1 of 2 with 5 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 2 with 8 MutationType ops
 upsert descriptor #104
   ...
              BY LIST (id) (PARTITION p1 VALUES IN (1))

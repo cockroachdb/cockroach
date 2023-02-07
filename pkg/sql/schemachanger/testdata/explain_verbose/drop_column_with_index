@@ -39,15 +39,12 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j;
 │       │   │         rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: ABSENT->DELETE_ONLY"
 │       │   │
 │       │   └── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
-│       │       │ ABSENT → TRANSIENT_ABSENT
+│       │       │ ABSENT → PUBLIC
 │       │       │
-│       │       ├── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
-│       │       │     rule: "temp index existence precedes index dependents"
-│       │       │
-│       │       └── • skip PUBLIC → TRANSIENT_ABSENT operations
-│       │             rule: "skip index-column removal ops on index removal"
+│       │       └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
+│       │             rule: "temp index existence precedes index dependents"
 │       │
-│       ├── • 5 elements transitioning toward ABSENT
+│       ├── • 3 elements transitioning toward ABSENT
 │       │   │
 │       │   ├── • Column:{DescID: 104, ColumnID: 2}
 │       │   │   │ PUBLIC → WRITE_ONLY
@@ -63,27 +60,6 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j;
 │       │   │   │
 │       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 2}
 │       │   │         rule: "column no longer public before dependents"
-│       │   │
-│       │   ├── • IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
-│       │   │   │ PUBLIC → ABSENT
-│       │   │   │
-│       │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 2}
-│       │   │   │     rule: "column no longer public before dependents"
-│       │   │   │
-│       │   │   ├── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
-│       │   │   │     rule: "index no longer public before dependents"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip index-column removal ops on index removal"
-│       │   │
-│       │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
-│       │   │   │ PUBLIC → ABSENT
-│       │   │   │
-│       │   │   ├── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
-│       │   │   │     rule: "index no longer public before dependents"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip index-column removal ops on index removal"
 │       │   │
 │       │   └── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
 │       │       │ PUBLIC → VALIDATED
@@ -154,20 +130,14 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j;
 │   │   │   │     DELETE_ONLY → ABSENT
 │   │   │   │
 │   │   │   └── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
-│   │   │         TRANSIENT_ABSENT → ABSENT
+│   │   │         PUBLIC → ABSENT
 │   │   │
-│   │   ├── • 5 elements transitioning toward ABSENT
+│   │   ├── • 3 elements transitioning toward ABSENT
 │   │   │   │
 │   │   │   ├── • Column:{DescID: 104, ColumnID: 2}
 │   │   │   │     WRITE_ONLY → PUBLIC
 │   │   │   │
 │   │   │   ├── • ColumnName:{DescID: 104, Name: j, ColumnID: 2}
-│   │   │   │     ABSENT → PUBLIC
-│   │   │   │
-│   │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
-│   │   │   │     ABSENT → PUBLIC
-│   │   │   │
-│   │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
 │   │   │   │     ABSENT → PUBLIC
 │   │   │   │
 │   │   │   └── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
@@ -501,37 +471,16 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j;
     │   │   └── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
     │   │       │ PUBLIC → TRANSIENT_ABSENT
     │   │       │
-    │   │       └── • skip PUBLIC → TRANSIENT_ABSENT operations
-    │   │             rule: "skip index-column removal ops on index removal"
+    │   │       └── • Precedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
+    │   │             rule: "index drop mutation visible before cleaning up index columns"
     │   │
-    │   ├── • 9 elements transitioning toward ABSENT
+    │   ├── • 7 elements transitioning toward ABSENT
     │   │   │
     │   │   ├── • Column:{DescID: 104, ColumnID: 2}
     │   │   │   │ WRITE_ONLY → DELETE_ONLY
     │   │   │   │
     │   │   │   └── • PreviousStagePrecedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 2}
     │   │   │         rule: "Column transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY"
-    │   │   │
-    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}
-    │   │   │   │ PUBLIC → ABSENT
-    │   │   │   │
-    │   │   │   ├── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
-    │   │   │   │     rule: "index no longer public before dependents"
-    │   │   │   │
-    │   │   │   └── • skip PUBLIC → ABSENT operations
-    │   │   │         rule: "skip index-column removal ops on index removal"
-    │   │   │
-    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 1}
-    │   │   │   │ PUBLIC → ABSENT
-    │   │   │   │
-    │   │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 2}
-    │   │   │   │     rule: "column no longer public before dependents"
-    │   │   │   │
-    │   │   │   ├── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
-    │   │   │   │     rule: "index no longer public before dependents"
-    │   │   │   │
-    │   │   │   └── • skip PUBLIC → ABSENT operations
-    │   │   │         rule: "skip index-column removal ops on index removal"
     │   │   │
     │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
     │   │   │   │ PUBLIC → VALIDATED
@@ -543,7 +492,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j;
     │   │   │   │ PUBLIC → ABSENT
     │   │   │   │
     │   │   │   └── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
-    │   │   │         rule: "index no longer public before dependents"
+    │   │   │         rule: "index no longer public before dependents, excluding columns"
     │   │   │
     │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
     │   │   │   │ PUBLIC → ABSENT
@@ -551,20 +500,14 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j;
     │   │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 2}
     │   │   │   │     rule: "column no longer public before dependents"
     │   │   │   │
-    │   │   │   ├── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
-    │   │   │   │     rule: "index no longer public before dependents"
-    │   │   │   │
-    │   │   │   └── • skip PUBLIC → ABSENT operations
-    │   │   │         rule: "skip index-column removal ops on index removal"
+    │   │   │   └── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+    │   │   │         rule: "index drop mutation visible before cleaning up index columns"
     │   │   │
     │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
     │   │   │   │ PUBLIC → ABSENT
     │   │   │   │
-    │   │   │   ├── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
-    │   │   │   │     rule: "index no longer public before dependents"
-    │   │   │   │
-    │   │   │   └── • skip PUBLIC → ABSENT operations
-    │   │   │         rule: "skip index-column removal ops on index removal"
+    │   │   │   └── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+    │   │   │         rule: "index drop mutation visible before cleaning up index columns"
     │   │   │
     │   │   ├── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
     │   │   │   │ VALIDATED → DELETE_ONLY
@@ -579,9 +522,9 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j;
     │   │       │     rule: "index no longer public before index name"
     │   │       │
     │   │       └── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
-    │   │             rule: "index no longer public before dependents"
+    │   │             rule: "index no longer public before dependents, excluding columns"
     │   │
-    │   └── • 10 Mutation operations
+    │   └── • 13 Mutation operations
     │       │
     │       ├── • MakeWriteOnlyColumnDeleteOnly
     │       │     ColumnID: 2
@@ -605,6 +548,11 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j;
     │       │     IndexID: 4
     │       │     TableID: 104
     │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 1
+    │       │     IndexID: 4
+    │       │     TableID: 104
+    │       │
     │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 2
     │       │     TableID: 104
@@ -618,13 +566,24 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j;
     │       │     IndexID: 3
     │       │     TableID: 104
     │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 2
+    │       │     IndexID: 2
+    │       │     TableID: 104
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 1
+    │       │     IndexID: 2
+    │       │     Kind: 1
+    │       │     TableID: 104
+    │       │
     │       ├── • SetJobStateOnDescriptor
     │       │     DescriptorID: 104
     │       │
     │       └── • UpdateSchemaChangerJob
     │             IsNonCancelable: true
     │             JobID: 1
-    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 3 with 3 MutationType ops pending
+    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 3 with 5 MutationType ops pending
     │
     ├── • Stage 2 of 3 in PostCommitNonRevertiblePhase
     │   │
@@ -639,7 +598,22 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j;
     │   │       └── • Precedence dependency from TRANSIENT_ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
     │   │             rule: "dependents removed before index"
     │   │
-    │   ├── • 2 elements transitioning toward ABSENT
+    │   ├── • 4 elements transitioning toward ABSENT
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
+    │   │   │         rule: "index drop mutation visible before cleaning up index columns"
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 1}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 2}
+    │   │   │   │     rule: "column no longer public before dependents"
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
+    │   │   │         rule: "index drop mutation visible before cleaning up index columns"
     │   │   │
     │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
     │   │   │   │ VALIDATED → DELETE_ONLY
@@ -662,7 +636,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j;
     │   │       └── • Precedence dependency from ABSENT IndexName:{DescID: 104, Name: t_j_idx, IndexID: 2}
     │   │             rule: "dependents removed before index"
     │   │
-    │   └── • 5 Mutation operations
+    │   └── • 7 Mutation operations
     │       │
     │       ├── • MakeIndexAbsent
     │       │     IndexID: 2
@@ -674,6 +648,17 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j;
     │       │
     │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 1
+    │       │     TableID: 104
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 1
+    │       │     IndexID: 1
+    │       │     TableID: 104
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 2
+    │       │     IndexID: 1
+    │       │     Kind: 2
     │       │     TableID: 104
     │       │
     │       ├── • SetJobStateOnDescriptor

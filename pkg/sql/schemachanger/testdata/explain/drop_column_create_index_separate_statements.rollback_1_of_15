@@ -23,9 +23,11 @@ Schema change plan for rolling back CREATE UNIQUE INDEX ‹idx› ON ‹defaultd
            │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 4}
            │    ├── BACKFILL_ONLY → ABSENT PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
            │    └── DELETE_ONLY   → ABSENT TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
-           └── 13 Mutation operations
+           └── 17 Mutation operations
                 ├── MakeValidatedSecondaryIndexPublic {"IndexID":2,"TableID":104}
                 ├── RefreshStats {"TableID":104}
+                ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":4,"TableID":104}
+                ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":4,"Kind":2,"TableID":104}
                 ├── SetColumnName {"ColumnID":2,"Name":"j","TableID":104}
                 ├── SetColumnName {"ColumnID":4,"Name":"crdb_internal_id...","TableID":104}
                 ├── MakeIndexAbsent {"IndexID":4,"TableID":104}
@@ -33,6 +35,8 @@ Schema change plan for rolling back CREATE UNIQUE INDEX ‹idx› ON ‹defaultd
                 ├── RefreshStats {"TableID":104}
                 ├── MakeWriteOnlyColumnPublic {"ColumnID":4,"TableID":104}
                 ├── RefreshStats {"TableID":104}
+                ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":3,"TableID":104}
+                ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":3,"Kind":2,"TableID":104}
                 ├── MakeIndexAbsent {"IndexID":3,"TableID":104}
                 ├── CreateGCJobForIndex {"IndexID":3,"TableID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":104}

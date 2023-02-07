@@ -21,15 +21,33 @@ import (
 // partitioning, etc. disappear once the index reaches a suitable state.
 func init() {
 
+	// For a column to be removed from an index, the index must be validated,
+	// which will not happen for temporary ones.
 	registerDepRuleForDrop(
-		"index no longer public before dependents",
+		"index no longer public before dependents, excluding columns",
 		scgraph.Precedence,
 		"index", "dependent",
 		scpb.Status_VALIDATED, scpb.Status_ABSENT,
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.TypeFilter(rulesVersionKey, isIndex),
-				to.TypeFilter(rulesVersionKey, isIndexDependent),
+				to.TypeFilter(rulesVersionKey, isIndexDependent, Not(isIndexColumn)),
+				JoinOnIndexID(from, to, "table-id", "index-id"),
+			}
+		},
+	)
+	// For temporary indexes we have to wait till DELETE_ONLY for primary index
+	// swaps, as the temporary index transitions into a drop state. Normally these
+	// get optimized out, so it should be safe to wait longer for all index types.
+	registerDepRuleForDrop(
+		"index drop mutation visible before cleaning up index columns",
+		scgraph.Precedence,
+		"index", "dependent",
+		scpb.Status_DELETE_ONLY, scpb.Status_ABSENT,
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.TypeFilter(rulesVersionKey, isIndex),
+				to.TypeFilter(rulesVersionKey, isIndexColumn),
 				JoinOnIndexID(from, to, "table-id", "index-id"),
 			}
 		},

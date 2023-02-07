@@ -646,7 +646,7 @@ begin transaction #17
 validate forward indexes [4] in table #106
 commit transaction #17
 begin transaction #18
-## PostCommitNonRevertiblePhase stage 1 of 2 with 9 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 2 with 12 MutationType ops
 upsert descriptor #106
   ...
          oid: 20

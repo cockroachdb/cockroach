@@ -310,7 +310,7 @@ begin transaction #9
 validate forward indexes [2] in table #106
 commit transaction #9
 begin transaction #10
-## PostCommitNonRevertiblePhase stage 1 of 2 with 6 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 2 with 8 MutationType ops
 upsert descriptor #106
   ...
            statement: CREATE INDEX idx1 ON t (v) WHERE (v = 'a')

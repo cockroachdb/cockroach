@@ -21,8 +21,12 @@ Schema change plan for rolling back ALTER TABLE ‹db›.public.‹tbl› ADD CO
            │    ├── DELETE_ONLY   → ABSENT TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
            │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}
            │    └── PUBLIC        → ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
-           └── 8 Mutation operations
+           └── 12 Mutation operations
                 ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":106}
+                ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":2,"TableID":106}
+                ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":2,"Kind":2,"TableID":106}
+                ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":3,"TableID":106}
+                ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":3,"Kind":2,"TableID":106}
                 ├── RemoveColumnDefaultExpression {"ColumnID":2,"TableID":106}
                 ├── MakeIndexAbsent {"IndexID":2,"TableID":106}
                 ├── CreateGCJobForIndex {"IndexID":2,"TableID":106}

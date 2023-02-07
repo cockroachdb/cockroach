@@ -648,7 +648,7 @@ begin transaction #9
 validate forward indexes [3] in table #104
 commit transaction #9
 begin transaction #10
-## PostCommitNonRevertiblePhase stage 1 of 3 with 12 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 3 with 16 MutationType ops
 upsert descriptor #104
   ...
            statementTag: ALTER TABLE
@@ -781,11 +781,11 @@ upsert descriptor #104
   -  version: "6"
   +  version: "7"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 3 with 4 MutationType ops pending"
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 3 with 7 MutationType ops pending"
 set schema change job #1 to non-cancellable
 commit transaction #10
 begin transaction #11
-## PostCommitNonRevertiblePhase stage 2 of 3 with 6 MutationType ops
+## PostCommitNonRevertiblePhase stage 2 of 3 with 9 MutationType ops
 upsert descriptor #104
   ...
        mutationId: 1

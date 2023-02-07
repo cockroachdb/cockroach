@@ -84,6 +84,14 @@ func isIndex(e scpb.Element) bool {
 	return false
 }
 
+func isIndexColumn(e scpb.Element) bool {
+	switch e.(type) {
+	case *scpb.IndexColumn:
+		return true
+	}
+	return false
+}
+
 func isColumn(e scpb.Element) bool {
 	_, ok := e.(*scpb.Column)
 	return ok
