@@ -180,6 +180,7 @@ go_library(
         "//pkg/util/encoding",
         "//pkg/util/envutil",
         "//pkg/util/errorutil",
+        "//pkg/util/future",
         "//pkg/util/grpcutil",
         "//pkg/util/grunning",
         "//pkg/util/hlc",

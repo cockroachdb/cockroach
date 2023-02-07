@@ -69,6 +69,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
@@ -2657,27 +2658,27 @@ func (s *Store) Descriptor(ctx context.Context, useCached bool) (*roachpb.StoreD
 	}, nil
 }
 
-// RangeFeed registers a rangefeed over the specified span. It sends updates to
-// the provided stream and returns with an optional error when the rangefeed is
+// RangeFeedPromise registers a rangefeed over the specified span. It sends updates to
+// the provided stream and returns a future with an optional error when the rangefeed is
 // complete.
-func (s *Store) RangeFeed(
+func (s *Store) RangeFeedPromise(
 	args *roachpb.RangeFeedRequest, stream roachpb.RangeFeedEventSink,
-) *roachpb.Error {
+) future.Future[*roachpb.Error] {
 
 	if filter := s.TestingKnobs().TestingRangefeedFilter; filter != nil {
 		if pErr := filter(args, stream); pErr != nil {
-			return pErr
+			return future.MakeCompletedFuture(pErr)
 		}
 	}
 
 	if err := verifyKeys(args.Span.Key, args.Span.EndKey, true); err != nil {
-		return roachpb.NewError(err)
+		return future.MakeCompletedFuture(roachpb.NewError(err))
 	}
 
 	// Get range and add command to the range for execution.
 	repl, err := s.GetReplica(args.RangeID)
 	if err != nil {
-		return roachpb.NewError(err)
+		return future.MakeCompletedFuture(roachpb.NewError(err))
 	}
 	if !repl.IsInitialized() {
 		// (*Store).Send has an optimization for uninitialized replicas to send back
@@ -2685,12 +2686,13 @@ func (s *Store) RangeFeed(
 		// be found. RangeFeeds can always be served from followers and so don't
 		// otherwise return NotLeaseHolderError. For simplicity we also don't return
 		// one here.
-		return roachpb.NewError(roachpb.NewRangeNotFoundError(args.RangeID, s.StoreID()))
+		return future.MakeCompletedFuture(
+			roachpb.NewError(roachpb.NewRangeNotFoundError(args.RangeID, s.StoreID())))
 	}
 
 	tenID, _ := repl.TenantID()
 	pacer := s.cfg.KVAdmissionController.AdmitRangefeedRequest(tenID, args)
-	return repl.RangeFeed(args, stream, pacer)
+	return repl.RangeFeedPromise(args, stream, pacer)
 }
 
 // updateReplicationGauges counts a number of simple replication statistics for

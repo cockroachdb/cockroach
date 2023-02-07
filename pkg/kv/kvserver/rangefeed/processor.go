@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -473,8 +474,7 @@ func (p *Processor) Register(
 	catchUpIterConstructor CatchUpIteratorConstructor,
 	withDiff bool,
 	stream Stream,
-	errC chan<- *roachpb.Error,
-) (bool, *Filter) {
+) (bool, *Filter, future.Future[*roachpb.Error]) {
 	// Synchronize the event channel so that this registration doesn't see any
 	// events that were consumed before this registration was called. Instead,
 	// it should see these events during its catch up scan.
@@ -482,14 +482,14 @@ func (p *Processor) Register(
 
 	r := newRegistration(
 		span.AsRawSpanWithNoLocals(), startTS, catchUpIterConstructor, withDiff,
-		p.Config.EventChanCap, p.Metrics, stream, errC,
+		p.Config.EventChanCap, p.Metrics, stream,
 	)
 	select {
 	case p.regC <- r:
 		// Wait for response.
-		return true, <-p.filterResC
+		return true, <-p.filterResC, r.done
 	case <-p.stoppedC:
-		return false, nil
+		return false, nil, r.done
 	}
 }
 

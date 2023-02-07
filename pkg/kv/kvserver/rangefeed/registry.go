@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -90,7 +91,7 @@ type registration struct {
 
 	// Output.
 	stream Stream
-	errC   chan<- *roachpb.Error
+	done   future.Future[*roachpb.Error]
 
 	// Internal.
 	id   int64
@@ -125,7 +126,6 @@ func newRegistration(
 	bufferSz int,
 	metrics *Metrics,
 	stream Stream,
-	errC chan<- *roachpb.Error,
 ) registration {
 	r := registration{
 		span:                   span,
@@ -134,7 +134,7 @@ func newRegistration(
 		withDiff:               withDiff,
 		metrics:                metrics,
 		stream:                 stream,
-		errC:                   errC,
+		done:                   future.MakePromise[*roachpb.Error](),
 		buf:                    make(chan *sharedEvent, bufferSz),
 	}
 	r.mu.Locker = &syncutil.Mutex{}
@@ -282,7 +282,7 @@ func (r *registration) disconnect(pErr *roachpb.Error) {
 			r.mu.outputLoopCancelFn()
 		}
 		r.mu.disconnected = true
-		r.errC <- pErr
+		r.done.SetValue(pErr)
 	}
 }
 
@@ -498,7 +498,8 @@ func (reg *registry) Disconnect(span roachpb.Span) {
 // DisconnectWithErr disconnects all registrations that overlap the specified
 // span with the provided error.
 func (reg *registry) DisconnectWithErr(span roachpb.Span, pErr *roachpb.Error) {
-	reg.forOverlappingRegs(span, func(_ *registration) (bool, *roachpb.Error) {
+	reg.forOverlappingRegs(span, func(r *registration) (bool, *roachpb.Error) {
+		r.done.SetValue(pErr)
 		return true, pErr
 	})
 }
