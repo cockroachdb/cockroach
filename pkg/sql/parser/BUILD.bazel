@@ -61,6 +61,7 @@ go_test(
     deps = [
         "//pkg/sql/lexbase",
         "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/randgen",
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sem/tree/treebin",
@@ -70,9 +71,11 @@ go_test(
         "//pkg/testutils/sqlutils",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/randutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
     ],
 )
 
