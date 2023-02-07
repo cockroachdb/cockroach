@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -59,95 +60,124 @@ type setZoneConfigNode struct {
 	run setZoneConfigRun
 }
 
+// zoneConfigOption describes a field one can set on a ZoneConfig.
+type zoneConfigOption struct {
+	field        config.Field
+	requiredType *types.T
+	setter       func(*zonepb.ZoneConfig, tree.Datum)
+	checkAllowed func(context.Context, *ExecutorConfig, tree.Datum) error
+}
+
 // supportedZoneConfigOptions indicates how to translate SQL variable
 // assignments in ALTER CONFIGURE ZONE to assignments to the member
 // fields of zonepb.ZoneConfig.
-var supportedZoneConfigOptions = map[tree.Name]struct {
-	requiredType *types.T
-	setter       func(*zonepb.ZoneConfig, tree.Datum)
-	checkAllowed func(context.Context, *ExecutorConfig, tree.Datum) error // optional
-}{
-	"range_min_bytes": {
-		requiredType: types.Int,
-		setter:       func(c *zonepb.ZoneConfig, d tree.Datum) { c.RangeMinBytes = proto.Int64(int64(tree.MustBeDInt(d))) },
-	},
-	"range_max_bytes": {
-		requiredType: types.Int,
-		setter:       func(c *zonepb.ZoneConfig, d tree.Datum) { c.RangeMaxBytes = proto.Int64(int64(tree.MustBeDInt(d))) },
-	},
-	"global_reads": {
-		requiredType: types.Bool,
-		setter:       func(c *zonepb.ZoneConfig, d tree.Datum) { c.GlobalReads = proto.Bool(bool(tree.MustBeDBool(d))) },
-		checkAllowed: func(ctx context.Context, execCfg *ExecutorConfig, d tree.Datum) error {
-			if !tree.MustBeDBool(d) {
-				// Always allow the value to be unset.
-				return nil
-			}
-			return base.CheckEnterpriseEnabled(
-				execCfg.Settings,
-				execCfg.NodeInfo.LogicalClusterID(),
-				"global_reads",
-			)
-		},
-	},
-	"num_replicas": {
-		requiredType: types.Int,
-		setter:       func(c *zonepb.ZoneConfig, d tree.Datum) { c.NumReplicas = proto.Int32(int32(tree.MustBeDInt(d))) },
-	},
-	"num_voters": {
-		requiredType: types.Int,
-		setter:       func(c *zonepb.ZoneConfig, d tree.Datum) { c.NumVoters = proto.Int32(int32(tree.MustBeDInt(d))) },
-	},
-	"gc.ttlseconds": {
-		requiredType: types.Int,
-		setter: func(c *zonepb.ZoneConfig, d tree.Datum) {
-			c.GC = &zonepb.GCPolicy{TTLSeconds: int32(tree.MustBeDInt(d))}
-		},
-	},
-	"constraints": {
-		requiredType: types.String,
-		setter: func(c *zonepb.ZoneConfig, d tree.Datum) {
-			constraintsList := zonepb.ConstraintsList{
-				Constraints: c.Constraints,
-				Inherited:   c.InheritedConstraints,
-			}
-			loadYAML(&constraintsList, string(tree.MustBeDString(d)))
-			c.Constraints = constraintsList.Constraints
-			c.InheritedConstraints = false
-		},
-	},
-	"voter_constraints": {
-		requiredType: types.String,
-		setter: func(c *zonepb.ZoneConfig, d tree.Datum) {
-			voterConstraintsList := zonepb.ConstraintsList{
-				Constraints: c.VoterConstraints,
-				Inherited:   c.InheritedVoterConstraints(),
-			}
-			loadYAML(&voterConstraintsList, string(tree.MustBeDString(d)))
-			c.VoterConstraints = voterConstraintsList.Constraints
-			c.NullVoterConstraintsIsEmpty = true
-		},
-	},
-	"lease_preferences": {
-		requiredType: types.String,
-		setter: func(c *zonepb.ZoneConfig, d tree.Datum) {
-			loadYAML(&c.LeasePreferences, string(tree.MustBeDString(d)))
-			c.InheritedLeasePreferences = false
-		},
-	},
-}
+var supportedZoneConfigOptions map[tree.Name]zoneConfigOption
 
 // zoneOptionKeys contains the keys from suportedZoneConfigOptions in
 // deterministic order. Needed to make the event log output
 // deterministic.
-var zoneOptionKeys = func() []string {
-	l := make([]string, 0, len(supportedZoneConfigOptions))
-	for k := range supportedZoneConfigOptions {
-		l = append(l, string(k))
+var zoneOptionKeys []string
+
+func init() {
+	opts := []zoneConfigOption{
+		{
+			field:        config.RangeMinBytes,
+			requiredType: types.Int,
+			setter:       func(c *zonepb.ZoneConfig, d tree.Datum) { c.RangeMinBytes = proto.Int64(int64(tree.MustBeDInt(d))) },
+		},
+		{
+			field:        config.RangeMaxBytes,
+			requiredType: types.Int,
+			setter:       func(c *zonepb.ZoneConfig, d tree.Datum) { c.RangeMaxBytes = proto.Int64(int64(tree.MustBeDInt(d))) },
+		},
+		{
+			field:        config.GCTTL,
+			requiredType: types.Int,
+			setter: func(c *zonepb.ZoneConfig, d tree.Datum) {
+				c.GC = &zonepb.GCPolicy{TTLSeconds: int32(tree.MustBeDInt(d))}
+			},
+		},
+		{
+			field:        config.GlobalReads,
+			requiredType: types.Bool,
+			setter:       func(c *zonepb.ZoneConfig, d tree.Datum) { c.GlobalReads = proto.Bool(bool(tree.MustBeDBool(d))) },
+			checkAllowed: func(ctx context.Context, execCfg *ExecutorConfig, d tree.Datum) error {
+				if !tree.MustBeDBool(d) {
+					// Always allow the value to be unset.
+					return nil
+				}
+				return base.CheckEnterpriseEnabled(
+					execCfg.Settings,
+					execCfg.NodeInfo.LogicalClusterID(),
+					"global_reads",
+				)
+			},
+		},
+		{
+			field:        config.NumReplicas,
+			requiredType: types.Int,
+			setter:       func(c *zonepb.ZoneConfig, d tree.Datum) { c.NumReplicas = proto.Int32(int32(tree.MustBeDInt(d))) },
+		},
+		{
+			field:        config.NumVoters,
+			requiredType: types.Int,
+			setter:       func(c *zonepb.ZoneConfig, d tree.Datum) { c.NumVoters = proto.Int32(int32(tree.MustBeDInt(d))) },
+		},
+		{
+			field:        config.GCTTL,
+			requiredType: types.Int,
+			setter: func(c *zonepb.ZoneConfig, d tree.Datum) {
+				c.GC = &zonepb.GCPolicy{TTLSeconds: int32(tree.MustBeDInt(d))}
+			},
+		},
+		{
+			field:        config.Constraints,
+			requiredType: types.String,
+			setter: func(c *zonepb.ZoneConfig, d tree.Datum) {
+				constraintsList := zonepb.ConstraintsList{
+					Constraints: c.Constraints,
+					Inherited:   c.InheritedConstraints,
+				}
+				loadYAML(&constraintsList, string(tree.MustBeDString(d)))
+				c.Constraints = constraintsList.Constraints
+				c.InheritedConstraints = false
+			},
+		},
+		{
+			field:        config.VoterConstraints,
+			requiredType: types.String,
+			setter: func(c *zonepb.ZoneConfig, d tree.Datum) {
+				voterConstraintsList := zonepb.ConstraintsList{
+					Constraints: c.VoterConstraints,
+					Inherited:   c.InheritedVoterConstraints(),
+				}
+				loadYAML(&voterConstraintsList, string(tree.MustBeDString(d)))
+				c.VoterConstraints = voterConstraintsList.Constraints
+				c.NullVoterConstraintsIsEmpty = true
+			},
+		},
+		{
+			field:        config.LeasePreferences,
+			requiredType: types.String,
+			setter: func(c *zonepb.ZoneConfig, d tree.Datum) {
+				loadYAML(&c.LeasePreferences, string(tree.MustBeDString(d)))
+				c.InheritedLeasePreferences = false
+			},
+		},
 	}
-	sort.Strings(l)
-	return l
-}()
+	supportedZoneConfigOptions = make(map[tree.Name]zoneConfigOption, len(opts))
+	zoneOptionKeys = make([]string, len(opts))
+	for i, opt := range opts {
+		name := opt.field.String()
+		key := tree.Name(name)
+		if _, exists := supportedZoneConfigOptions[key]; exists {
+			panic(errors.AssertionFailedf("duplicate entry for key %s", name))
+		}
+		supportedZoneConfigOptions[key] = opt
+		zoneOptionKeys[i] = name
+	}
+	sort.Strings(zoneOptionKeys)
+}
 
 func loadYAML(dst interface{}, yamlString string) {
 	if err := yaml.UnmarshalStrict([]byte(yamlString), dst); err != nil {
