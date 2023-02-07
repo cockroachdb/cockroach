@@ -1046,6 +1046,7 @@ DISTDIR_FILES = {
     "https://storage.googleapis.com/public-bazel-artifacts/c-deps/20230105-170607/libproj_foreign.macos.20230105-170607.tar.gz": "7706dcc20f083f621ba891eb82864e980ae352f34add33753100085d12ab91ec",
     "https://storage.googleapis.com/public-bazel-artifacts/c-deps/20230105-170607/libproj_foreign.macosarm.20230105-170607.tar.gz": "1ab617eb51b017d27d71ba08a065b6a08ef5410e9aa5554669196b7cf28214c1",
     "https://storage.googleapis.com/public-bazel-artifacts/c-deps/20230105-170607/libproj_foreign.windows.20230105-170607.tar.gz": "b819b17740b2a3418d62d2f6db8b245094458180e1e5e301e9f0f4257696fef5",
+    "https://storage.googleapis.com/public-bazel-artifacts/go-fips/20230207-040328/go1.19.5fips.linux-amd64.tar.gz": "b143b3c384d70700f3ad171dcf9fa1a4b434efa0012c4b1d4ebfb6a0cb7a50b6",
     "https://storage.googleapis.com/public-bazel-artifacts/go/20230214-214430/go1.19.4.darwin-amd64.tar.gz": "e88ffbbfe3adc94c4a2cf50f24e698a4c262cd99d98ea7d02d289726106d61e7",
     "https://storage.googleapis.com/public-bazel-artifacts/go/20230214-214430/go1.19.4.darwin-arm64.tar.gz": "1408a938fef3d17163d585db6bc2b769835c801302e3efc05ffabe021c05f0e9",
     "https://storage.googleapis.com/public-bazel-artifacts/go/20230214-214430/go1.19.4.freebsd-amd64.tar.gz": "84489ebb63f1757b79574d7345c647bd40bc6414cecb868c93e24476c2d2b9b6",
