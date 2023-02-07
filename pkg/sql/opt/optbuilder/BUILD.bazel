@@ -52,6 +52,7 @@ go_library(
         "//pkg/settings",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/funcdesc",
         "//pkg/sql/catalog/schemaexpr",
         "//pkg/sql/catalog/seqexpr",
         "//pkg/sql/catalog/tabledesc",

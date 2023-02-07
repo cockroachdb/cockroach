@@ -12,6 +12,7 @@ package optbuilder
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -81,6 +82,10 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 			funcBodyStr = string(opt)
 		case tree.FunctionLanguage:
 			languageFound = true
+			// Check the language here, before attempting to parse the function body.
+			if _, err := funcdesc.FunctionLangToProto(opt); err != nil {
+				panic(err)
+			}
 		}
 	}
 
