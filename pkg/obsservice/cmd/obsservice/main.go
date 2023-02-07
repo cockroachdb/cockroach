@@ -12,6 +12,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"net"
 	"os"
 	"os/signal"
 	"time"
@@ -20,13 +21,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/httpproxy"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/ingest"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/migrations"
+	logspb "github.com/cockroachdb/cockroach/pkg/obsservice/obspb/opentelemetry-proto/collector/logs/v1"
 	_ "github.com/cockroachdb/cockroach/pkg/ui/distoss" // web UI init hooks
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
+	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/spf13/cobra"
 	"golang.org/x/sys/unix"
+	"google.golang.org/grpc"
 )
 
 // drainSignals are the signals that will cause the server to drain and exit.
@@ -52,7 +56,8 @@ var RootCmd = &cobra.Command{
 	Short: "An observability service for CockroachDB",
 	Long: `The Observability Service ingests monitoring and observability data 
 from one or more CockroachDB clusters.`,
-	Run: func(cmd *cobra.Command, args []string) {
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 		cfg := httpproxy.ReverseHTTPProxyConfig{
 			HTTPAddr:      httpAddr,
@@ -64,20 +69,15 @@ from one or more CockroachDB clusters.`,
 
 		connCfg, err := pgxpool.ParseConfig(sinkPGURL)
 		if err != nil {
-			panic(fmt.Sprintf("invalid --sink-pgurl (%s): %s", sinkPGURL, err))
+			return errors.Wrapf(err, "invalid --sink-pgurl (%s)", sinkPGURL)
 		}
 		if connCfg.ConnConfig.Database == "" {
 			fmt.Printf("No database explicitly provided in --sink-pgurl. Using %q.\n", defaultSinkDBName)
 			connCfg.ConnConfig.Database = defaultSinkDBName
 		}
 
-		pool, err := pgxpool.ConnectConfig(ctx, connCfg)
-		if err != nil {
-			panic(fmt.Sprintf("failed to connect to sink database (%s): %s", sinkPGURL, err))
-		}
-
 		if err := migrations.RunDBMigrations(ctx, connCfg.ConnConfig); err != nil {
-			panic(fmt.Sprintf("failed to run DB migrations: %s", err))
+			return errors.Wrap(err, "failed to run DB migrations")
 		}
 
 		signalCh := make(chan os.Signal, 1)
@@ -86,10 +86,24 @@ from one or more CockroachDB clusters.`,
 		stop := stop.NewStopper()
 
 		// Run the event ingestion in the background.
-		if eventsAddr != "" {
-			ingester := ingest.EventIngester{}
-			ingester.StartIngestEvents(ctx, eventsAddr, pool, stop)
+		ingester, err := ingest.MakeEventIngester(ctx, connCfg)
+		if err != nil {
+			return err
 		}
+		listener, err := net.Listen("tcp", otlpAddr)
+		if err != nil {
+			return errors.Wrapf(err, "failed to listen for incoming HTTP connections on address %s", otlpAddr)
+		}
+		fmt.Printf("Listening for OTLP connections on %s.", otlpAddr)
+		grpcServer := grpc.NewServer()
+		logspb.RegisterLogsServiceServer(grpcServer, &ingester)
+		if err := stop.RunAsyncTask(ctx, "event ingester", func(ctx context.Context) {
+			defer ingester.Close()
+			_ = grpcServer.Serve(listener)
+		}); err != nil {
+			return err
+		}
+
 		// Run the reverse HTTP proxy in the background.
 		httpproxy.NewReverseHTTPProxy(ctx, cfg).Start(ctx, stop)
 
@@ -127,17 +141,18 @@ from one or more CockroachDB clusters.`,
 				handleSignalDuringShutdown(sig)
 			}
 		}
+		return nil
 	},
 }
 
 // Flags.
 var (
+	otlpAddr                  string
 	httpAddr                  string
 	targetURL                 string
 	caCertPath                string
 	uiCertPath, uiCertKeyPath string
 	sinkPGURL                 string
-	eventsAddr                string
 )
 
 func main() {
@@ -146,6 +161,11 @@ func main() {
 	// --vmodule, for example.
 	RootCmd.PersistentFlags().AddGoFlagSet(flag.CommandLine)
 
+	RootCmd.PersistentFlags().StringVar(
+		&otlpAddr,
+		"otlp-addr",
+		"localhost:4317",
+		"The address on which to listen for exported events using OTLP gRPC. If the port is missing, 4317 is used.")
 	RootCmd.PersistentFlags().StringVar(
 		&httpAddr,
 		"http-addr",
@@ -183,14 +203,7 @@ func main() {
 		"PGURL for the sink cluster. If the url does not include a database name, "+
 			"then \"obsservice\" will be used.")
 
-	RootCmd.PersistentFlags().StringVar(
-		&eventsAddr,
-		"crdb-events-addr",
-		"localhost:26257",
-		"Address of a CRDB node that events will be ingested from.")
-
 	if err := RootCmd.Execute(); err != nil {
-		fmt.Println(err)
 		exit.WithCode(exit.UnspecifiedError())
 	}
 }

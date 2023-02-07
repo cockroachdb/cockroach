@@ -1,24 +1,5 @@
 load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
-load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
-load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
-
-proto_library(
-    name = "obs_proto",
-    srcs = ["obs.proto"],
-    strip_import_prefix = "/pkg",
-    visibility = ["//visibility:public"],
-    deps = ["//pkg/obsservice/obspb/opentelemetry-proto/logs/v1:v1_proto"],
-)
-
-go_proto_library(
-    name = "obs_go_proto",
-    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler"],
-    importpath = "github.com/cockroachdb/cockroach/pkg/obsservice/obspb",
-    proto = ":obs_proto",
-    visibility = ["//visibility:public"],
-    deps = ["//pkg/obsservice/obspb/opentelemetry-proto/logs/v1:logs"],
-)
 
 go_library(
     name = "obspb",
@@ -26,7 +7,6 @@ go_library(
         "event_types.go",
         "resource.go",
     ],
-    embed = [":obs_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/obsservice/obspb",
     visibility = ["//visibility:public"],
 )

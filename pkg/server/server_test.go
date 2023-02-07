@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -59,6 +60,7 @@ import (
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/gogo/protobuf/proto"
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
+	"github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
@@ -1207,4 +1209,27 @@ func TestSocketAutoNumbering(t *testing.T) {
 	if socketPath := s.(*TestServer).Cfg.SocketFile; !strings.HasSuffix(socketPath, "."+expectedPort) {
 		t.Errorf("expected unix socket ending with port %q, got %q", expectedPort, socketPath)
 	}
+}
+
+// Test that connections using the internal SQL loopback listener work.
+func TestInternalSQL(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	conf, err := pgx.ParseConfig("")
+	require.NoError(t, err)
+	conf.User = "root"
+	// Configure pgx to connect on the loopback listener.
+	conf.DialFunc = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		return s.(*TestServer).Server.loopbackPgL.Connect(ctx)
+	}
+	conn, err := pgx.ConnectConfig(ctx, conf)
+	require.NoError(t, err)
+	// Run a random query to check that it all works.
+	r := conn.QueryRow(ctx, "SELECT count(*) FROM system.sqlliveness")
+	var count int
+	require.NoError(t, r.Scan(&count))
 }

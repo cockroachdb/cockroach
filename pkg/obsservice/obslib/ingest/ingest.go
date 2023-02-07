@@ -11,81 +11,53 @@ package ingest
 import (
 	"context"
 	"fmt"
-	"io"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obspb"
+	logspb "github.com/cockroachdb/cockroach/pkg/obsservice/obspb/opentelemetry-proto/collector/logs/v1"
 	otlogs "github.com/cockroachdb/cockroach/pkg/obsservice/obspb/opentelemetry-proto/logs/v1"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v4/pgxpool"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
-// EventIngester connects to a CRDB node through the SubscribeToEvents RPC and
-// saves the incoming events to a database.
-type EventIngester struct{}
-
-// StartIngestEvents runs event ingestion in a stopper task.
-func (e *EventIngester) StartIngestEvents(
-	ctx context.Context, addr string, db *pgxpool.Pool, stop *stop.Stopper,
-) {
-	_ = stop.RunAsyncTask(ctx, "event ingester", func(ctx context.Context) {
-		ctx, cancel := stop.WithCancelOnQuiesce(ctx)
-		defer cancel()
-		e.ingestEvents(ctx, addr, db)
-	})
+// EventIngester implements the OTLP Logs gRPC service, accepting connections
+// and ingesting events.
+type EventIngester struct {
+	db *pgxpool.Pool
 }
 
-// ingestEvents subscribes to events published by the CRDB node at addr and
-// persists them to the database.
-//
-// The call blocks until the RPC is terminated by the server or ctx is canceled.
-func (e *EventIngester) ingestEvents(ctx context.Context, addr string, db *pgxpool.Pool) {
-	// TODO(andrei): recover from connection errors.
-	// TODO(andrei): use certs for secure clusters.
-	conn, err := grpc.DialContext(ctx, addr,
-		grpc.WithBlock(), // block until the connection is established
-		grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		panic(fmt.Sprintf("failed to dial %s: %s", addr, err))
-	}
-	defer func() {
-		_ = conn.Close() // nolint:grpcconnclose
-	}()
-	log.Infof(ctx, "Ingesting events from %s.", addr)
+var _ logspb.LogsServiceServer = &EventIngester{}
 
-	c := obspb.NewObsClient(conn)
-	stream, err := c.SubscribeToEvents(ctx,
-		&obspb.SubscribeToEventsRequest{
-			Identity: "Obs Service",
-		})
+func MakeEventIngester(ctx context.Context, cfg *pgxpool.Config) (EventIngester, error) {
+	pool, err := pgxpool.ConnectConfig(ctx, cfg)
 	if err != nil {
-		panic(fmt.Sprintf("SubscribeToEvents call to %s failed: %s", addr, err))
+		return EventIngester{}, errors.Wrap(err, "failed to connect to sink database")
 	}
+	return EventIngester{
+		db: pool,
+	}, nil
+}
 
-	for {
-		events, err := stream.Recv()
-		if err != nil {
-			if (err != io.EOF && ctx.Err() == nil) || log.V(2) {
-				log.Infof(ctx, "event stream error: %s", err)
-			}
-			// TODO(andrei): recover from the error by trying to reestablish the
-			// connection.
-			return
-		}
-		if log.V(3) {
-			log.Infof(ctx, "received events: %s", events.String())
-		}
-		err = persistEvents(ctx, events.ResourceLogs, db)
-		if err != nil {
-			log.Errorf(ctx, "error persisting events: %s", err)
-		}
+// Close closes the database connections opened by the ingester.
+func (e EventIngester) Close() {
+	e.db.Close()
+}
+
+// Export implements the LogsServiceServer gRPC service.
+func (e *EventIngester) Export(
+	ctx context.Context, request *logspb.ExportLogsServiceRequest,
+) (*logspb.ExportLogsServiceResponse, error) {
+	if e.db == nil {
+		return nil, errors.AssertionFailedf("SetDB not called before incoming Export() RPC")
 	}
+	if err := persistEvents(ctx, request.ResourceLogs, e.db); err != nil {
+		log.Warningf(ctx, "failed to persist events: %s", err)
+	}
+	return &logspb.ExportLogsServiceResponse{}, nil
 }
 
 // persistEvents writes events to the database.
