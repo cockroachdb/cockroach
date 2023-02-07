@@ -755,6 +755,11 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 			"exec_node_ids",
 			"txn_fingerprint_id",
 			"index_recommendations",
+			"latency_seconds_min",
+			"latency_seconds_max",
+			"latency_seconds_p50",
+			"latency_seconds_p90",
+			"latency_seconds_p99",
 		},
 	},
 	"crdb_internal.node_transaction_statistics": {
