@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/collatedstring"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
@@ -698,7 +699,7 @@ func (expr *AnnotateTypeExpr) TypeCheck(
 func (expr *CollateExpr) TypeCheck(
 	ctx context.Context, semaCtx *SemaContext, desired *types.T,
 ) (TypedExpr, error) {
-	if strings.ToLower(expr.Locale) == DefaultCollationTag {
+	if strings.ToLower(expr.Locale) == collatedstring.DefaultCollationTag {
 		return nil, errors.WithHint(
 			unimplemented.NewWithIssuef(
 				57255,
