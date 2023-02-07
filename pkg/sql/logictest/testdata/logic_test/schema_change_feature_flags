@@ -73,7 +73,7 @@ statement error pq: feature ALTER DATABASE is part of the schema change category
 ALTER DATABASE d RENAME TO r
 
 # Test REPARENT DATABASE
-statement error pq: cannot perform ALTER DATABASE CONVERT TO SCHEMA in version
+statement error pq: cannot perform ALTER DATABASE CONVERT TO SCHEMA
 ALTER DATABASE d CONVERT TO SCHEMA WITH PARENT test
 
 # Test ALTER TABLE PARTITION BY.

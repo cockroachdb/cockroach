@@ -13,7 +13,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/clusterversion",
         "//pkg/security/username",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",

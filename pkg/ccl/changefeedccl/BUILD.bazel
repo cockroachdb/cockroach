@@ -211,7 +211,6 @@ go_test(
         "//pkg/ccl/utilccl",
         "//pkg/cloud",
         "//pkg/cloud/impl:cloudimpl",
-        "//pkg/clusterversion",
         "//pkg/gossip",
         "//pkg/internal/sqlsmith",
         "//pkg/jobs",
