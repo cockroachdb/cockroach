@@ -420,10 +420,6 @@ func (k Key) String() string {
 	return ByKey(k).String()
 }
 
-// TODOPreV22_1 is an alias for V22_1 for use in any version gate/check that
-// previously referenced a < 22.1 version until that check/gate can be removed.
-const TODOPreV22_1 = V22_1
-
 // Offset every version +1M major versions into the future if this is a dev branch.
 const DevOffset = 1000000
 

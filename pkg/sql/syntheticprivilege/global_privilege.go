@@ -11,7 +11,6 @@
 package syntheticprivilege
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -35,11 +34,6 @@ var _ Object = &GlobalPrivilege{}
 // GetPath implements the Object interface.
 func (p *GlobalPrivilege) GetPath() string {
 	return "/global/"
-}
-
-// SystemPrivilegesTableVersionGate implements the Object interface.
-func (p *GlobalPrivilege) SystemPrivilegesTableVersionGate() clusterversion.Key {
-	return clusterversion.TODOPreV22_1
 }
 
 // GlobalPrivilegeObject is one of one since it is global.

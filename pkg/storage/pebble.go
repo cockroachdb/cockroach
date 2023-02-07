@@ -1964,30 +1964,26 @@ func (p *Pebble) SetMinVersion(version roachpb.Version) error {
 	// at a version X+1, it is guaranteed that all nodes have already ratcheted
 	// their store version to the version X that enabled the feature at the Pebble
 	// level.
-	formatVers := pebble.FormatMostCompatible
+	var formatVers pebble.FormatMajorVersion
 	// Cases are ordered from newer to older versions.
 	switch {
 	case !version.Less(clusterversion.ByKey(clusterversion.V23_1EnsurePebbleFormatSSTableValueBlocks)):
-		if formatVers < pebble.FormatSSTableValueBlocks {
-			formatVers = pebble.FormatSSTableValueBlocks
-		}
+		formatVers = pebble.FormatSSTableValueBlocks
+
 	case !version.Less(clusterversion.ByKey(clusterversion.V22_2PebbleFormatPrePebblev1Marked)):
-		if formatVers < pebble.FormatPrePebblev1Marked {
-			formatVers = pebble.FormatPrePebblev1Marked
-		}
+		formatVers = pebble.FormatPrePebblev1Marked
+
 	case !version.Less(clusterversion.ByKey(clusterversion.V22_2EnsurePebbleFormatVersionRangeKeys)):
-		if formatVers < pebble.FormatRangeKeys {
-			formatVers = pebble.FormatRangeKeys
-		}
+		formatVers = pebble.FormatRangeKeys
+
 	case !version.Less(clusterversion.ByKey(clusterversion.V22_2PebbleFormatSplitUserKeysMarkedCompacted)):
-		if formatVers < pebble.FormatSplitUserKeysMarkedCompacted {
-			formatVers = pebble.FormatSplitUserKeysMarkedCompacted
-		}
-	case !version.Less(clusterversion.ByKey(clusterversion.TODOPreV22_1)):
-		if formatVers < pebble.FormatSplitUserKeysMarked {
-			formatVers = pebble.FormatSplitUserKeysMarked
-		}
+		formatVers = pebble.FormatSplitUserKeysMarkedCompacted
+
+	default:
+		// Corresponds to V22_1.
+		formatVers = pebble.FormatSplitUserKeysMarked
 	}
+
 	if p.db.FormatMajorVersion() < formatVers {
 		if err := p.db.RatchetFormatMajorVersion(formatVers); err != nil {
 			return errors.Wrap(err, "ratcheting format major version")
