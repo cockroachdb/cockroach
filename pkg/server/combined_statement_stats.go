@@ -739,7 +739,7 @@ func getStatementDetailsPerPlanHash(
 		LIMIT $%d`, whereClause, len(args)+1)
 	expectedNumDatums := 6
 
-	if settings.Version.IsActive(ctx, clusterversion.V22_2AlterSystemStatementStatisticsAddIndexRecommendations) {
+	if settings.Version.IsActive(ctx, clusterversion.TODODelete_V22_2AlterSystemStatementStatisticsAddIndexRecommendations) {
 		query = fmt.Sprintf(
 			`SELECT
 				plan_hash,

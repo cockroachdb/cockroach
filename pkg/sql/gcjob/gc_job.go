@@ -507,7 +507,7 @@ func shouldUseDelRange(
 ) bool {
 	// TODO(ajwerner): Adopt the DeleteRange protocol for tenant GC.
 	return details.Tenant == nil &&
-		s.Version.IsActive(ctx, clusterversion.V22_2UseDelRangeInGCJob) &&
+		s.Version.IsActive(ctx, clusterversion.TODODelete_V22_2UseDelRangeInGCJob) &&
 		(storage.CanUseMVCCRangeTombstones(ctx, s) ||
 			// Allow this testing knob to override the storage setting, for convenience.
 			knobs.SkipWaitingForMVCCGC)

@@ -282,7 +282,7 @@ func (r *Registry) insertRequestInternal(
 	minExecutionLatency time.Duration,
 	expiresAfter time.Duration,
 ) (RequestID, error) {
-	isSamplingProbabilitySupported := r.st.Version.IsActive(ctx, clusterversion.V22_2SampledStmtDiagReqs)
+	isSamplingProbabilitySupported := r.st.Version.IsActive(ctx, clusterversion.TODODelete_V22_2SampledStmtDiagReqs)
 	if !isSamplingProbabilitySupported && samplingProbability != 0 {
 		return 0, errors.New(
 			"sampling probability only supported after 22.2 version migrations have completed",
@@ -647,7 +647,7 @@ func (r *Registry) InsertStatementDiagnostics(
 // updates r.mu.requests accordingly.
 func (r *Registry) pollRequests(ctx context.Context) error {
 	var rows []tree.Datums
-	isSamplingProbabilitySupported := r.st.Version.IsActive(ctx, clusterversion.V22_2SampledStmtDiagReqs)
+	isSamplingProbabilitySupported := r.st.Version.IsActive(ctx, clusterversion.TODODelete_V22_2SampledStmtDiagReqs)
 
 	// Loop until we run the query without straddling an epoch increment.
 	for {

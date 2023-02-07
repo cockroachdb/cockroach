@@ -1523,7 +1523,7 @@ func TestLeaseUpgradeVersionGate(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettingsWithVersions(
 		clusterversion.TestingBinaryVersion,
-		clusterversion.ByKey(clusterversion.V22_2EnableLeaseUpgrade-1),
+		clusterversion.ByKey(clusterversion.TODODelete_V22_2EnableLeaseUpgrade-1),
 		false, /* initializeVersion */
 	)
 	tci := serverutils.StartNewTestCluster(t, 2, base.TestClusterArgs{
@@ -1533,7 +1533,7 @@ func TestLeaseUpgradeVersionGate(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
-					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.V22_2EnableLeaseUpgrade - 1),
+					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.TODODelete_V22_2EnableLeaseUpgrade - 1),
 				},
 			},
 		},
@@ -1564,7 +1564,7 @@ func TestLeaseUpgradeVersionGate(t *testing.T) {
 
 	// Enable the version gate.
 	_, err := tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
-		clusterversion.ByKey(clusterversion.V22_2EnableLeaseUpgrade).String())
+		clusterversion.ByKey(clusterversion.TODODelete_V22_2EnableLeaseUpgrade).String())
 	require.NoError(t, err)
 
 	// Transfer the lease back from n2 to n1. It should be transferred as an

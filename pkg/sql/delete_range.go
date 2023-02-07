@@ -166,7 +166,7 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 func (d *deleteRangeNode) deleteSpans(params runParams, b *kv.Batch, spans roachpb.Spans) {
 	ctx := params.ctx
 	traceKV := params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
-	canUsePointDelete := params.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V22_2DeleteRequestReturnKey)
+	canUsePointDelete := params.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.TODODelete_V22_2DeleteRequestReturnKey)
 	for _, span := range spans {
 		if span.EndKey == nil && canUsePointDelete {
 			if traceKV {

@@ -675,8 +675,8 @@ func TestGCJobNoSystemConfig(t *testing.T) {
 
 	provider := fakeSystemConfigProvider{}
 	var (
-		v0 = clusterversion.ByKey(clusterversion.V22_2UseDelRangeInGCJob - 1)
-		v1 = clusterversion.ByKey(clusterversion.V22_2UseDelRangeInGCJob)
+		v0 = clusterversion.ByKey(clusterversion.TODODelete_V22_2UseDelRangeInGCJob - 1)
+		v1 = clusterversion.ByKey(clusterversion.TODODelete_V22_2UseDelRangeInGCJob)
 	)
 	settings := cluster.MakeTestingClusterSettingsWithVersions(v1, v0, false /* initializeVersion */)
 	ctx := context.Background()

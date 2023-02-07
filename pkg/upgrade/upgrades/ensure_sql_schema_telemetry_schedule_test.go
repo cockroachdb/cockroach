@@ -77,7 +77,7 @@ func TestSchemaTelemetrySchedule(t *testing.T) {
 		}
 		args.Knobs.Server = &server.TestingKnobs{
 			DisableAutomaticVersionUpgrade: make(chan struct{}),
-			BinaryVersionOverride:          clusterversion.ByKey(clusterversion.V22_2SQLSchemaTelemetryScheduledJobs - 1),
+			BinaryVersionOverride:          clusterversion.ByKey(clusterversion.TODODelete_V22_2SQLSchemaTelemetryScheduledJobs - 1),
 		}
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: args})
 		defer tc.Stopper().Stop(ctx)
@@ -100,7 +100,7 @@ func TestSchemaTelemetrySchedule(t *testing.T) {
 
 		// Upgrade the cluster.
 		tdb.Exec(t, `SET CLUSTER SETTING version = $1`,
-			clusterversion.ByKey(clusterversion.V22_2SQLSchemaTelemetryScheduledJobs).String())
+			clusterversion.ByKey(clusterversion.TODODelete_V22_2SQLSchemaTelemetryScheduledJobs).String())
 
 		// Check that the schedule now exists and that jobs can be created.
 		tdb.Exec(t, qJob)
