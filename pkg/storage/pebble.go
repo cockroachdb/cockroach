@@ -693,6 +693,7 @@ type Pebble struct {
 		syncutil.Mutex
 		flushCompletedCallback func()
 	}
+	asyncDone sync.WaitGroup
 
 	// supportsRangeKeys is 1 if the database supports range keys. It must
 	// be accessed atomically.
@@ -943,7 +944,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 	oldDiskSlow := lel.DiskSlow
 	lel.DiskSlow = func(info pebble.DiskSlowInfo) {
 		// Run oldDiskSlow asynchronously.
-		go oldDiskSlow(info)
+		p.async(func() { oldDiskSlow(info) })
 	}
 	cfg.Opts.EventListener = pebble.TeeEventListener(
 		p.makeMetricEtcEventListener(ctx),
@@ -990,6 +991,17 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 	}
 
 	return p, nil
+}
+
+// async launches the provided function in a new goroutine. It uses a wait group
+// to synchronize with (*Pebble).Close to ensure all launched goroutines have
+// exited before Close returns.
+func (p *Pebble) async(fn func()) {
+	p.asyncDone.Add(1)
+	go func() {
+		defer p.asyncDone.Done()
+		fn()
+	}()
 }
 
 func (p *Pebble) makeMetricEtcEventListener(ctx context.Context) pebble.EventListener {
@@ -1042,8 +1054,10 @@ func (p *Pebble) makeMetricEtcEventListener(ctx context.Context) pebble.EventLis
 					log.Fatalf(ctx, "disk stall detected: pebble unable to write to %s in %.2f seconds",
 						info.Path, redact.Safe(info.Duration.Seconds()))
 				} else {
-					go log.Errorf(ctx, "disk stall detected: pebble unable to write to %s in %.2f seconds",
-						info.Path, redact.Safe(info.Duration.Seconds()))
+					p.async(func() {
+						log.Errorf(ctx, "disk stall detected: pebble unable to write to %s in %.2f seconds",
+							info.Path, redact.Safe(info.Duration.Seconds()))
+					})
 				}
 				return
 			}
@@ -1082,6 +1096,9 @@ func (p *Pebble) Close() {
 		return
 	}
 	p.closed = true
+
+	// Wait for any asynchronous goroutines to exit.
+	p.asyncDone.Wait()
 
 	handleErr := func(err error) {
 		if err == nil {
