@@ -59,6 +59,14 @@ func init() {
 		}
 	}
 
+	// Add a collated string separately (since it shares the oid with the STRING
+	// type and, thus, wasn't included above).
+	collatedStringType := types.MakeCollatedString(types.String, "en" /* locale */)
+	SeedTypes = append(SeedTypes, collatedStringType)
+	if IsAllowedForArray(collatedStringType) {
+		arrayContentsTypes = append(arrayContentsTypes, collatedStringType)
+	}
+
 	// Sort these so randomly chosen indexes always point to the same element.
 	sort.Slice(SeedTypes, func(i, j int) bool {
 		return SeedTypes[i].String() < SeedTypes[j].String()

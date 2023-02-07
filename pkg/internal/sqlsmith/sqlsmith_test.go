@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
@@ -36,6 +37,7 @@ var (
 // TestSetups verifies that all setups generate executable SQL.
 func TestSetups(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	defer ccl.TestingEnableEnterprise()()
 
 	for name, setup := range Setups {
@@ -81,6 +83,7 @@ func TestSetups(t *testing.T) {
 // false-negative.
 func TestRandTableInserts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
@@ -144,6 +147,7 @@ func TestRandTableInserts(t *testing.T) {
 // sometimes put them into bad states that the parser would never do.
 func TestGenerateParse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	defer ccl.TestingEnableEnterprise()()
 
 	ctx := context.Background()
