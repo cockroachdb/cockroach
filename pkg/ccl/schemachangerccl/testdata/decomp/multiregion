@@ -278,6 +278,7 @@ ElementState:
     expr: unique_rowid()
     referencedColumnIds: []
     tableId: 110
+    usesFunctionIds: []
     usesSequenceIds: []
     usesTypeIds: []
   Status: PUBLIC
@@ -555,6 +556,7 @@ ElementState:
     expr: unique_rowid()
     referencedColumnIds: []
     tableId: 109
+    usesFunctionIds: []
     usesSequenceIds: []
     usesTypeIds: []
   Status: PUBLIC
@@ -883,6 +885,7 @@ ElementState:
     expr: default_to_database_primary_region(gateway_region())::@100106
     referencedColumnIds: []
     tableId: 108
+    usesFunctionIds: []
     usesSequenceIds: []
     usesTypeIds:
     - 106

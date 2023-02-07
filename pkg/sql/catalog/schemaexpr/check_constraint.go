@@ -95,7 +95,7 @@ func (b *CheckConstraintBuilder) Build(
 		b.desc,
 		c.Expr,
 		types.Bool,
-		"CHECK",
+		tree.CheckConstraintExpr,
 		b.semaCtx,
 		volatility.Volatile,
 		&b.tableName,

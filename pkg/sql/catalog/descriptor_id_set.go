@@ -82,3 +82,43 @@ func (d DescriptorIDSet) Difference(o DescriptorIDSet) DescriptorIDSet {
 func (d DescriptorIDSet) Union(o DescriptorIDSet) DescriptorIDSet {
 	return DescriptorIDSet{set: d.set.Union(o.set)}
 }
+
+type ConstraintIDSet struct {
+	set intsets.Fast
+}
+
+// MakeConstraintIDSet returns a set initialized with the given values.
+func MakeConstraintIDSet(ids ...descpb.ConstraintID) ConstraintIDSet {
+	s := ConstraintIDSet{}
+	for _, id := range ids {
+		s.Add(id)
+	}
+	return s
+}
+
+func (s *ConstraintIDSet) Add(id descpb.ConstraintID) {
+	s.set.Add(int(id))
+}
+
+func (s *ConstraintIDSet) Remove(id descpb.ConstraintID) {
+	s.set.Remove(int(id))
+}
+
+func (s *ConstraintIDSet) Empty() bool {
+	return s.set.Empty()
+}
+
+func (s *ConstraintIDSet) Len() int {
+	return s.set.Len()
+}
+
+func (s *ConstraintIDSet) Ordered() []descpb.ConstraintID {
+	if s.Empty() {
+		return nil
+	}
+	result := make([]descpb.ConstraintID, 0, s.Len())
+	s.set.ForEach(func(i int) {
+		result = append(result, descpb.ConstraintID(i))
+	})
+	return result
+}

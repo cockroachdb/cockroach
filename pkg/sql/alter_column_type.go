@@ -282,7 +282,7 @@ func alterColumnTypeGeneral(
 			tableDesc,
 			using,
 			toType,
-			"ALTER COLUMN TYPE USING EXPRESSION",
+			tree.AlterColumnTypeUsingExpr,
 			&params.p.semaCtx,
 			volatility.Volatile,
 			tn,

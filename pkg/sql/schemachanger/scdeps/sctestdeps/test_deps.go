@@ -552,19 +552,40 @@ func (s *TestState) GetQualifiedTableNameByID(
 }
 
 func (s *TestState) getQualifiedObjectNameByID(id descpb.ID) (*tree.TableName, error) {
-	obj, err := s.mustReadImmutableDescriptor(id)
+	db, sc, obj, err := s.getQualifiedNameComponentsByID(id)
 	if err != nil {
 		return nil, err
 	}
+	return tree.NewTableNameWithSchema(tree.Name(db), tree.Name(sc), tree.Name(obj)), nil
+}
+
+func (s *TestState) GetQualifiedFunctionNameByID(
+	ctx context.Context, id int64,
+) (*tree.FunctionName, error) {
+	db, sc, obj, err := s.getQualifiedNameComponentsByID(descpb.ID(id))
+	if err != nil {
+		return nil, err
+	}
+	fn := tree.MakeQualifiedFunctionName(db, sc, obj)
+	return &fn, nil
+}
+
+func (s *TestState) getQualifiedNameComponentsByID(
+	id descpb.ID,
+) (dbName string, scName string, objName string, err error) {
+	obj, err := s.mustReadImmutableDescriptor(id)
+	if err != nil {
+		return "", "", "", err
+	}
 	db, err := s.mustReadImmutableDescriptor(obj.GetParentID())
 	if err != nil {
-		return nil, errors.Wrapf(err, "parent database for object #%d", id)
+		return "", "", "", errors.Wrapf(err, "parent database for object #%d", id)
 	}
 	sc, err := s.mustReadImmutableDescriptor(obj.GetParentSchemaID())
 	if err != nil {
-		return nil, errors.Wrapf(err, "parent schema for object #%d", id)
+		return "", "", "", errors.Wrapf(err, "parent schema for object #%d", id)
 	}
-	return tree.NewTableNameWithSchema(tree.Name(db.GetName()), tree.Name(sc.GetName()), tree.Name(obj.GetName())), nil
+	return db.GetName(), sc.GetName(), obj.GetName(), nil
 }
 
 // CurrentDatabase implements the scbuild.CatalogReader interface.
