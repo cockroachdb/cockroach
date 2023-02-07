@@ -602,6 +602,11 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		return cannotDistribute, nil
 
 	case *projectSetNode:
+		for i := range n.exprs {
+			if err := checkExpr(n.exprs[i]); err != nil {
+				return cannotDistribute, err
+			}
+		}
 		return checkSupportForPlanNode(n.source)
 
 	case *renderNode:
