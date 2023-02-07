@@ -43,14 +43,13 @@ interface DetailedRow {
   latency: number;
   identityB: Identity;
 }
-type DetailedIdentity = Identity & {
+export type DetailedIdentity = Identity & {
   row: DetailedRow[];
   title?: string;
 };
 
 // createHeaderCell creates and decorates a header cell.
 function createHeaderCell(
-  staleIDs: Set<number>,
   id: DetailedIdentity,
   key: string,
   isMultiple?: boolean,
@@ -60,7 +59,6 @@ function createHeaderCell(
   const className = classNames(
     "latency-table__cell",
     "latency-table__cell--header",
-    { "latency-table__cell--header-warning": staleIDs.has(id.nodeID) },
     { "latency-table__cell--start": isMultiple },
   );
   return (
@@ -122,6 +120,7 @@ const renderMultipleHeaders = (
   nodeId: string,
   multipleHeader: boolean,
 ) => {
+  // replace with createDetailedIdentityArray.
   const data: any = [];
   let rowLength = 0;
   const filteredData = displayIdentities.map(identityA => {
@@ -217,7 +216,19 @@ const getLatencyCell = (
           "latency-table__cell--stddev-even",
         ])}
       >
-        <Chip title="loading..." type="yellow" />
+        <Chip title="currently no connection" type="yellow" />
+      </td>
+    );
+  }
+  if (latency === -2) {
+    return (
+      <td
+        className={generateClassName([
+          "latency-table__cell",
+          "latency-table__cell--stddev-even",
+        ])}
+      >
+        <Chip title="connection not attempted" type="grey" />
       </td>
     );
   }
@@ -364,7 +375,6 @@ export const Latency: React.SFC<ILatencyProps> = ({
             {_.map(data, value =>
               _.map(value, (identity, index: number) =>
                 createHeaderCell(
-                  staleIDs,
                   identity,
                   `0-${value.nodeID}`,
                   index === 0,
@@ -393,7 +403,6 @@ export const Latency: React.SFC<ILatencyProps> = ({
                   </th>
                 )}
                 {createHeaderCell(
-                  staleIDs,
                   identityA,
                   `${identityA.nodeID}-0`,
                   false,

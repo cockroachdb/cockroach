@@ -58,9 +58,13 @@ export function queryByName(location: Location, key: string): string | null {
 }
 
 export function getMatchParamByName(match: Match<any>, key: string) {
-  const param = match.params[key];
-  if (param) {
-    return decodeURIComponent(param);
-  }
-  return null;
+  return getParam(match.params, key);
 }
+
+export const getParam = (params: any, key: string) => {
+  if (!params) {
+    return null;
+  }
+  const param = params[key];
+  return param ? decodeURIComponent(param) : null;
+};
