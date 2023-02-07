@@ -756,10 +756,8 @@ var versionsSingleton = func() keyedVersions {
 		// version! For example, on a cluster that is on released version 3, a dev
 		// binary containing versions 1, 2, 3, and 4 started with this flag would
 		// renumber only 2-4 to be +1M. It would then step from 3 "up" to 1000002 --
-		// which conceptually is actually back down to 2 -- then back to to 1000003,
+		// which conceptually is actually back down to 2 -- then back to 1000003,
 		// then on to 1000004, etc.
-		skipFirst := allowUpgradeToDev
-		first := true
 		for i := range rawVersionsSingleton {
 			// VPrimordial versions are not offset; they don't matter for the logic
 			// offsetting is used for.
@@ -767,10 +765,11 @@ var versionsSingleton = func() keyedVersions {
 				continue
 			}
 
-			if skipFirst && first {
-				first = false
+			if allowUpgradeToDev && rawVersionsSingleton[i].Key <= BinaryMinSupportedVersionKey {
+				// Support upgrading from the non-development version of BinaryMinSupportedVersionKey.
 				continue
 			}
+
 			rawVersionsSingleton[i].Major += DevOffset
 		}
 	}
