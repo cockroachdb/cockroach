@@ -1321,6 +1321,7 @@ var debugCmds = []*cobra.Command{
 	debugSyncTestCmd,
 	debugEnvCmd,
 	debugZipCmd,
+	debugProfile,
 	debugMergeLogsCmd,
 	debugListFilesCmd,
 	debugResetQuorumCmd,

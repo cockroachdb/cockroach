@@ -1432,6 +1432,24 @@ func (s *statusServer) Profile(
 	return profileLocal(ctx, req, s.st)
 }
 
+// ProfileLoop calls Profile in a tight loop.
+func (s *statusServer) ProfileLoop(
+	req *serverpb.ProfileRequest, srv serverpb.Status_ProfileLoopServer,
+) error {
+	// NB: `Profile` handles auth{z,n}.
+	ctx := srv.Context()
+	for ctx.Err() == nil {
+		resp, err := s.Profile(ctx, req)
+		if err != nil {
+			return err
+		}
+		if err := srv.Send(resp); err != nil {
+			return err
+		}
+	}
+	return ctx.Err()
+}
+
 // Regions implements the serverpb.StatusServer interface.
 func (s *systemStatusServer) Regions(
 	ctx context.Context, req *serverpb.RegionsRequest,

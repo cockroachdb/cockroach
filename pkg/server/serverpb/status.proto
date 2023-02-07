@@ -2201,6 +2201,10 @@ service Status {
     };
   }
 
+  // ProfileLoop is like Profile, but runs in a tight loop until the
+  // client cancels the connection.
+  rpc ProfileLoop(ProfileRequest) returns (stream JSONResponse) {}
+
   // Metrics retrieves the node metrics for a given node.
   //
   // Note: this is a “reserved” API and should not be relied upon to

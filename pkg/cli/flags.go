@@ -601,6 +601,7 @@ func init() {
 		debugGossipValuesCmd,
 		debugTimeSeriesDumpCmd,
 		debugZipCmd,
+		debugProfile,
 		debugListFilesCmd,
 		debugSendKVBatchCmd,
 		doctorExamineClusterCmd,
@@ -679,6 +680,12 @@ func init() {
 		cliflagcfg.DurationFlag(f, &zipCtx.cpuProfDuration, cliflags.ZipCPUProfileDuration)
 		cliflagcfg.IntFlag(f, &zipCtx.concurrency, cliflags.ZipConcurrency)
 	}
+	// Pprof command.
+	{
+		// TODO hook this up.
+		// cliflagcfg.DurationFlag(f, &zipCtx.cpuProfDuration, cliflags.ZipCPUProfileDuration)
+	}
+
 	// List-files + Zip commands.
 	for _, cmd := range []*cobra.Command{debugZipCmd, debugListFilesCmd} {
 		f := cmd.Flags()
