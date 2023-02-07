@@ -42,7 +42,7 @@ func ValidateUniqueWithoutIndexPredicate(
 		desc,
 		pred,
 		types.Bool,
-		"unique without index predicate",
+		tree.UniqueWithoutIndexPredicateExpr,
 		semaCtx,
 		volatility.Immutable,
 		&tn,

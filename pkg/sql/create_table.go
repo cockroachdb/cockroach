@@ -413,6 +413,14 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 	}
 
+	// Replace all UDF names with OIDs in check constraints and update back
+	// references in functions used.
+	for _, ck := range desc.CheckConstraints() {
+		if err := params.p.updateFunctionReferencesForCheck(params.ctx, desc, ck.CheckDesc()); err != nil {
+			return err
+		}
+	}
+
 	// Descriptor written to store here.
 	if err := params.p.createDescriptor(
 		params.ctx,
@@ -1723,7 +1731,7 @@ func NewTableDesc(
 		case *tree.ColumnTableDef:
 			if d.IsComputed() {
 				serializedExpr, _, err := schemaexpr.ValidateComputedColumnExpression(
-					ctx, &desc, d, &n.Table, "computed column", semaCtx,
+					ctx, &desc, d, &n.Table, tree.ComputedColumnExprContext(d.IsVirtual()), semaCtx,
 				)
 				if err != nil {
 					return nil, err

@@ -123,6 +123,7 @@ const (
 // database in the qualification.
 type QualifiedNameResolver interface {
 	GetQualifiedTableNameByID(ctx context.Context, id int64, requiredType RequiredTableKind) (*TableName, error)
+	GetQualifiedFunctionNameByID(ctx context.Context, id int64) (*FunctionName, error)
 	CurrentDatabase() string
 }
 

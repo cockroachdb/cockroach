@@ -121,7 +121,7 @@ func (p *planner) canDropTypeDesc(
 		return err
 	}
 	if len(desc.ReferencingDescriptorIDs) > 0 && behavior != tree.DropCascade {
-		dependentNames, err := p.getFullyQualifiedTableNamesFromIDs(ctx, desc.ReferencingDescriptorIDs)
+		dependentNames, err := p.getFullyQualifiedNamesFromIDs(ctx, desc.ReferencingDescriptorIDs)
 		if err != nil {
 			return errors.Wrapf(err, "type %q has dependent objects", desc.Name)
 		}

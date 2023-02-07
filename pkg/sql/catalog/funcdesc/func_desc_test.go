@@ -51,6 +51,9 @@ func TestValidateFuncDesc(t *testing.T) {
 		tableWithFuncBackRefID    = dbID + 5
 		tableWithFuncForwardRefID = dbID + 6
 		typeWithFuncRefID         = dbID + 7
+		viewID                    = dbID + 8
+		tableWithBadConstraintID  = dbID + 9
+		tableWithGoodConstraintID = dbID + 10
 	)
 	funcDescID := descpb.ID(bootstrap.TestingUserDescID(0))
 
@@ -94,6 +97,31 @@ func TestValidateFuncDesc(t *testing.T) {
 		ID:        tableWithFuncForwardRefID,
 		Name:      "tbl",
 		DependsOn: []descpb.ID{funcDescID},
+	}).BuildImmutable())
+	cb.UpsertDescriptor(tabledesc.NewBuilder(&descpb.TableDescriptor{
+		ID:        viewID,
+		Name:      "v",
+		ViewQuery: "some query",
+	}).BuildImmutable())
+	cb.UpsertDescriptor(tabledesc.NewBuilder(&descpb.TableDescriptor{
+		ID:   tableWithBadConstraintID,
+		Name: "tbl",
+		Checks: []*descpb.TableDescriptor_CheckConstraint{
+			{
+				Expr:         "[FUNCTION 100101] ()",
+				ConstraintID: 1,
+			},
+		},
+	}).BuildImmutable())
+	cb.UpsertDescriptor(tabledesc.NewBuilder(&descpb.TableDescriptor{
+		ID:   tableWithGoodConstraintID,
+		Name: "v",
+		Checks: []*descpb.TableDescriptor_CheckConstraint{
+			{
+				Expr:         "[FUNCTION 100100] ()",
+				ConstraintID: 1,
+			},
+		},
 	}).BuildImmutable())
 
 	defaultPrivileges := catpb.NewBasePrivilegeDescriptor(username.RootUserName())
@@ -352,6 +380,30 @@ func TestValidateFuncDesc(t *testing.T) {
 			},
 		},
 		{
+			"depended-on-by view \"v\" (1008) has no corresponding depends-on forward reference",
+			descpb.FunctionDescriptor{
+				Name:           "f",
+				ID:             funcDescID,
+				ParentID:       dbID,
+				ParentSchemaID: schemaWithFuncRefID,
+				Privileges:     defaultPrivileges,
+				ReturnType: descpb.FunctionDescriptor_ReturnType{
+					Type: types.Int,
+				},
+				Params: []descpb.FunctionDescriptor_Parameter{
+					{
+						Name: "arg1",
+						Type: types.Int,
+					},
+				},
+				LeakProof:  true,
+				Volatility: catpb.Function_IMMUTABLE,
+				DependedOnBy: []descpb.FunctionDescriptor_Reference{
+					{ID: viewID},
+				},
+			},
+		},
+		{
 			"depended-on-by table \"tbl\" (1003) has no corresponding depends-on forward reference",
 			descpb.FunctionDescriptor{
 				Name:           "f",
@@ -455,16 +507,78 @@ func TestValidateFuncDesc(t *testing.T) {
 				DependsOnTypes: []descpb.ID{typeWithFuncRefID},
 			},
 		},
+		{
+			`constraint 1 in depended-on-by relation "tbl" (1009) does not have reference to function "f" (100)`,
+			descpb.FunctionDescriptor{
+				Name:           "f",
+				ID:             funcDescID,
+				ParentID:       dbID,
+				ParentSchemaID: schemaWithFuncRefID,
+				Privileges:     defaultPrivileges,
+				ReturnType: descpb.FunctionDescriptor_ReturnType{
+					Type: types.Int,
+				},
+				Params: []descpb.FunctionDescriptor_Parameter{
+					{
+						Name: "arg1",
+						Type: types.Int,
+					},
+				},
+				LeakProof:  true,
+				Volatility: catpb.Function_IMMUTABLE,
+				DependedOnBy: []descpb.FunctionDescriptor_Reference{
+					{ID: tableWithBadConstraintID, ConstraintIDs: []descpb.ConstraintID{1}},
+				},
+				DependsOn:      []descpb.ID{tableWithFuncBackRefID},
+				DependsOnTypes: []descpb.ID{typeWithFuncRefID},
+			},
+		},
+		{
+			``,
+			descpb.FunctionDescriptor{
+				Name:           "f",
+				ID:             funcDescID,
+				ParentID:       dbID,
+				ParentSchemaID: schemaWithFuncRefID,
+				Privileges:     defaultPrivileges,
+				ReturnType: descpb.FunctionDescriptor_ReturnType{
+					Type: types.Int,
+				},
+				Params: []descpb.FunctionDescriptor_Parameter{
+					{
+						Name: "arg1",
+						Type: types.Int,
+					},
+				},
+				LeakProof:  true,
+				Volatility: catpb.Function_IMMUTABLE,
+				DependedOnBy: []descpb.FunctionDescriptor_Reference{
+					{ID: tableWithGoodConstraintID, ConstraintIDs: []descpb.ConstraintID{1}},
+				},
+				DependsOn:      []descpb.ID{tableWithFuncBackRefID},
+				DependsOnTypes: []descpb.ID{typeWithFuncRefID},
+			},
+		},
 	}
 
 	for i, test := range testData {
 		desc := funcdesc.NewBuilder(&test.desc).BuildImmutable()
-		expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), test.err)
+		var expectedErr string
+		if test.err != "" {
+			expectedErr = fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), test.err)
+		}
 		ve := cb.Validate(ctx, clusterversion.TestingClusterVersion, catalog.NoValidationTelemetry, validate.Write, desc)
-		if err := ve.CombinedError(); err == nil {
-			t.Errorf("#%d expected err: %s, but found nil: %v", i, expectedErr, test.desc)
-		} else if expectedErr != err.Error() {
-			t.Errorf("#%d expected err: %s, but found %s", i, expectedErr, err)
+		err := ve.CombinedError()
+		if expectedErr == "" {
+			if err != nil {
+				t.Errorf("#%d expected no err, but found %s", i, err)
+			}
+		} else {
+			if err == nil {
+				t.Errorf("#%d expected err: %s, but found nil: %v", i, expectedErr, test.desc)
+			} else if expectedErr != err.Error() {
+				t.Errorf("#%d expected err: %s, but found %s", i, expectedErr, err)
+			}
 		}
 	}
 }

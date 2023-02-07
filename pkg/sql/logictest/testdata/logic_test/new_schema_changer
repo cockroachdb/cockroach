@@ -806,7 +806,7 @@ select $desc_count_pre_drop-$desc_count_post_drop
 statement ok
 CREATE TABLE trewrite(k INT PRIMARY KEY, ts TIMESTAMPTZ, FAMILY (k,ts))
 
-statement error context-dependent operators are not allowed in computed column
+statement error timestamptz::string: context-dependent operators are not allowed in STORED COMPUTED COLUMN
 ALTER TABLE trewrite ADD COLUMN c STRING AS (ts::STRING) STORED
 
 statement ok

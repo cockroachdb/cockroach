@@ -582,6 +582,12 @@ func (b *builderState) WrapExpression(tableID catid.DescID, expr tree.Expr) *scp
 			}
 		}
 	}
+	// Collect function IDs
+	fnIDs, err := schemaexpr.GetUdfIDs(expr)
+	if err != nil {
+		panic(err)
+	}
+
 	ids, err := scbuildstmt.ExtractColumnIDsInExpr(b, tableID, expr)
 	if err != nil {
 		panic(err)
@@ -590,6 +596,7 @@ func (b *builderState) WrapExpression(tableID catid.DescID, expr tree.Expr) *scp
 		Expr:                catpb.Expression(tree.Serialize(expr)),
 		UsesSequenceIDs:     seqIDs.Ordered(),
 		UsesTypeIDs:         typeIDs.Ordered(),
+		UsesFunctionIDs:     fnIDs.Ordered(),
 		ReferencedColumnIDs: ids.Ordered(),
 	}
 	return ret
@@ -606,7 +613,7 @@ func (b *builderState) ComputedColumnExpression(tbl *scpb.Table, d *tree.ColumnT
 		b.descCache[tbl.TableID].desc.(catalog.TableDescriptor),
 		d,
 		&tn,
-		"computed column",
+		tree.ComputedColumnExprContext(d.IsVirtual()),
 		b.semaCtx,
 	)
 	if err != nil {
