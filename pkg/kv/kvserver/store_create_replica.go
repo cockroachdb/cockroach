@@ -256,10 +256,8 @@ func (s *Store) tryGetOrCreateReplica(
 
 	// Make sure that storage invariants for this uninitialized replica hold.
 	uninitDesc := roachpb.RangeDescriptor{RangeID: rangeID}
-	state, err := kvstorage.LoadReplicaState(ctx, s.engine, &uninitDesc, replicaID)
+	_, err := kvstorage.LoadReplicaState(ctx, s.Engine(), s.StoreID(), &uninitDesc, replicaID)
 	if err != nil {
-		return nil, false, err
-	} else if err := state.Check(s.StoreID()); err != nil {
 		return nil, false, err
 	}
 

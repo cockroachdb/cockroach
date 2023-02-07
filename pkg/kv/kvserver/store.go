@@ -1862,7 +1862,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			continue
 		}
 		// TODO(pavelkalinnikov): integrate into kvstorage.LoadAndReconcileReplicas.
-		state, err := repl.Load(ctx, s.Engine())
+		state, err := repl.Load(ctx, s.Engine(), s.StoreID())
 		if err != nil {
 			return err
 		}
