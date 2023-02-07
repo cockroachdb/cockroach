@@ -411,6 +411,7 @@ func (c *CustomFuncs) InlineConstVar(f memo.FiltersExpr) memo.FiltersExpr {
 //     leak-proof.
 //  2. It has a single statement.
 //  3. Its arguments are non-volatile expressions.
+//  4. It is not a set-returning function.
 //
 // UDFs with mutations (INSERT, UPDATE, UPSERT, DELETE) cannot be inlined, but
 // we do not need an explicit check for this because immutable UDFs cannot
@@ -423,7 +424,7 @@ func (c *CustomFuncs) InlineConstVar(f memo.FiltersExpr) memo.FiltersExpr {
 // able to inline volatile UDFs. We must take care not to inline UDFs with
 // volatile arguments used more than once in the function body.
 func (c *CustomFuncs) IsInlinableUDF(args memo.ScalarListExpr, udfp *memo.UDFPrivate) bool {
-	if udfp.Volatility == volatility.Volatile || len(udfp.Body) > 1 {
+	if udfp.Volatility == volatility.Volatile || len(udfp.Body) > 1 || udfp.SetReturning {
 		return false
 	}
 	for i := range args {
