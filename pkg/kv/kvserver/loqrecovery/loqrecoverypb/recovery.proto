@@ -54,6 +54,16 @@ message ReplicaInfo {
     (gogoproto.jsontag) = "raft_log_descriptor_changes,omitempty"];
 }
 
+// ClusterMetadata contains info about cluster that planner can use when
+// creating a plan.
+message ClusterMetadata {
+  // ClusterID contains id of the cluster from which info was collected.
+  string cluster_id = 1 [(gogoproto.customname) = "ClusterID"];
+  // Version contains effective cluster version of the cluster from which
+  // info was collected.
+  roachpb.Version version = 2 [(gogoproto.nullable) = false];
+}
+
 // Collection of replica information gathered in a collect-info run.
 // ReplicaInfo in Replicas does not have to be constrained to a single node,
 // but in practice info collected from remote cluster will contain info per
@@ -76,6 +86,9 @@ message ClusterReplicaInfo {
   // subset of full info. They are not guaranteed to be split by node, each
   // element should contain disjoint subset of replica infos.
   repeated NodeReplicaInfo local_info = 3 [(gogoproto.nullable) = false];
+  // Version contains effective cluster version of the cluster from which
+  // info was collected.
+  roachpb.Version version = 4 [(gogoproto.nullable) = false];
 }
 
 // ReplicaUpdate contains information that needs to be updated on replica on the node
@@ -119,6 +132,9 @@ message ReplicaUpdatePlan {
   // that they hold and that can't be shed because quorum is lost on the ranges.
   repeated int32 stale_leaseholder_node_ids = 5 [(gogoproto.customname) = "StaleLeaseholderNodeIDs",
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  // Version contains minimum cluster version that update plan could be applied
+  // on.
+  roachpb.Version version = 6 [(gogoproto.nullable) = false];
 }
 
 // ReplicaRecoveryRecord is a struct that loss of quorum recovery commands

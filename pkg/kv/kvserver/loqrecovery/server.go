@@ -150,6 +150,18 @@ func (s Server) ServeClusterReplicas(
 		}
 	}()
 
+	v := s.settings.Version.ActiveVersion(ctx)
+	if err = outStream.Send(&serverpb.RecoveryCollectReplicaInfoResponse{
+		Info: &serverpb.RecoveryCollectReplicaInfoResponse_Metadata{
+			Metadata: &loqrecoverypb.ClusterMetadata{
+				ClusterID: s.clusterIDContainer.String(),
+				Version:   v.Version,
+			},
+		},
+	}); err != nil {
+		return err
+	}
+
 	err = contextutil.RunWithTimeout(ctx, "scan range descriptors", s.metadataQueryTimeout,
 		func(txnCtx context.Context) error {
 			txn := kvDB.NewTxn(txnCtx, "scan-range-descriptors")
@@ -252,10 +264,18 @@ func (s Server) StagePlan(
 	if !req.ForcePlan && req.Plan == nil {
 		return nil, errors.New("stage plan request can't be used with empty plan without force flag")
 	}
-	clusterID := s.clusterIDContainer.Get().String()
-	if req.Plan != nil && req.Plan.ClusterID != clusterID {
-		return nil, errors.Newf("attempting to stage plan from cluster %s on cluster %s",
-			req.Plan.ClusterID, clusterID)
+	if p := req.Plan; p != nil {
+		clusterID := s.clusterIDContainer.Get().String()
+		if p.ClusterID != clusterID {
+			return nil, errors.Newf("attempting to stage plan from cluster %s on cluster %s",
+				p.ClusterID, clusterID)
+		}
+		version := s.settings.Version.ActiveVersion(ctx)
+		minVersion := s.settings.Version.BinaryMinSupportedVersion()
+		log.Infof(ctx, "checking staged plan version. plan=%s, min=%s, current=%s", p.Version, minVersion, version)
+		if err := checkDataVersionIsAllowed(p.Version, minVersion, version.Version); err != nil {
+			return nil, errors.Wrap(err, "incompatible plan")
+		}
 	}
 
 	localNodeID := s.nodeIDContainer.Get()

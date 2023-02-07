@@ -15,6 +15,7 @@ import (
 	"io"
 	"math"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
@@ -36,10 +37,6 @@ type CollectionStats struct {
 func CollectRemoteReplicaInfo(
 	ctx context.Context, c serverpb.AdminClient,
 ) (loqrecoverypb.ClusterReplicaInfo, CollectionStats, error) {
-	cInfo, err := c.Cluster(ctx, &serverpb.ClusterRequest{})
-	if err != nil {
-		return loqrecoverypb.ClusterReplicaInfo{}, CollectionStats{}, err
-	}
 	cc, err := c.RecoveryCollectReplicaInfo(ctx, &serverpb.RecoveryCollectReplicaInfoRequest{})
 	if err != nil {
 		return loqrecoverypb.ClusterReplicaInfo{}, CollectionStats{}, err
@@ -50,6 +47,7 @@ func CollectRemoteReplicaInfo(
 	var clusterReplInfo []loqrecoverypb.NodeReplicaInfo
 	var nodeReplicas []loqrecoverypb.ReplicaInfo
 	var currentNode roachpb.NodeID
+	var metadata loqrecoverypb.ClusterMetadata
 	for {
 		info, err := cc.Recv()
 		if err != nil {
@@ -80,12 +78,21 @@ func CollectRemoteReplicaInfo(
 			if s.NodeID == currentNode {
 				nodeReplicas = nil
 			}
+		} else if m := info.GetMetadata(); m != nil {
+			metadata = *m
 		}
 	}
+	// We don't want to process data outside of safe version range for this CLI
+	// binary.
+	if err := checkVersionAllowedByBinary(metadata.Version); err != nil {
+		return loqrecoverypb.ClusterReplicaInfo{}, CollectionStats{}, errors.Wrap(err,
+			"unsupported cluster info version")
+	}
 	return loqrecoverypb.ClusterReplicaInfo{
-			ClusterID:   cInfo.ClusterID,
+			ClusterID:   metadata.ClusterID,
 			Descriptors: descriptors,
 			LocalInfo:   clusterReplInfo,
+			Version:     metadata.Version,
 		}, CollectionStats{
 			Nodes:       len(nodes),
 			Stores:      len(stores),
@@ -100,6 +107,21 @@ func CollectStoresReplicaInfo(
 	if len(stores) == 0 {
 		return loqrecoverypb.ClusterReplicaInfo{}, CollectionStats{}, errors.New("no stores were provided for info collection")
 	}
+
+	// Synthesizing version from engine ensures that binary is compatible with
+	// the store, so we don't need to do any extra checks.
+	// We don't use synthesized version, because current binary could be newer
+	// and add extra info to generated data.
+	binaryVersion := clusterversion.ByKey(clusterversion.BinaryVersionKey)
+	binaryMinSupportedVersion := clusterversion.ByKey(clusterversion.BinaryVersionKey)
+	_, err := kvstorage.SynthesizeClusterVersionFromEngines(
+		ctx, stores, binaryVersion, binaryMinSupportedVersion,
+	)
+	if err != nil {
+		return loqrecoverypb.ClusterReplicaInfo{}, CollectionStats{}, errors.WithHint(err,
+			"ensure that used cli has the same version as storage")
+	}
+
 	var clusterUUID uuid.UUID
 	nodes := make(map[roachpb.NodeID]struct{})
 	var replicas []loqrecoverypb.ReplicaInfo
@@ -126,6 +148,7 @@ func CollectStoresReplicaInfo(
 	return loqrecoverypb.ClusterReplicaInfo{
 			ClusterID: clusterUUID.String(),
 			LocalInfo: []loqrecoverypb.NodeReplicaInfo{{Replicas: replicas}},
+			Version:   binaryVersion,
 		}, CollectionStats{
 			Nodes:  len(nodes),
 			Stores: len(stores),

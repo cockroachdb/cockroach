@@ -118,6 +118,12 @@ func (u PlannedReplicaUpdate) asReplicaUpdate() loqrecoverypb.ReplicaUpdate {
 // information not being atomically captured.
 // An error is returned in case of unrecoverable error in the collected data
 // that prevents creation of any sane plan or correctable user error.
+// Note on versions in clusterInfo.
+// It is planners responsibility to only use features supported by cluster
+// version specified in the clusterInfo. Newer features must not be used as it
+// may break the cluster if they are not backward compatible. Target versions
+// is copied into resulting plan so that cluster could reject higher versions
+// of plans.
 func PlanReplicas(
 	ctx context.Context,
 	clusterInfo loqrecoverypb.ClusterReplicaInfo,
@@ -128,6 +134,10 @@ func PlanReplicas(
 	planID, err := uuidGen.NewV4()
 	if err != nil {
 		return loqrecoverypb.ReplicaUpdatePlan{}, PlanningReport{}, err
+	}
+	if err := checkVersionAllowedByBinary(clusterInfo.Version); err != nil {
+		return loqrecoverypb.ReplicaUpdatePlan{}, PlanningReport{}, errors.Wrapf(err,
+			"unsupported cluster info version")
 	}
 	var replicas []loqrecoverypb.ReplicaInfo
 	for _, node := range clusterInfo.LocalInfo {
@@ -188,6 +198,7 @@ func PlanReplicas(
 		DecommissionedNodeIDs:   decommissionNodeIDs,
 		ClusterID:               clusterInfo.ClusterID,
 		StaleLeaseholderNodeIDs: staleLeaseholderNodes,
+		Version:                 clusterInfo.Version,
 	}, report, err
 }
 

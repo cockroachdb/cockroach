@@ -15,8 +15,10 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/strutil"
+	"github.com/cockroachdb/errors"
 )
 
 type storeIDSet map[roachpb.StoreID]struct{}
@@ -314,4 +316,28 @@ func (e *RecoveryError) ErrorDetail() string {
 		descriptions = append(descriptions, fmt.Sprintf("%v", id))
 	}
 	return strings.Join(descriptions, "\n")
+}
+
+func checkVersionAllowedByBinary(version roachpb.Version) error {
+	return checkDataVersionIsAllowed(version,
+		clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey),
+		clusterversion.ByKey(clusterversion.BinaryVersionKey))
+}
+
+func checkDataVersionIsAllowed(version, minSupported, current roachpb.Version) error {
+	// We ignore patch and internal versions for the sake of plan and replica info
+	// version checks as they must be semantically compatible with each other.
+	reset := func(v *roachpb.Version) {
+		v.Patch = 0
+		v.Internal = 0
+	}
+	reset(&version)
+	reset(&current)
+	if version.Less(minSupported) {
+		return errors.Newf("version is too old, minimum supported %s, found %s", minSupported, version)
+	}
+	if current.Less(version) {
+		return errors.Newf("version is too new, maximum supported %s, found %s", current, version)
+	}
+	return nil
 }

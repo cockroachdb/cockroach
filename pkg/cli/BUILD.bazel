@@ -357,6 +357,7 @@ go_test(
         "//pkg/cli/clisqlexec",
         "//pkg/cli/democluster",
         "//pkg/cli/exit",
+        "//pkg/clusterversion",
         "//pkg/gossip",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",

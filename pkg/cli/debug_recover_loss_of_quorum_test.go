@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -86,6 +87,8 @@ func TestCollectInfoFromMultipleStores(t *testing.T) {
 		stores[r.StoreID] = struct{}{}
 	}
 	require.Equal(t, 2, len(stores), "collected replicas from stores")
+	require.Equal(t, clusterversion.ByKey(clusterversion.BinaryVersionKey), replicas.Version,
+		"collected version info from stores")
 }
 
 // TestCollectInfoFromOnlineCluster verifies that given a test cluster with
@@ -147,6 +150,8 @@ func TestCollectInfoFromOnlineCluster(t *testing.T) {
 	require.Equal(t, totalRanges*2, totalReplicas, "number of collected replicas")
 	require.Equal(t, totalRanges, len(replicas.Descriptors),
 		"number of collected descriptors from metadata")
+	require.Equal(t, clusterversion.ByKey(clusterversion.BinaryVersionKey), replicas.Version,
+		"collected version info from stores")
 }
 
 // TestLossOfQuorumRecovery performs a sanity check on end to end recovery workflow.

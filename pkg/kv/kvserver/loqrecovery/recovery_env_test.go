@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -559,10 +560,7 @@ func (e *quorumRecoveryEnv) handleDescriptorData(t *testing.T, d datadriven.Test
 func (e *quorumRecoveryEnv) handleMakePlan(t *testing.T, d datadriven.TestData) (string, error) {
 	stores := e.parseStoresArg(t, d, false /* defaultToAll */)
 	nodes := e.parseNodesArg(t, d)
-	plan, report, err := PlanReplicas(context.Background(), loqrecoverypb.ClusterReplicaInfo{
-		Descriptors: e.replicas.Descriptors,
-		LocalInfo:   e.replicas.LocalInfo,
-	}, stores, nodes, e.uuidGen)
+	plan, report, err := PlanReplicas(context.Background(), e.replicas, stores, nodes, e.uuidGen)
 	if err != nil {
 		return "", err
 	}
@@ -643,6 +641,12 @@ func (e *quorumRecoveryEnv) handleCollectReplicas(
 		if err = e.replicas.Merge(info); err != nil {
 			return "", err
 		}
+	}
+	if len(e.replicas.LocalInfo) == 0 {
+		// This is unrealistic as we don't have metadata. We need to fake it here
+		// to pass planner checks.
+		e.replicas.ClusterID = e.clusterID.String()
+		e.replicas.Version = clusterversion.ByKey(clusterversion.BinaryVersionKey)
 	}
 	e.replicas.Descriptors = e.meta
 	return "ok", nil
