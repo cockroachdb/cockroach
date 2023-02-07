@@ -843,7 +843,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		if !required.Ordering.Any() {
 			if f.HasFlags(ExprFmtHideMiscProps) {
 				tp.Childf("ordering: %s", required.Ordering.String())
-			} else {
+			} else if e.ProvidedPhysical() != nil {
 				// Show the provided ordering as well, unless it's exactly the same.
 				provided := e.ProvidedPhysical().Ordering
 				reqStr := required.Ordering.String()
