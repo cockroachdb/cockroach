@@ -46,6 +46,8 @@ func SuffixFromPlatform(platform Platform) string {
 	switch platform {
 	case PlatformLinux:
 		return ".linux-2.6.32-gnu-amd64"
+	case PlatformLinuxFIPS:
+		return ".linux-2.6.32-gnu-amd64-fips"
 	case PlatformLinuxArm:
 		return ".linux-3.7.10-gnu-arm64"
 	case PlatformMacOS:
@@ -67,6 +69,8 @@ func CrossConfigFromPlatform(platform Platform) string {
 	switch platform {
 	case PlatformLinux:
 		return "crosslinuxbase"
+	case PlatformLinuxFIPS:
+		return "crosslinuxfipsbase"
 	case PlatformLinuxArm:
 		return "crosslinuxarmbase"
 	case PlatformMacOS:
@@ -84,7 +88,7 @@ func CrossConfigFromPlatform(platform Platform) string {
 // into the cockroach binary for the given platform.
 func TargetTripleFromPlatform(platform Platform) string {
 	switch platform {
-	case PlatformLinux:
+	case PlatformLinux, PlatformLinuxFIPS:
 		return "x86_64-pc-linux-gnu"
 	case PlatformLinuxArm:
 		return "aarch64-unknown-linux-gnu"
@@ -102,7 +106,7 @@ func TargetTripleFromPlatform(platform Platform) string {
 // SharedLibraryExtensionFromPlatform returns the shared library extensions for a given Platform.
 func SharedLibraryExtensionFromPlatform(platform Platform) string {
 	switch platform {
-	case PlatformLinux, PlatformLinuxArm:
+	case PlatformLinux, PlatformLinuxFIPS, PlatformLinuxArm:
 		return ".so"
 	case PlatformWindows:
 		return ".dll"
@@ -179,7 +183,7 @@ func MakeRelease(platform Platform, opts BuildOptions, pkgDir string) error {
 		return err
 	}
 
-	if platform == PlatformLinux {
+	if platform == PlatformLinux || platform == PlatformLinuxFIPS {
 		suffix := SuffixFromPlatform(platform)
 		binaryName := "./cockroach" + suffix
 
@@ -210,6 +214,24 @@ func MakeRelease(platform Platform, opts BuildOptions, pkgDir string) error {
 		if err := scanner.Err(); err != nil {
 			return err
 		}
+
+		cmd = exec.Command("bazel", "run", "@go_sdk//:bin/go", "--", "tool", "nm", binaryName)
+		cmd.Dir = pkgDir
+		cmd.Stderr = os.Stderr
+		log.Printf("%s %s", cmd.Env, cmd.Args)
+		stdoutBytes, err = opts.ExecFn.Run(cmd)
+		if err != nil {
+			log.Fatalf("%s %s: out=%s err=%v", cmd.Env, cmd.Args, string(stdoutBytes), err)
+		}
+		out := string(stdoutBytes)
+		if platform == PlatformLinuxFIPS && !strings.Contains(out, "golang-fips") {
+			log.Print("`go nm tool` does not contain `golang-fips` in its output")
+			log.Fatalf("%s %s: out=%s", cmd.Env, cmd.Args, out)
+		}
+		if platform == PlatformLinux && strings.Contains(out, "golang-fips") {
+			log.Print("`go nm tool` contains `golang-fips` in its output")
+			log.Fatalf("%s %s: out=%s", cmd.Env, cmd.Args, out)
+		}
 	}
 	return nil
 }
@@ -229,7 +251,7 @@ var (
 		}, "|")
 		return regexp.MustCompile(libs)
 	}()
-	osVersionRe = regexp.MustCompile(`\d+(\.\d+)*-`)
+	osVersionRe = regexp.MustCompile(`\d+\.(\d+(\.)?)*?-`)
 )
 
 // Platform is an enumeration of the supported platforms for release.
@@ -238,6 +260,8 @@ type Platform int
 const (
 	// PlatformLinux is the Linux x86_64 target.
 	PlatformLinux Platform = iota
+	// PlatformLinuxFIPS is the Linux FIPS target.
+	PlatformLinuxFIPS
 	// PlatformLinuxArm is the Linux aarch64 target.
 	PlatformLinuxArm
 	// PlatformMacOS is the Darwin x86_64 target.
