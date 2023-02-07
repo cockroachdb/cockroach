@@ -396,10 +396,6 @@ func TestReplicaCircuitBreaker_Liveness_QuorumLoss(t *testing.T) {
 
 type dummyStream struct {
 	name string
-	t    interface {
-		Helper()
-		Logf(string, ...interface{})
-	}
 	ctx  context.Context
 	recv chan *roachpb.RangeFeedEvent
 }
@@ -410,14 +406,34 @@ func (s *dummyStream) Context() context.Context {
 
 func (s *dummyStream) Send(ev *roachpb.RangeFeedEvent) error {
 	if ev.Val == nil && ev.Error == nil {
-		s.t.Logf("%s: ignoring event: %v", s.name, ev)
 		return nil
 	}
+
 	select {
 	case <-s.ctx.Done():
 		return s.ctx.Err()
 	case s.recv <- ev:
 		return nil
+	}
+}
+
+func waitReplicaRangeFeed(
+	ctx context.Context,
+	r *kvserver.Replica,
+	req *roachpb.RangeFeedRequest,
+	stream roachpb.RangeFeedEventSink,
+) error {
+	f := r.RangeFeedPromise(req, stream, nil /* pacer */)
+	defer f.Join()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-f.Done():
+		pErr, err := f.Get()
+		if err != nil {
+			return err
+		}
+		return pErr.GoError()
 	}
 }
 
@@ -440,9 +456,9 @@ func TestReplicaCircuitBreaker_RangeFeed(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	stream1 := &dummyStream{t: t, ctx: ctx, name: "rangefeed1", recv: make(chan *roachpb.RangeFeedEvent)}
+	stream1 := &dummyStream{ctx: ctx, name: "rangefeed1", recv: make(chan *roachpb.RangeFeedEvent)}
 	require.NoError(t, tc.Stopper().RunAsyncTask(ctx, "stream1", func(ctx context.Context) {
-		err := tc.repls[0].RangeFeed(args, stream1, nil /* pacer */).GoError()
+		err := waitReplicaRangeFeed(ctx, tc.repls[0].Replica, args, stream1)
 		if ctx.Err() != nil {
 			return // main goroutine stopping
 		}
@@ -494,9 +510,9 @@ func TestReplicaCircuitBreaker_RangeFeed(t *testing.T) {
 
 	// Start another stream during the "outage" to make sure it isn't rejected by
 	// the breaker.
-	stream2 := &dummyStream{t: t, ctx: ctx, name: "rangefeed2", recv: make(chan *roachpb.RangeFeedEvent)}
+	stream2 := &dummyStream{ctx: ctx, name: "rangefeed2", recv: make(chan *roachpb.RangeFeedEvent)}
 	require.NoError(t, tc.Stopper().RunAsyncTask(ctx, "stream2", func(ctx context.Context) {
-		err := tc.repls[0].RangeFeed(args, stream2, nil /* pacer */).GoError()
+		err := waitReplicaRangeFeed(ctx, tc.repls[0].Replica, args, stream2)
 		if ctx.Err() != nil {
 			return // main goroutine stopping
 		}

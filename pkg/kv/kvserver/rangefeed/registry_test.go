@@ -18,6 +18,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/keys" // hook up pretty printer
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -92,7 +93,6 @@ func (s *testStream) BlockSend() func() {
 type testRegistration struct {
 	registration
 	stream *testStream
-	errC   <-chan *roachpb.Error
 }
 
 func makeCatchUpIteratorConstructor(iter storage.SimpleMVCCIterator) CatchUpIteratorConstructor {
@@ -112,8 +112,6 @@ func newTestRegistration(
 	span roachpb.Span, ts hlc.Timestamp, catchup storage.SimpleMVCCIterator, withDiff bool,
 ) *testRegistration {
 	s := newTestStream()
-	errC := make(chan *roachpb.Error, 1)
-
 	r := newRegistration(
 		span,
 		ts,
@@ -122,13 +120,13 @@ func newTestRegistration(
 		5,
 		NewMetrics(),
 		s,
-		errC,
+		func() {},
+		future.MakePromise[*roachpb.Error](),
 	)
 	r.maybeConstructCatchUpIter()
 	return &testRegistration{
 		registration: r,
 		stream:       s,
-		errC:         errC,
 	}
 }
 
@@ -137,14 +135,22 @@ func (r *testRegistration) Events() []*roachpb.RangeFeedEvent {
 }
 
 func (r *testRegistration) Err() *roachpb.Error {
+	pErr, err := r.done.Get()
+	if err != nil {
+		return roachpb.NewError(err)
+	}
+	return pErr
+}
+
+func (r *testRegistration) TryErr() *roachpb.Error {
 	select {
-	case pErr := <-r.errC:
-		return pErr
+	case <-r.done.Done():
+		v, _ := r.done.Get()
+		return v
 	default:
 		return nil
 	}
 }
-
 func TestRegistrationBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -163,7 +169,6 @@ func TestRegistrationBasic(t *testing.T) {
 	require.NoError(t, noCatchupReg.waitForCaughtUp())
 	require.Equal(t, []*roachpb.RangeFeedEvent{ev1, ev2}, noCatchupReg.stream.Events())
 	noCatchupReg.disconnect(nil)
-	<-noCatchupReg.errC
 
 	// Registration with catchup scan.
 	catchupReg := newTestRegistration(spBC, hlc.Timestamp{WallTime: 1},
@@ -181,7 +186,6 @@ func TestRegistrationBasic(t *testing.T) {
 	require.Equal(t, 5, len(events))
 	require.Equal(t, []*roachpb.RangeFeedEvent{ev1, ev2}, events[3:])
 	catchupReg.disconnect(nil)
-	<-catchupReg.errC
 
 	// EXIT CONDITIONS
 	// External Disconnect.
@@ -192,8 +196,7 @@ func TestRegistrationBasic(t *testing.T) {
 	require.NoError(t, disconnectReg.waitForCaughtUp())
 	discErr := roachpb.NewError(fmt.Errorf("disconnection error"))
 	disconnectReg.disconnect(discErr)
-	err := <-disconnectReg.errC
-	require.Equal(t, discErr, err)
+	require.Equal(t, discErr, disconnectReg.Err())
 	require.Equal(t, 2, len(disconnectReg.stream.Events()))
 
 	// External Disconnect before output loop.
@@ -202,8 +205,7 @@ func TestRegistrationBasic(t *testing.T) {
 	disconnectEarlyReg.publish(ctx, ev2, nil /* alloc */)
 	disconnectEarlyReg.disconnect(discErr)
 	go disconnectEarlyReg.runOutputLoop(context.Background(), 0)
-	err = <-disconnectEarlyReg.errC
-	require.Equal(t, discErr, err)
+	require.Equal(t, discErr, disconnectEarlyReg.Err())
 	require.Equal(t, 0, len(disconnectEarlyReg.stream.Events()))
 
 	// Overflow.
@@ -212,8 +214,7 @@ func TestRegistrationBasic(t *testing.T) {
 		overflowReg.publish(ctx, ev1, nil /* alloc */)
 	}
 	go overflowReg.runOutputLoop(context.Background(), 0)
-	err = <-overflowReg.errC
-	require.Equal(t, newErrBufferCapacityExceeded(), err)
+	require.Equal(t, newErrBufferCapacityExceeded(), overflowReg.Err())
 	require.Equal(t, cap(overflowReg.buf), len(overflowReg.Events()))
 
 	// Stream Error.
@@ -222,16 +223,14 @@ func TestRegistrationBasic(t *testing.T) {
 	streamErrReg.stream.SetSendErr(streamErr)
 	go streamErrReg.runOutputLoop(context.Background(), 0)
 	streamErrReg.publish(ctx, ev1, nil /* alloc */)
-	err = <-streamErrReg.errC
-	require.Equal(t, streamErr.Error(), err.GoError().Error())
+	require.Equal(t, streamErr.Error(), streamErrReg.Err().GoError().Error())
 
 	// Stream Context Canceled.
 	streamCancelReg := newTestRegistration(spAB, hlc.Timestamp{}, nil, false)
 	streamCancelReg.stream.Cancel()
 	go streamCancelReg.runOutputLoop(context.Background(), 0)
 	require.NoError(t, streamCancelReg.waitForCaughtUp())
-	err = <-streamCancelReg.errC
-	require.Equal(t, streamCancelReg.stream.Context().Err().Error(), err.GoError().Error())
+	require.Equal(t, streamCancelReg.stream.Context().Err().Error(), streamCancelReg.Err().GoError().Error())
 }
 
 func TestRegistrationCatchUpScan(t *testing.T) {
@@ -388,10 +387,10 @@ func TestRegistryBasic(t *testing.T) {
 	require.Equal(t, []*roachpb.RangeFeedEvent{ev2, ev4}, rBC.Events())
 	require.Equal(t, []*roachpb.RangeFeedEvent{ev3}, rCD.Events())
 	require.Equal(t, []*roachpb.RangeFeedEvent{noPrev(ev1), noPrev(ev2), noPrev(ev4)}, rAC.Events())
-	require.Nil(t, rAB.Err())
-	require.Nil(t, rBC.Err())
-	require.Nil(t, rCD.Err())
-	require.Nil(t, rAC.Err())
+	require.Nil(t, rAB.TryErr())
+	require.Nil(t, rBC.TryErr())
+	require.Nil(t, rCD.TryErr())
+	require.Nil(t, rAC.TryErr())
 
 	// Check the registry's operation filter.
 	f := reg.NewFilter()
@@ -554,7 +553,6 @@ func TestRegistryPublishBeneathStartTimestamp(t *testing.T) {
 	require.Equal(t, []*roachpb.RangeFeedEvent{ev}, r.Events())
 
 	r.disconnect(nil)
-	<-r.errC
 }
 
 func TestRegistrationString(t *testing.T) {

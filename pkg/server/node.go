@@ -18,6 +18,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -51,7 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
-	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -1418,13 +1419,19 @@ func (n *Node) RangeLookup(
 func (n *Node) RangeFeed(
 	args *roachpb.RangeFeedRequest, stream roachpb.Internal_RangeFeedServer,
 ) error {
-	return n.singleRangeFeed(args, stream)
-}
+	ctx := n.AnnotateCtx(stream.Context())
+	ctx = logtags.AddTag(ctx, "r", args.RangeID)
+	ctx = logtags.AddTag(ctx, "s", args.Replica.StoreID)
+	_, restore := pprofutil.SetProfilerLabelsFromCtxTags(ctx)
+	defer restore()
 
-func (n *Node) singleRangeFeed(
-	args *roachpb.RangeFeedRequest, stream roachpb.RangeFeedEventSink,
-) error {
-	pErr := n.stores.RangeFeed(args, stream)
+	pErr, err := n.stores.RangeFeedPromise(args, stream).Get()
+	if err != nil {
+		// Got stream context error, probably won't be able to propagate it to the stream,
+		// but give it a try anyway.
+		pErr = roachpb.NewError(err)
+	}
+
 	if pErr != nil {
 		var event roachpb.RangeFeedEvent
 		event.SetValue(&roachpb.RangeFeedError{
@@ -1480,34 +1487,50 @@ func (s *lockedMuxStream) Send(e *roachpb.MuxRangeFeedEvent) error {
 
 // MuxRangeFeed implements the roachpb.InternalServer interface.
 func (n *Node) MuxRangeFeed(stream roachpb.Internal_MuxRangeFeedServer) error {
-	ctx, cancelFeeds := n.stopper.WithCancelOnQuiesce(stream.Context())
-	defer cancelFeeds()
-	rfGrp := ctxgroup.WithContext(ctx)
-
 	muxStream := &lockedMuxStream{wrapped: stream}
+	var streams syncutil.IntMap
+	defer func() {
+		streams.Range(func(key int64, v unsafe.Pointer) bool {
+			(*future.Future[*roachpb.Error])(v).Join()
+			return true
+		})
+	}()
+
 	for {
 		req, err := stream.Recv()
 		if err != nil {
-			cancelFeeds()
-			return errors.CombineErrors(err, rfGrp.Wait())
+			return err
 		}
 
-		rfGrp.GoCtx(func(ctx context.Context) error {
-			ctx = n.AnnotateCtx(ctx)
-			ctx = logtags.AddTag(ctx, "r", req.RangeID)
-			ctx = logtags.AddTag(ctx, "s", req.Replica.StoreID)
-			ctx, restore := pprofutil.SetProfilerLabelsFromCtxTags(ctx)
-			defer restore()
-			ctx, span := tracing.ForkSpan(ctx, "mux-rf")
-			defer span.Finish()
+		streamCtx := n.AnnotateCtx(stream.Context())
+		streamCtx = logtags.AddTag(streamCtx, "r", req.RangeID)
+		streamCtx = logtags.AddTag(streamCtx, "s", req.Replica.StoreID)
 
-			sink := setRangeIDEventSink{
-				ctx:      ctx,
-				rangeID:  req.RangeID,
-				streamID: req.StreamID,
-				wrapped:  muxStream,
+		sink := setRangeIDEventSink{
+			ctx:      streamCtx,
+			rangeID:  req.RangeID,
+			streamID: req.StreamID,
+			wrapped:  muxStream,
+		}
+
+		f := n.stores.RangeFeedPromise(req, &sink)
+		streams.Store(req.StreamID, unsafe.Pointer(&f))
+		f.WhenReady(func(pErr *roachpb.Error, err error) {
+			streams.Delete(req.StreamID)
+			f.Join()
+
+			if err != nil {
+				pErr = roachpb.NewError(err)
 			}
-			return n.singleRangeFeed(req, &sink)
+			if pErr != nil {
+				var event roachpb.RangeFeedEvent
+				event.SetValue(&roachpb.RangeFeedError{
+					Error: *pErr,
+				})
+				// Sending could fail, but if it did, the stream is broken anyway, so
+				// nothing we can do with this error.
+				_ = sink.Send(&event)
+			}
 		})
 	}
 }

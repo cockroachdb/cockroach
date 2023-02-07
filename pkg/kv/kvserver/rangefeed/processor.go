@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -318,6 +319,9 @@ func (p *Processor) run(
 				r.runOutputLoop(ctx, p.RangeID)
 				select {
 				case p.unregC <- &r:
+					if r.unreg != nil {
+						r.unreg()
+					}
 				case <-p.stoppedC:
 				}
 			}
@@ -473,7 +477,8 @@ func (p *Processor) Register(
 	catchUpIterConstructor CatchUpIteratorConstructor,
 	withDiff bool,
 	stream Stream,
-	errC chan<- *roachpb.Error,
+	disconnectFn func(),
+	done future.Future[*roachpb.Error],
 ) (bool, *Filter) {
 	// Synchronize the event channel so that this registration doesn't see any
 	// events that were consumed before this registration was called. Instead,
@@ -482,7 +487,7 @@ func (p *Processor) Register(
 
 	r := newRegistration(
 		span.AsRawSpanWithNoLocals(), startTS, catchUpIterConstructor, withDiff,
-		p.Config.EventChanCap, p.Metrics, stream, errC,
+		p.Config.EventChanCap, p.Metrics, stream, disconnectFn, done,
 	)
 	select {
 	case p.regC <- r:
