@@ -223,7 +223,7 @@ func NewReplicationHelper(
 SET CLUSTER SETTING kv.rangefeed.enabled = true;
 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s';
 SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms';
-SET CLUSTER SETTING sql.defaults.experimental_stream_replication.enabled = 'on';
+SET CLUSTER SETTING cross_cluster_replication.enabled = true;
 `, `;`)...)
 
 	// Sink to read data from.

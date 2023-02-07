@@ -1047,14 +1047,14 @@ func (c *clusterImpl) StopCockroachGracefullyOnNode(
 	gracefulOpts.RoachprodOpts.Sig = 15 // SIGTERM
 	gracefulOpts.RoachprodOpts.Wait = true
 	gracefulOpts.RoachprodOpts.MaxWait = 60
-	c.Stop(ctx, l, gracefulOpts, c.Node(node))
-	// NB: we still call Stop to make sure the process is dead when we try
-	// to restart it (or we'll catch an error from the RocksDB dir being
-	// locked). This won't happen unless run with --local due to timing.
-	c.Stop(ctx, l, option.DefaultStopOpts(), c.Node(node))
-	// TODO(tschottdorf): should return an error. I doubt that we want to
-	//  call these *testing.T-style methods on goroutines.
-	return nil
+	if err := c.StopE(ctx, l, gracefulOpts, c.Node(node)); err != nil {
+		return err
+	}
+
+	// NB: we still call Stop to make sure the process is dead when we
+	// try to restart it (in case it takes longer than `MaxWait` for it
+	// to finish).
+	return c.StopE(ctx, l, option.DefaultStopOpts(), c.Node(node))
 }
 
 // Save marks the cluster as "saved" so that it doesn't get destroyed.

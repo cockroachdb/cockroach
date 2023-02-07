@@ -113,7 +113,7 @@ SET CLUSTER SETTING stream_replication.consumer_heartbeat_frequency = '100ms';
 SET CLUSTER SETTING bulkio.stream_ingestion.minimum_flush_interval = '500ms';
 SET CLUSTER SETTING bulkio.stream_ingestion.cutover_signal_poll_interval = '100ms';
 SET CLUSTER SETTING stream_replication.job_checkpoint_frequency = '100ms';
-SET enable_experimental_stream_replication = true;
+SET CLUSTER SETTING cross_cluster_replication.enabled = true;
 `,
 		";")...)
 
@@ -191,7 +191,7 @@ func TestTenantStreamingCreationErrors(t *testing.T) {
 	SrcSysSQL.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
 
 	DestSysSQL := sqlutils.MakeSQLRunner(destDB)
-	DestSysSQL.Exec(t, `SET enable_experimental_stream_replication = true`)
+	DestSysSQL.Exec(t, `SET CLUSTER SETTING cross_cluster_replication.enabled = true;`)
 
 	// Sink to read data from.
 	srcPgURL, cleanupSink := sqlutils.PGUrl(t, srcServer.ServingSQLAddr(), t.Name(), url.User(username.RootUser))

@@ -273,7 +273,7 @@ func CreateTenantStreamingClusters(
 		args.DestInitFunc(t, tsc.DestSysSQL)
 	}
 	// Enable stream replication on dest by default.
-	tsc.DestSysSQL.Exec(t, `SET enable_experimental_stream_replication = true;`)
+	tsc.DestSysSQL.Exec(t, `SET CLUSTER SETTING cross_cluster_replication.enabled = true;`)
 	return tsc, func() {
 		require.NoError(t, srcTenantConn.Close())
 		destCleanup()

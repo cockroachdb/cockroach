@@ -24,31 +24,31 @@ const (
 var (
 	metaReplicationEventsIngested = metric.Metadata{
 		Name:        "replication.events_ingested",
-		Help:        "Events ingested by all ingestion jobs",
+		Help:        "Events ingested by all replication jobs",
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaReplicationResolvedEventsIngested = metric.Metadata{
 		Name:        "replication.resolved_events_ingested",
-		Help:        "Resolved events ingested by all ingestion jobs",
+		Help:        "Resolved events ingested by all replication jobs",
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaReplicationIngestedBytes = metric.Metadata{
-		Name:        "replication.ingested_bytes",
-		Help:        "Bytes ingested by all ingestion jobs",
+		Name:        "replication.logical_bytes",
+		Help:        "Logical bytes (sum of keys + values) ingested by all replication jobs",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
 	metaReplicationSSTBytes = metric.Metadata{
 		Name:        "replication.sst_bytes",
-		Help:        "SST bytes (compressed) sent to KV by all ingestion jobs",
+		Help:        "SST bytes (compressed) sent to KV by all replication jobs",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
 	metaReplicationFlushes = metric.Metadata{
 		Name:        "replication.flushes",
-		Help:        "Total flushes across all ingestion jobs",
+		Help:        "Total flushes across all replication jobs",
 		Measurement: "Flushes",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -105,8 +105,9 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 	metaFrontierLagSeconds = metric.Metadata{
-		Name:        "replication.frontier_lag_seconds",
-		Help:        "Time the replication frontier lags",
+		Name: "replication.frontier_lag_seconds",
+		Help: "Time between the wall clock and replicated time of the replication stream. " +
+			"This metric tracks how far behind the replication stream is relative to now",
 		Measurement: "Seconds",
 		Unit:        metric.Unit_SECONDS,
 	}
