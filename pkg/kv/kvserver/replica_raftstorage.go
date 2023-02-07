@@ -567,6 +567,10 @@ func (r *Replica) applySnapshot(
 	}
 	stats.ingestion = timeutil.Now()
 
+	// The on-disk state is now committed, but the corresponding in-memory state
+	// has not yet been updated. Any errors past this point must therefore be
+	// treated as fatal.
+
 	state, err := stateloader.Make(desc.RangeID).Load(ctx, r.store.engine, desc)
 	if err != nil {
 		log.Fatalf(ctx, "unable to load replica state: %s", err)
@@ -581,21 +585,20 @@ func (r *Replica) applySnapshot(
 			state.RaftAppliedIndexTerm, nonemptySnap.Metadata.Term)
 	}
 
-	// The on-disk state is now committed, but the corresponding in-memory state
-	// has not yet been updated. Any errors past this point must therefore be
-	// treated as fatal.
-
-	subPHs, err := r.clearSubsumedReplicaInMemoryData(ctx, subsumedRepls, mergedTombstoneReplicaID)
-	if err != nil {
-		log.Fatalf(ctx, "failed to clear in-memory data of subsumed replicas while applying snapshot: %+v", err)
-	}
-
 	// Read the prior read summary for this range, which was included in the
 	// snapshot. We may need to use it to bump our timestamp cache if we
 	// discover that we are the leaseholder as of the snapshot's log index.
 	prioReadSum, err := readsummary.Load(ctx, r.store.engine, r.RangeID)
 	if err != nil {
 		log.Fatalf(ctx, "failed to read prior read summary after applying snapshot: %+v", err)
+	}
+
+	// The necessary on-disk state is read. Update the in-memory Replica and Store
+	// state now.
+
+	subPHs, err := r.clearSubsumedReplicaInMemoryData(ctx, subsumedRepls, mergedTombstoneReplicaID)
+	if err != nil {
+		log.Fatalf(ctx, "failed to clear in-memory data of subsumed replicas while applying snapshot: %+v", err)
 	}
 
 	// Atomically swap the placeholder, if any, for the replica, and update the
