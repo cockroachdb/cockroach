@@ -145,9 +145,9 @@ func runInconsistency(ctx context.Context, t test.Test, c cluster.Cluster) {
 		c.Run(ctx, c.Node(n), "find {store-dir}/auxiliary/checkpoints -name checkpoint.txt")
 		// The checkpoint can be inspected by the tooling.
 		c.Run(ctx, c.Node(n), "./cockroach debug range-descriptors "+
-			"$(find {store-dir}/auxiliary/checkpoints/* -type d -depth 0 | head -n1)")
+			"$(find {store-dir}/auxiliary/checkpoints/* -maxdepth 0 -type d | head -n1)")
 		c.Run(ctx, c.Node(n), "./cockroach debug range-data --limit 10 "+
-			"$(find {store-dir}/auxiliary/checkpoints/* -type d -depth 0 | head -n1) 1")
+			"$(find {store-dir}/auxiliary/checkpoints/* -maxdepth 0 -type d | head -n1) 1")
 	}
 
 	// NB: we can't easily verify the error because there's a lot of output which
