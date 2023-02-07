@@ -146,8 +146,8 @@ func collectFuncOptions(
 			}
 
 		case tree.FunctionLanguage:
-			if t != tree.FunctionLangSQL {
-				panic(fmt.Errorf("LANGUAGE must be SQL"))
+			if t != tree.FunctionLangSQL && t != tree.FunctionLangPlPgSQL {
+				panic(fmt.Errorf("LANGUAGE must be SQL or plpgsql"))
 			}
 
 		default:

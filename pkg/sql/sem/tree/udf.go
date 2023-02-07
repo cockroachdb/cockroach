@@ -235,33 +235,34 @@ func (node FunctionLeakproof) Format(ctx *FmtCtx) {
 
 // FunctionLanguage indicates the language of the statements in the UDF function
 // body.
-type FunctionLanguage int
+type FunctionLanguage string
 
 const (
-	_ FunctionLanguage = iota
-	// FunctionLangSQL represent SQL language.
-	FunctionLangSQL
+	// FunctionLangUnknown represents an unknown language.
+	FunctionLangUnknown = "unknown"
+	// FunctionLangSQL represents SQL language.
+	FunctionLangSQL = "SQL"
+	// FunctionLangPlPgSQL represents the PL/pgSQL procedural language.
+	FunctionLangPlPgSQL = "plpgsql"
 )
 
 // Format implements the NodeFormatter interface.
 func (node FunctionLanguage) Format(ctx *FmtCtx) {
 	ctx.WriteString("LANGUAGE ")
-	switch node {
-	case FunctionLangSQL:
-		ctx.WriteString("SQL")
-	default:
-		panic(pgerror.New(pgcode.InvalidParameterValue, "Unknown function option"))
-	}
+	ctx.WriteString(string(node))
 }
 
 // AsFunctionLanguage converts a string to a FunctionLanguage if applicable.
-// Error is returned if string does not represent a valid UDF language.
+// No error is returned if string does not represent a valid UDF language;
+// unknown languages result in an error later.
 func AsFunctionLanguage(lang string) (FunctionLanguage, error) {
 	switch strings.ToLower(lang) {
 	case "sql":
 		return FunctionLangSQL, nil
+	case "plpgsql":
+		return FunctionLangPlPgSQL, nil
 	}
-	return 0, errors.Newf("language %q does not exist", lang)
+	return FunctionLanguage(lang), nil
 }
 
 // FunctionBodyStr is a string containing all statements in a UDF body.
@@ -523,34 +524,34 @@ func MaybeFailOnUDFUsage(expr TypedExpr) error {
 // function options in the given slice.
 func ValidateFuncOptions(options FunctionOptions) error {
 	var hasLang, hasBody, hasLeakProof, hasVolatility, hasNullInputBehavior bool
-	err := func(opt FunctionOption) error {
+	conflictingErr := func(opt FunctionOption) error {
 		return errors.Wrapf(ErrConflictingFunctionOption, "%s", AsString(opt))
 	}
 	for _, option := range options {
 		switch option.(type) {
 		case FunctionLanguage:
 			if hasLang {
-				return err(option)
+				return conflictingErr(option)
 			}
 			hasLang = true
 		case FunctionBodyStr:
 			if hasBody {
-				return err(option)
+				return conflictingErr(option)
 			}
 			hasBody = true
 		case FunctionLeakproof:
 			if hasLeakProof {
-				return err(option)
+				return conflictingErr(option)
 			}
 			hasLeakProof = true
 		case FunctionVolatility:
 			if hasVolatility {
-				return err(option)
+				return conflictingErr(option)
 			}
 			hasVolatility = true
 		case FunctionNullInputBehavior:
 			if hasNullInputBehavior {
-				return err(option)
+				return conflictingErr(option)
 			}
 			hasNullInputBehavior = true
 		default:

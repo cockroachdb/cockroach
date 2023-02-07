@@ -495,3 +495,53 @@ using the support form.
 We appreciate your feedback.
 ----
 ----
+
+parse
+CREATE FUNCTION populate() RETURNS integer AS $$
+DECLARE
+    -- declarations
+BEGIN
+    PERFORM my_function();
+END;
+$$ LANGUAGE plpgsql
+----
+CREATE FUNCTION populate()
+	RETURNS INT8
+	LANGUAGE plpgsql
+	AS $$
+DECLARE
+    -- declarations
+BEGIN
+    PERFORM my_function();
+END;
+$$ -- normalized!
+CREATE FUNCTION populate()
+	RETURNS INT8
+	LANGUAGE plpgsql
+	AS $$
+DECLARE
+    -- declarations
+BEGIN
+    PERFORM my_function();
+END;
+$$ -- fully parenthesized
+CREATE FUNCTION populate()
+	RETURNS INT8
+	LANGUAGE plpgsql
+	AS $$
+DECLARE
+    -- declarations
+BEGIN
+    PERFORM my_function();
+END;
+$$ -- literals removed
+CREATE FUNCTION _()
+	RETURNS INT8
+	LANGUAGE plpgsql
+	AS $$
+DECLARE
+    -- declarations
+BEGIN
+    PERFORM my_function();
+END;
+$$ -- identifiers removed
