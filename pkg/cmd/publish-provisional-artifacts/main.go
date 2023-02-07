@@ -142,6 +142,7 @@ func run(providers []release.ObjectPutGetter, flags runFlags, execFn release.Exe
 
 	platforms := []release.Platform{
 		release.PlatformLinux,
+		release.PlatformLinuxFIPS,
 		release.PlatformMacOS,
 		release.PlatformMacOSArm,
 		release.PlatformWindows,
