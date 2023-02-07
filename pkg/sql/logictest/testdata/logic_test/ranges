@@ -364,10 +364,23 @@ CREATE TABLE simple_range_for_row(x INT PRIMARY KEY)
 statement ok
 ALTER TABLE simple_range_for_row SPLIT AT VALUES (1), (2)
 
+# Before split
+query TT
+SELECT start_key, end_key FROM [SHOW RANGE FROM TABLE simple_range_for_row FOR ROW (0)]
+----
+<before:/Table/113/2/0>  …/1
+
+# Between splits
 query TT
 SELECT start_key, end_key FROM [SHOW RANGE FROM TABLE simple_range_for_row FOR ROW (1)]
 ----
-…/1  <after:/Table/120/1/2>
+…/1  …/2
+
+# After split
+query TT retry
+SELECT start_key, end_key FROM [SHOW RANGE FROM TABLE simple_range_for_row FOR ROW (2)]
+----
+…/2  <after:/Max>
 
 statement ok
 CREATE TABLE range_for_row(x INT, y INT, z INT, w INT, PRIMARY KEY (x, y), INDEX i (z, w))
@@ -381,32 +394,32 @@ ALTER INDEX range_for_row@i SPLIT AT VALUES (3, 4), (3, 5)
 query TT
 SELECT start_key, end_key FROM [SHOW RANGE FROM TABLE range_for_row FOR ROW (1, 2)]
 ----
-…/1/2  <after:/Table/121/1/1/3>
+…/1/2  …/1/3
 
 query TT
 SELECT start_key, end_key FROM [SHOW RANGE FROM TABLE range_for_row FOR ROW (1, 3)]
 ----
-…/1/3  <after:/Table/121/2/3/4>
+…/1/3  …/3/4
 
 query TT
 SELECT start_key, end_key FROM [SHOW RANGE FROM TABLE range_for_row FOR ROW (1, 1)]
 ----
-<before:/Table/120/1/2>  <after:/Table/121/1/1/2>
+<before:/Table/120/1/2>  …/1/2
 
 query TT
 SELECT start_key, end_key FROM [SHOW RANGE FROM INDEX range_for_row@i FOR ROW (1, 2, 1, 2)]
 ----
-…/1/3  <after:/Table/121/2/3/4>
+…/1/3  …/3/4
 
 query TT
 SELECT start_key, end_key FROM [SHOW RANGE FROM INDEX range_for_row@i FOR ROW (3, 4, 1, 2)]
 ----
-…/3/4  <after:/Table/121/2/3/5>
+…/3/4  …/3/5
 
 query TT
 SELECT start_key, end_key FROM [SHOW RANGE FROM INDEX range_for_row@i FOR ROW (3, 5, 1, 2)]
 ----
-…/3/5  …
+…/3/5  <after:/Max>
 
 statement ok
 CREATE TABLE range_for_row_string(x STRING PRIMARY KEY)
@@ -417,7 +430,7 @@ ALTER TABLE range_for_row_string SPLIT AT VALUES ('hello')
 query TT
 SELECT start_key, end_key FROM [SHOW RANGE FROM TABLE range_for_row_string FOR ROW ('he')]
 ----
-<before:/Table/121/2/3/5>  <after:/Table/122/1/"hello">
+<before:/Table/121/2/3/5>  …/"hello"
 
 statement ok
 CREATE TABLE range_for_row_decimal(x DECIMAL PRIMARY KEY)
@@ -428,7 +441,7 @@ ALTER TABLE range_for_row_decimal SPLIT AT VALUES (1), (2)
 query TT
 SELECT start_key, end_key FROM [SHOW RANGE FROM TABLE range_for_row_decimal FOR ROW (1)]
 ----
-…/1  <after:/Table/123/1/2>
+…/1  …/2
 
 statement ok
 CREATE TABLE range_for_row_nulls(x INT PRIMARY KEY, y INT, INDEX i (y))
@@ -439,7 +452,7 @@ ALTER INDEX range_for_row_nulls@i SPLIT AT VALUES (NULL)
 query TT
 SELECT start_key, end_key from [SHOW RANGE FROM INDEX range_for_row_nulls@i FOR ROW (NULL, 1)]
 ----
-…/NULL  …
+…/NULL  <after:/Max>
 
 subtest end
 
@@ -529,12 +542,12 @@ ALTER TABLE t63646 SPLIT AT VALUES ('a'), ('b')
 query TT
 SELECT start_key, end_key FROM [SHOW RANGE FROM TABLE t63646 FOR ROW ('a')]
 ----
-…/"@"  <after:/Table/130/1/"\x80">
+…/"@"  …/"\x80"
 
 query TT
 SELECT start_key, end_key FROM [SHOW RANGE FROM TABLE t63646 FOR ROW ('b')]
 ----
-…/"\x80"  …
+…/"\x80"  <after:/Max>
 
 # Test permissions for showing ranges with ZONECONFIG privilege
 

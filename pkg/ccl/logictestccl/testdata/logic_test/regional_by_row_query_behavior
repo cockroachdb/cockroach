@@ -262,7 +262,7 @@ ap-southeast-2  23
 query TT
 SELECT start_key, end_key FROM [SHOW RANGE FROM TABLE regional_by_row_table FOR ROW ('ap-southeast-2', 1)]
 ----
-<before:/Table/57>  <after:/Table/110/5>
+<before:/Table/57>  …
 
 query TIIII
 SELECT crdb_region, pk, pk2, a, b FROM regional_by_row_table
