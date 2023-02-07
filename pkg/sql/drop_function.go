@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -71,6 +73,21 @@ func (p *planner) DropFunction(
 		mut, err := p.checkPrivilegesForDropFunction(ctx, fnID)
 		if err != nil {
 			return nil, err
+		}
+		if n.DropBehavior != tree.DropCascade && len(mut.DependedOnBy) > 0 {
+			dependedOnByIDs := make([]descpb.ID, 0, len(mut.DependedOnBy))
+			for _, ref := range mut.DependedOnBy {
+				dependedOnByIDs = append(dependedOnByIDs, ref.ID)
+			}
+			depNames, err := p.getFullyQualifiedNamesFromIDs(ctx, dependedOnByIDs)
+			if err != nil {
+				return nil, err
+			}
+			return nil, pgerror.Newf(
+				pgcode.DependentObjectsStillExist,
+				"cannot drop function %q because other objects (%v) still depend on it",
+				mut.Name, depNames,
+			)
 		}
 		dropNode.toDrop = append(dropNode.toDrop, mut)
 	}
@@ -179,9 +196,6 @@ func (p *planner) dropFunctionImpl(ctx context.Context, fnMutable *funcdesc.Muta
 
 	// Remove backreference from tables/views/sequences referenced by this UDF.
 	for _, id := range fnMutable.DependsOn {
-		// TODO(chengxiong): remove backreference from UDFs that this UDF has
-		// reference to. This is needed when we allow UDFs being referenced by
-		// UDFs.
 		refMutable, err := p.Descriptors().MutableByID(p.txn).Table(ctx, id)
 		if err != nil {
 			return err

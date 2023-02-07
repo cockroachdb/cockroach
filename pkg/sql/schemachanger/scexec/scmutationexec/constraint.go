@@ -91,10 +91,10 @@ func (i *immediateVisitor) AddCheckConstraint(
 	return nil
 }
 
-func (m *immediateVisitor) MakeAbsentColumnNotNullWriteOnly(
+func (i *immediateVisitor) MakeAbsentColumnNotNullWriteOnly(
 	ctx context.Context, op scop.MakeAbsentColumnNotNullWriteOnly,
 ) error {
-	tbl, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil || tbl.Dropped() {
 		return err
 	}

@@ -93,7 +93,7 @@ func alterTableAddCheck(
 	// See the comments of DequalifyAndValidateExprImpl for criteria.
 	ckDef := t.ConstraintDef.(*tree.CheckConstraintTableDef)
 	ckExpr, _, colIDs, err := schemaexpr.DequalifyAndValidateExprImpl(b, ckDef.Expr, types.Bool,
-		"CHECK", b.SemaCtx(), volatility.Volatile, tn,
+		tree.CheckConstraintExpr, b.SemaCtx(), volatility.Volatile, tn,
 		func() colinfo.ResultColumns {
 			return getNonDropResultColumns(b, tbl.TableID)
 		},
@@ -467,7 +467,7 @@ func alterTableAddUniqueWithoutIndex(
 
 	// 4. If there is a predicate, validate it.
 	if d.Predicate != nil {
-		predicate, _, _, err := schemaexpr.DequalifyAndValidateExprImpl(b, d.Predicate, types.Bool, "unique without index predicate", b.SemaCtx(), volatility.Immutable, tn,
+		predicate, _, _, err := schemaexpr.DequalifyAndValidateExprImpl(b, d.Predicate, types.Bool, tree.UniqueWithoutIndexPredicateExpr, b.SemaCtx(), volatility.Immutable, tn,
 			func() colinfo.ResultColumns {
 				return getNonDropResultColumns(b, tbl.TableID)
 			},

@@ -47,7 +47,7 @@ func ValidateComputedColumnExpression(
 	desc catalog.TableDescriptor,
 	d *tree.ColumnTableDef,
 	tn *tree.TableName,
-	context string,
+	context tree.SchemaExprContext,
 	semaCtx *tree.SemaContext,
 ) (serializedExpr string, _ *types.T, _ error) {
 	if d.HasDefaultExpr() {
@@ -133,7 +133,7 @@ func ValidateComputedColumnExpression(
 			return "", nil, err
 		}
 		if len(mutationColumnNames) > 0 {
-			if context == "index element" {
+			if context == tree.ExpressionIndexElementExpr {
 				return "", nil, unimplemented.Newf(
 					"index element expression referencing mutation columns",
 					"index element expression referencing columns (%s) added in the current transaction",

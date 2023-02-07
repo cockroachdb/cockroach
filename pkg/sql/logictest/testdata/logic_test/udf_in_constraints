@@ -1,0 +1,394 @@
+statement ok
+CREATE FUNCTION f1(a INT) RETURNS INT LANGUAGE SQL AS $$ SELECT a + 1 $$;
+
+statement ok
+CREATE VIEW v_checks AS
+SELECT
+     id,
+     jsonb_pretty(
+       crdb_internal.pb_to_json(
+         'cockroach.sql.sqlbase.Descriptor',
+         descriptor,
+         false
+       )->'table'->'checks'
+     ) as checks
+FROM system.descriptor
+
+statement ok
+CREATE FUNCTION get_checks(table_id INT) RETURNS STRING
+LANGUAGE SQL
+AS $$
+  SELECT checks
+  FROM v_checks
+  WHERE id = table_id
+$$;
+
+statement ok
+CREATE VIEW v_fn_depended_on_by AS
+SELECT
+     id,
+     jsonb_pretty(
+       crdb_internal.pb_to_json(
+         'cockroach.sql.sqlbase.Descriptor',
+         descriptor,
+         false
+       )->'function'->'dependedOnBy'
+     ) as depended_on_by
+FROM system.descriptor
+
+statement ok
+CREATE FUNCTION get_fn_depended_on_by(function_id INT) RETURNS STRING
+LANGUAGE SQL
+AS $$
+  SELECT depended_on_by
+  FROM v_fn_depended_on_by
+  WHERE id = function_id
+$$;
+
+# Make sure that check constraint expression is properly serialized and
+# deserialized.
+statement ok
+CREATE TABLE t1(
+  a INT PRIMARY KEY,
+  b INT CHECK (f1(b) > 1),
+  FAMILY fam_0 (a, b)
+);
+
+let $tbl_id
+SELECT id FROM system.namespace WHERE name = 't1';
+
+query T
+SELECT get_checks($tbl_id);
+----
+[
+    {
+        "columnIds": [
+            2
+        ],
+        "constraintId": 2,
+        "expr": "[FUNCTION 100106](b) \u003e 1:::INT8",
+        "name": "check_b"
+    }
+]
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t1];
+----
+CREATE TABLE public.t1 (
+  a INT8 NOT NULL,
+  b INT8 NULL,
+  CONSTRAINT t1_pkey PRIMARY KEY (a ASC),
+  FAMILY fam_0 (a, b),
+  CONSTRAINT check_b CHECK (public.f1(b) > 1:::INT8)
+)
+
+# Make sure back references are tracked properly.
+let $fn_id
+SELECT oid::int - 100000 FROM pg_catalog.pg_proc WHERE proname = 'f1';
+
+query T
+SELECT get_fn_depended_on_by($fn_id)
+----
+[
+    {
+        "constraintIds": [
+            2
+        ],
+        "id": 111
+    }
+]
+
+# Make sure ADD CONSTRAINT works as expected.
+statement ok
+ALTER TABLE t1 ADD CONSTRAINT cka CHECK (f1(a) > 1);
+
+query T
+SELECT get_checks($tbl_id);
+----
+[
+    {
+        "columnIds": [
+            2
+        ],
+        "constraintId": 2,
+        "expr": "[FUNCTION 100106](b) \u003e 1:::INT8",
+        "name": "check_b"
+    },
+    {
+        "columnIds": [
+            1
+        ],
+        "constraintId": 3,
+        "expr": "[FUNCTION 100106](a) \u003e 1:::INT8",
+        "name": "cka"
+    }
+]
+
+query T
+SELECT get_fn_depended_on_by($fn_id)
+----
+[
+    {
+        "constraintIds": [
+            2,
+            3
+        ],
+        "id": 111
+    }
+]
+
+# Make sure references from different tables are tracked properly.
+statement ok
+CREATE TABLE t2(
+  a INT PRIMARY KEY,
+  b INT CHECK (f1(b) > 1),
+  CONSTRAINT cka CHECK (f1(a) > 1)
+);
+
+query T
+SELECT get_fn_depended_on_by($fn_id)
+----
+[
+    {
+        "constraintIds": [
+            2,
+            3
+        ],
+        "id": 111
+    },
+    {
+        "constraintIds": [
+            2,
+            3
+        ],
+        "id": 112
+    }
+]
+
+# Make sure DROP CONSTRAINT remove references properly.
+statement ok
+ALTER TABLE t2 DROP CONSTRAINT check_b;
+
+query T
+SELECT get_fn_depended_on_by($fn_id)
+----
+[
+    {
+        "constraintIds": [
+            2,
+            3
+        ],
+        "id": 111
+    },
+    {
+        "constraintIds": [
+            2
+        ],
+        "id": 112
+    }
+]
+
+statement ok
+ALTER TABLE t2 DROP CONSTRAINT cka;
+
+query T
+SELECT get_fn_depended_on_by($fn_id)
+----
+[
+    {
+        "constraintIds": [
+            2,
+            3
+        ],
+        "id": 111
+    }
+]
+
+# Make sure that DROP TABLE remove references properly.
+statement ok
+DROP TABLE t1;
+
+query T
+SELECT get_fn_depended_on_by($fn_id)
+----
+NULL
+
+# Make sure function cannot be dropped if used in constraints
+statement ok
+CREATE TABLE t1(
+  a INT PRIMARY KEY,
+  b INT CHECK (f1(b) > 1),
+  FAMILY fam_0 (a, b)
+);
+
+statement error cannot drop function "f1" because other objects \(\[test.public.t1\]\) still depend on it
+DROP FUNCTION f1;
+
+statement ok
+ALTER TABLE t1 DROP CONSTRAINT check_b;
+
+statement ok
+DROP FUNCTION f1;
+
+statement ok
+DROP TABLE t1;
+
+# Make sure that CREATE FUNCTION and CREATE TABLE works in one txn.
+statement ok
+BEGIN;
+CREATE FUNCTION f1(a INT) RETURNS INT LANGUAGE SQL AS $$ SELECT a + 1 $$;
+CREATE TABLE t1(
+  a INT PRIMARY KEY,
+  b INT CHECK (f1(b) > 1),
+  FAMILY fam_0 (a, b)
+);
+END;
+
+let $tbl_id
+SELECT id FROM system.namespace WHERE name = 't1';
+
+let $fn_id
+SELECT oid::int - 100000 FROM pg_catalog.pg_proc WHERE proname = 'f1';
+
+query T
+SELECT get_checks($tbl_id);
+----
+[
+    {
+        "columnIds": [
+            2
+        ],
+        "constraintId": 2,
+        "expr": "[FUNCTION 100114](b) \u003e 1:::INT8",
+        "name": "check_b"
+    }
+]
+
+query T
+SELECT get_fn_depended_on_by($fn_id);
+----
+[
+    {
+        "constraintIds": [
+            2
+        ],
+        "id": 115
+    }
+]
+
+statement ok
+BEGIN;
+DROP TABLE t1;
+DROP FUNCTION f1;
+END;
+
+# Make sure that CREATE FUNCTION and ADD CONSTRAINT works in one txn.
+statement ok
+CREATE TABLE t1 (
+  a INT PRIMARY KEY,
+  b INT,
+  FAMILY fam_0 (a, b)
+);
+
+statement ok
+BEGIN;
+CREATE FUNCTION f1(a INT) RETURNS INT LANGUAGE SQL AS $$ SELECT a + 1 $$;
+ALTER TABLE t1 ADD CONSTRAINT check_b CHECK (f1(b) > 1);
+END;
+
+let $tbl_id
+SELECT id FROM system.namespace WHERE name = 't1';
+
+let $fn_id
+SELECT oid::int - 100000 FROM pg_catalog.pg_proc WHERE proname = 'f1';
+
+query T
+SELECT get_checks($tbl_id);
+----
+[
+    {
+        "columnIds": [
+            2
+        ],
+        "constraintId": 2,
+        "expr": "[FUNCTION 100117](b) \u003e 1:::INT8",
+        "name": "check_b"
+    }
+]
+
+query T
+SELECT get_fn_depended_on_by($fn_id);
+----
+[
+    {
+        "constraintIds": [
+            2
+        ],
+        "id": 116
+    }
+]
+
+skipif config local-legacy-schema-changer
+statement ok
+SET use_declarative_schema_changer = 'unsafe_always';
+
+# In legacy schema changer, constraints are formally dropped in jobs.
+# So by the point we do DROP FUNCTION, constraints are still there.
+skipif config local-legacy-schema-changer
+statement ok
+BEGIN;
+ALTER TABLE t1 DROP CONSTRAINT check_b;
+DROP FUNCTION f1;
+END;
+
+statement ok
+DROP TABLE t1;
+
+skipif config local-legacy-schema-changer
+statement ok
+SET use_declarative_schema_changer = 'on';
+
+# Make sure check constraint actually validates.
+
+statement ok
+CREATE OR REPLACE FUNCTION f1(a INT) RETURNS INT LANGUAGE SQL AS $$ SELECT a + 1 $$;
+CREATE TABLE t1 (
+  a INT PRIMARY KEY,
+  b INT CHECK (f1(b) > 1),
+  FAMILY fam_0 (a, b)
+);
+
+statement error failed to satisfy CHECK constraint \(public\.f1\(b\) > 1:::INT8\)
+INSERT INTO t1 VALUES (1,0);
+
+statement ok
+INSERT INTO t1 VALUES (1,1);
+
+statement error validation of CHECK "public\.f1\(a\) > 10:::INT8" failed on row: a=1, b=1
+ALTER TABLE t1 ADD CONSTRAINT cka CHECK (f1(a) > 10);
+
+# Make sure that schema prefix is preserved through serialization and
+# deserialization.
+
+statement ok
+CREATE DATABASE db1;
+USE db1;
+CREATE SCHEMA sc1;
+CREATE FUNCTION sc1.f1(a INT) RETURNS INT LANGUAGE SQL AS $$ SELECT a + 1 $$;
+CREATE FUNCTION sc1.f1() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+CREATE TABLE t(
+  a INT PRIMARY KEY,
+  b INT CHECK (sc1.f1(b) > 1),
+  FAMILY fam_0_b_a (b, a)
+);
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t]
+----
+CREATE TABLE public.t (
+  a INT8 NOT NULL,
+  b INT8 NULL,
+  CONSTRAINT t_pkey PRIMARY KEY (a ASC),
+  FAMILY fam_0_b_a (b, a),
+  CONSTRAINT check_b CHECK (sc1.f1(b) > 1:::INT8)
+)

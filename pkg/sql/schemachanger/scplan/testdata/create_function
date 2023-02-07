@@ -281,3 +281,73 @@ PreCommitPhase stage 2 of 2 with 11 MutationType ops
         ParentSchemaID: 101
     *scop.MarkDescriptorAsPublic
       DescriptorID: 109
+
+deps
+CREATE FUNCTION f(a notmyworkday) RETURNS INT VOLATILE LANGUAGE SQL AS $$
+  SELECT a FROM t;
+  SELECT b FROM t@t_idx_b;
+  SELECT c FROM t@t_idx_c;
+  SELECT a FROM v;
+  SELECT nextval('sq1');
+$$;
+----
+- from: [Function:{DescID: 110}, DESCRIPTOR_ADDED]
+  to:   [FunctionBody:{DescID: 110}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [Function:{DescID: 110}, DESCRIPTOR_ADDED]
+  to:   [FunctionName:{DescID: 110}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [Function:{DescID: 110}, DESCRIPTOR_ADDED]
+  to:   [FunctionVolatility:{DescID: 110}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [Function:{DescID: 110}, DESCRIPTOR_ADDED]
+  to:   [ObjectParent:{DescID: 110, ReferencedDescID: 101}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [Function:{DescID: 110}, DESCRIPTOR_ADDED]
+  to:   [Owner:{DescID: 110}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [Function:{DescID: 110}, DESCRIPTOR_ADDED]
+  to:   [UserPrivileges:{DescID: 110, Name: admin}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [Function:{DescID: 110}, DESCRIPTOR_ADDED]
+  to:   [UserPrivileges:{DescID: 110, Name: root}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [FunctionBody:{DescID: 110}, PUBLIC]
+  to:   [Function:{DescID: 110}, PUBLIC]
+  kind: Precedence
+  rule: dependents exist before descriptor becomes public
+- from: [FunctionName:{DescID: 110}, PUBLIC]
+  to:   [Function:{DescID: 110}, PUBLIC]
+  kind: Precedence
+  rule: dependents exist before descriptor becomes public
+- from: [FunctionName:{DescID: 110}, PUBLIC]
+  to:   [ObjectParent:{DescID: 110, ReferencedDescID: 101}, PUBLIC]
+  kind: Precedence
+  rule: function name should be set before parent ids
+- from: [FunctionVolatility:{DescID: 110}, PUBLIC]
+  to:   [Function:{DescID: 110}, PUBLIC]
+  kind: Precedence
+  rule: dependents exist before descriptor becomes public
+- from: [ObjectParent:{DescID: 110, ReferencedDescID: 101}, PUBLIC]
+  to:   [Function:{DescID: 110}, PUBLIC]
+  kind: Precedence
+  rule: dependents exist before descriptor becomes public
+- from: [Owner:{DescID: 110}, PUBLIC]
+  to:   [Function:{DescID: 110}, PUBLIC]
+  kind: Precedence
+  rule: dependents exist before descriptor becomes public
+- from: [UserPrivileges:{DescID: 110, Name: admin}, PUBLIC]
+  to:   [Function:{DescID: 110}, PUBLIC]
+  kind: Precedence
+  rule: dependents exist before descriptor becomes public
+- from: [UserPrivileges:{DescID: 110, Name: root}, PUBLIC]
+  to:   [Function:{DescID: 110}, PUBLIC]
+  kind: Precedence
+  rule: dependents exist before descriptor becomes public

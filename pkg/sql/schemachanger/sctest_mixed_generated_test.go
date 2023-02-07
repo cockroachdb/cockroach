@@ -40,6 +40,11 @@ func TestValidateMixedVersionElements_add_column_no_default(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	sctest.ValidateMixedVersionElements(t, "pkg/sql/schemachanger/testdata/end_to_end/add_column_no_default", sctest.SingleNodeMixedCluster)
 }
+func TestValidateMixedVersionElements_alter_table_add_check_udf(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.ValidateMixedVersionElements(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_add_check_udf", sctest.SingleNodeMixedCluster)
+}
 func TestValidateMixedVersionElements_alter_table_add_check_unvalidated(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

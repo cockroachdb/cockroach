@@ -51,7 +51,7 @@ func ValidatePartialIndexPredicate(
 		desc,
 		e,
 		types.Bool,
-		"index predicate",
+		tree.IndexPredicateExpr,
 		semaCtx,
 		volatility.Immutable,
 		tn,

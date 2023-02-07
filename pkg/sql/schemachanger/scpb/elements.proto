@@ -166,6 +166,8 @@ message Expression {
 
   // ReferencedColumnIDs stores the IDs of the columns referenced by the expression.
   repeated uint32 referenced_column_ids = 4 [(gogoproto.customname) = "ReferencedColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
+
+  repeated uint32 uses_function_ids = 5 [(gogoproto.customname) = "UsesFunctionIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
 }
 
 message Column {
