@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -158,6 +159,7 @@ func newTestProcessorWithTxnPusher(
 		PushTxnsAge:          pushTxnAge,
 		EventChanCap:         testProcessorEventCCap,
 		CheckStreamsInterval: 10 * time.Millisecond,
+		Metrics:              NewMetrics(),
 	})
 	require.NoError(t, p.Start(stopper, makeIntentScannerConstructor(rtsIter)))
 	return p, stopper
@@ -204,14 +206,15 @@ func TestProcessorBasic(t *testing.T) {
 
 	// Add a registration.
 	r1Stream := newTestStream()
-	r1ErrC := make(chan *kvpb.Error, 1)
+	r1Done := future.MakePromise[*kvpb.Error]()
 	r1OK, r1Filter := p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 		hlc.Timestamp{WallTime: 1},
 		nil,   /* catchUpIter */
 		false, /* withDiff */
 		r1Stream,
-		r1ErrC,
+		func() {},
+		r1Done,
 	)
 	require.True(t, r1OK)
 	p.syncEventAndRegistrations()
@@ -325,14 +328,15 @@ func TestProcessorBasic(t *testing.T) {
 
 	// Add another registration with withDiff = true.
 	r2Stream := newTestStream()
-	r2ErrC := make(chan *kvpb.Error, 1)
+	r2Done := future.MakePromise[*kvpb.Error]()
 	r2OK, r1And2Filter := p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("c"), EndKey: roachpb.RKey("z")},
 		hlc.Timestamp{WallTime: 1},
 		nil,  /* catchUpIter */
 		true, /* withDiff */
 		r2Stream,
-		r2ErrC,
+		func() {},
+		r2Done,
 	)
 	require.True(t, r2OK)
 	p.syncEventAndRegistrations()
@@ -399,23 +403,27 @@ func TestProcessorBasic(t *testing.T) {
 
 	// Cancel the first registration.
 	r1Stream.Cancel()
-	require.NotNil(t, <-r1ErrC)
+	v, err := r1Done.Get()
+	require.NoError(t, err)
+	require.NotNil(t, v)
 
 	// Stop the processor with an error.
 	pErr := kvpb.NewErrorf("stop err")
 	p.StopWithErr(pErr)
-	require.NotNil(t, <-r2ErrC)
+	v, err = r2Done.Get()
+	require.NoError(t, err)
+	require.NotNil(t, v)
 
 	// Adding another registration should fail.
 	r3Stream := newTestStream()
-	r3ErrC := make(chan *kvpb.Error, 1)
 	r3OK, _ := p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("c"), EndKey: roachpb.RKey("z")},
 		hlc.Timestamp{WallTime: 1},
 		nil,   /* catchUpIter */
 		false, /* withDiff */
 		r3Stream,
-		r3ErrC,
+		func() {},
+		future.MakePromise[*kvpb.Error](),
 	)
 	require.False(t, r3OK)
 }
@@ -439,7 +447,11 @@ func TestNilProcessor(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	require.Panics(t, func() { _ = p.Start(stopper, nil) })
-	require.Panics(t, func() { p.Register(roachpb.RSpan{}, hlc.Timestamp{}, nil, false, nil, nil) })
+	require.Panics(t, func() {
+		p.Register(roachpb.RSpan{}, hlc.Timestamp{}, nil, false, nil,
+			func() {}, future.MakePromise[*kvpb.Error](),
+		)
+	})
 }
 
 func TestProcessorSlowConsumer(t *testing.T) {
@@ -450,24 +462,25 @@ func TestProcessorSlowConsumer(t *testing.T) {
 
 	// Add a registration.
 	r1Stream := newTestStream()
-	r1ErrC := make(chan *kvpb.Error, 1)
-	p.Register(
+	r1Done := future.MakePromise[*kvpb.Error]()
+	_, _ = p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 		hlc.Timestamp{WallTime: 1},
 		nil,   /* catchUpIter */
 		false, /* withDiff */
 		r1Stream,
-		r1ErrC,
+		func() {},
+		r1Done,
 	)
 	r2Stream := newTestStream()
-	r2ErrC := make(chan *kvpb.Error, 1)
 	p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
 		hlc.Timestamp{WallTime: 1},
 		nil,   /* catchUpIter */
 		false, /* withDiff */
 		r2Stream,
-		r2ErrC,
+		func() {},
+		future.MakePromise[*kvpb.Error](),
 	)
 	p.syncEventAndRegistrations()
 	require.Equal(t, 2, p.Len())
@@ -525,7 +538,9 @@ func TestProcessorSlowConsumer(t *testing.T) {
 	// were dropped due to rapid event consumption before the r1's outputLoop
 	// began consuming from its event buffer.
 	require.LessOrEqual(t, len(r1Stream.Events()), toFill)
-	require.Equal(t, newErrBufferCapacityExceeded().GoError(), (<-r1ErrC).GoError())
+	pErr, err := r1Done.Get()
+	require.NoError(t, err)
+	require.Equal(t, newErrBufferCapacityExceeded().GoError(), pErr.GoError())
 	testutils.SucceedsSoon(t, func() error {
 		if act, exp := p.Len(), 1; exp != act {
 			return fmt.Errorf("processor had %d regs, wanted %d", act, exp)
@@ -562,14 +577,15 @@ func TestProcessorMemoryBudgetExceeded(t *testing.T) {
 
 	// Add a registration.
 	r1Stream := newTestStream()
-	r1ErrC := make(chan *kvpb.Error, 1)
-	p.Register(
+	r1Done := future.MakePromise[*kvpb.Error]()
+	_, _ = p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 		hlc.Timestamp{WallTime: 1},
 		nil,   /* catchUpIter */
 		false, /* withDiff */
 		r1Stream,
-		r1ErrC,
+		func() {},
+		r1Done,
 	)
 	p.syncEventAndRegistrations()
 
@@ -599,7 +615,9 @@ func TestProcessorMemoryBudgetExceeded(t *testing.T) {
 	unblock = nil
 	p.syncEventAndRegistrations()
 
-	require.Equal(t, newErrBufferCapacityExceeded().GoError(), (<-r1ErrC).GoError())
+	v, err := r1Done.Get()
+	require.NoError(t, err)
+	require.Equal(t, newErrBufferCapacityExceeded().GoError(), v.GoError())
 	require.Equal(t, 0, p.reg.Len(), "registration was not removed")
 	require.Equal(t, int64(1), p.Metrics.RangeFeedBudgetExhausted.Count())
 }
@@ -631,14 +649,14 @@ func TestProcessorMemoryBudgetReleased(t *testing.T) {
 
 	// Add a registration.
 	r1Stream := newTestStream()
-	r1ErrC := make(chan *kvpb.Error, 1)
 	p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 		hlc.Timestamp{WallTime: 1},
 		nil,   /* catchUpIter */
 		false, /* withDiff */
 		r1Stream,
-		r1ErrC,
+		func() {},
+		future.MakePromise[*kvpb.Error](),
 	)
 	p.syncEventAndRegistrations()
 
@@ -711,7 +729,8 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 		nil,   /* catchUpIter */
 		false, /* withDiff */
 		r1Stream,
-		make(chan *kvpb.Error, 1),
+		func() {},
+		future.MakePromise[*kvpb.Error](),
 	)
 	p.syncEventAndRegistrations()
 	require.Equal(t, 1, p.Len())
@@ -952,8 +971,8 @@ func TestProcessorConcurrentStop(t *testing.T) {
 			defer wg.Done()
 			runtime.Gosched()
 			s := newTestStream()
-			errC := make(chan<- *kvpb.Error, 1)
-			p.Register(p.Span, hlc.Timestamp{}, nil, false, s, errC)
+			p.Register(p.Span, hlc.Timestamp{}, nil, false, s,
+				func() {}, future.MakePromise[*kvpb.Error]())
 		}()
 		go func() {
 			defer wg.Done()
@@ -1021,8 +1040,8 @@ func TestProcessorRegistrationObservesOnlyNewEvents(t *testing.T) {
 			// operation is should see is firstIdx.
 			s := newTestStream()
 			regs[s] = firstIdx
-			errC := make(chan *kvpb.Error, 1)
-			p.Register(p.Span, hlc.Timestamp{}, nil, false, s, errC)
+			p.Register(p.Span, hlc.Timestamp{}, nil, false,
+				s, func() {}, future.MakePromise[*kvpb.Error]())
 			regDone <- struct{}{}
 		}
 	}()
@@ -1069,6 +1088,17 @@ func (p *Processor) syncEventAndRegistrationSpan(span roachpb.Span) {
 	}
 }
 
+func notifyWhenDone(f future.Future[*kvpb.Error]) chan *kvpb.Error {
+	ch := make(chan *kvpb.Error, 1)
+	f.WhenReady(func(pErr *kvpb.Error, err error) {
+		if err != nil {
+			pErr = kvpb.NewError(err)
+		}
+		ch <- pErr
+	})
+	return ch
+}
+
 func TestBudgetReleaseOnProcessorStop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -1098,6 +1128,7 @@ func TestBudgetReleaseOnProcessorStop(t *testing.T) {
 		EventChanCap:         channelCapacity,
 		CheckStreamsInterval: 10 * time.Millisecond,
 		MemBudget:            fb,
+		Metrics:              NewMetrics(),
 	})
 	require.NoError(t, p.Start(stopper, nil))
 	ctx := context.Background()
@@ -1106,15 +1137,17 @@ func TestBudgetReleaseOnProcessorStop(t *testing.T) {
 	// Add a registration.
 	rStream := newConsumer(50)
 	defer func() { rStream.Resume() }()
-	rErrC := make(chan *kvpb.Error, 1)
-	p.Register(
+	done := future.MakePromise[*kvpb.Error]()
+	_, _ = p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 		hlc.Timestamp{WallTime: 1},
 		nil,   /* catchUpIter */
 		false, /* withDiff */
 		rStream,
-		rErrC,
+		func() {},
+		done,
 	)
+	rErrC := notifyWhenDone(done)
 	p.syncEventAndRegistrations()
 
 	for i := 0; i < totalEvents; i++ {
@@ -1186,6 +1219,7 @@ func TestBudgetReleaseOnLastStreamError(t *testing.T) {
 		EventChanCap:         channelCapacity,
 		CheckStreamsInterval: 10 * time.Millisecond,
 		MemBudget:            fb,
+		Metrics:              NewMetrics(),
 	})
 	require.NoError(t, p.Start(stopper, nil))
 	ctx := context.Background()
@@ -1194,15 +1228,17 @@ func TestBudgetReleaseOnLastStreamError(t *testing.T) {
 	// Add a registration.
 	rStream := newConsumer(90)
 	defer func() { rStream.Resume() }()
-	rErrC := make(chan *kvpb.Error, 1)
-	p.Register(
+	done := future.MakePromise[*kvpb.Error]()
+	_, _ = p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 		hlc.Timestamp{WallTime: 1},
 		nil,   /* catchUpIter */
 		false, /* withDiff */
 		rStream,
-		rErrC,
+		func() {},
+		done,
 	)
+	rErrC := notifyWhenDone(done)
 	p.syncEventAndRegistrations()
 
 	for i := 0; i < totalEvents; i++ {
@@ -1263,6 +1299,7 @@ func TestBudgetReleaseOnOneStreamError(t *testing.T) {
 		EventChanCap:         channelCapacity,
 		CheckStreamsInterval: 10 * time.Millisecond,
 		MemBudget:            fb,
+		Metrics:              NewMetrics(),
 	})
 	require.NoError(t, p.Start(stopper, nil))
 	ctx := context.Background()
@@ -1271,25 +1308,28 @@ func TestBudgetReleaseOnOneStreamError(t *testing.T) {
 	// Add a registration.
 	r1Stream := newConsumer(50)
 	defer func() { r1Stream.Resume() }()
-	r1ErrC := make(chan *kvpb.Error, 1)
-	p.Register(
+	r1Done := future.MakePromise[*kvpb.Error]()
+	_, _ = p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 		hlc.Timestamp{WallTime: 1},
 		nil,   /* catchUpIter */
 		false, /* withDiff */
 		r1Stream,
-		r1ErrC,
+		func() {},
+		r1Done,
 	)
+	r1ErrC := notifyWhenDone(r1Done)
+
 	// Non-blocking registration that would consume all events.
 	r2Stream := newConsumer(0)
-	r2ErrC := make(chan *kvpb.Error, 1)
 	p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 		hlc.Timestamp{WallTime: 1},
 		nil,   /* catchUpIter */
 		false, /* withDiff */
 		r2Stream,
-		r2ErrC,
+		func() {},
+		future.MakePromise[*kvpb.Error](),
 	)
 	p.syncEventAndRegistrations()
 
@@ -1439,14 +1479,16 @@ func BenchmarkProcessorWithBudget(b *testing.B) {
 
 	// Add a registration.
 	r1Stream := newTestStream()
-	r1ErrC := make(chan *kvpb.Error, 1)
-	p.Register(
+
+	r1Done := future.MakePromise[*kvpb.Error]()
+	_, _ = p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 		hlc.Timestamp{WallTime: 1},
 		nil,   /* catchUpIter */
 		false, /* withDiff */
 		r1Stream,
-		r1ErrC,
+		func() {},
+		r1Done,
 	)
 	p.syncEventAndRegistrations()
 
@@ -1464,8 +1506,9 @@ func BenchmarkProcessorWithBudget(b *testing.B) {
 
 	// Sanity check that subscription was not dropped.
 	if p.reg.Len() == 0 {
-		err := <-r1ErrC
-		require.NoError(b, err.GoError())
+		pErr, err := r1Done.Get()
+		require.NoError(b, err)
+		require.NoError(b, pErr.GoError())
 	}
 }
 
