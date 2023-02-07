@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudprivilege"
+	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -362,6 +363,14 @@ func importPlanHook(
 	if !importStmt.Bundle && !importStmt.Into {
 		p.BufferClientNotice(ctx, pgnotice.Newf("IMPORT TABLE has been deprecated in 21.2, and will be removed in a future version."+
 			" Instead, use CREATE TABLE with the desired schema, and IMPORT INTO the newly created table."))
+	}
+	switch f := strings.ToUpper(importStmt.FileFormat); f {
+	case "PGDUMP", "MYSQLDUMP":
+		p.BufferClientNotice(ctx, pgnotice.Newf(
+			"IMPORT %s has been deprecated in 23.1, and will be removed in a future version. See %s for alternatives.",
+			redact.SafeString(f),
+			redact.SafeString(docs.URL("migration-overview")),
+		))
 	}
 
 	addToFileFormatTelemetry(importStmt.FileFormat, "attempted")

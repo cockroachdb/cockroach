@@ -4,6 +4,24 @@ CREATE TABLE ab (
   b INT
 )
 
+statement error pgcode 0A000 unimplemented: PL/pgSQL is not yet supported
+CREATE FUNCTION populate() RETURNS integer AS $$
+DECLARE
+    -- declarations
+BEGIN
+    PERFORM my_function();
+END;
+$$ LANGUAGE plpgsql
+
+statement error pgcode 42704 language \"made_up_language\" does not exist
+CREATE FUNCTION populate() RETURNS integer AS $$
+DECLARE
+    -- declarations
+BEGIN
+    PERFORM my_function();
+END;
+$$ LANGUAGE made_up_language
+
 statement error pq: unimplemented: user-defined functions with SETOF return types are not supported
 CREATE FUNCTION f(a int) RETURNS SETOF INT LANGUAGE SQL AS 'SELECT 1'
 
