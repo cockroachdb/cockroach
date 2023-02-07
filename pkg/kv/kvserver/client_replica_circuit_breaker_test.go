@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/circuit"
+	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -397,10 +398,6 @@ func TestReplicaCircuitBreaker_Liveness_QuorumLoss(t *testing.T) {
 
 type dummyStream struct {
 	name string
-	t    interface {
-		Helper()
-		Logf(string, ...interface{})
-	}
 	ctx  context.Context
 	recv chan *kvpb.RangeFeedEvent
 }
@@ -411,15 +408,28 @@ func (s *dummyStream) Context() context.Context {
 
 func (s *dummyStream) Send(ev *kvpb.RangeFeedEvent) error {
 	if ev.Val == nil && ev.Error == nil {
-		s.t.Logf("%s: ignoring event: %v", s.name, ev)
 		return nil
 	}
+
 	select {
 	case <-s.ctx.Done():
 		return s.ctx.Err()
 	case s.recv <- ev:
 		return nil
 	}
+}
+
+func waitReplicaRangeFeed(
+	ctx context.Context,
+	r *kvserver.Replica,
+	req *kvpb.RangeFeedRequest,
+	stream kvpb.RangeFeedEventSink,
+) error {
+	rfErr, ctxErr := future.Wait(ctx, r.RangeFeed(req, stream, nil /* pacer */))
+	if ctxErr != nil {
+		return ctxErr
+	}
+	return rfErr
 }
 
 // This test verifies that RangeFeed bypasses the circuit breaker. When the
@@ -441,9 +451,9 @@ func TestReplicaCircuitBreaker_RangeFeed(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	stream1 := &dummyStream{t: t, ctx: ctx, name: "rangefeed1", recv: make(chan *kvpb.RangeFeedEvent)}
+	stream1 := &dummyStream{ctx: ctx, name: "rangefeed1", recv: make(chan *kvpb.RangeFeedEvent)}
 	require.NoError(t, tc.Stopper().RunAsyncTask(ctx, "stream1", func(ctx context.Context) {
-		err := tc.repls[0].RangeFeed(args, stream1, nil /* pacer */).GoError()
+		err := waitReplicaRangeFeed(ctx, tc.repls[0].Replica, args, stream1)
 		if ctx.Err() != nil {
 			return // main goroutine stopping
 		}
@@ -495,9 +505,9 @@ func TestReplicaCircuitBreaker_RangeFeed(t *testing.T) {
 
 	// Start another stream during the "outage" to make sure it isn't rejected by
 	// the breaker.
-	stream2 := &dummyStream{t: t, ctx: ctx, name: "rangefeed2", recv: make(chan *kvpb.RangeFeedEvent)}
+	stream2 := &dummyStream{ctx: ctx, name: "rangefeed2", recv: make(chan *kvpb.RangeFeedEvent)}
 	require.NoError(t, tc.Stopper().RunAsyncTask(ctx, "stream2", func(ctx context.Context) {
-		err := tc.repls[0].RangeFeed(args, stream2, nil /* pacer */).GoError()
+		err := waitReplicaRangeFeed(ctx, tc.repls[0].Replica, args, stream2)
 		if ctx.Err() != nil {
 			return // main goroutine stopping
 		}

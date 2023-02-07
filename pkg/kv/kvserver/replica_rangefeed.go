@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -131,35 +132,26 @@ func (tp *rangefeedTxnPusher) ResolveIntents(
 }
 
 // RangeFeed registers a rangefeed over the specified span. It sends updates to
-// the provided stream and returns with an optional error when the rangefeed is
+// the provided stream and returns with a future error when the rangefeed is
 // complete. The surrounding store's ConcurrentRequestLimiter is used to limit
 // the number of rangefeeds using catch-up iterators at the same time.
 func (r *Replica) RangeFeed(
 	args *kvpb.RangeFeedRequest, stream kvpb.RangeFeedEventSink, pacer *admission.Pacer,
-) *kvpb.Error {
-	return r.rangeFeedWithRangeID(r.RangeID, args, stream, pacer)
-}
-
-func (r *Replica) rangeFeedWithRangeID(
-	_forStacks roachpb.RangeID,
-	args *kvpb.RangeFeedRequest,
-	stream kvpb.RangeFeedEventSink,
-	pacer *admission.Pacer,
-) *kvpb.Error {
+) *future.ErrorFuture {
 	ctx := r.AnnotateCtx(stream.Context())
 
 	rSpan, err := keys.SpanAddr(args.Span)
 	if err != nil {
-		return kvpb.NewError(err)
+		return future.MakeCompletedErrorFuture(err)
 	}
 
 	if err := r.ensureClosedTimestampStarted(ctx); err != nil {
 		if err := stream.Send(&kvpb.RangeFeedEvent{Error: &kvpb.RangeFeedError{
 			Error: *err,
 		}}); err != nil {
-			return kvpb.NewError(err)
+			return future.MakeCompletedErrorFuture(err)
 		}
-		return nil
+		return future.MakeCompletedErrorFuture(nil)
 	}
 
 	// If the RangeFeed is performing a catch-up scan then it will observe all
@@ -178,17 +170,16 @@ func (r *Replica) rangeFeedWithRangeID(
 	}
 
 	lockedStream := &lockedRangefeedStream{wrapped: stream}
-	errC := make(chan *kvpb.Error, 1)
 
 	// If we will be using a catch-up iterator, wait for the limiter here before
 	// locking raftMu.
 	usingCatchUpIter := false
-	var iterSemRelease func()
+	iterSemRelease := func() {}
 	if !args.Timestamp.IsEmpty() {
 		usingCatchUpIter = true
 		alloc, err := r.store.limiters.ConcurrentRangefeedIters.Begin(ctx)
 		if err != nil {
-			return kvpb.NewError(err)
+			return future.MakeCompletedErrorFuture(err)
 		}
 		// Finish the iterator limit if we exit before the iterator finishes.
 		// The release function will be hooked into the Close method on the
@@ -202,7 +193,6 @@ func (r *Replica) rangeFeedWithRangeID(
 		iterSemRelease = func() {
 			iterSemReleaseOnce.Do(alloc.Release)
 		}
-		defer iterSemRelease()
 	}
 
 	// Lock the raftMu, then register the stream as a new rangefeed registration.
@@ -212,7 +202,8 @@ func (r *Replica) rangeFeedWithRangeID(
 	r.raftMu.Lock()
 	if err := r.checkExecutionCanProceedForRangeFeed(ctx, rSpan, checkTS); err != nil {
 		r.raftMu.Unlock()
-		return kvpb.NewError(err)
+		iterSemRelease()
+		return future.MakeCompletedErrorFuture(err)
 	}
 
 	// Register the stream with a catch-up iterator.
@@ -229,17 +220,18 @@ func (r *Replica) rangeFeedWithRangeID(
 			return i
 		}
 	}
+	var done future.ErrorFuture
 	p := r.registerWithRangefeedRaftMuLocked(
-		ctx, rSpan, args.Timestamp, catchUpIterFunc, args.WithDiff, lockedStream, errC,
+		ctx, rSpan, args.Timestamp, catchUpIterFunc, args.WithDiff, lockedStream, &done,
 	)
 	r.raftMu.Unlock()
 
-	// When this function returns, attempt to clean up the rangefeed.
+	// This call is a no-op if we have successfully registered; but in case we
+	// encountered an error after we created processor, disconnect if processor
+	// is empty.
 	defer r.maybeDisconnectEmptyRangefeed(p)
 
-	// Block on the registration's error channel. Note that the registration
-	// observes stream.Context().Done.
-	return <-errC
+	return &done
 }
 
 func (r *Replica) getRangefeedProcessorAndFilter() (*rangefeed.Processor, *rangefeed.Filter) {
@@ -324,6 +316,7 @@ func logSlowRangefeedRegistration(ctx context.Context) func() {
 // registerWithRangefeedRaftMuLocked sets up a Rangefeed registration over the
 // provided span. It initializes a rangefeed for the Replica if one is not
 // already running. Requires raftMu be locked.
+// Returns Future[*roachpb.Error] which will return an error once rangefeed completes.
 func (r *Replica) registerWithRangefeedRaftMuLocked(
 	ctx context.Context,
 	span roachpb.RSpan,
@@ -331,7 +324,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	catchUpIter rangefeed.CatchUpIteratorConstructor,
 	withDiff bool,
 	stream rangefeed.Stream,
-	errC chan<- *kvpb.Error,
+	done *future.ErrorFuture,
 ) *rangefeed.Processor {
 	defer logSlowRangefeedRegistration(ctx)()
 
@@ -341,7 +334,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	r.rangefeedMu.Lock()
 	p := r.rangefeedMu.proc
 	if p != nil {
-		reg, filter := p.Register(span, startTS, catchUpIter, withDiff, stream, errC)
+		reg, filter := p.Register(span, startTS, catchUpIter, withDiff, stream, func() { r.maybeDisconnectEmptyRangefeed(p) }, done)
 		if reg {
 			// Registered successfully with an existing processor.
 			// Update the rangefeed filter to avoid filtering ops
@@ -401,7 +394,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	// due to stopping, but before it enters the quiescing state, then the select
 	// below will fall through to the panic.
 	if err := p.Start(r.store.Stopper(), rtsIter); err != nil {
-		errC <- kvpb.NewError(err)
+		done.Set(err)
 		return nil
 	}
 
@@ -410,11 +403,11 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	// any other goroutines are able to stop the processor. In other words,
 	// this ensures that the only time the registration fails is during
 	// server shutdown.
-	reg, filter := p.Register(span, startTS, catchUpIter, withDiff, stream, errC)
+	reg, filter := p.Register(span, startTS, catchUpIter, withDiff, stream, func() { r.maybeDisconnectEmptyRangefeed(p) }, done)
 	if !reg {
 		select {
 		case <-r.store.Stopper().ShouldQuiesce():
-			errC <- kvpb.NewError(&kvpb.NodeUnavailableError{})
+			done.Set(&kvpb.NodeUnavailableError{})
 			return nil
 		default:
 			panic("unexpected Stopped processor")
@@ -430,7 +423,6 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	// Check for an initial closed timestamp update immediately to help
 	// initialize the rangefeed's resolved timestamp as soon as possible.
 	r.handleClosedTimestampUpdateRaftMuLocked(ctx, r.GetCurrentClosedTimestamp(ctx))
-
 	return p
 }
 
