@@ -1107,6 +1107,7 @@ func (r *testRunner) teardownTest(
 		if t.mu.cancel != nil {
 			t.mu.cancel()
 		}
+		t.L().Printf("test timed; check __stacks.log and CRDB logs for goroutine dumps")
 	}
 	return nil
 }
