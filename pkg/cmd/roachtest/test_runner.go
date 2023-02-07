@@ -984,10 +984,9 @@ func (r *testRunner) runTest(
 		}
 		t.L().Printf("tearing down after %s; see teardown.log", s)
 	case <-time.After(timeout):
-		// NB: we're intentionally not failing the test if it hasn't
-		// already. This will be done at the very end of this method,
-		// after we've collected artifacts.
-		t.addFailure("test timed out (%s)", timeout)
+		// NB: We're adding the timeout failure intentionally without cancelling the context
+		// to capture as much state as possible during artifact collection.
+		t.addFailure(0, "test timed out (%s)", timeout)
 		timedOut = true
 	}
 
@@ -1104,8 +1103,7 @@ func (r *testRunner) teardownTest(
 		// around so someone can poke at it.
 		_ = c.StopE(ctx, t.L(), option.DefaultStopOpts(), c.All())
 
-		// We add a failure without cancelling the context to allow for artifact collection.
-		// Now we can cancel the context.
+		// We previously added a timeout failure without cancellation, so we cancel here.
 		if t.mu.cancel != nil {
 			t.mu.cancel()
 		}

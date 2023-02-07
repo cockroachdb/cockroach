@@ -288,44 +288,47 @@ func collectErrors(args []interface{}) []error {
 // ATTENTION: Since this calls panic(errTestFatal), it should only be called
 // from a test's closure. The test runner itself should never call this.
 func (t *testImpl) Fatal(args ...interface{}) {
-	t.addFailureAndCancel("", args...)
+	t.addFailureAndCancel(1, "", args...)
 	panic(errTestFatal)
 }
 
 // Fatalf is like Fatal, but takes a format string.
 func (t *testImpl) Fatalf(format string, args ...interface{}) {
-	t.addFailureAndCancel(format, args...)
+	t.addFailureAndCancel(1, format, args...)
 	panic(errTestFatal)
 }
 
 // FailNow implements the TestingT interface.
 func (t *testImpl) FailNow() {
-	t.addFailureAndCancel("FailNow called")
+	t.addFailureAndCancel(1, "FailNow called")
 	panic(errTestFatal)
 }
 
 // Error implements the TestingT interface
 func (t *testImpl) Error(args ...interface{}) {
-	t.addFailureAndCancel("", args...)
+	t.addFailureAndCancel(1, "", args...)
 }
 
 // Errorf implements the TestingT interface.
 func (t *testImpl) Errorf(format string, args ...interface{}) {
-	t.addFailureAndCancel(format, args...)
+	t.addFailureAndCancel(1, format, args...)
 }
 
-func (t *testImpl) addFailureAndCancel(format string, args ...interface{}) {
-	t.addFailure(format, args...)
+func (t *testImpl) addFailureAndCancel(depth int, format string, args ...interface{}) {
+	t.addFailure(depth+1, format, args...)
 	if t.mu.cancel != nil {
 		t.mu.cancel()
 	}
 }
 
-func (t *testImpl) addFailure(format string, args ...interface{}) {
+// addFailure depth indicates how many stack frames to skip when reporting the
+// site of the failure in logs. `0` will report the caller of addFailure, `1` the
+// caller of the caller of addFailure, etc.
+func (t *testImpl) addFailure(depth int, format string, args ...interface{}) {
 	if format == "" {
 		format = strings.Repeat(" %v", len(args))[1:]
 	}
-	reportFailure := newFailure(errors.NewWithDepthf(2, format, args...), collectErrors(args))
+	reportFailure := newFailure(errors.NewWithDepthf(depth+1, format, args...), collectErrors(args))
 
 	t.mu.Lock()
 	defer t.mu.Unlock()
