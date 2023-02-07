@@ -73,9 +73,11 @@ func getCombinedStatementStats(
 	endTime := getTimeFromSeconds(req.End)
 	limit := SQLStatsResponseMax.Get(&settings.SV)
 	showInternal := SQLStatsShowInternal.Get(&settings.SV)
+
 	whereClause, orderAndLimit, args := getCombinedStatementsQueryClausesAndArgs(
 		startTime, endTime, limit, testingKnobs, showInternal)
-	statements, err := collectCombinedStatements(ctx, ie, whereClause, args, orderAndLimit)
+
+	statements, err := collectCombinedStatements(ctx, ie, whereClause, args, orderAndLimit, settings)
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
@@ -138,8 +140,12 @@ func collectCombinedStatements(
 	whereClause string,
 	args []interface{},
 	orderAndLimit string,
+	settings *cluster.Settings,
 ) ([]serverpb.StatementsResponse_CollectedStatementStatistics, error) {
-
+	table := "crdb_internal.statement_statistics"
+	if !settings.Version.IsActive(ctx, clusterversion.AlterSystemStatementStatisticsAddIndexRecommendations) {
+		table = "crdb_internal.statement_statistics_v22_1"
+	}
 	query := fmt.Sprintf(
 		`SELECT
 				fingerprint_id,
@@ -150,14 +156,14 @@ func collectCombinedStatements(
 				crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics,
 				max(sampled_plan) AS sampled_plan,
 				aggregation_interval
-		FROM crdb_internal.statement_statistics %s
+		FROM %s %s
 		GROUP BY
 				fingerprint_id,
 				transaction_fingerprint_id,
 				app_name,
 				metadata,
 				aggregation_interval
-		%s`, whereClause, orderAndLimit)
+		%s`, table, whereClause, orderAndLimit)
 
 	const expectedNumDatums = 8
 
@@ -374,15 +380,26 @@ func getStatementDetails(
 		return nil, serverError(ctx, err)
 	}
 
-	statementTotal, err := getTotalStatementDetails(ctx, ie, whereClause, args)
+	withIndexRecs := settings.Version.IsActive(ctx, clusterversion.AlterSystemStatementStatisticsAddIndexRecommendations)
+	stmtsTable := "crdb_internal.statement_statistics"
+
+	if !withIndexRecs {
+		stmtsTable = "crdb_internal.statement_statistics_v22_1"
+	}
+
+	// (xinhaoz) I don't think this propagation of the table name is ideal, but
+	// since this is only for the 22.2 release branch it's not really worth the
+	// effort to refactor these calls.
+	statementTotal, err := getTotalStatementDetails(ctx, ie, whereClause, args, stmtsTable)
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
-	statementStatisticsPerAggregatedTs, err := getStatementDetailsPerAggregatedTs(ctx, ie, whereClause, args, limit)
+	statementStatisticsPerAggregatedTs, err :=
+		getStatementDetailsPerAggregatedTs(ctx, ie, whereClause, args, limit, stmtsTable)
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
-	statementStatisticsPerPlanHash, err := getStatementDetailsPerPlanHash(ctx, ie, whereClause, args, limit, settings)
+	statementStatisticsPerPlanHash, err := getStatementDetailsPerPlanHash(ctx, ie, whereClause, args, limit, withIndexRecs)
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
@@ -482,7 +499,11 @@ func getStatementDetailsQueryClausesAndArgs(
 
 // getTotalStatementDetails return all the statistics for the selected statement combined.
 func getTotalStatementDetails(
-	ctx context.Context, ie *sql.InternalExecutor, whereClause string, args []interface{},
+	ctx context.Context,
+	ie *sql.InternalExecutor,
+	whereClause string,
+	args []interface{},
+	table string,
 ) (serverpb.StatementDetailsResponse_CollectedStatementSummary, error) {
 	query := fmt.Sprintf(
 		`SELECT
@@ -492,11 +513,11 @@ func getTotalStatementDetails(
 				crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics,
 				max(sampled_plan) as sampled_plan,
 				encode(fingerprint_id, 'hex') as fingerprint_id
-		FROM crdb_internal.statement_statistics %s
+		FROM %s %s
 		GROUP BY
 				aggregation_interval,
 				fingerprint_id
-		LIMIT 1`, whereClause)
+		LIMIT 1`, table, whereClause)
 
 	const expectedNumDatums = 6
 	var statement serverpb.StatementDetailsResponse_CollectedStatementSummary
@@ -574,6 +595,7 @@ func getStatementDetailsPerAggregatedTs(
 	whereClause string,
 	args []interface{},
 	limit int64,
+	table string,
 ) ([]serverpb.StatementDetailsResponse_CollectedStatementGroupedByAggregatedTs, error) {
 	query := fmt.Sprintf(
 		`SELECT
@@ -582,12 +604,12 @@ func getStatementDetailsPerAggregatedTs(
 				crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics,
 				max(sampled_plan) as sampled_plan,
 				aggregation_interval
-		FROM crdb_internal.statement_statistics %s
+		FROM %s %s
 		GROUP BY
 				aggregated_ts,
 				aggregation_interval
 		ORDER BY aggregated_ts ASC
-		LIMIT $%d`, whereClause, len(args)+1)
+		LIMIT $%d`, table, whereClause, len(args)+1)
 
 	args = append(args, limit)
 	const expectedNumDatums = 5
@@ -702,7 +724,7 @@ func getStatementDetailsPerPlanHash(
 	whereClause string,
 	args []interface{},
 	limit int64,
-	settings *cluster.Settings,
+	withIndexRecs bool,
 ) ([]serverpb.StatementDetailsResponse_CollectedStatementGroupedByPlanHash, error) {
 
 	query := fmt.Sprintf(
@@ -713,7 +735,7 @@ func getStatementDetailsPerPlanHash(
 				crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics,
 				max(sampled_plan) as sampled_plan,
 				aggregation_interval
-		FROM crdb_internal.statement_statistics %s
+		FROM crdb_internal.statement_statistics_v22_1 %s
 		GROUP BY
 				plan_hash,
 				plan_gist,
@@ -721,7 +743,7 @@ func getStatementDetailsPerPlanHash(
 		LIMIT $%d`, whereClause, len(args)+1)
 	expectedNumDatums := 6
 
-	if settings.Version.IsActive(ctx, clusterversion.AlterSystemStatementStatisticsAddIndexRecommendations) {
+	if withIndexRecs {
 		query = fmt.Sprintf(
 			`SELECT
 				plan_hash,
@@ -801,10 +823,12 @@ func getStatementDetailsPerPlanHash(
 		metadata.Stats.SensitiveInfo.MostRecentPlanDescription = *plan
 		aggInterval := tree.MustBeDInterval(row[5]).Duration
 
-		recommendations := tree.MustBeDArray(row[6])
 		var idxRecommendations []string
-		for _, s := range recommendations.Array {
-			idxRecommendations = util.CombineUniqueString(idxRecommendations, []string{string(tree.MustBeDString(s))})
+		if withIndexRecs {
+			recommendations := tree.MustBeDArray(row[6])
+			for _, s := range recommendations.Array {
+				idxRecommendations = util.CombineUniqueString(idxRecommendations, []string{string(tree.MustBeDString(s))})
+			}
 		}
 
 		// A metadata is unique for each plan, meaning if any of the counts are greater than zero,

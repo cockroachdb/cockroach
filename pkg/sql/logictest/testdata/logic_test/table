@@ -615,6 +615,7 @@ schema_changes                         NULL
 session_trace                          NULL
 session_variables                      NULL
 statement_statistics                   NULL
+statement_statistics_v22_1             NULL
 super_regions                          NULL
 table_columns                          NULL
 table_indexes                          NULL

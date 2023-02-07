@@ -143,6 +143,7 @@ const (
 	CrdbInternalSessionTraceTableID
 	CrdbInternalSessionVariablesTableID
 	CrdbInternalStmtStatsTableID
+	CrdbInternalStmtStatsV22_1TableID
 	CrdbInternalTableColumnsTableID
 	CrdbInternalTableIndexesTableID
 	CrdbInternalTablesTableID
