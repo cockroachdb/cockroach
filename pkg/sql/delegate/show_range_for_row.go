@@ -69,7 +69,7 @@ SELECT
   END AS start_key,
 	CASE
     WHEN r.end_key = crdb_internal.table_span(%[1]d)[2] THEN '…/<TableMax>'
-    WHEN r.end_key < crdb_internal.table_span(%[1]d)[2] THEN '<after:'||crdb_internal.pretty_key(r.end_key,-1)||'>'
+    WHEN r.end_key > crdb_internal.table_span(%[1]d)[2] THEN '<after:'||crdb_internal.pretty_key(r.end_key,-1)||'>'
     ELSE '…'||crdb_internal.pretty_key(r.end_key, 2)
   END AS end_key,
 	range_id,

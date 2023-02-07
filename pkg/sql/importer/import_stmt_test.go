@@ -78,6 +78,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgconn"
 	"github.com/jackc/pgx/v4"
 	"github.com/linkedin/goavro/v2"
 	"github.com/stretchr/testify/assert"
@@ -1684,6 +1685,23 @@ func TestImportRowLimit(t *testing.T) {
 	conn := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
+	// Also create a pgx connection so we can check notices.
+	pgURL, cleanup := sqlutils.PGUrl(
+		t,
+		tc.Server(0).ServingSQLAddr(),
+		"TestImportRowLimit",
+		url.User(username.RootUser),
+	)
+	defer cleanup()
+	config, err := pgx.ParseConfig(pgURL.String())
+	require.NoError(t, err)
+	var noticeMsg string
+	config.OnNotice = func(_ *pgconn.PgConn, notice *pgconn.Notice) {
+		noticeMsg = notice.Message
+	}
+	pgxConn, err := pgx.ConnectConfig(ctx, config)
+	require.NoError(t, err)
+
 	avroField := []map[string]interface{}{
 		{
 			"name": "a",
@@ -1864,14 +1882,25 @@ func TestImportRowLimit(t *testing.T) {
 
 					// Import table from dump format.
 					importDumpQuery := fmt.Sprintf(`IMPORT TABLE t FROM %s ($1) %s`, test.typ, test.with)
-					sqlDB.Exec(t, importDumpQuery, srv.URL)
+					_, err := pgxConn.Exec(ctx, importDumpQuery, srv.URL)
+					require.NoError(t, err)
+					require.Regexp(t, fmt.Sprintf(
+						"IMPORT %s has been deprecated in 23.1.*See https://www.cockroachlabs.com/docs/.*/migration-overview for alternatives.",
+						test.typ,
+					), noticeMsg)
+
 					sqlDB.CheckQueryResults(t, test.verifyQuery, test.expected)
 
 					sqlDB.Exec(t, `DROP TABLE t`)
 
 					// Import dump format directly.
 					importDumpQuery = fmt.Sprintf(`IMPORT %s ($1) %s`, test.typ, test.with)
-					sqlDB.Exec(t, importDumpQuery, srv.URL)
+					_, err = pgxConn.Exec(ctx, importDumpQuery, srv.URL)
+					require.NoError(t, err)
+					require.Regexp(t, fmt.Sprintf(
+						"IMPORT %s has been deprecated in 23.1.*See https://www.cockroachlabs.com/docs/.*/migration-overview for alternatives.",
+						test.typ,
+					), noticeMsg)
 					sqlDB.CheckQueryResults(t, test.verifyQuery, test.expected)
 
 					sqlDB.Exec(t, `DROP TABLE t`)
