@@ -288,44 +288,36 @@ func collectErrors(args []interface{}) []error {
 // ATTENTION: Since this calls panic(errTestFatal), it should only be called
 // from a test's closure. The test runner itself should never call this.
 func (t *testImpl) Fatal(args ...interface{}) {
-	t.addFailure("", args...)
+	t.addFailureAndCancel("", args...)
 	panic(errTestFatal)
 }
 
 // Fatalf is like Fatal, but takes a format string.
 func (t *testImpl) Fatalf(format string, args ...interface{}) {
-	t.addFailure(format, args...)
+	t.addFailureAndCancel(format, args...)
 	panic(errTestFatal)
 }
 
 // FailNow implements the TestingT interface.
 func (t *testImpl) FailNow() {
-	t.addFailure("FailNow called")
+	t.addFailureAndCancel("FailNow called")
 	panic(errTestFatal)
 }
 
 // Error implements the TestingT interface
 func (t *testImpl) Error(args ...interface{}) {
-	t.addFailure("", args...)
+	t.addFailureAndCancel("", args...)
 }
 
 // Errorf implements the TestingT interface.
 func (t *testImpl) Errorf(format string, args ...interface{}) {
-	t.addFailure(format, args...)
+	t.addFailureAndCancel(format, args...)
 }
 
-// We take the first error from each failure which is the
-// "squashed" error that contains all information of a failure
-func formatFailure(b *strings.Builder, reportFailures ...failure) {
-	for i, failure := range reportFailures {
-		if i > 0 {
-			fmt.Fprintln(b)
-		}
-		file, line, fn, ok := errors.GetOneLineSource(failure.squashedErr)
-		if !ok {
-			file, line, fn = "<unknown>", 0, "unknown"
-		}
-		fmt.Fprintf(b, "(%s:%d).%s: %v", file, line, fn, failure.squashedErr)
+func (t *testImpl) addFailureAndCancel(format string, args ...interface{}) {
+	t.addFailure(format, args...)
+	if t.mu.cancel != nil {
+		t.mu.cancel()
 	}
 }
 
@@ -368,8 +360,20 @@ func (t *testImpl) addFailure(format string, args ...interface{}) {
 
 	t.mu.output = append(t.mu.output, msg...)
 	t.mu.output = append(t.mu.output, '\n')
-	if t.mu.cancel != nil {
-		t.mu.cancel()
+}
+
+// We take the first error from each failure which is the
+// "squashed" error that contains all information of a failure
+func formatFailure(b *strings.Builder, reportFailures ...failure) {
+	for i, failure := range reportFailures {
+		if i > 0 {
+			fmt.Fprintln(b)
+		}
+		file, line, fn, ok := errors.GetOneLineSource(failure.squashedErr)
+		if !ok {
+			file, line, fn = "<unknown>", 0, "unknown"
+		}
+		fmt.Fprintf(b, "(%s:%d).%s: %v", file, line, fn, failure.squashedErr)
 	}
 }
 

@@ -987,7 +987,7 @@ func (r *testRunner) runTest(
 		// NB: we're intentionally not failing the test if it hasn't
 		// already. This will be done at the very end of this method,
 		// after we've collected artifacts.
-		t.L().Printf("test timed out after %s; check __stacks.log and CRDB logs for goroutine dumps", timeout)
+		t.addFailure("test timed out (%s)", timeout)
 		timedOut = true
 	}
 
@@ -1104,10 +1104,11 @@ func (r *testRunner) teardownTest(
 		// around so someone can poke at it.
 		_ = c.StopE(ctx, t.L(), option.DefaultStopOpts(), c.All())
 
-		// The hung test may, against all odds, still not have reported an error.
-		// We delayed it to improve artifacts collection, and now we ensure the test
-		// is marked as failing.
-		t.Errorf("test timed out (%s)", t.Spec().(*registry.TestSpec).Timeout)
+		// We add a failure without cancelling the context to allow for artifact collection.
+		// Now we can cancel the context.
+		if t.mu.cancel != nil {
+			t.mu.cancel()
+		}
 	}
 	return nil
 }
