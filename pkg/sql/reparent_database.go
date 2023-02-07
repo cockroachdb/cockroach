@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -22,7 +21,5 @@ import (
 func (p *planner) ReparentDatabase(
 	ctx context.Context, n *tree.ReparentDatabase,
 ) (planNode, error) {
-	return nil, pgerror.Newf(pgcode.FeatureNotSupported,
-		"cannot perform ALTER DATABASE CONVERT TO SCHEMA in version %v and beyond",
-		clusterversion.TODOPreV22_1)
+	return nil, pgerror.Newf(pgcode.FeatureNotSupported, "cannot perform ALTER DATABASE CONVERT TO SCHEMA")
 }

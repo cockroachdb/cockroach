@@ -101,12 +101,11 @@ func TestSetMinVersion(t *testing.T) {
 	defer p.Close()
 	require.Equal(t, pebble.FormatMostCompatible, p.db.FormatMajorVersion())
 
-	// Advancing the store cluster version to TODOPreV22_1
-	// should also advance the store's format major version.
-	err = p.SetMinVersion(clusterversion.ByKey(clusterversion.TODOPreV22_1))
+	// Advancing the store cluster version to V22_2 should also advance the
+	// store's format major version.
+	err = p.SetMinVersion(clusterversion.ByKey(clusterversion.V22_2))
 	require.NoError(t, err)
-	require.Equal(t, pebble.FormatSplitUserKeysMarked, p.db.FormatMajorVersion())
-
+	require.Equal(t, pebble.FormatPrePebblev1Marked, p.db.FormatMajorVersion())
 }
 
 func TestMinVersion_IsNotEncrypted(t *testing.T) {
