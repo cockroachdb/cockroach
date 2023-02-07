@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -166,6 +167,8 @@ func runIterate(
 }
 
 func BenchmarkTimeBoundIterate(b *testing.B) {
+	skip.WithIssue(b, 95530, "bump minBinary to 22.2. Skip 22.2 mixed-version tests for future cleanup")
+
 	for _, loadFactor := range []float32{1.0, 0.5, 0.1, 0.05, 0.0} {
 		b.Run(fmt.Sprintf("LoadFactor=%.2f", loadFactor), func(b *testing.B) {
 			b.Run("NormalIterator", func(b *testing.B) {
