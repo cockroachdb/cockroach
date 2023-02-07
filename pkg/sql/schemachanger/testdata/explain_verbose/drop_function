@@ -32,29 +32,20 @@ EXPLAIN (ddl, verbose) DROP FUNCTION f;
 │       │   ├── • Owner:{DescID: 109}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Function:{DescID: 109}
-│       │   │   │     rule: "descriptor dropped before dependent element removal"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109}
+│       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • UserPrivileges:{DescID: 109, Name: admin}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Function:{DescID: 109}
-│       │   │   │     rule: "descriptor dropped before dependent element removal"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109}
+│       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • UserPrivileges:{DescID: 109, Name: root}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Function:{DescID: 109}
-│       │   │   │     rule: "descriptor dropped before dependent element removal"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109}
+│       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • Function:{DescID: 109}
 │       │   │     PUBLIC → DROPPED
@@ -69,38 +60,26 @@ EXPLAIN (ddl, verbose) DROP FUNCTION f;
 │       │   ├── • FunctionName:{DescID: 109}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Function:{DescID: 109}
-│       │   │   │     rule: "descriptor dropped before dependent element removal"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109}
+│       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • FunctionVolatility:{DescID: 109}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Function:{DescID: 109}
-│       │   │   │     rule: "descriptor dropped before dependent element removal"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109}
+│       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • FunctionLeakProof:{DescID: 109}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Function:{DescID: 109}
-│       │   │   │     rule: "descriptor dropped before dependent element removal"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109}
+│       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • FunctionNullInputBehavior:{DescID: 109}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Function:{DescID: 109}
-│       │   │   │     rule: "descriptor dropped before dependent element removal"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109}
+│       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   └── • FunctionBody:{DescID: 109}
 │       │       │ PUBLIC → ABSENT
@@ -108,7 +87,7 @@ EXPLAIN (ddl, verbose) DROP FUNCTION f;
 │       │       └── • Precedence dependency from DROPPED Function:{DescID: 109}
 │       │             rule: "descriptor dropped before dependent element removal"
 │       │
-│       └── • 4 Mutation operations
+│       └── • 11 Mutation operations
 │           │
 │           ├── • MarkDescriptorAsDropped
 │           │     DescriptorID: 109
@@ -117,20 +96,48 @@ EXPLAIN (ddl, verbose) DROP FUNCTION f;
 │           │     ObjectID: 109
 │           │     ParentSchemaID: 101
 │           │
+│           ├── • NotImplementedForPublicObjects
+│           │     DescID: 109
+│           │     ElementType: scpb.FunctionName
+│           │
+│           ├── • NotImplementedForPublicObjects
+│           │     DescID: 109
+│           │     ElementType: scpb.FunctionVolatility
+│           │
+│           ├── • NotImplementedForPublicObjects
+│           │     DescID: 109
+│           │     ElementType: scpb.FunctionLeakProof
+│           │
+│           ├── • NotImplementedForPublicObjects
+│           │     DescID: 109
+│           │     ElementType: scpb.FunctionNullInputBehavior
+│           │
 │           ├── • RemoveBackReferenceInTypes
 │           │     BackReferencedDescriptorID: 109
 │           │     TypeIDs:
 │           │     - 107
 │           │     - 108
 │           │
-│           └── • RemoveBackReferencesInRelations
-│                 BackReferencedID: 109
-│                 RelationIDs:
-│                 - 104
-│                 - 104
-│                 - 104
-│                 - 106
-│                 - 105
+│           ├── • RemoveBackReferencesInRelations
+│           │     BackReferencedID: 109
+│           │     RelationIDs:
+│           │     - 104
+│           │     - 104
+│           │     - 104
+│           │     - 106
+│           │     - 105
+│           │
+│           ├── • NotImplementedForPublicObjects
+│           │     DescID: 109
+│           │     ElementType: scpb.Owner
+│           │
+│           ├── • RemoveUserPrivileges
+│           │     DescriptorID: 109
+│           │     User: admin
+│           │
+│           └── • RemoveUserPrivileges
+│                 DescriptorID: 109
+│                 User: root
 │
 ├── • PreCommitPhase
 │   │
@@ -180,29 +187,20 @@ EXPLAIN (ddl, verbose) DROP FUNCTION f;
 │       │   ├── • Owner:{DescID: 109}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Function:{DescID: 109}
-│       │   │   │     rule: "descriptor dropped before dependent element removal"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109}
+│       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • UserPrivileges:{DescID: 109, Name: admin}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Function:{DescID: 109}
-│       │   │   │     rule: "descriptor dropped before dependent element removal"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109}
+│       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • UserPrivileges:{DescID: 109, Name: root}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Function:{DescID: 109}
-│       │   │   │     rule: "descriptor dropped before dependent element removal"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109}
+│       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • Function:{DescID: 109}
 │       │   │     PUBLIC → DROPPED
@@ -217,38 +215,26 @@ EXPLAIN (ddl, verbose) DROP FUNCTION f;
 │       │   ├── • FunctionName:{DescID: 109}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Function:{DescID: 109}
-│       │   │   │     rule: "descriptor dropped before dependent element removal"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109}
+│       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • FunctionVolatility:{DescID: 109}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Function:{DescID: 109}
-│       │   │   │     rule: "descriptor dropped before dependent element removal"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109}
+│       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • FunctionLeakProof:{DescID: 109}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Function:{DescID: 109}
-│       │   │   │     rule: "descriptor dropped before dependent element removal"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109}
+│       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • FunctionNullInputBehavior:{DescID: 109}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Function:{DescID: 109}
-│       │   │   │     rule: "descriptor dropped before dependent element removal"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109}
+│       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   └── • FunctionBody:{DescID: 109}
 │       │       │ PUBLIC → ABSENT
@@ -256,7 +242,7 @@ EXPLAIN (ddl, verbose) DROP FUNCTION f;
 │       │       └── • Precedence dependency from DROPPED Function:{DescID: 109}
 │       │             rule: "descriptor dropped before dependent element removal"
 │       │
-│       └── • 11 Mutation operations
+│       └── • 18 Mutation operations
 │           │
 │           ├── • MarkDescriptorAsDropped
 │           │     DescriptorID: 109
@@ -264,6 +250,22 @@ EXPLAIN (ddl, verbose) DROP FUNCTION f;
 │           ├── • RemoveObjectParent
 │           │     ObjectID: 109
 │           │     ParentSchemaID: 101
+│           │
+│           ├── • NotImplementedForPublicObjects
+│           │     DescID: 109
+│           │     ElementType: scpb.FunctionName
+│           │
+│           ├── • NotImplementedForPublicObjects
+│           │     DescID: 109
+│           │     ElementType: scpb.FunctionVolatility
+│           │
+│           ├── • NotImplementedForPublicObjects
+│           │     DescID: 109
+│           │     ElementType: scpb.FunctionLeakProof
+│           │
+│           ├── • NotImplementedForPublicObjects
+│           │     DescID: 109
+│           │     ElementType: scpb.FunctionNullInputBehavior
 │           │
 │           ├── • RemoveBackReferenceInTypes
 │           │     BackReferencedDescriptorID: 109
@@ -279,6 +281,18 @@ EXPLAIN (ddl, verbose) DROP FUNCTION f;
 │           │     - 104
 │           │     - 106
 │           │     - 105
+│           │
+│           ├── • NotImplementedForPublicObjects
+│           │     DescID: 109
+│           │     ElementType: scpb.Owner
+│           │
+│           ├── • RemoveUserPrivileges
+│           │     DescriptorID: 109
+│           │     User: admin
+│           │
+│           ├── • RemoveUserPrivileges
+│           │     DescriptorID: 109
+│           │     User: root
 │           │
 │           ├── • SetJobStateOnDescriptor
 │           │     DescriptorID: 104

@@ -48,7 +48,7 @@ func init() {
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.TypeFilter(rulesVersionKey, isDescriptor),
-				to.TypeFilter(rulesVersionKey, isSimpleDependent, Not(isConstraintDependent)),
+				to.TypeFilter(rulesVersionKey, Or(isSimpleDependent, isOwner), Not(isConstraintDependent)),
 				JoinOnDescID(from, to, "desc-id"),
 				StatusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_ABSENT),
 			}
@@ -122,8 +122,10 @@ func init() {
 		},
 	)
 
+	// If the descriptor references this type is already being dropped, then
+	// the back references don't really matter.
 	registerDepRule(
-		"descriptor drop right before removing dependent with type ref",
+		"descriptor drop right before removing dependent between types",
 		scgraph.SameStagePrecedence,
 		"referenced-descriptor", "referencing-via-type",
 		func(from, to NodeVars) rel.Clauses {
@@ -132,7 +134,23 @@ func init() {
 				from.TypeFilter(rulesVersionKey, isTypeDescriptor),
 				from.DescIDEq(fromDescID),
 				to.ReferencedTypeDescIDsContain(fromDescID),
-				to.TypeFilter(rulesVersionKey, isSimpleDependent, Or(isWithTypeT, isWithExpression)),
+				to.TypeFilter(rulesVersionKey, isSimpleDependent, isWithTypeT),
+				StatusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_ABSENT),
+			}
+		},
+	)
+	registerDepRule(
+		"descriptor drop right before removing dependent with type refs in expressions",
+		scgraph.SameStagePrecedence,
+		"referenced-descriptor", "referencing-via-type",
+		func(from, to NodeVars) rel.Clauses {
+			fromDescID := rel.Var("fromDescID")
+			return rel.Clauses{
+				from.TypeFilter(rulesVersionKey, isTypeDescriptor),
+				from.DescIDEq(fromDescID),
+				to.ReferencedTypeDescIDsContain(fromDescID),
+				descriptorIsNotBeingDropped(to.El),
+				to.TypeFilter(rulesVersionKey, isSimpleDependent, isWithExpression),
 				StatusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_ABSENT),
 			}
 		},
@@ -210,8 +228,10 @@ func init() {
 
 // These rules ensures we drop cross-descriptor constraints before dropping
 // descriptors, both the referencing and referenced. Namely,
-//  1. cross-descriptor constraints are absent before referenced descriptor
-//  2. cross-descriptor constraints are absent before referencing descriptor
+//  1. cross-descriptor constraints are absent before referenced descriptor, if
+//     the referencing table is not being dropped.
+//  2. cross-descriptor constraints are absent before referencing descriptor, if
+//     the referenced table is not dropped.
 //
 // A canonical example is FKs:
 // To illustrate why rule 1 is necessary, consider we have tables `t1` and `t2`,

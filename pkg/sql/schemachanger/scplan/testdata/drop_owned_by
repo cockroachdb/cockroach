@@ -17,7 +17,7 @@ CREATE VIEW s.v2 AS (SELECT 'a'::s.typ::string AS k, name FROM s.v1);
 ops
 DROP OWNED BY r
 ----
-StatementPhase stage 1 of 1 with 36 MutationType ops
+StatementPhase stage 1 of 1 with 108 MutationType ops
   transitions:
     [[UserPrivileges:{DescID: 100, Name: r}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 105, Name: s, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
@@ -57,9 +57,6 @@ StatementPhase stage 1 of 1 with 36 MutationType ops
     [[Column:{DescID: 109, ColumnID: 4294967294}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 109, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
-    [[IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[IndexColumn:{DescID: 109, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[IndexColumn:{DescID: 109, ColumnID: 3, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> VALIDATED
     [[IndexName:{DescID: 109, Name: t_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 107, Name: sq, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
@@ -92,9 +89,6 @@ StatementPhase stage 1 of 1 with 36 MutationType ops
     [[Column:{DescID: 108, ColumnID: 4294967294}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
-    [[IndexColumn:{DescID: 108, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[IndexColumn:{DescID: 108, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[IndexColumn:{DescID: 108, ColumnID: 3, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> VALIDATED
     [[IndexName:{DescID: 108, Name: t_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 110, Name: v1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
@@ -162,6 +156,33 @@ StatementPhase stage 1 of 1 with 36 MutationType ops
     *scop.RemoveObjectParent
       ObjectID: 109
       ParentSchemaID: 101
+    *scop.NotImplementedForPublicObjects
+      DescID: 109
+      ElementType: scpb.ColumnFamily
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 1
+      TableID: 109
+    *scop.SetColumnName
+      ColumnID: 1
+      Name: crdb_internal_column_1_name_placeholder
+      TableID: 109
+    *scop.MakePublicColumnNotNullValidated
+      ColumnID: 1
+      TableID: 109
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 2
+      TableID: 109
+    *scop.SetColumnName
+      ColumnID: 2
+      Name: crdb_internal_column_2_name_placeholder
+      TableID: 109
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 3
+      TableID: 109
+    *scop.SetColumnName
+      ColumnID: 3
+      Name: crdb_internal_column_3_name_placeholder
+      TableID: 109
     *scop.RemoveColumnDefaultExpression
       ColumnID: 3
       TableID: 109
@@ -170,6 +191,27 @@ StatementPhase stage 1 of 1 with 36 MutationType ops
       BackReferencedTableID: 109
       SequenceIDs:
       - 106
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967295
+      TableID: 109
+    *scop.SetColumnName
+      ColumnID: 4294967295
+      Name: crdb_internal_column_4294967295_name_placeholder
+      TableID: 109
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967294
+      TableID: 109
+    *scop.SetColumnName
+      ColumnID: 4294967294
+      Name: crdb_internal_column_4294967294_name_placeholder
+      TableID: 109
+    *scop.MakePublicPrimaryIndexWriteOnly
+      IndexID: 1
+      TableID: 109
+    *scop.SetIndexName
+      IndexID: 1
+      Name: crdb_internal_index_1_name_placeholder
+      TableID: 109
     *scop.MarkDescriptorAsDropped
       DescriptorID: 107
     *scop.RemoveObjectParent
@@ -180,6 +222,33 @@ StatementPhase stage 1 of 1 with 36 MutationType ops
     *scop.RemoveObjectParent
       ObjectID: 108
       ParentSchemaID: 105
+    *scop.NotImplementedForPublicObjects
+      DescID: 108
+      ElementType: scpb.ColumnFamily
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 1
+      TableID: 108
+    *scop.SetColumnName
+      ColumnID: 1
+      Name: crdb_internal_column_1_name_placeholder
+      TableID: 108
+    *scop.MakePublicColumnNotNullValidated
+      ColumnID: 1
+      TableID: 108
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 2
+      TableID: 108
+    *scop.SetColumnName
+      ColumnID: 2
+      Name: crdb_internal_column_2_name_placeholder
+      TableID: 108
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 3
+      TableID: 108
+    *scop.SetColumnName
+      ColumnID: 3
+      Name: crdb_internal_column_3_name_placeholder
+      TableID: 108
     *scop.RemoveColumnDefaultExpression
       ColumnID: 3
       TableID: 108
@@ -188,6 +257,27 @@ StatementPhase stage 1 of 1 with 36 MutationType ops
       BackReferencedTableID: 108
       SequenceIDs:
       - 107
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967295
+      TableID: 108
+    *scop.SetColumnName
+      ColumnID: 4294967295
+      Name: crdb_internal_column_4294967295_name_placeholder
+      TableID: 108
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967294
+      TableID: 108
+    *scop.SetColumnName
+      ColumnID: 4294967294
+      Name: crdb_internal_column_4294967294_name_placeholder
+      TableID: 108
+    *scop.MakePublicPrimaryIndexWriteOnly
+      IndexID: 1
+      TableID: 108
+    *scop.SetIndexName
+      IndexID: 1
+      Name: crdb_internal_index_1_name_placeholder
+      TableID: 108
     *scop.MarkDescriptorAsDropped
       DescriptorID: 110
     *scop.RemoveBackReferencesInRelations
@@ -197,8 +287,32 @@ StatementPhase stage 1 of 1 with 36 MutationType ops
     *scop.RemoveObjectParent
       ObjectID: 110
       ParentSchemaID: 105
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 1
+      TableID: 110
+    *scop.SetColumnName
+      ColumnID: 1
+      Name: crdb_internal_column_1_name_placeholder
+      TableID: 110
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967295
+      TableID: 110
+    *scop.SetColumnName
+      ColumnID: 4294967295
+      Name: crdb_internal_column_4294967295_name_placeholder
+      TableID: 110
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967294
+      TableID: 110
+    *scop.SetColumnName
+      ColumnID: 4294967294
+      Name: crdb_internal_column_4294967294_name_placeholder
+      TableID: 110
     *scop.MarkDescriptorAsDropped
       DescriptorID: 111
+    *scop.NotImplementedForPublicObjects
+      DescID: 111
+      ElementType: scpb.EnumTypeValue
     *scop.RemoveObjectParent
       ObjectID: 111
       ParentSchemaID: 105
@@ -221,6 +335,34 @@ StatementPhase stage 1 of 1 with 36 MutationType ops
     *scop.RemoveObjectParent
       ObjectID: 113
       ParentSchemaID: 105
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 1
+      TableID: 113
+    *scop.SetColumnName
+      ColumnID: 1
+      Name: crdb_internal_column_1_name_placeholder
+      TableID: 113
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 2
+      TableID: 113
+    *scop.SetColumnName
+      ColumnID: 2
+      Name: crdb_internal_column_2_name_placeholder
+      TableID: 113
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967295
+      TableID: 113
+    *scop.SetColumnName
+      ColumnID: 4294967295
+      Name: crdb_internal_column_4294967295_name_placeholder
+      TableID: 113
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967294
+      TableID: 113
+    *scop.SetColumnName
+      ColumnID: 4294967294
+      Name: crdb_internal_column_4294967294_name_placeholder
+      TableID: 113
     *scop.MarkDescriptorAsDropped
       DescriptorID: 105
     *scop.RemoveSchemaParent
@@ -233,53 +375,140 @@ StatementPhase stage 1 of 1 with 36 MutationType ops
         DescriptorID: 106
         Name: sq
         SchemaID: 101
+    *scop.NotImplementedForPublicObjects
+      DescID: 106
+      ElementType: scpb.Owner
+    *scop.RemoveUserPrivileges
+      DescriptorID: 106
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 106
+      User: root
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
         DescriptorID: 109
         Name: t
         SchemaID: 101
+    *scop.NotImplementedForPublicObjects
+      DescID: 109
+      ElementType: scpb.Owner
+    *scop.RemoveUserPrivileges
+      DescriptorID: 109
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 109
+      User: root
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
         DescriptorID: 107
         Name: sq
         SchemaID: 105
+    *scop.NotImplementedForPublicObjects
+      DescID: 107
+      ElementType: scpb.Owner
+    *scop.RemoveUserPrivileges
+      DescriptorID: 107
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 107
+      User: root
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
         DescriptorID: 108
         Name: t
         SchemaID: 105
+    *scop.NotImplementedForPublicObjects
+      DescID: 108
+      ElementType: scpb.Owner
+    *scop.RemoveUserPrivileges
+      DescriptorID: 108
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 108
+      User: root
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
         DescriptorID: 110
         Name: v1
         SchemaID: 105
+    *scop.NotImplementedForPublicObjects
+      DescID: 110
+      ElementType: scpb.Owner
+    *scop.RemoveUserPrivileges
+      DescriptorID: 110
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 110
+      User: root
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
         DescriptorID: 111
         Name: typ
         SchemaID: 105
+    *scop.NotImplementedForPublicObjects
+      DescID: 111
+      ElementType: scpb.Owner
+    *scop.RemoveUserPrivileges
+      DescriptorID: 111
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 111
+      User: public
+    *scop.RemoveUserPrivileges
+      DescriptorID: 111
+      User: root
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
         DescriptorID: 112
         Name: _typ
         SchemaID: 105
+    *scop.NotImplementedForPublicObjects
+      DescID: 112
+      ElementType: scpb.Owner
+    *scop.RemoveUserPrivileges
+      DescriptorID: 112
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 112
+      User: public
+    *scop.RemoveUserPrivileges
+      DescriptorID: 112
+      User: root
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
         DescriptorID: 113
         Name: v2
         SchemaID: 105
+    *scop.NotImplementedForPublicObjects
+      DescID: 113
+      ElementType: scpb.Owner
+    *scop.RemoveUserPrivileges
+      DescriptorID: 113
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 113
+      User: root
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
         DescriptorID: 105
         Name: s
+    *scop.NotImplementedForPublicObjects
+      DescID: 105
+      ElementType: scpb.Owner
+    *scop.RemoveUserPrivileges
+      DescriptorID: 105
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 105
+      User: root
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
     [[UserPrivileges:{DescID: 100, Name: r}, ABSENT], ABSENT] -> PUBLIC
@@ -320,9 +549,6 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[Column:{DescID: 109, ColumnID: 4294967294}, ABSENT], WRITE_ONLY] -> PUBLIC
     [[ColumnName:{DescID: 109, Name: tableoid, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
-    [[IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 1}, ABSENT], ABSENT] -> PUBLIC
-    [[IndexColumn:{DescID: 109, ColumnID: 2, IndexID: 1}, ABSENT], ABSENT] -> PUBLIC
-    [[IndexColumn:{DescID: 109, ColumnID: 3, IndexID: 1}, ABSENT], ABSENT] -> PUBLIC
     [[PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT], VALIDATED] -> PUBLIC
     [[IndexName:{DescID: 109, Name: t_pkey, IndexID: 1}, ABSENT], ABSENT] -> PUBLIC
     [[Namespace:{DescID: 107, Name: sq, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
@@ -355,9 +581,6 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[Column:{DescID: 108, ColumnID: 4294967294}, ABSENT], WRITE_ONLY] -> PUBLIC
     [[ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
-    [[IndexColumn:{DescID: 108, ColumnID: 1, IndexID: 1}, ABSENT], ABSENT] -> PUBLIC
-    [[IndexColumn:{DescID: 108, ColumnID: 2, IndexID: 1}, ABSENT], ABSENT] -> PUBLIC
-    [[IndexColumn:{DescID: 108, ColumnID: 3, IndexID: 1}, ABSENT], ABSENT] -> PUBLIC
     [[PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}, ABSENT], VALIDATED] -> PUBLIC
     [[IndexName:{DescID: 108, Name: t_pkey, IndexID: 1}, ABSENT], ABSENT] -> PUBLIC
     [[Namespace:{DescID: 110, Name: v1, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
@@ -411,7 +634,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 67 MutationType ops
+PreCommitPhase stage 2 of 2 with 166 MutationType ops
   transitions:
     [[UserPrivileges:{DescID: 100, Name: r}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 105, Name: s, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
@@ -556,6 +779,33 @@ PreCommitPhase stage 2 of 2 with 67 MutationType ops
     *scop.RemoveObjectParent
       ObjectID: 109
       ParentSchemaID: 101
+    *scop.NotImplementedForPublicObjects
+      DescID: 109
+      ElementType: scpb.ColumnFamily
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 1
+      TableID: 109
+    *scop.SetColumnName
+      ColumnID: 1
+      Name: crdb_internal_column_1_name_placeholder
+      TableID: 109
+    *scop.MakePublicColumnNotNullValidated
+      ColumnID: 1
+      TableID: 109
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 2
+      TableID: 109
+    *scop.SetColumnName
+      ColumnID: 2
+      Name: crdb_internal_column_2_name_placeholder
+      TableID: 109
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 3
+      TableID: 109
+    *scop.SetColumnName
+      ColumnID: 3
+      Name: crdb_internal_column_3_name_placeholder
+      TableID: 109
     *scop.RemoveColumnDefaultExpression
       ColumnID: 3
       TableID: 109
@@ -564,6 +814,27 @@ PreCommitPhase stage 2 of 2 with 67 MutationType ops
       BackReferencedTableID: 109
       SequenceIDs:
       - 106
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967295
+      TableID: 109
+    *scop.SetColumnName
+      ColumnID: 4294967295
+      Name: crdb_internal_column_4294967295_name_placeholder
+      TableID: 109
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967294
+      TableID: 109
+    *scop.SetColumnName
+      ColumnID: 4294967294
+      Name: crdb_internal_column_4294967294_name_placeholder
+      TableID: 109
+    *scop.MakePublicPrimaryIndexWriteOnly
+      IndexID: 1
+      TableID: 109
+    *scop.SetIndexName
+      IndexID: 1
+      Name: crdb_internal_index_1_name_placeholder
+      TableID: 109
     *scop.MarkDescriptorAsDropped
       DescriptorID: 107
     *scop.RemoveObjectParent
@@ -574,6 +845,33 @@ PreCommitPhase stage 2 of 2 with 67 MutationType ops
     *scop.RemoveObjectParent
       ObjectID: 108
       ParentSchemaID: 105
+    *scop.NotImplementedForPublicObjects
+      DescID: 108
+      ElementType: scpb.ColumnFamily
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 1
+      TableID: 108
+    *scop.SetColumnName
+      ColumnID: 1
+      Name: crdb_internal_column_1_name_placeholder
+      TableID: 108
+    *scop.MakePublicColumnNotNullValidated
+      ColumnID: 1
+      TableID: 108
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 2
+      TableID: 108
+    *scop.SetColumnName
+      ColumnID: 2
+      Name: crdb_internal_column_2_name_placeholder
+      TableID: 108
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 3
+      TableID: 108
+    *scop.SetColumnName
+      ColumnID: 3
+      Name: crdb_internal_column_3_name_placeholder
+      TableID: 108
     *scop.RemoveColumnDefaultExpression
       ColumnID: 3
       TableID: 108
@@ -582,6 +880,27 @@ PreCommitPhase stage 2 of 2 with 67 MutationType ops
       BackReferencedTableID: 108
       SequenceIDs:
       - 107
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967295
+      TableID: 108
+    *scop.SetColumnName
+      ColumnID: 4294967295
+      Name: crdb_internal_column_4294967295_name_placeholder
+      TableID: 108
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967294
+      TableID: 108
+    *scop.SetColumnName
+      ColumnID: 4294967294
+      Name: crdb_internal_column_4294967294_name_placeholder
+      TableID: 108
+    *scop.MakePublicPrimaryIndexWriteOnly
+      IndexID: 1
+      TableID: 108
+    *scop.SetIndexName
+      IndexID: 1
+      Name: crdb_internal_index_1_name_placeholder
+      TableID: 108
     *scop.MarkDescriptorAsDropped
       DescriptorID: 110
     *scop.RemoveBackReferencesInRelations
@@ -591,8 +910,32 @@ PreCommitPhase stage 2 of 2 with 67 MutationType ops
     *scop.RemoveObjectParent
       ObjectID: 110
       ParentSchemaID: 105
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 1
+      TableID: 110
+    *scop.SetColumnName
+      ColumnID: 1
+      Name: crdb_internal_column_1_name_placeholder
+      TableID: 110
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967295
+      TableID: 110
+    *scop.SetColumnName
+      ColumnID: 4294967295
+      Name: crdb_internal_column_4294967295_name_placeholder
+      TableID: 110
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967294
+      TableID: 110
+    *scop.SetColumnName
+      ColumnID: 4294967294
+      Name: crdb_internal_column_4294967294_name_placeholder
+      TableID: 110
     *scop.MarkDescriptorAsDropped
       DescriptorID: 111
+    *scop.NotImplementedForPublicObjects
+      DescID: 111
+      ElementType: scpb.EnumTypeValue
     *scop.RemoveObjectParent
       ObjectID: 111
       ParentSchemaID: 105
@@ -615,6 +958,34 @@ PreCommitPhase stage 2 of 2 with 67 MutationType ops
     *scop.RemoveObjectParent
       ObjectID: 113
       ParentSchemaID: 105
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 1
+      TableID: 113
+    *scop.SetColumnName
+      ColumnID: 1
+      Name: crdb_internal_column_1_name_placeholder
+      TableID: 113
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 2
+      TableID: 113
+    *scop.SetColumnName
+      ColumnID: 2
+      Name: crdb_internal_column_2_name_placeholder
+      TableID: 113
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967295
+      TableID: 113
+    *scop.SetColumnName
+      ColumnID: 4294967295
+      Name: crdb_internal_column_4294967295_name_placeholder
+      TableID: 113
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967294
+      TableID: 113
+    *scop.SetColumnName
+      ColumnID: 4294967294
+      Name: crdb_internal_column_4294967294_name_placeholder
+      TableID: 113
     *scop.MarkDescriptorAsDropped
       DescriptorID: 105
     *scop.RemoveSchemaParent
@@ -627,14 +998,44 @@ PreCommitPhase stage 2 of 2 with 67 MutationType ops
         DescriptorID: 106
         Name: sq
         SchemaID: 101
+    *scop.NotImplementedForPublicObjects
+      DescID: 106
+      ElementType: scpb.Owner
+    *scop.RemoveUserPrivileges
+      DescriptorID: 106
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 106
+      User: root
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
         DescriptorID: 109
         Name: t
         SchemaID: 101
+    *scop.NotImplementedForPublicObjects
+      DescID: 109
+      ElementType: scpb.Owner
+    *scop.RemoveUserPrivileges
+      DescriptorID: 109
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 109
+      User: root
     *scop.RemoveColumnNotNull
       ColumnID: 1
+      TableID: 109
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 2
+      TableID: 109
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 3
+      TableID: 109
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967295
+      TableID: 109
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967294
       TableID: 109
     *scop.DrainDescriptorName
       Namespace:
@@ -642,14 +1043,44 @@ PreCommitPhase stage 2 of 2 with 67 MutationType ops
         DescriptorID: 107
         Name: sq
         SchemaID: 105
+    *scop.NotImplementedForPublicObjects
+      DescID: 107
+      ElementType: scpb.Owner
+    *scop.RemoveUserPrivileges
+      DescriptorID: 107
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 107
+      User: root
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
         DescriptorID: 108
         Name: t
         SchemaID: 105
+    *scop.NotImplementedForPublicObjects
+      DescID: 108
+      ElementType: scpb.Owner
+    *scop.RemoveUserPrivileges
+      DescriptorID: 108
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 108
+      User: root
     *scop.RemoveColumnNotNull
       ColumnID: 1
+      TableID: 108
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 2
+      TableID: 108
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 3
+      TableID: 108
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967295
+      TableID: 108
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967294
       TableID: 108
     *scop.DrainDescriptorName
       Namespace:
@@ -657,29 +1088,185 @@ PreCommitPhase stage 2 of 2 with 67 MutationType ops
         DescriptorID: 110
         Name: v1
         SchemaID: 105
+    *scop.NotImplementedForPublicObjects
+      DescID: 110
+      ElementType: scpb.Owner
+    *scop.RemoveUserPrivileges
+      DescriptorID: 110
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 110
+      User: root
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 1
+      TableID: 110
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967295
+      TableID: 110
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967294
+      TableID: 110
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
         DescriptorID: 111
         Name: typ
         SchemaID: 105
+    *scop.NotImplementedForPublicObjects
+      DescID: 111
+      ElementType: scpb.Owner
+    *scop.RemoveUserPrivileges
+      DescriptorID: 111
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 111
+      User: public
+    *scop.RemoveUserPrivileges
+      DescriptorID: 111
+      User: root
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
         DescriptorID: 112
         Name: _typ
         SchemaID: 105
+    *scop.NotImplementedForPublicObjects
+      DescID: 112
+      ElementType: scpb.Owner
+    *scop.RemoveUserPrivileges
+      DescriptorID: 112
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 112
+      User: public
+    *scop.RemoveUserPrivileges
+      DescriptorID: 112
+      User: root
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
         DescriptorID: 113
         Name: v2
         SchemaID: 105
+    *scop.NotImplementedForPublicObjects
+      DescID: 113
+      ElementType: scpb.Owner
+    *scop.RemoveUserPrivileges
+      DescriptorID: 113
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 113
+      User: root
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 1
+      TableID: 113
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 2
+      TableID: 113
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967295
+      TableID: 113
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967294
+      TableID: 113
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
         DescriptorID: 105
         Name: s
+    *scop.NotImplementedForPublicObjects
+      DescID: 105
+      ElementType: scpb.Owner
+    *scop.RemoveUserPrivileges
+      DescriptorID: 105
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 105
+      User: root
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 1
+      TableID: 109
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967295
+      TableID: 109
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967294
+      TableID: 109
+    *scop.MakeWriteOnlyIndexDeleteOnly
+      IndexID: 1
+      TableID: 109
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 1
+      TableID: 108
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967295
+      TableID: 108
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967294
+      TableID: 108
+    *scop.MakeWriteOnlyIndexDeleteOnly
+      IndexID: 1
+      TableID: 108
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 1
+      TableID: 110
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967295
+      TableID: 110
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967294
+      TableID: 110
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 1
+      TableID: 113
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 2
+      TableID: 113
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967295
+      TableID: 113
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967294
+      TableID: 113
+    *scop.RemoveColumnFromIndex
+      ColumnID: 1
+      IndexID: 1
+      TableID: 109
+    *scop.RemoveColumnFromIndex
+      ColumnID: 2
+      IndexID: 1
+      Kind: 2
+      TableID: 109
+    *scop.RemoveColumnFromIndex
+      ColumnID: 3
+      IndexID: 1
+      Kind: 2
+      Ordinal: 1
+      TableID: 109
+    *scop.MakeIndexAbsent
+      IndexID: 1
+      TableID: 109
+    *scop.RemoveColumnFromIndex
+      ColumnID: 1
+      IndexID: 1
+      TableID: 108
+    *scop.RemoveColumnFromIndex
+      ColumnID: 2
+      IndexID: 1
+      Kind: 2
+      TableID: 108
+    *scop.RemoveColumnFromIndex
+      ColumnID: 3
+      IndexID: 1
+      Kind: 2
+      Ordinal: 1
+      TableID: 108
+    *scop.MakeIndexAbsent
+      IndexID: 1
+      TableID: 108
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 1
+      TableID: 109
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 2
       TableID: 109
@@ -687,49 +1274,13 @@ PreCommitPhase stage 2 of 2 with 67 MutationType ops
       ColumnID: 3
       TableID: 109
     *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 4294967295
-      TableID: 109
-    *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 4294967294
-      TableID: 109
+      ColumnID: 1
+      TableID: 108
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 2
       TableID: 108
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 3
-      TableID: 108
-    *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 4294967295
-      TableID: 108
-    *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 4294967294
-      TableID: 108
-    *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 1
-      TableID: 110
-    *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 4294967295
-      TableID: 110
-    *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 4294967294
-      TableID: 110
-    *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 1
-      TableID: 113
-    *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 2
-      TableID: 113
-    *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 4294967295
-      TableID: 113
-    *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 4294967294
-      TableID: 113
-    *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 1
-      TableID: 109
-    *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 1
       TableID: 108
     *scop.SetJobStateOnDescriptor
       DescriptorID: 100

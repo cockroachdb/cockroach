@@ -17,11 +17,13 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› D
       │    │    ├── PUBLIC        → ABSENT      IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
       │    │    ├── WRITE_ONLY    → DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
       │    │    └── PUBLIC        → ABSENT      IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
-      │    └── 9 Mutation operations
+      │    └── 11 Mutation operations
       │         ├── SetColumnName {"ColumnID":2,"Name":"j","TableID":104}
       │         ├── MakeValidatedSecondaryIndexPublic {"IndexID":2,"TableID":104}
       │         ├── RefreshStats {"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":3,"TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":4,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":4,"TableID":104}
       │         ├── MakeWriteOnlyColumnPublic {"ColumnID":2,"TableID":104}
       │         ├── RefreshStats {"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":3,"TableID":104}

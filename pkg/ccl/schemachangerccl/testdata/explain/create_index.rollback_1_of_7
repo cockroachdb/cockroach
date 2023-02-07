@@ -24,8 +24,14 @@ Schema change plan for rolling back CREATE INDEX ‹id1› ON ‹defaultdb›.pu
            │    ├── PUBLIC           → ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
            │    ├── PUBLIC           → ABSENT IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
            │    └── PUBLIC           → ABSENT IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}
-           └── 6 Mutation operations
+           └── 12 Mutation operations
+                ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":2,"TableID":104}
+                ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":2,"Ordinal":1,"TableID":104}
+                ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":2,"Kind":2,"TableID":104}
                 ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":104}
+                ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":3,"TableID":104}
+                ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":3,"Ordinal":1,"TableID":104}
+                ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":3,"Kind":2,"TableID":104}
                 ├── MakeIndexAbsent {"IndexID":2,"TableID":104}
                 ├── CreateGCJobForIndex {"IndexID":2,"TableID":104}
                 ├── MakeIndexAbsent {"IndexID":3,"TableID":104}

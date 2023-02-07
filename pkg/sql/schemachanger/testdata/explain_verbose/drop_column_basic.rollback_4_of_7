@@ -56,8 +56,8 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 4 of 7;
     │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
     │   │   │   │ PUBLIC → ABSENT
     │   │   │   │
-    │   │   │   └── • skip PUBLIC → ABSENT operations
-    │   │   │         rule: "skip index-column removal ops on index removal"
+    │   │   │   └── • Precedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+    │   │   │         rule: "index drop mutation visible before cleaning up index columns"
     │   │   │
     │   │   ├── • TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
     │   │   │   │ WRITE_ONLY → DELETE_ONLY
@@ -68,10 +68,10 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 4 of 7;
     │   │   └── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
     │   │       │ PUBLIC → ABSENT
     │   │       │
-    │   │       └── • skip PUBLIC → ABSENT operations
-    │   │             rule: "skip index-column removal ops on index removal"
+    │   │       └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+    │   │             rule: "index drop mutation visible before cleaning up index columns"
     │   │
-    │   └── • 8 Mutation operations
+    │   └── • 10 Mutation operations
     │       │
     │       ├── • SetColumnName
     │       │     ColumnID: 2
@@ -84,7 +84,17 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 4 of 7;
     │       │     PGAttributeNum: 2
     │       │     TableID: 104
     │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 1
+    │       │     IndexID: 2
+    │       │     TableID: 104
+    │       │
     │       ├── • MakeWriteOnlyIndexDeleteOnly
+    │       │     IndexID: 3
+    │       │     TableID: 104
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 1
     │       │     IndexID: 3
     │       │     TableID: 104
     │       │

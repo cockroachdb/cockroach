@@ -31,12 +31,6 @@ func registerDepRule(
 		def)
 }
 
-func registerOpRule(rn scgraph.RuleName, from rel.Var, q *rel.Query) {
-	registry.RegisterOpRule(rn,
-		from,
-		q)
-}
-
 func registerDepRuleForDrop(
 	ruleName scgraph.RuleName,
 	kind scgraph.DepEdgeKind,
