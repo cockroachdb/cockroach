@@ -409,6 +409,13 @@ func (r Recording) ToJaegerJSON(stmt, comment, nodeStr string) (string, error) {
 			}}
 		}
 
+		if sp.GoroutineID != 0 {
+			s.Tags = append(s.Tags, jaegerjson.KeyValue{
+				Key:   "goroutine",
+				Value: sp.GoroutineID,
+				Type:  jaegerjson.Int64Type,
+			})
+		}
 		for k, v := range sp.Tags {
 			s.Tags = append(s.Tags, jaegerjson.KeyValue{
 				Key:   k,
