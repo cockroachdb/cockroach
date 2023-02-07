@@ -23,6 +23,7 @@ type ImmediateMutationOp interface {
 // ImmediateMutationVisitor is a visitor for ImmediateMutationOp operations.
 type ImmediateMutationVisitor interface {
 	NotImplemented(context.Context, NotImplemented) error
+	NotImplementedForPublicObjects(context.Context, NotImplementedForPublicObjects) error
 	UndoAllInTxnImmediateMutationOpSideEffects(context.Context, UndoAllInTxnImmediateMutationOpSideEffects) error
 	MakeAbsentTempIndexDeleteOnly(context.Context, MakeAbsentTempIndexDeleteOnly) error
 	MakeAbsentIndexBackfilling(context.Context, MakeAbsentIndexBackfilling) error
@@ -119,6 +120,11 @@ type ImmediateMutationVisitor interface {
 // Visit is part of the ImmediateMutationOp interface.
 func (op NotImplemented) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
 	return v.NotImplemented(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op NotImplementedForPublicObjects) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.NotImplementedForPublicObjects(ctx, op)
 }
 
 // Visit is part of the ImmediateMutationOp interface.

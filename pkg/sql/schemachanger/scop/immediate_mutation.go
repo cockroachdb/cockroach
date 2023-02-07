@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 )
 
@@ -33,6 +34,14 @@ func (immediateMutationOp) Type() Type { return MutationType }
 type NotImplemented struct {
 	immediateMutationOp
 	ElementType string
+}
+
+// NotImplementedForPublicObjects is a placeholder for operations which haven't defined,
+// these are okay when dropping objects.
+type NotImplementedForPublicObjects struct {
+	immediateMutationOp
+	ElementType string
+	DescID      catid.DescID
 }
 
 // UndoAllInTxnImmediateMutationOpSideEffects undoes the side effects of all

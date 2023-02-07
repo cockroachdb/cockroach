@@ -269,3 +269,11 @@ func isDescriptorParentReference(e scpb.Element) bool {
 	}
 	return false
 }
+
+func isOwner(e scpb.Element) bool {
+	switch e.(type) {
+	case *scpb.Owner:
+		return true
+	}
+	return false
+}

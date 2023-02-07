@@ -31,8 +31,8 @@ func init() {
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.FunctionLeakProof) *scop.NotImplemented {
-					return notImplemented(this)
+				emit(func(this *scpb.FunctionLeakProof) *scop.NotImplementedForPublicObjects {
+					return notImplementedForPublicObjects(this)
 				}),
 			),
 		),
