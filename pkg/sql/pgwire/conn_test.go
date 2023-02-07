@@ -1593,6 +1593,14 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 				_ = c.Ping(ctx)
 				// closing connection immediately, since getSessionArgs is blocking
 				_ = c.Close(ctx)
+
+				select {
+				case <-c.PgConn().CleanupDone():
+				case <-time.After(20 * time.Second):
+					// 20 seconds was picked because pgconn has an internal deadline of
+					// 15 seconds when performing the async close request.
+					t.Error("pgconn asyncClose did not clean up on time")
+				}
 			}(tc.query)
 			// Wait for the client to connect and perform the handshake.
 			_, args, err := getSessionArgs(ln, true /* trustRemoteAddr */)

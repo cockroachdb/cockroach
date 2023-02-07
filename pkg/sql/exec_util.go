@@ -512,14 +512,6 @@ var experimentalUseNewSchemaChanger = settings.RegisterEnumSetting(
 	},
 ).WithPublic()
 
-var experimentalStreamReplicationEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
-	"sql.defaults.experimental_stream_replication.enabled",
-	"default value for experimental_stream_replication session setting;"+
-		"enables the ability to setup a replication stream",
-	false,
-).WithPublic()
-
 var stubCatalogTablesEnabledClusterValue = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	`sql.defaults.stub_catalog_tables.enabled`,

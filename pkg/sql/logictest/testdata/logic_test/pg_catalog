@@ -2570,7 +2570,6 @@ disallow_full_table_scans                             off                 NULL  
 distsql                                               off                 NULL      NULL        NULL        string
 enable_auto_rehoming                                  off                 NULL      NULL        NULL        string
 enable_experimental_alter_column_type_general         off                 NULL      NULL        NULL        string
-enable_experimental_stream_replication                off                 NULL      NULL        NULL        string
 enable_implicit_select_for_update                     on                  NULL      NULL        NULL        string
 enable_implicit_transaction_for_batch_statements      on                  NULL      NULL        NULL        string
 enable_insert_fast_path                               on                  NULL      NULL        NULL        string
@@ -2714,7 +2713,6 @@ disallow_full_table_scans                             off                 NULL  
 distsql                                               off                 NULL  user     NULL      off                 off
 enable_auto_rehoming                                  off                 NULL  user     NULL      off                 off
 enable_experimental_alter_column_type_general         off                 NULL  user     NULL      off                 off
-enable_experimental_stream_replication                off                 NULL  user     NULL      off                 off
 enable_implicit_select_for_update                     on                  NULL  user     NULL      on                  on
 enable_implicit_transaction_for_batch_statements      on                  NULL  user     NULL      on                  on
 enable_insert_fast_path                               on                  NULL  user     NULL      on                  on
@@ -2856,7 +2854,6 @@ distsql                                               NULL    NULL     NULL     
 distsql_workmem                                       NULL    NULL     NULL     NULL        NULL
 enable_auto_rehoming                                  NULL    NULL     NULL     NULL        NULL
 enable_experimental_alter_column_type_general         NULL    NULL     NULL     NULL        NULL
-enable_experimental_stream_replication                NULL    NULL     NULL     NULL        NULL
 enable_implicit_select_for_update                     NULL    NULL     NULL     NULL        NULL
 enable_implicit_transaction_for_batch_statements      NULL    NULL     NULL     NULL        NULL
 enable_insert_fast_path                               NULL    NULL     NULL     NULL        NULL

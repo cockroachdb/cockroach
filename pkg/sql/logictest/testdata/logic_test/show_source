@@ -57,7 +57,6 @@ disallow_full_table_scans                             off
 distsql                                               off
 enable_auto_rehoming                                  off
 enable_experimental_alter_column_type_general         off
-enable_experimental_stream_replication                off
 enable_implicit_select_for_update                     on
 enable_implicit_transaction_for_batch_statements      on
 enable_insert_fast_path                               on
