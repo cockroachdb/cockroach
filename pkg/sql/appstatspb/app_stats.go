@@ -161,6 +161,7 @@ func (s *StatementStatistics) Add(other *StatementStatistics) {
 	s.Indexes = util.CombineUniqueString(s.Indexes, other.Indexes)
 
 	s.ExecStats.Add(other.ExecStats)
+	s.LatencyInfo.Add(other.LatencyInfo)
 
 	if other.SensitiveInfo.LastErr != "" {
 		s.SensitiveInfo.LastErr = other.SensitiveInfo.LastErr
@@ -216,4 +217,21 @@ func (s *ExecStats) Add(other ExecStats) {
 	s.CPUSQLNanos.Add(other.CPUSQLNanos, execStatCollectionCount, other.Count)
 
 	s.Count += other.Count
+}
+
+// Add combines other into this LatencyInfo.
+func (s *LatencyInfo) Add(other LatencyInfo) {
+	// Use the latest non-zero value.
+	if other.P50 != 0 {
+		s.P50 = other.P50
+		s.P90 = other.P90
+		s.P99 = other.P99
+	}
+
+	if s.Min == 0 || other.Min < s.Min {
+		s.Min = other.Min
+	}
+	if other.Max > s.Max {
+		s.Max = other.Max
+	}
 }

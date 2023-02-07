@@ -119,8 +119,9 @@ type Container struct {
 	txnCounts transactionCounts
 	mon       *mon.BytesMonitor
 
-	knobs    *sqlstats.TestingKnobs
-	insights insights.Writer
+	knobs              *sqlstats.TestingKnobs
+	insights           insights.Writer
+	latencyInformation insights.LatencyInformation
 }
 
 var _ sqlstats.ApplicationStats = &Container{}
@@ -136,6 +137,7 @@ func New(
 	appName string,
 	knobs *sqlstats.TestingKnobs,
 	insightsWriter insights.Writer,
+	latencyInformation insights.LatencyInformation,
 ) *Container {
 	s := &Container{
 		st:                         st,
@@ -145,6 +147,7 @@ func New(
 		mon:                        mon,
 		knobs:                      knobs,
 		insights:                   insightsWriter,
+		latencyInformation:         latencyInformation,
 	}
 
 	if mon != nil {
@@ -251,6 +254,7 @@ func NewTempContainerFromExistingStmtStats(
 		appName,
 		nil, /* knobs */
 		nil, /* insights */
+		nil, /*latencyInformation */
 	)
 
 	for i := range statistics {
@@ -324,6 +328,7 @@ func NewTempContainerFromExistingTxnStats(
 		appName,
 		nil, /* knobs */
 		nil, /* insights */
+		nil, /* latencyInformation */
 	)
 
 	for i := range statistics {
@@ -358,13 +363,14 @@ func (s *Container) NewApplicationStatsWithInheritedOptions() sqlstats.Applicati
 		sqlstats.MaxSQLStatsStmtFingerprintsPerExplicitTxn,
 		// There is no need to constraint txn fingerprint limit since in temporary
 		// container, there will never be more than one transaction fingerprint.
-		nil, // uniqueTxnFingerprintLimit,
+		nil, // uniqueTxnFingerprintLimit
 		&uniqueStmtFingerprintCount,
 		&uniqueTxnFingerprintCount,
 		s.mon,
 		s.appName,
 		s.knobs,
 		s.insights,
+		s.latencyInformation,
 	)
 }
 
