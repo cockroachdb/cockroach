@@ -7450,6 +7450,7 @@ Support status: [reserved](#support-status)
 | range_descriptor | [cockroach.roachpb.RangeDescriptor](#cockroach.server.serverpb.RecoveryCollectReplicaInfoResponse-cockroach.roachpb.RangeDescriptor) |  |  | [reserved](#support-status) |
 | replica_info | [cockroach.kv.kvserver.loqrecovery.loqrecoverypb.ReplicaInfo](#cockroach.server.serverpb.RecoveryCollectReplicaInfoResponse-cockroach.kv.kvserver.loqrecovery.loqrecoverypb.ReplicaInfo) |  |  | [reserved](#support-status) |
 | node_stream_restarted | [RecoveryCollectReplicaRestartNodeStream](#cockroach.server.serverpb.RecoveryCollectReplicaInfoResponse-cockroach.server.serverpb.RecoveryCollectReplicaRestartNodeStream) |  |  | [reserved](#support-status) |
+| metadata | [cockroach.kv.kvserver.loqrecovery.loqrecoverypb.ClusterMetadata](#cockroach.server.serverpb.RecoveryCollectReplicaInfoResponse-cockroach.kv.kvserver.loqrecovery.loqrecoverypb.ClusterMetadata) |  |  | [reserved](#support-status) |
 
 
 
@@ -7538,7 +7539,8 @@ Support status: [reserved](#support-status)
 | ----- | ---- | ----- | ----------- | -------------- |
 | plan | [cockroach.kv.kvserver.loqrecovery.loqrecoverypb.ReplicaUpdatePlan](#cockroach.server.serverpb.RecoveryStagePlanRequest-cockroach.kv.kvserver.loqrecovery.loqrecoverypb.ReplicaUpdatePlan) |  | Plan is replica update plan to stage for application on next restart. Plan could be empty in that case existing plan is removed if present. | [reserved](#support-status) |
 | all_nodes | [bool](#cockroach.server.serverpb.RecoveryStagePlanRequest-bool) |  | If all nodes is true, then receiver should act as a coordinator and perform a fan-out to stage plan on all nodes of the cluster. | [reserved](#support-status) |
-| force_plan | [bool](#cockroach.server.serverpb.RecoveryStagePlanRequest-bool) |  | Force plan tells receiver to ignore any plan already staged on the node if it is present and replace it with new plan (including empty one). | [reserved](#support-status) |
+| force_plan | [bool](#cockroach.server.serverpb.RecoveryStagePlanRequest-bool) |  | ForcePlan tells receiver to ignore any plan already staged on the node if it is present and replace it with new plan (including empty one). | [reserved](#support-status) |
+| force_local_internal_version | [bool](#cockroach.server.serverpb.RecoveryStagePlanRequest-bool) |  | ForceLocalInternalVersion tells server to update internal component of plan version to the one of active cluster version. This option needs to be set if target cluster is stuck in recovery where only part of nodes were successfully migrated. | [reserved](#support-status) |
 
 
 

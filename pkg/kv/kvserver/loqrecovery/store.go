@@ -21,7 +21,7 @@ import (
 )
 
 const recoveryPlanDir = "loq-recovery-plans"
-const planFileName = "staged.json"
+const planFileName = "staged.bin"
 
 type PlanStore struct {
 	path string
@@ -59,9 +59,8 @@ func (s PlanStore) SavePlan(plan loqrecoverypb.ReplicaUpdatePlan) error {
 			return errors.Wrapf(err, "failed to create file %q", tmpFileName)
 		}
 		defer func() { _ = outFile.Close() }()
-		jsonpb := protoutil.JSONPb{Indent: "  "}
 		var out []byte
-		if out, err = jsonpb.Marshal(&plan); err != nil {
+		if out, err = protoutil.Marshal(&plan); err != nil {
 			return errors.Wrap(err, "failed to marshal recovery plan")
 		}
 		if _, err = outFile.Write(out); err != nil {
@@ -101,8 +100,7 @@ func (s PlanStore) LoadPlan() (loqrecoverypb.ReplicaUpdatePlan, bool, error) {
 			fileName)
 	}
 	var nodeUpdates loqrecoverypb.ReplicaUpdatePlan
-	jsonpb := protoutil.JSONPb{Indent: "  "}
-	if err = jsonpb.Unmarshal(data, &nodeUpdates); err != nil {
+	if err = protoutil.Unmarshal(data, &nodeUpdates); err != nil {
 		return loqrecoverypb.ReplicaUpdatePlan{}, false, errors.Wrapf(err,
 			"failed to unmarshal plan from file %q", fileName)
 	}

@@ -1451,6 +1451,8 @@ func init() {
 		cliflags.ConfirmActions.Usage())
 	f.UintVar(&formatHelper.maxPrintedKeyLength, cliflags.PrintKeyLength.Name,
 		formatHelper.maxPrintedKeyLength, cliflags.PrintKeyLength.Usage())
+	f.BoolVar(&debugRecoverExecuteOpts.ignoreInternalVersion, cliflags.RecoverIgnoreInternalVersion.Name,
+		debugRecoverExecuteOpts.ignoreInternalVersion, cliflags.RecoverIgnoreInternalVersion.Usage())
 
 	f = debugMergeLogsCmd.Flags()
 	f.Var(flagutil.Time(&debugMergeLogsOpts.from), "from",

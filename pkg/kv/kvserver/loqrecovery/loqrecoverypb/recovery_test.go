@@ -124,12 +124,13 @@ func TestClusterInfoMergeSameClusterID(t *testing.T) {
 		"should be able to merge partial info with equal cluster ids")
 }
 
-func TestClusterInfoMergeRejectDifferentClusterIDs(t *testing.T) {
+func TestClusterInfoMergeRejectDifferentMetadata(t *testing.T) {
 	uuid1 := uuid.FastMakeV4()
 	uuid2 := uuid.FastMakeV4()
 	info1 := ClusterReplicaInfo{
 		ClusterID:   uuid1.String(),
 		Descriptors: []roachpb.RangeDescriptor{{RangeID: 1}},
+		Version:     roachpb.Version{Major: 22},
 		LocalInfo: []NodeReplicaInfo{
 			{
 				Replicas: []ReplicaInfo{
@@ -139,8 +140,20 @@ func TestClusterInfoMergeRejectDifferentClusterIDs(t *testing.T) {
 			},
 		},
 	}
-	info3 := ClusterReplicaInfo{
+	info2 := ClusterReplicaInfo{
 		ClusterID: uuid2.String(),
+		Version:   roachpb.Version{Major: 22},
+		LocalInfo: []NodeReplicaInfo{
+			{
+				Replicas: []ReplicaInfo{
+					{StoreID: 3, NodeID: 2},
+				},
+			},
+		},
+	}
+	info3 := ClusterReplicaInfo{
+		ClusterID: uuid1.String(),
+		Version:   roachpb.Version{Major: 23},
 		LocalInfo: []NodeReplicaInfo{
 			{
 				Replicas: []ReplicaInfo{
@@ -150,12 +163,15 @@ func TestClusterInfoMergeRejectDifferentClusterIDs(t *testing.T) {
 		},
 	}
 	require.Error(t, info1.Merge(info3), "reject merging of info from different clusters")
+	require.Error(t, info1.Merge(info2), "reject merging of info from different versions")
 }
 
 func TestClusterInfoInitializeByMerge(t *testing.T) {
 	uuid1 := uuid.FastMakeV4().String()
+	version1 := roachpb.Version{Major: 22, Minor: 2}
 	info := ClusterReplicaInfo{
 		ClusterID:   uuid1,
+		Version:     version1,
 		Descriptors: []roachpb.RangeDescriptor{{RangeID: 1}},
 		LocalInfo: []NodeReplicaInfo{
 			{
@@ -169,4 +185,5 @@ func TestClusterInfoInitializeByMerge(t *testing.T) {
 	empty := ClusterReplicaInfo{}
 	require.NoError(t, empty.Merge(info), "should be able to merge into empty struct")
 	require.Equal(t, empty.ClusterID, uuid1, "merge should update empty info fields")
+	require.Equal(t, empty.Version, version1, "merge should update empty info fields")
 }
