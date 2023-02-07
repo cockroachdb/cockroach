@@ -165,7 +165,10 @@ func init() {
 	) bool {
 		ok, reverse := ScanPrivateCanProvide(md, s, required)
 		if !ok {
-			panic(errors.AssertionFailedf("scan can't provide required ordering"))
+			// If the scan cannot provide the ordering, then the scan direction
+			// cannot be determined. This is possible when a memo is not fully
+			// optimized.
+			return false
 		}
 		return reverse
 	}

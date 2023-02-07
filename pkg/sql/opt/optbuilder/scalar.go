@@ -674,19 +674,20 @@ func (b *Builder) buildUDF(
 		expr := stmtScope.expr
 		physProps := stmtScope.makePhysicalProps()
 
-		// Add a LIMIT 1 to the last statement. This is valid because any other
-		// rows after the first can simply be ignored. The limit could be
-		// beneficial because it could allow additional optimization.
+		// The last statement produces the output of the UDF.
 		if i == len(stmts)-1 {
-			b.buildLimit(&tree.Limit{Count: tree.NewDInt(1)}, b.allocScope(), stmtScope)
-			expr = stmtScope.expr
-			// The limit expression will maintain the desired ordering, if any,
-			// so the physical props ordering can be cleared. The presentation
-			// must remain.
-			// TODO(mgartner): For SETOF functions, we may need to maintain the
-			// ordering without the LIMIT. Make sure to account for this in
-			// ConvertUDFToSubquery.
-			physProps.Ordering = props.OrderingChoice{}
+			// Add a LIMIT 1 to the last statement if the UDF is not
+			// set-returning. This is valid because any other rows after the
+			// first can simply be ignored. The limit could be beneficial
+			// because it could allow additional optimization.
+			if o.Class != tree.GeneratorClass {
+				b.buildLimit(&tree.Limit{Count: tree.NewDInt(1)}, b.allocScope(), stmtScope)
+				expr = stmtScope.expr
+				// The limit expression will maintain the desired ordering, if any,
+				// so the physical props ordering can be cleared. The presentation
+				// must remain.
+				physProps.Ordering = props.OrderingChoice{}
+			}
 
 			// If there are multiple output columns, we must combine them into a
 			// tuple - only a single column can be returned from a UDF.
@@ -702,8 +703,10 @@ func (b *Builder) buildUDF(
 				physProps = stmtScope.makePhysicalProps()
 			}
 
-			// If necessary, add an assignment cast to the result column so that
-			// its type matches the function return type.
+			// We must preserve the presentation of columns as physical
+			// properties to prevent the optimizer from pruning the output
+			// column. If necessary, we add an assignment cast to the result
+			// column so that its type matches the function return type.
 			returnCol := physProps.Presentation[0].ID
 			returnColMeta := b.factory.Metadata().ColumnMeta(returnCol)
 			if !returnColMeta.Type.Identical(f.ResolvedType()) {
@@ -731,11 +734,12 @@ func (b *Builder) buildUDF(
 	out = b.factory.ConstructUDF(
 		args,
 		&memo.UDFPrivate{
-			Name:       def.Name,
-			Params:     params,
-			Body:       rels,
-			Typ:        f.ResolvedType(),
-			Volatility: o.Volatility,
+			Name:         def.Name,
+			Params:       params,
+			Body:         rels,
+			Typ:          f.ResolvedType(),
+			SetReturning: o.Class == tree.GeneratorClass,
+			Volatility:   o.Volatility,
 		},
 	)
 

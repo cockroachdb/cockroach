@@ -68,6 +68,16 @@ func (p *planner) EvalRoutineExpr(
 	return res, nil
 }
 
+// RoutineExprGenerator returns an eval.ValueGenerator that produces the results
+// of a routine.
+func (p *planner) RoutineExprGenerator(
+	ctx context.Context, expr *tree.RoutineExpr, args tree.Datums,
+) eval.ValueGenerator {
+	var g routineGenerator
+	g.init(ctx, p, expr, args)
+	return &g
+}
+
 // routineGenerator is an eval.ValueGenerator that produces the result of a
 // routine.
 type routineGenerator struct {

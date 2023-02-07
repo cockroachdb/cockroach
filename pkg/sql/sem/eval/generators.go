@@ -19,13 +19,13 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// GetGenerator is used to construct a ValueGenerator from a FuncExpr.
-func GetGenerator(
+// GetFuncGenerator is used to construct a ValueGenerator from a FuncExpr.
+func GetFuncGenerator(
 	ctx context.Context, evalCtx *Context, expr *tree.FuncExpr,
 ) (ValueGenerator, error) {
 	if !expr.IsGeneratorClass() {
 		return nil, errors.AssertionFailedf(
-			"cannot call EvalArgsAndGetGenerator() on non-aggregate function: %q",
+			"cannot call GetFuncGenerator() on non-generator function: %q",
 			tree.ErrString(expr),
 		)
 	}
@@ -38,6 +38,17 @@ func GetGenerator(
 		return nil, err
 	}
 	return ol.Generator.(GeneratorOverload)(ctx, evalCtx, args)
+}
+
+// GetRoutineGenerator is used to construct a ValueGenerator from a FuncExpr.
+func GetRoutineGenerator(
+	ctx context.Context, evalCtx *Context, expr *tree.RoutineExpr,
+) (ValueGenerator, error) {
+	args, err := (*evaluator)(evalCtx).evalRoutineArgs(ctx, expr)
+	if err != nil {
+		return nil, err
+	}
+	return (*evaluator)(evalCtx).Planner.RoutineExprGenerator(ctx, expr, args), nil
 }
 
 // Table generators, also called "set-generating functions", are
@@ -58,7 +69,7 @@ func GetGenerator(
 //   construct a special row source from them.
 
 // ValueGenerator is the interface provided by the value generator
-// functions for SQL SRfs. Objects that implement this interface are
+// functions for SQL SRFs. Objects that implement this interface are
 // able to produce rows of values in a streaming fashion (like Go
 // iterators or generators in Python).
 type ValueGenerator interface {

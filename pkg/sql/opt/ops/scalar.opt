@@ -1251,6 +1251,9 @@ define UDFPrivate {
     # Typ is the return type of the function.
     Typ Type
 
+    # SetReturning is true if the UDF has a SETOF return type.
+    SetReturning bool
+
     # Volatility is the user-provided volatility of the function given during
     # CREATE FUNCTION.
     #
