@@ -609,6 +609,19 @@ Raft applied index at which this checkpoint was taken.`,
 		Measurement: "Directories",
 		Unit:        metric.Unit_COUNT,
 	}
+
+	metaSharedStorageBytesWritten = metric.Metadata{
+		Name:        "storage.shared-storage.write",
+		Help:        "Bytes written to external storage",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaSharedStorageBytesRead = metric.Metadata{
+		Name:        "storage.shared-storage.read",
+		Help:        "Bytes read from shared storage",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
 )
 
 var (
@@ -1806,6 +1819,8 @@ type StoreMetrics struct {
 	RdbLevelScore               [7]*metric.GaugeFloat64 // idx = level
 	RdbWriteStalls              *metric.Gauge
 	RdbWriteStallNanos          *metric.Gauge
+	SharedStorageBytesRead      *metric.Gauge
+	SharedStorageBytesWritten   *metric.Gauge
 
 	RdbCheckpoints *metric.Gauge
 
@@ -2342,6 +2357,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RdbLevelScore:               rdbLevelScore,
 		RdbWriteStalls:              metric.NewGauge(metaRdbWriteStalls),
 		RdbWriteStallNanos:          metric.NewGauge(metaRdbWriteStallNanos),
+		SharedStorageBytesRead:      metric.NewGauge(metaSharedStorageBytesRead),
+		SharedStorageBytesWritten:   metric.NewGauge(metaSharedStorageBytesWritten),
 
 		RdbCheckpoints: metric.NewGauge(metaRdbCheckpoints),
 
@@ -2665,6 +2682,8 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.RdbWriteStallNanos.Update(m.WriteStallDuration.Nanoseconds())
 	sm.DiskSlow.Update(m.DiskSlowCount)
 	sm.DiskStalled.Update(m.DiskStallCount)
+	sm.SharedStorageBytesRead.Update(m.SharedStorageReadBytes)
+	sm.SharedStorageBytesWritten.Update(m.SharedStorageWriteBytes)
 
 	// Update the maximum number of L0 sub-levels seen.
 	sm.l0SublevelsTracker.Lock()
