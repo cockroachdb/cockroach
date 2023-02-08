@@ -626,25 +626,26 @@ func (r *Registry) CreateAdoptableJobWithTxn(
 			createdByType = j.createdBy.Name
 			createdByID = j.createdBy.ID
 		}
+		typ := j.mu.payload.Type().String()
 
+		nCols := 7
+		cols := [7]string{"id", "status", "payload", "progress", "created_by_type", "created_by_id", "job_type"}
+		placeholders := [7]string{"$1", "$2", "$3", "$4", "$5", "$6", "$7"}
+		values := [7]interface{}{jobID, StatusRunning, payloadBytes, progressBytes, createdByType, createdByID, typ}
+		if !r.settings.Version.IsActive(ctx, clusterversion.V23_1AddTypeColumnToJobsTable) {
+			nCols -= 1
+		}
 		// Insert the job row, but do not set a `claim_session_id`. By not
 		// setting the claim, the job can be adopted by any node and will
 		// be adopted by the node which next runs the adoption loop.
-		const stmt = `INSERT
-  INTO system.jobs (
-                    id,
-                    status,
-                    payload,
-                    progress,
-                    created_by_type,
-                    created_by_id
-                   )
-VALUES ($1, $2, $3, $4, $5, $6);`
+		stmt := fmt.Sprintf(
+			`INSERT INTO system.jobs (%s) VALUES (%s);`,
+			strings.Join(cols[:nCols], ","), strings.Join(placeholders[:nCols], ","),
+		)
 		_, err = txn.ExecEx(ctx, "job-insert", txn.KV(), sessiondata.InternalExecutorOverride{
 			User:     username.NodeUserName(),
 			Database: catconstants.SystemDatabaseName,
-		}, stmt,
-			jobID, StatusRunning, payloadBytes, progressBytes, createdByType, createdByID)
+		}, stmt, values[:nCols]...)
 		return err
 	}
 	run := r.db.Txn
