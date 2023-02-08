@@ -54,7 +54,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
-	"golang.org/x/text/collate"
 )
 
 var (
@@ -810,12 +809,8 @@ https://www.postgresql.org/docs/9.5/catalog-pg-collation.html`,
 					tree.DNull, // collisdeterministic
 				)
 			}
-			if err := add(collatedstring.DefaultCollationTag); err != nil {
-				return err
-			}
-			for _, tag := range collate.Supported() {
-				collName := tag.String()
-				if err := add(collName); err != nil {
+			for _, tag := range collatedstring.Supported() {
+				if err := add(tag); err != nil {
 					return err
 				}
 			}
