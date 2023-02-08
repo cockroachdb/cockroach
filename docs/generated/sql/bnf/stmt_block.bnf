@@ -1989,6 +1989,7 @@ copy_options ::=
 	| 'DELIMITER' string_or_placeholder
 	| 'NULL' string_or_placeholder
 	| 'HEADER'
+	| 'QUOTE' 'SCONST'
 
 db_object_name_component ::=
 	name

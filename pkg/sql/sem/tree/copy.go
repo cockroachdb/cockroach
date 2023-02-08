@@ -31,6 +31,7 @@ type CopyOptions struct {
 	Null        Expr
 	Escape      *StrVal
 	Header      bool
+	Quote       *StrVal
 }
 
 var _ NodeFormatter = &CopyOptions{}
@@ -102,6 +103,11 @@ func (o *CopyOptions) Format(ctx *FmtCtx) {
 		maybeAddSep()
 		ctx.WriteString("HEADER")
 	}
+	if o.Quote != nil {
+		maybeAddSep()
+		ctx.WriteString("QUOTE ")
+		ctx.FormatNode(o.Quote)
+	}
 }
 
 // IsDefault returns true if this struct has default value.
@@ -144,6 +150,12 @@ func (o *CopyOptions) CombineWith(other *CopyOptions) error {
 	}
 	if other.Header {
 		o.Header = true
+	}
+	if other.Quote != nil {
+		if o.Quote != nil {
+			return pgerror.Newf(pgcode.Syntax, "quote option specified multiple times")
+		}
+		o.Quote = other.Quote
 	}
 	return nil
 }
