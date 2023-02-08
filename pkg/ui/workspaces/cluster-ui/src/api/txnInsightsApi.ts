@@ -631,7 +631,9 @@ export async function getTxnInsightDetailsApi(
       }
 
       const stmts = result.execution.txn_results[0];
-      txnInsightDetails.statements = formatStmtInsights(stmts);
+      if (stmts.rows?.length) {
+        txnInsightDetails.statements = formatStmtInsights(stmts);
+      }
     } catch (e) {
       errors.statementsErr = e;
     }
