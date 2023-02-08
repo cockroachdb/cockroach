@@ -3376,6 +3376,10 @@ func (m *sessionDataMutator) SetCopyFromRetriesEnabled(val bool) {
 	m.data.CopyFromRetriesEnabled = val
 }
 
+func (m *sessionDataMutator) SetDeclareCursorStatementTimeoutEnabled(val bool) {
+	m.data.DeclareCursorStatementTimeoutEnabled = val
+}
+
 func (m *sessionDataMutator) SetEnforceHomeRegion(val bool) {
 	m.data.EnforceHomeRegion = val
 }
