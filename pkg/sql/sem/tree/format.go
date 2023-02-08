@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -253,6 +254,7 @@ type FmtCtx struct {
 	bytes.Buffer
 
 	dataConversionConfig sessiondatapb.DataConversionConfig
+	location             *time.Location
 
 	// NOTE: if you add more flags to this structure, make sure to add
 	// corresponding cleanup code in FmtCtx.Close().
@@ -325,6 +327,13 @@ func FmtIndexedTypeFormat(fn func(*FmtCtx, *OIDTypeReference)) FmtCtxOption {
 func FmtDataConversionConfig(dcc sessiondatapb.DataConversionConfig) FmtCtxOption {
 	return func(ctx *FmtCtx) {
 		ctx.dataConversionConfig = dcc
+	}
+}
+
+// FmtLocation modifies FmtCtx to contain the correct location.
+func FmtLocation(loc *time.Location) FmtCtxOption {
+	return func(ctx *FmtCtx) {
+		ctx.location = loc
 	}
 }
 
