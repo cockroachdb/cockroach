@@ -350,16 +350,20 @@ func (s *Store) SplitRange(
 		// assumption that distribution across all tracked load stats is
 		// identical.
 		leftRepl.loadStats.Split(rightRepl.loadStats)
-		if err := s.addToReplicasByKeyLocked(rightRepl); err != nil {
+		rightRepl.mu.RLock()
+		if err := s.addToReplicasByKeyLockedReplicaRLocked(rightRepl); err != nil {
+			rightRepl.mu.RUnlock()
 			return errors.Wrapf(err, "unable to add replica %v", rightRepl)
 		}
+		rightRepl.mu.RUnlock()
 
 		// Update the replica's cached byte thresholds. This is a no-op if the system
 		// config is not available, in which case we rely on the next gossip update
 		// to perform the update.
-		if err := rightRepl.updateRangeInfo(ctx, rightRepl.Desc()); err != nil {
+		if err := rightRepl.updateRangeInfo(ctx, rightDesc); err != nil {
 			return err
 		}
+
 		// Add the range to metrics and maybe gossip on capacity change.
 		s.metrics.ReplicaCount.Inc(1)
 		s.storeGossip.MaybeGossipOnCapacityChange(ctx, RangeAddEvent)

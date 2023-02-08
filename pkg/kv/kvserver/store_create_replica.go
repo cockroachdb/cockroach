@@ -249,28 +249,26 @@ func fromReplicaIsTooOldRLocked(toReplica *Replica, fromReplica *roachpb.Replica
 	return !found && fromReplica.ReplicaID < desc.NextReplicaID
 }
 
-// addToReplicasByKeyLocked adds the replica to the replicasByKey btree. The
-// replica must already be in replicasByRangeID. Requires that Store.mu is held.
-//
-// Returns an error if a different replica with the same range ID, or an
-// overlapping replica or placeholder exists in this Store.
-func (s *Store) addToReplicasByKeyLocked(repl *Replica) error {
-	if !repl.IsInitialized() {
-		return errors.Errorf("attempted to add uninitialized replica %s", repl)
+// addToReplicasByKeyLockedReplicaRLocked adds the replica to the replicasByKey
+// btree. The replica must already be in replicasByRangeID. Returns an error if
+// a different replica with the same range ID, or an overlapping replica or
+// placeholder exists in this Store. Replica.mu must be at least read-locked.
+func (s *Store) addToReplicasByKeyLockedReplicaRLocked(repl *Replica) error {
+	desc := repl.descRLocked()
+	if !desc.IsInitialized() {
+		return errors.Errorf("%s: attempted to add uninitialized replica %s", s, repl)
 	}
 	if got := s.GetReplicaIfExists(repl.RangeID); got != repl { // NB: got can be nil too
-		return errors.Errorf("replica %s not in replicasByRangeID; got %s", repl, got)
+		return errors.Errorf("%s: replica %s not in replicasByRangeID; got %s", s, repl, got)
 	}
-
-	if it := s.getOverlappingKeyRangeLocked(repl.Desc()); it.item != nil {
-		return errors.Errorf("%s: cannot addToReplicasByKeyLocked; range %s has overlapping range %s", s, repl, it.Desc())
+	if it := s.getOverlappingKeyRangeLocked(desc); it.item != nil {
+		return errors.Errorf(
+			"%s: cannot add to replicasByKey: range %s overlaps with %s", s, repl, it.Desc())
 	}
-
 	if it := s.mu.replicasByKey.ReplaceOrInsertReplica(context.Background(), repl); it.item != nil {
-		return errors.Errorf("%s: cannot addToReplicasByKeyLocked; range for key %v already exists in replicasByKey btree", s,
-			it.item.key())
+		return errors.Errorf(
+			"%s: cannot add to replicasByKey: key %v already exists in the btree", s, it.item.key())
 	}
-
 	return nil
 }
 
@@ -319,16 +317,11 @@ func (s *Store) maybeMarkReplicaInitializedLockedReplLocked(
 	}
 	delete(s.mu.uninitReplicas, rangeID)
 
-	if it := s.getOverlappingKeyRangeLocked(desc); it.item != nil {
-		return errors.AssertionFailedf("%s: cannot initialize replica; %s has overlapping range %s",
-			s, desc, it.Desc())
-	}
-
 	// Copy of the start key needs to be set before inserting into replicasByKey.
 	lockedRepl.setStartKeyLocked(desc.StartKey)
-	if it := s.mu.replicasByKey.ReplaceOrInsertReplica(ctx, lockedRepl); it.item != nil {
-		return errors.AssertionFailedf("range for key %v already exists in replicasByKey btree: %+v",
-			it.item.key(), it)
+
+	if err := s.addToReplicasByKeyLockedReplicaRLocked(lockedRepl); err != nil {
+		return err
 	}
 
 	// Unquiesce the replica. We don't allow uninitialized replicas to unquiesce,
@@ -357,7 +350,6 @@ func (s *Store) maybeMarkReplicaInitializedLockedReplLocked(
 	if !lockedRepl.maybeUnquiesceWithOptionsLocked(false /* campaignOnWake */) {
 		return errors.AssertionFailedf("expected replica %s to unquiesce after initialization", desc)
 	}
-
 	// Add the range to metrics and maybe gossip on capacity change.
 	s.metrics.ReplicaCount.Inc(1)
 	s.storeGossip.MaybeGossipOnCapacityChange(ctx, RangeAddEvent)
