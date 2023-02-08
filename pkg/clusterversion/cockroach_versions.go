@@ -228,9 +228,6 @@ const (
 	TODODelete_V22_2AlterSystemSQLInstancesAddLocality
 	// TODODelete_V22_2SystemExternalConnectionsTable adds system.external_connections table.
 	TODODelete_V22_2SystemExternalConnectionsTable
-	// TODODelete_V22_2AlterSystemStatementStatisticsAddIndexRecommendations adds an
-	// index_recommendations column to the system.statement_statistics table.
-	TODODelete_V22_2AlterSystemStatementStatisticsAddIndexRecommendations
 	// TODODelete_V22_2RoleIDSequence is the version where the system.role_id_sequence exists.
 	TODODelete_V22_2RoleIDSequence
 	// TODODelete_V22_2AddSystemUserIDColumn is the version where the system.users table has
@@ -538,10 +535,6 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     TODODelete_V22_2SystemExternalConnectionsTable,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 30},
-	},
-	{
-		Key:     TODODelete_V22_2AlterSystemStatementStatisticsAddIndexRecommendations,
-		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 32},
 	},
 	{
 		Key:     TODODelete_V22_2RoleIDSequence,
