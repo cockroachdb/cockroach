@@ -101,10 +101,32 @@ func (p *planner) createExternalConnection(
 		return errors.Wrap(err, "failed to log and sanitize External Connection")
 	}
 
+	var SkipCheckingExternalStorageConnection bool
+	var SkipCheckingKMSConnection bool
+	if tk := params.ExecCfg().ExternalConnectionTestingKnobs; tk != nil {
+		if tk.SkipCheckingExternalStorageConnection != nil {
+			SkipCheckingExternalStorageConnection = params.ExecCfg().ExternalConnectionTestingKnobs.SkipCheckingExternalStorageConnection()
+		}
+		if tk.SkipCheckingKMSConnection != nil {
+			SkipCheckingKMSConnection = params.ExecCfg().ExternalConnectionTestingKnobs.SkipCheckingKMSConnection()
+		}
+	}
+
+	env := externalconn.MakeExternalConnEnv(
+		params.ExecCfg().Settings,
+		&params.ExecCfg().ExternalIODirConfig,
+		params.ExecCfg().InternalDB,
+		p.User(),
+		params.ExecCfg().DistSQLSrv.ExternalStorageFromURI,
+		SkipCheckingExternalStorageConnection,
+		SkipCheckingKMSConnection,
+		&params.ExecCfg().DistSQLSrv.ServerConfig,
+	)
+
 	// Construct the ConnectionDetails for the external resource represented by
 	// the External Connection.
 	exConn, err := externalconn.ExternalConnectionFromURI(
-		params.ctx, params.ExecCfg(), p.User(), ec.endpoint,
+		params.ctx, env, ec.endpoint,
 	)
 	if err != nil {
 		return errors.Wrap(err, "failed to construct External Connection details")
