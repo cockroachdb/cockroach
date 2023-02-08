@@ -12,6 +12,7 @@ package upgrades_test
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
@@ -51,6 +53,45 @@ func (*fakeResumer) Resume(ctx context.Context, execCtx interface{}) error {
 // Resume implements the jobs.Resumer interface.
 func (*fakeResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}, jobErr error) error {
 	return jobErr
+}
+
+// TestCreateAdoptableJobPopulatesJobType verifies that the job_type column in system.jobs is populated
+// by CreateAdoptableJobWithTxn after upgrading to V23_1AddTypeColumnToJobsTable.
+func TestCreateAdoptableJobPopulatesJobType(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	clusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					DisableAutomaticVersionUpgrade: make(chan struct{}),
+					BinaryVersionOverride: clusterversion.ByKey(
+						clusterversion.V23_1AddTypeColumnToJobsTable),
+				},
+			},
+		},
+	}
+
+	var (
+		ctx   = context.Background()
+		tc    = testcluster.StartTestCluster(t, 1, clusterArgs)
+		s     = tc.Server(0)
+		sqlDB = tc.ServerConn(0)
+	)
+	defer tc.Stopper().Stop(ctx)
+
+	record := jobs.Record{
+		Description: "fake job",
+		Username:    username.TestUserName(),
+		Details:     jobspb.ImportDetails{},
+		Progress:    jobspb.ImportProgress{},
+	}
+
+	j, err := s.JobRegistry().(*jobs.Registry).CreateAdoptableJobWithTxn(ctx, record, 0, nil)
+	require.NoError(t, err)
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+	runner.CheckQueryResults(t, fmt.Sprintf("SELECT job_type from system.jobs WHERE id = %d", j.ID()), [][]string{{"IMPORT"}})
 }
 
 // TestAlterSystemJobsTableAddJobTypeColumn verifies that the migrations that add & backfill
