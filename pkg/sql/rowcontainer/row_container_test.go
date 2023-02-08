@@ -40,9 +40,8 @@ import (
 )
 
 // verifyRows verifies that the rows read with the given RowIterator match up
-// with  the given rows. evalCtx and ordering are used to compare rows.
+// with the given rows. evalCtx and ordering are used to compare rows.
 func verifyRows(
-	ctx context.Context,
 	i RowIterator,
 	expectedRows rowenc.EncDatumRows,
 	evalCtx *eval.Context,
@@ -54,11 +53,22 @@ func verifyRows(
 		} else if !ok {
 			break
 		}
+		encRow, err := i.EncRow()
+		if err != nil {
+			return err
+		}
+		if cmp, err := compareEncRows(
+			types.OneIntCol, encRow, expectedRows[0], evalCtx, &tree.DatumAlloc{}, ordering,
+		); err != nil {
+			return err
+		} else if cmp != 0 {
+			return fmt.Errorf("unexpected enc row %v, expected %v", encRow, expectedRows[0])
+		}
 		row, err := i.Row()
 		if err != nil {
 			return err
 		}
-		if cmp, err := compareRows(
+		if cmp, err := compareRowToEncRow(
 			types.OneIntCol, row, expectedRows[0], evalCtx, &tree.DatumAlloc{}, ordering,
 		); err != nil {
 			return err
@@ -166,7 +176,7 @@ func TestRowContainerIterators(t *testing.T) {
 			func() {
 				i := mc.NewIterator(ctx)
 				defer i.Close()
-				if err := verifyRows(ctx, i, rows, evalCtx, ordering); err != nil {
+				if err := verifyRows(i, rows, evalCtx, ordering); err != nil {
 					t.Fatalf("rows mismatch on the run number %d: %s", k+1, err)
 				}
 			}()
@@ -179,7 +189,7 @@ func TestRowContainerIterators(t *testing.T) {
 	t.Run("NewFinalIterator", func(t *testing.T) {
 		i := mc.NewFinalIterator(ctx)
 		defer i.Close()
-		if err := verifyRows(ctx, i, rows, evalCtx, ordering); err != nil {
+		if err := verifyRows(i, rows, evalCtx, ordering); err != nil {
 			t.Fatal(err)
 		}
 		if mc.Len() != 0 {
@@ -271,7 +281,7 @@ func TestDiskBackedRowContainer(t *testing.T) {
 		func() {
 			i := rc.NewIterator(ctx)
 			defer i.Close()
-			if err := verifyRows(ctx, i, rows[:mid], &evalCtx, ordering); err != nil {
+			if err := verifyRows(i, rows[:mid], &evalCtx, ordering); err != nil {
 				t.Fatalf("verifying memory rows failed with: %s", err)
 			}
 		}()
@@ -289,7 +299,7 @@ func TestDiskBackedRowContainer(t *testing.T) {
 		func() {
 			i := rc.NewIterator(ctx)
 			defer i.Close()
-			if err := verifyRows(ctx, i, rows, &evalCtx, ordering); err != nil {
+			if err := verifyRows(i, rows, &evalCtx, ordering); err != nil {
 				t.Fatalf("verifying disk rows failed with: %s", err)
 			}
 		}()
@@ -462,7 +472,7 @@ func verifyOrdering(
 		} else if !ok {
 			break
 		}
-		row, err := i.Row()
+		row, err := i.EncRow()
 		if err != nil {
 			return err
 		}

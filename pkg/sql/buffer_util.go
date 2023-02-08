@@ -142,9 +142,7 @@ func (c *rowContainerHelper) Close(ctx context.Context) {
 type rowContainerIterator struct {
 	iter rowcontainer.RowIterator
 
-	typs   []*types.T
-	datums tree.Datums
-	da     tree.DatumAlloc
+	typs []*types.T
 }
 
 // newRowContainerIterator returns a new rowContainerIterator that must be
@@ -153,9 +151,8 @@ func newRowContainerIterator(
 	ctx context.Context, c rowContainerHelper, typs []*types.T,
 ) *rowContainerIterator {
 	i := &rowContainerIterator{
-		iter:   c.rows.NewIterator(ctx),
-		typs:   typs,
-		datums: make(tree.Datums, len(typs)),
+		iter: c.rows.NewIterator(ctx),
+		typs: typs,
 	}
 	i.iter.Rewind()
 	return i
@@ -175,10 +172,7 @@ func (i *rowContainerIterator) Next() (tree.Datums, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err = rowenc.EncDatumRowToDatums(i.typs, i.datums, row, &i.da); err != nil {
-		return nil, err
-	}
-	return i.datums, nil
+	return row, nil
 }
 
 func (i *rowContainerIterator) Close() {

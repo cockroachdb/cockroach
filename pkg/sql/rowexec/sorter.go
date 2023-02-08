@@ -97,7 +97,7 @@ func (s *sorterBase) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) 
 			break
 		}
 
-		row, err := s.i.Row()
+		row, err := s.i.EncRow()
 		if err != nil {
 			s.MoveToDraining(err)
 			break
@@ -548,7 +548,7 @@ func (s *sortChunksProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerM
 		}
 
 		// If we have an active chunk, get a row from it.
-		row, err := s.i.Row()
+		row, err := s.i.EncRow()
 		if err != nil {
 			s.MoveToDraining(err)
 			break
