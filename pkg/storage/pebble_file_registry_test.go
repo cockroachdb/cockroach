@@ -190,12 +190,11 @@ func TestFileRegistryCheckNoFile(t *testing.T) {
 	mem := vfs.NewMem()
 	fileEntry :=
 		&enginepb.FileEntry{EnvType: enginepb.EnvType_Data, EncryptionSettings: []byte("foo")}
+	require.NoError(t, CheckNoRegistryFile(mem, "" /* dbDir */))
 	registry := &PebbleFileRegistry{FS: mem}
-	require.NoError(t, registry.CheckNoRegistryFile())
 	require.NoError(t, registry.Load())
 	require.NoError(t, registry.SetFileEntry("/foo", fileEntry))
-	registry = &PebbleFileRegistry{FS: mem}
-	require.Error(t, registry.CheckNoRegistryFile())
+	require.Error(t, CheckNoRegistryFile(mem, "" /* dbDir */))
 }
 
 func TestFileRegistryElideUnencrypted(t *testing.T) {
@@ -293,8 +292,8 @@ func TestFileRegistryRecordsReadAndWrite(t *testing.T) {
 	}
 
 	// Create a file registry and add entries for a few files.
+	require.NoError(t, CheckNoRegistryFile(mem, "" /* dbDir */))
 	registry1 := &PebbleFileRegistry{FS: mem}
-	require.NoError(t, registry1.CheckNoRegistryFile())
 	require.NoError(t, registry1.Load())
 	for filename, entry := range files {
 		require.NoError(t, registry1.SetFileEntry(filename, entry))
@@ -332,10 +331,7 @@ func TestFileRegistry(t *testing.T) {
 		switch d.Cmd {
 		case "check-no-registry-file":
 			require.Nil(t, registry)
-			registry = &PebbleFileRegistry{FS: fs}
-			err := registry.CheckNoRegistryFile()
-			registry = nil
-			if err == nil {
+			if err := CheckNoRegistryFile(fs, "" /* dbDir */); err == nil {
 				fmt.Fprintf(&buf, "OK\n")
 			} else {
 				fmt.Fprintf(&buf, "Error: %s\n", err)
