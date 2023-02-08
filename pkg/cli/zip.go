@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server/heapprofiler"
+	"github.com/cockroachdb/cockroach/pkg/server/profiler"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -317,12 +317,12 @@ done
 // TODO(knz): Remove this in v21.1.
 func maybeAddProfileSuffix(name string) string {
 	switch {
-	case strings.HasPrefix(name, heapprofiler.HeapFileNamePrefix+".") && !strings.HasSuffix(name, heapprofiler.HeapFileNameSuffix):
-		name += heapprofiler.HeapFileNameSuffix
-	case strings.HasPrefix(name, heapprofiler.StatsFileNamePrefix+".") && !strings.HasSuffix(name, heapprofiler.StatsFileNameSuffix):
-		name += heapprofiler.StatsFileNameSuffix
-	case strings.HasPrefix(name, heapprofiler.JemallocFileNamePrefix+".") && !strings.HasSuffix(name, heapprofiler.JemallocFileNameSuffix):
-		name += heapprofiler.JemallocFileNameSuffix
+	case strings.HasPrefix(name, profiler.HeapFileNamePrefix+".") && !strings.HasSuffix(name, profiler.HeapFileNameSuffix):
+		name += profiler.HeapFileNameSuffix
+	case strings.HasPrefix(name, profiler.StatsFileNamePrefix+".") && !strings.HasSuffix(name, profiler.StatsFileNameSuffix):
+		name += profiler.StatsFileNameSuffix
+	case strings.HasPrefix(name, profiler.JemallocFileNamePrefix+".") && !strings.HasSuffix(name, profiler.JemallocFileNameSuffix):
+		name += profiler.JemallocFileNameSuffix
 	}
 	return name
 }
