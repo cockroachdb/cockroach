@@ -41,8 +41,7 @@ func (m *ExternalStorage) AccessIsWithExplicitAuth() bool {
 	case ExternalStorageProvider_gs:
 		return m.GoogleCloudConfig.Auth == ExternalStorageAuthSpecified
 	case ExternalStorageProvider_azure:
-		// Azure storage only uses explicitly supplied credentials.
-		return true
+		return m.AzureConfig.Auth == AzureAuth_LEGACY || m.AzureConfig.Auth == AzureAuth_EXPLICIT
 	case ExternalStorageProvider_userfile:
 		// userfile always checks the user performing the action has grants on the
 		// table used.
