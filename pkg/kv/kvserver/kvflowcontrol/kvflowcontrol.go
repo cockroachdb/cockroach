@@ -19,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/redact"
+	"github.com/dustin/go-humanize"
 )
 
 // Stream models the stream over which we replicate data traffic, the
@@ -34,7 +36,10 @@ type Stream struct {
 // Tokens represent the finite capacity of a given stream, expressed in bytes
 // for data we're looking to replicate. Use of replication streams are
 // predicated on tokens being available.
-type Tokens uint64
+//
+// NB: We use a signed integer to accommodate data structures that deal with
+// token deltas, or buckets that are allowed to go into debt.
+type Tokens int64
 
 // Controller provides flow control for replication traffic in KV, held at the
 // node-level.
@@ -135,4 +140,31 @@ type DispatchWriter interface {
 type DispatchReader interface {
 	PendingDispatch() []roachpb.NodeID
 	PendingDispatchFor(roachpb.NodeID) []kvflowcontrolpb.AdmittedRaftLogEntries
+}
+
+func (t Tokens) String() string {
+	return redact.StringWithoutMarkers(t)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (t Tokens) SafeFormat(p redact.SafePrinter, verb rune) {
+	sign := "+"
+	if t < 0 {
+		sign = "-"
+		t = -t
+	}
+	p.Printf("%s%s", sign, humanize.IBytes(uint64(t)))
+}
+
+func (s Stream) String() string {
+	return redact.StringWithoutMarkers(s)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (s Stream) SafeFormat(p redact.SafePrinter, verb rune) {
+	tenantSt := s.TenantID.String()
+	if s.TenantID.IsSystem() {
+		tenantSt = "1"
+	}
+	p.Printf("t%s/s%s", tenantSt, s.StoreID.String())
 }
