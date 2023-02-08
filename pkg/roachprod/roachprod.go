@@ -224,8 +224,9 @@ func CachedClusters(l *logger.Logger, fn func(clusterName string, numVMs int)) {
 	}
 }
 
-// acquireFilesystemLock acquires a filesystem lock so that two concurrent
-// synchronizations of roachprod state don't clobber each other.
+// acquireFilesystemLock acquires a filesystem lock in order that concurrent
+// operations or roachprod processes that access shared system resources do
+// not conflict.
 func acquireFilesystemLock() (unlockFn func(), _ error) {
 	lockFile := os.ExpandEnv("$HOME/.roachprod/LOCK")
 	f, err := os.Create(lockFile)
@@ -577,6 +578,11 @@ func SetupSSH(ctx context.Context, l *logger.Logger, clusterName string) error {
 
 	// Configure SSH for machines in the zones we operate on.
 	if err := vm.ProvidersSequential(providers, func(p vm.Provider) error {
+		unlock, lockErr := acquireFilesystemLock()
+		if lockErr != nil {
+			return lockErr
+		}
+		defer unlock()
 		return p.ConfigSSH(zones[p.Name()])
 	}); err != nil {
 		return err
