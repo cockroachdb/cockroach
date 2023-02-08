@@ -28,6 +28,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -670,6 +671,9 @@ type PebbleConfig struct {
 	base.StorageConfig
 	// Pebble specific options.
 	Opts *pebble.Options
+	// SharedStorage is a cloud.ExternalStorage that can be used by all Pebble
+	// stores on this node and on other nodes to store sstables.
+	SharedStorage cloud.ExternalStorage
 }
 
 // EncryptionStatsHandler provides encryption related stats.
@@ -721,6 +725,8 @@ type Pebble struct {
 	writeStallStartNanos int64
 	diskSlowCount        int64
 	diskStallCount       int64
+	sharedBytesRead      int64
+	sharedBytesWritten   int64
 
 	// Relevant options copied over from pebble.Options.
 	fs            vfs.FS
@@ -1018,6 +1024,11 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 	p.eventListener = &el
 	opts.EventListener = &el
 	p.wrappedIntentWriter = wrapIntentWriter(p)
+
+	if cfg.SharedStorage != nil {
+		esWrapper := &externalStorageWrapper{p: p, es: cfg.SharedStorage, ctx: ctx}
+		cfg.Opts.Experimental.SharedStorage = esWrapper
+	}
 
 	// Read the current store cluster version.
 	storeClusterVersion, minVerFileExists, err := getMinVersion(unencryptedFS, cfg.Dir)
@@ -1667,11 +1678,13 @@ func (p *Pebble) Flush() error {
 func (p *Pebble) GetMetrics() Metrics {
 	m := p.db.Metrics()
 	return Metrics{
-		Metrics:            m,
-		WriteStallCount:    atomic.LoadInt64(&p.writeStallCount),
-		WriteStallDuration: time.Duration(atomic.LoadInt64((*int64)(&p.writeStallDuration))),
-		DiskSlowCount:      atomic.LoadInt64(&p.diskSlowCount),
-		DiskStallCount:     atomic.LoadInt64(&p.diskStallCount),
+		Metrics:                 m,
+		WriteStallCount:         atomic.LoadInt64(&p.writeStallCount),
+		WriteStallDuration:      time.Duration(atomic.LoadInt64((*int64)(&p.writeStallDuration))),
+		DiskSlowCount:           atomic.LoadInt64(&p.diskSlowCount),
+		DiskStallCount:          atomic.LoadInt64(&p.diskStallCount),
+		SharedStorageReadBytes:  atomic.LoadInt64(&p.sharedBytesRead),
+		SharedStorageWriteBytes: atomic.LoadInt64(&p.sharedBytesWritten),
 	}
 }
 

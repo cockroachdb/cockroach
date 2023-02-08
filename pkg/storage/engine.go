@@ -1015,6 +1015,10 @@ type Metrics struct {
 	// DiskStallCount counts the number of times Pebble observes slow writes
 	// on disk lasting longer than MaxSyncDuration (`storage.max_sync_duration`).
 	DiskStallCount int64
+	// SharedStorageWriteBytes counts the number of bytes written to shared storage.
+	SharedStorageWriteBytes int64
+	// SharedStorageReadBytes counts the number of bytes read from shared storage.
+	SharedStorageReadBytes int64
 }
 
 // MetricsForInterval is a set of pebble.Metrics that need to be saved in order to
