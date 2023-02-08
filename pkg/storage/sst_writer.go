@@ -63,7 +63,7 @@ func MakeIngestionWriterOptions(ctx context.Context, cs *cluster.Settings) sstab
 	// table features available. Upgrade to an appropriate version only if the
 	// cluster supports it.
 	format := sstable.TableFormatPebblev1 // Block properties.
-	if cs.Version.IsActive(ctx, clusterversion.V22_2EnablePebbleFormatVersionRangeKeys) {
+	if cs.Version.IsActive(ctx, clusterversion.TODODelete_V22_2EnablePebbleFormatVersionRangeKeys) {
 		format = sstable.TableFormatPebblev2 // Range keys.
 	}
 	if cs.Version.IsActive(ctx, clusterversion.V23_1EnablePebbleFormatSSTableValueBlocks) &&
@@ -82,7 +82,7 @@ func MakeBackupSSTWriter(ctx context.Context, cs *cluster.Settings, f io.Writer)
 	// table features available. Upgrade to an appropriate version only if the
 	// cluster supports it.
 	format := sstable.TableFormatPebblev1 // Block properties.
-	if cs.Version.IsActive(ctx, clusterversion.V22_2EnablePebbleFormatVersionRangeKeys) {
+	if cs.Version.IsActive(ctx, clusterversion.TODODelete_V22_2EnablePebbleFormatVersionRangeKeys) {
 		format = sstable.TableFormatPebblev2 // Range keys.
 	}
 	// TODO(sumeer): add code to use TableFormatPebblev3 after confirming that

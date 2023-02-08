@@ -2041,7 +2041,7 @@ func TestEngineRangeKeysUnsupported(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// Set up an engine with a version that doesn't support range keys.
-	version := clusterversion.ByKey(clusterversion.V22_2EnsurePebbleFormatVersionRangeKeys - 1)
+	version := clusterversion.ByKey(clusterversion.TODODelete_V22_2EnsurePebbleFormatVersionRangeKeys - 1)
 	st := cluster.MakeTestingClusterSettingsWithVersions(version, version, true)
 
 	eng, err := Open(context.Background(), InMemory(), st, MaxSize(1<<20))

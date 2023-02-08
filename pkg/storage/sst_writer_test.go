@@ -89,7 +89,7 @@ func TestMakeIngestionWriterOptions(t *testing.T) {
 		{
 			name: "before feature gate",
 			st: cluster.MakeTestingClusterSettingsWithVersions(
-				clusterversion.ByKey(clusterversion.V22_2EnablePebbleFormatVersionRangeKeys-1),
+				clusterversion.ByKey(clusterversion.TODODelete_V22_2EnablePebbleFormatVersionRangeKeys-1),
 				clusterversion.TestingBinaryMinSupportedVersion,
 				true,
 			),
@@ -98,7 +98,7 @@ func TestMakeIngestionWriterOptions(t *testing.T) {
 		{
 			name: "at feature gate",
 			st: cluster.MakeTestingClusterSettingsWithVersions(
-				clusterversion.ByKey(clusterversion.V22_2EnablePebbleFormatVersionRangeKeys),
+				clusterversion.ByKey(clusterversion.TODODelete_V22_2EnablePebbleFormatVersionRangeKeys),
 				clusterversion.TestingBinaryMinSupportedVersion,
 				true,
 			),
@@ -122,7 +122,7 @@ func TestSSTWriterRangeKeysUnsupported(t *testing.T) {
 	ctx := context.Background()
 
 	// Set up a version that doesn't support range keys.
-	version := clusterversion.ByKey(clusterversion.V22_2EnsurePebbleFormatVersionRangeKeys - 1)
+	version := clusterversion.ByKey(clusterversion.TODODelete_V22_2EnsurePebbleFormatVersionRangeKeys - 1)
 	st := cluster.MakeTestingClusterSettingsWithVersions(version, version, true)
 
 	writers := map[string]SSTWriter{

@@ -114,7 +114,7 @@ func (s *PersistedSQLStats) getFetchQueryForStmtStatsTable(
 		"agg_interval",
 	}
 
-	if s.cfg.Settings.Version.IsActive(ctx, clusterversion.V22_2AlterSystemStatementStatisticsAddIndexRecommendations) {
+	if s.cfg.Settings.Version.IsActive(ctx, clusterversion.TODODelete_V22_2AlterSystemStatementStatisticsAddIndexRecommendations) {
 		selectedColumns = append(selectedColumns, "index_recommendations")
 	}
 

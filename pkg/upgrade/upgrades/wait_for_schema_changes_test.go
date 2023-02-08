@@ -125,7 +125,7 @@ func TestWaitForSchemaChangeMigration(t *testing.T) {
 			params, _ := tests.CreateTestServerParams()
 			params.Knobs.Server = &server.TestingKnobs{
 				DisableAutomaticVersionUpgrade: make(chan struct{}),
-				BinaryVersionOverride:          clusterversion.ByKey(clusterversion.V22_2NoNonMVCCAddSSTable - 1),
+				BinaryVersionOverride:          clusterversion.ByKey(clusterversion.TODODelete_V22_2NoNonMVCCAddSSTable - 1),
 			}
 
 			var (
@@ -253,7 +253,7 @@ func TestWaitForSchemaChangeMigrationSynthetic(t *testing.T) {
 			params, _ := tests.CreateTestServerParams()
 			params.Knobs.Server = &server.TestingKnobs{
 				DisableAutomaticVersionUpgrade: make(chan struct{}),
-				BinaryVersionOverride:          clusterversion.ByKey(clusterversion.V22_2NoNonMVCCAddSSTable - 1),
+				BinaryVersionOverride:          clusterversion.ByKey(clusterversion.TODODelete_V22_2NoNonMVCCAddSSTable - 1),
 			}
 
 			var waitCount int32

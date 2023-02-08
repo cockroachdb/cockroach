@@ -181,7 +181,7 @@ func makeGCSStorage(
 	if conf.AssumeRole == "" {
 		opts = append(opts, credentialsOpt...)
 	} else {
-		if !args.Settings.Version.IsActive(ctx, clusterversion.V22_2SupportAssumeRoleAuth) {
+		if !args.Settings.Version.IsActive(ctx, clusterversion.TODODelete_V22_2SupportAssumeRoleAuth) {
 			return nil, errors.New("cannot authenticate to cloud storage via assume role until cluster has fully upgraded to 22.2")
 		}
 
