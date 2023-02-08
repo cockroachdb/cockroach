@@ -149,7 +149,7 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 		SELECT cluster_logical_timestamp();
 	END;`).Scan(&ts1)
 
-	if actual, expected := kvsToRows(slurpUserDataKVs(t, store.Engine())), []rowWithMVCCMetadata{
+	if actual, expected := kvsToRows(slurpUserDataKVs(t, store.TODOEngine())), []rowWithMVCCMetadata{
 		{[]string{`1`, `a`, `a`, `a`}, false, ts1},
 		{[]string{`2`, `b`, `b`, `b`}, false, ts1},
 	}; !reflect.DeepEqual(expected, actual) {
@@ -163,7 +163,7 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 		SELECT cluster_logical_timestamp();
 	END;`).Scan(&ts2)
 
-	if actual, expected := kvsToRows(slurpUserDataKVs(t, store.Engine())), []rowWithMVCCMetadata{
+	if actual, expected := kvsToRows(slurpUserDataKVs(t, store.TODOEngine())), []rowWithMVCCMetadata{
 		{[]string{`1`, `NULL`, `NULL`, `NULL`}, false, ts2},
 		{[]string{`2`, `b`, `b`, `NULL`}, false, ts2},
 	}; !reflect.DeepEqual(expected, actual) {
@@ -175,7 +175,7 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 		DELETE FROM parent WHERE a = '1';
 		SELECT cluster_logical_timestamp();
 	END;`).Scan(&ts3)
-	if actual, expected := kvsToRows(slurpUserDataKVs(t, store.Engine())), []rowWithMVCCMetadata{
+	if actual, expected := kvsToRows(slurpUserDataKVs(t, store.TODOEngine())), []rowWithMVCCMetadata{
 		{[]string{`1`, `NULL`, `NULL`, `NULL`}, true, ts3},
 		{[]string{`2`, `b`, `b`, `NULL`}, false, ts2},
 	}; !reflect.DeepEqual(expected, actual) {

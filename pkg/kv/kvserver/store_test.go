@@ -458,7 +458,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	store := createTestStoreWithConfig(ctx, t, stopper, testStoreOpts{}, &cfg)
 	defer stopper.Stop(ctx)
 
-	if _, err := kvstorage.ReadStoreIdent(ctx, store.Engine()); err != nil {
+	if _, err := kvstorage.ReadStoreIdent(ctx, store.TODOEngine()); err != nil {
 		t.Fatalf("unable to read store ident: %+v", err)
 	}
 
@@ -471,7 +471,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 		memMS := repl.GetMVCCStats()
 		// Stats should agree with a recomputation.
 		now := store.Clock().Now()
-		diskMS, err := rditer.ComputeStatsForRange(repl.Desc(), store.Engine(), now.WallTime)
+		diskMS, err := rditer.ComputeStatsForRange(repl.Desc(), store.TODOEngine(), now.WallTime)
 		require.NoError(t, err)
 		memMS.AgeTo(diskMS.LastUpdateNanos)
 		require.Equal(t, memMS, diskMS)
@@ -542,7 +542,7 @@ func createReplica(s *Store, rangeID roachpb.RangeID, start, end roachpb.RKey) *
 	}
 	const replicaID = 1
 	if err := stateloader.WriteInitialRangeState(
-		ctx, s.engine, *desc, replicaID, clusterversion.TestingClusterVersion.Version,
+		ctx, s.TODOEngine(), *desc, replicaID, clusterversion.TestingClusterVersion.Version,
 	); err != nil {
 		panic(err)
 	}
@@ -837,7 +837,7 @@ func TestMaybeMarkReplicaInitialized(t *testing.T) {
 	newRangeID := roachpb.RangeID(3)
 	const replicaID = 1
 	require.NoError(t,
-		logstore.NewStateLoader(newRangeID).SetRaftReplicaID(ctx, store.engine, replicaID))
+		logstore.NewStateLoader(newRangeID).SetRaftReplicaID(ctx, store.TODOEngine(), replicaID))
 
 	r := newUninitializedReplica(store, newRangeID, replicaID)
 	require.NoError(t, err)
@@ -1374,7 +1374,7 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 			txnKey := keys.TransactionKey(pushee.Key, pushee.ID)
 			var txn roachpb.Transaction
 			if ok, err := storage.MVCCGetProto(
-				ctx, store.Engine(), txnKey, hlc.Timestamp{}, &txn, storage.MVCCGetOptions{},
+				ctx, store.TODOEngine(), txnKey, hlc.Timestamp{}, &txn, storage.MVCCGetOptions{},
 			); err != nil {
 				t.Fatal(err)
 			} else if ok {
@@ -1685,7 +1685,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	txnKey := keys.TransactionKey(pushee.Key, pushee.ID)
 	var txn roachpb.Transaction
 	if ok, err := storage.MVCCGetProto(
-		ctx, store.Engine(), txnKey, hlc.Timestamp{}, &txn, storage.MVCCGetOptions{},
+		ctx, store.TODOEngine(), txnKey, hlc.Timestamp{}, &txn, storage.MVCCGetOptions{},
 	); !ok || err != nil {
 		t.Fatalf("not found or err: %+v", err)
 	}
@@ -2673,7 +2673,7 @@ func TestStoreGCThreshold(t *testing.T) {
 		}
 		repl.mu.Lock()
 		gcThreshold := *repl.mu.state.GCThreshold
-		pgcThreshold, err := repl.mu.stateLoader.LoadGCThreshold(context.Background(), store.Engine())
+		pgcThreshold, err := repl.mu.stateLoader.LoadGCThreshold(context.Background(), store.TODOEngine())
 		repl.mu.Unlock()
 		if err != nil {
 			t.Fatal(err)
@@ -3788,7 +3788,7 @@ func TestStoreGetOrCreateReplicaWritesRaftReplicaID(t *testing.T) {
 		})
 	require.NoError(t, err)
 	require.True(t, created)
-	replicaID, err := repl.mu.stateLoader.LoadRaftReplicaID(ctx, tc.store.Engine())
+	replicaID, err := repl.mu.stateLoader.LoadRaftReplicaID(ctx, tc.store.TODOEngine())
 	require.NoError(t, err)
 	require.Equal(t, &roachpb.RaftReplicaID{ReplicaID: 7}, replicaID)
 }

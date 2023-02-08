@@ -62,7 +62,7 @@ var _ raft.Storage = (*replicaRaftStorage)(nil)
 // exclusive access to r.mu.stateLoader.
 func (r *replicaRaftStorage) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	ctx := r.AnnotateCtx(context.TODO())
-	hs, err := r.mu.stateLoader.LoadHardState(ctx, r.store.Engine())
+	hs, err := r.mu.stateLoader.LoadHardState(ctx, r.store.TODOEngine())
 	// For uninitialized ranges, membership is unknown at this point.
 	if raft.IsEmptyHardState(hs) || err != nil {
 		return raftpb.HardState{}, raftpb.ConfState{}, err
@@ -83,7 +83,7 @@ func (r *replicaRaftStorage) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, e
 	if r.raftMu.sideloaded == nil {
 		return nil, errors.New("sideloaded storage is uninitialized")
 	}
-	return logstore.LoadEntries(ctx, r.mu.stateLoader.StateLoader, r.store.Engine(), r.RangeID,
+	return logstore.LoadEntries(ctx, r.mu.stateLoader.StateLoader, r.store.TODOEngine(), r.RangeID,
 		r.store.raftEntryCache, r.raftMu.sideloaded, lo, hi, maxBytes)
 }
 
@@ -107,7 +107,7 @@ func (r *replicaRaftStorage) Term(i uint64) (uint64, error) {
 		return r.mu.lastTermNotDurable, nil
 	}
 	ctx := r.AnnotateCtx(context.TODO())
-	return logstore.LoadTerm(ctx, r.mu.stateLoader.StateLoader, r.store.Engine(), r.RangeID,
+	return logstore.LoadTerm(ctx, r.mu.stateLoader.StateLoader, r.store.TODOEngine(), r.RangeID,
 		r.store.raftEntryCache, i)
 }
 
@@ -209,7 +209,7 @@ func (r *Replica) GetSnapshot(
 	// an AddSSTable" (i.e. a state in which an SSTable has been linked in, but
 	// the corresponding Raft command not applied yet).
 	r.raftMu.Lock()
-	snap := r.store.engine.NewSnapshot()
+	snap := r.store.TODOEngine().NewSnapshot()
 	r.raftMu.Unlock()
 
 	defer func() {
@@ -526,7 +526,8 @@ func (r *Replica) applySnapshot(
 	// of the removed range. In this case, however, it's copacetic, as subsumed
 	// ranges _can't_ have new replicas.
 	if err := clearSubsumedReplicaDiskData(
-		ctx, r.store.ClusterSettings(), r.store.Engine(), inSnap.SSTStorageScratch.WriteSST,
+		// TODO(sep-raft-log): needs access to both engines.
+		ctx, r.store.ClusterSettings(), r.store.TODOEngine(), inSnap.SSTStorageScratch.WriteSST,
 		desc, subsumedDescs, mergedTombstoneReplicaID,
 	); err != nil {
 		return err
@@ -541,7 +542,10 @@ func (r *Replica) applySnapshot(
 	}
 	var ingestStats pebble.IngestOperationStats
 	if ingestStats, err =
-		r.store.engine.IngestExternalFilesWithStats(ctx, inSnap.SSTStorageScratch.SSTs()); err != nil {
+		// TODO: separate ingestions for log and statemachine engine. See:
+		//
+		// https://github.com/cockroachdb/cockroach/issues/93251
+		r.store.TODOEngine().IngestExternalFilesWithStats(ctx, inSnap.SSTStorageScratch.SSTs()); err != nil {
 		return errors.Wrapf(err, "while ingesting %s", inSnap.SSTStorageScratch.SSTs())
 	}
 	if r.store.cfg.KVAdmissionController != nil {
@@ -549,7 +553,7 @@ func (r *Replica) applySnapshot(
 	}
 	stats.ingestion = timeutil.Now()
 
-	state, err := stateloader.Make(desc.RangeID).Load(ctx, r.store.engine, desc)
+	state, err := stateloader.Make(desc.RangeID).Load(ctx, r.store.TODOEngine(), desc)
 	if err != nil {
 		log.Fatalf(ctx, "unable to load replica state: %s", err)
 	}
@@ -575,7 +579,7 @@ func (r *Replica) applySnapshot(
 	// Read the prior read summary for this range, which was included in the
 	// snapshot. We may need to use it to bump our timestamp cache if we
 	// discover that we are the leaseholder as of the snapshot's log index.
-	prioReadSum, err := readsummary.Load(ctx, r.store.engine, r.RangeID)
+	prioReadSum, err := readsummary.Load(ctx, r.store.TODOEngine(), r.RangeID)
 	if err != nil {
 		log.Fatalf(ctx, "failed to read prior read summary after applying snapshot: %+v", err)
 	}
@@ -661,7 +665,7 @@ func (r *Replica) applySnapshot(
 	// operation can be expensive. This is safe, as we hold the Replica.raftMu
 	// across both Replica.mu critical sections.
 	r.mu.RLock()
-	r.assertStateRaftMuLockedReplicaMuRLocked(ctx, r.store.Engine())
+	r.assertStateRaftMuLockedReplicaMuRLocked(ctx, r.store.TODOEngine())
 	r.mu.RUnlock()
 
 	// The rangefeed processor is listening for the logical ops attached to

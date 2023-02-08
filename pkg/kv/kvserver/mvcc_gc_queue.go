@@ -709,7 +709,7 @@ func (mgcq *mvccGCQueue) process(
 		log.VErrEventf(ctx, 2, "failed to update last processed time: %v", err)
 	}
 
-	snap := repl.store.Engine().NewSnapshot()
+	snap := repl.store.TODOEngine().NewSnapshot()
 	defer snap.Close()
 
 	intentAgeThreshold := gc.IntentAgeThreshold.Get(&repl.store.ClusterSettings().SV)

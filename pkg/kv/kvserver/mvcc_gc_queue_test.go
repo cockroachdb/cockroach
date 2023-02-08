@@ -858,7 +858,7 @@ func TestMVCCGCQueueProcess(t *testing.T) {
 
 	// Call Run with dummy functions to get current Info.
 	gcInfo, err := func() (gc.Info, error) {
-		snap := tc.repl.store.Engine().NewSnapshot()
+		snap := tc.repl.store.TODOEngine().NewSnapshot()
 		desc := tc.repl.Desc()
 		defer snap.Close()
 
@@ -941,7 +941,7 @@ func TestMVCCGCQueueProcess(t *testing.T) {
 	// However, because the GC processing pushes transactions and
 	// resolves intents asynchronously, we use a SucceedsSoon loop.
 	testutils.SucceedsSoon(t, func() error {
-		kvs, err := storage.Scan(tc.store.Engine(), key1, keys.MaxKey, 0)
+		kvs, err := storage.Scan(tc.store.TODOEngine(), key1, keys.MaxKey, 0)
 		if err != nil {
 			return err
 		}
@@ -1193,7 +1193,7 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 				return fmt.Errorf("%s: unexpected intent resolutions:\nexpected: %s\nobserved: %s", strKey, expIntents, spans)
 			}
 			entry := &roachpb.AbortSpanEntry{}
-			abortExists, err := tc.repl.abortSpan.Get(ctx, tc.store.Engine(), txns[strKey].ID, entry)
+			abortExists, err := tc.repl.abortSpan.Get(ctx, tc.store.TODOEngine(), txns[strKey].ID, entry)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1207,7 +1207,7 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 	outsideTxnPrefix := keys.TransactionKey(outsideKey, uuid.UUID{})
 	outsideTxnPrefixEnd := keys.TransactionKey(outsideKey.Next(), uuid.UUID{})
 	var count int
-	if _, err := storage.MVCCIterate(ctx, tc.store.Engine(), outsideTxnPrefix, outsideTxnPrefixEnd, hlc.Timestamp{},
+	if _, err := storage.MVCCIterate(ctx, tc.store.TODOEngine(), outsideTxnPrefix, outsideTxnPrefixEnd, hlc.Timestamp{},
 		storage.MVCCScanOptions{}, func(roachpb.KeyValue) error {
 			count++
 			return nil
@@ -1290,7 +1290,7 @@ func TestMVCCGCQueueIntentResolution(t *testing.T) {
 		meta := &enginepb.MVCCMetadata{}
 		// The range is specified using only global keys, since the implementation
 		// may use an intentInterleavingIter.
-		return tc.store.Engine().MVCCIterate(
+		return tc.store.TODOEngine().MVCCIterate(
 			keys.LocalMax, roachpb.KeyMax, storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsOnly,
 			func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
 				if !kv.Key.IsValue() {

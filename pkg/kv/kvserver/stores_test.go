@@ -155,7 +155,7 @@ func TestStoresGetReplicaForRangeID(t *testing.T) {
 		}
 
 		require.NoError(t,
-			logstore.NewStateLoader(desc.RangeID).SetRaftReplicaID(ctx, store.engine, replicaID))
+			logstore.NewStateLoader(desc.RangeID).SetRaftReplicaID(ctx, store.TODOEngine(), replicaID))
 		replica, err := loadInitializedReplicaForTesting(ctx, store, desc, replicaID)
 		if err != nil {
 			t.Fatalf("unexpected error when creating replica: %+v", err)

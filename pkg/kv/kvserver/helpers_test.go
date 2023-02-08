@@ -88,7 +88,7 @@ func (s *Store) ComputeMVCCStats() (enginepb.MVCCStats, error) {
 	now := s.Clock().PhysicalNow()
 	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
 		var stats enginepb.MVCCStats
-		stats, err = rditer.ComputeStatsForRange(r.Desc(), s.Engine(), now)
+		stats, err = rditer.ComputeStatsForRange(r.Desc(), s.TODOEngine(), now)
 		if err != nil {
 			return false
 		}
@@ -231,6 +231,10 @@ func NewTestStorePool(cfg StoreConfig) *storepool.StorePool {
 		},
 		/* deterministic */ false,
 	)
+}
+
+func (r *Replica) Store() *Store {
+	return r.store
 }
 
 func (r *Replica) Breaker() *circuit2.Breaker {

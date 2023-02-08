@@ -1972,7 +1972,7 @@ func getExpectedSnapshotSizeBytes(
 	}
 	defer snap.Close()
 
-	b := originStore.Engine().NewUnindexedBatch(true)
+	b := originStore.TODOEngine().NewUnindexedBatch(true)
 	defer b.Close()
 
 	err = rditer.IterateReplicaKeySpans(snap.State.Desc, snap.EngineSnap, true, /* replicatedOnly */
