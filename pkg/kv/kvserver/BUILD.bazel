@@ -196,7 +196,6 @@ go_library(
         "//pkg/util/quotapool",
         "//pkg/util/retry",
         "//pkg/util/shuffle",
-        "//pkg/util/slidingwindow",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/syncutil/singleflight",

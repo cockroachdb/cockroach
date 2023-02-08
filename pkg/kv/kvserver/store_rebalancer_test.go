@@ -59,7 +59,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 3000,
 				CPUPerSecond:     3000 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold - 10,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold - 10),
 			},
 		},
 		{
@@ -78,7 +79,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 2800,
 				CPUPerSecond:     2800 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold - 5,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold - 5),
 			},
 		},
 		{
@@ -97,7 +99,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 2600,
 				CPUPerSecond:     2600 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold + 2,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold + 2),
 			},
 		},
 		{
@@ -116,7 +119,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 2400,
 				CPUPerSecond:     2400 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold - 10,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold - 10),
 			},
 		},
 		{
@@ -135,7 +139,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 2200,
 				CPUPerSecond:     2200 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold - 3,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold - 3),
 			},
 		},
 		{
@@ -154,7 +159,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 2000,
 				CPUPerSecond:     2000 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold + 2,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold + 2),
 			},
 		},
 		{
@@ -173,7 +179,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 1800,
 				CPUPerSecond:     1800 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold - 10,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold - 10),
 			},
 		},
 		{
@@ -192,7 +199,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 1600,
 				CPUPerSecond:     1600 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold - 5,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold - 5),
 			},
 		},
 		{
@@ -211,7 +219,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 1400,
 				CPUPerSecond:     1400 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold + 3,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold + 3),
 			},
 		},
 	}
@@ -273,7 +282,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 1500,
 				CPUPerSecond:     1500 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold - 15,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold - 15),
 			},
 		},
 		{
@@ -282,7 +292,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 1300,
 				CPUPerSecond:     1300 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold - 10,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold - 10),
 			},
 		},
 		{
@@ -291,7 +302,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 1000,
 				CPUPerSecond:     1000 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold - 5,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold - 5),
 			},
 		},
 		{
@@ -300,7 +312,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 900,
 				CPUPerSecond:     900 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold + 20,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold + 20),
 			},
 		},
 		{
@@ -309,7 +322,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 500,
 				CPUPerSecond:     500 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold + 25,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold + 25),
 			},
 		},
 	}
@@ -323,7 +337,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 1000,
 				CPUPerSecond:     1000 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold + 100,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold + 100),
 			},
 		},
 		{
@@ -332,7 +347,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 1000,
 				CPUPerSecond:     1000 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold - 15,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold - 15),
 			},
 		},
 		{
@@ -341,7 +357,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 1000,
 				CPUPerSecond:     1000 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold + 100,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold + 100),
 			},
 		},
 		{
@@ -350,7 +367,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 1000,
 				CPUPerSecond:     1000 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold - 15,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold - 15),
 			},
 		},
 		{
@@ -359,7 +377,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 1000,
 				CPUPerSecond:     1000 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold + 100,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold + 100),
 			},
 		},
 	}
@@ -373,7 +392,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 1500,
 				CPUPerSecond:     1500 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold + 1,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold + 1),
 			},
 		},
 		{
@@ -382,7 +402,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 1300,
 				CPUPerSecond:     1300 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold + 1,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold + 1),
 			},
 		},
 		{
@@ -391,7 +412,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 1000,
 				CPUPerSecond:     1000 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold + 1,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold + 1),
 			},
 		},
 		{
@@ -400,7 +422,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 900,
 				CPUPerSecond:     900 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold + 1,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold + 1),
 			},
 		},
 		{
@@ -409,7 +432,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 500,
 				CPUPerSecond:     500 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold + 1,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold + 1),
 			},
 		},
 	}
@@ -423,7 +447,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 1500,
 				CPUPerSecond:     1500 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold + 1,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold + 1),
 			},
 		},
 		{
@@ -432,7 +457,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 1300,
 				CPUPerSecond:     1300 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold + 10,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold + 10),
 			},
 		},
 		{
@@ -441,7 +467,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 1000,
 				CPUPerSecond:     1000 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold + 50,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold + 50),
 			},
 		},
 		{
@@ -450,7 +477,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 900,
 				CPUPerSecond:     900 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold + 100,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold + 100),
 			},
 		},
 		{
@@ -459,7 +487,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 500,
 				CPUPerSecond:     500 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold + 100,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold + 100),
 			},
 		},
 	}
@@ -1783,7 +1812,7 @@ func TestStoreRebalancerReadAmpCheck(t *testing.T) {
 			require.Greater(t, len(rctx.hottestRanges), 0)
 
 			rctx.options.StoreHealthOptions = allocatorimpl.StoreHealthOptions{
-				EnforcementLevel: test.enforcement, L0SublevelThreshold: allocatorimpl.MaxL0SublevelThreshold}
+				EnforcementLevel: test.enforcement, IOThreshold: allocatorimpl.DefaultIOOverloadThreshold}
 			rctx.options.LoadThreshold = allocatorimpl.WithAllDims(0.05)
 
 			_, targetVoters, _ := sr.chooseRangeToRebalance(ctx, rctx)

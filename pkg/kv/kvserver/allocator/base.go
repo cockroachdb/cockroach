@@ -193,6 +193,17 @@ var MinQPSDifferenceForTransfers = func() *settings.FloatSetting {
 	return s
 }()
 
+var EnableUnhealthyLeaseShedding = func() *settings.BoolSetting {
+	s := settings.RegisterBoolSetting(
+		settings.SystemOnly,
+		"kv.allocator.enable_unhealthy_lease_shedding",
+		"-",
+		true,
+	)
+	s.SetVisibility(settings.Reserved)
+	return s
+}()
+
 // transferLeaseGoal dictates whether a call to TransferLeaseTarget should
 // improve locality of access, convergence of lease counts or convergence of
 // QPS.
@@ -223,6 +234,10 @@ type TransferLeaseOptions struct {
 	// AllowUninitializedCandidates allows a lease transfer target to include
 	// replicas which are not in the existing replica set.
 	AllowUninitializedCandidates bool
+	// ShedUnhealthyLease, when true, tells `TransferLeaseTarget` to exclude
+	// the current leaseholder from consideration as a potential target when
+	// the store the leaseholder replica is on is deemed unhealthy.
+	ShedUnhealthyLease bool
 	// LoadDimensions declares the load dimensions to use when the Goal is
 	// LoadConvergence.
 	LoadDimensions []load.Dimension

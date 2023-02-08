@@ -1936,6 +1936,37 @@ func (a *Allocator) ScorerOptionsForScatter(ctx context.Context) *ScatterScorerO
 	}
 }
 
+func (a *Allocator) HealthyLeaseTargets(
+	ctx context.Context,
+	storePool storepool.AllocatorStorePool,
+	existing []roachpb.ReplicaDescriptor,
+	leaseStoreID roachpb.StoreID,
+	opts allocator.TransferLeaseOptions,
+	shedUnhealthyLeases bool,
+) []roachpb.ReplicaDescriptor {
+	existingStores := make([]roachpb.StoreID, len(existing))
+	for i, replica := range existing {
+		existingStores[i] = replica.StoreID
+	}
+	sl, _, _ := storePool.GetStoreListFromIDs(existingStores, storepool.StoreFilterSuspect)
+	sl = a.StoreHealthOptions(ctx).excludeUnhealthy(sl)
+	var candidates []roachpb.ReplicaDescriptor
+	for _, repl := range existing {
+		// We don't exclude the leaseholder replica despite it being unhealthy,
+		// unless opts.ShedUnhealthyLease is true, in which case the
+		// leaseholder may be filtered out.
+		if repl.StoreID == leaseStoreID && !shedUnhealthyLeases {
+			candidates = append(candidates, repl)
+			continue
+		}
+		if _, ok := sl.FindStoreByID(repl.StoreID); ok {
+			candidates = append(candidates, repl)
+		}
+	}
+
+	return candidates
+}
+
 // ValidLeaseTargets returns a set of candidate stores that are suitable to be
 // transferred a lease for the given range.
 //
@@ -2022,6 +2053,11 @@ func (a *Allocator) ValidLeaseTargets(
 			ctx, status, leaseRepl.GetFirstIndex(), candidates)...)
 	}
 
+	existingStores := make([]roachpb.StoreID, len(candidates))
+	for i, replica := range candidates {
+		existingStores[i] = replica.StoreID
+	}
+
 	// Determine which store(s) is preferred based on user-specified preferences.
 	// If any stores match, only consider those stores as candidates.
 	preferred := a.PreferredLeaseholders(storePool, conf, candidates)
@@ -2085,16 +2121,16 @@ func (a *Allocator) leaseholderShouldMoveDueToPreferences(
 }
 
 // StoreHealthOptions returns the store health options, currently only
-// considering the threshold for L0 sub-levels. This threshold is not
+// considering the threshold for io overload. This threshold is not
 // considered in allocation or rebalancing decisions (excluding candidate
 // stores as targets) when enforcementLevel is set to storeHealthNoAction or
 // storeHealthLogOnly. By default storeHealthBlockRebalanceTo is the action taken. When
 // there is a mixed version cluster, storeHealthNoAction is set instead.
 func (a *Allocator) StoreHealthOptions(_ context.Context) StoreHealthOptions {
-	enforcementLevel := StoreHealthEnforcement(l0SublevelsThresholdEnforce.Get(&a.st.SV))
+	enforcementLevel := StoreHealthEnforcement(IOOverloadThresholdEnforce.Get(&a.st.SV))
 	return StoreHealthOptions{
-		EnforcementLevel:    enforcementLevel,
-		L0SublevelThreshold: l0SublevelsThreshold.Get(&a.st.SV),
+		EnforcementLevel: enforcementLevel,
+		IOThreshold:      IOOverloadThreshold.Get(&a.st.SV),
 	}
 }
 
@@ -2128,6 +2164,11 @@ func (a *Allocator) TransferLeaseTarget(
 	forceDecisionWithoutStats bool,
 	opts allocator.TransferLeaseOptions,
 ) roachpb.ReplicaDescriptor {
+	source, ok := storePool.GetStoreDescriptor(leaseRepl.StoreID())
+	if !ok {
+		return roachpb.ReplicaDescriptor{}
+	}
+
 	excludeLeaseRepl := opts.ExcludeLeaseRepl
 	if a.leaseholderShouldMoveDueToPreferences(ctx, storePool, conf, leaseRepl, existing) {
 		// Explicitly exclude the current leaseholder from the result set if it is
@@ -2136,19 +2177,27 @@ func (a *Allocator) TransferLeaseTarget(
 		excludeLeaseRepl = true
 	}
 
-	allStoresList, _, _ := storePool.GetStoreList(storepool.StoreFilterNone)
-	storeDescMap := allStoresList.ToMap()
-	sl, _, _ := storePool.GetStoreList(storepool.StoreFilterSuspect)
+	// Filter the existing replica list down to only valid candidate
+	// leaseholders that are not overloaded.
+	existing = a.ValidLeaseTargets(ctx, storePool, conf, existing, leaseRepl, opts)
+	existingStores := make([]roachpb.StoreID, len(existing))
+	for i, replica := range existing {
+		existingStores[i] = replica.StoreID
+	}
+	sl, _, _ := storePool.GetStoreListFromIDs(existingStores, storepool.StoreFilterSuspect)
 	sl = sl.ExcludeInvalid(conf.Constraints)
 	sl = sl.ExcludeInvalid(conf.VoterConstraints)
 	candidateLeasesMean := sl.CandidateLeases.Mean
+	existing = a.HealthyLeaseTargets(
+		ctx,
+		storePool,
+		existing,
+		leaseRepl.StoreID(),
+		opts,
+		allocator.EnableUnhealthyLeaseShedding.Get(&a.st.SV),
+	)
+	storeDescMap := sl.ToMap()
 
-	source, ok := storePool.GetStoreDescriptor(leaseRepl.StoreID())
-	if !ok {
-		return roachpb.ReplicaDescriptor{}
-	}
-
-	existing = a.ValidLeaseTargets(ctx, storePool, conf, existing, leaseRepl, opts)
 	// Short-circuit if there are no valid targets out there.
 	if len(existing) == 0 || (len(existing) == 1 && existing[0].StoreID == leaseRepl.StoreID()) {
 		log.KvDistribution.VEventf(ctx, 2, "no lease transfer target found for r%d", leaseRepl.GetRangeID())
