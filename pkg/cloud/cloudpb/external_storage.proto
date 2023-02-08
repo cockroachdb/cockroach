@@ -130,6 +130,13 @@ message ExternalStorage {
     string client_id = 6 [(gogoproto.customname) = "ClientID"];
     string client_secret = 7;
     string tenant_id = 8 [(gogoproto.customname) = "TenantID"];
+
+    enum Auth {
+      AUTH_LEGACY = 0;  // Storage account key
+      AUTH_EXPLICIT = 1;  // App Registration + RBAC
+      AUTH_IMPLICIT = 2;  // Environment Credentials or Managed Service
+    }
+    Auth auth = 9;
   }
   message FileTable {
     // User interacting with the external storage. This is used to check access

@@ -66,10 +66,14 @@ var maxConcurrentUploadBuffers = settings.RegisterIntSetting(
 // support this access method. For backwards compatibility, however, we retain
 // support for these keys on Storage.
 //
-// So to authenticate to Azure Storage, a CRDB user must provide EITHER
+// So to authenticate manually to Azure Storage, a CRDB user must provide
+// EITHER:
 // 1. AZURE_ACCOUNT_KEY (legacy storage-key access), OR
 // 2. All three of AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID (RBAC
 // access).
+// Alternatively, a user may
+// 3. Use implicit authentication with a managed identity derived from the
+// environment on an Azure cluster host.
 const (
 	// AzureAccountNameParam is the query parameter for account_name in an azure URI.
 	AzureAccountNameParam = "AZURE_ACCOUNT_NAME"
@@ -98,12 +102,35 @@ const (
 	deprecatedExternalConnectionScheme = "azure-storage"
 )
 
+func azureAuthMethod(
+	uri *url.URL, consumeURI *cloud.ConsumeURL,
+) (cloudpb.ExternalStorage_Azure_Auth, error) {
+	authParam := consumeURI.ConsumeParam(cloud.AuthParam)
+	switch authParam {
+	case "", cloud.AuthParamSpecified:
+		if uri.Query().Get(AzureAccountKeyParam) != "" {
+			return cloudpb.ExternalStorage_Azure_AUTH_LEGACY, nil
+		}
+		return cloudpb.ExternalStorage_Azure_AUTH_EXPLICIT, nil
+	case cloud.AuthParamImplicit:
+		return cloudpb.ExternalStorage_Azure_AUTH_IMPLICIT, nil
+	default:
+		return 0, errors.Errorf("unsupported value %s for %s",
+			authParam, cloud.AuthParam)
+	}
+
+}
+
 func parseAzureURL(
 	_ cloud.ExternalStorageURIContext, uri *url.URL,
 ) (cloudpb.ExternalStorage, error) {
 	azureURL := cloud.ConsumeURL{URL: uri}
 	conf := cloudpb.ExternalStorage{}
 	conf.Provider = cloudpb.ExternalStorageProvider_azure
+	auth, err := azureAuthMethod(uri, &azureURL)
+	if err != nil {
+		return conf, err
+	}
 	conf.AzureConfig = &cloudpb.ExternalStorage_Azure{
 		Container:    uri.Host,
 		Prefix:       uri.Path,
@@ -113,6 +140,7 @@ func parseAzureURL(
 		ClientID:     azureURL.ConsumeParam(AzureClientIDParam),
 		ClientSecret: azureURL.ConsumeParam(AzureClientSecretParam),
 		TenantID:     azureURL.ConsumeParam(AzureTenantIDParam),
+		Auth:         auth,
 	}
 
 	// Validate that all the passed in parameters are supported.
@@ -125,13 +153,41 @@ func parseAzureURL(
 		return conf, errors.Errorf("azure uri missing %q parameter", AzureAccountNameParam)
 	}
 
-	hasKeyCreds := conf.AzureConfig.AccountKey != ""
-
-	hasRoleCreds := conf.AzureConfig.TenantID != "" && conf.AzureConfig.ClientID != "" && conf.AzureConfig.ClientSecret != ""
-	noRoleCreds := conf.AzureConfig.TenantID == "" && conf.AzureConfig.ClientID == "" && conf.AzureConfig.ClientSecret == ""
-
-	if hasRoleCreds == hasKeyCreds || hasRoleCreds == noRoleCreds {
-		return conf, errors.Errorf("azure uri requires exactly one authentication method: %q OR all three of %q, %q, and %q", AzureAccountKeyParam, AzureTenantIDParam, AzureClientIDParam, AzureClientSecretParam)
+	// Validate the authentication parameters are set correctly.
+	switch conf.AzureConfig.Auth {
+	case cloudpb.ExternalStorage_Azure_AUTH_LEGACY:
+		hasKeyCred := conf.AzureConfig.AccountKey != ""
+		hasARoleCred := conf.AzureConfig.TenantID != "" || conf.AzureConfig.ClientID != "" || conf.AzureConfig.ClientSecret != ""
+		if !hasKeyCred || hasARoleCred {
+			// If the URI params are misconfigured we can't be certain Legacy Auth
+			// was intended, so print a broader error message.
+			return conf, errors.Errorf("explicit azure uri requires exactly one authentication method: %q OR all three of %q, %q, and %q", AzureAccountKeyParam, AzureTenantIDParam, AzureClientIDParam, AzureClientSecretParam)
+		}
+	case cloudpb.ExternalStorage_Azure_AUTH_EXPLICIT:
+		hasKeyCred := conf.AzureConfig.AccountKey != ""
+		hasAllRoleCreds := conf.AzureConfig.TenantID != "" && conf.AzureConfig.ClientID != "" && conf.AzureConfig.ClientSecret != ""
+		if hasKeyCred || !hasAllRoleCreds {
+			// If the URI params are misconfigured we can't be certain Explicit Auth
+			// was intended, so print a broader error message.
+			return conf, errors.Errorf("explicit azure uri requires exactly one authentication method: %q OR all three of %q, %q, and %q", AzureAccountKeyParam, AzureTenantIDParam, AzureClientIDParam, AzureClientSecretParam)
+		}
+	case cloudpb.ExternalStorage_Azure_AUTH_IMPLICIT:
+		unsupportedParams := make([]string, 0)
+		if conf.AzureConfig.AccountKey != "" {
+			unsupportedParams = append(unsupportedParams, AzureAccountKeyParam)
+		}
+		if conf.AzureConfig.TenantID != "" {
+			unsupportedParams = append(unsupportedParams, AzureTenantIDParam)
+		}
+		if conf.AzureConfig.ClientID != "" {
+			unsupportedParams = append(unsupportedParams, AzureClientIDParam)
+		}
+		if conf.AzureConfig.ClientSecret != "" {
+			unsupportedParams = append(unsupportedParams, AzureClientSecretParam)
+		}
+		if len(unsupportedParams) > 0 {
+			return conf, errors.Errorf("implicit azure auth does not support uri param %s", strings.Join(unsupportedParams, ", "))
+		}
 	}
 
 	if conf.AzureConfig.Environment == "" {
@@ -169,19 +225,9 @@ func makeAzureStorage(
 		return nil, errors.Wrap(err, "azure: account name is not valid")
 	}
 
-	//TODO(benbardin): Implicit auth.
 	var azClient *service.Client
-	if conf.ClientID != "" {
-		credential, err := azidentity.NewClientSecretCredential(conf.TenantID, conf.ClientID, conf.ClientSecret, nil)
-		if err != nil {
-			return nil, errors.Wrap(err, "azure client secret credential")
-		}
-
-		azClient, err = service.NewClient(u.String(), credential, nil)
-		if err != nil {
-			return nil, err
-		}
-	} else {
+	switch conf.Auth {
+	case cloudpb.ExternalStorage_Azure_AUTH_LEGACY:
 		credential, err := azblob.NewSharedKeyCredential(conf.AccountName, conf.AccountKey)
 		if err != nil {
 			return nil, errors.Wrap(err, "azure shared key credential")
@@ -190,6 +236,34 @@ func makeAzureStorage(
 		if err != nil {
 			return nil, err
 		}
+	case cloudpb.ExternalStorage_Azure_AUTH_EXPLICIT:
+		credential, err := azidentity.NewClientSecretCredential(conf.TenantID, conf.ClientID, conf.ClientSecret, nil)
+		if err != nil {
+			return nil, errors.Wrap(err, "azure client secret credential")
+		}
+		azClient, err = service.NewClient(u.String(), credential, nil)
+		if err != nil {
+			return nil, err
+		}
+	case cloudpb.ExternalStorage_Azure_AUTH_IMPLICIT:
+		if args.IOConf.DisableImplicitCredentials {
+			return nil, errors.New(
+				"implicit credentials disallowed for azure due to --external-io-implicit-credentials flag")
+		}
+		// The Default credential supports env vars and managed identity magic.
+		// We rely on the former for testing and the latter in prod.
+		// https://learn.microsoft.com/en-us/dotnet/api/azure.identity.defaultazurecredential
+		credential, err := azidentity.NewDefaultAzureCredential(nil)
+		if err != nil {
+			return nil, errors.Wrap(err, "azure default credential")
+		}
+		azClient, err = service.NewClient(u.String(), credential, nil)
+		if err != nil {
+			return nil, err
+		}
+
+	default:
+		return nil, errors.Errorf("unsupported value %s for %s", conf.Auth, cloud.AuthParam)
 	}
 
 	return &azureStorage{
