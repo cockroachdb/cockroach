@@ -28,8 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -53,7 +51,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -256,23 +253,11 @@ func changefeedPlanHook(
 		// Resume to shorten the window that data may be GC'd. The protected
 		// timestamps are updated to the highwater mark periodically during the
 		// execution of the changefeed by the changeFrontier. Protected timestamps
-		// are removed in OnFailOrCancel. See
-		// changeFrontier.manageProtectedTimestamps for more details on the handling
-		// of protected timestamps.
+		// are removed in OnFailOrCancel. See pts_management.go for more details on
+		// protected timestamps.
 		var sj *jobs.StartableJob
 		jobID := p.ExecCfg().JobRegistry.MakeJobID()
 		{
-			var ptr *ptpb.Record
-			codec := p.ExecCfg().Codec
-			ptr = createProtectedTimestampRecord(
-				ctx,
-				codec,
-				jobID,
-				AllTargets(details),
-				details.StatementTime,
-				progress.GetChangefeed(),
-			)
-
 			jr.Progress = *progress.GetChangefeed()
 
 			if changefeedStmt.CreatedByInfo != nil {
@@ -285,11 +270,8 @@ func changefeedPlanHook(
 					return err
 				}
 
-				if ptr != nil {
-					pts := p.ExecCfg().ProtectedTimestampProvider.WithTxn(p.InternalSQLTxn())
-					if err := pts.Protect(ctx, ptr); err != nil {
-						return err
-					}
+				if err := managePTSOnChangefeedStart(ctx, p.ExecCfg().Codec, details, jobID, progress.GetChangefeed(), p.ExecCfg().ProtectedTimestampProvider, p.InternalSQLTxn()); err != nil {
+					return err
 				}
 
 				select {
@@ -306,10 +288,7 @@ func changefeedPlanHook(
 				if err := p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jobID, txn, *jr); err != nil {
 					return err
 				}
-				if ptr != nil {
-					return p.ExecCfg().ProtectedTimestampProvider.WithTxn(txn).Protect(ctx, ptr)
-				}
-				return nil
+				return managePTSOnChangefeedStart(ctx, p.ExecCfg().Codec, details, jobID, progress.GetChangefeed(), p.ExecCfg().ProtectedTimestampProvider, txn)
 			}); err != nil {
 				if sj != nil {
 					if err := sj.CleanupOnRollback(ctx); err != nil {
@@ -1137,11 +1116,11 @@ func (b *changefeedResumer) OnFailOrCancel(
 	exec := jobExec.(sql.JobExecContext)
 	execCfg := exec.ExecCfg()
 	progress := b.job.Progress()
-	b.maybeCleanUpProtectedTimestamp(
+	managePTSOnFailOrCancel(
 		ctx,
 		execCfg.InternalDB,
 		execCfg.ProtectedTimestampProvider,
-		progress.GetChangefeed().ProtectedTimestampRecord,
+		progress,
 	)
 
 	// If this job has failed (not canceled), increment the counter.
@@ -1157,60 +1136,17 @@ func (b *changefeedResumer) OnFailOrCancel(
 	return nil
 }
 
-// Try to clean up a protected timestamp created by the changefeed.
-func (b *changefeedResumer) maybeCleanUpProtectedTimestamp(
-	ctx context.Context, db isql.DB, pts protectedts.Manager, ptsID uuid.UUID,
-) {
-	if ptsID == uuid.Nil {
-		return
-	}
-	if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		return pts.WithTxn(txn).Release(ctx, ptsID)
-	}); err != nil && !errors.Is(err, protectedts.ErrNotExists) {
-		// NB: The record should get cleaned up by the reconciliation loop.
-		// No good reason to cause more trouble by returning an error here.
-		// Log and move on.
-		log.Warningf(ctx, "failed to remove protected timestamp record %v: %v", ptsID, err)
-	}
-}
-
 var _ jobs.PauseRequester = (*changefeedResumer)(nil)
 
-// OnPauseRequest implements jobs.PauseRequester. If this changefeed is being
-// paused, we may want to clear the protected timestamp record.
+// OnPauseRequest implements jobs.PauseRequester.
 func (b *changefeedResumer) OnPauseRequest(
 	ctx context.Context, jobExec interface{}, txn isql.Txn, progress *jobspb.Progress,
 ) error {
-	details := b.job.Details().(jobspb.ChangefeedDetails)
-
-	cp := progress.GetChangefeed()
 	execCfg := jobExec.(sql.JobExecContext).ExecCfg()
-
-	if _, shouldProtect := details.Opts[changefeedbase.OptProtectDataFromGCOnPause]; !shouldProtect {
-		// Release existing pts record to avoid a single changefeed left on pause
-		// resulting in storage issues
-		if cp.ProtectedTimestampRecord != uuid.Nil {
-			pts := execCfg.ProtectedTimestampProvider.WithTxn(txn)
-			if err := pts.Release(ctx, cp.ProtectedTimestampRecord); err != nil {
-				log.Warningf(ctx, "failed to release protected timestamp %v: %v", cp.ProtectedTimestampRecord, err)
-			} else {
-				cp.ProtectedTimestampRecord = uuid.Nil
-			}
-		}
-		return nil
-	}
-
-	if cp.ProtectedTimestampRecord == uuid.Nil {
-		resolved := progress.GetHighWater()
-		if resolved == nil {
-			return nil
-		}
-		pts := execCfg.ProtectedTimestampProvider.WithTxn(txn)
-		ptr := createProtectedTimestampRecord(ctx, execCfg.Codec, b.job.ID(), AllTargets(details), *resolved, cp)
-		return pts.Protect(ctx, ptr)
-	}
-
-	return nil
+	return managePTSOnPause(ctx, progress,
+		b.job.Details().(jobspb.ChangefeedDetails),
+		execCfg.ProtectedTimestampProvider, execCfg.Codec, b.job.ID(), txn,
+	)
 }
 
 // getQualifiedTableName returns the database-qualified name of the table

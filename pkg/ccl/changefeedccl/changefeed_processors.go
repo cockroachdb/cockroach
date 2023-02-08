@@ -38,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
@@ -1245,9 +1244,23 @@ func (cf *changeFrontier) checkpointJobProgress(
 			changefeedProgress := progress.Details.(*jobspb.Progress_Changefeed).Changefeed
 			changefeedProgress.Checkpoint = &checkpoint
 
-			if err := cf.manageProtectedTimestamps(cf.Ctx(), txn, changefeedProgress); err != nil {
-				log.Warningf(cf.Ctx(), "error managing protected timestamp record: %v", err)
-				return err
+			// Manage protected timestamps.
+			{
+				highWater := cf.frontier.Frontier()
+				if highWater.Less(cf.highWaterAtStart) {
+					highWater = cf.highWaterAtStart
+				}
+				err, updated := managePTSOnCheckpoint(cf.Ctx(), txn, changefeedProgress,
+					cf.spec.Feed, cf.flowCtx.Cfg.ProtectedTimestampProvider, cf.spec.JobID,
+					cf.flowCtx.Codec(), highWater, cf.lastProtectedTimestampUpdate, cf.flowCtx.Cfg.Settings,
+				)
+				if err != nil {
+					log.Warningf(cf.Ctx(), "error managing protected timestamp record: %v", err)
+					return err
+				}
+				if updated {
+					cf.lastProtectedTimestampUpdate = timeutil.Now()
+				}
 			}
 
 			if updateRunStatus {
@@ -1286,42 +1299,6 @@ func (cf *changeFrontier) checkpointJobProgress(
 	}
 
 	return true, nil
-}
-
-// manageProtectedTimestamps periodically advances the protected timestamp for
-// the changefeed's targets to the current highwater mark.  The record is
-// cleared during changefeedResumer.OnFailOrCancel
-func (cf *changeFrontier) manageProtectedTimestamps(
-	ctx context.Context, txn isql.Txn, progress *jobspb.ChangefeedProgress,
-) error {
-	ptsUpdateInterval := changefeedbase.ProtectTimestampInterval.Get(&cf.flowCtx.Cfg.Settings.SV)
-	if timeutil.Since(cf.lastProtectedTimestampUpdate) < ptsUpdateInterval {
-		return nil
-	}
-	cf.lastProtectedTimestampUpdate = timeutil.Now()
-
-	pts := cf.flowCtx.Cfg.ProtectedTimestampProvider.WithTxn(txn)
-
-	// Create / advance the protected timestamp record to the highwater mark
-	highWater := cf.frontier.Frontier()
-	if highWater.Less(cf.highWaterAtStart) {
-		highWater = cf.highWaterAtStart
-	}
-
-	recordID := progress.ProtectedTimestampRecord
-	if recordID == uuid.Nil {
-		ptr := createProtectedTimestampRecord(ctx, cf.flowCtx.Codec(), cf.spec.JobID, AllTargets(cf.spec.Feed), highWater, progress)
-		if err := pts.Protect(ctx, ptr); err != nil {
-			return err
-		}
-	} else {
-		log.VEventf(ctx, 2, "updating protected timestamp %v at %v", recordID, highWater)
-		if err := pts.UpdateTimestamp(ctx, recordID, highWater); err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
 
 func (cf *changeFrontier) maybeEmitResolved(newResolved hlc.Timestamp) error {
