@@ -93,7 +93,7 @@ func startSampleEnvironment(
 	var nonGoAllocProfiler *heapprofiler.NonGoAllocProfiler
 	var statsProfiler *heapprofiler.StatsProfiler
 	var queryProfiler *heapprofiler.ActiveQueryProfiler
-	var cpuProfiler *heapprofiler.CPUProfiler
+	//var cpuProfiler *heapprofiler.CPUProfiler
 	if cfg.heapProfileDirName != "" {
 		hasValidDumpDir := true
 		if err := os.MkdirAll(cfg.heapProfileDirName, 0755); err != nil {
@@ -124,10 +124,10 @@ func startSampleEnvironment(
 			if err != nil {
 				log.Warningf(ctx, "failed to start query profiler worker: %v", err)
 			}
-			cpuProfiler, err = heapprofiler.NewCPUProfiler(ctx, cfg.cpuProfileDirName, cfg.st)
-			if err != nil {
-				log.Warningf(ctx, "failed to start cpu profiler worker: %v", err)
-			}
+			// cpuProfiler, err = heapprofiler.NewCPUProfiler(ctx, cfg.cpuProfileDirName, cfg.st)
+			// if err != nil {
+			// 	log.Warningf(ctx, "failed to start cpu profiler worker: %v", err)
+			// }
 		}
 	}
 
@@ -196,9 +196,9 @@ func startSampleEnvironment(
 					if queryProfiler != nil {
 						queryProfiler.MaybeDumpQueries(ctx, cfg.sessionRegistry, cfg.st)
 					}
-					if cpuProfiler != nil {
-						cpuProfiler.MaybeTakeProfile(ctx, int64(cfg.runtime.CPUCombinedPercentNorm.Value()*100))
-					}
+					// if cpuProfiler != nil {
+					// 	cpuProfiler.MaybeTakeProfile(ctx, int64(cfg.runtime.CPUCombinedPercentNorm.Value()*100))
+					// }
 				}
 			}
 		})
