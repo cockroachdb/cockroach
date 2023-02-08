@@ -169,6 +169,7 @@ go_test(
         "create_scheduled_backup_test.go",
         "datadriven_test.go",
         "full_cluster_backup_restore_test.go",
+        "generative_split_and_scatter_processor_test.go",
         "key_rewriter_test.go",
         "main_test.go",
         "partitioned_backup_test.go",
