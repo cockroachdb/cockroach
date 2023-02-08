@@ -2397,6 +2397,7 @@ system         public        web_sessions                     hashedSecret      
 system         public        web_sessions                     id                                                                                                        1
 system         public        web_sessions                     lastUsedAt                                                                                                7
 system         public        web_sessions                     revokedAt                                                                                                 6
+system         public        web_sessions                     user_id                                                                                                   9
 system         public        web_sessions                     username                                                                                                  3
 system         public        zones                            config                                                                                                    2
 system         public        zones                            id                                                                                                        1
