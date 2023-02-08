@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/gossiputil"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1028,4 +1029,85 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestStorePoolStoreHealthTracker(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	stopper, _, clock, sp, _ := CreateTestStorePool(ctx, st,
+		TestTimeUntilStoreDead, false, /* deterministic */
+		func() int { return 1 }, /* nodeCount */
+		livenesspb.NodeLivenessStatus_LIVE)
+	defer stopper.Stop(ctx)
+	desc := roachpb.StoreDescriptor{
+		StoreID: 1,
+		Node:    roachpb.NodeDescriptor{NodeID: 1},
+		Capacity: roachpb.StoreCapacity{
+			IOThreshold: admissionpb.IOThreshold{
+				L0NumSubLevels:          5,
+				L0NumSubLevelsThreshold: 20,
+				L0NumFiles:              5,
+				L0NumFilesThreshold:     1000,
+			},
+		},
+	}
+
+	checkIOOverloadScore := func() float64 {
+		detail, ok := sp.GetStoreDescriptor(1)
+		require.True(t, ok)
+		score, _ := detail.Capacity.IOThreshold.Score()
+		return score
+	}
+
+	// Intiailly sublevels is 5/20 = 0.25, expect that score.
+	sp.storeDescriptorUpdate(desc)
+	require.Equal(t, 0.25, checkIOOverloadScore())
+	// Now increase the numfiles to be greater (500/1000) so the score should
+	// update to 0.5.
+	desc.Capacity.IOThreshold.L0NumFiles = 500
+	sp.storeDescriptorUpdate(desc)
+	require.Equal(t, 0.5, checkIOOverloadScore())
+	// Despite the numfiles now decreasing again to 0, the max tracked should
+	// be still 500 and therefore the score unchanged.
+	desc.Capacity.IOThreshold.L0NumFiles = 0
+	sp.storeDescriptorUpdate(desc)
+	require.Equal(t, 0.5, checkIOOverloadScore())
+	// Update the threshold, which will be used with the max tracked score
+	// (500/500).
+	desc.Capacity.IOThreshold.L0NumFilesThreshold = 500
+	sp.storeDescriptorUpdate(desc)
+	require.Equal(t, 1.0, checkIOOverloadScore())
+	// Update the sublevels to be greater than the num files score.
+	desc.Capacity.IOThreshold.L0NumSubLevels = 40
+	sp.storeDescriptorUpdate(desc)
+	require.Equal(t, 2.0, checkIOOverloadScore())
+	// Decreasing the sublevels doesn't affect the max tracked since they are
+	// recorded at the same time.
+	desc.Capacity.IOThreshold.L0NumSubLevels = 20
+	sp.storeDescriptorUpdate(desc)
+	require.Equal(t, 2.0, checkIOOverloadScore())
+	// Advance past the retention period, so that previous values are
+	// rotated out.
+	clock.Advance(IOOverloadTrackedRetention)
+	desc.Capacity.IOThreshold.L0NumSubLevels = 10
+	desc.Capacity.IOThreshold.L0NumSubLevelsThreshold = 20
+	desc.Capacity.IOThreshold.L0NumFiles = 0
+	desc.Capacity.IOThreshold.L0NumFilesThreshold = 1000
+	sp.storeDescriptorUpdate(desc)
+	require.Equal(t, 0.5, checkIOOverloadScore())
+	// Rotate 1/2 the retention period and update sublevels with a lower value,
+	// this shouldn't be included in the score as it is lower than the maximum
+	// seen in the retention period.
+	clock.Advance(IOOverloadTrackedRetention / 2)
+	desc.Capacity.IOThreshold.L0NumSubLevels = 5
+	sp.storeDescriptorUpdate(desc)
+	require.Equal(t, 0.5, checkIOOverloadScore())
+	// Rotate 1/2 the retention period again, this time the sublevels added
+	// above should now be the maximum (5/20).
+	clock.Advance(IOOverloadTrackedRetention / 2)
+	desc.Capacity.IOThreshold.L0NumSubLevels = 0
+	sp.storeDescriptorUpdate(desc)
+	require.Equal(t, 0.25, checkIOOverloadScore())
 }

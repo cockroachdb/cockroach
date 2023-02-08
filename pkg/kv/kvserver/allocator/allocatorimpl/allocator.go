@@ -2036,16 +2036,16 @@ func (a *Allocator) leaseholderShouldMoveDueToPreferences(
 }
 
 // StoreHealthOptions returns the store health options, currently only
-// considering the threshold for L0 sub-levels. This threshold is not
+// considering the threshold for io overload. This threshold is not
 // considered in allocation or rebalancing decisions (excluding candidate
 // stores as targets) when enforcementLevel is set to storeHealthNoAction or
 // storeHealthLogOnly. By default storeHealthBlockRebalanceTo is the action taken. When
 // there is a mixed version cluster, storeHealthNoAction is set instead.
 func (a *Allocator) StoreHealthOptions(_ context.Context) StoreHealthOptions {
-	enforcementLevel := StoreHealthEnforcement(l0SublevelsThresholdEnforce.Get(&a.st.SV))
+	enforcementLevel := StoreHealthEnforcement(IOOverloadThresholdEnforce.Get(&a.st.SV))
 	return StoreHealthOptions{
-		EnforcementLevel:    enforcementLevel,
-		L0SublevelThreshold: l0SublevelsThreshold.Get(&a.st.SV),
+		EnforcementLevel: enforcementLevel,
+		IOThreshold:      IOOverloadThreshold.Get(&a.st.SV),
 	}
 }
 

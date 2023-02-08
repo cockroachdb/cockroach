@@ -508,11 +508,11 @@ func (sc StoreCapacity) String() string {
 func (sc StoreCapacity) SafeFormat(w redact.SafePrinter, _ rune) {
 	w.Printf("disk (capacity=%s, available=%s, used=%s, logicalBytes=%s), "+
 		"ranges=%d, leases=%d, queries=%.2f, writes=%.2f, "+
-		"l0Sublevels=%d, ioThreshold={%v} bytesPerReplica={%s}, writesPerReplica={%s}",
+		"ioThreshold={%v} bytesPerReplica={%s}, writesPerReplica={%s}",
 		humanizeutil.IBytes(sc.Capacity), humanizeutil.IBytes(sc.Available),
 		humanizeutil.IBytes(sc.Used), humanizeutil.IBytes(sc.LogicalBytes),
 		sc.RangeCount, sc.LeaseCount, sc.QueriesPerSecond, sc.WritesPerSecond,
-		sc.L0Sublevels, sc.IOThreshold, sc.BytesPerReplica, sc.WritesPerReplica)
+		sc.IOThreshold, sc.BytesPerReplica, sc.WritesPerReplica)
 }
 
 // FractionUsed computes the fraction of storage capacity that is in use.

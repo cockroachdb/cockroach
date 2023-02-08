@@ -18,7 +18,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
@@ -30,9 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
-	"github.com/cockroachdb/cockroach/pkg/util/slidingwindow"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/pebble"
 	"go.etcd.io/raft/v3/raftpb"
 )
@@ -1765,13 +1762,6 @@ type StoreMetrics struct {
 	AverageWriteBytesPerSecond *metric.GaugeFloat64
 	AverageReadBytesPerSecond  *metric.GaugeFloat64
 	AverageCPUNanosPerSecond   *metric.GaugeFloat64
-	// l0SublevelsWindowedMax doesn't get recorded to metrics itself, it maintains
-	// an ad-hoc history for gosipping information for allocator use.
-	l0SublevelsWindowedMax syncutil.AtomicFloat64
-	l0SublevelsTracker     struct {
-		syncutil.Mutex
-		swag *slidingwindow.Swag
-	}
 
 	// Follower read metrics.
 	FollowerReadsCount *metric.Counter
@@ -2593,19 +2583,6 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		ReplicaReadBatchWithoutInterleavingIter:  metric.NewCounter(metaReplicaReadBatchWithoutInterleavingIter),
 	}
 
-	{
-		// Track the maximum L0 sublevels seen in the last 10 minutes. backed
-		// by a sliding window, which we  record and query indirectly in
-		// L0SublevelsMax. this is not exported to as metric.
-		sm.l0SublevelsTracker.swag = slidingwindow.NewMaxSwag(
-			timeutil.Now(),
-			allocatorimpl.L0SublevelInterval,
-			// 5 sliding windows, by the default interval (2 mins) will track the
-			// maximum for up to 10 minutes. Selected experimentally.
-			5,
-		)
-	}
-
 	storeRegistry.AddMetricStruct(sm)
 	storeRegistry.AddMetricStruct(sm.LoadSplitterMetrics)
 	return sm
@@ -2684,14 +2661,6 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.DiskStalled.Update(m.DiskStallCount)
 	sm.SharedStorageBytesRead.Update(m.SharedStorageReadBytes)
 	sm.SharedStorageBytesWritten.Update(m.SharedStorageWriteBytes)
-
-	// Update the maximum number of L0 sub-levels seen.
-	sm.l0SublevelsTracker.Lock()
-	sm.l0SublevelsTracker.swag.Record(timeutil.Now(), float64(m.Levels[0].Sublevels))
-	curMax, _ := sm.l0SublevelsTracker.swag.Query(timeutil.Now())
-	sm.l0SublevelsTracker.Unlock()
-	syncutil.StoreFloat64(&sm.l0SublevelsWindowedMax, curMax)
-
 	sm.RdbL0Sublevels.Update(int64(m.Levels[0].Sublevels))
 	sm.RdbL0NumFiles.Update(m.Levels[0].NumFiles)
 	sm.RdbL0BytesFlushed.Update(int64(m.Levels[0].BytesFlushed))

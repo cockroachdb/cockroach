@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"math"
 	"sort"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
@@ -24,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -70,26 +70,16 @@ const (
 	// away from the mean.
 	minRangeRebalanceThreshold = 2
 
-	// MaxL0SublevelThreshold is the number of L0 sub-levels of a store
-	// descriptor, that when greater than this value and in excees of the
-	// average L0 sub-levels in the cluster - will have the action defined by
-	// l0SublevelsThresholdEnforce taken. This value does not affect the
-	// allocator in deciding to remove replicas from it's store, only
+	// DefaultIOOverloadThreshold is the IO overload score of a store
+	// descriptor, that when greater than this value and in excess of the
+	// average IO overload of comparable candidates - will have the action
+	// defined by StoreHealthEnforcement taken. This value does not affect
+	// the allocator in deciding to remove replicas from it's store, only
 	// potentially block adding or moving replicas to other stores.
-	MaxL0SublevelThreshold = 20
-
-	// L0SublevelInterval is the period over which to accumulate statistics on
-	// the number of L0 sublevels within a store.
-	L0SublevelInterval = time.Minute * 2
-
-	// L0SublevelMaxSampled is maximum number of L0 sub-levels that may exist
-	// in a sample. This setting limits the extreme skew that could occur by
-	// capping the highest possible value considered.
-	L0SublevelMaxSampled = 500
-
-	// l0SubLevelWaterMark is the percentage above the mean after which a store
+	DefaultIOOverloadThreshold = 0.8
+	// IOOverloadWaterMark is the percentage above the mean after which a store
 	// could be conisdered unhealthy if also exceeding the threshold.
-	l0SubLevelWaterMark = 1.10
+	IOOverloadWaterMark = 1.1
 )
 
 // StoreHealthEnforcement represents the level of action that may be taken or
@@ -98,18 +88,18 @@ type StoreHealthEnforcement int64
 
 const (
 	// StoreHealthNoAction will take no action upon candidate stores when they
-	// exceed l0SublevelThreshold.
+	// exceed the IOOverloadThreshold.
 	StoreHealthNoAction StoreHealthEnforcement = iota
 	// StoreHealthLogOnly will take no action upon candidate stores when they
-	// exceed l0SublevelThreshold except log an event.
+	// exceed IOOverloadThreshold except log an event.
 	StoreHealthLogOnly
 	// StoreHealthBlockRebalanceTo will take action to exclude candidate stores
-	// when they exceed l0SublevelThreshold and mean from being considered
+	// when they exceed IOOverloadThreshold and mean from being considered
 	// targets for rebalance actions only. Allocation actions such as adding
 	// upreplicaing an range will not be affected.
 	StoreHealthBlockRebalanceTo
 	// StoreHealthBlockAll will take action to exclude candidate stores when
-	// they exceed l0SublevelThreshold and mean from being candidates for all
+	// they exceed IOOverloadThreshold and mean from being candidates for all
 	// replica allocation and rebalancing. When enabled and stores exceed the
 	// threshold, they will not receive any new replicas.
 	StoreHealthBlockAll
@@ -130,29 +120,16 @@ var RangeRebalanceThreshold = func() *settings.FloatSetting {
 	return s
 }()
 
-// l0SublevelsThreshold is the maximum number of sub-levels within level 0 that
-// may exist on candidate store descriptors before they are considered
-// unhealthy. Once considered unhealthy, the action taken will be dictated by
-// l0SublevelsThresholdEnforce cluster setting defined below. The rationale for
-// using L0 sub-levels as opposed to read amplification is that it is more
-// generally the variable component that makes up read amplification. When
-// L0 sub-levels is high, it is an indicator of poor LSM health as L0 is usually
-// in memory and must be first visited before traversing any further level. See
-// this issue for additional information:
-// https://github.com/cockroachdb/pebble/issues/609
-var l0SublevelsThreshold = settings.RegisterIntSetting(
+var IOOverloadThreshold = settings.RegisterFloatSetting(
 	settings.SystemOnly,
-	"kv.allocator.l0_sublevels_threshold",
-	"the maximum number of l0 sublevels within a store that may exist "+
-		"before the action defined in "+
-		"`kv.allocator.l0_sublevels_threshold_enforce` will be taken "+
-		"if also exceeding the cluster average",
-	MaxL0SublevelThreshold,
+	"kv.allocator.io_overload_threshold",
+	"-",
+	DefaultIOOverloadThreshold,
 )
 
-// l0SublevelsThresholdEnforce is the level of enforcement taken upon candidate
-// stores when their L0-sublevels exceeds the threshold defined in
-// l0SublevelThreshold. Under disabled and log enforcement, no action is taken
+// IOOverloadThresholdEnforce is the level of enforcement taken upon candidate
+// stores when their io overload exceeds the threshold defined in
+// IOOverloadThresold. Under disabled and log enforcement, no action is taken
 // to exclude the candidate store either as a potential allocation nor
 // rebalance target by the replicate queue and store rebalancer. When the
 // enforcement level is rebalance, candidate stores will be excluded as targets
@@ -160,11 +137,11 @@ var l0SublevelsThreshold = settings.RegisterIntSetting(
 // for allocation of voters and non-voters.  When allocate is set, candidates
 // are excluded as targets for all rebalancing and also allocation of voters
 // and non-voters.
-var l0SublevelsThresholdEnforce = settings.RegisterEnumSetting(
+var IOOverloadThresholdEnforce = settings.RegisterEnumSetting(
 	settings.SystemOnly,
-	"kv.allocator.l0_sublevels_threshold_enforce",
-	"the level of enforcement when a candidate disk has L0 sub-levels "+
-		"exceeding `kv.allocator.l0_sublevels_threshold` and above the "+
+	"kv.allocator.io_overload_threshold_enforce",
+	"the level of enforcement when a candidate store has an io overload score  "+
+		"exceeding `kv.allocator.io_overload_threshold` and above the "+
 		"cluster average:`block_none` will exclude "+
 		"no candidate stores, `block_none_log` will exclude no candidates but log an "+
 		"event, `block_rebalance_to` will exclude candidates stores from being "+
@@ -571,24 +548,24 @@ func (o *LoadScorerOptions) removalMaximallyConvergesScore(
 
 // candidate store for allocation. These are ordered by importance.
 type candidate struct {
-	store          roachpb.StoreDescriptor
-	valid          bool
-	fullDisk       bool
-	necessary      bool
-	diversityScore float64
-	highReadAmp    bool
-	l0SubLevels    int
-	convergesScore int
-	balanceScore   balanceStatus
-	hasNonVoter    bool
-	rangeCount     int
-	details        string
+	store           roachpb.StoreDescriptor
+	valid           bool
+	fullDisk        bool
+	necessary       bool
+	diversityScore  float64
+	ioOverloaded    bool
+	ioOverloadScore float64
+	convergesScore  int
+	balanceScore    balanceStatus
+	hasNonVoter     bool
+	rangeCount      int
+	details         string
 }
 
 func (c candidate) String() string {
-	str := fmt.Sprintf("s%d, valid:%t, fulldisk:%t, necessary:%t, diversity:%.2f, highReadAmp: %t, l0SubLevels: %d, converges:%d, "+
+	str := fmt.Sprintf("s%d, valid:%t, fulldisk:%t, necessary:%t, diversity:%.2f, ioOverloaded: %t, ioOverload: %.2f, converges:%d, "+
 		"balance:%d, hasNonVoter:%t, rangeCount:%d, queriesPerSecond:%.2f",
-		c.store.StoreID, c.valid, c.fullDisk, c.necessary, c.diversityScore, c.highReadAmp, c.l0SubLevels, c.convergesScore,
+		c.store.StoreID, c.valid, c.fullDisk, c.necessary, c.diversityScore, c.ioOverloaded, c.ioOverloadScore, c.convergesScore,
 		c.balanceScore, c.hasNonVoter, c.rangeCount, c.store.Capacity.QueriesPerSecond)
 	if c.details != "" {
 		return fmt.Sprintf("%s, details:(%s)", str, c.details)
@@ -611,11 +588,11 @@ func (c candidate) compactString() string {
 	if c.diversityScore != 0 {
 		fmt.Fprintf(&buf, ", diversity:%.2f", c.diversityScore)
 	}
-	if c.highReadAmp {
-		fmt.Fprintf(&buf, ", highReadAmp:%t", c.highReadAmp)
+	if c.ioOverloaded {
+		fmt.Fprintf(&buf, ", ioOverloaded:%t", c.ioOverloaded)
 	}
-	if c.l0SubLevels > 0 {
-		fmt.Fprintf(&buf, ", l0SubLevels:%d", c.l0SubLevels)
+	if c.ioOverloadScore > 0 {
+		fmt.Fprintf(&buf, ", ioOverload:%.2fd", c.ioOverloadScore)
 	}
 	fmt.Fprintf(&buf, ", converges:%d, balance:%d, rangeCount:%d",
 		c.convergesScore, c.balanceScore, c.rangeCount)
@@ -660,17 +637,17 @@ func (c candidate) compare(o candidate) float64 {
 		}
 		return -300
 	}
-	// If both o and c have high read amplification, then we prefer the
-	// canidate with lower read amp.
-	if o.highReadAmp && c.highReadAmp {
-		if o.l0SubLevels > c.l0SubLevels {
+	// If both o and c are IO overloaded, then we prefer the
+	// canidate with IO overload score.
+	if o.ioOverloaded && c.ioOverloaded {
+		if o.ioOverloadScore > c.ioOverloadScore {
 			return 250
 		}
 	}
-	if c.highReadAmp {
+	if c.ioOverloaded {
 		return -250
 	}
-	if o.highReadAmp {
+	if o.ioOverloaded {
 		return 250
 	}
 
@@ -743,7 +720,7 @@ func (c byScoreAndID) Less(i, j int) bool {
 		c[i].rangeCount == c[j].rangeCount &&
 		c[i].necessary == c[j].necessary &&
 		c[i].fullDisk == c[j].fullDisk &&
-		c[i].highReadAmp == c[j].highReadAmp &&
+		c[i].ioOverloaded == c[j].ioOverloaded &&
 		c[i].valid == c[j].valid {
 		return c[i].store.StoreID < c[j].store.StoreID
 	}
@@ -752,11 +729,11 @@ func (c byScoreAndID) Less(i, j int) bool {
 func (c byScoreAndID) Swap(i, j int) { c[i], c[j] = c[j], c[i] }
 
 // onlyValidAndHealthyDisk returns all the elements in a sorted (by score
-// reversed) candidate list that are valid and not nearly full or with high
-// read amplification.
+// reversed) candidate list that are valid and not nearly full or being IO
+// overloaded.
 func (cl candidateList) onlyValidAndHealthyDisk() candidateList {
 	for i := len(cl) - 1; i >= 0; i-- {
-		if cl[i].valid && !cl[i].fullDisk && !cl[i].highReadAmp {
+		if cl[i].valid && !cl[i].fullDisk && !cl[i].ioOverloaded {
 			return cl[:i+1]
 		}
 	}
@@ -826,10 +803,10 @@ func (cl candidateList) worst() candidateList {
 			}
 		}
 	}
-	// Are there candidates with high read amplification? If so, pick those.
-	if cl[len(cl)-1].highReadAmp {
+	// Are there candidates with high io overload? If so, pick those.
+	if cl[len(cl)-1].ioOverloaded {
 		for i := len(cl) - 2; i >= 0; i-- {
-			if !cl[i].highReadAmp {
+			if !cl[i].ioOverloaded {
 				return cl[i+1:]
 			}
 		}
@@ -978,10 +955,10 @@ func rankedCandidateListForAllocation(
 			continue
 		}
 
-		if !allocator.MaxCapacityCheck(s) || !options.getStoreHealthOptions().readAmpIsHealthy(
+		if !allocator.MaxCapacityCheck(s) || !options.getStoreHealthOptions().storeIsHealthy(
 			ctx,
 			s,
-			candidateStores.CandidateL0Sublevels.Mean,
+			candidateStores.CandidateIOOverload.Mean,
 		) {
 			continue
 		}
@@ -1049,10 +1026,10 @@ func candidateListForRemoval(
 			necessary: necessary,
 			fullDisk:  !allocator.MaxCapacityCheck(s),
 			// When removing a replica from a store, we do not want to include
-			// high amplification in ranking stores. This would submit already
-			// high read amplification stores to additional load of moving a
+			// io overloaded in ranking stores. This would submit already
+			// overloaded amplification stores to additional load of moving a
 			// replica.
-			highReadAmp:    false,
+			ioOverloaded:   false,
 			diversityScore: diversityScore,
 		})
 	}
@@ -1366,10 +1343,10 @@ func rankedCandidateListForRebalancing(
 				necessary: necessary,
 				fullDisk:  fullDisk,
 				// When rebalancing a replica away from a store, we do not want
-				// to include high amplification in ranking stores. This would
-				// submit already high read amplification stores to additional
-				// load of moving a replica.
-				highReadAmp:    false,
+				// to include io overload in ranking stores. This would
+				// submit already overloaded stores to additional load of
+				// moving a replica.
+				ioOverloaded:   false,
 				diversityScore: curDiversityScore,
 			}
 		}
@@ -1561,14 +1538,15 @@ func rankedCandidateListForRebalancing(
 			// above, but recompute fullDisk using special rebalanceTo logic for
 			// rebalance candidates.
 			s := cand.store
+			candIOOverloadScore, _ := s.Capacity.IOThreshold.Score()
 			cand.fullDisk = !rebalanceToMaxCapacityCheck(s)
-			cand.l0SubLevels = int(s.Capacity.L0Sublevels)
-			cand.highReadAmp = !options.getStoreHealthOptions().rebalanceToReadAmpIsHealthy(
+			cand.ioOverloadScore = candIOOverloadScore
+			cand.ioOverloaded = !options.getStoreHealthOptions().rebalanceToStoreIsHealthy(
 				ctx,
 				s,
-				// We only wish to compare the read amplification to the
+				// We only wish to compare the io overload to the
 				// comparable stores average and not the cluster.
-				comparable.candidateSL.CandidateL0Sublevels.Mean,
+				comparable.candidateSL.CandidateIOOverload.Mean,
 			)
 			cand.balanceScore = options.balanceScore(comparable.candidateSL, s.Capacity)
 			cand.convergesScore = options.rebalanceToConvergesScore(comparable, s)
@@ -2093,62 +2071,68 @@ func convergesOnMean(oldVal, newVal, mean float64) bool {
 // StoreHealthOptions is the scorer options for store health. It is
 // used to inform scoring based on the health of a store.
 type StoreHealthOptions struct {
-	EnforcementLevel    StoreHealthEnforcement
-	L0SublevelThreshold int64
+	EnforcementLevel StoreHealthEnforcement
+	IOThreshold      float64
 }
 
-// readAmpIsHealthy returns true if the store read amplification does not exceed
+// storeIsHealthy returns true if the store io overload does not exceed
 // the cluster threshold and mean, or the enforcement level does not include
 // excluding candidates from being allocation targets.
-func (o StoreHealthOptions) readAmpIsHealthy(
+func (o StoreHealthOptions) storeIsHealthy(
 	ctx context.Context, store roachpb.StoreDescriptor, avg float64,
 ) bool {
+	ioOverloadScore, _ := store.Capacity.IOThreshold.Score()
 	if o.EnforcementLevel == StoreHealthNoAction ||
-		store.Capacity.L0Sublevels < o.L0SublevelThreshold {
+		ioOverloadScore < o.IOThreshold {
 		return true
 	}
 
-	// Still log an event when the L0 sub-levels exceeds the threshold, however
+	// Still log an event when the IO overload score exceeds the threshold, however
 	// does not exceed the cluster average. This is enabled to avoid confusion
 	// where candidate stores are still targets, despite exeeding the
 	// threshold.
-	if float64(store.Capacity.L0Sublevels) < avg*l0SubLevelWaterMark {
-		log.KvDistribution.VEventf(ctx, 5, "s%d, allocate check l0 sublevels %d exceeds threshold %d, but below average: %f, action enabled %d",
-			store.StoreID, store.Capacity.L0Sublevels,
-			o.L0SublevelThreshold, avg, o.EnforcementLevel)
+	if ioOverloadScore < avg*IOOverloadWaterMark {
+		log.KvDistribution.VEventf(ctx, 5, "s%d, allocate check io overload %.2f exceeds threshold %.2f, but below average: %.2f, action enabled %d",
+			store.StoreID, ioOverloadScore,
+			o.IOThreshold, avg, o.EnforcementLevel)
 		return true
 	}
 
-	log.KvDistribution.VEventf(ctx, 5, "s%d, allocate check l0 sublevels %d exceeds threshold %d, above average: %f, action enabled %d",
-		store.StoreID, store.Capacity.L0Sublevels,
-		o.L0SublevelThreshold, avg, o.EnforcementLevel)
+	log.KvDistribution.VEventf(ctx, 5, "s%d, allocate check io overload %.2f exceeds threshold %.2f, above average: %.2f, action enabled %d",
+		store.StoreID, ioOverloadScore,
+		o.IOThreshold, avg, o.EnforcementLevel)
 
 	// The store is only considered unhealthy when the enforcement level is
 	// storeHealthBlockAll.
 	return o.EnforcementLevel < StoreHealthBlockAll
 }
 
-// rebalanceToReadAmpIsHealthy returns true if the store read amplification does
-// not exceed the cluster threshold and mean, or the enforcement level does not
+// rebalanceToStoreIsHealthy returns true if the store io overload does not
+// exceed the cluster threshold and mean, or the enforcement level does not
 // include excluding candidates from being rebalancing targets.
-func (o StoreHealthOptions) rebalanceToReadAmpIsHealthy(
+func (o StoreHealthOptions) rebalanceToStoreIsHealthy(
 	ctx context.Context, store roachpb.StoreDescriptor, avg float64,
 ) bool {
+	ioOverloadScore, _ := store.Capacity.IOThreshold.Score()
 	if o.EnforcementLevel == StoreHealthNoAction ||
-		store.Capacity.L0Sublevels < o.L0SublevelThreshold {
+		ioOverloadScore < o.IOThreshold {
 		return true
 	}
 
-	if float64(store.Capacity.L0Sublevels) < avg*l0SubLevelWaterMark {
-		log.KvDistribution.VEventf(ctx, 5, "s%d, allocate check l0 sublevels %d exceeds threshold %d, but below average watermark: %f, action enabled %d",
-			store.StoreID, store.Capacity.L0Sublevels,
-			o.L0SublevelThreshold, avg*l0SubLevelWaterMark, o.EnforcementLevel)
+	if ioOverloadScore < avg*IOOverloadWaterMark {
+		log.KvDistribution.VEventf(ctx, 5,
+			"s%d, allocate check io overload %.2f exceeds threshold %.2f, but "+
+				"below average watermark: %.2f, action enabled %d",
+			store.StoreID, ioOverloadScore, o.IOThreshold,
+			avg*IOOverloadWaterMark, o.EnforcementLevel)
 		return true
 	}
 
-	log.KvDistribution.VEventf(ctx, 5, "s%d, allocate check l0 sublevels %d exceeds threshold %d, above average watermark: %f, action enabled %d",
-		store.StoreID, store.Capacity.L0Sublevels,
-		o.L0SublevelThreshold, avg*l0SubLevelWaterMark, o.EnforcementLevel)
+	log.KvDistribution.VEventf(ctx, 5,
+		"s%d, allocate check io overload %.2f exceeds threshold %.2f, above average "+
+			"watermark: %.2f, action enabled %d",
+		store.StoreID, ioOverloadScore, o.IOThreshold,
+		avg*IOOverloadWaterMark, o.EnforcementLevel)
 
 	// The store is only considered unhealthy when the enforcement level is
 	// storeHealthBlockRebalanceTo or storeHealthBlockAll.
@@ -2164,4 +2148,15 @@ func rebalanceToMaxCapacityCheck(store roachpb.StoreDescriptor) bool {
 
 func scoresAlmostEqual(score1, score2 float64) bool {
 	return math.Abs(score1-score2) < epsilon
+}
+
+// TestingIOThresholdWithScore returns an IOThreshold where the score will be
+// equal to the value provided. This is suitable for testing only.
+func TestingIOThresholdWithScore(score float64) admissionpb.IOThreshold {
+	return admissionpb.IOThreshold{
+		L0NumSubLevels:          int64(20 * score),
+		L0NumSubLevelsThreshold: 20,
+		L0NumFiles:              int64(1000 * score),
+		L0NumFilesThreshold:     1000,
+	}
 }

@@ -52,7 +52,7 @@ func TestOnlyValidAndHealthyDisk(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testCases := []struct {
-		valid, invalid, full, readAmpHigh int
+		valid, invalid, full, ioOverloaded int
 	}{
 		{0, 0, 0, 0},
 		{1, 0, 0, 0},
@@ -80,8 +80,8 @@ func TestOnlyValidAndHealthyDisk(t *testing.T) {
 			for i := 0; i < tc.full; i++ {
 				cl = append(cl, candidate{fullDisk: true})
 			}
-			for i := 0; i < tc.readAmpHigh; i++ {
-				cl = append(cl, candidate{highReadAmp: true})
+			for i := 0; i < tc.ioOverloaded; i++ {
+				cl = append(cl, candidate{ioOverloaded: true})
 			}
 			sort.Sort(sort.Reverse(byScore(cl)))
 
@@ -89,7 +89,7 @@ func TestOnlyValidAndHealthyDisk(t *testing.T) {
 			if a, e := len(valid), tc.valid; a != e {
 				t.Errorf("expected %d valid, actual %d", e, a)
 			}
-			if a, e := len(cl)-len(valid), tc.invalid+tc.full+tc.readAmpHigh; a != e {
+			if a, e := len(cl)-len(valid), tc.invalid+tc.full+tc.ioOverloaded; a != e {
 				t.Errorf("expected %d invalid, actual %d", e, a)
 			}
 		})
