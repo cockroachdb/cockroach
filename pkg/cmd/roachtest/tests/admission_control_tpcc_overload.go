@@ -79,6 +79,28 @@ func (s tpccOLAPSpec) run(ctx context.Context, t test.Test, c cluster.Cluster) {
 		return nil
 	})
 	m.Wait()
+
+	// Before checking liveness, set the gRPC logging[^1] to verbose. We stopped the
+	// load so this should be OK in terms of overhead, and it can explain to us why
+	// we see gRPC connections buckle in this workload. See:
+	//
+	// https://github.com/cockroachdb/cockroach/issues/96543
+	//
+	// [^1]: google.golang.org/grpc/grpclog/component.go
+	for i := 1; i <= c.Spec().NodeCount-1; i++ {
+		_, err := c.Conn(ctx, t.L(), i).ExecContext(ctx, `SELECT crdb_internal.set_vmodule('component=2');`)
+		if err != nil {
+			t.L().PrintfCtx(ctx, "ignoring vmodule error: %s", err)
+		}
+	}
+	defer func() {
+		for i := 1; i <= c.Spec().NodeCount-1; i++ {
+			_, err := c.Conn(ctx, t.L(), i).ExecContext(ctx, `SELECT crdb_internal.set_vmodule('');`)
+			if err != nil {
+				t.L().PrintfCtx(ctx, "ignoring vmodule-reset error: %s", err)
+			}
+		}
+	}()
 	verifyNodeLiveness(ctx, c, t, duration)
 }
 
