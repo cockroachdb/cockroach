@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/flagstub"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
@@ -49,6 +50,10 @@ func DefaultProject() string {
 
 // projects for which a cron GC job exists.
 var projectsWithGC = []string{defaultProject, "andrei-jepsen"}
+
+// The `gcloud compute config-ssh` command is not thread-safe, so we need to
+// serialize access to it.
+var configSSHMu syncutil.Mutex
 
 // Init registers the GCE provider into vm.Providers.
 //
@@ -630,6 +635,8 @@ func (o *ProviderOpts) ConfigureClusterFlags(flags *pflag.FlagSet, opt vm.Multip
 
 // CleanSSH TODO(peter): document
 func (p *Provider) CleanSSH() error {
+	configSSHMu.Lock()
+	defer configSSHMu.Unlock()
 	for _, prj := range p.GetProjects() {
 		args := []string{"compute", "config-ssh", "--project", prj, "--quiet", "--remove"}
 		cmd := exec.Command("gcloud", args...)
@@ -644,6 +651,8 @@ func (p *Provider) CleanSSH() error {
 
 // ConfigSSH is part of the vm.Provider interface
 func (p *Provider) ConfigSSH(zones []string) error {
+	configSSHMu.Lock()
+	defer configSSHMu.Unlock()
 	// Populate SSH config files with Host entries from each instance in active projects.
 	for _, prj := range p.GetProjects() {
 		args := []string{"compute", "config-ssh", "--project", prj, "--quiet"}
