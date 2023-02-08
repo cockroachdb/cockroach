@@ -300,6 +300,7 @@ func (f *fullReconciler) reconcile(
 	}
 
 	if !f.codec.ForSystemTenant() {
+		found := false
 		tenantPrefixKey := f.codec.TenantPrefix()
 		// We want to ensure tenant ranges do not straddle tenant boundaries. As
 		// such, a full reconciliation should always include a SpanConfig where the
@@ -309,16 +310,23 @@ func (f *fullReconciler) reconcile(
 		// tenant. Also, sql.CreateTenantRecord relies on such a SpanConfigs
 		// existence to ensure the same thing for newly created tenants.
 		if err := storeWithLatestSpanConfigs.Iterate(func(record spanconfig.Record) error {
-			spanConfigStartKey := record.GetTarget().GetSpan().Key
-			if tenantPrefixKey.Compare(spanConfigStartKey) != 0 {
-				return errors.AssertionFailedf(
-					"tenant prefix key %q does not match first span config start key %q",
-					tenantPrefixKey, spanConfigStartKey,
-				)
+			if record.GetTarget().IsSystemTarget() {
+				return nil // skip over system span configurations,
 			}
-			return iterutil.StopIteration()
+			spanConfigStartKey := record.GetTarget().GetSpan().Key
+			if tenantPrefixKey.Compare(spanConfigStartKey) == 0 {
+				found = true
+				return iterutil.StopIteration()
+			}
+			return nil
 		}); err != nil {
 			return nil, hlc.Timestamp{}, err
+		}
+
+		if !found {
+			return nil, hlc.Timestamp{}, errors.AssertionFailedf(
+				"did not find split point at the start of the tenant's keyspace during full reconciliation",
+			)
 		}
 	}
 
