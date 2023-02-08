@@ -285,9 +285,6 @@ const (
 	// schema changes to complete. After this point, no non-MVCC
 	// AddSSTable calls will be used outside of tenant streaming.
 	TODODelete_V22_2NoNonMVCCAddSSTable
-	// TODODelete_V22_2GCHintInReplicaState adds GC hint to replica state. When this version is
-	// enabled, replicas will populate GC hint and update them when necessary.
-	TODODelete_V22_2GCHintInReplicaState
 	// TODODelete_V22_2UpdateInvalidColumnIDsInSequenceBackReferences looks for invalid column
 	// ids in sequences' back references and attempts a best-effort-based matching
 	// to update those column IDs.
@@ -595,10 +592,6 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     TODODelete_V22_2NoNonMVCCAddSSTable,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 62},
-	},
-	{
-		Key:     TODODelete_V22_2GCHintInReplicaState,
-		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 64},
 	},
 	{
 		Key:     TODODelete_V22_2UpdateInvalidColumnIDsInSequenceBackReferences,
