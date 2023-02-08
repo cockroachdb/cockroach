@@ -319,7 +319,7 @@ func (c *Connection) Connect(ctx context.Context) (*grpc.ClientConn, error) {
 	case <-c.stopper.ShouldQuiesce():
 		return nil, errors.Errorf("stopped")
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return nil, errors.Wrap(ctx.Err(), "connect")
 	}
 
 	// If connection is invalid, return latest heartbeat error.

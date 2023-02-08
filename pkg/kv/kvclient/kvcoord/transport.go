@@ -225,7 +225,10 @@ func (gt *grpcTransport) sendBatch(
 			span.ImportRemoteSpans(reply.CollectedSpans)
 		}
 	}
-	return reply, err
+	if err != nil {
+		return nil, errors.Wrapf(err, "ba: %s RPC error", ba.String())
+	}
+	return reply, nil
 }
 
 // NextInternalClient returns the next InternalClient to use for performing
