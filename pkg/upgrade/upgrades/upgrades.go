@@ -274,6 +274,18 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		backfillSystemPrivilegesUserIDColumn,
 	),
+	upgrade.NewTenantUpgrade(
+		"add user_id column to system.web_sessions table",
+		toCV(clusterversion.V23_1WebSessionsTableHasUserIDColumn),
+		upgrade.NoPrecondition,
+		alterWebSessionsTableAddUserIDColumn,
+	),
+	upgrade.NewTenantUpgrade(
+		"backfill user_id column in system.web_sessions table",
+		toCV(clusterversion.V23_1WebSessionsTableUserIDColumnBackfilled),
+		upgrade.NoPrecondition,
+		backfillWebSessionsTableUserIDColumn,
+	),
 }
 
 func init() {

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/redact"
+	"github.com/lib/pq/oid"
 )
 
 // saveWebSessions persists any currently active web session to disk,
@@ -114,6 +115,7 @@ type webSessionRow struct {
 	HashedSecret []byte
 	Username     string
 	ExpiresAt    string
+	UserID       oid.Oid
 }
 
 // saveWebSessionsInternal saves the sessions for just one tenant to
@@ -123,7 +125,7 @@ func (c *transientCluster) saveWebSessionsInternal(
 ) error {
 	c.infoLog(ctx, "saving sessions")
 	rows, err := db.QueryContext(ctx, `
-SELECT id, "hashedSecret", username, "expiresAt"
+SELECT id, "hashedSecret", username, "expiresAt", user_id
 FROM system.web_sessions
 WHERE "expiresAt" > now()
 AND "revokedAt" IS NULL`)
@@ -151,7 +153,7 @@ AND "revokedAt" IS NULL`)
 	numSessions := 0
 	for rows.Next() {
 		var row webSessionRow
-		if err := rows.Scan(&row.ID, &row.HashedSecret, &row.Username, &row.ExpiresAt); err != nil {
+		if err := rows.Scan(&row.ID, &row.HashedSecret, &row.Username, &row.ExpiresAt, &row.UserID); err != nil {
 			return err
 		}
 		j, err := json.Marshal(row)
@@ -209,12 +211,13 @@ func (c *transientCluster) restoreWebSessionsInternal(
 		}
 
 		if _, err := db.ExecContext(ctx, `
-INSERT INTO system.web_sessions(id, "hashedSecret", username, "expiresAt")
-VALUES ($1, $2, $3, $4)`,
+INSERT INTO system.web_sessions(id, "hashedSecret", username, "expiresAt", user_id)
+VALUES ($1, $2, $3, $4, $5)`,
 			row.ID,
 			row.HashedSecret,
 			row.Username,
 			row.ExpiresAt,
+			row.UserID,
 		); err != nil {
 			return err
 		}

@@ -55,6 +55,7 @@ go_library(
         "@com_github_cockroachdb_errors//oserror",
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_redact//:redact",
+        "@com_github_lib_pq//oid",
         "@com_github_nightlyone_lockfile//:lockfile",
         "@org_golang_x_time//rate",
     ],
