@@ -347,7 +347,7 @@ func (c *Connection) Connect(ctx context.Context) (*grpc.ClientConn, error) {
 	case <-c.stopper.ShouldQuiesce():
 		return nil, errors.Errorf("stopped")
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return nil, errors.Wrap(ctx.Err(), "connect")
 	}
 
 	// If connection is invalid, return latest heartbeat error.
@@ -1202,7 +1202,7 @@ func (s *pipe) send(ctx context.Context, m interface{}) error {
 	case s.respC <- m:
 		return nil
 	case <-ctx.Done():
-		return ctx.Err()
+		return errors.Wrap(ctx.Err(), "send")
 	}
 }
 
@@ -1226,7 +1226,7 @@ func (s *pipe) recv(ctx context.Context) (interface{}, error) {
 			return nil, err
 		}
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return nil, errors.Wrap(ctx.Err(), "recv")
 	}
 }
 
