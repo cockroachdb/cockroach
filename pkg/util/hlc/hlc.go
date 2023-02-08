@@ -185,9 +185,9 @@ func (m *HybridManualClock) Resume() {
 }
 
 // NewClockWithSystemTimeSource creates a Clock that reads the system time. This
-// is equivalent to NewClock(timeutil.SystemTimeSource, maxOffset).
-func NewClockWithSystemTimeSource(maxOffset time.Duration) *Clock {
-	return NewClock(timeutil.DefaultTimeSource{}, maxOffset)
+// is equivalent to NewClock(timeutil.SystemTimeSource, maxOffset, toleratedOffset).
+func NewClockWithSystemTimeSource(maxOffset, toleratedOffset time.Duration) *Clock {
+	return NewClock(timeutil.DefaultTimeSource{}, maxOffset, toleratedOffset)
 }
 
 // NewClockForTesting creates a new Clock for tests that don't care about clock
@@ -196,19 +196,23 @@ func NewClockForTesting(wallClock WallClock) *Clock {
 	if wallClock == nil {
 		wallClock = timeutil.DefaultTimeSource{}
 	}
-	return NewClock(wallClock, 0 /* maxOffset */)
+	return NewClock(wallClock, 0 /* maxOffset */, 0 /* toleratedOffset */)
 }
 
 // NewClock returns a Clock configured to use a specified time source. Use
 // NewClockWithSystemTimeSource to use the system clock.
 //
-// A value of 0 for maxOffset means that clock skew checking, if performed on
-// this clock by RemoteClockMonitor, is disabled.
-func NewClock(wallClock WallClock, maxOffset time.Duration) *Clock {
+// maxOffset specifies the max clock offset between cluster nodes, used for
+// linearizability and lease guarantees. toleratedOffset specifies the tolerated
+// clock offset between cluster nodes as measured by RPC heartbeats, terminating
+// the node via RemoteClockMonitor if violated. A value of 0 will disable the
+// corresponding check. See Clock.MaxOffset() and Clock.ToleratedOffset() for
+// details.
+func NewClock(wallClock WallClock, maxOffset, toleratedOffset time.Duration) *Clock {
 	return &Clock{
 		wallClock:       wallClock,
 		maxOffset:       maxOffset,
-		toleratedOffset: maxOffset * 4 / 5, // tolerate 80% clock skew before terminating
+		toleratedOffset: toleratedOffset,
 	}
 }
 

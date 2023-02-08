@@ -75,6 +75,12 @@ const (
 
 	maximumMaxClockOffset = 5 * time.Second
 
+	// toleratedOffsetMultiplier is the MaxOffset multiplier used for
+	// ToleratedOffset, which determines the tolerated clock skew between this
+	// node and the cluster before self-terminating. It is conservatively set to
+	// 80% to avoid exceeding MaxOffset.
+	toleratedOffsetMultiplier = 0.8
+
 	minimumNetworkFileDescriptors     = 256
 	recommendedNetworkFileDescriptors = 5000
 
@@ -320,6 +326,11 @@ func (cfg *BaseConfig) InitTestingKnobs() {
 		storeKnobs.EvalKnobs.UseRangeTombstonesForPointDeletes = true
 		cfg.TestingKnobs.RangeFeed.(*rangefeed.TestingKnobs).IgnoreOnDeleteRangeError = true
 	}
+}
+
+// ToleratedOffset returns the tolerated offset, or 0 if disabled.
+func (cfg *BaseConfig) ToleratedOffset() time.Duration {
+	return time.Duration(toleratedOffsetMultiplier * float64(cfg.MaxOffset))
 }
 
 // Config holds the parameters needed to set up a combined KV and SQL server.
