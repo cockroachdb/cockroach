@@ -7,7 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import Helmet from "react-helmet";
 import { RouteComponentProps } from "react-router-dom";
 import { ArrowLeft } from "@cockroachlabs/icons";
@@ -51,6 +51,8 @@ enum TabKeysEnum {
   STATEMENTS = "statements",
 }
 
+const MAX_REQ_ATTEMPTS = 3;
+
 export const TransactionInsightDetails: React.FC<
   TransactionInsightDetailsProps
 > = ({
@@ -64,6 +66,7 @@ export const TransactionInsightDetails: React.FC<
   hasAdminRole,
   refreshUserSQLRoles,
 }) => {
+  const fetches = useRef<number>(0);
   const executionID = getMatchParamByName(match, idAttr);
   const txnDetails = insightDetails.txnDetails;
   const stmts = insightDetails.statements;
@@ -74,6 +77,10 @@ export const TransactionInsightDetails: React.FC<
   }, [refreshUserSQLRoles]);
 
   useEffect(() => {
+    if (fetches.current === MAX_REQ_ATTEMPTS) {
+      return;
+    }
+
     const stmtsComplete =
       stmts != null && stmts.length === txnDetails?.stmtExecutionIDs?.length;
 
@@ -100,6 +107,7 @@ export const TransactionInsightDetails: React.FC<
         excludeStmts: stmtsComplete,
         excludeContention: contentionComplete,
       };
+      fetches.current += 1;
       refreshTransactionInsightDetails(req);
     }
   }, [
@@ -140,6 +148,7 @@ export const TransactionInsightDetails: React.FC<
         >
           <Tabs.TabPane tab="Overview" key={TabKeysEnum.OVERVIEW}>
             <TransactionInsightDetailsOverviewTab
+              isLoading={txnDetails == null && fetches.current === 0}
               errors={insightError}
               statements={insightDetails.statements}
               txnDetails={insightDetails.txnDetails}

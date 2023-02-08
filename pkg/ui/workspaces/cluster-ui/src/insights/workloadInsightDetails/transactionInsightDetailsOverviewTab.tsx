@@ -59,6 +59,7 @@ type Props = {
   setTimeScale: (ts: TimeScale) => void;
   hasAdminRole: boolean;
   errors: TxnInsightDetailsReqErrs | null;
+  isLoading: boolean;
 };
 
 export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
@@ -68,6 +69,7 @@ export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
   statements,
   setTimeScale,
   hasAdminRole,
+  isLoading,
 }) => {
   const [insightsSortSetting, setInsightsSortSetting] = useState<SortSetting>({
     ascending: false,
@@ -106,19 +108,19 @@ export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
 
   return (
     <div>
-      <Loading
-        loading={txnDetails == null}
-        page="Transaction Details"
-        error={errors?.txnDetailsErr}
-        renderError={() => InsightsError(errors?.txnDetailsErr?.message)}
-      >
-        {txnDetails && (
-          <section className={cx("section")}>
-            <Row gutter={24}>
-              <Col span={24}>
-                <SqlBox value={insightQueries} size={SqlBoxSize.custom} />
-              </Col>
-            </Row>
+      <section className={cx("section")}>
+        <Loading
+          loading={isLoading}
+          page="Transaction Details"
+          error={errors?.txnDetailsErr}
+          renderError={() => InsightsError(errors?.txnDetailsErr?.message)}
+        >
+          <Row gutter={24}>
+            <Col span={24}>
+              <SqlBox value={insightQueries} size={SqlBoxSize.custom} />
+            </Col>
+          </Row>
+          {txnDetails && (
             <>
               <Row gutter={24} type="flex">
                 <Col span={12}>
@@ -199,9 +201,9 @@ export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
                 </Col>
               </Row>
             </>
-          </section>
-        )}
-      </Loading>
+          )}
+        </Loading>
+      </section>
       {hasContentionInsights && (
         <Loading
           loading={blockingExecutions == null}
