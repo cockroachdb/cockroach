@@ -624,7 +624,7 @@ func (desc *immutable) getCreateExprLang() tree.FunctionLanguage {
 	case catpb.Function_SQL:
 		return tree.FunctionLangSQL
 	}
-	return 0
+	return tree.FunctionLangUnknown
 }
 
 func (desc *immutable) getCreateExprVolatility() tree.FunctionVolatility {
