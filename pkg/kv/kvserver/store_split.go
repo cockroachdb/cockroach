@@ -250,17 +250,18 @@ func prepareRightReplicaForSplit(
 	if rightRepl == nil || rightRepl.isNewerThanSplit(split) {
 		return nil
 	}
+	// Finish initialization of the RHS replica.
+
+	state, err := kvstorage.LoadReplicaState(
+		ctx, r.Engine(), r.StoreID(), &split.RightDesc, rightRepl.replicaID)
+	if err != nil {
+		log.Fatalf(ctx, "%v", err)
+	}
 
 	// Already holding raftMu, see above.
 	rightRepl.mu.Lock()
 	defer rightRepl.mu.Unlock()
-
-	// Finish initialization of the RHS.
-	if state, err := kvstorage.LoadReplicaState(
-		ctx, r.Engine(), r.StoreID(), &split.RightDesc, rightRepl.replicaID,
-	); err != nil {
-		log.Fatalf(ctx, "%v", err)
-	} else if err := rightRepl.initRaftMuLockedReplicaMuLocked(state); err != nil {
+	if err := rightRepl.initRaftMuLockedReplicaMuLocked(state); err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}
 
