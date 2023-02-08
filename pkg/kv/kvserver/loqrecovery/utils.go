@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/strutil"
 )
 
 type storeIDSet map[roachpb.StoreID]struct{}
@@ -42,11 +43,7 @@ func (s storeIDSet) storeSliceFromSet() []roachpb.StoreID {
 
 // Make a string of stores 'set' in ascending order.
 func (s storeIDSet) joinStoreIDs() string {
-	storeNames := make([]string, 0, len(s))
-	for _, id := range s.storeSliceFromSet() {
-		storeNames = append(storeNames, fmt.Sprintf("s%d", id))
-	}
-	return strings.Join(storeNames, ", ")
+	return strutil.JoinIDs("s", s.storeSliceFromSet())
 }
 
 func (s storeIDSet) intersect(other storeIDSet) storeIDSet {

@@ -7613,6 +7613,7 @@ Support status: [reserved](#support-status)
 | ----- | ---- | ----- | ----------- | -------------- |
 | plan_id | [bytes](#cockroach.server.serverpb.RecoveryVerifyRequest-bytes) |  | PlanID is ID of the plan to verify. | [reserved](#support-status) |
 | decommissioned_node_ids | [int32](#cockroach.server.serverpb.RecoveryVerifyRequest-int32) | repeated | DecommissionedNodeIDs is a set of nodes that should be marked as decommissioned in the cluster when loss of quorum recovery successfully applies. | [reserved](#support-status) |
+| max_reported_ranges | [int32](#cockroach.server.serverpb.RecoveryVerifyRequest-int32) |  | MaxReportedRanges is the maximum number of failed ranges to report. If more unhealthy ranges are found, error will be returned alongside range to indicate that ranges were cut short. | [reserved](#support-status) |
 
 
 
@@ -7631,9 +7632,37 @@ Support status: [reserved](#support-status)
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
 | statuses | [cockroach.kv.kvserver.loqrecovery.loqrecoverypb.NodeRecoveryStatus](#cockroach.server.serverpb.RecoveryVerifyResponse-cockroach.kv.kvserver.loqrecovery.loqrecoverypb.NodeRecoveryStatus) | repeated | Statuses contain a list of recovery statuses of nodes updated during recovery. It also contains nodes that were expected to be live (not decommissioned by recovery) but failed to return status response. | [reserved](#support-status) |
-| unavailable_ranges | [cockroach.roachpb.RangeDescriptor](#cockroach.server.serverpb.RecoveryVerifyResponse-cockroach.roachpb.RangeDescriptor) | repeated | UnavailableRanges contains descriptors of ranges that failed health checks. | [reserved](#support-status) |
-| decommissioned_node_ids | [int32](#cockroach.server.serverpb.RecoveryVerifyResponse-int32) | repeated | DecommissionedNodeIDs contains list of decommissioned node id's. Only nodes that were decommissioned by the plan would be listed here, not all historically decommissioned ones. | [reserved](#support-status) |
+| unavailable_ranges | [RecoveryVerifyResponse.UnavailableRanges](#cockroach.server.serverpb.RecoveryVerifyResponse-cockroach.server.serverpb.RecoveryVerifyResponse.UnavailableRanges) |  | UnavailableRanges contains information about ranges that failed health check. | [reserved](#support-status) |
+| decommissioned_node_statuses | [RecoveryVerifyResponse.DecommissionedNodeStatusesEntry](#cockroach.server.serverpb.RecoveryVerifyResponse-cockroach.server.serverpb.RecoveryVerifyResponse.DecommissionedNodeStatusesEntry) | repeated | DecommissionedNodeStatuses contains a map of requested IDs with their corresponding liveness statuses. | [reserved](#support-status) |
 
+
+
+
+
+
+<a name="cockroach.server.serverpb.RecoveryVerifyResponse-cockroach.server.serverpb.RecoveryVerifyResponse.UnavailableRanges"></a>
+#### RecoveryVerifyResponse.UnavailableRanges
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| ranges | [cockroach.kv.kvserver.loqrecovery.loqrecoverypb.RangeRecoveryStatus](#cockroach.server.serverpb.RecoveryVerifyResponse-cockroach.kv.kvserver.loqrecovery.loqrecoverypb.RangeRecoveryStatus) | repeated | Ranges contains descriptors of ranges that failed health check. If there are too many ranges to report, error would contain relevant message. | [reserved](#support-status) |
+| error | [string](#cockroach.server.serverpb.RecoveryVerifyResponse-string) |  | Error contains an optional error if ranges validation can't complete. | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.RecoveryVerifyResponse-cockroach.server.serverpb.RecoveryVerifyResponse.DecommissionedNodeStatusesEntry"></a>
+#### RecoveryVerifyResponse.DecommissionedNodeStatusesEntry
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| key | [int32](#cockroach.server.serverpb.RecoveryVerifyResponse-int32) |  |  |  |
+| value | [cockroach.kv.kvserver.liveness.livenesspb.MembershipStatus](#cockroach.server.serverpb.RecoveryVerifyResponse-cockroach.kv.kvserver.liveness.livenesspb.MembershipStatus) |  |  |  |
 
 
 

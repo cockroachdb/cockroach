@@ -66,7 +66,7 @@ func IsTimeout(err error) bool {
 // set when we are not able to establish connection to remote node.
 func IsConnectionUnavailable(err error) bool {
 	if s, ok := status.FromError(errors.UnwrapAll(err)); ok {
-		return s.Code() == codes.Unavailable
+		return s.Code() == codes.Unavailable || s.Code() == codes.FailedPrecondition
 	}
 	return false
 }

@@ -12,6 +12,7 @@ syntax = "proto3";
 package cockroach.kv.kvserver.loqrecovery.loqrecoverypb;
 option go_package = "loqrecoverypb";
 
+import "roachpb/data.proto";
 import "roachpb/metadata.proto";
 import "gogoproto/gogo.proto";
 import "google/protobuf/timestamp.proto";
@@ -183,6 +184,28 @@ message PlanApplicationResult {
   // If most recent recovery plan application failed, Error will contain
   // aggregated error messages containing all encountered errors.
   string error = 3;
+}
+
+// RangeHealth is a state of a range availability from loss of quorum recovery
+// perspective.
+enum RangeHealth {
+  UNKNOWN = 0;
+  // Healthy indicates that range is available.
+  HEALTHY = 1;
+  // WaitingForMeta means that range is not yet readable according to meta
+  // descriptor, but has a recovered replica that is waiting to be up-replicated.
+  WAITING_FOR_META = 2;
+  // LossOfQuorum means that range is unavailable because it lost quorum and
+  // no replicas are fixed to act as a designated survivor (yet).
+  LOSS_OF_QUORUM = 3;
+}
+
+// RangeRecoveryStatus contains recovery status of a single range.
+message RangeRecoveryStatus {
+  int64 range_id = 1 [(gogoproto.customname) = "RangeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+  roachpb.Span span = 2 [(gogoproto.nullable) = false];
+  RangeHealth health = 3;
 }
 
 // DeferredRecoveryActions contains data for recovery actions that need to be

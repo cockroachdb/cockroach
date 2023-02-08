@@ -144,3 +144,16 @@ func (m *ClusterReplicaInfo) ReplicaCount() (size int) {
 func (a DeferredRecoveryActions) Empty() bool {
 	return len(a.DecommissionedNodeIDs) == 0
 }
+
+var rangeHealthTitle = map[int32]string{
+	0: "unknown",
+	1: "healthy",
+	2: "waiting for meta",
+	3: "loss of quorum",
+}
+
+// Name gives a better looking name for range health enum which is good for
+// including in CLI messages.
+func (x RangeHealth) Name() string {
+	return proto.EnumName(rangeHealthTitle, int32(x))
+}

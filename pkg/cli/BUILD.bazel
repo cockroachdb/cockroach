@@ -399,6 +399,7 @@ go_test(
         "//pkg/util/stop",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
+        "//pkg/util/uuid",
         "//pkg/workload/examples",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",

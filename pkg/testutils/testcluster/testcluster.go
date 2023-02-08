@@ -1546,21 +1546,23 @@ func (tc *TestCluster) RestartServerWithInspect(idx int, inspect func(s *server.
 	}
 	serverArgs := tc.serverArgs[idx]
 
-	if idx == 0 {
-		// If it's the first server, then we need to restart the RPC listener by hand.
-		// Look at NewTestCluster for more details.
-		listener, err := net.Listen("tcp", serverArgs.Listener.Addr().String())
-		if err != nil {
-			return err
-		}
-		serverArgs.Listener = listener
-		serverArgs.Knobs.Server.(*server.TestingKnobs).RPCListener = serverArgs.Listener
-	} else {
-		serverArgs.Addr = ""
-		// Try and point the server to a live server in the cluster to join.
-		for i := range tc.Servers {
-			if !tc.ServerStopped(i) {
-				serverArgs.JoinAddr = tc.Servers[i].ServingRPCAddr()
+	if !tc.clusterArgs.ReusableListeners {
+		if idx == 0 {
+			// If it's the first server, then we need to restart the RPC listener by hand.
+			// Look at NewTestCluster for more details.
+			listener, err := net.Listen("tcp", serverArgs.Listener.Addr().String())
+			if err != nil {
+				return err
+			}
+			serverArgs.Listener = listener
+			serverArgs.Knobs.Server.(*server.TestingKnobs).RPCListener = serverArgs.Listener
+		} else {
+			serverArgs.Addr = ""
+			// Try and point the server to a live server in the cluster to join.
+			for i := range tc.Servers {
+				if !tc.ServerStopped(i) {
+					serverArgs.JoinAddr = tc.Servers[i].ServingRPCAddr()
+				}
 			}
 		}
 	}
