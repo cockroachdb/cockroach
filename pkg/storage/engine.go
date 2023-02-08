@@ -591,11 +591,6 @@ type Reader interface {
 	// underlying Engine state. This is not true about Batch writes: new iterators
 	// will see new writes made to the batch, existing iterators won't.
 	ConsistentIterators() bool
-	// SupportsRangeKeys returns true if the Reader implementation supports
-	// range keys.
-	//
-	// TODO(erikgrinaker): Remove this after 22.2.
-	SupportsRangeKeys() bool
 
 	// PinEngineStateForIterators ensures that the state seen by iterators
 	// without timestamp hints (see IterOptions) is pinned and will not see

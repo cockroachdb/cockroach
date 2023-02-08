@@ -177,14 +177,13 @@ func (p *pebbleBatch) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) M
 		handle = p.db
 	}
 	if iter.inuse {
-		return newPebbleIteratorByCloning(p.iter, opts, StandardDurability, p.SupportsRangeKeys())
+		return newPebbleIteratorByCloning(p.iter, opts, StandardDurability)
 	}
 
 	if iter.iter != nil {
 		iter.setOptions(opts, StandardDurability)
 	} else {
-		iter.initReuseOrCreate(
-			handle, p.iter, p.iterUsed, opts, StandardDurability, p.SupportsRangeKeys())
+		iter.initReuseOrCreate(handle, p.iter, p.iterUsed, opts, StandardDurability)
 		if p.iter == nil {
 			// For future cloning.
 			p.iter = iter.iter
@@ -211,14 +210,13 @@ func (p *pebbleBatch) NewEngineIterator(opts IterOptions) EngineIterator {
 		handle = p.db
 	}
 	if iter.inuse {
-		return newPebbleIteratorByCloning(p.iter, opts, StandardDurability, p.SupportsRangeKeys())
+		return newPebbleIteratorByCloning(p.iter, opts, StandardDurability)
 	}
 
 	if iter.iter != nil {
 		iter.setOptions(opts, StandardDurability)
 	} else {
-		iter.initReuseOrCreate(
-			handle, p.iter, p.iterUsed, opts, StandardDurability, p.SupportsRangeKeys())
+		iter.initReuseOrCreate(handle, p.iter, p.iterUsed, opts, StandardDurability)
 		if p.iter == nil {
 			// For future cloning.
 			p.iter = iter.iter
@@ -233,11 +231,6 @@ func (p *pebbleBatch) NewEngineIterator(opts IterOptions) EngineIterator {
 // ConsistentIterators implements the Batch interface.
 func (p *pebbleBatch) ConsistentIterators() bool {
 	return true
-}
-
-// SupportsRangeKeys implements the Batch interface.
-func (p *pebbleBatch) SupportsRangeKeys() bool {
-	return p.db.FormatMajorVersion() >= pebble.FormatRangeKeys
 }
 
 // PinEngineStateForIterators implements the Batch interface.
@@ -323,7 +316,7 @@ func (p *pebbleBatch) ClearRawRange(start, end roachpb.Key, pointKeys, rangeKeys
 			return err
 		}
 	}
-	if rangeKeys && p.SupportsRangeKeys() {
+	if rangeKeys {
 		if err := p.batch.RangeKeyDelete(p.buf, endRaw, pebble.Sync); err != nil {
 			return err
 		}
@@ -450,19 +443,12 @@ func (p *pebbleBatch) PutRawMVCCRangeKey(rangeKey MVCCRangeKey, value []byte) er
 
 // PutEngineRangeKey implements the Engine interface.
 func (p *pebbleBatch) PutEngineRangeKey(start, end roachpb.Key, suffix, value []byte) error {
-	if !p.SupportsRangeKeys() {
-		return errors.Errorf("range keys not supported by Pebble database version %s",
-			p.db.FormatMajorVersion())
-	}
 	return p.batch.RangeKeySet(
 		EngineKey{Key: start}.Encode(), EngineKey{Key: end}.Encode(), suffix, value, nil)
 }
 
 // ClearEngineRangeKey implements the Engine interface.
 func (p *pebbleBatch) ClearEngineRangeKey(start, end roachpb.Key, suffix []byte) error {
-	if !p.SupportsRangeKeys() {
-		return nil // noop
-	}
 	return p.batch.RangeKeyUnset(
 		EngineKey{Key: start}.Encode(), EngineKey{Key: end}.Encode(), suffix, nil)
 }

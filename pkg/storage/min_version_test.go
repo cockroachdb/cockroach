@@ -119,34 +119,23 @@ func TestMinVersion_IsNotEncrypted(t *testing.T) {
 	defer func() { NewEncryptedEnvFunc = oldNewEncryptedEnvFunc }()
 	NewEncryptedEnvFunc = fauxNewEncryptedEnvFunc
 
+	st := cluster.MakeClusterSettings()
 	fs := vfs.NewMem()
 	p, err := Open(
 		context.Background(),
 		Location{dir: "", fs: fs},
-		cluster.MakeClusterSettings(),
+		st,
 		EncryptionAtRest(nil))
 	require.NoError(t, err)
 	defer p.Close()
-
-	v1 := roachpb.Version{Major: 21, Minor: 1, Patch: 0, Internal: 122}
-	v2 := roachpb.Version{Major: 21, Minor: 1, Patch: 0, Internal: 126}
-
-	ok, err := MinVersionIsAtLeastTargetVersion(p.unencryptedFS, p.path, v1)
-	require.NoError(t, err)
-	require.False(t, ok)
-
-	require.NoError(t, p.SetMinVersion(v2))
-
-	ok, err = MinVersionIsAtLeastTargetVersion(p.unencryptedFS, p.path, v1)
-	require.NoError(t, err)
-	require.True(t, ok)
+	require.NoError(t, p.SetMinVersion(st.Version.BinaryVersion()))
 
 	// Reading the file directly through the unencrypted MemFS should
 	// succeed and yield the correct version.
 	v, ok, err := getMinVersion(fs, "")
 	require.NoError(t, err)
 	require.True(t, ok)
-	require.Equal(t, v2, v)
+	require.Equal(t, st.Version.BinaryVersion(), v)
 }
 
 func fauxNewEncryptedEnvFunc(

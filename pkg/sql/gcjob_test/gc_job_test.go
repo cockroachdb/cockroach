@@ -19,9 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -30,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
@@ -39,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
-	"github.com/cockroachdb/cockroach/pkg/sql/gcjob/gcjobnotifier"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -51,10 +47,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -662,88 +656,6 @@ SELECT descriptor_id, index_id
 		jr := s.JobRegistry().(*jobs.Registry)
 		require.NoError(t, jr.WaitForJobs(ctx, []jobspb.JobID{jobID}))
 	})
-}
-
-// TestGCJobNoSystemConfig tests that the GC job is robust to running with
-// no system config provided by the SystemConfigProvider. It is a regression
-// test for a panic which could occur due to a slow systemconfigwatcher
-// initialization.
-//
-// TODO(ajwerner): Remove this test in 23.1.
-func TestGCJobNoSystemConfig(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	provider := fakeSystemConfigProvider{}
-	var (
-		v0 = clusterversion.ByKey(clusterversion.TODODelete_V22_2UseDelRangeInGCJob - 1)
-		v1 = clusterversion.ByKey(clusterversion.TODODelete_V22_2UseDelRangeInGCJob)
-	)
-	settings := cluster.MakeTestingClusterSettingsWithVersions(v1, v0, false /* initializeVersion */)
-	ctx := context.Background()
-	require.NoError(t, clusterversion.Initialize(ctx, v0, &settings.SV))
-	stopper := stop.NewStopper()
-	gcKnobs := &sql.GCJobTestingKnobs{}
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
-		Settings: settings,
-		Stopper:  stopper,
-		Knobs: base.TestingKnobs{
-			GCJob: gcKnobs,
-			Server: &server.TestingKnobs{
-				DisableAutomaticVersionUpgrade: make(chan struct{}),
-				BinaryVersionOverride:          v0,
-			},
-		},
-	})
-	defer stopper.Stop(ctx)
-	codec := s.ExecutorConfig().(sql.ExecutorConfig).Codec
-	n := gcjobnotifier.New(settings, &provider, codec, stopper)
-	n.Start(ctx)
-	gcKnobs.Notifier = n
-
-	tdb := sqlutils.MakeSQLRunner(sqlDB)
-	tdb.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY)")
-	tdb.Exec(t, "SET CLUSTER SETTING kv.protectedts.poll_interval = '10ms'")
-	var id uint32
-	tdb.QueryRow(t, "SELECT 'foo'::regclass::int").Scan(&id)
-	tdb.Exec(t, "DROP TABLE foo")
-	// We want to make sure there's a notifyee and that the job attempted
-	// to read the status twice. We expect it once for the notifier and
-	// once for the job itself.
-	testutils.SucceedsSoon(t, func() error {
-		if n := provider.numNotifyees(); n == 0 {
-			return errors.Errorf("expected 1 notifyee, got %d", n)
-		}
-		if n := provider.numCalls(); n < 2 {
-			return errors.Errorf("expected at least 2 calls, got %d", n)
-		}
-		return nil
-	})
-	cfgProto := &zonepb.ZoneConfig{
-		GC: &zonepb.GCPolicy{TTLSeconds: 0},
-	}
-	cfg := config.NewSystemConfig(cfgProto)
-	descKV, err := kvDB.Get(ctx, codec.DescMetadataKey(id))
-	require.NoError(t, err)
-	var zoneKV roachpb.KeyValue
-	zoneKV.Key = config.MakeZoneKey(codec, descpb.ID(id))
-	require.NoError(t, zoneKV.Value.SetProto(cfgProto))
-	defaultKV := zoneKV
-	defaultKV.Key = config.MakeZoneKey(codec, 0)
-	// We need to put in an entry for the descriptor both so that the notifier
-	// fires and so that we don't think the descriptor is missing. We also
-	// need a zone config KV to make the delta filter happy.
-	cfg.Values = []roachpb.KeyValue{
-		{Key: descKV.Key, Value: *descKV.Value},
-		defaultKV,
-		zoneKV,
-	}
-
-	provider.setConfig(cfg)
-	tdb.CheckQueryResultsRetry(t, `
-SELECT status
-  FROM crdb_internal.jobs
- WHERE description = 'GC for DROP TABLE defaultdb.public.foo'`,
-		[][]string{{"succeeded"}})
 }
 
 type fakeSystemConfigProvider struct {

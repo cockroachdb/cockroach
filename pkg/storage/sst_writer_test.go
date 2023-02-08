@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -79,30 +78,28 @@ func makePebbleSST(t testing.TB, kvs []MVCCKeyValue, ingestion bool) []byte {
 func TestMakeIngestionWriterOptions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	skip.WithIssue(t, 95530, "bump minBinary to 22.2. Skip 22.2 mixed-version tests for future cleanup")
-
 	testCases := []struct {
 		name string
 		st   *cluster.Settings
 		want sstable.TableFormat
 	}{
 		{
-			name: "before feature gate",
+			name: "22.2",
 			st: cluster.MakeTestingClusterSettingsWithVersions(
-				clusterversion.ByKey(clusterversion.TODODelete_V22_2EnablePebbleFormatVersionRangeKeys-1),
-				clusterversion.TestingBinaryMinSupportedVersion,
-				true,
-			),
-			want: sstable.TableFormatPebblev1,
-		},
-		{
-			name: "at feature gate",
-			st: cluster.MakeTestingClusterSettingsWithVersions(
-				clusterversion.ByKey(clusterversion.TODODelete_V22_2EnablePebbleFormatVersionRangeKeys),
+				clusterversion.ByKey(clusterversion.V22_2),
 				clusterversion.TestingBinaryMinSupportedVersion,
 				true,
 			),
 			want: sstable.TableFormatPebblev2,
+		},
+		{
+			name: "with value blocks",
+			st: func() *cluster.Settings {
+				st := cluster.MakeTestingClusterSettings()
+				valueBlocksEnabled.Override(context.Background(), &st.SV, true)
+				return st
+			}(),
+			want: sstable.TableFormatPebblev3,
 		},
 	}
 
@@ -111,45 +108,6 @@ func TestMakeIngestionWriterOptions(t *testing.T) {
 			ctx := context.Background()
 			opts := MakeIngestionWriterOptions(ctx, tc.st)
 			require.Equal(t, tc.want, opts.TableFormat)
-		})
-	}
-}
-
-func TestSSTWriterRangeKeysUnsupported(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-
-	// Set up a version that doesn't support range keys.
-	version := clusterversion.ByKey(clusterversion.TODODelete_V22_2EnsurePebbleFormatVersionRangeKeys - 1)
-	st := cluster.MakeTestingClusterSettingsWithVersions(version, version, true)
-
-	writers := map[string]SSTWriter{
-		"ingestion": MakeIngestionSSTWriter(ctx, st, &MemFile{}),
-		"backup":    MakeBackupSSTWriter(ctx, st, &MemFile{}),
-	}
-
-	for name, w := range writers {
-		t.Run(name, func(t *testing.T) {
-			defer w.Close()
-
-			rangeKey := rangeKey("a", "b", 2)
-
-			// Put should error, but clears are noops.
-			err := w.PutMVCCRangeKey(rangeKey, MVCCValue{})
-			require.Error(t, err)
-			require.Contains(t, err.Error(), "range keys not supported")
-
-			err = w.PutEngineRangeKey(rangeKey.StartKey, rangeKey.EndKey,
-				EncodeMVCCTimestampSuffix(rangeKey.Timestamp), nil)
-			require.Error(t, err)
-			require.Contains(t, err.Error(), "range keys not supported")
-
-			require.NoError(t, w.ClearMVCCRangeKey(rangeKey))
-			require.NoError(t, w.ClearEngineRangeKey(rangeKey.StartKey, rangeKey.EndKey,
-				EncodeMVCCTimestampSuffix(rangeKey.Timestamp)))
-			require.NoError(t, w.ClearRawRange(rangeKey.StartKey, rangeKey.EndKey, false, true))
 		})
 	}
 }
