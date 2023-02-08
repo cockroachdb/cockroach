@@ -11,7 +11,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { ColumnDescriptor, SortedTable } from "src/sortedtable";
-import { StmtInsightEvent, TxnInsightDetails } from "../types";
+import { StmtInsightEvent } from "../types";
 import { InsightCell } from "../workloadInsights/util/insightCell";
 import {
   DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT,
@@ -80,22 +80,24 @@ const stmtColumns: ColumnDescriptor<StmtInsightEvent>[] = [
 ];
 
 type Props = {
-  insightDetails: TxnInsightDetails;
+  isLoading: boolean;
+  statements: StmtInsightEvent[] | null;
   error: Error;
 };
 
 export const TransactionInsightsDetailsStmtsTab: React.FC<Props> = ({
-  insightDetails,
+  isLoading,
   error,
+  statements,
 }) => {
   return (
     <Loading
-      loading={insightDetails?.statements == null}
+      loading={isLoading}
       page="Transaction Details | Statements"
       error={error}
       renderError={() => InsightsError(error?.message)}
     >
-      <SortedTable columns={stmtColumns} data={insightDetails.statements} />
+      <SortedTable columns={stmtColumns} data={statements ?? []} />
     </Loading>
   );
 };
