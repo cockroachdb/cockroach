@@ -123,12 +123,6 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		systemExternalConnectionsTableMigration,
 	),
-	upgrade.NewTenantUpgrade(
-		"add column index_recommendations to table system.statement_statistics",
-		toCV(clusterversion.TODODelete_V22_2AlterSystemStatementStatisticsAddIndexRecommendations),
-		upgrade.NoPrecondition,
-		alterSystemStatementStatisticsAddIndexRecommendations,
-	),
 	upgrade.NewTenantUpgrade("add system.role_id_sequence",
 		toCV(clusterversion.TODODelete_V22_2RoleIDSequence),
 		upgrade.NoPrecondition,

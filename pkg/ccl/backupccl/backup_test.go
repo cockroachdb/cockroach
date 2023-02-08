@@ -273,6 +273,8 @@ func TestBackupRestoreJobTagAndLabel(t *testing.T) {
 
 	backupAndRestore(ctx, t, tc, []string{localFoo}, []string{localFoo}, numAccounts)
 
+	mu.Lock()
+	defer mu.Unlock()
 	require.True(t, found)
 }
 
