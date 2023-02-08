@@ -1055,6 +1055,7 @@ unreserved_keyword ::=
 	| 'CONTROLJOB'
 	| 'CONVERSION'
 	| 'CONVERT'
+	| 'COORDINATOR_LOCALITY'
 	| 'COPY'
 	| 'COST'
 	| 'COVERING'
@@ -2257,6 +2258,7 @@ backup_options ::=
 	| 'DETACHED' '=' 'FALSE'
 	| 'KMS' '=' string_or_placeholder_opt_list
 	| 'INCREMENTAL_LOCATION' '=' string_or_placeholder_opt_list
+	| 'COORDINATOR_LOCALITY' '=' string_or_placeholder
 
 c_expr ::=
 	d_expr
@@ -3410,6 +3412,7 @@ bare_label_keywords ::=
 	'AS_JSON'
 	| 'ATOMIC'
 	| 'CALLED'
+	| 'COORDINATOR_LOCALITY'
 	| 'COST'
 	| 'CHECK_FILES'
 	| 'DEBUG_IDS'

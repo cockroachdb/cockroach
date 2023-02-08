@@ -519,6 +519,7 @@ func backupTypeCheck(
 		exprutil.Strings{
 			backupStmt.Subdir,
 			backupStmt.Options.EncryptionPassphrase,
+			backupStmt.Options.CoordinatorLocality,
 		},
 		exprutil.StringArrays{
 			tree.Exprs(backupStmt.To),
@@ -597,6 +598,19 @@ func backupPlanHook(
 		)
 		if err != nil {
 			return nil, nil, nil, false, err
+		}
+	}
+
+	var coordinatorLocality roachpb.Locality
+	if backupStmt.Options.CoordinatorLocality != nil {
+		s, err := exprEval.String(ctx, backupStmt.Options.CoordinatorLocality)
+		if err != nil {
+			return nil, nil, nil, false, err
+		}
+		if s != "" {
+			if err := coordinatorLocality.Set(s); err != nil {
+				return nil, nil, nil, false, err
+			}
 		}
 	}
 
@@ -712,6 +726,13 @@ func backupPlanHook(
 			return err
 		}
 
+		// Check that a node will currently be able to run this before we create it.
+		if coordinatorLocality.NonEmpty() {
+			if _, err := p.DistSQLPlanner().GetAllInstancesByLocality(ctx, coordinatorLocality); err != nil {
+				return err
+			}
+		}
+
 		initialDetails := jobspb.BackupDetails{
 			Destination:         jobspb.BackupDetails_Destination{To: to, IncrementalStorage: incrementalStorage},
 			EndTime:             endTime,
@@ -723,6 +744,7 @@ func backupPlanHook(
 			AsOfInterval:        asOfInterval,
 			Detached:            detached,
 			ApplicationName:     p.SessionData().ApplicationName,
+			CoordinatorLocation: coordinatorLocality,
 		}
 		if backupStmt.CreatedByInfo != nil && backupStmt.CreatedByInfo.Name == jobs.CreatedByScheduledJobs {
 			initialDetails.ScheduleID = backupStmt.CreatedByInfo.ID

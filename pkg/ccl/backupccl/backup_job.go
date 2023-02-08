@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -450,6 +451,11 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	// The span is finished by the registry executing the job.
 	details := b.job.Details().(jobspb.BackupDetails)
 	p := execCtx.(sql.JobExecContext)
+
+	if err := b.maybeRelocateJobExecution(ctx, p, details.CoordinatorLocation); err != nil {
+		return err
+	}
+
 	kmsEnv := backupencryption.MakeBackupKMSEnv(
 		p.ExecCfg().Settings,
 		&p.ExecCfg().ExternalIODirConfig,
@@ -838,6 +844,41 @@ func (b *backupResumer) ReportResults(ctx context.Context, resultsCh chan<- tree
 	}:
 		return nil
 	}
+}
+
+func (b *backupResumer) maybeRelocateJobExecution(
+	ctx context.Context, p sql.JobExecContext, locality roachpb.Locality,
+) error {
+	if locality.NonEmpty() {
+		current, err := p.DistSQLPlanner().GetSQLInstanceInfo(p.ExecCfg().JobRegistry.ID())
+		if err != nil {
+			return err
+		}
+		if ok, missedTier := current.Locality.Matches(locality); !ok {
+			log.Infof(ctx,
+				"BACKUP job %d initially adopted on instance %d but it does not match locality filter %s, finding a new coordinator",
+				b.job.ID(), current.NodeID, missedTier.String(),
+			)
+
+			instancesInRegion, err := p.DistSQLPlanner().GetAllInstancesByLocality(ctx, locality)
+			if err != nil {
+				return err
+			}
+			rng, _ := randutil.NewPseudoRand()
+			dest := instancesInRegion[rng.Intn(len(instancesInRegion))]
+
+			var res error
+			if err := p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				var err error
+				res, err = p.ExecCfg().JobRegistry.RelocateLease(ctx, txn, b.job.ID(), dest.InstanceID, dest.SessionID)
+				return err
+			}); err != nil {
+				return errors.Wrapf(err, "failed to relocate job coordinator to %d", dest.InstanceID)
+			}
+			return res
+		}
+	}
+	return nil
 }
 
 func getBackupDetailAndManifest(

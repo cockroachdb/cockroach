@@ -186,6 +186,41 @@ func TestLocalityConversions(t *testing.T) {
 	}
 }
 
+func TestLocalityMatches(t *testing.T) {
+	var empty Locality
+	var l Locality
+	require.NoError(t, l.Set("a=b,c=d,e=f"))
+	for _, tc := range []struct {
+		filter string
+		miss   string
+	}{
+		{filter: "", miss: ""},
+		{filter: "a=b", miss: ""},
+		{filter: "a=b,c=d,e=f", miss: ""},
+		{filter: "c=d,e=f,a=b", miss: ""},
+		{filter: "a=z", miss: "a=z"},
+		{filter: "a=b,c=x,e=f", miss: "c=x"},
+		{filter: "a=b,x=y", miss: "x=y"},
+	} {
+		t.Run(fmt.Sprintf("%s-miss-%s", tc.filter, tc.miss), func(t *testing.T) {
+			var filter Locality
+			if tc.filter != "" {
+				require.NoError(t, filter.Set(tc.filter))
+			}
+			matches, miss := l.Matches(filter)
+			if tc.miss == "" {
+				require.True(t, matches)
+			} else {
+				require.False(t, matches)
+				require.Equal(t, tc.miss, miss.String())
+			}
+
+			emptyMatches, _ := empty.Matches(filter)
+			require.Equal(t, tc.filter == "", emptyMatches)
+		})
+	}
+}
+
 func TestDiversityScore(t *testing.T) {
 	// Keys are not considered for score, just the order, so we don't need to
 	// specify them.

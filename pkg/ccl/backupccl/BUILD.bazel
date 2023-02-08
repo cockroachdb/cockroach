@@ -136,6 +136,7 @@ go_library(
         "//pkg/util/metric",
         "//pkg/util/mon",
         "//pkg/util/protoutil",
+        "//pkg/util/randutil",
         "//pkg/util/retry",
         "//pkg/util/span",
         "//pkg/util/stop",
