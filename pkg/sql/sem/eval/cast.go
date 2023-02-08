@@ -445,12 +445,14 @@ func performCastWithoutPrecisionTruncation(
 				d,
 				tree.FmtPgwireText,
 				tree.FmtDataConversionConfig(evalCtx.SessionData().DataConversionConfig),
+				tree.FmtLocation(evalCtx.GetLocation()),
 			)
 		case *tree.DArray:
 			s = tree.AsStringWithFlags(
 				d,
 				tree.FmtPgwireText,
 				tree.FmtDataConversionConfig(evalCtx.SessionData().DataConversionConfig),
+				tree.FmtLocation(evalCtx.GetLocation()),
 			)
 		case *tree.DInterval:
 			// When converting an interval to string, we need a string representation
