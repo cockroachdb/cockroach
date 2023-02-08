@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
 
@@ -348,7 +349,7 @@ func (m *rangefeedMuxer) receiveEventsFromNode(ctx context.Context, ms *muxClien
 			return ctx.Err()
 		case <-m.demuxLoopDone:
 			// demuxLoop exited, and so should we (happens when main context group completes)
-			return nil
+			return errors.Wrapf(context.Canceled, "demux loop terminated")
 		case m.eventCh <- event:
 		}
 	}
