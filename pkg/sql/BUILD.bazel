@@ -554,7 +554,6 @@ go_library(
         "@in_gopkg_yaml_v2//:yaml_v2",
         "@io_opentelemetry_go_otel//attribute",
         "@org_golang_x_net//trace",
-        "@org_golang_x_text//collate",
     ],
 )
 
