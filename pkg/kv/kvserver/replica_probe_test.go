@@ -120,17 +120,24 @@ func TestReplicaProbeRequest(t *testing.T) {
 	// stack, with both routing policies.
 	for _, srv := range tc.Servers {
 		db := srv.DB()
-		{
+		for _, policy := range []roachpb.RoutingPolicy{
+			roachpb.RoutingPolicy_LEASEHOLDER,
+			roachpb.RoutingPolicy_NEAREST,
+		} {
 			var b kv.Batch
 			b.AddRawRequest(probeReq)
-			b.Header.RoutingPolicy = roachpb.RoutingPolicy_LEASEHOLDER
-			require.NoError(t, db.Run(ctx, &b))
-		}
-		{
-			var b kv.Batch
-			b.AddRawRequest(probeReq)
-			b.Header.RoutingPolicy = roachpb.RoutingPolicy_NEAREST
-			require.NoError(t, db.Run(ctx, &b))
+			b.Header.RoutingPolicy = policy
+			err := db.Run(ctx, &b)
+			if errors.HasType(err, (*roachpb.AmbiguousResultError)(nil)) {
+				// Rare but it can happen that we're proposing on a replica
+				// that is just about to get a snapshot. In that case we'll
+				// get:
+				//
+				// result is ambiguous: unable to determine whether command was applied via snapshot
+				t.Logf("ignoring: %s", err)
+				err = nil
+			}
+			require.NoError(t, err)
 		}
 	}
 	// Check expected number of probes seen on each Replica in the apply loop.
