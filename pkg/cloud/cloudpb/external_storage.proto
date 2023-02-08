@@ -27,6 +27,12 @@ enum ExternalStorageProvider {
   external = 9;
 }
 
+enum AzureAuth {
+  LEGACY = 0;  // Storage account key
+  EXPLICIT = 1;  // App Registration + RBAC
+  IMPLICIT = 2;  // Environment Credentials or Managed Service
+}
+
 message ExternalStorage {
   ExternalStorageProvider provider = 1;
 
@@ -130,6 +136,8 @@ message ExternalStorage {
     string client_id = 6 [(gogoproto.customname) = "ClientID"];
     string client_secret = 7;
     string tenant_id = 8 [(gogoproto.customname) = "TenantID"];
+
+    AzureAuth auth = 9;
   }
   message FileTable {
     // User interacting with the external storage. This is used to check access
