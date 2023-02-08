@@ -1,5 +1,5 @@
 load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "tenantcostmodel",
@@ -12,6 +12,19 @@ go_library(
     deps = [
         "//pkg/roachpb",
         "//pkg/settings",
+        "//pkg/util/log",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "tenantcostmodel_test",
+    srcs = ["settings_test.go"],
+    args = ["-test.timeout=295s"],
+    embed = [":tenantcostmodel"],
+    deps = [
+        "//pkg/util/leaktest",
+        "@com_github_stretchr_testify//require",
     ],
 )
 
