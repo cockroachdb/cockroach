@@ -1532,17 +1532,14 @@ func pebbleCryptoInitializer() error {
 		}
 	}
 
-	cfg := storage.PebbleConfig{
-		StorageConfig: storageConfig,
-		Opts:          storage.DefaultPebbleOptions(),
-	}
-
-	// This has the side effect of storing the encrypted FS into cfg.Opts.FS.
-	_, _, err := storage.ResolveEncryptedEnvOptions(&cfg)
+	_, encryptedEnv, err := storage.ResolveEncryptedEnvOptions(&storageConfig, vfs.Default, false /* readOnly */)
 	if err != nil {
 		return err
 	}
-
-	pebbleToolFS.set(cfg.Opts.FS)
+	if encryptedEnv != nil {
+		pebbleToolFS.set(encryptedEnv.FS)
+	} else {
+		pebbleToolFS.set(vfs.Default)
+	}
 	return nil
 }
