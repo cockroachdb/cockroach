@@ -79,7 +79,8 @@ func vetCmd(t *testing.T, dir, name string, args []string, filters []stream.Filt
 				}
 			}
 			return scanner.Err()
-		})}, filters...)
+		}),
+	}, filters...)
 
 	var msgs strings.Builder
 	if err := stream.ForEach(stream.Sequence(filters...), func(s string) {
@@ -1707,7 +1708,7 @@ func TestLint(t *testing.T) {
 				stream.GrepNot("type name will be used as tracing.TracingMode by other packages, and that stutters; consider calling this Mode"),
 				stream.GrepNot("pkg/build/bazel/bes/.*empty.go.*don't use an underscore in package name"),
 				stream.GrepNot("pkg/sql/types/types.go.*var Json should be JSON"),
-				stream.GrepNot(`pkg/sql/schemachanger/scplan/internal/rules/.*/.*go:.* should not use dot imports`),
+				stream.GrepNot(`pkg/sql/schemachanger/scplan/internal/rules/.*/.*go:.* should not use dot imports \(ST1001\)`),
 			), func(s string) {
 				t.Errorf("\n%s", s)
 			}); err != nil {
@@ -2295,7 +2296,6 @@ func TestLint(t *testing.T) {
 		vetCmd(t, crdb.Dir, "go",
 			[]string{"vet", "-vettool", vetToolPath, "-all", "-printf.funcs", printfuncs, pkgScope},
 			filters)
-
 	})
 
 	t.Run("CODEOWNERS", func(t *testing.T) {
