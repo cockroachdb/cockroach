@@ -67,10 +67,11 @@ func (s *Store) FindTargetAndTransferLease(
 func (s *Store) AddReplica(repl *Replica) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	repl.mu.RLock()
+	defer repl.mu.RUnlock()
 	if err := s.addToReplicasByRangeIDLocked(repl); err != nil {
 		return err
-	}
-	if err := s.addToReplicasByKeyLocked(repl); err != nil {
+	} else if err := s.addToReplicasByKeyLockedReplicaRLocked(repl); err != nil {
 		return err
 	}
 	s.metrics.ReplicaCount.Inc(1)
