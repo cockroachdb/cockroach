@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -487,7 +486,14 @@ func (s *PersistedSQLStats) insertStatementStats(
 	plan := tree.NewDJSON(sqlstatsutil.ExplainTreePlanNodeToJSON(&stats.Stats.SensitiveInfo.MostRecentPlanDescription))
 	nodeID := s.GetEnabledSQLInstanceID()
 
-	values := "$1 ,$2, $3, $4, $5, $6, $7, $8, $9, $10"
+	indexRecommendations := tree.NewDArray(types.String)
+	for _, recommendation := range stats.Stats.IndexRecommendations {
+		if err := indexRecommendations.Append(tree.NewDString(recommendation)); err != nil {
+			return 0, err
+		}
+	}
+
+	values := "$1 ,$2, $3, $4, $5, $6, $7, $8, $9, $10, $11"
 	args := append(make([]interface{}, 0, 11),
 		aggregatedTs,                       // aggregated_ts
 		serializedFingerprintID,            // fingerprint_id
@@ -499,17 +505,8 @@ func (s *PersistedSQLStats) insertStatementStats(
 		metadata,                           // metadata
 		statistics,                         // statistics
 		plan,                               // plan
+		indexRecommendations,               // index_recommendations
 	)
-	if s.cfg.Settings.Version.IsActive(ctx, clusterversion.TODODelete_V22_2AlterSystemStatementStatisticsAddIndexRecommendations) {
-		values = values + ", $11"
-		indexRecommendations := tree.NewDArray(types.String)
-		for _, recommendation := range stats.Stats.IndexRecommendations {
-			if err := indexRecommendations.Append(tree.NewDString(recommendation)); err != nil {
-				return 0, err
-			}
-		}
-		args = append(args, indexRecommendations)
-	}
 
 	insertStmt := fmt.Sprintf(`
 INSERT INTO system.statement_statistics
