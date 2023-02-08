@@ -31,6 +31,7 @@ go_test(
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
+        "//pkg/util/encoding/csv",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/randutil",

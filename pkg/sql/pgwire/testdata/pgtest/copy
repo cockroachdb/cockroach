@@ -64,6 +64,23 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"COPY 4"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
+send
+Query {"String": "COPY (SELECT * FROM t) TO STDOUT CSV HEADER"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CopyOutResponse","ColumnFormatCodes":[0,0]}
+{"Type":"CopyData","Data":"692c740a"}
+{"Type":"CopyData","Data":"312c626c61680a"}
+{"Type":"CopyData","Data":"322c22220a"}
+{"Type":"CopyData","Data":"332c0a"}
+{"Type":"CopyData","Data":"342c2222222222220a"}
+{"Type":"CopyDone"}
+{"Type":"CommandComplete","CommandTag":"COPY 4"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
 # Extra fields.
 
 send crdb_only

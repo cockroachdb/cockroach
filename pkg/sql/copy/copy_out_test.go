@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -172,6 +173,28 @@ func TestCopyOutRandom(t *testing.T) {
 					t,
 					string(rowOutput[lineNum][fieldNum]),
 					sql.DecodeCopy(field),
+					"error line %d, field %d (%s)",
+					lineNum,
+					fieldNum,
+					colTypes[fieldNum].SQLString(),
+				)
+			}
+		}
+	})
+
+	t.Run("csv", func(t *testing.T) {
+		var buf bytes.Buffer
+		_, err = conn.PgConn().CopyTo(ctx, &buf, "COPY t TO STDOUT CSV")
+		require.NoError(t, err)
+
+		allRecords, err := csv.NewReader(bytes.NewReader(buf.Bytes())).ReadAll()
+		require.NoError(t, err)
+		for lineNum, line := range allRecords {
+			for fieldNum, field := range line {
+				require.Equalf(
+					t,
+					string(rowOutput[lineNum][fieldNum]),
+					field.Val,
 					"error line %d, field %d (%s)",
 					lineNum,
 					fieldNum,
