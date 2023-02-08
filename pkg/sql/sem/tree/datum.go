@@ -979,6 +979,14 @@ func (*DFloat) AmbiguousFormat() bool { return true }
 func (d *DFloat) Format(ctx *FmtCtx) {
 	fl := float64(*d)
 
+	// TODO(#sql-sessions): formatting float4s are broken here as we cannot
+	// differentiate float4 vs float8.
+	// #73743, ##84326, #41689 are partially related.
+	if ctx.HasFlags(fmtPgwireFormat) {
+		ctx.Write(PgwireFormatFloat(ctx.scratch[:0], float64(*d), ctx.dataConversionConfig, d.ResolvedType()))
+		return
+	}
+
 	disambiguate := ctx.flags.HasFlags(fmtDisambiguateDatumTypes)
 	parsable := ctx.flags.HasFlags(FmtParsableNumerics)
 	quote := parsable && (math.IsNaN(fl) || math.IsInf(fl, 0))
@@ -1311,7 +1319,7 @@ func (*DString) AmbiguousFormat() bool { return true }
 // Format implements the NodeFormatter interface.
 func (d *DString) Format(ctx *FmtCtx) {
 	buf, f := &ctx.Buffer, ctx.flags
-	if f.HasFlags(fmtRawStrings) {
+	if f.HasFlags(fmtRawStrings) || f.HasFlags(fmtPgwireFormat) {
 		buf.WriteString(string(*d))
 	} else {
 		lexbase.EncodeSQLStringWithFlags(buf, string(*d), f.EncodeFlags())
@@ -1570,9 +1578,8 @@ func writeAsHexString(ctx *FmtCtx, b string) {
 func (d *DBytes) Format(ctx *FmtCtx) {
 	f := ctx.flags
 	if f.HasFlags(fmtPgwireFormat) {
-		ctx.WriteString(`"\\x`)
+		ctx.WriteString(`\x`)
 		writeAsHexString(ctx, string(*d))
-		ctx.WriteString(`"`)
 	} else if f.HasFlags(fmtFormatByteLiterals) {
 		ctx.WriteByte('x')
 		ctx.WriteByte('\'')
@@ -2369,7 +2376,7 @@ func (d *DTime) Format(ctx *FmtCtx) {
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
-	ctx.Write(timeofday.TimeOfDay(*d).AppendFormat(ctx.scratch[:0]))
+	ctx.Write(PGWireFormatTime(timeofday.TimeOfDay(*d), ctx.scratch[:0]))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -2545,7 +2552,7 @@ func (d *DTimeTZ) Format(ctx *FmtCtx) {
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
-	ctx.Write(d.TimeTZ.AppendFormat(ctx.scratch[:0]))
+	ctx.Write(PGWireFormatTimeTZ(d.TimeTZ, ctx.scratch[:0]))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -2844,7 +2851,13 @@ func (d *DTimestamp) Format(ctx *FmtCtx) {
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
-	ctx.WriteString(FormatTimestamp(d.Time))
+
+	if f.HasFlags(fmtPgwireFormat) {
+		ctx.Write(PGWireFormatTimestamp(d.Time, nil, ctx.scratch[:0]))
+	} else {
+		ctx.WriteString(FormatTimestamp(d.Time))
+	}
+
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -3028,7 +3041,14 @@ func (d *DTimestampTZ) Format(ctx *FmtCtx) {
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
-	FormatTimestampTZ(d.Time, &ctx.Buffer)
+	if f.HasFlags(fmtPgwireFormat) {
+		if ctx.location == nil {
+			panic(errors.AssertionFailedf("location on ctx for fmtPgwireFormat must be set for TimestampTZ types"))
+		}
+		ctx.Write(PGWireFormatTimestamp(d.Time, ctx.location, ctx.scratch[:0]))
+	} else {
+		FormatTimestampTZ(d.Time, &ctx.Buffer)
+	}
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -3720,7 +3740,9 @@ func AsJSON(
 		return json.FromString(formatTime(t.UTC(), "2006-01-02T15:04:05.999999999")), nil
 	case *DDate, *DUuid, *DOid, *DInterval, *DBytes, *DIPAddr, *DTime, *DTimeTZ, *DBitArray, *DBox2D,
 		*DTSVector, *DTSQuery:
-		return json.FromString(AsStringWithFlags(t, FmtBareStrings, FmtDataConversionConfig(dcc))), nil
+		return json.FromString(
+			AsStringWithFlags(t, FmtBareStrings, FmtDataConversionConfig(dcc), FmtLocation(loc)),
+		), nil
 	case *DGeometry:
 		return json.FromSpatialObject(t.Geometry.SpatialObject(), geo.DefaultGeoJSONDecimalDigits)
 	case *DGeography:
@@ -3815,7 +3837,7 @@ func (d *DJSON) Format(ctx *FmtCtx) {
 	// TODO(justin): ideally the JSON string encoder should know it needs to
 	// escape things to be inside SQL strings in order to avoid this allocation.
 	s := d.JSON.String()
-	if ctx.flags.HasFlags(fmtRawStrings) {
+	if ctx.HasFlags(fmtRawStrings) || ctx.HasFlags(fmtPgwireFormat) {
 		ctx.WriteString(s)
 	} else {
 		// TODO(knz): This seems incorrect,
