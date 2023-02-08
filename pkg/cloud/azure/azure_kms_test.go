@@ -86,8 +86,25 @@ func TestEncryptDecryptAzure(t *testing.T) {
 		require.Error(t, err)
 	})
 
-	t.Run("succeeds", func(t *testing.T) {
+	t.Run("explicit auth", func(t *testing.T) {
 		uri := fmt.Sprintf("azure-kms:///%s/%s?%s", cfg.keyName, cfg.keyVersion, params.Encode())
+		cloud.KMSEncryptDecrypt(t, uri, &cloud.TestKMSEnv{
+			Settings:         azureKMSTestSettings,
+			ExternalIOConfig: &base.ExternalIODirConfig{},
+		})
+	})
+
+	t.Run("implicit auth", func(t *testing.T) {
+		redactedParams := make(url.Values)
+		for k, v := range params {
+			redactedParams[k] = v
+		}
+		redactedParams.Del(AzureClientIDParam)
+		redactedParams.Del(AzureClientSecretParam)
+		redactedParams.Del(AzureTenantIDParam)
+		redactedParams.Add(cloud.AuthParam, cloud.AuthParamImplicit)
+
+		uri := fmt.Sprintf("azure-kms:///%s/%s?%s", cfg.keyName, cfg.keyVersion, redactedParams.Encode())
 		cloud.KMSEncryptDecrypt(t, uri, &cloud.TestKMSEnv{
 			Settings:         azureKMSTestSettings,
 			ExternalIOConfig: &base.ExternalIODirConfig{},

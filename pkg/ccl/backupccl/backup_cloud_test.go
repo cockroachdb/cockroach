@@ -139,23 +139,24 @@ func TestCloudBackupRestoreGoogleCloudStorage(t *testing.T) {
 	backupAndRestore(ctx, t, tc, []string{uri.String()}, []string{uri.String()}, numAccounts, nil)
 }
 
-// TestBackupRestoreAzure hits the real Azure Blob Storage and so could
-// occasionally be flaky. It's only run if the AZURE_ACCOUNT_NAME,
-// AZURE_ACCOUNT_KEY, and AZURE_CONTAINER environment vars are set.
+// TestCloudBackupRestoreAzure hits the real Azure Blob Storage and so could
+// occasionally be flaky. It's only run if the AZURE_ACCOUNT_NAME
+// and AZURE_CONTAINER environment vars are set.
 func TestCloudBackupRestoreAzure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	accountName := os.Getenv("AZURE_ACCOUNT_NAME")
-
-	// NB: the Azure Account key must not be url encoded.
-	accountKey := os.Getenv("AZURE_ACCOUNT_KEY")
-	if accountName == "" || accountKey == "" {
-		skip.IgnoreLint(t, "AZURE_ACCOUNT_NAME and AZURE_ACCOUNT_KEY env vars must be set")
+	if accountName == "" {
+		skip.IgnoreLint(t, "AZURE_ACCOUNT_NAME env var must be set")
 	}
+
 	bucket := os.Getenv("AZURE_CONTAINER")
 	if bucket == "" {
 		skip.IgnoreLint(t, "AZURE_CONTAINER env var must be set")
 	}
+
+	// NB: the Azure Account key must not be url encoded.
+	accountKey := os.Getenv("AZURE_ACCOUNT_KEY")
 
 	const numAccounts = 1000
 
@@ -172,10 +173,42 @@ func TestCloudBackupRestoreAzure(t *testing.T) {
 	backupAndRestore(ctx, t, tc, []string{uri.String()}, []string{uri.String()}, numAccounts, nil)
 }
 
-// TestBackupRestoreAzureWithKMS hits real Azure services and so could
+// TestCloudBackupRestoreAzureImplicitAuth hits the real Azure Blob Storage
+// and so could occasionally be flaky. It's only run if the AZURE_ACCOUNT_NAME
+// and AZURE_CONTAINER environment vars are set.
+func TestCloudBackupRestoreAzureImplicitAuth(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	accountName := os.Getenv("AZURE_ACCOUNT_NAME")
+	if accountName == "" {
+		skip.IgnoreLint(t, "AZURE_ACCOUNT_NAME env var must be set")
+	}
+
+	bucket := os.Getenv("AZURE_CONTAINER")
+	if bucket == "" {
+		skip.IgnoreLint(t, "AZURE_CONTAINER env var must be set")
+	}
+
+	const numAccounts = 1000
+
+	ctx := context.Background()
+	tc, _, _, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts, InitManualReplication)
+	defer cleanupFn()
+	prefix := fmt.Sprintf("TestBackupRestoreAzure-%d", timeutil.Now().UnixNano())
+	uri := url.URL{Scheme: "azure", Host: bucket, Path: prefix}
+	values := uri.Query()
+	values.Add(azure.AzureAccountNameParam, accountName)
+	values.Add(cloud.AuthParam, cloud.AuthParamImplicit)
+	// Omitting credentials. Should read from environment.
+	uri.RawQuery = values.Encode()
+
+	backupAndRestore(ctx, t, tc, []string{uri.String()}, []string{uri.String()}, numAccounts, nil)
+}
+
+// TestCloudBackupRestoreAzureWithKMS hits real Azure services and so could
 // occasionally be flaky.
 //
-// It's only run if the AZURE_ACCOUNT_NAME, AZURE_ACCOUNT_KEY, and
+// It's only run if the AZURE_ACCOUNT_NAME and
 // AZURE_CONTAINER environment vars are set. This is for consistency with the
 // non-KMS Azure test. In point of fact, many variables are required. These
 // are listed in cloud_unit_tests_impl.sh, and the test will fail without them
@@ -184,12 +217,55 @@ func TestCloudBackupRestoreAzureWithKMS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	accountName := os.Getenv("AZURE_ACCOUNT_NAME")
+	if accountName == "" {
+		skip.IgnoreLint(t, "AZURE_ACCOUNT_NAME env var must be set")
+	}
+
+	bucket := os.Getenv("AZURE_CONTAINER")
+	if bucket == "" {
+		skip.IgnoreLint(t, "AZURE_CONTAINER env var must be set")
+	}
 
 	// NB: the Azure Account key must not be url encoded.
 	accountKey := os.Getenv("AZURE_ACCOUNT_KEY")
-	if accountName == "" || accountKey == "" {
-		skip.IgnoreLint(t, "AZURE_ACCOUNT_NAME and AZURE_ACCOUNT_KEY env vars must be set")
+
+	const numAccounts = 1000
+
+	ctx := context.Background()
+	tc, _, _, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts, InitManualReplication)
+	defer cleanupFn()
+	prefix := fmt.Sprintf("TestBackupRestoreAzureWithKMS-%d", timeutil.Now().UnixNano())
+	uri := url.URL{Scheme: "azure", Host: bucket, Path: prefix}
+	values := uri.Query()
+	values.Add(azure.AzureAccountNameParam, accountName)
+	values.Add(azure.AzureAccountKeyParam, accountKey)
+	uri.RawQuery = values.Encode()
+
+	kmsParams := make(url.Values)
+	for _, k := range []string{"AZURE_CLIENT_ID", "AZURE_CLIENT_SECRET", "AZURE_TENANT_ID", "AZURE_VAULT_NAME"} {
+		v := os.Getenv(k)
+		kmsParams.Add(k, v)
 	}
+	kmsURI := fmt.Sprintf("azure-kms:///%s/%s?%s", os.Getenv("AZURE_KMS_KEY_NAME"), os.Getenv("AZURE_KMS_KEY_VERSION"), kmsParams.Encode())
+	backupAndRestore(ctx, t, tc, []string{uri.String()}, []string{uri.String()}, numAccounts, []string{kmsURI})
+}
+
+// TestCloudBackupRestoreAzureWithKMSImplicitAuth hits real Azure services and
+// so could occasionally be flaky.
+//
+// It's only run if the AZURE_ACCOUNT_NAME and AZURE_CONTAINER environment
+// vars are set. This is for consistency with the non-KMS Azure test. In
+// point of fact, many variables are required. These are listed in
+// cloud_unit_tests_impl.sh, and the test will fail without them rather than
+// skipping.
+func TestCloudBackupRestoreAzureWithKMSImplicitAuth(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	accountName := os.Getenv("AZURE_ACCOUNT_NAME")
+	if accountName == "" {
+		skip.IgnoreLint(t, "AZURE_ACCOUNT_NAME env var must be set")
+	}
+
 	bucket := os.Getenv("AZURE_CONTAINER")
 	if bucket == "" {
 		skip.IgnoreLint(t, "AZURE_CONTAINER env var must be set")
@@ -204,7 +280,8 @@ func TestCloudBackupRestoreAzureWithKMS(t *testing.T) {
 	uri := url.URL{Scheme: "azure", Host: bucket, Path: prefix}
 	values := uri.Query()
 	values.Add(azure.AzureAccountNameParam, accountName)
-	values.Add(azure.AzureAccountKeyParam, accountKey)
+	values.Add(cloud.AuthParam, cloud.AuthParamImplicit)
+	// Omitting credentials. Should read from environment.
 	uri.RawQuery = values.Encode()
 
 	kmsParams := make(url.Values)
