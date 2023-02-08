@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
@@ -421,8 +422,7 @@ func createConstraintCheckOperations(
 		for _, constraintName := range constraintNames {
 			c := catalog.FindConstraintByName(tableDesc, string(constraintName))
 			if c == nil {
-				return nil, pgerror.Newf(pgcode.UndefinedObject,
-					"constraint %q of relation %q does not exist", constraintName, tableDesc.GetName())
+				return nil, sqlerrors.NewUndefinedConstraintError(string(constraintName), tableDesc.GetName())
 			}
 			constraints = append(constraints, c)
 		}

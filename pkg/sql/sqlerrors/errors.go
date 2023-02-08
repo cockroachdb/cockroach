@@ -270,6 +270,12 @@ func NewUndefinedUserError(user username.SQLUsername) error {
 	return pgerror.Newf(pgcode.UndefinedObject, "role/user %q does not exist", user)
 }
 
+// NewUndefinedConstraintError returns a missing constraint error.
+func NewUndefinedConstraintError(constraintName, tableName string) error {
+	return pgerror.Newf(pgcode.UndefinedObject,
+		"constraint %q of relation %q does not exist", constraintName, tableName)
+}
+
 // NewRangeUnavailableError creates an unavailable range error.
 func NewRangeUnavailableError(rangeID roachpb.RangeID, origErr error) error {
 	return pgerror.Wrapf(origErr, pgcode.RangeUnavailable, "key range id:%d is unavailable", rangeID)
