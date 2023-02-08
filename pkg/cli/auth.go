@@ -12,6 +12,7 @@ package cli
 
 import (
 	"context"
+	"database/sql/driver"
 	"fmt"
 	"net/http"
 	"os"
@@ -19,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -122,27 +124,63 @@ func createAuthSessionToken(
 	expiration := timeutil.Now().Add(authCtx.validityPeriod)
 
 	// Create the session on the server to the server.
-	insertSessionStmt := `
+	var id int64
+	err = sqlConn.ExecTxn(ctx, func(ctx context.Context, conn clisqlclient.TxBoundConn) error {
+		rows, err := conn.Query(ctx, fmt.Sprintf(
+			"SELECT crdb_internal.is_at_least_version('%s')",
+			clusterversion.ByKey(clusterversion.V23_1WebSessionsTableHasUserIDColumn)))
+		if err != nil {
+			return err
+		}
+		row := make([]driver.Value, 1)
+		if err := rows.Next(row); err != nil {
+			return err
+		}
+		if err := rows.Close(); err != nil {
+			return err
+		}
+		webSessionsHasUserIDCol, ok := row[0].(bool)
+		if !ok {
+			return errors.Newf("expected bool, got %T", row[0])
+		}
+		insertSessionStmt := `
 INSERT INTO system.web_sessions ("hashedSecret", username, "expiresAt")
-VALUES($1, $2, $3)
+VALUES ($1, $2, $3)
 RETURNING id
 `
-	var id int64
-	row, err := sqlConn.QueryRow(ctx,
-		insertSessionStmt,
-		hashedSecret,
-		username,
-		expiration,
-	)
+		if webSessionsHasUserIDCol {
+			insertSessionStmt = `
+INSERT INTO system.web_sessions ("hashedSecret", username, "expiresAt", user_id)
+VALUES ($1, $2, $3, (SELECT user_id FROM system.users WHERE username = $2))
+RETURNING id
+`
+		}
+		rows, err = conn.Query(ctx,
+			insertSessionStmt,
+			hashedSecret,
+			username,
+			expiration,
+		)
+		if err != nil {
+			return err
+		}
+		if err := rows.Next(row); err != nil {
+			return err
+		}
+		if err := rows.Close(); err != nil {
+			return err
+		}
+		if len(row) != 1 {
+			return errors.Newf("expected 1 column, got %d", len(row))
+		}
+		id, ok = row[0].(int64)
+		if !ok {
+			return errors.Newf("expected integer, got %T", row[0])
+		}
+		return nil
+	})
 	if err != nil {
 		return -1, nil, err
-	}
-	if len(row) != 1 {
-		return -1, nil, errors.Newf("expected 1 column, got %d", len(row))
-	}
-	id, ok := row[0].(int64)
-	if !ok {
-		return -1, nil, errors.Newf("expected integer, got %T", row[0])
 	}
 
 	// Spell out the cookie.
@@ -204,17 +242,19 @@ func runAuthList(cmd *cobra.Command, args []string) (resErr error) {
 	}
 	defer func() { resErr = errors.CombineErrors(resErr, sqlConn.Close()) }()
 
-	logoutQuery := clisqlclient.MakeQuery(`
+	// TODO(yang): Change this to read the user_id directly from the table in 23.2.
+	authListQuery := clisqlclient.MakeQuery(`
 SELECT username,
+       (SELECT user_id FROM system.users AS u WHERE w.username = u.username) AS "user ID",
        id AS "session ID",
        "createdAt" as "created",
        "expiresAt" as "expires",
        "revokedAt" as "revoked",
        "lastUsedAt" as "last used"
-  FROM system.web_sessions`)
+  FROM system.web_sessions AS w`)
 	return sqlExecCtx.RunQueryAndFormatResults(
 		context.Background(),
-		sqlConn, os.Stdout, os.Stdout, stderr, logoutQuery)
+		sqlConn, os.Stdout, os.Stdout, stderr, authListQuery)
 }
 
 var authCmds = []*cobra.Command{
