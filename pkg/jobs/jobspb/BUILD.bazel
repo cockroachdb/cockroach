@@ -1,7 +1,7 @@
 load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "jobspb",
@@ -61,6 +61,16 @@ go_proto_library(
         "//pkg/util/uuid",  # keep
         "@com_github_cockroachdb_errors//errorspb",
         "@com_github_gogo_protobuf//gogoproto",
+    ],
+)
+
+go_test(
+    name = "jobspb_test",
+    srcs = ["wrap_test.go"],
+    args = ["-test.timeout=295s"],
+    deps = [
+        ":jobspb",
+        "@com_github_stretchr_testify//assert",
     ],
 )
 

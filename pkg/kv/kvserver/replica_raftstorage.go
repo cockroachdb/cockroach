@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary"
@@ -39,26 +40,6 @@ import (
 type replicaRaftStorage Replica
 
 var _ raft.Storage = (*replicaRaftStorage)(nil)
-
-const (
-	// clearRangeThresholdPointKeys is the threshold (as number of point keys)
-	// beyond which we'll clear range data using a Pebble range tombstone rather
-	// than individual Pebble point tombstones.
-	//
-	// It is expensive for there to be many Pebble range tombstones in the same
-	// sstable because all of the tombstones in an sstable are loaded whenever the
-	// sstable is accessed. So we avoid using range deletion unless there is some
-	// minimum number of keys. The value here was pulled out of thin air. It might
-	// be better to make this dependent on the size of the data being deleted. Or
-	// perhaps we should fix Pebble to handle large numbers of range tombstones in
-	// an sstable better.
-	clearRangeThresholdPointKeys = 64
-
-	// clearRangeThresholdRangeKeys is the threshold (as number of range keys)
-	// beyond which we'll clear range data using a single RANGEKEYDEL across the
-	// span rather than clearing individual range keys.
-	clearRangeThresholdRangeKeys = 8
-)
 
 // All calls to raft.RawNode require that both Replica.raftMu and
 // Replica.mu are held. All of the functions exposed via the
@@ -393,56 +374,6 @@ func (r *Replica) updateRangeInfo(ctx context.Context, desc *roachpb.RangeDescri
 	}
 
 	r.SetSpanConfig(conf)
-	return nil
-}
-
-type clearRangeDataOptions struct {
-	// ClearReplicatedByRangeID indicates that replicated RangeID-based keys
-	// (abort span, etc) should be removed.
-	ClearReplicatedByRangeID bool
-	// ClearUnreplicatedByRangeID indicates that unreplicated RangeID-based keys
-	// (logstore state incl. HardState, etc) should be removed.
-	ClearUnreplicatedByRangeID bool
-	// ClearReplicatedBySpan causes the state machine data (i.e. the replicated state
-	// for the given RSpan) that is key-addressable (i.e. range descriptor, user keys,
-	// locks) to be removed. No data is removed if this is the zero span.
-	ClearReplicatedBySpan roachpb.RSpan
-
-	// If MustUseClearRange is true, a Pebble range tombstone will always be used
-	// to clear the key spans (unless empty). This is typically used when we need
-	// to write additional keys to an SST after this clear, e.g. a replica
-	// tombstone, since keys must be written in order. When this is false, a
-	// heuristic will be used instead.
-	MustUseClearRange bool
-}
-
-// clearRangeData clears the data associated with a range descriptor selected
-// by the provided clearRangeDataOptions.
-//
-// TODO(tbg): could rename this to clearReplicaData. The use of "Range" in both the
-// "CRDB Range" and "storage.ClearRange" context in the setting of this method could
-// be confusing.
-func clearRangeData(
-	rangeID roachpb.RangeID, reader storage.Reader, writer storage.Writer, opts clearRangeDataOptions,
-) error {
-	keySpans := rditer.Select(rangeID, rditer.SelectOpts{
-		ReplicatedBySpan:      opts.ClearReplicatedBySpan,
-		ReplicatedByRangeID:   opts.ClearReplicatedByRangeID,
-		UnreplicatedByRangeID: opts.ClearUnreplicatedByRangeID,
-	})
-
-	pointKeyThreshold, rangeKeyThreshold := clearRangeThresholdPointKeys, clearRangeThresholdRangeKeys
-	if opts.MustUseClearRange {
-		pointKeyThreshold, rangeKeyThreshold = 1, 1
-	}
-
-	for _, keySpan := range keySpans {
-		if err := storage.ClearRangeWithHeuristic(
-			reader, writer, keySpan.Key, keySpan.EndKey, pointKeyThreshold, rangeKeyThreshold,
-		); err != nil {
-			return err
-		}
-	}
 	return nil
 }
 
@@ -814,18 +745,12 @@ func clearSubsumedReplicaDiskData(
 		// NOTE: We set mustClearRange to true because we are setting
 		// RangeTombstoneKey. Since Clears and Puts need to be done in increasing
 		// order of keys, it is not safe to use ClearRangeIter.
-		opts := clearRangeDataOptions{
+		opts := kvstorage.ClearRangeDataOptions{
 			ClearReplicatedByRangeID:   true,
 			ClearUnreplicatedByRangeID: true,
 			MustUseClearRange:          true,
 		}
-		if err := sr.preDestroyRaftMuLocked(
-			ctx,
-			reader,
-			&subsumedReplSST,
-			subsumedNextReplicaID,
-			opts,
-		); err != nil {
+		if err := kvstorage.DestroyReplica(ctx, sr.RangeID, reader, &subsumedReplSST, subsumedNextReplicaID, opts); err != nil {
 			subsumedReplSST.Close()
 			return err
 		}
@@ -878,8 +803,8 @@ func clearSubsumedReplicaDiskData(
 				&subsumedReplSST,
 				keySpans[i].EndKey,
 				totalKeySpans[i].EndKey,
-				clearRangeThresholdPointKeys,
-				clearRangeThresholdRangeKeys,
+				kvstorage.ClearRangeThresholdPointKeys,
+				kvstorage.ClearRangeThresholdRangeKeys,
 			); err != nil {
 				subsumedReplSST.Close()
 				return err

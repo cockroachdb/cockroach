@@ -46,7 +46,7 @@ func MakeConcurrentRequestLimiter(spanName string, limit int) ConcurrentRequestL
 // is forced to block.
 func (l *ConcurrentRequestLimiter) Begin(ctx context.Context) (Reservation, error) {
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "limiter begin")
 	}
 
 	res, err := l.sem.TryAcquire(ctx, 1)

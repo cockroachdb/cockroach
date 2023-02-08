@@ -1149,6 +1149,12 @@ message SchemaTelemetryDetails {
 message SchemaTelemetryProgress {
 }
 
+message PollJobsStatsDetails {
+}
+
+message PollJobsStatsProgress {
+}
+
 message Payload {
   string description = 1;
   // If empty, the description is assumed to be the statement.
@@ -1200,7 +1206,12 @@ message Payload {
     // and publish it to the telemetry event log. These jobs are typically
     // created by a built-in schedule named "sql-schema-telemetry".
     SchemaTelemetryDetails schema_telemetry = 37;
+
     KeyVisualizerDetails keyVisualizerDetails = 38;
+
+    // PollJobsStats jobs poll the jobs table for statistics metrics as the number of
+    // paused jobs.
+    PollJobsStatsDetails poll_jobs_stats = 39;
   }
   reserved 26;
   // PauseReason is used to describe the reason that the job is currently paused
@@ -1263,6 +1274,7 @@ message Progress {
     RowLevelTTLProgress row_level_ttl = 25 [(gogoproto.customname)="RowLevelTTL"];
     SchemaTelemetryProgress schema_telemetry = 26;
     KeyVisualizerProgress keyVisualizerProgress = 27;
+    PollJobsStatsProgress pollJobsStats = 28;
   }
 
   uint64 trace_id = 21 [(gogoproto.nullable) = false, (gogoproto.customname) = "TraceID", (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb.TraceID"];
@@ -1293,6 +1305,7 @@ enum Type {
   ROW_LEVEL_TTL = 16 [(gogoproto.enumvalue_customname) = "TypeRowLevelTTL"];
   AUTO_SCHEMA_TELEMETRY = 17 [(gogoproto.enumvalue_customname) = "TypeAutoSchemaTelemetry"];
   KEY_VISUALIZER = 18 [(gogoproto.enumvalue_customname) = "TypeKeyVisualizer"];
+  POLL_JOBS_STATS = 19 [(gogoproto.enumvalue_customname) = "TypePollJobsStats"];
 }
 
 message Job {

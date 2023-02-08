@@ -46,13 +46,11 @@ func LoadReplicaState(
 	replicaID roachpb.ReplicaID,
 ) (LoadedReplicaState, error) {
 	sl := stateloader.Make(desc.RangeID)
-	id, found, err := sl.LoadRaftReplicaID(ctx, eng)
+	id, err := sl.LoadRaftReplicaID(ctx, eng)
 	if err != nil {
 		return LoadedReplicaState{}, err
-	} else if !found {
-		return LoadedReplicaState{}, errors.AssertionFailedf(
-			"r%d: RaftReplicaID not found", desc.RangeID)
-	} else if loaded := id.ReplicaID; loaded != replicaID {
+	}
+	if loaded := id.ReplicaID; loaded != replicaID {
 		return LoadedReplicaState{}, errors.AssertionFailedf(
 			"r%d: loaded RaftReplicaID %d does not match %d", desc.RangeID, loaded, replicaID)
 	}

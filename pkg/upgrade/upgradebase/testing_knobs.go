@@ -33,6 +33,11 @@ type TestingKnobs struct {
 	// production.
 	DontUseJobs bool
 
+	// SkipJobMetricsPollingJobBootstrap, if set, disables the
+	// clusterversion.V23_1_CreateJobsMetricsPollingJob upgrade, which prevents a
+	// job from being created.
+	SkipJobMetricsPollingJobBootstrap bool
+
 	// AfterRunPermanentUpgrades is called after each call to
 	// RunPermanentUpgrades.
 	AfterRunPermanentUpgrades func()

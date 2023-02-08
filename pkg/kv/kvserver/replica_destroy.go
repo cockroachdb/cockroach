@@ -15,12 +15,10 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -71,36 +69,6 @@ func (s destroyStatus) Removed() bool {
 // don't know the current replica ID.
 const mergedTombstoneReplicaID roachpb.ReplicaID = math.MaxInt32
 
-func (r *Replica) preDestroyRaftMuLocked(
-	ctx context.Context,
-	reader storage.Reader,
-	writer storage.Writer,
-	nextReplicaID roachpb.ReplicaID,
-	opts clearRangeDataOptions,
-) error {
-	r.mu.RLock()
-	desc := r.descRLocked()
-	removed := r.mu.destroyStatus.Removed()
-	r.mu.RUnlock()
-
-	// The replica must be marked as destroyed before its data is removed. If
-	// not, we risk new commands being accepted and observing the missing data.
-	if !removed {
-		log.Fatalf(ctx, "replica not marked as destroyed before call to preDestroyRaftMuLocked: %v", r)
-	}
-	err := clearRangeData(desc.RangeID, reader, writer, opts)
-	if err != nil {
-		return err
-	}
-
-	// Save a tombstone to ensure that replica IDs never get reused.
-	//
-	// NB: Legacy tombstones (which are in the replicated key space) are wiped
-	// in clearRangeData, but that's OK since we're writing a new one in the same
-	// batch (and in particular, sequenced *after* the wipe).
-	return r.setTombstoneKey(ctx, writer, nextReplicaID)
-}
-
 func (r *Replica) postDestroyRaftMuLocked(ctx context.Context, ms enginepb.MVCCStats) error {
 	// NB: we need the nil check below because it's possible that we're GC'ing a
 	// Replica without a replicaID, in which case it does not have a sideloaded
@@ -147,7 +115,7 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 	desc := r.Desc()
 	inited := desc.IsInitialized()
 
-	opts := clearRangeDataOptions{
+	opts := kvstorage.ClearRangeDataOptions{
 		ClearReplicatedBySpan: desc.RSpan(), // zero if !inited
 		// TODO(tbg): if it's uninitialized, we might as well clear
 		// the replicated state because there isn't any. This seems
@@ -157,13 +125,7 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 		ClearReplicatedByRangeID:   inited,
 		ClearUnreplicatedByRangeID: true,
 	}
-	if err := r.preDestroyRaftMuLocked(
-		ctx,
-		r.Engine(),
-		batch,
-		nextReplicaID,
-		opts,
-	); err != nil {
+	if err := kvstorage.DestroyReplica(ctx, r.RangeID, r.Engine(), batch, nextReplicaID, opts); err != nil {
 		return err
 	}
 	preTime := timeutil.Now()
@@ -221,38 +183,4 @@ func (r *Replica) disconnectReplicationRaftMuLocked(ctx context.Context) {
 		})
 	}
 	r.mu.internalRaftGroup = nil
-}
-
-// setTombstoneKey writes a tombstone to disk to ensure that replica IDs never
-// get reused. It determines what the minimum next replica ID can be using
-// the provided nextReplicaID and the Replica's own ID.
-//
-// We have to be careful to set the right key, since a replica can be using an
-// ID that it hasn't yet received a RangeDescriptor for if it receives raft
-// requests for that replica ID (as seen in #14231).
-func (r *Replica) setTombstoneKey(
-	ctx context.Context, writer storage.Writer, externalNextReplicaID roachpb.ReplicaID,
-) error {
-	r.mu.Lock()
-	nextReplicaID := r.mu.state.Desc.NextReplicaID
-	if externalNextReplicaID > nextReplicaID {
-		nextReplicaID = externalNextReplicaID
-	}
-	r.mu.Unlock()
-	return writeTombstoneKey(ctx, writer, r.RangeID, nextReplicaID)
-}
-
-func writeTombstoneKey(
-	ctx context.Context,
-	writer storage.Writer,
-	rangeID roachpb.RangeID,
-	nextReplicaID roachpb.ReplicaID,
-) error {
-	tombstoneKey := keys.RangeTombstoneKey(rangeID)
-	tombstone := &roachpb.RangeTombstone{
-		NextReplicaID: nextReplicaID,
-	}
-	// "Blind" because ms == nil and timestamp.IsEmpty().
-	return storage.MVCCBlindPutProto(ctx, writer, nil, tombstoneKey,
-		hlc.Timestamp{}, hlc.ClockTimestamp{}, tombstone, nil)
 }
