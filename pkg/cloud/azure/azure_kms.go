@@ -16,6 +16,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	kms "github.com/Azure/azure-sdk-for-go/sdk/keyvault/azkeys"
 	"github.com/Azure/go-autorest/autorest/azure"
@@ -54,6 +55,8 @@ type kmsURIParams struct {
 	clientID     string
 	clientSecret string
 	tenantID     string
+
+	auth string
 }
 
 // resolveKMSURIParams parses the `kmsURI` for all the supported KMS parameters.
@@ -64,6 +67,7 @@ func resolveKMSURIParams(kmsURI cloud.ConsumeURL) (kmsURIParams, error) {
 		clientID:     kmsURI.ConsumeParam(AzureClientIDParam),
 		clientSecret: kmsURI.ConsumeParam(AzureClientSecretParam),
 		tenantID:     kmsURI.ConsumeParam(AzureTenantIDParam),
+		auth:         kmsURI.ConsumeParam(cloud.AuthParam),
 	}
 
 	// Validate that all the passed in parameters are supported.
@@ -98,15 +102,19 @@ func MakeAzureKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS,
 	if kmsURIParams.vaultName == "" {
 		missingParams = append(missingParams, AzureVaultName)
 	}
-	if kmsURIParams.clientID == "" {
-		missingParams = append(missingParams, AzureClientIDParam)
+
+	if kmsURIParams.auth != cloud.AuthParamImplicit {
+		if kmsURIParams.clientID == "" {
+			missingParams = append(missingParams, AzureClientIDParam)
+		}
+		if kmsURIParams.clientSecret == "" {
+			missingParams = append(missingParams, AzureClientSecretParam)
+		}
+		if kmsURIParams.tenantID == "" {
+			missingParams = append(missingParams, AzureTenantIDParam)
+		}
 	}
-	if kmsURIParams.clientSecret == "" {
-		missingParams = append(missingParams, AzureClientSecretParam)
-	}
-	if kmsURIParams.tenantID == "" {
-		missingParams = append(missingParams, AzureTenantIDParam)
-	}
+
 	if len(missingParams) != 0 {
 		return nil, errors.Errorf("kms URI expected but did not receive: %s", strings.Join(missingParams, ", "))
 	}
@@ -116,13 +124,6 @@ func MakeAzureKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS,
 		// which itself defaults to this for backwards compatibility.
 		kmsURIParams.environment = azure.PublicCloud.Name
 	}
-
-	//TODO(benbardin): Implicit auth.
-	credential, err := azidentity.NewClientSecretCredential(kmsURIParams.tenantID, kmsURIParams.clientID, kmsURIParams.clientSecret, nil)
-	if err != nil {
-		return nil, errors.Wrap(err, "azure kms client secret credential")
-	}
-
 	azureEnv, err := azure.EnvironmentFromName(kmsURIParams.environment)
 	if err != nil {
 		return nil, errors.Wrap(err, "azure kms environment")
@@ -132,10 +133,36 @@ func MakeAzureKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS,
 	if err != nil {
 		return nil, errors.Wrap(err, "azure kms vault url")
 	}
+
+	var credential azcore.TokenCredential
+
+	switch kmsURIParams.auth {
+	case "", cloud.AuthParamSpecified:
+		credential, err = azidentity.NewClientSecretCredential(kmsURIParams.tenantID, kmsURIParams.clientID, kmsURIParams.clientSecret, nil)
+		if err != nil {
+			return nil, errors.Wrap(err, "azure kms client secret credential")
+		}
+	case cloud.AuthParamImplicit:
+		if env.KMSConfig().DisableImplicitCredentials {
+			return nil, errors.New(
+				"implicit credentials disallowed for azure due to --external-io-implicit-credentials flag")
+		}
+		// The Default credential supports env vars and managed identity magic.
+		// We rely on the former for testing and the latter in prod.
+		// https://learn.microsoft.com/en-us/dotnet/api/azure.identity.defaultazurecredential
+		credential, err = azidentity.NewDefaultAzureCredential(nil)
+		if err != nil {
+			return nil, errors.Wrap(err, "azure managed identity credential")
+		}
+	default:
+		return nil, errors.Errorf("unsupported value %s for %s", kmsURIParams.auth, cloud.AuthParam)
+	}
+
 	client, err := kms.NewClient(u.String(), credential, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "azure kms vault client")
 	}
+
 	keyTokens := strings.Split(strings.TrimPrefix(kmsURI.Path, "/"), "/")
 	if len(keyTokens) != 2 {
 		return nil, errors.New("azure kms key must be of form 'id/version'")

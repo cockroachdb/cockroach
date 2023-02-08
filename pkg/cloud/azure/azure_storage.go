@@ -66,10 +66,14 @@ var maxConcurrentUploadBuffers = settings.RegisterIntSetting(
 // support this access method. For backwards compatibility, however, we retain
 // support for these keys on Storage.
 //
-// So to authenticate to Azure Storage, a CRDB user must provide EITHER
+// So to authenticate manually to Azure Storage, a CRDB user must provide
+// EITHER:
 // 1. AZURE_ACCOUNT_KEY (legacy storage-key access), OR
 // 2. All three of AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID (RBAC
 // access).
+// Alternatively, a user may
+// 3. Use implicit authentication with a managed identity derived from the
+// environment on an Azure cluster host.
 const (
 	// AzureAccountNameParam is the query parameter for account_name in an azure URI.
 	AzureAccountNameParam = "AZURE_ACCOUNT_NAME"
@@ -113,6 +117,7 @@ func parseAzureURL(
 		ClientID:     azureURL.ConsumeParam(AzureClientIDParam),
 		ClientSecret: azureURL.ConsumeParam(AzureClientSecretParam),
 		TenantID:     azureURL.ConsumeParam(AzureTenantIDParam),
+		Auth:         azureURL.ConsumeParam(cloud.AuthParam),
 	}
 
 	// Validate that all the passed in parameters are supported.
@@ -125,13 +130,21 @@ func parseAzureURL(
 		return conf, errors.Errorf("azure uri missing %q parameter", AzureAccountNameParam)
 	}
 
-	hasKeyCreds := conf.AzureConfig.AccountKey != ""
+	// Validate the authentication parameters are set correctly.
+	switch conf.AzureConfig.Auth {
+	case "", cloud.AuthParamSpecified:
+		hasKeyCreds := conf.AzureConfig.AccountKey != ""
 
-	hasRoleCreds := conf.AzureConfig.TenantID != "" && conf.AzureConfig.ClientID != "" && conf.AzureConfig.ClientSecret != ""
-	noRoleCreds := conf.AzureConfig.TenantID == "" && conf.AzureConfig.ClientID == "" && conf.AzureConfig.ClientSecret == ""
+		hasRoleCreds := conf.AzureConfig.TenantID != "" && conf.AzureConfig.ClientID != "" && conf.AzureConfig.ClientSecret != ""
+		noRoleCreds := conf.AzureConfig.TenantID == "" && conf.AzureConfig.ClientID == "" && conf.AzureConfig.ClientSecret == ""
 
-	if hasRoleCreds == hasKeyCreds || hasRoleCreds == noRoleCreds {
-		return conf, errors.Errorf("azure uri requires exactly one authentication method: %q OR all three of %q, %q, and %q", AzureAccountKeyParam, AzureTenantIDParam, AzureClientIDParam, AzureClientSecretParam)
+		if hasRoleCreds == hasKeyCreds || hasRoleCreds == noRoleCreds {
+			return conf, errors.Errorf("explicit azure uri requires exactly one authentication method: %q OR all three of %q, %q, and %q", AzureAccountKeyParam, AzureTenantIDParam, AzureClientIDParam, AzureClientSecretParam)
+		}
+	case cloud.AuthParamImplicit:
+	default:
+		return cloudpb.ExternalStorage{}, errors.Errorf("unsupported value %s for %s",
+			conf.AzureConfig.Auth, cloud.AuthParam)
 	}
 
 	if conf.AzureConfig.Environment == "" {
@@ -169,27 +182,48 @@ func makeAzureStorage(
 		return nil, errors.Wrap(err, "azure: account name is not valid")
 	}
 
-	//TODO(benbardin): Implicit auth.
 	var azClient *service.Client
-	if conf.ClientID != "" {
-		credential, err := azidentity.NewClientSecretCredential(conf.TenantID, conf.ClientID, conf.ClientSecret, nil)
-		if err != nil {
-			return nil, errors.Wrap(err, "azure client secret credential")
-		}
+	switch conf.Auth {
+	case "", cloud.AuthParamSpecified:
+		if conf.ClientID != "" {
+			credential, err := azidentity.NewClientSecretCredential(conf.TenantID, conf.ClientID, conf.ClientSecret, nil)
+			if err != nil {
+				return nil, errors.Wrap(err, "azure client secret credential")
+			}
 
+			azClient, err = service.NewClient(u.String(), credential, nil)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			credential, err := azblob.NewSharedKeyCredential(conf.AccountName, conf.AccountKey)
+			if err != nil {
+				return nil, errors.Wrap(err, "azure shared key credential")
+			}
+			azClient, err = service.NewClientWithSharedKeyCredential(u.String(), credential, nil)
+			if err != nil {
+				return nil, err
+			}
+		}
+	case cloud.AuthParamImplicit:
+		if args.IOConf.DisableImplicitCredentials {
+			return nil, errors.New(
+				"implicit credentials disallowed for azure due to --external-io-implicit-credentials flag")
+		}
+		// The Default credential supports env vars and managed identity magic.
+		// We rely on the former for testing and the latter in prod.
+		// https://learn.microsoft.com/en-us/dotnet/api/azure.identity.defaultazurecredential
+		credential, err := azidentity.NewDefaultAzureCredential(nil)
+		if err != nil {
+			return nil, errors.Wrap(err, "azure default credential")
+		}
 		azClient, err = service.NewClient(u.String(), credential, nil)
 		if err != nil {
 			return nil, err
 		}
-	} else {
-		credential, err := azblob.NewSharedKeyCredential(conf.AccountName, conf.AccountKey)
-		if err != nil {
-			return nil, errors.Wrap(err, "azure shared key credential")
-		}
-		azClient, err = service.NewClientWithSharedKeyCredential(u.String(), credential, nil)
-		if err != nil {
-			return nil, err
-		}
+
+	default:
+		return nil, errors.Errorf("unsupported value %s for %s", conf.Auth, cloud.AuthParam)
 	}
 
 	return &azureStorage{
