@@ -47,7 +47,7 @@ const (
 func ExampleNewClock() {
 	// Initialize a new clock, using the local
 	// physical clock.
-	c := NewClockWithSystemTimeSource(time.Nanosecond)
+	c := NewClockWithSystemTimeSource(time.Nanosecond, time.Nanosecond)
 	// Update the state of the hybrid clock.
 	s := c.Now()
 	time.Sleep(50 * time.Nanosecond)
@@ -71,7 +71,7 @@ func ExampleNewClock() {
 
 func TestHLCLess(t *testing.T) {
 	m := timeutil.NewManualTime(timeutil.Unix(0, 1))
-	c := NewClock(m, time.Nanosecond)
+	c := NewClock(m, time.Nanosecond, time.Nanosecond)
 	a := c.Now()
 	b := a
 	if a.Less(b) || b.Less(a) {
@@ -90,7 +90,7 @@ func TestHLCLess(t *testing.T) {
 
 func TestHLCLessEq(t *testing.T) {
 	m := timeutil.NewManualTime(timeutil.Unix(0, 1))
-	c := NewClock(m, time.Nanosecond)
+	c := NewClock(m, time.Nanosecond, time.Nanosecond)
 	a := c.Now()
 	b := a
 	if !a.LessEq(b) || !b.LessEq(a) {
@@ -109,7 +109,7 @@ func TestHLCLessEq(t *testing.T) {
 
 func TestHLCEqual(t *testing.T) {
 	m := timeutil.NewManualTime(timeutil.Unix(0, 1))
-	c := NewClock(m, time.Nanosecond)
+	c := NewClock(m, time.Nanosecond, time.Nanosecond)
 	a := c.Now()
 	b := a
 	if a != b {
@@ -200,7 +200,7 @@ func TestHLCPhysicalClockJump(t *testing.T) {
 			a := assert.New(t)
 
 			m := timeutil.NewManualTime(timeutil.Unix(0, 1))
-			c := NewClock(m, test.maxOffset)
+			c := NewClock(m, test.maxOffset, test.maxOffset)
 			var tickerDuration time.Duration
 			tickerCh := make(chan time.Time)
 			tickProcessedCh := make(chan struct{})
@@ -302,7 +302,7 @@ func TestHLCPhysicalClockJump(t *testing.T) {
 // including backward jumps in local physical time and clock offset.
 func TestHLCClock(t *testing.T) {
 	m := timeutil.NewManualTime(timeutil.Unix(0, 1))
-	c := NewClock(m, 1000*time.Nanosecond)
+	c := NewClock(m, 1000*time.Nanosecond, 1000*time.Nanosecond)
 	expectedHistory := []struct {
 		// The physical time that this event should take place at.
 		wallClock int64
@@ -353,7 +353,7 @@ func TestHLCClock(t *testing.T) {
 // used as a physical clock. This is useful for testing.
 func TestExampleManualClock(t *testing.T) {
 	m := timeutil.NewManualTime(timeutil.Unix(0, 10))
-	c := NewClock(m, time.Nanosecond)
+	c := NewClock(m, time.Nanosecond, time.Nanosecond)
 	if wallNanos := c.Now().WallTime; wallNanos != 10 {
 		t.Fatalf("unexpected wall time: %d", wallNanos)
 	}
@@ -367,7 +367,7 @@ func TestExampleManualClock(t *testing.T) {
 // TestHybridManualClock.
 func TestHybridManualClock(t *testing.T) {
 	m := NewHybridManualClock()
-	c := NewClock(m, time.Nanosecond)
+	c := NewClock(m, time.Nanosecond, time.Nanosecond)
 
 	// We do a two sided test to make sure that the physical clock matches
 	// the hybrid value. Since we cant pull a value off both clocks at the same
@@ -386,7 +386,7 @@ func TestHybridManualClock(t *testing.T) {
 // HybridManualClock.
 func TestHybridManualClockPause(t *testing.T) {
 	m := NewHybridManualClock()
-	c := NewClock(m, time.Nanosecond)
+	c := NewClock(m, time.Nanosecond, time.Nanosecond)
 	now := c.Now().WallTime
 	time.Sleep(10 * time.Millisecond)
 	require.Less(t, now, c.Now().WallTime)
@@ -407,7 +407,7 @@ func TestHybridManualClockPause(t *testing.T) {
 
 func TestHLCMonotonicityCheck(t *testing.T) {
 	m := timeutil.NewManualTime(timeutil.Unix(0, 100000))
-	c := NewClock(m, 100*time.Nanosecond)
+	c := NewClock(m, 100*time.Nanosecond, 100*time.Nanosecond)
 
 	// Update the state of the hybrid clock.
 	firstTime := c.Now()
@@ -473,7 +473,8 @@ func TestHLCEnforceWallTimeWithinBoundsInNow(t *testing.T) {
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
 			a := assert.New(t)
-			c := NewClock(timeutil.NewManualTime(timeutil.Unix(0, test.physicalTime)), time.Nanosecond)
+			c := NewClock(timeutil.NewManualTime(timeutil.Unix(0, test.physicalTime)),
+				time.Nanosecond, time.Nanosecond)
 			c.mu.wallTimeUpperBound = test.wallTimeUpperBound
 			fatal = false
 			c.Now()
@@ -522,7 +523,8 @@ func TestHLCEnforceWallTimeWithinBoundsInUpdate(t *testing.T) {
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
 			a := assert.New(t)
-			c := NewClock(timeutil.NewManualTime(timeutil.Unix(0, test.messageWallTime)), time.Nanosecond)
+			c := NewClock(timeutil.NewManualTime(timeutil.Unix(0, test.messageWallTime)),
+				time.Nanosecond, time.Nanosecond)
 			c.mu.wallTimeUpperBound = test.wallTimeUpperBound
 			fatal = false
 			err := c.UpdateAndCheckMaxOffset(ctx, ClockTimestamp{WallTime: test.messageWallTime})
@@ -537,7 +539,7 @@ func TestHLCEnforceWallTimeWithinBoundsInUpdate(t *testing.T) {
 func TestClock_UpdateAndCheckMaxOffset_UntrustworthyValue(t *testing.T) {
 	t0 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
 	m := timeutil.NewManualTime(t0)
-	c := NewClock(m, 500*time.Millisecond)
+	c := NewClock(m, 500*time.Millisecond, 500*time.Millisecond)
 	require.NoError(t, c.UpdateAndCheckMaxOffset(context.Background(), ClockTimestamp{
 		WallTime: t0.Add(499 * time.Millisecond).UnixNano(),
 	}))
@@ -596,7 +598,7 @@ func TestResetAndRefreshHLCUpperBound(t *testing.T) {
 				return nil
 			}
 			m := timeutil.NewManualTime(timeutil.Unix(0, 1))
-			c := NewClock(m, time.Nanosecond)
+			c := NewClock(m, time.Nanosecond, time.Nanosecond)
 			// Test Refresh Upper Bound
 			err := c.RefreshHLCUpperBound(persistFn, test.delta)
 			a.True(
@@ -636,7 +638,7 @@ func TestLateStartForwardClockJump(t *testing.T) {
 	// a forward clock jump (because the background goroutine to keep
 	// the HLC clock fresh was not yet running).
 	m := timeutil.NewManualTime(timeutil.Unix(0, 1))
-	c := NewClock(m, 500*time.Millisecond)
+	c := NewClock(m, 500*time.Millisecond, 500*time.Millisecond)
 	c.Now()
 	m.Advance(time.Second)
 
@@ -659,7 +661,7 @@ func TestLateStartForwardClockJump(t *testing.T) {
 
 func TestSleepUntil(t *testing.T) {
 	m := timeutil.NewManualTime(timeutil.Unix(0, 100000))
-	c := NewClock(m, 0)
+	c := NewClock(m, 0, 0)
 
 	before := c.Now()
 	waitDur := time.Duration(1000)
@@ -683,7 +685,7 @@ func TestSleepUntil(t *testing.T) {
 
 func TestSleepUntilContextCancellation(t *testing.T) {
 	m := timeutil.NewManualTime(timeutil.Unix(0, 100000))
-	c := NewClock(m, 0)
+	c := NewClock(m, 0, 0)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
 	defer cancel()
@@ -724,7 +726,7 @@ func BenchmarkUpdate(b *testing.B) {
 
 	b.StartTimer()
 	for n := 0; n < b.N; n++ {
-		clock := NewClock(timeutil.NewManualTime(timeutil.Unix(0, 123)), time.Second)
+		clock := NewClock(timeutil.NewManualTime(timeutil.Unix(0, 123)), time.Second, time.Second)
 		wg := sync.WaitGroup{}
 		for w := 0; w < concurrency; w++ {
 			w := w // make sure we don't close over the loop variable
