@@ -16,8 +16,12 @@ import (
 	"net/url"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/errors"
 )
 
@@ -52,19 +56,15 @@ type schemeRegistration struct {
 }
 
 func (s *schemeRegistration) parseAndValidateURI(
-	ctx context.Context,
-	execCfg interface{},
-	user username.SQLUsername,
-	uri *url.URL,
-	requestedValidations ...string,
+	ctx context.Context, env ExternalConnEnv, uri *url.URL, requestedValidations ...string,
 ) (ExternalConnection, error) {
-	conn, err := s.connectionParserFactory(ctx, execCfg, user, uri)
+	conn, err := s.connectionParserFactory(ctx, env, uri)
 	if err != nil {
 		return nil, err
 	}
 	for _, v := range requestedValidations {
 		if validationFn, ok := s.validations[v]; ok {
-			err = errors.CombineErrors(err, validationFn(ctx, execCfg, user, uri.String()))
+			err = errors.CombineErrors(err, validationFn(ctx, env, uri.String()))
 		}
 	}
 	return conn, err
@@ -109,7 +109,7 @@ func RegisterNamedValidation(providerScheme string, name string, validation Vali
 }
 
 func makeSimpleURIFactory(provider connectionpb.ConnectionProvider) connectionParserFactory {
-	return func(ctx context.Context, execCfg interface{}, user username.SQLUsername, uri *url.URL) (ExternalConnection, error) {
+	return func(ctx context.Context, env ExternalConnEnv, uri *url.URL) (ExternalConnection, error) {
 		connDetails := connectionpb.ConnectionDetails{
 			Provider: provider,
 			Details: &connectionpb.ConnectionDetails_SimpleURI{
@@ -125,7 +125,7 @@ func makeSimpleURIFactory(provider connectionpb.ConnectionProvider) connectionPa
 // ExternalConnectionFromURI returns an ExternalConnection for the given URI and runs the registered
 // default validation, which can involve making external calls.
 func ExternalConnectionFromURI(
-	ctx context.Context, execCfg interface{}, user username.SQLUsername, uri string,
+	ctx context.Context, env ExternalConnEnv, uri string,
 ) (ExternalConnection, error) {
 	externalConnectionURI, err := url.Parse(uri)
 	if err != nil {
@@ -138,11 +138,71 @@ func ExternalConnectionFromURI(
 		return nil, errors.Newf("no parseAndValidateFn found for external connection provider %s", externalConnectionURI.Scheme)
 	}
 
-	return parseAndValidateFn.parseAndValidateURI(ctx, execCfg, user, externalConnectionURI, defaultValidation)
+	return parseAndValidateFn.parseAndValidateURI(ctx, env, externalConnectionURI, defaultValidation)
 }
 
-// ValidationFn is the type taken by Register*Validation. Validation functions can ping the external connection.
-type ValidationFn func(ctx context.Context, execCfg interface{}, user username.SQLUsername, uri string) error
+type ExternalConnEnv struct {
+	// Settings refers to the cluster settings that apply to the BackupKMSEnv.
+	Settings *cluster.Settings
+	// Conf represents the ExternalIODirConfig that applies to the BackupKMSEnv.
+	Conf *base.ExternalIODirConfig
+	// DB is the database handle that applies to the BackupKMSEnv.
+	Isqldb isql.DB
+	// Username is the user that applies to the BackupKMSEnv.
+	Username username.SQLUsername
+
+	ExternalStorageFromURIFactory cloud.ExternalStorageFromURIFactory
+
+	SkipCheckingExternalStorageConnection bool
+	SkipCheckingKMSConnection             bool
+	// ServerCfg is used to validate the external connection sink URI.
+	//// It implements *execinfra.ServerConfig.
+	ServerCfg interface{}
+	//ServerCfg *execinfra.ServerConfig
+}
+
+var _ cloud.KMSEnv = &ExternalConnEnv{}
+
+func (s *ExternalConnEnv) ClusterSettings() *cluster.Settings {
+	return s.Settings
+}
+
+func (s *ExternalConnEnv) KMSConfig() *base.ExternalIODirConfig {
+	return s.Conf
+}
+
+func (s *ExternalConnEnv) DBHandle() isql.DB {
+	return s.Isqldb
+}
+
+func (s *ExternalConnEnv) User() username.SQLUsername {
+	return s.Username
+}
+
+func MakeExternalConnEnv(
+	settings *cluster.Settings,
+	conf *base.ExternalIODirConfig,
+	isqlDB isql.DB,
+	username username.SQLUsername,
+	externalStorageFromURIFactory cloud.ExternalStorageFromURIFactory,
+	skipCheckingExternalStorageConnection bool,
+	skipCheckingKMSConnection bool,
+	serverCfg *execinfra.ServerConfig,
+) ExternalConnEnv {
+	return ExternalConnEnv{
+		Settings:                              settings,
+		Conf:                                  conf,
+		Isqldb:                                isqlDB,
+		SkipCheckingExternalStorageConnection: skipCheckingExternalStorageConnection,
+		SkipCheckingKMSConnection:             skipCheckingKMSConnection,
+		ExternalStorageFromURIFactory:         externalStorageFromURIFactory,
+		Username:                              username,
+		ServerCfg:                             serverCfg,
+	}
+}
+
+// ValidationFn is the type taken by Register*ValidationWithCloud. Validation functions can ping the external connection.
+type ValidationFn func(ctx context.Context, env ExternalConnEnv, uri string) error
 
 // TestingKnobs provide fine-grained control over the external connection
 // components for testing.

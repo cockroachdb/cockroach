@@ -18,7 +18,6 @@ go_library(
         "//pkg/cloud/externalconn/connectionpb",
         "//pkg/cloud/externalconn/utils",
         "//pkg/roachpb",
-        "//pkg/security/username",
         "//pkg/server/telemetry",
         "//pkg/settings/cluster",
         "//pkg/util/ioctx",

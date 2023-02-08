@@ -103,8 +103,27 @@ func (p *planner) createExternalConnection(
 
 	// Construct the ConnectionDetails for the external resource represented by
 	// the External Connection.
+
+	var SkipCheckingExternalStorageConnection bool
+	var SkipCheckingKMSConnection bool
+	if params.ExecCfg().ExternalConnectionTestingKnobs != nil {
+		SkipCheckingExternalStorageConnection = params.ExecCfg().ExternalConnectionTestingKnobs.SkipCheckingExternalStorageConnection()
+		SkipCheckingKMSConnection = params.ExecCfg().ExternalConnectionTestingKnobs.SkipCheckingKMSConnection()
+	}
+
+	env := externalconn.MakeExternalConnEnv(
+		params.ExecCfg().Settings,
+		&params.ExecCfg().ExternalIODirConfig,
+		params.ExecCfg().InternalDB,
+		p.User(),
+		params.ExecCfg().DistSQLSrv.ExternalStorageFromURI,
+		SkipCheckingExternalStorageConnection,
+		SkipCheckingKMSConnection,
+		&params.ExecCfg().DistSQLSrv.ServerConfig,
+	)
+
 	exConn, err := externalconn.ExternalConnectionFromURI(
-		params.ctx, params.ExecCfg(), p.User(), ec.endpoint,
+		params.ctx, env, ec.endpoint,
 	)
 	if err != nil {
 		return errors.Wrap(err, "failed to construct External Connection details")
