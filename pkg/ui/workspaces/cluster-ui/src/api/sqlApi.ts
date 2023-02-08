@@ -148,12 +148,13 @@ function isUpgradeError(message: string): boolean {
  * @param message
  */
 export function sqlApiErrorMessage(message: string): string {
+  if (isUpgradeError(message)) {
+    return "This page may not be available during an upgrade.";
+  }
+
   message = message.replace("run-query-via-api: ", "");
   if (message.includes(":")) {
     return message.split(":")[1];
-  }
-  if (isUpgradeError(message)) {
-    message = "This page may not be available during an upgrade.";
   }
 
   return message;
