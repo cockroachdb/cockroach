@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
@@ -489,6 +490,9 @@ func CreateAuthSecret() (secret, hashedSecret []byte, err error) {
 func (s *authenticationServer) newAuthSession(
 	ctx context.Context, userName username.SQLUsername,
 ) (int64, []byte, error) {
+	privilegesTableHasUserIDCol := s.sqlServer.execCfg.Settings.Version.IsActive(ctx,
+		clusterversion.V23_1SystemPrivilegesTableHasUserIDColumn)
+
 	secret, hashedSecret, err := CreateAuthSecret()
 	if err != nil {
 		return 0, nil, err
@@ -501,6 +505,13 @@ INSERT INTO system.web_sessions ("hashedSecret", username, "expiresAt")
 VALUES($1, $2, $3)
 RETURNING id
 `
+	if privilegesTableHasUserIDCol {
+		insertSessionStmt = `
+INSERT INTO system.web_sessions ("hashedSecret", username, "expiresAt", user_id)
+VALUES($1, $2, $3, (SELECT user_id FROM system.users WHERE username = $2))
+RETURNING id
+`
+	}
 	var id int64
 
 	row, err := s.sqlServer.internalExecutor.QueryRowEx(

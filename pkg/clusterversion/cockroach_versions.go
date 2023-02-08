@@ -418,6 +418,14 @@ const (
 	// user_id column in the system.privileges table has been backfilled.
 	V23_1SystemPrivilegesTableUserIDColumnBackfilled
 
+	// V23_1WebSessionsTableHasUserIDColumn is the version where the
+	// user_id column has been added to the system.web_sessions table.
+	V23_1WebSessionsTableHasUserIDColumn
+
+	// V23_1WebSessionsTableUserIDColumnBackfilled is the version where the
+	// user_id column in the system.web_sessions table has been backfilled.
+	V23_1WebSessionsTableUserIDColumnBackfilled
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -718,6 +726,14 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1SystemPrivilegesTableUserIDColumnBackfilled,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 44},
+	},
+	{
+		Key:     V23_1WebSessionsTableHasUserIDColumn,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 46},
+	},
+	{
+		Key:     V23_1WebSessionsTableUserIDColumnBackfilled,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 48},
 	},
 
 	// *************************************************

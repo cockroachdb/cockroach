@@ -208,6 +208,7 @@ func (c *transientCluster) restoreWebSessionsInternal(
 			return err
 		}
 
+		// TODO(yang): Update this to insert new user_id column.
 		if _, err := db.ExecContext(ctx, `
 INSERT INTO system.web_sessions(id, "hashedSecret", username, "expiresAt")
 VALUES ($1, $2, $3, $4)`,

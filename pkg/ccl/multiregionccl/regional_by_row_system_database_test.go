@@ -57,14 +57,15 @@ UNION ALL SELECT create_statement FROM [SHOW CREATE TABLE system.namespace]
 	"revokedAt" TIMESTAMP NULL,
 	"lastUsedAt" TIMESTAMP NOT NULL DEFAULT now():::TIMESTAMP,
 	"auditInfo" STRING NULL,
+	user_id OID NULL,
 	crdb_region system.public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::system.public.crdb_internal_region,
 	CONSTRAINT "primary" PRIMARY KEY (id ASC),
 	INDEX "web_sessions_expiresAt_idx" ("expiresAt" ASC),
 	INDEX "web_sessions_createdAt_idx" ("createdAt" ASC),
 	INDEX "web_sessions_revokedAt_idx" ("revokedAt" ASC),
 	INDEX "web_sessions_lastUsedAt_idx" ("lastUsedAt" ASC),
-	FAMILY "fam_0_id_hashedSecret_username_createdAt_expiresAt_revokedAt_lastUsedAt_auditInfo" (id, "hashedSecret", username, "createdAt", "expiresAt", "revokedAt", "lastUsedAt", "auditInfo"),
-	FAMILY fam_9_crdb_region (crdb_region)
+	FAMILY "fam_0_id_hashedSecret_username_createdAt_expiresAt_revokedAt_lastUsedAt_auditInfo" (id, "hashedSecret", username, "createdAt", "expiresAt", "revokedAt", "lastUsedAt", "auditInfo", user_id),
+	FAMILY fam_10_crdb_region (crdb_region)
 ) LOCALITY REGIONAL BY ROW`},
 		{`CREATE TABLE public.namespace (
 	"parentID" INT8 NOT NULL,
