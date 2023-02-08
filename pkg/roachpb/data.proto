@@ -129,13 +129,7 @@ message SplitTrigger {
   RangeDescriptor left_desc = 1 [(gogoproto.nullable) = false];
   RangeDescriptor right_desc = 2 [(gogoproto.nullable) = false];
 
-  // WriteGCHint is a version gate to only enable writing GC hints in split
-  // trigger if cluster was upgraded to required version.
-  // TODO(replication): remove this field in the 23.2 cycle (i.e. on master
-  // after 23.1 has been cut).
-  bool write_gc_hint = 4 [(gogoproto.customname) = "WriteGCHint"];
-
-  reserved 3;
+  reserved 3, 4;
 }
 
 // A MergeTrigger is run after a successful commit of an AdminMerge
