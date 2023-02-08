@@ -436,6 +436,30 @@ no_collation_str        default
 no_collation_str_array  default
 rowid                   NULL
 
+# "default", "C", and "POSIX" all behave the same as normal strings when
+# used in an expression.
+query BBB
+SELECT 'cat' = ('cat'::text collate "default"), 'cat' = ('cat'::VARCHAR(64) collate "C"), 'cat' = ('cat'::CHAR(3) collate "POSIX")
+----
+true  true  true
+
+statement ok
+INSERT INTO t54989 VALUES ('a', '{b}', 'c', 'd')
+
+query BB
+SELECT default_collation = 'd' COLLATE "C", no_collation_str = 'a' COLLATE "POSIX" FROM t54989
+----
+true  true
+
+# Creating a "C" or "POSIX" column is not allowed. In the future, we may
+# add better support for collations, and it would be hard to do that if we
+# start allowing columns like these.
+statement error invalid locale C: language: tag is not well-formed
+CREATE TABLE disallowed(a text COLLATE "C")
+
+statement error invalid locale POSIX: language: tag is not well-formed
+CREATE TABLE disallowed(a text COLLATE "POSIX")
+
 # Regression test for collated string lowercase and hyphen/underscore equality.
 subtest nocase_strings
 
@@ -483,9 +507,6 @@ SELECT s FROM nocase_strings WHERE s = ('bbb' COLLATE "en-us-u-ks-l""evel2")
 
 statement error at or near "evel2": syntax error
 SELECT s FROM nocase_strings WHERE s = ('bbb' COLLATE "en-us-u-ks-l"evel2")
-
-statement error DEFAULT collations are not supported
-SELECT 'default collate'::text collate "default"
 
 statement ok
 CREATE TABLE nocase_strings2 (
