@@ -2533,3 +2533,27 @@ func TestRejectDialOnQuiesce(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, codes.Canceled, status.Code(err))
 }
+
+// TestOnlyOnceDialer verifies that onlyOnceDialer prevents gRPC from re-dialing
+// on an existing connection. (Instead, gRPC will have to make a new dialer).
+func TestOnlyOnceDialer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	ln, err := net.Listen(util.TestAddr.Network(), util.TestAddr.String())
+	require.NoError(t, err)
+	defer func() { _ = ln.Close() }()
+
+	ood := &onlyOnceDialer{}
+	conn, err := ood.dial(ctx, ln.Addr().String())
+	require.NoError(t, err)
+	_ = conn.Close()
+
+	for i := 0; i < 5; i++ {
+		_, err := ood.dial(ctx, ln.Addr().String())
+		if i == 0 {
+			require.True(t, errors.Is(err, grpcutil.ErrConnectionInterrupted), "i=%d: %+v", i, err)
+		} else {
+			require.ErrorContains(t, err, `gRPC connection unexpectedly re-dialed`)
+		}
+	}
+}
