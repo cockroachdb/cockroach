@@ -120,6 +120,7 @@ message Statement {
   Problem problem = 21;
   repeated Cause causes = 22;
   int64 cpu_sql_nanos = 23 [(gogoproto.customname) = "CPUSQLNanos"];
+  string error_code = 24;
 }
 
 

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -29,6 +30,14 @@ func newStmtWithProblemAndCauses(stmt *Statement, problem Problem, causes []Caus
 	newStmt := *stmt
 	newStmt.Problem = problem
 	newStmt.Causes = causes
+	return &newStmt
+}
+
+// Return a new failed statement with an added errorCode.
+func newFailedStmtWithErrorCode(stmt *Statement, errorCode string) *Statement {
+	newStmt := *stmt
+	newStmt.Problem = Problem_FailedExecution
+	newStmt.ErrorCode = errorCode
 	return &newStmt
 }
 
@@ -80,6 +89,7 @@ func TestRegistry(t *testing.T) {
 			FingerprintID:    appstatspb.StmtFingerprintID(100),
 			LatencyInSeconds: 2,
 			Status:           Statement_Failed,
+			ErrorCode:        "22012",
 		}
 
 		st := cluster.MakeTestingClusterSettings()
@@ -93,7 +103,7 @@ func TestRegistry(t *testing.T) {
 			Session:     session,
 			Transaction: transaction,
 			Statements: []*Statement{
-				newStmtWithProblemAndCauses(statement, Problem_FailedExecution, nil),
+				newFailedStmtWithErrorCode(statement, pgcode.DivisionByZero.String()),
 			},
 		}}
 		var actual []*Insight
