@@ -49,8 +49,8 @@ func (r *Replica) setCorruptRaftMuLocked(
 	cErr.Processed = true
 	r.mu.destroyStatus.Set(cErr, destroyReasonRemoved)
 
-	auxDir := r.store.engine.GetAuxiliaryDir()
-	_ = r.store.engine.MkdirAll(auxDir)
+	auxDir := r.store.stateEngine.GetAuxiliaryDir()
+	_ = r.store.stateEngine.MkdirAll(auxDir)
 	path := base.PreventedStartupFile(auxDir)
 
 	preventStartupMsg := fmt.Sprintf(`ATTENTION:
@@ -63,7 +63,7 @@ A file preventing this node from restarting was placed at:
 %s
 `, r, path)
 
-	if err := fs.WriteFile(r.store.engine, path, []byte(preventStartupMsg)); err != nil {
+	if err := fs.WriteFile(r.store.stateEngine, path, []byte(preventStartupMsg)); err != nil {
 		log.Warningf(ctx, "%v", err)
 	}
 

@@ -70,7 +70,7 @@ func logPendingLossOfQuorumRecoveryEvents(ctx context.Context, stores *kvserver.
 		// cluster-replicated destinations.
 		eventCount, err := loqrecovery.RegisterOfflineRecoveryEvents(
 			ctx,
-			s.Engine(),
+			s.StateEngine(),
 			func(ctx context.Context, record loqrecoverypb.ReplicaRecoveryRecord) (bool, error) {
 				event := record.AsStructuredLog()
 				log.StructuredEvent(ctx, &event)
@@ -102,7 +102,7 @@ func maybeRunLossOfQuorumRecoveryCleanup(
 		if err := stores.VisitStores(func(s *kvserver.Store) error {
 			_, err := loqrecovery.RegisterOfflineRecoveryEvents(
 				ctx,
-				s.Engine(),
+				s.StateEngine(),
 				func(ctx context.Context, record loqrecoverypb.ReplicaRecoveryRecord) (bool, error) {
 					sqlExec := func(ctx context.Context, stmt string, args ...interface{}) (int, error) {
 						return ie.ExecEx(ctx, "", nil,
@@ -132,14 +132,14 @@ func maybeRunLossOfQuorumRecoveryCleanup(
 	var cleanup loqrecoverypb.DeferredRecoveryActions
 	var actionsSource storage.ReadWriter
 	err := stores.VisitStores(func(s *kvserver.Store) error {
-		c, found, err := loqrecovery.ReadCleanupActionsInfo(ctx, s.Engine())
+		c, found, err := loqrecovery.ReadCleanupActionsInfo(ctx, s.StateEngine())
 		if err != nil {
 			log.Errorf(ctx, "failed to read loss of quorum recovery cleanup actions info from store: %s", err)
 			return nil
 		}
 		if found {
 			cleanup = c
-			actionsSource = s.Engine()
+			actionsSource = s.StateEngine()
 			return iterutil.StopIteration()
 		}
 		return nil

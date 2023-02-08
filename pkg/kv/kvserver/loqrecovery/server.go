@@ -115,7 +115,7 @@ func (s Server) ServeLocalReplicas(
 	stream serverpb.Admin_RecoveryCollectLocalReplicaInfoServer,
 ) error {
 	return s.stores.VisitStores(func(s *kvserver.Store) error {
-		reader := s.Engine().NewSnapshot()
+		reader := s.StateEngine().NewSnapshot()
 		defer reader.Close()
 		return visitStoreReplicas(ctx, reader, s.StoreID(), s.NodeID(),
 			func(info loqrecoverypb.ReplicaInfo) error {
@@ -383,7 +383,7 @@ func (s Server) NodeStatus(
 		status.PendingPlanID = &plan.PlanID
 	}
 	err = s.stores.VisitStores(func(s *kvserver.Store) error {
-		r, ok, err := readNodeRecoveryStatusInfo(ctx, s.Engine())
+		r, ok, err := readNodeRecoveryStatusInfo(ctx, s.StateEngine())
 		if err != nil {
 			return err
 		}

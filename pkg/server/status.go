@@ -737,7 +737,7 @@ func (s *systemStatusServer) EngineStats(
 		engineStatsInfo := serverpb.EngineStatsInfo{
 			StoreID:              store.Ident.StoreID,
 			TickersAndHistograms: nil,
-			EngineType:           store.Engine().Type(),
+			EngineType:           store.StateEngine().Type(),
 		}
 
 		resp.Stats = append(resp.Stats, engineStatsInfo)
@@ -3482,7 +3482,7 @@ func (s *systemStatusServer) Stores(
 			StoreID: store.Ident.StoreID,
 		}
 
-		envStats, err := store.Engine().GetEnvStats()
+		envStats, err := store.StateEngine().GetEnvStats()
 		if err != nil {
 			return err
 		}

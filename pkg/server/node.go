@@ -629,7 +629,7 @@ func (n *Node) SetHLCUpperBound(ctx context.Context, hlcUpperBound int64) error 
 }
 
 func (n *Node) addStore(ctx context.Context, store *kvserver.Store) {
-	cv, err := kvstorage.ReadClusterVersion(context.TODO(), store.Engine())
+	cv, err := kvstorage.ReadClusterVersion(context.TODO(), store.StateEngine())
 	if err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}
@@ -905,7 +905,7 @@ func (n *Node) GetPebbleMetrics() []admission.StoreMetrics {
 	}
 	var metrics []admission.StoreMetrics
 	_ = n.stores.VisitStores(func(store *kvserver.Store) error {
-		m := store.Engine().GetMetrics()
+		m := store.StateEngine().GetMetrics()
 		diskStats := admission.DiskStats{ProvisionedBandwidth: clusterProvisionedBandwidth}
 		if s, ok := storeIDToDiskStats[store.StoreID()]; ok {
 			diskStats = s

@@ -349,7 +349,8 @@ func (s *Store) maybeThrottleBatch(
 		}
 
 		beforeEngineDelay := timeutil.Now()
-		s.engine.PreIngestDelay(ctx)
+		// TODO(sep-raft-log): can we get rid of this?
+		s.todoEngine.PreIngestDelay(ctx)
 		after := timeutil.Now()
 
 		waited, waitedEngine := after.Sub(before), after.Sub(beforeEngineDelay)

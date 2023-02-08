@@ -146,7 +146,7 @@ func (b *replicaAppBatch) Stage(
 	// will be committed, but all of these commands will be `IsTrivial()`.
 	if err := b.ab.runPostAddTriggers(ctx, &cmd.ReplicatedCmd, postAddEnv{
 		st:          b.r.store.cfg.Settings,
-		eng:         b.r.store.engine,
+		eng:         b.r.store.stateEngine,
 		sideloaded:  b.r.raftMu.sideloaded,
 		bulkLimiter: b.r.store.limiters.BulkIOWriteRate,
 	}); err != nil {

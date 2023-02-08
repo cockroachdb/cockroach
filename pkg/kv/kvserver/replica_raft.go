@@ -937,7 +937,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			// ranges, so can be passed to LogStore methods instead of being stored in it.
 			s := logstore.LogStore{
 				RangeID:     r.RangeID,
-				Engine:      r.store.engine,
+				Engine:      r.store.logEngine,
 				Sideload:    r.raftMu.sideloaded,
 				StateLoader: r.raftMu.stateLoader.StateLoader,
 				SyncWaiter:  r.store.syncWaiter,

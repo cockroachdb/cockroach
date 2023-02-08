@@ -554,7 +554,7 @@ func (r *Replica) evaluate1PC(
 	if !etArg.Commit {
 		clonedTxn.Status = roachpb.ABORTED
 		batch.Close()
-		batch = r.store.Engine().NewBatch()
+		batch = r.store.StateEngine().NewBatch()
 		ms.Reset()
 	} else {
 		// Run commit trigger manually.
@@ -697,7 +697,7 @@ func (r *Replica) evaluateWriteBatchWrapper(
 func (r *Replica) newBatchedEngine(
 	ba *roachpb.BatchRequest, g *concurrency.Guard,
 ) (storage.Batch, *storage.OpLoggerBatch) {
-	batch := r.store.Engine().NewBatch()
+	batch := r.store.StateEngine().NewBatch()
 	if !batch.ConsistentIterators() {
 		// This is not currently needed for correctness, but future optimizations
 		// may start relying on this, so we assert here.
