@@ -1391,9 +1391,17 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 							break
 						}
 					}
-				case descpb.ConstraintValidity_Unvalidated:
+				case descpb.ConstraintValidity_Unvalidated, descpb.ConstraintValidity_Validated:
 					// add the constraint to the list of check constraints on the table
 					// descriptor.
+					// The constraint mutation's validity being VALIDATED is strange but could happen
+					// in the legacy schema changer when we do
+					// `ALTER TABLE ... ADD CONSTRAINT ... NOT VALID, VALIDATE CONSTRAINT ...`
+					// where `ADD CONSTRAINT ... NOT VALID` enqueues a mutation and
+					// `VALIDATE CONSTRAINT` change this mutation's validity to VALIDATED.
+					// We thus will run into this case later in the job for
+					// `ADD CONSTRAINT ... NOT VALID`, at which point we should just append it
+					// to the public slice and return.
 					desc.Checks = append(desc.Checks, &t.Constraint.Check)
 				default:
 					return errors.AssertionFailedf("invalid constraint validity state: %d", t.Constraint.Check.Validity)
@@ -1409,7 +1417,7 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 							break
 						}
 					}
-				case descpb.ConstraintValidity_Unvalidated:
+				case descpb.ConstraintValidity_Unvalidated, descpb.ConstraintValidity_Validated:
 					// Takes care of adding the Foreign Key to the table index. Adding the
 					// backreference to the referenced table index must be taken care of
 					// in another call.
@@ -1427,7 +1435,7 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 							break
 						}
 					}
-				case descpb.ConstraintValidity_Unvalidated:
+				case descpb.ConstraintValidity_Unvalidated, descpb.ConstraintValidity_Validated:
 					// add the constraint to the list of unique without index constraints
 					// on the table descriptor.
 					desc.UniqueWithoutIndexConstraints = append(

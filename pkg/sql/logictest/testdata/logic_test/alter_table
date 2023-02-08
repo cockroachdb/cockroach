@@ -2903,3 +2903,40 @@ t_96115     t_96115_pkey     PRIMARY KEY      true
 
 statement ok
 DROP TABLE t_96115;
+
+# This subtest tests the behavior of adding/dropping a constraint and validating
+# the constraint in one ALTER TABLE statement.
+
+subtest 96648
+
+statement ok
+CREATE TABLE t_96648 (i INT PRIMARY KEY);
+
+statement ok
+ALTER TABLE t_96648 ADD CONSTRAINT check_i CHECK (i > 0), VALIDATE CONSTRAINT check_i;
+
+statement ok
+ALTER TABLE t_96648 ADD CONSTRAINT check_i1 CHECK (i > 0) NOT VALID, VALIDATE CONSTRAINT check_i1;
+
+query TTTTB colnames
+SHOW CONSTRAINTS FROM t_96648
+----
+table_name  constraint_name  constraint_type  details              validated
+t_96648     check_i          CHECK            CHECK ((i > 0))      true
+t_96648     check_i1         CHECK            CHECK ((i > 0))      true
+t_96648     t_96648_pkey     PRIMARY KEY      PRIMARY KEY (i ASC)  true
+
+statement ok
+ALTER TABLE t_96648 ADD CONSTRAINT check_i2 CHECK (i > 0) NOT VALID;
+
+statement error pgcode 42704 constraint "check_i" of relation "t_96648" does not exist
+ALTER TABLE t_96648 DROP CONSTRAINT check_i, VALIDATE CONSTRAINT check_i;
+
+statement error pgcode 42704 constraint "check_i2" of relation "t_96648" does not exist
+ALTER TABLE t_96648 DROP CONSTRAINT check_i2, VALIDATE CONSTRAINT check_i2;
+
+statement ok
+ALTER TABLE t_96648 DROP CONSTRAINT check_i, DROP CONSTRAINT check_i1, DROP CONSTRAINT check_i2;
+
+statement ok
+DROP TABLE t_96648

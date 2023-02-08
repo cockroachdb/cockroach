@@ -831,14 +831,14 @@ CREATE TABLE orders2 (
   INDEX (product)
 )
 
-# The constraint can't be validated with VALIDATE CONSTRAINT in the same transaction
+# VALIDATE CONSTRAINT when a vanilla constraint is being added is a no-op.
 statement ok
 BEGIN
 
 statement ok
 ALTER TABLE orders2 ADD FOREIGN KEY (product) REFERENCES products
 
-statement error constraint "orders2_product_fkey" in the middle of being added, try again later
+statement ok
 ALTER TABLE orders2 VALIDATE CONSTRAINT orders2_product_fkey
 
 statement ok
@@ -851,7 +851,7 @@ BEGIN
 statement ok
 ALTER TABLE orders2 ADD FOREIGN KEY (product) REFERENCES products
 
-statement error constraint "orders2_product_fkey" in the middle of being added, try again later
+statement error pq: referencing constraint "orders2_product_fkey_1" in the middle of being added, try again later
 ALTER TABLE orders2 DROP COLUMN product
 
 statement ok
@@ -864,7 +864,7 @@ BEGIN
 statement ok
 ALTER TABLE orders2 ADD FOREIGN KEY (product) REFERENCES products
 
-statement error constraint "orders2_product_fkey" in the middle of being added, try again later
+statement error pq: referencing constraint "orders2_product_fkey_1" in the middle of being added, try again later
 DROP INDEX orders2@orders2_product_idx
 
 statement ok
@@ -1051,7 +1051,7 @@ ALTER TABLE check_table ADD h INT
 statement ok
 ALTER TABLE check_table ADD CONSTRAINT h_0 CHECK (h > 0)
 
-statement error constraint "h_0" in the middle of being added
+statement ok
 ALTER TABLE check_table VALIDATE CONSTRAINT h_0
 
 statement ok

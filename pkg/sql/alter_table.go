@@ -523,12 +523,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return sqlerrors.NewUndefinedConstraintError(string(t.Constraint), n.tableDesc.Name)
 			}
 			switch c.GetConstraintValidity() {
-			case descpb.ConstraintValidity_Validated:
+			case descpb.ConstraintValidity_Validated, descpb.ConstraintValidity_Validating:
 				// Nothing to do.
 				continue
-			case descpb.ConstraintValidity_Validating:
-				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-					"constraint %q in the middle of being added, try again later", t.Constraint)
 			case descpb.ConstraintValidity_Dropping:
 				return sqlerrors.NewUndefinedConstraintError(string(t.Constraint), n.tableDesc.Name)
 			}

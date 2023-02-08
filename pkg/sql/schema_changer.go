@@ -1413,7 +1413,8 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 				}
 			}
 			if fk := m.AsForeignKey(); fk != nil && fk.Adding() &&
-				fk.GetConstraintValidity() == descpb.ConstraintValidity_Unvalidated {
+				(fk.GetConstraintValidity() == descpb.ConstraintValidity_Unvalidated ||
+					fk.GetConstraintValidity() == descpb.ConstraintValidity_Validated) {
 				// Add backreference on the referenced table (which could be the same table)
 				backrefTable, err := txn.Descriptors().MutableByID(txn.KV()).Table(ctx, fk.GetReferencedTableID())
 				if err != nil {
