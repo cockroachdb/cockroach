@@ -178,6 +178,7 @@ require (
 	github.com/mattn/goveralls v0.0.2
 	github.com/mibk/dupl v1.0.0
 	github.com/mitchellh/reflectwalk v1.0.0
+	github.com/mkungla/bexp/v3 v3.0.1
 	github.com/mmatczuk/go_generics v0.0.0-20181212143635-0aaa050f9bab
 	github.com/montanaflynn/stats v0.6.6
 	github.com/mozillazg/go-slugify v0.2.0

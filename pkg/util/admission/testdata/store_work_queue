@@ -63,7 +63,7 @@ print
 regular workqueue: closed epoch: 0 tenantHeap len: 1 top tenant: 57
  tenant-id: 53 used: 101, w: 1, fifo: -128
  tenant-id: 55 used: 600, w: 1, fifo: -128
- tenant-id: 57 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: 0, ct: 1, epoch: 0, qt: 0]
+ tenant-id: 57 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 0]
 elastic workqueue: closed epoch: 0 tenantHeap len: 0
 stats:{admittedCount:2 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{IngestOperationStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0}} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 estimates:{writeTokens:100}
