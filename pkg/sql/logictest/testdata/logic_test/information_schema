@@ -4668,6 +4668,8 @@ SELECT * FROM information_schema.collations
 ----
 collation_catalog  collation_schema  collation_name       pad_attribute
 test               pg_catalog        default              NO PAD
+test               pg_catalog        C                    NO PAD
+test               pg_catalog        POSIX                NO PAD
 test               pg_catalog        und                  NO PAD
 test               pg_catalog        aa                   NO PAD
 test               pg_catalog        af                   NO PAD
@@ -4773,6 +4775,8 @@ SELECT * FROM information_schema.collation_character_set_applicability
 ----
 collation_catalog  collation_schema  collation_name       character_set_catalog  character_set_schema  character_set_name
 test               pg_catalog        default              NULL                   NULL                  UTF8
+test               pg_catalog        C                    NULL                   NULL                  UTF8
+test               pg_catalog        POSIX                NULL                   NULL                  UTF8
 test               pg_catalog        und                  NULL                   NULL                  UTF8
 test               pg_catalog        aa                   NULL                   NULL                  UTF8
 test               pg_catalog        af                   NULL                   NULL                  UTF8
