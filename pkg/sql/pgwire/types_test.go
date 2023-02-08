@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -35,8 +36,89 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/stretchr/testify/require"
 )
+
+// TestWriteTextDatumMatchesFmtPgwireText confirms tree.FmtPgwireText matches
+// the output of writeTextDatum. It is required so long as writeTextDatum
+// has a separate implementation to tree.FmtPgwireText
+func TestWriteTextDatumMatchesFmtPgwireText(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	rng, _ := randutil.NewTestRand()
+	runTest := func(t *testing.T, typ *types.T, conv sessiondatapb.DataConversionConfig, loc *time.Location) {
+		ctx := tree.NewFmtCtx(
+			tree.FmtPgwireText,
+			tree.FmtDataConversionConfig(conv),
+			tree.FmtLocation(loc),
+		)
+		d := randgen.RandDatum(rng, typ, false)
+		writeBuf := newWriteBuffer(nil /* bytecount */)
+		writeBuf.writeTextDatum(context.Background(), d, conv, loc, typ)
+
+		ctx.FormatNode(d)
+		ret := ctx.CloseAndGetString()
+		// Remove the leading 4 bytes which contain the size when comparing.
+		require.Equal(t, string(writeBuf.wrapped.Bytes()[4:]), ret)
+	}
+	const its = 100
+
+	conv, loc := makeTestingConvCfg()
+	sydney, err := timeutil.LoadLocation("Australia/Sydney")
+	require.NoError(t, err)
+	dateStyles := []pgdate.DateStyle{
+		conv.DateStyle,
+		{Style: pgdate.Style_ISO, Order: pgdate.Order_DMY},
+	}
+
+	for _, typ := range types.Scalar {
+		t.Run(typ.SQLString(), func(t *testing.T) {
+			switch typ.Family() {
+			case types.IntervalFamily:
+				for _, is := range []duration.IntervalStyle{
+					duration.IntervalStyle_POSTGRES,
+				} {
+					t.Run(is.String(), func(t *testing.T) {
+						conv := conv
+						conv.IntervalStyle = is
+						for i := 0; i < its; i++ {
+							runTest(t, typ, conv, loc)
+						}
+					})
+				}
+			case types.TimestampFamily, types.TimeFamily, types.TimeTZFamily:
+				for _, ds := range dateStyles {
+					t.Run(fmt.Sprintf("%s/%s", ds.Style, ds.Order), func(t *testing.T) {
+						for i := 0; i < its; i++ {
+							conv := conv
+							conv.DateStyle = ds
+							runTest(t, typ, conv, loc)
+						}
+					})
+				}
+			case types.TimestampTZFamily:
+				for _, ds := range dateStyles {
+					t.Run(fmt.Sprintf("%s/%s", ds.Style, ds.Order), func(t *testing.T) {
+						for _, loc := range []*time.Location{loc, sydney} {
+							t.Run(loc.String(), func(t *testing.T) {
+								for i := 0; i < its; i++ {
+									runTest(t, typ, conv, loc)
+								}
+							})
+						}
+					})
+				}
+			default:
+				for i := 0; i < its; i++ {
+					runTest(t, typ, conv, loc)
+				}
+			}
+		})
+	}
+}
 
 // The assertions in this test should also be caught by the integration tests on
 // various drivers.
@@ -80,7 +162,7 @@ func TestTimestampRoundtrip(t *testing.T) {
 		return decoded.UTC()
 	}
 
-	if actual := parse(formatTs(ts, nil, nil)); !ts.Equal(actual) {
+	if actual := parse(tree.PGWireFormatTimestamp(ts, nil, nil)); !ts.Equal(actual) {
 		t.Fatalf("timestamp did not roundtrip got [%s] expected [%s]", actual, ts)
 	}
 
@@ -89,7 +171,7 @@ func TestTimestampRoundtrip(t *testing.T) {
 	EST := time.FixedZone("America/New_York", 0)
 
 	for _, tz := range []*time.Location{time.UTC, CET, EST} {
-		if actual := parse(formatTs(ts, tz, nil)); !ts.Equal(actual) {
+		if actual := parse(tree.PGWireFormatTimestamp(ts, tz, nil)); !ts.Equal(actual) {
 			t.Fatalf("[%s]: timestamp did not roundtrip got [%s] expected [%s]", tz, actual, ts)
 		}
 	}
