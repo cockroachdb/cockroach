@@ -558,18 +558,26 @@ func (sp *StorePool) statusString(nl NodeLivenessFunc) string {
 // storeGossipUpdate is the Gossip callback used to keep the StorePool up to date.
 func (sp *StorePool) storeGossipUpdate(_ string, content roachpb.Value) {
 	var storeDesc roachpb.StoreDescriptor
-	// We keep copies of the capacity and storeID to pass into the
-	// capacityChanged callback.
-	var oldCapacity, curCapacity roachpb.StoreCapacity
-	var storeID roachpb.StoreID
 
 	if err := content.GetProto(&storeDesc); err != nil {
 		ctx := sp.AnnotateCtx(context.TODO())
 		log.Errorf(ctx, "%v", err)
 		return
 	}
-	storeID = storeDesc.StoreID
-	curCapacity = storeDesc.Capacity
+
+	sp.storeDescriptorUpdate(storeDesc)
+}
+
+// storeDescriptorUpdate takes a store descriptor and updates the corresponding
+// details for the store in the storepool.
+func (sp *StorePool) storeDescriptorUpdate(storeDesc roachpb.StoreDescriptor) {
+	// We keep copies of the capacity and storeID to pass into the
+	// capacityChanged callback.
+	var oldCapacity roachpb.StoreCapacity
+	storeID := storeDesc.StoreID
+	curCapacity := storeDesc.Capacity
+
+	now := sp.clock.PhysicalTime()
 
 	sp.DetailsMu.Lock()
 	detail := sp.GetStoreDetailLocked(storeID)
@@ -577,7 +585,7 @@ func (sp *StorePool) storeGossipUpdate(_ string, content roachpb.Value) {
 		oldCapacity = detail.Desc.Capacity
 	}
 	detail.Desc = &storeDesc
-	detail.LastUpdatedTime = sp.clock.PhysicalTime()
+	detail.LastUpdatedTime = now
 	sp.DetailsMu.Unlock()
 
 	sp.localitiesMu.Lock()
@@ -749,8 +757,7 @@ func (sp *StorePool) UpdateLocalStoresAfterLeaseTransfer(
 	}
 }
 
-// newStoreDetail makes a new StoreDetail struct. It sets index to be -1 to
-// ensure that it will be processed by a queue immediately.
+// newStoreDetail makes a new StoreDetail struct.
 func newStoreDetail() *StoreDetail {
 	return &StoreDetail{}
 }
@@ -1063,9 +1070,9 @@ type StoreList struct {
 	// eligible to be rebalance targets.
 	candidateWritesPerSecond Stat
 
-	// candidateWritesPerSecond tracks L0 sub-level stats for Stores that are
-	// eligible to be rebalance targets.
-	CandidateL0Sublevels Stat
+	// CandidateIOOverloadScores tracks the IO overload stats for Stores that are
+	// eligible to be rebalance candidates.
+	CandidateIOOverloadScores Stat
 }
 
 // MakeStoreList constructs a new store list based on the passed in descriptors.
@@ -1080,8 +1087,9 @@ func MakeStoreList(descriptors []roachpb.StoreDescriptor) StoreList {
 		sl.candidateLogicalBytes.update(float64(desc.Capacity.LogicalBytes))
 		sl.CandidateQueriesPerSecond.update(desc.Capacity.QueriesPerSecond)
 		sl.candidateWritesPerSecond.update(desc.Capacity.WritesPerSecond)
-		sl.CandidateL0Sublevels.update(float64(desc.Capacity.L0Sublevels))
 		sl.CandidateCPU.update(desc.Capacity.CPUPerSecond)
+		score, _ := desc.Capacity.IOThreshold.Score()
+		sl.CandidateIOOverloadScores.update(score)
 	}
 	return sl
 }
@@ -1102,12 +1110,13 @@ func (sl StoreList) String() string {
 		fmt.Fprintf(&buf, " <no candidates>")
 	}
 	for _, desc := range sl.Stores {
-		fmt.Fprintf(&buf, "  %d: ranges=%d leases=%d disk-usage=%s queries-per-second=%.2f store-cpu-per-second=%s l0-sublevels=%d\n",
+		ioScore, _ := desc.Capacity.IOThreshold.Score()
+		fmt.Fprintf(&buf, "  %d: ranges=%d leases=%d disk-usage=%s queries-per-second=%.2f store-cpu-per-second=%s io-overload=%.2f\n",
 			desc.StoreID, desc.Capacity.RangeCount,
 			desc.Capacity.LeaseCount, humanizeutil.IBytes(desc.Capacity.LogicalBytes),
 			desc.Capacity.QueriesPerSecond,
 			humanizeutil.Duration(time.Duration(int64(desc.Capacity.CPUPerSecond))),
-			desc.Capacity.L0Sublevels,
+			ioScore,
 		)
 	}
 	return buf.String()
