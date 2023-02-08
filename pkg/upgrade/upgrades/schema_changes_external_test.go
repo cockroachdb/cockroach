@@ -242,9 +242,9 @@ func testMigrationWithFailures(
 
 	skip.UnderRace(t, "very slow")
 
-	// We're going to be migrating from startCV to endCV.
-	startCV := roachpb.Version{Major: 2041}
-	endCV := roachpb.Version{Major: 2042}
+	// We're going to be migrating from the minimum supported version to the current version.
+	startCV := clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey)
+	endCV := clusterversion.ByKey(clusterversion.BinaryVersionKey)
 
 	// The tests follows the following procedure.
 	//

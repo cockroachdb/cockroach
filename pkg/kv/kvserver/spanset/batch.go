@@ -475,11 +475,6 @@ func (s spanSetReader) ConsistentIterators() bool {
 	return s.r.ConsistentIterators()
 }
 
-// SupportsRangeKeys implements the storage.Reader interface.
-func (s spanSetReader) SupportsRangeKeys() bool {
-	return s.r.SupportsRangeKeys()
-}
-
 // PinEngineStateForIterators implements the storage.Reader interface.
 func (s spanSetReader) PinEngineStateForIterators() error {
 	return s.r.PinEngineStateForIterators()
