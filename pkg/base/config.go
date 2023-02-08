@@ -18,6 +18,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -730,6 +731,9 @@ type StorageConfig struct {
 	// through to C CCL code to set up encryption-at-rest.  Must be set if and
 	// only if encryption is enabled, otherwise left empty.
 	EncryptionOptions []byte
+	// SharedStorage is a cloud.ExternalStorage that can be used by all Pebble
+	// stores on this node and on other nodes to store sstables.
+	SharedStorage cloud.ExternalStorage
 }
 
 // IsEncrypted returns whether the StorageConfig has encryption enabled.

@@ -269,6 +269,7 @@ go_library(
         "//pkg/util/hlc",
         "//pkg/util/httputil",
         "//pkg/util/humanizeutil",
+        "//pkg/util/ioctx",
         "//pkg/util/iterutil",
         "//pkg/util/json",
         "//pkg/util/log",

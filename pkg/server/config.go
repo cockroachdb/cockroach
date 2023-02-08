@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"runtime"
 	"strconv"
@@ -24,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/base/serverident"
+	cloudstorage "github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
@@ -38,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -217,6 +220,9 @@ type BaseConfig struct {
 
 	// Stores is specified to enable durable key-value storage.
 	Stores base.StoreSpecList
+
+	// SharedStorage is specified to enable disaggregated shared storage.
+	SharedStorage string
 
 	// StartDiagnosticsReporting starts the asynchronous goroutine that
 	// checks for CockroachDB upgrades and periodically reports
@@ -643,6 +649,17 @@ func (e *Engines) Close() {
 	*e = nil
 }
 
+type pebbleSharedStorageInterceptor struct{}
+
+func (p pebbleSharedStorageInterceptor) Reader(ctx context.Context, externalStorage cloudstorage.ExternalStorage, ctx2 ioctx.ReadCloserCtx) ioctx.ReadCloserCtx {
+
+}
+
+func (p pebbleSharedStorageInterceptor) Writer(ctx context.Context, externalStorage cloudstorage.ExternalStorage, closer io.WriteCloser) io.WriteCloser {
+	//TODO implement me
+	panic("implement me")
+}
+
 // CreateEngines creates Engines based on the specs in cfg.Stores.
 func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 	engines := Engines(nil)
@@ -655,6 +672,19 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 	details := []redact.RedactableString{redact.Sprintf("Pebble cache size: %s", humanizeutil.IBytes(cfg.CacheSize))}
 	pebbleCache := pebble.NewCache(cfg.CacheSize)
 	defer pebbleCache.Unref()
+
+	var sharedStorage cloudstorage.ExternalStorage
+	if cfg.SharedStorage != "" {
+		var err error
+		// Note that we don't pass an io interceptor here. Instead, we record shared
+		// storage metrics on a per-store basis; see storage.Metrics.
+		sharedStorage, err = cloudstorage.ExternalStorageFromURI(ctx, cfg.SharedStorage,
+			base.ExternalIODirConfig{}, cfg.Settings, nil, cfg.User, nil,
+			nil, cloudstorage.NilMetrics)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	var physicalStores int
 	for _, spec := range cfg.Stores.Specs {
@@ -764,6 +794,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				Settings:          cfg.Settings,
 				UseFileRegistry:   spec.UseFileRegistry,
 				EncryptionOptions: spec.EncryptionOptions,
+				SharedStorage:     sharedStorage,
 			}
 			pebbleConfig := storage.PebbleConfig{
 				StorageConfig: storageConfig,

@@ -34,6 +34,7 @@ go_library(
         "read_as_of_iterator.go",
         "replicas_storage.go",
         "row_counter.go",
+        "shared_storage.go",
         "slice.go",
         "slice_go1.9.go",
         "sst.go",
@@ -47,6 +48,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/cli/exit",
+        "//pkg/cloud",
         "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/kv/kvnemesis/kvnemesisutil",
@@ -68,6 +70,7 @@ go_library(
         "//pkg/util/envutil",
         "//pkg/util/hlc",
         "//pkg/util/humanizeutil",
+        "//pkg/util/ioctx",
         "//pkg/util/iterutil",
         "//pkg/util/log",
         "//pkg/util/log/eventpb",

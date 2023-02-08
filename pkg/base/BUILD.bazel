@@ -22,6 +22,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/cli/cliflags",
+        "//pkg/cloud",
         "//pkg/roachpb",
         "//pkg/security/username",
         "//pkg/settings/cluster",

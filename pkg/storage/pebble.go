@@ -721,6 +721,8 @@ type Pebble struct {
 	writeStallStartNanos int64
 	diskSlowCount        int64
 	diskStallCount       int64
+	sharedBytesRead      int64
+	sharedBytesWritten   int64
 
 	// Relevant options copied over from pebble.Options.
 	fs            vfs.FS
@@ -1018,6 +1020,11 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 	p.eventListener = &el
 	opts.EventListener = &el
 	p.wrappedIntentWriter = wrapIntentWriter(p)
+
+	if cfg.SharedStorage != nil {
+		esWrapper := &externalStorageWrapper{p: p, es: cfg.SharedStorage, ctx: ctx}
+		cfg.Opts.Experimental.SharedStorage = esWrapper
+	}
 
 	// Read the current store cluster version.
 	storeClusterVersion, minVerFileExists, err := getMinVersion(unencryptedFS, cfg.Dir)
@@ -1667,11 +1674,13 @@ func (p *Pebble) Flush() error {
 func (p *Pebble) GetMetrics() Metrics {
 	m := p.db.Metrics()
 	return Metrics{
-		Metrics:            m,
-		WriteStallCount:    atomic.LoadInt64(&p.writeStallCount),
-		WriteStallDuration: time.Duration(atomic.LoadInt64((*int64)(&p.writeStallDuration))),
-		DiskSlowCount:      atomic.LoadInt64(&p.diskSlowCount),
-		DiskStallCount:     atomic.LoadInt64(&p.diskStallCount),
+		Metrics:                 m,
+		WriteStallCount:         atomic.LoadInt64(&p.writeStallCount),
+		WriteStallDuration:      time.Duration(atomic.LoadInt64((*int64)(&p.writeStallDuration))),
+		DiskSlowCount:           atomic.LoadInt64(&p.diskSlowCount),
+		DiskStallCount:          atomic.LoadInt64(&p.diskStallCount),
+		SharedStorageReadBytes:  atomic.LoadInt64(&p.sharedBytesRead),
+		SharedStorageWriteBytes: atomic.LoadInt64(&p.sharedBytesWritten),
 	}
 }
 
