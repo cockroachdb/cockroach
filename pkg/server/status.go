@@ -503,6 +503,7 @@ type systemStatusServer struct {
 	spanConfigReporter spanconfig.Reporter
 	distSender         *kvcoord.DistSender
 	rangeStatsFetcher  *rangestats.Fetcher
+	node               *Node
 }
 
 // StmtDiagnosticsRequester is the interface into *stmtdiagnostics.Registry
@@ -612,6 +613,7 @@ func newSystemStatusServer(
 	clock *hlc.Clock,
 	distSender *kvcoord.DistSender,
 	rangeStatsFetcher *rangestats.Fetcher,
+	node *Node,
 ) *systemStatusServer {
 	server := newStatusServer(
 		ambient,
@@ -639,6 +641,7 @@ func newSystemStatusServer(
 		spanConfigReporter: spanConfigReporter,
 		distSender:         distSender,
 		rangeStatsFetcher:  rangeStatsFetcher,
+		node:               node,
 	}
 }
 
@@ -848,6 +851,53 @@ func recordedSpansToTraceEvents(spans []tracingpb.RecordedSpan) []*serverpb.Trac
 		}
 	}
 	return output
+}
+
+// CriticalNodes retrieves nodes that are considered critical. A critical node
+// is one whose unexpected termination could result in data loss. A node is
+// considered critical if any of its replicas are unavailable or
+// under-replicated. The response includes a list of node descriptors that are
+// considered critical, and the corresponding SpanConfigConformanceReport that
+// includes details of non-conforming ranges contributing to the criticality.
+func (s *systemStatusServer) CriticalNodes(
+	ctx context.Context, req *serverpb.CriticalNodesRequest,
+) (*serverpb.CriticalNodesResponse, error) {
+	ctx = s.AnnotateCtx(ctx)
+	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
+	conformance, err := s.node.SpanConfigConformance(
+		ctx, &roachpb.SpanConfigConformanceRequest{
+			Spans: []roachpb.Span{keys.EverythingSpan},
+		})
+	if err != nil {
+		return nil, err
+	}
+
+	critical := make(map[roachpb.NodeID]bool)
+	for _, r := range conformance.Report.UnderReplicated {
+		for _, desc := range r.RangeDescriptor.Replicas().Descriptors() {
+			critical[desc.NodeID] = true
+		}
+	}
+	for _, r := range conformance.Report.Unavailable {
+		for _, desc := range r.RangeDescriptor.Replicas().Descriptors() {
+			critical[desc.NodeID] = true
+		}
+	}
+
+	res := &serverpb.CriticalNodesResponse{
+		CriticalNodes: nil,
+		Report:        conformance.Report,
+	}
+	for nodeID := range critical {
+		ns, err := s.nodeStatus(ctx, &serverpb.NodeRequest{NodeId: nodeID.String()})
+		if err != nil {
+			return nil, err
+		}
+		res.CriticalNodes = append(res.CriticalNodes, ns.Desc)
+	}
+	return res, nil
 }
 
 // AllocatorRange returns simulated allocator info for the requested range.
