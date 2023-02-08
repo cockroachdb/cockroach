@@ -1171,7 +1171,7 @@ func TestStoreSendWithClockOffset(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	cfg := TestStoreConfig(hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 123)),
-		time.Millisecond /* maxOffset */))
+		time.Millisecond /* maxOffset */, time.Millisecond /* toleratedOffset */))
 	store := createTestStoreWithConfig(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 	args := getArgs([]byte("a"))
 	// Set args timestamp to exceed max offset.
@@ -1320,7 +1320,8 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
-	cfg := TestStoreConfig(hlc.NewClock(manual, 1000*time.Nanosecond /* maxOffset */))
+	cfg := TestStoreConfig(hlc.NewClock(
+		manual, 1000*time.Nanosecond /* maxOffset */, 1000*time.Nanosecond /* toleratedOffset */))
 	cfg.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 			pr, ok := filterArgs.Req.(*roachpb.PushTxnRequest)
