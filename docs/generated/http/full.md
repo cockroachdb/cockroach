@@ -2934,6 +2934,52 @@ Support status: [reserved](#support-status)
 
 
 
+## CriticalNodes
+
+`POST /_status/critical_nodes`
+
+CriticalNodes retrieves nodes that are considered critical. A critical node
+is one whose unexpected termination could result in data loss. A node is
+considered critical if any of its replicas violate their span configurations.
+The response includes a list of node descriptors that are considered critical,
+and the corresponding SpanConfigConformanceReport that includes details of
+non-conforming ranges contributing to the criticality.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+
+
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| critical_nodes | [cockroach.roachpb.NodeDescriptor](#cockroach.server.serverpb.CriticalNodesResponse-cockroach.roachpb.NodeDescriptor) | repeated |  | [reserved](#support-status) |
+| report | [cockroach.roachpb.SpanConfigConformanceReport](#cockroach.server.serverpb.CriticalNodesResponse-cockroach.roachpb.SpanConfigConformanceReport) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
 ## Stacks
 
 `GET /_status/stacks/{node_id}`

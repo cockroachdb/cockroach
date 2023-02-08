@@ -1930,6 +1930,13 @@ message ListExecutionInsightsResponse {
   ];
 }
 
+
+message CriticalNodesRequest {}
+message CriticalNodesResponse {
+  repeated roachpb.NodeDescriptor critical_nodes = 1 [(gogoproto.nullable) = false];
+  roachpb.SpanConfigConformanceReport report = 2 [(gogoproto.nullable) = false];
+}
+
 service Status {
   // Certificates retrieves a copy of the TLS certificates.
   rpc Certificates(CertificatesRequest) returns (CertificatesResponse) {
@@ -2169,6 +2176,19 @@ service Status {
     option (google.api.http) = {
       post : "/_status/span"
       body : "*"
+    };
+  }
+
+  // CriticalNodes retrieves nodes that are considered critical. A critical node
+  // is one whose unexpected termination could result in data loss. A node is
+  // considered critical if any of its replicas violate their span configurations.
+  // The response includes a list of node descriptors that are considered critical,
+  // and the corresponding SpanConfigConformanceReport that includes details of
+  // non-conforming ranges contributing to the criticality.
+  rpc CriticalNodes(CriticalNodesRequest) returns (CriticalNodesResponse) {
+    option (google.api.http) = {
+      post: "/_status/critical_nodes"
+      body: "*"
     };
   }
 
