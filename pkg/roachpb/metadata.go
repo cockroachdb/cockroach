@@ -597,6 +597,23 @@ func (l Locality) String() string {
 	return strings.Join(tiers, ",")
 }
 
+// NonEmpty returns true if the tiers are non-empty.
+func (l Locality) NonEmpty() bool {
+	return len(l.Tiers) > 0
+}
+
+// Matches checks if this locality has a tier with a matching value for each
+// tier of the passed filter, returning true if so or false if not along with
+// the first tier of the filters that did not matched.
+func (l Locality) Matches(filter Locality) (bool, Tier) {
+	for _, t := range filter.Tiers {
+		if v, ok := l.Find(t.Key); !ok || v != t.Value {
+			return false, t
+		}
+	}
+	return true, Tier{}
+}
+
 // Type returns the underlying type in string form. This is part of pflag's
 // value interface.
 func (Locality) Type() string {
