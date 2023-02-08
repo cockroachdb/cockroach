@@ -19,7 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/server/goroutinedumper"
-	"github.com/cockroachdb/cockroach/pkg/server/heapprofiler"
+	"github.com/cockroachdb/cockroach/pkg/server/profiler"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -89,11 +89,11 @@ func startSampleEnvironment(
 
 	// Initialize a heap profiler if we have an output directory
 	// specified.
-	var heapProfiler *heapprofiler.HeapProfiler
-	var nonGoAllocProfiler *heapprofiler.NonGoAllocProfiler
-	var statsProfiler *heapprofiler.StatsProfiler
-	var queryProfiler *heapprofiler.ActiveQueryProfiler
-	//var cpuProfiler *heapprofiler.CPUProfiler
+	var heapProfiler *profiler.HeapProfiler
+	var nonGoAllocProfiler *profiler.NonGoAllocProfiler
+	var statsProfiler *profiler.StatsProfiler
+	var queryProfiler *profiler.ActiveQueryProfiler
+	var cpuProfiler *profiler.CPUProfiler
 	if cfg.heapProfileDirName != "" {
 		hasValidDumpDir := true
 		if err := os.MkdirAll(cfg.heapProfileDirName, 0755); err != nil {
@@ -108,26 +108,26 @@ func startSampleEnvironment(
 
 		if hasValidDumpDir {
 			var err error
-			heapProfiler, err = heapprofiler.NewHeapProfiler(ctx, cfg.heapProfileDirName, cfg.st)
+			heapProfiler, err = profiler.NewHeapProfiler(ctx, cfg.heapProfileDirName, cfg.st)
 			if err != nil {
 				return errors.Wrap(err, "starting heap profiler worker")
 			}
-			nonGoAllocProfiler, err = heapprofiler.NewNonGoAllocProfiler(ctx, cfg.heapProfileDirName, cfg.st)
+			nonGoAllocProfiler, err = profiler.NewNonGoAllocProfiler(ctx, cfg.heapProfileDirName, cfg.st)
 			if err != nil {
 				return errors.Wrap(err, "starting non-go alloc profiler worker")
 			}
-			statsProfiler, err = heapprofiler.NewStatsProfiler(ctx, cfg.heapProfileDirName, cfg.st)
+			statsProfiler, err = profiler.NewStatsProfiler(ctx, cfg.heapProfileDirName, cfg.st)
 			if err != nil {
 				return errors.Wrap(err, "starting memory stats collector worker")
 			}
-			queryProfiler, err = heapprofiler.NewActiveQueryProfiler(ctx, cfg.heapProfileDirName, cfg.st)
+			queryProfiler, err = profiler.NewActiveQueryProfiler(ctx, cfg.heapProfileDirName, cfg.st)
 			if err != nil {
 				log.Warningf(ctx, "failed to start query profiler worker: %v", err)
 			}
-			// cpuProfiler, err = heapprofiler.NewCPUProfiler(ctx, cfg.cpuProfileDirName, cfg.st)
-			// if err != nil {
-			// 	log.Warningf(ctx, "failed to start cpu profiler worker: %v", err)
-			// }
+			cpuProfiler, err = profiler.NewCPUProfiler(ctx, cfg.cpuProfileDirName, cfg.st)
+			if err != nil {
+				log.Warningf(ctx, "failed to start cpu profiler worker: %v", err)
+			}
 		}
 	}
 
@@ -196,9 +196,9 @@ func startSampleEnvironment(
 					if queryProfiler != nil {
 						queryProfiler.MaybeDumpQueries(ctx, cfg.sessionRegistry, cfg.st)
 					}
-					// if cpuProfiler != nil {
-					// 	cpuProfiler.MaybeTakeProfile(ctx, int64(cfg.runtime.CPUCombinedPercentNorm.Value()*100))
-					// }
+					if cpuProfiler != nil {
+						cpuProfiler.MaybeTakeProfile(ctx, int64(cfg.runtime.CPUCombinedPercentNorm.Value()*100))
+					}
 				}
 			}
 		})
