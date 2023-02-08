@@ -130,7 +130,7 @@ const UPGRADE_RELATED_ERRORS = [
 ];
 
 function isUpgradeError(message: string): boolean {
-  return UPGRADE_RELATED_ERRORS.some(err => message.search(err));
+  return UPGRADE_RELATED_ERRORS.some(err => message.search(err) !== -1);
 }
 
 /**
