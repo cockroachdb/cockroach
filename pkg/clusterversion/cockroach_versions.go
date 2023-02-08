@@ -215,9 +215,6 @@ const (
 	// probabilistically collects stmt bundles, controlled by the user provided
 	// sampling rate.
 	TODODelete_V22_2SampledStmtDiagReqs
-	// TODODelete_V22_2AddSSTableTombstones allows writing MVCC point tombstones via AddSSTable.
-	// Previously, SSTs containing these could error.
-	TODODelete_V22_2AddSSTableTombstones
 	// TODODelete_V22_2SystemPrivilegesTable adds system.privileges table.
 	TODODelete_V22_2SystemPrivilegesTable
 	// TODODelete_V22_2EnablePredicateProjectionChangefeed indicates that changefeeds support
@@ -518,10 +515,6 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     TODODelete_V22_2SampledStmtDiagReqs,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 20},
-	},
-	{
-		Key:     TODODelete_V22_2AddSSTableTombstones,
-		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 22},
 	},
 	{
 		Key:     TODODelete_V22_2SystemPrivilegesTable,
