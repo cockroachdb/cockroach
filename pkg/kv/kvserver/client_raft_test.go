@@ -292,7 +292,7 @@ func TestReplicateRange(t *testing.T) {
 	// Verify no intent remains on range descriptor key.
 	key := keys.RangeDescriptorKey(rhsDesc.StartKey)
 	desc := roachpb.RangeDescriptor{}
-	if ok, err := storage.MVCCGetProto(ctx, store.Engine(), key,
+	if ok, err := storage.MVCCGetProto(ctx, store.TODOEngine(), key,
 		store.Clock().Now(), &desc, storage.MVCCGetOptions{}); err != nil {
 		t.Fatal(err)
 	} else if !ok {
@@ -305,7 +305,7 @@ func TestReplicateRange(t *testing.T) {
 		meta1 := keys.RangeMetaKey(meta2)
 		for _, key := range []roachpb.RKey{meta2, meta1} {
 			metaDesc := roachpb.RangeDescriptor{}
-			if ok, err := storage.MVCCGetProto(ctx, store.Engine(), key.AsRawKey(),
+			if ok, err := storage.MVCCGetProto(ctx, store.TODOEngine(), key.AsRawKey(),
 				store.Clock().Now(), &metaDesc, storage.MVCCGetOptions{}); err != nil {
 				return err
 			} else if !ok {
@@ -611,7 +611,7 @@ func TestRaftLogSizeAfterTruncation(t *testing.T) {
 		// compute its size.
 		repl.RaftLock()
 		realSize, err := kvserver.ComputeRaftLogSize(
-			ctx, repl.RangeID, repl.Engine(), repl.SideloadedRaftMuLocked(),
+			ctx, repl.RangeID, repl.Store().TODOEngine(), repl.SideloadedRaftMuLocked(),
 		)
 		size, _ := repl.GetRaftLogSize()
 		repl.RaftUnlock()
@@ -828,7 +828,7 @@ func TestSnapshotAfterTruncation(t *testing.T) {
 func waitForTruncationForTesting(t *testing.T, r *kvserver.Replica, newFirstIndex uint64) {
 	testutils.SucceedsSoon(t, func() error {
 		// Flush the engine to advance durability, which triggers truncation.
-		require.NoError(t, r.Engine().Flush())
+		require.NoError(t, r.Store().TODOEngine().Flush())
 		// FirstIndex has changed.
 		firstIndex := r.GetFirstIndex()
 		if firstIndex != newFirstIndex {
@@ -2966,7 +2966,7 @@ func TestRaftRemoveRace(t *testing.T) {
 		tombstoneKey := keys.RangeTombstoneKey(desc.RangeID)
 		var tombstone roachpb.RangeTombstone
 		if ok, err := storage.MVCCGetProto(
-			ctx, tc.GetFirstStoreFromServer(t, 2).Engine(), tombstoneKey,
+			ctx, tc.GetFirstStoreFromServer(t, 2).TODOEngine(), tombstoneKey,
 			hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
 		); err != nil {
 			t.Fatal(err)
@@ -5147,7 +5147,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 		var tombstone roachpb.RangeTombstone
 		tombstoneKey := keys.RangeTombstoneKey(rangeID)
 		ok, err := storage.MVCCGetProto(
-			ctx, store.Engine(), tombstoneKey, hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
+			ctx, store.TODOEngine(), tombstoneKey, hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
 		)
 		require.NoError(t, err)
 		require.False(t, ok)
@@ -5155,7 +5155,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 	getHardState := func(
 		t *testing.T, store *kvserver.Store, rangeID roachpb.RangeID,
 	) raftpb.HardState {
-		hs, err := stateloader.Make(rangeID).LoadHardState(ctx, store.Engine())
+		hs, err := stateloader.Make(rangeID).LoadHardState(ctx, store.TODOEngine())
 		require.NoError(t, err)
 		return hs
 	}
@@ -5322,7 +5322,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 		// raft message when the other nodes split and then after the above call
 		// it will find out about its new replica ID and write a tombstone for the
 		// old one.
-		waitForTombstone(t, tc.GetFirstStoreFromServer(t, 0).Engine(), rhsID)
+		waitForTombstone(t, tc.GetFirstStoreFromServer(t, 0).TODOEngine(), rhsID)
 		lhsPartition.deactivate()
 		tc.WaitForValues(t, keyA, []int64{8, 8, 8})
 		hs := getHardState(t, tc.GetFirstStoreFromServer(t, 0), rhsID)
@@ -5375,7 +5375,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 		// raft message when the other nodes split and then after the above call
 		// it will find out about its new replica ID and write a tombstone for the
 		// old one.
-		waitForTombstone(t, tc.GetFirstStoreFromServer(t, 0).Engine(), rhsID)
+		waitForTombstone(t, tc.GetFirstStoreFromServer(t, 0).TODOEngine(), rhsID)
 
 		// We do all of this incrementing to ensure that nobody will ever
 		// succeed in sending a message the new RHS replica after we restart
@@ -5662,7 +5662,7 @@ func TestReplicaRemovalClosesProposalQuota(t *testing.T) {
 		ToReplica:     newReplDesc,
 		Message:       raftpb.Message{Type: raftpb.MsgVote, Term: 2},
 	}, noopRaftMessageResponseStream{}))
-	ts := waitForTombstone(t, store.Engine(), desc.RangeID)
+	ts := waitForTombstone(t, store.TODOEngine(), desc.RangeID)
 	require.Equal(t, ts.NextReplicaID, desc.NextReplicaID)
 	wg.Wait()
 	_, err = repl.GetProposalQuota().Acquire(ctx, 1)
@@ -5803,7 +5803,7 @@ func TestElectionAfterRestart(t *testing.T) {
 		})
 		for _, srv := range tc.Servers {
 			require.NoError(t, srv.Stores().VisitStores(func(s *kvserver.Store) error {
-				return s.Engine().Flush()
+				return s.TODOEngine().Flush()
 			}))
 		}
 		t.Log("waited for all followers to be caught up")
@@ -5914,12 +5914,12 @@ func TestRaftSnapshotsWithMVCCRangeKeys(t *testing.T) {
 			rangeKVWithTS("a", "b", ts1, storage.MVCCValue{}),
 			rangeKVWithTS("b", "c", ts2, storage.MVCCValue{}),
 			rangeKVWithTS("b", "c", ts1, storage.MVCCValue{}),
-		}, storageutils.ScanRange(t, store.Engine(), descA))
+		}, storageutils.ScanRange(t, store.TODOEngine(), descA))
 		require.Equal(t, kvs{
 			rangeKVWithTS("c", "d", ts2, storage.MVCCValue{}),
 			rangeKVWithTS("c", "d", ts1, storage.MVCCValue{}),
 			rangeKVWithTS("d", "e", ts2, storage.MVCCValue{}),
-		}, storageutils.ScanRange(t, store.Engine(), descC))
+		}, storageutils.ScanRange(t, store.TODOEngine(), descC))
 	}
 
 	// Quick check of MVCC stats.
@@ -5962,7 +5962,7 @@ func TestRaftSnapshotsWithMVCCRangeKeysEverywhere(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	srv := tc.Server(0)
 	store := tc.GetFirstStoreFromServer(t, 0)
-	engine := store.Engine()
+	engine := store.TODOEngine()
 	sender := srv.DB().NonTransactionalSender()
 
 	// Split off ranges at "a" and "b".
@@ -6013,7 +6013,7 @@ func TestRaftSnapshotsWithMVCCRangeKeysEverywhere(t *testing.T) {
 
 	// Look for the range keys on the other servers.
 	for _, srvIdx := range []int{1, 2} {
-		e := tc.GetFirstStoreFromServer(t, srvIdx).Engine()
+		e := tc.GetFirstStoreFromServer(t, srvIdx).TODOEngine()
 		for _, desc := range descs {
 			for _, span := range rditer.MakeReplicatedKeySpans(&desc) {
 				prefix := append(span.Key.Clone(), ':')

@@ -110,7 +110,7 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 	startTime := timeutil.Now()
 
 	ms := r.GetMVCCStats()
-	batch := r.Engine().NewUnindexedBatch(true /* writeOnly */)
+	batch := r.store.TODOEngine().NewUnindexedBatch(true /* writeOnly */)
 	defer batch.Close()
 	desc := r.Desc()
 	inited := desc.IsInitialized()
@@ -125,7 +125,8 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 		ClearReplicatedByRangeID:   inited,
 		ClearUnreplicatedByRangeID: true,
 	}
-	if err := kvstorage.DestroyReplica(ctx, r.RangeID, r.Engine(), batch, nextReplicaID, opts); err != nil {
+	// TODO(sep-raft-log): need both engines separately here.
+	if err := kvstorage.DestroyReplica(ctx, r.RangeID, r.store.TODOEngine(), batch, nextReplicaID, opts); err != nil {
 		return err
 	}
 	preTime := timeutil.Now()
