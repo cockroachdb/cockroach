@@ -80,7 +80,7 @@ func MakeGCSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 		return nil, err
 	}
 	if kmsURI.Path == "/" {
-		return nil, errors.Newf("host component of the KMS cannot be empty; must contain the Customer Managed Key")
+		return nil, errors.Newf("path component of the KMS cannot be empty; must contain the Customer Managed Key")
 	}
 
 	kmsConsumeURL := cloud.ConsumeURL{URL: kmsURI}

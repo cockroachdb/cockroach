@@ -70,7 +70,7 @@ CREATE EXTERNAL CONNECTION "foo-kms" AS 'gcp-kms:///cmk?AUTH=specified&BEARER_TO
 exec-sql
 CREATE EXTERNAL CONNECTION "missing-cmk-kms" AS 'gcp-kms:///?AUTH=implicit&CREDENTIALS=baz&ASSUME_ROLE=ronaldo,rashford,bruno&BEARER_TOKEN=foo';
 ----
-pq: failed to construct External Connection details: failed to create GCP KMS external connection: host component of the KMS cannot be empty; must contain the Customer Managed Key
+pq: failed to construct External Connection details: failed to create GCP KMS external connection: path component of the KMS cannot be empty; must contain the Customer Managed Key
 
 exec-sql
 CREATE EXTERNAL CONNECTION "invalid-params-kms" AS 'gcp-kms:///cmk?AUTH=implicit&INVALIDPARAM=baz';
