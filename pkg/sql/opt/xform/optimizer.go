@@ -1078,6 +1078,9 @@ func (o *Optimizer) disableRulesRandom(probability float64) {
 		int(opt.PruneScanCols),
 		// Needed to ensure that the input of a RangeExpr is always an AndExpr.
 		int(opt.SimplifyRange),
+		// Needed to ensure that all uncorrelated EXISTS subqueries are
+		// converted to COALESCE+subquery expressions.
+		int(opt.ConvertUncorrelatedExistsToCoalesceSubquery),
 	)
 
 	var disabledRules RuleSet
