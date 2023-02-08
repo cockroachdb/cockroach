@@ -2285,14 +2285,16 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 			t.Fatalf("replica descriptor for key %s not found", rKey)
 		}
 
+		now := s.Clock().NowAsClockTimestamp()
 		leaseReq := kvpb.RequestLeaseRequest{
 			RequestHeader: kvpb.RequestHeader{
 				Key: key,
 			},
 			Lease: roachpb.Lease{
-				Start:      s.Clock().NowAsClockTimestamp(),
-				Expiration: s.Clock().Now().Add(time.Second.Nanoseconds(), 0).Clone(),
+				Start:      now,
+				Expiration: now.ToTimestamp().Add(time.Second.Nanoseconds(), 0).Clone(),
 				Replica:    replDesc,
+				ProposedTS: &now,
 			},
 		}
 

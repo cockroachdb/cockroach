@@ -570,6 +570,7 @@ func TestReplicaReadConsistency(t *testing.T) {
 	tc.manualClock.MustAdvanceTo(leaseExpiry(tc.repl))
 	start := tc.Clock().NowAsClockTimestamp()
 	if err := sendLeaseRequest(tc.repl, &roachpb.Lease{
+		ProposedTS: &start,
 		Start:      start,
 		Expiration: start.ToTimestamp().Add(10, 0).Clone(),
 		Replica:    secondReplica,
@@ -788,6 +789,7 @@ func TestApplyCmdLeaseError(t *testing.T) {
 	tc.manualClock.MustAdvanceTo(leaseExpiry(tc.repl))
 	start := tc.Clock().NowAsClockTimestamp()
 	if err := sendLeaseRequest(tc.repl, &roachpb.Lease{
+		ProposedTS: &start,
 		Start:      start,
 		Expiration: start.ToTimestamp().Add(10, 0).Clone(),
 		Replica:    secondReplica,
@@ -944,6 +946,7 @@ func TestReplicaLease(t *testing.T) {
 	tc.manualClock.MustAdvanceTo(leaseExpiry(tc.repl))
 	now := tc.Clock().NowAsClockTimestamp()
 	if err := sendLeaseRequest(tc.repl, &roachpb.Lease{
+		ProposedTS: &now,
 		Start:      now.ToTimestamp().Add(10, 0).UnsafeToClockTimestamp(),
 		Expiration: now.ToTimestamp().Add(20, 0).Clone(),
 		Replica:    secondReplica,
@@ -999,6 +1002,7 @@ func TestReplicaNotLeaseHolderError(t *testing.T) {
 	tc.manualClock.MustAdvanceTo(leaseExpiry(tc.repl))
 	now := tc.Clock().NowAsClockTimestamp()
 	if err := sendLeaseRequest(tc.repl, &roachpb.Lease{
+		ProposedTS: &now,
 		Start:      now,
 		Expiration: now.ToTimestamp().Add(10, 0).Clone(),
 		Replica:    secondReplica,
@@ -1083,6 +1087,7 @@ func TestReplicaLeaseCounters(t *testing.T) {
 
 	now := tc.Clock().NowAsClockTimestamp()
 	if err := sendLeaseRequest(tc.repl, &roachpb.Lease{
+		ProposedTS: &now,
 		Start:      now,
 		Expiration: now.ToTimestamp().Add(10, 0).Clone(),
 		Replica: roachpb.ReplicaDescriptor{
@@ -1113,6 +1118,7 @@ func TestReplicaLeaseCounters(t *testing.T) {
 
 	// Make lease request fail by requesting overlapping lease from bogus Replica.
 	if err := sendLeaseRequest(tc.repl, &roachpb.Lease{
+		ProposedTS: &now,
 		Start:      now,
 		Expiration: now.ToTimestamp().Add(10, 0).Clone(),
 		Replica: roachpb.ReplicaDescriptor{
