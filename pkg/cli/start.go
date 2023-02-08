@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/profiler"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -1434,19 +1435,18 @@ func initCPUProfiler(ctx context.Context, dir string, st *cluster.Settings, stop
 	if cpuProfileInterval <= 0 {
 		return
 	}
-	//cpuProfiler, err := heapprofiler.NewCPUProfiler(ctx, dir, st)
-	// if err != nil {
-	// 	log.Warningf(ctx, "failed to start cpu profiler worker: %v", err)
-	// }
+	cpuProfiler, err := profiler.NewCPUProfiler(ctx, dir, st)
+	if err != nil {
+		log.Warningf(ctx, "failed to start cpu profiler worker: %v", err)
+	}
 
-	if err := stopper.RunAsyncTask(ctx, "run cpu profiler", func(ctx context.Context) {
+	if err = stopper.RunAsyncTask(ctx, "run cpu profiler", func(ctx context.Context) {
 		for {
 			select {
 			case <-stopper.ShouldQuiesce():
 				return
 			case <-time.After(time.Second):
-				//cpuProfiler.MaybeTakeProfile(ctx, 100)
-				return
+				cpuProfiler.MaybeTakeProfile(ctx, 100)
 			}
 		}
 	}); err != nil {

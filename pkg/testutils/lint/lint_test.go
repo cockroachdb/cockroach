@@ -1737,7 +1737,7 @@ func TestLint(t *testing.T) {
 				stream.GrepNot(`pkg/security/securityassets/security_assets\.go.*"io/ioutil" has been deprecated since Go 1\.16`),
 				stream.GrepNot(`pkg/security/securitytest/embedded\.go:.*"io/ioutil" has been deprecated since Go 1\.16`),
 				stream.GrepNot(`pkg/server/dumpstore.*\.go.*"io/ioutil" has been deprecated since Go 1\.16: As of Go 1\.16`),
-				stream.GrepNot(`pkg/server/heapprofiler/profilestore_test\.go.*"io/ioutil" has been deprecated since Go 1\.16`),
+				stream.GrepNot(`pkg/server/profiler/profilestore_test\.go.*"io/ioutil" has been deprecated since Go 1\.16`),
 				stream.GrepNot(`pkg/util/log/file_api\.go.*"io/ioutil" has been deprecated since Go 1\.16`),
 				// TODO(yuzefovich): remove these exclusions.
 				stream.GrepNot(`pkg/sql/conn_executor.go:.* evalCtx.SetDeprecatedContext is deprecated: .*`),
