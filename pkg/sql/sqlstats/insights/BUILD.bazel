@@ -53,6 +53,7 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/sql/appstatspb",
         "//pkg/sql/clusterunique",
+        "//pkg/sql/pgwire/pgcode",
         "//pkg/util/stop",
         "//pkg/util/uint128",
         "//pkg/util/uuid",
