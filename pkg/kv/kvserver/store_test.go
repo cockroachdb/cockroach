@@ -3469,7 +3469,7 @@ func TestAllocatorCheckRange(t *testing.T) {
 	}{
 		{
 			name:   "overreplicated",
-			stores: multiRegionStores,
+			stores: multiRegionStores, // Nine stores
 			existingReplicas: []roachpb.ReplicaDescriptor{
 				{NodeID: 1, StoreID: 1, ReplicaID: 1},
 				{NodeID: 2, StoreID: 2, ReplicaID: 2},
@@ -3482,7 +3482,7 @@ func TestAllocatorCheckRange(t *testing.T) {
 		},
 		{
 			name:   "overreplicated but store dead",
-			stores: multiRegionStores,
+			stores: multiRegionStores, // Nine stores
 			existingReplicas: []roachpb.ReplicaDescriptor{
 				{NodeID: 1, StoreID: 1, ReplicaID: 1},
 				{NodeID: 2, StoreID: 2, ReplicaID: 2},
@@ -3497,7 +3497,7 @@ func TestAllocatorCheckRange(t *testing.T) {
 		},
 		{
 			name:   "decommissioning but underreplicated",
-			stores: multiRegionStores,
+			stores: multiRegionStores, // Nine stores
 			existingReplicas: []roachpb.ReplicaDescriptor{
 				{NodeID: 1, StoreID: 1, ReplicaID: 1},
 				{NodeID: 2, StoreID: 2, ReplicaID: 2},
@@ -3511,7 +3511,7 @@ func TestAllocatorCheckRange(t *testing.T) {
 		},
 		{
 			name:   "decommissioning with replacement",
-			stores: multiRegionStores,
+			stores: multiRegionStores, // Nine stores
 			existingReplicas: []roachpb.ReplicaDescriptor{
 				{NodeID: 1, StoreID: 1, ReplicaID: 1},
 				{NodeID: 2, StoreID: 2, ReplicaID: 2},
@@ -3541,7 +3541,7 @@ func TestAllocatorCheckRange(t *testing.T) {
 		},
 		{
 			name:   "five to four nodes at RF five",
-			stores: noLocalityStores,
+			stores: noLocalityStores, // Five stores
 			existingReplicas: []roachpb.ReplicaDescriptor{
 				{NodeID: 1, StoreID: 1, ReplicaID: 1},
 				{NodeID: 2, StoreID: 2, ReplicaID: 2},
@@ -3557,6 +3557,83 @@ func TestAllocatorCheckRange(t *testing.T) {
 			expectedAction:    allocatorimpl.AllocatorRemoveDecommissioningVoter,
 			expectErr:         false,
 			expectValidTarget: false,
+		},
+		{
+			name:   "five to two nodes at RF five replaces first",
+			stores: noLocalityStores, // Five stores
+			existingReplicas: []roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1, ReplicaID: 1},
+				{NodeID: 2, StoreID: 2, ReplicaID: 2},
+				{NodeID: 3, StoreID: 3, ReplicaID: 3},
+				{NodeID: 4, StoreID: 4, ReplicaID: 4},
+				{NodeID: 5, StoreID: 5, ReplicaID: 5},
+			},
+			zoneConfig: zonepb.DefaultSystemZoneConfigRef(),
+			livenessOverrides: map[roachpb.NodeID]livenesspb.NodeLivenessStatus{
+				3: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+				4: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+				5: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+			},
+			baselineExpNoop:    true,
+			expectedAction:     allocatorimpl.AllocatorReplaceDecommissioningVoter,
+			expectValidTarget:  false,
+			expectAllocatorErr: true,
+			expectedErrStr:     "likely not enough nodes in cluster",
+		},
+		{
+			name:   "replace first when lowering effective RF",
+			stores: multiRegionStores, // Nine stores
+			existingReplicas: []roachpb.ReplicaDescriptor{
+				// Region "a"
+				{NodeID: 1, StoreID: 1, ReplicaID: 1},
+				{NodeID: 2, StoreID: 2, ReplicaID: 2},
+				// Region "b"
+				{NodeID: 4, StoreID: 4, ReplicaID: 3},
+				{NodeID: 5, StoreID: 5, ReplicaID: 4},
+				// Region "c"
+				{NodeID: 7, StoreID: 7, ReplicaID: 5},
+			},
+			zoneConfig: zonepb.DefaultSystemZoneConfigRef(),
+			livenessOverrides: map[roachpb.NodeID]livenesspb.NodeLivenessStatus{
+				// Downsize to one node per region: 3,6,9.
+				1: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+				2: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+				4: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+				5: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+				7: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+				8: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+			},
+			expectedAction:    allocatorimpl.AllocatorReplaceDecommissioningVoter,
+			expectErr:         false,
+			expectValidTarget: true,
+		},
+		{
+			name:   "replace dead first when lowering effective RF",
+			stores: multiRegionStores, // Nine stores
+			existingReplicas: []roachpb.ReplicaDescriptor{
+				// Region "a"
+				{NodeID: 1, StoreID: 1, ReplicaID: 1},
+				{NodeID: 2, StoreID: 2, ReplicaID: 2},
+				// Region "b"
+				{NodeID: 4, StoreID: 4, ReplicaID: 3},
+				{NodeID: 5, StoreID: 5, ReplicaID: 4},
+				// Region "c"
+				{NodeID: 7, StoreID: 7, ReplicaID: 5},
+			},
+			zoneConfig: zonepb.DefaultSystemZoneConfigRef(),
+			livenessOverrides: map[roachpb.NodeID]livenesspb.NodeLivenessStatus{
+				// Downsize to: 1,4,7,9 but 7 is dead.
+				// Replica on n7 should be replaced first.
+				2: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+				3: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+				5: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+				6: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+				7: livenesspb.NodeLivenessStatus_DEAD,
+				8: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+			},
+			expectedAction:    allocatorimpl.AllocatorReplaceDeadVoter,
+			expectErr:         false,
+			expectValidTarget: true,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -3629,6 +3706,10 @@ func TestAllocatorCheckRange(t *testing.T) {
 				true /* collectTraces */, storePoolOverride,
 			)
 
+			require.Equalf(t, tc.expectedAction, action,
+				"expected action \"%s\", got action \"%s\"", tc.expectedAction, action,
+			)
+
 			// Validate expectations from test case.
 			if tc.expectErr || tc.expectAllocatorErr {
 				require.Error(t, err)
@@ -3646,10 +3727,6 @@ func TestAllocatorCheckRange(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 			}
-
-			require.Equalf(t, tc.expectedAction, action,
-				"expected action \"%s\", got action \"%s\"", tc.expectedAction, action,
-			)
 
 			if tc.expectValidTarget {
 				require.NotEqualf(t, roachpb.ReplicationTarget{}, target, "expected valid target")
