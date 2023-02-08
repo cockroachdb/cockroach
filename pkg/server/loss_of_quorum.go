@@ -96,7 +96,9 @@ func maybeRunLossOfQuorumRecoveryCleanup(
 	server *Server,
 	stopper *stop.Stopper,
 ) {
-	_ = stopper.RunAsyncTask(ctx, "publish-loss-of-quorum-events", func(ctx context.Context) {
+	publishCtx, publishCancel := stopper.WithCancelOnQuiesce(ctx)
+	_ = stopper.RunAsyncTask(publishCtx, "publish-loss-of-quorum-events", func(ctx context.Context) {
+		defer publishCancel()
 		if err := stores.VisitStores(func(s *kvserver.Store) error {
 			_, err := loqrecovery.RegisterOfflineRecoveryEvents(
 				ctx,
@@ -149,7 +151,9 @@ func maybeRunLossOfQuorumRecoveryCleanup(
 	if len(cleanup.DecommissionedNodeIDs) == 0 {
 		return
 	}
-	_ = stopper.RunAsyncTask(ctx, "maybe-mark-nodes-as-decommissioned", func(ctx context.Context) {
+	decomCtx, decomCancel := stopper.WithCancelOnQuiesce(ctx)
+	_ = stopper.RunAsyncTask(decomCtx, "maybe-mark-nodes-as-decommissioned", func(ctx context.Context) {
+		defer decomCancel()
 		log.Infof(ctx, "loss of quorum recovery decommissioning removed nodes %s",
 			strutil.JoinIDs("n", cleanup.DecommissionedNodeIDs))
 		retryOpts := retry.Options{

@@ -542,7 +542,7 @@ func (ds *DistSender) RangeDescriptorCache() *rangecache.RangeCache {
 // The client has some control over the consistency of the lookup. The
 // acceptable values for the consistency argument are INCONSISTENT
 // or READ_UNCOMMITTED. We use INCONSISTENT for an optimistic lookup
-// pass. If we don't fine a new enough descriptor, we do a leaseholder
+// pass. If we don't find a new enough descriptor, we do a leaseholder
 // read at READ_UNCOMMITTED in order to read intents as well as committed
 // values. The reason for this is that it's not clear whether the intent
 // or the previous value points to the correct location of the Range. It gets
