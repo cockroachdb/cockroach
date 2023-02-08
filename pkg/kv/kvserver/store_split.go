@@ -239,27 +239,21 @@ func prepareRightReplicaForSplit(
 	minValidObservedTS := r.mu.minValidObservedTimestamp
 	r.mu.RUnlock()
 
-	// The right hand side of the split was already created (and its raftMu
-	// acquired) in Replica.acquireSplitLock. It must be present here.
+	// If the RHS replica of the split is not removed, then it has been obtained
+	// (and its raftMu acquired) in Replica.acquireSplitLock.
 	rightRepl := r.store.GetReplicaIfExists(split.RightDesc.RangeID)
-	// If the RHS replica at the point of the split was known to be removed
-	// during the application of the split then we may not find it here. That's
-	// fine, carry on. See also:
+	// If the RHS replica of the split has been removed then we either not find it
+	// here, or find a one with a later replica ID. In this case we also know that
+	// its data has already been removed by splitPreApply, so we skip initializing
+	// this replica. See also:
 	_, _ = r.acquireSplitLock, splitPostApply
-	if rightRepl == nil {
+	if rightRepl == nil || rightRepl.isNewerThanSplit(split) {
 		return nil
 	}
 
 	// Already holding raftMu, see above.
 	rightRepl.mu.Lock()
 	defer rightRepl.mu.Unlock()
-
-	// If we know that the RHS has already been removed at this replica ID
-	// then we also know that its data has already been removed by the preApply
-	// so we skip initializing it as the RHS of the split.
-	if rightRepl.isNewerThanSplit(split) {
-		return nil
-	}
 
 	// Finish initialization of the RHS.
 	if state, err := kvstorage.LoadReplicaState(
