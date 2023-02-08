@@ -134,7 +134,7 @@ func (c *Controller) Start(ctx context.Context, stopper *stop.Stopper) {
 		})
 	}
 	// Trigger a schedule update to ensure it exists at startup.
-	if c.st.Version.IsActive(ctx, clusterversion.V22_2SQLSchemaTelemetryScheduledJobs) {
+	if c.st.Version.IsActive(ctx, clusterversion.TODODelete_V22_2SQLSchemaTelemetryScheduledJobs) {
 		notify("ensure-at-startup")
 	}
 	// Add a change hook on the recurrence cluster setting that will notify
@@ -145,7 +145,7 @@ func (c *Controller) Start(ctx context.Context, stopper *stop.Stopper) {
 }
 
 func updateSchedule(ctx context.Context, db isql.DB, st *cluster.Settings, clusterID uuid.UUID) {
-	if !st.Version.IsActive(ctx, clusterversion.V22_2SQLSchemaTelemetryScheduledJobs) {
+	if !st.Version.IsActive(ctx, clusterversion.TODODelete_V22_2SQLSchemaTelemetryScheduledJobs) {
 		log.Infof(ctx, "failed to update SQL schema telemetry schedule: %s", ErrVersionGate)
 	}
 	retryOptions := retry.Options{
@@ -223,7 +223,7 @@ var cronExprRewrites = map[string]func(r *rand.Rand) string{
 func (c *Controller) CreateSchemaTelemetryJob(
 	ctx context.Context, createdByName string, createdByID int64,
 ) (id int64, _ error) {
-	if !c.st.Version.IsActive(ctx, clusterversion.V22_2SQLSchemaTelemetryScheduledJobs) {
+	if !c.st.Version.IsActive(ctx, clusterversion.TODODelete_V22_2SQLSchemaTelemetryScheduledJobs) {
 		return 0, ErrVersionGate
 	}
 	var j *jobs.Job

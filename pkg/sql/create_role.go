@@ -202,7 +202,7 @@ func updateRoleOptions(
 	roleName username.SQLUsername,
 	telemetryOp string,
 ) (rowsAffected int, err error) {
-	withID := params.p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.V22_2RoleOptionsTableHasIDColumn)
+	withID := params.p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.TODODelete_V22_2RoleOptionsTableHasIDColumn)
 	// Get a map of statements to execute for role options and their values.
 	stmts, err := roleOptions.GetSQLStmts(func(o roleoption.Option) {
 		sqltelemetry.IncIAMOptionCounter(telemetryOp, strings.ToLower(o.String()))

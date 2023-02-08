@@ -991,7 +991,7 @@ func restorePlanHook(
 	}
 
 	if restoreStmt.Options.SchemaOnly &&
-		!p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V22_2Start) {
+		!p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.TODODelete_V22_2Start) {
 		return nil, nil, nil, false,
 			errors.New("cannot run RESTORE with schema_only until cluster has fully upgraded to 22.2")
 	}

@@ -188,7 +188,7 @@ func (c *Cache) readFromStorage(
 func (c *Cache) Start(ctx context.Context) {
 	if err := c.stopper.RunAsyncTask(ctx, "syntheticprivilegecache-warm", func(ctx context.Context) {
 		defer close(c.warmed)
-		if !c.settings.Version.IsActive(ctx, clusterversion.V22_2SystemPrivilegesTable) {
+		if !c.settings.Version.IsActive(ctx, clusterversion.TODODelete_V22_2SystemPrivilegesTable) {
 			return
 		}
 		start := timeutil.Now()

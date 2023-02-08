@@ -80,10 +80,10 @@ func normalizeAndValidateSelectForTarget(
 		}
 	}()
 
-	if !execCfg.Settings.Version.IsActive(ctx, clusterversion.V22_2EnablePredicateProjectionChangefeed) {
+	if !execCfg.Settings.Version.IsActive(ctx, clusterversion.TODODelete_V22_2EnablePredicateProjectionChangefeed) {
 		return nil, errors.Newf(
 			`filters and projections not supported until upgrade to version %s or higher is finalized`,
-			clusterversion.V22_2EnablePredicateProjectionChangefeed.String())
+			clusterversion.TODODelete_V22_2EnablePredicateProjectionChangefeed.String())
 	}
 
 	// This really shouldn't happen as it's enforced by sql.y.

@@ -2340,6 +2340,16 @@ pb_to_json  pb_to_json  4294967295    crdb_internal  3802        25 17
 pb_to_json  pb_to_json  4294967295    crdb_internal  3802        25 17 16
 pb_to_json  pb_to_json  4294967295    crdb_internal  3802        25 17 16 16
 
+query TTOTOT colnames
+SELECT proname, prosrc, pronamespace, nspname, prorettype, proargtypes
+FROM pg_catalog.pg_proc p
+JOIN pg_catalog.pg_namespace n ON p.pronamespace = n.oid
+WHERE proname='_pg_char_max_length'
+ORDER BY p.oid
+----
+proname              prosrc               pronamespace  nspname             prorettype  proargtypes
+_pg_char_max_length  _pg_char_max_length  4294967213    information_schema  20          26 23
+
 query TOIOTTB colnames
 SELECT proname, provariadic, pronargs, prorettype, proargtypes, proargmodes, proisstrict
 FROM pg_catalog.pg_proc

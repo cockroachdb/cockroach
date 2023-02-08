@@ -68,10 +68,10 @@ func (p *planner) parseExternalConnection(
 func (p *planner) createExternalConnection(
 	params runParams, n *tree.CreateExternalConnection,
 ) error {
-	if !p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.V22_2SystemExternalConnectionsTable) {
+	if !p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.TODODelete_V22_2SystemExternalConnectionsTable) {
 		return pgerror.Newf(pgcode.FeatureNotSupported,
 			"version %v must be finalized to create an External Connection",
-			clusterversion.ByKey(clusterversion.V22_2SystemExternalConnectionsTable))
+			clusterversion.ByKey(clusterversion.TODODelete_V22_2SystemExternalConnectionsTable))
 	}
 
 	if err := params.p.CheckPrivilege(params.ctx, syntheticprivilege.GlobalPrivilegeObject,

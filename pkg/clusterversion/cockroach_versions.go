@@ -176,81 +176,81 @@ const (
 	// to succeed without actually performing the update.
 	VPrimordialMax
 
-	// V22_1 is CockroachDB v22.1. It's used for all v22.1.x patch releases.
-	V22_1
+	// TODODelete_V22_1 is CockroachDB v22.1. It's used for all v22.1.x patch releases.
+	TODODelete_V22_1
 
 	// v22.2 versions.
 	//
-	// V22_2Start demarcates work towards CockroachDB v22.2.
-	V22_2Start
+	// TODODelete_V22_2Start demarcates work towards CockroachDB v22.2.
+	TODODelete_V22_2Start
 
-	// V22_2LocalTimestamps enables the use of local timestamps in MVCC values.
-	V22_2LocalTimestamps
-	// V22_2PebbleFormatSplitUserKeysMarkedCompacted updates the Pebble format
+	// TODODelete_V22_2LocalTimestamps enables the use of local timestamps in MVCC values.
+	TODODelete_V22_2LocalTimestamps
+	// TODODelete_V22_2PebbleFormatSplitUserKeysMarkedCompacted updates the Pebble format
 	// version that recombines all user keys that may be split across multiple
 	// files into a single table.
-	V22_2PebbleFormatSplitUserKeysMarkedCompacted
-	// V22_2EnsurePebbleFormatVersionRangeKeys is the first step of a two-part
+	TODODelete_V22_2PebbleFormatSplitUserKeysMarkedCompacted
+	// TODODelete_V22_2EnsurePebbleFormatVersionRangeKeys is the first step of a two-part
 	// migration that bumps Pebble's format major version to a version that
 	// supports range keys.
-	V22_2EnsurePebbleFormatVersionRangeKeys
-	// V22_2EnablePebbleFormatVersionRangeKeys is the second of a two-part migration
+	TODODelete_V22_2EnsurePebbleFormatVersionRangeKeys
+	// TODODelete_V22_2EnablePebbleFormatVersionRangeKeys is the second of a two-part migration
 	// and is used as the feature gate for use of range keys. Any node at this
 	// version is guaranteed to reside in a cluster where all nodes support range
 	// keys at the Pebble layer.
-	V22_2EnablePebbleFormatVersionRangeKeys
-	// V22_2TrigramInvertedIndexes enables the creation of trigram inverted indexes
+	TODODelete_V22_2EnablePebbleFormatVersionRangeKeys
+	// TODODelete_V22_2TrigramInvertedIndexes enables the creation of trigram inverted indexes
 	// on strings.
-	V22_2TrigramInvertedIndexes
-	// V22_2RemoveGrantPrivilege is the last step to migrate from the GRANT privilege to WITH GRANT OPTION.
-	V22_2RemoveGrantPrivilege
-	// V22_2MVCCRangeTombstones enables the use of MVCC range tombstones.
-	V22_2MVCCRangeTombstones
-	// V22_2UpgradeSequenceToBeReferencedByID ensures that sequences are referenced
+	TODODelete_V22_2TrigramInvertedIndexes
+	// TODODelete_V22_2RemoveGrantPrivilege is the last step to migrate from the GRANT privilege to WITH GRANT OPTION.
+	TODODelete_V22_2RemoveGrantPrivilege
+	// TODODelete_V22_2MVCCRangeTombstones enables the use of MVCC range tombstones.
+	TODODelete_V22_2MVCCRangeTombstones
+	// TODODelete_V22_2UpgradeSequenceToBeReferencedByID ensures that sequences are referenced
 	// by IDs rather than by their names. For example, a column's DEFAULT (or
 	// ON UPDATE) expression can be defined to be 'nextval('s')'; we want to be
 	// able to refer to sequence 's' by its ID, since 's' might be later renamed.
-	V22_2UpgradeSequenceToBeReferencedByID
-	// V22_2SampledStmtDiagReqs enables installing statement diagnostic requests that
+	TODODelete_V22_2UpgradeSequenceToBeReferencedByID
+	// TODODelete_V22_2SampledStmtDiagReqs enables installing statement diagnostic requests that
 	// probabilistically collects stmt bundles, controlled by the user provided
 	// sampling rate.
-	V22_2SampledStmtDiagReqs
-	// V22_2AddSSTableTombstones allows writing MVCC point tombstones via AddSSTable.
+	TODODelete_V22_2SampledStmtDiagReqs
+	// TODODelete_V22_2AddSSTableTombstones allows writing MVCC point tombstones via AddSSTable.
 	// Previously, SSTs containing these could error.
-	V22_2AddSSTableTombstones
-	// V22_2SystemPrivilegesTable adds system.privileges table.
-	V22_2SystemPrivilegesTable
-	// V22_2EnablePredicateProjectionChangefeed indicates that changefeeds support
+	TODODelete_V22_2AddSSTableTombstones
+	// TODODelete_V22_2SystemPrivilegesTable adds system.privileges table.
+	TODODelete_V22_2SystemPrivilegesTable
+	// TODODelete_V22_2EnablePredicateProjectionChangefeed indicates that changefeeds support
 	// predicates and projections.
-	V22_2EnablePredicateProjectionChangefeed
-	// V22_2AlterSystemSQLInstancesAddLocality adds a locality column to the
+	TODODelete_V22_2EnablePredicateProjectionChangefeed
+	// TODODelete_V22_2AlterSystemSQLInstancesAddLocality adds a locality column to the
 	// system.sql_instances table.
-	V22_2AlterSystemSQLInstancesAddLocality
-	// V22_2SystemExternalConnectionsTable adds system.external_connections table.
-	V22_2SystemExternalConnectionsTable
-	// V22_2AlterSystemStatementStatisticsAddIndexRecommendations adds an
+	TODODelete_V22_2AlterSystemSQLInstancesAddLocality
+	// TODODelete_V22_2SystemExternalConnectionsTable adds system.external_connections table.
+	TODODelete_V22_2SystemExternalConnectionsTable
+	// TODODelete_V22_2AlterSystemStatementStatisticsAddIndexRecommendations adds an
 	// index_recommendations column to the system.statement_statistics table.
-	V22_2AlterSystemStatementStatisticsAddIndexRecommendations
-	// V22_2RoleIDSequence is the version where the system.role_id_sequence exists.
-	V22_2RoleIDSequence
-	// V22_2AddSystemUserIDColumn is the version where the system.users table has
+	TODODelete_V22_2AlterSystemStatementStatisticsAddIndexRecommendations
+	// TODODelete_V22_2RoleIDSequence is the version where the system.role_id_sequence exists.
+	TODODelete_V22_2RoleIDSequence
+	// TODODelete_V22_2AddSystemUserIDColumn is the version where the system.users table has
 	// a user_id column for writes only.
-	V22_2AddSystemUserIDColumn
-	// V22_2SystemUsersIDColumnIsBackfilled is the version where all users in the system.users table
+	TODODelete_V22_2AddSystemUserIDColumn
+	// TODODelete_V22_2SystemUsersIDColumnIsBackfilled is the version where all users in the system.users table
 	// have ids.
-	V22_2SystemUsersIDColumnIsBackfilled
-	// V22_2SetSystemUsersUserIDColumnNotNull sets the user_id column in system.users to not null.
-	V22_2SetSystemUsersUserIDColumnNotNull
-	// V22_2SQLSchemaTelemetryScheduledJobs adds an automatic schedule for SQL schema
+	TODODelete_V22_2SystemUsersIDColumnIsBackfilled
+	// TODODelete_V22_2SetSystemUsersUserIDColumnNotNull sets the user_id column in system.users to not null.
+	TODODelete_V22_2SetSystemUsersUserIDColumnNotNull
+	// TODODelete_V22_2SQLSchemaTelemetryScheduledJobs adds an automatic schedule for SQL schema
 	// telemetry logging jobs.
-	V22_2SQLSchemaTelemetryScheduledJobs
-	// V22_2SchemaChangeSupportsCreateFunction adds support of CREATE FUNCTION
+	TODODelete_V22_2SQLSchemaTelemetryScheduledJobs
+	// TODODelete_V22_2SchemaChangeSupportsCreateFunction adds support of CREATE FUNCTION
 	// statement.
-	V22_2SchemaChangeSupportsCreateFunction
-	// V22_2DeleteRequestReturnKey is the version where the DeleteRequest began
+	TODODelete_V22_2SchemaChangeSupportsCreateFunction
+	// TODODelete_V22_2DeleteRequestReturnKey is the version where the DeleteRequest began
 	// populating the FoundKey value in the response.
-	V22_2DeleteRequestReturnKey
-	// V22_2PebbleFormatPrePebblev1Marked performs a Pebble-level migration and
+	TODODelete_V22_2DeleteRequestReturnKey
+	// TODODelete_V22_2PebbleFormatPrePebblev1Marked performs a Pebble-level migration and
 	// upgrades the Pebble format major version to FormatPrePebblev1Marked. This
 	// migration occurs at the per-store level and is twofold:
 	//  - Each store is first bumped to a Pebble format major version that raises
@@ -261,48 +261,48 @@ const (
 	//  pre-Pebblev1 for a low-priority compaction. In a future release of
 	//  Cockroach (likely 23.1), a blocking migration will be run to
 	//  rewrite-compact on any remaining marked tables.
-	V22_2PebbleFormatPrePebblev1Marked
-	// V22_2RoleOptionsTableHasIDColumn is the version where the role options table
+	TODODelete_V22_2PebbleFormatPrePebblev1Marked
+	// TODODelete_V22_2RoleOptionsTableHasIDColumn is the version where the role options table
 	// has ids.
-	V22_2RoleOptionsTableHasIDColumn
-	// V22_2RoleOptionsIDColumnIsBackfilled is the version where ids in the role options
+	TODODelete_V22_2RoleOptionsTableHasIDColumn
+	// TODODelete_V22_2RoleOptionsIDColumnIsBackfilled is the version where ids in the role options
 	// table are backfilled.
-	V22_2RoleOptionsIDColumnIsBackfilled
-	// V22_2SetRoleOptionsUserIDColumnNotNull is the version where the role
+	TODODelete_V22_2RoleOptionsIDColumnIsBackfilled
+	// TODODelete_V22_2SetRoleOptionsUserIDColumnNotNull is the version where the role
 	// options table id column cannot be null. This is the final step
 	// of the system.role_options table migration.
-	V22_2SetRoleOptionsUserIDColumnNotNull
-	// V22_2UseDelRangeInGCJob enables the use of the DelRange operation in the
+	TODODelete_V22_2SetRoleOptionsUserIDColumnNotNull
+	// TODODelete_V22_2UseDelRangeInGCJob enables the use of the DelRange operation in the
 	// GC job. Before it is enabled, the GC job uses ClearRange operations
 	// after the job waits out the GC TTL. After it has been enabled, the
 	// job instead issues DelRange operations at the beginning of the job
 	// and then waits for the data to be removed automatically before removing
 	// the descriptor and zone configurations.
-	V22_2UseDelRangeInGCJob
-	// V22_2WaitedForDelRangeInGCJob corresponds to the migration which waits for
+	TODODelete_V22_2UseDelRangeInGCJob
+	// TODODelete_V22_2WaitedForDelRangeInGCJob corresponds to the migration which waits for
 	// the GC jobs to adopt the use of DelRange with tombstones.
-	V22_2WaitedForDelRangeInGCJob
-	// V22_2RangefeedUseOneStreamPerNode changes rangefeed implementation to use 1 RPC stream per node.
-	V22_2RangefeedUseOneStreamPerNode
-	// V22_2NoNonMVCCAddSSTable adds a migration which waits for all
+	TODODelete_V22_2WaitedForDelRangeInGCJob
+	// TODODelete_V22_2RangefeedUseOneStreamPerNode changes rangefeed implementation to use 1 RPC stream per node.
+	TODODelete_V22_2RangefeedUseOneStreamPerNode
+	// TODODelete_V22_2NoNonMVCCAddSSTable adds a migration which waits for all
 	// schema changes to complete. After this point, no non-MVCC
 	// AddSSTable calls will be used outside of tenant streaming.
-	V22_2NoNonMVCCAddSSTable
-	// V22_2GCHintInReplicaState adds GC hint to replica state. When this version is
+	TODODelete_V22_2NoNonMVCCAddSSTable
+	// TODODelete_V22_2GCHintInReplicaState adds GC hint to replica state. When this version is
 	// enabled, replicas will populate GC hint and update them when necessary.
-	V22_2GCHintInReplicaState
-	// V22_2UpdateInvalidColumnIDsInSequenceBackReferences looks for invalid column
+	TODODelete_V22_2GCHintInReplicaState
+	// TODODelete_V22_2UpdateInvalidColumnIDsInSequenceBackReferences looks for invalid column
 	// ids in sequences' back references and attempts a best-effort-based matching
 	// to update those column IDs.
-	V22_2UpdateInvalidColumnIDsInSequenceBackReferences
-	// V22_2TTLDistSQL uses DistSQL to distribute TTL SELECT/DELETE statements to
+	TODODelete_V22_2UpdateInvalidColumnIDsInSequenceBackReferences
+	// TODODelete_V22_2TTLDistSQL uses DistSQL to distribute TTL SELECT/DELETE statements to
 	// leaseholder nodes.
-	V22_2TTLDistSQL
-	// V22_2PrioritizeSnapshots adds prioritization to sender snapshots. When this
+	TODODelete_V22_2TTLDistSQL
+	// TODODelete_V22_2PrioritizeSnapshots adds prioritization to sender snapshots. When this
 	// version is enabled, the receiver will look at the priority of snapshots
 	// using the fields added in 22.2.
-	V22_2PrioritizeSnapshots
-	// V22_2EnableLeaseUpgrade version gates a change in the lease transfer protocol
+	TODODelete_V22_2PrioritizeSnapshots
+	// TODODelete_V22_2EnableLeaseUpgrade version gates a change in the lease transfer protocol
 	// whereby we only ever transfer expiration-based leases (and have
 	// recipients later upgrade them to the more efficient epoch based ones).
 	// This was done to limit the effects of ill-advised lease transfers since
@@ -311,14 +311,14 @@ const (
 	// as part of lease transfers, we don't start sending out expiration based
 	// leases to nodes that (i) don't expect them for certain keyspans, and (ii)
 	// don't know to upgrade them to efficient epoch-based ones.
-	V22_2EnableLeaseUpgrade
-	// V22_2SupportAssumeRoleAuth is the version where assume role authorization is
+	TODODelete_V22_2EnableLeaseUpgrade
+	// TODODelete_V22_2SupportAssumeRoleAuth is the version where assume role authorization is
 	// supported in cloud storage and KMS.
-	V22_2SupportAssumeRoleAuth
-	// V22_2FixUserfileRelatedDescriptorCorruption adds a migration which uses
+	TODODelete_V22_2SupportAssumeRoleAuth
+	// TODODelete_V22_2FixUserfileRelatedDescriptorCorruption adds a migration which uses
 	// heuristics to identify invalid table descriptors for userfile-related
 	// descriptors.
-	V22_2FixUserfileRelatedDescriptorCorruption
+	TODODelete_V22_2FixUserfileRelatedDescriptorCorruption
 
 	// V22_2 is CockroachDB v22.2. It's used for all v22.2.x patch releases.
 	V22_2
@@ -474,161 +474,161 @@ var rawVersionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 0, Minor: 0, Internal: 424242},
 	},
 	{
-		Key:     V22_1,
+		Key:     TODODelete_V22_1,
 		Version: roachpb.Version{Major: 22, Minor: 1},
 	},
 
 	// v22.2 versions. Internal versions must be even.
 	{
-		Key:     V22_2Start,
+		Key:     TODODelete_V22_2Start,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 2},
 	},
 	{
-		Key:     V22_2LocalTimestamps,
+		Key:     TODODelete_V22_2LocalTimestamps,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 4},
 	},
 	{
-		Key:     V22_2PebbleFormatSplitUserKeysMarkedCompacted,
+		Key:     TODODelete_V22_2PebbleFormatSplitUserKeysMarkedCompacted,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 6},
 	},
 	{
-		Key:     V22_2EnsurePebbleFormatVersionRangeKeys,
+		Key:     TODODelete_V22_2EnsurePebbleFormatVersionRangeKeys,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 8},
 	},
 	{
-		Key:     V22_2EnablePebbleFormatVersionRangeKeys,
+		Key:     TODODelete_V22_2EnablePebbleFormatVersionRangeKeys,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 10},
 	},
 	{
-		Key:     V22_2TrigramInvertedIndexes,
+		Key:     TODODelete_V22_2TrigramInvertedIndexes,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 12},
 	},
 	{
-		Key:     V22_2RemoveGrantPrivilege,
+		Key:     TODODelete_V22_2RemoveGrantPrivilege,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 14},
 	},
 	{
-		Key:     V22_2MVCCRangeTombstones,
+		Key:     TODODelete_V22_2MVCCRangeTombstones,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 16},
 	},
 	{
-		Key:     V22_2UpgradeSequenceToBeReferencedByID,
+		Key:     TODODelete_V22_2UpgradeSequenceToBeReferencedByID,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 18},
 	},
 	{
-		Key:     V22_2SampledStmtDiagReqs,
+		Key:     TODODelete_V22_2SampledStmtDiagReqs,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 20},
 	},
 	{
-		Key:     V22_2AddSSTableTombstones,
+		Key:     TODODelete_V22_2AddSSTableTombstones,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 22},
 	},
 	{
-		Key:     V22_2SystemPrivilegesTable,
+		Key:     TODODelete_V22_2SystemPrivilegesTable,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 24},
 	},
 	{
-		Key:     V22_2EnablePredicateProjectionChangefeed,
+		Key:     TODODelete_V22_2EnablePredicateProjectionChangefeed,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 26},
 	},
 	{
-		Key:     V22_2AlterSystemSQLInstancesAddLocality,
+		Key:     TODODelete_V22_2AlterSystemSQLInstancesAddLocality,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 28},
 	},
 	{
-		Key:     V22_2SystemExternalConnectionsTable,
+		Key:     TODODelete_V22_2SystemExternalConnectionsTable,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 30},
 	},
 	{
-		Key:     V22_2AlterSystemStatementStatisticsAddIndexRecommendations,
+		Key:     TODODelete_V22_2AlterSystemStatementStatisticsAddIndexRecommendations,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 32},
 	},
 	{
-		Key:     V22_2RoleIDSequence,
+		Key:     TODODelete_V22_2RoleIDSequence,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 34},
 	},
 	{
-		Key:     V22_2AddSystemUserIDColumn,
+		Key:     TODODelete_V22_2AddSystemUserIDColumn,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 36},
 	},
 	{
-		Key:     V22_2SystemUsersIDColumnIsBackfilled,
+		Key:     TODODelete_V22_2SystemUsersIDColumnIsBackfilled,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 38},
 	},
 	{
-		Key:     V22_2SetSystemUsersUserIDColumnNotNull,
+		Key:     TODODelete_V22_2SetSystemUsersUserIDColumnNotNull,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 40},
 	},
 	{
-		Key:     V22_2SQLSchemaTelemetryScheduledJobs,
+		Key:     TODODelete_V22_2SQLSchemaTelemetryScheduledJobs,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 42},
 	},
 	{
-		Key:     V22_2SchemaChangeSupportsCreateFunction,
+		Key:     TODODelete_V22_2SchemaChangeSupportsCreateFunction,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 44},
 	},
 	{
-		Key:     V22_2DeleteRequestReturnKey,
+		Key:     TODODelete_V22_2DeleteRequestReturnKey,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 46},
 	},
 	{
-		Key:     V22_2PebbleFormatPrePebblev1Marked,
+		Key:     TODODelete_V22_2PebbleFormatPrePebblev1Marked,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 48},
 	},
 	{
-		Key:     V22_2RoleOptionsTableHasIDColumn,
+		Key:     TODODelete_V22_2RoleOptionsTableHasIDColumn,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 50},
 	},
 	{
-		Key:     V22_2RoleOptionsIDColumnIsBackfilled,
+		Key:     TODODelete_V22_2RoleOptionsIDColumnIsBackfilled,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 52},
 	},
 	{
-		Key:     V22_2SetRoleOptionsUserIDColumnNotNull,
+		Key:     TODODelete_V22_2SetRoleOptionsUserIDColumnNotNull,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 54},
 	},
 	{
-		Key:     V22_2UseDelRangeInGCJob,
+		Key:     TODODelete_V22_2UseDelRangeInGCJob,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 56},
 	},
 	{
-		Key:     V22_2WaitedForDelRangeInGCJob,
+		Key:     TODODelete_V22_2WaitedForDelRangeInGCJob,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 58},
 	},
 	{
-		Key:     V22_2RangefeedUseOneStreamPerNode,
+		Key:     TODODelete_V22_2RangefeedUseOneStreamPerNode,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 60},
 	},
 	{
-		Key:     V22_2NoNonMVCCAddSSTable,
+		Key:     TODODelete_V22_2NoNonMVCCAddSSTable,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 62},
 	},
 	{
-		Key:     V22_2GCHintInReplicaState,
+		Key:     TODODelete_V22_2GCHintInReplicaState,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 64},
 	},
 	{
-		Key:     V22_2UpdateInvalidColumnIDsInSequenceBackReferences,
+		Key:     TODODelete_V22_2UpdateInvalidColumnIDsInSequenceBackReferences,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 66},
 	},
 	{
-		Key:     V22_2TTLDistSQL,
+		Key:     TODODelete_V22_2TTLDistSQL,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 68},
 	},
 	{
-		Key:     V22_2PrioritizeSnapshots,
+		Key:     TODODelete_V22_2PrioritizeSnapshots,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 70},
 	},
 	{
-		Key:     V22_2EnableLeaseUpgrade,
+		Key:     TODODelete_V22_2EnableLeaseUpgrade,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 72},
 	},
 	{
-		Key:     V22_2SupportAssumeRoleAuth,
+		Key:     TODODelete_V22_2SupportAssumeRoleAuth,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 74},
 	},
 	{
-		Key:     V22_2FixUserfileRelatedDescriptorCorruption,
+		Key:     TODODelete_V22_2FixUserfileRelatedDescriptorCorruption,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 76},
 	},
 	{

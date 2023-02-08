@@ -512,7 +512,7 @@ func TestPrecondition(t *testing.T) {
 		version.Internal += 2
 		return version
 	}
-	v0 := clusterversion.ByKey(clusterversion.V22_1)
+	v0 := clusterversion.ByKey(clusterversion.TODODelete_V22_1)
 	v1 := next(v0)
 	v2 := next(v1)
 	versions := []roachpb.Version{v0, v1, v2}
