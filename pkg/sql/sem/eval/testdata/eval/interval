@@ -4,7 +4,7 @@
 eval
 '2010-09-28 12:00:00.1-04:00'::timestamptz - '1s'::interval - '0s'::interval
 ----
-'2010-09-28 15:59:59.1+00:00'
+'2010-09-28 15:59:59.1+00'
 
 eval
 '12h2m1s23ms'::interval + '1h'::interval
