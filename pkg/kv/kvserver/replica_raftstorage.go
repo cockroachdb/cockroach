@@ -536,6 +536,19 @@ func (r *Replica) applySnapshot(
 		}
 	}
 
+	for _, sr := range subsumedRepls {
+		// We mark the replica as destroyed so that new commands are not
+		// accepted. This destroy status will be detected after the batch
+		// commits by clearSubsumedReplicaInMemoryData() to finish the removal.
+		sr.readOnlyCmdMu.Lock()
+		sr.mu.Lock()
+		sr.mu.destroyStatus.Set(
+			roachpb.NewRangeNotFoundError(sr.RangeID, sr.store.StoreID()),
+			destroyReasonRemoved)
+		sr.mu.Unlock()
+		sr.readOnlyCmdMu.Unlock()
+	}
+
 	// If we're subsuming a replica below, we don't have its last NextReplicaID,
 	// nor can we obtain it. That's OK: we can just be conservative and use the
 	// maximum possible replica ID. preDestroyRaftMuLocked will write a replica
@@ -725,17 +738,6 @@ func clearSubsumedReplicaDiskData(
 	keySpans := getKeySpans(desc)
 	totalKeySpans := append([]roachpb.Span(nil), keySpans...)
 	for _, sr := range subsumedRepls {
-		// We mark the replica as destroyed so that new commands are not
-		// accepted. This destroy status will be detected after the batch
-		// commits by clearSubsumedReplicaInMemoryData() to finish the removal.
-		sr.readOnlyCmdMu.Lock()
-		sr.mu.Lock()
-		sr.mu.destroyStatus.Set(
-			roachpb.NewRangeNotFoundError(sr.RangeID, sr.store.StoreID()),
-			destroyReasonRemoved)
-		sr.mu.Unlock()
-		sr.readOnlyCmdMu.Unlock()
-
 		// We have to create an SST for the subsumed replica's range-id local keys.
 		subsumedReplSSTFile := &storage.MemFile{}
 		subsumedReplSST := storage.MakeIngestionSSTWriter(
