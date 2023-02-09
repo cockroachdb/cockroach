@@ -98,7 +98,7 @@ func (p *planner) EvalRoutineExpr(
 
 	// Fetch the first row from the row container and return the first
 	// datum.
-	rightRowsIterator := newRowContainerIterator(ctx, rch, retTypes)
+	rightRowsIterator := newRowContainerIterator(ctx, rch)
 	defer rightRowsIterator.Close()
 	row, err := rightRowsIterator.Next()
 	if err != nil {

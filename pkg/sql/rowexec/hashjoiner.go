@@ -339,7 +339,7 @@ func (h *hashJoiner) probeRow() (
 	}
 
 	leftRow := h.probingRowState.row
-	rightRow, err := i.Row()
+	rightRow, err := i.EncRow()
 	if err != nil {
 		h.MoveToDraining(err)
 		return hjStateUnknown, nil, h.DrainHelper()
@@ -438,7 +438,7 @@ func (h *hashJoiner) emitRightUnmatched() (
 		return hjStateUnknown, nil, h.DrainHelper()
 	}
 
-	row, err := i.Row()
+	row, err := i.EncRow()
 	if err != nil {
 		h.MoveToDraining(err)
 		return hjStateUnknown, nil, h.DrainHelper()

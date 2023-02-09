@@ -187,7 +187,9 @@ func (d *DiskBackedNumberedRowContainer) GetRow(
 		if skip {
 			return nil, nil
 		}
-		return d.rc.mrc.EncRow(idx), nil
+		mrc := d.rc.mrc
+		mrc.getEncRow(mrc.scratchEncRow, idx)
+		return mrc.scratchEncRow, nil
 	}
 	return d.rowIter.getRow(ctx, idx, skip)
 }
@@ -533,7 +535,7 @@ func (n *numberedDiskRowIterator) ensureDecoded(row rowenc.EncDatumRow) error {
 func (n *numberedDiskRowIterator) tryAddCacheAndReturnRow(
 	ctx context.Context, elem *cacheElement,
 ) (rowenc.EncDatumRow, error) {
-	r, err := n.rowIter.Row()
+	r, err := n.rowIter.EncRow()
 	if err != nil {
 		return nil, err
 	}
@@ -547,16 +549,16 @@ func (n *numberedDiskRowIterator) tryAddCacheAndReturnRow(
 }
 
 func (n *numberedDiskRowIterator) tryAddCache(ctx context.Context, elem *cacheElement) error {
-	// We don't want to pay the cost of rowIter.Row() if the row will not be
+	// We don't want to pay the cost of rowIter.EncRow() if the row will not be
 	// added to the cache. But to do correct memory accounting, which is needed
 	// for the precise caching decision, we do need the EncDatumRow. So we do a
 	// cheap check that is a good predictor of whether the row will be cached,
-	// and then call rowIter.Row().
+	// and then call rowIter.EncRow().
 	cacheSize := len(n.cacheHeap)
 	if cacheSize == n.maxCacheSize && (cacheSize == 0 || n.cacheHeap[0].nextAccess <= elem.accesses[0]) {
 		return nil
 	}
-	row, err := n.rowIter.Row()
+	row, err := n.rowIter.EncRow()
 	if err != nil {
 		return err
 	}
