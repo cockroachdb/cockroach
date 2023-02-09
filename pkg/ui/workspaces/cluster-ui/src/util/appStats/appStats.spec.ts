@@ -284,6 +284,7 @@ function randomStats(
       p90: 0.7,
       p99: 1.1,
     },
+    last_error_code: "",
   };
 }
 
