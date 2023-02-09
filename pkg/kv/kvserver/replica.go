@@ -863,6 +863,11 @@ func (r *Replica) ReplicaID() roachpb.ReplicaID {
 	return r.replicaID
 }
 
+// ID returns the FullReplicaID for the Replica.
+func (r *Replica) ID() storage.FullReplicaID {
+	return storage.FullReplicaID{RangeID: r.RangeID, ReplicaID: r.replicaID}
+}
+
 // cleanupFailedProposal cleans up after a proposal that has failed. It
 // clears any references to the proposal and releases associated quota.
 // It requires that Replica.mu is exclusively held.
