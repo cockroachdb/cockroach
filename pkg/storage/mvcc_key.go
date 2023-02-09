@@ -512,6 +512,13 @@ type MVCCRangeKeyVersion struct {
 	Value     []byte
 }
 
+// CloneInto copies the version into the provided destination
+// MVCCRangeKeyVersion, reusing and overwriting its value slice.
+func (v MVCCRangeKeyVersion) CloneInto(dst *MVCCRangeKeyVersion) {
+	dst.Timestamp = v.Timestamp
+	dst.Value = append(dst.Value[:0], v.Value...)
+}
+
 // AsRangeKey returns an MVCCRangeKey for the given version. Byte slices
 // are shared with the stack.
 func (s MVCCRangeKeyStack) AsRangeKey(v MVCCRangeKeyVersion) MVCCRangeKey {

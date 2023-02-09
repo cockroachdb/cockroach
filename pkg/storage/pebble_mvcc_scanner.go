@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -441,14 +442,15 @@ type pebbleMVCCScanner struct {
 	// cur* variables store the "current" record we're pointing to. Updated in
 	// updateCurrent. Note that the timestamp can be clobbered in the case of
 	// adding an intent from the intent history but is otherwise meaningful.
-	curUnsafeKey   MVCCKey
-	curRawKey      []byte
-	curUnsafeValue MVCCValue
-	curRawValue    pebble.LazyValue
-	curRangeKeys   MVCCRangeKeyStack
-	savedRangeKeys MVCCRangeKeyStack
-	results        results
-	intents        pebble.Batch
+	curUnsafeKey      MVCCKey
+	curRawKey         []byte
+	curUnsafeValue    MVCCValue
+	curRawValue       pebble.LazyValue
+	curRangeKeys      MVCCRangeKeyStack
+	savedRangeKeys    MVCCRangeKeyStack
+	savedRangeKeyVers MVCCRangeKeyVersion
+	results           results
+	intents           pebble.Batch
 	// mostRecentTS stores the largest timestamp observed that is equal to or
 	// above the scan timestamp. Only applicable if failOnMoreRecent is true. If
 	// set and no other error is hit, a WriteToOld error will be returned from
@@ -546,6 +548,25 @@ func (p *pebbleMVCCScanner) get(ctx context.Context) {
 	if !p.iterValid() {
 		return
 	}
+
+	// Unlike scans, if tombstones are enabled, we synthesize point tombstones
+	// for MVCC range tombstones even if there is no existing point key below
+	// it. These are often needed for e.g. conflict checks. However, both
+	// processRangeKeys and getOne may need to advance the iterator,
+	// moving away from range key we originally landed on. If we're in tombstone
+	// mode and there's a range key, save the most recent visible value so that
+	// we can use it to synthesize a tombstone if we fail to find a KV.
+	var hadMVCCRangeTombstone bool
+	if p.tombstones {
+		if _, hasRange := p.parent.HasPointAndRange(); hasRange {
+			rangeKeys := p.parent.RangeKeys()
+			if rkv, ok := rangeKeys.FirstAtOrBelow(p.ts); ok {
+				hadMVCCRangeTombstone = true
+				rkv.CloneInto(&p.savedRangeKeyVers)
+			}
+		}
+	}
+
 	var added bool
 	if p.processRangeKeys(true /* seeked */, false /* reverse */) {
 		if p.updateCurrent() {
@@ -553,13 +574,14 @@ func (p *pebbleMVCCScanner) get(ctx context.Context) {
 		}
 	}
 	p.maybeFailOnMoreRecent()
-	// Unlike scans, if tombstones are enabled, we synthesize point tombstones for
-	// MVCC range tombstones even if there is no existing point key below it.
-	// These are often needed for e.g. conflict checks.
-	if p.tombstones && !added && p.err == nil {
-		if rkv, ok := p.coveredByRangeKey(hlc.MinTimestamp); ok {
-			p.addSynthetic(ctx, p.curRangeKeys.Bounds.Key, rkv)
-		}
+
+	// In tombstone mode, if there was no existing point key we may need to
+	// synthesize a point tombstone if we saved a range key before
+	// Unlike scans, if tombstones are enabled, we synthesize point tombstones
+	// for MVCC range tombstones even if there is no existing point key below
+	// it. These are often needed for e.g. conflict checks.
+	if p.tombstones && hadMVCCRangeTombstone && !added && p.err == nil {
+		p.addSynthetic(ctx, p.start, p.savedRangeKeyVers)
 	}
 }
 
@@ -1658,6 +1680,9 @@ func (p *pebbleMVCCScanner) iterNext() bool {
 		p.parent.Next()
 		// We don't need to process range key changes here, because curRangeKeys
 		// already contains the range keys at this position from before the peek.
+		if buildutil.CrdbTestBuild {
+			p.assertOwnedRangeKeys()
+		}
 		if !p.iterValid() {
 			return false
 		}
@@ -1833,4 +1858,17 @@ func (p *pebbleMVCCScanner) intentsRepr() []byte {
 		return nil
 	}
 	return p.intents.Repr()
+}
+
+// assertOwnedRangeKeys asserts that p.curRangeKeys is empty, or backed by
+// p.savedRangeKeys's buffers.
+func (p *pebbleMVCCScanner) assertOwnedRangeKeys() {
+	if p.curRangeKeys.IsEmpty() {
+		return
+	}
+	// NB: We compare on the EndKey in case the start key is /Min, the empty
+	// key.
+	if &p.curRangeKeys.Bounds.EndKey[0] != &p.savedRangeKeys.Bounds.EndKey[0] {
+		panic(errors.AssertionFailedf("current range keys are not scanner-owned"))
+	}
 }
