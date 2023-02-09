@@ -57,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
+	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -6473,9 +6474,15 @@ CREATE TABLE crdb_internal.transaction_contention_events (
 
     contention_duration          INTERVAL NOT NULL,
     contending_key               BYTES NOT NULL,
-
-    waiting_stmt_id               string NOT NULL,
-    waiting_stmt_fingerprint_id   BYTES NOT NULL
+    contending_pretty_key     	 STRING NOT NULL,
+		    
+    waiting_stmt_id              string NOT NULL,
+    waiting_stmt_fingerprint_id  BYTES NOT NULL,
+    
+    database_name       				 STRING NOT NULL,
+    schema_name         				 STRING NOT NULL,
+    table_name          				 STRING NOT NULL,
+    index_name          				 STRING
 );`,
 	generator: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
 		// Check permission first before making RPC fanout.
@@ -6541,10 +6548,13 @@ CREATE TABLE crdb_internal.transaction_contention_events (
 					types.DefaultIntervalTypeMetadata,
 				)
 
+				contendingPrettyKey := tree.NewDString("")
 				contendingKey := tree.NewDBytes("")
 				if !shouldRedactContendingKey {
+					decodedKey, _, _ := keys.DecodeTenantPrefix(resp.Events[i].BlockingEvent.Key)
+					contendingPrettyKey = tree.NewDString(keys.PrettyPrint(nil /* valDirs */, decodedKey))
 					contendingKey = tree.NewDBytes(
-						tree.DBytes(resp.Events[i].BlockingEvent.Key))
+						tree.DBytes(decodedKey))
 				}
 
 				waitingStmtFingerprintID := tree.NewDBytes(
@@ -6552,17 +6562,27 @@ CREATE TABLE crdb_internal.transaction_contention_events (
 
 				waitingStmtId := tree.NewDString(hex.EncodeToString(resp.Events[i].WaitingStmtID.GetBytes()))
 
+				schemaName, dbName, tableName, indexName, err := getContentionEventInfo(ctx, p, resp.Events[i])
+				if err != nil {
+					return err
+				}
+
 				row = row[:0]
 				row = append(row,
 					collectionTs, // collection_ts
 					tree.NewDUuid(tree.DUuid{UUID: resp.Events[i].BlockingEvent.TxnMeta.ID}), // blocking_txn_id
 					blockingFingerprintID, // blocking_fingerprint_id
 					tree.NewDUuid(tree.DUuid{UUID: resp.Events[i].WaitingTxnID}), // waiting_txn_id
-					waitingFingerprintID,     // waiting_fingerprint_id
-					contentionDuration,       // contention_duration
-					contendingKey,            // contending_key,
-					waitingStmtId,            // waiting_stmt_id
-					waitingStmtFingerprintID, // waiting_stmt_fingerprint_id
+					waitingFingerprintID,        // waiting_fingerprint_id
+					contentionDuration,          // contention_duration
+					contendingKey,               // contending_key,
+					contendingPrettyKey,         // contending_pretty_key
+					waitingStmtId,               // waiting_stmt_id
+					waitingStmtFingerprintID,    // waiting_stmt_fingerprint_id
+					tree.NewDString(dbName),     // database_name
+					tree.NewDString(schemaName), // schema_name
+					tree.NewDString(tableName),  // table_name
+					tree.NewDString(indexName),  // index_name
 				)
 
 				if err = pusher.pushRow(row...); err != nil {
@@ -7207,7 +7227,6 @@ CREATE TABLE crdb_internal.%s (
 	last_retry_reason          STRING,
 	exec_node_ids              INT[] NOT NULL,
 	contention                 INTERVAL,
-	contention_events          JSONB,
 	index_recommendations      STRING[] NOT NULL,
 	implicit_txn               BOOL NOT NULL,
 	cpu_sql_nanos              INT8
@@ -7295,17 +7314,6 @@ func populateStmtInsights(
 				)
 			}
 
-			contentionEvents := tree.DNull
-			if len(s.ContentionEvents) > 0 {
-				var contentionEventsJSON json.JSON
-				contentionEventsJSON, err = convertContentionEventsToJSON(ctx, p, s.ContentionEvents)
-				if err != nil {
-					return err
-				}
-
-				contentionEvents = tree.NewDJSON(contentionEventsJSON)
-			}
-
 			indexRecommendations := tree.NewDArray(types.String)
 			for _, recommendation := range s.IndexRecommendations {
 				if err = indexRecommendations.Append(tree.NewDString(recommendation)); err != nil {
@@ -7337,7 +7345,6 @@ func populateStmtInsights(
 				autoRetryReason,
 				execNodeIDs,
 				contentionTime,
-				contentionEvents,
 				indexRecommendations,
 				tree.MakeDBool(tree.DBool(insight.Transaction.ImplicitTxn)),
 				tree.NewDInt(tree.DInt(s.CPUSQLNanos)),
@@ -7347,57 +7354,45 @@ func populateStmtInsights(
 	return
 }
 
-func convertContentionEventsToJSON(
-	ctx context.Context, p *planner, contentionEvents []roachpb.ContentionEvent,
-) (json json.JSON, err error) {
+func getContentionEventInfo(
+	ctx context.Context, p *planner, contentionEvent contentionpb.ExtendedContentionEvent,
+) (schemaName, dbName, tableName, indexName string, err error) {
 
-	eventWithNames := make([]sqlstatsutil.ContentionEventWithNames, len(contentionEvents))
-	for i, contentionEvent := range contentionEvents {
-		_, tableID, err := p.ExecCfg().Codec.DecodeTablePrefix(contentionEvent.Key)
-		if err != nil {
-			return nil, err
-		}
-		_, _, indexID, err := p.ExecCfg().Codec.DecodeIndexPrefix(contentionEvent.Key)
-		if err != nil {
-			return nil, err
-		}
-
-		desc := p.Descriptors()
-		var tableDesc catalog.TableDescriptor
-		tableDesc, err = desc.ByIDWithLeased(p.txn).WithoutNonPublic().Get().Table(ctx, descpb.ID(tableID))
-		if err != nil {
-			return nil, err
-		}
-
-		idxDesc, err := catalog.MustFindIndexByID(tableDesc, descpb.IndexID(indexID))
-		if err != nil {
-			return nil, err
-		}
-
-		dbDesc, err := desc.ByIDWithLeased(p.txn).WithoutNonPublic().Get().Database(ctx, tableDesc.GetParentID())
-		if err != nil {
-			return nil, err
-		}
-
-		schemaDesc, err := desc.ByIDWithLeased(p.txn).WithoutNonPublic().Get().Schema(ctx, tableDesc.GetParentSchemaID())
-		if err != nil {
-			return nil, err
-		}
-
-		var idxName string
-		if idxDesc != nil {
-			idxName = idxDesc.GetName()
-		}
-
-		eventWithNames[i] = sqlstatsutil.ContentionEventWithNames{
-			BlockingTransactionID: contentionEvent.TxnMeta.ID.String(),
-			SchemaName:            schemaDesc.GetName(),
-			DatabaseName:          dbDesc.GetName(),
-			TableName:             tableDesc.GetName(),
-			IndexName:             idxName,
-			DurationInMs:          float64(contentionEvent.Duration) / float64(time.Millisecond),
-		}
+	_, tableID, err := p.ExecCfg().Codec.DecodeTablePrefix(contentionEvent.BlockingEvent.Key)
+	if err != nil {
+		return "", "", "", "", err
+	}
+	_, _, indexID, err := p.ExecCfg().Codec.DecodeIndexPrefix(contentionEvent.BlockingEvent.Key)
+	if err != nil {
+		return "", "", "", "", err
 	}
 
-	return sqlstatsutil.BuildContentionEventsJSON(eventWithNames)
+	desc := p.Descriptors()
+	var tableDesc catalog.TableDescriptor
+	tableDesc, err = desc.ByIDWithLeased(p.txn).WithoutNonPublic().Get().Table(ctx, descpb.ID(tableID))
+	if err != nil {
+		return "", "", "", "", err
+	}
+
+	idxDesc, err := catalog.MustFindIndexByID(tableDesc, descpb.IndexID(indexID))
+	if err != nil {
+		return "", "", "", "", err
+	}
+
+	dbDesc, err := desc.ByIDWithLeased(p.txn).WithoutNonPublic().Get().Database(ctx, tableDesc.GetParentID())
+	if err != nil {
+		return "", "", "", "", err
+	}
+
+	schemaDesc, err := desc.ByIDWithLeased(p.txn).WithoutNonPublic().Get().Schema(ctx, tableDesc.GetParentSchemaID())
+	if err != nil {
+		return "", "", "", "", err
+	}
+
+	var idxName string
+	if idxDesc != nil {
+		idxName = idxDesc.GetName()
+	}
+
+	return schemaDesc.GetName(), dbDesc.GetName(), tableDesc.GetName(), idxName, nil
 }

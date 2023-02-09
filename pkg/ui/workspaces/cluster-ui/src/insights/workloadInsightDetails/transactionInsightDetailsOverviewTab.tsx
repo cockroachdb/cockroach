@@ -28,12 +28,12 @@ import {
 } from "src/insightsTable/insightsTable";
 import { WaitTimeDetailsTable } from "./insightDetailsTables";
 import {
-  BlockedContentionDetails,
+  ContentionDetails,
   ContentionEvent,
-  TxnInsightEvent,
   InsightExecEnum,
-  StmtInsightEvent,
   InsightNameEnum,
+  StmtInsightEvent,
+  TxnInsightEvent,
 } from "../types";
 
 import classNames from "classnames/bind";
@@ -55,7 +55,7 @@ const tableCx = classNames.bind(insightTableStyles);
 type Props = {
   txnDetails: TxnInsightEvent | null;
   statements: StmtInsightEvent[] | null;
-  contentionDetails?: BlockedContentionDetails[];
+  contentionDetails?: ContentionDetails[];
   setTimeScale: (ts: TimeScale) => void;
   hasAdminRole: boolean;
   errors: TxnInsightDetailsReqErrs | null;
@@ -85,10 +85,15 @@ export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
   );
 
   const blockingExecutions: ContentionEvent[] = contentionDetails?.map(x => {
+    const stmtInsight = statements.find(
+      y => y.statementExecutionID == x.waitingStmtID,
+    );
     return {
       executionID: x.blockingExecutionID,
       fingerprintID: x.blockingTxnFingerprintID,
-      queries: x.blockingQueries,
+      waitingStmtID: x.waitingStmtID,
+      waitingStmtFingerprintID: x.waitingStmtFingerprintID,
+      queries: x.blockingTxnQuery,
       startTime: x.collectionTimeStamp,
       contentionTimeMs: x.contentionTimeMs,
       execType: InsightExecEnum.TRANSACTION,
@@ -96,6 +101,7 @@ export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
       databaseName: x.databaseName,
       tableName: x.tableName,
       indexName: x.indexName,
+      stmtInsightEvent: stmtInsight,
     };
   });
 

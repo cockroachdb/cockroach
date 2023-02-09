@@ -10,35 +10,39 @@
 
 import moment from "moment";
 import {
-  filterTransactionInsights,
-  getAppsFromTransactionInsights,
   filterStatementInsights,
+  filterTransactionInsights,
   getAppsFromStatementInsights,
+  getAppsFromTransactionInsights,
   getInsightsFromProblemsAndCauses,
   mergeTxnInsightDetails,
 } from "./utils";
 import {
-  TxnInsightEvent,
-  InsightNameEnum,
+  ContentionDetails,
   failedExecutionInsight,
-  StmtInsightEvent,
-  InsightExecEnum,
   highContentionInsight,
-  slowExecutionInsight,
-  planRegressionInsight,
-  suboptimalPlanInsight,
   highRetryCountInsight,
-  BlockedContentionDetails,
+  InsightExecEnum,
+  InsightNameEnum,
+  planRegressionInsight,
+  slowExecutionInsight,
+  StmtInsightEvent,
+  suboptimalPlanInsight,
   TxnInsightDetails,
+  TxnInsightEvent,
 } from "./types";
 
 const INTERNAL_APP_PREFIX = "$ internal";
 
-const blockedContentionMock: BlockedContentionDetails = {
+const blockedContentionMock: ContentionDetails = {
   collectionTimeStamp: moment(),
   blockingExecutionID: "execution",
   blockingTxnFingerprintID: "block",
-  blockingQueries: ["select 1"],
+  blockingTxnQuery: ["select 1"],
+  waitingStmtFingerprintID: "waitingStmtFingerprintID",
+  waitingStmtID: "waitingStmtID",
+  waitingTxnFingerprintID: "waitingTxnFingerprintID",
+  waitingTxnID: "waitingTxnID",
   contendedKey: "key",
   schemaName: "schema",
   databaseName: "db",
