@@ -762,7 +762,11 @@ func resolveTargetDB(
 // if skipFKsWithNoMatchingTable is set, FKs whose "other" table is missing from
 // the set provided are omitted during the upgrade, instead of causing an error
 // to be returned.
-func maybeUpgradeDescriptors(descs []catalog.Descriptor, skipFKsWithNoMatchingTable bool) error {
+func maybeUpgradeDescriptors(
+	version clusterversion.ClusterVersion,
+	descs []catalog.Descriptor,
+	skipFKsWithNoMatchingTable bool,
+) error {
 	// A data structure for efficient descriptor lookup by ID or by name.
 	descCatalog := &nstree.MutableCatalog{}
 	for _, d := range descs {
@@ -779,7 +783,7 @@ func maybeUpgradeDescriptors(descs []catalog.Descriptor, skipFKsWithNoMatchingTa
 		if err := b.RunPostDeserializationChanges(); err != nil {
 			return errors.NewAssertionErrorWithWrappedErrf(err, "error during RunPostDeserializationChanges")
 		}
-		err := b.RunRestoreChanges(descCatalog.LookupDescriptor)
+		err := b.RunRestoreChanges(version, descCatalog.LookupDescriptor)
 		if err != nil {
 			return err
 		}
@@ -797,7 +801,9 @@ func maybeUpgradeDescriptors(descs []catalog.Descriptor, skipFKsWithNoMatchingTa
 // "other" table is missing from the set provided are omitted during the
 // upgrade, instead of causing an error to be returned.
 func maybeUpgradeDescriptorsInBackupManifests(
-	backupManifests []backuppb.BackupManifest, skipFKsWithNoMatchingTable bool,
+	version clusterversion.ClusterVersion,
+	backupManifests []backuppb.BackupManifest,
+	skipFKsWithNoMatchingTable bool,
 ) error {
 	if len(backupManifests) == 0 {
 		return nil
@@ -812,7 +818,7 @@ func maybeUpgradeDescriptorsInBackupManifests(
 		descriptors = append(descriptors, descs...)
 	}
 
-	err := maybeUpgradeDescriptors(descriptors, skipFKsWithNoMatchingTable)
+	err := maybeUpgradeDescriptors(version, descriptors, skipFKsWithNoMatchingTable)
 	if err != nil {
 		return err
 	}
@@ -1644,7 +1650,7 @@ func doRestorePlan(
 
 	sqlDescs = append(sqlDescs, newTypeDescs...)
 
-	if err := maybeUpgradeDescriptors(sqlDescs, restoreStmt.Options.SkipMissingFKs); err != nil {
+	if err := maybeUpgradeDescriptors(currentVersion, sqlDescs, restoreStmt.Options.SkipMissingFKs); err != nil {
 		return err
 	}
 
