@@ -38,10 +38,9 @@ type DiskRowContainer struct {
 	// diskAcc keeps track of disk usage.
 	diskAcc mon.BoundAccount
 	// bufferedRows buffers writes to the diskMap.
-	bufferedRows  diskmap.SortedDiskMapBatchWriter
-	scratchKey    []byte
-	scratchVal    []byte
-	scratchEncRow rowenc.EncDatumRow
+	bufferedRows diskmap.SortedDiskMapBatchWriter
+	scratchKey   []byte
+	scratchVal   []byte
 
 	// For computing mean encoded row bytes.
 	totalEncodedRowBytes uint64
@@ -104,14 +103,13 @@ func MakeDiskRowContainer(
 ) DiskRowContainer {
 	diskMap := e.NewSortedDiskMap()
 	d := DiskRowContainer{
-		diskMap:       diskMap,
-		diskAcc:       diskMonitor.MakeBoundAccount(),
-		types:         types,
-		ordering:      ordering,
-		scratchEncRow: make(rowenc.EncDatumRow, len(types)),
-		diskMonitor:   diskMonitor,
-		engine:        e,
-		datumAlloc:    &tree.DatumAlloc{},
+		diskMap:     diskMap,
+		diskAcc:     diskMonitor.MakeBoundAccount(),
+		types:       types,
+		ordering:    ordering,
+		diskMonitor: diskMonitor,
+		engine:      e,
+		datumAlloc:  &tree.DatumAlloc{},
 	}
 	d.bufferedRows = d.diskMap.NewBatchWriter()
 
@@ -337,7 +335,7 @@ func (d *DiskRowContainer) Reorder(ctx context.Context, ordering colinfo.ColumnO
 		} else if !ok {
 			break
 		}
-		row, err := i.Row()
+		row, err := i.EncRow()
 		if err != nil {
 			return err
 		}
@@ -394,45 +392,13 @@ func (d *DiskRowContainer) Close(ctx context.Context) {
 	d.diskAcc.Close(ctx)
 }
 
-// keyValToRow decodes a key and a value byte slice stored with AddRow() into
-// a rowenc.EncDatumRow. The returned EncDatumRow is only valid until the next
-// call to keyValToRow(). The passed in byte slices are used directly, and it is
-// the caller's responsibility to make sure they don't get modified.
-func (d *DiskRowContainer) keyValToRow(k []byte, v []byte) (rowenc.EncDatumRow, error) {
-	for i, orderInfo := range d.ordering {
-		// Types with composite key encodings are decoded from the value.
-		if colinfo.CanHaveCompositeKeyEncoding(d.types[orderInfo.ColIdx]) {
-			// Skip over the encoded key.
-			encLen, err := encoding.PeekLength(k)
-			if err != nil {
-				return nil, err
-			}
-			k = k[encLen:]
-			continue
-		}
-		var err error
-		col := orderInfo.ColIdx
-		d.scratchEncRow[col], k, err = rowenc.EncDatumFromBuffer(d.types[col], d.encodings[i], k)
-		if err != nil {
-			return nil, errors.NewAssertionErrorWithWrappedErrf(err,
-				"unable to decode row, column idx %d", errors.Safe(col))
-		}
-	}
-	for _, i := range d.valueIdxs {
-		var err error
-		d.scratchEncRow[i], v, err = rowenc.EncDatumFromBuffer(d.types[i], descpb.DatumEncoding_VALUE, v)
-		if err != nil {
-			return nil, errors.NewAssertionErrorWithWrappedErrf(err,
-				"unable to decode row, value idx %d", errors.Safe(i))
-		}
-	}
-	return d.scratchEncRow, nil
-}
-
 // diskRowIterator iterates over the rows in a DiskRowContainer.
 type diskRowIterator struct {
-	rowContainer *DiskRowContainer
-	rowBuf       bufalloc.ByteAllocator
+	rowContainer  *DiskRowContainer
+	rowBuf        bufalloc.ByteAllocator
+	scratchEncRow rowenc.EncDatumRow
+	scratchRow    tree.Datums
+	da            tree.DatumAlloc
 	diskmap.SortedDiskMapIterator
 }
 
@@ -442,7 +408,12 @@ func (d *DiskRowContainer) newIterator(ctx context.Context) diskRowIterator {
 	if err := d.bufferedRows.Flush(); err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}
-	return diskRowIterator{rowContainer: d, SortedDiskMapIterator: d.diskMap.NewIterator()}
+	return diskRowIterator{
+		rowContainer:          d,
+		scratchEncRow:         make(rowenc.EncDatumRow, len(d.types)),
+		scratchRow:            make(tree.Datums, len(d.types)),
+		SortedDiskMapIterator: d.diskMap.NewIterator(),
+	}
 }
 
 // NewIterator is part of the SortableRowContainer interface.
@@ -454,9 +425,9 @@ func (d *DiskRowContainer) NewIterator(ctx context.Context) RowIterator {
 	return &i
 }
 
-// Row returns the current row. The returned rowenc.EncDatumRow is only valid
-// until the next call to Row().
-func (r *diskRowIterator) Row() (rowenc.EncDatumRow, error) {
+// EncRow returns the current row. The returned rowenc.EncDatumRow is only valid
+// until the next call to EncRow().
+func (r *diskRowIterator) EncRow() (rowenc.EncDatumRow, error) {
 	if ok, err := r.Valid(); err != nil {
 		return nil, errors.NewAssertionErrorWithWrappedErrf(err, "unable to check row validity")
 	} else if !ok {
@@ -465,14 +436,52 @@ func (r *diskRowIterator) Row() (rowenc.EncDatumRow, error) {
 
 	k := r.UnsafeKey()
 	v := r.UnsafeValue()
-	// keyValToRow will use the encoded key and value bytes as is by shoving
-	// them directly into the EncDatum, so we need to make a copy here. We
-	// cannot reuse the same byte slice across Row() calls because it would lead
-	// to modification of the EncDatums (which is not allowed).
+	// We will use the encoded key and value bytes as is by shoving them
+	// directly into the EncDatum, so we need to make a copy here. We cannot
+	// reuse the same byte slice across EncRow() calls because it would lead to
+	// modification of the EncDatums (which is not allowed).
 	r.rowBuf, k = r.rowBuf.Copy(k, len(v))
 	r.rowBuf, v = r.rowBuf.Copy(v, 0 /* extraCap */)
 
-	return r.rowContainer.keyValToRow(k, v)
+	for i, orderInfo := range r.rowContainer.ordering {
+		// Types with composite key encodings are decoded from the value.
+		if colinfo.CanHaveCompositeKeyEncoding(r.rowContainer.types[orderInfo.ColIdx]) {
+			// Skip over the encoded key.
+			encLen, err := encoding.PeekLength(k)
+			if err != nil {
+				return nil, err
+			}
+			k = k[encLen:]
+			continue
+		}
+		var err error
+		col := orderInfo.ColIdx
+		r.scratchEncRow[col], k, err = rowenc.EncDatumFromBuffer(r.rowContainer.types[col], r.rowContainer.encodings[i], k)
+		if err != nil {
+			return nil, errors.NewAssertionErrorWithWrappedErrf(err,
+				"unable to decode row, column idx %d", errors.Safe(col))
+		}
+	}
+	for _, i := range r.rowContainer.valueIdxs {
+		var err error
+		r.scratchEncRow[i], v, err = rowenc.EncDatumFromBuffer(r.rowContainer.types[i], descpb.DatumEncoding_VALUE, v)
+		if err != nil {
+			return nil, errors.NewAssertionErrorWithWrappedErrf(err,
+				"unable to decode row, value idx %d", errors.Safe(i))
+		}
+	}
+	return r.scratchEncRow, nil
+}
+
+// Row returns the current row. The returned row is only valid until the next
+// call to Row().
+func (r *diskRowIterator) Row() (tree.Datums, error) {
+	encRow, err := r.EncRow()
+	if err != nil {
+		return nil, err
+	}
+	err = rowenc.EncDatumRowToDatums(r.rowContainer.types, r.scratchRow, encRow, &r.da)
+	return r.scratchRow, err
 }
 
 func (r *diskRowIterator) Close() {
@@ -526,7 +535,17 @@ func (r *diskRowFinalIterator) Rewind() {
 	}
 }
 
-func (r *diskRowFinalIterator) Row() (rowenc.EncDatumRow, error) {
+func (r *diskRowFinalIterator) EncRow() (rowenc.EncDatumRow, error) {
+	row, err := r.diskRowIterator.EncRow()
+	if err != nil {
+		return nil, err
+	}
+	r.diskRowIterator.rowContainer.lastReadKey =
+		append(r.diskRowIterator.rowContainer.lastReadKey[:0], r.UnsafeKey()...)
+	return row, nil
+}
+
+func (r *diskRowFinalIterator) Row() (tree.Datums, error) {
 	row, err := r.diskRowIterator.Row()
 	if err != nil {
 		return nil, err
