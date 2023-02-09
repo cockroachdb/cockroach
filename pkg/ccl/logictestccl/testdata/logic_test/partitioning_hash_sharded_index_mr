@@ -1,0 +1,278 @@
+# tenant-cluster-setting-override-opt: allow-multi-region-abstractions-for-secondary-tenants
+# LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-tenant multiregion-9node-3region-3azs-no-los
+
+statement ok
+CREATE DATABASE testdb PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2";
+
+statement ok
+USE testdb;
+
+statement ok
+CREATE TABLE t_test_hsi_change_locality(
+  a INT PRIMARY KEY USING HASH,
+  b INT,
+  INDEX idx_b (b) USING HASH,
+  FAMILY fam_0 (a, b)
+)
+
+statement ok
+INSERT INTO t_test_hsi_change_locality VALUES(1, 2), (3, 4), (5, 6), (7, 8), (9, 10)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_test_hsi_change_locality]
+----
+CREATE TABLE public.t_test_hsi_change_locality (
+  crdb_internal_a_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 16:::INT8)) VIRTUAL,
+  a INT8 NOT NULL,
+  b INT8 NULL,
+  crdb_internal_b_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(b)), 16:::INT8)) VIRTUAL,
+  CONSTRAINT t_test_hsi_change_locality_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=16),
+  INDEX idx_b (b ASC) USING HASH WITH (bucket_count=16),
+  FAMILY fam_0 (a, b)
+) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+
+query ITITTITTB colnames
+SELECT * FROM crdb_internal.index_columns WHERE descriptor_name = 't_test_hsi_change_locality'
+----
+descriptor_id  descriptor_name             index_id  index_name                       column_type  column_id  column_name               column_direction  implicit
+110            t_test_hsi_change_locality  1         t_test_hsi_change_locality_pkey  key          1          crdb_internal_a_shard_16  ASC               true
+110            t_test_hsi_change_locality  1         t_test_hsi_change_locality_pkey  key          2          a                         ASC               false
+110            t_test_hsi_change_locality  2         idx_b                            key          4          crdb_internal_b_shard_16  ASC               true
+110            t_test_hsi_change_locality  2         idx_b                            key          3          b                         ASC               false
+110            t_test_hsi_change_locality  2         idx_b                            extra        1          NULL                      NULL              false
+110            t_test_hsi_change_locality  2         idx_b                            extra        2          NULL                      NULL              false
+
+statement ok
+ALTER TABLE t_test_hsi_change_locality SET LOCALITY REGIONAL BY ROW
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_test_hsi_change_locality]
+----
+CREATE TABLE public.t_test_hsi_change_locality (
+  crdb_internal_a_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 16:::INT8)) VIRTUAL,
+  a INT8 NOT NULL,
+  b INT8 NULL,
+  crdb_internal_b_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(b)), 16:::INT8)) VIRTUAL,
+  crdb_region testdb.public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::testdb.public.crdb_internal_region,
+  CONSTRAINT t_test_hsi_change_locality_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=16),
+  INDEX idx_b (b ASC) USING HASH WITH (bucket_count=16),
+  FAMILY fam_0 (a, b, crdb_region)
+) LOCALITY REGIONAL BY ROW
+
+query ITITTITTB colnames
+SELECT * FROM crdb_internal.index_columns WHERE descriptor_name = 't_test_hsi_change_locality'
+----
+descriptor_id  descriptor_name             index_id  index_name                       column_type  column_id  column_name               column_direction  implicit
+110            t_test_hsi_change_locality  3         t_test_hsi_change_locality_pkey  key          5          crdb_region               ASC               true
+110            t_test_hsi_change_locality  3         t_test_hsi_change_locality_pkey  key          1          crdb_internal_a_shard_16  ASC               true
+110            t_test_hsi_change_locality  3         t_test_hsi_change_locality_pkey  key          2          a                         ASC               false
+110            t_test_hsi_change_locality  5         idx_b                            key          5          crdb_region               ASC               true
+110            t_test_hsi_change_locality  5         idx_b                            key          4          crdb_internal_b_shard_16  ASC               true
+110            t_test_hsi_change_locality  5         idx_b                            key          3          b                         ASC               false
+110            t_test_hsi_change_locality  5         idx_b                            extra        1          NULL                      NULL              false
+110            t_test_hsi_change_locality  5         idx_b                            extra        2          NULL                      NULL              false
+
+query TIII
+SELECT crdb_region, crdb_internal_a_shard_16, a, b
+FROM t_test_hsi_change_locality
+ORDER BY crdb_region, crdb_internal_a_shard_16, a, b;
+----
+ca-central-1  0   7  8
+ca-central-1  2   5  6
+ca-central-1  4   3  4
+ca-central-1  6   1  2
+ca-central-1  14  9  10
+
+# Make sure switching back and forward between different localities is ok.
+statement ok
+ALTER TABLE t_test_hsi_change_locality SET LOCALITY REGIONAL BY TABLE
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_test_hsi_change_locality]
+----
+CREATE TABLE public.t_test_hsi_change_locality (
+  crdb_internal_a_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 16:::INT8)) VIRTUAL,
+  a INT8 NOT NULL,
+  b INT8 NULL,
+  crdb_internal_b_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(b)), 16:::INT8)) VIRTUAL,
+  crdb_region testdb.public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::testdb.public.crdb_internal_region,
+  CONSTRAINT t_test_hsi_change_locality_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=16),
+  INDEX idx_b (b ASC) USING HASH WITH (bucket_count=16),
+  FAMILY fam_0 (a, b, crdb_region)
+) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+
+query ITITTITTB colnames
+SELECT * FROM crdb_internal.index_columns WHERE descriptor_name = 't_test_hsi_change_locality'
+----
+descriptor_id  descriptor_name             index_id  index_name                       column_type  column_id  column_name               column_direction  implicit
+110            t_test_hsi_change_locality  7         t_test_hsi_change_locality_pkey  key          1          crdb_internal_a_shard_16  ASC               true
+110            t_test_hsi_change_locality  7         t_test_hsi_change_locality_pkey  key          2          a                         ASC               false
+110            t_test_hsi_change_locality  9         idx_b                            key          4          crdb_internal_b_shard_16  ASC               true
+110            t_test_hsi_change_locality  9         idx_b                            key          3          b                         ASC               false
+110            t_test_hsi_change_locality  9         idx_b                            extra        1          NULL                      NULL              false
+110            t_test_hsi_change_locality  9         idx_b                            extra        2          NULL                      NULL              false
+
+statement ok
+ALTER TABLE t_test_hsi_change_locality SET LOCALITY REGIONAL BY ROW
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_test_hsi_change_locality]
+----
+CREATE TABLE public.t_test_hsi_change_locality (
+  crdb_internal_a_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 16:::INT8)) VIRTUAL,
+  a INT8 NOT NULL,
+  b INT8 NULL,
+  crdb_internal_b_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(b)), 16:::INT8)) VIRTUAL,
+  crdb_region testdb.public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::testdb.public.crdb_internal_region,
+  CONSTRAINT t_test_hsi_change_locality_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=16),
+  INDEX idx_b (b ASC) USING HASH WITH (bucket_count=16),
+  FAMILY fam_0 (a, b, crdb_region)
+) LOCALITY REGIONAL BY ROW
+
+query ITITTITTB colnames
+SELECT * FROM crdb_internal.index_columns WHERE descriptor_name = 't_test_hsi_change_locality'
+----
+descriptor_id  descriptor_name             index_id  index_name                       column_type  column_id  column_name               column_direction  implicit
+110            t_test_hsi_change_locality  11        t_test_hsi_change_locality_pkey  key          5          crdb_region               ASC               true
+110            t_test_hsi_change_locality  11        t_test_hsi_change_locality_pkey  key          1          crdb_internal_a_shard_16  ASC               true
+110            t_test_hsi_change_locality  11        t_test_hsi_change_locality_pkey  key          2          a                         ASC               false
+110            t_test_hsi_change_locality  13        idx_b                            key          5          crdb_region               ASC               true
+110            t_test_hsi_change_locality  13        idx_b                            key          4          crdb_internal_b_shard_16  ASC               true
+110            t_test_hsi_change_locality  13        idx_b                            key          3          b                         ASC               false
+110            t_test_hsi_change_locality  13        idx_b                            extra        1          NULL                      NULL              false
+110            t_test_hsi_change_locality  13        idx_b                            extra        2          NULL                      NULL              false
+
+subtest set_locality_with_fk
+
+statement ok
+CREATE TABLE t_parent(
+  id INT PRIMARY KEY USING HASH,
+  id2 INT NOT NULL,
+  FAMILY fam_0_id_id2 (id, id2)
+);
+
+statement ok
+INSERT INTO t_parent VALUES(1, 2), (3, 4), (5, 6), (7, 8), (9, 10)
+
+statement ok
+CREATE UNIQUE INDEX uniq_id2 ON t_parent(id2) USING HASH;
+
+statement ok
+CREATE TABLE t_child(
+  id INT PRIMARY KEY,
+  pid INT REFERENCES t_parent(id),
+  pid2 INT REFERENCES t_parent(id2)
+);
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_parent]
+----
+CREATE TABLE public.t_parent (
+  crdb_internal_id_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(id)), 16:::INT8)) VIRTUAL,
+  id INT8 NOT NULL,
+  id2 INT8 NOT NULL,
+  crdb_internal_id2_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(id2)), 16:::INT8)) VIRTUAL,
+  CONSTRAINT t_parent_pkey PRIMARY KEY (id ASC) USING HASH WITH (bucket_count=16),
+  UNIQUE INDEX uniq_id2 (id2 ASC) USING HASH WITH (bucket_count=16),
+  FAMILY fam_0_id_id2 (id, id2)
+) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+
+statement ok
+ALTER TABLE t_parent SET LOCALITY REGIONAL BY ROW
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_parent]
+----
+CREATE TABLE public.t_parent (
+  crdb_internal_id_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(id)), 16:::INT8)) VIRTUAL,
+  id INT8 NOT NULL,
+  id2 INT8 NOT NULL,
+  crdb_internal_id2_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(id2)), 16:::INT8)) VIRTUAL,
+  crdb_region testdb.public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::testdb.public.crdb_internal_region,
+  CONSTRAINT t_parent_pkey PRIMARY KEY (id ASC) USING HASH WITH (bucket_count=16),
+  UNIQUE INDEX uniq_id2 (id2 ASC) USING HASH WITH (bucket_count=16),
+  FAMILY fam_0_id_id2 (id, id2, crdb_region)
+) LOCALITY REGIONAL BY ROW
+
+query TIII
+SELECT crdb_region, crdb_internal_id_shard_16, id, id2
+FROM t_parent
+ORDER BY crdb_region, crdb_internal_id_shard_16, id, id2;
+----
+ca-central-1  0   7  8
+ca-central-1  2   5  6
+ca-central-1  4   3  4
+ca-central-1  6   1  2
+ca-central-1  14  9  10
+
+query ITITTITTB colnames
+SELECT * FROM crdb_internal.index_columns WHERE descriptor_name = 't_parent'
+----
+descriptor_id  descriptor_name  index_id  index_name     column_type  column_id  column_name                column_direction  implicit
+111            t_parent         4         t_parent_pkey  key          5          crdb_region                 ASC               true
+111            t_parent         4         t_parent_pkey  key          1          crdb_internal_id_shard_16   ASC               true
+111            t_parent         4         t_parent_pkey  key          2          id                          ASC               false
+111            t_parent         6         uniq_id2       key          5          crdb_region                 ASC               true
+111            t_parent         6         uniq_id2       key          4          crdb_internal_id2_shard_16  ASC               true
+111            t_parent         6         uniq_id2       key          3          id2                         ASC               false
+111            t_parent         6         uniq_id2       extra        1          NULL                        NULL              false
+111            t_parent         6         uniq_id2       extra        2          NULL                        NULL              false
+
+# Make sure switching back and forward between different localities is ok.
+statement ok
+ALTER TABLE t_parent SET LOCALITY REGIONAL BY TABLE
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_parent]
+----
+CREATE TABLE public.t_parent (
+  crdb_internal_id_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(id)), 16:::INT8)) VIRTUAL,
+  id INT8 NOT NULL,
+  id2 INT8 NOT NULL,
+  crdb_internal_id2_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(id2)), 16:::INT8)) VIRTUAL,
+  crdb_region testdb.public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::testdb.public.crdb_internal_region,
+  CONSTRAINT t_parent_pkey PRIMARY KEY (id ASC) USING HASH WITH (bucket_count=16),
+  UNIQUE INDEX uniq_id2 (id2 ASC) USING HASH WITH (bucket_count=16),
+  FAMILY fam_0_id_id2 (id, id2, crdb_region)
+) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+
+query ITITTITTB colnames
+SELECT * FROM crdb_internal.index_columns WHERE descriptor_name = 't_parent'
+----
+descriptor_id  descriptor_name  index_id  index_name     column_type  column_id  column_name                 column_direction  implicit
+111            t_parent         8         t_parent_pkey  key          1          crdb_internal_id_shard_16   ASC               true
+111            t_parent         8         t_parent_pkey  key          2          id                          ASC               false
+111            t_parent         10        uniq_id2       key          4          crdb_internal_id2_shard_16  ASC               true
+111            t_parent         10        uniq_id2       key          3          id2                         ASC               false
+111            t_parent         10        uniq_id2       extra        1          NULL                        NULL              false
+111            t_parent         10        uniq_id2       extra        2          NULL                        NULL              false
+
+statement ok
+ALTER TABLE t_parent SET LOCALITY REGIONAL BY ROW
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_parent]
+----
+CREATE TABLE public.t_parent (
+  crdb_internal_id_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(id)), 16:::INT8)) VIRTUAL,
+  id INT8 NOT NULL,
+  id2 INT8 NOT NULL,
+  crdb_internal_id2_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(id2)), 16:::INT8)) VIRTUAL,
+  crdb_region testdb.public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::testdb.public.crdb_internal_region,
+  CONSTRAINT t_parent_pkey PRIMARY KEY (id ASC) USING HASH WITH (bucket_count=16),
+  UNIQUE INDEX uniq_id2 (id2 ASC) USING HASH WITH (bucket_count=16),
+  FAMILY fam_0_id_id2 (id, id2, crdb_region)
+) LOCALITY REGIONAL BY ROW
+
+query ITITTITTB colnames
+SELECT * FROM crdb_internal.index_columns WHERE descriptor_name = 't_parent'
+----
+descriptor_id  descriptor_name  index_id  index_name     column_type  column_id  column_name                 column_direction  implicit
+111            t_parent         12        t_parent_pkey  key          5          crdb_region                 ASC               true
+111            t_parent         12        t_parent_pkey  key          1          crdb_internal_id_shard_16   ASC               true
+111            t_parent         12        t_parent_pkey  key          2          id                          ASC               false
+111            t_parent         14        uniq_id2       key          5          crdb_region                 ASC               true
+111            t_parent         14        uniq_id2       key          4          crdb_internal_id2_shard_16  ASC               true
+111            t_parent         14        uniq_id2       key          3          id2                         ASC               false
+111            t_parent         14        uniq_id2       extra        1          NULL                        NULL              false
+111            t_parent         14        uniq_id2       extra        2          NULL                        NULL              false
