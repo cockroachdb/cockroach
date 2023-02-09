@@ -23,21 +23,80 @@ func HasDeprecatedElements(version clusterversion.ClusterVersion, target Target)
 }
 
 // migrateTargetElement migrates an individual target at a given index.
-func migrateTargetElement(state *DescriptorState, idx int) {
-	migratedElement := state.Targets[idx]
-	switch t := migratedElement.Element().(type) {
+func migrateTargetElement(targets []Target, idx int) {
+	targetToMigrate := targets[idx]
+	switch t := targetToMigrate.Element().(type) {
 	case *SecondaryIndexPartial:
-		for _, target := range state.Targets {
+		for _, target := range targets {
 			if target.SecondaryIndex != nil &&
 				target.SecondaryIndex.TableID == t.TableID &&
 				target.SecondaryIndex.IndexID == t.IndexID &&
-				target.TargetStatus == migratedElement.TargetStatus {
+				target.TargetStatus == targetToMigrate.TargetStatus {
 				target.SecondaryIndex.EmbeddedExpr = &t.Expression
 				break
 			}
 		}
 	}
+}
 
+// migrateStatuses used to migrate individual statuses and generate
+// new current and target statuses.
+func migrateStatuses(
+	currentStatus Status, targetStatus Status,
+) (newCurrentStatus Status, newTargetStatus Status, updated bool) {
+	// Target state of TXN_DROPPED has been removed, so push plans further along.
+	// Note: No version is required for this transition, since it will be valid
+	// for all releases.
+	if targetStatus == Status_ABSENT && currentStatus == Status_TXN_DROPPED {
+		return Status_PUBLIC, targetStatus, true
+	} else if targetStatus == Status_PUBLIC && currentStatus == Status_TXN_DROPPED {
+		return Status_ABSENT, targetStatus, true
+	}
+	return currentStatus, targetStatus, false
+}
+
+// MigrateCurrentState migrates a current state by upgrading elements based
+// on the current version number.
+func MigrateCurrentState(version clusterversion.ClusterVersion, state *CurrentState) bool {
+	// Nothing to do for empty states.
+	if state == nil {
+		return false
+	}
+	targetsToRemove := make(map[int]struct{})
+	updated := false
+	for idx, target := range state.Targets {
+		if HasDeprecatedElements(version, target) {
+			updated = true
+			migrateTargetElement(state.Targets, idx)
+			targetsToRemove[idx] = struct{}{}
+		}
+		current, targetStatus, update := migrateStatuses(state.Current[idx], target.TargetStatus)
+		if update {
+			state.Current[idx] = current
+			target.TargetStatus = targetStatus
+			updated = true
+		}
+	}
+	if !updated {
+		return updated
+	}
+	existingTargets := state.Targets
+	existingStatuses := state.Current
+	initialStatuses := state.Initial
+
+	state.Targets = make([]Target, 0, len(existingTargets))
+	state.Current = make([]Status, 0, len(existingStatuses))
+	state.Initial = make([]Status, 0, len(initialStatuses))
+	for idx := range existingTargets {
+		if _, ok := targetsToRemove[idx]; ok {
+			continue
+		}
+		state.Targets = append(state.Targets, existingTargets[idx])
+		state.Current = append(state.Current, existingStatuses[idx])
+		state.Initial = append(state.Initial, initialStatuses[idx])
+
+	}
+	return updated
 }
 
 // MigrateDescriptorState migrates descriptor state and applies any changes
@@ -52,8 +111,14 @@ func MigrateDescriptorState(version clusterversion.ClusterVersion, state *Descri
 	for idx, target := range state.Targets {
 		if HasDeprecatedElements(version, target) {
 			updated = true
-			migrateTargetElement(state, idx)
+			migrateTargetElement(state.Targets, idx)
 			targetsToRemove[idx] = struct{}{}
+		}
+		current, targetStatus, update := migrateStatuses(state.CurrentStatuses[idx], target.TargetStatus)
+		if update {
+			state.CurrentStatuses[idx] = current
+			target.TargetStatus = targetStatus
+			updated = true
 		}
 	}
 	if !updated {

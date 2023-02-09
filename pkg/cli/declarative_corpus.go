@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/corpus"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/spf13/cobra"
 )
@@ -43,6 +44,7 @@ a given corpus file.
 			}
 			for idx := 0; idx < cr.GetNumEntries(); idx++ {
 				name, state := cr.GetCorpus(idx)
+				scpb.MigrateCurrentState(clusterversion.TestingClusterVersion, state)
 				jobID := jobspb.JobID(0)
 				params := scplan.Params{
 					ActiveVersion:  clusterversion.TestingClusterVersion,
