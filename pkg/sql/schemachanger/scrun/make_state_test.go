@@ -14,6 +14,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -121,7 +122,7 @@ func TestMakeState(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			const jobID = 1
-			_, err := makeState(ctx, jobID, tc.ids, tc.descriptors)
+			_, err := makeState(ctx, jobID, tc.ids, tc.descriptors, clusterversion.TestingClusterVersion)
 			if tc.expErr == "" {
 				require.NoError(t, err)
 			} else {
