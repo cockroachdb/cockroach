@@ -117,6 +117,12 @@ func (h *ElasticCPUWorkHandle) overLimitInner() (overLimit bool, difference time
 	return false, h.differenceWithAllottedAtLastCheck
 }
 
+// TestingOverrideOverLimit allows tests to override the behaviour of
+// OverLimit().
+func (h *ElasticCPUWorkHandle) TestingOverrideOverLimit(f func() (bool, time.Duration)) {
+	h.testingOverrideOverLimit = f
+}
+
 type handleKey struct{}
 
 // ContextWithElasticCPUWorkHandle returns a Context wrapping the supplied elastic

@@ -94,6 +94,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
@@ -10818,4 +10819,50 @@ func TestBackupInLocality(t *testing.T) {
 		db := sqlutils.MakeSQLRunner(cluster.ServerConn(tc.node - 1))
 		db.ExpectErr(t, tc.err, "BACKUP system.users INTO $1 WITH coordinator_locality = $2", fmt.Sprintf("userfile:///tc%d", i), tc.filter)
 	}
+}
+
+// TestExportResponseDataSizeZeroCPUPagination verifies that an ExportRequest
+// that is preempted by the elastic CPU limiter and has DataSize = 0, is
+// returned to the client to handle pagination.
+func TestExportResponseDataSizeZeroCPUPagination(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	first := true
+	var numRequests int
+	externalDir, dirCleanup := testutils.TempDir(t)
+	defer dirCleanup()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		ExternalIODir: externalDir,
+		Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
+			TestingRequestFilter: func(ctx context.Context, request *roachpb.BatchRequest) *roachpb.Error {
+				for _, ru := range request.Requests {
+					if _, ok := ru.GetInner().(*roachpb.ExportRequest); ok {
+						numRequests++
+						h := admission.ElasticCPUWorkHandleFromContext(ctx)
+						if h == nil {
+							t.Fatalf("expected context to have CPU work handle")
+						}
+						h.TestingOverrideOverLimit(func() (bool, time.Duration) {
+							if first {
+								first = false
+								return true, 0
+							}
+							return false, 0
+						})
+					}
+				}
+				return nil
+			},
+		}},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `INSERT INTO foo VALUES (1), (2)`)
+	sqlDB.Exec(t, `DELETE FROM foo WHERE a = 1`)
+	sqlDB.Exec(t, `BACKUP TABLE foo INTO 'nodelocal://1/foo'`)
+	require.Equal(t, 2, numRequests)
 }

@@ -24,6 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -31,9 +33,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/stretchr/testify/require"
@@ -1475,4 +1480,56 @@ func TestLeasedDescriptorByteSizeBaseline(t *testing.T) {
 				"%d does not exceed the baseline", desc.GetID())
 		})
 	}
+}
+
+// TODO(adityamaru): We do not set SplitMidKey to true for ExportRequests sent
+// in getDescriptorsFromStoreForInterval. This disallows the elastic CPU limiter
+// from preempting the ExportRequest unless we are on a key boundary. In this
+// test we are only exporting revisions of the same key so we should never be
+// allowed to paginate because of exhausted CPU tokens. Once we do add support
+// for SplitMidKey, we should change the test to verify the correctness of our
+// pagination logic.
+//
+// For now, assert that all revisions are fetched in a single ExportRequest even
+// though we are always OverLimit according to the elastic CPU limiter.
+func TestGetDescriptorsFromStoreForIntervalCPULimiterPagination(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	var numRequests int
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
+			TestingRequestFilter: func(ctx context.Context, request *roachpb.BatchRequest) *roachpb.Error {
+				for _, ru := range request.Requests {
+					if _, ok := ru.GetInner().(*roachpb.ExportRequest); ok {
+						numRequests++
+						h := admission.ElasticCPUWorkHandleFromContext(ctx)
+						if h == nil {
+							t.Fatalf("expected context to have CPU work handle")
+						}
+						h.TestingOverrideOverLimit(func() (bool, time.Duration) {
+							return true, 0
+						})
+					}
+				}
+				return nil
+			},
+		}},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	beforeCreate := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `ALTER TABLE foo RENAME TO bar`)
+	sqlDB.Exec(t, `ALTER TABLE bar RENAME TO baz`)
+	afterCreate := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	var tableID int
+	sqlDB.QueryRow(t, `SELECT id FROM system.namespace WHERE name = 'baz'`).Scan(&tableID)
+	descs, err := getDescriptorsFromStoreForInterval(ctx, kvDB, s.Codec(), descpb.ID(tableID),
+		beforeCreate, afterCreate)
+	require.NoError(t, err)
+	require.Len(t, descs, 3)
+	require.Equal(t, numRequests, 1)
 }

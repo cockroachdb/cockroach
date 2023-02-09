@@ -591,11 +591,10 @@ func assertEqualKVs(
 		start := storage.MVCCKey{Key: startKey}
 		for start.Key != nil {
 			var sst []byte
-			var summary roachpb.BulkOpSummary
 			maxSize := uint64(0)
 			prevStart := start
 			sstFile := &storage.MemFile{}
-			summary, start, err = storage.MVCCExportToSST(ctx, st, e, storage.MVCCExportOptions{
+			summary, resumeInfo, err := storage.MVCCExportToSST(ctx, st, e, storage.MVCCExportOptions{
 				StartKey:           start,
 				EndKey:             endKey,
 				StartTS:            startTime,
@@ -606,6 +605,7 @@ func assertEqualKVs(
 				StopMidKey:         bool(stopMidKey),
 			}, sstFile)
 			require.NoError(t, err)
+			start = resumeInfo.ResumeKey
 			sst = sstFile.Data()
 			loaded := loadSST(t, sst, startKey, endKey)
 			// Ensure that the pagination worked properly.

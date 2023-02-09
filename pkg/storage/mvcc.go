@@ -6190,7 +6190,7 @@ func MVCCIsSpanEmpty(
 // allocations.
 func MVCCExportFingerprint(
 	ctx context.Context, cs *cluster.Settings, reader Reader, opts MVCCExportOptions, dest io.Writer,
-) (roachpb.BulkOpSummary, MVCCKey, uint64, bool, error) {
+) (roachpb.BulkOpSummary, ExportRequestResumeInfo, uint64, bool, error) {
 	ctx, span := tracing.ChildSpan(ctx, "storage.MVCCExportFingerprint")
 	defer span.Finish()
 
@@ -6198,18 +6198,19 @@ func MVCCExportFingerprint(
 	fingerprintWriter := makeFingerprintWriter(ctx, hasher, cs, dest, opts.FingerprintOptions)
 	defer fingerprintWriter.Close()
 
-	summary, resumeKey, err := mvccExportToWriter(ctx, reader, opts, &fingerprintWriter)
-	if err != nil {
-		return roachpb.BulkOpSummary{}, MVCCKey{}, 0, false, err
+	summary, resumeInfo, exportErr := mvccExportToWriter(ctx, reader, opts, &fingerprintWriter)
+	if exportErr != nil {
+		return roachpb.BulkOpSummary{}, ExportRequestResumeInfo{}, 0, false, exportErr
 	}
 
 	fingerprint, err := fingerprintWriter.Finish()
 	if err != nil {
-		return roachpb.BulkOpSummary{}, MVCCKey{}, 0, false, err
+		return roachpb.BulkOpSummary{}, ExportRequestResumeInfo{}, 0, false, err
 	}
 
 	hasRangeKeys := fingerprintWriter.sstWriter.DataSize != 0
-	return summary, resumeKey, fingerprint, hasRangeKeys, err
+
+	return summary, resumeInfo, fingerprint, hasRangeKeys, nil
 }
 
 // MVCCExportToSST exports changes to the keyrange [StartKey, EndKey) over the
@@ -6217,29 +6218,34 @@ func MVCCExportFingerprint(
 // details.
 func MVCCExportToSST(
 	ctx context.Context, cs *cluster.Settings, reader Reader, opts MVCCExportOptions, dest io.Writer,
-) (roachpb.BulkOpSummary, MVCCKey, error) {
+) (roachpb.BulkOpSummary, ExportRequestResumeInfo, error) {
 	ctx, span := tracing.ChildSpan(ctx, "storage.MVCCExportToSST")
 	defer span.Finish()
 	sstWriter := MakeBackupSSTWriter(ctx, cs, dest)
 	defer sstWriter.Close()
 
-	summary, resumeKey, err := mvccExportToWriter(ctx, reader, opts, &sstWriter)
-	if err != nil {
-		return roachpb.BulkOpSummary{}, MVCCKey{}, err
+	summary, resumeInfo, exportErr := mvccExportToWriter(ctx, reader, opts, &sstWriter)
+	if exportErr != nil {
+		return roachpb.BulkOpSummary{}, ExportRequestResumeInfo{}, exportErr
 	}
 
 	if summary.DataSize == 0 {
 		// If no records were added to the sstable, skip
 		// completing it and return an empty summary.
 		//
-		// We still propagate the resumeKey because our
-		// iteration may have been halted because of resource
-		// limitations before any keys were added to the
-		// returned SST.
-		return roachpb.BulkOpSummary{}, resumeKey, nil
+		// We still propagate the resumeKey because our iteration may have been
+		// halted because of resource limitations before any keys were added to the
+		// returned SST. We also propagate the error because an
+		// ExportOverElasticCPULimitError is used to signal that we should paginate
+		// and return a response to the client, instead of retrying immediately.
+		return summary, resumeInfo, exportErr
 	}
 
-	return summary, resumeKey, sstWriter.Finish()
+	if err := sstWriter.Finish(); err != nil {
+		return roachpb.BulkOpSummary{}, ExportRequestResumeInfo{}, err
+	}
+
+	return summary, resumeInfo, nil
 }
 
 // ExportWriter is a trimmed down version of the Writer interface. It contains
@@ -6272,6 +6278,11 @@ type ExportWriter interface {
 	PutUnversioned(key roachpb.Key, value []byte) error
 }
 
+type ExportRequestResumeInfo struct {
+	ResumeKey    MVCCKey
+	CPUOverlimit bool
+}
+
 // mvccExportToWriter exports changes to the keyrange [StartKey, EndKey) over
 // the interval (StartTS, EndTS] to the passed in writer. See MVCCExportOptions
 // for options. StartTS may be zero.
@@ -6299,7 +6310,7 @@ type ExportWriter interface {
 // responsibility of the caller to Finish() / Close() the passed in writer.
 func mvccExportToWriter(
 	ctx context.Context, reader Reader, opts MVCCExportOptions, writer ExportWriter,
-) (roachpb.BulkOpSummary, MVCCKey, error) {
+) (roachpb.BulkOpSummary, ExportRequestResumeInfo, error) {
 	// If we're not exporting all revisions then we can mask point keys below any
 	// MVCC range tombstones, since we don't care about them.
 	var rangeKeyMasking hlc.Timestamp
@@ -6383,7 +6394,7 @@ func mvccExportToWriter(
 	iter.SeekGE(opts.StartKey)
 	for {
 		if ok, err := iter.Valid(); err != nil {
-			return roachpb.BulkOpSummary{}, MVCCKey{}, err
+			return roachpb.BulkOpSummary{}, ExportRequestResumeInfo{}, err
 		} else if !ok {
 			break
 		} else if iter.NumCollectedIntents() > 0 {
@@ -6416,8 +6427,7 @@ func mvccExportToWriter(
 				if isNewKey {
 					resumeKey.Timestamp = hlc.Timestamp{}
 				}
-				log.VInfof(ctx, 2, "paginating ExportRequest: CPU over-limit")
-				break
+				return rows.BulkOpSummary, ExportRequestResumeInfo{ResumeKey: resumeKey, CPUOverlimit: true}, nil
 			}
 		}
 
@@ -6434,13 +6444,13 @@ func mvccExportToWriter(
 					mvccValue, err = decodeExtendedMVCCValue(v.Value)
 				}
 				if err != nil {
-					return roachpb.BulkOpSummary{}, MVCCKey{}, errors.Wrapf(err,
+					return roachpb.BulkOpSummary{}, ExportRequestResumeInfo{}, errors.Wrapf(err,
 						"decoding mvcc value %s", v.Value)
 				}
 				// Export only the inner roachpb.Value, not the MVCCValue header.
 				rawValue := mvccValue.Value.RawBytes
 				if err := writer.PutRawMVCCRangeKey(rangeKeys.AsRangeKey(v), rawValue); err != nil {
-					return roachpb.BulkOpSummary{}, MVCCKey{}, err
+					return roachpb.BulkOpSummary{}, ExportRequestResumeInfo{}, err
 				}
 			}
 			rows.BulkOpSummary.DataSize += rangeKeysSize
@@ -6485,7 +6495,7 @@ func mvccExportToWriter(
 					break
 				}
 				if reachedMaxSize {
-					return roachpb.BulkOpSummary{}, MVCCKey{}, &ExceedMaxSizeError{
+					return roachpb.BulkOpSummary{}, ExportRequestResumeInfo{}, &ExceedMaxSizeError{
 						reached: newSize, maxSize: opts.MaxSize}
 				}
 			}
@@ -6501,7 +6511,7 @@ func mvccExportToWriter(
 		// Process point keys.
 		unsafeValue, err := iter.UnsafeValue()
 		if err != nil {
-			return roachpb.BulkOpSummary{}, MVCCKey{}, err
+			return roachpb.BulkOpSummary{}, ExportRequestResumeInfo{}, err
 		}
 		skip := false
 		if unsafeKey.IsValue() {
@@ -6510,7 +6520,7 @@ func mvccExportToWriter(
 				mvccValue, err = decodeExtendedMVCCValue(unsafeValue)
 			}
 			if err != nil {
-				return roachpb.BulkOpSummary{}, MVCCKey{}, errors.Wrapf(err, "decoding mvcc value %s", unsafeKey)
+				return roachpb.BulkOpSummary{}, ExportRequestResumeInfo{}, errors.Wrapf(err, "decoding mvcc value %s", unsafeKey)
 			}
 
 			// Export only the inner roachpb.Value, not the MVCCValue header.
@@ -6523,7 +6533,7 @@ func mvccExportToWriter(
 
 		if !skip {
 			if err := rows.Count(unsafeKey.Key); err != nil {
-				return roachpb.BulkOpSummary{}, MVCCKey{}, errors.Wrapf(err, "decoding %s", unsafeKey)
+				return roachpb.BulkOpSummary{}, ExportRequestResumeInfo{}, errors.Wrapf(err, "decoding %s", unsafeKey)
 			}
 			curSize := rows.BulkOpSummary.DataSize
 			curSizeWithRangeKeys := curSize + maxRangeKeysSizeIfTruncated(unsafeKey.Key)
@@ -6532,7 +6542,7 @@ func mvccExportToWriter(
 			kvSize := int64(len(unsafeKey.Key) + len(unsafeValue))
 			if curSize == 0 && opts.MaxSize > 0 && kvSize > int64(opts.MaxSize) {
 				// This single key exceeds the MaxSize. Even if we paginate below, this will still fail.
-				return roachpb.BulkOpSummary{}, MVCCKey{}, &ExceedMaxSizeError{reached: kvSize, maxSize: opts.MaxSize}
+				return roachpb.BulkOpSummary{}, ExportRequestResumeInfo{}, &ExceedMaxSizeError{reached: kvSize, maxSize: opts.MaxSize}
 			}
 			newSize := curSize + kvSize
 			newSizeWithRangeKeys := curSizeWithRangeKeys + kvSize
@@ -6551,18 +6561,18 @@ func mvccExportToWriter(
 				break
 			}
 			if reachedMaxSize {
-				return roachpb.BulkOpSummary{}, MVCCKey{}, &ExceedMaxSizeError{
+				return roachpb.BulkOpSummary{}, ExportRequestResumeInfo{}, &ExceedMaxSizeError{
 					reached: newSizeWithRangeKeys, maxSize: opts.MaxSize}
 			}
 			if unsafeKey.Timestamp.IsEmpty() {
 				// This should never be an intent since the incremental iterator returns
 				// an error when encountering intents.
 				if err := writer.PutUnversioned(unsafeKey.Key, unsafeValue); err != nil {
-					return roachpb.BulkOpSummary{}, MVCCKey{}, errors.Wrapf(err, "adding key %s", unsafeKey)
+					return roachpb.BulkOpSummary{}, ExportRequestResumeInfo{}, errors.Wrapf(err, "adding key %s", unsafeKey)
 				}
 			} else {
 				if err := writer.PutRawMVCC(unsafeKey, unsafeValue); err != nil {
-					return roachpb.BulkOpSummary{}, MVCCKey{}, errors.Wrapf(err, "adding key %s", unsafeKey)
+					return roachpb.BulkOpSummary{}, ExportRequestResumeInfo{}, errors.Wrapf(err, "adding key %s", unsafeKey)
 				}
 			}
 			rows.BulkOpSummary.DataSize = newSize
@@ -6589,7 +6599,7 @@ func mvccExportToWriter(
 			}
 		}
 		err := iter.TryGetIntentError()
-		return roachpb.BulkOpSummary{}, MVCCKey{}, err
+		return roachpb.BulkOpSummary{}, ExportRequestResumeInfo{}, err
 	}
 
 	// Flush any pending buffered range keys, truncated to the resume key (if
@@ -6614,19 +6624,19 @@ func mvccExportToWriter(
 				mvccValue, err = decodeExtendedMVCCValue(v.Value)
 			}
 			if err != nil {
-				return roachpb.BulkOpSummary{}, MVCCKey{}, errors.Wrapf(err,
+				return roachpb.BulkOpSummary{}, ExportRequestResumeInfo{}, errors.Wrapf(err,
 					"decoding mvcc value %s", v.Value)
 			}
 			// Export only the inner roachpb.Value, not the MVCCValue header.
 			rawValue := mvccValue.Value.RawBytes
 			if err := writer.PutRawMVCCRangeKey(rangeKeys.AsRangeKey(v), rawValue); err != nil {
-				return roachpb.BulkOpSummary{}, MVCCKey{}, err
+				return roachpb.BulkOpSummary{}, ExportRequestResumeInfo{}, err
 			}
 		}
 		rows.BulkOpSummary.DataSize += rangeKeysSize
 	}
 
-	return rows.BulkOpSummary, resumeKey, nil
+	return rows.BulkOpSummary, ExportRequestResumeInfo{ResumeKey: resumeKey}, nil
 }
 
 // MVCCExportOptions contains options for MVCCExportToSST.

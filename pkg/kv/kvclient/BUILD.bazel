@@ -1,5 +1,5 @@
 load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "kvclient",
@@ -16,6 +16,36 @@ go_library(
         "//pkg/roachpb",
         "//pkg/storage",
         "//pkg/util/hlc",
+    ],
+)
+
+go_test(
+    name = "kvclient_test",
+    srcs = [
+        "main_test.go",
+        "revision_reader_test.go",
+    ],
+    args = ["-test.timeout=295s"],
+    embed = [":kvclient"],
+    deps = [
+        "//pkg/base",
+        "//pkg/keys",
+        "//pkg/kv/kvserver",
+        "//pkg/roachpb",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/admission",
+        "//pkg/util/ctxgroup",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "//pkg/util/timeutil",
+        "@com_github_stretchr_testify//require",
     ],
 )
 

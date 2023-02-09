@@ -1385,12 +1385,12 @@ func cmdExport(e *evalCtx) error {
 	sstFile := &storage.MemFile{}
 
 	var summary roachpb.BulkOpSummary
-	var resume storage.MVCCKey
+	var resumeInfo storage.ExportRequestResumeInfo
 	var fingerprint uint64
 	var hasRangeKeys bool
 	var err error
 	if shouldFingerprint {
-		summary, resume, fingerprint, hasRangeKeys, err = storage.MVCCExportFingerprint(e.ctx, e.st, r,
+		summary, resumeInfo, fingerprint, hasRangeKeys, err = storage.MVCCExportFingerprint(e.ctx, e.st, r,
 			opts, sstFile)
 		if err != nil {
 			return err
@@ -1401,15 +1401,15 @@ func cmdExport(e *evalCtx) error {
 		e.results.buf.Printf("export: %s", &summary)
 		e.results.buf.Print(" fingerprint=true")
 	} else {
-		summary, resume, err = storage.MVCCExportToSST(e.ctx, e.st, r, opts, sstFile)
+		summary, resumeInfo, err = storage.MVCCExportToSST(e.ctx, e.st, r, opts, sstFile)
 		if err != nil {
 			return err
 		}
 		e.results.buf.Printf("export: %s", &summary)
 	}
 
-	if resume.Key != nil {
-		e.results.buf.Printf(" resume=%s", resume)
+	if resumeInfo.ResumeKey.Key != nil {
+		e.results.buf.Printf(" resume=%s", resumeInfo.ResumeKey)
 	}
 	e.results.buf.Printf("\n")
 

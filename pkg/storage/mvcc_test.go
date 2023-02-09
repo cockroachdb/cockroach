@@ -6042,7 +6042,7 @@ func TestMVCCExportToSSTExhaustedAtStart(t *testing.T) {
 			sstFile := &MemFile{}
 			opts := initialOpts
 			opts.StartKey = startKey
-			_, resumeKey, err := MVCCExportToSST(ctx, st, engine, opts, sstFile)
+			_, resumeInfo, err := MVCCExportToSST(ctx, st, engine, opts, sstFile)
 			require.NoError(t, err)
 			chunk := sstToKeys(t, sstFile.Data())
 			require.LessOrEqual(t, len(chunk), len(expectedData)-dataIndex, "remaining test data")
@@ -6050,7 +6050,7 @@ func TestMVCCExportToSSTExhaustedAtStart(t *testing.T) {
 				require.True(t, key.Equal(expectedData[dataIndex]), "returned key is not equal")
 				dataIndex++
 			}
-			startKey = resumeKey
+			startKey = resumeInfo.ResumeKey
 		}
 		require.Equal(t, len(expectedData), dataIndex, "not all expected data was consumed")
 	}
@@ -6075,11 +6075,9 @@ func TestMVCCExportToSSTExhaustedAtStart(t *testing.T) {
 				latest:       false,
 			})
 
-			// Our ElasticCPUWorkHandle will fail on the
-			// very first call. As a result, the very
-			// first resturn from MVCCExportToSST will
-			// actually contain no data but _should_
-			// return a resume key.
+			// Our ElasticCPUWorkHandle will fail on the very first call. As a result,
+			// the very first return from MVCCExportToSST will actually contain no
+			// data but _should_ return a resume key.
 			firstCall := true
 			ctx := admission.ContextWithElasticCPUWorkHandle(context.Background(), admission.TestingNewElasticCPUHandleWithCallback(func() (bool, time.Duration) {
 				if firstCall {
@@ -6377,7 +6375,7 @@ func TestMVCCExportToSSTSplitMidKey(t *testing.T) {
 				}
 				for !resumeKey.Equal(MVCCKey{}) {
 					dest := &MemFile{}
-					_, resumeKey, _ = MVCCExportToSST(
+					_, resumeInfo, err := MVCCExportToSST(
 						ctx, st, engine, MVCCExportOptions{
 							StartKey:           resumeKey,
 							EndKey:             key(3).Next(),
@@ -6388,6 +6386,8 @@ func TestMVCCExportToSSTSplitMidKey(t *testing.T) {
 							MaxSize:            maxSize,
 							StopMidKey:         test.stopMidKey,
 						}, dest)
+					require.NoError(t, err)
+					resumeKey = resumeInfo.ResumeKey
 					if !resumeKey.Timestamp.IsEmpty() {
 						resumeWithTs++
 					}
@@ -6443,13 +6443,13 @@ func TestMVCCExportFingerprint(t *testing.T) {
 	fingerprint := func(opts MVCCExportOptions, engine Engine) (uint64, []byte, roachpb.BulkOpSummary, MVCCKey) {
 		dest := &MemFile{}
 		var err error
-		res, resumeKey, fingerprint, hasRangeKeys, err := MVCCExportFingerprint(
+		res, resumeInfo, fingerprint, hasRangeKeys, err := MVCCExportFingerprint(
 			ctx, st, engine, opts, dest)
 		require.NoError(t, err)
 		if !hasRangeKeys {
 			dest = &MemFile{}
 		}
-		return fingerprint, dest.Data(), res, resumeKey
+		return fingerprint, dest.Data(), res, resumeInfo.ResumeKey
 	}
 
 	// verifyFingerprintAgainstOracle uses the `fingerprintOracle` to compute a

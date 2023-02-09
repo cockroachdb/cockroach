@@ -14,17 +14,24 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -169,8 +176,10 @@ func TestIssuesHighPriorityReadsIfBlocked(t *testing.T) {
 	highPriorityAfter.Override(ctx, &s.ClusterSettings().SV, priorityAfter)
 	var responseFiles []roachpb.ExportResponse_File
 	testutils.SucceedsWithin(t, func() error {
-		resp, err := fetchDescriptorsWithPriorityOverride(ctx, s.ClusterSettings(),
-			kvDB.NonTransactionalSender(), keys.SystemSQLCodec, hlc.Timestamp{}, s.Clock().Now())
+		span := roachpb.Span{Key: keys.SystemSQLCodec.TablePrefix(keys.DescriptorTableID)}
+		span.EndKey = span.Key.PrefixEnd()
+		resp, err := sendExportRequestWithPriorityOverride(ctx, s.ClusterSettings(),
+			kvDB.NonTransactionalSender(), span, hlc.Timestamp{}, s.Clock().Now())
 		if err != nil {
 			return err
 		}
@@ -178,4 +187,79 @@ func TestIssuesHighPriorityReadsIfBlocked(t *testing.T) {
 		return nil
 	}, 10*priorityAfter)
 	require.Less(t, 0, len(responseFiles))
+}
+
+func TestFetchDescriptorVersionsCPULimiterPagination(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	var numRequests int
+	first := true
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
+			TestingRequestFilter: func(ctx context.Context, request *roachpb.BatchRequest) *roachpb.Error {
+				for _, ru := range request.Requests {
+					if _, ok := ru.GetInner().(*roachpb.ExportRequest); ok {
+						numRequests++
+						h := admission.ElasticCPUWorkHandleFromContext(ctx)
+						if h == nil {
+							t.Fatalf("expected context to have CPU work handle")
+						}
+						h.TestingOverrideOverLimit(func() (bool, time.Duration) {
+							if first {
+								first = false
+								return true, 0
+							}
+							return false, 0
+						})
+					}
+				}
+				return nil
+			},
+		}},
+	})
+	defer s.Stopper().Stop(ctx)
+	sqlServer := s.SQLServer().(*sql.Server)
+	if len(s.TestTenants()) != 0 {
+		sqlServer = s.TestTenants()[0].PGServer().(*pgwire.Server).SQLServer
+	}
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	beforeCreate := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `CREATE TABLE baz (a INT PRIMARY KEY)`)
+	afterCreate := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+
+	var targets changefeedbase.Targets
+	var tableID descpb.ID
+	var statementTimeName changefeedbase.StatementTimeName
+	sqlDB.QueryRow(t, "SELECT $1::regclass::int, $1::regclass::string", "foo").Scan(
+		&tableID, &statementTimeName)
+	targets.Add(changefeedbase.Target{
+		Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
+		TableID:           tableID,
+		FamilyName:        "primary",
+		StatementTimeName: statementTimeName,
+	})
+	sqlDB.QueryRow(t, "SELECT $1::regclass::int, $1::regclass::string", "bar").Scan(
+		&tableID, &statementTimeName)
+	targets.Add(changefeedbase.Target{
+		Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
+		TableID:           tableID,
+		FamilyName:        "primary",
+		StatementTimeName: statementTimeName,
+	})
+	now := s.Clock().Now()
+	sf := New(ctx, &sqlServer.GetExecutorConfig().DistSQLSrv.ServerConfig,
+		TestingAllEventFilter, targets, now, nil, changefeedbase.CanHandle{
+			MultipleColumnFamilies: true,
+			VirtualColumns:         true,
+		})
+	scf := sf.(*schemaFeed)
+	desc, err := scf.fetchDescriptorVersions(ctx, beforeCreate, afterCreate)
+	require.NoError(t, err)
+	require.Len(t, desc, 2)
+	require.Equal(t, 2, numRequests)
 }

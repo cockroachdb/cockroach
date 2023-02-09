@@ -111,6 +111,7 @@ go_test(
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util",
+        "//pkg/util/admission",
         "//pkg/util/encoding",
         "//pkg/util/envutil",
         "//pkg/util/hlc",

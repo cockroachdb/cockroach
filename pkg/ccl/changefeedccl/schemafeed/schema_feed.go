@@ -571,15 +571,13 @@ var highPriorityAfter = settings.RegisterDurationSetting(
 	time.Minute,
 ).WithPublic()
 
-func fetchDescriptorsWithPriorityOverride(
+func sendExportRequestWithPriorityOverride(
 	ctx context.Context,
 	st *cluster.Settings,
 	sender kv.Sender,
-	codec keys.SQLCodec,
+	span roachpb.Span,
 	startTS, endTS hlc.Timestamp,
 ) (roachpb.Response, error) {
-	span := roachpb.Span{Key: codec.TablePrefix(keys.DescriptorTableID)}
-	span.EndKey = span.Key.PrefixEnd()
 	header := roachpb.Header{Timestamp: endTS}
 	req := &roachpb.ExportRequest{
 		RequestHeader: roachpb.RequestHeaderFromSpan(span),
@@ -587,7 +585,7 @@ func fetchDescriptorsWithPriorityOverride(
 		MVCCFilter:    roachpb.MVCCFilter_All,
 	}
 
-	fetchDescriptors := func(ctx context.Context) (roachpb.Response, error) {
+	sendRequest := func(ctx context.Context) (roachpb.Response, error) {
 		resp, pErr := kv.SendWrappedWith(ctx, sender, header, req)
 		if pErr != nil {
 			err := pErr.GoError()
@@ -598,7 +596,7 @@ func fetchDescriptorsWithPriorityOverride(
 
 	priorityAfter := highPriorityAfter.Get(&st.SV)
 	if priorityAfter == 0 {
-		return fetchDescriptors(ctx)
+		return sendRequest(ctx)
 	}
 
 	var resp roachpb.Response
@@ -606,7 +604,7 @@ func fetchDescriptorsWithPriorityOverride(
 		ctx, "schema-feed", priorityAfter,
 		func(ctx context.Context) error {
 			var err error
-			resp, err = fetchDescriptors(ctx)
+			resp, err = sendRequest(ctx)
 			return err
 		},
 	)
@@ -615,7 +613,7 @@ func fetchDescriptorsWithPriorityOverride(
 	}
 	if errors.HasType(err, (*contextutil.TimeoutError)(nil)) {
 		header.UserPriority = roachpb.MaxUserPriority
-		return fetchDescriptors(ctx)
+		return sendRequest(ctx)
 	}
 	return nil, err
 }
@@ -628,85 +626,97 @@ func (tf *schemaFeed) fetchDescriptorVersions(
 	}
 	codec := tf.leaseMgr.Codec()
 	start := timeutil.Now()
-	res, err := fetchDescriptorsWithPriorityOverride(
-		ctx, tf.settings, tf.db.KV().NonTransactionalSender(), codec, startTS, endTS)
-	if log.ExpensiveLogEnabled(ctx, 2) {
-		log.Infof(ctx, `fetched table descs (%s,%s] took %s err=%s`, startTS, endTS, timeutil.Since(start), err)
-	}
-	if err != nil {
-		return nil, err
-	}
+	span := roachpb.Span{Key: codec.TablePrefix(keys.DescriptorTableID)}
+	span.EndKey = span.Key.PrefixEnd()
 
 	tf.mu.Lock()
 	defer tf.mu.Unlock()
 
 	var descriptors []catalog.Descriptor
-	found := errors.New(``)
-	for _, file := range res.(*roachpb.ExportResponse).Files {
-		if err := func() error {
-			it, err := storage.NewMemSSTIterator(file.SST, false /* verify */, storage.IterOptions{
-				// NB: We assume there will be no MVCC range tombstones here.
-				KeyTypes:   storage.IterKeyTypePointsOnly,
-				LowerBound: keys.MinKey,
-				UpperBound: keys.MaxKey,
-			})
-			if err != nil {
-				return err
-			}
-			defer it.Close()
-			for it.SeekGE(storage.NilKey); ; it.Next() {
-				if ok, err := it.Valid(); err != nil {
-					return err
-				} else if !ok {
-					return nil
-				}
-				k := it.UnsafeKey()
-				remaining, _, _, err := codec.DecodeIndexPrefix(k.Key)
-				if err != nil {
-					return err
-				}
-				_, id, err := encoding.DecodeUvarintAscending(remaining)
-				if err != nil {
-					return err
-				}
-				var origName changefeedbase.StatementTimeName
-				isTable, _ := tf.targets.EachHavingTableID(descpb.ID(id), func(t changefeedbase.Target) error {
-					origName = t.StatementTimeName
-					return found // sentinel error to break the loop
-				})
-				isType := tf.mu.typeDeps.containsType(descpb.ID(id))
-				// Check if the descriptor is an interesting table or type.
-				if !(isTable || isType) {
-					// Uninteresting descriptor.
-					continue
-				}
-
-				unsafeValue, err := it.UnsafeValue()
-				if err != nil {
-					return err
-				}
-				if unsafeValue == nil {
-					name := origName
-					if name == "" {
-						name = changefeedbase.StatementTimeName(fmt.Sprintf("desc(%d)", id))
-					}
-					return errors.Errorf(`"%v" was dropped or truncated`, name)
-				}
-
-				// Unmarshal the descriptor.
-				value := roachpb.Value{RawBytes: unsafeValue, Timestamp: k.Timestamp}
-				b, err := descbuilder.FromSerializedValue(&value)
-				if err != nil {
-					return err
-				}
-				if b != nil && (b.DescriptorType() == catalog.Table || b.DescriptorType() == catalog.Type) {
-					descriptors = append(descriptors, b.BuildImmutable())
-				}
-			}
-		}(); err != nil {
+	for {
+		res, err := sendExportRequestWithPriorityOverride(
+			ctx, tf.settings, tf.db.KV().NonTransactionalSender(), span, startTS, endTS)
+		if log.ExpensiveLogEnabled(ctx, 2) {
+			log.Infof(ctx, `fetched table descs (%s,%s] took %s err=%s`, startTS, endTS, timeutil.Since(start), err)
+		}
+		if err != nil {
 			return nil, err
 		}
+
+		found := errors.New(``)
+		exportResp := res.(*roachpb.ExportResponse)
+		for _, file := range exportResp.Files {
+			if err := func() error {
+				it, err := storage.NewMemSSTIterator(file.SST, false /* verify */, storage.IterOptions{
+					// NB: We assume there will be no MVCC range tombstones here.
+					KeyTypes:   storage.IterKeyTypePointsOnly,
+					LowerBound: keys.MinKey,
+					UpperBound: keys.MaxKey,
+				})
+				if err != nil {
+					return err
+				}
+				defer it.Close()
+				for it.SeekGE(storage.NilKey); ; it.Next() {
+					if ok, err := it.Valid(); err != nil {
+						return err
+					} else if !ok {
+						return nil
+					}
+					k := it.UnsafeKey()
+					remaining, _, _, err := codec.DecodeIndexPrefix(k.Key)
+					if err != nil {
+						return err
+					}
+					_, id, err := encoding.DecodeUvarintAscending(remaining)
+					if err != nil {
+						return err
+					}
+					var origName changefeedbase.StatementTimeName
+					isTable, _ := tf.targets.EachHavingTableID(descpb.ID(id), func(t changefeedbase.Target) error {
+						origName = t.StatementTimeName
+						return found // sentinel error to break the loop
+					})
+					isType := tf.mu.typeDeps.containsType(descpb.ID(id))
+					// Check if the descriptor is an interesting table or type.
+					if !(isTable || isType) {
+						// Uninteresting descriptor.
+						continue
+					}
+
+					unsafeValue, err := it.UnsafeValue()
+					if err != nil {
+						return err
+					}
+					if unsafeValue == nil {
+						name := origName
+						if name == "" {
+							name = changefeedbase.StatementTimeName(fmt.Sprintf("desc(%d)", id))
+						}
+						return errors.Errorf(`"%v" was dropped or truncated`, name)
+					}
+
+					// Unmarshal the descriptor.
+					value := roachpb.Value{RawBytes: unsafeValue, Timestamp: k.Timestamp}
+					b, err := descbuilder.FromSerializedValue(&value)
+					if err != nil {
+						return err
+					}
+					if b != nil && (b.DescriptorType() == catalog.Table || b.DescriptorType() == catalog.Type) {
+						descriptors = append(descriptors, b.BuildImmutable())
+					}
+				}
+			}(); err != nil {
+				return nil, err
+			}
+		}
+
+		if exportResp.ResumeSpan == nil {
+			break
+		}
+		span.Key = exportResp.ResumeSpan.Key
 	}
+
 	return descriptors, nil
 }
 
