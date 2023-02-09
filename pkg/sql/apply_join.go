@@ -256,7 +256,7 @@ func (a *applyJoinNode) runNextRightSideIteration(params runParams, leftRow tree
 	if err := runPlanInsidePlan(ctx, params, plan, rowResultWriter); err != nil {
 		return err
 	}
-	a.run.rightRowsIterator = newRowContainerIterator(ctx, a.run.rightRows, a.rightTypes)
+	a.run.rightRowsIterator = newRowContainerIterator(ctx, a.run.rightRows)
 	return nil
 }
 
