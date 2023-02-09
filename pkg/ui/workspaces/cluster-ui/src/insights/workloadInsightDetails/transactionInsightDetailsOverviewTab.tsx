@@ -59,6 +59,7 @@ type Props = {
   setTimeScale: (ts: TimeScale) => void;
   hasAdminRole: boolean;
   errors: TxnInsightDetailsReqErrs | null;
+  maxRequestsReached: boolean;
 };
 
 export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
@@ -68,6 +69,7 @@ export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
   statements,
   setTimeScale,
   hasAdminRole,
+  maxRequestsReached,
 }) => {
   const [insightsSortSetting, setInsightsSortSetting] = useState<SortSetting>({
     ascending: false,
@@ -76,8 +78,9 @@ export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
   const isCockroachCloud = useContext(CockroachCloudContext);
 
   const queryFromStmts = statements?.map(s => s.query)?.join("\n");
-  const insightQueries =
-    queryFromStmts ?? txnDetails?.query ?? "Insight not found.";
+  const insightQueries = queryFromStmts?.length
+    ? queryFromStmts
+    : txnDetails?.query ?? "Insight not found.";
   const insightsColumns = makeInsightsColumns(
     isCockroachCloud,
     hasAdminRole,
@@ -106,19 +109,19 @@ export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
 
   return (
     <div>
-      <Loading
-        loading={txnDetails == null}
-        page="Transaction Details"
-        error={errors?.txnDetailsErr}
-        renderError={() => InsightsError(errors?.txnDetailsErr?.message)}
-      >
-        {txnDetails && (
-          <section className={cx("section")}>
-            <Row gutter={24}>
-              <Col span={24}>
-                <SqlBox value={insightQueries} size={SqlBoxSize.custom} />
-              </Col>
-            </Row>
+      <section className={cx("section")}>
+        <Loading
+          loading={!maxRequestsReached && txnDetails == null}
+          page="Transaction Details"
+          error={errors?.txnDetailsErr}
+          renderError={() => InsightsError(errors?.txnDetailsErr?.message)}
+        >
+          <Row gutter={24}>
+            <Col span={24}>
+              <SqlBox value={insightQueries} size={SqlBoxSize.custom} />
+            </Col>
+          </Row>
+          {txnDetails && (
             <>
               <Row gutter={24} type="flex">
                 <Col span={12}>
@@ -200,12 +203,12 @@ export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
                 </Col>
               </Row>
             </>
-          </section>
-        )}
-      </Loading>
+          )}
+        </Loading>
+      </section>
       {hasContentionInsights && (
         <Loading
-          loading={blockingExecutions == null}
+          loading={!maxRequestsReached && contentionDetails == null}
           page="Transaction Details"
           error={errors?.contentionErr}
           renderError={() => InsightsError(errors?.contentionErr?.message)}

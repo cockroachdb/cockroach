@@ -622,7 +622,9 @@ export async function getTxnInsightDetailsApi(
       }
 
       const stmts = result.execution.txn_results[0];
-      txnInsightDetails.statements = formatStmtInsights(stmts);
+      if (stmts.rows?.length) {
+        txnInsightDetails.statements = formatStmtInsights(stmts);
+      }
     } catch (e) {
       errors.statementsErr = e;
     }
@@ -636,7 +638,7 @@ export async function getTxnInsightDetailsApi(
     if (!req.excludeContention && highContention) {
       const contentionInfo = await getTxnInsightsContentionDetailsApi(req);
       txnInsightDetails.blockingContentionDetails =
-        contentionInfo.blockingContentionDetails;
+        contentionInfo?.blockingContentionDetails;
     }
   } catch (e) {
     errors.contentionErr = e;
