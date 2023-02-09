@@ -103,7 +103,7 @@ func processDescriptorTable(
 		if err := b.RunPostDeserializationChanges(); err != nil {
 			return nil, errors.NewAssertionErrorWithWrappedErrf(err, "error during RunPostDeserializationChanges")
 		}
-		if err := b.RunRestoreChanges(func(id descpb.ID) catalog.Descriptor {
+		if err := b.RunRestoreChanges(clusterversion.TestingClusterVersion, func(id descpb.ID) catalog.Descriptor {
 			return m[int64(id)]
 		}); err != nil {
 			descReport(stdout, desc, "failed to upgrade descriptor: %v", err)

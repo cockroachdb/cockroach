@@ -106,7 +106,10 @@ func (m manifestInfoReader) showBackup(
 	// FKs for which we can't resolve the cross-table references. We can't
 	// display them anyway, because we don't have the referenced table names,
 	// etc.
-	err := maybeUpgradeDescriptorsInBackupManifests(ctx, info.manifests, info.layerToIterFactory,
+	err := maybeUpgradeDescriptorsInBackupManifests(ctx,
+		kmsEnv.ClusterSettings().Version.ActiveVersion(ctx),
+		info.manifests,
+		info.layerToIterFactory,
 		true /* skipFKsWithNoMatchingTable */)
 	if err != nil {
 		return err
