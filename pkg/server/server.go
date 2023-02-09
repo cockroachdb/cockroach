@@ -1101,6 +1101,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	recoveryServer := loqrecovery.NewServer(
 		nodeIDContainer,
+		st,
 		stores,
 		planStore,
 		g,
