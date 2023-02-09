@@ -742,6 +742,24 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	err := r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
 		r.deliverLocalRaftMsgsRaftMuLockedReplicaMuLocked(ctx, raftGroup)
 
+		// NB: we need to have flushed the proposals before each application cycle
+		// because due to reproposals it is possible to have a proposal that
+		//
+		// - is going to be applied in this raft cycle, and
+		// - is not in the proposals map, and
+		// - is in the proposals buffer.
+		//
+		// The current structure of the code makes sure that by the time we apply the
+		// entry, the in-mem proposal has moved from the proposal buffer to the proposals
+		// map. Without this property, we could have the following interleaving:
+		//
+		// - proposal is in map (initial state)
+		// - refreshProposalsLocked adds it to the proposal buffer again
+		// - proposal applies with an error: removes it from map, finishes proposal
+		// - proposal buffer flushes, inserts proposal into map
+		// - we now have a finished proposal in the proposal map, an invariant violation.
+		//
+		// See Replica.mu.proposals.
 		numFlushed, err := r.mu.proposalBuf.FlushLockedWithRaftGroup(ctx, raftGroup)
 		if err != nil {
 			return false, err
