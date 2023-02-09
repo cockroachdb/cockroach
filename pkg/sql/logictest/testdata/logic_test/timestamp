@@ -656,6 +656,24 @@ SELECT to_char(d, 'FF1 FF2 FF3 FF4 FF5 FF6  ff1 ff2 ff3 ff4 ff5 ff6  MS US')
 7 78 789 7890 78901 789010  7 78 789 7890 78901 789010  789 789010
 7 78 789 7890 78901 789012  7 78 789 7890 78901 789012  789 789012
 
+query T
+SET timezone = '00:00';
+SELECT ARRAY[
+  '2018-11-02 12:34:56.78901234'::timestamptz,
+  '2018-11-02 12:34:56.78901234-07'::timestamptz
+]
+----
+{"2018-11-02 12:34:56.789012+00","2018-11-02 19:34:56.789012+00"}
+
+query T
+SET timezone = 'Australia/Sydney';
+SELECT ARRAY[
+  '2018-11-02 12:34:56.78901234'::timestamptz,
+  '2018-11-02 12:34:56.78901234-07'::timestamptz
+]
+----
+{"2018-11-02 12:34:56.789012+11","2018-11-03 06:34:56.789012+11"}
+
 query TT
 SET timezone = '00:00';
 SELECT to_char(now(), 'OF') as of_t, to_char(now(), 'TZH:TZM') as "TZH:TZM";
