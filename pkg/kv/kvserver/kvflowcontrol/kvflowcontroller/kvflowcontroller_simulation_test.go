@@ -287,7 +287,6 @@ func TestUsingSimulation(t *testing.T) {
 						}
 						switch unit {
 						case "μs", "us", "microseconds":
-							time.Microsecond.Nanoseconds()
 							options = append(options, asciitsdb.WithDivisor(float64(time.Microsecond.Nanoseconds())) /* ns => μs conversion  */)
 						case "ms", "milliseconds":
 							options = append(options, asciitsdb.WithDivisor(float64(time.Millisecond.Nanoseconds())) /* ns => μs conversion  */)

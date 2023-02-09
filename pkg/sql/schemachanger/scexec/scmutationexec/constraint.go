@@ -22,7 +22,7 @@ import (
 
 func (i *immediateVisitor) SetConstraintName(ctx context.Context, op scop.SetConstraintName) error {
 	tbl, err := i.checkOutTable(ctx, op.TableID)
-	if err != nil {
+	if err != nil || tbl.Dropped() {
 		return err
 	}
 	constraint, err := catalog.MustFindConstraintByID(tbl, op.ConstraintID)
@@ -36,6 +36,7 @@ func (i *immediateVisitor) SetConstraintName(ctx context.Context, op scop.SetCon
 	} else if constraint.AsCheck() != nil {
 		constraint.AsCheck().CheckDesc().Name = op.Name
 	} else if constraint.AsForeignKey() != nil {
+		oldName := constraint.AsForeignKey().ForeignKeyDesc().Name
 		constraint.AsForeignKey().ForeignKeyDesc().Name = op.Name
 		// Also attempt to set the FK constraint name in the referenced table.
 		// This is needed on the dropping path (i.e. when dropping an existing
@@ -45,7 +46,12 @@ func (i *immediateVisitor) SetConstraintName(ctx context.Context, op scop.SetCon
 			return err
 		}
 		for _, inboundFK := range referencedTable.InboundForeignKeys() {
-			if inboundFK.GetOriginTableID() == op.TableID && inboundFK.GetConstraintID() == op.ConstraintID {
+			// Unfortunately, because of a post-deserialization bug the IDs
+			// between the origin and reference table may not properly sync in
+			// restored descriptors. So, sadly we need to match by name when
+			// updating names on the inbound side (TestRestoreOldVersions exposes this
+			// scenario)
+			if inboundFK.GetOriginTableID() == op.TableID && inboundFK.GetName() == oldName {
 				inboundFK.ForeignKeyDesc().Name = op.Name
 				break
 			}
@@ -193,7 +199,7 @@ func (i *immediateVisitor) MakePublicCheckConstraintValidated(
 	ctx context.Context, op scop.MakePublicCheckConstraintValidated,
 ) error {
 	tbl, err := i.checkOutTable(ctx, op.TableID)
-	if err != nil {
+	if err != nil || tbl.Dropped() {
 		return err
 	}
 	for _, ck := range tbl.Checks {
@@ -211,7 +217,7 @@ func (i *immediateVisitor) MakePublicColumnNotNullValidated(
 	ctx context.Context, op scop.MakePublicColumnNotNullValidated,
 ) error {
 	tbl, err := i.checkOutTable(ctx, op.TableID)
-	if err != nil {
+	if err != nil || tbl.Dropped() {
 		return err
 	}
 
@@ -297,7 +303,7 @@ func (i *immediateVisitor) RemoveForeignKeyConstraint(
 	ctx context.Context, op scop.RemoveForeignKeyConstraint,
 ) error {
 	out, err := i.checkOutTable(ctx, op.TableID)
-	if err != nil || out.Dropped() {
+	if err != nil {
 		return err
 	}
 	var found bool
@@ -483,7 +489,7 @@ func (i *immediateVisitor) MakePublicForeignKeyConstraintValidated(
 	}
 
 	out, err := i.checkOutTable(ctx, op.TableID)
-	if err != nil {
+	if err != nil || out.Dropped() {
 		return err
 	}
 	for idx, fk := range out.OutboundFKs {
@@ -578,7 +584,7 @@ func (i *immediateVisitor) MakePublicUniqueWithoutIndexConstraintValidated(
 	ctx context.Context, op scop.MakePublicUniqueWithoutIndexConstraintValidated,
 ) error {
 	tbl, err := i.checkOutTable(ctx, op.TableID)
-	if err != nil {
+	if err != nil || tbl.Dropped() {
 		return err
 	}
 	for i, uwi := range tbl.UniqueWithoutIndexConstraints {

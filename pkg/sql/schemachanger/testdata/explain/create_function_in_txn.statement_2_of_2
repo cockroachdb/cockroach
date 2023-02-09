@@ -12,15 +12,15 @@ Schema change plan for CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹publi
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 5 elements transitioning toward PUBLIC
- │         │    ├── ABSENT → BACKFILL_ONLY    SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
- │         │    ├── ABSENT → PUBLIC           IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
- │         │    ├── ABSENT → PUBLIC           IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
- │         │    ├── ABSENT → PUBLIC           IndexData:{DescID: 104, IndexID: 2}
- │         │    └── ABSENT → PUBLIC           IndexName:{DescID: 104, Name: idx, IndexID: 2}
+ │         │    ├── ABSENT → BACKFILL_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+ │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
+ │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
+ │         │    ├── ABSENT → PUBLIC        IndexData:{DescID: 104, IndexID: 2}
+ │         │    └── ABSENT → PUBLIC        IndexName:{DescID: 104, Name: idx, IndexID: 2}
  │         ├── 3 elements transitioning toward TRANSIENT_ABSENT
- │         │    ├── ABSENT → DELETE_ONLY      TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
- │         │    ├── ABSENT → TRANSIENT_ABSENT IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
- │         │    └── ABSENT → TRANSIENT_ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
+ │         │    ├── ABSENT → DELETE_ONLY   TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+ │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
+ │         │    └── ABSENT → PUBLIC        IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
  │         └── 7 Mutation operations
  │              ├── MakeAbsentIndexBackfilling {"IsSecondaryIndex":true}
  │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":2,"TableID":104}
@@ -46,8 +46,8 @@ Schema change plan for CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹publi
  │    │    │    └── PUBLIC           → ABSENT IndexName:{DescID: 104, Name: idx, IndexID: 2}
  │    │    ├── 3 elements transitioning toward TRANSIENT_ABSENT
  │    │    │    ├── DELETE_ONLY      → ABSENT TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
- │    │    │    ├── TRANSIENT_ABSENT → ABSENT IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
- │    │    │    └── TRANSIENT_ABSENT → ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
+ │    │    │    ├── PUBLIC           → ABSENT IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
+ │    │    │    └── PUBLIC           → ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
@@ -148,11 +148,13 @@ Schema change plan for CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹publi
       │    │    ├── WRITE_ONLY       → TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
       │    │    ├── PUBLIC           → TRANSIENT_ABSENT      IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
       │    │    └── PUBLIC           → TRANSIENT_ABSENT      IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
-      │    └── 7 Mutation operations
+      │    └── 9 Mutation operations
       │         ├── MarkDescriptorAsPublic {"DescriptorID":105}
       │         ├── MakeValidatedSecondaryIndexPublic {"IndexID":2,"TableID":104}
       │         ├── RefreshStats {"TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":3,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":3,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":3,"Kind":1,"TableID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":105}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}

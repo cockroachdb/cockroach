@@ -807,7 +807,7 @@ begin transaction #17
 validate forward indexes [5] in table #104
 commit transaction #17
 begin transaction #18
-## PostCommitNonRevertiblePhase stage 1 of 2 with 11 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 2 with 21 MutationType ops
 upsert descriptor #104
   ...
            statementTag: CREATE INDEX

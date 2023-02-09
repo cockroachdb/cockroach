@@ -15,10 +15,13 @@ Schema change plan for DROP SCHEMA ‹db›.‹sc›;
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 106, Name: root}
  │         │    ├── PUBLIC → DROPPED Schema:{DescID: 106}
  │         │    └── PUBLIC → ABSENT  SchemaParent:{DescID: 106, ReferencedDescID: 104}
- │         └── 3 Mutation operations
+ │         └── 6 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":106}
  │              ├── RemoveSchemaParent {"Parent":{"ParentDatabaseID":104,"SchemaID":106}}
- │              └── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":106,"Name":"sc"}}
+ │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":106,"Name":"sc"}}
+ │              ├── NotImplementedForPublicObjects {"DescID":106,"ElementType":"scpb.Owner"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"admin"}
+ │              └── RemoveUserPrivileges {"DescriptorID":106,"User":"root"}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
  │    │    ├── 6 elements transitioning toward ABSENT
@@ -38,10 +41,13 @@ Schema change plan for DROP SCHEMA ‹db›.‹sc›;
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 106, Name: root}
  │         │    ├── PUBLIC → DROPPED Schema:{DescID: 106}
  │         │    └── PUBLIC → ABSENT  SchemaParent:{DescID: 106, ReferencedDescID: 104}
- │         └── 6 Mutation operations
+ │         └── 9 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":106}
  │              ├── RemoveSchemaParent {"Parent":{"ParentDatabaseID":104,"SchemaID":106}}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":106,"Name":"sc"}}
+ │              ├── NotImplementedForPublicObjects {"DescID":106,"ElementType":"scpb.Owner"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"admin"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"root"}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":106,"Initialize":true}
  │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"PostCommitNonRev..."}

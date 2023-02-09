@@ -13,25 +13,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │   │
 │   └── • Stage 1 of 1 in StatementPhase
 │       │
-│       ├── • 28 elements transitioning toward ABSENT
-│       │   │
-│       │   ├── • IndexColumn:{DescID: 105, ColumnID: 2, IndexID: 2}
-│       │   │   │ PUBLIC → ABSENT
-│       │   │   │
-│       │   │   ├── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 105, IndexID: 2, ConstraintID: 0}
-│       │   │   │     rule: "index no longer public before dependents"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip index-column removal ops on index removal"
-│       │   │
-│       │   ├── • IndexColumn:{DescID: 105, ColumnID: 3, IndexID: 2}
-│       │   │   │ PUBLIC → ABSENT
-│       │   │   │
-│       │   │   ├── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 105, IndexID: 2, ConstraintID: 0}
-│       │   │   │     rule: "index no longer public before dependents"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip index-column removal ops on index removal"
+│       ├── • 24 elements transitioning toward ABSENT
 │       │   │
 │       │   ├── • SecondaryIndex:{DescID: 105, IndexID: 2, ConstraintID: 0}
 │       │   │   │ PUBLIC → VALIDATED
@@ -51,29 +33,20 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │   ├── • Owner:{DescID: 106}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED View:{DescID: 106}
-│       │   │   │     rule: "descriptor dropped before dependent element removal"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │   └── • Precedence dependency from DROPPED View:{DescID: 106}
+│       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • UserPrivileges:{DescID: 106, Name: admin}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED View:{DescID: 106}
-│       │   │   │     rule: "descriptor dropped before dependent element removal"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │   └── • Precedence dependency from DROPPED View:{DescID: 106}
+│       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • UserPrivileges:{DescID: 106, Name: root}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED View:{DescID: 106}
-│       │   │   │     rule: "descriptor dropped before dependent element removal"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │   └── • Precedence dependency from DROPPED View:{DescID: 106}
+│       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • View:{DescID: 106}
 │       │   │     PUBLIC → DROPPED
@@ -88,20 +61,14 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │   ├── • ColumnFamily:{DescID: 106, Name: primary, ColumnFamilyID: 0}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED View:{DescID: 106}
-│       │   │   │     rule: "descriptor dropped before dependent element removal"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │   └── • Precedence dependency from DROPPED View:{DescID: 106}
+│       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • Column:{DescID: 106, ColumnID: 1}
 │       │   │   │ PUBLIC → WRITE_ONLY
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED View:{DescID: 106}
-│       │   │   │     rule: "relation dropped before dependent column"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → WRITE_ONLY operations
-│       │   │         rule: "skip column removal ops on relation drop"
+│       │   │   └── • Precedence dependency from DROPPED View:{DescID: 106}
+│       │   │         rule: "relation dropped before dependent column"
 │       │   │
 │       │   ├── • ColumnName:{DescID: 106, Name: j, ColumnID: 1}
 │       │   │   │ PUBLIC → ABSENT
@@ -109,11 +76,8 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │   │   ├── • Precedence dependency from DROPPED View:{DescID: 106}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 1}
-│       │   │   │     rule: "column no longer public before dependents"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip column dependents removal ops on relation drop"
+│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 1}
+│       │   │         rule: "column no longer public before dependents"
 │       │   │
 │       │   ├── • ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 1}
 │       │   │   │ PUBLIC → ABSENT
@@ -127,11 +91,8 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │   ├── • Column:{DescID: 106, ColumnID: 2}
 │       │   │   │ PUBLIC → WRITE_ONLY
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED View:{DescID: 106}
-│       │   │   │     rule: "relation dropped before dependent column"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → WRITE_ONLY operations
-│       │   │         rule: "skip column removal ops on relation drop"
+│       │   │   └── • Precedence dependency from DROPPED View:{DescID: 106}
+│       │   │         rule: "relation dropped before dependent column"
 │       │   │
 │       │   ├── • ColumnName:{DescID: 106, Name: rowid, ColumnID: 2}
 │       │   │   │ PUBLIC → ABSENT
@@ -139,11 +100,8 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │   │   ├── • Precedence dependency from DROPPED View:{DescID: 106}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 2}
-│       │   │   │     rule: "column no longer public before dependents"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip column dependents removal ops on relation drop"
+│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │   │         rule: "column no longer public before dependents"
 │       │   │
 │       │   ├── • ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
 │       │   │   │ PUBLIC → ABSENT
@@ -158,10 +116,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │   │         rule: "column type dependents removed right before column type"
 │       │   │
 │       │   ├── • ColumnNotNull:{DescID: 106, ColumnID: 2, IndexID: 0}
-│       │   │   │ PUBLIC → VALIDATED
-│       │   │   │
-│       │   │   └── • skip PUBLIC → VALIDATED operations
-│       │   │         rule: "skip constraint removal ops on relation drop"
+│       │   │     PUBLIC → VALIDATED
 │       │   │
 │       │   ├── • ColumnDefaultExpression:{DescID: 106, ColumnID: 2}
 │       │   │   │ PUBLIC → ABSENT
@@ -175,11 +130,8 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │   ├── • Column:{DescID: 106, ColumnID: 4294967295}
 │       │   │   │ PUBLIC → WRITE_ONLY
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED View:{DescID: 106}
-│       │   │   │     rule: "relation dropped before dependent column"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → WRITE_ONLY operations
-│       │   │         rule: "skip column removal ops on relation drop"
+│       │   │   └── • Precedence dependency from DROPPED View:{DescID: 106}
+│       │   │         rule: "relation dropped before dependent column"
 │       │   │
 │       │   ├── • ColumnName:{DescID: 106, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
 │       │   │   │ PUBLIC → ABSENT
@@ -187,11 +139,8 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │   │   ├── • Precedence dependency from DROPPED View:{DescID: 106}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 4294967295}
-│       │   │   │     rule: "column no longer public before dependents"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip column dependents removal ops on relation drop"
+│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 4294967295}
+│       │   │         rule: "column no longer public before dependents"
 │       │   │
 │       │   ├── • ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967295}
 │       │   │   │ PUBLIC → ABSENT
@@ -205,11 +154,8 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │   ├── • Column:{DescID: 106, ColumnID: 4294967294}
 │       │   │   │ PUBLIC → WRITE_ONLY
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED View:{DescID: 106}
-│       │   │   │     rule: "relation dropped before dependent column"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → WRITE_ONLY operations
-│       │   │         rule: "skip column removal ops on relation drop"
+│       │   │   └── • Precedence dependency from DROPPED View:{DescID: 106}
+│       │   │         rule: "relation dropped before dependent column"
 │       │   │
 │       │   ├── • ColumnName:{DescID: 106, Name: tableoid, ColumnID: 4294967294}
 │       │   │   │ PUBLIC → ABSENT
@@ -217,11 +163,8 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │   │   ├── • Precedence dependency from DROPPED View:{DescID: 106}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 4294967294}
-│       │   │   │     rule: "column no longer public before dependents"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip column dependents removal ops on relation drop"
+│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 4294967294}
+│       │   │         rule: "column no longer public before dependents"
 │       │   │
 │       │   ├── • ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967294}
 │       │   │   │ PUBLIC → ABSENT
@@ -232,46 +175,11 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 4294967294}
 │       │   │         rule: "column no longer public before dependents"
 │       │   │
-│       │   ├── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 1}
-│       │   │   │ PUBLIC → ABSENT
-│       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED View:{DescID: 106}
-│       │   │   │     rule: "descriptor dropped before dependent element removal"
-│       │   │   │
-│       │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 2}
-│       │   │   │     rule: "column no longer public before dependents"
-│       │   │   │
-│       │   │   ├── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
-│       │   │   │     rule: "index no longer public before dependents"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip index dependents removal ops on relation drop"
-│       │   │         rule: "skip index-column removal ops on index removal"
-│       │   │
-│       │   ├── • IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 1}
-│       │   │   │ PUBLIC → ABSENT
-│       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED View:{DescID: 106}
-│       │   │   │     rule: "descriptor dropped before dependent element removal"
-│       │   │   │
-│       │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 1}
-│       │   │   │     rule: "column no longer public before dependents"
-│       │   │   │
-│       │   │   ├── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
-│       │   │   │     rule: "index no longer public before dependents"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip index dependents removal ops on relation drop"
-│       │   │         rule: "skip index-column removal ops on index removal"
-│       │   │
 │       │   ├── • PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
 │       │   │   │ PUBLIC → VALIDATED
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED View:{DescID: 106}
-│       │   │   │     rule: "relation dropped before dependent index"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → VALIDATED operations
-│       │   │         rule: "skip index removal ops on relation drop"
+│       │   │   └── • Precedence dependency from DROPPED View:{DescID: 106}
+│       │   │         rule: "relation dropped before dependent index"
 │       │   │
 │       │   └── • IndexName:{DescID: 106, Name: v3_pkey, IndexID: 1}
 │       │       │ PUBLIC → ABSENT
@@ -279,13 +187,10 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │       ├── • Precedence dependency from DROPPED View:{DescID: 106}
 │       │       │     rule: "descriptor dropped before dependent element removal"
 │       │       │
-│       │       ├── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
-│       │       │     rule: "index no longer public before dependents"
-│       │       │
-│       │       └── • skip PUBLIC → ABSENT operations
-│       │             rule: "skip index dependents removal ops on relation drop"
+│       │       └── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
+│       │             rule: "index no longer public before dependents, excluding columns"
 │       │
-│       └── • 6 Mutation operations
+│       └── • 21 Mutation operations
 │           │
 │           ├── • MarkDescriptorAsDropped
 │           │     DescriptorID: 106
@@ -299,32 +204,91 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │           │     ObjectID: 106
 │           │     ParentSchemaID: 101
 │           │
+│           ├── • NotImplementedForPublicObjects
+│           │     DescID: 106
+│           │     ElementType: scpb.ColumnFamily
+│           │
+│           ├── • MakePublicColumnWriteOnly
+│           │     ColumnID: 1
+│           │     TableID: 106
+│           │
+│           ├── • SetColumnName
+│           │     ColumnID: 1
+│           │     Name: crdb_internal_column_1_name_placeholder
+│           │     TableID: 106
+│           │
+│           ├── • MakePublicColumnWriteOnly
+│           │     ColumnID: 2
+│           │     TableID: 106
+│           │
+│           ├── • SetColumnName
+│           │     ColumnID: 2
+│           │     Name: crdb_internal_column_2_name_placeholder
+│           │     TableID: 106
+│           │
+│           ├── • MakePublicColumnNotNullValidated
+│           │     ColumnID: 2
+│           │     TableID: 106
+│           │
 │           ├── • RemoveColumnDefaultExpression
 │           │     ColumnID: 2
+│           │     TableID: 106
+│           │
+│           ├── • MakePublicColumnWriteOnly
+│           │     ColumnID: 4294967295
+│           │     TableID: 106
+│           │
+│           ├── • SetColumnName
+│           │     ColumnID: 4294967295
+│           │     Name: crdb_internal_column_4294967295_name_placeholder
+│           │     TableID: 106
+│           │
+│           ├── • MakePublicColumnWriteOnly
+│           │     ColumnID: 4294967294
+│           │     TableID: 106
+│           │
+│           ├── • SetColumnName
+│           │     ColumnID: 4294967294
+│           │     Name: crdb_internal_column_4294967294_name_placeholder
+│           │     TableID: 106
+│           │
+│           ├── • MakePublicPrimaryIndexWriteOnly
+│           │     IndexID: 1
+│           │     TableID: 106
+│           │
+│           ├── • SetIndexName
+│           │     IndexID: 1
+│           │     Name: crdb_internal_index_1_name_placeholder
 │           │     TableID: 106
 │           │
 │           ├── • MakePublicSecondaryIndexWriteOnly
 │           │     IndexID: 2
 │           │     TableID: 105
 │           │
-│           └── • DrainDescriptorName
-│                 Namespace:
-│                   DatabaseID: 100
-│                   DescriptorID: 106
-│                   Name: v3
-│                   SchemaID: 101
+│           ├── • DrainDescriptorName
+│           │     Namespace:
+│           │       DatabaseID: 100
+│           │       DescriptorID: 106
+│           │       Name: v3
+│           │       SchemaID: 101
+│           │
+│           ├── • NotImplementedForPublicObjects
+│           │     DescID: 106
+│           │     ElementType: scpb.Owner
+│           │
+│           ├── • RemoveUserPrivileges
+│           │     DescriptorID: 106
+│           │     User: admin
+│           │
+│           └── • RemoveUserPrivileges
+│                 DescriptorID: 106
+│                 User: root
 │
 ├── • PreCommitPhase
 │   │
 │   ├── • Stage 1 of 2 in PreCommitPhase
 │   │   │
-│   │   ├── • 28 elements transitioning toward ABSENT
-│   │   │   │
-│   │   │   ├── • IndexColumn:{DescID: 105, ColumnID: 2, IndexID: 2}
-│   │   │   │     ABSENT → PUBLIC
-│   │   │   │
-│   │   │   ├── • IndexColumn:{DescID: 105, ColumnID: 3, IndexID: 2}
-│   │   │   │     ABSENT → PUBLIC
+│   │   ├── • 24 elements transitioning toward ABSENT
 │   │   │   │
 │   │   │   ├── • SecondaryIndex:{DescID: 105, IndexID: 2, ConstraintID: 0}
 │   │   │   │     VALIDATED → PUBLIC
@@ -392,12 +356,6 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │   │   │   ├── • ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967294}
 │   │   │   │     ABSENT → PUBLIC
 │   │   │   │
-│   │   │   ├── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 1}
-│   │   │   │     ABSENT → PUBLIC
-│   │   │   │
-│   │   │   ├── • IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 1}
-│   │   │   │     ABSENT → PUBLIC
-│   │   │   │
 │   │   │   ├── • PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
 │   │   │   │     VALIDATED → PUBLIC
 │   │   │   │
@@ -411,25 +369,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │   │
 │   └── • Stage 2 of 2 in PreCommitPhase
 │       │
-│       ├── • 28 elements transitioning toward ABSENT
-│       │   │
-│       │   ├── • IndexColumn:{DescID: 105, ColumnID: 2, IndexID: 2}
-│       │   │   │ PUBLIC → ABSENT
-│       │   │   │
-│       │   │   ├── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 105, IndexID: 2, ConstraintID: 0}
-│       │   │   │     rule: "index no longer public before dependents"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip index-column removal ops on index removal"
-│       │   │
-│       │   ├── • IndexColumn:{DescID: 105, ColumnID: 3, IndexID: 2}
-│       │   │   │ PUBLIC → ABSENT
-│       │   │   │
-│       │   │   ├── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 105, IndexID: 2, ConstraintID: 0}
-│       │   │   │     rule: "index no longer public before dependents"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip index-column removal ops on index removal"
+│       ├── • 26 elements transitioning toward ABSENT
 │       │   │
 │       │   ├── • SecondaryIndex:{DescID: 105, IndexID: 2, ConstraintID: 0}
 │       │   │   │ PUBLIC → VALIDATED
@@ -449,29 +389,20 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │   ├── • Owner:{DescID: 106}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED View:{DescID: 106}
-│       │   │   │     rule: "descriptor dropped before dependent element removal"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │   └── • Precedence dependency from DROPPED View:{DescID: 106}
+│       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • UserPrivileges:{DescID: 106, Name: admin}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED View:{DescID: 106}
-│       │   │   │     rule: "descriptor dropped before dependent element removal"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │   └── • Precedence dependency from DROPPED View:{DescID: 106}
+│       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • UserPrivileges:{DescID: 106, Name: root}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED View:{DescID: 106}
-│       │   │   │     rule: "descriptor dropped before dependent element removal"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │   └── • Precedence dependency from DROPPED View:{DescID: 106}
+│       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • View:{DescID: 106}
 │       │   │     PUBLIC → DROPPED
@@ -486,11 +417,8 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │   ├── • ColumnFamily:{DescID: 106, Name: primary, ColumnFamilyID: 0}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED View:{DescID: 106}
-│       │   │   │     rule: "descriptor dropped before dependent element removal"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │   └── • Precedence dependency from DROPPED View:{DescID: 106}
+│       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • Column:{DescID: 106, ColumnID: 1}
 │       │   │   │ PUBLIC → ABSENT
@@ -504,14 +432,8 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 1}
 │       │   │   │     rule: "dependents removed before column"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 1}
-│       │   │   │     rule: "dependents removed before column"
-│       │   │   │
-│       │   │   ├── • skip PUBLIC → WRITE_ONLY operations
-│       │   │   │     rule: "skip column removal ops on relation drop"
-│       │   │   │
-│       │   │   └── • skip WRITE_ONLY → DELETE_ONLY operations
-│       │   │         rule: "skip column removal ops on relation drop"
+│       │   │   └── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 1}
+│       │   │         rule: "dependents removed before column"
 │       │   │
 │       │   ├── • ColumnName:{DescID: 106, Name: j, ColumnID: 1}
 │       │   │   │ PUBLIC → ABSENT
@@ -519,11 +441,8 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │   │   ├── • Precedence dependency from DROPPED View:{DescID: 106}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 1}
-│       │   │   │     rule: "column no longer public before dependents"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip column dependents removal ops on relation drop"
+│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 1}
+│       │   │         rule: "column no longer public before dependents"
 │       │   │
 │       │   ├── • ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 1}
 │       │   │   │ PUBLIC → ABSENT
@@ -555,14 +474,8 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │   │   ├── • Precedence dependency from ABSENT ColumnDefaultExpression:{DescID: 106, ColumnID: 2}
 │       │   │   │     rule: "dependents removed before column"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 1}
-│       │   │   │     rule: "dependents removed before column"
-│       │   │   │
-│       │   │   ├── • skip PUBLIC → WRITE_ONLY operations
-│       │   │   │     rule: "skip column removal ops on relation drop"
-│       │   │   │
-│       │   │   └── • skip WRITE_ONLY → DELETE_ONLY operations
-│       │   │         rule: "skip column removal ops on relation drop"
+│       │   │   └── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 1}
+│       │   │         rule: "dependents removed before column"
 │       │   │
 │       │   ├── • ColumnName:{DescID: 106, Name: rowid, ColumnID: 2}
 │       │   │   │ PUBLIC → ABSENT
@@ -570,11 +483,8 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │   │   ├── • Precedence dependency from DROPPED View:{DescID: 106}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 2}
-│       │   │   │     rule: "column no longer public before dependents"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip column dependents removal ops on relation drop"
+│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │   │         rule: "column no longer public before dependents"
 │       │   │
 │       │   ├── • ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
 │       │   │   │ PUBLIC → ABSENT
@@ -591,11 +501,8 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │   ├── • ColumnNotNull:{DescID: 106, ColumnID: 2, IndexID: 0}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 2}
-│       │   │   │     rule: "column no longer public before dependents"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → VALIDATED operations
-│       │   │         rule: "skip constraint removal ops on relation drop"
+│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │   │         rule: "column no longer public before dependents"
 │       │   │
 │       │   ├── • ColumnDefaultExpression:{DescID: 106, ColumnID: 2}
 │       │   │   │ PUBLIC → ABSENT
@@ -615,14 +522,8 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 106, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
 │       │   │   │     rule: "dependents removed before column"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967295}
-│       │   │   │     rule: "dependents removed before column"
-│       │   │   │
-│       │   │   ├── • skip PUBLIC → WRITE_ONLY operations
-│       │   │   │     rule: "skip column removal ops on relation drop"
-│       │   │   │
-│       │   │   └── • skip WRITE_ONLY → DELETE_ONLY operations
-│       │   │         rule: "skip column removal ops on relation drop"
+│       │   │   └── • Precedence dependency from ABSENT ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967295}
+│       │   │         rule: "dependents removed before column"
 │       │   │
 │       │   ├── • ColumnName:{DescID: 106, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
 │       │   │   │ PUBLIC → ABSENT
@@ -630,11 +531,8 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │   │   ├── • Precedence dependency from DROPPED View:{DescID: 106}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 4294967295}
-│       │   │   │     rule: "column no longer public before dependents"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip column dependents removal ops on relation drop"
+│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 4294967295}
+│       │   │         rule: "column no longer public before dependents"
 │       │   │
 │       │   ├── • ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967295}
 │       │   │   │ PUBLIC → ABSENT
@@ -654,14 +552,8 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 106, Name: tableoid, ColumnID: 4294967294}
 │       │   │   │     rule: "dependents removed before column"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967294}
-│       │   │   │     rule: "dependents removed before column"
-│       │   │   │
-│       │   │   ├── • skip PUBLIC → WRITE_ONLY operations
-│       │   │   │     rule: "skip column removal ops on relation drop"
-│       │   │   │
-│       │   │   └── • skip WRITE_ONLY → DELETE_ONLY operations
-│       │   │         rule: "skip column removal ops on relation drop"
+│       │   │   └── • Precedence dependency from ABSENT ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967294}
+│       │   │         rule: "dependents removed before column"
 │       │   │
 │       │   ├── • ColumnName:{DescID: 106, Name: tableoid, ColumnID: 4294967294}
 │       │   │   │ PUBLIC → ABSENT
@@ -669,11 +561,8 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │   │   ├── • Precedence dependency from DROPPED View:{DescID: 106}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 4294967294}
-│       │   │   │     rule: "column no longer public before dependents"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip column dependents removal ops on relation drop"
+│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 4294967294}
+│       │   │         rule: "column no longer public before dependents"
 │       │   │
 │       │   ├── • ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967294}
 │       │   │   │ PUBLIC → ABSENT
@@ -693,12 +582,8 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 2}
 │       │   │   │     rule: "column no longer public before dependents"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
-│       │   │   │     rule: "index no longer public before dependents"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip index dependents removal ops on relation drop"
-│       │   │         rule: "skip index-column removal ops on index removal"
+│       │   │   └── • Precedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
+│       │   │         rule: "index drop mutation visible before cleaning up index columns"
 │       │   │
 │       │   ├── • IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 1}
 │       │   │   │ PUBLIC → ABSENT
@@ -709,12 +594,8 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 1}
 │       │   │   │     rule: "column no longer public before dependents"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
-│       │   │   │     rule: "index no longer public before dependents"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip index dependents removal ops on relation drop"
-│       │   │         rule: "skip index-column removal ops on index removal"
+│       │   │   └── • Precedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
+│       │   │         rule: "index drop mutation visible before cleaning up index columns"
 │       │   │
 │       │   ├── • PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
 │       │   │   │ PUBLIC → ABSENT
@@ -728,20 +609,8 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 1}
 │       │   │   │     rule: "dependents removed before index"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from ABSENT IndexName:{DescID: 106, Name: v3_pkey, IndexID: 1}
-│       │   │   │     rule: "dependents removed before index"
-│       │   │   │
-│       │   │   ├── • skip PUBLIC → VALIDATED operations
-│       │   │   │     rule: "skip index removal ops on relation drop"
-│       │   │   │
-│       │   │   ├── • skip VALIDATED → WRITE_ONLY operations
-│       │   │   │     rule: "skip index removal ops on relation drop"
-│       │   │   │
-│       │   │   ├── • skip WRITE_ONLY → DELETE_ONLY operations
-│       │   │   │     rule: "skip index removal ops on relation drop"
-│       │   │   │
-│       │   │   └── • skip DELETE_ONLY → ABSENT operations
-│       │   │         rule: "skip index removal ops on relation drop"
+│       │   │   └── • Precedence dependency from ABSENT IndexName:{DescID: 106, Name: v3_pkey, IndexID: 1}
+│       │   │         rule: "dependents removed before index"
 │       │   │
 │       │   └── • IndexName:{DescID: 106, Name: v3_pkey, IndexID: 1}
 │       │       │ PUBLIC → ABSENT
@@ -749,13 +618,10 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │       ├── • Precedence dependency from DROPPED View:{DescID: 106}
 │       │       │     rule: "descriptor dropped before dependent element removal"
 │       │       │
-│       │       ├── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
-│       │       │     rule: "index no longer public before dependents"
-│       │       │
-│       │       └── • skip PUBLIC → ABSENT operations
-│       │             rule: "skip index dependents removal ops on relation drop"
+│       │       └── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
+│       │             rule: "index no longer public before dependents, excluding columns"
 │       │
-│       └── • 14 Mutation operations
+│       └── • 37 Mutation operations
 │           │
 │           ├── • MarkDescriptorAsDropped
 │           │     DescriptorID: 106
@@ -769,8 +635,61 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │           │     ObjectID: 106
 │           │     ParentSchemaID: 101
 │           │
+│           ├── • NotImplementedForPublicObjects
+│           │     DescID: 106
+│           │     ElementType: scpb.ColumnFamily
+│           │
+│           ├── • MakePublicColumnWriteOnly
+│           │     ColumnID: 1
+│           │     TableID: 106
+│           │
+│           ├── • SetColumnName
+│           │     ColumnID: 1
+│           │     Name: crdb_internal_column_1_name_placeholder
+│           │     TableID: 106
+│           │
+│           ├── • MakePublicColumnWriteOnly
+│           │     ColumnID: 2
+│           │     TableID: 106
+│           │
+│           ├── • SetColumnName
+│           │     ColumnID: 2
+│           │     Name: crdb_internal_column_2_name_placeholder
+│           │     TableID: 106
+│           │
+│           ├── • MakePublicColumnNotNullValidated
+│           │     ColumnID: 2
+│           │     TableID: 106
+│           │
 │           ├── • RemoveColumnDefaultExpression
 │           │     ColumnID: 2
+│           │     TableID: 106
+│           │
+│           ├── • MakePublicColumnWriteOnly
+│           │     ColumnID: 4294967295
+│           │     TableID: 106
+│           │
+│           ├── • SetColumnName
+│           │     ColumnID: 4294967295
+│           │     Name: crdb_internal_column_4294967295_name_placeholder
+│           │     TableID: 106
+│           │
+│           ├── • MakePublicColumnWriteOnly
+│           │     ColumnID: 4294967294
+│           │     TableID: 106
+│           │
+│           ├── • SetColumnName
+│           │     ColumnID: 4294967294
+│           │     Name: crdb_internal_column_4294967294_name_placeholder
+│           │     TableID: 106
+│           │
+│           ├── • MakePublicPrimaryIndexWriteOnly
+│           │     IndexID: 1
+│           │     TableID: 106
+│           │
+│           ├── • SetIndexName
+│           │     IndexID: 1
+│           │     Name: crdb_internal_index_1_name_placeholder
 │           │     TableID: 106
 │           │
 │           ├── • MakePublicSecondaryIndexWriteOnly
@@ -784,12 +703,36 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │           │       Name: v3
 │           │       SchemaID: 101
 │           │
+│           ├── • NotImplementedForPublicObjects
+│           │     DescID: 106
+│           │     ElementType: scpb.Owner
+│           │
+│           ├── • RemoveUserPrivileges
+│           │     DescriptorID: 106
+│           │     User: admin
+│           │
+│           ├── • RemoveUserPrivileges
+│           │     DescriptorID: 106
+│           │     User: root
+│           │
+│           ├── • MakeWriteOnlyColumnDeleteOnly
+│           │     ColumnID: 1
+│           │     TableID: 106
+│           │
 │           ├── • RemoveColumnNotNull
 │           │     ColumnID: 2
 │           │     TableID: 106
 │           │
-│           ├── • MakeDeleteOnlyColumnAbsent
-│           │     ColumnID: 1
+│           ├── • MakeWriteOnlyColumnDeleteOnly
+│           │     ColumnID: 4294967295
+│           │     TableID: 106
+│           │
+│           ├── • MakeWriteOnlyColumnDeleteOnly
+│           │     ColumnID: 4294967294
+│           │     TableID: 106
+│           │
+│           ├── • MakeWriteOnlyColumnDeleteOnly
+│           │     ColumnID: 2
 │           │     TableID: 106
 │           │
 │           ├── • MakeDeleteOnlyColumnAbsent
@@ -798,6 +741,29 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │           │
 │           ├── • MakeDeleteOnlyColumnAbsent
 │           │     ColumnID: 4294967294
+│           │     TableID: 106
+│           │
+│           ├── • MakeWriteOnlyIndexDeleteOnly
+│           │     IndexID: 1
+│           │     TableID: 106
+│           │
+│           ├── • RemoveColumnFromIndex
+│           │     ColumnID: 2
+│           │     IndexID: 1
+│           │     TableID: 106
+│           │
+│           ├── • RemoveColumnFromIndex
+│           │     ColumnID: 1
+│           │     IndexID: 1
+│           │     Kind: 2
+│           │     TableID: 106
+│           │
+│           ├── • MakeIndexAbsent
+│           │     IndexID: 1
+│           │     TableID: 106
+│           │
+│           ├── • MakeDeleteOnlyColumnAbsent
+│           │     ColumnID: 1
 │           │     TableID: 106
 │           │
 │           ├── • MakeDeleteOnlyColumnAbsent
@@ -820,7 +786,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │                 - 106
 │                 JobID: 1
 │                 NonCancelable: true
-│                 RunningStatus: PostCommitNonRevertiblePhase stage 1 of 2 with 4 MutationType ops pending
+│                 RunningStatus: PostCommitNonRevertiblePhase stage 1 of 2 with 6 MutationType ops pending
 │                 Statements:
 │                 - statement: DROP INDEX idx CASCADE
 │                   redactedstatement: DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx› CASCADE
@@ -830,7 +796,19 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
     │
     ├── • Stage 1 of 2 in PostCommitNonRevertiblePhase
     │   │
-    │   ├── • 5 elements transitioning toward ABSENT
+    │   ├── • 7 elements transitioning toward ABSENT
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 105, ColumnID: 2, IndexID: 2}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 105, IndexID: 2, ConstraintID: 0}
+    │   │   │         rule: "index drop mutation visible before cleaning up index columns"
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 105, ColumnID: 3, IndexID: 2}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 105, IndexID: 2, ConstraintID: 0}
+    │   │   │         rule: "index drop mutation visible before cleaning up index columns"
     │   │   │
     │   │   ├── • SecondaryIndex:{DescID: 105, IndexID: 2, ConstraintID: 0}
     │   │   │   │ VALIDATED → DELETE_ONLY
@@ -845,7 +823,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
     │   │   │   │     rule: "index no longer public before index name"
     │   │   │   │
     │   │   │   └── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 105, IndexID: 2, ConstraintID: 0}
-    │   │   │         rule: "index no longer public before dependents"
+    │   │   │         rule: "index no longer public before dependents, excluding columns"
     │   │   │
     │   │   ├── • View:{DescID: 106}
     │   │   │   │ DROPPED → ABSENT
@@ -943,7 +921,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
     │   │       └── • SameStagePrecedence dependency from ABSENT View:{DescID: 106}
     │   │             rule: "table removed right before garbage collection"
     │   │
-    │   └── • 6 Mutation operations
+    │   └── • 8 Mutation operations
     │       │
     │       ├── • CreateGCJobForTable
     │       │     DatabaseID: 100
@@ -965,6 +943,17 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
     │       │     StatementForDropJob:
     │       │       Statement: DROP INDEX defaultdb.public.v2@idx CASCADE
     │       │     TableID: 106
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 2
+    │       │     IndexID: 2
+    │       │     TableID: 105
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 3
+    │       │     IndexID: 2
+    │       │     Kind: 1
+    │       │     TableID: 105
     │       │
     │       ├── • SetJobStateOnDescriptor
     │       │     DescriptorID: 105

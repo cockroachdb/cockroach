@@ -1192,10 +1192,10 @@ def go_deps():
         name = "com_github_cespare_xxhash_v2",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cespare/xxhash/v2",
-        sha256 = "ac641ac8330df61f677c87448fc679c47886087d2933a1e431556f423782ea38",
-        strip_prefix = "github.com/cespare/xxhash/v2@v2.1.2",
+        sha256 = "fc180cdb0c00fbffbd39b774a72cdb5f0c32ace25370d5135195918a8c3fbd25",
+        strip_prefix = "github.com/cespare/xxhash/v2@v2.2.0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cespare/xxhash/v2/com_github_cespare_xxhash_v2-v2.1.2.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cespare/xxhash/v2/com_github_cespare_xxhash_v2-v2.2.0.zip",
         ],
     )
     go_repository(
@@ -1525,10 +1525,10 @@ def go_deps():
         patches = [
             "@com_github_cockroachdb_cockroach//build/patches:com_github_cockroachdb_pebble.patch",
         ],
-        sha256 = "2ec90dd7f152417825d77ee6f4221060a04be5f9573fd4588e8ccc5394d91e56",
-        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20230202171745-e9d3bb388ad6",
+        sha256 = "7087b386f9b4da9ce24708ae5b26eb175655892045b92c30952ba353b47d42aa",
+        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20230208205550-65fa048bf403",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20230202171745-e9d3bb388ad6.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20230208205550-65fa048bf403.zip",
         ],
     )
     go_repository(
@@ -5083,10 +5083,10 @@ def go_deps():
         name = "com_github_klauspost_compress",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/klauspost/compress",
-        sha256 = "5f85779b0a96cf9a66f6cee4a91382e03a71919121ebe8f6a90936300eb683c1",
-        strip_prefix = "github.com/klauspost/compress@v1.15.11",
+        sha256 = "8ffb3c1be810ed7cefa91c5f8c10be2b17944d0ac679a769e73a68940377f8ce",
+        strip_prefix = "github.com/klauspost/compress@v1.15.15",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/klauspost/compress/com_github_klauspost_compress-v1.15.11.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/klauspost/compress/com_github_klauspost_compress-v1.15.15.zip",
         ],
     )
     go_repository(

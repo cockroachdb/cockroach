@@ -10,7 +10,7 @@ EXPLAIN (ddl) DROP DATABASE multi_region_test_db CASCADE;
 Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
- │         ├── 53 elements transitioning toward ABSENT
+ │         ├── 52 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → ABSENT     Namespace:{DescID: 104, Name: multi_region_test_db, ReferencedDescID: 0}
  │         │    ├── PUBLIC → ABSENT     Owner:{DescID: 104}
  │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID: 104, Name: admin}
@@ -61,28 +61,59 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 108, ColumnID: 4294967294}
  │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}
  │         │    ├── PUBLIC → ABSENT     ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}
- │         │    ├── PUBLIC → ABSENT     IndexColumn:{DescID: 108, ColumnID: 1, IndexID: 1}
  │         │    ├── PUBLIC → VALIDATED  PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
  │         │    └── PUBLIC → ABSENT     IndexName:{DescID: 108, Name: table_regional_by_table_pkey, IndexID: 1}
- │         └── 15 Mutation operations
+ │         └── 47 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":106}
+ │              ├── NotImplementedForPublicObjects {"DescID":106,"ElementType":"scpb.EnumTypeVal..."}
+ │              ├── NotImplementedForPublicObjects {"DescID":106,"ElementType":"scpb.EnumTypeVal..."}
+ │              ├── NotImplementedForPublicObjects {"DescID":106,"ElementType":"scpb.EnumTypeVal..."}
  │              ├── RemoveObjectParent {"ObjectID":106,"ParentSchemaID":105}
  │              ├── MarkDescriptorAsDropped {"DescriptorID":107}
  │              ├── RemoveObjectParent {"ObjectID":107,"ParentSchemaID":105}
  │              ├── MarkDescriptorAsDropped {"DescriptorID":108}
  │              ├── RemoveObjectParent {"ObjectID":108,"ParentSchemaID":105}
  │              ├── RemoveBackReferenceInTypes {"BackReferencedDescriptorID":108}
+ │              ├── NotImplementedForPublicObjects {"DescID":108,"ElementType":"scpb.ColumnFamil..."}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":1,"TableID":108}
+ │              ├── SetColumnName {"ColumnID":1,"Name":"crdb_internal_co...","TableID":108}
+ │              ├── MakePublicColumnNotNullValidated {"ColumnID":1,"TableID":108}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967295,"TableID":108}
+ │              ├── SetColumnName {"ColumnID":4294967295,"Name":"crdb_internal_co...","TableID":108}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967294,"TableID":108}
+ │              ├── SetColumnName {"ColumnID":4294967294,"Name":"crdb_internal_co...","TableID":108}
+ │              ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":108}
+ │              ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":108}
  │              ├── MarkDescriptorAsDropped {"DescriptorID":105}
  │              ├── RemoveSchemaParent {"Parent":{"ParentDatabaseID":104,"SchemaID":105}}
+ │              ├── NotImplementedForPublicObjects {"DescID":106,"ElementType":"scpb.Owner"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"admin"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"public"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"root"}
+ │              ├── NotImplementedForPublicObjects {"DescID":107,"ElementType":"scpb.Owner"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":107,"User":"admin"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":107,"User":"public"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":107,"User":"root"}
+ │              ├── NotImplementedForPublicObjects {"DescID":108,"ElementType":"scpb.Owner"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":108,"User":"admin"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":108,"User":"root"}
  │              ├── MarkDescriptorAsDropped {"DescriptorID":104}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":105,"Name":"public"}}
+ │              ├── NotImplementedForPublicObjects {"DescID":105,"ElementType":"scpb.Owner"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":105,"User":"admin"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":105,"User":"public"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":105,"User":"root"}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":106,"Name":"crdb_internal_re...","SchemaID":105}}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":107,"Name":"_crdb_internal_r...","SchemaID":105}}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":108,"Name":"table_regional_b...","SchemaID":105}}
- │              └── DrainDescriptorName {"Namespace":{"DescriptorID":104,"Name":"multi_region_tes..."}}
+ │              ├── DrainDescriptorName {"Namespace":{"DescriptorID":104,"Name":"multi_region_tes..."}}
+ │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.Owner"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":104,"User":"admin"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":104,"User":"public"}
+ │              └── RemoveUserPrivileges {"DescriptorID":104,"User":"root"}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
- │    │    ├── 53 elements transitioning toward ABSENT
+ │    │    ├── 52 elements transitioning toward ABSENT
  │    │    │    ├── ABSENT     → PUBLIC Namespace:{DescID: 104, Name: multi_region_test_db, ReferencedDescID: 0}
  │    │    │    ├── ABSENT     → PUBLIC Owner:{DescID: 104}
  │    │    │    ├── ABSENT     → PUBLIC UserPrivileges:{DescID: 104, Name: admin}
@@ -133,7 +164,6 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │    │    │    ├── WRITE_ONLY → PUBLIC Column:{DescID: 108, ColumnID: 4294967294}
  │    │    │    ├── ABSENT     → PUBLIC ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}
  │    │    │    ├── ABSENT     → PUBLIC ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}
- │    │    │    ├── ABSENT     → PUBLIC IndexColumn:{DescID: 108, ColumnID: 1, IndexID: 1}
  │    │    │    ├── VALIDATED  → PUBLIC PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
  │    │    │    └── ABSENT     → PUBLIC IndexName:{DescID: 108, Name: table_regional_by_table_pkey, IndexID: 1}
  │    │    └── 1 Mutation operation
@@ -193,26 +223,64 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID: 108, ColumnID: 1, IndexID: 1}
  │         │    ├── PUBLIC → ABSENT  PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
  │         │    └── PUBLIC → ABSENT  IndexName:{DescID: 108, Name: table_regional_by_table_pkey, IndexID: 1}
- │         └── 26 Mutation operations
+ │         └── 64 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":106}
+ │              ├── NotImplementedForPublicObjects {"DescID":106,"ElementType":"scpb.EnumTypeVal..."}
+ │              ├── NotImplementedForPublicObjects {"DescID":106,"ElementType":"scpb.EnumTypeVal..."}
+ │              ├── NotImplementedForPublicObjects {"DescID":106,"ElementType":"scpb.EnumTypeVal..."}
  │              ├── RemoveObjectParent {"ObjectID":106,"ParentSchemaID":105}
  │              ├── MarkDescriptorAsDropped {"DescriptorID":107}
  │              ├── RemoveObjectParent {"ObjectID":107,"ParentSchemaID":105}
  │              ├── MarkDescriptorAsDropped {"DescriptorID":108}
  │              ├── RemoveObjectParent {"ObjectID":108,"ParentSchemaID":105}
  │              ├── RemoveBackReferenceInTypes {"BackReferencedDescriptorID":108}
+ │              ├── NotImplementedForPublicObjects {"DescID":108,"ElementType":"scpb.ColumnFamil..."}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":1,"TableID":108}
+ │              ├── SetColumnName {"ColumnID":1,"Name":"crdb_internal_co...","TableID":108}
+ │              ├── MakePublicColumnNotNullValidated {"ColumnID":1,"TableID":108}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967295,"TableID":108}
+ │              ├── SetColumnName {"ColumnID":4294967295,"Name":"crdb_internal_co...","TableID":108}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967294,"TableID":108}
+ │              ├── SetColumnName {"ColumnID":4294967294,"Name":"crdb_internal_co...","TableID":108}
+ │              ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":108}
+ │              ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":108}
  │              ├── MarkDescriptorAsDropped {"DescriptorID":105}
  │              ├── RemoveSchemaParent {"Parent":{"ParentDatabaseID":104,"SchemaID":105}}
+ │              ├── NotImplementedForPublicObjects {"DescID":106,"ElementType":"scpb.Owner"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"admin"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"public"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"root"}
+ │              ├── NotImplementedForPublicObjects {"DescID":107,"ElementType":"scpb.Owner"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":107,"User":"admin"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":107,"User":"public"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":107,"User":"root"}
+ │              ├── NotImplementedForPublicObjects {"DescID":108,"ElementType":"scpb.Owner"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":108,"User":"admin"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":108,"User":"root"}
  │              ├── RemoveColumnNotNull {"ColumnID":1,"TableID":108}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967295,"TableID":108}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967294,"TableID":108}
  │              ├── MarkDescriptorAsDropped {"DescriptorID":104}
  │              ├── RemoveDatabaseRoleSettings {"DatabaseID":104}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":105,"Name":"public"}}
+ │              ├── NotImplementedForPublicObjects {"DescID":105,"ElementType":"scpb.Owner"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":105,"User":"admin"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":105,"User":"public"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":105,"User":"root"}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":106,"Name":"crdb_internal_re...","SchemaID":105}}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":107,"Name":"_crdb_internal_r...","SchemaID":105}}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":108,"Name":"table_regional_b...","SchemaID":105}}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":1,"TableID":108}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967295,"TableID":108}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967294,"TableID":108}
+ │              ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":1,"TableID":108}
  │              ├── DrainDescriptorName {"Namespace":{"DescriptorID":104,"Name":"multi_region_tes..."}}
+ │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.Owner"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":104,"User":"admin"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":104,"User":"public"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":104,"User":"root"}
+ │              ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":1,"TableID":108}
+ │              ├── MakeIndexAbsent {"IndexID":1,"TableID":108}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":1,"TableID":108}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":105,"Initialize":true}

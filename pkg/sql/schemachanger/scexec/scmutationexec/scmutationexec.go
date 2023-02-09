@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/errors"
 )
 
 // NewImmediateVisitor creates a new scop.ImmediateMutationVisitor.
@@ -49,5 +50,16 @@ type deferredVisitor struct {
 }
 
 func (i *immediateVisitor) NotImplemented(_ context.Context, _ scop.NotImplemented) error {
-	return nil
+	return errors.AssertionFailedf("not implemented operation was hit unexpectedly.")
+}
+
+func (i *immediateVisitor) NotImplementedForPublicObjects(
+	ctx context.Context, op scop.NotImplementedForPublicObjects,
+) error {
+	desc := i.MaybeGetCheckedOutDescriptor(op.DescID)
+	if desc.Dropped() {
+		return nil
+	}
+	return errors.AssertionFailedf("not implemented operation was hit " +
+		"unexpectedly, no dropped descriptor was found.")
 }
