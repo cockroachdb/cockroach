@@ -10,7 +10,7 @@
 
 import { Format, Identifier, Join, SQL } from "./safesql";
 
-describe.only("safesql", () => {
+describe("safesql", () => {
   test("format", () => {
     type customString = string;
     type customNum = number;
