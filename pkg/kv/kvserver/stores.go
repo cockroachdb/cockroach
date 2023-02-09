@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 )
 
 // Stores provides methods to access a collection of stores. There's
@@ -189,7 +190,7 @@ func (ls *Stores) SendWithWriteBytes(
 	ctx context.Context, ba *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *kvadmission.StoreWriteBytes, *roachpb.Error) {
 	if err := ba.ValidateForEvaluation(); err != nil {
-		log.Fatalf(ctx, "invalid batch (%s): %s", ba, err)
+		return nil, nil, roachpb.NewError(errors.Wrapf(err, "invalid batch (%s)", ba))
 	}
 
 	store, err := ls.GetStore(ba.Replica.StoreID)
