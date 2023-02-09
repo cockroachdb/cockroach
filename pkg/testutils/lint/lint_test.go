@@ -1786,6 +1786,7 @@ func TestLint(t *testing.T) {
 				stream.GrepNot(`pkg/server/dumpstore.*\.go.*"io/ioutil" has been deprecated since Go 1\.16: As of Go 1\.16`),
 				stream.GrepNot(`pkg/server/heapprofiler/profilestore_test\.go.*"io/ioutil" has been deprecated since Go 1\.16`),
 				stream.GrepNot(`pkg/util/log/file_api\.go.*"io/ioutil" has been deprecated since Go 1\.16`),
+				stream.GrepNot(`pkg/sql/schemachanger/scplan/internal/rules/.*/.*go:.* should not use dot imports \(ST1001\)`),
 			), func(s string) {
 				t.Errorf("\n%s", s)
 			}); err != nil {
