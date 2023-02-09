@@ -53,11 +53,15 @@ export type TxnInsightEvent = InsightEventBase & {
 };
 
 // Information about the blocking transaction and schema.
-export type BlockedContentionDetails = {
+export type ContentionDetails = {
   collectionTimeStamp: Moment;
   blockingExecutionID: string;
   blockingTxnFingerprintID: string;
-  blockingQueries: string[];
+  blockingTxnQuery: string[];
+  waitingTxnID: string;
+  waitingTxnFingerprintID: string;
+  waitingStmtID: string;
+  waitingStmtFingerprintID: string;
   contendedKey: string;
   schemaName: string;
   databaseName: string;
@@ -70,7 +74,7 @@ export type TxnContentionInsightDetails = {
   transactionExecutionID: string;
   application: string;
   transactionFingerprintID: string;
-  blockingContentionDetails: BlockedContentionDetails[];
+  blockingContentionDetails: ContentionDetails[];
   execType: InsightExecEnum;
   insightName: string;
 };
@@ -80,17 +84,8 @@ export type TxnInsightDetails = {
   // This data is segmented into 3 parts so that we can
   // selective fetch missing info on the details page.
   txnDetails?: TxnInsightEvent;
-  blockingContentionDetails?: BlockedContentionDetails[];
+  blockingContentionDetails?: ContentionDetails[];
   statements?: StmtInsightEvent[];
-};
-
-export type BlockedStatementContentionDetails = {
-  blockingTxnID: string;
-  durationInMs: number;
-  schemaName: string;
-  databaseName: string;
-  tableName: string;
-  indexName: string;
 };
 
 // Shown on the stmt insights overview page.
@@ -98,7 +93,7 @@ export type StmtInsightEvent = InsightEventBase & {
   statementExecutionID: string;
   statementFingerprintID: string;
   isFullScan: boolean;
-  contentionEvents?: BlockedStatementContentionDetails[];
+  contentionEvents?: ContentionDetails[];
   indexRecommendations: string[];
   planGist: string;
   databaseName: string;
@@ -114,6 +109,8 @@ export type Insight = {
 export type ContentionEvent = {
   executionID: string;
   fingerprintID: string;
+  waitingStmtID: string;
+  waitingStmtFingerprintID: string;
   queries: string[];
   startTime: Moment;
   contentionTimeMs: number;
@@ -122,6 +119,7 @@ export type ContentionEvent = {
   tableName: string;
   indexName: string;
   execType: InsightExecEnum;
+  stmtInsightEvent: StmtInsightEvent;
 };
 
 export const highContentionInsight = (

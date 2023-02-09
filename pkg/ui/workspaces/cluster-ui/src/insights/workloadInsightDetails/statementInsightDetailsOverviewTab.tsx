@@ -71,7 +71,7 @@ export const StatementInsightDetailsOverviewTab: React.FC<
     columnTitle: "duration",
   });
   let contentionTable: JSX.Element = null;
-  if (insightDetails?.contentionEvents !== null) {
+  if (insightDetails?.contentionEvents != null) {
     contentionTable = (
       <Row gutter={24} className={tableCx("margin-bottom")}>
         <Col className="gutter-row">
@@ -85,6 +85,7 @@ export const StatementInsightDetailsOverviewTab: React.FC<
             data={insightDetails.contentionEvents}
             sortSetting={insightsDetailsContentionSortSetting}
             onChangeSortSetting={setDetailsContentionSortSetting}
+            setTimeScale={setTimeScale}
           />
         </Col>
       </Row>
