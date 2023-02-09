@@ -11,8 +11,10 @@ package workloadccl_test
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -24,8 +26,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/spf13/pflag"
@@ -249,4 +253,40 @@ func TestImportFixtureCSVServer(t *testing.T) {
 	require.NoError(t, err)
 	sqlDB.CheckQueryResults(t,
 		`SELECT count(*) FROM d.fx`, [][]string{{strconv.Itoa(fixtureTestGenRows)}})
+}
+
+func TestImportFixtureNodeCount(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	const (
+		nodes        = 3
+		filesPerNode = 1
+	)
+
+	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	db := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	gen := makeTestWorkload()
+	flag := fmt.Sprintf("--val=%d", timeutil.Now().UnixNano())
+	require.NoError(t, gen.Flags().Parse([]string{flag}))
+
+	sqlDB.Exec(t, "CREATE DATABASE ingest")
+	_, err := workloadccl.ImportFixture(
+		ctx, db, gen, "ingest", filesPerNode, false, /* injectStats */
+		``, /* csvServer */
+	)
+	require.NoError(t, err)
+
+	var desc string
+	sqlDB.QueryRow(t, "SELECT description FROM crdb_internal.jobs WHERE job_type = 'IMPORT'").Scan(&desc)
+
+	expectedFiles := math.Ceil(float64(fixtureTestGenRows) / float64(nodes))
+	actualFiles := strings.Count(desc, "workload://")
+	require.Equal(t, int(expectedFiles), actualFiles)
 }
