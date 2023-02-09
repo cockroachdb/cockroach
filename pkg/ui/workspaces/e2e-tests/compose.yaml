@@ -1,6 +1,6 @@
 services:
   crdb:
-    image: cockroachdb/cockroach-ci:latest
+    image: cockroachdb/cockroach:latest
     command: start-single-node --http-port=8080
     hostname: crdbhost
     networks:

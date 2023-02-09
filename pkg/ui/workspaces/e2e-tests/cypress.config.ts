@@ -24,6 +24,8 @@ export default defineConfig({
     setupNodeEvents(on, config) {
       config.env.username = "cypress";
       config.env.password = "tests";
+      config.experimentalMemoryManagement = true;
+      config.numTestsKeptInMemory = 0;
       return config;
     },
     // Override some settings when running in Docker

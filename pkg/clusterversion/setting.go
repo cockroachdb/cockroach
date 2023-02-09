@@ -289,6 +289,7 @@ func RegisterOnVersionChangeCallback(sv *settings.Values) {
 	preserveDowngradeVersion.SetOnChange(sv, func(ctx context.Context) {
 		var value int64
 		downgrade := preserveDowngradeVersion.Get(sv)
+		sv.NonSystemTenant()
 		if downgrade != "" {
 			value = timeutil.Now().Unix()
 		}

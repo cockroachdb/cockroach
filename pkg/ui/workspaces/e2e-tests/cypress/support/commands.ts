@@ -33,3 +33,19 @@ Cypress.Commands.add("login", () => {
     }
   });
 });
+
+Cypress.Commands.add("loginOld", () => {
+  cy.request({
+    method: "POST",
+    url: "login",
+    body: JSON.stringify({
+      username: Cypress.env("username"),
+      password: Cypress.env("password"),
+    }),
+    failOnStatusCode: true,
+  }).then(({ headers }) => {
+    if (!("set-cookie" in headers)) {
+      throw new Error(`Missing cookies in login response: ${headers}`);
+    }
+  });
+});

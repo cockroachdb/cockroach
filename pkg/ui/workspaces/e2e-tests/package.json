@@ -16,7 +16,7 @@
     "@cockroachlabs/eslint-config": "0.1.11",
     "@testing-library/cypress": "^8.0.2",
     "@types/node": "16",
-    "cypress": "^10.3.0",
+    "cypress": "12.5.0",
     "eslint": "7.29.0",
     "eslint-plugin-prettier": "3.4.0",
     "eslint-plugin-react": "7.24.0",

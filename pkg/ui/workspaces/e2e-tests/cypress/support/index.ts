@@ -31,12 +31,20 @@ declare global {
     interface Chainable {
       /**
        * Sets a session cookie for the demo user on the current
-       * database.
+       * database using the newer "/api/v2/login" endpoint.
        * @example
        * cy.login();
        * cy.visit("#/some/authenticated/route");
        */
       login(): void;
+      /**
+       * Sets a session cookie for the demo user on the current
+       * database using the older "/login" endpoint.
+       * @example
+       * cy.loginOld();
+       * cy.visit("#/some/authenticated/route");
+       */
+      loginOld(): void;
     }
   }
 }
