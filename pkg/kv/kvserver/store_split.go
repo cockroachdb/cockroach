@@ -239,34 +239,29 @@ func prepareRightReplicaForSplit(
 	minValidObservedTS := r.mu.minValidObservedTimestamp
 	r.mu.RUnlock()
 
-	// The right hand side of the split was already created (and its raftMu
-	// acquired) in Replica.acquireSplitLock. It must be present here.
+	// If the RHS replica of the split is not removed, then it has been obtained
+	// (and its raftMu acquired) in Replica.acquireSplitLock.
 	rightRepl := r.store.GetReplicaIfExists(split.RightDesc.RangeID)
-	// If the RHS replica at the point of the split was known to be removed
-	// during the application of the split then we may not find it here. That's
-	// fine, carry on. See also:
+	// If the RHS replica of the split has been removed then we either not find it
+	// here, or find a one with a later replica ID. In this case we also know that
+	// its data has already been removed by splitPreApply, so we skip initializing
+	// this replica. See also:
 	_, _ = r.acquireSplitLock, splitPostApply
-	if rightRepl == nil {
+	if rightRepl == nil || rightRepl.isNewerThanSplit(split) {
 		return nil
+	}
+	// Finish initialization of the RHS replica.
+
+	state, err := kvstorage.LoadReplicaState(
+		ctx, r.Engine(), r.StoreID(), &split.RightDesc, rightRepl.replicaID)
+	if err != nil {
+		log.Fatalf(ctx, "%v", err)
 	}
 
 	// Already holding raftMu, see above.
 	rightRepl.mu.Lock()
 	defer rightRepl.mu.Unlock()
-
-	// If we know that the RHS has already been removed at this replica ID
-	// then we also know that its data has already been removed by the preApply
-	// so we skip initializing it as the RHS of the split.
-	if rightRepl.isNewerThanSplit(split) {
-		return nil
-	}
-
-	// Finish initialization of the RHS.
-	if state, err := kvstorage.LoadReplicaState(
-		ctx, r.Engine(), r.StoreID(), &split.RightDesc, rightRepl.replicaID,
-	); err != nil {
-		log.Fatalf(ctx, "%v", err)
-	} else if err := rightRepl.initRaftMuLockedReplicaMuLocked(state); err != nil {
+	if err := rightRepl.initRaftMuLockedReplicaMuLocked(state); err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}
 
@@ -355,16 +350,20 @@ func (s *Store) SplitRange(
 		// assumption that distribution across all tracked load stats is
 		// identical.
 		leftRepl.loadStats.Split(rightRepl.loadStats)
-		if err := s.addToReplicasByKeyLocked(rightRepl); err != nil {
+		rightRepl.mu.RLock()
+		if err := s.addToReplicasByKeyLockedReplicaRLocked(rightRepl); err != nil {
+			rightRepl.mu.RUnlock()
 			return errors.Wrapf(err, "unable to add replica %v", rightRepl)
 		}
+		rightRepl.mu.RUnlock()
 
 		// Update the replica's cached byte thresholds. This is a no-op if the system
 		// config is not available, in which case we rely on the next gossip update
 		// to perform the update.
-		if err := rightRepl.updateRangeInfo(ctx, rightRepl.Desc()); err != nil {
+		if err := rightRepl.updateRangeInfo(ctx, rightDesc); err != nil {
 			return err
 		}
+
 		// Add the range to metrics and maybe gossip on capacity change.
 		s.metrics.ReplicaCount.Inc(1)
 		s.storeGossip.MaybeGossipOnCapacityChange(ctx, RangeAddEvent)

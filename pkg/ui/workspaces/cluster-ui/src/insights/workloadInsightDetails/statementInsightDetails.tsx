@@ -144,7 +144,7 @@ export const StatementInsightDetails: React.FC<
         iconPosition="left"
         className={commonStyles("small-margin")}
       >
-        Insights
+        Previous page
       </Button>
       <h3 className={commonStyles("base-heading", "no-margin-bottom")}>
         Statement Execution ID: {executionID}

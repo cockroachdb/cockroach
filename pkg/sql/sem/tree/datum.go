@@ -1051,7 +1051,7 @@ func ParseDDecimal(s string) (*DDecimal, error) {
 func (d *DDecimal) SetString(s string) error {
 	// ExactCtx should be able to handle any decimal, but if there is any rounding
 	// or other inexact conversion, it will result in an error.
-	//_, res, err := HighPrecisionCtx.SetString(&d.Decimal, s)
+	// _, res, err := HighPrecisionCtx.SetString(&d.Decimal, s)
 	_, res, err := ExactCtx.SetString(&d.Decimal, s)
 	if res != 0 || err != nil {
 		return MakeParseError(s, types.Decimal, err)

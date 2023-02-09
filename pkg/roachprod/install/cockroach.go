@@ -228,7 +228,7 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 	}
 
 	// Only after a successful cluster initialization should we attempt to schedule backups.
-	if startOpts.ScheduleBackups && !startOpts.SkipInit {
+	if startOpts.ScheduleBackups && !startOpts.SkipInit && config.CockroachDevLicense != "" {
 		return c.createFixedBackupSchedule(ctx, l, startOpts.ScheduleBackupArgs)
 	}
 	return nil

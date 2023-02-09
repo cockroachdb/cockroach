@@ -537,6 +537,7 @@ func (sc StoreCapacity) FractionUsed() float64 {
 func (sc StoreCapacity) Load() load.Load {
 	dims := load.Vector{}
 	dims[load.Queries] = sc.QueriesPerSecond
+	dims[load.CPU] = sc.CPUPerSecond
 	return dims
 
 }

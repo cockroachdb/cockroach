@@ -188,13 +188,14 @@ export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
                   </SummaryCard>
                 </Col>
               </Row>
-              <Row gutter={24} className={tableCx("margin-bottom")}>
+              <Row gutter={24}>
                 <Col span={24}>
                   <InsightsSortedTable
                     columns={insightsColumns}
                     data={insightRecs}
                     sortSetting={insightsSortSetting}
                     onChangeSortSetting={setInsightsSortSetting}
+                    tableWrapperClassName={tableCx("sorted-table")}
                   />
                 </Col>
               </Row>

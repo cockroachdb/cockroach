@@ -395,7 +395,8 @@ type Replica struct {
 		// mergeTxnID contains the ID of the in-progress merge transaction, if a
 		// merge is currently in progress. Otherwise, the ID is empty.
 		mergeTxnID uuid.UUID
-		// The state of the Raft state machine.
+		// The state of the Raft state machine. Updated only when raftMu and mu are
+		// both held.
 		state kvserverpb.ReplicaState
 		// Last index/term written to the raft log (not necessarily durable locally
 		// or committed by the group). Note that lastTermNotDurable may be 0 (and

@@ -216,3 +216,10 @@ func (o *OverrideStorePool) UpdateLocalStoreAfterRelocate(
 	_ allocator.RangeUsageInfo,
 ) {
 }
+
+// SetOnCapacityChange installs a callback to be called when any store
+// capacity changes in the storepool. This currently doesn't consider local
+// updates (UpdateLocalStoreAfterRelocate, UpdateLocalStoreAfterRebalance,
+// UpdateLocalStoresAfterLeaseTransfer) as capacity changes.
+func (o *OverrideStorePool) SetOnCapacityChange(fn CapacityChangeFn) {
+}

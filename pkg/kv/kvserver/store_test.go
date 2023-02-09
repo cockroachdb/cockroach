@@ -665,9 +665,9 @@ func TestReplicasByKey(t *testing.T) {
 		expectedErrorOnAdd string
 	}{
 		// [a,c) is contained in [KeyMin, e)
-		{nil, 2, roachpb.RKey("a"), roachpb.RKey("c"), ".*has overlapping range"},
+		{nil, 2, roachpb.RKey("a"), roachpb.RKey("c"), "overlaps with"},
 		// [c,f) partially overlaps with [KeyMin, e)
-		{nil, 3, roachpb.RKey("c"), roachpb.RKey("f"), ".*has overlapping range"},
+		{nil, 3, roachpb.RKey("c"), roachpb.RKey("f"), "overlaps with"},
 		// [e, f) is disjoint from [KeyMin, e)
 		{nil, 4, roachpb.RKey("e"), roachpb.RKey("f"), ""},
 	}
@@ -875,8 +875,9 @@ func TestMaybeMarkReplicaInitialized(t *testing.T) {
 	}()
 
 	store.mu.uninitReplicas[newRangeID] = r
+	require.NoError(t, store.addToReplicasByRangeIDLocked(r))
 
-	expectedResult = ".*cannot initialize replica.*"
+	expectedResult = "overlaps with"
 	func() {
 		r.mu.Lock()
 		defer r.mu.Unlock()
