@@ -452,6 +452,11 @@ func runStartInternal(
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, DrainSignals...)
 
+	// We try to delete old leftover temporary folders
+	if err := cleanupOldTempDirs(serverCfg.Stores.Specs); err != nil {
+		return err
+	}
+
 	// Check for stores with full disks and exit with an informative exit
 	// code. This needs to happen early during start, before we perform any
 	// writes to the filesystem including log rotation. We need to guarantee
@@ -1240,6 +1245,17 @@ func maybeWarnMemorySizes(ctx context.Context) {
 				humanizeutil.IBytes(maxRecommendedMem))
 		}
 	}
+}
+
+func cleanupOldTempDirs(specs []base.StoreSpec) error {
+	for _, spec := range specs {
+		recordPath := filepath.Join(spec.Path, server.TempDirsRecordFilename)
+		err := fs.CleanupTempDirs(recordPath)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func exitIfDiskFull(fs vfs.FS, specs []base.StoreSpec) error {
