@@ -361,6 +361,13 @@ func (ctx *FmtCtx) SetDataConversionConfig(
 	return old
 }
 
+// SetLocation sets the location on ctx and returns the old one.
+func (ctx *FmtCtx) SetLocation(loc *time.Location) *time.Location {
+	old := ctx.location
+	ctx.location = loc
+	return old
+}
+
 // WithReformatTableNames modifies FmtCtx to to substitute the printing of table
 // names using the provided function, calls fn, then restores the original table
 // formatting.
