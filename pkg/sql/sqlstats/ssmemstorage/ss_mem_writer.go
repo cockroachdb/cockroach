@@ -15,7 +15,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
@@ -180,11 +179,9 @@ func (s *Container) RecordStatement(
 	}
 
 	var contention *time.Duration
-	var contentionEvents []roachpb.ContentionEvent
 	var cpuSQLNanos int64
 	if value.ExecStats != nil {
 		contention = &value.ExecStats.ContentionTime
-		contentionEvents = value.ExecStats.ContentionEvents
 		cpuSQLNanos = value.ExecStats.CPUTime.Nanoseconds()
 	}
 
@@ -204,7 +201,6 @@ func (s *Container) RecordStatement(
 		RowsWritten:          value.RowsWritten,
 		Nodes:                value.Nodes,
 		Contention:           contention,
-		ContentionEvents:     contentionEvents,
 		IndexRecommendations: value.IndexRecommendations,
 		Database:             value.Database,
 		CPUSQLNanos:          cpuSQLNanos,

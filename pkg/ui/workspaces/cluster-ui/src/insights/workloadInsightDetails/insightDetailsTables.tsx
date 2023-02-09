@@ -11,11 +11,7 @@
 import React, { useState } from "react";
 import { ColumnDescriptor, SortedTable, SortSetting } from "src/sortedtable";
 import { DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT, Duration } from "src/util";
-import {
-  BlockedStatementContentionDetails,
-  ContentionEvent,
-  InsightExecEnum,
-} from "../types";
+import { ContentionDetails, ContentionEvent, InsightExecEnum } from "../types";
 import {
   insightsTableTitles,
   QueriesCell,
@@ -50,6 +46,20 @@ export function makeInsightDetailsColumns(
           setTimeScale,
         ),
       sort: (item: ContentionEvent) => item.fingerprintID,
+    },
+    {
+      name: "waitingStmtId",
+      title: insightsTableTitles.waitingID(InsightExecEnum.STATEMENT),
+      cell: (item: ContentionEvent) => String(item.waitingStmtID),
+      sort: (item: ContentionEvent) => item.waitingStmtID,
+    },
+    {
+      name: "waitingStmtFingerprintID",
+      title: insightsTableTitles.waitingFingerprintID(
+        InsightExecEnum.STATEMENT,
+      ),
+      cell: (item: ContentionEvent) => item.waitingStmtFingerprintID,
+      sort: (item: ContentionEvent) => item.waitingStmtFingerprintID,
     },
     {
       name: "query",
@@ -116,59 +126,72 @@ export const WaitTimeDetailsTable: React.FC<
   );
 };
 
-export function makeInsightStatementContentionColumns(): ColumnDescriptor<BlockedStatementContentionDetails>[] {
+export function makeInsightStatementContentionColumns(
+  setTimeScale: (ts: TimeScale) => void,
+): ColumnDescriptor<ContentionDetails>[] {
   const execType = InsightExecEnum.STATEMENT;
   return [
     {
       name: "executionID",
       title: insightsTableTitles.executionID(InsightExecEnum.TRANSACTION),
-      cell: (item: BlockedStatementContentionDetails) => item.blockingTxnID,
-      sort: (item: BlockedStatementContentionDetails) => item.blockingTxnID,
+      cell: (item: ContentionDetails) => item.blockingExecutionID,
+      sort: (item: ContentionDetails) => item.blockingExecutionID,
+    },
+    {
+      name: "fingerprintId",
+      title: insightsTableTitles.fingerprintID(InsightExecEnum.TRANSACTION),
+      cell: (item: ContentionDetails) =>
+        TransactionDetailsLink(
+          item.blockingTxnFingerprintID,
+          item.collectionTimeStamp,
+          setTimeScale,
+        ),
+      sort: (item: ContentionDetails) => item.blockingTxnFingerprintID,
     },
     {
       name: "duration",
       title: insightsTableTitles.contention(execType),
-      cell: (item: BlockedStatementContentionDetails) =>
-        Duration(item.durationInMs * 1e6),
-      sort: (item: BlockedStatementContentionDetails) => item.durationInMs,
-    },
-    {
-      name: "schemaName",
-      title: insightsTableTitles.schemaName(execType),
-      cell: (item: BlockedStatementContentionDetails) => item.schemaName,
-      sort: (item: BlockedStatementContentionDetails) => item.schemaName,
+      cell: (item: ContentionDetails) => Duration(item.contentionTimeMs * 1e6),
+      sort: (item: ContentionDetails) => item.contentionTimeMs,
     },
     {
       name: "databaseName",
       title: insightsTableTitles.databaseName(execType),
-      cell: (item: BlockedStatementContentionDetails) => item.databaseName,
-      sort: (item: BlockedStatementContentionDetails) => item.databaseName,
+      cell: (item: ContentionDetails) => item.databaseName,
+      sort: (item: ContentionDetails) => item.databaseName,
+    },
+    {
+      name: "schemaName",
+      title: insightsTableTitles.schemaName(execType),
+      cell: (item: ContentionDetails) => item.schemaName,
+      sort: (item: ContentionDetails) => item.schemaName,
     },
     {
       name: "tableName",
       title: insightsTableTitles.tableName(execType),
-      cell: (item: BlockedStatementContentionDetails) => item.tableName,
-      sort: (item: BlockedStatementContentionDetails) => item.tableName,
+      cell: (item: ContentionDetails) => item.tableName,
+      sort: (item: ContentionDetails) => item.tableName,
     },
     {
       name: "indexName",
       title: insightsTableTitles.indexName(execType),
-      cell: (item: BlockedStatementContentionDetails) => item.indexName,
-      sort: (item: BlockedStatementContentionDetails) => item.indexName,
+      cell: (item: ContentionDetails) => item.indexName,
+      sort: (item: ContentionDetails) => item.indexName,
     },
   ];
 }
 
 interface InsightContentionTableProps {
-  data: BlockedStatementContentionDetails[];
+  data: ContentionDetails[];
   sortSetting?: SortSetting;
   onChangeSortSetting?: (ss: SortSetting) => void;
+  setTimeScale: (ts: TimeScale) => void;
 }
 
 export const ContentionStatementDetailsTable: React.FC<
   InsightContentionTableProps
 > = props => {
-  const columns = makeInsightStatementContentionColumns();
+  const columns = makeInsightStatementContentionColumns(props.setTimeScale);
   return (
     <SortedTable
       className="statements-table"
