@@ -89,8 +89,10 @@ func MakeTracingAggregatorWithSpan(
 	ctx context.Context, aggregatorName string, tracer *tracing.Tracer,
 ) (context.Context, *TracingAggregator) {
 	agg := &TracingAggregator{}
+
+	sp := tracing.SpanFromContext(ctx)
 	aggCtx, aggSpan := tracing.EnsureChildSpan(ctx, tracer, aggregatorName,
-		tracing.WithEventListeners(agg))
+		tracing.WithEventListeners(agg), tracing.WithRecording(sp.RecordingType()))
 
 	agg.mu.Lock()
 	defer agg.mu.Unlock()

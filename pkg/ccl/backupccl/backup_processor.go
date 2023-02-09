@@ -249,6 +249,12 @@ type exportedSpan struct {
 	atKeyBoundary  bool
 }
 
+func fetchExportRequestTrace(ctx context.Context) string {
+	sp := tracing.SpanFromContext(ctx)
+	rec := sp.GetConfiguredRecording()
+	return rec.String()
+}
+
 func runBackupProcessor(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
@@ -440,7 +446,12 @@ func runBackupProcessor(
 							}
 							return nil
 						})
+
+					// Fetch the trace for the ExportRequest even if it failed with an
+					// error.
+					exportReqTrace := fetchExportRequestTrace(ctx)
 					if exportRequestErr != nil {
+						log.Infof(ctx, "ExportRequest for span %s trace:\n%s", span.span.String(), exportReqTrace)
 						if intentErr, ok := pErr.GetDetail().(*roachpb.WriteIntentError); ok {
 							span.lastTried = timeutil.Now()
 							span.attempts++
@@ -471,6 +482,7 @@ func runBackupProcessor(
 						return errors.Wrapf(exportRequestErr, "exporting %s", span.span)
 					}
 
+					log.VEventf(ctx, 2, "ExportRequest for span %s trace:\n%s", span.span.String(), exportReqTrace)
 					resp := rawResp.(*roachpb.ExportResponse)
 
 					// If the reply has a resume span, we process it immediately.
