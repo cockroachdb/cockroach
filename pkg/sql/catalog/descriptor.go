@@ -13,6 +13,7 @@ package catalog
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
@@ -90,7 +91,7 @@ type DescriptorBuilder interface {
 	// built from a deserialized protobuf obtained by restoring a backup.
 	// This is to compensate for the fact that these are not subject to cluster
 	// upgrade migrations
-	RunRestoreChanges(descLookupFn func(id descpb.ID) Descriptor) error
+	RunRestoreChanges(version clusterversion.ClusterVersion, descLookupFn func(id descpb.ID) Descriptor) error
 
 	// SetRawBytesInStorage sets `rawBytesInStorage` field by deep-copying `rawBytes`.
 	SetRawBytesInStorage(rawBytes []byte)

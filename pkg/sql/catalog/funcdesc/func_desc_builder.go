@@ -11,8 +11,10 @@
 package funcdesc
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -94,8 +96,8 @@ func (fdb *functionDescriptorBuilder) RunPostDeserializationChanges() (err error
 	if err != nil {
 		return err
 	}
+	fdb.maybeModified = protoutil.Clone(fdb.original).(*descpb.FunctionDescriptor)
 	if mustSetModTime {
-		fdb.maybeModified = protoutil.Clone(fdb.original).(*descpb.FunctionDescriptor)
 		fdb.maybeModified.ModificationTime = fdb.mvccTimestamp
 		fdb.changes.Add(catalog.SetModTimeToMVCCTimestamp)
 	}
@@ -104,8 +106,12 @@ func (fdb *functionDescriptorBuilder) RunPostDeserializationChanges() (err error
 
 // RunRestoreChanges implements the catalog.DescriptorBuilder interface.
 func (fdb *functionDescriptorBuilder) RunRestoreChanges(
-	descLookupFn func(id descpb.ID) catalog.Descriptor,
+	version clusterversion.ClusterVersion, descLookupFn func(id descpb.ID) catalog.Descriptor,
 ) error {
+	// Upgrade the declarative schema changer state.
+	if scpb.MigrateDescriptorState(version, fdb.maybeModified.DeclarativeSchemaChangerState) {
+		fdb.changes.Add(catalog.UpgradedDeclarativeSchemaChangerState)
+	}
 	return nil
 }
 
