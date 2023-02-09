@@ -30,7 +30,7 @@ import (
 var sqlAlchemyResultRegex = regexp.MustCompile(`^(?P<test>test.*::.*::[^ \[\]]*(?:\[.*])?) (?P<result>\w+)\s+\[.+]$`)
 var sqlAlchemyReleaseTagRegex = regexp.MustCompile(`^rel_(?P<major>\d+)_(?P<minor>\d+)_(?P<point>\d+)$`)
 
-var supportedSQLAlchemyTag = "1.4.46"
+var supportedSQLAlchemyTag = "2.0.2"
 
 // This test runs the SQLAlchemy dialect test suite against a single Cockroach
 // node.
@@ -96,7 +96,7 @@ func runSQLAlchemy(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	if err := repeatRunE(ctx, t, c, node, "install pytest", fmt.Sprintf(`
 		source venv/bin/activate &&
-			pip3 install --upgrade --force-reinstall setuptools pytest==6.0.1 pytest-xdist psycopg2 alembic sqlalchemy==%s`,
+			pip3 install --upgrade --force-reinstall setuptools pytest==7.2.1 pytest-xdist psycopg2 alembic sqlalchemy==%s`,
 		supportedSQLAlchemyTag)); err != nil {
 		t.Fatal(err)
 	}
