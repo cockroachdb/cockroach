@@ -8,7 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { SqlExecutionResponse, sqlResultsAreEmpty } from "./sqlApi";
+import {
+  SqlExecutionResponse,
+  sqlResultsAreEmpty,
+  isUpgradeError,
+} from "./sqlApi";
 
 describe("sqlApi", () => {
   test("sqlResultsAreEmpty should return true when there are no rows in the response", () => {
@@ -81,6 +85,26 @@ describe("sqlApi", () => {
 
     testCases.forEach(tc => {
       expect(sqlResultsAreEmpty(tc.response)).toEqual(tc.expected);
+    });
+  });
+
+  test("isUpgradeError", () => {
+    const tests = [
+      {
+        msg: 'relation "crdb_internal.txn_execution_insights" does not exist',
+        expected: true,
+      },
+      {
+        msg: 'column "hello" does not exist',
+        expected: true,
+      },
+      {
+        msg: "not an upgrade error",
+        expected: false,
+      },
+    ];
+    tests.forEach(tc => {
+      expect(isUpgradeError(tc.msg)).toEqual(tc.expected);
     });
   });
 });

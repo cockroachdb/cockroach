@@ -129,8 +129,8 @@ const UPGRADE_RELATED_ERRORS = [
   /column "(.*)" does not exist/i,
 ];
 
-function isUpgradeError(message: string): boolean {
-  return UPGRADE_RELATED_ERRORS.some(err => message.search(err));
+export function isUpgradeError(message: string): boolean {
+  return UPGRADE_RELATED_ERRORS.some(err => message.search(err) !== -1);
 }
 
 /**
