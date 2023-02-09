@@ -603,6 +603,12 @@ var charts = []sectionDescription{
 				},
 			},
 			{
+				Title: "Rangefeed Registrations",
+				Metrics: []string{
+					"kv.rangefeed.registrations",
+				},
+			},
+			{
 				Title: "Rangefeed Memory Allocations",
 				Metrics: []string{
 					"kv.rangefeed.budget_allocation_failed",
