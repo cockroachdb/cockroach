@@ -647,7 +647,7 @@ export async function getTxnInsightDetailsApi(
     if (!req.excludeContention && highContention) {
       const contentionInfo = await getTxnInsightsContentionDetailsApi(req);
       txnInsightDetails.blockingContentionDetails =
-        contentionInfo.blockingContentionDetails;
+        contentionInfo?.blockingContentionDetails;
     }
   } catch (e) {
     errors.contentionErr = e;
