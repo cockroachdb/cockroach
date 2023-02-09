@@ -28,6 +28,7 @@ go_library(
         "//pkg/sql/sqlerrors",
         "//pkg/sql/types",
         "//pkg/util",
+        "//pkg/util/bufalloc",
         "//pkg/util/cancelchecker",
         "//pkg/util/encoding",
         "//pkg/util/hlc",

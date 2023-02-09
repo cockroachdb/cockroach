@@ -36,11 +36,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// compareRows compares l and r according to a column ordering. Returns -1 if
+// compareEncRows compares l and r according to a column ordering. Returns -1 if
 // l < r, 0 if l == r, and 1 if l > r. If an error is returned the int returned
 // is invalid. Note that the comparison is only performed on the ordering
 // columns.
-func compareRows(
+func compareEncRows(
 	lTypes []*types.T,
 	l, r rowenc.EncDatumRow,
 	e *eval.Context,
@@ -49,7 +49,38 @@ func compareRows(
 ) (int, error) {
 	for _, orderInfo := range ordering {
 		col := orderInfo.ColIdx
-		cmp, err := l[col].Compare(lTypes[col], d, e, &r[orderInfo.ColIdx])
+		cmp, err := l[col].Compare(lTypes[col], d, e, &r[col])
+		if err != nil {
+			return 0, err
+		}
+		if cmp != 0 {
+			if orderInfo.Direction == encoding.Descending {
+				cmp = -cmp
+			}
+			return cmp, nil
+		}
+	}
+	return 0, nil
+}
+
+// compareRowToEncRow compares l and r according to a column ordering. Returns
+// -1 if l < r, 0 if l == r, and 1 if l > r. If an error is returned the int
+// returned is invalid. Note that the comparison is only performed on the
+// ordering columns.
+func compareRowToEncRow(
+	lTypes []*types.T,
+	l tree.Datums,
+	r rowenc.EncDatumRow,
+	e *eval.Context,
+	d *tree.DatumAlloc,
+	ordering colinfo.ColumnOrdering,
+) (int, error) {
+	for _, orderInfo := range ordering {
+		col := orderInfo.ColIdx
+		if err := r[col].EnsureDecoded(lTypes[col], d); err != nil {
+			return 0, err
+		}
+		cmp, err := l[col].CompareError(e, r[col].Datum)
 		if err != nil {
 			return 0, err
 		}
@@ -144,17 +175,17 @@ func TestDiskRowContainer(t *testing.T) {
 					} else if !ok {
 						t.Fatal("unexpectedly invalid")
 					}
-					readRow := make(rowenc.EncDatumRow, len(row))
+					readEncRow := make(rowenc.EncDatumRow, len(row))
 
-					temp, err := i.Row()
+					temp, err := i.EncRow()
 					if err != nil {
 						t.Fatal(err)
 					}
-					copy(readRow, temp)
+					copy(readEncRow, temp)
 
 					// Ensure the datum fields are set and no errors occur when
 					// decoding.
-					for i, encDatum := range readRow {
+					for i, encDatum := range readEncRow {
 						if err := encDatum.EnsureDecoded(typs[i], d.datumAlloc); err != nil {
 							t.Fatal(err)
 						}
@@ -162,10 +193,23 @@ func TestDiskRowContainer(t *testing.T) {
 
 					// Check equality of the row we wrote and the row we read.
 					for i := range row {
-						if cmp, err := readRow[i].Compare(typs[i], d.datumAlloc, &evalCtx, &row[i]); err != nil {
+						if cmp, err := readEncRow[i].Compare(typs[i], d.datumAlloc, &evalCtx, &row[i]); err != nil {
 							t.Fatal(err)
 						} else if cmp != 0 {
-							t.Fatalf("encoded %s but decoded %s", row.String(typs), readRow.String(typs))
+							t.Fatalf("encoded %s but decoded %s", row.String(typs), readEncRow.String(typs))
+						}
+					}
+
+					// Now check the tree.Datums row.
+					readRow, err := i.Row()
+					if err != nil {
+						t.Fatal(err)
+					}
+					for i := range row {
+						if cmp, err := readRow[i].CompareError(&evalCtx, row[i].Datum); err != nil {
+							t.Fatal(err)
+						} else if cmp != 0 {
+							t.Fatalf("read %s but expected %s", readRow.String(), row.String(typs))
 						}
 					}
 				}()
@@ -210,7 +254,7 @@ func TestDiskRowContainer(t *testing.T) {
 					} else if !ok {
 						break
 					}
-					row, err := i.Row()
+					row, err := i.EncRow()
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -224,15 +268,17 @@ func TestDiskRowContainer(t *testing.T) {
 					}
 
 					// Check sorted order.
-					if cmp, err := compareRows(
-						types, sortedRows.EncRow(numKeysRead), row, &evalCtx, d.datumAlloc, ordering,
+					sortedRows.getEncRow(sortedRows.scratchEncRow, numKeysRead)
+					if cmp, err := compareEncRows(
+						types, sortedRows.scratchEncRow, row, &evalCtx, d.datumAlloc, ordering,
 					); err != nil {
 						t.Fatal(err)
 					} else if cmp != 0 {
+						sortedRows.getEncRow(sortedRows.scratchEncRow, numKeysRead)
 						t.Fatalf(
 							"expected %s to be equal to %s",
 							row.String(types),
-							sortedRows.EncRow(numKeysRead).String(types),
+							sortedRows.scratchEncRow.String(types),
 						)
 					}
 					numKeysRead++
@@ -315,7 +361,7 @@ func TestDiskRowContainer(t *testing.T) {
 			valid, err := iter.Valid()
 			require.True(t, valid)
 			require.NoError(t, err)
-			row, err := iter.Row()
+			row, err := iter.EncRow()
 			require.NoError(t, err)
 			require.Equal(t, rows[index].String(types), row.String(types))
 		}
@@ -467,7 +513,7 @@ func TestDiskRowContainerFinalIterator(t *testing.T) {
 			} else if !ok {
 				t.Fatalf("unexpectedly reached the end after %d rows read", rowsRead)
 			}
-			row, err := i.Row()
+			row, err := i.EncRow()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -488,7 +534,7 @@ func TestDiskRowContainerFinalIterator(t *testing.T) {
 			} else if !ok {
 				break
 			}
-			row, err := i.Row()
+			row, err := i.EncRow()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -519,7 +565,7 @@ func TestDiskRowContainerFinalIterator(t *testing.T) {
 		} else if !ok {
 			break
 		}
-		row, err := i.Row()
+		row, err := i.EncRow()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -590,7 +636,7 @@ func TestDiskRowContainerUnsafeReset(t *testing.T) {
 			if ok, err := i.Valid(); err != nil || !ok {
 				t.Fatalf("unexpected i.Valid() return values: ok=%t, err=%s", ok, err)
 			}
-			row, err := i.Row()
+			row, err := i.EncRow()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -617,7 +663,7 @@ func TestDiskRowContainerUnsafeReset(t *testing.T) {
 		} else if !ok {
 			break
 		}
-		_, err := i.Row()
+		_, err := i.EncRow()
 		if err != nil {
 			t.Fatal(err)
 		}

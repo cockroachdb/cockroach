@@ -81,7 +81,7 @@ type scanBufferNode struct {
 }
 
 func (n *scanBufferNode) startExec(params runParams) error {
-	n.iterator = newRowContainerIterator(params.ctx, n.buffer.rows, n.buffer.typs)
+	n.iterator = newRowContainerIterator(params.ctx, n.buffer.rows)
 	return nil
 }
 
