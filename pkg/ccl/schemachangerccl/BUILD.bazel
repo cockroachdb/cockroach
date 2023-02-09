@@ -8,6 +8,7 @@ go_test(
     srcs = [
         "main_test.go",
         "schemachanger_ccl_test.go",
+        ":test_gen_backup_mixed_non_ccl",  # keep
         ":test_gen_backup_non_ccl",  # keep
         ":test_gen_ccl",  # keep
     ],
@@ -22,6 +23,7 @@ go_test(
         "//pkg/base",
         "//pkg/ccl",
         "//pkg/ccl/multiregionccl/multiregionccltestutils",
+        "//pkg/clusterversion",
         "//pkg/jobs",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
@@ -56,6 +58,23 @@ sctest_gen(
         "//pkg/sql/schemachanger:end_to_end_testdata",
     ],
     tests = ["Backup"],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
+)
+
+sctest_gen(
+    name = "test_gen_backup_mixed_non_ccl",
+    out = "backup_base_mixed_generated_test.go",
+    ccl = True,
+    new_cluster_func = "newClusterMixed",
+    package = "schemachangerccl",
+    suffix = "_base",
+    test_data = [
+        "//pkg/sql/schemachanger:end_to_end_testdata",
+    ],
+    tests = ["BackupMixedVersionElements"],
     visibility = [
         ":__pkg__",
         "//pkg/gen:__pkg__",

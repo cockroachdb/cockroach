@@ -1521,3 +1521,337 @@ WHERE
 	}
 	cumulativeTest(t, path, testFunc)
 }
+
+func BackupMixedVersionElements(t *testing.T, path string, newCluster NewMixedClusterFunc) {
+	testVersion := clusterversion.ClusterVersion{
+		Version: clusterversion.ByKey(clusterversion.V23_1_SchemaChangerDeprecatedIndexPredicates - 1),
+	}
+	var after [][]string // CREATE_STATEMENT for all descriptors after finishing `stmts` in each test case.
+	var dbName string
+	r, _ := randutil.NewTestRand()
+	const runRate = .5
+
+	maybeRandomlySkip := func(t *testing.T) {
+		if !*runAllBackups && r.Float64() >= runRate {
+			skip.IgnoreLint(t, "skipping due to randomness")
+		}
+	}
+	downlevelClusterFunc := func(t *testing.T, knobs *scexec.TestingKnobs,
+	) (_ serverutils.TestServerInterface, _ *gosql.DB, cleanup func()) {
+		return newCluster(t, knobs, true)
+	}
+	// A function that executes `setup` first and then count the number of
+	// postCommit and postCommitNonRevertible stages for executing `stmts`.
+	// It also initializes `after` and `dbName` here.
+	countStages := func(
+		t *testing.T, setup, stmts []parser.Statement,
+	) (postCommit, nonRevertible int) {
+		var pl scplan.Plan
+		processPlanInPhase(t, downlevelClusterFunc, setup, stmts, scop.PostCommitPhase,
+			func(p scplan.Plan) {
+				pl = p
+				postCommit = len(p.StagesForCurrentPhase())
+				nonRevertible = len(p.Stages) - postCommit
+			}, func(db *gosql.DB) {
+				tdb := sqlutils.MakeSQLRunner(db)
+				var ok bool
+				dbName, ok = maybeGetDatabaseForIDs(t, tdb, screl.AllTargetDescIDs(pl.TargetState))
+				if ok {
+					tdb.Exec(t, fmt.Sprintf("USE %q", dbName))
+				}
+				after = tdb.QueryStr(t, fetchDescriptorStateQuery)
+			})
+		return postCommit, nonRevertible
+	}
+
+	// A function that takes backup at `ord`-th stage while executing `stmts` after
+	// finishing `setup`. It also takes `ord` backups at each of the preceding stage
+	// if it's a revertible stage.
+	// It then restores the backup(s) in various "flavors" (see
+	// comment below for details) and expect the restore to finish the schema change job
+	// as if the backup/restore had never happened.
+	testBackupRestoreCase := func(
+		t *testing.T, setup, stmts []parser.Statement, ord int,
+	) {
+		type stage struct {
+			p        scplan.Plan
+			stageIdx int
+			resume   chan error
+		}
+
+		stageChan := make(chan stage)
+		ctx, cancel := context.WithCancel(context.Background())
+		_, db, cleanup := newCluster(t, &scexec.TestingKnobs{
+			BeforeStage: func(p scplan.Plan, stageIdx int) error {
+				if p.Stages[len(p.Stages)-1].Phase < scop.PostCommitPhase {
+					if stageChan != nil {
+						close(stageChan)
+					}
+					return nil
+				}
+				if p.Stages[stageIdx].Phase < scop.PostCommitPhase {
+					return nil
+				}
+				if stageChan != nil {
+					s := stage{p: p, stageIdx: stageIdx, resume: make(chan error)}
+					select {
+					case stageChan <- s:
+					case <-ctx.Done():
+						return ctx.Err()
+					}
+					select {
+					case err := <-s.resume:
+						return err
+					case <-ctx.Done():
+						return ctx.Err()
+					}
+				}
+				return nil
+			},
+		}, true)
+
+		// Start with full database backup/restore.
+		defer cleanup()
+		defer cancel()
+
+		conn, err := db.Conn(ctx)
+		require.NoError(t, err)
+		tdb := sqlutils.MakeSQLRunner(conn)
+		// TODO(postamar): remove this threshold bump
+		//   This requires the test cases to be properly parallelized.
+		tdb.SucceedsSoonDuration = testutils.RaceSucceedsSoonDuration
+		tdb.Exec(t, "create database backups")
+		var g errgroup.Group
+		var before [][]string
+		beforeFunc := func() {
+			tdb.Exec(t, fmt.Sprintf("USE %q", dbName))
+			before = tdb.QueryStr(t, fetchDescriptorStateQuery)
+		}
+		g.Go(func() error {
+			return executeSchemaChangeTxn(
+				context.Background(), t, setup, stmts, db, beforeFunc, nil, nil,
+			)
+		})
+		type backup struct {
+			name       string
+			isRollback bool
+			url        string
+			s          stage
+		}
+		var backups []backup
+		var done bool
+		var rollbackStage int
+		type stageKey struct {
+			stage    int
+			rollback bool
+		}
+		completedStages := make(map[stageKey]struct{})
+		for i := 0; !done; i++ {
+			// We want to let the stages up to ord continue unscathed. Then, we'll
+			// start taking backups at ord. If ord corresponds to a revertible
+			// stage, we'll inject an error, forcing the schema change to revert.
+			// At each subsequent stage, we also take a backup. At the very end,
+			// we'll have one backup where things should succeed and N backups
+			// where we're reverting. In each case, we want to have the end state
+			// of the restored set of descriptors match what we have in the original
+			// cluster.
+			//
+			// Lastly, we'll hit an ord corresponding to the first non-revertible
+			// stage. At this point, we'll take a backup for each non-revertible
+			// stage and confirm that restoring them and letting the jobs run
+			// leaves the database in the right state.
+			s := <-stageChan
+			// If there is no post-commit stages. Just consider it as done.
+			if s.p.Stages == nil {
+				done = true
+				stageChan = nil
+				break
+			}
+			// Move the index backwards if we see the same stage repeat due to a txn
+			// retry error for example.
+			stage := stageKey{
+				stage:    s.stageIdx,
+				rollback: s.p.InRollback,
+			}
+			if _, ok := completedStages[stage]; ok {
+				i--
+				if stage.rollback {
+					rollbackStage--
+				}
+			}
+			completedStages[stage] = struct{}{}
+			shouldFail := ord == i &&
+				s.p.Stages[s.stageIdx].Phase != scop.PostCommitNonRevertiblePhase &&
+				!s.p.InRollback
+			done = len(s.p.Stages) == s.stageIdx+1 && !shouldFail
+			t.Logf("stage %d/%d in %v (rollback=%v) %d %q %v",
+				s.stageIdx+1, len(s.p.Stages), s.p.Stages[s.stageIdx].Phase, s.p.InRollback, ord, dbName, done)
+
+			// If the database has been dropped, there is nothing for
+			// us to do here.
+			var exists bool
+			tdb.QueryRow(t,
+				`SELECT count(*) > 0 FROM system.namespace WHERE "parentID" = 0 AND name = $1`,
+				dbName).Scan(&exists)
+			if !exists || (i < ord && !done) {
+				close(s.resume)
+				continue
+			}
+
+			// This test assumes that all the descriptors being modified in the
+			// transaction are in the same database.
+			//
+			// TODO(ajwerner): Deal with trying to restore just some of the tables.
+			backupURL := fmt.Sprintf("userfile://backups.public.userfiles_$user/data%d", i)
+			tdb.Exec(t, fmt.Sprintf(
+				"BACKUP DATABASE %s INTO '%s'", dbName, backupURL))
+			backups = append(backups, backup{
+				name:       dbName,
+				isRollback: rollbackStage > 0,
+				url:        backupURL,
+				s:          s,
+			})
+
+			if s.p.InRollback {
+				rollbackStage++
+			}
+			if done {
+				t.Logf("reached final stage, waiting for completion")
+				stageChan = nil // allow the restored jobs to proceed
+			}
+			if shouldFail {
+				s.resume <- errors.Newf("boom %d", i)
+			} else {
+				close(s.resume)
+			}
+		}
+		if err := g.Wait(); rollbackStage > 0 {
+			require.Regexp(t, fmt.Sprintf("boom %d", ord), err)
+		} else {
+			require.NoError(t, err)
+		}
+
+		t.Logf("finished")
+
+		_, err = db.Exec("SET CLUSTER SETTING VERSION=$1", clusterversion.TestingBinaryVersion.String())
+		require.NoError(t, err)
+
+		for i, b := range backups {
+			// For each backup, we restore it in three flavors.
+			// 1. RESTORE DATABASE
+			// 2. RESTORE DATABASE WITH schema_only
+			// 3. RESTORE TABLE tbl1, tbl2, ..., tblN
+			// We then assert that the restored database should correctly finish
+			// the ongoing schema change job when the backup was taken, and
+			// reaches the expected state as if the back/restore had not happened at all.
+			// Skip a backup randomly.
+			type backupConsumptionFlavor struct {
+				name         string
+				restoreSetup []string
+				restoreQuery string
+			}
+			flavors := []backupConsumptionFlavor{
+				{
+					name: "restore database",
+					restoreSetup: []string{
+						fmt.Sprintf("DROP DATABASE IF EXISTS %q CASCADE", dbName),
+						"SET use_declarative_schema_changer = 'off'",
+					},
+					restoreQuery: fmt.Sprintf("RESTORE DATABASE %s FROM LATEST IN '%s'", dbName, b.url),
+				},
+				{
+					name: "restore database with schema-only",
+					restoreSetup: []string{
+						fmt.Sprintf("DROP DATABASE IF EXISTS %q CASCADE", dbName),
+						"SET use_declarative_schema_changer = 'off'",
+					},
+					restoreQuery: fmt.Sprintf("RESTORE DATABASE %s FROM LATEST IN '%s' with schema_only", dbName, b.url),
+				},
+			}
+
+			// For the third flavor, we restore all tables in the backup.
+			// Skip it if there is no tables.
+			rows := tdb.QueryStr(t, `
+			SELECT parent_schema_name, object_name
+			FROM [SHOW BACKUP FROM LATEST IN $1]
+			WHERE database_name = $2 AND object_type = 'table'`, b.url, dbName)
+			var tablesToRestore []string
+			for _, row := range rows {
+				tablesToRestore = append(tablesToRestore, fmt.Sprintf("%s.%s.%s", dbName, row[0], row[1]))
+			}
+
+			if len(tablesToRestore) > 0 {
+				flavors = append(flavors, backupConsumptionFlavor{
+					name: "restore all tables in database",
+					restoreSetup: []string{
+						fmt.Sprintf("DROP DATABASE IF EXISTS %q CASCADE", dbName),
+						fmt.Sprintf("CREATE DATABASE %q", dbName),
+						"SET use_declarative_schema_changer = 'off'",
+					},
+					restoreQuery: fmt.Sprintf("RESTORE TABLE %s FROM LATEST IN '%s' WITH skip_missing_sequences",
+						strings.Join(tablesToRestore, ","), b.url),
+				})
+			}
+
+			// TODO (xiang): Add here the fourth flavor that restores
+			// only a subset, maybe randomly chosen, of all tables with
+			// `RESTORE TABLE`. Currently, it's blocked by issue #87518.
+			// We will need to change what the expected output will be
+			// in this case, since it will no longer be simply `before`
+			// and `after`.
+
+			for _, flavor := range flavors {
+				t.Run(flavor.name, func(t *testing.T) {
+					maybeRandomlySkip(t)
+					t.Logf("testing backup %d (rollback=%v)", i, b.isRollback)
+					tdb.ExecMultiple(t, flavor.restoreSetup...)
+					tdb.Exec(t, flavor.restoreQuery)
+					tdb.Exec(t, fmt.Sprintf("USE %q", dbName))
+					waitForSchemaChangesToFinish(t, tdb)
+					afterRestore := tdb.QueryStr(t, fetchDescriptorStateQuery)
+					if b.isRollback {
+						require.Equal(t, before, afterRestore)
+					} else {
+						require.Equal(t, after, afterRestore)
+					}
+					// Hack to deal with corrupt userfiles tables due to #76764.
+					const validateQuery = `
+SELECT * FROM crdb_internal.invalid_objects WHERE database_name != 'backups'
+`
+					tdb.CheckQueryResults(t, validateQuery, [][]string{})
+					tdb.Exec(t, fmt.Sprintf("DROP DATABASE %q CASCADE", dbName))
+					tdb.Exec(t, "USE backups")
+					tdb.CheckQueryResults(t, validateQuery, [][]string{})
+				})
+			}
+		}
+	}
+
+	testFunc := func(t *testing.T, _ string, _ bool, setup, stmts []parser.Statement, _ *stageExecStmtMap) {
+		for _, stmt := range stmts {
+			supported := scbuild.CheckIfSupported(testVersion, stmt.AST)
+			if !supported {
+				skip.IgnoreLint(t, "statement not supported in current release")
+			}
+		}
+		postCommit, nonRevertible := countStages(t, setup, stmts)
+		n := postCommit + nonRevertible
+		t.Logf(
+			"test case has %d revertible post-commit stages and %d non-revertible"+
+				" post-commit stages", postCommit, nonRevertible,
+		)
+		for i := 0; i <= n; i++ {
+			if !t.Run(
+				fmt.Sprintf("backup/restore stage %d of %d", i, n),
+				func(t *testing.T) {
+					maybeRandomlySkip(t)
+					testBackupRestoreCase(t, setup, stmts, i)
+				},
+			) {
+				return
+			}
+		}
+	}
+
+	cumulativeTest(t, path, testFunc)
+}
