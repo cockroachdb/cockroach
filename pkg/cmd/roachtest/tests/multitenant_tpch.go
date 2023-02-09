@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/workload/tpch"
 )
 
@@ -89,6 +90,10 @@ func runMultiTenantTPCH(
 	if err != nil {
 		t.Fatal(err)
 	}
+	testutils.SucceedsSoon(t, func() error {
+		_, err := multiTenantConn.Exec(`ALTER TENANT [$1::INT] GRANT CAPABILITY can_admin_split=true`, tenantID)
+		return err
+	})
 	runTPCH(multiTenantConn, "'"+tenant.secureURL()+"'", 1 /* setupIdx */)
 
 	// Analyze the runtimes of both setups.
