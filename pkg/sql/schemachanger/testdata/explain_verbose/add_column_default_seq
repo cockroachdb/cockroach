@@ -82,25 +82,19 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN l INT NOT NULL DEFAU
 │       │   │         rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: ABSENT->DELETE_ONLY"
 │       │   │
 │       │   ├── • IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}
-│       │   │   │ ABSENT → TRANSIENT_ABSENT
+│       │   │   │ ABSENT → PUBLIC
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
-│       │   │   │     rule: "temp index existence precedes index dependents"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → TRANSIENT_ABSENT operations
-│       │   │         rule: "skip index-column removal ops on index removal"
+│       │   │   └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+│       │   │         rule: "temp index existence precedes index dependents"
 │       │   │
 │       │   └── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
-│       │       │ ABSENT → TRANSIENT_ABSENT
+│       │       │ ABSENT → PUBLIC
 │       │       │
 │       │       ├── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
 │       │       │     rule: "column existence precedes column dependents"
 │       │       │
-│       │       ├── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
-│       │       │     rule: "temp index existence precedes index dependents"
-│       │       │
-│       │       └── • skip PUBLIC → TRANSIENT_ABSENT operations
-│       │             rule: "skip index-column removal ops on index removal"
+│       │       └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+│       │             rule: "temp index existence precedes index dependents"
 │       │
 │       └── • 11 Mutation operations
 │           │
@@ -217,10 +211,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN l INT NOT NULL DEFAU
 │   │   │   │     DELETE_ONLY → ABSENT
 │   │   │   │
 │   │   │   ├── • IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}
-│   │   │   │     TRANSIENT_ABSENT → ABSENT
+│   │   │   │     PUBLIC → ABSENT
 │   │   │   │
 │   │   │   └── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
-│   │   │         TRANSIENT_ABSENT → ABSENT
+│   │   │         PUBLIC → ABSENT
 │   │   │
 │   │   └── • 1 Mutation operation
 │   │       │
@@ -722,25 +716,16 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN l INT NOT NULL DEFAU
     │   │   ├── • IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}
     │   │   │   │ PUBLIC → TRANSIENT_ABSENT
     │   │   │   │
-    │   │   │   └── • skip PUBLIC → TRANSIENT_ABSENT operations
-    │   │   │         rule: "skip index-column removal ops on index removal"
+    │   │   │   └── • Precedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+    │   │   │         rule: "index drop mutation visible before cleaning up index columns"
     │   │   │
     │   │   └── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
     │   │       │ PUBLIC → TRANSIENT_ABSENT
     │   │       │
-    │   │       └── • skip PUBLIC → TRANSIENT_ABSENT operations
-    │   │             rule: "skip index-column removal ops on index removal"
+    │   │       └── • Precedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+    │   │             rule: "index drop mutation visible before cleaning up index columns"
     │   │
-    │   ├── • 3 elements transitioning toward ABSENT
-    │   │   │
-    │   │   ├── • IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 1}
-    │   │   │   │ PUBLIC → ABSENT
-    │   │   │   │
-    │   │   │   ├── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
-    │   │   │   │     rule: "index no longer public before dependents"
-    │   │   │   │
-    │   │   │   └── • skip PUBLIC → ABSENT operations
-    │   │   │         rule: "skip index-column removal ops on index removal"
+    │   ├── • 2 elements transitioning toward ABSENT
     │   │   │
     │   │   ├── • PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
     │   │   │   │ PUBLIC → VALIDATED
@@ -752,9 +737,9 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN l INT NOT NULL DEFAU
     │   │       │ PUBLIC → ABSENT
     │   │       │
     │   │       └── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
-    │   │             rule: "index no longer public before dependents"
+    │   │             rule: "index no longer public before dependents, excluding columns"
     │   │
-    │   └── • 11 Mutation operations
+    │   └── • 13 Mutation operations
     │       │
     │       ├── • MakePublicPrimaryIndexWriteOnly
     │       │     IndexID: 1
@@ -772,6 +757,17 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN l INT NOT NULL DEFAU
     │       │
     │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 3
+    │       │     TableID: 106
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 1
+    │       │     IndexID: 3
+    │       │     TableID: 106
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 2
+    │       │     IndexID: 3
+    │       │     Kind: 2
     │       │     TableID: 106
     │       │
     │       ├── • MakeValidatedColumnNotNullPublic
@@ -798,7 +794,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN l INT NOT NULL DEFAU
     │       └── • UpdateSchemaChangerJob
     │             IsNonCancelable: true
     │             JobID: 1
-    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 3 with 2 MutationType ops pending
+    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 3 with 3 MutationType ops pending
     │
     ├── • Stage 2 of 3 in PostCommitNonRevertiblePhase
     │   │
@@ -816,7 +812,13 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN l INT NOT NULL DEFAU
     │   │       └── • Precedence dependency from TRANSIENT_ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
     │   │             rule: "dependents removed before index"
     │   │
-    │   ├── • 1 element transitioning toward ABSENT
+    │   ├── • 2 elements transitioning toward ABSENT
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 1}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
+    │   │   │         rule: "index drop mutation visible before cleaning up index columns"
     │   │   │
     │   │   └── • PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
     │   │       │ VALIDATED → DELETE_ONLY
@@ -824,13 +826,18 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN l INT NOT NULL DEFAU
     │   │       └── • PreviousStagePrecedence dependency from VALIDATED PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
     │   │             rule: "PrimaryIndex transitions to ABSENT uphold 2-version invariant: VALIDATED->WRITE_ONLY"
     │   │
-    │   └── • 5 Mutation operations
+    │   └── • 6 Mutation operations
     │       │
     │       ├── • MakeIndexAbsent
     │       │     IndexID: 3
     │       │     TableID: 106
     │       │
     │       ├── • MakeWriteOnlyIndexDeleteOnly
+    │       │     IndexID: 1
+    │       │     TableID: 106
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 1
     │       │     IndexID: 1
     │       │     TableID: 106
     │       │

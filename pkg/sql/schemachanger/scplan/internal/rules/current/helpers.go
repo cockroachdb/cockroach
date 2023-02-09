@@ -84,6 +84,14 @@ func isIndex(e scpb.Element) bool {
 	return false
 }
 
+func isIndexColumn(e scpb.Element) bool {
+	switch e.(type) {
+	case *scpb.IndexColumn:
+		return true
+	}
+	return false
+}
+
 func isColumn(e scpb.Element) bool {
 	_, ok := e.(*scpb.Column)
 	return ok
@@ -265,6 +273,14 @@ func isData(e scpb.Element) bool {
 func isDescriptorParentReference(e scpb.Element) bool {
 	switch e.(type) {
 	case *scpb.ObjectParent, *scpb.SchemaParent:
+		return true
+	}
+	return false
+}
+
+func isOwner(e scpb.Element) bool {
+	switch e.(type) {
+	case *scpb.Owner:
 		return true
 	}
 	return false

@@ -133,7 +133,7 @@ func (i *immediateVisitor) RemoveUserPrivileges(
 	ctx context.Context, op scop.RemoveUserPrivileges,
 ) error {
 	desc, err := i.checkOutDescriptor(ctx, op.DescriptorID)
-	if err != nil {
+	if err != nil || desc.Dropped() {
 		return err
 	}
 	user, err := username.MakeSQLUsernameFromUserInput(op.User, username.PurposeValidation)

@@ -6,7 +6,7 @@ CREATE TYPE defaultdb.ctyp AS (a INT, b INT)
 ops
 DROP TYPE defaultdb.typ
 ----
-StatementPhase stage 1 of 1 with 6 MutationType ops
+StatementPhase stage 1 of 1 with 15 MutationType ops
   transitions:
     [[Namespace:{DescID: 104, Name: typ, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 104}, ABSENT], PUBLIC] -> ABSENT
@@ -26,6 +26,9 @@ StatementPhase stage 1 of 1 with 6 MutationType ops
   ops:
     *scop.MarkDescriptorAsDropped
       DescriptorID: 104
+    *scop.NotImplementedForPublicObjects
+      DescID: 104
+      ElementType: scpb.EnumTypeValue
     *scop.RemoveObjectParent
       ObjectID: 104
       ParentSchemaID: 101
@@ -40,12 +43,36 @@ StatementPhase stage 1 of 1 with 6 MutationType ops
         DescriptorID: 104
         Name: typ
         SchemaID: 101
+    *scop.NotImplementedForPublicObjects
+      DescID: 104
+      ElementType: scpb.Owner
+    *scop.RemoveUserPrivileges
+      DescriptorID: 104
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 104
+      User: public
+    *scop.RemoveUserPrivileges
+      DescriptorID: 104
+      User: root
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
         DescriptorID: 105
         Name: _typ
         SchemaID: 101
+    *scop.NotImplementedForPublicObjects
+      DescID: 105
+      ElementType: scpb.Owner
+    *scop.RemoveUserPrivileges
+      DescriptorID: 105
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 105
+      User: public
+    *scop.RemoveUserPrivileges
+      DescriptorID: 105
+      User: root
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
     [[Namespace:{DescID: 104, Name: typ, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
@@ -66,7 +93,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 9 MutationType ops
+PreCommitPhase stage 2 of 2 with 18 MutationType ops
   transitions:
     [[Namespace:{DescID: 104, Name: typ, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 104}, ABSENT], PUBLIC] -> ABSENT
@@ -86,6 +113,9 @@ PreCommitPhase stage 2 of 2 with 9 MutationType ops
   ops:
     *scop.MarkDescriptorAsDropped
       DescriptorID: 104
+    *scop.NotImplementedForPublicObjects
+      DescID: 104
+      ElementType: scpb.EnumTypeValue
     *scop.RemoveObjectParent
       ObjectID: 104
       ParentSchemaID: 101
@@ -100,12 +130,36 @@ PreCommitPhase stage 2 of 2 with 9 MutationType ops
         DescriptorID: 104
         Name: typ
         SchemaID: 101
+    *scop.NotImplementedForPublicObjects
+      DescID: 104
+      ElementType: scpb.Owner
+    *scop.RemoveUserPrivileges
+      DescriptorID: 104
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 104
+      User: public
+    *scop.RemoveUserPrivileges
+      DescriptorID: 104
+      User: root
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
         DescriptorID: 105
         Name: _typ
         SchemaID: 101
+    *scop.NotImplementedForPublicObjects
+      DescID: 105
+      ElementType: scpb.Owner
+    *scop.RemoveUserPrivileges
+      DescriptorID: 105
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 105
+      User: public
+    *scop.RemoveUserPrivileges
+      DescriptorID: 105
+      User: root
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
       Initialize: true
@@ -266,7 +320,7 @@ DROP TYPE defaultdb.typ
 ops
 DROP TYPE defaultdb.ctyp
 ----
-StatementPhase stage 1 of 1 with 8 MutationType ops
+StatementPhase stage 1 of 1 with 16 MutationType ops
   transitions:
     [[Namespace:{DescID: 106, Name: ctyp, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 106}, ABSENT], PUBLIC] -> ABSENT
@@ -288,9 +342,11 @@ StatementPhase stage 1 of 1 with 8 MutationType ops
   ops:
     *scop.MarkDescriptorAsDropped
       DescriptorID: 106
-    *scop.NotImplemented
+    *scop.NotImplementedForPublicObjects
+      DescID: 106
       ElementType: scpb.CompositeTypeAttrName
-    *scop.NotImplemented
+    *scop.NotImplementedForPublicObjects
+      DescID: 106
       ElementType: scpb.CompositeTypeAttrName
     *scop.RemoveObjectParent
       ObjectID: 106
@@ -306,12 +362,36 @@ StatementPhase stage 1 of 1 with 8 MutationType ops
         DescriptorID: 106
         Name: ctyp
         SchemaID: 101
+    *scop.NotImplementedForPublicObjects
+      DescID: 106
+      ElementType: scpb.Owner
+    *scop.RemoveUserPrivileges
+      DescriptorID: 106
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 106
+      User: public
+    *scop.RemoveUserPrivileges
+      DescriptorID: 106
+      User: root
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
         DescriptorID: 107
         Name: _ctyp
         SchemaID: 101
+    *scop.NotImplementedForPublicObjects
+      DescID: 107
+      ElementType: scpb.Owner
+    *scop.RemoveUserPrivileges
+      DescriptorID: 107
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 107
+      User: public
+    *scop.RemoveUserPrivileges
+      DescriptorID: 107
+      User: root
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
     [[Namespace:{DescID: 106, Name: ctyp, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
@@ -334,7 +414,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 11 MutationType ops
+PreCommitPhase stage 2 of 2 with 19 MutationType ops
   transitions:
     [[Namespace:{DescID: 106, Name: ctyp, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 106}, ABSENT], PUBLIC] -> ABSENT
@@ -356,9 +436,11 @@ PreCommitPhase stage 2 of 2 with 11 MutationType ops
   ops:
     *scop.MarkDescriptorAsDropped
       DescriptorID: 106
-    *scop.NotImplemented
+    *scop.NotImplementedForPublicObjects
+      DescID: 106
       ElementType: scpb.CompositeTypeAttrName
-    *scop.NotImplemented
+    *scop.NotImplementedForPublicObjects
+      DescID: 106
       ElementType: scpb.CompositeTypeAttrName
     *scop.RemoveObjectParent
       ObjectID: 106
@@ -374,12 +456,36 @@ PreCommitPhase stage 2 of 2 with 11 MutationType ops
         DescriptorID: 106
         Name: ctyp
         SchemaID: 101
+    *scop.NotImplementedForPublicObjects
+      DescID: 106
+      ElementType: scpb.Owner
+    *scop.RemoveUserPrivileges
+      DescriptorID: 106
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 106
+      User: public
+    *scop.RemoveUserPrivileges
+      DescriptorID: 106
+      User: root
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
         DescriptorID: 107
         Name: _ctyp
         SchemaID: 101
+    *scop.NotImplementedForPublicObjects
+      DescID: 107
+      ElementType: scpb.Owner
+    *scop.RemoveUserPrivileges
+      DescriptorID: 107
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 107
+      User: public
+    *scop.RemoveUserPrivileges
+      DescriptorID: 107
+      User: root
     *scop.SetJobStateOnDescriptor
       DescriptorID: 106
       Initialize: true

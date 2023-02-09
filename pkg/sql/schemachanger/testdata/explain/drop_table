@@ -11,7 +11,7 @@ EXPLAIN (ddl) DROP TABLE db.sc.t;
 Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
- │         ├── 30 elements transitioning toward ABSENT
+ │         ├── 27 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → ABSENT     Namespace:{DescID: 107, Name: t, ReferencedDescID: 104}
  │         │    ├── PUBLIC → ABSENT     Owner:{DescID: 107}
  │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID: 107, Name: admin}
@@ -37,20 +37,34 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 107, ColumnID: 4294967294}
  │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 107, Name: tableoid, ColumnID: 4294967294}
  │         │    ├── PUBLIC → ABSENT     ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967294}
- │         │    ├── PUBLIC → ABSENT     IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 1}
- │         │    ├── PUBLIC → ABSENT     IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 1}
- │         │    ├── PUBLIC → ABSENT     IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 1}
  │         │    ├── PUBLIC → VALIDATED  PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 1}
  │         │    └── PUBLIC → ABSENT     IndexName:{DescID: 107, Name: t_pkey, IndexID: 1}
- │         └── 5 Mutation operations
+ │         └── 22 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":107}
  │              ├── RemoveObjectParent {"ObjectID":107,"ParentSchemaID":106}
  │              ├── RemoveTableComment {"TableID":107}
+ │              ├── NotImplementedForPublicObjects {"DescID":107,"ElementType":"scpb.ColumnFamil..."}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":1,"TableID":107}
+ │              ├── SetColumnName {"ColumnID":1,"Name":"crdb_internal_co...","TableID":107}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":2,"TableID":107}
+ │              ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":107}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":3,"TableID":107}
+ │              ├── SetColumnName {"ColumnID":3,"Name":"crdb_internal_co...","TableID":107}
+ │              ├── MakePublicColumnNotNullValidated {"ColumnID":3,"TableID":107}
  │              ├── RemoveColumnDefaultExpression {"ColumnID":3,"TableID":107}
- │              └── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":107,"Name":"t","SchemaID":106}}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967295,"TableID":107}
+ │              ├── SetColumnName {"ColumnID":4294967295,"Name":"crdb_internal_co...","TableID":107}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967294,"TableID":107}
+ │              ├── SetColumnName {"ColumnID":4294967294,"Name":"crdb_internal_co...","TableID":107}
+ │              ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":107}
+ │              ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":107}
+ │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":107,"Name":"t","SchemaID":106}}
+ │              ├── NotImplementedForPublicObjects {"DescID":107,"ElementType":"scpb.Owner"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":107,"User":"admin"}
+ │              └── RemoveUserPrivileges {"DescriptorID":107,"User":"root"}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
- │    │    ├── 30 elements transitioning toward ABSENT
+ │    │    ├── 27 elements transitioning toward ABSENT
  │    │    │    ├── ABSENT     → PUBLIC Namespace:{DescID: 107, Name: t, ReferencedDescID: 104}
  │    │    │    ├── ABSENT     → PUBLIC Owner:{DescID: 107}
  │    │    │    ├── ABSENT     → PUBLIC UserPrivileges:{DescID: 107, Name: admin}
@@ -76,9 +90,6 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  │    │    │    ├── WRITE_ONLY → PUBLIC Column:{DescID: 107, ColumnID: 4294967294}
  │    │    │    ├── ABSENT     → PUBLIC ColumnName:{DescID: 107, Name: tableoid, ColumnID: 4294967294}
  │    │    │    ├── ABSENT     → PUBLIC ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967294}
- │    │    │    ├── ABSENT     → PUBLIC IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 1}
- │    │    │    ├── ABSENT     → PUBLIC IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 1}
- │    │    │    ├── ABSENT     → PUBLIC IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 1}
  │    │    │    ├── VALIDATED  → PUBLIC PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 1}
  │    │    │    └── ABSENT     → PUBLIC IndexName:{DescID: 107, Name: t_pkey, IndexID: 1}
  │    │    └── 1 Mutation operation
@@ -115,17 +126,44 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 1}
  │         │    ├── PUBLIC → ABSENT  PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 1}
  │         │    └── PUBLIC → ABSENT  IndexName:{DescID: 107, Name: t_pkey, IndexID: 1}
- │         └── 13 Mutation operations
+ │         └── 40 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":107}
  │              ├── RemoveObjectParent {"ObjectID":107,"ParentSchemaID":106}
  │              ├── RemoveTableComment {"TableID":107}
+ │              ├── NotImplementedForPublicObjects {"DescID":107,"ElementType":"scpb.ColumnFamil..."}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":1,"TableID":107}
+ │              ├── SetColumnName {"ColumnID":1,"Name":"crdb_internal_co...","TableID":107}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":2,"TableID":107}
+ │              ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":107}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":3,"TableID":107}
+ │              ├── SetColumnName {"ColumnID":3,"Name":"crdb_internal_co...","TableID":107}
+ │              ├── MakePublicColumnNotNullValidated {"ColumnID":3,"TableID":107}
  │              ├── RemoveColumnDefaultExpression {"ColumnID":3,"TableID":107}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967295,"TableID":107}
+ │              ├── SetColumnName {"ColumnID":4294967295,"Name":"crdb_internal_co...","TableID":107}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967294,"TableID":107}
+ │              ├── SetColumnName {"ColumnID":4294967294,"Name":"crdb_internal_co...","TableID":107}
+ │              ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":107}
+ │              ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":107}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":107,"Name":"t","SchemaID":106}}
+ │              ├── NotImplementedForPublicObjects {"DescID":107,"ElementType":"scpb.Owner"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":107,"User":"admin"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":107,"User":"root"}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":1,"TableID":107}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":2,"TableID":107}
  │              ├── RemoveColumnNotNull {"ColumnID":3,"TableID":107}
- │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":1,"TableID":107}
- │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":107}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967295,"TableID":107}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967294,"TableID":107}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":3,"TableID":107}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967295,"TableID":107}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967294,"TableID":107}
+ │              ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":1,"TableID":107}
+ │              ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":1,"TableID":107}
+ │              ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":1,"Kind":2,"TableID":107}
+ │              ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":1,"Kind":2,"Ordinal":1,"TableID":107}
+ │              ├── MakeIndexAbsent {"IndexID":1,"TableID":107}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":1,"TableID":107}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":107}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":3,"TableID":107}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":107,"Initialize":true}
  │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"PostCommitNonRev..."}

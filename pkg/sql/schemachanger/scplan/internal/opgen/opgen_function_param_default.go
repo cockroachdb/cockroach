@@ -21,8 +21,8 @@ func init() {
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
 				// TODO(chengxiong): add operations when default value is supported.
-				emit(func(this *scpb.FunctionParamDefaultExpression) *scop.NotImplemented {
-					return notImplemented(this)
+				emit(func(this *scpb.FunctionParamDefaultExpression) *scop.NotImplementedForPublicObjects {
+					return notImplementedForPublicObjects(this)
 				}),
 			),
 		),

@@ -11,23 +11,20 @@ Schema change plan for CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹publi
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
  │    │    ├── 4 elements transitioning toward PUBLIC
- │    │    │    ├── PUBLIC           → ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
- │    │    │    ├── PUBLIC           → ABSENT IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}
- │    │    │    ├── PUBLIC           → ABSENT IndexData:{DescID: 104, IndexID: 3}
- │    │    │    └── BACKFILL_ONLY    → ABSENT PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
+ │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
+ │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}
+ │    │    │    ├── PUBLIC        → ABSENT IndexData:{DescID: 104, IndexID: 3}
+ │    │    │    └── BACKFILL_ONLY → ABSENT PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
  │    │    ├── 3 elements transitioning toward TRANSIENT_ABSENT
- │    │    │    ├── TRANSIENT_ABSENT → ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
- │    │    │    ├── TRANSIENT_ABSENT → ABSENT IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 4}
- │    │    │    └── DELETE_ONLY      → ABSENT TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
- │    │    ├── 8 elements transitioning toward ABSENT
- │    │    │    ├── WRITE_ONLY       → PUBLIC Column:{DescID: 104, ColumnID: 2}
- │    │    │    ├── WRITE_ONLY       → PUBLIC Column:{DescID: 104, ColumnID: 4}
- │    │    │    ├── ABSENT           → PUBLIC IndexColumn:{DescID: 104, ColumnID: 4, IndexID: 2}
- │    │    │    ├── ABSENT           → PUBLIC IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}
- │    │    │    ├── ABSENT           → PUBLIC IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
- │    │    │    ├── VALIDATED        → PUBLIC SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
- │    │    │    ├── ABSENT           → PUBLIC ColumnName:{DescID: 104, Name: j, ColumnID: 2}
- │    │    │    └── ABSENT           → PUBLIC ColumnName:{DescID: 104, Name: crdb_internal_idx_expr, ColumnID: 4}
+ │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
+ │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 4}
+ │    │    │    └── DELETE_ONLY   → ABSENT TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
+ │    │    ├── 5 elements transitioning toward ABSENT
+ │    │    │    ├── WRITE_ONLY    → PUBLIC Column:{DescID: 104, ColumnID: 2}
+ │    │    │    ├── WRITE_ONLY    → PUBLIC Column:{DescID: 104, ColumnID: 4}
+ │    │    │    ├── VALIDATED     → PUBLIC SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+ │    │    │    ├── ABSENT        → PUBLIC ColumnName:{DescID: 104, Name: j, ColumnID: 2}
+ │    │    │    └── ABSENT        → PUBLIC ColumnName:{DescID: 104, Name: crdb_internal_idx_expr, ColumnID: 4}
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
@@ -206,16 +203,26 @@ Schema change plan for CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹publi
       │    │    ├── PUBLIC     → ABSENT                IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
       │    │    ├── VALIDATED  → DELETE_ONLY           SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
       │    │    └── PUBLIC     → ABSENT                IndexName:{DescID: 104, Name: t_expr_k_idx, IndexID: 2}
-      │    └── 11 Mutation operations
+      │    └── 21 Mutation operations
       │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":2,"TableID":104}
       │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4,"TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":4,"TableID":104}
       │         ├── MakeValidatedSecondaryIndexPublic {"IndexID":5,"TableID":104}
       │         ├── RefreshStats {"TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":6,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":6,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":6,"Kind":1,"TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":1,"TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":2,"TableID":104}
       │         ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":4,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":4,"Kind":2,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":1,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":1,"Kind":2,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":1,"Kind":2,"Ordinal":1,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":4,"IndexID":2,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":2,"Ordinal":1,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":2,"Kind":1,"TableID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
       └── Stage 2 of 2 in PostCommitNonRevertiblePhase

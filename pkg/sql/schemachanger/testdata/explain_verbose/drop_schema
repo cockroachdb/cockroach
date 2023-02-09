@@ -22,29 +22,20 @@ EXPLAIN (ddl, verbose) DROP SCHEMA db.sc;
 │       │   ├── • Owner:{DescID: 106}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Schema:{DescID: 106}
-│       │   │   │     rule: "descriptor dropped before dependent element removal"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │   └── • Precedence dependency from DROPPED Schema:{DescID: 106}
+│       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • UserPrivileges:{DescID: 106, Name: admin}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Schema:{DescID: 106}
-│       │   │   │     rule: "descriptor dropped before dependent element removal"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │   └── • Precedence dependency from DROPPED Schema:{DescID: 106}
+│       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • UserPrivileges:{DescID: 106, Name: root}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Schema:{DescID: 106}
-│       │   │   │     rule: "descriptor dropped before dependent element removal"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │   └── • Precedence dependency from DROPPED Schema:{DescID: 106}
+│       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • Schema:{DescID: 106}
 │       │   │     PUBLIC → DROPPED
@@ -56,7 +47,7 @@ EXPLAIN (ddl, verbose) DROP SCHEMA db.sc;
 │       │             rule: "descriptor dropped before dependent element removal"
 │       │             rule: "descriptor dropped right before removing back-reference in its parent descriptor"
 │       │
-│       └── • 3 Mutation operations
+│       └── • 6 Mutation operations
 │           │
 │           ├── • MarkDescriptorAsDropped
 │           │     DescriptorID: 106
@@ -66,11 +57,23 @@ EXPLAIN (ddl, verbose) DROP SCHEMA db.sc;
 │           │       ParentDatabaseID: 104
 │           │       SchemaID: 106
 │           │
-│           └── • DrainDescriptorName
-│                 Namespace:
-│                   DatabaseID: 104
-│                   DescriptorID: 106
-│                   Name: sc
+│           ├── • DrainDescriptorName
+│           │     Namespace:
+│           │       DatabaseID: 104
+│           │       DescriptorID: 106
+│           │       Name: sc
+│           │
+│           ├── • NotImplementedForPublicObjects
+│           │     DescID: 106
+│           │     ElementType: scpb.Owner
+│           │
+│           ├── • RemoveUserPrivileges
+│           │     DescriptorID: 106
+│           │     User: admin
+│           │
+│           └── • RemoveUserPrivileges
+│                 DescriptorID: 106
+│                 User: root
 │
 ├── • PreCommitPhase
 │   │
@@ -114,29 +117,20 @@ EXPLAIN (ddl, verbose) DROP SCHEMA db.sc;
 │       │   ├── • Owner:{DescID: 106}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Schema:{DescID: 106}
-│       │   │   │     rule: "descriptor dropped before dependent element removal"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │   └── • Precedence dependency from DROPPED Schema:{DescID: 106}
+│       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • UserPrivileges:{DescID: 106, Name: admin}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Schema:{DescID: 106}
-│       │   │   │     rule: "descriptor dropped before dependent element removal"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │   └── • Precedence dependency from DROPPED Schema:{DescID: 106}
+│       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • UserPrivileges:{DescID: 106, Name: root}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Schema:{DescID: 106}
-│       │   │   │     rule: "descriptor dropped before dependent element removal"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │   └── • Precedence dependency from DROPPED Schema:{DescID: 106}
+│       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • Schema:{DescID: 106}
 │       │   │     PUBLIC → DROPPED
@@ -148,7 +142,7 @@ EXPLAIN (ddl, verbose) DROP SCHEMA db.sc;
 │       │             rule: "descriptor dropped before dependent element removal"
 │       │             rule: "descriptor dropped right before removing back-reference in its parent descriptor"
 │       │
-│       └── • 6 Mutation operations
+│       └── • 9 Mutation operations
 │           │
 │           ├── • MarkDescriptorAsDropped
 │           │     DescriptorID: 106
@@ -163,6 +157,18 @@ EXPLAIN (ddl, verbose) DROP SCHEMA db.sc;
 │           │       DatabaseID: 104
 │           │       DescriptorID: 106
 │           │       Name: sc
+│           │
+│           ├── • NotImplementedForPublicObjects
+│           │     DescID: 106
+│           │     ElementType: scpb.Owner
+│           │
+│           ├── • RemoveUserPrivileges
+│           │     DescriptorID: 106
+│           │     User: admin
+│           │
+│           ├── • RemoveUserPrivileges
+│           │     DescriptorID: 106
+│           │     User: root
 │           │
 │           ├── • SetJobStateOnDescriptor
 │           │     DescriptorID: 104

@@ -70,7 +70,7 @@ func (i *immediateVisitor) RemoveForeignKeyBackReference(
 	ctx context.Context, op scop.RemoveForeignKeyBackReference,
 ) error {
 	in, err := i.checkOutTable(ctx, op.ReferencedTableID)
-	if err != nil || in.Dropped() {
+	if err != nil {
 		// Exit early if the foreign key back-reference holder is getting dropped.
 		return err
 	}
@@ -201,7 +201,7 @@ func (i *immediateVisitor) UpdateTypeBackReferencesInTypes(
 	var forwardRefs catalog.DescriptorIDSet
 	if desc, err := i.getDescriptor(ctx, op.BackReferencedTypeID); err != nil {
 		return err
-	} else if !desc.Dropped() {
+	} else {
 		typ, err := catalog.AsTypeDescriptor(desc)
 		if err != nil {
 			return err

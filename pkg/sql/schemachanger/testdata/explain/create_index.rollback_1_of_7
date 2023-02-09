@@ -20,10 +20,14 @@ Schema change plan for rolling back CREATE INDEX ‹idx1› ON ‹defaultdb›.p
            │    ├── PUBLIC        → ABSENT SecondaryIndexPartial:{DescID: 106, IndexID: 3}
            │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
            │    └── PUBLIC        → ABSENT IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}
-           └── 8 Mutation operations
+           └── 12 Mutation operations
                 ├── RemoveDroppedIndexPartialPredicate {"IndexID":2,"TableID":106}
+                ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":2,"TableID":106}
+                ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":2,"Kind":1,"TableID":106}
                 ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":106}
                 ├── RemoveDroppedIndexPartialPredicate {"IndexID":3,"TableID":106}
+                ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":3,"TableID":106}
+                ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":3,"Kind":1,"TableID":106}
                 ├── MakeIndexAbsent {"IndexID":2,"TableID":106}
                 ├── CreateGCJobForIndex {"IndexID":2,"TableID":106}
                 ├── MakeIndexAbsent {"IndexID":3,"TableID":106}

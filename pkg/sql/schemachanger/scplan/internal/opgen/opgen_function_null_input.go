@@ -30,8 +30,8 @@ func init() {
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.FunctionNullInputBehavior) *scop.NotImplemented {
-					return notImplemented(this)
+				emit(func(this *scpb.FunctionNullInputBehavior) *scop.NotImplementedForPublicObjects {
+					return notImplementedForPublicObjects(this)
 				}),
 			),
 		),

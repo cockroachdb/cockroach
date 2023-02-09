@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/errors"
 )
 
@@ -26,6 +27,13 @@ func equiv(from scpb.Status) transitionSpec {
 func notImplemented(e scpb.Element) *scop.NotImplemented {
 	return &scop.NotImplemented{
 		ElementType: reflect.ValueOf(e).Type().Elem().String(),
+	}
+}
+
+func notImplementedForPublicObjects(e scpb.Element) *scop.NotImplementedForPublicObjects {
+	return &scop.NotImplementedForPublicObjects{
+		ElementType: reflect.ValueOf(e).Type().Elem().String(),
+		DescID:      screl.GetDescID(e),
 	}
 }
 

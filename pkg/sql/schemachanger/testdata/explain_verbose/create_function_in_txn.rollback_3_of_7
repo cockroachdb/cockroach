@@ -20,29 +20,20 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 3 of 7;
     │   │   ├── • Owner:{DescID: 105}
     │   │   │   │ PUBLIC → ABSENT
     │   │   │   │
-    │   │   │   ├── • Precedence dependency from DROPPED Function:{DescID: 105}
-    │   │   │   │     rule: "descriptor dropped before dependent element removal"
-    │   │   │   │
-    │   │   │   └── • skip PUBLIC → ABSENT operations
-    │   │   │         rule: "skip element removal ops on descriptor drop"
+    │   │   │   └── • Precedence dependency from DROPPED Function:{DescID: 105}
+    │   │   │         rule: "descriptor dropped before dependent element removal"
     │   │   │
     │   │   ├── • UserPrivileges:{DescID: 105, Name: admin}
     │   │   │   │ PUBLIC → ABSENT
     │   │   │   │
-    │   │   │   ├── • Precedence dependency from DROPPED Function:{DescID: 105}
-    │   │   │   │     rule: "descriptor dropped before dependent element removal"
-    │   │   │   │
-    │   │   │   └── • skip PUBLIC → ABSENT operations
-    │   │   │         rule: "skip element removal ops on descriptor drop"
+    │   │   │   └── • Precedence dependency from DROPPED Function:{DescID: 105}
+    │   │   │         rule: "descriptor dropped before dependent element removal"
     │   │   │
     │   │   ├── • UserPrivileges:{DescID: 105, Name: root}
     │   │   │   │ PUBLIC → ABSENT
     │   │   │   │
-    │   │   │   ├── • Precedence dependency from DROPPED Function:{DescID: 105}
-    │   │   │   │     rule: "descriptor dropped before dependent element removal"
-    │   │   │   │
-    │   │   │   └── • skip PUBLIC → ABSENT operations
-    │   │   │         rule: "skip element removal ops on descriptor drop"
+    │   │   │   └── • Precedence dependency from DROPPED Function:{DescID: 105}
+    │   │   │         rule: "descriptor dropped before dependent element removal"
     │   │   │
     │   │   ├── • Function:{DescID: 105}
     │   │   │     DESCRIPTOR_ADDED → DROPPED
@@ -57,11 +48,8 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 3 of 7;
     │   │   ├── • FunctionName:{DescID: 105}
     │   │   │   │ PUBLIC → ABSENT
     │   │   │   │
-    │   │   │   ├── • Precedence dependency from DROPPED Function:{DescID: 105}
-    │   │   │   │     rule: "descriptor dropped before dependent element removal"
-    │   │   │   │
-    │   │   │   └── • skip PUBLIC → ABSENT operations
-    │   │   │         rule: "skip element removal ops on descriptor drop"
+    │   │   │   └── • Precedence dependency from DROPPED Function:{DescID: 105}
+    │   │   │         rule: "descriptor dropped before dependent element removal"
     │   │   │
     │   │   ├── • FunctionBody:{DescID: 105}
     │   │   │   │ PUBLIC → ABSENT
@@ -87,14 +75,14 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 3 of 7;
     │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
     │   │   │   │ PUBLIC → ABSENT
     │   │   │   │
-    │   │   │   └── • skip PUBLIC → ABSENT operations
-    │   │   │         rule: "skip index-column removal ops on index removal"
+    │   │   │   └── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+    │   │   │         rule: "index drop mutation visible before cleaning up index columns"
     │   │   │
     │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
     │   │   │   │ PUBLIC → ABSENT
     │   │   │   │
-    │   │   │   └── • skip PUBLIC → ABSENT operations
-    │   │   │         rule: "skip index-column removal ops on index removal"
+    │   │   │   └── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+    │   │   │         rule: "index drop mutation visible before cleaning up index columns"
     │   │   │
     │   │   ├── • IndexName:{DescID: 104, Name: idx, IndexID: 2}
     │   │   │   │ PUBLIC → ABSENT
@@ -111,16 +99,27 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 3 of 7;
     │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
     │   │   │   │ PUBLIC → ABSENT
     │   │   │   │
-    │   │   │   └── • skip PUBLIC → ABSENT operations
-    │   │   │         rule: "skip index-column removal ops on index removal"
+    │   │   │   └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+    │   │   │         rule: "index drop mutation visible before cleaning up index columns"
     │   │   │
     │   │   └── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
     │   │       │ PUBLIC → ABSENT
     │   │       │
-    │   │       └── • skip PUBLIC → ABSENT operations
-    │   │             rule: "skip index-column removal ops on index removal"
+    │   │       └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+    │   │             rule: "index drop mutation visible before cleaning up index columns"
     │   │
-    │   └── • 8 Mutation operations
+    │   └── • 16 Mutation operations
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 2
+    │       │     IndexID: 2
+    │       │     TableID: 104
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 1
+    │       │     IndexID: 2
+    │       │     Kind: 1
+    │       │     TableID: 104
     │       │
     │       ├── • SetIndexName
     │       │     IndexID: 2
@@ -131,6 +130,17 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 3 of 7;
     │       │     IndexID: 3
     │       │     TableID: 104
     │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 2
+    │       │     IndexID: 3
+    │       │     TableID: 104
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 1
+    │       │     IndexID: 3
+    │       │     Kind: 1
+    │       │     TableID: 104
+    │       │
     │       ├── • MarkDescriptorAsDropped
     │       │     DescriptorID: 105
     │       │
@@ -138,9 +148,25 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 3 of 7;
     │       │     ObjectID: 105
     │       │     ParentSchemaID: 101
     │       │
+    │       ├── • NotImplementedForPublicObjects
+    │       │     DescID: 105
+    │       │     ElementType: scpb.FunctionName
+    │       │
     │       ├── • MakeIndexAbsent
     │       │     IndexID: 2
     │       │     TableID: 104
+    │       │
+    │       ├── • NotImplementedForPublicObjects
+    │       │     DescID: 105
+    │       │     ElementType: scpb.Owner
+    │       │
+    │       ├── • RemoveUserPrivileges
+    │       │     DescriptorID: 105
+    │       │     User: admin
+    │       │
+    │       ├── • RemoveUserPrivileges
+    │       │     DescriptorID: 105
+    │       │     User: root
     │       │
     │       ├── • SetJobStateOnDescriptor
     │       │     DescriptorID: 104

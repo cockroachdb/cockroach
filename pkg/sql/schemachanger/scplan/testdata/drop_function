@@ -21,7 +21,7 @@ $$;
 ops
 DROP FUNCTION f;
 ----
-StatementPhase stage 1 of 1 with 4 MutationType ops
+StatementPhase stage 1 of 1 with 11 MutationType ops
   transitions:
     [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 109, Name: admin}, ABSENT], PUBLIC] -> ABSENT
@@ -39,6 +39,18 @@ StatementPhase stage 1 of 1 with 4 MutationType ops
     *scop.RemoveObjectParent
       ObjectID: 109
       ParentSchemaID: 101
+    *scop.NotImplementedForPublicObjects
+      DescID: 109
+      ElementType: scpb.FunctionName
+    *scop.NotImplementedForPublicObjects
+      DescID: 109
+      ElementType: scpb.FunctionVolatility
+    *scop.NotImplementedForPublicObjects
+      DescID: 109
+      ElementType: scpb.FunctionLeakProof
+    *scop.NotImplementedForPublicObjects
+      DescID: 109
+      ElementType: scpb.FunctionNullInputBehavior
     *scop.RemoveBackReferenceInTypes
       BackReferencedDescriptorID: 109
       TypeIDs:
@@ -52,6 +64,15 @@ StatementPhase stage 1 of 1 with 4 MutationType ops
       - 104
       - 106
       - 105
+    *scop.NotImplementedForPublicObjects
+      DescID: 109
+      ElementType: scpb.Owner
+    *scop.RemoveUserPrivileges
+      DescriptorID: 109
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 109
+      User: root
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
     [[Owner:{DescID: 109}, ABSENT], ABSENT] -> PUBLIC
@@ -67,7 +88,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 11 MutationType ops
+PreCommitPhase stage 2 of 2 with 18 MutationType ops
   transitions:
     [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 109, Name: admin}, ABSENT], PUBLIC] -> ABSENT
@@ -85,6 +106,18 @@ PreCommitPhase stage 2 of 2 with 11 MutationType ops
     *scop.RemoveObjectParent
       ObjectID: 109
       ParentSchemaID: 101
+    *scop.NotImplementedForPublicObjects
+      DescID: 109
+      ElementType: scpb.FunctionName
+    *scop.NotImplementedForPublicObjects
+      DescID: 109
+      ElementType: scpb.FunctionVolatility
+    *scop.NotImplementedForPublicObjects
+      DescID: 109
+      ElementType: scpb.FunctionLeakProof
+    *scop.NotImplementedForPublicObjects
+      DescID: 109
+      ElementType: scpb.FunctionNullInputBehavior
     *scop.RemoveBackReferenceInTypes
       BackReferencedDescriptorID: 109
       TypeIDs:
@@ -98,6 +131,15 @@ PreCommitPhase stage 2 of 2 with 11 MutationType ops
       - 104
       - 106
       - 105
+    *scop.NotImplementedForPublicObjects
+      DescID: 109
+      ElementType: scpb.Owner
+    *scop.RemoveUserPrivileges
+      DescriptorID: 109
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 109
+      User: root
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
       Initialize: true

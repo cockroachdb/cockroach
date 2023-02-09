@@ -78,14 +78,14 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 15;
         │   ├── • IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 2}
         │   │   │ PUBLIC → ABSENT
         │   │   │
-        │   │   └── • skip PUBLIC → ABSENT operations
-        │   │         rule: "skip index-column removal ops on index removal"
+        │   │   └── • Precedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+        │   │         rule: "index drop mutation visible before cleaning up index columns"
         │   │
         │   ├── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
         │   │   │ PUBLIC → ABSENT
         │   │   │
-        │   │   └── • skip PUBLIC → ABSENT operations
-        │   │         rule: "skip index-column removal ops on index removal"
+        │   │   └── • Precedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+        │   │         rule: "index drop mutation visible before cleaning up index columns"
         │   │
         │   ├── • IndexData:{DescID: 106, IndexID: 2}
         │   │   │ PUBLIC → ABSENT
@@ -108,20 +108,42 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 15;
         │   ├── • IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}
         │   │   │ PUBLIC → ABSENT
         │   │   │
-        │   │   └── • skip PUBLIC → ABSENT operations
-        │   │         rule: "skip index-column removal ops on index removal"
+        │   │   └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+        │   │         rule: "index drop mutation visible before cleaning up index columns"
         │   │
         │   └── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
         │       │ PUBLIC → ABSENT
         │       │
-        │       └── • skip PUBLIC → ABSENT operations
-        │             rule: "skip index-column removal ops on index removal"
+        │       └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+        │             rule: "index drop mutation visible before cleaning up index columns"
         │
-        └── • 8 Mutation operations
+        └── • 12 Mutation operations
             │
             ├── • SetColumnName
             │     ColumnID: 2
             │     Name: crdb_internal_column_2_name_placeholder
+            │     TableID: 106
+            │
+            ├── • RemoveColumnFromIndex
+            │     ColumnID: 1
+            │     IndexID: 2
+            │     TableID: 106
+            │
+            ├── • RemoveColumnFromIndex
+            │     ColumnID: 2
+            │     IndexID: 2
+            │     Kind: 2
+            │     TableID: 106
+            │
+            ├── • RemoveColumnFromIndex
+            │     ColumnID: 1
+            │     IndexID: 3
+            │     TableID: 106
+            │
+            ├── • RemoveColumnFromIndex
+            │     ColumnID: 2
+            │     IndexID: 3
+            │     Kind: 2
             │     TableID: 106
             │
             ├── • RemoveColumnDefaultExpression
