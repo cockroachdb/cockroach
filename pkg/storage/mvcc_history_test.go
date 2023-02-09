@@ -1981,9 +1981,18 @@ func printIter(e *evalCtx) {
 	}
 }
 
+func rangeKeysIfExist(it storage.SimpleMVCCIterator) storage.MVCCRangeKeyStack {
+	if valid, err := it.Valid(); !valid || err != nil {
+		return storage.MVCCRangeKeyStack{}
+	} else if _, hasRange := it.HasPointAndRange(); !hasRange {
+		return storage.MVCCRangeKeyStack{}
+	}
+	return it.RangeKeys()
+}
+
 func checkAndUpdateRangeKeyChanged(e *evalCtx) bool {
 	rangeKeyChanged := e.iter.RangeKeyChanged()
-	rangeKeys := e.iter.RangeKeys()
+	rangeKeys := rangeKeysIfExist(e.iter)
 
 	if incrIter := e.tryMVCCIncrementalIter(); incrIter != nil {
 		// For MVCCIncrementalIterator, make sure RangeKeyChangedIgnoringTime() fires

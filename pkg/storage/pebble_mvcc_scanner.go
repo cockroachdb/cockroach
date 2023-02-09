@@ -1521,6 +1521,12 @@ func (p *pebbleMVCCScanner) processRangeKeys(seeked bool, reverse bool) bool {
 		if hasPoint {
 			return true
 		}
+
+		// Stepping might move the iterator entirely off the bare range key, at
+		// which point the previous curRangeKeys buffers are invalidated.
+		p.curRangeKeys.CloneInto(&p.savedRangeKeys)
+		p.curRangeKeys = p.savedRangeKeys
+
 		if !reverse {
 			p.parent.Next()
 		} else {
