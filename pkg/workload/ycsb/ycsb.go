@@ -461,8 +461,8 @@ func (g *ycsb) Ops(
 		return workload.QueryLoad{}, err
 	}
 	pool, err := workload.NewMultiConnPool(ctx, workload.MultiConnPoolCfg{
+		// We want number of connections = number of workers.
 		MaxTotalConnections: g.connFlags.Concurrency,
-		MaxConnsPerPool:     (g.connFlags.Concurrency / len(urls)) + 1,
 	}, urls...)
 	if err != nil {
 		return workload.QueryLoad{}, err
@@ -492,12 +492,35 @@ func (g *ycsb) Ops(
 		pool.AddPreparedStatement(key, q)
 		updateStmts[i] = key
 	}
+
 	for i := 0; i < g.connFlags.Concurrency; i++ {
-		rng := rand.New(rand.NewSource(RandomSeed.Seed() + uint64(i)))
-		conn, err := pool.Get().Acquire(ctx)
+		// We want to have 1 connection per worker, however the
+		// multi-connection pool round robins access to different pools so it
+		// is always possible that we hit a pool that is full, unless we create
+		// more connections than necessary. To avoid this, first check if the
+		// pool we are attempting to acquire a connection from is full. If
+		// full, skip this pool and continue to the next one, otherwise grab
+		// the connection and move on.
+		var pl *pgxpool.Pool
+		var try int
+		for try = 0; try < g.connFlags.Concurrency; try++ {
+			pl = pool.Get()
+			plStat := pl.Stat()
+			if plStat.MaxConns()-plStat.AcquiredConns() > 0 {
+				break
+			}
+		}
+		if try == g.connFlags.Concurrency {
+			return workload.QueryLoad{},
+				errors.AssertionFailedf("Unable to acquire connection for worker %d", i)
+		}
+
+		conn, err := pl.Acquire(ctx)
 		if err != nil {
 			return workload.QueryLoad{}, err
 		}
+
+		rng := rand.New(rand.NewSource(RandomSeed.Seed() + uint64(i)))
 		w := &ycsbWorker{
 			config:                  g,
 			hists:                   reg.GetHandle(),
