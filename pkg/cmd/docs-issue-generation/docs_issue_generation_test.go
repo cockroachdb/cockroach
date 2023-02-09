@@ -163,19 +163,19 @@ func TestConstructDocsIssues(t *testing.T) {
 				{
 					sourceCommitSha: "8d15073f329cf8d72e09977b34a3b339d1436000",
 					title:           "PR #91294 - ui: update filter labels",
-					body:            "Related PR: https://github.com/cockroachdb/cockroach/pull/91294\nCommit: https://github.com/cockroachdb/cockroach/commit/8d15073f329cf8d72e09977b34a3b339d1436000\n\n---\n\nRelease note (ui change): Update filter labels from\n\"App\" to \"Application Name\" and from \"Username\" to\n\"User Name\" on SQL Activity pages.",
+					body:            "Related PR: https://github.com/cockroachdb/cockroach/pull/91294\nCommit: https://github.com/cockroachdb/cockroach/commit/8d15073f329cf8d72e09977b34a3b339d1436000\nFixes: https://github.com/cockroachdb/cockroach/issues/87960\n\n---\n\nRelease note (ui change): Update filter labels from\n\"App\" to \"Application Name\" and from \"Username\" to\n\"User Name\" on SQL Activity pages.",
 					labels:          []string{"C-product-change", "release-22.1"},
 				},
 				{
 					sourceCommitSha: "1829a72664f28ddfa50324c9ff5352380029560b",
 					title:           "PR #90381 - sql/ttl: rename num_active_ranges metrics",
-					body:            "Related PR: https://github.com/cockroachdb/cockroach/pull/90381\nCommit: https://github.com/cockroachdb/cockroach/commit/1829a72664f28ddfa50324c9ff5352380029560b\n\n---\n\nRelease note (ops change): These TTL metrics have been renamed:\njobs.row_level_ttl.range_total_duration -> jobs.row_level_ttl.span_total_duration\njobs.row_level_ttl.num_active_ranges -> jobs.row_level_ttl.num_active_spans",
+					body:            "Related PR: https://github.com/cockroachdb/cockroach/pull/90381\nCommit: https://github.com/cockroachdb/cockroach/commit/1829a72664f28ddfa50324c9ff5352380029560b\nFixes: https://github.com/cockroachdb/cockroach/issues/90094\n\n---\n\nRelease note (ops change): These TTL metrics have been renamed:\njobs.row_level_ttl.range_total_duration -> jobs.row_level_ttl.span_total_duration\njobs.row_level_ttl.num_active_ranges -> jobs.row_level_ttl.num_active_spans",
 					labels:          []string{"C-product-change", "release-22.2.0"},
 				},
 				{
 					sourceCommitSha: "43de8ff30e3e6e1d9b2272ed4f62c543dc0a037c",
 					title:           "PR #89957 - opt/props: shallow-copy props.Histogram when applying selectivity",
-					body:            "Related PR: https://github.com/cockroachdb/cockroach/pull/89957\nCommit: https://github.com/cockroachdb/cockroach/commit/43de8ff30e3e6e1d9b2272ed4f62c543dc0a037c\n\n---\n\nRelease note (performance improvement): The optimizer now does less\ncopying of histograms while planning queries, which will reduce memory\npressure a little.",
+					body:            "Related PR: https://github.com/cockroachdb/cockroach/pull/89957\nCommit: https://github.com/cockroachdb/cockroach/commit/43de8ff30e3e6e1d9b2272ed4f62c543dc0a037c\nFixes: https://github.com/cockroachdb/cockroach/issues/89941\n\n---\n\nRelease note (performance improvement): The optimizer now does less\ncopying of histograms while planning queries, which will reduce memory\npressure a little.",
 					labels:          []string{"C-product-change", "release-22.2"},
 				},
 			},
@@ -191,15 +191,16 @@ func TestConstructDocsIssues(t *testing.T) {
 
 func TestFormatReleaseNotes(t *testing.T) {
 	testCases := []struct {
-		prNum   string
-		sha     string
-		message string
-		rns     []string
+		prNum         string
+		prBody        string
+		sha           string
+		commitMessage string
+		rns           []string
 	}{
 		{
 			prNum: "79069",
 			sha:   "5ec9343b0e0a00bfd4603e55ca6533e2b77db2f9",
-			message: `sql: ignore non-existent columns when injecting stats
+			commitMessage: `sql: ignore non-existent columns when injecting stats
 
 Previously, an ` + "`ALTER TABLE ... INJECT STATS`" + ` command would return an
 error if the given stats JSON included any columns that were not present
@@ -218,6 +219,7 @@ columns, rather than resulting in an error. Any statistics in the JSON
 for existing columns will be injected successfully.`,
 			rns: []string{`Related PR: https://github.com/cockroachdb/cockroach/pull/79069
 Commit: https://github.com/cockroachdb/cockroach/commit/5ec9343b0e0a00bfd4603e55ca6533e2b77db2f9
+Informs: https://github.com/cockroachdb/cockroach/issues/68184
 
 ---
 
@@ -229,7 +231,7 @@ for existing columns will be injected successfully.`},
 		{
 			prNum: "79361",
 			sha:   "88be04bd64283b1d77000a3f88588e603465e81b",
-			message: `changefeedccl: remove the default values from SHOW
+			commitMessage: `changefeedccl: remove the default values from SHOW
 CHANGEFEED JOB output
 
 Currently, when a user alters a changefeed, we
@@ -250,7 +252,7 @@ values from the SHOW CHANGEFEED JOB output`},
 		{
 			prNum: "78685",
 			sha:   "1d7811d5d14f9c7e106c3ec92de9c66192f19604",
-			message: `opt: do not cross-join input of semi-join
+			commitMessage: `opt: do not cross-join input of semi-join
 
 This commit fixes a logical correctness bug caused when
 ` + "`GenerateLookupJoins`" + ` cross-joins the input of a semi-join with a set of
@@ -280,7 +282,7 @@ constraint or an ` + "`IN`" + " condition in the filter.",
 		{
 			prNum: "66328",
 			sha:   "0f329965acccb3e771ec1657c7def9e881dc78bb",
-			message: `util/log: report the logging format at the start of new files
+			commitMessage: `util/log: report the logging format at the start of new files
 
 Release note (cli change): When log entries are written to disk,
 the first few header lines written at the start of every new file
@@ -297,7 +299,7 @@ now report the configured logging format.`},
 		{
 			prNum: "66328",
 			sha:   "fb249c7140b634a53dca2967c946bc78ba927e1a",
-			message: `cli: report explicit log config in logs
+			commitMessage: `cli: report explicit log config in logs
 
 This increases troubleshootability.
 
@@ -308,7 +310,7 @@ Release note: None`,
 	for _, tc := range testCases {
 		t.Run(tc.prNum, func(t *testing.T) {
 			prNumInt, _ := strconv.Atoi(tc.prNum)
-			result := formatReleaseNotes(tc.message, prNumInt, tc.sha)
+			result := formatReleaseNotes(tc.commitMessage, prNumInt, tc.prBody, tc.sha)
 			assert.Equal(t, tc.rns, result)
 		})
 	}
@@ -384,6 +386,40 @@ func TestFormatTitle(t *testing.T) {
 		t.Run(tc.testName, func(t *testing.T) {
 			result := formatTitle(tc.message, tc.prNumber, tc.index, tc.totalLength)
 			assert.Equal(t, tc.title, result)
+		})
+	}
+}
+
+func TestGetUrlFromRef(t *testing.T) {
+	testCases := []struct {
+		ref    string
+		result string
+	}{
+		{
+			ref:    "#12345",
+			result: "https://github.com/cockroachdb/cockroach/issues/12345",
+		},
+		{
+			ref:    "CRDB-54321",
+			result: "https://cockroachlabs.atlassian.net/browse/CRDB-54321",
+		},
+		{
+			ref:    "cockroachlabs/release-staging#23456",
+			result: "https://github.com/cockroachlabs/release-staging/issues/23456",
+		},
+		{
+			ref:    "https://github.com/cockroachdb/cockroach/issues/98765",
+			result: "https://github.com/cockroachdb/cockroach/issues/98765",
+		},
+		{
+			ref:    "https://cockroachlabs.atlassian.net/browse/CRDB-56789",
+			result: "https://cockroachlabs.atlassian.net/browse/CRDB-56789",
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.ref, func(t *testing.T) {
+			result := getUrlFromRef(tc.ref)
+			assert.Equal(t, tc.result, result)
 		})
 	}
 }
