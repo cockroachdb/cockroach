@@ -1521,12 +1521,30 @@ func (p *pebbleMVCCScanner) processRangeKeys(seeked bool, reverse bool) bool {
 		if hasPoint {
 			return true
 		}
+
+		// Stepping might move the iterator entirely off the bare range key,
+		// at which point the previous curRangeKeys buffers are invalidated.
+		// In tombstone mode, we still need to observe the range key even if
+		// there's no point key beneath it.
+		if p.tombstones {
+			p.curRangeKeys.CloneInto(&p.savedRangeKeys)
+			p.curRangeKeys = p.savedRangeKeys
+		}
+
 		if !reverse {
 			p.parent.Next()
 		} else {
 			p.parent.Prev()
 		}
 		if !p.iterValid() {
+			// In tombstone mode, p.curRangeKeys holds a saved copy of the
+			// previous iterator position's range keys. If not in tombstone
+			// mode, p.curRangeKeys still holds the previous bare range key
+			// owned by Pebble. Clear it so that the caller doesn't attempt to
+			// read invalidated buffers.
+			if !p.tombstones {
+				p.curRangeKeys = MVCCRangeKeyStack{}
+			}
 			return false
 		}
 	}

@@ -1600,14 +1600,6 @@ func assertSimpleMVCCIteratorInvariants(iter SimpleMVCCIterator) error {
 			}
 		}
 
-	} else {
-		// Bounds and range keys must be empty.
-		if bounds := iter.RangeBounds(); !bounds.Equal(roachpb.Span{}) {
-			return errors.AssertionFailedf("hasRange=false but RangeBounds=%s", bounds)
-		}
-		if r := iter.RangeKeys(); !r.IsEmpty() || !r.Bounds.Equal(roachpb.Span{}) {
-			return errors.AssertionFailedf("hasRange=false but RangeKeys=%s", r)
-		}
 	}
 	if hasPoint {
 		value, err := iter.UnsafeValue()
