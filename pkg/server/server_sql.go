@@ -344,7 +344,7 @@ type sqlServerArgs struct {
 	// the node/cluster and cancel sessions/queries.
 	sqlStatusServer serverpb.SQLStatusServer
 
-	// Used to watch settings and descriptor changes.
+	// Used to construct rangefeeds.
 	rangeFeedFactory *rangefeed.Factory
 
 	// Used to query status information useful for debugging on the server.

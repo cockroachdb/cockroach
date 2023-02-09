@@ -18,6 +18,7 @@ go_library(
         "//pkg/cloud/cloudpb",
         "//pkg/cloud/externalconn/connectionpb",
         "//pkg/security/username",
+        "//pkg/settings/cluster",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/isql",
         "//pkg/sql/pgwire/pgcode",

@@ -3,13 +3,19 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "tenantcapabilitiesauthorizer",
-    srcs = ["authorizer.go"],
+    srcs = [
+        "authorizer.go",
+        "noop.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/multitenant/tenantcapabilities",
         "//pkg/roachpb",
+        "//pkg/settings/cluster",
         "//pkg/util/log",
+        "//pkg/util/log/logcrash",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -24,6 +30,7 @@ go_test(
         "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb",
         "//pkg/multitenant/tenantcapabilities/tenantcapabilitiestestutils",
         "//pkg/roachpb",
+        "//pkg/settings/cluster",
         "//pkg/testutils/datapathutils",
         "//pkg/util/leaktest",
         "@com_github_cockroachdb_datadriven//:datadriven",

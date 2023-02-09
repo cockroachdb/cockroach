@@ -51,6 +51,7 @@ go_library(
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/multitenant/mtinfopb",
+        "//pkg/multitenant/tenantcapabilities",
         "//pkg/repstream/streampb",
         "//pkg/roachpb",
         "//pkg/security/username",

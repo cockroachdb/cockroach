@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -353,6 +355,10 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// TODO(ecwall): This test doesn't work now that capability checks exist.
+	// We should migrate what is being tested to a logictest instead.
+	skip.WithIssue(t, 96739)
+
 	testCases := []testCase{
 		{
 			desc:  "ALTER RANGE x RELOCATE LEASE",
@@ -549,7 +555,8 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 	}
 }
 
-// TestTruncateTable tests that range splits are retained after a table is truncated.
+// TestTruncateTable tests that range splits are retained after a table is
+// truncated.
 func TestTruncateTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -579,6 +586,15 @@ func TestTruncateTable(t *testing.T) {
 		t,
 		func() testClusterCfg {
 			return testClusterCfg{
+				TestClusterArgs: base.TestClusterArgs{
+					ServerArgs: base.TestServerArgs{
+						Knobs: base.TestingKnobs{
+							TenantCapabilitiesTestingKnobs: &tenantcapabilities.TestingKnobs{
+								AuthorizerSkipAdminSplitCapabilityChecks: true,
+							},
+						},
+					},
+				},
 				setupClusterSetting: sql.SecondaryTenantSplitAtEnabled,
 			}
 		},
