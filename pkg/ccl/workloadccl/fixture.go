@@ -206,10 +206,6 @@ func csvServerPaths(
 	return paths
 }
 
-// Specify an explicit empty prefix for crdb_internal to avoid an error if
-// the database we're connected to does not exist.
-const numNodesQuery = `SELECT count(node_id) FROM "".crdb_internal.gossip_liveness`
-
 // MakeFixture regenerates a fixture, storing it to GCS. It is expected that the
 // generator will have had Configure called on it.
 //
@@ -330,6 +326,29 @@ func (l ImportDataLoader) InitialDataLoad(
 	return bytes, nil
 }
 
+// Specify an explicit empty prefix for crdb_internal to avoid an error if
+// the database we're connected to does not exist.
+const numNodesQuery = `SELECT count(node_id) FROM "".crdb_internal.gossip_liveness`
+const numNodesQuerySQLInstances = `SELECT count(1) FROM system.sql_instances`
+
+func getNodeCount(ctx context.Context, sqlDB *gosql.DB) (int, error) {
+	var numNodes int
+	if err := sqlDB.QueryRow(numNodesQuery).Scan(&numNodes); err != nil {
+		// If the query is unsupported because we're in
+		// multi-tenant mode, use the sql_instances table.
+		if !strings.Contains(err.Error(), errorutil.UnsupportedWithMultiTenancyMessage) {
+			return 0, err
+
+		}
+	} else {
+		return numNodes, nil
+	}
+	if err := sqlDB.QueryRow(numNodesQuerySQLInstances).Scan(&numNodes); err != nil {
+		return 0, err
+	}
+	return numNodes, nil
+}
+
 // ImportFixture works like MakeFixture, but instead of stopping halfway or
 // writing a backup to cloud storage, it finishes ingesting the data.
 // It also includes the option to inject pre-calculated table statistics if
@@ -349,18 +368,9 @@ func ImportFixture(
 		)
 	}
 
-	var numNodes int
-	if err := sqlDB.QueryRow(numNodesQuery).Scan(&numNodes); err != nil {
-		if strings.Contains(err.Error(), errorutil.UnsupportedWithMultiTenancyMessage) {
-			// If the query is unsupported because we're in multi-tenant mode. Assume
-			// that the cluster has 1 node for the purposes of running CSV servers.
-			// Tenants won't use DistSQL to parallelize IMPORT across SQL pods. Doing
-			// something better here is tracked in:
-			//  https://github.com/cockroachdb/cockroach/issues/78968
-			numNodes = 1
-		} else {
-			return 0, err
-		}
+	numNodes, err := getNodeCount(ctx, sqlDB)
+	if err != nil {
+		return 0, err
 	}
 
 	var bytesAtomic int64
