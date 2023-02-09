@@ -195,7 +195,7 @@ func NewProcessor(cfg Config) *Processor {
 	cfg.AmbientContext.AddLogTag("rangefeed", nil)
 	p := &Processor{
 		Config: cfg,
-		reg:    makeRegistry(),
+		reg:    makeRegistry(cfg.Metrics.RangeFeedRegistrations),
 		rts:    makeResolvedTimestamp(),
 
 		regC:       make(chan registration),

@@ -610,6 +610,12 @@ var charts = []sectionDescription{
 				},
 			},
 			{
+				Title: "Rangefeed Scheduler",
+				Metrics: []string{
+					"kv.rangefeed.registrations",
+				},
+			},
+			{
 				Title: "Snapshots",
 				Metrics: []string{
 					"range.snapshots.generated",
