@@ -1442,7 +1442,7 @@ func (c *tenantEgressCounter) GetBatchNetworkEgress(
 			// Use the default values for the DataConversionConfig and location.
 			// See the comment in getRowNetworkEgress for why the writeText variant
 			// is used here instead of writeBinary.
-			c.buf.writeTextColumnarElement(ctx, &c.vecs, vecIdx, rowIdx, conv, nil /* sessionLoc */)
+			c.buf.writeTextColumnarElement(ctx, &c.vecs, vecIdx, rowIdx, conv, time.UTC)
 			egress += int64(c.buf.Len())
 			c.buf.reset()
 		}
