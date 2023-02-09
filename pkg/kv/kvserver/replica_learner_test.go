@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
@@ -1269,9 +1270,10 @@ func TestLearnerReplicateQueueRace(t *testing.T) {
 		// leaving the 2 voters.
 		startKey := tc.ScratchRange(t)
 		desc, err := tc.RemoveVoters(startKey, tc.Target(2))
-		require.NoError(t, err)
-		require.Len(t, desc.Replicas().VoterDescriptors(), 2)
-		require.Len(t, desc.Replicas().LearnerDescriptors(), 0)
+		// NB: don't fatal on this goroutine, as we can't recover cleanly.
+		assert.NoError(t, err)
+		assert.Len(t, desc.Replicas().VoterDescriptors(), 2)
+		assert.Len(t, desc.Replicas().LearnerDescriptors(), 0)
 		return false
 	}
 	tc = testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
@@ -1300,7 +1302,7 @@ func TestLearnerReplicateQueueRace(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			if !strings.Contains(processErr.Error(), `descriptor changed`) {
+			if processErr == nil || !strings.Contains(processErr.Error(), `descriptor changed`) {
 				// NB: errors.Wrapf(nil, ...) returns nil.
 				// nolint:errwrap
 				return errors.Errorf(`expected "descriptor changed" error got: %+v`, processErr)
