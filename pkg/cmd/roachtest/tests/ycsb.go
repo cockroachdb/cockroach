@@ -26,22 +26,33 @@ import (
 
 const envYCSBFlags = "ROACHTEST_YCSB_FLAGS"
 
+type ycsbEnvConfig struct {
+	nodes, cpus int
+}
+
 func registerYCSB(r registry.Registry) {
 	workloads := []string{"A", "B", "C", "D", "E", "F"}
-	cpusConfigs := []int{8, 32}
+	envConfigs := []ycsbEnvConfig{{3, 8}, {3, 32}, {7, 8}}
 	cpusWithGlobalMVCCRangeTombstone := 32
 
 	// concurrencyConfigs contains near-optimal concurrency levels for each
-	// (workload, cpu count) combination. All of these figures were tuned on GCP
+	// (workload, cluster cpu count) combination. All of these figures were tuned on GCP
 	// n1-standard instance types. We should consider implementing a search for
 	// the optimal concurrency level in the roachtest itself (see kvbench).
-	concurrencyConfigs := map[string] /* workload */ map[int] /* cpus */ int{
-		"A": {8: 96, 32: 144},
-		"B": {8: 144, 32: 192},
-		"C": {8: 144, 32: 192},
-		"D": {8: 96, 32: 144},
-		"E": {8: 96, 32: 144},
-		"F": {8: 96, 32: 144},
+	concurrencyConfigs := map[string] /* workload */ map[int] /* totalCPUs */ int{
+		"A": {24: 96, 96: 144, 56: 144},
+		"B": {24: 144, 96: 192, 56: 192},
+		"C": {24: 144, 96: 192, 56: 192},
+		"D": {24: 96, 96: 144, 56: 144},
+		"E": {24: 96, 96: 144, 56: 144},
+		"F": {24: 96, 96: 144, 56: 144},
+	}
+
+	// insertCountConfig contains the number of inserts to be run before
+	// beginning the benchmark.
+	insertCountConfig := map[int]int{
+		3: 1_000_000,  // 1.25gb unreplicated
+		7: 50_000_000, // 62.5gb unreplicated
 	}
 
 	runYCSB := func(
@@ -55,9 +66,10 @@ func registerYCSB(r registry.Registry) {
 
 		nodes := c.Spec().NodeCount - 1
 
-		conc, ok := concurrencyConfigs[wl][cpus]
+		totalCPUs := nodes * cpus
+		conc, ok := concurrencyConfigs[wl][totalCPUs]
 		if !ok {
-			t.Fatalf("missing concurrency for (workload, cpus) = (%s, %d)", wl, cpus)
+			t.Fatalf("missing concurrency for (workload, nodes, cpus) = (%s, %d, %d)", wl, nodes, cpus)
 		}
 
 		settings := install.MakeClusterSettings()
@@ -82,10 +94,10 @@ func registerYCSB(r registry.Registry) {
 				args += " " + envFlags
 			}
 			cmd := fmt.Sprintf(
-				"./workload run ycsb --init --insert-count=1000000 --workload=%s --concurrency=%d"+
+				"./workload run ycsb --init --insert-count=%d --workload=%s --concurrency=%d"+
 					" --splits=%d --histograms="+t.PerfArtifactsDir()+"/stats.json"+args+
 					" {pgurl:1-%d}",
-				wl, conc, nodes, nodes)
+				insertCountConfig[nodes], wl, conc, nodes, nodes)
 			c.Run(ctx, c.Node(nodes+1), cmd)
 			return nil
 		})
@@ -93,30 +105,30 @@ func registerYCSB(r registry.Registry) {
 	}
 
 	for _, wl := range workloads {
-		for _, cpus := range cpusConfigs {
+		for _, env := range envConfigs {
 			var name string
-			if cpus == 8 { // support legacy test name which didn't include cpu
-				name = fmt.Sprintf("ycsb/%s/nodes=3", wl)
+			cpus, nodes, workload := env.cpus, env.nodes, wl
+			if cpus == 8 && nodes == 3 { // support legacy test name which didn't include cpu
+				name = fmt.Sprintf("ycsb/%s/nodes=3", workload)
 			} else {
-				name = fmt.Sprintf("ycsb/%s/nodes=3/cpu=%d", wl, cpus)
+				name = fmt.Sprintf("ycsb/%s/nodes=%d/cpu=%d", workload, nodes, cpus)
 			}
-			wl, cpus := wl, cpus
 			r.Add(registry.TestSpec{
 				Name:    name,
 				Owner:   registry.OwnerTestEng,
-				Cluster: r.MakeClusterSpec(4, spec.CPU(cpus)),
+				Cluster: r.MakeClusterSpec(nodes+1, spec.CPU(cpus)),
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-					runYCSB(ctx, t, c, wl, cpus, false /* rangeTombstone */)
+					runYCSB(ctx, t, c, workload, cpus, false /* rangeTombstone */)
 				},
 			})
 
-			if wl == "A" {
+			if workload == "A" && nodes == 3 {
 				r.Add(registry.TestSpec{
-					Name:    fmt.Sprintf("zfs/ycsb/%s/nodes=3/cpu=%d", wl, cpus),
+					Name:    fmt.Sprintf("zfs/ycsb/%s/nodes=3/cpu=%d", workload, cpus),
 					Owner:   registry.OwnerStorage,
 					Cluster: r.MakeClusterSpec(4, spec.CPU(cpus), spec.SetFileSystem(spec.Zfs)),
 					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-						runYCSB(ctx, t, c, wl, cpus, false /* rangeTombstone */)
+						runYCSB(ctx, t, c, workload, cpus, false /* rangeTombstone */)
 					},
 				})
 			}
@@ -127,7 +139,7 @@ func registerYCSB(r registry.Registry) {
 					Owner:   registry.OwnerTestEng,
 					Cluster: r.MakeClusterSpec(4, spec.CPU(cpus)),
 					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-						runYCSB(ctx, t, c, wl, cpus, true /* rangeTombstone */)
+						runYCSB(ctx, t, c, workload, cpus, true /* rangeTombstone */)
 					},
 				})
 			}
