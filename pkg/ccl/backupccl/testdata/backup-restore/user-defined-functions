@@ -291,3 +291,33 @@ exec-sql
 DROP TYPE sc1.enum1
 ----
 pq: cannot drop type "enum1" because other objects ([db1.sc1.f1]) still depend on it
+
+# Make sure that backup and restore individual tables from schema with UDF does
+# not crash.
+new-cluster name=s3
+----
+
+exec-sql cluster=s3
+CREATE DATABASE db1;
+CREATE TABLE t(a INT PRIMARY KEY);
+CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+----
+
+exec-sql
+BACKUP TABLE t INTO 'nodelocal://0/test/'
+----
+
+exec-sql
+RESTORE TABLE t FROM LATEST IN 'nodelocal://0/test/' WITH into_db = 'db1';
+----
+
+exec-sql
+USE db1;
+----
+
+# Make sure proper error message is returned when trying to resolve the
+# function from the restore target db.
+query-sql
+SELECT f()
+----
+pq: unknown function: f(): function undefined
