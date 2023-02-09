@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/workload/tpch"
 )
 
@@ -89,6 +90,25 @@ func runMultiTenantTPCH(
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Allow the tenant to be able to split tables. We need to run a dummy split
+	// in order to make sure the capability is propagated before starting the
+	// test, otherwise importing tpch may fail.
+	_, err = singleTenantConn.Exec(
+		`ALTER TENANT [$1] SET CLUSTER SETTING sql.split_at.allow_for_secondary_tenant.enabled=true`, tenantID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = singleTenantConn.Exec(`ALTER TENANT [$1] GRANT CAPABILITY can_admin_split=true`, tenantID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	testutils.SucceedsSoon(t, func() error {
+		if _, err := multiTenantConn.Exec(`CREATE TABLE IF NOT EXISTS dummysplit (a INT)`); err != nil {
+			return err
+		}
+		_, err = multiTenantConn.Exec(`ALTER TABLE dummysplit SPLIT AT VALUES (0)`)
+		return err
+	})
 	runTPCH(multiTenantConn, "'"+tenant.secureURL()+"'", 1 /* setupIdx */)
 
 	// Analyze the runtimes of both setups.
