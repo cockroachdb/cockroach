@@ -18,6 +18,7 @@ import {
   SqlTxnResult,
 } from "./sqlApi";
 import {
+  ContentionDetails,
   getInsightsFromProblemsAndCauses,
   InsightExecEnum,
   StmtInsightEvent,
@@ -25,21 +26,13 @@ import {
 import moment from "moment";
 import { INTERNAL_APP_NAME_PREFIX } from "src/recentExecutions/recentStatementUtils";
 import { FixFingerprintHexValue } from "../util";
+import { getContentionDetailsApi } from "./contentionApi";
 
 export type StmtInsightsReq = {
   start?: moment.Moment;
   end?: moment.Moment;
   stmtExecutionID?: string;
   stmtFingerprintId?: string;
-};
-
-type InsightsContentionResponseEvent = {
-  blockingTxnID: string;
-  durationInMs: number;
-  schemaName: string;
-  databaseName: string;
-  tableName: string;
-  indexName: string;
 };
 
 export type StmtInsightsResponseRow = {
@@ -62,7 +55,7 @@ export type StmtInsightsResponseRow = {
   retries: number;
   exec_node_ids: number[];
   contention: string; // interval
-  contention_events: InsightsContentionResponseEvent[];
+  contention_events: ContentionDetails[];
   last_retry_reason?: string;
   causes: string[];
   problem: string;
@@ -91,7 +84,6 @@ priority,
 retries,
 exec_node_ids,
 contention,
-contention_events,
 last_retry_reason,
 causes,
 problem,
@@ -143,7 +135,7 @@ export const stmtInsightsByTxnExecutionQuery = (id: string): string => `
  WHERE txn_id = '${id}'
 `;
 
-export function getStmtInsightsApi(
+export async function getStmtInsightsApi(
   req?: StmtInsightsReq,
 ): Promise<StmtInsightEvent[]> {
   const request: SqlExecutionRequest = {
@@ -156,21 +148,48 @@ export function getStmtInsightsApi(
     max_result_size: LARGE_RESULT_SIZE,
     timeout: LONG_TIMEOUT,
   };
-  return executeInternalSql<StmtInsightsResponseRow>(request).then(result => {
-    if (result.error) {
-      throw new Error(
-        `Error while retrieving insights information: ${sqlApiErrorMessage(
-          result.error.message,
-        )}`,
-      );
+
+  const result = await executeInternalSql<StmtInsightsResponseRow>(request);
+  if (result.error) {
+    throw new Error(
+      `Error while retrieving insights information: ${sqlApiErrorMessage(
+        result.error.message,
+      )}`,
+    );
+  }
+
+  if (sqlResultsAreEmpty(result)) {
+    return [];
+  }
+
+  const stmtInsightEvent = formatStmtInsights(result.execution?.txn_results[0]);
+  await addStmtContentionInfoApi(stmtInsightEvent);
+  return stmtInsightEvent;
+}
+
+async function addStmtContentionInfoApi(
+  input: StmtInsightEvent[],
+): Promise<void> {
+  if (!input || input.length === 0) {
+    return;
+  }
+
+  for (let i = 0; i < input.length; i++) {
+    const event = input[i];
+    if (
+      event.contentionTime == null ||
+      event.contentionTime.asMilliseconds() <= 0
+    ) {
+      continue;
     }
 
-    if (sqlResultsAreEmpty(result)) {
-      return [];
-    }
-
-    return formatStmtInsights(result.execution?.txn_results[0]);
-  });
+    event.contentionEvents = await getContentionDetailsApi({
+      waitingTxnID: null,
+      waitingStmtID: event.statementExecutionID,
+      start: null,
+      end: null,
+    });
+  }
 }
 
 export function formatStmtInsights(
@@ -204,7 +223,6 @@ export function formatStmtInsights(
       isFullScan: row.full_scan,
       rowsRead: row.rows_read,
       rowsWritten: row.rows_written,
-      contentionEvents: row.contention_events,
       // This is the total stmt contention.
       contentionTime: row.contention ? moment.duration(row.contention) : null,
       indexRecommendations: row.index_recommendations,

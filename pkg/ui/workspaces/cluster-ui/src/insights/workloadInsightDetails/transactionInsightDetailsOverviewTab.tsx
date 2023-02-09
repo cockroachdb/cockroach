@@ -28,12 +28,12 @@ import {
 } from "src/insightsTable/insightsTable";
 import { WaitTimeDetailsTable } from "./insightDetailsTables";
 import {
-  BlockedContentionDetails,
+  ContentionDetails,
   ContentionEvent,
-  TxnInsightEvent,
   InsightExecEnum,
-  StmtInsightEvent,
   InsightNameEnum,
+  StmtInsightEvent,
+  TxnInsightEvent,
 } from "../types";
 
 import classNames from "classnames/bind";
@@ -55,7 +55,7 @@ const tableCx = classNames.bind(insightTableStyles);
 type Props = {
   txnDetails: TxnInsightEvent | null;
   statements: StmtInsightEvent[] | null;
-  contentionDetails?: BlockedContentionDetails[];
+  contentionDetails?: ContentionDetails[];
   setTimeScale: (ts: TimeScale) => void;
   hasAdminRole: boolean;
   errors: TxnInsightDetailsReqErrs | null;
@@ -87,20 +87,28 @@ export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
     true,
   );
 
-  const blockingExecutions: ContentionEvent[] = contentionDetails?.map(x => {
-    return {
-      executionID: x.blockingExecutionID,
-      fingerprintID: x.blockingTxnFingerprintID,
-      queries: x.blockingQueries,
-      startTime: x.collectionTimeStamp,
-      contentionTimeMs: x.contentionTimeMs,
-      execType: InsightExecEnum.TRANSACTION,
-      schemaName: x.schemaName,
-      databaseName: x.databaseName,
-      tableName: x.tableName,
-      indexName: x.indexName,
-    };
-  });
+  const blockingExecutions: ContentionEvent[] = contentionDetails?.map(
+    event => {
+      const stmtInsight = statements.find(
+        stmt => stmt.statementExecutionID == event.waitingStmtID,
+      );
+      return {
+        executionID: event.blockingExecutionID,
+        fingerprintID: event.blockingTxnFingerprintID,
+        waitingStmtID: event.waitingStmtID,
+        waitingStmtFingerprintID: event.waitingStmtFingerprintID,
+        queries: event.blockingTxnQuery,
+        startTime: event.collectionTimeStamp,
+        contentionTimeMs: event.contentionTimeMs,
+        execType: InsightExecEnum.TRANSACTION,
+        schemaName: event.schemaName,
+        databaseName: event.databaseName,
+        tableName: event.tableName,
+        indexName: event.indexName,
+        stmtInsightEvent: stmtInsight,
+      };
+    },
+  );
 
   const insightRecs = getTxnInsightRecommendations(txnDetails);
   const hasContentionInsights =

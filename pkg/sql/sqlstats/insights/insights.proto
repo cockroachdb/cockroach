@@ -115,8 +115,7 @@ message Statement {
   repeated int64 nodes = 17;
   google.protobuf.Duration contention = 18 [(gogoproto.stdduration) = true];
   repeated string index_recommendations = 19;
-  // contention_events hit at the statement level.
-  repeated cockroach.roachpb.ContentionEvent contention_events = 20 [(gogoproto.nullable) = false];
+  reserved 20; // previously contention_events
   Problem problem = 21;
   repeated Cause causes = 22;
   int64 cpu_sql_nanos = 23 [(gogoproto.customname) = "CPUSQLNanos"];

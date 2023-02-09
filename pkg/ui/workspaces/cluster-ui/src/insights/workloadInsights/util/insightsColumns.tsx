@@ -18,6 +18,8 @@ import { contentionTime, readFromDisk, writtenToDisk } from "../../../util";
 export const insightsColumnLabels = {
   executionID: "Execution ID",
   latestExecutionID: "Latest Execution ID",
+  waitingID: "Waiting Execution ID",
+  waitingFingerprintID: "Waiting Fingerprint ID",
   query: "Execution",
   insights: "Insights",
   startTime: "Start Time (UTC)",
@@ -87,6 +89,20 @@ export const insightsTableTitles: InsightsTableTitleType = {
     return makeToolTip(
       <p>The ID of the execution with the {execType} fingerprint.</p>,
       "executionID",
+      execType,
+    );
+  },
+  waitingFingerprintID: (execType: InsightExecEnum) => {
+    return makeToolTip(
+      <p>The {execType} fingerprint ID.</p>,
+      "waitingFingerprintID",
+      execType,
+    );
+  },
+  waitingID: (execType: InsightExecEnum) => {
+    return makeToolTip(
+      <p>The ID of the waiting {execType}.</p>,
+      "waitingID",
       execType,
     );
   },
