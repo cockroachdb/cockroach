@@ -3079,6 +3079,13 @@ var charts = []sectionDescription{
 				Metrics: []string{"storage.l0-sublevels"},
 			},
 			{
+				Title: "Shared Storage Reads/Writes",
+				Metrics: []string{
+					"storage.shared-storage.read",
+					"storage.shared-storage.write",
+				},
+			},
+			{
 				Title: "L0 Files",
 				Metrics: []string{
 					"storage.l0-num-files",
