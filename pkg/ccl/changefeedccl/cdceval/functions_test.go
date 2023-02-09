@@ -168,7 +168,7 @@ func TestEvaluatesCDCFunctionOverloads(t *testing.T) {
 			p, err := e.Eval(ctx, testRow, cdcevent.Row{})
 			require.NoError(t, err)
 
-			expectedTZ := fmt.Sprintf("%s-01:33:00",
+			expectedTZ := fmt.Sprintf("%s-01:33",
 				futureTS.GoTime().Add(-93*time.Minute).Format("15:04:05"))
 			require.Equal(t, map[string]string{"timezone": expectedTZ}, slurpValues(t, p))
 		})

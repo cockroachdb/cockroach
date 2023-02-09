@@ -828,7 +828,7 @@ project
  │    │    │    │         ├── "lookup_join_const_col_@20":38 = transactiondetails.dealerid:20 [outer=(20,38), constraints=(/20: (/NULL - ]; /38: (/NULL - ]), fd=(20)==(38), (38)==(20)]
  │    │    │    │         ├── "lookup_join_const_col_@21":39 = isbuy:21 [outer=(21,39), constraints=(/21: (/NULL - ]; /39: (/NULL - ]), fd=(21)==(39), (39)==(21)]
  │    │    │    │         ├── id:1 = transactiondetails.cardid:23 [outer=(1,23), constraints=(/1: (/NULL - ]; /23: (/NULL - ]), fd=(1)==(23), (23)==(1)]
- │    │    │    │         └── (transactiondate:22 >= '2020-02-28 00:00:00+00:00') AND (transactiondate:22 <= '2020-03-01 00:00:00+00:00') [outer=(22), constraints=(/22: [/'2020-02-28 00:00:00+00:00' - /'2020-03-01 00:00:00+00:00']; tight)]
+ │    │    │    │         └── (transactiondate:22 >= '2020-02-28 00:00:00+00') AND (transactiondate:22 <= '2020-03-01 00:00:00+00') [outer=(22), constraints=(/22: [/'2020-02-28 00:00:00+00' - /'2020-03-01 00:00:00+00']; tight)]
  │    │    │    ├── immutable
  │    │    │    ├── stats: [rows=659920.1, distinct(10)=19000, null(10)=0, distinct(23)=19000, null(23)=0, distinct(2,4,5,10)=29618.5, null(2,4,5,10)=0]
  │    │    │    ├── key: (10,22-24)
@@ -978,7 +978,7 @@ sort
       │    │    │    ├── fd: ()-->(1,2,11,12), (3-5)-->(6,7), (13)-->(14,15), (3)==(13), (13)==(3)
       │    │    │    ├── scan transactiondetails
       │    │    │    │    ├── columns: transactiondetails.dealerid:1!null transactiondetails.isbuy:2!null transactiondate:3!null transactiondetails.cardid:4!null quantity:5!null transactiondetails.sellprice:6!null transactiondetails.buyprice:7!null
-      │    │    │    │    ├── constraint: /1/2/3/4/5: [/1/false/'2020-02-23 00:00:00+00:00' - /1/false/'2020-03-01 00:00:00+00:00']
+      │    │    │    │    ├── constraint: /1/2/3/4/5: [/1/false/'2020-02-23 00:00:00+00' - /1/false/'2020-03-01 00:00:00+00']
       │    │    │    │    ├── stats: [rows=1270000, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1.27e+06, null(3)=0, distinct(4)=57000, null(4)=0, distinct(5)=1.23043e+06, null(5)=0, distinct(6)=1.23043e+06, null(6)=0, distinct(7)=1.23043e+06, null(7)=0, distinct(1,2)=1, null(1,2)=0, distinct(1-3)=1.27e+06, null(1-3)=0]
       │    │    │    │    ├── key: (3-5)
       │    │    │    │    ├── fd: ()-->(1,2), (3-5)-->(6,7)
@@ -991,7 +991,7 @@ sort
       │    │    │    │    ├── ordering: +13 opt(11,12) [actual: +13]
       │    │    │    │    ├── scan transactions
       │    │    │    │    │    ├── columns: transactions.dealerid:11!null transactions.isbuy:12!null date:13!null accountname:14!null customername:15!null
-      │    │    │    │    │    ├── constraint: /11/12/13: [/1/false/'2020-02-23 00:00:00+00:00' - /1/false/'2020-03-01 00:00:00+00:00']
+      │    │    │    │    │    ├── constraint: /11/12/13: [/1/false/'2020-02-23 00:00:00+00' - /1/false/'2020-03-01 00:00:00+00']
       │    │    │    │    │    ├── stats: [rows=141111.1, distinct(11)=1, null(11)=0, distinct(12)=1, null(12)=0, distinct(13)=141111, null(13)=0, distinct(11,12)=1, null(11,12)=0, distinct(11-13)=141111, null(11-13)=0]
       │    │    │    │    │    ├── key: (13)
       │    │    │    │    │    ├── fd: ()-->(11,12), (13)-->(14,15)
@@ -1190,20 +1190,20 @@ values
            │         │    │    │    └── scan transactiondetails@detailscardidindex [as=d]
            │         │    │    │         ├── columns: d.dealerid:1!null d.isbuy:2!null transactiondate:3!null cardid:4!null quantity:5!null
            │         │    │    │         ├── constraint: /1/2/4/3/5
-           │         │    │    │         │    ├── [/1/false/19483/'2020-02-28 00:00:00+00:00' - /1/false/19483/'2020-03-01 00:00:00+00:00']
-           │         │    │    │         │    ├── [/1/true/19483/'2020-02-28 00:00:00+00:00' - /1/true/19483/'2020-03-01 00:00:00+00:00']
-           │         │    │    │         │    ├── [/2/false/19483/'2020-02-28 00:00:00+00:00' - /2/false/19483/'2020-03-01 00:00:00+00:00']
-           │         │    │    │         │    ├── [/2/true/19483/'2020-02-28 00:00:00+00:00' - /2/true/19483/'2020-03-01 00:00:00+00:00']
-           │         │    │    │         │    ├── [/3/false/19483/'2020-02-28 00:00:00+00:00' - /3/false/19483/'2020-03-01 00:00:00+00:00']
-           │         │    │    │         │    ├── [/3/true/19483/'2020-02-28 00:00:00+00:00' - /3/true/19483/'2020-03-01 00:00:00+00:00']
-           │         │    │    │         │    ├── [/4/false/19483/'2020-02-28 00:00:00+00:00' - /4/false/19483/'2020-03-01 00:00:00+00:00']
-           │         │    │    │         │    ├── [/4/true/19483/'2020-02-28 00:00:00+00:00' - /4/true/19483/'2020-03-01 00:00:00+00:00']
-           │         │    │    │         │    ├── [/5/false/19483/'2020-02-28 00:00:00+00:00' - /5/false/19483/'2020-03-01 00:00:00+00:00']
-           │         │    │    │         │    └── [/5/true/19483/'2020-02-28 00:00:00+00:00' - /5/true/19483/'2020-03-01 00:00:00+00:00']
+           │         │    │    │         │    ├── [/1/false/19483/'2020-02-28 00:00:00+00' - /1/false/19483/'2020-03-01 00:00:00+00']
+           │         │    │    │         │    ├── [/1/true/19483/'2020-02-28 00:00:00+00' - /1/true/19483/'2020-03-01 00:00:00+00']
+           │         │    │    │         │    ├── [/2/false/19483/'2020-02-28 00:00:00+00' - /2/false/19483/'2020-03-01 00:00:00+00']
+           │         │    │    │         │    ├── [/2/true/19483/'2020-02-28 00:00:00+00' - /2/true/19483/'2020-03-01 00:00:00+00']
+           │         │    │    │         │    ├── [/3/false/19483/'2020-02-28 00:00:00+00' - /3/false/19483/'2020-03-01 00:00:00+00']
+           │         │    │    │         │    ├── [/3/true/19483/'2020-02-28 00:00:00+00' - /3/true/19483/'2020-03-01 00:00:00+00']
+           │         │    │    │         │    ├── [/4/false/19483/'2020-02-28 00:00:00+00' - /4/false/19483/'2020-03-01 00:00:00+00']
+           │         │    │    │         │    ├── [/4/true/19483/'2020-02-28 00:00:00+00' - /4/true/19483/'2020-03-01 00:00:00+00']
+           │         │    │    │         │    ├── [/5/false/19483/'2020-02-28 00:00:00+00' - /5/false/19483/'2020-03-01 00:00:00+00']
+           │         │    │    │         │    └── [/5/true/19483/'2020-02-28 00:00:00+00' - /5/true/19483/'2020-03-01 00:00:00+00']
            │         │    │    │         ├── key: (1-3,5)
            │         │    │    │         └── fd: ()-->(4)
            │         │    │    └── filters
-           │         │    │         ├── (date:13 >= '2020-02-28 00:00:00+00:00') AND (date:13 <= '2020-03-01 00:00:00+00:00') [outer=(13), constraints=(/13: [/'2020-02-28 00:00:00+00:00' - /'2020-03-01 00:00:00+00:00']; tight)]
+           │         │    │         ├── (date:13 >= '2020-02-28 00:00:00+00') AND (date:13 <= '2020-03-01 00:00:00+00') [outer=(13), constraints=(/13: [/'2020-02-28 00:00:00+00' - /'2020-03-01 00:00:00+00']; tight)]
            │         │    │         ├── ((((t.dealerid:11 = 1) OR (t.dealerid:11 = 2)) OR (t.dealerid:11 = 3)) OR (t.dealerid:11 = 4)) OR (t.dealerid:11 = 5) [outer=(11), constraints=(/11: [/1 - /1] [/2 - /2] [/3 - /3] [/4 - /4] [/5 - /5]; tight)]
            │         │    │         └── t.isbuy:12 IN (false, true) [outer=(12), constraints=(/12: [/false - /false] [/true - /true]; tight)]
            │         │    └── 100
@@ -1239,7 +1239,7 @@ insert transactions
       ├── volatile
       ├── key: ()
       ├── fd: ()-->(10-12,15-18)
-      └── (1, false, '2020-03-01 00:00:00+00:00', '70f03eb1-4f58-4c26-b72d-c524a9d537dd', 'the-account', 'the-customer', cluster_logical_timestamp())
+      └── (1, false, '2020-03-01 00:00:00+00', '70f03eb1-4f58-4c26-b72d-c524a9d537dd', 'the-account', 'the-customer', cluster_logical_timestamp())
 
 # Upsert buy or sell transaction.
 opt
@@ -1278,10 +1278,10 @@ upsert transactions
       │    ├── volatile
       │    ├── key: ()
       │    ├── fd: ()-->(10-12,15-18)
-      │    └── (1, false, '2020-03-01 00:00:00+00:00', '70f03eb1-4f58-4c26-b72d-c524a9d537dd', 'the-account', 'the-customer', cluster_logical_timestamp())
+      │    └── (1, false, '2020-03-01 00:00:00+00', '70f03eb1-4f58-4c26-b72d-c524a9d537dd', 'the-account', 'the-customer', cluster_logical_timestamp())
       ├── scan transactions
       │    ├── columns: dealerid:19!null isbuy:20!null date:21!null accountname:22!null customername:23!null operationid:24 version:25!null
-      │    ├── constraint: /19/20/21: [/1/false/'2020-03-01 00:00:00+00:00' - /1/false/'2020-03-01 00:00:00+00:00']
+      │    ├── constraint: /19/20/21: [/1/false/'2020-03-01 00:00:00+00' - /1/false/'2020-03-01 00:00:00+00']
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
       │    └── fd: ()-->(19-25)
@@ -1358,7 +1358,7 @@ upsert transactiondetails
  │    │    │    │         ├── cluster_logical_timestamp() [as=version_default:20, volatile]
  │    │    │    │         ├── 1 [as="?column?":13]
  │    │    │    │         ├── false [as=bool:14]
- │    │    │    │         ├── '2017-05-10 13:00:00+00:00' [as=current_timestamp:15]
+ │    │    │    │         ├── '2017-05-10 13:00:00+00' [as=current_timestamp:15]
  │    │    │    │         ├── detail_c:59::STRING::INT8 [as=int8:16, outer=(59), immutable]
  │    │    │    │         ├── detail_q:60::STRING::INT8 [as=int8:17, outer=(60), immutable]
  │    │    │    │         ├── detail_s:61::STRING::DECIMAL(10,4) [as=numeric:18, outer=(61), immutable]

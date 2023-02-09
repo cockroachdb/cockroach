@@ -152,10 +152,10 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION]
   WHERE operation = 'join reader' AND message NOT LIKE 'querying next range%' AND message NOT LIKE 'key: %, desc: %'
 ----
 Scan /Table/109/1/{1/2020-01-01T00:00:00.000000001Z-2}, /Table/109/1/{2/2020-01-01T00:00:00.000000001Z-3}
-fetched: /metric_values/metric_values_pkey/1/'2020-01-01 00:00:01+00:00'/nullable/value -> /1/1
-fetched: /metric_values/metric_values_pkey/2/'2020-01-01 00:00:01+00:00'/nullable/value -> /2/3
-fetched: /metric_values/metric_values_pkey/2/'2020-01-01 00:01:01+00:00'/nullable/value -> /-11/4
-fetched: /metric_values/metric_values_pkey/2/'2020-01-01 00:01:02+00:00'/nullable/value -> /-10/5
+fetched: /metric_values/metric_values_pkey/1/'2020-01-01 00:00:01+00'/nullable/value -> /1/1
+fetched: /metric_values/metric_values_pkey/2/'2020-01-01 00:00:01+00'/nullable/value -> /2/3
+fetched: /metric_values/metric_values_pkey/2/'2020-01-01 00:01:01+00'/nullable/value -> /-11/4
+fetched: /metric_values/metric_values_pkey/2/'2020-01-01 00:01:02+00'/nullable/value -> /-10/5
 
 statement ok
 SET tracing = on, kv;
@@ -213,7 +213,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION]
   WHERE operation = 'join reader' AND message NOT LIKE 'querying next range%' AND message NOT LIKE 'key: %, desc: %'
 ----
 Scan /Table/109/2/{1/2-2}, /Table/109/2/{2/2-3}
-fetched: /metric_values/secondary/2/2/'2020-01-01 00:00:01+00:00' -> <undecoded>
+fetched: /metric_values/secondary/2/2/'2020-01-01 00:00:01+00' -> <undecoded>
 Scan /Table/109/1/2/2020-01-01T00:00:01Z/0
 fetched: /metric_values/metric_values_pkey/?/?/value -> /3
 Scan /Table/108/1/2/0
@@ -238,7 +238,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION]
   WHERE operation = 'join reader' AND message NOT LIKE 'querying next range%' AND message NOT LIKE 'key: %, desc: %'
 ----
 Scan /Table/109/2/1/{!NULL--10}, /Table/109/2/2/{!NULL--10}
-fetched: /metric_values/secondary/2/-11/'2020-01-01 00:01:01+00:00' -> <undecoded>
+fetched: /metric_values/secondary/2/-11/'2020-01-01 00:01:01+00' -> <undecoded>
 Scan /Table/109/1/2/2020-01-01T00:01:01Z/0
 fetched: /metric_values/metric_values_pkey/?/?/value -> /4
 Scan /Table/108/1/2/0
@@ -263,8 +263,8 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION]
   WHERE operation = 'join reader' AND message NOT LIKE 'querying next range%' AND message NOT LIKE 'key: %, desc: %'
 ----
 Scan /Table/109/2/1/{!NULL--9}, /Table/109/2/2/{!NULL--9}
-fetched: /metric_values/secondary/2/-11/'2020-01-01 00:01:01+00:00' -> <undecoded>
-fetched: /metric_values/secondary/2/-10/'2020-01-01 00:01:02+00:00' -> <undecoded>
+fetched: /metric_values/secondary/2/-11/'2020-01-01 00:01:01+00' -> <undecoded>
+fetched: /metric_values/secondary/2/-10/'2020-01-01 00:01:02+00' -> <undecoded>
 Scan /Table/109/1/2/2020-01-01T00:01:01Z/0, /Table/109/1/2/2020-01-01T00:01:02Z/0
 fetched: /metric_values/metric_values_pkey/?/?/value -> /4
 fetched: /metric_values/metric_values_pkey/?/?/value -> /5
@@ -290,8 +290,8 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION]
   WHERE operation = 'join reader' AND message NOT LIKE 'querying next range%' AND message NOT LIKE 'key: %, desc: %'
 ----
 Scan /Table/109/2/1/{!NULL--9}, /Table/109/2/2/{!NULL--9}
-fetched: /metric_values/secondary/2/-11/'2020-01-01 00:01:01+00:00' -> <undecoded>
-fetched: /metric_values/secondary/2/-10/'2020-01-01 00:01:02+00:00' -> <undecoded>
+fetched: /metric_values/secondary/2/-11/'2020-01-01 00:01:01+00' -> <undecoded>
+fetched: /metric_values/secondary/2/-10/'2020-01-01 00:01:02+00' -> <undecoded>
 Scan /Table/109/1/2/2020-01-01T00:01:01Z/0, /Table/109/1/2/2020-01-01T00:01:02Z/0
 fetched: /metric_values/metric_values_pkey/?/?/value -> /4
 fetched: /metric_values/metric_values_pkey/?/?/value -> /5

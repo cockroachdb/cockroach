@@ -583,17 +583,17 @@ vectorized: true
 • scan
   estimated row count: 24 (100% of the table; stats collected <hidden> ago; using stats forecast)
   table: c@c_pkey
-  spans: [/'1988-08-07 00:00:00+00:00' - ]
+  spans: [/'1988-08-07 00:00:00+00' - ]
 
 query T
 EXPLAIN (OPT, VERBOSE) SELECT * FROM c WHERE h >= '1988-08-07'
 ----
 scan c
  ├── columns: h:1
- ├── constraint: /1: [/'1988-08-07 00:00:00+00:00' - ]
+ ├── constraint: /1: [/'1988-08-07 00:00:00+00' - ]
  ├── stats: [rows=24, distinct(1)=24, null(1)=0]
- │   histogram(1)=  0               1               5               1               5               1               5               1               5               0
- │                <--- '1988-08-07 00:00:00+00:00' --- '1988-08-07 06:00:00+00:00' --- '1988-08-07 12:00:00+00:00' --- '1988-08-07 18:00:00+00:00' --- '1988-08-08 00:00:00+00:00'
+ │   histogram(1)=  0             1              5             1              5             1              5             1              5             0
+ │                <--- '1988-08-07 00:00:00+00' --- '1988-08-07 06:00:00+00' --- '1988-08-07 12:00:00+00' --- '1988-08-07 18:00:00+00' --- '1988-08-08 00:00:00+00'
  ├── cost: 43.7
  ├── key: (1)
  └── distribution: test
@@ -944,14 +944,14 @@ vectorized: true
 • scan
   estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
   table: c@c_pkey
-  spans: [/'1988-08-07 00:00:00.000001+00:00' - ]
+  spans: [/'1988-08-07 00:00:00.000001+00' - ]
 
 query T
 EXPLAIN (OPT, VERBOSE) SELECT * FROM c WHERE h > '1988-08-07'
 ----
 scan c
  ├── columns: h:1
- ├── constraint: /1: [/'1988-08-07 00:00:00.000001+00:00' - ]
+ ├── constraint: /1: [/'1988-08-07 00:00:00.000001+00' - ]
  ├── stats: [rows=4.8e-09, distinct(1)=4.8e-09, null(1)=0]
  │   histogram(1)=
  ├── cost: 18.02
@@ -1064,17 +1064,17 @@ vectorized: true
 • scan
   estimated row count: 23 (96% of the table; stats collected <hidden> ago; using stats forecast)
   table: c@c_pkey
-  spans: [/'1988-08-07 00:00:00.000001+00:00' - ]
+  spans: [/'1988-08-07 00:00:00.000001+00' - ]
 
 query T
 EXPLAIN (OPT, VERBOSE) SELECT * FROM c WHERE h > '1988-08-07'
 ----
 scan c
  ├── columns: h:1
- ├── constraint: /1: [/'1988-08-07 00:00:00.000001+00:00' - ]
+ ├── constraint: /1: [/'1988-08-07 00:00:00.000001+00' - ]
  ├── stats: [rows=23, distinct(1)=23, null(1)=0]
- │   histogram(1)=  0               0               5               1               5               1               5               1               5               0
- │                <--- '1988-08-07 00:00:00+00:00' --- '1988-08-07 06:00:00+00:00' --- '1988-08-07 12:00:00+00:00' --- '1988-08-07 18:00:00+00:00' --- '1988-08-08 00:00:00+00:00'
+ │   histogram(1)=  0             0              5             1              5             1              5             1              5             0
+ │                <--- '1988-08-07 00:00:00+00' --- '1988-08-07 06:00:00+00' --- '1988-08-07 12:00:00+00' --- '1988-08-07 18:00:00+00' --- '1988-08-08 00:00:00+00'
  ├── cost: 42.63
  ├── key: (1)
  └── distribution: test
@@ -1164,7 +1164,7 @@ vectorized: true
 • scan
   estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
   table: c@c_pkey
-  spans: [/'1988-08-07 00:00:00.000001+00:00' - ]
+  spans: [/'1988-08-07 00:00:00.000001+00' - ]
 
 query T
 EXPLAIN SELECT * FROM x WHERE a > 16
@@ -1203,7 +1203,7 @@ vectorized: true
 • scan
   estimated row count: 23 (96% of the table; stats collected <hidden> ago; using stats forecast)
   table: c@c_pkey
-  spans: [/'1988-08-07 00:00:00.000001+00:00' - ]
+  spans: [/'1988-08-07 00:00:00.000001+00' - ]
 
 # Now check that we resume using forecasts when sql.stats.forecasts.enabled is
 # reset.
@@ -1242,7 +1242,7 @@ vectorized: true
 • scan
   estimated row count: 23 (96% of the table; stats collected <hidden> ago; using stats forecast)
   table: c@c_pkey
-  spans: [/'1988-08-07 00:00:00.000001+00:00' - ]
+  spans: [/'1988-08-07 00:00:00.000001+00' - ]
 
 query T
 EXPLAIN SELECT * FROM x WHERE a > 16

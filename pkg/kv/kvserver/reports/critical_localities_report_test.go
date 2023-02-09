@@ -206,7 +206,7 @@ func TestCriticalLocalitiesSaving(t *testing.T) {
 		{"7", "8", "'dc=B'", "2", "2"},
 	})
 	require.ElementsMatch(t, TableData(ctx, "system.reports_meta", con), [][]string{
-		{"2", "'2001-01-01 10:00:00+00:00'"},
+		{"2", "'2001-01-01 10:00:00+00'"},
 	})
 	require.Equal(t, 3, saver.LastUpdatedRowCount())
 
@@ -227,7 +227,7 @@ func TestCriticalLocalitiesSaving(t *testing.T) {
 		{"15", "6", "'dc=A'", "2", "1"},
 	})
 	require.ElementsMatch(t, TableData(ctx, "system.reports_meta", con), [][]string{
-		{"2", "'2001-01-01 11:00:00+00:00'"},
+		{"2", "'2001-01-01 11:00:00+00'"},
 	})
 	require.Equal(t, 3, saver.LastUpdatedRowCount())
 
@@ -267,7 +267,7 @@ func TestCriticalLocalitiesSaving(t *testing.T) {
 		{"15", "6", "'dc=A'", "2", "1"},
 	})
 	require.ElementsMatch(t, TableData(ctx, "system.reports_meta", con), [][]string{
-		{"2", "'2001-01-01 12:00:00+00:00'"},
+		{"2", "'2001-01-01 12:00:00+00'"},
 	})
 	require.Equal(t, 2, saver.LastUpdatedRowCount())
 
@@ -282,7 +282,7 @@ func TestCriticalLocalitiesSaving(t *testing.T) {
 		{"5", "6", "'dc=A'", "2", "1"},
 	})
 	require.ElementsMatch(t, TableData(ctx, "system.reports_meta", con), [][]string{
-		{"2", "'2001-01-01 12:30:00+00:00'"},
+		{"2", "'2001-01-01 12:30:00+00'"},
 	})
 	require.Equal(t, 3, saver.LastUpdatedRowCount())
 }

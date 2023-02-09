@@ -11909,7 +11909,7 @@ func (c *castTimestampStringOp) Next() coldata.Batch {
 							v := inputCol.Get(tupleIdx)
 							var r []byte
 
-							r = []byte(tree.FormatTimestamp(v))
+							r = tree.PGWireFormatTimestamp(v, nil, r)
 							if toType.Oid() != oid.T_name {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
@@ -11955,7 +11955,7 @@ func (c *castTimestampStringOp) Next() coldata.Batch {
 							v := inputCol.Get(tupleIdx)
 							var r []byte
 
-							r = []byte(tree.FormatTimestamp(v))
+							r = tree.PGWireFormatTimestamp(v, nil, r)
 							if toType.Oid() != oid.T_name {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
@@ -12001,7 +12001,7 @@ func (c *castTimestampStringOp) Next() coldata.Batch {
 							v := inputCol.Get(tupleIdx)
 							var r []byte
 
-							r = []byte(tree.FormatTimestamp(v))
+							r = tree.PGWireFormatTimestamp(v, nil, r)
 							if toType.Oid() != oid.T_name {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
@@ -12047,7 +12047,7 @@ func (c *castTimestampStringOp) Next() coldata.Batch {
 							v := inputCol.Get(tupleIdx)
 							var r []byte
 
-							r = []byte(tree.FormatTimestamp(v))
+							r = tree.PGWireFormatTimestamp(v, nil, r)
 							if toType.Oid() != oid.T_name {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
@@ -12126,16 +12126,14 @@ func (c *castTimestamptzStringOp) Next() coldata.Batch {
 							var r []byte
 
 							// Convert to context timezone for correct display.
-							_t := v.In(evalCtx.GetLocation())
+							_t := v
 
 							_t = _t.Round(time.Microsecond)
 							if _t.After(tree.MaxSupportedTime) || _t.Before(tree.MinSupportedTime) {
 								colexecerror.ExpectedError(tree.NewTimestampExceedsBoundsError(_t))
 							}
 
-							buf.Reset()
-							tree.FormatTimestampTZ(_t, buf)
-							r = []byte(buf.String())
+							r = tree.PGWireFormatTimestamp(_t, evalCtx.GetLocation(), r)
 
 							if toType.Oid() != oid.T_name {
 								// bpchar types truncate trailing whitespace.
@@ -12183,16 +12181,14 @@ func (c *castTimestamptzStringOp) Next() coldata.Batch {
 							var r []byte
 
 							// Convert to context timezone for correct display.
-							_t := v.In(evalCtx.GetLocation())
+							_t := v
 
 							_t = _t.Round(time.Microsecond)
 							if _t.After(tree.MaxSupportedTime) || _t.Before(tree.MinSupportedTime) {
 								colexecerror.ExpectedError(tree.NewTimestampExceedsBoundsError(_t))
 							}
 
-							buf.Reset()
-							tree.FormatTimestampTZ(_t, buf)
-							r = []byte(buf.String())
+							r = tree.PGWireFormatTimestamp(_t, evalCtx.GetLocation(), r)
 
 							if toType.Oid() != oid.T_name {
 								// bpchar types truncate trailing whitespace.
@@ -12240,16 +12236,14 @@ func (c *castTimestamptzStringOp) Next() coldata.Batch {
 							var r []byte
 
 							// Convert to context timezone for correct display.
-							_t := v.In(evalCtx.GetLocation())
+							_t := v
 
 							_t = _t.Round(time.Microsecond)
 							if _t.After(tree.MaxSupportedTime) || _t.Before(tree.MinSupportedTime) {
 								colexecerror.ExpectedError(tree.NewTimestampExceedsBoundsError(_t))
 							}
 
-							buf.Reset()
-							tree.FormatTimestampTZ(_t, buf)
-							r = []byte(buf.String())
+							r = tree.PGWireFormatTimestamp(_t, evalCtx.GetLocation(), r)
 
 							if toType.Oid() != oid.T_name {
 								// bpchar types truncate trailing whitespace.
@@ -12297,16 +12291,14 @@ func (c *castTimestamptzStringOp) Next() coldata.Batch {
 							var r []byte
 
 							// Convert to context timezone for correct display.
-							_t := v.In(evalCtx.GetLocation())
+							_t := v
 
 							_t = _t.Round(time.Microsecond)
 							if _t.After(tree.MaxSupportedTime) || _t.Before(tree.MinSupportedTime) {
 								colexecerror.ExpectedError(tree.NewTimestampExceedsBoundsError(_t))
 							}
 
-							buf.Reset()
-							tree.FormatTimestampTZ(_t, buf)
-							r = []byte(buf.String())
+							r = tree.PGWireFormatTimestamp(_t, evalCtx.GetLocation(), r)
 
 							if toType.Oid() != oid.T_name {
 								// bpchar types truncate trailing whitespace.
