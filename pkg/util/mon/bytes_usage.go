@@ -649,6 +649,7 @@ func (b *BoundAccount) Clear(ctx context.Context) {
 }
 
 // Close releases all the cumulated allocations of an account at once.
+// TODO(yuzefovich): consider removing this method in favor of Clear.
 func (b *BoundAccount) Close(ctx context.Context) {
 	if b == nil {
 		return

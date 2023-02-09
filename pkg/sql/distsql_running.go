@@ -1680,7 +1680,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 		// TODO(yuzefovich): this is unfortunate - we're materializing all
 		// buffered rows into a single tuple kept in memory. Refactor it.
 		var result tree.DTuple
-		iterator := newRowContainerIterator(ctx, rows, typs)
+		iterator := newRowContainerIterator(ctx, rows)
 		defer iterator.Close()
 		for {
 			row, err := iterator.Next()
@@ -1725,7 +1725,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 		case 0:
 			subqueryPlans[planIdx].result = tree.DNull
 		case 1:
-			iterator := newRowContainerIterator(ctx, rows, typs)
+			iterator := newRowContainerIterator(ctx, rows)
 			defer iterator.Close()
 			row, err := iterator.Next()
 			if err != nil {

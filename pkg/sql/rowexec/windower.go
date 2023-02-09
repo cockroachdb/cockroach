@@ -645,7 +645,7 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *eval.Con
 		} else if !ok {
 			break
 		}
-		row, err := i.Row()
+		row, err := i.EncRow()
 		if err != nil {
 			return err
 		}
@@ -722,7 +722,7 @@ func (w *windower) populateNextOutputRow() (bool, error) {
 		} else if !ok {
 			return false, nil
 		}
-		inputRow, err := w.allRowsIterator.Row()
+		inputRow, err := w.allRowsIterator.EncRow()
 		w.allRowsIterator.Next()
 		if err != nil {
 			return false, err
