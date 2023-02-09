@@ -536,10 +536,19 @@ func SchemaDescs(schemas []*schemadesc.Mutable, descriptorRewrites jobspb.DescRe
 		sc.ParentID = rewrite.ParentID
 
 		// Rewrite function ID and types ID in function signatures.
-		for _, fn := range sc.GetFunctions() {
+		newFns := make(map[string]descpb.SchemaDescriptor_Function)
+		for fnName, fn := range sc.GetFunctions() {
+			newSigs := make([]descpb.SchemaDescriptor_FunctionSignature, 0, len(fn.Signatures))
 			for i := range fn.Signatures {
 				sig := &fn.Signatures[i]
-				sig.ID = descriptorRewrites[sig.ID].ID
+				// If the function is not found in the backup, we just skip. This only
+				// happens when restoring from a backup with `BACKUP TABLE` where the
+				// function descriptors are not backup.
+				fnDesc, ok := descriptorRewrites[sig.ID]
+				if !ok {
+					continue
+				}
+				sig.ID = fnDesc.ID
 				for _, typ := range sig.ArgTypes {
 					if err := rewriteIDsInTypesT(typ, descriptorRewrites); err != nil {
 						return err
@@ -547,6 +556,13 @@ func SchemaDescs(schemas []*schemadesc.Mutable, descriptorRewrites jobspb.DescRe
 				}
 				if err := rewriteIDsInTypesT(sig.ReturnType, descriptorRewrites); err != nil {
 					return err
+				}
+				newSigs = append(newSigs, *sig)
+			}
+			if len(newSigs) > 0 {
+				newFns[fnName] = descpb.SchemaDescriptor_Function{
+					Name:       fnName,
+					Signatures: newSigs,
 				}
 			}
 		}
