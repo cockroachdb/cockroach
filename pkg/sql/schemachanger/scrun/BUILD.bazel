@@ -39,6 +39,7 @@ go_test(
     args = ["-test.timeout=55s"],
     embed = [":scrun"],
     deps = [
+        "//pkg/clusterversion",
         "//pkg/jobs/jobspb",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
