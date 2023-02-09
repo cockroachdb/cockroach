@@ -150,7 +150,42 @@ type cockroachCommit struct {
 	MessageBody     string `json:"messageBody"`
 }
 
+type epicIssueRefInfo struct {
+	epicRefs        map[string]int
+	epicNone        bool
+	issueCloseRefs  map[string]int
+	issueInformRefs map[string]int
+	isBugFix        bool
+}
+
+// Regex components for finding and validating issue and epic references in a string
 var (
+	ghIssuePart     = `(#\d+)`                                                      // e.g., #12345
+	ghIssueRepoPart = `([\w.-]+[/][\w.-]+#\d+)`                                     // e.g., cockroachdb/cockroach#12345
+	ghURLPart       = `(https://github.com/[-a-z0-9]+/[-._a-z0-9/]+/issues/\d+)`    // e.g., https://github.com/cockroachdb/cockroach/issues/12345
+	jiraIssuePart   = `([[:alpha:]]+-\d+)`                                          // e.g., DOC-3456
+	jiraURLPart     = "https://cockroachlabs.atlassian.net/browse/" + jiraIssuePart // e.g., https://cockroachlabs.atlassian.net/browse/DOC-3456
+	issueRefPart    = ghIssuePart + "|" + ghIssueRepoPart + "|" + ghURLPart + "|" + jiraIssuePart + "|" + jiraURLPart
+	afterRefPart    = `[,.;]?(?:[ \t\n\r]+|$)`
+)
+
+// RegExes of each issue part
+var (
+	ghIssuePartRE     = regexp.MustCompile(ghIssuePart)
+	ghIssueRepoPartRE = regexp.MustCompile(ghIssueRepoPart)
+	ghURLPartRE       = regexp.MustCompile(ghURLPart)
+	jiraIssuePartRE   = regexp.MustCompile(jiraIssuePart)
+	jiraURLPartRE     = regexp.MustCompile(jiraURLPart)
+)
+
+// Fully composed regexs used to match strings.
+var (
+	fixIssueRefRE          = regexp.MustCompile(`(?im)(?i:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+(?:(?:` + issueRefPart + `)` + afterRefPart + ")+")
+	informIssueRefRE       = regexp.MustCompile(`(?im)(?:part of|see also|informs):?\s+(?:(?:` + issueRefPart + `)` + afterRefPart + ")+")
+	epicRefRE              = regexp.MustCompile(`(?im)epic:?\s+(?:(?:` + jiraIssuePart + "|" + jiraURLPart + `)` + afterRefPart + ")+")
+	epicNoneRE             = regexp.MustCompile(`(?im)epic:?\s+(?:(none)` + afterRefPart + ")+")
+	githubJiraIssueRefRE   = regexp.MustCompile(issueRefPart)
+	jiraIssueRefRE         = regexp.MustCompile(jiraIssuePart + "|" + jiraURLPart)
 	releaseNoteNoneRE      = regexp.MustCompile(`(?i)release note:? [nN]one`)
 	allRNRE                = regexp.MustCompile(`(?i)release note:? \(.*`)
 	nonBugFixRNRE          = regexp.MustCompile(`(?i)release note:? \(([^b]|b[^u]|bu[^g]|bug\S|bug [^f]|bug f[^i]|bug fi[^x]).*`)
@@ -576,13 +611,109 @@ func searchCockroachPRCommitsSingle(
 	return pageInfo.HasNextPage, pageInfo.EndCursor, result, nil
 }
 
+// extractStringsFromMessage takes in a commit message or PR body as well as two regular expressions. The first
+// regular expression checks for a valid formatted epic or issue reference. If one is found, it searches that exact
+// string for the individual issue references. The output is a map where the key is each epic or issue ref and the
+// value is the count of references of that ref.
+func extractStringsFromMessage(
+	message string, firstMatch, secondMatch *regexp.Regexp,
+) map[string]int {
+	ids := map[string]int{}
+	if allMatches := firstMatch.FindAllString(message, -1); len(allMatches) > 0 {
+		for _, x := range allMatches {
+			matches := secondMatch.FindAllString(x, -1)
+			for _, match := range matches {
+				ids[match]++
+			}
+		}
+	}
+	return ids
+}
+
+func extractFixIssueIDs(message string) map[string]int {
+	return extractStringsFromMessage(message, fixIssueRefRE, githubJiraIssueRefRE)
+}
+
+func extractInformIssueIDs(message string) map[string]int {
+	return extractStringsFromMessage(message, informIssueRefRE, githubJiraIssueRefRE)
+}
+
+func extractEpicIDs(message string) map[string]int {
+	return extractStringsFromMessage(message, epicRefRE, jiraIssueRefRE)
+}
+
+func containsEpicNone(message string) bool {
+	if allMatches := epicNoneRE.FindAllString(message, -1); len(allMatches) > 0 {
+		return true
+	}
+	return false
+}
+
+func containsBugFix(message string) bool {
+	if allMatches := bugFixRNRE.FindAllString(message, -1); len(allMatches) > 0 {
+		return true
+	}
+	return false
+}
+
+func getUrlFromRef(ref string) string {
+	if ghURLPartRE.MatchString(ref) || jiraURLPartRE.MatchString(ref) {
+		return ref
+	} else if ghIssueRepoPartRE.MatchString(ref) {
+		split := strings.Split(ref, "#")
+		return "https://github.com/" + split[0] + "/issues/" + split[1]
+	} else if ghIssuePartRE.MatchString(ref) {
+		return "https://github.com/cockroachdb/cockroach/issues/" + strings.Replace(ref, "#", "", 1)
+	} else if jiraIssuePartRE.MatchString(ref) {
+		return "https://cockroachlabs.atlassian.net/browse/" + ref
+	} else {
+		return "Malformed epic/issue ref (" + ref + ")"
+	}
+}
+
+func extractIssueEpicRefs(prBody, commitBody string) string {
+	refInfo := epicIssueRefInfo{
+		epicRefs:        extractEpicIDs(prBody + "\n" + commitBody),
+		epicNone:        containsEpicNone(prBody + "\n" + commitBody),
+		issueCloseRefs:  extractFixIssueIDs(prBody + "\n" + commitBody),
+		issueInformRefs: extractInformIssueIDs(prBody + "\n" + commitBody),
+		isBugFix:        containsBugFix(prBody + "\n" + commitBody),
+	}
+	var builder strings.Builder
+	if len(refInfo.epicRefs) > 0 {
+		builder.WriteString("Epic:")
+		for x := range refInfo.epicRefs {
+			builder.WriteString(" " + getUrlFromRef(x))
+		}
+		builder.WriteString("\n")
+	}
+	if len(refInfo.issueCloseRefs) > 0 {
+		builder.WriteString("Fixes:")
+		for x := range refInfo.issueCloseRefs {
+			builder.WriteString(" " + getUrlFromRef(x))
+		}
+		builder.WriteString("\n")
+	}
+	if len(refInfo.issueInformRefs) > 0 {
+		builder.WriteString("Informs:")
+		for x := range refInfo.issueInformRefs {
+			builder.WriteString(" " + getUrlFromRef(x))
+		}
+		builder.WriteString("\n")
+	}
+	if refInfo.epicNone && builder.Len() == 0 {
+		builder.WriteString("Epic: none\n")
+	}
+	return builder.String()
+}
+
 // getIssues takes a list of commits from GitHub as well as the PR number associated with those commits and outputs a
 // formatted list of docs issues with valid release notes
 func constructDocsIssues(prs []cockroachPR) []docsIssue {
 	var result []docsIssue
 	for _, pr := range prs {
 		for _, commit := range pr.Commits {
-			rns := formatReleaseNotes(commit.MessageBody, pr.Number, commit.Sha)
+			rns := formatReleaseNotes(commit.MessageBody, pr.Number, pr.Body, commit.Sha)
 			for i, rn := range rns {
 				x := docsIssue{
 					sourceCommitSha: commit.Sha,
@@ -610,12 +741,15 @@ func formatTitle(title string, prNumber int, index int, totalLength int) string 
 }
 
 // formatReleaseNotes generates a list of docsIssue bodies for the docs repo based on a given CRDB sha
-func formatReleaseNotes(message string, prNumber int, crdbSha string) []string {
+func formatReleaseNotes(
+	commitMessage string, prNumber int, prBody string, crdbSha string,
+) []string {
 	rnBodySlice := []string{}
-	if releaseNoteNoneRE.MatchString(message) {
+	if releaseNoteNoneRE.MatchString(commitMessage) {
 		return rnBodySlice
 	}
-	splitString := strings.Split(message, "\n")
+	epicIssueRefs := extractIssueEpicRefs(prBody, commitMessage)
+	splitString := strings.Split(commitMessage, "\n")
 	releaseNoteLines := []string{}
 	var rnBody string
 	for _, x := range splitString {
@@ -626,9 +760,10 @@ func formatReleaseNotes(message string, prNumber int, crdbSha string) []string {
 			rnBody = fmt.Sprintf(
 				"Related PR: https://github.com/cockroachdb/cockroach/pull/%s\n"+
 					"Commit: https://github.com/cockroachdb/cockroach/commit/%s\n"+
-					"\n---\n\n%s",
+					"%s\n---\n\n%s",
 				strconv.Itoa(prNumber),
 				crdbSha,
+				epicIssueRefs,
 				strings.Join(releaseNoteLines, "\n"),
 			)
 			rnBodySlice = append(rnBodySlice, strings.TrimSuffix(rnBody, "\n"))
@@ -643,9 +778,10 @@ func formatReleaseNotes(message string, prNumber int, crdbSha string) []string {
 		rnBody = fmt.Sprintf(
 			"Related PR: https://github.com/cockroachdb/cockroach/pull/%s\n"+
 				"Commit: https://github.com/cockroachdb/cockroach/commit/%s\n"+
-				"\n---\n\n%s",
+				"%s\n---\n\n%s",
 			strconv.Itoa(prNumber),
 			crdbSha,
+			epicIssueRefs,
 			strings.Join(releaseNoteLines, "\n"),
 		)
 		rnBodySlice = append(rnBodySlice, strings.TrimSuffix(rnBody, "\n"))
