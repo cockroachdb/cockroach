@@ -82,6 +82,7 @@ export type TxnInsightDetails = {
   txnDetails?: TxnInsightEvent;
   blockingContentionDetails?: BlockedContentionDetails[];
   statements?: StmtInsightEvent[];
+  execType?: InsightExecEnum;
 };
 
 export type BlockedStatementContentionDetails = {
@@ -102,6 +103,7 @@ export type StmtInsightEvent = InsightEventBase & {
   indexRecommendations: string[];
   planGist: string;
   databaseName: string;
+  execType?: InsightExecEnum;
 };
 
 export type Insight = {
@@ -324,6 +326,9 @@ export interface ExecutionDetails {
   retries?: number;
   statement?: string;
   summary?: string;
+  statementExecutionID?: string;
+  transactionExecutionID?: string;
+  execType?: InsightExecEnum;
 }
 
 export interface insightDetails {

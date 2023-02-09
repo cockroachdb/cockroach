@@ -18,11 +18,13 @@ import {
   SchemaInsightEventFilters,
   SortSetting,
   selectID,
+  selectTransactionFingerprintID,
   selectStatementInsightDetailsCombiner,
   selectTxnInsightDetailsCombiner,
   InsightEnumToLabel,
   TxnInsightDetails,
   api,
+  util,
 } from "@cockroachlabs/cluster-ui";
 
 export const filtersLocalSetting = new LocalSetting<
@@ -105,6 +107,18 @@ export const selectStmtInsightsLoading = (state: AdminUIState) =>
   state.cachedData.stmtInsights?.inFlight &&
   (!state.cachedData.stmtInsights?.data ||
     !state.cachedData.stmtInsights.valid);
+
+export const selectTxnInsightsByFingerprint = createSelector(
+  selectTransactionInsights,
+  selectTransactionFingerprintID,
+  (execInsights, fingerprintID) => {
+    if (fingerprintID == null) {
+      return null;
+    }
+    const id = util.FixFingerprintHexValue(BigInt(fingerprintID).toString(16));
+    return execInsights?.filter(txn => txn.transactionFingerprintID === id);
+  },
+);
 
 export const selectInsightTypes = () => {
   const insights: string[] = [];

@@ -78,7 +78,21 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 			},
 		},
 	}
+	callbacks := []roachpb.StoreID{}
+	sp.SetOnCapacityChange(func(
+		storeID roachpb.StoreID,
+		_, _ roachpb.StoreCapacity,
+	) {
+		callbacks = append(callbacks, storeID)
+	})
+	// Gossip the initial stores. There should trigger two callbacks as the
+	// capacity has changed from no capacity to a new capacity.
 	sg.GossipStores(stores, t)
+	require.Len(t, callbacks, 2)
+	// Gossip the initial stores again, with the same capacity. This shouldn't
+	// trigger any callbacks as the capacity hasn't changed.
+	sg.GossipStores(stores, t)
+	require.Len(t, callbacks, 2)
 
 	replica := Replica{RangeID: 1}
 	replica.mu.Lock()

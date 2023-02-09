@@ -9,7 +9,13 @@
 // licenses/APL.txt.
 
 import { RouteComponentProps } from "react-router";
-import { getMatchParamByName, executionIdAttr, idAttr } from "src/util";
+import {
+  getMatchParamByName,
+  executionIdAttr,
+  idAttr,
+  statementAttr,
+  txnFingerprintIdAttr,
+} from "src/util";
 
 // The functions in this file are agnostic to the different shape of each
 // state in db-console and cluster-ui. This file contains selector functions
@@ -30,3 +36,13 @@ export const selectID = (
 ): string | null => {
   return getMatchParamByName(props.match, idAttr);
 };
+
+export const selectStatementFingerprintID = (
+  _state: unknown,
+  props: RouteComponentProps,
+): string | null => getMatchParamByName(props.match, statementAttr);
+
+export const selectTransactionFingerprintID = (
+  _state: unknown,
+  props: RouteComponentProps,
+): string | null => getMatchParamByName(props.match, txnFingerprintIdAttr);

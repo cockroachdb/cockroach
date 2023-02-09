@@ -39,5 +39,23 @@ type RangeRequestLocalityInfo struct {
 func (r RangeUsageInfo) Load() load.Load {
 	dims := load.Vector{}
 	dims[load.Queries] = r.QueriesPerSecond
+	dims[load.CPU] = r.RequestCPUNanosPerSecond + r.RaftCPUNanosPerSecond
+	return dims
+}
+
+// TransferImpact returns the impact of transferring the lease for the range,
+// given the usage information. The impact is assumed to be symmetric, e.g. the
+// receiving store of the transfer will have load = prev_load(recv) + impact
+// after the transfer, whilst the sending side will have load =
+// prev_load(sender) - impact after the transfer.
+func (r RangeUsageInfo) TransferImpact() load.Load {
+	dims := load.Vector{}
+	dims[load.Queries] = r.QueriesPerSecond
+	// Only use the request recorded cpu. This assumes that all replicas will
+	// use the same amount of raft cpu - which may be dubious.
+	//
+	// TODO(kvoli): Look to separate out leaseholder vs replica cpu usage in
+	// accounting to account for follower reads if able.
+	dims[load.CPU] = r.RequestCPUNanosPerSecond
 	return dims
 }

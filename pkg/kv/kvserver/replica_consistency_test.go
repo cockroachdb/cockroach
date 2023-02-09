@@ -102,7 +102,7 @@ func TestStoreCheckpointSpans(t *testing.T) {
 		r.isInitialized.Set(desc.IsInitialized())
 		require.NoError(t, s.addToReplicasByRangeIDLocked(r))
 		if r.IsInitialized() {
-			require.NoError(t, s.addToReplicasByKeyLocked(r))
+			require.NoError(t, s.addToReplicasByKeyLockedReplicaRLocked(r))
 			descs = append(descs, desc)
 		}
 	}

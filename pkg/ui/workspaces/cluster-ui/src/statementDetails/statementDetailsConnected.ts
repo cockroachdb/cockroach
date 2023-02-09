@@ -39,12 +39,17 @@ import { actions as nodesActions } from "../store/nodes";
 import { actions as nodeLivenessActions } from "../store/liveness";
 import { selectTimeScale } from "../store/utils/selectors";
 import {
+  actions as statementFingerprintInsightActions,
+  selectStatementFingerprintInsights,
+} from "src/store/insights/statementFingerprintInsights";
+import {
+  StmtInsightsReq,
   InsertStmtDiagnosticRequest,
   StatementDetailsRequest,
   StatementDiagnosticsReport,
-} from "../api";
+} from "src/api";
 import { TimeScale } from "../timeScaleDropdown";
-import { getMatchParamByName, statementAttr } from "../util";
+import { getMatchParamByName, statementAttr } from "src/util";
 
 // For tenant cases, we don't show information about node, regions and
 // diagnostics.
@@ -71,6 +76,10 @@ const mapStateToProps = (state: AppState, props: RouteComponentProps) => {
     isTenant: selectIsTenant(state),
     hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),
     hasAdminRole: selectHasAdminRole(state),
+    statementFingerprintInsights: selectStatementFingerprintInsights(
+      state,
+      props,
+    ),
   };
 };
 
@@ -84,6 +93,8 @@ const mapDispatchToProps = (
   refreshNodes: () => dispatch(nodesActions.refresh()),
   refreshNodesLiveness: () => dispatch(nodeLivenessActions.refresh()),
   refreshUserSQLRoles: () => dispatch(uiConfigActions.refreshUserSQLRoles()),
+  refreshStatementFingerprintInsights: (req: StmtInsightsReq) =>
+    dispatch(statementFingerprintInsightActions.refresh(req)),
   onTimeScaleChange: (ts: TimeScale) => {
     dispatch(
       sqlStatsActions.updateTimeScale({

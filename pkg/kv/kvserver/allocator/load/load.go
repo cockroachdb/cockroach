@@ -73,10 +73,29 @@ func ElementWiseProduct(a, b Load) Load {
 	return bimap(a, b, func(ai, bi float64) float64 { return ai * bi })
 }
 
+// Scale applies the factor given against every dimension.
+func Scale(l Load, factor float64) Load {
+	return nmap(l, func(_ Dimension, li float64) float64 { return li * factor })
+}
+
+// Set returns a new Load with every dimension equal to the value given.
+func Set(val float64) Load {
+	l := Vector{}
+	return nmap(l, func(_ Dimension, li float64) float64 { return val })
+}
+
 func bimap(a, b Load, op func(ai, bi float64) float64) Load {
 	mapped := Vector{}
 	for dim := Dimension(0); dim < Dimension(nDimensions); dim++ {
 		mapped[dim] = op(a.Dim(dim), b.Dim(dim))
+	}
+	return mapped
+}
+
+func nmap(l Load, op func(d Dimension, li float64) float64) Load {
+	mapped := Vector{}
+	for dim := Dimension(0); dim < Dimension(nDimensions); dim++ {
+		mapped[dim] = op(dim, l.Dim(dim))
 	}
 	return mapped
 }

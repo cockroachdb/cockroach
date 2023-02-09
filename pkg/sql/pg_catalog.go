@@ -52,13 +52,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vtable"
+	"github.com/cockroachdb/cockroach/pkg/util/collatedstring"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
-	"golang.org/x/text/collate"
 )
 
 var (
@@ -815,12 +815,8 @@ https://www.postgresql.org/docs/9.5/catalog-pg-collation.html`,
 					tree.DNull, // collisdeterministic
 				)
 			}
-			if err := add(tree.DefaultCollationTag); err != nil {
-				return err
-			}
-			for _, tag := range collate.Supported() {
-				collName := tag.String()
-				if err := add(collName); err != nil {
+			for _, tag := range collatedstring.Supported() {
+				if err := add(tag); err != nil {
 					return err
 				}
 			}
@@ -4402,13 +4398,13 @@ func typColl(typ *types.T, h oidHasher) tree.Datum {
 	case types.AnyFamily:
 		return oidZero
 	case types.StringFamily:
-		return h.CollationOid(tree.DefaultCollationTag)
+		return h.CollationOid(collatedstring.DefaultCollationTag)
 	case types.CollatedStringFamily:
 		return h.CollationOid(typ.Locale())
 	}
 
 	if typ.Equivalent(types.StringArray) {
-		return h.CollationOid(tree.DefaultCollationTag)
+		return h.CollationOid(collatedstring.DefaultCollationTag)
 	}
 	return oidZero
 }
