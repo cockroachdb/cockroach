@@ -536,6 +536,7 @@ func (r *Replica) applySnapshot(
 		}
 	}
 
+	subsumedDescs := make([]*roachpb.RangeDescriptor, 0, len(subsumedRepls))
 	for _, sr := range subsumedRepls {
 		// We mark the replica as destroyed so that new commands are not
 		// accepted. This destroy status will be detected after the batch
@@ -547,6 +548,8 @@ func (r *Replica) applySnapshot(
 			destroyReasonRemoved)
 		sr.mu.Unlock()
 		sr.readOnlyCmdMu.Unlock()
+
+		subsumedDescs = append(subsumedDescs, sr.Desc())
 	}
 
 	// If we're subsuming a replica below, we don't have its last NextReplicaID,
@@ -558,7 +561,7 @@ func (r *Replica) applySnapshot(
 	// ranges _can't_ have new replicas.
 	if err := clearSubsumedReplicaDiskData(
 		ctx, r.store.ClusterSettings(), r.store.Engine(), inSnap.SSTStorageScratch,
-		desc, subsumedRepls, mergedTombstoneReplicaID,
+		desc, subsumedDescs, mergedTombstoneReplicaID,
 	); err != nil {
 		return err
 	}
@@ -725,7 +728,7 @@ func clearSubsumedReplicaDiskData(
 	reader storage.Reader,
 	scratch *SSTSnapshotStorageScratch,
 	desc *roachpb.RangeDescriptor,
-	subsumedRepls []*Replica,
+	subsumedDescs []*roachpb.RangeDescriptor,
 	subsumedNextReplicaID roachpb.ReplicaID,
 ) error {
 	// NB: we don't clear RangeID local key spans here. That happens
@@ -737,7 +740,7 @@ func clearSubsumedReplicaDiskData(
 	}
 	keySpans := getKeySpans(desc)
 	totalKeySpans := append([]roachpb.Span(nil), keySpans...)
-	for _, sr := range subsumedRepls {
+	for _, subDesc := range subsumedDescs {
 		// We have to create an SST for the subsumed replica's range-id local keys.
 		subsumedReplSSTFile := &storage.MemFile{}
 		subsumedReplSST := storage.MakeIngestionSSTWriter(
@@ -752,7 +755,7 @@ func clearSubsumedReplicaDiskData(
 			ClearUnreplicatedByRangeID: true,
 			MustUseClearRange:          true,
 		}
-		if err := kvstorage.DestroyReplica(ctx, sr.RangeID, reader, &subsumedReplSST, subsumedNextReplicaID, opts); err != nil {
+		if err := kvstorage.DestroyReplica(ctx, subDesc.RangeID, reader, &subsumedReplSST, subsumedNextReplicaID, opts); err != nil {
 			subsumedReplSST.Close()
 			return err
 		}
@@ -767,7 +770,7 @@ func clearSubsumedReplicaDiskData(
 			}
 		}
 
-		srKeySpans := getKeySpans(sr.Desc())
+		srKeySpans := getKeySpans(subDesc)
 		// Compute the total key space covered by the current replica and all
 		// subsumed replicas.
 		for i := range srKeySpans {
