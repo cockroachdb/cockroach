@@ -240,14 +240,5 @@ func Open(
 	if err != nil {
 		return nil, err
 	}
-	// Set the active cluster version, ensuring the engine's format
-	// major version is ratcheted sufficiently high to match the
-	// settings cluster version.
-	if v := settings.Version.ActiveVersionOrEmpty(ctx).Version; v != (roachpb.Version{}) {
-		if err := p.SetMinVersion(v); err != nil {
-			p.Close()
-			return nil, err
-		}
-	}
 	return p, nil
 }
