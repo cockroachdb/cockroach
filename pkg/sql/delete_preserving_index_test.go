@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -129,10 +130,21 @@ func TestDeletePreservingIndexEncoding(t *testing.T) {
 		prefix := rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, tableDesc.GetID(), index.ID)
 		prefixEnd := append(prefix, []byte("\xff")...)
 
-		revisions, err := kvclient.GetAllRevisions(context.Background(), kvDB, prefix, prefixEnd, now, end)
-		if err != nil {
-			return nil, nil, err
-		}
+		revisionsCh := make(chan []kvclient.VersionedValues)
+		g := ctxgroup.WithContext(ctx)
+		g.GoCtx(func(ctx context.Context) error {
+			defer close(revisionsCh)
+			return kvclient.GetAllRevisions(context.Background(), kvDB, prefix, prefixEnd, now, end, revisionsCh)
+		})
+
+		var revisions []kvclient.VersionedValues
+		g.GoCtx(func(ctx context.Context) error {
+			for r := range revisionsCh {
+				revisions = append(revisions, r...)
+			}
+			return nil
+		})
+		require.NoError(t, g.Wait())
 
 		completeSchemaChange <- struct{}{}
 		finishedSchemaChange.Wait()
