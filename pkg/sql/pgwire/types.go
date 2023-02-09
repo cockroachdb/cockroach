@@ -157,8 +157,13 @@ func writeTextDatumNotNull(
 	sessionLoc *time.Location,
 	t *types.T,
 ) {
+
 	oldDCC := b.textFormatter.SetDataConversionConfig(conv)
-	defer b.textFormatter.SetDataConversionConfig(oldDCC)
+	oldLoc := b.textFormatter.SetLocation(sessionLoc)
+	defer func() {
+		b.textFormatter.SetDataConversionConfig(oldDCC)
+		b.textFormatter.SetLocation(oldLoc)
+	}()
 	switch v := tree.UnwrapDOidWrapper(d).(type) {
 	case *tree.DBitArray:
 		b.textFormatter.FormatNode(v)
@@ -293,7 +298,11 @@ func (b *writeBuffer) writeTextColumnarElement(
 	sessionLoc *time.Location,
 ) {
 	oldDCC := b.textFormatter.SetDataConversionConfig(conv)
-	defer b.textFormatter.SetDataConversionConfig(oldDCC)
+	oldLoc := b.textFormatter.SetLocation(sessionLoc)
+	defer func() {
+		b.textFormatter.SetDataConversionConfig(oldDCC)
+		b.textFormatter.SetLocation(oldLoc)
+	}()
 	typ := vecs.Vecs[vecIdx].Type()
 	if log.V(2) {
 		log.Infof(ctx, "pgwire writing TEXT columnar element of type: %s", typ)
