@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -655,9 +656,13 @@ func asyncWriteToOtelAndSystemEventsTable(
 				}
 			}
 		}); err != nil {
-		// This should never happen: RunAsyncTask can only fail if its context was canceled,
-		// and we're using the background context here.
-		err = errors.NewAssertionErrorWithWrappedErrf(err, "unexpected stopper error")
+		expectedStopperError := errors.Is(err, stop.ErrThrottled) || errors.Is(err, stop.ErrUnavailable)
+		if !expectedStopperError {
+			// RunAsyncTask only returns an error not listed above
+			// if its context was canceled, and we're using the
+			// background context here.
+			err = errors.NewAssertionErrorWithWrappedErrf(err, "unexpected stopper error")
+		}
 		log.Warningf(ctx, "failed to start task to save %d events in eventlog: %v", len(entries), err)
 	}
 }
