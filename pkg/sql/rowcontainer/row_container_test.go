@@ -39,9 +39,8 @@ import (
 )
 
 // verifyRows verifies that the rows read with the given RowIterator match up
-// with  the given rows. evalCtx and ordering are used to compare rows.
+// with the given rows. evalCtx and ordering are used to compare rows.
 func verifyRows(
-	ctx context.Context,
 	i RowIterator,
 	expectedRows rowenc.EncDatumRows,
 	evalCtx *eval.Context,
@@ -53,11 +52,22 @@ func verifyRows(
 		} else if !ok {
 			break
 		}
+		encRow, err := i.EncRow()
+		if err != nil {
+			return err
+		}
+		if cmp, err := compareEncRows(
+			types.OneIntCol, encRow, expectedRows[0], evalCtx, &tree.DatumAlloc{}, ordering,
+		); err != nil {
+			return err
+		} else if cmp != 0 {
+			return fmt.Errorf("unexpected enc row %v, expected %v", encRow, expectedRows[0])
+		}
 		row, err := i.Row()
 		if err != nil {
 			return err
 		}
-		if cmp, err := compareRows(
+		if cmp, err := compareRowToEncRow(
 			types.OneIntCol, row, expectedRows[0], evalCtx, &tree.DatumAlloc{}, ordering,
 		); err != nil {
 			return err
@@ -163,7 +173,7 @@ func TestRowContainerIterators(t *testing.T) {
 			func() {
 				i := mc.NewIterator(ctx)
 				defer i.Close()
-				if err := verifyRows(ctx, i, rows, evalCtx, ordering); err != nil {
+				if err := verifyRows(i, rows, evalCtx, ordering); err != nil {
 					t.Fatalf("rows mismatch on the run number %d: %s", k+1, err)
 				}
 			}()
@@ -176,7 +186,7 @@ func TestRowContainerIterators(t *testing.T) {
 	t.Run("NewFinalIterator", func(t *testing.T) {
 		i := mc.NewFinalIterator(ctx)
 		defer i.Close()
-		if err := verifyRows(ctx, i, rows, evalCtx, ordering); err != nil {
+		if err := verifyRows(i, rows, evalCtx, ordering); err != nil {
 			t.Fatal(err)
 		}
 		if mc.Len() != 0 {
@@ -197,56 +207,58 @@ func TestDiskBackedRowContainer(t *testing.T) {
 	}
 	defer tempEngine.Close()
 
-	// These monitors are started and stopped by subtests.
-	memoryMonitor := mon.NewMonitor(
-		"test-mem",
-		mon.MemoryResource,
-		nil,           /* curCount */
-		nil,           /* maxHist */
-		-1,            /* increment */
-		math.MaxInt64, /* noteworthy */
-		st,
-	)
-	diskMonitor := mon.NewMonitor(
-		"test-disk",
-		mon.DiskResource,
-		nil,           /* curCount */
-		nil,           /* maxHist */
-		-1,            /* increment */
-		math.MaxInt64, /* noteworthy */
-		st,
-	)
-
+	rng, _ := randutil.NewTestRand()
 	const numRows = 10
 	const numCols = 1
 	rows := randgen.MakeIntRows(numRows, numCols)
 	ordering := colinfo.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
 
-	rc := DiskBackedRowContainer{}
-	rc.Init(
-		ordering,
-		types.OneIntCol,
-		&evalCtx,
-		tempEngine,
-		memoryMonitor,
-		diskMonitor,
-	)
-	defer rc.Close(ctx)
+	getRowContainer := func(memReserved, diskReserved *mon.BoundAccount) (rc *DiskBackedRowContainer, memoryMonitor, diskMonitor *mon.BytesMonitor, cleanup func(context.Context)) {
+		memoryMonitor = mon.NewMonitor(
+			"test-mem",
+			mon.MemoryResource,
+			nil,           /* curCount */
+			nil,           /* maxHist */
+			-1,            /* increment */
+			math.MaxInt64, /* noteworthy */
+			st,
+		)
+		diskMonitor = mon.NewMonitor(
+			"test-disk",
+			mon.DiskResource,
+			nil,           /* curCount */
+			nil,           /* maxHist */
+			-1,            /* increment */
+			math.MaxInt64, /* noteworthy */
+			st,
+		)
+		memoryMonitor.Start(ctx, nil, memReserved)
+		diskMonitor.Start(ctx, nil, diskReserved)
+
+		rc = &DiskBackedRowContainer{}
+		rc.Init(
+			ordering,
+			types.OneIntCol,
+			&evalCtx,
+			tempEngine,
+			memoryMonitor,
+			diskMonitor,
+		)
+		cleanup = func(ctx context.Context) {
+			rc.Close(ctx)
+			diskMonitor.Stop(ctx)
+			memoryMonitor.Stop(ctx)
+		}
+		return rc, memoryMonitor, diskMonitor, cleanup
+	}
 
 	// NormalRun adds rows to a DiskBackedRowContainer, makes it spill to disk
 	// halfway through, keeps on adding rows, and then verifies that all rows
 	// were properly added to the DiskBackedRowContainer.
 	t.Run("NormalRun", func(t *testing.T) {
-		memoryMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
-		defer memoryMonitor.Stop(ctx)
-		diskMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
-		defer diskMonitor.Stop(ctx)
-
-		defer func() {
-			if err := rc.UnsafeReset(ctx); err != nil {
-				t.Fatal(err)
-			}
-		}()
+		memReserved, diskReserved := mon.NewStandaloneBudget(math.MaxInt64), mon.NewStandaloneBudget(math.MaxInt64)
+		rc, _, _, cleanup := getRowContainer(memReserved, diskReserved)
+		defer cleanup(ctx)
 
 		mid := len(rows) / 2
 		for i := 0; i < mid; i++ {
@@ -260,7 +272,7 @@ func TestDiskBackedRowContainer(t *testing.T) {
 		func() {
 			i := rc.NewIterator(ctx)
 			defer i.Close()
-			if err := verifyRows(ctx, i, rows[:mid], &evalCtx, ordering); err != nil {
+			if err := verifyRows(i, rows[:mid], &evalCtx, ordering); err != nil {
 				t.Fatalf("verifying memory rows failed with: %s", err)
 			}
 		}()
@@ -278,23 +290,16 @@ func TestDiskBackedRowContainer(t *testing.T) {
 		func() {
 			i := rc.NewIterator(ctx)
 			defer i.Close()
-			if err := verifyRows(ctx, i, rows, &evalCtx, ordering); err != nil {
+			if err := verifyRows(i, rows, &evalCtx, ordering); err != nil {
 				t.Fatalf("verifying disk rows failed with: %s", err)
 			}
 		}()
 	})
 
 	t.Run("AddRowOutOfMem", func(t *testing.T) {
-		memoryMonitor.Start(ctx, nil, mon.NewStandaloneBudget(1))
-		defer memoryMonitor.Stop(ctx)
-		diskMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
-		defer diskMonitor.Stop(ctx)
-
-		defer func() {
-			if err := rc.UnsafeReset(ctx); err != nil {
-				t.Fatal(err)
-			}
-		}()
+		memReserved, diskReserved := mon.NewStandaloneBudget(1), mon.NewStandaloneBudget(math.MaxInt64)
+		rc, memoryMonitor, diskMonitor, cleanup := getRowContainer(memReserved, diskReserved)
+		defer cleanup(ctx)
 
 		if err := rc.AddRow(ctx, rows[0]); err != nil {
 			t.Fatal(err)
@@ -311,16 +316,9 @@ func TestDiskBackedRowContainer(t *testing.T) {
 	})
 
 	t.Run("AddRowOutOfDisk", func(t *testing.T) {
-		memoryMonitor.Start(ctx, nil, mon.NewStandaloneBudget(1))
-		defer memoryMonitor.Stop(ctx)
-		diskMonitor.Start(ctx, nil, mon.NewStandaloneBudget(1))
-		defer diskMonitor.Stop(ctx)
-
-		defer func() {
-			if err := rc.UnsafeReset(ctx); err != nil {
-				t.Fatal(err)
-			}
-		}()
+		memReserved, diskReserved := mon.NewStandaloneBudget(1), mon.NewStandaloneBudget(1)
+		rc, memoryMonitor, diskMonitor, cleanup := getRowContainer(memReserved, diskReserved)
+		defer cleanup(ctx)
 
 		err := rc.AddRow(ctx, rows[0])
 		if code := pgerror.GetPGCode(err); code != pgcode.DiskFull {
@@ -336,6 +334,65 @@ func TestDiskBackedRowContainer(t *testing.T) {
 		}
 		if memoryMonitor.AllocBytes() != 0 {
 			t.Fatal("memory monitor reports unexpected usage")
+		}
+	})
+
+	// ConcurrentReads adds rows to a DiskBackedRowContainer (possibly spilling
+	// to disk at some point) and then verifies that all rows can be read
+	// concurrently (via separate iterators) from the container.
+	t.Run("ConcurrentReads", func(t *testing.T) {
+		memReserved, diskReserved := mon.NewStandaloneBudget(math.MaxInt64), mon.NewStandaloneBudget(math.MaxInt64)
+		rc, _, _, cleanup := getRowContainer(memReserved, diskReserved)
+		defer cleanup(ctx)
+
+		// Spill in 50% of cases.
+		spillAfter := numRows
+		if rng.Float64() < 0.5 {
+			spillAfter = rng.Intn(numRows - 1)
+		}
+		for i := 0; i < spillAfter; i++ {
+			if err := rc.AddRow(ctx, rows[i]); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if rc.Spilled() {
+			t.Fatal("unexpectedly using disk")
+		}
+		if spillAfter < numRows {
+			if err := rc.SpillToDisk(ctx); err != nil {
+				t.Fatal(err)
+			}
+			if !rc.Spilled() {
+				t.Fatal("unexpectedly using memory")
+			}
+			for i := spillAfter; i < len(rows); i++ {
+				if err := rc.AddRow(ctx, rows[i]); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+		numConcurrentReaders := 2 + rng.Intn(4)
+		errCh := make(chan error)
+		for i := 0; i < numConcurrentReaders; i++ {
+			// Creating and closing iterators must be done serially.
+			iterator := rc.NewIterator(ctx)
+			defer iterator.Close()
+			go func(iterator RowIterator) {
+				if err := verifyRows(iterator, rows, &evalCtx, ordering); err != nil {
+					errCh <- err
+				} else {
+					errCh <- nil
+				}
+			}(iterator)
+		}
+		var firstErr error
+		for i := 0; i < numConcurrentReaders; i++ {
+			if err := <-errCh; err != nil && firstErr == nil {
+				firstErr = err
+			}
+		}
+		if firstErr != nil {
+			t.Fatal(firstErr)
 		}
 	})
 }
@@ -443,7 +500,7 @@ func verifyOrdering(
 		} else if !ok {
 			break
 		}
-		row, err := i.Row()
+		row, err := i.EncRow()
 		if err != nil {
 			return err
 		}
