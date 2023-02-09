@@ -356,7 +356,7 @@ func TestAddReplicaWithReceiverThrottling(t *testing.T) {
 func TestDelegateSnapshot(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderStress(t, "Occasionally fails until 87553 is resolved")
+	skip.WithIssue(t, 96841, "Occasionally fails until 87553 is resolved")
 
 	ctx := context.Background()
 
