@@ -180,7 +180,7 @@ func (ls *Stores) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	if err := ba.ValidateForEvaluation(); err != nil {
-		log.Fatalf(ctx, "invalid batch (%s): %s", ba, err)
+		return nil, roachpb.NewError(errors.Wrapf(err, "invalid batch (%s)", ba))
 	}
 
 	store, err := ls.GetStore(ba.Replica.StoreID)
