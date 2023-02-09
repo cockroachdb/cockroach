@@ -67,7 +67,7 @@ func MakeIngestionWriterOptions(ctx context.Context, cs *cluster.Settings) sstab
 		format = sstable.TableFormatPebblev2 // Range keys.
 	}
 	if cs.Version.IsActive(ctx, clusterversion.V23_1EnablePebbleFormatSSTableValueBlocks) &&
-		valueBlocksEnabled.Get(&cs.SV) {
+		ValueBlocksEnabled.Get(&cs.SV) {
 		format = sstable.TableFormatPebblev3
 	}
 	opts := DefaultPebbleOptions().MakeWriterOptions(0, format)
