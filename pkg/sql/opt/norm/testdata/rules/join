@@ -1195,7 +1195,7 @@ inner-join (cross)
  │    ├── scan t2
  │    │    └── columns: b:5
  │    └── filters
- │         └── age(b:5, '2017-01-01 00:00:00+00:00') > '1 day' [outer=(5), immutable]
+ │         └── age(b:5, '2017-01-01 00:00:00+00') > '1 day' [outer=(5), immutable]
  └── filters
       └── a:1 = b:5 [outer=(1,5), stable, constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
 

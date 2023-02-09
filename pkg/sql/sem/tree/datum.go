@@ -2376,11 +2376,7 @@ func (d *DTime) Format(ctx *FmtCtx) {
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
-	if ctx.HasFlags(fmtPgwireFormat) {
-		ctx.Write(PGWireFormatTime(timeofday.TimeOfDay(*d), ctx.scratch[:0]))
-	} else {
-		ctx.Write(timeofday.TimeOfDay(*d).AppendFormat(ctx.scratch[:0]))
-	}
+	ctx.Write(PGWireFormatTime(timeofday.TimeOfDay(*d), ctx.scratch[:0]))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -2556,11 +2552,7 @@ func (d *DTimeTZ) Format(ctx *FmtCtx) {
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
-	if ctx.HasFlags(fmtPgwireFormat) {
-		ctx.Write(PGWireFormatTimeTZ(d.TimeTZ, ctx.scratch[:0]))
-	} else {
-		ctx.Write(d.TimeTZ.AppendFormat(ctx.scratch[:0]))
-	}
+	ctx.Write(PGWireFormatTimeTZ(d.TimeTZ, ctx.scratch[:0]))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -2608,16 +2600,6 @@ func MustMakeDTimestamp(t time.Time, precision time.Duration) *DTimestamp {
 
 // DZeroTimestamp is the zero-valued DTimestamp.
 var DZeroTimestamp = &DTimestamp{}
-
-// time.Time formats.
-const (
-	// timestampTZOutputFormat is used to output all TimestampTZs.
-	// Note the second offset is missing here -- this is to maintain
-	// backward compatibility with casting timestamptz to strings.
-	timestampTZOutputFormat = "2006-01-02 15:04:05.999999-07:00"
-	// timestampOutputFormat is used to output all Timestamps.
-	timestampOutputFormat = "2006-01-02 15:04:05.999999"
-)
 
 // ParseDTimestamp parses and returns the *DTimestamp Datum value represented by
 // the provided string in UTC, or an error if parsing is unsuccessful.
@@ -2847,11 +2829,6 @@ func (d *DTimestamp) Max(ctx CompareContext) (Datum, bool) {
 // AmbiguousFormat implements the Datum interface.
 func (*DTimestamp) AmbiguousFormat() bool { return true }
 
-// FormatTimestamp outputs a timestamp in the UTC timezone.
-func FormatTimestamp(t time.Time) string {
-	return t.UTC().Format(timestampOutputFormat)
-}
-
 // Format implements the NodeFormatter interface.
 func (d *DTimestamp) Format(ctx *FmtCtx) {
 	f := ctx.flags
@@ -2860,11 +2837,7 @@ func (d *DTimestamp) Format(ctx *FmtCtx) {
 		ctx.WriteByte('\'')
 	}
 
-	if f.HasFlags(fmtPgwireFormat) {
-		ctx.Write(PGWireFormatTimestamp(d.Time, nil, ctx.scratch[:0]))
-	} else {
-		ctx.WriteString(FormatTimestamp(d.Time))
-	}
+	ctx.Write(PGWireFormatTimestamp(d.Time, nil, ctx.scratch[:0]))
 
 	if !bareStrings {
 		ctx.WriteByte('\'')
@@ -3025,23 +2998,6 @@ func (d *DTimestampTZ) Max(ctx CompareContext) (Datum, bool) {
 // AmbiguousFormat implements the Datum interface.
 func (*DTimestampTZ) AmbiguousFormat() bool { return true }
 
-// FormatTimestampTZ formats the given timestamp with timezone into the provided
-// buffer.
-func FormatTimestampTZ(t time.Time, buf *bytes.Buffer) {
-	buf.WriteString(t.Format(timestampTZOutputFormat))
-	_, offsetSecs := t.Zone()
-	// Only output remaining seconds offsets if it is available.
-	// This is to maintain backward compatibility with older CRDB versions,
-	// where we only output HH:MM.
-	if secondOffset := offsetSecs % 60; secondOffset != 0 {
-		if secondOffset < 0 {
-			secondOffset = 60 + secondOffset
-		}
-		buf.WriteByte(':')
-		buf.WriteString(fmt.Sprintf("%02d", secondOffset))
-	}
-}
-
 // Format implements the NodeFormatter interface.
 func (d *DTimestampTZ) Format(ctx *FmtCtx) {
 	f := ctx.flags
@@ -3049,14 +3005,20 @@ func (d *DTimestampTZ) Format(ctx *FmtCtx) {
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
+	// By default, rely on the ctx location.
+	loc := ctx.location
+	// We sometimes set location correctly in DTimestampTZ.
+	if loc == nil {
+		loc = d.Location()
+	}
 	if f.HasFlags(fmtPgwireFormat) {
-		if ctx.location == nil {
+		// This assertion should be in place everywhere, but that's a
+		// huge change for a different day.
+		if loc == nil {
 			panic(errors.AssertionFailedf("location on ctx for fmtPgwireFormat must be set for TimestampTZ types"))
 		}
-		ctx.Write(PGWireFormatTimestamp(d.Time, ctx.location, ctx.scratch[:0]))
-	} else {
-		FormatTimestampTZ(d.Time, &ctx.Buffer)
 	}
+	ctx.Write(PGWireFormatTimestamp(d.Time, loc, ctx.scratch[:0]))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
