@@ -350,7 +350,7 @@ func TestRegistryBasic(t *testing.T) {
 		return ev
 	}
 
-	reg := makeRegistry()
+	reg := makeRegistry(NewMetrics())
 	require.Equal(t, 0, reg.Len())
 	require.NotPanics(t, func() { reg.PublishToOverlapping(ctx, spAB, ev1, nil /* alloc */) })
 	require.NotPanics(t, func() { reg.Disconnect(spAB) })
@@ -467,7 +467,7 @@ func TestRegistryBasic(t *testing.T) {
 func TestRegistryPublishAssertsPopulatedInformation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	reg := makeRegistry()
+	reg := makeRegistry(NewMetrics())
 
 	rNoDiff := newTestRegistration(spAB, hlc.Timestamp{}, nil, false /* withDiff */)
 	go rNoDiff.runOutputLoop(context.Background(), 0)
@@ -520,7 +520,7 @@ func TestRegistryPublishAssertsPopulatedInformation(t *testing.T) {
 func TestRegistryPublishBeneathStartTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	reg := makeRegistry()
+	reg := makeRegistry(NewMetrics())
 
 	r := newTestRegistration(spAB, hlc.Timestamp{WallTime: 10}, nil, false)
 	go r.runOutputLoop(context.Background(), 0)
