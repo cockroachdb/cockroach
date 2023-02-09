@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	gosql "database/sql"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"net/http"
@@ -39,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
@@ -738,6 +740,9 @@ func registerRestore(r registry.Registry) {
 				hc := NewHealthChecker(t, c, c.All())
 				m.Go(hc.Runner)
 
+				// TODO(msbutler): merge disk usage tracker and logger
+				dut, err := NewDiskUsageTracker(c, t.L())
+				require.NoError(t, err)
 				m.Go(func(ctx context.Context) error {
 					defer dul.Done()
 					defer hc.Done()
@@ -746,8 +751,20 @@ func registerRestore(r registry.Registry) {
 					if err := sp.run(ctx, c); err != nil {
 						return err
 					}
+					// TODO (msbutler): export disk size once prom server scrapes the roachtest process.
 					promLabel := registry.PromSub(strings.Replace(sp.computeName(false), "restore/", "", 1)) + "_seconds"
-					durationGauge.WithLabelValues(promLabel).Set(timeutil.Since(startTime).Seconds())
+					testDuration := timeutil.Since(startTime).Seconds()
+					durationGauge.WithLabelValues(promLabel).Set(testDuration)
+
+					// compute throughput as MB / node / second
+					du := dut.GetDiskUsage(ctx, c.All())
+					throughput := float64(du) / (float64(sp.hardware.nodes) * testDuration)
+					t.L().Printf("Usage %d , Nodes %d , Duration %f\n; Throughput: %f mb / node / second",
+						du,
+						sp.hardware.nodes,
+						testDuration,
+						throughput)
+					recordPerf(ctx, t, c, sp.computeName(false), int64(throughput))
 					return nil
 				})
 				m.Wait()
@@ -938,6 +955,38 @@ func (sp restoreSpecs) run(ctx context.Context, c cluster.Cluster) error {
 		return errors.Wrapf(err, "full test specs: %s", sp.computeName(true))
 	}
 	return nil
+}
+
+// recordPerf is a rediculous hack to export a single perf metric for the given test to roachperf.
+func recordPerf(
+	ctx context.Context, t test.Test, c cluster.Cluster, testName string, metric int64,
+) {
+
+	// The easiest way to record a precise metric for roachperf is to caste it as a duration,
+	// in seconds in the histogram's upper bound.
+	reg := histogram.NewRegistry(
+		time.Duration(metric)*time.Second,
+		histogram.MockWorkloadName,
+	)
+	bytesBuf := bytes.NewBuffer([]byte{})
+	jsonEnc := json.NewEncoder(bytesBuf)
+
+	// Ensure the histogram contains the name of the roachtest
+	reg.GetHandle().Get(testName)
+
+	// Serialize the histogram into the buffer
+	reg.Tick(func(tick histogram.Tick) {
+		_ = jsonEnc.Encode(tick.Snapshot())
+	})
+	// Upload the perf artifacts to any one of the nodes so that the test
+	// runner copies it into an appropriate directory path.
+	dest := filepath.Join(t.PerfArtifactsDir(), "stats.json")
+	if err := c.RunE(ctx, c.Node(1), "mkdir -p "+filepath.Dir(dest)); err != nil {
+		log.Errorf(ctx, "failed to create perf dir: %+v", err)
+	}
+	if err := c.PutString(ctx, bytesBuf.String(), dest, 0755, c.Node(1)); err != nil {
+		log.Errorf(ctx, "failed to upload perf artifacts to node: %s", err.Error())
+	}
 }
 
 // verifyMetrics loops, retrieving the timeseries metrics specified in m every
