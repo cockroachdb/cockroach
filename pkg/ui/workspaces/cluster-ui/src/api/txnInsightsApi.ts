@@ -19,7 +19,7 @@ import {
   sqlResultsAreEmpty,
 } from "./sqlApi";
 import {
-  BlockedContentionDetails,
+  ContentionDetails,
   getInsightsFromProblemsAndCauses,
   InsightExecEnum,
   InsightNameEnum,
@@ -35,6 +35,7 @@ import {
   StmtInsightsResponseRow,
 } from "./stmtInsightsApi";
 import { INTERNAL_APP_NAME_PREFIX } from "src/recentExecutions/recentStatementUtils";
+import { GetContentionDetailsApi } from "./contentionApi";
 
 export const TXN_QUERY_PREVIEW_MAX = 800;
 export const QUERY_MAX = 1500;
@@ -128,69 +129,10 @@ function createStmtFingerprintToQueryMap(
   return idToQuery;
 }
 
-// txnContentionDetailsQuery selects information about a specific transaction contention event.
-function txnContentionDetailsQuery(filters: TxnContentionDetailsRequest) {
-  let whereClause = ` WHERE waiting_txn_id = '${filters.txnExecutionID}'`;
-  if (filters?.start) {
-    whereClause =
-      whereClause + ` AND collection_ts >= '${filters.start.toISOString()}'`;
-  }
-  if (filters?.end) {
-    whereClause =
-      whereClause +
-      ` AND (collection_ts + contention_duration) <= '${filters.end.toISOString()}'`;
-  }
-  return `
-SELECT DISTINCT
-  collection_ts,
-  blocking_txn_id,
-  encode( blocking_txn_fingerprint_id, 'hex' ) AS blocking_txn_fingerprint_id,
-  waiting_txn_id,
-  encode( waiting_txn_fingerprint_id, 'hex' ) AS waiting_txn_fingerprint_id,
-  contention_duration,
-  crdb_internal.pretty_key(contending_key, 0) AS key,
-  database_name,
-  schema_name,
-  table_name,
-  index_name
-FROM
-  crdb_internal.transaction_contention_events AS tce
-  JOIN [SELECT database_name,
-               schema_name,
-               name AS table_name,
-               table_id
-        FROM
-          "".crdb_internal.tables] AS tables ON tce.contending_key BETWEEN crdb_internal.table_span(tables.table_id)[1]
-  AND crdb_internal.table_span(tables.table_id)[2]
-  LEFT OUTER JOIN [SELECT index_name,
-                          descriptor_id,
-                          index_id
-                   FROM
-                     "".crdb_internal.table_indexes] AS indexes ON tce.contending_key BETWEEN crdb_internal.index_span(
-  indexes.descriptor_id,
-  indexes.index_id
-  )[1]
-  AND crdb_internal.index_span(
-    indexes.descriptor_id,
-    indexes.index_id
-    )[2]
-  ${whereClause}
-`;
-}
-
-type TxnContentionDetailsResponseColumns = {
-  waiting_txn_id: string;
-  waiting_txn_fingerprint_id: string;
-  collection_ts: string;
-  contention_duration: string;
-  blocking_txn_id: string;
-  blocking_txn_fingerprint_id: string;
-  schema_name: string;
-  database_name: string;
-  table_name: string;
-  index_name: string;
-  key: string;
-};
+export type TransactionContentionEventDetails = Omit<
+  TxnContentionInsightDetails,
+  "application" | "queries" | "blockingQueries"
+>;
 
 type PartialTxnContentionDetails = Omit<
   TxnContentionInsightDetails,
@@ -198,48 +140,20 @@ type PartialTxnContentionDetails = Omit<
 >;
 
 function formatTxnContentionDetailsResponse(
-  response: SqlExecutionResponse<TxnContentionDetailsResponseColumns>,
+  response: ContentionDetails[],
 ): PartialTxnContentionDetails {
-  const resultsRows = response.execution.txn_results[0].rows;
-  if (!resultsRows) {
+  if (!response || response.length === 9) {
     // No data.
     return;
   }
 
-  const blockingContentionDetails = new Array<BlockedContentionDetails>(
-    resultsRows.length,
-  );
-
-  resultsRows.forEach((value, idx) => {
-    const contentionTimeInMs = moment
-      .duration(value.contention_duration)
-      .asMilliseconds();
-    blockingContentionDetails[idx] = {
-      blockingExecutionID: value.blocking_txn_id,
-      blockingTxnFingerprintID: FixFingerprintHexValue(
-        value.blocking_txn_fingerprint_id,
-      ),
-      blockingQueries: null,
-      collectionTimeStamp: moment(value.collection_ts).utc(),
-      contentionTimeMs: contentionTimeInMs,
-      contendedKey: value.key,
-      schemaName: value.schema_name,
-      databaseName: value.database_name,
-      tableName: value.table_name,
-      indexName:
-        value.index_name && value.index_name !== ""
-          ? value.index_name
-          : "index not found",
-    };
-  });
-
-  const row = resultsRows[0];
+  const row = response[0];
   return {
-    transactionExecutionID: row.waiting_txn_id,
+    transactionExecutionID: row.waitingTxnID,
     transactionFingerprintID: FixFingerprintHexValue(
-      row.waiting_txn_fingerprint_id,
+      row.waitingTxnFingerprintID,
     ),
-    blockingContentionDetails: blockingContentionDetails,
+    blockingContentionDetails: response,
     insightName: InsightNameEnum.highContention,
     execType: InsightExecEnum.TRANSACTION,
   };
@@ -263,24 +177,15 @@ export async function getTxnInsightsContentionDetailsApi(
   // 3. Get the query strings for ALL statements involved in the transaction.
 
   // Get contention results for requested transaction.
-  const contentionResults =
-    await executeInternalSql<TxnContentionDetailsResponseColumns>(
-      makeInsightsSqlRequest([
-        txnContentionDetailsQuery({
-          txnExecutionID: req.txnExecutionID,
-          start: req.start,
-          end: req.end,
-        }),
-      ]),
-    );
-  if (contentionResults.error) {
-    throw new Error(
-      `Error while retrieving contention information: ${sqlApiErrorMessage(
-        contentionResults.error.message,
-      )}`,
-    );
-  }
-  if (sqlResultsAreEmpty(contentionResults)) {
+
+  const contentionResults = await GetContentionDetailsApi({
+    waitingTxnID: req.txnExecutionID,
+    waitingStmtID: null,
+    start: null,
+    end: null,
+  });
+
+  if (contentionResults.length === 0) {
     return;
   }
   const contentionDetails =
@@ -358,7 +263,7 @@ function buildTxnContentionInsightDetails(
       return;
     }
 
-    blockedRow.blockingQueries = currBlockedFingerprintStmts.queryIDs.map(
+    blockedRow.blockingTxnQuery = currBlockedFingerprintStmts.queryIDs.map(
       id => stmtFingerprintToQuery.get(id) ?? "",
     );
   });
