@@ -13,6 +13,7 @@ package rangefeed
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"sync"
 	"time"
 
@@ -402,12 +403,14 @@ func (r registration) String() string {
 
 // registry holds a set of registrations and manages their lifecycle.
 type registry struct {
+	n       *metric.Gauge
 	tree    interval.Tree // *registration items
 	idAlloc int64
 }
 
-func makeRegistry() registry {
+func makeRegistry(n *metric.Gauge) registry {
 	return registry{
+		n:    n,
 		tree: interval.NewTree(interval.ExclusiveOverlapper),
 	}
 }
@@ -425,6 +428,7 @@ func (reg *registry) NewFilter() *Filter {
 
 // Register adds the provided registration to the registry.
 func (reg *registry) Register(r *registration) {
+	reg.n.Inc(1)
 	r.id = reg.nextID()
 	r.keys = r.span.AsRange()
 	if err := reg.tree.Insert(r, false /* fast */); err != nil {
@@ -483,6 +487,7 @@ func (reg *registry) PublishToOverlapping(
 // that we rely on a fact that caller is not going to post any more events
 // concurrently or after this function is called.
 func (reg *registry) Unregister(ctx context.Context, r *registration) {
+	reg.n.Dec(1)
 	if err := reg.tree.Delete(r, false /* fast */); err != nil {
 		panic(err)
 	}
