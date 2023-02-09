@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/corpus"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/stretchr/testify/require"
@@ -41,6 +42,7 @@ func TestValidateCorpuses(t *testing.T) {
 	for corpusIdx := 0; corpusIdx < reader.GetNumEntries(); corpusIdx++ {
 		jobID := jobspb.InvalidJobID
 		name, state := reader.GetCorpus(corpusIdx)
+		scpb.MigrateCurrentState(clusterversion.TestingClusterVersion, state)
 		t.Run(name, func(t *testing.T) {
 			_, err := scplan.MakePlan(context.Background(), *state, scplan.Params{
 				ActiveVersion:  clusterversion.TestingClusterVersion,
