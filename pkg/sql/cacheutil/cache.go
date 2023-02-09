@@ -12,7 +12,6 @@ package cacheutil
 
 import (
 	"context"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -84,7 +83,11 @@ func (c *Cache) LoadValueOutsideOfCacheSingleFlight(
 // version than the one we pass in here, that is okay since the cache will
 // be invalidated upon the next read.
 func (c *Cache) MaybeWriteBackToCache(
-	ctx context.Context, tableVersions []descpb.DescriptorVersion, key interface{}, entry interface{},
+	ctx context.Context,
+	tableVersions []descpb.DescriptorVersion,
+	key interface{},
+	entry interface{},
+	entrySize int64,
 ) bool {
 	c.Lock()
 	defer c.Unlock()
@@ -98,8 +101,7 @@ func (c *Cache) MaybeWriteBackToCache(
 		}
 	}
 	// Table version remains the same: update map, unlock, return.
-	const sizeOfEntry = int(unsafe.Sizeof(entry))
-	if err := c.boundAccount.Grow(ctx, int64(sizeOfEntry)); err != nil {
+	if err := c.boundAccount.Grow(ctx, entrySize); err != nil {
 		// If there is no memory available to cache the entry, we can still
 		// proceed with authentication so that users are not locked out of
 		// the database.
