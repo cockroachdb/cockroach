@@ -560,7 +560,7 @@ func (r *Replica) applySnapshot(
 	// of the removed range. In this case, however, it's copacetic, as subsumed
 	// ranges _can't_ have new replicas.
 	if err := clearSubsumedReplicaDiskData(
-		ctx, r.store.ClusterSettings(), r.store.Engine(), inSnap.SSTStorageScratch,
+		ctx, r.store.ClusterSettings(), r.store.Engine(), inSnap.SSTStorageScratch.WriteSST,
 		desc, subsumedDescs, mergedTombstoneReplicaID,
 	); err != nil {
 		return err
@@ -726,7 +726,7 @@ func clearSubsumedReplicaDiskData(
 	ctx context.Context,
 	st *cluster.Settings,
 	reader storage.Reader,
-	scratch *SSTSnapshotStorageScratch,
+	writeSST func(context.Context, []byte) error,
 	desc *roachpb.RangeDescriptor,
 	subsumedDescs []*roachpb.RangeDescriptor,
 	subsumedNextReplicaID roachpb.ReplicaID,
@@ -765,7 +765,7 @@ func clearSubsumedReplicaDiskData(
 		if subsumedReplSST.DataSize > 0 {
 			// TODO(itsbilal): Write to SST directly in subsumedReplSST rather than
 			// buffering in a MemFile first.
-			if err := scratch.WriteSST(ctx, subsumedReplSSTFile.Data()); err != nil {
+			if err := writeSST(ctx, subsumedReplSSTFile.Data()); err != nil {
 				return err
 			}
 		}
@@ -820,7 +820,7 @@ func clearSubsumedReplicaDiskData(
 			if subsumedReplSST.DataSize > 0 {
 				// TODO(itsbilal): Write to SST directly in subsumedReplSST rather than
 				// buffering in a MemFile first.
-				if err := scratch.WriteSST(ctx, subsumedReplSSTFile.Data()); err != nil {
+				if err := writeSST(ctx, subsumedReplSSTFile.Data()); err != nil {
 					return err
 				}
 			}
