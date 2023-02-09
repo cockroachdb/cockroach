@@ -76,7 +76,7 @@ func runTestRoleOptionsMigration(t *testing.T, numUsers int) {
 		{"testuser", "CONTROLJOB", "NULL"},
 		{"testuser", "CREATEROLE", "NULL"},
 		{"testuser", "NOLOGIN", "NULL"},
-		{"testuser", "VALID UNTIL", "2021-01-01 00:00:00+00:00"},
+		{"testuser", "VALID UNTIL", "2021-01-01 00:00:00+00"},
 	})
 
 	type roleOption struct {
@@ -162,7 +162,7 @@ func runTestRoleOptionsMigration(t *testing.T, numUsers int) {
 		{"testuser", "CONTROLJOB", "NULL"},
 		{"testuser", "CREATEROLE", "NULL"},
 		{"testuser", "NOLOGIN", "NULL"},
-		{"testuser", "VALID UNTIL", "2021-01-01 00:00:00+00:00"},
+		{"testuser", "VALID UNTIL", "2021-01-01 00:00:00+00"},
 		{"testuser_last", "CREATEROLE", "NULL"},
 	})
 
@@ -182,7 +182,7 @@ func runTestRoleOptionsMigration(t *testing.T, numUsers int) {
 		{"testuser", "CONTROLJOB", "NULL", fmt.Sprintf("%d", testuserID)},
 		{"testuser", "CREATEROLE", "NULL", fmt.Sprintf("%d", testuserID)},
 		{"testuser", "NOLOGIN", "NULL", fmt.Sprintf("%d", testuserID)},
-		{"testuser", "VALID UNTIL", "2021-01-01 00:00:00+00:00", fmt.Sprintf("%d", testuserID)},
+		{"testuser", "VALID UNTIL", "2021-01-01 00:00:00+00", fmt.Sprintf("%d", testuserID)},
 		{"testuser_last", "CREATEROLE", "NULL", fmt.Sprintf(`%d`, testuserLastID)},
 	})
 

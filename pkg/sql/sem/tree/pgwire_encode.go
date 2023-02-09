@@ -303,11 +303,7 @@ const (
 // provided tmp buffer and reallocating if needed. The function will then return
 // the resulting buffer.
 func PGWireFormatTime(t timeofday.TimeOfDay, tmp []byte) []byte {
-	// time.Time's AppendFormat does not recognize 2400, so special case it accordingly.
-	if t == timeofday.Time2400 {
-		return []byte(PGTime2400Format)
-	}
-	return t.ToTime().AppendFormat(tmp, PGTimeFormat)
+	return t.AppendFormat(tmp)
 }
 
 // PGWireFormatTimeTZ formats t into a format lib/pq understands, appending to the
@@ -333,8 +329,7 @@ func PGWireFormatTimeTZ(t timetz.TimeTZ, tmp []byte) []byte {
 }
 
 // PGWireFormatTimestamp formats t into a format lib/pq understands.
-// If offset is not nil, it
-// TODO(#sql-sessions): merge implementation with DTimestamp/DTimestampTZ.Format.
+// If offset is not nil, it will not display the timezone offset.
 func PGWireFormatTimestamp(t time.Time, offset *time.Location, tmp []byte) (b []byte) {
 	format := PGTimeStampFormatNoOffset
 	if offset != nil {
