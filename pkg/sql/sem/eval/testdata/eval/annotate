@@ -48,7 +48,7 @@ ANNOTATE_TYPE('2010-09-28', timestamp)
 eval
 ANNOTATE_TYPE('2010-09-28', timestamptz)
 ----
-'2010-09-28 00:00:00+00:00'
+'2010-09-28 00:00:00+00'
 
 eval
 ANNOTATE_TYPE(123, int) + 1
@@ -115,4 +115,4 @@ eval
 eval
 ANNOTATE_TYPE('12:00:00-01', timetz)
 ----
-'12:00:00-01:00:00'
+'12:00:00-01'

@@ -1071,7 +1071,7 @@ ALTER ROLE rolewithlogin VALID UNTIL '2020-01-01'
 query TTT
 SELECT username, option, value FROM system.role_options
 ----
-rolewithlogin    VALID UNTIL  2020-01-01 00:00:00+00:00
+rolewithlogin    VALID UNTIL  2020-01-01 00:00:00+00
 rolewithnologin  NOLOGIN      NULL
 
 statement ok

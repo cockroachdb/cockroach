@@ -159,7 +159,7 @@ func TestFormatExpr(t *testing.T) {
 		{`timestamp 'now'`, tree.FmtShowTypes,
 			`(('now')[string]::TIMESTAMP)[timestamp]`},
 		{`timestamptz '2003-01-01 00:00:00+03:00'`, tree.FmtShowTypes,
-			`('2003-01-01 00:00:00+03:00')[timestamptz]`},
+			`('2003-01-01 00:00:00+03')[timestamptz]`},
 		{`timestamptz '2003-01-01 00:00:00'`, tree.FmtShowTypes,
 			`(('2003-01-01 00:00:00')[string]::TIMESTAMPTZ)[timestamptz]`},
 		{`greatest(unique_rowid(), 12)`, tree.FmtShowTypes,

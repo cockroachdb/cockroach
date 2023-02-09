@@ -378,7 +378,7 @@ $$`)
 			expectMainFamily: []decodeExpectation{
 				{
 					keyValues: []string{"   spaced out      ", "1"},
-					allValues: map[string]string{"btrim": "spaced out", "past": "01:00:00+00:00:00"},
+					allValues: map[string]string{"btrim": "spaced out", "past": "01:00:00+00"},
 				},
 			},
 		},

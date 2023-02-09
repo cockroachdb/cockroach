@@ -89,7 +89,7 @@ func TestRangeReport(t *testing.T) {
 		{"2", "4", "3", "1", "0", "1", "0"},
 	})
 	require.ElementsMatch(t, TableData(ctx, "system.reports_meta", con), [][]string{
-		{"3", "'2001-01-01 10:00:00+00:00'"},
+		{"3", "'2001-01-01 10:00:00+00'"},
 	})
 	require.Equal(t, 3, r.LastUpdatedRowCount())
 
@@ -120,7 +120,7 @@ func TestRangeReport(t *testing.T) {
 		{"4", "4", "3", "1", "0", "1", "1"},
 	})
 	require.ElementsMatch(t, TableData(ctx, "system.reports_meta", con), [][]string{
-		{"3", "'2001-01-01 11:00:00+00:00'"},
+		{"3", "'2001-01-01 11:00:00+00'"},
 	})
 	require.Equal(t, 3, r.LastUpdatedRowCount())
 
@@ -170,7 +170,7 @@ func TestRangeReport(t *testing.T) {
 		{"4", "4", "3", "1", "0", "1", "1"},
 	})
 	require.ElementsMatch(t, TableData(ctx, "system.reports_meta", con), [][]string{
-		{"3", "'2001-01-01 12:00:00+00:00'"},
+		{"3", "'2001-01-01 12:00:00+00'"},
 	})
 	require.Equal(t, 3, r.LastUpdatedRowCount())
 
@@ -189,7 +189,7 @@ func TestRangeReport(t *testing.T) {
 		{"1", "3", "3", "1", "0", "1", "1"},
 	})
 	require.ElementsMatch(t, TableData(ctx, "system.reports_meta", con), [][]string{
-		{"3", "'2001-01-01 12:30:00+00:00'"},
+		{"3", "'2001-01-01 12:30:00+00'"},
 	})
 	require.Equal(t, 2, r.LastUpdatedRowCount())
 }

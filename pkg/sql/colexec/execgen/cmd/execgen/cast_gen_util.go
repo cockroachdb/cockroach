@@ -612,20 +612,18 @@ func stringToUUID(to, from, _, _, _ string) string {
 }
 
 func timestampToString(to, from, _, toType, _ string) string {
-	return toString(fmt.Sprintf("%s = []byte(tree.FormatTimestamp(%s))", to, from), to, toType)
+	return toString(fmt.Sprintf("%s = tree.PGWireFormatTimestamp(%s, nil, r)", to, from), to, toType)
 }
 
 func timestampTZToString(to, from, evalCtx, toType, buf string) string {
 	convStr := `
 		// Convert to context timezone for correct display.
-		_t := %[2]s.In(%[3]s.GetLocation())
-		%[5]s
-		%[4]s.Reset()
-		tree.FormatTimestampTZ(_t, %[4]s)
-		%[1]s = []byte(%[4]s.String())
+		_t := %[2]s
+		%[4]s
+		r = tree.PGWireFormatTimestamp(_t, %[3]s.GetLocation(), r)
 `
 	roundT := roundTimestamp("_t", "_t", "time.Microsecond")
-	return toString(fmt.Sprintf(convStr, to, from, evalCtx, buf, roundT), to, toType)
+	return toString(fmt.Sprintf(convStr, to, from, evalCtx, roundT), to, toType)
 }
 
 func uuidToString(to, from, _, toType, _ string) string {

@@ -834,7 +834,7 @@ project
  ├── scan t
  │    └── columns: tz:2
  └── projections
-      └── tz:2 <= '2020-06-01 18:35:55+00:00' [as="?column?":6, outer=(2)]
+      └── tz:2 <= '2020-06-01 18:35:55+00' [as="?column?":6, outer=(2)]
 
 # --------------------------------------------------
 # NormalizeCmpTimeZoneFunctionTZ
@@ -847,7 +847,7 @@ project
  ├── scan t
  │    └── columns: tz:2
  └── projections
-      └── tz:2 >= '2020-06-01 18:35:55+00:00' [as="?column?":6, outer=(2)]
+      └── tz:2 >= '2020-06-01 18:35:55+00' [as="?column?":6, outer=(2)]
 
 # Apply after commuting the inequality.
 norm expect=NormalizeCmpTimeZoneFunctionTZ
@@ -858,7 +858,7 @@ project
  ├── scan t
  │    └── columns: tz:2
  └── projections
-      └── tz:2 <= '2020-06-01 18:35:55+00:00' [as="?column?":6, outer=(2)]
+      └── tz:2 <= '2020-06-01 18:35:55+00' [as="?column?":6, outer=(2)]
 
 # Don't normalize when the right-hand-side is not a constant.
 norm expect-not=NormalizeCmpTimeZoneFunctionTZ
