@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	gosql "database/sql"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"net/http"
@@ -39,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
@@ -738,6 +740,7 @@ func registerRestore(r registry.Registry) {
 				hc := NewHealthChecker(t, c, c.All())
 				m.Go(hc.Runner)
 
+				recordMetric, perfBuf := initPerfRecorder(sp.computeName(false))
 				m.Go(func(ctx context.Context) error {
 					defer dul.Done()
 					defer hc.Done()
@@ -746,8 +749,28 @@ func registerRestore(r registry.Registry) {
 					if err := sp.run(ctx, c); err != nil {
 						return err
 					}
+
+					// TODO (msbutler): export disk size once prom server scrapes the roachtest process.
 					promLabel := registry.PromSub(strings.Replace(sp.computeName(false), "restore/", "", 1)) + "_seconds"
-					durationGauge.WithLabelValues(promLabel).Set(timeutil.Since(startTime).Seconds())
+					testDuration := timeutil.Since(startTime).Seconds()
+					durationGauge.WithLabelValues(promLabel).Set(testDuration)
+
+					dut, err := NewDiskUsageTracker(c, t.L())
+					require.NoError(t, err)
+
+					// compute throughput as MB / node / second
+					throughput := (float64(dut.GetDiskUsage(ctx, c.All())) / float64(len(c.Nodes()))) / testDuration
+					recordMetric(int64(throughput))
+
+					// Upload the perf artifacts to any one of the nodes so that the test
+					// runner copies it into an appropriate directory path.
+					dest := filepath.Join(t.PerfArtifactsDir(), "stats.json")
+					if err := c.RunE(ctx, c.Node(1), "mkdir -p "+filepath.Dir(dest)); err != nil {
+						log.Errorf(ctx, "failed to create perf dir: %+v", err)
+					}
+					if err := c.PutString(ctx, perfBuf.String(), dest, 0755, c.Node(1)); err != nil {
+						log.Errorf(ctx, "failed to upload perf artifacts to node: %s", err.Error())
+					}
 					return nil
 				})
 				m.Wait()
@@ -938,6 +961,26 @@ func (sp restoreSpecs) run(ctx context.Context, c cluster.Cluster) error {
 		return errors.Wrapf(err, "full test specs: %s", sp.computeName(true))
 	}
 	return nil
+}
+
+// initPerfRecorder returns a function to a record perf metric for the given test
+func initPerfRecorder(testName string) (func(metric int64), *bytes.Buffer) {
+	reg := histogram.NewRegistry(
+		timeout,
+		histogram.MockWorkloadName,
+	)
+	bytesBuf := bytes.NewBuffer([]byte{})
+	jsonEnc := json.NewEncoder(bytesBuf)
+
+	return func(metric int64) {
+
+		hist := reg.GetHandle().Get(testName)
+		hist.RecordValue(metric)
+
+		reg.Tick(func(tick histogram.Tick) {
+			_ = jsonEnc.Encode(tick.Snapshot())
+		})
+	}, bytesBuf
 }
 
 // verifyMetrics loops, retrieving the timeseries metrics specified in m every
