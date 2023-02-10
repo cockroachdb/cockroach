@@ -227,7 +227,7 @@ func registerRubyPG(r registry.Registry) {
 
 	r.Add(registry.TestSpec{
 		Name:       "ruby-pg",
-		Owner:      registry.OwnerSQLExperience,
+		Owner:      registry.OwnerSQLSessions,
 		Cluster:    r.MakeClusterSpec(1),
 		NativeLibs: registry.LibGEOS,
 		Tags:       []string{`default`, `orm`},
