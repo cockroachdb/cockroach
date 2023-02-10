@@ -7712,7 +7712,10 @@ expires until the statement bundle is collected`,
 
 				parsed, err := parser.ParseOne(sql)
 				if err != nil {
-					return nil, err
+					// If parsing is unsuccessful, we shouldn't return an error, however
+					// we can't return the original stmt since this function is used to
+					// hide sensitive information.
+					return tree.NewDString(""), nil //nolint:returnerrcheck
 				}
 				sqlNoConstants := tree.AsStringWithFlags(parsed.AST, tree.FmtHideConstants)
 				return tree.NewDString(sqlNoConstants), nil
@@ -7743,7 +7746,7 @@ expires until the statement bundle is collected`,
 					if len(sql) != 0 {
 						parsed, err := parser.ParseOne(sql)
 						if err != nil {
-							return nil, err
+							return tree.NewDString(sqlNoConstants), nil //nolint:returnerrcheck
 						}
 
 						sqlNoConstants = tree.AsStringWithFlags(parsed.AST, tree.FmtHideConstants)

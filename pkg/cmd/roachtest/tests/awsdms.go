@@ -184,7 +184,7 @@ func dmsDescribeTasksInput(
 func registerAWSDMS(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:    "awsdms",
-		Owner:   registry.OwnerSQLExperience, // TODO(otan): add a migrations OWNERS team
+		Owner:   registry.OwnerSQLSessions, // TODO(otan): add a migrations OWNERS team
 		Cluster: r.MakeClusterSpec(1),
 		Tags:    []string{`default`, `awsdms`},
 		Run:     runAWSDMS,

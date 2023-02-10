@@ -66,13 +66,13 @@ func TestCache(t *testing.T) {
 		}()
 	}
 
-	wrote := cache.MaybeWriteBackToCache(ctx, []descpb.DescriptorVersion{2, 2}, "test", "val")
+	wrote := cache.MaybeWriteBackToCache(ctx, []descpb.DescriptorVersion{2, 2}, "test", "val", int64(len("test")+len("val")))
 	require.Equal(t, wrote, true)
 
-	wrote = cache.MaybeWriteBackToCache(ctx, []descpb.DescriptorVersion{0, 2}, "test", "val")
+	wrote = cache.MaybeWriteBackToCache(ctx, []descpb.DescriptorVersion{0, 2}, "test", "val", int64(len("test")+len("val")))
 	require.Equal(t, wrote, false)
 
-	wrote = cache.MaybeWriteBackToCache(ctx, []descpb.DescriptorVersion{2, 0}, "test", "val")
+	wrote = cache.MaybeWriteBackToCache(ctx, []descpb.DescriptorVersion{2, 0}, "test", "val", int64(len("test")+len("val")))
 	require.Equal(t, wrote, false)
 
 	val, ok := cache.GetValueLocked("test")

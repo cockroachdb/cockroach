@@ -140,7 +140,7 @@ func registerLibPQ(r registry.Registry) {
 
 	r.Add(registry.TestSpec{
 		Name:    "lib/pq",
-		Owner:   registry.OwnerSQLExperience,
+		Owner:   registry.OwnerSQLSessions,
 		Cluster: r.MakeClusterSpec(1),
 		Tags:    []string{`default`, `driver`},
 		Run:     runLibPQ,
