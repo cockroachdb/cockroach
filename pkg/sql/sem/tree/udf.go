@@ -89,6 +89,12 @@ type CreateFunction struct {
 	ReturnType  FuncReturnType
 	Options     FunctionOptions
 	RoutineBody *RoutineBody
+	// BodyStatements is not assigned during initial parsing of user input. It's
+	// assigned during opt builder for logging purpose at the moment. It stores
+	// all parsed AST nodes of body statements with all expression in original
+	// format. That is sequence names and type name in expressions are not
+	// rewritten with OIDs.
+	BodyStatements Statements
 }
 
 // Format implements the NodeFormatter interface.
@@ -106,7 +112,7 @@ func (node *CreateFunction) Format(ctx *FmtCtx) {
 	if node.ReturnType.IsSet {
 		ctx.WriteString("SETOF ")
 	}
-	ctx.WriteString(node.ReturnType.Type.SQLString())
+	ctx.FormatTypeReference(node.ReturnType.Type)
 	ctx.WriteString("\n\t")
 	var funcBody FunctionBodyStr
 	for _, option := range node.Options {
@@ -119,7 +125,18 @@ func (node *CreateFunction) Format(ctx *FmtCtx) {
 		ctx.WriteString("\n\t")
 	}
 
-	if node.RoutineBody != nil {
+	if ctx.HasFlags(FmtMarkRedactionNode) {
+		ctx.WriteString("AS ")
+		ctx.WriteString("$$")
+		for i, stmt := range node.BodyStatements {
+			if i > 0 {
+				ctx.WriteString(" ")
+			}
+			ctx.FormatNode(stmt)
+			ctx.WriteString(";")
+		}
+		ctx.WriteString("$$")
+	} else if node.RoutineBody != nil {
 		ctx.WriteString("BEGIN ATOMIC ")
 		for _, stmt := range node.RoutineBody.Stmts {
 			ctx.FormatNode(stmt)

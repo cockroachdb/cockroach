@@ -28,6 +28,8 @@ func Redact(descProto *descpb.Descriptor) []error {
 		return redactTableDescriptor(d.Table)
 	case *descpb.Descriptor_Type:
 		redactTypeDescriptor(d.Type)
+	case *descpb.Descriptor_Function:
+		return redactFunctionDescriptor(d.Function)
 	}
 	return nil
 }
@@ -165,6 +167,8 @@ func redactElement(element scpb.Element) error {
 		if e.ComputeExpr != nil {
 			return redactExpr(&e.ComputeExpr.Expr)
 		}
+	case *scpb.FunctionBody:
+		return redactFunctionBodyStr(&e.Body)
 	}
 	return nil
 }
@@ -203,5 +207,46 @@ func redactExprStr(expr *string) error {
 	fmtCtx := tree.NewFmtCtx(tree.FmtHideConstants)
 	parsedExpr.Format(fmtCtx)
 	*expr = fmtCtx.String()
+	return nil
+}
+
+func redactFunctionDescriptor(desc *descpb.FunctionDescriptor) (errs []error) {
+	handleErr := func(err error) {
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	if err := redactFunctionBodyStr(&desc.FunctionBody); err != nil {
+		return []error{err}
+	}
+	if scs := desc.DeclarativeSchemaChangerState; scs != nil {
+		for i := range scs.RelevantStatements {
+			stmt := &scs.RelevantStatements[i]
+			stmt.Statement.Statement = stmt.Statement.RedactedStatement
+		}
+		for i := range scs.Targets {
+			t := &scs.Targets[i]
+			handleErr(errors.Wrapf(redactElement(t.Element()), "element #%d", i))
+		}
+	}
+	return nil
+}
+
+func redactFunctionBodyStr(body *string) error {
+	stmts, err := parser.Parse(*body)
+	if err != nil {
+		return err
+	}
+
+	fmtCtx := tree.NewFmtCtx(tree.FmtHideConstants)
+	for i, stmt := range stmts {
+		if i > 0 {
+			fmtCtx.WriteString(" ")
+		}
+		fmtCtx.FormatNode(stmt.AST)
+		fmtCtx.WriteString(";")
+	}
+	*body = fmtCtx.String()
 	return nil
 }

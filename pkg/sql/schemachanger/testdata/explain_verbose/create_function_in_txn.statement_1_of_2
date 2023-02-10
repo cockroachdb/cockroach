@@ -7,7 +7,7 @@ EXPLAIN (ddl, verbose) CREATE FUNCTION t() RETURNS INT LANGUAGE SQL AS $$ SELECT
 • Schema change plan for CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()
 │ 	RETURNS INT8
 │ 	LANGUAGE SQL
-│ 	AS $$SELECT 1;$$;
+│ 	AS $$SELECT ‹1›;$$;
 │
 ├── • StatementPhase
 │   │

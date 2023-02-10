@@ -8,7 +8,7 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(b);
 • Schema change plan for CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹public›.‹t› (‹b›); following CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()
 │ 	RETURNS INT8
 │ 	LANGUAGE SQL
-│ 	AS $$SELECT 1;$$;
+│ 	AS $$SELECT ‹1›;$$;
 │
 ├── • StatementPhase
 │   │
@@ -395,7 +395,7 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(b);
 │                 - statement: "CREATE FUNCTION t()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$ SELECT
 │                     1 $$"
 │                   redactedstatement: "CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()\n\tRETURNS INT8\n\tLANGUAGE
-│                     SQL\n\tAS $$SELECT 1;$$"
+│                     SQL\n\tAS $$SELECT ‹1›;$$"
 │                   statementtag: CREATE FUNCTION
 │                 - statement: CREATE UNIQUE INDEX idx ON t (b)
 │                   redactedstatement: CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹public›.‹t› (‹b›)

@@ -165,6 +165,36 @@ func TestingGetPublicTypeDescriptor(
 	return TestingGetTypeDescriptor(kvDB, codec, database, "public", object)
 }
 
+func TestGetFunctionDescriptor(
+	kvDB *kv.DB, codec keys.SQLCodec, database string, schema string, fName string,
+) catalog.FunctionDescriptor {
+	db := TestingGetDatabaseDescriptor(kvDB, codec, database)
+	sc := TestingGetSchemaDescriptor(kvDB, codec, db.GetID(), schema)
+	f, found := sc.GetFunction(fName)
+	if !found {
+		panic(fmt.Sprintf("function %s.%s.%s does not exist", database, schema, fName))
+	}
+	if len(f.Signatures) != 1 {
+		panic(fmt.Sprintf("expected only 1 function %s.%s.%s, found %d", database, schema, fName, len(f.Signatures)))
+	}
+	fnID := f.Signatures[0].ID
+	ctx := context.Background()
+	var fnDesc catalog.Descriptor
+	cr := catkv.NewCatalogReader(
+		codec, latestBinaryVersion, nil /* systemDatabaseCache */, nil, /* maybeMonitor */
+	)
+	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+		fnDesc, err = mustGetDescriptorByID(ctx, latestBinaryVersion, cr, txn, fnID, catalog.Function)
+		if err != nil {
+			panic(err)
+		}
+		return nil
+	}); err != nil {
+		panic(err)
+	}
+	return fnDesc.(catalog.FunctionDescriptor)
+}
+
 func testingGetObjectDescriptor(
 	kvDB *kv.DB,
 	codec keys.SQLCodec,

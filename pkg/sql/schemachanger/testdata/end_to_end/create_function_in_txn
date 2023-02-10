@@ -157,7 +157,7 @@ upsert descriptor #105
   +    relevantStatements:
   +    - statement:
   +        redactedStatement: "CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()\n\tRETURNS
-  +          INT8\n\tLANGUAGE SQL\n\tAS $$SELECT 1;$$"
+  +          INT8\n\tLANGUAGE SQL\n\tAS $$SELECT ‹1›;$$"
   +        statement: "CREATE FUNCTION t()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$ SELECT
   +          1 $$"
   +        statementTag: CREATE FUNCTION
@@ -583,7 +583,7 @@ upsert descriptor #105
   -    relevantStatements:
   -    - statement:
   -        redactedStatement: "CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()\n\tRETURNS
-  -          INT8\n\tLANGUAGE SQL\n\tAS $$SELECT 1;$$"
+  -          INT8\n\tLANGUAGE SQL\n\tAS $$SELECT ‹1›;$$"
   -        statement: "CREATE FUNCTION t()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$ SELECT
   -          1 $$"
   -        statementTag: CREATE FUNCTION
