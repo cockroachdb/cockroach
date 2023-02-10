@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -155,20 +154,11 @@ func (n *Notifier) run(_ context.Context) {
 			versionSettingChanged <- struct{}{}
 		}
 	})
-	tombstonesEnableChanges := make(chan struct{}, 1)
-	storage.MVCCRangeTombstonesEnabled.SetOnChange(&n.settings.SV, func(ctx context.Context) {
-		select {
-		case tombstonesEnableChanges <- struct{}{}:
-		default:
-		}
-	})
 	for {
 		select {
 		case <-n.stopper.ShouldQuiesce():
 			return
 		case <-versionSettingChanged:
-			n.notify()
-		case <-tombstonesEnableChanges:
 			n.notify()
 		case <-systemConfigUpdateCh:
 			n.maybeNotify()

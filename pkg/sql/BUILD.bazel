@@ -485,7 +485,6 @@ go_library(
         "//pkg/sql/syntheticprivilegecache",
         "//pkg/sql/types",
         "//pkg/sql/vtable",
-        "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/testutils/serverutils",
         "//pkg/upgrade",

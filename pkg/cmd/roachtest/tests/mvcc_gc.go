@@ -93,7 +93,6 @@ func runMVCCGC(ctx context.Context, t test.Test, c cluster.Cluster) {
 		execSQLOrFail(fmt.Sprintf(`SET CLUSTER SETTING %s = $1`, name), value)
 	}
 
-	setClusterSetting("storage.mvcc.range_tombstones.enabled", true)
 	setClusterSetting("kv.protectedts.poll_interval", "5s")
 	setClusterSetting("kv.mvcc_gc.queue_interval", "0s")
 

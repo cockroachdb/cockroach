@@ -22,6 +22,9 @@ not yet been upgraded to support them (in the
 NB: MVCC range tombstones are not yet supported in transactions, since that
 would require ranged write intents.
 
+NB: The `storage.mvcc.range_tombstones.enabled` cluster setting and the
+`storage.CanUseMVCCRangeTombstones()` helper were removed in 23.1.
+
 ## Motivation
 
 Previously, certain operations would rely on the non-MVCC methods `ClearRange`

@@ -22,7 +22,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -73,30 +72,6 @@ var minWALSyncInterval = settings.RegisterDurationSetting(
 	"minimum duration between syncs of the RocksDB WAL",
 	0*time.Millisecond,
 )
-
-// MVCCRangeTombstonesEnabled enables writing of MVCC range tombstones.
-// Currently, this is used for schema GC and import cancellation rollbacks.
-//
-// Note that any executing jobs may not pick up this change, so these need to be
-// waited out before being certain that the setting has taken effect.
-//
-// If disabled after being enabled, this will prevent new range tombstones from
-// being written, but already written tombstones will remain until GCed. The
-// above note on jobs also applies in this case.
-var MVCCRangeTombstonesEnabled = settings.RegisterBoolSetting(
-	settings.TenantReadOnly,
-	"storage.mvcc.range_tombstones.enabled",
-	"enables the use of MVCC range tombstones",
-	true)
-
-// CanUseMVCCRangeTombstones returns true if the caller can begin writing
-// MVCC range tombstones, by setting DeleteRangeRequest.UseRangeTombstone.
-// It requires the MVCCRangeTombstones version gate to be active, and the
-// setting storage.mvcc.range_tombstones.enabled to be enabled.
-func CanUseMVCCRangeTombstones(ctx context.Context, st *cluster.Settings) bool {
-	return st.Version.IsActive(ctx, clusterversion.TODODelete_V22_2MVCCRangeTombstones) &&
-		MVCCRangeTombstonesEnabled.Get(&st.SV)
-}
 
 // MaxIntentsPerWriteIntentError sets maximum number of intents returned in
 // WriteIntentError in operations that return multiple intents per error.
