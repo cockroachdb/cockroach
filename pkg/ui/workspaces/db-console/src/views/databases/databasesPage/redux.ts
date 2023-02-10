@@ -21,11 +21,11 @@ import {
 import { cockroach } from "src/js/protos";
 import {
   generateTableID,
-  refreshDatabases,
   refreshDatabaseDetails,
-  refreshTableStats,
+  refreshDatabases,
   refreshNodes,
   refreshSettings,
+  refreshTableStats,
 } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import { FixLong } from "src/util/fixLong";
@@ -75,7 +75,7 @@ const searchLocalSetting = new LocalSetting(
 );
 
 const selectDatabases = createSelector(
-  (state: AdminUIState) => state.cachedData.databases.data?.databases,
+  (state: AdminUIState) => state.cachedData.databases.data,
   (state: AdminUIState) => state.cachedData.databaseDetails,
   (state: AdminUIState) => state.cachedData.tableStats,
   (state: AdminUIState) => nodeRegionsByIDSelector(state),
@@ -87,7 +87,7 @@ const selectDatabases = createSelector(
     nodeRegions,
     isTenant,
   ): DatabasesPageDataDatabase[] =>
-    (databases || []).map(database => {
+    (databases?.databases || []).map(database => {
       const details = databaseDetails[database];
 
       const stats = details?.data?.stats;
@@ -131,10 +131,15 @@ const selectDatabases = createSelector(
       );
       const numIndexRecommendations = stats?.num_index_recommendations || 0;
 
+      const combinedErr = combineLoadingErrors(
+        details?.lastError,
+        databases?.error?.message,
+      );
+
       return {
         loading: !!details?.inFlight,
         loaded: !!details?.valid,
-        lastError: details?.lastError,
+        lastError: combinedErr,
         name: database,
         sizeInBytes: sizeInBytes,
         tableCount: details?.data?.table_names?.length || 0,
@@ -151,6 +156,30 @@ const selectDatabases = createSelector(
       };
     }),
 );
+
+function combineLoadingErrors(detailsErr: Error, dbList: string): Error {
+  if (!dbList) {
+    return detailsErr;
+  }
+
+  if (!detailsErr) {
+    return new GetDatabaseInfoError(
+      `Failed to load all databases. Partial results are shown. Debug info: ${dbList}`,
+    );
+  }
+
+  return new GetDatabaseInfoError(
+    `Failed to load all databases and database details. Partial results are shown. Debug info: ${dbList}, details error: ${detailsErr}`,
+  );
+}
+
+export class GetDatabaseInfoError extends Error {
+  constructor(message: string) {
+    super(message);
+
+    this.name = this.constructor.name;
+  }
+}
 
 export const mapStateToProps = (state: AdminUIState): DatabasesPageData => ({
   loading: selectLoading(state),
