@@ -24,11 +24,7 @@ Schema change plan for CREATE FUNCTION ‹defaultdb›.‹public›.‹f›(IN �
 	RETURNS INT8
 	VOLATILE
 	LANGUAGE SQL
-	AS $$SELECT a FROM defaultdb.public.t;
-SELECT b FROM defaultdb.public.t@t_idx_b;
-SELECT c FROM defaultdb.public.t@t_idx_c;
-SELECT a FROM defaultdb.public.v;
-SELECT nextval('sq1');$$;
+	AS $$SELECT ‹a› FROM ‹defaultdb›.‹public›.‹t›; SELECT ‹b› FROM ‹defaultdb›.‹public›.‹t›@‹t_idx_b›; SELECT ‹c› FROM ‹defaultdb›.‹public›.‹t›@‹t_idx_c›; SELECT ‹a› FROM ‹defaultdb›.‹public›.‹v›; SELECT nextval(‹'sq1'›);$$;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 8 elements transitioning toward PUBLIC

@@ -168,6 +168,8 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 
 		deps = append(deps, b.schemaDeps...)
 		typeDeps.UnionWith(b.schemaTypeDeps)
+		// Add statement ast into CreateFunction node for logging purpose.
+		cf.BodyStatements = append(cf.BodyStatements, stmt.AST)
 		// Reset the tracked dependencies for next statement.
 		b.schemaDeps = nil
 		b.schemaTypeDeps = intsets.Fast{}
