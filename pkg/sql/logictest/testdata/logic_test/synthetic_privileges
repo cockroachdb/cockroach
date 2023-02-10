@@ -36,11 +36,11 @@ GRANT SYSTEM EXTERNALCONNECTION TO testuser2
 
 user root
 
-query TTTT
+query TTTTO
 SELECT * FROM system.privileges ORDER BY 1, 2
 ----
-testuser  /externalconn/foo  {ALL}                                      {}
-testuser  /global/           {EXTERNALCONNECTION,MODIFYCLUSTERSETTING}  {}
+testuser  /externalconn/foo  {ALL}                                      {}  100
+testuser  /global/           {EXTERNALCONNECTION,MODIFYCLUSTERSETTING}  {}  100
 
 query TT
 SELECT connection_name, connection_type FROM system.external_connections
@@ -68,7 +68,7 @@ CREATE EXTERNAL CONNECTION foo AS 'nodelocal://1/foo';
 
 user root
 
-query TTTT
+query TTTTO
 SELECT * FROM system.privileges ORDER BY 1, 2
 ----
 
@@ -87,45 +87,45 @@ GRANT SYSTEM MODIFYCLUSTERSETTING TO root
 
 user root
 
-query TTTT
+query TTTTO
 SELECT * FROM system.privileges ORDER BY 1, 2
 ----
-root      /global/  {MODIFYCLUSTERSETTING}  {}
-testuser  /global/  {MODIFYCLUSTERSETTING}  {MODIFYCLUSTERSETTING}
+root      /global/  {MODIFYCLUSTERSETTING}  {}                      1
+testuser  /global/  {MODIFYCLUSTERSETTING}  {MODIFYCLUSTERSETTING}  100
 
 statement ok
 REVOKE GRANT OPTION FOR SYSTEM MODIFYCLUSTERSETTING FROM testuser
 
-query TTTT
+query TTTTO
 SELECT * FROM system.privileges ORDER BY 1, 2
 ----
-root      /global/  {MODIFYCLUSTERSETTING}  {}
-testuser  /global/  {MODIFYCLUSTERSETTING}  {}
+root      /global/  {MODIFYCLUSTERSETTING}  {}  1
+testuser  /global/  {MODIFYCLUSTERSETTING}  {}  100
 
 statement ok
 REVOKE SYSTEM MODIFYCLUSTERSETTING FROM testuser
 
-query TTTT
+query TTTTO
 SELECT * FROM system.privileges ORDER BY 1, 2
 ----
-root  /global/  {MODIFYCLUSTERSETTING}  {}
+root  /global/  {MODIFYCLUSTERSETTING}  {}  1
 
 statement ok
 GRANT SYSTEM MODIFYCLUSTERSETTING TO testuser WITH GRANT OPTION
 
-query TTTT
+query TTTTO
 SELECT * FROM system.privileges ORDER BY 1, 2
 ----
-root      /global/  {MODIFYCLUSTERSETTING}  {}
-testuser  /global/  {MODIFYCLUSTERSETTING}  {MODIFYCLUSTERSETTING}
+root      /global/  {MODIFYCLUSTERSETTING}  {}                      1
+testuser  /global/  {MODIFYCLUSTERSETTING}  {MODIFYCLUSTERSETTING}  100
 
 statement ok
 REVOKE SYSTEM MODIFYCLUSTERSETTING FROM testuser
 
-query TTTT
+query TTTTO
 SELECT * FROM system.privileges ORDER BY 1, 2
 ----
-root  /global/  {MODIFYCLUSTERSETTING}  {}
+root  /global/  {MODIFYCLUSTERSETTING}  {}  1
 
 # test VIEWCLUSTERSETTING
 user testuser
@@ -145,11 +145,11 @@ SELECT * FROM crdb_internal.cluster_settings;
 
 user root
 
-query TTTT
+query TTTTO
 SELECT * FROM system.privileges ORDER BY 1, 2
 ----
-root      /global/  {MODIFYCLUSTERSETTING}  {}
-testuser  /global/  {VIEWCLUSTERSETTING}    {}
+root      /global/  {MODIFYCLUSTERSETTING}  {}  1
+testuser  /global/  {VIEWCLUSTERSETTING}    {}  100
 
 statement ok
 REVOKE SYSTEM VIEWCLUSTERSETTING FROM testuser
@@ -161,10 +161,10 @@ SELECT * FROM crdb_internal.cluster_settings;
 
 user root
 
-query TTTT
+query TTTTO
 SELECT * FROM system.privileges
 ----
-root  /global/  {MODIFYCLUSTERSETTING}  {}
+root  /global/  {MODIFYCLUSTERSETTING}  {}  1
 
 # test VIEWACTIVITY
 user testuser
@@ -184,11 +184,11 @@ SELECT * FROM crdb_internal.node_statement_statistics;
 
 user root 
 
-query TTTT
+query TTTTO
 SELECT * FROM system.privileges ORDER BY 1, 2
 ----
-root      /global/  {MODIFYCLUSTERSETTING}  {}
-testuser  /global/  {VIEWACTIVITY}          {}
+root      /global/  {MODIFYCLUSTERSETTING}  {}  1
+testuser  /global/  {VIEWACTIVITY}          {}  100
 
 statement ok
 REVOKE SYSTEM VIEWACTIVITY FROM testuser
@@ -200,10 +200,10 @@ SELECT * FROM crdb_internal.node_statement_statistics;
 
 user root
 
-query TTTT
+query TTTTO
 SELECT * FROM system.privileges
 ----
-root  /global/  {MODIFYCLUSTERSETTING}  {}
+root  /global/  {MODIFYCLUSTERSETTING}  {}  1
 
 # test VIEWACTIVITYREDACTED
 user testuser
@@ -223,11 +223,11 @@ SELECT * FROM crdb_internal.node_statement_statistics;
 
 user root 
 
-query TTTT
+query TTTTO
 SELECT * FROM system.privileges ORDER BY 1, 2
 ----
-root      /global/  {MODIFYCLUSTERSETTING}  {}
-testuser  /global/  {VIEWACTIVITYREDACTED}  {}
+root      /global/  {MODIFYCLUSTERSETTING}  {}  1
+testuser  /global/  {VIEWACTIVITYREDACTED}  {}  100
 
 statement ok
 REVOKE SYSTEM VIEWACTIVITYREDACTED FROM testuser
@@ -239,10 +239,10 @@ SELECT * FROM crdb_internal.node_statement_statistics;
 
 user root
 
-query TTTT
+query TTTTO
 SELECT * FROM system.privileges
 ----
-root  /global/  {MODIFYCLUSTERSETTING}  {}
+root  /global/  {MODIFYCLUSTERSETTING}  {}  1
 
 statement ok
 DROP USER testuser
@@ -302,18 +302,18 @@ BEGIN
 statement ok
 GRANT SELECT ON crdb_internal.tables TO testuser4
 
-query TTTT
+query TTTTO
 SELECT * FROM system.privileges ORDER BY 1,2
 ----
-public     /vtable/crdb_internal/tables  {}                                         {}
-root       /global/                      {MODIFYCLUSTERSETTING}                     {}
-testuser   /externalconn/foo             {USAGE}                                    {}
-testuser   /global/                      {MODIFYCLUSTERSETTING}                     {}
-testuser   /vtable/crdb_internal/tables  {SELECT}                                   {}
-testuser2  /externalconn/foo             {USAGE}                                    {}
-testuser2  /global/                      {MODIFYCLUSTERSETTING}                     {}
-testuser3  /global/                      {EXTERNALCONNECTION,MODIFYCLUSTERSETTING}  {}
-testuser4  /vtable/crdb_internal/tables  {SELECT}                                   {}
+public     /vtable/crdb_internal/tables  {}                                         {}  4
+root       /global/                      {MODIFYCLUSTERSETTING}                     {}  1
+testuser   /externalconn/foo             {USAGE}                                    {}  102
+testuser   /global/                      {MODIFYCLUSTERSETTING}                     {}  102
+testuser   /vtable/crdb_internal/tables  {SELECT}                                   {}  102
+testuser2  /externalconn/foo             {USAGE}                                    {}  101
+testuser2  /global/                      {MODIFYCLUSTERSETTING}                     {}  101
+testuser3  /global/                      {EXTERNALCONNECTION,MODIFYCLUSTERSETTING}  {}  103
+testuser4  /vtable/crdb_internal/tables  {SELECT}                                   {}  104
 
 # This should not cache the uncommitted privilege.
 query B
@@ -324,17 +324,17 @@ true
 statement ok
 ROLLBACK
 
-query TTTT
+query TTTTO
 SELECT * FROM system.privileges ORDER BY 1,2
 ----
-public     /vtable/crdb_internal/tables  {}                                         {}
-root       /global/                      {MODIFYCLUSTERSETTING}                     {}
-testuser   /externalconn/foo             {USAGE}                                    {}
-testuser   /global/                      {MODIFYCLUSTERSETTING}                     {}
-testuser   /vtable/crdb_internal/tables  {SELECT}                                   {}
-testuser2  /externalconn/foo             {USAGE}                                    {}
-testuser2  /global/                      {MODIFYCLUSTERSETTING}                     {}
-testuser3  /global/                      {EXTERNALCONNECTION,MODIFYCLUSTERSETTING}  {}
+public     /vtable/crdb_internal/tables  {}                                         {}  4
+root       /global/                      {MODIFYCLUSTERSETTING}                     {}  1
+testuser   /externalconn/foo             {USAGE}                                    {}  102
+testuser   /global/                      {MODIFYCLUSTERSETTING}                     {}  102
+testuser   /vtable/crdb_internal/tables  {SELECT}                                   {}  102
+testuser2  /externalconn/foo             {USAGE}                                    {}  101
+testuser2  /global/                      {MODIFYCLUSTERSETTING}                     {}  101
+testuser3  /global/                      {EXTERNALCONNECTION,MODIFYCLUSTERSETTING}  {}  103
 
 query B
 SELECT has_table_privilege('testuser4', 'crdb_internal.tables', 'SELECT')

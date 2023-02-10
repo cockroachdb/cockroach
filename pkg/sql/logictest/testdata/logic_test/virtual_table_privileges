@@ -16,17 +16,17 @@ user root
 statement ok
 REVOKE SELECT ON crdb_internal.tables FROM public
 
-query TTTT
+query TTTTO
 SELECT * FROM system.privileges
 ----
-public  /vtable/crdb_internal/tables  {}  {}
+public  /vtable/crdb_internal/tables  {}  {}  4
 
 # Note that after granting SELECT to public, there should be no row
 # since this is the default case, public with SELECT is represented as no row.
 statement ok
 GRANT SELECT ON crdb_internal.tables TO public
 
-query TTTT
+query TTTTO
 SELECT * FROM system.privileges
 ----
 
@@ -89,10 +89,10 @@ GRANT SELECT ON TABLE test2.information_schema.columns TO testuser
 ----
 NOTICE: virtual table privileges are not database specific
 
-query TTTT
+query TTTTO
 SELECT * FROM system.privileges
 ----
-testuser  /vtable/information_schema/columns  {SELECT}  {}
+testuser  /vtable/information_schema/columns  {SELECT}  {}  100
 
 user testuser
 
