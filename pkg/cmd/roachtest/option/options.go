@@ -36,6 +36,16 @@ func DefaultStartOptsNoBackups() StartOpts {
 	return StartOpts{RoachprodOpts: roachprod.DefaultStartOpts()}
 }
 
+// DefaultStartSingleNodeOpts returns StartOpts with default values,
+// but no init. This is helpful if node is not going to start gracefully or
+// will be terminated as init could fail even if it is a noop for a running
+// cluster.
+func DefaultStartSingleNodeOpts() StartOpts {
+	startOpts := StartOpts{RoachprodOpts: roachprod.DefaultStartOpts()}
+	startOpts.RoachprodOpts.SkipInit = true
+	return startOpts
+}
+
 // StopOpts is a type that combines the stop options needed by roachprod and roachtest.
 type StopOpts struct {
 	RoachprodOpts roachprod.StopOpts
