@@ -65,9 +65,9 @@ GRANT DROP ON EXTERNAL CONNECTION "drop-privileged" TO testuser;
 query-sql
 SELECT * FROM system.privileges
 ----
-root /externalconn/drop-privileged {ALL} {}
-root /externalconn/drop-privileged-dup {ALL} {}
-testuser /externalconn/drop-privileged {DROP} {}
+root /externalconn/drop-privileged {ALL} {} 1
+root /externalconn/drop-privileged-dup {ALL} {} 1
+testuser /externalconn/drop-privileged {DROP} {} 100
 
 exec-sql user=testuser
 DROP EXTERNAL CONNECTION "drop-privileged"
@@ -133,9 +133,9 @@ CREATE EXTERNAL CONNECTION 'not-root' AS 'userfile:///bar'
 query-sql
 SELECT * FROM system.privileges
 ----
-root /externalconn/root {ALL} {}
-testuser /externalconn/not-root {ALL} {}
-testuser /global/ {EXTERNALCONNECTION} {}
+root /externalconn/root {ALL} {} 1
+testuser /externalconn/not-root {ALL} {} 101
+testuser /global/ {EXTERNALCONNECTION} {} 101
 
 exec-sql user=testuser
 BACKUP TABLE foo INTO 'external://not-root'
