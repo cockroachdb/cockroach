@@ -14,6 +14,7 @@ package cockroach.kv.bulk.bulkpb;
 option go_package = "bulkpb";
 
 import "gogoproto/gogo.proto";
+import "util/hlc/timestamp.proto";
 
 // IngestionPerformanceStats is a message containing information about the
 // creation of SSTables by an SSTBatcher or BufferingAdder.
@@ -72,8 +73,16 @@ message IngestionPerformanceStats {
   // CommitWait is the time spent waiting for commit timestamps.
   int64 commit_wait = 18  [(gogoproto.casttype) = "time.Duration"];
 
-  // Duration is the total ingestion time.
+  // Duration is the difference between the CurrentFlushTime and the
+  // PreviousFlushTime.
   int64 duration = 19  [(gogoproto.casttype) = "time.Duration"];
+
+  // LastFlushTime is the timestamp at which we completed the flush prior to the
+  // current flush.
+  util.hlc.Timestamp last_flush_time = 21 [(gogoproto.nullable) = false];
+
+  // CurrentFlushTime is the timestamp at which we finished the current flush.
+  util.hlc.Timestamp current_flush_time = 22 [(gogoproto.nullable) = false];
 
   // SendWaitByStore is the time spent sending batches to each store.
   map<int32, int64> send_wait_by_store = 20 [(gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID", (gogoproto.castvalue) = "time.Duration"];

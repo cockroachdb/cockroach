@@ -631,6 +631,8 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 		afterFlush := timeutil.Now()
 		currentBatchStatsCopy.BatchWait += afterFlush.Sub(beforeFlush)
 		currentBatchStatsCopy.Duration = afterFlush.Sub(b.mu.lastFlush)
+		currentBatchStatsCopy.LastFlushTime = hlc.Timestamp{WallTime: b.mu.lastFlush.UnixNano()}
+		currentBatchStatsCopy.CurrentFlushTime = hlc.Timestamp{WallTime: afterFlush.UnixNano()}
 		b.mu.totalStats.Combine(currentBatchStatsCopy)
 		b.mu.lastFlush = afterFlush
 		if b.mu.tracingSpan != nil {
