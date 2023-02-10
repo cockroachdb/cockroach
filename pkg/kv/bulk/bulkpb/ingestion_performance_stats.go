@@ -46,7 +46,8 @@ func (s *IngestionPerformanceStats) Combine(other bulk.TracingAggregatorEvent) {
 		panic(fmt.Sprintf("`other` is not of type IngestionPerformanceStats: %T", other))
 	}
 
-	s.DataSize += otherStats.DataSize
+	s.LogicalDataSize += otherStats.LogicalDataSize
+	s.SSTDataSize += otherStats.SSTDataSize
 	s.BufferFlushes += otherStats.BufferFlushes
 	s.FlushesDueToSize += otherStats.FlushesDueToSize
 	s.Batches += otherStats.Batches
@@ -128,18 +129,35 @@ func (s *IngestionPerformanceStats) Render() []attribute.KeyValue {
 		)
 	}
 
-	if s.DataSize > 0 {
-		dataSizeMB := float64(s.DataSize) / mb
+	if s.LogicalDataSize > 0 {
+		logicalDataSizeMB := float64(s.LogicalDataSize) / mb
 		tags = append(tags, attribute.KeyValue{
-			Key:   "data_size",
-			Value: attribute.StringValue(fmt.Sprintf("%.2f MB", dataSizeMB)),
+			Key:   "logical_data_size",
+			Value: attribute.StringValue(fmt.Sprintf("%.2f MB", logicalDataSizeMB)),
 		})
 
 		if !s.CurrentFlushTime.IsEmpty() && !s.LastFlushTime.IsEmpty() {
 			duration := s.CurrentFlushTime.GoTime().Sub(s.LastFlushTime.GoTime())
-			throughput := dataSizeMB / duration.Seconds()
+			throughput := logicalDataSizeMB / duration.Seconds()
 			tags = append(tags, attribute.KeyValue{
-				Key:   "throughput",
+				Key:   "logical_throughput",
+				Value: attribute.StringValue(fmt.Sprintf("%.2f MB/s", throughput)),
+			})
+		}
+	}
+
+	if s.SSTDataSize > 0 {
+		sstDataSizeMB := float64(s.SSTDataSize) / mb
+		tags = append(tags, attribute.KeyValue{
+			Key:   "sst_data_size",
+			Value: attribute.StringValue(fmt.Sprintf("%.2f MB", sstDataSizeMB)),
+		})
+
+		if !s.CurrentFlushTime.IsEmpty() && !s.LastFlushTime.IsEmpty() {
+			duration := s.CurrentFlushTime.GoTime().Sub(s.LastFlushTime.GoTime())
+			throughput := sstDataSizeMB / duration.Seconds()
+			tags = append(tags, attribute.KeyValue{
+				Key:   "sst_throughput",
 				Value: attribute.StringValue(fmt.Sprintf("%.2f MB/s", throughput)),
 			})
 		}
@@ -185,7 +203,7 @@ func (s *IngestionPerformanceStats) LogTimings(ctx context.Context, name, action
 		"%s adder %s; ingested %s: %s filling; %v sorting; %v / %v flushing; %v sending; %v splitting; %d; %v scattering, %d, %v; %v commit-wait",
 		name,
 		redact.Safe(action),
-		sz(s.DataSize),
+		sz(s.LogicalDataSize),
 		timing(s.FillWait),
 		timing(s.SortWait),
 		timing(s.FlushWait),

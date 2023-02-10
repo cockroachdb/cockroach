@@ -13,6 +13,7 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
@@ -36,6 +37,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	gogotypes "github.com/gogo/protobuf/types"
@@ -195,6 +198,29 @@ func (rd *restoreDataProcessor) Start(ctx context.Context) {
 	rd.phaseGroup.GoCtx(func(ctx context.Context) error {
 		defer close(rd.progCh)
 		return rd.runRestoreWorkers(ctx, rd.sstCh)
+	})
+
+	rd.phaseGroup.GoCtx(func(ctx context.Context) error {
+		timer := timeutil.NewTimer()
+		defer timer.Stop()
+		timer.Reset(time.Minute)
+		for {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-timer.C:
+				sp := tracing.SpanFromContext(ctx)
+				ingestionPerformanceTag, ok := sp.GetLazyTag("IngestionPerformanceStats")
+				if !ok {
+					log.Warningf(ctx, "did not find ingestion tag")
+				} else {
+					i := ingestionPerformanceTag.(tracing.LazyTag)
+					log.Infof(ctx, "ingestion stats %+v", i.Render())
+				}
+				timer.Read = true
+				timer.Reset(time.Minute)
+			}
+		}
 	})
 }
 

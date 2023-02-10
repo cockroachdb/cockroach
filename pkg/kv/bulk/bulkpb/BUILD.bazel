@@ -35,6 +35,7 @@ go_library(
     deps = [
         "//pkg/roachpb",
         "//pkg/util/bulk",
+        "//pkg/util/hlc",
         "//pkg/util/humanizeutil",
         "//pkg/util/log",
         "@com_github_cockroachdb_redact//:redact",
