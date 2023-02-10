@@ -36,7 +36,7 @@ func GetKeyLockingStrength(lockStrength descpb.ScanLockingStrength) lock.Strengt
 		fallthrough
 	case descpb.ScanLockingStrength_FOR_UPDATE:
 		// We currently perform exclusive per-key locking when FOR_UPDATE is
-		// used because Upgrade locks have not yet been implemented.
+		// used because Update locks have not yet been implemented.
 		return lock.Exclusive
 
 	default:

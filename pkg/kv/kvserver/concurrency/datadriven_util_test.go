@@ -79,24 +79,6 @@ func scanUserPriority(t *testing.T, d *datadriven.TestData) roachpb.UserPriority
 	}
 }
 
-func scanLockStrength(t *testing.T, d *datadriven.TestData) lock.Strength {
-	var strS string
-	d.ScanArgs(t, "strength", &strS)
-	switch strS {
-	case "none":
-		return lock.None
-	case "shared":
-		return lock.Shared
-	case "upgrade":
-		return lock.Upgrade
-	case "exclusive":
-		return lock.Exclusive
-	default:
-		d.Fatalf(t, "unknown lock strength: %s", strS)
-		return 0
-	}
-}
-
 func scanLockDurability(t *testing.T, d *datadriven.TestData) lock.Durability {
 	var durS string
 	d.ScanArgs(t, "dur", &durS)

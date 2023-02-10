@@ -497,7 +497,7 @@ func TestLockTableBasic(t *testing.T) {
 				}
 				var key string
 				d.ScanArgs(t, "k", &key)
-				strength := scanLockStrength(t, d)
+				strength := ScanLockStrength(t, d)
 				if ok, txn := g.IsKeyLockedByConflictingTxn(roachpb.Key(key), strength); ok {
 					holder := "<nil>"
 					if txn != nil {
@@ -714,7 +714,7 @@ func scanSpans(t *testing.T, d *datadriven.TestData, ts hlc.Timestamp) *spanset.
 	return spans
 }
 
-func scanLockStrength(t *testing.T, d *datadriven.TestData) lock.Strength {
+func ScanLockStrength(t *testing.T, d *datadriven.TestData) lock.Strength {
 	var strS string
 	d.ScanArgs(t, "strength", &strS)
 	switch strS {
@@ -722,8 +722,8 @@ func scanLockStrength(t *testing.T, d *datadriven.TestData) lock.Strength {
 		return lock.None
 	case "shared":
 		return lock.Shared
-	case "upgrade":
-		return lock.Upgrade
+	case "update":
+		return lock.Update
 	case "exclusive":
 		return lock.Exclusive
 	default:
