@@ -615,7 +615,7 @@ func (r *Replica) applySnapshot(
 	r.mu.Lock()
 	if isInitialSnap {
 		// NB: this will also call setDescLockedRaftMuLocked.
-		if err := initReplicaLocked(ctx, r, desc); err != nil {
+		if err := r.initFromSnapshotLockedRaftMuLocked(ctx, desc); err != nil {
 			log.Fatalf(ctx, "unable to initialize replica while applying snapshot: %+v", err)
 		} else if err := r.store.markReplicaInitializedLockedReplLocked(ctx, r); err != nil {
 			log.Fatalf(ctx, "unable to mark replica initialized while applying snapshot: %+v", err)
