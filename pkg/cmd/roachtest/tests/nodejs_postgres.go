@@ -168,7 +168,7 @@ PGSSLCERT=$HOME/certs/client.%s.crt PGSSLKEY=$HOME/certs/client.%s.key PGSSLROOT
 
 	r.Add(registry.TestSpec{
 		Name:    "node-postgres",
-		Owner:   registry.OwnerSQLExperience,
+		Owner:   registry.OwnerSQLSessions,
 		Cluster: r.MakeClusterSpec(1),
 		Tags:    []string{`default`, `driver`},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

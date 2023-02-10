@@ -81,15 +81,15 @@ func registerPsycopg(r registry.Registry) {
 
 		// TODO(rafi): When psycopg 2.9.4 is released and tagged,
 		//    use the tag version instead of the commit.
-		//if err := repeatGitCloneE(
+		// if err := repeatGitCloneE(
 		//	ctx, t, c,
 		//	"https://github.com/psycopg/psycopg2.git",
 		//	"/mnt/data1/psycopg",
 		//	supportedPsycopgTag,
 		//	node,
-		//); err != nil {
+		// ); err != nil {
 		//	t.Fatal(err)
-		//}
+		// }
 		if err = c.RunE(ctx, node, "git clone https://github.com/psycopg/psycopg2.git /mnt/data1/psycopg"); err != nil {
 			t.Fatal(err)
 		}
@@ -148,7 +148,7 @@ func registerPsycopg(r registry.Registry) {
 
 	r.Add(registry.TestSpec{
 		Name:    "psycopg",
-		Owner:   registry.OwnerSQLExperience,
+		Owner:   registry.OwnerSQLSessions,
 		Cluster: r.MakeClusterSpec(1),
 		Tags:    []string{`default`, `driver`},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
