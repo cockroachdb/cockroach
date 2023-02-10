@@ -85,6 +85,27 @@ message WatchPodsResponse {
   Pod pod = 1;
 }
 
+// WatchTenantsRequest is empty as we want to get all notifications.
+message WatchTenantsRequest {}
+
+// WatchTenantsResponse represents the notifications that the server sends to
+// its clients when clients want to monitor the directory server activity.
+message WatchTenantsResponse {
+  Tenant tenant = 1;
+}
+
+// Tenant contains information about a tenant, such as its name, tenantID,
+// and connection limit.
+message Tenant {
+  // ClusterName is the name of the tenant's cluster.
+  string cluster_name = 1;
+  // MaxNonRootConns is the limit on non-root sql connections to this tenant.
+  // A value of -1 indicates no limit.
+  int32 max_non_root_conns = 2;
+  // TenantID identifies the tenant.
+  uint64 tenant_id = 3 [(gogoproto.customname) = "TenantID"];
+}
+
 // EnsurePodRequest is used to ensure that at least one tenant pod is in the
 // RUNNING state.
 message EnsurePodRequest {
@@ -107,7 +128,10 @@ message GetTenantRequest {
 // GetTenantResponse is sent back when a client requests metadata for a tenant.
 message GetTenantResponse {
   // ClusterName is the name of the tenant's cluster.
+  // TODO(alyshan): Deprecate cluster_name field in favour of tenant field.
   string cluster_name = 1; // add more metadata if needed
+  // Tenant contains the information for the tenant specified in the request.
+  Tenant tenant = 2;
 }
 
 // Directory specifies a service that keeps track and manages tenant backends,
@@ -120,6 +144,10 @@ service Directory {
   // are sent when a tenant pod is created, destroyed, or modified. When
   // WatchPods is first called, it returns notifications for all existing pods.
   rpc WatchPods(WatchPodsRequest) returns (stream WatchPodsResponse);
+  // WatchTenants gets a stream of tenant change notifications. Notifications
+  // are sent when a tenant is created, destroyed, or modified. When
+  // WatchTenants is first called, it returns notifications for all existing tenants.
+  rpc WatchTenants(WatchTenantsRequest) returns (stream WatchTenantsResponse);
   // EnsurePod ensures that at least one of the given tenant's pod is in the
   // RUNNING state. If there is already a RUNNING pod, then the server doesn't
   // have to do anything. If there isn't a RUNNING pod, then the server must

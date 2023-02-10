@@ -34,6 +34,19 @@ type tenantEntry struct {
 	// Full name of the tenant's cluster i.e. dim-dog.
 	ClusterName string
 
+	// mu contains fields in the tenantEntry that can be updated over time,
+	// so a lock must be obtained before accessing them.
+	mu struct {
+		 syncutil.Mutex
+		 // numConns indicates whether the tenant has the respective
+		 // limit set on it. A value of -1 indicates no limit. A value of 0 would
+		 // indicate that only root connections can be made to the tenant.
+		 numConns int32
+		 // pods synchronizes access to information about the tenant's SQL pods.
+		 pods []*Pod
+	 }
+
+
 	// RefreshDelay is the minimum amount of time that must elapse between
 	// attempts to refresh pods for this tenant after ReportFailure is
 	// called.
@@ -46,14 +59,6 @@ type tenantEntry struct {
 	// initError is set to any error that occurs in Initialized (or nil if no
 	// error occurred).
 	initError error
-
-	// pods synchronizes access to information about the tenant's SQL pods.
-	// These fields can be updated over time, so a lock must be obtained before
-	// accessing them.
-	pods struct {
-		syncutil.Mutex
-		pods []*Pod
-	}
 
 	// calls synchronizes calls to the Directory service for this tenant (e.g.
 	// calls to GetTenant or ListPods). Synchronization is needed to ensure that
@@ -80,7 +85,12 @@ func (e *tenantEntry) Initialize(ctx context.Context, client DirectoryClient) er
 			return
 		}
 
+		// TODO(alyshan): Once tenant directories are updated to send the Tenant field
+		// we can take ClusterName from that.
 		e.ClusterName = tenantResp.ClusterName
+		if tenantResp.Tenant != nil {
+			e.SetMaxNonRootConnections(tenantResp.Tenant.MaxNonRootConns)
+		}
 	})
 
 	// If Initialize has already been called, return any error that occurred.
@@ -110,36 +120,59 @@ func (e *tenantEntry) RefreshPods(ctx context.Context, client DirectoryClient) e
 // AddPod inserts the given pod into the tenant's list of pods. If it is
 // already present, then AddPod updates the pod entry and returns false.
 func (e *tenantEntry) AddPod(pod *Pod) bool {
-	e.pods.Lock()
-	defer e.pods.Unlock()
+	e.mu.Lock()
+	defer e.mu.Unlock()
 
-	for i, existing := range e.pods.pods {
+	for i, existing := range e.mu.pods {
 		if existing.Addr == pod.Addr {
 			// e.pods.pods is copy on write. Whenever modifications are made,
 			// we must make a copy to avoid accidentally mutating the slice
 			// retrieved by GetPods.
-			pods := e.pods.pods
-			e.pods.pods = make([]*Pod, len(pods))
-			copy(e.pods.pods, pods)
-			e.pods.pods[i] = pod
+			pods := e.mu.pods
+			e.mu.pods = make([]*Pod, len(pods))
+			copy(e.mu.pods, pods)
+			e.mu.pods[i] = pod
 			return false
 		}
 	}
 
-	e.pods.pods = append(e.pods.pods, pod)
+	e.mu.pods = append(e.mu.pods, pod)
 	return true
+}
+
+// SetMaxNonRootConnections sets numConns in the lock protected mu struct.
+func (e *tenantEntry) SetMaxNonRootConnections(numNonRoot int32){
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.mu.numConns = numNonRoot
+}
+
+// GetMaxNonRootConnections gets numConns from the lock protected mu struct.
+func (e *tenantEntry) GetMaxNonRootConnections() int32 {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.mu.numConns
+}
+
+// ToTenantProto returns a Tenant constructed from the fields of the tenantEntry.
+func (e *tenantEntry) ToTenantProto() Tenant {
+	return Tenant{
+		ClusterName: e.ClusterName,
+		MaxNonRootConns: e.GetMaxNonRootConnections(),
+		TenantID: e.TenantID.ToUint64(),
+	}
 }
 
 // RemovePodByAddr removes the pod with the given IP address from the tenant's
 // list of pod addresses. If it was not present, RemovePodByAddr returns false.
 func (e *tenantEntry) RemovePodByAddr(addr string) bool {
-	e.pods.Lock()
-	defer e.pods.Unlock()
+	e.mu.Lock()
+	defer e.mu.Unlock()
 
-	for i, existing := range e.pods.pods {
+	for i, existing := range e.mu.pods {
 		if existing.Addr == addr {
-			copy(e.pods.pods[i:], e.pods.pods[i+1:])
-			e.pods.pods = e.pods.pods[:len(e.pods.pods)-1]
+			copy(e.mu.pods[i:], e.mu.pods[i+1:])
+			e.mu.pods = e.mu.pods[:len(e.mu.pods)-1]
 			return true
 		}
 	}
@@ -148,9 +181,9 @@ func (e *tenantEntry) RemovePodByAddr(addr string) bool {
 
 // GetPods gets the current list of pods within scope of lock and returns them.
 func (e *tenantEntry) GetPods() []*Pod {
-	e.pods.Lock()
-	defer e.pods.Unlock()
-	return e.pods.pods
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.mu.pods
 }
 
 // EnsureTenantPod ensures that at least one RUNNING SQL process exists for this
@@ -228,15 +261,15 @@ func (e *tenantEntry) fetchPodsLocked(
 
 	// Need to lock in case another thread is reading the IP addresses (e.g. in
 	// ChoosePodAddr).
-	e.pods.Lock()
-	defer e.pods.Unlock()
-	e.pods.pods = list.Pods
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.mu.pods = list.Pods
 
-	if len(e.pods.pods) != 0 {
-		log.Infof(ctx, "fetched IP addresses: %v", e.pods.pods)
+	if len(e.mu.pods) != 0 {
+		log.Infof(ctx, "fetched IP addresses: %v", e.mu.pods)
 	}
 
-	return e.pods.pods, nil
+	return e.mu.pods, nil
 }
 
 // canRefreshLocked returns true if it's been at least X milliseconds since the

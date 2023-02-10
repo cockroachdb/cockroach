@@ -12,6 +12,8 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/interceptor"
+	"io"
 	"net"
 	"net/http"
 	"regexp"
@@ -108,6 +110,9 @@ type ProxyOptions struct {
 	ThrottleBaseDelay time.Duration
 	// DisableConnectionRebalancing disables connection rebalancing for tenants.
 	DisableConnectionRebalancing bool
+	// EnableLimitNonRootConns enables the limiting of non root connections for
+	// tenants who have that limit set on them.
+	EnableLimitNonRootConns bool
 
 	// testingKnobs are knobs used for testing.
 	testingKnobs struct {
@@ -164,10 +169,20 @@ const throttledErrorHint string = `Connection throttling is triggered by repeate
 sure the username and password are correct.
 `
 
+// TODO: Make this generic - let tenant dir provide error message
+const resourceLimitedErrorHint string = `Connection limiting is triggered by insufficient resource limits. Make
+sure the cluster has not hit its request unit and storage limits.
+`
+
 var throttledError = errors.WithHint(
 	withCode(errors.New(
 		"connection attempt throttled"), codeProxyRefusedConnection),
 	throttledErrorHint)
+
+var connectionsLimitedError = errors.WithHint(
+	withCode(errors.New(
+		"connection attempt limited"), codeProxyRefusedConnection),
+	resourceLimitedErrorHint)
 
 // newProxyHandler will create a new proxy handler with configuration based on
 // the provided options.
@@ -272,6 +287,9 @@ func newProxyHandler(
 	dirOpts = append(dirOpts, tenant.PodWatcher(podWatcher))
 	if handler.testingKnobs.dirOpts != nil {
 		dirOpts = append(dirOpts, handler.testingKnobs.dirOpts...)
+	}
+	if options.EnableLimitNonRootConns {
+		dirOpts = append(dirOpts, tenant.WithWatchTenantsOption())
 	}
 
 	client := tenant.NewDirectoryClient(conn)
@@ -428,6 +446,9 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) 
 				return throttledError
 			}
 			return nil
+		}, func(crdbConn net.Conn) error {
+			user := fe.Msg.Parameters["user"]
+			return handler.limitNonRootConnections(ctx, user, tenID, clusterName, crdbConn)
 		},
 	)
 	if err != nil {
@@ -465,6 +486,7 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) 
 		writeErrMarker: errClientWrite,
 	}
 
+
 	// Pass ownership of conn and crdbConn to the forwarder.
 	if err := f.run(clientConn, crdbConn); err != nil {
 		// Don't send to the client here for the same reason below.
@@ -501,6 +523,83 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) 
 		handler.metrics.updateForError(err)
 		return err
 	}
+}
+
+func (handler *proxyHandler) limitNonRootConnections (ctx context.Context, user string,
+	tenID roachpb.TenantID, clusterName string, crdbConn net.Conn) error {
+	if !handler.EnableLimitNonRootConns || user == "root" {
+		return nil
+	}
+
+	// If this is a non-root connection and the tenant has a specified limit on
+	// their non-root connections, then ensure that limit is respected.
+	tenantResp, err := handler.directoryCache.LookupTenant(ctx, tenID, clusterName)
+	if err != nil {
+		log.Errorf(ctx, "error looking up tenant %v: %v", tenID, err.Error())
+		return err
+	}
+
+	// If the tenant has a limit specified, count the non-root connections.
+	if tenantResp.MaxNonRootConns != -1 {
+		count, err := countNonRootConnections(ctx, interceptor.NewPGConn(crdbConn))
+		if err != nil {
+			log.Errorf(ctx, "error counting non root connections for tenant %v: %v", tenID, err.Error())
+			return err
+		}
+		log.Infof(ctx, "non-root connections open for tenant %v: %v, maxNonRootConnections %v",
+			tenID, count, tenantResp.MaxNonRootConns)
+		// The current connection is included in the count, so if the count is greater
+		// than the limit then this current connection should be closed.
+		if int32(count) > tenantResp.MaxNonRootConns {
+			log.Error(ctx, "throttler refused connection due to limiting non root connections")
+			return connectionsLimitedError
+		}
+	}
+
+	return nil
+}
+
+func countNonRootConnections(ctx context.Context, pgServerConn *interceptor.PGConn) (int, error) {
+	if err := writeQuery(pgServerConn, "select count(*) from [show cluster sessions] where user_name != 'root'"); err != nil {
+		return -1, err
+	}
+
+	pgServerFeConn := pgServerConn.ToFrontendConn()
+	if err := waitForSmallRowDescription(
+		ctx,
+		pgServerFeConn,
+		io.Discard,
+		func(msg *pgproto3.RowDescription) bool {
+			return true
+		},
+	); err != nil {
+		return -1, err
+	}
+
+	numNonRootSessions := 0
+	if err := expectDataRow(ctx, pgServerFeConn, func(msg *pgproto3.DataRow, _ int) bool {
+		if len(msg.Values) != 1 {
+			return false
+		}
+		num, err := strconv.Atoi(string(msg.Values[0]))
+		if err != nil {
+			return false
+		}
+		numNonRootSessions = num
+		return true
+	}); err != nil {
+		return -1, errors.Wrap(err, "expecting DataRow")
+	}
+
+	if err := expectCommandComplete(ctx, pgServerFeConn, "SELECT 1"); err != nil {
+		return -1, errors.Wrap(err, "expecting CommandComplete")
+	}
+
+	if err := expectReadyForQuery(ctx, pgServerFeConn); err != nil {
+		return -1, errors.Wrap(err, "expecting ReadyForQuery")
+	}
+
+	return numNonRootSessions, nil
 }
 
 // handleCancelRequest handles a pgwire query cancel request by either

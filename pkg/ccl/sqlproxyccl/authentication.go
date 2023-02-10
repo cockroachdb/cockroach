@@ -24,6 +24,7 @@ var authenticate = func(
 	clientConn, crdbConn net.Conn,
 	proxyBackendKeyData *pgproto3.BackendKeyData,
 	throttleHook func(throttler.AttemptStatus) error,
+	limitHook func(crdbConn net.Conn) error,
 ) (crdbBackendKeyData *pgproto3.BackendKeyData, _ error) {
 	fe := pgproto3.NewBackend(pgproto3.NewChunkReader(clientConn), clientConn)
 	be := pgproto3.NewFrontend(pgproto3.NewChunkReader(crdbConn), crdbConn)
@@ -144,6 +145,16 @@ var authenticate = func(
 		// Server has authenticated the connection successfully and is ready to
 		// serve queries.
 		case *pgproto3.ReadyForQuery:
+			// We invoke the limit hook before sending ReadyForQuery back to the client.
+			// This is because once we send ReadyForQuery, the client may start sending
+			// messages and if we send an error the client may not read it correctly.
+			limitError := limitHook(crdbConn)
+			if limitError != nil {
+				if err = feSend(toPgError(limitError)); err != nil {
+					return nil, err
+				}
+				return nil, limitError
+			}
 			if err = feSend(backendMsg); err != nil {
 				return nil, err
 			}

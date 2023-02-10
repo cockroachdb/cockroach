@@ -144,6 +144,7 @@ func (c *connector) OpenTenantConnWithAuth(
 	requester balancer.ConnectionHandle,
 	clientConn net.Conn,
 	throttleHook func(throttler.AttemptStatus) error,
+	limitHook func(crdbConn net.Conn) error,
 ) (retServerConnection net.Conn, sentToClient bool, retErr error) {
 	// Just a safety check, but this shouldn't happen since we will block the
 	// startup param in the frontend admitter. The only case where we actually
@@ -163,7 +164,8 @@ func (c *connector) OpenTenantConnWithAuth(
 
 	// Perform user authentication for non-token-based auth methods. This will
 	// block until the server has authenticated the client.
-	crdbBackendKeyData, err := authenticate(clientConn, serverConn, c.CancelInfo.proxyBackendKeyData, throttleHook)
+	crdbBackendKeyData, err := authenticate(clientConn, serverConn, c.CancelInfo.proxyBackendKeyData,
+		throttleHook, limitHook)
 	if err != nil {
 		return nil, true, err
 	}

@@ -27,6 +27,7 @@ func init() {
 		cliflagcfg.StringFlag(f, &proxyContext.DirectoryAddr, cliflags.DirectoryAddr)
 		cliflagcfg.BoolFlag(f, &proxyContext.SkipVerify, cliflags.SkipVerify)
 		cliflagcfg.BoolFlag(f, &proxyContext.Insecure, cliflags.InsecureBackend)
+		cliflagcfg.BoolFlag(f, &proxyContext.EnableLimitNonRootConns, cliflags.LimitNonRootConns)
 		cliflagcfg.DurationFlag(f, &proxyContext.ValidateAccessInterval, cliflags.ValidateAccessInterval)
 		cliflagcfg.DurationFlag(f, &proxyContext.PollConfigInterval, cliflags.PollConfigInterval)
 		cliflagcfg.DurationFlag(f, &proxyContext.ThrottleBaseDelay, cliflags.ThrottleBaseDelay)

@@ -176,6 +176,67 @@ func (d *TestStaticDirectoryServer) WatchPods(
 	)
 }
 
+// WatchTenants allows callers to monitor for pod update events.
+//
+// WatchTenants implements the tenant.DirectoryServer interface.
+func (d *TestStaticDirectoryServer) WatchTenants(
+	req *tenant.WatchTenantsRequest, server tenant.Directory_WatchTenantsServer,
+) error {
+	d.process.Lock()
+	stopper := d.process.stopper
+	d.process.Unlock()
+
+	// This cannot happen unless WatchTenants was called directly, which we
+	// shouldn't since it is meant to be called through a GRPC client.
+	if stopper == nil {
+		return status.Errorf(codes.FailedPrecondition, "directory server has not been started")
+	}
+
+	addListener := func(ch chan *tenant.WatchTenantsResponse) *list.Element {
+		d.mu.Lock()
+		defer d.mu.Unlock()
+		return d.mu.eventListeners.PushBack(ch)
+	}
+	removeListener := func(e *list.Element) chan *tenant.WatchTenantsResponse {
+		d.mu.Lock()
+		defer d.mu.Unlock()
+		return d.mu.eventListeners.Remove(e).(chan *tenant.WatchTenantsResponse)
+	}
+
+	// Construct the channel with a small buffer to allow for a burst of
+	// notifications, and a slow receiver.
+	c := make(chan *tenant.WatchTenantsResponse, 10)
+	chElement := addListener(c)
+
+	return stopper.RunTask(
+		context.Background(),
+		"watch-tenants-server",
+		func(ctx context.Context) {
+			defer func() {
+				if ch := removeListener(chElement); ch != nil {
+					close(ch)
+				}
+			}()
+
+			for watch := true; watch; {
+				select {
+				case e, ok := <-c:
+					// Channel was closed.
+					if !ok {
+						watch = false
+						break
+					}
+					if err := server.Send(e); err != nil {
+						watch = false
+					}
+				case <-stopper.ShouldQuiesce():
+					watch = false
+				}
+			}
+		},
+	)
+}
+
 // EnsurePod returns an empty response if a tenant with the given tenant ID
 // exists, and there is at least one SQL pod. If there are no SQL pods, a GRPC
 // FailedPrecondition error will be returned. Similarly, if the tenant does not
