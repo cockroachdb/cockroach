@@ -1945,6 +1945,13 @@ func typeCheckAndRequireTupleElems(
 	op treecmp.ComparisonOperator,
 ) (TypedExpr, error) {
 	tuple.typ = types.MakeTuple(make([]*types.T, len(tuple.Exprs)))
+	exprs := make([]Expr, 0, len(tuple.Exprs)+1)
+	exprs = append(exprs, expr)
+	exprs = append(exprs, tuple.Exprs...)
+	_, _, err := typeCheckSameTypedExprs(ctx, semaCtx, types.Any, exprs...)
+	if err != nil {
+		return nil, err
+	}
 	for i, subExpr := range tuple.Exprs {
 		// Require that the sub expression is comparable to the required type.
 		_, rightTyped, _, _, err := typeCheckComparisonOp(ctx, semaCtx, op, expr, subExpr)
