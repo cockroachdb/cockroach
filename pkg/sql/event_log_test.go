@@ -21,6 +21,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -769,4 +772,25 @@ func TestPerfLogging(t *testing.T) {
 			db.ExecMultiple(t, strings.Split(tc.cleanup, ";")...)
 		}
 	}
+}
+
+func TestFunctionBodyRedacted(t *testing.T) {
+	stmt, err := parser.ParseOne(`
+CREATE FUNCTION f1() RETURNS INT 
+LANGUAGE SQL 
+AS $$ 
+SELECT k FROM kv WHERE v != 'foo';
+SELECT k FROM kv WHERE v = 'bar';
+$$`)
+	require.NoError(t, err)
+
+	ast := sql.MayBeRewriteAstForLogging(stmt.AST)
+	fmtCtx := tree.NewFmtCtx(tree.FmtMarkRedactionNode)
+	ast.Format(fmtCtx)
+	redactableStr := fmtCtx.String()
+	require.Equal(
+		t,
+		"CREATE FUNCTION ‹f1›()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$SELECT ‹k› FROM ‹kv› WHERE ‹v› != ‹'foo'›; SELECT ‹k› FROM ‹kv› WHERE ‹v› = ‹'bar'›;$$",
+		redactableStr,
+	)
 }

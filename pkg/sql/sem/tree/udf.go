@@ -109,10 +109,14 @@ func (node *CreateFunction) Format(ctx *FmtCtx) {
 	ctx.WriteString(node.ReturnType.Type.SQLString())
 	ctx.WriteString("\n\t")
 	var funcBody FunctionBodyStr
+	var internalFuncBody InternalFunctionBody
 	for _, option := range node.Options {
 		switch t := option.(type) {
 		case FunctionBodyStr:
 			funcBody = t
+			continue
+		case InternalFunctionBody:
+			internalFuncBody = t
 			continue
 		}
 		ctx.FormatNode(option)
@@ -126,6 +130,8 @@ func (node *CreateFunction) Format(ctx *FmtCtx) {
 			ctx.WriteString("; ")
 		}
 		ctx.WriteString("END")
+	} else if len(internalFuncBody) > 0 {
+		ctx.FormatNode(internalFuncBody)
 	} else {
 		ctx.FormatNode(funcBody)
 	}
@@ -161,6 +167,7 @@ func (FunctionVolatility) functionOption()        {}
 func (FunctionLeakproof) functionOption()         {}
 func (FunctionBodyStr) functionOption()           {}
 func (FunctionLanguage) functionOption()          {}
+func (InternalFunctionBody) functionOption()      {}
 
 // FunctionNullInputBehavior represent the UDF property on null parameters.
 type FunctionNullInputBehavior int
@@ -273,6 +280,26 @@ func (node FunctionBodyStr) Format(ctx *FmtCtx) {
 	ctx.WriteString("AS ")
 	ctx.WriteString("$$")
 	ctx.WriteString(string(node))
+	ctx.WriteString("$$")
+}
+
+// InternalFunctionBody is an internal function body representation for the
+// convenience of telemetry logging. We replace function body string with it, so
+// that the formatter knows how to mark the function body statements as
+// redactable.
+type InternalFunctionBody Statements
+
+// Format implements the NodeFormatter interface.
+func (node InternalFunctionBody) Format(ctx *FmtCtx) {
+	ctx.WriteString("AS ")
+	ctx.WriteString("$$")
+	for i, stmt := range node {
+		if i > 0 {
+			ctx.WriteString(" ")
+		}
+		stmt.Format(ctx)
+		ctx.WriteString(";")
+	}
 	ctx.WriteString("$$")
 }
 
