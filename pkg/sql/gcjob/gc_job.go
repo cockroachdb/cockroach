@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -307,7 +306,7 @@ func (r schemaChangeGCResumer) Resume(ctx context.Context, execCtx interface{}) 
 		return err
 	}
 
-	if !shouldUseDelRange(ctx, details, execCfg.Settings, execCfg.GCJobTestingKnobs) {
+	if !shouldUseDelRange(ctx, details, execCfg.Settings) {
 		return r.legacyWaitAndClearTableData(ctx, execCfg, details, progress)
 	}
 	return r.deleteDataAndWaitForGC(ctx, execCfg, details, progress)
@@ -432,7 +431,7 @@ func (r schemaChangeGCResumer) legacyWaitAndClearTableData(
 
 	// Now that we've registered to be notified, check to see if we raced
 	// with the new version becoming active.
-	if shouldUseDelRange(ctx, details, execCfg.Settings, execCfg.GCJobTestingKnobs) {
+	if shouldUseDelRange(ctx, details, execCfg.Settings) {
 		return r.deleteDataAndWaitForGC(ctx, execCfg, details, progress)
 	}
 
@@ -448,9 +447,7 @@ func (r schemaChangeGCResumer) legacyWaitAndClearTableData(
 		}
 		// We'll be notified if the new version becomes active, so check and
 		// see if it's now time to change to the new protocol.
-		if shouldUseDelRange(
-			ctx, details, execCfg.Settings, execCfg.GCJobTestingKnobs,
-		) {
+		if shouldUseDelRange(ctx, details, execCfg.Settings) {
 			return r.deleteDataAndWaitForGC(ctx, execCfg, details, progress)
 		}
 
@@ -500,17 +497,11 @@ func (r schemaChangeGCResumer) legacyWaitAndClearTableData(
 }
 
 func shouldUseDelRange(
-	ctx context.Context,
-	details *jobspb.SchemaChangeGCDetails,
-	s *cluster.Settings,
-	knobs *sql.GCJobTestingKnobs,
+	ctx context.Context, details *jobspb.SchemaChangeGCDetails, s *cluster.Settings,
 ) bool {
 	// TODO(ajwerner): Adopt the DeleteRange protocol for tenant GC.
 	return details.Tenant == nil &&
-		s.Version.IsActive(ctx, clusterversion.TODODelete_V22_2UseDelRangeInGCJob) &&
-		(storage.CanUseMVCCRangeTombstones(ctx, s) ||
-			// Allow this testing knob to override the storage setting, for convenience.
-			knobs.SkipWaitingForMVCCGC)
+		s.Version.IsActive(ctx, clusterversion.TODODelete_V22_2UseDelRangeInGCJob)
 }
 
 // waitForWork waits until there is work to do given the gossipUpDateC, the

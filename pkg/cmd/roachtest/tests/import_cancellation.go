@@ -29,22 +29,18 @@ import (
 )
 
 func registerImportCancellation(r registry.Registry) {
-	for _, rangeTombstones := range []bool{true, false} {
-		r.Add(registry.TestSpec{
-			Name:    fmt.Sprintf(`import-cancellation/rangeTs=%t`, rangeTombstones),
-			Owner:   registry.OwnerDisasterRecovery,
-			Timeout: 4 * time.Hour,
-			Cluster: r.MakeClusterSpec(6, spec.CPU(32)),
-			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				runImportCancellation(ctx, t, c, rangeTombstones)
-			},
-		})
-	}
+	r.Add(registry.TestSpec{
+		Name:    `import-cancellation`,
+		Owner:   registry.OwnerDisasterRecovery,
+		Timeout: 4 * time.Hour,
+		Cluster: r.MakeClusterSpec(6, spec.CPU(32)),
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runImportCancellation(ctx, t, c)
+		},
+	})
 }
 
-func runImportCancellation(
-	ctx context.Context, t test.Test, c cluster.Cluster, rangeTombstones bool,
-) {
+func runImportCancellation(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload") // required for tpch
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
@@ -74,15 +70,6 @@ func runImportCancellation(
 		t.Fatal(err)
 	}
 	if _, err := conn.Exec(`SET CLUSTER SETTING kv.bulk_ingest.max_index_buffer_size = '2gb'`); err != nil {
-		t.Fatal(err)
-	}
-	// Enable MVCC Range tombstones, if required.
-	rtEnable := "f"
-	if rangeTombstones {
-		rtEnable = "t"
-	}
-	stmt := fmt.Sprintf(`SET CLUSTER SETTING storage.mvcc.range_tombstones.enabled = '%s'`, rtEnable)
-	if _, err := conn.Exec(stmt); err != nil {
 		t.Fatal(err)
 	}
 	// Increase AddSSTable concurrency to speed up the imports. Otherwise the

@@ -7,9 +7,7 @@
 # - roll it back it back non-mvcc
 # - run an inc backup and ensure we reintroduce the table spans
 
-# disabled to run within tenant as they don't have access to the
-# storage.mvcc.range_tombstones.enabled cluster setting
-new-cluster name=s1 disable-tenant
+new-cluster name=s1
 ----
 
 ###########
@@ -35,12 +33,6 @@ SET CLUSTER SETTING jobs.debug.pausepoints = 'import.after_ingest';
 exec-sql
 SET CLUSTER SETTING kv.bulkio.write_metadata_sst.enabled = false;
 ----
-
-
-exec-sql
-SET CLUSTER SETTING storage.mvcc.range_tombstones.enabled = false;
-----
-
 
 exec-sql
 EXPORT INTO CSV 'nodelocal://0/export1/' FROM SELECT * FROM baz;
@@ -242,10 +234,6 @@ exec-sql
 SET CLUSTER SETTING jobs.debug.pausepoints = 'import.after_ingest';
 ----
 
-
-exec-sql
-SET CLUSTER SETTING storage.mvcc.range_tombstones.enabled = true;
-----
 
 exec-sql
 SET CLUSTER SETTING kv.bulkio.write_metadata_sst.enabled = false;

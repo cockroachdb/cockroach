@@ -40,7 +40,6 @@ go_library(
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sqlerrors",
-        "//pkg/storage",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/hlc",
         "//pkg/util/log",
