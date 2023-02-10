@@ -75,7 +75,7 @@ func newInitializedReplica(store *Store, loaded kvstorage.LoadedReplicaState) (*
 // Replica.loadRaftMuLockedReplicaMuLocked() is called.
 //
 // TODO(#94912): we actually have another initialization path which should be
-// refactored: Store.maybeMarkReplicaInitializedLockedReplLocked().
+// refactored: Store.markReplicaInitializedLockedReplLocked().
 func newUninitializedReplica(
 	store *Store, rangeID roachpb.RangeID, replicaID roachpb.ReplicaID,
 ) *Replica {

@@ -403,7 +403,13 @@ func (r *Replica) applySnapshot(
 	if desc.RangeID != r.RangeID {
 		log.Fatalf(ctx, "unexpected range ID %d", desc.RangeID)
 	}
+	if !desc.IsInitialized() {
+		return errors.AssertionFailedf("applying snapshot with uninitialized desc: %s", desc)
+	}
 
+	// NB: since raftMu is held, this is not going to change out under us for the
+	// duration of this method. In particular, if this is true, then the replica
+	// must be in the store's uninitialized replicas map.
 	isInitialSnap := !r.IsInitialized()
 	{
 		var from, to roachpb.RKey
@@ -607,9 +613,15 @@ func (r *Replica) applySnapshot(
 	// NB: we lock `r.mu` only now because removePlaceholderLocked operates on
 	// replicasByKey and this may end up calling r.Desc().
 	r.mu.Lock()
-	r.setDescLockedRaftMuLocked(ctx, desc)
-	if err := r.store.maybeMarkReplicaInitializedLockedReplLocked(ctx, r); err != nil {
-		log.Fatalf(ctx, "unable to mark replica initialized while applying snapshot: %+v", err)
+	if isInitialSnap {
+		// NB: this will also call setDescLockedRaftMuLocked.
+		if err := initReplicaLocked(ctx, r, desc); err != nil {
+			log.Fatalf(ctx, "unable to initialize replica while applying snapshot: %+v", err)
+		} else if err := r.store.markReplicaInitializedLockedReplLocked(ctx, r); err != nil {
+			log.Fatalf(ctx, "unable to mark replica initialized while applying snapshot: %+v", err)
+		}
+	} else {
+		r.setDescLockedRaftMuLocked(ctx, desc)
 	}
 	// NOTE: even though we acquired the store mutex first (according to the
 	// lock ordering rules described on Store.mu), it is safe to drop it first

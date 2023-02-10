@@ -300,31 +300,14 @@ func (s *Store) addToReplicasByRangeIDLocked(repl *Replica) error {
 	return nil
 }
 
-// maybeMarkReplicaInitializedLocked should be called whenever a previously
-// uninitialized replica has become initialized so that the store can update its
-// internal bookkeeping. It requires that Store.mu and Replica.raftMu
-// are locked.
-func (s *Store) maybeMarkReplicaInitializedLockedReplLocked(
-	ctx context.Context, lockedRepl *Replica,
-) error {
-	desc := lockedRepl.descRLocked()
+// initReplicaLocked initializes a Replica when applying the initial snapshot.
+func initReplicaLocked(ctx context.Context, r *Replica, desc *roachpb.RangeDescriptor) error {
 	if !desc.IsInitialized() {
-		return errors.Errorf("attempted to process uninitialized range %s", desc)
+		return errors.AssertionFailedf("initializing replica with uninitialized desc: %s", desc)
 	}
 
-	rangeID := lockedRepl.RangeID
-	if _, ok := s.mu.uninitReplicas[rangeID]; !ok {
-		// Do nothing if the range has already been initialized.
-		return nil
-	}
-	delete(s.mu.uninitReplicas, rangeID)
-
-	// Copy of the start key needs to be set before inserting into replicasByKey.
-	lockedRepl.setStartKeyLocked(desc.StartKey)
-
-	if err := s.addToReplicasByKeyLockedReplicaRLocked(lockedRepl); err != nil {
-		return err
-	}
+	r.setDescLockedRaftMuLocked(ctx, desc)
+	r.setStartKeyLocked(desc.StartKey)
 
 	// Unquiesce the replica. We don't allow uninitialized replicas to unquiesce,
 	// but now that the replica has been initialized, we unquiesce it as soon as
@@ -349,9 +332,30 @@ func (s *Store) maybeMarkReplicaInitializedLockedReplLocked(
 	// We have more information here (see "This means that the other replica ..."
 	// above) and can make assumptions about the state of the other replicas in
 	// the range, so we can unquiesce without campaigning or waking the leader.
-	if !lockedRepl.maybeUnquiesceWithOptionsLocked(false /* campaignOnWake */) {
+	if !r.maybeUnquiesceWithOptionsLocked(false /* campaignOnWake */) {
 		return errors.AssertionFailedf("expected replica %s to unquiesce after initialization", desc)
 	}
+
+	return nil
+}
+
+// markReplicaInitializedLocked updates the Store bookkeeping to reflect that
+// the given replica has transitioned from uninitialized to initialized state.
+// Requires that Store.mu and Replica.mu are locked.
+func (s *Store) markReplicaInitializedLockedReplLocked(ctx context.Context, r *Replica) error {
+	if !r.IsInitialized() {
+		return errors.AssertionFailedf("attempted to process uninitialized replica %s", r)
+	}
+
+	if have, ok := s.mu.uninitReplicas[r.RangeID]; !ok || have != r {
+		return errors.AssertionFailedf("%s not in uninitReplicas, found %v", r, have)
+	}
+	delete(s.mu.uninitReplicas, r.RangeID)
+
+	if err := s.addToReplicasByKeyLockedReplicaRLocked(r); err != nil {
+		return err
+	}
+
 	// Add the range to metrics and maybe gossip on capacity change.
 	s.metrics.ReplicaCount.Inc(1)
 	s.storeGossip.MaybeGossipOnCapacityChange(ctx, RangeAddEvent)

@@ -918,7 +918,8 @@ type Store struct {
 		// creatingReplicas stores IDs of all ranges for which there is an ongoing
 		// attempt to create a replica.
 		creatingReplicas map[roachpb.RangeID]struct{}
-		// All *Replica objects for which Replica.IsInitialized is false.
+		// All *Replica objects for which Replica.IsInitialized is false. Replicas
+		// are added to and removed from this map with Replica.raftMu locked.
 		//
 		// INVARIANT: any entry in this map is also in replicasByRangeID.
 		uninitReplicas map[roachpb.RangeID]*Replica // Map of uninitialized replicas by Range ID
