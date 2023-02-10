@@ -196,14 +196,15 @@ func passwordAuthenticator(
 	)(ctx, systemIdentity, clientConnection)
 
 	if err == nil {
-		// Password authentication succeeded using cleartext.  If the
-		// stored hash was encoded using crdb-bcrypt, we might want to
-		// upgrade it to SCRAM instead.
+		// Password authentication succeeded using cleartext.  If the stored hash
+		// was encoded using crdb-bcrypt, we might want to upgrade it to SCRAM
+		// instead. Conversely, if the stored hash was encoded using SCRAM, we might
+		// want to downgrade it to crdb-bcrypt.
 		//
-		// This auto-conversion is a CockroachDB-specific feature, which
-		// pushes clusters upgraded from a previous version into using
-		// SCRAM-SHA-256.
-		sql.MaybeUpgradeStoredPasswordHash(ctx,
+		// This auto-conversion is a CockroachDB-specific feature, which pushes
+		// clusters upgraded from a previous version into using SCRAM-SHA-256, and
+		// makes it easy to rollback from SCRAM-SHA-256 if there are issues.
+		sql.MaybeConvertStoredPasswordHash(ctx,
 			execCfg,
 			systemIdentity,
 			passwordStr, hashedPassword)
@@ -518,6 +519,17 @@ func authAutoSelectPasswordProtocol(
 		if err == nil && hashedPassword.Method() == password.HashBCrypt {
 			// Yes: we have no choice but to request a cleartext password.
 			c.LogAuthInfof(ctx, "found stored crdb-bcrypt credentials; requesting cleartext password")
+			return passwordAuthenticator(ctx, systemIdentity, clientConnection, newpwfn, c, execCfg)
+		}
+
+		autoDowngradePasswordHashesBool := security.AutoDowngradePasswordHashes.Get(&execCfg.Settings.SV)
+		configuredHashMethod := security.GetConfiguredPasswordHashMethod(&execCfg.Settings.SV)
+		if err == nil && hashedPassword.Method() == password.HashSCRAMSHA256 &&
+			autoDowngradePasswordHashesBool &&
+			configuredHashMethod == password.HashBCrypt {
+			// If the cluster is configured to automatically downgrade from SCRAM to
+			// bcrypt, then we also request the cleartext password.
+			c.LogAuthInfof(ctx, "found stored SCRAM-SHA-256 credentials but cluster is configured to downgrade to bcrypt; requesting cleartext password")
 			return passwordAuthenticator(ctx, systemIdentity, clientConnection, newpwfn, c, execCfg)
 		}
 

@@ -462,7 +462,7 @@ func (s *authenticationServer) verifyPasswordDBConsole(
 		// This auto-conversion is a CockroachDB-specific feature, which
 		// pushes clusters upgraded from a previous version into using
 		// SCRAM-SHA-256.
-		sql.MaybeUpgradeStoredPasswordHash(ctx,
+		sql.MaybeConvertStoredPasswordHash(ctx,
 			s.sqlServer.execCfg,
 			userName,
 			passwordStr, hashedPassword)

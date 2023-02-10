@@ -86,12 +86,13 @@ server.shutdown.lease_transfer_wait	duration	5s	the timeout for a single iterati
 server.shutdown.query_wait	duration	10s	the timeout for waiting for active queries to finish during a drain (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting)
 server.time_until_store_dead	duration	5m0s	the time after which if there is no new gossiped information about a store, it is considered dead
 server.user_login.cert_password_method.auto_scram_promotion.enabled	boolean	true	whether to automatically promote cert-password authentication to use SCRAM
+server.user_login.downgrade_scram_stored_passwords_to_bcrypt.enabled	boolean	true	if server.user_login.password_encryption=crdb-bcrypt, this controls whether to automatically re-encode stored passwords using scram-sha-256 to crdb-bcrypt
 server.user_login.min_password_length	integer	1	the minimum length accepted for passwords set in cleartext via SQL. Note that a value lower than 1 is ignored: passwords cannot be empty in any case.
 server.user_login.password_encryption	enumeration	scram-sha-256	which hash method to use to encode cleartext passwords passed via ALTER/CREATE USER/ROLE WITH PASSWORD [crdb-bcrypt = 2, scram-sha-256 = 3]
 server.user_login.password_hashes.default_cost.crdb_bcrypt	integer	10	the hashing cost to use when storing passwords supplied as cleartext by SQL clients with the hashing method crdb-bcrypt (allowed range: 4-31)
 server.user_login.password_hashes.default_cost.scram_sha_256	integer	119680	the hashing cost to use when storing passwords supplied as cleartext by SQL clients with the hashing method scram-sha-256 (allowed range: 4096-240000000000)
 server.user_login.timeout	duration	10s	timeout after which client authentication times out if some system range is unavailable (0 = no timeout)
-server.user_login.upgrade_bcrypt_stored_passwords_to_scram.enabled	boolean	true	whether to automatically re-encode stored passwords using crdb-bcrypt to scram-sha-256
+server.user_login.upgrade_bcrypt_stored_passwords_to_scram.enabled	boolean	true	if server.user_login.password_encryption=scram-sha-256, this controls whether to automatically re-encode stored passwords using crdb-bcrypt to scram-sha-256
 server.web_session.purge.ttl	duration	1h0m0s	if nonzero, entries in system.web_sessions older than this duration are periodically purged
 server.web_session_timeout	duration	168h0m0s	the duration that a newly created web session will be valid
 sql.auth.change_own_password.enabled	boolean	false	controls whether a user is allowed to change their own password, even if they have no other privileges
