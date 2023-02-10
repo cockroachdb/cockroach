@@ -77,6 +77,8 @@ type restoreDataProcessor struct {
 	// concurrent workers and sent down the flow by the processor.
 	progCh chan backuppb.RestoreProgress
 
+	doneCh chan struct{}
+
 	agg *bulkutil.TracingAggregator
 }
 
@@ -144,6 +146,7 @@ func newRestoreDataProcessor(
 		spec:       spec,
 		output:     output,
 		progCh:     make(chan backuppb.RestoreProgress, maxConcurrentRestoreWorkers),
+		doneCh:     make(chan struct{}),
 		metaCh:     make(chan *execinfrapb.ProducerMetadata, 1),
 		numWorkers: int(numRestoreWorkers.Get(sv)),
 	}
@@ -197,6 +200,7 @@ func (rd *restoreDataProcessor) Start(ctx context.Context) {
 
 	rd.phaseGroup.GoCtx(func(ctx context.Context) error {
 		defer close(rd.progCh)
+		defer close(rd.doneCh)
 		return rd.runRestoreWorkers(ctx, rd.sstCh)
 	})
 
@@ -206,6 +210,10 @@ func (rd *restoreDataProcessor) Start(ctx context.Context) {
 		timer.Reset(time.Minute)
 		for {
 			select {
+			case _, ok := <-rd.doneCh:
+				if !ok {
+					return nil
+				}
 			case <-ctx.Done():
 				return ctx.Err()
 			case <-timer.C:
