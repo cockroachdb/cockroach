@@ -1338,15 +1338,14 @@ func (c *clusterImpl) assertNoDeadNode(ctx context.Context, t test.Test) {
 	}
 }
 
-// FailOnReplicaDivergence fails the test if
-// crdb_internal.check_consistency(true, ”, ”) indicates that any ranges'
-// replicas are inconsistent with each other. It uses the first node that
-// is up to run the query.
-func (c *clusterImpl) FailOnReplicaDivergence(ctx context.Context, t *testImpl) {
+// ConnectToLiveNode returns a connection to a live node in the cluster. If no
+// live node is found, it returns nil and -1. If a live node is found it returns
+// a connection to it and the node's index.
+func (c *clusterImpl) ConnectToLiveNode(ctx context.Context, t *testImpl) (*gosql.DB, int) {
+	node := -1
 	if c.spec.NodeCount < 1 {
-		return // unit tests
+		return nil, node // unit tests
 	}
-
 	// Find a live node to run against, if one exists.
 	var db *gosql.DB
 	for i := 1; i <= c.spec.NodeCount; i++ {
@@ -1363,15 +1362,33 @@ func (c *clusterImpl) FailOnReplicaDivergence(ctx context.Context, t *testImpl) 
 			db = nil
 			continue
 		}
-		t.L().Printf("running (fast) consistency checks on node %d", i)
+		node = i
 		break
 	}
 	if db == nil {
-		t.L().Printf("no live node found, skipping consistency check")
-		return
+		return nil, node
 	}
-	defer db.Close()
+	return db, node
+}
 
+// FailOnInvalidDescriptors fails the test if there exists any descriptors in
+// the crdb_internal.invalid_objects virtual table.
+func (c *clusterImpl) FailOnInvalidDescriptors(ctx context.Context, db *gosql.DB, t *testImpl) {
+	if err := contextutil.RunWithTimeout(
+		ctx, "invalid descriptors check", 5*time.Minute,
+		func(ctx context.Context) error {
+			return roachtestutil.CheckInvalidDescriptors(db)
+		},
+	); err != nil {
+		t.Errorf("invalid descriptors check failed: %v", err)
+	}
+}
+
+// FailOnReplicaDivergence fails the test if
+// crdb_internal.check_consistency(true, ”, ”) indicates that any ranges'
+// replicas are inconsistent with each other. It uses the first node that
+// is up to run the query.
+func (c *clusterImpl) FailOnReplicaDivergence(ctx context.Context, db *gosql.DB, t *testImpl) {
 	if err := contextutil.RunWithTimeout(
 		ctx, "consistency check", 5*time.Minute,
 		func(ctx context.Context) error {

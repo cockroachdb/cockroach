@@ -16,6 +16,7 @@ import (
 	gosql "database/sql"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/errors"
 )
 
@@ -59,4 +60,25 @@ WHERE t.status NOT IN ('RANGE_CONSISTENT', 'RANGE_INDETERMINATE')`)
 		return nil
 	}
 	return finalErr
+}
+
+// CheckInvalidDescriptors returns an error if there exists any descriptors in
+// the crdb_internal.invalid_objects virtual table.
+func CheckInvalidDescriptors(db *gosql.DB) error {
+	// Because crdb_internal.invalid_objects is a virtual table, by default, the
+	// query will take a lease on the database sqlDB is connected to and only run
+	// the query on the given database. The "" prefix prevents this lease
+	// acquisition and allows the query to fetch all descriptors in the cluster.
+	rows, err := db.Query(`SELECT id, obj_name, error FROM "".crdb_internal.invalid_objects`)
+	if err != nil {
+		return err
+	}
+	invalidIDs, err := sqlutils.RowsToDataDrivenOutput(rows)
+	if err != nil {
+		return err
+	}
+	if invalidIDs != "" {
+		return errors.Errorf("the following descriptor ids are invalid\n%v", invalidIDs)
+	}
+	return nil
 }

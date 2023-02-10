@@ -1068,9 +1068,6 @@ func (r *testRunner) teardownTest(
 		// monitor).
 		c.assertNoDeadNode(ctx, t)
 
-		// Detect replica divergence (i.e. ranges in which replicas have arrived
-		// at the same log position with different states).
-		//
 		// We avoid trying to do this when t.Failed() (and in particular when there
 		// are dead nodes) because for reasons @tbg does not understand this gets
 		// stuck occasionally, which really ruins the roachtest run. The method
@@ -1079,7 +1076,17 @@ func (r *testRunner) teardownTest(
 		//
 		// TODO(testinfra): figure out why this can still get stuck despite the
 		// above.
-		c.FailOnReplicaDivergence(ctx, t)
+		db, node := c.ConnectToLiveNode(ctx, t)
+		if db != nil {
+			defer func() { _ = db.Close() }()
+			t.L().Printf("running (fast) validation checks on node %d", node)
+			c.FailOnInvalidDescriptors(ctx, db, t)
+			// Detect replica divergence (i.e. ranges in which replicas have arrived
+			// at the same log position with different states).
+			c.FailOnReplicaDivergence(ctx, db, t)
+		} else {
+			t.L().Printf("no live node found, skipping validation checks")
+		}
 
 		if timedOut || t.Failed() {
 			r.collectClusterArtifacts(ctx, c, t.L())

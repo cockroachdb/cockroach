@@ -4,14 +4,15 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "roachtestutil",
     srcs = [
-        "consistency_check.go",
         "jaeger.go",
+        "validation_check.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/cmd/roachtest/cluster",
         "//pkg/roachprod/logger",
+        "//pkg/testutils/sqlutils",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
