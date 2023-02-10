@@ -377,9 +377,16 @@ SELECT database_name,
 		if err != nil {
 			return nil, err
 		}
-		userExists, err := d.catalog.RoleExists(d.ctx, user)
-		if err != nil {
-			return nil, err
+		// The `public` role is a pseudo-role, so we check it separately. RoleExists
+		// should not return true for `public` since other operations like GRANT and
+		// REVOKE should fail with a "role `public` does not exist" error if they
+		// are used with `public`.
+		userExists := user.IsPublicRole()
+		if !userExists {
+			userExists, err = d.catalog.RoleExists(d.ctx, user)
+			if err != nil {
+				return nil, err
+			}
 		}
 		if !userExists {
 			return nil, sqlerrors.NewUndefinedUserError(user)
