@@ -885,7 +885,7 @@ type lockWaitQueue struct {
 	// seqnums but at another key req2 wants to read and req1 wants to write and
 	// since req2 does not wait in the queue it acquires a read reservation
 	// before req1. See the discussion at the end of this comment section on how
-	// the behavior will extend when we start supporting Shared and Upgrade
+	// the behavior will extend when we start supporting Shared and Update
 	// locks.
 	//
 	// Non-transactional requests can do both reads and writes but cannot be
@@ -948,7 +948,7 @@ type lockWaitQueue struct {
 	//   This is a deadlock caused by the lock table unless req2 partially
 	//   breaks the reservation at A.
 	//
-	// Extension for Shared and Upgrade locks:
+	// Extension for Shared and Update locks:
 	// There are 3 aspects to consider: holders; reservers; the dependencies
 	// that need to be captured when waiting.
 	//

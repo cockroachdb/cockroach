@@ -61,8 +61,8 @@ func (m *Mode) Conflicts(sv *settings.Values, o *Mode) bool {
 		return false
 	case Shared:
 		return o.Strength == Exclusive || o.Strength == Intent
-	case Upgrade:
-		return o.Strength == Upgrade || o.Strength == Exclusive || o.Strength == Intent
+	case Update:
+		return o.Strength == Update || o.Strength == Exclusive || o.Strength == Intent
 	case Exclusive:
 		if ExclusiveLocksBlockNonLockingReads.Get(sv) {
 			// Only non-locking reads below the timestamp at which the lock is held
@@ -99,10 +99,10 @@ func MakeModeShared() Mode {
 	}
 }
 
-// MakeModeUpgrade constructs a Mode with strength Upgrade.
-func MakeModeUpgrade() Mode {
+// MakeModeUpdate constructs a Mode with strength Update.
+func MakeModeUpdate() Mode {
 	return Mode{
-		Strength: Upgrade,
+		Strength: Update,
 	}
 }
 

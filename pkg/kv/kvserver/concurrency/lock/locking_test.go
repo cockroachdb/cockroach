@@ -62,11 +62,11 @@ func TestCheckLockConflicts(t *testing.T) {
 			exp:                                   false,
 			expExclusiveLocksBlockNonLockingReads: false,
 		},
-		// A3. Shared lock mode doesn't conflict with an Upgrade lock mode.
+		// A3. Shared lock mode doesn't conflict with an Update lock mode.
 		{
-			desc:                                  "upgrade lock acquisition, held shared lock",
+			desc:                                  "update lock acquisition, held shared lock",
 			heldLockMode:                          lock.MakeModeShared(),
-			toCheckLockMode:                       lock.MakeModeUpgrade(),
+			toCheckLockMode:                       lock.MakeModeUpdate(),
 			exp:                                   false,
 			expExclusiveLocksBlockNonLockingReads: false,
 		},
@@ -80,50 +80,50 @@ func TestCheckLockConflicts(t *testing.T) {
 		},
 		// A5. Shared lock mode conflicts with Intent lock mode.
 		{
-			desc:                                  "upgrade lock acquisition, held shared lock",
+			desc:                                  "update lock acquisition, held shared lock",
 			heldLockMode:                          lock.MakeModeShared(),
 			toCheckLockMode:                       lock.MakeModeIntent(tsLock),
 			exp:                                   true,
 			expExclusiveLocksBlockNonLockingReads: true,
 		},
-		// B. Held lock mode is "Upgrade".
-		// B1. Upgrade lock mode doesn't conflict with non-locking reads.
+		// B. Held lock mode is "Update".
+		// B1. Update lock mode doesn't conflict with non-locking reads.
 		{
-			desc:                                  "non-locking read, held upgrade lock",
-			heldLockMode:                          lock.MakeModeUpgrade(),
+			desc:                                  "non-locking read, held update lock",
+			heldLockMode:                          lock.MakeModeUpdate(),
 			toCheckLockMode:                       lock.MakeModeNone(tsLock),
 			exp:                                   false,
 			expExclusiveLocksBlockNonLockingReads: false,
 		},
-		// B2. Upgrade lock mode doesn't conflict with Shared lock mode.
+		// B2. Update lock mode doesn't conflict with Shared lock mode.
 		{
-			desc:                                  "shared lock acquisition, held upgrade lock",
-			heldLockMode:                          lock.MakeModeUpgrade(),
+			desc:                                  "shared lock acquisition, held update lock",
+			heldLockMode:                          lock.MakeModeUpdate(),
 			toCheckLockMode:                       lock.MakeModeShared(),
 			exp:                                   false,
 			expExclusiveLocksBlockNonLockingReads: false,
 		},
-		// B3. Upgrade lock mode conflicts with a concurrent attempt to acquire an
-		// Upgrade lock.
+		// B3. Update lock mode conflicts with a concurrent attempt to acquire an
+		// Update lock.
 		{
 			desc:                                  "update lock acquisition, held update lock",
-			heldLockMode:                          lock.MakeModeUpgrade(),
-			toCheckLockMode:                       lock.MakeModeUpgrade(),
+			heldLockMode:                          lock.MakeModeUpdate(),
+			toCheckLockMode:                       lock.MakeModeUpdate(),
 			exp:                                   true,
 			expExclusiveLocksBlockNonLockingReads: true,
 		},
-		// B4. Upgrade lock mode conflicts with Exclusive lock mode.
+		// B4. Update lock mode conflicts with Exclusive lock mode.
 		{
-			desc:                                  "exclusive lock acquisition, held upgrade lock",
-			heldLockMode:                          lock.MakeModeUpgrade(),
+			desc:                                  "exclusive lock acquisition, held update lock",
+			heldLockMode:                          lock.MakeModeUpdate(),
 			toCheckLockMode:                       lock.MakeModeExclusive(tsLock),
 			exp:                                   true,
 			expExclusiveLocksBlockNonLockingReads: true,
 		},
-		// B5. Upgrade lock mode conflicts with Intent lock mode.
+		// B5. Update lock mode conflicts with Intent lock mode.
 		{
-			desc:                                  "upgrade lock acquisition, held shared lock",
-			heldLockMode:                          lock.MakeModeUpgrade(),
+			desc:                                  "update lock acquisition, held shared lock",
+			heldLockMode:                          lock.MakeModeUpdate(),
 			toCheckLockMode:                       lock.MakeModeIntent(tsLock),
 			exp:                                   true,
 			expExclusiveLocksBlockNonLockingReads: true,
@@ -166,11 +166,11 @@ func TestCheckLockConflicts(t *testing.T) {
 			exp:                                   true,
 			expExclusiveLocksBlockNonLockingReads: true,
 		},
-		// C5. Exclusive lock mode conflicts with Upgrade lock mode.
+		// C5. Exclusive lock mode conflicts with Update lock mode.
 		{
-			desc:                                  "upgrade lock acquisition, held exclusive lock",
+			desc:                                  "update lock acquisition, held exclusive lock",
 			heldLockMode:                          lock.MakeModeExclusive(tsLock),
-			toCheckLockMode:                       lock.MakeModeUpgrade(),
+			toCheckLockMode:                       lock.MakeModeUpdate(),
 			exp:                                   true,
 			expExclusiveLocksBlockNonLockingReads: true,
 		},
@@ -258,11 +258,11 @@ func TestCheckLockConflicts(t *testing.T) {
 			exp:                                   true,
 			expExclusiveLocksBlockNonLockingReads: true,
 		},
-		// D5. Intent lock mode conflicts with Upgrade lock mode.
+		// D5. Intent lock mode conflicts with Update lock mode.
 		{
-			desc:                                  "upgrade lock acquisition, held intent",
+			desc:                                  "update lock acquisition, held intent",
 			heldLockMode:                          lock.MakeModeIntent(tsLock),
-			toCheckLockMode:                       lock.MakeModeUpgrade(),
+			toCheckLockMode:                       lock.MakeModeUpdate(),
 			exp:                                   true,
 			expExclusiveLocksBlockNonLockingReads: true,
 		},
