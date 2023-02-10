@@ -3752,6 +3752,18 @@ SELECT crdb_internal.hide_sql_constants(NULL)
 NULL
 
 query T
+SELECT crdb_internal.hide_sql_constants('not a sql stmt')
+----
+·
+
+
+query T
+select crdb_internal.hide_sql_constants(e'\r');
+----
+·
+
+
+query T
 SELECT crdb_internal.hide_sql_constants(create_statement) from crdb_internal.create_statements where descriptor_name = 'foo'
 ----
 CREATE TABLE public.foo (a INT8 NULL, rowid INT8 NOT NULL NOT VISIBLE DEFAULT unique_rowid(), CONSTRAINT foo_pkey PRIMARY KEY (rowid ASC))
