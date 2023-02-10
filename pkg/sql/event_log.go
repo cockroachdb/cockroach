@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -188,9 +189,41 @@ var defaultRedactionOptions = redactionOptions{
 	omitSQLNameRedaction: false,
 }
 
+func MayBeRewriteAstForLogging(ast tree.Statement) tree.Statement {
+	switch t := ast.(type) {
+	case *tree.CreateFunction:
+		// If it's a CREATE FUNCTION statement, we need to replace the function body
+		// string with a list a Statement nodes, so that the formatter is able to
+		// mark those statements as redactable.
+		cf := *t
+		cf.Options = make(tree.FunctionOptions, len(t.Options))
+		for i, option := range t.Options {
+			if fnBodyStr, ok := option.(tree.FunctionBodyStr); !ok {
+				cf.Options[i] = option
+			} else {
+				stmts, err := parser.Parse(string(fnBodyStr))
+				if err != nil {
+					// If there is a parser error (meaning malformed statements), we just
+					// log the original one.
+					cf.Options[i] = option
+					continue
+				}
+				iFnBody := make(tree.InternalFunctionBody, len(stmts))
+				for j, stmt := range stmts {
+					iFnBody[j] = stmt.AST
+				}
+				cf.Options[i] = iFnBody
+			}
+		}
+		return &cf
+	}
+	return ast
+}
+
 func (p *planner) getCommonSQLEventDetails(opt redactionOptions) eventpb.CommonSQLEventDetails {
+	ast := MayBeRewriteAstForLogging(p.stmt.AST)
 	redactableStmt := formatStmtKeyAsRedactableString(
-		p.extendedEvalCtx.VirtualSchemas, p.stmt.AST,
+		p.extendedEvalCtx.VirtualSchemas, ast,
 		p.extendedEvalCtx.Context.Annotations, opt.toFlags(),
 	)
 	commonSQLEventDetails := eventpb.CommonSQLEventDetails{
