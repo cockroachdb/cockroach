@@ -317,19 +317,6 @@ func (s *Store) SplitRange(
 		return errors.Errorf("left range is not splittable by right range: %+v, %+v", oldLeftDesc, rightDesc)
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if exRng, ok := s.mu.uninitReplicas[rightDesc.RangeID]; rightReplOrNil != nil && ok {
-		// If we have an uninitialized replica of the new range we require pointer
-		// equivalence with rightRepl. See Store.splitTriggerPostApply().
-		if exRng != rightReplOrNil {
-			log.Fatalf(ctx, "found unexpected uninitialized replica: %s vs %s", exRng, rightReplOrNil)
-		}
-		// NB: We only remove from uninitReplicas here so that we don't leave open a
-		// window where a replica is temporarily not present in Store.mu.replicas.
-		delete(s.mu.uninitReplicas, rightDesc.RangeID)
-	}
-
 	leftRepl.setDescRaftMuLocked(ctx, newLeftDesc)
 
 	// Clear the LHS lock and txn wait-queues, to redirect to the RHS if
@@ -339,35 +326,29 @@ func (s *Store) SplitRange(
 	leftRepl.concMgr.OnRangeSplit()
 
 	if rightReplOrNil == nil {
-		// There is no rhs replica, so instead halve the load of the lhs
-		// replica.
+		// There is no RHS replica, so (heuristically) halve the load stats for the
+		// LHS, instead of splitting it between LHS and RHS.
 		throwawayRightStats := load.NewReplicaLoad(s.Clock(), nil)
 		leftRepl.loadStats.Split(throwawayRightStats)
-	} else {
-		rightRepl := rightReplOrNil
-		// Split the replica load of the lhs evenly (50:50) with the rhs. NB:
-		// that this ignores the split point and makes as simplifying
-		// assumption that distribution across all tracked load stats is
-		// identical.
-		leftRepl.loadStats.Split(rightRepl.loadStats)
-		rightRepl.mu.RLock()
-		if err := s.addToReplicasByKeyLockedReplicaRLocked(rightRepl); err != nil {
-			rightRepl.mu.RUnlock()
-			return errors.Wrapf(err, "unable to add replica %v", rightRepl)
-		}
-		rightRepl.mu.RUnlock()
+		return nil
+	}
+	rightRepl := rightReplOrNil
 
-		// Update the replica's cached byte thresholds. This is a no-op if the system
-		// config is not available, in which case we rely on the next gossip update
-		// to perform the update.
-		if err := rightRepl.updateRangeInfo(ctx, rightDesc); err != nil {
-			return err
-		}
+	// Split the replica load of the LHS evenly (50:50) with the RHS. NB: this
+	// ignores the split point, and makes as simplifying assumption that
+	// distribution across all tracked load stats is identical.
+	leftRepl.loadStats.Split(rightRepl.loadStats)
 
-		// Add the range to metrics and maybe gossip on capacity change.
-		s.metrics.ReplicaCount.Inc(1)
-		s.storeGossip.MaybeGossipOnCapacityChange(ctx, RangeAddEvent)
+	// Update the replica's cached byte thresholds. This is a no-op if the system
+	// config is not available, in which case we rely on the next gossip update to
+	// perform the update.
+	if err := rightRepl.updateRangeInfo(ctx, rightDesc); err != nil {
+		return err
 	}
 
-	return nil
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rightRepl.mu.RLock()
+	defer rightRepl.mu.RUnlock()
+	return s.markReplicaInitializedLockedReplLocked(ctx, rightRepl)
 }
