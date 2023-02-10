@@ -298,45 +298,6 @@ func (s *Store) addToReplicasByRangeIDLocked(repl *Replica) error {
 	return nil
 }
 
-// initReplicaLocked initializes a Replica when applying the initial snapshot.
-func initReplicaLocked(ctx context.Context, r *Replica, desc *roachpb.RangeDescriptor) error {
-	if !desc.IsInitialized() {
-		return errors.AssertionFailedf("initializing replica with uninitialized desc: %s", desc)
-	}
-
-	r.setDescLockedRaftMuLocked(ctx, desc)
-	r.setStartKeyLocked(desc.StartKey)
-
-	// Unquiesce the replica. We don't allow uninitialized replicas to unquiesce,
-	// but now that the replica has been initialized, we unquiesce it as soon as
-	// possible. This replica was initialized in response to the reception of a
-	// snapshot from another replica. This means that the other replica is not
-	// quiesced, so we don't need to campaign or wake the leader. We just want
-	// to start ticking.
-	//
-	// NOTE: The fact that this replica is being initialized in response to the
-	// receipt of a snapshot means that its r.mu.internalRaftGroup must not be
-	// nil.
-	//
-	// NOTE: Unquiescing the replica here is not strictly necessary. As of the
-	// time of writing, this function is only ever called below handleRaftReady,
-	// which will always unquiesce any eligible replicas before completing. So in
-	// marking this replica as initialized, we have made it eligible to unquiesce.
-	// However, there is still a benefit to unquiecing here instead of letting
-	// handleRaftReady do it for us. The benefit is that handleRaftReady cannot
-	// make assumptions about the state of the other replicas in the range when it
-	// unquieces a replica, so when it does so, it also instructs the replica to
-	// campaign and to wake the leader (see maybeUnquiesceAndWakeLeaderLocked).
-	// We have more information here (see "This means that the other replica ..."
-	// above) and can make assumptions about the state of the other replicas in
-	// the range, so we can unquiesce without campaigning or waking the leader.
-	if !r.maybeUnquiesceWithOptionsLocked(false /* campaignOnWake */) {
-		return errors.AssertionFailedf("expected replica %s to unquiesce after initialization", desc)
-	}
-
-	return nil
-}
-
 // markReplicaInitializedLocked updates the Store bookkeeping to reflect that
 // the given replica has transitioned from uninitialized to initialized state.
 // Requires that Store.mu and Replica.mu are locked.

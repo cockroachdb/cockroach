@@ -625,7 +625,7 @@ func (r *Replica) applySnapshot(
 	// replicasByKey and this may end up calling r.Desc().
 	r.mu.Lock()
 	if isInitialSnap {
-		if err := initReplicaLocked(ctx, r, desc); err != nil {
+		if err := r.initFromSnapshotLockedRaftMuLocked(ctx, desc); err != nil {
 			log.Fatalf(ctx, "unable initialize replica while applying snapshot: %+v", err)
 		} else if err := r.store.markReplicaInitializedLockedReplLocked(ctx, r); err != nil {
 			log.Fatalf(ctx, "unable to mark replica initialized while applying snapshot: %+v", err)
