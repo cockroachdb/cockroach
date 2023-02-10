@@ -1,9 +1,14 @@
 config secure
 ----
 
+# Prevent auto-converting passwords, so that each sub-test exercises its own hash method.
 sql
--- prevent auto-converting passwords, so that each sub-test exercises its own hash method.
 SET CLUSTER SETTING server.user_login.upgrade_bcrypt_stored_passwords_to_scram.enabled = false;
+----
+ok
+
+sql
+SET CLUSTER SETTING server.user_login.downgrade_scram_stored_passwords_to_bcrypt.enabled = false;
 ----
 ok
 
@@ -280,9 +285,14 @@ subtest end
 
 subtest hash_conversion
 
+# Enable auto-conversion of passwords.
 sql
--- enable auto-conversion of passwords.
 SET CLUSTER SETTING server.user_login.upgrade_bcrypt_stored_passwords_to_scram.enabled = true;
+----
+ok
+
+sql
+SET CLUSTER SETTING server.user_login.downgrade_scram_stored_passwords_to_bcrypt.enabled = true;
 ----
 ok
 
@@ -332,6 +342,56 @@ authlog 7
 95 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
 96 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
 
+sql
+-- change back to bcrypt.
+SET CLUSTER SETTING server.user_login.password_encryption = 'crdb-bcrypt';
+----
+ok
 
+# The first time after conversion is enabled, a scram-using account still uses scram.
+connect user=foo password=abc
+----
+ok defaultdb
+
+# Assert the conn used a cleartext handshake, but with a SCRAM hash.
+authlog 7
+.*client_connection_end
+----
+97 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+98 {"EventType":"client_authentication_info","Info":"HBA rule: host all foo all cert-password","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
+99 {"EventType":"client_authentication_info","Info":"client did not present TLS certificate","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
+100 {"EventType":"client_authentication_info","Info":"found stored SCRAM-SHA-256 credentials but cluster is configured to downgrade to bcrypt; requesting cleartext password","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
+101 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
+102 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+103 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+
+# Verify the stored hash has been converted to bcrypt now.
+sql
+SELECT crdb_internal.force_error('11111', substr(encode("hashedPassword",'escape'), 1, 4)) FROM system.users WHERE username='foo'
+----
+ERROR: $2a$ (SQLSTATE 11111)
+
+# So the next login uses bcrypt.
+connect user=foo password=abc
+----
+ok defaultdb
+
+# Assert the conn used bcrypt.
+authlog 7
+.*client_connection_end
+----
+104 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+105 {"EventType":"client_authentication_info","Info":"HBA rule: host all foo all cert-password","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
+106 {"EventType":"client_authentication_info","Info":"client did not present TLS certificate","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
+107 {"EventType":"client_authentication_info","Info":"found stored crdb-bcrypt credentials; requesting cleartext password","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
+108 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
+109 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+110 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+
+sql
+-- change back to SCRAM for future tests.
+SET CLUSTER SETTING server.user_login.password_encryption = 'scram-sha-256';
+----
+ok
 
 subtest end
