@@ -98,6 +98,10 @@ func TestStoreCheckpointSpans(t *testing.T) {
 	addReplica := func(rangeID roachpb.RangeID, start, end string) {
 		desc := makeDesc(rangeID, start, end)
 		r := &Replica{RangeID: rangeID, startKey: desc.StartKey}
+		// NB: locking is unnecessary during Replica creation, but this is to work
+		// around the mutex hold asserts in "Locked" methods below.
+		r.mu.Lock()
+		defer r.mu.Unlock()
 		r.mu.state.Desc = &desc
 		r.isInitialized.Set(desc.IsInitialized())
 		require.NoError(t, s.addToReplicasByRangeIDLocked(r))

@@ -1,0 +1,61 @@
+# Well formed benchmark output
+benchmark
+goarch: amd64
+cpu: Intel(R) Xeon(R) CPU @ 2.80GHz
+BenchmarkFastIntMap/4x4-4/fastintmap-24 	       1	       603.0 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFastIntMap/4x4-4/map-24        	       1	      1039 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFastIntMap/4x4-4/map-sized-24  	       1	       977.0 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFastIntMap/4x4-4/slice-24      	       1	      1406 ns/op	      64 B/op	       3 allocs/op
+PASS
+----
+false [[BenchmarkFastIntMap/4x4-4/fastintmap-24 1 603.0 ns/op 0 B/op 0 allocs/op] [BenchmarkFastIntMap/4x4-4/map-24 1 1039 ns/op 0 B/op 0 allocs/op] [BenchmarkFastIntMap/4x4-4/map-sized-24 1 977.0 ns/op 0 B/op 0 allocs/op] [BenchmarkFastIntMap/4x4-4/slice-24 1 1406 ns/op 64 B/op 3 allocs/op]]
+
+# Scattered benchmark output
+benchmark
+goarch: amd64
+cpu: Intel(R) Xeon(R) CPU @ 2.80GHz
+BenchmarkFastIntMap/4x4-4/fastintmap-24
+ 	       1	       603.0 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFastIntMap/4x4-4/map-24
+log noise
+        	       1	      1039 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFastIntMap/4x4-4/map-sized-24  	       1	       977.0 ns/op	       0 B/op	       0 allocs/op
+more noise
+BenchmarkFastIntMap/4x4-4/slice-24
+extra log noise
+
+
+1	      1406 ns/op	      64 B/op	       3 allocs/op
+PASS
+----
+false [[BenchmarkFastIntMap/4x4-4/fastintmap-24 1 603.0 ns/op 0 B/op 0 allocs/op] [BenchmarkFastIntMap/4x4-4/map-24 1 1039 ns/op 0 B/op 0 allocs/op] [BenchmarkFastIntMap/4x4-4/map-sized-24 1 977.0 ns/op 0 B/op 0 allocs/op] [BenchmarkFastIntMap/4x4-4/slice-24 1 1406 ns/op 64 B/op 3 allocs/op]]
+
+# Missing benchmark name, and missing benchmark metrics (incorrect column count)
+benchmark
+goarch: amd64
+cpu: Intel(R) Xeon(R) CPU @ 2.80GHz
+1	       603.0 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFastIntMap/4x4-4/map-24        	       1	      1039 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFastIntMap/4x4-4/map-sized-24  	       1	       977.0 ns/op
+BenchmarkFastIntMap/4x4-4/slice-24      	       1	      1406 ns/op	      64 B/op	       3 allocs/op
+PASS
+----
+false [[BenchmarkFastIntMap/4x4-4/map-24 1 1039 ns/op 0 B/op 0 allocs/op] [BenchmarkFastIntMap/4x4-4/map-sized-24 1 977.0 ns/op] [BenchmarkFastIntMap/4x4-4/slice-24 1 1406 ns/op 64 B/op 3 allocs/op]]
+
+# Failed benchmark
+benchmark
+goarch: amd64
+cpu: Intel(R) Xeon(R) CPU @ 2.80GHz
+BenchmarkFastIntMap/4x4-4/slice-24      	       1	      1406 ns/op	      64 B/op	       3 allocs/op
+FAIL
+----
+true [[BenchmarkFastIntMap/4x4-4/slice-24 1 1406 ns/op 64 B/op 3 allocs/op]]
+
+# Benchmark with panic
+benchmark
+goarch: amd64
+cpu: Intel(R) Xeon(R) CPU @ 2.80GHz
+BenchmarkFastIntMap/4x4-4/slice-24      	       1	      1406 ns/op	      64 B/op	       3 allocs/op
+panic: something went wrong
+----
+true [[BenchmarkFastIntMap/4x4-4/slice-24 1 1406 ns/op 64 B/op 3 allocs/op]]

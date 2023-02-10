@@ -118,7 +118,7 @@ func TestConstructDocsIssues(t *testing.T) {
 			docsIssues: []docsIssue{{
 				sourceCommitSha: "8dc44d23bb7e0688cd435b6f7908fab615f1aa39",
 				title:           "PR #91345 - clusterversion: allow forcing release binary to dev version",
-				body:            "Related PR: https://github.com/cockroachdb/cockroach/pull/91345\nCommit: https://github.com/cockroachdb/cockroach/commit/8dc44d23bb7e0688cd435b6f7908fab615f1aa39\n\n---\n\nRelease note (ops change): Release version binaries can now be instructed via the enviroment\nvariable COCKROACH_FORCE_DEV_VERSION to override their cluster version support to match that\nof develeopment builds, which can allow a release binary to be started in a cluster that is\nrun or has previously run a development build.",
+				body:            "Related PR: https://github.com/cockroachdb/cockroach/pull/91345\nCommit: https://github.com/cockroachdb/cockroach/commit/8dc44d23bb7e0688cd435b6f7908fab615f1aa39\nEpic: none\n\n---\n\nRelease note (ops change): Release version binaries can now be instructed via the enviroment\nvariable COCKROACH_FORCE_DEV_VERSION to override their cluster version support to match that\nof develeopment builds, which can allow a release binary to be started in a cluster that is\nrun or has previously run a development build.",
 				labels:          []string{"C-product-change", "release-22.2"},
 			}},
 		},
@@ -163,22 +163,62 @@ func TestConstructDocsIssues(t *testing.T) {
 				{
 					sourceCommitSha: "8d15073f329cf8d72e09977b34a3b339d1436000",
 					title:           "PR #91294 - ui: update filter labels",
-					body:            "Related PR: https://github.com/cockroachdb/cockroach/pull/91294\nCommit: https://github.com/cockroachdb/cockroach/commit/8d15073f329cf8d72e09977b34a3b339d1436000\n\n---\n\nRelease note (ui change): Update filter labels from\n\"App\" to \"Application Name\" and from \"Username\" to\n\"User Name\" on SQL Activity pages.",
+					body:            "Related PR: https://github.com/cockroachdb/cockroach/pull/91294\nCommit: https://github.com/cockroachdb/cockroach/commit/8d15073f329cf8d72e09977b34a3b339d1436000\nFixes: https://github.com/cockroachdb/cockroach/issues/87960\n\n---\n\nRelease note (ui change): Update filter labels from\n\"App\" to \"Application Name\" and from \"Username\" to\n\"User Name\" on SQL Activity pages.",
 					labels:          []string{"C-product-change", "release-22.1"},
 				},
 				{
 					sourceCommitSha: "1829a72664f28ddfa50324c9ff5352380029560b",
 					title:           "PR #90381 - sql/ttl: rename num_active_ranges metrics",
-					body:            "Related PR: https://github.com/cockroachdb/cockroach/pull/90381\nCommit: https://github.com/cockroachdb/cockroach/commit/1829a72664f28ddfa50324c9ff5352380029560b\n\n---\n\nRelease note (ops change): These TTL metrics have been renamed:\njobs.row_level_ttl.range_total_duration -> jobs.row_level_ttl.span_total_duration\njobs.row_level_ttl.num_active_ranges -> jobs.row_level_ttl.num_active_spans",
+					body:            "Related PR: https://github.com/cockroachdb/cockroach/pull/90381\nCommit: https://github.com/cockroachdb/cockroach/commit/1829a72664f28ddfa50324c9ff5352380029560b\nFixes: https://github.com/cockroachdb/cockroach/issues/90094\n\n---\n\nRelease note (ops change): These TTL metrics have been renamed:\njobs.row_level_ttl.range_total_duration -> jobs.row_level_ttl.span_total_duration\njobs.row_level_ttl.num_active_ranges -> jobs.row_level_ttl.num_active_spans",
 					labels:          []string{"C-product-change", "release-22.2.0"},
 				},
 				{
 					sourceCommitSha: "43de8ff30e3e6e1d9b2272ed4f62c543dc0a037c",
 					title:           "PR #89957 - opt/props: shallow-copy props.Histogram when applying selectivity",
-					body:            "Related PR: https://github.com/cockroachdb/cockroach/pull/89957\nCommit: https://github.com/cockroachdb/cockroach/commit/43de8ff30e3e6e1d9b2272ed4f62c543dc0a037c\n\n---\n\nRelease note (performance improvement): The optimizer now does less\ncopying of histograms while planning queries, which will reduce memory\npressure a little.",
+					body:            "Related PR: https://github.com/cockroachdb/cockroach/pull/89957\nCommit: https://github.com/cockroachdb/cockroach/commit/43de8ff30e3e6e1d9b2272ed4f62c543dc0a037c\nFixes: https://github.com/cockroachdb/cockroach/issues/89941\n\n---\n\nRelease note (performance improvement): The optimizer now does less\ncopying of histograms while planning queries, which will reduce memory\npressure a little.",
 					labels:          []string{"C-product-change", "release-22.2"},
 				},
 			},
+		},
+		{
+			testName: "Epic none",
+			cockroachPRs: []cockroachPR{{
+				Title:       "Epic none PR",
+				Number:      123456,
+				Body:        "This fixes a thing.\n\nEpic: none\nRelease note (enterprise change): enterprise changes",
+				BaseRefName: "master",
+				Commits: []cockroachCommit{{
+					Sha:             "690da3e2ac3b1b7268accfb1dcbe5464e948e9d1",
+					MessageHeadline: "Epic none PR",
+					MessageBody:     "Epic: none\nRelease note (enterprise change): enterprise changes",
+				}},
+			}},
+			docsIssues: []docsIssue{{
+				sourceCommitSha: "690da3e2ac3b1b7268accfb1dcbe5464e948e9d1",
+				title:           "PR #123456 - Epic none PR",
+				body:            "Related PR: https://github.com/cockroachdb/cockroach/pull/123456\nCommit: https://github.com/cockroachdb/cockroach/commit/690da3e2ac3b1b7268accfb1dcbe5464e948e9d1\nEpic: none\n\n---\n\nRelease note (enterprise change): enterprise changes",
+				labels:          []string{"C-product-change", "master"},
+			}},
+		},
+		{
+			testName: "Epic extraction",
+			cockroachPRs: []cockroachPR{{
+				Title:       "Epic extraction PR",
+				Number:      123456,
+				Body:        "This fixes another thing.\n\nEpic: CRDB-24680\nRelease note (cli change): cli changes",
+				BaseRefName: "master",
+				Commits: []cockroachCommit{{
+					Sha:             "aaada3e2ac3b1b7268accfb1dcbe5464e948e9d1",
+					MessageHeadline: "Epic extraction PR",
+					MessageBody:     "Epic: CRDB-24680\nRelease note (cli change): cli changes",
+				}},
+			}},
+			docsIssues: []docsIssue{{
+				sourceCommitSha: "aaada3e2ac3b1b7268accfb1dcbe5464e948e9d1",
+				title:           "PR #123456 - Epic extraction PR",
+				body:            "Related PR: https://github.com/cockroachdb/cockroach/pull/123456\nCommit: https://github.com/cockroachdb/cockroach/commit/aaada3e2ac3b1b7268accfb1dcbe5464e948e9d1\nEpic: https://cockroachlabs.atlassian.net/browse/CRDB-24680\n\n---\n\nRelease note (cli change): cli changes",
+				labels:          []string{"C-product-change", "master"},
+			}},
 		},
 	}
 	for _, tc := range testCases {
@@ -191,15 +231,16 @@ func TestConstructDocsIssues(t *testing.T) {
 
 func TestFormatReleaseNotes(t *testing.T) {
 	testCases := []struct {
-		prNum   string
-		sha     string
-		message string
-		rns     []string
+		prNum         string
+		prBody        string
+		sha           string
+		commitMessage string
+		rns           []string
 	}{
 		{
 			prNum: "79069",
 			sha:   "5ec9343b0e0a00bfd4603e55ca6533e2b77db2f9",
-			message: `sql: ignore non-existent columns when injecting stats
+			commitMessage: `sql: ignore non-existent columns when injecting stats
 
 Previously, an ` + "`ALTER TABLE ... INJECT STATS`" + ` command would return an
 error if the given stats JSON included any columns that were not present
@@ -218,6 +259,7 @@ columns, rather than resulting in an error. Any statistics in the JSON
 for existing columns will be injected successfully.`,
 			rns: []string{`Related PR: https://github.com/cockroachdb/cockroach/pull/79069
 Commit: https://github.com/cockroachdb/cockroach/commit/5ec9343b0e0a00bfd4603e55ca6533e2b77db2f9
+Informs: https://github.com/cockroachdb/cockroach/issues/68184
 
 ---
 
@@ -229,7 +271,7 @@ for existing columns will be injected successfully.`},
 		{
 			prNum: "79361",
 			sha:   "88be04bd64283b1d77000a3f88588e603465e81b",
-			message: `changefeedccl: remove the default values from SHOW
+			commitMessage: `changefeedccl: remove the default values from SHOW
 CHANGEFEED JOB output
 
 Currently, when a user alters a changefeed, we
@@ -250,7 +292,7 @@ values from the SHOW CHANGEFEED JOB output`},
 		{
 			prNum: "78685",
 			sha:   "1d7811d5d14f9c7e106c3ec92de9c66192f19604",
-			message: `opt: do not cross-join input of semi-join
+			commitMessage: `opt: do not cross-join input of semi-join
 
 This commit fixes a logical correctness bug caused when
 ` + "`GenerateLookupJoins`" + ` cross-joins the input of a semi-join with a set of
@@ -280,7 +322,7 @@ constraint or an ` + "`IN`" + " condition in the filter.",
 		{
 			prNum: "66328",
 			sha:   "0f329965acccb3e771ec1657c7def9e881dc78bb",
-			message: `util/log: report the logging format at the start of new files
+			commitMessage: `util/log: report the logging format at the start of new files
 
 Release note (cli change): When log entries are written to disk,
 the first few header lines written at the start of every new file
@@ -297,7 +339,7 @@ now report the configured logging format.`},
 		{
 			prNum: "66328",
 			sha:   "fb249c7140b634a53dca2967c946bc78ba927e1a",
-			message: `cli: report explicit log config in logs
+			commitMessage: `cli: report explicit log config in logs
 
 This increases troubleshootability.
 
@@ -308,7 +350,7 @@ Release note: None`,
 	for _, tc := range testCases {
 		t.Run(tc.prNum, func(t *testing.T) {
 			prNumInt, _ := strconv.Atoi(tc.prNum)
-			result := formatReleaseNotes(tc.message, prNumInt, tc.sha)
+			result := formatReleaseNotes(tc.commitMessage, prNumInt, tc.prBody, tc.sha)
 			assert.Equal(t, tc.rns, result)
 		})
 	}
@@ -384,6 +426,248 @@ func TestFormatTitle(t *testing.T) {
 		t.Run(tc.testName, func(t *testing.T) {
 			result := formatTitle(tc.message, tc.prNumber, tc.index, tc.totalLength)
 			assert.Equal(t, tc.title, result)
+		})
+	}
+}
+
+func TestGetUrlFromRef(t *testing.T) {
+	testCases := []struct {
+		ref    string
+		result string
+	}{
+		{
+			ref:    "#12345",
+			result: "https://github.com/cockroachdb/cockroach/issues/12345",
+		},
+		{
+			ref:    "CRDB-54321",
+			result: "https://cockroachlabs.atlassian.net/browse/CRDB-54321",
+		},
+		{
+			ref:    "cockroachlabs/release-staging#23456",
+			result: "https://github.com/cockroachlabs/release-staging/issues/23456",
+		},
+		{
+			ref:    "https://github.com/cockroachdb/cockroach/issues/98765",
+			result: "https://github.com/cockroachdb/cockroach/issues/98765",
+		},
+		{
+			ref:    "https://cockroachlabs.atlassian.net/browse/CRDB-56789",
+			result: "https://cockroachlabs.atlassian.net/browse/CRDB-56789",
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.ref, func(t *testing.T) {
+			result := getUrlFromRef(tc.ref)
+			assert.Equal(t, tc.result, result)
+		})
+	}
+}
+
+func TestExtractFixIssuesIDs(t *testing.T) {
+	testCases := []struct {
+		message  string
+		expected map[string]int
+	}{
+		{
+			message: `workload: Fix folder name generation.
+Fixes #75200 #98922
+close #75201
+closed #592
+RESOLVE #5555
+Release Notes: None`,
+			expected: map[string]int{"#75200": 1, "#98922": 1, "#75201": 1, "#592": 1, "#5555": 1},
+		},
+		{
+			message: `logictestccl: skip flaky TestCCLLogic/fakedist-metadata/partitioning_enum
+Informs #75227
+Epic CRDB-491
+Release note (bug fix): Fixin the bug`,
+			expected: map[string]int{},
+		},
+		{
+			message: `lots of variations
+fixes #74932; we were reading from the replicas map without...
+Closes #74889.
+Resolves #74482, #74784  #65117   #79299.
+Fix:  #73834
+epic: CRDB-9234.
+epic CRDB-235, CRDB-40192;   DEVINF-392
+Fixed:  #29833 example/repo#941
+see also:  #9243
+informs: #912,   #4729   #2911  cockroachdb/cockroach#2934
+Release note (sql change): Import now checks readability...`,
+			expected: map[string]int{"#74932": 1, "#74889": 1, "#74482": 1, "#74784": 1, "#65117": 1, "#79299": 1, "#73834": 1, "#29833": 1, "example/repo#941": 1},
+		},
+		{
+			message: `lots of variations 2
+Resolved: #4921
+This comes w/ support for Applie Silicon Macs. Closes #72829.
+This doesn't completely fix #71901 in that some...
+      Fixes #491
+Resolves #71614, Resolves #71607
+Thereby, fixes #69765
+Informs #69765 (point 4).
+Fixes #65200. The last remaining 21.1 version (V21_1) can be removed as
+Release note (build change): Upgrade to Go 1.17.6
+Release note (ops change): Added a metric
+Release notes (enterprise change): Client certificates may...`,
+			expected: map[string]int{"#4921": 1, "#72829": 1, "#71901": 1, "#491": 1, "#71614": 1, "#71607": 1, "#69765": 1, "#65200": 1},
+		},
+		{
+			message: `testing JIRA tickets
+Resolved: doc-4321
+This fixes everything. Closes CC-1234.
+      Fixes CRDB-12345
+Resolves crdb-23456, Resolves DEVINFHD-12345
+Fixes #12345
+Release notes (sql change): Excellent sql change...`,
+			expected: map[string]int{"doc-4321": 1, "CC-1234": 1, "CRDB-12345": 1, "crdb-23456": 1, "DEVINFHD-12345": 1, "#12345": 1},
+		},
+		{
+			message: `testing URL refs
+Resolves: https://github.com/cockroachlabs/support/issues/1833
+This fixes everything. Closes https://github.com/cockroachdb/cockroach/issues/83912.
+Fix: https://cockroachlabs.atlassian.net/browse/DOC-9492
+Release notes (sql change): Excellent sql change...`,
+			expected: map[string]int{
+				"https://github.com/cockroachlabs/support/issues/1833":  1,
+				"https://github.com/cockroachdb/cockroach/issues/83912": 1,
+				"https://cockroachlabs.atlassian.net/browse/DOC-9492":   1,
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.message, func(t *testing.T) {
+			result := extractFixIssueIDs(tc.message)
+			assert.Equal(t, tc.expected, result)
+		})
+	}
+}
+
+func TestExtractInformIssueIDs(t *testing.T) {
+	testCases := []struct {
+		message  string
+		expected map[string]int
+	}{
+		{
+			message: `logictestccl: skip flaky TestCCLLogic/fakedist-metadata/partitioning_enum
+Informs #75227
+Part of #45791
+Epic CRDB-491
+Fix:  #73834
+Release note (bug fix): Fixin the bug`,
+			expected: map[string]int{"#75227": 1, "#45791": 1},
+		},
+		{
+			message: `lots of variations
+Fixed:  #29833 example/repo#941
+see also:  #9243
+informs: #912,   #4729   #2911  cockroachdb/cockroach#2934
+Informs #69765 (point 4).
+This informs #59293 with these additions:
+Release note (sql change): Import now checks readability...`,
+			expected: map[string]int{"#9243": 1, "#912": 1, "#4729": 1, "#2911": 1, "cockroachdb/cockroach#2934": 1, "#69765": 1, "#59293": 1},
+		},
+		{
+			message: `testing JIRA keys with varying cases
+Fixed:  CRDB-12345 example/repo#941
+informs: doc-1234, crdb-24680
+Informs DEVINF-123, #69765 and part of DEVINF-3891
+Release note (sql change): Something something something...`,
+			expected: map[string]int{"doc-1234": 1, "DEVINF-123": 1, "#69765": 1, "crdb-24680": 1, "DEVINF-3891": 1},
+		},
+		{
+			message: `testing URL refs
+Fixed:  CRDB-12345 example/repo#941
+informs: https://github.com/cockroachdb/cockroach/issues/8892, https://github.com/cockroachdb/pebble/issues/309
+PART OF https://cockroachlabs.atlassian.net/browse/DOC-3891
+Release note (sql change): Something something something...`,
+			expected: map[string]int{
+				"https://github.com/cockroachdb/cockroach/issues/8892": 1,
+				"https://github.com/cockroachdb/pebble/issues/309":     1,
+				"https://cockroachlabs.atlassian.net/browse/DOC-3891":  1,
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.message, func(t *testing.T) {
+			result := extractInformIssueIDs(tc.message)
+			assert.Equal(t, tc.expected, result)
+		})
+	}
+}
+
+func TestExtractEpicIDs(t *testing.T) {
+	testCases := []struct {
+		message  string
+		expected map[string]int
+	}{
+		{
+			message: `logictestccl: skip flaky TestCCLLogic/fakedist-metadata/partitioning_enum
+Informs #75227
+Epic CRDB-491
+Fix:  #73834
+Release note (bug fix): Fixin the bug`,
+			expected: map[string]int{"CRDB-491": 1},
+		},
+		{
+			message: `lots of variations
+epic: CRDB-9234.
+epic CRDB-235, CRDB-40192;   DEVINF-392	https://cockroachlabs.atlassian.net/browse/CRDB-97531
+Epic doc-9238
+Release note (sql change): Import now checks readability...`,
+			expected: map[string]int{
+				"CRDB-9234":  1,
+				"CRDB-235":   1,
+				"CRDB-40192": 1,
+				"DEVINF-392": 1,
+				"doc-9238":   1,
+				"https://cockroachlabs.atlassian.net/browse/CRDB-97531": 1,
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.message, func(t *testing.T) {
+			result := extractEpicIDs(tc.message)
+			assert.Equal(t, tc.expected, result)
+		})
+	}
+}
+
+func TestExtractEpicNone(t *testing.T) {
+	testCases := []struct {
+		message  string
+		expected bool
+	}{
+		{
+			message: `logictestccl: skip flaky TestCCLLogic/fakedist-metadata/partitioning_enum
+Epic CRDB-491
+Fix:  #73834
+Release note (bug fix): Fixin the bug`,
+			expected: false,
+		},
+		{
+			message: `lots of variations
+epic: None
+Release note (sql change): Import now checks readability...`,
+			expected: true,
+		},
+		{
+			message: `another test
+Epic nONE
+Release note (sql change): Import now checks readability...`,
+			expected: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.message, func(t *testing.T) {
+			result := containsEpicNone(tc.message)
+			assert.Equal(t, tc.expected, result)
 		})
 	}
 }
