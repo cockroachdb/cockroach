@@ -89,6 +89,8 @@ func (c MembershipStatus) String() string {
 		return "decommissioning"
 	case MembershipStatus_DECOMMISSIONED:
 		return "decommissioned"
+	case MembershipStatus_STARTING:
+		return "starting"
 	default:
 		err := "unknown membership status, expected one of [active,decommissioning,decommissioned]"
 		panic(err)
@@ -100,14 +102,20 @@ func (c MembershipStatus) String() string {
 // (which also includes decommissioning a decommissioned node) the valid state
 // transitions for Membership are as follows:
 //
-//	Decommissioning  => Active
-//	Active           => Decommissioning
-//	Decommissioning  => Decommissioned
+//		Decommissioning  => Active
+//		Active           => Decommissioning
+//		Decommissioning  => Decommissioned
+//	  Starting         => *
 //
 // See diagram above the Membership type for more details.
 func ValidateTransition(old, new Liveness) error {
 	if old.Membership == new.Membership {
 		// No-op.
+		return nil
+	}
+
+	// Allow transition from STARTING to any status.
+	if old.Membership == MembershipStatus_STARTING {
 		return nil
 	}
 

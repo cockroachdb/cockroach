@@ -102,6 +102,11 @@ enum MembershipStatus {
   // TODO(irfansharif): We don't disallow the joining as yet (but will come in
   // as part of the Connect RPC subsystem).
   DECOMMISSIONED = 2;
+
+  // Starting represents a transient node status of a node that is starting up,
+  // but has not yet stabilized. It is active in most respects, however it
+  // should not be the targeted of lease or replica transfers.
+  STARTING = 3;
 }
 
 // NodeLivenessStatus describes the status of a node from the perspective of the
@@ -135,4 +140,6 @@ enum NodeLivenessStatus {
   NODE_STATUS_DECOMMISSIONED = 5 [(gogoproto.enumvalue_customname) = "DECOMMISSIONED"];
   // DRAINING indicates a node that is in the process of draining.
   NODE_STATUS_DRAINING = 6 [(gogoproto.enumvalue_customname) = "DRAINING"];
+  // STARTING indicates a node is starting up. This is a transient status.
+  NODE_STATUS_STARTING = 7 [(gogoproto.enumvalue_customname) = "STARTING"];
 }

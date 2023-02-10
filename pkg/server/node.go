@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"net"
 	"sort"
 	"strings"
@@ -578,6 +579,7 @@ func (n *Node) start(
 		log.Infof(ctx, "started with engine type %v", t)
 	}
 	log.Infof(ctx, "started with attributes %v", attrs.Attrs)
+
 	return nil
 }
 
@@ -593,6 +595,47 @@ func (n *Node) waitForAdditionalStoreInit() {
 	if n.additionalStoreInitCh != nil {
 		<-n.additionalStoreInitCh
 	}
+}
+
+func (n *Node) updateNodeStatusOnceReady(ctx context.Context) {
+	// This is a "short-lived" goroutine that only lives for the first few seconds of each server startup.
+	go func() {
+		// Sleep a small amount to allow Raft to start sending MsgApp to us and our queues to grow if necessary.
+		sleepTime := 5 * time.Second
+		log.Infof(ctx, "waiting %v sec to check status", sleepTime)
+		time.Sleep(sleepTime)
+
+		// Check the size of all the Raft queues. If any store is unhealthy wait for
+		// a little longer. Queues are in the KB size for a healthy store.
+		for err := n.stores.VisitStores(func(s *kvserver.Store) error {
+			raftLogQueueSize := s.RaftLogQueueSize()
+			if raftLogQueueSize > 10*1024*1024 {
+				return errors.Newf("Store s%d is unhealthy - raft queue is %d", s.StoreID(), raftLogQueueSize)
+			}
+			return nil
+		}); err != nil; {
+			log.Infof(ctx, "at least one unhealthy store for raft queue %v", err)
+			time.Sleep(time.Second)
+		}
+
+		// Finally wait to make sure our LSM is healthy. Starting with an unhealthy
+		// LSM leads to problems.
+		for err := n.stores.VisitStores(func(s *kvserver.Store) error {
+			if s.IOOverThreshold() {
+				return errors.Newf("Store s%d is over IO threshold", s.StoreID())
+			}
+			return nil
+		}); err != nil; {
+			log.Infof(ctx, "at least one unhealthy store for IO %v", err)
+			time.Sleep(time.Second)
+		}
+
+		log.Info(ctx, "changing node status to healthy")
+		_, err := n.storeCfg.NodeLiveness.SetMembershipStatus(ctx, n.Descriptor.NodeID, livenesspb.MembershipStatus_ACTIVE)
+		if err != nil {
+			log.Errorf(ctx, "Unable to set membership status to active %+s", err)
+		}
+	}()
 }
 
 // IsDraining returns true if at least one Store housed on this Node is not

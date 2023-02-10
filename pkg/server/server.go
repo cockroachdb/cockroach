@@ -921,9 +921,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			cfg.ObsServiceAddr,
 			timeutil.DefaultTimeSource{},
 			cfg.Tracer,
-			5*time.Second, // maxStaleness
-			1<<20,         // triggerSizeBytes - 1MB
-			10*1<<20,      // maxBufferSizeBytes - 10MB
+			5*time.Second,                             // maxStaleness
+			1<<20,                                     // triggerSizeBytes - 1MB
+			10*1<<20,                                  // maxBufferSizeBytes - 10MB
 			sqlMonitorAndMetrics.rootSQLMemoryMonitor, // memMonitor - this is not "SQL" usage, but we don't have another memory pool
 		)
 		if err != nil {
@@ -1981,6 +1981,8 @@ func (s *Server) PreStart(ctx context.Context) error {
 	s.tsDB.PollSource(
 		s.cfg.AmbientCtx, s.recorder, base.DefaultMetricsSampleInterval, ts.Resolution10s, s.stopper,
 	)
+
+	s.node.updateNodeStatusOnceReady(ctx)
 
 	return maybeImportTS(ctx, s)
 }

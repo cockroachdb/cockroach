@@ -2027,6 +2027,10 @@ func (s *Store) WaitForInit() {
 	s.initComplete.Wait()
 }
 
+func (s *Store) RaftLogQueueSize() int64 {
+	return s.raftRecvQueues.mon.AllocBytes()
+}
+
 // GetConfReader exposes access to a configuration reader.
 func (s *Store) GetConfReader(ctx context.Context) (spanconfig.StoreReader, error) {
 	if s.cfg.TestingKnobs.MakeSystemConfigSpanUnavailableToQueues {
@@ -2293,6 +2297,14 @@ func (s *Store) applyAllFromSpanConfigStore(ctx context.Context) {
 // GossipStore broadcasts the store on the gossip network.
 func (s *Store) GossipStore(ctx context.Context, useCached bool) error {
 	return s.storeGossip.GossipStore(ctx, useCached)
+}
+
+func (s *Store) IOOverThreshold() bool {
+	s.ioThreshold.Lock()
+	defer s.ioThreshold.Unlock()
+	// TODO(baptist): Just returning whether this is over threshold.
+	score, _ := s.ioThreshold.t.Score()
+	return score > 0.5
 }
 
 // UpdateIOThreshold updates the IOThreshold reported in the StoreDescriptor.

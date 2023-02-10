@@ -162,6 +162,9 @@ func MakeStorePoolNodeLivenessFunc(nodeLiveness *liveness.NodeLiveness) NodeLive
 func LivenessStatus(
 	l livenesspb.Liveness, now time.Time, deadThreshold time.Duration,
 ) livenesspb.NodeLivenessStatus {
+	if l.Membership == livenesspb.MembershipStatus_STARTING {
+		return livenesspb.NodeLivenessStatus_STARTING
+	}
 	if l.IsDead(now, deadThreshold) {
 		if !l.Membership.Active() {
 			return livenesspb.NodeLivenessStatus_DECOMMISSIONED
@@ -292,7 +295,7 @@ func (sd *StoreDetail) status(
 		return storeStatusDead
 	case livenesspb.NodeLivenessStatus_DECOMMISSIONING:
 		return storeStatusDecommissioning
-	case livenesspb.NodeLivenessStatus_UNAVAILABLE:
+	case livenesspb.NodeLivenessStatus_UNAVAILABLE, livenesspb.NodeLivenessStatus_STARTING:
 		// We don't want to suspect a node on startup or when it's first added to a
 		// cluster, because we dont know its liveness yet.
 		if !sd.LastAvailable.IsZero() {
