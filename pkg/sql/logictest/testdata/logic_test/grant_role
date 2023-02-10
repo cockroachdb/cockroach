@@ -1,0 +1,34 @@
+# Test that no-op grant role command is actually no-op (i.e. does not perform schema change)
+subtest no_op_grant_role
+
+statement ok
+CREATE USER developer WITH CREATEDB
+
+statement ok
+CREATE USER roach WITH PASSWORD NULL
+
+statement ok
+GRANT developer TO roach
+
+# Remember the current table version for `system.role_members`.
+let $role_members_version
+SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'table'->>'version' FROM system.descriptor WHERE id = 'system.public.role_members'::REGCLASS
+
+# Repeatedly grant membership of `developer` to `roach` which it's already a member of.
+statement ok
+GRANT developer TO roach
+
+# Assert that it's indeed a no-op by checking the 'role_members' table's version remains the same
+query B
+SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'table'->>'version' = $role_members_version::STRING FROM system.descriptor WHERE id = 'system.public.role_members'::REGCLASS
+----
+true
+
+# GRANT or REVOKE on the public role should result in "not exists"
+subtest grant_revoke_public
+
+statement error role/user public does not exist
+GRANT testuser TO public
+
+statement error role/user public does not exist
+REVOKE testuser FROM public
