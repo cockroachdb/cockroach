@@ -1893,7 +1893,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		err = s.addToReplicasByRangeIDLocked(rep)
 		if err == nil {
 			// NB: no locking of the Replica is needed since it's being created, but
-			// just in case.
+			// it is asserted on in "Locked" methods.
 			rep.mu.RLock()
 			err = s.addToReplicasByKeyLockedReplicaRLocked(rep)
 			rep.mu.RUnlock()
