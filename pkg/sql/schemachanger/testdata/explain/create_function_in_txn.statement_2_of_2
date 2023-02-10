@@ -8,7 +8,7 @@ EXPLAIN (ddl) CREATE UNIQUE INDEX idx ON t(b);
 Schema change plan for CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹public›.‹t› (‹b›); following CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()
 	RETURNS INT8
 	LANGUAGE SQL
-	AS $$SELECT 1;$$;
+	AS $$SELECT ‹1›;$$;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 5 elements transitioning toward PUBLIC
