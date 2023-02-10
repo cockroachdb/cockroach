@@ -80,6 +80,15 @@ func (d *TestSimpleDirectoryServer) ListPods(
 // WatchPods is a no-op for the simple directory.
 //
 // WatchPods implements the tenant.DirectoryServer interface.
+func (d *TestSimpleDirectoryServer) WatchTenants(
+	req *tenant.WatchTenantsRequest, server tenant.Directory_WatchTenantsServer,
+) error {
+	return nil
+}
+
+// WatchPods is a no-op for the simple directory.
+//
+// WatchPods implements the tenant.DirectoryServer interface.
 func (d *TestSimpleDirectoryServer) WatchPods(
 	req *tenant.WatchPodsRequest, server tenant.Directory_WatchPodsServer,
 ) error {

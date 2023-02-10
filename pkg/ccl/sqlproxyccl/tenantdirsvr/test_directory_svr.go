@@ -228,6 +228,12 @@ func (s *TestDirectoryServer) WatchPods(
 	return err
 }
 
+func (s *TestDirectoryServer) WatchTenants(
+	_ *tenant.WatchTenantsRequest, server tenant.Directory_WatchTenantsServer,
+) error {
+	return nil
+}
+
 // Drain sends out DRAINING pod notifications for each process managed by the
 // test directory. This causes the proxy to start enforcing short idle
 // connection timeouts in order to drain the connections to the pod.

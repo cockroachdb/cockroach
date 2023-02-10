@@ -34,6 +34,16 @@ type tenantEntry struct {
 	// Full name of the tenant's cluster i.e. dim-dog.
 	ClusterName string
 
+	// MaxNonRootConnections indicates whether the tenant has the respective
+	// limit set on it. A value of -1 indicates no limit. A value of 0 would
+	// indicate that only root connections can be made to the tenant.
+	// This field can be updated over time, so a lock must be obtained before
+	// accessing it.
+	MaxNonRootConnections struct {
+		syncutil.Mutex
+		numConns int32
+	}
+
 	// RefreshDelay is the minimum amount of time that must elapse between
 	// attempts to refresh pods for this tenant after ReportFailure is
 	// called.
@@ -80,7 +90,10 @@ func (e *tenantEntry) Initialize(ctx context.Context, client DirectoryClient) er
 			return
 		}
 
+		// TODO(alyshan): Once tenant directories are updated to send the Tenant field
+		// we can take ClusterName from that.
 		e.ClusterName = tenantResp.ClusterName
+		e.SetMaxNonRootConnections(tenantResp.Tenant.MaxNonRootConns)
 	})
 
 	// If Initialize has already been called, return any error that occurred.
@@ -128,6 +141,18 @@ func (e *tenantEntry) AddPod(pod *Pod) bool {
 
 	e.pods.pods = append(e.pods.pods, pod)
 	return true
+}
+
+func (e *tenantEntry) SetMaxNonRootConnections(numNonRoot int32){
+	e.MaxNonRootConnections.Lock()
+	defer e.MaxNonRootConnections.Unlock()
+	e.MaxNonRootConnections.numConns = numNonRoot
+}
+
+func (e *tenantEntry) GetMaxNonRootConnections() int32 {
+	e.MaxNonRootConnections.Lock()
+	defer e.MaxNonRootConnections.Unlock()
+	return e.MaxNonRootConnections.numConns
 }
 
 // RemovePodByAddr removes the pod with the given IP address from the tenant's

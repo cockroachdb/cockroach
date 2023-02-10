@@ -64,6 +64,11 @@ var (
 		Description: "Directory address of the service doing resolution of tenants to their IP addresses.",
 	}
 
+	LimitNonRootConns = FlagInfo{
+		Name:        "limit-non-root-conns",
+		Description: "Enable the limiting of non-root connections for tenants.",
+	}
+
 	// TODO(chrisseto): Remove skip-verify as a CLI option. It should only be
 	// set internally for testing, rather than being exposed to consumers.
 	SkipVerify = FlagInfo{
