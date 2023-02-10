@@ -62,11 +62,11 @@ func TestCheckLockCompatibility(t *testing.T) {
 			exp:                                   true,
 			expExclusiveLocksBlockNonLockingReads: true,
 		},
-		// A3. Shared lock mode is compatible with Upgrade lock mode.
+		// A3. Shared lock mode is compatible with Update lock mode.
 		{
-			desc:                                  "upgrade lock acquisition, held shared lock",
+			desc:                                  "update lock acquisition, held shared lock",
 			heldLockMode:                          lock.MakeModeShared(),
-			toCheckLockMode:                       lock.MakeModeUpgrade(),
+			toCheckLockMode:                       lock.MakeModeUpdate(),
 			exp:                                   true,
 			expExclusiveLocksBlockNonLockingReads: true,
 		},
@@ -80,51 +80,51 @@ func TestCheckLockCompatibility(t *testing.T) {
 		},
 		// A5. Shared lock mode is incompatible with Intent lock mode.
 		{
-			desc:                                  "upgrade lock acquisition, held shared lock",
+			desc:                                  "update lock acquisition, held shared lock",
 			heldLockMode:                          lock.MakeModeShared(),
 			toCheckLockMode:                       lock.MakeModeIntent(tsLock),
 			exp:                                   false,
 			expExclusiveLocksBlockNonLockingReads: false,
 		},
 
-		// B. Held lock mode is "Upgrade".
-		// B1. Upgrade lock mode is compatible with non-locking reads.
+		// B. Held lock mode is "Update".
+		// B1. Update lock mode is compatible with non-locking reads.
 		{
-			desc:                                  "non-locking read, held upgrade lock",
-			heldLockMode:                          lock.MakeModeUpgrade(),
+			desc:                                  "non-locking read, held update lock",
+			heldLockMode:                          lock.MakeModeUpdate(),
 			toCheckLockMode:                       lock.MakeModeNone(tsLock),
 			exp:                                   true,
 			expExclusiveLocksBlockNonLockingReads: true,
 		},
-		// B2. Upgrade lock mode is compatible with Shared lock mode.
+		// B2. Update lock mode is compatible with Shared lock mode.
 		{
-			desc:                                  "shared lock acquisition, held upgrade lock",
-			heldLockMode:                          lock.MakeModeUpgrade(),
+			desc:                                  "shared lock acquisition, held update lock",
+			heldLockMode:                          lock.MakeModeUpdate(),
 			toCheckLockMode:                       lock.MakeModeShared(),
 			exp:                                   true,
 			expExclusiveLocksBlockNonLockingReads: true,
 		},
-		// B3. Upgrade lock mode is incompatible with a concurrent attempt to
-		// acquire an Upgrade lock.
+		// B3. Update lock mode is incompatible with a concurrent attempt to
+		// acquire an Update lock.
 		{
-			desc:                                  "upgrade lock acquisition, held upgrade lock",
-			heldLockMode:                          lock.MakeModeUpgrade(),
-			toCheckLockMode:                       lock.MakeModeUpgrade(),
+			desc:                                  "update lock acquisition, held update lock",
+			heldLockMode:                          lock.MakeModeUpdate(),
+			toCheckLockMode:                       lock.MakeModeUpdate(),
 			exp:                                   false,
 			expExclusiveLocksBlockNonLockingReads: false,
 		},
-		// B4. Upgrade lock mode is incompatible with Exclusive lock mode.
+		// B4. Update lock mode is incompatible with Exclusive lock mode.
 		{
-			desc:                                  "exclusive lock acquisition, held upgrade lock",
-			heldLockMode:                          lock.MakeModeUpgrade(),
+			desc:                                  "exclusive lock acquisition, held update lock",
+			heldLockMode:                          lock.MakeModeUpdate(),
 			toCheckLockMode:                       lock.MakeModeExclusive(tsLock),
 			exp:                                   false,
 			expExclusiveLocksBlockNonLockingReads: false,
 		},
-		// B5. Upgrade lock mode is incompatible with Intent lock mode.
+		// B5. Update lock mode is incompatible with Intent lock mode.
 		{
-			desc:                                  "upgrade lock acquisition, held shared lock",
-			heldLockMode:                          lock.MakeModeUpgrade(),
+			desc:                                  "update lock acquisition, held shared lock",
+			heldLockMode:                          lock.MakeModeUpdate(),
 			toCheckLockMode:                       lock.MakeModeIntent(tsLock),
 			exp:                                   false,
 			expExclusiveLocksBlockNonLockingReads: false,
@@ -167,11 +167,11 @@ func TestCheckLockCompatibility(t *testing.T) {
 			exp:                                   false,
 			expExclusiveLocksBlockNonLockingReads: false,
 		},
-		// C5. Exclusive lock mode is incompatible with Upgrade lock mode.
+		// C5. Exclusive lock mode is incompatible with Update lock mode.
 		{
-			desc:                                  "upgrade lock acquisition, held exclusive lock",
+			desc:                                  "update lock acquisition, held exclusive lock",
 			heldLockMode:                          lock.MakeModeExclusive(tsLock),
-			toCheckLockMode:                       lock.MakeModeUpgrade(),
+			toCheckLockMode:                       lock.MakeModeUpdate(),
 			exp:                                   false,
 			expExclusiveLocksBlockNonLockingReads: false,
 		},
@@ -260,11 +260,11 @@ func TestCheckLockCompatibility(t *testing.T) {
 			exp:                                   false,
 			expExclusiveLocksBlockNonLockingReads: false,
 		},
-		// D5. Intent lock mode is incompatible with Upgrade lock mode.
+		// D5. Intent lock mode is incompatible with Update lock mode.
 		{
-			desc:                                  "upgrade lock acquisition, held intent",
+			desc:                                  "update lock acquisition, held intent",
 			heldLockMode:                          lock.MakeModeIntent(tsLock),
-			toCheckLockMode:                       lock.MakeModeUpgrade(),
+			toCheckLockMode:                       lock.MakeModeUpdate(),
 			exp:                                   false,
 			expExclusiveLocksBlockNonLockingReads: false,
 		},

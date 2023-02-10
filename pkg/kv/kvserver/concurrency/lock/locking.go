@@ -70,8 +70,8 @@ func (m *Mode) CheckLockCompatibility(sv *settings.Values, o *Mode) bool {
 	case None:
 		return true
 	case Shared:
-		return o.Strength == None || o.Strength == Shared || o.Strength == Upgrade
-	case Upgrade:
+		return o.Strength == None || o.Strength == Shared || o.Strength == Update
+	case Update:
 		return o.Strength == None || o.Strength == Shared
 	case Exclusive:
 		if ExclusiveLocksBlockNonLockingReads.Get(sv) {
@@ -105,10 +105,10 @@ func MakeModeShared() Mode {
 	}
 }
 
-// MakeModeUpgrade constructs a Mode with strength Upgrade.
-func MakeModeUpgrade() Mode {
+// MakeModeUpdate constructs a Mode with strength Update.
+func MakeModeUpdate() Mode {
 	return Mode{
-		Strength: Upgrade,
+		Strength: Update,
 	}
 }
 

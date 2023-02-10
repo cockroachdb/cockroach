@@ -10886,7 +10886,7 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 				expTS = ba.Txn.WriteTimestamp
 
 				scan := scanArgs(roachpb.Key("lscan"), roachpb.Key("lscan\x00"))
-				scan.KeyLocking = lock.Upgrade
+				scan.KeyLocking = lock.Update
 				ba.Add(scan)
 				return
 			},

@@ -363,7 +363,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				}
 				var key string
 				d.ScanArgs(t, "key", &key)
-				strength := scanLockStrength(t, d)
+				strength := concurrency.ScanLockStrength(t, d)
 				if ok, txn := g.IsKeyLockedByConflictingTxn(roachpb.Key(key), strength); ok {
 					holder := "<nil>"
 					if txn != nil {

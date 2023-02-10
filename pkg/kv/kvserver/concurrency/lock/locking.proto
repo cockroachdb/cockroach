@@ -52,7 +52,7 @@ enum Strength {
   
   // Shared (S) locks are used by read-only operations and allow concurrent
   // transactions to read under pessimistic concurrency control. Shared locks
-  // are compatible with each other but are not compatible with Upgrade or
+  // are compatible with each other but are not compatible with Update or
   // Exclusive locks. This means that multiple transactions can hold a Shared
   // lock on the same key at the same time, but no other transaction can
   // modify the key at the same time. A holder of a Shared lock on a key is
@@ -62,7 +62,7 @@ enum Strength {
   // optimistically (see None).
   Shared = 1;
 
-  // Upgrade (U) locks are a hybrid of Shared and Exclusive locks which are
+  // Update (U) locks are a hybrid of Shared and Exclusive locks which are
   // used to prevent a common form of deadlock. When a transaction intends to
   // modify existing KVs, it is often the case that it reads the KVs first and
   // then attempts to modify them. Under pessimistic concurrency control, this
@@ -74,33 +74,33 @@ enum Strength {
   // occur. To resolve the deadlock, one of the two transactions would need to
   // be aborted.
   //
-  // To avoid this potential deadlock problem, an Upgrade lock can be used in
-  // place of a Shared lock. Upgrade locks are only compatible with other Shared
+  // To avoid this potential deadlock problem, an Update lock can be used in
+  // place of a Shared lock. Update locks are only compatible with other Shared
   // locks. This means that unlike Shared locks, there may only be a single
-  // Upgrade lock holder for a given key. As with Shared locks, the lock holder
-  // of an Upgrade lock on a key is only allowed to read from the key while the
+  // Update lock holder for a given key. As with Shared locks, the lock holder
+  // of an Update lock on a key is only allowed to read from the key while the
   // lock is held. These two requirements help resolve the deadlock scenario
   // presented above because only one of the transactions would be able to
-  // acquire an Upgrade lock at a time while reading the initial state of the
+  // acquire an Update lock at a time while reading the initial state of the
   // KVs. This means only one transaction is allowed to upgrade its lock to
   // Exclusive. It may have to wait for concurrent transactions to release their
   // Shared locks, however, there is no deadlock hazard here as the Shared lock
-  // holders are not waiting on the Upgrade lock in any way.
+  // holders are not waiting on the Update lock in any way.
   //
-  // Under pure pessimistic concurrency control, an Upgrade lock is equivalent
+  // Under pure pessimistic concurrency control, an Update lock is equivalent
   // to an Intent. However, unlike with Intents, reads under optimistic
-  // concurrency control do not conflict with Upgrade locks. This is because
-  // a transaction can only hold an Upgrade lock on keys that it has not yet
+  // concurrency control do not conflict with Update locks. This is because
+  // a transaction can only hold an Update lock on keys that it has not yet
   // modified. This improves concurrency between read and write transactions
   // compared to if the writing transaction had immediately laid down an intent.
   //
-  // The trade-off here is twofold. First, if the Upgrade lock holder does
+  // The trade-off here is twofold. First, if the Update lock holder does
   // lay down an intent on a key after an optimistic read has observed the state
   // of the key, the transaction that performed the optimistic read may be
   // unable to perform a successful read refresh if it attempts to refresh to
   // a timestamp at or past the timestamp of the intent. Second, the optimistic
-  // reads permitted while the Upgrade lock is held will bump the timestamp
-  // cache. This may result in the Upgrade lock holder being forced to increase
+  // reads permitted while the Update lock is held will bump the timestamp
+  // cache. This may result in the Update lock holder being forced to increase
   // its write timestamp when converting to an Exclusive lock or laying down
   // an Intent, which in turn may force it to restart if its read refresh
   // fails.
@@ -109,7 +109,7 @@ enum Strength {
   // that will (can?) happen? Or will this only happen when laying down intents.
   // Maybe the "may result" phrasing is ambiguous enough for whatever we do
   // here?
-  Upgrade = 2;
+  Update = 2;
 
   // Exclusive (X) locks are used by read-write and read-only operations to
   // provide transactions with (potential) exclusive write access to a key. When
@@ -154,13 +154,13 @@ enum Strength {
 // different transactions, concurrently.
 //
 //  +------------+---------+-----------+-----------+-------------+----------+
-//  |            |   None  |  Shared   |  Upgrade  |  Exclusive  |  Intent  |
+//  |            |   None  |  Shared   |  Update   |  Exclusive  |  Intent  |
 //  +------------+---------+-----------+-----------+-------------+----------+
 //  | None       |         |           |           |      X^*    |    X^†   |
 //  +------------+---------+-----------+-----------+-------------+----------+
 //  | Shared     |         |           |           |      X      |    X     |
 //  +------------+---------+-----------+-----------+-------------+----------+
-//  | Upgrade    |         |           |     X     |      X      |    X     |
+//  | Update     |         |           |     X     |      X      |    X     |
 //  +------------+---------+-----------+-----------+-------------+----------+
 //  | Exclusive  |   X^*   |     X     |     X     |      X      |    X     |
 //  +------------+---------+-----------+-----------+-------------+----------+
