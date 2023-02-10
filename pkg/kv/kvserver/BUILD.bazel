@@ -430,6 +430,7 @@ go_test(
         "//pkg/util/ctxgroup",
         "//pkg/util/encoding",
         "//pkg/util/errorutil",
+        "//pkg/util/grunning",
         "//pkg/util/hlc",
         "//pkg/util/humanizeutil",
         "//pkg/util/leaktest",

@@ -23,3 +23,12 @@ query B
 SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'table'->>'version' = $role_members_version::STRING FROM system.descriptor WHERE id = 'system.public.role_members'::REGCLASS
 ----
 true
+
+# GRANT or REVOKE on the public role should result in "not exists"
+subtest grant_revoke_public
+
+statement error pgcode 42704 role/user \"public\" does not exist
+GRANT testuser TO public
+
+statement error pgcode 42704 role/user \"public\" does not exist
+REVOKE testuser FROM public
