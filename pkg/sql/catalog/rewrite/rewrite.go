@@ -566,6 +566,7 @@ func SchemaDescs(schemas []*schemadesc.Mutable, descriptorRewrites jobspb.DescRe
 				}
 			}
 		}
+		sc.Functions = newFns
 
 		if err := rewriteSchemaChangerState(sc, descriptorRewrites); err != nil {
 			return err
