@@ -805,7 +805,7 @@ func TestStoreReplicaVisitor(t *testing.T) {
 	}
 }
 
-func TestMaybeMarkReplicaInitialized(t *testing.T) {
+func TestMarkReplicaInitialized(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
@@ -846,13 +846,13 @@ func TestMaybeMarkReplicaInitialized(t *testing.T) {
 	store.mu.Lock()
 	defer store.mu.Unlock()
 
-	expectedResult := "attempted to process uninitialized range.*"
+	expectedResult := "attempted to process uninitialized replica"
 	ctx = r.AnnotateCtx(ctx)
 	func() {
 		r.mu.Lock()
 		defer r.mu.Unlock()
-		if err := store.maybeMarkReplicaInitializedLockedReplLocked(ctx, r); !testutils.IsError(err, expectedResult) {
-			t.Errorf("expected maybeMarkReplicaInitializedLocked with uninitialized replica to fail, got %v", err)
+		if err := store.markReplicaInitializedLockedReplLocked(ctx, r); !testutils.IsError(err, expectedResult) {
+			t.Errorf("expected markReplicaInitializedLocked with uninitialized replica to fail, got %v", err)
 		}
 	}()
 
@@ -867,11 +867,12 @@ func TestMaybeMarkReplicaInitialized(t *testing.T) {
 	}}
 	desc.NextReplicaID = 2
 	r.setDescRaftMuLocked(ctx, desc)
+	expectedResult = "not in uninitReplicas"
 	func() {
 		r.mu.Lock()
 		defer r.mu.Unlock()
-		if err := store.maybeMarkReplicaInitializedLockedReplLocked(ctx, r); err != nil {
-			t.Errorf("expected maybeMarkReplicaInitializedLocked on a replica that's not in the uninit map to silently succeed, got %v", err)
+		if err := store.markReplicaInitializedLockedReplLocked(ctx, r); !testutils.IsError(err, expectedResult) {
+			t.Errorf("expected markReplicaInitializedLocked on a replica that's not in the uninit map to fail, got %v", err)
 		}
 	}()
 
@@ -882,8 +883,8 @@ func TestMaybeMarkReplicaInitialized(t *testing.T) {
 	func() {
 		r.mu.Lock()
 		defer r.mu.Unlock()
-		if err := store.maybeMarkReplicaInitializedLockedReplLocked(ctx, r); !testutils.IsError(err, expectedResult) {
-			t.Errorf("expected maybeMarkReplicaInitializedLocked with overlapping keys to fail, got %v", err)
+		if err := store.markReplicaInitializedLockedReplLocked(ctx, r); !testutils.IsError(err, expectedResult) {
+			t.Errorf("expected markReplicaInitializedLocked with overlapping keys to fail, got %v", err)
 		}
 	}()
 }
