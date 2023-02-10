@@ -1211,44 +1211,21 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 	stmt := randgen.RandCreateTableWithColumnIndexNumberGenerator(og.params.rng, "table", tableIdx, databaseHasMultiRegion, og.newUniqueSeqNum)
 	stmt.Table = *tableName
 	stmt.IfNotExists = og.randIntn(2) == 0
-	trigramIsNotSupported, err := isClusterVersionLessThan(
+	tsQueryNotSupported, err := isClusterVersionLessThan(
 		ctx,
 		tx,
-		clusterversion.ByKey(clusterversion.TODODelete_V22_2TrigramInvertedIndexes))
+		clusterversion.ByKey(clusterversion.V23_1))
 	if err != nil {
 		return nil, err
 	}
-	hasTrigramIdxUnsupported := func() bool {
-		if !trigramIsNotSupported {
+	hasUnsupportedTSQuery := func() bool {
+		if !tsQueryNotSupported {
 			return false
 		}
 		// Check if any of the indexes have trigrams involved.
 		for _, def := range stmt.Defs {
-			if idx, ok := def.(*tree.IndexTableDef); ok && idx.Inverted {
-				lastColumn := idx.Columns[len(idx.Columns)-1]
-				switch lastColumn.OpClass {
-				case "gin_trgm_ops", "gist_trgm_ops":
-					return true
-				}
-			}
-		}
-		return false
-	}()
-
-	invisibleIndexesIsNotSupported, err := isClusterVersionLessThan(
-		ctx,
-		tx,
-		clusterversion.ByKey(clusterversion.TODODelete_V22_2Start))
-	if err != nil {
-		return nil, err
-	}
-	hasInvisibleIndexesUnsupported := func() bool {
-		if !invisibleIndexesIsNotSupported {
-			return false
-		}
-		// Check if any of the indexes have trigrams involved.
-		for _, def := range stmt.Defs {
-			if idx, ok := def.(*tree.IndexTableDef); ok && idx.NotVisible {
+			if col, ok := def.(*tree.ColumnTableDef); ok &&
+				(col.Type.SQLString() == "TSQUERY" || col.Type.SQLString() == "TSVECTOR") {
 				return true
 			}
 		}
@@ -1271,8 +1248,7 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 	// Compatibility errors aren't guaranteed since the cluster version update is not
 	// fully transaction aware.
 	codesWithConditions{
-		{code: pgcode.FeatureNotSupported, condition: hasTrigramIdxUnsupported},
-		{code: pgcode.Syntax, condition: hasInvisibleIndexesUnsupported},
+		{code: pgcode.Syntax, condition: hasUnsupportedTSQuery},
 	}.add(opStmt.potentialExecErrors)
 	opStmt.sql = tree.Serialize(stmt)
 	return opStmt, nil
