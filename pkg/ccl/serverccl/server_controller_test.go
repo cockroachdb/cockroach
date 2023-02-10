@@ -181,6 +181,48 @@ VALUES($1, $2, $3, $4, $5)`, id, secret, username, created, expires)
 	require.Equal(t, body.Sessions[0].ApplicationName, "hello system")
 }
 
+// TestServerControllerBadHTTPCookies tests the controller's proxy
+// layer for correct behavior under scenarios where the client has
+// stale or invalid cookies. This helps ensure that we continue to
+// serve static assets even when the browser is referencing an
+// unknown tenant, or bad sessions.
+func TestServerControllerBadHTTPCookies(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	client, err := s.GetUnauthenticatedHTTPClient()
+	require.NoError(t, err)
+
+	c := &http.Cookie{
+		Name:     server.TenantSelectCookieName,
+		Value:    "some-nonexistent-tenant",
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   true,
+	}
+
+	req, err := http.NewRequest("GET", s.AdminURL()+"/", nil)
+	require.NoError(t, err)
+	req.AddCookie(c)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, 200, resp.StatusCode)
+
+	req, err = http.NewRequest("GET", s.AdminURL()+"/bundle.js", nil)
+	require.NoError(t, err)
+	req.AddCookie(c)
+	resp, err = client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, 200, resp.StatusCode)
+}
+
 func TestServerStartStop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

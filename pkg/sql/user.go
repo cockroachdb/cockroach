@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -545,11 +546,7 @@ func (p *planner) setRole(ctx context.Context, local bool, s username.SQLUsernam
 			return err
 		}
 		if !exists {
-			return pgerror.Newf(
-				pgcode.InvalidParameterValue,
-				"role %s does not exist",
-				becomeUser.Normalized(),
-			)
+			return sqlerrors.NewUndefinedUserError(becomeUser)
 		}
 	}
 

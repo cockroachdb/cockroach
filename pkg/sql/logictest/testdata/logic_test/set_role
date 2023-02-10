@@ -15,13 +15,13 @@ GRANT ALL ON TABLE testuser.testuser_table TO testuser
 statement error role name "public" is reserved
 CREATE ROLE public
 
-statement error pgcode 22023 role public does not exist
+statement error pgcode 42704 role/user \"public\" does not exist
 SET ROLE public
 
 statement error role name "node" is reserved
 CREATE ROLE node
 
-statement error pgcode 22023 role node does not exist
+statement error pgcode 42704 role/user \"node\" does not exist
 SET ROLE node
 
 # Check root can reset and become itself.
@@ -38,7 +38,7 @@ none
 statement ok
 RESET ROLE
 
-statement error pgcode 22023 role non_existent_user does not exist
+statement error pgcode 42704 role/user \"non_existent_user\" does not exist
 SET ROLE non_existent_user
 
 query TTTT
