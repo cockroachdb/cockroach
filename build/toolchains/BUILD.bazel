@@ -346,6 +346,7 @@ config_setting(
     ],
     flag_values = {
         ":dev_flag": "true",
+        ":cross_flag": "false",
     },
 )
 
