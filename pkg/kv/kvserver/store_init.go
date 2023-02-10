@@ -81,7 +81,7 @@ func WriteInitialClusterData(
 	//
 	// [1]: See `(*NodeLiveness).CreateLivenessRecord` and usages for where that happens.
 	// [2]: See `(*NodeLiveness).Start` for where that happens.
-	livenessRecord := livenesspb.Liveness{NodeID: kvstorage.FirstNodeID, Epoch: 0}
+	livenessRecord := livenesspb.Liveness{NodeID: kvstorage.FirstNodeID, Epoch: 0, Membership: livenesspb.MembershipStatus_STARTING}
 	if err := livenessVal.SetProto(&livenessRecord); err != nil {
 		return err
 	}

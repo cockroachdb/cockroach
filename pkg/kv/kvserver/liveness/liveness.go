@@ -566,7 +566,7 @@ func (nl *NodeLiveness) CreateLivenessRecord(ctx context.Context, nodeID roachpb
 	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
 		// We start off at epoch=0, entrusting the initial heartbeat to increment it
 		// to epoch=1 to signal the very first time the node is up and running.
-		liveness := livenesspb.Liveness{NodeID: nodeID, Epoch: 0}
+		liveness := livenesspb.Liveness{NodeID: nodeID, Epoch: 0, Membership: livenesspb.MembershipStatus_STARTING}
 
 		// We skip adding an expiration, we only really care about the liveness
 		// record existing within KV.
