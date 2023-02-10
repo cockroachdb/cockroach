@@ -592,9 +592,9 @@ func validateConstraintNameIsNotUsed(
 
 	var isInUse bool
 	scpb.ForEachConstraintWithoutIndexName(b.QueryByID(tbl.TableID), func(
-		_ scpb.Status, _ scpb.TargetStatus, e *scpb.ConstraintWithoutIndexName,
+		_ scpb.Status, target scpb.TargetStatus, e *scpb.ConstraintWithoutIndexName,
 	) {
-		if e.Name == string(name) {
+		if target == scpb.ToPublic && e.Name == string(name) {
 			isInUse = true
 		}
 	})

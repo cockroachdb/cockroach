@@ -72,7 +72,8 @@ var supportedAlterTableStatements = map[reflect.Type]supportedAlterTableCommand{
 
 		return false
 	}},
-	reflect.TypeOf((*tree.AlterTableDropConstraint)(nil)): {fn: alterTableDropConstraint, on: true, minSupportedClusterVersion: clusterversion.V23_1},
+	reflect.TypeOf((*tree.AlterTableDropConstraint)(nil)):     {fn: alterTableDropConstraint, on: true, minSupportedClusterVersion: clusterversion.V23_1},
+	reflect.TypeOf((*tree.AlterTableValidateConstraint)(nil)): {fn: alterTableValidateConstraint, on: true, minSupportedClusterVersion: clusterversion.V23_1},
 }
 
 // alterTableAddConstraintMinSupportedClusterVersion tracks the minimal supported cluster version

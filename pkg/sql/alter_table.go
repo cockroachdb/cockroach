@@ -504,8 +504,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				if t.IfExists {
 					continue
 				}
-				return pgerror.Newf(pgcode.UndefinedObject,
-					"constraint %q of relation %q does not exist", t.Constraint, n.tableDesc.Name)
+				return sqlerrors.NewUndefinedConstraintError(string(t.Constraint), n.tableDesc.Name)
 			}
 			if err := n.tableDesc.DropConstraint(c, func(backRef catalog.ForeignKeyConstraint) error {
 				return params.p.removeFKBackReference(params.ctx, n.tableDesc, backRef.ForeignKeyDesc())
@@ -521,8 +520,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			name := string(t.Constraint)
 			c := catalog.FindConstraintByName(n.tableDesc, name)
 			if c == nil {
-				return pgerror.Newf(pgcode.UndefinedObject,
-					"constraint %q of relation %q does not exist", t.Constraint, n.tableDesc.Name)
+				return sqlerrors.NewUndefinedConstraintError(string(t.Constraint), n.tableDesc.Name)
 			}
 			switch c.GetConstraintValidity() {
 			case descpb.ConstraintValidity_Validated:
@@ -532,8 +530,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 					"constraint %q in the middle of being added, try again later", t.Constraint)
 			case descpb.ConstraintValidity_Dropping:
-				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-					"constraint %q in the middle of being dropped", t.Constraint)
+				return sqlerrors.NewUndefinedConstraintError(string(t.Constraint), n.tableDesc.Name)
 			}
 			if ck := c.AsCheck(); ck != nil {
 				if err := validateCheckInTxn(
@@ -745,8 +742,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 		case *tree.AlterTableRenameConstraint:
 			constraint := catalog.FindConstraintByName(n.tableDesc, string(t.Constraint))
 			if constraint == nil {
-				return pgerror.Newf(pgcode.UndefinedObject,
-					"constraint %q of relation %q does not exist", tree.ErrString(&t.Constraint), n.tableDesc.Name)
+				return sqlerrors.NewUndefinedConstraintError(tree.ErrString(&t.Constraint), n.tableDesc.Name)
 			}
 			if t.Constraint == t.NewName {
 				// Nothing to do.

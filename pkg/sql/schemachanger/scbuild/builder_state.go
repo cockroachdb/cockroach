@@ -1053,8 +1053,7 @@ func (b *builderState) ResolveConstraint(
 		if p.IsExistenceOptional {
 			return nil
 		}
-		panic(pgerror.Newf(pgcode.UndefinedObject,
-			"constraint %q of relation %q does not exist", constraintName, rel.GetName()))
+		panic(sqlerrors.NewUndefinedConstraintError(string(constraintName), rel.GetName()))
 	}
 
 	return c.ers.Filter(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) bool {

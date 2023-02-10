@@ -15,10 +15,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
 
@@ -60,8 +59,7 @@ func (n *commentOnConstraintNode) startExec(params runParams) error {
 	constraintName := string(n.n.Constraint)
 	constraint := catalog.FindConstraintByName(n.tableDesc, constraintName)
 	if constraint == nil {
-		return pgerror.Newf(pgcode.UndefinedObject,
-			"constraint %q of relation %q does not exist", constraintName, n.tableDesc.GetName())
+		return sqlerrors.NewUndefinedConstraintError(constraintName, n.tableDesc.GetName())
 	}
 
 	var err error
