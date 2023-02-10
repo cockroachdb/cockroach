@@ -217,4 +217,9 @@ message ExportStats {
   // Duration is the total time taken to send an ExportRequest, receive an
   // ExportResponse and push the response on a channel.
   int64 duration = 3 [(gogoproto.casttype) = "time.Duration"];
+  // StartTime is the timestamp at which the ExportRequest was sent.
+  util.hlc.Timestamp start_time = 4 [(gogoproto.nullable) = false];
+  // EndTime is the timestamp at which an ExportResponse was received and pushed
+  // onto a channel.
+  util.hlc.Timestamp end_time = 5 [(gogoproto.nullable) = false];
 }

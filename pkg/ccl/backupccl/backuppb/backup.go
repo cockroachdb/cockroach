@@ -11,6 +11,7 @@ package backuppb
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
@@ -18,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/bulk"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	_ "github.com/cockroachdb/cockroach/pkg/util/uuid" // required for backup.proto
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/jsonpb"
@@ -145,8 +147,9 @@ func (e *ExportStats) Render() []attribute.KeyValue {
 			Value: attribute.StringValue(fmt.Sprintf("%.2f MB", dataSizeMB)),
 		})
 
-		if e.Duration > 0 {
-			throughput := dataSizeMB / e.Duration.Seconds()
+		if !e.StartTime.IsEmpty() && !e.EndTime.IsEmpty() {
+			duration := e.EndTime.GoTime().Sub(e.StartTime.GoTime())
+			throughput := dataSizeMB / duration.Seconds()
 			tags = append(tags, attribute.KeyValue{
 				Key:   "throughput",
 				Value: attribute.StringValue(fmt.Sprintf("%.2f MB/s", throughput)),
@@ -159,7 +162,10 @@ func (e *ExportStats) Render() []attribute.KeyValue {
 
 // Identity implements the TracingAggregatorEvent interface.
 func (e *ExportStats) Identity() bulk.TracingAggregatorEvent {
-	return &ExportStats{}
+	return &ExportStats{
+		StartTime: hlc.Timestamp{WallTime: math.MaxInt64},
+		EndTime:   hlc.Timestamp{WallTime: math.MinInt64},
+	}
 }
 
 // Combine implements the TracingAggregatorEvent interface.
@@ -170,7 +176,20 @@ func (e *ExportStats) Combine(other bulk.TracingAggregatorEvent) {
 	}
 	e.NumFiles += otherExportStats.NumFiles
 	e.DataSize += otherExportStats.DataSize
+	// Duration should not be used in throughput calculations as adding durations
+	// of two ExportRequests does not account for concurrent evaluation of these
+	// requests.
 	e.Duration += otherExportStats.Duration
+
+	// We want to store the earliest of the StartTimes.
+	if otherExportStats.StartTime.Less(e.StartTime) {
+		e.StartTime = otherExportStats.StartTime
+	}
+
+	// We want to store the latest of the EndTimes.
+	if e.EndTime.Less(otherExportStats.EndTime) {
+		e.EndTime = otherExportStats.EndTime
+	}
 }
 
 // Tag implements the TracingAggregatorEvent interface.
