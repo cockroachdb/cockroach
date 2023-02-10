@@ -105,7 +105,11 @@ func argExists(args []string, target string) int {
 type StartOpts struct {
 	Target     StartTarget
 	Sequential bool
-	ExtraArgs  []string
+	// ExtraArgs are extra arguments used when starting the node. Multiple
+	// arguments should be passed as separate items in the slice. For example:
+	//   Instead of: []string{"--flag foo bar"}
+	//   Use:        []string{"--flag", "foo", "bar"}
+	ExtraArgs []string
 
 	// systemd limits on resources.
 	NumFilesLimit int64
@@ -414,10 +418,14 @@ func (c *SyncedCluster) generateStartCmd(
 	if err != nil {
 		return "", err
 	}
+	keyCmd, err := c.generateKeyCmd(ctx, l, node, startOpts)
+	if err != nil {
+		return "", err
+	}
 
 	return execStartTemplate(startTemplateData{
 		LogDir: c.LogDir(node),
-		KeyCmd: c.generateKeyCmd(node, startOpts),
+		KeyCmd: keyCmd,
 		EnvVars: append(append([]string{
 			fmt.Sprintf("ROACHPROD=%s", c.roachprodEnvValue(node)),
 			"GOTRACEBACK=crash",
@@ -549,16 +557,18 @@ func (c *SyncedCluster) generateStartArgs(
 		args = append(args, c.generateStartFlagsSQL(node, startOpts, vers)...)
 	}
 
+	args = append(args, startOpts.ExtraArgs...)
+
 	// Argument template expansion is node specific (e.g. for {store-dir}).
 	e := expander{
 		node: node,
 	}
-	for _, arg := range startOpts.ExtraArgs {
+	for i, arg := range args {
 		expandedArg, err := e.expand(ctx, l, c, arg)
 		if err != nil {
 			return nil, err
 		}
-		args = append(args, strings.Split(expandedArg, " ")...)
+		args[i] = expandedArg
 	}
 
 	return args, nil
@@ -581,9 +591,14 @@ func (c *SyncedCluster) generateStartFlagsKV(
 			args = append(args, `--store`,
 				`path=`+storeDir+`,attrs=`+fmt.Sprintf("store%d", i))
 		}
-	} else {
+	} else if startOpts.ExtraArgs[idx] == "--store=" {
+		// The flag and path were provided together. Strip the flag prefix.
 		storeDir := strings.TrimPrefix(startOpts.ExtraArgs[idx], "--store=")
 		storeDirs = append(storeDirs, storeDir)
+	} else {
+		// Else, the store flag and path were specified as separate arguments. The
+		// path is the subsequent arg.
+		storeDirs = append(storeDirs, startOpts.ExtraArgs[idx+1])
 	}
 
 	if startOpts.EncryptedStores {
@@ -714,9 +729,11 @@ func (c *SyncedCluster) generateInitCmd(node Node) string {
 	return initCmd
 }
 
-func (c *SyncedCluster) generateKeyCmd(node Node, startOpts StartOpts) string {
+func (c *SyncedCluster) generateKeyCmd(
+	ctx context.Context, l *logger.Logger, node Node, startOpts StartOpts,
+) (string, error) {
 	if !startOpts.EncryptedStores {
-		return ""
+		return "", nil
 	}
 
 	var storeDirs []string
@@ -725,9 +742,14 @@ func (c *SyncedCluster) generateKeyCmd(node Node, startOpts StartOpts) string {
 			storeDir := c.NodeDir(node, i)
 			storeDirs = append(storeDirs, storeDir)
 		}
-	} else {
+	} else if startOpts.ExtraArgs[storeArgIdx] == "--store=" {
+		// The flag and path were provided together. Strip the flag prefix.
 		storeDir := strings.TrimPrefix(startOpts.ExtraArgs[storeArgIdx], "--store=")
 		storeDirs = append(storeDirs, storeDir)
+	} else {
+		// Else, the store flag and path were specified as separate arguments. The
+		// path is the subsequent arg.
+		storeDirs = append(storeDirs, startOpts.ExtraArgs[storeArgIdx+1])
 	}
 
 	// Command to create the store key.
@@ -739,7 +761,13 @@ func (c *SyncedCluster) generateKeyCmd(node Node, startOpts StartOpts) string {
 				openssl rand -out %[1]s/aes-128.key 48;
 			fi;`, storeDir)
 	}
-	return keyCmd.String()
+
+	e := expander{node: node}
+	expanded, err := e.expand(ctx, l, c, keyCmd.String())
+	if err != nil {
+		return "", err
+	}
+	return expanded, nil
 }
 
 func (c *SyncedCluster) useStartSingleNode() bool {
