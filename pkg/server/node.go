@@ -340,9 +340,23 @@ func bootstrapCluster(
 		// Create first range, writing directly to engine. Note this does
 		// not create the range, just its data. Only do this if this is the
 		// first store.
+		var initialValues []roachpb.KeyValue
+		var tableSplits []roachpb.RKey
 		if i == 0 {
-			schema := GetBootstrapSchema(&initCfg.defaultZoneConfig, &initCfg.defaultSystemZoneConfig)
-			initialValues, tableSplits := schema.GetInitialValues()
+			if initCfg.testingKnobs.Server != nil && initCfg.testingKnobs.Server.(*TestingKnobs).BootstrapVersionKeyOverride != 0 {
+				// Bootstrap using the given override key.
+				bootstrapVersionKeyOverride := initCfg.testingKnobs.Server.(*TestingKnobs).BootstrapVersionKeyOverride
+				initialValuesFn := bootstrap.GetInitialValuesFn(bootstrapVersionKeyOverride, true /* forSystemTenant */)
+				initialValues, tableSplits, err = initialValuesFn(keys.SystemSQLCodec, &initCfg.defaultZoneConfig, &initCfg.defaultSystemZoneConfig)
+				if err != nil {
+					return nil, err
+				}
+			} else {
+				// No override was passed so bootstrap normally.
+				schema := GetBootstrapSchema(&initCfg.defaultZoneConfig, &initCfg.defaultSystemZoneConfig)
+				initialValues, tableSplits = schema.GetInitialValues()
+			}
+
 			splits := append(config.StaticSplits(), tableSplits...)
 			sort.Slice(splits, func(i, j int) bool {
 				return splits[i].Less(splits[j])

@@ -140,7 +140,7 @@ func (p *planner) createTenantInternal(
 
 	processNonActiveVersionInitialValues := func(versionKey clusterversion.Key) error {
 		tenantVersion.Version = clusterversion.ByKey(versionKey)
-		kvs, splits, err = bootstrap.GetInitialValuesFn(versionKey)(
+		kvs, splits, err = bootstrap.GetInitialValuesFn(versionKey, false /* forSystemTenant */)(
 			codec,
 			initialTenantZoneConfig, /* defaultZoneConfig */
 			initialTenantZoneConfig, /* defaultSystemZoneConfig */
