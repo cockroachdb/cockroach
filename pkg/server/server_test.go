@@ -1233,3 +1233,50 @@ func TestInternalSQL(t *testing.T) {
 	var count int
 	require.NoError(t, r.Scan(&count))
 }
+
+// Test memory used by connections using the internal SQL loopback listener.
+func BenchmarkConnectionMem(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+	ctx := context.Background()
+	s, _, _ := serverutils.StartServer(b, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	conf, err := pgx.ParseConfig("")
+	require.NoError(b, err)
+	conf.User = "root"
+	// Configure pgx to connect on the loopback listener.
+	conf.DialFunc = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		return s.(*TestServer).Server.loopbackPgL.Connect(ctx)
+	}
+	conn, err := pgx.ConnectConfig(ctx, conf)
+	conn.Exec(ctx, "SET CLUSTER SETTING sql.query_cache.enabled = false")
+	conn.Exec(ctx, "CREATE TABLE t1(a CHAR(10000000))")
+	conn.Exec(ctx, "INSERT INTO t1 VALUES (repeat('a', 10000000))")
+	conn.Exec(ctx, "INSERT INTO t1 VALUES ('b')")
+	conn.Exec(ctx, "INSERT INTO t1 VALUES ('c')")
+	conn.Exec(ctx, "SET distsql_workmem='10GiB'")
+	conn.Exec(ctx, "SET CLUSTER SETTING sql.query_cache.enabled = true")
+
+	const numConnections = 100
+	connections := make([]*pgx.Conn, 0, numConnections)
+	b.Run(fmt.Sprintf("BenchmarkConnectionMem"), func(b *testing.B) {
+		for i := 0; i < numConnections; i++ {
+			conn, err := pgx.ConnectConfig(ctx, conf)
+			require.NoError(b, err)
+			connections = append(connections, conn)
+			//conn.Exec(ctx, "SET distsql_workmem='1000KiB'")
+		}
+		for i := 0; i < numConnections; i++ {
+			go func(i int) {
+				rows, err := connections[i].Query(ctx, "SELECT a.a FROM t1 a, t1 b, t1 c, t1 d ")
+				var a string
+				require.NoError(b, err)
+				for rows.Next() {
+					err = rows.Scan(&a)
+					require.NoError(b, err)
+				}
+			}(i)
+		}
+	})
+}
