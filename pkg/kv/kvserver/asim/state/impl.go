@@ -335,6 +335,9 @@ func (s *state) AddStore(nodeID NodeID) (Store, bool) {
 	// Add a range load splitter for this store.
 	s.loadsplits[storeID] = NewSplitDecider(s.settings)
 
+	// Add a usage info struct.
+	_ = s.usageInfo.storeRef(storeID)
+
 	return store, true
 }
 
@@ -595,7 +598,6 @@ func (s *state) TransferLease(rangeID RangeID, storeID StoreID) bool {
 	s.loadsplits[oldStore.StoreID()].ResetRange(rangeID)
 	s.loadsplits[storeID].ResetRange(rangeID)
 	s.load[rangeID].ResetLoad()
-	s.usageInfo.LeaseTransfers++
 
 	// Apply the lease transfer to state.
 	s.replaceLeaseHolder(rangeID, storeID, oldStore.StoreID())

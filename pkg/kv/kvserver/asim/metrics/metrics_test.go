@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package asim_test
+package metrics_test
 
 import (
 	"bytes"
@@ -19,39 +19,45 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
 	"github.com/stretchr/testify/require"
 )
 
+const testingMetricsInterval = 10 * time.Second
+
 func Example_noWriters() {
+	ctx := context.Background()
 	start := state.TestingStartTime()
 	s := state.LoadConfig(state.ComplexConfig)
-	m := asim.NewMetricsTracker()
+	m := metrics.NewTracker(testingMetricsInterval)
 
-	_ = m.Tick(start, s)
+	m.Tick(ctx, start, s)
 	// Output:
 }
 
 func Example_tickEmptyState() {
+	ctx := context.Background()
 	start := state.TestingStartTime()
 	s := state.LoadConfig(state.ComplexConfig)
-	m := asim.NewMetricsTracker(os.Stdout)
+	m := metrics.NewTracker(testingMetricsInterval, metrics.NewClusterMetricsTracker(os.Stdout))
 
-	_ = m.Tick(start, s)
+	m.Tick(ctx, start, s)
 	// Output:
 	//tick,c_ranges,c_write,c_write_b,c_read,c_read_b,s_ranges,s_write,s_write_b,s_read,s_read_b,c_lease_moves,c_replica_moves,c_replica_b_moves
 	//2022-03-21 11:00:00 +0000 UTC,1,0,0,0,0,0,0,0,0,0,0,0
 }
 
 func TestTickEmptyState(t *testing.T) {
+	ctx := context.Background()
 	start := state.TestingStartTime()
 	s := state.LoadConfig(state.ComplexConfig)
 
 	var buf bytes.Buffer
-	m := asim.NewMetricsTracker(&buf)
+	m := metrics.NewTracker(testingMetricsInterval, metrics.NewClusterMetricsTracker(&buf))
 
-	_ = m.Tick(start, s)
+	m.Tick(ctx, start, s)
 
 	expected :=
 		"tick,c_ranges,c_write,c_write_b,c_read,c_read_b,s_ranges,s_write,s_write_b,s_read,s_read_b,c_lease_moves,c_replica_moves,c_replica_b_moves\n" +
@@ -60,11 +66,12 @@ func TestTickEmptyState(t *testing.T) {
 }
 
 func Example_multipleWriters() {
+	ctx := context.Background()
 	start := state.TestingStartTime()
 	s := state.LoadConfig(state.ComplexConfig)
-	m := asim.NewMetricsTracker(os.Stdout, os.Stdout)
+	m := metrics.NewTracker(testingMetricsInterval, metrics.NewClusterMetricsTracker(os.Stdout, os.Stdout))
 
-	_ = m.Tick(start, s)
+	m.Tick(ctx, start, s)
 	// Output:
 	//tick,c_ranges,c_write,c_write_b,c_read,c_read_b,s_ranges,s_write,s_write_b,s_read,s_read_b,c_lease_moves,c_replica_moves,c_replica_b_moves
 	//tick,c_ranges,c_write,c_write_b,c_read,c_read_b,s_ranges,s_write,s_write_b,s_read,s_read_b,c_lease_moves,c_replica_moves,c_replica_b_moves
@@ -73,48 +80,56 @@ func Example_multipleWriters() {
 }
 
 func Example_leaseTransfer() {
+	ctx := context.Background()
 	start := state.TestingStartTime()
 	s := state.LoadConfig(state.ComplexConfig)
-	m := asim.NewMetricsTracker(os.Stdout)
-	s.TransferLease(1, 2)
+	m := metrics.NewTracker(testingMetricsInterval, metrics.NewClusterMetricsTracker(os.Stdout))
 
-	_ = m.Tick(start, s)
+	changer := state.NewReplicaChanger()
+	changer.Push(state.TestingStartTime(), &state.LeaseTransferChange{
+		RangeID:        1,
+		TransferTarget: 2,
+		Author:         1,
+		Wait:           0,
+	})
+	changer.Tick(state.TestingStartTime(), s)
+	m.Tick(ctx, start, s)
 	// Output:
 	//tick,c_ranges,c_write,c_write_b,c_read,c_read_b,s_ranges,s_write,s_write_b,s_read,s_read_b,c_lease_moves,c_replica_moves,c_replica_b_moves
 	//2022-03-21 11:00:00 +0000 UTC,1,0,0,0,0,0,0,0,0,1,0,0
 }
 
 func Example_rebalance() {
+	ctx := context.Background()
 	start := state.TestingStartTime()
 	s := state.LoadConfig(state.ComplexConfig)
-	m := asim.NewMetricsTracker(os.Stdout)
+	m := metrics.NewTracker(testingMetricsInterval, metrics.NewClusterMetricsTracker(os.Stdout))
 
 	// Apply load, to get a replica size greater than 0.
 	le := workload.LoadBatch{workload.LoadEvent{Writes: 1, WriteSize: 7, Reads: 2, ReadSize: 9, Key: 5}}
 	s.ApplyLoad(le)
 
 	// Do the rebalance.
-	c := &state.ReplicaChange{RangeID: 1, Add: 2, Remove: 1}
+	c := &state.ReplicaChange{RangeID: 1, Add: 2, Remove: 1, Author: 1}
 	c.Apply(s)
 
-	_ = m.Tick(start, s)
+	m.Tick(ctx, start, s)
 	// Output:
 	//tick,c_ranges,c_write,c_write_b,c_read,c_read_b,s_ranges,s_write,s_write_b,s_read,s_read_b,c_lease_moves,c_replica_moves,c_replica_b_moves
-	//2022-03-21 11:00:00 +0000 UTC,1,3,21,2,9,1,7,2,9,1,1,7
+	//2022-03-21 11:00:00 +0000 UTC,1,3,21,2,9,1,7,2,9,0,1,7
 }
 
 func Example_workload() {
 	ctx := context.Background()
 	settings := config.DefaultSimulationSettings()
 	duration := 200 * time.Second
-	interval := 10 * time.Second
 	rwg := make([]workload.Generator, 1)
 	rwg[0] = workload.TestCreateWorkloadGenerator(settings.Seed, settings.StartTime, 10, 10000)
-	m := asim.NewMetricsTracker(os.Stdout)
+	m := metrics.NewTracker(testingMetricsInterval, metrics.NewClusterMetricsTracker(os.Stdout))
 
 	s := state.LoadConfig(state.ComplexConfig)
 
-	sim := asim.NewSimulator(duration, interval, interval, rwg, s, settings, m)
+	sim := asim.NewSimulator(duration, rwg, s, settings, m)
 	sim.RunSim(ctx)
 	// WIP: non deterministic
 	// Output:
