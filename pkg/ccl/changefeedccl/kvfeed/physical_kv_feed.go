@@ -30,6 +30,7 @@ type physicalConfig struct {
 	Timestamp hlc.Timestamp
 	WithDiff  bool
 	Knobs     TestingKnobs
+	Boundary  jobspb.ResolvedSpan_BoundaryType
 }
 
 type rangefeedFactory func(
