@@ -70,11 +70,11 @@ func (rl *ReplicaLoadCounter) ApplyLoad(le workload.LoadEvent) {
 	rl.WriteKeys += le.Writes
 
 	rl.loadStats.RecordBatchRequests(LoadEventQPS(le), 0)
-	rl.loadStats.RecordRequests(LoadEventQPS(le))
-	rl.loadStats.RecordReadKeys(float64(le.Reads))
-	rl.loadStats.RecordReadBytes(float64(le.ReadSize))
-	rl.loadStats.RecordWriteKeys(float64(le.Writes))
-	rl.loadStats.RecordWriteBytes(float64(le.WriteSize))
+	// TODO(kvoli): Recording the load on every load counter is horribly
+	// inefficient at the moment. It multiplies the time taken per test almost
+	// linearly by the number of load stats counters we bump. The other load
+	// stats are not used currently, re-enable them when perf is fixed and they
+	// are used.
 }
 
 // Load translates the recorded key accesses and size into range usage
@@ -147,20 +147,22 @@ func Capacity(state State, storeID StoreID) roachpb.StoreCapacity {
 
 // StoreUsageInfo contains the load on a single store.
 type StoreUsageInfo struct {
-	WriteKeys  int64
-	WriteBytes int64
-	ReadKeys   int64
-	ReadBytes  int64
+	WriteKeys          int64
+	WriteBytes         int64
+	ReadKeys           int64
+	ReadBytes          int64
+	LeaseTransfers     int64
+	Rebalances         int64
+	RebalanceSentBytes int64
+	RebalanceRcvdBytes int64
+	RangeSplits        int64
 }
 
 // ClusterUsageInfo contains the load and state of the cluster. Using this we
 // can answer questions such as how balanced the load is, and how much data got
 // rebalanced.
 type ClusterUsageInfo struct {
-	LeaseTransfers  int64
-	Rebalances      int64
-	BytesRebalanced int64
-	StoreUsage      map[StoreID]*StoreUsageInfo
+	StoreUsage map[StoreID]*StoreUsageInfo
 }
 
 func newClusterUsageInfo() *ClusterUsageInfo {
@@ -169,15 +171,20 @@ func newClusterUsageInfo() *ClusterUsageInfo {
 	}
 }
 
+func (u *ClusterUsageInfo) storeRef(storeID StoreID) *StoreUsageInfo {
+	var s *StoreUsageInfo
+	var ok bool
+	if s, ok = u.StoreUsage[storeID]; !ok {
+		s = &StoreUsageInfo{}
+		u.StoreUsage[storeID] = s
+	}
+	return s
+}
+
 // ApplyLoad applies the load event on the right stores.
 func (u *ClusterUsageInfo) ApplyLoad(r *rng, le workload.LoadEvent) {
 	for _, rep := range r.replicas {
-		s, ok := u.StoreUsage[rep.storeID]
-		if !ok {
-			// First time we see this store ID, add it.
-			s = &StoreUsageInfo{}
-			u.StoreUsage[rep.storeID] = s
-		}
+		s := u.storeRef(rep.storeID)
 		// Writes are added to all replicas, reads are added to the leaseholder
 		// only.
 		// Note that the accounting here is different from ReplicaLoadCounter above:

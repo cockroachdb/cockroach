@@ -2,39 +2,33 @@ load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
-    name = "queue",
+    name = "metrics",
     srcs = [
-        "pacer.go",
-        "queue.go",
-        "replicate_queue.go",
-        "split_queue.go",
+        "cluster_tracker.go",
+        "tracker.go",
     ],
-    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/queue",
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/kv/kvserver/allocator/allocatorimpl",
-        "//pkg/kv/kvserver/allocator/storepool",
         "//pkg/kv/kvserver/asim/state",
-        "//pkg/roachpb",
+        "//pkg/util/encoding/csv",
         "//pkg/util/log",
     ],
 )
 
 go_test(
-    name = "queue_test",
+    name = "metrics_test",
     srcs = [
-        "pacer_test.go",
-        "replicate_queue_test.go",
-        "split_queue_test.go",
+        "metrics_test.go",
+        "tracker_test.go",
     ],
     args = ["-test.timeout=295s"],
-    embed = [":queue"],
     deps = [
+        ":metrics",
+        "//pkg/kv/kvserver/asim",
         "//pkg/kv/kvserver/asim/config",
-        "//pkg/kv/kvserver/asim/gossip",
         "//pkg/kv/kvserver/asim/state",
         "//pkg/kv/kvserver/asim/workload",
-        "//pkg/roachpb",
         "@com_github_stretchr_testify//require",
     ],
 )
