@@ -4,9 +4,9 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "bootstrap",
     srcs = [
+        "initial_values.go",
         "kv_writer.go",
         "metadata.go",
-        "previous_releases.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap",
     visibility = ["//visibility:public"],
@@ -41,6 +41,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":bootstrap"],
     deps = [
+        "//pkg/clusterversion",
         "//pkg/config/zonepb",
         "//pkg/keys",
         "//pkg/roachpb",

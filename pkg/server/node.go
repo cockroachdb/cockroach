@@ -340,8 +340,20 @@ func bootstrapCluster(
 		// not create the range, just its data. Only do this if this is the
 		// first store.
 		if i == 0 {
-			schema := GetBootstrapSchema(&initCfg.defaultZoneConfig, &initCfg.defaultSystemZoneConfig)
-			initialValues, tableSplits := schema.GetInitialValues()
+			initialValuesOpts := bootstrap.InitialValuesOpts{
+				DefaultZoneConfig:       &initCfg.defaultZoneConfig,
+				DefaultSystemZoneConfig: &initCfg.defaultSystemZoneConfig,
+				Codec:                   keys.SystemSQLCodec,
+			}
+			if initCfg.testingKnobs.Server != nil && initCfg.testingKnobs.Server.(*TestingKnobs).BootstrapVersionKeyOverride != 0 {
+				// Bootstrap using the given override key.
+				initialValuesOpts.OverrideKey = initCfg.testingKnobs.Server.(*TestingKnobs).BootstrapVersionKeyOverride
+			}
+			initialValues, tableSplits, err := initialValuesOpts.GetInitialValuesCheckForOverrides()
+			if err != nil {
+				return nil, err
+			}
+
 			splits := append(config.StaticSplits(), tableSplits...)
 			sort.Slice(splits, func(i, j int) bool {
 				return splits[i].Less(splits[j])

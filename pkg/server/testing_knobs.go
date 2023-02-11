@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/blobs"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -110,6 +111,10 @@ type TestingKnobs struct {
 	// StubTimeNow allows tests to override the timeutil.Now() function used
 	// in the jobs endpoint to calculate earliest_retained_time.
 	StubTimeNow func() time.Time
+
+	// We use clusterversion.Key rather than a roachpb.Version because it will be used
+	// to get initial values to use during bootstrap.
+	BootstrapVersionKeyOverride clusterversion.Key
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

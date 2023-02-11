@@ -79,6 +79,7 @@ func TestServerStartupGuardrails(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					BinaryVersionOverride:          test.storageBinaryVersion,
+					BootstrapVersionKeyOverride:    clusterversion.V22_2,
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
 				},
 				SQLEvalContext: &eval.TestingKnobs{
