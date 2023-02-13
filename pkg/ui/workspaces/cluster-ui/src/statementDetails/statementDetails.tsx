@@ -799,7 +799,7 @@ export class StatementDetails extends React.Component<
         onDownloadDiagnosticBundleClick={this.props.onDiagnosticBundleDownload}
         onDiagnosticCancelRequestClick={this.props.onDiagnosticCancelRequest}
         showDiagnosticsViewLink={
-          this.props.uiConfig.showStatementDiagnosticsLink
+          this.props.uiConfig?.showStatementDiagnosticsLink
         }
         onSortingChange={this.props.onSortingChange}
       />
