@@ -58,7 +58,7 @@ type ReplicaLoadCounter struct {
 func NewReplicaLoadCounter(clock *ManualSimClock) *ReplicaLoadCounter {
 	return &ReplicaLoadCounter{
 		clock:     clock,
-		loadStats: load.NewReplicaLoad(hlc.NewClock(clock, 0), nil),
+		loadStats: load.NewReplicaLoad(hlc.NewClockForTesting(clock), nil),
 	}
 }
 
@@ -103,7 +103,7 @@ func (rl *ReplicaLoadCounter) Split() ReplicaLoad {
 	rl.ReadKeys /= 2
 	rl.ReadBytes /= 2
 
-	otherLoadStats := load.NewReplicaLoad(hlc.NewClock(rl.clock, 0), nil)
+	otherLoadStats := load.NewReplicaLoad(hlc.NewClockForTesting(rl.clock), nil)
 	rl.loadStats.Split(otherLoadStats)
 
 	return &ReplicaLoadCounter{

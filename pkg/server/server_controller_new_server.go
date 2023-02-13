@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 )
 
@@ -141,13 +140,12 @@ func (s *Server) startTenantServerInternal(
 
 	// New context, since we're using a separate tracer.
 	startCtx := ambientCtx.AnnotateCtx(context.Background())
-	startCtx = logtags.AddTags(startCtx, logtags.FromContext(ctx))
 
 	// Inform the logs we're starting a new server.
 	log.Infof(startCtx, "starting tenant server")
 
 	// Now start the tenant proper.
-	tenantServer, err := NewTenantServer(startCtx, stopper, baseCfg, sqlCfg, s.recorder, tenantNameContainer)
+	tenantServer, err := NewSharedProcessTenantServer(startCtx, stopper, baseCfg, sqlCfg, s.recorder, tenantNameContainer)
 	if err != nil {
 		return nil, err
 	}
@@ -169,8 +167,6 @@ func (s *Server) makeSharedProcessTenantConfig(
 	ctx context.Context, tenantID roachpb.TenantID, index int, stopper *stop.Stopper,
 ) (BaseConfig, SQLConfig, error) {
 	// Create a configuration for the new tenant.
-	// TODO(knz): Maybe enforce the SQL Instance ID to be equal to the KV node ID?
-	// See: https://github.com/cockroachdb/cockroach/issues/84602
 	parentCfg := s.cfg
 	localServerInfo := LocalKVServerInfo{
 		InternalServer:     s.node,
@@ -180,7 +176,8 @@ func (s *Server) makeSharedProcessTenantConfig(
 	if err != nil {
 		return BaseConfig{}, SQLConfig{}, err
 	}
-
+	// Inherit the node ID from the server.
+	baseCfg.IDContainer.Set(ctx, s.NodeID())
 	return baseCfg, sqlCfg, nil
 }
 

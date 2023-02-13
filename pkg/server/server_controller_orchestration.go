@@ -211,6 +211,7 @@ func (c *serverController) startControlledServer(
 	tenantCtx := logtags.AddTag(context.Background(), "tenant-orchestration", nil)
 
 	tenantStopper := stop.NewStopper()
+
 	// Ensure that if the surrounding server requests shutdown, we
 	// propagate it to the new server.
 	if err := c.stopper.RunAsyncTask(ctx, "propagate-close", func(ctx context.Context) {
@@ -233,6 +234,10 @@ func (c *serverController) startControlledServer(
 			tenantStopper.Stop(tenantCtx)
 		}
 	}); err != nil {
+		// The goroutine above is responsible for stopping the
+		// tenantStopper. If it fails to stop, we stop it here
+		// to avoid leaking the stopper.
+		tenantStopper.Stop(ctx)
 		return nil, err
 	}
 

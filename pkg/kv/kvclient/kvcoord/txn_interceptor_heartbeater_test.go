@@ -38,7 +38,7 @@ func makeMockTxnHeartbeater(
 	th.init(
 		log.MakeTestingAmbientCtxWithNewTracer(),
 		stop.NewStopper(),
-		hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 123)), time.Nanosecond),
+		hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(0, 123))),
 		new(TxnMetrics),
 		1*time.Millisecond,
 		mockGatekeeper,
@@ -283,7 +283,7 @@ func TestTxnHeartbeaterLoopStartsBeforeExpiry(t *testing.T) {
 			txn := makeTxnProto()
 
 			manualTime := timeutil.NewManualTime(timeutil.Unix(0, 123))
-			clock := hlc.NewClock(manualTime, time.Nanosecond)
+			clock := hlc.NewClockForTesting(manualTime)
 			txn.MinTimestamp, txn.WriteTimestamp = clock.Now(), clock.Now()
 
 			// We attempt to simulate a transaction that heartbeats every 1s, however

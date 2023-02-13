@@ -45,12 +45,12 @@ func TestRaftTransportStartNewQueue(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	rpcC := rpc.NewContext(ctx,
 		rpc.ContextOptions{
-			TenantID:  roachpb.SystemTenantID,
-			Config:    &base.Config{Insecure: true},
-			Clock:     &timeutil.DefaultTimeSource{},
-			MaxOffset: 500 * time.Millisecond,
-			Stopper:   stopper,
-			Settings:  st,
+			TenantID:        roachpb.SystemTenantID,
+			Config:          &base.Config{Insecure: true},
+			Clock:           &timeutil.DefaultTimeSource{},
+			ToleratedOffset: 500 * time.Millisecond,
+			Stopper:         stopper,
+			Settings:        st,
 		})
 	rpcC.StorageClusterID.Set(context.Background(), uuid.MakeV4())
 

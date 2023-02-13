@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"io"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -66,7 +65,7 @@ func TestDistSenderRangeFeedRetryOnTransportErrors(t *testing.T) {
 		} {
 			t.Run(fmt.Sprintf("mux=%t/%s", useMuxRangeFeed, spec.errorCode),
 				func(t *testing.T) {
-					clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+					clock := hlc.NewClockForTesting(nil)
 					ctx, cancel := context.WithCancel(context.Background())
 					defer cancel()
 					stopper := stop.NewStopper()

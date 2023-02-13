@@ -561,7 +561,7 @@ func TestReplicaClosedTimestamp(t *testing.T) {
 			r.lai = test.sidetransportLAI
 			var tc testContext
 			tc.manualClock = timeutil.NewManualTime(timeutil.Unix(0, 123)) // required by StartWithStoreConfig
-			cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, time.Nanosecond) /* maxOffset */)
+			cfg := TestStoreConfig(hlc.NewClockForTesting(tc.manualClock))
 			cfg.TestingKnobs.DontCloseTimestamps = true
 			cfg.ClosedTimestampReceiver = &r
 			tc.StartWithStoreConfig(ctx, t, stopper, cfg)
@@ -654,7 +654,7 @@ func TestQueryResolvedTimestamp(t *testing.T) {
 			// Create a single range.
 			var tc testContext
 			tc.manualClock = timeutil.NewManualTime(timeutil.Unix(0, 1)) // required by StartWithStoreConfig
-			cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, 100*time.Nanosecond) /* maxOffset */)
+			cfg := TestStoreConfig(hlc.NewClockForTesting(tc.manualClock))
 			cfg.TestingKnobs.DontCloseTimestamps = true
 			// Make sure commands are visible by the time they are applied. Otherwise
 			// this test can be flaky because we might have a lease applied index
@@ -704,7 +704,7 @@ func TestQueryResolvedTimestampResolvesAbandonedIntents(t *testing.T) {
 	// Create a single range.
 	var tc testContext
 	tc.manualClock = timeutil.NewManualTime(timeutil.Unix(0, 1)) // required by StartWithStoreConfig
-	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, 100*time.Nanosecond) /* maxOffset */)
+	cfg := TestStoreConfig(hlc.NewClockForTesting(tc.manualClock))
 	cfg.TestingKnobs.DontCloseTimestamps = true
 	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
@@ -967,7 +967,7 @@ func TestServerSideBoundedStalenessNegotiation(t *testing.T) {
 				// Create a single range.
 				var tc testContext
 				tc.manualClock = timeutil.NewManualTime(timeutil.Unix(0, 1)) // required by StartWithStoreConfig
-				cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, 100*time.Nanosecond) /* maxOffset */)
+				cfg := TestStoreConfig(hlc.NewClockForTesting(tc.manualClock))
 				cfg.TestingKnobs.DontCloseTimestamps = true
 				cfg.TestingKnobs.DisableCanAckBeforeApplication = true
 				tc.StartWithStoreConfig(ctx, t, stopper, cfg)
@@ -1146,7 +1146,7 @@ func TestServerSideBoundedStalenessNegotiationWithResumeSpan(t *testing.T) {
 			// Create a single range.
 			var tc testContext
 			tc.manualClock = timeutil.NewManualTime(timeutil.Unix(0, 1)) // required by StartWithStoreConfig
-			cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, 100*time.Nanosecond) /* maxOffset */)
+			cfg := TestStoreConfig(hlc.NewClockForTesting(tc.manualClock))
 			cfg.TestingKnobs.DontCloseTimestamps = true
 			cfg.TestingKnobs.DisableCanAckBeforeApplication = true
 			tc.StartWithStoreConfig(ctx, t, stopper, cfg)

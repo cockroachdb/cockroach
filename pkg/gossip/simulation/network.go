@@ -72,12 +72,12 @@ func NewNetwork(
 	}
 	n.RPCContext = rpc.NewContext(ctx,
 		rpc.ContextOptions{
-			TenantID:  roachpb.SystemTenantID,
-			Config:    &base.Config{Insecure: true},
-			Clock:     &timeutil.DefaultTimeSource{},
-			MaxOffset: 0,
-			Stopper:   n.Stopper,
-			Settings:  cluster.MakeTestingClusterSettings(),
+			TenantID:        roachpb.SystemTenantID,
+			Config:          &base.Config{Insecure: true},
+			Clock:           &timeutil.DefaultTimeSource{},
+			ToleratedOffset: 0,
+			Stopper:         n.Stopper,
+			Settings:        cluster.MakeTestingClusterSettings(),
 
 			Knobs: rpc.ContextTestingKnobs{
 				NoLoopbackDialer: true,

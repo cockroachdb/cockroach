@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -51,7 +50,7 @@ func TestFlowTokenAdjustment(t *testing.T) {
 				controller = New(
 					metric.NewRegistry(),
 					cluster.MakeTestingClusterSettings(),
-					hlc.NewClockWithSystemTimeSource(time.Nanosecond),
+					hlc.NewClockForTesting(nil),
 				)
 				adjustments = nil
 				return ""

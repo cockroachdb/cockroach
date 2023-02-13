@@ -2302,7 +2302,7 @@ func (ot *OptTester) ExecBuild(f exec.Factory, mem *memo.Memo, expr opt.Expr) (e
 	if opt.IsDDLOp(expr) {
 		ot.evalCtx.Codec = keys.MakeSQLCodec(roachpb.MustMakeTenantID(5))
 		factory := kv.MockTxnSenderFactory{}
-		clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+		clock := hlc.NewClockForTesting(nil)
 		stopper := stop.NewStopper()
 		db := kv.NewDB(log.MakeTestingAmbientCtxWithNewTracer(), factory, clock, stopper)
 		ot.evalCtx.Txn = kv.NewTxn(context.Background(), db, 1)

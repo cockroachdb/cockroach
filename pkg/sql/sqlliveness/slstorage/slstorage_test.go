@@ -77,7 +77,7 @@ func testStorage(t *testing.T) {
 		tableID := newSqllivenessTable(t, tDB, dbName)
 
 		timeSource := timeutil.NewManualTime(t0)
-		clock := hlc.NewClock(timeSource, base.DefaultMaxClockOffset)
+		clock := hlc.NewClockForTesting(timeSource)
 		settings := cluster.MakeTestingClusterSettings()
 		stopper := stop.NewStopper(stop.WithTracer(s.TracerI().(*tracing.Tracer)))
 		var ambientCtx log.AmbientContext
@@ -340,7 +340,7 @@ func testConcurrentAccessesAndEvictions(t *testing.T) {
 	tableID := newSqllivenessTable(t, tDB, dbName)
 
 	timeSource := timeutil.NewManualTime(t0)
-	clock := hlc.NewClock(timeSource, base.DefaultMaxClockOffset)
+	clock := hlc.NewClockForTesting(timeSource)
 	settings := cluster.MakeTestingClusterSettings()
 	stopper := stop.NewStopper(stop.WithTracer(s.TracerI().(*tracing.Tracer)))
 	defer stopper.Stop(ctx)
@@ -508,7 +508,7 @@ func testConcurrentAccessSynchronization(t *testing.T) {
 	tableID := newSqllivenessTable(t, tDB, dbName)
 
 	timeSource := timeutil.NewManualTime(t0)
-	clock := hlc.NewClock(timeSource, base.DefaultMaxClockOffset)
+	clock := hlc.NewClockForTesting(timeSource)
 	settings := cluster.MakeTestingClusterSettings()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)

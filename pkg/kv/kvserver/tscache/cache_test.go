@@ -18,7 +18,6 @@ import (
 	"reflect"
 	"runtime"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -42,7 +41,7 @@ func forEachCacheImpl(
 	for _, constr := range cacheImplConstrs {
 		const baseTS = 100
 		manual := timeutil.NewManualTime(timeutil.Unix(0, baseTS))
-		clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
+		clock := hlc.NewClockForTesting(manual)
 
 		tc := constr(clock)
 		tcName := reflect.TypeOf(tc).Elem().Name()
@@ -457,7 +456,7 @@ func TestTimestampCacheImplsIdentical(t *testing.T) {
 	// simulating real conditions while the latter is good for testing timestamp
 	// collisions.
 	testutils.RunTrueAndFalse(t, "useClock", func(t *testing.T, useClock bool) {
-		clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+		clock := hlc.NewClockForTesting(nil)
 		caches := make([]Cache, len(cacheImplConstrs))
 		start := clock.Now()
 		for i, constr := range cacheImplConstrs {
@@ -651,7 +650,7 @@ func identicalAndRatcheted(
 }
 
 func BenchmarkTimestampCacheInsertion(b *testing.B) {
-	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 123)), time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(0, 123)))
 	tc := New(clock)
 
 	for i := 0; i < b.N; i++ {

@@ -2299,8 +2299,7 @@ func fetchDescVersionModificationTime(
 		MVCCFilter:    roachpb.MVCCFilter_All,
 		StartTime:     hlc.Timestamp{},
 	}
-	clock := hlc.NewClockWithSystemTimeSource(time.Minute /* maxOffset */)
-	hh := roachpb.Header{Timestamp: clock.Now()}
+	hh := roachpb.Header{Timestamp: hlc.NewClockForTesting(nil).Now()}
 	res, pErr := kv.SendWrappedWith(context.Background(),
 		s.SystemServer.DB().NonTransactionalSender(), hh, req)
 	if pErr != nil {

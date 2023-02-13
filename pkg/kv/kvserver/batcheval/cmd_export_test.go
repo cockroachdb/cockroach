@@ -19,7 +19,6 @@ import (
 	"sort"
 	"strconv"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -120,7 +119,7 @@ func TestExportCmd(t *testing.T) {
 	exportAndSlurp := func(t *testing.T, start hlc.Timestamp,
 		maxResponseSSTBytes int64) ExportAndSlurpResult {
 		var ret ExportAndSlurpResult
-		ret.end = hlc.NewClockWithSystemTimeSource(time.Nanosecond).Now( /* maxOffset */ )
+		ret.end = hlc.NewClockForTesting(nil).Now()
 		ret.mvccLatestFiles, ret.mvccLatestKVs, ret.mvccLatestResponseHeader = exportAndSlurpOne(t,
 			start, roachpb.MVCCFilter_Latest, maxResponseSSTBytes)
 		ret.mvccAllFiles, ret.mvccAllKVs, ret.mvccAllResponseHeader = exportAndSlurpOne(t, start,

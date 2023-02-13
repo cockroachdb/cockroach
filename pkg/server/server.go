@@ -210,7 +210,9 @@ type Server struct {
 // The caller is responsible for listening on the server's ShutdownRequested()
 // channel and calling stopper.Stop().
 func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
-	if err := cfg.ValidateAddrs(context.Background()); err != nil {
+	ctx := cfg.AmbientCtx.AnnotateCtx(context.Background())
+
+	if err := cfg.ValidateAddrs(ctx); err != nil {
 		return nil, err
 	}
 
@@ -220,19 +222,21 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		panic(errors.New("no tracer set in AmbientCtx"))
 	}
 
+	maxOffset := time.Duration(cfg.MaxOffset)
+	toleratedOffset := cfg.ToleratedOffset()
 	var clock *hlc.Clock
 	if cfg.ClockDevicePath != "" {
-		ptpClock, err := ptp.MakeClock(context.Background(), cfg.ClockDevicePath)
+		ptpClock, err := ptp.MakeClock(ctx, cfg.ClockDevicePath)
 		if err != nil {
 			return nil, errors.Wrap(err, "instantiating clock source")
 		}
-		clock = hlc.NewClock(ptpClock, time.Duration(cfg.MaxOffset))
+		clock = hlc.NewClock(ptpClock, maxOffset, toleratedOffset)
 	} else if cfg.TestingKnobs.Server != nil &&
 		cfg.TestingKnobs.Server.(*TestingKnobs).WallClock != nil {
 		clock = hlc.NewClock(cfg.TestingKnobs.Server.(*TestingKnobs).WallClock,
-			time.Duration(cfg.MaxOffset))
+			maxOffset, toleratedOffset)
 	} else {
-		clock = hlc.NewClockWithSystemTimeSource(time.Duration(cfg.MaxOffset))
+		clock = hlc.NewClockWithSystemTimeSource(maxOffset, toleratedOffset)
 	}
 	registry := metric.NewRegistry()
 	ruleRegistry := metric.NewRuleRegistry()
@@ -254,8 +258,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// bootstrapped; otherwise a new one is allocated in Node.
 	nodeIDContainer := cfg.IDContainer
 	idContainer := base.NewSQLIDContainerForNode(nodeIDContainer)
-
-	ctx := cfg.AmbientCtx.AnnotateCtx(context.Background())
 
 	admissionOptions := admission.DefaultOptions
 	if opts, ok := cfg.TestingKnobs.AdmissionControl.(*admission.Options); ok {
@@ -301,7 +303,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		StorageClusterID: cfg.ClusterIDContainer,
 		Config:           cfg.Config,
 		Clock:            clock.WallClock(),
-		MaxOffset:        clock.MaxOffset(),
+		ToleratedOffset:  clock.ToleratedOffset(),
 		Stopper:          stopper,
 		Settings:         cfg.Settings,
 		OnOutgoingPing: func(ctx context.Context, req *rpc.PingRequest) error {

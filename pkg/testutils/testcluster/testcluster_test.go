@@ -208,12 +208,12 @@ func TestStopServer(t *testing.T) {
 
 	ctx := context.Background()
 	rpcContext := rpc.NewContext(ctx, rpc.ContextOptions{
-		TenantID:  roachpb.SystemTenantID,
-		Config:    server1.RPCContext().Config,
-		Clock:     server1.Clock().WallClock(),
-		MaxOffset: server1.Clock().MaxOffset(),
-		Stopper:   tc.Stopper(),
-		Settings:  server1.ClusterSettings(),
+		TenantID:        roachpb.SystemTenantID,
+		Config:          server1.RPCContext().Config,
+		Clock:           server1.Clock().WallClock(),
+		ToleratedOffset: server1.Clock().ToleratedOffset(),
+		Stopper:         tc.Stopper(),
+		Settings:        server1.ClusterSettings(),
 
 		ClientOnly: true,
 	})

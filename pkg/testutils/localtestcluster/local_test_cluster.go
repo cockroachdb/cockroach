@@ -114,7 +114,8 @@ func (ltc *LocalTestCluster) Stopper() *stop.Stopper {
 // to shutdown the server after the test completes.
 func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFactory InitFactoryFn) {
 	manualClock := timeutil.NewManualTime(timeutil.Unix(0, 123))
-	clock := hlc.NewClock(manualClock, 50*time.Millisecond /* maxOffset */)
+	clock := hlc.NewClock(manualClock,
+		50*time.Millisecond /* maxOffset */, 50*time.Millisecond /* toleratedOffset */)
 	cfg := kvserver.TestStoreConfig(clock)
 	tr := cfg.AmbientCtx.Tracer
 	ltc.stopper = stop.NewStopper(stop.WithTracer(tr))
@@ -135,13 +136,13 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 
 	ltc.tester = t
 	cfg.RPCContext = rpc.NewContext(ctx, rpc.ContextOptions{
-		TenantID:  roachpb.SystemTenantID,
-		Config:    baseCtx,
-		Clock:     ltc.Clock.WallClock(),
-		MaxOffset: ltc.Clock.MaxOffset(),
-		Stopper:   ltc.stopper,
-		Settings:  cfg.Settings,
-		NodeID:    nc,
+		TenantID:        roachpb.SystemTenantID,
+		Config:          baseCtx,
+		Clock:           ltc.Clock.WallClock(),
+		ToleratedOffset: ltc.Clock.ToleratedOffset(),
+		Stopper:         ltc.stopper,
+		Settings:        cfg.Settings,
+		NodeID:          nc,
 	})
 	cfg.RPCContext.NodeID.Set(ctx, nodeID)
 	clusterID := cfg.RPCContext.StorageClusterID

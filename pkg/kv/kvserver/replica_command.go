@@ -225,17 +225,14 @@ func splitTxnAttempt(
 		return err
 	}
 
-	gcHintsAllowed := store.ClusterSettings().Version.IsActive(ctx, clusterversion.TODODelete_V22_2GCHintInReplicaState)
-
 	// End the transaction manually, instead of letting RunTransaction
 	// loop do it, in order to provide a split trigger.
 	b.AddRawRequest(&roachpb.EndTxnRequest{
 		Commit: true,
 		InternalCommitTrigger: &roachpb.InternalCommitTrigger{
 			SplitTrigger: &roachpb.SplitTrigger{
-				LeftDesc:    *leftDesc,
-				RightDesc:   *rightDesc,
-				WriteGCHint: gcHintsAllowed,
+				LeftDesc:  *leftDesc,
+				RightDesc: *rightDesc,
 			},
 		},
 	})
@@ -761,8 +758,6 @@ func (r *Replica) AdminMerge(
 			return errors.Wrap(err, "waiting for all right-hand replicas to catch up")
 		}
 
-		gcHintsAllowed := r.ClusterSettings().Version.IsActive(ctx, clusterversion.TODODelete_V22_2GCHintInReplicaState)
-
 		// Successful subsume, so we're guaranteed that the right-hand range will
 		// not serve another request unless this transaction aborts. End the
 		// transaction manually in order to provide a merge trigger.
@@ -777,7 +772,6 @@ func (r *Replica) AdminMerge(
 					FreezeStart:          rhsSnapshotRes.FreezeStart,
 					RightClosedTimestamp: rhsSnapshotRes.ClosedTimestamp,
 					RightReadSummary:     rhsSnapshotRes.ReadSummary,
-					WriteGCHint:          gcHintsAllowed,
 				},
 			},
 		})

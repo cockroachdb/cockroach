@@ -15,7 +15,6 @@ import (
 	"context"
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -85,7 +84,7 @@ func TestTxnRecoveryFromStaging(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			stopper := stop.NewStopper()
 			defer stopper.Stop(ctx)
-			cfg := TestStoreConfig(hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 123)), time.Nanosecond) /* maxOffset */)
+			cfg := TestStoreConfig(hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(0, 123))))
 			// Set the RecoverIndeterminateCommitsOnFailedPushes flag to true so
 			// that a push on a STAGING transaction record immediately launches
 			// the transaction recovery process.
@@ -225,7 +224,7 @@ func TestTxnRecoveryFromStagingWithHighPriority(t *testing.T) {
 		stopper := stop.NewStopper()
 		defer stopper.Stop(ctx)
 		manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
-		cfg := TestStoreConfig(hlc.NewClock(manual, time.Nanosecond) /* maxOffset */)
+		cfg := TestStoreConfig(hlc.NewClockForTesting(manual))
 		store := createTestStoreWithConfig(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 
 		// Create a transaction that will get stuck performing a parallel

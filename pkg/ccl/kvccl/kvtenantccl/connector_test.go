@@ -205,7 +205,7 @@ func TestConnectorGossipSubscription(t *testing.T) {
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 	s, err := rpc.NewServer(rpcContext)
 	require.NoError(t, err)
@@ -358,7 +358,7 @@ func TestConnectorRangeLookup(t *testing.T) {
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 	s, err := rpc.NewServer(rpcContext)
 	require.NoError(t, err)
@@ -444,7 +444,7 @@ func TestConnectorRetriesUnreachable(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 	s, err := rpc.NewServer(rpcContext)
 	require.NoError(t, err)
@@ -531,7 +531,7 @@ func TestConnectorRetriesError(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 
 	// Function to create rpc server that would delegate to gossip and range lookup

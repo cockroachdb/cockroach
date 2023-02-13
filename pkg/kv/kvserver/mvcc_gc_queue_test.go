@@ -481,7 +481,7 @@ func TestMVCCGCQueueMakeGCScoreRealistic(t *testing.T) {
 		mc := timeutil.NewManualTime(timeutil.Unix(0, ms.LastUpdateNanos))
 		txn := newTransaction(
 			"txn", roachpb.Key("key"), roachpb.NormalUserPriority,
-			hlc.NewClock(mc, time.Millisecond /* maxOffset */))
+			hlc.NewClockForTesting(mc))
 
 		// Write 1000 distinct 1kb intents at the initial timestamp. This means that
 		// the average intent age is just the time elapsed from now, and this is roughly
@@ -971,7 +971,7 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 	ctx := context.Background()
 
 	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
-	tsc := TestStoreConfig(hlc.NewClock(manual, time.Nanosecond) /* maxOffset */)
+	tsc := TestStoreConfig(hlc.NewClockForTesting(manual))
 	manual.MustAdvanceTo(timeutil.Unix(0, 3*24*time.Hour.Nanoseconds()))
 
 	testTime := manual.Now().Add(2 * time.Hour)
@@ -1116,7 +1116,7 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 	txns := map[string]roachpb.Transaction{}
 	for strKey, test := range testCases {
 		baseKey := roachpb.Key(strKey)
-		txnClock := hlc.NewClock(timeutil.NewManualTime(test.orig), time.Nanosecond /* maxOffset */)
+		txnClock := hlc.NewClockForTesting(timeutil.NewManualTime(test.orig))
 		txn := newTransaction("txn1", baseKey, 1, txnClock)
 		txn.Status = test.status
 		txn.LockSpans = testIntents
@@ -1374,7 +1374,7 @@ func TestMVCCGCQueueChunkRequests(t *testing.T) {
 
 	var gcRequests int32
 	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
-	tsc := TestStoreConfig(hlc.NewClock(manual, time.Nanosecond) /* maxOffset */)
+	tsc := TestStoreConfig(hlc.NewClockForTesting(manual))
 	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 			if _, ok := filterArgs.Req.(*roachpb.GCRequest); ok {
@@ -1481,7 +1481,7 @@ func TestMVCCGCQueueGroupsRangeDeletions(t *testing.T) {
 
 	// Create store and prepare by removing default range.
 	clock := timeutil.NewManualTime(timeutil.Unix(0, 123))
-	cfg := TestStoreConfig(hlc.NewClock(clock, time.Nanosecond) /* maxOffset */)
+	cfg := TestStoreConfig(hlc.NewClockForTesting(clock))
 	cfg.TestingKnobs.MVCCGCQueueLeaseCheckInterceptor = func(ctx context.Context, replica *Replica, now hlc.ClockTimestamp,
 	) bool {
 		return leaseError

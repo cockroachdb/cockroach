@@ -1802,11 +1802,6 @@ message AdminVerifyProtectedTimestampResponse {
 // inline values). It cannot be used in a transaction, cannot be split across
 // ranges, and must be alone in a batch.
 //
-// In 22.1, AddSSTable does not support MVCC point tombstones in SSTs, and may
-// return an error when given these. 22.2 does allow this, but check the
-// AddSSTableTombstones version gate first to make sure there are no 22.1 nodes
-// left in the cluster.
-//
 // MVCC range tombstones are supported in 22.2, but check the
 // MVCCRangeTombstones version gate before writing them.
 //

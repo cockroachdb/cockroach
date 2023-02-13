@@ -14,7 +14,6 @@ import (
 	"context"
 	"reflect"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -57,7 +56,7 @@ func TestRangeIterForward(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 	g := makeGossip(t, stopper, rpcContext)
 	ds := NewDistSender(DistSenderConfig{
@@ -93,7 +92,7 @@ func TestRangeIterSeekForward(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 	g := makeGossip(t, stopper, rpcContext)
 	ds := NewDistSender(DistSenderConfig{
@@ -132,7 +131,7 @@ func TestRangeIterReverse(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 	g := makeGossip(t, stopper, rpcContext)
 	ds := NewDistSender(DistSenderConfig{
@@ -168,7 +167,7 @@ func TestRangeIterSeekReverse(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 	g := makeGossip(t, stopper, rpcContext)
 	ds := NewDistSender(DistSenderConfig{

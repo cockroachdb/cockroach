@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -51,7 +50,7 @@ type testContext struct {
 }
 
 func makeTestContext(stopper *stop.Stopper) testContext {
-	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 123)), time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(0, 123)))
 	factory := kv.MakeMockTxnSenderFactory(
 		func(context.Context, *roachpb.Transaction, *roachpb.BatchRequest,
 		) (*roachpb.BatchResponse, *roachpb.Error) {
