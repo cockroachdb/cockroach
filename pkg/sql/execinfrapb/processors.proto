@@ -125,8 +125,10 @@ message ProcessorCoreUnion {
   optional StreamIngestionFrontierSpec streamIngestionFrontier = 36;
   optional ExportSpec exporter = 37;
   optional IndexBackfillMergerSpec indexBackfillMerger = 38;
+  optional IngestStoppedSpec ingestStopped = 44;
 
   reserved 6, 12;
+  // NEXT ID: 45.
 }
 
 // NoopCoreSpec indicates a "no-op" processor core. This is used when we just

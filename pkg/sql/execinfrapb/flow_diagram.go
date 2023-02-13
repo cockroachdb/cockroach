@@ -605,6 +605,12 @@ func (s *ChangeFrontierSpec) summary() (string, []string) {
 	return "ChangeFrontier", []string{}
 }
 
+// summary implements the diagramCellType interface.
+func (i *IngestStoppedSpec) summary() (string, []string) {
+	detail := fmt.Sprintf("job %d ingest stopped spans", i.JobID)
+	return "IngestStoppedSpec", []string{detail}
+}
+
 type diagramCell struct {
 	Title   string   `json:"title"`
 	Details []string `json:"details"`
