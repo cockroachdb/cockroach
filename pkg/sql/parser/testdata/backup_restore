@@ -153,6 +153,15 @@ SHOW BACKUP FILES '_' -- literals removed
 SHOW BACKUP FILES 'bar' -- identifiers removed
 
 parse
+SHOW BACKUP CONNECTION 'bar'
+----
+SHOW BACKUP CONNECTION 'bar'
+SHOW BACKUP CONNECTION ('bar') -- fully parenthesized
+SHOW BACKUP CONNECTION '_' -- literals removed
+SHOW BACKUP CONNECTION 'bar' -- identifiers removed
+
+
+parse
 SHOW BACKUPS IN 'bar'
 ----
 SHOW BACKUPS IN 'bar'

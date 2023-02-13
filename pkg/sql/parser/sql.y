@@ -7195,6 +7195,13 @@ show_backup_stmt:
   			Options: *$5.showBackupOptions(),
   		}
   	}
+| SHOW BACKUP CONNECTION string_or_placeholder
+  	{
+  		$$.val = &tree.ShowBackup{
+  		  Details:  tree.BackupConnectionTest,
+  			Path:    $4.expr(),
+  		}
+  	}
 | SHOW BACKUP error // SHOW HELP: SHOW BACKUP
 
 show_backup_details:

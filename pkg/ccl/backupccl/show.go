@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudcheck"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudprivilege"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -203,6 +204,9 @@ func showBackupTypeCheck(
 	); err != nil {
 		return false, nil, err
 	}
+	if backup.Details == tree.BackupConnectionTest {
+		return true, cloudcheck.Header, nil
+	}
 	infoReader := getBackupInfoReader(p, backup)
 	return true, infoReader.header(), nil
 }
@@ -216,6 +220,16 @@ func showBackupPlanHook(
 		return nil, nil, nil, false, nil
 	}
 	exprEval := p.ExprEvaluator("SHOW BACKUP")
+
+	// TODO(dt): find move this to its own hook.
+	if showStmt.Details == tree.BackupConnectionTest {
+		loc, err := exprEval.String(ctx, showStmt.Path)
+		if err != nil {
+			return nil, nil, nil, false, err
+		}
+		return cloudcheck.ShowCloudStorageTestPlanHook(ctx, p, loc)
+	}
+
 	if showStmt.Path == nil && showStmt.InCollection != nil {
 		collection, err := exprEval.StringArray(
 			ctx, tree.Exprs(showStmt.InCollection),
