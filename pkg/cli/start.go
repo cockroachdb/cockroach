@@ -1427,14 +1427,9 @@ func reportReadinessExternally(ctx context.Context, cmd *cobra.Command, waitForI
 	}
 }
 
-// initCPUProfiler creates a new CPUProfiler and takes
-// a profile provided that the cpu profile interval has
-// been exceeded.
+// initCPUProfiler creates a new CPUProfiler and attempts to take
+// a profile every second.
 func initCPUProfiler(ctx context.Context, dir string, st *cluster.Settings, stopper *stop.Stopper) {
-	cpuProfileInterval := envutil.EnvOrDefaultDuration("COCKROACH_CPUPROF_INTERVAL", -1)
-	if cpuProfileInterval <= 0 {
-		return
-	}
 	cpuProfiler, err := profiler.NewCPUProfiler(ctx, dir, st)
 	if err != nil {
 		log.Warningf(ctx, "failed to start cpu profiler worker: %v", err)
