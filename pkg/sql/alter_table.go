@@ -264,6 +264,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					false, /* isInverted */
 					false, /* isNewTable */
 					params.p.SemaCtx(),
+					params.ExecCfg().Settings.Version.ActiveVersion(params.ctx),
 				); err != nil {
 					return err
 				}
@@ -295,6 +296,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				if d.Predicate != nil {
 					expr, err := schemaexpr.ValidatePartialIndexPredicate(
 						params.ctx, n.tableDesc, d.Predicate, tableName, params.p.SemaCtx(),
+						params.ExecCfg().Settings.Version.ActiveVersion(params.ctx),
 					)
 					if err != nil {
 						return err
@@ -352,7 +354,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					for _, c := range n.tableDesc.AllConstraints() {
 						ckBuilder.MarkNameInUse(c.GetName())
 					}
-					ck, buildErr := ckBuilder.Build(d)
+					ck, buildErr := ckBuilder.Build(d, params.ExecCfg().Settings.Version.ActiveVersion(params.ctx))
 					if buildErr != nil {
 						err = buildErr
 						return
@@ -1909,7 +1911,10 @@ func handleTTLStorageParamChange(
 
 	// Validate the type and volatility of ttl_expiration_expression.
 	if after != nil {
-		if err := schemaexpr.ValidateTTLExpirationExpression(params.ctx, tableDesc, params.p.SemaCtx(), tn, after); err != nil {
+		if err := schemaexpr.ValidateTTLExpirationExpression(
+			params.ctx, tableDesc, params.p.SemaCtx(), tn, after,
+			params.ExecCfg().Settings.Version.ActiveVersion(params.ctx),
+		); err != nil {
 			return false, err
 		}
 	}
