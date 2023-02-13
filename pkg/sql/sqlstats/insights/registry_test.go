@@ -84,6 +84,7 @@ func TestRegistry(t *testing.T) {
 			FingerprintID:    appstatspb.StmtFingerprintID(100),
 			LatencyInSeconds: 2,
 			Status:           Statement_Failed,
+			ErrorCode:        "22012",
 		}
 
 		st := cluster.MakeTestingClusterSettings()
@@ -110,6 +111,7 @@ func TestRegistry(t *testing.T) {
 		)
 
 		require.Equal(t, expected, actual)
+		require.Equal(t, transaction.LastErrorCode, statement.ErrorCode)
 	})
 
 	t.Run("disabled", func(t *testing.T) {
