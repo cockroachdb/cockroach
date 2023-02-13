@@ -661,6 +661,13 @@ func (r *Replica) applySnapshot(
 	return nil
 }
 
+// writeUnreplicatedSST creates an SST for snapshot application that
+// covers the RangeID-unreplicated keyspace. A range tombstone is
+// laid down and the Raft state provided by the arguments is overlaid
+// onto it.
+//
+// TODO(sep-raft-log): when is `nonempty` ever false? We always
+// perform a number of writes to this SST.
 func writeUnreplicatedSST(
 	ctx context.Context,
 	id storage.FullReplicaID,
@@ -668,7 +675,7 @@ func writeUnreplicatedSST(
 	meta raftpb.SnapshotMetadata,
 	hs raftpb.HardState,
 	sl *logstore.StateLoader,
-) (*storage.MemFile, bool, error) {
+) (_ *storage.MemFile, nonempty bool, _ error) {
 	unreplicatedSSTFile := &storage.MemFile{}
 	unreplicatedSST := storage.MakeIngestionSSTWriter(
 		ctx, st, unreplicatedSSTFile,
