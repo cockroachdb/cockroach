@@ -14,6 +14,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -90,7 +91,7 @@ func TestIndexPredicateValidator_Validate(t *testing.T) {
 			}
 
 			deqExpr, err := schemaexpr.ValidatePartialIndexPredicate(
-				ctx, desc, expr, &tn, &semaCtx,
+				ctx, desc, expr, &tn, &semaCtx, clusterversion.TestingClusterVersion,
 			)
 
 			if !d.expectedValid {

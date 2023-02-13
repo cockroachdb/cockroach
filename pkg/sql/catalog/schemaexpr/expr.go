@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -84,6 +85,7 @@ func DequalifyAndValidateExprImpl(
 	semaCtx *tree.SemaContext,
 	maxVolatility volatility.V,
 	tn *tree.TableName,
+	version clusterversion.ClusterVersion,
 	getAllNonDropColumnsFn func() colinfo.ResultColumns,
 	columnLookupByNameFn func(columnName tree.Name) (exists bool, accessible bool, id catid.ColumnID, typ *types.T),
 ) (string, *types.T, catalog.TableColSet, error) {
@@ -115,7 +117,7 @@ func DequalifyAndValidateExprImpl(
 		return "", nil, colIDs, err
 	}
 
-	if err := tree.MaybeFailOnUDFUsage(typedExpr, context); err != nil {
+	if err := funcdesc.MaybeFailOnUDFUsage(typedExpr, context, version); err != nil {
 		return "", nil, colIDs, unimplemented.NewWithIssue(83234, "usage of user-defined function from relations not supported")
 	}
 
@@ -144,6 +146,7 @@ func DequalifyAndValidateExpr(
 	semaCtx *tree.SemaContext,
 	maxVolatility volatility.V,
 	tn *tree.TableName,
+	version clusterversion.ClusterVersion,
 ) (string, *types.T, catalog.TableColSet, error) {
 	getAllNonDropColumnsFn := func() colinfo.ResultColumns {
 		return colinfo.ResultColumnsFromColumns(desc.GetID(), desc.NonDropColumns())
@@ -156,7 +159,7 @@ func DequalifyAndValidateExpr(
 		return true, !col.IsInaccessible(), col.GetID(), col.GetType()
 	}
 
-	return DequalifyAndValidateExprImpl(ctx, expr, typ, context, semaCtx, maxVolatility, tn,
+	return DequalifyAndValidateExprImpl(ctx, expr, typ, context, semaCtx, maxVolatility, tn, version,
 		getAllNonDropColumnsFn, columnLookupByNameFn)
 }
 
@@ -539,6 +542,7 @@ func ValidateTTLExpirationExpression(
 	semaCtx *tree.SemaContext,
 	tableName *tree.TableName,
 	ttl *catpb.RowLevelTTL,
+	version clusterversion.ClusterVersion,
 ) error {
 
 	if !ttl.HasExpirationExpr() {
@@ -564,6 +568,7 @@ func ValidateTTLExpirationExpression(
 		semaCtx,
 		volatility.Immutable,
 		tableName,
+		version,
 	); err != nil {
 		return pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
 	}
