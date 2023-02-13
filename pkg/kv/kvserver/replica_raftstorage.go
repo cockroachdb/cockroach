@@ -485,6 +485,9 @@ func (r *Replica) applySnapshot(
 	unreplicatedSSTFile, nonempty, err := writeUnreplicatedSST(
 		ctx, r.ID(), r.ClusterSettings(), nonemptySnap.Metadata, hs, &r.raftMu.stateLoader.StateLoader,
 	)
+	if err != nil {
+		return err
+	}
 	if nonempty {
 		// TODO(itsbilal): Write to SST directly in unreplicatedSST rather than
 		// buffering in a MemFile first.
