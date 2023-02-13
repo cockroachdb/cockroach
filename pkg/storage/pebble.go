@@ -533,6 +533,12 @@ var PebbleBlockPropertyCollectors = []func() pebble.BlockPropertyCollector{
 	},
 }
 
+// MinimumSupportedFormatVersion is the version that provides features that the
+// Cockroach code relies on unconditionally (like range keys). New stores are by
+// default created with this version. It should correspond to the minimum
+// supported binary version.
+const MinimumSupportedFormatVersion = pebble.FormatPrePebblev1Marked
+
 // DefaultPebbleOptions returns the default pebble options.
 func DefaultPebbleOptions() *pebble.Options {
 	// In RocksDB, the concurrency setting corresponds to both flushes and
@@ -556,7 +562,7 @@ func DefaultPebbleOptions() *pebble.Options {
 		Merger:                      MVCCMerger,
 		BlockPropertyCollectors:     PebbleBlockPropertyCollectors,
 		// Minimum supported format.
-		FormatMajorVersion: pebble.FormatPrePebblev1Marked,
+		FormatMajorVersion: MinimumSupportedFormatVersion,
 	}
 	// Automatically flush 10s after the first range tombstone is added to a
 	// memtable. This ensures that we can reclaim space even when there's no
@@ -869,6 +875,12 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 	} else {
 		// Clone the given options so that we are free to modify them.
 		opts = cfg.Opts.Clone()
+	}
+	if opts.FormatMajorVersion < MinimumSupportedFormatVersion {
+		return nil, errors.AssertionFailedf(
+			"FormatMajorVersion is %d, should be at least %d",
+			opts.FormatMajorVersion, MinimumSupportedFormatVersion,
+		)
 	}
 
 	// pebble.Open also calls EnsureDefaults, but only after doing a clone. Call
@@ -1965,7 +1977,7 @@ func (p *Pebble) SetMinVersion(version roachpb.Version) error {
 		// This should never happen in production. But we tolerate tests creating
 		// imaginary older versions; we must still use the earliest supported
 		// format.
-		formatVers = pebble.FormatPrePebblev1Marked
+		formatVers = MinimumSupportedFormatVersion
 	}
 
 	if p.db.FormatMajorVersion() < formatVers {

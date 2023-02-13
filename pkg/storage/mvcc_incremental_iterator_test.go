@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/pebble"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -1568,7 +1567,7 @@ func BenchmarkMVCCIncrementalIteratorForOldData(b *testing.B) {
 	// day of keys. The old keys are uniformly distributed in the key space,
 	// which is the worst case for block property filters.
 	keyAgeInterval := 400
-	setupMVCCPebbleWithBlockProperties := func(b *testing.B) Engine {
+	setupMVCCPebble := func(b *testing.B) Engine {
 		eng, err := Open(
 			context.Background(),
 			InMemory(),
@@ -1577,10 +1576,7 @@ func BenchmarkMVCCIncrementalIteratorForOldData(b *testing.B) {
 			// will mostly miss the cache (especially since the block cache is meant
 			// to be scan resistant).
 			CacheSize(1<<10),
-			func(cfg *engineConfig) error {
-				cfg.Opts.FormatMajorVersion = pebble.FormatBlockPropertyCollector
-				return nil
-			})
+		)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -1618,7 +1614,7 @@ func BenchmarkMVCCIncrementalIteratorForOldData(b *testing.B) {
 	}
 
 	for _, valueSize := range []int{100, 500, 1000, 2000} {
-		eng := setupMVCCPebbleWithBlockProperties(b)
+		eng := setupMVCCPebble(b)
 		setupData(b, eng, valueSize)
 		b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
 			startKey := roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(0)))

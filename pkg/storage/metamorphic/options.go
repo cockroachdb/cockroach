@@ -100,15 +100,11 @@ func standardOptions(i int) *pebble.Options {
 	if err := opts.Parse(stdOpts[i], nil); err != nil {
 		panic(err)
 	}
-	// Enable range keys in all options.
-	opts.FormatMajorVersion = pebble.FormatRangeKeys
 	return opts
 }
 
 func randomOptions() *pebble.Options {
 	opts := storage.DefaultPebbleOptions()
-	// Enable range keys in all options.
-	opts.FormatMajorVersion = pebble.FormatRangeKeys
 
 	rng, _ := randutil.NewTestRand()
 	opts.BytesPerSync = 1 << rngIntRange(rng, 8, 30)
