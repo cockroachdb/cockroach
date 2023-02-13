@@ -83,7 +83,7 @@ func setupWebhookSinkWithDetails(
 	if err != nil {
 		return nil, err
 	}
-	sinkSrc, err := makeWebhookSink(ctx, sinkURL{URL: u}, encodingOpts, sinkOpts, parallelism, source, nilMetricsRecorderBuilder)
+	sinkSrc, err := makeWebhookSink(ctx, sinkURL{URL: u}, encodingOpts, sinkOpts, int64(parallelism), source, nilMetricsRecorderBuilder, &nilSinkPacer{})
 	if err != nil {
 		return nil, err
 	}
@@ -172,8 +172,6 @@ func TestWebhookSink(t *testing.T) {
 		require.NoError(t, sinkSrcNoCert.EmitRow(context.Background(), nil, []byte("[1001]"), []byte("{\"after\":{\"col1\":\"val1\",\"rowid\":1000},\"key\":[1001],\"topic:\":\"foo\"}"), zeroTS, zeroTS, zeroAlloc))
 
 		require.Regexp(t, "x509", sinkSrcNoCert.Flush(context.Background()))
-		require.EqualError(t, sinkSrcNoCert.EmitRow(context.Background(), nil, nil, nil, zeroTS, zeroTS, zeroAlloc),
-			`context canceled`)
 
 		params.Set(changefeedbase.SinkParamSkipTLSVerify, "true")
 		sinkDestHost.RawQuery = params.Encode()
@@ -191,8 +189,6 @@ func TestWebhookSink(t *testing.T) {
 		err = sinkSrc.Flush(context.Background())
 		require.Error(t, err)
 		require.Contains(t, err.Error(), fmt.Sprintf(`Post "%s":`, sinkDest.URL()))
-		require.EqualError(t, sinkSrc.EmitRow(context.Background(), nil, nil, nil, zeroTS, zeroTS, zeroAlloc),
-			`context canceled`)
 
 		sinkDestHTTP, err := cdctest.StartMockWebhookSinkInsecure()
 		require.NoError(t, err)
@@ -207,8 +203,6 @@ func TestWebhookSink(t *testing.T) {
 		require.EqualError(t, sinkSrcWrongProtocol.Flush(context.Background()),
 			fmt.Sprintf(`Post "%s": http: server gave HTTP response to HTTPS client`, fmt.Sprintf("https://%s", strings.TrimPrefix(sinkDestHTTP.URL(),
 				"http://"))))
-		require.EqualError(t, sinkSrcWrongProtocol.EmitRow(context.Background(), nil, nil, nil, zeroTS, zeroTS, zeroAlloc),
-			`context canceled`)
 
 		sinkDestSecure, err := cdctest.StartMockWebhookSinkSecure(cert)
 		require.NoError(t, err)
@@ -230,6 +224,7 @@ func TestWebhookSink(t *testing.T) {
 			Opts:    opts,
 		}
 
+		require.NoError(t, sinkSrc.Close())
 		sinkSrc, err = setupWebhookSinkWithDetails(context.Background(), details, parallelism, timeutil.DefaultTimeSource{})
 		require.NoError(t, err)
 
@@ -305,8 +300,6 @@ func TestWebhookSinkWithAuthOptions(t *testing.T) {
 		require.NoError(t, sinkSrcNoCreds.EmitRow(context.Background(), nil, []byte("[1001]"), []byte("{\"after\":{\"col1\":\"val1\",\"rowid\":1000},\"key\":[1001],\"topic:\":\"foo\"}"), zeroTS, zeroTS, zeroAlloc))
 
 		require.EqualError(t, sinkSrcNoCreds.Flush(context.Background()), "401 Unauthorized: ")
-		require.EqualError(t, sinkSrcNoCreds.EmitRow(context.Background(), nil, nil, nil, zeroTS, zeroTS, zeroAlloc),
-			`context canceled`)
 
 		// wrong credentials should result in a 401 as well
 		var wrongAuthHeader string
@@ -318,8 +311,6 @@ func TestWebhookSinkWithAuthOptions(t *testing.T) {
 		require.NoError(t, sinkSrcWrongCreds.EmitRow(context.Background(), nil, []byte("[1001]"), []byte("{\"after\":{\"col1\":\"val1\",\"rowid\":1000},\"key\":[1001],\"topic:\":\"foo\"}"), zeroTS, zeroTS, zeroAlloc))
 
 		require.EqualError(t, sinkSrcWrongCreds.Flush(context.Background()), "401 Unauthorized: ")
-		require.EqualError(t, sinkSrcWrongCreds.EmitRow(context.Background(), nil, nil, nil, zeroTS, zeroTS, zeroAlloc),
-			`context canceled`)
 
 		require.NoError(t, sinkSrc.Close())
 		require.NoError(t, sinkSrcNoCreds.Close())
@@ -573,65 +564,6 @@ func TestWebhookSinkConfig(t *testing.T) {
 		sinkDest.Close()
 	}
 
-	largeBatchFrequencyFn := func(parallelism int) {
-		opts := getGenericWebhookSinkOptions(struct {
-			key   string
-			value string
-		}{
-			key:   changefeedbase.OptWebhookSinkConfig,
-			value: `{"Retry":{"Backoff": "5ms"},"Flush":{"Messages": 10, "Frequency": "1h"}}`,
-		})
-		cert, certEncoded, err := cdctest.NewCACertBase64Encoded()
-		require.NoError(t, err)
-		sinkDest, err := cdctest.StartMockWebhookSink(cert)
-		require.NoError(t, err)
-
-		sinkDestHost, err := url.Parse(sinkDest.URL())
-		require.NoError(t, err)
-
-		params := sinkDestHost.Query()
-		params.Set(changefeedbase.SinkParamCACert, certEncoded)
-		sinkDestHost.RawQuery = params.Encode()
-
-		details := jobspb.ChangefeedDetails{
-			SinkURI: fmt.Sprintf("webhook-%s", sinkDestHost.String()),
-			Opts:    opts.AsMap(),
-		}
-
-		mt := timeutil.NewManualTime(timeutil.Now())
-
-		sinkSrc, err := setupWebhookSinkWithDetails(context.Background(), details, parallelism, mt)
-		require.NoError(t, err)
-
-		// send incomplete batch
-		require.NoError(t, sinkSrc.EmitRow(context.Background(), nil, []byte("[1001]"), []byte("{\"after\":{\"col1\":\"val1\",\"rowid\":1000},\"key\":[1001],\"topic:\":\"foo\"}"), zeroTS, zeroTS, pool.alloc()))
-		require.NoError(t, sinkSrc.EmitRow(context.Background(), nil, []byte("[1001]"), []byte("{\"after\":{\"col1\":\"val1\",\"rowid\":1001},\"key\":[1001],\"topic:\":\"foo\"}"), zeroTS, zeroTS, pool.alloc()))
-
-		// no messages at first
-		require.Equal(t, sinkDest.Latest(), "")
-
-		testutils.SucceedsSoon(t, func() error {
-			// wait for the timer in batch worker to be set (1 hour from now, as specified by config) before advancing time.
-			if len(mt.Timers()) == 1 && mt.Timers()[0] == mt.Now().Add(time.Hour) {
-				return nil
-			}
-			return errors.New("Waiting for timer to be created by batch worker")
-		})
-		mt.Advance(time.Hour)
-		require.NoError(t, sinkSrc.Flush(context.Background()))
-		// batch should send after time expires even if message quota has not been met
-		require.Equal(t, sinkDest.Pop(), "{\"payload\":[{\"after\":{\"col1\":\"val1\",\"rowid\":1000},\"key\":[1001],\"topic:\":\"foo\"},"+
-			"{\"after\":{\"col1\":\"val1\",\"rowid\":1001},\"key\":[1001],\"topic:\":\"foo\"}],\"length\":2}")
-
-		mt.Advance(time.Hour)
-		require.NoError(t, sinkSrc.Flush(context.Background()))
-		// batch doesn't send if there are no messages to send
-		require.Equal(t, sinkDest.Latest(), "")
-
-		require.NoError(t, sinkSrc.Close())
-		sinkDest.Close()
-	}
-
 	// run tests with parallelism from 1-4
 	for i := 1; i <= 4; i++ {
 		retryThenSuccessFn(i)
@@ -639,7 +571,6 @@ func TestWebhookSinkConfig(t *testing.T) {
 		retryThenFailureCustomFn(i)
 		largeBatchSizeFn(i)
 		largeBatchBytesFn(i)
-		largeBatchFrequencyFn(i)
 	}
 }
 

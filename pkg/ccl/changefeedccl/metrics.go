@@ -64,6 +64,11 @@ type AggMetrics struct {
 	BatchReductionCount       *aggmetric.AggGauge
 	InternalRetryMessageCount *aggmetric.AggGauge
 
+	ParallelSinkEmitterAdmitCount     *aggmetric.AggCounter
+	ParallelSinkEmitterBufferedEvents *aggmetric.AggGauge
+	BatchingSinkEmitterAdmitCount     *aggmetric.AggCounter
+	BatchingSinkEmitterBufferedEvents *aggmetric.AggGauge
+
 	// There is always at least 1 sliMetrics created for defaultSLI scope.
 	mu struct {
 		syncutil.Mutex
@@ -90,6 +95,10 @@ type metricsRecorder interface {
 	getBackfillCallback() func() func()
 	getBackfillRangeCallback() func(int64) (func(), func())
 	recordSizeBasedFlush()
+	recordParallelEmitterAdmit()
+	recordParallelEmitterEmit()
+	recordBatchingEmitterAdmit()
+	recordBatchingEmitterEmit(int)
 }
 
 var _ metricsRecorder = (*sliMetrics)(nil)
@@ -117,6 +126,11 @@ type sliMetrics struct {
 	RunningCount              *aggmetric.Gauge
 	BatchReductionCount       *aggmetric.Gauge
 	InternalRetryMessageCount *aggmetric.Gauge
+
+	ParallelSinkEmitterAdmitCount     *aggmetric.Counter
+	ParallelSinkEmitterBufferedEvents *aggmetric.Gauge
+	BatchingSinkEmitterAdmitCount     *aggmetric.Counter
+	BatchingSinkEmitterBufferedEvents *aggmetric.Gauge
 }
 
 // sinkDoesNotCompress is a sentinel value indicating the sink
@@ -207,6 +221,34 @@ func (m *sliMetrics) getBackfillCallback() func() func() {
 			m.BackfillCount.Dec(1)
 		}
 	}
+}
+
+func (m *sliMetrics) recordParallelEmitterAdmit() {
+	if m == nil {
+		return
+	}
+	m.ParallelSinkEmitterAdmitCount.Inc(1)
+	m.ParallelSinkEmitterBufferedEvents.Inc(1)
+}
+func (m *sliMetrics) recordParallelEmitterEmit() {
+	if m == nil {
+		return
+	}
+	m.ParallelSinkEmitterBufferedEvents.Dec(1)
+}
+
+func (m *sliMetrics) recordBatchingEmitterAdmit() {
+	if m == nil {
+		return
+	}
+	m.BatchingSinkEmitterAdmitCount.Inc(1)
+	m.BatchingSinkEmitterBufferedEvents.Inc(1)
+}
+func (m *sliMetrics) recordBatchingEmitterEmit(numFlushed int) {
+	if m == nil {
+		return
+	}
+	m.BatchingSinkEmitterBufferedEvents.Dec(int64(numFlushed))
 }
 
 // getBackfillRangeCallback returns a backfillRangeCallback that is to be called
@@ -303,6 +345,22 @@ func (w *wrappingCostController) getBackfillRangeCallback() func(int64) (func(),
 // Record size-based flush.
 func (w *wrappingCostController) recordSizeBasedFlush() {
 	w.inner.recordSizeBasedFlush()
+}
+
+func (w *wrappingCostController) recordParallelEmitterAdmit() {
+	w.inner.recordParallelEmitterAdmit()
+}
+
+func (w *wrappingCostController) recordParallelEmitterEmit() {
+	w.inner.recordParallelEmitterEmit()
+}
+
+func (w *wrappingCostController) recordBatchingEmitterAdmit() {
+	w.inner.recordBatchingEmitterAdmit()
+}
+
+func (w *wrappingCostController) recordBatchingEmitterEmit(numFlushed int) {
+	w.inner.recordBatchingEmitterEmit(numFlushed)
 }
 
 var (
@@ -489,6 +547,30 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaChangefeedParallelSinkEmitterAdmitCount := metric.Metadata{
+		Name:        "changefeed.parallel_sink_emitter_admit_count",
+		Help:        "Number of messages that have entered into the parallel sink emitter",
+		Measurement: "Count of Events",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaChangefeedParallelSinkEmitterBufferedEvents := metric.Metadata{
+		Name:        "changefeed.parallel_sink_emitter_buffered_events",
+		Help:        "Number of messages buffered within the parallel sink emitter not yet emitted",
+		Measurement: "Count of Events",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaChangefeedBatchingSinkEmitterAdmitCount := metric.Metadata{
+		Name:        "changefeed.batching_sink_emitter_admit_count",
+		Help:        "Number of messages that have entered into the batching sink emitters",
+		Measurement: "Count of Events",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaChangefeedBatchingSinkEmitterBufferedEvents := metric.Metadata{
+		Name:        "changefeed.batching_sink_emitter_buffered_events",
+		Help:        "Number of messages buffered within the batching sink emitter not yet emitted",
+		Measurement: "Count of Events",
+		Unit:        metric.Unit_COUNT,
+	}
 	// NB: When adding new histograms, use sigFigs = 1.  Older histograms
 	// retain significant figures of 2.
 	b := aggmetric.MakeBuilder("scope")
@@ -541,6 +623,11 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 		RunningCount:              b.Gauge(metaChangefeedRunning),
 		BatchReductionCount:       b.Gauge(metaBatchReductionCount),
 		InternalRetryMessageCount: b.Gauge(metaInternalRetryMessageCount),
+
+		ParallelSinkEmitterAdmitCount:     b.Counter(metaChangefeedParallelSinkEmitterAdmitCount),
+		ParallelSinkEmitterBufferedEvents: b.Gauge(metaChangefeedParallelSinkEmitterBufferedEvents),
+		BatchingSinkEmitterAdmitCount:     b.Counter(metaChangefeedBatchingSinkEmitterAdmitCount),
+		BatchingSinkEmitterBufferedEvents: b.Gauge(metaChangefeedBatchingSinkEmitterBufferedEvents),
 	}
 	a.mu.sliMetrics = make(map[string]*sliMetrics)
 	_, err := a.getOrCreateScope(defaultSLIScope)
@@ -596,6 +683,11 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 		RunningCount:              a.RunningCount.AddChild(scope),
 		BatchReductionCount:       a.BatchReductionCount.AddChild(scope),
 		InternalRetryMessageCount: a.InternalRetryMessageCount.AddChild(scope),
+
+		ParallelSinkEmitterAdmitCount:     a.ParallelSinkEmitterAdmitCount.AddChild(scope),
+		ParallelSinkEmitterBufferedEvents: a.ParallelSinkEmitterBufferedEvents.AddChild(scope),
+		BatchingSinkEmitterAdmitCount:     a.BatchingSinkEmitterAdmitCount.AddChild(scope),
+		BatchingSinkEmitterBufferedEvents: a.BatchingSinkEmitterBufferedEvents.AddChild(scope),
 	}
 
 	a.mu.sliMetrics[scope] = sm

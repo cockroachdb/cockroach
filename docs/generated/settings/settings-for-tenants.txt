@@ -17,6 +17,7 @@ changefeed.event_consumer_workers	integer	0	the number of workers to use when pr
 changefeed.fast_gzip.enabled	boolean	true	use fast gzip implementation
 changefeed.node_throttle_config	string		specifies node level throttling configuration for all changefeeeds
 changefeed.schema_feed.read_with_priority_after	duration	1m0s	retry with high priority if we were not able to read descriptors for too long; 0 disables
+changefeed.sink_workers	integer	0	the number of workers used by changefeeds when sending requests to the sink: <0 disables, 0 assigns a reasonable default, >0 assigns the setting value.
 cloudstorage.azure.concurrent_upload_buffers	integer	1	controls the number of concurrent buffers that will be used by the Azure client when uploading chunks.Each buffer can buffer up to cloudstorage.write_chunk.size of memory during an upload
 cloudstorage.http.custom_ca	string		custom root CA (appended to system's default CAs) for verifying certificates when interacting with HTTPS storage
 cloudstorage.timeout	duration	10m0s	the timeout for import/export storage operations

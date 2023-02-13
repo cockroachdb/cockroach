@@ -433,6 +433,7 @@ INSERT INTO t2 VALUES (3, 'three'), (2, 'two'), (1, 'one');
 			mockSink:       sinkDest,
 			isBare:         isBare,
 			jobFeed:        newJobFeed(db, dummyWrapper),
+			ss:             &sinkSynchronizer{},
 		}
 
 		sinkURI := fmt.Sprintf("webhook-%s?insecure_tls_skip_verify=true", sinkDest.URL())
