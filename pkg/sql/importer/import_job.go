@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/ingeststopped"
 	"github.com/cockroachdb/cockroach/pkg/jobs/joberror"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -56,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 type importTestingKnobs struct {
@@ -1390,6 +1392,20 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, execCtx interface{},
 
 	details := r.job.Details().(jobspb.ImportDetails)
 	addToFileFormatTelemetry(details.Format.Format.String(), "failed")
+
+	// If the import completed preparation and started writing, verify it has
+	// stopped writing before proceeding to revert it.
+	if details.PrepareComplete {
+		log.Infof(ctx, "need to verify that no nodes are still importing since job had started writing...")
+		const maxWait = time.Minute * 5
+		if err := ingeststopped.WaitForNoIngestingNodes(ctx, p, r.job, maxWait); err != nil {
+			log.Errorf(ctx, "unable to verify that attempted IMPORT had stopped writing before reverting after %s: %v", maxWait, err)
+		} else {
+			log.Infof(ctx, "verified no nodes still ingesting on behalf of job %d", redact.Safe(r.job.ID()))
+		}
+
+	}
+
 	cfg := execCtx.(sql.JobExecContext).ExecCfg()
 	var jobsToRunAfterTxnCommit []jobspb.JobID
 	if err := sql.DescsTxn(ctx, cfg, func(
