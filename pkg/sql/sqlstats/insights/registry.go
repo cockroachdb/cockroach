@@ -97,10 +97,11 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 	delete(r.statements, sessionID)
 	defer statements.release()
 
-	var slowStatements intsets.Fast
+	// Mark statements which are detected as slow or have a failed status.
+	var slowOrFailedStatements intsets.Fast
 	for i, s := range *statements {
-		if r.detector.isSlow(s) {
-			slowStatements.Add(i)
+		if r.detector.isSlow(s) || isFailed(s) {
+			slowOrFailedStatements.Add(i)
 		}
 	}
 
@@ -112,8 +113,8 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 		highContention = transaction.Contention.Seconds() >= LatencyThreshold.Get(&r.causes.st.SV).Seconds()
 	}
 
-	if slowStatements.Empty() && !highContention {
-		// We only record an insight if we have slow statements or high txn contention.
+	if slowOrFailedStatements.Empty() && !highContention {
+		// We only record an insight if we have slow or failed statements or high txn contention.
 		return
 	}
 
@@ -126,15 +127,15 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 		insight.Transaction.Causes = addCause(insight.Transaction.Causes, Cause_HighContention)
 	}
 
+	var lastErrorCode string
 	for i, s := range *statements {
-		if slowStatements.Contains(i) {
+		if slowOrFailedStatements.Contains(i) {
 			switch s.Status {
 			case Statement_Completed:
 				s.Problem = Problem_SlowExecution
 				s.Causes = r.causes.examine(s.Causes, s)
 			case Statement_Failed:
-				// Note that we'll be building better failure support for 23.1.
-				// For now, we only mark failed statements that were also slow.
+				lastErrorCode = s.ErrorCode
 				s.Problem = Problem_FailedExecution
 			}
 
@@ -149,6 +150,7 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 		insight.Statements = append(insight.Statements, s)
 	}
 
+	insight.Transaction.LastErrorCode = lastErrorCode
 	r.sink.AddInsight(insight)
 }
 
