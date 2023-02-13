@@ -1,2 +1,2 @@
 alter_database_alter_super_region ::=
-	'ALTER' 'DATABASE' database_name 'ALTER' 'SUPER' 'REGION' name 'VALUES' name_list
+	'ALTER' 'DATABASE' database_name 'ALTER' 'SUPER' 'REGION' region_name 'VALUES' region_name_list
