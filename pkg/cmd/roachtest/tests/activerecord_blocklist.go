@@ -10,14 +10,6 @@
 
 package tests
 
-var activeRecordBlocklists = blocklistsForVersion{
-	{"v20.2", "activeRecordBlockList20_2", activeRecordBlockList20_2, "activeRecordIgnoreList20_2", activeRecordIgnoreList20_2},
-	{"v21.1", "activeRecordBlockList21_1", activeRecordBlockList21_1, "activeRecordIgnoreList21_1", activeRecordIgnoreList21_1},
-	{"v21.2", "activeRecordBlockList21_2", activeRecordBlockList21_2, "activeRecordIgnoreList21_2", activeRecordIgnoreList21_2},
-	{"v22.1", "activeRecordBlockList22_1", activeRecordBlockList22_1, "activeRecordIgnoreList22_1", activeRecordIgnoreList22_1},
-	{"v22.2", "activeRecordBlockList22_2", activeRecordBlockList22_2, "activeRecordIgnoreList22_2", activeRecordIgnoreList22_2},
-}
-
 // These are lists of known activerecord test errors and failures.
 // When the activerecord test suite is run, the results are compared to this list.
 // Any passed test that is not on this list is reported as PASS - expected
@@ -29,47 +21,13 @@ var activeRecordBlocklists = blocklistsForVersion{
 // Please keep these lists alphabetized for easy diffing.
 // After a failed run, an updated version of this blocklist should be available
 // in the test log.
-var activeRecordBlockList22_2 = blocklist{}
+var activeRecordBlocklist = blocklist{}
 
-var activeRecordBlockList22_1 = blocklist{}
-
-var activeRecordBlockList21_2 = blocklist{}
-
-var activeRecordBlockList21_1 = blocklist{}
-
-var activeRecordBlockList20_2 = blocklist{}
-
-var activeRecordIgnoreList22_2 = activeRecordIgnoreList22_1
-
-var activeRecordIgnoreList22_1 = blocklist{
+var activeRecordIgnorelist = blocklist{
 	"CockroachDB::PostgresqlIntervalTest#test_interval_type":               "flaky",
 	"ConcurrentTransactionTest#test_transaction_isolation__read_committed": "flaky - https://github.com/cockroachdb/activerecord-cockroachdb-adapter/issues/237",
 	"FixturesTest#test_create_fixtures":                                    "flaky - FK constraint violated sometimes when loading all fixture data",
 	"IgnoreFixturesTest#test_ignores_books_fixtures":                       "flaky - FK constraint violated sometimes when loading all fixture data",
 	"IgnoreFixturesTest#test_ignores_parrots_fixtures":                     "flaky - FK constraint violated sometimes when loading all fixture data",
 	"PostgresqlIntervalTest#test_interval_type":                            "flaky",
-}
-
-var activeRecordIgnoreList21_2 = blocklist{
-	"ActiveRecord::CockroachDB::UnloggedTablesTest#test_gracefully_handles_temporary_tables": "modified to pass on 20.2",
-	"CockroachDB::PostgresqlIntervalTest#test_interval_type":                                 "flaky",
-	"ConcurrentTransactionTest#test_transaction_isolation__read_committed":                   "flaky - https://github.com/cockroachdb/activerecord-cockroachdb-adapter/issues/237",
-	"FixturesTest#test_create_fixtures":                                                      "flaky - FK constraint violated sometimes when loading all fixture data",
-	"IgnoreFixturesTest#test_ignores_books_fixtures":                                         "flaky - FK constraint violated sometimes when loading all fixture data",
-	"IgnoreFixturesTest#test_ignores_parrots_fixtures":                                       "flaky - FK constraint violated sometimes when loading all fixture data",
-}
-
-var activeRecordIgnoreList21_1 = blocklist{
-	"ActiveRecord::CockroachDB::UnloggedTablesTest#test_gracefully_handles_temporary_tables": "modified to pass on 20.2",
-	"CockroachDB::PostgresqlIntervalTest#test_interval_type":                                 "flaky",
-	"FixturesTest#test_create_fixtures":                                                      "flaky - FK constraint violated sometimes when loading all fixture data",
-	"IgnoreFixturesTest#test_ignores_books_fixtures":                                         "flaky - FK constraint violated sometimes when loading all fixture data",
-	"IgnoreFixturesTest#test_ignores_parrots_fixtures":                                       "flaky - FK constraint violated sometimes when loading all fixture data",
-}
-
-var activeRecordIgnoreList20_2 = blocklist{
-	"ActiveRecord::CockroachDB::UnloggedTablesTest#test_gracefully_handles_temporary_tables": "modified to pass on 20.2",
-	"FixturesTest#test_create_fixtures":                "flaky - FK constraint violated sometimes when loading all fixture data",
-	"IgnoreFixturesTest#test_ignores_books_fixtures":   "flaky - FK constraint violated sometimes when loading all fixture data",
-	"IgnoreFixturesTest#test_ignores_parrots_fixtures": "flaky - FK constraint violated sometimes when loading all fixture data",
 }

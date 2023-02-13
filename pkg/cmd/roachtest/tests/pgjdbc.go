@@ -150,8 +150,8 @@ func registerPgjdbc(r registry.Registry) {
 
 		const blocklistName = "pgjdbcBlocklist"
 		const ignorelistName = "pgjdbcIgnorelist"
-		expectedFailures := pgjdbcBlockList
-		ignorelist := pgjdbcIgnoreList
+		expectedFailures := pgjdbcBlocklist
+		ignorelist := pgjdbcIgnorelist
 
 		status := fmt.Sprintf("Running cockroach version %s, using blocklist %s, using ignorelist %s",
 			version, blocklistName, ignorelistName)

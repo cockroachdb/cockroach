@@ -13,7 +13,7 @@ package tests
 // Please keep these lists alphabetized for easy diffing.
 // After a failed run, an updated version of this blocklist should be available
 // in the test log.
-var pgjdbcBlockList = blocklist{
+var pgjdbcBlocklist = blocklist{
 	"org.postgresql.core.OidValuesCorrectnessTest.testValue[oidName=BOX, oidValue=603]":                                                                                        "unknown",
 	"org.postgresql.core.OidValuesCorrectnessTest.testValue[oidName=CIDR, oidValue=650]":                                                                                       "unknown",
 	"org.postgresql.core.OidValuesCorrectnessTest.testValue[oidName=CIRCLE, oidValue=718]":                                                                                     "unknown",
@@ -764,7 +764,7 @@ var pgjdbcBlockList = blocklist{
 	"org.postgresql.test.xa.XADataSourceTest.testWrapperEquals":                                                                                                                "22329",
 }
 
-var pgjdbcIgnoreList = blocklist{
+var pgjdbcIgnorelist = blocklist{
 	"org.postgresql.jdbc.PgSQLXMLTest.setCharacterStream":                                                                                           "43355",
 	"org.postgresql.jdbc.PgSQLXMLTest.testGetSourceXxeDOMSource":                                                                                    "43355",
 	"org.postgresql.jdbc.PgSQLXMLTest.testGetSourceXxeNull":                                                                                         "43355",

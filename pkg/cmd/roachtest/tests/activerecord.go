@@ -164,7 +164,10 @@ func registerActiveRecord(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		blocklistName, expectedFailures, ignorelistName, ignorelist := activeRecordBlocklists.getLists(version)
+		blocklistName := "activeRecordBlocklist"
+		expectedFailures := activeRecordBlocklist
+		ignorelistName := "activeRecordIgnorelist"
+		ignorelist := activeRecordIgnorelist
 		if expectedFailures == nil {
 			t.Fatalf("No activerecord blocklist defined for cockroach version %s", version)
 		}

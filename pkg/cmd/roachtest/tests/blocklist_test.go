@@ -33,15 +33,15 @@ func TestBlocklists(t *testing.T) {
 	}
 
 	blocklists := map[string]blocklist{
-		"hibernate":    hibernateBlockList20_2,
-		"pgjdbc":       pgjdbcBlockList,
-		"psycopg":      psycopgBlockList20_2,
+		"hibernate":    hibernateBlocklist,
+		"pgjdbc":       pgjdbcBlocklist,
+		"psycopg":      psycopgBlocklist,
 		"django":       djangoBlocklist,
 		"sqlAlchemy":   sqlAlchemyBlocklist,
-		"libpq":        libPQBlocklist20_2,
-		"gopg":         gopgBlockList20_2,
-		"pgx":          pgxBlocklist20_2,
-		"activerecord": activeRecordBlockList20_2,
+		"libpq":        libPQBlocklist,
+		"gopg":         gopgBlocklist,
+		"pgx":          pgxBlocklist,
+		"activerecord": activeRecordBlocklist,
 	}
 	type reasonCount struct {
 		reason string
