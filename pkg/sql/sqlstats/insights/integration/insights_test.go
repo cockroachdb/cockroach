@@ -100,7 +100,8 @@ func TestInsightsIntegration(t *testing.T) {
 			"end_time, "+
 			"full_scan, "+
 			"implicit_txn, "+
-			"cpu_sql_nanos "+
+			"cpu_sql_nanos, "+
+			"COALESCE(error_code, '') error_code "+
 			"FROM crdb_internal.node_execution_insights where "+
 			"query = $1 and app_name = $2 ", "SELECT pg_sleep($1)", appName)
 
@@ -109,7 +110,8 @@ func TestInsightsIntegration(t *testing.T) {
 		var fullScan bool
 		var implicitTxn bool
 		var cpuSQLNanos int64
-		err = row.Scan(&query, &status, &startInsights, &endInsights, &fullScan, &implicitTxn, &cpuSQLNanos)
+		var errorCode string
+		err = row.Scan(&query, &status, &startInsights, &endInsights, &fullScan, &implicitTxn, &cpuSQLNanos, &errorCode)
 
 		if err != nil {
 			return err
@@ -117,6 +119,10 @@ func TestInsightsIntegration(t *testing.T) {
 
 		if status != "Completed" {
 			return fmt.Errorf("expected 'Completed', but was %s", status)
+		}
+
+		if errorCode != "" {
+			return fmt.Errorf("expected error code to be '' but was %s", errorCode)
 		}
 
 		delayFromTable := endInsights.Sub(startInsights).Seconds()
@@ -142,7 +148,8 @@ func TestInsightsIntegration(t *testing.T) {
 			"start_time, "+
 			"end_time, "+
 			"implicit_txn, "+
-			"cpu_sql_nanos "+
+			"cpu_sql_nanos, "+
+			"COALESCE(last_error_code, '') last_error_code "+
 			"FROM crdb_internal.cluster_txn_execution_insights WHERE "+
 			"query = $1 and app_name = $2 ", "SELECT pg_sleep($1)", appName)
 
@@ -150,10 +157,15 @@ func TestInsightsIntegration(t *testing.T) {
 		var startInsights, endInsights time.Time
 		var implicitTxn bool
 		var cpuSQLNanos int64
-		err = row.Scan(&query, &startInsights, &endInsights, &implicitTxn, &cpuSQLNanos)
+		var lastErrorCode string
+		err = row.Scan(&query, &startInsights, &endInsights, &implicitTxn, &cpuSQLNanos, &lastErrorCode)
 
 		if err != nil {
 			return err
+		}
+
+		if lastErrorCode != "" {
+			return fmt.Errorf("expected last error code to be '' but was %s", lastErrorCode)
 		}
 
 		if !implicitTxn {
@@ -169,6 +181,123 @@ func TestInsightsIntegration(t *testing.T) {
 		maxCPUMs := delayFromTable*1e3 + 10
 		if cpuSQLNanos < 0 || (cpuSQLNanos > (int64(maxCPUMs) * 1e6)) {
 			return fmt.Errorf("expected cpuSQLNanos to be between zero and %f ms, but was %d", maxCPUMs, cpuSQLNanos)
+		}
+
+		return nil
+	}, 1*time.Second)
+}
+
+func TestFailedInsights(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const appName = "TestFailedInsights"
+
+	// Start the cluster. (One node is sufficient; the outliers system is currently in-memory only.)
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+	args := base.TestClusterArgs{ServerArgs: base.TestServerArgs{Settings: settings}}
+	tc := testcluster.StartTestCluster(t, 1, args)
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.ServerConn(0)
+
+	// Enable detection by setting a latencyThreshold > 0.
+	latencyThreshold := 20 * time.Millisecond
+	insights.LatencyThreshold.Override(ctx, &settings.SV, latencyThreshold)
+
+	_, err := conn.ExecContext(ctx, "SET SESSION application_name=$1", appName)
+	require.NoError(t, err)
+
+	// See no recorded insights.
+	var count int
+	var queryText string
+	row := conn.QueryRowContext(ctx, "SELECT count(*), coalesce(string_agg(query, ';'),'') "+
+		"FROM crdb_internal.cluster_execution_insights where app_name = $1 ", appName)
+	err = row.Scan(&count, &queryText)
+	require.NoError(t, err)
+	require.Equal(t, 0, count, "expect:0, actual:%d, queries:%s", count, queryText)
+
+	// Run a statement that will fail.
+	failedQuery := "CREATE TABLE crdb_internal.example (abc INT8)"
+	_, err = conn.ExecContext(ctx, failedQuery)
+
+	// Eventually see one recorded insight.
+	testutils.SucceedsWithin(t, func() error {
+		row = conn.QueryRowContext(ctx, "SELECT count(*), coalesce(string_agg(query, ';'),'') "+
+			"FROM crdb_internal.cluster_execution_insights where app_name = $1 ", appName)
+		if err = row.Scan(&count, &queryText); err != nil {
+			return err
+		}
+		if count != 1 {
+			return fmt.Errorf("expected 1, but was %d, queryText:%s", count, queryText)
+		}
+		return nil
+	}, 1*time.Second)
+
+	// Verify the table content is valid on the crdb_internal.node_execution_insights table.
+	testutils.SucceedsWithin(t, func() error {
+		row = conn.QueryRowContext(ctx, "SELECT "+
+			"query, "+
+			"status, "+
+			"start_time, "+
+			"end_time, "+
+			"full_scan, "+
+			"implicit_txn, "+
+			"cpu_sql_nanos, "+
+			"COALESCE(error_code, '') error_code "+
+			"FROM crdb_internal.node_execution_insights where "+
+			"query = $1 AND app_name = $2 ", failedQuery, appName)
+
+		var query, status string
+		var startInsights, endInsights time.Time
+		var fullScan bool
+		var implicitTxn bool
+		var cpuSQLNanos int64
+		var errorCode string
+		err = row.Scan(&query, &status, &startInsights, &endInsights, &fullScan, &implicitTxn, &cpuSQLNanos, &errorCode)
+
+		if err != nil {
+			return err
+		}
+
+		if status != "Failed" {
+			return fmt.Errorf("expected 'Failed', but was %s", status)
+		}
+
+		// The error code for the failed statement should be '42501', insufficient privilege.
+		if errorCode != "42501" {
+			return fmt.Errorf("expected error code to be '42501' but was %s", errorCode)
+		}
+
+		return nil
+	}, 1*time.Second)
+
+	// Verify the table content is valid on the crdb_internal.node_txn_execution_insights table.
+	testutils.SucceedsWithin(t, func() error {
+		row = conn.QueryRowContext(ctx, "SELECT "+
+			"query, "+
+			"start_time, "+
+			"end_time, "+
+			"implicit_txn, "+
+			"cpu_sql_nanos, "+
+			"COALESCE(last_error_code, '') last_error_code "+
+			"FROM crdb_internal.node_txn_execution_insights where "+
+			"query = $1 AND app_name = $2 ", failedQuery, appName)
+
+		var query string
+		var startInsights, endInsights time.Time
+		var implicitTxn bool
+		var cpuSQLNanos int64
+		var lastErrorCode string
+		err = row.Scan(&query, &startInsights, &endInsights, &implicitTxn, &cpuSQLNanos, &lastErrorCode)
+
+		if err != nil {
+			return err
+		}
+
+		// The error code for the failed statement should be '42501', insufficient privilege.
+		if lastErrorCode != "42501" {
+			return fmt.Errorf("expected error code to be '42501' but was %s", lastErrorCode)
 		}
 
 		return nil
