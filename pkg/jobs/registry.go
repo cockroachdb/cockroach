@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/server/tracedumper"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -151,6 +152,10 @@ type Registry struct {
 		// passively polling for these jobs to complete. If they complete locally,
 		// the waitingSet will be updated appropriately.
 		waiting jobWaitingSets
+
+		// ingestingJobs is a map of jobs which are actively ingesting on this node
+		// including via a processor.
+		ingestingJobs map[jobspb.JobID]struct{}
 	}
 
 	// withSessionEvery ensures that logging when failing to get a live session
@@ -1927,4 +1932,33 @@ func (r *Registry) TestingIsJobIdle(jobID jobspb.JobID) bool {
 	defer r.mu.Unlock()
 	adoptedJob := r.mu.adoptedJobs[jobID]
 	return adoptedJob != nil && adoptedJob.isIdle
+}
+
+// MarkAsIngesting records a given jobID as actively ingesting data on the node
+// in which this Registry resides, either directly or via a processor running on
+// behalf of a job being run by a differnt registry. The returned function is to
+// be called when this node is no longer ingesting for that jobID, typically by
+// deferring it when calling this method. See IsIngestin ag.
+func (r *Registry) MarkAsIngesting(jobID catpb.JobID) func() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.mu.ingestingJobs == nil {
+		r.mu.ingestingJobs = make(map[catpb.JobID]struct{})
+	}
+	r.mu.ingestingJobs[jobID] = struct{}{}
+	return func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		delete(r.mu.ingestingJobs, jobID)
+	}
+}
+
+// IsIngesting returns true if a given job has indicated it is ingesting at this
+// time on this node. See MarkAsIngesting.
+func (r *Registry) IsIngesting(jobID catpb.JobID) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	_, ok := r.mu.ingestingJobs[jobID]
+	return ok
 }
