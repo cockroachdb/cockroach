@@ -156,6 +156,19 @@ export function Duration(nanoseconds: number): string {
 }
 
 /**
+ * Duration creates a string representation for a duration. The expectation is
+ * that units are passed in nanoseconds; for larger durations, the value will
+ * be converted into larger units.
+ * If the value is 0, return "no samples".
+ */
+export function DurationCheckSample(nanoseconds: number): string {
+  if (nanoseconds == 0) {
+    return "no samples";
+  }
+  return Duration(nanoseconds);
+}
+
+/**
  * Cast nanoseconds to provided scale units
  */
 // tslint:disable-next-line: variable-name
