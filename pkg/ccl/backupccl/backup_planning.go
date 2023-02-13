@@ -67,6 +67,7 @@ const (
 	backupOptDebugMetadataSST = "debug_dump_metadata_sst"
 	backupOptEncDir           = "encryption_info_dir"
 	backupOptCheckFiles       = "check_files"
+	backupOptConnTestTransfer = "transfer"
 	// backupPartitionDescriptorPrefix is the file name prefix for serialized
 	// BackupPartitionDescriptor protos.
 	backupPartitionDescriptorPrefix = "BACKUP_PART"

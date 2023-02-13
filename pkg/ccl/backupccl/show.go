@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudcheck"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudprivilege"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -44,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -194,6 +196,9 @@ func showBackupTypeCheck(
 	); err != nil {
 		return false, nil, err
 	}
+	if backup.Details == tree.BackupConnectionTest {
+		return true, cloudcheck.Header, nil
+	}
 	infoReader := getBackupInfoReader(p, backup)
 	return true, infoReader.header(), nil
 }
@@ -208,6 +213,7 @@ var showBackupOptions = exprutil.KVOptionValidationMap{
 	backupOptDebugMetadataSST:               exprutil.KVStringOptRequireNoValue,
 	backupOptEncDir:                         exprutil.KVStringOptRequireValue,
 	backupOptCheckFiles:                     exprutil.KVStringOptRequireNoValue,
+	backupOptConnTestTransfer:               exprutil.KVStringOptRequireValue,
 }
 
 // showBackupPlanHook implements PlanHookFn.
@@ -219,6 +225,30 @@ func showBackupPlanHook(
 		return nil, nil, nil, false, nil
 	}
 	exprEval := p.ExprEvaluator("SHOW BACKUP")
+
+	// TODO(dt): find move this to its own hook.
+	if backup.Details == tree.BackupConnectionTest {
+		loc, err := exprEval.String(ctx, backup.Path)
+		if err != nil {
+			return nil, nil, nil, false, err
+		}
+		opts, err := exprEval.KVOptions(ctx, backup.Options, showBackupOptions)
+		if err != nil {
+			return nil, nil, nil, false, err
+		}
+
+		var transferSize int64
+		if transferSizeStr, ok := opts[backupOptConnTestTransfer]; ok {
+			parsed, err := humanizeutil.ParseBytes(transferSizeStr)
+			if err != nil {
+				return nil, nil, nil, false, err
+			}
+			transferSize = parsed
+		}
+
+		return cloudcheck.ShowCloudStorageTestPlanHook(ctx, p, loc, transferSize)
+	}
+
 	if backup.Path == nil && backup.InCollection != nil {
 		collection, err := exprEval.StringArray(
 			ctx, tree.Exprs(backup.InCollection),

@@ -6698,6 +6698,14 @@ show_backup_stmt:
   			Options: $5.kvOptions(),
   		}
   	}
+| SHOW BACKUP CONNECTION string_or_placeholder opt_with_options
+  	{
+  		$$.val = &tree.ShowBackup{
+  		  Details:  tree.BackupConnectionTest,
+  			Path:    $4.expr(),
+        Options: $5.kvOptions(),
+  		}
+  	}
 | SHOW BACKUP error // SHOW HELP: SHOW BACKUP
 
 show_backup_details:

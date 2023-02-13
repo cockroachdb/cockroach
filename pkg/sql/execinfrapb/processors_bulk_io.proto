@@ -409,3 +409,9 @@ message GenerativeSplitAndScatterSpec {
   optional int64 job_id = 18 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
   optional bool use_simple_import_spans = 19 [(gogoproto.nullable) = false];
 }
+
+message CloudStorageTestSpec {
+  optional string location = 1 [(gogoproto.nullable) = false];
+  optional int64 transfer_size = 2 [(gogoproto.nullable) = false];
+  // NEXT ID: 2;
+}
