@@ -241,6 +241,7 @@ func TestImportIgnoresProcessedFiles(t *testing.T) {
 		EvalCtx: &evalCtx,
 		Mon:     evalCtx.TestingMon,
 		Cfg: &execinfra.ServerConfig{
+			JobRegistry:     &jobs.Registry{},
 			Settings:        &cluster.Settings{},
 			ExternalStorage: externalStorageFactory,
 			DB:              fakeDB{},
@@ -365,6 +366,7 @@ func TestImportHonorsResumePosition(t *testing.T) {
 		EvalCtx: &evalCtx,
 		Mon:     evalCtx.TestingMon,
 		Cfg: &execinfra.ServerConfig{
+			JobRegistry:     &jobs.Registry{},
 			Settings:        &cluster.Settings{},
 			ExternalStorage: externalStorageFactory,
 			DB:              fakeDB{},
@@ -494,6 +496,7 @@ func TestImportHandlesDuplicateKVs(t *testing.T) {
 		EvalCtx: &evalCtx,
 		Mon:     evalCtx.TestingMon,
 		Cfg: &execinfra.ServerConfig{
+			JobRegistry:     &jobs.Registry{},
 			Settings:        &cluster.Settings{},
 			ExternalStorage: externalStorageFactory,
 			DB:              fakeDB{},
