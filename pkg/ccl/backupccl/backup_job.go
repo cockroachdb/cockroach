@@ -714,7 +714,14 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			return errors.Wrap(err, "failed to run backup")
 		}
 
-		log.Warningf(ctx, `BACKUP job encountered retryable error: %+v`, err)
+		// If we are draining, it is unlikely we can start a
+		// new DistSQL flow. Exit with a retryable error so
+		// that another node can pick up the job.
+		if p.ExecCfg().JobRegistry.IsDraining() {
+			return jobs.MarkAsRetryJobError(errors.Wrapf(err, "job encountered retryable error on draining node"))
+		}
+
+		log.Warningf(ctx, "encountered retryable error: %+v", err)
 
 		// Reload the backup manifest to pick up any spans we may have completed on
 		// previous attempts.
