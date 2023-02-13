@@ -28,42 +28,47 @@ export type NodeNames = { [nodeId: string]: string };
 
 // Single place for column names. Used in table columns and in columns selector.
 export const statisticsColumnLabels = {
-  sessionStart: "Session Start Time (UTC)",
-  sessionDuration: "Session Duration",
-  sessionActiveDuration: "Session Active Duration",
-  sessionTxnCount: "Transaction Count",
-  mostRecentStatement: "Most Recent Statement",
-  status: "Status",
-  statementStartTime: "Statement Start Time (UTC)",
-  txnDuration: "Transaction Duration",
   actions: "Actions",
-  memUsage: "Memory Usage",
-  maxMemUsed: "Maximum Memory Usage",
-  numRetries: "Retries",
-  numStatements: "Statements Run",
-  clientAddress: "Client IP Address",
-  username: "User Name",
   applicationName: "Application Name",
   bytesRead: "Bytes Read",
+  clientAddress: "Client IP Address",
   contention: "Contention Time",
   cpu: "CPU Time",
   database: "Database",
   diagnostics: "Diagnostics",
   executionCount: "Execution Count",
+  lastExecTimestamp: "Last Execution Time (UTC)",
+  latencyMax: "Max Latency",
+  latencyMin: "Min Latency",
+  latencyP50: "P50 Latency",
+  latencyP90: "P90 Latency",
+  latencyP99: "P99 Latency",
   maxMemUsage: "Max Memory",
+  maxMemUsed: "Maximum Memory Usage",
+  memUsage: "Memory Usage",
+  mostRecentStatement: "Most Recent Statement",
   networkBytes: "Network",
+  numRetries: "Retries",
+  numStatements: "Statements Run",
   regions: "Regions",
   regionNodes: "Regions/Nodes",
   retries: "Retries",
   rowsProcessed: "Rows Processed",
+  sessionActiveDuration: "Session Active Duration",
+  sessionDuration: "Session Duration",
+  sessionStart: "Session Start Time (UTC)",
+  sessionTxnCount: "Transaction Count",
+  statementFingerprintId: "Statement Fingerprint ID",
+  statementStartTime: "Statement Start Time (UTC)",
   statements: "Statements",
   statementsCount: "Statements",
+  status: "Status",
   time: "Time",
-  transactions: "Transactions",
-  workloadPct: "% of All Runtime",
-  lastExecTimestamp: "Last Execution Time (UTC)",
-  statementFingerprintId: "Statement Fingerprint ID",
   transactionFingerprintId: "Transaction Fingerprint ID",
+  transactions: "Transactions",
+  txnDuration: "Transaction Duration",
+  username: "User Name",
+  workloadPct: "% of All Runtime",
 };
 
 export const contentModifiers = {
@@ -885,6 +890,111 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         }
       >
         {getLabel("statementsCount")}
+      </Tooltip>
+    );
+  },
+  latencyMax: (statType: StatisticType) => {
+    let contentModifier = "";
+    switch (statType) {
+      case "transaction":
+        contentModifier = contentModifiers.transaction;
+        break;
+      case "statement":
+        contentModifier = contentModifiers.statement;
+        break;
+    }
+
+    return (
+      <Tooltip
+        placement="bottom"
+        style="tableTitle"
+        content={<p>Maximum latency value of the {contentModifier}.</p>}
+      >
+        {getLabel("latencyMax")}
+      </Tooltip>
+    );
+  },
+  latencyMin: (statType: StatisticType) => {
+    let contentModifier = "";
+    switch (statType) {
+      case "transaction":
+        contentModifier = contentModifiers.transaction;
+        break;
+      case "statement":
+        contentModifier = contentModifiers.statement;
+        break;
+    }
+
+    return (
+      <Tooltip
+        placement="bottom"
+        style="tableTitle"
+        content={<p>Minimum latency value of the {contentModifier}.</p>}
+      >
+        {getLabel("latencyMin")}
+      </Tooltip>
+    );
+  },
+  latencyP50: (statType: StatisticType) => {
+    let contentModifier = "";
+    switch (statType) {
+      case "transaction":
+        contentModifier = contentModifiers.transaction;
+        break;
+      case "statement":
+        contentModifier = contentModifiers.statement;
+        break;
+    }
+
+    return (
+      <Tooltip
+        placement="bottom"
+        style="tableTitle"
+        content={<p>The 50 Percentile for the {contentModifier}.</p>}
+      >
+        {getLabel("latencyP50")}
+      </Tooltip>
+    );
+  },
+  latencyP90: (statType: StatisticType) => {
+    let contentModifier = "";
+    switch (statType) {
+      case "transaction":
+        contentModifier = contentModifiers.transaction;
+        break;
+      case "statement":
+        contentModifier = contentModifiers.statement;
+        break;
+    }
+
+    return (
+      <Tooltip
+        placement="bottom"
+        style="tableTitle"
+        content={<p>The 90 Percentile for the {contentModifier}.</p>}
+      >
+        {getLabel("latencyP90")}
+      </Tooltip>
+    );
+  },
+  latencyP99: (statType: StatisticType) => {
+    let contentModifier = "";
+    switch (statType) {
+      case "transaction":
+        contentModifier = contentModifiers.transaction;
+        break;
+      case "statement":
+        contentModifier = contentModifiers.statement;
+        break;
+    }
+
+    return (
+      <Tooltip
+        placement="bottom"
+        style="tableTitle"
+        content={<p>The 99 Percentile for the {contentModifier}.</p>}
+      >
+        {getLabel("latencyP99")}
       </Tooltip>
     );
   },
