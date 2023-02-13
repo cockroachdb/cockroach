@@ -7164,7 +7164,8 @@ CREATE TABLE crdb_internal.%s (
   problems                   STRING[] NOT NULL,
   causes                     STRING[] NOT NULL,
   stmt_execution_ids         STRING[] NOT NULL,
-  cpu_sql_nanos              INT8
+  cpu_sql_nanos              INT8,
+  last_error_code            STRING
 )`
 
 var crdbInternalClusterTxnExecutionInsightsTable = virtualSchemaTable{
@@ -7205,6 +7206,7 @@ func populateTxnExecutionInsights(
 	// We should truncate the query if it surpasses some absurd limit.
 	queryMax := 5000
 	for _, insight := range response.Insights {
+		var errorCode string
 		var queryBuilder strings.Builder
 		for i := range insight.Statements {
 			// Build query string.
@@ -7219,6 +7221,10 @@ func populateTxnExecutionInsights(
 				queryBuilder.WriteString(" ; ")
 			}
 			queryBuilder.WriteString(insight.Statements[i].Query)
+
+			if insight.Statements[i].ErrorCode != "" {
+				errorCode = insight.Statements[i].ErrorCode
+			}
 		}
 
 		problems := tree.NewDArray(types.String)
@@ -7287,6 +7293,7 @@ func populateTxnExecutionInsights(
 			causes,
 			stmtIDs,
 			tree.NewDInt(tree.DInt(insight.Transaction.CPUSQLNanos)),
+			tree.NewDString(errorCode),
 		))
 
 		if err != nil {
@@ -7325,7 +7332,8 @@ CREATE TABLE crdb_internal.%s (
 	contention                 INTERVAL,
 	index_recommendations      STRING[] NOT NULL,
 	implicit_txn               BOOL NOT NULL,
-	cpu_sql_nanos              INT8
+	cpu_sql_nanos              INT8,
+    error_code                 STRING
 )`
 
 var crdbInternalClusterExecutionInsightsTable = virtualSchemaTable{
@@ -7448,6 +7456,7 @@ func populateStmtInsights(
 				indexRecommendations,
 				tree.MakeDBool(tree.DBool(insight.Transaction.ImplicitTxn)),
 				tree.NewDInt(tree.DInt(s.CPUSQLNanos)),
+				tree.NewDString(s.ErrorCode),
 			))
 		}
 	}
