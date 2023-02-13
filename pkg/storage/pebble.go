@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/storage/pebbleiter"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -89,7 +90,8 @@ var ValueBlocksEnabled = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"storage.value_blocks.enabled",
 	"set to true to enable writing of value blocks in sstables",
-	false).WithPublic()
+	util.ConstantWithMetamorphicTestBool(
+		"storage.value_blocks.enabled", true)).WithPublic()
 
 // EngineKeyCompare compares cockroach keys, including the version (which
 // could be MVCC timestamps).

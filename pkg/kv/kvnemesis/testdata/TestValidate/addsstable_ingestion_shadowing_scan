@@ -2,7 +2,7 @@ echo
 ----
 db0.Put(ctx, tk(1), sv(1)) // @0.000000001,0 <nil>
 db0.Put(ctx, tk(2), sv(1)) // @0.000000001,0 <nil>
-db0.AddSSTable(ctx, tk(1), tk(3), ... /* @s2 */) // 1051 bytes
+db0.AddSSTable(ctx, tk(1), tk(3), ... /* @s2 */) // 1052 bytes
 // ^-- tk(1) -> sv(s2): /Table/100/"0000000000000001"/0.000000001,0 -> /BYTES/v2
 // ^-- tk(2) -> sv(s2): /Table/100/"0000000000000002"/0.000000001,0 -> /<empty>
 db0.Scan(ctx, tk(1), tk(3), 0) // @0.000000003,0 (/Table/100/"0000000000000001":v2, <nil>)
