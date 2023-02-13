@@ -144,6 +144,7 @@ func newReplicaCircuitBreaker(
 		Name:       "breaker", // log bridge has ctx tags
 		AsyncProbe: br.asyncProbe,
 		EventHandler: &replicaCircuitBreakerLogger{
+			ambientCtx: ambientCtx,
 			EventHandler: &circuit.EventLogger{
 				Log: func(buf redact.StringBuilder) {
 					log.Infof(ambientCtx.AnnotateCtx(context.Background()), "%s", buf)
@@ -159,15 +160,19 @@ func newReplicaCircuitBreaker(
 
 type replicaCircuitBreakerLogger struct {
 	circuit.EventHandler
-	onTrip  func()
-	onReset func()
+	ambientCtx log.AmbientContext
+	onTrip     func()
+	onReset    func()
 }
 
-func (r replicaCircuitBreakerLogger) OnTrip(br *circuit.Breaker, prev, cur error) {
+func (r replicaCircuitBreakerLogger) OnTrip(b *circuit.Breaker, prev, cur error) {
 	if prev == nil {
 		r.onTrip()
 	}
-	r.EventHandler.OnTrip(br, prev, cur)
+	// Log directly from this method via log.Errorf.
+	var buf redact.StringBuilder
+	circuit.EventFormatter{}.OnTrip(b, prev, cur, &buf)
+	log.Errorf(r.ambientCtx.AnnotateCtx(context.Background()), "%s", buf)
 }
 
 func (r replicaCircuitBreakerLogger) OnReset(br *circuit.Breaker) {
