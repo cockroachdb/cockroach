@@ -483,3 +483,46 @@ DROP TYPE sc2.typ;
 # This is just cleanup.
 statement ok
 DROP SCHEMA sc2 CASCADE;
+
+# Concurrent DROP TYPE and other ALTER TYPE statements can potentially
+# collide with each other, since the code used to as a part of TYPE SCHEMA
+# CHANGER jobs clean up the descriptor if it was marked as dropped. This
+# should no longer happen, if a declarative schema changer state exists.
+# Without the fix this test would hang.
+subtest concurrent_declarative_89831
+
+statement ok
+CREATE DATABASE db1 OWNER testuser;
+CREATE SCHEMA db1.sc1 AUTHORIZATION testuser;
+
+statement ok
+CREATE TYPE db1.sc1.typ AS ENUM ('a');
+
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints="typeschemachanger.before.exec"
+
+skipif config local-legacy-schema-changer
+statement error job \d+ was paused before it completed with reason: pause point "typeschemachanger.before.exec" hit
+ALTER TYPE db1.sc1.typ OWNER TO testuser
+
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints=""
+
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints="newschemachanger.before.exec"
+
+skipif config local-legacy-schema-changer
+statement error job \d+ was paused before it completed with reason: pause point "newschemachanger.before.exec" hit
+DROP SCHEMA db1.sc1 CASCADE
+
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints=""
+
+statement ok
+RESUME JOB (SELECT job_id FROM crdb_internal.jobs WHERE description LIKE 'ALTER TYPE%' AND status='paused' FETCH FIRST 1 ROWS ONLY);
+
+statement ok
+RESUME JOB (SELECT job_id FROM crdb_internal.jobs WHERE description LIKE 'ALTER TYPE%' AND status='paused' FETCH FIRST 1 ROWS ONLY);
+
+statement ok
+RESUME JOB (SELECT job_id FROM crdb_internal.jobs WHERE description LIKE 'DROP SCHEMA%' AND status='paused' FETCH FIRST 1 ROWS ONLY);
