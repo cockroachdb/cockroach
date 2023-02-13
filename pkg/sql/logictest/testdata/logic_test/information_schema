@@ -4922,6 +4922,7 @@ cost_scans_with_default_col_size                      off
 database                                              test
 datestyle                                             ISO, MDY
 datestyle_enabled                                     on
+declare_cursor_statement_timeout_enabled              on
 default_int_size                                      8
 default_table_access_method                           heap
 default_tablespace                                    ·
