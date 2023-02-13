@@ -3043,3 +3043,11 @@ SELECT * FROM ROWS FROM (json_to_record('')) AS t (a INT8, b STRING, c foo) -- n
 SELECT (*) FROM ROWS FROM ((json_to_record(('')))) AS t (a INT8, b STRING, c foo) -- fully parenthesized
 SELECT * FROM ROWS FROM (json_to_record('_')) AS t (a INT8, b STRING, c foo) -- literals removed
 SELECT * FROM ROWS FROM (json_to_record('')) AS _ (_ INT8, _ STRING, _ foo) -- identifiers removed
+
+parse
+SELECT substring('stringstringstring',1,10) QUERY
+----
+SELECT substring('stringstringstring', 1, 10) AS query -- normalized!
+SELECT (substring(('stringstringstring'), (1), (10))) AS query -- fully parenthesized
+SELECT substring('_', _, _) AS query -- literals removed
+SELECT substring('stringstringstring', 1, 10) AS _ -- identifiers removed
