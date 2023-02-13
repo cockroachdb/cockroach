@@ -2285,7 +2285,42 @@ func typeCheckComparisonOp(
 	// defined to return NULL anyways. Should the SQL dialect ever be extended with
 	// comparisons that can return non-NULL on NULL input, the `inBinOp` parameter
 	// may need altering.
-	s := getOverloadTypeChecker(ops, foldedLeft, foldedRight)
+	var s *overloadTypeChecker
+	// The overload type checker does not have symmetric behavior (the order of
+	// the expression arguments matters). Find the order which does not error out
+	// and initialize the type checker with that order. We purposely do not return
+	// errors here because the overload type checker can coerce types in some
+	// cases to avoid errors. Comparisons with placeholders aren't examined as
+	// that may not take placeholder hints into account. Comparisons with columns
+	// aren't examined as it's usually best to allow type coercion to the type of
+	// the column, if possible.
+	placeholderComparison := false
+	columnComparison := false
+	if _, ok := foldedLeft.(VariableExpr); ok {
+		columnComparison = true
+	}
+	if _, ok := foldedRight.(VariableExpr); ok {
+		columnComparison = true
+	}
+	if _, ok := foldedLeft.(*Placeholder); ok {
+		placeholderComparison = true
+	}
+	if _, ok := foldedRight.(*Placeholder); ok {
+		placeholderComparison = true
+	}
+	if !placeholderComparison && !columnComparison {
+		_, _, err := typeCheckSameTypedExprs(ctx, semaCtx, types.Any, foldedLeft, foldedRight)
+		if err != nil {
+			_, _, err = typeCheckSameTypedExprs(ctx, semaCtx, types.Any, foldedRight, foldedLeft)
+			if err == nil {
+				s = getOverloadTypeChecker(ops, foldedRight, foldedLeft)
+				switched = !switched
+			}
+		}
+	}
+	if s == nil {
+		s = getOverloadTypeChecker(ops, foldedLeft, foldedRight)
+	}
 	defer s.release()
 	if err := s.typeCheckOverloadedExprs(ctx, semaCtx, types.Any, true); err != nil {
 		return nil, nil, nil, false, err
