@@ -100,35 +100,61 @@ func NewFlowsMetadata(flows map[base.SQLInstanceID]*execinfrapb.FlowSpec) *Flows
 //
 //	stat.
 type NodeLevelStats struct {
-	NetworkBytesSentGroupedByNode      map[base.SQLInstanceID]int64
-	MaxMemoryUsageGroupedByNode        map[base.SQLInstanceID]int64
-	MaxDiskUsageGroupedByNode          map[base.SQLInstanceID]int64
-	KVBytesReadGroupedByNode           map[base.SQLInstanceID]int64
-	KVRowsReadGroupedByNode            map[base.SQLInstanceID]int64
-	KVBatchRequestsIssuedGroupedByNode map[base.SQLInstanceID]int64
-	KVTimeGroupedByNode                map[base.SQLInstanceID]time.Duration
-	NetworkMessagesGroupedByNode       map[base.SQLInstanceID]int64
-	ContentionTimeGroupedByNode        map[base.SQLInstanceID]time.Duration
-	RUEstimateGroupedByNode            map[base.SQLInstanceID]int64
-	CPUTimeGroupedByNode               map[base.SQLInstanceID]time.Duration
+	NetworkBytesSentGroupedByNode                   map[base.SQLInstanceID]int64
+	MaxMemoryUsageGroupedByNode                     map[base.SQLInstanceID]int64
+	MaxDiskUsageGroupedByNode                       map[base.SQLInstanceID]int64
+	KVBytesReadGroupedByNode                        map[base.SQLInstanceID]int64
+	KVRowsReadGroupedByNode                         map[base.SQLInstanceID]int64
+	KVBatchRequestsIssuedGroupedByNode              map[base.SQLInstanceID]int64
+	KVTimeGroupedByNode                             map[base.SQLInstanceID]time.Duration
+	MvccStepsGroupedByNode                          map[base.SQLInstanceID]int64
+	MvccStepsInternalGroupedByNode                  map[base.SQLInstanceID]int64
+	MvccSeeksGroupedByNode                          map[base.SQLInstanceID]int64
+	MvccSeeksInternalGroupedByNode                  map[base.SQLInstanceID]int64
+	MvccBlockBytesGroupedByNode                     map[base.SQLInstanceID]int64
+	MvccBlockBytesInCacheGroupedByNode              map[base.SQLInstanceID]int64
+	MvccKeyBytesGroupedByNode                       map[base.SQLInstanceID]int64
+	MvccValueBytesGroupedByNode                     map[base.SQLInstanceID]int64
+	MvccPointCountGroupedByNode                     map[base.SQLInstanceID]int64
+	MvccPointsCoveredByRangeTombstonesGroupedByNode map[base.SQLInstanceID]int64
+	MvccRangeKeyCountGroupedByNode                  map[base.SQLInstanceID]int64
+	MvccRangeKeyContainedPointsGroupedByNode        map[base.SQLInstanceID]int64
+	MvccRangeKeySkippedPointsGroupedByNode          map[base.SQLInstanceID]int64
+	NetworkMessagesGroupedByNode                    map[base.SQLInstanceID]int64
+	ContentionTimeGroupedByNode                     map[base.SQLInstanceID]time.Duration
+	RUEstimateGroupedByNode                         map[base.SQLInstanceID]int64
+	CPUTimeGroupedByNode                            map[base.SQLInstanceID]time.Duration
 }
 
 // QueryLevelStats returns all the query level stats that correspond to the
 // given traces and flow metadata.
 // NOTE: When adding fields to this struct, be sure to update Accumulate.
 type QueryLevelStats struct {
-	NetworkBytesSent      int64
-	MaxMemUsage           int64
-	MaxDiskUsage          int64
-	KVBytesRead           int64
-	KVRowsRead            int64
-	KVBatchRequestsIssued int64
-	KVTime                time.Duration
-	NetworkMessages       int64
-	ContentionTime        time.Duration
-	ContentionEvents      []roachpb.ContentionEvent
-	RUEstimate            int64
-	CPUTime               time.Duration
+	NetworkBytesSent                   int64
+	MaxMemUsage                        int64
+	MaxDiskUsage                       int64
+	KVBytesRead                        int64
+	KVRowsRead                         int64
+	KVBatchRequestsIssued              int64
+	KVTime                             time.Duration
+	MvccSteps                          int64
+	MvccStepsInternal                  int64
+	MvccSeeks                          int64
+	MvccSeeksInternal                  int64
+	MvccBlockBytes                     int64
+	MvccBlockBytesInCache              int64
+	MvccKeyBytes                       int64
+	MvccValueBytes                     int64
+	MvccPointCount                     int64
+	MvccPointsCoveredByRangeTombstones int64
+	MvccRangeKeyCount                  int64
+	MvccRangeKeyContainedPoints        int64
+	MvccRangeKeySkippedPoints          int64
+	NetworkMessages                    int64
+	ContentionTime                     time.Duration
+	ContentionEvents                   []roachpb.ContentionEvent
+	RUEstimate                         int64
+	CPUTime                            time.Duration
 }
 
 // QueryLevelStatsWithErr is the same as QueryLevelStats, but also tracks
@@ -160,6 +186,19 @@ func (s *QueryLevelStats) Accumulate(other QueryLevelStats) {
 	s.KVRowsRead += other.KVRowsRead
 	s.KVBatchRequestsIssued += other.KVBatchRequestsIssued
 	s.KVTime += other.KVTime
+	s.MvccSteps += other.MvccSteps
+	s.MvccStepsInternal += other.MvccStepsInternal
+	s.MvccSeeks += other.MvccSeeks
+	s.MvccSeeksInternal += other.MvccSeeksInternal
+	s.MvccBlockBytes += other.MvccBlockBytes
+	s.MvccBlockBytesInCache += other.MvccBlockBytesInCache
+	s.MvccKeyBytes += other.MvccKeyBytes
+	s.MvccValueBytes += other.MvccValueBytes
+	s.MvccPointCount += other.MvccPointCount
+	s.MvccPointsCoveredByRangeTombstones += other.MvccPointsCoveredByRangeTombstones
+	s.MvccRangeKeyCount += other.MvccRangeKeyCount
+	s.MvccRangeKeyContainedPoints += other.MvccRangeKeyContainedPoints
+	s.MvccRangeKeySkippedPoints += other.MvccRangeKeySkippedPoints
 	s.NetworkMessages += other.NetworkMessages
 	s.ContentionTime += other.ContentionTime
 	s.ContentionEvents = append(s.ContentionEvents, other.ContentionEvents...)
@@ -231,17 +270,30 @@ func (a *TraceAnalyzer) AddTrace(trace []tracingpb.RecordedSpan, makeDeterminist
 func (a *TraceAnalyzer) ProcessStats() error {
 	// Process node level stats.
 	a.nodeLevelStats = NodeLevelStats{
-		NetworkBytesSentGroupedByNode:      make(map[base.SQLInstanceID]int64),
-		MaxMemoryUsageGroupedByNode:        make(map[base.SQLInstanceID]int64),
-		MaxDiskUsageGroupedByNode:          make(map[base.SQLInstanceID]int64),
-		KVBytesReadGroupedByNode:           make(map[base.SQLInstanceID]int64),
-		KVRowsReadGroupedByNode:            make(map[base.SQLInstanceID]int64),
-		KVBatchRequestsIssuedGroupedByNode: make(map[base.SQLInstanceID]int64),
-		KVTimeGroupedByNode:                make(map[base.SQLInstanceID]time.Duration),
-		NetworkMessagesGroupedByNode:       make(map[base.SQLInstanceID]int64),
-		ContentionTimeGroupedByNode:        make(map[base.SQLInstanceID]time.Duration),
-		RUEstimateGroupedByNode:            make(map[base.SQLInstanceID]int64),
-		CPUTimeGroupedByNode:               make(map[base.SQLInstanceID]time.Duration),
+		NetworkBytesSentGroupedByNode:                   make(map[base.SQLInstanceID]int64),
+		MaxMemoryUsageGroupedByNode:                     make(map[base.SQLInstanceID]int64),
+		MaxDiskUsageGroupedByNode:                       make(map[base.SQLInstanceID]int64),
+		KVBytesReadGroupedByNode:                        make(map[base.SQLInstanceID]int64),
+		KVRowsReadGroupedByNode:                         make(map[base.SQLInstanceID]int64),
+		KVBatchRequestsIssuedGroupedByNode:              make(map[base.SQLInstanceID]int64),
+		KVTimeGroupedByNode:                             make(map[base.SQLInstanceID]time.Duration),
+		MvccStepsGroupedByNode:                          make(map[base.SQLInstanceID]int64),
+		MvccStepsInternalGroupedByNode:                  make(map[base.SQLInstanceID]int64),
+		MvccSeeksGroupedByNode:                          make(map[base.SQLInstanceID]int64),
+		MvccSeeksInternalGroupedByNode:                  make(map[base.SQLInstanceID]int64),
+		MvccBlockBytesGroupedByNode:                     make(map[base.SQLInstanceID]int64),
+		MvccBlockBytesInCacheGroupedByNode:              make(map[base.SQLInstanceID]int64),
+		MvccKeyBytesGroupedByNode:                       make(map[base.SQLInstanceID]int64),
+		MvccValueBytesGroupedByNode:                     make(map[base.SQLInstanceID]int64),
+		MvccPointCountGroupedByNode:                     make(map[base.SQLInstanceID]int64),
+		MvccPointsCoveredByRangeTombstonesGroupedByNode: make(map[base.SQLInstanceID]int64),
+		MvccRangeKeyCountGroupedByNode:                  make(map[base.SQLInstanceID]int64),
+		MvccRangeKeyContainedPointsGroupedByNode:        make(map[base.SQLInstanceID]int64),
+		MvccRangeKeySkippedPointsGroupedByNode:          make(map[base.SQLInstanceID]int64),
+		NetworkMessagesGroupedByNode:                    make(map[base.SQLInstanceID]int64),
+		ContentionTimeGroupedByNode:                     make(map[base.SQLInstanceID]time.Duration),
+		RUEstimateGroupedByNode:                         make(map[base.SQLInstanceID]int64),
+		CPUTimeGroupedByNode:                            make(map[base.SQLInstanceID]time.Duration),
 	}
 	var errs error
 
@@ -256,6 +308,19 @@ func (a *TraceAnalyzer) ProcessStats() error {
 		a.nodeLevelStats.KVRowsReadGroupedByNode[instanceID] += int64(stats.KV.TuplesRead.Value())
 		a.nodeLevelStats.KVBatchRequestsIssuedGroupedByNode[instanceID] += int64(stats.KV.BatchRequestsIssued.Value())
 		a.nodeLevelStats.KVTimeGroupedByNode[instanceID] += stats.KV.KVTime.Value()
+		a.nodeLevelStats.MvccStepsGroupedByNode[instanceID] += int64(stats.KV.NumInterfaceSteps.Value())
+		a.nodeLevelStats.MvccStepsInternalGroupedByNode[instanceID] += int64(stats.KV.NumInternalSteps.Value())
+		a.nodeLevelStats.MvccSeeksGroupedByNode[instanceID] += int64(stats.KV.NumInterfaceSeeks.Value())
+		a.nodeLevelStats.MvccSeeksInternalGroupedByNode[instanceID] += int64(stats.KV.NumInternalSeeks.Value())
+		a.nodeLevelStats.MvccBlockBytesGroupedByNode[instanceID] += int64(stats.KV.BlockBytes.Value())
+		a.nodeLevelStats.MvccBlockBytesInCacheGroupedByNode[instanceID] += int64(stats.KV.BlockBytesInCache.Value())
+		a.nodeLevelStats.MvccKeyBytesGroupedByNode[instanceID] += int64(stats.KV.BlockBytesInCache.Value())
+		a.nodeLevelStats.MvccValueBytesGroupedByNode[instanceID] += int64(stats.KV.ValueBytes.Value())
+		a.nodeLevelStats.MvccPointCountGroupedByNode[instanceID] += int64(stats.KV.PointCount.Value())
+		a.nodeLevelStats.MvccPointsCoveredByRangeTombstonesGroupedByNode[instanceID] += int64(stats.KV.PointsCoveredByRangeTombstones.Value())
+		a.nodeLevelStats.MvccRangeKeyCountGroupedByNode[instanceID] += int64(stats.KV.RangeKeyCount.Value())
+		a.nodeLevelStats.MvccRangeKeyContainedPointsGroupedByNode[instanceID] += int64(stats.KV.RangeKeyContainedPoints.Value())
+		a.nodeLevelStats.MvccRangeKeySkippedPointsGroupedByNode[instanceID] += int64(stats.KV.RangeKeySkippedPoints.Value())
 		a.nodeLevelStats.ContentionTimeGroupedByNode[instanceID] += stats.KV.ContentionTime.Value()
 		a.nodeLevelStats.RUEstimateGroupedByNode[instanceID] += int64(stats.Exec.ConsumedRU.Value())
 		a.nodeLevelStats.CPUTimeGroupedByNode[instanceID] += stats.Exec.CPUTime.Value()
@@ -365,6 +430,58 @@ func (a *TraceAnalyzer) ProcessStats() error {
 
 	for _, kvTime := range a.nodeLevelStats.KVTimeGroupedByNode {
 		a.queryLevelStats.KVTime += kvTime
+	}
+
+	for _, MvccSteps := range a.nodeLevelStats.MvccStepsGroupedByNode {
+		a.queryLevelStats.MvccSteps += MvccSteps
+	}
+
+	for _, MvccStepsInternal := range a.nodeLevelStats.MvccStepsInternalGroupedByNode {
+		a.queryLevelStats.MvccStepsInternal += MvccStepsInternal
+	}
+
+	for _, MvccSeeks := range a.nodeLevelStats.MvccSeeksGroupedByNode {
+		a.queryLevelStats.MvccSeeks += MvccSeeks
+	}
+
+	for _, MvccSeeksInternal := range a.nodeLevelStats.MvccSeeksInternalGroupedByNode {
+		a.queryLevelStats.MvccSeeksInternal += MvccSeeksInternal
+	}
+
+	for _, MvccBlockBytes := range a.nodeLevelStats.MvccBlockBytesGroupedByNode {
+		a.queryLevelStats.MvccBlockBytes += MvccBlockBytes
+	}
+
+	for _, MvccBlockBytesInCache := range a.nodeLevelStats.MvccBlockBytesInCacheGroupedByNode {
+		a.queryLevelStats.MvccBlockBytesInCache += MvccBlockBytesInCache
+	}
+
+	for _, MvccKeyBytes := range a.nodeLevelStats.MvccKeyBytesGroupedByNode {
+		a.queryLevelStats.MvccKeyBytes += MvccKeyBytes
+	}
+
+	for _, MvccValueBytes := range a.nodeLevelStats.MvccValueBytesGroupedByNode {
+		a.queryLevelStats.MvccValueBytes += MvccValueBytes
+	}
+
+	for _, MvccPointCount := range a.nodeLevelStats.MvccPointCountGroupedByNode {
+		a.queryLevelStats.MvccPointCount += MvccPointCount
+	}
+
+	for _, MvccPointsCoveredByRangeTombstones := range a.nodeLevelStats.MvccPointsCoveredByRangeTombstonesGroupedByNode {
+		a.queryLevelStats.MvccPointsCoveredByRangeTombstones += MvccPointsCoveredByRangeTombstones
+	}
+
+	for _, MvccRangeKeyCount := range a.nodeLevelStats.MvccRangeKeyCountGroupedByNode {
+		a.queryLevelStats.MvccRangeKeyCount += MvccRangeKeyCount
+	}
+
+	for _, MvccRangeKeyContainedPoints := range a.nodeLevelStats.MvccRangeKeyContainedPointsGroupedByNode {
+		a.queryLevelStats.MvccRangeKeyContainedPoints += MvccRangeKeyContainedPoints
+	}
+
+	for _, MvccRangeKeySkippedPoints := range a.nodeLevelStats.MvccRangeKeySkippedPointsGroupedByNode {
+		a.queryLevelStats.MvccRangeKeySkippedPoints += MvccRangeKeySkippedPoints
 	}
 
 	for _, networkMessages := range a.nodeLevelStats.NetworkMessagesGroupedByNode {

@@ -542,7 +542,7 @@ func runBackupProcessor(
 						}
 					}
 					// Emit the stats for the processed ExportRequest.
-					recordExportStats(backupProcessorSpan, resp, timeutil.Since(requestSentAt))
+					recordExportStats(backupProcessorSpan, resp, requestSentAt)
 					span = resumeSpan
 				}
 			default:
@@ -558,13 +558,16 @@ func runBackupProcessor(
 
 // recordExportStats emits a StructuredEvent containing the stats about the
 // evaluated ExportRequest.
-func recordExportStats(
-	sp *tracing.Span, resp *roachpb.ExportResponse, exportDuration time.Duration,
-) {
+func recordExportStats(sp *tracing.Span, resp *roachpb.ExportResponse, requestSentAt time.Time) {
 	if sp == nil {
 		return
 	}
-	exportStats := backuppb.ExportStats{Duration: exportDuration}
+	now := timeutil.Now()
+	exportStats := backuppb.ExportStats{
+		StartTime: hlc.Timestamp{WallTime: requestSentAt.UnixNano()},
+		EndTime:   hlc.Timestamp{WallTime: now.UnixNano()},
+		Duration:  now.Sub(requestSentAt),
+	}
 	for _, f := range resp.Files {
 		exportStats.NumFiles++
 		exportStats.DataSize += int64(len(f.SST))

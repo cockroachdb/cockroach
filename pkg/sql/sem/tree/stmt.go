@@ -85,6 +85,12 @@ const (
 	TypeTCL
 )
 
+const (
+	RestoreTag = "RESTORE"
+	BackupTag  = "BACKUP"
+	ImportTag  = "IMPORT"
+)
+
 // Statements represent a list of statements.
 type Statements []Statement
 
@@ -545,7 +551,7 @@ func (*Backup) StatementReturnType() StatementReturnType { return Rows }
 func (*Backup) StatementType() StatementType { return TypeDML }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*Backup) StatementTag() string { return "BACKUP" }
+func (*Backup) StatementTag() string { return BackupTag }
 
 func (*Backup) cclOnlyStatement() {}
 
@@ -1133,7 +1139,7 @@ func (*Import) StatementReturnType() StatementReturnType { return Rows }
 func (*Import) StatementType() StatementType { return TypeDML }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*Import) StatementTag() string { return "IMPORT" }
+func (*Import) StatementTag() string { return ImportTag }
 
 func (*Import) cclOnlyStatement() {}
 
@@ -1285,7 +1291,7 @@ func (*Restore) StatementReturnType() StatementReturnType { return Rows }
 func (*Restore) StatementType() StatementType { return TypeDML }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*Restore) StatementTag() string { return "RESTORE" }
+func (*Restore) StatementTag() string { return RestoreTag }
 
 func (*Restore) cclOnlyStatement() {}
 

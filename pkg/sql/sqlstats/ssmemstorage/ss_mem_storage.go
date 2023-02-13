@@ -460,6 +460,20 @@ func (s *stmtStats) recordExecStats(stats execstats.QueryLevelStats) {
 	s.mu.data.ExecStats.NetworkMessages.Record(count, float64(stats.NetworkMessages))
 	s.mu.data.ExecStats.MaxDiskUsage.Record(count, float64(stats.MaxDiskUsage))
 	s.mu.data.ExecStats.CPUSQLNanos.Record(count, float64(stats.CPUTime.Nanoseconds()))
+
+	s.mu.data.ExecStats.MVCCIteratorStats.StepCount.Record(count, float64(stats.MvccSteps))
+	s.mu.data.ExecStats.MVCCIteratorStats.StepCountInternal.Record(count, float64(stats.MvccStepsInternal))
+	s.mu.data.ExecStats.MVCCIteratorStats.SeekCount.Record(count, float64(stats.MvccSeeks))
+	s.mu.data.ExecStats.MVCCIteratorStats.SeekCountInternal.Record(count, float64(stats.MvccSeeksInternal))
+	s.mu.data.ExecStats.MVCCIteratorStats.BlockBytes.Record(count, float64(stats.MvccBlockBytes))
+	s.mu.data.ExecStats.MVCCIteratorStats.BlockBytesInCache.Record(count, float64(stats.MvccBlockBytesInCache))
+	s.mu.data.ExecStats.MVCCIteratorStats.KeyBytes.Record(count, float64(stats.MvccKeyBytes))
+	s.mu.data.ExecStats.MVCCIteratorStats.ValueBytes.Record(count, float64(stats.MvccValueBytes))
+	s.mu.data.ExecStats.MVCCIteratorStats.PointCount.Record(count, float64(stats.MvccPointCount))
+	s.mu.data.ExecStats.MVCCIteratorStats.PointsCoveredByRangeTombstones.Record(count, float64(stats.MvccPointsCoveredByRangeTombstones))
+	s.mu.data.ExecStats.MVCCIteratorStats.RangeKeyCount.Record(count, float64(stats.MvccRangeKeyCount))
+	s.mu.data.ExecStats.MVCCIteratorStats.RangeKeyContainedPoints.Record(count, float64(stats.MvccRangeKeyContainedPoints))
+	s.mu.data.ExecStats.MVCCIteratorStats.RangeKeySkippedPoints.Record(count, float64(stats.MvccRangeKeySkippedPoints))
 }
 
 func (s *stmtStats) mergeStatsLocked(statistics *appstatspb.CollectedStatementStatistics) {
