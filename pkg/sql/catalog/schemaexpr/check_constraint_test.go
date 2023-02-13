@@ -14,6 +14,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -114,7 +115,7 @@ func TestCheckConstraintBuilder_Build(t *testing.T) {
 
 			ckDef := &tree.CheckConstraintTableDef{Name: tree.Name(d.name), Expr: expr}
 
-			ck, err := builder.Build(ckDef)
+			ck, err := builder.Build(ckDef, clusterversion.TestingClusterVersion)
 
 			if !d.expectedValid {
 				if err == nil {
