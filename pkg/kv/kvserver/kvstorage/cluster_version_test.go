@@ -31,8 +31,14 @@ func TestStoresClusterVersionIncompatible(t *testing.T) {
 
 	ctx := context.Background()
 
-	vOneDashOne := roachpb.Version{Major: 1, Internal: 1}
-	vOne := roachpb.Version{Major: 1}
+	current := clusterversion.ByKey(clusterversion.BinaryVersionKey)
+	minSupported := clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey)
+
+	future := current
+	future.Major++
+
+	tooOld := minSupported
+	tooOld.Major--
 
 	type testCase struct {
 		binV, minV roachpb.Version // binary version and min supported version
@@ -42,28 +48,21 @@ func TestStoresClusterVersionIncompatible(t *testing.T) {
 	for name, tc := range map[string]testCase{
 		"StoreTooNew": {
 			// This is what the node is running.
-			binV: vOneDashOne,
+			binV: current,
 			// This is what the running node requires from its stores.
-			minV: vOne,
+			minV: minSupported,
 			// Version is way too high for this node.
-			engV:   roachpb.Version{Major: 9},
-			expErr: `cockroach version v1\.0-1 is incompatible with data in store <no-attributes>=<in-mem>; use version v9\.0 or later`,
+			engV:   future,
+			expErr: `cockroach version .* is incompatible with data in store <no-attributes>=<in-mem>; use version .* or later`,
 		},
 		"StoreTooOldVersion": {
 			// This is what the node is running.
-			binV: roachpb.Version{Major: 9},
+			binV: current,
 			// This is what the running node requires from its stores.
-			minV: roachpb.Version{Major: 5},
+			minV: minSupported,
 			// Version is way too low.
-			engV:   roachpb.Version{Major: 4},
-			expErr: `store <no-attributes>=<in-mem>, last used with cockroach version v4\.0, is too old for running version v9\.0 \(which requires data from v5\.0 or later\)`,
-		},
-		"StoreTooOldMinVersion": {
-			// Like the previous test case, but this time cv.MinimumVersion is the culprit.
-			binV:   roachpb.Version{Major: 9},
-			minV:   roachpb.Version{Major: 5},
-			engV:   roachpb.Version{Major: 4},
-			expErr: `store <no-attributes>=<in-mem>, last used with cockroach version v4\.0, is too old for running version v9\.0 \(which requires data from v5\.0 or later\)`,
+			engV:   tooOld,
+			expErr: `store <no-attributes>=<in-mem>, last used with cockroach version .*, is too old for running version .* \(which requires data from .* or later\)`,
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -71,12 +70,11 @@ func TestStoresClusterVersionIncompatible(t *testing.T) {
 			defer engs[0].Close()
 			// Configure versions and write.
 			cv := clusterversion.ClusterVersion{Version: tc.engV}
-			if err := WriteClusterVersionToEngines(ctx, engs, cv); err != nil {
-				t.Fatal(err)
+			err := WriteClusterVersionToEngines(ctx, engs, cv)
+			if err == nil {
+				cv, err = SynthesizeClusterVersionFromEngines(ctx, engs, tc.binV, tc.minV)
 			}
-			if cv, err := SynthesizeClusterVersionFromEngines(
-				ctx, engs, tc.binV, tc.minV,
-			); !testutils.IsError(err, tc.expErr) {
+			if !testutils.IsError(err, tc.expErr) {
 				t.Fatalf("unexpected error: %+v, got version %v", err, cv)
 			}
 		})

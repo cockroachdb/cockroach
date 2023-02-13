@@ -24,10 +24,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -1287,13 +1289,17 @@ func TestIncompatibleVersion(t *testing.T) {
 		dir: "",
 		fs:  vfs.NewMem(),
 	}
-	oldVer := roachpb.Version{Major: 21, Minor: 1}
-	stOld := cluster.MakeTestingClusterSettingsWithVersions(oldVer, oldVer, true /* initializeVersion */)
-	p, err := Open(ctx, loc, stOld)
+
+	p, err := Open(ctx, loc, cluster.MakeTestingClusterSettings())
 	require.NoError(t, err)
 	p.Close()
 
-	stNew := cluster.MakeTestingClusterSettings()
-	_, err = Open(ctx, loc, stNew)
+	// Overwrite the min version file with an unsupported version.
+	version := roachpb.Version{Major: 21, Minor: 1}
+	b, err := protoutil.Marshal(&version)
+	require.NoError(t, err)
+	require.NoError(t, fs.SafeWriteToFile(loc.fs, loc.dir, MinVersionFilename, b))
+
+	_, err = Open(ctx, loc, cluster.MakeTestingClusterSettings())
 	require.ErrorContains(t, err, "is too old for running version")
 }

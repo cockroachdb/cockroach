@@ -72,7 +72,7 @@ func TestPebbleIterator_Corruption(t *testing.T) {
 		LowerBound: []byte("a"),
 		UpperBound: []byte("z"),
 	}
-	iter := newPebbleIterator(p.db, iterOpts, StandardDurability, false /* range keys */)
+	iter := newPebbleIterator(p.db, iterOpts, StandardDurability)
 
 	// Seeking into the table catches the corruption.
 	ok, err := iter.SeekEngineKeyGE(ek)
@@ -94,7 +94,7 @@ func randStr(fill []byte, rng *rand.Rand) {
 func TestPebbleIterator_ExternalCorruption(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	version := clusterversion.ByKey(clusterversion.TODODelete_V22_2EnsurePebbleFormatVersionRangeKeys)
+	version := clusterversion.ByKey(clusterversion.V22_2)
 	st := cluster.MakeTestingClusterSettingsWithVersions(version, version, true)
 	ctx := context.Background()
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))

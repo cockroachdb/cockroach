@@ -982,7 +982,12 @@ func TestTxnContentionEventsTable(t *testing.T) {
 			waiting_stmt_id,
 			encode(
 					 waiting_txn_fingerprint_id, 'hex'
-			 ) AS waiting_txn_fingerprint_id
+			 ) AS waiting_txn_fingerprint_id,
+			contending_pretty_key,
+			database_name,
+			schema_name,
+			table_name,
+			index_name
 			FROM crdb_internal.transaction_contention_events tce 
 			inner join ( 
 			select
@@ -1001,7 +1006,8 @@ func TestTxnContentionEventsTable(t *testing.T) {
 			rowCount++
 
 			var blockingTxnId, waitingTxnId, waitingStmtId, waitingStmtFingerprint string
-			errVerify = rows.Scan(&blockingTxnId, &waitingTxnId, &waitingStmtId, &waitingStmtFingerprint)
+			var prettyKey, dbName, schemaName, tableName, indexName string
+			errVerify = rows.Scan(&blockingTxnId, &waitingTxnId, &waitingStmtId, &waitingStmtFingerprint, &prettyKey, &dbName, &schemaName, &tableName, &indexName)
 			if errVerify != nil {
 				return errVerify
 			}
@@ -1015,8 +1021,24 @@ func TestTxnContentionEventsTable(t *testing.T) {
 				return fmt.Errorf("transaction_contention_events had default waiting txn id %s, blocking txn id %s", waitingTxnId, blockingTxnId)
 			}
 
-			if waitingStmtId == defaultIdString {
-				return fmt.Errorf("transaction_contention_events had default waiting stmt id %s, blocking txn id %s, waiting txn id %s", waitingStmtId, blockingTxnId, waitingTxnId)
+			if !strings.HasPrefix(prettyKey, "/Table/") {
+				return fmt.Errorf("prettyKey should be defaultdb: %s, %s, %s, %s, %s", prettyKey, dbName, schemaName, tableName, indexName)
+			}
+
+			if dbName != "defaultdb" {
+				return fmt.Errorf("dbName should be defaultdb: %s, %s, %s, %s, %s", prettyKey, dbName, schemaName, tableName, indexName)
+			}
+
+			if schemaName != "public" {
+				return fmt.Errorf("schemaName should be public: %s, %s, %s, %s, %s", prettyKey, dbName, schemaName, tableName, indexName)
+			}
+
+			if tableName != "t" {
+				return fmt.Errorf("tableName should be t: %s, %s, %s, %s, %s", prettyKey, dbName, schemaName, tableName, indexName)
+			}
+
+			if indexName != "t_pkey" {
+				return fmt.Errorf("indexName should be t_pkey: %s, %s, %s, %s, %s", prettyKey, dbName, schemaName, tableName, indexName)
 			}
 		}
 
