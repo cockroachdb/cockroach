@@ -29,7 +29,7 @@ BEGIN AS OF SYSTEM TIME follower_read_timestamp(); SELECT * FROM t
 statement ok
 ROLLBACK
 
-statement error pgcode 0A000 cannot specify AS OF SYSTEM TIME with different timestamps
+statement error pgcode 0A000 inconsistent AS OF SYSTEM TIME timestamp
 SELECT * from t AS OF SYSTEM TIME '-1μs'; SELECT * from t AS OF SYSTEM TIME '-2μs'
 
 statement ok
