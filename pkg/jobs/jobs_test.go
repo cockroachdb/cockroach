@@ -55,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -64,6 +65,7 @@ import (
 	"github.com/gogo/protobuf/types"
 	"github.com/google/go-cmp/cmp"
 	"github.com/kr/pretty"
+	io_prometheus_client "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -2812,6 +2814,23 @@ func TestStatusSafeFormatter(t *testing.T) {
 	require.Equal(t, expected, redacted)
 }
 
+type fakeMetrics struct {
+	n *metric.Counter
+}
+
+func (fm fakeMetrics) MetricStruct() {}
+
+func makeFakeMetrics() fakeMetrics {
+	return fakeMetrics{
+		n: metric.NewCounter(metric.Metadata{
+			Name:        "fake.count",
+			Help:        "utterly fake metric",
+			Measurement: "N",
+			Unit:        metric.Unit_COUNT,
+			MetricType:  io_prometheus_client.MetricType_COUNTER,
+		}),
+	}
+}
 func TestMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -2841,20 +2860,34 @@ func TestMetrics(t *testing.T) {
 			return nil
 		})
 	}
-	res := jobs.FakeResumer{
-		OnResume: func(ctx context.Context) error {
-			return waitForErr(ctx)
+
+	fakeBackupMetrics := makeFakeMetrics()
+	jobs.RegisterConstructor(jobspb.TypeBackup,
+		func(j *jobs.Job, _ *cluster.Settings) jobs.Resumer {
+			return jobs.FakeResumer{
+				OnResume: func(ctx context.Context) error {
+					defer fakeBackupMetrics.n.Inc(1)
+					return waitForErr(ctx)
+				},
+				FailOrCancel: func(ctx context.Context) error {
+					return waitForErr(ctx)
+				},
+			}
 		},
-		FailOrCancel: func(ctx context.Context) error {
-			return waitForErr(ctx)
-		},
-	}
-	jobs.RegisterConstructor(jobspb.TypeBackup, func(_ *jobs.Job, _ *cluster.Settings) jobs.Resumer {
-		return res
-	}, jobs.UsesTenantCostControl)
+		jobs.UsesTenantCostControl, jobs.WithJobMetrics(fakeBackupMetrics),
+	)
+
 	jobs.RegisterConstructor(jobspb.TypeImport, func(_ *jobs.Job, _ *cluster.Settings) jobs.Resumer {
-		return res
+		return jobs.FakeResumer{
+			OnResume: func(ctx context.Context) error {
+				return waitForErr(ctx)
+			},
+			FailOrCancel: func(ctx context.Context) error {
+				return waitForErr(ctx)
+			},
+		}
 	}, jobs.UsesTenantCostControl)
+
 	setup := func(t *testing.T) (
 		s serverutils.TestServerInterface, db *gosql.DB, r *jobs.Registry, cleanup func(),
 	) {
@@ -2886,6 +2919,8 @@ func TestMetrics(t *testing.T) {
 		require.Equal(t, int64(1), backupMetrics.CurrentlyRunning.Value())
 		errCh <- nil
 		int64EqSoon(t, backupMetrics.ResumeCompleted.Count, 1)
+		int64EqSoon(t, registry.MetricsStruct().JobSpecificMetrics[jobspb.TypeBackup].(fakeMetrics).n.Count, 1)
+
 	})
 	t.Run("restart, pause, resume, then success", func(t *testing.T) {
 		_, db, registry, cleanup := setup(t)

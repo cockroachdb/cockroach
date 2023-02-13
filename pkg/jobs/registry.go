@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -1457,6 +1458,14 @@ var UsesTenantCostControl = func(opts *registerOptions) {
 	opts.hasTenantCostControlOption = true
 }
 
+// WithJobMetrics returns a RegisterOption which will configure the job
+// to use specified job metrics.
+func WithJobMetrics(m metric.Struct) RegisterOption {
+	return func(opts *registerOptions) {
+		opts.metrics = m
+	}
+}
+
 // registerOptions are passed to RegisterConstructor and control how a job
 // resumer is created and configured.
 type registerOptions struct {
@@ -1468,6 +1477,9 @@ type registerOptions struct {
 	// UsesTenantCostControl was specified as an option. RegisterConstructor will
 	// panic if this is false.
 	hasTenantCostControlOption bool
+
+	// metrics allow jobs to register job specific metrics.
+	metrics metric.Struct
 }
 
 // PauseRequester is an extension of Resumer which allows job implementers to inject
