@@ -2067,7 +2067,7 @@ alter_database_primary_region_stmt:
   }
 
 alter_database_add_super_region:
-  ALTER DATABASE database_name ADD SUPER REGION name VALUES name_list
+  ALTER DATABASE database_name ADD SUPER REGION region_name VALUES region_name_list
   {
     $$.val = &tree.AlterDatabaseAddSuperRegion{
       DatabaseName: tree.Name($3),
@@ -2077,7 +2077,7 @@ alter_database_add_super_region:
   }
 
 alter_database_drop_super_region:
-  ALTER DATABASE database_name DROP SUPER REGION name
+  ALTER DATABASE database_name DROP SUPER REGION region_name
   {
     $$.val = &tree.AlterDatabaseDropSuperRegion{
       DatabaseName: tree.Name($3),
@@ -2086,7 +2086,7 @@ alter_database_drop_super_region:
   }
 
 alter_database_alter_super_region:
-  ALTER DATABASE database_name ALTER SUPER REGION name VALUES name_list
+  ALTER DATABASE database_name ALTER SUPER REGION region_name VALUES region_name_list
   {
     $$.val = &tree.AlterDatabaseAlterSuperRegion{
       DatabaseName: tree.Name($3),
@@ -3423,7 +3423,7 @@ alter_backup_schedule_cmd:
 sconst_or_placeholder:
   SCONST
   {
-    $$.val =  tree.NewStrVal($1)
+    $$.val = tree.NewStrVal($1)
   }
 | PLACEHOLDER
   {
@@ -11332,7 +11332,7 @@ opt_super_region_clause:
 }
 
 super_region_clause:
-SUPER REGION name VALUES region_name_list
+SUPER REGION region_name VALUES region_name_list
 {
   $$.val = tree.SuperRegion{Name: tree.Name($3), Regions: $5.nameList()}
 }
@@ -15653,11 +15653,18 @@ type_name:             db_object_name
 
 sequence_name:         db_object_name
 
-region_name:           name
+region_name:
+  name
+| SCONST
 
-region_name_list:      name_list
+region_name_list:
+  region_name
   {
-    $$.val = $1.nameList()
+    $$.val = tree.NameList{tree.Name($1)}
+  }
+| region_name_list ',' region_name
+  {
+    $$.val = append($1.nameList(), tree.Name($3))
   }
 
 schema_name:           name

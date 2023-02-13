@@ -1,2 +1,2 @@
 alter_database_drop_super_region ::=
-	'ALTER' 'DATABASE' database_name 'DROP' 'SUPER' 'REGION' name
+	'ALTER' 'DATABASE' database_name 'DROP' 'SUPER' 'REGION' region_name

@@ -2169,13 +2169,13 @@ alter_database_set_stmt ::=
 	'ALTER' 'DATABASE' database_name set_or_reset_clause
 
 alter_database_add_super_region ::=
-	'ALTER' 'DATABASE' database_name 'ADD' 'SUPER' 'REGION' name 'VALUES' name_list
+	'ALTER' 'DATABASE' database_name 'ADD' 'SUPER' 'REGION' region_name 'VALUES' region_name_list
 
 alter_database_alter_super_region ::=
-	'ALTER' 'DATABASE' database_name 'ALTER' 'SUPER' 'REGION' name 'VALUES' name_list
+	'ALTER' 'DATABASE' database_name 'ALTER' 'SUPER' 'REGION' region_name 'VALUES' region_name_list
 
 alter_database_drop_super_region ::=
-	'ALTER' 'DATABASE' database_name 'DROP' 'SUPER' 'REGION' name
+	'ALTER' 'DATABASE' database_name 'DROP' 'SUPER' 'REGION' region_name
 
 alter_database_set_secondary_region_stmt ::=
 	'ALTER' 'DATABASE' database_name 'SET' secondary_region_clause
@@ -2836,6 +2836,7 @@ sequence_option_list ::=
 
 region_name ::=
 	name
+	| 'SCONST'
 
 survival_goal_clause ::=
 	'SURVIVE' opt_equal 'REGION' 'FAILURE'
@@ -2847,6 +2848,9 @@ primary_region_clause ::=
 placement_clause ::=
 	'PLACEMENT' 'RESTRICTED'
 	| 'PLACEMENT' 'DEFAULT'
+
+region_name_list ::=
+	( region_name ) ( ( ',' region_name ) )*
 
 secondary_region_clause ::=
 	'SECONDARY' 'REGION' opt_equal region_name
@@ -2991,11 +2995,8 @@ opt_equal ::=
 region_or_regions ::=
 	'REGIONS'
 
-region_name_list ::=
-	name_list
-
 super_region_clause ::=
-	'SUPER' 'REGION' name 'VALUES' region_name_list
+	'SUPER' 'REGION' region_name 'VALUES' region_name_list
 
 opt_name ::=
 	name
