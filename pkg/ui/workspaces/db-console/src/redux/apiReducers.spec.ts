@@ -13,7 +13,7 @@ import {
   databaseRequestPayloadToID,
   tableRequestToID,
 } from "./apiReducers";
-import * as protos from "src/js/protos";
+import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
 
 describe("table id generator", function () {
   it("generates encoded db/table id", function () {
@@ -39,11 +39,10 @@ describe("request to string functions", function () {
   it("correctly generates a string from a table details request", function () {
     const database = "testDatabase";
     const table = "testTable";
-    const tableRequest =
-      new protos.cockroach.server.serverpb.TableDetailsRequest({
-        database,
-        table,
-      });
+    const tableRequest: clusterUiApi.TableDetailsReqParams = {
+      database,
+      table,
+    };
     expect(tableRequestToID(tableRequest)).toEqual(
       generateTableID(database, table),
     );
