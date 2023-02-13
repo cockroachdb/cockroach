@@ -541,6 +541,10 @@ func (r *Replica) applySnapshot(
 		// We mark the replica as destroyed so that new commands are not
 		// accepted. This destroy status will be detected after the batch
 		// commits by clearSubsumedReplicaInMemoryData() to finish the removal.
+		//
+		// We need to mark the replicas as being destroyed *before* we ingest the
+		// SSTs, so that, e.g., concurrent reads served by the replica don't
+		// erroneously return empty data.
 		sr.readOnlyCmdMu.Lock()
 		sr.mu.Lock()
 		sr.mu.destroyStatus.Set(
