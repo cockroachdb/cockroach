@@ -35,7 +35,10 @@ var cpuUsageCombined = settings.RegisterIntSetting(
 	settings.TenantWritable,
 	"server.cpu_profile.cpu_usage_combined_threshold",
 	"a threshold beyond which if the combined cpu usage is above, "+
-		"then a cpu profile can be triggered",
+		"then a cpu profile can be triggered. If a value over 100 is set, "+
+		"the profiler will never take a profile and conversely, if a value"+
+		"of 0 is set, a profile will be taken every time the cpu profile"+
+		"interval has passed or the provided usage is increasing",
 	80,
 )
 
@@ -56,9 +59,17 @@ var cpuProfileDuration = settings.RegisterDurationSetting(
 	10*time.Second, settings.PositiveDuration,
 )
 
-const cpuProfFileNamePrefix = "cpuprof."
+const cpuProfFileNamePrefix = "cpuprof"
 
+// CPUProfiler is used to take CPU profiles.
+// Similar to the heapprofiler, MaybeTakeProfile()
+// is intended to be called periodically and, unlike the
+// heapprofiler, has a highWaterMarkBytes floor based on cpuUsageCombined
+// which makes it more particular about when to take profiles.
 type CPUProfiler struct {
+	// profiler provides the common values and methods used across all of the
+	// profilers. In particular, the CPUProfiler provides control of when to take
+	// profiles via the cluster settings defined above when initializing profiler.
 	profiler profiler
 	st       *cluster.Settings
 }
@@ -68,6 +79,10 @@ type CPUProfiler struct {
 func NewCPUProfiler(ctx context.Context, dir string, st *cluster.Settings) (*CPUProfiler, error) {
 	if dir == "" {
 		return nil, errors.New("directory to store dumps could not be determined")
+	}
+	// Make the directory if it doesn't already exist.
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return nil, err
 	}
 
 	log.Infof(ctx, "writing cpu profile dumps to %s", log.SafeManaged(dir))
@@ -89,12 +104,11 @@ func (cp *CPUProfiler) MaybeTakeProfile(ctx context.Context, currentCpuUsage int
 }
 
 func (cp *CPUProfiler) takeCPUProfile(ctx context.Context, path string) (success bool) {
-	// TODO(santamaura): not CPUProfileWithLabels?
-	if err := debug.CPUProfileDo(cp.st, cluster.CPUProfileDefault, func() error {
+	if err := debug.CPUProfileDo(cp.st, cluster.CPUProfileWithLabels, func() error {
 		// Try writing a CPU profile.
 		f, err := os.Create(path)
 		if err != nil {
-			log.Warningf(ctx, "error creating go heap profile %s: %v", path, err)
+			log.Warningf(ctx, "error creating go cpu profile %s: %v", path, err)
 			return err
 		}
 		defer f.Close()
@@ -103,7 +117,10 @@ func (cp *CPUProfiler) takeCPUProfile(ctx context.Context, path string) (success
 			return err
 		}
 		log.Info(ctx, "taking cpu profile")
-		time.Sleep(cpuProfileDuration.Get(&cp.st.SV))
+		select {
+		case <-ctx.Done():
+		case <-time.After(cpuProfileDuration.Get(&cp.st.SV)):
+		}
 		defer pprof.StopCPUProfile()
 		return nil
 	}); err != nil {
