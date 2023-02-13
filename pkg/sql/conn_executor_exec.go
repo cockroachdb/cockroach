@@ -720,11 +720,10 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.stmt = stmt
 	p.cancelChecker.Reset(ctx)
 
-	// Auto-commit is disallowed during statement execution, if we previously executed any DDL.
-	// This is because may potentially create jobs and do other operations rather than
-	// a KV commit. Insteadand carry out any extra operations needed for DDL.he auto-connection executor will commit after this statement,
-	// in this scenario.
-	// This prevents commit during statement execution, but the connection executor,
+	// Auto-commit is disallowed during statement execution if we previously
+	// executed any DDL. This is because may potentially create jobs and do other
+	// operations rather than a KV commit.
+	// This prevents commit during statement execution, but the conn_executor
 	// will still commit this transaction after this statement executes.
 	p.autoCommit = canAutoCommit &&
 		!ex.server.cfg.TestingKnobs.DisableAutoCommitDuringExec && ex.extraTxnState.numDDL == 0
@@ -811,7 +810,10 @@ func (ex *connExecutor) handleAOST(ctx context.Context, stmt tree.Statement) err
 	if asOf == nil {
 		return nil
 	}
-	if ex.implicitTxn() {
+
+	// Implicit transactions can have multiple statements, so we need to check
+	// if one has already been executed.
+	if ex.implicitTxn() && !ex.extraTxnState.firstStmtExecuted {
 		if p.extendedEvalCtx.AsOfSystemTime == nil {
 			p.extendedEvalCtx.AsOfSystemTime = asOf
 			if !asOf.BoundedStaleness {
@@ -854,7 +856,9 @@ func (ex *connExecutor) handleAOST(ctx context.Context, stmt tree.Statement) err
 	if readTs := ex.state.getReadTimestamp(); asOf.Timestamp != readTs {
 		err = pgerror.Newf(pgcode.Syntax,
 			"inconsistent AS OF SYSTEM TIME timestamp; expected: %s, got: %s", readTs, asOf.Timestamp)
-		err = errors.WithHint(err, "try SET TRANSACTION AS OF SYSTEM TIME")
+		if !ex.implicitTxn() {
+			err = errors.WithHint(err, "try SET TRANSACTION AS OF SYSTEM TIME")
+		}
 		return err
 	}
 	p.extendedEvalCtx.AsOfSystemTime = asOf
