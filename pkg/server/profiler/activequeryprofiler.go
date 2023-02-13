@@ -87,7 +87,7 @@ func NewActiveQueryProfiler(
 		profiler: makeProfiler(
 			newProfileStore(dumpStore, QueryFileNamePrefix, QueryFileNameSuffix, st),
 			zeroFloor,
-			envMemprofInterval, // TODO(obs-inf): this seems wrong
+			envMemprofInterval,
 		),
 		cgroupMemLimit: maxMem,
 	}

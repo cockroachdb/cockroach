@@ -98,7 +98,7 @@ func (o *profiler) maybeTakeProfile(
 
 	now := o.now()
 	// Check whether to reset the high watermark to the floor. This is the case if
-	// the floor (which might change) is now below the high water mark, or if
+	// the high water mark is now below the floor (which might change), or if
 	// enough time has elapsed to reset the high water mark.
 	if floor := o.highWaterMarkFloor(); o.highWaterMark < floor || now.Sub(o.lastProfileTime) >= o.resetInterval() {
 		o.highWaterMark = floor
