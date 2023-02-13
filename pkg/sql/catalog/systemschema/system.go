@@ -491,11 +491,11 @@ CREATE TABLE system.sqlliveness (
 
 	MrSqllivenessTableSchema = `
 CREATE TABLE system.sqlliveness (
-    session_uuid         BYTES NOT NULL,
+    session_id           BYTES NOT NULL,
     expiration           DECIMAL NOT NULL,
     crdb_region          BYTES NOT NULL,
-    CONSTRAINT "primary" PRIMARY KEY (crdb_region, session_uuid),
-    FAMILY "primary" (crdb_region, session_uuid, expiration)
+    CONSTRAINT "primary" PRIMARY KEY (crdb_region, session_id),
+    FAMILY "primary" (crdb_region, session_id, expiration)
 )`
 
 	// system.migrations stores completion records for upgrades performed by the
@@ -2302,16 +2302,16 @@ var (
 					catconstants.SqllivenessTableName,
 					keys.SqllivenessID,
 					[]descpb.ColumnDescriptor{
-						{Name: "crdb_region", ID: 4, Type: types.Bytes, Nullable: false},
-						{Name: "session_uuid", ID: 3, Type: types.Bytes, Nullable: false},
+						{Name: "session_id", ID: 1, Type: types.Bytes, Nullable: false},
 						{Name: "expiration", ID: 2, Type: types.Decimal, Nullable: false},
+						{Name: "crdb_region", ID: 3, Type: types.Bytes, Nullable: false},
 					},
 					[]descpb.ColumnFamilyDescriptor{
 						{
 							Name:            "primary",
 							ID:              0,
-							ColumnNames:     []string{"crdb_region", "session_uuid", "expiration"},
-							ColumnIDs:       []descpb.ColumnID{4, 3, 2},
+							ColumnNames:     []string{"session_id", "expiration", "crdb_region"},
+							ColumnIDs:       []descpb.ColumnID{1, 2, 3},
 							DefaultColumnID: 2,
 						},
 					},
@@ -2319,9 +2319,9 @@ var (
 						Name:                "primary",
 						ID:                  2,
 						Unique:              true,
-						KeyColumnNames:      []string{"crdb_region", "session_uuid"},
+						KeyColumnNames:      []string{"crdb_region", "session_id"},
 						KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
-						KeyColumnIDs:        []descpb.ColumnID{4, 3},
+						KeyColumnIDs:        []descpb.ColumnID{3, 1},
 					},
 				))
 		}

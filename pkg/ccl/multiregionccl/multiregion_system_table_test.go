@@ -78,11 +78,11 @@ func TestMrSystemDatabase(t *testing.T) {
 	tDB.CheckQueryResults(t, `SELECT * FROM crdb_internal.invalid_objects`, [][]string{})
 
 	t.Run("Sqlliveness", func(t *testing.T) {
-		row := tDB.QueryRow(t, `SELECT crdb_region, session_uuid, expiration FROM system.sqlliveness LIMIT 1`)
-		var sessionUUID string
+		row := tDB.QueryRow(t, `SELECT crdb_region, session_id, expiration FROM system.sqlliveness LIMIT 1`)
+		var sessionID string
 		var crdbRegion string
 		var rawExpiration apd.Decimal
-		row.Scan(&crdbRegion, &sessionUUID, &rawExpiration)
+		row.Scan(&crdbRegion, &sessionID, &rawExpiration)
 		require.Equal(t, "us-east1", crdbRegion)
 	})
 
@@ -239,14 +239,14 @@ func TestMrSystemDatabase(t *testing.T) {
 		// optimizer, because the stats will have the wrong type for the
 		// crdb_column.
 		row := tDB.QueryRow(t, `
-			SELECT crdb_region, session_uuid, expiration 
+			SELECT crdb_region, session_id, expiration 
 			FROM system.sqlliveness 
 			WHERE crdb_region = 'us-east1'
 			LIMIT 1;`)
-		var sessionUUID string
+		var sessionID string
 		var crdbRegion string
 		var rawExpiration apd.Decimal
-		row.Scan(&crdbRegion, &sessionUUID, &rawExpiration)
+		row.Scan(&crdbRegion, &sessionID, &rawExpiration)
 		require.Equal(t, "us-east1", crdbRegion)
 	})
 }
@@ -301,30 +301,28 @@ func TestTenantStartupWithMultiRegionEnum(t *testing.T) {
 	var sessionID string
 	tenSQLDB2.QueryRow(t, `SELECT session_id FROM system.sql_instances WHERE id = $1`,
 		ten.SQLInstanceID()).Scan(&sessionID)
-	region, id, err := slstorage.UnsafeDecodeSessionID(sqlliveness.SessionID(sessionID))
+	region, _, err := slstorage.UnsafeDecodeSessionID(sqlliveness.SessionID(sessionID))
 	require.NoError(t, err)
-	require.NotNil(t, id)
 	require.Equal(t, enum.One, region)
 
 	// Ensure that the sqlliveness entry created by the second SQL server has
 	// the right region and session UUID.
 	tenSQLDB2.QueryRow(t, `SELECT session_id FROM system.sql_instances WHERE id = $1`,
 		ten2.SQLInstanceID()).Scan(&sessionID)
-	region, id, err = slstorage.UnsafeDecodeSessionID(sqlliveness.SessionID(sessionID))
+	region, _, err = slstorage.UnsafeDecodeSessionID(sqlliveness.SessionID(sessionID))
 	require.NoError(t, err)
-	require.NotNil(t, id)
 	require.NotEqual(t, enum.One, region)
 
-	rows := tenSQLDB2.Query(t, `SELECT crdb_region, session_uuid FROM system.sqlliveness`)
+	rows := tenSQLDB2.Query(t, `SELECT crdb_region, session_id FROM system.sqlliveness`)
 	defer rows.Close()
 	livenessMap := map[string][]byte{}
 	for rows.Next() {
-		var region, sessionUUID string
-		require.NoError(t, rows.Scan(&region, &sessionUUID))
-		livenessMap[sessionUUID] = []byte(region)
+		var region, ID string
+		require.NoError(t, rows.Scan(&region, &ID))
+		livenessMap[ID] = []byte(region)
 	}
 	require.NoError(t, rows.Err())
-	r, ok := livenessMap[string(id)]
+	r, ok := livenessMap[sessionID]
 	require.True(t, ok)
 	require.Equal(t, r, region)
 }
