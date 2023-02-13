@@ -33,6 +33,7 @@ var cmdBase = []string{
 }
 
 func TestDockerCLI(t *testing.T) {
+	skip.WithIssue(t, 96797, "flaky test")
 	s := log.Scope(t)
 	defer s.Close(t)
 
