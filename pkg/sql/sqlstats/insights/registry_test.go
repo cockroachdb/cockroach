@@ -32,6 +32,13 @@ func newStmtWithProblemAndCauses(stmt *Statement, problem Problem, causes []Caus
 	return &newStmt
 }
 
+// Return a new failed statement.
+func newFailedStmt(stmt *Statement) *Statement {
+	newStmt := *stmt
+	newStmt.Problem = Problem_FailedExecution
+	return &newStmt
+}
+
 func TestRegistry(t *testing.T) {
 	ctx := context.Background()
 
@@ -72,9 +79,6 @@ func TestRegistry(t *testing.T) {
 	})
 
 	t.Run("failure detection", func(t *testing.T) {
-		// Note that we don't fully support detecting and reporting statement failures yet.
-		// We only report failures when the statement was also slow.
-		// We'll be coming back to build a better failure story for 23.1.
 		statement := &Statement{
 			ID:               clusterunique.IDFromBytes([]byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")),
 			FingerprintID:    appstatspb.StmtFingerprintID(100),
@@ -93,7 +97,7 @@ func TestRegistry(t *testing.T) {
 			Session:     session,
 			Transaction: transaction,
 			Statements: []*Statement{
-				newStmtWithProblemAndCauses(statement, Problem_FailedExecution, nil),
+				newFailedStmt(statement),
 			},
 		}}
 		var actual []*Insight
