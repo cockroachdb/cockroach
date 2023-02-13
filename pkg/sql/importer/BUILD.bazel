@@ -40,6 +40,7 @@ go_library(
         "//pkg/geo",
         "//pkg/geo/geopb",
         "//pkg/jobs",
+        "//pkg/jobs/ingeststopped",
         "//pkg/jobs/joberror",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
