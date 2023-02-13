@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors/oserror"
-	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
 )
@@ -202,7 +201,6 @@ func setupMVCCPebble(b testing.TB, dir string, lBaseMaxBytes int64, readOnly boo
 	opts.FS = vfs.Default
 	opts.LBaseMaxBytes = lBaseMaxBytes
 	opts.ReadOnly = readOnly
-	opts.FormatMajorVersion = pebble.FormatRangeKeys
 	peb, err := storage.NewPebble(
 		context.Background(),
 		storage.PebbleConfig{
