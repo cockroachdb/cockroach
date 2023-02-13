@@ -2566,6 +2566,7 @@ copy_from_retries_enabled                             off                 NULL  
 cost_scans_with_default_col_size                      off                 NULL      NULL        NULL        string
 database                                              test                NULL      NULL        NULL        string
 datestyle                                             ISO, MDY            NULL      NULL        NULL        string
+declare_cursor_statement_timeout_enabled              on                  NULL      NULL        NULL        string
 default_int_size                                      8                   NULL      NULL        NULL        string
 default_table_access_method                           heap                NULL      NULL        NULL        string
 default_tablespace                                    ·                   NULL      NULL        NULL        string
@@ -2709,6 +2710,7 @@ copy_from_retries_enabled                             off                 NULL  
 cost_scans_with_default_col_size                      off                 NULL  user     NULL      off                 off
 database                                              test                NULL  user     NULL      ·                   test
 datestyle                                             ISO, MDY            NULL  user     NULL      ISO, MDY            ISO, MDY
+declare_cursor_statement_timeout_enabled              on                  NULL  user     NULL      on                  on
 default_int_size                                      8                   NULL  user     NULL      8                   8
 default_table_access_method                           heap                NULL  user     NULL      heap                heap
 default_tablespace                                    ·                   NULL  user     NULL      ·                   ·
@@ -2848,6 +2850,7 @@ cost_scans_with_default_col_size                      NULL    NULL     NULL     
 crdb_version                                          NULL    NULL     NULL     NULL        NULL
 database                                              NULL    NULL     NULL     NULL        NULL
 datestyle                                             NULL    NULL     NULL     NULL        NULL
+declare_cursor_statement_timeout_enabled              NULL    NULL     NULL     NULL        NULL
 default_int_size                                      NULL    NULL     NULL     NULL        NULL
 default_table_access_method                           NULL    NULL     NULL     NULL        NULL
 default_tablespace                                    NULL    NULL     NULL     NULL        NULL

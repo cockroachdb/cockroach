@@ -2341,6 +2341,23 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`declare_cursor_statement_timeout_enabled`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`declare_cursor_statement_timeout_enabled`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("declare_cursor_statement_timeout_enabled", s)
+			if err != nil {
+				return err
+			}
+			m.SetDeclareCursorStatementTimeoutEnabled(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().DeclareCursorStatementTimeoutEnabled), nil
+		},
+		GlobalDefault: globalTrue,
+	},
+
+	// CockroachDB extension.
 	`enforce_home_region`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`enforce_home_region`),
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {
