@@ -560,3 +560,48 @@ SELECT (ARRAY[]::color[]) IS NOT NULL
 values
  ├── columns: "?column?":1(bool!null)
  └── (true,) [type=tuple{bool}]
+
+# This comparison should succeed, no matter if `<` or `>` is used.
+build
+SELECT ARRAY[]::TIMESTAMPTZ[] < ARRAY[NULL];
+----
+project
+ ├── columns: "?column?":1(bool)
+ ├── values
+ │    └── () [type=tuple]
+ └── projections
+      └── ARRAY[] < ARRAY[NULL] [as="?column?":1, type=bool]
+
+build
+SELECT ARRAY[]::TIMESTAMPTZ[] > ARRAY[NULL];
+----
+project
+ ├── columns: "?column?":1(bool)
+ ├── values
+ │    └── () [type=tuple]
+ └── projections
+      └── ARRAY[] > ARRAY[NULL] [as="?column?":1, type=bool]
+
+# This comparison should succeed, no matter if `<` or `>` is used.
+build
+SELECT (ARRAY[TIMESTAMPTZ '1969-12-29T21:20:13'], ARRAY[]::TIMESTAMPTZ[]) >
+       (ARRAY[TIMESTAMPTZ '1969-12-29T21:20:13'], ARRAY[NULL]);
+----
+project
+ ├── columns: "?column?":1(bool)
+ ├── values
+ │    └── () [type=tuple]
+ └── projections
+      └── (ARRAY['1969-12-29T21:20:13'::TIMESTAMPTZ], ARRAY[]) > (ARRAY['1969-12-29T21:20:13'::TIMESTAMPTZ], ARRAY[NULL]) [as="?column?":1, type=bool]
+
+# This comparison should succeed, no matter if `<` or `>` is used.
+build
+SELECT (ARRAY[TIMESTAMPTZ '1969-12-29T21:20:13'], ARRAY[]::TIMESTAMPTZ[]) <
+       (ARRAY[TIMESTAMPTZ '1969-12-29T21:20:13'], ARRAY[NULL]);
+----
+project
+ ├── columns: "?column?":1(bool)
+ ├── values
+ │    └── () [type=tuple]
+ └── projections
+      └── (ARRAY['1969-12-29T21:20:13'::TIMESTAMPTZ], ARRAY[]) < (ARRAY['1969-12-29T21:20:13'::TIMESTAMPTZ], ARRAY[NULL]) [as="?column?":1, type=bool]
