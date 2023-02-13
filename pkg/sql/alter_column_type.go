@@ -286,6 +286,7 @@ func alterColumnTypeGeneral(
 			&params.p.semaCtx,
 			volatility.Volatile,
 			tn,
+			params.ExecCfg().Settings.Version.ActiveVersion(ctx),
 		)
 
 		if err != nil {

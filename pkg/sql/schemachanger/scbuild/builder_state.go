@@ -615,6 +615,7 @@ func (b *builderState) ComputedColumnExpression(tbl *scpb.Table, d *tree.ColumnT
 		&tn,
 		tree.ComputedColumnExprContext(d.IsVirtual()),
 		b.semaCtx,
+		b.clusterSettings.Version.ActiveVersion(b.ctx),
 	)
 	if err != nil {
 		// This may be referencing newly added columns, so cheat and return
@@ -651,7 +652,8 @@ func (b *builderState) PartialIndexPredicateExpression(
 		b.descCache[tableID].desc.(catalog.TableDescriptor),
 		expr,
 		&tn,
-		b.semaCtx)
+		b.semaCtx,
+		b.clusterSettings.Version.ActiveVersion(b.ctx))
 	if err != nil {
 		panic(err)
 	}
