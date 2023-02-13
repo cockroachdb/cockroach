@@ -1267,19 +1267,26 @@ func ingestWithRetry(
 			return res, err
 		}
 
-		// Re-load the job in order to update our progress object, which may have
-		// been updated by the changeFrontier processor since the flow started.
+		// If we are draining, it is unlikely we can start a new DistSQL
+		// flow. Exit with a retryable error so that another node can
+		// pick up the job.
+		if execCtx.ExecCfg().JobRegistry.IsDraining() {
+			return res, jobs.MarkAsRetryJobError(errors.Wrapf(err, "job encountered retryable error on draining node"))
+		}
+
+		// Re-load the job in order to update our progress object, which
+		// may have been updated since the flow started.
 		reloadedJob, reloadErr := execCtx.ExecCfg().JobRegistry.LoadClaimedJob(ctx, job.ID())
 		if reloadErr != nil {
 			if ctx.Err() != nil {
 				return res, ctx.Err()
 			}
-			log.Warningf(ctx, `IMPORT job %d could not reload job progress when retrying: %+v`,
-				int64(job.ID()), reloadErr)
+			log.Warningf(ctx, "IMPORT job %d could not reload job progress when retrying: %+v",
+				job.ID(), reloadErr)
 		} else {
 			job = reloadedJob
 		}
-		log.Warningf(ctx, `encountered retryable error: %+v`, err)
+		log.Warningf(ctx, "encountered retryable error: %+v", err)
 	}
 
 	// We have exhausted retries, but we have not seen a "PermanentBulkJobError" so

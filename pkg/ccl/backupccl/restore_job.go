@@ -193,7 +193,14 @@ func restoreWithRetry(
 			return roachpb.RowCount{}, err
 		}
 
-		log.Warningf(restoreCtx, `encountered retryable error: %+v`, err)
+		// If we are draining, it is unlikely we can start a
+		// new DistSQL flow. Exit with a retryable error so
+		// that another node can pick up the job.
+		if execCtx.ExecCfg().JobRegistry.IsDraining() {
+			return roachpb.RowCount{}, jobs.MarkAsRetryJobError(errors.Wrapf(err, "job encountered retryable error on draining node"))
+		}
+
+		log.Warningf(restoreCtx, "encountered retryable error: %+v", err)
 	}
 
 	// We have exhausted retries, but we have not seen a "PermanentBulkJobError" so
