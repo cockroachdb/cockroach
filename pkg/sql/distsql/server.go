@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -408,6 +409,16 @@ func (ds *ServerImpl) setupFlow(
 
 	if !f.IsLocal() {
 		flowCtx.AmbientContext.AddLogTag("f", f.GetFlowCtx().ID.Short())
+		if req.StatementSQL != "" {
+			flowCtx.AmbientContext.AddLogTag("distsql.stmt", req.StatementSQL)
+		}
+		flowCtx.AmbientContext.AddLogTag("distsql.gateway", req.Flow.Gateway)
+		if req.EvalContext.SessionData.ApplicationName != "" {
+			flowCtx.AmbientContext.AddLogTag("distsql.appname", req.EvalContext.SessionData.ApplicationName)
+		}
+		if leafTxn != nil {
+			flowCtx.AmbientContext.AddLogTag("distsql.txn", leafTxn.ID())
+		}
 		ctx = flowCtx.AmbientContext.AnnotateCtx(ctx)
 		telemetry.Inc(sqltelemetry.DistSQLExecCounter)
 	}
@@ -644,6 +655,9 @@ func (ds *ServerImpl) SetupFlow(
 		nil /* batchSyncFlowConsumer */, LocalState{},
 	)
 	if err == nil {
+		var undo func()
+		ctx, undo = pprofutil.SetProfilerLabelsFromCtxTags(ctx)
+		defer undo()
 		err = ds.flowScheduler.ScheduleFlow(ctx, f)
 	}
 	if err != nil {
