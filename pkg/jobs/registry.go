@@ -155,6 +155,16 @@ type Registry struct {
 		// ingestingJobs is a map of jobs which are actively ingesting on this node
 		// including via a processor.
 		ingestingJobs map[jobspb.JobID]struct{}
+
+		// draining indicates whether this node is draining or
+		// not. It is set by the drain server when the drain
+		// process starts.
+		//
+		// TODO(ssd): We may want to prevent the adoption of
+		// jobs onto a draining node. At the moment, jobs can
+		// access this to make per-job decisions about what to
+		// do.
+		draining bool
 	}
 
 	// withSessionEvery ensures that logging when failing to get a live session
@@ -1583,6 +1593,28 @@ func (r *Registry) TestingIsJobIdle(jobID jobspb.JobID) bool {
 	defer r.mu.Unlock()
 	adoptedJob := r.mu.adoptedJobs[jobID]
 	return adoptedJob != nil && adoptedJob.isIdle
+}
+
+// IsDraining returns true if the job system has been informed that
+// the local node is draining.
+//
+// Jobs that depend on distributed SQL infrastructure may choose to
+// exit early in this case.
+func (r *Registry) IsDraining() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	return r.mu.draining
+}
+
+// SetDraining informs the job system if the node is draining.
+//
+// NB: Check the implementation of drain before adding code that would
+// make this block.
+func (r *Registry) SetDraining(draining bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.mu.draining = draining
 }
 
 // MarkAsIngesting records a given jobID as actively ingesting data on the node
