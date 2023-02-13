@@ -127,6 +127,7 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 		insight.Transaction.Causes = addCause(insight.Transaction.Causes, Cause_HighContention)
 	}
 
+	var lastErrorCode string
 	for i, s := range *statements {
 		if slowOrFailedStatements.Contains(i) {
 			switch s.Status {
@@ -134,6 +135,7 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 				s.Problem = Problem_SlowExecution
 				s.Causes = r.causes.examine(s.Causes, s)
 			case Statement_Failed:
+				lastErrorCode = s.ErrorCode
 				s.Problem = Problem_FailedExecution
 			}
 
@@ -148,6 +150,7 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 		insight.Statements = append(insight.Statements, s)
 	}
 
+	insight.Transaction.LastErrorCode = lastErrorCode
 	r.sink.AddInsight(insight)
 }
 
