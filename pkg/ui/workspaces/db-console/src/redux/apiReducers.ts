@@ -138,28 +138,19 @@ export function generateTableID(db: string, table: string) {
 
 export const tableRequestToID = (
   req:
-    | api.TableDetailsRequestMessage
     | api.TableStatsRequestMessage
-    | api.IndexStatsRequestMessage,
+    | api.IndexStatsRequestMessage
+    | clusterUiApi.TableDetailsReqParams,
 ): string => generateTableID(req.database, req.table);
 
 const tableDetailsReducerObj = new KeyedCachedDataReducer(
-  api.getTableDetails,
+  clusterUiApi.getTableDetails,
   "tableDetails",
   tableRequestToID,
   null,
   moment.duration(10, "m"),
 );
 export const refreshTableDetails = tableDetailsReducerObj.refresh;
-
-const tableStatsReducerObj = new KeyedCachedDataReducer(
-  api.getTableStats,
-  "tableStats",
-  tableRequestToID,
-  null,
-  moment.duration(10, "m"),
-);
-export const refreshTableStats = tableStatsReducerObj.refresh;
 
 const indexStatsReducerObj = new KeyedCachedDataReducer(
   api.getIndexStats,
@@ -534,8 +525,9 @@ export interface APIReducersState {
   locations: CachedDataReducerState<api.LocationsResponseMessage>;
   databases: CachedDataReducerState<clusterUiApi.DatabasesListResponse>;
   databaseDetails: KeyedCachedDataReducerState<api.DatabaseDetailsResponseMessage>;
-  tableDetails: KeyedCachedDataReducerState<api.TableDetailsResponseMessage>;
-  tableStats: KeyedCachedDataReducerState<api.TableStatsResponseMessage>;
+  tableDetails: KeyedCachedDataReducerState<
+    clusterUiApi.SqlApiResponse<clusterUiApi.TableDetailsResponse>
+  >;
   indexStats: KeyedCachedDataReducerState<api.IndexStatsResponseMessage>;
   nonTableStats: CachedDataReducerState<api.NonTableStatsResponseMessage>;
   logs: CachedDataReducerState<api.LogEntriesResponseMessage>;
@@ -595,7 +587,6 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [databaseDetailsReducerObj.actionNamespace]:
     databaseDetailsReducerObj.reducer,
   [tableDetailsReducerObj.actionNamespace]: tableDetailsReducerObj.reducer,
-  [tableStatsReducerObj.actionNamespace]: tableStatsReducerObj.reducer,
   [indexStatsReducerObj.actionNamespace]: indexStatsReducerObj.reducer,
   [nonTableStatsReducerObj.actionNamespace]: nonTableStatsReducerObj.reducer,
   [logsReducerObj.actionNamespace]: logsReducerObj.reducer,

@@ -24,11 +24,6 @@ export type DatabaseDetailsRequestMessage =
 export type DatabaseDetailsResponseMessage =
   protos.cockroach.server.serverpb.DatabaseDetailsResponse;
 
-export type TableDetailsRequestMessage =
-  protos.cockroach.server.serverpb.TableDetailsRequest;
-export type TableDetailsResponseMessage =
-  protos.cockroach.server.serverpb.TableDetailsResponse;
-
 export type LocationsRequestMessage =
   protos.cockroach.server.serverpb.LocationsRequest;
 export type LocationsResponseMessage =
@@ -364,26 +359,6 @@ export function getDatabaseDetails(
   return timeoutFetch(
     serverpb.DatabaseDetailsResponse,
     `${API_PREFIX}/databases/${EncodeUriName(req.database)}${queryString}`,
-    null,
-    timeout,
-  );
-}
-
-// getTableDetails gets details for a specific table
-export function getTableDetails(
-  req: TableDetailsRequestMessage,
-  timeout?: moment.Duration,
-): Promise<TableDetailsResponseMessage> {
-  const promiseErr = IsValidateUriName(req.database, req.table);
-  if (promiseErr) {
-    return promiseErr;
-  }
-
-  return timeoutFetch(
-    serverpb.TableDetailsResponse,
-    `${API_PREFIX}/databases/${EncodeUriName(
-      req.database,
-    )}/tables/${EncodeUriName(req.table)}`,
     null,
     timeout,
   );
