@@ -88,11 +88,10 @@ func registerLibPQ(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		blocklistName, expectedFailures, ignorelistName, ignoreList := libPQBlocklists.getLists(version)
-		if expectedFailures == nil {
+		if len(libPQBlocklist) == 0 {
 			t.Fatalf("No lib/pq blocklist defined for cockroach version %s", version)
 		}
-		t.L().Printf("Running cockroach version %s, using blocklist %s, using ignorelist %s", version, blocklistName, ignorelistName)
+		t.L().Printf("Running cockroach version %s, using blocklist %s, using ignorelist %s", version, "libPQBlocklist", "libPQIgnorelist")
 
 		t.Status("running lib/pq test suite and collecting results")
 
@@ -117,7 +116,7 @@ func registerLibPQ(r registry.Registry) {
 				continue
 			}
 			// If the test is part of ignoreList, do not run the test.
-			if _, ok := ignoreList[testName]; !ok {
+			if _, ok := libPQIgnorelist[testName]; !ok {
 				allowedTests = append(allowedTests, testName)
 			}
 		}
@@ -134,7 +133,7 @@ func registerLibPQ(r registry.Registry) {
 
 		parseAndSummarizeJavaORMTestsResults(
 			ctx, t, c, node, "lib/pq" /* ormName */, []byte(resultsPath),
-			blocklistName, expectedFailures, ignoreList, version, libPQSupportedTag,
+			"libPQBlocklist", libPQBlocklist, libPQIgnorelist, version, libPQSupportedTag,
 		)
 	}
 
