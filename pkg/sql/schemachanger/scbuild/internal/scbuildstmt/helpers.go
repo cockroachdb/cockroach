@@ -423,6 +423,15 @@ func hasColumnIDAttrFilter(
 	}
 }
 
+func hasConstraintIDAttrFilter(
+	constraintID catid.ConstraintID,
+) func(_ scpb.Status, _ scpb.TargetStatus, _ scpb.Element) bool {
+	return func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) (included bool) {
+		idI, _ := screl.Schema.GetAttribute(screl.ConstraintID, e)
+		return idI != nil && idI.(catid.ConstraintID) == constraintID
+	}
+}
+
 func referencesColumnIDFilter(
 	columnID catid.ColumnID,
 ) func(_ scpb.Status, _ scpb.TargetStatus, _ scpb.Element) bool {
