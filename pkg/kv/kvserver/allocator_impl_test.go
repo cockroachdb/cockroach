@@ -107,7 +107,7 @@ var threeStores = []*roachpb.StoreDescriptor{
 func TestAllocatorRebalanceTarget(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 123)), time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(0, 123)))
 	ctx := context.Background()
 	stopper, g, sp, a, _ := allocatorimpl.CreateTestAllocator(ctx, 5, false /* deterministic */)
 	defer stopper.Stop(ctx)

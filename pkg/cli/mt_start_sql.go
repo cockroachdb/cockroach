@@ -87,7 +87,7 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 		// always be non-nil, even if NewServer returns a nil pointer (and
 		// an error). The code below is dependent on the interface
 		// reference remaining nil in case of error.
-		s, err := server.NewTenantServer(
+		s, err := server.NewSeparateProcessTenantServer(
 			ctx,
 			stopper,
 			serverCfg.BaseConfig,

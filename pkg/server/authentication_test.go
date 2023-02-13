@@ -95,12 +95,12 @@ func TestSSLEnforcement(t *testing.T) {
 
 	newRPCContext := func(cfg *base.Config) *rpc.Context {
 		return rpc.NewContext(ctx, rpc.ContextOptions{
-			TenantID:  roachpb.SystemTenantID,
-			Config:    cfg,
-			Clock:     &timeutil.DefaultTimeSource{},
-			MaxOffset: time.Nanosecond,
-			Stopper:   s.Stopper(),
-			Settings:  s.ClusterSettings(),
+			TenantID:        roachpb.SystemTenantID,
+			Config:          cfg,
+			Clock:           &timeutil.DefaultTimeSource{},
+			ToleratedOffset: time.Nanosecond,
+			Stopper:         s.Stopper(),
+			Settings:        s.ClusterSettings(),
 		})
 	}
 

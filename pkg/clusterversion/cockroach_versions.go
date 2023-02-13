@@ -215,9 +215,6 @@ const (
 	// probabilistically collects stmt bundles, controlled by the user provided
 	// sampling rate.
 	TODODelete_V22_2SampledStmtDiagReqs
-	// TODODelete_V22_2AddSSTableTombstones allows writing MVCC point tombstones via AddSSTable.
-	// Previously, SSTs containing these could error.
-	TODODelete_V22_2AddSSTableTombstones
 	// TODODelete_V22_2SystemPrivilegesTable adds system.privileges table.
 	TODODelete_V22_2SystemPrivilegesTable
 	// TODODelete_V22_2EnablePredicateProjectionChangefeed indicates that changefeeds support
@@ -285,9 +282,6 @@ const (
 	// schema changes to complete. After this point, no non-MVCC
 	// AddSSTable calls will be used outside of tenant streaming.
 	TODODelete_V22_2NoNonMVCCAddSSTable
-	// TODODelete_V22_2GCHintInReplicaState adds GC hint to replica state. When this version is
-	// enabled, replicas will populate GC hint and update them when necessary.
-	TODODelete_V22_2GCHintInReplicaState
 	// TODODelete_V22_2UpdateInvalidColumnIDsInSequenceBackReferences looks for invalid column
 	// ids in sequences' back references and attempts a best-effort-based matching
 	// to update those column IDs.
@@ -534,10 +528,6 @@ var rawVersionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 20},
 	},
 	{
-		Key:     TODODelete_V22_2AddSSTableTombstones,
-		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 22},
-	},
-	{
 		Key:     TODODelete_V22_2SystemPrivilegesTable,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 24},
 	},
@@ -612,10 +602,6 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     TODODelete_V22_2NoNonMVCCAddSSTable,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 62},
-	},
-	{
-		Key:     TODODelete_V22_2GCHintInReplicaState,
-		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 64},
 	},
 	{
 		Key:     TODODelete_V22_2UpdateInvalidColumnIDsInSequenceBackReferences,

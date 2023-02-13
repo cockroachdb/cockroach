@@ -76,6 +76,12 @@ const (
 
 	maximumMaxClockOffset = 5 * time.Second
 
+	// toleratedOffsetMultiplier is the MaxOffset multiplier used for
+	// ToleratedOffset, which determines the tolerated clock skew between this
+	// node and the cluster before self-terminating. It is conservatively set to
+	// 80% to avoid exceeding MaxOffset.
+	toleratedOffsetMultiplier = 0.8
+
 	minimumNetworkFileDescriptors     = 256
 	recommendedNetworkFileDescriptors = 5000
 
@@ -138,13 +144,19 @@ type BaseConfig struct {
 	// AmbientCtx is used to annotate contexts used inside the server.
 	AmbientCtx log.AmbientContext
 
-	// Maximum allowed clock offset for the cluster. If observed clock
-	// offsets exceed this limit, inconsistency may result, and servers
-	// will panic to minimize the likelihood of inconsistent data.
-	// Increasing this value will increase time to recovery after
-	// failures, and increase the frequency and impact of
-	// ReadWithinUncertaintyIntervalError.
+	// MaxOffset is the maximum clock offset for the cluster. If real clock skew
+	// exceeds this limit, it may result in linearizability violations. Increasing
+	// this will increase the frequency of ReadWithinUncertaintyIntervalError and
+	// the write latency of global tables.
+	//
+	// Nodes will self-terminate if they detect that their clock skew with other
+	// nodes is too large, see ToleratedOffset().
 	MaxOffset MaxOffsetType
+
+	// DisableMaxOffsetCheck disables the MaxOffset check with other cluster nodes.
+	// The operator assumes responsibility for ensuring real clock skew never
+	// exceeds MaxOffset. See also ToleratedOffset().
+	DisableMaxOffsetCheck bool
 
 	// DisableRuntimeStatsMonitor prevents this server from starting the
 	// async task that collects runtime stats and triggers
@@ -276,6 +288,7 @@ func (cfg *BaseConfig) SetDefaults(
 	cfg.ClusterIDContainer = idsProvider.clusterID
 	cfg.AmbientCtx = log.MakeServerAmbientContext(tr, idsProvider)
 	cfg.MaxOffset = MaxOffsetType(base.DefaultMaxClockOffset)
+	cfg.DisableMaxOffsetCheck = false
 	cfg.DefaultZoneConfig = zonepb.DefaultZoneConfig()
 	cfg.StorageEngine = storage.DefaultStorageEngine
 	cfg.TestingInsecureWebAccess = disableWebLogin
@@ -324,6 +337,15 @@ func (cfg *BaseConfig) InitTestingKnobs() {
 		storeKnobs.EvalKnobs.UseRangeTombstonesForPointDeletes = true
 		cfg.TestingKnobs.RangeFeed.(*rangefeed.TestingKnobs).IgnoreOnDeleteRangeError = true
 	}
+}
+
+// ToleratedOffset returns the tolerated clock offset with other cluster nodes
+// as measured via RPC heartbeats, or 0 to disable clock offset checks.
+func (cfg *BaseConfig) ToleratedOffset() time.Duration {
+	if cfg.DisableMaxOffsetCheck {
+		return 0
+	}
+	return time.Duration(toleratedOffsetMultiplier * float64(cfg.MaxOffset))
 }
 
 // Config holds the parameters needed to set up a combined KV and SQL server.

@@ -13,7 +13,6 @@ package batcheval
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -56,7 +55,7 @@ func TestQueryIntent(t *testing.T) {
 	txB := writeIntent(keyB, 7)
 
 	st := cluster.MakeTestingClusterSettings()
-	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 10)), time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(0, 10)))
 	evalCtx := &MockEvalCtx{ClusterSettings: st, Clock: clock}
 
 	// Since we can't move the intents clock after they are written, created
