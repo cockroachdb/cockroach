@@ -3426,6 +3426,7 @@ bare_label_keywords ::=
 	| 'INVOKER'
 	| 'LEAKPROOF'
 	| 'PARALLEL'
+	| 'QUERY'
 	| 'RETURN'
 	| 'RETURNS'
 	| 'SECURITY'
