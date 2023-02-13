@@ -24,6 +24,17 @@ import (
 // Metrics are for production monitoring of each job type.
 type Metrics struct {
 	JobMetrics [jobspb.NumJobTypes]*JobTypeMetrics
+
+	// JobSpecificMetrics contains a list of job specific metrics, registered when
+	// the job was registered with the system.  Prior to this array, job
+	// implementations had to arrange for various hook functions be configured to
+	// setup registration of the job specific metrics with the jobs registry. This
+	// is a much simpler mechanism. Since having job specific metrics is optional,
+	// these metrics are exposed as an array to the metrics registry since metrics
+	// arrays may contain nil values. TODO(yevgeniy): Remove hook based
+	// implementation of job specific metrics.
+	JobSpecificMetrics [jobspb.NumJobTypes]metric.Struct
+
 	// RunningNonIdleJobs is the total number of running jobs that are not idle.
 	RunningNonIdleJobs *metric.Gauge
 
@@ -233,6 +244,9 @@ func (m *Metrics) init(histogramWindowInterval time.Duration) {
 			FailOrCancelCompleted:  metric.NewCounter(makeMetaFailOrCancelCompeted(typeStr)),
 			FailOrCancelRetryError: metric.NewCounter(makeMetaFailOrCancelRetryError(typeStr)),
 			FailOrCancelFailed:     metric.NewCounter(makeMetaFailOrCancelFailed(typeStr)),
+		}
+		if opts, ok := options[jt]; ok && opts.metrics != nil {
+			m.JobSpecificMetrics[jt] = opts.metrics
 		}
 	}
 }

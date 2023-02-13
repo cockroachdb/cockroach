@@ -153,6 +153,7 @@ go_test(
         "@com_github_gogo_protobuf//types",
         "@com_github_google_go_cmp//cmp",
         "@com_github_kr_pretty//:pretty",
+        "@com_github_prometheus_client_model//go",
         "@com_github_robfig_cron_v3//:cron",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
