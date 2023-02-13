@@ -124,8 +124,10 @@ message ProcessorCoreUnion {
   optional TTLSpec ttl = 39;
   optional HashGroupJoinerSpec hashGroupJoiner = 40;
   optional GenerativeSplitAndScatterSpec generativeSplitAndScatter = 41;
+  optional IngestStoppedSpec ingestStopped = 42;
 
   reserved 6, 12, 14, 17, 18, 19, 20;
+  // NEXT ID: 43.
 }
 
 // NoopCoreSpec indicates a "no-op" processor core. This is used when we just
