@@ -90,6 +90,8 @@ const (
 	// BackupValidateDetails identifies a SHOW BACKUP VALIDATION
 	// statement.
 	BackupValidateDetails
+	// BackupConnectionTest identifies a SHOW BACKUP CONNECTION statement
+	BackupConnectionTest
 )
 
 // TODO (msbutler): 22.2 after removing old style show backup syntax, rename
@@ -122,6 +124,8 @@ func (node *ShowBackup) Format(ctx *FmtCtx) {
 		ctx.WriteString("FILES ")
 	case BackupSchemaDetails:
 		ctx.WriteString("SCHEMAS ")
+	case BackupConnectionTest:
+		ctx.WriteString("CONNECTION ")
 	}
 
 	if node.From {
@@ -158,6 +162,7 @@ type ShowBackupOptions struct {
 	// the full backup dir.
 	EncryptionInfoDir Expr
 	DebugMetadataSST  bool
+	TransferSize      Expr
 }
 
 var _ NodeFormatter = &ShowBackupOptions{}
@@ -216,6 +221,10 @@ func (o *ShowBackupOptions) Format(ctx *FmtCtx) {
 		ctx.WriteString("debug_dump_metadata_sst")
 	}
 
+	if o.TransferSize != nil {
+		ctx.WriteString("TRANSFER = ")
+		ctx.FormatNode(o.TransferSize)
+	}
 }
 
 func (o ShowBackupOptions) IsDefault() bool {
@@ -228,7 +237,8 @@ func (o ShowBackupOptions) IsDefault() bool {
 		o.EncryptionPassphrase == options.EncryptionPassphrase &&
 		o.Privileges == options.Privileges &&
 		o.DebugMetadataSST == options.DebugMetadataSST &&
-		o.EncryptionInfoDir == options.EncryptionInfoDir
+		o.EncryptionInfoDir == options.EncryptionInfoDir &&
+		o.TransferSize == options.TransferSize
 }
 
 func combineBools(v1 bool, v2 bool, label string) (bool, error) {
@@ -303,6 +313,7 @@ func (o *ShowBackupOptions) CombineWith(other *ShowBackupOptions) error {
 	if err != nil {
 		return err
 	}
+	// no need to combine TransferSize – it only is used standalone by CONNECTION.
 	return nil
 }
 
