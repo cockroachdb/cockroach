@@ -308,10 +308,10 @@ CREATE TABLE crdb_internal.databases (
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, nil /* all databases */, true, /* requiresPrivileges */
 			func(db catalog.DatabaseDescriptor) error {
-				var survivalGoal tree.Datum = tree.DNull
-				var primaryRegion tree.Datum = tree.DNull
-				var secondaryRegion tree.Datum = tree.DNull
-				var placement tree.Datum = tree.DNull
+				var survivalGoal = tree.DNull
+				var primaryRegion = tree.DNull
+				var secondaryRegion = tree.DNull
+				var placement = tree.DNull
 				regions := tree.NewDArray(types.String)
 
 				createNode := tree.CreateDatabase{}
@@ -1371,6 +1371,32 @@ CREATE TABLE crdb_internal.node_statement_statistics (
   contention_time_var FLOAT,
   cpu_sql_nanos_avg       FLOAT,
   cpu_sql_nanos_var       FLOAT,
+  mvcc_step_avg       FLOAT,
+  mvcc_step_var       FLOAT,
+  mvcc_step_internal_avg FLOAT,
+  mvcc_step_internal_var FLOAT,
+  mvcc_seek_avg       FLOAT,
+  mvcc_seek_var       FLOAT,
+  mvcc_seek_internal_avg FLOAT,
+  mvcc_seek_internal_var FLOAT,
+  mvcc_block_bytes_avg       FLOAT,
+  mvcc_block_bytes_var       FLOAT,
+  mvcc_block_bytes_in_cache_avg FLOAT,
+  mvcc_block_bytes_in_cache_var FLOAT,
+  mvcc_key_bytes_avg FLOAT,
+  mvcc_key_bytes_var FLOAT,
+  mvcc_value_bytes_avg       FLOAT,
+  mvcc_value_bytes_var       FLOAT,
+  mvcc_point_count_avg       FLOAT,
+  mvcc_point_count_var       FLOAT,
+  mvcc_points_covered_by_range_tombstones_avg FLOAT,
+  mvcc_points_covered_by_range_tombstones_var FLOAT,
+  mvcc_range_key_count_avg FLOAT,
+  mvcc_range_key_count_var FLOAT,
+  mvcc_range_key_contained_points_avg       FLOAT,
+  mvcc_range_key_contained_points_var       FLOAT,
+  mvcc_range_key_skipped_points_avg      FLOAT,
+  mvcc_range_key_skipped_points_var      FLOAT,
   implicit_txn        BOOL NOT NULL,
   full_scan           BOOL NOT NULL,
   sample_plan         JSONB,
@@ -1460,40 +1486,66 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 				tree.NewDInt(tree.DInt(stats.Stats.MaxRetries)),           // max_retries
 				errString, // last_error
 				errCode,   // last_error_code
-				tree.NewDFloat(tree.DFloat(stats.Stats.NumRows.Mean)),                               // rows_avg
-				tree.NewDFloat(tree.DFloat(stats.Stats.NumRows.GetVariance(stats.Stats.Count))),     // rows_var
-				tree.NewDFloat(tree.DFloat(stats.Stats.IdleLat.Mean)),                               // idle_lat_avg
-				tree.NewDFloat(tree.DFloat(stats.Stats.IdleLat.GetVariance(stats.Stats.Count))),     // idle_lat_var
-				tree.NewDFloat(tree.DFloat(stats.Stats.ParseLat.Mean)),                              // parse_lat_avg
-				tree.NewDFloat(tree.DFloat(stats.Stats.ParseLat.GetVariance(stats.Stats.Count))),    // parse_lat_var
-				tree.NewDFloat(tree.DFloat(stats.Stats.PlanLat.Mean)),                               // plan_lat_avg
-				tree.NewDFloat(tree.DFloat(stats.Stats.PlanLat.GetVariance(stats.Stats.Count))),     // plan_lat_var
-				tree.NewDFloat(tree.DFloat(stats.Stats.RunLat.Mean)),                                // run_lat_avg
-				tree.NewDFloat(tree.DFloat(stats.Stats.RunLat.GetVariance(stats.Stats.Count))),      // run_lat_var
-				tree.NewDFloat(tree.DFloat(stats.Stats.ServiceLat.Mean)),                            // service_lat_avg
-				tree.NewDFloat(tree.DFloat(stats.Stats.ServiceLat.GetVariance(stats.Stats.Count))),  // service_lat_var
-				tree.NewDFloat(tree.DFloat(stats.Stats.OverheadLat.Mean)),                           // overhead_lat_avg
-				tree.NewDFloat(tree.DFloat(stats.Stats.OverheadLat.GetVariance(stats.Stats.Count))), // overhead_lat_var
-				tree.NewDFloat(tree.DFloat(stats.Stats.BytesRead.Mean)),                             // bytes_read_avg
-				tree.NewDFloat(tree.DFloat(stats.Stats.BytesRead.GetVariance(stats.Stats.Count))),   // bytes_read_var
-				tree.NewDFloat(tree.DFloat(stats.Stats.RowsRead.Mean)),                              // rows_read_avg
-				tree.NewDFloat(tree.DFloat(stats.Stats.RowsRead.GetVariance(stats.Stats.Count))),    // rows_read_var
-				tree.NewDFloat(tree.DFloat(stats.Stats.RowsWritten.Mean)),                           // rows_written_avg
-				tree.NewDFloat(tree.DFloat(stats.Stats.RowsWritten.GetVariance(stats.Stats.Count))), // rows_written_var
-				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.NetworkBytes),        // network_bytes_avg
-				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.NetworkBytes),        // network_bytes_var
-				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.NetworkMessages),     // network_msgs_avg
-				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.NetworkMessages),     // network_msgs_var
-				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MaxMemUsage),         // max_mem_usage_avg
-				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MaxMemUsage),         // max_mem_usage_var
-				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MaxDiskUsage),        // max_disk_usage_avg
-				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MaxDiskUsage),        // max_disk_usage_var
-				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.ContentionTime),      // contention_time_avg
-				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.ContentionTime),      // contention_time_var
-				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.CPUSQLNanos),         // cpu_sql_nanos_avg
-				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.CPUSQLNanos),         // cpu_sql_nanos_var
-				tree.MakeDBool(tree.DBool(stats.Key.ImplicitTxn)),                                   // implicit_txn
-				tree.MakeDBool(tree.DBool(stats.Key.FullScan)),                                      // full_scan
+				tree.NewDFloat(tree.DFloat(stats.Stats.NumRows.Mean)),                                                            // rows_avg
+				tree.NewDFloat(tree.DFloat(stats.Stats.NumRows.GetVariance(stats.Stats.Count))),                                  // rows_var
+				tree.NewDFloat(tree.DFloat(stats.Stats.IdleLat.Mean)),                                                            // idle_lat_avg
+				tree.NewDFloat(tree.DFloat(stats.Stats.IdleLat.GetVariance(stats.Stats.Count))),                                  // idle_lat_var
+				tree.NewDFloat(tree.DFloat(stats.Stats.ParseLat.Mean)),                                                           // parse_lat_avg
+				tree.NewDFloat(tree.DFloat(stats.Stats.ParseLat.GetVariance(stats.Stats.Count))),                                 // parse_lat_var
+				tree.NewDFloat(tree.DFloat(stats.Stats.PlanLat.Mean)),                                                            // plan_lat_avg
+				tree.NewDFloat(tree.DFloat(stats.Stats.PlanLat.GetVariance(stats.Stats.Count))),                                  // plan_lat_var
+				tree.NewDFloat(tree.DFloat(stats.Stats.RunLat.Mean)),                                                             // run_lat_avg
+				tree.NewDFloat(tree.DFloat(stats.Stats.RunLat.GetVariance(stats.Stats.Count))),                                   // run_lat_var
+				tree.NewDFloat(tree.DFloat(stats.Stats.ServiceLat.Mean)),                                                         // service_lat_avg
+				tree.NewDFloat(tree.DFloat(stats.Stats.ServiceLat.GetVariance(stats.Stats.Count))),                               // service_lat_var
+				tree.NewDFloat(tree.DFloat(stats.Stats.OverheadLat.Mean)),                                                        // overhead_lat_avg
+				tree.NewDFloat(tree.DFloat(stats.Stats.OverheadLat.GetVariance(stats.Stats.Count))),                              // overhead_lat_var
+				tree.NewDFloat(tree.DFloat(stats.Stats.BytesRead.Mean)),                                                          // bytes_read_avg
+				tree.NewDFloat(tree.DFloat(stats.Stats.BytesRead.GetVariance(stats.Stats.Count))),                                // bytes_read_var
+				tree.NewDFloat(tree.DFloat(stats.Stats.RowsRead.Mean)),                                                           // rows_read_avg
+				tree.NewDFloat(tree.DFloat(stats.Stats.RowsRead.GetVariance(stats.Stats.Count))),                                 // rows_read_var
+				tree.NewDFloat(tree.DFloat(stats.Stats.RowsWritten.Mean)),                                                        // rows_written_avg
+				tree.NewDFloat(tree.DFloat(stats.Stats.RowsWritten.GetVariance(stats.Stats.Count))),                              // rows_written_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.NetworkBytes),                                     // network_bytes_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.NetworkBytes),                                     // network_bytes_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.NetworkMessages),                                  // network_msgs_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.NetworkMessages),                                  // network_msgs_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MaxMemUsage),                                      // max_mem_usage_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MaxMemUsage),                                      // max_mem_usage_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MaxDiskUsage),                                     // max_disk_usage_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MaxDiskUsage),                                     // max_disk_usage_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.ContentionTime),                                   // contention_time_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.ContentionTime),                                   // contention_time_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.CPUSQLNanos),                                      // cpu_sql_nanos_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.CPUSQLNanos),                                      // cpu_sql_nanos_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.StepCount),                      // mvcc_step_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.StepCount),                      // mvcc_step_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.StepCountInternal),              // mvcc_step_internal_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.StepCountInternal),              // mvcc_step_internal_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.SeekCount),                      // mvcc_seek_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.SeekCount),                      // mvcc_seek_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.SeekCountInternal),              // mvcc_seek_internal_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.SeekCountInternal),              // mvcc_seek_internal_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.BlockBytes),                     // mvcc_block_bytes_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.BlockBytes),                     // mvcc_block_bytes_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.BlockBytesInCache),              // mvcc_block_bytes_in_cache_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.BlockBytesInCache),              // mvcc_block_bytes_in_cache_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.KeyBytes),                       // mvcc_key_bytes_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.KeyBytes),                       // mvcc_key_bytes_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.ValueBytes),                     // mvcc_value_bytes_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.ValueBytes),                     // mvcc_value_bytes_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.PointCount),                     // mvcc_point_count_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.PointCount),                     // mvcc_point_count_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.PointsCoveredByRangeTombstones), // mvcc_points_covered_by_range_tombstones_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.PointsCoveredByRangeTombstones), // mvcc_points_covered_by_range_tombstones_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.RangeKeyCount),                  // mvcc_range_key_count_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.RangeKeyCount),                  // mvcc_range_key_count_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.RangeKeyContainedPoints),        // mvcc_range_key_contained_points_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.RangeKeyContainedPoints),        // mvcc_range_key_contained_points_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.RangeKeySkippedPoints),          // mvcc_range_key_skipped_points_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.RangeKeySkippedPoints),          // mvcc_range_key_skipped_points_var
+				tree.MakeDBool(tree.DBool(stats.Key.ImplicitTxn)),                                                                // implicit_txn
+				tree.MakeDBool(tree.DBool(stats.Key.FullScan)),                                                                   // full_scan
 				tree.NewDJSON(samplePlan),           // sample_plan
 				tree.NewDString(stats.Key.Database), // database_name
 				execNodeIDs,                         // exec_node_ids
@@ -1555,7 +1607,33 @@ CREATE TABLE crdb_internal.node_transaction_statistics (
   contention_time_avg FLOAT,
   contention_time_var FLOAT,
   cpu_sql_nanos_avg       FLOAT,
-  cpu_sql_nanos_var       FLOAT
+  cpu_sql_nanos_var       FLOAT,
+  mvcc_step_avg       FLOAT,
+  mvcc_step_var       FLOAT,
+  mvcc_step_internal_avg FLOAT,
+  mvcc_step_internal_var FLOAT,
+  mvcc_seek_avg       FLOAT,
+  mvcc_seek_var       FLOAT,
+  mvcc_seek_internal_avg FLOAT,
+  mvcc_seek_internal_var FLOAT,
+  mvcc_block_bytes_avg       FLOAT,
+  mvcc_block_bytes_var       FLOAT,
+  mvcc_block_bytes_in_cache_avg FLOAT,
+  mvcc_block_bytes_in_cache_var FLOAT,
+  mvcc_key_bytes_avg FLOAT,
+  mvcc_key_bytes_var FLOAT,
+  mvcc_value_bytes_avg       FLOAT,
+  mvcc_value_bytes_var       FLOAT,
+  mvcc_point_count_avg       FLOAT,
+  mvcc_point_count_var       FLOAT,
+  mvcc_points_covered_by_range_tombstones_avg FLOAT,
+  mvcc_points_covered_by_range_tombstones_var FLOAT,
+  mvcc_range_key_count_avg FLOAT,
+  mvcc_range_key_count_var FLOAT,
+  mvcc_range_key_contained_points_avg       FLOAT,
+  mvcc_range_key_contained_points_var       FLOAT,
+  mvcc_range_key_skipped_points_avg      FLOAT,
+  mvcc_range_key_skipped_points_var      FLOAT
 )
 `,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
@@ -1587,31 +1665,57 @@ CREATE TABLE crdb_internal.node_transaction_statistics (
 				tree.NewDInt(tree.DInt(nodeID)), // node_id
 				tree.NewDString(stats.App),      // application_name
 				tree.NewDString(strconv.FormatUint(uint64(stats.TransactionFingerprintID), 10)), // key
-				stmtFingerprintIDsDatum,                                                            // statement_ids
-				tree.NewDInt(tree.DInt(stats.Stats.Count)),                                         // count
-				tree.NewDInt(tree.DInt(stats.Stats.MaxRetries)),                                    // max_retries
-				tree.NewDFloat(tree.DFloat(stats.Stats.ServiceLat.Mean)),                           // service_lat_avg
-				tree.NewDFloat(tree.DFloat(stats.Stats.ServiceLat.GetVariance(stats.Stats.Count))), // service_lat_var
-				tree.NewDFloat(tree.DFloat(stats.Stats.RetryLat.Mean)),                             // retry_lat_avg
-				tree.NewDFloat(tree.DFloat(stats.Stats.RetryLat.GetVariance(stats.Stats.Count))),   // retry_lat_var
-				tree.NewDFloat(tree.DFloat(stats.Stats.CommitLat.Mean)),                            // commit_lat_avg
-				tree.NewDFloat(tree.DFloat(stats.Stats.CommitLat.GetVariance(stats.Stats.Count))),  // commit_lat_var
-				tree.NewDFloat(tree.DFloat(stats.Stats.IdleLat.Mean)),                              // idle_lat_avg
-				tree.NewDFloat(tree.DFloat(stats.Stats.IdleLat.GetVariance(stats.Stats.Count))),    // idle_lat_var
-				tree.NewDFloat(tree.DFloat(stats.Stats.NumRows.Mean)),                              // rows_read_avg
-				tree.NewDFloat(tree.DFloat(stats.Stats.NumRows.GetVariance(stats.Stats.Count))),    // rows_read_var
-				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.NetworkBytes),       // network_bytes_avg
-				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.NetworkBytes),       // network_bytes_var
-				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.NetworkMessages),    // network_msgs_avg
-				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.NetworkMessages),    // network_msgs_var
-				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MaxMemUsage),        // max_mem_usage_avg
-				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MaxMemUsage),        // max_mem_usage_var
-				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MaxDiskUsage),       // max_disk_usage_avg
-				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MaxDiskUsage),       // max_disk_usage_var
-				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.ContentionTime),     // contention_time_avg
-				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.ContentionTime),     // contention_time_var
-				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.CPUSQLNanos),        // cpu_sql_nanos_avg
-				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.CPUSQLNanos),        // cpu_sql_nanos_var
+				stmtFingerprintIDsDatum,                                                                                          // statement_ids
+				tree.NewDInt(tree.DInt(stats.Stats.Count)),                                                                       // count
+				tree.NewDInt(tree.DInt(stats.Stats.MaxRetries)),                                                                  // max_retries
+				tree.NewDFloat(tree.DFloat(stats.Stats.ServiceLat.Mean)),                                                         // service_lat_avg
+				tree.NewDFloat(tree.DFloat(stats.Stats.ServiceLat.GetVariance(stats.Stats.Count))),                               // service_lat_var
+				tree.NewDFloat(tree.DFloat(stats.Stats.RetryLat.Mean)),                                                           // retry_lat_avg
+				tree.NewDFloat(tree.DFloat(stats.Stats.RetryLat.GetVariance(stats.Stats.Count))),                                 // retry_lat_var
+				tree.NewDFloat(tree.DFloat(stats.Stats.CommitLat.Mean)),                                                          // commit_lat_avg
+				tree.NewDFloat(tree.DFloat(stats.Stats.CommitLat.GetVariance(stats.Stats.Count))),                                // commit_lat_var
+				tree.NewDFloat(tree.DFloat(stats.Stats.IdleLat.Mean)),                                                            // idle_lat_avg
+				tree.NewDFloat(tree.DFloat(stats.Stats.IdleLat.GetVariance(stats.Stats.Count))),                                  // idle_lat_var
+				tree.NewDFloat(tree.DFloat(stats.Stats.NumRows.Mean)),                                                            // rows_read_avg
+				tree.NewDFloat(tree.DFloat(stats.Stats.NumRows.GetVariance(stats.Stats.Count))),                                  // rows_read_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.NetworkBytes),                                     // network_bytes_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.NetworkBytes),                                     // network_bytes_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.NetworkMessages),                                  // network_msgs_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.NetworkMessages),                                  // network_msgs_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MaxMemUsage),                                      // max_mem_usage_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MaxMemUsage),                                      // max_mem_usage_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MaxDiskUsage),                                     // max_disk_usage_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MaxDiskUsage),                                     // max_disk_usage_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.ContentionTime),                                   // contention_time_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.ContentionTime),                                   // contention_time_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.CPUSQLNanos),                                      // cpu_sql_nanos_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.CPUSQLNanos),                                      // cpu_sql_nanos_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.StepCount),                      // mvcc_step_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.StepCount),                      // mvcc_step_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.StepCountInternal),              // mvcc_step_internal_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.StepCountInternal),              // mvcc_step_internal_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.SeekCount),                      // mvcc_seek_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.SeekCount),                      // mvcc_seek_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.SeekCountInternal),              // mvcc_seek_internal_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.SeekCountInternal),              // mvcc_seek_internal_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.BlockBytes),                     // mvcc_block_bytes_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.BlockBytes),                     // mvcc_block_bytes_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.BlockBytesInCache),              // mvcc_block_bytes_in_cache_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.BlockBytesInCache),              // mvcc_block_bytes_in_cache_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.KeyBytes),                       // mvcc_key_bytes_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.KeyBytes),                       // mvcc_key_bytes_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.ValueBytes),                     // mvcc_value_bytes_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.ValueBytes),                     // mvcc_value_bytes_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.PointCount),                     // mvcc_point_count_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.PointCount),                     // mvcc_point_count_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.PointsCoveredByRangeTombstones), // mvcc_points_covered_by_range_tombstones_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.PointsCoveredByRangeTombstones), // mvcc_points_covered_by_range_tombstones_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.RangeKeyCount),                  // mvcc_range_key_count_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.RangeKeyCount),                  // mvcc_range_key_count_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.RangeKeyContainedPoints),        // mvcc_range_key_contained_points_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.RangeKeyContainedPoints),        // mvcc_range_key_contained_points_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.RangeKeySkippedPoints),          // mvcc_range_key_skipped_points_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MVCCIteratorStats.RangeKeySkippedPoints),          // mvcc_range_key_skipped_points_var
 			)
 
 			if err != nil {

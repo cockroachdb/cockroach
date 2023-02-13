@@ -77,7 +77,16 @@ type ScanStats struct {
 	NumInterfaceSeeks uint64
 	// NumInternalSeeks is the number of times that MVCC seek was invoked
 	// internally, including to step over internal, uncompacted Pebble versions.
-	NumInternalSeeks uint64
+	NumInternalSeeks               uint64
+	BlockBytes                     uint64
+	BlockBytesInCache              uint64
+	KeyBytes                       uint64
+	ValueBytes                     uint64
+	PointCount                     uint64
+	PointsCoveredByRangeTombstones uint64
+	RangeKeyCount                  uint64
+	RangeKeyContainedPoints        uint64
+	RangeKeySkippedPoints          uint64
 	// ConsumedRU is the number of RUs that were consumed during the course of a
 	// scan.
 	ConsumedRU uint64
@@ -89,6 +98,15 @@ func PopulateKVMVCCStats(kvStats *execinfrapb.KVStats, ss *ScanStats) {
 	kvStats.NumInternalSteps = optional.MakeUint(ss.NumInternalSteps)
 	kvStats.NumInterfaceSeeks = optional.MakeUint(ss.NumInterfaceSeeks)
 	kvStats.NumInternalSeeks = optional.MakeUint(ss.NumInternalSeeks)
+	kvStats.BlockBytes = optional.MakeUint(ss.BlockBytes)
+	kvStats.BlockBytesInCache = optional.MakeUint(ss.BlockBytesInCache)
+	kvStats.KeyBytes = optional.MakeUint(ss.KeyBytes)
+	kvStats.ValueBytes = optional.MakeUint(ss.ValueBytes)
+	kvStats.PointCount = optional.MakeUint(ss.PointCount)
+	kvStats.PointsCoveredByRangeTombstones = optional.MakeUint(ss.PointsCoveredByRangeTombstones)
+	kvStats.RangeKeyCount = optional.MakeUint(ss.RangeKeyCount)
+	kvStats.RangeKeyContainedPoints = optional.MakeUint(ss.RangeKeyContainedPoints)
+	kvStats.RangeKeySkippedPoints = optional.MakeUint(ss.RangeKeySkippedPoints)
 }
 
 // GetScanStats is a helper function to calculate scan stats from the given
@@ -110,6 +128,15 @@ func GetScanStats(ctx context.Context, recording tracingpb.Recording) (scanStats
 				scanStats.NumInternalSteps += ss.NumInternalSteps
 				scanStats.NumInterfaceSeeks += ss.NumInterfaceSeeks
 				scanStats.NumInternalSeeks += ss.NumInternalSeeks
+				scanStats.BlockBytes += ss.BlockBytes
+				scanStats.BlockBytesInCache += ss.BlockBytesInCache
+				scanStats.KeyBytes += ss.KeyBytes
+				scanStats.ValueBytes += ss.ValueBytes
+				scanStats.PointCount += ss.PointCount
+				scanStats.PointsCoveredByRangeTombstones += ss.PointsCoveredByRangeTombstones
+				scanStats.RangeKeyCount += ss.RangeKeyCount
+				scanStats.RangeKeyContainedPoints += ss.RangeKeyContainedPoints
+				scanStats.RangeKeySkippedPoints += ss.RangeKeySkippedPoints
 			} else if pbtypes.Is(any, &tc) {
 				if err := pbtypes.UnmarshalAny(any, &tc); err != nil {
 					return

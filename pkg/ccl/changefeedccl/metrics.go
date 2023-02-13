@@ -255,23 +255,28 @@ func maybeWrapMetrics(
 	return &wrappingCostController{ctx: ctx, inner: inner, recorder: recorder}
 }
 
-func (w *wrappingCostController) recordOneMessage() recordOneMessageCallback {
-	innerCallback := w.inner.recordOneMessage()
-	return func(mvcc hlc.Timestamp, bytes int, compressedBytes int) {
-		w.recordEmittedBatch(time.Time{}, 1, mvcc, bytes, compressedBytes)
-		innerCallback(mvcc, bytes, compressedBytes)
-	}
-}
-
-func (w *wrappingCostController) recordEmittedBatch(
-	_ time.Time, _ int, _ hlc.Timestamp, bytes int, compressedBytes int,
-) {
+func (w *wrappingCostController) recordExternalIO(bytes int, compressedBytes int) {
 	if compressedBytes == sinkDoesNotCompress {
 		compressedBytes = bytes
 	}
 	// NB: We don't Wait for RUs for changefeeds; but, this call may put the RU limiter in debt which
 	// will impact future KV requests.
 	w.recorder.OnExternalIO(w.ctx, multitenant.ExternalIOUsage{EgressBytes: int64(compressedBytes)})
+}
+
+func (w *wrappingCostController) recordOneMessage() recordOneMessageCallback {
+	innerCallback := w.inner.recordOneMessage()
+	return func(mvcc hlc.Timestamp, bytes int, compressedBytes int) {
+		w.recordExternalIO(bytes, compressedBytes)
+		innerCallback(mvcc, bytes, compressedBytes)
+	}
+}
+
+func (w *wrappingCostController) recordEmittedBatch(
+	startTime time.Time, numMessages int, mvcc hlc.Timestamp, bytes int, compressedBytes int,
+) {
+	w.recordExternalIO(bytes, compressedBytes)
+	w.inner.recordEmittedBatch(startTime, numMessages, mvcc, bytes, compressedBytes)
 }
 
 func (w *wrappingCostController) recordMessageSize(sz int64) {
