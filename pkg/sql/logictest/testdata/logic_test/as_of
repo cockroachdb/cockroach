@@ -147,3 +147,7 @@ ROLLBACK
 # internal error.
 statement error pq: AS OF SYSTEM TIME: expected timestamp, decimal, or interval, got bool
 SELECT * FROM t AS OF SYSTEM TIME ('' BETWEEN '' AND '')
+
+# Check that AOST in multi-stmt implicit transaction has the proper error.
+statement error inconsistent AS OF SYSTEM TIME timestamp
+insert into t values(1); select * from t as of system time '-1s';
