@@ -361,6 +361,8 @@ func ingestKvs(
 	ctx, span := tracing.ChildSpan(ctx, "import-ingest-kvs")
 	defer span.Finish()
 
+	defer flowCtx.Cfg.JobRegistry.MarkAsIngesting(spec.Progress.JobID)()
+
 	writeTS := hlc.Timestamp{WallTime: spec.WalltimeNanos}
 
 	var pkAdderName, indexAdderName = "rows", "indexes"
