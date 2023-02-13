@@ -1,5 +1,9 @@
 #! /usr/bin/env expect -f
 
+# This test is skipped (flaky test) -- its filename lets it hide from the selector in
+# TestDockerCLI. Un-skip it by renaming after fixing
+# https://github.com/cockroachdb/cockroach/issues/96797.
+
 source [file join [file dirname $argv0] common.tcl]
 
 # Set a larger timeout as partitioning can be slow.
