@@ -7166,7 +7166,8 @@ CREATE TABLE crdb_internal.%s (
   problems                   STRING[] NOT NULL,
   causes                     STRING[] NOT NULL,
   stmt_execution_ids         STRING[] NOT NULL,
-  cpu_sql_nanos              INT8
+  cpu_sql_nanos              INT8,
+  last_error_code            STRING
 )`
 
 var crdbInternalClusterTxnExecutionInsightsTable = virtualSchemaTable{
@@ -7275,6 +7276,13 @@ func populateTxnExecutionInsights(
 			}
 		}
 
+		errorCode := tree.DNull
+		for _, stmt := range insight.Statements {
+			if stmt.ErrorCode != "" {
+				errorCode = tree.NewDString(stmt.ErrorCode)
+			}
+		}
+
 		err = errors.CombineErrors(err, addRow(
 			tree.NewDUuid(tree.DUuid{UUID: insight.Transaction.ID}),
 			tree.NewDBytes(tree.DBytes(sqlstatsutil.EncodeUint64ToBytes(uint64(insight.Transaction.FingerprintID)))),
@@ -7295,6 +7303,7 @@ func populateTxnExecutionInsights(
 			causes,
 			stmtIDs,
 			tree.NewDInt(tree.DInt(insight.Transaction.CPUSQLNanos)),
+			errorCode,
 		))
 
 		if err != nil {
@@ -7333,7 +7342,8 @@ CREATE TABLE crdb_internal.%s (
 	contention                 INTERVAL,
 	index_recommendations      STRING[] NOT NULL,
 	implicit_txn               BOOL NOT NULL,
-	cpu_sql_nanos              INT8
+	cpu_sql_nanos              INT8,
+    error_code                 STRING
 )`
 
 var crdbInternalClusterExecutionInsightsTable = virtualSchemaTable{
@@ -7452,6 +7462,7 @@ func populateStmtInsights(
 				indexRecommendations,
 				tree.MakeDBool(tree.DBool(insight.Transaction.ImplicitTxn)),
 				tree.NewDInt(tree.DInt(s.CPUSQLNanos)),
+				tree.NewDString(s.ErrorCode),
 			))
 		}
 	}
