@@ -12,7 +12,6 @@ package profiler
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/server/dumpstore"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -59,7 +58,7 @@ func NewNonGoAllocProfiler(
 	}
 
 	if jemallocHeapDump != nil {
-		log.Infof(ctx, "writing jemalloc profiles to %s at last every %s", dir, fmt.Sprint(hp.highWaterMarkFloor()))
+		log.Infof(ctx, "writing jemalloc profiles to %s at least every %s", dir, hp.resetInterval())
 	} else {
 		log.Infof(ctx, `to enable jmalloc profiling: "export MALLOC_CONF=prof:true" or "ln -s prof:true /etc/malloc.conf"`)
 	}

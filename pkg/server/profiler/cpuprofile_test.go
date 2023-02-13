@@ -22,11 +22,9 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-var cpuProfilerDirName = "cockroach-data/logs/pprof_dump"
-
 func TestCPUProfiler(t *testing.T) {
 	ctx := context.Background()
-	dumpStore := dumpstore.NewStore(cpuProfilerDirName, nil, nil)
+	dumpStore := dumpstore.NewStore(t.TempDir(), nil, nil)
 	s := &cluster.Settings{}
 	sv := &s.SV
 	s.Version = clusterversion.MakeVersionHandle(sv)
