@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -210,6 +211,9 @@ func setupMVCCPebble(b testing.TB, dir string, lBaseMaxBytes int64, readOnly boo
 func setupData(
 	ctx context.Context, b *testing.B, emk engineMaker, opts benchDataOptions,
 ) (storage.Engine, string) {
+	// Include the current version in the fixture name, or we may inadvertently
+	// run against a left-over fixture that is no longer supported.
+	verStr := fmt.Sprintf("v%s", clusterversion.TestingBinaryVersion.String())
 	orderStr := "linear"
 	if opts.randomKeyOrder {
 		orderStr = "random"
@@ -218,8 +222,8 @@ func setupData(
 	if opts.readOnlyEngine {
 		readOnlyStr = "_readonly"
 	}
-	loc := fmt.Sprintf("refresh_range_bench_data_%s%s_%d_%d_%d",
-		orderStr, readOnlyStr, opts.numKeys, opts.valueBytes, opts.lBaseMaxBytes)
+	loc := fmt.Sprintf("refresh_range_bench_data_%s_%s%s_%d_%d_%d",
+		verStr, orderStr, readOnlyStr, opts.numKeys, opts.valueBytes, opts.lBaseMaxBytes)
 	exists := true
 	if _, err := os.Stat(loc); oserror.IsNotExist(err) {
 		exists = false
@@ -227,13 +231,19 @@ func setupData(
 		b.Fatal(err)
 	}
 
+	absPath, err := filepath.Abs(loc)
+	if err != nil {
+		absPath = loc
+	}
+
 	if exists {
+		log.Infof(ctx, "using existing refresh range benchmark data: %s", absPath)
 		testutils.ReadAllFiles(filepath.Join(loc, "*"))
 		return emk(b, loc, opts.lBaseMaxBytes, opts.readOnlyEngine), loc
 	}
 
 	eng := emk(b, loc, opts.lBaseMaxBytes, false)
-	log.Infof(ctx, "creating refresh range benchmark data: %s", loc)
+	log.Infof(ctx, "creating refresh range benchmark data: %s", absPath)
 
 	// Generate the same data every time.
 	rng := rand.New(rand.NewSource(1449168817))
