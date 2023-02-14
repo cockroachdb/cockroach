@@ -96,10 +96,20 @@ func getAndDeleteParams(u *url.URL) (schemaRegistryParams, error) {
 	return s, nil
 }
 
-func newConfluentSchemaRegistry(baseURL string) (*confluentSchemaRegistry, error) {
+func newConfluentSchemaRegistry(
+	baseURL string, p externalConnectionProvider,
+) (*confluentSchemaRegistry, error) {
 	u, err := url.Parse(baseURL)
 	if err != nil {
 		return nil, errors.Wrap(err, "malformed schema registry url")
+	}
+
+	if u.Scheme == changefeedbase.SinkSchemeExternalConnection {
+		actual, err := p.lookup(u.Host)
+		if err != nil {
+			return nil, err
+		}
+		return newConfluentSchemaRegistry(actual, p)
 	}
 
 	if u.Scheme != "http" && u.Scheme != "https" {

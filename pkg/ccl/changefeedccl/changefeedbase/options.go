@@ -883,6 +883,10 @@ func (s StatementOptions) GetMinCheckpointFrequency() (*time.Duration, error) {
 	return s.getDurationValue(OptMinCheckpointFrequency)
 }
 
+func (s StatementOptions) GetConfluentSchemaRegistry() string {
+	return s.m[OptConfluentSchemaRegistry]
+}
+
 // ForceKeyInValue sets the encoding option KeyInValue to true and then validates the
 // resoluting encoding options.
 func (s StatementOptions) ForceKeyInValue() error {

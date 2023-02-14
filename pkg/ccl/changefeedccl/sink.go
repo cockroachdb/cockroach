@@ -233,7 +233,7 @@ func getSink(
 		case u.Scheme == changefeedbase.SinkSchemeExternalConnection:
 			return validateOptionsAndMakeSink(changefeedbase.ExternalConnectionValidOptions, func() (Sink, error) {
 				return makeExternalConnectionSink(
-					ctx, sinkURL{URL: u}, user, serverCfg.DB,
+					ctx, sinkURL{URL: u}, user, makeExternalConnectionProvider(ctx, serverCfg.DB),
 					serverCfg, feedCfg, timestampOracle, jobID, m,
 				)
 			})
