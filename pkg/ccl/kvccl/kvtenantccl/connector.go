@@ -648,6 +648,22 @@ func (c *Connector) SpanConfigConformance(
 	return report, nil
 }
 
+// SpanStats implements the serverpb.TenantStatusServer interface.
+func (c *Connector) SpanStats(
+	ctx context.Context, req *roachpb.SpanStatsRequest,
+) (*roachpb.SpanStatsResponse, error) {
+	var response *roachpb.SpanStatsResponse
+	err := c.withClient(ctx, func(ctx context.Context, c *client) error {
+		stats, err := c.SpanStats(ctx, req)
+		if err != nil {
+			return err
+		}
+		response = stats
+		return nil
+	})
+	return response, err
+}
+
 // GetAllSystemSpanConfigsThatApply implements the spanconfig.KVAccessor
 // interface.
 func (c *Connector) GetAllSystemSpanConfigsThatApply(

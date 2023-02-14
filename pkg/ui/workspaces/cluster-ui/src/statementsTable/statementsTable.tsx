@@ -20,8 +20,9 @@ import {
   TimestampToNumber,
   TimestampToMoment,
   unset,
+  DurationCheckSample,
 } from "src/util";
-import { DATE_FORMAT } from "src/util/format";
+import { DATE_FORMAT, Duration } from "src/util/format";
 import {
   countBarChart,
   bytesReadBarChart,
@@ -225,6 +226,49 @@ export function makeStatementsColumns(
       cell: cpuBar,
       sort: (stmt: AggregateStatistics) =>
         FixLong(Number(stmt.stats.exec_stats.cpu_sql_nanos?.mean)),
+    },
+    {
+      name: "latencyP50",
+      title: statisticsTableTitles.latencyP50(statType),
+      cell: (stmt: AggregateStatistics) =>
+        DurationCheckSample(stmt.stats.latency_info?.p50 * 1e9),
+      sort: (stmt: AggregateStatistics) =>
+        FixLong(Number(stmt.stats.latency_info?.p50)),
+      showByDefault: false,
+    },
+    {
+      name: "latencyP90",
+      title: statisticsTableTitles.latencyP90(statType),
+      cell: (stmt: AggregateStatistics) =>
+        DurationCheckSample(stmt.stats.latency_info?.p90 * 1e9),
+      sort: (stmt: AggregateStatistics) =>
+        FixLong(Number(stmt.stats.latency_info?.p90)),
+      showByDefault: false,
+    },
+    {
+      name: "latencyP99",
+      title: statisticsTableTitles.latencyP99(statType),
+      cell: (stmt: AggregateStatistics) =>
+        DurationCheckSample(stmt.stats.latency_info?.p99 * 1e9),
+      sort: (stmt: AggregateStatistics) =>
+        FixLong(Number(stmt.stats.latency_info?.p99)),
+    },
+    {
+      name: "latencyMin",
+      title: statisticsTableTitles.latencyMin(statType),
+      cell: (stmt: AggregateStatistics) =>
+        Duration(stmt.stats.latency_info?.min * 1e9),
+      sort: (stmt: AggregateStatistics) =>
+        FixLong(Number(stmt.stats.latency_info?.min)),
+      showByDefault: false,
+    },
+    {
+      name: "latencyMax",
+      title: statisticsTableTitles.latencyMax(statType),
+      cell: (stmt: AggregateStatistics) =>
+        Duration(stmt.stats.latency_info?.max * 1e9),
+      sort: (stmt: AggregateStatistics) =>
+        FixLong(Number(stmt.stats.latency_info?.max)),
     },
     {
       name: "maxMemUsage",

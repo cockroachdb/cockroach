@@ -141,6 +141,7 @@ proto_library(
         "io-formats.proto",
         "metadata.proto",
         "span_config.proto",
+        "span_stats.proto",
     ],
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
@@ -158,6 +159,7 @@ proto_library(
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
         "@com_google_protobuf//:duration_proto",
         "@com_google_protobuf//:timestamp_proto",
+        "@go_googleapis//google/api:annotations_proto",
     ],
 )
 
@@ -179,6 +181,7 @@ go_proto_library(
         "//pkg/util/tracing/tracingpb",
         "@com_github_cockroachdb_errors//errorspb",
         "@com_github_gogo_protobuf//gogoproto",
+        "@org_golang_google_genproto//googleapis/api/annotations:go_default_library",
     ],
 )
 
