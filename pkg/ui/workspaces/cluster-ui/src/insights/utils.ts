@@ -392,6 +392,8 @@ export function getStmtInsightRecommendations(
     statementExecutionID: insightDetails.statementExecutionID,
     transactionExecutionID: insightDetails.transactionExecutionID,
     execType: InsightExecEnum.STATEMENT,
+    errorCode: insightDetails.errorCode,
+    status: insightDetails.status,
   };
 
   const recs: InsightRecommendation[] = insightDetails.insights?.map(insight =>

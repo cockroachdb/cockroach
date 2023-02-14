@@ -21,6 +21,7 @@ export const insightsColumnLabels = {
   waitingID: "Waiting Execution ID",
   waitingFingerprintID: "Waiting Fingerprint ID",
   query: "Execution",
+  status: "Status",
   insights: "Insights",
   startTime: "Start Time (UTC)",
   elapsedTime: "Elapsed Time",
@@ -122,6 +123,10 @@ export const insightsTableTitles: InsightsTableTitleType = {
       tooltipText = "The queries attempted in the transaction.";
     }
     return makeToolTip(<p>{tooltipText}</p>, "query", execType);
+  },
+  status: (execType: InsightExecEnum) => {
+    const tooltipText = `The ${execType} status`;
+    return makeToolTip(<p>{tooltipText}</p>, "status");
   },
   insights: (execType: InsightExecEnum) => {
     return makeToolTip(
