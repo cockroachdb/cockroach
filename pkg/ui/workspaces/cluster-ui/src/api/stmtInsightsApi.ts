@@ -21,6 +21,7 @@ import {
   ContentionDetails,
   getInsightsFromProblemsAndCauses,
   InsightExecEnum,
+  StatementStatus,
   StmtInsightEvent,
 } from "src/insights";
 import moment from "moment";
@@ -62,6 +63,8 @@ export type StmtInsightsResponseRow = {
   index_recommendations: string[];
   plan_gist: string;
   cpu_sql_nanos: number;
+  error_code: string;
+  status: StatementStatus;
 };
 
 const stmtColumns = `
@@ -89,7 +92,9 @@ causes,
 problem,
 index_recommendations,
 plan_gist,
-cpu_sql_nanos
+cpu_sql_nanos,
+error_code,
+status
 `;
 
 const stmtInsightsOverviewQuery = (filters?: StmtInsightsReq): string => {
@@ -233,6 +238,8 @@ export function formatStmtInsights(
       ),
       planGist: row.plan_gist,
       cpuSQLNanos: row.cpu_sql_nanos,
+      errorCode: row.error_code,
+      status: row.status,
     } as StmtInsightEvent;
   });
 }

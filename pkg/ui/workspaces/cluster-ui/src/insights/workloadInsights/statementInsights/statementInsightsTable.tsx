@@ -22,7 +22,11 @@ import {
   limitText,
   NO_SAMPLES_FOUND,
 } from "src/util";
-import { InsightExecEnum, StmtInsightEvent } from "src/insights";
+import {
+  InsightExecEnum,
+  StatementStatus,
+  StmtInsightEvent,
+} from "src/insights";
 import {
   InsightCell,
   insightsTableTitles,
@@ -33,8 +37,20 @@ import { Link } from "react-router-dom";
 import classNames from "classnames/bind";
 import styles from "../util/workloadInsights.module.scss";
 import { TimeScale } from "../../../timeScaleDropdown";
+import { Badge } from "src/badge";
 
 const cx = classNames.bind(styles);
+
+function stmtStatusToBadge(status: StatementStatus) {
+  switch (status) {
+    case StatementStatus.COMPLETED:
+      return "success";
+    case StatementStatus.FAILED:
+      return "danger";
+    default:
+      return "info";
+  }
+}
 
 interface StatementInsightsTable {
   data: StmtInsightEvent[];
@@ -78,6 +94,15 @@ export function makeStatementInsightsColumns(
         </Tooltip>
       ),
       sort: (item: StmtInsightEvent) => item.query,
+      showByDefault: true,
+    },
+    {
+      name: "status",
+      title: insightsTableTitles.status(execType),
+      cell: (item: StmtInsightEvent) => (
+        <Badge text={item.status} status={stmtStatusToBadge(item.status)} />
+      ),
+      sort: (item: StmtInsightEvent) => item.status,
       showByDefault: true,
     },
     {
