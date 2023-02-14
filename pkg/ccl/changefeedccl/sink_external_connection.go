@@ -26,7 +26,7 @@ func makeExternalConnectionSink(
 	ctx context.Context,
 	u sinkURL,
 	user username.SQLUsername,
-	db isql.DB,
+	p externalConnectionProvider,
 	serverCfg *execinfra.ServerConfig,
 	// TODO(cdc): Replace jobspb.ChangefeedDetails with ChangefeedConfig.
 	feedCfg jobspb.ChangefeedDetails,
@@ -41,27 +41,14 @@ func makeExternalConnectionSink(
 
 	externalConnectionName := u.Host
 
-	// Retrieve the external connection object from the system table.
-	var ec externalconn.ExternalConnection
-	if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		var err error
-		ec, err = externalconn.LoadExternalConnection(ctx, externalConnectionName, txn)
-		return err
-	}); err != nil {
-		return nil, errors.Wrap(err, "failed to load external connection object")
+	uri, err := p.lookup(externalConnectionName)
+	if err != nil {
+		return nil, err
 	}
-
-	// Construct a Sink handle for the underlying resource represented by the
-	// external connection object.
-	switch d := ec.ConnectionProto().Details.(type) {
-	case *connectionpb.ConnectionDetails_SimpleURI:
-		// Replace the external connection URI in the `feedCfg` with the URI of the
-		// underlying resource.
-		feedCfg.SinkURI = d.SimpleURI.URI
-		return getSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m)
-	default:
-		return nil, errors.Newf("cannot connect to %T; unsupported resource for a Sink connection", d)
-	}
+	// Replace the external connection URI in the `feedCfg` with the URI of the
+	// underlying resource.
+	feedCfg.SinkURI = uri
+	return getSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m)
 }
 
 func validateExternalConnectionSinkURI(
@@ -127,5 +114,45 @@ func init() {
 			`changefeed`,
 			validateExternalConnectionSinkURI,
 		)
+	}
+}
+
+type externalConnectionProvider interface {
+	lookup(name string) (string, error)
+}
+
+type isqlExternalConnectionProvider struct {
+	ctx context.Context
+	db  isql.DB
+}
+
+func makeExternalConnectionProvider(ctx context.Context, db isql.DB) externalConnectionProvider {
+	return &isqlExternalConnectionProvider{
+		ctx: ctx,
+		db:  db,
+	}
+}
+
+func (p *isqlExternalConnectionProvider) lookup(name string) (string, error) {
+	if name == "" {
+		return "", errors.Newf("host component of an external URI must refer to an " +
+			"existing External Connection object")
+	}
+	var ec externalconn.ExternalConnection
+	if err := p.db.Txn(p.ctx, func(ctx context.Context, txn isql.Txn) error {
+		var err error
+		ec, err = externalconn.LoadExternalConnection(ctx, name, txn)
+		return err
+	}); err != nil {
+		return "", errors.Wrap(err, "failed to load external connection object")
+	}
+
+	// Construct a Sink handle for the underlying resource represented by the
+	// external connection object.
+	switch d := ec.ConnectionProto().Details.(type) {
+	case *connectionpb.ConnectionDetails_SimpleURI:
+		return d.SimpleURI.URI, nil
+	default:
+		return "", errors.Newf("cannot connect to %T; unsupported resource for a changefeed connection", d)
 	}
 }

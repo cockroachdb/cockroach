@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"math/rand"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -2934,6 +2935,33 @@ func TestChangefeedBareJSON(t *testing.T) {
 	cdcTest(t, testFn, feedTestForceSink("sinkless"))
 	cdcTest(t, testFn, feedTestForceSink("webhook"))
 	cdcTest(t, testFn, feedTestForceSink("cloudstorage"))
+}
+
+func TestChangefeedExternalConnectionSchemaRegistry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `INSERT INTO foo values (0, 'dog')`)
+
+		schemaReg := cdctest.StartTestSchemaRegistry()
+		defer schemaReg.Close()
+
+		name := fmt.Sprintf("schemareg%d", rand.Uint64())
+
+		sqlDB.Exec(t, fmt.Sprintf(`CREATE EXTERNAL CONNECTION "%s" AS '%s'`, name, schemaReg.URL()))
+
+		sql := fmt.Sprintf("CREATE CHANGEFEED WITH format=avro, confluent_schema_registry='external://%s' AS SELECT * FROM foo", name)
+
+		foo := feed(t, f, sql)
+		defer closeFeed(t, foo)
+		assertPayloads(t, foo, []string{`foo: {"a":{"long":0}}->{"record":{"foo":{"a":{"long":0},"b":{"string":"dog"}}}}`})
+	}
+	// Test helpers for avro assume Kafka
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
 
 func TestChangefeedAvroNotice(t *testing.T) {
