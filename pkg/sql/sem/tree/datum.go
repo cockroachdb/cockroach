@@ -5688,6 +5688,25 @@ func NewDefaultDatum(collationEnv *CollationEnvironment, t *types.T) (d Datum, e
 	}
 }
 
+// PGWireTypeSize is the size of the type as reported in pg_catalog and over
+// the wire protocol.
+func PGWireTypeSize(t *types.T) int {
+	tOid := t.Oid()
+	if tOid == oid.T_timestamptz || tOid == oid.T_timestamp || tOid == oid.T_time {
+		return 8
+	}
+	if tOid == oid.T_timetz {
+		return 12
+	}
+	if tOid == oid.T_date {
+		return 4
+	}
+	if sz, variable := DatumTypeSize(t); !variable {
+		return int(sz)
+	}
+	return -1
+}
+
 // DatumTypeSize returns a lower bound on the total size of a Datum
 // of the given type in bytes, including memory that is
 // pointed at (even if shared between Datum instances) but excluding
