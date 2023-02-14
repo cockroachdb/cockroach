@@ -40,6 +40,7 @@ go_library(
         "//pkg/clusterversion",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
+        "//pkg/jobs/metricspoller",
         "//pkg/keys",
         "//pkg/keyvisualizer/keyvisjob",
         "//pkg/kv",
