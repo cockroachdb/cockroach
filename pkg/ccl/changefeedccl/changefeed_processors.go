@@ -931,7 +931,7 @@ func newChangeFrontierProcessor(
 	if err != nil {
 		return nil, err
 	}
-	if cf.encoder, err = getEncoder(encodingOpts, AllTargets(spec.Feed)); err != nil {
+	if cf.encoder, err = getEncoder(encodingOpts, AllTargets(spec.Feed), makeExternalConnectionProvider(ctx, flowCtx.Cfg.DB)); err != nil {
 		return nil, err
 	}
 
