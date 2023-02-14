@@ -1033,6 +1033,7 @@ func makeTenantSQLServerArgs(
 		DB:       internalExecutorFactory,
 		Settings: st,
 		Knobs:    protectedtsKnobs,
+		Clock:    clock,
 		ReconcileStatusFuncs: ptreconcile.StatusFuncs{
 			jobsprotectedts.GetMetaType(jobsprotectedts.Jobs): jobsprotectedts.MakeStatusFunc(
 				circularJobRegistry, jobsprotectedts.Jobs,

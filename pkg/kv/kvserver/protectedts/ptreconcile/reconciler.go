@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -53,6 +54,7 @@ type StatusFuncs map[string]StatusFunc
 type Reconciler struct {
 	settings    *cluster.Settings
 	db          isql.DB
+	clock       *hlc.Clock
 	pts         protectedts.Manager
 	metrics     Metrics
 	statusFuncs StatusFuncs
@@ -60,11 +62,16 @@ type Reconciler struct {
 
 // New constructs a Reconciler.
 func New(
-	st *cluster.Settings, db isql.DB, storage protectedts.Manager, statusFuncs StatusFuncs,
+	st *cluster.Settings,
+	db isql.DB,
+	storage protectedts.Manager,
+	statusFuncs StatusFuncs,
+	clock *hlc.Clock,
 ) *Reconciler {
 	return &Reconciler{
 		settings:    st,
 		db:          db,
+		clock:       clock,
 		pts:         storage,
 		metrics:     makeMetrics(),
 		statusFuncs: statusFuncs,
@@ -135,11 +142,20 @@ func (r *Reconciler) reconcile(ctx context.Context) {
 			continue
 		}
 		var didRemove bool
+		var didExpire bool
+
 		if err := r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
 			didRemove = false // reset for retries
+			didExpire = false
 			shouldRemove, err := task(ctx, txn, rec.Meta)
 			if err != nil {
 				return err
+			}
+			if !shouldRemove && rec.Target != nil &&
+				rec.Target.Expiration > 0 &&
+				rec.Timestamp.Add(int64(rec.Target.Expiration), 0).Less(r.clock.Now()) {
+				didExpire = true
+				shouldRemove = true
 			}
 			if !shouldRemove {
 				return nil
@@ -158,6 +174,9 @@ func (r *Reconciler) reconcile(ctx context.Context) {
 			r.metrics.RecordsProcessed.Inc(1)
 			if didRemove {
 				r.metrics.RecordsRemoved.Inc(1)
+				if didExpire {
+					r.metrics.RecordsExpired.Inc(1)
+				}
 			}
 		}
 	}

@@ -19,6 +19,7 @@ import (
 type Metrics struct {
 	ReconcilationRuns    *metric.Counter
 	RecordsProcessed     *metric.Counter
+	RecordsExpired       *metric.Counter
 	RecordsRemoved       *metric.Counter
 	ReconciliationErrors *metric.Counter
 }
@@ -27,6 +28,7 @@ func makeMetrics() Metrics {
 	return Metrics{
 		ReconcilationRuns:    metric.NewCounter(metaReconciliationRuns),
 		RecordsProcessed:     metric.NewCounter(metaRecordsProcessed),
+		RecordsExpired:       metric.NewCounter(metaRecordsExpired),
 		RecordsRemoved:       metric.NewCounter(metaRecordsRemoved),
 		ReconciliationErrors: metric.NewCounter(metaReconciliationErrors),
 	}
@@ -48,6 +50,13 @@ var (
 	metaRecordsProcessed = metric.Metadata{
 		Name:        "kv.protectedts.reconciliation.records_processed",
 		Help:        "number of records processed without error during reconciliation on this node",
+		Measurement: "Count",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_COUNTER,
+	}
+	metaRecordsExpired = metric.Metadata{
+		Name:        "kv.protectedts.reconciliation.records_expired",
+		Help:        "number of records removed on this node due to expiration",
 		Measurement: "Count",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,

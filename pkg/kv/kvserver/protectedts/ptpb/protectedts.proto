@@ -183,4 +183,9 @@ message Target {
   // `exclude_data_from_backup` are still respected when making GC decisions on
   // the span.
   bool ignore_if_excluded_from_backup = 4;
+
+  // Expiration, if non-zero, will cause reconciliation loop to drop this
+  // record if timestamp + expiration is in the past.
+  int64 expiration = 5 [(gogoproto.casttype) = "time.Duration"];
+
 }

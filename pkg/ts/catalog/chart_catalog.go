@@ -893,6 +893,7 @@ var charts = []sectionDescription{
 					"kv.protectedts.reconciliation.errors",
 					"kv.protectedts.reconciliation.records_processed",
 					"kv.protectedts.reconciliation.records_removed",
+					"kv.protectedts.reconciliation.records_expired",
 				},
 			},
 			{
