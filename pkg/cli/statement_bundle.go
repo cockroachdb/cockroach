@@ -124,6 +124,7 @@ func runBundleRecreate(cmd *cobra.Command, args []string) (resErr error) {
 	}
 
 	demoCtx.UseEmptyDatabase = true
+	demoCtx.Multitenant = false
 	return runDemoInternal(cmd, nil /* gen */, func(ctx context.Context, conn clisqlclient.Conn) error {
 		// Disable autostats collection, which will override the injected stats.
 		if err := conn.Exec(ctx,
