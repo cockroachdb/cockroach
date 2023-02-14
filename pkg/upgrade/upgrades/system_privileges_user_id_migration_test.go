@@ -119,7 +119,7 @@ func runTestSystemPrivilegesUserIDMigration(t *testing.T, numUsers int) {
 	grant_options STRING[] NOT NULL,
 	user_id OID NULL,
 	CONSTRAINT "primary" PRIMARY KEY (username ASC, path ASC),
-	UNIQUE INDEX privileges_path_user_id_key (path ASC, user_id ASC)
+	UNIQUE INDEX privileges_path_user_id_key (path ASC, user_id ASC) STORING (privileges, grant_options)
 )`
 	r := tdb.QueryRow(t, "SELECT create_statement FROM [SHOW CREATE TABLE system.privileges]")
 	var actualSchema string
