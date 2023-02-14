@@ -82,8 +82,11 @@ func (p *storage) Protect(ctx context.Context, r *ptpb.Record) error {
 	// already verified that the record has a valid `target`.
 	r.DeprecatedSpans = nil
 	s := makeSettings(p.settings)
-	encodedTarget, err := protoutil.Marshal(&ptpb.Target{Union: r.Target.GetUnion(),
-		IgnoreIfExcludedFromBackup: r.Target.IgnoreIfExcludedFromBackup})
+	encodedTarget, err := protoutil.Marshal(&ptpb.Target{
+		Union:                      r.Target.GetUnion(),
+		IgnoreIfExcludedFromBackup: r.Target.IgnoreIfExcludedFromBackup,
+		Expiration:                 r.Target.Expiration,
+	})
 	if err != nil { // how can this possibly fail?
 		return errors.Wrap(err, "failed to marshal spans")
 	}

@@ -557,6 +557,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		DB:       insqlDB,
 		Settings: st,
 		Knobs:    protectedtsKnobs,
+		Clock:    clock,
 		ReconcileStatusFuncs: ptreconcile.StatusFuncs{
 			jobsprotectedts.GetMetaType(jobsprotectedts.Jobs): jobsprotectedts.MakeStatusFunc(
 				jobRegistry, jobsprotectedts.Jobs,

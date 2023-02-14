@@ -73,7 +73,7 @@ func TestReconciler(t *testing.T) {
 					_, shouldRemove = state.toRemove[string(meta)]
 					return shouldRemove, nil
 				},
-			})
+			}, s0.Clock())
 		require.NoError(t, r.StartReconciler(ctx, s0.Stopper()))
 		recMeta := "a"
 		rec1 := ptpb.Record{
@@ -111,6 +111,30 @@ func TestReconciler(t *testing.T) {
 				require.Equal(t, int64(0), r.Metrics().ReconciliationErrors.Count())
 				if removed := r.Metrics().RecordsRemoved.Count(); removed != 1 {
 					return errors.Errorf("expected processed to be 1, got %d", removed)
+				}
+				return nil
+			})
+			_, err := pts.GetRecord(ctx, rec1.ID.GetUUID())
+			require.Regexp(t, protectedts.ErrNotExists, err)
+		})
+
+		t.Run("expire", func(t *testing.T) {
+			if withDeprecatedSpans {
+				return
+			}
+
+			state.mu.Lock()
+			delete(state.toRemove, recMeta)
+			state.mu.Unlock()
+
+			rec1.Target.Expiration = 100 * time.Millisecond
+			require.NoError(t, pts.Protect(context.Background(), &rec1))
+
+			ptreconcile.ReconcileInterval.Override(ctx, &settings.SV, time.Millisecond)
+			testutils.SucceedsSoon(t, func() error {
+				require.Equal(t, int64(0), r.Metrics().ReconciliationErrors.Count())
+				if expired := r.Metrics().RecordsExpired.Count(); expired != 1 {
+					return errors.Errorf("expected expired to be 1, got %d", expired)
 				}
 				return nil
 			})

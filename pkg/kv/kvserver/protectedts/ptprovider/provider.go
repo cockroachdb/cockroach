@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
@@ -33,6 +34,7 @@ type Config struct {
 	DB                   isql.DB
 	Stores               *kvserver.Stores
 	ReconcileStatusFuncs ptreconcile.StatusFuncs
+	Clock                *hlc.Clock
 	Knobs                *protectedts.TestingKnobs
 }
 
@@ -50,7 +52,7 @@ func New(cfg Config) (protectedts.Provider, error) {
 		return nil, err
 	}
 	storage := ptstorage.New(cfg.Settings, cfg.Knobs)
-	reconciler := ptreconcile.New(cfg.Settings, cfg.DB, storage, cfg.ReconcileStatusFuncs)
+	reconciler := ptreconcile.New(cfg.Settings, cfg.DB, storage, cfg.ReconcileStatusFuncs, cfg.Clock)
 	cache := ptcache.New(ptcache.Config{
 		DB:       cfg.DB,
 		Storage:  storage,
@@ -71,6 +73,8 @@ func validateConfig(cfg Config) error {
 		return errors.Errorf("invalid nil Settings")
 	case cfg.DB == nil:
 		return errors.Errorf("invalid nil DB")
+	case cfg.Clock == nil:
+		return errors.Errorf("invalid nil clock")
 	default:
 		return nil
 	}
