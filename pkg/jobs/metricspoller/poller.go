@@ -71,13 +71,11 @@ func (mp *metricsPoller) Resume(ctx context.Context, execCtx interface{}) error 
 			return ctx.Err()
 		case <-t.C:
 			t.Read = true
-			if err := runTask("paused-jobs", updatePausedMetrics); err != nil {
-				log.Errorf(ctx, "Periodic stats collector task paused-jobs completed with error %s", err)
-				metrics.numErrors.Inc(1)
-			}
-			if err := runTask("pts-stats", updatePTSStats); err != nil {
-				log.Errorf(ctx, "Periodic stats collector task pts-stats completed with error %s", err)
-				metrics.numErrors.Inc(1)
+			for name, task := range metricPollerTasks {
+				if err := runTask(name, task); err != nil {
+					log.Errorf(ctx, "Periodic stats collector task %s completed with error %s", name, err)
+					metrics.numErrors.Inc(1)
+				}
 			}
 		}
 	}
@@ -85,6 +83,13 @@ func (mp *metricsPoller) Resume(ctx context.Context, execCtx interface{}) error 
 
 type pollerMetrics struct {
 	numErrors *metric.Counter
+}
+
+// metricsPollerTasks lists the list of tasks performed on each iteration
+// of metrics poller.
+var metricPollerTasks = map[string]func(ctx context.Context, execCtx sql.JobExecContext) error{
+	"paused-jobs": updatePausedMetrics,
+	"manage-pts":  manageJobsProtectedTimestamps,
 }
 
 func (m pollerMetrics) MetricStruct() {}

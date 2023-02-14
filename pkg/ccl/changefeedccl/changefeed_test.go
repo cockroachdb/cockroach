@@ -4166,6 +4166,53 @@ func TestChangefeedDataTTL(t *testing.T) {
 	cdcTestWithSystem(t, testFn, feedTestForceSink("sinkless"), feedTestNoTenants)
 }
 
+// TestChangefeedCanceledWhenPTSIsOld verifies paused changefeed job which holds PTS
+// record gets canceled if paused for too long.
+func TestChangefeedCanceledWhenPTSIsOld(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms';`)
+		// Create the data table; it will only contain a
+		// single row with multiple versions.
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b INT)`)
+
+		feed, err := f.Feed("CREATE CHANGEFEED FOR TABLE foo WITH protect_data_from_gc_on_pause, gc_protect_expires_after='24h'")
+		require.NoError(t, err)
+		defer func() {
+			closeFeed(t, feed)
+		}()
+
+		jobFeed := feed.(cdctest.EnterpriseTestFeed)
+		require.NoError(t, jobFeed.Pause())
+
+		// While the job is paused, take opportunity to test that alter changefeed
+		// works when setting gc_protect_expires_after option.
+
+		// Verify we can set it to 0 -- i.e. disable.
+		sqlDB.Exec(t, fmt.Sprintf("ALTER CHANGEFEED %d SET gc_protect_expires_after = '0s'", jobFeed.JobID()))
+		// Now, set it to something very small.
+		sqlDB.Exec(t, fmt.Sprintf("ALTER CHANGEFEED %d SET gc_protect_expires_after = '250ms'", jobFeed.JobID()))
+
+		// Stale PTS record should trigger job cancellation.
+		require.NoError(t, jobFeed.WaitForStatus(func(s jobs.Status) bool {
+			if s == jobs.StatusCanceled {
+				return true
+			}
+			// 	t.Logf("still waiting for job cancelatlation; current status %s", s)
+			return false
+		}))
+	}
+
+	// Ensure metrics poller loop runs fast.
+	st := cluster.MakeTestingClusterSettings()
+	jobs.PollJobsMetricsInterval.Override(context.Background(), &st.SV, 100*time.Millisecond)
+	cdcTest(t, testFn, feedTestEnterpriseSinks, withSettings(st))
+}
+
 // TestChangefeedSchemaTTL ensures that changefeeds fail with an error in the case
 // where the feed has fallen behind the GC TTL of the table's schema.
 func TestChangefeedSchemaTTL(t *testing.T) {
