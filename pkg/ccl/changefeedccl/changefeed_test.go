@@ -5411,6 +5411,7 @@ func TestChangefeedProtectedTimestampOnPause(t *testing.T) {
 					require.NotEqual(t, uuid.Nil, details.ProtectedTimestampRecord)
 					r, err := pts.GetRecord(ctx, details.ProtectedTimestampRecord)
 					require.NoError(t, err)
+					require.Equal(t, changefeedbase.PTSExpiresAfter.Get(&serverCfg.Settings.SV), r.Target.Expiration)
 					require.True(t, r.Timestamp.LessEq(*progress.GetHighWater()))
 				} else {
 					require.Equal(t, uuid.Nil, details.ProtectedTimestampRecord)
