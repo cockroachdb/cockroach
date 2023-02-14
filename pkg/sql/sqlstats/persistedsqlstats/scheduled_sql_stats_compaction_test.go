@@ -170,6 +170,7 @@ func TestScheduledSQLStatsCompaction(t *testing.T) {
 }
 
 func TestSQLStatsScheduleOperations(t *testing.T) {
+	skip.WithIssue(t, 93601)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	skip.UnderStressRace(t, "test is too slow to run under race")
