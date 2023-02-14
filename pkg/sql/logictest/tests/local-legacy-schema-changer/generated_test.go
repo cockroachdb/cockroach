@@ -1983,6 +1983,13 @@ func TestLogic_udf(
 	runLogicTest(t, "udf")
 }
 
+func TestLogic_udf_setof(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_setof")
+}
+
 func TestLogic_udf_star(
 	t *testing.T,
 ) {

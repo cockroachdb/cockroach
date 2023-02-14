@@ -42,7 +42,7 @@ type projectSetProcessor struct {
 	// funcs contains a valid pointer to a SRF FuncExpr for every entry
 	// in `exprHelpers` that is actually a SRF function application.
 	// The size of the slice is the same as `exprHelpers` though.
-	funcs []*tree.FuncExpr
+	funcs []tree.TypedExpr
 
 	// mustBeStreaming indicates whether at least one function in funcs is of
 	// "streaming" nature.
@@ -87,7 +87,7 @@ func newProjectSetProcessor(
 		input:       input,
 		spec:        spec,
 		exprHelpers: make([]*execinfrapb.ExprHelper, len(spec.Exprs)),
-		funcs:       make([]*tree.FuncExpr, len(spec.Exprs)),
+		funcs:       make([]tree.TypedExpr, len(spec.Exprs)),
 		rowBuffer:   make(rowenc.EncDatumRow, len(outputTypes)),
 		gens:        make([]eval.ValueGenerator, len(spec.Exprs)),
 		done:        make([]bool, len(spec.Exprs)),
@@ -124,6 +124,11 @@ func newProjectSetProcessor(
 			// Expr is a set-generating function.
 			ps.funcs[i] = tFunc
 			ps.mustBeStreaming = ps.mustBeStreaming || tFunc.IsVectorizeStreaming()
+		}
+		if tRoutine, ok := helper.Expr.(*tree.RoutineExpr); ok {
+			// A routine in the context of a project-set is a set-returning
+			// routine.
+			ps.funcs[i] = tRoutine
 		}
 		ps.exprHelpers[i] = &helper
 	}
@@ -170,7 +175,17 @@ func (ps *projectSetProcessor) nextInputRow() (
 			ps.exprHelpers[i].Row = row
 
 			ps.EvalCtx.IVarContainer = ps.exprHelpers[i]
-			gen, err := eval.GetGenerator(ps.Ctx(), ps.EvalCtx, fn)
+
+			var gen eval.ValueGenerator
+			var err error
+			switch t := fn.(type) {
+			case *tree.FuncExpr:
+				gen, err = eval.GetFuncGenerator(ps.Ctx(), ps.EvalCtx, t)
+			case *tree.RoutineExpr:
+				gen, err = eval.GetRoutineGenerator(ps.Ctx(), ps.EvalCtx, t)
+			default:
+				return nil, nil, errors.AssertionFailedf("unexpected expression in project-set: %T", fn)
+			}
 			if err != nil {
 				return nil, nil, err
 			}
