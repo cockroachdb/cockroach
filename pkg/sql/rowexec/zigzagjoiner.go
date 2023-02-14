@@ -574,8 +574,7 @@ func (z *zigzagJoiner) matchBase(curRow rowenc.EncDatumRow, side int) (bool, err
 	ordering := z.infos[side].eqColOrdering
 
 	// Compare the equality columns of the baseRow to that of the curRow.
-	da := &tree.DatumAlloc{}
-	cmp, err := prevEqDatums.Compare(eqColTypes, da, ordering, z.FlowCtx.EvalCtx, curEqDatums)
+	cmp, err := prevEqDatums.Compare(eqColTypes, &z.infos[side].alloc, ordering, z.FlowCtx.EvalCtx, curEqDatums)
 	if err != nil {
 		return false, err
 	}
@@ -717,8 +716,7 @@ func (z *zigzagJoiner) nextRow(ctx context.Context) (rowenc.EncDatumRow, error) 
 			currentEqCols := z.extractEqDatums(curNext, z.side)
 			eqColTypes := curInfo.eqColTypes
 			ordering := curInfo.eqColOrdering
-			da := &tree.DatumAlloc{}
-			cmp, err := prevEqCols.Compare(eqColTypes, da, ordering, z.FlowCtx.EvalCtx, currentEqCols)
+			cmp, err := prevEqCols.Compare(eqColTypes, &z.infos[z.side].alloc, ordering, z.FlowCtx.EvalCtx, currentEqCols)
 			if err != nil {
 				return nil, err
 			}
