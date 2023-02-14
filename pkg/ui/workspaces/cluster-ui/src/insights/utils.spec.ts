@@ -26,8 +26,10 @@ import {
   InsightNameEnum,
   planRegressionInsight,
   slowExecutionInsight,
+  StatementStatus,
   StmtInsightEvent,
   suboptimalPlanInsight,
+  TransactionStatus,
   TxnInsightDetails,
   TxnInsightEvent,
 } from "./types";
@@ -76,6 +78,8 @@ const statementInsightMock: StmtInsightEvent = {
   indexRecommendations: [],
   planGist: "gist",
   cpuSQLNanos: 50,
+  errorCode: "",
+  status: StatementStatus.COMPLETED,
 };
 
 function mockStmtInsightEvent(
@@ -116,6 +120,8 @@ const txnInsightEventMock: TxnInsightEvent = {
   elapsedTimeMillis: 1,
   stmtExecutionIDs: [statementInsightMock.statementExecutionID],
   cpuSQLNanos: 50,
+  errorCode: "",
+  status: TransactionStatus.COMPLETED,
 };
 
 function mockTxnInsightEvent(
