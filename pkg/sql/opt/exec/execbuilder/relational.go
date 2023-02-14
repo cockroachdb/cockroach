@@ -831,6 +831,7 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		}
 		b.builtScans = append(b.builtScans, scan)
 	}
+	b.TablesScanned = util.CombineUniqueInt64(b.TablesScanned, []int64{int64(tab.ID())})
 	return res, nil
 }
 
@@ -895,6 +896,7 @@ func (b *Builder) buildPlaceholderScan(scan *memo.PlaceholderScanExpr) (execPlan
 	if err != nil {
 		return execPlan{}, err
 	}
+	b.TablesScanned = util.CombineUniqueInt64(b.TablesScanned, []int64{int64(tab.ID())})
 
 	res.root = root
 	return res, nil

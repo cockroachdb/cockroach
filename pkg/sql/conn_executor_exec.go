@@ -1399,6 +1399,8 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	ex.extraTxnState.rowsWritten += stats.rowsWritten
 
 	populateQueryLevelStatsAndRegions(ctx, planner, ex.server.cfg, &stats, &ex.cpuStatsCollector)
+	isInternal := ex.executorType == executorTypeInternal || planner.isInternalPlanner
+	planner.instrumentation.CollectScannedSpanStats(ctx, ex.server.scannedSpanStatsCache, planner, isInternal)
 
 	// The transaction (from planner.txn) may already have been committed at this point,
 	// due to one-phase commit optimization or an error. Since we use that transaction
@@ -1407,7 +1409,6 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		// Set index recommendations, so it can be saved on statement statistics.
 		// TODO(yuzefovich): figure out whether we want to set isInternalPlanner
 		// to true for the internal executors.
-		isInternal := ex.executorType == executorTypeInternal || planner.isInternalPlanner
 		planner.instrumentation.SetIndexRecommendations(ctx, ex.server.idxRecommendationsCache, planner, isInternal)
 	}
 

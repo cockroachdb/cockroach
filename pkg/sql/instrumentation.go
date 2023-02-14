@@ -15,10 +15,12 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
@@ -37,8 +39,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal/scannedspanstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
@@ -200,6 +204,12 @@ type instrumentationHelper struct {
 
 	// indexesUsed list the indexes used in the query with format tableID@indexID.
 	indexesUsed []string
+
+	// tablesScanned list the tables scanned by the execution of a plan.
+	tablesScanned []int64
+
+	// scannedSpanStats contains MVCC stats for the spans scanned during the execution of a plan.
+	scannedSpanStats []enginepb.MVCCStats
 }
 
 // outputMode indicates how the statement output needs to be populated (for
@@ -817,4 +827,67 @@ func (ih *instrumentationHelper) SetIndexRecommendations(
 		recommendations,
 		reset,
 	)
+}
+
+// CollectScannedSpanStats collects span stats for the tables scanned during the execution of the current statement's
+// plan.
+func (ih *instrumentationHelper) CollectScannedSpanStats(
+	ctx context.Context,
+	spanStats *scannedspanstats.SpanStatsCache,
+	planner *planner,
+	isInternal bool,
+) {
+	stmtType := planner.stmt.AST.StatementType()
+	if spanStats.ShouldCacheFingerprintInfo(
+		stmtType,
+		isInternal,
+		int64(ih.scanCounts[exec.ScanCount])) {
+		var spanStatsArray []enginepb.MVCCStats
+		newStatsForFingerprint := false
+		if spanStats.ShouldCollectSpanStatsForFingerprint(ih.fingerprint, ih.tablesScanned) {
+			for _, tabID := range ih.tablesScanned {
+				var tableSpanStats enginepb.MVCCStats
+				resetSpanStats := false
+				if spanStats.ShouldCollectSpanStatsForTable(tabID) {
+					tableStartKey := planner.ExecCfg().Codec.TablePrefix(uint32(tabID))
+					resolvedSpanStartKey, err := keys.Addr(tableStartKey)
+					if err != nil {
+						log.Warningf(ctx, "failed to resolve addr for key %q: %+v", tableStartKey, err)
+					}
+
+					tableEndKey := tableStartKey.PrefixEnd()
+					resolvedSpanEndKey, err := keys.Addr(tableEndKey)
+					if err != nil {
+						log.Warningf(ctx, "failed to resolve addr for key %q: %+v", tableEndKey, err)
+					}
+					spanStatsRequest := roachpb.SpanStatsRequest{
+						NodeID:   strconv.Itoa(0),
+						StartKey: resolvedSpanStartKey,
+						EndKey:   resolvedSpanEndKey,
+					}
+					var spanStatsResponse *roachpb.SpanStatsResponse
+					spanStatsResponse, err = planner.extendedEvalCtx.TenantStatusServer.SpanStats(ctx, &spanStatsRequest)
+					if err != nil {
+						if log.V(1) {
+							log.Warningf(ctx, "failed to fetch span stats: %s", err)
+						}
+					}
+					if spanStatsResponse != nil {
+						tableSpanStats = spanStatsResponse.TotalStats
+					}
+				}
+				if tableSpanStats != (enginepb.MVCCStats{}) {
+					resetSpanStats = true
+					newStatsForFingerprint = true
+				}
+				spanStatsInCache := spanStats.UpdateSpanStatistics(
+					tabID,
+					tableSpanStats,
+					resetSpanStats,
+				)
+				spanStatsArray = append(spanStatsArray, spanStatsInCache)
+			}
+		}
+		ih.scannedSpanStats = spanStats.UpdateFingerprintInfo(ih.fingerprint, ih.tablesScanned, spanStatsArray, newStatsForFingerprint)
+	}
 }

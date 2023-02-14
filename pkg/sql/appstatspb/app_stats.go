@@ -160,6 +160,7 @@ func (s *StatementStatistics) Add(other *StatementStatistics) {
 	s.PlanGists = util.CombineUniqueString(s.PlanGists, other.PlanGists)
 	s.IndexRecommendations = other.IndexRecommendations
 	s.Indexes = util.CombineUniqueString(s.Indexes, other.Indexes)
+	s.ScannedSpanStats = other.ScannedSpanStats
 
 	s.ExecStats.Add(other.ExecStats)
 	s.LatencyInfo.Add(other.LatencyInfo)

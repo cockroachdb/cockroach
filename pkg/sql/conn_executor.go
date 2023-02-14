@@ -62,6 +62,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal/scannedspanstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -322,6 +323,10 @@ type Server struct {
 
 	idxRecommendationsCache *idxrecommendations.IndexRecCache
 
+	// scannedSpanStatsCache stores a subset of MVCC statistics for the ranges scanned during
+	// plan execution.
+	scannedSpanStatsCache *scannedspanstats.SpanStatsCache
+
 	mu struct {
 		syncutil.Mutex
 		connectionCount int64
@@ -413,6 +418,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 			cfg.Settings,
 			&serverMetrics.ContentionSubsystemMetrics),
 		idxRecommendationsCache: idxrecommendations.NewIndexRecommendationsCache(cfg.Settings),
+		scannedSpanStatsCache:   scannedspanstats.NewSpanStatsCache(cfg.Settings),
 	}
 
 	telemetryLoggingMetrics := &TelemetryLoggingMetrics{}

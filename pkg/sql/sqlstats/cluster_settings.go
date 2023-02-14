@@ -187,3 +187,21 @@ var GatewayNodeEnabled = settings.RegisterBoolSetting(
 		"be stored as 0.",
 	true,
 ).WithPublic()
+
+// CollectScannedSpanStats specifies whether we sample span statistics for tables scanned
+// during the execution of a statement fingerprint.
+var CollectScannedSpanStats = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.metrics.statement_details.scanned_span_stats_collection.enabled",
+	"collect span statistics for tables scanned during the execution of a statement fingerprint",
+	false,
+).WithPublic()
+
+// MaxMemScannedSpanStats specifies the maximum number of tables for which to collect span
+// statistics to store in memory.
+var MaxMemScannedSpanStats = settings.RegisterIntSetting(
+	settings.TenantWritable,
+	"sql.metrics.statement_details.max_mem_scanned_span_stats",
+	"the maximum number of tables for which to collect span statistics to store in memory",
+	100,
+).WithPublic()

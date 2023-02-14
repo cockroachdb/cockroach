@@ -90,6 +90,7 @@ import {
   makeInsightsColumns,
 } from "../insightsTable/insightsTable";
 import { CockroachCloudContext } from "../contexts";
+import * as format from "../util/format";
 
 type StatementDetailsResponse =
   cockroach.server.serverpb.StatementDetailsResponse;
@@ -210,6 +211,23 @@ function renderTransactionType(implicitTxn: boolean) {
     return "Implicit";
   }
   return "Explicit";
+}
+
+function renderSpanStats(spanStats: cockroach.sql.IScannedSpanStats) {
+  return (
+    <>
+      <span className={cx("bold")}>
+        {format.Bytes(Number(spanStats.live_bytes))}
+      </span>{" "}
+      live data /{" "}
+      <span className={cx("bold")}>
+        {format.Bytes(Number(spanStats.total_bytes))}
+      </span>
+      {" total ("}
+      <span>{format.Percentage(spanStats.pct_live, 1, 1)}</span>
+      {")"}
+    </>
+  );
 }
 
 export class StatementDetails extends React.Component<
@@ -750,6 +768,13 @@ export class StatementDetails extends React.Component<
                   label="Vectorized execution?"
                   value={RenderCount(vec_count, total_count)}
                 />
+                {stats.scanned_span_stats &&
+                  stats.scanned_span_stats.pct_live != 0 && (
+                    <SummaryCardItem
+                      label="Live Data in Tables Scanned"
+                      value={renderSpanStats(stats.scanned_span_stats)}
+                    />
+                  )}
                 <SummaryCardItem
                   label="Transaction type"
                   value={renderTransactionType(implicit_txn)}
