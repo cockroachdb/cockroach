@@ -26,6 +26,7 @@ import {
   InsightNameEnum,
   planRegressionInsight,
   slowExecutionInsight,
+  StatementStatus,
   StmtInsightEvent,
   suboptimalPlanInsight,
   TxnInsightDetails,
@@ -76,6 +77,8 @@ const statementInsightMock: StmtInsightEvent = {
   indexRecommendations: [],
   planGist: "gist",
   cpuSQLNanos: 50,
+  errorCode: "",
+  status: StatementStatus.COMPLETED,
 };
 
 function mockStmtInsightEvent(

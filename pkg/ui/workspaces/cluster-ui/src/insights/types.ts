@@ -26,6 +26,11 @@ export enum InsightExecEnum {
   STATEMENT = "statement",
 }
 
+export enum StatementStatus {
+  COMPLETED = "Completed",
+  FAILED = "Failed",
+}
+
 // Common fields for both txn and stmt insights.
 export type InsightEventBase = {
   application: string;
@@ -99,6 +104,8 @@ export type StmtInsightEvent = InsightEventBase & {
   planGist: string;
   databaseName: string;
   execType?: InsightExecEnum;
+  status: StatementStatus;
+  errorCode: string;
 };
 
 export type Insight = {
@@ -327,6 +334,9 @@ export interface ExecutionDetails {
   statementExecutionID?: string;
   transactionExecutionID?: string;
   execType?: InsightExecEnum;
+  errorCode?: string;
+  status?: string;
+  executionCount?: number;
 }
 
 export interface insightDetails {

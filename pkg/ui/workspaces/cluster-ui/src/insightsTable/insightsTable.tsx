@@ -93,7 +93,11 @@ export const insightsTableTitles: InsightsTableTitleType = {
 };
 
 function typeCell(value: string): React.ReactElement {
-  return <div className={cx("insight-type")}>{value}</div>;
+  let insightType = "insight-type";
+  if (value === "Failed Execution") {
+    insightType = "insight-type-failed";
+  }
+  return <div className={cx(insightType)}>{value}</div>;
 }
 
 const StatementExecution = ({
@@ -265,7 +269,8 @@ function descriptionCell(
       return (
         <>
           <div className={cx("description-item")}>
-            This execution has failed.
+            <span className={cx("label-bold")}>Error Code: </span>{" "}
+            {insightRec.execution.errorCode}
           </div>
         </>
       );
