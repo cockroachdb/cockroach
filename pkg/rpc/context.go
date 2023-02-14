@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	circuitbreaker "github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/growstack"
@@ -665,24 +666,6 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 	// a connection class. Only calls going over an actual gRPC connection will
 	// use that interceptor.
 
-	rpcCtx.Stopper.RunAsyncTask(ctx, "reconnect peers", func(ctx context.Context) {
-		var t timeutil.Timer
-		defer t.Stop()
-		for {
-			t.Reset(2 * time.Second)
-			select {
-			case <-rpcCtx.MasterCtx.Done():
-				return
-			case <-t.C:
-				t.Read = true
-			}
-			for k, pc := range rpcCtx.m.mu.m {
-				if !pc.mu.disconnected.IsZero() {
-					rpcCtx.grpcDialNodeInternal(k.targetAddr, k.nodeID, k.class)
-				}
-			}
-		}
-	})
 	return rpcCtx
 }
 
@@ -2061,16 +2044,60 @@ func (rpcCtx *Context) GRPCDialPod(
 }
 
 type Peer struct {
-	c *Connection // mutate only when surrounding map's mutex is held exclusively
-
-	mu struct {
+	c       *Connection // mutate only when surrounding map's mutex is held exclusively
+	breaker *circuitbreaker.Breaker
+	mu      struct {
 		syncutil.RWMutex
 		// disconnected is zero initially, reset on successful heartbeat, set on
 		// heartbeat teardown if zero. In other words, does not move forward across
 		// subsequent connection failures - it tracks the first disconnect since
 		// having been healthy.
-		disconnected time.Time
+		disconnected   time.Time
+		decommissioned bool
 	}
+}
+
+func NewPeer(ctx context.Context, conn *Connection, stopper *stop.Stopper, onReconnect func()) *Peer {
+	pc := &Peer{
+		c: conn,
+	}
+	pc.breaker = circuitbreaker.NewBreaker(circuitbreaker.Options{
+		Name: "reconnect",
+		AsyncProbe: func(report func(error), done func()) {
+			if err := stopper.RunAsyncTask(ctx, "reconnect peers", func(ctx context.Context) {
+				var t timeutil.Timer
+				defer t.Stop()
+				for {
+					t.Reset(2 * time.Second) // TODO (koorosh): figure out how often should it be polled?
+					select {
+					case <-ctx.Done():
+						done()
+					case <-t.C:
+						t.Read = true
+					}
+					pc.mu.RLock()
+					disconnected := !pc.mu.disconnected.IsZero()
+					pc.mu.RUnlock()
+					if disconnected {
+						onReconnect()
+					}
+					pc.mu.Lock()
+					pc.mu.disconnected = time.Time{}
+					pc.mu.Unlock()
+					report(nil)
+				}
+			}); err != nil {
+				report(err)
+				done()
+			}
+		},
+		EventHandler: &circuitbreaker.EventLogger{
+			Log: func(buf redact.StringBuilder) {
+				log.Infof(ctx, "%s", buf)
+			},
+		},
+	})
+	return pc
 }
 
 func (p *Peer) conn() (*Connection, bool) {
@@ -2137,7 +2164,7 @@ func (m *connMap) OnDisconnect(k connKey, conn *Connection) error {
 	defer m.mu.Unlock()
 	mConn, found := m.mu.m[k]
 	if !found {
-		return nil
+		return errors.AssertionFailedf("no conn found for %+v", k)
 	}
 	if mConn.c != conn {
 		return errors.AssertionFailedf("conn for %+v not identical to those for which removal was requested", k)
@@ -2145,10 +2172,12 @@ func (m *connMap) OnDisconnect(k connKey, conn *Connection) error {
 	if mConn.mu.disconnected.IsZero() {
 		mConn.mu.disconnected = timeutil.Now()
 	}
+	mConn.breaker.Report(errors.Errorf("disconnected: %v", conn))
 	return nil
 }
 
-func (m *connMap) TryInsert(k connKey) (_ *Connection, inserted bool) {
+// TryInsert inits new peer and connection (if necessary). onReconnect function is called to restore connection.
+func (m *connMap) TryInsert(ctx context.Context, k connKey, stopper *stop.Stopper, onReconnect func()) (_ *Connection, inserted bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -2170,13 +2199,8 @@ func (m *connMap) TryInsert(k connKey) (_ *Connection, inserted bool) {
 	// [^1]: https://github.com/cockroachdb/cockroach/issues/37200
 	// [^2]: https://github.com/cockroachdb/cockroach/pull/89539
 	if m.mu.m[k] == nil {
-		m.mu.m[k] = &Peer{}
+		m.mu.m[k] = NewPeer(ctx, newConn, stopper, onReconnect)
 	}
-	// Ensure that `disconnected` is zeroed for new connections.
-	m.mu.m[k].mu.Lock()
-	m.mu.m[k].mu.disconnected = time.Time{}
-	m.mu.m[k].mu.Unlock()
-	m.mu.m[k].c = newConn
 	return newConn, true
 }
 
@@ -2200,7 +2224,9 @@ func (rpcCtx *Context) grpcDialNodeInternal(
 
 	ctx := rpcCtx.makeDialCtx(target, remoteNodeID, class)
 
-	conn, inserted := rpcCtx.m.TryInsert(k)
+	conn, inserted := rpcCtx.m.TryInsert(ctx, k, rpcCtx.Stopper, func() {
+		rpcCtx.grpcDialNodeInternal(k.targetAddr, k.nodeID, k.class)
+	})
 	if !inserted {
 		// Someone else won the race.
 		return conn
