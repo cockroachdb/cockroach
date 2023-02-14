@@ -522,7 +522,10 @@ func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqllivenes
 						// update.
 						r.clearLeaseForJobID(id, txn, txn.KV())
 					}
-					md.Payload.Error = errJobCanceled.Error()
+					if md.Payload.Error == "" {
+						// Set default cancellation reason.
+						md.Payload.Error = errJobCanceled.Error()
+					}
 					encodedErr := errors.EncodeError(ctx, errJobCanceled)
 					md.Payload.FinalResumeError = &encodedErr
 					ju.UpdatePayload(md.Payload)

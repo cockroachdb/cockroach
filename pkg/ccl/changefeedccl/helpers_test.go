@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -395,12 +396,12 @@ func startTestFullServer(
 		DisableDefaultTestTenant: true,
 		UseDatabase:              `d`,
 		ExternalIODir:            options.externalIODir,
+		Settings:                 options.settings,
 	}
 
 	if options.argsFn != nil {
 		options.argsFn(&args)
 	}
-
 	resetRetry := testingUseFastRetry()
 	resetFlushFrequency := changefeedbase.TestingSetDefaultMinCheckpointFrequency(testSinkFlushFrequency)
 	s, db, _ := serverutils.StartServer(t, args)
@@ -505,6 +506,7 @@ func startTestTenant(
 		UseDatabase:   `d`,
 		TestingKnobs:  knobs,
 		ExternalIODir: options.externalIODir,
+		Settings:      options.settings,
 	}
 
 	tenantServer, tenantDB := serverutils.StartTenant(t, systemServer, tenantArgs)
@@ -534,6 +536,7 @@ type feedTestOptions struct {
 	allowedSinkTypes             []string
 	disabledSinkTypes            []string
 	disableSyntheticTimestamps   bool
+	settings                     *cluster.Settings
 }
 
 type feedTestOption func(opts *feedTestOptions)
@@ -581,6 +584,14 @@ func (opts feedTestOptions) omitSinks(sinks ...string) feedTestOptions {
 // and not the sqlServer.
 func withArgsFn(fn updateArgsFn) feedTestOption {
 	return func(opts *feedTestOptions) { opts.argsFn = fn }
+}
+
+// withSettingsFn arranges for a feed option to set the settings for
+// both system and test tenant.
+func withSettings(st *cluster.Settings) feedTestOption {
+	return func(opts *feedTestOptions) {
+		opts.settings = st
+	}
 }
 
 // withKnobsFn is a feedTestOption that allows the caller to modify

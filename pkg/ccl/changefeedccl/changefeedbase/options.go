@@ -90,6 +90,7 @@ const (
 	OptSchemaChangePolicy       = `schema_change_policy`
 	OptSplitColumnFamilies      = `split_column_families`
 	OptProtectDataFromGCOnPause = `protect_data_from_gc_on_pause`
+	OptExpirePTSAfter           = `gc_protect_expires_after`
 	OptWebhookAuthHeader        = `webhook_auth_header`
 	OptWebhookClientTimeout     = `webhook_client_timeout`
 	OptOnError                  = `on_error`
@@ -320,6 +321,7 @@ var ChangefeedOptionExpectValues = map[string]OptionPermittedValues{
 	OptNoInitialScan:            flagOption,
 	OptInitialScanOnly:          flagOption,
 	OptProtectDataFromGCOnPause: flagOption,
+	OptExpirePTSAfter:           durationOption.thatCanBeZero(),
 	OptKafkaSinkConfig:          jsonOption,
 	OptWebhookSinkConfig:        jsonOption,
 	OptWebhookAuthHeader:        stringOption,
@@ -339,7 +341,7 @@ var CommonOptions = makeStringSet(OptCursor, OptEndTime, OptEnvelope,
 	OptSchemaChangeEvents, OptSchemaChangePolicy,
 	OptProtectDataFromGCOnPause, OptOnError,
 	OptInitialScan, OptNoInitialScan, OptInitialScanOnly, OptUnordered,
-	OptMinCheckpointFrequency, OptMetricsScope, OptVirtualColumns, Topics)
+	OptMinCheckpointFrequency, OptMetricsScope, OptVirtualColumns, Topics, OptExpirePTSAfter)
 
 // SQLValidOptions is options exclusive to SQL sink
 var SQLValidOptions map[string]struct{} = nil
@@ -881,6 +883,19 @@ func (s StatementOptions) KeyOnly() bool {
 // recorded. Returns nil if not set, and an error if invalid.
 func (s StatementOptions) GetMinCheckpointFrequency() (*time.Duration, error) {
 	return s.getDurationValue(OptMinCheckpointFrequency)
+}
+
+// GetPTSExpiration returns the maximum age of the protected timestamp record.
+// Changefeeds that fail to update their records in time will be canceled.
+func (s StatementOptions) GetPTSExpiration() (time.Duration, error) {
+	exp, err := s.getDurationValue(OptExpirePTSAfter)
+	if err != nil {
+		return 0, err
+	}
+	if exp == nil {
+		return 0, nil
+	}
+	return *exp, nil
 }
 
 // ForceKeyInValue sets the encoding option KeyInValue to true and then validates the

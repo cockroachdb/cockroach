@@ -343,6 +343,7 @@ func (r *Registry) makePayload(ctx context.Context, record *Record) (jobspb.Payl
 		Noncancelable:          record.NonCancelable,
 		CreationClusterVersion: r.settings.Version.ActiveVersion(ctx).Version,
 		CreationClusterID:      r.clusterID.Get(),
+		MaximumPTSAge:          record.MaximumPTSAge,
 	}, nil
 }
 

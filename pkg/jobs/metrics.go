@@ -69,6 +69,7 @@ type JobTypeMetrics struct {
 	FailOrCancelFailed *metric.Counter
 
 	NumJobsWithPTS *metric.Gauge
+	ExpiredPTS     *metric.Counter
 	ProtectedAge   *metric.Gauge
 }
 
@@ -181,8 +182,8 @@ func makeMetaProtectedCount(typeStr string) metric.Metadata {
 	return metric.Metadata{
 		Name:        fmt.Sprintf("jobs.%s.protected_record_count", typeStr),
 		Help:        fmt.Sprintf("Number of protected timestamp records held by %s jobs", typeStr),
-		Measurement: "bytes",
-		Unit:        metric.Unit_BYTES,
+		Measurement: "records",
+		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_GAUGE,
 	}
 }
@@ -194,6 +195,16 @@ func makeMetaProtectedAge(typeStr string) metric.Metadata {
 		Measurement: "seconds",
 		Unit:        metric.Unit_SECONDS,
 		MetricType:  io_prometheus_client.MetricType_GAUGE,
+	}
+}
+
+func makeMetaExpiredPTS(typeStr string) metric.Metadata {
+	return metric.Metadata{
+		Name:        fmt.Sprintf("jobs.%s.expired_pts_records", typeStr),
+		Help:        fmt.Sprintf("Number of expired protected timestamp records owned by %s jobs", typeStr),
+		Measurement: "records",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_COUNTER,
 	}
 }
 
@@ -268,6 +279,7 @@ func (m *Metrics) init(histogramWindowInterval time.Duration) {
 			FailOrCancelRetryError: metric.NewCounter(makeMetaFailOrCancelRetryError(typeStr)),
 			FailOrCancelFailed:     metric.NewCounter(makeMetaFailOrCancelFailed(typeStr)),
 			NumJobsWithPTS:         metric.NewGauge(makeMetaProtectedCount(typeStr)),
+			ExpiredPTS:             metric.NewCounter(makeMetaExpiredPTS(typeStr)),
 			ProtectedAge:           metric.NewGauge(makeMetaProtectedAge(typeStr)),
 		}
 		if opts, ok := options[jt]; ok && opts.metrics != nil {
