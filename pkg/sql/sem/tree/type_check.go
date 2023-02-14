@@ -1947,7 +1947,7 @@ func typeCheckAndRequireTupleElems(
 	tuple.typ = types.MakeTuple(make([]*types.T, len(tuple.Exprs)))
 	for i, subExpr := range tuple.Exprs {
 		// Require that the sub expression is comparable to the required type.
-		_, rightTyped, _, _, err := typeCheckComparisonOp(ctx, semaCtx, op, expr, subExpr)
+		_, rightTyped, _, _, err := typeCheckComparisonOp(ctx, semaCtx, op, expr, subExpr, true /* disallowSwitch */)
 		if err != nil {
 			return nil, err
 		}
@@ -2172,9 +2172,20 @@ func typeCheckSubqueryWithIn(left, right *types.T) error {
 	return nil
 }
 
+// The first element of `params` is disallowSwitch, which when true means the
+// first parameter to the overload type checker must be the original left
+// expression.
 func typeCheckComparisonOp(
-	ctx context.Context, semaCtx *SemaContext, op treecmp.ComparisonOperator, left, right Expr,
+	ctx context.Context,
+	semaCtx *SemaContext,
+	op treecmp.ComparisonOperator,
+	left, right Expr,
+	params ...bool,
 ) (_ TypedExpr, _ TypedExpr, _ *CmpOp, alwaysNull bool, _ error) {
+	disallowSwitch := false
+	if len(params) > 0 {
+		disallowSwitch = true
+	}
 	// Parentheses are semantically unimportant and can be removed/replaced
 	// with its nested expression in our plan. This makes type checking cleaner.
 	left = StripParens(left)
@@ -2308,7 +2319,7 @@ func typeCheckComparisonOp(
 	if _, ok := foldedRight.(*Placeholder); ok {
 		placeholderComparison = true
 	}
-	if !placeholderComparison && !columnComparison {
+	if !disallowSwitch && !placeholderComparison && !columnComparison {
 		_, _, err := typeCheckSameTypedExprs(ctx, semaCtx, types.Any, foldedLeft, foldedRight)
 		if err != nil {
 			_, _, err = typeCheckSameTypedExprs(ctx, semaCtx, types.Any, foldedRight, foldedLeft)
@@ -2319,7 +2330,12 @@ func typeCheckComparisonOp(
 		}
 	}
 	if s == nil {
-		s = getOverloadTypeChecker(ops, foldedLeft, foldedRight)
+		if disallowSwitch && switched {
+			s = getOverloadTypeChecker(ops, foldedRight, foldedLeft)
+			switched = false
+		} else {
+			s = getOverloadTypeChecker(ops, foldedLeft, foldedRight)
+		}
 	}
 	defer s.release()
 	if err := s.typeCheckOverloadedExprs(ctx, semaCtx, types.Any, true); err != nil {
