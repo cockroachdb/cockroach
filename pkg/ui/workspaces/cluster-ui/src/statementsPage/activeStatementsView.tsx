@@ -35,10 +35,12 @@ import { inactiveFiltersState } from "../queryFilter/filter";
 import { queryByName, syncHistory } from "src/util/query";
 import { getTableSortFromURL } from "../sortedtable/getTableSortFromURL";
 import { getActiveStatementFiltersFromURL } from "src/queryFilter/utils";
+import { Pagination } from "src/pagination";
 
 import styles from "./statementsPage.module.scss";
 
 const cx = classNames.bind(styles);
+const PAGE_SIZE = 20;
 
 export type ActiveStatementsViewDispatchProps = {
   onColumnsSelect: (columns: string[]) => void;
@@ -75,7 +77,7 @@ export const ActiveStatementsView: React.FC<ActiveStatementsViewProps> = ({
 }: ActiveStatementsViewProps) => {
   const [pagination, setPagination] = useState<ISortedTablePagination>({
     current: 1,
-    pageSize: 20,
+    pageSize: PAGE_SIZE,
   });
   const history = useHistory();
   const [search, setSearch] = useState<string>(
@@ -132,8 +134,8 @@ export const ActiveStatementsView: React.FC<ActiveStatementsViewProps> = ({
 
   const resetPagination = () => {
     setPagination({
+      pageSize: PAGE_SIZE,
       current: 1,
-      pageSize: 20,
     });
   };
 
@@ -165,6 +167,13 @@ export const ActiveStatementsView: React.FC<ActiveStatementsViewProps> = ({
     internalAppNamePrefix,
     search,
   );
+
+  const onChangePage = (page: number) => {
+    setPagination({
+      ...pagination,
+      current: page,
+    });
+  };
 
   return (
     <div className={cx("root")}>
@@ -207,6 +216,12 @@ export const ActiveStatementsView: React.FC<ActiveStatementsViewProps> = ({
             onChangeSortSetting={onSortClick}
             onColumnsSelect={onColumnsSelect}
             isTenant={isTenant}
+          />
+          <Pagination
+            pageSize={pagination.pageSize}
+            current={pagination.current}
+            total={filteredStatements?.length}
+            onChange={onChangePage}
           />
         </Loading>
       </div>
