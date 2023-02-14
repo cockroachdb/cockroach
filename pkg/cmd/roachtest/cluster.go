@@ -1406,7 +1406,7 @@ func (c *clusterImpl) FetchDmesg(ctx context.Context, l *logger.Logger) error {
 		}
 
 		// Run dmesg on all nodes to redirect the kernel ring buffer content to a file.
-		cmd := []string{"/bin/bash", "-c", "'sudo dmesg > " + name + "'"}
+		cmd := []string{"/bin/bash", "-c", "'sudo dmesg -T > " + name + "'"}
 		var results []install.RunResultDetails
 		var combinedDmesgError error
 		if results, combinedDmesgError = c.RunWithDetails(ctx, nil, c.All(), cmd...); combinedDmesgError != nil {
