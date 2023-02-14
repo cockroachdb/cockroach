@@ -229,7 +229,7 @@ func (gssp *generativeSplitAndScatterProcessor) close() {
 
 func makeBackupMetadata(
 	ctx context.Context, flowCtx *execinfra.FlowCtx, spec *execinfrapb.GenerativeSplitAndScatterSpec,
-) ([]backuppb.BackupManifest, layerToBackupManifestFileIterFactory, error) {
+) ([]backuppb.BackupManifest, backupinfo.LayerToBackupManifestFileIterFactory, error) {
 
 	execCfg := flowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig)
 
@@ -242,7 +242,7 @@ func makeBackupMetadata(
 		return nil, nil, err
 	}
 
-	layerToBackupManifestFileIterFactory, err := getBackupManifestFileIters(ctx, execCfg,
+	layerToBackupManifestFileIterFactory, err := backupinfo.GetBackupManifestIterFactories(ctx, execCfg.DistSQLSrv.ExternalStorage,
 		backupManifests, spec.Encryption, &kmsEnv)
 	if err != nil {
 		return nil, nil, err
