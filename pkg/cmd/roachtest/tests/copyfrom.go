@@ -106,7 +106,7 @@ func runTest(ctx context.Context, t test.Test, c cluster.Cluster, pg string) {
 	dataRate := bytes / 1024 / 1024 / dur.Seconds()
 	t.L().Printf("results: %d rows/s, %f mb/s", rate, dataRate)
 	// Write the copy rate into the stats.json file to be used by roachperf.
-	c.Run(ctx, c.Node(1), "mkdir", t.PerfArtifactsDir())
+	c.Run(ctx, c.Node(1), "mkdir", "-p", t.PerfArtifactsDir())
 	cmd := fmt.Sprintf(
 		`echo '{ "copy_row_rate": %d, "copy_data_rate": %f}' > %s/stats.json`,
 		rate, dataRate, t.PerfArtifactsDir(),
