@@ -73,8 +73,62 @@ func (s *PersistedSQLStats) Flush(ctx context.Context) {
 
 	aggregatedTs := s.ComputeAggregatedTs()
 
-	s.flushStmtStats(ctx, aggregatedTs)
-	s.flushTxnStats(ctx, aggregatedTs)
+	if s.stmtsLimitSizeReached(ctx) || s.txnsLimitSizeReached(ctx) {
+		log.Infof(ctx, "unable to flush fingerprints because table limit was reached.")
+	} else {
+		s.flushStmtStats(ctx, aggregatedTs)
+		s.flushTxnStats(ctx, aggregatedTs)
+	}
+}
+
+func (s *PersistedSQLStats) stmtsLimitSizeReached(ctx context.Context) bool {
+	maxPersistedRows := float64(SQLStatsMaxPersistedRows.Get(&s.SQLStats.GetClusterSettings().SV))
+
+	readStmt := `
+SELECT
+    count(*)
+FROM
+    system.statement_statistics
+`
+
+	row, err := s.cfg.DB.Executor().QueryRowEx(
+		ctx,
+		"fetch-stmt-count",
+		nil,
+		sessiondata.NodeUserSessionDataOverride,
+		readStmt,
+	)
+
+	if err != nil {
+		return false
+	}
+	actualSize := float64(tree.MustBeDInt(row[0]))
+	return actualSize > (maxPersistedRows * 1.5)
+}
+
+func (s *PersistedSQLStats) txnsLimitSizeReached(ctx context.Context) bool {
+	maxPersistedRows := float64(SQLStatsMaxPersistedRows.Get(&s.SQLStats.GetClusterSettings().SV))
+
+	readStmt := `
+SELECT
+    count(*)
+FROM
+    system.transaction_statistics
+`
+
+	row, err := s.cfg.DB.Executor().QueryRowEx(
+		ctx,
+		"fetch-txn-count",
+		nil,
+		sessiondata.NodeUserSessionDataOverride,
+		readStmt,
+	)
+
+	if err != nil {
+		return false
+	}
+	actualSize := float64(tree.MustBeDInt(row[0]))
+	return actualSize > (maxPersistedRows * 1.5)
 }
 
 func (s *PersistedSQLStats) flushStmtStats(ctx context.Context, aggregatedTs time.Time) {
