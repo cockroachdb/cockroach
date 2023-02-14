@@ -209,6 +209,7 @@ go_library(
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sem/tree",
+        "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/testutils",
         "//pkg/testutils/skip",
