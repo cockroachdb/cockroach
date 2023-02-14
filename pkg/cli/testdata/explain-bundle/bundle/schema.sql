@@ -4,3 +4,7 @@ CREATE TABLE public.a (
 	CONSTRAINT "primary" PRIMARY KEY (a ASC),
 	FAMILY "primary" (a, b)
 );
+
+CREATE TABLE public."order" (
+    id INT8 PRIMARY KEY
+);
