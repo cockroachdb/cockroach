@@ -234,6 +234,11 @@ func TestSQLStatsScheduleOperations(t *testing.T) {
 
 			helper.sqlDB.Exec(t, "RESET CLUSTER SETTING sql.stats.cleanup.recurrence")
 			helper.sqlDB.CheckQueryResultsRetry(t,
+				`SHOW CLUSTER SETTING sql.stats.cleanup.recurrence`,
+				[][]string{{"@hourly"}},
+			)
+
+			helper.sqlDB.CheckQueryResultsRetry(t,
 				fmt.Sprintf(`
 SELECT schedule_expr
 FROM system.scheduled_jobs WHERE schedule_id = %d`, schedID),
