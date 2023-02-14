@@ -55,7 +55,7 @@ func MakeStatusFunc(jr *jobs.Registry, metaType MetaType) ptreconcile.StatusFunc
 	switch metaType {
 	case Jobs:
 		return func(ctx context.Context, txn isql.Txn, meta []byte) (shouldRemove bool, _ error) {
-			jobID, err := decodeID(meta)
+			jobID, err := DecodeID(meta)
 			if err != nil {
 				return false, err
 			}
@@ -71,7 +71,7 @@ func MakeStatusFunc(jr *jobs.Registry, metaType MetaType) ptreconcile.StatusFunc
 		}
 	case Schedules:
 		return func(ctx context.Context, txn isql.Txn, meta []byte) (shouldRemove bool, _ error) {
-			scheduleID, err := decodeID(meta)
+			scheduleID, err := DecodeID(meta)
 			if err != nil {
 				return false, err
 			}
@@ -114,7 +114,8 @@ func encodeID(id int64) []byte {
 	return []byte(strconv.FormatInt(id, 10))
 }
 
-func decodeID(meta []byte) (id int64, err error) {
+// DecodeID decodes ID stored in the PTS record.
+func DecodeID(meta []byte) (id int64, err error) {
 	id, err = strconv.ParseInt(string(meta), 10, 64)
 	if err != nil {
 		return 0, errors.Wrapf(err, "failed to interpret meta %q as bytes", meta)

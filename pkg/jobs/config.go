@@ -74,7 +74,7 @@ const (
 
 	// defaultPollForMetricsInterval is the default interval to poll the jobs
 	// table for metrics.
-	defaultPollForMetricsInterval = 10 * time.Second
+	defaultPollForMetricsInterval = 30 * time.Second
 )
 
 var (

@@ -1,0 +1,33 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "metricspoller",
+    srcs = [
+        "job_statistics.go",
+        "poller.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/jobs/metricspoller",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/jobs",
+        "//pkg/jobs/jobspb",
+        "//pkg/jobs/jobsprotectedts",
+        "//pkg/roachpb",
+        "//pkg/security/username",
+        "//pkg/settings/cluster",
+        "//pkg/sql",
+        "//pkg/sql/isql",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/metric",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_logtags//:logtags",
+        "@com_github_prometheus_client_model//go",
+    ],
+)
+
+get_x_data(name = "get_x_data")

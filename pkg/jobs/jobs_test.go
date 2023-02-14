@@ -32,8 +32,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -60,6 +62,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/gogo/protobuf/types"
@@ -3494,28 +3497,33 @@ func TestPausepoints(t *testing.T) {
 	}
 }
 
-func TestPausedMetrics(t *testing.T) {
+func TestJobTypeMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	skip.UnderShort(t)
 
 	ctx := context.Background()
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+	// Make sure we set polling intervale before we start the server.
+	// Otherwise, we might pick up the default value (30 second), which would make
+	// this test slow.
+	args := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		},
-	})
+		Settings: cluster.MakeTestingClusterSettings(),
+	}
+	jobs.PollJobsMetricsInterval.Override(ctx, &args.Settings.SV, 10*time.Millisecond)
+	s, sqlDB, _ := serverutils.StartServer(t, args)
 	defer s.Stopper().Stop(ctx)
 
-	jobs.PollJobsMetricsInterval.Override(ctx, &s.ClusterSettings().SV, 10*time.Millisecond)
 	runner := sqlutils.MakeSQLRunner(sqlDB)
 	reg := s.JobRegistry().(*jobs.Registry)
 
 	waitForPausedCount := func(typ jobspb.Type, numPaused int64) {
 		testutils.SucceedsSoon(t, func() error {
 			currentlyPaused := reg.MetricsStruct().JobMetrics[typ].CurrentlyPaused.Value()
-			if reg.MetricsStruct().JobMetrics[typ].CurrentlyPaused.Value() != numPaused {
+			if currentlyPaused != numPaused {
 				return fmt.Errorf(
 					"expected (%+v) paused jobs of type (%+v), found (%+v)",
 					numPaused,
@@ -3544,6 +3552,36 @@ func TestPausedMetrics(t *testing.T) {
 			Username: username.TestUserName(),
 		},
 	}
+
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	writePTSRecord := func(jobID jobspb.JobID) (uuid.UUID, error) {
+		id := uuid.MakeV4()
+		record := jobsprotectedts.MakeRecord(
+			id, int64(jobID), s.Clock().Now(), nil,
+			jobsprotectedts.Jobs, ptpb.MakeClusterTarget(),
+		)
+		return id,
+			execCfg.InternalDB.Txn(context.Background(), func(ctx context.Context, txn isql.Txn) error {
+				return execCfg.ProtectedTimestampProvider.WithTxn(txn).Protect(context.Background(), record)
+			})
+	}
+	relesePTSRecord := func(id uuid.UUID) error {
+		return execCfg.InternalDB.Txn(context.Background(), func(ctx context.Context, txn isql.Txn) error {
+			return execCfg.ProtectedTimestampProvider.WithTxn(txn).Release(context.Background(), id)
+		})
+	}
+
+	checkPTSCounts := func(typ jobspb.Type, count int64) {
+		testutils.SucceedsSoon(t, func() error {
+			m := reg.MetricsStruct().JobMetrics[typ]
+			if m.NumJobsWithPTS.Value() == count && (count == 0 || m.ProtectedAge.Value() > 0) {
+				return nil
+			}
+			return errors.Newf("still waiting for PTS count to reach %d: c=%d age=%d",
+				count, m.NumJobsWithPTS.Value(), m.ProtectedAge.Value())
+		})
+	}
+
 	for typ := range typeToRecord {
 		jobs.RegisterConstructor(typ, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 			return jobs.FakeResumer{
@@ -3570,6 +3608,17 @@ func TestPausedMetrics(t *testing.T) {
 	importJob := makeJob(context.Background(), jobspb.TypeImport)
 	scJob := makeJob(context.Background(), jobspb.TypeSchemaChange)
 
+	// Write few PTS records
+	cfJobPTSID, err := writePTSRecord(cfJob.ID())
+	require.NoError(t, err)
+	_, err = writePTSRecord(cfJob.ID())
+	require.NoError(t, err)
+	importJobPTSID, err := writePTSRecord(importJob.ID())
+	require.NoError(t, err)
+
+	checkPTSCounts(jobspb.TypeChangefeed, 2)
+	checkPTSCounts(jobspb.TypeImport, 1)
+
 	// Pause all job types.
 	runner.Exec(t, "PAUSE JOB $1", cfJob.ID())
 	waitForPausedCount(jobspb.TypeChangefeed, 1)
@@ -3579,6 +3628,12 @@ func TestPausedMetrics(t *testing.T) {
 	waitForPausedCount(jobspb.TypeImport, 1)
 	runner.Exec(t, "PAUSE JOB $1", scJob.ID())
 	waitForPausedCount(jobspb.TypeSchemaChange, 1)
+
+	// Release some of the pts records.
+	require.NoError(t, relesePTSRecord(cfJobPTSID))
+	require.NoError(t, relesePTSRecord(importJobPTSID))
+	checkPTSCounts(jobspb.TypeChangefeed, 1)
+	checkPTSCounts(jobspb.TypeImport, 0)
 
 	// Resume / cancel jobs.
 	runner.Exec(t, "RESUME JOB $1", cfJob.ID())
