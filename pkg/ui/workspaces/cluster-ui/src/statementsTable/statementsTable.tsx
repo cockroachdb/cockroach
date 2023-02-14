@@ -50,8 +50,10 @@ import {
 
 type ICollectedStatementStatistics =
   cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
+type IScannedSpanStats = cockroach.sql.IScannedSpanStats;
 import styles from "./statementsTable.module.scss";
 import { StatementDiagnosticsReport } from "../api";
+import * as format from "../util/format";
 const cx = classNames.bind(styles);
 
 export interface AggregateStatistics {
@@ -146,6 +148,31 @@ export function makeStatementsColumns(
   );
   const retryBar = retryBarChart(statements, defaultBarChartOptions);
 
+  const scannedSpanStatsCell = (
+    scannedSpanStats: IScannedSpanStats,
+  ): React.ReactElement => {
+    if (!scannedSpanStats || scannedSpanStats.pct_live == 0) {
+      return <p>MVCC stats unavailable</p>;
+    }
+    return (
+      <>
+        <p className={cx("multiple-lines-info")}>
+          {format.Percentage(scannedSpanStats.pct_live, 1, 1)}
+        </p>
+        <p className={cx("multiple-lines-info")}>
+          <span className={cx("bold")}>
+            {format.Bytes(Number(scannedSpanStats.live_bytes))}
+          </span>{" "}
+          live data /{" "}
+          <span className={cx("bold")}>
+            {format.Bytes(Number(scannedSpanStats.total_bytes))}
+          </span>
+          {" total"}
+        </p>
+      </>
+    );
+  };
+
   const columns: ColumnDescriptor<AggregateStatistics>[] = [
     {
       name: "statements",
@@ -203,6 +230,15 @@ export function makeStatementsColumns(
       cell: bytesReadBar,
       sort: (stmt: AggregateStatistics) =>
         FixLong(Number(stmt.stats.bytes_read.mean)),
+    },
+    {
+      name: "liveBytesScanned",
+      title: statisticsTableTitles.liveBytesScanned(statType),
+      cell: (stmt: AggregateStatistics) =>
+        scannedSpanStatsCell(stmt.stats.scanned_span_stats),
+      sort: (stmt: AggregateStatistics) =>
+        FixLong(Number(stmt.stats.scanned_span_stats.pct_live)),
+      showByDefault: false,
     },
     {
       name: "time",

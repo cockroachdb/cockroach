@@ -286,6 +286,7 @@ function randomStats(
       p99: 1.1,
     },
     last_error_code: "",
+    scanned_span_stats: {},
   };
 }
 

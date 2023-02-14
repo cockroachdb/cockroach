@@ -1,0 +1,47 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "scannedspanstats",
+    srcs = ["scanned_span_stats_cache.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal/scannedspanstats",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/settings/cluster",
+        "//pkg/sql/opt/cat",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sqlstats",
+        "//pkg/storage/enginepb",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+    ],
+)
+
+go_test(
+    name = "scannedspanstats_test",
+    srcs = [
+        "bench_test.go",
+        "main_test.go",
+        "scanned_span_stats_cache_test.go",
+    ],
+    args = ["-test.timeout=295s"],
+    deps = [
+        "//pkg/base",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/settings/cluster",
+        "//pkg/sql/sqlstats",
+        "//pkg/sql/tests",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+get_x_data(name = "get_x_data")

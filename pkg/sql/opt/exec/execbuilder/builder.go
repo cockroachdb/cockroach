@@ -192,8 +192,12 @@ type Builder struct {
 	// these statements.
 	IsANSIDML bool
 
-	// IndexesUsed list the indexes used in query with the format tableID@indexID.
+	// IndexesUsed collects the list of the indexes used in query with the format tableID@indexID.
 	IndexesUsed []string
+
+	// TablesScanned collects the list of tableIDs of tables scanned by the plan.
+	// This field does not store a value.
+	TablesScanned map[cat.StableID]struct{}
 }
 
 // New constructs an instance of the execution node builder using the

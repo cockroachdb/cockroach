@@ -299,6 +299,7 @@ func (s *innerStmtStats) jsonFields() jsonFields {
 		{"indexes", (*stringArray)(&s.Indexes)},
 		{"latencyInfo", (*latencyInfo)(&s.LatencyInfo)},
 		{"lastErrorCode", (*jsonString)(&s.LastErrorCode)},
+		{"scannedSpanStats", (*spanStats)(&s.ScannedSpanStats)},
 	}
 }
 
@@ -358,6 +359,24 @@ func (e *iteratorStats) decodeJSON(js json.JSON) error {
 }
 
 func (e *iteratorStats) encodeJSON() (json.JSON, error) {
+	return e.jsonFields().encodeJSON()
+}
+
+type spanStats appstatspb.ScannedSpanStats
+
+func (e *spanStats) jsonFields() jsonFields {
+	return jsonFields{
+		{"liveBytes", (*jsonInt)(&e.LiveBytes)},
+		{"totalBytes", (*jsonInt)(&e.TotalBytes)},
+		{"pctLive", (*jsonFloat)(&e.PctLive)},
+	}
+}
+
+func (e *spanStats) decodeJSON(js json.JSON) error {
+	return e.jsonFields().decodeJSON(js)
+}
+
+func (e *spanStats) encodeJSON() (json.JSON, error) {
 	return e.jsonFields().encodeJSON()
 }
 

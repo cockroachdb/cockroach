@@ -23,6 +23,7 @@ import { AggregateStatistics } from "src/statementsTable";
 
 type IStatementStatistics = protos.cockroach.sql.IStatementStatistics;
 type IExecStats = protos.cockroach.sql.IExecStats;
+type IScannedSpanStats = protos.cockroach.sql.IScannedSpanStats;
 
 const history = createMemoryHistory({ initialEntries: ["/statements"] });
 
@@ -61,6 +62,12 @@ const latencyInfo: Required<ILatencyInfo> = {
   p90: 0.00016,
   p99: 0.00018,
 };
+
+const scannedSpanStats: Required<IScannedSpanStats> = {
+  live_bytes: Long.fromInt(99),
+  total_bytes: Long.fromInt(100),
+  pct_live: 0.99
+}
 
 const statementStats: Required<IStatementStatistics> = {
   count: Long.fromNumber(180000),
@@ -231,6 +238,7 @@ const statementStats: Required<IStatementStatistics> = {
       ],
     },
   },
+  scanned_span_stats: scannedSpanStats
 };
 
 const diagnosticsReports: StatementDiagnosticsReport[] = [

@@ -100,6 +100,15 @@ func BuildStmtMetadataJSON(statistics *appstatspb.CollectedStatementStatistics) 
 //		      "items": {
 //		        "type": "string",
 //		      },
+//	      "span_stats": {
+//	        "type": "object",
+//	        "properties": {
+//	          "liveBytes":   { "type": "number" },
+//	          "totalBytes":  { "type": "number" },
+//	          "pctLive":     { "type": "number" }
+//	        },
+//	      "required": ["liveBytes", "totalBytes", "pctLive"]
+//	    },
 //		    },
 //		    "mvcc_iterator_stats": {
 //		      "type": "object",
