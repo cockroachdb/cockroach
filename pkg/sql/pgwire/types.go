@@ -58,10 +58,7 @@ type pgType struct {
 }
 
 func pgTypeForParserType(t *types.T) pgType {
-	size := -1
-	if s, variable := tree.DatumTypeSize(t); !variable {
-		size = int(s)
-	}
+	size := tree.PGWireTypeSize(t)
 	tOid := t.Oid()
 	if tOid == oid.T_text && t.Width() > 0 {
 		tOid = oid.T_varchar
