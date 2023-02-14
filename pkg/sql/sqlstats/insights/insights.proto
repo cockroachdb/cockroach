@@ -12,7 +12,6 @@ syntax = "proto3";
 package cockroach.sql.insights;
 option go_package = "insights";
 
-import "roachpb/api.proto";
 import "gogoproto/gogo.proto";
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/duration.proto";
