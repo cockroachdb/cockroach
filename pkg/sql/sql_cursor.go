@@ -48,7 +48,17 @@ func (p *planner) DeclareCursor(ctx context.Context, s *tree.DeclareCursor) (pla
 				return nil, pgerror.Newf(pgcode.NoActiveSQLTransaction, "DECLARE CURSOR can only be used in transaction blocks")
 			}
 
-			ie := p.ExecCfg().InternalExecutorFactory.NewInternalExecutor(p.SessionData())
+			sd := p.SessionData()
+			// This session variable was introduced as a workaround to #96322.
+			// Today, if a timeout is set, FETCH's timeout is from the point
+			// DECLARE CURSOR is executed rather than the FETCH itself.
+			// The setting allows us to override the setting without affecting
+			// third-party applications.
+			if !p.SessionData().DeclareCursorStatementTimeoutEnabled {
+				sd = sd.Clone()
+				sd.StmtTimeout = 0
+			}
+			ie := p.ExecCfg().InternalExecutorFactory.NewInternalExecutor(sd)
 			if cursor := p.sqlCursors.getCursor(s.Name); cursor != nil {
 				return nil, pgerror.Newf(pgcode.DuplicateCursor, "cursor %q already exists", s.Name)
 			}

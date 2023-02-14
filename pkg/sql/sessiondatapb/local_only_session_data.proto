@@ -309,6 +309,9 @@ message LocalOnlySessionData {
   // CopyFromRetriesEnabled controls whether retries should be internally
   // attempted for retriable errors.
   bool copy_from_retries_enabled = 89;
+  // DeclareCursorStatementTimeoutEnabled controls whether statement timeouts
+  // apply during DECLARE CURSOR.
+  bool declare_cursor_statement_timeout_enabled = 90;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
