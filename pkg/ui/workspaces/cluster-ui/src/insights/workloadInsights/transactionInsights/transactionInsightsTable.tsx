@@ -16,7 +16,7 @@ import {
   SortSetting,
 } from "src/sortedtable";
 import { DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT, Duration } from "src/util";
-import { InsightExecEnum, TxnInsightEvent } from "src/insights";
+import { InsightExecEnum, TransactionStatus, TxnInsightEvent } from "src/insights";
 import {
   InsightCell,
   insightsTableTitles,
@@ -25,6 +25,18 @@ import {
 } from "../util";
 import { Link } from "react-router-dom";
 import { TimeScale } from "../../../timeScaleDropdown";
+import { Badge } from "src/badge";
+
+function txnStatusToString(status: TransactionStatus) {
+  switch (status) {
+    case TransactionStatus.COMPLETED:
+      return "success";
+    case TransactionStatus.FAILED:
+      return "danger";
+    case TransactionStatus.CANCELLED:
+      return "info";
+  }
+}
 
 interface TransactionInsightsTable {
   data: TxnInsightEvent[];
@@ -66,6 +78,15 @@ export function makeTransactionInsightsColumns(
       title: insightsTableTitles.query(execType),
       cell: item => QueriesCell([item.query], 50),
       sort: item => item.query,
+    },
+    {
+      name: "status",
+      title: insightsTableTitles.status(execType),
+      cell: item => (
+        <Badge text={item.status} status={txnStatusToString(item.status)} />
+      ),
+      sort: item => item.status,
+      showByDefault: true,
     },
     {
       name: "insights",

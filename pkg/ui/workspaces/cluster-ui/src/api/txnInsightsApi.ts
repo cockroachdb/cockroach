@@ -26,6 +26,7 @@ import {
   getInsightsFromProblemsAndCauses,
   InsightExecEnum,
   InsightNameEnum,
+  TransactionStatus,
   TxnContentionInsightDetails,
   TxnInsightDetails,
   TxnInsightEvent,
@@ -293,6 +294,8 @@ type TxnInsightsResponseRow = {
   causes: string[];
   stmt_execution_ids: string[];
   cpu_sql_nanos: number;
+  last_error_code: string;
+  status: TransactionStatus;
 };
 
 type TxnQueryFilters = {
@@ -326,7 +329,9 @@ last_retry_reason,
 problems,
 causes,
 stmt_execution_ids,
-cpu_sql_nanos`;
+cpu_sql_nanos,
+last_error_code,
+status`;
 
   if (filters?.execID) {
     return `
@@ -394,6 +399,8 @@ function formatTxnInsightsRow(row: TxnInsightsResponseRow): TxnInsightEvent {
     insights,
     stmtExecutionIDs: row.stmt_execution_ids,
     cpuSQLNanos: row.cpu_sql_nanos,
+    errorCode: row.last_error_code,
+    status: row.status,
   };
 }
 

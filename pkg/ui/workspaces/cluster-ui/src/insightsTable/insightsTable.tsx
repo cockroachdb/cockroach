@@ -31,6 +31,7 @@ import { Link } from "react-router-dom";
 import {
   InsightExecEnum,
   InsightRecommendation,
+  InsightType,
   insightType,
 } from "../insights";
 
@@ -93,8 +94,12 @@ export const insightsTableTitles: InsightsTableTitleType = {
   },
 };
 
-function typeCell(value: string): React.ReactElement {
-  return <div className={cx("insight-type")}>{value}</div>;
+function TypeCell(value: InsightType): React.ReactElement {
+  const className =
+    insightType(value) === "FailedExecution"
+      ? "insight-type-failed"
+      : "insight-type";
+  return <div className={cx(className)}>{value}</div>;
 }
 
 const StatementExecution = ({
@@ -276,7 +281,8 @@ function descriptionCell(
       return (
         <>
           <div className={cx("description-item")}>
-            This execution has failed.
+            <span className={cx("label-bold")}>Error Code: </span>{" "}
+            {insightRec.execution.errorCode}
           </div>
         </>
       );
@@ -409,7 +415,7 @@ export function makeInsightsColumns(
     {
       name: "insights",
       title: insightsTableTitles.insights(),
-      cell: (item: InsightRecommendation) => typeCell(insightType(item.type)),
+      cell: (item: InsightRecommendation) => TypeCell(item.type),
       sort: (item: InsightRecommendation) => item.type,
     },
     {
