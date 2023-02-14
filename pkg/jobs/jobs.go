@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"reflect"
 	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -114,6 +115,9 @@ type Record struct {
 	// CreatedBy, if set, annotates this record with the information on
 	// this job creator.
 	CreatedBy *CreatedByInfo
+	// MaximumPTSAge specifies the maximum age of PTS record held by a job.
+	// 0 means no limit.
+	MaximumPTSAge time.Duration
 }
 
 // AppendDescription appends description to this records Description with a
@@ -423,6 +427,16 @@ func (u Updater) Unpaused(ctx context.Context) error {
 // that it is in state StatusCancelRequested and will move it to state
 // StatusReverting.
 func (u Updater) CancelRequested(ctx context.Context) error {
+	return u.CancelRequestedWithReason(ctx, errJobCanceled)
+}
+
+// CancelRequestedWithReason sets the status of the tracked job to cancel-requested. It
+// does not directly cancel the job; like job.Paused, it expects the job to call
+// job.Progressed soon, observe a "job is cancel-requested" error, and abort.
+// Further the node the runs the job will actively cancel it when it notices
+// that it is in state StatusCancelRequested and will move it to state
+// StatusReverting.
+func (u Updater) CancelRequestedWithReason(ctx context.Context, reason error) error {
 	return u.Update(ctx, func(txn isql.Txn, md JobMetadata, ju *JobUpdater) error {
 		if md.Payload.Noncancelable {
 			return errors.Newf("job %d: not cancelable", md.ID)
@@ -437,6 +451,10 @@ func (u Updater) CancelRequested(ctx context.Context) error {
 			decodedErr := errors.DecodeError(ctx, *md.Payload.FinalResumeError)
 			return errors.Wrapf(decodedErr, "job %d is paused and has non-nil FinalResumeError "+
 				"hence cannot be canceled and should be reverted", md.ID)
+		}
+		if !errors.Is(reason, errJobCanceled) {
+			md.Payload.Error = reason.Error()
+			ju.UpdatePayload(md.Payload)
 		}
 		ju.UpdateStatus(StatusCancelRequested)
 		return nil

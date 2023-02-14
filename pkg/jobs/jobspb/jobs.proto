@@ -1238,6 +1238,12 @@ message Payload {
   // cluster version, in case a job resuming later needs to use this information
   // to migrate or update the job.
   roachpb.Version creation_cluster_version = 36 [(gogoproto.nullable) = false];
+
+  // If a job lays protected timestamp records, this optional field
+  // specifies how old such record could get before this job is canceled.
+  int64 maximum_pts_age = 40 [(gogoproto.casttype) = "time.Duration",  (gogoproto.customname) = "MaximumPTSAge"];
+
+  // NEXT ID: 41
 }
 
 message Progress {

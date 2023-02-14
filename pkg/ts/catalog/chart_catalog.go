@@ -3395,6 +3395,7 @@ var charts = []sectionDescription{
 			jobTypeCharts("Currently Paused", "currently_paused"),
 			jobTypeCharts("PTS Age", "protected_age_sec"),
 			jobTypeCharts("PTS Record Count", "protected_record_count"),
+			jobTypeCharts("Expired PTS Records", "expired_pts_records"),
 			{
 				Title: "Auto Create Stats",
 				Metrics: []string{

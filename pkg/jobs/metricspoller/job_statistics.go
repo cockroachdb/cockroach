@@ -23,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -77,10 +79,14 @@ func updatePausedMetrics(ctx context.Context, execCtx sql.JobExecContext) error 
 	return nil
 }
 
-// updatePTSStats update protected timestamp statistics per job type.
-func updatePTSStats(ctx context.Context, execCtx sql.JobExecContext) error {
+// manageJobsProtectedTimestamps manages protected timestamp records owned by various jobs.
+// This function mostly concerns itself with collecting statistics related to job PTS records.
+// It also detects PTS records that are too old (as configured by the owner job) and requests
+// job cancellation for those jobs.
+func manageJobsProtectedTimestamps(ctx context.Context, execCtx sql.JobExecContext) error {
 	type ptsStat struct {
 		numRecords int64
+		expired    int64
 		oldest     hlc.Timestamp
 	}
 	var ptsStats map[jobspb.Type]*ptsStat
@@ -105,17 +111,38 @@ func updatePTSStats(ctx context.Context, execCtx sql.JobExecContext) error {
 				continue
 			}
 			p := j.Payload()
-			stats := ptsStats[p.Type()]
+			jobType, err := p.CheckType()
+			if err != nil {
+				return err
+			}
+			stats := ptsStats[jobType]
 			if stats == nil {
 				stats = &ptsStat{}
-				ptsStats[p.Type()] = stats
+				ptsStats[jobType] = stats
 			}
 			stats.numRecords++
 			if stats.oldest.IsEmpty() || rec.Timestamp.Less(stats.oldest) {
 				stats.oldest = rec.Timestamp
 			}
-		}
 
+			// If MaximumPTSAge is set on the job payload, verify if PTS record
+			// timestamp is fresh enough.  Note: we only look at paused jobs.
+			// If the running job wants to enforce an invariant wrt to PTS age,
+			// it can do so itself.  This check here is a safety mechanism to detect
+			// paused jobs that own protected timestamp records.
+			if j.Status() == jobs.StatusPaused &&
+				p.MaximumPTSAge > 0 &&
+				rec.Timestamp.GoTime().Add(p.MaximumPTSAge).Before(timeutil.Now()) {
+				stats.expired++
+				ptsExpired := errors.Newf(
+					"protected timestamp records %s as of %s (age %s) exceeds job configured limit of %s",
+					rec.ID, rec.Timestamp, timeutil.Since(rec.Timestamp.GoTime()), p.MaximumPTSAge)
+				if err := j.WithTxn(txn).CancelRequestedWithReason(ctx, ptsExpired); err != nil {
+					return err
+				}
+				log.Warningf(ctx, "job %d canceled due to %s", id, ptsExpired)
+			}
+		}
 		return nil
 	}); err != nil {
 		return err
@@ -130,6 +157,7 @@ func updatePTSStats(ctx context.Context, execCtx sql.JobExecContext) error {
 		stats, found := ptsStats[jobspb.Type(typ)]
 		if found {
 			m.NumJobsWithPTS.Update(stats.numRecords)
+			m.ExpiredPTS.Inc(stats.expired)
 			if stats.oldest.WallTime > 0 {
 				m.ProtectedAge.Update((execCfg.Clock.Now().WallTime - stats.oldest.WallTime) / 1e9)
 			} else {
@@ -137,6 +165,7 @@ func updatePTSStats(ctx context.Context, execCtx sql.JobExecContext) error {
 			}
 		} else {
 			// If we haven't found PTS records for a job type, then reset stats.
+			// (note: we don't reset counter based stats)
 			m.NumJobsWithPTS.Update(0)
 			m.ProtectedAge.Update(0)
 		}
