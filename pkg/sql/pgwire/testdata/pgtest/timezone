@@ -2,11 +2,12 @@ send
 Query {"String": "SET TIME ZONE \"UTC\""}
 ----
 
-until
+# Ignore parameter status since it's only sent if the value changed, and the
+# starting value is not deterministic.
+until ignore=ParameterStatus
 ReadyForQuery
 ----
 {"Type":"CommandComplete","CommandTag":"SET"}
-{"Type":"ParameterStatus","Name":"TimeZone","Value":"UTC"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 send
