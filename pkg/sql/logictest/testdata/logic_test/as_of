@@ -139,3 +139,14 @@ SET TRANSACTION AS OF system time '-1s'
 
 statement ok
 ROLLBACK
+
+# Check that AOST in multi-stmt implicit transaction has the proper error.
+statement error inconsistent AS OF SYSTEM TIME timestamp
+insert into t values(1); select * from t as of system time '-1s';
+
+statement error inconsistent AS OF SYSTEM TIME timestamp
+select * from t as of system time '-1s'; select * from t as of system time '-2s';
+
+# Specifying the AOST in the first statement (and no others) is allowed.
+statement ok
+select * from t as of system time '-1s'; select * from t;
