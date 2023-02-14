@@ -143,17 +143,6 @@ func (r *commandResult) Close(ctx context.Context, t sql.TransactionStatusIndica
 		}
 	}
 
-	for _, paramStatusUpdate := range r.buffer.paramStatusUpdates {
-		if err := r.conn.bufferParamStatus(
-			paramStatusUpdate.param,
-			paramStatusUpdate.val,
-		); err != nil {
-			panic(
-				errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err when sending parameter status update"),
-			)
-		}
-	}
-
 	// Send a completion message, specific to the type of result.
 	switch r.typ {
 	case commandComplete:
@@ -182,6 +171,17 @@ func (r *commandResult) Close(ctx context.Context, t sql.TransactionStatusIndica
 		// nothing to do
 	default:
 		panic(errors.AssertionFailedf("unknown type: %v", r.typ))
+	}
+
+	for _, paramStatusUpdate := range r.buffer.paramStatusUpdates {
+		if err := r.conn.bufferParamStatus(
+			paramStatusUpdate.param,
+			paramStatusUpdate.val,
+		); err != nil {
+			panic(
+				errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err when sending parameter status update"),
+			)
+		}
 	}
 }
 
