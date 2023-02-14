@@ -197,6 +197,10 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 		}
 	}
 
+	if b.TablesScanned == nil {
+		b.TablesScanned = make(map[cat.StableID]struct{})
+	}
+
 	switch t := e.(type) {
 	case *memo.ValuesExpr:
 		ep, err = b.buildValues(t)
@@ -711,6 +715,7 @@ func (b *Builder) scanParams(
 func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 	md := b.mem.Metadata()
 	tab := md.Table(scan.Table)
+	tabId := tab.ID()
 
 	if !b.disableTelemetry && scan.PartialIndexPredicate(md) != nil {
 		telemetry.Inc(sqltelemetry.PartialIndexScanUseCounter)
@@ -736,7 +741,7 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		return execPlan{},
 			errors.AssertionFailedf("expected inverted index scan to have an inverted constraint")
 	}
-	b.IndexesUsed = util.CombineUniqueString(b.IndexesUsed, []string{fmt.Sprintf("%d@%d", tab.ID(), idx.ID())})
+	b.IndexesUsed = util.CombineUniqueString(b.IndexesUsed, []string{fmt.Sprintf("%d@%d", tabId, idx.ID())})
 
 	// Save if we planned a full table/index scan on the builder so that the
 	// planner can be made aware later. We only do this for non-virtual tables.
@@ -831,6 +836,10 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		}
 		b.builtScans = append(b.builtScans, scan)
 	}
+	if _, ok := b.TablesScanned[tabId]; !ok {
+		b.TablesScanned[tabId] = struct{}{}
+	}
+
 	return res, nil
 }
 
@@ -841,6 +850,7 @@ func (b *Builder) buildPlaceholderScan(scan *memo.PlaceholderScanExpr) (execPlan
 
 	md := b.mem.Metadata()
 	tab := md.Table(scan.Table)
+	tabID := tab.ID()
 	idx := tab.Index(scan.Index)
 
 	// Build the index constraint.
@@ -894,6 +904,10 @@ func (b *Builder) buildPlaceholderScan(scan *memo.PlaceholderScanExpr) (execPlan
 	)
 	if err != nil {
 		return execPlan{}, err
+	}
+
+	if _, ok := b.TablesScanned[tabID]; !ok {
+		b.TablesScanned[tabID] = struct{}{}
 	}
 
 	res.root = root
@@ -2041,11 +2055,12 @@ func (b *Builder) buildIndexJoin(join *memo.IndexJoinExpr) (execPlan, error) {
 
 	md := b.mem.Metadata()
 	tab := md.Table(join.Table)
+	tabId := tab.ID()
 
 	// TODO(radu): the distsql implementation of index join assumes that the input
 	// starts with the PK columns in order (#40749).
 	pri := tab.Index(cat.PrimaryIndex)
-	b.IndexesUsed = util.CombineUniqueString(b.IndexesUsed, []string{fmt.Sprintf("%d@%d", tab.ID(), pri.ID())})
+	b.IndexesUsed = util.CombineUniqueString(b.IndexesUsed, []string{fmt.Sprintf("%d@%d", tabId, pri.ID())})
 	keyCols := make([]exec.NodeColumnOrdinal, pri.KeyColumnCount())
 	for i := range keyCols {
 		keyCols[i] = input.getNodeColumnOrdinal(join.Table.ColumnID(pri.Column(i).Ordinal()))
@@ -2069,6 +2084,9 @@ func (b *Builder) buildIndexJoin(join *memo.IndexJoinExpr) (execPlan, error) {
 		return execPlan{}, err
 	}
 
+	if _, ok := b.TablesScanned[tabId]; !ok {
+		b.TablesScanned[tabId] = struct{}{}
+	}
 	return res, nil
 }
 
@@ -2346,8 +2364,9 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 	}
 
 	tab := md.Table(join.Table)
+	tabId := tab.ID()
 	idx := tab.Index(join.Index)
-	b.IndexesUsed = util.CombineUniqueString(b.IndexesUsed, []string{fmt.Sprintf("%d@%d", tab.ID(), idx.ID())})
+	b.IndexesUsed = util.CombineUniqueString(b.IndexesUsed, []string{fmt.Sprintf("%d@%d", tabId, idx.ID())})
 
 	locking := join.Locking
 	if b.forceForUpdateLocking {
@@ -2391,6 +2410,10 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 			outCols = join.Cols.Intersection(inputCols)
 		}
 		return b.applySimpleProject(res, join, outCols, join.ProvidedPhysical().Ordering)
+	}
+
+	if _, ok := b.TablesScanned[tabId]; !ok {
+		b.TablesScanned[tabId] = struct{}{}
 	}
 	return res, nil
 }
@@ -2514,8 +2537,9 @@ func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, erro
 	}
 	md := b.mem.Metadata()
 	tab := md.Table(join.Table)
+	tabId := tab.ID()
 	idx := tab.Index(join.Index)
-	b.IndexesUsed = util.CombineUniqueString(b.IndexesUsed, []string{fmt.Sprintf("%d@%d", tab.ID(), idx.ID())})
+	b.IndexesUsed = util.CombineUniqueString(b.IndexesUsed, []string{fmt.Sprintf("%d@%d", tabId, idx.ID())})
 
 	prefixEqCols := make([]exec.NodeColumnOrdinal, len(join.PrefixKeyCols))
 	for i, c := range join.PrefixKeyCols {
@@ -2607,6 +2631,9 @@ func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, erro
 		return execPlan{}, err
 	}
 
+	if _, ok := b.TablesScanned[tabId]; !ok {
+		b.TablesScanned[tabId] = struct{}{}
+	}
 	// Apply a post-projection to remove the inverted column.
 	return b.applySimpleProject(res, join, join.Cols, join.ProvidedPhysical().Ordering)
 }
@@ -2615,13 +2642,15 @@ func (b *Builder) buildZigzagJoin(join *memo.ZigzagJoinExpr) (execPlan, error) {
 	md := b.mem.Metadata()
 
 	leftTable := md.Table(join.LeftTable)
+	leftTableID := leftTable.ID()
 	rightTable := md.Table(join.RightTable)
+	rightTableID := rightTable.ID()
 	leftIndex := leftTable.Index(join.LeftIndex)
 	rightIndex := rightTable.Index(join.RightIndex)
 	b.IndexesUsed = util.CombineUniqueString(b.IndexesUsed,
-		[]string{fmt.Sprintf("%d@%d", leftTable.ID(), leftIndex.ID())})
+		[]string{fmt.Sprintf("%d@%d", leftTableID, leftIndex.ID())})
 	b.IndexesUsed = util.CombineUniqueString(b.IndexesUsed,
-		[]string{fmt.Sprintf("%d@%d", rightTable.ID(), rightIndex.ID())})
+		[]string{fmt.Sprintf("%d@%d", rightTableID, rightIndex.ID())})
 
 	leftEqCols := make([]exec.TableColumnOrdinal, len(join.LeftEqCols))
 	rightEqCols := make([]exec.TableColumnOrdinal, len(join.RightEqCols))
@@ -2717,6 +2746,13 @@ func (b *Builder) buildZigzagJoin(join *memo.ZigzagJoinExpr) (execPlan, error) {
 		return execPlan{}, err
 	}
 
+	if _, ok := b.TablesScanned[leftTableID]; !ok {
+		b.TablesScanned[leftTableID] = struct{}{}
+	}
+
+	if _, ok := b.TablesScanned[rightTableID]; !ok {
+		b.TablesScanned[rightTableID] = struct{}{}
+	}
 	// Apply a post-projection to retain only the columns we need.
 	return b.applySimpleProject(res, join, join.Cols, join.ProvidedPhysical().Ordering)
 }

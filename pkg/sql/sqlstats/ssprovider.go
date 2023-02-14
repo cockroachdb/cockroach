@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -222,6 +223,7 @@ type RecordedStmtStats struct {
 	ExecStats            *execstats.QueryLevelStats
 	Indexes              []string
 	Database             string
+	ScannedSpanStats     []enginepb.MVCCStats
 }
 
 // RecordedTxnStats stores the statistics of a transaction to be recorded.

@@ -15,6 +15,7 @@ import moment from "moment";
 import { Tooltip } from "@cockroachlabs/ui-components";
 import {
   contentionTime,
+  mvccGarbage,
   planningExecutionTime,
   readFromDisk,
   readsAndWrites,
@@ -69,6 +70,7 @@ export const statisticsColumnLabels = {
   txnDuration: "Transaction Duration",
   username: "User Name",
   workloadPct: "% of All Runtime",
+  liveBytesScanned: "Live Bytes in Scanned Tables",
 };
 
 export const contentModifiers = {
@@ -552,6 +554,28 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         }
       >
         {getLabel("bytesRead")}
+      </Tooltip>
+    );
+  },
+  liveBytesScanned: () => {
+    return (
+      <Tooltip
+        placement="bottom"
+        style="tableTitle"
+        content={
+          <div>
+            {"% of total uncompressed logical data that has not been modified (updated or deleted) in the tables " +
+              "scanned by the fingerprint execution. " +
+              "A low percentage suggests that the fingerprint execution scans more data ("}
+            <Anchor href={mvccGarbage} target="_blank">
+              MVCC values
+            </Anchor>
+            {") than required, which can reduce performance. Unless the execution plan requires a full table scan, not " +
+              "all bytes in the table's range will be scanned during the statement's execution."}
+          </div>
+        }
+      >
+        % of Live Data
       </Tooltip>
     );
   },

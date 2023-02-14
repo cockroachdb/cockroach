@@ -142,6 +142,25 @@ func (s *Container) RecordStatement(
 	stats.mu.data.IndexRecommendations = value.IndexRecommendations
 	stats.mu.data.Indexes = util.CombineUniqueString(stats.mu.data.Indexes, value.Indexes)
 
+	var liveBytes int64
+	var totalBytes int64
+	var pctLive float64
+	for _, val := range value.ScannedSpanStats {
+		liveBytes += val.LiveBytes
+		totalBytes += val.ValBytes + val.KeyBytes + val.RangeValBytes + val.RangeKeyBytes + val.SysBytes
+	}
+	if totalBytes != 0 {
+		pctLive = float64(liveBytes) / float64(totalBytes)
+	} else {
+		totalBytes = 0
+	}
+	stats.mu.data.ScannedSpanStats =
+		appstatspb.ScannedSpanStats{
+			LiveBytes:  liveBytes,
+			TotalBytes: totalBytes,
+			PctLive:    pctLive,
+		}
+
 	// Percentile latencies are only being sampled if the latency was above the
 	// AnomalyDetectionLatencyThreshold.
 	latencies := s.latencyInformation.GetPercentileValues(stmtFingerprintID)

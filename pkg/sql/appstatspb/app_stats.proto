@@ -129,6 +129,10 @@ message StatementStatistics {
   // last_error_code is the last error code for a failed statement, if it exists.
   optional string last_error_code = 32 [(gogoproto.nullable) = false];
 
+  // ScannedSpanStats is an aggregated subset of statistics for the spans of the
+  // tables scanned during the execution of the plan.
+  optional ScannedSpanStats scanned_span_stats = 33 [(gogoproto.nullable) = false];
+
   // Note: be sure to update `sql/app_stats.go` when adding/removing fields here!
 
   reserved 13, 14, 17, 18, 19, 20;
@@ -435,4 +439,17 @@ message MVCCIteratorStats {
   // For details, see pkg/storage/engine.go, pebble.RangeKeyIteratorStats, and
   // https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md.
   optional NumericStat range_key_skipped_points = 13 [(gogoproto.nullable) = false];
+}
+
+// ScannedSpanStats contains an aggregated subset of the span stats collected
+// from the table ranges scanned by a sampled plan.
+message ScannedSpanStats {
+  // TotalBytes is the total bytes in the scanned ranges.
+  optional int64 total_bytes = 1 [(gogoproto.nullable) = false];
+
+  // LiveBytes is the live (non-garbage) bytes in the scanned ranges.
+  optional int64 live_bytes = 2 [(gogoproto.nullable) = false];
+
+  // PctLive is the ratio of live to total bytes in the scanned ranges.
+  optional double pct_live = 3 [(gogoproto.nullable) = false];
 }
