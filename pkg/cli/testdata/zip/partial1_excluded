@@ -1,10 +1,10 @@
 zip
 ----
 debug zip /dev/null --concurrency=1 --exclude-nodes=2 --cpu-profile-duration=0
-[cluster] establishing RPC connection to ...
-[cluster] retrieving the node status to get the SQL address... done
-[cluster] using SQL address: ...
+[cluster] discovering tenants on cluster... done
 [cluster] creating output file /dev/null... done
+[cluster] establishing RPC connection to ...
+[cluster] using SQL address: ...
 [cluster] requesting data for debug/events... received response... converting to JSON... writing binary output: debug/events.json... done
 [cluster] requesting data for debug/rangelog... received response... converting to JSON... writing binary output: debug/rangelog.json... done
 [cluster] requesting data for debug/settings... received response... converting to JSON... writing binary output: debug/settings.json... done

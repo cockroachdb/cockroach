@@ -261,3 +261,15 @@ SELECT CASE WHEN x > 1 THEN true ELSE NULL OR false END FROM (VALUES (1), (2)) A
 ----
 NULL
 true
+
+# Error "cannot determine type of empty array" should apply no matter the
+# operator, `>`, or `<`.
+query error pq: cannot determine type of empty array\. Consider casting to the desired type, for example ARRAY\[\]::int\[\]
+SELECT ARRAY[]::TIMESTAMPTZ[] >
+       SOME (ARRAY[TIMESTAMPTZ '1969-12-29T21:20:13+01'], ARRAY[NULL]);
+
+# Error "cannot determine type of empty array" should apply no matter the
+# operator, `>`, or `<`.
+query error pq: cannot determine type of empty array\. Consider casting to the desired type, for example ARRAY\[\]::int\[\]
+SELECT ARRAY[]::TIMESTAMPTZ[] <
+       SOME (ARRAY[TIMESTAMPTZ '1969-12-29T21:20:13+01'], ARRAY[NULL]);

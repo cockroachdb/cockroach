@@ -104,15 +104,8 @@ func registerPsycopg(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		blocklistName, expectedFailures, ignoredlistName, ignoredlist := psycopgBlocklists.getLists(version)
-		if expectedFailures == nil {
-			t.Fatalf("No psycopg blocklist defined for cockroach version %s", version)
-		}
-		if ignoredlist == nil {
-			t.Fatalf("No psycopg ignorelist defined for cockroach version %s", version)
-		}
 		t.L().Printf("Running cockroach version %s, using blocklist %s, using ignoredlist %s",
-			version, blocklistName, ignoredlistName)
+			version, "psycopgBlockList", "psycopgIgnoreList")
 
 		t.Status("running psycopg test suite")
 
@@ -139,9 +132,9 @@ func registerPsycopg(r registry.Registry) {
 
 		// Find all the failed and errored tests.
 		results := newORMTestsResults()
-		results.parsePythonUnitTestOutput(rawResults, expectedFailures, ignoredlist)
+		results.parsePythonUnitTestOutput(rawResults, psycopgBlockList, psycopgIgnoreList)
 		results.summarizeAll(
-			t, "psycopg" /* ormName */, blocklistName, expectedFailures,
+			t, "psycopg" /* ormName */, "psycopgBlockList", psycopgBlockList,
 			version, supportedPsycopgTag,
 		)
 	}

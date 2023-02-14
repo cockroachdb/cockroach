@@ -67,7 +67,7 @@ func makePerNodeZipRequests(prefix, id string, status serverpb.StatusClient) []z
 // This is called first and in isolation, before other zip operations
 // possibly influence the nodes.
 func (zc *debugZipContext) collectCPUProfiles(
-	ctx context.Context, ni nodesInfo, livenessByNodeID nodeLivenesses,
+	ctx context.Context, ni *serverpb.NodesListResponse, livenessByNodeID nodeLivenesses,
 ) error {
 	if zipCtx.cpuProfDuration <= 0 {
 		// Nothing to do; return early.
@@ -82,11 +82,11 @@ func (zc *debugZipContext) collectCPUProfiles(
 
 	zc.clusterPrinter.info("requesting CPU profiles")
 
-	if ni.nodesListResponse == nil {
+	if ni == nil {
 		return errors.AssertionFailedf("nodes list is empty; nothing to do")
 	}
 
-	nodeList := ni.nodesListResponse.Nodes
+	nodeList := ni.Nodes
 	// NB: this takes care not to produce non-deterministic log output.
 	resps := make([]profData, len(nodeList))
 	for i := range nodeList {
@@ -133,7 +133,7 @@ func (zc *debugZipContext) collectCPUProfiles(
 			continue // skipped node
 		}
 		nodeID := nodeList[i].NodeID
-		prefix := fmt.Sprintf("%s/%s", nodesPrefix, fmt.Sprintf("%d", nodeID))
+		prefix := fmt.Sprintf("%s/%s/%s", zc.prefix, nodesPrefix, fmt.Sprintf("%d", nodeID))
 		s := zc.clusterPrinter.start("profile for node %d", nodeID)
 		if err := zc.z.createRawOrError(s, prefix+"/cpu.pprof", pd.data, pd.err); err != nil {
 			return err
@@ -166,9 +166,10 @@ func (zc *debugZipContext) collectPerNodeData(
 			return nil
 		}
 	}
+
 	nodePrinter := zipCtx.newZipReporter("node %d", nodeID)
 	id := fmt.Sprintf("%d", nodeID)
-	prefix := fmt.Sprintf("%s/%s", nodesPrefix, id)
+	prefix := fmt.Sprintf("%s%s/%s", zc.prefix, nodesPrefix, id)
 
 	if !zipCtx.nodes.isIncluded(nodeID) {
 		if err := zc.z.createRaw(nodePrinter.start("skipping node"), prefix+".skipped",

@@ -10,17 +10,7 @@
 
 package tests
 
-var jasyncsqlBlocklists = blocklistsForVersion{
-	{"v22.1", "jasyncsqlBlocklist22_1", jasyncBlocklist22_1, "jasyncsqlIgnoreList22_1", jasyncsqlIgnoreList22_1},
-	{"v22.2", "jasyncsqlBlocklist22_2", jasyncBlocklist22_2, "jasyncsqlIgnoreList22_2", jasyncsqlIgnoreList22_2},
-	{"v23.1", "jasyncsqlBlocklist23_1", jasyncBlocklist23_1, "jasyncsqlIgnoreList23_1", jasyncsqlIgnoreList23_1},
-}
-
-var jasyncBlocklist23_1 = jasyncBlocklist22_2
-
-var jasyncBlocklist22_2 = jasyncBlocklist22_1
-
-var jasyncBlocklist22_1 = blocklist{
+var jasyncSqlBlocklist = blocklist{
 	"com.github.aysnc.sql.db.integration.ArrayTypesSpec.connection should correctly parse the array type":                                                           "unknown",
 	"com.github.aysnc.sql.db.integration.ArrayTypesSpec.connection should correctly send arrays using prepared statements":                                          "unknown",
 	"com.github.aysnc.sql.db.integration.ListenNotifySpec.connection should be able to receive a notification from a pg_notify call":                                "unknown",
@@ -78,8 +68,4 @@ var jasyncBlocklist22_1 = blocklist{
 	"com.github.aysnc.sql.db.integration.pool.SuspendingPoolSpec.transactions with pool should commit simple inserts , prepared statements":                         "unknown",
 }
 
-var jasyncsqlIgnoreList23_1 = jasyncsqlIgnoreList22_2
-
-var jasyncsqlIgnoreList22_2 = jasyncsqlIgnoreList22_1
-
-var jasyncsqlIgnoreList22_1 = blocklist{}
+var jasyncsqlIgnoreList = blocklist{}

@@ -82,17 +82,9 @@ func registerPgx(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		t.Status("checking blocklist")
-		blocklistName, expectedFailures, ignorelistName, ignorelist := pgxBlocklists.getLists(version)
-		if expectedFailures == nil {
-			t.Fatalf("No pgx blocklist defined for cockroach version %s", version)
-		}
-		status := fmt.Sprintf("Running cockroach version %s, using blocklist %s", version, blocklistName)
-		if ignorelist != nil {
-			status = fmt.Sprintf("Running cockroach version %s, using blocklist %s, using ignorelist %s",
-				version, blocklistName, ignorelistName)
-		}
-		t.L().Printf("%s", status)
+		RunningStatus := fmt.Sprintf("Running cockroach version %s, using blocklist %s, using ignorelist %s",
+			version, "pgxBlocklist", "pgxIgnorelist")
+		t.L().Printf("%s", RunningStatus)
 
 		t.Status("setting up test db")
 		db, err := c.ConnE(ctx, t.L(), node[0])
@@ -132,9 +124,9 @@ func registerPgx(r registry.Registry) {
 		xmlResults := []byte(result.Stdout + result.Stderr)
 
 		results := newORMTestsResults()
-		results.parseJUnitXML(t, expectedFailures, ignorelist, xmlResults)
+		results.parseJUnitXML(t, pgxBlocklist, pgxIgnorelist, xmlResults)
 		results.summarizeAll(
-			t, "pgx", blocklistName, expectedFailures, version, supportedPGXTag,
+			t, "pgx", "pgxBlocklist", pgxBlocklist, version, supportedPGXTag,
 		)
 	}
 
