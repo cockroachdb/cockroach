@@ -79,10 +79,10 @@ type Constraint struct {
 	// be projected on the lookup join's input.
 	InputProjections memo.ProjectionsExpr
 
-	// ConstFilters contains constant equalities and ranges in either KeyCols or
-	// LookupExpr that are used to aid selectivity estimation. See
-	// memo.LookupJoinPrivate.ConstFilters.
-	ConstFilters memo.FiltersExpr
+	// AllLookupFilters contains equalities and other filters in either KeyCols or
+	// LookupExpr that are used to aid selectivity estimation and logical props
+	// calculation. See memo.LookupJoinPrivate.AllLookupFilters.
+	AllLookupFilters memo.FiltersExpr
 
 	// RemainingFilters contains explicit ON filters that are not represented by
 	// KeyCols or LookupExpr. These filters must be included as ON filters in
@@ -193,7 +193,7 @@ func (b *ConstraintBuilder) Build(
 	rightSideCols := make(opt.ColList, 0, numIndexKeyCols)
 	var inputProjections memo.ProjectionsExpr
 	var lookupExpr memo.FiltersExpr
-	var constFilters memo.FiltersExpr
+	var allLookupFilters memo.FiltersExpr
 	var filterOrdsToExclude util.FastIntSet
 	foundLookupCols := false
 	lookupExprRequired := false
@@ -237,6 +237,7 @@ func (b *ConstraintBuilder) Build(
 		idxCol := b.table.IndexColumnID(index, j)
 		idxColIsDesc := index.Column(j).Descending
 		if eqIdx, ok := rightEq.Find(idxCol); ok {
+			allLookupFilters = append(allLookupFilters, allFilters[eqFilterOrds[eqIdx]])
 			addEqualityColumns(leftEq[eqIdx], idxCol)
 			filterOrdsToExclude.Add(eqFilterOrds[eqIdx])
 			foundEqualityCols = true
@@ -291,7 +292,7 @@ func (b *ConstraintBuilder) Build(
 				b.f.ConstructConstVal(foundVals[0], idxColType),
 				constColID,
 			))
-			constFilters = append(constFilters, allFilters[allIdx])
+			allLookupFilters = append(allLookupFilters, allFilters[allIdx])
 			addEqualityColumns(constColID, idxCol)
 			filterOrdsToExclude.Add(allIdx)
 			continue
@@ -314,7 +315,7 @@ func (b *ConstraintBuilder) Build(
 				})
 			}
 			lookupExpr = append(lookupExpr, valsFilter)
-			constFilters = append(constFilters, valsFilter)
+			allLookupFilters = append(allLookupFilters, allFilters[allIdx])
 			filterOrdsToExclude.Add(allIdx)
 			continue
 		}
@@ -327,12 +328,14 @@ func (b *ConstraintBuilder) Build(
 		if foundStart {
 			convertToLookupExpr()
 			lookupExpr = append(lookupExpr, allFilters[startIdx])
+			allLookupFilters = append(allLookupFilters, allFilters[startIdx])
 			filterOrdsToExclude.Add(startIdx)
 			foundLookupCols = true
 		}
 		if foundEnd {
 			convertToLookupExpr()
 			lookupExpr = append(lookupExpr, allFilters[endIdx])
+			allLookupFilters = append(allLookupFilters, allFilters[endIdx])
 			filterOrdsToExclude.Add(endIdx)
 			foundLookupCols = true
 		}
@@ -354,7 +357,7 @@ func (b *ConstraintBuilder) Build(
 			// A constant range filter could be found.
 			convertToLookupExpr()
 			lookupExpr = append(lookupExpr, *rangeFilter)
-			constFilters = append(constFilters, *rangeFilter)
+			allLookupFilters = append(allLookupFilters, allFilters[filterIdx])
 			filterOrdsToExclude.Add(filterIdx)
 			if remaining != nil {
 				remainingFilters = append(remainingFilters, *remaining)
@@ -383,7 +386,7 @@ func (b *ConstraintBuilder) Build(
 		RightSideCols:    rightSideCols,
 		LookupExpr:       lookupExpr,
 		InputProjections: inputProjections,
-		ConstFilters:     constFilters,
+		AllLookupFilters: allLookupFilters,
 	}
 
 	// Reduce the remaining filters.

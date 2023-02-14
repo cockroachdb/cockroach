@@ -463,10 +463,12 @@ define LookupJoinPrivate {
     # this lookup join.
     LocalityOptimized bool
 
-    # ConstFilters contains the constant filters that are represented as equality
-    # conditions on the KeyCols. These filters are needed by the statistics code to
-    # correctly estimate selectivity.
-    ConstFilters FiltersExpr
+    # AllLookupFilters synthesizes all the filters that are represented as
+    # equality conditions on the KeyCols, as well as the filters in LookupExpr
+    # and RemoteLookupExpr. These filters are needed by the statistics code to
+    # correctly estimate selectivity as well as by the logicalPropsBuilder for
+    # calculating logical properties.
+    AllLookupFilters FiltersExpr
 
     # Locking represents the row-level locking mode of the LookupJoin in the
     # lookup table. Most lookup joins leave this unset (Strength = ForNone),

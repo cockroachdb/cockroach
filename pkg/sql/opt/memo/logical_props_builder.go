@@ -2276,7 +2276,7 @@ func (h *joinPropsHelper) init(b *logicalPropsBuilder, joinExpr RelExpr) {
 		ensureLookupJoinInputProps(join, &b.sb)
 		h.joinType = join.JoinType
 		h.rightProps = &join.lookupProps
-		h.filters = append(join.On, join.LookupExpr...)
+		h.filters = append(join.On, join.AllLookupFilters...)
 		b.addFiltersToFuncDep(h.filters, &h.filtersFD)
 		h.filterNotNullCols = b.rejectNullCols(h.filters)
 
