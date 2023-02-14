@@ -322,7 +322,7 @@ func (r *Replica) adminSplitWithDescriptor(
 			var err error
 			targetSize := r.GetMaxBytes() / 2
 			foundSplitKey, err = storage.MVCCFindSplitKey(
-				ctx, r.store.engine, desc.StartKey, desc.EndKey, targetSize)
+				ctx, r.store.TODOEngine(), desc.StartKey, desc.EndKey, targetSize)
 			if err != nil {
 				return reply, errors.Wrap(err, "unable to determine split key")
 			}
@@ -3106,7 +3106,7 @@ func (r *Replica) followerSendSnapshot(
 		Type:                req.Type,
 	}
 	newBatchFn := func() storage.Batch {
-		return r.store.Engine().NewUnindexedBatch(true /* writeOnly */)
+		return r.store.TODOEngine().NewUnindexedBatch(true /* writeOnly */)
 	}
 	sent := func() {
 		r.store.metrics.RangeSnapshotsGenerated.Inc(1)

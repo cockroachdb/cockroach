@@ -138,7 +138,7 @@ func (sm *replicaStateMachine) NewBatch() apply.Batch {
 	b := &sm.batch
 	b.r = r
 	b.applyStats = &sm.applyStats
-	b.batch = r.store.engine.NewBatch()
+	b.batch = r.store.TODOEngine().NewBatch()
 	r.mu.RLock()
 	b.state = r.mu.state
 	b.state.Stats = &sm.stats
@@ -197,7 +197,9 @@ func (sm *replicaStateMachine) ApplySideEffects(
 			// Assert that the on-disk state doesn't diverge from the in-memory
 			// state as a result of the side effects.
 			sm.r.mu.RLock()
-			sm.r.assertStateRaftMuLockedReplicaMuRLocked(ctx, sm.r.store.Engine())
+			// TODO(sep-raft-log): either check only statemachine invariants or
+			// pass both engines in.
+			sm.r.assertStateRaftMuLockedReplicaMuRLocked(ctx, sm.r.store.TODOEngine())
 			sm.r.mu.RUnlock()
 			sm.applyStats.stateAssertions++
 		}

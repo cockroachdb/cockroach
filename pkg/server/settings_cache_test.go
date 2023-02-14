@@ -86,7 +86,7 @@ func TestCachedSettingsServerRestart(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		settings, err := loadCachedSettingsKVs(context.Background(), store.Engine())
+		settings, err := loadCachedSettingsKVs(context.Background(), store.TODOEngine())
 		if err != nil {
 			return err
 		}

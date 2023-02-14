@@ -955,7 +955,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			// ranges, so can be passed to LogStore methods instead of being stored in it.
 			s := logstore.LogStore{
 				RangeID:     r.RangeID,
-				Engine:      r.store.engine,
+				Engine:      r.store.TODOEngine(),
 				Sideload:    r.raftMu.sideloaded,
 				StateLoader: r.raftMu.stateLoader.StateLoader,
 				SyncWaiter:  r.store.syncWaiter,
@@ -2460,7 +2460,7 @@ func (r *Replica) printRaftTail(
 	end := keys.RaftLogPrefix(r.RangeID).PrefixEnd()
 
 	// NB: raft log does not have intents.
-	it := r.Engine().NewEngineIterator(storage.IterOptions{LowerBound: start, UpperBound: end})
+	it := r.store.TODOEngine().NewEngineIterator(storage.IterOptions{LowerBound: start, UpperBound: end})
 	valid, err := it.SeekEngineKeyLT(storage.EngineKey{Key: end})
 	if err != nil {
 		return "", err

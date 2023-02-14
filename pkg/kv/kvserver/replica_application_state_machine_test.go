@@ -271,7 +271,7 @@ func TestReplicaStateMachineRaftLogTruncationLooselyCoupled(t *testing.T) {
 		looselyCoupledTruncationEnabled.Override(ctx, &st.SV, true)
 		// Remove the flush completed callback since we don't want a
 		// non-deterministic flush to cause the test to fail.
-		tc.store.engine.RegisterFlushCompletedCallback(func() {})
+		tc.store.TODOEngine().RegisterFlushCompletedCallback(func() {})
 		r := tc.repl
 
 		{
@@ -366,7 +366,7 @@ func TestReplicaStateMachineRaftLogTruncationLooselyCoupled(t *testing.T) {
 			require.True(t, trunc.isDeltaTrusted)
 			return raftLogSize, truncatedIndex
 		}()
-		require.NoError(t, tc.store.Engine().Flush())
+		require.NoError(t, tc.store.TODOEngine().Flush())
 		// Asynchronous call to advance durability.
 		tc.store.raftTruncator.durabilityAdvancedCallback()
 		expectedSize := raftLogSize - 1
@@ -426,7 +426,7 @@ func TestReplicaStateMachineEphemeralAppBatchRejection(t *testing.T) {
 	r.mu.Unlock()
 
 	descWriteRepr := func(v string) (roachpb.Request, []byte) {
-		b := tc.store.Engine().NewBatch()
+		b := tc.store.TODOEngine().NewBatch()
 		defer b.Close()
 		key := keys.LocalMax
 		val := roachpb.MakeValueFromString("hello")

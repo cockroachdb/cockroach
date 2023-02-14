@@ -226,7 +226,7 @@ func (r *Replica) rangeFeedWithRangeID(
 			// Assert that we still hold the raftMu when this is called to ensure
 			// that the catchUpIter reads from the current snapshot.
 			r.raftMu.AssertHeld()
-			i := rangefeed.NewCatchUpIterator(r.Engine(), span, startTime, iterSemRelease, pacer)
+			i := rangefeed.NewCatchUpIterator(r.store.TODOEngine(), span, startTime, iterSemRelease, pacer)
 			if f := r.store.TestingKnobs().RangefeedValueHeaderFilter; f != nil {
 				i.OnEmit = f
 			}
@@ -392,7 +392,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 
 		lowerBound, _ := keys.LockTableSingleKey(desc.StartKey.AsRawKey(), nil)
 		upperBound, _ := keys.LockTableSingleKey(desc.EndKey.AsRawKey(), nil)
-		iter := r.Engine().NewEngineIterator(storage.IterOptions{
+		iter := r.store.TODOEngine().NewEngineIterator(storage.IterOptions{
 			LowerBound: lowerBound,
 			UpperBound: upperBound,
 		})

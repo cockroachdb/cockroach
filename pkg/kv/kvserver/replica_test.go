@@ -216,7 +216,9 @@ func (tc *testContext) StartWithStoreConfigAndVersion(
 	tc.rangeID = repl.RangeID
 	tc.gossip = store.cfg.Gossip
 	tc.transport = store.cfg.Transport
-	tc.engine = store.engine
+	// TODO(sep-raft-log): may need to update our various test harnesses to
+	// support two engines, do metamorphic stuff, etc.
+	tc.engine = store.TODOEngine()
 	tc.store = store
 }
 
@@ -922,7 +924,7 @@ func TestReplicaLease(t *testing.T) {
 	for _, lease := range []roachpb.Lease{
 		{Start: start, Expiration: &hlc.Timestamp{}},
 	} {
-		if _, err := batcheval.RequestLease(ctx, tc.store.Engine(),
+		if _, err := batcheval.RequestLease(ctx, tc.store.TODOEngine(),
 			batcheval.CommandArgs{
 				EvalCtx: NewReplicaEvalContext(
 					ctx, tc.repl, allSpans(), false, /* requiresClosedTSOlderThanStorageSnap */
@@ -4500,7 +4502,7 @@ func TestEndTxnWithErrors(t *testing.T) {
 			existTxnRecord := existTxn.AsRecord()
 			txnKey := keys.TransactionKey(test.key, txn.ID)
 			if err := storage.MVCCPutProto(
-				ctx, tc.repl.store.Engine(), nil, txnKey, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &existTxnRecord,
+				ctx, tc.repl.store.TODOEngine(), nil, txnKey, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &existTxnRecord,
 			); err != nil {
 				t.Fatal(err)
 			}
@@ -4543,7 +4545,7 @@ func TestEndTxnWithErrorAndSyncIntentResolution(t *testing.T) {
 	existTxn.Status = roachpb.ABORTED
 	existTxnRec := existTxn.AsRecord()
 	txnKey := keys.TransactionKey(txn.Key, txn.ID)
-	err := storage.MVCCPutProto(ctx, tc.repl.store.Engine(), nil, txnKey, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &existTxnRec)
+	err := storage.MVCCPutProto(ctx, tc.repl.store.TODOEngine(), nil, txnKey, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &existTxnRec)
 	require.NoError(t, err)
 
 	// End the transaction, verify expected error, shouldn't deadlock.
@@ -4609,7 +4611,7 @@ func TestEndTxnRollbackAbortedTransaction(t *testing.T) {
 			var txnRecord roachpb.Transaction
 			txnKey := keys.TransactionKey(txn.Key, txn.ID)
 			if ok, err := storage.MVCCGetProto(
-				ctx, tc.repl.store.Engine(),
+				ctx, tc.repl.store.TODOEngine(),
 				txnKey, hlc.Timestamp{}, &txnRecord, storage.MVCCGetOptions{},
 			); err != nil {
 				t.Fatal(err)
@@ -4805,7 +4807,7 @@ func TestBatchRetryCantCommitIntents(t *testing.T) {
 	// Verify txn record is cleaned.
 	var readTxn roachpb.Transaction
 	txnKey := keys.TransactionKey(txn.Key, txn.ID)
-	ok, err := storage.MVCCGetProto(ctx, tc.repl.store.Engine(), txnKey,
+	ok, err := storage.MVCCGetProto(ctx, tc.repl.store.TODOEngine(), txnKey,
 		hlc.Timestamp{}, &readTxn, storage.MVCCGetOptions{})
 	if err != nil || ok {
 		t.Errorf("expected transaction record to be cleared (%t): %+v", ok, err)
@@ -4900,7 +4902,7 @@ func TestEndTxnLocalGC(t *testing.T) {
 		}
 		var readTxn roachpb.Transaction
 		txnKey := keys.TransactionKey(txn.Key, txn.ID)
-		ok, err := storage.MVCCGetProto(ctx, tc.repl.store.Engine(), txnKey, hlc.Timestamp{},
+		ok, err := storage.MVCCGetProto(ctx, tc.repl.store.TODOEngine(), txnKey, hlc.Timestamp{},
 			&readTxn, storage.MVCCGetOptions{})
 		if err != nil {
 			t.Fatal(err)
@@ -7066,7 +7068,7 @@ func TestReplicaDestroy(t *testing.T) {
 		require.NoError(t, err)
 	}()
 
-	engSnapshot := tc.repl.store.Engine().NewSnapshot()
+	engSnapshot := tc.repl.store.TODOEngine().NewSnapshot()
 	defer engSnapshot.Close()
 
 	// If the range is destroyed, only a tombstone key should be there.
@@ -13167,7 +13169,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 
 			var foundRecord roachpb.TransactionRecord
 			if found, err := storage.MVCCGetProto(
-				ctx, tc.repl.store.Engine(), keys.TransactionKey(txn.Key, txn.ID),
+				ctx, tc.repl.store.TODOEngine(), keys.TransactionKey(txn.Key, txn.ID),
 				hlc.Timestamp{}, &foundRecord, storage.MVCCGetOptions{},
 			); err != nil {
 				t.Fatal(err)

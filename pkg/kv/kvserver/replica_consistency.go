@@ -656,7 +656,7 @@ func (r *Replica) computeChecksumPostApply(
 
 	// Caller is holding raftMu, so an engine snapshot is automatically
 	// Raft-consistent (i.e. not in the middle of an AddSSTable).
-	snap := r.store.engine.NewSnapshot()
+	snap := r.store.TODOEngine().NewSnapshot()
 	if cc.Checkpoint {
 		sl := stateloader.Make(r.RangeID)
 		as, err := sl.LoadRangeAppliedState(ctx, snap)
@@ -739,8 +739,8 @@ func (r *Replica) computeChecksumPostApply(
 		// early, the reply won't make it back to the leaseholder, so it will not be
 		// certain of completing the check. Since we're already in a goroutine
 		// that's about to end, just sleep for a few seconds and then terminate.
-		auxDir := r.store.engine.GetAuxiliaryDir()
-		_ = r.store.engine.MkdirAll(auxDir)
+		auxDir := r.store.TODOEngine().GetAuxiliaryDir()
+		_ = r.store.TODOEngine().MkdirAll(auxDir)
 		path := base.PreventedStartupFile(auxDir)
 
 		const attentionFmt = `ATTENTION:
@@ -779,7 +779,7 @@ $ cockroach debug range-data --replicated data/auxiliary/checkpoints/rN_at_M N
 `
 		attentionArgs := []any{r, desc.Replicas(), auxDir, path}
 		preventStartupMsg := fmt.Sprintf(attentionFmt, attentionArgs...)
-		if err := fs.WriteFile(r.store.engine, path, []byte(preventStartupMsg)); err != nil {
+		if err := fs.WriteFile(r.store.TODOEngine(), path, []byte(preventStartupMsg)); err != nil {
 			log.Warningf(ctx, "%v", err)
 		}
 

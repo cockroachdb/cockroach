@@ -236,7 +236,7 @@ func TestStorePoolUpdateLocalStoreBeforeGossip(t *testing.T) {
 
 	const replicaID = 1
 	require.NoError(t,
-		logstore.NewStateLoader(rg.RangeID).SetRaftReplicaID(ctx, store.engine, replicaID))
+		logstore.NewStateLoader(rg.RangeID).SetRaftReplicaID(ctx, store.TODOEngine(), replicaID))
 	replica, err := loadInitializedReplicaForTesting(ctx, store, &rg, replicaID)
 	if err != nil {
 		t.Fatalf("make replica error : %+v", err)

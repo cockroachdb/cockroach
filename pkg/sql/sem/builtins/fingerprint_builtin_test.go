@@ -111,7 +111,7 @@ func TestFingerprint(t *testing.T) {
 
 	store, err := s.Stores().GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
-	eng := store.Engine()
+	eng := store.TODOEngine()
 
 	// Insert some point keys.
 	txn := db.NewTxn(ctx, "test-point-keys")

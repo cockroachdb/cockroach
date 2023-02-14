@@ -243,7 +243,9 @@ func (ls *Stores) ReadBootstrapInfo(bi *gossip.BootstrapInfo) error {
 		s := (*Store)(v)
 		var storeBI gossip.BootstrapInfo
 		var ok bool
-		ok, err = storage.MVCCGetProto(ctx, s.engine, keys.StoreGossipKey(), hlc.Timestamp{}, &storeBI,
+		// TODO(sep-raft-log): probably state engine since it's random data
+		// with no durability guarantees.
+		ok, err = storage.MVCCGetProto(ctx, s.TODOEngine(), keys.StoreGossipKey(), hlc.Timestamp{}, &storeBI,
 			storage.MVCCGetOptions{})
 		if err != nil {
 			return false
@@ -292,7 +294,8 @@ func (ls *Stores) updateBootstrapInfoLocked(bi *gossip.BootstrapInfo) error {
 	var err error
 	ls.storeMap.Range(func(k int64, v unsafe.Pointer) bool {
 		s := (*Store)(v)
-		err = storage.MVCCPutProto(ctx, s.engine, nil, keys.StoreGossipKey(), hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, bi)
+		// TODO(sep-raft-log): see ReadBootstrapInfo.
+		err = storage.MVCCPutProto(ctx, s.TODOEngine(), nil, keys.StoreGossipKey(), hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, bi)
 		return err == nil
 	})
 	return err
@@ -301,7 +304,9 @@ func (ls *Stores) updateBootstrapInfoLocked(bi *gossip.BootstrapInfo) error {
 func (ls *Stores) engines() []storage.Engine {
 	var engines []storage.Engine
 	ls.storeMap.Range(func(_ int64, v unsafe.Pointer) bool {
-		engines = append(engines, (*Store)(v).Engine())
+		// TODO(sep-raft-log): at time of writing the only caller to this is
+		// TestClusterVersionWriteSynthesize.
+		engines = append(engines, (*Store)(v).TODOEngine())
 		return true // want more
 	})
 	return engines

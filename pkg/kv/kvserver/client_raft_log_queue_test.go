@@ -94,7 +94,7 @@ func TestRaftLogQueue(t *testing.T) {
 			tc.GetFirstStoreFromServer(t, i).MustForceRaftLogScanAndProcess()
 		}
 		// Flush the engine to advance durability, which triggers truncation.
-		require.NoError(t, raftLeaderRepl.Engine().Flush())
+		require.NoError(t, raftLeaderRepl.Store().TODOEngine().Flush())
 		// Ensure that firstIndex has increased indicating that the log
 		// truncation has occurred.
 		afterTruncationIndex = raftLeaderRepl.GetFirstIndex()
