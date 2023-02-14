@@ -50,7 +50,7 @@ func loadInitializedReplicaForTesting(
 	if !desc.IsInitialized() {
 		return nil, errors.AssertionFailedf("can not load with uninitialized descriptor: %s", desc)
 	}
-	state, err := kvstorage.LoadReplicaState(ctx, store.engine, store.StoreID(), desc, replicaID)
+	state, err := kvstorage.LoadReplicaState(ctx, store.TODOEngine(), store.StoreID(), desc, replicaID)
 	if err != nil {
 		return nil, err
 	}
@@ -141,9 +141,9 @@ func newUninitializedReplica(
 	r.raftMu.sideloaded = logstore.NewDiskSideloadStorage(
 		store.cfg.Settings,
 		rangeID,
-		store.engine.GetAuxiliaryDir(),
+		store.TODOEngine().GetAuxiliaryDir(),
 		store.limiters.BulkIOWriteRate,
-		store.engine,
+		store.TODOEngine(),
 	)
 
 	r.splitQueueThrottle = util.Every(splitQueueThrottleDuration)

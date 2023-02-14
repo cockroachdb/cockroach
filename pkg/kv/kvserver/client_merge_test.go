@@ -197,7 +197,7 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 	}
 
 	// Collect all the keys.
-	preKeys := getEngineKeySet(t, store.Engine())
+	preKeys := getEngineKeySet(t, store.TODOEngine())
 
 	// Split the range.
 	lhsDesc, rhsDesc, err := createSplitRanges(ctx, scratchKey(""), store)
@@ -220,7 +220,7 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 	}
 
 	// Collect all the keys again.
-	postKeys := getEngineKeySet(t, store.Engine())
+	postKeys := getEngineKeySet(t, store.TODOEngine())
 
 	// Compute the new keys.
 	for k := range preKeys {
@@ -354,7 +354,7 @@ func mergeWithData(t *testing.T, retries int64) {
 	// Verify no intents remains on range descriptor keys.
 	for _, key := range []roachpb.Key{keys.RangeDescriptorKey(lhsDesc.StartKey), keys.RangeDescriptorKey(rhsDesc.StartKey)} {
 		if _, err := storage.MVCCGet(
-			ctx, store.Engine(), key, store.Clock().Now(), storage.MVCCGetOptions{},
+			ctx, store.TODOEngine(), key, store.Clock().Now(), storage.MVCCGetOptions{},
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -748,7 +748,7 @@ func mergeCheckingTimestampCaches(
 				for _, r := range lhsRepls[1:] {
 					// Loosely-coupled truncation requires an engine flush to advance
 					// guaranteed durability.
-					require.NoError(t, r.Engine().Flush())
+					require.NoError(t, r.Store().TODOEngine().Flush())
 					firstIndex := r.GetFirstIndex()
 					if firstIndex < truncIndex {
 						return errors.Errorf("truncate not applied, %d < %d", firstIndex, truncIndex)
@@ -1349,7 +1349,7 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	// merge below.
 
 	// Get the range stats for both ranges now that we have data.
-	snap := store.Engine().NewSnapshot()
+	snap := store.TODOEngine().NewSnapshot()
 	defer snap.Close()
 	msA, err := stateloader.Make(lhsDesc.RangeID).LoadMVCCStats(ctx, snap)
 	require.NoError(t, err)
@@ -1367,7 +1367,7 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	replMerged := store.LookupReplica(lhsDesc.StartKey)
 
 	// Get the range stats for the merged range and verify.
-	snap = store.Engine().NewSnapshot()
+	snap = store.TODOEngine().NewSnapshot()
 	defer snap.Close()
 	msMerged, err := stateloader.Make(replMerged.RangeID).LoadMVCCStats(ctx, snap)
 	require.NoError(t, err)
@@ -2542,8 +2542,8 @@ func TestStoreReplicaGCAfterMerge(t *testing.T) {
 			t.Fatalf("expected next replica ID to be %d, but got %d", e, a)
 		}
 	}
-	checkTombstone(store0.Engine())
-	checkTombstone(store1.Engine())
+	checkTombstone(store0.TODOEngine())
+	checkTombstone(store1.TODOEngine())
 }
 
 // TestStoreRangeMergeAddReplicaRace verifies that when an add replica request
@@ -3941,8 +3941,8 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		})
 	defer tc.Stopper().Stop(ctx)
 	store0, store2 := tc.GetFirstStoreFromServer(t, 0), tc.GetFirstStoreFromServer(t, 2)
-	sendingEng = store0.Engine()
-	receivingEng = store2.Engine()
+	sendingEng = store0.TODOEngine()
+	receivingEng = store2.TODOEngine()
 	distSender := tc.Servers[0].DistSender()
 
 	// This test works across 5 ranges in total. We start with a scratch range(1)
@@ -4072,8 +4072,8 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		}
 
 		// Verify that the sets of keys in store0 and store2 are identical.
-		storeKeys0 := getKeySet(store0.Engine())
-		storeKeys2 := getKeySet(store2.Engine())
+		storeKeys0 := getKeySet(store0.TODOEngine())
+		storeKeys2 := getKeySet(store2.TODOEngine())
 		for k := range storeKeys0 {
 			if _, ok := storeKeys2[k]; !ok {
 				return fmt.Errorf("store2 missing key %s", roachpb.Key(k))
@@ -5340,7 +5340,7 @@ func TestStoreMergeGCHint(t *testing.T) {
 				require.Greater(t, gcHint.LatestRangeDeleteTimestamp.WallTime, beforeSecondDel,
 					"highest timestamp wasn't picked up")
 			}
-			repl.AssertState(ctx, store.Engine())
+			repl.AssertState(ctx, store.TODOEngine())
 		})
 	}
 }

@@ -148,7 +148,7 @@ func (q *timeSeriesMaintenanceQueue) process(
 	ctx context.Context, repl *Replica, _ spanconfig.StoreReader,
 ) (processed bool, err error) {
 	desc := repl.Desc()
-	snap := repl.store.Engine().NewSnapshot()
+	snap := repl.store.TODOEngine().NewSnapshot()
 	now := repl.store.Clock().Now()
 	defer snap.Close()
 	if err := q.tsData.MaintainTimeSeries(

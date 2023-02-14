@@ -684,7 +684,7 @@ func (rlq *raftLogQueue) process(
 		// make sure concurrent Raft activity doesn't foul up our update to the
 		// cached in-memory values.
 		r.raftMu.Lock()
-		n, err := ComputeRaftLogSize(ctx, r.RangeID, r.Engine(), r.raftMu.sideloaded)
+		n, err := ComputeRaftLogSize(ctx, r.RangeID, r.store.TODOEngine(), r.raftMu.sideloaded)
 		if err == nil {
 			r.mu.Lock()
 			r.mu.raftLogSize = n

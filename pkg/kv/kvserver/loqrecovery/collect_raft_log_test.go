@@ -193,7 +193,9 @@ func checkRaftLog(
 
 	skey := action(ctx, tc)
 
-	eng := tc.GetFirstStoreFromServer(t, nodeToMonitor).Engine()
+	// TODO(sep-raft-log): the receiver doesn't use the engine, so remove this
+	// altogether and use a `chan struct{}{}`.
+	eng := tc.GetFirstStoreFromServer(t, nodeToMonitor).TODOEngine()
 	makeSnapshot <- eng
 	// After the test action is complete raft might be completely caught up with
 	// its messages, so we will write a value into the range to ensure filter

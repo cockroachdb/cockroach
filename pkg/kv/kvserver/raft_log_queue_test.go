@@ -336,7 +336,7 @@ func verifyLogSizeInSync(t *testing.T, r *Replica) {
 	r.mu.Lock()
 	raftLogSize := r.mu.raftLogSize
 	r.mu.Unlock()
-	actualRaftLogSize, err := ComputeRaftLogSize(context.Background(), r.RangeID, r.Engine(), r.SideloadedRaftMuLocked())
+	actualRaftLogSize, err := ComputeRaftLogSize(context.Background(), r.RangeID, r.store.TODOEngine(), r.SideloadedRaftMuLocked())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -619,7 +619,7 @@ func TestProactiveRaftLogTruncate(t *testing.T) {
 			testutils.SucceedsSoon(t, func() error {
 				if looselyCoupled {
 					// Flush the engine to advance durability, which triggers truncation.
-					require.NoError(t, store.engine.Flush())
+					require.NoError(t, store.TODOEngine().Flush())
 				}
 				newFirstIndex := r.GetFirstIndex()
 				if newFirstIndex <= oldFirstIndex {
@@ -914,7 +914,7 @@ func waitForTruncationForTesting(
 	testutils.SucceedsSoon(t, func() error {
 		if looselyCoupled {
 			// Flush the engine to advance durability, which triggers truncation.
-			require.NoError(t, r.Engine().Flush())
+			require.NoError(t, r.store.TODOEngine().Flush())
 		}
 		// FirstIndex should have changed.
 		firstIndex := r.GetFirstIndex()
