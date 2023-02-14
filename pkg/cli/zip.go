@@ -49,6 +49,7 @@ type debugZipContext struct {
 	timeout        time.Duration
 	admin          serverpb.AdminClient
 	status         serverpb.StatusClient
+	prefix         string
 
 	firstNodeSQLConn clisqlclient.Conn
 
@@ -85,24 +86,17 @@ func (zc *debugZipContext) runZipRequest(ctx context.Context, zr *zipReporter, r
 // forAllNodes runs fn on every node, possibly concurrently.
 func (zc *debugZipContext) forAllNodes(
 	ctx context.Context,
-	ni nodesInfo,
+	nodesList *serverpb.NodesListResponse,
 	fn func(ctx context.Context, nodeDetails serverpb.NodeDetails, nodeStatus *statuspb.NodeStatus) error,
 ) error {
-	if ni.nodesListResponse == nil {
+	if nodesList == nil {
 		// Nothing to do, return
 		return errors.AssertionFailedf("nodes list is empty")
 	}
-	if ni.nodesStatusResponse != nil && len(ni.nodesStatusResponse.Nodes) != len(ni.nodesListResponse.Nodes) {
-		return errors.AssertionFailedf("mismatching node status response and node list")
-	}
 	if zipCtx.concurrency == 1 {
 		// Sequential case. Simplify.
-		for index, nodeDetails := range ni.nodesListResponse.Nodes {
+		for _, nodeDetails := range nodesList.Nodes {
 			var nodeStatus *statuspb.NodeStatus
-			// nodeStatusResponse is expected to be nil for SQL only servers.
-			if ni.nodesStatusResponse != nil {
-				nodeStatus = &ni.nodesStatusResponse.Nodes[index]
-			}
 			if err := fn(ctx, nodeDetails, nodeStatus); err != nil {
 				return err
 			}
@@ -113,15 +107,12 @@ func (zc *debugZipContext) forAllNodes(
 	// Multiple nodes concurrently.
 
 	// nodeErrs collects the individual error objects.
-	nodeErrs := make(chan error, len(ni.nodesListResponse.Nodes))
+	nodeErrs := make(chan error, len(nodesList.Nodes))
 	// The wait group to wait for all concurrent collectors.
 	var wg sync.WaitGroup
-	for index, nodeDetails := range ni.nodesListResponse.Nodes {
+	for _, nodeDetails := range nodesList.Nodes {
 		wg.Add(1)
 		var nodeStatus *statuspb.NodeStatus
-		if ni.nodesStatusResponse != nil {
-			nodeStatus = &ni.nodesStatusResponse.Nodes[index]
-		}
 		go func(nodeDetails serverpb.NodeDetails, nodeStatus *statuspb.NodeStatus) {
 			defer wg.Done()
 			if err := zc.sem.Acquire(ctx, 1); err != nil {
@@ -137,7 +128,7 @@ func (zc *debugZipContext) forAllNodes(
 
 	// The final error.
 	var err error
-	for range ni.nodesListResponse.Nodes {
+	for range nodesList.Nodes {
 		err = errors.CombineErrors(err, <-nodeErrs)
 	}
 	return err
@@ -160,62 +151,30 @@ func runDebugZip(_ *cobra.Command, args []string) (retErr error) {
 		zipCtx.redact = true
 	}
 
-	s := zr.start("establishing RPC connection to %s", serverCfg.AdvertiseAddr)
-	conn, _, finish, err := getClientGRPCConn(ctx, serverCfg)
-	if err != nil {
-		return s.fail(err)
-	}
-	defer finish()
+	var tenants []*serverpb.Tenant
+	if err := func() error {
+		s := zr.start("discovering tenants on cluster")
+		conn, _, finish, err := getClientGRPCConn(ctx, serverCfg)
+		if err != nil {
+			return s.fail(err)
+		}
+		defer finish()
 
-	status := serverpb.NewStatusClient(conn)
-	admin := serverpb.NewAdminClient(conn)
-	s.done()
-
-	s = zr.start("retrieving the node status to get the SQL address")
-	firstNodeDetails, err := status.Details(ctx, &serverpb.DetailsRequest{NodeId: "local"})
-	if err != nil {
-		return s.fail(err)
-	}
-	s.done()
-
-	sqlAddr := firstNodeDetails.SQLAddress
-	if sqlAddr.IsEmpty() {
-		// No SQL address: either a pre-19.2 node, or same address for both
-		// SQL and RPC.
-		sqlAddr = firstNodeDetails.Address
-	}
-	s = zr.start("using SQL address: %s", sqlAddr.AddressField)
-
-	cliCtx.clientOpts.ServerHost, cliCtx.clientOpts.ServerPort, err = net.SplitHostPort(sqlAddr.AddressField)
-	if err != nil {
-		return s.fail(err)
-	}
-
-	// We're going to use the SQL code, but in non-interactive mode.
-	// Override whatever terminal-driven defaults there may be out there.
-	cliCtx.IsInteractive = false
-	sqlExecCtx.TerminalOutput = false
-	sqlExecCtx.ShowTimes = false
-	// Use a streaming format to avoid accumulating all rows in RAM.
-	sqlExecCtx.TableDisplayFormat = clisqlexec.TableDisplayTSV
-
-	sqlConn, err := makeSQLClient("cockroach zip", useSystemDb)
-	// The zip output is sent directly into a text file, so the results should
-	// be scanned into strings.
-	sqlConn.SetAlwaysInferResultTypes(false)
-	if err != nil {
-		_ = s.fail(errors.Wrap(err, "unable to open a SQL session. Debug information will be incomplete"))
-	} else {
-		// Note: we're not printing "connection established" because the driver we're using
-		// does late binding.
-		defer func() { retErr = errors.CombineErrors(retErr, sqlConn.Close()) }()
-		s.progress("using SQL connection URL: %s", sqlConn.GetURL())
+		resp, err := serverpb.NewAdminClient(conn).ListTenants(ctx, &serverpb.ListTenantsRequest{})
+		if err != nil {
+			return s.fail(err)
+		}
+		tenants = resp.Tenants
 		s.done()
+
+		return nil
+	}(); err != nil {
+		return err
 	}
 
-	name := args[0]
-	s = zr.start("creating output file %s", name)
-	out, err := os.Create(name)
+	dirName := args[0]
+	s := zr.start("creating output file %s", dirName)
+	out, err := os.Create(dirName)
 	if err != nil {
 		return s.fail(err)
 	}
@@ -227,75 +186,138 @@ func runDebugZip(_ *cobra.Command, args []string) (retErr error) {
 	}()
 	s.done()
 
-	timeout := 10 * time.Second
-	if cliCtx.cmdTimeout != 0 {
-		timeout = cliCtx.cmdTimeout
-	}
+	for _, tenant := range tenants {
+		if err := func() error {
+			cfg := serverCfg
+			cfg.AdvertiseAddr = tenant.RpcAddr
+			sqlAddr := tenant.SqlAddr
 
-	zc := debugZipContext{
-		clusterPrinter:   zr,
-		z:                z,
-		timeout:          timeout,
-		admin:            admin,
-		status:           status,
-		firstNodeSQLConn: sqlConn,
-		sem:              semaphore.New(zipCtx.concurrency),
-	}
+			s := zr.start("establishing RPC connection to %s", cfg.AdvertiseAddr)
+			conn, _, finish, err := getClientGRPCConn(ctx, cfg)
+			if err != nil {
+				return s.fail(err)
+			}
+			defer finish()
 
-	// Fetch the cluster-wide details.
-	// For a SQL only server, the nodeList will be a list of SQL nodes
-	// and livenessByNodeID is null. For a KV server, the nodeList will
-	// be a list of KV nodes along with the corresponding node liveness data.
-	ni, livenessByNodeID, err := zc.collectClusterData(ctx, firstNodeDetails)
-	if err != nil {
-		return err
-	}
-	// Collect the CPU profiles, before the other per-node requests
-	// below possibly influences the nodes and thus CPU profiles.
-	if err := zc.collectCPUProfiles(ctx, ni, livenessByNodeID); err != nil {
-		return err
-	}
+			status := serverpb.NewStatusClient(conn)
+			admin := serverpb.NewAdminClient(conn)
+			s.done()
 
-	// Collect the per-node data.
-	if err := zc.forAllNodes(ctx, ni, func(ctx context.Context, nodeDetails serverpb.NodeDetails, nodesStatus *statuspb.NodeStatus) error {
-		return zc.collectPerNodeData(ctx, nodeDetails, nodesStatus, livenessByNodeID)
-	}); err != nil {
-		return err
-	}
+			if sqlAddr == "" {
+				// No SQL address: either a pre-19.2 node, or same address for both
+				// SQL and RPC.
+				sqlAddr = tenant.RpcAddr
+			}
+			s = zr.start("using SQL address: %s", sqlAddr)
 
-	// Add a little helper script to draw attention to the existence of tags in
-	// the profiles.
-	{
-		s := zc.clusterPrinter.start("pprof summary script")
-		if err := z.createRaw(s, debugBase+"/pprof-summary.sh", []byte(`#!/bin/sh
+			cliCtx.clientOpts.ServerHost, cliCtx.clientOpts.ServerPort, err = net.SplitHostPort(sqlAddr)
+			if err != nil {
+				return s.fail(err)
+			}
+
+			// We're going to use the SQL code, but in non-interactive mode.
+			// Override whatever terminal-driven defaults there may be out there.
+			cliCtx.IsInteractive = false
+			sqlExecCtx.TerminalOutput = false
+			sqlExecCtx.ShowTimes = false
+			// Use a streaming format to avoid accumulating all rows in RAM.
+			sqlExecCtx.TableDisplayFormat = clisqlexec.TableDisplayTSV
+
+			sqlConn, err := makeTenantSQLClient("cockroach zip", useSystemDb, tenant.TenantName)
+			// The zip output is sent directly into a text file, so the results should
+			// be scanned into strings.
+			sqlConn.SetAlwaysInferResultTypes(false)
+			if err != nil {
+				_ = s.fail(errors.Wrap(err, "unable to open a SQL session. Debug information will be incomplete"))
+			} else {
+				// Note: we're not printing "connection established" because the driver we're using
+				// does late binding.
+				defer func() { retErr = errors.CombineErrors(retErr, sqlConn.Close()) }()
+				s.progress("using SQL connection URL: %s", sqlConn.GetURL())
+				s.done()
+			}
+
+			timeout := 10 * time.Second
+			if cliCtx.cmdTimeout != 0 {
+				timeout = cliCtx.cmdTimeout
+			}
+
+			// Only add tenant prefix for non system tenants.
+			var prefix string
+			if tenant.TenantId.ToUint64() != roachpb.SystemTenantID.ToUint64() {
+				prefix = fmt.Sprintf("/tenants/%s", tenant.TenantName)
+			}
+
+			zc := debugZipContext{
+				clusterPrinter:   zr,
+				z:                z,
+				timeout:          timeout,
+				admin:            admin,
+				status:           status,
+				firstNodeSQLConn: sqlConn,
+				sem:              semaphore.New(zipCtx.concurrency),
+				prefix:           debugBase + prefix,
+			}
+
+			// Fetch the cluster-wide details.
+			// For a SQL only server, the nodeList will be a list of SQL nodes
+			// and livenessByNodeID is null. For a KV server, the nodeList will
+			// be a list of KV nodes along with the corresponding node liveness data.
+			nodesList, livenessByNodeID, err := zc.collectClusterData(ctx)
+			if err != nil {
+				return err
+			}
+			// Collect the CPU profiles, before the other per-node requests
+			// below possibly influences the nodes and thus CPU profiles.
+			if err := zc.collectCPUProfiles(ctx, nodesList, livenessByNodeID); err != nil {
+				return err
+			}
+
+			// Collect the per-node data.
+			if err := zc.forAllNodes(ctx, nodesList, func(ctx context.Context, nodeDetails serverpb.NodeDetails, nodesStatus *statuspb.NodeStatus) error {
+				return zc.collectPerNodeData(ctx, nodeDetails, nodesStatus, livenessByNodeID)
+			}); err != nil {
+				return err
+			}
+
+			// Add a little helper script to draw attention to the existence of tags in
+			// the profiles.
+			{
+				s := zc.clusterPrinter.start("pprof summary script")
+				if err := z.createRaw(s, zc.prefix+"/pprof-summary.sh", []byte(`#!/bin/sh
 find . -name cpu.pprof -print0 | xargs -0 go tool pprof -tags
 `)); err != nil {
-			return err
-		}
-	}
+					return err
+				}
+			}
 
-	// A script to summarize the hottest ranges for a storage server's range reports.
-	{
-		s := zc.clusterPrinter.start("hot range summary script")
-		if err := z.createRaw(s, debugBase+"/hot-ranges.sh", []byte(`#!/bin/sh
+			// A script to summarize the hottest ranges for a storage server's range reports.
+			{
+				s := zc.clusterPrinter.start("hot range summary script")
+				if err := z.createRaw(s, zc.prefix+"/hot-ranges.sh", []byte(`#!/bin/sh
 for stat in "queries" "writes" "reads" "write_bytes" "read_bytes" "cpu_time"; do
 	echo "$stat"
 	find . -path './nodes/*/ranges/*.json' -print0 | xargs -0 grep "$stat"_per_second | sort -rhk3 | head -n 10
 done
 `)); err != nil {
-			return err
-		}
-	}
+					return err
+				}
+			}
 
-	// A script to summarize the hottest ranges for a tenant's range report.
-	{
-		s := zc.clusterPrinter.start("tenant hot range summary script")
-		if err := z.createRaw(s, debugBase+"/hot-ranges-tenant.sh", []byte(`#!/bin/sh
+			// A script to summarize the hottest ranges for a tenant's range report.
+			{
+				s := zc.clusterPrinter.start("tenant hot range summary script")
+				if err := z.createRaw(s, zc.prefix+"/hot-ranges-tenant.sh", []byte(`#!/bin/sh
 for stat in "queries" "writes" "reads" "write_bytes" "read_bytes" "cpu_time"; do
     echo "$stat"_per_second
     find . -path './tenant_ranges/*/*.json' -print0 | xargs -0 grep "$stat"_per_second | sort -rhk3 | head -n 10
 done
 `)); err != nil {
+					return err
+				}
+			}
+			return nil
+		}(); err != nil {
 			return err
 		}
 	}

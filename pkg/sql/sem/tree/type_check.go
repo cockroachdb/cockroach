@@ -1941,7 +1941,7 @@ func typeCheckAndRequireTupleElems(
 	tuple.typ = types.MakeTuple(make([]*types.T, len(tuple.Exprs)))
 	for i, subExpr := range tuple.Exprs {
 		// Require that the sub expression is comparable to the required type.
-		_, rightTyped, _, _, err := typeCheckComparisonOp(ctx, semaCtx, op, expr, subExpr)
+		_, rightTyped, _, _, err := typeCheckComparisonOp(ctx, semaCtx, op, expr, subExpr, true /* disallowSwitch */)
 		if err != nil {
 			return nil, err
 		}
@@ -2166,9 +2166,20 @@ func typeCheckSubqueryWithIn(left, right *types.T) error {
 	return nil
 }
 
+// The first element of `params` is disallowSwitch, which when true means the
+// first parameter to the overload type checker must be the original left
+// expression.
 func typeCheckComparisonOp(
-	ctx context.Context, semaCtx *SemaContext, op treecmp.ComparisonOperator, left, right Expr,
+	ctx context.Context,
+	semaCtx *SemaContext,
+	op treecmp.ComparisonOperator,
+	left, right Expr,
+	params ...bool,
 ) (_ TypedExpr, _ TypedExpr, _ *CmpOp, alwaysNull bool, _ error) {
+	disallowSwitch := false
+	if len(params) > 0 {
+		disallowSwitch = true
+	}
 	// Parentheses are semantically unimportant and can be removed/replaced
 	// with its nested expression in our plan. This makes type checking cleaner.
 	left = StripParens(left)
@@ -2279,7 +2290,47 @@ func typeCheckComparisonOp(
 	// defined to return NULL anyways. Should the SQL dialect ever be extended with
 	// comparisons that can return non-NULL on NULL input, the `inBinOp` parameter
 	// may need altering.
-	s := getOverloadTypeChecker(ops, foldedLeft, foldedRight)
+	var s *overloadTypeChecker
+	// The overload type checker does not have symmetric behavior (the order of
+	// the expression arguments matters). Find the order which does not error out
+	// and initialize the type checker with that order. We purposely do not return
+	// errors here because the overload type checker can coerce types in some
+	// cases to avoid errors. Comparisons with placeholders aren't examined as
+	// that may not take placeholder hints into account. Comparisons with columns
+	// aren't examined as it's usually best to allow type coercion to the type of
+	// the column, if possible.
+	placeholderComparison := false
+	columnComparison := false
+	if _, ok := foldedLeft.(VariableExpr); ok {
+		columnComparison = true
+	}
+	if _, ok := foldedRight.(VariableExpr); ok {
+		columnComparison = true
+	}
+	if _, ok := foldedLeft.(*Placeholder); ok {
+		placeholderComparison = true
+	}
+	if _, ok := foldedRight.(*Placeholder); ok {
+		placeholderComparison = true
+	}
+	if !disallowSwitch && !placeholderComparison && !columnComparison {
+		_, _, err := typeCheckSameTypedExprs(ctx, semaCtx, types.Any, foldedLeft, foldedRight)
+		if err != nil {
+			_, _, err = typeCheckSameTypedExprs(ctx, semaCtx, types.Any, foldedRight, foldedLeft)
+			if err == nil {
+				s = getOverloadTypeChecker(ops, foldedRight, foldedLeft)
+				switched = !switched
+			}
+		}
+	}
+	if s == nil {
+		if disallowSwitch && switched {
+			s = getOverloadTypeChecker(ops, foldedRight, foldedLeft)
+			switched = false
+		} else {
+			s = getOverloadTypeChecker(ops, foldedLeft, foldedRight)
+		}
+	}
 	defer s.release()
 	if err := s.typeCheckOverloadedExprs(ctx, semaCtx, types.Any, true); err != nil {
 		return nil, nil, nil, false, err

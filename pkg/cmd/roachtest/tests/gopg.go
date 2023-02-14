@@ -89,16 +89,8 @@ func registerGopg(r registry.Registry) {
 		); err != nil {
 			t.Fatal(err)
 		}
-
-		blocklistName, expectedFailures, ignorelistName, ignorelist := gopgBlocklists.getLists(version)
-		if expectedFailures == nil {
-			t.Fatalf("No gopg blocklist defined for cockroach version %s", version)
-		}
-		if ignorelist == nil {
-			t.Fatalf("No gopg ignorelist defined for cockroach version %s", version)
-		}
 		t.L().Printf("Running cockroach version %s, using blocklist %s, using ignorelist %s",
-			version, blocklistName, ignorelistName)
+			version, "gopgBlockList", "gopgIgnoreList")
 
 		if err := c.RunE(ctx, node, fmt.Sprintf("mkdir -p %s", resultsDirPath)); err != nil {
 			t.Fatal(err)
@@ -131,7 +123,7 @@ func registerGopg(r registry.Registry) {
 		// test suites in themselves. Those are run with TestGinkgo test harness.
 		// First, we parse the result of running TestGinkgo.
 		if err := gopgParseTestGinkgoOutput(
-			results, rawResults, expectedFailures, ignorelist,
+			results, rawResults, gopgBlockList, gopgIgnoreList,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -155,9 +147,9 @@ func registerGopg(r registry.Registry) {
 
 		xmlResults := []byte(result.Stdout + result.Stderr)
 
-		results.parseJUnitXML(t, expectedFailures, ignorelist, xmlResults)
+		results.parseJUnitXML(t, gopgBlockList, gopgIgnoreList, xmlResults)
 		results.summarizeFailed(
-			t, "gopg", blocklistName, expectedFailures, version, gopgSupportedTag,
+			t, "gopg", "gopgBlockList", gopgBlockList, version, gopgSupportedTag,
 			0, /* notRunCount */
 		)
 	}
