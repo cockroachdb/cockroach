@@ -9,6 +9,7 @@
 package statusccl
 
 import (
+	"bytes"
 	"context"
 	gosql "database/sql"
 	"encoding/hex"
@@ -140,6 +141,75 @@ func TestTenantStatusAPI(t *testing.T) {
 
 	t.Run("tenant_hot_ranges", func(t *testing.T) {
 		testTenantHotRanges(ctx, t, testHelper)
+	})
+
+	t.Run("tenant_span_stats", func(t *testing.T) {
+		testTenantSpanStats(ctx, t, testHelper)
+	})
+}
+
+func testTenantSpanStats(ctx context.Context, t *testing.T, helper serverccl.TenantTestHelper) {
+	tenantA := helper.TestCluster().Tenant(0)
+	tenantB := helper.ControlCluster().Tenant(0)
+
+	aSpan := tenantA.GetTenant().Codec().TenantSpan()
+	bSpan := tenantB.GetTenant().Codec().TenantSpan()
+
+	t.Run("test tenant isolation", func(t *testing.T) {
+		_, err := tenantA.TenantStatusSrv().(serverpb.TenantStatusServer).SpanStats(ctx,
+			&roachpb.SpanStatsRequest{
+				NodeID:   "0", // 0 indicates we want stats from all nodes.
+				StartKey: roachpb.RKey(bSpan.Key),
+				EndKey:   roachpb.RKey(bSpan.EndKey),
+			})
+		require.Error(t, err)
+	})
+
+	t.Run("test KV node fan-out", func(t *testing.T) {
+		_, tID, err := keys.DecodeTenantPrefix(aSpan.Key)
+		require.NoError(t, err)
+		tPrefix := keys.MakeTenantPrefix(tID)
+
+		makeKey := func(keys ...[]byte) roachpb.Key {
+			return bytes.Join(keys, nil)
+		}
+
+		controlStats, err := tenantA.TenantStatusSrv().(serverpb.TenantStatusServer).SpanStats(ctx,
+			&roachpb.SpanStatsRequest{
+				NodeID:   "0", // 0 indicates we want stats from all nodes.
+				StartKey: roachpb.RKey(aSpan.Key),
+				EndKey:   roachpb.RKey(aSpan.EndKey),
+			})
+		require.NoError(t, err)
+
+		// Create a new range in this tenant.
+		_, _, err = helper.HostCluster().Server(0).SplitRange(makeKey(tPrefix, roachpb.Key("c")))
+		require.NoError(t, err)
+
+		// Wait for the split to finish and propagate.
+		err = helper.HostCluster().WaitForFullReplication()
+		require.NoError(t, err)
+
+		// Create 6 new keys across the tenant's ranges.
+		incKeys := []string{"a", "b", "bb", "d", "e", "f"}
+		for _, incKey := range incKeys {
+			// Prefix each key appropriately for this tenant.
+			k := makeKey(keys.MakeTenantPrefix(tID), []byte(incKey))
+			if _, err := helper.HostCluster().Server(0).DB().Inc(ctx, k, 5); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		stats, err := tenantA.TenantStatusSrv().(serverpb.TenantStatusServer).SpanStats(ctx,
+			&roachpb.SpanStatsRequest{
+				NodeID:   "0", // 0 indicates we want stats from all nodes.
+				StartKey: roachpb.RKey(aSpan.Key),
+				EndKey:   roachpb.RKey(aSpan.EndKey),
+			})
+
+		require.NoError(t, err)
+		require.Equal(t, controlStats.RangeCount+1, stats.RangeCount)
+		require.Equal(t, controlStats.TotalStats.LiveCount+int64(len(incKeys)), stats.TotalStats.LiveCount)
 	})
 }
 
