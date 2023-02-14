@@ -16,6 +16,7 @@ changefeed.event_consumer_worker_queue_size	integer	16	if changefeed.event_consu
 changefeed.event_consumer_workers	integer	0	the number of workers to use when processing events: <0 disables, 0 assigns a reasonable default, >0 assigns the setting value. for experimental/core changefeeds and changefeeds using parquet format, this is disabled
 changefeed.fast_gzip.enabled	boolean	true	use fast gzip implementation
 changefeed.node_throttle_config	string		specifies node level throttling configuration for all changefeeeds
+changefeed.protect_timestamp.expire_after	duration	72h0m0s	automatically expire protected timestamp older than this threshold. 0 disables expiration. Note: this setting should not be too small; it should be larger than changefeed.protect_timestamp_interval
 changefeed.schema_feed.read_with_priority_after	duration	1m0s	retry with high priority if we were not able to read descriptors for too long; 0 disables
 cloudstorage.azure.concurrent_upload_buffers	integer	1	controls the number of concurrent buffers that will be used by the Azure client when uploading chunks.Each buffer can buffer up to cloudstorage.write_chunk.size of memory during an upload
 cloudstorage.http.custom_ca	string		custom root CA (appended to system's default CAs) for verifying certificates when interacting with HTTPS storage

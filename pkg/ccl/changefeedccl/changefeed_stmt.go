@@ -270,6 +270,7 @@ func changefeedPlanHook(
 				jobID,
 				AllTargets(details),
 				details.StatementTime,
+				changefeedbase.PTSExpiresAfter.Get(&p.ExecCfg().Settings.SV),
 				progress.GetChangefeed(),
 			)
 
@@ -1206,7 +1207,10 @@ func (b *changefeedResumer) OnPauseRequest(
 			return nil
 		}
 		pts := execCfg.ProtectedTimestampProvider.WithTxn(txn)
-		ptr := createProtectedTimestampRecord(ctx, execCfg.Codec, b.job.ID(), AllTargets(details), *resolved, cp)
+		ptr := createProtectedTimestampRecord(
+			ctx, execCfg.Codec, b.job.ID(), AllTargets(details), *resolved,
+			changefeedbase.PTSExpiresAfter.Get(&execCfg.Settings.SV), cp,
+		)
 		return pts.Protect(ctx, ptr)
 	}
 

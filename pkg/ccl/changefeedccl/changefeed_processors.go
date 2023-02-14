@@ -1368,8 +1368,11 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 	}
 
 	recordID := progress.ProtectedTimestampRecord
+	expiration := changefeedbase.PTSExpiresAfter.Get(&cf.flowCtx.Cfg.Settings.SV)
 	if recordID == uuid.Nil {
-		ptr := createProtectedTimestampRecord(ctx, cf.flowCtx.Codec(), cf.spec.JobID, AllTargets(cf.spec.Feed), highWater, progress)
+		ptr := createProtectedTimestampRecord(
+			ctx, cf.flowCtx.Codec(), cf.spec.JobID, AllTargets(cf.spec.Feed), highWater, expiration, progress,
+		)
 		if err := pts.Protect(ctx, ptr); err != nil {
 			return err
 		}

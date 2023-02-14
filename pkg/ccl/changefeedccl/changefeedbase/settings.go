@@ -211,6 +211,16 @@ var ProtectTimestampInterval = settings.RegisterDurationSetting(
 	settings.PositiveDuration,
 )
 
+// PTSExpiresAfter sets the expiration for the protected timestamp records.
+var PTSExpiresAfter = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"changefeed.protect_timestamp.expire_after",
+	"automatically expire protected timestamp older than this threshold. 0 disables expiration. "+
+		"Note: this setting should not be too small; it should be larger than changefeed.protect_timestamp_interval",
+	72*time.Hour, // a very generous default in case job is paused in error.
+	settings.NonNegativeDuration,
+).WithPublic()
+
 // BatchReductionRetryEnabled enables the temporary reduction of batch sizes upon kafka message too large errors
 var BatchReductionRetryEnabled = settings.RegisterBoolSetting(
 	settings.TenantWritable,

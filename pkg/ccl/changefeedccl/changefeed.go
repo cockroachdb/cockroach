@@ -11,6 +11,7 @@ package changefeedccl
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -115,11 +116,13 @@ func createProtectedTimestampRecord(
 	jobID jobspb.JobID,
 	targets changefeedbase.Targets,
 	resolved hlc.Timestamp,
+	expiration time.Duration,
 	progress *jobspb.ChangefeedProgress,
 ) *ptpb.Record {
 	progress.ProtectedTimestampRecord = uuid.MakeV4()
 	deprecatedSpansToProtect := makeSpansToProtect(codec, targets)
 	targetToProtect := makeTargetToProtect(targets)
+	targetToProtect.Expiration = expiration
 
 	log.VEventf(ctx, 2, "creating protected timestamp %v at %v", progress.ProtectedTimestampRecord, resolved)
 	return jobsprotectedts.MakeRecord(
