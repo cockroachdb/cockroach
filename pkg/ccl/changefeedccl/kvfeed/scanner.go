@@ -39,6 +39,7 @@ type scanConfig struct {
 	Timestamp hlc.Timestamp
 	WithDiff  bool
 	Knobs     TestingKnobs
+	Boundary  jobspb.ResolvedSpan_BoundaryType
 }
 
 type kvScanner interface {
@@ -116,7 +117,7 @@ func (p *scanRequestScanner) Scan(ctx context.Context, sink kvevent.Writer, cfg 
 			defer limAlloc.Release()
 			defer spanAlloc.Release(ctx)
 
-			err := p.exportSpan(ctx, span, cfg.Timestamp, cfg.WithDiff, sink, cfg.Knobs)
+			err := p.exportSpan(ctx, span, cfg.Timestamp, cfg.Boundary, cfg.WithDiff, sink, cfg.Knobs)
 			finished := atomic.AddInt64(&atomicFinished, 1)
 			if backfillDec != nil {
 				backfillDec()
@@ -134,6 +135,7 @@ func (p *scanRequestScanner) exportSpan(
 	ctx context.Context,
 	span roachpb.Span,
 	ts hlc.Timestamp,
+	boundaryType jobspb.ResolvedSpan_BoundaryType,
 	withDiff bool,
 	sink kvevent.Writer,
 	knobs TestingKnobs,
@@ -191,7 +193,7 @@ func (p *scanRequestScanner) exportSpan(
 		if res.ResumeSpan != nil {
 			consumed := roachpb.Span{Key: remaining.Key, EndKey: res.ResumeSpan.Key}
 			if err := sink.Add(
-				ctx, kvevent.NewBackfillResolvedEvent(consumed, ts, jobspb.ResolvedSpan_NONE),
+				ctx, kvevent.NewBackfillResolvedEvent(consumed, ts, boundaryType),
 			); err != nil {
 				return err
 			}
@@ -200,7 +202,7 @@ func (p *scanRequestScanner) exportSpan(
 	}
 	// p.metrics.PollRequestNanosHist.RecordValue(scanDuration.Nanoseconds())
 	if err := sink.Add(
-		ctx, kvevent.NewBackfillResolvedEvent(span, ts, jobspb.ResolvedSpan_NONE),
+		ctx, kvevent.NewBackfillResolvedEvent(span, ts, boundaryType),
 	); err != nil {
 		return err
 	}

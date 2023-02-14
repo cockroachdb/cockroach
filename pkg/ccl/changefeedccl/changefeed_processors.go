@@ -80,9 +80,9 @@ type changeAggregator struct {
 	// eventConsumer consumes the event.
 	eventConsumer eventConsumer
 
-	// lastFlush and flushFrequency keep track of the flush frequency.
-	lastFlush      time.Time
-	flushFrequency time.Duration
+	lastHighWaterFlush time.Time     // last time high watermark was checkpointed.
+	flushFrequency     time.Duration // how often high watermark can be checkpointed.
+	lastSpanFlush      time.Time     // last time expensive, span based checkpoint was written.
 
 	// frontier keeps track of resolved timestamps for spans along with schema change
 	// boundary information.
@@ -291,6 +291,9 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		ca.cancel()
 		return
 	}
+
+	// Generate expensive checkpoint only after we ran for a while.
+	ca.lastSpanFlush = timeutil.Now()
 }
 
 func (ca *changeAggregator) startKVFeed(
@@ -321,7 +324,6 @@ func (ca *changeAggregator) startKVFeed(
 		// Trying to call MoveToDraining here is racy (`MoveToDraining called in
 		// state stateTrailingMeta`), so return the error via a channel.
 		ca.errCh <- kvfeed.Run(ctx, kvfeedCfg)
-		ca.cancel()
 	}); err != nil {
 		// If err != nil then the RunAsyncTask closure never ran, which means we
 		// need to manually close ca.kvFeedDoneCh so `(*changeAggregator).close`
@@ -406,6 +408,12 @@ func (ca *changeAggregator) setupSpansAndFrontier() (spans []roachpb.Span, err e
 	ca.frontier, err = makeSchemaChangeFrontier(initialHighWater, spans...)
 	if err != nil {
 		return nil, err
+	}
+	if initialHighWater.IsEmpty() {
+		// If we are performing initial scan, set frontier initialHighWater
+		// to the StatementTime -- this is the time we will be scanning spans.
+		// Spans that reach this time are eligible for checkpointing.
+		ca.frontier.initialHighWater = ca.spec.Feed.StatementTime
 	}
 
 	checkpointedSpanTs := ca.spec.Checkpoint.Timestamp
@@ -536,6 +544,13 @@ func (ca *changeAggregator) tick() error {
 // changeAggregator node to the changeFrontier node to allow the changeFrontier
 // to persist the overall changefeed's progress
 func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error {
+	if resolved.Timestamp.IsEmpty() {
+		// @0.0 resolved timestamps could come in from rangefeed checkpoint.
+		// When rangefeed starts running, it emits @0.0 resolved timestamp.
+		// We don't care about those as far as checkpointing concerned.
+		return nil
+	}
+
 	advanced, err := ca.frontier.ForwardResolvedSpan(resolved)
 	if err != nil {
 		return err
@@ -544,18 +559,25 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error
 	forceFlush := resolved.BoundaryType != jobspb.ResolvedSpan_NONE
 
 	checkpointFrontier := advanced &&
-		(forceFlush || timeutil.Since(ca.lastFlush) > ca.flushFrequency)
+		(forceFlush || timeutil.Since(ca.lastHighWaterFlush) > ca.flushFrequency)
+
+	if checkpointFrontier {
+		defer func() {
+			ca.lastHighWaterFlush = timeutil.Now()
+		}()
+		return ca.flushFrontier()
+	}
 
 	// At a lower frequency we checkpoint specific spans in the job progress
 	// either in backfills or if the highwater mark is excessively lagging behind
 	checkpointSpans := ca.spec.JobID != 0 && /* enterprise changefeed */
 		(resolved.Timestamp.Equal(ca.frontier.BackfillTS()) ||
 			ca.frontier.hasLaggingSpans(ca.spec.Feed.StatementTime, &ca.flowCtx.Cfg.Settings.SV)) &&
-		canCheckpointSpans(&ca.flowCtx.Cfg.Settings.SV, ca.lastFlush)
+		canCheckpointSpans(&ca.flowCtx.Cfg.Settings.SV, ca.lastSpanFlush)
 
-	if checkpointFrontier || checkpointSpans {
+	if checkpointSpans {
 		defer func() {
-			ca.lastFlush = timeutil.Now()
+			ca.lastSpanFlush = timeutil.Now()
 		}()
 		return ca.flushFrontier()
 	}
@@ -1032,7 +1054,7 @@ func (cf *changeFrontier) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 				cf.frontier.boundaryType == jobspb.ResolvedSpan_RESTART) {
 			var err error
 			endTime := cf.spec.Feed.EndTime
-			if endTime.IsEmpty() || endTime.Less(cf.frontier.boundaryTime.Next()) {
+			if endTime.IsEmpty() || endTime.Less(cf.frontier.boundaryTime) {
 				err = pgerror.Newf(pgcode.SchemaChangeOccurred,
 					"schema change occurred at %v", cf.frontier.boundaryTime.Next().AsOfSystemTime())
 
