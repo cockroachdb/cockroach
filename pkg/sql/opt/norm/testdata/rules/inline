@@ -1221,7 +1221,7 @@ CREATE FUNCTION min_x_gt(i INT) RETURNS INT STABLE LANGUAGE SQL AS $$
 $$
 ----
 
-# Nested stable UDFs should be inline.
+# Nested stable UDFs should be inlined.
 norm expect=InlineUDF
 SELECT k FROM a WHERE k = min_x_gt(min_x_gt(0))
 ----
@@ -1304,6 +1304,26 @@ project
  ├── scan a
  └── projections
       └── vol() [as=vol:9, volatile, udf]
+
+exec-ddl
+CREATE FUNCTION set_fn(x INT) RETURNS SETOF INT IMMUTABLE LANGUAGE SQL AS $$
+  SELECT i FROM a WHERE k > x
+$$
+----
+
+# Set-returning UDFs are not inlined.
+norm expect-not=InlineUDF
+SELECT * FROM set_fn(0)
+----
+project-set
+ ├── columns: set_fn:9
+ ├── immutable
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── ()
+ └── zip
+      └── set_fn(0) [immutable, udf]
 
 exec-ddl
 CREATE FUNCTION multi_stmt() RETURNS INT IMMUTABLE LANGUAGE SQL AS $$

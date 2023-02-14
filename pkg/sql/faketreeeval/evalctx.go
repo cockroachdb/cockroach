@@ -392,9 +392,16 @@ func (ep *DummyEvalPlanner) EvalSubquery(expr *tree.Subquery) (tree.Datum, error
 
 // EvalRoutineExpr is part of the eval.Planner interface.
 func (ep *DummyEvalPlanner) EvalRoutineExpr(
-	ctx context.Context, expr *tree.RoutineExpr, input tree.Datums,
+	ctx context.Context, expr *tree.RoutineExpr, args tree.Datums,
 ) (tree.Datum, error) {
 	return nil, errors.WithStack(errEvalPlanner)
+}
+
+// RoutineExprGenerator is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) RoutineExprGenerator(
+	ctx context.Context, expr *tree.RoutineExpr, args tree.Datums,
+) eval.ValueGenerator {
+	return nil
 }
 
 // ResolveTypeByOID implements the tree.TypeReferenceResolver interface.

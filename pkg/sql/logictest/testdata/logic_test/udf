@@ -22,9 +22,6 @@ BEGIN
 END;
 $$ LANGUAGE made_up_language
 
-statement error pq: unimplemented: user-defined functions with SETOF return types are not supported
-CREATE FUNCTION f(a int) RETURNS SETOF INT LANGUAGE SQL AS 'SELECT 1'
-
 statement error .*cannot set leakproof on function with non-immutable volatility: STABLE.*
 CREATE FUNCTION f(a int) RETURNS INT LEAKPROOF STABLE LANGUAGE SQL AS 'SELECT 1'
 
@@ -1430,9 +1427,6 @@ CREATE OR REPLACE FUNCTION f_test_cor(a INT, c INT) RETURNS INT IMMUTABLE LANGUA
 
 statement error pq: cannot change return type of existing function
 CREATE OR REPLACE FUNCTION f_test_cor(a INT, b INT) RETURNS STRING IMMUTABLE LANGUAGE SQL AS $$ SELECT 'hello' $$;
-
-statement error pq: unimplemented: user-defined functions with SETOF return types are not supported
-CREATE OR REPLACE FUNCTION f_test_cor(a INT, b INT) RETURNS SETOF INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$;
 
 statement error pq: cannot set leakproof on function with non-immutable volatility: VOLATILE
 CREATE OR REPLACE FUNCTION f_test_cor(a INT, b INT) RETURNS INT LEAKPROOF LANGUAGE SQL AS $$ SELECT 1 $$;
@@ -3047,3 +3041,50 @@ query I
 SELECT count(descriptor) FROM system.descriptor WHERE id = $dropped_fn_id;
 ----
 0
+
+subtest udt_alter
+
+statement ok
+CREATE TABLE t_alter (
+  a INT PRIMARY KEY,
+  b INT
+)
+
+statement ok
+CREATE FUNCTION f_rtbl() RETURNS t_alter LANGUAGE SQL AS 'SELECT 1, 2;'
+
+query T
+SELECT f_rtbl();
+----
+(1,2)
+
+statement ok
+ALTER TABLE t_alter DROP COLUMN b;
+
+statement error pq: return type mismatch in function declared to return t_alter
+SELECT f_rtbl();
+
+statement ok
+ALTER TABLE t_alter ADD COLUMN b INT;
+
+query T
+SELECT f_rtbl();
+----
+(1,2)
+
+statement ok
+SET enable_experimental_alter_column_type_general=true
+
+statement ok
+ALTER TABLE t_alter ALTER b TYPE FLOAT;
+
+statement error pq: return type mismatch in function declared to return t_alter
+SELECT f_rtbl();
+
+statement ok
+ALTER TABLE t_alter ALTER b TYPE INT;
+
+query T
+SELECT f_rtbl();
+----
+(1,2)

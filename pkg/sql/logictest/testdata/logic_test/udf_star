@@ -173,16 +173,20 @@ SELECT f_allcolsel_alias()
 ----
 (1,2)
 
+# Return an error after adding a column when the table is used as the return
+# type. Note that this behavior is ok for late binding.
 statement ok
 ALTER TABLE t_twocol ADD COLUMN c INT DEFAULT 5;
 
-# TODO(#95558): With early binding, postgres returns an error after adding a
-# column when the table is used as the return type. Note that this behavior is
-# ok for late binding.
-query T
+statement error pq: return type mismatch in function declared to return t_twocol
 SELECT f_unqualified_twocol()
-----
-(1,2)
+
+# Dropping the new column renders the function usable again.
+statement ok
+ALTER TABLE t_twocol DROP COLUMN c;
+
+statement ok
+SELECT f_unqualified_twocol()
 
 # Altering a column type is not allowed in postgres or CRDB.
 statement error pq: cannot alter type of column "b" because function "f_unqualified_twocol" depends on it

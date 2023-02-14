@@ -668,6 +668,7 @@ func (b *Builder) buildExistsSubquery(
 				planGen,
 				types.Bool,
 				false, /* enableStepping */
+				true,  /* calledOnNullInput */
 			),
 			tree.DBoolFalse,
 		}, types.Bool), nil
@@ -751,6 +752,7 @@ func (b *Builder) buildSubquery(
 			planGen,
 			subquery.Typ,
 			false, /* enableStepping */
+			true,  /* calledOnNullInput */
 		), nil
 	}
 
@@ -806,6 +808,7 @@ func (b *Builder) buildSubquery(
 			planGen,
 			subquery.Typ,
 			false, /* enableStepping */
+			true,  /* calledOnNullInput */
 		), nil
 	}
 
@@ -887,6 +890,7 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		planGen,
 		udf.Typ,
 		enableStepping,
+		udf.CalledOnNullInput,
 	), nil
 }
 

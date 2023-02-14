@@ -100,6 +100,9 @@ func (tc *Catalog) CreateFunction(c *tree.CreateFunction) {
 		Volatility:        v,
 		CalledOnNullInput: calledOnNullInput,
 	}
+	if c.ReturnType.IsSet {
+		overload.Class = tree.GeneratorClass
+	}
 	prefixedOverload := tree.MakeQualifiedOverload("public", overload)
 	def := &tree.ResolvedFunctionDefinition{
 		Name: name,

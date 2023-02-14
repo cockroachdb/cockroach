@@ -93,18 +93,33 @@ type RoutineExpr struct {
 	// once and the cached result will be returned if the subquery is evaluated
 	// multiple times (e.g., for each value of i in v).
 	CachedResult Datum
+
+	// CalledOnNullInput is true if the function should be called when any of
+	// its inputs are NULL. If false, the function will not be evaluated in the
+	// presence of null inputs, and will instead evaluate directly to NULL.
+	//
+	// NOTE: This boolean only affects evaluation of set-returning Routines.
+	// Strict non-set-returning routines are not invoked when their arguments
+	// are NULL because optbuilder wraps them in a CASE expressions.
+	CalledOnNullInput bool
 }
 
 // NewTypedRoutineExpr returns a new RoutineExpr that is well-typed.
 func NewTypedRoutineExpr(
-	name string, args TypedExprs, gen RoutinePlanGenerator, typ *types.T, enableStepping bool,
+	name string,
+	args TypedExprs,
+	gen RoutinePlanGenerator,
+	typ *types.T,
+	enableStepping bool,
+	calledOnNullInput bool,
 ) *RoutineExpr {
 	return &RoutineExpr{
-		Args:           args,
-		ForEachPlan:    gen,
-		Typ:            typ,
-		EnableStepping: enableStepping,
-		Name:           name,
+		Args:              args,
+		ForEachPlan:       gen,
+		Typ:               typ,
+		EnableStepping:    enableStepping,
+		Name:              name,
+		CalledOnNullInput: calledOnNullInput,
 	}
 }
 

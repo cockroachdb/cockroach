@@ -320,6 +320,8 @@ func (sr *schemaResolver) ResolveType(
 }
 
 // ResolveTypeByOID implements the tree.TypeReferenceResolver interface.
+// Note: Type resolution only works for OIDs of user-defined types. Builtin
+// types do not need to be hydrated.
 func (sr *schemaResolver) ResolveTypeByOID(ctx context.Context, oid oid.Oid) (*types.T, error) {
 	return typedesc.ResolveHydratedTByOID(ctx, oid, sr)
 }

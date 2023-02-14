@@ -618,21 +618,29 @@ func (e *evaluator) EvalSubquery(ctx context.Context, subquery *tree.Subquery) (
 func (e *evaluator) EvalRoutineExpr(
 	ctx context.Context, routine *tree.RoutineExpr,
 ) (tree.Datum, error) {
-	var err error
-	var args tree.Datums
-	if len(routine.Args) > 0 {
+	args, err := e.evalRoutineArgs(ctx, routine)
+	if err != nil {
+		return nil, err
+	}
+	return e.Planner.EvalRoutineExpr(ctx, routine, args)
+}
+
+func (e *evaluator) evalRoutineArgs(
+	ctx context.Context, expr *tree.RoutineExpr,
+) (args tree.Datums, err error) {
+	if len(expr.Args) > 0 {
 		// Evaluate each argument expression.
 		// TODO(mgartner): Use a scratch tree.Datums to avoid allocation on
 		// every invocation.
-		args = make(tree.Datums, len(routine.Args))
-		for i := range routine.Args {
-			args[i], err = routine.Args[i].Eval(ctx, e)
+		args = make(tree.Datums, len(expr.Args))
+		for i := range expr.Args {
+			args[i], err = expr.Args[i].Eval(ctx, e)
 			if err != nil {
 				return nil, err
 			}
 		}
 	}
-	return e.Planner.EvalRoutineExpr(ctx, routine, args)
+	return args, nil
 }
 
 func (e *evaluator) EvalTuple(ctx context.Context, t *tree.Tuple) (tree.Datum, error) {

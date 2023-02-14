@@ -505,6 +505,9 @@ func (desc *immutable) GetResolvedFuncDefinition(
 			IsUDF:                    true,
 			UDFContainsOnlySignature: true,
 		}
+		if funcDescPb.Signatures[i].ReturnSet {
+			overload.Class = tree.GeneratorClass
+		}
 		paramTypes := make(tree.ParamTypes, 0, len(sig.ArgTypes))
 		for _, paramType := range sig.ArgTypes {
 			paramTypes = append(
