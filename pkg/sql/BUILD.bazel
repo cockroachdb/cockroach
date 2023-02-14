@@ -483,6 +483,7 @@ go_library(
         "//pkg/sql/sqlstats/persistedsqlstats",
         "//pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil",
         "//pkg/sql/sqlstats/sslocal",
+        "//pkg/sql/sqlstats/sslocal/scannedspanstats",
         "//pkg/sql/sqltelemetry",
         "//pkg/sql/stats",
         "//pkg/sql/stats/bounds",

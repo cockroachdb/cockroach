@@ -23,6 +23,7 @@ export type StatementStatistics = protos.cockroach.sql.IStatementStatistics;
 export type ExecStats = protos.cockroach.sql.IExecStats;
 export type CollectedStatementStatistics =
   protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
+type ScannedSpanStats = protos.cockroach.sql.IScannedSpanStats;
 
 export interface NumericStat {
   mean?: number;
@@ -208,6 +209,13 @@ export function addStatementStats(
     indexes = b.indexes;
   }
 
+  let scannedSpanStats: ScannedSpanStats;
+  if (b.scanned_span_stats) {
+    scannedSpanStats = b.scanned_span_stats;
+  } else if (a.scanned_span_stats) {
+    scannedSpanStats = a.scanned_span_stats;
+  }
+
   return {
     count: a.count.add(b.count),
     first_attempt_count: a.first_attempt_count.add(b.first_attempt_count),
@@ -262,6 +270,7 @@ export function addStatementStats(
     indexes: indexes,
     latency_info: aggregateLatencyInfo(a, b),
     last_error_code: "",
+    scanned_span_stats: scannedSpanStats,
   };
 }
 
