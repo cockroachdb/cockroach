@@ -15,6 +15,19 @@ CREATE USER testuser2
 statement ok
 CREATE USER target
 
+# Check privileges that `public` has by default, ignoring types and virtual tables.
+query TTTTTB colnames
+SELECT * FROM [SHOW GRANTS FOR public] WHERE relation_name IS NULL
+----
+database_name  schema_name         relation_name  grantee  privilege_type  is_grantable
+test           crdb_internal       NULL           public   USAGE           false
+test           information_schema  NULL           public   USAGE           false
+test           pg_catalog          NULL           public   USAGE           false
+test           pg_extension        NULL           public   USAGE           false
+test           public              NULL           public   CREATE          false
+test           public              NULL           public   USAGE           false
+test           NULL                NULL           public   CONNECT         false
+
 statement error grant options cannot be granted to "public" role
 GRANT ALL PRIVILEGES ON TABLE t TO public WITH GRANT OPTION
 
