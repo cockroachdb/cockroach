@@ -679,3 +679,43 @@ DECLARE foo CURSOR WITH HOLD FOR SELECT 1
 statement ok
 ROLLBACK
 
+# Regression test for using a SQL cursor that buffers a notice.
+# See https://github.com/cockroachdb/cockroach/issues/94344
+statement ok
+BEGIN;
+declare a cursor for select * from crdb_internal.gossip_network;
+FETCH 1 FROM a;
+COMMIT
+
+
+# Regression test for statement timeouts during DECLARE CURSOR.
+# We set timeout to 1s so that DECLARE CURSOR can execute, then sleep
+# 0.5s each to make up 1s and attempt to fetch.
+# Setting the timeout to 0.001ms means DECLARE CURSOR times out thus
+# voiding the test.
+statement ok
+SET declare_cursor_statement_timeout_enabled = false;
+BEGIN;
+SET statement_timeout = '1s';
+DECLARE a CURSOR FOR SELECT * FROM ( VALUES (1), (2) ) t(id);
+
+# Note we can't set pg_sleep to 1 or else it'll statement timeout!
+statement ok
+select pg_sleep(0.7)
+
+query I
+FETCH 1 FROM a
+----
+1
+
+statement ok
+select pg_sleep(0.7)
+
+query I
+FETCH 1 FROM a
+----
+2
+
+statement ok
+SET statement_timeout = 0;
+COMMIT
