@@ -32,14 +32,15 @@ import {
   getFullFiltersAsStringRecord,
 } from "../queryFilter/filter";
 import { RecentStatementsSection } from "../recentExecutions/recentStatementsSection";
-import { inactiveFiltersState } from "../queryFilter/filter";
 import { queryByName, syncHistory } from "src/util/query";
 import { getTableSortFromURL } from "../sortedtable/getTableSortFromURL";
 import { getRecentStatementFiltersFromURL } from "src/queryFilter/utils";
+import { Pagination } from "src/pagination";
 
 import styles from "./statementsPage.module.scss";
 
 const cx = classNames.bind(styles);
+const PAGE_SIZE = 20;
 
 export type RecentStatementsViewDispatchProps = {
   onColumnsSelect: (columns: string[]) => void;
@@ -78,7 +79,7 @@ export const RecentStatementsView: React.FC<RecentStatementsViewProps> = ({
 }: RecentStatementsViewProps) => {
   const [pagination, setPagination] = useState<ISortedTablePagination>({
     current: 1,
-    pageSize: 20,
+    pageSize: PAGE_SIZE,
   });
   const history = useHistory();
   const [search, setSearch] = useState<string>(
@@ -135,8 +136,8 @@ export const RecentStatementsView: React.FC<RecentStatementsViewProps> = ({
 
   const resetPagination = () => {
     setPagination({
+      pageSize: PAGE_SIZE,
       current: 1,
-      pageSize: 20,
     });
   };
 
@@ -172,6 +173,13 @@ export const RecentStatementsView: React.FC<RecentStatementsViewProps> = ({
     internalAppNamePrefix,
     search,
   );
+
+  const onChangePage = (page: number) => {
+    setPagination({
+      ...pagination,
+      current: page,
+    });
+  };
 
   return (
     <div className={cx("root")}>
@@ -216,6 +224,12 @@ export const RecentStatementsView: React.FC<RecentStatementsViewProps> = ({
             onChangeSortSetting={onSortClick}
             onColumnsSelect={onColumnsSelect}
             isTenant={isTenant}
+          />
+          <Pagination
+            pageSize={pagination.pageSize}
+            current={pagination.current}
+            total={filteredStatements?.length}
+            onChange={onChangePage}
           />
         </Loading>
       </div>
