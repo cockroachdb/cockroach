@@ -495,6 +495,12 @@ var functions = func() map[tree.FunctionClass]map[oid.Oid][]function {
 			// See #69213.
 			continue
 		}
+
+		if n := tree.Name(def.Name); n.String() != def.Name {
+			// sqlsmith doesn't seem to know how to quote these.
+			continue
+		}
+
 		skip := false
 		for _, substr := range []string{
 			// crdb_internal.complete_stream_ingestion_job is a stateful

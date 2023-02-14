@@ -1053,22 +1053,6 @@ var regularBuiltins = map[string]builtinDefinition{
 		},
 	),
 
-	"inet": makeBuiltin(defProps(),
-		tree.Overload{
-			Types:      tree.ParamTypes{{Name: "val", Typ: types.String}},
-			ReturnType: tree.FixedReturnType(types.INet),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				inet, err := eval.PerformCast(ctx, evalCtx, args[0], types.INet)
-				if err != nil {
-					return nil, pgerror.WithCandidateCode(err, pgcode.InvalidTextRepresentation)
-				}
-				return inet, nil
-			},
-			Info:       "If possible, converts input to that of type inet.",
-			Volatility: volatility.Immutable,
-		},
-	),
-
 	"from_ip": makeBuiltin(defProps(),
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "val", Typ: types.Bytes}},

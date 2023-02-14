@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -132,6 +133,75 @@ func init() {
 		registerBuiltin(name, builtin)
 	}
 
+	// Make type cast builtins.
+	// In postgresql, this is done at type resolution type - if a valid cast exists
+	// but used as a function, make it a cast.
+	// e.g. date(ts) is the same as ts::date.
+	castBuiltins := make(map[oid.Oid]*builtinDefinition)
+	for fromOID, castToMap := range cast.CastMap() {
+		fromTyp, ok := types.OidToType[fromOID]
+		if !ok || !shouldMakeFromCastBuiltin(fromTyp) {
+			continue
+		}
+		for toOID, castInfo := range castToMap {
+			toType, ok := types.OidToType[toOID]
+			if !ok {
+				continue
+			}
+			if _, ok := castBuiltins[toOID]; !ok {
+				castBuiltins[toOID] = &builtinDefinition{
+					props: tree.FunctionProperties{Category: builtinconstants.CategoryCast},
+				}
+			}
+			castBuiltins[toOID].overloads = append(
+				castBuiltins[toOID].overloads,
+				tree.Overload{
+					Types:      tree.ParamTypes{{Name: fromTyp.String(), Typ: fromTyp}},
+					ReturnType: tree.FixedReturnType(toType),
+					Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+						return eval.PerformCast(ctx, evalCtx, args[0], toType)
+					},
+					Class:      tree.NormalClass,
+					Info:       fmt.Sprintf("Cast from %s to %s.", fromTyp.SQLString(), toType.SQLString()),
+					Volatility: castInfo.Volatility,
+					// The one for name casts differ.
+					// Since we're using the same one as cast, ignore that from now.
+					IgnoreVolatilityCheck: true,
+				},
+			)
+		}
+	}
+	// Add casts between the same type.
+	for typOID, def := range castBuiltins {
+		typ := types.OidToType[typOID]
+		if !shouldMakeFromCastBuiltin(typ) {
+			continue
+		}
+		// Some casts already have been defined to deal with typmod coercian.
+		// Do not double add them.
+		if _, ok := cast.CastMap()[typOID][typOID]; ok {
+			continue
+		}
+		def.overloads = append(
+			def.overloads,
+			tree.Overload{
+				Types:      tree.ParamTypes{{Name: typ.String(), Typ: typ}},
+				ReturnType: tree.FixedReturnType(typ),
+				Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+					return eval.PerformCast(ctx, evalCtx, args[0], typ)
+				},
+				Class:      tree.NormalClass,
+				Info:       fmt.Sprintf("Cast from %s to %s.", typ.SQLString(), typ.SQLString()),
+				Volatility: volatility.Immutable,
+			},
+		)
+	}
+	for toOID, def := range castBuiltins {
+		n := strings.ToLower(types.OidToType[toOID].SQLString())
+		CastBuiltinNames[n] = struct{}{}
+		registerBuiltin(n, *def)
+	}
+
 	// Make crdb_internal.create_regfoo and to_regfoo builtins.
 	for _, b := range []struct {
 		toRegOverloadHelpText string
@@ -148,7 +218,27 @@ func init() {
 		registerBuiltin("crdb_internal.create_"+typName, makeCreateRegDef(b.typ))
 		registerBuiltin("to_"+typName, makeToRegOverload(b.typ, b.toRegOverloadHelpText))
 	}
+}
 
+// CastBuiltinNames contains all cast builtin names.
+var CastBuiltinNames = make(map[string]struct{})
+
+func shouldMakeFromCastBuiltin(in *types.T) bool {
+	// Since type resolutions are based on families, prevent ambiguity where
+	// possible by using the "preferred" type for the family.
+	switch {
+	case in.Family() == types.OidFamily && in.Oid() != oid.T_oid:
+		return false
+	case in.Family() == types.BitFamily && in.Oid() != oid.T_bit:
+		return false
+	case in.Family() == types.StringFamily && in.Oid() != oid.T_text:
+		return false
+	case in.Family() == types.IntFamily && in.Oid() != oid.T_int8:
+		return false
+	case in.Family() == types.FloatFamily && in.Oid() != oid.T_float8:
+		return false
+	}
+	return true
 }
 
 var errUnimplemented = pgerror.New(pgcode.FeatureNotSupported, "unimplemented")
@@ -985,18 +1075,6 @@ var pgBuiltins = map[string]builtinDefinition{
 			Info: "Returns the comment for a database object specified by its OID and the name of the containing system catalog. " +
 				"For example, obj_description(123456, 'pg_class') would retrieve the comment for the table with OID 123456.",
 			Volatility: volatility.Stable,
-		},
-	),
-
-	"oid": makeBuiltin(defProps(),
-		tree.Overload{
-			Types:      tree.ParamTypes{{Name: "int", Typ: types.Int}},
-			ReturnType: tree.FixedReturnType(types.Oid),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				return eval.PerformCast(ctx, evalCtx, args[0], types.Oid)
-			},
-			Info:       "Converts an integer to an OID.",
-			Volatility: volatility.Immutable,
 		},
 	),
 
