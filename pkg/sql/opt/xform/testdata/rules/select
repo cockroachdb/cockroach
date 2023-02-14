@@ -6223,6 +6223,35 @@ inner-join (zigzag pqr@q pqr@s)
       ├── r:3 = 1 [outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
       └── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
 
+# Regression test for #97090. We should not plan a zigzag join when the
+# direction of the equality columns doesn't match.
+exec-ddl
+CREATE TABLE t97090 (
+  c INT NOT NULL,
+  l INT NOT NULL,
+  r INT NOT NULL,
+  INDEX (l ASC, c DESC),
+  INDEX (r ASC, c ASC)
+)
+----
+
+opt expect-not=GenerateZigzagJoins
+SELECT * FROM t97090 WHERE l = 1 AND r = -1
+----
+select
+ ├── columns: c:1!null l:2!null r:3!null
+ ├── fd: ()-->(2,3)
+ ├── index-join t97090
+ │    ├── columns: c:1!null l:2!null r:3!null
+ │    ├── fd: ()-->(2)
+ │    └── scan t97090@t97090_l_c_idx
+ │         ├── columns: c:1!null l:2!null rowid:4!null
+ │         ├── constraint: /2/-1/4: [/1 - /1]
+ │         ├── key: (4)
+ │         └── fd: ()-->(2), (4)-->(1)
+ └── filters
+      └── r:3 = -1 [outer=(3), constraints=(/3: [/-1 - /-1]; tight), fd=()-->(3)]
+
 # Zigzag join should not be produced when there is a NO_ZIGZAG_JOIN hint.
 opt expect-not=GenerateZigzagJoins
 SELECT q,r FROM pqr@{NO_ZIGZAG_JOIN} WHERE q = 1 AND r = 2
