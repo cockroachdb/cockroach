@@ -4367,9 +4367,13 @@ func TestMergeQueue(t *testing.T) {
 		// NB: It is possible for the ranges being checked to record load
 		// during the test. To avoid flakiness, we set the splitByLoadStat high
 		// enough that any recorded load from testing won't exceed it.
+		// Likewise, when running under race - it is possible that if
+		// splitByLoadMergeDelay is small, enough time will pass in the test
+		// that this delay is elapsed and the ranges will merge when not
+		// expected to.
 		const splitByLoadStat = 10e9
 		const mergeByLoadStat = splitByLoadStat / 2 // see conservativeLoadBasedSplitThreshold
-		const splitByLoadMergeDelay = 500 * time.Millisecond
+		const splitByLoadMergeDelay = 1000 * time.Second
 
 		setSplitObjective := func(dim kvserver.LBRebalancingObjective) {
 			kvserver.LoadBasedRebalancingObjective.Override(ctx, sv, int64(dim))
