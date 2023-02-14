@@ -8274,8 +8274,8 @@ func TestReadBackupManifestMemoryMonitoring(t *testing.T) {
 }
 
 // TestIncorrectAccessOfFilesInBackupMetadata ensures that an accidental use of
-// the `Files` field (instead of its dedicated SST) on the `BACKUP_METADATA`
-// results in an error on restore and show.
+// the `Descriptors` field (instead of its dedicated SST) on the
+// `BACKUP_METADATA` results in an error on restore and show.
 func TestIncorrectAccessOfFilesInBackupMetadata(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -8299,13 +8299,13 @@ func TestIncorrectAccessOfFilesInBackupMetadata(t *testing.T) {
 	var backupManifest backuppb.BackupManifest
 	require.NoError(t, protoutil.Unmarshal(manifestData, &backupManifest))
 
-	// The manifest should have `HasExternalFilesList` set to true.
-	require.True(t, backupManifest.HasExternalFilesList)
+	// The manifest should have `HasExternalManifestSSTs` set to true.
+	require.True(t, backupManifest.HasExternalManifestSSTs)
 
 	// Set it to false, so that any operation that resolves the metadata treats
 	// this manifest as a pre-23.1 BACKUP_MANIFEST, and directly accesses the
-	// `Files` field, instead of reading from the external SST.
-	backupManifest.HasExternalFilesList = false
+	// `Descriptors` field, instead of reading from the external SST.
+	backupManifest.HasExternalManifestSSTs = false
 	manifestData, err = protoutil.Marshal(&backupManifest)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(manifestPath, manifestData, 0644 /* perm */))
@@ -8315,7 +8315,7 @@ func TestIncorrectAccessOfFilesInBackupMetadata(t *testing.T) {
 	require.NoError(t, os.WriteFile(manifestPath+backupinfo.BackupManifestChecksumSuffix, checksum, 0644 /* perm */))
 
 	// Expect an error on restore.
-	sqlDB.ExpectErr(t, "assertion: this placeholder legacy Files entry should never be opened", `RESTORE DATABASE r1 FROM LATEST IN 'nodelocal://0/test' WITH new_db_name = 'r2'`)
+	sqlDB.ExpectErr(t, "assertion: this placeholder legacy Descriptor entry should never be used", `RESTORE DATABASE r1 FROM LATEST IN 'nodelocal://0/test' WITH new_db_name = 'r2'`)
 }
 
 func TestManifestTooNew(t *testing.T) {

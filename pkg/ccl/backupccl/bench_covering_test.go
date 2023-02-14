@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -83,7 +84,7 @@ func BenchmarkRestoreEntryCover(b *testing.B) {
 											introducedSpanFrontier, err := createIntroducedSpanFrontier(backups, hlc.Timestamp{})
 											require.NoError(b, err)
 
-											layerToBackupManifestFileIterFactory, err := getBackupManifestFileIters(ctx, &execCfg,
+											layerToBackupManifestFileIterFactory, err := backupinfo.GetBackupManifestIterFactories(ctx, execCfg.DistSQLSrv.ExternalStorage,
 												backups, nil, nil)
 											require.NoError(b, err)
 
