@@ -43,29 +43,21 @@ var SplitByLoadQPSThreshold = settings.RegisterIntSetting(
 ).WithPublic()
 
 // SplitByLoadCPUThreshold wraps "kv.range_split.load_cpu_threshold". The
-// default threshold of 250ms translates to a replica utilizing 25% of a CPU
+// default threshold of 500ms translates to a replica utilizing 50% of a CPU
 // core processing requests. In practice, the "real" CPU usage of a replica all
 // things considered (sql,compactions, gc) tends to be around 3x the attributed
 // usage which this threshold is checked against. This means that in a static
-// state we would expect no more than (number of cores) / 0.75 load based
-// splits. In practice however, workload patterns change.
-// TODO(kvoli): Benchmark ycsb, kv0, kv95 on three nodes and bisect a value
-// that achieves the highest throughput. The current value was selected by
-// observing the performance of the cluster from a rebalancing perspective. The
-// specific criteria was to constrain the occurrences of a store being overfull
-// relative to the mean but not having any actions available to resolve being
-// overfull. When running TPCE (50k), CPU splitting with a 250ms threshold
-// performed 1 load based split whilst QPS splitting (2500) performed 12.5.
-// When running the allocbench/*/kv roachtest suite, CPU splitting (250ms)
-// tended to make between 33-100% more load based splits than QPS splitting
-// (2500) on workloads involving reads (usually large scans), whilst on the
-// write heavy workloads the number of load based splits was identically low.
-// This is tracked in #96869.
+// state we would expect no more than (number of cores) / 1.5 load based
+// splits. In practice however, workload patterns change. The default threshold
+// was selected after running kv(0|95)/(splt=0|seq) and allocbench, then
+// inspecting which threshold had the best performance. Performance was
+// measured as max ops/s for kv and resource balance for allocbench. See #96869
+// for more details.
 var SplitByLoadCPUThreshold = settings.RegisterDurationSetting(
 	settings.TenantWritable,
 	"kv.range_split.load_cpu_threshold",
 	"the CPU use per second over which, the range becomes a candidate for load based splitting",
-	250*time.Millisecond,
+	500*time.Millisecond,
 ).WithPublic()
 
 // SplitObjective is a type that specifies a load based splitting objective.
