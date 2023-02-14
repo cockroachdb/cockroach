@@ -1192,7 +1192,8 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 
 	ex.sessionTracing.TracePlanCheckStart(ctx)
 	distributePlan := getPlanDistribution(
-		ctx, planner, planner.execCfg.NodeInfo.NodeID, ex.sessionData().DistSQLMode, planner.curPlan.main,
+		ctx, planner.Descriptors().HasUncommittedTypes(),
+		ex.sessionData().DistSQLMode, planner.curPlan.main,
 	)
 	ex.sessionTracing.TracePlanCheckEnd(ctx, nil, distributePlan.WillDistribute())
 
@@ -1579,6 +1580,13 @@ type topLevelQueryStats struct {
 	networkEgressEstimate int64
 }
 
+func (s *topLevelQueryStats) add(other *topLevelQueryStats) {
+	s.bytesRead += other.bytesRead
+	s.rowsRead += other.rowsRead
+	s.rowsWritten += other.rowsWritten
+	s.networkEgressEstimate += other.networkEgressEstimate
+}
+
 // execWithDistSQLEngine converts a plan to a distributed SQL physical plan and
 // runs it.
 // If an error is returned, the connection needs to stop processing queries.
@@ -1616,27 +1624,31 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	} else if planner.instrumentation.ShouldSaveFlows() {
 		planCtx.saveFlows = planCtx.getDefaultSaveFlowsFunc(ctx, planner, planComponentTypeMainQuery)
 	}
-	planCtx.traceMetadata = planner.instrumentation.traceMetadata
+	planCtx.associateNodeWithComponents = planner.instrumentation.getAssociateNodeWithComponentsFn()
 	planCtx.collectExecStats = planner.instrumentation.ShouldCollectExecStats()
 
-	var evalCtxFactory func() *extendedEvalContext
+	var evalCtxFactory func(usedConcurrently bool) *extendedEvalContext
 	if len(planner.curPlan.subqueryPlans) != 0 ||
 		len(planner.curPlan.cascades) != 0 ||
 		len(planner.curPlan.checkPlans) != 0 {
-		// The factory reuses the same object because the contexts are not used
-		// concurrently.
-		var factoryEvalCtx extendedEvalContext
-		ex.initEvalCtx(ctx, &factoryEvalCtx, planner)
-		evalCtxFactory = func() *extendedEvalContext {
-			ex.resetEvalCtx(&factoryEvalCtx, planner.txn, planner.ExtendedEvalContext().StmtTimestamp)
+		var serialEvalCtx extendedEvalContext
+		ex.initEvalCtx(ctx, &serialEvalCtx, planner)
+		evalCtxFactory = func(usedConcurrently bool) *extendedEvalContext {
+			// Reuse the same object if this factory is not used concurrently.
+			factoryEvalCtx := &serialEvalCtx
+			if usedConcurrently {
+				factoryEvalCtx = &extendedEvalContext{}
+				ex.initEvalCtx(ctx, factoryEvalCtx, planner)
+			}
+			ex.resetEvalCtx(factoryEvalCtx, planner.txn, planner.ExtendedEvalContext().StmtTimestamp)
 			factoryEvalCtx.Placeholders = &planner.semaCtx.Placeholders
 			factoryEvalCtx.Annotations = &planner.semaCtx.Annotations
 			factoryEvalCtx.SessionID = planner.ExtendedEvalContext().SessionID
-			return &factoryEvalCtx
+			return factoryEvalCtx
 		}
 	}
 	err := ex.server.cfg.DistSQLPlanner.PlanAndRunAll(ctx, evalCtx, planCtx, planner, recv, evalCtxFactory)
-	return *recv.stats, err
+	return recv.stats, err
 }
 
 // beginTransactionTimestampsAndReadMode computes the timestamps and

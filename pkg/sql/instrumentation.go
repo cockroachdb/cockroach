@@ -638,6 +638,16 @@ func (ih *instrumentationHelper) setExplainAnalyzeResult(
 	return nil
 }
 
+// getAssociateNodeWithComponentsFn returns a function, unsafe for concurrent
+// usage, that maintains a mapping from planNode to tracing metadata. It might
+// return nil in which case this mapping is not needed.
+func (ih *instrumentationHelper) getAssociateNodeWithComponentsFn() func(exec.Node, execComponents) {
+	if ih.traceMetadata == nil {
+		return nil
+	}
+	return ih.traceMetadata.associateNodeWithComponents
+}
+
 // execNodeTraceMetadata associates exec.Nodes with metadata for corresponding
 // execution components.
 // Currently, we only store info about processors. A node can correspond to

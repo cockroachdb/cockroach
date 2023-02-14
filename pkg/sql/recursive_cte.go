@@ -96,7 +96,7 @@ func (n *recursiveCTENode) Next(params runParams) (bool, error) {
 				return false, err
 			}
 		}
-		n.iterator = newRowContainerIterator(params.ctx, n.workingRows, n.typs)
+		n.iterator = newRowContainerIterator(params.ctx, n.workingRows)
 		n.initialDone = true
 	}
 
@@ -152,7 +152,7 @@ func (n *recursiveCTENode) Next(params runParams) (bool, error) {
 		return false, err
 	}
 
-	n.iterator = newRowContainerIterator(params.ctx, n.workingRows, n.typs)
+	n.iterator = newRowContainerIterator(params.ctx, n.workingRows)
 	n.currentRow, err = n.iterator.Next()
 	if err != nil {
 		return false, err

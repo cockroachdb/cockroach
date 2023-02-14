@@ -170,6 +170,11 @@ func (tc *Collection) ResetMaxTimestampBound() {
 	tc.maxTimestampBoundDeadlineHolder.maxTimestampBound = hlc.Timestamp{}
 }
 
+// GetMaxTimestampBound returns the maximum timestamp to read schemas at.
+func (tc *Collection) GetMaxTimestampBound() hlc.Timestamp {
+	return tc.maxTimestampBoundDeadlineHolder.maxTimestampBound
+}
+
 // SkipValidationOnWrite avoids validating stored descriptors prior to
 // a transaction commit.
 func (tc *Collection) SkipValidationOnWrite() {

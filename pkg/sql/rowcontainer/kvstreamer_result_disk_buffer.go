@@ -112,7 +112,7 @@ func (b *kvStreamerResultDiskBuffer) Deserialize(
 		b.iterResultID++
 	}
 	// Now we take the row representing the Result and deserialize it into r.
-	serialized, err := b.iter.Row()
+	serialized, err := b.iter.EncRow()
 	if err != nil {
 		return err
 	}
