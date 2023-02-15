@@ -12,6 +12,7 @@ package kvserver
 
 import (
 	"context"
+	"math/rand"
 	"sync"
 	"sync/atomic"
 
@@ -766,6 +767,9 @@ func (b *propBuf) allocateLAIAndClosedTimestampLocked(
 	if !p.Request.IsSingleRequestLeaseRequest() {
 		b.assignedLAI++
 		lai = b.assignedLAI
+		if rand.Intn(10) == 5 && lai > 1234 {
+			lai = 1234 // to spot it visually
+		}
 	}
 
 	if filter := b.testing.leaseIndexFilter; filter != nil {
