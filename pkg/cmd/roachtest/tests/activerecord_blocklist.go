@@ -56,6 +56,7 @@ var activeRecordIgnoreList = blocklist{
 	"ActiveRecord::Migration::ForeignKeyChangeColumnWithSuffixTest#test_rename_reference_column_of_child_table":       "flaky - sometimes complains a file is not open for writing",
 	"ActiveRecord::PostgresqlConnectionTest#test_table_exists_logs_name":                                              "flaky - sometimes attempts to call a method on nil",
 	"ActiveRecord::WhereChainTest#test_chaining_multiple":                                                             "flaky - sometimes complains that a relation does not exist",
+	"BasicsTest#test_default_values_are_deeply_dupped":                                                                "flaky - sometimes attempts to call a method on nil",
 	"BinaryTest#test_mixed_encoding":                                                                                                                           "flaky - sometimes complains that a relation does not exist",
 	"CockroachDB::FixturesTest#test_bulk_insert":                                                                                                               "flaky",
 	"CockroachDB::PostgresqlIntervalTest#test_column":                                                                                                          "flaky - sometimes complains that a relation does not exist",
