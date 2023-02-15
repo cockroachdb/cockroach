@@ -1040,6 +1040,9 @@ func (expr *FuncExpr) TypeCheck(
 		searchPath = semaCtx.SearchPath
 		resolver = semaCtx.FunctionResolver
 	}
+
+	_, functionResolvedByID := expr.Func.FunctionReference.(*FunctionOID)
+
 	def, err := expr.Func.Resolve(ctx, searchPath, resolver)
 	if err != nil {
 		return nil, err
@@ -1144,13 +1147,21 @@ func (expr *FuncExpr) TypeCheck(
 		return nil, pgerror.Newf(pgcode.UndefinedFunction, "unknown signature: %s", getFuncSig(expr, s.typedExprs, desired))
 	}
 
-	// Get overloads from the most significant schema in search path.
-	favoredOverload, err := getMostSignificantOverload(
-		def.Overloads, s.overloads, s.overloadIdxs, searchPath, expr,
-		func() string { return getFuncSig(expr, s.typedExprs, desired) },
-	)
-	if err != nil {
-		return nil, err
+	var favoredOverload QualifiedOverload
+	if functionResolvedByID {
+		// If the function is resolved by OID, we know that there is always only one
+		// overload qualified. As long as it passes the argument type checks above,
+		// there is no need to worry about the search path.
+		favoredOverload = def.Overloads[0]
+	} else {
+		// Get overloads from the most significant schema in search path.
+		favoredOverload, err = getMostSignificantOverload(
+			def.Overloads, s.overloads, s.overloadIdxs, searchPath, expr,
+			func() string { return getFuncSig(expr, s.typedExprs, desired) },
+		)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Just pick the first overload from the search path.
