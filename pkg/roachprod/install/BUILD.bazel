@@ -32,7 +32,6 @@ go_library(
         "//pkg/roachprod/vm/aws",
         "//pkg/roachprod/vm/local",
         "//pkg/util",
-        "//pkg/util/httputil",
         "//pkg/util/log",
         "//pkg/util/retry",
         "//pkg/util/syncutil",
@@ -47,6 +46,7 @@ go_test(
     name = "install_test",
     srcs = [
         "cluster_synced_test.go",
+        "staging_test.go",
         "start_template_test.go",
     ],
     args = ["-test.timeout=295s"],

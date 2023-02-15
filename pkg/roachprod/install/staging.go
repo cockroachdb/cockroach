@@ -15,16 +15,14 @@ import (
 	"fmt"
 	"net/url"
 	"path/filepath"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
-	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/errors"
 )
 
 const (
-	edgeBinaryServer    = "https://edge-binaries.cockroachdb.com"
-	releaseBinaryServer = "https://s3.amazonaws.com/binaries.cockroachdb.com/"
+	edgeBinaryServer    = "https://storage.googleapis.com/cockroach-edge-artifacts-prod/"
+	releaseBinaryServer = "https://storage.googleapis.com/cockroach-release-artifacts-prod/"
 )
 
 type archInfo struct {
@@ -37,23 +35,35 @@ type archInfo struct {
 	// LibraryExtension is the extensions that dynamic libraries
 	// have on the given architecture.
 	LibraryExtension string
+	// ExecutableExtension is the extensions that executable files
+	// have on the given architecture.
+	ExecutableExtension string
+	// ReleaseArchiveExtension is the extensions that release archive files
+	// have on the given architecture.
+	ReleaseArchiveExtension string
 }
 
 var (
 	linuxArchInfo = archInfo{
-		DebugArchitecture:   "linux-gnu-amd64",
-		ReleaseArchitecture: "linux-amd64",
-		LibraryExtension:    ".so",
+		DebugArchitecture:       "linux-gnu-amd64",
+		ReleaseArchitecture:     "linux-amd64",
+		LibraryExtension:        ".so",
+		ExecutableExtension:     "",
+		ReleaseArchiveExtension: "tgz",
 	}
 	darwinArchInfo = archInfo{
-		DebugArchitecture:   "darwin-amd64",
-		ReleaseArchitecture: "darwin-10.9-amd64",
-		LibraryExtension:    ".dylib",
+		DebugArchitecture:       "darwin-amd64",
+		ReleaseArchitecture:     "darwin-10.9-amd64",
+		LibraryExtension:        ".dylib",
+		ExecutableExtension:     "",
+		ReleaseArchiveExtension: "tgz",
 	}
 	windowsArchInfo = archInfo{
-		DebugArchitecture:   "windows-amd64",
-		ReleaseArchitecture: "windows-6.2-amd64",
-		LibraryExtension:    ".dll",
+		DebugArchitecture:       "windows-amd64",
+		ReleaseArchitecture:     "windows-6.2-amd64",
+		LibraryExtension:        ".dll",
+		ExecutableExtension:     ".exe",
+		ReleaseArchiveExtension: "zip",
 	}
 
 	crdbLibraries = []string{"libgeos", "libgeos_c"}
@@ -81,7 +91,7 @@ func getEdgeURL(urlPathBase, SHA, arch string, ext string) (*url.URL, error) {
 	if err != nil {
 		return nil, err
 	}
-	edgeBinaryLocation.Path = urlPathBase
+	edgeBinaryLocation.Path += urlPathBase
 	// If a target architecture is provided, attach that.
 	if len(arch) > 0 {
 		edgeBinaryLocation.Path += "." + arch
@@ -90,33 +100,22 @@ func getEdgeURL(urlPathBase, SHA, arch string, ext string) (*url.URL, error) {
 	if len(SHA) > 0 {
 		edgeBinaryLocation.Path += "." + SHA + ext
 	} else {
-		edgeBinaryLocation.Path += ext + ".LATEST"
-		// Otherwise, find the latest SHA binary available. This works because
-		// "[executable].LATEST" redirects to the latest SHA.
-		resp, err := httputil.Head(context.TODO(), edgeBinaryLocation.String())
-		if err != nil {
-			return nil, err
+		// Special case for windows latest executable. For some reason it has no extension. ¯\_(ツ)_/¯
+		if ext == ".exe" {
+			edgeBinaryLocation.Path += ".LATEST"
+		} else {
+			edgeBinaryLocation.Path += ext + ".LATEST"
 		}
-		defer resp.Body.Close()
-		edgeBinaryLocation = resp.Request.URL
 	}
-
 	return edgeBinaryLocation, nil
 }
 
-// shaFromEdgeURL returns the SHA of the given URL. The SHA is based
-// on the current format of URLs.
-func shaFromEdgeURL(u *url.URL) string {
-	urlSplit := strings.Split(u.Path, ".")
-	return urlSplit[len(urlSplit)-1]
-}
-
-func cockroachReleaseURL(version string, arch string) (*url.URL, error) {
+func cockroachReleaseURL(version string, arch string, archiveExtension string) (*url.URL, error) {
 	binURL, err := url.Parse(releaseBinaryServer)
 	if err != nil {
 		return nil, err
 	}
-	binURL.Path += fmt.Sprintf("cockroach-%s.%s.tgz", version, arch)
+	binURL.Path += fmt.Sprintf("cockroach-%s.%s.%s", version, arch, archiveExtension)
 	return binURL, nil
 }
 
@@ -140,7 +139,7 @@ func StageApplication(
 
 	switch applicationName {
 	case "cockroach":
-		sha, err := StageRemoteBinary(
+		err := StageRemoteBinary(
 			ctx, l, c, applicationName, "cockroach/cockroach", version, archInfo.DebugArchitecture, destDir,
 		)
 		if err != nil {
@@ -155,7 +154,7 @@ func StageApplication(
 				c,
 				library,
 				fmt.Sprintf("cockroach/lib/%s", library),
-				sha,
+				version,
 				archInfo.DebugArchitecture,
 				archInfo.LibraryExtension,
 				destDir,
@@ -165,12 +164,12 @@ func StageApplication(
 		}
 		return nil
 	case "workload":
-		_, err := StageRemoteBinary(
+		err := StageRemoteBinary(
 			ctx, l, c, applicationName, "cockroach/workload", version, "" /* arch */, destDir,
 		)
 		return err
 	case "release":
-		return StageCockroachRelease(ctx, l, c, version, archInfo.ReleaseArchitecture, destDir)
+		return StageCockroachRelease(ctx, l, c, version, archInfo.ReleaseArchitecture, archInfo.ReleaseArchiveExtension, destDir)
 	default:
 		return fmt.Errorf("unknown application %s", applicationName)
 	}
@@ -186,17 +185,16 @@ func URLsForApplication(application string, version string, os string) ([]*url.U
 
 	switch application {
 	case "cockroach":
-		u, err := getEdgeURL("cockroach/cockroach", version, archInfo.DebugArchitecture, "" /* extension */)
+		u, err := getEdgeURL("cockroach/cockroach", version, archInfo.DebugArchitecture, archInfo.ExecutableExtension)
 		if err != nil {
 			return nil, err
 		}
 
 		urls := []*url.URL{u}
-		sha := shaFromEdgeURL(u)
 		for _, library := range crdbLibraries {
 			u, err := getEdgeURL(
 				fmt.Sprintf("cockroach/lib/%s", library),
-				sha,
+				version,
 				archInfo.DebugArchitecture,
 				archInfo.LibraryExtension,
 			)
@@ -213,7 +211,7 @@ func URLsForApplication(application string, version string, os string) ([]*url.U
 		}
 		return []*url.URL{u}, nil
 	case "release":
-		u, err := cockroachReleaseURL(version, archInfo.ReleaseArchitecture)
+		u, err := cockroachReleaseURL(version, archInfo.ReleaseArchitecture, archInfo.ReleaseArchiveExtension)
 		if err != nil {
 			return nil, err
 		}
@@ -232,17 +230,17 @@ func StageRemoteBinary(
 	l *logger.Logger,
 	c *SyncedCluster,
 	applicationName, urlPathBase, SHA, arch, dir string,
-) (string, error) {
+) error {
 	binURL, err := getEdgeURL(urlPathBase, SHA, arch, "")
 	if err != nil {
-		return "", err
+		return err
 	}
 	l.Printf("Resolved binary url for %s: %s", applicationName, binURL)
 	target := filepath.Join(dir, applicationName)
 	cmdStr := fmt.Sprintf(
 		`curl -sfSL -o "%s" "%s" && chmod 755 %s`, target, binURL, target,
 	)
-	return shaFromEdgeURL(binURL), c.Run(
+	return c.Run(
 		ctx, l, l.Stdout, l.Stderr, c.Nodes, fmt.Sprintf("staging binary (%s)", applicationName), cmdStr,
 	)
 }
@@ -280,14 +278,18 @@ curl -sfSL -o "%s" "%s" 2>/dev/null || echo 'optional library %s not found; cont
 // StageCockroachRelease downloads an official CockroachDB release binary with
 // the specified version.
 func StageCockroachRelease(
-	ctx context.Context, l *logger.Logger, c *SyncedCluster, version, arch, dir string,
+	ctx context.Context,
+	l *logger.Logger,
+	c *SyncedCluster,
+	version, arch, archiveExtension, dir string,
 ) error {
 	if len(version) == 0 {
 		return fmt.Errorf(
 			"release application cannot be staged without specifying a specific version",
 		)
 	}
-	binURL, err := cockroachReleaseURL(version, arch)
+
+	binURL, err := cockroachReleaseURL(version, arch, archiveExtension)
 	if err != nil {
 		return err
 	}
