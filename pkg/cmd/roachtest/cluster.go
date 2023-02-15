@@ -1306,10 +1306,13 @@ func (c *clusterImpl) FetchDebugZip(ctx context.Context, l *logger.Logger) error
 			//
 			// Ignore the files in the the log directory; we pull the logs separately anyway
 			// so this would only cause duplication.
-			si := strconv.Itoa(i)
-			cmd := []string{"./cockroach", "debug", "zip", "--exclude-files='*.log,*.txt,*.pprof'", "--url", "{pgurl:" + si + "}", zipName}
-			if err := c.RunE(ctx, c.All(), cmd...); err != nil {
-				l.Printf("./cockroach debug zip failed: %v", err)
+			excludeFiles := "*.log,*.txt,*.pprof"
+			cmd := fmt.Sprintf(
+				"./cockroach debug zip --exclude-files='%s' --url {pgurl:%d} %s",
+				excludeFiles, i, zipName,
+			)
+			if err := c.RunE(ctx, c.Node(i), cmd); err != nil {
+				l.Printf("./cockroach debug zip failed on node %d: %v", i, err)
 				if i < c.spec.NodeCount {
 					continue
 				}
@@ -1403,7 +1406,7 @@ func (c *clusterImpl) FetchDmesg(ctx context.Context, l *logger.Logger) error {
 		}
 
 		// Run dmesg on all nodes to redirect the kernel ring buffer content to a file.
-		cmd := []string{"/bin/bash", "-c", "'sudo dmesg > " + name + "'"}
+		cmd := []string{"/bin/bash", "-c", "'sudo dmesg -T > " + name + "'"}
 		var results []install.RunResultDetails
 		var combinedDmesgError error
 		if results, combinedDmesgError = c.RunWithDetails(ctx, nil, c.All(), cmd...); combinedDmesgError != nil {
