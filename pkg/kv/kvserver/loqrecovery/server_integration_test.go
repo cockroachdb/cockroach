@@ -277,6 +277,7 @@ func TestStageRecoveryPlans(t *testing.T) {
 	plan.Updates = []loqrecoverypb.ReplicaUpdate{
 		createRecoveryForRange(t, tc, sk, 3),
 	}
+	plan.StaleLeaseholderNodeIDs = []roachpb.NodeID{1}
 	res, err := adm.RecoveryStagePlan(ctx, &serverpb.RecoveryStagePlanRequest{Plan: &plan, AllNodes: true})
 	require.NoError(t, err, "failed to stage plan")
 	require.Empty(t, res.Errors, "unexpected errors in stage response")
@@ -285,7 +286,7 @@ func TestStageRecoveryPlans(t *testing.T) {
 	resp, err = adm.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{})
 	require.NoError(t, err)
 	statuses := aggregateStatusByNode(resp)
-	require.Nil(t, statuses[1].PendingPlanID, "unexpected plan id on node 1")
+	require.Equal(t, &plan.PlanID, statuses[1].PendingPlanID, "incorrect plan id on node 1")
 	require.Nil(t, statuses[2].PendingPlanID, "unexpected plan id on node 2")
 	require.Equal(t, &plan.PlanID, statuses[3].PendingPlanID, "incorrect plan id on node 3")
 }

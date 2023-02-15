@@ -289,6 +289,11 @@ func (s Server) StagePlan(
 				return nil, errors.Newf("node n%d has planned changed but is unreachable in the cluster", u.NodeID())
 			}
 		}
+		for _, n := range plan.StaleLeaseholderNodeIDs {
+			if !foundNodes[n] {
+				return nil, errors.Newf("node n%d has planned restart but is unreachable in the cluster", n)
+			}
+		}
 
 		// Distribute plan - this should not use fan out to available, but use
 		// list from previous step.
@@ -357,12 +362,25 @@ func (s Server) StagePlan(
 		}
 	}
 
+	needsUpdate := false
 	for _, r := range plan.Updates {
 		if r.NodeID() == localNodeID {
-			if err := s.planStore.SavePlan(plan); err != nil {
-				return responseFromError(err)
-			}
+			needsUpdate = true
 			break
+		}
+	}
+	if !needsUpdate {
+		for _, n := range plan.StaleLeaseholderNodeIDs {
+			if n == localNodeID {
+				needsUpdate = true
+				break
+			}
+		}
+	}
+
+	if needsUpdate {
+		if err := s.planStore.SavePlan(plan); err != nil {
+			return responseFromError(err)
 		}
 	}
 
