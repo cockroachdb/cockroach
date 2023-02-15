@@ -57,7 +57,7 @@ type FunctionReferenceResolver interface {
 	// there is no function with the same oid.
 	ResolveFunctionByOID(
 		ctx context.Context, oid oid.Oid,
-	) (string, *Overload, error)
+	) (*FunctionName, *Overload, error)
 }
 
 // ResolvableFunctionReference implements the editable reference call of a
@@ -113,6 +113,20 @@ func (ref *ResolvableFunctionReference) Resolve(
 		}
 		ref.FunctionReference = fd
 		return fd, nil
+	case *FunctionOID:
+		if resolver == nil {
+			return GetBuiltinFunctionByOIDOrFail(t.OID)
+		}
+		fnName, o, err := resolver.ResolveFunctionByOID(ctx, t.OID)
+		if err != nil {
+			return nil, err
+		}
+		fd := &ResolvedFunctionDefinition{
+			Name:      fnName.Object(),
+			Overloads: []QualifiedOverload{{Schema: fnName.Schema(), Overload: o}},
+		}
+		ref.FunctionReference = fd
+		return fd, nil
 	default:
 		return nil, errors.AssertionFailedf("unknown resolvable function reference type %s", t)
 	}
@@ -146,3 +160,16 @@ var _ FunctionReference = &ResolvedFunctionDefinition{}
 func (*UnresolvedName) functionReference()             {}
 func (*FunctionDefinition) functionReference()         {}
 func (*ResolvedFunctionDefinition) functionReference() {}
+func (*FunctionOID) functionReference()                {}
+
+type FunctionOID struct {
+	OID oid.Oid
+}
+
+func (o *FunctionOID) String() string {
+	return AsString(o)
+}
+
+func (o *FunctionOID) Format(ctx *FmtCtx) {
+	ctx.WriteString(fmt.Sprintf("[FUNCTION %d]", o.OID))
+}
