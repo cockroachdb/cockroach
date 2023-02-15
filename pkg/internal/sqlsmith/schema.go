@@ -516,6 +516,9 @@ var functions = func() map[tree.FunctionClass]map[oid.Oid][]function {
 			// TODO(96555): Temporarily disable crdb_internal.hide_sql_constants,
 			// which produces internal errors for some valid inputs.
 			"crdb_internal.hide_sql_constants",
+			// TODO(#97097): Temporarily disable crdb_internal.fingerprint
+			// which produces internal errors for some valid inputs.
+			"crdb_internal.fingerprint",
 		} {
 			skip = skip || strings.Contains(def.Name, substr)
 		}
