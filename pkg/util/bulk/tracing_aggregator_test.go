@@ -97,7 +97,8 @@ func TestIngestionPerformanceStatsAggregation(t *testing.T) {
 
 	makeEvent := func(v int64, sendWaitByStore map[roachpb.StoreID]time.Duration) *bulkpb.IngestionPerformanceStats {
 		return &bulkpb.IngestionPerformanceStats{
-			DataSize:          v,
+			LogicalDataSize:   v,
+			SSTDataSize:       v,
 			BufferFlushes:     v,
 			FlushesDueToSize:  v,
 			Batches:           v,

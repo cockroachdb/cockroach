@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -137,10 +138,14 @@ const (
 	// when Raft log truncation usually occurs when using the number of entries
 	// as the sole criteria.
 	RaftLogQueueStaleSize = 64 << 10
-	// Allow a limited number of Raft log truncations to be processed
-	// concurrently.
-	raftLogQueueConcurrency = 4
 )
+
+// raftLogQueueConcurrency limits the number of Raft log truncations to be
+// processed concurrently. For a single Raft participant (range), it impacts the
+// latency between consecutive log truncations, and therefore the amount of Raft
+// log data flushed to disk when it wasn't truncated in memtable timely. Higher
+// concurrency may decrease truncation latency and reduce the amount of IO.
+var raftLogQueueConcurrency = envutil.EnvOrDefaultInt("COCKROACH_RAFT_LOG_QUEUE_CONCURRENCY", 16)
 
 // raftLogQueue manages a queue of replicas slated to have their raft logs
 // truncated by removing unneeded entries.
