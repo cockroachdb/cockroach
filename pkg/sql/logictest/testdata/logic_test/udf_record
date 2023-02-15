@@ -1,0 +1,122 @@
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY, b INT);
+INSERT INTO t VALUES (1, 5), (2, 6), (3, 7);
+
+statement ok
+CREATE FUNCTION f_one() RETURNS RECORD AS
+$$
+  SELECT 1;
+$$ LANGUAGE SQL;
+
+query T
+SELECT f_one();
+----
+(1)
+
+statement ok
+CREATE FUNCTION f_const() RETURNS RECORD AS
+$$
+  SELECT 1, 2.0, 'welcome roacher', '2021-07-12 09:02:10-08:00'::TIMESTAMPTZ;
+$$ LANGUAGE SQL;
+
+query T
+SELECT f_const();
+----
+(1,2.0,"welcome roacher","2021-07-12 17:02:10+00")
+
+statement ok
+CREATE FUNCTION f_arr() RETURNS RECORD AS
+$$
+  SELECT ARRAY[1, 2, 3];
+$$ LANGUAGE SQL;
+
+query T
+SELECT f_arr();
+----
+("{1,2,3}")
+
+statement ok
+CREATE FUNCTION f_tuple() RETURNS RECORD AS
+$$
+  SELECT (4, 5, (6, 7, 8));
+$$ LANGUAGE SQL;
+
+query T
+SELECT f_tuple();
+----
+(4,5,"(6,7,8)")
+
+statement ok
+CREATE FUNCTION f_multituple() RETURNS RECORD AS
+$$
+  SELECT (1, 2), (3, 4);
+$$ LANGUAGE SQL;
+
+query T
+SELECT f_multituple();
+----
+("(1,2)","(3,4)")
+
+statement ok
+CREATE FUNCTION f_table() RETURNS RECORD AS
+$$
+  SELECT * FROM t ORDER BY a LIMIT 1;
+$$ LANGUAGE SQL;
+
+query TT
+SHOW CREATE FUNCTION f_table;
+----
+f_table  CREATE FUNCTION public.f_table()
+           RETURNS RECORD
+           VOLATILE
+           NOT LEAKPROOF
+           CALLED ON NULL INPUT
+           LANGUAGE SQL
+           AS $$
+           SELECT t.a, t.b FROM test.public.t ORDER BY a LIMIT 1;
+         $$
+
+query T
+SELECT f_table();
+----
+(1,5)
+
+statement ok
+CREATE FUNCTION f_multitable() RETURNS RECORD AS
+$$
+  SELECT t1.*, t2.* FROM t as t1 JOIN t as t2 on t1.a = t2.a ORDER BY t1.a LIMIT 1;
+$$ LANGUAGE SQL;
+
+query T
+SELECT f_multitable();
+----
+(1,5,1,5)
+
+statement ok
+CREATE FUNCTION f_setof() RETURNS SETOF RECORD AS
+$$
+  SELECT * FROM t
+$$ LANGUAGE SQL;
+
+query T rowsort
+SELECT f_setof();
+----
+(1,5)
+(2,6)
+(3,7)
+
+statement ok
+CREATE FUNCTION f_row() RETURNS RECORD IMMUTABLE LEAKPROOF LANGUAGE SQL AS 'SELECT ROW(1.1)';
+
+query T
+SELECT f_row();
+----
+(1.1)
+
+statement ok
+ALTER TABLE t ADD COLUMN c INT DEFAULT 0;
+
+query T
+SELECT f_table();
+----
+(1,5)
