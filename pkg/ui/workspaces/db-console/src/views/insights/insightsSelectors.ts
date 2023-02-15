@@ -57,6 +57,12 @@ export const selectTransactionInsightDetails = createSelector(
   },
 );
 
+export const selectStmtInsightsMaxApiReached = (
+  state: AdminUIState,
+): boolean => {
+  return !!state.cachedData.statementInsights?.data?.maxSizeReached;
+};
+
 export const selectTransactionInsightDetailsError = createSelector(
   (state: AdminUIState) => state.cachedData.transactionInsightDetails,
   selectID,
@@ -69,7 +75,7 @@ export const selectTransactionInsightDetailsError = createSelector(
 );
 
 export const selectStatementInsights = createSelector(
-  (state: AdminUIState) => state.cachedData.statementInsights?.data,
+  (state: AdminUIState) => state.cachedData.statementInsights?.data?.results,
   selectStatementInsightsCombiner,
 );
 

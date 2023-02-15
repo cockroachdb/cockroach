@@ -31,6 +31,7 @@ import {
   selectColumns,
   selectStatementInsights,
   selectStatementInsightsError,
+  selectStmtInsightsMaxApiReached,
 } from "src/store/insights/statementInsights";
 import {
   actions as transactionInsights,
@@ -65,6 +66,7 @@ const statementMapStateToProps = (
   sortSetting: selectSortSetting(state),
   selectedColumnNames: selectColumns(state),
   isTenant: selectIsTenant(state),
+  maxSizeApiReached: selectStmtInsightsMaxApiReached(state),
 });
 
 const TransactionDispatchProps = (

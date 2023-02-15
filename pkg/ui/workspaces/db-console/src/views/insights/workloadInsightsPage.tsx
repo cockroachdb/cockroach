@@ -30,6 +30,7 @@ import {
   selectStatementInsights,
   sortSettingLocalSetting,
   selectTransactionInsights,
+  selectStmtInsightsMaxApiReached,
 } from "src/views/insights/insightsSelectors";
 import { bindActionCreators } from "redux";
 import { LocalSetting } from "src/redux/localsettings";
@@ -64,6 +65,7 @@ const statementMapStateToProps = (
   sortSetting: sortSettingLocalSetting.selector(state),
   selectedColumnNames:
     insightStatementColumnsLocalSetting.selectorToArray(state),
+  maxSizeApiReached: selectStmtInsightsMaxApiReached(state),
 });
 
 const TransactionDispatchProps = {

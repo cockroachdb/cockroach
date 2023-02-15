@@ -503,7 +503,7 @@ export interface APIReducersState {
   clusterLocks: CachedDataReducerState<clusterUiApi.ClusterLocksResponse>;
   transactionInsights: CachedDataReducerState<clusterUiApi.TransactionInsightEventsResponse>;
   transactionInsightDetails: KeyedCachedDataReducerState<clusterUiApi.TransactionInsightEventDetailsResponse>;
-  statementInsights: CachedDataReducerState<clusterUiApi.StatementInsights>;
+  statementInsights: CachedDataReducerState<clusterUiApi.ApiResponse<clusterUiApi.StatementInsights>>;
   schemaInsights: CachedDataReducerState<clusterUiApi.InsightRecommendation[]>;
   schedules: KeyedCachedDataReducerState<clusterUiApi.Schedules>;
   schedule: KeyedCachedDataReducerState<clusterUiApi.Schedule>;

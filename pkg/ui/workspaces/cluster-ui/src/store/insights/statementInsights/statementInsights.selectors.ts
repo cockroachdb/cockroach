@@ -18,12 +18,15 @@ import {
 } from "src/selectors/insightsCommon.selectors";
 import { selectID } from "src/selectors/common";
 export const selectStatementInsights = createSelector(
-  (state: AppState) => state.adminUI.statementInsights?.data,
+  (state: AppState) => state.adminUI.statementInsights?.data?.results,
   selectStatementInsightsCombiner,
 );
 
 export const selectStatementInsightsError = (state: AppState) =>
   state.adminUI.statementInsights?.lastError;
+
+export const selectStmtInsightsMaxApiReached = (state: AppState): boolean =>
+  state.adminUI.statementInsights?.data?.maxSizeReached;
 
 export const selectStatementInsightDetails = createSelector(
   selectStatementInsights,
