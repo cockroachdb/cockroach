@@ -70,6 +70,8 @@ import (
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 	sentry "github.com/getsentry/sentry-go"
+	"google.golang.org/grpc/codes"
+	grpcstatus "google.golang.org/grpc/status"
 )
 
 // SQLServerWrapper is a utility struct that encapsulates
@@ -757,7 +759,15 @@ func (s *SQLServerWrapper) serveConn(
 	switch status.State {
 	case pgwire.PreServeCancel:
 		if err := pgServer.HandleCancel(ctx, status.CancelKey); err != nil {
-			log.Sessions.Warningf(ctx, "unexpected while handling pgwire cancellation request: %v", err)
+			_, rateLimited := errors.If(err, func(err error) (interface{}, bool) {
+				if respStatus := grpcstatus.Convert(err); respStatus.Code() == codes.ResourceExhausted {
+					return nil, true
+				}
+				return nil, false
+			})
+			if rateLimited {
+				log.Sessions.Warningf(ctx, "unexpected while handling pgwire cancellation request: %v", err)
+			}
 		}
 		return nil
 	case pgwire.PreServeReady:

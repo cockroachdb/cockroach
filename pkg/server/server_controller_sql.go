@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"google.golang.org/grpc/codes"
+	grpcstatus "google.golang.org/grpc/status"
 )
 
 // sqlMux redirects incoming SQL connections to the server selected
@@ -71,7 +73,15 @@ func (c *serverController) sqlMux(
 			}
 			if !sawSuccess {
 				// We don't want to log a warning if cancellation has succeeded.
-				log.Sessions.Warningf(ctx, "unexpected while handling pgwire cancellation request: %+v", err)
+				_, rateLimited := errors.If(err, func(err error) (interface{}, bool) {
+					if respStatus := grpcstatus.Convert(err); respStatus.Code() == codes.ResourceExhausted {
+						return nil, true
+					}
+					return nil, false
+				})
+				if rateLimited {
+					log.Sessions.Warningf(ctx, "unexpected while handling pgwire cancellation request: %v", err)
+				}
 			}
 		})
 
