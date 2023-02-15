@@ -418,6 +418,9 @@ const (
 	// user_id column in the system.privileges table has been backfilled.
 	V23_1SystemPrivilegesTableUserIDColumnBackfilled
 
+	// V23_1_SchemaChangerDeprecatedIndexPredicates is the version where the
+	// declarative schema changer no longer produces scpb.SecondaryIndexPartial
+	// elements.
 	V23_1_SchemaChangerDeprecatedIndexPredicates
 
 	// *************************************************
