@@ -431,9 +431,17 @@ const (
 	// elements.
 	V23_1_SchemaChangerDeprecatedIndexPredicates
 
-	// V23_1AlterSystemPrivilegesAddIndexOnPathAndUsername adds a covering secondary index to
 	// system.privileges, on the path and username columns.
 	V23_1AlterSystemPrivilegesAddIndexOnPathAndUsername
+
+	// V23_1DatabaseRoleSettingsHasRoleIDColumn is the version where the role_id
+	// column has been added to the system.database_role_settings table.
+	V23_1DatabaseRoleSettingsHasRoleIDColumn
+
+	// V23_1DatabaseRoleSettingsRoleIDColumnBackfilled is the version where
+	// the role_id column in the system.database_role_settings table has been
+	// backfilled.
+	V23_1DatabaseRoleSettingsRoleIDColumnBackfilled
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -751,6 +759,14 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1AlterSystemPrivilegesAddIndexOnPathAndUsername,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 52},
+	},
+	{
+		Key:     V23_1DatabaseRoleSettingsHasRoleIDColumn,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 54},
+	},
+	{
+		Key:     V23_1DatabaseRoleSettingsRoleIDColumnBackfilled,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 56},
 	},
 
 	// *************************************************
