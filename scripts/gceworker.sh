@@ -151,7 +151,13 @@ case "${cmd}" in
     gcloud "$@"
     ;;
     get)
-    from="${NAME}:go/src/github.com/cockroachdb/cockroach/${1}"
+    rpath="${1}"
+    # Check whether we have an absolute path like /foo, ~foo, or ~/foo.
+    # If not, base the path relative to the CRDB repo.
+    if [[ "${rpath:0:1}" != / && "${rpath:0:2}" != ~[/a-z] ]]; then
+        rpath="go/src/github.com/cockroachdb/cockroach/${rpath}"
+    fi
+    from="${NAME}:${rpath}"
     shift
     gcloud compute scp --recurse "${from}" "$@"
     ;;
