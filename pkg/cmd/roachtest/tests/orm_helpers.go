@@ -175,15 +175,25 @@ func (r *ormTestsResults) summarizeFailed(
 		var b strings.Builder
 		fmt.Fprintf(&b, "Here is new %s blocklist that can be used to update the test:\n\n", ormName)
 		fmt.Fprintf(&b, "var %s = blocklist{\n", blocklistName)
-		for _, test := range r.currentFailures {
-			issue := expectedFailures[test]
+
+		prevName := ""
+		for _, testName := range r.currentFailures {
+			// Avoid putting duplicates in the map. Since the currentFailures was
+			// sorted earlier, we just need to keep track of the previous element.
+			// The npgsql suite has duplicate test names since it seems to run
+			// some tests twice.
+			if testName == prevName {
+				continue
+			}
+			prevName = testName
+			issue := expectedFailures[testName]
 			if len(issue) == 0 || issue == "unknown" {
-				issue = r.allIssueHints[test]
+				issue = r.allIssueHints[testName]
 			}
 			if len(issue) == 0 {
 				issue = "unknown"
 			}
-			fmt.Fprintf(&b, "  \"%s\": \"%s\",\n", test, issue)
+			fmt.Fprintf(&b, "  `%s`: \"%s\",\n", testName, issue)
 		}
 		fmt.Fprintf(&b, "}\n\n")
 		t.L().Printf("\n\n%s\n\n", b.String())

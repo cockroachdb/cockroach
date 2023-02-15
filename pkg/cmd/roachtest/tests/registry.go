@@ -90,6 +90,7 @@ func RegisterTests(r registry.Registry) {
 	registerMultiTenantSharedProcess(r)
 	registerNetwork(r)
 	registerNodeJSPostgres(r)
+	registerNpgsql(r)
 	registerPebbleWriteThroughput(r)
 	registerPebbleYCSB(r)
 	registerPgjdbc(r)
