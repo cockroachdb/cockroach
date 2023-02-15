@@ -56,6 +56,7 @@ import styles from "src/statementsPage/statementsPage.module.scss";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 import { commonStyles } from "../../../common";
 import { useFetchDataWithPolling } from "src/util/hooks";
+import { InlineAlert } from "@cockroachlabs/ui-components";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -72,6 +73,7 @@ export type StatementInsightsViewStateProps = {
   isLoading?: boolean;
   dropDownSelect?: React.ReactElement;
   timeScale?: TimeScale;
+  maxSizeApiReached?: boolean;
 };
 
 export type StatementInsightsViewDispatchProps = {
@@ -105,6 +107,7 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = ({
   setTimeScale,
   selectedColumnNames,
   dropDownSelect,
+  maxSizeApiReached,
 }: StatementInsightsViewProps) => {
   const [pagination, setPagination] = useState<ISortedTablePagination>({
     current: 1,
@@ -317,6 +320,12 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = ({
               total={filteredStatements?.length}
               onChange={onChangePage}
             />
+            {maxSizeApiReached && (
+              <InlineAlert
+                intent="info"
+                title="Some Insights may not be displayed."
+              />
+            )}
           </div>
         </Loading>
       </div>

@@ -70,8 +70,19 @@ const selectTxnInsight = createSelector(
   },
 );
 
-export const selectStmtInsights = (state: AdminUIState) =>
-  state.cachedData.stmtInsights?.data;
+export const selectStmtInsights = (state: AdminUIState) => {
+  return state.cachedData.stmtInsights?.data
+    ? state.cachedData.stmtInsights.data["results"]
+    : null;
+};
+
+export const selectStmtInsightsMaxApiReached = (
+  state: AdminUIState,
+): boolean => {
+  return state.cachedData.stmtInsights?.data
+    ? state.cachedData.stmtInsights?.data["maxSizeReached"]
+    : false;
+};
 
 export const selectTxnInsightDetails = createSelector(
   selectTxnInsight,

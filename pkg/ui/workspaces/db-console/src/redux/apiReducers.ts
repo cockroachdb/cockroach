@@ -557,11 +557,15 @@ export interface APIReducersState {
   userSQLRoles: CachedDataReducerState<api.UserSQLRolesResponseMessage>;
   hotRanges: PaginatedCachedDataReducerState<api.HotRangesV2ResponseMessage>;
   clusterLocks: CachedDataReducerState<clusterUiApi.ClusterLocksResponse>;
-  stmtInsights: CachedDataReducerState<StmtInsightEvent[]>;
+  stmtInsights: CachedDataReducerState<
+    clusterUiApi.ApiResponse<StmtInsightEvent>
+  >;
   txnInsightDetails: KeyedCachedDataReducerState<clusterUiApi.TxnInsightDetailsResponse>;
   txnInsights: CachedDataReducerState<TxnInsightEvent[]>;
   schemaInsights: CachedDataReducerState<clusterUiApi.InsightRecommendation[]>;
-  statementFingerprintInsights: KeyedCachedDataReducerState<StmtInsightEvent[]>;
+  statementFingerprintInsights: KeyedCachedDataReducerState<
+    clusterUiApi.ApiResponse<StmtInsightEvent>
+  >;
   schedules: KeyedCachedDataReducerState<clusterUiApi.Schedules>;
   schedule: KeyedCachedDataReducerState<clusterUiApi.Schedule>;
   snapshots: KeyedCachedDataReducerState<clusterUiApi.ListTracingSnapshotsResponse>;

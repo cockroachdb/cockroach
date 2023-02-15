@@ -108,7 +108,7 @@ const selectStatementFingerprintInsights = createSelector(
   (_state: AdminUIState, props: RouteComponentProps): string =>
     getMatchParamByName(props.match, statementAttr),
   (cachedFingerprintInsights, fingerprintID) => {
-    return cachedFingerprintInsights[fingerprintID]?.data;
+    return cachedFingerprintInsights[fingerprintID]?.data?.results;
   },
 );
 
