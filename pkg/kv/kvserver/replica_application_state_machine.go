@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/kr/pretty"
 	"go.etcd.io/raft/v3"
 )
@@ -150,6 +151,26 @@ func (sm *replicaStateMachine) NewBatch() apply.Batch {
 	return b
 }
 
+func formatReplicatedCmd(cmd *replicatedCmd) redact.RedactableString {
+	var buf redact.StringBuilder
+	// We need to zero various data structures that would otherwise
+	// cause panics in `pretty.Sprint`.
+	var pd ProposalData
+	if cmd.proposal != nil {
+		pd = *cmd.proposal
+		pd.ctx = nil
+		pd.sp = nil
+		pd.command.TraceData = nil
+		pd.quotaAlloc = nil
+		pd.tok = TrackedRequestToken{}
+		pd.ec = endCmds{}
+	}
+
+	// NB: this redacts very poorly, but this is considered acceptable for now.
+	redact.Fprintf(&buf, "cmd:%s\n\nproposal: %s", pretty.Sprint(cmd.ReplicatedCmd), pretty.Sprint(pd))
+	return buf.RedactableString()
+}
+
 // ApplySideEffects implements the apply.StateMachine interface. The method
 // handles the third phase of applying a command to the replica state machine.
 //
@@ -223,22 +244,52 @@ func (sm *replicaStateMachine) ApplySideEffects(
 			sm.r.handleReadWriteLocalEvalResult(ctx, *cmd.localResult)
 		}
 
-		if higherReproposalsExist := cmd.proposal.Supersedes(cmd.Cmd.MaxLeaseIndex); higherReproposalsExist {
-			// If the command wasn't rejected, we just applied it and no higher
-			// reproposal must exist (since that one may also apply).
+		if higherReproposalsExist := cmd.proposal.Supersedes(cmd.Cmd.MaxLeaseIndex); higherReproposalsExist &&
+			(!cmd.Rejected() || cmd.Rejection == kvserverbase.ProposalRejectionIllegalLeaseIndex) {
+			// If this entry was accepted, there must not be superseding reproposal,
+			// as nothing prevents it from applying as well in the common case.
 			//
-			// If the command was rejected with ProposalRejectionPermanent, no higher
-			// reproposal should exist (after all, whoever made that reproposal should
-			// also have seen a permanent rejection).
+			// If this entry was rejected but only on account of the lease applied
+			// index, then the call to tryReproposeWithNewLeaseIndex[^1] must have
+			// returned an error (or the proposal would not be IsLocal() now; we
+			// unbind on success). But that call, by design, does not an error for a
+			// proposal that is already superseded.
 			//
-			// If it was rejected with ProposalRejectionIllegalLeaseIndex, then the
-			// subsequent call to tryReproposeWithNewLeaseIndex[^1] must have returned an
-			// error (or the proposal would not be IsLocal() now). But that call
-			// cannot return an error for a proposal that is already superseded
-			// initially.
+			// If the command was rejected permanently, a superseding entry *can*
+			// actually exist, because the condition that leads to a permanent
+			// rejection now may not have been given at the time at which the
+			// superseding proposal was spawned.
+			//
+			// For example, consider the following initial situation:
+			//
+			//   [lease seq is 1]
+			//   idx 99: unrelated cmd at LAI 10000, lease seq = 1
+			//   idx 100: cmd X at LAI 10000, lease seq = 1
+			//   idx 100: cmd X at LAI 10000, lease seq = 1
+			//
+			// Command `X` at log position 100 will get reproposed with a new lease
+			// index (as idx 99 consumed the LAI). But now the lease might also change
+			// hands, and an identical reproposal of index 100 might be appended, too:
+			//
+			//   [lease seq is 1]
+			//   idx 99: unrelated cmd at LAI 10000, lease seq = 1
+			//   idx 100: cmd X at LAI 10000, lease seq = 1
+			//   idx 101: new lease seq=2
+			//   idx 102: cmd X at LAI 10000, lease seq = 1
+			//   idx 103: cmd X at LAI 20000, lease seq = 1
+			//
+			// When we apply index 102, we will see a permanent rejection but the
+			// proposal is local (since we don't unlink it if it is already superseded
+			// initially, see `retrieveLocalProposals`) and superseded (by idx 103). A
+			// permanent rejection dooms all reproposals (including the superseding
+			// one) to the same fate, so idx 103 will get rejected just like idx 102.
+			// is.
 			//
 			// [^1]: see (*replicaDecoder).retrieveLocalProposals()
-			log.Fatalf(ctx, "finishing proposal with outstanding reproposal at a higher max lease index: %+v", cmd)
+			sm.r.mu.RLock()
+			s := formatReplicatedCmd(cmd)
+			sm.r.mu.RUnlock()
+			log.Fatalf(ctx, "finishing a proposal with outstanding reproposal at a higher max lease index:\n\n%s", s)
 		}
 		if !cmd.Rejected() && cmd.proposal.applied {
 			// If the command already applied then we shouldn't be "finishing" its
