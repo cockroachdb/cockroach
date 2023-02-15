@@ -1794,6 +1794,12 @@ func (s *ScanStats) SafeFormat(w redact.SafePrinter, _ rune) {
 		humanizePointCount(s.RangeKeyCount),
 		humanizePointCount(s.RangeKeyContainedPoints),
 		humanizePointCount(s.RangeKeySkippedPoints))
+	if s.SeparatedPointCount != 0 {
+		w.Printf(" separated: (count: %s, bytes: %s, bytes-fetched: %s)",
+			humanizePointCount(s.SeparatedPointCount),
+			humanizeutil.IBytes(int64(s.SeparatedPointValueBytes)),
+			humanizeutil.IBytes(int64(s.SeparatedPointValueBytesFetched)))
+	}
 }
 
 // String implements fmt.Stringer.
