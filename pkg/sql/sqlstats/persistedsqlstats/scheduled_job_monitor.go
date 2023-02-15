@@ -96,10 +96,14 @@ func (j *jobMonitor) start(ctx context.Context, stopper *stop.Stopper) {
 			case <-stopCtx.Done():
 				return
 			}
-			if SQLStatsCleanupRecurrence.Get(&j.st.SV) != currentRecurrence || nextJobScheduleCheck.Before(timeutil.Now()) {
-				j.updateSchedule(stopCtx)
+
+			// Read the config once to avoid race condition if config is changed during
+			// the update process.
+			newRecurrence := SQLStatsCleanupRecurrence.Get(&j.st.SV)
+			if newRecurrence != currentRecurrence || nextJobScheduleCheck.Before(timeutil.Now()) {
+				j.updateSchedule(stopCtx, newRecurrence)
 				nextJobScheduleCheck = timeutil.Now().Add(j.jitterFn(j.scanInterval))
-				currentRecurrence = SQLStatsCleanupRecurrence.Get(&j.st.SV)
+				currentRecurrence = newRecurrence
 			}
 
 			timer.Reset(updateCheckInterval)
@@ -136,7 +140,7 @@ func (j *jobMonitor) getSchedule(
 	return sj, nil
 }
 
-func (j *jobMonitor) updateSchedule(ctx context.Context) {
+func (j *jobMonitor) updateSchedule(ctx context.Context, cronExpr string) {
 	var sj *jobs.ScheduledJob
 	var err error
 	retryOptions := retry.Options{
@@ -158,8 +162,7 @@ func (j *jobMonitor) updateSchedule(ctx context.Context) {
 					return err
 				}
 			}
-			// Update schedule with new recurrence, if different.
-			cronExpr := SQLStatsCleanupRecurrence.Get(&j.st.SV)
+
 			if sj.ScheduleExpr() == cronExpr {
 				return nil
 			}
