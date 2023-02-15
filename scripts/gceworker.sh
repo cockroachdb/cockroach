@@ -151,7 +151,12 @@ case "${cmd}" in
     gcloud "$@"
     ;;
     get)
-    from="${NAME}:go/src/github.com/cockroachdb/cockroach/${1}"
+    rpath="${1}"
+    if [[ "${rpath}" != /* ]]; then
+        # Relative paths are relative to main repo.
+        rpath="go/src/github.com/cockroachdb/cockroach/${rpath}"
+    fi
+    from="${NAME}:${rpath}"
     shift
     gcloud compute scp --recurse "${from}" "$@"
     ;;
