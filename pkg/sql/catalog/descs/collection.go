@@ -170,6 +170,11 @@ func (tc *Collection) ResetMaxTimestampBound() {
 	tc.maxTimestampBoundDeadlineHolder.maxTimestampBound = hlc.Timestamp{}
 }
 
+// GetMaxTimestampBound returns the maximum timestamp to read schemas at.
+func (tc *Collection) GetMaxTimestampBound() hlc.Timestamp {
+	return tc.maxTimestampBoundDeadlineHolder.maxTimestampBound
+}
+
 // SkipValidationOnWrite avoids validating stored descriptors prior to
 // a transaction commit.
 func (tc *Collection) SkipValidationOnWrite() {
@@ -901,8 +906,8 @@ func (tc *Collection) aggregateAllLayers(
 			// This is needed at least for the temp system db during restores.
 			descIDs.Add(sc.GetID())
 		}
-		_ = sc.ForEachFunctionOverload(func(overload descpb.SchemaDescriptor_FunctionOverload) error {
-			descIDs.Add(overload.ID)
+		_ = sc.ForEachFunctionSignature(func(sig descpb.SchemaDescriptor_FunctionSignature) error {
+			descIDs.Add(sig.ID)
 			return nil
 		})
 	}
@@ -910,8 +915,8 @@ func (tc *Collection) aggregateAllLayers(
 	_ = stored.ForEachDescriptor(func(desc catalog.Descriptor) error {
 		descIDs.Add(desc.GetID())
 		if sc, ok := desc.(catalog.SchemaDescriptor); ok {
-			_ = sc.ForEachFunctionOverload(func(overload descpb.SchemaDescriptor_FunctionOverload) error {
-				descIDs.Add(overload.ID)
+			_ = sc.ForEachFunctionSignature(func(sig descpb.SchemaDescriptor_FunctionSignature) error {
+				descIDs.Add(sig.ID)
 				return nil
 			})
 		}
@@ -956,8 +961,8 @@ func (tc *Collection) aggregateAllLayers(
 		_ = iterator(func(desc catalog.Descriptor) error {
 			descIDs.Add(desc.GetID())
 			if sc, ok := desc.(catalog.SchemaDescriptor); ok {
-				_ = sc.ForEachFunctionOverload(func(overload descpb.SchemaDescriptor_FunctionOverload) error {
-					descIDs.Add(overload.ID)
+				_ = sc.ForEachFunctionSignature(func(sig descpb.SchemaDescriptor_FunctionSignature) error {
+					descIDs.Add(sig.ID)
 					return nil
 				})
 			}
@@ -1206,7 +1211,7 @@ func MakeTestCollection(ctx context.Context, leaseManager *lease.Manager) Collec
 }
 
 // InternalExecFn is the type of functions that operates using an internalExecutor.
-type InternalExecFn func(ctx context.Context, txn isql.Txn, descriptors *Collection) error
+type InternalExecFn func(ctx context.Context, txn Txn) error
 
 // HistoricalInternalExecTxnRunnerFn callback for executing with the internal executor
 // at a fixed timestamp.

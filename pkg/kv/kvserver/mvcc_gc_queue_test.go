@@ -481,7 +481,7 @@ func TestMVCCGCQueueMakeGCScoreRealistic(t *testing.T) {
 		mc := timeutil.NewManualTime(timeutil.Unix(0, ms.LastUpdateNanos))
 		txn := newTransaction(
 			"txn", roachpb.Key("key"), roachpb.NormalUserPriority,
-			hlc.NewClock(mc, time.Millisecond /* maxOffset */))
+			hlc.NewClockForTesting(mc))
 
 		// Write 1000 distinct 1kb intents at the initial timestamp. This means that
 		// the average intent age is just the time elapsed from now, and this is roughly
@@ -858,7 +858,7 @@ func TestMVCCGCQueueProcess(t *testing.T) {
 
 	// Call Run with dummy functions to get current Info.
 	gcInfo, err := func() (gc.Info, error) {
-		snap := tc.repl.store.Engine().NewSnapshot()
+		snap := tc.repl.store.TODOEngine().NewSnapshot()
 		desc := tc.repl.Desc()
 		defer snap.Close()
 
@@ -941,7 +941,7 @@ func TestMVCCGCQueueProcess(t *testing.T) {
 	// However, because the GC processing pushes transactions and
 	// resolves intents asynchronously, we use a SucceedsSoon loop.
 	testutils.SucceedsSoon(t, func() error {
-		kvs, err := storage.Scan(tc.store.Engine(), key1, keys.MaxKey, 0)
+		kvs, err := storage.Scan(tc.store.TODOEngine(), key1, keys.MaxKey, 0)
 		if err != nil {
 			return err
 		}
@@ -971,7 +971,7 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 	ctx := context.Background()
 
 	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
-	tsc := TestStoreConfig(hlc.NewClock(manual, time.Nanosecond) /* maxOffset */)
+	tsc := TestStoreConfig(hlc.NewClockForTesting(manual))
 	manual.MustAdvanceTo(timeutil.Unix(0, 3*24*time.Hour.Nanoseconds()))
 
 	testTime := manual.Now().Add(2 * time.Hour)
@@ -1116,7 +1116,7 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 	txns := map[string]roachpb.Transaction{}
 	for strKey, test := range testCases {
 		baseKey := roachpb.Key(strKey)
-		txnClock := hlc.NewClock(timeutil.NewManualTime(test.orig), time.Nanosecond /* maxOffset */)
+		txnClock := hlc.NewClockForTesting(timeutil.NewManualTime(test.orig))
 		txn := newTransaction("txn1", baseKey, 1, txnClock)
 		txn.Status = test.status
 		txn.LockSpans = testIntents
@@ -1193,7 +1193,7 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 				return fmt.Errorf("%s: unexpected intent resolutions:\nexpected: %s\nobserved: %s", strKey, expIntents, spans)
 			}
 			entry := &roachpb.AbortSpanEntry{}
-			abortExists, err := tc.repl.abortSpan.Get(ctx, tc.store.Engine(), txns[strKey].ID, entry)
+			abortExists, err := tc.repl.abortSpan.Get(ctx, tc.store.TODOEngine(), txns[strKey].ID, entry)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1207,7 +1207,7 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 	outsideTxnPrefix := keys.TransactionKey(outsideKey, uuid.UUID{})
 	outsideTxnPrefixEnd := keys.TransactionKey(outsideKey.Next(), uuid.UUID{})
 	var count int
-	if _, err := storage.MVCCIterate(ctx, tc.store.Engine(), outsideTxnPrefix, outsideTxnPrefixEnd, hlc.Timestamp{},
+	if _, err := storage.MVCCIterate(ctx, tc.store.TODOEngine(), outsideTxnPrefix, outsideTxnPrefixEnd, hlc.Timestamp{},
 		storage.MVCCScanOptions{}, func(roachpb.KeyValue) error {
 			count++
 			return nil
@@ -1290,7 +1290,7 @@ func TestMVCCGCQueueIntentResolution(t *testing.T) {
 		meta := &enginepb.MVCCMetadata{}
 		// The range is specified using only global keys, since the implementation
 		// may use an intentInterleavingIter.
-		return tc.store.Engine().MVCCIterate(
+		return tc.store.TODOEngine().MVCCIterate(
 			keys.LocalMax, roachpb.KeyMax, storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsOnly,
 			func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
 				if !kv.Key.IsValue() {
@@ -1374,7 +1374,7 @@ func TestMVCCGCQueueChunkRequests(t *testing.T) {
 
 	var gcRequests int32
 	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
-	tsc := TestStoreConfig(hlc.NewClock(manual, time.Nanosecond) /* maxOffset */)
+	tsc := TestStoreConfig(hlc.NewClockForTesting(manual))
 	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 			if _, ok := filterArgs.Req.(*roachpb.GCRequest); ok {
@@ -1481,7 +1481,7 @@ func TestMVCCGCQueueGroupsRangeDeletions(t *testing.T) {
 
 	// Create store and prepare by removing default range.
 	clock := timeutil.NewManualTime(timeutil.Unix(0, 123))
-	cfg := TestStoreConfig(hlc.NewClock(clock, time.Nanosecond) /* maxOffset */)
+	cfg := TestStoreConfig(hlc.NewClockForTesting(clock))
 	cfg.TestingKnobs.MVCCGCQueueLeaseCheckInterceptor = func(ctx context.Context, replica *Replica, now hlc.ClockTimestamp,
 	) bool {
 		return leaseError

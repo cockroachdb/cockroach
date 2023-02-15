@@ -519,6 +519,7 @@ func backupTypeCheck(
 		exprutil.Strings{
 			backupStmt.Subdir,
 			backupStmt.Options.EncryptionPassphrase,
+			backupStmt.Options.CoordinatorLocality,
 		},
 		exprutil.StringArrays{
 			tree.Exprs(backupStmt.To),
@@ -597,6 +598,19 @@ func backupPlanHook(
 		)
 		if err != nil {
 			return nil, nil, nil, false, err
+		}
+	}
+
+	var coordinatorLocality roachpb.Locality
+	if backupStmt.Options.CoordinatorLocality != nil {
+		s, err := exprEval.String(ctx, backupStmt.Options.CoordinatorLocality)
+		if err != nil {
+			return nil, nil, nil, false, err
+		}
+		if s != "" {
+			if err := coordinatorLocality.Set(s); err != nil {
+				return nil, nil, nil, false, err
+			}
 		}
 	}
 
@@ -712,6 +726,13 @@ func backupPlanHook(
 			return err
 		}
 
+		// Check that a node will currently be able to run this before we create it.
+		if coordinatorLocality.NonEmpty() {
+			if _, err := p.DistSQLPlanner().GetAllInstancesByLocality(ctx, coordinatorLocality); err != nil {
+				return err
+			}
+		}
+
 		initialDetails := jobspb.BackupDetails{
 			Destination:         jobspb.BackupDetails_Destination{To: to, IncrementalStorage: incrementalStorage},
 			EndTime:             endTime,
@@ -723,6 +744,7 @@ func backupPlanHook(
 			AsOfInterval:        asOfInterval,
 			Detached:            detached,
 			ApplicationName:     p.SessionData().ApplicationName,
+			CoordinatorLocation: coordinatorLocality,
 		}
 		if backupStmt.CreatedByInfo != nil && backupStmt.CreatedByInfo.Name == jobs.CreatedByScheduledJobs {
 			initialDetails.ScheduleID = backupStmt.CreatedByInfo.ID
@@ -1072,6 +1094,7 @@ func getReintroducedSpans(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
 	prevBackups []backuppb.BackupManifest,
+	layerToIterFactory backupinfo.LayerToBackupManifestFileIterFactory,
 	tables []catalog.TableDescriptor,
 	revs []backuppb.BackupManifest_DescriptorRevision,
 	endTime hlc.Timestamp,
@@ -1097,12 +1120,21 @@ func getReintroducedSpans(
 	// at backup time, we must find all tables in manifest.DescriptorChanges whose
 	// last change brought the table offline.
 	offlineInLastBackup := make(map[descpb.ID]struct{})
-	lastBackup := prevBackups[len(prevBackups)-1]
+	lastIterFactory := layerToIterFactory[len(prevBackups)-1]
 
-	for _, desc := range lastBackup.Descriptors {
+	descIt := lastIterFactory.NewDescIter(ctx)
+	defer descIt.Close()
+
+	for ; ; descIt.Next() {
+		if ok, err := descIt.Valid(); err != nil {
+			return nil, err
+		} else if !ok {
+			break
+		}
+
 		// TODO(pbardea): Also check that lastWriteTime is set once those are
 		// populated on the table descriptor.
-		if table, _, _, _, _ := descpb.GetDescriptors(&desc); table != nil && table.Offline() {
+		if table, _, _, _, _ := descpb.GetDescriptors(descIt.Value()); table != nil && table.Offline() {
 			offlineInLastBackup[table.GetID()] = struct{}{}
 		}
 	}
@@ -1112,8 +1144,16 @@ func getReintroducedSpans(
 	// change in the previous backup interval put the table offline, then that
 	// backup was offline at the endTime of the last backup.
 	latestTableDescChangeInLastBackup := make(map[descpb.ID]*descpb.TableDescriptor)
-	for _, rev := range lastBackup.DescriptorChanges {
-		if table, _, _, _, _ := descpb.GetDescriptors(rev.Desc); table != nil {
+	descRevIt := lastIterFactory.NewDescriptorChangesIter(ctx)
+	defer descRevIt.Close()
+	for ; ; descRevIt.Next() {
+		if ok, err := descRevIt.Valid(); err != nil {
+			return nil, err
+		} else if !ok {
+			break
+		}
+
+		if table, _, _, _, _ := descpb.GetDescriptors(descRevIt.Value().Desc); table != nil {
 			if trackedRev, ok := latestTableDescChangeInLastBackup[table.GetID()]; !ok {
 				latestTableDescChangeInLastBackup[table.GetID()] = table
 			} else if trackedRev.Version < table.Version {
@@ -1366,6 +1406,7 @@ func createBackupManifest(
 	txn isql.Txn,
 	jobDetails jobspb.BackupDetails,
 	prevBackups []backuppb.BackupManifest,
+	layerToIterFactory backupinfo.LayerToBackupManifestFileIterFactory,
 ) (backuppb.BackupManifest, error) {
 	mvccFilter := backuppb.MVCCFilter_Latest
 	if jobDetails.RevisionHistory {
@@ -1439,9 +1480,17 @@ func createBackupManifest(
 	if len(prevBackups) > 0 {
 		tablesInPrev := make(map[descpb.ID]struct{})
 		dbsInPrev := make(map[descpb.ID]struct{})
-		rawDescs := prevBackups[len(prevBackups)-1].Descriptors
-		for i := range rawDescs {
-			if t, _, _, _, _ := descpb.GetDescriptors(&rawDescs[i]); t != nil {
+
+		descIt := layerToIterFactory[len(prevBackups)-1].NewDescIter(ctx)
+		defer descIt.Close()
+		for ; ; descIt.Next() {
+			if ok, err := descIt.Valid(); err != nil {
+				return backuppb.BackupManifest{}, err
+			} else if !ok {
+				break
+			}
+
+			if t, _, _, _, _ := descpb.GetDescriptors(descIt.Value()); t != nil {
 				tablesInPrev[t.ID] = struct{}{}
 			}
 		}
@@ -1462,7 +1511,7 @@ func createBackupManifest(
 
 		newSpans = filterSpans(spans, prevBackups[len(prevBackups)-1].Spans)
 
-		reintroducedSpans, err = getReintroducedSpans(ctx, execCfg, prevBackups, tables, revs, endTime)
+		reintroducedSpans, err = getReintroducedSpans(ctx, execCfg, prevBackups, layerToIterFactory, tables, revs, endTime)
 		if err != nil {
 			return backuppb.BackupManifest{}, err
 		}

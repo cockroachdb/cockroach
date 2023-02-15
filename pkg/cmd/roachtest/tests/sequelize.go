@@ -151,7 +151,7 @@ func registerSequelize(r registry.Registry) {
 
 	r.Add(registry.TestSpec{
 		Name:       "sequelize",
-		Owner:      registry.OwnerSQLExperience,
+		Owner:      registry.OwnerSQLSessions,
 		Cluster:    r.MakeClusterSpec(1),
 		NativeLibs: registry.LibGEOS,
 		Tags:       []string{`default`, `orm`},

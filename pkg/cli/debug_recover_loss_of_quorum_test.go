@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -378,4 +380,195 @@ func TestJsonSerialization(t *testing.T) {
 	var crFromJSON loqrecoverypb.ClusterReplicaInfo
 	require.NoError(t, jsonpb.Unmarshal(data, &crFromJSON))
 	require.Equal(t, nr, crFromJSON, "objects before and after serialization")
+}
+
+func TestUpdatePlanVsClusterDiff(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var empty uuid.UUID
+	planID, _ := uuid.FromString("123e4567-e89b-12d3-a456-426614174000")
+	otherPlanID, _ := uuid.FromString("123e4567-e89b-12d3-a456-426614174001")
+	applyTime, _ := time.Parse(time.RFC3339, "2023-01-24T10:30:00Z")
+
+	status := func(id roachpb.NodeID, pending, applied uuid.UUID, err string) loqrecoverypb.NodeRecoveryStatus {
+		s := loqrecoverypb.NodeRecoveryStatus{
+			NodeID: id,
+		}
+		if !pending.Equal(empty) {
+			s.PendingPlanID = &pending
+		}
+		if !applied.Equal(empty) {
+			s.AppliedPlanID = &applied
+			s.ApplyTimestamp = &applyTime
+		}
+		s.Error = err
+		return s
+	}
+
+	for _, d := range []struct {
+		name         string
+		updatedNodes []int
+		staleLeases  []int
+		status       []loqrecoverypb.NodeRecoveryStatus
+		pending      int
+		errors       int
+		report       []string
+	}{
+		{
+			name:         "after staging",
+			updatedNodes: []int{1, 2},
+			staleLeases:  []int{3},
+			status: []loqrecoverypb.NodeRecoveryStatus{
+				status(1, planID, empty, ""),
+				status(2, planID, empty, ""),
+				status(3, planID, empty, ""),
+			},
+			pending: 3,
+			report: []string{
+				" plan application pending on node n1",
+				" plan application pending on node n2",
+				" plan application pending on node n3",
+			},
+		},
+		{
+			name:         "partially applied",
+			updatedNodes: []int{1, 2, 3},
+			status: []loqrecoverypb.NodeRecoveryStatus{
+				status(1, planID, empty, ""),
+				status(2, empty, planID, ""),
+				status(3, planID, empty, ""),
+			},
+			pending: 2,
+			report: []string{
+				" plan application pending on node n1",
+				" plan applied successfully on node n2",
+				" plan application pending on node n3",
+			},
+		},
+		{
+			name:         "fully applied",
+			updatedNodes: []int{1, 2, 3},
+			status: []loqrecoverypb.NodeRecoveryStatus{
+				status(1, empty, planID, ""),
+				status(2, empty, planID, ""),
+				status(3, empty, planID, ""),
+			},
+			report: []string{
+				" plan applied successfully on node n1",
+				" plan applied successfully on node n2",
+				" plan applied successfully on node n3",
+			},
+		},
+		{
+			name:         "staging lost no node",
+			updatedNodes: []int{1, 2, 3},
+			status: []loqrecoverypb.NodeRecoveryStatus{
+				status(1, planID, empty, ""),
+				status(3, planID, empty, ""),
+			},
+			pending: 2,
+			errors:  1,
+			report: []string{
+				" plan application pending on node n1",
+				" plan application pending on node n3",
+				" failed to find node n2 where plan must be staged",
+			},
+		},
+		{
+			name:         "staging lost no plan",
+			updatedNodes: []int{1, 2},
+			staleLeases:  []int{3},
+			status: []loqrecoverypb.NodeRecoveryStatus{
+				status(1, planID, empty, ""),
+				status(2, planID, empty, ""),
+				status(3, empty, empty, ""),
+			},
+			pending: 2,
+			errors:  1,
+			report: []string{
+				" plan application pending on node n1",
+				" plan application pending on node n2",
+				" failed to find staged plan on node n3",
+			},
+		},
+		{
+			name:         "partial failure",
+			updatedNodes: []int{1, 2, 3},
+			status: []loqrecoverypb.NodeRecoveryStatus{
+				status(1, planID, empty, ""),
+				status(2, empty, planID, "found stale replica"),
+				status(3, planID, empty, ""),
+			},
+			pending: 2,
+			errors:  1,
+			report: []string{
+				" plan application pending on node n1",
+				" plan application failed on node n2: found stale replica",
+				" plan application pending on node n3",
+			},
+		},
+		{
+			name: "no plan",
+			status: []loqrecoverypb.NodeRecoveryStatus{
+				status(1, planID, empty, ""),
+				status(2, empty, planID, "found stale replica"),
+				status(3, empty, otherPlanID, ""),
+			},
+			report: []string{
+				" node n1 staged plan: 123e4567-e89b-12d3-a456-426614174000",
+				" node n2 failed to apply plan 123e4567-e89b-12d3-a456-426614174000: found stale replica",
+				" node n3 applied plan: 123e4567-e89b-12d3-a456-426614174001 at 2023-01-24 10:30:00 +0000 UTC",
+			},
+		},
+		{
+			name:         "wrong plan",
+			updatedNodes: []int{1, 2},
+			status: []loqrecoverypb.NodeRecoveryStatus{
+				status(1, planID, empty, ""),
+				status(2, otherPlanID, empty, ""),
+				status(3, otherPlanID, empty, ""),
+			},
+			pending: 1,
+			errors:  2,
+			report: []string{
+				" plan application pending on node n1",
+				" unexpected staged plan 123e4567-e89b-12d3-a456-426614174001 on node n2",
+				" unexpected staged plan 123e4567-e89b-12d3-a456-426614174001 on node n3",
+			},
+		},
+	} {
+		t.Run(d.name, func(t *testing.T) {
+			plan := loqrecoverypb.ReplicaUpdatePlan{
+				PlanID: planID,
+			}
+			// Plan will contain single replica update for each requested node.
+			rangeSeq := 1
+			for _, id := range d.updatedNodes {
+				plan.Updates = append(plan.Updates, loqrecoverypb.ReplicaUpdate{
+					RangeID:      roachpb.RangeID(rangeSeq),
+					StartKey:     nil,
+					OldReplicaID: roachpb.ReplicaID(1),
+					NewReplica: roachpb.ReplicaDescriptor{
+						NodeID:    roachpb.NodeID(id),
+						StoreID:   roachpb.StoreID(id),
+						ReplicaID: roachpb.ReplicaID(rangeSeq + 17),
+					},
+					NextReplicaID: roachpb.ReplicaID(rangeSeq + 18),
+				})
+			}
+			for _, id := range d.staleLeases {
+				plan.StaleLeaseholderNodeIDs = append(plan.StaleLeaseholderNodeIDs, roachpb.NodeID(id))
+			}
+
+			diff := diffPlanWithNodeStatus(plan, d.status)
+			require.Equal(t, d.pending, diff.pending, "number of pending changes")
+			require.Equal(t, d.errors, diff.errors, "number of node errors")
+			if d.report != nil {
+				require.Equal(t, len(d.report), len(diff.report), "number of lines in diff")
+				for i := range d.report {
+					require.Equal(t, d.report[i], diff.report[i], "wrong line %d of report", i)
+				}
+			}
+		})
+	}
 }

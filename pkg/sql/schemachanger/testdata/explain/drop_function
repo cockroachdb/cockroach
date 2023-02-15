@@ -9,7 +9,7 @@ CREATE TABLE t(
 CREATE SEQUENCE sq1;
 CREATE VIEW v AS SELECT a FROM t;
 CREATE TYPE notmyworkday AS ENUM ('Monday', 'Tuesday');
-CREATE FUNCTION f(a notmyworkday) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+CREATE FUNCTION f(a notmyworkday) RETURNS INT VOLATILE LANGUAGE SQL AS $$
   SELECT a FROM t;
   SELECT b FROM t@t_idx_b;
   SELECT c FROM t@t_idx_c;
@@ -35,11 +35,18 @@ Schema change plan for DROP FUNCTION ‹""›.‹""›.‹f›;
  │         │    ├── PUBLIC → ABSENT  FunctionLeakProof:{DescID: 109}
  │         │    ├── PUBLIC → ABSENT  FunctionNullInputBehavior:{DescID: 109}
  │         │    └── PUBLIC → ABSENT  FunctionBody:{DescID: 109}
- │         └── 4 Mutation operations
+ │         └── 11 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":109}
  │              ├── RemoveObjectParent {"ObjectID":109,"ParentSchemaID":101}
+ │              ├── NotImplementedForPublicObjects {"DescID":109,"ElementType":"scpb.FunctionNam..."}
+ │              ├── NotImplementedForPublicObjects {"DescID":109,"ElementType":"scpb.FunctionVol..."}
+ │              ├── NotImplementedForPublicObjects {"DescID":109,"ElementType":"scpb.FunctionLea..."}
+ │              ├── NotImplementedForPublicObjects {"DescID":109,"ElementType":"scpb.FunctionNul..."}
  │              ├── RemoveBackReferenceInTypes {"BackReferencedDescriptorID":109}
- │              └── RemoveBackReferencesInRelations {"BackReferencedID":109}
+ │              ├── RemoveBackReferencesInRelations {"BackReferencedID":109}
+ │              ├── NotImplementedForPublicObjects {"DescID":109,"ElementType":"scpb.Owner"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":109,"User":"admin"}
+ │              └── RemoveUserPrivileges {"DescriptorID":109,"User":"root"}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
  │    │    ├── 10 elements transitioning toward ABSENT
@@ -67,11 +74,18 @@ Schema change plan for DROP FUNCTION ‹""›.‹""›.‹f›;
  │         │    ├── PUBLIC → ABSENT  FunctionLeakProof:{DescID: 109}
  │         │    ├── PUBLIC → ABSENT  FunctionNullInputBehavior:{DescID: 109}
  │         │    └── PUBLIC → ABSENT  FunctionBody:{DescID: 109}
- │         └── 11 Mutation operations
+ │         └── 18 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":109}
  │              ├── RemoveObjectParent {"ObjectID":109,"ParentSchemaID":101}
+ │              ├── NotImplementedForPublicObjects {"DescID":109,"ElementType":"scpb.FunctionNam..."}
+ │              ├── NotImplementedForPublicObjects {"DescID":109,"ElementType":"scpb.FunctionVol..."}
+ │              ├── NotImplementedForPublicObjects {"DescID":109,"ElementType":"scpb.FunctionLea..."}
+ │              ├── NotImplementedForPublicObjects {"DescID":109,"ElementType":"scpb.FunctionNul..."}
  │              ├── RemoveBackReferenceInTypes {"BackReferencedDescriptorID":109}
  │              ├── RemoveBackReferencesInRelations {"BackReferencedID":109}
+ │              ├── NotImplementedForPublicObjects {"DescID":109,"ElementType":"scpb.Owner"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":109,"User":"admin"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":109,"User":"root"}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":105,"Initialize":true}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":106,"Initialize":true}

@@ -24,31 +24,31 @@ const (
 var (
 	metaReplicationEventsIngested = metric.Metadata{
 		Name:        "replication.events_ingested",
-		Help:        "Events ingested by all ingestion jobs",
+		Help:        "Events ingested by all replication jobs",
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaReplicationResolvedEventsIngested = metric.Metadata{
 		Name:        "replication.resolved_events_ingested",
-		Help:        "Resolved events ingested by all ingestion jobs",
+		Help:        "Resolved events ingested by all replication jobs",
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaReplicationIngestedBytes = metric.Metadata{
-		Name:        "replication.ingested_bytes",
-		Help:        "Bytes ingested by all ingestion jobs",
+		Name:        "replication.logical_bytes",
+		Help:        "Logical bytes (sum of keys + values) ingested by all replication jobs",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
 	metaReplicationSSTBytes = metric.Metadata{
 		Name:        "replication.sst_bytes",
-		Help:        "SST bytes (compressed) sent to KV by all ingestion jobs",
+		Help:        "SST bytes (compressed) sent to KV by all replication jobs",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
 	metaReplicationFlushes = metric.Metadata{
 		Name:        "replication.flushes",
-		Help:        "Total flushes across all ingestion jobs",
+		Help:        "Total flushes across all replication jobs",
 		Measurement: "Flushes",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -105,8 +105,9 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 	metaFrontierLagSeconds = metric.Metadata{
-		Name:        "replication.frontier_lag_seconds",
-		Help:        "Time the replication frontier lags",
+		Name: "replication.frontier_lag_seconds",
+		Help: "Time between the wall clock and replicated time of the replication stream. " +
+			"This metric tracks how far behind the replication stream is relative to now",
 		Measurement: "Seconds",
 		Unit:        metric.Unit_SECONDS,
 	}
@@ -114,6 +115,17 @@ var (
 		Name:        "replication.job_progress_updates",
 		Help:        "Total number of updates to the ingestion job progress",
 		Measurement: "Job Updates",
+		Unit:        metric.Unit_COUNT,
+	}
+	// This metric would be 0 until cutover begins, and then it will be updated to
+	// the total number of ranges that need to be reverted, and then gradually go
+	// down to 0 again. NB: that the number of ranges is the total number of
+	// ranges left to be reverted, but some may not have writes and therefore the
+	// revert will be a no-op for those ranges.
+	metaReplicationCutoverProgress = metric.Metadata{
+		Name:        "replication.cutover_progress",
+		Help:        "The number of ranges left to revert in order to complete an inflight cutover",
+		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
 	}
 )
@@ -135,6 +147,7 @@ type Metrics struct {
 	DataCheckpointSpanCount     *metric.Gauge
 	FrontierCheckpointSpanCount *metric.Gauge
 	FrontierLagSeconds          *metric.GaugeFloat64
+	ReplicationCutoverProgress  *metric.Gauge
 }
 
 // MetricStruct implements the metric.Struct interface.
@@ -155,7 +168,6 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 			Buckets:  metric.BatchProcessLatencyBuckets,
 			MaxVal:   streamingFlushHistMaxLatency.Nanoseconds(),
 			SigFigs:  1,
-			Mode:     metric.HistogramModePreferHdrLatency,
 		}),
 		CommitLatency: metric.NewHistogram(metric.HistogramOptions{
 			Metadata: metaReplicationCommitLatency,
@@ -163,7 +175,6 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 			Buckets:  metric.BatchProcessLatencyBuckets,
 			MaxVal:   streamingCommitLatencyMaxValue.Nanoseconds(),
 			SigFigs:  1,
-			Mode:     metric.HistogramModePreferHdrLatency,
 		}),
 		AdmitLatency: metric.NewHistogram(metric.HistogramOptions{
 			Metadata: metaReplicationAdmitLatency,
@@ -171,7 +182,6 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 			Buckets:  metric.BatchProcessLatencyBuckets,
 			MaxVal:   streamingAdmitLatencyMaxValue.Nanoseconds(),
 			SigFigs:  1,
-			Mode:     metric.HistogramModePreferHdrLatency,
 		}),
 		RunningCount:                metric.NewGauge(metaStreamsRunning),
 		EarliestDataCheckpointSpan:  metric.NewGauge(metaEarliestDataCheckpointSpan),
@@ -179,6 +189,7 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 		DataCheckpointSpanCount:     metric.NewGauge(metaDataCheckpointSpanCount),
 		FrontierCheckpointSpanCount: metric.NewGauge(metaFrontierCheckpointSpanCount),
 		FrontierLagSeconds:          metric.NewGaugeFloat64(metaFrontierLagSeconds),
+		ReplicationCutoverProgress:  metric.NewGauge(metaReplicationCutoverProgress),
 	}
 	return m
 }

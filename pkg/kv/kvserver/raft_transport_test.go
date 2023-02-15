@@ -97,11 +97,9 @@ func (s channelServer) HandleSnapshot(
 }
 
 func (s channelServer) HandleDelegatedSnapshot(
-	ctx context.Context,
-	req *kvserverpb.DelegateSnapshotRequest,
-	stream kvserver.DelegateSnapshotResponseStream,
-) error {
-	panic("unimplemented")
+	ctx context.Context, req *kvserverpb.DelegateSendSnapshotRequest,
+) *kvserverpb.DelegateSnapshotResponse {
+	panic("unexpected HandleDelegatedSnapshot")
 }
 
 // raftTransportTestContext contains objects needed to test RaftTransport.
@@ -124,12 +122,12 @@ func newRaftTransportTestContext(t testing.TB) *raftTransportTestContext {
 		transports: map[roachpb.NodeID]*kvserver.RaftTransport{},
 	}
 	rttc.nodeRPCContext = rpc.NewContext(ctx, rpc.ContextOptions{
-		TenantID:  roachpb.SystemTenantID,
-		Config:    testutils.NewNodeTestBaseContext(),
-		Clock:     &timeutil.DefaultTimeSource{},
-		MaxOffset: time.Nanosecond,
-		Stopper:   rttc.stopper,
-		Settings:  cluster.MakeTestingClusterSettings(),
+		TenantID:        roachpb.SystemTenantID,
+		Config:          testutils.NewNodeTestBaseContext(),
+		Clock:           &timeutil.DefaultTimeSource{},
+		ToleratedOffset: time.Nanosecond,
+		Stopper:         rttc.stopper,
+		Settings:        cluster.MakeTestingClusterSettings(),
 	})
 	// Ensure that tests using this test context and restart/shut down
 	// their servers do not inadvertently start talking to servers from

@@ -38,11 +38,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vtable"
+	"github.com/cockroachdb/cockroach/pkg/util/collatedstring"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
-	"golang.org/x/text/collate"
 )
 
 const (
@@ -441,7 +441,7 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 				colDefault := tree.DNull
 				if column.HasDefault() {
 					colExpr, err := schemaexpr.FormatExprForDisplay(
-						ctx, table, column.GetDefaultExpr(), &p.semaCtx, p.SessionData(), tree.FmtPgwireText,
+						ctx, table, column.GetDefaultExpr(), &p.semaCtx, p.SessionData(), tree.FmtParsableNumerics,
 					)
 					if err != nil {
 						return err
@@ -1532,12 +1532,8 @@ https://www.postgresql.org/docs/current/infoschema-collations.html`,
 				tree.NewDString("NO PAD"),
 			)
 		}
-		if err := add(tree.DefaultCollationTag); err != nil {
-			return err
-		}
-		for _, tag := range collate.Supported() {
-			collName := tag.String()
-			if err := add(collName); err != nil {
+		for _, tag := range collatedstring.Supported() {
+			if err := add(tag); err != nil {
 				return err
 			}
 		}
@@ -1565,12 +1561,8 @@ https://www.postgresql.org/docs/current/infoschema-collation-character-set-appli
 				tree.NewDString("UTF8"),   // character_set_name: UTF8 is the only available encoding
 			)
 		}
-		if err := add(tree.DefaultCollationTag); err != nil {
-			return err
-		}
-		for _, tag := range collate.Supported() {
-			collName := tag.String()
-			if err := add(collName); err != nil {
+		for _, tag := range collatedstring.Supported() {
+			if err := add(tag); err != nil {
 				return err
 			}
 		}
@@ -1676,8 +1668,8 @@ var informationSchemaRoleRoutineGrantsTable = virtualSchemaTable{
 				if err != nil {
 					return err
 				}
-				return sc.ForEachFunctionOverload(func(overload descpb.SchemaDescriptor_FunctionOverload) error {
-					fn, err := p.Descriptors().MutableByID(p.txn).Function(ctx, overload.ID)
+				return sc.ForEachFunctionSignature(func(sig descpb.SchemaDescriptor_FunctionSignature) error {
+					fn, err := p.Descriptors().MutableByID(p.txn).Function(ctx, sig.ID)
 					if err != nil {
 						return err
 					}

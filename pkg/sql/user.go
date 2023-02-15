@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -28,8 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -86,7 +85,7 @@ func GetUserSessionInitInfo(
 	pwRetrieveFn func(ctx context.Context) (expired bool, hashedPassword password.PasswordHash, err error),
 	err error,
 ) {
-	runFn := getUserInfoRunFn(execCfg, user, "get-user-timeout")
+	runFn := getUserInfoRunFn(execCfg, user, "get-user-session")
 
 	if user.IsRootUser() {
 		// As explained above, for root we report that the user exists
@@ -126,7 +125,9 @@ func GetUserSessionInitInfo(
 			return err
 		}
 
-		// Find whether the user is an admin.
+		// Find whether the user is an admin and has the NOSQLLOGIN global
+		// privilege. These calls have their own caches, so it's OK to make them
+		// outside of the retrieveSessionInitInfoWithCache call above.
 		return execCfg.InternalDB.DescsTxn(ctx, func(
 			ctx context.Context, txn descs.Txn,
 		) error {
@@ -135,6 +136,30 @@ func GetUserSessionInitInfo(
 				return err
 			}
 			_, isSuperuser = memberships[username.AdminRoleName()]
+
+			// If we already know that the user has CanLoginSQLRoleOpt=false, there's
+			// no need to check the global privilege.
+			canLoginSQL = authInfo.CanLoginSQLRoleOpt
+			if canLoginSQL {
+				privs, err := execCfg.SyntheticPrivilegeCache.Get(
+					ctx, txn, txn.Descriptors(), syntheticprivilege.GlobalPrivilegeObject,
+				)
+				if err != nil {
+					return err
+				}
+				// Check the user and its role hierarchy.
+				if privs.CheckPrivilege(user, privilege.NOSQLLOGIN) {
+					canLoginSQL = false
+				} else {
+					for parentRole := range memberships {
+						if privs.CheckPrivilege(parentRole, privilege.NOSQLLOGIN) {
+							canLoginSQL = false
+							break
+						}
+					}
+				}
+			}
+
 			return nil
 		},
 		)
@@ -144,8 +169,8 @@ func GetUserSessionInitInfo(
 	}
 
 	return authInfo.UserExists,
-		authInfo.CanLoginSQL,
-		authInfo.CanLoginDBConsole,
+		canLoginSQL,
+		authInfo.CanLoginDBConsoleRoleOpt,
 		isSuperuser,
 		settingsEntries,
 		func(ctx context.Context) (expired bool, ret password.PasswordHash, err error) {
@@ -193,26 +218,15 @@ func retrieveSessionInitInfoWithCache(
 	ctx context.Context, execCfg *ExecutorConfig, userName username.SQLUsername, databaseName string,
 ) (aInfo sessioninit.AuthInfo, settingsEntries []sessioninit.SettingsCacheEntry, err error) {
 	if err = func() (retErr error) {
-		makePlanner := func(opName string) (interface{}, func()) {
-			return NewInternalPlanner(
-				opName,
-				execCfg.DB.NewTxn(ctx, opName),
-				username.RootUserName(),
-				&MemoryMetrics{},
-				execCfg,
-				sessiondatapb.SessionData{},
-			)
-		}
 		aInfo, retErr = execCfg.SessionInitCache.GetAuthInfo(
 			ctx,
 			execCfg.Settings,
 			execCfg.InternalDB,
 			userName,
 			retrieveAuthInfo,
-			makePlanner,
 		)
 		if retErr != nil {
-			return retErr
+			return errors.Wrap(retErr, "get auth info error")
 		}
 		// Avoid looking up default settings for root and non-existent users.
 		if userName.IsRootUser() || !aInfo.UserExists {
@@ -226,7 +240,7 @@ func retrieveSessionInitInfoWithCache(
 			databaseName,
 			retrieveDefaultSettings,
 		)
-		return retErr
+		return errors.Wrap(retErr, "get default settings error")
 	}(); err != nil {
 		// Failed to retrieve the user account. Report in logs for later investigation.
 		log.Warningf(ctx, "user lookup for %q failed: %v", userName, err)
@@ -236,11 +250,7 @@ func retrieveSessionInitInfoWithCache(
 }
 
 func retrieveAuthInfo(
-	ctx context.Context,
-	f descs.DB,
-	user username.SQLUsername,
-	makePlanner func(opName string) (interface{}, func()),
-	settings *cluster.Settings,
+	ctx context.Context, f descs.DB, user username.SQLUsername,
 ) (aInfo sessioninit.AuthInfo, retErr error) {
 	// Use fully qualified table name to avoid looking up "".system.users.
 	// We use a nil txn as login is not tied to any transaction state, and
@@ -294,38 +304,20 @@ func retrieveAuthInfo(
 
 	// To support users created before 20.1, allow all USERS/ROLES to login
 	// if NOLOGIN is not found.
-	aInfo.CanLoginSQL = true
-	aInfo.CanLoginDBConsole = true
+	aInfo.CanLoginSQLRoleOpt = true
+	aInfo.CanLoginDBConsoleRoleOpt = true
 	var ok bool
-
-	// Check system privilege to see if user can sql login.
-	planner, cleanup := makePlanner("check-privilege")
-	defer cleanup()
-	aa := planner.(AuthorizationAccessor)
-	hasAdmin, err := aa.HasAdminRole(ctx)
-	if err != nil {
-		return aInfo, err
-	}
-	if !hasAdmin {
-		if ok, err = aa.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.NOSQLLOGIN, user); err != nil {
-			return aInfo, err
-		} else if ok {
-			aInfo.CanLoginSQL = false
-		}
-	}
 
 	for ok, err = roleOptsIt.Next(ctx); ok; ok, err = roleOptsIt.Next(ctx) {
 		row := roleOptsIt.Cur()
 		option := string(tree.MustBeDString(row[0]))
 
 		if option == "NOLOGIN" {
-			aInfo.CanLoginSQL = false
-			aInfo.CanLoginDBConsole = false
+			aInfo.CanLoginSQLRoleOpt = false
+			aInfo.CanLoginDBConsoleRoleOpt = false
 		}
-		// If the user did not have the NOSQLLOGIN system privilege but has the
-		// equivalent role option set the flag to false.
-		if option == "NOSQLLOGIN" && aInfo.CanLoginSQL {
-			aInfo.CanLoginSQL = false
+		if option == "NOSQLLOGIN" {
+			aInfo.CanLoginSQLRoleOpt = false
 		}
 
 		if option == "VALID UNTIL" {
@@ -554,11 +546,7 @@ func (p *planner) setRole(ctx context.Context, local bool, s username.SQLUsernam
 			return err
 		}
 		if !exists {
-			return pgerror.Newf(
-				pgcode.InvalidParameterValue,
-				"role %s does not exist",
-				becomeUser.Normalized(),
-			)
+			return sqlerrors.NewUndefinedUserError(becomeUser)
 		}
 	}
 
@@ -715,7 +703,7 @@ func updateUserPasswordHash(
 	userName username.SQLUsername,
 	prevHash, newHash []byte,
 ) error {
-	runFn := getUserInfoRunFn(execCfg, userName, "set-hash-timeout")
+	runFn := getUserInfoRunFn(execCfg, userName, "set-user-password-hash")
 
 	return runFn(ctx, func(ctx context.Context) error {
 		return DescsTxn(ctx, execCfg, func(ctx context.Context, txn isql.Txn, d *descs.Collection) error {

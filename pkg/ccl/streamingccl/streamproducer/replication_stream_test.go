@@ -176,7 +176,7 @@ func startReplication(
 	conn, err := pgx.ConnectConfig(queryCtx, pgxConfig)
 	require.NoError(t, err)
 
-	rows, err := conn.Query(queryCtx, `SET enable_experimental_stream_replication = true`)
+	rows, err := conn.Query(queryCtx, `SET CLUSTER SETTING cross_cluster_replication.enabled = true;`)
 	require.NoError(t, err)
 	rows.Close()
 

@@ -10,7 +10,7 @@ EXPLAIN (ddl) DROP TABLE multi_region_test_db.public.table_regional_by_table CAS
 Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_table› CASCADE;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
- │         ├── 21 elements transitioning toward ABSENT
+ │         ├── 20 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → ABSENT     Namespace:{DescID: 108, Name: table_regional_by_table, ReferencedDescID: 104}
  │         │    ├── PUBLIC → ABSENT     Owner:{DescID: 108}
  │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID: 108, Name: admin}
@@ -29,17 +29,29 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 108, ColumnID: 4294967294}
  │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}
  │         │    ├── PUBLIC → ABSENT     ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}
- │         │    ├── PUBLIC → ABSENT     IndexColumn:{DescID: 108, ColumnID: 1, IndexID: 1}
  │         │    ├── PUBLIC → VALIDATED  PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
  │         │    └── PUBLIC → ABSENT     IndexName:{DescID: 108, Name: table_regional_by_table_pkey, IndexID: 1}
- │         └── 4 Mutation operations
+ │         └── 17 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":108}
  │              ├── RemoveObjectParent {"ObjectID":108,"ParentSchemaID":105}
  │              ├── RemoveBackReferenceInTypes {"BackReferencedDescriptorID":108}
- │              └── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":108,"Name":"table_regional_b...","SchemaID":105}}
+ │              ├── NotImplementedForPublicObjects {"DescID":108,"ElementType":"scpb.ColumnFamil..."}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":1,"TableID":108}
+ │              ├── SetColumnName {"ColumnID":1,"Name":"crdb_internal_co...","TableID":108}
+ │              ├── MakePublicColumnNotNullValidated {"ColumnID":1,"TableID":108}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967295,"TableID":108}
+ │              ├── SetColumnName {"ColumnID":4294967295,"Name":"crdb_internal_co...","TableID":108}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967294,"TableID":108}
+ │              ├── SetColumnName {"ColumnID":4294967294,"Name":"crdb_internal_co...","TableID":108}
+ │              ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":108}
+ │              ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":108}
+ │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":108,"Name":"table_regional_b...","SchemaID":105}}
+ │              ├── NotImplementedForPublicObjects {"DescID":108,"ElementType":"scpb.Owner"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":108,"User":"admin"}
+ │              └── RemoveUserPrivileges {"DescriptorID":108,"User":"root"}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
- │    │    ├── 21 elements transitioning toward ABSENT
+ │    │    ├── 20 elements transitioning toward ABSENT
  │    │    │    ├── ABSENT     → PUBLIC Namespace:{DescID: 108, Name: table_regional_by_table, ReferencedDescID: 104}
  │    │    │    ├── ABSENT     → PUBLIC Owner:{DescID: 108}
  │    │    │    ├── ABSENT     → PUBLIC UserPrivileges:{DescID: 108, Name: admin}
@@ -58,7 +70,6 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │    │    │    ├── WRITE_ONLY → PUBLIC Column:{DescID: 108, ColumnID: 4294967294}
  │    │    │    ├── ABSENT     → PUBLIC ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}
  │    │    │    ├── ABSENT     → PUBLIC ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}
- │    │    │    ├── ABSENT     → PUBLIC IndexColumn:{DescID: 108, ColumnID: 1, IndexID: 1}
  │    │    │    ├── VALIDATED  → PUBLIC PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
  │    │    │    └── ABSENT     → PUBLIC IndexName:{DescID: 108, Name: table_regional_by_table_pkey, IndexID: 1}
  │    │    └── 1 Mutation operation
@@ -86,14 +97,33 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID: 108, ColumnID: 1, IndexID: 1}
  │         │    ├── PUBLIC → ABSENT  PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
  │         │    └── PUBLIC → ABSENT  IndexName:{DescID: 108, Name: table_regional_by_table_pkey, IndexID: 1}
- │         └── 11 Mutation operations
+ │         └── 30 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":108}
  │              ├── RemoveObjectParent {"ObjectID":108,"ParentSchemaID":105}
  │              ├── RemoveBackReferenceInTypes {"BackReferencedDescriptorID":108}
+ │              ├── NotImplementedForPublicObjects {"DescID":108,"ElementType":"scpb.ColumnFamil..."}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":1,"TableID":108}
+ │              ├── SetColumnName {"ColumnID":1,"Name":"crdb_internal_co...","TableID":108}
+ │              ├── MakePublicColumnNotNullValidated {"ColumnID":1,"TableID":108}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967295,"TableID":108}
+ │              ├── SetColumnName {"ColumnID":4294967295,"Name":"crdb_internal_co...","TableID":108}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967294,"TableID":108}
+ │              ├── SetColumnName {"ColumnID":4294967294,"Name":"crdb_internal_co...","TableID":108}
+ │              ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":108}
+ │              ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":108}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":108,"Name":"table_regional_b...","SchemaID":105}}
+ │              ├── NotImplementedForPublicObjects {"DescID":108,"ElementType":"scpb.Owner"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":108,"User":"admin"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":108,"User":"root"}
  │              ├── RemoveColumnNotNull {"ColumnID":1,"TableID":108}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967295,"TableID":108}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967294,"TableID":108}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":1,"TableID":108}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967295,"TableID":108}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967294,"TableID":108}
+ │              ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":1,"TableID":108}
+ │              ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":1,"TableID":108}
+ │              ├── MakeIndexAbsent {"IndexID":1,"TableID":108}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":1,"TableID":108}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":106,"Initialize":true}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":108,"Initialize":true}

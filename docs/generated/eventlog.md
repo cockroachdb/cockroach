@@ -437,6 +437,7 @@ is directly or indirectly a member of the admin role) executes a query.
 | `FullTableScan` | Whether the query contains a full table scan. | no |
 | `FullIndexScan` | Whether the query contains a full secondary index scan of a non-partial index. | no |
 | `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
+| `BulkJobId` | The job id for bulk job (IMPORT/BACKUP/RESTORE). | no |
 
 ### `sensitive_table_access`
 
@@ -471,6 +472,7 @@ a table marked as audited.
 | `FullTableScan` | Whether the query contains a full table scan. | no |
 | `FullIndexScan` | Whether the query contains a full secondary index scan of a non-partial index. | no |
 | `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
+| `BulkJobId` | The job id for bulk job (IMPORT/BACKUP/RESTORE). | no |
 
 ## SQL Execution Log
 
@@ -512,6 +514,7 @@ and the cluster setting `sql.trace.log_statement_execute` is set.
 | `FullTableScan` | Whether the query contains a full table scan. | no |
 | `FullIndexScan` | Whether the query contains a full secondary index scan of a non-partial index. | no |
 | `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
+| `BulkJobId` | The job id for bulk job (IMPORT/BACKUP/RESTORE). | no |
 
 ## SQL Logical Schema Changes
 
@@ -2304,6 +2307,7 @@ set to a non-zero value, AND
 | `FullTableScan` | Whether the query contains a full table scan. | no |
 | `FullIndexScan` | Whether the query contains a full secondary index scan of a non-partial index. | no |
 | `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
+| `BulkJobId` | The job id for bulk job (IMPORT/BACKUP/RESTORE). | no |
 
 ### `txn_rows_read_limit`
 
@@ -2423,6 +2427,7 @@ the "slow query" condition.
 | `FullTableScan` | Whether the query contains a full table scan. | no |
 | `FullIndexScan` | Whether the query contains a full secondary index scan of a non-partial index. | no |
 | `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
+| `BulkJobId` | The job id for bulk job (IMPORT/BACKUP/RESTORE). | no |
 
 ### `txn_rows_read_limit_internal`
 
@@ -2724,6 +2729,30 @@ An event of type `captured_index_usage_stats`
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 
+### `changefeed_emitted_bytes`
+
+An event of type `changefeed_emitted_bytes` is an event representing the bytes emitted by a changefeed over an interval.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `JobId` | The job id for enterprise changefeeds. | no |
+| `EmittedBytes` | The number of bytes emitted. | no |
+| `LoggingInterval` | The time period in nanoseconds between emitting telemetry events of this type (per-aggregator). | no |
+| `Closing` | Flag to indicate that the changefeed is closing. | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Description` | The description of that would show up in the job's description field, redacted | yes |
+| `SinkType` | The type of sink being emitted to (ex: kafka, nodelocal, webhook-https). | no |
+| `NumTables` | The number of tables listed in the query that the changefeed is to run on. | no |
+| `Resolved` | The behavior of emitted resolved spans (ex: yes, no, 10s) | no |
+| `InitialScan` | The desired behavior of initial scans (ex: yes, no, only) | no |
+| `Format` | The data format being emitted (ex: JSON, Avro). | no |
+
 ### `changefeed_failed`
 
 An event of type `changefeed_failed` is an event for any Changefeed failure since the plan hook
@@ -2804,6 +2833,7 @@ logged whenever a BACKUP and RESTORE job completes or fails.
 | `OnPreviousRunning` | OnPreviousRunning describes the desired behavior if the previously scheduled BACKUP is still running. | no |
 | `IgnoreExistingBackup` | IgnoreExistingBackup is true iff the BACKUP schedule should still be created even if a backup is already present in its destination. | no |
 | `ApplicationName` | The application name for the session where recovery event was created. | no |
+| `NumRows` | NumRows is the number of rows successfully imported, backed up or restored. | no |
 
 
 #### Common fields
@@ -2891,6 +2921,7 @@ contains common SQL event/execution details.
 | `FullTableScan` | Whether the query contains a full table scan. | no |
 | `FullIndexScan` | Whether the query contains a full secondary index scan of a non-partial index. | no |
 | `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
+| `BulkJobId` | The job id for bulk job (IMPORT/BACKUP/RESTORE). | no |
 
 ### `schema_descriptor`
 

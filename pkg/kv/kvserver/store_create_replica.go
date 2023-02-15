@@ -14,11 +14,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
@@ -210,91 +207,17 @@ func (s *Store) tryGetOrCreateReplica(
 	// be accessed by someone holding a reference to, or currently creating a
 	// Replica for this rangeID, and that's us.
 
-	// Before creating the replica, see if there is a tombstone which would
-	// indicate that this is a stale message.
-	tombstoneKey := keys.RangeTombstoneKey(rangeID)
-	var tombstone roachpb.RangeTombstone
-	if ok, err := storage.MVCCGetProto(
-		ctx, s.Engine(), tombstoneKey, hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
+	if err := kvstorage.CreateUninitializedReplica(
+		// TODO(sep-raft-log): needs both engines due to tombstone (which lives on
+		// statemachine).
+		ctx, s.TODOEngine(), s.StoreID(), rangeID, replicaID,
 	); err != nil {
-		return nil, false, err
-	} else if ok && replicaID < tombstone.NextReplicaID {
-		return nil, false, &roachpb.RaftGroupDeletedError{}
-	}
-
-	// An uninitialized replica must have an empty HardState.Commit at all times.
-	// Failure to maintain this invariant indicates corruption. And yet, we have
-	// observed this in the wild. See #40213.
-	sl := stateloader.Make(rangeID)
-	if hs, err := sl.LoadHardState(ctx, s.Engine()); err != nil {
-		return nil, false, err
-	} else if hs.Commit != 0 {
-		log.Fatalf(ctx, "found non-zero HardState.Commit on uninitialized replica r%d/%d. HS=%+v",
-			rangeID, replicaID, hs)
-	}
-	// Write the RaftReplicaID for this replica. This is the only place in the
-	// CockroachDB code that we are creating a new *uninitialized* replica.
-	// Note that it is possible that we have already created the HardState for
-	// an uninitialized replica, then crashed, and on recovery are receiving a
-	// raft message for the same or later replica.
-	// - Same replica: we are overwriting the RaftReplicaID with the same
-	//   value, which is harmless.
-	// - Later replica: there may be an existing HardState for the older
-	//   uninitialized replica with Commit=0 and non-zero Term and Vote. Using
-	//   the Term and Vote values for that older replica in the context of
-	//   this newer replica is harmless since it just limits the votes for
-	//   this replica.
-	//
-	//
-	// Compatibility:
-	// - v21.2 and v22.1: v22.1 unilaterally introduces RaftReplicaID (an
-	//   unreplicated range-id local key). If a v22.1 binary is rolled back at
-	//   a node, the fact that RaftReplicaID was written is harmless to a
-	//   v21.2 node since it does not read it. When a v21.2 drops an
-	//   initialized range, the RaftReplicaID will also be deleted because the
-	//   whole range-ID local key space is deleted.
-	//
-	// - v22.2: we will start relying on the presence of RaftReplicaID, and
-	//   remove any unitialized replicas that have a HardState but no
-	//   RaftReplicaID. This removal will happen in ReplicasStorage.Init and
-	//   allow us to tighten invariants. Additionally, knowing the ReplicaID
-	//   for an unitialized range could allow a node to somehow contact the
-	//   raft group (say by broadcasting to all nodes in the cluster), and if
-	//   the ReplicaID is stale, would allow the node to remove the HardState
-	//   and RaftReplicaID. See
-	//   https://github.com/cockroachdb/cockroach/issues/75740.
-	//
-	//   There is a concern that there could be some replica that survived
-	//   from v21.2 to v22.1 to v22.2 in unitialized state and will be
-	//   incorrectly removed in ReplicasStorage.Init causing the loss of the
-	//   HardState.{Term,Vote} and lead to a "split-brain" wrt leader
-	//   election.
-	//
-	//   Even though this seems theoretically possible, it is considered
-	//   practically impossible, and not just because a replica's vote is
-	//   unlikely to stay relevant across 2 upgrades. For one, we're always
-	//   going through learners and don't promote until caught up, so
-	//   uninitialized replicas generally never get to vote. Second, even if
-	//   their vote somehow mattered (perhaps we sent a learner a snap which
-	//   was not durably persisted - which we also know is impossible, but
-	//   let's assume it - and then promoted the node and it immediately
-	//   power-cycled, losing the snapshot) the fire-and-forget way in which
-	//   raft votes are requested (in the same raft cycle) makes it extremely
-	//   unlikely that the restarted node would then receive it.
-	if err := sl.SetRaftReplicaID(ctx, s.Engine(), replicaID); err != nil {
 		return nil, false, err
 	}
 
 	// Create a new uninitialized replica and lock it for raft processing.
-	repl := newUnloadedReplica(ctx, rangeID, s, replicaID)
+	repl := newUninitializedReplica(s, rangeID, replicaID)
 	repl.raftMu.Lock() // not unlocked
-	repl.mu.Lock()
-	// TODO(pavelkalinnikov): there is little benefit in this check, since loading
-	// ReplicaID is a no-op after the above write, and the ReplicaState load is
-	// only for making sure it's empty. Distill the useful IO and make its result
-	// the direct input into Replica creation, then this check won't be needed.
-	repl.assertStateRaftMuLockedReplicaMuRLocked(ctx, s.Engine())
-	repl.mu.Unlock()
 
 	// Install the replica in the store's replica map.
 	s.mu.Lock()
@@ -328,28 +251,26 @@ func fromReplicaIsTooOldRLocked(toReplica *Replica, fromReplica *roachpb.Replica
 	return !found && fromReplica.ReplicaID < desc.NextReplicaID
 }
 
-// addToReplicasByKeyLocked adds the replica to the replicasByKey btree. The
-// replica must already be in replicasByRangeID. Requires that Store.mu is held.
-//
-// Returns an error if a different replica with the same range ID, or an
-// overlapping replica or placeholder exists in this Store.
-func (s *Store) addToReplicasByKeyLocked(repl *Replica) error {
-	if !repl.IsInitialized() {
-		return errors.Errorf("attempted to add uninitialized replica %s", repl)
+// addToReplicasByKeyLockedReplicaRLocked adds the replica to the replicasByKey
+// btree. The replica must already be in replicasByRangeID. Returns an error if
+// a different replica with the same range ID, or an overlapping replica or
+// placeholder exists in this Store. Replica.mu must be at least read-locked.
+func (s *Store) addToReplicasByKeyLockedReplicaRLocked(repl *Replica) error {
+	desc := repl.descRLocked()
+	if !desc.IsInitialized() {
+		return errors.Errorf("%s: attempted to add uninitialized replica %s", s, repl)
 	}
 	if got := s.GetReplicaIfExists(repl.RangeID); got != repl { // NB: got can be nil too
-		return errors.Errorf("replica %s not in replicasByRangeID; got %s", repl, got)
+		return errors.Errorf("%s: replica %s not in replicasByRangeID; got %s", s, repl, got)
 	}
-
-	if it := s.getOverlappingKeyRangeLocked(repl.Desc()); it.item != nil {
-		return errors.Errorf("%s: cannot addToReplicasByKeyLocked; range %s has overlapping range %s", s, repl, it.Desc())
+	if it := s.getOverlappingKeyRangeLocked(desc); it.item != nil {
+		return errors.Errorf(
+			"%s: cannot add to replicasByKey: range %s overlaps with %s", s, repl, it.Desc())
 	}
-
 	if it := s.mu.replicasByKey.ReplaceOrInsertReplica(context.Background(), repl); it.item != nil {
-		return errors.Errorf("%s: cannot addToReplicasByKeyLocked; range for key %v already exists in replicasByKey btree", s,
-			it.item.key())
+		return errors.Errorf(
+			"%s: cannot add to replicasByKey: key %v already exists in the btree", s, it.item.key())
 	}
-
 	return nil
 }
 
@@ -398,16 +319,11 @@ func (s *Store) maybeMarkReplicaInitializedLockedReplLocked(
 	}
 	delete(s.mu.uninitReplicas, rangeID)
 
-	if it := s.getOverlappingKeyRangeLocked(desc); it.item != nil {
-		return errors.AssertionFailedf("%s: cannot initialize replica; %s has overlapping range %s",
-			s, desc, it.Desc())
-	}
-
 	// Copy of the start key needs to be set before inserting into replicasByKey.
 	lockedRepl.setStartKeyLocked(desc.StartKey)
-	if it := s.mu.replicasByKey.ReplaceOrInsertReplica(ctx, lockedRepl); it.item != nil {
-		return errors.AssertionFailedf("range for key %v already exists in replicasByKey btree: %+v",
-			it.item.key(), it)
+
+	if err := s.addToReplicasByKeyLockedReplicaRLocked(lockedRepl); err != nil {
+		return err
 	}
 
 	// Unquiesce the replica. We don't allow uninitialized replicas to unquiesce,
@@ -436,7 +352,6 @@ func (s *Store) maybeMarkReplicaInitializedLockedReplLocked(
 	if !lockedRepl.maybeUnquiesceWithOptionsLocked(false /* campaignOnWake */) {
 		return errors.AssertionFailedf("expected replica %s to unquiesce after initialization", desc)
 	}
-
 	// Add the range to metrics and maybe gossip on capacity change.
 	s.metrics.ReplicaCount.Inc(1)
 	s.storeGossip.MaybeGossipOnCapacityChange(ctx, RangeAddEvent)

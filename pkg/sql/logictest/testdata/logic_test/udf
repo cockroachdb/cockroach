@@ -4,8 +4,23 @@ CREATE TABLE ab (
   b INT
 )
 
-statement error pq: unimplemented: user-defined functions with SETOF return types are not supported
-CREATE FUNCTION f(a int) RETURNS SETOF INT LANGUAGE SQL AS 'SELECT 1'
+statement error pgcode 0A000 unimplemented: PL/pgSQL is not yet supported
+CREATE FUNCTION populate() RETURNS integer AS $$
+DECLARE
+    -- declarations
+BEGIN
+    PERFORM my_function();
+END;
+$$ LANGUAGE plpgsql
+
+statement error pgcode 42704 language \"made_up_language\" does not exist
+CREATE FUNCTION populate() RETURNS integer AS $$
+DECLARE
+    -- declarations
+BEGIN
+    PERFORM my_function();
+END;
+$$ LANGUAGE made_up_language
 
 statement error .*cannot set leakproof on function with non-immutable volatility: STABLE.*
 CREATE FUNCTION f(a int) RETURNS INT LEAKPROOF STABLE LANGUAGE SQL AS 'SELECT 1'
@@ -107,7 +122,7 @@ statement ok
 CREATE TYPE notmyworkday AS ENUM ('Monday', 'Tuesday');
 
 statement ok
-CREATE FUNCTION f(a notmyworkday) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+CREATE FUNCTION f(a notmyworkday) RETURNS INT VOLATILE LANGUAGE SQL AS $$
 SELECT a FROM t;
 SELECT b FROM t@t_idx_b;
 SELECT c FROM t@t_idx_c;
@@ -119,7 +134,7 @@ SELECT create_statement FROM [SHOW CREATE FUNCTION f];
 ----
 CREATE FUNCTION public.f(IN a test.public.notmyworkday)
   RETURNS INT8
-  IMMUTABLE
+  VOLATILE
   NOT LEAKPROOF
   CALLED ON NULL INPUT
   LANGUAGE SQL
@@ -652,7 +667,7 @@ public         a              int8              int8                 func       
 public         b              int8              int8                 func           volatile
 public         c              int8              int8, int8           func           volatile
 public         d              int4              int2                 func           volatile
-public         f              int8              notmyworkday         func           immutable
+public         f              int8              notmyworkday         func           volatile
 public         f_no_ref       int8              int8                 func           immutable
 public         proc_f         int8              int8                 func           volatile
 public         proc_f         text              text, int8           func           immutable
@@ -672,7 +687,7 @@ public       a              int8              int8                 func         
 public       b              int8              int8                 func           volatile
 public       c              int8              int8, int8           func           volatile
 public       d              int4              int2                 func           volatile
-public       f              int8              notmyworkday         func           immutable
+public       f              int8              notmyworkday         func           volatile
 public       f_no_ref       int8              int8                 func           immutable
 public       proc_f         int8              int8                 func           volatile
 public       proc_f         text              text, int8           func           immutable
@@ -696,7 +711,7 @@ public         a              int8              int8                 func       
 public         b              int8              int8                 func           volatile
 public         c              int8              int8, int8           func           volatile
 public         d              int4              int2                 func           volatile
-public         f              int8              notmyworkday         func           immutable
+public         f              int8              notmyworkday         func           volatile
 public         f_no_ref       int8              int8                 func           immutable
 public         proc_f         int8              int8                 func           volatile
 public         proc_f         text              text, int8           func           immutable
@@ -1412,9 +1427,6 @@ CREATE OR REPLACE FUNCTION f_test_cor(a INT, c INT) RETURNS INT IMMUTABLE LANGUA
 
 statement error pq: cannot change return type of existing function
 CREATE OR REPLACE FUNCTION f_test_cor(a INT, b INT) RETURNS STRING IMMUTABLE LANGUAGE SQL AS $$ SELECT 'hello' $$;
-
-statement error pq: unimplemented: user-defined functions with SETOF return types are not supported
-CREATE OR REPLACE FUNCTION f_test_cor(a INT, b INT) RETURNS SETOF INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$;
 
 statement error pq: cannot set leakproof on function with non-immutable volatility: VOLATILE
 CREATE OR REPLACE FUNCTION f_test_cor(a INT, b INT) RETURNS INT LEAKPROOF LANGUAGE SQL AS $$ SELECT 1 $$;
@@ -2286,10 +2298,10 @@ subtest volatility
 statement ok
 CREATE TABLE kv (k INT PRIMARY KEY, v INT);
 INSERT INTO kv VALUES (1, 1), (2, 2), (3, 3);
-CREATE FUNCTION get_l(i INT) RETURNS INT IMMUTABLE LEAKPROOF LANGUAGE SQL AS $$
+CREATE FUNCTION get_l(i INT) RETURNS INT STABLE LANGUAGE SQL AS $$
 SELECT v FROM kv WHERE k = i;
 $$;
-CREATE FUNCTION get_i(i INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+CREATE FUNCTION get_i(i INT) RETURNS INT STABLE LANGUAGE SQL AS $$
 SELECT v FROM kv WHERE k = i;
 $$;
 CREATE FUNCTION get_s(i INT) RETURNS INT STABLE LANGUAGE SQL AS $$
@@ -2307,8 +2319,8 @@ SELECT pg_get_functiondef('get_l'::regproc::oid)
 ----
 CREATE FUNCTION public.get_l(IN i INT8)
     RETURNS INT8
-    IMMUTABLE
-    LEAKPROOF
+    STABLE
+    NOT LEAKPROOF
     CALLED ON NULL INPUT
     LANGUAGE SQL
     AS $$
@@ -2352,39 +2364,22 @@ l1  l2  i1  i2  s1  s2  v1  v2
 
 statement ok
 CREATE SEQUENCE sq2;
+
+statement error volatile statement not allowed in immutable function: SELECT nextval\('sq2'\)
 CREATE FUNCTION rand_i() RETURNS INT IMMUTABLE LANGUAGE SQL AS $$SELECT nextval('sq2')$$;
+
+statement error volatile statement not allowed in stable function: SELECT nextval\('sq2'\)
 CREATE FUNCTION rand_s() RETURNS INT STABLE    LANGUAGE SQL AS $$SELECT nextval('sq2')$$;
+
+statement ok
 CREATE FUNCTION rand_v() RETURNS INT VOLATILE  LANGUAGE SQL AS $$SELECT nextval('sq2')$$;
 
-# UDFs with mislabeled volatilities. The volatile functions incorrectly marked
-# immutable and stable are evaluated just once, either during optimization or
-# execution.
-#
-# Note: This particular example does not match the behavior of Postgres 14.6
-# exactly, where rand_s() returns a different value in each row. However,
-# Postgres can fold these stable functions in some situations. Specifically,
-# Postgres will fold a stable function if doing so allows it to plan a
-# constrained index scan. For example:
-#
-#   CREATE TABLE t (i INT PRIMARY KEY);
-#   INSERT INTO t SELECT * FROM generate_series(1, 1000000);
-#   ANALYZE t;
-#   CREATE FUNCTION rand_s() RETURNS INT STABLE LANGUAGE SQL AS 'SELECT (10*random())::INT';
-#   SELECT i FROM t WHERE i = rand_s();
-#
-# The query plan of the SELECT is a contrained index scan, with rand_s() only
-# being evalauated once. With this query plan, the SELECT always returns a
-# single row.
-#
-# So, our behavior is more aggressive in folding table functions, but this is
-# perfectly valid.
-query IIIIII rowsort
-SELECT rand_i(), rand_i(), rand_s(), rand_s(), rand_v(), rand_v() FROM generate_series(1, 3)
+query II rowsort
+SELECT rand_v(), rand_v() FROM generate_series(1, 3)
 ----
-1  2  3  4  5  6
-1  2  3  4  7  8
-1  2  3  4  9  10
-
+1  2
+3  4
+5  6
 
 subtest implicit_record_types
 
@@ -2695,6 +2690,9 @@ subtest cte
 statement error pgcode 0A000 unimplemented: CTE usage inside a function definition
 CREATE FUNCTION err() RETURNS INT LANGUAGE SQL AS 'WITH s AS (SELECT a FROM t) SELECT a FROM s'
 
+statement error pgcode 0A000 unimplemented: statement source \(square bracket syntax\) within user-defined function
+CREATE FUNCTION err() RETURNS INT LANGUAGE SQL AS 'SELECT a FROM [SELECT 1] a(a)'
+
 
 subtest recursion
 
@@ -2933,10 +2931,10 @@ SELECT oid, proname, pronamespace, proowner, prolang, proleakproof, proisstrict,
 FROM pg_catalog.pg_proc WHERE proname IN ('f_93314', 'f_93314_alias', 'f_93314_comp', 'f_93314_comp_t')
 ORDER BY oid;
 ----
-100266  f_93314         105  1546506610  14  false  false  false  v  0  100265  ·  {}  NULL  SELECT i, e FROM test.public.t_93314 ORDER BY i LIMIT 1;
-100268  f_93314_alias   105  1546506610  14  false  false  false  v  0  100267  ·  {}  NULL  SELECT i, e FROM test.public.t_93314_alias ORDER BY i LIMIT 1;
-100272  f_93314_comp    105  1546506610  14  false  false  false  v  0  100269  ·  {}  NULL  SELECT (1, 2);
-100273  f_93314_comp_t  105  1546506610  14  false  false  false  v  0  100271  ·  {}  NULL  SELECT a, c FROM test.public.t_93314_comp LIMIT 1;
+100264  f_93314         105  1546506610  14  false  false  false  v  0  100263  ·  {}  NULL  SELECT i, e FROM test.public.t_93314 ORDER BY i LIMIT 1;
+100266  f_93314_alias   105  1546506610  14  false  false  false  v  0  100265  ·  {}  NULL  SELECT i, e FROM test.public.t_93314_alias ORDER BY i LIMIT 1;
+100270  f_93314_comp    105  1546506610  14  false  false  false  v  0  100267  ·  {}  NULL  SELECT (1, 2);
+100271  f_93314_comp_t  105  1546506610  14  false  false  false  v  0  100269  ·  {}  NULL  SELECT a, c FROM test.public.t_93314_comp LIMIT 1;
 
 # Regression test for #95240. Strict UDFs that are inlined should result in NULL
 # when presented with NULL arguments.
@@ -3043,6 +3041,54 @@ query I
 SELECT count(descriptor) FROM system.descriptor WHERE id = $dropped_fn_id;
 ----
 0
+
+
+subtest udt_alter
+
+statement ok
+CREATE TABLE t_alter (
+  a INT PRIMARY KEY,
+  b INT
+)
+
+statement ok
+CREATE FUNCTION f_rtbl() RETURNS t_alter LANGUAGE SQL AS 'SELECT 1, 2;'
+
+query T
+SELECT f_rtbl();
+----
+(1,2)
+
+statement ok
+ALTER TABLE t_alter DROP COLUMN b;
+
+statement error pq: return type mismatch in function declared to return t_alter
+SELECT f_rtbl();
+
+statement ok
+ALTER TABLE t_alter ADD COLUMN b INT;
+
+query T
+SELECT f_rtbl();
+----
+(1,2)
+
+statement ok
+SET enable_experimental_alter_column_type_general=true
+
+statement ok
+ALTER TABLE t_alter ALTER b TYPE FLOAT;
+
+statement error pq: return type mismatch in function declared to return t_alter
+SELECT f_rtbl();
+
+statement ok
+ALTER TABLE t_alter ALTER b TYPE INT;
+
+query T
+SELECT f_rtbl();
+----
+(1,2)
 
 # Regression test for #94146
 statement ok

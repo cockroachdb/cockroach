@@ -124,6 +124,7 @@ func runBundleRecreate(cmd *cobra.Command, args []string) (resErr error) {
 	}
 
 	demoCtx.UseEmptyDatabase = true
+	demoCtx.Multitenant = false
 	return runDemoInternal(cmd, nil /* gen */, func(ctx context.Context, conn clisqlclient.Conn) error {
 		// Disable autostats collection, which will override the injected stats.
 		if err := conn.Exec(ctx,
@@ -182,7 +183,8 @@ func runBundleRecreate(cmd *cobra.Command, args []string) (resErr error) {
 // $2: 1
 var placeholderRe = regexp.MustCompile(`\$(\d+): .*`)
 
-var statsRe = regexp.MustCompile(`ALTER TABLE ([\w.]+) INJECT STATISTICS '`)
+// The double quotes are needed for table names that are reserved keywords.
+var statsRe = regexp.MustCompile(`ALTER TABLE ([\w".]+) INJECT STATISTICS '`)
 
 type bucketKey struct {
 	NumEq         float64

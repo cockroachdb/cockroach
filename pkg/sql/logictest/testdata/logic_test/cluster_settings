@@ -326,3 +326,10 @@ WHERE variable IN ('jobs.scheduler.enabled', 'jobs.retention_time') ORDER BY 1
 ----
 jobs.retention_time     d  true   no-override
 jobs.scheduler.enabled  b  false  no-override
+
+statement notice NOTICE: using global default sql.defaults.distsql is not recommended\nHINT: use the `ALTER ROLE ... SET` syntax to control session variable defaults at a finer-grained level. See: https://www.cockroachlabs.com/docs/.*/alter-role.html#set-default-session-variable-values-for-a-role
+SHOW CLUSTER SETTING sql.defaults.distsql;
+
+query T noticetrace
+SHOW CLUSTER SETTING sql.notices.enabled
+----

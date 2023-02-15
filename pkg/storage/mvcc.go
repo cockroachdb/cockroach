@@ -22,7 +22,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -94,8 +93,7 @@ var MVCCRangeTombstonesEnabled = settings.RegisterBoolSetting(
 // It requires the MVCCRangeTombstones version gate to be active, and the
 // setting storage.mvcc.range_tombstones.enabled to be enabled.
 func CanUseMVCCRangeTombstones(ctx context.Context, st *cluster.Settings) bool {
-	return st.Version.IsActive(ctx, clusterversion.V22_2MVCCRangeTombstones) &&
-		MVCCRangeTombstonesEnabled.Get(&st.SV)
+	return MVCCRangeTombstonesEnabled.Get(&st.SV)
 }
 
 // MaxIntentsPerWriteIntentError sets maximum number of intents returned in
@@ -4954,8 +4952,7 @@ func MVCCResolveWriteIntentRange(
 		mvccIter = rw.NewMVCCIterator(MVCCKeyIterKind, iterOpts)
 	} else {
 		// For correctness, we need mvccIter to be consistent with engineIter.
-		mvccIter = newPebbleIteratorByCloning(
-			engineIter.GetRawIter(), iterOpts, StandardDurability, rw.SupportsRangeKeys())
+		mvccIter = newPebbleIteratorByCloning(engineIter.GetRawIter(), iterOpts, StandardDurability)
 	}
 	iterAndBuf := GetBufUsingIter(mvccIter)
 	defer func() {

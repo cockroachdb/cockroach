@@ -28,12 +28,12 @@ import {
 } from "src/insightsTable/insightsTable";
 import { WaitTimeDetailsTable } from "./insightDetailsTables";
 import {
-  BlockedContentionDetails,
+  ContentionDetails,
   ContentionEvent,
-  TxnInsightEvent,
   InsightExecEnum,
-  StmtInsightEvent,
   InsightNameEnum,
+  StmtInsightEvent,
+  TxnInsightEvent,
 } from "../types";
 
 import classNames from "classnames/bind";
@@ -55,10 +55,11 @@ const tableCx = classNames.bind(insightTableStyles);
 type Props = {
   txnDetails: TxnInsightEvent | null;
   statements: StmtInsightEvent[] | null;
-  contentionDetails?: BlockedContentionDetails[];
+  contentionDetails?: ContentionDetails[];
   setTimeScale: (ts: TimeScale) => void;
   hasAdminRole: boolean;
   errors: TxnInsightDetailsReqErrs | null;
+  maxRequestsReached: boolean;
 };
 
 export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
@@ -68,6 +69,7 @@ export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
   statements,
   setTimeScale,
   hasAdminRole,
+  maxRequestsReached,
 }) => {
   const [insightsSortSetting, setInsightsSortSetting] = useState<SortSetting>({
     ascending: false,
@@ -76,28 +78,37 @@ export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
   const isCockroachCloud = useContext(CockroachCloudContext);
 
   const queryFromStmts = statements?.map(s => s.query)?.join("\n");
-  const insightQueries =
-    queryFromStmts ?? txnDetails?.query ?? "Insight not found.";
+  const insightQueries = queryFromStmts?.length
+    ? queryFromStmts
+    : txnDetails?.query ?? "Insight not found.";
   const insightsColumns = makeInsightsColumns(
     isCockroachCloud,
     hasAdminRole,
     true,
   );
 
-  const blockingExecutions: ContentionEvent[] = contentionDetails?.map(x => {
-    return {
-      executionID: x.blockingExecutionID,
-      fingerprintID: x.blockingTxnFingerprintID,
-      queries: x.blockingQueries,
-      startTime: x.collectionTimeStamp,
-      contentionTimeMs: x.contentionTimeMs,
-      execType: InsightExecEnum.TRANSACTION,
-      schemaName: x.schemaName,
-      databaseName: x.databaseName,
-      tableName: x.tableName,
-      indexName: x.indexName,
-    };
-  });
+  const blockingExecutions: ContentionEvent[] = contentionDetails?.map(
+    event => {
+      const stmtInsight = statements.find(
+        stmt => stmt.statementExecutionID == event.waitingStmtID,
+      );
+      return {
+        executionID: event.blockingExecutionID,
+        fingerprintID: event.blockingTxnFingerprintID,
+        waitingStmtID: event.waitingStmtID,
+        waitingStmtFingerprintID: event.waitingStmtFingerprintID,
+        queries: event.blockingTxnQuery,
+        startTime: event.collectionTimeStamp,
+        contentionTimeMs: event.contentionTimeMs,
+        execType: InsightExecEnum.TRANSACTION,
+        schemaName: event.schemaName,
+        databaseName: event.databaseName,
+        tableName: event.tableName,
+        indexName: event.indexName,
+        stmtInsightEvent: stmtInsight,
+      };
+    },
+  );
 
   const insightRecs = getTxnInsightRecommendations(txnDetails);
   const hasContentionInsights =
@@ -106,19 +117,19 @@ export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
 
   return (
     <div>
-      <Loading
-        loading={txnDetails == null}
-        page="Transaction Details"
-        error={errors?.txnDetailsErr}
-        renderError={() => InsightsError(errors?.txnDetailsErr?.message)}
-      >
-        {txnDetails && (
-          <section className={cx("section")}>
-            <Row gutter={24}>
-              <Col span={24}>
-                <SqlBox value={insightQueries} size={SqlBoxSize.custom} />
-              </Col>
-            </Row>
+      <section className={cx("section")}>
+        <Loading
+          loading={!maxRequestsReached && txnDetails == null}
+          page="Transaction Details"
+          error={errors?.txnDetailsErr}
+          renderError={() => InsightsError(errors?.txnDetailsErr?.message)}
+        >
+          <Row gutter={24}>
+            <Col span={24}>
+              <SqlBox value={insightQueries} size={SqlBoxSize.custom} />
+            </Col>
+          </Row>
+          {txnDetails && (
             <>
               <Row gutter={24} type="flex">
                 <Col span={12}>
@@ -188,23 +199,24 @@ export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
                   </SummaryCard>
                 </Col>
               </Row>
-              <Row gutter={24} className={tableCx("margin-bottom")}>
+              <Row gutter={24}>
                 <Col span={24}>
                   <InsightsSortedTable
                     columns={insightsColumns}
                     data={insightRecs}
                     sortSetting={insightsSortSetting}
                     onChangeSortSetting={setInsightsSortSetting}
+                    tableWrapperClassName={tableCx("sorted-table")}
                   />
                 </Col>
               </Row>
             </>
-          </section>
-        )}
-      </Loading>
+          )}
+        </Loading>
+      </section>
       {hasContentionInsights && (
         <Loading
-          loading={blockingExecutions == null}
+          loading={!maxRequestsReached && contentionDetails == null}
           page="Transaction Details"
           error={errors?.contentionErr}
           renderError={() => InsightsError(errors?.contentionErr?.message)}

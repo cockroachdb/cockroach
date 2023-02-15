@@ -77,8 +77,10 @@ func (n *alterFunctionOptionsNode) startExec(params runParams) error {
 	for _, option := range n.n.Options {
 		// Note that language and function body cannot be altered, and it's blocked
 		// from parser level with "common_func_opt_item" syntax.
-		err := setFuncOption(params, fnDesc, option)
-		if err != nil {
+		if err := maybeValidateNewFuncVolatility(params, fnDesc, option); err != nil {
+			return err
+		}
+		if err := setFuncOption(params, fnDesc, option); err != nil {
 			return err
 		}
 	}
@@ -99,6 +101,29 @@ func (n *alterFunctionOptionsNode) startExec(params runParams) error {
 		FunctionName: fnName.FQString(),
 	}
 	return params.p.logEvent(params.ctx, fnDesc.GetID(), &event)
+}
+
+func maybeValidateNewFuncVolatility(
+	params runParams, fnDesc catalog.FunctionDescriptor, option tree.FunctionOption,
+) error {
+	switch t := option.(type) {
+	case tree.FunctionVolatility:
+		f := NewReferenceProviderFactory(params.p)
+		ast, err := fnDesc.ToCreateExpr()
+		if err != nil {
+			return err
+		}
+		for i, o := range ast.Options {
+			if _, ok := o.(tree.FunctionVolatility); ok {
+				ast.Options[i] = t
+			}
+		}
+		if _, err := f.NewReferenceProvider(params.ctx, ast); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (n *alterFunctionOptionsNode) Next(params runParams) (bool, error) { return false, nil }
@@ -140,7 +165,7 @@ func (n *alterFunctionRenameNode) startExec(params runParams) error {
 
 	maybeExistingFuncObj := fnDesc.ToFuncObj()
 	maybeExistingFuncObj.FuncName.ObjectName = n.n.NewName
-	existing, err := params.p.matchUDF(params.ctx, &maybeExistingFuncObj, false /* required */)
+	existing, err := params.p.matchUDF(params.ctx, maybeExistingFuncObj, false /* required */)
 	if err != nil {
 		return err
 	}
@@ -305,7 +330,7 @@ func (n *alterFunctionSetSchemaNode) startExec(params runParams) error {
 	maybeExistingFuncObj := fnDesc.ToFuncObj()
 	maybeExistingFuncObj.FuncName.SchemaName = tree.Name(targetSc.GetName())
 	maybeExistingFuncObj.FuncName.ExplicitSchema = true
-	existing, err := params.p.matchUDF(params.ctx, &maybeExistingFuncObj, false /* required */)
+	existing, err := params.p.matchUDF(params.ctx, maybeExistingFuncObj, false /* required */)
 	if err != nil {
 		return err
 	}
@@ -380,8 +405,8 @@ func (p *planner) mustGetMutableFunctionForAlter(
 	return mut, nil
 }
 
-func toSchemaOverloadSignature(fnDesc *funcdesc.Mutable) descpb.SchemaDescriptor_FunctionOverload {
-	ret := descpb.SchemaDescriptor_FunctionOverload{
+func toSchemaOverloadSignature(fnDesc *funcdesc.Mutable) descpb.SchemaDescriptor_FunctionSignature {
+	ret := descpb.SchemaDescriptor_FunctionSignature{
 		ID:         fnDesc.GetID(),
 		ArgTypes:   make([]*types.T, len(fnDesc.GetParams())),
 		ReturnType: fnDesc.ReturnType.Type,

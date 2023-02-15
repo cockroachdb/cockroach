@@ -14,13 +14,10 @@ SET sql_safe_updates = false;
 ops
 ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
 ----
-StatementPhase stage 1 of 1 with 16 MutationType ops
+StatementPhase stage 1 of 1 with 29 MutationType ops
   transitions:
     [[Column:{DescID: 107, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 107, Name: v1, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, ABSENT], PUBLIC] -> VALIDATED
     [[Namespace:{DescID: 108, Name: fooview, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 108}, ABSENT], PUBLIC] -> ABSENT
@@ -48,8 +45,8 @@ StatementPhase stage 1 of 1 with 16 MutationType ops
     [[IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 3}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexData:{DescID: 107, IndexID: 3}, PUBLIC], ABSENT] -> PUBLIC
     [[TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT] -> DELETE_ONLY
-    [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 4}, TRANSIENT_ABSENT], ABSENT] -> TRANSIENT_ABSENT
-    [[IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 4}, TRANSIENT_ABSENT], ABSENT] -> TRANSIENT_ABSENT
+    [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 4}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
+    [[IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 4}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
   ops:
     *scop.MakePublicColumnWriteOnly
       ColumnID: 2
@@ -74,6 +71,20 @@ StatementPhase stage 1 of 1 with 16 MutationType ops
     *scop.RemoveObjectParent
       ObjectID: 108
       ParentSchemaID: 101
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 1
+      TableID: 108
+    *scop.SetColumnName
+      ColumnID: 1
+      Name: crdb_internal_column_1_name_placeholder
+      TableID: 108
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 2
+      TableID: 108
+    *scop.SetColumnName
+      ColumnID: 2
+      Name: crdb_internal_column_2_name_placeholder
+      TableID: 108
     *scop.RemoveDroppedColumnType
       ColumnID: 2
       TableID: 108
@@ -82,6 +93,27 @@ StatementPhase stage 1 of 1 with 16 MutationType ops
       TypeIDs:
       - 104
       - 105
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 3
+      TableID: 108
+    *scop.SetColumnName
+      ColumnID: 3
+      Name: crdb_internal_column_3_name_placeholder
+      TableID: 108
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967295
+      TableID: 108
+    *scop.SetColumnName
+      ColumnID: 4294967295
+      Name: crdb_internal_column_4294967295_name_placeholder
+      TableID: 108
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967294
+      TableID: 108
+    *scop.SetColumnName
+      ColumnID: 4294967294
+      Name: crdb_internal_column_4294967294_name_placeholder
+      TableID: 108
     *scop.MakeAbsentIndexBackfilling
       Index:
         ConstraintID: 3
@@ -121,13 +153,19 @@ StatementPhase stage 1 of 1 with 16 MutationType ops
         DescriptorID: 108
         Name: fooview
         SchemaID: 101
+    *scop.NotImplementedForPublicObjects
+      DescID: 108
+      ElementType: scpb.Owner
+    *scop.RemoveUserPrivileges
+      DescriptorID: 108
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 108
+      User: root
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
     [[Column:{DescID: 107, ColumnID: 2}, ABSENT], WRITE_ONLY] -> PUBLIC
     [[ColumnName:{DescID: 107, Name: v1, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
-    [[IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 2}, ABSENT], ABSENT] -> PUBLIC
-    [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 2}, ABSENT], ABSENT] -> PUBLIC
-    [[IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 2}, ABSENT], ABSENT] -> PUBLIC
     [[SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, ABSENT], VALIDATED] -> PUBLIC
     [[Namespace:{DescID: 108, Name: fooview, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 108}, ABSENT], ABSENT] -> PUBLIC
@@ -155,8 +193,8 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 3}, PUBLIC], PUBLIC] -> ABSENT
     [[IndexData:{DescID: 107, IndexID: 3}, PUBLIC], PUBLIC] -> ABSENT
     [[TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_ABSENT], DELETE_ONLY] -> ABSENT
-    [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 4}, TRANSIENT_ABSENT], TRANSIENT_ABSENT] -> ABSENT
-    [[IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 4}, TRANSIENT_ABSENT], TRANSIENT_ABSENT] -> ABSENT
+    [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 4}, TRANSIENT_ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 4}, TRANSIENT_ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
@@ -340,12 +378,9 @@ PostCommitPhase stage 7 of 7 with 1 ValidationType op
     *scop.ValidateIndex
       IndexID: 3
       TableID: 107
-PostCommitNonRevertiblePhase stage 1 of 3 with 25 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 3 with 48 MutationType ops
   transitions:
     [[Column:{DescID: 107, ColumnID: 2}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
-    [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, ABSENT], PUBLIC] -> VALIDATED
     [[IndexName:{DescID: 107, Name: foo_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
@@ -403,6 +438,20 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 25 MutationType ops
     *scop.RemoveObjectParent
       ObjectID: 108
       ParentSchemaID: 101
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 1
+      TableID: 108
+    *scop.SetColumnName
+      ColumnID: 1
+      Name: crdb_internal_column_1_name_placeholder
+      TableID: 108
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 2
+      TableID: 108
+    *scop.SetColumnName
+      ColumnID: 2
+      Name: crdb_internal_column_2_name_placeholder
+      TableID: 108
     *scop.RemoveDroppedColumnType
       ColumnID: 2
       TableID: 108
@@ -411,12 +460,42 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 25 MutationType ops
       TypeIDs:
       - 104
       - 105
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 3
+      TableID: 108
+    *scop.SetColumnName
+      ColumnID: 3
+      Name: crdb_internal_column_3_name_placeholder
+      TableID: 108
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967295
+      TableID: 108
+    *scop.SetColumnName
+      ColumnID: 4294967295
+      Name: crdb_internal_column_4294967295_name_placeholder
+      TableID: 108
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967294
+      TableID: 108
+    *scop.SetColumnName
+      ColumnID: 4294967294
+      Name: crdb_internal_column_4294967294_name_placeholder
+      TableID: 108
     *scop.SetIndexName
       IndexID: 3
       Name: foo_pkey
       TableID: 107
     *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 4
+      TableID: 107
+    *scop.RemoveColumnFromIndex
+      ColumnID: 1
+      IndexID: 4
+      TableID: 107
+    *scop.RemoveColumnFromIndex
+      ColumnID: 3
+      IndexID: 4
+      Kind: 2
       TableID: 107
     *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 2
@@ -431,8 +510,46 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 25 MutationType ops
         DescriptorID: 108
         Name: fooview
         SchemaID: 101
+    *scop.NotImplementedForPublicObjects
+      DescID: 108
+      ElementType: scpb.Owner
+    *scop.RemoveUserPrivileges
+      DescriptorID: 108
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 108
+      User: root
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 1
+      TableID: 108
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 2
+      TableID: 108
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 3
+      TableID: 108
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967295
+      TableID: 108
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967294
+      TableID: 108
     *scop.MakeValidatedPrimaryIndexPublic
       IndexID: 3
+      TableID: 107
+    *scop.RemoveColumnFromIndex
+      ColumnID: 3
+      IndexID: 2
+      TableID: 107
+    *scop.RemoveColumnFromIndex
+      ColumnID: 1
+      IndexID: 2
+      Kind: 1
+      TableID: 107
+    *scop.RemoveColumnFromIndex
+      ColumnID: 2
+      IndexID: 2
+      Kind: 2
       TableID: 107
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
@@ -460,8 +577,11 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 25 MutationType ops
     *scop.UpdateSchemaChangerJob
       IsNonCancelable: true
       JobID: 1
-PostCommitNonRevertiblePhase stage 2 of 3 with 8 MutationType ops
+PostCommitNonRevertiblePhase stage 2 of 3 with 11 MutationType ops
   transitions:
+    [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, ABSENT], VALIDATED] -> DELETE_ONLY
     [[SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
     [[View:{DescID: 108}, ABSENT], DROPPED] -> ABSENT
@@ -477,6 +597,21 @@ PostCommitNonRevertiblePhase stage 2 of 3 with 8 MutationType ops
       TableID: 107
     *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 1
+      TableID: 107
+    *scop.RemoveColumnFromIndex
+      ColumnID: 1
+      IndexID: 1
+      TableID: 107
+    *scop.RemoveColumnFromIndex
+      ColumnID: 2
+      IndexID: 1
+      Kind: 2
+      TableID: 107
+    *scop.RemoveColumnFromIndex
+      ColumnID: 3
+      IndexID: 1
+      Kind: 2
+      Ordinal: 1
       TableID: 107
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
@@ -575,6 +710,10 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
   to:   [IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 2}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
+- from: [Column:{DescID: 108, ColumnID: 1}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [Column:{DescID: 108, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 108, Name: k, ColumnID: 1}, ABSENT]
   kind: Precedence
@@ -583,6 +722,10 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
   to:   [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
+- from: [Column:{DescID: 108, ColumnID: 2}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [Column:{DescID: 108, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 108, Name: v1, ColumnID: 2}, ABSENT]
   kind: Precedence
@@ -591,6 +734,10 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
   to:   [ColumnType:{DescID: 108, ReferencedTypeIDs: [104 105], ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
+- from: [Column:{DescID: 108, ColumnID: 3}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [Column:{DescID: 108, ColumnID: 3}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 108, Name: v2, ColumnID: 3}, ABSENT]
   kind: Precedence
@@ -599,6 +746,10 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
   to:   [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
+- from: [Column:{DescID: 108, ColumnID: 4294967294}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [Column:{DescID: 108, ColumnID: 4294967294}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
@@ -607,6 +758,10 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
   to:   [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
+- from: [Column:{DescID: 108, ColumnID: 4294967295}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [Column:{DescID: 108, ColumnID: 4294967295}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
@@ -623,22 +778,42 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
   to:   [Column:{DescID: 108, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [ColumnName:{DescID: 108, Name: k, ColumnID: 1}, ABSENT]
   to:   [Column:{DescID: 108, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnName:{DescID: 108, Name: k, ColumnID: 1}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}, ABSENT]
   to:   [Column:{DescID: 108, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [ColumnName:{DescID: 108, Name: v1, ColumnID: 2}, ABSENT]
   to:   [Column:{DescID: 108, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnName:{DescID: 108, Name: v1, ColumnID: 2}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [ColumnName:{DescID: 108, Name: v2, ColumnID: 3}, ABSENT]
   to:   [Column:{DescID: 108, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnName:{DescID: 108, Name: v2, ColumnID: 3}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [ColumnType:{DescID: 107, ReferencedTypeIDs: [104 105], ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   to:   [Column:{DescID: 107, ColumnID: 2}, ABSENT]
   kind: SameStagePrecedence
@@ -647,22 +822,42 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
   to:   [Column:{DescID: 108, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
   to:   [Column:{DescID: 108, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
   to:   [Column:{DescID: 108, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
   to:   [Column:{DescID: 108, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [ColumnType:{DescID: 108, ReferencedTypeIDs: [104 105], ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   to:   [Column:{DescID: 108, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnType:{DescID: 108, ReferencedTypeIDs: [104 105], ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 1}, ABSENT]
   to:   [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, ABSENT]
   kind: Precedence
@@ -751,6 +946,18 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
   to:   [SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
+- from: [Namespace:{DescID: 108, Name: fooview, ReferencedDescID: 100}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ObjectParent:{DescID: 108, ReferencedDescID: 101}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Owner:{DescID: 108}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, ABSENT]
   to:   [Column:{DescID: 107, ColumnID: 2}, ABSENT]
   kind: Precedence
@@ -760,6 +967,18 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
   kind: Precedence
   rule: index removed before garbage collection
 - from: [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, DELETE_ONLY]
+  to:   [IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 1}, ABSENT]
+  kind: Precedence
+  rule: index drop mutation visible before cleaning up index columns
+- from: [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, DELETE_ONLY]
+  to:   [IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 1}, ABSENT]
+  kind: Precedence
+  rule: index drop mutation visible before cleaning up index columns
+- from: [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, DELETE_ONLY]
+  to:   [IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 1}, ABSENT]
+  kind: Precedence
+  rule: index drop mutation visible before cleaning up index columns
+- from: [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, DELETE_ONLY]
   to:   [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, ABSENT]
   kind: PreviousStagePrecedence
   rule: PrimaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT
@@ -768,21 +987,9 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
   kind: PreviousStagePrecedence
   rule: PrimaryIndex transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED
 - from: [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, VALIDATED]
-  to:   [IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 1}, ABSENT]
-  kind: Precedence
-  rule: index no longer public before dependents
-- from: [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, VALIDATED]
-  to:   [IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 1}, ABSENT]
-  kind: Precedence
-  rule: index no longer public before dependents
-- from: [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, VALIDATED]
-  to:   [IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 1}, ABSENT]
-  kind: Precedence
-  rule: index no longer public before dependents
-- from: [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, VALIDATED]
   to:   [IndexName:{DescID: 107, Name: foo_pkey, IndexID: 1}, ABSENT]
   kind: Precedence
-  rule: index no longer public before dependents
+  rule: index no longer public before dependents, excluding columns
 - from: [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, VALIDATED]
   to:   [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, WRITE_ONLY]
   kind: PreviousStagePrecedence
@@ -848,6 +1055,18 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
   kind: Precedence
   rule: index removed before garbage collection
 - from: [SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, DELETE_ONLY]
+  to:   [IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 2}, ABSENT]
+  kind: Precedence
+  rule: index drop mutation visible before cleaning up index columns
+- from: [SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, DELETE_ONLY]
+  to:   [IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 2}, ABSENT]
+  kind: Precedence
+  rule: index drop mutation visible before cleaning up index columns
+- from: [SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, DELETE_ONLY]
+  to:   [IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 2}, ABSENT]
+  kind: Precedence
+  rule: index drop mutation visible before cleaning up index columns
+- from: [SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, DELETE_ONLY]
   to:   [IndexName:{DescID: 107, Name: foo_v2_key, IndexID: 2}, ABSENT]
   kind: Precedence
   rule: index no longer public before index name
@@ -860,21 +1079,9 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
   kind: PreviousStagePrecedence
   rule: SecondaryIndex transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED
 - from: [SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, VALIDATED]
-  to:   [IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 2}, ABSENT]
-  kind: Precedence
-  rule: index no longer public before dependents
-- from: [SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, VALIDATED]
-  to:   [IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 2}, ABSENT]
-  kind: Precedence
-  rule: index no longer public before dependents
-- from: [SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, VALIDATED]
-  to:   [IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 2}, ABSENT]
-  kind: Precedence
-  rule: index no longer public before dependents
-- from: [SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, VALIDATED]
   to:   [IndexName:{DescID: 107, Name: foo_v2_key, IndexID: 2}, ABSENT]
   kind: Precedence
-  rule: index no longer public before dependents
+  rule: index no longer public before dependents, excluding columns
 - from: [SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, VALIDATED]
   to:   [SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, WRITE_ONLY]
   kind: PreviousStagePrecedence
@@ -900,6 +1107,14 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
   kind: Precedence
   rule: index removed before garbage collection
 - from: [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_DELETE_ONLY]
+  to:   [IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 4}, TRANSIENT_ABSENT]
+  kind: Precedence
+  rule: index drop mutation visible before cleaning up index columns
+- from: [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_DELETE_ONLY]
+  to:   [IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 4}, TRANSIENT_ABSENT]
+  kind: Precedence
+  rule: index drop mutation visible before cleaning up index columns
+- from: [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_DELETE_ONLY]
   to:   [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_ABSENT]
   kind: PreviousStagePrecedence
   rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT
@@ -915,6 +1130,14 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
   to:   [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_DELETE_ONLY]
   kind: PreviousStagePrecedence
   rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: WRITE_ONLY->TRANSIENT_DELETE_ONLY
+- from: [UserPrivileges:{DescID: 108, Name: admin}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [UserPrivileges:{DescID: 108, Name: root}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [View:{DescID: 108}, DROPPED]
   to:   [Column:{DescID: 108, ColumnID: 1}, WRITE_ONLY]
   kind: Precedence
@@ -1003,14 +1226,11 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
 ops
 ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
 ----
-StatementPhase stage 1 of 1 with 17 MutationType ops
+StatementPhase stage 1 of 1 with 30 MutationType ops
   transitions:
     [[Column:{DescID: 107, ColumnID: 3}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 107, Name: v2, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnNotNull:{DescID: 107, ColumnID: 3, IndexID: 0}, ABSENT], PUBLIC] -> VALIDATED
-    [[IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, ABSENT], PUBLIC] -> VALIDATED
     [[Namespace:{DescID: 108, Name: fooview, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 108}, ABSENT], PUBLIC] -> ABSENT
@@ -1038,8 +1258,8 @@ StatementPhase stage 1 of 1 with 17 MutationType ops
     [[IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 3}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexData:{DescID: 107, IndexID: 3}, PUBLIC], ABSENT] -> PUBLIC
     [[TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT] -> DELETE_ONLY
-    [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 4}, TRANSIENT_ABSENT], ABSENT] -> TRANSIENT_ABSENT
-    [[IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 4}, TRANSIENT_ABSENT], ABSENT] -> TRANSIENT_ABSENT
+    [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 4}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
+    [[IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 4}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
   ops:
     *scop.MakePublicColumnNotNullValidated
       ColumnID: 3
@@ -1060,6 +1280,20 @@ StatementPhase stage 1 of 1 with 17 MutationType ops
     *scop.RemoveObjectParent
       ObjectID: 108
       ParentSchemaID: 101
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 1
+      TableID: 108
+    *scop.SetColumnName
+      ColumnID: 1
+      Name: crdb_internal_column_1_name_placeholder
+      TableID: 108
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 2
+      TableID: 108
+    *scop.SetColumnName
+      ColumnID: 2
+      Name: crdb_internal_column_2_name_placeholder
+      TableID: 108
     *scop.RemoveDroppedColumnType
       ColumnID: 2
       TableID: 108
@@ -1068,6 +1302,27 @@ StatementPhase stage 1 of 1 with 17 MutationType ops
       TypeIDs:
       - 104
       - 105
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 3
+      TableID: 108
+    *scop.SetColumnName
+      ColumnID: 3
+      Name: crdb_internal_column_3_name_placeholder
+      TableID: 108
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967295
+      TableID: 108
+    *scop.SetColumnName
+      ColumnID: 4294967295
+      Name: crdb_internal_column_4294967295_name_placeholder
+      TableID: 108
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967294
+      TableID: 108
+    *scop.SetColumnName
+      ColumnID: 4294967294
+      Name: crdb_internal_column_4294967294_name_placeholder
+      TableID: 108
     *scop.MakeAbsentIndexBackfilling
       Index:
         ConstraintID: 3
@@ -1114,14 +1369,20 @@ StatementPhase stage 1 of 1 with 17 MutationType ops
         DescriptorID: 108
         Name: fooview
         SchemaID: 101
+    *scop.NotImplementedForPublicObjects
+      DescID: 108
+      ElementType: scpb.Owner
+    *scop.RemoveUserPrivileges
+      DescriptorID: 108
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 108
+      User: root
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
     [[Column:{DescID: 107, ColumnID: 3}, ABSENT], WRITE_ONLY] -> PUBLIC
     [[ColumnName:{DescID: 107, Name: v2, ColumnID: 3}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnNotNull:{DescID: 107, ColumnID: 3, IndexID: 0}, ABSENT], VALIDATED] -> PUBLIC
-    [[IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 2}, ABSENT], ABSENT] -> PUBLIC
-    [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 2}, ABSENT], ABSENT] -> PUBLIC
-    [[IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 2}, ABSENT], ABSENT] -> PUBLIC
     [[SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, ABSENT], VALIDATED] -> PUBLIC
     [[Namespace:{DescID: 108, Name: fooview, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 108}, ABSENT], ABSENT] -> PUBLIC
@@ -1149,8 +1410,8 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 3}, PUBLIC], PUBLIC] -> ABSENT
     [[IndexData:{DescID: 107, IndexID: 3}, PUBLIC], PUBLIC] -> ABSENT
     [[TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_ABSENT], DELETE_ONLY] -> ABSENT
-    [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 4}, TRANSIENT_ABSENT], TRANSIENT_ABSENT] -> ABSENT
-    [[IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 4}, TRANSIENT_ABSENT], TRANSIENT_ABSENT] -> ABSENT
+    [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 4}, TRANSIENT_ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 4}, TRANSIENT_ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
@@ -1350,13 +1611,10 @@ PostCommitPhase stage 7 of 7 with 1 ValidationType op
     *scop.ValidateIndex
       IndexID: 3
       TableID: 107
-PostCommitNonRevertiblePhase stage 1 of 3 with 27 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 3 with 50 MutationType ops
   transitions:
     [[Column:{DescID: 107, ColumnID: 3}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[ColumnNotNull:{DescID: 107, ColumnID: 3, IndexID: 0}, ABSENT], VALIDATED] -> ABSENT
-    [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, ABSENT], PUBLIC] -> VALIDATED
     [[IndexName:{DescID: 107, Name: foo_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
@@ -1414,6 +1672,20 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 27 MutationType ops
     *scop.RemoveObjectParent
       ObjectID: 108
       ParentSchemaID: 101
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 1
+      TableID: 108
+    *scop.SetColumnName
+      ColumnID: 1
+      Name: crdb_internal_column_1_name_placeholder
+      TableID: 108
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 2
+      TableID: 108
+    *scop.SetColumnName
+      ColumnID: 2
+      Name: crdb_internal_column_2_name_placeholder
+      TableID: 108
     *scop.RemoveDroppedColumnType
       ColumnID: 2
       TableID: 108
@@ -1422,12 +1694,42 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 27 MutationType ops
       TypeIDs:
       - 104
       - 105
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 3
+      TableID: 108
+    *scop.SetColumnName
+      ColumnID: 3
+      Name: crdb_internal_column_3_name_placeholder
+      TableID: 108
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967295
+      TableID: 108
+    *scop.SetColumnName
+      ColumnID: 4294967295
+      Name: crdb_internal_column_4294967295_name_placeholder
+      TableID: 108
+    *scop.MakePublicColumnWriteOnly
+      ColumnID: 4294967294
+      TableID: 108
+    *scop.SetColumnName
+      ColumnID: 4294967294
+      Name: crdb_internal_column_4294967294_name_placeholder
+      TableID: 108
     *scop.SetIndexName
       IndexID: 3
       Name: foo_pkey
       TableID: 107
     *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 4
+      TableID: 107
+    *scop.RemoveColumnFromIndex
+      ColumnID: 1
+      IndexID: 4
+      TableID: 107
+    *scop.RemoveColumnFromIndex
+      ColumnID: 2
+      IndexID: 4
+      Kind: 2
       TableID: 107
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 3
@@ -1445,8 +1747,46 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 27 MutationType ops
         DescriptorID: 108
         Name: fooview
         SchemaID: 101
+    *scop.NotImplementedForPublicObjects
+      DescID: 108
+      ElementType: scpb.Owner
+    *scop.RemoveUserPrivileges
+      DescriptorID: 108
+      User: admin
+    *scop.RemoveUserPrivileges
+      DescriptorID: 108
+      User: root
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 1
+      TableID: 108
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 2
+      TableID: 108
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 3
+      TableID: 108
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967295
+      TableID: 108
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967294
+      TableID: 108
     *scop.MakeValidatedPrimaryIndexPublic
       IndexID: 3
+      TableID: 107
+    *scop.RemoveColumnFromIndex
+      ColumnID: 3
+      IndexID: 2
+      TableID: 107
+    *scop.RemoveColumnFromIndex
+      ColumnID: 1
+      IndexID: 2
+      Kind: 1
+      TableID: 107
+    *scop.RemoveColumnFromIndex
+      ColumnID: 2
+      IndexID: 2
+      Kind: 2
       TableID: 107
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
@@ -1476,8 +1816,11 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 27 MutationType ops
     *scop.UpdateSchemaChangerJob
       IsNonCancelable: true
       JobID: 1
-PostCommitNonRevertiblePhase stage 2 of 3 with 9 MutationType ops
+PostCommitNonRevertiblePhase stage 2 of 3 with 12 MutationType ops
   transitions:
+    [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, ABSENT], VALIDATED] -> DELETE_ONLY
     [[SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
     [[View:{DescID: 108}, ABSENT], DROPPED] -> ABSENT
@@ -1493,6 +1836,21 @@ PostCommitNonRevertiblePhase stage 2 of 3 with 9 MutationType ops
       TableID: 107
     *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 1
+      TableID: 107
+    *scop.RemoveColumnFromIndex
+      ColumnID: 1
+      IndexID: 1
+      TableID: 107
+    *scop.RemoveColumnFromIndex
+      ColumnID: 2
+      IndexID: 1
+      Kind: 2
+      TableID: 107
+    *scop.RemoveColumnFromIndex
+      ColumnID: 3
+      IndexID: 1
+      Kind: 2
+      Ordinal: 1
       TableID: 107
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
@@ -1606,6 +1964,10 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
   to:   [IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 2}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
+- from: [Column:{DescID: 108, ColumnID: 1}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [Column:{DescID: 108, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 108, Name: k, ColumnID: 1}, ABSENT]
   kind: Precedence
@@ -1614,6 +1976,10 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
   to:   [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
+- from: [Column:{DescID: 108, ColumnID: 2}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [Column:{DescID: 108, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 108, Name: v1, ColumnID: 2}, ABSENT]
   kind: Precedence
@@ -1622,6 +1988,10 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
   to:   [ColumnType:{DescID: 108, ReferencedTypeIDs: [104 105], ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
+- from: [Column:{DescID: 108, ColumnID: 3}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [Column:{DescID: 108, ColumnID: 3}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 108, Name: v2, ColumnID: 3}, ABSENT]
   kind: Precedence
@@ -1630,6 +2000,10 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
   to:   [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
+- from: [Column:{DescID: 108, ColumnID: 4294967294}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [Column:{DescID: 108, ColumnID: 4294967294}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
@@ -1638,6 +2012,10 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
   to:   [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
+- from: [Column:{DescID: 108, ColumnID: 4294967295}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [Column:{DescID: 108, ColumnID: 4294967295}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
@@ -1662,22 +2040,42 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
   to:   [Column:{DescID: 108, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [ColumnName:{DescID: 108, Name: k, ColumnID: 1}, ABSENT]
   to:   [Column:{DescID: 108, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnName:{DescID: 108, Name: k, ColumnID: 1}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}, ABSENT]
   to:   [Column:{DescID: 108, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [ColumnName:{DescID: 108, Name: v1, ColumnID: 2}, ABSENT]
   to:   [Column:{DescID: 108, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnName:{DescID: 108, Name: v1, ColumnID: 2}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [ColumnName:{DescID: 108, Name: v2, ColumnID: 3}, ABSENT]
   to:   [Column:{DescID: 108, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnName:{DescID: 108, Name: v2, ColumnID: 3}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [ColumnNotNull:{DescID: 107, ColumnID: 3, IndexID: 0}, ABSENT]
   to:   [Column:{DescID: 107, ColumnID: 3}, ABSENT]
   kind: Precedence
@@ -1702,22 +2100,42 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
   to:   [Column:{DescID: 108, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
   to:   [Column:{DescID: 108, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
   to:   [Column:{DescID: 108, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
   to:   [Column:{DescID: 108, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [ColumnType:{DescID: 108, ReferencedTypeIDs: [104 105], ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   to:   [Column:{DescID: 108, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnType:{DescID: 108, ReferencedTypeIDs: [104 105], ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 1}, ABSENT]
   to:   [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, ABSENT]
   kind: Precedence
@@ -1806,6 +2224,18 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
   to:   [SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
+- from: [Namespace:{DescID: 108, Name: fooview, ReferencedDescID: 100}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ObjectParent:{DescID: 108, ReferencedDescID: 101}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Owner:{DescID: 108}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, ABSENT]
   to:   [Column:{DescID: 107, ColumnID: 3}, ABSENT]
   kind: Precedence
@@ -1815,6 +2245,18 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
   kind: Precedence
   rule: index removed before garbage collection
 - from: [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, DELETE_ONLY]
+  to:   [IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 1}, ABSENT]
+  kind: Precedence
+  rule: index drop mutation visible before cleaning up index columns
+- from: [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, DELETE_ONLY]
+  to:   [IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 1}, ABSENT]
+  kind: Precedence
+  rule: index drop mutation visible before cleaning up index columns
+- from: [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, DELETE_ONLY]
+  to:   [IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 1}, ABSENT]
+  kind: Precedence
+  rule: index drop mutation visible before cleaning up index columns
+- from: [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, DELETE_ONLY]
   to:   [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, ABSENT]
   kind: PreviousStagePrecedence
   rule: PrimaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT
@@ -1823,21 +2265,9 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
   kind: PreviousStagePrecedence
   rule: PrimaryIndex transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED
 - from: [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, VALIDATED]
-  to:   [IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 1}, ABSENT]
-  kind: Precedence
-  rule: index no longer public before dependents
-- from: [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, VALIDATED]
-  to:   [IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 1}, ABSENT]
-  kind: Precedence
-  rule: index no longer public before dependents
-- from: [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, VALIDATED]
-  to:   [IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 1}, ABSENT]
-  kind: Precedence
-  rule: index no longer public before dependents
-- from: [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, VALIDATED]
   to:   [IndexName:{DescID: 107, Name: foo_pkey, IndexID: 1}, ABSENT]
   kind: Precedence
-  rule: index no longer public before dependents
+  rule: index no longer public before dependents, excluding columns
 - from: [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, VALIDATED]
   to:   [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, WRITE_ONLY]
   kind: PreviousStagePrecedence
@@ -1903,6 +2333,18 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
   kind: Precedence
   rule: index removed before garbage collection
 - from: [SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, DELETE_ONLY]
+  to:   [IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 2}, ABSENT]
+  kind: Precedence
+  rule: index drop mutation visible before cleaning up index columns
+- from: [SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, DELETE_ONLY]
+  to:   [IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 2}, ABSENT]
+  kind: Precedence
+  rule: index drop mutation visible before cleaning up index columns
+- from: [SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, DELETE_ONLY]
+  to:   [IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 2}, ABSENT]
+  kind: Precedence
+  rule: index drop mutation visible before cleaning up index columns
+- from: [SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, DELETE_ONLY]
   to:   [IndexName:{DescID: 107, Name: foo_v2_key, IndexID: 2}, ABSENT]
   kind: Precedence
   rule: index no longer public before index name
@@ -1919,21 +2361,9 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
   kind: Precedence
   rule: secondary indexes containing column as key reach write-only before column
 - from: [SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, VALIDATED]
-  to:   [IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 2}, ABSENT]
-  kind: Precedence
-  rule: index no longer public before dependents
-- from: [SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, VALIDATED]
-  to:   [IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 2}, ABSENT]
-  kind: Precedence
-  rule: index no longer public before dependents
-- from: [SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, VALIDATED]
-  to:   [IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 2}, ABSENT]
-  kind: Precedence
-  rule: index no longer public before dependents
-- from: [SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, VALIDATED]
   to:   [IndexName:{DescID: 107, Name: foo_v2_key, IndexID: 2}, ABSENT]
   kind: Precedence
-  rule: index no longer public before dependents
+  rule: index no longer public before dependents, excluding columns
 - from: [SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, VALIDATED]
   to:   [SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, WRITE_ONLY]
   kind: PreviousStagePrecedence
@@ -1959,6 +2389,14 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
   kind: Precedence
   rule: index removed before garbage collection
 - from: [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_DELETE_ONLY]
+  to:   [IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 4}, TRANSIENT_ABSENT]
+  kind: Precedence
+  rule: index drop mutation visible before cleaning up index columns
+- from: [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_DELETE_ONLY]
+  to:   [IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 4}, TRANSIENT_ABSENT]
+  kind: Precedence
+  rule: index drop mutation visible before cleaning up index columns
+- from: [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_DELETE_ONLY]
   to:   [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_ABSENT]
   kind: PreviousStagePrecedence
   rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT
@@ -1974,6 +2412,14 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
   to:   [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_DELETE_ONLY]
   kind: PreviousStagePrecedence
   rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: WRITE_ONLY->TRANSIENT_DELETE_ONLY
+- from: [UserPrivileges:{DescID: 108, Name: admin}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [UserPrivileges:{DescID: 108, Name: root}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [View:{DescID: 108}, DROPPED]
   to:   [Column:{DescID: 108, ColumnID: 1}, WRITE_ONLY]
   kind: Precedence

@@ -13,7 +13,7 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │   │
 │   └── • Stage 1 of 1 in StatementPhase
 │       │
-│       ├── • 29 elements transitioning toward ABSENT
+│       ├── • 27 elements transitioning toward ABSENT
 │       │   │
 │       │   ├── • Namespace:{DescID: 108, Name: table_regional_by_row, ReferencedDescID: 104}
 │       │   │   │ PUBLIC → ABSENT
@@ -24,29 +24,20 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │   ├── • Owner:{DescID: 108}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108}
-│       │   │   │     rule: "descriptor dropped before dependent element removal"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 108}
+│       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • UserPrivileges:{DescID: 108, Name: admin}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108}
-│       │   │   │     rule: "descriptor dropped before dependent element removal"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 108}
+│       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • UserPrivileges:{DescID: 108, Name: root}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108}
-│       │   │   │     rule: "descriptor dropped before dependent element removal"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 108}
+│       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • Table:{DescID: 108}
 │       │   │     PUBLIC → DROPPED
@@ -61,11 +52,8 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │   ├── • TablePartitioning:{DescID: 108}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108}
-│       │   │   │     rule: "descriptor dropped before dependent element removal"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 108}
+│       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • TableLocalityRegionalByRow:{DescID: 108}
 │       │   │   │ PUBLIC → ABSENT
@@ -76,20 +64,14 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │   ├── • ColumnFamily:{DescID: 108, Name: primary, ColumnFamilyID: 0}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108}
-│       │   │   │     rule: "descriptor dropped before dependent element removal"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 108}
+│       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • Column:{DescID: 108, ColumnID: 1}
 │       │   │   │ PUBLIC → WRITE_ONLY
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108}
-│       │   │   │     rule: "relation dropped before dependent column"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → WRITE_ONLY operations
-│       │   │         rule: "skip column removal ops on relation drop"
+│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 108}
+│       │   │         rule: "relation dropped before dependent column"
 │       │   │
 │       │   ├── • ColumnName:{DescID: 108, Name: k, ColumnID: 1}
 │       │   │   │ PUBLIC → ABSENT
@@ -97,11 +79,8 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 108, ColumnID: 1}
-│       │   │   │     rule: "column no longer public before dependents"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip column dependents removal ops on relation drop"
+│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 108, ColumnID: 1}
+│       │   │         rule: "column no longer public before dependents"
 │       │   │
 │       │   ├── • ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}
 │       │   │   │ PUBLIC → ABSENT
@@ -115,20 +94,14 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │   ├── • ColumnNotNull:{DescID: 108, ColumnID: 1, IndexID: 0}
 │       │   │   │ PUBLIC → VALIDATED
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108}
-│       │   │   │     rule: "relation dropped before dependent constraint"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → VALIDATED operations
-│       │   │         rule: "skip constraint removal ops on relation drop"
+│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 108}
+│       │   │         rule: "relation dropped before dependent constraint"
 │       │   │
 │       │   ├── • Column:{DescID: 108, ColumnID: 2}
 │       │   │   │ PUBLIC → WRITE_ONLY
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108}
-│       │   │   │     rule: "relation dropped before dependent column"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → WRITE_ONLY operations
-│       │   │         rule: "skip column removal ops on relation drop"
+│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 108}
+│       │   │         rule: "relation dropped before dependent column"
 │       │   │
 │       │   ├── • ColumnName:{DescID: 108, Name: crdb_region, ColumnID: 2}
 │       │   │   │ PUBLIC → ABSENT
@@ -136,11 +109,8 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 108, ColumnID: 2}
-│       │   │   │     rule: "column no longer public before dependents"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip column dependents removal ops on relation drop"
+│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 108, ColumnID: 2}
+│       │   │         rule: "column no longer public before dependents"
 │       │   │
 │       │   ├── • ColumnType:{DescID: 108, ReferencedTypeIDs: [106 107], ColumnFamilyID: 0, ColumnID: 2}
 │       │   │   │ PUBLIC → ABSENT
@@ -157,11 +127,8 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │   ├── • ColumnNotNull:{DescID: 108, ColumnID: 2, IndexID: 0}
 │       │   │   │ PUBLIC → VALIDATED
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108}
-│       │   │   │     rule: "relation dropped before dependent constraint"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → VALIDATED operations
-│       │   │         rule: "skip constraint removal ops on relation drop"
+│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 108}
+│       │   │         rule: "relation dropped before dependent constraint"
 │       │   │
 │       │   ├── • ColumnDefaultExpression:{DescID: 108, ReferencedTypeIDs: [106 107], ColumnID: 2}
 │       │   │   │ PUBLIC → ABSENT
@@ -175,11 +142,8 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │   ├── • Column:{DescID: 108, ColumnID: 4294967295}
 │       │   │   │ PUBLIC → WRITE_ONLY
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108}
-│       │   │   │     rule: "relation dropped before dependent column"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → WRITE_ONLY operations
-│       │   │         rule: "skip column removal ops on relation drop"
+│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 108}
+│       │   │         rule: "relation dropped before dependent column"
 │       │   │
 │       │   ├── • ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
 │       │   │   │ PUBLIC → ABSENT
@@ -187,11 +151,8 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 108, ColumnID: 4294967295}
-│       │   │   │     rule: "column no longer public before dependents"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip column dependents removal ops on relation drop"
+│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 108, ColumnID: 4294967295}
+│       │   │         rule: "column no longer public before dependents"
 │       │   │
 │       │   ├── • ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295}
 │       │   │   │ PUBLIC → ABSENT
@@ -205,11 +166,8 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │   ├── • Column:{DescID: 108, ColumnID: 4294967294}
 │       │   │   │ PUBLIC → WRITE_ONLY
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108}
-│       │   │   │     rule: "relation dropped before dependent column"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → WRITE_ONLY operations
-│       │   │         rule: "skip column removal ops on relation drop"
+│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 108}
+│       │   │         rule: "relation dropped before dependent column"
 │       │   │
 │       │   ├── • ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}
 │       │   │   │ PUBLIC → ABSENT
@@ -217,11 +175,8 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 108, ColumnID: 4294967294}
-│       │   │   │     rule: "column no longer public before dependents"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip column dependents removal ops on relation drop"
+│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 108, ColumnID: 4294967294}
+│       │   │         rule: "column no longer public before dependents"
 │       │   │
 │       │   ├── • ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}
 │       │   │   │ PUBLIC → ABSENT
@@ -232,46 +187,11 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 108, ColumnID: 4294967294}
 │       │   │         rule: "column no longer public before dependents"
 │       │   │
-│       │   ├── • IndexColumn:{DescID: 108, ColumnID: 2, IndexID: 1}
-│       │   │   │ PUBLIC → ABSENT
-│       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108}
-│       │   │   │     rule: "descriptor dropped before dependent element removal"
-│       │   │   │
-│       │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 108, ColumnID: 2}
-│       │   │   │     rule: "column no longer public before dependents"
-│       │   │   │
-│       │   │   ├── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
-│       │   │   │     rule: "index no longer public before dependents"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip index dependents removal ops on relation drop"
-│       │   │         rule: "skip index-column removal ops on index removal"
-│       │   │
-│       │   ├── • IndexColumn:{DescID: 108, ColumnID: 1, IndexID: 1}
-│       │   │   │ PUBLIC → ABSENT
-│       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108}
-│       │   │   │     rule: "descriptor dropped before dependent element removal"
-│       │   │   │
-│       │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 108, ColumnID: 1}
-│       │   │   │     rule: "column no longer public before dependents"
-│       │   │   │
-│       │   │   ├── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
-│       │   │   │     rule: "index no longer public before dependents"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip index dependents removal ops on relation drop"
-│       │   │         rule: "skip index-column removal ops on index removal"
-│       │   │
 │       │   ├── • PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
 │       │   │   │ PUBLIC → VALIDATED
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108}
-│       │   │   │     rule: "relation dropped before dependent index"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → VALIDATED operations
-│       │   │         rule: "skip index removal ops on relation drop"
+│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 108}
+│       │   │         rule: "relation dropped before dependent index"
 │       │   │
 │       │   ├── • IndexPartitioning:{DescID: 108, IndexID: 1}
 │       │   │   │ PUBLIC → ABSENT
@@ -279,11 +199,8 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
-│       │   │   │     rule: "index no longer public before dependents"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip index dependents removal ops on relation drop"
+│       │   │   └── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
+│       │   │         rule: "index no longer public before dependents, excluding columns"
 │       │   │
 │       │   └── • IndexName:{DescID: 108, Name: table_regional_by_row_pkey, IndexID: 1}
 │       │       │ PUBLIC → ABSENT
@@ -291,13 +208,10 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │       ├── • Precedence dependency from DROPPED Table:{DescID: 108}
 │       │       │     rule: "descriptor dropped before dependent element removal"
 │       │       │
-│       │       ├── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
-│       │       │     rule: "index no longer public before dependents"
-│       │       │
-│       │       └── • skip PUBLIC → ABSENT operations
-│       │             rule: "skip index dependents removal ops on relation drop"
+│       │       └── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
+│       │             rule: "index no longer public before dependents, excluding columns"
 │       │
-│       └── • 7 Mutation operations
+│       └── • 24 Mutation operations
 │           │
 │           ├── • MarkDescriptorAsDropped
 │           │     DescriptorID: 108
@@ -305,6 +219,40 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │           ├── • RemoveObjectParent
 │           │     ObjectID: 108
 │           │     ParentSchemaID: 105
+│           │
+│           ├── • NotImplementedForPublicObjects
+│           │     DescID: 108
+│           │     ElementType: scpb.TablePartitioning
+│           │
+│           ├── • NotImplementedForPublicObjects
+│           │     DescID: 108
+│           │     ElementType: scpb.ColumnFamily
+│           │
+│           ├── • MakePublicColumnWriteOnly
+│           │     ColumnID: 1
+│           │     TableID: 108
+│           │
+│           ├── • SetColumnName
+│           │     ColumnID: 1
+│           │     Name: crdb_internal_column_1_name_placeholder
+│           │     TableID: 108
+│           │
+│           ├── • MakePublicColumnNotNullValidated
+│           │     ColumnID: 1
+│           │     TableID: 108
+│           │
+│           ├── • MakePublicColumnWriteOnly
+│           │     ColumnID: 2
+│           │     TableID: 108
+│           │
+│           ├── • SetColumnName
+│           │     ColumnID: 2
+│           │     Name: crdb_internal_column_2_name_placeholder
+│           │     TableID: 108
+│           │
+│           ├── • MakePublicColumnNotNullValidated
+│           │     ColumnID: 2
+│           │     TableID: 108
 │           │
 │           ├── • RemoveColumnDefaultExpression
 │           │     ColumnID: 2
@@ -316,12 +264,51 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │           │     - 106
 │           │     - 107
 │           │
+│           ├── • MakePublicColumnWriteOnly
+│           │     ColumnID: 4294967295
+│           │     TableID: 108
+│           │
+│           ├── • SetColumnName
+│           │     ColumnID: 4294967295
+│           │     Name: crdb_internal_column_4294967295_name_placeholder
+│           │     TableID: 108
+│           │
+│           ├── • MakePublicColumnWriteOnly
+│           │     ColumnID: 4294967294
+│           │     TableID: 108
+│           │
+│           ├── • SetColumnName
+│           │     ColumnID: 4294967294
+│           │     Name: crdb_internal_column_4294967294_name_placeholder
+│           │     TableID: 108
+│           │
+│           ├── • MakePublicPrimaryIndexWriteOnly
+│           │     IndexID: 1
+│           │     TableID: 108
+│           │
+│           ├── • SetIndexName
+│           │     IndexID: 1
+│           │     Name: crdb_internal_index_1_name_placeholder
+│           │     TableID: 108
+│           │
 │           ├── • DrainDescriptorName
 │           │     Namespace:
 │           │       DatabaseID: 104
 │           │       DescriptorID: 108
 │           │       Name: table_regional_by_row
 │           │       SchemaID: 105
+│           │
+│           ├── • NotImplementedForPublicObjects
+│           │     DescID: 108
+│           │     ElementType: scpb.Owner
+│           │
+│           ├── • RemoveUserPrivileges
+│           │     DescriptorID: 108
+│           │     User: admin
+│           │
+│           ├── • RemoveUserPrivileges
+│           │     DescriptorID: 108
+│           │     User: root
 │           │
 │           ├── • RemoveDroppedColumnType
 │           │     ColumnID: 2
@@ -337,7 +324,7 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │   │
 │   ├── • Stage 1 of 2 in PreCommitPhase
 │   │   │
-│   │   ├── • 29 elements transitioning toward ABSENT
+│   │   ├── • 27 elements transitioning toward ABSENT
 │   │   │   │
 │   │   │   ├── • Namespace:{DescID: 108, Name: table_regional_by_row, ReferencedDescID: 104}
 │   │   │   │     ABSENT → PUBLIC
@@ -411,12 +398,6 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │   │   │   ├── • ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}
 │   │   │   │     ABSENT → PUBLIC
 │   │   │   │
-│   │   │   ├── • IndexColumn:{DescID: 108, ColumnID: 2, IndexID: 1}
-│   │   │   │     ABSENT → PUBLIC
-│   │   │   │
-│   │   │   ├── • IndexColumn:{DescID: 108, ColumnID: 1, IndexID: 1}
-│   │   │   │     ABSENT → PUBLIC
-│   │   │   │
 │   │   │   ├── • PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
 │   │   │   │     VALIDATED → PUBLIC
 │   │   │   │
@@ -444,29 +425,20 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │   ├── • Owner:{DescID: 108}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108}
-│       │   │   │     rule: "descriptor dropped before dependent element removal"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 108}
+│       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • UserPrivileges:{DescID: 108, Name: admin}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108}
-│       │   │   │     rule: "descriptor dropped before dependent element removal"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 108}
+│       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • UserPrivileges:{DescID: 108, Name: root}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108}
-│       │   │   │     rule: "descriptor dropped before dependent element removal"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 108}
+│       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • Table:{DescID: 108}
 │       │   │     PUBLIC → DROPPED
@@ -481,11 +453,8 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │   ├── • TablePartitioning:{DescID: 108}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108}
-│       │   │   │     rule: "descriptor dropped before dependent element removal"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 108}
+│       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • TableLocalityRegionalByRow:{DescID: 108}
 │       │   │   │ PUBLIC → ABSENT
@@ -496,11 +465,8 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │   ├── • ColumnFamily:{DescID: 108, Name: primary, ColumnFamilyID: 0}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108}
-│       │   │   │     rule: "descriptor dropped before dependent element removal"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 108}
+│       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • Column:{DescID: 108, ColumnID: 1}
 │       │   │   │ PUBLIC → ABSENT
@@ -520,14 +486,8 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │   │   ├── • Precedence dependency from ABSENT ColumnNotNull:{DescID: 108, ColumnID: 1, IndexID: 0}
 │       │   │   │     rule: "dependents removed before column"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 108, ColumnID: 1, IndexID: 1}
-│       │   │   │     rule: "dependents removed before column"
-│       │   │   │
-│       │   │   ├── • skip PUBLIC → WRITE_ONLY operations
-│       │   │   │     rule: "skip column removal ops on relation drop"
-│       │   │   │
-│       │   │   └── • skip WRITE_ONLY → DELETE_ONLY operations
-│       │   │         rule: "skip column removal ops on relation drop"
+│       │   │   └── • Precedence dependency from ABSENT IndexColumn:{DescID: 108, ColumnID: 1, IndexID: 1}
+│       │   │         rule: "dependents removed before column"
 │       │   │
 │       │   ├── • ColumnName:{DescID: 108, Name: k, ColumnID: 1}
 │       │   │   │ PUBLIC → ABSENT
@@ -535,11 +495,8 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 108, ColumnID: 1}
-│       │   │   │     rule: "column no longer public before dependents"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip column dependents removal ops on relation drop"
+│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 108, ColumnID: 1}
+│       │   │         rule: "column no longer public before dependents"
 │       │   │
 │       │   ├── • ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}
 │       │   │   │ PUBLIC → ABSENT
@@ -556,11 +513,8 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108}
 │       │   │   │     rule: "relation dropped before dependent constraint"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 108, ColumnID: 1}
-│       │   │   │     rule: "column no longer public before dependents"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → VALIDATED operations
-│       │   │         rule: "skip constraint removal ops on relation drop"
+│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 108, ColumnID: 1}
+│       │   │         rule: "column no longer public before dependents"
 │       │   │
 │       │   ├── • Column:{DescID: 108, ColumnID: 2}
 │       │   │   │ PUBLIC → ABSENT
@@ -583,14 +537,8 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │   │   ├── • Precedence dependency from ABSENT ColumnDefaultExpression:{DescID: 108, ReferencedTypeIDs: [106 107], ColumnID: 2}
 │       │   │   │     rule: "dependents removed before column"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 108, ColumnID: 2, IndexID: 1}
-│       │   │   │     rule: "dependents removed before column"
-│       │   │   │
-│       │   │   ├── • skip PUBLIC → WRITE_ONLY operations
-│       │   │   │     rule: "skip column removal ops on relation drop"
-│       │   │   │
-│       │   │   └── • skip WRITE_ONLY → DELETE_ONLY operations
-│       │   │         rule: "skip column removal ops on relation drop"
+│       │   │   └── • Precedence dependency from ABSENT IndexColumn:{DescID: 108, ColumnID: 2, IndexID: 1}
+│       │   │         rule: "dependents removed before column"
 │       │   │
 │       │   ├── • ColumnName:{DescID: 108, Name: crdb_region, ColumnID: 2}
 │       │   │   │ PUBLIC → ABSENT
@@ -598,11 +546,8 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 108, ColumnID: 2}
-│       │   │   │     rule: "column no longer public before dependents"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip column dependents removal ops on relation drop"
+│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 108, ColumnID: 2}
+│       │   │         rule: "column no longer public before dependents"
 │       │   │
 │       │   ├── • ColumnType:{DescID: 108, ReferencedTypeIDs: [106 107], ColumnFamilyID: 0, ColumnID: 2}
 │       │   │   │ PUBLIC → ABSENT
@@ -622,11 +567,8 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108}
 │       │   │   │     rule: "relation dropped before dependent constraint"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 108, ColumnID: 2}
-│       │   │   │     rule: "column no longer public before dependents"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → VALIDATED operations
-│       │   │         rule: "skip constraint removal ops on relation drop"
+│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 108, ColumnID: 2}
+│       │   │         rule: "column no longer public before dependents"
 │       │   │
 │       │   ├── • ColumnDefaultExpression:{DescID: 108, ReferencedTypeIDs: [106 107], ColumnID: 2}
 │       │   │   │ PUBLIC → ABSENT
@@ -646,14 +588,8 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
 │       │   │   │     rule: "dependents removed before column"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295}
-│       │   │   │     rule: "dependents removed before column"
-│       │   │   │
-│       │   │   ├── • skip PUBLIC → WRITE_ONLY operations
-│       │   │   │     rule: "skip column removal ops on relation drop"
-│       │   │   │
-│       │   │   └── • skip WRITE_ONLY → DELETE_ONLY operations
-│       │   │         rule: "skip column removal ops on relation drop"
+│       │   │   └── • Precedence dependency from ABSENT ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295}
+│       │   │         rule: "dependents removed before column"
 │       │   │
 │       │   ├── • ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
 │       │   │   │ PUBLIC → ABSENT
@@ -661,11 +597,8 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 108, ColumnID: 4294967295}
-│       │   │   │     rule: "column no longer public before dependents"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip column dependents removal ops on relation drop"
+│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 108, ColumnID: 4294967295}
+│       │   │         rule: "column no longer public before dependents"
 │       │   │
 │       │   ├── • ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295}
 │       │   │   │ PUBLIC → ABSENT
@@ -685,14 +618,8 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}
 │       │   │   │     rule: "dependents removed before column"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}
-│       │   │   │     rule: "dependents removed before column"
-│       │   │   │
-│       │   │   ├── • skip PUBLIC → WRITE_ONLY operations
-│       │   │   │     rule: "skip column removal ops on relation drop"
-│       │   │   │
-│       │   │   └── • skip WRITE_ONLY → DELETE_ONLY operations
-│       │   │         rule: "skip column removal ops on relation drop"
+│       │   │   └── • Precedence dependency from ABSENT ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}
+│       │   │         rule: "dependents removed before column"
 │       │   │
 │       │   ├── • ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}
 │       │   │   │ PUBLIC → ABSENT
@@ -700,11 +627,8 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 108, ColumnID: 4294967294}
-│       │   │   │     rule: "column no longer public before dependents"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip column dependents removal ops on relation drop"
+│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 108, ColumnID: 4294967294}
+│       │   │         rule: "column no longer public before dependents"
 │       │   │
 │       │   ├── • ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}
 │       │   │   │ PUBLIC → ABSENT
@@ -724,12 +648,8 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 108, ColumnID: 2}
 │       │   │   │     rule: "column no longer public before dependents"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
-│       │   │   │     rule: "index no longer public before dependents"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip index dependents removal ops on relation drop"
-│       │   │         rule: "skip index-column removal ops on index removal"
+│       │   │   └── • Precedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
+│       │   │         rule: "index drop mutation visible before cleaning up index columns"
 │       │   │
 │       │   ├── • IndexColumn:{DescID: 108, ColumnID: 1, IndexID: 1}
 │       │   │   │ PUBLIC → ABSENT
@@ -740,12 +660,8 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 108, ColumnID: 1}
 │       │   │   │     rule: "column no longer public before dependents"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
-│       │   │   │     rule: "index no longer public before dependents"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip index dependents removal ops on relation drop"
-│       │   │         rule: "skip index-column removal ops on index removal"
+│       │   │   └── • Precedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
+│       │   │         rule: "index drop mutation visible before cleaning up index columns"
 │       │   │
 │       │   ├── • PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
 │       │   │   │ PUBLIC → ABSENT
@@ -762,20 +678,8 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │   │   ├── • Precedence dependency from ABSENT IndexPartitioning:{DescID: 108, IndexID: 1}
 │       │   │   │     rule: "dependents removed before index"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from ABSENT IndexName:{DescID: 108, Name: table_regional_by_row_pkey, IndexID: 1}
-│       │   │   │     rule: "dependents removed before index"
-│       │   │   │
-│       │   │   ├── • skip PUBLIC → VALIDATED operations
-│       │   │   │     rule: "skip index removal ops on relation drop"
-│       │   │   │
-│       │   │   ├── • skip VALIDATED → WRITE_ONLY operations
-│       │   │   │     rule: "skip index removal ops on relation drop"
-│       │   │   │
-│       │   │   ├── • skip WRITE_ONLY → DELETE_ONLY operations
-│       │   │   │     rule: "skip index removal ops on relation drop"
-│       │   │   │
-│       │   │   └── • skip DELETE_ONLY → ABSENT operations
-│       │   │         rule: "skip index removal ops on relation drop"
+│       │   │   └── • Precedence dependency from ABSENT IndexName:{DescID: 108, Name: table_regional_by_row_pkey, IndexID: 1}
+│       │   │         rule: "dependents removed before index"
 │       │   │
 │       │   ├── • IndexPartitioning:{DescID: 108, IndexID: 1}
 │       │   │   │ PUBLIC → ABSENT
@@ -783,11 +687,8 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
-│       │   │   │     rule: "index no longer public before dependents"
-│       │   │   │
-│       │   │   └── • skip PUBLIC → ABSENT operations
-│       │   │         rule: "skip index dependents removal ops on relation drop"
+│       │   │   └── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
+│       │   │         rule: "index no longer public before dependents, excluding columns"
 │       │   │
 │       │   └── • IndexName:{DescID: 108, Name: table_regional_by_row_pkey, IndexID: 1}
 │       │       │ PUBLIC → ABSENT
@@ -795,13 +696,10 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │       ├── • Precedence dependency from DROPPED Table:{DescID: 108}
 │       │       │     rule: "descriptor dropped before dependent element removal"
 │       │       │
-│       │       ├── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
-│       │       │     rule: "index no longer public before dependents"
-│       │       │
-│       │       └── • skip PUBLIC → ABSENT operations
-│       │             rule: "skip index dependents removal ops on relation drop"
+│       │       └── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
+│       │             rule: "index no longer public before dependents, excluding columns"
 │       │
-│       └── • 17 Mutation operations
+│       └── • 42 Mutation operations
 │           │
 │           ├── • MarkDescriptorAsDropped
 │           │     DescriptorID: 108
@@ -809,6 +707,40 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │           ├── • RemoveObjectParent
 │           │     ObjectID: 108
 │           │     ParentSchemaID: 105
+│           │
+│           ├── • NotImplementedForPublicObjects
+│           │     DescID: 108
+│           │     ElementType: scpb.TablePartitioning
+│           │
+│           ├── • NotImplementedForPublicObjects
+│           │     DescID: 108
+│           │     ElementType: scpb.ColumnFamily
+│           │
+│           ├── • MakePublicColumnWriteOnly
+│           │     ColumnID: 1
+│           │     TableID: 108
+│           │
+│           ├── • SetColumnName
+│           │     ColumnID: 1
+│           │     Name: crdb_internal_column_1_name_placeholder
+│           │     TableID: 108
+│           │
+│           ├── • MakePublicColumnNotNullValidated
+│           │     ColumnID: 1
+│           │     TableID: 108
+│           │
+│           ├── • MakePublicColumnWriteOnly
+│           │     ColumnID: 2
+│           │     TableID: 108
+│           │
+│           ├── • SetColumnName
+│           │     ColumnID: 2
+│           │     Name: crdb_internal_column_2_name_placeholder
+│           │     TableID: 108
+│           │
+│           ├── • MakePublicColumnNotNullValidated
+│           │     ColumnID: 2
+│           │     TableID: 108
 │           │
 │           ├── • RemoveColumnDefaultExpression
 │           │     ColumnID: 2
@@ -820,12 +752,51 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │           │     - 106
 │           │     - 107
 │           │
+│           ├── • MakePublicColumnWriteOnly
+│           │     ColumnID: 4294967295
+│           │     TableID: 108
+│           │
+│           ├── • SetColumnName
+│           │     ColumnID: 4294967295
+│           │     Name: crdb_internal_column_4294967295_name_placeholder
+│           │     TableID: 108
+│           │
+│           ├── • MakePublicColumnWriteOnly
+│           │     ColumnID: 4294967294
+│           │     TableID: 108
+│           │
+│           ├── • SetColumnName
+│           │     ColumnID: 4294967294
+│           │     Name: crdb_internal_column_4294967294_name_placeholder
+│           │     TableID: 108
+│           │
+│           ├── • MakePublicPrimaryIndexWriteOnly
+│           │     IndexID: 1
+│           │     TableID: 108
+│           │
+│           ├── • SetIndexName
+│           │     IndexID: 1
+│           │     Name: crdb_internal_index_1_name_placeholder
+│           │     TableID: 108
+│           │
 │           ├── • DrainDescriptorName
 │           │     Namespace:
 │           │       DatabaseID: 104
 │           │       DescriptorID: 108
 │           │       Name: table_regional_by_row
 │           │       SchemaID: 105
+│           │
+│           ├── • NotImplementedForPublicObjects
+│           │     DescID: 108
+│           │     ElementType: scpb.Owner
+│           │
+│           ├── • RemoveUserPrivileges
+│           │     DescriptorID: 108
+│           │     User: admin
+│           │
+│           ├── • RemoveUserPrivileges
+│           │     DescriptorID: 108
+│           │     User: root
 │           │
 │           ├── • RemoveColumnNotNull
 │           │     ColumnID: 1
@@ -845,12 +816,47 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │           │     ColumnID: 2
 │           │     TableID: 108
 │           │
+│           ├── • MakeWriteOnlyColumnDeleteOnly
+│           │     ColumnID: 4294967295
+│           │     TableID: 108
+│           │
+│           ├── • MakeWriteOnlyColumnDeleteOnly
+│           │     ColumnID: 4294967294
+│           │     TableID: 108
+│           │
+│           ├── • MakeWriteOnlyColumnDeleteOnly
+│           │     ColumnID: 1
+│           │     TableID: 108
+│           │
+│           ├── • MakeWriteOnlyColumnDeleteOnly
+│           │     ColumnID: 2
+│           │     TableID: 108
+│           │
 │           ├── • MakeDeleteOnlyColumnAbsent
 │           │     ColumnID: 4294967295
 │           │     TableID: 108
 │           │
 │           ├── • MakeDeleteOnlyColumnAbsent
 │           │     ColumnID: 4294967294
+│           │     TableID: 108
+│           │
+│           ├── • MakeWriteOnlyIndexDeleteOnly
+│           │     IndexID: 1
+│           │     TableID: 108
+│           │
+│           ├── • RemoveColumnFromIndex
+│           │     ColumnID: 2
+│           │     IndexID: 1
+│           │     TableID: 108
+│           │
+│           ├── • RemoveColumnFromIndex
+│           │     ColumnID: 1
+│           │     IndexID: 1
+│           │     Ordinal: 1
+│           │     TableID: 108
+│           │
+│           ├── • MakeIndexAbsent
+│           │     IndexID: 1
 │           │     TableID: 108
 │           │
 │           ├── • MakeDeleteOnlyColumnAbsent
@@ -897,8 +903,92 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
         │   ├── • Table:{DescID: 108}
         │   │   │ DROPPED → ABSENT
         │   │   │
-        │   │   └── • PreviousStagePrecedence dependency from DROPPED Table:{DescID: 108}
-        │   │         rule: "descriptor dropped in transaction before removal"
+        │   │   ├── • Precedence dependency from ABSENT Namespace:{DescID: 108, Name: table_regional_by_row, ReferencedDescID: 104}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT Owner:{DescID: 108}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT UserPrivileges:{DescID: 108, Name: admin}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT UserPrivileges:{DescID: 108, Name: root}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • PreviousStagePrecedence dependency from DROPPED Table:{DescID: 108}
+        │   │   │     rule: "descriptor dropped in transaction before removal"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT ObjectParent:{DescID: 108, ReferencedDescID: 105}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT TablePartitioning:{DescID: 108}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT TableLocalityRegionalByRow:{DescID: 108}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT ColumnFamily:{DescID: 108, Name: primary, ColumnFamilyID: 0}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT Column:{DescID: 108, ColumnID: 1}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 108, Name: k, ColumnID: 1}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT ColumnNotNull:{DescID: 108, ColumnID: 1, IndexID: 0}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT Column:{DescID: 108, ColumnID: 2}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 108, Name: crdb_region, ColumnID: 2}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 108, ReferencedTypeIDs: [106 107], ColumnFamilyID: 0, ColumnID: 2}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT ColumnNotNull:{DescID: 108, ColumnID: 2, IndexID: 0}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT ColumnDefaultExpression:{DescID: 108, ReferencedTypeIDs: [106 107], ColumnID: 2}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT Column:{DescID: 108, ColumnID: 4294967295}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT Column:{DescID: 108, ColumnID: 4294967294}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 108, ColumnID: 2, IndexID: 1}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 108, ColumnID: 1, IndexID: 1}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexPartitioning:{DescID: 108, IndexID: 1}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   └── • Precedence dependency from ABSENT IndexName:{DescID: 108, Name: table_regional_by_row_pkey, IndexID: 1}
+        │   │         rule: "non-data dependents removed before descriptor"
         │   │
         │   ├── • IndexData:{DescID: 108, IndexID: 1}
         │   │   │ PUBLIC → ABSENT

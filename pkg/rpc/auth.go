@@ -13,12 +13,15 @@ package rpc
 import (
 	"context"
 	"crypto/x509"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -41,6 +44,7 @@ func authErrorf(format string, a ...interface{}) error {
 // validates that client TLS certificate provided by the incoming connection
 // contains a sufficiently privileged user.
 type kvAuth struct {
+	sv     *settings.Values
 	tenant tenantAuthorizer
 }
 
@@ -68,18 +72,14 @@ func (a kvAuth) unaryInterceptor(
 		return nil, err
 	}
 
-	// Enhance the context if the peer is a tenant server.
-	switch ar := authnRes.(type) {
-	case authnSuccessPeerIsTenantServer:
-		ctx = contextWithClientTenant(ctx, roachpb.TenantID(ar))
-	default:
-		ctx = contextWithoutClientTenant(ctx)
-	}
+	// Enhance the context to ensure the API handler only sees a client tenant ID
+	// via roachpb.ClientTenantFromContext when relevant.
+	ctx = contextForRequest(ctx, authnRes)
 
 	// Handle authorization according to the selected authz method.
 	switch ar := authz.(type) {
 	case authzTenantServerToKVServer:
-		if err := a.tenant.authorize(roachpb.TenantID(ar), info.FullMethod, req); err != nil {
+		if err := a.tenant.authorize(ctx, roachpb.TenantID(ar), info.FullMethod, req); err != nil {
 			return nil, err
 		}
 	case authzTenantServerToTenantServer:
@@ -103,13 +103,9 @@ func (a kvAuth) streamInterceptor(
 		return err
 	}
 
-	// Enhance the context if the peer is a tenant server.
-	switch ar := authnRes.(type) {
-	case authnSuccessPeerIsTenantServer:
-		ctx = contextWithClientTenant(ctx, roachpb.TenantID(ar))
-	default:
-		ctx = contextWithoutClientTenant(ctx)
-	}
+	// Enhance the context to ensure the API handler only sees a client tenant ID
+	// via roachpb.ClientTenantFromContext when relevant.
+	ctx = contextForRequest(ctx, authnRes)
 
 	// Handle authorization according to the selected authz method.
 	switch ar := authz.(type) {
@@ -123,7 +119,7 @@ func (a kvAuth) streamInterceptor(
 					return err
 				}
 				// 'm' is now populated and contains the request from the client.
-				return a.tenant.authorize(roachpb.TenantID(ar), info.FullMethod, m)
+				return a.tenant.authorize(ctx, roachpb.TenantID(ar), info.FullMethod, m)
 			},
 		}
 	case authzTenantServerToTenantServer:
@@ -188,7 +184,10 @@ func (authnSuccessPeerIsTenantServer) authnResult() {}
 func (authnSuccessPeerIsPrivileged) authnResult()   {}
 
 // authenticate verifies the credentials of the client and performs
-// some consistency check with the information provided.
+// some consistency check with the information provided. The caller
+// should discard the original context.Context and use the new one;
+// the function also consumes and strips some fields from the incoming
+// gRPC metadata.MD to avoid confusion if/when the RPC gets forwarded.
 func (a kvAuth) authenticate(ctx context.Context) (authnResult, error) {
 	var ar authnResult
 	if clientTenantID, localRequest := grpcutil.IsLocalRequestContext(ctx); localRequest {
@@ -219,14 +218,26 @@ func (a kvAuth) authenticate(ctx context.Context) (authnResult, error) {
 	return ar, nil
 }
 
-// Deal with local requests done through the
-// internalClientAdapter. There's no TLS for these calls, so the
-// regular authentication code path doesn't apply. The clientTenantID
-// should be the result of a call to grpcutil.IsLocalRequestContext.
+// Deal with local requests done through the internalClientAdapter.
+// There's no TLS for these calls, so the regular authentication code
+// path doesn't apply. The clientTenantID should be the result of a
+// call to grpcutil.IsLocalRequestContext.
 func (a kvAuth) authenticateLocalRequest(
 	ctx context.Context, clientTenantID roachpb.TenantID,
 ) (authnResult, error) {
-	if !clientTenantID.IsSet() || clientTenantID.IsSystem() {
+	// Sanity check: verify that we do not also have gRPC network credentials
+	// in the context. This would indicate that metadata was improperly propagated.
+	maybeTid, err := tenantIDFromRPCMetadata(ctx)
+	if err != nil || maybeTid.IsSet() {
+		logcrash.ReportOrPanic(ctx, a.sv, "programming error: network credentials in internal adapter request (%v, %v)", maybeTid, err)
+		return nil, authErrorf("programming error")
+	}
+
+	if !clientTenantID.IsSet() {
+		return authnSuccessPeerIsPrivileged{}, nil
+	}
+
+	if clientTenantID.IsSystem() {
 		return authnSuccessPeerIsPrivileged{}, nil
 	}
 
@@ -242,6 +253,11 @@ func (a kvAuth) authenticateNetworkRequest(ctx context.Context) (authnResult, er
 		return nil, err
 	}
 
+	tenantIDFromMetadata, err := tenantIDFromRPCMetadata(ctx)
+	if err != nil {
+		return nil, authErrorf("client provided invalid tenant ID: %v", err)
+	}
+
 	// Did the client peer use a tenant client cert?
 	if security.IsTenantCertificate(clientCert) {
 		// If the peer is using a client tenant cert, in any case we
@@ -250,7 +266,14 @@ func (a kvAuth) authenticateNetworkRequest(ctx context.Context) (authnResult, er
 		if err != nil {
 			return nil, err
 		}
-
+		// If the peer is using a TenantCertificate and also
+		// provided a tenant ID via gRPC metadata, they must
+		// match.
+		if tenantIDFromMetadata.IsSet() && tenantIDFromMetadata != tlsID {
+			return nil, authErrorf(
+				"client wants to authenticate as tenant %v, but is using TLS cert for tenant %v",
+				tenantIDFromMetadata, tlsID)
+		}
 		return authnSuccessPeerIsTenantServer(tlsID), nil
 	}
 
@@ -273,6 +296,9 @@ func (a kvAuth) authenticateNetworkRequest(ctx context.Context) (authnResult, er
 		return nil, err
 	}
 
+	if tenantIDFromMetadata.IsSet() {
+		return authnSuccessPeerIsTenantServer(tenantIDFromMetadata), nil
+	}
 	return authnSuccessPeerIsPrivileged{}, nil
 }
 
@@ -350,3 +376,96 @@ func checkRootOrNodeInScope(
 		"need root or node client cert to perform RPCs on this server (this is tenant %v; cert is valid for %s)",
 		serverTenantID, security.FormatUserScopes(certUserScope))
 }
+
+// contextForRequest sets up the context.Context for use by
+// the API handler. It covers two cases:
+//
+//   - the request is coming from a secondary tenant.
+//     Then it uses roachpb.ContextWithTenantClient() to
+//     ensure that the API handler will find the tenant ID
+//     with roachpb.TenantClientFromContext().
+//   - the request is coming from the system tenant.
+//     then it clears the tenant client information
+//     to ensure that the API handler will _not_ find
+//     a tenant ID with roachpb.TenantClientFromContext().
+//
+// This latter case is important e.g. in the following scenario:
+//
+//	SQL (a) -(network gRPC)-> KV (b) -(internal client adapter)-> KV (c)
+//
+// The authn in the call from (a) to (b) has added a tenant ID in the
+// Go context for the handler at (b). This context.Context "pierces"
+// the stack of calls in the internal client adapter, and thus the
+// tenant ID is still present when the call is received at (c).
+// However, we don't want the API handler at (c) to see it any more.
+// So we need to remove it.
+func contextForRequest(ctx context.Context, authnRes authnResult) context.Context {
+	switch ar := authnRes.(type) {
+	case authnSuccessPeerIsTenantServer:
+		// The simple context key will be used in various places via
+		// roachpb.ClientTenantFromContext(). This also adds a logging
+		// tag.
+		ctx = contextWithClientTenant(ctx, roachpb.TenantID(ar))
+	default:
+		// The caller is not a tenant server, but it may have been in the
+		// process of handling an API call for a tenant server and so it
+		// may have a client tenant ID in its context already. To ensure
+		// none will be found, we need to clear it explicitly.
+		ctx = contextWithoutClientTenant(ctx)
+	}
+	return ctx
+}
+
+// tenantClientCred is responsible for passing the tenant ID as
+// medatada header to called RPCs. This makes it possible to pass the
+// tenant ID even when using a different TLS cert than the "tenant
+// client cert".
+type tenantClientCred struct {
+	md map[string]string
+}
+
+// clientTIDMetadataHeaderKey is the gRPC metadata key that indicates
+// which tenant ID the client is intending to connect as (originating
+// tenant identity).
+//
+// This is used instead of the cert CN field when connecting with a
+// TLS client cert that is not marked as special "tenant client cert"
+// via the "Tenants" string in the OU field.
+//
+// This metadata item is not meant to be used beyond authentication;
+// to access the client tenant ID inside RPC handlers or other code,
+// use roachpb.ClientTenantFromContext() instead.
+const clientTIDMetadataHeaderKey = "client-tid"
+
+// newTenantClientCreds constructs a credentials.PerRPCCredentials
+// which injects the client tenant ID as extra gRPC metadata in each
+// RPC.
+func newTenantClientCreds(tid roachpb.TenantID) credentials.PerRPCCredentials {
+	return &tenantClientCred{
+		md: map[string]string{
+			clientTIDMetadataHeaderKey: fmt.Sprint(tid),
+		},
+	}
+}
+
+// tenantIDFromRPCMetadata checks if there is a tenant ID in
+// the incoming gRPC metadata.
+func tenantIDFromRPCMetadata(ctx context.Context) (roachpb.TenantID, error) {
+	val, ok := grpcutil.FastFirstValueFromIncomingContext(ctx, clientTIDMetadataHeaderKey)
+	if !ok {
+		return roachpb.TenantID{}, nil
+	}
+	return tenantIDFromString(val, "gRPC metadata")
+}
+
+// GetRequestMetadata implements the (grpc)
+// credentials.PerRPCCredentials interface.
+func (tcc *tenantClientCred) GetRequestMetadata(
+	ctx context.Context, uri ...string,
+) (map[string]string, error) {
+	return tcc.md, nil
+}
+
+// RequireTransportSecurity implements the (grpc)
+// credentials.PerRPCCredentials interface.
+func (tcc *tenantClientCred) RequireTransportSecurity() bool { return false }

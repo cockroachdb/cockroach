@@ -1976,6 +1976,13 @@ func TestLogic_statement_statistics(
 	runLogicTest(t, "statement_statistics")
 }
 
+func TestLogic_statement_statistics_errors(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "statement_statistics_errors")
+}
+
 func TestLogic_stats(
 	t *testing.T,
 ) {
@@ -2200,11 +2207,32 @@ func TestLogic_udf(
 	runLogicTest(t, "udf")
 }
 
+func TestLogic_udf_oid_ref(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_oid_ref")
+}
+
+func TestLogic_udf_setof(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_setof")
+}
+
 func TestLogic_udf_star(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_star")
+}
+
+func TestLogic_udf_volatility_check(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_volatility_check")
 }
 
 func TestLogic_union(

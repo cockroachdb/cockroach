@@ -1614,9 +1614,9 @@ var charts = []sectionDescription{
 				},
 			},
 			{
-				Title: "Ingested Bytes",
+				Title: "Logical Bytes",
 				Metrics: []string{
-					"replication.ingested_bytes",
+					"replication.logical_bytes",
 				},
 			},
 			{
@@ -1648,6 +1648,10 @@ var charts = []sectionDescription{
 			{
 				Title:   "Job Progress Updates",
 				Metrics: []string{"replication.job_progress_updates"},
+			},
+			{
+				Title:   "Ranges To Revert",
+				Metrics: []string{"replication.cutover_progress"},
 			},
 		},
 	},
@@ -3075,6 +3079,13 @@ var charts = []sectionDescription{
 				Metrics: []string{"storage.l0-sublevels"},
 			},
 			{
+				Title: "Shared Storage Reads/Writes",
+				Metrics: []string{
+					"storage.shared-storage.read",
+					"storage.shared-storage.write",
+				},
+			},
+			{
 				Title: "L0 Files",
 				Metrics: []string{
 					"storage.l0-num-files",
@@ -3387,6 +3398,7 @@ var charts = []sectionDescription{
 					"jobs.auto_sql_stats_compaction.currently_running",
 					"jobs.stream_replication.currently_running",
 					"jobs.key_visualizer.currently_running",
+					"jobs.poll_jobs_stats.currently_running",
 				},
 			},
 			{
@@ -3408,6 +3420,31 @@ var charts = []sectionDescription{
 					"jobs.stream_replication.currently_idle",
 					"jobs.typedesc_schema_change.currently_idle",
 					"jobs.key_visualizer.currently_idle",
+					"jobs.poll_jobs_stats.currently_idle",
+				},
+			},
+			{
+				Title: "Currently Paused",
+				Metrics: []string{
+					"jobs.auto_create_stats.currently_paused",
+					"jobs.auto_span_config_reconciliation.currently_paused",
+					"jobs.auto_sql_stats_compaction.currently_paused",
+					"jobs.backup.currently_paused",
+					"jobs.changefeed.currently_paused",
+					"jobs.create_stats.currently_paused",
+					"jobs.import.currently_paused",
+					"jobs.migration.currently_paused",
+					"jobs.new_schema_change.currently_paused",
+					"jobs.restore.currently_paused",
+					"jobs.schema_change.currently_paused",
+					"jobs.schema_change_gc.currently_paused",
+					"jobs.stream_ingestion.currently_paused",
+					"jobs.stream_replication.currently_paused",
+					"jobs.typedesc_schema_change.currently_paused",
+					"jobs.auto_schema_telemetry.currently_paused",
+					"jobs.row_level_ttl.currently_paused",
+					"jobs.poll_jobs_stats.currently_paused",
+					"jobs.key_visualizer.currently_paused",
 				},
 			},
 			{
@@ -3593,6 +3630,17 @@ var charts = []sectionDescription{
 					"jobs.key_visualizer.resume_completed",
 					"jobs.key_visualizer.resume_failed",
 					"jobs.key_visualizer.resume_retry_error",
+				},
+			},
+			{
+				Title: "Jobs Stats Polling Job",
+				Metrics: []string{
+					"jobs.poll_jobs_stats.fail_or_cancel_completed",
+					"jobs.poll_jobs_stats.fail_or_cancel_failed",
+					"jobs.poll_jobs_stats.fail_or_cancel_retry_error",
+					"jobs.poll_jobs_stats.resume_completed",
+					"jobs.poll_jobs_stats.resume_failed",
+					"jobs.poll_jobs_stats.resume_retry_error",
 				},
 			},
 		},

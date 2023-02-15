@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/strutil"
 )
 
 type storeIDSet map[roachpb.StoreID]struct{}
@@ -34,19 +35,13 @@ func (s storeIDSet) storeSliceFromSet() []roachpb.StoreID {
 	for k := range s {
 		storeIDs = append(storeIDs, k)
 	}
-	sort.Slice(storeIDs, func(i, j int) bool {
-		return storeIDs[i] < storeIDs[j]
-	})
+	sort.Sort(roachpb.StoreIDSlice(storeIDs))
 	return storeIDs
 }
 
 // Make a string of stores 'set' in ascending order.
 func (s storeIDSet) joinStoreIDs() string {
-	storeNames := make([]string, 0, len(s))
-	for _, id := range s.storeSliceFromSet() {
-		storeNames = append(storeNames, fmt.Sprintf("s%d", id))
-	}
-	return strings.Join(storeNames, ", ")
+	return strutil.JoinIDs("s", s.storeSliceFromSet())
 }
 
 func (s storeIDSet) intersect(other storeIDSet) storeIDSet {
@@ -144,14 +139,8 @@ func (m locationsMap) joinNodeIDs() string {
 	for k := range m {
 		nodeIDs = append(nodeIDs, k)
 	}
-	sort.Slice(nodeIDs, func(i, j int) bool {
-		return nodeIDs[i] < nodeIDs[j]
-	})
-	nodeNames := make([]string, 0, len(m))
-	for _, id := range nodeIDs {
-		nodeNames = append(nodeNames, fmt.Sprintf("n%d", id))
-	}
-	return strings.Join(nodeNames, ", ")
+	sort.Sort(roachpb.NodeIDSlice(nodeIDs))
+	return strutil.JoinIDs("n", nodeIDs)
 }
 
 func keyMax(key1 roachpb.RKey, key2 roachpb.RKey) roachpb.RKey {

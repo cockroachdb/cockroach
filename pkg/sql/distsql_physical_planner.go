@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
@@ -118,6 +119,10 @@ type DistSQLPlanner struct {
 	// additional goroutines that can be used to run concurrent TableReaders
 	// for the same stage of the fully local physical plans.
 	parallelLocalScansSem *quotapool.IntPool
+	// parallelChecksSem is a node-wide semaphore on the number of additional
+	// goroutines that can be used to run check postqueries (FK and UNIQUE
+	// constraint checks) in parallel.
+	parallelChecksSem *quotapool.IntPool
 
 	// distSender is used to construct the spanResolver upon SetSQLInstanceInfo.
 	distSender *kvcoord.DistSender
@@ -206,14 +211,42 @@ func NewDistSQLPlanner(
 	localScansConcurrencyLimit.SetOnChange(&st.SV, func(ctx context.Context) {
 		dsp.parallelLocalScansSem.UpdateCapacity(uint64(localScansConcurrencyLimit.Get(&st.SV)))
 	})
+	dsp.parallelChecksSem = quotapool.NewIntPool("parallel checks concurrency",
+		uint64(parallelChecksConcurrencyLimit.Get(&st.SV)))
+	parallelChecksConcurrencyLimit.SetOnChange(&st.SV, func(ctx context.Context) {
+		dsp.parallelChecksSem.UpdateCapacity(uint64(parallelChecksConcurrencyLimit.Get(&st.SV)))
+	})
 	if rpcCtx != nil {
 		// rpcCtx might be nil in some tests.
 		rpcCtx.Stopper.AddCloser(dsp.parallelLocalScansSem.Closer("stopper"))
+		rpcCtx.Stopper.AddCloser(dsp.parallelChecksSem.Closer("stopper"))
 	}
 
 	dsp.runnerCoordinator.init(ctx, stopper, &st.SV)
 	dsp.initCancelingWorkers(ctx)
 	return dsp
+}
+
+// GetAllInstancesByLocality lists all instances that match the passed locality
+// filters.
+func (dsp *DistSQLPlanner) GetAllInstancesByLocality(
+	ctx context.Context, filter roachpb.Locality,
+) ([]sqlinstance.InstanceInfo, error) {
+	all, err := dsp.sqlAddressResolver.GetAllInstances(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var pos int
+	for _, n := range all {
+		if ok, _ := n.Locality.Matches(filter); ok {
+			all[pos] = n
+			pos++
+		}
+	}
+	if pos == 0 {
+		return nil, errors.Newf("no instances found matching locality filter %s", filter.String())
+	}
+	return all[:pos], nil
 }
 
 // GetSQLInstanceInfo gets a node descriptor by node ID.
@@ -580,6 +613,11 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		return cannotDistribute, nil
 
 	case *projectSetNode:
+		for i := range n.exprs {
+			if err := checkExpr(n.exprs[i]); err != nil {
+				return cannotDistribute, err
+			}
+		}
 		return checkSupportForPlanNode(n.source)
 
 	case *renderNode:
@@ -782,11 +820,11 @@ type PlanningCtx struct {
 
 	// If set, the flows for the physical plan will be passed to this function.
 	// The flows are not safe for use past the lifetime of the saveFlows function.
-	saveFlows func(map[base.SQLInstanceID]*execinfrapb.FlowSpec, execopnode.OpChains) error
+	saveFlows func(_ map[base.SQLInstanceID]*execinfrapb.FlowSpec, _ execopnode.OpChains, vectorized bool) error
 
 	// If set, we will record the mapping from planNode to tracing metadata to
 	// later allow associating statistics with the planNode.
-	traceMetadata execNodeTraceMetadata
+	associateNodeWithComponents func(exec.Node, execComponents)
 
 	// If set, statement execution stats should be collected.
 	collectExecStats bool
@@ -797,6 +835,17 @@ type PlanningCtx struct {
 	// plan (which prohibit all concurrency) and whether all parts of the plan
 	// are supported natively by the vectorized engine.
 	parallelizeScansIfLocal bool
+
+	// Set if this is either a subquery or a postquery (i.e. not the "main"
+	// query).
+	subOrPostQuery bool
+
+	// parallelCheck, if set, indicates that this PlanningCtx is used to handle
+	// one of the checkPlans that are run in parallel. As such, the DistSQL
+	// planner will need to do a few adjustments like using the LeafTxn (even if
+	// it's not needed based on other "regular" factors) and adding
+	// synchronization between certain write operations.
+	parallelCheck bool
 
 	// onFlowCleanup contains non-nil functions that will be called after the
 	// local flow finished running and is being cleaned up. It allows us to
@@ -833,11 +882,11 @@ func (p *PlanningCtx) IsLocal() bool {
 }
 
 // getDefaultSaveFlowsFunc returns the default function used to save physical
-// plans and their diagrams.
+// plans and their diagrams. The returned function is **not** concurrency-safe.
 func (p *PlanningCtx) getDefaultSaveFlowsFunc(
 	ctx context.Context, planner *planner, typ planComponentType,
-) func(map[base.SQLInstanceID]*execinfrapb.FlowSpec, execopnode.OpChains) error {
-	return func(flows map[base.SQLInstanceID]*execinfrapb.FlowSpec, opChains execopnode.OpChains) error {
+) func(map[base.SQLInstanceID]*execinfrapb.FlowSpec, execopnode.OpChains, bool) error {
+	return func(flows map[base.SQLInstanceID]*execinfrapb.FlowSpec, opChains execopnode.OpChains, vectorized bool) error {
 		var diagram execinfrapb.FlowDiagram
 		if planner.instrumentation.shouldSaveDiagrams() {
 			diagramFlags := execinfrapb.DiagramFlags{
@@ -851,7 +900,7 @@ func (p *PlanningCtx) getDefaultSaveFlowsFunc(
 		}
 		var explainVec []string
 		var explainVecVerbose []string
-		if planner.instrumentation.collectBundle && planner.curPlan.flags.IsSet(planFlagVectorized) {
+		if planner.instrumentation.collectBundle && vectorized {
 			flowCtx, cleanup := newFlowCtxForExplainPurposes(ctx, p, planner)
 			defer cleanup()
 			getExplain := func(verbose bool) []string {
@@ -864,7 +913,7 @@ func (p *PlanningCtx) getDefaultSaveFlowsFunc(
 					// In some edge cases (like when subqueries are present or
 					// when certain component doesn't implement execopnode.OpNode
 					// interface) an error might occur. In such scenario, we
-					// don't want to fail the collection of the bundle, so we
+					// don't want to fail the collection of the bundle, so we're
 					// deliberately ignoring the error.
 					explain = nil
 				}
@@ -3405,7 +3454,7 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 		return plan, err
 	}
 
-	if planCtx.traceMetadata != nil {
+	if planCtx.associateNodeWithComponents != nil {
 		processors := make(execComponents, len(plan.ResultRouters))
 		for i, resultProcIdx := range plan.ResultRouters {
 			processors[i] = execinfrapb.ProcessorComponentID(
@@ -3414,7 +3463,7 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 				int32(resultProcIdx),
 			)
 		}
-		planCtx.traceMetadata.associateNodeWithComponents(node, processors)
+		planCtx.associateNodeWithComponents(node, processors)
 	}
 
 	return plan, err
@@ -4504,17 +4553,15 @@ func maybeMoveSingleFlowToGateway(planCtx *PlanningCtx, plan *PhysicalPlan, rowC
 
 // FinalizePlan adds a final "result" stage and a final projection if necessary
 // as well as populates the endpoints of the plan.
-func (dsp *DistSQLPlanner) FinalizePlan(
-	ctx context.Context, planCtx *PlanningCtx, plan *PhysicalPlan,
-) {
-	dsp.finalizePlanWithRowCount(ctx, planCtx, plan, -1 /* rowCount */)
+func FinalizePlan(ctx context.Context, planCtx *PlanningCtx, plan *PhysicalPlan) {
+	finalizePlanWithRowCount(ctx, planCtx, plan, -1 /* rowCount */)
 }
 
 // finalizePlanWithRowCount adds a final "result" stage and a final projection
 // if necessary as well as populates the endpoints of the plan.
 // - rowCount is the estimated number of rows that the plan outputs. Use a
 // negative number if the stats were not available to make an estimate.
-func (dsp *DistSQLPlanner) finalizePlanWithRowCount(
+func finalizePlanWithRowCount(
 	ctx context.Context, planCtx *PlanningCtx, plan *PhysicalPlan, rowCount int64,
 ) {
 	maybeMoveSingleFlowToGateway(planCtx, plan, rowCount)

@@ -1,0 +1,38 @@
+// Copyright 2023 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.roachpb;
+option go_package = "roachpb";
+
+import "storage/enginepb/mvcc.proto";
+import "gogoproto/gogo.proto";
+import "google/api/annotations.proto";
+
+// SpanStatsRequest is used to request a SpanStatsResponse for the given key
+// span and node id. A node_id value of 0 indicates that the server should
+// fan-out to all nodes, and the resulting SpanStatsResponse is a cumulative
+// result from across the cluster.
+message SpanStatsRequest {
+  string node_id = 1 [(gogoproto.customname) = "NodeID"];
+  bytes start_key = 2 [(gogoproto.casttype) = "RKey"];
+  bytes end_key = 3 [(gogoproto.casttype) = "RKey"];
+}
+
+message SpanStatsResponse {
+  // range_count measures the number of ranges that the request span falls within.
+  // A SpanStatsResponse for a span that lies within a range, and whose start
+  // key sorts after the range start, and whose end key sorts before the
+  // range end, will have a range_count value of 1.
+  int32 range_count = 2;
+  uint64 approximate_disk_bytes = 3;
+  cockroach.storage.enginepb.MVCCStats total_stats = 1
+  [(gogoproto.nullable) = false];
+}

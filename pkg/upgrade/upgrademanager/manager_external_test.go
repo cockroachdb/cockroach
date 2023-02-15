@@ -301,23 +301,20 @@ func TestConcurrentMigrationAttempts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// We're going to be migrating from startKey to endKey. We end up needing
-	// to use real versions because the ListBetween uses the keys compiled into
-	// the clusterversion package.
-	const (
-		startMajor = 42
-		endMajor   = 48
-	)
-	migrationRunCounts := make(map[clusterversion.ClusterVersion]int)
+	// We're going to be migrating from the current version to imaginary future versions.
+	current := clusterversion.ByKey(clusterversion.BinaryVersionKey)
+	versions := []roachpb.Version{current}
+	for i := int32(1); i <= 6; i++ {
+		v := current
+		v.Major += i
+		versions = append(versions, v)
+	}
 
 	// RegisterKVMigration the upgrades to update the map with run counts.
 	// There should definitely not be any concurrency of execution, so the race
 	// detector should not fire.
-	var versions []roachpb.Version
+	migrationRunCounts := make(map[clusterversion.ClusterVersion]int)
 
-	for major := int32(startMajor); major <= endMajor; major++ {
-		versions = append(versions, roachpb.Version{Major: major})
-	}
 	ctx := context.Background()
 	var active int32 // used to detect races
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
@@ -512,7 +509,7 @@ func TestPrecondition(t *testing.T) {
 		version.Internal += 2
 		return version
 	}
-	v0 := clusterversion.ByKey(clusterversion.V22_1)
+	v0 := clusterversion.ByKey(clusterversion.TODODelete_V22_1)
 	v1 := next(v0)
 	v2 := next(v1)
 	versions := []roachpb.Version{v0, v1, v2}

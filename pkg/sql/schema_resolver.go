@@ -97,7 +97,10 @@ func (sr *schemaResolver) GetObjectNamesAndIDs(
 func (sr *schemaResolver) MustGetCurrentSessionDatabase(
 	ctx context.Context,
 ) (catalog.DatabaseDescriptor, error) {
-	return sr.descCollection.ByName(sr.txn).Get().Database(ctx, sr.CurrentDatabase())
+	if sr.skipDescriptorCache {
+		return sr.descCollection.ByName(sr.txn).Get().Database(ctx, sr.CurrentDatabase())
+	}
+	return sr.descCollection.ByNameWithLeased(sr.txn).Get().Database(ctx, sr.CurrentDatabase())
 }
 
 // CurrentSearchPath implements the resolver.SchemaResolver interface.
@@ -320,6 +323,8 @@ func (sr *schemaResolver) ResolveType(
 }
 
 // ResolveTypeByOID implements the tree.TypeReferenceResolver interface.
+// Note: Type resolution only works for OIDs of user-defined types. Builtin
+// types do not need to be hydrated.
 func (sr *schemaResolver) ResolveTypeByOID(ctx context.Context, oid oid.Oid) (*types.T, error) {
 	return typedesc.ResolveHydratedTByOID(ctx, oid, sr)
 }
@@ -534,31 +539,31 @@ func maybeLookUpUDF(
 
 func (sr *schemaResolver) ResolveFunctionByOID(
 	ctx context.Context, oid oid.Oid,
-) (name string, fn *tree.Overload, err error) {
+) (name *tree.FunctionName, fn *tree.Overload, err error) {
 	if !funcdesc.IsOIDUserDefinedFunc(oid) {
-		name, ok := tree.OidToBuiltinName[oid]
+		qol, ok := tree.OidToQualifiedBuiltinOverload[oid]
 		if !ok {
-			return "", nil, errors.Wrapf(tree.ErrFunctionUndefined, "function %d not found", oid)
+			return nil, nil, errors.Wrapf(tree.ErrFunctionUndefined, "function %d not found", oid)
 		}
-		funcDef := tree.FunDefs[name]
-		for _, o := range funcDef.Definition {
-			if o.Oid == oid {
-				return funcDef.Name, o, nil
-			}
-		}
+		fnName := tree.MakeQualifiedFunctionName(sr.CurrentDatabase(), qol.Schema, tree.OidToBuiltinName[oid])
+		return &fnName, qol.Overload, nil
 	}
 
 	g := sr.byIDGetterBuilder().WithoutNonPublic().WithoutOtherParent(sr.typeResolutionDbID).Get()
 	descID := funcdesc.UserDefinedFunctionOIDToID(oid)
 	funcDesc, err := g.Function(ctx, descID)
 	if err != nil {
-		return "", nil, err
+		return nil, nil, err
 	}
 	ret, err := funcDesc.ToOverload()
 	if err != nil {
-		return "", nil, err
+		return nil, nil, err
 	}
-	return funcDesc.GetName(), ret, nil
+	fnName, err := sr.getQualifiedFunctionName(ctx, funcDesc)
+	if err != nil {
+		return nil, nil, err
+	}
+	return fnName, ret, nil
 }
 
 // NewSkippingCacheSchemaResolver constructs a schemaResolver which always skip

@@ -157,8 +157,7 @@ func (tc *testContext) Clock() *hlc.Clock {
 // entire keyspace.
 func (tc *testContext) Start(ctx context.Context, t testing.TB, stopper *stop.Stopper) {
 	tc.manualClock = timeutil.NewManualTime(timeutil.Unix(0, 123))
-	cfg := TestStoreConfig(
-		hlc.NewClock(tc.manualClock, time.Nanosecond) /* maxOffset */)
+	cfg := TestStoreConfig(hlc.NewClockForTesting(tc.manualClock))
 	// testContext tests like to move the manual clock around and assume that they can write at past
 	// timestamps.
 	cfg.TestingKnobs.DontCloseTimestamps = true
@@ -217,7 +216,9 @@ func (tc *testContext) StartWithStoreConfigAndVersion(
 	tc.rangeID = repl.RangeID
 	tc.gossip = store.cfg.Gossip
 	tc.transport = store.cfg.Transport
-	tc.engine = store.engine
+	// TODO(sep-raft-log): may need to update our various test harnesses to
+	// support two engines, do metamorphic stuff, etc.
+	tc.engine = store.TODOEngine()
 	tc.store = store
 }
 
@@ -424,7 +425,7 @@ func TestIsOnePhaseCommit(t *testing.T) {
 		{ru: txnReqsRequire1PC, isRestarted: true, isWTO: true, exp1PC: false},
 	}
 
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	for i, c := range testCases {
 		t.Run(
 			fmt.Sprintf("%d:isNonTxn:%t,canForwardTS:%t,isRestarted:%t,isWTO:%t,isTSOff:%t",
@@ -527,7 +528,7 @@ func TestReplicaReadConsistency(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	tc := testContext{manualClock: timeutil.NewManualTime(timeutil.Unix(0, 123))}
-	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, time.Nanosecond) /* maxOffset */)
+	cfg := TestStoreConfig(hlc.NewClockForTesting(tc.manualClock))
 	cfg.TestingKnobs.DisableAutomaticLeaseRenewal = true
 	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
@@ -611,7 +612,7 @@ func TestBehaviorDuringLeaseTransfer(t *testing.T) {
 
 	testutils.RunTrueAndFalse(t, "transferSucceeds", func(t *testing.T, transferSucceeds bool) {
 		manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
-		clock := hlc.NewClock(manual, 100*time.Millisecond /* maxOffset */)
+		clock := hlc.NewClockForTesting(manual)
 		tc := testContext{manualClock: manual}
 		tsc := TestStoreConfig(clock)
 		var leaseAcquisitionTrap atomic.Value
@@ -771,7 +772,7 @@ func TestApplyCmdLeaseError(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	tc := testContext{manualClock: timeutil.NewManualTime(timeutil.Unix(0, 123))}
-	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, time.Nanosecond) /* maxOffset */)
+	cfg := TestStoreConfig(hlc.NewClockForTesting(tc.manualClock))
 	cfg.TestingKnobs.DisableAutomaticLeaseRenewal = true
 	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
@@ -907,7 +908,7 @@ func TestReplicaLease(t *testing.T) {
 	}
 
 	tc.manualClock = timeutil.NewManualTime(timeutil.Unix(0, 123))
-	tsc := TestStoreConfig(hlc.NewClock(tc.manualClock, time.Nanosecond) /* maxOffset */)
+	tsc := TestStoreConfig(hlc.NewClockForTesting(tc.manualClock))
 	tsc.TestingKnobs.DisableAutomaticLeaseRenewal = true
 	tsc.TestingKnobs.TestingApplyCalledTwiceFilter = applyFilter
 	tc.StartWithStoreConfig(ctx, t, stopper, tsc)
@@ -923,7 +924,7 @@ func TestReplicaLease(t *testing.T) {
 	for _, lease := range []roachpb.Lease{
 		{Start: start, Expiration: &hlc.Timestamp{}},
 	} {
-		if _, err := batcheval.RequestLease(ctx, tc.store.Engine(),
+		if _, err := batcheval.RequestLease(ctx, tc.store.TODOEngine(),
 			batcheval.CommandArgs{
 				EvalCtx: NewReplicaEvalContext(
 					ctx, tc.repl, allSpans(), false, /* requiresClosedTSOlderThanStorageSnap */
@@ -985,7 +986,7 @@ func TestReplicaNotLeaseHolderError(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	tc := testContext{manualClock: timeutil.NewManualTime(timeutil.Unix(0, 123))}
-	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, time.Nanosecond) /* maxOffset */)
+	cfg := TestStoreConfig(hlc.NewClockForTesting(tc.manualClock))
 	cfg.TestingKnobs.DisableAutomaticLeaseRenewal = true
 	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
@@ -1147,7 +1148,7 @@ func TestReplicaGossipConfigsOnLease(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	tc := testContext{manualClock: timeutil.NewManualTime(timeutil.Unix(0, 123))}
-	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, time.Nanosecond) /* maxOffset */)
+	cfg := TestStoreConfig(hlc.NewClockForTesting(tc.manualClock))
 	cfg.TestingKnobs.DisableAutomaticLeaseRenewal = true
 	// Use the TestingBinaryMinSupportedVersion for bootstrap because we won't
 	// gossip the system config once the current version is finalized.
@@ -1223,7 +1224,7 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	tc := testContext{manualClock: timeutil.NewManualTime(timeutil.Unix(0, 123))}
-	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, time.Nanosecond) /* maxOffset */)
+	cfg := TestStoreConfig(hlc.NewClockForTesting(tc.manualClock))
 	cfg.TestingKnobs.DisableAutomaticLeaseRenewal = true
 	// Disable raft log truncation which confuses this test.
 	cfg.TestingKnobs.DisableRaftLogQueue = true
@@ -1319,7 +1320,7 @@ func TestReplicaLeaseRejectUnknownRaftNodeID(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	tc := testContext{manualClock: timeutil.NewManualTime(timeutil.Unix(0, 123))}
-	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, time.Nanosecond) /* maxOffset */)
+	cfg := TestStoreConfig(hlc.NewClockForTesting(tc.manualClock))
 	cfg.TestingKnobs.DisableAutomaticLeaseRenewal = true
 	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
@@ -1997,7 +1998,7 @@ func TestLeaseConcurrent(t *testing.T) {
 		wg.Add(num)
 
 		tc := testContext{manualClock: timeutil.NewManualTime(timeutil.Unix(0, 123))}
-		cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, time.Nanosecond) /* maxOffset */)
+		cfg := TestStoreConfig(hlc.NewClockForTesting(tc.manualClock))
 		// Disable reasonNewLeader and reasonNewLeaderOrConfigChange proposal
 		// refreshes so that our lease proposal does not risk being rejected
 		// with an AmbiguousResultError.
@@ -3050,7 +3051,7 @@ func TestConditionalPutUpdatesTSCacheOnError(t *testing.T) {
 	tc := testContext{manualClock: timeutil.NewManualTime(timeutil.Unix(0, 123))}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, time.Nanosecond) /* maxOffset */)
+	cfg := TestStoreConfig(hlc.NewClockForTesting(tc.manualClock))
 	cfg.TestingKnobs.DontPushOnWriteIntentError = true
 	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
@@ -3134,7 +3135,7 @@ func TestInitPutUpdatesTSCacheOnError(t *testing.T) {
 	tc := testContext{manualClock: timeutil.NewManualTime(timeutil.Unix(0, 123))}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, time.Nanosecond) /* maxOffset */)
+	cfg := TestStoreConfig(hlc.NewClockForTesting(tc.manualClock))
 	cfg.TestingKnobs.DontPushOnWriteIntentError = true
 	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
@@ -4501,7 +4502,7 @@ func TestEndTxnWithErrors(t *testing.T) {
 			existTxnRecord := existTxn.AsRecord()
 			txnKey := keys.TransactionKey(test.key, txn.ID)
 			if err := storage.MVCCPutProto(
-				ctx, tc.repl.store.Engine(), nil, txnKey, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &existTxnRecord,
+				ctx, tc.repl.store.TODOEngine(), nil, txnKey, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &existTxnRecord,
 			); err != nil {
 				t.Fatal(err)
 			}
@@ -4544,7 +4545,7 @@ func TestEndTxnWithErrorAndSyncIntentResolution(t *testing.T) {
 	existTxn.Status = roachpb.ABORTED
 	existTxnRec := existTxn.AsRecord()
 	txnKey := keys.TransactionKey(txn.Key, txn.ID)
-	err := storage.MVCCPutProto(ctx, tc.repl.store.Engine(), nil, txnKey, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &existTxnRec)
+	err := storage.MVCCPutProto(ctx, tc.repl.store.TODOEngine(), nil, txnKey, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &existTxnRec)
 	require.NoError(t, err)
 
 	// End the transaction, verify expected error, shouldn't deadlock.
@@ -4610,7 +4611,7 @@ func TestEndTxnRollbackAbortedTransaction(t *testing.T) {
 			var txnRecord roachpb.Transaction
 			txnKey := keys.TransactionKey(txn.Key, txn.ID)
 			if ok, err := storage.MVCCGetProto(
-				ctx, tc.repl.store.Engine(),
+				ctx, tc.repl.store.TODOEngine(),
 				txnKey, hlc.Timestamp{}, &txnRecord, storage.MVCCGetOptions{},
 			); err != nil {
 				t.Fatal(err)
@@ -4806,7 +4807,7 @@ func TestBatchRetryCantCommitIntents(t *testing.T) {
 	// Verify txn record is cleaned.
 	var readTxn roachpb.Transaction
 	txnKey := keys.TransactionKey(txn.Key, txn.ID)
-	ok, err := storage.MVCCGetProto(ctx, tc.repl.store.Engine(), txnKey,
+	ok, err := storage.MVCCGetProto(ctx, tc.repl.store.TODOEngine(), txnKey,
 		hlc.Timestamp{}, &readTxn, storage.MVCCGetOptions{})
 	if err != nil || ok {
 		t.Errorf("expected transaction record to be cleared (%t): %+v", ok, err)
@@ -4901,7 +4902,7 @@ func TestEndTxnLocalGC(t *testing.T) {
 		}
 		var readTxn roachpb.Transaction
 		txnKey := keys.TransactionKey(txn.Key, txn.ID)
-		ok, err := storage.MVCCGetProto(ctx, tc.repl.store.Engine(), txnKey, hlc.Timestamp{},
+		ok, err := storage.MVCCGetProto(ctx, tc.repl.store.TODOEngine(), txnKey, hlc.Timestamp{},
 			&readTxn, storage.MVCCGetOptions{})
 		if err != nil {
 			t.Fatal(err)
@@ -5654,7 +5655,7 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 	tc := testContext{manualClock: timeutil.NewManualTime(timeutil.Unix(0, 123))}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, time.Nanosecond) /* maxOffset */)
+	cfg := TestStoreConfig(hlc.NewClockForTesting(tc.manualClock))
 	cfg.TestingKnobs.DontRetryPushTxnFailures = true
 	cfg.TestingKnobs.DontRecoverIndeterminateCommits = true
 	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
@@ -6301,7 +6302,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	tc.manualClock = timeutil.NewManualTime(timeutil.Unix(0, 123))
-	sc := TestStoreConfig(hlc.NewClock(tc.manualClock, 500*time.Millisecond))
+	sc := TestStoreConfig(hlc.NewClockForTesting(tc.manualClock))
 
 	sc.TestingKnobs.DisableCanAckBeforeApplication = true
 	tc.StartWithStoreConfig(ctx, t, stopper, sc)
@@ -6926,7 +6927,7 @@ func TestRequestLeaderEncounterGroupDeleteError(t *testing.T) {
 
 	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
 	tc := testContext{manualClock: manual}
-	cfg := TestStoreConfig(hlc.NewClock(manual, time.Nanosecond) /* maxOffset */)
+	cfg := TestStoreConfig(hlc.NewClockForTesting(manual))
 	cfg.TestingKnobs.TestingProposalFilter = proposeFn
 	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
@@ -7067,7 +7068,7 @@ func TestReplicaDestroy(t *testing.T) {
 		require.NoError(t, err)
 	}()
 
-	engSnapshot := tc.repl.store.Engine().NewSnapshot()
+	engSnapshot := tc.repl.store.TODOEngine().NewSnapshot()
 	defer engSnapshot.Close()
 
 	// If the range is destroyed, only a tombstone key should be there.
@@ -7990,6 +7991,24 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 			t.Fatal(pErr)
 		}
 
+		g, _, pErr := r.concMgr.SequenceReq(ctx, nil /* guard */, concurrency.Request{
+			Txn:             ba.Txn,
+			Timestamp:       ba.Timestamp,
+			NonTxnPriority:  ba.UserPriority,
+			ReadConsistency: ba.ReadConsistency,
+			WaitPolicy:      ba.WaitPolicy,
+			LockTimeout:     ba.LockTimeout,
+			Requests:        ba.Requests,
+			LatchSpans:      spanset.New(),
+			LockSpans:       spanset.New(),
+		}, concurrency.PessimisticEval)
+		require.NoError(t, pErr.GoError())
+
+		cmd.ec = endCmds{
+			repl: r,
+			g:    g,
+		}
+
 		dropProposals.Lock()
 		dropProposals.m[cmd] = struct{}{} // silently drop proposals
 		dropProposals.Unlock()
@@ -8105,6 +8124,19 @@ func TestReplicaRefreshMultiple(t *testing.T) {
 	ba.Add(inc)
 	ba.Timestamp = tc.Clock().Now()
 
+	g, _, pErr := repl.concMgr.SequenceReq(ctx, nil /* guard */, concurrency.Request{
+		Txn:             ba.Txn,
+		Timestamp:       ba.Timestamp,
+		NonTxnPriority:  ba.UserPriority,
+		ReadConsistency: ba.ReadConsistency,
+		WaitPolicy:      ba.WaitPolicy,
+		LockTimeout:     ba.LockTimeout,
+		Requests:        ba.Requests,
+		LatchSpans:      spanset.New(),
+		LockSpans:       spanset.New(),
+	}, concurrency.PessimisticEval)
+	require.NoError(t, pErr.GoError())
+
 	st := repl.CurrentLeaseStatus(ctx)
 	proposal, pErr := repl.requestToProposal(ctx, incCmdID, ba, allSpansGuard(), &st, uncertainty.Interval{})
 	if pErr != nil {
@@ -8112,6 +8144,11 @@ func TestReplicaRefreshMultiple(t *testing.T) {
 	}
 	// Save this channel; it may get reset to nil before we read from it.
 	proposalDoneCh := proposal.doneCh
+
+	proposal.ec = endCmds{
+		repl: repl,
+		g:    g,
+	}
 
 	repl.mu.Lock()
 	ai := repl.mu.state.LeaseAppliedIndex
@@ -9881,99 +9918,6 @@ func TestApplyPaginatedCommittedEntries(t *testing.T) {
 	}
 }
 
-func TestSplitMsgApps(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	msgApp := func(idx uint64) raftpb.Message {
-		return raftpb.Message{Index: idx, Type: raftpb.MsgApp}
-	}
-	otherMsg := func(idx uint64) raftpb.Message {
-		return raftpb.Message{Index: idx, Type: raftpb.MsgVote}
-	}
-	formatMsgs := func(msgs []raftpb.Message) string {
-		strs := make([]string, len(msgs))
-		for i, msg := range msgs {
-			strs[i] = fmt.Sprintf("{%s:%d}", msg.Type, msg.Index)
-		}
-		return fmt.Sprint(strs)
-	}
-
-	testCases := []struct {
-		msgsIn, msgAppsOut, otherMsgsOut []raftpb.Message
-	}{
-		// No msgs.
-		{
-			msgsIn:       []raftpb.Message{},
-			msgAppsOut:   []raftpb.Message{},
-			otherMsgsOut: []raftpb.Message{},
-		},
-		// Only msgApps.
-		{
-			msgsIn:       []raftpb.Message{msgApp(1)},
-			msgAppsOut:   []raftpb.Message{msgApp(1)},
-			otherMsgsOut: []raftpb.Message{},
-		},
-		{
-			msgsIn:       []raftpb.Message{msgApp(1), msgApp(2)},
-			msgAppsOut:   []raftpb.Message{msgApp(1), msgApp(2)},
-			otherMsgsOut: []raftpb.Message{},
-		},
-		{
-			msgsIn:       []raftpb.Message{msgApp(2), msgApp(1)},
-			msgAppsOut:   []raftpb.Message{msgApp(2), msgApp(1)},
-			otherMsgsOut: []raftpb.Message{},
-		},
-		// Only otherMsgs.
-		{
-			msgsIn:       []raftpb.Message{otherMsg(1)},
-			msgAppsOut:   []raftpb.Message{},
-			otherMsgsOut: []raftpb.Message{otherMsg(1)},
-		},
-		{
-			msgsIn:       []raftpb.Message{otherMsg(1), otherMsg(2)},
-			msgAppsOut:   []raftpb.Message{},
-			otherMsgsOut: []raftpb.Message{otherMsg(1), otherMsg(2)},
-		},
-		{
-			msgsIn:       []raftpb.Message{otherMsg(2), otherMsg(1)},
-			msgAppsOut:   []raftpb.Message{},
-			otherMsgsOut: []raftpb.Message{otherMsg(2), otherMsg(1)},
-		},
-		// Mixed msgApps and otherMsgs.
-		{
-			msgsIn:       []raftpb.Message{msgApp(1), otherMsg(2)},
-			msgAppsOut:   []raftpb.Message{msgApp(1)},
-			otherMsgsOut: []raftpb.Message{otherMsg(2)},
-		},
-		{
-			msgsIn:       []raftpb.Message{otherMsg(1), msgApp(2)},
-			msgAppsOut:   []raftpb.Message{msgApp(2)},
-			otherMsgsOut: []raftpb.Message{otherMsg(1)},
-		},
-		{
-			msgsIn:       []raftpb.Message{msgApp(1), otherMsg(2), msgApp(3)},
-			msgAppsOut:   []raftpb.Message{msgApp(1), msgApp(3)},
-			otherMsgsOut: []raftpb.Message{otherMsg(2)},
-		},
-		{
-			msgsIn:       []raftpb.Message{otherMsg(1), msgApp(2), otherMsg(3)},
-			msgAppsOut:   []raftpb.Message{msgApp(2)},
-			otherMsgsOut: []raftpb.Message{otherMsg(1), otherMsg(3)},
-		},
-	}
-	for _, c := range testCases {
-		inStr := formatMsgs(c.msgsIn)
-		t.Run(inStr, func(t *testing.T) {
-			msgAppsRes, otherMsgsRes := splitMsgApps(c.msgsIn)
-			if !reflect.DeepEqual(msgAppsRes, c.msgAppsOut) || !reflect.DeepEqual(otherMsgsRes, c.otherMsgsOut) {
-				t.Errorf("expected splitMsgApps(%s)=%s/%s, found %s/%s", inStr, formatMsgs(c.msgAppsOut),
-					formatMsgs(c.otherMsgsOut), formatMsgs(msgAppsRes), formatMsgs(otherMsgsRes))
-			}
-		})
-	}
-}
-
 type testQuiescer struct {
 	desc            roachpb.RangeDescriptor
 	numProposals    int
@@ -11728,7 +11672,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 
 	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
 	tc := testContext{manualClock: manual}
-	tsc := TestStoreConfig(hlc.NewClock(manual, time.Nanosecond) /* maxOffset */)
+	tsc := TestStoreConfig(hlc.NewClockForTesting(manual))
 	tsc.TestingKnobs.DisableGCQueue = true
 	tsc.TestingKnobs.DontRetryPushTxnFailures = true
 	tsc.TestingKnobs.DontRecoverIndeterminateCommits = true
@@ -13225,7 +13169,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 
 			var foundRecord roachpb.TransactionRecord
 			if found, err := storage.MVCCGetProto(
-				ctx, tc.repl.store.Engine(), keys.TransactionKey(txn.Key, txn.ID),
+				ctx, tc.repl.store.TODOEngine(), keys.TransactionKey(txn.Key, txn.ID),
 				hlc.Timestamp{}, &foundRecord, storage.MVCCGetOptions{},
 			); err != nil {
 				t.Fatal(err)
@@ -13379,7 +13323,7 @@ func TestProposalNotAcknowledgedOrReproposedAfterApplication(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	tc.manualClock = timeutil.NewManualTime(timeutil.Unix(0, 123))
-	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, time.Nanosecond) /* maxOffset */)
+	cfg := TestStoreConfig(hlc.NewClockForTesting(tc.manualClock))
 	// Set the RaftMaxCommittedSizePerReady so that only a single raft entry is
 	// applied at a time, which makes it easier to line up the timing of reproposals.
 	cfg.RaftMaxCommittedSizePerReady = 1

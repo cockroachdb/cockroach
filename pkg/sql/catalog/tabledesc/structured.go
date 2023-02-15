@@ -276,6 +276,12 @@ func ForEachExprStringInTableDesc(descI catalog.TableDescriptor, f func(expr *st
 	doCheck := func(c *descpb.TableDescriptor_CheckConstraint) error {
 		return f(&c.Expr)
 	}
+	doUwi := func(uwi *descpb.UniqueWithoutIndexConstraint) error {
+		if uwi.Predicate != "" {
+			return f(&uwi.Predicate)
+		}
+		return nil
+	}
 
 	// Process columns.
 	for i := range desc.Columns {
@@ -300,6 +306,13 @@ func ForEachExprStringInTableDesc(descI catalog.TableDescriptor, f func(expr *st
 		}
 	}
 
+	// Process uwis.
+	for i := range desc.UniqueWithoutIndexConstraints {
+		if err := doUwi(&desc.UniqueWithoutIndexConstraints[i]); err != nil {
+			return err
+		}
+	}
+
 	// Process all non-index mutations.
 	for _, mut := range desc.Mutations {
 		if c := mut.GetColumn(); c != nil {
@@ -310,6 +323,12 @@ func ForEachExprStringInTableDesc(descI catalog.TableDescriptor, f func(expr *st
 		if c := mut.GetConstraint(); c != nil &&
 			c.ConstraintType == descpb.ConstraintToUpdate_CHECK {
 			if err := doCheck(&c.Check); err != nil {
+				return err
+			}
+		}
+		if c := mut.GetConstraint(); c != nil &&
+			c.ConstraintType == descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX {
+			if err := doUwi(&c.UniqueWithoutIndexConstraint); err != nil {
 				return err
 			}
 		}
@@ -1372,9 +1391,19 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 							break
 						}
 					}
-				case descpb.ConstraintValidity_Unvalidated:
+				case descpb.ConstraintValidity_Unvalidated, descpb.ConstraintValidity_Validated:
 					// add the constraint to the list of check constraints on the table
 					// descriptor.
+					//
+					// The "validated" validity seems strange -- why would we ever complete
+					// a constraint mutation whose validity is already "validated"?
+					// This is because of how legacy schema changer is implemented and will
+					// occur for the following case:
+					// `ALTER TABLE .. ADD CONSTRAINT .. NOT VALID, VALIDATE CONSTRAINT ..`
+					// where the constraint mutation's validity is changed by `VALIDATE CONSTRAINT`
+					// to "validated", and in the job of `ADD CONSTRAINT .. NOT VALID` we
+					// came to mark the constraint mutation as completed.
+					// The same is true for FK and UWI constraints.
 					desc.Checks = append(desc.Checks, &t.Constraint.Check)
 				default:
 					return errors.AssertionFailedf("invalid constraint validity state: %d", t.Constraint.Check.Validity)
@@ -1390,7 +1419,7 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 							break
 						}
 					}
-				case descpb.ConstraintValidity_Unvalidated:
+				case descpb.ConstraintValidity_Unvalidated, descpb.ConstraintValidity_Validated:
 					// Takes care of adding the Foreign Key to the table index. Adding the
 					// backreference to the referenced table index must be taken care of
 					// in another call.
@@ -1408,7 +1437,7 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 							break
 						}
 					}
-				case descpb.ConstraintValidity_Unvalidated:
+				case descpb.ConstraintValidity_Unvalidated, descpb.ConstraintValidity_Validated:
 					// add the constraint to the list of unique without index constraints
 					// on the table descriptor.
 					desc.UniqueWithoutIndexConstraints = append(

@@ -20,8 +20,6 @@ go_library(
         "dep_swap_index.go",
         "dep_two_version.go",
         "helpers.go",
-        "op_drop.go",
-        "op_index_and_column.go",
         "registry.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/current",

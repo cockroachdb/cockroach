@@ -102,21 +102,37 @@ func (i *MVCCIterator) SeekLT(key storage.MVCCKey) {
 // Next is part of the storage.MVCCIterator interface.
 func (i *MVCCIterator) Next() {
 	i.i.Next()
-	i.checkAllowed(roachpb.Span{Key: i.UnsafeKey().Key}, false)
+	i.checkAllowedCurrPosForward(false)
 }
 
 // Prev is part of the storage.MVCCIterator interface.
 func (i *MVCCIterator) Prev() {
 	i.i.Prev()
-	i.checkAllowed(roachpb.Span{Key: i.UnsafeKey().Key}, false)
+	i.checkAllowedCurrPosForward(false)
 }
 
 // NextKey is part of the storage.MVCCIterator interface.
 func (i *MVCCIterator) NextKey() {
 	i.i.NextKey()
-	i.checkAllowed(roachpb.Span{Key: i.UnsafeKey().Key}, false)
+	i.checkAllowedCurrPosForward(false)
 }
 
+// checkAllowedCurrPosForward checks the span starting at the current iterator
+// position, if the current iterator position is valid.
+func (i *MVCCIterator) checkAllowedCurrPosForward(errIfDisallowed bool) {
+	i.invalid = false
+	i.err = nil
+	if ok, _ := i.i.Valid(); !ok {
+		// If the iterator is invalid after the operation, there's nothing to
+		// check. We allow uses of iterators to exceed the declared span bounds
+		// as long as the iterator itself is configured with proper boundaries.
+		return
+	}
+	i.checkAllowedValidPos(roachpb.Span{Key: i.UnsafeKey().Key}, errIfDisallowed)
+}
+
+// checkAllowed checks the provided span if the current iterator position is
+// valid.
 func (i *MVCCIterator) checkAllowed(span roachpb.Span, errIfDisallowed bool) {
 	i.invalid = false
 	i.err = nil
@@ -126,6 +142,10 @@ func (i *MVCCIterator) checkAllowed(span roachpb.Span, errIfDisallowed bool) {
 		// as long as the iterator itself is configured with proper boundaries.
 		return
 	}
+	i.checkAllowedValidPos(span, errIfDisallowed)
+}
+
+func (i *MVCCIterator) checkAllowedValidPos(span roachpb.Span, errIfDisallowed bool) {
 	var err error
 	if i.spansOnly {
 		err = i.spans.CheckAllowed(SpanReadOnly, span)
@@ -473,11 +493,6 @@ func (s spanSetReader) NewEngineIterator(opts storage.IterOptions) storage.Engin
 // ConsistentIterators implements the storage.Reader interface.
 func (s spanSetReader) ConsistentIterators() bool {
 	return s.r.ConsistentIterators()
-}
-
-// SupportsRangeKeys implements the storage.Reader interface.
-func (s spanSetReader) SupportsRangeKeys() bool {
-	return s.r.SupportsRangeKeys()
 }
 
 // PinEngineStateForIterators implements the storage.Reader interface.

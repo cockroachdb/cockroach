@@ -331,9 +331,9 @@ func UpdateHighwaterProgressed(highWater hlc.Timestamp, md JobMetadata, ju *JobU
 //	  if md.Status != StatusRunning {
 //	    return errors.New("job no longer running")
 //	  }
-//	  md.UpdateStatus(StatusPaused)
+//	  ju.UpdateStatus(StatusPaused)
 //	  // <modify md.Payload>
-//	  md.UpdatePayload(md.Payload)
+//	  ju.UpdatePayload(md.Payload)
 //	}
 //
 // Note that there are various convenience wrappers (like FractionProgressed)

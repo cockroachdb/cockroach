@@ -1055,6 +1055,7 @@ unreserved_keyword ::=
 	| 'CONTROLJOB'
 	| 'CONVERSION'
 	| 'CONVERT'
+	| 'COORDINATOR_LOCALITY'
 	| 'COPY'
 	| 'COST'
 	| 'COVERING'
@@ -2002,6 +2003,7 @@ copy_options ::=
 	| 'DELIMITER' string_or_placeholder
 	| 'NULL' string_or_placeholder
 	| 'HEADER'
+	| 'QUOTE' 'SCONST'
 
 db_object_name_component ::=
 	name
@@ -2256,6 +2258,7 @@ backup_options ::=
 	| 'DETACHED' '=' 'FALSE'
 	| 'KMS' '=' string_or_placeholder_opt_list
 	| 'INCREMENTAL_LOCATION' '=' string_or_placeholder_opt_list
+	| 'COORDINATOR_LOCALITY' '=' string_or_placeholder
 
 c_expr ::=
 	d_expr
@@ -3409,6 +3412,7 @@ bare_label_keywords ::=
 	'AS_JSON'
 	| 'ATOMIC'
 	| 'CALLED'
+	| 'COORDINATOR_LOCALITY'
 	| 'COST'
 	| 'CHECK_FILES'
 	| 'DEBUG_IDS'
@@ -3422,6 +3426,7 @@ bare_label_keywords ::=
 	| 'INVOKER'
 	| 'LEAKPROOF'
 	| 'PARALLEL'
+	| 'QUERY'
 	| 'RETURN'
 	| 'RETURNS'
 	| 'SECURITY'
@@ -3491,11 +3496,11 @@ opt_interval_qualifier ::=
 	| 
 
 func_application ::=
-	func_name '(' ')'
-	| func_name '(' expr_list opt_sort_clause ')'
-	| func_name '(' 'ALL' expr_list opt_sort_clause ')'
-	| func_name '(' 'DISTINCT' expr_list ')'
-	| func_name '(' '*' ')'
+	func_application_name '(' ')'
+	| func_application_name '(' expr_list opt_sort_clause ')'
+	| func_application_name '(' 'ALL' expr_list opt_sort_clause ')'
+	| func_application_name '(' 'DISTINCT' expr_list ')'
+	| func_application_name '(' '*' ')'
 
 within_group_clause ::=
 	'WITHIN' 'GROUP' '(' single_sort_clause ')'
@@ -3747,10 +3752,9 @@ rowsfrom_item ::=
 opt_col_def_list ::=
 	'(' col_def_list ')'
 
-func_name ::=
-	type_function_name
-	| prefixed_column_path
-	| 'INDEX'
+func_application_name ::=
+	func_name
+	| '[' 'FUNCTION' iconst32 ']'
 
 single_sort_clause ::=
 	'ORDER' 'BY' sortby
@@ -3898,10 +3902,10 @@ create_as_params ::=
 col_def_list ::=
 	( col_def ) ( ( ',' col_def ) )*
 
-type_function_name ::=
-	'identifier'
-	| unreserved_keyword
-	| type_func_name_keyword
+func_name ::=
+	type_function_name
+	| prefixed_column_path
+	| 'INDEX'
 
 opt_existing_window_name ::=
 	name
@@ -3941,6 +3945,11 @@ trim_list ::=
 	a_expr 'FROM' expr_list
 	| 'FROM' expr_list
 	| expr_list
+
+type_function_name ::=
+	'identifier'
+	| unreserved_keyword
+	| type_func_name_keyword
 
 char_aliases ::=
 	'CHAR'

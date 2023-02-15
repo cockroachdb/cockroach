@@ -229,7 +229,7 @@ func (gssp *generativeSplitAndScatterProcessor) close() {
 
 func makeBackupMetadata(
 	ctx context.Context, flowCtx *execinfra.FlowCtx, spec *execinfrapb.GenerativeSplitAndScatterSpec,
-) ([]backuppb.BackupManifest, layerToBackupManifestFileIterFactory, error) {
+) ([]backuppb.BackupManifest, backupinfo.LayerToBackupManifestFileIterFactory, error) {
 
 	execCfg := flowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig)
 
@@ -242,7 +242,7 @@ func makeBackupMetadata(
 		return nil, nil, err
 	}
 
-	layerToBackupManifestFileIterFactory, err := getBackupManifestFileIters(ctx, execCfg,
+	layerToBackupManifestFileIterFactory, err := backupinfo.GetBackupManifestIterFactories(ctx, execCfg.DistSQLSrv.ExternalStorage,
 		backupManifests, spec.Encryption, &kmsEnv)
 	if err != nil {
 		return nil, nil, err
@@ -321,14 +321,22 @@ func runGenerativeSplitAndScatter(
 			idx++
 			if len(chunk.entries) == int(spec.ChunkSize) {
 				chunk.splitKey = entry.Span.Key
-				restoreEntryChunksCh <- chunk
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case restoreEntryChunksCh <- chunk:
+				}
 				chunk = restoreEntryChunk{}
 			}
 			chunk.entries = append(chunk.entries, entry)
 		}
 
 		if len(chunk.entries) > 0 {
-			restoreEntryChunksCh <- chunk
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case restoreEntryChunksCh <- chunk:
+			}
 		}
 		return nil
 	})
@@ -419,6 +427,12 @@ func runGenerativeSplitAndScatter(
 					scatteredEntry := entryNode{
 						entry: importEntry,
 						node:  chunkDestination,
+					}
+
+					if restoreKnobs, ok := flowCtx.TestingKnobs().BackupRestoreTestingKnobs.(*sql.BackupRestoreTestingKnobs); ok {
+						if restoreKnobs.RunAfterSplitAndScatteringEntry != nil {
+							restoreKnobs.RunAfterSplitAndScatteringEntry(ctx)
+						}
 					}
 
 					select {

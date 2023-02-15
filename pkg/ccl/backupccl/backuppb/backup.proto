@@ -131,12 +131,13 @@ message BackupManifest {
   int32 descriptor_coverage = 22 [
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree.DescriptorCoverage"];
 
-  // HasExternalFilesList is set to true if the backup manifest has its `Files`
-  // field nil'ed out and written as a supporting SST file instead.
+  // HasExternalManifestSSTs is set to true if the backup manifest has its
+  // `Files`, `Descriptors`, and DescriptorChanges fields nil'ed out and written
+  // as a supporting SST file instead.
   //
   // TODO(adityamaru): Delete when backwards compatibility with 22.2 is dropped
   // since all backups in 23.1+ will write slim manifests.
-  bool has_external_files_list = 27;
+  bool has_external_manifest_ssts = 27 [(gogoproto.customname) = "HasExternalManifestSSTs"];
 
   // NEXT ID: 28
 }
@@ -217,4 +218,9 @@ message ExportStats {
   // Duration is the total time taken to send an ExportRequest, receive an
   // ExportResponse and push the response on a channel.
   int64 duration = 3 [(gogoproto.casttype) = "time.Duration"];
+  // StartTime is the timestamp at which the ExportRequest was sent.
+  util.hlc.Timestamp start_time = 4 [(gogoproto.nullable) = false];
+  // EndTime is the timestamp at which an ExportResponse was received and pushed
+  // onto a channel.
+  util.hlc.Timestamp end_time = 5 [(gogoproto.nullable) = false];
 }

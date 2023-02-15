@@ -19,7 +19,6 @@ go_library(
         "//pkg/cloud/externalconn/connectionpb",
         "//pkg/cloud/externalconn/utils",
         "//pkg/clusterversion",
-        "//pkg/security/username",
         "//pkg/server/telemetry",
         "//pkg/settings",
         "//pkg/settings/cluster",

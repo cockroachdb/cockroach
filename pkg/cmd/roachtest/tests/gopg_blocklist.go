@@ -10,15 +10,6 @@
 
 package tests
 
-var gopgBlocklists = blocklistsForVersion{
-	{"v20.2", "gopgBlockList20_2", gopgBlockList20_2, "gopgIgnoreList20_2", gopgIgnoreList20_2},
-	{"v21.1", "gopgBlockList21_1", gopgBlockList21_1, "gopgIgnoreList21_1", gopgIgnoreList21_1},
-	{"v21.2", "gopgBlockList21_2", gopgBlockList21_2, "gopgIgnoreList21_2", gopgIgnoreList21_2},
-	{"v22.1", "gopgBlockList22_1", gopgBlockList22_1, "gopgIgnoreList22_1", gopgIgnoreList22_1},
-	{"v22.2", "gopgBlockList22_2", gopgBlockList22_2, "gopgIgnoreList22_2", gopgIgnoreList22_2},
-	{"v23.1", "gopgBlockList23_1", gopgBlockList23_1, "gopgIgnoreList23_1", gopgIgnoreList23_1},
-}
-
 // These are lists of known gopg test errors and failures.
 // When the gopg test suite is run, the results are compared to this list.
 // Any failed test that is on this list is reported as FAIL - expected.
@@ -27,16 +18,7 @@ var gopgBlocklists = blocklistsForVersion{
 // Please keep these lists alphabetized for easy diffing.
 // After a failed run, an updated version of this blocklist should be available
 // in the test log.
-
-var gopgBlockList23_1 = gopgBlockList22_2
-
-var gopgBlockList22_2 = gopgBlockList22_1
-
-var gopgBlockList22_1 = gopgBlockList21_2
-
-var gopgBlockList21_2 = gopgBlockList21_1
-
-var gopgBlockList21_1 = blocklist{
+var gopgBlockList = blocklist{
 	"pg | BeforeQuery and AfterQuery CopyTo | is called for CopyTo with model":    "41608",
 	"pg | BeforeQuery and AfterQuery CopyTo | is called for CopyTo without model": "41608",
 	"pg | CopyFrom/CopyTo | copies corrupted data to a table":                     "41608",
@@ -59,42 +41,7 @@ var gopgBlockList21_1 = blocklist{
 	"v10.TestUnixSocket":      "31113",
 }
 
-var gopgBlockList20_2 = blocklist{
-	"pg | BeforeQuery and AfterQuery CopyFrom | is called for CopyFrom with model":    "41608",
-	"pg | BeforeQuery and AfterQuery CopyFrom | is called for CopyFrom without model": "41608",
-	"pg | BeforeQuery and AfterQuery CopyTo | is called for CopyTo with model":        "41608",
-	"pg | BeforeQuery and AfterQuery CopyTo | is called for CopyTo without model":     "41608",
-	"pg | CopyFrom/CopyTo | copies corrupted data to a table":                         "41608",
-	"pg | CopyFrom/CopyTo | copies data from a table and to a table":                  "41608",
-	"pg | CountEstimate | works":                                      "17511",
-	"pg | CountEstimate | works when there are no results":            "17511",
-	"pg | CountEstimate | works with GROUP":                           "17511",
-	"pg | CountEstimate | works with GROUP when there are no results": "17511",
-	"pg | Listener | is closed when DB is closed":                     "41522",
-	"pg | Listener | listens for notifications":                       "41522",
-	"pg | Listener | reconnects on receive error":                     "41522",
-	"pg | Listener | returns an error on timeout":                     "41522",
-	"pg | Listener | supports concurrent Listen and Receive":          "41522",
-	"v10.ExampleDB_Model_postgresArrayStructTag":                      "32552",
-	"v10.TestBigColumn":                                               "41608",
-	"v10.TestConversion":                                              "32552",
-	"v10.TestGinkgo":                                                  "41522",
-	"v10.TestGocheck":                                                 "17511",
-	"v10.TestReadColumnValue":                                         "26925",
-	"v10.TestUnixSocket":                                              "31113",
-}
-
-var gopgIgnoreList23_1 = gopgIgnoreList22_2
-
-var gopgIgnoreList22_2 = gopgIgnoreList22_1
-
-var gopgIgnoreList22_1 = gopgIgnoreList21_2
-
-var gopgIgnoreList21_2 = gopgIgnoreList21_1
-
-var gopgIgnoreList21_1 = gopgIgnoreList20_2
-
-var gopgIgnoreList20_2 = blocklist{
+var gopgIgnoreList = blocklist{
 	// These "fetching" tests assume a particular order when ORDER BY clause is
 	// omitted from the query by the ORM itself.
 	"pg | ORM slice model | fetches Book relations":       "41690",

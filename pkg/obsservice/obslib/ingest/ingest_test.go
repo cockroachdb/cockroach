@@ -10,14 +10,15 @@ package ingest
 
 import (
 	"context"
+	"net"
 	"net/url"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/migrations"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obspb"
+	logspb "github.com/cockroachdb/cockroach/pkg/obsservice/obspb/opentelemetry-proto/collector/logs/v1"
 	otel_pb "github.com/cockroachdb/cockroach/pkg/obsservice/obspb/opentelemetry-proto/common/v1"
 	otlogs "github.com/cockroachdb/cockroach/pkg/obsservice/obspb/opentelemetry-proto/logs/v1"
 	v1 "github.com/cockroachdb/cockroach/pkg/obsservice/obspb/opentelemetry-proto/resource/v1"
@@ -33,6 +34,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
 )
 
 func TestPersistEvents(t *testing.T) {
@@ -129,16 +131,20 @@ func TestEventIngestionIntegration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	connected := make(chan struct{})
+
+	// Allocate a port for the ingestion service to work around a circular
+	// dependency: CRDB needs to be told what the port is, but we can only create
+	// the event ingester after having started CRDB (because the ingester wants a
+	// reference to CRDB).
+	otlpListener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer func() {
+		_ = otlpListener.Close()
+	}()
+
 	s, sqlDB, _ := serverutils.StartServer(t,
 		base.TestServerArgs{
-			Insecure: true, // The Obs Service will make RPCs to the Server.
-			Knobs: base.TestingKnobs{
-				EventExporter: obs.EventServerTestingKnobs{
-					OnConnect: func(ctx context.Context) {
-						close(connected)
-					}},
-			},
+			ObsServiceAddr: otlpListener.Addr().String(),
 		},
 	)
 	defer s.Stopper().Stop(ctx)
@@ -151,7 +157,6 @@ func TestEventIngestionIntegration(t *testing.T) {
 	config, err := pgxpool.ParseConfig(pgURL.String())
 	require.NoError(t, err)
 	config.ConnConfig.Database = "defaultdb"
-	config.ConnConfig.TLSConfig = nil // Insecure server doesn't accept TLS.
 	pool, err := pgxpool.ConnectConfig(ctx, config)
 	require.NoError(t, err)
 	defer pool.Close()
@@ -160,10 +165,15 @@ func TestEventIngestionIntegration(t *testing.T) {
 	// Start the ingestion in the background.
 	obsStop := stop.NewStopper()
 	defer obsStop.Stop(ctx)
-	e := EventIngester{}
-	e.StartIngestEvents(ctx, s.RPCAddr(), pool, obsStop)
-	// Wait for the ingester to connect.
-	<-connected
+	e, err := MakeEventIngester(ctx, config)
+	require.NoError(t, err)
+	defer e.Close()
+	grpcServer := grpc.NewServer()
+	defer grpcServer.Stop()
+	logspb.RegisterLogsServiceServer(grpcServer, &e)
+	go func() {
+		_ = grpcServer.Serve(otlpListener)
+	}()
 
 	// Perform a schema change and check that we get an event.
 	_, err = sqlDB.Exec("create table t()")

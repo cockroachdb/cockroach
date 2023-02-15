@@ -22,7 +22,7 @@ Schema change plan for rolling back CREATE UNIQUE INDEX ‹idx› ON ‹defaultd
       │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 4}
       │    │    ├── MERGE_ONLY → DELETE_ONLY PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
       │    │    └── WRITE_ONLY → DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
-      │    └── 12 Mutation operations
+      │    └── 16 Mutation operations
       │         ├── MakeValidatedSecondaryIndexPublic {"IndexID":2,"TableID":104}
       │         ├── RefreshStats {"TableID":104}
       │         ├── SetColumnName {"ColumnID":2,"Name":"j","TableID":104}
@@ -32,7 +32,11 @@ Schema change plan for rolling back CREATE UNIQUE INDEX ‹idx› ON ‹defaultd
       │         ├── RefreshStats {"TableID":104}
       │         ├── MakeWriteOnlyColumnPublic {"ColumnID":4,"TableID":104}
       │         ├── RefreshStats {"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":4,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":4,"Kind":2,"TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":3,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":3,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":3,"Kind":2,"TableID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
       └── Stage 2 of 2 in PostCommitNonRevertiblePhase

@@ -79,6 +79,8 @@ require (
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.3.0
+	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.1.0
+	github.com/Azure/azure-sdk-for-go/sdk/keyvault/azkeys v0.9.0
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v0.6.1
 	github.com/BurntSushi/toml v0.4.1
 	github.com/Masterminds/semver/v3 v3.1.1
@@ -112,7 +114,7 @@ require (
 	github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55
 	github.com/cockroachdb/gostdlib v1.19.0
 	github.com/cockroachdb/logtags v0.0.0-20230118201751-21c54148d20b
-	github.com/cockroachdb/pebble v0.0.0-20230202171745-e9d3bb388ad6
+	github.com/cockroachdb/pebble v0.0.0-20230209160836-829675f94811
 	github.com/cockroachdb/redact v1.1.3
 	github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd
 	github.com/cockroachdb/stress v0.0.0-20220803192808-1806698b1b7b
@@ -157,9 +159,9 @@ require (
 	github.com/kevinburke/go-bindata v3.13.0+incompatible
 	github.com/kisielk/errcheck v1.6.1-0.20210625163953-8ddee489636a
 	github.com/kisielk/gotool v1.0.0
-	github.com/klauspost/compress v1.15.11
+	github.com/klauspost/compress v1.15.15
 	github.com/klauspost/pgzip v1.2.5
-	github.com/knz/bubbline v0.0.0-20230124184034-a0b62576595b
+	github.com/knz/bubbline v0.0.0-20230205122847-05558f88fdc4
 	github.com/knz/go-libedit v1.10.1
 	github.com/knz/strtime v0.0.0-20200318182718-be999391ffa9
 	github.com/kr/pretty v0.3.0
@@ -176,8 +178,9 @@ require (
 	github.com/mattn/goveralls v0.0.2
 	github.com/mibk/dupl v1.0.0
 	github.com/mitchellh/reflectwalk v1.0.0
+	github.com/mkungla/bexp/v3 v3.0.1
 	github.com/mmatczuk/go_generics v0.0.0-20181212143635-0aaa050f9bab
-	github.com/montanaflynn/stats v0.6.3
+	github.com/montanaflynn/stats v0.6.6
 	github.com/mozillazg/go-slugify v0.2.0
 	github.com/nightlyone/lockfile v1.0.0
 	github.com/olekukonko/tablewriter v0.0.5-0.20200416053754-163badb3bac6
@@ -229,6 +232,7 @@ require (
 	cloud.google.com/go/compute v1.6.1 // indirect
 	cloud.google.com/go/iam v0.3.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.1.1 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/keyvault/internal v0.7.0 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20210617225240-d185dfc1b5a1 // indirect
 	github.com/Azure/go-autorest v14.2.0+incompatible // indirect
 	github.com/Azure/go-autorest/autorest/adal v0.9.15 // indirect
@@ -236,6 +240,7 @@ require (
 	github.com/Azure/go-autorest/autorest/validation v0.3.1 // indirect
 	github.com/Azure/go-autorest/logger v0.2.1 // indirect
 	github.com/Azure/go-autorest/tracing v0.6.0 // indirect
+	github.com/AzureAD/microsoft-authentication-library-for-go v0.5.1 // indirect
 	github.com/Masterminds/goutils v1.1.0 // indirect
 	github.com/Masterminds/semver v1.5.0 // indirect
 	github.com/Masterminds/sprig v2.22.0+incompatible // indirect
@@ -252,7 +257,7 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bgentry/go-netrc v0.0.0-20140422174119-9fd32a8b3d3d // indirect
 	github.com/cenkalti/backoff/v4 v4.1.3 // indirect
-	github.com/cespare/xxhash/v2 v2.1.2 // indirect
+	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/charmbracelet/bubbletea v0.23.1 // indirect
 	github.com/charmbracelet/lipgloss v0.6.0 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.1.0 // indirect
@@ -283,7 +288,7 @@ require (
 	github.com/gofrs/flock v0.8.1 // indirect
 	github.com/gofrs/uuid v4.0.0+incompatible // indirect
 	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
-	github.com/golang-jwt/jwt/v4 v4.0.0 // indirect
+	github.com/golang-jwt/jwt/v4 v4.2.0 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/googleapis/gax-go/v2 v2.4.0 // indirect

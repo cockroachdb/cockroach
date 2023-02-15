@@ -2461,7 +2461,7 @@ be09b235155bae6cb96b94ce4645260937e856ac3907d710850256e6351f50b428f948a7af339374
 f7fbba6e0636f890e56fbbf3283e524c6fa3204ae298382d624741d0dc6638326e282c41be5e4254d8820772c5518a2c5a8c0c7f7eda19594a7eb539453e1ed7
 95bce0fdbcf48ba9c944dae46238d89bbd6df696a0d0b7cc8fc16eeabd30c03d6d2506cfcce81de320b37bc677df1bd045ac9231b43ae11807773db3909d1220
 b2d173023893f71caadf7cb2f9557355462570de2c9c971b9cfa5494936e28df8e13d0db4d550aab66d5e7a002f678ddb02def092c069ce473cf5fb293953986
-960b0fed9378be1e9adefd91e1be6ac9c1de7208008dfec438ff845135727bebea0f7458a5181079f61288176e0168cfea501b900c3e495b3ab9bbe4d372486d
+17ecb6d43868f7502f588817661f5edb85b8e408d304ffbdeddd6b1abbec00dc5dda907b930356f1a031be368ea053626af59a9e74fbe55cf9cb7855acfd5f17
 d82c4eb5261cb9c8aa9855edd67d1bd10482f41529858d925094d173fa662aa91ff39bc5b188615273484021dfb16fd8284cf684ccf0fc795be3aa2fc1e6c181
 
 # We only support one encoding, UTF8, which is hardcoded to id 6 just like in
@@ -3750,6 +3750,18 @@ query T
 SELECT crdb_internal.hide_sql_constants(NULL)
 ----
 NULL
+
+query T
+SELECT crdb_internal.hide_sql_constants('not a sql stmt')
+----
+·
+
+
+query T
+select crdb_internal.hide_sql_constants(e'\r');
+----
+·
+
 
 query T
 SELECT crdb_internal.hide_sql_constants(create_statement) from crdb_internal.create_statements where descriptor_name = 'foo'

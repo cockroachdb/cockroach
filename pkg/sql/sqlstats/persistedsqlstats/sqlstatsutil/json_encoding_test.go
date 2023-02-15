@@ -102,7 +102,15 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
          },
          "nodes": [{{joinInts .IntArray}}],
          "planGists": [{{joinStrings .StringArray}}],
-         "indexes": [{{joinStrings .StringArray}}]
+         "indexes": [{{joinStrings .StringArray}}],
+         "latencyInfo": {
+           "min": {{.Float}},
+           "max": {{.Float}},
+           "p50": {{.Float}},
+           "p90": {{.Float}},
+           "p99": {{.Float}}
+         },
+         "lastErrorCode": "{{.String}}"
        },
        "execution_statistics": {
          "cnt": {{.Int64}},
@@ -129,7 +137,61 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
          "cpuSQLNanos": {
            "mean": {{.Float}},
            "sqDiff": {{.Float}}
-         }
+         },
+         "mvccIteratorStats": {
+           "stepCount": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "stepCountInternal": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "seekCount": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "seekCountInternal": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "blockBytes": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "blockBytesInCache": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "keyBytes": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "valueBytes": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "pointCount": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "pointsCoveredByRangeTombstones": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "rangeKeyCount": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "rangeKeyContainedPoints": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "rangeKeySkippedPoints": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           }
+			   }
        },
        "index_recommendations": [{{joinStrings .StringArray}}]
      }
@@ -224,8 +286,16 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
            "mean": {{.Float}},
            "sqDiff": {{.Float}}
          },
-         "nodes": [{{joinInts .IntArray}}]
-         "planGists": [{{joinStrings .StringArray}}]
+         "nodes": [{{joinInts .IntArray}}],
+         "planGists": [{{joinStrings .StringArray}}],
+         "latencyInfo": {
+           "min": {{.Float}},
+           "max": {{.Float}},
+           "p50": {{.Float}},
+           "p90": {{.Float}},
+           "p99": {{.Float}},
+         },
+         "errorCode": "{{.String}}"
        },
        "execution_statistics": {
          "cnt": {{.Int64}},
@@ -252,7 +322,61 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
          "cpuSQLNanos": {
            "mean": {{.Float}},
            "sqDiff": {{.Float}}
-         }
+         },
+         "mvccIteratorStats": {
+           "stepCount": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "stepCountInternal": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "seekCount": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "seekCountInternal": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "blockBytes": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "blockBytesInCache": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "keyBytes": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "valueBytes": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "pointCount": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "pointsCoveredByRangeTombstones": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "rangeKeyCount": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "rangeKeyContainedPoints": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "rangeKeySkippedPoints": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           }
+			   }
        },
        "index_recommendations": [{{joinStrings .StringArray}}]
      }
@@ -368,6 +492,60 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
     "cpuSQLNanos": {
       "mean": {{.Float}},
       "sqDiff": {{.Float}}
+    },
+    "mvccIteratorStats": {
+      "stepCount": {
+        "mean": {{.Float}},
+        "sqDiff": {{.Float}}
+      },
+      "stepCountInternal": {
+        "mean": {{.Float}},
+        "sqDiff": {{.Float}}
+      },
+      "seekCount": {
+        "mean": {{.Float}},
+        "sqDiff": {{.Float}}
+      },
+      "seekCountInternal": {
+        "mean": {{.Float}},
+        "sqDiff": {{.Float}}
+      },
+      "blockBytes": {
+        "mean": {{.Float}},
+        "sqDiff": {{.Float}}
+      },
+      "blockBytesInCache": {
+        "mean": {{.Float}},
+        "sqDiff": {{.Float}}
+      },
+      "keyBytes": {
+        "mean": {{.Float}},
+        "sqDiff": {{.Float}}
+      },
+      "valueBytes": {
+        "mean": {{.Float}},
+        "sqDiff": {{.Float}}
+      },
+      "pointCount": {
+        "mean": {{.Float}},
+        "sqDiff": {{.Float}}
+      },
+      "pointsCoveredByRangeTombstones": {
+        "mean": {{.Float}},
+        "sqDiff": {{.Float}}
+      },
+      "rangeKeyCount": {
+        "mean": {{.Float}},
+        "sqDiff": {{.Float}}
+      },
+      "rangeKeyContainedPoints": {
+        "mean": {{.Float}},
+        "sqDiff": {{.Float}}
+      },
+      "rangeKeySkippedPoints": {
+        "mean": {{.Float}},
+        "sqDiff": {{.Float}}
+      }
     }
   }
 }

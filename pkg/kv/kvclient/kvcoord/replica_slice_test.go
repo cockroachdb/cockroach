@@ -83,6 +83,9 @@ func TestNewReplicaSlice(t *testing.T) {
 	rs, err := NewReplicaSlice(ctx, ns, rd, nil, OnlyPotentialLeaseholders)
 	require.NoError(t, err)
 	require.Equal(t, 3, rs.Len())
+	rs, err = NewReplicaSlice(ctx, ns, rd, nil, AllReplicas)
+	require.NoError(t, err)
+	require.Equal(t, 3, rs.Len())
 
 	// Check that learners are not included.
 	rd.InternalReplicas[2].Type = roachpb.LEARNER
@@ -92,6 +95,9 @@ func TestNewReplicaSlice(t *testing.T) {
 	rs, err = NewReplicaSlice(ctx, ns, rd, nil, AllExtantReplicas)
 	require.NoError(t, err)
 	require.Equal(t, 2, rs.Len())
+	rs, err = NewReplicaSlice(ctx, ns, rd, nil, AllReplicas)
+	require.NoError(t, err)
+	require.Equal(t, 3, rs.Len())
 
 	// Check that non-voters are included iff we ask for them to be.
 	rd.InternalReplicas[2].Type = roachpb.NON_VOTER
@@ -101,11 +107,18 @@ func TestNewReplicaSlice(t *testing.T) {
 	rs, err = NewReplicaSlice(ctx, ns, rd, nil, OnlyPotentialLeaseholders)
 	require.NoError(t, err)
 	require.Equal(t, 2, rs.Len())
+	rs, err = NewReplicaSlice(ctx, ns, rd, nil, AllReplicas)
+	require.NoError(t, err)
+	require.Equal(t, 3, rs.Len())
 
 	// Check that, if the leaseholder points to a learner, that learner is
 	// included.
+	rd.InternalReplicas[2].Type = roachpb.LEARNER
 	leaseholder := &roachpb.ReplicaDescriptor{NodeID: 3, StoreID: 3, ReplicaID: 3}
 	rs, err = NewReplicaSlice(ctx, ns, rd, leaseholder, OnlyPotentialLeaseholders)
+	require.NoError(t, err)
+	require.Equal(t, 3, rs.Len())
+	rs, err = NewReplicaSlice(ctx, ns, rd, leaseholder, AllReplicas)
 	require.NoError(t, err)
 	require.Equal(t, 3, rs.Len())
 }
@@ -269,4 +282,14 @@ func TestReplicaSliceOptimizeReplicaOrder(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestReplicaInfoLocalityValue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ri := info(t, 1, 1, []string{"country=us", "region=west", "city=la"})
+	require.Equal(t, "", ri.LocalityValue("foo"))
+	require.Equal(t, "us", ri.LocalityValue("country"))
+	require.Equal(t, "west", ri.LocalityValue("region"))
+	require.Equal(t, "la", ri.LocalityValue("city"))
 }

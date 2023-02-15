@@ -197,7 +197,7 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 	}
 
 	// Collect all the keys.
-	preKeys := getEngineKeySet(t, store.Engine())
+	preKeys := getEngineKeySet(t, store.TODOEngine())
 
 	// Split the range.
 	lhsDesc, rhsDesc, err := createSplitRanges(ctx, scratchKey(""), store)
@@ -220,7 +220,7 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 	}
 
 	// Collect all the keys again.
-	postKeys := getEngineKeySet(t, store.Engine())
+	postKeys := getEngineKeySet(t, store.TODOEngine())
 
 	// Compute the new keys.
 	for k := range preKeys {
@@ -354,7 +354,7 @@ func mergeWithData(t *testing.T, retries int64) {
 	// Verify no intents remains on range descriptor keys.
 	for _, key := range []roachpb.Key{keys.RangeDescriptorKey(lhsDesc.StartKey), keys.RangeDescriptorKey(rhsDesc.StartKey)} {
 		if _, err := storage.MVCCGet(
-			ctx, store.Engine(), key, store.Clock().Now(), storage.MVCCGetOptions{},
+			ctx, store.TODOEngine(), key, store.Clock().Now(), storage.MVCCGetOptions{},
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -748,7 +748,7 @@ func mergeCheckingTimestampCaches(
 				for _, r := range lhsRepls[1:] {
 					// Loosely-coupled truncation requires an engine flush to advance
 					// guaranteed durability.
-					require.NoError(t, r.Engine().Flush())
+					require.NoError(t, r.Store().TODOEngine().Flush())
 					firstIndex := r.GetFirstIndex()
 					if firstIndex < truncIndex {
 						return errors.Errorf("truncate not applied, %d < %d", firstIndex, truncIndex)
@@ -1349,7 +1349,7 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	// merge below.
 
 	// Get the range stats for both ranges now that we have data.
-	snap := store.Engine().NewSnapshot()
+	snap := store.TODOEngine().NewSnapshot()
 	defer snap.Close()
 	msA, err := stateloader.Make(lhsDesc.RangeID).LoadMVCCStats(ctx, snap)
 	require.NoError(t, err)
@@ -1367,7 +1367,7 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	replMerged := store.LookupReplica(lhsDesc.StartKey)
 
 	// Get the range stats for the merged range and verify.
-	snap = store.Engine().NewSnapshot()
+	snap = store.TODOEngine().NewSnapshot()
 	defer snap.Close()
 	msMerged, err := stateloader.Make(replMerged.RangeID).LoadMVCCStats(ctx, snap)
 	require.NoError(t, err)
@@ -2542,8 +2542,8 @@ func TestStoreReplicaGCAfterMerge(t *testing.T) {
 			t.Fatalf("expected next replica ID to be %d, but got %d", e, a)
 		}
 	}
-	checkTombstone(store0.Engine())
-	checkTombstone(store1.Engine())
+	checkTombstone(store0.TODOEngine())
+	checkTombstone(store1.TODOEngine())
 }
 
 // TestStoreRangeMergeAddReplicaRace verifies that when an add replica request
@@ -3941,8 +3941,8 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		})
 	defer tc.Stopper().Stop(ctx)
 	store0, store2 := tc.GetFirstStoreFromServer(t, 0), tc.GetFirstStoreFromServer(t, 2)
-	sendingEng = store0.Engine()
-	receivingEng = store2.Engine()
+	sendingEng = store0.TODOEngine()
+	receivingEng = store2.TODOEngine()
 	distSender := tc.Servers[0].DistSender()
 
 	// This test works across 5 ranges in total. We start with a scratch range(1)
@@ -4072,8 +4072,8 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		}
 
 		// Verify that the sets of keys in store0 and store2 are identical.
-		storeKeys0 := getKeySet(store0.Engine())
-		storeKeys2 := getKeySet(store2.Engine())
+		storeKeys0 := getKeySet(store0.TODOEngine())
+		storeKeys2 := getKeySet(store2.TODOEngine())
 		for k := range storeKeys0 {
 			if _, ok := storeKeys2[k]; !ok {
 				return fmt.Errorf("store2 missing key %s", roachpb.Key(k))
@@ -4364,9 +4364,20 @@ func TestMergeQueue(t *testing.T) {
 	})
 
 	t.Run("load-based-merging", func(t *testing.T) {
-		const splitByLoadQPS = 10
-		const mergeByLoadQPS = splitByLoadQPS / 2 // see conservativeLoadBasedSplitThreshold
-		const splitByLoadMergeDelay = 500 * time.Millisecond
+		// NB: It is possible for the ranges being checked to record load
+		// during the test. To avoid flakiness, we set the splitByLoadStat high
+		// enough that any recorded load from testing won't exceed it.
+		// Likewise, when running under race - it is possible that if
+		// splitByLoadMergeDelay is small, enough time will pass in the test
+		// that this delay is elapsed and the ranges will merge when not
+		// expected to.
+		const splitByLoadStat = 10e9
+		const mergeByLoadStat = splitByLoadStat / 2 // see conservativeLoadBasedSplitThreshold
+		const splitByLoadMergeDelay = 1000 * time.Second
+
+		setSplitObjective := func(dim kvserver.LBRebalancingObjective) {
+			kvserver.LoadBasedRebalancingObjective.Override(ctx, sv, int64(dim))
+		}
 
 		resetForLoadBasedSubtest := func(t *testing.T) {
 			reset(t)
@@ -4384,7 +4395,8 @@ func TestMergeQueue(t *testing.T) {
 			// meaning that it was a maximum measurement over some extended period of
 			// time.
 			kvserver.SplitByLoadEnabled.Override(ctx, sv, true)
-			kvserver.SplitByLoadQPSThreshold.Override(ctx, sv, splitByLoadQPS)
+			kvserver.SplitByLoadQPSThreshold.Override(ctx, sv, splitByLoadStat)
+			kvserver.SplitByLoadCPUThreshold.Override(ctx, sv, splitByLoadStat)
 
 			// Drop the load-based splitting merge delay setting, which also dictates
 			// the duration that a leaseholder must measure QPS before considering its
@@ -4399,47 +4411,104 @@ func TestMergeQueue(t *testing.T) {
 			rhs().LoadBasedSplitter().Reset(tc.Servers[1].Clock().PhysicalTime())
 			manualClock.Increment(splitByLoadMergeDelay.Nanoseconds())
 		}
+		for _, splitObjective := range []kvserver.LBRebalancingObjective{
+			kvserver.LBRebalancingQueries,
+			kvserver.LBRebalancingCPU,
+		} {
+			setSplitObjective(splitObjective)
+			t.Run(fmt.Sprintf("unreliable-lhs-%s", splitObjective.ToDimension().String()), func(t *testing.T) {
+				resetForLoadBasedSubtest(t)
 
-		t.Run("unreliable-lhs-qps", func(t *testing.T) {
-			resetForLoadBasedSubtest(t)
+				lhs().LoadBasedSplitter().Reset(tc.Servers[0].Clock().PhysicalTime())
 
-			lhs().LoadBasedSplitter().Reset(tc.Servers[0].Clock().PhysicalTime())
+				clearRange(t, lhsStartKey, rhsEndKey)
+				verifyUnmergedSoon(t, store, lhsStartKey, rhsStartKey)
+			})
 
-			clearRange(t, lhsStartKey, rhsEndKey)
-			verifyUnmergedSoon(t, store, lhsStartKey, rhsStartKey)
-		})
+			t.Run(fmt.Sprintf("unreliable-rhs-%s", splitObjective.ToDimension().String()), func(t *testing.T) {
+				resetForLoadBasedSubtest(t)
 
-		t.Run("unreliable-rhs-qps", func(t *testing.T) {
-			resetForLoadBasedSubtest(t)
+				rhs().LoadBasedSplitter().Reset(tc.Servers[1].Clock().PhysicalTime())
 
-			rhs().LoadBasedSplitter().Reset(tc.Servers[1].Clock().PhysicalTime())
+				clearRange(t, lhsStartKey, rhsEndKey)
+				verifyUnmergedSoon(t, store, lhsStartKey, rhsStartKey)
+			})
 
-			clearRange(t, lhsStartKey, rhsEndKey)
-			verifyUnmergedSoon(t, store, lhsStartKey, rhsStartKey)
-		})
+			t.Run(fmt.Sprintf("combined-%s-above-threshold", splitObjective.ToDimension().String()), func(t *testing.T) {
+				resetForLoadBasedSubtest(t)
 
-		t.Run("combined-qps-above-threshold", func(t *testing.T) {
-			resetForLoadBasedSubtest(t)
+				moreThanHalfStat := mergeByLoadStat/2 + 1
+				rhs().LoadBasedSplitter().RecordMax(tc.Servers[0].Clock().PhysicalTime(), moreThanHalfStat)
+				lhs().LoadBasedSplitter().RecordMax(tc.Servers[1].Clock().PhysicalTime(), moreThanHalfStat)
 
-			moreThanHalfQPS := mergeByLoadQPS/2 + 1
-			rhs().LoadBasedSplitter().RecordMax(tc.Servers[0].Clock().PhysicalTime(), float64(moreThanHalfQPS))
-			lhs().LoadBasedSplitter().RecordMax(tc.Servers[1].Clock().PhysicalTime(), float64(moreThanHalfQPS))
+				clearRange(t, lhsStartKey, rhsEndKey)
+				verifyUnmergedSoon(t, store, lhsStartKey, rhsStartKey)
+			})
 
-			clearRange(t, lhsStartKey, rhsEndKey)
-			verifyUnmergedSoon(t, store, lhsStartKey, rhsStartKey)
-		})
+			t.Run(fmt.Sprintf("combined-%s-below-threshold", splitObjective.ToDimension().String()), func(t *testing.T) {
+				resetForLoadBasedSubtest(t)
 
-		t.Run("combined-qps-below-threshold", func(t *testing.T) {
-			resetForLoadBasedSubtest(t)
+				manualClock.Increment(splitByLoadMergeDelay.Nanoseconds())
+				lessThanHalfStat := mergeByLoadStat/2 - 1
+				rhs().LoadBasedSplitter().RecordMax(tc.Servers[0].Clock().PhysicalTime(), lessThanHalfStat)
+				lhs().LoadBasedSplitter().RecordMax(tc.Servers[1].Clock().PhysicalTime(), lessThanHalfStat)
 
-			manualClock.Increment(splitByLoadMergeDelay.Nanoseconds())
-			lessThanHalfQPS := mergeByLoadQPS/2 - 1
-			rhs().LoadBasedSplitter().RecordMax(tc.Servers[0].Clock().PhysicalTime(), float64(lessThanHalfQPS))
-			lhs().LoadBasedSplitter().RecordMax(tc.Servers[1].Clock().PhysicalTime(), float64(lessThanHalfQPS))
+				clearRange(t, lhsStartKey, rhsEndKey)
+				verifyMergedSoon(t, store, lhsStartKey, rhsStartKey)
+			})
 
-			clearRange(t, lhsStartKey, rhsEndKey)
-			verifyMergedSoon(t, store, lhsStartKey, rhsStartKey)
-		})
+			// These nested tests assert that after changing the split
+			// dimension, any previous load is discarded and the range will not
+			// merge, even if the previous load was above or below the
+			// threshold.
+			for _, secondSplitObjective := range []kvserver.LBRebalancingObjective{
+				kvserver.LBRebalancingQueries,
+				kvserver.LBRebalancingCPU,
+			} {
+				if splitObjective == secondSplitObjective {
+					// Nothing to do when there is no change. We expect the
+					// same outcome as the above tests.
+					continue
+				}
+				t.Run(fmt.Sprintf("switch-%s-to-%s-prev-combined-above-threshold",
+					splitObjective.ToDimension().String(),
+					secondSplitObjective.ToDimension().String(),
+				), func(t *testing.T) {
+					// Set the split dimension again, since we have modified it
+					// at the bottom of this loop.
+					setSplitObjective(splitObjective)
+					resetForLoadBasedSubtest(t)
+
+					moreThanHalfStat := mergeByLoadStat/2 + 1
+					rhs().LoadBasedSplitter().RecordMax(tc.Servers[0].Clock().PhysicalTime(), moreThanHalfStat)
+					lhs().LoadBasedSplitter().RecordMax(tc.Servers[1].Clock().PhysicalTime(), moreThanHalfStat)
+
+					clearRange(t, lhsStartKey, rhsEndKey)
+					// Switch the dimension, so that any recorded load should
+					// be discarded and despite being above the threshold (for
+					// both dimensions), it shouldn't merge.
+					setSplitObjective(secondSplitObjective)
+					verifyUnmergedSoon(t, store, lhsStartKey, rhsStartKey)
+				})
+
+				t.Run(fmt.Sprintf("switch-%s-to-%s-prev-combined-below-threshold",
+					splitObjective.ToDimension().String(),
+					secondSplitObjective.ToDimension().String(),
+				), func(t *testing.T) {
+					setSplitObjective(splitObjective)
+					resetForLoadBasedSubtest(t)
+
+					manualClock.Increment(splitByLoadMergeDelay.Nanoseconds())
+					lessThanHalfStat := mergeByLoadStat/2 - 1
+					rhs().LoadBasedSplitter().RecordMax(tc.Servers[0].Clock().PhysicalTime(), lessThanHalfStat)
+					lhs().LoadBasedSplitter().RecordMax(tc.Servers[1].Clock().PhysicalTime(), lessThanHalfStat)
+
+					clearRange(t, lhsStartKey, rhsEndKey)
+					setSplitObjective(secondSplitObjective)
+					verifyUnmergedSoon(t, store, lhsStartKey, rhsStartKey)
+				})
+			}
+		}
 	})
 
 	t.Run("sticky-bit", func(t *testing.T) {
@@ -5275,7 +5344,7 @@ func TestStoreMergeGCHint(t *testing.T) {
 				require.Greater(t, gcHint.LatestRangeDeleteTimestamp.WallTime, beforeSecondDel,
 					"highest timestamp wasn't picked up")
 			}
-			repl.AssertState(ctx, store.Engine())
+			repl.AssertState(ctx, store.TODOEngine())
 		})
 	}
 }

@@ -62,7 +62,7 @@ func (h *HTTPHandler) HandleRequest(w http.ResponseWriter, req *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		getter, ok := s.Engine().(workloadCollectorGetter)
+		getter, ok := s.TODOEngine().(workloadCollectorGetter)
 		if !ok {
 			http.Error(
 				w,
@@ -85,7 +85,7 @@ func (h *HTTPHandler) HandleRequest(w http.ResponseWriter, req *http.Request) {
 				}
 				if !wc.IsRunning() {
 					wc.Start(captureFS, actionJSON.CaptureDirectory)
-					err = s.Engine().CreateCheckpoint(captureFS.PathJoin(actionJSON.CaptureDirectory, "checkpoint"))
+					err = s.TODOEngine().CreateCheckpoint(captureFS.PathJoin(actionJSON.CaptureDirectory, "checkpoint"), nil)
 				}
 				if err != nil {
 					return err
@@ -108,7 +108,7 @@ func (h *HTTPHandler) HandleRequest(w http.ResponseWriter, req *http.Request) {
 	case "GET":
 		var response []WorkloadCollectorStatus
 		err := h.Stores.VisitStores(func(s *kvserver.Store) error {
-			getter, ok := s.Engine().(workloadCollectorGetter)
+			getter, ok := s.TODOEngine().(workloadCollectorGetter)
 			if !ok {
 				return errors.Newf("Failed to retrieve workload collector for store with id: %d", s.StoreID())
 			}

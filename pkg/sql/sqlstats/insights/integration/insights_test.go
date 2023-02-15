@@ -372,16 +372,17 @@ func TestInsightsIntegrationForContention(t *testing.T) {
 	testutils.SucceedsWithin(t, func() error {
 		rows, err := conn.QueryContext(ctx, `SELECT
 		query,
-		contention::FLOAT,
-		contention_events->0->>'durationInMs' AS durationMs,
-		contention_events->0->>'schemaName',
-		contention_events->0->>'databaseName',
-		contention_events->0->>'tableName',
-		contention_events->0->>'indexName',
-		txn_contention.blocking_txn_fingerprint_id
+		insight.contention::FLOAT,
+		sum(txn_contention.contention_duration)::FLOAT AS durationMs,
+		txn_contention.schema_name,
+		txn_contention.database_name,
+		txn_contention.table_name,
+		txn_contention.index_name,
+		txn_contention.waiting_txn_fingerprint_id
 		FROM crdb_internal.cluster_execution_insights insight
-		left join crdb_internal.transaction_contention_events txn_contention on  (contention_events->0->>'blockingTxnID')::uuid = txn_contention.blocking_txn_id
-																		 where query like 'UPDATE t SET s =%'`)
+		left join crdb_internal.transaction_contention_events txn_contention on  insight.stmt_id = txn_contention.waiting_stmt_id
+																		 where query like 'UPDATE t SET s =%'
+		group by query, insight.contention, txn_contention.schema_name, txn_contention.database_name, txn_contention.table_name, txn_contention.index_name, waiting_txn_fingerprint_id;`)
 		if err != nil {
 			return err
 		}
@@ -393,19 +394,18 @@ func TestInsightsIntegrationForContention(t *testing.T) {
 				return err
 			}
 
-			var totalContentionFromQuerySeconds, contentionFromEventMs float64
+			var totalContentionFromQueryMs, contentionFromEventMs float64
 			var queryText, schemaName, dbName, tableName, indexName string
 			var blockingTxnFingerprintID gosql.NullString
-			err = rows.Scan(&queryText, &totalContentionFromQuerySeconds, &contentionFromEventMs, &schemaName, &dbName, &tableName, &indexName, &blockingTxnFingerprintID)
+			err = rows.Scan(&queryText, &totalContentionFromQueryMs, &contentionFromEventMs, &schemaName, &dbName, &tableName, &indexName, &blockingTxnFingerprintID)
 			if err != nil {
 				return err
 			}
 
-			if totalContentionFromQuerySeconds < .2 {
-				return fmt.Errorf("contention time is %f should be greater than .2 since block is delayed by .5 seconds", totalContentionFromQuerySeconds)
+			if totalContentionFromQueryMs < .2 {
+				return fmt.Errorf("contention time is %f should be greater than .2 since block is delayed by .5 seconds", totalContentionFromQueryMs)
 			}
 
-			totalContentionFromQueryMs := totalContentionFromQuerySeconds * 1000
 			diff := totalContentionFromQueryMs - contentionFromEventMs
 			if math.Abs(diff) > .1 {
 				return fmt.Errorf("contention time from column: %f should be the same as event value %f", totalContentionFromQueryMs, contentionFromEventMs)

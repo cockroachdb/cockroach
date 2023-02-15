@@ -52,13 +52,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vtable"
+	"github.com/cockroachdb/cockroach/pkg/util/collatedstring"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
-	"golang.org/x/text/collate"
 )
 
 var (
@@ -815,12 +815,8 @@ https://www.postgresql.org/docs/9.5/catalog-pg-collation.html`,
 					tree.DNull, // collisdeterministic
 				)
 			}
-			if err := add(tree.DefaultCollationTag); err != nil {
-				return err
-			}
-			for _, tag := range collate.Supported() {
-				collName := tag.String()
-				if err := add(collName); err != nil {
+			for _, tag := range collatedstring.Supported() {
+				if err := add(tag); err != nil {
 					return err
 				}
 			}
@@ -2357,9 +2353,13 @@ func addPgProcBuiltinRow(name string, addRow func(...tree.Datum) error) error {
 	_, overloads := builtinsregistry.GetBuiltinProperties(name)
 	nspOid := tree.NewDOid(catconstants.PgCatalogID)
 	const crdbInternal = catconstants.CRDBInternalSchemaName + "."
+	const infoSchema = catconstants.InformationSchemaName + "."
 	if strings.HasPrefix(name, crdbInternal) {
 		nspOid = tree.NewDOid(catconstants.CrdbInternalID)
 		name = name[len(crdbInternal):]
+	} else if strings.HasPrefix(name, infoSchema) {
+		nspOid = tree.NewDOid(catconstants.InformationSchemaID)
+		name = name[len(infoSchema):]
 	}
 
 	for _, builtin := range overloads {
@@ -2590,8 +2590,8 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 		return forEachDatabaseDesc(ctx, p, dbContext, false, /* requiresPrivileges */
 			func(dbDesc catalog.DatabaseDescriptor) error {
 				return forEachSchema(ctx, p, dbDesc, true /* requiresPrivileges */, func(scDesc catalog.SchemaDescriptor) error {
-					return scDesc.ForEachFunctionOverload(func(overload descpb.SchemaDescriptor_FunctionOverload) error {
-						fnDesc, err := p.Descriptors().ByID(p.Txn()).WithoutNonPublic().Get().Function(ctx, overload.ID)
+					return scDesc.ForEachFunctionSignature(func(sig descpb.SchemaDescriptor_FunctionSignature) error {
+						fnDesc, err := p.Descriptors().ByID(p.Txn()).WithoutNonPublic().Get().Function(ctx, sig.ID)
 						if err != nil {
 							return err
 						}
@@ -2642,7 +2642,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 						return false, err
 					}
 
-					err = addPgProcBuiltinRow(name, addRow)
+					err = addPgProcBuiltinRow(name.Object(), addRow)
 					if err != nil {
 						return false, err
 					}
@@ -4398,13 +4398,13 @@ func typColl(typ *types.T, h oidHasher) tree.Datum {
 	case types.AnyFamily:
 		return oidZero
 	case types.StringFamily:
-		return h.CollationOid(tree.DefaultCollationTag)
+		return h.CollationOid(collatedstring.DefaultCollationTag)
 	case types.CollatedStringFamily:
 		return h.CollationOid(typ.Locale())
 	}
 
 	if typ.Equivalent(types.StringArray) {
-		return h.CollationOid(tree.DefaultCollationTag)
+		return h.CollationOid(collatedstring.DefaultCollationTag)
 	}
 	return oidZero
 }

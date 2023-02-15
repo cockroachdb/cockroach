@@ -14,7 +14,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -136,9 +135,7 @@ func DeleteRange(
 			if !hint.ForwardLatestRangeDeleteTimestamp(h.Timestamp) {
 				return nil
 			}
-			canUseGCHint := cArgs.EvalCtx.ClusterSettings().Version.IsActive(ctx,
-				clusterversion.V22_2GCHintInReplicaState)
-			if updated, err := sl.SetGCHint(ctx, readWriter, cArgs.Stats, hint, canUseGCHint); err != nil || !updated {
+			if updated, err := sl.SetGCHint(ctx, readWriter, cArgs.Stats, hint); err != nil || !updated {
 				return err
 			}
 			res.Replicated.State = &kvserverpb.ReplicaState{

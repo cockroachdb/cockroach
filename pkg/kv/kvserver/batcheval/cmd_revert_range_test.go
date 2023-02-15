@@ -16,7 +16,6 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
@@ -108,7 +107,7 @@ func TestCmdRevertRange(t *testing.T) {
 		EndKey:   roachpb.RKey(endKey),
 	}
 	cArgs := batcheval.CommandArgs{Header: roachpb.Header{RangeID: desc.RangeID, Timestamp: tsReq, MaxSpanRequestKeys: 2}}
-	evalCtx := &batcheval.MockEvalCtx{Desc: &desc, Clock: hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */), Stats: stats}
+	evalCtx := &batcheval.MockEvalCtx{Desc: &desc, Clock: hlc.NewClockForTesting(nil), Stats: stats}
 	cArgs.EvalCtx = evalCtx.EvalContext()
 	afterStats, err := storage.ComputeStats(eng, keys.LocalMax, keys.MaxKey, 0)
 	require.NoError(t, err)
@@ -187,7 +186,7 @@ func TestCmdRevertRange(t *testing.T) {
 	sumD := hashRange(t, eng, startKey, endKey)
 
 	// Re-set EvalCtx to pick up revised stats.
-	cArgs.EvalCtx = (&batcheval.MockEvalCtx{Desc: &desc, Clock: hlc.NewClockWithSystemTimeSource(time.Nanosecond), Stats: stats}).EvalContext( /* maxOffset */ )
+	cArgs.EvalCtx = (&batcheval.MockEvalCtx{Desc: &desc, Clock: hlc.NewClockForTesting(nil), Stats: stats}).EvalContext( /* maxOffset */ )
 	for _, tc := range []struct {
 		name        string
 		ts          hlc.Timestamp
@@ -284,7 +283,7 @@ func TestCmdRevertRangeMVCCRangeTombstones(t *testing.T) {
 		cArgs := batcheval.CommandArgs{
 			EvalCtx: (&batcheval.MockEvalCtx{
 				Desc:  &desc,
-				Clock: hlc.NewClockWithSystemTimeSource(time.Nanosecond),
+				Clock: hlc.NewClockForTesting(nil),
 				Stats: ms,
 			}).EvalContext(),
 			Header: roachpb.Header{

@@ -439,10 +439,15 @@ func (s *streamIngestionResumer) protectDestinationTenant(
 	execCfg := execCtx.(sql.JobExecContext).ExecCfg()
 	target := ptpb.MakeTenantsTarget([]roachpb.TenantID{oldDetails.DestinationTenantID})
 	ptsID := uuid.MakeV4()
-	now := execCfg.Clock.Now()
+
+	// Note that the protected timestamps are in the context of the source cluster
+	// clock, not the destination. This is because the data timestamps are also
+	// decided on the source cluster. Replication start time is picked on the
+	// producer job on the source cluster.
+	replicationStartTime := oldDetails.ReplicationStartTime
 	return execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		ptp := execCfg.ProtectedTimestampProvider.WithTxn(txn)
-		pts := jobsprotectedts.MakeRecord(ptsID, int64(s.job.ID()), now,
+		pts := jobsprotectedts.MakeRecord(ptsID, int64(s.job.ID()), replicationStartTime,
 			nil /* deprecatedSpans */, jobsprotectedts.Jobs, target)
 		if err := ptp.Protect(ctx, pts); err != nil {
 			return err
@@ -492,7 +497,8 @@ func maybeRevertToCutoverTimestamp(
 
 	p := execCtx.(sql.JobExecContext)
 	db := p.ExecCfg().DB
-	j, err := p.ExecCfg().JobRegistry.LoadJob(ctx, ingestionJobID)
+	jobRegistry := p.ExecCfg().JobRegistry
+	j, err := jobRegistry.LoadJob(ctx, ingestionJobID)
 	if err != nil {
 		return false, err
 	}
@@ -537,6 +543,8 @@ func maybeRevertToCutoverTimestamp(
 		if err != nil {
 			return err
 		}
+		m := jobRegistry.MetricsStruct().StreamIngest.(*Metrics)
+		m.ReplicationCutoverProgress.Update(int64(nRanges))
 		if origNRanges == -1 {
 			origNRanges = nRanges
 		}

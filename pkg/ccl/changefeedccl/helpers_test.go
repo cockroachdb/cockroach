@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -93,7 +94,10 @@ func readNextMessages(
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-		log.Infof(context.Background(), "About to read a message from %v (%T)", f, f)
+		if log.V(1) {
+			log.Infof(context.Background(), "About to read a message (%d out of %d) from %v (%T)",
+				len(actual), numMessages, f, f)
+		}
 		m, err := f.Next()
 		if log.V(1) {
 			if m != nil {
@@ -248,10 +252,17 @@ func assertPayloadsTimeout() time.Duration {
 func withTimeout(
 	f cdctest.TestFeed, timeout time.Duration, fn func(ctx context.Context) error,
 ) error {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	defer stopFeedWhenDone(ctx, f)()
-	return fn(ctx)
+	var jobID jobspb.JobID
+	if jobFeed, ok := f.(cdctest.EnterpriseTestFeed); ok {
+		jobID = jobFeed.JobID()
+	}
+	return contextutil.RunWithTimeout(context.Background(),
+		fmt.Sprintf("withTimeout-%d", jobID), timeout,
+		func(ctx context.Context) error {
+			defer stopFeedWhenDone(ctx, f)()
+			return fn(ctx)
+		},
+	)
 }
 
 func assertPayloads(t testing.TB, f cdctest.TestFeed, expected []string) {
@@ -1050,6 +1061,55 @@ func checkStructuredLogs(t *testing.T, eventType string, startTime int64) []stri
 	})
 
 	return matchingEntries
+}
+
+func checkContinuousChangefeedLogs(t *testing.T, startTime int64) []eventpb.ChangefeedEmittedBytes {
+	logs := checkStructuredLogs(t, "changefeed_emitted_bytes", startTime)
+	matchingEntries := make([]eventpb.ChangefeedEmittedBytes, len(logs))
+
+	for i, m := range logs {
+		jsonPayload := []byte(m)
+		var event eventpb.ChangefeedEmittedBytes
+		if err := gojson.Unmarshal(jsonPayload, &event); err != nil {
+			t.Errorf("unmarshalling %q: %v", m, err)
+		}
+		matchingEntries[i] = event
+	}
+
+	return matchingEntries
+}
+
+// verifyLogsWithEmittedBytes fetches changefeed_emitted_bytes telemetry logs produced
+// after startTime for a particular job and asserts that at least one message has positive emitted bytes.
+// This function also asserts the LoggingInterval and Closing fields of
+// each message.
+func verifyLogsWithEmittedBytes(
+	t *testing.T, jobID jobspb.JobID, startTime int64, interval int64, closing bool,
+) {
+	testutils.SucceedsSoon(t, func() error {
+		emittedBytesLogs := checkContinuousChangefeedLogs(t, startTime)
+		if len(emittedBytesLogs) == 0 {
+			return errors.New("no logs found")
+		}
+		emittedBytes := false
+		for _, msg := range emittedBytesLogs {
+			if msg.JobId != int64(jobID) {
+				continue
+			}
+
+			if msg.EmittedBytes > 0 {
+				emittedBytes = true
+			}
+			require.Equal(t, interval, msg.LoggingInterval)
+			if closing {
+				require.Equal(t, true, msg.Closing)
+			}
+		}
+		if !emittedBytes {
+			return errors.New("expected emitted bytes in log messages, but found 0")
+		}
+		return nil
+	})
 }
 
 func checkCreateChangefeedLogs(t *testing.T, startTime int64) []eventpb.CreateChangefeed {

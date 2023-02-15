@@ -591,11 +591,6 @@ type Reader interface {
 	// underlying Engine state. This is not true about Batch writes: new iterators
 	// will see new writes made to the batch, existing iterators won't.
 	ConsistentIterators() bool
-	// SupportsRangeKeys returns true if the Reader implementation supports
-	// range keys.
-	//
-	// TODO(erikgrinaker): Remove this after 22.2.
-	SupportsRangeKeys() bool
 
 	// PinEngineStateForIterators ensures that the state seen by iterators
 	// without timestamp hints (see IterOptions) is pinned and will not see
@@ -951,16 +946,13 @@ type Engine interface {
 	fs.FS
 	// CreateCheckpoint creates a checkpoint of the engine in the given directory,
 	// which must not exist. The directory should be on the same file system so
-	// that hard links can be used.
-	CreateCheckpoint(dir string) error
+	// that hard links can be used. If spans is not empty, the checkpoint excludes
+	// SSTs that don't overlap with any of these key spans.
+	CreateCheckpoint(dir string, spans []roachpb.Span) error
 
 	// SetMinVersion is used to signal to the engine the current minimum
 	// version that it must maintain compatibility with.
 	SetMinVersion(version roachpb.Version) error
-
-	// MinVersionIsAtLeastTargetVersion returns whether the engine's recorded
-	// storage min version is at least the target version.
-	MinVersionIsAtLeastTargetVersion(target roachpb.Version) (bool, error)
 
 	// SetCompactionConcurrency is used to set the engine's compaction
 	// concurrency. It returns the previous compaction concurrency.
@@ -1018,6 +1010,10 @@ type Metrics struct {
 	// DiskStallCount counts the number of times Pebble observes slow writes
 	// on disk lasting longer than MaxSyncDuration (`storage.max_sync_duration`).
 	DiskStallCount int64
+	// SharedStorageWriteBytes counts the number of bytes written to shared storage.
+	SharedStorageWriteBytes int64
+	// SharedStorageReadBytes counts the number of bytes read from shared storage.
+	SharedStorageReadBytes int64
 }
 
 // MetricsForInterval is a set of pebble.Metrics that need to be saved in order to

@@ -55,7 +55,7 @@ func TestConsistencyQueueRequiresLive(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	manualClock := timeutil.NewManualTime(timeutil.Unix(0, 123))
-	clock := hlc.NewClock(manualClock, 10 /* maxOffset */)
+	clock := hlc.NewClockForTesting(manualClock)
 	interval := time.Second * 5
 	live := true
 	testStart := clock.Now()
@@ -258,9 +258,9 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
 	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
 
-	// The cluster has 3 node, with 1 store per node. The test writes a few KVs to
-	// a range, which gets replicated to all 3 stores. Then it manually replaces
-	// an entry in s2. The consistency check must detect this and terminate n2/s2.
+	// The cluster has 3 nodes, one store per node. The test writes a few KVs to a
+	// range, which gets replicated to all 3 stores. Then it manually replaces an
+	// entry in s2. The consistency check must detect this and terminate n2/s2.
 	const numStores = 3
 	testKnobs := kvserver.StoreTestingKnobs{DisableConsistencyQueue: true}
 	var tc *testcluster.TestCluster
@@ -318,7 +318,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 			base.StoreSpec{StickyInMemoryEngineID: strconv.FormatInt(int64(nodeIdx), 10)})
 		require.NoError(t, err)
 		store := tc.GetFirstStoreFromServer(t, nodeIdx)
-		checkpointPath := filepath.Join(store.Engine().GetAuxiliaryDir(), "checkpoints")
+		checkpointPath := filepath.Join(store.TODOEngine().GetAuxiliaryDir(), "checkpoints")
 		checkpoints, _ := fs.List(checkpointPath)
 		var checkpointPaths []string
 		for _, cpDirName := range checkpoints {
@@ -350,7 +350,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	var val roachpb.Value
 	val.SetInt(42)
 	// Put an inconsistent key "e" to s2, and have s1 and s3 still agree.
-	require.NoError(t, storage.MVCCPut(context.Background(), store1.Engine(), nil,
+	require.NoError(t, storage.MVCCPut(context.Background(), store1.TODOEngine(), nil,
 		roachpb.Key("e"), tc.Server(0).Clock().Now(), hlc.ClockTimestamp{}, val, nil))
 
 	// Run consistency check again, this time it should find something.
@@ -408,7 +408,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	assert.NotEqual(t, hashes[0], hashes[1]) // s2 diverged
 
 	// A death rattle should have been written on s2 (store index 1).
-	eng := store1.Engine()
+	eng := store1.TODOEngine()
 	f, err := eng.Open(base.PreventedStartupFile(eng.GetAuxiliaryDir()))
 	require.NoError(t, err)
 	b, err := io.ReadAll(f)

@@ -41,8 +41,8 @@ type Evaluator struct {
 	execCfg     *sql.ExecutorConfig
 	user        username.SQLUsername
 	sessionData sessiondatapb.SessionData
-
-	familyEval map[descpb.FamilyID]*familyEvaluator
+	withDiff    bool
+	familyEval  map[descpb.FamilyID]*familyEvaluator
 }
 
 // familyEvaluator is a responsible for evaluating expressions in CDC
@@ -82,6 +82,7 @@ func NewEvaluator(
 	user username.SQLUsername,
 	sd sessiondatapb.SessionData,
 	statementTS hlc.Timestamp,
+	withDiff bool,
 ) *Evaluator {
 	return &Evaluator{
 		sc:          sc,
@@ -89,6 +90,7 @@ func NewEvaluator(
 		user:        user,
 		sessionData: sd,
 		statementTS: statementTS,
+		withDiff:    withDiff,
 		familyEval:  make(map[descpb.FamilyID]*familyEvaluator, 1), // usually, just 1 family.
 	}
 }
@@ -101,6 +103,7 @@ func newFamilyEvaluator(
 	user username.SQLUsername,
 	sd sessiondatapb.SessionData,
 	statementTS hlc.Timestamp,
+	withDiff bool,
 ) *familyEvaluator {
 	e := familyEvaluator{
 		targetFamilyID: targetFamilyID,
@@ -113,6 +116,8 @@ func newFamilyEvaluator(
 		rowCh: make(chan tree.Datums, 1),
 	}
 	e.rowEvalCtx.startTime = statementTS
+	e.rowEvalCtx.withDiff = withDiff
+
 	// Arrange to be notified when event does not match predicate.
 	predicateAsProjection(e.norm)
 
@@ -143,7 +148,9 @@ func (e *Evaluator) Eval(
 
 	fe, ok := e.familyEval[updatedRow.FamilyID]
 	if !ok {
-		fe = newFamilyEvaluator(e.sc, updatedRow.FamilyID, e.execCfg, e.user, e.sessionData, e.statementTS)
+		fe = newFamilyEvaluator(
+			e.sc, updatedRow.FamilyID, e.execCfg, e.user, e.sessionData, e.statementTS, e.withDiff,
+		)
 		e.familyEval[updatedRow.FamilyID] = fe
 	}
 
@@ -183,7 +190,7 @@ func (e *familyEvaluator) eval(
 	}
 
 	// Setup context.
-	if err := e.setupContextForRow(ctx, updatedRow); err != nil {
+	if err := e.setupContextForRow(ctx, updatedRow, prevRow); err != nil {
 		return cdcevent.Row{}, err
 	}
 
@@ -447,9 +454,28 @@ func (e *familyEvaluator) copyPrevRow(prev cdcevent.Row) error {
 
 // setupContextForRow configures evaluation context with the provided row
 // information.
-func (e *familyEvaluator) setupContextForRow(ctx context.Context, updated cdcevent.Row) error {
+func (e *familyEvaluator) setupContextForRow(
+	ctx context.Context, updated cdcevent.Row, prevRow cdcevent.Row,
+) error {
 	e.rowEvalCtx.ctx = ctx
 	e.rowEvalCtx.updatedRow = updated
+
+	if updated.IsDeleted() {
+		e.rowEvalCtx.op = eventTypeDelete
+	} else {
+		// Insert or update.
+		if e.rowEvalCtx.withDiff {
+			if prevRow.IsInitialized() {
+				e.rowEvalCtx.op = eventTypeUpdate
+			} else {
+				e.rowEvalCtx.op = eventTypeInsert
+			}
+		} else {
+			// Without diff option we can't tell insert from update; so, use upsert.
+			e.rowEvalCtx.op = eventTypeUpsert
+		}
+	}
+
 	return nil
 }
 
@@ -478,7 +504,9 @@ func (e *familyEvaluator) closeErr() error {
 type rowEvalContext struct {
 	ctx        context.Context
 	startTime  hlc.Timestamp
+	withDiff   bool
 	updatedRow cdcevent.Row
+	op         tree.Datum
 }
 
 // cdcAnnotationAddr is the address used to store relevant information

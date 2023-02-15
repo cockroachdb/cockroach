@@ -1567,6 +1567,7 @@ system              public             29_51_2_not_null                         
 system              public             29_51_3_not_null                                                                                                system         public        privileges                       CHECK            NO             NO
 system              public             29_51_4_not_null                                                                                                system         public        privileges                       CHECK            NO             NO
 system              public             primary                                                                                                         system         public        privileges                       PRIMARY KEY      NO             NO
+system              public             privileges_path_user_id_key                                                                                     system         public        privileges                       UNIQUE           NO             NO
 system              public             29_31_1_not_null                                                                                                system         public        protected_ts_meta                CHECK            NO             NO
 system              public             29_31_2_not_null                                                                                                system         public        protected_ts_meta                CHECK            NO             NO
 system              public             29_31_3_not_null                                                                                                system         public        protected_ts_meta                CHECK            NO             NO
@@ -1975,6 +1976,8 @@ system         public        namespace                        name              
 system         public        namespace                        parentID                                                                                                  system              public             primary
 system         public        namespace                        parentSchemaID                                                                                            system              public             primary
 system         public        privileges                       path                                                                                                      system              public             primary
+system         public        privileges                       path                                                                                                      system              public             privileges_path_user_id_key
+system         public        privileges                       user_id                                                                                                   system              public             privileges_path_user_id_key
 system         public        privileges                       username                                                                                                  system              public             primary
 system         public        protected_ts_meta                singleton                                                                                                 system              public             check_singleton
 system         public        protected_ts_meta                singleton                                                                                                 system              public             primary
@@ -2212,6 +2215,7 @@ system         public        namespace                        parentSchemaID    
 system         public        privileges                       grant_options                                                                                             4
 system         public        privileges                       path                                                                                                      2
 system         public        privileges                       privileges                                                                                                3
+system         public        privileges                       user_id                                                                                                   5
 system         public        privileges                       username                                                                                                  1
 system         public        protected_ts_meta                num_records                                                                                               3
 system         public        protected_ts_meta                num_spans                                                                                                 4
@@ -2410,7 +2414,7 @@ WHERE table_schema = 'public' AND table_name = 'with_defaults'
 ----
 table_name     column_name  column_default
 with_defaults  a            9
-with_defaults  b            default
+with_defaults  b            'default'
 with_defaults  c            NULL
 with_defaults  d            NULL
 with_defaults  rowid        unique_rowid()
@@ -4668,6 +4672,8 @@ SELECT * FROM information_schema.collations
 ----
 collation_catalog  collation_schema  collation_name       pad_attribute
 test               pg_catalog        default              NO PAD
+test               pg_catalog        C                    NO PAD
+test               pg_catalog        POSIX                NO PAD
 test               pg_catalog        und                  NO PAD
 test               pg_catalog        aa                   NO PAD
 test               pg_catalog        af                   NO PAD
@@ -4773,6 +4779,8 @@ SELECT * FROM information_schema.collation_character_set_applicability
 ----
 collation_catalog  collation_schema  collation_name       character_set_catalog  character_set_schema  character_set_name
 test               pg_catalog        default              NULL                   NULL                  UTF8
+test               pg_catalog        C                    NULL                   NULL                  UTF8
+test               pg_catalog        POSIX                NULL                   NULL                  UTF8
 test               pg_catalog        und                  NULL                   NULL                  UTF8
 test               pg_catalog        aa                   NULL                   NULL                  UTF8
 test               pg_catalog        af                   NULL                   NULL                  UTF8
@@ -4914,6 +4922,7 @@ cost_scans_with_default_col_size                      off
 database                                              test
 datestyle                                             ISO, MDY
 datestyle_enabled                                     on
+declare_cursor_statement_timeout_enabled              on
 default_int_size                                      8
 default_table_access_method                           heap
 default_tablespace                                    ·
@@ -4931,7 +4940,6 @@ disallow_full_table_scans                             off
 enable_auto_rehoming                                  off
 enable_drop_enum_value                                on
 enable_experimental_alter_column_type_general         off
-enable_experimental_stream_replication                off
 enable_implicit_select_for_update                     on
 enable_implicit_transaction_for_batch_statements      on
 enable_insert_fast_path                               on

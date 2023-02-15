@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/keysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/strutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
@@ -168,6 +169,7 @@ type replicaDescriptorView struct {
 	StoreID     roachpb.StoreID     `yaml:"StoreID"`
 	ReplicaID   roachpb.ReplicaID   `yaml:"ReplicaID"`
 	ReplicaType roachpb.ReplicaType `yaml:"ReplicaType,omitempty"`
+	Leaseholder bool                `yaml:"Leaseholder,omitempty"`
 }
 
 func (r replicaDescriptorView) asReplicaDescriptor() roachpb.ReplicaDescriptor {
@@ -297,7 +299,7 @@ func (e *quorumRecoveryEnv) Handle(t *testing.T, d datadriven.TestData) string {
 
 func (e *quorumRecoveryEnv) handleReplicationData(t *testing.T, d datadriven.TestData) string {
 	ctx := context.Background()
-	clock := hlc.NewClockWithSystemTimeSource(time.Millisecond * 100 /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 
 	// Close existing stores in case we have multiple use cases within a data file.
 	e.cleanupStores()
@@ -327,7 +329,7 @@ func (e *quorumRecoveryEnv) handleReplicationData(t *testing.T, d datadriven.Tes
 		}
 
 		sl := stateloader.Make(replica.RangeID)
-		if _, err := sl.Save(ctx, eng, replicaState, true /* gcHintsEnabled */); err != nil {
+		if _, err := sl.Save(ctx, eng, replicaState); err != nil {
 			t.Fatalf("failed to save raft replica state into store: %v", err)
 		}
 		if err := sl.SetHardState(ctx, eng, hardState); err != nil {
@@ -360,7 +362,7 @@ func buildReplicaDescriptorFromTestData(
 	raftpb.HardState,
 	[]enginepb.MVCCMetadata,
 ) {
-	clock := hlc.NewClockWithSystemTimeSource(time.Millisecond * 100 /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 
 	startKey := parsePrettyKey(t, replica.StartKey)
 	endKey := parsePrettyKey(t, replica.EndKey)
@@ -368,13 +370,17 @@ func buildReplicaDescriptorFromTestData(
 	var replicas []roachpb.ReplicaDescriptor
 	var replicaID roachpb.ReplicaID
 	maxReplicaID := replica.Replicas[0].ReplicaID
-	for _, r := range replica.Replicas {
+	var lhIndex int
+	for i, r := range replica.Replicas {
 		if r.ReplicaID > maxReplicaID {
 			maxReplicaID = r.ReplicaID
 		}
 		replicas = append(replicas, r.asReplicaDescriptor())
 		if r.NodeID == replica.NodeID && r.StoreID == replica.StoreID {
 			replicaID = r.ReplicaID
+		}
+		if r.Leaseholder {
+			lhIndex = i
 		}
 	}
 	if replica.Generation == 0 {
@@ -391,7 +397,7 @@ func buildReplicaDescriptorFromTestData(
 	lease := roachpb.Lease{
 		Start:           clock.Now().Add(5*time.Minute.Nanoseconds(), 0).UnsafeToClockTimestamp(),
 		Expiration:      nil,
-		Replica:         desc.InternalReplicas[0],
+		Replica:         desc.InternalReplicas[lhIndex],
 		ProposedTS:      nil,
 		Epoch:           0,
 		Sequence:        0,
@@ -577,12 +583,18 @@ func (e *quorumRecoveryEnv) handleMakePlan(t *testing.T, d datadriven.TestData) 
 	if err != nil {
 		t.Fatalf("failed to marshal plan into yaml for verification: %v", err)
 	}
-	var ids []string
-	for _, id := range e.plan.DecommissionedNodeIDs {
-		ids = append(ids, fmt.Sprintf("n%d", id))
+	var b strings.Builder
+	b.WriteString("Replica updates:\n")
+	b.WriteString(string(out))
+	if len(e.plan.DecommissionedNodeIDs) > 0 {
+		b.WriteString(fmt.Sprintf("Decommissioned nodes:\n[%s]\n",
+			strutil.JoinIDs("n", e.plan.DecommissionedNodeIDs)))
 	}
-	return fmt.Sprintf("Replica updates:\n%sDecommissioned nodes:\n[%s]\n", out,
-		strings.Join(ids, ", ")), nil
+	if len(e.plan.StaleLeaseholderNodeIDs) > 0 {
+		b.WriteString(fmt.Sprintf("Nodes to restart:\n[%s]\n",
+			strutil.JoinIDs("n", e.plan.StaleLeaseholderNodeIDs)))
+	}
+	return b.String(), nil
 }
 
 func (e *quorumRecoveryEnv) getOrCreateStore(
@@ -707,7 +719,7 @@ func (e *quorumRecoveryEnv) parseStoresArg(
 			stores = []roachpb.StoreID{}
 		}
 	}
-	sort.Slice(stores, func(i, j int) bool { return i < j })
+	sort.Sort(roachpb.StoreIDSlice(stores))
 	return stores
 }
 
@@ -729,7 +741,7 @@ func (e *quorumRecoveryEnv) parseNodesArg(t *testing.T, d datadriven.TestData) [
 		}
 	}
 	if len(nodes) > 0 {
-		sort.Slice(nodes, func(i, j int) bool { return i < j })
+		sort.Sort(roachpb.NodeIDSlice(nodes))
 	}
 	return nodes
 }
@@ -747,7 +759,7 @@ func (e *quorumRecoveryEnv) handleDumpStore(t *testing.T, d datadriven.TestData)
 				descriptorViews = append(descriptorViews, descriptorView(desc))
 
 				sl := stateloader.Make(desc.RangeID)
-				raftReplicaID, _, err := sl.LoadRaftReplicaID(ctx, store.engine)
+				raftReplicaID, err := sl.LoadRaftReplicaID(ctx, store.engine)
 				if err != nil {
 					t.Fatalf("failed to load Raft replica ID: %v", err)
 				}

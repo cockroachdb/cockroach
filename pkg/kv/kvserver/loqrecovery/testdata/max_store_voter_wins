@@ -14,7 +14,7 @@ replication-data
   - { NodeID: 2, StoreID: 2, ReplicaID: 2}
   - { NodeID: 3, StoreID: 3, ReplicaID: 3}
   - { NodeID: 4, StoreID: 4, ReplicaID: 4}
-  - { NodeID: 5, StoreID: 5, ReplicaID: 5}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 5, Leaseholder: true}
   RangeAppliedIndex: 10
   RaftCommittedIndex: 13
 - StoreID: 2
@@ -26,7 +26,7 @@ replication-data
   - { NodeID: 2, StoreID: 2, ReplicaID: 2}  # this replica has the same state n1 but has higher storeID so it wins
   - { NodeID: 3, StoreID: 3, ReplicaID: 3}
   - { NodeID: 4, StoreID: 4, ReplicaID: 4}
-  - { NodeID: 5, StoreID: 5, ReplicaID: 5}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 5, Leaseholder: true}
   RangeAppliedIndex: 10
   RaftCommittedIndex: 13
 ----
@@ -93,7 +93,7 @@ replication-data
   - { NodeID: 2, StoreID: 2, ReplicaID: 2}
   - { NodeID: 3, StoreID: 3, ReplicaID: 3}
   - { NodeID: 4, StoreID: 4, ReplicaID: 4}
-  - { NodeID: 5, StoreID: 5, ReplicaID: 5}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 5, Leaseholder: true}
   RangeAppliedIndex: 10
   RaftCommittedIndex: 13
 - StoreID: 2
@@ -105,7 +105,7 @@ replication-data
   - { NodeID: 2, StoreID: 2, ReplicaID: 2}  # this replica has the same state n1 but has higher storeID so it wins
   - { NodeID: 3, StoreID: 3, ReplicaID: 3}
   - { NodeID: 4, StoreID: 4, ReplicaID: 4}
-  - { NodeID: 5, StoreID: 5, ReplicaID: 5}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 5, Leaseholder: true}
   RangeAppliedIndex: 10
   RaftCommittedIndex: 13
 ----

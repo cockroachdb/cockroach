@@ -446,16 +446,18 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 		nil /* curCount */, nil /* maxHist */, math.MaxInt64, st,
 	)
 
+	insightsProvider := insights.New(st, insights.NewMetrics())
 	sqlStats := sslocal.New(
 		st,
 		sqlstats.MaxMemSQLStatsStmtFingerprints,
 		sqlstats.MaxMemSQLStatsTxnFingerprints,
 		nil, /* curMemoryBytesCount */
 		nil, /* maxMemoryBytesHist */
-		insights.New(st, insights.NewMetrics()).Writer,
+		insightsProvider.Writer,
 		monitor,
 		nil, /* reportingSink */
 		nil, /* knobs */
+		insightsProvider.LatencyInformation(),
 	)
 
 	appStats := sqlStats.GetApplicationStats("" /* appName */, false /* internal */)
@@ -564,16 +566,18 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 		require.NoError(t, err)
 
 		// Construct the SQL Stats machinery.
+		insightsProvider := insights.New(st, insights.NewMetrics())
 		sqlStats := sslocal.New(
 			st,
 			sqlstats.MaxMemSQLStatsStmtFingerprints,
 			sqlstats.MaxMemSQLStatsTxnFingerprints,
 			nil,
 			nil,
-			insights.New(st, insights.NewMetrics()).Writer,
+			insightsProvider.Writer,
 			monitor,
 			nil,
 			nil,
+			insightsProvider.LatencyInformation(),
 		)
 		appStats := sqlStats.GetApplicationStats("" /* appName */, false /* internal */)
 		statsCollector := sslocal.NewStatsCollector(
@@ -1440,4 +1444,81 @@ func convertIDsToNames(t *testing.T, testConn *sqlutils.SQLRunner, indexes []str
 		return indexesInfo[i].name < indexesInfo[j].name
 	})
 	return indexesInfo
+}
+
+func TestSQLStatsLatencyInfo(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	params, _ := tests.CreateTestServerParams()
+	testServer, sqlConn, _ := serverutils.StartServer(t, params)
+	defer func() {
+		require.NoError(t, sqlConn.Close())
+		testServer.Stopper().Stop(ctx)
+	}()
+	testConn := sqlutils.MakeSQLRunner(sqlConn)
+	appName := "latency-info"
+	testConn.Exec(t, "SET application_name = $1", appName)
+	testConn.Exec(t, "CREATE TABLE t1 (k INT)")
+
+	testCases := []struct {
+		name        string
+		statement   string
+		fingerprint string
+		latencyMax  float64
+	}{
+		{
+			name:        "select on table",
+			statement:   "SELECT * FROM t1",
+			fingerprint: "SELECT * FROM t1",
+			latencyMax:  1,
+		},
+		{
+			name:        "select sleep",
+			statement:   "SELECT pg_sleep(0.06)",
+			fingerprint: "SELECT pg_sleep(_)",
+			latencyMax:  0.2,
+		},
+		{
+			name:        "select sleep",
+			statement:   "SELECT pg_sleep(0.1)",
+			fingerprint: "SELECT pg_sleep(_)",
+			latencyMax:  0.2,
+		},
+		{
+			name:        "select sleep",
+			statement:   "SELECT pg_sleep(0.07)",
+			fingerprint: "SELECT pg_sleep(_)",
+			latencyMax:  0.2,
+		},
+	}
+
+	var min float64
+	var max float64
+	var p50 float64
+	var p90 float64
+	var p99 float64
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			testConn.Exec(t, tc.statement)
+
+			rows := testConn.QueryRow(t, "SELECT statistics -> 'statistics' -> 'latencyInfo' ->> 'min',"+
+				"statistics -> 'statistics' -> 'latencyInfo' ->> 'max',"+
+				"statistics -> 'statistics' -> 'latencyInfo' ->> 'p50',"+
+				"statistics -> 'statistics' -> 'latencyInfo' ->> 'p90',"+
+				"statistics -> 'statistics' -> 'latencyInfo' ->> 'p99' "+
+				"FROM CRDB_INTERNAL.STATEMENT_STATISTICS WHERE app_name = $1 "+
+				"AND metadata ->> 'query'=$2", appName, "SELECT * FROM t1")
+			rows.Scan(&min, &max, &p50, &p90, &p99)
+
+			require.Positive(t, min)
+			require.Positive(t, max)
+			require.GreaterOrEqual(t, max, min)
+			require.LessOrEqual(t, max, tc.latencyMax)
+			require.GreaterOrEqual(t, p99, p90)
+			require.GreaterOrEqual(t, p90, p50)
+			require.LessOrEqual(t, p99, max)
+		})
+	}
 }

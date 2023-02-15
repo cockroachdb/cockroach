@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -95,6 +96,11 @@ func backupRestoreTestSetupWithParams(
 		}
 		params.ServerArgs.Knobs.Store.(*kvserver.StoreTestingKnobs).SmallEngineBlocks = true
 	}
+	params.ServerArgs.Knobs.TenantCapabilitiesTestingKnobs = &tenantcapabilities.TestingKnobs{
+		// TODO(arul): This can be removed once
+		// https://github.com/cockroachdb/cockroach/issues/96736  is fixed.
+		AuthorizerSkipAdminSplitCapabilityChecks: true,
+	}
 
 	params.ServerArgs.Knobs.KeyVisualizer = &keyvisualizer.TestingKnobs{
 		SkipJobBootstrap:        true,
@@ -145,7 +151,17 @@ func backupRestoreTestSetup(
 ) (tc *testcluster.TestCluster, sqlDB *sqlutils.SQLRunner, tempDir string, cleanup func()) {
 	// TODO (msbutler): DisableDefaultTestTenant should be disabled by the caller of this function
 	return backupRestoreTestSetupWithParams(t, clusterSize, numAccounts, init,
-		base.TestClusterArgs{ServerArgs: base.TestServerArgs{DisableDefaultTestTenant: true}})
+		base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				DisableDefaultTestTenant: true,
+				Knobs: base.TestingKnobs{
+					TenantCapabilitiesTestingKnobs: &tenantcapabilities.TestingKnobs{
+						// TODO(arul): This can be removed once
+						// https://github.com/cockroachdb/cockroach/issues/96736  is fixed.
+						AuthorizerSkipAdminSplitCapabilityChecks: true,
+					},
+				},
+			}})
 }
 
 func backupRestoreTestSetupEmpty(
@@ -157,6 +173,11 @@ func backupRestoreTestSetupEmpty(
 ) (tc *testcluster.TestCluster, sqlDB *sqlutils.SQLRunner, cleanup func()) {
 	// TODO (msbutler): this should be disabled by callers of this function
 	params.ServerArgs.DisableDefaultTestTenant = true
+	params.ServerArgs.Knobs.TenantCapabilitiesTestingKnobs = &tenantcapabilities.TestingKnobs{
+		// TODO(arul): This can be removed once
+		// https://github.com/cockroachdb/cockroach/issues/96736  is fixed.
+		AuthorizerSkipAdminSplitCapabilityChecks: true,
+	}
 	return backupRestoreTestSetupEmptyWithParams(t, clusterSize, tempDir, init, params)
 }
 
@@ -184,6 +205,11 @@ func backupRestoreTestSetupEmptyWithParams(
 		}
 		params.ServerArgs.Knobs.Store.(*kvserver.StoreTestingKnobs).SmallEngineBlocks = true
 	}
+	params.ServerArgs.Knobs.TenantCapabilitiesTestingKnobs = &tenantcapabilities.TestingKnobs{
+		// TODO(arul): This can be removed once
+		// https://github.com/cockroachdb/cockroach/issues/96736  is fixed.
+		AuthorizerSkipAdminSplitCapabilityChecks: true,
+	}
 
 	tc = testcluster.StartTestCluster(t, clusterSize, params)
 	init(tc)
@@ -208,6 +234,11 @@ func createEmptyCluster(
 	params.ServerArgs.ExternalIODir = dir
 	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
 		SmallEngineBlocks: smallEngineBlocks,
+	}
+	params.ServerArgs.Knobs.TenantCapabilitiesTestingKnobs = &tenantcapabilities.TestingKnobs{
+		// TODO(arul): This can be removed once
+		// https://github.com/cockroachdb/cockroach/issues/96736  is fixed.
+		AuthorizerSkipAdminSplitCapabilityChecks: true,
 	}
 	tc := testcluster.StartTestCluster(t, clusterSize, params)
 
@@ -378,7 +409,10 @@ func getKVCount(
 
 // uriFmtStringAndArgs returns format strings like "$1" or "($1, $2, $3)" and
 // an []interface{} of URIs for the BACKUP/RESTORE queries.
-func uriFmtStringAndArgs(uris []string) (string, []interface{}) {
+//
+// Passing startIndex=i will start the fmt strings at $i+1. This can be useful
+// when formatting different blocks of strings/args in the same query.
+func uriFmtStringAndArgs(uris []string, startIndex int) (string, []interface{}) {
 	urisForFormat := make([]interface{}, len(uris))
 	var fmtString strings.Builder
 	if len(uris) > 1 {
@@ -388,7 +422,7 @@ func uriFmtStringAndArgs(uris []string) (string, []interface{}) {
 		if i > 0 {
 			fmtString.WriteString(", ")
 		}
-		fmtString.WriteString(fmt.Sprintf("$%d", i+1))
+		fmtString.WriteString(fmt.Sprintf("$%d", startIndex+i+1))
 		urisForFormat[i] = uri
 	}
 	if len(uris) > 1 {

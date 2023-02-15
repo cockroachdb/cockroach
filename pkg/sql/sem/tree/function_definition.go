@@ -198,6 +198,10 @@ var ResolvedBuiltinFuncDefs map[string]*ResolvedFunctionDefinition
 // package because of dependency issues: we can't use oidHasher from this file.
 var OidToBuiltinName map[oid.Oid]string
 
+// OidToQualifiedBuiltinOverload is a map from builtin function OID to an
+// qualified overload.
+var OidToQualifiedBuiltinOverload map[oid.Oid]QualifiedOverload
+
 // Format implements the NodeFormatter interface.
 func (fd *FunctionDefinition) Format(ctx *FmtCtx) {
 	ctx.WriteString(fd.Name)
@@ -374,6 +378,19 @@ func GetBuiltinFuncDefinitionOrFail(
 		return nil, errors.Wrapf(ErrFunctionUndefined, "unknown function: %s()", ErrString(&forError))
 	}
 	return def, nil
+}
+
+// GetBuiltinFunctionByOIDOrFail retrieves a builtin function by OID.
+func GetBuiltinFunctionByOIDOrFail(oid oid.Oid) (*ResolvedFunctionDefinition, error) {
+	ol, ok := OidToQualifiedBuiltinOverload[oid]
+	if !ok {
+		return nil, errors.Wrapf(ErrFunctionUndefined, "function %d not found", oid)
+	}
+	fd := &ResolvedFunctionDefinition{
+		Name:      OidToBuiltinName[oid],
+		Overloads: []QualifiedOverload{ol},
+	}
+	return fd, nil
 }
 
 // GetBuiltinFuncDefinition search for a builtin function given a function name

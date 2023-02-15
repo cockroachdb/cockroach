@@ -720,11 +720,10 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.stmt = stmt
 	p.cancelChecker.Reset(ctx)
 
-	// Auto-commit is disallowed during statement execution, if we previously executed any DDL.
-	// This is because may potentially create jobs and do other operations rather than
-	// a KV commit. Insteadand carry out any extra operations needed for DDL.he auto-connection executor will commit after this statement,
-	// in this scenario.
-	// This prevents commit during statement execution, but the connection executor,
+	// Auto-commit is disallowed during statement execution if we previously
+	// executed any DDL. This is because may potentially create jobs and do other
+	// operations rather than a KV commit.
+	// This prevents commit during statement execution, but the conn_executor
 	// will still commit this transaction after this statement executes.
 	p.autoCommit = canAutoCommit &&
 		!ex.server.cfg.TestingKnobs.DisableAutoCommitDuringExec && ex.extraTxnState.numDDL == 0
@@ -811,7 +810,10 @@ func (ex *connExecutor) handleAOST(ctx context.Context, stmt tree.Statement) err
 	if asOf == nil {
 		return nil
 	}
-	if ex.implicitTxn() {
+
+	// Implicit transactions can have multiple statements, so we need to check
+	// if one has already been executed.
+	if ex.implicitTxn() && !ex.extraTxnState.firstStmtExecuted {
 		if p.extendedEvalCtx.AsOfSystemTime == nil {
 			p.extendedEvalCtx.AsOfSystemTime = asOf
 			if !asOf.BoundedStaleness {
@@ -852,9 +854,11 @@ func (ex *connExecutor) handleAOST(ctx context.Context, stmt tree.Statement) err
 		)
 	}
 	if readTs := ex.state.getReadTimestamp(); asOf.Timestamp != readTs {
-		err = pgerror.Newf(pgcode.Syntax,
+		err = pgerror.Newf(pgcode.FeatureNotSupported,
 			"inconsistent AS OF SYSTEM TIME timestamp; expected: %s, got: %s", readTs, asOf.Timestamp)
-		err = errors.WithHint(err, "try SET TRANSACTION AS OF SYSTEM TIME")
+		if !ex.implicitTxn() {
+			err = errors.WithHint(err, "try SET TRANSACTION AS OF SYSTEM TIME")
+		}
 		return err
 	}
 	p.extendedEvalCtx.AsOfSystemTime = asOf
@@ -1160,20 +1164,16 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	var stmtFingerprintID appstatspb.StmtFingerprintID
 	var stats topLevelQueryStats
 	defer func() {
-		planner.maybeLogStatement(
-			ctx,
-			ex.executorType,
-			false, /* isCopy */
-			int(ex.state.mu.autoRetryCounter),
-			ex.extraTxnState.txnCounter,
-			res.RowsAffected(),
-			res.Err(),
-			ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived),
-			&ex.extraTxnState.hasAdminRoleCache,
-			ex.server.TelemetryLoggingMetrics,
-			stmtFingerprintID,
-			&stats,
-		)
+		var bulkJobId uint64
+		// Note that for bulk job query (IMPORT, BACKUP and RESTORE), we don't
+		// use this numRows entry. We emit the number of changed rows when the job
+		// completes. (see the usages of logutil.LogJobCompletion()).
+		nonBulkJobNumRows := res.RowsAffected()
+		switch planner.stmt.AST.(type) {
+		case *tree.Import, *tree.Restore, *tree.Backup:
+			bulkJobId = res.GetBulkJobId()
+		}
+		planner.maybeLogStatement(ctx, ex.executorType, false, int(ex.state.mu.autoRetryCounter), ex.extraTxnState.txnCounter, nonBulkJobNumRows, bulkJobId, res.Err(), ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived), &ex.extraTxnState.hasAdminRoleCache, ex.server.TelemetryLoggingMetrics, stmtFingerprintID, &stats)
 	}()
 
 	ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.PlannerEndLogicalPlan, timeutil.Now())
@@ -1196,7 +1196,8 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 
 	ex.sessionTracing.TracePlanCheckStart(ctx)
 	distributePlan := getPlanDistribution(
-		ctx, planner, planner.execCfg.NodeInfo.NodeID, ex.sessionData().DistSQLMode, planner.curPlan.main,
+		ctx, planner.Descriptors().HasUncommittedTypes(),
+		ex.sessionData().DistSQLMode, planner.curPlan.main,
 	)
 	ex.sessionTracing.TracePlanCheckEnd(ctx, nil, distributePlan.WillDistribute())
 
@@ -1583,6 +1584,13 @@ type topLevelQueryStats struct {
 	networkEgressEstimate int64
 }
 
+func (s *topLevelQueryStats) add(other *topLevelQueryStats) {
+	s.bytesRead += other.bytesRead
+	s.rowsRead += other.rowsRead
+	s.rowsWritten += other.rowsWritten
+	s.networkEgressEstimate += other.networkEgressEstimate
+}
+
 // execWithDistSQLEngine converts a plan to a distributed SQL physical plan and
 // runs it.
 // If an error is returned, the connection needs to stop processing queries.
@@ -1620,27 +1628,31 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	} else if planner.instrumentation.ShouldSaveFlows() {
 		planCtx.saveFlows = planCtx.getDefaultSaveFlowsFunc(ctx, planner, planComponentTypeMainQuery)
 	}
-	planCtx.traceMetadata = planner.instrumentation.traceMetadata
+	planCtx.associateNodeWithComponents = planner.instrumentation.getAssociateNodeWithComponentsFn()
 	planCtx.collectExecStats = planner.instrumentation.ShouldCollectExecStats()
 
-	var evalCtxFactory func() *extendedEvalContext
+	var evalCtxFactory func(usedConcurrently bool) *extendedEvalContext
 	if len(planner.curPlan.subqueryPlans) != 0 ||
 		len(planner.curPlan.cascades) != 0 ||
 		len(planner.curPlan.checkPlans) != 0 {
-		// The factory reuses the same object because the contexts are not used
-		// concurrently.
-		var factoryEvalCtx extendedEvalContext
-		ex.initEvalCtx(ctx, &factoryEvalCtx, planner)
-		evalCtxFactory = func() *extendedEvalContext {
-			ex.resetEvalCtx(&factoryEvalCtx, planner.txn, planner.ExtendedEvalContext().StmtTimestamp)
+		var serialEvalCtx extendedEvalContext
+		ex.initEvalCtx(ctx, &serialEvalCtx, planner)
+		evalCtxFactory = func(usedConcurrently bool) *extendedEvalContext {
+			// Reuse the same object if this factory is not used concurrently.
+			factoryEvalCtx := &serialEvalCtx
+			if usedConcurrently {
+				factoryEvalCtx = &extendedEvalContext{}
+				ex.initEvalCtx(ctx, factoryEvalCtx, planner)
+			}
+			ex.resetEvalCtx(factoryEvalCtx, planner.txn, planner.ExtendedEvalContext().StmtTimestamp)
 			factoryEvalCtx.Placeholders = &planner.semaCtx.Placeholders
 			factoryEvalCtx.Annotations = &planner.semaCtx.Annotations
 			factoryEvalCtx.SessionID = planner.ExtendedEvalContext().SessionID
-			return &factoryEvalCtx
+			return factoryEvalCtx
 		}
 	}
 	err := ex.server.cfg.DistSQLPlanner.PlanAndRunAll(ctx, evalCtx, planCtx, planner, recv, evalCtxFactory)
-	return *recv.stats, err
+	return recv.stats, err
 }
 
 // beginTransactionTimestampsAndReadMode computes the timestamps and
@@ -2422,7 +2434,6 @@ func (ex *connExecutor) recordTransactionFinish(
 
 	if contentionDuration := ex.extraTxnState.accumulatedStats.ContentionTime.Nanoseconds(); contentionDuration > 0 {
 		ex.metrics.EngineMetrics.SQLContendedTxns.Inc(1)
-		ex.planner.DistSQLPlanner().distSQLSrv.Metrics.ContendedQueriesCount.Inc(1)
 	}
 
 	ex.txnIDCacheWriter.Record(contentionpb.ResolvedTxnID{

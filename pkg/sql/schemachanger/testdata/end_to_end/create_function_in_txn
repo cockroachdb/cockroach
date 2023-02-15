@@ -46,7 +46,7 @@ upsert descriptor #101
    schema:
   +  functions:
   +    t:
-  +      overloads:
+  +      signatures:
   +      - argTypes: []
   +        id: 105
   +        returnType:
@@ -195,7 +195,7 @@ upsert descriptor #101
    schema:
   +  functions:
   +    t:
-  +      overloads:
+  +      signatures:
   +      - argTypes: []
   +        id: 105
   +        returnType:
@@ -419,7 +419,7 @@ begin transaction #9
 validate forward indexes [2] in table #104
 commit transaction #9
 begin transaction #10
-## PostCommitNonRevertiblePhase stage 1 of 2 with 7 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 2 with 9 MutationType ops
 upsert descriptor #104
   ...
            statementTag: CREATE INDEX

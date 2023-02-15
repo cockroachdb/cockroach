@@ -979,6 +979,14 @@ func (*DFloat) AmbiguousFormat() bool { return true }
 func (d *DFloat) Format(ctx *FmtCtx) {
 	fl := float64(*d)
 
+	// TODO(#sql-sessions): formatting float4s are broken here as we cannot
+	// differentiate float4 vs float8.
+	// #73743, ##84326, #41689 are partially related.
+	if ctx.HasFlags(fmtPgwireFormat) {
+		ctx.Write(PgwireFormatFloat(ctx.scratch[:0], float64(*d), ctx.dataConversionConfig, d.ResolvedType()))
+		return
+	}
+
 	disambiguate := ctx.flags.HasFlags(fmtDisambiguateDatumTypes)
 	parsable := ctx.flags.HasFlags(FmtParsableNumerics)
 	quote := parsable && (math.IsNaN(fl) || math.IsInf(fl, 0))
@@ -1043,7 +1051,7 @@ func ParseDDecimal(s string) (*DDecimal, error) {
 func (d *DDecimal) SetString(s string) error {
 	// ExactCtx should be able to handle any decimal, but if there is any rounding
 	// or other inexact conversion, it will result in an error.
-	//_, res, err := HighPrecisionCtx.SetString(&d.Decimal, s)
+	// _, res, err := HighPrecisionCtx.SetString(&d.Decimal, s)
 	_, res, err := ExactCtx.SetString(&d.Decimal, s)
 	if res != 0 || err != nil {
 		return MakeParseError(s, types.Decimal, err)
@@ -1311,7 +1319,7 @@ func (*DString) AmbiguousFormat() bool { return true }
 // Format implements the NodeFormatter interface.
 func (d *DString) Format(ctx *FmtCtx) {
 	buf, f := &ctx.Buffer, ctx.flags
-	if f.HasFlags(fmtRawStrings) {
+	if f.HasFlags(fmtRawStrings) || f.HasFlags(fmtPgwireFormat) {
 		buf.WriteString(string(*d))
 	} else {
 		lexbase.EncodeSQLStringWithFlags(buf, string(*d), f.EncodeFlags())
@@ -1570,9 +1578,8 @@ func writeAsHexString(ctx *FmtCtx, b string) {
 func (d *DBytes) Format(ctx *FmtCtx) {
 	f := ctx.flags
 	if f.HasFlags(fmtPgwireFormat) {
-		ctx.WriteString(`"\\x`)
+		ctx.WriteString(`\x`)
 		writeAsHexString(ctx, string(*d))
-		ctx.WriteString(`"`)
 	} else if f.HasFlags(fmtFormatByteLiterals) {
 		ctx.WriteByte('x')
 		ctx.WriteByte('\'')
@@ -2369,7 +2376,7 @@ func (d *DTime) Format(ctx *FmtCtx) {
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
-	ctx.Write(timeofday.TimeOfDay(*d).AppendFormat(ctx.scratch[:0]))
+	ctx.Write(PGWireFormatTime(timeofday.TimeOfDay(*d), ctx.scratch[:0]))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -2545,7 +2552,7 @@ func (d *DTimeTZ) Format(ctx *FmtCtx) {
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
-	ctx.Write(d.TimeTZ.AppendFormat(ctx.scratch[:0]))
+	ctx.Write(PGWireFormatTimeTZ(d.TimeTZ, ctx.scratch[:0]))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -2593,16 +2600,6 @@ func MustMakeDTimestamp(t time.Time, precision time.Duration) *DTimestamp {
 
 // DZeroTimestamp is the zero-valued DTimestamp.
 var DZeroTimestamp = &DTimestamp{}
-
-// time.Time formats.
-const (
-	// timestampTZOutputFormat is used to output all TimestampTZs.
-	// Note the second offset is missing here -- this is to maintain
-	// backward compatibility with casting timestamptz to strings.
-	timestampTZOutputFormat = "2006-01-02 15:04:05.999999-07:00"
-	// timestampOutputFormat is used to output all Timestamps.
-	timestampOutputFormat = "2006-01-02 15:04:05.999999"
-)
 
 // ParseDTimestamp parses and returns the *DTimestamp Datum value represented by
 // the provided string in UTC, or an error if parsing is unsuccessful.
@@ -2832,11 +2829,6 @@ func (d *DTimestamp) Max(ctx CompareContext) (Datum, bool) {
 // AmbiguousFormat implements the Datum interface.
 func (*DTimestamp) AmbiguousFormat() bool { return true }
 
-// FormatTimestamp outputs a timestamp in the UTC timezone.
-func FormatTimestamp(t time.Time) string {
-	return t.UTC().Format(timestampOutputFormat)
-}
-
 // Format implements the NodeFormatter interface.
 func (d *DTimestamp) Format(ctx *FmtCtx) {
 	f := ctx.flags
@@ -2844,7 +2836,9 @@ func (d *DTimestamp) Format(ctx *FmtCtx) {
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
-	ctx.WriteString(FormatTimestamp(d.Time))
+
+	ctx.Write(PGWireFormatTimestamp(d.Time, nil, ctx.scratch[:0]))
+
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -3004,23 +2998,6 @@ func (d *DTimestampTZ) Max(ctx CompareContext) (Datum, bool) {
 // AmbiguousFormat implements the Datum interface.
 func (*DTimestampTZ) AmbiguousFormat() bool { return true }
 
-// FormatTimestampTZ formats the given timestamp with timezone into the provided
-// buffer.
-func FormatTimestampTZ(t time.Time, buf *bytes.Buffer) {
-	buf.WriteString(t.Format(timestampTZOutputFormat))
-	_, offsetSecs := t.Zone()
-	// Only output remaining seconds offsets if it is available.
-	// This is to maintain backward compatibility with older CRDB versions,
-	// where we only output HH:MM.
-	if secondOffset := offsetSecs % 60; secondOffset != 0 {
-		if secondOffset < 0 {
-			secondOffset = 60 + secondOffset
-		}
-		buf.WriteByte(':')
-		buf.WriteString(fmt.Sprintf("%02d", secondOffset))
-	}
-}
-
 // Format implements the NodeFormatter interface.
 func (d *DTimestampTZ) Format(ctx *FmtCtx) {
 	f := ctx.flags
@@ -3028,7 +3005,20 @@ func (d *DTimestampTZ) Format(ctx *FmtCtx) {
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
-	FormatTimestampTZ(d.Time, &ctx.Buffer)
+	// By default, rely on the ctx location.
+	loc := ctx.location
+	// We sometimes set location correctly in DTimestampTZ.
+	if loc == nil {
+		loc = d.Location()
+	}
+	if f.HasFlags(fmtPgwireFormat) {
+		// This assertion should be in place everywhere, but that's a
+		// huge change for a different day.
+		if loc == nil {
+			panic(errors.AssertionFailedf("location on ctx for fmtPgwireFormat must be set for TimestampTZ types"))
+		}
+	}
+	ctx.Write(PGWireFormatTimestamp(d.Time, loc, ctx.scratch[:0]))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -3720,7 +3710,9 @@ func AsJSON(
 		return json.FromString(formatTime(t.UTC(), "2006-01-02T15:04:05.999999999")), nil
 	case *DDate, *DUuid, *DOid, *DInterval, *DBytes, *DIPAddr, *DTime, *DTimeTZ, *DBitArray, *DBox2D,
 		*DTSVector, *DTSQuery:
-		return json.FromString(AsStringWithFlags(t, FmtBareStrings, FmtDataConversionConfig(dcc))), nil
+		return json.FromString(
+			AsStringWithFlags(t, FmtBareStrings, FmtDataConversionConfig(dcc), FmtLocation(loc)),
+		), nil
 	case *DGeometry:
 		return json.FromSpatialObject(t.Geometry.SpatialObject(), geo.DefaultGeoJSONDecimalDigits)
 	case *DGeography:
@@ -3815,7 +3807,7 @@ func (d *DJSON) Format(ctx *FmtCtx) {
 	// TODO(justin): ideally the JSON string encoder should know it needs to
 	// escape things to be inside SQL strings in order to avoid this allocation.
 	s := d.JSON.String()
-	if ctx.flags.HasFlags(fmtRawStrings) {
+	if ctx.HasFlags(fmtRawStrings) || ctx.HasFlags(fmtPgwireFormat) {
 		ctx.WriteString(s)
 	} else {
 		// TODO(knz): This seems incorrect,

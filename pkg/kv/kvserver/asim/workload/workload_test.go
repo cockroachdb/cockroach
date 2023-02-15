@@ -71,7 +71,7 @@ func TestRandWorkloadGenerator(t *testing.T) {
 		expectedReadRatio float64
 	}{
 		{
-			keyGenerator:      NewUniformKeyGen(int64(cycleLength), rand.New(rand.NewSource(testingSeed))),
+			keyGenerator:      NewUniformKeyGen(0, int64(cycleLength), rand.New(rand.NewSource(testingSeed))),
 			rate:              10,
 			readRatio:         0.75,
 			maxSize:           1000,
@@ -80,7 +80,16 @@ func TestRandWorkloadGenerator(t *testing.T) {
 			expectedQuartiles: [3]int{25, 49, 75},
 		},
 		{
-			keyGenerator:      NewUniformKeyGen(int64(cycleLength), rand.New(rand.NewSource(testingSeed))),
+			keyGenerator:      NewUniformKeyGen(100, 100+int64(cycleLength), rand.New(rand.NewSource(testingSeed))),
+			rate:              10,
+			readRatio:         0.75,
+			maxSize:           1000,
+			minSize:           100,
+			duration:          1000 * time.Second,
+			expectedQuartiles: [3]int{125, 149, 175},
+		},
+		{
+			keyGenerator:      NewUniformKeyGen(0, int64(cycleLength), rand.New(rand.NewSource(testingSeed))),
 			rate:              10,
 			readRatio:         0.5,
 			maxSize:           1000,
@@ -89,7 +98,16 @@ func TestRandWorkloadGenerator(t *testing.T) {
 			expectedQuartiles: [3]int{25, 49, 75},
 		},
 		{
-			keyGenerator:      NewZipfianKeyGen(int64(cycleLength), 1.1, 1, rand.New(rand.NewSource(testingSeed))),
+			keyGenerator:      NewUniformKeyGen(200, 200+int64(cycleLength), rand.New(rand.NewSource(testingSeed))),
+			rate:              10,
+			readRatio:         0.5,
+			maxSize:           1000,
+			minSize:           100,
+			duration:          1000 * time.Second,
+			expectedQuartiles: [3]int{225, 249, 275},
+		},
+		{
+			keyGenerator:      NewZipfianKeyGen(0, int64(cycleLength), 1.1, 1, rand.New(rand.NewSource(testingSeed))),
 			rate:              10,
 			readRatio:         0.75,
 			maxSize:           1000,
@@ -98,13 +116,31 @@ func TestRandWorkloadGenerator(t *testing.T) {
 			expectedQuartiles: [3]int{1, 4, 20},
 		},
 		{
-			keyGenerator:      NewZipfianKeyGen(int64(cycleLength), 1.1, 1, rand.New(rand.NewSource(testingSeed))),
+			keyGenerator:      NewZipfianKeyGen(300, 300+int64(cycleLength), 1.1, 1, rand.New(rand.NewSource(testingSeed))),
+			rate:              10,
+			readRatio:         0.75,
+			maxSize:           1000,
+			minSize:           100,
+			duration:          1000 * time.Second,
+			expectedQuartiles: [3]int{301, 304, 320},
+		},
+		{
+			keyGenerator:      NewZipfianKeyGen(0, int64(cycleLength), 1.1, 1, rand.New(rand.NewSource(testingSeed))),
 			rate:              10,
 			readRatio:         0.5,
 			maxSize:           1000,
 			minSize:           100,
 			duration:          1000 * time.Second,
 			expectedQuartiles: [3]int{1, 4, 20},
+		},
+		{
+			keyGenerator:      NewZipfianKeyGen(400, 400+int64(cycleLength), 1.1, 1, rand.New(rand.NewSource(testingSeed))),
+			rate:              10,
+			readRatio:         0.5,
+			maxSize:           1000,
+			minSize:           100,
+			duration:          1000 * time.Second,
+			expectedQuartiles: [3]int{401, 404, 420},
 		},
 	}
 

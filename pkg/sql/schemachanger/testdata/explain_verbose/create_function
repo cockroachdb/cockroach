@@ -12,7 +12,7 @@ CREATE TYPE notmyworkday AS ENUM ('Monday', 'Tuesday');
 CREATE TABLE t2(a notmyworkday);
 
 /* test */
-EXPLAIN (ddl, verbose) CREATE FUNCTION f(a notmyworkday) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+EXPLAIN (ddl, verbose) CREATE FUNCTION f(a notmyworkday) RETURNS INT VOLATILE LANGUAGE SQL AS $$
   SELECT a FROM t;
   SELECT b FROM t@t_idx_b;
   SELECT c FROM t@t_idx_c;
@@ -22,7 +22,7 @@ $$;
 ----
 • Schema change plan for CREATE FUNCTION ‹defaultdb›.‹public›.‹f›(IN ‹a› notmyworkday)
 │ 	RETURNS INT8
-│ 	IMMUTABLE
+│ 	VOLATILE
 │ 	LANGUAGE SQL
 │ 	AS $$SELECT a FROM defaultdb.public.t;
 │ SELECT b FROM defaultdb.public.t@t_idx_b;
@@ -120,7 +120,7 @@ $$;
 │           │
 │           ├── • SetFunctionVolatility
 │           │     FunctionID: 110
-│           │     Volatility: 2
+│           │     Volatility: 1
 │           │
 │           ├── • UpdateOwner
 │           │     Owner:
@@ -352,7 +352,7 @@ $$;
             │
             ├── • SetFunctionVolatility
             │     FunctionID: 110
-            │     Volatility: 2
+            │     Volatility: 1
             │
             ├── • UpdateOwner
             │     Owner:

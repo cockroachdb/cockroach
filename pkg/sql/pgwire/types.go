@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
-	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/tsearch"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -114,14 +113,14 @@ func writeTextString(b *writeBuffer, v string, t *types.T) {
 
 func writeTextTimestamp(b *writeBuffer, v time.Time) {
 	// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
-	s := formatTs(v, nil, b.putbuf[4:4])
+	s := tree.PGWireFormatTimestamp(v, nil, b.putbuf[4:4])
 	b.putInt32(int32(len(s)))
 	b.write(s)
 }
 
 func writeTextTimestampTZ(b *writeBuffer, v time.Time, sessionLoc *time.Location) {
 	// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
-	s := formatTs(v, sessionLoc, b.putbuf[4:4])
+	s := tree.PGWireFormatTimestamp(v, sessionLoc, b.putbuf[4:4])
 	b.putInt32(int32(len(s)))
 	b.write(s)
 }
@@ -158,8 +157,13 @@ func writeTextDatumNotNull(
 	sessionLoc *time.Location,
 	t *types.T,
 ) {
+
 	oldDCC := b.textFormatter.SetDataConversionConfig(conv)
-	defer b.textFormatter.SetDataConversionConfig(oldDCC)
+	oldLoc := b.textFormatter.SetLocation(sessionLoc)
+	defer func() {
+		b.textFormatter.SetDataConversionConfig(oldDCC)
+		b.textFormatter.SetLocation(oldLoc)
+	}()
 	switch v := tree.UnwrapDOidWrapper(d).(type) {
 	case *tree.DBitArray:
 		b.textFormatter.FormatNode(v)
@@ -199,13 +203,13 @@ func writeTextDatumNotNull(
 
 	case *tree.DTime:
 		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
-		s := formatTime(timeofday.TimeOfDay(*v), b.putbuf[4:4])
+		s := tree.PGWireFormatTime(timeofday.TimeOfDay(*v), b.putbuf[4:4])
 		b.putInt32(int32(len(s)))
 		b.write(s)
 
 	case *tree.DTimeTZ:
 		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
-		s := formatTimeTZ(v.TimeTZ, b.putbuf[4:4])
+		s := tree.PGWireFormatTimeTZ(v.TimeTZ, b.putbuf[4:4])
 		b.putInt32(int32(len(s)))
 		b.write(s)
 
@@ -294,7 +298,11 @@ func (b *writeBuffer) writeTextColumnarElement(
 	sessionLoc *time.Location,
 ) {
 	oldDCC := b.textFormatter.SetDataConversionConfig(conv)
-	defer b.textFormatter.SetDataConversionConfig(oldDCC)
+	oldLoc := b.textFormatter.SetLocation(sessionLoc)
+	defer func() {
+		b.textFormatter.SetDataConversionConfig(oldDCC)
+		b.textFormatter.SetLocation(oldLoc)
+	}()
 	typ := vecs.Vecs[vecIdx].Type()
 	if log.V(2) {
 		log.Infof(ctx, "pgwire writing TEXT columnar element of type: %s", typ)
@@ -869,89 +877,6 @@ func (b *writeBuffer) writeBinaryColumnarElement(
 		// All other types are represented via the datum-backed vector.
 		writeBinaryDatumNotNull(ctx, b, vecs.DatumCols[colIdx].Get(rowIdx).(tree.Datum), sessionLoc, typ)
 	}
-}
-
-const (
-	pgTimeFormat              = "15:04:05.999999"
-	pgTimeTZFormat            = pgTimeFormat + "-07"
-	pgDateFormat              = "2006-01-02"
-	pgTimeStampFormatNoOffset = pgDateFormat + " " + pgTimeFormat
-	pgTimeStampFormat         = pgTimeStampFormatNoOffset + "-07"
-	pgTime2400Format          = "24:00:00"
-)
-
-// formatTime formats t into a format lib/pq understands, appending to the
-// provided tmp buffer and reallocating if needed. The function will then return
-// the resulting buffer.
-func formatTime(t timeofday.TimeOfDay, tmp []byte) []byte {
-	// time.Time's AppendFormat does not recognize 2400, so special case it accordingly.
-	if t == timeofday.Time2400 {
-		return []byte(pgTime2400Format)
-	}
-	return t.ToTime().AppendFormat(tmp, pgTimeFormat)
-}
-
-// formatTimeTZ formats t into a format lib/pq understands, appending to the
-// provided tmp buffer and reallocating if needed. The function will then return
-// the resulting buffer.
-func formatTimeTZ(t timetz.TimeTZ, tmp []byte) []byte {
-	format := pgTimeTZFormat
-	if t.OffsetSecs%60 != 0 {
-		format += ":00:00"
-	} else if t.OffsetSecs%3600 != 0 {
-		format += ":00"
-	}
-	ret := t.ToTime().AppendFormat(tmp, format)
-	// time.Time's AppendFormat does not recognize 2400, so special case it accordingly.
-	if t.TimeOfDay == timeofday.Time2400 {
-		// It instead reads 00:00:00. Replace that text.
-		var newRet []byte
-		newRet = append(newRet, pgTime2400Format...)
-		newRet = append(newRet, ret[len(pgTime2400Format):]...)
-		ret = newRet
-	}
-	return ret
-}
-
-func formatTs(t time.Time, offset *time.Location, tmp []byte) (b []byte) {
-	var format string
-	if offset != nil {
-		format = pgTimeStampFormat
-		if _, offsetSeconds := t.In(offset).Zone(); offsetSeconds%60 != 0 {
-			format += ":00:00"
-		} else if offsetSeconds%3600 != 0 {
-			format += ":00"
-		}
-	} else {
-		format = pgTimeStampFormatNoOffset
-	}
-	return formatTsWithFormat(format, t, offset, tmp)
-}
-
-// formatTsWithFormat formats t with an optional offset into a format
-// lib/pq understands, appending to the provided tmp buffer and
-// reallocating if needed. The function will then return the resulting
-// buffer. formatTsWithFormat is mostly cribbed from github.com/lib/pq.
-func formatTsWithFormat(format string, t time.Time, offset *time.Location, tmp []byte) (b []byte) {
-	// Need to send dates before 0001 A.D. with " BC" suffix, instead of the
-	// minus sign preferred by Go.
-	// Beware, "0000" in ISO is "1 BC", "-0001" is "2 BC" and so on
-	if offset != nil {
-		t = t.In(offset)
-	}
-
-	bc := false
-	if t.Year() <= 0 {
-		// flip year sign, and add 1, e.g: "0" will be "1", and "-10" will be "11"
-		t = t.AddDate((-t.Year())*2+1, 0, 0)
-		bc = true
-	}
-
-	b = t.AppendFormat(tmp, format)
-	if bc {
-		b = append(b, " BC"...)
-	}
-	return b
 }
 
 // timeToPgBinary calculates the Postgres binary format for a timestamp. The timestamp

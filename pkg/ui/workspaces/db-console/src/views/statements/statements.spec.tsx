@@ -530,10 +530,18 @@ function makeStats(): Required<StatementStatistics> {
     plan_gists: ["Ais="],
     index_recommendations: [],
     indexes: ["123@456"],
+    latency_info: {
+      min: 0.01,
+      max: 1.2,
+      p50: 0.4,
+      p90: 0.7,
+      p99: 1.1,
+    },
+    last_error_code: "",
   };
 }
 
-function makeExecStats(): Required<ExecStats> {
+function makeExecStats(): ExecStats {
   return {
     count: Long.fromNumber(10),
     network_bytes: makeStat(),

@@ -26,6 +26,59 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestAlterTenantCompleteToTime(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	args := replicationtestutils.DefaultTenantStreamingClustersArgs
+
+	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
+
+	jobutils.WaitForJobToRun(t, c.SrcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(t, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+
+	c.WaitUntilHighWatermark(c.SrcCluster.Server(0).Clock().Now(), jobspb.JobID(ingestionJobID))
+
+	var cutoverTime time.Time
+	c.DestSysSQL.QueryRow(t, "SELECT clock_timestamp()").Scan(&cutoverTime)
+
+	var cutoverStr string
+	c.DestSysSQL.QueryRow(c.T, `ALTER TENANT $1 COMPLETE REPLICATION TO SYSTEM TIME $2::string`,
+		args.DestTenantName, cutoverTime).Scan(&cutoverStr)
+	cutoverOutput := replicationtestutils.DecimalTimeToHLC(t, cutoverStr)
+	require.Equal(t, cutoverTime, cutoverOutput.GoTime())
+	jobutils.WaitForJobToSucceed(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+}
+
+func TestAlterTenantCompleteToLatest(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	args := replicationtestutils.DefaultTenantStreamingClustersArgs
+
+	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
+
+	jobutils.WaitForJobToRun(t, c.SrcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(t, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+
+	highWater := c.SrcCluster.Server(0).Clock().Now()
+	c.WaitUntilHighWatermark(highWater, jobspb.JobID(ingestionJobID))
+
+	var cutoverStr string
+	c.DestSysSQL.QueryRow(c.T, `ALTER TENANT $1 COMPLETE REPLICATION TO LATEST`,
+		args.DestTenantName).Scan(&cutoverStr)
+	cutoverOutput := replicationtestutils.DecimalTimeToHLC(t, cutoverStr)
+	require.GreaterOrEqual(t, cutoverOutput.GoTime(), highWater.GoTime())
+	require.LessOrEqual(t, cutoverOutput.GoTime(), c.SrcCluster.Server(0).Clock().Now().GoTime())
+	jobutils.WaitForJobToSucceed(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+}
+
 func TestAlterTenantPauseResume(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -85,6 +138,7 @@ func TestAlterTenantPauseResume(t *testing.T) {
 	})
 
 	t.Run("pause-resume-as-non-system-tenant", func(t *testing.T) {
+		c.DestTenantSQL.Exec(t, `SET CLUSTER SETTING cross_cluster_replication.enabled = true`)
 		c.DestTenantSQL.ExpectErr(t, "only the system tenant can alter tenant", `ALTER TENANT $1 PAUSE REPLICATION`, "foo")
 		c.DestTenantSQL.ExpectErr(t, "only the system tenant can alter tenant", `ALTER TENANT $1 RESUME REPLICATION`, "foo")
 	})
@@ -305,4 +359,30 @@ func TestTenantReplicationStatus(t *testing.T) {
 	_, status, err = getReplicationStatsAndStatus(ctx, registry, nil, jobspb.JobID(producerJobID))
 	require.ErrorContains(t, err, "is not a stream ingestion job")
 	require.Equal(t, "replication error", status)
+}
+
+// TestAlterTenantHandleFutureProtectedTimestamp verifies that cutting over "TO
+// LATEST" doesn't fail if the destination cluster clock is ahead of the source
+// cluster clock. See issue #96477.
+func TestAlterTenantHandleFutureProtectedTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	args := replicationtestutils.DefaultTenantStreamingClustersArgs
+	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+
+	// Push the clock on the destination cluster forward.
+	destNow := c.DestCluster.Server(0).Clock().NowAsClockTimestamp()
+	destNow.WallTime += (200 * time.Millisecond).Nanoseconds()
+	c.DestCluster.Server(0).Clock().Update(destNow)
+
+	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
+
+	jobutils.WaitForJobToRun(t, c.SrcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(t, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+	c.WaitUntilHighWatermark(c.SrcCluster.Server(0).Clock().Now(), jobspb.JobID(ingestionJobID))
+
+	c.DestSysSQL.Exec(c.T, `ALTER TENANT $1 COMPLETE REPLICATION TO LATEST`, args.DestTenantName)
 }

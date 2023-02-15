@@ -51,7 +51,7 @@ func TestKnobsUseRangeTombstonesForPointDeletes(t *testing.T) {
 
 	store, err := s.Stores().GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
-	eng := store.Engine()
+	eng := store.TODOEngine()
 	txn := db.NewTxn(ctx, "test")
 
 	// Write a non-transactional and transactional tombstone.

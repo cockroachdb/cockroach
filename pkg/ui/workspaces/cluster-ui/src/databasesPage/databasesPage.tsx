@@ -178,6 +178,9 @@ function filterBySearchQuery(
     .every(val => matchString.includes(val));
 }
 
+const tablePageSize = 20;
+const disableTableSortSize = tablePageSize * 2;
+
 export class DatabasesPage extends React.Component<
   DatabasesPageProps,
   DatabasesPageState
@@ -189,7 +192,7 @@ export class DatabasesPage extends React.Component<
       filters: defaultFilters,
       pagination: {
         current: 1,
-        pageSize: 20,
+        pageSize: tablePageSize,
       },
       lastDetailsError: null,
     };
@@ -293,22 +296,51 @@ export class DatabasesPage extends React.Component<
     }
 
     let lastDetailsError: Error;
-    this.props.databases.forEach(database => {
+
+    // load everything by default
+    let filteredDbs = this.props.databases;
+
+    // Loading only the first page if there are more than
+    // 40 dbs. If there is more than 40 dbs sort will be disabled.
+    if (this.props.databases.length > disableTableSortSize) {
+      const startIndex =
+        this.state.pagination.pageSize * (this.state.pagination.current - 1);
+      // Result maybe filtered so get db names from filtered results
+      if (this.props.search && this.props.search.length > 0) {
+        filteredDbs = this.filteredDatabasesData();
+      }
+
+      if (!filteredDbs || filteredDbs.length === 0) {
+        return;
+      }
+
+      // Only load the first page
+      filteredDbs = filteredDbs.slice(
+        startIndex,
+        startIndex + this.state.pagination.pageSize,
+      );
+    }
+
+    filteredDbs.forEach(database => {
       if (database.lastError !== undefined) {
         lastDetailsError = database.lastError;
       }
+
       if (
         lastDetailsError &&
         this.state.lastDetailsError?.name != lastDetailsError?.name
       ) {
         this.setState({ lastDetailsError: lastDetailsError });
       }
+
       if (
         !database.loaded &&
         !database.loading &&
-        database.lastError === undefined
+        (database.lastError === undefined ||
+          database.lastError?.name === "GetDatabaseInfoError")
       ) {
-        return this.props.refreshDatabaseDetails(database.name);
+        this.props.refreshDatabaseDetails(database.name);
+        return;
       }
 
       database.missingTables.forEach(table => {
@@ -478,7 +510,10 @@ export class DatabasesPage extends React.Component<
     database: DatabasesPageDataDatabase,
     cell: React.ReactNode,
   ): React.ReactNode => {
-    if (database.lastError) {
+    if (
+      database.lastError &&
+      database.lastError.name !== "GetDatabaseInfoError"
+    ) {
       return "(unavailable)";
     }
     return cell;
@@ -681,6 +716,7 @@ export class DatabasesPage extends React.Component<
                 onChangeSortSetting={this.changeSortSetting}
                 pagination={this.state.pagination}
                 loading={this.props.loading}
+                disableSortSizeLimit={disableTableSortSize}
                 renderNoResult={
                   <div
                     className={cx(
@@ -715,6 +751,7 @@ export class DatabasesPage extends React.Component<
                   timeout: this.state.lastDetailsError?.name
                     ?.toLowerCase()
                     .includes("timeout"),
+                  error: this.state.lastDetailsError,
                 })
               }
             />

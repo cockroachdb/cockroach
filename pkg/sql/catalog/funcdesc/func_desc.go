@@ -289,14 +289,14 @@ func (desc *immutable) validateFuncExistsInSchema(scDesc catalog.SchemaDescripto
 	}
 
 	function, _ := scDesc.GetFunction(desc.GetName())
-	for _, overload := range function.Overloads {
+	for _, sig := range function.Signatures {
 		// TODO (Chengxiong) maybe a overkill, but we could also validate function
 		// signature matches.
-		if overload.ID == desc.GetID() {
+		if sig.ID == desc.GetID() {
 			return nil
 		}
 	}
-	return errors.AssertionFailedf("function overload %q (%d) cannot be found in schema %q (%d)",
+	return errors.AssertionFailedf("function sig %q (%d) cannot be found in schema %q (%d)",
 		desc.GetName(), desc.GetID(), scDesc.GetName(), scDesc.GetID())
 }
 
@@ -504,8 +504,8 @@ func (desc *Mutable) SetParentSchemaID(id descpb.ID) {
 }
 
 // ToFuncObj converts the descriptor to a tree.FuncObj.
-func (desc *immutable) ToFuncObj() tree.FuncObj {
-	ret := tree.FuncObj{
+func (desc *immutable) ToFuncObj() *tree.FuncObj {
+	ret := &tree.FuncObj{
 		FuncName: tree.MakeFunctionNameFromPrefix(tree.ObjectNamePrefix{}, tree.Name(desc.Name)),
 		Params:   make(tree.FuncParams, len(desc.Params)),
 	}
@@ -556,6 +556,9 @@ func (desc *immutable) ToOverload() (ret *tree.Overload, err error) {
 	ret.CalledOnNullInput, err = desc.calledOnNullInput()
 	if err != nil {
 		return nil, err
+	}
+	if desc.ReturnType.ReturnSet {
+		ret.Class = tree.GeneratorClass
 	}
 
 	return ret, nil
@@ -635,7 +638,7 @@ func (desc *immutable) getCreateExprLang() tree.FunctionLanguage {
 	case catpb.Function_SQL:
 		return tree.FunctionLangSQL
 	}
-	return 0
+	return tree.FunctionLangUnknown
 }
 
 func (desc *immutable) getCreateExprVolatility() tree.FunctionVolatility {

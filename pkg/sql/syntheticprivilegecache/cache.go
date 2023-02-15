@@ -13,6 +13,7 @@ package syntheticprivilegecache
 import (
 	"context"
 	"fmt"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -96,9 +97,9 @@ func (c *Cache) Get(
 		return nil, err
 	}
 	privDesc := val.(*catpb.PrivilegeDescriptor)
-	// Only write back to the cache if the table version is
-	// committed.
-	c.c.MaybeWriteBackToCache(ctx, []descpb.DescriptorVersion{desc.GetVersion()}, spo.GetPath(), *privDesc)
+	entrySize := int64(len(spo.GetPath())) + computePrivDescSize(privDesc)
+	// Only write back to the cache if the table version is committed.
+	c.c.MaybeWriteBackToCache(ctx, []descpb.DescriptorVersion{desc.GetVersion()}, spo.GetPath(), *privDesc, entrySize)
 	return privDesc, nil
 }
 
@@ -188,7 +189,7 @@ func (c *Cache) readFromStorage(
 func (c *Cache) Start(ctx context.Context) {
 	if err := c.stopper.RunAsyncTask(ctx, "syntheticprivilegecache-warm", func(ctx context.Context) {
 		defer close(c.warmed)
-		if !c.settings.Version.IsActive(ctx, clusterversion.V22_2SystemPrivilegesTable) {
+		if !c.settings.Version.IsActive(ctx, clusterversion.TODODelete_V22_2SystemPrivilegesTable) {
 			return
 		}
 		start := timeutil.Now()
@@ -278,7 +279,8 @@ func (c *Cache) start(ctx context.Context) error {
 			if accum, ok := vtablePathToPrivilegeAccumulator[vtablePriv.GetPath()]; ok {
 				privDesc = accum.finish()
 			}
-			c.c.MaybeWriteBackToCache(ctx, tableVersions, vtablePriv.GetPath(), *privDesc)
+			entrySize := int64(len(vtablePriv.GetPath())) + computePrivDescSize(privDesc)
+			c.c.MaybeWriteBackToCache(ctx, tableVersions, vtablePriv.GetPath(), *privDesc, entrySize)
 		})
 	}
 	return nil
@@ -291,4 +293,16 @@ func (c *Cache) waitForWarmed(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+}
+
+// computePrivDescSize computes the size in bytes required by the data in this
+// descriptor.
+func computePrivDescSize(privDesc *catpb.PrivilegeDescriptor) int64 {
+	privDescSize := int(unsafe.Sizeof(*privDesc))
+	privDescSize += len(privDesc.OwnerProto)
+	for _, u := range privDesc.Users {
+		privDescSize += int(unsafe.Sizeof(u))
+		privDescSize += len(u.UserProto)
+	}
+	return int64(privDescSize)
 }

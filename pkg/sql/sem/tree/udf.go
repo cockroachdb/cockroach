@@ -235,33 +235,34 @@ func (node FunctionLeakproof) Format(ctx *FmtCtx) {
 
 // FunctionLanguage indicates the language of the statements in the UDF function
 // body.
-type FunctionLanguage int
+type FunctionLanguage string
 
 const (
-	_ FunctionLanguage = iota
-	// FunctionLangSQL represent SQL language.
-	FunctionLangSQL
+	// FunctionLangUnknown represents an unknown language.
+	FunctionLangUnknown FunctionLanguage = "unknown"
+	// FunctionLangSQL represents SQL language.
+	FunctionLangSQL FunctionLanguage = "SQL"
+	// FunctionLangPlPgSQL represents the PL/pgSQL procedural language.
+	FunctionLangPlPgSQL FunctionLanguage = "plpgsql"
 )
 
 // Format implements the NodeFormatter interface.
 func (node FunctionLanguage) Format(ctx *FmtCtx) {
 	ctx.WriteString("LANGUAGE ")
-	switch node {
-	case FunctionLangSQL:
-		ctx.WriteString("SQL")
-	default:
-		panic(pgerror.New(pgcode.InvalidParameterValue, "Unknown function option"))
-	}
+	ctx.WriteString(string(node))
 }
 
 // AsFunctionLanguage converts a string to a FunctionLanguage if applicable.
-// Error is returned if string does not represent a valid UDF language.
+// No error is returned if string does not represent a valid UDF language;
+// unknown languages result in an error later.
 func AsFunctionLanguage(lang string) (FunctionLanguage, error) {
 	switch strings.ToLower(lang) {
 	case "sql":
 		return FunctionLangSQL, nil
+	case "plpgsql":
+		return FunctionLangPlPgSQL, nil
 	}
-	return 0, errors.Newf("language %q does not exist", lang)
+	return FunctionLanguage(lang), nil
 }
 
 // FunctionBodyStr is a string containing all statements in a UDF body.
@@ -280,11 +281,11 @@ type FuncParams []FuncParam
 
 // Format implements the NodeFormatter interface.
 func (node FuncParams) Format(ctx *FmtCtx) {
-	for i, arg := range node {
+	for i := range node {
 		if i > 0 {
 			ctx.WriteString(", ")
 		}
-		ctx.FormatNode(&arg)
+		ctx.FormatNode(&node[i])
 	}
 }
 
@@ -367,11 +368,11 @@ type FuncObjs []FuncObj
 
 // Format implements the NodeFormatter interface.
 func (node FuncObjs) Format(ctx *FmtCtx) {
-	for i, f := range node {
+	for i := range node {
 		if i > 0 {
 			ctx.WriteString(", ")
 		}
-		ctx.FormatNode(f)
+		ctx.FormatNode(&node[i])
 	}
 }
 
@@ -382,7 +383,7 @@ type FuncObj struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node FuncObj) Format(ctx *FmtCtx) {
+func (node *FuncObj) Format(ctx *FmtCtx) {
 	ctx.FormatNode(&node.FuncName)
 	if node.Params != nil {
 		ctx.WriteString("(")
@@ -419,7 +420,7 @@ type AlterFunctionOptions struct {
 // Format implements the NodeFormatter interface.
 func (node *AlterFunctionOptions) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER FUNCTION ")
-	ctx.FormatNode(node.Function)
+	ctx.FormatNode(&node.Function)
 	for _, option := range node.Options {
 		ctx.WriteString(" ")
 		ctx.FormatNode(option)
@@ -435,7 +436,7 @@ type AlterFunctionRename struct {
 // Format implements the NodeFormatter interface.
 func (node *AlterFunctionRename) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER FUNCTION ")
-	ctx.FormatNode(node.Function)
+	ctx.FormatNode(&node.Function)
 	ctx.WriteString(" RENAME TO ")
 	ctx.WriteString(string(node.NewName))
 }
@@ -449,7 +450,7 @@ type AlterFunctionSetSchema struct {
 // Format implements the NodeFormatter interface.
 func (node *AlterFunctionSetSchema) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER FUNCTION ")
-	ctx.FormatNode(node.Function)
+	ctx.FormatNode(&node.Function)
 	ctx.WriteString(" SET SCHEMA ")
 	ctx.WriteString(string(node.NewSchemaName))
 }
@@ -463,7 +464,7 @@ type AlterFunctionSetOwner struct {
 // Format implements the NodeFormatter interface.
 func (node *AlterFunctionSetOwner) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER FUNCTION ")
-	ctx.FormatNode(node.Function)
+	ctx.FormatNode(&node.Function)
 	ctx.WriteString(" OWNER TO ")
 	ctx.FormatNode(&node.NewOwner)
 }
@@ -478,7 +479,7 @@ type AlterFunctionDepExtension struct {
 // Format implements the NodeFormatter interface.
 func (node *AlterFunctionDepExtension) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER FUNCTION  ")
-	ctx.FormatNode(node.Function)
+	ctx.FormatNode(&node.Function)
 	if node.Remove {
 		ctx.WriteString(" NO")
 	}
@@ -523,34 +524,34 @@ func MaybeFailOnUDFUsage(expr TypedExpr) error {
 // function options in the given slice.
 func ValidateFuncOptions(options FunctionOptions) error {
 	var hasLang, hasBody, hasLeakProof, hasVolatility, hasNullInputBehavior bool
-	err := func(opt FunctionOption) error {
+	conflictingErr := func(opt FunctionOption) error {
 		return errors.Wrapf(ErrConflictingFunctionOption, "%s", AsString(opt))
 	}
 	for _, option := range options {
 		switch option.(type) {
 		case FunctionLanguage:
 			if hasLang {
-				return err(option)
+				return conflictingErr(option)
 			}
 			hasLang = true
 		case FunctionBodyStr:
 			if hasBody {
-				return err(option)
+				return conflictingErr(option)
 			}
 			hasBody = true
 		case FunctionLeakproof:
 			if hasLeakProof {
-				return err(option)
+				return conflictingErr(option)
 			}
 			hasLeakProof = true
 		case FunctionVolatility:
 			if hasVolatility {
-				return err(option)
+				return conflictingErr(option)
 			}
 			hasVolatility = true
 		case FunctionNullInputBehavior:
 			if hasNullInputBehavior {
-				return err(option)
+				return conflictingErr(option)
 			}
 			hasNullInputBehavior = true
 		default:
@@ -559,4 +560,17 @@ func ValidateFuncOptions(options FunctionOptions) error {
 	}
 
 	return nil
+}
+
+// GetFuncVolatility tries to find a function volatility from the given list of
+// function options. If there is no volatility found, FunctionVolatile is
+// returned as the default.
+func GetFuncVolatility(options FunctionOptions) FunctionVolatility {
+	for _, option := range options {
+		switch t := option.(type) {
+		case FunctionVolatility:
+			return t
+		}
+	}
+	return FunctionVolatile
 }

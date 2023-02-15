@@ -253,7 +253,6 @@ func TestConnHealthInternal(t *testing.T) {
 	rpcCtx := newTestContext(clock, maxOffset, stopper)
 	rpcCtx.SetLocalInternalServer(
 		&internalServer{},
-		false, // tenant
 		rpc.ServerInterceptorInfo{}, rpc.ClientInterceptorInfo{})
 	rpcCtx.NodeID.Set(ctx, staticNodeID)
 	rpcCtx.Config.AdvertiseAddr = localAddr.String()
@@ -469,12 +468,12 @@ func newTestContext(
 	cfg.RPCHeartbeatTimeout = 100 * time.Millisecond
 	ctx := context.Background()
 	rctx := rpc.NewContext(ctx, rpc.ContextOptions{
-		TenantID:  roachpb.SystemTenantID,
-		Config:    cfg,
-		Clock:     clock,
-		MaxOffset: maxOffset,
-		Stopper:   stopper,
-		Settings:  cluster.MakeTestingClusterSettings(),
+		TenantID:        roachpb.SystemTenantID,
+		Config:          cfg,
+		Clock:           clock,
+		ToleratedOffset: maxOffset,
+		Stopper:         stopper,
+		Settings:        cluster.MakeTestingClusterSettings(),
 	})
 	// Ensure that tests using this test context and restart/shut down
 	// their servers do not inadvertently start talking to servers from

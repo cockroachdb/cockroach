@@ -61,6 +61,41 @@ export function aggregateNumericStats(
   };
 }
 
+export function aggregateLatencyInfo(
+  a: StatementStatistics,
+  b: StatementStatistics,
+): protos.cockroach.sql.ILatencyInfo {
+  const min =
+    a.latency_info?.min == 0 || a.latency_info?.min > b.latency_info?.min
+      ? b.latency_info?.min
+      : a.latency_info?.min;
+  const max =
+    a.latency_info?.max > b.latency_info?.max
+      ? a.latency_info?.max
+      : b.latency_info?.max;
+
+  let p50 = b.latency_info?.p50;
+  let p90 = b.latency_info?.p90;
+  let p99 = b.latency_info?.p99;
+  // Use the latest value we have that is not zero.
+  if (
+    b.last_exec_timestamp < a.last_exec_timestamp &&
+    b.latency_info?.p50 != 0
+  ) {
+    p50 = a.latency_info?.p50;
+    p90 = a.latency_info?.p90;
+    p99 = a.latency_info?.p99;
+  }
+
+  return {
+    min,
+    max,
+    p50,
+    p90,
+    p99,
+  };
+}
+
 export function coalesceSensitiveInfo(
   a: protos.cockroach.sql.ISensitiveInfo,
   b: protos.cockroach.sql.ISensitiveInfo,
@@ -81,7 +116,7 @@ export function addMaybeUnsetNumericStat(
   return a && b ? aggregateNumericStats(a, b, countA, countB) : null;
 }
 
-export function addExecStats(a: ExecStats, b: ExecStats): Required<ExecStats> {
+export function addExecStats(a: ExecStats, b: ExecStats): ExecStats {
   let countA = FixLong(a.count).toInt();
   const countB = FixLong(b.count).toInt();
   if (countA === 0 && countB === 0) {
@@ -214,6 +249,8 @@ export function addStatementStats(
     plan_gists: planGists,
     index_recommendations: indexRec,
     indexes: indexes,
+    latency_info: aggregateLatencyInfo(a, b),
+    last_error_code: "",
   };
 }
 

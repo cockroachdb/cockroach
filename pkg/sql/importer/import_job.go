@@ -51,12 +51,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
+
+const importJobRecoveryEventType eventpb.RecoveryEventType = "import_job"
 
 type importTestingKnobs struct {
 	afterImport            func(summary roachpb.RowCount) error
@@ -264,7 +267,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 					return errors.Wrap(err, "checking if existing table is empty")
 				}
 				details.Tables[i].WasEmpty = len(res) == 0
-				if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V22_2Start) {
+				if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.TODODelete_V22_2Start) {
 					// Update the descriptor in the job record and in the database with the ImportStartTime
 					details.Tables[i].Desc.ImportStartWallTime = details.Walltime
 					err := bindImportStartTime(ctx, p, tblDesc.GetID(), details.Walltime)
@@ -306,6 +309,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			return err
 		}
 	}
+
 	if err := p.ExecCfg().JobRegistry.CheckPausepoint("import.after_ingest"); err != nil {
 		return err
 	}
@@ -343,7 +347,6 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	}); err != nil {
 		log.Errorf(ctx, "failed to release protected timestamp: %v", err)
 	}
-
 	emitImportJobEvent(ctx, p, jobs.StatusSucceeded, r.job)
 
 	addToFileFormatTelemetry(details.Format.Format.String(), "succeeded")
@@ -363,6 +366,8 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	if sizeMb > 10 {
 		telemetry.CountBucketed("import.speed-mbps.over10mb", mbps)
 	}
+
+	logutil.LogJobCompletion(ctx, importJobRecoveryEventType, r.job.ID(), true, nil, r.res.Rows)
 
 	return nil
 }
@@ -1267,19 +1272,26 @@ func ingestWithRetry(
 			return res, err
 		}
 
-		// Re-load the job in order to update our progress object, which may have
-		// been updated by the changeFrontier processor since the flow started.
+		// If we are draining, it is unlikely we can start a new DistSQL
+		// flow. Exit with a retryable error so that another node can
+		// pick up the job.
+		if execCtx.ExecCfg().JobRegistry.IsDraining() {
+			return res, jobs.MarkAsRetryJobError(errors.Wrapf(err, "job encountered retryable error on draining node"))
+		}
+
+		// Re-load the job in order to update our progress object, which
+		// may have been updated since the flow started.
 		reloadedJob, reloadErr := execCtx.ExecCfg().JobRegistry.LoadClaimedJob(ctx, job.ID())
 		if reloadErr != nil {
 			if ctx.Err() != nil {
 				return res, ctx.Err()
 			}
-			log.Warningf(ctx, `IMPORT job %d could not reload job progress when retrying: %+v`,
-				int64(job.ID()), reloadErr)
+			log.Warningf(ctx, "IMPORT job %d could not reload job progress when retrying: %+v",
+				job.ID(), reloadErr)
 		} else {
 			job = reloadedJob
 		}
-		log.Warningf(ctx, `encountered retryable error: %+v`, err)
+		log.Warningf(ctx, "encountered retryable error: %+v", err)
 	}
 
 	// We have exhausted retries, but we have not seen a "PermanentBulkJobError" so
@@ -1382,13 +1394,19 @@ func createNonDropDatabaseChangeJob(
 // been committed from a import that has failed or been canceled. It does this
 // by adding the table descriptors in DROP state, which causes the schema change
 // stuff to delete the keys in the background.
-func (r *importResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}, _ error) error {
+func (r *importResumer) OnFailOrCancel(
+	ctx context.Context, execCtx interface{}, jobErr error,
+) error {
 	p := execCtx.(sql.JobExecContext)
 
 	// Emit to the event log that the job has started reverting.
 	emitImportJobEvent(ctx, p, jobs.StatusReverting, r.job)
 
+	// TODO(sql-exp): increase telemetry count for import.total.failed and
+	// import.duration-sec.failed.
 	details := r.job.Details().(jobspb.ImportDetails)
+	logutil.LogJobCompletion(ctx, importJobRecoveryEventType, r.job.ID(), false, jobErr, r.res.Rows)
+
 	addToFileFormatTelemetry(details.Format.Format.String(), "failed")
 	cfg := execCtx.(sql.JobExecContext).ExecCfg()
 	var jobsToRunAfterTxnCommit []jobspb.JobID

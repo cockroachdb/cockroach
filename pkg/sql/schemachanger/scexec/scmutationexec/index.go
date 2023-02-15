@@ -52,7 +52,7 @@ func addNewIndexMutation(
 	state descpb.DescriptorMutation_State,
 ) error {
 	tbl, err := i.checkOutTable(ctx, opIndex.TableID)
-	if err != nil {
+	if err != nil || tbl.Dropped() {
 		return err
 	}
 	// TODO(ajwerner): deal with ordering the indexes or sanity checking this
@@ -121,7 +121,7 @@ func (i *immediateVisitor) MakeBackfillingIndexDeleteOnly(
 	ctx context.Context, op scop.MakeBackfillingIndexDeleteOnly,
 ) error {
 	tbl, err := i.checkOutTable(ctx, op.TableID)
-	if err != nil {
+	if err != nil || tbl.Dropped() {
 		return err
 	}
 	return mutationStateChange(
@@ -137,7 +137,7 @@ func (i *immediateVisitor) MakeDeleteOnlyIndexWriteOnly(
 	ctx context.Context, op scop.MakeDeleteOnlyIndexWriteOnly,
 ) error {
 	tbl, err := i.checkOutTable(ctx, op.TableID)
-	if err != nil {
+	if err != nil || tbl.Dropped() {
 		return err
 	}
 	return mutationStateChange(
@@ -153,7 +153,7 @@ func (i *immediateVisitor) MakeBackfilledIndexMerging(
 	ctx context.Context, op scop.MakeBackfilledIndexMerging,
 ) error {
 	tbl, err := i.checkOutTable(ctx, op.TableID)
-	if err != nil {
+	if err != nil || tbl.Dropped() {
 		return err
 	}
 	return mutationStateChange(
@@ -169,7 +169,7 @@ func (i *immediateVisitor) MakeMergedIndexWriteOnly(
 	ctx context.Context, op scop.MakeMergedIndexWriteOnly,
 ) error {
 	tbl, err := i.checkOutTable(ctx, op.TableID)
-	if err != nil {
+	if err != nil || tbl.Dropped() {
 		return err
 	}
 	return mutationStateChange(
@@ -185,7 +185,7 @@ func (i *immediateVisitor) MakeValidatedPrimaryIndexPublic(
 	ctx context.Context, op scop.MakeValidatedPrimaryIndexPublic,
 ) error {
 	tbl, err := i.checkOutTable(ctx, op.TableID)
-	if err != nil {
+	if err != nil || tbl.Dropped() {
 		return err
 	}
 	index, err := catalog.MustFindIndexByID(tbl, op.IndexID)
@@ -205,7 +205,7 @@ func (i *immediateVisitor) MakeValidatedSecondaryIndexPublic(
 	ctx context.Context, op scop.MakeValidatedSecondaryIndexPublic,
 ) error {
 	tbl, err := i.checkOutTable(ctx, op.TableID)
-	if err != nil {
+	if err != nil || tbl.Dropped() {
 		return err
 	}
 
@@ -233,7 +233,7 @@ func (i *immediateVisitor) MakePublicPrimaryIndexWriteOnly(
 	ctx context.Context, op scop.MakePublicPrimaryIndexWriteOnly,
 ) error {
 	tbl, err := i.checkOutTable(ctx, op.TableID)
-	if err != nil {
+	if err != nil || tbl.Dropped() {
 		return err
 	}
 	if tbl.GetPrimaryIndexID() != op.IndexID {
@@ -265,7 +265,7 @@ func (i *immediateVisitor) MakeWriteOnlyIndexDeleteOnly(
 	ctx context.Context, op scop.MakeWriteOnlyIndexDeleteOnly,
 ) error {
 	tbl, err := i.checkOutTable(ctx, op.TableID)
-	if err != nil {
+	if err != nil || tbl.Dropped() {
 		return err
 	}
 	idx, err := catalog.MustFindIndexByID(tbl, op.IndexID)
@@ -303,7 +303,7 @@ func (i *immediateVisitor) RemoveDroppedIndexPartialPredicate(
 
 func (i *immediateVisitor) MakeIndexAbsent(ctx context.Context, op scop.MakeIndexAbsent) error {
 	tbl, err := i.checkOutTable(ctx, op.TableID)
-	if err != nil {
+	if err != nil || tbl.Dropped() {
 		return err
 	}
 	_, err = RemoveMutation(
@@ -319,7 +319,7 @@ func (i *immediateVisitor) AddIndexPartitionInfo(
 	ctx context.Context, op scop.AddIndexPartitionInfo,
 ) error {
 	tbl, err := i.checkOutTable(ctx, op.Partitioning.TableID)
-	if err != nil {
+	if err != nil || tbl.Dropped() {
 		return err
 	}
 	index, err := catalog.MustFindIndexByID(tbl, op.Partitioning.IndexID)
@@ -332,7 +332,7 @@ func (i *immediateVisitor) AddIndexPartitionInfo(
 
 func (i *immediateVisitor) SetIndexName(ctx context.Context, op scop.SetIndexName) error {
 	tbl, err := i.checkOutTable(ctx, op.TableID)
-	if err != nil {
+	if err != nil || tbl.Dropped() {
 		return err
 	}
 	index, err := catalog.MustFindIndexByID(tbl, op.IndexID)
@@ -345,7 +345,7 @@ func (i *immediateVisitor) SetIndexName(ctx context.Context, op scop.SetIndexNam
 
 func (i *immediateVisitor) AddColumnToIndex(ctx context.Context, op scop.AddColumnToIndex) error {
 	tbl, err := i.checkOutTable(ctx, op.TableID)
-	if err != nil {
+	if err != nil || tbl.Dropped() {
 		return err
 	}
 	index, err := catalog.MustFindIndexByID(tbl, op.IndexID)
@@ -418,11 +418,11 @@ func (i *immediateVisitor) RemoveColumnFromIndex(
 	ctx context.Context, op scop.RemoveColumnFromIndex,
 ) error {
 	tbl, err := i.checkOutTable(ctx, op.TableID)
-	if err != nil {
+	if err != nil || tbl.Dropped() {
 		return err
 	}
 	index, err := catalog.MustFindIndexByID(tbl, op.IndexID)
-	if err != nil {
+	if err != nil || index.Dropped() {
 		return err
 	}
 	column, err := catalog.MustFindColumnByID(tbl, op.ColumnID)

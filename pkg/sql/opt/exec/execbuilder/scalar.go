@@ -668,6 +668,7 @@ func (b *Builder) buildExistsSubquery(
 				planGen,
 				types.Bool,
 				false, /* enableStepping */
+				true,  /* calledOnNullInput */
 			),
 			tree.DBoolFalse,
 		}, types.Bool), nil
@@ -679,8 +680,7 @@ func (b *Builder) buildExistsSubquery(
 	// TODO(mgartner): This path should never be executed because the
 	// ConvertUncorrelatedExistsToCoalesceSubquery converts all uncorrelated
 	// Exists with Coalesce+Subquery expressions. Remove this and the execution
-	// support for the Exists mode. Remember to mark
-	// ConvertUncorrelatedExistsToCoalesceSubquery as an essential rule.
+	// support for the Exists mode.
 	plan, err := b.buildRelational(exists.Input)
 	if err != nil {
 		return nil, err
@@ -752,6 +752,7 @@ func (b *Builder) buildSubquery(
 			planGen,
 			subquery.Typ,
 			false, /* enableStepping */
+			true,  /* calledOnNullInput */
 		), nil
 	}
 
@@ -807,6 +808,7 @@ func (b *Builder) buildSubquery(
 			planGen,
 			subquery.Typ,
 			false, /* enableStepping */
+			true,  /* calledOnNullInput */
 		), nil
 	}
 
@@ -888,6 +890,7 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		planGen,
 		udf.Typ,
 		enableStepping,
+		udf.CalledOnNullInput,
 	), nil
 }
 
@@ -1032,5 +1035,5 @@ func (b *Builder) buildRoutinePlanGenerator(
 }
 
 func expectedLazyRoutineError(typ string) error {
-	return errors.AssertionFailedf("expected %s to be lazily planned as routines", typ)
+	return errors.AssertionFailedf("expected %s to be lazily planned as a routine", typ)
 }

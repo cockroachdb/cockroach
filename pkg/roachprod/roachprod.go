@@ -224,8 +224,9 @@ func CachedClusters(l *logger.Logger, fn func(clusterName string, numVMs int)) {
 	}
 }
 
-// acquireFilesystemLock acquires a filesystem lock so that two concurrent
-// synchronizations of roachprod state don't clobber each other.
+// acquireFilesystemLock acquires a filesystem lock in order that concurrent
+// operations or roachprod processes that access shared system resources do
+// not conflict.
 func acquireFilesystemLock() (unlockFn func(), _ error) {
 	lockFile := os.ExpandEnv("$HOME/.roachprod/LOCK")
 	f, err := os.Create(lockFile)
@@ -419,7 +420,14 @@ func RunWithDetails(
 	return c.RunWithDetails(ctx, l, c.Nodes, title, cmd)
 }
 
-// SQL runs `cockroach sql` on a remote cluster.
+// SQL runs `cockroach sql` on a remote cluster. If a single node is passed,
+// an interactive session may start.
+//
+// NOTE: When querying a single-node in a cluster, a pseudo-terminal is attached
+// to ssh which may result in an _interactive_ ssh session.
+//
+// CAUTION: this function should not be used by roachtest writers. Use syncedCluser.ExecSQL()
+// instead.
 func SQL(
 	ctx context.Context,
 	l *logger.Logger,
@@ -435,7 +443,10 @@ func SQL(
 	if err != nil {
 		return err
 	}
-	return c.SQL(ctx, l, tenantName, cmdArray)
+	if len(c.Nodes) == 1 {
+		return c.ExecOrInteractiveSQL(ctx, l, tenantName, cmdArray)
+	}
+	return c.ExecSQL(ctx, l, tenantName, cmdArray)
 }
 
 // IP gets the ip addresses of the nodes in a cluster.
@@ -567,6 +578,11 @@ func SetupSSH(ctx context.Context, l *logger.Logger, clusterName string) error {
 
 	// Configure SSH for machines in the zones we operate on.
 	if err := vm.ProvidersSequential(providers, func(p vm.Provider) error {
+		unlock, lockErr := acquireFilesystemLock()
+		if lockErr != nil {
+			return lockErr
+		}
+		defer unlock()
 		return p.ConfigSSH(zones[p.Name()])
 	}); err != nil {
 		return err

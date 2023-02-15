@@ -30,8 +30,8 @@ type hibernateOptions struct {
 	testDir  string
 	buildCmd,
 	testCmd string
-	blocklists  blocklistsForVersion
-	dbSetupFunc func(ctx context.Context, t test.Test, c cluster.Cluster)
+	blocklistWithName blocklistWithName
+	dbSetupFunc       func(ctx context.Context, t test.Test, c cluster.Cluster)
 }
 
 var (
@@ -40,9 +40,9 @@ var (
 		testDir:  "hibernate-core",
 		buildCmd: `cd /mnt/data1/hibernate/hibernate-core/ && ./../gradlew test -Pdb=cockroachdb ` +
 			`--tests org.hibernate.jdbc.util.BasicFormatterTest.*`,
-		testCmd:     "cd /mnt/data1/hibernate/hibernate-core/ && ./../gradlew test -Pdb=cockroachdb",
-		blocklists:  hibernateBlocklists,
-		dbSetupFunc: nil,
+		testCmd:           "cd /mnt/data1/hibernate/hibernate-core/ && ./../gradlew test -Pdb=cockroachdb",
+		blocklistWithName: blocklistWithName{blocklistname: "hibernateBlockList", blocklist: hibernateBlockList},
+		dbSetupFunc:       nil,
 	}
 	hibernateSpatialOpts = hibernateOptions{
 		testName: "hibernate-spatial",
@@ -51,7 +51,7 @@ var (
 			`--tests org.hibernate.spatial.dialect.postgis.*`,
 		testCmd: `cd /mnt/data1/hibernate/hibernate-spatial && ` +
 			`HIBERNATE_CONNECTION_LEAK_DETECTION=true ./../gradlew test -Pdb=cockroachdb_spatial`,
-		blocklists: hibernateSpatialBlocklists,
+		blocklistWithName: blocklistWithName{blocklistname: "hibernateSpatialBlockList", blocklist: hibernateSpatialBlockList},
 		dbSetupFunc: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			db := c.Conn(ctx, t.L(), 1)
 			defer db.Close()
@@ -169,10 +169,9 @@ func registerHibernate(r registry.Registry, opt hibernateOptions) {
 			t.Fatal(err)
 		}
 
-		blocklistName, expectedFailures, _, _ := opt.blocklists.getLists(version)
-		if expectedFailures == nil {
-			t.Fatalf("No hibernate blocklist defined for cockroach version %s", version)
-		}
+		blocklistName := opt.blocklistWithName.blocklistname
+		expectedFailures := opt.blocklistWithName.blocklist
+
 		t.L().Printf("Running cockroach version %s, using blocklist %s", version, blocklistName)
 
 		t.Status("running hibernate test suite, will take at least 3 hours")
@@ -235,7 +234,7 @@ func registerHibernate(r registry.Registry, opt hibernateOptions) {
 
 	r.Add(registry.TestSpec{
 		Name:       opt.testName,
-		Owner:      registry.OwnerSQLExperience,
+		Owner:      registry.OwnerSQLSessions,
 		Cluster:    r.MakeClusterSpec(1),
 		NativeLibs: registry.LibGEOS,
 		Tags:       []string{`default`, `orm`},

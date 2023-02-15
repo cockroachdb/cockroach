@@ -263,7 +263,7 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 
 	const anyRecipientStore roachpb.StoreID = 0
 	pendingSnapshotIndex := r.getSnapshotLogTruncationConstraintsRLocked(anyRecipientStore)
-	lastIndex := r.mu.lastIndex
+	lastIndex := r.mu.lastIndexNotDurable
 	// NB: raftLogSize above adjusts for pending truncations that have already
 	// been successfully replicated via raft, but logSizeTrusted does not see if
 	// those pending truncations would cause a transition from trusted =>
@@ -684,7 +684,7 @@ func (rlq *raftLogQueue) process(
 		// make sure concurrent Raft activity doesn't foul up our update to the
 		// cached in-memory values.
 		r.raftMu.Lock()
-		n, err := ComputeRaftLogSize(ctx, r.RangeID, r.Engine(), r.raftMu.sideloaded)
+		n, err := ComputeRaftLogSize(ctx, r.RangeID, r.store.TODOEngine(), r.raftMu.sideloaded)
 		if err == nil {
 			r.mu.Lock()
 			r.mu.raftLogSize = n

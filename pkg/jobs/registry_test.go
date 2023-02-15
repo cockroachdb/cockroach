@@ -123,11 +123,13 @@ func TestRegistryGC(t *testing.T) {
 			},
 			UpgradeManager: &upgradebase.TestingKnobs{
 				// This test wants to look at job records.
-				DontUseJobs: true,
+				DontUseJobs:                       true,
+				SkipJobMetricsPollingJobBootstrap: true,
 			},
 			KeyVisualizer: &keyvisualizer.TestingKnobs{
 				SkipJobBootstrap: true,
 			},
+			JobsTestingKnobs: NewTestingKnobsWithShortIntervals(),
 		},
 	})
 	defer s.Stopper().Stop(ctx)
@@ -271,11 +273,13 @@ func TestRegistryGCPagination(t *testing.T) {
 			},
 			UpgradeManager: &upgradebase.TestingKnobs{
 				// This test wants to count job records.
-				DontUseJobs: true,
+				DontUseJobs:                       true,
+				SkipJobMetricsPollingJobBootstrap: true,
 			},
 			KeyVisualizer: &keyvisualizer.TestingKnobs{
 				SkipJobBootstrap: true,
 			},
+			JobsTestingKnobs: NewTestingKnobsWithShortIntervals(),
 		},
 	})
 	db := sqlutils.MakeSQLRunner(sqlDB)
@@ -475,20 +479,15 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 		// We initialize the clock with Now() because the job-creation timestamp,
 		// 'created' column in system.jobs, of a new job is set from txn's time.
 		bti.clock = timeutil.NewManualTime(timeutil.Now())
-		timeSource := hlc.NewClock(bti.clock, base.DefaultMaxClockOffset)
+		timeSource := hlc.NewClockForTesting(bti.clock)
 		// Set up the test cluster.
-		knobs := &TestingKnobs{
-			TimeSource: timeSource,
-		}
+		// Set a small adopt and cancel intervals to reduce test time.
+		knobs := NewTestingKnobsWithIntervals(unitTime, unitTime, initialDelay, maxDelay)
+		knobs.TimeSource = timeSource
 		if bti.afterJobStateMachineKnob != nil {
 			knobs.AfterJobStateMachine = bti.afterJobStateMachineKnob
 		}
 		cs := cluster.MakeTestingClusterSettings()
-		// Set a small adopt and cancel intervals to reduce test time.
-		adoptIntervalSetting.Override(ctx, &cs.SV, unitTime)
-		cancelIntervalSetting.Override(ctx, &cs.SV, unitTime)
-		retryInitialDelaySetting.Override(ctx, &cs.SV, initialDelay)
-		retryMaxDelaySetting.Override(ctx, &cs.SV, maxDelay)
 		args := base.TestServerArgs{
 			Settings: cs,
 			Knobs: base.TestingKnobs{
@@ -501,7 +500,8 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 					ManagerDisableJobCreation: true,
 				},
 				UpgradeManager: &upgradebase.TestingKnobs{
-					DontUseJobs: true,
+					DontUseJobs:                       true,
+					SkipJobMetricsPollingJobBootstrap: true,
 				},
 				KeyVisualizer: &keyvisualizer.TestingKnobs{
 					SkipJobBootstrap: true,

@@ -253,7 +253,7 @@ func (d *txnDeps) CheckPausepoint(name string) error {
 }
 
 func (d *txnDeps) UseLegacyGCJob(ctx context.Context) bool {
-	return !d.settings.Version.IsActive(ctx, clusterversion.V22_2UseDelRangeInGCJob)
+	return !d.settings.Version.IsActive(ctx, clusterversion.TODODelete_V22_2UseDelRangeInGCJob)
 }
 
 func (d *txnDeps) SchemaChangerJobID() jobspb.JobID {

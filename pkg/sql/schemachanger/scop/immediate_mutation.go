@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 )
 
@@ -33,6 +34,14 @@ func (immediateMutationOp) Type() Type { return MutationType }
 type NotImplemented struct {
 	immediateMutationOp
 	ElementType string
+}
+
+// NotImplementedForPublicObjects is a placeholder for operations which haven't defined,
+// these are okay when dropping objects.
+type NotImplementedForPublicObjects struct {
+	immediateMutationOp
+	ElementType string
+	DescID      catid.DescID
 }
 
 // UndoAllInTxnImmediateMutationOpSideEffects undoes the side effects of all
@@ -266,15 +275,16 @@ type RemoveColumnNotNull struct {
 	ColumnID descpb.ColumnID
 }
 
-// MakeAbsentCheckConstraintWriteOnly adds a non-existent check constraint
-// to the table in the WRITE_ONLY state.
-type MakeAbsentCheckConstraintWriteOnly struct {
+// AddCheckConstraint adds a non-existent check constraint
+// to the table.
+type AddCheckConstraint struct {
 	immediateMutationOp
 	TableID               descpb.ID
 	ConstraintID          descpb.ConstraintID
 	ColumnIDs             []descpb.ColumnID
 	CheckExpr             catpb.Expression
 	FromHashShardedColumn bool
+	Validity              descpb.ConstraintValidity
 }
 
 // MakeAbsentColumnNotNullWriteOnly adds a non-existent NOT NULL constraint,
@@ -317,9 +327,9 @@ type MakeValidatedColumnNotNullPublic struct {
 	ColumnID descpb.ColumnID
 }
 
-// MakeAbsentForeignKeyConstraintWriteOnly adds a non-existent foreign key
-// constraint to the table in the WRITE_ONLY state.
-type MakeAbsentForeignKeyConstraintWriteOnly struct {
+// AddForeignKeyConstraint adds a non-existent foreign key
+// constraint to the table.
+type AddForeignKeyConstraint struct {
 	immediateMutationOp
 	TableID                 descpb.ID
 	ConstraintID            descpb.ConstraintID
@@ -329,6 +339,7 @@ type MakeAbsentForeignKeyConstraintWriteOnly struct {
 	OnUpdateAction          semenumpb.ForeignKeyAction
 	OnDeleteAction          semenumpb.ForeignKeyAction
 	CompositeKeyMatchMethod semenumpb.Match
+	Validity                descpb.ConstraintValidity
 }
 
 // MakeValidatedForeignKeyConstraintPublic moves a new, validated foreign key
@@ -364,14 +375,15 @@ type RemoveForeignKeyBackReference struct {
 	OriginConstraintID descpb.ConstraintID
 }
 
-// MakeAbsentUniqueWithoutIndexConstraintWriteOnly adds a non-existent
-// unique_without_index constraint to the table in the WRITE_ONLY state.
-type MakeAbsentUniqueWithoutIndexConstraintWriteOnly struct {
+// AddUniqueWithoutIndexConstraint adds a non-existent
+// unique_without_index constraint to the table.
+type AddUniqueWithoutIndexConstraint struct {
 	immediateMutationOp
 	TableID      descpb.ID
 	ConstraintID descpb.ConstraintID
 	ColumnIDs    []descpb.ColumnID
 	PartialExpr  catpb.Expression
+	Validity     descpb.ConstraintValidity
 }
 
 // MakeValidatedUniqueWithoutIndexConstraintPublic moves a new, validated unique_without_index

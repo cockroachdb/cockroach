@@ -46,7 +46,7 @@ func (n *createFunctionNode) ReadingOwnWrites() {}
 func (n *createFunctionNode) startExec(params runParams) error {
 	if !params.EvalContext().Settings.Version.IsActive(
 		params.ctx,
-		clusterversion.V22_2SchemaChangeSupportsCreateFunction,
+		clusterversion.TODODelete_V22_2SchemaChangeSupportsCreateFunction,
 	) {
 		// TODO(chengxiong): remove this version gate in 23.1.
 		return pgerror.Newf(
@@ -144,7 +144,7 @@ func (n *createFunctionNode) createNewFunction(
 	}
 	scDesc.AddFunction(
 		udfDesc.GetName(),
-		descpb.SchemaDescriptor_FunctionOverload{
+		descpb.SchemaDescriptor_FunctionSignature{
 			ID:         udfDesc.GetID(),
 			ArgTypes:   paramTypes,
 			ReturnType: returnType,

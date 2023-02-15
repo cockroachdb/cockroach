@@ -203,8 +203,15 @@ func (sl StateLoader) SetRaftReplicaID(
 // LoadRaftReplicaID loads the RaftReplicaID.
 func (sl StateLoader) LoadRaftReplicaID(
 	ctx context.Context, reader storage.Reader,
-) (replicaID roachpb.RaftReplicaID, found bool, err error) {
-	found, err = storage.MVCCGetProto(ctx, reader, sl.RaftReplicaIDKey(),
+) (*roachpb.RaftReplicaID, error) {
+	var replicaID roachpb.RaftReplicaID
+	found, err := storage.MVCCGetProto(ctx, reader, sl.RaftReplicaIDKey(),
 		hlc.Timestamp{}, &replicaID, storage.MVCCGetOptions{})
-	return
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, errors.AssertionFailedf("no replicaID persisted")
+	}
+	return &replicaID, nil
 }

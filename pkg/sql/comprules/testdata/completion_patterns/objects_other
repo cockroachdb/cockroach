@@ -47,6 +47,7 @@ SELECT name AS completion,
   FROM t
 LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
     ON t.table_id = cc.object_id AND cc.type = 'TableCommentType'
+ORDER BY 1,3,4,5
 --placeholders: []interface {}{"xor", 9, 12, "a", "public"}
 
 comp at=10
@@ -72,6 +73,7 @@ SELECT name AS completion,
   FROM t
 LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
     ON t.table_id = cc.object_id AND cc.type = 'TableCommentType'
+ORDER BY 1,3,4,5
 --placeholders: []interface {}{"", 10, 10, "a", "public"}
 
 comp at=9
@@ -97,6 +99,7 @@ SELECT name AS completion,
   FROM t
 LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
     ON t.table_id = cc.object_id AND cc.type = 'TableCommentType'
+ORDER BY 1,3,4,5
 --placeholders: []interface {}{"", 9, 9, "a", "public"}
 
 
@@ -127,6 +130,7 @@ SELECT name AS completion,
   FROM t
 LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
     ON t.table_id = cc.object_id AND cc.type = 'TableCommentType'
+ORDER BY 1,3,4,5
 --placeholders: []interface {}{"xor", 11, 14, "a", "b"}
 
 comp at=12
@@ -152,6 +156,7 @@ SELECT name AS completion,
   FROM t
 LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
     ON t.table_id = cc.object_id AND cc.type = 'TableCommentType'
+ORDER BY 1,3,4,5
 --placeholders: []interface {}{"", 12, 12, "a", "b"}
 
 comp at=11
@@ -177,6 +182,7 @@ SELECT name AS completion,
   FROM t
 LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
     ON t.table_id = cc.object_id AND cc.type = 'TableCommentType'
+ORDER BY 1,3,4,5
 --placeholders: []interface {}{"", 11, 11, "a", "b"}
 
 
@@ -207,6 +213,7 @@ SELECT name AS completion,
   FROM t
 LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
     ON t.table_id = cc.object_id AND cc.type = 'TableCommentType'
+ORDER BY 1,3,4,5
 --placeholders: []interface {}{"pg_", 12, 16, "mydb", "public"}
 
 # Quoted uppercase is an entire schema entirely.
@@ -233,6 +240,7 @@ SELECT name AS completion,
   FROM t
 LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
     ON t.table_id = cc.object_id AND cc.type = 'TableCommentType'
+ORDER BY 1,3,4,5
 --placeholders: []interface {}{"PG_", 12, 16, "mydb", "public"}
 
 

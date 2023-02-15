@@ -50,6 +50,7 @@ var (
 	_ jsonMarshaler = (*jsonInt)(nil)
 	_ jsonMarshaler = (*stmtFingerprintID)(nil)
 	_ jsonMarshaler = (*int64Array)(nil)
+	_ jsonMarshaler = &latencyInfo{}
 )
 
 type txnStats appstatspb.TransactionStatistics
@@ -120,50 +121,6 @@ func (s *aggregatedMetadata) jsonFields() jsonFields {
 		{"vecCount", (*jsonInt)(&s.VecCount)},
 		{"totalCount", (*jsonInt)(&s.TotalCount)},
 		{"fingerprintID", (*jsonString)(&s.FingerprintID)},
-	}
-}
-
-// ContentionEventWithNames is used to serialize into
-// cluster_execution_insights as a JSON array. This type
-// has the names instead of ids to avoid doing joins to get
-// the user-friendly names.
-type ContentionEventWithNames struct {
-	BlockingTransactionID string
-	SchemaName            string
-	DatabaseName          string
-	TableName             string
-	IndexName             string
-	DurationInMs          float64
-}
-
-type contentionEvents []ContentionEventWithNames
-
-func (s *contentionEvents) encodeJSON() (json.JSON, error) {
-	builder := json.NewArrayBuilder(len(*s))
-
-	for _, value := range *s {
-		jsVal := (*contentionEvent)(&value).jsonFields()
-		jsObj, err := jsVal.encodeJSON()
-		if err != nil {
-			return nil, err
-		}
-
-		builder.Add(jsObj)
-	}
-
-	return builder.Build(), nil
-}
-
-type contentionEvent ContentionEventWithNames
-
-func (s *contentionEvent) jsonFields() jsonFields {
-	return jsonFields{
-		{"blockingTxnID", (*jsonString)(&s.BlockingTransactionID)},
-		{"durationInMs", (*jsonFloat)(&s.DurationInMs)},
-		{"schemaName", (*jsonString)(&s.SchemaName)},
-		{"databaseName", (*jsonString)(&s.DatabaseName)},
-		{"tableName", (*jsonString)(&s.TableName)},
-		{"indexName", (*jsonString)(&s.IndexName)},
 	}
 }
 
@@ -339,6 +296,8 @@ func (s *innerStmtStats) jsonFields() jsonFields {
 		{"nodes", (*int64Array)(&s.Nodes)},
 		{"planGists", (*stringArray)(&s.PlanGists)},
 		{"indexes", (*stringArray)(&s.Indexes)},
+		{"latencyInfo", (*latencyInfo)(&s.LatencyInfo)},
+		{"lastErrorCode", (*jsonString)(&s.LastErrorCode)},
 	}
 }
 
@@ -361,6 +320,7 @@ func (e *execStats) jsonFields() jsonFields {
 		{"networkMsgs", (*numericStats)(&e.NetworkMessages)},
 		{"maxDiskUsage", (*numericStats)(&e.MaxDiskUsage)},
 		{"cpuSQLNanos", (*numericStats)(&e.CPUSQLNanos)},
+		{"mvccIteratorStats", (*iteratorStats)(&e.MVCCIteratorStats)},
 	}
 }
 
@@ -369,6 +329,34 @@ func (e *execStats) decodeJSON(js json.JSON) error {
 }
 
 func (e *execStats) encodeJSON() (json.JSON, error) {
+	return e.jsonFields().encodeJSON()
+}
+
+type iteratorStats appstatspb.MVCCIteratorStats
+
+func (e *iteratorStats) jsonFields() jsonFields {
+	return jsonFields{
+		{"stepCount", (*numericStats)(&e.StepCount)},
+		{"stepCountInternal", (*numericStats)(&e.StepCountInternal)},
+		{"seekCount", (*numericStats)(&e.SeekCount)},
+		{"seekCountInternal", (*numericStats)(&e.SeekCountInternal)},
+		{"blockBytes", (*numericStats)(&e.BlockBytes)},
+		{"blockBytesInCache", (*numericStats)(&e.BlockBytesInCache)},
+		{"keyBytes", (*numericStats)(&e.KeyBytes)},
+		{"valueBytes", (*numericStats)(&e.ValueBytes)},
+		{"pointCount", (*numericStats)(&e.PointCount)},
+		{"pointsCoveredByRangeTombstones", (*numericStats)(&e.PointsCoveredByRangeTombstones)},
+		{"rangeKeyCount", (*numericStats)(&e.RangeKeyCount)},
+		{"rangeKeyContainedPoints", (*numericStats)(&e.RangeKeyContainedPoints)},
+		{"rangeKeySkippedPoints", (*numericStats)(&e.RangeKeySkippedPoints)},
+	}
+}
+
+func (e *iteratorStats) decodeJSON(js json.JSON) error {
+	return e.jsonFields().decodeJSON(js)
+}
+
+func (e *iteratorStats) encodeJSON() (json.JSON, error) {
 	return e.jsonFields().encodeJSON()
 }
 
@@ -387,6 +375,26 @@ func (n *numericStats) decodeJSON(js json.JSON) error {
 
 func (n *numericStats) encodeJSON() (json.JSON, error) {
 	return n.jsonFields().encodeJSON()
+}
+
+type latencyInfo appstatspb.LatencyInfo
+
+func (l *latencyInfo) jsonFields() jsonFields {
+	return jsonFields{
+		{"min", (*jsonFloat)(&l.Min)},
+		{"max", (*jsonFloat)(&l.Max)},
+		{"p50", (*jsonFloat)(&l.P50)},
+		{"p90", (*jsonFloat)(&l.P90)},
+		{"p99", (*jsonFloat)(&l.P99)},
+	}
+}
+
+func (l *latencyInfo) decodeJSON(js json.JSON) error {
+	return l.jsonFields().decodeJSON(js)
+}
+
+func (l *latencyInfo) encodeJSON() (json.JSON, error) {
+	return l.jsonFields().encodeJSON()
 }
 
 type jsonFields []jsonField

@@ -39,8 +39,8 @@ func TestUpdateInvalidColumnIDsInSequenceBackReferences(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	var (
-		v0 = clusterversion.ByKey(clusterversion.V22_2UpdateInvalidColumnIDsInSequenceBackReferences - 1)
-		v1 = clusterversion.ByKey(clusterversion.V22_2UpdateInvalidColumnIDsInSequenceBackReferences)
+		v0 = clusterversion.ByKey(clusterversion.TODODelete_V22_2UpdateInvalidColumnIDsInSequenceBackReferences - 1)
+		v1 = clusterversion.ByKey(clusterversion.TODODelete_V22_2UpdateInvalidColumnIDsInSequenceBackReferences)
 	)
 
 	type TestCase struct {

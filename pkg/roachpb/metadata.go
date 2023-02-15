@@ -37,6 +37,13 @@ func (n NodeID) String() string {
 // SafeValue implements the redact.SafeValue interface.
 func (n NodeID) SafeValue() {}
 
+// NodeIDSlice implements sort.Interface.
+type NodeIDSlice []NodeID
+
+func (s NodeIDSlice) Len() int           { return len(s) }
+func (s NodeIDSlice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+func (s NodeIDSlice) Less(i, j int) bool { return s[i] < s[j] }
+
 // StoreID is a custom type for a cockroach store ID.
 type StoreID int32
 
@@ -537,6 +544,7 @@ func (sc StoreCapacity) FractionUsed() float64 {
 func (sc StoreCapacity) Load() load.Load {
 	dims := load.Vector{}
 	dims[load.Queries] = sc.QueriesPerSecond
+	dims[load.CPU] = sc.CPUPerSecond
 	return dims
 
 }
@@ -595,6 +603,23 @@ func (l Locality) String() string {
 		tiers[i] = tier.String()
 	}
 	return strings.Join(tiers, ",")
+}
+
+// NonEmpty returns true if the tiers are non-empty.
+func (l Locality) NonEmpty() bool {
+	return len(l.Tiers) > 0
+}
+
+// Matches checks if this locality has a tier with a matching value for each
+// tier of the passed filter, returning true if so or false if not along with
+// the first tier of the filters that did not matched.
+func (l Locality) Matches(filter Locality) (bool, Tier) {
+	for _, t := range filter.Tiers {
+		if v, ok := l.Find(t.Key); !ok || v != t.Value {
+			return false, t
+		}
+	}
+	return true, Tier{}
 }
 
 // Type returns the underlying type in string form. This is part of pflag's

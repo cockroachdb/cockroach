@@ -89,11 +89,11 @@ type ChangefeedTargets []ChangefeedTarget
 
 // Format implements the NodeFormatter interface.
 func (cts *ChangefeedTargets) Format(ctx *FmtCtx) {
-	for i, ct := range *cts {
+	for i := range *cts {
 		if i > 0 {
 			ctx.WriteString(", ")
 		}
-		ctx.FormatNode(&ct)
+		ctx.FormatNode(&(*cts)[i])
 	}
 }
 

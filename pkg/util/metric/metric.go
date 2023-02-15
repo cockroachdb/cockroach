@@ -578,6 +578,63 @@ func (c *Counter) GetMetadata() Metadata {
 	return baseMetadata
 }
 
+type CounterFloat64 struct {
+	Metadata
+	count syncutil.AtomicFloat64
+}
+
+// GetMetadata returns the metric's metadata including the Prometheus
+// MetricType.
+func (c *CounterFloat64) GetMetadata() Metadata {
+	baseMetadata := c.Metadata
+	baseMetadata.MetricType = prometheusgo.MetricType_COUNTER
+	return baseMetadata
+}
+
+func (c *CounterFloat64) Clear() {
+	syncutil.StoreFloat64(&c.count, 0)
+}
+
+func (c *CounterFloat64) Count() float64 {
+	return syncutil.LoadFloat64(&c.count)
+}
+
+func (c *CounterFloat64) Inc(i float64) {
+	syncutil.AddFloat64(&c.count, i)
+}
+
+func (c *CounterFloat64) UpdateIfHigher(i float64) {
+	syncutil.StoreFloat64IfHigher(&c.count, i)
+}
+
+func (c *CounterFloat64) Snapshot() *CounterFloat64 {
+	newCounter := NewCounterFloat64(c.Metadata)
+	syncutil.StoreFloat64(&newCounter.count, c.Count())
+	return newCounter
+}
+
+// GetType returns the prometheus type enum for this metric.
+func (c *CounterFloat64) GetType() *prometheusgo.MetricType {
+	return prometheusgo.MetricType_COUNTER.Enum()
+}
+
+// ToPrometheusMetric returns a filled-in prometheus metric of the right type.
+func (c *CounterFloat64) ToPrometheusMetric() *prometheusgo.Metric {
+	return &prometheusgo.Metric{
+		Counter: &prometheusgo.Counter{Value: proto.Float64(c.Count())},
+	}
+}
+
+// MarshalJSON marshals to JSON.
+func (c *CounterFloat64) MarshalJSON() ([]byte, error) {
+	return json.Marshal(c.Count())
+}
+
+// NewCounterFloat64 creates a counter.
+func NewCounterFloat64(metadata Metadata) *CounterFloat64 {
+	return &CounterFloat64{Metadata: metadata}
+}
+
 // A Gauge atomically stores a single integer value.
 type Gauge struct {
 	Metadata

@@ -723,7 +723,7 @@ begin transaction #17
 validate forward indexes [4] in table #104
 commit transaction #17
 begin transaction #18
-## PostCommitNonRevertiblePhase stage 1 of 4 with 7 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 4 with 12 MutationType ops
 upsert descriptor #104
    table:
   -  checks:
@@ -933,10 +933,10 @@ upsert descriptor #104
   -  version: "12"
   +  version: "13"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 3 of 4 with 1 MutationType op pending"
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 3 of 4 with 3 MutationType ops pending"
 commit transaction #19
 begin transaction #20
-## PostCommitNonRevertiblePhase stage 3 of 4 with 3 MutationType ops
+## PostCommitNonRevertiblePhase stage 3 of 4 with 5 MutationType ops
 upsert descriptor #104
   ...
          version: 4

@@ -68,10 +68,10 @@ func (p *planner) parseExternalConnection(
 func (p *planner) createExternalConnection(
 	params runParams, n *tree.CreateExternalConnection,
 ) error {
-	if !p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.V22_2SystemExternalConnectionsTable) {
+	if !p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.TODODelete_V22_2SystemExternalConnectionsTable) {
 		return pgerror.Newf(pgcode.FeatureNotSupported,
 			"version %v must be finalized to create an External Connection",
-			clusterversion.ByKey(clusterversion.V22_2SystemExternalConnectionsTable))
+			clusterversion.ByKey(clusterversion.TODODelete_V22_2SystemExternalConnectionsTable))
 	}
 
 	if err := params.p.CheckPrivilege(params.ctx, syntheticprivilege.GlobalPrivilegeObject,
@@ -101,10 +101,32 @@ func (p *planner) createExternalConnection(
 		return errors.Wrap(err, "failed to log and sanitize External Connection")
 	}
 
+	var SkipCheckingExternalStorageConnection bool
+	var SkipCheckingKMSConnection bool
+	if tk := params.ExecCfg().ExternalConnectionTestingKnobs; tk != nil {
+		if tk.SkipCheckingExternalStorageConnection != nil {
+			SkipCheckingExternalStorageConnection = params.ExecCfg().ExternalConnectionTestingKnobs.SkipCheckingExternalStorageConnection()
+		}
+		if tk.SkipCheckingKMSConnection != nil {
+			SkipCheckingKMSConnection = params.ExecCfg().ExternalConnectionTestingKnobs.SkipCheckingKMSConnection()
+		}
+	}
+
+	env := externalconn.MakeExternalConnEnv(
+		params.ExecCfg().Settings,
+		&params.ExecCfg().ExternalIODirConfig,
+		params.ExecCfg().InternalDB,
+		p.User(),
+		params.ExecCfg().DistSQLSrv.ExternalStorageFromURI,
+		SkipCheckingExternalStorageConnection,
+		SkipCheckingKMSConnection,
+		&params.ExecCfg().DistSQLSrv.ServerConfig,
+	)
+
 	// Construct the ConnectionDetails for the external resource represented by
 	// the External Connection.
 	exConn, err := externalconn.ExternalConnectionFromURI(
-		params.ctx, params.ExecCfg(), p.User(), ec.endpoint,
+		params.ctx, env, ec.endpoint,
 	)
 	if err != nil {
 		return errors.Wrap(err, "failed to construct External Connection details")

@@ -16,6 +16,11 @@ import { Dispatch } from "redux";
 import { AppState, uiConfigActions } from "src/store";
 import { actions as nodesActions } from "../store/nodes";
 import { actions as sqlStatsActions } from "src/store/sqlStats";
+import { TxnInsightsRequest } from "../api";
+import {
+  actions as transactionInsights,
+  selectTxnInsightsByFingerprint,
+} from "src/store/insights/transactionInsights";
 import {
   TransactionDetails,
   TransactionDetailsDispatchProps,
@@ -29,12 +34,14 @@ import {
 import {
   selectIsTenant,
   selectHasViewActivityRedactedRole,
+  selectHasAdminRole,
 } from "../store/uiConfig";
 import { nodeRegionsByIDSelector } from "../store/nodes";
 import { selectTimeScale } from "../store/utils/selectors";
 import { StatementsRequest } from "src/api/statementsApi";
 import { txnFingerprintIdAttr, getMatchParamByName } from "../util";
 import { TimeScale } from "../timeScaleDropdown";
+import { actions as analyticsActions } from "../store/analytics";
 
 export const selectTransaction = createSelector(
   (state: AppState) => state.adminUI?.sqlStats,
@@ -87,6 +94,8 @@ const mapStateToProps = (
     isLoading: isLoading,
     lastUpdated: lastUpdated,
     hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),
+    transactionInsights: selectTxnInsightsByFingerprint(state, props),
+    hasAdminRole: selectHasAdminRole(state),
   };
 };
 
@@ -103,6 +112,16 @@ const mapDispatchToProps = (
         ts: ts,
       }),
     );
+    dispatch(
+      analyticsActions.track({
+        name: "TimeScale changed",
+        page: "Transaction Details",
+        value: ts.key,
+      }),
+    );
+  },
+  refreshTransactionInsights: (req: TxnInsightsRequest) => {
+    dispatch(transactionInsights.refresh(req));
   },
 });
 

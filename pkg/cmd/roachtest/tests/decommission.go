@@ -342,7 +342,7 @@ func runDecommission(
 			if err != nil {
 				return err
 			}
-			startOpts := option.DefaultStartOpts()
+			startOpts := option.DefaultStartSingleNodeOpts()
 			extraArgs := []string{
 				"--join", internalAddrs[0],
 				fmt.Sprintf("--attrs=node%d", node),
@@ -707,7 +707,8 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 			t.L().Printf("expected to fail: restarting [n%d,n%d] and attempting to recommission through n%d\n",
 				targetNodeA, targetNodeB, runNode)
 			c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Nodes(targetNodeA, targetNodeB))
-			c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.Nodes(targetNodeA, targetNodeB))
+			// The node is in a decomissioned state, so don't attempt to run scheduled backups.
+			c.Start(ctx, t.L(), option.DefaultStartSingleNodeOpts(), settings, c.Nodes(targetNodeA, targetNodeB))
 
 			if _, err := h.recommission(ctx, c.Nodes(targetNodeA, targetNodeB), runNode); err == nil {
 				t.Fatalf("expected recommission to fail")
@@ -769,7 +770,7 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 
 			// Bring targetNode it back up to verify that its replicas still get
 			// removed.
-			c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.Node(targetNode))
+			c.Start(ctx, t.L(), option.DefaultStartSingleNodeOpts(), settings, c.Node(targetNode))
 		}
 
 		// Run decommission a second time to wait until the replicas have
@@ -845,7 +846,7 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 				t.Fatal(err)
 			}
 			joinAddr := internalAddrs[0]
-			startOpts := option.DefaultStartOpts()
+			startOpts := option.DefaultStartSingleNodeOpts()
 			startOpts.RoachprodOpts.ExtraArgs = append(
 				startOpts.RoachprodOpts.ExtraArgs,
 				[]string{"--join", joinAddr}...,

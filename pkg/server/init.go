@@ -469,15 +469,9 @@ func (s *initServer) attemptJoinTo(
 	initClient := roachpb.NewInternalClient(conn)
 	resp, err := initClient.Join(ctx, req)
 	if err != nil {
-		// If the target node does not implement the Join RPC, or explicitly
-		// returns errJoinRPCUnsupported (because the cluster version
-		// introducing its usage is not yet active), we error out so the init
-		// server knows to fall back on the gossip-based discovery mechanism for
-		// the clusterID.
-
 		status, ok := grpcstatus.FromError(errors.UnwrapAll(err))
 		if !ok {
-			return nil, err
+			return nil, errors.Wrap(err, "failed to join cluster")
 		}
 
 		// TODO(irfansharif): Here we're logging the error and also returning

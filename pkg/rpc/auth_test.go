@@ -20,12 +20,15 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -97,12 +100,13 @@ func TestAuthenticateTenant(t *testing.T) {
 	stid := roachpb.SystemTenantID
 	tenTen := roachpb.MustMakeTenantID(10)
 	for _, tc := range []struct {
-		systemID    roachpb.TenantID
-		ous         []string
-		commonName  string
-		expTenID    roachpb.TenantID
-		expErr      string
-		tenantScope uint64
+		systemID         roachpb.TenantID
+		ous              []string
+		commonName       string
+		expTenID         roachpb.TenantID
+		expErr           string
+		tenantScope      uint64
+		clientTenantInMD string
 	}{
 		{systemID: stid, ous: correctOU, commonName: "10", expTenID: tenTen},
 		{systemID: stid, ous: correctOU, commonName: roachpb.MinTenantID.String(), expTenID: roachpb.MinTenantID},
@@ -127,8 +131,44 @@ func TestAuthenticateTenant(t *testing.T) {
 		{systemID: tenTen, ous: correctOU, commonName: "1", expErr: `invalid tenant ID 1 in Common Name \(CN\)`},
 		{systemID: tenTen, ous: nil, commonName: "root"},
 		{systemID: tenTen, ous: nil, commonName: "node"},
+
+		// Passing a client ID in metadata instead of relying only on the TLS cert.
+		{clientTenantInMD: "invalid", expErr: `could not parse tenant ID from gRPC metadata`},
+		{clientTenantInMD: "1", expErr: `invalid tenant ID 1 in gRPC metadata`},
+		{clientTenantInMD: "-1", expErr: `could not parse tenant ID from gRPC metadata`},
+
+		// tenant ID in MD matches that in client cert.
+		// Server is KV node: expect tenant authorization.
+		{clientTenantInMD: "10",
+			systemID: stid, ous: correctOU, commonName: "10", expTenID: tenTen},
+		// tenant ID in MD doesn't match that in client cert.
+		{clientTenantInMD: "10",
+			systemID: stid, ous: correctOU, commonName: "123",
+			expErr: `client wants to authenticate as tenant 10, but is using TLS cert for tenant 123`},
+		// tenant ID present in MD, but not in client cert. However,
+		// client cert is valid. Use MD tenant ID.
+		// Server is KV node: expect tenant authorization.
+		{clientTenantInMD: "10",
+			systemID: stid, ous: nil, commonName: "root", expTenID: tenTen},
+		// tenant ID present in MD, but not in client cert. However,
+		// client cert is valid. Use MD tenant ID.
+		// Server is KV node: expect tenant authorization.
+		{clientTenantInMD: "10",
+			systemID: stid, ous: nil, commonName: "node", expTenID: tenTen},
+		// tenant ID present in MD, but not in client cert. However,
+		// client cert is valid. Use MD tenant ID.
+		// Server is secondary tenant: do not do additional tenant authorization.
+		{clientTenantInMD: "10",
+			systemID: tenTen, ous: nil, commonName: "root", expTenID: roachpb.TenantID{}},
+		{clientTenantInMD: "10",
+			systemID: tenTen, ous: nil, commonName: "node", expTenID: roachpb.TenantID{}},
+		// tenant ID present in MD, but not in client cert. Use MD tenant ID.
+		// Server tenant ID does not match client tenant ID.
+		{clientTenantInMD: "123",
+			systemID: tenTen, ous: nil, commonName: "root",
+			expErr: `client tenant identity \(123\) does not match server`},
 	} {
-		t.Run(fmt.Sprintf("from %v to %v", tc.commonName, tc.systemID), func(t *testing.T) {
+		t.Run(fmt.Sprintf("from %v to %v (md %q)", tc.commonName, tc.systemID, tc.clientTenantInMD), func(t *testing.T) {
 			cert := &x509.Certificate{
 				Subject: pkix.Name{
 					CommonName:         tc.commonName,
@@ -150,6 +190,11 @@ func TestAuthenticateTenant(t *testing.T) {
 			p := peer.Peer{AuthInfo: tlsInfo}
 			ctx := peer.NewContext(context.Background(), &p)
 
+			if tc.clientTenantInMD != "" {
+				md := metadata.MD{"client-tid": []string{tc.clientTenantInMD}}
+				ctx = metadata.NewIncomingContext(ctx, md)
+			}
+
 			tenID, err := rpc.TestingAuthenticateTenant(ctx, tc.systemID)
 
 			if tc.expErr == "" {
@@ -165,29 +210,46 @@ func TestAuthenticateTenant(t *testing.T) {
 	}
 }
 
+func prefix(tenID uint64, key string) string {
+	tenPrefix := keys.MakeTenantPrefix(roachpb.MustMakeTenantID(tenID))
+	return string(append(tenPrefix, []byte(key)...))
+}
+
+func makeSpanShared(t *testing.T, key string, endKey ...string) roachpb.Span {
+	s := roachpb.Span{Key: roachpb.Key(key)}
+	if len(endKey) > 1 {
+		t.Fatalf("unexpected endKey vararg %v", endKey)
+	} else if len(endKey) == 1 {
+		s.EndKey = roachpb.Key(endKey[0])
+	}
+	return s
+}
+
+func makeReqShared(t *testing.T, key string, endKey ...string) roachpb.Request {
+	s := makeSpanShared(t, key, endKey...)
+	h := roachpb.RequestHeaderFromSpan(s)
+	return &roachpb.ScanRequest{RequestHeader: h}
+}
+
+func makeReqs(reqs ...roachpb.Request) []roachpb.RequestUnion {
+	ru := make([]roachpb.RequestUnion, len(reqs))
+	for i, r := range reqs {
+		ru[i].MustSetInner(r)
+	}
+	return ru
+}
+
 func TestTenantAuthRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tenID := roachpb.MustMakeTenantID(10)
-	prefix := func(tenID uint64, key string) string {
-		tenPrefix := keys.MakeTenantPrefix(roachpb.MustMakeTenantID(tenID))
-		return string(append(tenPrefix, []byte(key)...))
-	}
 	makeSpan := func(key string, endKey ...string) roachpb.Span {
-		s := roachpb.Span{Key: roachpb.Key(key)}
-		if len(endKey) > 1 {
-			t.Fatalf("unexpected endKey vararg %v", endKey)
-		} else if len(endKey) == 1 {
-			s.EndKey = roachpb.Key(endKey[0])
-		}
-		return s
+		return makeSpanShared(t, key, endKey...)
 	}
 	makeReq := func(key string, endKey ...string) roachpb.Request {
-		s := makeSpan(key, endKey...)
-		h := roachpb.RequestHeaderFromSpan(s)
-		return &roachpb.ScanRequest{RequestHeader: h}
+		return makeReqShared(t, key, endKey...)
 	}
 	makeDisallowedAdminReq := func(key string) roachpb.Request {
-		s := makeSpan(key)
+		s := makeSpanShared(t, key)
 		h := roachpb.RequestHeader{Key: s.Key}
 		return &roachpb.AdminMergeRequest{RequestHeader: h}
 	}
@@ -200,13 +262,6 @@ func TestTenantAuthRequest(t *testing.T) {
 		s := makeSpan(key)
 		h := roachpb.RequestHeaderFromSpan(s)
 		return &roachpb.AdminScatterRequest{RequestHeader: h}
-	}
-	makeReqs := func(reqs ...roachpb.Request) []roachpb.RequestUnion {
-		ru := make([]roachpb.RequestUnion, len(reqs))
-		for i, r := range reqs {
-			ru[i].MustSetInner(r)
-		}
-		return ru
 	}
 	makeSystemSpanConfigTarget := func(source, target uint64) roachpb.SpanConfigTarget {
 		return roachpb.SpanConfigTarget{
@@ -815,9 +870,12 @@ func TestTenantAuthRequest(t *testing.T) {
 		},
 	} {
 		t.Run(method, func(t *testing.T) {
+			ctx := context.Background()
 			for _, tc := range tests {
 				t.Run("", func(t *testing.T) {
-					err := rpc.TestingAuthorizeTenantRequest(tenID, method, tc.req)
+					err := rpc.TestingAuthorizeTenantRequest(
+						ctx, tenID, method, tc.req, tenantcapabilitiesauthorizer.NewNoopAuthorizer(),
+					)
 					if tc.expErr == noError {
 						require.NoError(t, err)
 					} else {
@@ -829,4 +887,75 @@ func TestTenantAuthRequest(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestTenantAuthCapabilityChecks ensures capability checks are performed
+// correctly by the tenant authorizer.
+func TestTenantAuthCapabilityChecks(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tenID := roachpb.MustMakeTenantID(10)
+	for method, tests := range map[string][]struct {
+		req                 interface{}
+		configureAuthorizer func(authorizer *mockAuthorizer)
+		expErr              string
+	}{
+		"/cockroach.roachpb.Internal/Batch": {
+			{
+				req: &roachpb.BatchRequest{Requests: makeReqs(
+					makeReqShared(t, prefix(10, "a"), prefix(10, "b")),
+				)},
+				configureAuthorizer: func(authorizer *mockAuthorizer) {
+					authorizer.hasCapabilityForBatch = true
+				},
+				expErr: "",
+			},
+			{
+				req: &roachpb.BatchRequest{Requests: makeReqs(
+					makeReqShared(t, prefix(10, "a"), prefix(10, "b")),
+				)},
+				configureAuthorizer: func(authorizer *mockAuthorizer) {
+					authorizer.hasCapabilityForBatch = false
+				},
+				expErr: "tenant does not have capability",
+			},
+		},
+	} {
+		ctx := context.Background()
+		for _, tc := range tests {
+			authorizer := mockAuthorizer{}
+			tc.configureAuthorizer(&authorizer)
+			err := rpc.TestingAuthorizeTenantRequest(
+				ctx, tenID, method, tc.req, authorizer,
+			)
+			if tc.expErr == "" {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+				require.Equal(t, codes.Unauthenticated, status.Code(err))
+				require.Regexp(t, tc.expErr, err)
+			}
+		}
+	}
+}
+
+type mockAuthorizer struct {
+	hasCapabilityForBatch bool
+}
+
+var _ tenantcapabilities.Authorizer = &mockAuthorizer{}
+
+// HasCapabilityForBatch implements the tenantcapabilities.Authorizer interface.
+func (m mockAuthorizer) HasCapabilityForBatch(
+	context.Context, roachpb.TenantID, *roachpb.BatchRequest,
+) error {
+	if m.hasCapabilityForBatch {
+		return nil
+	}
+	return errors.New("tenant does not have capability")
+}
+
+// BindReader implements the tenantcapabilities.Authorizer interface.
+func (m mockAuthorizer) BindReader(tenantcapabilities.Reader) {
+	panic("unimplemented")
 }

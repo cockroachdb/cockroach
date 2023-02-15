@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -655,9 +656,13 @@ func asyncWriteToOtelAndSystemEventsTable(
 				}
 			}
 		}); err != nil {
-		// This should never happen: RunAsyncTask can only fail if its context was canceled,
-		// and we're using the background context here.
-		err = errors.NewAssertionErrorWithWrappedErrf(err, "unexpected stopper error")
+		expectedStopperError := errors.Is(err, stop.ErrThrottled) || errors.Is(err, stop.ErrUnavailable)
+		if !expectedStopperError {
+			// RunAsyncTask only returns an error not listed above
+			// if its context was canceled, and we're using the
+			// background context here.
+			err = errors.NewAssertionErrorWithWrappedErrf(err, "unexpected stopper error")
+		}
 		log.Warningf(ctx, "failed to start task to save %d events in eventlog: %v", len(entries), err)
 	}
 }
@@ -687,10 +692,16 @@ VALUES($1, $2, $3, $4, 0)`
 
 	events = make([]otel_logs_pb.LogRecord, len(entries))
 	sp := tracing.SpanFromContext(ctx)
-	var traceID, spanID [8]byte
+	var traceID [16]byte
+	var spanID [8]byte
 	if sp != nil {
-		binary.LittleEndian.PutUint64(traceID[:], uint64(sp.TraceID()))
-		binary.LittleEndian.PutUint64(spanID[:], uint64(sp.SpanID()))
+		// Our trace IDs are 8 bytes, but OTLP insists on 16. We'll use only the
+		// most significant bytes and leave the rest zero.
+		//
+		// NOTE(andrei): The BigEndian is an arbitrary decision; I don't know how
+		// others serialize their UUIDs, but I went with the network byte order.
+		binary.BigEndian.PutUint64(traceID[:], uint64(sp.TraceID()))
+		binary.BigEndian.PutUint64(spanID[:], uint64(sp.SpanID()))
 	}
 	nowNanos := timeutil.Now().UnixNano()
 	for i := 0; i < len(entries); i++ {

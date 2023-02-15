@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package tenantcapabilitieswatcher
+package tenantcapabilitieswatcher_test
 
 import (
 	"context"
@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -72,8 +73,7 @@ func TestDecodeCapabilities(t *testing.T) {
 
 	// Decode and verify.
 	row := rows[0]
-	decoder := newDecoder()
-	got, err := decoder.decode(roachpb.KeyValue{
+	got, err := tenantcapabilitieswatcher.TestingDecoderFn()(roachpb.KeyValue{
 		Key:   row.Key,
 		Value: *row.Value,
 	})

@@ -161,9 +161,14 @@ func (s *StatementStatistics) Add(other *StatementStatistics) {
 	s.Indexes = util.CombineUniqueString(s.Indexes, other.Indexes)
 
 	s.ExecStats.Add(other.ExecStats)
+	s.LatencyInfo.Add(other.LatencyInfo)
 
 	if other.SensitiveInfo.LastErr != "" {
 		s.SensitiveInfo.LastErr = other.SensitiveInfo.LastErr
+	}
+
+	if other.LastErrorCode != "" {
+		s.LastErrorCode = other.LastErrorCode
 	}
 
 	if s.SensitiveInfo.MostRecentPlanTimestamp.Before(other.SensitiveInfo.MostRecentPlanTimestamp) {
@@ -215,5 +220,36 @@ func (s *ExecStats) Add(other ExecStats) {
 	s.MaxDiskUsage.Add(other.MaxDiskUsage, execStatCollectionCount, other.Count)
 	s.CPUSQLNanos.Add(other.CPUSQLNanos, execStatCollectionCount, other.Count)
 
+	s.MVCCIteratorStats.StepCount.Add(other.MVCCIteratorStats.StepCount, execStatCollectionCount, other.Count)
+	s.MVCCIteratorStats.StepCountInternal.Add(other.MVCCIteratorStats.StepCountInternal, execStatCollectionCount, other.Count)
+	s.MVCCIteratorStats.SeekCount.Add(other.MVCCIteratorStats.SeekCount, execStatCollectionCount, other.Count)
+	s.MVCCIteratorStats.SeekCountInternal.Add(other.MVCCIteratorStats.SeekCountInternal, execStatCollectionCount, other.Count)
+	s.MVCCIteratorStats.BlockBytes.Add(other.MVCCIteratorStats.BlockBytes, execStatCollectionCount, other.Count)
+	s.MVCCIteratorStats.BlockBytesInCache.Add(other.MVCCIteratorStats.BlockBytesInCache, execStatCollectionCount, other.Count)
+	s.MVCCIteratorStats.KeyBytes.Add(other.MVCCIteratorStats.KeyBytes, execStatCollectionCount, other.Count)
+	s.MVCCIteratorStats.ValueBytes.Add(other.MVCCIteratorStats.ValueBytes, execStatCollectionCount, other.Count)
+	s.MVCCIteratorStats.PointCount.Add(other.MVCCIteratorStats.PointCount, execStatCollectionCount, other.Count)
+	s.MVCCIteratorStats.PointsCoveredByRangeTombstones.Add(other.MVCCIteratorStats.PointsCoveredByRangeTombstones, execStatCollectionCount, other.Count)
+	s.MVCCIteratorStats.RangeKeyCount.Add(other.MVCCIteratorStats.RangeKeyCount, execStatCollectionCount, other.Count)
+	s.MVCCIteratorStats.RangeKeyContainedPoints.Add(other.MVCCIteratorStats.RangeKeyContainedPoints, execStatCollectionCount, other.Count)
+	s.MVCCIteratorStats.RangeKeySkippedPoints.Add(other.MVCCIteratorStats.RangeKeySkippedPoints, execStatCollectionCount, other.Count)
+
 	s.Count += other.Count
+}
+
+// Add combines other into this LatencyInfo.
+func (s *LatencyInfo) Add(other LatencyInfo) {
+	// Use the latest non-zero value.
+	if other.P50 != 0 {
+		s.P50 = other.P50
+		s.P90 = other.P90
+		s.P99 = other.P99
+	}
+
+	if s.Min == 0 || other.Min < s.Min {
+		s.Min = other.Min
+	}
+	if other.Max > s.Max {
+		s.Max = other.Max
+	}
 }

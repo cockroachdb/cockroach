@@ -17,7 +17,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -44,7 +43,7 @@ func getTimeFromSeconds(seconds int64) *time.Time {
 func (s *statusServer) CombinedStatementStats(
 	ctx context.Context, req *serverpb.CombinedStatementsStatsRequest,
 ) (*serverpb.StatementsResponse, error) {
-	ctx = propagateGatewayMetadata(ctx)
+	ctx = forwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
 	if err := s.privilegeChecker.requireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
@@ -340,7 +339,7 @@ func collectCombinedTransactions(
 func (s *statusServer) StatementDetails(
 	ctx context.Context, req *serverpb.StatementDetailsRequest,
 ) (*serverpb.StatementDetailsResponse, error) {
-	ctx = propagateGatewayMetadata(ctx)
+	ctx = forwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
 	if err := s.privilegeChecker.requireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
@@ -730,23 +729,6 @@ func getStatementDetailsPerPlanHash(
 				crdb_internal.merge_stats_metadata(array_agg(metadata)) AS metadata,
 				crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics,
 				max(sampled_plan) as sampled_plan,
-				aggregation_interval
-		FROM crdb_internal.statement_statistics %s
-		GROUP BY
-				plan_hash,
-				plan_gist,
-				aggregation_interval
-		LIMIT $%d`, whereClause, len(args)+1)
-	expectedNumDatums := 6
-
-	if settings.Version.IsActive(ctx, clusterversion.V22_2AlterSystemStatementStatisticsAddIndexRecommendations) {
-		query = fmt.Sprintf(
-			`SELECT
-				plan_hash,
-				(statistics -> 'statistics' -> 'planGists'->>0) as plan_gist,
-				crdb_internal.merge_stats_metadata(array_agg(metadata)) AS metadata,
-				crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics,
-				max(sampled_plan) as sampled_plan,
 				aggregation_interval,
 				index_recommendations
 		FROM crdb_internal.statement_statistics %s
@@ -756,8 +738,7 @@ func getStatementDetailsPerPlanHash(
 				aggregation_interval,
 				index_recommendations
 		LIMIT $%d`, whereClause, len(args)+1)
-		expectedNumDatums = 7
-	}
+	expectedNumDatums := 7
 
 	args = append(args, limit)
 

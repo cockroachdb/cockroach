@@ -19,6 +19,7 @@ go_library(
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",
         "//pkg/util/fileutil",
+        "//pkg/util/grpcutil",
         "//pkg/util/ioctx",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",

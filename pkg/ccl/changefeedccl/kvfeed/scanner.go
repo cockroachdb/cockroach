@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -39,6 +40,7 @@ type scanConfig struct {
 	Timestamp hlc.Timestamp
 	WithDiff  bool
 	Knobs     TestingKnobs
+	Boundary  jobspb.ResolvedSpan_BoundaryType
 }
 
 type kvScanner interface {
@@ -101,22 +103,15 @@ func (p *scanRequestScanner) Scan(ctx context.Context, sink kvevent.Writer, cfg 
 			return errors.CombineErrors(err, g.Wait())
 		}
 
-		var spanAlloc kvevent.Alloc
-		if allocator, ok := sink.(kvevent.MemAllocator); ok {
-			// Sink implements memory allocator interface, so acquire
-			// memory needed to hold scan reply.
-			spanAlloc, err = allocator.AcquireMemory(ctx, changefeedbase.ScanRequestSize.Get(&p.settings.SV))
-			if err != nil {
-				cancel()
-				return errors.CombineErrors(err, g.Wait())
-			}
-		}
-
 		g.GoCtx(func(ctx context.Context) error {
 			defer limAlloc.Release()
+			spanAlloc, err := p.tryAcquireMemory(ctx, sink)
+			if err != nil {
+				return err
+			}
 			defer spanAlloc.Release(ctx)
 
-			err := p.exportSpan(ctx, span, cfg.Timestamp, cfg.WithDiff, sink, cfg.Knobs)
+			err = p.exportSpan(ctx, span, cfg.Timestamp, cfg.Boundary, cfg.WithDiff, sink, cfg.Knobs)
 			finished := atomic.AddInt64(&atomicFinished, 1)
 			if backfillDec != nil {
 				backfillDec()
@@ -130,10 +125,52 @@ func (p *scanRequestScanner) Scan(ctx context.Context, sink kvevent.Writer, cfg 
 	return g.Wait()
 }
 
+var logMemAcquireEvery = log.Every(5 * time.Second)
+
+// tryAcquireMemory attempts to acquire memory for span export.
+func (p *scanRequestScanner) tryAcquireMemory(
+	ctx context.Context, sink kvevent.Writer,
+) (alloc kvevent.Alloc, err error) {
+	allocator, ok := sink.(kvevent.MemAllocator)
+	if !ok {
+		// Not an allocator -- can't acquire memory.
+		return alloc, nil
+	}
+
+	// Begin by attempting to acquire memory for the request we're about to issue.
+	alloc, err = allocator.AcquireMemory(ctx, changefeedbase.ScanRequestSize.Get(&p.settings.SV))
+	if err == nil {
+		return alloc, nil
+	}
+
+	retryOpts := retry.Options{
+		InitialBackoff: 500 * time.Millisecond,
+		MaxBackoff:     10 * time.Second,
+	}
+
+	// We failed to acquire memory for this export.  Begin retry loop -- we may succeed
+	// in the future, once somebody releases memory.
+	for attempt := retry.StartWithCtx(ctx, retryOpts); attempt.Next(); {
+		// Sink implements memory allocator interface, so acquire
+		// memory needed to hold scan reply.
+		if logMemAcquireEvery.ShouldLog() {
+			log.Errorf(ctx, "Failed to acquire memory for export span: %s (attempt %d)",
+				err, attempt.CurrentAttempt()+1)
+		}
+		alloc, err = allocator.AcquireMemory(ctx, changefeedbase.ScanRequestSize.Get(&p.settings.SV))
+		if err == nil {
+			return alloc, nil
+		}
+	}
+
+	return alloc, ctx.Err()
+}
+
 func (p *scanRequestScanner) exportSpan(
 	ctx context.Context,
 	span roachpb.Span,
 	ts hlc.Timestamp,
+	boundaryType jobspb.ResolvedSpan_BoundaryType,
 	withDiff bool,
 	sink kvevent.Writer,
 	knobs TestingKnobs,
@@ -191,7 +228,7 @@ func (p *scanRequestScanner) exportSpan(
 		if res.ResumeSpan != nil {
 			consumed := roachpb.Span{Key: remaining.Key, EndKey: res.ResumeSpan.Key}
 			if err := sink.Add(
-				ctx, kvevent.NewBackfillResolvedEvent(consumed, ts, jobspb.ResolvedSpan_NONE),
+				ctx, kvevent.NewBackfillResolvedEvent(consumed, ts, boundaryType),
 			); err != nil {
 				return err
 			}
@@ -200,7 +237,7 @@ func (p *scanRequestScanner) exportSpan(
 	}
 	// p.metrics.PollRequestNanosHist.RecordValue(scanDuration.Nanoseconds())
 	if err := sink.Add(
-		ctx, kvevent.NewBackfillResolvedEvent(span, ts, jobspb.ResolvedSpan_NONE),
+		ctx, kvevent.NewBackfillResolvedEvent(span, ts, boundaryType),
 	); err != nil {
 		return err
 	}

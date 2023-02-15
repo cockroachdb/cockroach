@@ -70,7 +70,7 @@ func logPendingLossOfQuorumRecoveryEvents(ctx context.Context, stores *kvserver.
 		// cluster-replicated destinations.
 		eventCount, err := loqrecovery.RegisterOfflineRecoveryEvents(
 			ctx,
-			s.Engine(),
+			s.TODOEngine(),
 			func(ctx context.Context, record loqrecoverypb.ReplicaRecoveryRecord) (bool, error) {
 				event := record.AsStructuredLog()
 				log.StructuredEvent(ctx, &event)
@@ -96,11 +96,13 @@ func maybeRunLossOfQuorumRecoveryCleanup(
 	server *Server,
 	stopper *stop.Stopper,
 ) {
-	_ = stopper.RunAsyncTask(ctx, "publish-loss-of-quorum-events", func(ctx context.Context) {
+	publishCtx, publishCancel := stopper.WithCancelOnQuiesce(ctx)
+	_ = stopper.RunAsyncTask(publishCtx, "publish-loss-of-quorum-events", func(ctx context.Context) {
+		defer publishCancel()
 		if err := stores.VisitStores(func(s *kvserver.Store) error {
 			_, err := loqrecovery.RegisterOfflineRecoveryEvents(
 				ctx,
-				s.Engine(),
+				s.TODOEngine(),
 				func(ctx context.Context, record loqrecoverypb.ReplicaRecoveryRecord) (bool, error) {
 					sqlExec := func(ctx context.Context, stmt string, args ...interface{}) (int, error) {
 						return ie.ExecEx(ctx, "", nil,
@@ -130,14 +132,14 @@ func maybeRunLossOfQuorumRecoveryCleanup(
 	var cleanup loqrecoverypb.DeferredRecoveryActions
 	var actionsSource storage.ReadWriter
 	err := stores.VisitStores(func(s *kvserver.Store) error {
-		c, found, err := loqrecovery.ReadCleanupActionsInfo(ctx, s.Engine())
+		c, found, err := loqrecovery.ReadCleanupActionsInfo(ctx, s.TODOEngine())
 		if err != nil {
 			log.Errorf(ctx, "failed to read loss of quorum recovery cleanup actions info from store: %s", err)
 			return nil
 		}
 		if found {
 			cleanup = c
-			actionsSource = s.Engine()
+			actionsSource = s.TODOEngine()
 			return iterutil.StopIteration()
 		}
 		return nil
@@ -149,7 +151,9 @@ func maybeRunLossOfQuorumRecoveryCleanup(
 	if len(cleanup.DecommissionedNodeIDs) == 0 {
 		return
 	}
-	_ = stopper.RunAsyncTask(ctx, "maybe-mark-nodes-as-decommissioned", func(ctx context.Context) {
+	decomCtx, decomCancel := stopper.WithCancelOnQuiesce(ctx)
+	_ = stopper.RunAsyncTask(decomCtx, "maybe-mark-nodes-as-decommissioned", func(ctx context.Context) {
+		defer decomCancel()
 		log.Infof(ctx, "loss of quorum recovery decommissioning removed nodes %s",
 			strutil.JoinIDs("n", cleanup.DecommissionedNodeIDs))
 		retryOpts := retry.Options{

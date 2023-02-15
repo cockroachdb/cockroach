@@ -601,13 +601,32 @@ func (w *walkCtx) walkIndex(tbl catalog.TableDescriptor, idx catalog.Index) {
 func (w *walkCtx) walkUniqueWithoutIndexConstraint(
 	tbl catalog.TableDescriptor, c catalog.UniqueWithoutIndexConstraint,
 ) {
-	// TODO(postamar): proper handling of constraint status
-
-	w.ev(scpb.Status_PUBLIC, &scpb.UniqueWithoutIndexConstraint{
-		TableID:      tbl.GetID(),
-		ConstraintID: c.GetConstraintID(),
-		ColumnIDs:    c.CollectKeyColumnIDs().Ordered(),
-	})
+	var expr *scpb.Expression
+	var err error
+	if c.IsPartial() {
+		expr, err = w.newExpression(c.GetPredicate())
+		if err != nil {
+			panic(errors.NewAssertionErrorWithWrappedErrf(err, "unique without index constraint %q in table %q (%d)",
+				c.GetName(), tbl.GetName(), tbl.GetID()))
+		}
+	}
+	if c.IsConstraintUnvalidated() && w.clusterVersion.IsActive(clusterversion.V23_1) {
+		uwi := &scpb.UniqueWithoutIndexConstraintUnvalidated{
+			TableID:      tbl.GetID(),
+			ConstraintID: c.GetConstraintID(),
+			ColumnIDs:    c.CollectKeyColumnIDs().Ordered(),
+			Predicate:    expr,
+		}
+		w.ev(scpb.Status_PUBLIC, uwi)
+	} else {
+		uwi := &scpb.UniqueWithoutIndexConstraint{
+			TableID:      tbl.GetID(),
+			ConstraintID: c.GetConstraintID(),
+			ColumnIDs:    c.CollectKeyColumnIDs().Ordered(),
+			Predicate:    expr,
+		}
+		w.ev(scpb.Status_PUBLIC, uwi)
+	}
 	w.ev(scpb.Status_PUBLIC, &scpb.ConstraintWithoutIndexName{
 		TableID:      tbl.GetID(),
 		ConstraintID: c.GetConstraintID(),
@@ -628,14 +647,22 @@ func (w *walkCtx) walkCheckConstraint(tbl catalog.TableDescriptor, c catalog.Che
 		panic(errors.NewAssertionErrorWithWrappedErrf(err, "check constraint %q in table %q (%d)",
 			c.GetName(), tbl.GetName(), tbl.GetID()))
 	}
-	// TODO(postamar): proper handling of constraint status
-	w.ev(scpb.Status_PUBLIC, &scpb.CheckConstraint{
-		TableID:               tbl.GetID(),
-		ConstraintID:          c.GetConstraintID(),
-		ColumnIDs:             c.CollectReferencedColumnIDs().Ordered(),
-		Expression:            *expr,
-		FromHashShardedColumn: c.IsHashShardingConstraint(),
-	})
+	if c.IsConstraintUnvalidated() && w.clusterVersion.IsActive(clusterversion.V23_1) {
+		w.ev(scpb.Status_PUBLIC, &scpb.CheckConstraintUnvalidated{
+			TableID:      tbl.GetID(),
+			ConstraintID: c.GetConstraintID(),
+			ColumnIDs:    c.CollectReferencedColumnIDs().Ordered(),
+			Expression:   *expr,
+		})
+	} else {
+		w.ev(scpb.Status_PUBLIC, &scpb.CheckConstraint{
+			TableID:               tbl.GetID(),
+			ConstraintID:          c.GetConstraintID(),
+			ColumnIDs:             c.CollectReferencedColumnIDs().Ordered(),
+			Expression:            *expr,
+			FromHashShardedColumn: c.IsHashShardingConstraint(),
+		})
+	}
 	w.ev(scpb.Status_PUBLIC, &scpb.ConstraintWithoutIndexName{
 		TableID:      tbl.GetID(),
 		ConstraintID: c.GetConstraintID(),
@@ -653,17 +680,29 @@ func (w *walkCtx) walkCheckConstraint(tbl catalog.TableDescriptor, c catalog.Che
 func (w *walkCtx) walkForeignKeyConstraint(
 	tbl catalog.TableDescriptor, c catalog.ForeignKeyConstraint,
 ) {
-	// TODO(postamar): proper handling of constraint status
-	w.ev(scpb.Status_PUBLIC, &scpb.ForeignKeyConstraint{
-		TableID:                 tbl.GetID(),
-		ConstraintID:            c.GetConstraintID(),
-		ColumnIDs:               c.ForeignKeyDesc().OriginColumnIDs,
-		ReferencedTableID:       c.GetReferencedTableID(),
-		ReferencedColumnIDs:     c.ForeignKeyDesc().ReferencedColumnIDs,
-		OnUpdateAction:          c.OnUpdate(),
-		OnDeleteAction:          c.OnDelete(),
-		CompositeKeyMatchMethod: c.Match(),
-	})
+	if c.IsConstraintUnvalidated() && w.clusterVersion.IsActive(clusterversion.V23_1) {
+		w.ev(scpb.Status_PUBLIC, &scpb.ForeignKeyConstraintUnvalidated{
+			TableID:                 tbl.GetID(),
+			ConstraintID:            c.GetConstraintID(),
+			ColumnIDs:               c.ForeignKeyDesc().OriginColumnIDs,
+			ReferencedTableID:       c.GetReferencedTableID(),
+			ReferencedColumnIDs:     c.ForeignKeyDesc().ReferencedColumnIDs,
+			OnUpdateAction:          c.OnUpdate(),
+			OnDeleteAction:          c.OnDelete(),
+			CompositeKeyMatchMethod: c.Match(),
+		})
+	} else {
+		w.ev(scpb.Status_PUBLIC, &scpb.ForeignKeyConstraint{
+			TableID:                 tbl.GetID(),
+			ConstraintID:            c.GetConstraintID(),
+			ColumnIDs:               c.ForeignKeyDesc().OriginColumnIDs,
+			ReferencedTableID:       c.GetReferencedTableID(),
+			ReferencedColumnIDs:     c.ForeignKeyDesc().ReferencedColumnIDs,
+			OnUpdateAction:          c.OnUpdate(),
+			OnDeleteAction:          c.OnDelete(),
+			CompositeKeyMatchMethod: c.Match(),
+		})
+	}
 	w.ev(scpb.Status_PUBLIC, &scpb.ConstraintWithoutIndexName{
 		TableID:      tbl.GetID(),
 		ConstraintID: c.GetConstraintID(),

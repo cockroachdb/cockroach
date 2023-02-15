@@ -1134,6 +1134,7 @@ indexrelid  indrelid  indnatts  indisunique  indnullsnotdistinct  indisprimary  
 1322500096  28        1         true         false                true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                          1
 1489445036  35        6         false        false                false         false           false         false           true        false         false       true       false           2 1 3 6 7 8    0 0                        0 0          2 2          NULL      NULL                                                                                                                          2
 1489445039  35        1         true         false                true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                          1
+1535840700  51        4         true         false                false         false           true          false           true        false         false       true       false           2 5 3 4        3403232968 0               0 0          2 2          NULL      NULL                                                                                                                          2
 1535840703  51        2         true         false                true          false           true          false           true        false         false       true       false           1 2            3403232968 3403232968      0 0          2 2          NULL      NULL                                                                                                                          2
 1582236367  3         1         true         false                true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                          1
 1628632026  19        1         false        false                false         false           false         false           true        false         false       true       false           6              0                          0            2            NULL      NULL                                                                                                                          1
@@ -1229,6 +1230,8 @@ indexrelid  operator_argument_type_oid  operator_argument_position
 1489445036  0                           1
 1489445036  0                           2
 1489445039  0                           1
+1535840700  0                           1
+1535840700  0                           2
 1535840703  0                           1
 1535840703  0                           2
 1582236367  0                           1
@@ -2340,6 +2343,16 @@ pb_to_json  pb_to_json  4294967295    crdb_internal  3802        25 17
 pb_to_json  pb_to_json  4294967295    crdb_internal  3802        25 17 16
 pb_to_json  pb_to_json  4294967295    crdb_internal  3802        25 17 16 16
 
+query TTOTOT colnames
+SELECT proname, prosrc, pronamespace, nspname, prorettype, proargtypes
+FROM pg_catalog.pg_proc p
+JOIN pg_catalog.pg_namespace n ON p.pronamespace = n.oid
+WHERE proname='_pg_char_max_length'
+ORDER BY p.oid
+----
+proname              prosrc               pronamespace  nspname             prorettype  proargtypes
+_pg_char_max_length  _pg_char_max_length  4294967213    information_schema  20          26 23
+
 query TOIOTTB colnames
 SELECT proname, provariadic, pronargs, prorettype, proargtypes, proargmodes, proisstrict
 FROM pg_catalog.pg_proc
@@ -2553,6 +2566,7 @@ copy_from_retries_enabled                             off                 NULL  
 cost_scans_with_default_col_size                      off                 NULL      NULL        NULL        string
 database                                              test                NULL      NULL        NULL        string
 datestyle                                             ISO, MDY            NULL      NULL        NULL        string
+declare_cursor_statement_timeout_enabled              on                  NULL      NULL        NULL        string
 default_int_size                                      8                   NULL      NULL        NULL        string
 default_table_access_method                           heap                NULL      NULL        NULL        string
 default_tablespace                                    ·                   NULL      NULL        NULL        string
@@ -2570,7 +2584,6 @@ disallow_full_table_scans                             off                 NULL  
 distsql                                               off                 NULL      NULL        NULL        string
 enable_auto_rehoming                                  off                 NULL      NULL        NULL        string
 enable_experimental_alter_column_type_general         off                 NULL      NULL        NULL        string
-enable_experimental_stream_replication                off                 NULL      NULL        NULL        string
 enable_implicit_select_for_update                     on                  NULL      NULL        NULL        string
 enable_implicit_transaction_for_batch_statements      on                  NULL      NULL        NULL        string
 enable_insert_fast_path                               on                  NULL      NULL        NULL        string
@@ -2697,6 +2710,7 @@ copy_from_retries_enabled                             off                 NULL  
 cost_scans_with_default_col_size                      off                 NULL  user     NULL      off                 off
 database                                              test                NULL  user     NULL      ·                   test
 datestyle                                             ISO, MDY            NULL  user     NULL      ISO, MDY            ISO, MDY
+declare_cursor_statement_timeout_enabled              on                  NULL  user     NULL      on                  on
 default_int_size                                      8                   NULL  user     NULL      8                   8
 default_table_access_method                           heap                NULL  user     NULL      heap                heap
 default_tablespace                                    ·                   NULL  user     NULL      ·                   ·
@@ -2714,7 +2728,6 @@ disallow_full_table_scans                             off                 NULL  
 distsql                                               off                 NULL  user     NULL      off                 off
 enable_auto_rehoming                                  off                 NULL  user     NULL      off                 off
 enable_experimental_alter_column_type_general         off                 NULL  user     NULL      off                 off
-enable_experimental_stream_replication                off                 NULL  user     NULL      off                 off
 enable_implicit_select_for_update                     on                  NULL  user     NULL      on                  on
 enable_implicit_transaction_for_batch_statements      on                  NULL  user     NULL      on                  on
 enable_insert_fast_path                               on                  NULL  user     NULL      on                  on
@@ -2837,6 +2850,7 @@ cost_scans_with_default_col_size                      NULL    NULL     NULL     
 crdb_version                                          NULL    NULL     NULL     NULL        NULL
 database                                              NULL    NULL     NULL     NULL        NULL
 datestyle                                             NULL    NULL     NULL     NULL        NULL
+declare_cursor_statement_timeout_enabled              NULL    NULL     NULL     NULL        NULL
 default_int_size                                      NULL    NULL     NULL     NULL        NULL
 default_table_access_method                           NULL    NULL     NULL     NULL        NULL
 default_tablespace                                    NULL    NULL     NULL     NULL        NULL
@@ -2856,7 +2870,6 @@ distsql                                               NULL    NULL     NULL     
 distsql_workmem                                       NULL    NULL     NULL     NULL        NULL
 enable_auto_rehoming                                  NULL    NULL     NULL     NULL        NULL
 enable_experimental_alter_column_type_general         NULL    NULL     NULL     NULL        NULL
-enable_experimental_stream_replication                NULL    NULL     NULL     NULL        NULL
 enable_implicit_select_for_update                     NULL    NULL     NULL     NULL        NULL
 enable_implicit_transaction_for_batch_statements      NULL    NULL     NULL     NULL        NULL
 enable_insert_fast_path                               NULL    NULL     NULL     NULL        NULL

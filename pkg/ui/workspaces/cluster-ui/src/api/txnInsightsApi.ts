@@ -19,7 +19,7 @@ import {
   sqlResultsAreEmpty,
 } from "./sqlApi";
 import {
-  BlockedContentionDetails,
+  ContentionDetails,
   getInsightsFromProblemsAndCauses,
   InsightExecEnum,
   InsightNameEnum,
@@ -35,6 +35,7 @@ import {
   StmtInsightsResponseRow,
 } from "./stmtInsightsApi";
 import { INTERNAL_APP_NAME_PREFIX } from "src/recentExecutions/recentStatementUtils";
+import { getContentionDetailsApi } from "./contentionApi";
 
 export const TXN_QUERY_PREVIEW_MAX = 800;
 export const QUERY_MAX = 1500;
@@ -128,85 +129,10 @@ function createStmtFingerprintToQueryMap(
   return idToQuery;
 }
 
-function getTxnContentionWhereClause(
-  clause: string,
-  filters?: TxnInsightDetailsRequest,
-): string {
-  let whereClause = clause;
-  if (filters?.start) {
-    whereClause =
-      whereClause + ` AND collection_ts >= '${filters.start.toISOString()}'`;
-  }
-  if (filters?.end) {
-    whereClause =
-      whereClause +
-      ` AND (collection_ts + contention_duration) <= '${filters.end.toISOString()}'`;
-  }
-  return whereClause;
-}
-
 export type TransactionContentionEventDetails = Omit<
   TxnContentionInsightDetails,
   "application" | "queries" | "blockingQueries"
 >;
-
-// txnContentionDetailsQuery selects information about a specific transaction contention event.
-function txnContentionDetailsQuery(filters: TxnContentionDetailsRequest) {
-  const whereClause = getTxnContentionWhereClause(
-    ` WHERE waiting_txn_id = '${filters.txnExecutionID}'`,
-    filters,
-  );
-  return `
-SELECT DISTINCT
-  collection_ts,
-  blocking_txn_id,
-  encode( blocking_txn_fingerprint_id, 'hex' ) AS blocking_txn_fingerprint_id,
-  waiting_txn_id,
-  encode( waiting_txn_fingerprint_id, 'hex' ) AS waiting_txn_fingerprint_id,
-  contention_duration,
-  crdb_internal.pretty_key(contending_key, 0) AS key,
-  database_name,
-  schema_name,
-  table_name,
-  index_name
-FROM
-  crdb_internal.transaction_contention_events AS tce
-  JOIN [SELECT database_name,
-               schema_name,
-               name AS table_name,
-               table_id
-        FROM
-          "".crdb_internal.tables] AS tables ON tce.contending_key BETWEEN crdb_internal.table_span(tables.table_id)[1]
-  AND crdb_internal.table_span(tables.table_id)[2]
-  LEFT OUTER JOIN [SELECT index_name,
-                          descriptor_id,
-                          index_id
-                   FROM
-                     "".crdb_internal.table_indexes] AS indexes ON tce.contending_key BETWEEN crdb_internal.index_span(
-  indexes.descriptor_id,
-  indexes.index_id
-  )[1]
-  AND crdb_internal.index_span(
-    indexes.descriptor_id,
-    indexes.index_id
-    )[2]
-  ${whereClause}
-`;
-}
-
-type TxnContentionDetailsResponseColumns = {
-  waiting_txn_id: string;
-  waiting_txn_fingerprint_id: string;
-  collection_ts: string;
-  contention_duration: string;
-  blocking_txn_id: string;
-  blocking_txn_fingerprint_id: string;
-  schema_name: string;
-  database_name: string;
-  table_name: string;
-  index_name: string;
-  key: string;
-};
 
 type PartialTxnContentionDetails = Omit<
   TxnContentionInsightDetails,
@@ -214,55 +140,27 @@ type PartialTxnContentionDetails = Omit<
 >;
 
 function formatTxnContentionDetailsResponse(
-  response: SqlExecutionResponse<TxnContentionDetailsResponseColumns>,
+  response: ContentionDetails[],
 ): PartialTxnContentionDetails {
-  const resultsRows = response.execution.txn_results[0].rows;
-  if (!resultsRows) {
+  if (!response || response.length === 9) {
     // No data.
     return;
   }
 
-  const blockingContentionDetails = new Array<BlockedContentionDetails>(
-    resultsRows.length,
-  );
-
-  resultsRows.forEach((value, idx) => {
-    const contentionTimeInMs = moment
-      .duration(value.contention_duration)
-      .asMilliseconds();
-    blockingContentionDetails[idx] = {
-      blockingExecutionID: value.blocking_txn_id,
-      blockingTxnFingerprintID: FixFingerprintHexValue(
-        value.blocking_txn_fingerprint_id,
-      ),
-      blockingQueries: null,
-      collectionTimeStamp: moment(value.collection_ts).utc(),
-      contentionTimeMs: contentionTimeInMs,
-      contendedKey: value.key,
-      schemaName: value.schema_name,
-      databaseName: value.database_name,
-      tableName: value.table_name,
-      indexName:
-        value.index_name && value.index_name !== ""
-          ? value.index_name
-          : "index not found",
-    };
-  });
-
-  const row = resultsRows[0];
+  const row = response[0];
   return {
-    transactionExecutionID: row.waiting_txn_id,
+    transactionExecutionID: row.waitingTxnID,
     transactionFingerprintID: FixFingerprintHexValue(
-      row.waiting_txn_fingerprint_id,
+      row.waitingTxnFingerprintID,
     ),
-    blockingContentionDetails: blockingContentionDetails,
+    blockingContentionDetails: response,
     insightName: InsightNameEnum.highContention,
     execType: InsightExecEnum.TRANSACTION,
   };
 }
 
 export type TxnContentionDetailsRequest = {
-  txnExecutionID: string;
+  txnExecutionID?: string;
   start?: moment.Moment;
   end?: moment.Moment;
 };
@@ -279,24 +177,15 @@ export async function getTxnInsightsContentionDetailsApi(
   // 3. Get the query strings for ALL statements involved in the transaction.
 
   // Get contention results for requested transaction.
-  const contentionResults =
-    await executeInternalSql<TxnContentionDetailsResponseColumns>(
-      makeInsightsSqlRequest([
-        txnContentionDetailsQuery({
-          txnExecutionID: req.txnExecutionID,
-          start: req.start,
-          end: req.end,
-        }),
-      ]),
-    );
-  if (contentionResults.error) {
-    throw new Error(
-      `Error while retrieving contention information: ${sqlApiErrorMessage(
-        contentionResults.error.message,
-      )}`,
-    );
-  }
-  if (sqlResultsAreEmpty(contentionResults)) {
+
+  const contentionResults = await getContentionDetailsApi({
+    waitingTxnID: req.txnExecutionID,
+    waitingStmtID: null,
+    start: null,
+    end: null,
+  });
+
+  if (contentionResults.length === 0) {
     return;
   }
   const contentionDetails =
@@ -374,7 +263,7 @@ function buildTxnContentionInsightDetails(
       return;
     }
 
-    blockedRow.blockingQueries = currBlockedFingerprintStmts.queryIDs.map(
+    blockedRow.blockingTxnQuery = currBlockedFingerprintStmts.queryIDs.map(
       id => stmtFingerprintToQuery.get(id) ?? "",
     );
   });
@@ -415,6 +304,7 @@ type TxnInsightsResponseRow = {
 
 type TxnQueryFilters = {
   execID?: string;
+  fingerprintID?: string;
   start?: moment.Moment;
   end?: moment.Moment;
 };
@@ -466,15 +356,20 @@ AND txn_id != '00000000-0000-0000-0000-000000000000'`;
     whereClause += ` AND end_time <= '${filters.end.toISOString()}'`;
   }
 
+  if (filters?.fingerprintID) {
+    whereClause += ` AND encode(txn_fingerprint_id, 'hex') = '${filters.fingerprintID}'`;
+  }
+
   return `
-SELECT ${txnColumns} FROM (
-    SELECT
-      *,
-      row_number() OVER ( PARTITION BY txn_fingerprint_id ORDER BY end_time DESC ) as rank
-    FROM ${TXN_INSIGHTS_TABLE_NAME}
-    ${whereClause} 
-    
-) WHERE rank = 1;
+SELECT ${txnColumns} FROM
+  (
+    SELECT DISTINCT ON (txn_fingerprint_id, problems, causes)
+      *
+    FROM
+      ${TXN_INSIGHTS_TABLE_NAME}
+    ${whereClause}
+    ORDER BY txn_fingerprint_id, problems, causes, end_time DESC
+  )
 `;
 };
 
@@ -511,6 +406,7 @@ function formatTxnInsightsRow(row: TxnInsightsResponseRow): TxnInsightEvent {
 
 export type TxnInsightsRequest = {
   txnExecutionID?: string;
+  txnFingerprintID?: string;
   start?: moment.Moment;
   end?: moment.Moment;
 };
@@ -518,13 +414,13 @@ export type TxnInsightsRequest = {
 export function getTxnInsightsApi(
   req?: TxnInsightsRequest,
 ): Promise<TxnInsightEvent[]> {
-  const request = makeInsightsSqlRequest([
-    createTxnInsightsQuery({
-      execID: req?.txnExecutionID,
-      start: req?.start,
-      end: req?.end,
-    }),
-  ]);
+  const filters: TxnQueryFilters = {
+    start: req?.start,
+    end: req?.end,
+    execID: req?.txnExecutionID,
+    fingerprintID: req?.txnFingerprintID,
+  };
+  const request = makeInsightsSqlRequest([createTxnInsightsQuery(filters)]);
   return executeInternalSql<TxnInsightsResponseRow>(request).then(result => {
     if (result.error) {
       throw new Error(
@@ -631,7 +527,9 @@ export async function getTxnInsightDetailsApi(
       }
 
       const stmts = result.execution.txn_results[0];
-      txnInsightDetails.statements = formatStmtInsights(stmts);
+      if (stmts.rows?.length) {
+        txnInsightDetails.statements = formatStmtInsights(stmts);
+      }
     } catch (e) {
       errors.statementsErr = e;
     }
@@ -645,7 +543,7 @@ export async function getTxnInsightDetailsApi(
     if (!req.excludeContention && highContention) {
       const contentionInfo = await getTxnInsightsContentionDetailsApi(req);
       txnInsightDetails.blockingContentionDetails =
-        contentionInfo.blockingContentionDetails;
+        contentionInfo?.blockingContentionDetails;
     }
   } catch (e) {
     errors.contentionErr = e;

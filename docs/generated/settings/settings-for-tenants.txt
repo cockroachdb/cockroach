@@ -43,6 +43,7 @@ kv.closed_timestamp.follower_reads_enabled	boolean	true	allow (all) replicas to 
 kv.log_range_and_node_events.enabled	boolean	true	set to true to transactionally log range events (e.g., split, merge, add/remove voter/non-voter) into system.rangelogand node join and restart events into system.eventolog
 kv.protectedts.reconciliation.interval	duration	5m0s	the frequency for reconciling jobs with protected timestamp records
 kv.range_split.by_load_enabled	boolean	true	allow automatic splits of ranges based on where load is concentrated
+kv.range_split.load_cpu_threshold	duration	250ms	the CPU use per second over which, the range becomes a candidate for load based splitting
 kv.range_split.load_qps_threshold	integer	2500	the QPS over which, the range becomes a candidate for load based splitting
 kv.rangefeed.enabled	boolean	false	if set, rangefeed registration is enabled
 kv.rangefeed.range_stuck_threshold	duration	1m0s	restart rangefeeds if they don't emit anything for the specified threshold; 0 disables (kv.closed_timestamp.side_transport_interval takes precedence)
@@ -132,9 +133,6 @@ sql.defaults.experimental_enable_unique_without_index_constraints.enabled	boolea
 This cluster setting is being kept to preserve backwards-compatibility.
 This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"
 sql.defaults.experimental_implicit_column_partitioning.enabled	boolean	false	"default value for experimental_enable_temp_tables; allows for the use of implicit column partitioning
-This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"
-sql.defaults.experimental_stream_replication.enabled	boolean	false	"default value for experimental_stream_replication session setting;enables the ability to setup a replication stream
 This cluster setting is being kept to preserve backwards-compatibility.
 This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"
 sql.defaults.experimental_temporary_tables.enabled	boolean	false	"default value for experimental_enable_temp_tables; allows for use of temporary tables by default
@@ -298,4 +296,4 @@ trace.jaeger.agent	string		the address of a Jaeger agent to receive traces using
 trace.opentelemetry.collector	string		address of an OpenTelemetry trace collector to receive traces using the otel gRPC protocol, as <host>:<port>. If no port is specified, 4317 will be used.
 trace.span_registry.enabled	boolean	true	if set, ongoing traces can be seen at https://<ui>/#/debug/tracez
 trace.zipkin.collector	string		the address of a Zipkin instance to receive traces, as <host>:<port>. If no port is specified, 9411 will be used.
-version	version	1000022.2-36	set the active cluster version in the format '<major>.<minor>'
+version	version	1000022.2-44	set the active cluster version in the format '<major>.<minor>'

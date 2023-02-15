@@ -96,6 +96,65 @@ func BuildStmtMetadataJSON(statistics *appstatspb.CollectedStatementStatistics) 
 //	        "type": "int",
 //	      },
 //	    },
+//	    "mvcc_iterator_stats": {
+//	      "type": "object",
+//	      "properties": {
+//	        "stepCount": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "stepCountInternal": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "seekCount": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "seekCountInternal": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "blockBytes": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "blockBytesInCache": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "keyBytes": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "valueBytes": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "pointCount": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "pointsCoveredByRangeTombstones": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "rangeKeyCount": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "rangeKeyContainedPoints": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "rangeKeySkippedPoints": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        }
+//	      },
+//	      "required": [
+//	        "stepCount",
+//	        "stepCountInternal",
+//	        "seekCount",
+//	        "seekCountInternal",
+//	        "blockBytes",
+//	        "blockBytesInCache",
+//	        "keyBytes",
+//	        "valueBytes",
+//	        "pointCount",
+//	        "pointsCoveredByRangeTombstones",
+//	        "rangeKeyCount",
+//	        "rangeKeyContainedPoints",
+//	        "rangeKeySkippedPoints"
+//	      ]
+//	    },
 //	    "statistics": {
 //	      "type": "object",
 //	      "properties": {
@@ -114,6 +173,7 @@ func BuildStmtMetadataJSON(statistics *appstatspb.CollectedStatementStatistics) 
 //	        "lastExecAt":        { "type": "string" },
 //	        "nodes":             { "type": "node_ids" },
 //	        "indexes":           { "type": "indexes" },
+//	        "lastErrorCode":     { "type": "string" },
 //	      },
 //	      "required": [
 //	        "firstAttemptCnt",
@@ -140,14 +200,19 @@ func BuildStmtMetadataJSON(statistics *appstatspb.CollectedStatementStatistics) 
 //	        "contentionTime":  { "$ref": "#/definitions/numeric_stats" },
 //	        "networkMsgs":     { "$ref": "#/definitions/numeric_stats" },
 //	        "maxDiskUsage":    { "$ref": "#/definitions/numeric_stats" },
+//	        "cpuSQLNanos":     { "$ref": "#/definitions/numeric_stats" },
+//	        "mvccIteratorStats": { "$ref": "#/definitions/mvcc_iterator_stats" }
+//	        }
 //	      },
 //	      "required": [
 //	        "cnt",
 //	        "networkBytes",
 //	        "maxMemUsage",
 //	        "contentionTime",
-//	        "networkMsgs",
+//	        "networkMsg",
 //	        "maxDiskUsage",
+//	        "cpuSQLNanos",
+//	        "mvccIteratorStats"
 //	      ]
 //	    }
 //	  },
@@ -157,7 +222,6 @@ func BuildStmtMetadataJSON(statistics *appstatspb.CollectedStatementStatistics) 
 //	    "execStats": {
 //	      "$ref": "#/definitions/execution_statistics"
 //	    }
-//	  }
 //	}
 func BuildStmtStatisticsJSON(statistics *appstatspb.StatementStatistics) (json.JSON, error) {
 	return (*stmtStats)(statistics).encodeJSON()
@@ -212,6 +276,65 @@ func BuildTxnMetadataJSON(
 //	      },
 //	      "required": ["mean", "sqDiff"]
 //	    },
+//	    "mvcc_iterator_stats": {
+//	      "type": "object",
+//	      "properties": {
+//	        "stepCount": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "stepCountInternal": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "seekCount": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "seekCountInternal": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "blockBytes": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "blockBytesInCache": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "keyBytes": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "valueBytes": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "pointCount": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "pointsCoveredByRangeTombstones": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "rangeKeyCount": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "rangeKeyContainedPoints": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "rangeKeySkippedPoints": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        }
+//	      },
+//	      "required": [
+//	        "stepCount",
+//	        "stepCountInternal",
+//	        "seekCount",
+//	        "seekCountInternal",
+//	        "blockBytes",
+//	        "blockBytesInCache",
+//	        "keyBytes",
+//	        "valueBytes",
+//	        "pointCount",
+//	        "pointsCoveredByRangeTombstones",
+//	        "rangeKeyCount",
+//	        "rangeKeyContainedPoints",
+//	        "rangeKeySkippedPoints"
+//	      ]
+//	    },
 //	    "statistics": {
 //	      "type": "object",
 //	      "properties": {
@@ -244,6 +367,8 @@ func BuildTxnMetadataJSON(
 //	        "contentionTime":  { "$ref": "#/definitions/numeric_stats" },
 //	        "networkMsg":      { "$ref": "#/definitions/numeric_stats" },
 //	        "maxDiskUsage":    { "$ref": "#/definitions/numeric_stats" },
+//	        "cpuSQLNanos":     { "$ref": "#/definitions/numeric_stats" },
+//	        "mvccIteratorStats": { "$ref": "#/definitions/mvcc_iterator_stats" }
 //	      },
 //	      "required": [
 //	        "cnt",
@@ -252,6 +377,8 @@ func BuildTxnMetadataJSON(
 //	        "contentionTime",
 //	        "networkMsg",
 //	        "maxDiskUsage",
+//	        "cpuSQLNanos",
+//	        "mvccIteratorStats"
 //	      ]
 //	    }
 //	  },
@@ -308,27 +435,6 @@ func BuildStmtDetailsMetadataJSON(
 	metadata *appstatspb.AggregatedStatementMetadata,
 ) (json.JSON, error) {
 	return (*aggregatedMetadata)(metadata).jsonFields().encodeJSON()
-}
-
-// BuildContentionEventsJSON returns a json.JSON object for contention events
-// roachpb.ContentionEvent.
-// JSON Schema for contention events
-//
-//	{
-//	  "$schema": "https://json-schema.org/draft/2020-12/schema",
-//	  "title": "system.statement_statistics.contention_events",
-//	  "type": "object",
-//	  [{
-//	    "blockingTxnID": { "type": "string" },
-//	    "durationInMs":  { "type": "number" },
-//	    "schemaName":    { "type": "string" },
-//	    "databaseName":  { "type": "string" },
-//	    "tableName":     { "type": "string" },
-//	    "indexName":     { "type": "string" }
-//	  }]
-//	}
-func BuildContentionEventsJSON(events []ContentionEventWithNames) (json.JSON, error) {
-	return (*contentionEvents)(&events).encodeJSON()
 }
 
 // EncodeUint64ToBytes returns the []byte representation of an uint64 value.

@@ -80,7 +80,7 @@ func MakeGCSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 		return nil, err
 	}
 	if kmsURI.Path == "/" {
-		return nil, errors.Newf("host component of the KMS cannot be empty; must contain the Customer Managed Key")
+		return nil, errors.Newf("path component of the KMS cannot be empty; must contain the Customer Managed Key")
 	}
 
 	kmsConsumeURL := cloud.ConsumeURL{URL: kmsURI}
@@ -127,7 +127,7 @@ func MakeGCSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 	if kmsURIParams.assumeRole == "" {
 		opts = append(opts, credentialsOpt...)
 	} else {
-		if !env.ClusterSettings().Version.IsActive(ctx, clusterversion.V22_2SupportAssumeRoleAuth) {
+		if !env.ClusterSettings().Version.IsActive(ctx, clusterversion.TODODelete_V22_2SupportAssumeRoleAuth) {
 			return nil, errors.New("cannot authenticate to KMS via assume role until cluster has fully upgraded to 22.2")
 		}
 

@@ -356,7 +356,7 @@ func TestReliableIntentCleanup(t *testing.T) {
 				started            = timeutil.Now()
 			)
 			for {
-				result, err := storage.MVCCScan(ctx, store.Engine(), prefix, prefix.PrefixEnd(),
+				result, err := storage.MVCCScan(ctx, store.TODOEngine(), prefix, prefix.PrefixEnd(),
 					hlc.MaxTimestamp, storage.MVCCScanOptions{Inconsistent: true})
 				require.NoError(t, err)
 				intentCount := len(result.Intents)
@@ -389,7 +389,7 @@ func TestReliableIntentCleanup(t *testing.T) {
 			var txnEntry roachpb.Transaction
 			if !assert.Eventually(t, func() bool {
 				key := keys.TransactionKey(txnKey, txnID)
-				ok, err := storage.MVCCGetProto(ctx, store.Engine(), key, hlc.MaxTimestamp, &txnEntry,
+				ok, err := storage.MVCCGetProto(ctx, store.TODOEngine(), key, hlc.MaxTimestamp, &txnEntry,
 					storage.MVCCGetOptions{})
 				require.NoError(t, err)
 				return !ok

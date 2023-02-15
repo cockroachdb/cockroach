@@ -74,10 +74,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgconn"
 	"github.com/jackc/pgx/v4"
 	"github.com/linkedin/goavro/v2"
 	"github.com/stretchr/testify/assert"
@@ -1684,6 +1686,23 @@ func TestImportRowLimit(t *testing.T) {
 	conn := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
+	// Also create a pgx connection so we can check notices.
+	pgURL, cleanup := sqlutils.PGUrl(
+		t,
+		tc.Server(0).ServingSQLAddr(),
+		"TestImportRowLimit",
+		url.User(username.RootUser),
+	)
+	defer cleanup()
+	config, err := pgx.ParseConfig(pgURL.String())
+	require.NoError(t, err)
+	var noticeMsg string
+	config.OnNotice = func(_ *pgconn.PgConn, notice *pgconn.Notice) {
+		noticeMsg = notice.Message
+	}
+	pgxConn, err := pgx.ConnectConfig(ctx, config)
+	require.NoError(t, err)
+
 	avroField := []map[string]interface{}{
 		{
 			"name": "a",
@@ -1864,14 +1883,25 @@ func TestImportRowLimit(t *testing.T) {
 
 					// Import table from dump format.
 					importDumpQuery := fmt.Sprintf(`IMPORT TABLE t FROM %s ($1) %s`, test.typ, test.with)
-					sqlDB.Exec(t, importDumpQuery, srv.URL)
+					_, err := pgxConn.Exec(ctx, importDumpQuery, srv.URL)
+					require.NoError(t, err)
+					require.Regexp(t, fmt.Sprintf(
+						"IMPORT %s has been deprecated in 23.1.*See https://www.cockroachlabs.com/docs/.*/migration-overview for alternatives.",
+						test.typ,
+					), noticeMsg)
+
 					sqlDB.CheckQueryResults(t, test.verifyQuery, test.expected)
 
 					sqlDB.Exec(t, `DROP TABLE t`)
 
 					// Import dump format directly.
 					importDumpQuery = fmt.Sprintf(`IMPORT %s ($1) %s`, test.typ, test.with)
-					sqlDB.Exec(t, importDumpQuery, srv.URL)
+					_, err = pgxConn.Exec(ctx, importDumpQuery, srv.URL)
+					require.NoError(t, err)
+					require.Regexp(t, fmt.Sprintf(
+						"IMPORT %s has been deprecated in 23.1.*See https://www.cockroachlabs.com/docs/.*/migration-overview for alternatives.",
+						test.typ,
+					), noticeMsg)
 					sqlDB.CheckQueryResults(t, test.verifyQuery, test.expected)
 
 					sqlDB.Exec(t, `DROP TABLE t`)
@@ -7020,7 +7050,11 @@ func TestImportJobEventLogging(t *testing.T) {
 		&unused)
 
 	expectedStatus := []string{string(jobs.StatusSucceeded), string(jobs.StatusRunning)}
-	jobstest.CheckEmittedEvents(t, expectedStatus, beforeImport.UnixNano(), jobID, "import", "IMPORT")
+	expectedRecoveryEvent := eventpb.RecoveryEvent{
+		RecoveryType: importJobRecoveryEventType,
+		NumRows:      int64(1000),
+	}
+	jobstest.CheckEmittedEvents(t, expectedStatus, beforeImport.UnixNano(), jobID, "import", "IMPORT", expectedRecoveryEvent)
 
 	sqlDB.Exec(t, `DROP TABLE simple`)
 
@@ -7037,7 +7071,17 @@ func TestImportJobEventLogging(t *testing.T) {
 		string(jobs.StatusFailed), string(jobs.StatusReverting),
 		string(jobs.StatusRunning),
 	}
-	jobstest.CheckEmittedEvents(t, expectedStatus, beforeSecondImport.UnixNano(), jobID, "import", "IMPORT")
+	expectedRecoveryEvent = eventpb.RecoveryEvent{
+		RecoveryType: importJobRecoveryEventType,
+		NumRows:      int64(1000),
+	}
+	// Note that different from RESTORE, for canceled or failed job, recovery
+	// events for IMPORT still shows the changed number of rows (hence we're not
+	// resetting the NumRows in expectedRecoveryEvent to 0 here). It's because
+	// we record the count of inserted rows prior to executing testingKnobs.afterImport
+	// (see `importResumer.Resume()`) so that we can test on resuming the interrupted
+	// import process (such as TestCSVImportCanBeResumed).
+	jobstest.CheckEmittedEvents(t, expectedStatus, beforeSecondImport.UnixNano(), jobID, "import", "IMPORT", expectedRecoveryEvent)
 }
 
 func TestImportDefautIntSizeSetting(t *testing.T) {
@@ -7283,7 +7327,8 @@ CREATE TABLE a (
     FAMILY (c)
 )`)
 		data = "1,1,1\n1,2,1" // 1,1,1 is unindexed, 1,2,1 is indexed
-		sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO a CSV DATA ('%s')`, srv.URL))
+		importQuery := fmt.Sprintf(`IMPORT INTO a CSV DATA ('%s')`, srv.URL)
+		sqlDB.Exec(t, importQuery)
 		sqlDB.CheckQueryResults(t, `SELECT * FROM a@idx_c_b_gt_1 WHERE b > 1`, [][]string{
 			{"1", "2", "1"},
 		})

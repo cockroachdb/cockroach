@@ -43,6 +43,7 @@ go_test(
         "//pkg/base",
         "//pkg/ccl/baseccl",
         "//pkg/ccl/storageccl/engineccl/enginepbccl",
+        "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/roachpb",
         "//pkg/settings/cluster",

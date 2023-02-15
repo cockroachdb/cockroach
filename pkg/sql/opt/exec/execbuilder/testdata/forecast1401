@@ -18396,7 +18396,7 @@ vectorized: true
 • scan
   estimated row count: 1 (<0.01% of the table; stats collected <hidden> ago)
   table: t1401@t1401_c_idx
-  spans: [/'2022-01-25 21:17:27.216095+00:00' - ]
+  spans: [/'2022-01-25 21:17:27.216095+00' - ]
 
 # Without forecasts, the bad plan uses t1401_c_idx.
 
@@ -18430,7 +18430,7 @@ vectorized: true
         └── • revscan
               estimated row count: 1 (<0.01% of the table; stats collected <hidden> ago)
               table: t1401@t1401_c_idx
-              spans: [/'2022-01-25 21:17:27.216095+00:00' - ]
+              spans: [/'2022-01-25 21:17:27.216095+00' - ]
 
 statement ok
 RESET optimizer_use_forecasts
@@ -18446,7 +18446,7 @@ vectorized: true
 • scan
   estimated row count: 179,489,803 (2.7% of the table; stats collected <hidden> ago; using stats forecast)
   table: t1401@t1401_c_idx
-  spans: [/'2022-01-25 21:17:27.216095+00:00' - ]
+  spans: [/'2022-01-25 21:17:27.216095+00' - ]
 
 # With forecasts, the good plan uses t1401_f_c_idx1.
 
@@ -18480,4 +18480,4 @@ vectorized: true
         └── • scan
               estimated row count: 101 - 632 (<0.01% of the table; stats collected <hidden> ago; using stats forecast)
               table: t1401@t1401_f_c_idx1 (partial index)
-              spans: [/4458256 - /4458256/'2022-01-25 21:17:27.216095+00:00']
+              spans: [/4458256 - /4458256/'2022-01-25 21:17:27.216095+00']

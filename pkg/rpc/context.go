@@ -25,7 +25,7 @@ import (
 
 	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/base/serverident"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -68,8 +68,8 @@ func init() {
 }
 
 const (
-	// The coefficient by which the maximum offset is multiplied to determine the
-	// maximum acceptable measurement latency.
+	// The coefficient by which the tolerated offset is multiplied to determine
+	// the maximum acceptable measurement latency.
 	maximumPingDurationMult = 2
 )
 
@@ -244,8 +244,10 @@ func NewServerEx(
 
 	if !rpcCtx.Config.Insecure {
 		a := kvAuth{
+			sv: &rpcCtx.Settings.SV,
 			tenant: tenantAuthorizer{
-				tenantID: rpcCtx.tenID,
+				tenantID:               rpcCtx.tenID,
+				capabilitiesAuthorizer: rpcCtx.capabilitiesAuthorizer,
 			},
 		}
 
@@ -325,7 +327,7 @@ func (c *Connection) Connect(ctx context.Context) (*grpc.ClientConn, error) {
 	select {
 	case <-c.initialHeartbeatDone:
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return nil, errors.Wrap(ctx.Err(), "connect")
 	}
 
 	if err, _ := c.err.Load().(error); err != nil {
@@ -362,7 +364,7 @@ func (c *Connection) Health() error {
 // thing.
 type Context struct {
 	ContextOptions
-	SecurityContext
+	*SecurityContext
 
 	breakerClock breakerClock
 	RemoteClocks *RemoteClockMonitor
@@ -421,6 +423,9 @@ type Context struct {
 	// The loopbackDialFn fits under that common case by transporting
 	// the gRPC protocol over an in-memory pipe.
 	loopbackDialFn func(context.Context) (net.Conn, error)
+
+	// clientCreds is used to pass additional headers to called RPCs.
+	clientCreds credentials.PerRPCCredentials
 }
 
 // SetLoopbackDialer configures the loopback dialer function.
@@ -457,12 +462,12 @@ func (c connKey) SafeFormat(p redact.SafePrinter, _ rune) {
 // ContextOptions are passed to NewContext to set up a new *Context.
 // All pointer fields and TenantID are required.
 type ContextOptions struct {
-	TenantID  roachpb.TenantID
-	Config    *base.Config
-	Clock     hlc.WallClock
-	MaxOffset time.Duration
-	Stopper   *stop.Stopper
-	Settings  *cluster.Settings
+	TenantID        roachpb.TenantID
+	Config          *base.Config
+	Clock           hlc.WallClock
+	ToleratedOffset time.Duration
+	Stopper         *stop.Stopper
+	Settings        *cluster.Settings
 	// OnIncomingPing is called when handling a PingRequest, after
 	// preliminary checks but before recording clock offset information.
 	//
@@ -496,6 +501,17 @@ type ContextOptions struct {
 	// utility, not a server, and thus misses server configuration, a
 	// cluster version, a node ID, etc.
 	ClientOnly bool
+
+	// UseNodeAuth is only used when ClientOnly is not set.
+	// When set, it indicates that this rpc.Context is running inside
+	// the same process as a KV layer and thus should feel empowered
+	// to use its node cert to perform outgoing RPC dials.
+	UseNodeAuth bool
+
+	// TenantRPCAuthorizer provides a handle into the tenantcapabilities
+	// subsystem. It allows KV nodes to perform capability checks for incoming
+	// tenant requests.
+	TenantRPCAuthorizer tenantcapabilities.Authorizer
 }
 
 func (c ContextOptions) validate() error {
@@ -601,9 +617,17 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 
 	masterCtx, _ := opts.Stopper.WithCancelOnQuiesce(ctx)
 
+	secCtx := NewSecurityContext(
+		opts.Config,
+		security.ClusterTLSSettings(opts.Settings),
+		opts.TenantID,
+		opts.TenantRPCAuthorizer,
+	)
+	secCtx.useNodeAuth = opts.UseNodeAuth
+
 	rpcCtx := &Context{
 		ContextOptions:  opts,
-		SecurityContext: MakeSecurityContext(opts.Config, security.ClusterTLSSettings(opts.Settings), opts.TenantID),
+		SecurityContext: secCtx,
 		breakerClock: breakerClock{
 			clock: opts.Clock,
 		},
@@ -613,6 +637,18 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 		heartbeatInterval:   opts.Config.RPCHeartbeatInterval,
 		heartbeatTimeout:    opts.Config.RPCHeartbeatTimeout,
 		logClosingConnEvery: log.Every(time.Second),
+	}
+
+	if !opts.TenantID.IsSet() {
+		panic("tenant ID not set")
+	}
+
+	if opts.ClientOnly && opts.Config.User.Undefined() {
+		panic("client username not set")
+	}
+
+	if !opts.TenantID.IsSystem() {
+		rpcCtx.clientCreds = newTenantClientCreds(opts.TenantID)
 	}
 
 	if opts.Knobs.NoLoopbackDialer {
@@ -628,7 +664,7 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 	// CLI commands are exempted.
 	if !opts.ClientOnly {
 		rpcCtx.RemoteClocks = newRemoteClockMonitor(
-			opts.Clock, opts.MaxOffset, 10*opts.Config.RPCHeartbeatTimeout, opts.Config.HistogramWindowInterval())
+			opts.Clock, opts.ToleratedOffset, 10*opts.Config.RPCHeartbeatTimeout, opts.Config.HistogramWindowInterval())
 	}
 
 	if id := opts.Knobs.StorageClusterID; id != nil {
@@ -702,10 +738,15 @@ func (rpcCtx *Context) GetLocalInternalClientForAddr(
 // the configured gRPC client-side and server-side interceptors.
 type internalClientAdapter struct {
 	server roachpb.InternalServer
-	// tenant is set when this adapter will be used by a shared-process tenant to
-	// talk to the local KV server. In that case, the internalClientAdapter needs
-	// to pay extra attention to tracing.
-	tenant bool
+
+	// clientTenantID is the tenant ID for the client (caller) side
+	// of the call. (The server/callee side is
+	// always the KV layer / system tenant.)
+	clientTenantID roachpb.TenantID
+
+	// separateTracer indicates that the client (caller)
+	// and server (callee) sides use different tracers.
+	separateTracers bool
 
 	// batchHandler is the RPC handler for Batch(). This includes both the chain
 	// of client-side and server-side gRPC interceptors, and bottoms out by
@@ -722,12 +763,18 @@ var _ RestrictedInternalClient = internalClientAdapter{}
 
 // makeInternalClientAdapter constructs a internalClientAdapter.
 //
-// tenant should be set when this adapter will be used by a shared-process
-// tenant to talk to the local KV server. In that case, the
-// internalClientAdapter needs to pay extra attention to tracing.
+// clientTenantID is the tenant ID of the caller side of the
+// interface. This might be for a secondary tenant, which enables us
+// to use the internal client adapter when running a secondary tenant
+// server inside the same process as the KV layer.
+//
+// The caller can set separateTracers to indicate that the
+// caller and callee use separate tracers, so we can't
+// use a child tracing span directly.
 func makeInternalClientAdapter(
 	server roachpb.InternalServer,
-	tenant bool,
+	clientTenantID roachpb.TenantID,
+	separateTracers bool,
 	clientUnaryInterceptors []grpc.UnaryClientInterceptor,
 	clientStreamInterceptors []grpc.StreamClientInterceptor,
 	serverUnaryInterceptors []grpc.UnaryServerInterceptor,
@@ -773,7 +820,8 @@ func makeInternalClientAdapter(
 
 	return internalClientAdapter{
 		server:                   server,
-		tenant:                   tenant,
+		clientTenantID:           clientTenantID,
+		separateTracers:          separateTracers,
 		clientStreamInterceptors: clientStreamInterceptors,
 		serverStreamInterceptors: serverStreamInterceptors,
 		batchHandler: func(ctx context.Context, ba *roachpb.BatchRequest, opts ...grpc.CallOption) (*roachpb.BatchResponse, error) {
@@ -799,11 +847,23 @@ func makeInternalClientAdapter(
 			// ends up performing another RPC to the local node. The inner RPC must
 			// carry the identity of the system tenant, not the one of the client of
 			// the outer RPC.
-			ctx = grpcutil.NewLocalRequestContext(ctx, tenantIDFromContext(ctx))
+			ctx = grpcutil.NewLocalRequestContext(ctx, clientTenantID)
 
-			// If this is a tenant calling to the local KV server, we make things look
-			// closer to a remote call from the tracing point of view.
-			if tenant {
+			// Clear any leftover gRPC incoming metadata, if this call
+			// is originating from a RPC handler function called as
+			// a result of a tenant call. This is this case:
+			//
+			//    tenant -(rpc)-> tenant -(rpc)-> KV
+			//                            ^ YOU ARE HERE
+			//
+			// at this point, the left side RPC has left some incoming
+			// metadata in the context, but we need to get rid of it
+			// before we let the call go through KV.
+			ctx = grpcutil.ClearIncomingContext(ctx)
+
+			// If the caller and callee use separate tracers, we make things
+			// look closer to a remote call from the tracing point of view.
+			if separateTracers {
 				sp := tracing.SpanFromContext(ctx)
 				if sp != nil && !sp.IsNoop() {
 					// Fill in ba.TraceInfo. For remote RPCs (not done throught the
@@ -822,17 +882,6 @@ func makeInternalClientAdapter(
 			return reply, err
 		},
 	}
-}
-
-// tenantIDFromContext returns the tenant ID of the current server.
-func tenantIDFromContext(ctx context.Context) roachpb.TenantID {
-	var tenantID roachpb.TenantID
-	si := serverident.ServerIdentificationFromContext(ctx)
-	// si should only be nil in rpc unit tests.
-	if si != nil {
-		tenantID = si.TenantID().(roachpb.TenantID)
-	}
-	return tenantID
 }
 
 // chainUnaryServerInterceptors takes a slice of RPC interceptors and a final RPC
@@ -1027,7 +1076,7 @@ func (a internalClientAdapter) RangeFeed(
 	}
 
 	serverCtx := ctx
-	if a.tenant {
+	if a.separateTracers {
 		// Wipe the span from context. The server will create a root span with a
 		// different Tracer, based on remote parent information provided by the
 		// TraceInfo above. If we didn't do this, the server would attempt to
@@ -1035,7 +1084,7 @@ func (a internalClientAdapter) RangeFeed(
 		serverCtx = tracing.ContextWithSpan(ctx, nil)
 	}
 	rawServerStream := &serverStream{
-		ctx: grpcutil.NewLocalRequestContext(serverCtx, tenantIDFromContext(ctx)),
+		ctx: grpcutil.NewLocalRequestContext(serverCtx, a.clientTenantID),
 		// RangeFeed is a server-streaming RPC, so the server does not receive
 		// anything.
 		receiver: pipeReader{},
@@ -1151,7 +1200,7 @@ func (a internalClientAdapter) MuxRangeFeed(
 		sender:   requestWriter,
 	}
 	serverCtx := ctx
-	if a.tenant {
+	if a.separateTracers {
 		// Wipe the span from context. The server will create a root span with a
 		// different Tracer, based on remote parent information provided by the
 		// TraceInfo above. If we didn't do this, the server would attempt to
@@ -1159,7 +1208,7 @@ func (a internalClientAdapter) MuxRangeFeed(
 		serverCtx = tracing.ContextWithSpan(ctx, nil)
 	}
 	rawServerStream := &serverStream{
-		ctx:      grpcutil.NewLocalRequestContext(serverCtx, tenantIDFromContext(ctx)),
+		ctx:      grpcutil.NewLocalRequestContext(serverCtx, a.clientTenantID),
 		receiver: requestReader,
 		sender:   eventWriter,
 	}
@@ -1287,7 +1336,7 @@ func (s *pipe) send(ctx context.Context, m interface{}) error {
 	case s.respC <- m:
 		return nil
 	case <-ctx.Done():
-		return ctx.Err()
+		return errors.Wrap(ctx.Err(), "send")
 	}
 }
 
@@ -1311,7 +1360,7 @@ func (s *pipe) recv(ctx context.Context) (interface{}, error) {
 			return nil, err
 		}
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return nil, errors.Wrap(ctx.Err(), "recv")
 	}
 }
 
@@ -1459,13 +1508,22 @@ func IsLocal(iface RestrictedInternalClient) bool {
 // through this local server.
 func (rpcCtx *Context) SetLocalInternalServer(
 	internalServer roachpb.InternalServer,
-	tenant bool,
 	serverInterceptors ServerInterceptorInfo,
 	clientInterceptors ClientInterceptorInfo,
 ) {
+	clientTenantID := rpcCtx.TenantID
+	separateTracers := false
+	if !clientTenantID.IsSystem() {
+		// This is a secondary tenant server in the same process as the KV
+		// layer (shared-process multitenancy). In this case, the caller
+		// and the callee use separate tracers, so we can't mix and match
+		// tracing spans.
+		separateTracers = true
+	}
 	rpcCtx.localInternalClient = makeInternalClientAdapter(
 		internalServer,
-		tenant,
+		clientTenantID,
+		separateTracers,
 		clientInterceptors.UnaryInterceptors,
 		clientInterceptors.StreamInterceptors,
 		serverInterceptors.UnaryInterceptors,
@@ -1560,6 +1618,42 @@ func (rpcCtx *Context) dialOptsLocal() ([]grpc.DialOption, error) {
 	return dialOpts, err
 }
 
+// GetClientTLSConfig decides which TLS client configuration (&
+// certificates) to use to reach the remote node.
+func (rpcCtx *Context) GetClientTLSConfig() (*tls.Config, error) {
+	if rpcCtx.config.Insecure {
+		return nil, nil
+	}
+
+	cm, err := rpcCtx.GetCertificateManager()
+	if err != nil {
+		return nil, wrapError(err)
+	}
+
+	switch {
+	case rpcCtx.ClientOnly:
+		// A CLI command is performing a remote RPC.
+		tlsCfg, err := cm.GetClientTLSConfig(rpcCtx.config.User)
+		return tlsCfg, wrapError(err)
+
+	case rpcCtx.UseNodeAuth || rpcCtx.tenID.IsSystem():
+		tlsCfg, err := cm.GetNodeClientTLSConfig()
+		return tlsCfg, wrapError(err)
+
+	case !rpcCtx.tenID.IsSystem():
+		// A SQL server running in a standalone server doesn't have access
+		// to the node certs, and thus must use the standalone tenant
+		// client cert.
+		tlsCfg, err := cm.GetTenantTLSConfig()
+		return tlsCfg, wrapError(err)
+
+	default:
+		// We don't currently support any other way to use the rpc context.
+		// go away.
+		return nil, errors.AssertionFailedf("programming error: rpc context not initialized correctly")
+	}
+}
+
 // dialOptsNetworkCredentials computes options that determines how the
 // RPC client authenticates itself to the remote server.
 func (rpcCtx *Context) dialOptsNetworkCredentials() ([]grpc.DialOption, error) {
@@ -1567,13 +1661,7 @@ func (rpcCtx *Context) dialOptsNetworkCredentials() ([]grpc.DialOption, error) {
 	if rpcCtx.Config.Insecure {
 		dialOpts = append(dialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	} else {
-		var tlsConfig *tls.Config
-		var err error
-		if rpcCtx.tenID == roachpb.SystemTenantID {
-			tlsConfig, err = rpcCtx.GetClientTLSConfig()
-		} else {
-			tlsConfig, err = rpcCtx.GetTenantTLSConfig()
-		}
+		tlsConfig, err := rpcCtx.GetClientTLSConfig()
 		if err != nil {
 			return nil, err
 		}
@@ -1693,6 +1781,10 @@ func (rpcCtx *Context) dialOptsCommon(
 		grpc.MaxCallSendMsgSize(math.MaxInt32),
 	)}
 
+	if rpcCtx.clientCreds != nil {
+		dialOpts = append(dialOpts, grpc.WithPerRPCCredentials(rpcCtx.clientCreds))
+	}
+
 	// We throw this one in for good measure, but it only disables the retries
 	// for RPCs that were already pending (which are opt in anyway, and we don't
 	// opt in). It doesn't disable what gRPC calls "transparent retries" (RPC
@@ -1765,7 +1857,8 @@ func init() {
 type onlyOnceDialer struct {
 	mu struct {
 		syncutil.Mutex
-		err error
+		err      error
+		redialed bool
 	}
 }
 
@@ -1782,13 +1875,13 @@ func (ood *onlyOnceDialer) dial(ctx context.Context, addr string) (net.Conn, err
 	defer ood.mu.Unlock()
 
 	if err := ood.mu.err; err != nil {
-		// Not first dial.
-		if !errors.Is(err, grpcutil.ErrConnectionInterrupted) {
-			// Hitting this path would indicate that gRPC retried even though it
-			// received an error not marked as retriable. At the time of writing, at
-			// least in simple experiments, as expected we don't see this error.
-			err = errors.Wrap(err, "previous dial failed")
+		if ood.mu.redialed {
+			// We set up onlyOnceDialer to avoid returning any errors that could look
+			// temporary to gRPC, and so we don't expect it to re-dial a connection
+			// twice (the first re-dial is supposed to surface the permanent error).
+			return nil, errors.NewAssertionErrorWithWrappedErrf(err, "gRPC connection unexpectedly re-dialed")
 		}
+		ood.mu.redialed = true
 		return nil, err
 	}
 
@@ -2348,7 +2441,7 @@ func (rpcCtx *Context) runHeartbeat(
 				// Only update the clock offset measurement if we actually got a
 				// successful response from the server.
 				pingDuration := receiveTime.Sub(sendTime)
-				if pingDuration > maximumPingDurationMult*rpcCtx.MaxOffset {
+				if pingDuration > maximumPingDurationMult*rpcCtx.ToleratedOffset {
 					request.Offset.Reset()
 				} else {
 					// Offset and error are measured using the remote clock reading

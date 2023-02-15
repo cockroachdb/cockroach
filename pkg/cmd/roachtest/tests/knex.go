@@ -128,7 +128,7 @@ func registerKnex(r registry.Registry) {
 
 	r.Add(registry.TestSpec{
 		Name:       "knex",
-		Owner:      registry.OwnerSQLExperience,
+		Owner:      registry.OwnerSQLSessions,
 		Cluster:    r.MakeClusterSpec(1),
 		NativeLibs: registry.LibGEOS,
 		Tags:       []string{`default`, `orm`},

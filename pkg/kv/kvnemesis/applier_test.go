@@ -56,6 +56,7 @@ func TestApplier(t *testing.T) {
 	sstFile := &storage.MemFile{}
 	{
 		st := cluster.MakeTestingClusterSettings()
+		storage.ValueBlocksEnabled.Override(ctx, &st.SV, true)
 		w := storage.MakeIngestionSSTWriter(ctx, st, sstFile)
 		defer w.Close()
 
@@ -91,7 +92,6 @@ func TestApplier(t *testing.T) {
 			"batch", step(batch(put(k1, 21), delRange(k2, k3, 22))),
 		},
 		{
-
 			"rscan", step(reverseScan(k1, k3)),
 		},
 		{
@@ -200,7 +200,7 @@ func TestApplier(t *testing.T) {
 				// Trim out context canceled location, which can be non-deterministic.
 				// The wrapped string around the context canceled error depends on where
 				// the context cancellation was noticed.
-				actual = regexp.MustCompile(` aborted .*: context canceled`).ReplaceAllString(actual, ` context canceled`)
+				actual = regexp.MustCompile(` (aborted .*|txn exec): context canceled`).ReplaceAllString(actual, ` context canceled`)
 			} else {
 				// Trim out the txn to avoid nondeterminism.
 				actual = regexp.MustCompile(` txnpb:\(.*\)`).ReplaceAllLiteralString(actual, ` txnpb:<txn>`)

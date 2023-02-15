@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -145,7 +146,7 @@ func (b *replicaAppBatch) Stage(
 	// will be committed, but all of these commands will be `IsTrivial()`.
 	if err := b.ab.runPostAddTriggers(ctx, &cmd.ReplicatedCmd, postAddEnv{
 		st:          b.r.store.cfg.Settings,
-		eng:         b.r.store.engine,
+		eng:         b.r.store.TODOEngine(),
 		sideloaded:  b.r.raftMu.sideloaded,
 		bulkLimiter: b.r.store.limiters.BulkIOWriteRate,
 	}); err != nil {
@@ -334,12 +335,10 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		// required for correctness, since the merge protocol should guarantee that
 		// no new replicas of the RHS can ever be created, but it doesn't hurt to
 		// be careful.
-		if err := rhsRepl.preDestroyRaftMuLocked(
-			ctx, b.batch, b.batch, mergedTombstoneReplicaID, clearRangeDataOptions{
-				ClearReplicatedByRangeID:   true,
-				ClearUnreplicatedByRangeID: true,
-			},
-		); err != nil {
+		if err := kvstorage.DestroyReplica(ctx, rhsRepl.RangeID, b.batch, b.batch, mergedTombstoneReplicaID, kvstorage.ClearRangeDataOptions{
+			ClearReplicatedByRangeID:   true,
+			ClearUnreplicatedByRangeID: true,
+		}); err != nil {
 			return errors.Wrapf(err, "unable to destroy replica before merge")
 		}
 
@@ -476,17 +475,11 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		// We've set the replica's in-mem status to reflect the pending destruction
 		// above, and preDestroyRaftMuLocked will also add a range tombstone to the
 		// batch, so that when we commit it, the removal is finalized.
-		if err := b.r.preDestroyRaftMuLocked(
-			ctx,
-			b.batch,
-			b.batch,
-			change.NextReplicaID(),
-			clearRangeDataOptions{
-				ClearReplicatedBySpan:      span,
-				ClearReplicatedByRangeID:   true,
-				ClearUnreplicatedByRangeID: true,
-			},
-		); err != nil {
+		if err := kvstorage.DestroyReplica(ctx, b.r.RangeID, b.batch, b.batch, change.NextReplicaID(), kvstorage.ClearRangeDataOptions{
+			ClearReplicatedBySpan:      span,
+			ClearReplicatedByRangeID:   true,
+			ClearUnreplicatedByRangeID: true,
+		}); err != nil {
 			return errors.Wrapf(err, "unable to destroy replica before removal")
 		}
 	}

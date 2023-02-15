@@ -364,14 +364,14 @@ func newRPCTestContext(ctx context.Context, ts *TestServer, cfg *base.Config) *r
 	var c base.NodeIDContainer
 	ctx = logtags.AddTag(ctx, "n", &c)
 	rpcContext := rpc.NewContext(ctx, rpc.ContextOptions{
-		TenantID:  roachpb.SystemTenantID,
-		NodeID:    &c,
-		Config:    cfg,
-		Clock:     ts.Clock().WallClock(),
-		MaxOffset: ts.Clock().MaxOffset(),
-		Stopper:   ts.Stopper(),
-		Settings:  ts.ClusterSettings(),
-		Knobs:     rpc.ContextTestingKnobs{NoLoopbackDialer: true},
+		TenantID:        roachpb.SystemTenantID,
+		NodeID:          &c,
+		Config:          cfg,
+		Clock:           ts.Clock().WallClock(),
+		ToleratedOffset: ts.Clock().ToleratedOffset(),
+		Stopper:         ts.Stopper(),
+		Settings:        ts.ClusterSettings(),
+		Knobs:           rpc.ContextTestingKnobs{NoLoopbackDialer: true},
 	})
 	// Ensure that the RPC client context validates the server cluster ID.
 	// This ensures that a test where the server is restarted will not let
@@ -1364,8 +1364,8 @@ func TestSpanStatsResponse(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var response serverpb.SpanStatsResponse
-	request := serverpb.SpanStatsRequest{
+	var response roachpb.SpanStatsResponse
+	request := roachpb.SpanStatsRequest{
 		NodeID:   "1",
 		StartKey: []byte(roachpb.RKeyMin),
 		EndKey:   []byte(roachpb.RKeyMax),
@@ -1394,7 +1394,7 @@ func TestSpanStatsGRPCResponse(t *testing.T) {
 	rpcStopper := stop.NewStopper()
 	defer rpcStopper.Stop(ctx)
 	rpcContext := newRPCTestContext(ctx, ts, ts.RPCContext().Config)
-	request := serverpb.SpanStatsRequest{
+	request := roachpb.SpanStatsRequest{
 		NodeID:   "1",
 		StartKey: []byte(roachpb.RKeyMin),
 		EndKey:   []byte(roachpb.RKeyMax),

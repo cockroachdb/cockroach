@@ -32,6 +32,7 @@ func CheckEmittedEvents(
 	startTime int64,
 	jobID int64,
 	expectedMessage, expectedJobType string,
+	expectedRecoveryEvent eventpb.RecoveryEvent,
 ) {
 	// Check that the structured event was logged.
 	testutils.SucceedsSoon(t, func() error {
@@ -53,17 +54,29 @@ func CheckEmittedEvents(
 			// crdb-v2 starts json with an equal sign.
 			e.Message = strings.TrimPrefix(e.Message, "=")
 			jsonPayload := []byte(e.Message)
-			var ev eventpb.CommonJobEventDetails
-			if err := json.Unmarshal(jsonPayload, &ev); err != nil {
-				t.Errorf("unmarshalling %q: %v", e.Message, err)
+
+			if strings.Contains(e.Message, "\"EventType\":\"recovery_event\"") {
+				var re eventpb.RecoveryEvent
+				if err := json.Unmarshal(jsonPayload, &re); err != nil {
+					t.Errorf("unmarshalling %q: %v", e.Message, err)
+				}
+				if re.ResultStatus != "" {
+					require.Equal(t, expectedRecoveryEvent.RecoveryType, re.RecoveryType)
+					require.Equal(t, expectedRecoveryEvent.NumRows, re.NumRows)
+				}
+			} else {
+				var ev eventpb.CommonJobEventDetails
+				if err := json.Unmarshal(jsonPayload, &ev); err != nil {
+					t.Errorf("unmarshalling %q: %v", e.Message, err)
+				}
+				require.Equal(t, expectedJobType, ev.JobType)
+				require.Equal(t, jobID, ev.JobID)
+				if matchingEntryIndex >= len(expectedStatus) {
+					return errors.New("more events fround in log than expected")
+				}
+				require.Equal(t, expectedStatus[matchingEntryIndex], ev.Status)
+				matchingEntryIndex++
 			}
-			require.Equal(t, expectedJobType, ev.JobType)
-			require.Equal(t, jobID, ev.JobID)
-			if matchingEntryIndex >= len(expectedStatus) {
-				return errors.New("more events fround in log than expected")
-			}
-			require.Equal(t, expectedStatus[matchingEntryIndex], ev.Status)
-			matchingEntryIndex++
 		}
 		if !foundEntry {
 			return errors.New("structured entry for import not found in log")

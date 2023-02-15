@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/base/serverident"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
@@ -74,6 +75,12 @@ const (
 	defaultEventLogEnabled = true
 
 	maximumMaxClockOffset = 5 * time.Second
+
+	// toleratedOffsetMultiplier is the MaxOffset multiplier used for
+	// ToleratedOffset, which determines the tolerated clock skew between this
+	// node and the cluster before self-terminating. It is conservatively set to
+	// 80% to avoid exceeding MaxOffset.
+	toleratedOffsetMultiplier = 0.8
 
 	minimumNetworkFileDescriptors     = 256
 	recommendedNetworkFileDescriptors = 5000
@@ -137,13 +144,19 @@ type BaseConfig struct {
 	// AmbientCtx is used to annotate contexts used inside the server.
 	AmbientCtx log.AmbientContext
 
-	// Maximum allowed clock offset for the cluster. If observed clock
-	// offsets exceed this limit, inconsistency may result, and servers
-	// will panic to minimize the likelihood of inconsistent data.
-	// Increasing this value will increase time to recovery after
-	// failures, and increase the frequency and impact of
-	// ReadWithinUncertaintyIntervalError.
+	// MaxOffset is the maximum clock offset for the cluster. If real clock skew
+	// exceeds this limit, it may result in linearizability violations. Increasing
+	// this will increase the frequency of ReadWithinUncertaintyIntervalError and
+	// the write latency of global tables.
+	//
+	// Nodes will self-terminate if they detect that their clock skew with other
+	// nodes is too large, see ToleratedOffset().
 	MaxOffset MaxOffsetType
+
+	// DisableMaxOffsetCheck disables the MaxOffset check with other cluster nodes.
+	// The operator assumes responsibility for ensuring real clock skew never
+	// exceeds MaxOffset. See also ToleratedOffset().
+	DisableMaxOffsetCheck bool
 
 	// DisableRuntimeStatsMonitor prevents this server from starting the
 	// async task that collects runtime stats and triggers
@@ -218,6 +231,9 @@ type BaseConfig struct {
 	// Stores is specified to enable durable key-value storage.
 	Stores base.StoreSpecList
 
+	// SharedStorage is specified to enable disaggregated shared storage.
+	SharedStorage string
+
 	// StartDiagnosticsReporting starts the asynchronous goroutine that
 	// checks for CockroachDB upgrades and periodically reports
 	// diagnostics to Cockroach Labs.
@@ -235,6 +251,11 @@ type BaseConfig struct {
 	// other service (typically, the serverController) will accept and
 	// route SQL connections instead.
 	DisableSQLListener bool
+
+	// ObsServiceAddr is the address of the OTLP sink to send events to, if any.
+	// These events are meant for the Observability Service, but they might pass
+	// through an OpenTelemetry Collector.
+	ObsServiceAddr string
 }
 
 // MakeBaseConfig returns a BaseConfig with default values.
@@ -267,6 +288,7 @@ func (cfg *BaseConfig) SetDefaults(
 	cfg.ClusterIDContainer = idsProvider.clusterID
 	cfg.AmbientCtx = log.MakeServerAmbientContext(tr, idsProvider)
 	cfg.MaxOffset = MaxOffsetType(base.DefaultMaxClockOffset)
+	cfg.DisableMaxOffsetCheck = false
 	cfg.DefaultZoneConfig = zonepb.DefaultZoneConfig()
 	cfg.StorageEngine = storage.DefaultStorageEngine
 	cfg.TestingInsecureWebAccess = disableWebLogin
@@ -315,6 +337,15 @@ func (cfg *BaseConfig) InitTestingKnobs() {
 		storeKnobs.EvalKnobs.UseRangeTombstonesForPointDeletes = true
 		cfg.TestingKnobs.RangeFeed.(*rangefeed.TestingKnobs).IgnoreOnDeleteRangeError = true
 	}
+}
+
+// ToleratedOffset returns the tolerated clock offset with other cluster nodes
+// as measured via RPC heartbeats, or 0 to disable clock offset checks.
+func (cfg *BaseConfig) ToleratedOffset() time.Duration {
+	if cfg.DisableMaxOffsetCheck {
+		return 0
+	}
+	return time.Duration(toleratedOffsetMultiplier * float64(cfg.MaxOffset))
 }
 
 // Config holds the parameters needed to set up a combined KV and SQL server.
@@ -651,6 +682,19 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 	pebbleCache := pebble.NewCache(cfg.CacheSize)
 	defer pebbleCache.Unref()
 
+	var sharedStorage cloud.ExternalStorage
+	if cfg.SharedStorage != "" {
+		var err error
+		// Note that we don't pass an io interceptor here. Instead, we record shared
+		// storage metrics on a per-store basis; see storage.Metrics.
+		sharedStorage, err = cloud.ExternalStorageFromURI(ctx, cfg.SharedStorage,
+			base.ExternalIODirConfig{}, cfg.Settings, nil, cfg.User, nil,
+			nil, cloud.NilMetrics)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	var physicalStores int
 	for _, spec := range cfg.Stores.Specs {
 		if !spec.InMemory {
@@ -763,6 +807,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			pebbleConfig := storage.PebbleConfig{
 				StorageConfig: storageConfig,
 				Opts:          storage.DefaultPebbleOptions(),
+				SharedStorage: sharedStorage,
 			}
 			pebbleConfig.Opts.Cache = pebbleCache
 			pebbleConfig.Opts.TableCache = tableCache

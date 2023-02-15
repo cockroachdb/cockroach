@@ -98,7 +98,7 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 		repl1 := store.LookupReplica(roachpb.RKey(k))
 		require.NotNil(t, repl1)
 
-		eng := store.Engine()
+		eng := store.TODOEngine()
 
 		// Put some bogus sideloaded data on the replica which we're about to
 		// remove. Then, at the end of the test, check that that sideloaded

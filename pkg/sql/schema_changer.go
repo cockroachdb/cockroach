@@ -355,9 +355,8 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 			}
 
 			isLocal := !getPlanDistribution(
-				ctx, localPlanner, localPlanner.execCfg.NodeInfo.NodeID,
-				localPlanner.extendedEvalCtx.SessionData().DistSQLMode,
-				localPlanner.curPlan.main,
+				ctx, localPlanner.Descriptors().HasUncommittedTypes(),
+				localPlanner.extendedEvalCtx.SessionData().DistSQLMode, localPlanner.curPlan.main,
 			).WillDistribute()
 			out := execinfrapb.ProcessorCoreUnion{BulkRowWriter: &execinfrapb.BulkRowWriterSpec{
 				Table: *table.TableDesc(),
@@ -440,8 +439,8 @@ func (sc *SchemaChanger) maybeMakeAddTablePublic(
 	}
 	log.Info(ctx, "making table public")
 
-	return sc.txn(ctx, func(ctx context.Context, txn isql.Txn, descsCol *descs.Collection) error {
-		mut, err := descsCol.MutableByID(txn.KV()).Table(ctx, table.GetID())
+	return sc.txn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		mut, err := txn.Descriptors().MutableByID(txn.KV()).Table(ctx, table.GetID())
 		if err != nil {
 			return err
 		}
@@ -449,7 +448,7 @@ func (sc *SchemaChanger) maybeMakeAddTablePublic(
 			return nil
 		}
 		mut.State = descpb.DescriptorState_PUBLIC
-		return descsCol.WriteDesc(ctx, true /* kvTrace */, mut, txn.KV())
+		return txn.Descriptors().WriteDesc(ctx, true /* kvTrace */, mut, txn.KV())
 	})
 }
 
@@ -481,8 +480,8 @@ func (sc *SchemaChanger) ignoreRevertedDropIndex(
 	if !table.IsPhysicalTable() {
 		return nil
 	}
-	return sc.txn(ctx, func(ctx context.Context, txn isql.Txn, descsCol *descs.Collection) error {
-		mut, err := descsCol.MutableByID(txn.KV()).Table(ctx, table.GetID())
+	return sc.txn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		mut, err := txn.Descriptors().MutableByID(txn.KV()).Table(ctx, table.GetID())
 		if err != nil {
 			return err
 		}
@@ -500,7 +499,7 @@ func (sc *SchemaChanger) ignoreRevertedDropIndex(
 			mutationsModified = true
 		}
 		if mutationsModified {
-			return descsCol.WriteDesc(ctx, true /* kvTrace */, mut, txn.KV())
+			return txn.Descriptors().WriteDesc(ctx, true /* kvTrace */, mut, txn.KV())
 		}
 		return nil
 	})
@@ -574,9 +573,9 @@ func (sc *SchemaChanger) getTargetDescriptor(ctx context.Context) (catalog.Descr
 	// Retrieve the descriptor that is being changed.
 	var desc catalog.Descriptor
 	if err := sc.txn(ctx, func(
-		ctx context.Context, txn isql.Txn, descriptors *descs.Collection,
+		ctx context.Context, txn descs.Txn,
 	) (err error) {
-		desc, err = descriptors.ByID(txn.KV()).Get().Desc(ctx, sc.descID)
+		desc, err = txn.Descriptors().ByID(txn.KV()).Get().Desc(ctx, sc.descID)
 		return err
 	}); err != nil {
 		return nil, err
@@ -736,7 +735,7 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 				sc.job.Payload().UsernameProto.Decode(),
 				sc.job.Payload().Description,
 				gcDetails,
-				!sc.settings.Version.IsActive(ctx, clusterversion.V22_2UseDelRangeInGCJob),
+				!sc.settings.Version.IsActive(ctx, clusterversion.TODODelete_V22_2UseDelRangeInGCJob),
 			); err != nil {
 				return err
 			}
@@ -894,8 +893,8 @@ func (sc *SchemaChanger) handlePermanentSchemaChangeError(
 
 // initialize the job running status.
 func (sc *SchemaChanger) initJobRunningStatus(ctx context.Context) error {
-	return sc.txn(ctx, func(ctx context.Context, txn isql.Txn, descriptors *descs.Collection) error {
-		desc, err := descriptors.ByID(txn.KV()).WithoutNonPublic().Get().Table(ctx, sc.descID)
+	return sc.txn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		desc, err := txn.Descriptors().ByID(txn.KV()).WithoutNonPublic().Get().Table(ctx, sc.descID)
 		if err != nil {
 			return err
 		}
@@ -1034,8 +1033,8 @@ func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) er
 	// table was in the ADD state and the schema change failed, then we need to
 	// clean up the descriptor.
 	gcJobID := sc.jobRegistry.MakeJobID()
-	if err := sc.txn(ctx, func(ctx context.Context, txn isql.Txn, descsCol *descs.Collection) error {
-		scTable, err := descsCol.MutableByID(txn.KV()).Table(ctx, sc.descID)
+	if err := sc.txn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		scTable, err := txn.Descriptors().MutableByID(txn.KV()).Table(ctx, sc.descID)
 		if err != nil {
 			return err
 		}
@@ -1046,17 +1045,17 @@ func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) er
 		b := txn.KV().NewBatch()
 		// For views, we need to clean up and references that exist to tables.
 		if scTable.IsView() {
-			if err := sc.dropViewDeps(ctx, descsCol, txn.KV(), b, scTable); err != nil {
+			if err := sc.dropViewDeps(ctx, txn.Descriptors(), txn.KV(), b, scTable); err != nil {
 				return err
 			}
 		}
 		scTable.SetDropped()
 		scTable.DropTime = timeutil.Now().UnixNano()
 		const kvTrace = false
-		if err := descsCol.WriteDescToBatch(ctx, kvTrace, scTable, b); err != nil {
+		if err := txn.Descriptors().WriteDescToBatch(ctx, kvTrace, scTable, b); err != nil {
 			return err
 		}
-		if err := descsCol.DeleteNamespaceEntryToBatch(ctx, kvTrace, scTable, b); err != nil {
+		if err := txn.Descriptors().DeleteNamespaceEntryToBatch(ctx, kvTrace, scTable, b); err != nil {
 			return err
 		}
 
@@ -1072,7 +1071,7 @@ func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) er
 					},
 				},
 			},
-			!sc.settings.Version.IsActive(ctx, clusterversion.V22_2UseDelRangeInGCJob),
+			!sc.settings.Version.IsActive(ctx, clusterversion.TODODelete_V22_2UseDelRangeInGCJob),
 		)
 		if _, err := sc.jobRegistry.CreateJobWithTxn(ctx, jobRecord, gcJobID, txn); err != nil {
 			return err
@@ -1094,13 +1093,13 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 
 	var runStatus jobs.RunningStatus
 	if err := sc.txn(ctx, func(
-		ctx context.Context, txn isql.Txn, descsCol *descs.Collection,
+		ctx context.Context, txn descs.Txn,
 	) error {
-		tbl, err := descsCol.MutableByID(txn.KV()).Table(ctx, sc.descID)
+		tbl, err := txn.Descriptors().MutableByID(txn.KV()).Table(ctx, sc.descID)
 		if err != nil {
 			return err
 		}
-		dbDesc, err := descsCol.ByID(txn.KV()).WithoutNonPublic().Get().Database(ctx, tbl.GetParentID())
+		dbDesc, err := txn.Descriptors().ByID(txn.KV()).WithoutNonPublic().Get().Database(ctx, tbl.GetParentID())
 		if err != nil {
 			return err
 		}
@@ -1143,7 +1142,7 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 				tbl,
 				m,
 				false, // isDone
-				descsCol,
+				txn.Descriptors(),
 			); err != nil {
 				return err
 			}
@@ -1151,7 +1150,7 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 		if doNothing := runStatus == "" || tbl.Dropped(); doNothing {
 			return nil
 		}
-		if err := descsCol.WriteDesc(
+		if err := txn.Descriptors().WriteDesc(
 			ctx, true /* kvTrace */, tbl, txn.KV(),
 		); err != nil {
 			return err
@@ -1200,9 +1199,9 @@ func (sc *SchemaChanger) stepStateMachineAfterIndexBackfill(ctx context.Context)
 
 	var runStatus jobs.RunningStatus
 	if err := sc.txn(ctx, func(
-		ctx context.Context, txn isql.Txn, descsCol *descs.Collection,
+		ctx context.Context, txn descs.Txn,
 	) error {
-		tbl, err := descsCol.MutableByID(txn.KV()).Table(ctx, sc.descID)
+		tbl, err := txn.Descriptors().MutableByID(txn.KV()).Table(ctx, sc.descID)
 		if err != nil {
 			return err
 		}
@@ -1232,7 +1231,7 @@ func (sc *SchemaChanger) stepStateMachineAfterIndexBackfill(ctx context.Context)
 		if runStatus == "" || tbl.Dropped() {
 			return nil
 		}
-		if err := descsCol.WriteDesc(
+		if err := txn.Descriptors().WriteDesc(
 			ctx, true /* kvTrace */, tbl, txn.KV(),
 		); err != nil {
 			return err
@@ -1282,7 +1281,7 @@ func (sc *SchemaChanger) createIndexGCJobWithDropTime(
 
 	gcJobRecord := CreateGCJobRecord(
 		jobDesc, sc.job.Payload().UsernameProto.Decode(), indexGCDetails,
-		!sc.settings.Version.IsActive(ctx, clusterversion.V22_2UseDelRangeInGCJob),
+		!sc.settings.Version.IsActive(ctx, clusterversion.TODODelete_V22_2UseDelRangeInGCJob),
 	)
 	jobID := sc.jobRegistry.MakeJobID()
 	if _, err := sc.jobRegistry.CreateJobWithTxn(ctx, gcJobRecord, jobID, txn); err != nil {
@@ -1342,24 +1341,24 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 	var depMutationJobs []jobspb.JobID
 	var otherJobIDs []jobspb.JobID
 	err := sc.txn(ctx, func(
-		ctx context.Context, txn isql.Txn, descsCol *descs.Collection,
+		ctx context.Context, txn descs.Txn,
 	) error {
 		depMutationJobs = depMutationJobs[:0]
 		otherJobIDs = otherJobIDs[:0]
 		var err error
-		scTable, err := descsCol.MutableByID(txn.KV()).Table(ctx, sc.descID)
+		scTable, err := txn.Descriptors().MutableByID(txn.KV()).Table(ctx, sc.descID)
 		if err != nil {
 			return err
 		}
 
-		dbDesc, err := descsCol.ByID(txn.KV()).WithoutNonPublic().Get().Database(ctx, scTable.GetParentID())
+		dbDesc, err := txn.Descriptors().ByID(txn.KV()).WithoutNonPublic().Get().Database(ctx, scTable.GetParentID())
 		if err != nil {
 			return err
 		}
 
 		collectReferencedTypeIDs := func() (catalog.DescriptorIDSet, error) {
 			typeLookupFn := func(id descpb.ID) (catalog.TypeDescriptor, error) {
-				desc, err := descsCol.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Type(ctx, id)
+				desc, err := txn.Descriptors().ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Type(ctx, id)
 				if err != nil {
 					return nil, err
 				}
@@ -1413,15 +1412,16 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 				}
 			}
 			if fk := m.AsForeignKey(); fk != nil && fk.Adding() &&
-				fk.GetConstraintValidity() == descpb.ConstraintValidity_Unvalidated {
+				(fk.GetConstraintValidity() == descpb.ConstraintValidity_Unvalidated ||
+					fk.GetConstraintValidity() == descpb.ConstraintValidity_Validated) {
 				// Add backreference on the referenced table (which could be the same table)
-				backrefTable, err := descsCol.MutableByID(txn.KV()).Table(ctx, fk.GetReferencedTableID())
+				backrefTable, err := txn.Descriptors().MutableByID(txn.KV()).Table(ctx, fk.GetReferencedTableID())
 				if err != nil {
 					return err
 				}
 				backrefTable.InboundFKs = append(backrefTable.InboundFKs, *fk.ForeignKeyDesc())
 				if backrefTable != scTable {
-					if err := descsCol.WriteDescToBatch(ctx, kvTrace, backrefTable, b); err != nil {
+					if err := txn.Descriptors().WriteDescToBatch(ctx, kvTrace, backrefTable, b); err != nil {
 						return err
 					}
 				}
@@ -1437,7 +1437,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 				scTable,
 				m,
 				true, // isDone
-				descsCol,
+				txn.Descriptors(),
 			); err != nil {
 				return err
 			}
@@ -1594,7 +1594,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 					}
 
 					if err := setNewLocalityConfig(
-						ctx, txn.KV(), descsCol, b, scTable, localityConfigToSwapTo, kvTrace,
+						ctx, txn.KV(), txn.Descriptors(), b, scTable, localityConfigToSwapTo, kvTrace,
 					); err != nil {
 						return err
 					}
@@ -1690,7 +1690,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 
 			// Update the set of back references.
 			for id, isAddition := range update {
-				typ, err := descsCol.MutableByID(txn.KV()).Type(ctx, id)
+				typ, err := txn.Descriptors().MutableByID(txn.KV()).Type(ctx, id)
 				if err != nil {
 					return err
 				}
@@ -1699,7 +1699,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 				} else {
 					typ.RemoveReferencingDescriptorID(scTable.ID)
 				}
-				if err := descsCol.WriteDescToBatch(ctx, kvTrace, typ, b); err != nil {
+				if err := txn.Descriptors().WriteDescToBatch(ctx, kvTrace, typ, b); err != nil {
 					return err
 				}
 			}
@@ -1731,12 +1731,12 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 
 			// Update the set of back references.
 			for id, colIDSet := range update {
-				tbl, err := descsCol.MutableByID(txn.KV()).Table(ctx, id)
+				tbl, err := txn.Descriptors().MutableByID(txn.KV()).Table(ctx, id)
 				if err != nil {
 					return err
 				}
 				tbl.UpdateColumnsDependedOnBy(scTable.ID, colIDSet)
-				if err := descsCol.WriteDescToBatch(ctx, kvTrace, tbl, b); err != nil {
+				if err := txn.Descriptors().WriteDescToBatch(ctx, kvTrace, tbl, b); err != nil {
 					return err
 				}
 			}
@@ -1745,7 +1745,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 		// Clean up any comments related to the mutations, specifically if we need
 		// to drop them.
 		for _, comment := range commentsToDelete {
-			if err := descsCol.DeleteCommentInBatch(
+			if err := txn.Descriptors().DeleteCommentInBatch(
 				ctx, false /* kvTrace */, b, catalogkeys.MakeCommentKey(uint32(comment.id), uint32(comment.subID), comment.commentType),
 			); err != nil {
 				return err
@@ -1753,23 +1753,23 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 		}
 
 		for _, comment := range commentsToSwap {
-			cmt, found := descsCol.GetComment(catalogkeys.MakeCommentKey(uint32(comment.id), uint32(comment.oldSubID), comment.commentType))
+			cmt, found := txn.Descriptors().GetComment(catalogkeys.MakeCommentKey(uint32(comment.id), uint32(comment.oldSubID), comment.commentType))
 			if !found {
 				continue
 			}
-			if err := descsCol.DeleteCommentInBatch(
+			if err := txn.Descriptors().DeleteCommentInBatch(
 				ctx, false /* kvTrace */, b, catalogkeys.MakeCommentKey(uint32(comment.id), uint32(comment.oldSubID), comment.commentType),
 			); err != nil {
 				return err
 			}
-			if err := descsCol.WriteCommentToBatch(
+			if err := txn.Descriptors().WriteCommentToBatch(
 				ctx, false /* kvTrace */, b, catalogkeys.MakeCommentKey(uint32(comment.id), uint32(comment.newSubID), comment.commentType), cmt,
 			); err != nil {
 				return err
 			}
 		}
 
-		if err := descsCol.WriteDescToBatch(ctx, kvTrace, scTable, b); err != nil {
+		if err := txn.Descriptors().WriteDescToBatch(ctx, kvTrace, scTable, b); err != nil {
 			return err
 		}
 		if err := txn.KV().Run(ctx, b); err != nil {
@@ -1924,8 +1924,8 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 	// Get the other tables whose foreign key backreferences need to be removed.
 	alreadyReversed := false
 	const kvTrace = true // TODO(ajwerner): figure this out
-	err := sc.txn(ctx, func(ctx context.Context, txn isql.Txn, descsCol *descs.Collection) error {
-		scTable, err := descsCol.MutableByID(txn.KV()).Table(ctx, sc.descID)
+	err := sc.txn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		scTable, err := txn.Descriptors().MutableByID(txn.KV()).Table(ctx, sc.descID)
 		if err != nil {
 			return err
 		}
@@ -1998,7 +1998,7 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 				}
 				// Get the foreign key backreferences to remove.
 				if fk := constraint.AsForeignKey(); fk != nil {
-					backrefTable, err := descsCol.MutableByID(txn.KV()).Table(ctx, fk.GetReferencedTableID())
+					backrefTable, err := txn.Descriptors().MutableByID(txn.KV()).Table(ctx, fk.GetReferencedTableID())
 					if err != nil {
 						return err
 					}
@@ -2009,7 +2009,7 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 						log.Infof(ctx,
 							"error attempting to remove backreference %s during rollback: %s", constraint.GetName(), err)
 					}
-					if err := descsCol.WriteDescToBatch(ctx, kvTrace, backrefTable, b); err != nil {
+					if err := txn.Descriptors().WriteDescToBatch(ctx, kvTrace, backrefTable, b); err != nil {
 						return err
 					}
 				}
@@ -2030,7 +2030,7 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 		// Read the table descriptor from the store. The Version of the
 		// descriptor has already been incremented in the transaction and
 		// this descriptor can be modified without incrementing the version.
-		if err := descsCol.WriteDescToBatch(ctx, kvTrace, scTable, b); err != nil {
+		if err := txn.Descriptors().WriteDescToBatch(ctx, kvTrace, scTable, b); err != nil {
 			return err
 		}
 		if err := txn.KV().Run(ctx, b); err != nil {
@@ -2447,27 +2447,7 @@ type SchemaChangerTestingKnobs struct {
 func (*SchemaChangerTestingKnobs) ModuleTestingKnobs() {}
 
 // txn is a convenient wrapper around descs.Txn().
-//
-// TODO(ajwerner): Replace this with direct calls to DescsTxn.
-func (sc *SchemaChanger) txn(
-	ctx context.Context, f func(context.Context, isql.Txn, *descs.Collection) error,
-) error {
-	return sc.txnWithExecutor(ctx, func(
-		ctx context.Context, txn isql.Txn, _ *sessiondata.SessionData,
-		collection *descs.Collection,
-	) error {
-		return f(ctx, txn, collection)
-	})
-}
-
-// txnWithExecutor is to run internal executor within a txn.
-func (sc *SchemaChanger) txnWithExecutor(
-	ctx context.Context,
-	f func(
-		context.Context, isql.Txn, *sessiondata.SessionData,
-		*descs.Collection,
-	) error,
-) error {
+func (sc *SchemaChanger) txn(ctx context.Context, f func(context.Context, descs.Txn) error) error {
 	if fn := sc.testingKnobs.RunBeforeDescTxn; fn != nil {
 		if err := fn(sc.job.ID()); err != nil {
 			return err
@@ -2476,7 +2456,7 @@ func (sc *SchemaChanger) txnWithExecutor(
 	return sc.execCfg.InternalDB.DescsTxn(ctx, func(
 		ctx context.Context, txn descs.Txn,
 	) error {
-		return f(ctx, txn, txn.SessionData(), txn.Descriptors())
+		return f(ctx, txn)
 	})
 }
 
@@ -2773,7 +2753,7 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 			r.job.Payload().Description,
 			multiTableGCDetails,
 			!p.ExecCfg().Settings.Version.IsActive(
-				ctx, clusterversion.V22_2UseDelRangeInGCJob,
+				ctx, clusterversion.TODODelete_V22_2UseDelRangeInGCJob,
 			),
 		); err != nil {
 			return err
@@ -3085,9 +3065,9 @@ func (sc *SchemaChanger) getDependentMutationsJobs(
 
 func (sc *SchemaChanger) preSplitHashShardedIndexRanges(ctx context.Context) error {
 	if err := sc.txn(ctx, func(
-		ctx context.Context, txn isql.Txn, descsCol *descs.Collection,
+		ctx context.Context, txn descs.Txn,
 	) error {
-		tableDesc, err := descsCol.MutableByID(txn.KV()).Table(ctx, sc.descID)
+		tableDesc, err := txn.Descriptors().MutableByID(txn.KV()).Table(ctx, sc.descID)
 		if err != nil {
 			return err
 		}

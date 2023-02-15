@@ -656,7 +656,7 @@ func (r *Replica) computeChecksumPostApply(
 
 	// Caller is holding raftMu, so an engine snapshot is automatically
 	// Raft-consistent (i.e. not in the middle of an AddSSTable).
-	snap := r.store.engine.NewSnapshot()
+	snap := r.store.TODOEngine().NewSnapshot()
 	if cc.Checkpoint {
 		sl := stateloader.Make(r.RangeID)
 		as, err := sl.LoadRangeAppliedState(ctx, snap)
@@ -665,8 +665,10 @@ func (r *Replica) computeChecksumPostApply(
 		}
 		// NB: the names here will match on all nodes, which is nice for debugging.
 		tag := fmt.Sprintf("r%d_at_%d", r.RangeID, as.RaftAppliedIndex)
-		if dir, err := r.store.checkpoint(ctx, tag); err != nil {
-			log.Warningf(ctx, "unable to create checkpoint %s: %+v", dir, err)
+		spans := r.store.checkpointSpans(&desc)
+		log.Warningf(ctx, "creating checkpoint %s with spans %+v", tag, spans)
+		if dir, err := r.store.checkpoint(tag, spans); err != nil {
+			log.Warningf(ctx, "unable to create checkpoint %s: %+v", tag, err)
 		} else {
 			log.Warningf(ctx, "created checkpoint %s", dir)
 		}
@@ -721,7 +723,6 @@ func (r *Replica) computeChecksumPostApply(
 			}
 			r.computeChecksumDone(c, result)
 		}
-
 		var shouldFatal bool
 		for _, rDesc := range cc.Terminate {
 			if rDesc.StoreID == r.store.StoreID() && rDesc.ReplicaID == r.replicaID {
@@ -738,8 +739,8 @@ func (r *Replica) computeChecksumPostApply(
 		// early, the reply won't make it back to the leaseholder, so it will not be
 		// certain of completing the check. Since we're already in a goroutine
 		// that's about to end, just sleep for a few seconds and then terminate.
-		auxDir := r.store.engine.GetAuxiliaryDir()
-		_ = r.store.engine.MkdirAll(auxDir)
+		auxDir := r.store.TODOEngine().GetAuxiliaryDir()
+		_ = r.store.TODOEngine().MkdirAll(auxDir)
 		path := base.PreventedStartupFile(auxDir)
 
 		const attentionFmt = `ATTENTION:
@@ -757,23 +758,19 @@ A file preventing this node from restarting was placed at:
 
 Checkpoints are created on each node/store hosting this range, to help
 investigate the cause. Only nodes that are more likely to have incorrect data
-are terminated, and usually a majority of replicas continue running.
+are terminated, and usually a majority of replicas continue running. Checkpoints
+are partial, i.e. contain only the data from to the inconsistent range, and
+possibly its neighbouring ranges.
 
-The storage checkpoint directory MUST be deleted or moved away timely, on the
-nodes that continue operating. Over time the storage engine gets updated and
-compacted, which leads to checkpoints becoming a full copy of a past state. Even
-with no writes to the database, on these stores disk consumption may double in a
-matter of hours/days, depending on compaction schedule.
+The storage checkpoint directories can/should be deleted when no longer needed.
+They are very helpful in debugging this issue, so before deleting them, please
+consider alternative actions:
 
-Checkpoints are very helpful in debugging this issue, so before deleting them,
-please consider alternative actions:
-
-- If the store has enough capacity, hold off deleting the checkpoint until CRDB
-  staff has diagnosed the issue.
-- Consider backing up the checkpoints before removing them, e.g. by snapshotting
-  the disk.
+- If the store has enough capacity, hold off the deletion until CRDB staff has
+  diagnosed the issue.
+- Back up the checkpoints for later investigation.
 - If the stores are nearly full, but the cluster has enough capacity, consider
-  gradually decomissioning the affected nodes, to retain the checkpoints.
+  gradually decommissioning the affected nodes, to retain the checkpoints.
 
 To inspect the checkpoints, one can use the cockroach debug range-data tool, and
 command line tools like diff. For example:
@@ -782,7 +779,7 @@ $ cockroach debug range-data --replicated data/auxiliary/checkpoints/rN_at_M N
 `
 		attentionArgs := []any{r, desc.Replicas(), auxDir, path}
 		preventStartupMsg := fmt.Sprintf(attentionFmt, attentionArgs...)
-		if err := fs.WriteFile(r.store.engine, path, []byte(preventStartupMsg)); err != nil {
+		if err := fs.WriteFile(r.store.TODOEngine(), path, []byte(preventStartupMsg)); err != nil {
 			log.Warningf(ctx, "%v", err)
 		}
 

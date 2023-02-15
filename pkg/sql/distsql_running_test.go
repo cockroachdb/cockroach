@@ -326,14 +326,15 @@ func TestDistSQLReceiverReportsContention(t *testing.T) {
 		}()
 		// TODO(yuzefovich): turning the tracing ON won't be necessary once
 		// always-on tracing is enabled.
-		_, err = otherConn.ExecContext(ctx, `
-SET TRACING=on;
-BEGIN;
-SET TRANSACTION PRIORITY HIGH;
-UPDATE test.test SET x = 100 WHERE x = 1;
-COMMIT;
-SET TRACING=off;
-`)
+		_, err = otherConn.ExecContext(ctx, `SET TRACING=on;`)
+		require.NoError(t, err)
+		txn, err := otherConn.BeginTx(ctx, nil)
+		require.NoError(t, err)
+		_, err = txn.ExecContext(ctx, `
+			SET TRANSACTION PRIORITY HIGH;
+			UPDATE test.test SET x = 100 WHERE x = 1;
+		`)
+
 		require.NoError(t, err)
 		if contention {
 			// Soft check to protect against flakiness where an internal query
@@ -346,8 +347,14 @@ SET TRACING=off;
 				"contention metric unexpectedly non-zero when no contention events are produced",
 			)
 		}
+
 		require.Equal(t, contention, strings.Contains(contentionRegistry.String(), contentionEventSubstring))
+		err = txn.Commit()
+		require.NoError(t, err)
+		_, err = otherConn.ExecContext(ctx, `SET TRACING=off;`)
+		require.NoError(t, err)
 	})
+
 }
 
 // TestDistSQLReceiverDrainsOnError is a simple unit test that asserts that the
@@ -684,4 +691,68 @@ func TestSetupFlowRPCError(t *testing.T) {
 	_, err := db.ExecContext(ctx, queries[2])
 	require.NoError(t, err)
 	assertNoRemoteFlows()
+}
+
+// TestDistSQLPlannerParallelChecks can be used to stress the behavior of
+// postquery checks when they run in parallel.
+func TestDistSQLPlannerParallelChecks(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	rng, _ := randutil.NewTestRand()
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	// Set up a child table with two foreign keys into two parent tables.
+	sqlDB.Exec(t, `CREATE TABLE parent1 (id1 INT8 PRIMARY KEY)`)
+	sqlDB.Exec(t, `CREATE TABLE parent2 (id2 INT8 PRIMARY KEY)`)
+	sqlDB.Exec(t, `
+CREATE TABLE child (
+    id INT8 PRIMARY KEY, parent_id1 INT8 NOT NULL, parent_id2 INT8 NOT NULL,
+    FOREIGN KEY (parent_id1) REFERENCES parent1 (id1),
+    FOREIGN KEY (parent_id2) REFERENCES parent2 (id2)
+);`)
+	// Disable the insert fast path in order for the foreign key checks to be
+	// planned as parallel postqueries.
+	sqlDB.Exec(t, `SET enable_insert_fast_path = false`)
+	if rng.Float64() < 0.1 {
+		// In 10% of the cases, set a very low workmem limit in order to force
+		// the bufferNode to spill to disk.
+		sqlDB.Exec(t, `SET distsql_workmem = '1KiB'`)
+	}
+
+	const numIDs = 1000
+	for id := 0; id < numIDs; id++ {
+		sqlDB.Exec(t, `INSERT INTO parent1 VALUES ($1)`, id)
+		sqlDB.Exec(t, `INSERT INTO parent2 VALUES ($1)`, id)
+		var prefix string
+		if rng.Float64() < 0.5 {
+			// In 50% of the cases, run the INSERT query with FK checks via
+			// EXPLAIN ANALYZE (or EXPLAIN ANALYZE (DEBUG)) in order to exercise
+			// the planning code paths that are only taken when the tracing is
+			// enabled.
+			prefix = "EXPLAIN ANALYZE "
+			if rng.Float64() < 0.02 {
+				// Run DEBUG flavor only in 1% of all cases since it is
+				// noticeably slower.
+				prefix = "EXPLAIN ANALYZE (DEBUG) "
+			}
+		}
+		if rng.Float64() < 0.1 {
+			// In 10% of the cases, run the INSERT that results in an error (we
+			// don't have any negative ids in the parent tables).
+			invalidID := -1
+			// The FK violation occurs for both FKs, but we expect that the
+			// error for parent_id1 is always chosen.
+			sqlDB.ExpectErr(
+				t,
+				`insert on table "child" violates foreign key constraint "child_parent_id1_fkey"`,
+				fmt.Sprintf(`%[1]sINSERT INTO child VALUES (%[2]d, %[2]d, %[2]d)`, prefix, invalidID),
+			)
+			continue
+		}
+		sqlDB.Exec(t, fmt.Sprintf(`%[1]sINSERT INTO child VALUES (%[2]d, %[2]d, %[2]d)`, prefix, id))
+	}
 }

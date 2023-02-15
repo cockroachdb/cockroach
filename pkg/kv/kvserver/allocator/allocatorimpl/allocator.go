@@ -823,7 +823,8 @@ func FilterReplicasForAction(
 	storePool storepool.AllocatorStorePool, desc *roachpb.RangeDescriptor, action AllocatorAction,
 ) (
 	filteredVoters, filteredNonVoters []roachpb.ReplicaDescriptor,
-	isReplacement, nothingToDo bool,
+	replacing *roachpb.ReplicaDescriptor,
+	nothingToDo bool,
 	err error,
 ) {
 	voterReplicas, nonVoterReplicas,
@@ -831,7 +832,8 @@ func FilterReplicasForAction(
 		liveNonVoterReplicas, deadNonVoterReplicas := LiveAndDeadVoterAndNonVoterReplicas(storePool, desc)
 
 	removeIdx := -1
-	_, filteredVoters, filteredNonVoters, removeIdx, nothingToDo, err = DetermineReplicaToReplaceAndFilter(
+	var existing []roachpb.ReplicaDescriptor
+	existing, filteredVoters, filteredNonVoters, removeIdx, nothingToDo, err = DetermineReplicaToReplaceAndFilter(
 		storePool,
 		action,
 		voterReplicas, nonVoterReplicas,
@@ -839,7 +841,11 @@ func FilterReplicasForAction(
 		liveNonVoterReplicas, deadNonVoterReplicas,
 	)
 
-	return filteredVoters, filteredNonVoters, removeIdx >= 0, nothingToDo, err
+	if removeIdx >= 0 {
+		replacing = &existing[removeIdx]
+	}
+
+	return filteredVoters, filteredNonVoters, replacing, nothingToDo, err
 }
 
 // ComputeAction determines the exact operation needed to repair the
@@ -934,6 +940,7 @@ func (a *Allocator) computeAction(
 	// actions.
 	haveVoters := len(voterReplicas)
 	decommissioningVoters := storePool.DecommissioningReplicas(voterReplicas)
+	postDecommissionVoters := haveVoters - len(decommissioningVoters)
 	// Node count including dead nodes but excluding
 	// decommissioning/decommissioned nodes.
 	clusterNodes := storePool.ClusterNodeCount()
@@ -975,9 +982,9 @@ func (a *Allocator) computeAction(
 		return action, action.Priority()
 	}
 
-	if haveVoters == neededVoters && len(deadVoters) > 0 {
+	if postDecommissionVoters <= neededVoters && len(deadVoters) > 0 {
 		// Range has dead voter(s). We should up-replicate to add another before
-		// before removing the dead one. This can avoid permanent data loss in cases
+		// removing the dead one. This can avoid permanent data loss in cases
 		// where the node is only temporarily dead, but we remove it from the range
 		// and lose a second node before we can up-replicate (#25392).
 		action = AllocatorReplaceDeadVoter
@@ -986,7 +993,7 @@ func (a *Allocator) computeAction(
 		return action, action.Priority()
 	}
 
-	if haveVoters == neededVoters && len(decommissioningVoters) > 0 {
+	if postDecommissionVoters < neededVoters {
 		// Range has decommissioning voter(s), which should be replaced.
 		action = AllocatorReplaceDecommissioningVoter
 		log.KvDistribution.VEventf(ctx, 3, "%s - replacement for %d decommissioning voters priority=%.2f",
@@ -1041,10 +1048,13 @@ func (a *Allocator) computeAction(
 		return action, action.Priority()
 	}
 
+	decommissioningNonVoters := storePool.DecommissioningReplicas(nonVoterReplicas)
+	postDecommissionNonVoters := haveNonVoters - len(decommissioningNonVoters)
 	liveNonVoters, deadNonVoters := storePool.LiveAndDeadReplicas(
 		nonVoterReplicas, includeSuspectAndDrainingStores,
 	)
-	if haveNonVoters == neededNonVoters && len(deadNonVoters) > 0 {
+
+	if postDecommissionNonVoters <= neededNonVoters && len(deadNonVoters) > 0 {
 		// The range has non-voter(s) on a dead node that we should replace.
 		action = AllocatorReplaceDeadNonVoter
 		log.KvDistribution.VEventf(ctx, 3, "%s - replacement for %d dead non-voters priority=%.2f",
@@ -1052,8 +1062,7 @@ func (a *Allocator) computeAction(
 		return action, action.Priority()
 	}
 
-	decommissioningNonVoters := storePool.DecommissioningReplicas(nonVoterReplicas)
-	if haveNonVoters == neededNonVoters && len(decommissioningNonVoters) > 0 {
+	if postDecommissionNonVoters < neededNonVoters {
 		// The range has non-voter(s) on a decommissioning node that we should
 		// replace.
 		action = AllocatorReplaceDecommissioningNonVoter
@@ -1181,6 +1190,7 @@ func (a *Allocator) AllocateTarget(
 	storePool storepool.AllocatorStorePool,
 	conf roachpb.SpanConfig,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
+	replacing *roachpb.ReplicaDescriptor,
 	replicaStatus ReplicaStatus,
 	targetType TargetReplicaType,
 ) (roachpb.ReplicationTarget, string, error) {
@@ -1198,6 +1208,16 @@ func (a *Allocator) AllocateTarget(
 		selector = a.NewGoodCandidateSelector()
 	}
 
+	// Only consider the effects of replacing a replica on constraint conformance
+	// during decommission. In the case that replicas are being replaced due to
+	// a store being dead but no remaining live stores meet all constraints, they
+	// should be considered of otherwise equal validity, with candidate ranking
+	// chosing the best of the available options.
+	var decommissioningReplica *roachpb.ReplicaDescriptor
+	if replicaStatus == Decommissioning {
+		decommissioningReplica = replacing
+	}
+
 	target, details := a.allocateTargetFromList(
 		ctx,
 		storePool,
@@ -1205,6 +1225,7 @@ func (a *Allocator) AllocateTarget(
 		conf,
 		existingVoters,
 		existingNonVoters,
+		decommissioningReplica,
 		a.ScorerOptions(ctx),
 		selector,
 		// When allocating a *new* replica, we explicitly disregard nodes with any
@@ -1274,7 +1295,7 @@ func (a *Allocator) CheckAvoidsFragileQuorum(
 			roachpb.ReplicaDescriptor{NodeID: newTarget.NodeID, StoreID: newTarget.StoreID},
 		)
 
-		_, _, err := a.AllocateVoter(ctx, storePool, conf, oldPlusNewReplicas, remainingLiveNonVoters, replicaStatus)
+		_, _, err := a.AllocateVoter(ctx, storePool, conf, oldPlusNewReplicas, remainingLiveNonVoters, nil /* replacing */, replicaStatus)
 		return err
 	}
 
@@ -1289,9 +1310,10 @@ func (a *Allocator) AllocateVoter(
 	storePool storepool.AllocatorStorePool,
 	conf roachpb.SpanConfig,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
+	replacing *roachpb.ReplicaDescriptor,
 	replicaStatus ReplicaStatus,
 ) (roachpb.ReplicationTarget, string, error) {
-	return a.AllocateTarget(ctx, storePool, conf, existingVoters, existingNonVoters, replicaStatus, VoterTarget)
+	return a.AllocateTarget(ctx, storePool, conf, existingVoters, existingNonVoters, replacing, replicaStatus, VoterTarget)
 }
 
 // AllocateNonVoter returns a suitable store for a new allocation of a
@@ -1302,9 +1324,10 @@ func (a *Allocator) AllocateNonVoter(
 	storePool storepool.AllocatorStorePool,
 	conf roachpb.SpanConfig,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
+	replacing *roachpb.ReplicaDescriptor,
 	replicaStatus ReplicaStatus,
 ) (roachpb.ReplicationTarget, string, error) {
-	return a.AllocateTarget(ctx, storePool, conf, existingVoters, existingNonVoters, replicaStatus, NonVoterTarget)
+	return a.AllocateTarget(ctx, storePool, conf, existingVoters, existingNonVoters, replacing, replicaStatus, NonVoterTarget)
 }
 
 // AllocateTargetFromList returns a suitable store for a new allocation of a
@@ -1322,7 +1345,7 @@ func (a *Allocator) AllocateTargetFromList(
 	targetType TargetReplicaType,
 ) (roachpb.ReplicationTarget, string) {
 	return a.allocateTargetFromList(ctx, storePool, candidateStores, conf, existingVoters,
-		existingNonVoters, options, selector, allowMultipleReplsPerNode, targetType)
+		existingNonVoters, nil /* replacing */, options, selector, allowMultipleReplsPerNode, targetType)
 }
 
 func (a *Allocator) allocateTargetFromList(
@@ -1331,12 +1354,16 @@ func (a *Allocator) allocateTargetFromList(
 	candidateStores storepool.StoreList,
 	conf roachpb.SpanConfig,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
+	replacing *roachpb.ReplicaDescriptor,
 	options ScorerOptions,
 	selector CandidateSelector,
 	allowMultipleReplsPerNode bool,
 	targetType TargetReplicaType,
 ) (roachpb.ReplicationTarget, string) {
 	existingReplicas := append(existingVoters, existingNonVoters...)
+	if replacing != nil {
+		existingReplicas = append(existingReplicas, *replacing)
+	}
 	analyzedOverallConstraints := constraint.AnalyzeConstraints(
 		storePool,
 		existingReplicas,
@@ -1350,15 +1377,40 @@ func (a *Allocator) allocateTargetFromList(
 		conf.VoterConstraints,
 	)
 
+	var replacingStore roachpb.StoreDescriptor
+	var replacingStoreOK bool
+	if replacing != nil {
+		replacingStore, replacingStoreOK = storePool.GetStoreDescriptor(replacing.StoreID)
+	}
+
 	var constraintsChecker constraintsCheckFn
 	switch t := targetType; t {
 	case VoterTarget:
-		constraintsChecker = voterConstraintsCheckerForAllocation(
-			analyzedOverallConstraints,
-			analyzedVoterConstraints,
-		)
+		// If we are replacing an existing replica, make sure we check the
+		// constraints to ensure we are not going from a state in which a
+		// constraint is satisfied to one in which we are not. In this case, we
+		// consider no candidates to be valid, as no sorting of replicas would lead
+		// to a satisfying candidate being selected.
+		if replacing != nil && replacingStoreOK {
+			constraintsChecker = voterConstraintsCheckerForReplace(
+				analyzedOverallConstraints,
+				analyzedVoterConstraints,
+				replacingStore,
+			)
+		} else {
+			constraintsChecker = voterConstraintsCheckerForAllocation(
+				analyzedOverallConstraints,
+				analyzedVoterConstraints,
+			)
+		}
 	case NonVoterTarget:
-		constraintsChecker = nonVoterConstraintsCheckerForAllocation(analyzedOverallConstraints)
+		if replacing != nil && replacingStoreOK {
+			constraintsChecker = nonVoterConstraintsCheckerForReplace(
+				analyzedOverallConstraints, replacingStore,
+			)
+		} else {
+			constraintsChecker = nonVoterConstraintsCheckerForAllocation(analyzedOverallConstraints)
+		}
 	default:
 		log.KvDistribution.Fatalf(ctx, "unsupported targetReplicaType: %v", t)
 	}
@@ -2186,7 +2238,7 @@ func (a *Allocator) TransferLeaseTarget(
 		return candidates[a.randGen.Intn(len(candidates))]
 
 	case allocator.LoadConvergence:
-		leaseReplLoad := usageInfo.Load()
+		leaseReplLoad := usageInfo.TransferImpact()
 		candidates := make([]roachpb.StoreID, 0, len(existing)-1)
 		for _, repl := range existing {
 			if repl.StoreID != leaseRepl.StoreID() {

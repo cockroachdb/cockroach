@@ -12,7 +12,7 @@ eexpect $prompt
 
 # create some cert without an IP address in there.
 set db_dir "logs/db"
-set certs_dir "logs/my-safe-directory"
+set certs_dir "my-safe-directory"
 send "mkdir -p $certs_dir\r"
 eexpect $prompt
 

@@ -476,7 +476,9 @@ func init() {
 
 			cliflagcfg.VarFlag(f, &storeSpecs, cliflags.Store)
 			cliflagcfg.VarFlag(f, &serverCfg.StorageEngine, cliflags.StorageEngine)
+			cliflagcfg.StringFlag(f, &serverCfg.SharedStorage, cliflags.SharedStorage)
 			cliflagcfg.VarFlag(f, &serverCfg.MaxOffset, cliflags.MaxOffset)
+			cliflagcfg.BoolFlag(f, &serverCfg.DisableMaxOffsetCheck, cliflags.DisableMaxOffsetCheck)
 			cliflagcfg.StringFlag(f, &serverCfg.ClockDevicePath, cliflags.ClockDevice)
 
 			cliflagcfg.StringFlag(f, &startCtx.listeningURLFile, cliflags.ListeningURLFile)
@@ -541,6 +543,10 @@ func init() {
 	telemetryEnabledCmds := append(serverCmds, demoCmd, statementBundleRecreateCmd)
 	telemetryEnabledCmds = append(telemetryEnabledCmds, demoCmd.Commands()...)
 	for _, cmd := range telemetryEnabledCmds {
+		f := cmd.Flags()
+		cliflagcfg.StringFlag(f, &serverCfg.ObsServiceAddr, cliflags.ObsServiceAddr)
+		_ = f.MarkHidden(cliflags.ObsServiceAddr.Name)
+
 		// Report flag usage for server commands in telemetry. We do this
 		// only for server commands, as there is no point in accumulating
 		// telemetry if there's no telemetry reporting loop being started.

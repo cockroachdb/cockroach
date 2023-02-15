@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/collatedstring"
 	"github.com/cockroachdb/cockroach/pkg/util/pretty"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/text/language"
@@ -381,7 +382,8 @@ func (node *CreateType) Format(ctx *FmtCtx) {
 		ctx.WriteString(")")
 	case Composite:
 		ctx.WriteString("AS (")
-		for i, elem := range node.CompositeTypeList {
+		for i := range node.CompositeTypeList {
+			elem := &node.CompositeTypeList[i]
 			if i != 0 {
 				ctx.WriteString(", ")
 			}
@@ -569,7 +571,7 @@ func NewColumnTableDef(
 			// In CRDB, collated strings are treated separately to string family types.
 			// To most behave like postgres, set the CollatedString type if a non-"default"
 			// collation is used.
-			if locale != DefaultCollationTag {
+			if locale != collatedstring.DefaultCollationTag {
 				_, err := language.Parse(locale)
 				if err != nil {
 					return nil, pgerror.Wrapf(err, pgcode.Syntax, "invalid locale %s", locale)
@@ -2228,10 +2230,10 @@ func (node *SuperRegion) Format(ctx *FmtCtx) {
 	ctx.WriteString(" SUPER REGION ")
 	ctx.FormatNode(&node.Name)
 	ctx.WriteString(" VALUES ")
-	for i, region := range node.Regions {
+	for i := range node.Regions {
 		if i != 0 {
 			ctx.WriteString(",")
 		}
-		ctx.FormatNode(&region)
+		ctx.FormatNode(&node.Regions[i])
 	}
 }

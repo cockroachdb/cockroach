@@ -346,10 +346,10 @@ func processColNodeType(
 			// we're going to inverted index.
 			switch columnNode.OpClass {
 			case "gin_trgm_ops", "gist_trgm_ops":
-				if !b.EvalCtx().Settings.Version.IsActive(b, clusterversion.V22_2TrigramInvertedIndexes) {
+				if !b.EvalCtx().Settings.Version.IsActive(b, clusterversion.TODODelete_V22_2TrigramInvertedIndexes) {
 					panic(pgerror.Newf(pgcode.FeatureNotSupported,
 						"version %v must be finalized to create trigram inverted indexes",
-						clusterversion.ByKey(clusterversion.V22_2TrigramInvertedIndexes)))
+						clusterversion.ByKey(clusterversion.TODODelete_V22_2TrigramInvertedIndexes)))
 				}
 			case "":
 				panic(errors.WithHint(

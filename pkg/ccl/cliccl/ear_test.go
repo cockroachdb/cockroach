@@ -156,13 +156,13 @@ func TestList(t *testing.T) {
 000004.log:
   env type: Data, AES128_CTR
   keyID: bbb65a9d114c2a18740f27b6933b74f61018bd5adf545c153b48ffe6473336ef
-  nonce: 80 18 c0 79 61 c7 cf ef b4 25 4e 78
-  counter: 1483615076
+  nonce: 31 d3 cd 5a 69 e2 13 64 21 53 57 64
+  counter: 3952287331
 000005.sst:
   env type: Data, AES128_CTR
   keyID: bbb65a9d114c2a18740f27b6933b74f61018bd5adf545c153b48ffe6473336ef
-  nonce: 71 12 f7 22 9a fb 90 24 4e 58 27 01
-  counter: 3082989236
+  nonce: 23 d9 b2 e1 39 b0 87 ed f9 6d 49 20
+  counter: 3481614039
 COCKROACHDB_DATA_KEYS_000001_monolith:
   env type: Store, AES128_CTR
   keyID: f594229216d81add7811c4360212eb7629b578ef4eab6e5d05679b3c5de48867
@@ -171,8 +171,8 @@ COCKROACHDB_DATA_KEYS_000001_monolith:
 CURRENT:
   env type: Data, AES128_CTR
   keyID: bbb65a9d114c2a18740f27b6933b74f61018bd5adf545c153b48ffe6473336ef
-  nonce: 18 c2 a6 23 cc 6e 2e 7c 8e bf 84 77
-  counter: 3159373900
+  nonce: 71 12 f7 22 9a fb 90 24 4e 58 27 01
+  counter: 3082989236
 MANIFEST-000001:
   env type: Data, AES128_CTR
   keyID: bbb65a9d114c2a18740f27b6933b74f61018bd5adf545c153b48ffe6473336ef
@@ -181,14 +181,25 @@ MANIFEST-000001:
 OPTIONS-000003:
   env type: Data, AES128_CTR
   keyID: bbb65a9d114c2a18740f27b6933b74f61018bd5adf545c153b48ffe6473336ef
-  nonce: d3 97 11 b3 1a ed 22 2b 74 fb 02 0c
-  counter: 1229228536
+  nonce: c3 6d b2 7b 3f 3e 67 b9 28 b9 81 b1
+  counter: 3050109376
 marker.datakeys.000001.COCKROACHDB_DATA_KEYS_000001_monolith:
   env type: Store, AES128_CTR
   keyID: f594229216d81add7811c4360212eb7629b578ef4eab6e5d05679b3c5de48867
   nonce: 55 d7 d4 27 6c 97 9b dd f1 5d 40 c8
   counter: 467030050
+marker.format-version.000009.010:
+  env type: Data, AES128_CTR
+  keyID: bbb65a9d114c2a18740f27b6933b74f61018bd5adf545c153b48ffe6473336ef
+  nonce: 6e 34 f4 3c 11 43 1a f5 69 ce 33 f1
+  counter: 2398097086
+marker.manifest.000001.MANIFEST-000001:
+  env type: Data, AES128_CTR
+  keyID: bbb65a9d114c2a18740f27b6933b74f61018bd5adf545c153b48ffe6473336ef
+  nonce: d3 97 11 b3 1a ed 22 2b 74 fb 02 0c
+  counter: 1229228536
 `
+
 	require.Equal(t, want, b.String())
 }
 

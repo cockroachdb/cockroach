@@ -21,9 +21,9 @@ Schema change plan for CREATE INDEX ‹id1› ON ‹defaultdb›.‹public›.�
  │         ├── 5 elements transitioning toward TRANSIENT_ABSENT
  │         │    ├── ABSENT → DELETE_ONLY      TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}
  │         │    ├── ABSENT → TRANSIENT_ABSENT IndexPartitioning:{DescID: 104, IndexID: 3}
- │         │    ├── ABSENT → TRANSIENT_ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
- │         │    ├── ABSENT → TRANSIENT_ABSENT IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
- │         │    └── ABSENT → TRANSIENT_ABSENT IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}
+ │         │    ├── ABSENT → PUBLIC           IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
+ │         │    ├── ABSENT → PUBLIC           IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
+ │         │    └── ABSENT → PUBLIC           IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}
  │         └── 11 Mutation operations
  │              ├── MakeAbsentIndexBackfilling {"IsSecondaryIndex":true}
  │              ├── AddIndexPartitionInfo {"Partitioning":{"IndexID":2,"TableID":104}}
@@ -49,9 +49,9 @@ Schema change plan for CREATE INDEX ‹id1› ON ‹defaultdb›.‹public›.�
  │    │    ├── 5 elements transitioning toward TRANSIENT_ABSENT
  │    │    │    ├── DELETE_ONLY      → ABSENT TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}
  │    │    │    ├── TRANSIENT_ABSENT → ABSENT IndexPartitioning:{DescID: 104, IndexID: 3}
- │    │    │    ├── TRANSIENT_ABSENT → ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
- │    │    │    ├── TRANSIENT_ABSENT → ABSENT IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
- │    │    │    └── TRANSIENT_ABSENT → ABSENT IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}
+ │    │    │    ├── PUBLIC           → ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
+ │    │    │    ├── PUBLIC           → ABSENT IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
+ │    │    │    └── PUBLIC           → ABSENT IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
@@ -139,10 +139,13 @@ Schema change plan for CREATE INDEX ‹id1› ON ‹defaultdb›.‹public›.�
       │    │    ├── PUBLIC     → TRANSIENT_ABSENT      IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
       │    │    ├── PUBLIC     → TRANSIENT_ABSENT      IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
       │    │    └── PUBLIC     → TRANSIENT_ABSENT      IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}
-      │    └── 5 Mutation operations
+      │    └── 8 Mutation operations
       │         ├── MakeValidatedSecondaryIndexPublic {"IndexID":2,"TableID":104}
       │         ├── RefreshStats {"TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":3,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":3,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":3,"Ordinal":1,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":3,"Kind":2,"TableID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
       └── Stage 2 of 2 in PostCommitNonRevertiblePhase

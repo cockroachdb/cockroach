@@ -16,7 +16,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -112,10 +111,7 @@ func (s *PersistedSQLStats) getFetchQueryForStmtStatsTable(
 		"statistics",
 		"plan",
 		"agg_interval",
-	}
-
-	if s.cfg.Settings.Version.IsActive(ctx, clusterversion.V22_2AlterSystemStatementStatisticsAddIndexRecommendations) {
-		selectedColumns = append(selectedColumns, "index_recommendations")
+		"index_recommendations",
 	}
 
 	// [1]: selection columns

@@ -1802,11 +1802,6 @@ message AdminVerifyProtectedTimestampResponse {
 // inline values). It cannot be used in a transaction, cannot be split across
 // ranges, and must be alone in a batch.
 //
-// In 22.1, AddSSTable does not support MVCC point tombstones in SSTs, and may
-// return an error when given these. 22.2 does allow this, but check the
-// AddSSTableTombstones version gate first to make sure there are no 22.1 nodes
-// left in the cluster.
-//
 // MVCC range tombstones are supported in 22.2, but check the
 // MVCCRangeTombstones version gate before writing them.
 //
@@ -2104,13 +2099,6 @@ message RangeStatsResponse {
     (gogoproto.customname) = "MVCCStats"
   ];
 
-  // DeprecatedLastQueriesPerSecond is the most recent rate of request/s or QPS
-  // for the range. The field is deprecated in favor of MaxQueriesPerSecond.
-  //
-  // TODO(nvanbenschoten): remove this field in v22.1 when all nodes in the
-  // cluster are guaranteed to return MaxQueriesPerSecond.
-  double deprecated_last_queries_per_second = 3;
-
   // MaxQueriesPerSecond is the maximum rate of request/s or QPS that the range
   // has served over a configured measurement period. Set to -1 if the replica
   // serving the RangeStats request has not been the leaseholder long enough to
@@ -2123,15 +2111,23 @@ message RangeStatsResponse {
   // by the server. Used to distinguish 0 qps set by a new server from the field
   // not being set at all by an old server.
   //
-  // TODO(nvanbenschoten): stop consulting this field on the receiver in v22.1
-  // when all nodes in the cluster are guaranteed to return MaxQueriesPerSecond.
-  //
-  // TODO(nvanbenschoten): stop setting this field and remove it in v22.2 when
+  // TODO(kvoli): stop setting this field and remove it in v23.2 when
   // no nodes in the cluster consult this field.
   bool max_queries_per_second_set = 6;
 
+
+  // MaxCPUPerSecond is the maximum rate of cpu/s that the range has used at
+  // the leaseholder over a configured measurement period. Set to -1 if the
+  // replica serving the RangeStats request has not been the leaseholder long
+  // enough to have recorded CPU rates for at least a full measurement period.
+  // In such cases, the recipient should not consider the CPU value reliable
+  // enough to base important decisions off of.
+  double max_cpu_per_second = 7 [(gogoproto.customname) = "MaxCPUPerSecond"];
+
   // range_info contains descriptor and lease information.
   RangeInfo range_info = 4 [(gogoproto.nullable) = false];
+
+  reserved 3;
 }
 
 // MigrateRequest is used instruct all ranges overlapping with it to exercise

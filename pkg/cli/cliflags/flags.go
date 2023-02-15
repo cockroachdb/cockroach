@@ -894,17 +894,33 @@ only tested and supported on Linux.
 	MaxOffset = FlagInfo{
 		Name: "max-offset",
 		Description: `
-Maximum allowed clock offset for the cluster. If observed clock offsets exceed
-this limit, servers will crash to minimize the likelihood of reading
-inconsistent data. Increasing this value will increase the time to recovery of
-failures as well as the frequency of uncertainty-based read restarts.
+Maximum clock offset for the cluster. If real clock skew exceeds this value,
+consistency guarantees can no longer be upheld, possibly resulting in stale
+reads and other anomalies. This value affects the frequency of uncertainty-based
+read restarts and write latencies for global tables.
+<PRE>
+
+</PRE>
+If a node detects that its clock offset from other nodes is too large, it will
+self-terminate to protect consistency guarantees. This check can be disabled
+via --disable-max-offset-check.
 <PRE>
 
 </PRE>
 This value should be the same on all nodes in the cluster. It is allowed to
 differ such that the max-offset value can be changed via a rolling restart of
-the cluster, in which case the real clock offset between nodes must be below the
+the cluster, in which case the real clock skew between nodes must be below the
 smallest max-offset value of any node.
+`,
+	}
+
+	DisableMaxOffsetCheck = FlagInfo{
+		Name: "disable-max-offset-check",
+		Description: `
+Normally, a node will self-terminate if it finds that its clock offset with the
+rest of the cluster exceeds --max-offset. This flag disables this check. The
+operator is responsible for ensuring that real clock skew never exceeds
+max-offset, to avoid read inconsistencies and other correctness anomalies.
 `,
 	}
 
@@ -992,6 +1008,25 @@ which use 'cockroach-data-tenant-X' for tenant 'X')
 Storage engine to use for all stores on this cockroach node. The only option is pebble. Deprecated;
 only present for backward compatibility.
 `,
+	}
+
+	SharedStorage = FlagInfo{
+		Name: "experimental-shared-storage",
+		Description: fmt.Sprintf(`
+Shared storage URL (with a cloud scheme, eg. s3://, gcs://) to use for all stores
+on this cockroach node. Cockroach can take advantage of this storage for faster
+replication from node to node, as well as to grow beyond locally-available disk
+space. The format of this URL is the same as that specified for bulk operations,
+for more on that see:
+
+<PRE>
+%s
+</PRE>
+
+This is an experimental option, and must be specified on every start of this
+node starting from the very first call to start. Passing this flag on an existing
+initialized node is not supported.
+`, docs.URL("use-cloud-storage-for-bulk-operations")),
 	}
 
 	Size = FlagInfo{
@@ -1701,6 +1736,14 @@ commands, WARNING for client commands.`,
 	SQLAuditLogDirOverride = FlagInfo{
 		Name:        "sql-audit-dir",
 		Description: `--sql-audit-dir=XXX is an alias for --log='sinks: {file-groups: {sql-audit: {channels: SENSITIVE_ACCESS, dir: ...}}}'.`,
+	}
+
+	ObsServiceAddr = FlagInfo{
+		Name:   "obsservice-addr",
+		EnvVar: "",
+		Description: `Address of an OpenTelemetry OTLP sink such as the
+Observability Service or the OpenTelemetry Collector. If set, telemetry
+events are exported to this address.`,
 	}
 
 	BuildTag = FlagInfo{

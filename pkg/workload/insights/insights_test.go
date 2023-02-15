@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -48,8 +49,8 @@ func TestInsightsWorkload(t *testing.T) {
 
 			insights := FromConfig(test.rows, test.rows, defaultPayloadBytes, test.ranges)
 			insightsTableA := insights.Tables()[0]
-			sqlDB.Exec(t, fmt.Sprintf(`DROP TABLE IF EXISTS %s`, insightsTableA.Name))
-			sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE %s %s`, insightsTableA.Name, insightsTableA.Schema))
+			sqlDB.Exec(t, fmt.Sprintf(`DROP TABLE IF EXISTS %s`, tree.NameString(insightsTableA.Name)))
+			sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE %s %s`, tree.NameString(insightsTableA.Name), insightsTableA.Schema))
 
 			if err := workloadsql.Split(ctx, db, insightsTableA, 1 /* concurrency */); err != nil {
 				t.Fatalf("%+v", err)
@@ -57,7 +58,7 @@ func TestInsightsWorkload(t *testing.T) {
 
 			var rangeCount int
 			sqlDB.QueryRow(t,
-				fmt.Sprintf(`SELECT count(*) FROM [SHOW RANGES FROM TABLE %s]`, insightsTableA.Name),
+				fmt.Sprintf(`SELECT count(*) FROM [SHOW RANGES FROM TABLE %s]`, tree.NameString(insightsTableA.Name)),
 			).Scan(&rangeCount)
 			if rangeCount != test.expectedRanges {
 				t.Errorf("got %d ranges expected %d", rangeCount, test.expectedRanges)

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/collatedstring"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
@@ -702,23 +703,16 @@ func (expr *AnnotateTypeExpr) TypeCheck(
 func (expr *CollateExpr) TypeCheck(
 	ctx context.Context, semaCtx *SemaContext, desired *types.T,
 ) (TypedExpr, error) {
-	if strings.ToLower(expr.Locale) == DefaultCollationTag {
-		return nil, errors.WithHint(
-			unimplemented.NewWithIssuef(
-				57255,
-				"DEFAULT collations are not supported",
-			),
-			`omit the 'COLLATE "default"' clause in your statement`,
-		)
-	}
-	_, err := language.Parse(expr.Locale)
-	if err != nil {
-		return nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue,
-			"invalid locale %s", expr.Locale)
-	}
 	subExpr, err := expr.Expr.TypeCheck(ctx, semaCtx, types.String)
 	if err != nil {
 		return nil, err
+	}
+	if collatedstring.IsDefaultEquivalentCollation(expr.Locale) {
+		return subExpr, nil
+	}
+	if _, err := language.Parse(expr.Locale); err != nil {
+		return nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue,
+			"invalid locale %s", expr.Locale)
 	}
 	t := subExpr.ResolvedType()
 	if types.IsStringType(t) {
@@ -1046,6 +1040,9 @@ func (expr *FuncExpr) TypeCheck(
 		searchPath = semaCtx.SearchPath
 		resolver = semaCtx.FunctionResolver
 	}
+
+	_, functionResolvedByID := expr.Func.FunctionReference.(*FunctionOID)
+
 	def, err := expr.Func.Resolve(ctx, searchPath, resolver)
 	if err != nil {
 		return nil, err
@@ -1150,13 +1147,21 @@ func (expr *FuncExpr) TypeCheck(
 		return nil, pgerror.Newf(pgcode.UndefinedFunction, "unknown signature: %s", getFuncSig(expr, s.typedExprs, desired))
 	}
 
-	// Get overloads from the most significant schema in search path.
-	favoredOverload, err := getMostSignificantOverload(
-		def.Overloads, s.overloads, s.overloadIdxs, searchPath, expr, s.typedExprs,
-		func() string { return getFuncSig(expr, s.typedExprs, desired) },
-	)
-	if err != nil {
-		return nil, err
+	var favoredOverload QualifiedOverload
+	if functionResolvedByID {
+		// If the function is resolved by OID, we know that there is always only one
+		// overload qualified. As long as it passes the argument type checks above,
+		// there is no need to worry about the search path.
+		favoredOverload = def.Overloads[0]
+	} else {
+		// Get overloads from the most significant schema in search path.
+		favoredOverload, err = getMostSignificantOverload(
+			def.Overloads, s.overloads, s.overloadIdxs, searchPath, expr, s.typedExprs,
+			func() string { return getFuncSig(expr, s.typedExprs, desired) },
+		)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Just pick the first overload from the search path.
@@ -1947,7 +1952,7 @@ func typeCheckAndRequireTupleElems(
 	tuple.typ = types.MakeTuple(make([]*types.T, len(tuple.Exprs)))
 	for i, subExpr := range tuple.Exprs {
 		// Require that the sub expression is comparable to the required type.
-		_, rightTyped, _, _, err := typeCheckComparisonOp(ctx, semaCtx, op, expr, subExpr)
+		_, rightTyped, _, _, err := typeCheckComparisonOp(ctx, semaCtx, op, expr, subExpr, true /* disallowSwitch */)
 		if err != nil {
 			return nil, err
 		}
@@ -2172,9 +2177,20 @@ func typeCheckSubqueryWithIn(left, right *types.T) error {
 	return nil
 }
 
+// The first element of `params` is disallowSwitch, which when true means the
+// first parameter to the overload type checker must be the original left
+// expression.
 func typeCheckComparisonOp(
-	ctx context.Context, semaCtx *SemaContext, op treecmp.ComparisonOperator, left, right Expr,
+	ctx context.Context,
+	semaCtx *SemaContext,
+	op treecmp.ComparisonOperator,
+	left, right Expr,
+	params ...bool,
 ) (_ TypedExpr, _ TypedExpr, _ *CmpOp, alwaysNull bool, _ error) {
+	disallowSwitch := false
+	if len(params) > 0 {
+		disallowSwitch = true
+	}
 	// Parentheses are semantically unimportant and can be removed/replaced
 	// with its nested expression in our plan. This makes type checking cleaner.
 	left = StripParens(left)
@@ -2285,7 +2301,47 @@ func typeCheckComparisonOp(
 	// defined to return NULL anyways. Should the SQL dialect ever be extended with
 	// comparisons that can return non-NULL on NULL input, the `inBinOp` parameter
 	// may need altering.
-	s := getOverloadTypeChecker(ops, foldedLeft, foldedRight)
+	var s *overloadTypeChecker
+	// The overload type checker does not have symmetric behavior (the order of
+	// the expression arguments matters). Find the order which does not error out
+	// and initialize the type checker with that order. We purposely do not return
+	// errors here because the overload type checker can coerce types in some
+	// cases to avoid errors. Comparisons with placeholders aren't examined as
+	// that may not take placeholder hints into account. Comparisons with columns
+	// aren't examined as it's usually best to allow type coercion to the type of
+	// the column, if possible.
+	placeholderComparison := false
+	columnComparison := false
+	if _, ok := foldedLeft.(VariableExpr); ok {
+		columnComparison = true
+	}
+	if _, ok := foldedRight.(VariableExpr); ok {
+		columnComparison = true
+	}
+	if _, ok := foldedLeft.(*Placeholder); ok {
+		placeholderComparison = true
+	}
+	if _, ok := foldedRight.(*Placeholder); ok {
+		placeholderComparison = true
+	}
+	if !disallowSwitch && !placeholderComparison && !columnComparison {
+		_, _, err := typeCheckSameTypedExprs(ctx, semaCtx, types.Any, foldedLeft, foldedRight)
+		if err != nil {
+			_, _, err = typeCheckSameTypedExprs(ctx, semaCtx, types.Any, foldedRight, foldedLeft)
+			if err == nil {
+				s = getOverloadTypeChecker(ops, foldedRight, foldedLeft)
+				switched = !switched
+			}
+		}
+	}
+	if s == nil {
+		if disallowSwitch && switched {
+			s = getOverloadTypeChecker(ops, foldedRight, foldedLeft)
+			switched = false
+		} else {
+			s = getOverloadTypeChecker(ops, foldedLeft, foldedRight)
+		}
+	}
 	defer s.release()
 	if err := s.typeCheckOverloadedExprs(ctx, semaCtx, types.Any, true); err != nil {
 		return nil, nil, nil, false, err

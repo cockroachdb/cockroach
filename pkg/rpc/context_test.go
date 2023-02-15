@@ -95,13 +95,13 @@ func newTestContextWithKnobs(
 	clock hlc.WallClock, maxOffset time.Duration, stopper *stop.Stopper, knobs ContextTestingKnobs,
 ) *Context {
 	return NewContext(context.Background(), ContextOptions{
-		TenantID:  roachpb.SystemTenantID,
-		Config:    testutils.NewNodeTestBaseContext(),
-		Clock:     clock,
-		MaxOffset: maxOffset,
-		Stopper:   stopper,
-		Settings:  cluster.MakeTestingClusterSettings(),
-		Knobs:     knobs,
+		TenantID:        roachpb.SystemTenantID,
+		Config:          testutils.NewNodeTestBaseContext(),
+		Clock:           clock,
+		ToleratedOffset: maxOffset,
+		Stopper:         stopper,
+		Settings:        cluster.MakeTestingClusterSettings(),
+		Knobs:           knobs,
 	})
 }
 
@@ -181,12 +181,12 @@ func TestPingInterceptors(t *testing.T) {
 	recvMsg := "boom due to onHandlePing"
 	errBoomRecv := status.Error(codes.FailedPrecondition, recvMsg)
 	opts := ContextOptions{
-		TenantID:  roachpb.SystemTenantID,
-		Config:    testutils.NewNodeTestBaseContext(),
-		Clock:     &timeutil.DefaultTimeSource{},
-		MaxOffset: 500 * time.Millisecond,
-		Stopper:   stop.NewStopper(),
-		Settings:  cluster.MakeTestingClusterSettings(),
+		TenantID:        roachpb.SystemTenantID,
+		Config:          testutils.NewNodeTestBaseContext(),
+		Clock:           &timeutil.DefaultTimeSource{},
+		ToleratedOffset: 500 * time.Millisecond,
+		Stopper:         stop.NewStopper(),
+		Settings:        cluster.MakeTestingClusterSettings(),
 		OnOutgoingPing: func(ctx context.Context, req *PingRequest) error {
 			if req.TargetNodeID == blockedTargetNodeID {
 				return errBoomSend
@@ -253,12 +253,12 @@ func testClockOffsetInPingRequestInternal(t *testing.T, clientOnly bool) {
 
 	// Build a minimal server.
 	opts := ContextOptions{
-		TenantID:  roachpb.SystemTenantID,
-		Config:    testutils.NewNodeTestBaseContext(),
-		Clock:     &timeutil.DefaultTimeSource{},
-		MaxOffset: 500 * time.Millisecond,
-		Stopper:   stopper,
-		Settings:  cluster.MakeTestingClusterSettings(),
+		TenantID:        roachpb.SystemTenantID,
+		Config:          testutils.NewNodeTestBaseContext(),
+		Clock:           &timeutil.DefaultTimeSource{},
+		ToleratedOffset: 500 * time.Millisecond,
+		Stopper:         stopper,
+		Settings:        cluster.MakeTestingClusterSettings(),
 	}
 	rpcCtxServer := NewContext(ctx, opts)
 
@@ -465,7 +465,6 @@ func TestInternalServerAddress(t *testing.T) {
 	internal := &internalServer{}
 	serverCtx.SetLocalInternalServer(
 		internal,
-		false, // tenant
 		ServerInterceptorInfo{}, ClientInterceptorInfo{})
 
 	ic := serverCtx.GetLocalInternalClientForAddr(1)
@@ -542,7 +541,6 @@ func TestInternalClientAdapterRunsInterceptors(t *testing.T) {
 	internal := &internalServer{}
 	serverCtx.SetLocalInternalServer(
 		internal,
-		false, // tenant
 		serverInterceptors, clientInterceptors)
 	ic := serverCtx.GetLocalInternalClientForAddr(1)
 	lic, ok := ic.(internalClientAdapter)
@@ -615,7 +613,6 @@ func TestInternalClientAdapterWithClientStreamInterceptors(t *testing.T) {
 		internal := &internalServer{rangeFeedEvents: []roachpb.RangeFeedEvent{{}, {}}}
 		serverCtx.SetLocalInternalServer(
 			internal,
-			false, // tenant
 			serverInterceptors, clientInterceptors)
 		ic := serverCtx.GetLocalInternalClientForAddr(1)
 		lic, ok := ic.(internalClientAdapter)
@@ -696,7 +693,6 @@ func TestInternalClientAdapterWithServerStreamInterceptors(t *testing.T) {
 		internal := &internalServer{rangeFeedEvents: []roachpb.RangeFeedEvent{{}, {}}}
 		serverCtx.SetLocalInternalServer(
 			internal,
-			false, // tenant
 			serverInterceptors, ClientInterceptorInfo{})
 		ic := serverCtx.GetLocalInternalClientForAddr(1)
 		lic, ok := ic.(internalClientAdapter)
@@ -832,7 +828,6 @@ func BenchmarkInternalClientAdapter(b *testing.B) {
 	internal := &internalServer{}
 	serverCtx.SetLocalInternalServer(
 		internal,
-		false, // tenant
 		interceptors, ClientInterceptorInfo{})
 	ic := serverCtx.GetLocalInternalClientForAddr(roachpb.NodeID(1))
 	lic, ok := ic.(internalClientAdapter)
@@ -1022,7 +1017,6 @@ func TestHeartbeatHealth(t *testing.T) {
 	// server has been registered.
 	clientCtx.SetLocalInternalServer(
 		&internalServer{},
-		false, // tenant
 		ServerInterceptorInfo{}, ClientInterceptorInfo{})
 	require.NoError(t, clientCtx.TestingConnHealth(clientCtx.Config.AdvertiseAddr, clientNodeID))
 
@@ -2538,4 +2532,28 @@ func TestRejectDialOnQuiesce(t *testing.T) {
 	err = conn.Invoke(ctx, "/Does/Not/Exist", &PingRequest{}, &PingResponse{})
 	require.Error(t, err)
 	require.Equal(t, codes.Canceled, status.Code(err))
+}
+
+// TestOnlyOnceDialer verifies that onlyOnceDialer prevents gRPC from re-dialing
+// on an existing connection. (Instead, gRPC will have to make a new dialer).
+func TestOnlyOnceDialer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	ln, err := net.Listen(util.TestAddr.Network(), util.TestAddr.String())
+	require.NoError(t, err)
+	defer func() { _ = ln.Close() }()
+
+	ood := &onlyOnceDialer{}
+	conn, err := ood.dial(ctx, ln.Addr().String())
+	require.NoError(t, err)
+	_ = conn.Close()
+
+	for i := 0; i < 5; i++ {
+		_, err := ood.dial(ctx, ln.Addr().String())
+		if i == 0 {
+			require.True(t, errors.Is(err, grpcutil.ErrConnectionInterrupted), "i=%d: %+v", i, err)
+		} else {
+			require.ErrorContains(t, err, `gRPC connection unexpectedly re-dialed`)
+		}
+	}
 }

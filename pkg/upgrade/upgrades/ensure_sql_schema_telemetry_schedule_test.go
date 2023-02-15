@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -39,6 +40,8 @@ import (
 
 func TestSchemaTelemetrySchedule(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	skip.WithIssue(t, 95530, "bump minBinary to 22.2. Skip 22.2 mixed-version tests for future cleanup")
 
 	// We want to ensure that the migration will succeed when run again.
 	// To ensure that it will, we inject a failure when trying to mark
@@ -74,7 +77,7 @@ func TestSchemaTelemetrySchedule(t *testing.T) {
 		}
 		args.Knobs.Server = &server.TestingKnobs{
 			DisableAutomaticVersionUpgrade: make(chan struct{}),
-			BinaryVersionOverride:          clusterversion.ByKey(clusterversion.V22_2SQLSchemaTelemetryScheduledJobs - 1),
+			BinaryVersionOverride:          clusterversion.ByKey(clusterversion.TODODelete_V22_2SQLSchemaTelemetryScheduledJobs - 1),
 		}
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: args})
 		defer tc.Stopper().Stop(ctx)
@@ -97,7 +100,7 @@ func TestSchemaTelemetrySchedule(t *testing.T) {
 
 		// Upgrade the cluster.
 		tdb.Exec(t, `SET CLUSTER SETTING version = $1`,
-			clusterversion.ByKey(clusterversion.V22_2SQLSchemaTelemetryScheduledJobs).String())
+			clusterversion.ByKey(clusterversion.TODODelete_V22_2SQLSchemaTelemetryScheduledJobs).String())
 
 		// Check that the schedule now exists and that jobs can be created.
 		tdb.Exec(t, qJob)

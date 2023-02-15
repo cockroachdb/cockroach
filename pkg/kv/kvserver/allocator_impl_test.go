@@ -102,12 +102,111 @@ var threeStores = []*roachpb.StoreDescriptor{
 	},
 }
 
+var fourSingleStoreRacks = []*roachpb.StoreDescriptor{
+	{
+		StoreID: 1,
+		Attrs:   roachpb.Attributes{Attrs: []string{"red"}},
+		Node: roachpb.NodeDescriptor{
+			NodeID: 1,
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{
+					{
+						Key:   "region",
+						Value: "local",
+					},
+					{
+						Key:   "rack",
+						Value: "1",
+					},
+				},
+			},
+		},
+		Capacity: roachpb.StoreCapacity{
+			Capacity:     200,
+			Available:    100,
+			LogicalBytes: 100,
+		},
+	},
+	{
+		StoreID: 2,
+		Attrs:   roachpb.Attributes{Attrs: []string{"red"}},
+		Node: roachpb.NodeDescriptor{
+			NodeID: 2,
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{
+					{
+						Key:   "region",
+						Value: "local",
+					},
+					{
+						Key:   "rack",
+						Value: "2",
+					},
+				},
+			},
+		},
+		Capacity: roachpb.StoreCapacity{
+			Capacity:     200,
+			Available:    100,
+			LogicalBytes: 100,
+		},
+	},
+	{
+		StoreID: 3,
+		Attrs:   roachpb.Attributes{Attrs: []string{"black"}},
+		Node: roachpb.NodeDescriptor{
+			NodeID: 3,
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{
+					{
+						Key:   "region",
+						Value: "local",
+					},
+					{
+						Key:   "rack",
+						Value: "3",
+					},
+				},
+			},
+		},
+		Capacity: roachpb.StoreCapacity{
+			Capacity:     200,
+			Available:    100,
+			LogicalBytes: 100,
+		},
+	},
+	{
+		StoreID: 4,
+		Attrs:   roachpb.Attributes{Attrs: []string{"black"}},
+		Node: roachpb.NodeDescriptor{
+			NodeID: 4,
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{
+					{
+						Key:   "region",
+						Value: "local",
+					},
+					{
+						Key:   "rack",
+						Value: "4",
+					},
+				},
+			},
+		},
+		Capacity: roachpb.StoreCapacity{
+			Capacity:     200,
+			Available:    100,
+			LogicalBytes: 100,
+		},
+	},
+}
+
 // TestAllocatorRebalanceTarget could help us to verify whether we'll rebalance
 // to a target that we'll immediately remove.
 func TestAllocatorRebalanceTarget(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 123)), time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(0, 123)))
 	ctx := context.Background()
 	stopper, g, sp, a, _ := allocatorimpl.CreateTestAllocator(ctx, 5, false /* deterministic */)
 	defer stopper.Stop(ctx)
@@ -298,14 +397,14 @@ func TestAllocatorThrottled(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	// First test to make sure we would send the replica to purgatory.
-	_, _, err := a.AllocateVoter(ctx, sp, simpleSpanConfig, []roachpb.ReplicaDescriptor{}, nil, allocatorimpl.Dead)
+	_, _, err := a.AllocateVoter(ctx, sp, simpleSpanConfig, []roachpb.ReplicaDescriptor{}, nil, nil, allocatorimpl.Dead)
 	if _, ok := IsPurgatoryError(err); !ok {
 		t.Fatalf("expected a purgatory error, got: %+v", err)
 	}
 
 	// Second, test the normal case in which we can allocate to the store.
 	gossiputil.NewStoreGossiper(g).GossipStores(singleStore, t)
-	result, _, err := a.AllocateVoter(ctx, sp, simpleSpanConfig, []roachpb.ReplicaDescriptor{}, nil, allocatorimpl.Dead)
+	result, _, err := a.AllocateVoter(ctx, sp, simpleSpanConfig, []roachpb.ReplicaDescriptor{}, nil, nil, allocatorimpl.Dead)
 	if err != nil {
 		t.Fatalf("unable to perform allocation: %+v", err)
 	}
@@ -322,7 +421,7 @@ func TestAllocatorThrottled(t *testing.T) {
 	}
 	storeDetail.ThrottledUntil = timeutil.Now().Add(24 * time.Hour)
 	sp.DetailsMu.Unlock()
-	_, _, err = a.AllocateVoter(ctx, sp, simpleSpanConfig, []roachpb.ReplicaDescriptor{}, nil, allocatorimpl.Dead)
+	_, _, err = a.AllocateVoter(ctx, sp, simpleSpanConfig, []roachpb.ReplicaDescriptor{}, nil, nil, allocatorimpl.Dead)
 	if _, ok := IsPurgatoryError(err); ok {
 		t.Fatalf("expected a non purgatory error, got: %+v", err)
 	}
