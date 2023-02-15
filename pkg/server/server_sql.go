@@ -1502,6 +1502,9 @@ func (s *SQLServer) preStart(
 		return errors.Wrap(err, "initializing settings")
 	}
 
+	clusterVersionMetrics := clusterversion.MakeMetricsAndRegisterOnVersionChangeCallback(&s.cfg.Settings.SV)
+	s.metricsRegistry.AddMetricStruct(clusterVersionMetrics)
+
 	// Run all the "permanent" upgrades that haven't already run in this cluster,
 	// until the currently active version. Upgrades for higher versions, if any,
 	// will be run in response to `SET CLUSTER SETTING version = <v>`, just like
