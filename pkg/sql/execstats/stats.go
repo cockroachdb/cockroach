@@ -77,16 +77,19 @@ type ScanStats struct {
 	NumInterfaceSeeks uint64
 	// NumInternalSeeks is the number of times that MVCC seek was invoked
 	// internally, including to step over internal, uncompacted Pebble versions.
-	NumInternalSeeks               uint64
-	BlockBytes                     uint64
-	BlockBytesInCache              uint64
-	KeyBytes                       uint64
-	ValueBytes                     uint64
-	PointCount                     uint64
-	PointsCoveredByRangeTombstones uint64
-	RangeKeyCount                  uint64
-	RangeKeyContainedPoints        uint64
-	RangeKeySkippedPoints          uint64
+	NumInternalSeeks                uint64
+	BlockBytes                      uint64
+	BlockBytesInCache               uint64
+	KeyBytes                        uint64
+	ValueBytes                      uint64
+	PointCount                      uint64
+	PointsCoveredByRangeTombstones  uint64
+	RangeKeyCount                   uint64
+	RangeKeyContainedPoints         uint64
+	RangeKeySkippedPoints           uint64
+	SeparatedPointCount             uint64
+	SeparatedPointValueBytes        uint64
+	SeparatedPointValueBytesFetched uint64
 	// ConsumedRU is the number of RUs that were consumed during the course of a
 	// scan.
 	ConsumedRU uint64
@@ -137,6 +140,9 @@ func GetScanStats(ctx context.Context, recording tracingpb.Recording) (scanStats
 				scanStats.RangeKeyCount += ss.RangeKeyCount
 				scanStats.RangeKeyContainedPoints += ss.RangeKeyContainedPoints
 				scanStats.RangeKeySkippedPoints += ss.RangeKeySkippedPoints
+				scanStats.SeparatedPointCount += ss.SeparatedPointCount
+				scanStats.SeparatedPointValueBytes += ss.SeparatedPointValueBytes
+				scanStats.SeparatedPointValueBytesFetched += ss.SeparatedPointValueBytesFetched
 			} else if pbtypes.Is(any, &tc) {
 				if err := pbtypes.UnmarshalAny(any, &tc); err != nil {
 					return

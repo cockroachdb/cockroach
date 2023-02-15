@@ -3627,19 +3627,22 @@ func recordIteratorStats(ctx context.Context, iter MVCCIterator) {
 	internalSteps := stats.ReverseStepCount[pebble.InternalIterCall] + stats.ForwardStepCount[pebble.InternalIterCall]
 	internalSeeks := stats.ReverseSeekCount[pebble.InternalIterCall] + stats.ForwardSeekCount[pebble.InternalIterCall]
 	sp.RecordStructured(&roachpb.ScanStats{
-		NumInterfaceSeeks:              uint64(seeks),
-		NumInternalSeeks:               uint64(internalSeeks),
-		NumInterfaceSteps:              uint64(steps),
-		NumInternalSteps:               uint64(internalSteps),
-		BlockBytes:                     stats.InternalStats.BlockBytes,
-		BlockBytesInCache:              stats.InternalStats.BlockBytesInCache,
-		KeyBytes:                       stats.InternalStats.KeyBytes,
-		ValueBytes:                     stats.InternalStats.ValueBytes,
-		PointCount:                     stats.InternalStats.PointCount,
-		PointsCoveredByRangeTombstones: stats.InternalStats.PointsCoveredByRangeTombstones,
-		RangeKeyCount:                  uint64(stats.RangeKeyStats.Count),
-		RangeKeyContainedPoints:        uint64(stats.RangeKeyStats.ContainedPoints),
-		RangeKeySkippedPoints:          uint64(stats.RangeKeyStats.SkippedPoints),
+		NumInterfaceSeeks:               uint64(seeks),
+		NumInternalSeeks:                uint64(internalSeeks),
+		NumInterfaceSteps:               uint64(steps),
+		NumInternalSteps:                uint64(internalSteps),
+		BlockBytes:                      stats.InternalStats.BlockBytes,
+		BlockBytesInCache:               stats.InternalStats.BlockBytesInCache,
+		KeyBytes:                        stats.InternalStats.KeyBytes,
+		ValueBytes:                      stats.InternalStats.ValueBytes,
+		PointCount:                      stats.InternalStats.PointCount,
+		PointsCoveredByRangeTombstones:  stats.InternalStats.PointsCoveredByRangeTombstones,
+		RangeKeyCount:                   uint64(stats.RangeKeyStats.Count),
+		RangeKeyContainedPoints:         uint64(stats.RangeKeyStats.ContainedPoints),
+		RangeKeySkippedPoints:           uint64(stats.RangeKeyStats.SkippedPoints),
+		SeparatedPointCount:             stats.InternalStats.SeparatedPointValue.Count,
+		SeparatedPointValueBytes:        stats.InternalStats.SeparatedPointValue.ValueBytes,
+		SeparatedPointValueBytesFetched: stats.InternalStats.SeparatedPointValue.ValueBytesFetched,
 	})
 }
 
