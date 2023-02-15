@@ -3085,7 +3085,7 @@ func getMostSignificantOverload(
 		if len(oImpls) != 1 {
 			// Since there are ambiguity errors when udf with the same family
 			// parameter types, function signature has to be sorted out
-			// to directly match specific udf function for execution, e2e tests added
+			// to directly match specific udf function for execution
 			var expTypes []*types.T
 			for _, exp := range typedInputExprs {
 				expTypes = append(expTypes, exp.ResolvedType())
