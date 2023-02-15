@@ -103,6 +103,8 @@ go_library(
         "mvcc_gc.go",
         "network.go",
         "nodejs_postgres.go",
+        "npgsql.go",
+        "npgsql_blocklist.go",
         "orm_helpers.go",
         "parsing_helpers.go",
         "pebble_write_throughput.go",
