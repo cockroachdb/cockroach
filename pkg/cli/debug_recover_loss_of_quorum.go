@@ -736,6 +736,9 @@ func stageRecoveryOntoCluster(
 	for _, r := range plan.Updates {
 		nodeSet[r.NodeID()] = struct{}{}
 	}
+	for _, ln := range plan.StaleLeaseholderNodeIDs {
+		nodeSet[ln] = struct{}{}
+	}
 
 	_, _ = fmt.Fprintf(stderr, `Plan staged. To complete recovery restart nodes %s.
 
@@ -993,9 +996,12 @@ func diffPlanWithNodeStatus(
 ) clusterDiff {
 	var result clusterDiff
 
-	nodesWithPlan := make(map[roachpb.NodeID]interface{})
+	nodesWithPlan := make(map[roachpb.NodeID]bool)
 	for _, r := range updatePlan.Updates {
-		nodesWithPlan[r.NodeID()] = struct{}{}
+		nodesWithPlan[r.NodeID()] = true
+	}
+	for _, id := range updatePlan.StaleLeaseholderNodeIDs {
+		nodesWithPlan[id] = true
 	}
 
 	// Sort statuses by node id for ease of readability.
@@ -1007,7 +1013,7 @@ func diffPlanWithNodeStatus(
 		// Invoked with plan, need to verify application of concrete plan to the
 		// cluster.
 		for _, status := range nodes {
-			if _, ok := nodesWithPlan[status.NodeID]; ok {
+			if nodesWithPlan[status.NodeID] {
 				// Nodes that we expect plan to be pending or applied.
 				switch {
 				case status.AppliedPlanID != nil && status.AppliedPlanID.Equal(updatePlan.PlanID) && status.Error != "":
@@ -1037,9 +1043,7 @@ func diffPlanWithNodeStatus(
 		for k := range nodesWithPlan {
 			missing = append(missing, k)
 		}
-		sort.Slice(missing, func(i, j int) bool {
-			return missing[i] < missing[j]
-		})
+		sort.Sort(roachpb.NodeIDSlice(missing))
 		for _, id := range missing {
 			result.appendError(fmt.Sprintf(" failed to find node n%d where plan must be staged", id))
 		}
