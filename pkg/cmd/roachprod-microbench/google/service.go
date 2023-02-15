@@ -19,6 +19,8 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
+	//lint:ignore SA1019 benchstat is deprecated; refactor to use benchproc and
+	// benchmath packages.
 	"golang.org/x/perf/benchstat"
 	"google.golang.org/api/drive/v3"
 	"google.golang.org/api/googleapi"

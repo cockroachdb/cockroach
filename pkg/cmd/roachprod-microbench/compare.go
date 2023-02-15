@@ -18,6 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/google"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	//lint:ignore SA1019 benchstat is deprecated; refactor to use benchproc and
+	// benchmath packages.
 	"golang.org/x/perf/benchstat"
 	"golang.org/x/perf/storage/benchfmt"
 )
