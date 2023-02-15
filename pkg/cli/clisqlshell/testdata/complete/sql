@@ -10,16 +10,16 @@ completions:
   "postgres" () -> "postgres" (0, 0)
   "system" () -> "system" (0, 0)
 - "functions":
+  "\"\"\"char\"\"\"(" ((from schema pg_catalog) Cast from UUID to "char") -> "\"\"\"char\"\"\"(" (0, 0)
+  "\"bit\"(" ((from schema pg_catalog) Cast from BIT to BIT) -> "\"bit\"(" (0, 0)
+  "\"box2d\"(" ((from schema pg_catalog) Cast from GEOMETRY to BOX2D) -> "\"box2d\"(" (0, 0)
+  "\"char\"(" ((from schema pg_catalog) Cast from UUID to CHAR) -> "\"char\"(" (0, 0)
   "\"current_date\"(" ((from schema pg_catalog) Returns the date of the current transaction) -> "\"current_date\"(" (0, 0)
   "\"current_schema\"(" ((from schema pg_catalog) Returns the current schema) -> "\"current_schema\"(" (0, 0)
   "\"current_time\"(" ((from schema pg_catalog) Returns the current transaction's time with time zone) -> "\"current_time\"(" (0, 0)
   "\"current_timestamp\"(" ((from schema pg_catalog) Returns the time of the current transaction) -> "\"current_timestamp\"(" (0, 0)
   "\"current_user\"(" ((from schema pg_catalog) Returns the current user) -> "\"current_user\"(" (0, 0)
-  "\"extract\"(" ((from schema pg_catalog) Extracts `element` from `input`) -> "\"extract\"(" (0, 0)
-  "\"extract_duration\"(" ((from schema pg_catalog) Extracts `element` from `input`) -> "\"extract_duration\"(" (0, 0)
-  "\"family\"(" ((from schema pg_catalog) Extracts the IP family of the value; 4 for IPv4, 6 for IPv6) -> "\"family\"(" (0, 0)
-  "\"greatest\"(" ((from schema pg_catalog) Returns the element with the greatest value) -> "\"greatest\"(" (0, 0)
-  "\"least\"(" ((from schema pg_catalog) Returns the element with the lowest value) -> "\"least\"(" (0, 0)
+  "\"decimal\"(" ((from schema pg_catalog) Cast from INTERVAL to DECIMAL) -> "\"decimal\"(" (0, 0)
   ... entries omitted ...
 - "keyword":
   "ABORT" (unreserved) -> "ABORT" (0, 0)

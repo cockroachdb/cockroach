@@ -358,6 +358,583 @@
 </span></td><td>Immutable</td></tr></tbody>
 </table>
 
+### Cast functions
+
+<table>
+<thead><tr><th>Function &rarr; Returns</th><th>Description</th><th>Volatility</th></tr></thead>
+<tbody>
+<tr><td><a name="bit"></a><code>bit(bit: bit) &rarr; bit</code></td><td><span class="funcdesc"><p>Cast from BIT to BIT.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bit"></a><code>bit(int: <a href="int.html">int</a>) &rarr; bit</code></td><td><span class="funcdesc"><p>Cast from INT8 to BIT.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bit"></a><code>bit(string: <a href="string.html">string</a>) &rarr; bit</code></td><td><span class="funcdesc"><p>Cast from STRING to BIT.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bool"></a><code>bool(bool: <a href="bool.html">bool</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Cast from BOOL to BOOL.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bool"></a><code>bool(decimal: <a href="decimal.html">decimal</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Cast from DECIMAL to BOOL.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bool"></a><code>bool(float: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Cast from FLOAT8 to BOOL.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bool"></a><code>bool(int: <a href="int.html">int</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Cast from INT8 to BOOL.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bool"></a><code>bool(jsonb: jsonb) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Cast from JSONB to BOOL.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bool"></a><code>bool(string: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Cast from STRING to BOOL.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="box2d"></a><code>box2d(box2d: box2d) &rarr; box2d</code></td><td><span class="funcdesc"><p>Cast from BOX2D to BOX2D.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="box2d"></a><code>box2d(geometry: geometry) &rarr; box2d</code></td><td><span class="funcdesc"><p>Cast from GEOMETRY to BOX2D.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="box2d"></a><code>box2d(string: <a href="string.html">string</a>) &rarr; box2d</code></td><td><span class="funcdesc"><p>Cast from STRING to BOX2D.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bpchar"></a><code>bpchar(bit: bit) &rarr; char</code></td><td><span class="funcdesc"><p>Cast from BIT to CHAR.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bpchar"></a><code>bpchar(bool: <a href="bool.html">bool</a>) &rarr; char</code></td><td><span class="funcdesc"><p>Cast from BOOL to CHAR.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bpchar"></a><code>bpchar(box2d: box2d) &rarr; char</code></td><td><span class="funcdesc"><p>Cast from BOX2D to CHAR.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bpchar"></a><code>bpchar(bytes: <a href="bytes.html">bytes</a>) &rarr; char</code></td><td><span class="funcdesc"><p>Cast from BYTES to CHAR.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="bpchar"></a><code>bpchar(date: <a href="date.html">date</a>) &rarr; char</code></td><td><span class="funcdesc"><p>Cast from DATE to CHAR.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="bpchar"></a><code>bpchar(decimal: <a href="decimal.html">decimal</a>) &rarr; char</code></td><td><span class="funcdesc"><p>Cast from DECIMAL to CHAR.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bpchar"></a><code>bpchar(float: <a href="float.html">float</a>) &rarr; char</code></td><td><span class="funcdesc"><p>Cast from FLOAT8 to CHAR.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="bpchar"></a><code>bpchar(geography: geography) &rarr; char</code></td><td><span class="funcdesc"><p>Cast from GEOGRAPHY to CHAR.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bpchar"></a><code>bpchar(geometry: geometry) &rarr; char</code></td><td><span class="funcdesc"><p>Cast from GEOMETRY to CHAR.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bpchar"></a><code>bpchar(inet: <a href="inet.html">inet</a>) &rarr; char</code></td><td><span class="funcdesc"><p>Cast from INET to CHAR.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bpchar"></a><code>bpchar(int: <a href="int.html">int</a>) &rarr; char</code></td><td><span class="funcdesc"><p>Cast from INT8 to CHAR.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bpchar"></a><code>bpchar(interval: <a href="interval.html">interval</a>) &rarr; char</code></td><td><span class="funcdesc"><p>Cast from INTERVAL to CHAR.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="bpchar"></a><code>bpchar(jsonb: jsonb) &rarr; char</code></td><td><span class="funcdesc"><p>Cast from JSONB to CHAR.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bpchar"></a><code>bpchar(oid: oid) &rarr; char</code></td><td><span class="funcdesc"><p>Cast from OID to CHAR.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bpchar"></a><code>bpchar(string: <a href="string.html">string</a>) &rarr; char</code></td><td><span class="funcdesc"><p>Cast from STRING to CHAR.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bpchar"></a><code>bpchar(time: <a href="time.html">time</a>) &rarr; char</code></td><td><span class="funcdesc"><p>Cast from TIME to CHAR.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bpchar"></a><code>bpchar(timestamp: <a href="timestamp.html">timestamp</a>) &rarr; char</code></td><td><span class="funcdesc"><p>Cast from TIMESTAMP to CHAR.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="bpchar"></a><code>bpchar(timestamptz: <a href="timestamp.html">timestamptz</a>) &rarr; char</code></td><td><span class="funcdesc"><p>Cast from TIMESTAMPTZ to CHAR.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="bpchar"></a><code>bpchar(timetz: timetz) &rarr; char</code></td><td><span class="funcdesc"><p>Cast from TIMETZ to CHAR.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bpchar"></a><code>bpchar(tsquery: tsquery) &rarr; char</code></td><td><span class="funcdesc"><p>Cast from TSQUERY to CHAR.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bpchar"></a><code>bpchar(tsvector: tsvector) &rarr; char</code></td><td><span class="funcdesc"><p>Cast from TSVECTOR to CHAR.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bpchar"></a><code>bpchar(tuple: tuple) &rarr; char</code></td><td><span class="funcdesc"><p>Cast from RECORD to CHAR.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="bpchar"></a><code>bpchar(uuid: <a href="uuid.html">uuid</a>) &rarr; char</code></td><td><span class="funcdesc"><p>Cast from UUID to CHAR.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bpchar"></a><code>bpchar(void: void) &rarr; char</code></td><td><span class="funcdesc"><p>Cast from VOID to CHAR.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bytes"></a><code>bytes(bytes: <a href="bytes.html">bytes</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Cast from BYTES to BYTES.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bytes"></a><code>bytes(geography: geography) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Cast from GEOGRAPHY to BYTES.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bytes"></a><code>bytes(geometry: geometry) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Cast from GEOMETRY to BYTES.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bytes"></a><code>bytes(string: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Cast from STRING to BYTES.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bytes"></a><code>bytes(uuid: <a href="uuid.html">uuid</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Cast from UUID to BYTES.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="char"></a><code>char(bit: bit) &rarr; "char"</code></td><td><span class="funcdesc"><p>Cast from BIT to “char”.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="char"></a><code>char(bool: <a href="bool.html">bool</a>) &rarr; "char"</code></td><td><span class="funcdesc"><p>Cast from BOOL to “char”.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="char"></a><code>char(box2d: box2d) &rarr; "char"</code></td><td><span class="funcdesc"><p>Cast from BOX2D to “char”.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="char"></a><code>char(bytes: <a href="bytes.html">bytes</a>) &rarr; "char"</code></td><td><span class="funcdesc"><p>Cast from BYTES to “char”.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="char"></a><code>char(date: <a href="date.html">date</a>) &rarr; "char"</code></td><td><span class="funcdesc"><p>Cast from DATE to “char”.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="char"></a><code>char(decimal: <a href="decimal.html">decimal</a>) &rarr; "char"</code></td><td><span class="funcdesc"><p>Cast from DECIMAL to “char”.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="char"></a><code>char(float: <a href="float.html">float</a>) &rarr; "char"</code></td><td><span class="funcdesc"><p>Cast from FLOAT8 to “char”.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="char"></a><code>char(geography: geography) &rarr; "char"</code></td><td><span class="funcdesc"><p>Cast from GEOGRAPHY to “char”.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="char"></a><code>char(geometry: geometry) &rarr; "char"</code></td><td><span class="funcdesc"><p>Cast from GEOMETRY to “char”.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="char"></a><code>char(inet: <a href="inet.html">inet</a>) &rarr; "char"</code></td><td><span class="funcdesc"><p>Cast from INET to “char”.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="char"></a><code>char(int: <a href="int.html">int</a>) &rarr; "char"</code></td><td><span class="funcdesc"><p>Cast from INT8 to “char”.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="char"></a><code>char(interval: <a href="interval.html">interval</a>) &rarr; "char"</code></td><td><span class="funcdesc"><p>Cast from INTERVAL to “char”.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="char"></a><code>char(jsonb: jsonb) &rarr; "char"</code></td><td><span class="funcdesc"><p>Cast from JSONB to “char”.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="char"></a><code>char(oid: oid) &rarr; "char"</code></td><td><span class="funcdesc"><p>Cast from OID to “char”.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="char"></a><code>char(string: <a href="string.html">string</a>) &rarr; "char"</code></td><td><span class="funcdesc"><p>Cast from STRING to “char”.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="char"></a><code>char(time: <a href="time.html">time</a>) &rarr; "char"</code></td><td><span class="funcdesc"><p>Cast from TIME to “char”.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="char"></a><code>char(timestamp: <a href="timestamp.html">timestamp</a>) &rarr; "char"</code></td><td><span class="funcdesc"><p>Cast from TIMESTAMP to “char”.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="char"></a><code>char(timestamptz: <a href="timestamp.html">timestamptz</a>) &rarr; "char"</code></td><td><span class="funcdesc"><p>Cast from TIMESTAMPTZ to “char”.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="char"></a><code>char(timetz: timetz) &rarr; "char"</code></td><td><span class="funcdesc"><p>Cast from TIMETZ to “char”.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="char"></a><code>char(tsquery: tsquery) &rarr; "char"</code></td><td><span class="funcdesc"><p>Cast from TSQUERY to “char”.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="char"></a><code>char(tsvector: tsvector) &rarr; "char"</code></td><td><span class="funcdesc"><p>Cast from TSVECTOR to “char”.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="char"></a><code>char(tuple: tuple) &rarr; "char"</code></td><td><span class="funcdesc"><p>Cast from RECORD to “char”.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="char"></a><code>char(uuid: <a href="uuid.html">uuid</a>) &rarr; "char"</code></td><td><span class="funcdesc"><p>Cast from UUID to “char”.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="char"></a><code>char(void: void) &rarr; "char"</code></td><td><span class="funcdesc"><p>Cast from VOID to “char”.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="date"></a><code>date(date: <a href="date.html">date</a>) &rarr; <a href="date.html">date</a></code></td><td><span class="funcdesc"><p>Cast from DATE to DATE.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="date"></a><code>date(int: <a href="int.html">int</a>) &rarr; <a href="date.html">date</a></code></td><td><span class="funcdesc"><p>Cast from INT8 to DATE.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="date"></a><code>date(string: <a href="string.html">string</a>) &rarr; <a href="date.html">date</a></code></td><td><span class="funcdesc"><p>Cast from STRING to DATE.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="date"></a><code>date(timestamp: <a href="timestamp.html">timestamp</a>) &rarr; <a href="date.html">date</a></code></td><td><span class="funcdesc"><p>Cast from TIMESTAMP to DATE.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="date"></a><code>date(timestamptz: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="date.html">date</a></code></td><td><span class="funcdesc"><p>Cast from TIMESTAMPTZ to DATE.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="float4"></a><code>float4(bool: <a href="bool.html">bool</a>) &rarr; float4</code></td><td><span class="funcdesc"><p>Cast from BOOL to FLOAT4.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="float4"></a><code>float4(date: <a href="date.html">date</a>) &rarr; float4</code></td><td><span class="funcdesc"><p>Cast from DATE to FLOAT4.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="float4"></a><code>float4(decimal: <a href="decimal.html">decimal</a>) &rarr; float4</code></td><td><span class="funcdesc"><p>Cast from DECIMAL to FLOAT4.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="float4"></a><code>float4(float: <a href="float.html">float</a>) &rarr; float4</code></td><td><span class="funcdesc"><p>Cast from FLOAT8 to FLOAT4.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="float4"></a><code>float4(int: <a href="int.html">int</a>) &rarr; float4</code></td><td><span class="funcdesc"><p>Cast from INT8 to FLOAT4.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="float4"></a><code>float4(interval: <a href="interval.html">interval</a>) &rarr; float4</code></td><td><span class="funcdesc"><p>Cast from INTERVAL to FLOAT4.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="float4"></a><code>float4(jsonb: jsonb) &rarr; float4</code></td><td><span class="funcdesc"><p>Cast from JSONB to FLOAT4.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="float4"></a><code>float4(string: <a href="string.html">string</a>) &rarr; float4</code></td><td><span class="funcdesc"><p>Cast from STRING to FLOAT4.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="float4"></a><code>float4(timestamp: <a href="timestamp.html">timestamp</a>) &rarr; float4</code></td><td><span class="funcdesc"><p>Cast from TIMESTAMP to FLOAT4.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="float4"></a><code>float4(timestamptz: <a href="timestamp.html">timestamptz</a>) &rarr; float4</code></td><td><span class="funcdesc"><p>Cast from TIMESTAMPTZ to FLOAT4.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="float8"></a><code>float8(bool: <a href="bool.html">bool</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Cast from BOOL to FLOAT8.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="float8"></a><code>float8(date: <a href="date.html">date</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Cast from DATE to FLOAT8.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="float8"></a><code>float8(decimal: <a href="decimal.html">decimal</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Cast from DECIMAL to FLOAT8.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="float8"></a><code>float8(float: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Cast from FLOAT8 to FLOAT8.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="float8"></a><code>float8(int: <a href="int.html">int</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Cast from INT8 to FLOAT8.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="float8"></a><code>float8(interval: <a href="interval.html">interval</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Cast from INTERVAL to FLOAT8.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="float8"></a><code>float8(jsonb: jsonb) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Cast from JSONB to FLOAT8.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="float8"></a><code>float8(string: <a href="string.html">string</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Cast from STRING to FLOAT8.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="float8"></a><code>float8(timestamp: <a href="timestamp.html">timestamp</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Cast from TIMESTAMP to FLOAT8.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="float8"></a><code>float8(timestamptz: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Cast from TIMESTAMPTZ to FLOAT8.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="geography"></a><code>geography(bytes: <a href="bytes.html">bytes</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Cast from BYTES to GEOGRAPHY.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="geography"></a><code>geography(geography: geography) &rarr; geography</code></td><td><span class="funcdesc"><p>Cast from GEOGRAPHY to GEOGRAPHY.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="geography"></a><code>geography(geometry: geometry) &rarr; geography</code></td><td><span class="funcdesc"><p>Cast from GEOMETRY to GEOGRAPHY.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="geography"></a><code>geography(jsonb: jsonb) &rarr; geography</code></td><td><span class="funcdesc"><p>Cast from JSONB to GEOGRAPHY.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="geography"></a><code>geography(string: <a href="string.html">string</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Cast from STRING to GEOGRAPHY.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="geometry"></a><code>geometry(box2d: box2d) &rarr; geometry</code></td><td><span class="funcdesc"><p>Cast from BOX2D to GEOMETRY.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="geometry"></a><code>geometry(bytes: <a href="bytes.html">bytes</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Cast from BYTES to GEOMETRY.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="geometry"></a><code>geometry(geography: geography) &rarr; geometry</code></td><td><span class="funcdesc"><p>Cast from GEOGRAPHY to GEOMETRY.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="geometry"></a><code>geometry(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Cast from GEOMETRY to GEOMETRY.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="geometry"></a><code>geometry(jsonb: jsonb) &rarr; geometry</code></td><td><span class="funcdesc"><p>Cast from JSONB to GEOMETRY.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="geometry"></a><code>geometry(string: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Cast from STRING to GEOMETRY.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="inet"></a><code>inet(inet: <a href="inet.html">inet</a>) &rarr; <a href="inet.html">inet</a></code></td><td><span class="funcdesc"><p>Cast from INET to INET.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="inet"></a><code>inet(string: <a href="string.html">string</a>) &rarr; <a href="inet.html">inet</a></code></td><td><span class="funcdesc"><p>Cast from STRING to INET.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="int2"></a><code>int2(bit: bit) &rarr; int2</code></td><td><span class="funcdesc"><p>Cast from BIT to INT2.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="int2"></a><code>int2(bool: <a href="bool.html">bool</a>) &rarr; int2</code></td><td><span class="funcdesc"><p>Cast from BOOL to INT2.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="int2"></a><code>int2(date: <a href="date.html">date</a>) &rarr; int2</code></td><td><span class="funcdesc"><p>Cast from DATE to INT2.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="int2"></a><code>int2(decimal: <a href="decimal.html">decimal</a>) &rarr; int2</code></td><td><span class="funcdesc"><p>Cast from DECIMAL to INT2.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="int2"></a><code>int2(float: <a href="float.html">float</a>) &rarr; int2</code></td><td><span class="funcdesc"><p>Cast from FLOAT8 to INT2.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="int2"></a><code>int2(int: <a href="int.html">int</a>) &rarr; int2</code></td><td><span class="funcdesc"><p>Cast from INT8 to INT2.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="int2"></a><code>int2(interval: <a href="interval.html">interval</a>) &rarr; int2</code></td><td><span class="funcdesc"><p>Cast from INTERVAL to INT2.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="int2"></a><code>int2(jsonb: jsonb) &rarr; int2</code></td><td><span class="funcdesc"><p>Cast from JSONB to INT2.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="int2"></a><code>int2(oid: oid) &rarr; int2</code></td><td><span class="funcdesc"><p>Cast from OID to INT2.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="int2"></a><code>int2(string: <a href="string.html">string</a>) &rarr; int2</code></td><td><span class="funcdesc"><p>Cast from STRING to INT2.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="int2"></a><code>int2(timestamp: <a href="timestamp.html">timestamp</a>) &rarr; int2</code></td><td><span class="funcdesc"><p>Cast from TIMESTAMP to INT2.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="int2"></a><code>int2(timestamptz: <a href="timestamp.html">timestamptz</a>) &rarr; int2</code></td><td><span class="funcdesc"><p>Cast from TIMESTAMPTZ to INT2.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="int4"></a><code>int4(bit: bit) &rarr; int4</code></td><td><span class="funcdesc"><p>Cast from BIT to INT4.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="int4"></a><code>int4(bool: <a href="bool.html">bool</a>) &rarr; int4</code></td><td><span class="funcdesc"><p>Cast from BOOL to INT4.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="int4"></a><code>int4(date: <a href="date.html">date</a>) &rarr; int4</code></td><td><span class="funcdesc"><p>Cast from DATE to INT4.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="int4"></a><code>int4(decimal: <a href="decimal.html">decimal</a>) &rarr; int4</code></td><td><span class="funcdesc"><p>Cast from DECIMAL to INT4.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="int4"></a><code>int4(float: <a href="float.html">float</a>) &rarr; int4</code></td><td><span class="funcdesc"><p>Cast from FLOAT8 to INT4.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="int4"></a><code>int4(int: <a href="int.html">int</a>) &rarr; int4</code></td><td><span class="funcdesc"><p>Cast from INT8 to INT4.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="int4"></a><code>int4(interval: <a href="interval.html">interval</a>) &rarr; int4</code></td><td><span class="funcdesc"><p>Cast from INTERVAL to INT4.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="int4"></a><code>int4(jsonb: jsonb) &rarr; int4</code></td><td><span class="funcdesc"><p>Cast from JSONB to INT4.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="int4"></a><code>int4(oid: oid) &rarr; int4</code></td><td><span class="funcdesc"><p>Cast from OID to INT4.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="int4"></a><code>int4(string: <a href="string.html">string</a>) &rarr; int4</code></td><td><span class="funcdesc"><p>Cast from STRING to INT4.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="int4"></a><code>int4(timestamp: <a href="timestamp.html">timestamp</a>) &rarr; int4</code></td><td><span class="funcdesc"><p>Cast from TIMESTAMP to INT4.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="int4"></a><code>int4(timestamptz: <a href="timestamp.html">timestamptz</a>) &rarr; int4</code></td><td><span class="funcdesc"><p>Cast from TIMESTAMPTZ to INT4.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="int8"></a><code>int8(bit: bit) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Cast from BIT to INT8.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="int8"></a><code>int8(bool: <a href="bool.html">bool</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Cast from BOOL to INT8.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="int8"></a><code>int8(date: <a href="date.html">date</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Cast from DATE to INT8.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="int8"></a><code>int8(decimal: <a href="decimal.html">decimal</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Cast from DECIMAL to INT8.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="int8"></a><code>int8(float: <a href="float.html">float</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Cast from FLOAT8 to INT8.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="int8"></a><code>int8(int: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Cast from INT8 to INT8.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="int8"></a><code>int8(interval: <a href="interval.html">interval</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Cast from INTERVAL to INT8.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="int8"></a><code>int8(jsonb: jsonb) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Cast from JSONB to INT8.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="int8"></a><code>int8(oid: oid) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Cast from OID to INT8.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="int8"></a><code>int8(string: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Cast from STRING to INT8.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="int8"></a><code>int8(timestamp: <a href="timestamp.html">timestamp</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Cast from TIMESTAMP to INT8.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="int8"></a><code>int8(timestamptz: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Cast from TIMESTAMPTZ to INT8.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="interval"></a><code>interval(decimal: <a href="decimal.html">decimal</a>) &rarr; <a href="interval.html">interval</a></code></td><td><span class="funcdesc"><p>Cast from DECIMAL to INTERVAL.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="interval"></a><code>interval(float: <a href="float.html">float</a>) &rarr; <a href="interval.html">interval</a></code></td><td><span class="funcdesc"><p>Cast from FLOAT8 to INTERVAL.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="interval"></a><code>interval(int: <a href="int.html">int</a>) &rarr; <a href="interval.html">interval</a></code></td><td><span class="funcdesc"><p>Cast from INT8 to INTERVAL.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="interval"></a><code>interval(interval: <a href="interval.html">interval</a>) &rarr; <a href="interval.html">interval</a></code></td><td><span class="funcdesc"><p>Cast from INTERVAL to INTERVAL.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="interval"></a><code>interval(string: <a href="string.html">string</a>) &rarr; <a href="interval.html">interval</a></code></td><td><span class="funcdesc"><p>Cast from STRING to INTERVAL.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="interval"></a><code>interval(time: <a href="time.html">time</a>) &rarr; <a href="interval.html">interval</a></code></td><td><span class="funcdesc"><p>Cast from TIME to INTERVAL.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="jsonb"></a><code>jsonb(geography: geography) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Cast from GEOGRAPHY to JSONB.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="jsonb"></a><code>jsonb(geometry: geometry) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Cast from GEOMETRY to JSONB.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="jsonb"></a><code>jsonb(jsonb: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Cast from JSONB to JSONB.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="jsonb"></a><code>jsonb(string: <a href="string.html">string</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Cast from STRING to JSONB.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="name"></a><code>name(bit: bit) &rarr; name</code></td><td><span class="funcdesc"><p>Cast from BIT to NAME.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="name"></a><code>name(bool: <a href="bool.html">bool</a>) &rarr; name</code></td><td><span class="funcdesc"><p>Cast from BOOL to NAME.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="name"></a><code>name(box2d: box2d) &rarr; name</code></td><td><span class="funcdesc"><p>Cast from BOX2D to NAME.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="name"></a><code>name(bytes: <a href="bytes.html">bytes</a>) &rarr; name</code></td><td><span class="funcdesc"><p>Cast from BYTES to NAME.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="name"></a><code>name(date: <a href="date.html">date</a>) &rarr; name</code></td><td><span class="funcdesc"><p>Cast from DATE to NAME.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="name"></a><code>name(decimal: <a href="decimal.html">decimal</a>) &rarr; name</code></td><td><span class="funcdesc"><p>Cast from DECIMAL to NAME.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="name"></a><code>name(float: <a href="float.html">float</a>) &rarr; name</code></td><td><span class="funcdesc"><p>Cast from FLOAT8 to NAME.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="name"></a><code>name(geography: geography) &rarr; name</code></td><td><span class="funcdesc"><p>Cast from GEOGRAPHY to NAME.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="name"></a><code>name(geometry: geometry) &rarr; name</code></td><td><span class="funcdesc"><p>Cast from GEOMETRY to NAME.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="name"></a><code>name(inet: <a href="inet.html">inet</a>) &rarr; name</code></td><td><span class="funcdesc"><p>Cast from INET to NAME.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="name"></a><code>name(int: <a href="int.html">int</a>) &rarr; name</code></td><td><span class="funcdesc"><p>Cast from INT8 to NAME.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="name"></a><code>name(interval: <a href="interval.html">interval</a>) &rarr; name</code></td><td><span class="funcdesc"><p>Cast from INTERVAL to NAME.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="name"></a><code>name(jsonb: jsonb) &rarr; name</code></td><td><span class="funcdesc"><p>Cast from JSONB to NAME.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="name"></a><code>name(oid: oid) &rarr; name</code></td><td><span class="funcdesc"><p>Cast from OID to NAME.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="name"></a><code>name(string: <a href="string.html">string</a>) &rarr; name</code></td><td><span class="funcdesc"><p>Cast from STRING to NAME.</p>
+</span></td><td>Leakproof</td></tr>
+<tr><td><a name="name"></a><code>name(time: <a href="time.html">time</a>) &rarr; name</code></td><td><span class="funcdesc"><p>Cast from TIME to NAME.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="name"></a><code>name(timestamp: <a href="timestamp.html">timestamp</a>) &rarr; name</code></td><td><span class="funcdesc"><p>Cast from TIMESTAMP to NAME.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="name"></a><code>name(timestamptz: <a href="timestamp.html">timestamptz</a>) &rarr; name</code></td><td><span class="funcdesc"><p>Cast from TIMESTAMPTZ to NAME.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="name"></a><code>name(timetz: timetz) &rarr; name</code></td><td><span class="funcdesc"><p>Cast from TIMETZ to NAME.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="name"></a><code>name(tsquery: tsquery) &rarr; name</code></td><td><span class="funcdesc"><p>Cast from TSQUERY to NAME.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="name"></a><code>name(tsvector: tsvector) &rarr; name</code></td><td><span class="funcdesc"><p>Cast from TSVECTOR to NAME.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="name"></a><code>name(tuple: tuple) &rarr; name</code></td><td><span class="funcdesc"><p>Cast from RECORD to NAME.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="name"></a><code>name(uuid: <a href="uuid.html">uuid</a>) &rarr; name</code></td><td><span class="funcdesc"><p>Cast from UUID to NAME.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="name"></a><code>name(void: void) &rarr; name</code></td><td><span class="funcdesc"><p>Cast from VOID to NAME.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="numeric"></a><code>numeric(bool: <a href="bool.html">bool</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Cast from BOOL to DECIMAL.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="numeric"></a><code>numeric(date: <a href="date.html">date</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Cast from DATE to DECIMAL.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="numeric"></a><code>numeric(decimal: <a href="decimal.html">decimal</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Cast from DECIMAL to DECIMAL.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="numeric"></a><code>numeric(float: <a href="float.html">float</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Cast from FLOAT8 to DECIMAL.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="numeric"></a><code>numeric(int: <a href="int.html">int</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Cast from INT8 to DECIMAL.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="numeric"></a><code>numeric(interval: <a href="interval.html">interval</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Cast from INTERVAL to DECIMAL.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="numeric"></a><code>numeric(jsonb: jsonb) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Cast from JSONB to DECIMAL.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="numeric"></a><code>numeric(string: <a href="string.html">string</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Cast from STRING to DECIMAL.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="numeric"></a><code>numeric(timestamp: <a href="timestamp.html">timestamp</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Cast from TIMESTAMP to DECIMAL.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="numeric"></a><code>numeric(timestamptz: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Cast from TIMESTAMPTZ to DECIMAL.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="oid"></a><code>oid(int: <a href="int.html">int</a>) &rarr; oid</code></td><td><span class="funcdesc"><p>Cast from INT8 to OID.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="oid"></a><code>oid(oid: oid) &rarr; oid</code></td><td><span class="funcdesc"><p>Cast from OID to OID.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="oid"></a><code>oid(string: <a href="string.html">string</a>) &rarr; oid</code></td><td><span class="funcdesc"><p>Cast from STRING to OID.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="record"></a><code>record(string: <a href="string.html">string</a>) &rarr; tuple</code></td><td><span class="funcdesc"><p>Cast from STRING to RECORD.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="record"></a><code>record(tuple: tuple) &rarr; tuple</code></td><td><span class="funcdesc"><p>Cast from RECORD to RECORD.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="regclass"></a><code>regclass(int: <a href="int.html">int</a>) &rarr; regclass</code></td><td><span class="funcdesc"><p>Cast from INT8 to REGCLASS.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="regclass"></a><code>regclass(oid: oid) &rarr; regclass</code></td><td><span class="funcdesc"><p>Cast from OID to REGCLASS.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="regclass"></a><code>regclass(string: <a href="string.html">string</a>) &rarr; regclass</code></td><td><span class="funcdesc"><p>Cast from STRING to REGCLASS.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="regnamespace"></a><code>regnamespace(int: <a href="int.html">int</a>) &rarr; regnamespace</code></td><td><span class="funcdesc"><p>Cast from INT8 to REGNAMESPACE.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="regnamespace"></a><code>regnamespace(oid: oid) &rarr; regnamespace</code></td><td><span class="funcdesc"><p>Cast from OID to REGNAMESPACE.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="regnamespace"></a><code>regnamespace(string: <a href="string.html">string</a>) &rarr; regnamespace</code></td><td><span class="funcdesc"><p>Cast from STRING to REGNAMESPACE.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="regproc"></a><code>regproc(int: <a href="int.html">int</a>) &rarr; regproc</code></td><td><span class="funcdesc"><p>Cast from INT8 to REGPROC.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="regproc"></a><code>regproc(oid: oid) &rarr; regproc</code></td><td><span class="funcdesc"><p>Cast from OID to REGPROC.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="regproc"></a><code>regproc(string: <a href="string.html">string</a>) &rarr; regproc</code></td><td><span class="funcdesc"><p>Cast from STRING to REGPROC.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="regprocedure"></a><code>regprocedure(int: <a href="int.html">int</a>) &rarr; regprocedure</code></td><td><span class="funcdesc"><p>Cast from INT8 to REGPROCEDURE.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="regprocedure"></a><code>regprocedure(oid: oid) &rarr; regprocedure</code></td><td><span class="funcdesc"><p>Cast from OID to REGPROCEDURE.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="regprocedure"></a><code>regprocedure(string: <a href="string.html">string</a>) &rarr; regprocedure</code></td><td><span class="funcdesc"><p>Cast from STRING to REGPROCEDURE.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="regrole"></a><code>regrole(int: <a href="int.html">int</a>) &rarr; regrole</code></td><td><span class="funcdesc"><p>Cast from INT8 to REGROLE.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="regrole"></a><code>regrole(oid: oid) &rarr; regrole</code></td><td><span class="funcdesc"><p>Cast from OID to REGROLE.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="regrole"></a><code>regrole(string: <a href="string.html">string</a>) &rarr; regrole</code></td><td><span class="funcdesc"><p>Cast from STRING to REGROLE.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="regtype"></a><code>regtype(int: <a href="int.html">int</a>) &rarr; regtype</code></td><td><span class="funcdesc"><p>Cast from INT8 to REGTYPE.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="regtype"></a><code>regtype(oid: oid) &rarr; regtype</code></td><td><span class="funcdesc"><p>Cast from OID to REGTYPE.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="regtype"></a><code>regtype(string: <a href="string.html">string</a>) &rarr; regtype</code></td><td><span class="funcdesc"><p>Cast from STRING to REGTYPE.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="string"></a><code>string(bit: bit) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Cast from BIT to STRING.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="string"></a><code>string(bool: <a href="bool.html">bool</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Cast from BOOL to STRING.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="string"></a><code>string(box2d: box2d) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Cast from BOX2D to STRING.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="string"></a><code>string(bytes: <a href="bytes.html">bytes</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Cast from BYTES to STRING.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="string"></a><code>string(date: <a href="date.html">date</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Cast from DATE to STRING.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="string"></a><code>string(decimal: <a href="decimal.html">decimal</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Cast from DECIMAL to STRING.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="string"></a><code>string(float: <a href="float.html">float</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Cast from FLOAT8 to STRING.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="string"></a><code>string(geography: geography) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Cast from GEOGRAPHY to STRING.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="string"></a><code>string(geometry: geometry) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Cast from GEOMETRY to STRING.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="string"></a><code>string(inet: <a href="inet.html">inet</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Cast from INET to STRING.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="string"></a><code>string(int: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Cast from INT8 to STRING.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="string"></a><code>string(interval: <a href="interval.html">interval</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Cast from INTERVAL to STRING.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="string"></a><code>string(jsonb: jsonb) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Cast from JSONB to STRING.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="string"></a><code>string(oid: oid) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Cast from OID to STRING.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="string"></a><code>string(string: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Cast from STRING to STRING.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="string"></a><code>string(time: <a href="time.html">time</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Cast from TIME to STRING.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="string"></a><code>string(timestamp: <a href="timestamp.html">timestamp</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Cast from TIMESTAMP to STRING.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="string"></a><code>string(timestamptz: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Cast from TIMESTAMPTZ to STRING.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="string"></a><code>string(timetz: timetz) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Cast from TIMETZ to STRING.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="string"></a><code>string(tsquery: tsquery) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Cast from TSQUERY to STRING.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="string"></a><code>string(tsvector: tsvector) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Cast from TSVECTOR to STRING.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="string"></a><code>string(tuple: tuple) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Cast from RECORD to STRING.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="string"></a><code>string(uuid: <a href="uuid.html">uuid</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Cast from UUID to STRING.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="string"></a><code>string(void: void) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Cast from VOID to STRING.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="time"></a><code>time(interval: <a href="interval.html">interval</a>) &rarr; <a href="time.html">time</a></code></td><td><span class="funcdesc"><p>Cast from INTERVAL to TIME.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="time"></a><code>time(string: <a href="string.html">string</a>) &rarr; <a href="time.html">time</a></code></td><td><span class="funcdesc"><p>Cast from STRING to TIME.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="time"></a><code>time(time: <a href="time.html">time</a>) &rarr; <a href="time.html">time</a></code></td><td><span class="funcdesc"><p>Cast from TIME to TIME.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="time"></a><code>time(timestamp: <a href="timestamp.html">timestamp</a>) &rarr; <a href="time.html">time</a></code></td><td><span class="funcdesc"><p>Cast from TIMESTAMP to TIME.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="time"></a><code>time(timestamptz: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="time.html">time</a></code></td><td><span class="funcdesc"><p>Cast from TIMESTAMPTZ to TIME.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="time"></a><code>time(timetz: timetz) &rarr; <a href="time.html">time</a></code></td><td><span class="funcdesc"><p>Cast from TIMETZ to TIME.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="timestamp"></a><code>timestamp(date: <a href="date.html">date</a>) &rarr; <a href="timestamp.html">timestamp</a></code></td><td><span class="funcdesc"><p>Cast from DATE to TIMESTAMP.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="timestamp"></a><code>timestamp(int: <a href="int.html">int</a>) &rarr; <a href="timestamp.html">timestamp</a></code></td><td><span class="funcdesc"><p>Cast from INT8 to TIMESTAMP.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="timestamp"></a><code>timestamp(string: <a href="string.html">string</a>) &rarr; <a href="timestamp.html">timestamp</a></code></td><td><span class="funcdesc"><p>Cast from STRING to TIMESTAMP.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="timestamp"></a><code>timestamp(timestamp: <a href="timestamp.html">timestamp</a>) &rarr; <a href="timestamp.html">timestamp</a></code></td><td><span class="funcdesc"><p>Cast from TIMESTAMP to TIMESTAMP.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="timestamp"></a><code>timestamp(timestamptz: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="timestamp.html">timestamp</a></code></td><td><span class="funcdesc"><p>Cast from TIMESTAMPTZ to TIMESTAMP.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="timestamptz"></a><code>timestamptz(date: <a href="date.html">date</a>) &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Cast from DATE to TIMESTAMPTZ.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="timestamptz"></a><code>timestamptz(int: <a href="int.html">int</a>) &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Cast from INT8 to TIMESTAMPTZ.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="timestamptz"></a><code>timestamptz(string: <a href="string.html">string</a>) &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Cast from STRING to TIMESTAMPTZ.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="timestamptz"></a><code>timestamptz(timestamp: <a href="timestamp.html">timestamp</a>) &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Cast from TIMESTAMP to TIMESTAMPTZ.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="timestamptz"></a><code>timestamptz(timestamptz: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Cast from TIMESTAMPTZ to TIMESTAMPTZ.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="timetz"></a><code>timetz(string: <a href="string.html">string</a>) &rarr; timetz</code></td><td><span class="funcdesc"><p>Cast from STRING to TIMETZ.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="timetz"></a><code>timetz(time: <a href="time.html">time</a>) &rarr; timetz</code></td><td><span class="funcdesc"><p>Cast from TIME to TIMETZ.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="timetz"></a><code>timetz(timestamptz: <a href="timestamp.html">timestamptz</a>) &rarr; timetz</code></td><td><span class="funcdesc"><p>Cast from TIMESTAMPTZ to TIMETZ.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="timetz"></a><code>timetz(timetz: timetz) &rarr; timetz</code></td><td><span class="funcdesc"><p>Cast from TIMETZ to TIMETZ.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="tsquery"></a><code>tsquery(string: <a href="string.html">string</a>) &rarr; tsquery</code></td><td><span class="funcdesc"><p>Cast from STRING to TSQUERY.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="tsquery"></a><code>tsquery(tsquery: tsquery) &rarr; tsquery</code></td><td><span class="funcdesc"><p>Cast from TSQUERY to TSQUERY.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="tsvector"></a><code>tsvector(string: <a href="string.html">string</a>) &rarr; tsvector</code></td><td><span class="funcdesc"><p>Cast from STRING to TSVECTOR.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="tsvector"></a><code>tsvector(tsvector: tsvector) &rarr; tsvector</code></td><td><span class="funcdesc"><p>Cast from TSVECTOR to TSVECTOR.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="uuid"></a><code>uuid(bytes: <a href="bytes.html">bytes</a>) &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Cast from BYTES to UUID.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="uuid"></a><code>uuid(string: <a href="string.html">string</a>) &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Cast from STRING to UUID.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="uuid"></a><code>uuid(uuid: <a href="uuid.html">uuid</a>) &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Cast from UUID to UUID.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="varbit"></a><code>varbit(bit: bit) &rarr; varbit</code></td><td><span class="funcdesc"><p>Cast from BIT to VARBIT.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="varbit"></a><code>varbit(string: <a href="string.html">string</a>) &rarr; varbit</code></td><td><span class="funcdesc"><p>Cast from STRING to VARBIT.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="varchar"></a><code>varchar(bit: bit) &rarr; varchar</code></td><td><span class="funcdesc"><p>Cast from BIT to VARCHAR.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="varchar"></a><code>varchar(bool: <a href="bool.html">bool</a>) &rarr; varchar</code></td><td><span class="funcdesc"><p>Cast from BOOL to VARCHAR.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="varchar"></a><code>varchar(box2d: box2d) &rarr; varchar</code></td><td><span class="funcdesc"><p>Cast from BOX2D to VARCHAR.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="varchar"></a><code>varchar(bytes: <a href="bytes.html">bytes</a>) &rarr; varchar</code></td><td><span class="funcdesc"><p>Cast from BYTES to VARCHAR.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="varchar"></a><code>varchar(date: <a href="date.html">date</a>) &rarr; varchar</code></td><td><span class="funcdesc"><p>Cast from DATE to VARCHAR.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="varchar"></a><code>varchar(decimal: <a href="decimal.html">decimal</a>) &rarr; varchar</code></td><td><span class="funcdesc"><p>Cast from DECIMAL to VARCHAR.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="varchar"></a><code>varchar(float: <a href="float.html">float</a>) &rarr; varchar</code></td><td><span class="funcdesc"><p>Cast from FLOAT8 to VARCHAR.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="varchar"></a><code>varchar(geography: geography) &rarr; varchar</code></td><td><span class="funcdesc"><p>Cast from GEOGRAPHY to VARCHAR.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="varchar"></a><code>varchar(geometry: geometry) &rarr; varchar</code></td><td><span class="funcdesc"><p>Cast from GEOMETRY to VARCHAR.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="varchar"></a><code>varchar(inet: <a href="inet.html">inet</a>) &rarr; varchar</code></td><td><span class="funcdesc"><p>Cast from INET to VARCHAR.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="varchar"></a><code>varchar(int: <a href="int.html">int</a>) &rarr; varchar</code></td><td><span class="funcdesc"><p>Cast from INT8 to VARCHAR.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="varchar"></a><code>varchar(interval: <a href="interval.html">interval</a>) &rarr; varchar</code></td><td><span class="funcdesc"><p>Cast from INTERVAL to VARCHAR.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="varchar"></a><code>varchar(jsonb: jsonb) &rarr; varchar</code></td><td><span class="funcdesc"><p>Cast from JSONB to VARCHAR.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="varchar"></a><code>varchar(oid: oid) &rarr; varchar</code></td><td><span class="funcdesc"><p>Cast from OID to VARCHAR.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="varchar"></a><code>varchar(string: <a href="string.html">string</a>) &rarr; varchar</code></td><td><span class="funcdesc"><p>Cast from STRING to VARCHAR.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="varchar"></a><code>varchar(time: <a href="time.html">time</a>) &rarr; varchar</code></td><td><span class="funcdesc"><p>Cast from TIME to VARCHAR.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="varchar"></a><code>varchar(timestamp: <a href="timestamp.html">timestamp</a>) &rarr; varchar</code></td><td><span class="funcdesc"><p>Cast from TIMESTAMP to VARCHAR.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="varchar"></a><code>varchar(timestamptz: <a href="timestamp.html">timestamptz</a>) &rarr; varchar</code></td><td><span class="funcdesc"><p>Cast from TIMESTAMPTZ to VARCHAR.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="varchar"></a><code>varchar(timetz: timetz) &rarr; varchar</code></td><td><span class="funcdesc"><p>Cast from TIMETZ to VARCHAR.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="varchar"></a><code>varchar(tsquery: tsquery) &rarr; varchar</code></td><td><span class="funcdesc"><p>Cast from TSQUERY to VARCHAR.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="varchar"></a><code>varchar(tsvector: tsvector) &rarr; varchar</code></td><td><span class="funcdesc"><p>Cast from TSVECTOR to VARCHAR.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="varchar"></a><code>varchar(tuple: tuple) &rarr; varchar</code></td><td><span class="funcdesc"><p>Cast from RECORD to VARCHAR.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="varchar"></a><code>varchar(uuid: <a href="uuid.html">uuid</a>) &rarr; varchar</code></td><td><span class="funcdesc"><p>Cast from UUID to VARCHAR.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="varchar"></a><code>varchar(void: void) &rarr; varchar</code></td><td><span class="funcdesc"><p>Cast from VOID to VARCHAR.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="void"></a><code>void(string: <a href="string.html">string</a>) &rarr; void</code></td><td><span class="funcdesc"><p>Cast from STRING to VOID.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="void"></a><code>void(void: void) &rarr; void</code></td><td><span class="funcdesc"><p>Cast from VOID to VOID.</p>
+</span></td><td>Immutable</td></tr></tbody>
+</table>
+
 ### Comparison functions
 
 <table>
@@ -2767,8 +3344,6 @@ The output can be used to recreate a database.’</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="get_byte"></a><code>get_byte(byte_string: <a href="bytes.html">bytes</a>, index: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Extracts a byte at the given index in the byte array.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="inet"></a><code>inet(val: <a href="string.html">string</a>) &rarr; <a href="inet.html">inet</a></code></td><td><span class="funcdesc"><p>If possible, converts input to that of type inet.</p>
-</span></td><td>Immutable</td></tr>
 <tr><td><a name="initcap"></a><code>initcap(val: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Capitalizes the first letter of <code>val</code>.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="left"></a><code>left(input: <a href="bytes.html">bytes</a>, return_set: <a href="int.html">int</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Returns the first <code>return_set</code> bytes from <code>input</code>.</p>
@@ -3520,8 +4095,6 @@ table. Returns an error if validation fails.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="obj_description"></a><code>obj_description(object_oid: oid, catalog_name: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the comment for a database object specified by its OID and the name of the containing system catalog. For example, obj_description(123456, ‘pg_class’) would retrieve the comment for the table with OID 123456.</p>
 </span></td><td>Stable</td></tr>
-<tr><td><a name="oid"></a><code>oid(int: <a href="int.html">int</a>) &rarr; oid</code></td><td><span class="funcdesc"><p>Converts an integer to an OID.</p>
-</span></td><td>Immutable</td></tr>
 <tr><td><a name="pg_backend_pid"></a><code>pg_backend_pid() &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns a numerical ID attached to this session. This ID is part of the query cancellation key used by the wire protocol. This function was only added for compatibility, and unlike in Postgres, the returned value does not correspond to a real process ID.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="pg_collation_for"></a><code>pg_collation_for(str: anyelement) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the collation of the argument</p>
