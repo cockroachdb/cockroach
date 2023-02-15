@@ -64,6 +64,12 @@ func NewTracker(interval time.Duration, listeners ...StoreMetricsListener) *Trac
 	}
 }
 
+// Register registers StoreMetricsListener's against the tracker. Subsequent
+// calls to Tick will also udpate the listeners if new metrics are available.
+func (mt *Tracker) Register(listeners ...StoreMetricsListener) {
+	mt.storeListeners = append(mt.storeListeners, listeners...)
+}
+
 // Tick updates all listeners attached to the metrics tracker with the state at
 // the tick given.
 func (mt *Tracker) Tick(ctx context.Context, tick time.Time, s state.State) {

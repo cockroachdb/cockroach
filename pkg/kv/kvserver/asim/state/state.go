@@ -271,7 +271,7 @@ func (m *ManualSimClock) Set(tsNanos int64) {
 type Key int64
 
 // MinKey is the minimum key in the keyspace.
-const MinKey Key = -1
+const MinKey Key = 0
 
 // MaxKey is the maximum key in the keyspace.
 const MaxKey Key = 9999999999
