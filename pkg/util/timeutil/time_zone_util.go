@@ -32,7 +32,8 @@ var timezoneOffsetRegex = regexp.MustCompile(`(?i)^(GMT|UTC)?([+-])?(\d{1,3}(:[0
 // FixedTimeZoneOffsetToLocation creates a time.Location with an offset and a
 // time zone string.
 func FixedTimeZoneOffsetToLocation(offset int, origRepr string) *time.Location {
-	return time.FixedZone(origRepr, offset)
+	// The offset name always should be normalized to upper-case for UTC/GMT.
+	return time.FixedZone(strings.ToUpper(origRepr), offset)
 }
 
 // TimeZoneOffsetToLocation takes an offset and name that can be marshaled by

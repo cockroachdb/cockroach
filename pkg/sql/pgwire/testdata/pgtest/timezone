@@ -2,10 +2,11 @@ send
 Query {"String": "SET TIME ZONE \"UTC\""}
 ----
 
-until
+# Ignore parameter status since it's only sent if the value changed, and the
+# starting value is not deterministic.
+until ignore=ParameterStatus
 ReadyForQuery
 ----
-{"Type":"ParameterStatus","Name":"TimeZone","Value":"UTC"}
 {"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
@@ -52,8 +53,8 @@ Query {"String": "SET TIME ZONE \"America/Chicago\""}
 until
 ReadyForQuery
 ----
-{"Type":"ParameterStatus","Name":"TimeZone","Value":"America/Chicago"}
 {"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ParameterStatus","Name":"TimeZone","Value":"America/Chicago"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 send
@@ -65,5 +66,86 @@ ReadyForQuery
 ----
 {"Type":"RowDescription","Fields":[{"Name":"timestamptz","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":1184,"DataTypeSize":0,"TypeModifier":-1,"Format":0}]}
 {"Type":"DataRow","Values":[{"text":"1882-05-23 00:00:24-05:50:36"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "drop table if exists testtimezone;"}
+----
+
+until ignore=NoticeResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "set timezone = 'gmt-3';"}
+Query {"String": "create table testtimezone (seq int4, tstz timestamp with time zone, ts timestamp without time zone, t time without time zone, tz time with time zone, d date);"}
+----
+
+# Verify that the GMT timezone ParameterStatus is upper-cased.
+until
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ParameterStatus","Name":"TimeZone","Value":"GMT-3"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+send
+Query {"String": "INSERT INTO testtimezone(tstz,ts,t,tz,d) VALUES('2005-01-01 15:00:00 +0300', '2005-01-01 15:00:00', '15:00:00', '15:00:00 +0300', '2005-01-01');"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SELECT tstz,ts,t,tz,d from testtimezone;"}
+----
+
+until ignore=RowDescription
+ReadyForQuery
+----
+{"Type":"DataRow","Values":[{"text":"2005-01-01 15:00:00+03"},{"text":"2005-01-01 15:00:00"},{"text":"15:00:00"},{"text":"15:00:00+03"},{"text":"2005-01-01"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Name": "s1", "Query": "SELECT tstz,ts,t,tz,d from testtimezone;"}
+Bind {"PreparedStatement": "s1"}
+Describe {"ObjectType": "P"}
+Execute
+Sync
+----
+
+until ignore_table_oids
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"RowDescription","Fields":[{"Name":"tstz","TableOID":0,"TableAttributeNumber":2,"DataTypeOID":1184,"DataTypeSize":8,"TypeModifier":-1,"Format":0},{"Name":"ts","TableOID":0,"TableAttributeNumber":3,"DataTypeOID":1114,"DataTypeSize":8,"TypeModifier":-1,"Format":0},{"Name":"t","TableOID":0,"TableAttributeNumber":4,"DataTypeOID":1083,"DataTypeSize":8,"TypeModifier":-1,"Format":0},{"Name":"tz","TableOID":0,"TableAttributeNumber":5,"DataTypeOID":1266,"DataTypeSize":12,"TypeModifier":-1,"Format":0},{"Name":"d","TableOID":0,"TableAttributeNumber":6,"DataTypeOID":1082,"DataTypeSize":4,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"2005-01-01 15:00:00+03"},{"text":"2005-01-01 15:00:00"},{"text":"15:00:00"},{"text":"15:00:00+03"},{"text":"2005-01-01"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+send
+Bind {"PreparedStatement": "s1", "ResultFormatCodes": [1,1,1,1,1]}
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"binary":"00008f9b06fdd000"},{"binary":"00008f9d8ab8bc00"},{"binary":"0000000c92a69c00"},{"binary":"0000000c92a69c00ffffd5d0"},{"binary":"00000723"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
