@@ -3223,4 +3223,7 @@ message ScanStats {
   uint64 range_key_count = 11;
   uint64 range_key_contained_points = 12;
   uint64 range_key_skipped_points = 13;
+  uint64 separated_point_count = 14;
+  uint64 separated_point_value_bytes = 15;
+  uint64 separated_point_value_bytes_fetched = 16;
 }
