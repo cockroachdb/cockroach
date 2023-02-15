@@ -200,3 +200,28 @@ func (i InfoStorage) Iterate(
 ) (retErr error) {
 	return i.iterate(ctx, infoPrefix, fn)
 }
+
+const (
+	legacyPayloadKey  = "legacy_payload"
+	legacyProgressKey = "legacy_progress"
+)
+
+// GetLegacyPayload returns the job's Payload from the system.jobs_info table.
+func (i InfoStorage) GetLegacyPayload(ctx context.Context) ([]byte, bool, error) {
+	return i.Get(ctx, []byte(legacyPayloadKey))
+}
+
+// WriteLegacyPayload writes the job's Payload to the system.jobs_info table.
+func (i InfoStorage) WriteLegacyPayload(ctx context.Context, payload []byte) error {
+	return i.Write(ctx, []byte(legacyPayloadKey), payload)
+}
+
+// GetLegacyProgress returns the job's Progress from the system.jobs_info table.
+func (i InfoStorage) GetLegacyProgress(ctx context.Context) ([]byte, bool, error) {
+	return i.Get(ctx, []byte(legacyProgressKey))
+}
+
+// WriteLegacyProgress writes the job's Progress to the system.jobs_info table.
+func (i InfoStorage) WriteLegacyProgress(ctx context.Context, progress []byte) error {
+	return i.Write(ctx, []byte(legacyProgressKey), progress)
+}
