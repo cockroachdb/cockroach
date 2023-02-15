@@ -15921,13 +15921,13 @@ unrestricted_name:
 | reserved_keyword
 
 // Keyword category lists. Generally, every keyword present in the Postgres
-// grammar should appear in exactly one of these lists.
+// grammar should appear in exactly one of these "x_keyword" lists.
 //
 // Put a new keyword into the first list that it can go into without causing
 // shift or reduce conflicts. The earlier lists define "less reserved"
 // categories of keywords.
 //
-// Note: also add the new keyword to `bare_label` list to not break
+// Note: also add the **new** keyword to `bare_label_keywords` list to not break
 // user queries using column label without `AS`.
 // "Unreserved" keywords --- available for use as any kind of name.
 unreserved_keyword:
@@ -16391,6 +16391,7 @@ bare_label_keywords:
 | INVOKER
 | LEAKPROOF
 | PARALLEL
+| QUERY
 | RETURN
 | RETURNS
 | SECURITY

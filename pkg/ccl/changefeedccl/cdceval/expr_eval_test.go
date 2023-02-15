@@ -11,6 +11,7 @@ package cdceval
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"sort"
 	"strconv"
 	"testing"
@@ -34,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -145,15 +145,15 @@ $$`)
 				"INSERT INTO foo (a, b) VALUES (2, '2nd test')",
 				"DELETE FROM foo WHERE a=2 AND b='2nd test'",
 			},
-			stmt: "SELECT *, cdc_is_delete() FROM foo WHERE 'hello' != 'world'",
+			stmt: "SELECT *, event_op() = 'delete' AS deleted FROM foo WHERE 'hello' != 'world'",
 			expectMainFamily: []decodeExpectation{
 				{
 					keyValues: []string{"2nd test", "2"},
-					allValues: map[string]string{"a": "2", "b": "2nd test", "e": "inactive", "cdc_is_delete": "false"},
+					allValues: map[string]string{"a": "2", "b": "2nd test", "e": "inactive", "deleted": "false"},
 				},
 				{
 					keyValues: []string{"2nd test", "2"},
-					allValues: map[string]string{"a": "2", "b": "2nd test", "e": "NULL", "cdc_is_delete": "true"},
+					allValues: map[string]string{"a": "2", "b": "2nd test", "e": "NULL", "deleted": "true"},
 				},
 			},
 		},
@@ -356,7 +356,7 @@ $$`)
 				"INSERT INTO foo (a, b) VALUES (123, 'select_if')",
 				"DELETE FROM foo where a=123",
 			},
-			stmt: "SELECT IF(cdc_is_delete(),'deleted',a::string) AS conditional FROM foo",
+			stmt: "SELECT IF(event_op() = 'delete','deleted',a::string) AS conditional FROM foo",
 			expectMainFamily: []decodeExpectation{
 				{
 					keyValues: []string{"select_if", "123"},
@@ -388,7 +388,7 @@ $$`)
 			actions: []string{
 				"INSERT INTO foo (a, b, h) VALUES (1,  'hello', 'invisible')",
 			},
-			stmt: "SELECT a, tableoid, h FROM foo WHERE crdb_internal_mvcc_timestamp = cdc_mvcc_timestamp()",
+			stmt: "SELECT a, tableoid, h FROM foo WHERE crdb_internal_mvcc_timestamp > 0",
 			expectMainFamily: []decodeExpectation{
 				{
 					keyValues: []string{"hello", "1"},
@@ -404,7 +404,7 @@ $$`)
 			actions: []string{
 				"INSERT INTO foo (a, b, h) VALUES (1,  'hello', 'invisible')",
 			},
-			stmt:      "SELECT a, tableoid, h FROM foo WHERE crdb_internal_mvcc_timestamp = cdc_mvcc_timestamp()",
+			stmt:      "SELECT a, tableoid, h FROM foo WHERE crdb_internal_mvcc_timestamp > 0",
 			expectErr: `column "h" does not exist`,
 		},
 		{
@@ -496,7 +496,7 @@ $$`)
 					"SELECT x, 'only_some_deleted_values', x::string FROM s",
 			},
 			actions:          []string{"DELETE FROM foo WHERE b='only_some_deleted_values'"},
-			stmt:             `SELECT * FROM foo WHERE cdc_is_delete() AND (cdc_prev).a % 33 = 0`,
+			stmt:             `SELECT * FROM foo WHERE event_op() = 'delete' AND (cdc_prev).a % 33 = 0`,
 			expectMainFamily: repeatExpectation(decodeExpectation{expectUnwatchedErr: true}, 100),
 			expectOnlyCFamily: func() (expectations []decodeExpectation) {
 				for i := 1; i <= 100; i++ {
@@ -722,10 +722,9 @@ func slurpValues(t *testing.T, r cdcevent.Row) map[string]string {
 }
 
 func randEncDatumPrimaryFamily(
-	t *testing.T, desc catalog.TableDescriptor,
+	t *testing.T, rng *rand.Rand, desc catalog.TableDescriptor,
 ) (row rowenc.EncDatumRow) {
 	t.Helper()
-	rng, _ := randutil.NewTestRand()
 
 	family, err := catalog.MustFindFamilyByID(desc, 0 /* id */)
 	require.NoError(t, err)
@@ -781,8 +780,9 @@ func newEvaluatorWithNormCheck(
 		return nil, err
 	}
 
+	const withDiff = true
 	return NewEvaluator(norm.SelectClause, execCfg, username.RootUserName(),
-		defaultDBSessionData, hlc.Timestamp{}), nil
+		defaultDBSessionData, hlc.Timestamp{}, withDiff), nil
 }
 
 var defaultDBSessionData = sessiondatapb.SessionData{

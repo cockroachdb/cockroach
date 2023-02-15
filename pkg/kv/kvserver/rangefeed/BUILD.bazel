@@ -55,6 +55,7 @@ go_test(
     embed = [":rangefeed"],
     deps = [
         "//pkg/base",
+        "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
