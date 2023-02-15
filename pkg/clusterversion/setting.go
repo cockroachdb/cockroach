@@ -278,14 +278,12 @@ var metaPreserveDowngradeLastUpdated = metric.Metadata{
 	Unit:        metric.Unit_TIMESTAMP_SEC,
 }
 
-// preserveDowngradeLastUpdatedMetric is a metric gauge that measures the
-// time the cluster.preserve_downgrade_option was last updated.
-var preserveDowngradeLastUpdatedMetric = metric.NewGauge(metaPreserveDowngradeLastUpdated)
-
 // RegisterOnVersionChangeCallback is a callback function that updates the
 // cluster.preserve-downgrade-option.last-updated when the
 // cluster.preserve_downgrade_option settings is changed.
-func RegisterOnVersionChangeCallback(sv *settings.Values) {
+func RegisterOnVersionChangeCallback(
+	sv *settings.Values, preserveDowngradeLastUpdatedMetric *metric.Gauge,
+) {
 	preserveDowngradeVersion.SetOnChange(sv, func(ctx context.Context) {
 		var value int64
 		downgrade := preserveDowngradeVersion.Get(sv)
@@ -298,13 +296,17 @@ func RegisterOnVersionChangeCallback(sv *settings.Values) {
 
 // Metrics defines the settings tracked in prometheus.
 type Metrics struct {
+	// PreserveDowngradeLastUpdated is a metric gauge that measures the
+	// time the cluster.preserve_downgrade_option was last updated.
 	PreserveDowngradeLastUpdated *metric.Gauge
 }
 
 // MakeMetrics is a function that creates the metrics defined in the Metrics
 // struct.
-func MakeMetrics() Metrics {
+func MakeMetricsAndRegisterOnVersionChangeCallback(sv *settings.Values) Metrics {
+	gauge := metric.NewGauge(metaPreserveDowngradeLastUpdated)
+	RegisterOnVersionChangeCallback(sv, gauge)
 	return Metrics{
-		PreserveDowngradeLastUpdated: preserveDowngradeLastUpdatedMetric,
+		PreserveDowngradeLastUpdated: gauge,
 	}
 }
