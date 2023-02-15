@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -149,10 +150,10 @@ func GetUserSessionInitInfo(
 			}
 			_, isSuperuser = memberships[username.AdminRoleName()]
 
+			canLoginSQL = authInfo.CanLoginSQLRoleOpt
 			// If we already know that the user has CanLoginSQLRoleOpt=false, there's
 			// no need to check the global privilege.
-			canLoginSQL = authInfo.CanLoginSQLRoleOpt
-			if canLoginSQL {
+			if execCfg.Settings.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) && canLoginSQL {
 				privs, err := execCfg.SyntheticPrivilegeCache.Get(
 					ctx, txn, descsCol, syntheticprivilege.GlobalPrivilegeObject,
 				)
@@ -171,7 +172,6 @@ func GetUserSessionInitInfo(
 					}
 				}
 			}
-
 			return nil
 		},
 		)
