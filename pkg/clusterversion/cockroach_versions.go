@@ -431,6 +431,15 @@ const (
 	// elements.
 	V23_1_SchemaChangerDeprecatedIndexPredicates
 
+	// V23_1DatabaseRoleSettingsHasRoleIDColumn is the version where the role_id
+	// column has been added to the system.database_role_settings table.
+	V23_1DatabaseRoleSettingsHasRoleIDColumn
+
+	// V23_1DatabaseRoleSettingsRoleIDColumnBackfilled is the version where
+	// the role_id column in the system.database_role_settings table has been
+	// backfilled.
+	V23_1DatabaseRoleSettingsRoleIDColumnBackfilled
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -743,6 +752,14 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1_SchemaChangerDeprecatedIndexPredicates,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 50},
+	},
+	{
+		Key:     V23_1DatabaseRoleSettingsHasRoleIDColumn,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 52},
+	},
+	{
+		Key:     V23_1DatabaseRoleSettingsRoleIDColumnBackfilled,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 54},
 	},
 
 	// *************************************************
