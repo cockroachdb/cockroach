@@ -63,6 +63,20 @@ func (a *azureConfig) filePathWithSchemeClientAuth(scheme string, f string) stri
 	return uri.String()
 }
 
+func (a *azureConfig) filePathImplicitAuth(f string) string {
+	return a.filePathWithSchemeImplicitAuth("azure", f)
+}
+
+func (a *azureConfig) filePathWithSchemeImplicitAuth(scheme string, f string) string {
+	uri := url.URL{Scheme: scheme, Host: a.bucket, Path: f}
+	values := uri.Query()
+	values.Add(AzureAccountNameParam, a.account)
+	values.Add(AzureEnvironmentKeyParam, a.environment)
+	values.Add(cloud.AuthParam, cloud.AuthParamImplicit)
+	uri.RawQuery = values.Encode()
+	return uri.String()
+}
+
 func getAzureConfig() (azureConfig, error) {
 	// NB: the Azure Account key must not be url encoded.
 	cfg := azureConfig{
@@ -102,12 +116,26 @@ func TestAzure(t *testing.T) {
 		nil, /* db */
 		testSettings,
 	)
+
+	// Client Secret auth
 	cloudtestutils.CheckExportStore(t, cfg.filePathClientAuth("backup-test"),
 		false, username.RootUserName(),
 		nil, /* db */
 		testSettings,
 	)
 	cloudtestutils.CheckListFiles(t, cfg.filePathClientAuth("listing-test"),
+		username.RootUserName(),
+		nil, /* db */
+		testSettings,
+	)
+
+	// Implicit auth
+	cloudtestutils.CheckExportStore(t, cfg.filePathImplicitAuth("backup-test"),
+		false, username.RootUserName(),
+		nil, /* db */
+		testSettings,
+	)
+	cloudtestutils.CheckListFiles(t, cfg.filePathImplicitAuth("listing-test"),
 		username.RootUserName(),
 		nil, /* db */
 		testSettings,
@@ -128,6 +156,10 @@ func TestAzureSchemes(t *testing.T) {
 
 		uriClientAuth := cfg.filePathWithSchemeClientAuth(scheme, "not-used")
 		_, err = cloud.ExternalStorageConfFromURI(uriClientAuth, username.RootUserName())
+		require.NoError(t, err)
+
+		uriImplicitAuth := cfg.filePathWithSchemeImplicitAuth(scheme, "not-used")
+		_, err = cloud.ExternalStorageConfFromURI(uriImplicitAuth, username.RootUserName())
 		require.NoError(t, err)
 	}
 }
@@ -153,6 +185,12 @@ func TestAntagonisticAzureRead(t *testing.T) {
 	require.NoError(t, err)
 
 	cloudtestutils.CheckAntagonisticRead(t, clientAuthConf, testSettings)
+
+	implicitAuthConf, err := cloud.ExternalStorageConfFromURI(
+		cfg.filePathImplicitAuth("antagonistic-read"), username.RootUserName())
+	require.NoError(t, err)
+
+	cloudtestutils.CheckAntagonisticRead(t, implicitAuthConf, testSettings)
 }
 
 func TestParseAzureURL(t *testing.T) {
@@ -181,6 +219,14 @@ func TestParseAzureURL(t *testing.T) {
 		_, err = parseAzureURL(cloud.ExternalStorageURIContext{}, u)
 		require.Error(t, err)
 
+	})
+
+	t.Run("Parses implicit auth param", func(t *testing.T) {
+		u, err := url.Parse("azure://container/path?AZURE_ACCOUNT_NAME=account&AUTH=implicit")
+		require.NoError(t, err)
+
+		_, err = parseAzureURL(cloud.ExternalStorageURIContext{}, u)
+		require.NoError(t, err)
 	})
 
 	t.Run("Can Override AZURE_ENVIRONMENT", func(t *testing.T) {
