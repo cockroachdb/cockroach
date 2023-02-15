@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -198,19 +199,23 @@ func (u Updater) update(ctx context.Context, useReadLock bool, updateFn UpdateFn
 		addSetter("status", ju.md.Status)
 	}
 
+	var payloadBytes []byte
 	if ju.md.Payload != nil {
 		payload = ju.md.Payload
-		payloadBytes, err := protoutil.Marshal(payload)
+		var err error
+		payloadBytes, err = protoutil.Marshal(payload)
 		if err != nil {
 			return err
 		}
 		addSetter("payload", payloadBytes)
 	}
 
+	var progressBytes []byte
 	if ju.md.Progress != nil {
 		progress = ju.md.Progress
 		progress.ModifiedMicros = timeutil.ToUnixMicros(u.now())
-		progressBytes, err := protoutil.Marshal(progress)
+		var err error
+		progressBytes, err = protoutil.Marshal(progress)
 		if err != nil {
 			return err
 		}
@@ -240,6 +245,26 @@ func (u Updater) update(ctx context.Context, useReadLock bool, updateFn UpdateFn
 			"expected exactly one row affected, but %d rows affected by job update", n,
 		)
 	}
+
+	// Insert the job payload and details into the system.jobs_info table if the
+	// associated cluster version is active.
+	//
+	// TODO(adityamaru): Stop writing the payload and details to the system.jobs
+	// table once we are outside the compatability window for 22.2.
+	if u.j.registry.settings.Version.IsActive(ctx, clusterversion.V23_1CreateSystemJobInfoTable) {
+		infoStorage := j.InfoStorageWithTxn(u.txn)
+		if payloadBytes != nil {
+			if err := infoStorage.WriteLegacyPayload(ctx, payloadBytes); err != nil {
+				return err
+			}
+		}
+		if progressBytes != nil {
+			if err := infoStorage.WriteLegacyProgress(ctx, progressBytes); err != nil {
+				return err
+			}
+		}
+	}
+
 	return nil
 }
 

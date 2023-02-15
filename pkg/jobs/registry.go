@@ -388,7 +388,17 @@ func createJobsInBatchWithTxn(
 	}
 	start := txn.KV().ReadTimestamp().GoTime()
 	modifiedMicros := timeutil.ToUnixMicros(start)
-	stmt, args, jobIDs, err := batchJobInsertStmt(ctx, r, s.ID(), records, modifiedMicros)
+
+	jobs := make([]*Job, len(records))
+	for i, record := range records {
+		j, err := r.newJob(ctx, *record)
+		if err != nil {
+			return nil, err
+		}
+		jobs[i] = j
+	}
+
+	stmt, args, jobIDs, err := batchJobInsertStmt(ctx, r, s.ID(), jobs, modifiedMicros)
 	if err != nil {
 		return nil, err
 	}
@@ -401,7 +411,44 @@ func createJobsInBatchWithTxn(
 		return nil, err
 	}
 
+	// Insert the job payload and details into the system.jobs_info table if the
+	// associated cluster version is active.
+	//
+	// TODO(adityamaru): Stop writing the payload and details to the system.jobs
+	// table once we are outside the compatability window for 22.2.
+	if r.settings.Version.IsActive(ctx, clusterversion.V23_1CreateSystemJobInfoTable) {
+		if err := batchJobWriteToJobInfo(ctx, txn, jobs, modifiedMicros); err != nil {
+			return nil, err
+		}
+	}
+
 	return jobIDs, nil
+}
+
+func batchJobWriteToJobInfo(
+	ctx context.Context, txn isql.Txn, jobs []*Job, modifiedMicros int64,
+) error {
+	marshalPanic := func(m protoutil.Message) []byte {
+		data, err := protoutil.Marshal(m)
+		if err != nil {
+			panic(err)
+		}
+		return data
+	}
+	for _, j := range jobs {
+		infoStorage := j.InfoStorageWithTxn(txn)
+		payload := j.Payload()
+		if err := infoStorage.WriteLegacyPayload(ctx, marshalPanic(&payload)); err != nil {
+			return err
+		}
+		progress := j.Progress()
+		progress.ModifiedMicros = modifiedMicros
+		if err := infoStorage.WriteLegacyProgress(ctx, marshalPanic(&progress)); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // batchJobInsertStmt creates an INSERT statement and its corresponding arguments
@@ -410,7 +457,7 @@ func batchJobInsertStmt(
 	ctx context.Context,
 	r *Registry,
 	sessionID sqlliveness.SessionID,
-	records []*Record,
+	jobs []*Job,
 	modifiedMicros int64,
 ) (string, []interface{}, []jobspb.JobID, error) {
 	instanceID := r.ID()
@@ -429,26 +476,24 @@ func batchJobInsertStmt(
 		return "", nil, nil, errors.NewAssertionErrorWithWrappedErrf(err, "failed to make timestamp for creation of job")
 	}
 
-	valueFns := map[string]func(*Record) (interface{}, error){
-		`id`:                func(rec *Record) (interface{}, error) { return rec.JobID, nil },
-		`created`:           func(rec *Record) (interface{}, error) { return created, nil },
-		`status`:            func(rec *Record) (interface{}, error) { return StatusRunning, nil },
-		`claim_session_id`:  func(rec *Record) (interface{}, error) { return sessionID.UnsafeBytes(), nil },
-		`claim_instance_id`: func(rec *Record) (interface{}, error) { return instanceID, nil },
-		`payload`: func(rec *Record) (interface{}, error) {
-			payload, err := r.makePayload(ctx, rec)
-			if err != nil {
-				return []byte{}, err
-			}
+	valueFns := map[string]func(*Job) (interface{}, error){
+		`id`:                func(job *Job) (interface{}, error) { return job.ID(), nil },
+		`created`:           func(job *Job) (interface{}, error) { return created, nil },
+		`status`:            func(job *Job) (interface{}, error) { return StatusRunning, nil },
+		`claim_session_id`:  func(job *Job) (interface{}, error) { return sessionID.UnsafeBytes(), nil },
+		`claim_instance_id`: func(job *Job) (interface{}, error) { return instanceID, nil },
+		`payload`: func(job *Job) (interface{}, error) {
+			payload := job.Payload()
 			return marshalPanic(&payload), nil
 		},
-		`progress`: func(rec *Record) (interface{}, error) {
-			progress := r.makeProgress(rec)
+		`progress`: func(job *Job) (interface{}, error) {
+			progress := job.Progress()
 			progress.ModifiedMicros = modifiedMicros
 			return marshalPanic(&progress), nil
 		},
-		`job_type`: func(rec *Record) (interface{}, error) {
-			return (&jobspb.Payload{Details: jobspb.WrapPayloadDetails(rec.Details)}).Type().String(), nil
+		`job_type`: func(job *Job) (interface{}, error) {
+			payload := job.Payload()
+			return payload.Type().String(), nil
 		},
 	}
 
@@ -459,19 +504,19 @@ func batchJobInsertStmt(
 		numColumns -= 1
 	}
 
-	appendValues := func(rec *Record, vals *[]interface{}) (err error) {
+	appendValues := func(job *Job, vals *[]interface{}) (err error) {
 		defer func() {
 			switch r := recover(); r.(type) {
 			case nil:
 			case error:
-				err = errors.CombineErrors(err, errors.Wrapf(r.(error), "encoding job %d", rec.JobID))
+				err = errors.CombineErrors(err, errors.Wrapf(r.(error), "encoding job %d", job.ID()))
 			default:
 				panic(r)
 			}
 		}()
 		for j := 0; j < numColumns; j++ {
 			c := columns[j]
-			val, err := valueFns[c](rec)
+			val, err := valueFns[c](job)
 			if err != nil {
 				return err
 			}
@@ -479,14 +524,14 @@ func batchJobInsertStmt(
 		}
 		return nil
 	}
-	args := make([]interface{}, 0, len(records)*numColumns)
-	jobIDs := make([]jobspb.JobID, 0, len(records))
+	args := make([]interface{}, 0, len(jobs)*numColumns)
+	jobIDs := make([]jobspb.JobID, 0, len(jobs))
 	var buf strings.Builder
 	buf.WriteString(`INSERT INTO system.jobs (`)
 	buf.WriteString(strings.Join(columns[:numColumns], ", "))
 	buf.WriteString(`) VALUES `)
 	argIdx := 1
-	for i, rec := range records {
+	for i, job := range jobs {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
@@ -500,10 +545,10 @@ func batchJobInsertStmt(
 			argIdx++
 		}
 		buf.WriteString(")")
-		if err := appendValues(rec, &args); err != nil {
+		if err := appendValues(job, &args); err != nil {
 			return "", nil, nil, err
 		}
-		jobIDs = append(jobIDs, rec.JobID)
+		jobIDs = append(jobIDs, job.ID())
 	}
 	return buf.String(), args, jobIDs, nil
 }
@@ -588,7 +633,26 @@ func (r *Registry) CreateJobWithTxn(
 			override,
 			insertStmt, vals[:numCols]...,
 		)
-		return err
+		if err != nil {
+			return err
+		}
+
+		// Insert the job payload and details into the system.jobs_info table if the
+		// associated cluster version is active.
+		//
+		// TODO(adityamaru): Stop writing the payload and details to the system.jobs
+		// table once we are outside the compatability window for 22.2.
+		if r.settings.Version.IsActive(ctx, clusterversion.V23_1CreateSystemJobInfoTable) {
+			infoStorage := j.InfoStorageWithTxn(txn)
+			if err := infoStorage.WriteLegacyPayload(ctx, payloadBytes); err != nil {
+				return err
+			}
+			if err := infoStorage.WriteLegacyProgress(ctx, progressBytes); err != nil {
+				return err
+			}
+		}
+
+		return nil
 	}
 
 	run := r.db.Txn
@@ -660,7 +724,26 @@ func (r *Registry) CreateAdoptableJobWithTxn(
 			User:     username.NodeUserName(),
 			Database: catconstants.SystemDatabaseName,
 		}, stmt, values[:nCols]...)
-		return err
+		if err != nil {
+			return err
+		}
+
+		// Insert the job payload and details into the system.jobs_info table if the
+		// associated cluster version is active.
+		//
+		// TODO(adityamaru): Stop writing the payload and details to the system.jobs
+		// table once we are outside the compatability window for 22.2.
+		if r.settings.Version.IsActive(ctx, clusterversion.V23_1CreateSystemJobInfoTable) {
+			infoStorage := j.InfoStorageWithTxn(txn)
+			if err := infoStorage.WriteLegacyPayload(ctx, payloadBytes); err != nil {
+				return err
+			}
+			if err := infoStorage.WriteLegacyProgress(ctx, progressBytes); err != nil {
+				return err
+			}
+		}
+
+		return nil
 	}
 	run := r.db.Txn
 	if txn != nil {

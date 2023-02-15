@@ -35,6 +35,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -300,6 +302,137 @@ func TestRegistryGCPagination(t *testing.T) {
 	require.Zero(t, count)
 }
 
+// TestCreateJobWritesToJobInfo tests that the `Create` methods exposed by the
+// registry to create a job write the job payload and progress to the
+// system.job_info table alongwith creating a job record in the system.jobs
+// table.
+func TestCreateJobWritesToJobInfo(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	args := base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			// Avoiding jobs to be adopted.
+			JobsTestingKnobs: &TestingKnobs{
+				DisableAdoptions: true,
+			},
+			// DisableAdoptions needs this.
+			UpgradeManager: &upgradebase.TestingKnobs{
+				DontUseJobs:                       true,
+				SkipJobMetricsPollingJobBootstrap: true,
+			},
+			KeyVisualizer: &keyvisualizer.TestingKnobs{
+				SkipJobBootstrap: true,
+			},
+		},
+		DisableSpanConfigs: true,
+	}
+
+	ctx := context.Background()
+	s, _, _ := serverutils.StartServer(t, args)
+	ief := s.InternalDB().(isql.DB)
+	defer s.Stopper().Stop(ctx)
+	r := s.JobRegistry().(*Registry)
+
+	RegisterConstructor(jobspb.TypeImport, func(job *Job, cs *cluster.Settings) Resumer {
+		return FakeResumer{
+			OnResume: func(ctx context.Context) error {
+				return nil
+			},
+		}
+	}, UsesTenantCostControl)
+
+	record := &Record{
+		Details:  jobspb.ImportDetails{},
+		Progress: jobspb.ImportProgress{},
+		Username: username.RootUserName(),
+	}
+
+	verifyPayloadAndProgress := func(t *testing.T, createdJob *Job, txn isql.Txn, expectedPayload jobspb.Payload,
+		expectedProgress jobspb.Progress) {
+		infoStorage := createdJob.InfoStorageWithTxn(txn)
+
+		// Verify the payload in the system.job_info is the same as what we read
+		// from system.jobs.
+		require.NoError(t, infoStorage.Iterate(ctx, []byte(legacyPayloadKey), func(infoKey, value []byte) error {
+			data, err := protoutil.Marshal(&expectedPayload)
+			if err != nil {
+				panic(err)
+			}
+			require.Equal(t, data, value)
+			return nil
+		}))
+
+		// Verify the progress in the system.job_info is the same as what we read
+		// from system.jobs.
+		require.NoError(t, infoStorage.Iterate(ctx, []byte(legacyProgressKey), func(infoKey, value []byte) error {
+			data, err := protoutil.Marshal(&expectedProgress)
+			if err != nil {
+				panic(err)
+			}
+			require.Equal(t, data, value)
+			return nil
+		}))
+	}
+
+	runTests := func(t *testing.T, createdJob *Job) {
+		t.Run("verify against system.jobs", func(t *testing.T) {
+			require.NoError(t, ief.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				progressQuery := `SELECT count(*)  FROM system.jobs AS a LEFT JOIN system.job_info AS b ON a.progress = b.value WHERE b.job_id IS NULL;`
+				row, err := txn.QueryRowEx(ctx, "verify-job-query", txn.KV(),
+					sessiondata.NodeUserSessionDataOverride, progressQuery)
+				if err != nil {
+					return err
+				}
+				count := tree.MustBeDInt(row[0])
+				require.Equal(t, 0, int(count))
+
+				payloadQuery := `SELECT count(*)  FROM system.jobs AS a LEFT JOIN system.job_info AS b ON a.payload = b.value WHERE b.job_id IS NULL;`
+				row, err = txn.QueryRowEx(ctx, "verify-job-query", txn.KV(),
+					sessiondata.NodeUserSessionDataOverride, payloadQuery)
+				if err != nil {
+					return err
+				}
+				count = tree.MustBeDInt(row[0])
+				require.Equal(t, 0, int(count))
+				return nil
+			}))
+		})
+
+		t.Run("verify against in-memory job", func(t *testing.T) {
+			require.NoError(t, ief.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				verifyPayloadAndProgress(t, createdJob, txn, createdJob.Payload(), createdJob.Progress())
+				return nil
+			}))
+		})
+	}
+
+	t.Run("CreateJobWithTxn", func(t *testing.T) {
+		var createdJob *Job
+		require.NoError(t, ief.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			record.JobID = r.MakeJobID()
+			var err error
+			createdJob, err = r.CreateJobWithTxn(ctx, *record, record.JobID, txn)
+			return err
+		}))
+		runTests(t, createdJob)
+	})
+
+	t.Run("CreateAdoptableJobWithTxn", func(t *testing.T) {
+		var createdJob *Job
+		require.NoError(t, ief.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			record.JobID = r.MakeJobID()
+			var err error
+			createdJob, err = r.CreateAdoptableJobWithTxn(ctx, *record, record.JobID, txn)
+			if err != nil {
+				return err
+			}
+			return nil
+		}))
+		runTests(t, createdJob)
+	})
+}
+
 func TestBatchJobsCreation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -328,12 +461,14 @@ func TestBatchJobsCreation(t *testing.T) {
 						},
 						// DisableAdoptions needs this.
 						UpgradeManager: &upgradebase.TestingKnobs{
-							DontUseJobs: true,
+							DontUseJobs:                       true,
+							SkipJobMetricsPollingJobBootstrap: true,
 						},
 						KeyVisualizer: &keyvisualizer.TestingKnobs{
 							SkipJobBootstrap: true,
 						},
 					},
+					DisableSpanConfigs: true,
 				}
 
 				ctx := context.Background()
@@ -370,6 +505,12 @@ func TestBatchJobsCreation(t *testing.T) {
 				}))
 				require.Equal(t, len(jobIDs), test.batchSize)
 				tdb.CheckQueryResults(t, "SELECT count(*) FROM [SHOW JOBS]",
+					[][]string{{fmt.Sprintf("%d", test.batchSize)}})
+
+				// Ensure that we are also writing the payload and progress to the job_info table.
+				tdb.CheckQueryResults(t, `SELECT count(*) FROM system.job_info WHERE info_key = 'legacy_payload'::BYTES`,
+					[][]string{{fmt.Sprintf("%d", test.batchSize)}})
+				tdb.CheckQueryResults(t, `SELECT count(*) FROM system.job_info WHERE info_key = 'legacy_progress'::BYTES`,
 					[][]string{{fmt.Sprintf("%d", test.batchSize)}})
 			}
 		})
