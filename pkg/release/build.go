@@ -139,7 +139,10 @@ func MakeWorkload(opts BuildOptions, pkgDir string) error {
 
 // MakeRelease makes the release binary and associated files.
 func MakeRelease(platform Platform, opts BuildOptions, pkgDir string) error {
-	buildArgs := []string{"build", "//pkg/cmd/cockroach", "//c-deps:libgeos", "//pkg/cmd/cockroach-sql"}
+	buildArgs := []string{"build", "//pkg/cmd/cockroach", "//pkg/cmd/cockroach-sql"}
+	if platform != PlatformMacOSArm {
+		buildArgs = append(buildArgs, "//c-deps:libgeos")
+	}
 	targetTriple := TargetTripleFromPlatform(platform)
 	if opts.Release {
 		if opts.BuildTag == "" {
@@ -291,6 +294,9 @@ func stageBinary(
 }
 
 func stageLibraries(platform Platform, bazelBin string, dir string) error {
+	if platform == PlatformMacOSArm {
+		return nil
+	}
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
