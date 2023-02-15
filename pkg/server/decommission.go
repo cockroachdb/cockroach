@@ -424,3 +424,18 @@ func (s *Server) DecommissioningNodeMap() map[roachpb.NodeID]interface{} {
 	}
 	return nodes
 }
+
+// checkIsDecommissioned returns a boolean indicating when a node was decommissioned based
+// on nodeTomstoneStorage.
+// This is meant for internal usage only.
+func checkIsDecommissioned(
+	ctx context.Context, nodeID roachpb.NodeID, nodeTombstones *nodeTombstoneStorage,
+) bool {
+	ts, err := nodeTombstones.IsDecommissioned(ctx, nodeID)
+	if err != nil {
+		// An error here means something very basic is not working. Better to terminate
+		// than to limp along.
+		log.Fatalf(ctx, "unable to read decommissioned status for n%d: %v", nodeID, err)
+	}
+	return !ts.IsZero()
+}

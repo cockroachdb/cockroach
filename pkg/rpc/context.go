@@ -2057,7 +2057,9 @@ type Peer struct {
 	}
 }
 
-func NewPeer(ctx context.Context, conn *Connection, stopper *stop.Stopper, onReconnect func()) *Peer {
+func NewPeer(
+	ctx context.Context, conn *Connection, stopper *stop.Stopper, onReconnect func(),
+) *Peer {
 	pc := &Peer{
 		c: conn,
 	}
@@ -2148,11 +2150,11 @@ func (m *connMap) GetPeer(k connKey) (*Peer, bool) {
 
 // RemoveNodeConnections removes all connections to target node. It is used when some node is
 // decommissioned and removed from the cluster.
-func (m *connMap) RemoveNodeConnections(nodeID roachpb.NodeID) error {
+func (m *connMap) RemoveNodeConnections(nodeID roachpb.NodeID, isDecommissioned func() bool) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for c := range m.mu.m {
-		if c.nodeID == nodeID {
+		if c.nodeID == nodeID && isDecommissioned() {
 			delete(m.mu.m, c)
 		}
 	}
@@ -2177,7 +2179,9 @@ func (m *connMap) OnDisconnect(k connKey, conn *Connection) error {
 }
 
 // TryInsert inits new peer and connection (if necessary). onReconnect function is called to restore connection.
-func (m *connMap) TryInsert(ctx context.Context, k connKey, stopper *stop.Stopper, onReconnect func()) (_ *Connection, inserted bool) {
+func (m *connMap) TryInsert(
+	ctx context.Context, k connKey, stopper *stop.Stopper, onReconnect func(),
+) (_ *Connection, inserted bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -2292,7 +2296,9 @@ var ErrNoConnection = errors.New("no connection found")
 // runHeartbeat synchronously runs the heartbeat loop for the given RPC
 // connection. The ctx passed as argument must be derived from rpcCtx.masterCtx,
 // so that it respects the same cancellation policy.
-func (rpcCtx *Context) runHeartbeat(ctx context.Context, conn *Connection, k connKey) (retErr error) {
+func (rpcCtx *Context) runHeartbeat(
+	ctx context.Context, conn *Connection, k connKey,
+) (retErr error) {
 	defer func() {
 		var initialHeartbeatDone bool
 		select {
@@ -2539,6 +2545,8 @@ func (rpcCtx *Context) NewHeartbeatService() *HeartbeatService {
 }
 
 // RemoveNodeConnections removes all known connections to target node.
-func (rpcCtx *Context) RemoveNodeConnections(nodeID roachpb.NodeID) error {
-	return rpcCtx.m.RemoveNodeConnections(nodeID)
+func (rpcCtx *Context) RemoveNodeConnections(
+	nodeID roachpb.NodeID, isDecommissioned func() bool,
+) error {
+	return rpcCtx.m.RemoveNodeConnections(nodeID, isDecommissioned)
 }
