@@ -347,6 +347,9 @@ func (s *drainServer) drainClients(
 		s.drainSleepFn(drainWait.Get(&s.sqlServer.execCfg.Settings.SV))
 	}
 
+	// Inform the job system that the node is draining.
+	s.sqlServer.jobRegistry.SetDraining(true)
+
 	// Wait for users to close the existing SQL connections.
 	// During this phase, the server is rejecting new SQL connections.
 	// The server exits this phase either once all SQL connections are closed,

@@ -151,6 +151,16 @@ type Registry struct {
 		// passively polling for these jobs to complete. If they complete locally,
 		// the waitingSet will be updated appropriately.
 		waiting jobWaitingSets
+
+		// draining indicates whether this node is draining or
+		// not. It is set by the drain server when the drain
+		// process starts.
+		//
+		// TODO(ssd): We may want to prevent the adoption of
+		// jobs onto a draining node. At the moment, jobs can
+		// access this to make per-job decisions about what to
+		// do.
+		draining bool
 	}
 
 	// withSessionEvery ensures that logging when failing to get a live session
@@ -825,9 +835,9 @@ func (r *Registry) IterateJobInfo(
 	rows, err := txn.QueryIteratorEx(
 		ctx, "job-info-iter", txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
-		`SELECT info_key, value 
-		FROM system.job_info 
-		WHERE job_id = $1 AND substring(info_key for $2) = $3 
+		`SELECT info_key, value
+		FROM system.job_info
+		WHERE job_id = $1 AND substring(info_key for $2) = $3
 		ORDER BY info_key ASC, written DESC`,
 		jobID, len(infoPrefix), infoPrefix,
 	)
@@ -1165,7 +1175,7 @@ func (r *Registry) PollMetricsTask(ctx context.Context) error {
 const pausedJobsCountQuery = string(`
 	SELECT job_type, count(*)
 	FROM system.jobs
-	WHERE status = '` + StatusPaused + `' 
+	WHERE status = '` + StatusPaused + `'
   GROUP BY job_type`)
 
 func (r *Registry) updatePausedMetrics(ctx context.Context, s sqlliveness.Session) error {
@@ -1919,6 +1929,28 @@ func (r *Registry) RelocateLease(
 	}
 
 	return errors.Mark(errors.Newf("execution of job %d relocated to %d", id, destID), errJobLeaseNotHeld), nil
+}
+
+// IsDraining returns true if the job system has been informed that
+// the local node is draining.
+//
+// Jobs that depend on distributed SQL infrastructure may choose to
+// exit early in this case.
+func (r *Registry) IsDraining() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	return r.mu.draining
+}
+
+// SetDraining informs the job system if the node is draining.
+//
+// NB: Check the implementation of drain before adding code that would
+// make this block.
+func (r *Registry) SetDraining(draining bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.mu.draining = draining
 }
 
 // TestingIsJobIdle returns true if the job is adopted and currently idle.

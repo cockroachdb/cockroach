@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -143,9 +144,18 @@ func jobSurvivesNodeShutdown(
 			}
 		}
 
-		t.L().Printf(`stopping node %s`, target)
-		if err := c.StopE(ctx, t.L(), option.DefaultStopOpts(), target); err != nil {
-			return errors.Wrapf(err, "could not stop node %s", target)
+		rng, _ := randutil.NewTestRand()
+		shouldUseSigKill := rng.Float64() > 0.5
+		if shouldUseSigKill {
+			t.L().Printf(`stopping node (using SIGKILL) %s`, target)
+			if err := c.StopE(ctx, t.L(), option.DefaultStopOpts(), target); err != nil {
+				return errors.Wrapf(err, "could not stop node %s", target)
+			}
+		} else {
+			t.L().Printf(`stopping node gracefully %s`, target)
+			if err := c.StopCockroachGracefullyOnNode(ctx, t.L(), nodeToShutdown); err != nil {
+				return errors.Wrapf(err, "could not stop node %s", target)
+			}
 		}
 		t.L().Printf("stopped node %s", target)
 
