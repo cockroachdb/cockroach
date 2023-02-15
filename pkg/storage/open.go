@@ -167,14 +167,6 @@ func Hook(hookFunc func(*base.StorageConfig) error) ConfigOption {
 	}
 }
 
-// LatestReleaseFormatMajorVersion opens the database already upgraded to the
-// latest release's format major version.
-var LatestReleaseFormatMajorVersion ConfigOption = func(cfg *engineConfig) error {
-	// TODO(jackson): Tie the below to the mapping in SetMinVersion.
-	cfg.PebbleConfig.Opts.FormatMajorVersion = pebble.FormatPrePebblev1Marked // v22.2
-	return nil
-}
-
 // If enables the given option if enable is true.
 func If(enable bool, opt ConfigOption) ConfigOption {
 	if enable {

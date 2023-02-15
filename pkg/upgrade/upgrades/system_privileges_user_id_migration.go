@@ -28,7 +28,7 @@ FAMILY "primary"
 `
 
 const createUniqueIndexOnUserIDAndPathOnSystemPrivilegesStmt = `
-CREATE UNIQUE INDEX IF NOT EXISTS privileges_path_user_id_key ON system.privileges (path ASC, user_id ASC)
+CREATE UNIQUE INDEX IF NOT EXISTS privileges_path_user_id_key ON system.privileges (path, user_id) STORING (privileges, grant_options)
 `
 
 func alterSystemPrivilegesAddUserIDColumn(
