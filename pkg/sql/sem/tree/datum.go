@@ -1637,7 +1637,7 @@ func (d *DEncodedKey) Prev(ctx CompareContext) (Datum, bool) {
 
 // Next implements the Datum interface.
 func (d *DEncodedKey) Next(ctx CompareContext) (Datum, bool) {
-	return nil, true
+	return nil, false
 }
 
 // IsMax implements the Datum interface.
@@ -6080,4 +6080,121 @@ func AdjustValueToType(typ *types.T, inVal Datum) (outVal Datum, err error) {
 		}
 	}
 	return inVal, nil
+}
+
+// DatumPrev returns a datum that is "previous" to the given one. For many types
+// it just delegates to Datum.Prev, but for some types that don't have an
+// implementation of that function this method makes the best effort to come up
+// with a reasonable previous datum that is smaller than the given one.
+//
+// The return value is undefined if Datum.IsMin returns true or if the value is
+// NaN of an infinity (for floats and decimals).
+func DatumPrev(
+	datum Datum, cmpCtx CompareContext, collationEnv *CollationEnvironment,
+) (Datum, bool) {
+	datum = UnwrapDOidWrapper(datum)
+	prevString := func(s string) (string, bool) {
+		// In order to obtain a previous string we subtract 1 from the last
+		// non-zero byte.
+		b := []byte(s)
+		lastNonZeroByteIdx := len(b) - 1
+		for ; lastNonZeroByteIdx >= 0 && b[lastNonZeroByteIdx] == 0; lastNonZeroByteIdx-- {
+		}
+		if lastNonZeroByteIdx < 0 {
+			return "", false
+		}
+		b[lastNonZeroByteIdx]--
+		return string(b), true
+	}
+	switch d := datum.(type) {
+	case *DDecimal:
+		var prev DDecimal
+		var sub apd.Decimal
+		_, err := sub.SetFloat64(1e-6)
+		if err != nil {
+			return nil, false
+		}
+		_, err = ExactCtx.Sub(&prev.Decimal, &d.Decimal, &sub)
+		if err != nil {
+			return nil, false
+		}
+		return &prev, true
+	case *DString:
+		prev, ok := prevString(string(*d))
+		if !ok {
+			return nil, false
+		}
+		return NewDString(prev), true
+	case *DCollatedString:
+		prev, ok := prevString(d.Contents)
+		if !ok {
+			return nil, false
+		}
+		c, err := NewDCollatedString(prev, d.Locale, collationEnv)
+		if err != nil {
+			return nil, false
+		}
+		return c, true
+	case *DBytes:
+		prev, ok := prevString(string(*d))
+		if !ok {
+			return nil, false
+		}
+		return NewDBytes(DBytes(prev)), true
+	case *DInterval:
+		// Subtract 1ms.
+		prev := d.Sub(duration.MakeDuration(1000000 /* nanos */, 0 /* days */, 0 /* months */))
+		return NewDInterval(prev, types.DefaultIntervalTypeMetadata), true
+	default:
+		// TODO(yuzefovich): consider adding support for other datums that don't
+		// have Datum.Prev implementation (DBitArray, DGeography, DGeometry,
+		// DBox2D, DJSON, DArray).
+		return datum.Prev(cmpCtx)
+	}
+}
+
+// DatumNext returns a datum that is "next" to the given one. For many types it
+// just delegates to Datum.Next, but for some types that don't have an
+// implementation of that function this method makes the best effort to come up
+// with a reasonable next datum that is greater than the given one.
+//
+// The return value is undefined if Datum.IsMax returns true or if the value is
+// NaN of an infinity (for floats and decimals).
+func DatumNext(
+	datum Datum, cmpCtx CompareContext, collationEnv *CollationEnvironment,
+) (Datum, bool) {
+	datum = UnwrapDOidWrapper(datum)
+	switch d := datum.(type) {
+	case *DDecimal:
+		var next DDecimal
+		var add apd.Decimal
+		_, err := add.SetFloat64(1e-6)
+		if err != nil {
+			return nil, false
+		}
+		_, err = ExactCtx.Add(&next.Decimal, &d.Decimal, &add)
+		if err != nil {
+			return nil, false
+		}
+		return &next, true
+	case *DCollatedString:
+		s := NewDString(d.Contents)
+		next, ok := s.Next(cmpCtx)
+		if !ok {
+			return nil, false
+		}
+		c, err := NewDCollatedString(string(*next.(*DString)), d.Locale, collationEnv)
+		if err != nil {
+			return nil, false
+		}
+		return c, true
+	case *DInterval:
+		next := d.Add(duration.MakeDuration(1000000 /* nanos */, 0 /* days */, 0 /* months */))
+		return NewDInterval(next, types.DefaultIntervalTypeMetadata), true
+	default:
+		// TODO(yuzefovich): consider adding support for other datums that don't
+		// have Datum.Next implementation (DGeography, DGeometry, DBox2D,
+		// DJSON).
+		return datum.Next(cmpCtx)
+	}
 }
