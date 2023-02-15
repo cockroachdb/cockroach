@@ -179,6 +179,7 @@ go_test(
         "constant_test.go",
         "datum_integration_test.go",
         "datum_invariants_test.go",
+        "datum_prev_next_test.go",
         "datum_test.go",
         "expr_test.go",
         "format_test.go",

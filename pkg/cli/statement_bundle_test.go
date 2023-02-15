@@ -32,16 +32,21 @@ import (
 func TestRunExplainCombinations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tests := []struct {
-		bundlePath          string
-		placeholderToColMap map[int]string
-		expectedInputs      [][]string
-		expectedOutputs     []string
+		bundlePath            string
+		placeholderToColMap   map[int]string
+		placeholderFQColNames map[string]struct{}
+		expectedInputs        [][]string
+		expectedOutputs       []string
 	}{
 		{
 			bundlePath: "bundle",
 			placeholderToColMap: map[int]string{
 				1: "public.a.a",
 				2: "public.a.b",
+			},
+			placeholderFQColNames: map[string]struct{}{
+				"public.a.a": {},
+				"public.a.b": {},
 			},
 			expectedInputs: [][]string{{"999", "8"}},
 			expectedOutputs: []string{`select
@@ -82,7 +87,10 @@ func TestRunExplainCombinations(t *testing.T) {
 			}
 		}
 
-		inputs, outputs, err := getExplainCombinations(ctx, conn, "EXPLAIN(OPT)", test.placeholderToColMap, bundle)
+		inputs, outputs, err := getExplainCombinations(
+			ctx, conn, "EXPLAIN(OPT)", test.placeholderToColMap,
+			test.placeholderFQColNames, bundle,
+		)
 		assert.NoError(t, err)
 		assert.Equal(t, test.expectedInputs, inputs)
 		assert.Equal(t, test.expectedOutputs, outputs)
