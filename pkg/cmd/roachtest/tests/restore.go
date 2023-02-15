@@ -826,7 +826,7 @@ var defaultBackupSpecs = backupSpecs{
 	cloud:            spec.AWS,
 	backupProperties: "inc-count=48",
 	fullBackupDir:    "LATEST",
-	incsIncluded:     12,
+	backupsIncluded:  12,
 	workload:         tpceRestore{customers: 25000},
 }
 
@@ -844,8 +844,8 @@ type backupSpecs struct {
 	// specifies the full backup directory in the collection to restore from.
 	fullBackupDir string
 
-	// specifies the number of incrementals to restore from
-	incsIncluded int
+	// specifies the number of backups in the chain to restore from
+	backupsIncluded int
 
 	// workload defines the backed up workload.
 	workload backupWorkload
@@ -865,8 +865,8 @@ func (bs backupSpecs) String(full bool) string {
 	}
 	builder.WriteString("/" + bs.cloud)
 
-	if full || bs.incsIncluded != defaultBackupSpecs.incsIncluded {
-		builder.WriteString("/" + fmt.Sprintf("incsIncluded=%d", bs.incsIncluded))
+	if full || bs.backupsIncluded != defaultBackupSpecs.backupsIncluded {
+		builder.WriteString("/" + fmt.Sprintf("backupsIncluded=%d", bs.backupsIncluded))
 	}
 	return builder.String()
 }
@@ -883,14 +883,14 @@ func (bs backupSpecs) backupCollection() string {
 		bs.storagePrefix(), bs.workload.fixtureDir(), bs.version, bs.backupProperties)
 }
 
-// getAOSTCmd returns a sql cmd that will return a system time that is greater
-// or equal than the start time of the incremental backups in the target backup
-// chain.
+// getAOSTCmd returns a sql cmd that will return a system time that is equal to the end time of
+// the bs.backupsIncluded'th backup in the target backup chain.
 func (bs backupSpecs) getAostCmd() string {
-	return fmt.Sprintf(`SELECT max(DISTINCT start_time) FROM [SHOW BACKUP FROM %s IN %s] LIMIT %d`,
+	return fmt.Sprintf(
+		`SELECT max(end_time) FROM [SELECT DISTINCT end_time FROM [SHOW BACKUP FROM %s IN %s] ORDER BY end_time LIMIT %d]`,
 		bs.fullBackupDir,
 		bs.backupCollection(),
-		bs.incsIncluded)
+		bs.backupsIncluded)
 }
 
 // makeBackupSpecs initializes the default backup specs. The caller can override
