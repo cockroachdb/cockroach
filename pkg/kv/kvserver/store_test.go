@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -3404,6 +3405,32 @@ func TestSnapshotRateLimit(t *testing.T) {
 	}
 }
 
+type mockSpanConfigReader struct {
+	real      spanconfig.StoreReader
+	overrides map[string]roachpb.SpanConfig
+}
+
+func (m *mockSpanConfigReader) NeedsSplit(ctx context.Context, start, end roachpb.RKey) bool {
+	panic("unimplemented")
+}
+
+func (m *mockSpanConfigReader) ComputeSplitKey(
+	ctx context.Context, start, end roachpb.RKey,
+) roachpb.RKey {
+	panic("unimplemented")
+}
+
+func (m *mockSpanConfigReader) GetSpanConfigForKey(
+	ctx context.Context, key roachpb.RKey,
+) (roachpb.SpanConfig, error) {
+	if conf, ok := m.overrides[string(key)]; ok {
+		return conf, nil
+	}
+	return m.GetSpanConfigForKey(ctx, key)
+}
+
+var _ spanconfig.StoreReader = &mockSpanConfigReader{}
+
 // TestAllocatorCheckRangeUnconfigured tests evaluating the allocation decisions
 // for a range with a single replica using the default system configuration and
 // no other available allocation targets.
@@ -3456,15 +3483,17 @@ func TestAllocatorCheckRange(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
+	defaultSystemSpanConfig := zonepb.DefaultSystemZoneConfigRef().AsSpanConfig()
+
 	for _, tc := range []struct {
 		name               string
 		stores             []*roachpb.StoreDescriptor
 		existingReplicas   []roachpb.ReplicaDescriptor
-		zoneConfig         *zonepb.ZoneConfig
+		spanConfig         *roachpb.SpanConfig
 		livenessOverrides  map[roachpb.NodeID]livenesspb.NodeLivenessStatus
-		baselineExpNoop    bool
 		expectedAction     allocatorimpl.AllocatorAction
 		expectValidTarget  bool
+		expectedTarget     roachpb.ReplicationTarget
 		expectedLogMessage string
 		expectErr          bool
 		expectAllocatorErr bool
@@ -3553,11 +3582,10 @@ func TestAllocatorCheckRange(t *testing.T) {
 				{NodeID: 4, StoreID: 4, ReplicaID: 4},
 				{NodeID: 5, StoreID: 5, ReplicaID: 5},
 			},
-			zoneConfig: zonepb.DefaultSystemZoneConfigRef(),
+			spanConfig: &defaultSystemSpanConfig,
 			livenessOverrides: map[roachpb.NodeID]livenesspb.NodeLivenessStatus{
 				3: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
 			},
-			baselineExpNoop:   true,
 			expectedAction:    allocatorimpl.AllocatorRemoveDecommissioningVoter,
 			expectErr:         false,
 			expectValidTarget: false,
@@ -3572,13 +3600,12 @@ func TestAllocatorCheckRange(t *testing.T) {
 				{NodeID: 4, StoreID: 4, ReplicaID: 4},
 				{NodeID: 5, StoreID: 5, ReplicaID: 5},
 			},
-			zoneConfig: zonepb.DefaultSystemZoneConfigRef(),
+			spanConfig: &defaultSystemSpanConfig,
 			livenessOverrides: map[roachpb.NodeID]livenesspb.NodeLivenessStatus{
 				3: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
 				4: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
 				5: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
 			},
-			baselineExpNoop:    true,
 			expectedAction:     allocatorimpl.AllocatorReplaceDecommissioningVoter,
 			expectValidTarget:  false,
 			expectAllocatorErr: true,
@@ -3597,7 +3624,7 @@ func TestAllocatorCheckRange(t *testing.T) {
 				// Region "c"
 				{NodeID: 7, StoreID: 7, ReplicaID: 5},
 			},
-			zoneConfig: zonepb.DefaultSystemZoneConfigRef(),
+			spanConfig: &defaultSystemSpanConfig,
 			livenessOverrides: map[roachpb.NodeID]livenesspb.NodeLivenessStatus{
 				// Downsize to one node per region: 3,6,9.
 				1: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
@@ -3624,7 +3651,7 @@ func TestAllocatorCheckRange(t *testing.T) {
 				// Region "c"
 				{NodeID: 7, StoreID: 7, ReplicaID: 5},
 			},
-			zoneConfig: zonepb.DefaultSystemZoneConfigRef(),
+			spanConfig: &defaultSystemSpanConfig,
 			livenessOverrides: map[roachpb.NodeID]livenesspb.NodeLivenessStatus{
 				// Downsize to: 1,4,7,9 but 7 is dead.
 				// Replica on n7 should be replaced first.
@@ -3638,6 +3665,196 @@ func TestAllocatorCheckRange(t *testing.T) {
 			expectedAction:    allocatorimpl.AllocatorReplaceDeadVoter,
 			expectErr:         false,
 			expectValidTarget: true,
+		},
+		{
+			name:   "decommissioning without satisfying partially constrained locality",
+			stores: fourSingleStoreRacks,
+			existingReplicas: []roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1, ReplicaID: 1},
+				{NodeID: 2, StoreID: 2, ReplicaID: 2},
+				{NodeID: 4, StoreID: 4, ReplicaID: 3},
+			},
+			livenessOverrides: map[roachpb.NodeID]livenesspb.NodeLivenessStatus{
+				4: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+			},
+			spanConfig: &roachpb.SpanConfig{
+				NumReplicas: 3,
+				Constraints: []roachpb.ConstraintsConjunction{
+					{
+						NumReplicas: 1,
+						Constraints: []roachpb.Constraint{
+							{
+								Type:  roachpb.Constraint_REQUIRED,
+								Key:   "rack",
+								Value: "4",
+							},
+						},
+					},
+				},
+			},
+			expectedAction:     allocatorimpl.AllocatorReplaceDecommissioningVoter,
+			expectAllocatorErr: true,
+			expectedErrStr:     "replicas must match constraints",
+			expectedLogMessage: "cannot allocate necessary voter on s3",
+		},
+		{
+			name:   "decommissioning without satisfying multiple partial constraints",
+			stores: fourSingleStoreRacks,
+			existingReplicas: []roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1, ReplicaID: 1},
+				{NodeID: 2, StoreID: 2, ReplicaID: 2},
+				{NodeID: 4, StoreID: 4, ReplicaID: 3},
+			},
+			livenessOverrides: map[roachpb.NodeID]livenesspb.NodeLivenessStatus{
+				4: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+			},
+			spanConfig: &roachpb.SpanConfig{
+				NumReplicas: 3,
+				Constraints: []roachpb.ConstraintsConjunction{
+					{
+						NumReplicas: 1,
+						Constraints: []roachpb.Constraint{
+							{
+								Type:  roachpb.Constraint_REQUIRED,
+								Value: "black",
+							},
+						},
+					},
+					{
+						NumReplicas: 1,
+						Constraints: []roachpb.Constraint{
+							{
+								Type:  roachpb.Constraint_REQUIRED,
+								Key:   "rack",
+								Value: "4",
+							},
+						},
+					},
+				},
+			},
+			expectedAction:     allocatorimpl.AllocatorReplaceDecommissioningVoter,
+			expectAllocatorErr: true,
+			expectedErrStr:     "replicas must match constraints",
+			expectedLogMessage: "cannot allocate necessary voter on s3",
+		},
+		{
+			name:   "decommissioning during upreplication with partial constraints",
+			stores: fourSingleStoreRacks,
+			existingReplicas: []roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1, ReplicaID: 1},
+			},
+			livenessOverrides: map[roachpb.NodeID]livenesspb.NodeLivenessStatus{
+				4: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+			},
+			spanConfig: &roachpb.SpanConfig{
+				NumReplicas: 3,
+				Constraints: []roachpb.ConstraintsConjunction{
+					{
+						NumReplicas: 1,
+						Constraints: []roachpb.Constraint{
+							{
+								Type:  roachpb.Constraint_REQUIRED,
+								Key:   "rack",
+								Value: "4",
+							},
+						},
+					},
+				},
+			},
+			expectedAction:    allocatorimpl.AllocatorAddVoter,
+			expectValidTarget: true,
+		},
+		{
+			name:   "decommissioning with replacement satisfying locality",
+			stores: multiRegionStores,
+			existingReplicas: []roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1, ReplicaID: 1},
+				{NodeID: 4, StoreID: 4, ReplicaID: 2},
+				{NodeID: 7, StoreID: 7, ReplicaID: 3},
+			},
+			livenessOverrides: map[roachpb.NodeID]livenesspb.NodeLivenessStatus{
+				1: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+				3: livenesspb.NodeLivenessStatus_DEAD,
+			},
+			spanConfig: &roachpb.SpanConfig{
+				NumReplicas: 3,
+				Constraints: []roachpb.ConstraintsConjunction{
+					{
+						NumReplicas: 1,
+						Constraints: []roachpb.Constraint{
+							{
+								Type:  roachpb.Constraint_REQUIRED,
+								Key:   "region",
+								Value: "a",
+							},
+						},
+					},
+					{
+						NumReplicas: 1,
+						Constraints: []roachpb.Constraint{
+							{
+								Type:  roachpb.Constraint_REQUIRED,
+								Key:   "region",
+								Value: "b",
+							},
+						},
+					},
+				},
+			},
+			expectedAction:    allocatorimpl.AllocatorReplaceDecommissioningVoter,
+			expectValidTarget: true,
+			expectedTarget:    roachpb.ReplicationTarget{NodeID: 2, StoreID: 2},
+			expectErr:         false,
+		},
+		{
+			name:   "decommissioning without satisfying fully constrained locality",
+			stores: fourSingleStoreRacks,
+			existingReplicas: []roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1, ReplicaID: 1},
+				{NodeID: 2, StoreID: 2, ReplicaID: 2},
+				{NodeID: 4, StoreID: 4, ReplicaID: 3},
+			},
+			livenessOverrides: map[roachpb.NodeID]livenesspb.NodeLivenessStatus{
+				4: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+			},
+			spanConfig: &roachpb.SpanConfig{
+				NumReplicas: 3,
+				Constraints: []roachpb.ConstraintsConjunction{
+					{
+						NumReplicas: 1,
+						Constraints: []roachpb.Constraint{
+							{
+								Type:  roachpb.Constraint_REQUIRED,
+								Key:   "rack",
+								Value: "1",
+							},
+						},
+					},
+					{
+						NumReplicas: 1,
+						Constraints: []roachpb.Constraint{
+							{
+								Type:  roachpb.Constraint_REQUIRED,
+								Key:   "rack",
+								Value: "2",
+							},
+						},
+					},
+					{
+						NumReplicas: 1,
+						Constraints: []roachpb.Constraint{
+							{
+								Type:  roachpb.Constraint_REQUIRED,
+								Key:   "rack",
+								Value: "4",
+							},
+						},
+					},
+				},
+			},
+			expectedAction:     allocatorimpl.AllocatorReplaceDecommissioningVoter,
+			expectAllocatorErr: true,
+			expectedErrStr:     "replicas must match constraints",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -3659,11 +3876,17 @@ func TestAllocatorCheckRange(t *testing.T) {
 			cfg := TestStoreConfig(clock)
 			cfg.Gossip = g
 			cfg.StorePool = sp
-			if tc.zoneConfig != nil {
-				// TODO(sarkesian): This override is not great. It would be much
-				// preferable to provide a SpanConfig if possible. See comment in
-				// createTestStoreWithoutStart.
-				cfg.SystemConfigProvider.GetSystemConfig().DefaultZoneConfig = tc.zoneConfig
+			if tc.spanConfig != nil {
+				mockSr := &mockSpanConfigReader{
+					real: cfg.SystemConfigProvider.GetSystemConfig(),
+					overrides: map[string]roachpb.SpanConfig{
+						"a": *tc.spanConfig,
+					},
+				}
+
+				cfg.TestingKnobs.ConfReaderInterceptor = func() spanconfig.StoreReader {
+					return mockSr
+				}
 			}
 
 			s := createTestStoreWithoutStart(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
@@ -3689,20 +3912,6 @@ func TestAllocatorCheckRange(t *testing.T) {
 					return numNodes - numDecomOverrides
 				}
 				storePoolOverride = storepool.NewOverrideStorePool(sp, livenessOverride, nodeCountOverride)
-			}
-
-			// Check if our baseline action without overrides is a noop; i.e., the
-			// range is fully replicated as configured and needs no actions.
-			if tc.baselineExpNoop {
-				action, _, _, err := s.AllocatorCheckRange(ctx, desc,
-					false /* collectTraces */, nil, /* overrideStorePool */
-				)
-				require.NoError(t, err, "expected baseline check without error")
-				require.Containsf(t, []allocatorimpl.AllocatorAction{
-					allocatorimpl.AllocatorNoop,
-					allocatorimpl.AllocatorConsiderRebalance,
-				}, action, "expected baseline noop, got %s", action)
-				//require.Equalf(t, allocatorimpl.AllocatorNoop, action, "expected baseline noop, got %s", action)
 			}
 
 			// Execute actual allocator range repair check.
@@ -3733,12 +3942,18 @@ func TestAllocatorCheckRange(t *testing.T) {
 			}
 
 			if tc.expectValidTarget {
-				require.NotEqualf(t, roachpb.ReplicationTarget{}, target, "expected valid target")
+				require.Falsef(t, roachpb.Empty(target), "expected valid target")
+			}
+
+			if !roachpb.Empty(tc.expectedTarget) {
+				require.Equalf(t, tc.expectedTarget, target, "expected target %s, got %s",
+					tc.expectedTarget, target,
+				)
 			}
 
 			if tc.expectedLogMessage != "" {
 				_, ok := recording.FindLogMessage(tc.expectedLogMessage)
-				require.Truef(t, ok, "expected to find trace \"%s\"", tc.expectedLogMessage)
+				require.Truef(t, ok, "expected to find \"%s\" in trace:\n%s", tc.expectedLogMessage, recording)
 			}
 		})
 	}

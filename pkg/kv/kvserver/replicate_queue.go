@@ -1154,16 +1154,21 @@ func (rq *replicateQueue) addOrReplaceVoters(
 ) (op AllocationOp, _ error) {
 	effects := effectBuilder{}
 	desc, conf := repl.DescAndSpanConfig()
-	isReplace := removeIdx >= 0
+	var replacing *roachpb.ReplicaDescriptor
+	if removeIdx >= 0 {
+		replacing = &existingVoters[removeIdx]
+	}
 
 	// The allocator should not try to re-add this replica since there is a reason
 	// we're removing it (i.e. dead or decommissioning). If we left the replica in
 	// the slice, the allocator would not be guaranteed to pick a replica that
 	// fills the gap removeRepl leaves once it's gone.
-	newVoter, details, err := rq.allocator.AllocateVoter(ctx, rq.storePool, conf, remainingLiveVoters, remainingLiveNonVoters, replicaStatus)
+	newVoter, details, err := rq.allocator.AllocateVoter(ctx, rq.storePool, conf, remainingLiveVoters, remainingLiveNonVoters, replacing, replicaStatus)
 	if err != nil {
 		return nil, err
 	}
+
+	isReplace := removeIdx >= 0
 	if isReplace && newVoter.StoreID == existingVoters[removeIdx].StoreID {
 		return nil, errors.AssertionFailedf("allocator suggested to replace replica on s%d with itself", newVoter.StoreID)
 	}
@@ -1254,8 +1259,12 @@ func (rq *replicateQueue) addOrReplaceNonVoters(
 ) (op AllocationOp, _ error) {
 	effects := effectBuilder{}
 	conf := repl.SpanConfig()
+	var replacing *roachpb.ReplicaDescriptor
+	if removeIdx >= 0 {
+		replacing = &existingNonVoters[removeIdx]
+	}
 
-	newNonVoter, details, err := rq.allocator.AllocateNonVoter(ctx, rq.storePool, conf, liveVoterReplicas, liveNonVoterReplicas, replicaStatus)
+	newNonVoter, details, err := rq.allocator.AllocateNonVoter(ctx, rq.storePool, conf, liveVoterReplicas, liveNonVoterReplicas, replacing, replicaStatus)
 	if err != nil {
 		return nil, err
 	}
