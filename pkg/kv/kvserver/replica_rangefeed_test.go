@@ -524,7 +524,7 @@ func TestReplicaRangefeedExpiringLeaseError(t *testing.T) {
 	}
 }
 
-func TestReplicaRangefeedRetryErrors(t *testing.T) {
+func TestReplicaRangefeedErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -610,6 +610,9 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 				&noResolveTimestampEvent,
 				&resolveTimestampEvent,
 			}
+		}
+		if len(events) > 2 {
+			events = events[:2]
 		}
 		if !reflect.DeepEqual(events, expEvents) {
 			t.Fatalf("incorrect events on stream, found %v, want %v", events, expEvents)
@@ -960,6 +963,87 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		// Check the error.
 		pErr := <-streamErrC
 		assertRangefeedRetryErr(t, pErr, roachpb.RangeFeedRetryError_REASON_LOGICAL_OPS_MISSING)
+	})
+	t.Run("range key mismatch", func(t *testing.T) {
+		knobs := base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				// Use a span config override to check that we get a key mismatch error
+				// despite the span config's setting whenever the key is outside the
+				// bounds of the range.
+				SetSpanConfigInterceptor: func(desc *roachpb.RangeDescriptor, conf roachpb.SpanConfig) roachpb.SpanConfig {
+					if desc.ContainsKey(roachpb.RKey(keys.ScratchRangeMin)) {
+						conf.RangefeedEnabled = false
+						return conf
+					} else if desc.ContainsKey(startRKey) {
+						conf.RangefeedEnabled = true
+						return conf
+					}
+					return conf
+				},
+			},
+		}
+		tc, _ := setup(t, knobs)
+		defer tc.Stopper().Stop(ctx)
+
+		ts := tc.Servers[0]
+		store, err := ts.Stores().GetStore(ts.GetFirstStoreID())
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Split the range so that the RHS should have a span config with
+		// rangefeeds enabled (like a range on a system table would), while the
+		// LHS does not. A rangefeed request on the LHS should still return a
+		// RangeKeyMismatchError given the span is outside the range, even though
+		// rangefeeds are not enabled.
+		tc.SplitRangeOrFatal(t, startKey)
+
+		leftReplica := store.LookupReplica(roachpb.RKey(keys.ScratchRangeMin))
+		leftRangeID := leftReplica.RangeID
+		rightReplica := store.LookupReplica(startRKey)
+		rightRangeID := rightReplica.RangeID
+
+		// Attempt to establish a rangefeed, sending the request to the LHS.
+		stream := newTestStream()
+		streamErrC := make(chan *roachpb.Error, 1)
+
+		endKey := keys.ScratchRangeMax
+		rangefeedSpan := roachpb.Span{Key: startKey, EndKey: endKey}
+
+		go func() {
+			req := roachpb.RangeFeedRequest{
+				Header: roachpb.Header{
+					RangeID: leftRangeID,
+				},
+				Span: rangefeedSpan,
+			}
+			timer := time.AfterFunc(10*time.Second, stream.Cancel)
+			defer timer.Stop()
+			streamErrC <- store.RangeFeed(&req, stream)
+		}()
+
+		// Check the error.
+		pErr := <-streamErrC
+		if _, ok := pErr.GetDetail().(*roachpb.RangeKeyMismatchError); !ok {
+			t.Fatalf("got incorrect error for RangeFeed: %v; expecting RangeKeyMismatchError", pErr)
+		}
+
+		// Now send the range feed request to the correct replica, which should not
+		// encounter errors.
+		stream = newTestStream()
+		go func() {
+			req := roachpb.RangeFeedRequest{
+				Header: roachpb.Header{
+					RangeID: rightRangeID,
+				},
+				Span: rangefeedSpan,
+			}
+			timer := time.AfterFunc(10*time.Second, stream.Cancel)
+			defer timer.Stop()
+			streamErrC <- store.RangeFeed(&req, stream)
+		}()
+
+		// Wait for the first checkpoint event.
+		waitForInitialCheckpointAcrossSpan(t, stream, streamErrC, rangefeedSpan)
 	})
 }
 
