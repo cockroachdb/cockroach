@@ -237,7 +237,9 @@ func (sm *replicaStateMachine) ApplySideEffects(
 			// initially.
 			//
 			// [^1]: see (*replicaDecoder).retrieveLocalProposals()
-			log.Fatalf(ctx, "finishing proposal with outstanding reproposal at a higher max lease index: %+v", cmd)
+			log.Fatalf(ctx, "finishing a proposal with outstanding reproposal at a higher max lease index:\n\n%+v",
+				cmd.
+					cmd)
 		}
 		if !cmd.Rejected() && cmd.proposal.applied {
 			// If the command already applied then we shouldn't be "finishing" its

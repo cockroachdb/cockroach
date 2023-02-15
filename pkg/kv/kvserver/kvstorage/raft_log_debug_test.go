@@ -13,11 +13,14 @@ package kvstorage
 import (
 	"context"
 	"math"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/stretchr/testify/require"
 	"go.etcd.io/raft/v3/raftpb"
 )
 
@@ -27,8 +30,15 @@ func TestDebugRaftLog(t *testing.T) {
 	st := cluster.MakeClusterSettings()
 	var opts []storage.ConfigOption
 	opts = append(opts, storage.ReadOnly)
-	eng, err := storage.Open(ctx, storage.Filesystem("cockroach-data"), st, opts...)
-	raftlog.Visit(eng, rangeID, 0, math.MaxUint64, func(entry raftpb.Entry) error {
-
-	})
+	eng, err := storage.Open(
+		ctx,
+		storage.Filesystem(filepath.Join(
+			//os.ExpandEnv("$HOME"), "go", "src", "github.com", "cockroachdb", "cockroach", "cockroach-data"),
+			os.ExpandEnv("$HOME"), "local", "1", "data",
+		)), st, opts...)
+	require.NoError(t, err)
+	require.NoError(t, raftlog.Visit(eng, rangeID, 0, math.MaxUint64, func(entry raftpb.Entry) error {
+		t.Log(entry)
+		return nil
+	}))
 }

@@ -6,4 +6,4 @@ roachprod put local cockroach
 roachprod start local
 roachprod sql local:1 -- -e 'set cluster setting kv.range_split.load_qps_threshold = 9999999'
 roachprod ssh local:1 -- ./cockroach workload init kv --splits 1
-roachprod ssh local:1 -- ./cockroach workload run kv --read-percent 0 {pgurl} --concurrency 512
+roachprod ssh local:1 -- ./cockroach workload run kv --min-block-bytes 1024 --max-block-bytes 1024 --read-percent 0 {pgurl} --concurrency=4096 --tolerate-errors
