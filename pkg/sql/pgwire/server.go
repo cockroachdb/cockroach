@@ -936,8 +936,8 @@ func (s *Server) handleCancel(ctx context.Context, conn net.Conn, buf *pgwirebas
 	} else if err != nil {
 		if respStatus := status.Convert(err); respStatus.Code() == codes.ResourceExhausted {
 			s.metrics.PGWireCancelIgnoredCount.Inc(1)
+			log.Sessions.Warningf(ctx, "unexpected while handling pgwire cancellation request: %v", err)
 		}
-		log.Sessions.Warningf(ctx, "unexpected while handling pgwire cancellation request: %v", err)
 	}
 }
 
