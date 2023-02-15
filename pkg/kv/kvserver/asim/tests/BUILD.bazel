@@ -1,0 +1,35 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_test(
+    name = "tests_test",
+    srcs = ["datadriven_simulation_test.go"],
+    args = ["-test.timeout=295s"],
+    data = glob(["testdata/**"]),
+    embed = [":tests"],
+    deps = [
+        "//pkg/kv/kvserver/asim",
+        "//pkg/kv/kvserver/asim/config",
+        "//pkg/kv/kvserver/asim/gen",
+        "//pkg/kv/kvserver/asim/metrics",
+        "//pkg/testutils/datapathutils",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_guptarohit_asciigraph//:asciigraph",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+go_library(
+    name = "tests",
+    srcs = ["assert.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/tests",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver/asim",
+        "//pkg/kv/kvserver/asim/metrics",
+        "//pkg/util/log",
+        "@com_github_montanaflynn_stats//:stats",
+    ],
+)
+
+get_x_data(name = "get_x_data")

@@ -40,7 +40,7 @@ func TestTracker(t *testing.T) {
 	rwg := []workload.Generator{
 		workload.TestCreateWorkloadGenerator(settings.Seed, settings.StartTime, 10, 10000),
 	}
-	s := state.LoadConfig(state.ComplexConfig)
+	s := state.LoadConfig(state.ComplexConfig, state.SingleRangeConfig, settings)
 	l1 := &mockListener{history: [][]metrics.StoreMetrics{}}
 	l2 := &mockListener{history: [][]metrics.StoreMetrics{}}
 	tracker := metrics.NewTracker(testingMetricsInterval, l1, l2)

@@ -64,7 +64,7 @@ func newState(settings *config.SimulationSettings) *state {
 		clock:      &ManualSimClock{nanos: settings.StartTime.UnixNano()},
 		ranges:     newRMap(),
 		usageInfo:  newClusterUsageInfo(),
-		settings:   config.DefaultSimulationSettings(),
+		settings:   settings,
 	}
 	s.load = map[RangeID]ReplicaLoad{FirstRangeID: NewReplicaLoadCounter(s.clock)}
 	return s

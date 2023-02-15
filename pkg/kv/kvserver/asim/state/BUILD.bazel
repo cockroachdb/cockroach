@@ -9,6 +9,7 @@ go_library(
         "helpers.go",
         "impl.go",
         "load.go",
+        "new_state.go",
         "split_decider.go",
         "state.go",
         "state_listener.go",

@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
@@ -37,7 +36,7 @@ func TestRunAllocatorSimulator(t *testing.T) {
 	rwg := make([]workload.Generator, 1)
 	rwg[0] = workload.TestCreateWorkloadGenerator(settings.Seed, settings.StartTime, 1, 10)
 	m := metrics.NewTracker(settings.MetricsInterval, metrics.NewClusterMetricsTracker(os.Stdout))
-	s := state.LoadConfig(state.ComplexConfig)
+	s := state.LoadConfig(state.ComplexConfig, state.SingleRangeConfig, settings)
 
 	sim := asim.NewSimulator(duration, rwg, s, settings, m)
 	sim.RunSim(ctx)
@@ -89,7 +88,7 @@ func TestAllocatorSimulatorSpeed(t *testing.T) {
 			replicaDistribution[i] = 0
 		}
 
-		s := state.NewTestStateReplDistribution(replicaDistribution, ranges, replsPerRange, keyspace)
+		s := state.NewStateWithDistribution(replicaDistribution, ranges, replsPerRange, keyspace, settings)
 		sim := asim.NewSimulator(duration, rwg, s, settings, m)
 
 		startTime := timeutil.Now()
@@ -139,7 +138,7 @@ func TestAllocatorSimulatorDeterministic(t *testing.T) {
 	// be larger than 3 keys per range.
 	keyspace := 3 * ranges
 	// Track the run to compare against for determinism.
-	var refRun []roachpb.StoreDescriptor
+	var refRun asim.History
 
 	for run := 0; run < runs; run++ {
 		rwg := make([]workload.Generator, 1)
@@ -158,23 +157,17 @@ func TestAllocatorSimulatorDeterministic(t *testing.T) {
 			replicaDistribution[i] = 0
 		}
 
-		s := state.NewTestStateReplDistribution(replicaDistribution, ranges, replsPerRange, keyspace)
+		s := state.NewStateWithDistribution(replicaDistribution, ranges, replsPerRange, keyspace, settings)
 		sim := asim.NewSimulator(duration, rwg, s, settings, m)
 
 		ctx := context.Background()
 		sim.RunSim(ctx)
-
-		storeRefs := s.Stores()
-		storeIDs := make([]state.StoreID, len(storeRefs))
-		for i, store := range storeRefs {
-			storeIDs[i] = store.StoreID()
-		}
-		descs := s.StoreDescriptors(false /* cached */, storeIDs...)
+		history := sim.History()
 
 		if run == 0 {
-			refRun = descs
+			refRun = history
 			continue
 		}
-		require.Equal(t, refRun, descs)
+		require.Equal(t, refRun, history)
 	}
 }

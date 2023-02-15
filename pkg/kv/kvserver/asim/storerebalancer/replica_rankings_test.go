@@ -15,12 +15,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/stretchr/testify/require"
 )
 
 func TestHottestRanges(t *testing.T) {
-	s := state.NewTestStateReplCounts(map[state.StoreID]int{1: 6, 2: 6, 3: 6}, 3, 1000 /* keyspace */)
+	settings := config.DefaultSimulationSettings()
+	s := state.NewStateWithReplCounts(map[state.StoreID]int{1: 7, 2: 7, 3: 7}, 3, 1000 /* keyspace */, settings)
 	// Set the QPS to be a testing rate to be rangeID * 100 for each range.
 	// NB: Normally the subsequent lease transfer would erase the QPS, however
 	// here the testing rate remains constants despite resets of actual counts.

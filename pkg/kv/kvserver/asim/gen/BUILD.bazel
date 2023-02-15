@@ -1,0 +1,18 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "gen",
+    srcs = ["generator.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gen",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver/asim",
+        "//pkg/kv/kvserver/asim/config",
+        "//pkg/kv/kvserver/asim/metrics",
+        "//pkg/kv/kvserver/asim/state",
+        "//pkg/kv/kvserver/asim/workload",
+    ],
+)
+
+get_x_data(name = "get_x_data")

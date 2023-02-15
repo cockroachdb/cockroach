@@ -370,21 +370,23 @@ func TestOrderedStateLists(t *testing.T) {
 			)
 		}
 	}
+	settings := config.DefaultSimulationSettings()
 
 	// Test an empty state, where there should be nothing.
-	s := NewState(config.DefaultSimulationSettings())
+	s := NewState(settings)
 	assertListsOrdered(s)
 	// Test an even distribution with 100 stores, 10k ranges and 1m keyspace.
-	s = NewTestStateEvenDistribution(100, 10000, 3, 1000000)
+	s = NewStateEvenDistribution(100, 10000, 3, 1000000, settings)
 	assertListsOrdered(s)
 	// Test a skewed distribution with 100 stores, 10k ranges and 1m keyspace.
-	s = NewTestStateSkewedDistribution(100, 10000, 3, 1000000)
+	s = NewStateSkewedDistribution(100, 10000, 3, 1000000, settings)
 	assertListsOrdered(s)
 }
 
 // TestNewStateDeterministic asserts that the state returned from the new state
 // utility functions is deterministic.
 func TestNewStateDeterministic(t *testing.T) {
+	settings := config.DefaultSimulationSettings()
 
 	testCases := []struct {
 		desc       string
@@ -392,15 +394,17 @@ func TestNewStateDeterministic(t *testing.T) {
 	}{
 		{
 			desc:       "even distribution",
-			newStateFn: func() State { return NewTestStateEvenDistribution(7, 1400, 3, 10000) },
+			newStateFn: func() State { return NewStateEvenDistribution(7, 1400, 3, 10000, settings) },
 		},
 		{
 			desc:       "skewed distribution",
-			newStateFn: func() State { return NewTestStateSkewedDistribution(7, 1400, 3, 10000) },
+			newStateFn: func() State { return NewStateSkewedDistribution(7, 1400, 3, 10000, settings) },
 		},
 		{
-			desc:       "replica distribution raw ",
-			newStateFn: func() State { return NewTestStateReplDistribution([]float64{0.2, 0.2, 0.2, 0.2, 0.2}, 5, 3, 10000) },
+			desc: "replica distribution raw ",
+			newStateFn: func() State {
+				return NewStateWithDistribution([]float64{0.2, 0.2, 0.2, 0.2, 0.2}, 5, 3, 10000, settings)
+			},
 		},
 	}
 
@@ -416,8 +420,15 @@ func TestNewStateDeterministic(t *testing.T) {
 
 // TestSplitRangeDeterministic asserts that range splits are deterministic.
 func TestSplitRangeDeterministic(t *testing.T) {
+	settings := config.DefaultSimulationSettings()
 	run := func() (State, func(key Key) (Range, Range, bool)) {
-		s := NewTestStateReplDistribution([]float64{0.2, 0.2, 0.2, 0.2, 0.2}, 5, 3, 10000)
+		s := NewStateWithDistribution(
+			[]float64{0.2, 0.2, 0.2, 0.2, 0.2},
+			5,
+			3,
+			10000,
+			settings,
+		)
 		return s, func(key Key) (Range, Range, bool) {
 			return s.SplitRange(key)
 		}
