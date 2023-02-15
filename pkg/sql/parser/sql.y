@@ -3937,7 +3937,7 @@ copy_stmt:
   }
 | COPY table_name opt_column_list TO error
   {
-    return unimplementedWithIssue(sqllex, 96590)
+    return unimplementedWithIssue(sqllex, 97181)
   }
 | COPY '(' preparable_stmt ')' TO STDOUT opt_with_copy_options
    {

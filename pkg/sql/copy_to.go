@@ -142,7 +142,7 @@ func runCopyTo(
 	case tree.CopyFormatBinary:
 		//wireFormat = pgwirebase.FormatBinary
 		return 0, unimplemented.NewWithIssue(
-			85571,
+			97180,
 			"binary format for COPY TO not implemented",
 		)
 	case tree.CopyFormatCSV:

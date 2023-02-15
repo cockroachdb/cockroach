@@ -15,4 +15,4 @@ COPY t TO STDOUT BINARY
 ----
 ERROR: unimplemented: binary format for COPY TO not implemented (SQLSTATE 0A000)
 HINT: You have attempted to use a feature that is not yet implemented.
-See: https://go.crdb.dev/issue-v/85571/v23.1
+See: https://go.crdb.dev/issue-v/97180/v23.1

@@ -118,7 +118,7 @@ DETAIL: source SQL:
 COPY t TO 'file'
           ^
 HINT: You have attempted to use a feature that is not yet implemented.
-See: https://go.crdb.dev/issue-v/96590/
+See: https://go.crdb.dev/issue-v/97181/
 
 
 parse
