@@ -707,9 +707,27 @@ func (b *Builder) buildUDF(
 				physProps.Ordering = props.OrderingChoice{}
 			}
 
-			// If there are multiple output columns, we must combine them into a
-			// tuple - only a single column can be returned from a UDF.
-			if cols := physProps.Presentation; len(cols) > 1 {
+			// Replace the tuple contents of RECORD return types from Any to the
+			// result columns of the last statement. If the result column is a tuple,
+			// then use its tuple contents for the return instead.
+			isSingleTupleResult := len(stmtScope.cols) == 1 && stmtScope.cols[0].typ.Family() == types.TupleFamily
+			if types.IsRecordType(f.ResolvedType()) {
+				if isSingleTupleResult {
+					f.ResolvedType().InternalType.TupleContents = stmtScope.cols[0].typ.TupleContents()
+				} else {
+					tc := make([]*types.T, len(stmtScope.cols))
+					for i, col := range stmtScope.cols {
+						tc[i] = col.typ
+					}
+					f.ResolvedType().InternalType.TupleContents = tc
+				}
+			}
+
+			// If there are multiple output columns or the output type is a record and
+			// the output column is not a tuple, we must combine them into a tuple -
+			// only a single column can be returned from a UDF.
+			cols := physProps.Presentation
+			if len(cols) > 1 || (types.IsRecordType(f.ResolvedType()) && !isSingleTupleResult) {
 				elems := make(memo.ScalarListExpr, len(cols))
 				for i := range cols {
 					elems[i] = b.factory.ConstructVariable(cols[i].ID)
@@ -724,10 +742,12 @@ func (b *Builder) buildUDF(
 			// We must preserve the presentation of columns as physical
 			// properties to prevent the optimizer from pruning the output
 			// column. If necessary, we add an assignment cast to the result
-			// column so that its type matches the function return type.
+			// column so that its type matches the function return type. Record return
+			// types do not need an assignment cast, since at this point the return
+			// column is already a tuple.
 			returnCol := physProps.Presentation[0].ID
 			returnColMeta := b.factory.Metadata().ColumnMeta(returnCol)
-			if !returnColMeta.Type.Identical(f.ResolvedType()) {
+			if !types.IsRecordType(f.ResolvedType()) && !returnColMeta.Type.Identical(f.ResolvedType()) {
 				if !cast.ValidCast(returnColMeta.Type, f.ResolvedType(), cast.ContextAssignment) {
 					panic(sqlerrors.NewInvalidAssignmentCastError(
 						returnColMeta.Type, f.ResolvedType(), returnColMeta.Alias))

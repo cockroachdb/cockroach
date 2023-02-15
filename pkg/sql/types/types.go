@@ -2720,6 +2720,13 @@ func IsWildcardTupleType(t *T) bool {
 	return len(t.TupleContents()) == 1 && t.TupleContents()[0].Family() == AnyFamily
 }
 
+// IsRecordType returns true if this is a RECORD type. This should only be used
+// when processing UDFs. A record differs from AnyTuple in that the tuple
+// contents may contain types other than Any.
+func IsRecordType(typ *T) bool {
+	return typ.Family() == TupleFamily && typ.Oid() == oid.T_record
+}
+
 // collatedStringTypeSQL returns the string representation of a COLLATEDSTRING
 // or []COLLATEDSTRING type. This is tricky in the case of an array of collated
 // string, since brackets must precede the COLLATE identifier:
