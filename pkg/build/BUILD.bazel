@@ -1,7 +1,7 @@
 load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "build",
@@ -12,13 +12,13 @@ go_library(
     ],
     cgo = True,
     embed = [":build_go_proto"],
+    embedsrcs = ["version.txt"],
     importpath = "github.com/cockroachdb/cockroach/pkg/build",
     visibility = ["//visibility:public"],
     x_defs = {
         "github.com/cockroachdb/cockroach/pkg/build.cgoTargetTriple": "{STABLE_BUILD_TARGET_TRIPLE}",
         "github.com/cockroachdb/cockroach/pkg/build.channel": "{STABLE_BUILD_CHANNEL}",
         "github.com/cockroachdb/cockroach/pkg/build.rev": "{BUILD_REV}",
-        "github.com/cockroachdb/cockroach/pkg/build.tag": "{BUILD_TAG}",
         "github.com/cockroachdb/cockroach/pkg/build.typ": "{STABLE_BUILD_TYPE}",
         "github.com/cockroachdb/cockroach/pkg/build.utcTime": "{BUILD_UTCTIME}",
     },
@@ -43,6 +43,14 @@ go_proto_library(
     proto = ":build_proto",
     visibility = ["//visibility:public"],
     deps = ["@com_github_gogo_protobuf//gogoproto"],
+)
+
+go_test(
+    name = "build_test",
+    srcs = ["info_test.go"],
+    args = ["-test.timeout=295s"],
+    embed = [":build"],
+    deps = ["@com_github_stretchr_testify//require"],
 )
 
 get_x_data(name = "get_x_data")

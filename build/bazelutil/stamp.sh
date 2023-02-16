@@ -3,13 +3,12 @@
 # This command is used by bazel as the workspace_status_command
 # to implement build stamping with git information.
 
-# Usage: stamp.sh [target-triple] [build-channel] [build-tag] [build-type]
+# Usage: stamp.sh [target-triple] [build-channel] [build-type]
 # All arguments are optional and have appropriate defaults. In this way,
 # stamp.sh with no arguments is appropriate as the `workplace_status_command`
 # for a development build.
 #  target-triple: defaults to the value of `cc -dumpmachine`
 #  build-channel: defaults to `unknown`, but can be `official-binary`
-#  build-tag: defaults to a value that is gleaned from `git rev-parse`
 #  build-type: defaults to `development`, but can be `release`
 
 set -euo pipefail
@@ -41,15 +40,6 @@ else
     shift 1
 fi
 
-# Handle build-tag.
-if [ -z "${1+x}" ]
-then
-    BUILD_TAG=$(git describe --tags --dirty --match=v[0-9]* 2> /dev/null || git rev-parse --short HEAD;)
-else
-    BUILD_TAG="$1"
-    shift 1
-fi
-
 # Handle build-type.
 if [ -z "${1+x}" ]
 then
@@ -61,7 +51,7 @@ fi
 
 if [ "$BUILD_TYPE" = "release" ]
 then
-    CRASH_REPORT_ENV="$BUILD_TAG"
+    CRASH_REPORT_ENV=$(cat ./pkg/build/version.txt)
 else
     CRASH_REPORT_ENV="development"
 fi
@@ -83,6 +73,5 @@ STABLE_BUILD_TARGET_TRIPLE ${TARGET_TRIPLE-}
 STABLE_BUILD_TYPE ${BUILD_TYPE-}
 STABLE_CRASH_REPORT_ENV ${CRASH_REPORT_ENV-}
 BUILD_REV ${BUILD_REV-}
-BUILD_TAG ${BUILD_TAG-}
 BUILD_UTCTIME ${BUILD_UTCTIME-}
 EOF
