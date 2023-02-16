@@ -150,7 +150,7 @@ func TestWaitForSchemaChangeMigration(t *testing.T) {
 			jobKnobs.IntervalOverrides.WaitForJobsMaxDelay = shortInterval()
 
 			var waitCount int32
-			jobKnobs.BeforeWaitForJobsQuery = func() {
+			jobKnobs.BeforeWaitForJobsQuery = func(_ []jobspb.JobID) {
 				if secondWaitChan != nil {
 					if atomic.AddInt32(&waitCount, 1) == 2 {
 						close(secondWaitChan)
@@ -259,7 +259,7 @@ func TestWaitForSchemaChangeMigrationSynthetic(t *testing.T) {
 			var waitCount int32
 			var secondWaitChan chan struct{}
 			params.Knobs.JobsTestingKnobs = &jobs.TestingKnobs{
-				BeforeWaitForJobsQuery: func() {
+				BeforeWaitForJobsQuery: func(_ []jobspb.JobID) {
 					if secondWaitChan != nil {
 						if atomic.AddInt32(&waitCount, 1) == 2 {
 							close(secondWaitChan)

@@ -15,10 +15,32 @@ import (
 	"bytes"
 	"fmt"
 	"regexp"
+	"strconv"
 )
 
-var rustUnitTestOutputRegex = regexp.MustCompile(`(?P<type>.*) (?P<class>.*)::(?P<name>.*) .\.\.\ (?P<result>.*)`)
+var dotNetUnitTestOutputRegex = regexp.MustCompile(`\s+(?P<result>Skipped|Failed)\s+(?P<name>.*) \[.+]`)
+var dotNetTestSummaryRegex = regexp.MustCompile(`Failed:\s+\d+,\s+Passed:\s+(?P<passes>\d+),\s+Skipped:\s+\d+,\s+Total:\s+\d+, Duration:`)
+
+var rustUnitTestOutputRegex = regexp.MustCompile(`(?P<type>.*) (?P<class>.*)::(?P<name>.*) \.\.\. (?P<result>.*)`)
 var pythonUnitTestOutputRegex = regexp.MustCompile(`(?P<name>.*) \((?P<class>.*)\) \.\.\. (?P<result>[^'"]*?)(?: u?['"](?P<reason>.*)['"])?$`)
+
+func (r *ormTestsResults) parseDotNetUnitTestOutput(
+	input []byte, expectedFailures blocklist, ignoredList blocklist,
+) {
+	r.parseUnitTestOutput(dotNetUnitTestOutputRegex, input, expectedFailures, ignoredList)
+	// Search the results one more time to get the total number of tests.
+	scanner := bufio.NewScanner(bytes.NewReader(input))
+	for scanner.Scan() {
+		match := dotNetTestSummaryRegex.FindStringSubmatch(scanner.Text())
+		if match != nil {
+			groups := map[string]string{}
+			for i, name := range match {
+				groups[dotNetTestSummaryRegex.SubexpNames()[i]] = name
+			}
+			r.passExpectedCount, _ = strconv.Atoi(groups["passes"])
+		}
+	}
+}
 
 func (r *ormTestsResults) parsePythonUnitTestOutput(
 	input []byte, expectedFailures blocklist, ignoredList blocklist,
@@ -43,8 +65,11 @@ func (r *ormTestsResults) parseUnitTestOutput(
 			for i, name := range match {
 				groups[testOutputregex.SubexpNames()[i]] = name
 			}
-			test := fmt.Sprintf("%s.%s", groups["class"], groups["name"])
-			skipped := groups["result"] == "skipped" || groups["result"] == "expected failure"
+			test := groups["name"]
+			if c := groups["class"]; len(c) > 0 {
+				test = fmt.Sprintf("%s.%s", c, test)
+			}
+			skipped := groups["result"] == "skipped" || groups["result"] == "expected failure" || groups["result"] == "Skipped"
 			skipReason := ""
 			if skipped {
 				skipReason = groups["reason"]

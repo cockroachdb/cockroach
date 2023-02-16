@@ -88,7 +88,7 @@ var supportedStatements = map[reflect.Type]supportedStatement{
 	// supportedAlterTableStatements list, so wwe will consider it fully supported
 	// here.
 	reflect.TypeOf((*tree.AlterTable)(nil)):          {fn: AlterTable, on: true, extraChecks: alterTableIsSupported},
-	reflect.TypeOf((*tree.CreateIndex)(nil)):         {fn: CreateIndex, on: true, minSupportedClusterVersion: clusterversion.V23_1Start},
+	reflect.TypeOf((*tree.CreateIndex)(nil)):         {fn: CreateIndex, on: true, minSupportedClusterVersion: clusterversion.V23_1},
 	reflect.TypeOf((*tree.DropDatabase)(nil)):        {fn: DropDatabase, on: true, minSupportedClusterVersion: clusterversion.TODODelete_V22_1},
 	reflect.TypeOf((*tree.DropOwnedBy)(nil)):         {fn: DropOwnedBy, on: true, minSupportedClusterVersion: clusterversion.TODODelete_V22_2Start},
 	reflect.TypeOf((*tree.DropSchema)(nil)):          {fn: DropSchema, on: true, minSupportedClusterVersion: clusterversion.TODODelete_V22_1},
@@ -96,15 +96,15 @@ var supportedStatements = map[reflect.Type]supportedStatement{
 	reflect.TypeOf((*tree.DropTable)(nil)):           {fn: DropTable, on: true, minSupportedClusterVersion: clusterversion.TODODelete_V22_1},
 	reflect.TypeOf((*tree.DropType)(nil)):            {fn: DropType, on: true, minSupportedClusterVersion: clusterversion.TODODelete_V22_1},
 	reflect.TypeOf((*tree.DropView)(nil)):            {fn: DropView, on: true, minSupportedClusterVersion: clusterversion.TODODelete_V22_1},
-	reflect.TypeOf((*tree.CommentOnDatabase)(nil)):   {fn: CommentOnDatabase, on: true, minSupportedClusterVersion: clusterversion.TODODelete_V22_2Start},
-	reflect.TypeOf((*tree.CommentOnSchema)(nil)):     {fn: CommentOnSchema, on: true, minSupportedClusterVersion: clusterversion.TODODelete_V22_2Start},
-	reflect.TypeOf((*tree.CommentOnTable)(nil)):      {fn: CommentOnTable, on: true, minSupportedClusterVersion: clusterversion.TODODelete_V22_2Start},
-	reflect.TypeOf((*tree.CommentOnColumn)(nil)):     {fn: CommentOnColumn, on: true, minSupportedClusterVersion: clusterversion.TODODelete_V22_2Start},
-	reflect.TypeOf((*tree.CommentOnIndex)(nil)):      {fn: CommentOnIndex, on: true, minSupportedClusterVersion: clusterversion.TODODelete_V22_2Start},
-	reflect.TypeOf((*tree.CommentOnConstraint)(nil)): {fn: CommentOnConstraint, on: true, minSupportedClusterVersion: clusterversion.TODODelete_V22_2Start},
-	reflect.TypeOf((*tree.DropIndex)(nil)):           {fn: DropIndex, on: true, minSupportedClusterVersion: clusterversion.V23_1Start},
-	reflect.TypeOf((*tree.DropFunction)(nil)):        {fn: DropFunction, on: true, minSupportedClusterVersion: clusterversion.V23_1Start},
-	reflect.TypeOf((*tree.CreateFunction)(nil)):      {fn: CreateFunction, on: true, minSupportedClusterVersion: clusterversion.V23_1Start},
+	reflect.TypeOf((*tree.CommentOnDatabase)(nil)):   {fn: CommentOnDatabase, on: true, minSupportedClusterVersion: clusterversion.V22_2},
+	reflect.TypeOf((*tree.CommentOnSchema)(nil)):     {fn: CommentOnSchema, on: true, minSupportedClusterVersion: clusterversion.V22_2},
+	reflect.TypeOf((*tree.CommentOnTable)(nil)):      {fn: CommentOnTable, on: true, minSupportedClusterVersion: clusterversion.V22_2},
+	reflect.TypeOf((*tree.CommentOnColumn)(nil)):     {fn: CommentOnColumn, on: true, minSupportedClusterVersion: clusterversion.V22_2},
+	reflect.TypeOf((*tree.CommentOnIndex)(nil)):      {fn: CommentOnIndex, on: true, minSupportedClusterVersion: clusterversion.V22_2},
+	reflect.TypeOf((*tree.CommentOnConstraint)(nil)): {fn: CommentOnConstraint, on: true, minSupportedClusterVersion: clusterversion.V22_2},
+	reflect.TypeOf((*tree.DropIndex)(nil)):           {fn: DropIndex, on: true, minSupportedClusterVersion: clusterversion.V23_1},
+	reflect.TypeOf((*tree.DropFunction)(nil)):        {fn: DropFunction, on: true, minSupportedClusterVersion: clusterversion.V23_1},
+	reflect.TypeOf((*tree.CreateFunction)(nil)):      {fn: CreateFunction, on: true, minSupportedClusterVersion: clusterversion.V23_1},
 }
 
 func init() {
@@ -142,7 +142,11 @@ func init() {
 
 // CheckIfStmtIsSupported determines if the statement is supported by the declarative
 // schema changer.
-func CheckIfStmtIsSupported(n tree.Statement, mode sessiondatapb.NewSchemaChangerMode) bool {
+func CheckIfStmtIsSupported(
+	activeVersion clusterversion.ClusterVersion,
+	n tree.Statement,
+	mode sessiondatapb.NewSchemaChangerMode,
+) bool {
 	// Check if an entry exists for the statement type, in which
 	// case it is either fully or partially supported.
 	info, ok := supportedStatements[reflect.TypeOf(n)]
@@ -152,7 +156,16 @@ func CheckIfStmtIsSupported(n tree.Statement, mode sessiondatapb.NewSchemaChange
 	// Check if partially supported operations are allowed next. If an
 	// operation is not fully supported will not allow it to be run in
 	// the declarative schema changer until its fully supported.
-	return isFullySupported(n, info.on, info.extraChecks, mode)
+	if !isFullySupported(n, info.on, info.extraChecks, mode) {
+		return false
+	}
+	// If a version handle is included, then this check can go further
+	// and confirm if the active version supports this statement.
+	if !stmtSupportedInCurrentClusterVersion(activeVersion, n) {
+		return false
+	}
+
+	return true
 }
 
 // Process dispatches on the statement type to populate the BuilderState
@@ -174,7 +187,7 @@ func Process(b BuildCtx, n tree.Statement) {
 	}
 
 	// Check if the statement is supported in the current cluster version.
-	if !stmtSupportedInCurrentClusterVersion(b, n) {
+	if !stmtSupportedInCurrentClusterVersion(b.EvalCtx().Settings.Version.ActiveVersion(b), n) {
 		panic(scerrors.NotImplementedError(n))
 	}
 
@@ -191,10 +204,12 @@ func Process(b BuildCtx, n tree.Statement) {
 
 // stmtSupportedInCurrentClusterVersion checks whether the statement is supported
 // in current cluster version.
-func stmtSupportedInCurrentClusterVersion(b BuildCtx, n tree.Statement) bool {
+func stmtSupportedInCurrentClusterVersion(
+	activeVersion clusterversion.ClusterVersion, n tree.Statement,
+) bool {
 	if alterTableStmt, isAlterTable := n.(*tree.AlterTable); isAlterTable {
-		return alterTableAllCmdsSupportedInCurrentClusterVersion(b, alterTableStmt)
+		return alterTableAllCmdsSupportedInCurrentClusterVersion(activeVersion, alterTableStmt)
 	}
 	minSupportedClusterVersion := supportedStatements[reflect.TypeOf(n)].minSupportedClusterVersion
-	return b.EvalCtx().Settings.Version.IsActive(b, minSupportedClusterVersion)
+	return activeVersion.IsActive(minSupportedClusterVersion)
 }

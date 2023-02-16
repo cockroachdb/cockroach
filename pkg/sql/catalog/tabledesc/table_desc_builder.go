@@ -11,6 +11,7 @@
 package tabledesc
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
@@ -19,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -150,7 +152,7 @@ func (tdb *tableDescriptorBuilder) RunPostDeserializationChanges() (err error) {
 
 // RunRestoreChanges implements the catalog.DescriptorBuilder interface.
 func (tdb *tableDescriptorBuilder) RunRestoreChanges(
-	descLookupFn func(id descpb.ID) catalog.Descriptor,
+	version clusterversion.ClusterVersion, descLookupFn func(id descpb.ID) catalog.Descriptor,
 ) (err error) {
 	// Upgrade FK representation
 	upgradedFK, err := maybeUpgradeForeignKeyRepresentation(
@@ -172,6 +174,11 @@ func (tdb *tableDescriptorBuilder) RunRestoreChanges(
 	}
 	if upgradedSequenceReference {
 		tdb.changes.Add(catalog.UpgradedSequenceReference)
+	}
+
+	// Upgrade the declarative schema changer state
+	if scpb.MigrateDescriptorState(version, tdb.maybeModified.DeclarativeSchemaChangerState) {
+		tdb.changes.Add(catalog.UpgradedDeclarativeSchemaChangerState)
 	}
 
 	return err
