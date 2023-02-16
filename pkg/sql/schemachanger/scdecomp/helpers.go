@@ -107,7 +107,7 @@ func (w *walkCtx) newExpression(expr string) (*scpb.Expression, error) {
 	if err != nil {
 		return nil, err
 	}
-	referencedFnIDs, err := schemaexpr.GetUdfIDs(e)
+	referencedFnIDs, err := schemaexpr.GetUDFIDs(e)
 	if err != nil {
 		return nil, err
 	}
