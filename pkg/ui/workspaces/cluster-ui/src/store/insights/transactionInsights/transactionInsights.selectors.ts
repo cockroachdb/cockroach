@@ -16,10 +16,14 @@ import { selectTransactionFingerprintID } from "src/selectors/common";
 import { FixFingerprintHexValue } from "../../../util";
 
 export const selectTransactionInsights = (state: AppState): TxnInsightEvent[] =>
-  state.adminUI.txnInsights?.data;
+  state.adminUI.txnInsights?.data?.results;
 
 export const selectTransactionInsightsError = (state: AppState): Error | null =>
   state.adminUI.txnInsights?.lastError;
+
+export const selectTransactionInsightsMaxApiReached = (
+  state: AppState,
+): boolean => state.adminUI.stmtInsights?.data?.maxSizeReached;
 
 export const selectTxnInsightsByFingerprint = createSelector(
   selectTransactionInsights,

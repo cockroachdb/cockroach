@@ -17,7 +17,7 @@ import {
   TxnInsightDetailsResponse,
 } from "src/api/txnInsightsApi";
 import { PayloadAction } from "@reduxjs/toolkit";
-import { ErrorWithKey } from "src/api";
+import { ErrorWithKey, SqlApiResponse } from "src/api";
 
 export function* refreshTransactionInsightDetailsSaga(
   action: PayloadAction<TxnInsightDetailsRequest>,
@@ -45,9 +45,9 @@ const CACHE_INVALIDATION_PERIOD = 5 * 60 * 1000; // 5 minutes in ms
 const timeoutsByExecID = new Map<string, NodeJS.Timeout>();
 
 export function receivedTxnInsightsDetailsSaga(
-  action: PayloadAction<TxnInsightDetailsResponse>,
+  action: PayloadAction<SqlApiResponse<TxnInsightDetailsResponse>>,
 ) {
-  const execID = action.payload.txnExecutionID;
+  const execID = action.payload.results.txnExecutionID;
   clearTimeout(timeoutsByExecID.get(execID));
   const id = setTimeout(() => {
     actions.invalidated({ key: execID });

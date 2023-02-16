@@ -22,6 +22,7 @@ import { AdminUIState } from "src/redux/state";
 import {
   selectTxnInsightDetails,
   selectTransactionInsightDetailsError,
+  selectTransactionInsightDetailsMaxSizeReached,
 } from "src/views/insights/insightsSelectors";
 import { setGlobalTimeScaleAction } from "src/redux/statements";
 import { selectTimeScale } from "src/redux/timeScale";
@@ -36,6 +37,10 @@ const mapStateToProps = (
     insightError: selectTransactionInsightDetailsError(state, props),
     timeScale: selectTimeScale(state),
     hasAdminRole: selectHasAdminRole(state),
+    maxSizeApiReached: selectTransactionInsightDetailsMaxSizeReached(
+      state,
+      props,
+    ),
   };
 };
 
