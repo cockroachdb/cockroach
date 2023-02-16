@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -51,14 +52,14 @@ func TestSavepoints(t *testing.T) {
 		var doAbort int64
 		params.Knobs.Store = &kvserver.StoreTestingKnobs{
 			EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
-				TestingEvalFilter: func(args kvserverbase.FilterArgs) *roachpb.Error {
+				TestingEvalFilter: func(args kvserverbase.FilterArgs) *kvpb.Error {
 					key := args.Req.Header().Key
 					if atomic.LoadInt64(&doAbort) != 0 && key.Equal(abortKey) {
-						return roachpb.NewErrorWithTxn(
-							roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_UNKNOWN), args.Hdr.Txn)
+						return kvpb.NewErrorWithTxn(
+							kvpb.NewTransactionAbortedError(kvpb.ABORT_REASON_UNKNOWN), args.Hdr.Txn)
 					}
 					if key.Equal(errKey) {
-						return roachpb.NewErrorf("injected error")
+						return kvpb.NewErrorf("injected error")
 					}
 					return nil
 				},
@@ -160,7 +161,7 @@ func TestSavepoints(t *testing.T) {
 					[]byte(td.CmdArgs[1].Key),
 					expVal,
 				); err != nil {
-					if errors.HasType(err, (*roachpb.ConditionFailedError)(nil)) {
+					if errors.HasType(err, (*kvpb.ConditionFailedError)(nil)) {
 						// Print an easier to match message.
 						fmt.Fprintf(&buf, "(%T) unexpected value\n", err)
 					} else {

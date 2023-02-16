@@ -14,6 +14,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -57,16 +58,16 @@ func TestTxnCommitterElideEndTxn(t *testing.T) {
 
 		// Test the case where the EndTxn request is part of a larger batch of
 		// requests.
-		ba := &roachpb.BatchRequest{}
-		ba.Header = roachpb.Header{Txn: &txn}
-		ba.Add(&roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
-		ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
-		ba.Add(&roachpb.EndTxnRequest{Commit: commit, LockSpans: nil})
+		ba := &kvpb.BatchRequest{}
+		ba.Header = kvpb.Header{Txn: &txn}
+		ba.Add(&kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
+		ba.Add(&kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
+		ba.Add(&kvpb.EndTxnRequest{Commit: commit, LockSpans: nil})
 
-		mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 			require.Len(t, ba.Requests, 2)
-			require.IsType(t, &roachpb.GetRequest{}, ba.Requests[0].GetInner())
-			require.IsType(t, &roachpb.PutRequest{}, ba.Requests[1].GetInner())
+			require.IsType(t, &kvpb.GetRequest{}, ba.Requests[0].GetInner())
+			require.IsType(t, &kvpb.PutRequest{}, ba.Requests[1].GetInner())
 
 			br := ba.CreateReply()
 			br.Txn = ba.Txn
@@ -84,9 +85,9 @@ func TestTxnCommitterElideEndTxn(t *testing.T) {
 
 		// Test the case where the EndTxn request is alone.
 		ba.Requests = nil
-		ba.Add(&roachpb.EndTxnRequest{Commit: commit, LockSpans: nil})
+		ba.Add(&kvpb.EndTxnRequest{Commit: commit, LockSpans: nil})
 
-		mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 			require.Fail(t, "should not have issued batch request", ba)
 			return nil, nil
 		})
@@ -116,12 +117,12 @@ func TestTxnCommitterAttachesTxnKey(t *testing.T) {
 	intents := []roachpb.Span{{Key: keyA}}
 
 	// Verify that the txn key is attached to committing EndTxn requests.
-	ba := &roachpb.BatchRequest{}
-	ba.Header = roachpb.Header{Txn: &txn}
-	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
-	ba.Add(&roachpb.EndTxnRequest{Commit: true, LockSpans: intents})
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	ba.Add(&kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
+	ba.Add(&kvpb.EndTxnRequest{Commit: true, LockSpans: intents})
 
-	mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 2)
 		require.Equal(t, keyA, ba.Requests[0].GetInner().Header().Key)
 		require.Equal(t, roachpb.Key(txn.Key), ba.Requests[1].GetInner().Header().Key)
@@ -138,9 +139,9 @@ func TestTxnCommitterAttachesTxnKey(t *testing.T) {
 
 	// Verify that the txn key is attached to aborting EndTxn requests.
 	ba.Requests = nil
-	ba.Add(&roachpb.EndTxnRequest{Commit: false, LockSpans: intents})
+	ba.Add(&kvpb.EndTxnRequest{Commit: false, LockSpans: intents})
 
-	mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 1)
 		require.Equal(t, roachpb.Key(txn.Key), ba.Requests[0].GetInner().Header().Key)
 
@@ -176,11 +177,11 @@ func TestTxnCommitterStripsInFlightWrites(t *testing.T) {
 
 	// Verify that the QueryIntent and the Put are both attached as lock spans
 	// to the committing EndTxn request when expected.
-	ba := &roachpb.BatchRequest{}
-	ba.Header = roachpb.Header{Txn: &txn}
-	qiArgs := roachpb.QueryIntentRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}}
-	putArgs := roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyB}}
-	etArgs := roachpb.EndTxnRequest{Commit: true}
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	qiArgs := kvpb.QueryIntentRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}}
+	putArgs := kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyB}}
+	etArgs := kvpb.EndTxnRequest{Commit: true}
 	qiArgs.Txn.Sequence = 1
 	putArgs.Sequence = 2
 	etArgs.Sequence = 3
@@ -190,11 +191,11 @@ func TestTxnCommitterStripsInFlightWrites(t *testing.T) {
 	etArgsCopy := etArgs
 	ba.Add(&putArgs, &qiArgs, &etArgsCopy)
 
-	mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 3)
-		require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[2].GetInner())
+		require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[2].GetInner())
 
-		et := ba.Requests[2].GetInner().(*roachpb.EndTxnRequest)
+		et := ba.Requests[2].GetInner().(*kvpb.EndTxnRequest)
 		require.True(t, et.Commit)
 		require.Len(t, et.LockSpans, 2)
 		require.Equal(t, []roachpb.Span{{Key: keyA}, {Key: keyB}}, et.LockSpans)
@@ -217,11 +218,11 @@ func TestTxnCommitterStripsInFlightWrites(t *testing.T) {
 	etArgsCopy = etArgs
 	ba.Add(&putArgs, &qiArgs, &etArgsCopy)
 
-	mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 3)
-		require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[2].GetInner())
+		require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[2].GetInner())
 
-		et := ba.Requests[2].GetInner().(*roachpb.EndTxnRequest)
+		et := ba.Requests[2].GetInner().(*kvpb.EndTxnRequest)
 		require.True(t, et.Commit)
 		require.Len(t, et.InFlightWrites, 2)
 		require.Equal(t, roachpb.SequencedWrite{Key: keyA, Sequence: 1}, et.InFlightWrites[0])
@@ -247,11 +248,11 @@ func TestTxnCommitterStripsInFlightWrites(t *testing.T) {
 	}
 	ba.Add(&putArgs, &qiArgs, &etArgsWithTrigger)
 
-	mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 3)
-		require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[2].GetInner())
+		require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[2].GetInner())
 
-		et := ba.Requests[2].GetInner().(*roachpb.EndTxnRequest)
+		et := ba.Requests[2].GetInner().(*kvpb.EndTxnRequest)
 		require.True(t, et.Commit)
 		require.Len(t, et.LockSpans, 2)
 		require.Equal(t, []roachpb.Span{{Key: keyA}, {Key: keyB}}, et.LockSpans)
@@ -271,18 +272,18 @@ func TestTxnCommitterStripsInFlightWrites(t *testing.T) {
 	// In-flight writes should not be attached because ranged writes cannot
 	// be parallelized with a commit.
 	ba.Requests = nil
-	delRngArgs := roachpb.DeleteRangeRequest{RequestHeader: roachpb.RequestHeader{Key: keyA, EndKey: keyB}}
+	delRngArgs := kvpb.DeleteRangeRequest{RequestHeader: kvpb.RequestHeader{Key: keyA, EndKey: keyB}}
 	delRngArgs.Sequence = 2
 	etArgsWithRangedIntentSpan := etArgs
 	etArgsWithRangedIntentSpan.LockSpans = []roachpb.Span{{Key: keyA, EndKey: keyB}}
 	etArgsWithRangedIntentSpan.InFlightWrites = []roachpb.SequencedWrite{{Key: keyA, Sequence: 1}}
 	ba.Add(&delRngArgs, &qiArgs, &etArgsWithRangedIntentSpan)
 
-	mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 3)
-		require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[2].GetInner())
+		require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[2].GetInner())
 
-		et := ba.Requests[2].GetInner().(*roachpb.EndTxnRequest)
+		et := ba.Requests[2].GetInner().(*kvpb.EndTxnRequest)
 		require.True(t, et.Commit)
 		require.Len(t, et.LockSpans, 1)
 		require.Equal(t, []roachpb.Span{{Key: keyA, EndKey: keyB}}, et.LockSpans)
@@ -302,16 +303,16 @@ func TestTxnCommitterStripsInFlightWrites(t *testing.T) {
 	// In-flight writes should not be attached because read-only requests
 	// cannot be parallelized with a commit.
 	ba.Requests = nil
-	getArgs := roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}}
+	getArgs := kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}}
 	getArgs.Sequence = 2
 	etArgsCopy = etArgs
 	ba.Add(&getArgs, &qiArgs, &etArgsCopy)
 
-	mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 3)
-		require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[2].GetInner())
+		require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[2].GetInner())
 
-		et := ba.Requests[2].GetInner().(*roachpb.EndTxnRequest)
+		et := ba.Requests[2].GetInner().(*kvpb.EndTxnRequest)
 		require.True(t, et.Commit)
 		require.Len(t, et.LockSpans, 2)
 		require.Equal(t, []roachpb.Span{{Key: keyA}, {Key: keyB}}, et.LockSpans)
@@ -343,10 +344,10 @@ func TestTxnCommitterAsyncExplicitCommitTask(t *testing.T) {
 
 	// Verify that the Put is attached as in-flight write to the committing
 	// EndTxn request.
-	ba := &roachpb.BatchRequest{}
-	ba.Header = roachpb.Header{Txn: &txn}
-	putArgs := roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}}
-	etArgs := roachpb.EndTxnRequest{Commit: true}
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	putArgs := kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}}
+	etArgs := kvpb.EndTxnRequest{Commit: true}
 	putArgs.Sequence = 1
 	etArgs.Sequence = 2
 	etArgs.InFlightWrites = []roachpb.SequencedWrite{{Key: keyA, Sequence: 1}}
@@ -357,13 +358,13 @@ func TestTxnCommitterAsyncExplicitCommitTask(t *testing.T) {
 	ba.Header.CanForwardReadTimestamp = true
 
 	explicitCommitCh := make(chan struct{})
-	mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 2)
 		require.True(t, ba.CanForwardReadTimestamp)
-		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
-		require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[1].GetInner())
+		require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[1].GetInner())
 
-		et := ba.Requests[1].GetInner().(*roachpb.EndTxnRequest)
+		et := ba.Requests[1].GetInner().(*kvpb.EndTxnRequest)
 		require.True(t, et.Commit)
 		require.Len(t, et.InFlightWrites, 1)
 		require.Equal(t, roachpb.SequencedWrite{Key: keyA, Sequence: 1}, et.InFlightWrites[0])
@@ -371,17 +372,17 @@ func TestTxnCommitterAsyncExplicitCommitTask(t *testing.T) {
 		br := ba.CreateReply()
 		br.Txn = ba.Txn
 		br.Txn.Status = roachpb.STAGING
-		br.Responses[1].GetInner().(*roachpb.EndTxnResponse).StagingTimestamp = br.Txn.WriteTimestamp
+		br.Responses[1].GetInner().(*kvpb.EndTxnResponse).StagingTimestamp = br.Txn.WriteTimestamp
 
 		// Before returning, mock out the sender again to test against the async
 		// task that should be sent to make the implicit txn commit explicit.
-		mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 			defer close(explicitCommitCh)
 			require.Len(t, ba.Requests, 1)
 			require.False(t, ba.CanForwardReadTimestamp)
-			require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[0].GetInner())
+			require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[0].GetInner())
 
-			et := ba.Requests[0].GetInner().(*roachpb.EndTxnRequest)
+			et := ba.Requests[0].GetInner().(*kvpb.EndTxnRequest)
 			require.True(t, et.Commit)
 			require.Len(t, et.InFlightWrites, 0)
 
@@ -415,21 +416,21 @@ func TestTxnCommitterRetryAfterStaging(t *testing.T) {
 		txn := makeTxnProto()
 		keyA := roachpb.Key("a")
 
-		ba := &roachpb.BatchRequest{}
-		ba.Header = roachpb.Header{Txn: &txn}
-		putArgs := roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}}
-		etArgs := roachpb.EndTxnRequest{Commit: true}
+		ba := &kvpb.BatchRequest{}
+		ba.Header = kvpb.Header{Txn: &txn}
+		putArgs := kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}}
+		etArgs := kvpb.EndTxnRequest{Commit: true}
 		putArgs.Sequence = 1
 		etArgs.Sequence = 2
 		etArgs.InFlightWrites = []roachpb.SequencedWrite{{Key: keyA, Sequence: 1}}
 		ba.Add(&putArgs, &etArgs)
 
-		mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 			require.Len(t, ba.Requests, 2)
-			require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
-			require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[1].GetInner())
+			require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
+			require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[1].GetInner())
 
-			et := ba.Requests[1].GetInner().(*roachpb.EndTxnRequest)
+			et := ba.Requests[1].GetInner().(*kvpb.EndTxnRequest)
 			require.True(t, et.Commit)
 			require.Len(t, et.InFlightWrites, 1)
 			require.Equal(t, roachpb.SequencedWrite{Key: keyA, Sequence: 1}, et.InFlightWrites[0])
@@ -437,7 +438,7 @@ func TestTxnCommitterRetryAfterStaging(t *testing.T) {
 			br := ba.CreateReply()
 			br.Txn = ba.Txn
 			br.Txn.Status = roachpb.STAGING
-			br.Responses[1].GetInner().(*roachpb.EndTxnResponse).StagingTimestamp = br.Txn.WriteTimestamp
+			br.Responses[1].GetInner().(*kvpb.EndTxnResponse).StagingTimestamp = br.Txn.WriteTimestamp
 
 			// Pretend the PutRequest was split and sent to a different Range. It
 			// could hit the timestamp cache, or a WriteTooOld error (which sets the
@@ -451,12 +452,12 @@ func TestTxnCommitterRetryAfterStaging(t *testing.T) {
 		br, pErr := tc.SendLocked(ctx, ba)
 		require.Nil(t, br)
 		require.NotNil(t, pErr)
-		require.IsType(t, &roachpb.TransactionRetryError{}, pErr.GetDetail())
-		expReason := roachpb.RETRY_SERIALIZABLE
+		require.IsType(t, &kvpb.TransactionRetryError{}, pErr.GetDetail())
+		expReason := kvpb.RETRY_SERIALIZABLE
 		if writeTooOld {
-			expReason = roachpb.RETRY_WRITE_TOO_OLD
+			expReason = kvpb.RETRY_WRITE_TOO_OLD
 		}
-		require.Equal(t, expReason, pErr.GetDetail().(*roachpb.TransactionRetryError).Reason)
+		require.Equal(t, expReason, pErr.GetDetail().(*kvpb.TransactionRetryError).Reason)
 	})
 }
 
@@ -473,10 +474,10 @@ func TestTxnCommitterNoParallelCommitsOnRetry(t *testing.T) {
 	txn := makeTxnProto()
 	keyA := roachpb.Key("a")
 
-	ba := &roachpb.BatchRequest{}
-	ba.Header = roachpb.Header{Txn: &txn}
-	putArgs := roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}}
-	etArgs := roachpb.EndTxnRequest{Commit: true}
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	putArgs := kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}}
+	etArgs := kvpb.EndTxnRequest{Commit: true}
 	putArgs.Sequence = 1
 	etArgs.Sequence = 2
 	etArgs.InFlightWrites = []roachpb.SequencedWrite{{Key: keyA, Sequence: 1}}
@@ -487,12 +488,12 @@ func TestTxnCommitterNoParallelCommitsOnRetry(t *testing.T) {
 
 	ba.Add(&putArgs, &etArgs)
 
-	mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 2)
-		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
-		require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[1].GetInner())
+		require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[1].GetInner())
 
-		et := ba.Requests[1].GetInner().(*roachpb.EndTxnRequest)
+		et := ba.Requests[1].GetInner().(*kvpb.EndTxnRequest)
 		require.True(t, et.Commit)
 		require.Len(t, et.InFlightWrites, 0, "expected parallel commit to be inhibited")
 

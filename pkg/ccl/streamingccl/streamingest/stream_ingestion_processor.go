@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -599,7 +600,7 @@ func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpans, err
 	return nil, nil
 }
 
-func (sip *streamIngestionProcessor) bufferSST(sst *roachpb.RangeFeedSSTable) error {
+func (sip *streamIngestionProcessor) bufferSST(sst *kvpb.RangeFeedSSTable) error {
 	// TODO(casper): we currently buffer all keys in an SST at once even for large SSTs.
 	// If in the future we decide buffer them in separate batches, we need to be
 	// careful with checkpoints: we can only send checkpoint whose TS >= SST batch TS
@@ -632,7 +633,7 @@ func (sip *streamIngestionProcessor) rekey(key roachpb.Key) ([]byte, error) {
 	return rekey, nil
 }
 
-func (sip *streamIngestionProcessor) bufferDelRange(delRange *roachpb.RangeFeedDeleteRange) error {
+func (sip *streamIngestionProcessor) bufferDelRange(delRange *kvpb.RangeFeedDeleteRange) error {
 	tombstoneVal, err := storage.EncodeMVCCValue(storage.MVCCValue{
 		MVCCValueHeader: enginepb.MVCCValueHeader{
 			LocalTimestamp: hlc.ClockTimestamp{

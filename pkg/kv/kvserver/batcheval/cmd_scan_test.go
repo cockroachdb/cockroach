@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -60,7 +61,7 @@ func TestScanReverseScanTargetBytes(t *testing.T) {
 						} else if tb == tbMid {
 							expN = 1
 						}
-						for _, sf := range []roachpb.ScanFormat{roachpb.KEY_VALUES, roachpb.BATCH_RESPONSE} {
+						for _, sf := range []kvpb.ScanFormat{kvpb.KEY_VALUES, kvpb.BATCH_RESPONSE} {
 							t.Run(fmt.Sprintf("format=%s", sf), func(t *testing.T) {
 								testScanReverseScanInner(t, tb, sf, reverse, allowEmpty, expN)
 							})
@@ -73,7 +74,7 @@ func TestScanReverseScanTargetBytes(t *testing.T) {
 }
 
 func testScanReverseScanInner(
-	t *testing.T, tb int64, sf roachpb.ScanFormat, reverse bool, allowEmpty bool, expN int,
+	t *testing.T, tb int64, sf kvpb.ScanFormat, reverse bool, allowEmpty bool, expN int,
 ) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -91,22 +92,22 @@ func testScanReverseScanInner(
 		require.NoError(t, err)
 	}
 
-	var req roachpb.Request
-	var resp roachpb.Response
+	var req kvpb.Request
+	var resp kvpb.Response
 	if !reverse {
-		req = &roachpb.ScanRequest{ScanFormat: sf}
-		resp = &roachpb.ScanResponse{}
+		req = &kvpb.ScanRequest{ScanFormat: sf}
+		resp = &kvpb.ScanResponse{}
 	} else {
-		req = &roachpb.ReverseScanRequest{ScanFormat: sf}
-		resp = &roachpb.ReverseScanResponse{}
+		req = &kvpb.ReverseScanRequest{ScanFormat: sf}
+		resp = &kvpb.ReverseScanResponse{}
 	}
-	req.SetHeader(roachpb.RequestHeader{Key: k1, EndKey: roachpb.KeyMax})
+	req.SetHeader(kvpb.RequestHeader{Key: k1, EndKey: roachpb.KeyMax})
 
 	settings := cluster.MakeTestingClusterSettings()
 
 	cArgs := CommandArgs{
 		Args: req,
-		Header: roachpb.Header{
+		Header: kvpb.Header{
 			Timestamp:   ts,
 			TargetBytes: tb,
 			AllowEmpty:  allowEmpty,
@@ -157,9 +158,9 @@ func testScanReverseScanInner(
 
 	var rows []roachpb.KeyValue
 	if !reverse {
-		rows = resp.(*roachpb.ScanResponse).Rows
+		rows = resp.(*kvpb.ScanResponse).Rows
 	} else {
-		rows = resp.(*roachpb.ReverseScanResponse).Rows
+		rows = resp.(*kvpb.ReverseScanResponse).Rows
 	}
 
 	if rows != nil {
@@ -191,23 +192,23 @@ func TestScanReverseScanWholeRows(t *testing.T) {
 	}
 
 	testutils.RunTrueAndFalse(t, "reverse", func(t *testing.T, reverse bool) {
-		var req roachpb.Request
-		var resp roachpb.Response
+		var req kvpb.Request
+		var resp kvpb.Response
 		if !reverse {
-			req = &roachpb.ScanRequest{}
-			resp = &roachpb.ScanResponse{}
+			req = &kvpb.ScanRequest{}
+			resp = &kvpb.ScanResponse{}
 		} else {
-			req = &roachpb.ReverseScanRequest{}
-			resp = &roachpb.ReverseScanResponse{}
+			req = &kvpb.ReverseScanRequest{}
+			resp = &kvpb.ReverseScanResponse{}
 		}
-		req.SetHeader(roachpb.RequestHeader{Key: rowKeys[0], EndKey: roachpb.KeyMax})
+		req.SetHeader(kvpb.RequestHeader{Key: rowKeys[0], EndKey: roachpb.KeyMax})
 
 		// Scan with limit of 5 keys. This should only return the first row (3 keys),
 		// since they second row would yield 6 keys total.
 		cArgs := CommandArgs{
 			EvalCtx: (&MockEvalCtx{ClusterSettings: cluster.MakeTestingClusterSettings()}).EvalContext(),
 			Args:    req,
-			Header: roachpb.Header{
+			Header: kvpb.Header{
 				Timestamp:          ts,
 				MaxSpanRequestKeys: 5,
 				WholeRowsOfSize:    3,

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -90,10 +91,10 @@ func TestRangeFeedIntegration(t *testing.T) {
 
 	f, err := rangefeed.NewFactory(srv0.Stopper(), db, srv0.ClusterSettings(), nil)
 	require.NoError(t, err)
-	rows := make(chan *roachpb.RangeFeedValue)
+	rows := make(chan *kvpb.RangeFeedValue)
 	initialScanDone := make(chan struct{})
 	r, err := f.RangeFeed(ctx, "test", []roachpb.Span{sp}, afterB,
-		func(ctx context.Context, value *roachpb.RangeFeedValue) {
+		func(ctx context.Context, value *kvpb.RangeFeedValue) {
 			select {
 			case rows <- value:
 			case <-ctx.Done():
@@ -191,7 +192,7 @@ func TestWithOnFrontierAdvance(t *testing.T) {
 	// these spans. We use the key we write to for the ranges below as keys for
 	// this map.
 	spanCheckpointTimestamps := make(map[string]hlc.Timestamp)
-	forwardCheckpointForKey := func(key string, checkpoint *roachpb.RangeFeedCheckpoint) {
+	forwardCheckpointForKey := func(key string, checkpoint *kvpb.RangeFeedCheckpoint) {
 		ts := hlc.MinTimestamp
 		if prevTS, found := spanCheckpointTimestamps[key]; found {
 			ts = prevTS
@@ -199,15 +200,15 @@ func TestWithOnFrontierAdvance(t *testing.T) {
 		ts.Forward(checkpoint.ResolvedTS)
 		spanCheckpointTimestamps[key] = ts
 	}
-	rows := make(chan *roachpb.RangeFeedValue)
+	rows := make(chan *kvpb.RangeFeedValue)
 	r, err := f.RangeFeed(ctx, "test", []roachpb.Span{sp}, db.Clock().Now(),
-		func(ctx context.Context, value *roachpb.RangeFeedValue) {
+		func(ctx context.Context, value *kvpb.RangeFeedValue) {
 			select {
 			case rows <- value:
 			case <-ctx.Done():
 			}
 		},
-		rangefeed.WithOnCheckpoint(func(ctx context.Context, checkpoint *roachpb.RangeFeedCheckpoint) {
+		rangefeed.WithOnCheckpoint(func(ctx context.Context, checkpoint *kvpb.RangeFeedCheckpoint) {
 			if checkpoint.Span.ContainsKey(mkKey("a")) {
 				forwardCheckpointForKey("a", checkpoint)
 			}
@@ -298,7 +299,7 @@ func TestWithOnCheckpoint(t *testing.T) {
 
 	var mu syncutil.RWMutex
 	var afterWriteTS hlc.Timestamp
-	checkpoints := make(chan *roachpb.RangeFeedCheckpoint)
+	checkpoints := make(chan *kvpb.RangeFeedCheckpoint)
 
 	// We need to start a goroutine that reads of the checkpoints channel, so to
 	// not block the rangefeed itself.
@@ -329,15 +330,15 @@ func TestWithOnCheckpoint(t *testing.T) {
 		})
 	}()
 
-	rows := make(chan *roachpb.RangeFeedValue)
+	rows := make(chan *kvpb.RangeFeedValue)
 	r, err := f.RangeFeed(ctx, "test", []roachpb.Span{sp}, db.Clock().Now(),
-		func(ctx context.Context, value *roachpb.RangeFeedValue) {
+		func(ctx context.Context, value *kvpb.RangeFeedValue) {
 			select {
 			case rows <- value:
 			case <-ctx.Done():
 			}
 		},
-		rangefeed.WithOnCheckpoint(func(ctx context.Context, checkpoint *roachpb.RangeFeedCheckpoint) {
+		rangefeed.WithOnCheckpoint(func(ctx context.Context, checkpoint *kvpb.RangeFeedCheckpoint) {
 			select {
 			case checkpoints <- checkpoint:
 			case <-ctx.Done():
@@ -395,9 +396,9 @@ func TestRangefeedValueTimestamps(t *testing.T) {
 	f, err := rangefeed.NewFactory(srv0.Stopper(), db, srv0.ClusterSettings(), nil)
 	require.NoError(t, err)
 
-	rows := make(chan *roachpb.RangeFeedValue)
+	rows := make(chan *kvpb.RangeFeedValue)
 	r, err := f.RangeFeed(ctx, "test", []roachpb.Span{sp}, db.Clock().Now(),
-		func(ctx context.Context, value *roachpb.RangeFeedValue) {
+		func(ctx context.Context, value *kvpb.RangeFeedValue) {
 			select {
 			case rows <- value:
 			case <-ctx.Done():
@@ -501,16 +502,16 @@ func TestWithOnSSTable(t *testing.T) {
 	sstC := make(chan kvcoord.RangeFeedMessage)
 	spans := []roachpb.Span{{Key: roachpb.Key("c"), EndKey: roachpb.Key("e")}}
 	r, err := f.RangeFeed(ctx, "test", spans, db.Clock().Now(),
-		func(ctx context.Context, value *roachpb.RangeFeedValue) {},
-		rangefeed.WithOnCheckpoint(func(ctx context.Context, checkpoint *roachpb.RangeFeedCheckpoint) {
+		func(ctx context.Context, value *kvpb.RangeFeedValue) {},
+		rangefeed.WithOnCheckpoint(func(ctx context.Context, checkpoint *kvpb.RangeFeedCheckpoint) {
 			once.Do(func() {
 				close(checkpointC)
 			})
 		}),
-		rangefeed.WithOnSSTable(func(ctx context.Context, sst *roachpb.RangeFeedSSTable, registeredSpan roachpb.Span) {
+		rangefeed.WithOnSSTable(func(ctx context.Context, sst *kvpb.RangeFeedSSTable, registeredSpan roachpb.Span) {
 			select {
 			case sstC <- kvcoord.RangeFeedMessage{
-				RangeFeedEvent: &roachpb.RangeFeedEvent{
+				RangeFeedEvent: &kvpb.RangeFeedEvent{
 					SST: sst,
 				},
 				RegisteredSpan: registeredSpan,
@@ -595,16 +596,16 @@ func TestWithOnSSTableCatchesUpIfNotSet(t *testing.T) {
 	// a-f), to ensure only the restricted span is emitted by the catchup scan.
 	var once sync.Once
 	checkpointC := make(chan struct{})
-	rowC := make(chan *roachpb.RangeFeedValue)
+	rowC := make(chan *kvpb.RangeFeedValue)
 	spans := []roachpb.Span{{Key: roachpb.Key("c"), EndKey: roachpb.Key("e")}}
 	r, err := f.RangeFeed(ctx, "test", spans, db.Clock().Now(),
-		func(ctx context.Context, value *roachpb.RangeFeedValue) {
+		func(ctx context.Context, value *kvpb.RangeFeedValue) {
 			select {
 			case rowC <- value:
 			case <-ctx.Done():
 			}
 		},
-		rangefeed.WithOnCheckpoint(func(ctx context.Context, checkpoint *roachpb.RangeFeedCheckpoint) {
+		rangefeed.WithOnCheckpoint(func(ctx context.Context, checkpoint *kvpb.RangeFeedCheckpoint) {
 			once.Do(func() {
 				close(checkpointC)
 			})
@@ -707,12 +708,12 @@ func TestWithOnDeleteRange(t *testing.T) {
 	// to ensure the DeleteRange event is truncated to the registration span.
 	var checkpointOnce sync.Once
 	checkpointC := make(chan struct{})
-	deleteRangeC := make(chan *roachpb.RangeFeedDeleteRange)
-	rowC := make(chan *roachpb.RangeFeedValue)
+	deleteRangeC := make(chan *kvpb.RangeFeedDeleteRange)
+	rowC := make(chan *kvpb.RangeFeedValue)
 
 	spans := []roachpb.Span{{Key: roachpb.Key("c"), EndKey: roachpb.Key("g")}}
 	r, err := f.RangeFeed(ctx, "test", spans, rangeFeedTS,
-		func(ctx context.Context, e *roachpb.RangeFeedValue) {
+		func(ctx context.Context, e *kvpb.RangeFeedValue) {
 			select {
 			case rowC <- e:
 			case <-ctx.Done():
@@ -720,12 +721,12 @@ func TestWithOnDeleteRange(t *testing.T) {
 		},
 		rangefeed.WithDiff(true),
 		rangefeed.WithInitialScan(nil),
-		rangefeed.WithOnCheckpoint(func(ctx context.Context, checkpoint *roachpb.RangeFeedCheckpoint) {
+		rangefeed.WithOnCheckpoint(func(ctx context.Context, checkpoint *kvpb.RangeFeedCheckpoint) {
 			checkpointOnce.Do(func() {
 				close(checkpointC)
 			})
 		}),
-		rangefeed.WithOnDeleteRange(func(ctx context.Context, e *roachpb.RangeFeedDeleteRange) {
+		rangefeed.WithOnDeleteRange(func(ctx context.Context, e *kvpb.RangeFeedDeleteRange) {
 			select {
 			case deleteRangeC <- e:
 			case <-ctx.Done():
@@ -890,7 +891,7 @@ func TestUnrecoverableErrors(t *testing.T) {
 	})
 
 	r, err := f.RangeFeed(ctx, "test", []roachpb.Span{sp}, preGCThresholdTS,
-		func(context.Context, *roachpb.RangeFeedValue) {},
+		func(context.Context, *kvpb.RangeFeedValue) {},
 		rangefeed.WithDiff(true),
 		rangefeed.WithOnInternalError(func(ctx context.Context, err error) {
 			mu.Lock()
@@ -906,7 +907,7 @@ func TestUnrecoverableErrors(t *testing.T) {
 		mu.Lock()
 		defer mu.Unlock()
 
-		if !errors.HasType(mu.internalErr, &roachpb.BatchTimestampBeforeGCError{}) {
+		if !errors.HasType(mu.internalErr, &kvpb.BatchTimestampBeforeGCError{}) {
 			return errors.New("expected internal error")
 		}
 		return nil
@@ -945,8 +946,8 @@ func TestMVCCHistoryMutationError(t *testing.T) {
 	checkpointC := make(chan struct{})
 	errC := make(chan error)
 	r, err := f.RangeFeed(ctx, "test", []roachpb.Span{sp}, srv0.Clock().Now(),
-		func(context.Context, *roachpb.RangeFeedValue) {},
-		rangefeed.WithOnCheckpoint(func(ctx context.Context, checkpoint *roachpb.RangeFeedCheckpoint) {
+		func(context.Context, *kvpb.RangeFeedValue) {},
+		rangefeed.WithOnCheckpoint(func(ctx context.Context, checkpoint *kvpb.RangeFeedCheckpoint) {
 			once.Do(func() {
 				close(checkpointC)
 			})
@@ -971,8 +972,8 @@ func TestMVCCHistoryMutationError(t *testing.T) {
 	}
 
 	// Send a ClearRange request that mutates MVCC history.
-	_, pErr := kv.SendWrapped(ctx, db0.NonTransactionalSender(), &roachpb.ClearRangeRequest{
-		RequestHeader: roachpb.RequestHeader{
+	_, pErr := kv.SendWrapped(ctx, db0.NonTransactionalSender(), &kvpb.ClearRangeRequest{
+		RequestHeader: kvpb.RequestHeader{
 			Key:    sp.Key,
 			EndKey: sp.EndKey,
 		},
@@ -982,9 +983,9 @@ func TestMVCCHistoryMutationError(t *testing.T) {
 	// Wait for the MVCCHistoryMutationError.
 	select {
 	case err := <-errC:
-		var mvccErr *roachpb.MVCCHistoryMutationError
+		var mvccErr *kvpb.MVCCHistoryMutationError
 		require.ErrorAs(t, err, &mvccErr)
-		require.Equal(t, &roachpb.MVCCHistoryMutationError{Span: sp}, err)
+		require.Equal(t, &kvpb.MVCCHistoryMutationError{Span: sp}, err)
 	case <-time.After(3 * time.Second):
 		require.Fail(t, "timed out waiting for error")
 	}
@@ -1068,7 +1069,7 @@ func TestRangefeedWithLabelsOption(t *testing.T) {
 	keyDSeenCh := make(chan struct{})
 
 	r, err := f.RangeFeed(ctx, rangefeedName, []roachpb.Span{sp}, afterB,
-		func(ctx context.Context, value *roachpb.RangeFeedValue) {
+		func(ctx context.Context, value *kvpb.RangeFeedValue) {
 			verifyLabels(ctx)
 			if value.Key.Equal(keyD) {
 				keyDSeen.Do(func() { close(keyDSeenCh) })
@@ -1131,9 +1132,9 @@ func TestRangeFeedStartTimeExclusive(t *testing.T) {
 
 	f, err := rangefeed.NewFactory(srv0.Stopper(), db, srv0.ClusterSettings(), nil)
 	require.NoError(t, err)
-	rows := make(chan *roachpb.RangeFeedValue)
+	rows := make(chan *kvpb.RangeFeedValue)
 	r, err := f.RangeFeed(ctx, "test", []roachpb.Span{span}, ts2,
-		func(ctx context.Context, value *roachpb.RangeFeedValue) {
+		func(ctx context.Context, value *kvpb.RangeFeedValue) {
 			select {
 			case rows <- value:
 			case <-ctx.Done():

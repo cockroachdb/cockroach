@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -186,16 +187,16 @@ func (mq *mergeQueue) requestRangeStats(
 	ctx context.Context, key roachpb.Key,
 ) (desc *roachpb.RangeDescriptor, stats enginepb.MVCCStats, ls loadSplitStat, err error) {
 
-	ba := &roachpb.BatchRequest{}
-	ba.Add(&roachpb.RangeStatsRequest{
-		RequestHeader: roachpb.RequestHeader{Key: key},
+	ba := &kvpb.BatchRequest{}
+	ba.Add(&kvpb.RangeStatsRequest{
+		RequestHeader: kvpb.RequestHeader{Key: key},
 	})
 
 	br, pErr := mq.db.NonTransactionalSender().Send(ctx, ba)
 	if pErr != nil {
 		return nil, enginepb.MVCCStats{}, loadSplitStat{}, pErr.GoError()
 	}
-	res := br.Responses[0].GetInner().(*roachpb.RangeStatsResponse)
+	res := br.Responses[0].GetInner().(*kvpb.RangeStatsResponse)
 
 	desc = &res.RangeInfo.Desc
 	stats = res.MVCCStats
@@ -385,10 +386,10 @@ func (mq *mergeQueue) process(
 		humanizeutil.IBytes(minBytes),
 		loadMergeReason,
 	)
-	_, pErr := lhsRepl.AdminMerge(ctx, roachpb.AdminMergeRequest{
-		RequestHeader: roachpb.RequestHeader{Key: lhsRepl.Desc().StartKey.AsRawKey()},
+	_, pErr := lhsRepl.AdminMerge(ctx, kvpb.AdminMergeRequest{
+		RequestHeader: kvpb.RequestHeader{Key: lhsRepl.Desc().StartKey.AsRawKey()},
 	}, reason)
-	if err := pErr.GoError(); errors.HasType(err, (*roachpb.ConditionFailedError)(nil)) {
+	if err := pErr.GoError(); errors.HasType(err, (*kvpb.ConditionFailedError)(nil)) {
 		// ConditionFailedErrors are an expected outcome for range merge
 		// attempts because merges can race with other descriptor modifications.
 		// On seeing a ConditionFailedError, don't return an error and enqueue

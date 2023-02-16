@@ -122,7 +122,7 @@ data: "g"/2.000000000,0 -> /BYTES/g2
 meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
 meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "a" at timestamp 3.000000000,0 too old; wrote at 4.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "a" at timestamp 3.000000000,0 too old; wrote at 4.000000000,1
 
 run error
 del_range_ts k=a end=b ts=4
@@ -141,7 +141,7 @@ data: "g"/2.000000000,0 -> /BYTES/g2
 meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
 meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "a" at timestamp 4.000000000,0 too old; wrote at 4.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "a" at timestamp 4.000000000,0 too old; wrote at 4.000000000,1
 
 run error
 del_range_ts k=e end=g ts=3
@@ -160,7 +160,7 @@ data: "g"/2.000000000,0 -> /BYTES/g2
 meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
 meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "f" at timestamp 3.000000000,0 too old; wrote at 4.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "f" at timestamp 3.000000000,0 too old; wrote at 4.000000000,1
 
 # Writing at or below existing range tombstones should return a WriteTooOldError,
 # regardless of how they overlap.
@@ -181,7 +181,7 @@ data: "g"/2.000000000,0 -> /BYTES/g2
 meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
 meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k" at timestamp 3.000000000,0 too old; wrote at 4.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k" at timestamp 3.000000000,0 too old; wrote at 4.000000000,1
 
 run error
 del_range_ts k=k end=p ts=4
@@ -200,7 +200,7 @@ data: "g"/2.000000000,0 -> /BYTES/g2
 meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
 meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k" at timestamp 4.000000000,0 too old; wrote at 4.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k" at timestamp 4.000000000,0 too old; wrote at 4.000000000,1
 
 run error
 del_range_ts k=j end=m ts=3
@@ -219,7 +219,7 @@ data: "g"/2.000000000,0 -> /BYTES/g2
 meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
 meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k" at timestamp 3.000000000,0 too old; wrote at 4.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k" at timestamp 3.000000000,0 too old; wrote at 4.000000000,1
 
 run error
 del_range_ts k=o end=q ts=3
@@ -238,7 +238,7 @@ data: "g"/2.000000000,0 -> /BYTES/g2
 meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
 meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "o" at timestamp 3.000000000,0 too old; wrote at 4.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "o" at timestamp 3.000000000,0 too old; wrote at 4.000000000,1
 
 run error
 del_range_ts k=j end=q ts=3
@@ -257,7 +257,7 @@ data: "g"/2.000000000,0 -> /BYTES/g2
 meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
 meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k" at timestamp 3.000000000,0 too old; wrote at 4.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k" at timestamp 3.000000000,0 too old; wrote at 4.000000000,1
 
 run error
 del_range_ts k=k end=n ts=3
@@ -276,7 +276,7 @@ data: "g"/2.000000000,0 -> /BYTES/g2
 meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
 meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k" at timestamp 3.000000000,0 too old; wrote at 4.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k" at timestamp 3.000000000,0 too old; wrote at 4.000000000,1
 
 # Writing below intents should return a WriteIntentError, both when above and
 # below the intent timestamp and any existing values.
@@ -297,7 +297,7 @@ data: "g"/2.000000000,0 -> /BYTES/g2
 meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
 meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
-error: (*roachpb.WriteIntentError:) conflicting intents on "d"
+error: (*kvpb.WriteIntentError:) conflicting intents on "d"
 
 run error
 del_range_ts k=d end=e ts=5
@@ -316,7 +316,7 @@ data: "g"/2.000000000,0 -> /BYTES/g2
 meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
 meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
-error: (*roachpb.WriteIntentError:) conflicting intents on "d"
+error: (*kvpb.WriteIntentError:) conflicting intents on "d"
 
 run error
 del_range_ts k=i end=j ts=5
@@ -335,7 +335,7 @@ data: "g"/2.000000000,0 -> /BYTES/g2
 meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
 meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
-error: (*roachpb.WriteIntentError:) conflicting intents on "i"
+error: (*kvpb.WriteIntentError:) conflicting intents on "i"
 
 run error
 del_range_ts k=i end=j ts=7
@@ -354,7 +354,7 @@ data: "g"/2.000000000,0 -> /BYTES/g2
 meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
 meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
-error: (*roachpb.WriteIntentError:) conflicting intents on "i"
+error: (*kvpb.WriteIntentError:) conflicting intents on "i"
 
 run error
 del_range_ts k=i end=j ts=10
@@ -373,7 +373,7 @@ data: "g"/2.000000000,0 -> /BYTES/g2
 meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
 meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
-error: (*roachpb.WriteIntentError:) conflicting intents on "i"
+error: (*kvpb.WriteIntentError:) conflicting intents on "i"
 
 # Writing above an inline value should error. We disable passing covered MVCC
 # stats in metamorphic tests because it changes the error message.

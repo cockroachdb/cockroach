@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package roachpb
+package kvpb
 
 import (
 	"context"
@@ -16,6 +16,7 @@ import (
 
 	_ "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil" // see RequestHeader
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -25,36 +26,7 @@ import (
 	"github.com/dustin/go-humanize"
 )
 
-//go:generate mockgen -package=roachpbmock -destination=roachpbmock/mocks_generated.go . InternalClient,Internal_RangeFeedClient,Internal_MuxRangeFeedClient
-
-// UserPriority is a custom type for transaction's user priority.
-type UserPriority float64
-
-func (up UserPriority) String() string {
-	switch up {
-	case MinUserPriority:
-		return "low"
-	case UnspecifiedUserPriority, NormalUserPriority:
-		return "normal"
-	case MaxUserPriority:
-		return "high"
-	default:
-		return fmt.Sprintf("%g", float64(up))
-	}
-}
-
-const (
-	// MinUserPriority is the minimum allowed user priority.
-	MinUserPriority UserPriority = 0.001
-	// UnspecifiedUserPriority means NormalUserPriority.
-	UnspecifiedUserPriority UserPriority = 0
-	// NormalUserPriority is set to 1, meaning ops run through the database
-	// are all given equal weight when a random priority is chosen. This can
-	// be set specifically via client.NewDBWithPriority().
-	NormalUserPriority UserPriority = 1
-	// MaxUserPriority is the maximum allowed user priority.
-	MaxUserPriority UserPriority = 1000
-)
+//go:generate mockgen -package=kvpbmock -destination=kvpbmock/mocks_generated.go . InternalClient,Internal_RangeFeedClient,Internal_MuxRangeFeedClient
 
 // SupportsBatch determines whether the methods in the provided batch
 // are supported by the ReadConsistencyType, returning an error if not.
@@ -568,19 +540,19 @@ func (rh *RequestHeader) SetHeader(other RequestHeader) {
 }
 
 // Span returns the key range that the Request operates over.
-func (rh RequestHeader) Span() Span {
-	return Span{Key: rh.Key, EndKey: rh.EndKey}
+func (rh RequestHeader) Span() roachpb.Span {
+	return roachpb.Span{Key: rh.Key, EndKey: rh.EndKey}
 }
 
 // SetSpan addresses the RequestHeader to the specified key span.
-func (rh *RequestHeader) SetSpan(s Span) {
+func (rh *RequestHeader) SetSpan(s roachpb.Span) {
 	rh.Key = s.Key
 	rh.EndKey = s.EndKey
 }
 
 // RequestHeaderFromSpan creates a RequestHeader addressed at the specified key
 // span.
-func RequestHeaderFromSpan(s Span) RequestHeader {
+func RequestHeaderFromSpan(s roachpb.Span) RequestHeader {
 	return RequestHeader{Key: s.Key, EndKey: s.EndKey}
 }
 
@@ -783,7 +755,9 @@ func (*SubsumeRequest) Method() Method { return Subsume }
 func (*RangeStatsRequest) Method() Method { return RangeStats }
 
 // Method implements the Request interface.
-func (*AdminVerifyProtectedTimestampRequest) Method() Method { return AdminVerifyProtectedTimestamp }
+func (*AdminVerifyProtectedTimestampRequest) Method() Method {
+	return AdminVerifyProtectedTimestamp
+}
 
 // Method implements the Request interface.
 func (*QueryResolvedTimestampRequest) Method() Method { return QueryResolvedTimestamp }
@@ -1085,7 +1059,7 @@ func (r *IsSpanEmptyRequest) ShallowCopy() Request {
 // NewGet returns a Request initialized to get the value at key. If
 // forUpdate is true, an unreplicated, exclusive lock is acquired on on
 // the key, if it exists.
-func NewGet(key Key, forUpdate bool) Request {
+func NewGet(key roachpb.Key, forUpdate bool) Request {
 	return &GetRequest{
 		RequestHeader: RequestHeader{
 			Key: key,
@@ -1096,7 +1070,7 @@ func NewGet(key Key, forUpdate bool) Request {
 
 // NewIncrement returns a Request initialized to increment the value at
 // key by increment.
-func NewIncrement(key Key, increment int64) Request {
+func NewIncrement(key roachpb.Key, increment int64) Request {
 	return &IncrementRequest{
 		RequestHeader: RequestHeader{
 			Key: key,
@@ -1106,7 +1080,7 @@ func NewIncrement(key Key, increment int64) Request {
 }
 
 // NewPut returns a Request initialized to put the value at key.
-func NewPut(key Key, value Value) Request {
+func NewPut(key roachpb.Key, value roachpb.Value) Request {
 	value.InitChecksum(key)
 	return &PutRequest{
 		RequestHeader: RequestHeader{
@@ -1118,7 +1092,7 @@ func NewPut(key Key, value Value) Request {
 
 // NewPutInline returns a Request initialized to put the value at key
 // using an inline value.
-func NewPutInline(key Key, value Value) Request {
+func NewPutInline(key roachpb.Key, value roachpb.Value) Request {
 	value.InitChecksum(key)
 	return &PutRequest{
 		RequestHeader: RequestHeader{
@@ -1135,7 +1109,9 @@ func NewPutInline(key Key, value Value) Request {
 // The callee takes ownership of value's underlying bytes and it will mutate
 // them. The caller retains ownership of expVal; NewConditionalPut will copy it
 // into the request.
-func NewConditionalPut(key Key, value Value, expValue []byte, allowNotExist bool) Request {
+func NewConditionalPut(
+	key roachpb.Key, value roachpb.Value, expValue []byte, allowNotExist bool,
+) Request {
 	value.InitChecksum(key)
 	return &ConditionalPutRequest{
 		RequestHeader: RequestHeader{
@@ -1153,7 +1129,9 @@ func NewConditionalPut(key Key, value Value, expValue []byte, allowNotExist bool
 // The callee takes ownership of value's underlying bytes and it will mutate
 // them. The caller retains ownership of expVal; NewConditionalPut will copy it
 // into the request.
-func NewConditionalPutInline(key Key, value Value, expValue []byte, allowNotExist bool) Request {
+func NewConditionalPutInline(
+	key roachpb.Key, value roachpb.Value, expValue []byte, allowNotExist bool,
+) Request {
 	value.InitChecksum(key)
 	return &ConditionalPutRequest{
 		RequestHeader: RequestHeader{
@@ -1171,7 +1149,7 @@ func NewConditionalPutInline(key Key, value Value, expValue []byte, allowNotExis
 // the existing value is different from value. If failOnTombstones is set to
 // true, tombstones count as mismatched values and will cause a
 // ConditionFailedError.
-func NewInitPut(key Key, value Value, failOnTombstones bool) Request {
+func NewInitPut(key roachpb.Key, value roachpb.Value, failOnTombstones bool) Request {
 	value.InitChecksum(key)
 	return &InitPutRequest{
 		RequestHeader: RequestHeader{
@@ -1183,7 +1161,7 @@ func NewInitPut(key Key, value Value, failOnTombstones bool) Request {
 }
 
 // NewDelete returns a Request initialized to delete the value at key.
-func NewDelete(key Key) Request {
+func NewDelete(key roachpb.Key) Request {
 	return &DeleteRequest{
 		RequestHeader: RequestHeader{
 			Key: key,
@@ -1193,7 +1171,7 @@ func NewDelete(key Key) Request {
 
 // NewDeleteRange returns a Request initialized to delete the values in
 // the given key range (excluding the endpoint).
-func NewDeleteRange(startKey, endKey Key, returnKeys bool) Request {
+func NewDeleteRange(startKey, endKey roachpb.Key, returnKeys bool) Request {
 	return &DeleteRangeRequest{
 		RequestHeader: RequestHeader{
 			Key:    startKey,
@@ -1206,7 +1184,7 @@ func NewDeleteRange(startKey, endKey Key, returnKeys bool) Request {
 // NewScan returns a Request initialized to scan from start to end keys.
 // If forUpdate is true, unreplicated, exclusive locks are acquired on
 // each of the resulting keys.
-func NewScan(key, endKey Key, forUpdate bool) Request {
+func NewScan(key, endKey roachpb.Key, forUpdate bool) Request {
 	return &ScanRequest{
 		RequestHeader: RequestHeader{
 			Key:    key,
@@ -1219,7 +1197,7 @@ func NewScan(key, endKey Key, forUpdate bool) Request {
 // NewReverseScan returns a Request initialized to reverse scan from end.
 // If forUpdate is true, unreplicated, exclusive locks are acquired on
 // each of the resulting keys.
-func NewReverseScan(key, endKey Key, forUpdate bool) Request {
+func NewReverseScan(key, endKey roachpb.Key, forUpdate bool) Request {
 	return &ReverseScanRequest{
 		RequestHeader: RequestHeader{
 			Key:    key,
@@ -1524,7 +1502,7 @@ func (e *RangeFeedValue) Timestamp() hlc.Timestamp {
 // MakeReplicationChanges returns a slice of changes of the given type with an
 // item for each target.
 func MakeReplicationChanges(
-	changeType ReplicaChangeType, targets ...ReplicationTarget,
+	changeType roachpb.ReplicaChangeType, targets ...roachpb.ReplicationTarget,
 ) []ReplicationChange {
 	chgs := make([]ReplicationChange, 0, len(targets))
 	for _, target := range targets {
@@ -1538,17 +1516,17 @@ func MakeReplicationChanges(
 
 // ReplicationChangesForPromotion returns the replication changes that
 // correspond to the promotion of a non-voter to a voter.
-func ReplicationChangesForPromotion(target ReplicationTarget) []ReplicationChange {
+func ReplicationChangesForPromotion(target roachpb.ReplicationTarget) []ReplicationChange {
 	return []ReplicationChange{
-		{ChangeType: ADD_VOTER, Target: target}, {ChangeType: REMOVE_NON_VOTER, Target: target},
+		{ChangeType: roachpb.ADD_VOTER, Target: target}, {ChangeType: roachpb.REMOVE_NON_VOTER, Target: target},
 	}
 }
 
 // ReplicationChangesForDemotion returns the replication changes that correspond
 // to the demotion of a voter to a non-voter.
-func ReplicationChangesForDemotion(target ReplicationTarget) []ReplicationChange {
+func ReplicationChangesForDemotion(target roachpb.ReplicationTarget) []ReplicationChange {
 	return []ReplicationChange{
-		{ChangeType: ADD_NON_VOTER, Target: target}, {ChangeType: REMOVE_VOTER, Target: target},
+		{ChangeType: roachpb.ADD_NON_VOTER, Target: target}, {ChangeType: roachpb.REMOVE_VOTER, Target: target},
 	}
 }
 
@@ -1566,8 +1544,8 @@ func (acrr *AdminChangeReplicasRequest) AddChanges(chgs ...ReplicationChange) {
 // ReplicationChanges is a slice of ReplicationChange.
 type ReplicationChanges []ReplicationChange
 
-func (rc ReplicationChanges) byType(typ ReplicaChangeType) []ReplicationTarget {
-	var sl []ReplicationTarget
+func (rc ReplicationChanges) byType(typ roachpb.ReplicaChangeType) []roachpb.ReplicationTarget {
+	var sl []roachpb.ReplicationTarget
 	for _, chg := range rc {
 		if chg.ChangeType == typ {
 			sl = append(sl, chg.Target)
@@ -1577,25 +1555,25 @@ func (rc ReplicationChanges) byType(typ ReplicaChangeType) []ReplicationTarget {
 }
 
 // VoterAdditions returns a slice of all contained replication changes that add replicas.
-func (rc ReplicationChanges) VoterAdditions() []ReplicationTarget {
-	return rc.byType(ADD_VOTER)
+func (rc ReplicationChanges) VoterAdditions() []roachpb.ReplicationTarget {
+	return rc.byType(roachpb.ADD_VOTER)
 }
 
 // VoterRemovals returns a slice of all contained replication changes that remove replicas.
-func (rc ReplicationChanges) VoterRemovals() []ReplicationTarget {
-	return rc.byType(REMOVE_VOTER)
+func (rc ReplicationChanges) VoterRemovals() []roachpb.ReplicationTarget {
+	return rc.byType(roachpb.REMOVE_VOTER)
 }
 
 // NonVoterAdditions returns a slice of all contained replication
 // changes that add non-voters.
-func (rc ReplicationChanges) NonVoterAdditions() []ReplicationTarget {
-	return rc.byType(ADD_NON_VOTER)
+func (rc ReplicationChanges) NonVoterAdditions() []roachpb.ReplicationTarget {
+	return rc.byType(roachpb.ADD_NON_VOTER)
 }
 
 // NonVoterRemovals returns a slice of all contained replication changes
 // that remove non-voters.
-func (rc ReplicationChanges) NonVoterRemovals() []ReplicationTarget {
-	return rc.byType(REMOVE_NON_VOTER)
+func (rc ReplicationChanges) NonVoterRemovals() []roachpb.ReplicationTarget {
+	return rc.byType(roachpb.REMOVE_NON_VOTER)
 }
 
 // Changes returns the changes requested by this AdminChangeReplicasRequest, taking
@@ -1617,8 +1595,8 @@ func (acrr *AdminChangeReplicasRequest) Changes() []ReplicationChange {
 
 // AsLockUpdate creates a lock update message corresponding to the given resolve
 // intent request.
-func (rir *ResolveIntentRequest) AsLockUpdate() LockUpdate {
-	return LockUpdate{
+func (rir *ResolveIntentRequest) AsLockUpdate() roachpb.LockUpdate {
+	return roachpb.LockUpdate{
 		Span:              rir.Span(),
 		Txn:               rir.IntentTxn,
 		Status:            rir.Status,
@@ -1629,8 +1607,8 @@ func (rir *ResolveIntentRequest) AsLockUpdate() LockUpdate {
 
 // AsLockUpdate creates a lock update message corresponding to the given resolve
 // intent range request.
-func (rirr *ResolveIntentRangeRequest) AsLockUpdate() LockUpdate {
-	return LockUpdate{
+func (rirr *ResolveIntentRangeRequest) AsLockUpdate() roachpb.LockUpdate {
+	return roachpb.LockUpdate{
 		Span:              rirr.Span(),
 		Txn:               rirr.IntentTxn,
 		Status:            rirr.Status,
@@ -1642,14 +1620,14 @@ func (rirr *ResolveIntentRangeRequest) AsLockUpdate() LockUpdate {
 // CreateStoreIdent creates a store identifier out of the details captured
 // within the join node response (the join node RPC is used to allocate a store
 // ID for the client's first store).
-func (r *JoinNodeResponse) CreateStoreIdent() (StoreIdent, error) {
-	nodeID, storeID := NodeID(r.NodeID), StoreID(r.StoreID)
+func (r *JoinNodeResponse) CreateStoreIdent() (roachpb.StoreIdent, error) {
+	nodeID, storeID := roachpb.NodeID(r.NodeID), roachpb.StoreID(r.StoreID)
 	clusterID, err := uuid.FromBytes(r.ClusterID)
 	if err != nil {
-		return StoreIdent{}, err
+		return roachpb.StoreIdent{}, err
 	}
 
-	sIdent := StoreIdent{
+	sIdent := roachpb.StoreIdent{
 		ClusterID: clusterID,
 		NodeID:    nodeID,
 		StoreID:   storeID,

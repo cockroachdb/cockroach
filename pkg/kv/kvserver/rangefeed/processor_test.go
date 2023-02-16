@@ -23,6 +23,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -110,26 +111,26 @@ func abortTxnOp(txnID uuid.UUID) enginepb.MVCCLogicalOp {
 	})
 }
 
-func makeRangeFeedEvent(val interface{}) *roachpb.RangeFeedEvent {
-	var event roachpb.RangeFeedEvent
+func makeRangeFeedEvent(val interface{}) *kvpb.RangeFeedEvent {
+	var event kvpb.RangeFeedEvent
 	event.MustSetValue(val)
 	return &event
 }
 
-func rangeFeedValueWithPrev(key roachpb.Key, val, prev roachpb.Value) *roachpb.RangeFeedEvent {
-	return makeRangeFeedEvent(&roachpb.RangeFeedValue{
+func rangeFeedValueWithPrev(key roachpb.Key, val, prev roachpb.Value) *kvpb.RangeFeedEvent {
+	return makeRangeFeedEvent(&kvpb.RangeFeedValue{
 		Key:       key,
 		Value:     val,
 		PrevValue: prev,
 	})
 }
 
-func rangeFeedValue(key roachpb.Key, val roachpb.Value) *roachpb.RangeFeedEvent {
+func rangeFeedValue(key roachpb.Key, val roachpb.Value) *kvpb.RangeFeedEvent {
 	return rangeFeedValueWithPrev(key, val, roachpb.Value{})
 }
 
-func rangeFeedCheckpoint(span roachpb.Span, ts hlc.Timestamp) *roachpb.RangeFeedEvent {
-	return makeRangeFeedEvent(&roachpb.RangeFeedCheckpoint{
+func rangeFeedCheckpoint(span roachpb.Span, ts hlc.Timestamp) *kvpb.RangeFeedEvent {
+	return makeRangeFeedEvent(&kvpb.RangeFeedCheckpoint{
 		Span:       span,
 		ResolvedTS: ts,
 	})
@@ -203,7 +204,7 @@ func TestProcessorBasic(t *testing.T) {
 
 	// Add a registration.
 	r1Stream := newTestStream()
-	r1ErrC := make(chan *roachpb.Error, 1)
+	r1ErrC := make(chan *kvpb.Error, 1)
 	r1OK, r1Filter := p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 		hlc.Timestamp{WallTime: 1},
@@ -216,7 +217,7 @@ func TestProcessorBasic(t *testing.T) {
 	p.syncEventAndRegistrations()
 	require.Equal(t, 1, p.Len())
 	require.Equal(t,
-		[]*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
+		[]*kvpb.RangeFeedEvent{rangeFeedCheckpoint(
 			roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("m")},
 			hlc.Timestamp{WallTime: 1},
 		)},
@@ -235,7 +236,7 @@ func TestProcessorBasic(t *testing.T) {
 	p.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 5})
 	p.syncEventAndRegistrations()
 	require.Equal(t,
-		[]*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
+		[]*kvpb.RangeFeedEvent{rangeFeedCheckpoint(
 			roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("m")},
 			hlc.Timestamp{WallTime: 5},
 		)},
@@ -247,7 +248,7 @@ func TestProcessorBasic(t *testing.T) {
 		writeValueOpWithKV(roachpb.Key("c"), hlc.Timestamp{WallTime: 6}, []byte("val")))
 	p.syncEventAndRegistrations()
 	require.Equal(t,
-		[]*roachpb.RangeFeedEvent{rangeFeedValue(
+		[]*kvpb.RangeFeedEvent{rangeFeedValue(
 			roachpb.Key("c"),
 			roachpb.Value{
 				RawBytes:  []byte("val"),
@@ -261,18 +262,18 @@ func TestProcessorBasic(t *testing.T) {
 	p.ConsumeLogicalOps(ctx,
 		writeValueOpWithKV(roachpb.Key("s"), hlc.Timestamp{WallTime: 6}, []byte("val")))
 	p.syncEventAndRegistrations()
-	require.Equal(t, []*roachpb.RangeFeedEvent(nil), r1Stream.Events())
+	require.Equal(t, []*kvpb.RangeFeedEvent(nil), r1Stream.Events())
 
 	// Test intent that is aborted with one registration.
 	txn1 := uuid.MakeV4()
 	// Write intent.
 	p.ConsumeLogicalOps(ctx, writeIntentOp(txn1, hlc.Timestamp{WallTime: 6}))
 	p.syncEventAndRegistrations()
-	require.Equal(t, []*roachpb.RangeFeedEvent(nil), r1Stream.Events())
+	require.Equal(t, []*kvpb.RangeFeedEvent(nil), r1Stream.Events())
 	// Abort.
 	p.ConsumeLogicalOps(ctx, abortIntentOp(txn1))
 	p.syncEventC()
-	require.Equal(t, []*roachpb.RangeFeedEvent(nil), r1Stream.Events())
+	require.Equal(t, []*kvpb.RangeFeedEvent(nil), r1Stream.Events())
 	require.Equal(t, 0, p.rts.intentQ.Len())
 
 	// Test intent that is committed with one registration.
@@ -280,12 +281,12 @@ func TestProcessorBasic(t *testing.T) {
 	// Write intent.
 	p.ConsumeLogicalOps(ctx, writeIntentOp(txn2, hlc.Timestamp{WallTime: 10}))
 	p.syncEventAndRegistrations()
-	require.Equal(t, []*roachpb.RangeFeedEvent(nil), r1Stream.Events())
+	require.Equal(t, []*kvpb.RangeFeedEvent(nil), r1Stream.Events())
 	// Forward closed timestamp. Should now be stuck on intent.
 	p.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 15})
 	p.syncEventAndRegistrations()
 	require.Equal(t,
-		[]*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
+		[]*kvpb.RangeFeedEvent{rangeFeedCheckpoint(
 			roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("m")},
 			hlc.Timestamp{WallTime: 9},
 		)},
@@ -295,7 +296,7 @@ func TestProcessorBasic(t *testing.T) {
 	p.ConsumeLogicalOps(ctx, updateIntentOp(txn2, hlc.Timestamp{WallTime: 12}))
 	p.syncEventAndRegistrations()
 	require.Equal(t,
-		[]*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
+		[]*kvpb.RangeFeedEvent{rangeFeedCheckpoint(
 			roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("m")},
 			hlc.Timestamp{WallTime: 11},
 		)},
@@ -306,7 +307,7 @@ func TestProcessorBasic(t *testing.T) {
 		commitIntentOpWithKV(txn2, roachpb.Key("e"), hlc.Timestamp{WallTime: 13}, []byte("ival")))
 	p.syncEventAndRegistrations()
 	require.Equal(t,
-		[]*roachpb.RangeFeedEvent{
+		[]*kvpb.RangeFeedEvent{
 			rangeFeedValue(
 				roachpb.Key("e"),
 				roachpb.Value{
@@ -324,7 +325,7 @@ func TestProcessorBasic(t *testing.T) {
 
 	// Add another registration with withDiff = true.
 	r2Stream := newTestStream()
-	r2ErrC := make(chan *roachpb.Error, 1)
+	r2ErrC := make(chan *kvpb.Error, 1)
 	r2OK, r1And2Filter := p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("c"), EndKey: roachpb.RKey("z")},
 		hlc.Timestamp{WallTime: 1},
@@ -337,7 +338,7 @@ func TestProcessorBasic(t *testing.T) {
 	p.syncEventAndRegistrations()
 	require.Equal(t, 2, p.Len())
 	require.Equal(t,
-		[]*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
+		[]*kvpb.RangeFeedEvent{rangeFeedCheckpoint(
 			roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("z")},
 			hlc.Timestamp{WallTime: 15},
 		)},
@@ -357,12 +358,12 @@ func TestProcessorBasic(t *testing.T) {
 	// Both registrations should see checkpoint.
 	p.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 20})
 	p.syncEventAndRegistrations()
-	chEventAM := []*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
+	chEventAM := []*kvpb.RangeFeedEvent{rangeFeedCheckpoint(
 		roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("m")},
 		hlc.Timestamp{WallTime: 20},
 	)}
 	require.Equal(t, chEventAM, r1Stream.Events())
-	chEventCZ := []*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
+	chEventCZ := []*kvpb.RangeFeedEvent{rangeFeedCheckpoint(
 		roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("z")},
 		hlc.Timestamp{WallTime: 20},
 	)}
@@ -372,7 +373,7 @@ func TestProcessorBasic(t *testing.T) {
 	p.ConsumeLogicalOps(ctx,
 		writeValueOpWithKV(roachpb.Key("k"), hlc.Timestamp{WallTime: 22}, []byte("val2")))
 	p.syncEventAndRegistrations()
-	valEvent := []*roachpb.RangeFeedEvent{rangeFeedValue(
+	valEvent := []*kvpb.RangeFeedEvent{rangeFeedValue(
 		roachpb.Key("k"),
 		roachpb.Value{
 			RawBytes:  []byte("val2"),
@@ -386,14 +387,14 @@ func TestProcessorBasic(t *testing.T) {
 	p.ConsumeLogicalOps(ctx,
 		writeValueOpWithKV(roachpb.Key("v"), hlc.Timestamp{WallTime: 23}, []byte("val3")))
 	p.syncEventAndRegistrations()
-	valEvent2 := []*roachpb.RangeFeedEvent{rangeFeedValue(
+	valEvent2 := []*kvpb.RangeFeedEvent{rangeFeedValue(
 		roachpb.Key("v"),
 		roachpb.Value{
 			RawBytes:  []byte("val3"),
 			Timestamp: hlc.Timestamp{WallTime: 23},
 		},
 	)}
-	require.Equal(t, []*roachpb.RangeFeedEvent(nil), r1Stream.Events())
+	require.Equal(t, []*kvpb.RangeFeedEvent(nil), r1Stream.Events())
 	require.Equal(t, valEvent2, r2Stream.Events())
 
 	// Cancel the first registration.
@@ -401,13 +402,13 @@ func TestProcessorBasic(t *testing.T) {
 	require.NotNil(t, <-r1ErrC)
 
 	// Stop the processor with an error.
-	pErr := roachpb.NewErrorf("stop err")
+	pErr := kvpb.NewErrorf("stop err")
 	p.StopWithErr(pErr)
 	require.NotNil(t, <-r2ErrC)
 
 	// Adding another registration should fail.
 	r3Stream := newTestStream()
-	r3ErrC := make(chan *roachpb.Error, 1)
+	r3ErrC := make(chan *kvpb.Error, 1)
 	r3OK, _ := p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("c"), EndKey: roachpb.RKey("z")},
 		hlc.Timestamp{WallTime: 1},
@@ -449,7 +450,7 @@ func TestProcessorSlowConsumer(t *testing.T) {
 
 	// Add a registration.
 	r1Stream := newTestStream()
-	r1ErrC := make(chan *roachpb.Error, 1)
+	r1ErrC := make(chan *kvpb.Error, 1)
 	p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 		hlc.Timestamp{WallTime: 1},
@@ -459,7 +460,7 @@ func TestProcessorSlowConsumer(t *testing.T) {
 		r1ErrC,
 	)
 	r2Stream := newTestStream()
-	r2ErrC := make(chan *roachpb.Error, 1)
+	r2ErrC := make(chan *kvpb.Error, 1)
 	p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
 		hlc.Timestamp{WallTime: 1},
@@ -471,14 +472,14 @@ func TestProcessorSlowConsumer(t *testing.T) {
 	p.syncEventAndRegistrations()
 	require.Equal(t, 2, p.Len())
 	require.Equal(t,
-		[]*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
+		[]*kvpb.RangeFeedEvent{rangeFeedCheckpoint(
 			roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("m")},
 			hlc.Timestamp{WallTime: 0},
 		)},
 		r1Stream.Events(),
 	)
 	require.Equal(t,
-		[]*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
+		[]*kvpb.RangeFeedEvent{rangeFeedCheckpoint(
 			roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
 			hlc.Timestamp{WallTime: 0},
 		)},
@@ -561,7 +562,7 @@ func TestProcessorMemoryBudgetExceeded(t *testing.T) {
 
 	// Add a registration.
 	r1Stream := newTestStream()
-	r1ErrC := make(chan *roachpb.Error, 1)
+	r1ErrC := make(chan *kvpb.Error, 1)
 	p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 		hlc.Timestamp{WallTime: 1},
@@ -630,7 +631,7 @@ func TestProcessorMemoryBudgetReleased(t *testing.T) {
 
 	// Add a registration.
 	r1Stream := newTestStream()
-	r1ErrC := make(chan *roachpb.Error, 1)
+	r1ErrC := make(chan *kvpb.Error, 1)
 	p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 		hlc.Timestamp{WallTime: 1},
@@ -710,14 +711,14 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 		nil,   /* catchUpIter */
 		false, /* withDiff */
 		r1Stream,
-		make(chan *roachpb.Error, 1),
+		make(chan *kvpb.Error, 1),
 	)
 	p.syncEventAndRegistrations()
 	require.Equal(t, 1, p.Len())
 
 	// The registration should be provided a checkpoint immediately with an
 	// empty resolved timestamp because it did not perform a catch-up scan.
-	chEvent := []*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
+	chEvent := []*kvpb.RangeFeedEvent{rangeFeedCheckpoint(
 		roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("m")},
 		hlc.Timestamp{},
 	)}
@@ -748,7 +749,7 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 	require.Equal(t, hlc.Timestamp{WallTime: 18}, p.rts.Get())
 
 	// The registration should have been informed of the new resolved timestamp.
-	chEvent = []*roachpb.RangeFeedEvent{rangeFeedCheckpoint(
+	chEvent = []*kvpb.RangeFeedEvent{rangeFeedCheckpoint(
 		roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("m")},
 		hlc.Timestamp{WallTime: 18},
 	)}
@@ -951,7 +952,7 @@ func TestProcessorConcurrentStop(t *testing.T) {
 			defer wg.Done()
 			runtime.Gosched()
 			s := newTestStream()
-			errC := make(chan<- *roachpb.Error, 1)
+			errC := make(chan<- *kvpb.Error, 1)
 			p.Register(p.Span, hlc.Timestamp{}, nil, false, s, errC)
 		}()
 		go func() {
@@ -1020,7 +1021,7 @@ func TestProcessorRegistrationObservesOnlyNewEvents(t *testing.T) {
 			// operation is should see is firstIdx.
 			s := newTestStream()
 			regs[s] = firstIdx
-			errC := make(chan *roachpb.Error, 1)
+			errC := make(chan *kvpb.Error, 1)
 			p.Register(p.Span, hlc.Timestamp{}, nil, false, s, errC)
 			regDone <- struct{}{}
 		}
@@ -1032,10 +1033,10 @@ func TestProcessorRegistrationObservesOnlyNewEvents(t *testing.T) {
 	// from before they registered.
 	for s, expFirstIdx := range regs {
 		events := s.Events()
-		require.IsType(t, &roachpb.RangeFeedCheckpoint{}, events[0].GetValue())
-		require.IsType(t, &roachpb.RangeFeedValue{}, events[1].GetValue())
+		require.IsType(t, &kvpb.RangeFeedCheckpoint{}, events[0].GetValue())
+		require.IsType(t, &kvpb.RangeFeedValue{}, events[1].GetValue())
 
-		firstVal := events[1].GetValue().(*roachpb.RangeFeedValue)
+		firstVal := events[1].GetValue().(*kvpb.RangeFeedValue)
 		firstIdx := firstVal.Value.Timestamp.WallTime
 		require.Equal(t, expFirstIdx, firstIdx)
 	}
@@ -1105,7 +1106,7 @@ func TestBudgetReleaseOnProcessorStop(t *testing.T) {
 	// Add a registration.
 	rStream := newConsumer(50)
 	defer func() { rStream.Resume() }()
-	rErrC := make(chan *roachpb.Error, 1)
+	rErrC := make(chan *kvpb.Error, 1)
 	p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 		hlc.Timestamp{WallTime: 1},
@@ -1193,7 +1194,7 @@ func TestBudgetReleaseOnLastStreamError(t *testing.T) {
 	// Add a registration.
 	rStream := newConsumer(90)
 	defer func() { rStream.Resume() }()
-	rErrC := make(chan *roachpb.Error, 1)
+	rErrC := make(chan *kvpb.Error, 1)
 	p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 		hlc.Timestamp{WallTime: 1},
@@ -1270,7 +1271,7 @@ func TestBudgetReleaseOnOneStreamError(t *testing.T) {
 	// Add a registration.
 	r1Stream := newConsumer(50)
 	defer func() { r1Stream.Resume() }()
-	r1ErrC := make(chan *roachpb.Error, 1)
+	r1ErrC := make(chan *kvpb.Error, 1)
 	p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 		hlc.Timestamp{WallTime: 1},
@@ -1281,7 +1282,7 @@ func TestBudgetReleaseOnOneStreamError(t *testing.T) {
 	)
 	// Non-blocking registration that would consume all events.
 	r2Stream := newConsumer(0)
-	r2ErrC := make(chan *roachpb.Error, 1)
+	r2ErrC := make(chan *kvpb.Error, 1)
 	p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 		hlc.Timestamp{WallTime: 1},
@@ -1357,7 +1358,7 @@ func newConsumer(blockAfter int) *consumer {
 	}
 }
 
-func (c *consumer) Send(e *roachpb.RangeFeedEvent) error {
+func (c *consumer) Send(e *kvpb.RangeFeedEvent) error {
 	//fmt.Printf("Stream received event %v\n", e)
 	if e.Val != nil {
 		v := int(atomic.AddInt32(&c.sentValues, 1))
@@ -1438,7 +1439,7 @@ func BenchmarkProcessorWithBudget(b *testing.B) {
 
 	// Add a registration.
 	r1Stream := newTestStream()
-	r1ErrC := make(chan *roachpb.Error, 1)
+	r1ErrC := make(chan *kvpb.Error, 1)
 	p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 		hlc.Timestamp{WallTime: 1},

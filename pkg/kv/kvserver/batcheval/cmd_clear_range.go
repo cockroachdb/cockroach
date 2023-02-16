@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -34,13 +35,13 @@ import (
 const ClearRangeBytesThreshold = 512 << 10 // 512KiB
 
 func init() {
-	RegisterReadWriteCommand(roachpb.ClearRange, declareKeysClearRange, ClearRange)
+	RegisterReadWriteCommand(kvpb.ClearRange, declareKeysClearRange, ClearRange)
 }
 
 func declareKeysClearRange(
 	rs ImmutableRangeState,
-	header *roachpb.Header,
-	req roachpb.Request,
+	header *kvpb.Header,
+	req kvpb.Request,
 	latchSpans, lockSpans *spanset.SpanSet,
 	maxOffset time.Duration,
 ) {
@@ -59,7 +60,7 @@ func declareKeysClearRange(
 	// Even if we obtain latches beyond the end range here, it won't cause
 	// contention with the subsequent range because latches are enforced per
 	// range.
-	args := req.(*roachpb.ClearRangeRequest)
+	args := req.(*kvpb.ClearRangeRequest)
 	l, r := rangeTombstonePeekBounds(args.Key, args.EndKey, rs.GetStartKey().AsRawKey(), nil)
 	latchSpans.AddMVCC(spanset.SpanReadOnly, roachpb.Span{Key: l, EndKey: r}, header.Timestamp)
 
@@ -78,7 +79,7 @@ func declareKeysClearRange(
 // or queried any more, such as after a DROP or TRUNCATE table, or
 // DROP index.
 func ClearRange(
-	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp kvpb.Response,
 ) (result.Result, error) {
 	if cArgs.Header.Txn != nil {
 		return result.Result{}, errors.New("cannot execute ClearRange within a transaction")
@@ -86,7 +87,7 @@ func ClearRange(
 	log.VEventf(ctx, 2, "ClearRange %+v", cArgs.Args)
 
 	// Encode MVCCKey values for start and end of clear span.
-	args := cArgs.Args.(*roachpb.ClearRangeRequest)
+	args := cArgs.Args.(*kvpb.ClearRangeRequest)
 	from := args.Key
 	to := args.EndKey
 
@@ -114,7 +115,7 @@ func ClearRange(
 	if err != nil {
 		return result.Result{}, err
 	} else if len(intents) > 0 {
-		return result.Result{}, &roachpb.WriteIntentError{Intents: intents}
+		return result.Result{}, &kvpb.WriteIntentError{Intents: intents}
 	}
 
 	// Before clearing, compute the delta in MVCCStats.

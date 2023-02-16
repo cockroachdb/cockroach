@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/tracker"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -255,32 +256,32 @@ type proposalCreator struct {
 }
 
 func (pc proposalCreator) newPutProposal(ts hlc.Timestamp) *ProposalData {
-	ba := &roachpb.BatchRequest{}
-	ba.Add(&roachpb.PutRequest{})
+	ba := &kvpb.BatchRequest{}
+	ba.Add(&kvpb.PutRequest{})
 	ba.Timestamp = ts
 	return pc.newProposal(ba)
 }
 
 func (pc proposalCreator) newLeaseRequestProposal(lease roachpb.Lease) *ProposalData {
-	ba := &roachpb.BatchRequest{}
-	ba.Add(&roachpb.RequestLeaseRequest{Lease: lease, PrevLease: pc.lease.Lease})
+	ba := &kvpb.BatchRequest{}
+	ba.Add(&kvpb.RequestLeaseRequest{Lease: lease, PrevLease: pc.lease.Lease})
 	return pc.newProposal(ba)
 }
 
 func (pc proposalCreator) newLeaseTransferProposal(lease roachpb.Lease) *ProposalData {
-	ba := &roachpb.BatchRequest{}
-	ba.Add(&roachpb.TransferLeaseRequest{Lease: lease, PrevLease: pc.lease.Lease})
+	ba := &kvpb.BatchRequest{}
+	ba.Add(&kvpb.TransferLeaseRequest{Lease: lease, PrevLease: pc.lease.Lease})
 	return pc.newProposal(ba)
 }
 
-func (pc proposalCreator) newProposal(ba *roachpb.BatchRequest) *ProposalData {
+func (pc proposalCreator) newProposal(ba *kvpb.BatchRequest) *ProposalData {
 	var lease *roachpb.Lease
 	var isLeaseRequest bool
 	switch v := ba.Requests[0].GetInner().(type) {
-	case *roachpb.RequestLeaseRequest:
+	case *kvpb.RequestLeaseRequest:
 		lease = &v.Lease
 		isLeaseRequest = true
-	case *roachpb.TransferLeaseRequest:
+	case *kvpb.TransferLeaseRequest:
 		lease = &v.Lease
 	}
 	p := &ProposalData{

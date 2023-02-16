@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -492,8 +493,8 @@ func TestServerDump(t *testing.T) {
 
 	var b kv.Batch
 	for _, kv := range kvs {
-		p := roachpb.NewPut(kv.Key, kv.Value)
-		p.(*roachpb.PutRequest).Inline = true
+		p := kvpb.NewPut(kv.Key, kv.Value)
+		p.(*kvpb.PutRequest).Inline = true
 		b.AddRawRequest(p)
 	}
 	// Write and check multiple times, to make sure there aren't any issues

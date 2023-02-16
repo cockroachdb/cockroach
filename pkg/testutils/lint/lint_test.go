@@ -1118,7 +1118,7 @@ func TestLint(t *testing.T) {
 			":!rpc/codec.go",
 			":!rpc/codec_test.go",
 			":!settings/settings_test.go",
-			":!roachpb/api_requestheader.go",
+			":!kv/kvpb/api_requestheader.go",
 			":!storage/mvcc_value.go",
 			":!storage/enginepb/mvcc3_valueheader.go",
 			":!sql/types/types_jsonpb.go",
@@ -1243,8 +1243,8 @@ func TestLint(t *testing.T) {
 			":!ccl/changefeedccl/changefeedbase/errors.go",
 			":!kv/kvclient/kvcoord/lock_spans_over_budget_error.go",
 			":!spanconfig/errors.go",
-			":!roachpb/replica_unavailable_error.go",
-			":!roachpb/ambiguous_result_error.go",
+			":!kv/kvpb/replica_unavailable_error.go",
+			":!kv/kvpb/ambiguous_result_error.go",
 			":!sql/flowinfra/flow_registry.go",
 			":!sql/pgwire/pgerror/constraint_name.go",
 			":!sql/pgwire/pgerror/severity.go",
@@ -1298,7 +1298,7 @@ func TestLint(t *testing.T) {
 			":!bench/cmd",
 			":!sql/opt/optgen",
 			":!sql/colexec/execgen",
-			":!roachpb/gen/main.go",
+			":!kv/kvpb/gen/main.go",
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -1564,7 +1564,7 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`cockroachdb/cockroach/pkg/rpc: github\.com/golang/protobuf/proto$`),
 			stream.GrepNot(`cockroachdb/cockroach/pkg/sql/lexbase/allkeywords: log$`),
 			stream.GrepNot(`cockroachdb/cockroach/pkg/util/timeutil/gen: log$`),
-			stream.GrepNot(`cockroachdb/cockroach/pkg/roachpb/gen: log$`),
+			stream.GrepNot(`cockroachdb/cockroach/pkg/kv/kvpb/gen: log$`),
 			stream.GrepNot(`cockroachdb/cockroach/pkg/util/log/gen: log$`),
 			stream.GrepNot(`cockroach/pkg/util/uuid: github\.com/satori/go\.uuid$`),
 		), func(s string) {
@@ -1610,6 +1610,7 @@ func TestLint(t *testing.T) {
 		forbiddenImports := map[string]struct{}{
 			"github.com/cockroachdb/pebble":                     {},
 			"github.com/cockroachdb/cockroach/pkg/cli":          {},
+			"github.com/cockroachdb/cockroach/pkg/kv/kvpb":      {},
 			"github.com/cockroachdb/cockroach/pkg/kv/kvserver":  {},
 			"github.com/cockroachdb/cockroach/pkg/roachpb":      {},
 			"github.com/cockroachdb/cockroach/pkg/server":       {},
@@ -1761,8 +1762,8 @@ func TestLint(t *testing.T) {
 				stream.GrepNot(`pkg/.*.go:.* func .*\.Cause is unused`),
 				// Using deprecated WireLength call.
 				stream.GrepNot(`pkg/rpc/stats_handler.go:.*v.WireLength is deprecated: This field is never set.*`),
-				// roachpb/api.go needs v1 Protobuf reflection
-				stream.GrepNot(`pkg/roachpb/api_test.go:.*"github.com/golang/protobuf/proto" is deprecated: Use the "google.golang.org/protobuf/proto" package instead.`),
+				// kv/kvpb/api.go needs v1 Protobuf reflection
+				stream.GrepNot(`pkg/kv/kvpb/api_test.go:.*"github.com/golang/protobuf/proto" is deprecated: Use the "google.golang.org/protobuf/proto" package instead.`),
 				// rpc/codec.go imports the same proto package that grpc-go imports (as of crdb@dd87d1145 and grpc-go@7b167fd6).
 				stream.GrepNot(`pkg/rpc/codec.go:.*"github.com/golang/protobuf/proto" is deprecated: Use the "google.golang.org/protobuf/proto" package instead.`),
 				// goschedstats contains partial copies of go runtime structures, with
@@ -2040,6 +2041,7 @@ func TestLint(t *testing.T) {
 			"../../col/colserde",
 			"../../keys",
 			"../../kv/kvclient/rangecache",
+			"../../kv/kvpb",
 			"../../roachpb",
 			"../../sql/catalog/descs",
 			"../../sql/colcontainer",
@@ -2272,13 +2274,13 @@ func TestLint(t *testing.T) {
 			// for efficient hashing.
 			stream.GrepNot(`pkg/sql/colexec/colexechash/hash.go:[0-9:]+: possible misuse of unsafe.Pointer`),
 			stream.GrepNot(`^#`), // comment line
-			// Roachpb's own error package takes ownership of error unwraps
+			// kvpb's own error package takes ownership of error unwraps
 			// (by enforcing that errors can never been wrapped under a
-			// roachpb.Error, which is an inconvenient limitation but it is
+			// kvpb.Error, which is an inconvenient limitation but it is
 			// what it is). Once this code is simplified to use generalized
 			// error encode/decode, it can be dropped from the linter
 			// exception as well.
-			stream.GrepNot(`pkg/roachpb/errors\.go:.*invalid direct cast on error object`),
+			stream.GrepNot(`pkg/kv/kvpb/errors\.go:.*invalid direct cast on error object`),
 			// Cast in decode handler.
 			stream.GrepNot(`pkg/sql/pgwire/pgerror/constraint_name\.go:.*invalid direct cast on error object`),
 			// Cast in decode handler.

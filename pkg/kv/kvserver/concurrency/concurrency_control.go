@@ -17,6 +17,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -228,7 +229,7 @@ type ContentionHandler interface {
 	// lock table and observes the lock on key K, so it enters the lock's
 	// wait-queue and waits for it to be resolved.
 	HandleWriterIntentError(
-		context.Context, *Guard, roachpb.LeaseSequence, *roachpb.WriteIntentError,
+		context.Context, *Guard, roachpb.LeaseSequence, *kvpb.WriteIntentError,
 	) (*Guard, *Error)
 
 	// HandleTransactionPushError consumes a TransactionPushError thrown by a
@@ -247,7 +248,7 @@ type ContentionHandler interface {
 	// before txn A retries its push. During the retry, txn A finds that txn B
 	// is being tracked in the txn wait-queue so it waits there for txn B to
 	// finish.
-	HandleTransactionPushError(context.Context, *Guard, *roachpb.TransactionPushError) *Guard
+	HandleTransactionPushError(context.Context, *Guard, *kvpb.TransactionPushError) *Guard
 }
 
 // LockManager is concerned with tracking locks that are stored on the manager's
@@ -383,7 +384,7 @@ type Request struct {
 	NonTxnPriority roachpb.UserPriority
 
 	// The consistency level of the request. Only set if Txn is nil.
-	ReadConsistency roachpb.ReadConsistencyType
+	ReadConsistency kvpb.ReadConsistencyType
 
 	// The wait policy of the request. Signifies how the request should
 	// behave if it encounters conflicting locks held by other active
@@ -407,7 +408,7 @@ type Request struct {
 	PoisonPolicy poison.Policy
 
 	// The individual requests in the batch.
-	Requests []roachpb.RequestUnion
+	Requests []kvpb.RequestUnion
 
 	// The maximal set of spans that the request will access. Latches
 	// will be acquired for these spans.
@@ -449,10 +450,10 @@ type Guard struct {
 // Response is a slice of responses to requests in a batch. This type is used
 // when the concurrency manager is able to respond to a request directly during
 // sequencing.
-type Response = []roachpb.ResponseUnion
+type Response = []kvpb.ResponseUnion
 
-// Error is an alias for a roachpb.Error.
-type Error = roachpb.Error
+// Error is an alias for a kvpb.Error.
+type Error = kvpb.Error
 
 // QueryLockTableOptions bundles the options for the QueryLockTableState function.
 type QueryLockTableOptions struct {
@@ -466,7 +467,7 @@ type QueryLockTableOptions struct {
 // results from the QueryLockTableState function.
 type QueryLockTableResumeState struct {
 	ResumeSpan   *roachpb.Span
-	ResumeReason roachpb.ResumeReason
+	ResumeReason kvpb.ResumeReason
 
 	// ResumeNextBytes represents the size (in bytes) of the next
 	// roachpb.LockStateInfo object that would have been returned by
@@ -981,14 +982,14 @@ type txnWaitQueue interface {
 	//
 	// If the transaction is successfully pushed while this method is waiting,
 	// the first return value is a non-nil PushTxnResponse object.
-	MaybeWaitForPush(context.Context, *roachpb.PushTxnRequest) (*roachpb.PushTxnResponse, *Error)
+	MaybeWaitForPush(context.Context, *kvpb.PushTxnRequest) (*kvpb.PushTxnResponse, *Error)
 
 	// MaybeWaitForQuery checks whether there is a queue already established for
 	// transaction being queried. If not, or if the QueryTxn request hasn't
 	// specified WaitForUpdate, the method returns immediately. If there is a
 	// queue, the method enqueues this request as a waiter and waits for any
 	// updates to the target transaction.
-	MaybeWaitForQuery(context.Context, *roachpb.QueryTxnRequest) *Error
+	MaybeWaitForQuery(context.Context, *kvpb.QueryTxnRequest) *Error
 
 	// OnRangeDescUpdated informs the Queue that its range's descriptor has been
 	// updated.

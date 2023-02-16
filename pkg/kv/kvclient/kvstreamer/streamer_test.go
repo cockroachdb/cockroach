@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -76,10 +77,10 @@ func TestStreamerLimitations(t *testing.T) {
 		streamer := getStreamer()
 		defer streamer.Close(ctx)
 		streamer.Init(OutOfOrder, Hints{UniqueRequests: true}, 1 /* maxKeysPerRow */, nil /* diskBuffer */)
-		get := roachpb.NewGet(roachpb.Key("key"), false /* forUpdate */)
-		reqs := []roachpb.RequestUnion{{
-			Value: &roachpb.RequestUnion_Get{
-				Get: get.(*roachpb.GetRequest),
+		get := kvpb.NewGet(roachpb.Key("key"), false /* forUpdate */)
+		reqs := []kvpb.RequestUnion{{
+			Value: &kvpb.RequestUnion_Get{
+				Get: get.(*kvpb.GetRequest),
 			},
 		}}
 		require.NoError(t, streamer.Enqueue(ctx, reqs))
@@ -137,10 +138,10 @@ func TestStreamerBudgetErrorInEnqueue(t *testing.T) {
 	// makeGetRequest returns a valid GetRequest that wants to lookup a key with
 	// value 'a' repeated keySize number of times in the primary index of table
 	// foo.
-	makeGetRequest := func(keySize int) roachpb.RequestUnion {
-		var res roachpb.RequestUnion
-		var get roachpb.GetRequest
-		var union roachpb.RequestUnion_Get
+	makeGetRequest := func(keySize int) kvpb.RequestUnion {
+		var res kvpb.RequestUnion
+		var get kvpb.GetRequest
+		var union kvpb.RequestUnion_Get
 		key := make([]byte, keySize+6)
 		key[0] = tableID + 136
 		key[1] = 137
@@ -187,7 +188,7 @@ func TestStreamerBudgetErrorInEnqueue(t *testing.T) {
 		defer streamer.Close(ctx)
 
 		// A single request that exceeds the limit should be allowed.
-		reqs := make([]roachpb.RequestUnion, 1)
+		reqs := make([]kvpb.RequestUnion, 1)
 		reqs[0] = makeGetRequest(limitBytes + 1)
 		require.NoError(t, streamer.Enqueue(ctx, reqs))
 	})
@@ -198,7 +199,7 @@ func TestStreamerBudgetErrorInEnqueue(t *testing.T) {
 
 		// A single request that exceeds the limit as well as the root SQL pool
 		// should be denied.
-		reqs := make([]roachpb.RequestUnion, 1)
+		reqs := make([]kvpb.RequestUnion, 1)
 		reqs[0] = makeGetRequest(rootPoolSize + 1)
 		require.Error(t, streamer.Enqueue(ctx, reqs))
 	})
@@ -208,7 +209,7 @@ func TestStreamerBudgetErrorInEnqueue(t *testing.T) {
 		defer streamer.Close(ctx)
 
 		// Create two requests which exceed the limit when combined.
-		reqs := make([]roachpb.RequestUnion, 2)
+		reqs := make([]kvpb.RequestUnion, 2)
 		reqs[0] = makeGetRequest(limitBytes/2 + 1)
 		reqs[1] = makeGetRequest(limitBytes/2 + 1)
 		require.Error(t, streamer.Enqueue(ctx, reqs))
@@ -397,10 +398,10 @@ func TestStreamerEmptyScans(t *testing.T) {
 	_, err = db.Exec("SELECT count(*) from t")
 	require.NoError(t, err)
 
-	makeScanRequest := func(start, end int) roachpb.RequestUnion {
-		var res roachpb.RequestUnion
-		var scan roachpb.ScanRequest
-		var union roachpb.RequestUnion_Scan
+	makeScanRequest := func(start, end int) kvpb.RequestUnion {
+		var res kvpb.RequestUnion
+		var scan kvpb.ScanRequest
+		var union kvpb.RequestUnion_Scan
 		makeKey := func(pk int) []byte {
 			// These numbers essentially make a key like '/t/primary/pk'.
 			return []byte{tableID + 136, 137, byte(136 + pk)}
@@ -424,7 +425,7 @@ func TestStreamerEmptyScans(t *testing.T) {
 		defer streamer.Close(ctx)
 
 		// Scan the row with pk=0.
-		reqs := make([]roachpb.RequestUnion, 1)
+		reqs := make([]kvpb.RequestUnion, 1)
 		reqs[0] = makeScanRequest(0, 1)
 		require.NoError(t, streamer.Enqueue(ctx, reqs))
 		results, err := streamer.GetResults(ctx)
@@ -438,7 +439,7 @@ func TestStreamerEmptyScans(t *testing.T) {
 		defer streamer.Close(ctx)
 
 		// Scan the rows with pk in range [1, 4).
-		reqs := make([]roachpb.RequestUnion, 1)
+		reqs := make([]kvpb.RequestUnion, 1)
 		reqs[0] = makeScanRequest(1, 4)
 		require.NoError(t, streamer.Enqueue(ctx, reqs))
 		// We expect an empty response for each range.

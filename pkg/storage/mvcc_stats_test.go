@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -995,7 +996,7 @@ func TestMVCCStatsDelDelGC(t *testing.T) {
 		ctx,
 		engine,
 		aggMS,
-		[]roachpb.GCRequest_GCKey{{
+		[]kvpb.GCRequest_GCKey{{
 			Key:       key,
 			Timestamp: ts2,
 		}},
@@ -1192,7 +1193,7 @@ func TestMVCCStatsPutWaitDeleteGC(t *testing.T) {
 
 	assertEq(t, engine, "after delete", aggMS, &expMS)
 
-	if err := MVCCGarbageCollect(ctx, engine, aggMS, []roachpb.GCRequest_GCKey{{
+	if err := MVCCGarbageCollect(ctx, engine, aggMS, []kvpb.GCRequest_GCKey{{
 		Key:       key,
 		Timestamp: ts1,
 	}}, ts2); err != nil {
@@ -1665,7 +1666,7 @@ func TestMVCCStatsRandomized(t *testing.T) {
 
 		mvccRangeDel := !s.isLocalKey && s.Txn == nil && s.rng.Intn(2) == 0
 		var mvccRangeDelKey, mvccRangeDelEndKey roachpb.Key
-		var predicates roachpb.DeleteRangePredicates
+		var predicates kvpb.DeleteRangePredicates
 		if mvccRangeDel {
 			mvccRangeDelKey = keys.LocalMax
 			mvccRangeDelEndKey = roachpb.KeyMax
@@ -1700,7 +1701,7 @@ func TestMVCCStatsRandomized(t *testing.T) {
 			_, _, _, err = MVCCDeleteRange(
 				ctx, s.batch, s.MSDelta, keySpan.Key, keySpan.EndKey, max, s.TS, hlc.ClockTimestamp{}, s.Txn, returnKeys,
 			)
-		} else if predicates == (roachpb.DeleteRangePredicates{}) {
+		} else if predicates == (kvpb.DeleteRangePredicates{}) {
 			desc = fmt.Sprintf("mvccDeleteRangeUsingTombstone=%s",
 				roachpb.Span{Key: mvccRangeDelKey, EndKey: mvccRangeDelEndKey})
 			const idempotent = false
@@ -1798,7 +1799,7 @@ func TestMVCCStatsRandomized(t *testing.T) {
 			ctx,
 			s.batch,
 			s.MSDelta,
-			[]roachpb.GCRequest_GCKey{{
+			[]kvpb.GCRequest_GCKey{{
 				Key:       s.key,
 				Timestamp: gcTS,
 			}},

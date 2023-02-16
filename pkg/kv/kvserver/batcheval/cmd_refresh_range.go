@@ -13,6 +13,7 @@ package batcheval
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -25,15 +26,15 @@ import (
 )
 
 func init() {
-	RegisterReadOnlyCommand(roachpb.RefreshRange, DefaultDeclareKeys, RefreshRange)
+	RegisterReadOnlyCommand(kvpb.RefreshRange, DefaultDeclareKeys, RefreshRange)
 }
 
 // RefreshRange checks whether the key range specified has any values written in
 // the interval (args.RefreshFrom, header.Timestamp].
 func RefreshRange(
-	ctx context.Context, reader storage.Reader, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, reader storage.Reader, cArgs CommandArgs, resp kvpb.Response,
 ) (result.Result, error) {
-	args := cArgs.Args.(*roachpb.RefreshRangeRequest)
+	args := cArgs.Args.(*kvpb.RefreshRangeRequest)
 	h := cArgs.Header
 
 	if h.Txn == nil {
@@ -93,7 +94,7 @@ func refreshRange(
 		key := iter.UnsafeKey().Clone()
 
 		if _, hasRange := iter.HasPointAndRange(); hasRange {
-			return roachpb.NewRefreshFailedError(roachpb.RefreshFailedError_REASON_COMMITTED_VALUE,
+			return kvpb.NewRefreshFailedError(kvpb.RefreshFailedError_REASON_COMMITTED_VALUE,
 				key.Key, iter.RangeKeys().Versions[0].Timestamp)
 		}
 
@@ -128,12 +129,12 @@ func refreshRange(
 				}
 				continue
 			}
-			return roachpb.NewRefreshFailedError(roachpb.RefreshFailedError_REASON_INTENT,
+			return kvpb.NewRefreshFailedError(kvpb.RefreshFailedError_REASON_INTENT,
 				key.Key, meta.Txn.WriteTimestamp)
 		}
 
 		// If a committed value is found, return an error.
-		return roachpb.NewRefreshFailedError(roachpb.RefreshFailedError_REASON_COMMITTED_VALUE,
+		return kvpb.NewRefreshFailedError(kvpb.RefreshFailedError_REASON_COMMITTED_VALUE,
 			key.Key, key.Timestamp)
 	}
 	return nil

@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -5360,8 +5361,8 @@ DO NOT USE -- USE 'CREATE TENANT' INSTEAD`,
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				key := []byte(tree.MustBeDBytes(args[0]))
 				b := &kv.Batch{}
-				b.AddRawRequest(&roachpb.LeaseInfoRequest{
-					RequestHeader: roachpb.RequestHeader{
+				b.AddRawRequest(&kvpb.LeaseInfoRequest{
+					RequestHeader: kvpb.RequestHeader{
 						Key: key,
 					},
 				})
@@ -5372,7 +5373,7 @@ DO NOT USE -- USE 'CREATE TENANT' INSTEAD`,
 				if err := evalCtx.Txn.Run(ctx, b); err != nil {
 					return nil, pgerror.Wrap(err, pgcode.InvalidParameterValue, "error fetching leaseholder")
 				}
-				resp := b.RawResponse().Responses[0].GetInner().(*roachpb.LeaseInfoResponse)
+				resp := b.RawResponse().Responses[0].GetInner().(*kvpb.LeaseInfoResponse)
 
 				return tree.NewDInt(tree.DInt(resp.Lease.Replica.StoreID)), nil
 			},
@@ -7307,7 +7308,7 @@ run from. One of 'mvccGC', 'merge', 'split', 'replicate', 'replicaGC',
 						return nil
 					}
 
-					if errors.HasType(err, (*roachpb.RangeNotFoundError)(nil)) {
+					if errors.HasType(err, (*kvpb.RangeNotFoundError)(nil)) {
 						return nil
 					}
 					return err
@@ -7359,7 +7360,7 @@ store housing the range on the node it's run from. One of 'mvccGC', 'merge', 'sp
 						return nil
 					}
 
-					if errors.HasType(err, (*roachpb.RangeNotFoundError)(nil)) {
+					if errors.HasType(err, (*kvpb.RangeNotFoundError)(nil)) {
 						return nil
 					}
 					return err
@@ -7579,7 +7580,7 @@ expires until the statement bundle is collected`,
 				if evalCtx.AsOfSystemTime != nil {
 					endTime = evalCtx.AsOfSystemTime.Timestamp
 				}
-				header := roachpb.Header{
+				header := kvpb.Header{
 					Timestamp: endTime,
 					// We set WaitPolicy to Error, so that the export will return an error
 					// to us instead of a blocking wait if it hits any other txns.
@@ -7592,23 +7593,23 @@ expires until the statement bundle is collected`,
 				startTime := args[1].(*tree.DTimestampTZ).Time
 				startTimestamp := hlc.Timestamp{WallTime: startTime.UnixNano()}
 				allRevisions := *args[2].(*tree.DBool)
-				filter := roachpb.MVCCFilter_Latest
+				filter := kvpb.MVCCFilter_Latest
 				if allRevisions {
-					filter = roachpb.MVCCFilter_All
+					filter = kvpb.MVCCFilter_All
 				}
-				req := &roachpb.ExportRequest{
-					RequestHeader:     roachpb.RequestHeader{Key: startKey, EndKey: endKey},
+				req := &kvpb.ExportRequest{
+					RequestHeader:     kvpb.RequestHeader{Key: startKey, EndKey: endKey},
 					StartTime:         startTimestamp,
 					MVCCFilter:        filter,
 					ExportFingerprint: true,
 				}
-				admissionHeader := roachpb.AdmissionHeader{
+				admissionHeader := kvpb.AdmissionHeader{
 					Priority:                 int32(admissionpb.BulkNormalPri),
 					CreateTime:               timeutil.Now().UnixNano(),
-					Source:                   roachpb.AdmissionHeader_FROM_SQL,
+					Source:                   kvpb.AdmissionHeader_FROM_SQL,
 					NoMemoryReservedAtSource: true,
 				}
-				todo := make(chan *roachpb.ExportRequest, 1)
+				todo := make(chan *kvpb.ExportRequest, 1)
 				todo <- req
 				ctxDone := ctx.Done()
 				var fingerprint uint64
@@ -7620,8 +7621,8 @@ expires until the statement bundle is collected`,
 					case <-ctxDone:
 						return nil, ctx.Err()
 					case req := <-todo:
-						var rawResp roachpb.Response
-						var pErr *roachpb.Error
+						var rawResp kvpb.Response
+						var pErr *kvpb.Error
 						exportRequestErr := contextutil.RunWithTimeout(ctx,
 							fmt.Sprintf("ExportRequest fingerprint for span %s", roachpb.Span{Key: startKey, EndKey: endKey}),
 							5*time.Minute, func(ctx context.Context) error {
@@ -7636,7 +7637,7 @@ expires until the statement bundle is collected`,
 							return nil, exportRequestErr
 						}
 
-						resp := rawResp.(*roachpb.ExportResponse)
+						resp := rawResp.(*kvpb.ExportResponse)
 						for _, file := range resp.Files {
 							fingerprint = fingerprint ^ file.Fingerprint
 
@@ -7652,7 +7653,7 @@ expires until the statement bundle is collected`,
 							}
 
 							resumeReq := req
-							resumeReq.RequestHeader = roachpb.RequestHeaderFromSpan(*resp.ResumeSpan)
+							resumeReq.RequestHeader = kvpb.RequestHeaderFromSpan(*resp.ResumeSpan)
 							todo <- resumeReq
 						}
 					default:

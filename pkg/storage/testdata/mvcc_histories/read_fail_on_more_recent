@@ -37,7 +37,7 @@ run error
 get k=k1 ts=9,0 failOnMoreRecent
 ----
 get: "k1" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 9.000000000,0 too old; wrote at 10.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 9.000000000,0 too old; wrote at 10.000000000,1
 
 run ok
 get k=k1 ts=10,0
@@ -48,7 +48,7 @@ run error
 get k=k1 ts=10,0 failOnMoreRecent
 ----
 get: "k1" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 10.000000000,0 too old; wrote at 10.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 10.000000000,0 too old; wrote at 10.000000000,1
 
 run ok
 get k=k1 ts=11,0
@@ -69,7 +69,7 @@ run error
 scan k=k1 end=k2 ts=9,0 failOnMoreRecent
 ----
 scan: "k1"-"k2" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 9.000000000,0 too old; wrote at 10.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 9.000000000,0 too old; wrote at 10.000000000,1
 
 run ok
 scan k=k1 end=k2 ts=10,0
@@ -80,7 +80,7 @@ run error
 scan k=k1 end=k2 ts=10,0 failOnMoreRecent
 ----
 scan: "k1"-"k2" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 10.000000000,0 too old; wrote at 10.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 10.000000000,0 too old; wrote at 10.000000000,1
 
 run ok
 scan k=k1 end=k2 ts=11,0
@@ -101,31 +101,31 @@ run error
 get k=k2 ts=9,0 failOnMoreRecent
 ----
 get: "k2" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k2"
+error: (*kvpb.WriteIntentError:) conflicting intents on "k2"
 
 run error
 get k=k2 ts=10,0
 ----
 get: "k2" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k2"
+error: (*kvpb.WriteIntentError:) conflicting intents on "k2"
 
 run error
 get k=k2 ts=10,0 failOnMoreRecent
 ----
 get: "k2" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k2"
+error: (*kvpb.WriteIntentError:) conflicting intents on "k2"
 
 run error
 get k=k2 ts=11,0
 ----
 get: "k2" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k2"
+error: (*kvpb.WriteIntentError:) conflicting intents on "k2"
 
 run error
 get k=k2 ts=11,0 failOnMoreRecent
 ----
 get: "k2" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k2"
+error: (*kvpb.WriteIntentError:) conflicting intents on "k2"
 
 run ok
 scan k=k2 end=k3 ts=9,0
@@ -136,31 +136,31 @@ run error
 scan k=k2 end=k3 ts=9,0 failOnMoreRecent
 ----
 scan: "k2"-"k3" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k2"
+error: (*kvpb.WriteIntentError:) conflicting intents on "k2"
 
 run error
 scan k=k2 end=k3 ts=10,0
 ----
 scan: "k2"-"k3" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k2"
+error: (*kvpb.WriteIntentError:) conflicting intents on "k2"
 
 run error
 scan k=k2 end=k3 ts=10,0 failOnMoreRecent
 ----
 scan: "k2"-"k3" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k2"
+error: (*kvpb.WriteIntentError:) conflicting intents on "k2"
 
 run error
 scan k=k2 end=k3 ts=11,0
 ----
 scan: "k2"-"k3" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k2"
+error: (*kvpb.WriteIntentError:) conflicting intents on "k2"
 
 run error
 scan k=k2 end=k3 ts=11,0 failOnMoreRecent
 ----
 scan: "k2"-"k3" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k2"
+error: (*kvpb.WriteIntentError:) conflicting intents on "k2"
 
 # More test cases:
 # 
@@ -180,31 +180,31 @@ run error
 scan k=k1 end=k3 ts=9,0 failOnMoreRecent
 ----
 scan: "k1"-"k3" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 9.000000000,0 too old; wrote at 10.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 9.000000000,0 too old; wrote at 10.000000000,1
 
 run error
 scan k=k1 end=k3 ts=10,0
 ----
 scan: "k1"-"k3" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k2"
+error: (*kvpb.WriteIntentError:) conflicting intents on "k2"
 
 run error
 scan k=k1 end=k3 ts=10,0 failOnMoreRecent
 ----
 scan: "k1"-"k3" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 10.000000000,0 too old; wrote at 10.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 10.000000000,0 too old; wrote at 10.000000000,1
 
 run error
 scan k=k1 end=k3 ts=11,0
 ----
 scan: "k1"-"k3" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k2"
+error: (*kvpb.WriteIntentError:) conflicting intents on "k2"
 
 run error
 scan k=k1 end=k3 ts=11,0 failOnMoreRecent
 ----
 scan: "k1"-"k3" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "k2"
+error: (*kvpb.WriteIntentError:) conflicting intents on "k2"
 
 # The failOnMoreRecent and inconsistent options cannot be used together.
 
@@ -241,16 +241,16 @@ run error
 scan k=a end=b_next ts=9,0 failOnMoreRecent
 ----
 scan: "a"-"b_next" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "a" at timestamp 9.000000000,0 too old; wrote at 13.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "a" at timestamp 9.000000000,0 too old; wrote at 13.000000000,1
 
 run error
 scan k=a end=c_next ts=9,0 failOnMoreRecent
 ----
 scan: "a"-"c_next" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "a" at timestamp 9.000000000,0 too old; wrote at 13.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "a" at timestamp 9.000000000,0 too old; wrote at 13.000000000,1
 
 run error
 scan k=b end=c_next ts=9,0 failOnMoreRecent
 ----
 scan: "b"-"c_next" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "b" at timestamp 9.000000000,0 too old; wrote at 13.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "b" at timestamp 9.000000000,0 too old; wrote at 13.000000000,1

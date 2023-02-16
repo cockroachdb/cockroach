@@ -14,25 +14,25 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 func init() {
-	RegisterReadWriteCommand(roachpb.Put, declareKeysPut, Put)
+	RegisterReadWriteCommand(kvpb.Put, declareKeysPut, Put)
 }
 
 func declareKeysPut(
 	rs ImmutableRangeState,
-	header *roachpb.Header,
-	req roachpb.Request,
+	header *kvpb.Header,
+	req kvpb.Request,
 	latchSpans, lockSpans *spanset.SpanSet,
 	maxOffset time.Duration,
 ) {
-	args := req.(*roachpb.PutRequest)
+	args := req.(*kvpb.PutRequest)
 	if args.Inline {
 		DefaultDeclareKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
 	} else {
@@ -42,9 +42,9 @@ func declareKeysPut(
 
 // Put sets the value for a specified key.
 func Put(
-	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp kvpb.Response,
 ) (result.Result, error) {
-	args := cArgs.Args.(*roachpb.PutRequest)
+	args := cArgs.Args.(*kvpb.PutRequest)
 	h := cArgs.Header
 	ms := cArgs.Stats
 

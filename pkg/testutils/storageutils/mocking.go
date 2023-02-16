@@ -14,8 +14,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 )
@@ -35,7 +35,7 @@ func (r raftCmdIDAndIndex) String() string {
 type ReplayProtectionFilterWrapper struct {
 	syncutil.Mutex
 	inFlight          *singleflight.Group
-	processedCommands map[raftCmdIDAndIndex]*roachpb.Error
+	processedCommands map[raftCmdIDAndIndex]*kvpb.Error
 	filter            kvserverbase.ReplicaCommandFilter
 }
 
@@ -46,14 +46,14 @@ func WrapFilterForReplayProtection(
 ) kvserverbase.ReplicaCommandFilter {
 	wrapper := ReplayProtectionFilterWrapper{
 		inFlight:          singleflight.NewGroup("replay-protection", "key"),
-		processedCommands: make(map[raftCmdIDAndIndex]*roachpb.Error),
+		processedCommands: make(map[raftCmdIDAndIndex]*kvpb.Error),
 		filter:            filter,
 	}
 	return wrapper.run
 }
 
 // Errors are mutated on the Send path, so we must always return copies.
-func shallowCloneErrorWithTxn(pErr *roachpb.Error) *roachpb.Error {
+func shallowCloneErrorWithTxn(pErr *kvpb.Error) *kvpb.Error {
 	if pErr != nil {
 		pErrCopy := *pErr
 		pErrCopy.SetTxn(pErrCopy.GetTxn())
@@ -64,7 +64,7 @@ func shallowCloneErrorWithTxn(pErr *roachpb.Error) *roachpb.Error {
 }
 
 // run executes the wrapped filter.
-func (c *ReplayProtectionFilterWrapper) run(args kvserverbase.FilterArgs) *roachpb.Error {
+func (c *ReplayProtectionFilterWrapper) run(args kvserverbase.FilterArgs) *kvpb.Error {
 	if !args.InRaftCmd() {
 		return c.filter(args)
 	}
@@ -96,5 +96,5 @@ func (c *ReplayProtectionFilterWrapper) run(args kvserverbase.FilterArgs) *roach
 	c.Unlock()
 
 	res := future.WaitForResult(args.Ctx)
-	return shallowCloneErrorWithTxn(res.Val.(*roachpb.Error))
+	return shallowCloneErrorWithTxn(res.Val.(*kvpb.Error))
 }

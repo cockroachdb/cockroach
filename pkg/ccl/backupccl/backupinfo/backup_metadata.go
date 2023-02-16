@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -751,13 +752,13 @@ func debugDumpFileSST(
 	kmsEnv cloud.KMSEnv,
 	out func(rawKey, readableKey string, value json.JSON) error,
 ) error {
-	var encOpts *roachpb.FileEncryptionOptions
+	var encOpts *kvpb.FileEncryptionOptions
 	if enc != nil {
 		key, err := backupencryption.GetEncryptionKey(ctx, enc, kmsEnv)
 		if err != nil {
 			return err
 		}
-		encOpts = &roachpb.FileEncryptionOptions{Key: key}
+		encOpts = &kvpb.FileEncryptionOptions{Key: key}
 	}
 	iter, err := storageccl.ExternalSSTReader(ctx, []storageccl.StoreFile{{Store: store, FilePath: fileInfoPath}}, encOpts, iterOpts)
 	if err != nil {
@@ -802,13 +803,13 @@ func DebugDumpMetadataSST(
 	kmsEnv cloud.KMSEnv,
 	out func(rawKey, readableKey string, value json.JSON) error,
 ) error {
-	var encOpts *roachpb.FileEncryptionOptions
+	var encOpts *kvpb.FileEncryptionOptions
 	if enc != nil {
 		key, err := backupencryption.GetEncryptionKey(ctx, enc, kmsEnv)
 		if err != nil {
 			return err
 		}
-		encOpts = &roachpb.FileEncryptionOptions{Key: key}
+		encOpts = &kvpb.FileEncryptionOptions{Key: key}
 	}
 	iter, err := storageccl.ExternalSSTReader(ctx, []storageccl.StoreFile{{Store: store,
 		FilePath: path}}, encOpts, iterOpts)
@@ -964,13 +965,13 @@ func NewBackupMetadata(
 	encryption *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
 ) (*BackupMetadata, error) {
-	var encOpts *roachpb.FileEncryptionOptions
+	var encOpts *kvpb.FileEncryptionOptions
 	if encryption != nil {
 		key, err := backupencryption.GetEncryptionKey(ctx, encryption, kmsEnv)
 		if err != nil {
 			return nil, err
 		}
-		encOpts = &roachpb.FileEncryptionOptions{Key: key}
+		encOpts = &kvpb.FileEncryptionOptions{Key: key}
 	}
 	iter, err := storageccl.ExternalSSTReader(ctx, []storageccl.StoreFile{{Store: exportStore,
 		FilePath: sstFileName}}, encOpts, iterOpts)
@@ -1092,13 +1093,13 @@ func (b *BackupMetadata) NewFileIter(
 	defer fileInfoIter.close()
 
 	var storeFiles []storageccl.StoreFile
-	var encOpts *roachpb.FileEncryptionOptions
+	var encOpts *kvpb.FileEncryptionOptions
 	if b.enc != nil {
 		key, err := backupencryption.GetEncryptionKey(ctx, b.enc, b.kmsEnv)
 		if err != nil {
 			return nil, err
 		}
-		encOpts = &roachpb.FileEncryptionOptions{Key: key}
+		encOpts = &kvpb.FileEncryptionOptions{Key: key}
 	}
 
 	result := resultWrapper{}
@@ -1120,13 +1121,13 @@ func (b *BackupMetadata) NewFileIter(
 // NewFileSSTIter creates a new FileIterator to iterate over the storeFile.
 // It is the caller's responsibility to Close() the returned iterator.
 func NewFileSSTIter(
-	ctx context.Context, storeFile storageccl.StoreFile, encOpts *roachpb.FileEncryptionOptions,
+	ctx context.Context, storeFile storageccl.StoreFile, encOpts *kvpb.FileEncryptionOptions,
 ) (*FileIterator, error) {
 	return newFileSSTIter(ctx, []storageccl.StoreFile{storeFile}, encOpts)
 }
 
 func newFileSSTIter(
-	ctx context.Context, storeFiles []storageccl.StoreFile, encOpts *roachpb.FileEncryptionOptions,
+	ctx context.Context, storeFiles []storageccl.StoreFile, encOpts *kvpb.FileEncryptionOptions,
 ) (*FileIterator, error) {
 	iter, err := storageccl.ExternalSSTReader(ctx, storeFiles, encOpts, iterOpts)
 	if err != nil {
@@ -1496,13 +1497,13 @@ func makeBytesIter(
 	useMVCCNext bool,
 	kmsEnv cloud.KMSEnv,
 ) bytesIter {
-	var encOpts *roachpb.FileEncryptionOptions
+	var encOpts *kvpb.FileEncryptionOptions
 	if enc != nil {
 		key, err := backupencryption.GetEncryptionKey(ctx, enc, kmsEnv)
 		if err != nil {
 			return bytesIter{iterError: err}
 		}
-		encOpts = &roachpb.FileEncryptionOptions{Key: key}
+		encOpts = &kvpb.FileEncryptionOptions{Key: key}
 	}
 
 	iter, err := storageccl.ExternalSSTReader(ctx, []storageccl.StoreFile{{Store: store,

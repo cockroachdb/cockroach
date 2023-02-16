@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedbuffer"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -95,7 +96,7 @@ func (d *decoder) decode(kv roachpb.KeyValue) (tenantcapabilities.Entry, error) 
 }
 
 func (d *decoder) translateEvent(
-	ctx context.Context, ev *roachpb.RangeFeedValue,
+	ctx context.Context, ev *kvpb.RangeFeedValue,
 ) rangefeedbuffer.Event {
 	deleted := !ev.Value.IsPresent()
 	var value roachpb.Value

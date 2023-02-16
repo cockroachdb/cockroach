@@ -14,6 +14,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -53,9 +54,9 @@ func TestCollectIntentsUsesSameIterator(t *testing.T) {
 	ctx := context.Background()
 	key := roachpb.Key("key")
 	ts := hlc.Timestamp{WallTime: 123}
-	header := roachpb.Header{
+	header := kvpb.Header{
 		Timestamp:       ts,
-		ReadConsistency: roachpb.READ_UNCOMMITTED,
+		ReadConsistency: kvpb.READ_UNCOMMITTED,
 	}
 	evalCtx := (&MockEvalCtx{ClusterSettings: cluster.MakeTestingClusterSettings()}).EvalContext()
 
@@ -68,10 +69,10 @@ func TestCollectIntentsUsesSameIterator(t *testing.T) {
 		{
 			name: "get",
 			run: func(t *testing.T, db storage.ReadWriter) ([]roachpb.KeyValue, error) {
-				req := &roachpb.GetRequest{
-					RequestHeader: roachpb.RequestHeader{Key: key},
+				req := &kvpb.GetRequest{
+					RequestHeader: kvpb.RequestHeader{Key: key},
 				}
-				var resp roachpb.GetResponse
+				var resp kvpb.GetResponse
 				if _, err := Get(ctx, db, CommandArgs{Args: req, Header: header, EvalCtx: evalCtx}, &resp); err != nil {
 					return nil, err
 				}
@@ -86,10 +87,10 @@ func TestCollectIntentsUsesSameIterator(t *testing.T) {
 		{
 			name: "scan",
 			run: func(t *testing.T, db storage.ReadWriter) ([]roachpb.KeyValue, error) {
-				req := &roachpb.ScanRequest{
-					RequestHeader: roachpb.RequestHeader{Key: key, EndKey: key.Next()},
+				req := &kvpb.ScanRequest{
+					RequestHeader: kvpb.RequestHeader{Key: key, EndKey: key.Next()},
 				}
-				var resp roachpb.ScanResponse
+				var resp kvpb.ScanResponse
 				if _, err := Scan(ctx, db, CommandArgs{Args: req, Header: header, EvalCtx: evalCtx}, &resp); err != nil {
 					return nil, err
 				}
@@ -101,10 +102,10 @@ func TestCollectIntentsUsesSameIterator(t *testing.T) {
 		{
 			name: "reverse scan",
 			run: func(t *testing.T, db storage.ReadWriter) ([]roachpb.KeyValue, error) {
-				req := &roachpb.ReverseScanRequest{
-					RequestHeader: roachpb.RequestHeader{Key: key, EndKey: key.Next()},
+				req := &kvpb.ReverseScanRequest{
+					RequestHeader: kvpb.RequestHeader{Key: key, EndKey: key.Next()},
 				}
-				var resp roachpb.ReverseScanResponse
+				var resp kvpb.ReverseScanResponse
 				if _, err := ReverseScan(ctx, db, CommandArgs{Args: req, Header: header, EvalCtx: evalCtx}, &resp); err != nil {
 					return nil, err
 				}

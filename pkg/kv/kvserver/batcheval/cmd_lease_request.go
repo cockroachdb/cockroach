@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -23,13 +24,13 @@ import (
 )
 
 func init() {
-	RegisterReadWriteCommand(roachpb.RequestLease, declareKeysRequestLease, RequestLease)
+	RegisterReadWriteCommand(kvpb.RequestLease, declareKeysRequestLease, RequestLease)
 }
 
 func declareKeysRequestLease(
 	rs ImmutableRangeState,
-	_ *roachpb.Header,
-	_ roachpb.Request,
+	_ *kvpb.Header,
+	_ kvpb.Request,
 	latchSpans, _ *spanset.SpanSet,
 	_ time.Duration,
 ) {
@@ -51,18 +52,18 @@ func declareKeysRequestLease(
 // lease, all duties required of the range lease holder are commenced, including
 // releasing all latches and clearing the timestamp cache.
 func RequestLease(
-	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp kvpb.Response,
 ) (result.Result, error) {
 	// When returning an error from this method, must always return a
 	// newFailedLeaseTrigger() to satisfy stats.
-	args := cArgs.Args.(*roachpb.RequestLeaseRequest)
+	args := cArgs.Args.(*kvpb.RequestLeaseRequest)
 
 	// NOTE: we use the range's current lease as prevLease instead of
 	// args.PrevLease so that we can detect lease requests that will
 	// inevitably fail early and reject them with a detailed
 	// LeaseRejectedError before going through Raft.
 	prevLease, _ := cArgs.EvalCtx.GetLease()
-	rErr := &roachpb.LeaseRejectedError{
+	rErr := &kvpb.LeaseRejectedError{
 		Existing:  prevLease,
 		Requested: args.Lease,
 	}

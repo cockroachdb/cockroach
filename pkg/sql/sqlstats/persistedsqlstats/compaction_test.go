@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -467,14 +468,14 @@ func (k *kvScanInterceptor) disable() {
 	atomic.StoreInt32(&k.enabled, 0)
 }
 
-func (k *kvScanInterceptor) intercept(_ context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
+func (k *kvScanInterceptor) intercept(_ context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
 	if atomic.LoadInt32(&k.enabled) == 0 {
 		return nil
 	}
-	if req, ok := ba.GetArg(roachpb.Scan); ok {
-		_, tableID, _ := encoding.DecodeUvarintAscending(req.(*roachpb.ScanRequest).Key)
+	if req, ok := ba.GetArg(kvpb.Scan); ok {
+		_, tableID, _ := encoding.DecodeUvarintAscending(req.(*kvpb.ScanRequest).Key)
 		if tableID == stmtStatsTableID || tableID == txnStatsTableID {
-			prettyKey := roachpb.PrettyPrintKey([]encoding.Direction{}, req.(*roachpb.ScanRequest).Key)
+			prettyKey := roachpb.PrettyPrintKey([]encoding.Direction{}, req.(*kvpb.ScanRequest).Key)
 
 			keyMatchedWideScan := kvReqWideScanStartKeyPattern.MatchString(prettyKey)
 

@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache/rangecachemock"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb/kvpbmock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb/roachpbmock"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -129,15 +129,15 @@ func TestDistSenderRangeFeedRetryOnTransportErrors(t *testing.T) {
 					// cancels the context and closes the range feed stream.
 					if spec.expectRetry {
 						rangeDB.EXPECT().FirstRange().Return(&desc, nil)
-						client := roachpbmock.NewMockInternalClient(ctrl)
+						client := kvpbmock.NewMockInternalClient(ctrl)
 
 						if useMuxRangeFeed {
-							stream := roachpbmock.NewMockInternal_MuxRangeFeedClient(ctrl)
+							stream := kvpbmock.NewMockInternal_MuxRangeFeedClient(ctrl)
 							stream.EXPECT().Send(gomock.Any()).Return(nil)
 							stream.EXPECT().Recv().Do(cancel).Return(nil, io.EOF)
 							client.EXPECT().MuxRangeFeed(gomock.Any()).Return(stream, nil)
 						} else {
-							stream := roachpbmock.NewMockInternal_RangeFeedClient(ctrl)
+							stream := kvpbmock.NewMockInternal_RangeFeedClient(ctrl)
 							stream.EXPECT().Recv().Do(cancel).Return(nil, io.EOF)
 							client.EXPECT().RangeFeed(gomock.Any(), gomock.Any()).Return(stream, nil)
 						}

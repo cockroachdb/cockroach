@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -44,32 +45,32 @@ var rpcRetryOpts = retry.Options{
 	MaxBackoff:     4 * time.Microsecond,
 }
 
-var _ roachpb.InternalServer = &mockServer{}
+var _ kvpb.InternalServer = &mockServer{}
 
 type mockServer struct {
-	rangeLookupFn    func(context.Context, *roachpb.RangeLookupRequest) (*roachpb.RangeLookupResponse, error)
-	gossipSubFn      func(*roachpb.GossipSubscriptionRequest, roachpb.Internal_GossipSubscriptionServer) error
-	tenantSettingsFn func(request *roachpb.TenantSettingsRequest, server roachpb.Internal_TenantSettingsServer) error
+	rangeLookupFn    func(context.Context, *kvpb.RangeLookupRequest) (*kvpb.RangeLookupResponse, error)
+	gossipSubFn      func(*kvpb.GossipSubscriptionRequest, kvpb.Internal_GossipSubscriptionServer) error
+	tenantSettingsFn func(request *kvpb.TenantSettingsRequest, server kvpb.Internal_TenantSettingsServer) error
 }
 
 func (m *mockServer) RangeLookup(
-	ctx context.Context, req *roachpb.RangeLookupRequest,
-) (*roachpb.RangeLookupResponse, error) {
+	ctx context.Context, req *kvpb.RangeLookupRequest,
+) (*kvpb.RangeLookupResponse, error) {
 	return m.rangeLookupFn(ctx, req)
 }
 
 func (m *mockServer) GossipSubscription(
-	req *roachpb.GossipSubscriptionRequest, stream roachpb.Internal_GossipSubscriptionServer,
+	req *kvpb.GossipSubscriptionRequest, stream kvpb.Internal_GossipSubscriptionServer,
 ) error {
 	return m.gossipSubFn(req, stream)
 }
 
 func (m *mockServer) TenantSettings(
-	req *roachpb.TenantSettingsRequest, stream roachpb.Internal_TenantSettingsServer,
+	req *kvpb.TenantSettingsRequest, stream kvpb.Internal_TenantSettingsServer,
 ) error {
 	if m.tenantSettingsFn == nil {
-		return stream.Send(&roachpb.TenantSettingsEvent{
-			Precedence:  roachpb.SpecificTenantOverrides,
+		return stream.Send(&kvpb.TenantSettingsEvent{
+			Precedence:  kvpb.SpecificTenantOverrides,
 			Incremental: false,
 			Overrides:   nil,
 		})
@@ -78,32 +79,30 @@ func (m *mockServer) TenantSettings(
 }
 
 func (*mockServer) ResetQuorum(
-	context.Context, *roachpb.ResetQuorumRequest,
-) (*roachpb.ResetQuorumResponse, error) {
+	context.Context, *kvpb.ResetQuorumRequest,
+) (*kvpb.ResetQuorumResponse, error) {
 	panic("unimplemented")
 }
 
-func (*mockServer) Batch(context.Context, *roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+func (*mockServer) Batch(context.Context, *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
 	panic("unimplemented")
 }
 
-func (*mockServer) RangeFeed(*roachpb.RangeFeedRequest, roachpb.Internal_RangeFeedServer) error {
+func (*mockServer) RangeFeed(*kvpb.RangeFeedRequest, kvpb.Internal_RangeFeedServer) error {
 	panic("unimplemented")
 }
 
-func (m *mockServer) MuxRangeFeed(server roachpb.Internal_MuxRangeFeedServer) error {
+func (m *mockServer) MuxRangeFeed(server kvpb.Internal_MuxRangeFeedServer) error {
 	panic("implement me")
 }
 
-func (*mockServer) Join(
-	context.Context, *roachpb.JoinNodeRequest,
-) (*roachpb.JoinNodeResponse, error) {
+func (*mockServer) Join(context.Context, *kvpb.JoinNodeRequest) (*kvpb.JoinNodeResponse, error) {
 	panic("unimplemented")
 }
 
 func (*mockServer) TokenBucket(
-	ctx context.Context, in *roachpb.TokenBucketRequest,
-) (*roachpb.TokenBucketResponse, error) {
+	ctx context.Context, in *kvpb.TokenBucketRequest,
+) (*kvpb.TokenBucketResponse, error) {
 	panic("unimplemented")
 }
 
@@ -132,49 +131,49 @@ func (m *mockServer) SpanConfigConformance(
 }
 
 func (m *mockServer) GetRangeDescriptors(
-	*roachpb.GetRangeDescriptorsRequest, roachpb.Internal_GetRangeDescriptorsServer,
+	*kvpb.GetRangeDescriptorsRequest, kvpb.Internal_GetRangeDescriptorsServer,
 ) error {
 	panic("unimplemented")
 }
 
-func gossipEventForClusterID(clusterID uuid.UUID) *roachpb.GossipSubscriptionEvent {
-	return &roachpb.GossipSubscriptionEvent{
+func gossipEventForClusterID(clusterID uuid.UUID) *kvpb.GossipSubscriptionEvent {
+	return &kvpb.GossipSubscriptionEvent{
 		Key:            gossip.KeyClusterID,
 		Content:        roachpb.MakeValueFromBytesAndTimestamp(clusterID.GetBytes(), hlc.Timestamp{}),
 		PatternMatched: gossip.KeyClusterID,
 	}
 }
 
-func gossipEventForNodeDesc(desc *roachpb.NodeDescriptor) *roachpb.GossipSubscriptionEvent {
+func gossipEventForNodeDesc(desc *roachpb.NodeDescriptor) *kvpb.GossipSubscriptionEvent {
 	val, err := protoutil.Marshal(desc)
 	if err != nil {
 		panic(err)
 	}
-	return &roachpb.GossipSubscriptionEvent{
+	return &kvpb.GossipSubscriptionEvent{
 		Key:            gossip.MakeNodeIDKey(desc.NodeID),
 		Content:        roachpb.MakeValueFromBytesAndTimestamp(val, hlc.Timestamp{}),
 		PatternMatched: gossip.MakePrefixPattern(gossip.KeyNodeDescPrefix),
 	}
 }
 
-func gossipEventForStoreDesc(desc *roachpb.StoreDescriptor) *roachpb.GossipSubscriptionEvent {
+func gossipEventForStoreDesc(desc *roachpb.StoreDescriptor) *kvpb.GossipSubscriptionEvent {
 	val, err := protoutil.Marshal(desc)
 	if err != nil {
 		panic(err)
 	}
-	return &roachpb.GossipSubscriptionEvent{
+	return &kvpb.GossipSubscriptionEvent{
 		Key:            gossip.MakeStoreDescKey(desc.StoreID),
 		Content:        roachpb.MakeValueFromBytesAndTimestamp(val, hlc.Timestamp{}),
 		PatternMatched: gossip.MakePrefixPattern(gossip.KeyStoreDescPrefix),
 	}
 }
 
-func gossipEventForSystemConfig(cfg *config.SystemConfigEntries) *roachpb.GossipSubscriptionEvent {
+func gossipEventForSystemConfig(cfg *config.SystemConfigEntries) *kvpb.GossipSubscriptionEvent {
 	val, err := protoutil.Marshal(cfg)
 	if err != nil {
 		panic(err)
 	}
-	return &roachpb.GossipSubscriptionEvent{
+	return &kvpb.GossipSubscriptionEvent{
 		Key:            gossip.KeyDeprecatedSystemConfig,
 		Content:        roachpb.MakeValueFromBytesAndTimestamp(val, hlc.Timestamp{}),
 		PatternMatched: gossip.KeyDeprecatedSystemConfig,
@@ -215,9 +214,9 @@ func TestConnectorGossipSubscription(t *testing.T) {
 	clusterID := rpcContext.StorageClusterID.Get()
 	rpcContext.StorageClusterID.Reset(uuid.Nil)
 
-	gossipSubC := make(chan *roachpb.GossipSubscriptionEvent)
+	gossipSubC := make(chan *kvpb.GossipSubscriptionEvent)
 	defer close(gossipSubC)
-	gossipSubFn := func(req *roachpb.GossipSubscriptionRequest, stream roachpb.Internal_GossipSubscriptionServer) error {
+	gossipSubFn := func(req *kvpb.GossipSubscriptionRequest, stream kvpb.Internal_GossipSubscriptionServer) error {
 		assert.Len(t, req.Patterns, 4)
 		assert.Equal(t, "cluster-id", req.Patterns[0])
 		assert.Equal(t, "node:.*", req.Patterns[1])
@@ -230,7 +229,7 @@ func TestConnectorGossipSubscription(t *testing.T) {
 		}
 		return nil
 	}
-	roachpb.RegisterInternalServer(s, &mockServer{gossipSubFn: gossipSubFn})
+	kvpb.RegisterInternalServer(s, &mockServer{gossipSubFn: gossipSubFn})
 	ln, err := netutil.ListenAndServeGRPC(stopper, s, util.TestAddr)
 	require.NoError(t, err)
 
@@ -363,11 +362,11 @@ func TestConnectorRangeLookup(t *testing.T) {
 	s, err := rpc.NewServer(rpcContext)
 	require.NoError(t, err)
 
-	rangeLookupRespC := make(chan *roachpb.RangeLookupResponse, 1)
-	rangeLookupFn := func(_ context.Context, req *roachpb.RangeLookupRequest) (*roachpb.RangeLookupResponse, error) {
+	rangeLookupRespC := make(chan *kvpb.RangeLookupResponse, 1)
+	rangeLookupFn := func(_ context.Context, req *kvpb.RangeLookupRequest) (*kvpb.RangeLookupResponse, error) {
 		// Validate request.
 		assert.Equal(t, roachpb.RKey("a"), req.Key)
-		assert.Equal(t, roachpb.READ_UNCOMMITTED, req.ReadConsistency)
+		assert.Equal(t, kvpb.READ_UNCOMMITTED, req.ReadConsistency)
 		assert.Equal(t, int64(kvcoord.RangeLookupPrefetchCount), req.PrefetchNum)
 		assert.Equal(t, false, req.PrefetchReverse)
 
@@ -375,7 +374,7 @@ func TestConnectorRangeLookup(t *testing.T) {
 		return <-rangeLookupRespC, nil
 	}
 	server := &mockServer{rangeLookupFn: rangeLookupFn}
-	roachpb.RegisterInternalServer(s, server)
+	kvpb.RegisterInternalServer(s, server)
 	ln, err := netutil.ListenAndServeGRPC(stopper, s, util.TestAddr)
 	require.NoError(t, err)
 
@@ -392,18 +391,18 @@ func TestConnectorRangeLookup(t *testing.T) {
 	// Success case.
 	descs := []roachpb.RangeDescriptor{{RangeID: 1}, {RangeID: 2}}
 	preDescs := []roachpb.RangeDescriptor{{RangeID: 3}, {RangeID: 4}}
-	rangeLookupRespC <- &roachpb.RangeLookupResponse{
+	rangeLookupRespC <- &kvpb.RangeLookupResponse{
 		Descriptors: descs, PrefetchedDescriptors: preDescs,
 	}
-	const rc = roachpb.READ_UNCOMMITTED
+	const rc = kvpb.READ_UNCOMMITTED
 	resDescs, resPreDescs, err := c.RangeLookup(ctx, roachpb.RKey("a"), rc, false /* useReverseScan */)
 	require.Equal(t, descs, resDescs)
 	require.Equal(t, preDescs, resPreDescs)
 	require.NoError(t, err)
 
 	// Error case.
-	rangeLookupRespC <- &roachpb.RangeLookupResponse{
-		Error: roachpb.NewErrorf("hit error"),
+	rangeLookupRespC <- &kvpb.RangeLookupResponse{
+		Error: kvpb.NewErrorf("hit error"),
 	}
 	resDescs, resPreDescs, err = c.RangeLookup(ctx, roachpb.RKey("a"), rc, false /* useReverseScan */)
 	require.Nil(t, resDescs)
@@ -413,7 +412,7 @@ func TestConnectorRangeLookup(t *testing.T) {
 	// Context cancelation.
 	canceledCtx, cancel := context.WithCancel(ctx)
 	blockingC := make(chan struct{})
-	server.rangeLookupFn = func(ctx context.Context, _ *roachpb.RangeLookupRequest) (*roachpb.RangeLookupResponse, error) {
+	server.rangeLookupFn = func(ctx context.Context, _ *kvpb.RangeLookupRequest) (*kvpb.RangeLookupResponse, error) {
 		<-blockingC
 		<-ctx.Done()
 		return nil, ctx.Err()
@@ -451,12 +450,12 @@ func TestConnectorRetriesUnreachable(t *testing.T) {
 
 	node1 := &roachpb.NodeDescriptor{NodeID: 1, Address: util.MakeUnresolvedAddr("tcp", "1.1.1.1")}
 	node2 := &roachpb.NodeDescriptor{NodeID: 2, Address: util.MakeUnresolvedAddr("tcp", "2.2.2.2")}
-	gossipSubEvents := []*roachpb.GossipSubscriptionEvent{
+	gossipSubEvents := []*kvpb.GossipSubscriptionEvent{
 		gossipEventForClusterID(rpcContext.StorageClusterID.Get()),
 		gossipEventForNodeDesc(node1),
 		gossipEventForNodeDesc(node2),
 	}
-	gossipSubFn := func(req *roachpb.GossipSubscriptionRequest, stream roachpb.Internal_GossipSubscriptionServer) error {
+	gossipSubFn := func(req *kvpb.GossipSubscriptionRequest, stream kvpb.Internal_GossipSubscriptionServer) error {
 		assert.Len(t, req.Patterns, 4)
 		assert.Equal(t, "cluster-id", req.Patterns[0])
 		assert.Equal(t, "node:.*", req.Patterns[1])
@@ -470,7 +469,7 @@ func TestConnectorRetriesUnreachable(t *testing.T) {
 		<-stream.Context().Done()
 		return stream.Context().Err()
 	}
-	roachpb.RegisterInternalServer(s, &mockServer{gossipSubFn: gossipSubFn})
+	kvpb.RegisterInternalServer(s, &mockServer{gossipSubFn: gossipSubFn})
 	// Decompose netutil.ListenAndServeGRPC so we can listen before serving.
 	ln, err := net.Listen(util.TestAddr.Network(), util.TestAddr.String())
 	require.NoError(t, err)
@@ -539,12 +538,12 @@ func TestConnectorRetriesError(t *testing.T) {
 	// Returns address on which server is listening for use in connector.
 	createServer := func(
 		t *testing.T,
-		gossipSubFn func(req *roachpb.GossipSubscriptionRequest, stream roachpb.Internal_GossipSubscriptionServer) error,
-		rangeLookupFn func(_ context.Context, req *roachpb.RangeLookupRequest) (*roachpb.RangeLookupResponse, error),
+		gossipSubFn func(req *kvpb.GossipSubscriptionRequest, stream kvpb.Internal_GossipSubscriptionServer) error,
+		rangeLookupFn func(_ context.Context, req *kvpb.RangeLookupRequest) (*kvpb.RangeLookupResponse, error),
 	) string {
 		internalServer, err := rpc.NewServer(rpcContext)
 		require.NoError(t, err)
-		roachpb.RegisterInternalServer(internalServer, &mockServer{rangeLookupFn: rangeLookupFn, gossipSubFn: gossipSubFn})
+		kvpb.RegisterInternalServer(internalServer, &mockServer{rangeLookupFn: rangeLookupFn, gossipSubFn: gossipSubFn})
 		ln, err := net.Listen(util.TestAddr.Network(), util.TestAddr.String())
 		require.NoError(t, err)
 		stopper.AddCloser(stop.CloserFn(internalServer.Stop))
@@ -568,20 +567,20 @@ func TestConnectorRetriesError(t *testing.T) {
 	} {
 		t.Run(fmt.Sprintf("error %v retries %v", spec.code, spec.shouldRetry), func(t *testing.T) {
 
-			gossipSubFn := func(req *roachpb.GossipSubscriptionRequest, stream roachpb.Internal_GossipSubscriptionServer) error {
+			gossipSubFn := func(req *kvpb.GossipSubscriptionRequest, stream kvpb.Internal_GossipSubscriptionServer) error {
 				return stream.Send(gossipEventForClusterID(rpcContext.StorageClusterID.Get()))
 			}
 
-			rangeLookupFn := func(_ context.Context, req *roachpb.RangeLookupRequest) (*roachpb.RangeLookupResponse, error) {
+			rangeLookupFn := func(_ context.Context, req *kvpb.RangeLookupRequest) (*kvpb.RangeLookupResponse, error) {
 				descs := []roachpb.RangeDescriptor{{RangeID: 1}, {RangeID: 2}}
 				preDescs := []roachpb.RangeDescriptor{{RangeID: 3}, {RangeID: 4}}
-				return &roachpb.RangeLookupResponse{
+				return &kvpb.RangeLookupResponse{
 					Descriptors: descs, PrefetchedDescriptors: preDescs,
 				}, nil
 			}
 
 			var errorsReported int32 = 0
-			rangeLookupRejectorFn := func(_ context.Context, req *roachpb.RangeLookupRequest) (*roachpb.RangeLookupResponse, error) {
+			rangeLookupRejectorFn := func(_ context.Context, req *kvpb.RangeLookupRequest) (*kvpb.RangeLookupResponse, error) {
 				// Respond with error always
 				atomic.AddInt32(&errorsReported, 1)
 				return nil, grpcstatus.Errorf(spec.code, "range lookup rejected")
@@ -607,7 +606,7 @@ func TestConnectorRetriesError(t *testing.T) {
 			// to check if it was retried.
 			for i := 0; i < 100; i++ {
 				_, _, err := c.RangeLookup(
-					ctx, roachpb.RKey("a"), roachpb.READ_UNCOMMITTED, false,
+					ctx, roachpb.RKey("a"), kvpb.READ_UNCOMMITTED, false,
 				)
 				if atomic.LoadInt32(&errorsReported) == 0 {
 					continue

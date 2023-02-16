@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -62,13 +63,13 @@ var ExportRequestMaxAllowedFileSizeOverage = settings.RegisterByteSizeSetting(
 ).WithPublic()
 
 func init() {
-	RegisterReadOnlyCommand(roachpb.Export, declareKeysExport, evalExport)
+	RegisterReadOnlyCommand(kvpb.Export, declareKeysExport, evalExport)
 }
 
 func declareKeysExport(
 	rs ImmutableRangeState,
-	header *roachpb.Header,
-	req roachpb.Request,
+	header *kvpb.Header,
+	req kvpb.Request,
 	latchSpans, lockSpans *spanset.SpanSet,
 	maxOffset time.Duration,
 ) {
@@ -84,11 +85,11 @@ func declareKeysExport(
 // evalExport dumps the requested keys into files of non-overlapping key ranges
 // in a format suitable for bulk ingest.
 func evalExport(
-	ctx context.Context, reader storage.Reader, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, reader storage.Reader, cArgs CommandArgs, resp kvpb.Response,
 ) (result.Result, error) {
-	args := cArgs.Args.(*roachpb.ExportRequest)
+	args := cArgs.Args.(*kvpb.ExportRequest)
 	h := cArgs.Header
-	reply := resp.(*roachpb.ExportResponse)
+	reply := resp.(*kvpb.ExportResponse)
 
 	ctx, evalExportSpan := tracing.ChildSpan(ctx, "evalExport")
 	defer evalExportSpan.Finish()
@@ -116,7 +117,7 @@ func evalExport(
 	// NOTE: Since export requests may not be holding latches during evaluation,
 	// this `GetGCThreshold()` call is going to potentially return a higher GC
 	// threshold than the pebble state we're evaluating over. This is copacetic.
-	if args.MVCCFilter == roachpb.MVCCFilter_All {
+	if args.MVCCFilter == kvpb.MVCCFilter_All {
 		reply.StartTime = args.StartTime
 		if args.StartTime.IsEmpty() {
 			reply.StartTime = cArgs.EvalCtx.GetGCThreshold()
@@ -125,9 +126,9 @@ func evalExport(
 
 	var exportAllRevisions bool
 	switch args.MVCCFilter {
-	case roachpb.MVCCFilter_Latest:
+	case kvpb.MVCCFilter_Latest:
 		exportAllRevisions = false
-	case roachpb.MVCCFilter_All:
+	case kvpb.MVCCFilter_All:
 		exportAllRevisions = true
 	default:
 		return result.Result{}, errors.Errorf("unknown MVCC filter: %s", args.MVCCFilter)
@@ -182,7 +183,7 @@ func evalExport(
 			MaxIntents:         maxIntents,
 			StopMidKey:         args.SplitMidKey,
 		}
-		var summary roachpb.BulkOpSummary
+		var summary kvpb.BulkOpSummary
 		var resume storage.MVCCKey
 		var fingerprint uint64
 		var err error
@@ -241,20 +242,20 @@ func evalExport(
 			span.EndKey = args.EndKey
 		}
 
-		var exported roachpb.ExportResponse_File
+		var exported kvpb.ExportResponse_File
 		if args.ExportFingerprint {
 			// A fingerprinting ExportRequest does not need to return the
 			// BulkOpSummary or the exported Span. This is because we do not expect
 			// the sender of a fingerprint ExportRequest to use anything but the
 			// `Fingerprint` for point-keys and the SST file that contains the
 			// rangekeys we encountered during ExportRequest evaluation.
-			exported = roachpb.ExportResponse_File{
+			exported = kvpb.ExportResponse_File{
 				EndKeyTS:    resume.Timestamp,
 				SST:         data,
 				Fingerprint: fingerprint,
 			}
 		} else {
-			exported = roachpb.ExportResponse_File{
+			exported = kvpb.ExportResponse_File{
 				Span:     span,
 				EndKeyTS: resume.Timestamp,
 				Exported: summary,
@@ -299,7 +300,7 @@ func evalExport(
 						Key:    resume.Key,
 						EndKey: args.EndKey,
 					}
-					reply.ResumeReason = roachpb.RESUME_BYTE_LIMIT
+					reply.ResumeReason = kvpb.RESUME_BYTE_LIMIT
 				}
 				break
 			}

@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -202,9 +203,9 @@ func TestBatchPrevNext(t *testing.T) {
 
 	for _, test := range testCases {
 		t.Run("", func(t *testing.T) {
-			var ba roachpb.BatchRequest
+			var ba kvpb.BatchRequest
 			for _, span := range test.spans {
-				args := &roachpb.ScanRequest{}
+				args := &kvpb.ScanRequest{}
 				args.Key, args.EndKey = span.Key, span.EndKey
 				ba.Add(args)
 			}
@@ -237,7 +238,7 @@ func TestBatchPrevNext(t *testing.T) {
 }
 
 type requestsWithPositions struct {
-	reqs      []roachpb.RequestUnion
+	reqs      []kvpb.RequestUnion
 	positions []int
 }
 
@@ -375,23 +376,23 @@ func TestTruncate(t *testing.T) {
 				}
 
 				for i, test := range testCases {
-					goldenOriginal := roachpb.BatchRequest{}
+					goldenOriginal := kvpb.BatchRequest{}
 					for _, ks := range test.keys {
 						if len(ks[1]) > 0 {
-							goldenOriginal.Add(&roachpb.ResolveIntentRangeRequest{
-								RequestHeader: roachpb.RequestHeader{
+							goldenOriginal.Add(&kvpb.ResolveIntentRangeRequest{
+								RequestHeader: kvpb.RequestHeader{
 									Key: roachpb.Key(ks[0]), EndKey: roachpb.Key(ks[1]),
 								},
 								IntentTxn: enginepb.TxnMeta{ID: uuid.MakeV4()},
 							})
 						} else {
-							goldenOriginal.Add(&roachpb.GetRequest{
-								RequestHeader: roachpb.RequestHeader{Key: roachpb.Key(ks[0])},
+							goldenOriginal.Add(&kvpb.GetRequest{
+								RequestHeader: kvpb.RequestHeader{Key: roachpb.Key(ks[0])},
 							})
 						}
 					}
 
-					original := roachpb.BatchRequest{Requests: make([]roachpb.RequestUnion, len(goldenOriginal.Requests))}
+					original := kvpb.BatchRequest{Requests: make([]kvpb.RequestUnion, len(goldenOriginal.Requests))}
 					for i, request := range goldenOriginal.Requests {
 						original.Requests[i].MustSetInner(request.GetInner().ShallowCopy())
 					}
@@ -512,17 +513,17 @@ func TestTruncateLoop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	makeGetRequest := func(key string) roachpb.RequestUnion {
-		var req roachpb.RequestUnion
-		req.MustSetInner(&roachpb.GetRequest{
-			RequestHeader: roachpb.RequestHeader{Key: roachpb.Key(key)},
+	makeGetRequest := func(key string) kvpb.RequestUnion {
+		var req kvpb.RequestUnion
+		req.MustSetInner(&kvpb.GetRequest{
+			RequestHeader: kvpb.RequestHeader{Key: roachpb.Key(key)},
 		})
 		return req
 	}
-	makeScanRequest := func(start, end string) roachpb.RequestUnion {
-		var req roachpb.RequestUnion
-		req.MustSetInner(&roachpb.ScanRequest{
-			RequestHeader: roachpb.RequestHeader{
+	makeScanRequest := func(start, end string) kvpb.RequestUnion {
+		var req kvpb.RequestUnion
+		req.MustSetInner(&kvpb.ScanRequest{
+			RequestHeader: kvpb.RequestHeader{
 				Key: roachpb.Key(start), EndKey: roachpb.Key(end),
 			},
 		})
@@ -535,8 +536,8 @@ func TestTruncateLoop(t *testing.T) {
 		return string(randomKey(rng, keyLength))
 	}
 
-	makeRandomTestCase := func() ([]roachpb.RequestUnion, []roachpb.RSpan) {
-		var requests []roachpb.RequestUnion
+	makeRandomTestCase := func() ([]kvpb.RequestUnion, []roachpb.RSpan) {
+		var requests []kvpb.RequestUnion
 		numRequests := rng.Intn(20) + 1
 		for i := 0; i < numRequests; i++ {
 			if rng.Float64() < 0.5 {
@@ -671,17 +672,17 @@ func BenchmarkTruncateLoop(b *testing.B) {
 							"%s%s/reqs=%d/ranges=%d/type=%s",
 							scanDir, orderStr, numRequests, numRanges, requestType,
 						), func(b *testing.B) {
-							reqs := make([]roachpb.RequestUnion, numRequests)
+							reqs := make([]kvpb.RequestUnion, numRequests)
 							switch requestType {
 							case "get":
 								for i := 0; i < numRequests; i++ {
-									var get roachpb.GetRequest
+									var get kvpb.GetRequest
 									get.Key = randomKey(rng, keyLength)
 									reqs[i].MustSetInner(&get)
 								}
 							case "scan":
 								for i := 0; i < numRequests; i++ {
-									var scan roachpb.ScanRequest
+									var scan kvpb.ScanRequest
 									startKey := randomKey(rng, keyLength)
 									endKey := randomKey(rng, keyLength)
 									for bytes.Equal(startKey, endKey) {
@@ -727,17 +728,17 @@ func BenchmarkTruncateLegacy(b *testing.B) {
 	for _, numRequests := range []int{1 << 5, 1 << 10, 1 << 15} {
 		for _, requestType := range []string{"get", "scan"} {
 			b.Run(fmt.Sprintf("reqs=%d/type=%s", numRequests, requestType), func(b *testing.B) {
-				reqs := make([]roachpb.RequestUnion, numRequests)
+				reqs := make([]kvpb.RequestUnion, numRequests)
 				switch requestType {
 				case "get":
 					for i := 0; i < numRequests; i++ {
-						var get roachpb.GetRequest
+						var get kvpb.GetRequest
 						get.Key = []byte{randomKeyByte(rng)}
 						reqs[i].MustSetInner(&get)
 					}
 				case "scan":
 					for i := 0; i < numRequests; i++ {
-						var scan roachpb.ScanRequest
+						var scan kvpb.ScanRequest
 						startKey := randomKeyByte(rng)
 						endKey := randomKeyByte(rng)
 						if endKey < startKey {

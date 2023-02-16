@@ -15,7 +15,7 @@ import (
 	"regexp"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 )
@@ -56,8 +56,8 @@ func TestPGError(t *testing.T) {
 }
 
 func TestIsSQLRetryableError(t *testing.T) {
-	errAmbiguous := &roachpb.AmbiguousResultError{}
-	if !pgerror.IsSQLRetryableError(roachpb.NewError(errAmbiguous).GoError()) {
+	errAmbiguous := &kvpb.AmbiguousResultError{}
+	if !pgerror.IsSQLRetryableError(kvpb.NewError(errAmbiguous).GoError()) {
 		t.Fatalf("%s should be a SQLRetryableError", errAmbiguous)
 	}
 }

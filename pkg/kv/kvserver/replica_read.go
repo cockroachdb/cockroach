@@ -14,6 +14,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
@@ -41,12 +42,12 @@ import (
 // iterator to evaluate the batch and then updates the timestamp cache to
 // reflect the key spans that it read.
 func (r *Replica) executeReadOnlyBatch(
-	ctx context.Context, ba *roachpb.BatchRequest, g *concurrency.Guard,
+	ctx context.Context, ba *kvpb.BatchRequest, g *concurrency.Guard,
 ) (
-	br *roachpb.BatchResponse,
+	br *kvpb.BatchResponse,
 	_ *concurrency.Guard,
 	_ *kvadmission.StoreWriteBytes,
-	pErr *roachpb.Error,
+	pErr *kvpb.Error,
 ) {
 	r.readOnlyCmdMu.RLock()
 	defer r.readOnlyCmdMu.RUnlock()
@@ -54,7 +55,7 @@ func (r *Replica) executeReadOnlyBatch(
 	// Verify that the batch can be executed.
 	st, err := r.checkExecutionCanProceedBeforeStorageSnapshot(ctx, ba, g)
 	if err != nil {
-		return nil, g, nil, roachpb.NewError(err)
+		return nil, g, nil, kvpb.NewError(err)
 	}
 
 	if fn := r.store.TestingKnobs().PreStorageSnapshotButChecksCompleteInterceptor; fn != nil {
@@ -82,7 +83,7 @@ func (r *Replica) executeReadOnlyBatch(
 	// based off the state of the engine as of this point and are mutually
 	// consistent.
 	if err := rw.PinEngineStateForIterators(); err != nil {
-		return nil, g, nil, roachpb.NewError(err)
+		return nil, g, nil, kvpb.NewError(err)
 	}
 	if util.RaceEnabled {
 		rw = spanset.NewReadWriterAt(rw, g.LatchSpans(), ba.Timestamp)
@@ -90,7 +91,7 @@ func (r *Replica) executeReadOnlyBatch(
 	defer rw.Close()
 
 	if err := r.checkExecutionCanProceedAfterStorageSnapshot(ctx, ba, st); err != nil {
-		return nil, g, nil, roachpb.NewError(err)
+		return nil, g, nil, kvpb.NewError(err)
 	}
 	ok, stillNeedsInterleavedIntents, pErr := r.canDropLatchesBeforeEval(ctx, rw, ba, g, st)
 	if pErr != nil {
@@ -139,7 +140,7 @@ func (r *Replica) executeReadOnlyBatch(
 			// conflicts for by using collectSpansRead as done below in the
 			// non-error path.
 			if !g.CheckOptimisticNoLatchConflicts() {
-				return nil, g, nil, roachpb.NewError(roachpb.NewOptimisticEvalConflictsError())
+				return nil, g, nil, kvpb.NewError(kvpb.NewOptimisticEvalConflictsError())
 			}
 		}
 		pErr = maybeAttachLease(pErr, &st.Lease)
@@ -153,19 +154,19 @@ func (r *Replica) executeReadOnlyBatch(
 			// the response.
 			latchSpansRead, lockSpansRead, err := r.collectSpansRead(ba, br)
 			if err != nil {
-				return nil, g, nil, roachpb.NewError(err)
+				return nil, g, nil, kvpb.NewError(err)
 			}
 			defer latchSpansRead.Release()
 			defer lockSpansRead.Release()
 			if ok := g.CheckOptimisticNoConflicts(latchSpansRead, lockSpansRead); !ok {
-				return nil, g, nil, roachpb.NewError(roachpb.NewOptimisticEvalConflictsError())
+				return nil, g, nil, kvpb.NewError(kvpb.NewOptimisticEvalConflictsError())
 			}
 		} else {
 			// There was an error, that was not classified as a concurrency retry
 			// error, and this request was not holding latches. This should be rare,
 			// and in the interest of not having subtle correctness bugs, we retry
 			// pessimistically.
-			return nil, g, nil, roachpb.NewError(roachpb.NewOptimisticEvalConflictsError())
+			return nil, g, nil, kvpb.NewError(kvpb.NewOptimisticEvalConflictsError())
 		}
 	}
 
@@ -200,7 +201,7 @@ func (r *Replica) executeReadOnlyBatch(
 		// if the request originated from the local node which means the local
 		// range descriptor cache has an in-flight RangeLookup request which
 		// prohibits any concurrent requests for the same range. See #17760.
-		allowSyncProcessing := ba.ReadConsistency == roachpb.CONSISTENT &&
+		allowSyncProcessing := ba.ReadConsistency == kvpb.CONSISTENT &&
 			ba.WaitPolicy != lock.WaitPolicy_SkipLocked
 		if err := r.store.intentResolver.CleanupIntentsAsync(
 			ctx,
@@ -237,9 +238,9 @@ func (r *Replica) executeReadOnlyBatch(
 func (r *Replica) updateTimestampCacheAndDropLatches(
 	ctx context.Context,
 	g *concurrency.Guard,
-	ba *roachpb.BatchRequest,
-	br *roachpb.BatchResponse,
-	pErr *roachpb.Error,
+	ba *kvpb.BatchRequest,
+	br *kvpb.BatchResponse,
+	pErr *kvpb.Error,
 	st kvserverpb.LeaseStatus,
 ) {
 	ec := endCmds{repl: r, g: g, st: st}
@@ -281,10 +282,10 @@ var allowDroppingLatchesBeforeEval = settings.RegisterBoolSetting(
 func (r *Replica) canDropLatchesBeforeEval(
 	ctx context.Context,
 	rw storage.ReadWriter,
-	ba *roachpb.BatchRequest,
+	ba *kvpb.BatchRequest,
 	g *concurrency.Guard,
 	st kvserverpb.LeaseStatus,
-) (ok, stillNeedsIntentInterleaving bool, pErr *roachpb.Error) {
+) (ok, stillNeedsIntentInterleaving bool, pErr *kvpb.Error) {
 	if !allowDroppingLatchesBeforeEval.Get(&r.store.cfg.Settings.SV) ||
 		!canReadOnlyRequestDropLatchesBeforeEval(ba, g) {
 		// If the request does not qualify, we neither drop latches nor use a
@@ -311,7 +312,7 @@ func (r *Replica) canDropLatchesBeforeEval(
 			ctx, rw, txnID, ba.Header.Timestamp, start, end, seq, &intents, maxIntents,
 		)
 		if err != nil {
-			return false /* ok */, true /* stillNeedsIntentInterleaving */, roachpb.NewError(
+			return false /* ok */, true /* stillNeedsIntentInterleaving */, kvpb.NewError(
 				errors.Wrap(err, "scanning intents"),
 			)
 		}
@@ -322,7 +323,7 @@ func (r *Replica) canDropLatchesBeforeEval(
 	}
 	if len(intents) > 0 {
 		return false /* ok */, false /* stillNeedsIntentInterleaving */, maybeAttachLease(
-			roachpb.NewError(&roachpb.WriteIntentError{Intents: intents}), &st.Lease,
+			kvpb.NewError(&kvpb.WriteIntentError{Intents: intents}), &st.Lease,
 		)
 	}
 	// If there were no conflicts, then the request can drop its latches and
@@ -398,12 +399,12 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 	ctx context.Context,
 	rw storage.ReadWriter,
 	rec batcheval.EvalContext,
-	ba *roachpb.BatchRequest,
+	ba *kvpb.BatchRequest,
 	g *concurrency.Guard,
 	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
 	evalPath batchEvalPath,
-) (br *roachpb.BatchResponse, res result.Result, pErr *roachpb.Error) {
+) (br *kvpb.BatchResponse, res result.Result, pErr *kvpb.Error) {
 	log.Event(ctx, "executing read-only batch")
 
 	var rootMonitor *mon.BytesMonitor
@@ -424,7 +425,7 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 	// TODO(sumeer): for multi-tenant KV we should be accounting on a per-tenant
 	// basis and not letting a single tenant consume all the memory (we could
 	// place a limit equal to total/2).
-	if ba.AdmissionHeader.SourceLocation != roachpb.AdmissionHeader_LOCAL ||
+	if ba.AdmissionHeader.SourceLocation != kvpb.AdmissionHeader_LOCAL ||
 		ba.AdmissionHeader.NoMemoryReservedAtSource {
 		// rootMonitor will never be nil in production settings, but it can be nil
 		// for tests that do not have a monitor.
@@ -492,8 +493,8 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 }
 
 func (r *Replica) handleReadOnlyLocalEvalResult(
-	ctx context.Context, ba *roachpb.BatchRequest, lResult result.LocalResult,
-) *roachpb.Error {
+	ctx context.Context, ba *kvpb.BatchRequest, lResult result.LocalResult,
+) *kvpb.Error {
 	// Fields for which no action is taken in this method are zeroed so that
 	// they don't trigger an assertion at the end of the method (which checks
 	// that all fields were handled).
@@ -520,17 +521,17 @@ func (r *Replica) handleReadOnlyLocalEvalResult(
 // spans in the responses, to construct the effective spans that were read,
 // and uses that to compute the latch and lock spans.
 func (r *Replica) collectSpansRead(
-	ba *roachpb.BatchRequest, br *roachpb.BatchResponse,
+	ba *kvpb.BatchRequest, br *kvpb.BatchResponse,
 ) (latchSpans, lockSpans *spanset.SpanSet, _ error) {
 	baCopy := *ba
-	baCopy.Requests = make([]roachpb.RequestUnion, 0, len(ba.Requests))
+	baCopy.Requests = make([]kvpb.RequestUnion, 0, len(ba.Requests))
 	for i := 0; i < len(ba.Requests); i++ {
 		baReq := ba.Requests[i]
 		req := baReq.GetInner()
 		header := req.Header()
 		resp := br.Responses[i].GetInner()
 
-		if ba.WaitPolicy == lock.WaitPolicy_SkipLocked && roachpb.CanSkipLocked(req) {
+		if ba.WaitPolicy == lock.WaitPolicy_SkipLocked && kvpb.CanSkipLocked(req) {
 			if ba.IndexFetchSpec != nil {
 				return nil, nil, errors.AssertionFailedf("unexpectedly IndexFetchSpec is set with SKIP LOCKED wait policy")
 			}
@@ -549,18 +550,18 @@ func (r *Replica) collectSpansRead(
 			//
 			// This is similar to how the timestamp cache and refresh spans handle the
 			// SkipLocked wait policy.
-			if err := roachpb.ResponseKeyIterate(req, resp, func(key roachpb.Key) {
+			if err := kvpb.ResponseKeyIterate(req, resp, func(key roachpb.Key) {
 				// TODO(nvanbenschoten): we currently perform a per-response key memory
 				// allocation. If this becomes an issue, we could pre-allocate chunks of
 				// these structs to amortize the cost.
 				getAlloc := new(struct {
-					get   roachpb.GetRequest
-					union roachpb.RequestUnion_Get
+					get   kvpb.GetRequest
+					union kvpb.RequestUnion_Get
 				})
 				getAlloc.get.Key = key
-				getAlloc.get.KeyLocking = req.(roachpb.LockingReadRequest).KeyLockingStrength()
+				getAlloc.get.KeyLocking = req.(kvpb.LockingReadRequest).KeyLockingStrength()
 				getAlloc.union.Get = &getAlloc.get
-				ru := roachpb.RequestUnion{Value: &getAlloc.union}
+				ru := kvpb.RequestUnion{Value: &getAlloc.union}
 				baCopy.Requests = append(baCopy.Requests, ru)
 			}); err != nil {
 				return nil, nil, err
@@ -575,10 +576,10 @@ func (r *Replica) collectSpansRead(
 		}
 
 		switch t := resp.(type) {
-		case *roachpb.GetResponse:
+		case *kvpb.GetResponse:
 			// The request did not evaluate. Ignore it.
 			continue
-		case *roachpb.ScanResponse:
+		case *kvpb.ScanResponse:
 			if header.Key.Equal(t.ResumeSpan.Key) {
 				// The request did not evaluate. Ignore it.
 				continue
@@ -587,7 +588,7 @@ func (r *Replica) collectSpansRead(
 			// ResumeSpan.Key has not been read and becomes the exclusive end key of
 			// what was read.
 			header.EndKey = t.ResumeSpan.Key
-		case *roachpb.ReverseScanResponse:
+		case *kvpb.ReverseScanResponse:
 			if header.EndKey.Equal(t.ResumeSpan.EndKey) {
 				// The request did not evaluate. Ignore it.
 				continue
@@ -602,7 +603,7 @@ func (r *Replica) collectSpansRead(
 			continue
 		}
 		// The ResumeSpan has changed the header.
-		var ru roachpb.RequestUnion
+		var ru kvpb.RequestUnion
 		req = req.ShallowCopy()
 		req.SetHeader(header)
 		ru.MustSetInner(req)
@@ -616,7 +617,7 @@ func (r *Replica) collectSpansRead(
 	return latchSpans, lockSpans, err
 }
 
-func getBatchResponseReadStats(br *roachpb.BatchResponse) (float64, float64) {
+func getBatchResponseReadStats(br *kvpb.BatchResponse) (float64, float64) {
 	var keys, bytes float64
 	for _, reply := range br.Responses {
 		h := reply.GetInner().Header()

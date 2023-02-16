@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/multitenantcpu"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -2722,7 +2723,7 @@ var retriableMinTimestampBoundUnsatisfiableError = errors.Newf(
 )
 
 func errIsRetriable(err error) bool {
-	return errors.HasType(err, (*roachpb.TransactionRetryWithProtoRefreshError)(nil)) ||
+	return errors.HasType(err, (*kvpb.TransactionRetryWithProtoRefreshError)(nil)) ||
 		scerrors.ConcurrentSchemaChangeDescID(err) != descpb.InvalidID ||
 		errors.Is(err, retriableMinTimestampBoundUnsatisfiableError) ||
 		errors.Is(err, descidgen.ErrDescIDSequenceMigrationInProgress) ||
@@ -2737,7 +2738,7 @@ func (ex *connExecutor) makeErrEvent(err error, stmt tree.Statement) (fsm.Event,
 	// MaxTimestampBound set if our MinTimestampBound was bumped up from the
 	// original AS OF SYSTEM TIME timestamp set due to a schema bumping the
 	// timestamp to a higher value.
-	if minTSErr := (*roachpb.MinTimestampBoundUnsatisfiableError)(nil); errors.As(err, &minTSErr) {
+	if minTSErr := (*kvpb.MinTimestampBoundUnsatisfiableError)(nil); errors.As(err, &minTSErr) {
 		aost := ex.planner.EvalContext().AsOfSystemTime
 		if aost != nil && aost.BoundedStaleness {
 			if !aost.MaxTimestampBound.IsEmpty() && aost.MaxTimestampBound.LessEq(minTSErr.MinTimestampBound) {
@@ -2964,7 +2965,7 @@ func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, 
 
 	// See resetPlanner for more context on setting the maximum timestamp for
 	// AOST read retries.
-	var minTSErr *roachpb.MinTimestampBoundUnsatisfiableError
+	var minTSErr *kvpb.MinTimestampBoundUnsatisfiableError
 	if err := ex.state.mu.autoRetryReason; err != nil && errors.As(err, &minTSErr) {
 		evalCtx.AsOfSystemTime.MaxTimestampBound = ex.extraTxnState.descCollection.GetMaxTimestampBound()
 	} else if newTxn {
@@ -3019,7 +3020,7 @@ func (ex *connExecutor) resetPlanner(
 	// same minimum timestamp for the AOST read, but set the maximum timestamp
 	// to the point just before our failed read to ensure we don't try to read
 	// data which may be after the schema change when we retry.
-	var minTSErr *roachpb.MinTimestampBoundUnsatisfiableError
+	var minTSErr *kvpb.MinTimestampBoundUnsatisfiableError
 	if err := ex.state.mu.autoRetryReason; err != nil && errors.As(err, &minTSErr) {
 		nextMax := minTSErr.MinTimestampBound
 		ex.extraTxnState.descCollection.SetMaxTimestampBound(nextMax)

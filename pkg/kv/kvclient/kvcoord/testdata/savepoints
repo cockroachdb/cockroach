@@ -363,7 +363,7 @@ savepoint x
 
 cput k v bogus_expected
 ----
-(*roachpb.ConditionFailedError) unexpected value
+(*kvpb.ConditionFailedError) unexpected value
 
 rollback x
 ----
@@ -396,7 +396,7 @@ savepoint x
 
 get conflict-key locking nowait
 ----
-(*roachpb.WriteIntentError) conflicting intents on "conflict-key" [reason=wait_policy]
+(*kvpb.WriteIntentError) conflicting intents on "conflict-key" [reason=wait_policy]
 
 rollback x
 ----
@@ -404,7 +404,7 @@ rollback x
 
 put conflict-key b nowait
 ----
-(*roachpb.WriteIntentError) conflicting intents on "conflict-key" [reason=wait_policy]
+(*kvpb.WriteIntentError) conflicting intents on "conflict-key" [reason=wait_policy]
 
 rollback x
 ----
@@ -437,7 +437,7 @@ savepoint x
 
 get conflict-key-2 lock-timeout
 ----
-(*roachpb.WriteIntentError) conflicting intents on "conflict-key-2" [reason=lock_timeout]
+(*kvpb.WriteIntentError) conflicting intents on "conflict-key-2" [reason=lock_timeout]
 
 rollback x
 ----
@@ -445,7 +445,7 @@ rollback x
 
 put conflict-key-2 b lock-timeout
 ----
-(*roachpb.WriteIntentError) conflicting intents on "conflict-key-2" [reason=lock_timeout]
+(*kvpb.WriteIntentError) conflicting intents on "conflict-key-2" [reason=lock_timeout]
 
 rollback x
 ----
@@ -490,7 +490,7 @@ savepoint x
 
 abort
 ----
-(*roachpb.TransactionRetryWithProtoRefreshError)
+(*kvpb.TransactionRetryWithProtoRefreshError)
 txn id not changed
 
 reset
@@ -529,6 +529,6 @@ epoch: 0 -> 1
 
 rollback x
 ----
-(*roachpb.TransactionRetryWithProtoRefreshError) TransactionRetryWithProtoRefreshError: cannot rollback to savepoint after a transaction restart
+(*kvpb.TransactionRetryWithProtoRefreshError) TransactionRetryWithProtoRefreshError: cannot rollback to savepoint after a transaction restart
 
 subtest end

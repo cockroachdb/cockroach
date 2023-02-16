@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -2980,10 +2981,10 @@ func (t *lockTableImpl) QueryLockTableState(
 			// Check if adding the lock would exceed our byte or count limits,
 			// though we must ensure we return at least one lock.
 			if len(lockTableState) > 0 && opts.TargetBytes > 0 && (numBytes+nextByteSize) > opts.TargetBytes {
-				resumeState.ResumeReason = roachpb.RESUME_BYTE_LIMIT
+				resumeState.ResumeReason = kvpb.RESUME_BYTE_LIMIT
 				break
 			} else if len(lockTableState) > 0 && opts.MaxLocks > 0 && numLocks >= opts.MaxLocks {
-				resumeState.ResumeReason = roachpb.RESUME_KEY_LIMIT
+				resumeState.ResumeReason = kvpb.RESUME_KEY_LIMIT
 				break
 			}
 

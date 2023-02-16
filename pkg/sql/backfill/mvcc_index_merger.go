@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -264,14 +265,14 @@ func (ibm *IndexBackfillMerger) scan(
 	chunkBytes := indexBackfillMergeBatchBytes.Get(&ibm.evalCtx.Settings.SV)
 
 	var nextStart roachpb.Key
-	var br *roachpb.BatchResponse
+	var br *kvpb.BatchResponse
 	if err := ibm.flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		if err := txn.KV().SetFixedTimestamp(ctx, readAsOf); err != nil {
 			return err
 		}
 		// For now just grab all of the destination KVs and merge the corresponding entries.
 		log.VInfof(ctx, 2, "scanning batch [%s, %s) at %v to merge", startKey, endKey, readAsOf)
-		ba := &roachpb.BatchRequest{}
+		ba := &kvpb.BatchRequest{}
 		ba.TargetBytes = chunkBytes
 		if err := ibm.growBoundAccount(ctx, chunkBytes); err != nil {
 			return errors.Wrap(err, "failed to fetch keys to merge from temp index")
@@ -279,14 +280,14 @@ func (ibm *IndexBackfillMerger) scan(
 		defer ibm.shrinkBoundAccount(ctx, chunkBytes)
 
 		ba.MaxSpanRequestKeys = chunkSize
-		ba.Add(&roachpb.ScanRequest{
-			RequestHeader: roachpb.RequestHeader{
+		ba.Add(&kvpb.ScanRequest{
+			RequestHeader: kvpb.RequestHeader{
 				Key:    startKey,
 				EndKey: endKey,
 			},
-			ScanFormat: roachpb.KEY_VALUES,
+			ScanFormat: kvpb.KEY_VALUES,
 		})
-		var pErr *roachpb.Error
+		var pErr *kvpb.Error
 		br, pErr = txn.KV().Send(ctx, ba)
 		if pErr != nil {
 			return pErr.GoError()

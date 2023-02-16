@@ -14,14 +14,14 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 )
 
 func init() {
-	RegisterReadOnlyCommand(roachpb.ReverseScan, DefaultDeclareIsolatedKeys, ReverseScan)
+	RegisterReadOnlyCommand(kvpb.ReverseScan, DefaultDeclareIsolatedKeys, ReverseScan)
 }
 
 // ReverseScan scans the key range specified by start key through
@@ -29,18 +29,18 @@ func init() {
 // maxKeys stores the number of scan results remaining for this batch
 // (MaxInt64 for no limit).
 func ReverseScan(
-	ctx context.Context, reader storage.Reader, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, reader storage.Reader, cArgs CommandArgs, resp kvpb.Response,
 ) (result.Result, error) {
-	args := cArgs.Args.(*roachpb.ReverseScanRequest)
+	args := cArgs.Args.(*kvpb.ReverseScanRequest)
 	h := cArgs.Header
-	reply := resp.(*roachpb.ReverseScanResponse)
+	reply := resp.(*kvpb.ReverseScanResponse)
 
 	var res result.Result
 	var scanRes storage.MVCCScanResult
 	var err error
 
 	opts := storage.MVCCScanOptions{
-		Inconsistent:          h.ReadConsistency != roachpb.CONSISTENT,
+		Inconsistent:          h.ReadConsistency != kvpb.CONSISTENT,
 		SkipLocked:            h.WaitPolicy == lock.WaitPolicy_SkipLocked,
 		Txn:                   h.Txn,
 		MaxKeys:               h.MaxSpanRequestKeys,
@@ -56,14 +56,14 @@ func ReverseScan(
 	}
 
 	switch args.ScanFormat {
-	case roachpb.BATCH_RESPONSE:
+	case kvpb.BATCH_RESPONSE:
 		scanRes, err = storage.MVCCScanToBytes(
 			ctx, reader, args.Key, args.EndKey, h.Timestamp, opts)
 		if err != nil {
 			return result.Result{}, err
 		}
 		reply.BatchResponses = scanRes.KVData
-	case roachpb.COL_BATCH_RESPONSE:
+	case kvpb.COL_BATCH_RESPONSE:
 		scanRes, err = storage.MVCCScanToCols(
 			ctx, reader, cArgs.Header.IndexFetchSpec, args.Key, args.EndKey,
 			h.Timestamp, opts, cArgs.EvalCtx.ClusterSettings(),
@@ -72,7 +72,7 @@ func ReverseScan(
 			return result.Result{}, err
 		}
 		reply.BatchResponses = scanRes.KVData
-	case roachpb.KEY_VALUES:
+	case kvpb.KEY_VALUES:
 		scanRes, err = storage.MVCCScan(
 			ctx, reader, args.Key, args.EndKey, h.Timestamp, opts)
 		if err != nil {
@@ -92,7 +92,7 @@ func ReverseScan(
 		reply.ResumeNextBytes = scanRes.ResumeNextBytes
 	}
 
-	if h.ReadConsistency == roachpb.READ_UNCOMMITTED {
+	if h.ReadConsistency == kvpb.READ_UNCOMMITTED {
 		// NOTE: MVCCScan doesn't use a Prefix iterator, so we don't want to use
 		// one in CollectIntentRows either so that we're guaranteed to use the
 		// same cached iterator and observe a consistent snapshot of the engine.

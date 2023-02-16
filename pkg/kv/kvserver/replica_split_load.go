@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -199,7 +200,7 @@ func (r *Replica) loadSplitStat(ctx context.Context) loadSplitStat {
 // 2. len(ba.Requests) == len(br.Responses)
 // Assumptions are checked in executeBatchWithConcurrencyRetries.
 func getResponseBoundarySpan(
-	ba *roachpb.BatchRequest, br *roachpb.BatchResponse,
+	ba *kvpb.BatchRequest, br *kvpb.BatchResponse,
 ) (responseBoundarySpan roachpb.Span) {
 	addSpanToBoundary := func(span roachpb.Span) {
 		if !responseBoundarySpan.Valid() {
@@ -219,10 +220,10 @@ func getResponseBoundarySpan(
 		}
 
 		switch resp.(type) {
-		case *roachpb.GetResponse:
+		case *kvpb.GetResponse:
 			// The request did not evaluate. Ignore it.
 			continue
-		case *roachpb.ScanResponse:
+		case *kvpb.ScanResponse:
 			// Not reverse (->)
 			// Request:    [key...............endKey)
 			// ResumeSpan:          [key......endKey)
@@ -239,7 +240,7 @@ func getResponseBoundarySpan(
 				Key:    reqHeader.Key,
 				EndKey: resumeSpan.Key,
 			})
-		case *roachpb.ReverseScanResponse:
+		case *kvpb.ReverseScanResponse:
 			// Reverse (<-)
 			// Request:    [key...............endKey)
 			// ResumeSpan: [key......endKey)
@@ -267,7 +268,7 @@ func getResponseBoundarySpan(
 // recordBatchForLoadBasedSplitting records the batch's spans to be considered
 // for load based splitting.
 func (r *Replica) recordBatchForLoadBasedSplitting(
-	ctx context.Context, ba *roachpb.BatchRequest, br *roachpb.BatchResponse, stat int,
+	ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse, stat int,
 ) {
 	if !r.SplitByLoadEnabled() {
 		return

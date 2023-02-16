@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package roachpb
+package kvpb
 
 import (
 	"bytes"
@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -140,7 +141,7 @@ func (ba BatchRequest) EarliestActiveTimestamp() hlc.Timestamp {
 // UpdateTxn updates the batch transaction from the supplied one in
 // a copy-on-write fashion, i.e. without mutating an existing
 // Transaction struct.
-func (ba *BatchRequest) UpdateTxn(o *Transaction) {
+func (ba *BatchRequest) UpdateTxn(o *roachpb.Transaction) {
 	if o == nil {
 		return
 	}
@@ -466,7 +467,7 @@ func (br *BatchResponse) String() string {
 // contained in the requests are used, but when a response contains a
 // ResumeSpan the ResumeSpan is subtracted from the request span to
 // provide a more minimal span of keys affected by the request.
-func (ba *BatchRequest) LockSpanIterate(br *BatchResponse, fn func(Span, lock.Durability)) {
+func (ba *BatchRequest) LockSpanIterate(br *BatchResponse, fn func(roachpb.Span, lock.Durability)) {
 	for i, arg := range ba.Requests {
 		req := arg.GetInner()
 		if !IsLocking(req) {
@@ -490,7 +491,7 @@ func (ba *BatchRequest) LockSpanIterate(br *BatchResponse, fn func(Span, lock.Du
 // ResumeSpan is subtracted from the request span to provide a more
 // minimal span of keys affected by the request. The supplied function
 // is called with each span.
-func (ba *BatchRequest) RefreshSpanIterate(br *BatchResponse, fn func(Span)) error {
+func (ba *BatchRequest) RefreshSpanIterate(br *BatchResponse, fn func(roachpb.Span)) error {
 	for i, arg := range ba.Requests {
 		req := arg.GetInner()
 		if !NeedsRefresh(req) {
@@ -516,8 +517,8 @@ func (ba *BatchRequest) RefreshSpanIterate(br *BatchResponse, fn func(Span)) err
 			// to enforce serializable isolation across keys that were skipped by this
 			// request, it does not need to validate that they have not changed if the
 			// transaction ever needs to refresh.
-			if err := ResponseKeyIterate(req, resp, func(k Key) {
-				fn(Span{Key: k})
+			if err := ResponseKeyIterate(req, resp, func(k roachpb.Key) {
+				fn(roachpb.Span{Key: k})
 			}); err != nil {
 				return err
 			}
@@ -534,7 +535,7 @@ func (ba *BatchRequest) RefreshSpanIterate(br *BatchResponse, fn func(Span)) err
 // ActualSpan returns the actual request span which was operated on,
 // according to the existence of a resume span in the response. If
 // nothing was operated on, returns false.
-func ActualSpan(req Request, resp Response) (Span, bool) {
+func ActualSpan(req Request, resp Response) (roachpb.Span, bool) {
 	h := req.Header()
 	if resp != nil {
 		resumeSpan := resp.Header().ResumeSpan
@@ -543,12 +544,12 @@ func ActualSpan(req Request, resp Response) (Span, bool) {
 			// Handle the reverse case first.
 			if bytes.Equal(resumeSpan.Key, h.Key) {
 				if bytes.Equal(resumeSpan.EndKey, h.EndKey) {
-					return Span{}, false
+					return roachpb.Span{}, false
 				}
-				return Span{Key: resumeSpan.EndKey, EndKey: h.EndKey}, true
+				return roachpb.Span{Key: resumeSpan.EndKey, EndKey: h.EndKey}, true
 			}
 			// The forward case.
-			return Span{Key: h.Key, EndKey: resumeSpan.Key}, true
+			return roachpb.Span{Key: h.Key, EndKey: resumeSpan.Key}, true
 		}
 	}
 	return h.Span(), true
@@ -559,7 +560,7 @@ func ActualSpan(req Request, resp Response) (Span, bool) {
 // the function will not be called.
 // NOTE: it is assumed that req (if it is a Scan or a ReverseScan) didn't use
 // COL_BATCH_RESPONSE scan format.
-func ResponseKeyIterate(req Request, resp Response, fn func(Key)) error {
+func ResponseKeyIterate(req Request, resp Response, fn func(roachpb.Key)) error {
 	if resp == nil {
 		return nil
 	}
@@ -583,7 +584,7 @@ func ResponseKeyIterate(req Request, resp Response, fn func(Key)) error {
 			//
 			// This is not a concern for other scan formats because keys and values
 			// are already separate heap allocations.
-			fn(Key(key).Clone())
+			fn(roachpb.Key(key).Clone())
 			return nil
 		}); err != nil {
 			return err
@@ -607,7 +608,7 @@ func ResponseKeyIterate(req Request, resp Response, fn func(Key)) error {
 		// If ScanFormat == BATCH_RESPONSE.
 		if err := enginepb.ScanDecodeKeyValues(v.BatchResponses, func(key []byte, _ hlc.Timestamp, _ []byte) error {
 			// Same explanation as above.
-			fn(Key(key).Clone())
+			fn(roachpb.Key(key).Clone())
 			return nil
 		}); err != nil {
 			return err

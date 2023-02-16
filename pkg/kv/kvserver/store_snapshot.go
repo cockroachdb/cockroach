@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -1000,17 +1001,17 @@ func (s *Store) receiveSnapshot(
 	var placeholder *ReplicaPlaceholder
 	if pErr := s.withReplicaForRequest(
 		ctx, &header.RaftMessageRequest, func(ctx context.Context, r *Replica,
-		) *roachpb.Error {
+		) *kvpb.Error {
 			var err error
 			s.mu.Lock()
 			defer s.mu.Unlock()
 			placeholder, err = s.canAcceptSnapshotLocked(ctx, header)
 			if err != nil {
-				return roachpb.NewError(err)
+				return kvpb.NewError(err)
 			}
 			if placeholder != nil {
 				if err := s.addPlaceholderLocked(placeholder); err != nil {
-					return roachpb.NewError(err)
+					return kvpb.NewError(err)
 				}
 			}
 			return nil

@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package roachpb_test
+package kvpb_test
 
 // See TestReplicaUnavailableError in string_test.go; it needed to be moved there
 // for obscure reasons explained in:

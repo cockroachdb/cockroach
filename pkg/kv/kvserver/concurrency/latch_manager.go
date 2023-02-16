@@ -13,10 +13,10 @@ package concurrency
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
 // latchManagerImpl implements the latchManager interface.
@@ -27,7 +27,7 @@ type latchManagerImpl struct {
 func (m *latchManagerImpl) Acquire(ctx context.Context, req Request) (latchGuard, *Error) {
 	lg, err := m.m.Acquire(ctx, req.LatchSpans, req.PoisonPolicy)
 	if err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, kvpb.NewError(err)
 	}
 	return lg, nil
 }
@@ -46,7 +46,7 @@ func (m *latchManagerImpl) WaitUntilAcquired(
 ) (latchGuard, *Error) {
 	lg, err := m.m.WaitUntilAcquired(ctx, lg.(*spanlatch.Guard))
 	if err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, kvpb.NewError(err)
 	}
 	return lg, nil
 }
@@ -56,7 +56,7 @@ func (m *latchManagerImpl) WaitFor(
 ) *Error {
 	err := m.m.WaitFor(ctx, ss, pp)
 	if err != nil {
-		return roachpb.NewError(err)
+		return kvpb.NewError(err)
 	}
 	return nil
 }

@@ -9,8 +9,8 @@ go_library(
     deps = [
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
+        "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/kvserverbase",
-        "//pkg/roachpb",
         "//pkg/security/username",
         "//pkg/sql/catalog/descpb",
         "//pkg/testutils",

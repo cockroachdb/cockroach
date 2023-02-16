@@ -14,20 +14,20 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 )
 
 func init() {
-	RegisterReadWriteCommand(roachpb.Barrier, declareKeysBarrier, Barrier)
+	RegisterReadWriteCommand(kvpb.Barrier, declareKeysBarrier, Barrier)
 }
 
 func declareKeysBarrier(
 	_ ImmutableRangeState,
-	_ *roachpb.Header,
-	req roachpb.Request,
+	_ *kvpb.Header,
+	req kvpb.Request,
 	latchSpans, _ *spanset.SpanSet,
 	_ time.Duration,
 ) {
@@ -47,9 +47,9 @@ func declareKeysBarrier(
 // Barrier evaluation is a no-op, as all the latch waiting happens in
 // the latch manager.
 func Barrier(
-	_ context.Context, _ storage.ReadWriter, cArgs CommandArgs, response roachpb.Response,
+	_ context.Context, _ storage.ReadWriter, cArgs CommandArgs, response kvpb.Response,
 ) (result.Result, error) {
-	resp := response.(*roachpb.BarrierResponse)
+	resp := response.(*kvpb.BarrierResponse)
 	resp.Timestamp = cArgs.EvalCtx.Clock().Now()
 
 	return result.Result{}, nil

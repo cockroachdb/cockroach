@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -41,7 +42,7 @@ func distBackupPlanSpecs(
 	urisByLocalityKV map[string]string,
 	encryption *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
-	mvccFilter roachpb.MVCCFilter,
+	mvccFilter kvpb.MVCCFilter,
 	startTime, endTime hlc.Timestamp,
 ) (map[base.SQLInstanceID]*execinfrapb.BackupDataSpec, error) {
 	var span *tracing.Span
@@ -85,9 +86,9 @@ func distBackupPlanSpecs(
 	}
 	// Wrap the relevant BackupEncryptionOptions to be used by the Backup
 	// processor and KV ExportRequest.
-	var fileEncryption *roachpb.FileEncryptionOptions
+	var fileEncryption *kvpb.FileEncryptionOptions
 	if encryption != nil {
-		fileEncryption = &roachpb.FileEncryptionOptions{Key: encryption.Key}
+		fileEncryption = &kvpb.FileEncryptionOptions{Key: encryption.Key}
 	}
 
 	// First construct spans based on span partitions. Then add on

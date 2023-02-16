@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -35,13 +36,13 @@ import (
 func ConvertBatchError(ctx context.Context, tableDesc catalog.TableDescriptor, b *kv.Batch) error {
 	origPErr := b.MustPErr()
 	switch v := origPErr.GetDetail().(type) {
-	case *roachpb.MinTimestampBoundUnsatisfiableError:
+	case *kvpb.MinTimestampBoundUnsatisfiableError:
 		return pgerror.WithCandidateCode(
 			origPErr.GoError(),
 			pgcode.UnsatisfiableBoundedStaleness,
 		)
 
-	case *roachpb.ConditionFailedError:
+	case *kvpb.ConditionFailedError:
 		if origPErr.Index == nil {
 			break
 		}
@@ -56,7 +57,7 @@ func ConvertBatchError(ctx context.Context, tableDesc catalog.TableDescriptor, b
 		key := result.Rows[0].Key
 		return NewUniquenessConstraintViolationError(ctx, tableDesc, key, v.ActualValue)
 
-	case *roachpb.WriteIntentError:
+	case *kvpb.WriteIntentError:
 		key := v.Intents[0].Key
 		decodeKeyFn := func() (tableName string, indexName string, colNames []string, values []string, err error) {
 			codec, index, err := decodeKeyCodecAndIndex(tableDesc, key)
@@ -80,8 +81,8 @@ func ConvertBatchError(ctx context.Context, tableDesc catalog.TableDescriptor, b
 // key-value fetch to a user friendly SQL error.
 func ConvertFetchError(spec *fetchpb.IndexFetchSpec, err error) error {
 	var errs struct {
-		wi *roachpb.WriteIntentError
-		bs *roachpb.MinTimestampBoundUnsatisfiableError
+		wi *kvpb.WriteIntentError
+		bs *kvpb.MinTimestampBoundUnsatisfiableError
 	}
 	switch {
 	case errors.As(err, &errs.wi):
@@ -161,11 +162,11 @@ func decodeKeyValsUsingSpec(
 // acquire a lock. It uses an IndexFetchSpec for the corresponding index (the
 // fetch columns in the spec are not used).
 func newLockNotAvailableError(
-	reason roachpb.WriteIntentError_Reason,
+	reason kvpb.WriteIntentError_Reason,
 	decodeKeyFn func() (tableName string, indexName string, colNames []string, values []string, err error),
 ) error {
 	baseMsg := "could not obtain lock on row"
-	if reason == roachpb.WriteIntentError_REASON_LOCK_TIMEOUT {
+	if reason == kvpb.WriteIntentError_REASON_LOCK_TIMEOUT {
 		baseMsg = "canceling statement due to lock timeout on row"
 	}
 	tableName, indexName, colNames, values, err := decodeKeyFn()

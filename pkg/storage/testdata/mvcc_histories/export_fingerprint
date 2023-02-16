@@ -81,17 +81,17 @@ data: "o"/7.000000000,0 -> /BYTES/n7
 run error
 export fingerprint k=a end=z
 ----
-error: (*roachpb.WriteIntentError:) conflicting intents on "a"
+error: (*kvpb.WriteIntentError:) conflicting intents on "a"
 
 run error
 export fingerprint k=a end=z maxIntents=100
 ----
-error: (*roachpb.WriteIntentError:) conflicting intents on "a", "d", "j", "l", "o"
+error: (*kvpb.WriteIntentError:) conflicting intents on "a", "d", "j", "l", "o"
 
 run error
 export fingerprint k=a end=z maxIntents=3
 ----
-error: (*roachpb.WriteIntentError:) conflicting intents on "a", "d", "j"
+error: (*kvpb.WriteIntentError:) conflicting intents on "a", "d", "j"
 
 # Export the entire dataset below the intents, with full revision history.
 run ok

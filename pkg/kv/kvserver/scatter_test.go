@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -25,9 +26,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func adminScatterArgs(key roachpb.Key, randomizeLeases bool) *roachpb.AdminScatterRequest {
-	return &roachpb.AdminScatterRequest{
-		RequestHeader: roachpb.RequestHeader{
+func adminScatterArgs(key roachpb.Key, randomizeLeases bool) *kvpb.AdminScatterRequest {
+	return &kvpb.AdminScatterRequest{
+		RequestHeader: kvpb.RequestHeader{
 			Key:    key,
 			EndKey: key.Next(),
 		},

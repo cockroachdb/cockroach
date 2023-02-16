@@ -14,7 +14,7 @@ import (
 	"context"
 	"math"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -590,14 +590,14 @@ func (pb *ProcessorBaseNoHelper) DrainHelper() *execinfrapb.ProducerMetadata {
 
 // ShouldSwallowReadWithinUncertaintyIntervalError examines meta and returns
 // true if it should be swallowed and not propagated further. It is the case if
-// meta contains roachpb.ReadWithinUncertaintyIntervalError.
+// meta contains kvpb.ReadWithinUncertaintyIntervalError.
 func ShouldSwallowReadWithinUncertaintyIntervalError(meta *execinfrapb.ProducerMetadata) bool {
 	if err := meta.Err; err != nil {
 		// We only look for UnhandledRetryableErrors. Local reads (which would
 		// be transformed by the Root TxnCoordSender into
 		// TransactionRetryWithProtoRefreshErrors) don't have any uncertainty.
-		if ure := (*roachpb.UnhandledRetryableError)(nil); errors.As(err, &ure) {
-			if _, uncertain := ure.PErr.GetDetail().(*roachpb.ReadWithinUncertaintyIntervalError); uncertain {
+		if ure := (*kvpb.UnhandledRetryableError)(nil); errors.As(err, &ure) {
+			if _, uncertain := ure.PErr.GetDetail().(*kvpb.ReadWithinUncertaintyIntervalError); uncertain {
 				return true
 			}
 		}

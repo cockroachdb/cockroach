@@ -15,6 +15,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -116,7 +117,7 @@ func (i *CatchUpIterator) Close() {
 // TODO(ssd): Clarify memory ownership. Currently, the memory backing
 // the RangeFeedEvents isn't modified by the caller after this
 // returns. However, we may revist this in #69596.
-type outputEventFn func(e *roachpb.RangeFeedEvent) error
+type outputEventFn func(e *kvpb.RangeFeedEvent) error
 
 // CatchUpScan iterates over all changes in the configured key/time span, and
 // emits them as RangeFeedEvents via outputFn in chronological order.
@@ -138,7 +139,7 @@ func (i *CatchUpIterator) CatchUpScan(
 	// events for the same key until a different key is encountered, then output
 	// the encountered values in reverse. This also allows us to buffer events
 	// as we fill in previous values.
-	reorderBuf := make([]roachpb.RangeFeedEvent, 0, 5)
+	reorderBuf := make([]kvpb.RangeFeedEvent, 0, 5)
 
 	outputEvents := func() error {
 		for i := len(reorderBuf) - 1; i >= 0; i-- {
@@ -146,7 +147,7 @@ func (i *CatchUpIterator) CatchUpScan(
 			if err := outputFn(&e); err != nil {
 				return err
 			}
-			reorderBuf[i] = roachpb.RangeFeedEvent{} // Drop references to values to allow GC
+			reorderBuf[i] = kvpb.RangeFeedEvent{} // Drop references to values to allow GC
 		}
 		reorderBuf = reorderBuf[:0]
 		return nil
@@ -191,8 +192,8 @@ func (i *CatchUpIterator) CatchUpScan(
 					a, span.Key = a.Copy(rangeKeys.Bounds.Key, 0)
 					a, span.EndKey = a.Copy(rangeKeys.Bounds.EndKey, 0)
 					ts := rangeKeys.Versions[j].Timestamp
-					err := outputFn(&roachpb.RangeFeedEvent{
-						DeleteRange: &roachpb.RangeFeedDeleteRange{
+					err := outputFn(&kvpb.RangeFeedEvent{
+						DeleteRange: &kvpb.RangeFeedDeleteRange{
 							Span:      span,
 							Timestamp: ts,
 						},
@@ -328,8 +329,8 @@ func (i *CatchUpIterator) CatchUpScan(
 
 			if !ignore {
 				// Add value to reorderBuf to be output.
-				var event roachpb.RangeFeedEvent
-				event.MustSetValue(&roachpb.RangeFeedValue{
+				var event kvpb.RangeFeedEvent
+				event.MustSetValue(&kvpb.RangeFeedValue{
 					Key: key,
 					Value: roachpb.Value{
 						RawBytes:  val,

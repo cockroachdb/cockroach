@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
@@ -102,8 +103,8 @@ func TestClosedTimestampCanServe(t *testing.T) {
 		// We just served a follower read. As a sanity check, make sure that we can't write at
 		// that same timestamp.
 		{
-			baWrite := &roachpb.BatchRequest{}
-			r := &roachpb.DeleteRequest{}
+			baWrite := &kvpb.BatchRequest{}
+			r := &kvpb.DeleteRequest{}
 			r.Key = desc.StartKey.AsRawKey()
 			txn := roachpb.MakeTransaction("testwrite", r.Key, roachpb.NormalUserPriority, ts, 100, int32(tc.Server(0).SQLInstanceID()))
 			baWrite.Txn = &txn
@@ -116,7 +117,7 @@ func TestClosedTimestampCanServe(t *testing.T) {
 			var found bool
 			for _, repl := range repls {
 				resp, pErr := repl.Send(ctx, baWrite)
-				if errors.HasType(pErr.GoError(), (*roachpb.NotLeaseHolderError)(nil)) {
+				if errors.HasType(pErr.GoError(), (*kvpb.NotLeaseHolderError)(nil)) {
 					continue
 				} else if pErr != nil {
 					t.Fatal(pErr)
@@ -232,7 +233,7 @@ func TestClosedTimestampCanServeThroughoutLeaseTransfer(t *testing.T) {
 				if pErr != nil {
 					return errors.Wrapf(pErr.GoError(), "on %s", r)
 				}
-				rows := resp.Responses[0].GetInner().(*roachpb.ScanResponse).Rows
+				rows := resp.Responses[0].GetInner().(*kvpb.ScanResponse).Rows
 				// Should see the write.
 				if len(rows) != 1 {
 					return fmt.Errorf("expected one row, but got %d", len(rows))
@@ -278,7 +279,7 @@ func TestClosedTimestampCantServeWithConflictingIntent(t *testing.T) {
 		key := append(txnKey, []byte(strconv.Itoa(i))...)
 		keys = append(keys, key)
 		put := putArgs(key, []byte("val"))
-		resp, err := kv.SendWrappedWith(ctx, ds, roachpb.Header{Txn: &txn}, put)
+		resp, err := kv.SendWrappedWith(ctx, ds, kvpb.Header{Txn: &txn}, put)
 		require.Nil(t, err)
 		txn.Update(resp.Header().Txn)
 	}
@@ -326,7 +327,7 @@ func TestClosedTimestampCantServeWithConflictingIntent(t *testing.T) {
 	for i := 0; i < len(repls)-1; i++ {
 		err := <-respCh2
 		require.Error(t, err)
-		var lErr *roachpb.NotLeaseHolderError
+		var lErr *kvpb.NotLeaseHolderError
 		require.True(t, errors.As(err, &lErr))
 	}
 	select {
@@ -336,12 +337,12 @@ func TestClosedTimestampCantServeWithConflictingIntent(t *testing.T) {
 	}
 
 	// Abort the transaction. All intents should be rolled back.
-	endTxn := &roachpb.EndTxnRequest{
-		RequestHeader: roachpb.RequestHeader{Key: txn.Key},
+	endTxn := &kvpb.EndTxnRequest{
+		RequestHeader: kvpb.RequestHeader{Key: txn.Key},
 		Commit:        false,
 		LockSpans:     []roachpb.Span{desc.KeySpan().AsRawSpanWithNoLocals()},
 	}
-	_, err := kv.SendWrappedWith(ctx, ds, roachpb.Header{Txn: &txn}, endTxn)
+	_, err := kv.SendWrappedWith(ctx, ds, kvpb.Header{Txn: &txn}, endTxn)
 	require.Nil(t, err)
 
 	// The blocked read on the leaseholder should succeed.
@@ -546,9 +547,9 @@ func TestClosedTimestampCantServeForNonTransactionalReadRequest(t *testing.T) {
 	})
 
 	// Create a "nontransactional" read-only batch.
-	baQueryTxn := &roachpb.BatchRequest{}
+	baQueryTxn := &kvpb.BatchRequest{}
 	baQueryTxn.Header.RangeID = desc.RangeID
-	r := &roachpb.QueryTxnRequest{}
+	r := &kvpb.QueryTxnRequest{}
 	r.Key = desc.StartKey.AsRawKey()
 	r.Txn.Key = r.Key
 	r.Txn.MinTimestamp = ts
@@ -812,10 +813,10 @@ SET CLUSTER SETTING kv.closed_timestamp.follower_reads_enabled = true;
 				require.NoError(t, err)
 				writeTime := rhsLeaseStart.Prev()
 				require.True(t, mergedLeaseholder.GetCurrentClosedTimestamp(ctx).Less(writeTime))
-				baWrite := &roachpb.BatchRequest{}
+				baWrite := &kvpb.BatchRequest{}
 				baWrite.Header.RangeID = leftDesc.RangeID
 				baWrite.Header.Timestamp = writeTime
-				put := &roachpb.PutRequest{}
+				put := &kvpb.PutRequest{}
 				put.Key = rightDesc.StartKey.AsRawKey()
 				baWrite.Add(put)
 				resp, pErr := mergedLeaseholder.Send(ctx, baWrite)
@@ -935,8 +936,8 @@ func (filter *mergeFilter) resetBlocker() (*mergeBlocker, bool) {
 // Communication with actors interested in blocked merges is done through
 // BlockNextMerge().
 func (filter *mergeFilter) SuspendMergeTrigger(
-	ctx context.Context, ba *roachpb.BatchRequest,
-) *roachpb.Error {
+	ctx context.Context, ba *kvpb.BatchRequest,
+) *kvpb.Error {
 	for _, req := range ba.Requests {
 		if et := req.GetEndTxn(); et != nil && et.Commit &&
 			et.InternalCommitTrigger.GetMergeTrigger() != nil {
@@ -1064,7 +1065,7 @@ func getTargetStore(
 }
 
 func verifyNotLeaseHolderErrors(
-	t *testing.T, ba *roachpb.BatchRequest, repls []*kvserver.Replica, expectedNLEs int,
+	t *testing.T, ba *kvpb.BatchRequest, repls []*kvserver.Replica, expectedNLEs int,
 ) {
 	t.Helper()
 	notLeaseholderErrs, err := countNotLeaseHolderErrors(ba, repls)
@@ -1076,14 +1077,14 @@ func verifyNotLeaseHolderErrors(
 	}
 }
 
-func countNotLeaseHolderErrors(ba *roachpb.BatchRequest, repls []*kvserver.Replica) (int64, error) {
+func countNotLeaseHolderErrors(ba *kvpb.BatchRequest, repls []*kvserver.Replica) (int64, error) {
 	g, ctx := errgroup.WithContext(context.Background())
 	var notLeaseholderErrs int64
 	for i := range repls {
 		repl := repls[i]
 		g.Go(func() (err error) {
 			if _, pErr := repl.Send(ctx, ba); pErr != nil {
-				if _, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); ok {
+				if _, ok := pErr.GetDetail().(*kvpb.NotLeaseHolderError); ok {
 					atomic.AddInt64(&notLeaseholderErrs, 1)
 					return nil
 				}
@@ -1250,12 +1251,12 @@ RESET statement_timeout;
 	return tc, desc
 }
 
-type respFunc func(*roachpb.BatchResponse, *roachpb.Error) (shouldRetry bool, err error)
+type respFunc func(*kvpb.BatchResponse, *kvpb.Error) (shouldRetry bool, err error)
 
 // respFuncs returns a respFunc which is passes its arguments to each passed
 // func until one returns shouldRetry or a non-nil error.
 func respFuncs(funcs ...respFunc) respFunc {
-	return func(resp *roachpb.BatchResponse, pErr *roachpb.Error) (shouldRetry bool, err error) {
+	return func(resp *kvpb.BatchResponse, pErr *kvpb.Error) (shouldRetry bool, err error) {
 		for _, f := range funcs {
 			shouldRetry, err = f(resp, pErr)
 			if err != nil || shouldRetry {
@@ -1266,8 +1267,8 @@ func respFuncs(funcs ...respFunc) respFunc {
 	}
 }
 
-func retryOnError(f func(*roachpb.Error) bool) respFunc {
-	return func(resp *roachpb.BatchResponse, pErr *roachpb.Error) (shouldRetry bool, err error) {
+func retryOnError(f func(*kvpb.Error) bool) respFunc {
+	return func(resp *kvpb.BatchResponse, pErr *kvpb.Error) (shouldRetry bool, err error) {
 		if pErr != nil && f(pErr) {
 			return true, nil
 		}
@@ -1275,22 +1276,22 @@ func retryOnError(f func(*roachpb.Error) bool) respFunc {
 	}
 }
 
-var retryOnRangeKeyMismatch = retryOnError(func(pErr *roachpb.Error) bool {
-	_, isRangeKeyMismatch := pErr.GetDetail().(*roachpb.RangeKeyMismatchError)
+var retryOnRangeKeyMismatch = retryOnError(func(pErr *kvpb.Error) bool {
+	_, isRangeKeyMismatch := pErr.GetDetail().(*kvpb.RangeKeyMismatchError)
 	return isRangeKeyMismatch
 })
 
-var retryOnRangeNotFound = retryOnError(func(pErr *roachpb.Error) bool {
-	_, isRangeNotFound := pErr.GetDetail().(*roachpb.RangeNotFoundError)
+var retryOnRangeNotFound = retryOnError(func(pErr *kvpb.Error) bool {
+	_, isRangeNotFound := pErr.GetDetail().(*kvpb.RangeNotFoundError)
 	return isRangeNotFound
 })
 
 func expectRows(expectedRows int) respFunc {
-	return func(resp *roachpb.BatchResponse, pErr *roachpb.Error) (shouldRetry bool, err error) {
+	return func(resp *kvpb.BatchResponse, pErr *kvpb.Error) (shouldRetry bool, err error) {
 		if pErr != nil {
 			return false, pErr.GoError()
 		}
-		rows := resp.Responses[0].GetInner().(*roachpb.ScanResponse).Rows
+		rows := resp.Responses[0].GetInner().(*kvpb.ScanResponse).Rows
 		// Should see the write.
 		if len(rows) != expectedRows {
 			return false, fmt.Errorf("expected %d rows, but got %d", expectedRows, len(rows))
@@ -1302,7 +1303,7 @@ func expectRows(expectedRows int) respFunc {
 func verifyCanReadFromAllRepls(
 	ctx context.Context,
 	t *testing.T,
-	baRead *roachpb.BatchRequest,
+	baRead *kvpb.BatchRequest,
 	repls []*kvserver.Replica,
 	f respFunc,
 ) error {
@@ -1330,14 +1331,14 @@ func verifyCanReadFromAllRepls(
 	return g.Wait()
 }
 
-func makeTxnReadBatchForDesc(desc roachpb.RangeDescriptor, ts hlc.Timestamp) *roachpb.BatchRequest {
+func makeTxnReadBatchForDesc(desc roachpb.RangeDescriptor, ts hlc.Timestamp) *kvpb.BatchRequest {
 	txn := roachpb.MakeTransaction("txn", nil, 0, ts, 0, 0)
 
-	baRead := &roachpb.BatchRequest{}
+	baRead := &kvpb.BatchRequest{}
 	baRead.Header.RangeID = desc.RangeID
 	baRead.Header.Timestamp = ts
 	baRead.Header.Txn = &txn
-	r := &roachpb.ScanRequest{}
+	r := &kvpb.ScanRequest{}
 	r.Key = desc.StartKey.AsRawKey()
 	r.EndKey = desc.EndKey.AsRawKey()
 	baRead.Add(r)

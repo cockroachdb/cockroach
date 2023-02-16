@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -307,8 +308,8 @@ func (db *DB) tryStoreRollup(ctx context.Context, r Resolution, data []rollupDat
 func (db *DB) storeKvs(ctx context.Context, kvs []roachpb.KeyValue) error {
 	b := &kv.Batch{}
 	for _, kv := range kvs {
-		b.AddRawRequest(&roachpb.MergeRequest{
-			RequestHeader: roachpb.RequestHeader{
+		b.AddRawRequest(&kvpb.MergeRequest{
+			RequestHeader: kvpb.RequestHeader{
 				Key: kv.Key,
 			},
 			Value: kv.Value,

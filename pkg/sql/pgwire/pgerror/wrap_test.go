@@ -13,7 +13,7 @@ package pgerror_test
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/errors"
@@ -24,8 +24,8 @@ func TestWrap(t *testing.T) {
 		err error
 	}{
 		{errors.New("woo")},
-		{&roachpb.TransactionRetryWithProtoRefreshError{}},
-		{&roachpb.AmbiguousResultError{}},
+		{&kvpb.TransactionRetryWithProtoRefreshError{}},
+		{&kvpb.AmbiguousResultError{}},
 	}
 
 	for i, test := range testData {

@@ -12,7 +12,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/errors"
 )
@@ -125,7 +125,7 @@ func AsTerminalError(ctx context.Context, lm *lease.Manager, cause error) (termE
 	}
 
 	// GC TTL errors are always fatal.
-	if errors.HasType(cause, (*roachpb.BatchTimestampBeforeGCError)(nil)) {
+	if errors.HasType(cause, (*kvpb.BatchTimestampBeforeGCError)(nil)) {
 		return WithTerminalError(cause)
 	}
 

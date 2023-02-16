@@ -13,6 +13,7 @@ package kvserver
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
@@ -74,7 +75,7 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 		return
 	}
 
-	var pErr *roachpb.Error
+	var pErr *kvpb.Error
 	if filter := r.store.cfg.TestingKnobs.TestingPostApplyFilter; filter != nil {
 		var newPropRetry int
 		newPropRetry, pErr = filter(kvserverbase.ApplyFilterArgs{
@@ -162,8 +163,8 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 // reproposer is used by tryReproposeWithNewLeaseIndex.
 type reproposer interface {
 	trackEvaluatingRequest(context.Context, hlc.Timestamp) (hlc.Timestamp, TrackedRequestToken)
-	propose(context.Context, *ProposalData, TrackedRequestToken) *roachpb.Error
-	newNotLeaseHolderError(string) *roachpb.NotLeaseHolderError
+	propose(context.Context, *ProposalData, TrackedRequestToken) *kvpb.Error
+	newNotLeaseHolderError(string) *kvpb.NotLeaseHolderError
 }
 
 type replicaReproposer Replica
@@ -179,14 +180,14 @@ func (r *replicaReproposer) trackEvaluatingRequest(
 
 func (r *replicaReproposer) propose(
 	ctx context.Context, p *ProposalData, tok TrackedRequestToken,
-) *roachpb.Error {
+) *kvpb.Error {
 	return (*Replica)(r).propose(ctx, p, tok)
 }
 
-func (r *replicaReproposer) newNotLeaseHolderError(msg string) *roachpb.NotLeaseHolderError {
+func (r *replicaReproposer) newNotLeaseHolderError(msg string) *kvpb.NotLeaseHolderError {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return roachpb.NewNotLeaseHolderError(
+	return kvpb.NewNotLeaseHolderError(
 		*r.mu.state.Lease,
 		r.store.StoreID(),
 		r.mu.state.Desc,
@@ -209,7 +210,7 @@ func (r *replicaReproposer) newNotLeaseHolderError(msg string) *roachpb.NotLease
 // timestamps across subsequent calls.
 func tryReproposeWithNewLeaseIndex(
 	ctx context.Context, cmd *replicatedCmd, r reproposer,
-) *roachpb.Error {
+) *kvpb.Error {
 	// Note that we don't need to validate anything about the proposal's
 	// lease here - if we got this far, we know that everything but the
 	// index is valid at this point in the log.
@@ -246,7 +247,7 @@ func tryReproposeWithNewLeaseIndex(
 		// The tracker wants us to forward the request timestamp, but we can't
 		// do that without re-evaluating, so give up. The error returned here
 		// will go back to DistSender, so send something it can digest.
-		return roachpb.NewError(r.newNotLeaseHolderError("reproposal failed due to closed timestamp"))
+		return kvpb.NewError(r.newNotLeaseHolderError("reproposal failed due to closed timestamp"))
 	}
 	// Some tests check for this log message in the trace.
 	log.VEventf(ctx, 2, "retry: proposalIllegalLeaseIndex")

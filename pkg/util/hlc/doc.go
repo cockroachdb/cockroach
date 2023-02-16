@@ -42,16 +42,16 @@ between nodes in a cluster:
     API will attach HLC clock readings on requests and responses (successes and
     errors).
 
-    Ref: (roachpb.Header).Timestamp.
-    Ref: (roachpb.BatchResponse_Header).Now.
-    Ref: (roachpb.Error).Now.
+    Ref: (kvpb.Header).Timestamp.
+    Ref: (kvpb.BatchResponse_Header).Now.
+    Ref: (kvpb.Error).Now.
 
   - DistSQL flows (unidirectional): leaves of a DistSQL flow will pass clock
     readings back to the root of the flow. Currently, this only takes place on
     errors, and relates to the "Transaction retry errors" interaction detailed
     below.
 
-    Ref: (roachpb.Error).Now.
+    Ref: (kvpb.Error).Now.
 
 Capturing causal relationships between events on different nodes is critical for
 enforcing invariants within CockroachDB. What follows is an enumeration of each

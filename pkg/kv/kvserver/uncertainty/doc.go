@@ -21,6 +21,7 @@
 package uncertainty
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -118,7 +119,7 @@ var D3 = Interval{}
 // guaranteed to observe any value written by any other transaction with a
 // happened-before relation to it, which is paramount to ensure single-key
 // linearizability and avoid stale reads.
-var D4 = roachpb.ReadWithinUncertaintyIntervalError{}
+var D4 = kvpb.ReadWithinUncertaintyIntervalError{}
 
 // D5 ————————————————————————————————————————————————
 //
@@ -371,7 +372,7 @@ var D7 = roachpb.Transaction{}.ObservedTimestamps
 // single-range, those that hit uncertainty errors can always retry on the
 // server, so these errors never bubble up to the client that initiated the
 // request.
-var D8 = roachpb.Header{}.TimestampFromServerClock
+var D8 = kvpb.Header{}.TimestampFromServerClock
 
 // D9 ————————————————————————————————————————————————
 //

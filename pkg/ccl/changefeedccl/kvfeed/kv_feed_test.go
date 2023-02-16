@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed/schematestutils"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -64,10 +65,10 @@ func TestKVFeed(t *testing.T) {
 			},
 		}
 	}
-	kvEvent := func(codec keys.SQLCodec, tableID uint32, k, v string, ts hlc.Timestamp) roachpb.RangeFeedEvent {
+	kvEvent := func(codec keys.SQLCodec, tableID uint32, k, v string, ts hlc.Timestamp) kvpb.RangeFeedEvent {
 		keyVal := kv(codec, tableID, k, v, ts)
-		return roachpb.RangeFeedEvent{
-			Val: &roachpb.RangeFeedValue{
+		return kvpb.RangeFeedEvent{
+			Val: &kvpb.RangeFeedValue{
 				Key:   keyVal.Key,
 				Value: keyVal.Value,
 			},
@@ -75,9 +76,9 @@ func TestKVFeed(t *testing.T) {
 			Error:      nil,
 		}
 	}
-	checkpointEvent := func(span roachpb.Span, ts hlc.Timestamp) roachpb.RangeFeedEvent {
-		return roachpb.RangeFeedEvent{
-			Checkpoint: &roachpb.RangeFeedCheckpoint{
+	checkpointEvent := func(span roachpb.Span, ts hlc.Timestamp) kvpb.RangeFeedEvent {
+		return kvpb.RangeFeedEvent{
+			Checkpoint: &kvpb.RangeFeedCheckpoint{
 				Span:       span,
 				ResolvedTS: ts,
 			},
@@ -93,7 +94,7 @@ func TestKVFeed(t *testing.T) {
 		endTime            hlc.Timestamp
 		spans              []roachpb.Span
 		checkpoint         []roachpb.Span
-		events             []roachpb.RangeFeedEvent
+		events             []kvpb.RangeFeedEvent
 
 		descs []catalog.TableDescriptor
 
@@ -190,7 +191,7 @@ func TestKVFeed(t *testing.T) {
 			spans: []roachpb.Span{
 				tableSpan(codec, 42),
 			},
-			events: []roachpb.RangeFeedEvent{
+			events: []kvpb.RangeFeedEvent{
 				kvEvent(codec, 42, "a", "b", ts(3)),
 			},
 			expScans: []hlc.Timestamp{
@@ -210,7 +211,7 @@ func TestKVFeed(t *testing.T) {
 			checkpoint: []roachpb.Span{
 				tableSpan(codec, 42),
 			},
-			events: []roachpb.RangeFeedEvent{
+			events: []kvpb.RangeFeedEvent{
 				kvEvent(codec, 42, "a", "b", ts(3)),
 			},
 			expScans:  []hlc.Timestamp{},
@@ -228,7 +229,7 @@ func TestKVFeed(t *testing.T) {
 			checkpoint: []roachpb.Span{
 				makeSpan(codec, 42, "a", "q"),
 			},
-			events: []roachpb.RangeFeedEvent{
+			events: []kvpb.RangeFeedEvent{
 				kvEvent(codec, 42, "a", "val", ts(3)),
 				kvEvent(codec, 42, "d", "val", ts(3)),
 			},
@@ -246,7 +247,7 @@ func TestKVFeed(t *testing.T) {
 			spans: []roachpb.Span{
 				tableSpan(codec, 42),
 			},
-			events: []roachpb.RangeFeedEvent{
+			events: []kvpb.RangeFeedEvent{
 				kvEvent(codec, 42, "a", "b", ts(3)),
 				checkpointEvent(tableSpan(codec, 42), ts(4)),
 				kvEvent(codec, 42, "a", "b", ts(5)),
@@ -272,7 +273,7 @@ func TestKVFeed(t *testing.T) {
 			spans: []roachpb.Span{
 				tableSpan(codec, 42),
 			},
-			events: []roachpb.RangeFeedEvent{
+			events: []kvpb.RangeFeedEvent{
 				kvEvent(codec, 42, "a", "b", ts(3).Next()),
 				checkpointEvent(tableSpan(codec, 42), ts(4)),
 				kvEvent(codec, 42, "a", "b", ts(5)),
@@ -296,7 +297,7 @@ func TestKVFeed(t *testing.T) {
 			spans: []roachpb.Span{
 				tableSpan(codec, 42),
 			},
-			events: []roachpb.RangeFeedEvent{
+			events: []kvpb.RangeFeedEvent{
 				kvEvent(codec, 42, "a", "b", ts(3)),
 				checkpointEvent(tableSpan(codec, 42), ts(4)),
 				kvEvent(codec, 42, "a", "b", ts(5)),
@@ -392,7 +393,7 @@ func (r *rawTableFeed) peekOrPop(
 	return events, nil
 }
 
-type rawEventFeed []roachpb.RangeFeedEvent
+type rawEventFeed []kvpb.RangeFeedEvent
 
 func (f rawEventFeed) run(
 	ctx context.Context,

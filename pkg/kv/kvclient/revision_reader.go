@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -34,11 +35,11 @@ func GetAllRevisions(
 	ctx context.Context, db *kv.DB, startKey, endKey roachpb.Key, startTime, endTime hlc.Timestamp,
 ) ([]VersionedValues, error) {
 	// TODO(dt): version check.
-	header := roachpb.Header{Timestamp: endTime}
-	req := &roachpb.ExportRequest{
-		RequestHeader: roachpb.RequestHeader{Key: startKey, EndKey: endKey},
+	header := kvpb.Header{Timestamp: endTime}
+	req := &kvpb.ExportRequest{
+		RequestHeader: kvpb.RequestHeader{Key: startKey, EndKey: endKey},
 		StartTime:     startTime,
-		MVCCFilter:    roachpb.MVCCFilter_All,
+		MVCCFilter:    kvpb.MVCCFilter_All,
 	}
 	resp, pErr := kv.SendWrappedWith(ctx, db.NonTransactionalSender(), header, req)
 	if pErr != nil {
@@ -46,7 +47,7 @@ func GetAllRevisions(
 	}
 
 	var res []VersionedValues
-	for _, file := range resp.(*roachpb.ExportResponse).Files {
+	for _, file := range resp.(*kvpb.ExportResponse).Files {
 		iterOpts := storage.IterOptions{
 			KeyTypes:   storage.IterKeyTypePointsOnly,
 			LowerBound: file.Span.Key,

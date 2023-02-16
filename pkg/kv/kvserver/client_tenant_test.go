@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl" // for tenant functionality
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -303,7 +304,7 @@ func TestTenantCtx(t *testing.T) {
 		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
-					TestingRequestFilter: func(ctx context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
+					TestingRequestFilter: func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
 						// We'll recognize a GetRequest and a PushRequest, check that the
 						// context looks as expected, and signal their channels.
 
@@ -313,13 +314,13 @@ func TestTenantCtx(t *testing.T) {
 							return nil
 						}
 
-						var getReq *roachpb.GetRequest
-						var pushReq *roachpb.PushTxnRequest
-						if isSingleGet := ba.IsSingleRequest() && ba.Requests[0].GetInner().Method() == roachpb.Get; isSingleGet {
-							getReq = ba.Requests[0].GetInner().(*roachpb.GetRequest)
+						var getReq *kvpb.GetRequest
+						var pushReq *kvpb.PushTxnRequest
+						if isSingleGet := ba.IsSingleRequest() && ba.Requests[0].GetInner().Method() == kvpb.Get; isSingleGet {
+							getReq = ba.Requests[0].GetInner().(*kvpb.GetRequest)
 						}
-						if isSinglePushTxn := ba.IsSingleRequest() && ba.Requests[0].GetInner().Method() == roachpb.PushTxn; isSinglePushTxn {
-							pushReq = ba.Requests[0].GetInner().(*roachpb.PushTxnRequest)
+						if isSinglePushTxn := ba.IsSingleRequest() && ba.Requests[0].GetInner().Method() == kvpb.PushTxn; isSinglePushTxn {
+							pushReq = ba.Requests[0].GetInner().(*kvpb.PushTxnRequest)
 						}
 
 						switch {

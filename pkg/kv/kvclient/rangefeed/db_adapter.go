@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -185,7 +186,7 @@ func (dbc *dbAdapter) scanSpan(
 		admissionPri = admissionpb.NormalPri
 	}
 	return dbc.db.TxnWithAdmissionControl(ctx,
-		roachpb.AdmissionHeader_ROOT_KV,
+		kvpb.AdmissionHeader_ROOT_KV,
 		admissionPri,
 		kv.SteppingDisabled,
 		func(ctx context.Context, txn *kv.Txn) error {

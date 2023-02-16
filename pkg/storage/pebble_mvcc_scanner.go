@@ -18,6 +18,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -414,7 +415,7 @@ type pebbleMVCCScanner struct {
 	maxIntents int64
 	// Resume fields describe the resume span to return. resumeReason must be set
 	// to a non-zero value to return a resume span, the others are optional.
-	resumeReason    roachpb.ResumeReason
+	resumeReason    kvpb.ResumeReason
 	resumeKey       roachpb.Key // if unset, falls back to p.advanceKey()
 	resumeNextBytes int64       // set when targetBytes is exceeded
 	// Transaction epoch and sequence number.
@@ -613,7 +614,7 @@ func (p *pebbleMVCCScanner) advance() bool {
 // resume span, resume reason, and for targetBytes the size of the next result.
 func (p *pebbleMVCCScanner) scan(
 	ctx context.Context,
-) (*roachpb.Span, roachpb.ResumeReason, int64, error) {
+) (*roachpb.Span, kvpb.ResumeReason, int64, error) {
 	if p.wholeRows && !p.results.(*pebbleResults).lastOffsetsEnabled {
 		return nil, 0, 0, errors.AssertionFailedf("cannot use wholeRows without trackLastOffsets")
 	}
@@ -632,7 +633,7 @@ func (p *pebbleMVCCScanner) scan(
 // afterScan checks whether some limit was exceeded during the scan, and if so,
 // it returns a resume span, resume reason, and for targetBytes the size of the
 // next result.
-func (p *pebbleMVCCScanner) afterScan() (*roachpb.Span, roachpb.ResumeReason, int64, error) {
+func (p *pebbleMVCCScanner) afterScan() (*roachpb.Span, kvpb.ResumeReason, int64, error) {
 	p.maybeFailOnMoreRecent()
 
 	if p.err != nil {
@@ -735,7 +736,7 @@ func (p *pebbleMVCCScanner) maybeFailOnMoreRecent() {
 	}
 	// The txn can't write at the existing timestamp, so we provide the error
 	// with the timestamp immediately after it.
-	p.err = roachpb.NewWriteTooOldError(p.ts, p.mostRecentTS.Next(), p.mostRecentKey)
+	p.err = kvpb.NewWriteTooOldError(p.ts, p.mostRecentTS.Next(), p.mostRecentKey)
 	p.results.clear()
 	p.intents.Reset()
 }
@@ -745,7 +746,7 @@ func (p *pebbleMVCCScanner) maybeFailOnMoreRecent() {
 func (p *pebbleMVCCScanner) uncertaintyError(
 	valueTs hlc.Timestamp, localTs hlc.ClockTimestamp,
 ) (ok bool) {
-	p.err = roachpb.NewReadWithinUncertaintyIntervalError(
+	p.err = kvpb.NewReadWithinUncertaintyIntervalError(
 		p.ts, p.uncertainty.LocalLimit, p.txn, valueTs, localTs)
 	p.results.clear()
 	p.intents.Reset()
@@ -971,7 +972,7 @@ func (p *pebbleMVCCScanner) getOne(ctx context.Context) (ok, added bool) {
 		}
 		// Limit number of intents returned in write intent error.
 		if p.maxIntents > 0 && int64(p.intents.Count()) >= p.maxIntents {
-			p.resumeReason = roachpb.RESUME_INTENT_LIMIT
+			p.resumeReason = kvpb.RESUME_INTENT_LIMIT
 			return false, false
 		}
 		return true /* ok */, false
@@ -1210,11 +1211,11 @@ func (p *pebbleMVCCScanner) add(
 
 	// Check if adding the key would exceed a limit.
 	if p.targetBytes > 0 && numBytes+numBytesInc > p.targetBytes {
-		p.resumeReason = roachpb.RESUME_BYTE_LIMIT
+		p.resumeReason = kvpb.RESUME_BYTE_LIMIT
 		p.resumeNextBytes = numBytesInc
 
 	} else if p.maxKeys > 0 && numKeys >= p.maxKeys {
-		p.resumeReason = roachpb.RESUME_KEY_LIMIT
+		p.resumeReason = kvpb.RESUME_KEY_LIMIT
 	}
 
 	var mustPutKey bool
@@ -1277,7 +1278,7 @@ func (p *pebbleMVCCScanner) add(
 		// the row may have been omitted (if they are all NULL values) -- to find
 		// out, we must continue scanning to the next key and handle it above.
 		if !p.wholeRows || p.results.lastRowHasFinalColumnFamily(p.reverse) {
-			p.resumeReason = roachpb.RESUME_KEY_LIMIT
+			p.resumeReason = kvpb.RESUME_KEY_LIMIT
 			return false /* ok */, true /* added */
 		}
 	}

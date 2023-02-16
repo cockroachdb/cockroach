@@ -14,6 +14,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -44,7 +45,7 @@ func BenchmarkSetupSpanForIncomingRPC(b *testing.B) {
 			parentSpan := tr.StartSpan("parent")
 			defer parentSpan.Finish()
 
-			ba := &roachpb.BatchRequest{}
+			ba := &kvpb.BatchRequest{}
 			if tc.traceInfo {
 				ba.TraceInfo = parentSpan.Meta().ToProto()
 			} else if tc.grpcMeta {

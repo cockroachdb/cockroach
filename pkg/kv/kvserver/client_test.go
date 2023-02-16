@@ -26,6 +26,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -38,32 +39,32 @@ import (
 
 // getArgs returns a GetRequest and GetResponse pair addressed to
 // the default replica for the specified key.
-func getArgs(key roachpb.Key) *roachpb.GetRequest {
-	return &roachpb.GetRequest{
-		RequestHeader: roachpb.RequestHeader{
+func getArgs(key roachpb.Key) *kvpb.GetRequest {
+	return &kvpb.GetRequest{
+		RequestHeader: kvpb.RequestHeader{
 			Key: key,
 		},
 	}
 }
 
 // putArgs returns a PutRequest for the specified key / value.
-func putArgs(key roachpb.Key, value []byte) *roachpb.PutRequest {
-	return &roachpb.PutRequest{
-		RequestHeader: roachpb.RequestHeader{Key: key},
+func putArgs(key roachpb.Key, value []byte) *kvpb.PutRequest {
+	return &kvpb.PutRequest{
+		RequestHeader: kvpb.RequestHeader{Key: key},
 		Value:         roachpb.MakeValueFromBytes(value),
 	}
 }
 
 // cPutArgs returns a ConditionPutRequest to the default replica
 // for the specified key and value, with the given expected value.
-func cPutArgs(key roachpb.Key, value, expValue []byte) *roachpb.ConditionalPutRequest {
+func cPutArgs(key roachpb.Key, value, expValue []byte) *kvpb.ConditionalPutRequest {
 	var expBytes []byte
 	if expValue != nil {
 		expBytes = roachpb.MakeValueFromBytes(expValue).TagAndDataBytes()
 	}
 
-	return &roachpb.ConditionalPutRequest{
-		RequestHeader: roachpb.RequestHeader{
+	return &kvpb.ConditionalPutRequest{
+		RequestHeader: kvpb.RequestHeader{
 			Key: key,
 		},
 		Value:    roachpb.MakeValueFromBytes(value),
@@ -73,17 +74,17 @@ func cPutArgs(key roachpb.Key, value, expValue []byte) *roachpb.ConditionalPutRe
 
 // incrementArgs returns an IncrementRequest addressed to the default replica
 // for the specified key.
-func incrementArgs(key roachpb.Key, inc int64) *roachpb.IncrementRequest {
-	return &roachpb.IncrementRequest{
-		RequestHeader: roachpb.RequestHeader{
+func incrementArgs(key roachpb.Key, inc int64) *kvpb.IncrementRequest {
+	return &kvpb.IncrementRequest{
+		RequestHeader: kvpb.RequestHeader{
 			Key: key,
 		},
 		Increment: inc,
 	}
 }
 
-func truncateLogArgs(index uint64, rangeID roachpb.RangeID) *roachpb.TruncateLogRequest {
-	return &roachpb.TruncateLogRequest{
+func truncateLogArgs(index uint64, rangeID roachpb.RangeID) *kvpb.TruncateLogRequest {
+	return &kvpb.TruncateLogRequest{
 		Index:   index,
 		RangeID: rangeID,
 	}
@@ -91,29 +92,29 @@ func truncateLogArgs(index uint64, rangeID roachpb.RangeID) *roachpb.TruncateLog
 
 func heartbeatArgs(
 	txn *roachpb.Transaction, now hlc.Timestamp,
-) (*roachpb.HeartbeatTxnRequest, roachpb.Header) {
-	return &roachpb.HeartbeatTxnRequest{
-		RequestHeader: roachpb.RequestHeader{
+) (*kvpb.HeartbeatTxnRequest, kvpb.Header) {
+	return &kvpb.HeartbeatTxnRequest{
+		RequestHeader: kvpb.RequestHeader{
 			Key: txn.Key,
 		},
 		Now: now,
-	}, roachpb.Header{Txn: txn}
+	}, kvpb.Header{Txn: txn}
 }
 
-func endTxnArgs(txn *roachpb.Transaction, commit bool) (*roachpb.EndTxnRequest, roachpb.Header) {
-	return &roachpb.EndTxnRequest{
-		RequestHeader: roachpb.RequestHeader{
+func endTxnArgs(txn *roachpb.Transaction, commit bool) (*kvpb.EndTxnRequest, kvpb.Header) {
+	return &kvpb.EndTxnRequest{
+		RequestHeader: kvpb.RequestHeader{
 			Key: txn.Key, // not allowed when going through TxnCoordSender, but we're not
 		},
 		Commit: commit,
-	}, roachpb.Header{Txn: txn}
+	}, kvpb.Header{Txn: txn}
 }
 
 func pushTxnArgs(
-	pusher, pushee *roachpb.Transaction, pushType roachpb.PushTxnType,
-) *roachpb.PushTxnRequest {
-	return &roachpb.PushTxnRequest{
-		RequestHeader: roachpb.RequestHeader{
+	pusher, pushee *roachpb.Transaction, pushType kvpb.PushTxnType,
+) *kvpb.PushTxnRequest {
+	return &kvpb.PushTxnRequest{
+		RequestHeader: kvpb.RequestHeader{
 			Key: pushee.Key,
 		},
 		PushTo:    pusher.WriteTimestamp.Next(),
@@ -123,9 +124,9 @@ func pushTxnArgs(
 	}
 }
 
-func migrateArgs(start, end roachpb.Key, version roachpb.Version) *roachpb.MigrateRequest {
-	return &roachpb.MigrateRequest{
-		RequestHeader: roachpb.RequestHeader{
+func migrateArgs(start, end roachpb.Key, version roachpb.Version) *kvpb.MigrateRequest {
+	return &kvpb.MigrateRequest{
+		RequestHeader: kvpb.RequestHeader{
 			Key:    start,
 			EndKey: end,
 		},
@@ -133,9 +134,9 @@ func migrateArgs(start, end roachpb.Key, version roachpb.Version) *roachpb.Migra
 	}
 }
 
-func adminTransferLeaseArgs(key roachpb.Key, target roachpb.StoreID) roachpb.Request {
-	return &roachpb.AdminTransferLeaseRequest{
-		RequestHeader: roachpb.RequestHeader{
+func adminTransferLeaseArgs(key roachpb.Key, target roachpb.StoreID) kvpb.Request {
+	return &kvpb.AdminTransferLeaseRequest{
+		RequestHeader: kvpb.RequestHeader{
 			Key: key,
 		},
 		Target: target,

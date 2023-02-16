@@ -383,13 +383,13 @@ run error
 scan k=a end=d ts=3 failOnMoreRecent
 ----
 scan: "a"-"d" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "a" at timestamp 3.000000000,0 too old; wrote at 4.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "a" at timestamp 3.000000000,0 too old; wrote at 4.000000000,1
 
 run error
 scan k=a end=d ts=4 failOnMoreRecent
 ----
 scan: "a"-"d" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "c" at timestamp 4.000000000,0 too old; wrote at 4.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "c" at timestamp 4.000000000,0 too old; wrote at 4.000000000,1
 
 run ok
 scan k=a end=d ts=5 failOnMoreRecent
@@ -401,25 +401,25 @@ run error
 scan k=c end=d ts=1 failOnMoreRecent
 ----
 scan: "c"-"d" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "c" at timestamp 1.000000000,0 too old; wrote at 4.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "c" at timestamp 1.000000000,0 too old; wrote at 4.000000000,1
 
 run error
 scan k=c end=d ts=2 failOnMoreRecent
 ----
 scan: "c"-"d" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "c" at timestamp 2.000000000,0 too old; wrote at 4.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "c" at timestamp 2.000000000,0 too old; wrote at 4.000000000,1
 
 run error
 scan k=c end=d ts=3 failOnMoreRecent
 ----
 scan: "c"-"d" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "c" at timestamp 3.000000000,0 too old; wrote at 4.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "c" at timestamp 3.000000000,0 too old; wrote at 4.000000000,1
 
 run error
 scan k=c end=d ts=4 failOnMoreRecent
 ----
 scan: "c"-"d" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "c" at timestamp 4.000000000,0 too old; wrote at 4.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "c" at timestamp 4.000000000,0 too old; wrote at 4.000000000,1
 
 run ok
 scan k=c end=d ts=5 failOnMoreRecent
@@ -431,32 +431,32 @@ run error
 scan k=e end=f ts=3 failOnMoreRecent
 ----
 scan: "e"-"f" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "e"
+error: (*kvpb.WriteIntentError:) conflicting intents on "e"
 
 run error
 scan k=e end=f ts=4 failOnMoreRecent
 ----
 scan: "e"-"f" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "e"
+error: (*kvpb.WriteIntentError:) conflicting intents on "e"
 
 run error
 scan k=e end=f ts=5 failOnMoreRecent
 ----
 scan: "e"-"f" -> <no data>
-error: (*roachpb.WriteIntentError:) conflicting intents on "e"
+error: (*kvpb.WriteIntentError:) conflicting intents on "e"
 
 # failOnMoreRecent: g-h
 run error
 scan k=g end=h ts=3 failOnMoreRecent
 ----
 scan: "g"-"h" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "g" at timestamp 3.000000000,0 too old; wrote at 4.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "g" at timestamp 3.000000000,0 too old; wrote at 4.000000000,1
 
 run error
 scan k=g end=h ts=4 failOnMoreRecent
 ----
 scan: "g"-"h" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "g" at timestamp 4.000000000,0 too old; wrote at 4.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "g" at timestamp 4.000000000,0 too old; wrote at 4.000000000,1
 
 run ok
 scan k=g end=h ts=5 failOnMoreRecent
@@ -474,7 +474,7 @@ run error
 scan k=b end=d ts=3 globalUncertaintyLimit=4
 ----
 scan: "b"-"d" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 3.000000000,0 encountered previous write with future timestamp 4.000000000,0 within uncertainty interval `t <= (local=0,0, global=0,0)`; observed timestamps: []
+error: (*kvpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 3.000000000,0 encountered previous write with future timestamp 4.000000000,0 within uncertainty interval `t <= (local=0,0, global=0,0)`; observed timestamps: []
 
 run ok
 scan k=b end=d ts=4 globalUncertaintyLimit=5
@@ -496,7 +496,7 @@ run error
 scan k=g end=h ts=1 globalUncertaintyLimit=4
 ----
 scan: "g"-"h" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 1.000000000,0 encountered previous write with future timestamp 4.000000000,0 within uncertainty interval `t <= (local=0,0, global=0,0)`; observed timestamps: []
+error: (*kvpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 1.000000000,0 encountered previous write with future timestamp 4.000000000,0 within uncertainty interval `t <= (local=0,0, global=0,0)`; observed timestamps: []
 
 run ok
 scan k=g end=h ts=4 globalUncertaintyLimit=5
@@ -518,7 +518,7 @@ run error
 scan k=h end=i ts=2 globalUncertaintyLimit=4
 ----
 scan: "h"-"i" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 2.000000000,0 encountered previous write with future timestamp 4.000000000,0 within uncertainty interval `t <= (local=0,0, global=0,0)`; observed timestamps: []
+error: (*kvpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 2.000000000,0 encountered previous write with future timestamp 4.000000000,0 within uncertainty interval `t <= (local=0,0, global=0,0)`; observed timestamps: []
 
 # Test local timestamp uncertainty for [j-l)@4 with localTs=3. Normally,
 # globalUncertaintyLimit=4 would error. However, localUncertaintyLimit<4
@@ -528,7 +528,7 @@ run error
 scan k=j end=l ts=1 globalUncertaintyLimit=4
 ----
 scan: "j"-"l" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 1.000000000,0 encountered previous write with future timestamp 4.000000000,0 (local=3.000000000,0) within uncertainty interval `t <= (local=0,0, global=0,0)`; observed timestamps: []
+error: (*kvpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 1.000000000,0 encountered previous write with future timestamp 4.000000000,0 (local=3.000000000,0) within uncertainty interval `t <= (local=0,0, global=0,0)`; observed timestamps: []
 
 run ok
 scan k=j end=l ts=1 globalUncertaintyLimit=4 localUncertaintyLimit=1
@@ -544,4 +544,4 @@ run error
 scan k=j end=l ts=1 globalUncertaintyLimit=4 localUncertaintyLimit=3
 ----
 scan: "j"-"l" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 1.000000000,0 encountered previous write with future timestamp 4.000000000,0 (local=3.000000000,0) within uncertainty interval `t <= (local=3.000000000,0, global=0,0)`; observed timestamps: []
+error: (*kvpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 1.000000000,0 encountered previous write with future timestamp 4.000000000,0 (local=3.000000000,0) within uncertainty interval `t <= (local=3.000000000,0, global=0,0)`; observed timestamps: []

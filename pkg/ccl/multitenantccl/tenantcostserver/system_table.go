@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multitenantccl/tenantcostserver/tenanttokenbucket"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -43,7 +44,7 @@ type tenantState struct {
 	Bucket tenanttokenbucket.State
 
 	// Current consumption information.
-	Consumption roachpb.TenantConsumption
+	Consumption kvpb.TenantConsumption
 }
 
 // defaultRefillRate is the default refill rate if it is never configured (via

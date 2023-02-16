@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/errors"
@@ -79,14 +80,14 @@ type txnSeqNumAllocator struct {
 
 // SendLocked is part of the txnInterceptor interface.
 func (s *txnSeqNumAllocator) SendLocked(
-	ctx context.Context, ba *roachpb.BatchRequest,
-) (*roachpb.BatchResponse, *roachpb.Error) {
+	ctx context.Context, ba *kvpb.BatchRequest,
+) (*kvpb.BatchResponse, *kvpb.Error) {
 	for _, ru := range ba.Requests {
 		req := ru.GetInner()
 		// Only increment the sequence number generator for requests that
 		// will leave intents or requests that will commit the transaction.
 		// This enables ba.IsCompleteTransaction to work properly.
-		if roachpb.IsIntentWrite(req) || req.Method() == roachpb.EndTxn {
+		if kvpb.IsIntentWrite(req) || req.Method() == kvpb.EndTxn {
 			s.writeSeq++
 		}
 
@@ -95,7 +96,7 @@ func (s *txnSeqNumAllocator) SendLocked(
 		// latest write seqnum.
 		oldHeader := req.Header()
 		oldHeader.Sequence = s.writeSeq
-		if s.steppingModeEnabled && roachpb.IsReadOnly(req) {
+		if s.steppingModeEnabled && kvpb.IsReadOnly(req) {
 			oldHeader.Sequence = s.readSeq
 		}
 		req.SetHeader(oldHeader)

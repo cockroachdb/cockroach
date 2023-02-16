@@ -11,6 +11,7 @@
 package kvserver
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -70,7 +71,7 @@ func (o AllocationTransferLeaseOp) trackPlanningMetrics() {
 type AllocationChangeReplicasOp struct {
 	usage             allocator.RangeUsageInfo
 	lhStore           roachpb.StoreID
-	chgs              roachpb.ReplicationChanges
+	chgs              kvpb.ReplicationChanges
 	priority          kvserverpb.SnapshotRequest_Priority
 	allocatorPriority float64
 	reason            kvserverpb.RangeLogEventReason

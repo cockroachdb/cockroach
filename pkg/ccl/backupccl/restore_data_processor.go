@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -391,10 +392,10 @@ func (rd *restoreDataProcessor) runRestoreWorkers(ctx context.Context, ssts chan
 
 func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	ctx context.Context, kr *KeyRewriter, sst mergedSST,
-) (roachpb.BulkOpSummary, error) {
+) (kvpb.BulkOpSummary, error) {
 	db := rd.flowCtx.Cfg.DB
 	evalCtx := rd.EvalCtx
-	var summary roachpb.BulkOpSummary
+	var summary kvpb.BulkOpSummary
 
 	entry := sst.entry
 	iter := sst.iter
@@ -530,7 +531,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 }
 
 func makeProgressUpdate(
-	summary roachpb.BulkOpSummary, entry execinfrapb.RestoreSpanEntry, pkIDs map[uint64]bool,
+	summary kvpb.BulkOpSummary, entry execinfrapb.RestoreSpanEntry, pkIDs map[uint64]bool,
 ) (progDetails backuppb.RestoreProgress) {
 	progDetails.Summary = countRows(summary, pkIDs)
 	progDetails.ProgressIdx = entry.ProgressIdx
@@ -594,7 +595,7 @@ type SSTBatcherExecutor interface {
 	Reset(ctx context.Context) error
 	Flush(ctx context.Context) error
 	Close(ctx context.Context)
-	GetSummary() roachpb.BulkOpSummary
+	GetSummary() kvpb.BulkOpSummary
 }
 
 type sstBatcherNoop struct {
@@ -624,7 +625,7 @@ func (b *sstBatcherNoop) Close(ctx context.Context) {
 }
 
 // GetSummary returns this batcher's total added rows/bytes/etc.
-func (b *sstBatcherNoop) GetSummary() roachpb.BulkOpSummary {
+func (b *sstBatcherNoop) GetSummary() kvpb.BulkOpSummary {
 	return b.totalRows.BulkOpSummary
 }
 

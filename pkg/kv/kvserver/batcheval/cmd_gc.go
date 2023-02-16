@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -26,17 +27,17 @@ import (
 )
 
 func init() {
-	RegisterReadWriteCommand(roachpb.GC, declareKeysGC, GC)
+	RegisterReadWriteCommand(kvpb.GC, declareKeysGC, GC)
 }
 
 func declareKeysGC(
 	rs ImmutableRangeState,
-	header *roachpb.Header,
-	req roachpb.Request,
+	header *kvpb.Header,
+	req kvpb.Request,
 	latchSpans, _ *spanset.SpanSet,
 	_ time.Duration,
 ) {
-	gcr := req.(*roachpb.GCRequest)
+	gcr := req.(*kvpb.GCRequest)
 	if gcr.RangeKeys != nil {
 		// When GC-ing MVCC range key tombstones, we need to serialize with
 		// range key writes that overlap the MVCC range tombstone, as well as
@@ -135,9 +136,9 @@ func mergeAdjacentSpans(spans []roachpb.Span) []roachpb.Span {
 // listed key along with the expiration timestamp. The GC metadata
 // specified in the args is persisted after GC.
 func GC(
-	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp kvpb.Response,
 ) (result.Result, error) {
-	args := cArgs.Args.(*roachpb.GCRequest)
+	args := cArgs.Args.(*kvpb.GCRequest)
 	h := cArgs.Header
 
 	// We do not allow GC requests to bump the GC threshold at the same time that
@@ -181,10 +182,10 @@ func GC(
 	// safe because they can simply be re-collected later on the correct
 	// replica. Discrepancies here can arise from race conditions during
 	// range splitting.
-	globalKeys := make([]roachpb.GCRequest_GCKey, 0, len(args.Keys))
+	globalKeys := make([]kvpb.GCRequest_GCKey, 0, len(args.Keys))
 	// Local keys are rarer, so don't pre-allocate slice. We separate the two
 	// kinds of keys since it is a requirement when calling MVCCGarbageCollect.
-	var localKeys []roachpb.GCRequest_GCKey
+	var localKeys []kvpb.GCRequest_GCKey
 	for _, k := range args.Keys {
 		if cArgs.EvalCtx.ContainsKey(k.Key) {
 			if keys.IsLocal(k.Key) {
@@ -196,7 +197,7 @@ func GC(
 	}
 
 	// Garbage collect the specified keys by expiration timestamps.
-	for _, gcKeys := range [][]roachpb.GCRequest_GCKey{localKeys, globalKeys} {
+	for _, gcKeys := range [][]kvpb.GCRequest_GCKey{localKeys, globalKeys} {
 		if err := storage.MVCCGarbageCollect(
 			ctx, readWriter, cArgs.Stats, gcKeys, h.Timestamp,
 		); err != nil {
@@ -296,7 +297,7 @@ func GC(
 // ensure merging of range tombstones could be performed and at the same time
 // no data is accessed outside of latches.
 func makeLookupBoundariesForGCRanges(
-	rangeStart, rangeEnd roachpb.Key, rangeKeys []roachpb.GCRequest_GCRangeKey,
+	rangeStart, rangeEnd roachpb.Key, rangeKeys []kvpb.GCRequest_GCRangeKey,
 ) []roachpb.Span {
 	spans := make([]roachpb.Span, len(rangeKeys))
 	for i := range rangeKeys {
@@ -313,7 +314,7 @@ func makeLookupBoundariesForGCRanges(
 // containing ranges to be removed as well as safe iteration boundaries.
 // See makeLookupBoundariesForGCRanges for why additional boundaries are used.
 func makeCollectableGCRangesFromGCRequests(
-	rangeStart, rangeEnd roachpb.Key, rangeKeys []roachpb.GCRequest_GCRangeKey,
+	rangeStart, rangeEnd roachpb.Key, rangeKeys []kvpb.GCRequest_GCRangeKey,
 ) []storage.CollectableGCRangeKey {
 	latches := makeLookupBoundariesForGCRanges(rangeStart, rangeEnd, rangeKeys)
 	collectableKeys := make([]storage.CollectableGCRangeKey, len(rangeKeys))

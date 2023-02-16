@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -121,7 +122,7 @@ func assertExpectErr(
 	}
 
 	_, err := iter.Valid()
-	if intentErr := (*roachpb.WriteIntentError)(nil); errors.As(err, &intentErr) {
+	if intentErr := (*kvpb.WriteIntentError)(nil); errors.As(err, &intentErr) {
 		if !expectedIntent.Key.Equal(intentErr.Intents[0].Key) {
 			t.Fatalf("Expected intent key %v, but got %v", expectedIntent.Key, intentErr.Intents[0].Key)
 		}
@@ -162,7 +163,7 @@ func assertExpectErrs(
 		t.Fatalf("Expected %d intents but found %d", len(expectedIntents), iter.NumCollectedIntents())
 	}
 	err := iter.TryGetIntentError()
-	if intentErr := (*roachpb.WriteIntentError)(nil); errors.As(err, &intentErr) {
+	if intentErr := (*kvpb.WriteIntentError)(nil); errors.As(err, &intentErr) {
 		for i := range expectedIntents {
 			if !expectedIntents[i].Key.Equal(intentErr.Intents[i].Key) {
 				t.Fatalf("%d intent key: got %v, expected %v", i, intentErr.Intents[i].Key, expectedIntents[i].Key)
@@ -172,7 +173,7 @@ func assertExpectErrs(
 			}
 		}
 	} else {
-		t.Fatalf("Expected roachpb.WriteIntentError, found %T", err)
+		t.Fatalf("Expected kvpb.WriteIntentError, found %T", err)
 	}
 }
 
@@ -200,7 +201,7 @@ func assertExportedErrs(
 	}, sstFile)
 	require.Error(t, err)
 
-	if intentErr := (*roachpb.WriteIntentError)(nil); errors.As(err, &intentErr) {
+	if intentErr := (*kvpb.WriteIntentError)(nil); errors.As(err, &intentErr) {
 		for i := range expectedIntents {
 			if !expectedIntents[i].Key.Equal(intentErr.Intents[i].Key) {
 				t.Fatalf("%d intent key: got %v, expected %v", i, intentErr.Intents[i].Key, expectedIntents[i].Key)
@@ -210,7 +211,7 @@ func assertExportedErrs(
 			}
 		}
 	} else {
-		t.Fatalf("Expected roachpb.WriteIntentError, found %T", err)
+		t.Fatalf("Expected kvpb.WriteIntentError, found %T", err)
 	}
 }
 
@@ -787,7 +788,7 @@ func TestMVCCIncrementalIteratorIntentPolicy(t *testing.T) {
 	kv2_2_2 := makeKVT(testKey2, testValue2, ts2)
 	txn, intent2_2_2 := makeKVTxn(testKey2, ts2)
 
-	intentErr := &roachpb.WriteIntentError{Intents: []roachpb.Intent{intent2_2_2}}
+	intentErr := &kvpb.WriteIntentError{Intents: []roachpb.Intent{intent2_2_2}}
 
 	e := NewDefaultInMemForTesting()
 	defer e.Close()
@@ -1401,7 +1402,7 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 		for it.SeekGE(MVCCKey{Key: keys.LocalMax}); ; it.Next() {
 			ok, err := it.Valid()
 			if err != nil {
-				if errors.HasType(err, (*roachpb.WriteIntentError)(nil)) {
+				if errors.HasType(err, (*kvpb.WriteIntentError)(nil)) {
 					// This is the write intent error we were expecting.
 					return
 				}

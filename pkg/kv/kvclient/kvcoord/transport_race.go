@@ -22,17 +22,17 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 var running int32 // atomically updated
-var incoming chan *roachpb.BatchRequest
+var incoming chan *kvpb.BatchRequest
 
 func init() {
-	incoming = make(chan *roachpb.BatchRequest, 100)
+	incoming = make(chan *kvpb.BatchRequest, 100)
 }
 
 const defaultRaceInterval = 150 * time.Microsecond
@@ -54,18 +54,18 @@ type raceTransport struct {
 }
 
 func (tr raceTransport) SendNext(
-	ctx context.Context, ba *roachpb.BatchRequest,
-) (*roachpb.BatchResponse, error) {
+	ctx context.Context, ba *kvpb.BatchRequest,
+) (*kvpb.BatchResponse, error) {
 	// Make a copy of the requests slice, and shallow copies of the requests.
 	// The caller is allowed to mutate the request after the call returns. Since
 	// this transport has no way of checking who's doing mutations (the client -
 	// which is allowed, or the server - which is not). So, for now, we exclude
 	// the slice and the requests from any checks, since those are the parts that
 	// the client currently mutates.
-	requestsCopy := make([]roachpb.RequestUnion, len(ba.Requests))
+	requestsCopy := make([]kvpb.RequestUnion, len(ba.Requests))
 	for i, ru := range ba.Requests {
 		// ru is a RequestUnion interface, so we need some hoops to dereference it.
-		requestsCopy[i] = reflect.Indirect(reflect.ValueOf(ru)).Interface().(roachpb.RequestUnion)
+		requestsCopy[i] = reflect.Indirect(reflect.ValueOf(ru)).Interface().(kvpb.RequestUnion)
 	}
 	ba.Requests = requestsCopy
 	select {
@@ -110,7 +110,7 @@ func GRPCTransportFactory(
 				// Make a fixed-size slice of *BatchRequest. When full, entries
 				// are evicted in FIFO order.
 				const size = 1000
-				bas := make([]*roachpb.BatchRequest, size)
+				bas := make([]*kvpb.BatchRequest, size)
 				encoder := json.NewEncoder(io.Discard)
 				for {
 					iters++

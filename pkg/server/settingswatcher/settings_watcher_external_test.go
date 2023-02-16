@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
@@ -447,12 +448,12 @@ func TestStaleRowsDoNotCauseSettingsToRegress(t *testing.T) {
 	bogusTenantID := roachpb.MustMakeTenantID(42)
 	bogusCodec := keys.MakeSQLCodec(bogusTenantID)
 	settingsStart := bogusCodec.TablePrefix(keys.SettingsTableID)
-	interceptedStreamCh := make(chan roachpb.RangeFeedEventSink)
+	interceptedStreamCh := make(chan kvpb.RangeFeedEventSink)
 	cancelCtx, cancel := context.WithCancel(ctx)
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
-				TestingRangefeedFilter: func(args *roachpb.RangeFeedRequest, stream roachpb.RangeFeedEventSink) *roachpb.Error {
+				TestingRangefeedFilter: func(args *kvpb.RangeFeedRequest, stream kvpb.RangeFeedEventSink) *kvpb.Error {
 					if !args.Span.ContainsKey(settingsStart) {
 						return nil
 					}
@@ -511,13 +512,13 @@ func TestStaleRowsDoNotCauseSettingsToRegress(t *testing.T) {
 
 	// newRangeFeedEvent creates a RangeFeedEvent for the bogus tenant using a KV
 	// which has a stripped prefix. It also sets the timestamp.
-	newRangeFeedEvent := func(kv roachpb.KeyValue, ts hlc.Timestamp) *roachpb.RangeFeedEvent {
+	newRangeFeedEvent := func(kv roachpb.KeyValue, ts hlc.Timestamp) *kvpb.RangeFeedEvent {
 		kv.Key = append(bogusCodec.TenantPrefix(), kv.Key...)
 		kv.Value.Timestamp = ts
 		kv.Value.ClearChecksum()
 		kv.Value.InitChecksum(kv.Key)
-		return &roachpb.RangeFeedEvent{
-			Val: &roachpb.RangeFeedValue{Key: kv.Key, Value: kv.Value},
+		return &kvpb.RangeFeedEvent{
+			Val: &kvpb.RangeFeedValue{Key: kv.Key, Value: kv.Value},
 		}
 	}
 	sideSettings := cluster.MakeTestingClusterSettings()

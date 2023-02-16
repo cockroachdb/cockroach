@@ -11,6 +11,7 @@ go_library(
         "//pkg/keyvisualizer/keyvispb",
         "//pkg/kv",
         "//pkg/kv/kvclient/rangefeed",
+        "//pkg/kv/kvpb",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog",

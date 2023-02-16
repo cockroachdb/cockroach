@@ -620,7 +620,7 @@ run error
 get ts=10 k=k1 skipLocked failOnMoreRecent
 ----
 get: "k1" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 10.000000000,0 too old; wrote at 11.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 10.000000000,0 too old; wrote at 11.000000000,1
 
 run ok
 get ts=10 k=k2 skipLocked failOnMoreRecent
@@ -644,25 +644,25 @@ run error
 get ts=10 k=k5 skipLocked failOnMoreRecent
 ----
 get: "k5" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 10.000000000,0 too old; wrote at 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 10.000000000,0 too old; wrote at 17.000000000,1
 
 run error
 scan ts=10 k=k1 end=k6 skipLocked failOnMoreRecent
 ----
 scan: "k1"-"k6" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 10.000000000,0 too old; wrote at 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 10.000000000,0 too old; wrote at 17.000000000,1
 
 run error
 scan ts=10 k=k1 end=k6 reverse skipLocked failOnMoreRecent
 ----
 scan: "k1"-"k6" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 10.000000000,0 too old; wrote at 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 10.000000000,0 too old; wrote at 17.000000000,1
 
 run error
 get ts=11 k=k1 skipLocked failOnMoreRecent
 ----
 get: "k1" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 11.000000000,0 too old; wrote at 11.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 11.000000000,0 too old; wrote at 11.000000000,1
 
 run ok
 get ts=11 k=k2 skipLocked failOnMoreRecent
@@ -686,19 +686,19 @@ run error
 get ts=11 k=k5 skipLocked failOnMoreRecent
 ----
 get: "k5" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 11.000000000,0 too old; wrote at 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 11.000000000,0 too old; wrote at 17.000000000,1
 
 run error
 scan ts=11 k=k1 end=k6 skipLocked failOnMoreRecent
 ----
 scan: "k1"-"k6" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 11.000000000,0 too old; wrote at 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 11.000000000,0 too old; wrote at 17.000000000,1
 
 run error
 scan ts=11 k=k1 end=k6 reverse skipLocked failOnMoreRecent
 ----
 scan: "k1"-"k6" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 11.000000000,0 too old; wrote at 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 11.000000000,0 too old; wrote at 17.000000000,1
 
 run ok
 get ts=12 k=k1 skipLocked failOnMoreRecent
@@ -727,19 +727,19 @@ run error
 get ts=12 k=k5 skipLocked failOnMoreRecent
 ----
 get: "k5" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 12.000000000,0 too old; wrote at 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 12.000000000,0 too old; wrote at 17.000000000,1
 
 run error
 scan ts=12 k=k1 end=k6 skipLocked failOnMoreRecent
 ----
 scan: "k1"-"k6" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 12.000000000,0 too old; wrote at 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 12.000000000,0 too old; wrote at 17.000000000,1
 
 run error
 scan ts=12 k=k1 end=k6 reverse skipLocked failOnMoreRecent
 ----
 scan: "k1"-"k6" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 12.000000000,0 too old; wrote at 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 12.000000000,0 too old; wrote at 17.000000000,1
 
 run ok
 get ts=12 t=A k=k1 skipLocked failOnMoreRecent
@@ -768,19 +768,19 @@ run error
 get ts=12 t=A k=k5 skipLocked failOnMoreRecent
 ----
 get: "k5" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 12.000000000,0 too old; wrote at 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 12.000000000,0 too old; wrote at 17.000000000,1
 
 run error
 scan ts=12 t=A k=k1 end=k6 skipLocked failOnMoreRecent
 ----
 scan: "k1"-"k6" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 12.000000000,0 too old; wrote at 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 12.000000000,0 too old; wrote at 17.000000000,1
 
 run error
 scan ts=12 t=A k=k1 end=k6 reverse skipLocked failOnMoreRecent
 ----
 scan: "k1"-"k6" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 12.000000000,0 too old; wrote at 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 12.000000000,0 too old; wrote at 17.000000000,1
 
 run ok
 get ts=13 k=k1 skipLocked failOnMoreRecent
@@ -809,19 +809,19 @@ run error
 get ts=13 k=k5 skipLocked failOnMoreRecent
 ----
 get: "k5" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 13.000000000,0 too old; wrote at 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 13.000000000,0 too old; wrote at 17.000000000,1
 
 run error
 scan ts=13 k=k1 end=k6 skipLocked failOnMoreRecent
 ----
 scan: "k1"-"k6" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 13.000000000,0 too old; wrote at 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 13.000000000,0 too old; wrote at 17.000000000,1
 
 run error
 scan ts=13 k=k1 end=k6 reverse skipLocked failOnMoreRecent
 ----
 scan: "k1"-"k6" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 13.000000000,0 too old; wrote at 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 13.000000000,0 too old; wrote at 17.000000000,1
 
 run ok
 get ts=13 t=B k=k1 skipLocked failOnMoreRecent
@@ -849,19 +849,19 @@ run error
 get ts=13 t=B k=k5 skipLocked failOnMoreRecent
 ----
 get: "k5" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 13.000000000,0 too old; wrote at 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 13.000000000,0 too old; wrote at 17.000000000,1
 
 run error
 scan ts=13 t=B k=k1 end=k6 skipLocked failOnMoreRecent
 ----
 scan: "k1"-"k6" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 13.000000000,0 too old; wrote at 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 13.000000000,0 too old; wrote at 17.000000000,1
 
 run error
 scan ts=13 t=B k=k1 end=k6 reverse skipLocked failOnMoreRecent
 ----
 scan: "k1"-"k6" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 13.000000000,0 too old; wrote at 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 13.000000000,0 too old; wrote at 17.000000000,1
 
 run ok
 get ts=14 k=k1 skipLocked failOnMoreRecent
@@ -890,19 +890,19 @@ run error
 get ts=14 k=k5 skipLocked failOnMoreRecent
 ----
 get: "k5" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 14.000000000,0 too old; wrote at 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 14.000000000,0 too old; wrote at 17.000000000,1
 
 run error
 scan ts=14 k=k1 end=k6 skipLocked failOnMoreRecent
 ----
 scan: "k1"-"k6" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 14.000000000,0 too old; wrote at 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 14.000000000,0 too old; wrote at 17.000000000,1
 
 run error
 scan ts=14 k=k1 end=k6 reverse skipLocked failOnMoreRecent
 ----
 scan: "k1"-"k6" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 14.000000000,0 too old; wrote at 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 14.000000000,0 too old; wrote at 17.000000000,1
 
 run ok
 get ts=14 t=C k=k1 skipLocked failOnMoreRecent
@@ -930,19 +930,19 @@ run error
 get ts=14 t=C k=k5 skipLocked failOnMoreRecent
 ----
 get: "k5" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 14.000000000,0 too old; wrote at 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 14.000000000,0 too old; wrote at 17.000000000,1
 
 run error
 scan ts=14 t=C k=k1 end=k6 skipLocked failOnMoreRecent
 ----
 scan: "k1"-"k6" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 14.000000000,0 too old; wrote at 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 14.000000000,0 too old; wrote at 17.000000000,1
 
 run error
 scan ts=14 t=C k=k1 end=k6 reverse skipLocked failOnMoreRecent
 ----
 scan: "k1"-"k6" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 14.000000000,0 too old; wrote at 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 14.000000000,0 too old; wrote at 17.000000000,1
 
 run ok
 get ts=15 k=k1 skipLocked failOnMoreRecent
@@ -971,19 +971,19 @@ run error
 get ts=15 k=k5 skipLocked failOnMoreRecent
 ----
 get: "k5" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 15.000000000,0 too old; wrote at 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 15.000000000,0 too old; wrote at 17.000000000,1
 
 run error
 scan ts=15 k=k1 end=k6 skipLocked failOnMoreRecent
 ----
 scan: "k1"-"k6" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 15.000000000,0 too old; wrote at 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 15.000000000,0 too old; wrote at 17.000000000,1
 
 run error
 scan ts=15 k=k1 end=k6 reverse skipLocked failOnMoreRecent
 ----
 scan: "k1"-"k6" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 15.000000000,0 too old; wrote at 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 15.000000000,0 too old; wrote at 17.000000000,1
 
 run ok
 get ts=15 t=D k=k1 skipLocked failOnMoreRecent
@@ -1012,19 +1012,19 @@ run error
 get ts=15 t=D k=k5 skipLocked failOnMoreRecent
 ----
 get: "k5" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 15.000000000,0 too old; wrote at 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 15.000000000,0 too old; wrote at 17.000000000,1
 
 run error
 scan ts=15 t=D k=k1 end=k6 skipLocked failOnMoreRecent
 ----
 scan: "k1"-"k6" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 15.000000000,0 too old; wrote at 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 15.000000000,0 too old; wrote at 17.000000000,1
 
 run error
 scan ts=15 t=D k=k1 end=k6 reverse skipLocked failOnMoreRecent
 ----
 scan: "k1"-"k6" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 15.000000000,0 too old; wrote at 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 15.000000000,0 too old; wrote at 17.000000000,1
 
 run ok
 get ts=16 k=k1 skipLocked failOnMoreRecent
@@ -1053,19 +1053,19 @@ run error
 get ts=16 k=k5 skipLocked failOnMoreRecent
 ----
 get: "k5" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 16.000000000,0 too old; wrote at 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 16.000000000,0 too old; wrote at 17.000000000,1
 
 run error
 scan ts=16 k=k1 end=k6 skipLocked failOnMoreRecent
 ----
 scan: "k1"-"k6" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 16.000000000,0 too old; wrote at 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 16.000000000,0 too old; wrote at 17.000000000,1
 
 run error
 scan ts=16 k=k1 end=k6 reverse skipLocked failOnMoreRecent
 ----
 scan: "k1"-"k6" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 16.000000000,0 too old; wrote at 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 16.000000000,0 too old; wrote at 17.000000000,1
 
 run ok
 get ts=16 t=E k=k1 skipLocked failOnMoreRecent
@@ -1093,19 +1093,19 @@ run error
 get ts=16 t=E k=k5 skipLocked failOnMoreRecent
 ----
 get: "k5" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 16.000000000,0 too old; wrote at 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 16.000000000,0 too old; wrote at 17.000000000,1
 
 run error
 scan ts=16 t=E k=k1 end=k6 skipLocked failOnMoreRecent
 ----
 scan: "k1"-"k6" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 16.000000000,0 too old; wrote at 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 16.000000000,0 too old; wrote at 17.000000000,1
 
 run error
 scan ts=16 t=E k=k1 end=k6 reverse skipLocked failOnMoreRecent
 ----
 scan: "k1"-"k6" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 16.000000000,0 too old; wrote at 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 16.000000000,0 too old; wrote at 17.000000000,1
 
 run ok
 get ts=17 k=k1 skipLocked failOnMoreRecent
@@ -1134,19 +1134,19 @@ run error
 get ts=17 k=k5 skipLocked failOnMoreRecent
 ----
 get: "k5" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 17.000000000,0 too old; wrote at 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 17.000000000,0 too old; wrote at 17.000000000,1
 
 run error
 scan ts=17 k=k1 end=k6 skipLocked failOnMoreRecent
 ----
 scan: "k1"-"k6" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 17.000000000,0 too old; wrote at 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 17.000000000,0 too old; wrote at 17.000000000,1
 
 run error
 scan ts=17 k=k1 end=k6 reverse skipLocked failOnMoreRecent
 ----
 scan: "k1"-"k6" -> <no data>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 17.000000000,0 too old; wrote at 17.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 17.000000000,0 too old; wrote at 17.000000000,1
 
 run ok
 get ts=18 k=k1 skipLocked failOnMoreRecent

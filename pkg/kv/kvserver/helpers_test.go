@@ -23,6 +23,7 @@ import (
 
 	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
@@ -418,10 +419,10 @@ func MakeSSTable(
 }
 
 func ProposeAddSSTable(ctx context.Context, key, val string, ts hlc.Timestamp, store *Store) error {
-	ba := &roachpb.BatchRequest{}
+	ba := &kvpb.BatchRequest{}
 	ba.RangeID = store.LookupReplica(roachpb.RKey(key)).RangeID
 
-	var addReq roachpb.AddSSTableRequest
+	var addReq kvpb.AddSSTableRequest
 	addReq.Data, _ = MakeSSTable(ctx, key, val, ts)
 	addReq.Key = roachpb.Key(key)
 	addReq.EndKey = addReq.Key.Next()
@@ -435,15 +436,15 @@ func ProposeAddSSTable(ctx context.Context, key, val string, ts hlc.Timestamp, s
 }
 
 func SetMockAddSSTable() (undo func()) {
-	prev, _ := batcheval.LookupCommand(roachpb.AddSSTable)
+	prev, _ := batcheval.LookupCommand(kvpb.AddSSTable)
 
 	// TODO(tschottdorf): this already does nontrivial work. Worth open-sourcing the relevant
 	// subparts of the real evalAddSSTable to make this test less likely to rot.
 	evalAddSSTable := func(
-		ctx context.Context, _ storage.ReadWriter, cArgs batcheval.CommandArgs, _ roachpb.Response,
+		ctx context.Context, _ storage.ReadWriter, cArgs batcheval.CommandArgs, _ kvpb.Response,
 	) (result.Result, error) {
 		log.Event(ctx, "evaluated testing-only AddSSTable mock")
-		args := cArgs.Args.(*roachpb.AddSSTableRequest)
+		args := cArgs.Args.(*kvpb.AddSSTableRequest)
 
 		return result.Result{
 			Replicated: kvserverpb.ReplicatedEvalResult{
@@ -455,11 +456,11 @@ func SetMockAddSSTable() (undo func()) {
 		}, nil
 	}
 
-	batcheval.UnregisterCommand(roachpb.AddSSTable)
-	batcheval.RegisterReadWriteCommand(roachpb.AddSSTable, batcheval.DefaultDeclareKeys, evalAddSSTable)
+	batcheval.UnregisterCommand(kvpb.AddSSTable)
+	batcheval.RegisterReadWriteCommand(kvpb.AddSSTable, batcheval.DefaultDeclareKeys, evalAddSSTable)
 	return func() {
-		batcheval.UnregisterCommand(roachpb.AddSSTable)
-		batcheval.RegisterReadWriteCommand(roachpb.AddSSTable, prev.DeclareKeys, prev.EvalRW)
+		batcheval.UnregisterCommand(kvpb.AddSSTable)
+		batcheval.RegisterReadWriteCommand(kvpb.AddSSTable, prev.DeclareKeys, prev.EvalRW)
 	}
 }
 
@@ -510,7 +511,7 @@ func WriteRandomDataToRange(
 	ctx := context.Background()
 	src, _ := randutil.NewTestRand()
 	for i := 0; i < 1000; i++ {
-		var req roachpb.Request
+		var req kvpb.Request
 		if src.Float64() < 0.05 {
 			// Write some occasional range tombstones.
 			startKey := append(keyPrefix.Clone(), randutil.RandBytes(src, int(src.Int31n(1<<4)))...)
@@ -518,8 +519,8 @@ func WriteRandomDataToRange(
 			for startKey.Compare(endKey) >= 0 {
 				endKey = append(keyPrefix.Clone(), randutil.RandBytes(src, int(src.Int31n(1<<4)))...)
 			}
-			req = &roachpb.DeleteRangeRequest{
-				RequestHeader: roachpb.RequestHeader{
+			req = &kvpb.DeleteRangeRequest{
+				RequestHeader: kvpb.RequestHeader{
 					Key:    startKey,
 					EndKey: endKey,
 				},
@@ -532,7 +533,7 @@ func WriteRandomDataToRange(
 			pArgs := putArgs(key, val)
 			req = &pArgs
 		}
-		_, pErr := kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{RangeID: rangeID}, req)
+		_, pErr := kv.SendWrappedWith(ctx, store.TestSender(), kvpb.Header{RangeID: rangeID}, req)
 		require.NoError(t, pErr.GoError())
 	}
 	// Return a random non-empty split key.

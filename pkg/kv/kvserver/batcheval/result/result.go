@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -26,7 +27,7 @@ import (
 // the proposing node may die before the local results are processed,
 // so any side effects here are only best-effort.
 type LocalResult struct {
-	Reply *roachpb.BatchResponse
+	Reply *kvpb.BatchResponse
 
 	// EncounteredIntents stores any intents from other transactions that the
 	// request encountered but did not conflict with. They should be handed off

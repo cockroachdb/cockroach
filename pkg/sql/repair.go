@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -737,20 +738,20 @@ func (p *planner) ForceDeleteTableData(ctx context.Context, descID int64) error 
 
 	prefix := p.extendedEvalCtx.Codec.TablePrefix(uint32(id))
 	tableSpan := roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
-	requestHeader := roachpb.RequestHeader{
+	requestHeader := kvpb.RequestHeader{
 		Key: tableSpan.Key, EndKey: tableSpan.EndKey,
 	}
 	b := &kv.Batch{}
 	if p.execCfg.Settings.Version.IsActive(ctx, clusterversion.TODODelete_V22_2UseDelRangeInGCJob) &&
 		storage.CanUseMVCCRangeTombstones(ctx, p.execCfg.Settings) {
-		b.AddRawRequest(&roachpb.DeleteRangeRequest{
+		b.AddRawRequest(&kvpb.DeleteRangeRequest{
 			RequestHeader:           requestHeader,
 			UseRangeTombstone:       true,
 			IdempotentTombstone:     true,
 			UpdateRangeDeleteGCHint: true,
 		})
 	} else {
-		b.AddRawRequest(&roachpb.ClearRangeRequest{
+		b.AddRawRequest(&kvpb.ClearRangeRequest{
 			RequestHeader: requestHeader,
 		})
 	}

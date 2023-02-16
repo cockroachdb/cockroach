@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -24,13 +25,13 @@ import (
 )
 
 func init() {
-	RegisterReadOnlyCommand(roachpb.ComputeChecksum, declareKeysComputeChecksum, ComputeChecksum)
+	RegisterReadOnlyCommand(kvpb.ComputeChecksum, declareKeysComputeChecksum, ComputeChecksum)
 }
 
 func declareKeysComputeChecksum(
 	rs ImmutableRangeState,
-	_ *roachpb.Header,
-	_ roachpb.Request,
+	_ *kvpb.Header,
+	_ kvpb.Request,
 	latchSpans, _ *spanset.SpanSet,
 	_ time.Duration,
 ) {
@@ -54,11 +55,11 @@ const ReplicaChecksumVersion = 4
 // a particular snapshot. The checksum is later verified through a
 // CollectChecksumRequest.
 func ComputeChecksum(
-	_ context.Context, _ storage.Reader, cArgs CommandArgs, resp roachpb.Response,
+	_ context.Context, _ storage.Reader, cArgs CommandArgs, resp kvpb.Response,
 ) (result.Result, error) {
-	args := cArgs.Args.(*roachpb.ComputeChecksumRequest)
+	args := cArgs.Args.(*kvpb.ComputeChecksumRequest)
 
-	reply := resp.(*roachpb.ComputeChecksumResponse)
+	reply := resp.(*kvpb.ComputeChecksumResponse)
 	reply.ChecksumID = uuid.MakeV4()
 
 	var pd result.Result

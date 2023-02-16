@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -37,7 +38,7 @@ var QueryResolvedTimestampIntentCleanupAge = settings.RegisterDurationSetting(
 )
 
 func init() {
-	RegisterReadOnlyCommand(roachpb.QueryResolvedTimestamp, DefaultDeclareKeys, QueryResolvedTimestamp)
+	RegisterReadOnlyCommand(kvpb.QueryResolvedTimestamp, DefaultDeclareKeys, QueryResolvedTimestamp)
 }
 
 // QueryResolvedTimestamp requests a resolved timestamp for the key span it is
@@ -45,16 +46,16 @@ func init() {
 // which all future reads within the span are guaranteed to produce the same
 // results, i.e. at which MVCC history has become immutable.
 func QueryResolvedTimestamp(
-	ctx context.Context, reader storage.Reader, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, reader storage.Reader, cArgs CommandArgs, resp kvpb.Response,
 ) (result.Result, error) {
-	args := cArgs.Args.(*roachpb.QueryResolvedTimestampRequest)
-	reply := resp.(*roachpb.QueryResolvedTimestampResponse)
+	args := cArgs.Args.(*kvpb.QueryResolvedTimestampRequest)
+	reply := resp.(*kvpb.QueryResolvedTimestampResponse)
 
 	// Grab the closed timestamp from the local replica. We do this before
 	// iterating over intents to ensure that we observe any and all intents
 	// written before the closed timestamp went into effect. This is important
 	// because QueryResolvedTimestamp requests are often run without acquiring
-	// latches (see roachpb.INCONSISTENT) and often also on follower replicas,
+	// latches (see kvpb.INCONSISTENT) and often also on follower replicas,
 	// so latches won't help them to synchronize with writes.
 	closedTS := cArgs.EvalCtx.GetClosedTimestampOlderThanStorageSnapshot()
 

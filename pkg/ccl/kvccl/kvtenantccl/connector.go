@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -97,7 +98,7 @@ type Connector struct {
 
 // client represents an RPC client that proxies to a KV instance.
 type client struct {
-	roachpb.InternalClient
+	kvpb.InternalClient
 	serverpb.StatusClient
 	serverpb.AdminClient
 	tspb.TimeSeriesClient
@@ -230,7 +231,7 @@ func (c *Connector) runGossipSubscription(ctx context.Context, startupCh chan st
 		if err != nil {
 			continue
 		}
-		stream, err := client.GossipSubscription(ctx, &roachpb.GossipSubscriptionRequest{
+		stream, err := client.GossipSubscription(ctx, &kvpb.GossipSubscriptionRequest{
 			Patterns: gossipSubsPatterns,
 		})
 		if err != nil {
@@ -436,7 +437,7 @@ func (c *Connector) RangeLookup(
 		if err != nil {
 			continue
 		}
-		resp, err := client.RangeLookup(ctx, &roachpb.RangeLookupRequest{
+		resp, err := client.RangeLookup(ctx, &kvpb.RangeLookupRequest{
 			Key: key,
 			// See the comment on (*kvcoord.DistSender).RangeLookup or kv.RangeLookup
 			// for more discussion on the choice of ReadConsistency and its
@@ -513,7 +514,7 @@ func (c *Connector) NewIterator(
 		if err != nil {
 			continue
 		}
-		stream, err := client.GetRangeDescriptors(ctx, &roachpb.GetRangeDescriptorsRequest{
+		stream, err := client.GetRangeDescriptors(ctx, &kvpb.GetRangeDescriptorsRequest{
 			Span: span,
 		})
 		if err != nil {
@@ -549,8 +550,8 @@ func (c *Connector) NewIterator(
 
 // TokenBucket implements the kvtenant.TokenBucketProvider interface.
 func (c *Connector) TokenBucket(
-	ctx context.Context, in *roachpb.TokenBucketRequest,
-) (*roachpb.TokenBucketResponse, error) {
+	ctx context.Context, in *kvpb.TokenBucketRequest,
+) (*kvpb.TokenBucketResponse, error) {
 	// Proxy token bucket requests through the Internal service.
 	ctx = c.AnnotateCtx(ctx)
 	for ctx.Err() == nil {
@@ -786,7 +787,7 @@ func (c *Connector) dialAddrs(ctx context.Context) (*client, error) {
 				continue
 			}
 			return &client{
-				InternalClient:   roachpb.NewInternalClient(conn),
+				InternalClient:   kvpb.NewInternalClient(conn),
 				StatusClient:     serverpb.NewStatusClient(conn),
 				AdminClient:      serverpb.NewAdminClient(conn),
 				TimeSeriesClient: tspb.NewTimeSeriesClient(conn),
@@ -807,7 +808,7 @@ func (c *Connector) dialAddr(ctx context.Context, addr string) (conn *grpc.Clien
 	return conn, err
 }
 
-func (c *Connector) tryForgetClient(ctx context.Context, client roachpb.InternalClient) {
+func (c *Connector) tryForgetClient(ctx context.Context, client kvpb.InternalClient) {
 	if ctx.Err() != nil {
 		// Error (may be) due to context. Don't forget client.
 		return

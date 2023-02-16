@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -123,7 +124,7 @@ func (tc *TxnCoordSender) RollbackToSavepoint(ctx context.Context, s kv.Savepoin
 	err := tc.checkSavepointLocked(sp)
 	if err != nil {
 		if errors.Is(err, errSavepointInvalidAfterTxnRestart) {
-			err = roachpb.NewTransactionRetryWithProtoRefreshError(
+			err = kvpb.NewTransactionRetryWithProtoRefreshError(
 				"cannot rollback to savepoint after a transaction restart",
 				tc.mu.txn.ID,
 				tc.mu.txn,
@@ -166,7 +167,7 @@ func (tc *TxnCoordSender) ReleaseSavepoint(ctx context.Context, s kv.SavepointTo
 	sp := s.(*savepoint)
 	err := tc.checkSavepointLocked(sp)
 	if errors.Is(err, errSavepointInvalidAfterTxnRestart) {
-		err = roachpb.NewTransactionRetryWithProtoRefreshError(
+		err = kvpb.NewTransactionRetryWithProtoRefreshError(
 			"cannot release savepoint after a transaction restart",
 			tc.mu.txn.ID,
 			tc.mu.txn,

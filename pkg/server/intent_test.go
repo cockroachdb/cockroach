@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -81,7 +82,7 @@ func TestIntentResolution(t *testing.T) {
 			closer := make(chan struct{}, 2)
 			var done bool
 			storeKnobs.EvalKnobs.TestingEvalFilter =
-				func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
+				func(filterArgs kvserverbase.FilterArgs) *kvpb.Error {
 					mu.Lock()
 					defer mu.Unlock()
 					header := filterArgs.Req.Header()
@@ -91,11 +92,11 @@ func TestIntentResolution(t *testing.T) {
 					}
 					var entry string
 					switch arg := filterArgs.Req.(type) {
-					case *roachpb.ResolveIntentRequest:
+					case *kvpb.ResolveIntentRequest:
 						if arg.Status == roachpb.COMMITTED {
 							entry = string(header.Key)
 						}
-					case *roachpb.ResolveIntentRangeRequest:
+					case *kvpb.ResolveIntentRangeRequest:
 						if arg.Status == roachpb.COMMITTED {
 							entry = fmt.Sprintf("%s-%s", header.Key, header.EndKey)
 						}

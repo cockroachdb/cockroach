@@ -14,6 +14,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -83,11 +84,11 @@ func TestQueryIntent(t *testing.T) {
 		{"readAA", txAA, txAA, keyAA, true, success},
 		{"readB", txB, txB, keyB, true, success},
 
-		{"readC", txA, txA, keyC, true, &roachpb.IntentMissingError{}},
+		{"readC", txA, txA, keyC, true, &kvpb.IntentMissingError{}},
 
 		// This tries reading a different key than this tx was written with. The
 		// returned error depends on the error flag setting.
-		{"wrongTxE", txA, txA, keyB, true, &roachpb.IntentMissingError{}},
+		{"wrongTxE", txA, txA, keyB, true, &kvpb.IntentMissingError{}},
 		{"wrongTx", txA, txA, keyB, false, notFound},
 
 		// This sets a mismatch for transactions in the header and the body. An
@@ -97,7 +98,7 @@ func TestQueryIntent(t *testing.T) {
 
 		// This simulates pushed intents by moving the tx clock backwards in time.
 		// An error is only returned if the error flag is set.
-		{"clockBackE", txABack, txABack, keyA, true, &roachpb.TransactionRetryError{}},
+		{"clockBackE", txABack, txABack, keyA, true, &kvpb.TransactionRetryError{}},
 		{"clockBack", txABack, txABack, keyA, false, notFound},
 
 		// This simulates pushed transactions by moving the tx clock forward in time.
@@ -116,15 +117,15 @@ func TestQueryIntent(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			cArgs := CommandArgs{
-				Header: roachpb.Header{Timestamp: clock.Now(), Txn: &test.hTransaction},
-				Args: &roachpb.QueryIntentRequest{
-					RequestHeader:  roachpb.RequestHeader{Key: test.key},
+				Header: kvpb.Header{Timestamp: clock.Now(), Txn: &test.hTransaction},
+				Args: &kvpb.QueryIntentRequest{
+					RequestHeader:  kvpb.RequestHeader{Key: test.key},
 					Txn:            test.argTransaction.TxnMeta,
 					ErrorIfMissing: test.errorFlag,
 				},
 			}
 			cArgs.EvalCtx = evalCtx.EvalContext()
-			var resp roachpb.QueryIntentResponse
+			var resp kvpb.QueryIntentResponse
 			_, err := QueryIntent(ctx, db, cArgs, &resp)
 			switch test.response {
 			case success:

@@ -19,6 +19,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -34,9 +35,9 @@ import (
 func TestSendKVBatchExample(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	var ba roachpb.BatchRequest
-	ba.Add(roachpb.NewPut(roachpb.Key("foo"), roachpb.MakeValueFromString("bar")))
-	ba.Add(roachpb.NewGet(roachpb.Key("foo"), false /* forUpdate */))
+	var ba kvpb.BatchRequest
+	ba.Add(kvpb.NewPut(roachpb.Key("foo"), roachpb.MakeValueFromString("bar")))
+	ba.Add(kvpb.NewGet(roachpb.Key("foo"), false /* forUpdate */))
 
 	// NOTE: This cannot be marshaled using the standard Go JSON marshaler,
 	// since it does not correctly (un)marshal the JSON as mandated by the
@@ -69,9 +70,9 @@ func TestSendKVBatch(t *testing.T) {
 	// NOTE: This cannot be marshaled using the standard Go JSON marshaler,
 	// since it does not correctly (un)marshal the JSON as mandated by the
 	// Protobuf spec. Instead, use the JSON marshaler shipped with Protobuf.
-	var ba roachpb.BatchRequest
-	ba.Add(roachpb.NewPut(roachpb.Key("foo"), roachpb.MakeValueFromString("bar")))
-	ba.Add(roachpb.NewGet(roachpb.Key("foo"), false /* forUpdate */))
+	var ba kvpb.BatchRequest
+	ba.Add(kvpb.NewPut(roachpb.Key("foo"), roachpb.MakeValueFromString("bar")))
+	ba.Add(kvpb.NewGet(roachpb.Key("foo"), false /* forUpdate */))
 
 	jsonpb := protoutil.JSONPb{}
 	jsonProto, err := jsonpb.Marshal(&ba)
@@ -140,7 +141,7 @@ func TestSendKVBatch(t *testing.T) {
 
 		// Check that the log entry contains the BatchRequest as JSON, following
 		// a Protobuf marshaling roundtrip (for normalization).
-		var ba roachpb.BatchRequest
+		var ba kvpb.BatchRequest
 		require.NoError(t, jsonpb.Unmarshal(jsonRequest, &ba))
 		expectLogJSON, err := jsonpb.Marshal(&ba)
 		require.NoError(t, err)

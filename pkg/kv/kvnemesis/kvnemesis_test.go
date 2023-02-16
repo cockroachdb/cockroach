@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -63,13 +64,13 @@ func testClusterArgs(tr *SeqTracker) base.TestClusterArgs {
 					// would add complexity to kvnemesis that isn't worth it. Instead, the operation
 					// generator for the most part tries to avoid range-spanning requests, and the
 					// ones that do end up happening get a hard error.
-					OnRangeSpanningNonTxnalBatch: func(ba *roachpb.BatchRequest) *roachpb.Error {
+					OnRangeSpanningNonTxnalBatch: func(ba *kvpb.BatchRequest) *kvpb.Error {
 						for _, req := range ba.Requests {
-							if req.GetInner().Method() != roachpb.DeleteRange {
+							if req.GetInner().Method() != kvpb.DeleteRange {
 								continue
 							}
 							if req.GetDeleteRange().UseRangeTombstone == true {
-								return roachpb.NewError(errDelRangeUsingTombstoneStraddlesRangeBoundary)
+								return kvpb.NewError(errDelRangeUsingTombstoneStraddlesRangeBoundary)
 							}
 						}
 						return nil
@@ -168,7 +169,7 @@ func testKVNemesisImpl(t *testing.T, cfg kvnemesisTestCfg) {
 	skip.UnderRace(t)
 
 	if !buildutil.CrdbTestBuild {
-		// `roachpb.RequestHeader` and `MVCCValueHeader` have a KVNemesisSeq field
+		// `kvpb.RequestHeader` and `MVCCValueHeader` have a KVNemesisSeq field
 		// that is zero-sized outside test builds. We could revisit that should
 		// a need arise to run kvnemesis against production binaries.
 		skip.IgnoreLint(t, "kvnemesis must be run with the crdb_test build tag")

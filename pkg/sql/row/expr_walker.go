@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -391,7 +391,7 @@ func incrementSequenceByVal(
 	seqValueKey := codec.SequenceKey(uint32(descriptor.GetID()))
 	val, err = kv.IncrementValRetryable(ctx, db, seqValueKey, incrementBy)
 	if err != nil {
-		if errors.HasType(err, (*roachpb.IntegerOverflowError)(nil)) {
+		if errors.HasType(err, (*kvpb.IntegerOverflowError)(nil)) {
 			return 0, boundsExceededError(descriptor)
 		}
 		return 0, err

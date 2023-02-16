@@ -29,6 +29,7 @@ proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/clusterversion:clusterversion_proto",
+        "//pkg/kv/kvpb:kvpb_proto",
         "//pkg/multitenant/mtinfopb:mtinfopb_proto",
         "//pkg/roachpb:roachpb_proto",
         "//pkg/sql/catalog/descpb:descpb_proto",
@@ -49,6 +50,7 @@ go_proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/clusterversion",
+        "//pkg/kv/kvpb",
         "//pkg/multitenant/mtinfopb",
         "//pkg/roachpb",
         "//pkg/security/username",  # keep

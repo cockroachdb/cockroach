@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -134,15 +135,15 @@ type scatterRun struct {
 }
 
 func (n *scatterNode) startExec(params runParams) error {
-	req := &roachpb.AdminScatterRequest{
-		RequestHeader:   roachpb.RequestHeader{Key: n.run.span.Key, EndKey: n.run.span.EndKey},
+	req := &kvpb.AdminScatterRequest{
+		RequestHeader:   kvpb.RequestHeader{Key: n.run.span.Key, EndKey: n.run.span.EndKey},
 		RandomizeLeases: true,
 	}
 	res, pErr := kv.SendWrapped(params.ctx, params.ExecCfg().DB.NonTransactionalSender(), req)
 	if pErr != nil {
 		return pErr.GoError()
 	}
-	scatterRes := res.(*roachpb.AdminScatterResponse)
+	scatterRes := res.(*kvpb.AdminScatterResponse)
 	n.run.rangeIdx = -1
 	n.run.ranges = make([]roachpb.Span, len(scatterRes.RangeInfos))
 	for i, rangeInfo := range scatterRes.RangeInfos {

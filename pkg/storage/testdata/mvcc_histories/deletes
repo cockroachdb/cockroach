@@ -105,7 +105,7 @@ data: "a"/47.000000000,0 -> /<empty>
 data: "a"/46.000000000,0 -> /BYTES/abc
 data: "a"/44.000000000,0 -> /<empty>
 data: "b"/49.000000000,0 -> /<empty>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "a" at timestamp 43.000000000,0 too old; wrote at 50.000000000,0
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "a" at timestamp 43.000000000,0 too old; wrote at 50.000000000,0
 
 run ok
 with t=A
@@ -135,7 +135,7 @@ data: "a"/47.000000000,0 -> /<empty>
 data: "a"/46.000000000,0 -> /BYTES/abc
 data: "a"/44.000000000,0 -> /<empty>
 data: "b"/49.000000000,0 -> /<empty>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "a" at timestamp 44.000000000,0 too old; wrote at 50.000000000,0
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "a" at timestamp 44.000000000,0 too old; wrote at 50.000000000,0
 
 run ok
 with t=A
@@ -165,7 +165,7 @@ data: "a"/47.000000000,0 -> /<empty>
 data: "a"/46.000000000,0 -> /BYTES/abc
 data: "a"/44.000000000,0 -> /<empty>
 data: "b"/49.000000000,0 -> /<empty>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "a" at timestamp 46.000000000,0 too old; wrote at 50.000000000,0
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "a" at timestamp 46.000000000,0 too old; wrote at 50.000000000,0
 
 run ok
 with t=A
@@ -195,7 +195,7 @@ data: "a"/47.000000000,0 -> /<empty>
 data: "a"/46.000000000,0 -> /BYTES/abc
 data: "a"/44.000000000,0 -> /<empty>
 data: "b"/49.000000000,0 -> /<empty>
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "a" at timestamp 47.000000000,0 too old; wrote at 50.000000000,0
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "a" at timestamp 47.000000000,0 too old; wrote at 50.000000000,0
 
 run ok
 with t=A

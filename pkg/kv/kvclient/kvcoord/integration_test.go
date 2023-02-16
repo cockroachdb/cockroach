@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
@@ -71,15 +72,15 @@ func TestWaiterOnRejectedCommit(t *testing.T) {
 			Store: &kvserver.StoreTestingKnobs{
 				DisableMergeQueue: true,
 				DisableSplitQueue: true,
-				TestingProposalFilter: func(args kvserverbase.ProposalFilterArgs) *roachpb.Error {
+				TestingProposalFilter: func(args kvserverbase.ProposalFilterArgs) *kvpb.Error {
 					// We'll recognize the attempt to commit our transaction and store the
 					// respective command id.
 					ba := args.Req
-					etReq, ok := ba.GetArg(roachpb.EndTxn)
+					etReq, ok := ba.GetArg(kvpb.EndTxn)
 					if !ok {
 						return nil
 					}
-					if !etReq.(*roachpb.EndTxnRequest).Commit {
+					if !etReq.(*kvpb.EndTxnRequest).Commit {
 						return nil
 					}
 					v := txnID.Load()
@@ -92,7 +93,7 @@ func TestWaiterOnRejectedCommit(t *testing.T) {
 					commitCmdID.Store(args.CmdID)
 					return nil
 				},
-				TestingApplyCalledTwiceFilter: func(args kvserverbase.ApplyFilterArgs) (int, *roachpb.Error) {
+				TestingApplyCalledTwiceFilter: func(args kvserverbase.ApplyFilterArgs) (int, *kvpb.Error) {
 					// We'll trap the processing of the commit command and return an error
 					// for it.
 					v := commitCmdID.Load()
@@ -104,15 +105,15 @@ func TestWaiterOnRejectedCommit(t *testing.T) {
 						if illegalLeaseIndex {
 							illegalLeaseIndex = false
 							// NB: 1 is proposalIllegalLeaseIndex.
-							return 1, roachpb.NewErrorf("test injected err (illegal lease index)")
+							return 1, kvpb.NewErrorf("test injected err (illegal lease index)")
 						}
 						// NB: 0 is proposalNoReevaluation.
-						return 0, roachpb.NewErrorf("test injected err")
+						return 0, kvpb.NewErrorf("test injected err")
 					}
 					return 0, nil
 				},
 				TxnWaitKnobs: txnwait.TestingKnobs{
-					OnPusherBlocked: func(ctx context.Context, push *roachpb.PushTxnRequest) {
+					OnPusherBlocked: func(ctx context.Context, push *kvpb.PushTxnRequest) {
 						// We'll trap a reader entering the wait queue for our txn.
 						v := txnID.Load()
 						if v == nil {

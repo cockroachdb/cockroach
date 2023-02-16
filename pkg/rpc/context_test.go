@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -317,31 +318,31 @@ func testClockOffsetInPingRequestInternal(t *testing.T, clientOnly bool) {
 	}
 }
 
-var _ roachpb.InternalServer = &internalServer{}
+var _ kvpb.InternalServer = &internalServer{}
 
 type internalServer struct {
 	// rangeFeedEvents are returned on RangeFeed() calls.
-	rangeFeedEvents   []roachpb.RangeFeedEvent
-	rfServerStream    roachpb.Internal_RangeFeedServer
-	muxRfServerStream roachpb.Internal_MuxRangeFeedServer
+	rangeFeedEvents   []kvpb.RangeFeedEvent
+	rfServerStream    kvpb.Internal_RangeFeedServer
+	muxRfServerStream kvpb.Internal_MuxRangeFeedServer
 }
 
 type rangefeedEventSink struct {
 	ctx    context.Context
-	stream roachpb.Internal_MuxRangeFeedServer
+	stream kvpb.Internal_MuxRangeFeedServer
 }
 
-var _ roachpb.RangeFeedEventSink = (*rangefeedEventSink)(nil)
+var _ kvpb.RangeFeedEventSink = (*rangefeedEventSink)(nil)
 
 func (s *rangefeedEventSink) Context() context.Context {
 	return s.ctx
 }
 
-func (s *rangefeedEventSink) Send(event *roachpb.RangeFeedEvent) error {
-	return s.stream.Send(&roachpb.MuxRangeFeedEvent{RangeFeedEvent: *event})
+func (s *rangefeedEventSink) Send(event *kvpb.RangeFeedEvent) error {
+	return s.stream.Send(&kvpb.MuxRangeFeedEvent{RangeFeedEvent: *event})
 }
 
-func (s *internalServer) MuxRangeFeed(stream roachpb.Internal_MuxRangeFeedServer) error {
+func (s *internalServer) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 	s.muxRfServerStream = stream
 	_, err := stream.Recv()
 	if err != nil {
@@ -351,20 +352,18 @@ func (s *internalServer) MuxRangeFeed(stream roachpb.Internal_MuxRangeFeedServer
 	return s.singleRangeFeed(sink)
 }
 
-func (*internalServer) Batch(
-	context.Context, *roachpb.BatchRequest,
-) (*roachpb.BatchResponse, error) {
+func (*internalServer) Batch(context.Context, *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
 	return nil, nil
 }
 
 func (*internalServer) RangeLookup(
-	context.Context, *roachpb.RangeLookupRequest,
-) (*roachpb.RangeLookupResponse, error) {
+	context.Context, *kvpb.RangeLookupRequest,
+) (*kvpb.RangeLookupResponse, error) {
 	panic("unimplemented")
 }
 
 func (s *internalServer) RangeFeed(
-	_ *roachpb.RangeFeedRequest, stream roachpb.Internal_RangeFeedServer,
+	_ *kvpb.RangeFeedRequest, stream kvpb.Internal_RangeFeedServer,
 ) error {
 	s.rfServerStream = stream
 	err := s.singleRangeFeed(stream)
@@ -374,7 +373,7 @@ func (s *internalServer) RangeFeed(
 	return nil
 }
 
-func (s *internalServer) singleRangeFeed(sink roachpb.RangeFeedEventSink) error {
+func (s *internalServer) singleRangeFeed(sink kvpb.RangeFeedEventSink) error {
 	for _, ev := range s.rangeFeedEvents {
 		evCpy := ev
 		if err := sink.Send(&evCpy); err != nil {
@@ -385,26 +384,26 @@ func (s *internalServer) singleRangeFeed(sink roachpb.RangeFeedEventSink) error 
 }
 
 func (*internalServer) GossipSubscription(
-	*roachpb.GossipSubscriptionRequest, roachpb.Internal_GossipSubscriptionServer,
+	*kvpb.GossipSubscriptionRequest, kvpb.Internal_GossipSubscriptionServer,
 ) error {
 	panic("unimplemented")
 }
 
 func (*internalServer) ResetQuorum(
-	context.Context, *roachpb.ResetQuorumRequest,
-) (*roachpb.ResetQuorumResponse, error) {
+	context.Context, *kvpb.ResetQuorumRequest,
+) (*kvpb.ResetQuorumResponse, error) {
 	panic("unimplemented")
 }
 
 func (*internalServer) Join(
-	context.Context, *roachpb.JoinNodeRequest,
-) (*roachpb.JoinNodeResponse, error) {
+	context.Context, *kvpb.JoinNodeRequest,
+) (*kvpb.JoinNodeResponse, error) {
 	panic("unimplemented")
 }
 
 func (*internalServer) TokenBucket(
-	ctx context.Context, in *roachpb.TokenBucketRequest,
-) (*roachpb.TokenBucketResponse, error) {
+	ctx context.Context, in *kvpb.TokenBucketRequest,
+) (*kvpb.TokenBucketResponse, error) {
 	panic("unimplemented")
 }
 
@@ -433,13 +432,13 @@ func (s *internalServer) SpanConfigConformance(
 }
 
 func (*internalServer) TenantSettings(
-	*roachpb.TenantSettingsRequest, roachpb.Internal_TenantSettingsServer,
+	*kvpb.TenantSettingsRequest, kvpb.Internal_TenantSettingsServer,
 ) error {
 	panic("unimplemented")
 }
 
 func (n *internalServer) GetRangeDescriptors(
-	*roachpb.GetRangeDescriptorsRequest, roachpb.Internal_GetRangeDescriptorsServer,
+	*kvpb.GetRangeDescriptorsRequest, kvpb.Internal_GetRangeDescriptorsServer,
 ) error {
 	panic("unimplemented")
 }
@@ -550,7 +549,7 @@ func TestInternalClientAdapterRunsInterceptors(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		clientUnaryInterceptor1Called, clientUnaryInterceptor2Called = false, false
 		serverUnaryInterceptor1Called, serverUnaryInterceptor2Called = false, false
-		ba := &roachpb.BatchRequest{}
+		ba := &kvpb.BatchRequest{}
 		_, err := lic.Batch(ctx, ba)
 		require.NoError(t, err)
 		require.True(t, serverUnaryInterceptor1Called)
@@ -562,7 +561,7 @@ func TestInternalClientAdapterRunsInterceptors(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		serverStreamInterceptor1Called, serverStreamInterceptor2Called = false, false
 		clientStreamInterceptor1Called, clientStreamInterceptor2Called = false, false
-		stream, err := lic.RangeFeed(ctx, &roachpb.RangeFeedRequest{})
+		stream, err := lic.RangeFeed(ctx, &kvpb.RangeFeedRequest{})
 		require.NoError(t, err)
 		_, err = stream.Recv()
 		require.ErrorIs(t, err, io.EOF)
@@ -610,7 +609,7 @@ func TestInternalClientAdapterWithClientStreamInterceptors(t *testing.T) {
 				return s, nil
 			})
 
-		internal := &internalServer{rangeFeedEvents: []roachpb.RangeFeedEvent{{}, {}}}
+		internal := &internalServer{rangeFeedEvents: []kvpb.RangeFeedEvent{{}, {}}}
 		serverCtx.SetLocalInternalServer(
 			internal,
 			serverInterceptors, clientInterceptors)
@@ -623,14 +622,14 @@ func TestInternalClientAdapterWithClientStreamInterceptors(t *testing.T) {
 		if useMux {
 			stream, err := lic.MuxRangeFeed(ctx)
 			require.NoError(t, err)
-			require.NoError(t, stream.Send(&roachpb.RangeFeedRequest{}))
+			require.NoError(t, stream.Send(&kvpb.RangeFeedRequest{}))
 			receiveEvent = func() error {
 				e, err := stream.Recv()
 				_ = e
 				return err
 			}
 		} else {
-			stream, err := lic.RangeFeed(ctx, &roachpb.RangeFeedRequest{})
+			stream, err := lic.RangeFeed(ctx, &kvpb.RangeFeedRequest{})
 			require.NoError(t, err)
 			receiveEvent = func() error {
 				_, err := stream.Recv()
@@ -690,7 +689,7 @@ func TestInternalClientAdapterWithServerStreamInterceptors(t *testing.T) {
 				return handler(srv, serverStream)
 			})
 
-		internal := &internalServer{rangeFeedEvents: []roachpb.RangeFeedEvent{{}, {}}}
+		internal := &internalServer{rangeFeedEvents: []kvpb.RangeFeedEvent{{}, {}}}
 		serverCtx.SetLocalInternalServer(
 			internal,
 			serverInterceptors, ClientInterceptorInfo{})
@@ -703,13 +702,13 @@ func TestInternalClientAdapterWithServerStreamInterceptors(t *testing.T) {
 		if useMux {
 			stream, err := lic.MuxRangeFeed(ctx)
 			require.NoError(t, err)
-			require.NoError(t, stream.Send(&roachpb.RangeFeedRequest{}))
+			require.NoError(t, stream.Send(&kvpb.RangeFeedRequest{}))
 			receiveEvent = func() error {
 				_, err := stream.Recv()
 				return err
 			}
 		} else {
-			stream, err := lic.RangeFeed(ctx, &roachpb.RangeFeedRequest{})
+			stream, err := lic.RangeFeed(ctx, &kvpb.RangeFeedRequest{})
 			require.NoError(t, err)
 			receiveEvent = func() error {
 				_, err := stream.Recv()
@@ -833,7 +832,7 @@ func BenchmarkInternalClientAdapter(b *testing.B) {
 	lic, ok := ic.(internalClientAdapter)
 	require.True(b, ok)
 	require.Equal(b, internal, lic.server)
-	ba := &roachpb.BatchRequest{}
+	ba := &kvpb.BatchRequest{}
 	_, err = lic.Batch(ctx, ba)
 	require.NoError(b, err)
 
@@ -1994,11 +1993,11 @@ func TestGRPCDeadlinePropagation(t *testing.T) {
 	s := newTestServer(t, serverCtx, grpc.UnknownServiceHandler(
 		func(srv interface{}, stream grpc.ServerStream) error {
 			serverDeadline, _ = stream.Context().Deadline()
-			var ba roachpb.BatchRequest
+			var ba kvpb.BatchRequest
 			if err := stream.RecvMsg(&ba); err != nil {
 				return err
 			}
-			return stream.SendMsg(&roachpb.BatchResponse{})
+			return stream.SendMsg(&kvpb.BatchResponse{})
 		},
 	))
 	RegisterHeartbeatServer(s, serverCtx.NewHeartbeatService())
@@ -2025,8 +2024,8 @@ func TestGRPCDeadlinePropagation(t *testing.T) {
 	const method = "/cockroach.rpc.Testing/Foo"
 	cs, err := defConn.NewStream(ctxWithDeadline, &desc, method)
 	require.Nil(t, err)
-	require.Nil(t, cs.SendMsg(&roachpb.BatchRequest{}))
-	var br roachpb.BatchResponse
+	require.Nil(t, cs.SendMsg(&kvpb.BatchRequest{}))
+	var br kvpb.BatchResponse
 	require.Nil(t, cs.RecvMsg(&br))
 	require.Nil(t, cs.CloseSend())
 
@@ -2356,11 +2355,11 @@ func TestTestingKnobs(t *testing.T) {
 	// a BatchResponse. It will be used both as a unary and stream handler below.
 	s := newTestServer(t, serverCtx, grpc.UnknownServiceHandler(
 		func(srv interface{}, stream grpc.ServerStream) error {
-			var ba roachpb.BatchRequest
+			var ba kvpb.BatchRequest
 			if err := stream.RecvMsg(&ba); err != nil {
 				return err
 			}
-			return stream.SendMsg(&roachpb.BatchResponse{})
+			return stream.SendMsg(&kvpb.BatchResponse{})
 		},
 	))
 	RegisterHeartbeatServer(s, &HeartbeatService{
@@ -2426,8 +2425,8 @@ func TestTestingKnobs(t *testing.T) {
 		}
 		cs, err := defConn.NewStream(ctx, &desc, streamMethod)
 		require.Nil(t, err)
-		require.Nil(t, cs.SendMsg(&roachpb.BatchRequest{}))
-		var br roachpb.BatchResponse
+		require.Nil(t, cs.SendMsg(&kvpb.BatchRequest{}))
+		var br kvpb.BatchResponse
 		require.Nil(t, cs.RecvMsg(&br))
 		require.Nil(t, cs.CloseSend())
 	}

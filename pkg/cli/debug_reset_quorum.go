@@ -16,7 +16,7 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/spf13/cobra"
 )
@@ -58,7 +58,7 @@ func runDebugResetQuorum(cmd *cobra.Command, args []string) error {
 	defer finish()
 
 	// Call ResetQuorum to reset quorum for given range on target node.
-	_, err = roachpb.NewInternalClient(cc).ResetQuorum(ctx, &roachpb.ResetQuorumRequest{
+	_, err = kvpb.NewInternalClient(cc).ResetQuorum(ctx, &kvpb.ResetQuorumRequest{
 		RangeID: int32(rangeID),
 	})
 	if err != nil {

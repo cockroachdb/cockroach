@@ -14,25 +14,25 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 func init() {
-	RegisterReadWriteCommand(roachpb.ConditionalPut, declareKeysConditionalPut, ConditionalPut)
+	RegisterReadWriteCommand(kvpb.ConditionalPut, declareKeysConditionalPut, ConditionalPut)
 }
 
 func declareKeysConditionalPut(
 	rs ImmutableRangeState,
-	header *roachpb.Header,
-	req roachpb.Request,
+	header *kvpb.Header,
+	req kvpb.Request,
 	latchSpans, lockSpans *spanset.SpanSet,
 	maxOffset time.Duration,
 ) {
-	args := req.(*roachpb.ConditionalPutRequest)
+	args := req.(*kvpb.ConditionalPutRequest)
 	if args.Inline {
 		DefaultDeclareKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
 	} else {
@@ -44,9 +44,9 @@ func declareKeysConditionalPut(
 // the expected value matches. If not, the return value contains
 // the actual value.
 func ConditionalPut(
-	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp kvpb.Response,
 ) (result.Result, error) {
-	args := cArgs.Args.(*roachpb.ConditionalPutRequest)
+	args := cArgs.Args.(*kvpb.ConditionalPutRequest)
 	h := cArgs.Header
 
 	var ts hlc.Timestamp

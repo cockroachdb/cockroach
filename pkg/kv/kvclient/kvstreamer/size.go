@@ -13,6 +13,7 @@ package kvstreamer
 import (
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
@@ -21,17 +22,17 @@ const (
 	intSize                   = int64(unsafe.Sizeof(int(0)))
 	int32SliceOverhead        = int64(unsafe.Sizeof([]int32{}))
 	int32Size                 = int64(unsafe.Sizeof(int32(0)))
-	requestUnionSliceOverhead = int64(unsafe.Sizeof([]roachpb.RequestUnion{}))
-	requestUnionOverhead      = int64(unsafe.Sizeof(roachpb.RequestUnion{}))
-	requestOverhead           = int64(unsafe.Sizeof(roachpb.RequestUnion_Get{}) +
-		unsafe.Sizeof(roachpb.GetRequest{}))
+	requestUnionSliceOverhead = int64(unsafe.Sizeof([]kvpb.RequestUnion{}))
+	requestUnionOverhead      = int64(unsafe.Sizeof(kvpb.RequestUnion{}))
+	requestOverhead           = int64(unsafe.Sizeof(kvpb.RequestUnion_Get{}) +
+		unsafe.Sizeof(kvpb.GetRequest{}))
 )
 
 var zeroInt32Slice []int32
 
 func init() {
-	scanRequestOverhead := int64(unsafe.Sizeof(roachpb.RequestUnion_Scan{}) +
-		unsafe.Sizeof(roachpb.ScanRequest{}))
+	scanRequestOverhead := int64(unsafe.Sizeof(kvpb.RequestUnion_Scan{}) +
+		unsafe.Sizeof(kvpb.ScanRequest{}))
 	if requestOverhead != scanRequestOverhead {
 		panic("GetRequest and ScanRequest have different overheads")
 	}
@@ -52,7 +53,7 @@ func requestSize(key, endKey roachpb.Key) int64 {
 	return requestOverhead + int64(cap(key)) + int64(cap(endKey))
 }
 
-func requestsMemUsage(reqs []roachpb.RequestUnion) (memUsage int64) {
+func requestsMemUsage(reqs []kvpb.RequestUnion) (memUsage int64) {
 	for _, r := range reqs {
 		h := r.GetInner().Header()
 		memUsage += requestSize(h.Key, h.EndKey)
@@ -62,7 +63,7 @@ func requestsMemUsage(reqs []roachpb.RequestUnion) (memUsage int64) {
 
 // getResponseSize calculates the size of the GetResponse similar to how it is
 // accounted for TargetBytes parameter by the KV layer.
-func getResponseSize(get *roachpb.GetResponse) int64 {
+func getResponseSize(get *kvpb.GetResponse) int64 {
 	if get.Value == nil {
 		return 0
 	}
@@ -71,6 +72,6 @@ func getResponseSize(get *roachpb.GetResponse) int64 {
 
 // scanResponseSize calculates the size of the ScanResponse similar to how it is
 // accounted for TargetBytes parameter by the KV layer.
-func scanResponseSize(scan *roachpb.ScanResponse) int64 {
+func scanResponseSize(scan *kvpb.ScanResponse) int64 {
 	return scan.NumBytes
 }

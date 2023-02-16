@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -50,11 +51,11 @@ func TestRangeLookupRaceSplits(t *testing.T) {
 	}
 
 	lookupKey := roachpb.Key("k")
-	assertRangeLookupScan := func(ba *roachpb.BatchRequest) {
+	assertRangeLookupScan := func(ba *kvpb.BatchRequest) {
 		if len(ba.Requests) != 1 {
 			t.Fatalf("expected single request, found %v", ba)
 		}
-		scan, ok := ba.Requests[0].GetInner().(*roachpb.ScanRequest)
+		scan, ok := ba.Requests[0].GetInner().(*kvpb.ScanRequest)
 		if !ok {
 			t.Fatalf("expected single scan request, found %v", ba)
 		}
@@ -79,7 +80,7 @@ func TestRangeLookupRaceSplits(t *testing.T) {
 		goodRes := newScanRespFromRangeDescriptors(&desc1AfterSplit)
 
 		attempt := 0
-		sender := SenderFunc(func(_ context.Context, ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		sender := SenderFunc(func(_ context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 			// Increment the attempt counter after each attempt.
 			defer func() {
 				attempt++
@@ -106,7 +107,7 @@ func TestRangeLookupRaceSplits(t *testing.T) {
 			context.Background(),
 			sender,
 			lookupKey,
-			roachpb.READ_UNCOMMITTED,
+			kvpb.READ_UNCOMMITTED,
 			0,     /* prefetchNum */
 			false, /* prefetchReverse */
 		)
@@ -137,7 +138,7 @@ func TestRangeLookupRaceSplits(t *testing.T) {
 			}
 
 			attempt := 0
-			sender := SenderFunc(func(_ context.Context, ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			sender := SenderFunc(func(_ context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 				// Increment the attempt counter after each attempt.
 				defer func() {
 					attempt++
@@ -157,7 +158,7 @@ func TestRangeLookupRaceSplits(t *testing.T) {
 				context.Background(),
 				sender,
 				lookupKey,
-				roachpb.READ_UNCOMMITTED,
+				kvpb.READ_UNCOMMITTED,
 				0,     /* prefetchNum */
 				false, /* prefetchReverse */
 			)
@@ -175,9 +176,9 @@ func TestRangeLookupRaceSplits(t *testing.T) {
 	})
 }
 
-func newScanRespFromRangeDescriptors(descs ...*roachpb.RangeDescriptor) *roachpb.BatchResponse {
-	br := &roachpb.BatchResponse{}
-	r := &roachpb.ScanResponse{}
+func newScanRespFromRangeDescriptors(descs ...*roachpb.RangeDescriptor) *kvpb.BatchResponse {
+	br := &kvpb.BatchResponse{}
+	r := &kvpb.ScanResponse{}
 	for _, desc := range descs {
 		var kv roachpb.KeyValue
 		if err := kv.Value.SetProto(desc); err != nil {

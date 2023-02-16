@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -55,8 +56,8 @@ type FilterArgs struct {
 	CmdID   CmdIDKey
 	Index   int
 	Sid     roachpb.StoreID
-	Req     roachpb.Request
-	Hdr     roachpb.Header
+	Req     kvpb.Request
+	Hdr     kvpb.Header
 	Version roachpb.Version
 	Err     error // only used for TestingPostEvalFilter
 }
@@ -67,7 +68,7 @@ type ProposalFilterArgs struct {
 	Cmd        *kvserverpb.RaftCommand
 	QuotaAlloc *quotapool.IntAlloc
 	CmdID      CmdIDKey
-	Req        roachpb.BatchRequest
+	Req        kvpb.BatchRequest
 }
 
 // ApplyFilterArgs groups the arguments to a ReplicaApplyFilter.
@@ -76,8 +77,8 @@ type ApplyFilterArgs struct {
 	CmdID       CmdIDKey
 	RangeID     roachpb.RangeID
 	StoreID     roachpb.StoreID
-	Req         *roachpb.BatchRequest // only set on the leaseholder
-	ForcedError *roachpb.Error
+	Req         *kvpb.BatchRequest // only set on the leaseholder
+	ForcedError *kvpb.Error
 }
 
 // InRaftCmd returns true if the filter is running in the context of a Raft
@@ -89,36 +90,36 @@ func (f *FilterArgs) InRaftCmd() bool {
 // ReplicaRequestFilter can be used in testing to influence the error returned
 // from a request before it is evaluated. Return nil to continue with regular
 // processing or non-nil to terminate processing with the returned error.
-type ReplicaRequestFilter func(context.Context, *roachpb.BatchRequest) *roachpb.Error
+type ReplicaRequestFilter func(context.Context, *kvpb.BatchRequest) *kvpb.Error
 
 // ReplicaConcurrencyRetryFilter can be used to examine a concurrency retry
 // error before it is handled and its batch is re-evaluated.
-type ReplicaConcurrencyRetryFilter func(context.Context, *roachpb.BatchRequest, *roachpb.Error)
+type ReplicaConcurrencyRetryFilter func(context.Context, *kvpb.BatchRequest, *kvpb.Error)
 
 // ReplicaCommandFilter may be used in tests through the StoreTestingKnobs to
 // intercept the handling of commands and artificially generate errors. Return
 // nil to continue with regular processing or non-nil to terminate processing
 // with the returned error.
-type ReplicaCommandFilter func(args FilterArgs) *roachpb.Error
+type ReplicaCommandFilter func(args FilterArgs) *kvpb.Error
 
 // ReplicaProposalFilter can be used in testing to influence the error returned
 // from proposals after a request is evaluated but before it is proposed.
-type ReplicaProposalFilter func(args ProposalFilterArgs) *roachpb.Error
+type ReplicaProposalFilter func(args ProposalFilterArgs) *kvpb.Error
 
 // A ReplicaApplyFilter is a testing hook into raft command application.
 // See StoreTestingKnobs.
-type ReplicaApplyFilter func(args ApplyFilterArgs) (int, *roachpb.Error)
+type ReplicaApplyFilter func(args ApplyFilterArgs) (int, *kvpb.Error)
 
 // ReplicaResponseFilter is used in unittests to modify the outbound
 // response returned to a waiting client after a replica command has
 // been processed. This filter is invoked only by the command proposer.
-type ReplicaResponseFilter func(context.Context, *roachpb.BatchRequest, *roachpb.BatchResponse) *roachpb.Error
+type ReplicaResponseFilter func(context.Context, *kvpb.BatchRequest, *kvpb.BatchResponse) *kvpb.Error
 
 // ReplicaRangefeedFilter is used in unit tests to modify the request, inject
 // responses, or return errors from rangefeeds.
 type ReplicaRangefeedFilter func(
-	args *roachpb.RangeFeedRequest, stream roachpb.RangeFeedEventSink,
-) *roachpb.Error
+	args *kvpb.RangeFeedRequest, stream kvpb.RangeFeedEventSink,
+) *kvpb.Error
 
 // ContainsKey returns whether this range contains the specified key.
 func ContainsKey(desc *roachpb.RangeDescriptor, key roachpb.Key) bool {

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -2776,11 +2777,11 @@ func TestOfflineLeaseRefresh(t *testing.T) {
 	var mu syncutil.RWMutex
 
 	knobs := &kvserver.StoreTestingKnobs{
-		TestingRequestFilter: func(ctx context.Context, req *roachpb.BatchRequest) *roachpb.Error {
+		TestingRequestFilter: func(ctx context.Context, req *kvpb.BatchRequest) *kvpb.Error {
 			mu.RLock()
 			checkRequest := req.Txn != nil && req.Txn.ID.Equal(txnID)
 			mu.RUnlock()
-			if _, ok := req.GetArg(roachpb.EndTxn); checkRequest && ok {
+			if _, ok := req.GetArg(kvpb.EndTxn); checkRequest && ok {
 				notify := make(chan struct{})
 				waitForRqstFilter <- notify
 				<-notify
@@ -2902,7 +2903,7 @@ func TestLeaseTxnDeadlineExtension(t *testing.T) {
 	// require the lease to be reacquired.
 	lease.LeaseDuration.Override(ctx, &params.SV, 0)
 	params.Knobs.Store = &kvserver.StoreTestingKnobs{
-		TestingRequestFilter: func(ctx context.Context, req *roachpb.BatchRequest) *roachpb.Error {
+		TestingRequestFilter: func(ctx context.Context, req *kvpb.BatchRequest) *kvpb.Error {
 			filterMu.Lock()
 			// Wait for a commit with the txnID, and only allows
 			// it to resume when the channel gets unblocked.
@@ -3222,7 +3223,7 @@ func TestAmbiguousResultIsRetried(t *testing.T) {
 
 	type filter = kvserverbase.ReplicaResponseFilter
 	var f atomic.Value
-	noop := filter(func(context.Context, *roachpb.BatchRequest, *roachpb.BatchResponse) *roachpb.Error {
+	noop := filter(func(context.Context, *kvpb.BatchRequest, *kvpb.BatchResponse) *kvpb.Error {
 		return nil
 	})
 	f.Store(noop)
@@ -3230,7 +3231,7 @@ func TestAmbiguousResultIsRetried(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
-				TestingResponseFilter: func(ctx context.Context, request *roachpb.BatchRequest, response *roachpb.BatchResponse) *roachpb.Error {
+				TestingResponseFilter: func(ctx context.Context, request *kvpb.BatchRequest, response *kvpb.BatchResponse) *kvpb.Error {
 					return f.Load().(filter)(ctx, request, response)
 				},
 			},
@@ -3249,23 +3250,23 @@ func TestAmbiguousResultIsRetried(t *testing.T) {
 
 	testCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	errorsAfterEndTxn := make(chan chan *roachpb.Error)
-	f.Store(filter(func(ctx context.Context, request *roachpb.BatchRequest, response *roachpb.BatchResponse) *roachpb.Error {
+	errorsAfterEndTxn := make(chan chan *kvpb.Error)
+	f.Store(filter(func(ctx context.Context, request *kvpb.BatchRequest, response *kvpb.BatchResponse) *kvpb.Error {
 		switch r := request.Requests[0].GetInner().(type) {
-		case *roachpb.ConditionalPutRequest:
+		case *kvpb.ConditionalPutRequest:
 			if !bytes.HasPrefix(r.Key, tablePrefix) {
 				return nil
 			}
 			in, _, _, err := keys.DecodeTableIDIndexID(r.Key)
 			if err != nil {
-				return roachpb.NewError(errors.WithAssertionFailure(err))
+				return kvpb.NewError(errors.WithAssertionFailure(err))
 			}
 			var a tree.DatumAlloc
 			if systemschema.TestSupportMultiRegion() {
 				var err error
 				_, in, err = keyside.Decode(&a, types.Bytes, in, encoding.Ascending)
 				if !assert.NoError(t, err) {
-					return roachpb.NewError(err)
+					return kvpb.NewError(err)
 				}
 			}
 			id, _, err := keyside.Decode(
@@ -3275,11 +3276,11 @@ func TestAmbiguousResultIsRetried(t *testing.T) {
 			if tree.MustBeDInt(id) == tree.DInt(tableID) {
 				txnID.Store(request.Txn.ID)
 			}
-		case *roachpb.EndTxnRequest:
+		case *kvpb.EndTxnRequest:
 			if request.Txn.ID != txnID.Load().(uuid.UUID) {
 				return nil
 			}
-			errCh := make(chan *roachpb.Error)
+			errCh := make(chan *kvpb.Error)
 			select {
 			case errorsAfterEndTxn <- errCh:
 			case <-testCtx.Done():
@@ -3298,7 +3299,7 @@ func TestAmbiguousResultIsRetried(t *testing.T) {
 		selectErr <- err
 	}()
 	unblock := <-errorsAfterEndTxn
-	unblock <- roachpb.NewError(roachpb.NewAmbiguousResultError(errors.New("boom")))
+	unblock <- kvpb.NewError(kvpb.NewAmbiguousResultError(errors.New("boom")))
 	// Make sure we see a retry, then let it succeed.
 	close(<-errorsAfterEndTxn)
 	// Allow anything further to proceed.

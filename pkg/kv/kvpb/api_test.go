@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package roachpb
+package kvpb
 
 import (
 	"reflect"
@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -32,24 +33,24 @@ import (
 func TestCombineResponses(t *testing.T) {
 	t.Run("both combinable", func(t *testing.T) {
 		left := &ScanResponse{
-			Rows: []KeyValue{
-				{Key: Key("A"), Value: MakeValueFromString("V")},
+			Rows: []roachpb.KeyValue{
+				{Key: roachpb.Key("A"), Value: roachpb.MakeValueFromString("V")},
 			},
-			IntentRows: []KeyValue{
-				{Key: Key("Ai"), Value: MakeValueFromString("X")},
+			IntentRows: []roachpb.KeyValue{
+				{Key: roachpb.Key("Ai"), Value: roachpb.MakeValueFromString("X")},
 			},
 		}
 		right := &ScanResponse{
-			Rows: []KeyValue{
-				{Key: Key("B"), Value: MakeValueFromString("W")},
+			Rows: []roachpb.KeyValue{
+				{Key: roachpb.Key("B"), Value: roachpb.MakeValueFromString("W")},
 			},
-			IntentRows: []KeyValue{
-				{Key: Key("Bi"), Value: MakeValueFromString("Z")},
+			IntentRows: []roachpb.KeyValue{
+				{Key: roachpb.Key("Bi"), Value: roachpb.MakeValueFromString("Z")},
 			},
 		}
 		expCombined := &ScanResponse{
-			Rows:       append(append([]KeyValue(nil), left.Rows...), right.Rows...),
-			IntentRows: append(append([]KeyValue(nil), left.IntentRows...), right.IntentRows...),
+			Rows:       append(append([]roachpb.KeyValue(nil), left.Rows...), right.Rows...),
+			IntentRows: append(append([]roachpb.KeyValue(nil), left.IntentRows...), right.IntentRows...),
 		}
 
 		err := CombineResponses(left, right)
@@ -59,10 +60,10 @@ func TestCombineResponses(t *testing.T) {
 
 	t.Run("neither combinable", func(t *testing.T) {
 		left := &GetResponse{
-			Value: &Value{RawBytes: []byte("V")},
+			Value: &roachpb.Value{RawBytes: []byte("V")},
 		}
 		right := &GetResponse{
-			Value: &Value{RawBytes: []byte("W")},
+			Value: &roachpb.Value{RawBytes: []byte("W")},
 		}
 		expCombined := &GetResponse{
 			Value: left.Value.ShallowClone(),
@@ -75,15 +76,15 @@ func TestCombineResponses(t *testing.T) {
 
 	t.Run("left combinable", func(t *testing.T) {
 		left := &ScanResponse{
-			Rows: []KeyValue{
-				{Key: Key("A"), Value: MakeValueFromString("V")},
+			Rows: []roachpb.KeyValue{
+				{Key: roachpb.Key("A"), Value: roachpb.MakeValueFromString("V")},
 			},
-			IntentRows: []KeyValue{
-				{Key: Key("Ai"), Value: MakeValueFromString("X")},
+			IntentRows: []roachpb.KeyValue{
+				{Key: roachpb.Key("Ai"), Value: roachpb.MakeValueFromString("X")},
 			},
 		}
 		right := &GetResponse{
-			Value: &Value{RawBytes: []byte("W")},
+			Value: &roachpb.Value{RawBytes: []byte("W")},
 		}
 
 		err := CombineResponses(left, right)
@@ -93,14 +94,14 @@ func TestCombineResponses(t *testing.T) {
 
 	t.Run("right combinable", func(t *testing.T) {
 		left := &GetResponse{
-			Value: &Value{RawBytes: []byte("V")},
+			Value: &roachpb.Value{RawBytes: []byte("V")},
 		}
 		right := &ScanResponse{
-			Rows: []KeyValue{
-				{Key: Key("B"), Value: MakeValueFromString("W")},
+			Rows: []roachpb.KeyValue{
+				{Key: roachpb.Key("B"), Value: roachpb.MakeValueFromString("W")},
 			},
-			IntentRows: []KeyValue{
-				{Key: Key("Bi"), Value: MakeValueFromString("Z")},
+			IntentRows: []roachpb.KeyValue{
+				{Key: roachpb.Key("Bi"), Value: roachpb.MakeValueFromString("Z")},
 			},
 		}
 
@@ -126,11 +127,11 @@ func TestCombinable(t *testing.T) {
 
 		// Test that {Scan,DeleteRange}Response properly implement it.
 		sr1 := &ScanResponse{
-			Rows: []KeyValue{
-				{Key: Key("A"), Value: MakeValueFromString("V")},
+			Rows: []roachpb.KeyValue{
+				{Key: roachpb.Key("A"), Value: roachpb.MakeValueFromString("V")},
 			},
-			IntentRows: []KeyValue{
-				{Key: Key("Ai"), Value: MakeValueFromString("X")},
+			IntentRows: []roachpb.KeyValue{
+				{Key: roachpb.Key("Ai"), Value: roachpb.MakeValueFromString("X")},
 			},
 		}
 
@@ -139,17 +140,17 @@ func TestCombinable(t *testing.T) {
 		}
 
 		sr2 := &ScanResponse{
-			Rows: []KeyValue{
-				{Key: Key("B"), Value: MakeValueFromString("W")},
+			Rows: []roachpb.KeyValue{
+				{Key: roachpb.Key("B"), Value: roachpb.MakeValueFromString("W")},
 			},
-			IntentRows: []KeyValue{
-				{Key: Key("Bi"), Value: MakeValueFromString("Z")},
+			IntentRows: []roachpb.KeyValue{
+				{Key: roachpb.Key("Bi"), Value: roachpb.MakeValueFromString("Z")},
 			},
 		}
 
 		wantedSR := &ScanResponse{
-			Rows:       append(append([]KeyValue(nil), sr1.Rows...), sr2.Rows...),
-			IntentRows: append(append([]KeyValue(nil), sr1.IntentRows...), sr2.IntentRows...),
+			Rows:       append(append([]roachpb.KeyValue(nil), sr1.Rows...), sr2.Rows...),
+			IntentRows: append(append([]roachpb.KeyValue(nil), sr1.IntentRows...), sr2.IntentRows...),
 		}
 
 		if err := sr1.combine(sr2); err != nil {
@@ -166,19 +167,19 @@ func TestCombinable(t *testing.T) {
 
 	t.Run("DeleteRange", func(t *testing.T) {
 		dr1 := &DeleteRangeResponse{
-			Keys: []Key{[]byte("1")},
+			Keys: []roachpb.Key{[]byte("1")},
 		}
 		if _, ok := interface{}(dr1).(combinable); !ok {
 			t.Fatalf("DeleteRangeResponse does not implement combinable")
 		}
 		dr2 := &DeleteRangeResponse{
-			Keys: []Key{[]byte("2")},
+			Keys: []roachpb.Key{[]byte("2")},
 		}
 		dr3 := &DeleteRangeResponse{
 			Keys: nil,
 		}
 		wantedDR := &DeleteRangeResponse{
-			Keys: []Key{[]byte("1"), []byte("2")},
+			Keys: []roachpb.Key{[]byte("1"), []byte("2")},
 		}
 		if err := dr2.combine(dr3); err != nil {
 			t.Fatal(err)
@@ -196,11 +197,11 @@ func TestCombinable(t *testing.T) {
 		v1 := &AdminVerifyProtectedTimestampResponse{
 			ResponseHeader: ResponseHeader{},
 			Verified:       false,
-			DeprecatedFailedRanges: []RangeDescriptor{
+			DeprecatedFailedRanges: []roachpb.RangeDescriptor{
 				{RangeID: 1},
 			},
 			VerificationFailedRanges: []AdminVerifyProtectedTimestampResponse_FailedRange{
-				{RangeID: 1, StartKey: RKeyMin, EndKey: RKeyMax, Reason: "foo"},
+				{RangeID: 1, StartKey: roachpb.RKeyMin, EndKey: roachpb.RKeyMax, Reason: "foo"},
 			},
 		}
 
@@ -215,24 +216,24 @@ func TestCombinable(t *testing.T) {
 		v3 := &AdminVerifyProtectedTimestampResponse{
 			ResponseHeader: ResponseHeader{},
 			Verified:       false,
-			DeprecatedFailedRanges: []RangeDescriptor{
+			DeprecatedFailedRanges: []roachpb.RangeDescriptor{
 				{RangeID: 2},
 			},
 			VerificationFailedRanges: []AdminVerifyProtectedTimestampResponse_FailedRange{
-				{RangeID: 2, StartKey: RKeyMin, EndKey: RKeyMax, Reason: "bar"},
+				{RangeID: 2, StartKey: roachpb.RKeyMin, EndKey: roachpb.RKeyMax, Reason: "bar"},
 			},
 		}
 		require.NoError(t, v1.combine(v2))
 		require.NoError(t, v1.combine(v3))
 		require.EqualValues(t, &AdminVerifyProtectedTimestampResponse{
 			Verified: false,
-			DeprecatedFailedRanges: []RangeDescriptor{
+			DeprecatedFailedRanges: []roachpb.RangeDescriptor{
 				{RangeID: 1},
 				{RangeID: 2},
 			},
 			VerificationFailedRanges: []AdminVerifyProtectedTimestampResponse_FailedRange{
-				{RangeID: 1, StartKey: RKeyMin, EndKey: RKeyMax, Reason: "foo"},
-				{RangeID: 2, StartKey: RKeyMin, EndKey: RKeyMax, Reason: "bar"},
+				{RangeID: 1, StartKey: roachpb.RKeyMin, EndKey: roachpb.RKeyMax, Reason: "foo"},
+				{RangeID: 2, StartKey: roachpb.RKeyMin, EndKey: roachpb.RKeyMax, Reason: "bar"},
 			},
 		}, v1)
 
@@ -242,7 +243,7 @@ func TestCombinable(t *testing.T) {
 
 		// Test that AdminScatterResponse properly implement it.
 		ar1 := &AdminScatterResponse{
-			RangeInfos: []RangeInfo{{Desc: RangeDescriptor{
+			RangeInfos: []roachpb.RangeInfo{{Desc: roachpb.RangeDescriptor{
 				RangeID: 1,
 			}}},
 			MVCCStats: enginepb.MVCCStats{
@@ -258,7 +259,7 @@ func TestCombinable(t *testing.T) {
 		}
 
 		ar2 := &AdminScatterResponse{
-			RangeInfos: []RangeInfo{{Desc: RangeDescriptor{
+			RangeInfos: []roachpb.RangeInfo{{Desc: roachpb.RangeDescriptor{
 				RangeID: 2,
 			}}},
 			MVCCStats: enginepb.MVCCStats{
@@ -270,7 +271,7 @@ func TestCombinable(t *testing.T) {
 		}
 
 		wantedAR := &AdminScatterResponse{
-			RangeInfos:             []RangeInfo{{Desc: RangeDescriptor{RangeID: 1}}, {Desc: RangeDescriptor{RangeID: 2}}},
+			RangeInfos:             []roachpb.RangeInfo{{Desc: roachpb.RangeDescriptor{RangeID: 1}}, {Desc: roachpb.RangeDescriptor{RangeID: 2}}},
 			MVCCStats:              enginepb.MVCCStats{LiveBytes: 3, LiveCount: 3, KeyCount: 3},
 			ReplicasScatteredBytes: 84,
 		}
@@ -306,7 +307,7 @@ func TestMustSetInner(t *testing.T) {
 
 func TestContentionEvent_SafeFormat(t *testing.T) {
 	ce := &ContentionEvent{
-		Key:     Key("foo"),
+		Key:     roachpb.Key("foo"),
 		TxnMeta: enginepb.TxnMeta{ID: uuid.FromStringOrNil("51b5ef6a-f18f-4e85-bc3f-c44e33f2bb27"), CoordinatorNodeID: 6},
 	}
 	const exp = redact.RedactableString(`conflicted with ‹51b5ef6a-f18f-4e85-bc3f-c44e33f2bb27› on ‹"foo"› for 0.000s`)

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -24,17 +25,17 @@ import (
 )
 
 func init() {
-	RegisterReadWriteCommand(roachpb.RecoverTxn, declareKeysRecoverTransaction, RecoverTxn)
+	RegisterReadWriteCommand(kvpb.RecoverTxn, declareKeysRecoverTransaction, RecoverTxn)
 }
 
 func declareKeysRecoverTransaction(
 	rs ImmutableRangeState,
-	_ *roachpb.Header,
-	req roachpb.Request,
+	_ *kvpb.Header,
+	req kvpb.Request,
 	latchSpans, _ *spanset.SpanSet,
 	_ time.Duration,
 ) {
-	rr := req.(*roachpb.RecoverTxnRequest)
+	rr := req.(*kvpb.RecoverTxnRequest)
 	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.TransactionKey(rr.Txn.Key, rr.Txn.ID)})
 	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.AbortSpanKey(rs.GetRangeID(), rr.Txn.ID)})
 }
@@ -50,11 +51,11 @@ func declareKeysRecoverTransaction(
 // result of the recovery should be committing the abandoned transaction or
 // aborting it.
 func RecoverTxn(
-	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp kvpb.Response,
 ) (result.Result, error) {
-	args := cArgs.Args.(*roachpb.RecoverTxnRequest)
+	args := cArgs.Args.(*kvpb.RecoverTxnRequest)
 	h := cArgs.Header
-	reply := resp.(*roachpb.RecoverTxnResponse)
+	reply := resp.(*kvpb.RecoverTxnResponse)
 
 	if h.Txn != nil {
 		return result.Result{}, ErrTransactionUnsupported

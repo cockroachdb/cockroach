@@ -10,13 +10,13 @@
 
 syntax = "proto3";
 package cockroach.roachpb;
-option go_package = "roachpb";
+option go_package = "kvpb";
 
 import "errorspb/errors.proto";
 import "kv/kvserver/concurrency/lock/locking.proto";
 import "kv/kvserver/readsummary/rspb/summary.proto";
 import "roachpb/data.proto";
-import "roachpb/errors.proto";
+import "kv/kvpb/errors.proto";
 import "roachpb/metadata.proto";
 import "roachpb/span_config.proto";
 import "settings/encoding.proto";
@@ -85,8 +85,8 @@ enum ResumeReason {
 // RequestHeaderPure is not to be used directly. It's generated only for use of
 // its marshaling methods by RequestHeader. See the comment there.
 message RequestHeaderPure {
-  bytes key = 3 [(gogoproto.casttype) = "Key"];
-  bytes end_key = 4 [(gogoproto.casttype) = "Key"];
+  bytes key = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+  bytes end_key = 4 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
   int32 sequence = 5 [
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnSeq"];
 }
@@ -99,8 +99,8 @@ message RequestHeaderCrdbTest {
     (gogoproto.customname) = "KVNemesisSeq",
     (gogoproto.nullable) = false,
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil.Container"];
-  bytes key = 3 [(gogoproto.casttype) = "Key"];
-  bytes end_key = 4 [(gogoproto.casttype) = "Key"];
+  bytes key = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+  bytes end_key = 4 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
   int32 sequence = 5 [
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnSeq"];
 }
@@ -153,12 +153,12 @@ message RequestHeader {
 
   // The key for request. If the request operates on a range, this
   // represents the starting key for the range.
-  bytes key = 3 [(gogoproto.casttype) = "Key"];
+  bytes key = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
   // The end key is empty if the request spans only a single key. Otherwise,
   // it must order strictly after Key. In such a case, the header indicates
   // that the operation takes place on the key range from Key to EndKey,
   // including Key and excluding EndKey.
-  bytes end_key = 4 [(gogoproto.casttype) = "Key"];
+  bytes end_key = 4 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
   // A zero-indexed transactional sequence number.
   int32 sequence = 5 [
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnSeq"];
@@ -483,7 +483,7 @@ message DeleteRangePredicates {
 message DeleteRangeResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // All the deleted keys if return_keys is set.
-  repeated bytes keys = 2 [(gogoproto.casttype) = "Key"];
+  repeated bytes keys = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
 }
 
 // A ClearRangeRequest is the argument to the ClearRange() method. It
@@ -741,7 +741,8 @@ message CheckConsistencyResponse {
   }
 
   message Result {
-    int64 range_id = 1 [(gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
+    int64 range_id = 1 [(gogoproto.customname) = "RangeID",
+                        (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
     // start_key of the range corresponding to range_id (at the time of the
     // check). This is useful to send additional requests to only a subset of
     // ranges contained within a result later, as requests can only be routed by
@@ -893,14 +894,14 @@ message EndTxnResponse {
 // automatic merging).
 message AdminSplitRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  bytes split_key = 2 [(gogoproto.casttype) = "Key"];
+  bytes split_key = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
   reserved 3;
   util.hlc.Timestamp expiration_time = 4 [(gogoproto.nullable) = false];
 
   // PredicateKeys specifies keys which if not contained within the range should
   // cause the split to be rejected. This can be used by a caller to effectively
   // send a "conditional split" request, i.e. a split if not already split.
-  repeated bytes predicate_keys = 5 [(gogoproto.casttype) = "Key"];
+  repeated bytes predicate_keys = 5 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
 }
 
 // An AdminSplitResponse is the return value from the AdminSplit()
@@ -951,7 +952,7 @@ message AdminMergeResponse {
 // replica of the range.
 message AdminTransferLeaseRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  int32 target = 2 [(gogoproto.casttype) = "StoreID"];
+  int32 target = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
   // When set to true, bypass_safety_checks configures the lease transfer to
   // skip safety checks that ensure that the transfer target is known to be
   // (according to the outgoing leaseholder) alive and sufficiently caught up on
@@ -1064,14 +1065,14 @@ message GCRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 
   message GCKey {
-    bytes key = 1 [(gogoproto.casttype) = "Key"];
+    bytes key = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
     util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
   }
   repeated GCKey keys = 3 [(gogoproto.nullable) = false];
 
   message GCRangeKey {
-    bytes start_key = 1 [(gogoproto.casttype) = "Key"];
-    bytes end_key = 2 [(gogoproto.casttype) = "Key"];
+    bytes start_key = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+    bytes end_key = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
     util.hlc.Timestamp timestamp = 3 [(gogoproto.nullable) = false];
   }
   repeated GCRangeKey range_keys = 6 [(gogoproto.nullable) = false];
@@ -1081,8 +1082,8 @@ message GCRequest {
   // GCClearRange contains a range for GC requests that would use
   // pebble range tombstones to delete data.
   message GCClearRange {
-    bytes start_key = 1 [(gogoproto.casttype) = "Key"];
-    bytes end_key = 2 [(gogoproto.casttype) = "Key"];
+    bytes start_key = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+    bytes end_key = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
     util.hlc.Timestamp start_key_timestamp = 3 [(gogoproto.nullable) = false];
   }
   // GCClearRange specifies a span that will be GCed using a Pebble range
@@ -1424,7 +1425,8 @@ message TruncateLogRequest {
   // The header specifies a span, start and end keys, but not the range id
   // itself. The range may have changed from the one specified in the header
   // in the case of a merge.
-  int64 range_id = 3 [(gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
+  int64 range_id = 3 [(gogoproto.customname) = "RangeID",
+                      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
 
   // ExpectedFirstIndex is the expected Index of the last TruncateLogRequest,
   // i.e., we expect that this request will typically be truncating entries
@@ -1516,7 +1518,7 @@ message LeaseInfoResponse{
   // possible that even if ReadConsistency=INCONSISTENT was used, the request is
   // still not evaluated by the node it was sent to if that node's replica is a
   // learner or the node doesn't have a replica at all.
-  int32 evaluated_by = 4 [(gogoproto.casttype) = "StoreID"];
+  int32 evaluated_by = 4 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
 }
 
 // A RequestLeaseResponse is the response to a RequestLease() or TransferLease()
@@ -1789,8 +1791,8 @@ message AdminVerifyProtectedTimestampResponse {
   repeated RangeDescriptor deprecated_failed_ranges = 3 [(gogoproto.nullable) = false];
   message FailedRange {
     int64 range_id = 1 [(gogoproto.customname) = "RangeID"];
-    bytes start_key = 2 [(gogoproto.casttype) = "RKey"];
-    bytes end_key = 3 [(gogoproto.casttype) = "RKey"];
+    bytes start_key = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RKey"];
+    bytes end_key = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RKey"];
     string reason = 4;
   }
   repeated FailedRange verification_failed_ranges = 4 [(gogoproto.nullable) = false];
@@ -1957,7 +1959,7 @@ message AddSSTableResponse {
   // not data before that key, or that that key actually exists; it may be
   // picked using cheaper, inconsistentent reads so it should be used only for
   // estimations of how ingested data and spans may overlap.
-  bytes following_likely_non_empty_span_start = 4 [(gogoproto.casttype) = "Key"];
+  bytes following_likely_non_empty_span_start = 4 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
 }
 
 // RefreshRequest is arguments to the Refresh() method, which verifies that no
@@ -2372,7 +2374,8 @@ message Header {
   // range_id specifies the ID of the Raft consensus group which the key
   // range belongs to. This is used by the receiving node to route the
   // request to the correct range.
-  int64 range_id = 3 [(gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
+  int64 range_id = 3 [(gogoproto.customname) = "RangeID",
+                      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
   // user_priority allows any command's priority to be biased from the
   // default random priority. It specifies a multiple. If set to 0.5,
   // the chosen priority will be 1/2x as likely to beat any default
@@ -2381,8 +2384,8 @@ message Header {
   // beat any default random priority, and so on. As a special case, 0
   // priority is treated the same as 1. This value is ignored if txn
   // is specified. The min and max user priorities are set via
-  // MinUserPriority and MaxUserPriority in data.go.
-  double user_priority = 4 [(gogoproto.casttype) = "UserPriority"];
+  // roachpb.MinUserPriority and roachpb.MaxUserPriority in roachpb/data.go.
+  double user_priority = 4 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.UserPriority"];
   // txn is set non-nil if a transaction is underway. To start a txn,
   // the first request should set this field to non-nil with name and
   // isolation level set as desired. The response will contain the
@@ -2592,7 +2595,8 @@ message Header {
   // gateway_node_id is the ID of the gateway node where the request originated.
   // For requests from tenants, this is set to the NodeID of the KV node handling
   // the BatchRequest.
-  int32 gateway_node_id = 11 [(gogoproto.customname) = "GatewayNodeID", (gogoproto.casttype) = "NodeID"];
+  int32 gateway_node_id = 11 [(gogoproto.customname) = "GatewayNodeID",
+                              (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
   // client_range_info represents the kvclient's knowledge about the state of
   // the range (i.e. of the range descriptor and lease). The kvserver checks
   // whether the client's info is up to date and, if it isn't, it will return a
@@ -2808,7 +2812,7 @@ message BatchResponse {
 // RangeLookupRequest is a request to proxy a RangeLookup through a Tenant
 // service. Its fields correspond to a subset of the args of kv.RangeLookup.
 message RangeLookupRequest {
-  bytes               key              = 1 [(gogoproto.casttype) = "RKey"];
+  bytes               key              = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RKey"];
   ReadConsistencyType read_consistency = 2;
   int64               prefetch_num     = 3;
   bool                prefetch_reverse = 4;
@@ -2850,7 +2854,7 @@ message RangeFeedRequest {
 // RangeFeedValue is a variant of RangeFeedEvent that represents an update to
 // the specified key with the provided value.
 message RangeFeedValue {
-  bytes key       = 1 [(gogoproto.casttype) = "Key"];
+  bytes key       = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
   Value value     = 2 [(gogoproto.nullable) = false];
   // prev_value is only populated if both:
   // 1. with_diff was passed in the corresponding RangeFeedRequest.
@@ -2922,7 +2926,8 @@ message RangeFeedEvent {
 // the underlying RangeFeedEvent with the ID of the range that produced this event.
 message MuxRangeFeedEvent {
   RangeFeedEvent event = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  int32 range_id = 2 [(gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
+  int32 range_id = 2 [(gogoproto.customname) = "RangeID",
+                      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
   // Server echoes back stream_id set by the client.
   int64 stream_id = 3 [(gogoproto.customname) = "StreamID"];
 }
@@ -3194,7 +3199,7 @@ message ContentionEvent {
   option (gogoproto.goproto_stringer) = false;
 
   // Key is the key that this and the other transaction conflicted on.
-  bytes key = 1 [(gogoproto.casttype) = "Key"];
+  bytes key = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
   // TxnMeta is the transaction conflicted with, i.e. the transaction holding a
   // lock or lock reservation.
   cockroach.storage.enginepb.TxnMeta txn_meta = 2 [(gogoproto.nullable) = false];

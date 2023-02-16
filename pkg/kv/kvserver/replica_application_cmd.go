@@ -13,9 +13,9 @@ package kvserver
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -79,7 +79,7 @@ func (c *replicatedCmd) Ctx() context.Context {
 // AckErrAndFinish implements apply.Command.
 func (c *replicatedCmd) AckErrAndFinish(ctx context.Context, err error) error {
 	if c.IsLocal() {
-		c.response.Err = roachpb.NewError(roachpb.NewAmbiguousResultError(err))
+		c.response.Err = kvpb.NewError(kvpb.NewAmbiguousResultError(err))
 	}
 	return c.AckOutcomeAndFinish(ctx)
 }
@@ -110,7 +110,7 @@ func (c *replicatedCmd) CanAckBeforeApplication() bool {
 	if !req.IsIntentWrite() || req.AsyncConsensus {
 		return false
 	}
-	if et, ok := req.GetArg(roachpb.EndTxn); ok && et.(*roachpb.EndTxnRequest).InternalCommitTrigger != nil {
+	if et, ok := req.GetArg(kvpb.EndTxn); ok && et.(*kvpb.EndTxnRequest).InternalCommitTrigger != nil {
 		// Don't early-ack for commit triggers, just to keep things simple - the
 		// caller is reasonably expecting to be able to run another replication
 		// change right away, and some code paths pull the descriptor out of memory
@@ -132,7 +132,7 @@ func (c *replicatedCmd) AckSuccess(ctx context.Context) error {
 	// is finished.
 	var resp proposalResult
 	reply := *c.proposal.Local.Reply
-	reply.Responses = append([]roachpb.ResponseUnion(nil), reply.Responses...)
+	reply.Responses = append([]kvpb.ResponseUnion(nil), reply.Responses...)
 	resp.Reply = &reply
 	resp.EncounteredIntents = c.proposal.Local.DetachEncounteredIntents()
 	resp.EndTxns = c.proposal.Local.DetachEndTxns(false /* alwaysOnly */)

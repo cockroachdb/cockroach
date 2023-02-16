@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -22,13 +23,13 @@ import (
 )
 
 func init() {
-	RegisterReadOnlyCommand(roachpb.LeaseInfo, declareKeysLeaseInfo, LeaseInfo)
+	RegisterReadOnlyCommand(kvpb.LeaseInfo, declareKeysLeaseInfo, LeaseInfo)
 }
 
 func declareKeysLeaseInfo(
 	rs ImmutableRangeState,
-	_ *roachpb.Header,
-	_ roachpb.Request,
+	_ *kvpb.Header,
+	_ kvpb.Request,
 	latchSpans, _ *spanset.SpanSet,
 	_ time.Duration,
 ) {
@@ -37,9 +38,9 @@ func declareKeysLeaseInfo(
 
 // LeaseInfo returns information about the lease holder for the range.
 func LeaseInfo(
-	ctx context.Context, reader storage.Reader, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, reader storage.Reader, cArgs CommandArgs, resp kvpb.Response,
 ) (result.Result, error) {
-	reply := resp.(*roachpb.LeaseInfoResponse)
+	reply := resp.(*kvpb.LeaseInfoResponse)
 	lease, nextLease := cArgs.EvalCtx.GetLease()
 	if nextLease != (roachpb.Lease{}) {
 		// If there's a lease request in progress, speculatively return that future

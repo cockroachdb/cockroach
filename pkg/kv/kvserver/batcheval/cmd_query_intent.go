@@ -14,22 +14,22 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
 func init() {
-	RegisterReadOnlyCommand(roachpb.QueryIntent, declareKeysQueryIntent, QueryIntent)
+	RegisterReadOnlyCommand(kvpb.QueryIntent, declareKeysQueryIntent, QueryIntent)
 }
 
 func declareKeysQueryIntent(
 	_ ImmutableRangeState,
-	_ *roachpb.Header,
-	req roachpb.Request,
+	_ *kvpb.Header,
+	req kvpb.Request,
 	latchSpans, _ *spanset.SpanSet,
 	_ time.Duration,
 ) {
@@ -49,11 +49,11 @@ func declareKeysQueryIntent(
 // request is special-cased to return a SERIALIZABLE retry error if a transaction
 // queries its own intent and finds it has been pushed.
 func QueryIntent(
-	ctx context.Context, reader storage.Reader, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, reader storage.Reader, cArgs CommandArgs, resp kvpb.Response,
 ) (result.Result, error) {
-	args := cArgs.Args.(*roachpb.QueryIntentRequest)
+	args := cArgs.Args.(*kvpb.QueryIntentRequest)
 	h := cArgs.Header
-	reply := resp.(*roachpb.QueryIntentResponse)
+	reply := resp.(*kvpb.QueryIntentResponse)
 
 	ownTxn := false
 	if h.Txn != nil {
@@ -129,9 +129,9 @@ func QueryIntent(
 			// TransactionRetryError immediately with an updated transaction proto.
 			// This is an optimization that can help the txn use refresh spans more
 			// effectively.
-			return result.Result{}, roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE, "intent pushed")
+			return result.Result{}, kvpb.NewTransactionRetryError(kvpb.RETRY_SERIALIZABLE, "intent pushed")
 		}
-		return result.Result{}, roachpb.NewIntentMissingError(args.Key, intent)
+		return result.Result{}, kvpb.NewIntentMissingError(args.Key, intent)
 	}
 	return result.Result{}, nil
 }

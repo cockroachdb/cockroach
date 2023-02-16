@@ -11,7 +11,7 @@ package kvfeed
 import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -23,7 +23,7 @@ type TestingKnobs struct {
 	OnRangeFeedValue func() error
 	// ShouldSkipCheckpoint invoked when rangefed receives a checkpoint.
 	// Returns true if checkpoint should be skipped.
-	ShouldSkipCheckpoint func(*roachpb.RangeFeedCheckpoint) bool
+	ShouldSkipCheckpoint func(*kvpb.RangeFeedCheckpoint) bool
 	// OnRangeFeedStart invoked when rangefeed starts.  It is given
 	// the list of SpanTimePairs.
 	OnRangeFeedStart func(spans []kvcoord.SpanTimePair)

@@ -15,7 +15,7 @@ option go_package = "execinfrapb";
 import "gogoproto/gogo.proto";
 
 import "util/optional/optional.proto";
-import "roachpb/api.proto";
+import "kv/kvpb/api.proto";
 
 // ComponentID identifies a component in a flow. There are multiple types of
 // components (e.g. processors, streams); each component of a certain type has

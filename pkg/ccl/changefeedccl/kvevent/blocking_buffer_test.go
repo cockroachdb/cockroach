@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
@@ -34,7 +35,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func makeRangeFeedEvent(rnd *rand.Rand, valSize int, prevValSize int) *roachpb.RangeFeedEvent {
+func makeRangeFeedEvent(rnd *rand.Rand, valSize int, prevValSize int) *kvpb.RangeFeedEvent {
 	const tableID = 42
 
 	key, err := keyside.Encode(
@@ -46,8 +47,8 @@ func makeRangeFeedEvent(rnd *rand.Rand, valSize int, prevValSize int) *roachpb.R
 		panic(err)
 	}
 
-	e := roachpb.RangeFeedEvent{
-		Val: &roachpb.RangeFeedValue{
+	e := kvpb.RangeFeedEvent{
+		Val: &kvpb.RangeFeedValue{
 			Key: key,
 			Value: roachpb.Value{
 				RawBytes:  randutil.RandBytes(rnd, valSize),

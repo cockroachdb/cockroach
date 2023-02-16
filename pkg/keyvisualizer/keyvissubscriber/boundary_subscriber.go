@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/keyvispb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -68,7 +69,7 @@ func Start(
 	// decodeRow decodes a row of the system.span_stats_tenant_boundaries table.
 	decodeRow := func(
 		ctx context.Context,
-		kv *roachpb.RangeFeedValue,
+		kv *kvpb.RangeFeedValue,
 	) (*roachpb.TenantID, *keyvispb.UpdateBoundariesRequest, error) {
 
 		// First, decode the tenant_id column.
@@ -121,7 +122,7 @@ func Start(
 		"tenant-boundaries-watcher",
 		[]roachpb.Span{tableSpan},
 		initialTimestamp,
-		func(ctx context.Context, kv *roachpb.RangeFeedValue) {
+		func(ctx context.Context, kv *kvpb.RangeFeedValue) {
 			tID, update, err := decodeRow(ctx, kv)
 			if err != nil {
 				log.Warningf(ctx,

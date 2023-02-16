@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -31,17 +32,17 @@ import (
 const clearRangeThreshold = 64
 
 func init() {
-	RegisterReadWriteCommand(roachpb.RevertRange, declareKeysRevertRange, RevertRange)
+	RegisterReadWriteCommand(kvpb.RevertRange, declareKeysRevertRange, RevertRange)
 }
 
 func declareKeysRevertRange(
 	rs ImmutableRangeState,
-	header *roachpb.Header,
-	req roachpb.Request,
+	header *kvpb.Header,
+	req kvpb.Request,
 	latchSpans, lockSpans *spanset.SpanSet,
 	maxOffset time.Duration,
 ) {
-	args := req.(*roachpb.RevertRangeRequest)
+	args := req.(*kvpb.RevertRangeRequest)
 	DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
 	// We look up the range descriptor key to check whether the span
 	// is equal to the entire range for fast stats updating.
@@ -97,15 +98,15 @@ const maxRevertRangeBatchBytes = 32 << 20
 // Note: this should only be used when there is no user traffic writing to the
 // target span at or above the target time.
 func RevertRange(
-	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp kvpb.Response,
 ) (result.Result, error) {
 	if cArgs.Header.Txn != nil {
 		return result.Result{}, ErrTransactionUnsupported
 	}
 	log.VEventf(ctx, 2, "RevertRange %+v", cArgs.Args)
 
-	args := cArgs.Args.(*roachpb.RevertRangeRequest)
-	reply := resp.(*roachpb.RevertRangeResponse)
+	args := cArgs.Args.(*kvpb.RevertRangeRequest)
+	reply := resp.(*kvpb.RevertRangeResponse)
 	desc := cArgs.EvalCtx.Desc()
 	pd := result.Result{
 		Replicated: kvserverpb.ReplicatedEvalResult{
@@ -152,7 +153,7 @@ func RevertRange(
 		// there only be one. Thus we just set it to MaxKeys when, and only when,
 		// we're returning a ResumeSpan.
 		reply.NumKeys = cArgs.Header.MaxSpanRequestKeys
-		reply.ResumeReason = roachpb.RESUME_KEY_LIMIT
+		reply.ResumeReason = kvpb.RESUME_KEY_LIMIT
 	}
 
 	return pd, nil

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -1098,7 +1099,7 @@ WHERE
 		defer filterState.Unlock()
 		return filterState.txnID
 	}
-	rf.setFilter(func(ctx context.Context, request *roachpb.BatchRequest) *roachpb.Error {
+	rf.setFilter(func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error {
 		if request.Txn == nil || request.Txn.Name != sql.SQLTxnName {
 			return nil
 		}
@@ -1107,8 +1108,8 @@ WHERE
 		if filterState.txnID != (uuid.UUID{}) {
 			return nil
 		}
-		if scanRequest, ok := request.GetArg(roachpb.Scan); ok {
-			scan := scanRequest.(*roachpb.ScanRequest)
+		if scanRequest, ok := request.GetArg(kvpb.Scan); ok {
+			scan := scanRequest.(*kvpb.ScanRequest)
 			if scan.Span().Overlaps(tableSpan) {
 				filterState.txnID = request.Txn.ID
 			}
@@ -1137,7 +1138,7 @@ WHERE
 	// fail. We'll want to ensure that we get a retriable error. Use the below
 	// pattern to detect when the user transaction has finished planning and is
 	// now executing: we don't want to inject the error during planning.
-	rf.setFilter(func(ctx context.Context, request *roachpb.BatchRequest) *roachpb.Error {
+	rf.setFilter(func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error {
 		if request.Txn == nil {
 			return nil
 		}
@@ -1151,11 +1152,11 @@ WHERE
 		default:
 			return nil
 		}
-		if getRequest, ok := request.GetArg(roachpb.Get); ok {
-			put := getRequest.(*roachpb.GetRequest)
+		if getRequest, ok := request.GetArg(kvpb.Get); ok {
+			put := getRequest.(*kvpb.GetRequest)
 			if put.Key.Equal(catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, descpb.ID(tableID))) {
 				filterState.txnID = uuid.UUID{}
-				return roachpb.NewError(roachpb.NewReadWithinUncertaintyIntervalError(
+				return kvpb.NewError(kvpb.NewReadWithinUncertaintyIntervalError(
 					request.Txn.ReadTimestamp, hlc.ClockTimestamp{}, request.Txn, afterInsert, hlc.ClockTimestamp{}))
 			}
 		}

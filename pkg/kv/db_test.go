@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -721,7 +722,7 @@ func TestGenerateForcedRetryableError(t *testing.T) {
 	txn := db.NewTxn(ctx, "test: TestGenerateForcedRetryableError")
 	require.Equal(t, 0, int(txn.Epoch()))
 	err := txn.GenerateForcedRetryableError(ctx, "testing TestGenerateForcedRetryableError")
-	var retryErr *roachpb.TransactionRetryWithProtoRefreshError
+	var retryErr *kvpb.TransactionRetryWithProtoRefreshError
 	require.True(t, errors.As(err, &retryErr))
 	require.Equal(t, 1, int(retryErr.Transaction.Epoch))
 }
@@ -769,12 +770,12 @@ func TestDB_TxnRetry(t *testing.T) {
 			if runNumber == 0 {
 				// First run, we should get a retryable error.
 				require.Zero(t, runNumber)
-				require.IsType(t, &roachpb.TransactionRetryWithProtoRefreshError{}, err)
+				require.IsType(t, &kvpb.TransactionRetryWithProtoRefreshError{}, err)
 				require.Equal(t, []byte(nil), r.ValueBytes())
 
 				// At this point txn is poisoned, and any op returns the same (poisoning) error.
 				r, err = txn.Get(ctx, keyB)
-				require.IsType(t, &roachpb.TransactionRetryWithProtoRefreshError{}, err)
+				require.IsType(t, &kvpb.TransactionRetryWithProtoRefreshError{}, err)
 				require.Equal(t, []byte(nil), r.ValueBytes())
 			} else {
 				// The retry should succeed.
@@ -839,8 +840,8 @@ func TestPreservingSteppingOnSenderReplacement(t *testing.T) {
 
 		_, err := txn.Get(ctx, keyA)
 		require.NotNil(t, err)
-		require.IsType(t, &roachpb.TransactionRetryWithProtoRefreshError{}, err)
-		pErr := (*roachpb.TransactionRetryWithProtoRefreshError)(nil)
+		require.IsType(t, &kvpb.TransactionRetryWithProtoRefreshError{}, err)
+		pErr := (*kvpb.TransactionRetryWithProtoRefreshError)(nil)
 		require.ErrorAs(t, err, &pErr)
 		require.Equal(t, txn.ID(), pErr.TxnID)
 

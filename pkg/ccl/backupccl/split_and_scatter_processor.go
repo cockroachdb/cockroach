@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -125,8 +126,8 @@ func (s dbSplitAndScatterer) scatter(
 	}
 
 	log.VEventf(ctx, 1, "scattering new key %+v", newScatterKey)
-	req := &roachpb.AdminScatterRequest{
-		RequestHeader: roachpb.RequestHeaderFromSpan(roachpb.Span{
+	req := &kvpb.AdminScatterRequest{
+		RequestHeader: kvpb.RequestHeaderFromSpan(roachpb.Span{
 			Key:    newScatterKey,
 			EndKey: newScatterKey.Next(),
 		}),
@@ -156,12 +157,12 @@ func (s dbSplitAndScatterer) scatter(
 		return 0, nil
 	}
 
-	return s.findDestination(res.(*roachpb.AdminScatterResponse)), nil
+	return s.findDestination(res.(*kvpb.AdminScatterResponse)), nil
 }
 
 // findDestination returns the node ID of the node of the destination of the
 // AdminScatter request. If the destination cannot be found, 0 is returned.
-func (s dbSplitAndScatterer) findDestination(res *roachpb.AdminScatterResponse) roachpb.NodeID {
+func (s dbSplitAndScatterer) findDestination(res *kvpb.AdminScatterResponse) roachpb.NodeID {
 	if len(res.RangeInfos) > 0 {
 		// If the lease is not populated, we return the 0 value anyway. We receive 1
 		// RangeInfo per range that was scattered. Since we send a scatter request

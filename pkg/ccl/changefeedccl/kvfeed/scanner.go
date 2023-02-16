@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -188,10 +189,10 @@ func (p *scanRequestScanner) exportSpan(
 	for remaining := &span; remaining != nil; {
 		start := timeutil.Now()
 		b := txn.NewBatch()
-		r := roachpb.NewScan(remaining.Key, remaining.EndKey, false /* forUpdate */).(*roachpb.ScanRequest)
-		r.ScanFormat = roachpb.BATCH_RESPONSE
+		r := kvpb.NewScan(remaining.Key, remaining.EndKey, false /* forUpdate */).(*kvpb.ScanRequest)
+		r.ScanFormat = kvpb.BATCH_RESPONSE
 		b.Header.TargetBytes = targetBytesPerScan
-		b.AdmissionHeader = roachpb.AdmissionHeader{
+		b.AdmissionHeader = kvpb.AdmissionHeader{
 			// TODO(irfansharif): Make this configurable if we want system table
 			// scanners or support "high priority" changefeeds to run at higher
 			// priorities. We use higher AC priorities for system-internal
@@ -201,7 +202,7 @@ func (p *scanRequestScanner) exportSpan(
 			// txn level) -- this way later batches from earlier txns don't just
 			// out compete batches from newer txns.
 			CreateTime:               start.UnixNano(),
-			Source:                   roachpb.AdmissionHeader_FROM_SQL,
+			Source:                   kvpb.AdmissionHeader_FROM_SQL,
 			NoMemoryReservedAtSource: true,
 		}
 		// NB: We use a raw request rather than the Scan() method because we want
@@ -296,7 +297,7 @@ func getSpansToProcess(
 func slurpScanResponse(
 	ctx context.Context,
 	sink kvevent.Writer,
-	res *roachpb.ScanResponse,
+	res *kvpb.ScanResponse,
 	backfillTS hlc.Timestamp,
 	withDiff bool,
 	span roachpb.Span,

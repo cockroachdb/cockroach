@@ -61,6 +61,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptutil"
@@ -1344,7 +1345,7 @@ func checkInProgressBackupRestore(
 	knobs := base.TestingKnobs{
 		DistSQL: &execinfra.TestingKnobs{
 			BackupRestoreTestingKnobs: &sql.BackupRestoreTestingKnobs{
-				RunAfterExportingSpanEntry: func(_ context.Context, res *roachpb.ExportResponse) {
+				RunAfterExportingSpanEntry: func(_ context.Context, res *kvpb.ExportResponse) {
 					<-allowResponse
 					// If ResumeSpan is set to nil, it means that we have completed
 					// exporting a span and the job will update its fraction progressed.
@@ -3887,9 +3888,9 @@ func TestRestoreAsOfSystemTimeGCBounds(t *testing.T) {
 	const dir = "nodelocal://0/"
 	preGC := eval.TimestampToDecimalDatum(tc.Server(0).Clock().Now()).String()
 
-	gcr := roachpb.GCRequest{
+	gcr := kvpb.GCRequest{
 		// Bogus span to make it a valid request.
-		RequestHeader: roachpb.RequestHeader{
+		RequestHeader: kvpb.RequestHeader{
 			Key:    keys.SystemSQLCodec.TablePrefix(bootstrap.TestingUserDescID(0)),
 			EndKey: keys.MaxKey,
 		},
@@ -6249,7 +6250,7 @@ func TestRestoreErrorPropagates(t *testing.T) {
 	jobsTableKey := keys.SystemSQLCodec.TablePrefix(uint32(systemschema.JobsTable.GetID()))
 	var shouldFail, failures int64
 	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
-		TestingRequestFilter: func(ctx context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
+		TestingRequestFilter: func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
 			// Intercept Put and ConditionalPut requests to the jobs table
 			// and, if shouldFail is positive, increment failures and return an
 			// injected error.
@@ -6259,10 +6260,10 @@ func TestRestoreErrorPropagates(t *testing.T) {
 			for _, ru := range ba.Requests {
 				r := ru.GetInner()
 				switch r.(type) {
-				case *roachpb.ConditionalPutRequest, *roachpb.PutRequest:
+				case *kvpb.ConditionalPutRequest, *kvpb.PutRequest:
 					key := r.Header().Key
 					if bytes.HasPrefix(key, jobsTableKey) && atomic.LoadInt64(&shouldFail) > 0 {
-						return roachpb.NewError(errors.Errorf("boom %d", atomic.AddInt64(&failures, 1)))
+						return kvpb.NewError(errors.Errorf("boom %d", atomic.AddInt64(&failures, 1)))
 					}
 				}
 			}
@@ -6370,16 +6371,16 @@ func TestPaginatedBackupTenant(t *testing.T) {
 
 	// Check if export request is from a lease for a descriptor to avoid picking
 	// up on wrong export requests
-	isLeasingExportRequest := func(r *roachpb.ExportRequest) bool {
+	isLeasingExportRequest := func(r *kvpb.ExportRequest) bool {
 		_, tenantID, _ := keys.DecodeTenantPrefix(r.Key)
 		codec := keys.MakeSQLCodec(tenantID)
 		return bytes.HasPrefix(r.Key, codec.DescMetadataPrefix()) &&
 			r.EndKey.Equal(r.Key.PrefixEnd())
 	}
 	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
-		TestingRequestFilter: func(ctx context.Context, request *roachpb.BatchRequest) *roachpb.Error {
+		TestingRequestFilter: func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error {
 			for _, ru := range request.Requests {
-				if exportRequest, ok := ru.GetInner().(*roachpb.ExportRequest); ok &&
+				if exportRequest, ok := ru.GetInner().(*kvpb.ExportRequest); ok &&
 					!isLeasingExportRequest(exportRequest) {
 
 					mu.Lock()
@@ -6395,11 +6396,11 @@ func TestPaginatedBackupTenant(t *testing.T) {
 			}
 			return nil
 		},
-		TestingResponseFilter: func(ctx context.Context, ba *roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
+		TestingResponseFilter: func(ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse) *kvpb.Error {
 			for i, ru := range br.Responses {
-				if exportRequest, ok := ba.Requests[i].GetInner().(*roachpb.ExportRequest); ok &&
+				if exportRequest, ok := ba.Requests[i].GetInner().(*kvpb.ExportRequest); ok &&
 					!isLeasingExportRequest(exportRequest) {
-					exportResponse := ru.GetInner().(*roachpb.ExportResponse)
+					exportResponse := ru.GetInner().(*kvpb.ExportResponse)
 					// Every ExportResponse should have a single SST when running backup
 					// within a tenant.
 					require.Equal(t, 1, len(exportResponse.Files))
@@ -7325,10 +7326,10 @@ func TestClientDisconnect(t *testing.T) {
 					blockBackupOrRestore(ctx)
 				}}},
 				Store: &kvserver.StoreTestingKnobs{
-					TestingResponseFilter: func(ctx context.Context, ba *roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
+					TestingResponseFilter: func(ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse) *kvpb.Error {
 						for _, ru := range br.Responses {
 							switch ru.GetInner().(type) {
-							case *roachpb.ExportResponse:
+							case *kvpb.ExportResponse:
 								blockBackupOrRestore(ctx)
 							}
 						}
@@ -8834,8 +8835,8 @@ DROP INDEX idx_3;
 		// descriptor.
 		var b kv.Batch
 		descriptorTableSpan := makeTableSpan(codec, keys.DescriptorTableID)
-		b.AddRawRequest(&roachpb.RevertRangeRequest{
-			RequestHeader: roachpb.RequestHeader{
+		b.AddRawRequest(&kvpb.RevertRangeRequest{
+			RequestHeader: kvpb.RequestHeader{
 				Key:    descriptorTableSpan.Key,
 				EndKey: descriptorTableSpan.EndKey,
 			},

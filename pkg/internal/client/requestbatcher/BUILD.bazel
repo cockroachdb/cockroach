@@ -8,6 +8,7 @@ go_library(
     visibility = ["//pkg:__subpackages__"],
     deps = [
         "//pkg/kv",
+        "//pkg/kv/kvpb",
         "//pkg/roachpb",
         "//pkg/util/contextutil",
         "//pkg/util/log",
@@ -23,6 +24,7 @@ go_test(
     args = ["-test.timeout=55s"],
     embed = [":requestbatcher"],
     deps = [
+        "//pkg/kv/kvpb",
         "//pkg/roachpb",
         "//pkg/testutils",
         "//pkg/util/leaktest",

@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -51,8 +52,8 @@ func TestDeleteRangeTombstoneSetsGCHint(t *testing.T) {
 	gcHint := repl.GetGCHint()
 	require.True(t, gcHint.LatestRangeDeleteTimestamp.IsEmpty(), "gc hint should be empty by default")
 
-	pArgs := &roachpb.PutRequest{
-		RequestHeader: roachpb.RequestHeader{
+	pArgs := &kvpb.PutRequest{
+		RequestHeader: kvpb.RequestHeader{
 			Key: key,
 		},
 		Value: roachpb.MakeValueFromBytes(content),
@@ -64,10 +65,10 @@ func TestDeleteRangeTombstoneSetsGCHint(t *testing.T) {
 	r, err := s.LookupRange(key)
 	require.NoError(t, err, "failed to lookup range")
 
-	drArgs := &roachpb.DeleteRangeRequest{
+	drArgs := &kvpb.DeleteRangeRequest{
 		UpdateRangeDeleteGCHint: true,
 		UseRangeTombstone:       true,
-		RequestHeader: roachpb.RequestHeader{
+		RequestHeader: kvpb.RequestHeader{
 			Key:    r.StartKey.AsRawKey(),
 			EndKey: r.EndKey.AsRawKey(),
 		},

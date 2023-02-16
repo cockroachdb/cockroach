@@ -12,7 +12,7 @@ package kvcoord
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 )
 
 // ClientTestingKnobs contains testing options that dictate the behavior
@@ -60,7 +60,7 @@ type ClientTestingKnobs struct {
 	// a non-transactional batch across a range boundary. The method may inject an
 	// error which, if non-nil, becomes the result of the batch. Otherwise, execution
 	// continues.
-	OnRangeSpanningNonTxnalBatch func(ba *roachpb.BatchRequest) *roachpb.Error
+	OnRangeSpanningNonTxnalBatch func(ba *kvpb.BatchRequest) *kvpb.Error
 }
 
 var _ base.ModuleTestingKnobs = &ClientTestingKnobs{}
