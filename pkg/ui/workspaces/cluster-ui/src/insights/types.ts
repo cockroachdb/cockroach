@@ -262,8 +262,8 @@ export const getInsightFromCause = (
 };
 
 export const InsightExecOptions = new Map<string, string>([
-  [InsightExecEnum.TRANSACTION.toString(), "Transaction Executions"],
   [InsightExecEnum.STATEMENT.toString(), "Statement Executions"],
+  [InsightExecEnum.TRANSACTION.toString(), "Transaction Executions"],
 ]);
 
 export const InsightEnumToLabel = new Map<string, string>([
