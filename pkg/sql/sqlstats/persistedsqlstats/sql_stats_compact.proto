@@ -10,7 +10,7 @@
 
 syntax = "proto3";
 package cockroach.sql;
-option go_package = "persistedsqlstats";
+option go_package = "github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats";
 
 // ScheduledSQLStatsCompactorExecutionArgs is the arguments to the scheduled
 // sql stats compactor. This is required to support SHOW SCHEDULE queries.

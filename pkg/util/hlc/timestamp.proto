@@ -10,7 +10,7 @@
 
 syntax = "proto3";
 package cockroach.util.hlc;
-option go_package = "hlc";
+option go_package = "github.com/cockroachdb/cockroach/pkg/util/hlc";
 
 import "gogoproto/gogo.proto";
 

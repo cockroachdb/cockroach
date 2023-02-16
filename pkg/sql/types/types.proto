@@ -11,7 +11,7 @@
 // Cannot be proto3 because we use nullable primitives.
 syntax = "proto2";
 package cockroach.sql.sem.types;
-option go_package = "types";
+option go_package = "github.com/cockroachdb/cockroach/pkg/sql/types";
 
 import "gogoproto/gogo.proto";
 import "geo/geopb/geopb.proto";

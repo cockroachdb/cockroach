@@ -10,7 +10,7 @@
 
 syntax = "proto3";
 package cockroach.kv.kvserver.readsummary;
-option go_package = "rspb";
+option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb";
 
 import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";

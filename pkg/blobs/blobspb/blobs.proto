@@ -10,7 +10,7 @@
 
 syntax = "proto3";
 package cockroach.blobs;
-option go_package = "blobspb";
+option go_package = "github.com/cockroachdb/cockroach/pkg/blobs/blobspb";
 
 // GetRequest is used to read a file from a remote node.
 // It's path is specified by `filename`, which can either

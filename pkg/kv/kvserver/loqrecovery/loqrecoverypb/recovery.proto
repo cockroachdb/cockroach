@@ -10,7 +10,7 @@
 
 syntax = "proto3";
 package cockroach.kv.kvserver.loqrecovery.loqrecoverypb;
-option go_package = "loqrecoverypb";
+option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb";
 
 import "roachpb/data.proto";
 import "roachpb/metadata.proto";

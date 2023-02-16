@@ -10,7 +10,7 @@
 
 syntax = "proto3";
 package cockroach.server.status.statuspb;
-option go_package = "statuspb";
+option go_package = "github.com/cockroachdb/cockroach/pkg/server/status/statuspb";
 
 import "roachpb/metadata.proto";
 import "build/info.proto";

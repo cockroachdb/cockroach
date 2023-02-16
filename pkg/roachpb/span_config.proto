@@ -10,7 +10,7 @@
 
 syntax = "proto3";
 package cockroach.roachpb;
-option go_package = "roachpb";
+option go_package = "github.com/cockroachdb/cockroach/pkg/roachpb";
 
 import "errorspb/errors.proto";
 import "roachpb/data.proto";

@@ -10,7 +10,7 @@
 
 syntax = "proto2";
 package cockroach.config.zonepb;
-option go_package = "zonepb";
+option go_package = "github.com/cockroachdb/cockroach/pkg/config/zonepb";
 
 import "gogoproto/gogo.proto";
 

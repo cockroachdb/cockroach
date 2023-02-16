@@ -11,7 +11,7 @@
 // Cannot be proto3 because we depend on absent-vs-empty distinction.
 syntax = "proto2";
 package cockroach.storage.enginepb;
-option go_package = "enginepb";
+option go_package = "github.com/cockroachdb/cockroach/pkg/storage/enginepb";
 
 import "storage/enginepb/mvcc3.proto";
 import "util/hlc/legacy_timestamp.proto";

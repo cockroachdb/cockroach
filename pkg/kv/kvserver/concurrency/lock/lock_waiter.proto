@@ -10,7 +10,7 @@
 
 syntax = "proto3";
 package cockroach.kv.kvserver.concurrency.lock;
-option go_package = "lock";
+option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock";
 
 import "kv/kvserver/concurrency/lock/locking.proto";
 import "storage/enginepb/mvcc3.proto";

@@ -10,7 +10,7 @@
 
 syntax = "proto3";
 package cockroach.util.admission.admissionpb;
-option go_package = "admissionpb";
+option go_package = "github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb";
 
 import "gogoproto/gogo.proto";
 

@@ -11,7 +11,7 @@
 
 syntax = "proto3";
 package cockroach.kv.bulk.bulkpb;
-option go_package = "bulkpb";
+option go_package = "github.com/cockroachdb/cockroach/pkg/kv/bulk/bulkpb";
 
 import "gogoproto/gogo.proto";
 import "util/hlc/timestamp.proto";

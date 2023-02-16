@@ -10,7 +10,7 @@
 
 syntax = "proto3";
 package cockroach.sql.sessiondatapb;
-option go_package = "lex";
+option go_package = "github.com/cockroachdb/cockroach/pkg/sql/lex";
 
 import "gogoproto/gogo.proto";
 

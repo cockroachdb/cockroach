@@ -10,7 +10,7 @@
 
 syntax = "proto2";
 package cockroach.sql.sqlbase;
-option go_package = "catpb";
+option go_package = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb";
 
 import "gogoproto/gogo.proto";
 

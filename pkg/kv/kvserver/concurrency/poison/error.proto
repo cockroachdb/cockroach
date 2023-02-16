@@ -10,7 +10,7 @@
 
 syntax = "proto3";
 package cockroach.kv.kvserver.concurrency.poison;
-option go_package = "poison";
+option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison";
 
 import "util/hlc/timestamp.proto";
 import "roachpb/data.proto";

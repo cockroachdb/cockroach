@@ -10,7 +10,7 @@
 
 syntax = "proto3";
 package cockroach.sql.schemachanger.scpb;
-option go_package = "scpb";
+option go_package = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb";
 
 import "sql/catalog/catenumpb/index.proto";
 import "sql/catalog/catpb/catalog.proto";

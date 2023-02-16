@@ -14,7 +14,7 @@
 
 syntax = "proto3";
 package cockroach.sql.stats;
-option go_package = "stats";
+option go_package = "github.com/cockroachdb/cockroach/pkg/sql/stats";
 
 import "gogoproto/gogo.proto";
 import "sql/types/types.proto";
