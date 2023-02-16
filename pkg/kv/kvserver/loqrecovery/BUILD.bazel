@@ -17,6 +17,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
+        "//pkg/clusterversion",
         "//pkg/gossip",
         "//pkg/keys",
         "//pkg/kv",
@@ -30,6 +31,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/server/serverpb",
+        "//pkg/settings/cluster",
         "//pkg/storage",
         "//pkg/util/contextutil",
         "//pkg/util/grpcutil",
