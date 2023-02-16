@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
@@ -169,6 +170,10 @@ func init() {
 }
 
 func dumpCmdInfo(ctx context.Context, eng storage.Engine, cmd *replicatedCmd) (s string) {
+	defer time.AfterFunc(5*time.Second, func() {
+		fmt.Fprintln(os.Stderr, "timed out during assertion")
+		os.Exit(123)
+	}).Stop()
 	defer func() {
 		if r := recover(); r != nil {
 			s = fmt.Sprint(r)
