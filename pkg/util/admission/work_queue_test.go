@@ -57,9 +57,12 @@ func (b *builderWithMu) stringAndReset() string {
 }
 
 type testGranter struct {
-	name                  string
-	buf                   *builderWithMu
-	r                     requester
+	gk   grantKind
+	name string
+	buf  *builderWithMu
+	r    requester
+
+	// Configurable knobs for tests.
 	returnValueFromTryGet bool
 	additionalTokens      int64
 }
@@ -67,21 +70,26 @@ type testGranter struct {
 var _ granterWithStoreWriteDone = &testGranter{}
 
 func (tg *testGranter) grantKind() grantKind {
-	return slot
+	return tg.gk
 }
+
 func (tg *testGranter) tryGet(count int64) bool {
 	tg.buf.printf("tryGet%s: returning %t", tg.name, tg.returnValueFromTryGet)
 	return tg.returnValueFromTryGet
 }
+
 func (tg *testGranter) returnGrant(count int64) {
 	tg.buf.printf("returnGrant%s %d", tg.name, count)
 }
+
 func (tg *testGranter) tookWithoutPermission(count int64) {
 	tg.buf.printf("tookWithoutPermission%s %d", tg.name, count)
 }
+
 func (tg *testGranter) continueGrantChain(grantChainID grantChainID) {
 	tg.buf.printf("continueGrantChain%s %d", tg.name, grantChainID)
 }
+
 func (tg *testGranter) grant(grantChainID grantChainID) {
 	rv := tg.r.granted(grantChainID)
 	if rv > 0 {
@@ -93,6 +101,7 @@ func (tg *testGranter) grant(grantChainID grantChainID) {
 	}
 	tg.buf.printf("granted%s: returned %d", tg.name, rv)
 }
+
 func (tg *testGranter) storeWriteDone(
 	originalTokens int64, doneInfo StoreWorkDoneInfo,
 ) (additionalTokens int64) {
@@ -186,7 +195,7 @@ func TestWorkQueueBasic(t *testing.T) {
 			switch d.Cmd {
 			case "init":
 				closeFn()
-				tg = &testGranter{buf: &buf}
+				tg = &testGranter{gk: slot, buf: &buf}
 				opts := makeWorkQueueOptions(KVWork)
 				timeSource = timeutil.NewManualTime(initialTime)
 				opts.timeSource = timeSource
@@ -329,7 +338,7 @@ func TestWorkQueueTokenResetRace(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	var buf builderWithMu
-	tg := &testGranter{buf: &buf}
+	tg := &testGranter{gk: slot, buf: &buf}
 	st := cluster.MakeTestingClusterSettings()
 	registry := metric.NewRegistry()
 	metrics := makeWorkQueueMetrics("", registry)
@@ -506,16 +515,16 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 			switch d.Cmd {
 			case "init":
 				closeFn()
-				tg[admissionpb.RegularWorkClass] = &testGranter{name: " regular", buf: &buf}
-				tg[admissionpb.ElasticWorkClass] = &testGranter{name: " elastic", buf: &buf}
+				tg[admissionpb.RegularWorkClass] = &testGranter{gk: token, name: " regular", buf: &buf}
+				tg[admissionpb.ElasticWorkClass] = &testGranter{gk: token, name: " elastic", buf: &buf}
 				opts := makeWorkQueueOptions(KVWork)
 				opts.usesTokens = true
 				opts.timeSource = timeutil.NewManualTime(timeutil.FromUnixMicros(0))
 				opts.disableEpochClosingGoroutine = true
 				st = cluster.MakeTestingClusterSettings()
-				q = makeStoreWorkQueue(log.MakeTestingAmbientContext(tracing.NewTracer()),
+				q = makeStoreWorkQueue(log.MakeTestingAmbientContext(tracing.NewTracer()), roachpb.StoreID(1),
 					[admissionpb.NumWorkClasses]granterWithStoreWriteDone{tg[admissionpb.RegularWorkClass], tg[admissionpb.ElasticWorkClass]},
-					st, metrics, opts).(*StoreWorkQueue)
+					st, metrics, opts, nil /* testing knobs */).(*StoreWorkQueue)
 				tg[admissionpb.RegularWorkClass].r = q.getRequesters()[admissionpb.RegularWorkClass]
 				tg[admissionpb.ElasticWorkClass].r = q.getRequesters()[admissionpb.ElasticWorkClass]
 				wrkMap.resetMap()
