@@ -919,7 +919,7 @@ func (n *Node) GetPebbleMetrics() []admission.StoreMetrics {
 			diskStats = s
 		}
 		metrics = append(metrics, admission.StoreMetrics{
-			StoreID:         int32(store.StoreID()),
+			StoreID:         store.StoreID(),
 			Metrics:         m.Metrics,
 			WriteStallCount: m.WriteStallCount,
 			DiskStats:       diskStats})

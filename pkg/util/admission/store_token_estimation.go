@@ -177,8 +177,8 @@ func (e *storePerWorkTokenEstimator) updateEstimates(
 	if adjustedIntL0IngestedBytes < 0 {
 		adjustedIntL0IngestedBytes = 0
 	}
-	intWorkCount := int64(admissionStats.admittedCount) -
-		int64(e.cumStoreAdmissionStats.admittedCount)
+	intWorkCount := int64(admissionStats.workCount) -
+		int64(e.cumStoreAdmissionStats.workCount)
 	intL0WriteAccountedBytes :=
 		int64(admissionStats.writeAccountedBytes) - int64(e.cumStoreAdmissionStats.writeAccountedBytes)
 	// Note that these are not L0 ingested bytes, since we don't know how

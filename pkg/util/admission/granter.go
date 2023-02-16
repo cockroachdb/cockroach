@@ -594,7 +594,7 @@ type IOThresholdConsumer interface {
 
 // StoreMetrics are the metrics for a store.
 type StoreMetrics struct {
-	StoreID int32
+	StoreID roachpb.StoreID
 	*pebble.Metrics
 	WriteStallCount int64
 	// Optional.

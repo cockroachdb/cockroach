@@ -15,6 +15,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -151,7 +152,7 @@ const l0SubLevelCountOverloadThreshold = 20
 //     storeWriteDone), the tokens are adjusted differently for the
 //     flush/compaction L0 tokens and for the "disk bandwidth" tokens.
 type ioLoadListener struct {
-	storeID     int32
+	storeID     roachpb.StoreID
 	settings    *cluster.Settings
 	kvRequester storeRequester
 	kvGranter   granterWithIOTokens
