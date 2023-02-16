@@ -92,7 +92,7 @@ func TestReplicaStateMachineChangeReplicas(t *testing.T) {
 
 		// Stage a command with the ChangeReplicas trigger.
 		ent := &raftlog.Entry{
-			Entry: raftpb.Entry{
+			RaftEntry: raftlog.RaftEntry{
 				Index: r.mu.state.RaftAppliedIndex + 1,
 				Type:  raftpb.EntryConfChange,
 			},
@@ -196,7 +196,7 @@ func TestReplicaStateMachineRaftLogTruncationStronglyCoupled(t *testing.T) {
 		// Stage a command that truncates one raft log entry which we pretend has a
 		// byte size of 1.
 		ent := &raftlog.Entry{
-			Entry: raftpb.Entry{
+			RaftEntry: raftlog.RaftEntry{
 				Index: raftAppliedIndex + 1,
 				Type:  raftpb.EntryNormal,
 			},
@@ -315,7 +315,7 @@ func TestReplicaStateMachineRaftLogTruncationLooselyCoupled(t *testing.T) {
 			// Stage a command that truncates one raft log entry which we pretend has a
 			// byte size of 1.
 			ent := &raftlog.Entry{
-				Entry: raftpb.Entry{
+				RaftEntry: raftlog.RaftEntry{
 					Index: raftAppliedIndex + 1,
 					Type:  raftpb.EntryNormal,
 				},
@@ -446,7 +446,7 @@ func TestReplicaStateMachineEphemeralAppBatchRejection(t *testing.T) {
 	for _, s := range []string{"earlier", "later"} {
 		req, repr := descWriteRepr(s)
 		ent := &raftlog.Entry{
-			Entry: raftpb.Entry{
+			RaftEntry: raftlog.RaftEntry{
 				Index: raftAppliedIndex + 1,
 				Type:  raftpb.EntryNormal,
 			},

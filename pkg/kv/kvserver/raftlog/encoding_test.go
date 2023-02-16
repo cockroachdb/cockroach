@@ -62,7 +62,7 @@ func BenchmarkRaftAdmissionMetaOverhead(b *testing.B) {
 
 			encodingBuf := make([]byte, RaftCommandPrefixLen+raftAdmissionMeta.Size()+len(marshaledRaftCmd))
 			raftEnt := Entry{
-				Entry: raftpb.Entry{
+				RaftEntry: RaftEntry{
 					Term:  1,
 					Index: 1,
 					Type:  raftpb.EntryNormal,
