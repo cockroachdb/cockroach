@@ -13,6 +13,7 @@ package kvserver
 import (
 	"context"
 	"math/rand"
+	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -133,7 +134,8 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 				_, inMap := r.mu.proposals[cmd.ID]
 				if inMap {
 					// NB: intentionally still holding lock, or access to `cmd.proposal` is unsafe.
-					log.Fatalf(ctx, "failed reproposal unexpectedly in proposals map: %s", dumpCmdInfo(ctx, r.store.TODOEngine(), cmd))
+					log.Warningf(ctx, "failed reproposal unexpectedly in proposals map: %s", dumpCmdInfo(ctx, r.store.TODOEngine(), cmd))
+					os.Exit(123)
 				}
 				r.mu.RUnlock()
 			} else {
