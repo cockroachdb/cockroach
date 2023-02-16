@@ -630,7 +630,7 @@ func (h *replicaHandle) deductTokens(
 	// Increment the quorum log position -- all token deductions are bound to
 	// incrementing log positions.
 	h.quorumLogPosition.Index += 1
-	streams := h.handle.TestingDeductTokensForInner(ctx, pri, h.quorumLogPosition, tokens)
+	_, streams := h.handle.TestingDeductTokensForInner(ctx, pri, time.Time{}, h.quorumLogPosition, tokens)
 	for _, stream := range streams {
 		h.deductionTracker[stream].Track(ctx, pri, tokens, h.quorumLogPosition)
 	}

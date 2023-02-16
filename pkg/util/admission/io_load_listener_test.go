@@ -67,11 +67,11 @@ func TestIOLoadListener(t *testing.T) {
 
 			case "prep-admission-stats":
 				req.stats = storeAdmissionStats{
-					admittedCount:          0,
+					workCount:              0,
 					writeAccountedBytes:    0,
 					ingestedAccountedBytes: 0,
 				}
-				d.ScanArgs(t, "admitted", &req.stats.admittedCount)
+				d.ScanArgs(t, "admitted", &req.stats.workCount)
 				if d.HasArg("write-bytes") {
 					d.ScanArgs(t, "write-bytes", &req.stats.writeAccountedBytes)
 				}
@@ -290,7 +290,7 @@ func TestBadIOLoadListenerStats(t *testing.T) {
 		d.BytesRead = rand.Uint64()
 		d.BytesWritten = rand.Uint64()
 		d.ProvisionedBandwidth = 1 << 20
-		req.stats.admittedCount = rand.Uint64()
+		req.stats.workCount = rand.Uint64()
 		req.stats.writeAccountedBytes = rand.Uint64()
 		req.stats.ingestedAccountedBytes = rand.Uint64()
 		req.stats.statsToIgnore.Bytes = rand.Uint64()

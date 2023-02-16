@@ -99,7 +99,10 @@ type Handle interface {
 	// tracked with respect to the specific raft log position it's expecting it
 	// to end up in, log positions that monotonically increase. Requests are
 	// assumed to have been Admit()-ed first.
-	DeductTokensFor(context.Context, admissionpb.WorkPriority, kvflowcontrolpb.RaftLogPosition, Tokens)
+	DeductTokensFor(
+		context.Context, admissionpb.WorkPriority, time.Time,
+		kvflowcontrolpb.RaftLogPosition, Tokens,
+	) time.Time
 	// ReturnTokensUpto returns all previously deducted tokens of a given
 	// priority for all log positions less than or equal to the one specified.
 	// It does for the specific stream. Once returned, subsequent attempts to
@@ -110,7 +113,10 @@ type Handle interface {
 	// the same raft term -- we want to both free up tokens from when we lost
 	// the lease, and also ensure we discard attempts to return them (on hearing
 	// about AdmittedRaftLogEntries replicated under the earlier lease).
-	ReturnTokensUpto(context.Context, admissionpb.WorkPriority, kvflowcontrolpb.RaftLogPosition, Stream)
+	ReturnTokensUpto(
+		context.Context, admissionpb.WorkPriority,
+		kvflowcontrolpb.RaftLogPosition, Stream,
+	)
 	// ConnectStream connects a stream (typically pointing to an active member
 	// of the raft group) to the handle. Subsequent calls to Admit() will block
 	// until flow tokens are available for the stream, or for it to be

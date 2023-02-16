@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -79,7 +80,7 @@ func TestHandleAdmit(t *testing.T) {
 			// Connect a single stream at pos=0 and deplete all 16MiB of regular
 			// tokens at pos=1.
 			handle.ConnectStream(ctx, pos(0), stream)
-			handle.DeductTokensFor(ctx, admissionpb.NormalPri, pos(1), kvflowcontrol.Tokens(16<<20 /* 16MiB */))
+			handle.DeductTokensFor(ctx, admissionpb.NormalPri, time.Time{}, pos(1), kvflowcontrol.Tokens(16<<20 /* 16MiB */))
 
 			// Invoke .Admit() in a separate goroutine, and test below whether
 			// the goroutine is blocked.
@@ -104,4 +105,68 @@ func TestHandleAdmit(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestHandleSequencing tests the sequencing behavior of
+// Handle.DeductTokensFor(), namely that we:
+// - advance sequencing timestamps when the create-time advances;
+// - advance sequencing timestamps when the log position advances.
+func TestHandleSequencing(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// tzero represents the t=0, the earliest possible time. All other
+	// create-time=<duration> is relative to this time.
+	var tzero = timeutil.Unix(0, 0)
+
+	ctx := context.Background()
+	stream := kvflowcontrol.Stream{
+		TenantID: roachpb.MustMakeTenantID(42),
+		StoreID:  roachpb.StoreID(42),
+	}
+	pos := func(t, i uint64) kvflowcontrolpb.RaftLogPosition {
+		return kvflowcontrolpb.RaftLogPosition{Term: t, Index: i}
+	}
+	ct := func(d int64) time.Time {
+		return tzero.Add(time.Nanosecond * time.Duration(d))
+	}
+
+	const tokens = kvflowcontrol.Tokens(1 << 20 /* MiB */)
+	const normal = admissionpb.NormalPri
+
+	registry := metric.NewRegistry()
+	clock := hlc.NewClockForTesting(nil)
+	controller := kvflowcontroller.New(registry, cluster.MakeTestingClusterSettings(), clock)
+	handle := kvflowhandle.New(controller, kvflowhandle.NewMetrics(registry), clock)
+
+	// Test setup: handle is connected to a single stream at pos=1/0 and has
+	// deducted 1MiB of regular tokens at pos=1 ct=1.
+	handle.ConnectStream(ctx, pos(1, 0), stream)
+	handle.DeductTokensFor(ctx, normal, ct(1), pos(1, 1), tokens)
+
+	// If create-time advances, so does the sequencing timestamp.
+	seq1 := handle.DeductTokensFor(ctx, normal, ct(2), pos(1, 1), tokens)
+	require.Greater(t, seq1, ct(2))
+
+	// If <create-time,log-position> stays static, so does the
+	// sequencing timestamp.
+	seq2 := handle.DeductTokensFor(ctx, normal, ct(2), pos(1, 1), tokens)
+	require.Equal(t, seq2, seq1)
+
+	// If the log index advances, so does the sequencing timestamp.
+	seq3 := handle.DeductTokensFor(ctx, normal, ct(3), pos(1, 2), tokens)
+	require.Greater(t, seq3, seq2)
+
+	// If the log term advances, so does the sequencing timestamp.
+	seq4 := handle.DeductTokensFor(ctx, normal, ct(3), pos(2, 2), tokens)
+	require.Greater(t, seq4, seq3)
+
+	// If both the create-time and log-position advance, so does the sequencing
+	// timestamp.
+	seq5 := handle.DeductTokensFor(ctx, normal, ct(1000), pos(4, 20), tokens)
+	require.Greater(t, seq5, seq4)
+
+	// Verify that the sequencing timestamp is kept close to the maximum
+	// observed create-time.
+	require.LessOrEqual(t, seq5.Sub(ct(1000)), time.Nanosecond)
 }
