@@ -327,6 +327,105 @@ package kvflowcontrol
 //   it can transition into the mode described in I3a where we deduct/block for
 //   flow tokens for subsequent quorum writes.
 //
+// I12. How does this interact with epoch-LIFO? Or CreateTime ordering
+//      generally?
+// - Background: Epoch-LIFO tries to reduce lower percentile admission queueing
+//   delay (at the expense of higher percentile delay) by switching between the
+//   standard CreateTime-based FIFO ordering to LIFO-within-an-epoch. Work
+//   submitted by a transaction with CreateTime T is slotted into the epoch
+//   number with time interval [E, E+100ms) where T is contained in this
+//   interval. The work will start executing after the epoch is closed, at
+//   ~E+100ms. This increases transaction latency by at most ~100ms. When the
+//   epoch closes, all nodes start executing the transactions in that epoch in
+//   LIFO order, and will implicitly have the same set of competing
+//   transactions[^10], a set that stays unchanged until the next epoch closes.
+//   And by the time the next epoch closes, and the current epoch's transactions
+//   are deprioritized, 100ms will have elapsed, which is selected to be long
+//   enough for most of these now-admitted to have finished their work.
+//   - We switch to LIFO-within-an-epoch once we start observing that the
+//     maximum queuing delay for work within a <tenant,priority> starts
+//     exceeding the ~100ms we'd add with epoch-LIFO.
+//   - The idea is we have bottle neck resources that cause delays without
+//     bound with if work keeps accumulating, and other kinds of bottlenecks
+//     where delays aren't increasing without bound. We're also relying on work
+//     bottlenecked on epoch-LIFO not being able to issue more work.
+// - For below-raft work queue ordering, we effectively ignore CreateTime when
+//   ordering work. Within a given <tenant,priority,range>, admission takes
+//   place in raft log order (i.e. entries with lower terms get admitted first,
+//   or lower indexes within the same term). This simplifies token returns which
+//   happen by specifying a prefix up to which we want to release flow tokens
+//   for a given priority[^13]. 
+//   - NB: Regarding "admission takes place in raft log order", we could
+//     implement this differently. We introduced log-position based ordering to
+//     simplify the implementation of token returns where we release tokens by
+//     specifying the log position up-to-which we want to release held
+//     tokens[^11]. But with additional tracking in the below-raft work queues,
+//     if we know that work W2 with log position L2 got admitted, and
+//     corresponded to F flow token deductions at the origin, and we also know
+//     that work W1 with log position L1 is currently queued, also corresponding
+//     to F flow token deductions at the origin, we could inform the origin node
+//     to return flow tokens up to L1 and still get what we want -- a return of
+//     F flow tokens when each work gets admitted.
+//   - We're effectively ignoring CreateTime since flow token deductions at the
+//     sender aren't "tied" to CreateTime in the way they're tied to the issuing
+//     tenant or the work class. So while we still want priority-based ordering
+//     to release regular flow tokens before elastic ones, releasing flow tokens
+//     for work with lower CreateTimes does not actually promote doing older
+//     work first since the physical work below-raft is already done before
+//     (asynchronous) admission, and the token returns don't unblock work from
+//     some given epoch. Below-raft ordering based on CreateTime is moot.
+// - Note that for WorkQueue orderings, we have (i) fair sharing through
+//   tenantID+weight, (ii) strict prioritization, (iii) and sequencing of work
+//   within a <tenant,priority>, using CreateTime. For below-raft work
+//   queue ordering where we want to admit in roughly log position order, we
+//   then (ab)use the CreateTime sequencing by combining each work's true
+//   CreateTime with its log position[^12], to get a monotonic "sequence number"
+//   that tracks observed log positions. This sequence number is kept close to
+//   the maximum observed CreateTime within a replication stream, which also
+//   lets us generate cluster-wide FIFO ordering as follows.
+//   - We're thus assigning CreateTime in a way that, with a high probability,
+//     matches log position order. We can be forgetful about this tracking (for
+//     internal GC reasons) since at wt worst we might over-admit slightly. 
+//   - To operate within cluster-wide FIFO ordering, we want to order by
+//     "true" CreateTime when comparing work across different ranges. Writes for
+//     a single range, as observed by a given store below-raft (follower or
+//     otherwise) travel along a single stream. Consider the case where a single
+//     store S3 receives replication traffic for two ranges R1 and R2,
+//     originating from two separate nodes N1 and N2. If N1 is issuing writes
+//     with strictly older CreateTimes, when returning flow tokens we should
+//     prefer N1. By keeping these sequence numbers close to "true" CreateTimes,
+//     we'd be favoring N1 without introducing bias for replication streams with
+//     shorter/longer raft logs[^12].
+// - We could improve cluster-wide FIFO properties by introducing a
+//   WorkQueue-like datastructure that simply orders by CreateTime when
+//   acquiring flow tokens above raft.
+//   - Could we then use this above-raft ordering to implement epoch-LIFO?
+//     Cluster-wide we want to admit work within a given epoch, which here
+//     entails issuing replication traffic for work slotted in a given epoch.
+//   - Fan-in effects to consider for epoch-LIFO, assuming below-raft orderings
+//     are as described above (i.e. log-position based).
+//     - When there's no epoch-LIFO happening, we have cluster-wide FIFO
+//       ordering within a <tenant,priority> pair as described above.
+//     - When epoch-LIFO is happening across all senders issuing replication
+//       traffic to a given receiver store, we're seeing work within the same
+//       epoch, but we'll be returning flow tokens to nodes issuing work with
+//       older CreateTimes. So defeating the LIFO in epoch-LIFO, but we're still
+//       completing work slotted into some given epoch.
+//     - When epoch-LIFO is happening only on a subset of the senders issuing
+//       replication traffic, we'll again be returning flow tokens to nodes
+//       issuing work with older CreateTimes. This is undefined.
+//     - It's strange that different nodes can admit work from "different
+//       epochs"[^10]. What are we to do below-raft, when deciding where to
+//       return flow tokens back to, since it's all for the same
+//       <tenant,priority>? Maybe we need to pass down whether the work was
+//       admitted at the sender with LIFO/FIFO, and return flow tokens in
+//       {LIFO,FIFO} order across all nodes that issued {LIFO,FIFO} work? Or
+//       also pass down the enqueuing timestamp, so we have a good sense
+//       below-raft on whether this work is past the epoch expiration and should
+//       be deprioritized.
+//   - Because the fan-in effects of epoch-LIFO are not well understood (by this
+//     author at least), we just disable it below-raft.
+//
 // ---
 //
 // [^1]: kvserverpb.RaftMessageRequest is the unit of what's sent
@@ -373,6 +472,18 @@ package kvflowcontrol
 //         machine application get significantly behind due to local scheduling
 //         reasons by using the same goroutine to do both async raft log writes
 //         and state machine application.
+// [^10]: This relies on partially synchronized clocks without requiring
+//        explicit coordination.
+//        - Isn't the decision to start using epoch-LIFO a node-local one, based
+//          on node-local max queuing latency for a <tenant,priority>? So what
+//          happens when work for a transaction is operating across multiple
+//          nodes, some using epoch-LIFO and some not?
+//          Is this why we use the max queuing latency as the trigger to switch
+//          into epoch-LIFO? All queued work for an epoch E across all nodes, if
+//          still queued after ~100ms, will trigger epoch-LIFO everywhere.
+// [^11]: See UpToRaftLogPosition in AdmittedRaftLogEntries.
+// [^12]: See the sequencer type in pkg/util/admission.
+// [^13]: See the implementation for kvflowcontrol.Dispatch.
 //
 // TODO(irfansharif): These descriptions are too high-level, imprecise and
 // possibly wrong. Fix that. After implementing these interfaces and integrating
