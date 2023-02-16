@@ -96,16 +96,24 @@ type rangeKeyBatcher struct {
 
 	// Minimum timestamp in the current batch. Used for metrics purpose.
 	minTimestamp hlc.Timestamp
-	// Data size of the current batch.
-	dataSize int
+
+	// batchSummary is the BulkOpSummary for the current batch of rangekeys.
+	batchSummary roachpb.BulkOpSummary
+
+	// onFlush is the callback called after the current batch has been
+	// successfully ingested.
+	onFlush func(roachpb.BulkOpSummary)
 }
 
-func newRangeKeyBatcher(ctx context.Context, cs *cluster.Settings, db *kv.DB) *rangeKeyBatcher {
+func newRangeKeyBatcher(
+	ctx context.Context, cs *cluster.Settings, db *kv.DB, onFlush func(summary roachpb.BulkOpSummary),
+) *rangeKeyBatcher {
 	batcher := &rangeKeyBatcher{
 		db:              db,
 		minTimestamp:    hlc.MaxTimestamp,
-		dataSize:        0,
+		batchSummary:    roachpb.BulkOpSummary{},
 		rangeKeySSTFile: &storage.MemFile{},
+		onFlush:         onFlush,
 	}
 	batcher.rangeKeySSTWriterMaker = func() *storage.SSTWriter {
 		w := storage.MakeIngestionSSTWriter(ctx, cs, batcher.rangeKeySSTFile)
@@ -281,14 +289,23 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 	evalCtx := sip.FlowCtx.EvalCtx
 	db := sip.FlowCtx.Cfg.DB
 	var err error
-	sip.batcher, err = bulk.MakeStreamSSTBatcher(ctx, db.KV(), evalCtx.Settings,
-		sip.flowCtx.Cfg.BackupMonitor.MakeBoundAccount(), sip.flowCtx.Cfg.BulkSenderLimiter)
+	sip.batcher, err = bulk.MakeStreamSSTBatcher(
+		ctx, db.KV(), evalCtx.Settings, sip.flowCtx.Cfg.BackupMonitor.MakeBoundAccount(),
+		sip.flowCtx.Cfg.BulkSenderLimiter, func(batchSummary roachpb.BulkOpSummary) {
+			// OnFlush update the ingested logical and SST byte metrics.
+			sip.metrics.IngestedLogicalBytes.Inc(batchSummary.DataSize)
+			sip.metrics.IngestedSSTBytes.Inc(batchSummary.SSTDataSize)
+		})
 	if err != nil {
 		sip.MoveToDraining(errors.Wrap(err, "creating stream sst batcher"))
 		return
 	}
 
-	sip.rangeBatcher = newRangeKeyBatcher(ctx, evalCtx.Settings, db.KV())
+	sip.rangeBatcher = newRangeKeyBatcher(ctx, evalCtx.Settings, db.KV(), func(batchSummary roachpb.BulkOpSummary) {
+		// OnFlush update the ingested logical and SST byte metrics.
+		sip.metrics.IngestedLogicalBytes.Inc(batchSummary.DataSize)
+		sip.metrics.IngestedSSTBytes.Inc(batchSummary.SSTDataSize)
+	})
 
 	// Start a poller that checks if the stream ingestion job has been signaled to
 	// cutover.
@@ -731,11 +748,10 @@ func (sip *streamIngestionProcessor) bufferCheckpoint(event partitionEvent) erro
 // the current size of all buffered range keys.
 func (r *rangeKeyBatcher) buffer(rangeKV storage.MVCCRangeKeyValue) {
 	r.curRangeKVBatch = append(r.curRangeKVBatch, rangeKV)
-	r.dataSize += rangeKV.RangeKey.EncodedSize() + len(rangeKV.Value)
 }
 
-func (r *rangeKeyBatcher) size() int {
-	return r.dataSize
+func (r *rangeKeyBatcher) logicalDataSize() int64 {
+	return r.batchSummary.DataSize
 }
 
 // Flush all the range keys buffered so far into storage as an SST.
@@ -766,6 +782,7 @@ func (r *rangeKeyBatcher) flush(ctx context.Context) error {
 		if rangeKeyVal.RangeKey.Timestamp.Less(r.minTimestamp) {
 			r.minTimestamp = rangeKeyVal.RangeKey.Timestamp
 		}
+		r.batchSummary.DataSize += int64(rangeKeyVal.RangeKey.EncodedSize() + len(rangeKeyVal.Value))
 	}
 
 	// Finish the current batch.
@@ -777,7 +794,16 @@ func (r *rangeKeyBatcher) flush(ctx context.Context) error {
 		false /* disallowConflicts */, false, /* disallowShadowing */
 		hlc.Timestamp{}, nil /* stats */, false, /* ingestAsWrites */
 		r.db.Clock().Now())
-	return err
+	if err != nil {
+		return err
+	}
+	r.batchSummary.SSTDataSize += int64(len(r.rangeKeySSTFile.Data()))
+
+	if r.onFlush != nil {
+		r.onFlush(r.batchSummary)
+	}
+
+	return nil
 }
 
 // Reset all the states inside the batcher and needs to called after flush
@@ -788,7 +814,7 @@ func (r *rangeKeyBatcher) reset() {
 	}
 	r.rangeKeySSTFile.Reset()
 	r.minTimestamp = hlc.MaxTimestamp
-	r.dataSize = 0
+	r.batchSummary.Reset()
 	r.curRangeKVBatch = r.curRangeKVBatch[:0]
 }
 
@@ -797,9 +823,11 @@ func (sip *streamIngestionProcessor) flush() (*jobspb.ResolvedSpans, error) {
 	defer sp.Finish()
 
 	flushedCheckpoints := jobspb.ResolvedSpans{ResolvedSpans: make([]jobspb.ResolvedSpan, 0)}
+
+	// First process the point KVs.
+	//
 	// Ensure that the current batch is sorted.
 	sort.Sort(sip.curKVBatch)
-	totalSize := 0
 	minBatchMVCCTimestamp := hlc.MaxTimestamp
 	for _, keyVal := range sip.curKVBatch {
 		if err := sip.batcher.AddMVCCKey(ctx, keyVal.Key, keyVal.Value); err != nil {
@@ -808,39 +836,32 @@ func (sip *streamIngestionProcessor) flush() (*jobspb.ResolvedSpans, error) {
 		if keyVal.Key.Timestamp.Less(minBatchMVCCTimestamp) {
 			minBatchMVCCTimestamp = keyVal.Key.Timestamp
 		}
-		totalSize += len(keyVal.Key.Key) + len(keyVal.Value)
 	}
 
-	if sip.rangeBatcher.size() > 0 {
-		totalSize += sip.rangeBatcher.size()
+	preFlushTime := timeutil.Now()
+	if len(sip.curKVBatch) > 0 {
+		if err := sip.batcher.Flush(ctx); err != nil {
+			return nil, errors.Wrap(err, "flushing sst batcher")
+		}
+	}
+
+	// Now process the range KVs.
+	if len(sip.rangeBatcher.curRangeKVBatch) > 0 {
 		if sip.rangeBatcher.minTimestamp.Less(minBatchMVCCTimestamp) {
 			minBatchMVCCTimestamp = sip.rangeBatcher.minTimestamp
 		}
-	}
 
-	if len(sip.curKVBatch) > 0 || sip.rangeBatcher.size() > 0 {
-		preFlushTime := timeutil.Now()
-		defer func() {
-			sip.metrics.FlushHistNanos.RecordValue(timeutil.Since(preFlushTime).Nanoseconds())
-			sip.metrics.CommitLatency.RecordValue(timeutil.Since(minBatchMVCCTimestamp.GoTime()).Nanoseconds())
-			sip.metrics.Flushes.Inc(1)
-			sip.metrics.IngestedBytes.Inc(int64(totalSize))
-			sip.metrics.SSTBytes.Inc(sip.batcher.GetSummary().SSTDataSize)
-			sip.metrics.IngestedEvents.Inc(int64(len(sip.curKVBatch)))
-			sip.metrics.IngestedEvents.Inc(int64(sip.rangeBatcher.size()))
-		}()
-		if len(sip.curKVBatch) > 0 {
-			if err := sip.batcher.Flush(ctx); err != nil {
-				return nil, errors.Wrap(err, "flushing sst batcher")
-			}
-		}
-
-		if sip.rangeBatcher.size() > 0 {
-			if err := sip.rangeBatcher.flush(ctx); err != nil {
-				return nil, errors.Wrap(err, "flushing range key sst")
-			}
+		if err := sip.rangeBatcher.flush(ctx); err != nil {
+			return nil, errors.Wrap(err, "flushing range key sst")
 		}
 	}
+
+	// Update the flush metrics.
+	sip.metrics.FlushHistNanos.RecordValue(timeutil.Since(preFlushTime).Nanoseconds())
+	sip.metrics.CommitLatency.RecordValue(timeutil.Since(minBatchMVCCTimestamp.GoTime()).Nanoseconds())
+	sip.metrics.Flushes.Inc(1)
+	sip.metrics.IngestedEvents.Inc(int64(len(sip.curKVBatch)))
+	sip.metrics.IngestedEvents.Inc(int64(len(sip.rangeBatcher.curRangeKVBatch)))
 
 	// Go through buffered checkpoint events, and put them on the channel to be
 	// emitted to the downstream frontier processor.

@@ -48,6 +48,11 @@ type BufferingAdder struct {
 	// currently buffered kvs.
 	curBuf kvBuf
 
+	// curBufSummary is a summary of the currently buffered kvs that is populated
+	// as and when the kvs are ingested by the underlying sink. This field is
+	// cleared after each flush of the BufferingAdder.
+	curBufSummary roachpb.BulkOpSummary
+
 	sorted bool
 
 	initialSplits int
@@ -109,8 +114,16 @@ func MakeBulkAdder(
 		sorted:         true,
 		initialSplits:  opts.InitialSplitsIfUnordered,
 		lastFlush:      timeutil.Now(),
+		curBufSummary:  roachpb.BulkOpSummary{},
 	}
 
+	// Register a callback with the underlying sink to accumulate the summary for
+	// the current buffered KVs. The curBufSummary is reset when the buffering
+	// adder, and therefore the underlying sink, has completed ingested all the
+	// currently buffered kvs.
+	b.sink.mu.onFlush = func(batchSummary roachpb.BulkOpSummary) {
+		b.curBufSummary.Add(batchSummary)
+	}
 	b.sink.mem.Mu = &syncutil.Mutex{}
 	// At minimum a bulk adder needs enough space to store a buffer of
 	// curBufferSize, and a subsequent SST of SSTSize in-memory. If the memory
@@ -129,7 +142,7 @@ func MakeBulkAdder(
 	return b, nil
 }
 
-// SetOnFlush sets a callback to run after the buffering adder flushes.
+// SetOnFlush sets a callback to run when the underlying sink flushes.
 func (b *BufferingAdder) SetOnFlush(fn func(summary roachpb.BulkOpSummary)) {
 	b.onFlush = fn
 }
@@ -238,9 +251,10 @@ func (b *BufferingAdder) doFlush(ctx context.Context, forSize bool) error {
 
 	if b.bufferedKeys() == 0 {
 		if b.onFlush != nil {
-			b.onFlush(b.sink.GetBatchSummary())
+			b.onFlush(b.curBufSummary)
 		}
 		b.lastFlush = timeutil.Now()
+		b.curBufSummary.Reset()
 		return nil
 	}
 	if err := b.sink.Reset(ctx); err != nil {
@@ -256,7 +270,7 @@ func (b *BufferingAdder) doFlush(ctx context.Context, forSize bool) error {
 		before = b.sink.mu.totalStats.Identity().(*bulkpb.IngestionPerformanceStats)
 		before.Combine(&b.sink.mu.totalStats)
 		before.Combine(&b.sink.currentStats)
-		beforeSize = b.sink.mu.totalRows.DataSize
+		beforeSize = b.sink.mu.totalBulkOpSummary.DataSize
 		b.sink.mu.Unlock()
 	}
 
@@ -308,7 +322,7 @@ func (b *BufferingAdder) doFlush(ctx context.Context, forSize bool) error {
 
 	if log.V(3) && before != nil {
 		b.sink.mu.Lock()
-		written := b.sink.mu.totalRows.DataSize - beforeSize
+		written := b.sink.mu.totalBulkOpSummary.DataSize - beforeSize
 		afterStats := b.sink.mu.totalStats.Identity().(*bulkpb.IngestionPerformanceStats)
 		afterStats.Combine(&b.sink.mu.totalStats)
 		afterStats.Combine(&b.sink.currentStats)
@@ -348,9 +362,10 @@ func (b *BufferingAdder) doFlush(ctx context.Context, forSize bool) error {
 	}
 
 	if b.onFlush != nil {
-		b.onFlush(b.sink.GetBatchSummary())
+		b.onFlush(b.curBufSummary)
 	}
 	b.curBuf.Reset()
+	b.curBufSummary.Reset()
 	b.lastFlush = timeutil.Now()
 	return nil
 }

@@ -18,7 +18,7 @@ import (
 )
 
 // RowCounter is a helper that counts how many distinct rows appear in the KVs
-// that is is shown via `Count`. Note: the `DataSize` field of the BulkOpSummary
+// that is shown via `Count`. Note: the `DataSize` field of the BulkOpSummary
 // is *not* populated by this and should be set separately.
 type RowCounter struct {
 	roachpb.BulkOpSummary
