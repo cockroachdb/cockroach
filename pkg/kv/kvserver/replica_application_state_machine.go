@@ -209,13 +209,10 @@ func dumpCmdInfo(ctx context.Context, eng storage.Engine, cmd *replicatedCmd) (s
 	p2 := *cmd.proposal
 	p2.ctx = nil
 	p2.sp = nil
+	p2.command.TraceData = nil
 	p2.quotaAlloc = nil
+	p2.tok = TrackedRequestToken{}
 	p2.ec = endCmds{} // <-- I think this one throws `pretty` under the bus
-
-	cmd2 := *cmd
-	cmd2.ctx = nil
-	cmd2.sp = nil
-	cmd2.proposal = nil
 
 	s = pretty.Sprintf("cmd:%# v\n\nproposal: %# v", cmd.ReplicatedCmd, p2)
 	if _, err := io.Copy(f, strings.NewReader(s)); err != nil {
@@ -312,7 +309,9 @@ func (sm *replicaStateMachine) ApplySideEffects(
 			// initially.
 			//
 			// [^1]: see (*replicaDecoder).retrieveLocalProposals()
+			sm.r.mu.RLock()
 			s := dumpCmdInfo(ctx, sm.r.store.TODOEngine(), cmd)
+			sm.r.mu.RUnlock()
 			log.Fatalf(ctx, "finishing a proposal with outstanding reproposal at a higher max lease index:\n\n%s", s)
 		}
 		if !cmd.Rejected() && cmd.proposal.applied {
