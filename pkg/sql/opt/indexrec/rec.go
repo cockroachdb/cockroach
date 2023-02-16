@@ -11,6 +11,7 @@
 package indexrec
 
 import (
+	"context"
 	"sort"
 	"strings"
 
@@ -64,10 +65,10 @@ type Rec struct {
 // being more expensive and reduces their likelihood of being chosen. This is a
 // tradeoff we accept in order to recommend STORING columns, as the difference
 // in plan costs is not very significant.
-func FindRecs(expr opt.Expr, md *opt.Metadata) []Rec {
+func FindRecs(ctx context.Context, expr opt.Expr, md *opt.Metadata) ([]Rec, error) {
 	collector := make(recCollector, len(md.AllTables()))
 	collector.addIndexRec(md, expr)
-	return collector.outputIndexRec()
+	return collector.outputIndexRec(ctx)
 }
 
 // recCollector stores the hypothetical indexes that are scanned in a
@@ -240,7 +241,7 @@ func findBestExistingIndexToReplace(
 // it determines the existing index. It will then properly format the index
 // recommendation to Rec, containing the SQL string needed to follow this
 // recommendation and the type of the index recommendation.
-func (ir *indexRecommendation) constructIndexRec() Rec {
+func (ir *indexRecommendation) constructIndexRec(ctx context.Context) (Rec, error) {
 	var sb strings.Builder
 	recType, existingIndex, existingIndexStoredCol := findBestExistingIndexToReplace(ir.index.tab.Table, ir.index, ir.newStoredColOrds)
 	indexCols := ir.indexCols()
@@ -251,7 +252,10 @@ func (ir *indexRecommendation) constructIndexRec() Rec {
 		ir.newStoredColOrds.UnionWith(existingIndexStoredCol)
 	}
 	storing := ir.storingColumns()
-	tableName := *tree.NewUnqualifiedTableName(ir.index.tab.Name())
+	tableName, err := ir.index.tab.FullyQualifiedName(ctx)
+	if err != nil {
+		return Rec{}, err
+	}
 
 	// Formats index recommendation to its final output struct Rec.
 	switch recType {
@@ -265,7 +269,7 @@ func (ir *indexRecommendation) constructIndexRec() Rec {
 		}
 		sb.WriteString(createCmd.String())
 		sb.WriteByte(';')
-		return Rec{sb.String(), TypeCreateIndex}
+		return Rec{sb.String(), TypeCreateIndex}, nil
 	case TypeReplaceIndex:
 		dropCmd := tree.DropIndex{
 			IndexList: []*tree.TableIndexName{{
@@ -286,7 +290,7 @@ func (ir *indexRecommendation) constructIndexRec() Rec {
 		sb.WriteByte(' ')
 		sb.WriteString(dropCmd.String())
 		sb.WriteByte(';')
-		return Rec{sb.String(), TypeReplaceIndex}
+		return Rec{sb.String(), TypeReplaceIndex}, nil
 	case TypeAlterIndex:
 		alterCmd := tree.AlterIndexVisible{
 			Index: tree.TableIndexName{
@@ -296,25 +300,29 @@ func (ir *indexRecommendation) constructIndexRec() Rec {
 		}
 		sb.WriteString(alterCmd.String())
 		sb.WriteByte(';')
-		return Rec{sb.String(), TypeAlterIndex}
+		return Rec{sb.String(), TypeAlterIndex}, nil
 	}
-	return Rec{}
+	return Rec{}, nil
 }
 
 // outputIndexRec formats index recommendations to its final outputs and returns
 // a list of Rec containing all index recs.
-func (rc recCollector) outputIndexRec() []Rec {
+func (rc recCollector) outputIndexRec(ctx context.Context) ([]Rec, error) {
 	rcMap := make(map[cat.Table][]Rec)
 	for t, indexRecs := range rc {
 		updatedRecs := make([]Rec, 0, len(indexRecs))
 		for _, indexRec := range indexRecs {
 			// For each index recommendation, call constructIndexRec to properly
 			// format it to Rec.
-			updatedRecs = append(updatedRecs, indexRec.constructIndexRec())
+			rec, err := indexRec.constructIndexRec(ctx)
+			if err != nil {
+				return nil, err
+			}
+			updatedRecs = append(updatedRecs, rec)
 		}
 		rcMap[t] = updatedRecs
 	}
-	return flattenRecMap(rcMap)
+	return flattenRecMap(rcMap), nil
 }
 
 // getColOrdSet returns the set of column ordinals within the given table that
