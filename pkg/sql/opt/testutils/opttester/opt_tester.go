@@ -2178,14 +2178,17 @@ func (ot *OptTester) IndexRecommendations() (string, error) {
 	}
 	md := normExpr.(memo.RelExpr).Memo().Metadata()
 	indexCandidates := indexrec.FindIndexCandidateSet(normExpr, md)
-	_, hypTables := indexrec.BuildOptAndHypTableMaps(indexCandidates)
+	_, hypTables := indexrec.BuildOptAndHypTableMaps(ot.catalog, indexCandidates)
 
 	optExpr, err := ot.OptimizeWithTables(hypTables)
 	if err != nil {
 		return "", err
 	}
 	md = optExpr.(memo.RelExpr).Memo().Metadata()
-	recs := indexrec.FindRecs(optExpr, md)
+	recs, err := indexrec.FindRecs(ot.ctx, optExpr, md)
+	if err != nil {
+		return "", err
+	}
 	if len(recs) == 0 {
 		return fmt.Sprintf("no index recommendations\n--\noptimal plan:\n%s", ot.FormatExpr(optExpr)), nil
 	}
