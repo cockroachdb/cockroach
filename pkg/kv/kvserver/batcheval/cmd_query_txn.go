@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -24,17 +25,17 @@ import (
 )
 
 func init() {
-	RegisterReadOnlyCommand(roachpb.QueryTxn, declareKeysQueryTransaction, QueryTxn)
+	RegisterReadOnlyCommand(kvpb.QueryTxn, declareKeysQueryTransaction, QueryTxn)
 }
 
 func declareKeysQueryTransaction(
 	_ ImmutableRangeState,
-	_ *roachpb.Header,
-	req roachpb.Request,
+	_ *kvpb.Header,
+	req kvpb.Request,
 	latchSpans, _ *spanset.SpanSet,
 	_ time.Duration,
 ) {
-	qr := req.(*roachpb.QueryTxnRequest)
+	qr := req.(*kvpb.QueryTxnRequest)
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.TransactionKey(qr.Txn.Key, qr.Txn.ID)})
 }
 
@@ -46,11 +47,11 @@ func declareKeysQueryTransaction(
 // other txns which are waiting on this transaction in order
 // to find dependency cycles.
 func QueryTxn(
-	ctx context.Context, reader storage.Reader, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, reader storage.Reader, cArgs CommandArgs, resp kvpb.Response,
 ) (result.Result, error) {
-	args := cArgs.Args.(*roachpb.QueryTxnRequest)
+	args := cArgs.Args.(*kvpb.QueryTxnRequest)
 	h := cArgs.Header
-	reply := resp.(*roachpb.QueryTxnResponse)
+	reply := resp.(*kvpb.QueryTxnResponse)
 
 	if h.Txn != nil {
 		return result.Result{}, ErrTransactionUnsupported

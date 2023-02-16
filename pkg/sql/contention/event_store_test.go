@@ -20,7 +20,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
@@ -146,7 +146,7 @@ func TestCollectionThreshold(t *testing.T) {
 
 	input := []contentionpb.ExtendedContentionEvent{
 		{
-			BlockingEvent: roachpb.ContentionEvent{
+			BlockingEvent: kvpb.ContentionEvent{
 				TxnMeta: enginepb.TxnMeta{
 					ID: uuid.FastMakeV4(),
 				},
@@ -154,7 +154,7 @@ func TestCollectionThreshold(t *testing.T) {
 			},
 		},
 		{
-			BlockingEvent: roachpb.ContentionEvent{
+			BlockingEvent: kvpb.ContentionEvent{
 				TxnMeta: enginepb.TxnMeta{
 					ID: uuid.FastMakeV4(),
 				},
@@ -199,7 +199,7 @@ func BenchmarkEventStoreIntake(b *testing.B) {
 	statusServer := newFakeStatusServerCluster()
 	metrics := NewMetrics()
 
-	e := roachpb.ContentionEvent{}
+	e := kvpb.ContentionEvent{}
 	b.SetBytes(int64(e.Size()))
 
 	run := func(b *testing.B, store *eventStore, numOfConcurrentWriter int) {

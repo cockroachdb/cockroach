@@ -16,6 +16,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
@@ -42,8 +43,8 @@ import (
 // the input slice, or has been shallow-copied appropriately to avoid
 // mutating the original requests).
 func optimizePuts(
-	reader storage.Reader, origReqs []roachpb.RequestUnion, distinctSpans bool,
-) []roachpb.RequestUnion {
+	reader storage.Reader, origReqs []kvpb.RequestUnion, distinctSpans bool,
+) []kvpb.RequestUnion {
 	var minKey, maxKey roachpb.Key
 	var unique map[string]struct{}
 	if !distinctSpans {
@@ -70,15 +71,15 @@ func optimizePuts(
 	firstUnoptimizedIndex := len(origReqs)
 	for i, r := range origReqs {
 		switch t := r.GetInner().(type) {
-		case *roachpb.PutRequest:
+		case *kvpb.PutRequest:
 			if maybeAddPut(t.Key) {
 				continue
 			}
-		case *roachpb.ConditionalPutRequest:
+		case *kvpb.ConditionalPutRequest:
 			if maybeAddPut(t.Key) {
 				continue
 			}
-		case *roachpb.InitPutRequest:
+		case *kvpb.InitPutRequest:
 			if maybeAddPut(t.Key) {
 				continue
 			}
@@ -117,20 +118,20 @@ func optimizePuts(
 	}
 	// Set the prefix of the run which is being written to virgin
 	// keyspace to "blindly" put values.
-	reqs := append([]roachpb.RequestUnion(nil), origReqs...)
+	reqs := append([]kvpb.RequestUnion(nil), origReqs...)
 	for i := range reqs[:firstUnoptimizedIndex] {
 		inner := reqs[i].GetInner()
 		if iterKey == nil || bytes.Compare(iterKey, inner.Header().Key) > 0 {
 			switch t := inner.(type) {
-			case *roachpb.PutRequest:
+			case *kvpb.PutRequest:
 				shallow := *t
 				shallow.Blind = true
 				reqs[i].MustSetInner(&shallow)
-			case *roachpb.ConditionalPutRequest:
+			case *kvpb.ConditionalPutRequest:
 				shallow := *t
 				shallow.Blind = true
 				reqs[i].MustSetInner(&shallow)
-			case *roachpb.InitPutRequest:
+			case *kvpb.InitPutRequest:
 				shallow := *t
 				shallow.Blind = true
 				reqs[i].MustSetInner(&shallow)
@@ -151,12 +152,12 @@ func evaluateBatch(
 	readWriter storage.ReadWriter,
 	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
-	ba *roachpb.BatchRequest,
+	ba *kvpb.BatchRequest,
 	g *concurrency.Guard,
 	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
 	evalPath batchEvalPath,
-) (_ *roachpb.BatchResponse, _ result.Result, retErr *roachpb.Error) {
+) (_ *kvpb.BatchResponse, _ result.Result, retErr *kvpb.Error) {
 	defer func() {
 		// Ensure that errors don't carry the WriteTooOld flag set. The client
 		// handles non-error responses with the WriteTooOld flag set, and errors
@@ -226,7 +227,7 @@ func evaluateBatch(
 	// WriteTooOldError in order to find out if there's more conflicts and chose
 	// a final write timestamp.
 	var writeTooOldState struct {
-		err *roachpb.WriteTooOldError
+		err *kvpb.WriteTooOldError
 		// cantDeferWTOE is set when a WriteTooOldError cannot be deferred past the
 		// end of the current batch.
 		cantDeferWTOE bool
@@ -313,14 +314,14 @@ func evaluateBatch(
 		if err != nil {
 			// If an EndTxn wants to restart because of a write too old, we
 			// might have a better error to return to the client.
-			if retErr := (*roachpb.TransactionRetryError)(nil); errors.As(err, &retErr) &&
-				retErr.Reason == roachpb.RETRY_WRITE_TOO_OLD &&
-				args.Method() == roachpb.EndTxn && writeTooOldState.err != nil {
+			if retErr := (*kvpb.TransactionRetryError)(nil); errors.As(err, &retErr) &&
+				retErr.Reason == kvpb.RETRY_WRITE_TOO_OLD &&
+				args.Method() == kvpb.EndTxn && writeTooOldState.err != nil {
 				err = writeTooOldState.err
 				// Don't defer this error. We could perhaps rely on the client observing
 				// the WriteTooOld flag and retry the batch, but we choose not too.
 				writeTooOldState.cantDeferWTOE = true
-			} else if wtoErr := (*roachpb.WriteTooOldError)(nil); errors.As(err, &wtoErr) {
+			} else if wtoErr := (*kvpb.WriteTooOldError)(nil); errors.As(err, &wtoErr) {
 				// We got a WriteTooOldError. We continue on to run all
 				// commands in the batch in order to determine the highest
 				// timestamp for more efficient retries. If the batch is
@@ -361,7 +362,7 @@ func evaluateBatch(
 				// speculative result, or leave behind an unreplicated lock that won't
 				// prevent the request for evaluating again at the same sequence number
 				// but at a bumped timestamp.
-				if !roachpb.IsBlindWrite(args) {
+				if !kvpb.IsBlindWrite(args) {
 					writeTooOldState.cantDeferWTOE = true
 				}
 
@@ -395,7 +396,7 @@ func evaluateBatch(
 		}
 
 		if err != nil {
-			pErr := roachpb.NewErrorWithTxn(err, baHeader.Txn)
+			pErr := kvpb.NewErrorWithTxn(err, baHeader.Txn)
 			// Initialize the error index.
 			pErr.SetErrorIndex(int32(index))
 
@@ -423,7 +424,7 @@ func evaluateBatch(
 		// limit). We have to check the ResumeReason as well, since e.g. a Scan
 		// response may not include the value that pushed it across the limit.
 		if baHeader.TargetBytes > 0 {
-			if h.ResumeReason == roachpb.RESUME_BYTE_LIMIT {
+			if h.ResumeReason == kvpb.RESUME_BYTE_LIMIT {
 				baHeader.TargetBytes = -1
 			} else if baHeader.TargetBytes > h.NumBytes {
 				baHeader.TargetBytes -= h.NumBytes
@@ -442,7 +443,7 @@ func evaluateBatch(
 	if writeTooOldState.cantDeferWTOE {
 		// NB: we can't do any error wrapping here yet due to compatibility with 20.2 nodes;
 		// there needs to be an ErrorDetail here.
-		return nil, mergedResult, roachpb.NewErrorWithTxn(writeTooOldState.err, baHeader.Txn)
+		return nil, mergedResult, kvpb.NewErrorWithTxn(writeTooOldState.err, baHeader.Txn)
 	}
 
 	// The batch evaluation will not return an error (i.e. either everything went
@@ -470,7 +471,7 @@ func evaluateBatch(
 }
 
 // evaluateCommand delegates to the eval method for the given
-// roachpb.Request. The returned Result may be partially valid
+// kvpb.Request. The returned Result may be partially valid
 // even if an error is returned. maxKeys is the number of scan results
 // remaining for this batch (MaxInt64 for no limit).
 func evaluateCommand(
@@ -478,9 +479,9 @@ func evaluateCommand(
 	readWriter storage.ReadWriter,
 	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
-	h roachpb.Header,
-	args roachpb.Request,
-	reply roachpb.Response,
+	h kvpb.Header,
+	args kvpb.Request,
+	reply kvpb.Response,
 	g *concurrency.Guard,
 	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
@@ -559,9 +560,9 @@ func evaluateCommand(
 // timestamp.
 func canDoServersideRetry(
 	ctx context.Context,
-	pErr *roachpb.Error,
-	ba *roachpb.BatchRequest,
-	br *roachpb.BatchResponse,
+	pErr *kvpb.Error,
+	ba *kvpb.BatchRequest,
+	br *kvpb.BatchResponse,
 	g *concurrency.Guard,
 	deadline hlc.Timestamp,
 ) bool {
@@ -572,8 +573,8 @@ func canDoServersideRetry(
 		if !deadline.IsEmpty() {
 			log.Fatal(ctx, "deadline passed for transactional request")
 		}
-		if etArg, ok := ba.GetArg(roachpb.EndTxn); ok {
-			et := etArg.(*roachpb.EndTxnRequest)
+		if etArg, ok := ba.GetArg(kvpb.EndTxn); ok {
+			et := etArg.(*kvpb.EndTxnRequest)
 			deadline = et.Deadline
 		}
 	}
@@ -582,7 +583,7 @@ func canDoServersideRetry(
 	if ba.Txn != nil {
 		if pErr != nil {
 			var ok bool
-			ok, newTimestamp = roachpb.TransactionRefreshTimestamp(pErr)
+			ok, newTimestamp = kvpb.TransactionRefreshTimestamp(pErr)
 			if !ok {
 				return false
 			}
@@ -597,10 +598,10 @@ func canDoServersideRetry(
 			log.Fatalf(ctx, "canDoServersideRetry called for non-txn request without error")
 		}
 		switch tErr := pErr.GetDetail().(type) {
-		case *roachpb.WriteTooOldError:
+		case *kvpb.WriteTooOldError:
 			newTimestamp = tErr.RetryTimestamp()
 
-		case *roachpb.ReadWithinUncertaintyIntervalError:
+		case *kvpb.ReadWithinUncertaintyIntervalError:
 			newTimestamp = tErr.RetryTimestamp()
 
 		default:
@@ -619,19 +620,19 @@ func canDoServersideRetry(
 // table first), bump the ts cache, release latches and then proceed with
 // evaluation. Only non-locking read requests that aren't being evaluated under
 // the `OptimisticEval` path are eligible for this optimization.
-func canReadOnlyRequestDropLatchesBeforeEval(ba *roachpb.BatchRequest, g *concurrency.Guard) bool {
+func canReadOnlyRequestDropLatchesBeforeEval(ba *kvpb.BatchRequest, g *concurrency.Guard) bool {
 	if g == nil {
 		// NB: A nil guard indicates that the caller is not holding latches.
 		return false
 	}
 	switch ba.Header.ReadConsistency {
-	case roachpb.CONSISTENT:
+	case kvpb.CONSISTENT:
 	// TODO(aayush): INCONSISTENT and READ_UNCOMMITTED reads do not care about
 	// resolving lock conflicts at all. Yet, they can still drop latches early and
 	// evaluate once they've pinned their pebble engine state. We should consider
 	// supporting this by letting these kinds of requests drop latches early while
 	// also skipping the initial validation step of scanning the lock table.
-	case roachpb.INCONSISTENT, roachpb.READ_UNCOMMITTED:
+	case kvpb.INCONSISTENT, kvpb.READ_UNCOMMITTED:
 		return false
 	default:
 		panic(fmt.Sprintf("unexpected ReadConsistency: %s", ba.Header.ReadConsistency))
@@ -670,7 +671,7 @@ func canReadOnlyRequestDropLatchesBeforeEval(ba *roachpb.BatchRequest, g *concur
 	for _, req := range ba.Requests {
 		inner := req.GetInner()
 		switch inner.(type) {
-		case *roachpb.ExportRequest, *roachpb.GetRequest, *roachpb.ScanRequest, *roachpb.ReverseScanRequest:
+		case *kvpb.ExportRequest, *kvpb.GetRequest, *kvpb.ScanRequest, *kvpb.ReverseScanRequest:
 		default:
 			return false
 		}

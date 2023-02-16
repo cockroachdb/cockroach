@@ -13,24 +13,24 @@ package batcheval
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 )
 
 func init() {
-	RegisterReadWriteCommand(roachpb.Increment, DefaultDeclareIsolatedKeys, Increment)
+	RegisterReadWriteCommand(kvpb.Increment, DefaultDeclareIsolatedKeys, Increment)
 }
 
 // Increment increments the value (interpreted as varint64 encoded) and
 // returns the newly incremented value (encoded as varint64). If no value
 // exists for the key, zero is incremented.
 func Increment(
-	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp kvpb.Response,
 ) (result.Result, error) {
-	args := cArgs.Args.(*roachpb.IncrementRequest)
+	args := cArgs.Args.(*kvpb.IncrementRequest)
 	h := cArgs.Header
-	reply := resp.(*roachpb.IncrementResponse)
+	reply := resp.(*kvpb.IncrementResponse)
 
 	newVal, err := storage.MVCCIncrement(
 		ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, cArgs.Now, h.Txn, args.Increment)

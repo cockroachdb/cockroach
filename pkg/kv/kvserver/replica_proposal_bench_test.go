@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -81,8 +82,8 @@ func runBenchmarkReplicaProposal(b *testing.B, bytes int64, withFollower bool) {
 	value := roachpb.MakeValueFromString(
 		randutil.RandString(rng, int(bytes), randutil.PrintableKeyAlphabet),
 	)
-	req := roachpb.NewPut(k, value)
-	var ba roachpb.BatchRequest
+	req := kvpb.NewPut(k, value)
+	var ba kvpb.BatchRequest
 	ba.Add(req)
 
 	repl, _, err := tc.Server(0).GetStores().(*kvserver.Stores).GetReplicaForRangeID(

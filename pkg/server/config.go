@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -522,7 +523,7 @@ type SQLConfig struct {
 // necessary for creating the internalClientAdapter for an in-process tenant
 // talking to that server.
 type LocalKVServerInfo struct {
-	InternalServer     roachpb.InternalServer
+	InternalServer     kvpb.InternalServer
 	ServerInterceptors rpc.ServerInterceptorInfo
 	Tracer             *tracing.Tracer
 }

@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	kvpb "github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -72,7 +73,7 @@ func (e *Env) CheckConsistency(ctx context.Context, span roachpb.Span) []error {
 		// discrepancy in SysBytes. This hasn't been investigated, but it's not
 		// critical so we ignore it for now. See:
 		// https://github.com/cockroachdb/cockroach/issues/93896
-		if status == roachpb.CheckConsistencyResponse_RANGE_CONSISTENT_STATS_INCORRECT.String() {
+		if status == kvpb.CheckConsistencyResponse_RANGE_CONSISTENT_STATS_INCORRECT.String() {
 			m := regexp.MustCompile(`.*\ndelta \(stats-computed\): \{(.*)\}`).FindStringSubmatch(detail)
 			if len(m) > 1 {
 				delta := m[1]
@@ -85,11 +86,11 @@ func (e *Env) CheckConsistency(ctx context.Context, span roachpb.Span) []error {
 			}
 		}
 		switch status {
-		case roachpb.CheckConsistencyResponse_RANGE_INDETERMINATE.String():
+		case kvpb.CheckConsistencyResponse_RANGE_INDETERMINATE.String():
 			// Can't do anything, so let it slide.
-		case roachpb.CheckConsistencyResponse_RANGE_CONSISTENT.String():
+		case kvpb.CheckConsistencyResponse_RANGE_CONSISTENT.String():
 			// Good.
-		case roachpb.CheckConsistencyResponse_RANGE_CONSISTENT_STATS_ESTIMATED.String():
+		case kvpb.CheckConsistencyResponse_RANGE_CONSISTENT_STATS_ESTIMATED.String():
 			// Ok.
 		default:
 			failures = append(failures, errors.Errorf("range %d (%s) %s:\n%s", rangeID, key, status, detail))

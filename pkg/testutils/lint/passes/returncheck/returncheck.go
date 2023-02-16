@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 // Package returncheck defines an Analyzer that detects unused or
-// discarded roachpb.Error objects.
+// discarded kvpb.Error objects.
 package returncheck
 
 import (
@@ -22,10 +22,10 @@ import (
 )
 
 // Analyzer is an analysis.Analyzer that checks for unused or discarded
-// roachpb.Error objects from function calls.
+// kvpb.Error objects from function calls.
 var Analyzer = &analysis.Analyzer{
 	Name:     "returncheck",
-	Doc:      "`returncheck` : `roachpb.Error` :: `errcheck` : (stdlib)`error`",
+	Doc:      "`returncheck` : `kvpb.Error` :: `errcheck` : (stdlib)`error`",
 	Requires: []*analysis.Analyzer{inspect.Analyzer},
 	Run:      runAnalyzer,
 }
@@ -73,7 +73,7 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 // recordUnchecked records an error if a given calls has an unchecked
 // return. If pos is not a negative value and the call returns a
 // tuple, check if the return value at the specified position is of type
-// roachpb.Error.
+// kvpb.Error.
 func recordUnchecked(pass *analysis.Pass, call *ast.CallExpr, pos int) {
 	isTarget := false
 	switch t := pass.TypesInfo.Types[call].Type.(type) {
@@ -96,10 +96,10 @@ func recordUnchecked(pass *analysis.Pass, call *ast.CallExpr, pos int) {
 	}
 
 	if isTarget {
-		pass.Reportf(call.Pos(), "unchecked roachpb.Error value")
+		pass.Reportf(call.Pos(), "unchecked kvpb.Error value")
 	}
 }
 
 func isTargetType(t types.Type) bool {
-	return t.String() == "github.com/cockroachdb/cockroach/pkg/roachpb.Error"
+	return t.String() == "github.com/cockroachdb/cockroach/pkg/kv/kvpb.Error"
 }

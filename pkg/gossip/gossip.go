@@ -61,6 +61,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -533,7 +534,7 @@ func (g *Gossip) GetStoreDescriptor(storeID roachpb.StoreID) (*roachpb.StoreDesc
 		desc := (*roachpb.StoreDescriptor)(value)
 		return desc, nil
 	}
-	return nil, roachpb.NewStoreNotFoundError(storeID)
+	return nil, kvpb.NewStoreNotFoundError(storeID)
 }
 
 // LogStatus logs the current status of gossip such as the incoming and

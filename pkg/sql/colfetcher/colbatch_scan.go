@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
@@ -84,7 +84,7 @@ func (s *colBatchScanBase) GetRowsRead() int64 {
 }
 
 // GetContentionInfo is part of the colexecop.KVReader interface.
-func (s *colBatchScanBase) GetContentionInfo() (time.Duration, []roachpb.ContentionEvent) {
+func (s *colBatchScanBase) GetContentionInfo() (time.Duration, []kvpb.ContentionEvent) {
 	return execstats.GetCumulativeContentionTime(s.Ctx, nil /* recording */)
 }
 
@@ -125,12 +125,12 @@ func newColBatchScanBase(
 	spec *execinfrapb.TableReaderSpec,
 	post *execinfrapb.PostProcessSpec,
 	typeResolver *descs.DistSQLTypeResolver,
-) (*colBatchScanBase, *roachpb.BoundedStalenessHeader, *cFetcherTableArgs, error) {
+) (*colBatchScanBase, *kvpb.BoundedStalenessHeader, *cFetcherTableArgs, error) {
 	// NB: we hit this with a zero NodeID (but !ok) with multi-tenancy.
 	if nodeID, ok := flowCtx.NodeID.OptionalNodeID(); nodeID == 0 && ok {
 		return nil, nil, nil, errors.Errorf("attempting to create a ColBatchScan with uninitialized NodeID")
 	}
-	var bsHeader *roachpb.BoundedStalenessHeader
+	var bsHeader *kvpb.BoundedStalenessHeader
 	if aost := flowCtx.EvalCtx.AsOfSystemTime; aost != nil && aost.BoundedStaleness {
 		ts := aost.Timestamp
 		// If the descriptor's modification time is after the bounded staleness min bound,
@@ -140,7 +140,7 @@ func newColBatchScanBase(
 		if aost.Timestamp.Less(spec.TableDescriptorModificationTime) {
 			ts = spec.TableDescriptorModificationTime
 		}
-		bsHeader = &roachpb.BoundedStalenessHeader{
+		bsHeader = &kvpb.BoundedStalenessHeader{
 			MinTimestampBound:       ts,
 			MinTimestampBoundStrict: aost.NearestOnly,
 			MaxTimestampBound:       flowCtx.EvalCtx.AsOfSystemTime.MaxTimestampBound, // may be empty

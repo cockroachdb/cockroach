@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
@@ -139,13 +140,13 @@ func TestCheckConsistencyMultiStore(t *testing.T) {
 	// Run consistency check on r1 and ScratchRange.
 	for _, k := range []roachpb.Key{keys.LocalMax, k2} {
 		t.Run(k.String(), func(t *testing.T) {
-			checkArgs := roachpb.CheckConsistencyRequest{
-				RequestHeader: roachpb.RequestHeader{
+			checkArgs := kvpb.CheckConsistencyRequest{
+				RequestHeader: kvpb.RequestHeader{
 					Key:    keys.LocalMax,
 					EndKey: keys.LocalMax.Next(),
 				},
 			}
-			_, pErr := kv.SendWrappedWith(context.Background(), store.DB().NonTransactionalSender(), roachpb.Header{
+			_, pErr := kv.SendWrappedWith(context.Background(), store.DB().NonTransactionalSender(), kvpb.Header{
 				Timestamp: store.Clock().Now(),
 			}, &checkArgs)
 			require.NoError(t, pErr.GoError())
@@ -176,7 +177,7 @@ func TestCheckConsistencyReplay(t *testing.T) {
 	}
 	// Arrange to count the number of times each checksum command applies to each
 	// store.
-	testKnobs.TestingPostApplyFilter = func(args kvserverbase.ApplyFilterArgs) (int, *roachpb.Error) {
+	testKnobs.TestingPostApplyFilter = func(args kvserverbase.ApplyFilterArgs) (int, *kvpb.Error) {
 		state.Lock()
 		defer state.Unlock()
 		if ccr := args.ComputeChecksum; ccr != nil {
@@ -187,14 +188,14 @@ func TestCheckConsistencyReplay(t *testing.T) {
 
 	// Arrange to trigger a retry when a ComputeChecksum request arrives.
 	testKnobs.TestingResponseFilter = func(
-		ctx context.Context, ba *roachpb.BatchRequest, br *roachpb.BatchResponse,
-	) *roachpb.Error {
+		ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse,
+	) *kvpb.Error {
 		state.Lock()
 		defer state.Unlock()
 		if ba.IsSingleComputeChecksumRequest() && !state.forcedRetry {
 			state.forcedRetry = true
 			// We need to return a retryable error from the perspective of the sender
-			return roachpb.NewError(&roachpb.NotLeaseHolderError{})
+			return kvpb.NewError(&kvpb.NotLeaseHolderError{})
 		}
 		return nil
 	}
@@ -213,8 +214,8 @@ func TestCheckConsistencyReplay(t *testing.T) {
 	defer tc.Stopper().Stop(context.Background())
 
 	store := tc.GetFirstStoreFromServer(t, 0)
-	checkArgs := roachpb.CheckConsistencyRequest{
-		RequestHeader: roachpb.RequestHeader{
+	checkArgs := kvpb.CheckConsistencyRequest{
+		RequestHeader: kvpb.RequestHeader{
 			Key:    []byte("a"),
 			EndKey: []byte("b"),
 		},
@@ -300,17 +301,17 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 		require.NoError(t, err.GoError())
 	}
 
-	runConsistencyCheck := func() *roachpb.CheckConsistencyResponse {
-		req := roachpb.CheckConsistencyRequest{
-			RequestHeader: roachpb.RequestHeader{ // keys span that includes "a" & "c"
+	runConsistencyCheck := func() *kvpb.CheckConsistencyResponse {
+		req := kvpb.CheckConsistencyRequest{
+			RequestHeader: kvpb.RequestHeader{ // keys span that includes "a" & "c"
 				Key:    []byte("a"),
 				EndKey: []byte("z"),
 			},
-			Mode: roachpb.ChecksumMode_CHECK_VIA_QUEUE,
+			Mode: kvpb.ChecksumMode_CHECK_VIA_QUEUE,
 		}
 		resp, err := kv.SendWrapped(context.Background(), store.DB().NonTransactionalSender(), &req)
 		require.NoError(t, err.GoError())
-		return resp.(*roachpb.CheckConsistencyResponse)
+		return resp.(*kvpb.CheckConsistencyResponse)
 	}
 
 	onDiskCheckpointPaths := func(nodeIdx int) []string {
@@ -330,7 +331,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	// Run the check the first time, it shouldn't find anything.
 	resp := runConsistencyCheck()
 	require.Len(t, resp.Result, 1)
-	assert.Equal(t, roachpb.CheckConsistencyResponse_RANGE_CONSISTENT, resp.Result[0].Status)
+	assert.Equal(t, kvpb.CheckConsistencyResponse_RANGE_CONSISTENT, resp.Result[0].Status)
 	select {
 	case <-notifyFatal:
 		t.Fatal("unexpected panic")
@@ -362,7 +363,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	}
 
 	require.Len(t, resp.Result, 1)
-	assert.Equal(t, roachpb.CheckConsistencyResponse_RANGE_INCONSISTENT, resp.Result[0].Status)
+	assert.Equal(t, kvpb.CheckConsistencyResponse_RANGE_INCONSISTENT, resp.Result[0].Status)
 	assert.Contains(t, resp.Result[0].Detail, `[minority]`)
 	assert.Contains(t, resp.Result[0].Detail, `stats`)
 
@@ -399,7 +400,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 
 		// Compute a checksum over the content of the problematic range.
 		rd, err := kvserver.CalcReplicaDigest(context.Background(), *desc, cpEng,
-			roachpb.ChecksumMode_CHECK_FULL, quotapool.NewRateLimiter("test", quotapool.Inf(), 0))
+			kvpb.ChecksumMode_CHECK_FULL, quotapool.NewRateLimiter("test", quotapool.Inf(), 0))
 		require.NoError(t, err)
 		hashes[i] = rd.SHA512[:]
 	}
@@ -448,10 +449,10 @@ func testConsistencyQueueRecomputeStatsImpl(t *testing.T, hadEstimates bool) {
 		ScanMaxIdleTime: 100 * time.Millisecond,
 	}
 
-	ccCh := make(chan roachpb.CheckConsistencyResponse, 1)
+	ccCh := make(chan kvpb.CheckConsistencyResponse, 1)
 	knobs := &kvserver.StoreTestingKnobs{}
-	knobs.ConsistencyTestingKnobs.ConsistencyQueueResultHook = func(resp roachpb.CheckConsistencyResponse) {
-		if len(resp.Result) == 0 || resp.Result[0].Status != roachpb.CheckConsistencyResponse_RANGE_CONSISTENT_STATS_INCORRECT {
+	knobs.ConsistencyTestingKnobs.ConsistencyQueueResultHook = func(resp kvpb.CheckConsistencyResponse) {
+		if len(resp.Result) == 0 || resp.Result[0].Status != kvpb.CheckConsistencyResponse_RANGE_CONSISTENT_STATS_INCORRECT {
 			// Ignore recomputations triggered by the time series ranges.
 			return
 		}
@@ -478,12 +479,12 @@ func testConsistencyQueueRecomputeStatsImpl(t *testing.T, hadEstimates bool) {
 
 	computeDelta := func(db *kv.DB) enginepb.MVCCStats {
 		var b kv.Batch
-		b.AddRawRequest(&roachpb.RecomputeStatsRequest{
-			RequestHeader: roachpb.RequestHeader{Key: key},
+		b.AddRawRequest(&kvpb.RecomputeStatsRequest{
+			RequestHeader: kvpb.RequestHeader{Key: key},
 			DryRun:        true,
 		})
 		require.NoError(t, db.Run(ctx, &b))
-		resp := b.RawResponse().Responses[0].GetInner().(*roachpb.RecomputeStatsResponse)
+		resp := b.RawResponse().Responses[0].GetInner().(*kvpb.RecomputeStatsResponse)
 		delta := enginepb.MVCCStats(resp.AddedDelta)
 		delta.AgeTo(0)
 		return delta
@@ -617,7 +618,7 @@ func testConsistencyQueueRecomputeStatsImpl(t *testing.T, hadEstimates bool) {
 	select {
 	case resp := <-ccCh:
 		assert.Contains(t, resp.Result[0].Detail, `KeyBytes`) // contains printed stats
-		assert.Equal(t, roachpb.CheckConsistencyResponse_RANGE_CONSISTENT_STATS_INCORRECT, resp.Result[0].Status)
+		assert.Equal(t, kvpb.CheckConsistencyResponse_RANGE_CONSISTENT_STATS_INCORRECT, resp.Result[0].Status)
 		assert.False(t, hadEstimates)
 	default:
 		assert.True(t, hadEstimates)

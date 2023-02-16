@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -1900,14 +1901,14 @@ type checkConsistencyGenerator struct {
 	txn                *kv.Txn // to load range descriptors
 	consistencyChecker eval.ConsistencyCheckRunner
 	from, to           roachpb.Key
-	mode               roachpb.ChecksumMode
+	mode               kvpb.ChecksumMode
 
 	// The descriptors for which we haven't yet emitted rows. Rows are consumed
 	// from this field and produce one (or more, in the case of splits not reflected
 	// in the descriptor) rows in `next`.
 	descs []roachpb.RangeDescriptor
 	// The current row, emitted by Values().
-	cur roachpb.CheckConsistencyResponse_Result
+	cur kvpb.CheckConsistencyResponse_Result
 	// The time it took to produce the current row, i.e. how long it took to run
 	// the consistency check that produced the row. When a consistency check
 	// produces more than one row (i.e. after a split), all of the duration will
@@ -1916,7 +1917,7 @@ type checkConsistencyGenerator struct {
 	// next are the potentially prefetched subsequent rows. This is usually empty
 	// (as one consistency check produces one result which immediately moves to
 	// `cur`) except when a descriptor we use doesn't reflect subsequent splits.
-	next []roachpb.CheckConsistencyResponse_Result
+	next []kvpb.CheckConsistencyResponse_Result
 }
 
 var _ eval.ValueGenerator = &checkConsistencyGenerator{}
@@ -1961,9 +1962,9 @@ func makeCheckConsistencyGenerator(
 		return nil, errors.New("start key must be less than end key")
 	}
 
-	mode := roachpb.ChecksumMode_CHECK_FULL
+	mode := kvpb.ChecksumMode_CHECK_FULL
 	if statsOnly := bool(*args[0].(*tree.DBool)); statsOnly {
-		mode = roachpb.ChecksumMode_CHECK_STATS
+		mode = kvpb.ChecksumMode_CHECK_STATS
 	}
 
 	if evalCtx.ConsistencyChecker == nil {
@@ -2043,10 +2044,10 @@ func (c *checkConsistencyGenerator) maybeRefillRows(ctx context.Context) time.Du
 		ctx, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey(), c.mode,
 	)
 	if err != nil {
-		resp = &roachpb.CheckConsistencyResponse{Result: []roachpb.CheckConsistencyResponse_Result{{
+		resp = &kvpb.CheckConsistencyResponse{Result: []kvpb.CheckConsistencyResponse_Result{{
 			RangeID:  desc.RangeID,
 			StartKey: desc.StartKey,
-			Status:   roachpb.CheckConsistencyResponse_RANGE_INDETERMINATE,
+			Status:   kvpb.CheckConsistencyResponse_RANGE_INDETERMINATE,
 			Detail:   err.Error(),
 		}}}
 	}
@@ -2176,15 +2177,15 @@ func (sp *spanKeyIterator) Next(ctx context.Context) (bool, error) {
 func (sp *spanKeyIterator) scan(
 	ctx context.Context, startKey roachpb.Key, endKey roachpb.Key,
 ) error {
-	ba := &roachpb.BatchRequest{}
+	ba := &kvpb.BatchRequest{}
 	ba.TargetBytes = spanKeyIteratorChunkBytes
 	ba.MaxSpanRequestKeys = spanKeyIteratorChunkKeys
-	ba.Add(&roachpb.ScanRequest{
-		RequestHeader: roachpb.RequestHeader{
+	ba.Add(&kvpb.ScanRequest{
+		RequestHeader: kvpb.RequestHeader{
 			Key:    startKey,
 			EndKey: endKey,
 		},
-		ScanFormat: roachpb.KEY_VALUES,
+		ScanFormat: kvpb.KEY_VALUES,
 	})
 	br, pErr := sp.txn.Send(ctx, ba)
 	if pErr != nil {

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
@@ -112,7 +113,7 @@ func BenchmarkMemBuffer(b *testing.B) {
 	_ = wg.Wait() // Ignore error -- this group returns context cancellation.
 }
 
-func generateRangeFeedCheckpoint(rng *rand.Rand) *roachpb.RangeFeedEvent {
+func generateRangeFeedCheckpoint(rng *rand.Rand) *kvpb.RangeFeedEvent {
 	start := rng.Intn(2 << 20)
 	end := start + rng.Intn(2<<20)
 	startDatum := tree.NewDInt(tree.DInt(start))
@@ -137,8 +138,8 @@ func generateRangeFeedCheckpoint(rng *rand.Rand) *roachpb.RangeFeedEvent {
 		panic(err)
 	}
 
-	return &roachpb.RangeFeedEvent{
-		Checkpoint: &roachpb.RangeFeedCheckpoint{
+	return &kvpb.RangeFeedEvent{
+		Checkpoint: &kvpb.RangeFeedCheckpoint{
 			Span: roachpb.Span{
 				Key:    startKey,
 				EndKey: endKey,

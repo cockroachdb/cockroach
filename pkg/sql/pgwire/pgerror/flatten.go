@@ -93,7 +93,7 @@ func Flatten(err error) *Error {
 
 // serializationFailureReasonRegexp captures known failure reasons for
 // the serialization failure error messages.
-// We cannot use roachpb.TransactionRetryReason or roachpb.TransactionAbortedReason
+// We cannot use kvpb.TransactionRetryReason or kvpb.TransactionAbortedReason
 // as this introduces a circular dependency.
 var serializationFailureReasonRegexp = regexp.MustCompile(
 	`((?:ABORT_|RETRY_)[A-Z_]*|ReadWithinUncertaintyInterval)`,

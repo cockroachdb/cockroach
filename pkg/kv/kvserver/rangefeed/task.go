@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -51,7 +52,7 @@ func (s *initResolvedTSScan) Run(ctx context.Context) {
 	if err := s.iterateAndConsume(ctx); err != nil {
 		err = errors.Wrap(err, "initial resolved timestamp scan failed")
 		log.Errorf(ctx, "%v", err)
-		s.p.StopWithErr(roachpb.NewError(err))
+		s.p.StopWithErr(kvpb.NewError(err))
 	} else {
 		// Inform the processor that its resolved timestamp can be initialized.
 		s.p.setResolvedTSInitialized(ctx)

@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -3259,8 +3260,8 @@ func (s *systemAdminServer) enqueueRangeLocal(
 // SendKVBatch proxies the given BatchRequest into KV, returning the
 // response. It is for use by the CLI `debug send-kv-batch` command.
 func (s *systemAdminServer) SendKVBatch(
-	ctx context.Context, ba *roachpb.BatchRequest,
-) (*roachpb.BatchResponse, error) {
+	ctx context.Context, ba *kvpb.BatchRequest,
+) (*kvpb.BatchResponse, error) {
 	ctx = s.AnnotateCtx(ctx)
 	// Note: the root user will bypass SQL auth checks, which is useful in case of
 	// a cluster outage.
@@ -3297,7 +3298,7 @@ func (s *systemAdminServer) SendKVBatch(
 	// setupSpanForIncomingRPC() call above; from now on the request is traced as
 	// per the span we just created.
 	ba.TraceInfo = nil
-	var br *roachpb.BatchResponse
+	var br *kvpb.BatchResponse
 	// NB: wrapped to delay br evaluation to its value when returning.
 	defer func() {
 		var redact redactOpt
@@ -3310,7 +3311,7 @@ func (s *systemAdminServer) SendKVBatch(
 	}()
 	br, pErr := s.db.NonTransactionalSender().Send(ctx, ba)
 	if br == nil {
-		br = &roachpb.BatchResponse{}
+		br = &kvpb.BatchResponse{}
 	}
 	br.Error = pErr
 	return br, nil

@@ -54,7 +54,7 @@ type ServerIdentificationPayload interface {
 	// sense for this interface to live in log).
 	//
 	// Note that this tenant ID should not be confused with the one put in the
-	// context by roachpb.NewContextForTenant(): that one is used by a server
+	// context by roachpb.ContextWithClientTenant(): that one is used by a server
 	// handling an RPC call, referring to the tenant that's the client of the RPC.
 	TenantID() interface{}
 }

@@ -23,7 +23,7 @@ proto_library(
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachpb:roachpb_proto",
+        "//pkg/kv/kvpb:kvpb_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
         "@com_google_protobuf//:duration_proto",
         "@com_google_protobuf//:timestamp_proto",
@@ -37,6 +37,7 @@ go_proto_library(
     proto = ":contentionpb_proto",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/kv/kvpb",
         "//pkg/roachpb",  # keep
         "//pkg/sql/appstatspb",  # keep
         "//pkg/sql/catalog/descpb",  # keep

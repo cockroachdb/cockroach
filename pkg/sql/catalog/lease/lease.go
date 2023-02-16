@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -250,18 +251,18 @@ func getDescriptorsFromStoreForInterval(
 
 	// Create an export request (1 kv call) for all descriptors for given
 	// descriptor ID written during the interval [timestamp, endTimestamp).
-	batchRequestHeader := roachpb.Header{
+	batchRequestHeader := kvpb.Header{
 		Timestamp: upperBound.Prev(),
 	}
 	descriptorKey := catalogkeys.MakeDescMetadataKey(codec, id)
-	requestHeader := roachpb.RequestHeader{
+	requestHeader := kvpb.RequestHeader{
 		Key:    descriptorKey,
 		EndKey: descriptorKey.PrefixEnd(),
 	}
-	req := &roachpb.ExportRequest{
+	req := &kvpb.ExportRequest{
 		RequestHeader: requestHeader,
 		StartTime:     lowerBound.Prev(),
-		MVCCFilter:    roachpb.MVCCFilter_All,
+		MVCCFilter:    kvpb.MVCCFilter_All,
 	}
 
 	// Export request returns descriptors in decreasing modification time.
@@ -277,7 +278,7 @@ func getDescriptorsFromStoreForInterval(
 	// set as the expiration for the next descriptor to process. Recall we process
 	// descriptors in decreasing modification time.
 	subsequentModificationTime := upperBound
-	for _, file := range res.(*roachpb.ExportResponse).Files {
+	for _, file := range res.(*kvpb.ExportResponse).Files {
 		if err := func() error {
 			it, err := kvstorage.NewMemSSTIterator(file.SST, false, /* verify */
 				kvstorage.IterOptions{
@@ -1150,7 +1151,7 @@ func (m *Manager) watchForUpdates(ctx context.Context, descUpdateCh chan<- *desc
 		EndKey: descriptorTableStart.PrefixEnd(),
 	}
 	handleEvent := func(
-		ctx context.Context, ev *roachpb.RangeFeedValue,
+		ctx context.Context, ev *kvpb.RangeFeedValue,
 	) {
 		if len(ev.Value.RawBytes) == 0 {
 			return

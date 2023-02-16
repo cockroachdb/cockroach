@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -102,15 +103,15 @@ func TestUpdateAbortSpan(t *testing.T) {
 
 	// Request helpers.
 	endTxn := func(b storage.ReadWriter, rec EvalContext, ms *enginepb.MVCCStats, commit bool, poison bool) error {
-		req := roachpb.EndTxnRequest{
-			RequestHeader: roachpb.RequestHeader{Key: txnKey},
+		req := kvpb.EndTxnRequest{
+			RequestHeader: kvpb.RequestHeader{Key: txnKey},
 			Commit:        commit,
 			Poison:        poison,
 			LockSpans:     []roachpb.Span{{Key: intentKey}},
 		}
 		args := CommandArgs{
 			EvalCtx: rec,
-			Header: roachpb.Header{
+			Header: kvpb.Header{
 				Timestamp: txn.ReadTimestamp,
 				Txn:       &txn,
 			},
@@ -118,15 +119,15 @@ func TestUpdateAbortSpan(t *testing.T) {
 			Stats: ms,
 		}
 
-		var resp roachpb.EndTxnResponse
+		var resp kvpb.EndTxnResponse
 		_, err := EndTxn(ctx, b, args, &resp)
 		return err
 	}
 	resolveIntent := func(
 		b storage.ReadWriter, rec EvalContext, ms *enginepb.MVCCStats, status roachpb.TransactionStatus, poison bool,
 	) error {
-		req := roachpb.ResolveIntentRequest{
-			RequestHeader: roachpb.RequestHeader{Key: intentKey},
+		req := kvpb.ResolveIntentRequest{
+			RequestHeader: kvpb.RequestHeader{Key: intentKey},
 			IntentTxn:     txn.TxnMeta,
 			Status:        status,
 			Poison:        poison,
@@ -137,15 +138,15 @@ func TestUpdateAbortSpan(t *testing.T) {
 			Stats:   ms,
 		}
 
-		var resp roachpb.ResolveIntentResponse
+		var resp kvpb.ResolveIntentResponse
 		_, err := ResolveIntent(ctx, b, args, &resp)
 		return err
 	}
 	resolveIntentRange := func(
 		b storage.ReadWriter, rec EvalContext, ms *enginepb.MVCCStats, status roachpb.TransactionStatus, poison bool,
 	) error {
-		req := roachpb.ResolveIntentRangeRequest{
-			RequestHeader: roachpb.RequestHeader{Key: startKey, EndKey: endKey},
+		req := kvpb.ResolveIntentRangeRequest{
+			RequestHeader: kvpb.RequestHeader{Key: startKey, EndKey: endKey},
 			IntentTxn:     txn.TxnMeta,
 			Status:        status,
 			Poison:        poison,
@@ -156,7 +157,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 			Stats:   ms,
 		}
 
-		var resp roachpb.ResolveIntentRangeResponse
+		var resp kvpb.ResolveIntentRangeResponse
 		_, err := ResolveIntentRange(ctx, b, args, &resp)
 		return err
 	}

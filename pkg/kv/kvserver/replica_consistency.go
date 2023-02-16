@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
@@ -78,26 +79,26 @@ type replicaChecksum struct {
 // terminate suspicious nodes. This behavior should be lifted to the consistency
 // checker queue in the future.
 func (r *Replica) CheckConsistency(
-	ctx context.Context, req roachpb.CheckConsistencyRequest,
-) (roachpb.CheckConsistencyResponse, *roachpb.Error) {
-	return r.checkConsistencyImpl(ctx, roachpb.ComputeChecksumRequest{
-		RequestHeader: roachpb.RequestHeader{Key: r.Desc().StartKey.AsRawKey()},
+	ctx context.Context, req kvpb.CheckConsistencyRequest,
+) (kvpb.CheckConsistencyResponse, *kvpb.Error) {
+	return r.checkConsistencyImpl(ctx, kvpb.ComputeChecksumRequest{
+		RequestHeader: kvpb.RequestHeader{Key: r.Desc().StartKey.AsRawKey()},
 		Version:       batcheval.ReplicaChecksumVersion,
 		Mode:          req.Mode,
 	})
 }
 
 func (r *Replica) checkConsistencyImpl(
-	ctx context.Context, args roachpb.ComputeChecksumRequest,
-) (roachpb.CheckConsistencyResponse, *roachpb.Error) {
-	isQueue := args.Mode == roachpb.ChecksumMode_CHECK_VIA_QUEUE
+	ctx context.Context, args kvpb.ComputeChecksumRequest,
+) (kvpb.CheckConsistencyResponse, *kvpb.Error) {
+	isQueue := args.Mode == kvpb.ChecksumMode_CHECK_VIA_QUEUE
 
 	results, err := r.runConsistencyCheck(ctx, args)
 	if err != nil {
-		return roachpb.CheckConsistencyResponse{}, roachpb.NewError(err)
+		return kvpb.CheckConsistencyResponse{}, kvpb.NewError(err)
 	}
 
-	res := roachpb.CheckConsistencyResponse_Result{RangeID: r.RangeID}
+	res := kvpb.CheckConsistencyResponse_Result{RangeID: r.RangeID}
 
 	shaToIdxs := map[string][]int{}
 	var missing []ConsistencyCheckResult
@@ -177,27 +178,27 @@ func (r *Replica) checkConsistencyImpl(
 	}
 
 	res.StartKey = []byte(args.Key)
-	res.Status = roachpb.CheckConsistencyResponse_RANGE_CONSISTENT
+	res.Status = kvpb.CheckConsistencyResponse_RANGE_CONSISTENT
 	if minoritySHA != "" {
-		res.Status = roachpb.CheckConsistencyResponse_RANGE_INCONSISTENT
-	} else if args.Mode != roachpb.ChecksumMode_CHECK_STATS && haveDelta {
+		res.Status = kvpb.CheckConsistencyResponse_RANGE_INCONSISTENT
+	} else if args.Mode != kvpb.ChecksumMode_CHECK_STATS && haveDelta {
 		if delta.ContainsEstimates > 0 {
 			// When ContainsEstimates is set, it's generally expected that we'll get a different
 			// result when we recompute from scratch.
-			res.Status = roachpb.CheckConsistencyResponse_RANGE_CONSISTENT_STATS_ESTIMATED
+			res.Status = kvpb.CheckConsistencyResponse_RANGE_CONSISTENT_STATS_ESTIMATED
 		} else {
 			// When ContainsEstimates is unset, we expect the recomputation to agree with the stored stats.
 			// If that's not the case, that's a problem: it could be a bug in the stats computation
 			// or stats maintenance, but it could also hint at the replica having diverged from its peers.
-			res.Status = roachpb.CheckConsistencyResponse_RANGE_CONSISTENT_STATS_INCORRECT
+			res.Status = kvpb.CheckConsistencyResponse_RANGE_CONSISTENT_STATS_INCORRECT
 		}
 		res.Detail += fmt.Sprintf("delta (stats-computed): %+v\n",
 			enginepb.MVCCStats(results[0].Response.Delta))
 	} else if len(missing) > 0 {
 		// No inconsistency was detected, but we didn't manage to inspect all replicas.
-		res.Status = roachpb.CheckConsistencyResponse_RANGE_INDETERMINATE
+		res.Status = kvpb.CheckConsistencyResponse_RANGE_INDETERMINATE
 	}
-	var resp roachpb.CheckConsistencyResponse
+	var resp kvpb.CheckConsistencyResponse
 	resp.Result = append(resp.Result, res)
 
 	// Bail out at this point except if the queue is the caller. All of the stuff
@@ -232,11 +233,11 @@ func (r *Replica) checkConsistencyImpl(
 		log.Infof(ctx, "triggering stats recomputation to resolve delta of %+v", results[0].Response.Delta)
 
 		var b kv.Batch
-		b.AddRawRequest(&roachpb.RecomputeStatsRequest{
-			RequestHeader: roachpb.RequestHeader{Key: args.Key},
+		b.AddRawRequest(&kvpb.RecomputeStatsRequest{
+			RequestHeader: kvpb.RequestHeader{Key: args.Key},
 		})
 		err := r.store.db.Run(ctx, &b)
-		return resp, roachpb.NewError(err)
+		return resp, kvpb.NewError(err)
 	}
 
 	if args.Checkpoint {
@@ -314,7 +315,7 @@ func (r *Replica) collectChecksumFromReplica(
 // upon). Requires that the computation succeeds on at least one replica, and
 // puts an arbitrary successful result first in the returned slice.
 func (r *Replica) runConsistencyCheck(
-	ctx context.Context, req roachpb.ComputeChecksumRequest,
+	ctx context.Context, req kvpb.ComputeChecksumRequest,
 ) ([]ConsistencyCheckResult, error) {
 	// Send a ComputeChecksum which will trigger computation of the checksum on
 	// all replicas.
@@ -322,7 +323,7 @@ func (r *Replica) runConsistencyCheck(
 	if pErr != nil {
 		return nil, pErr.GoError()
 	}
-	ccRes := res.(*roachpb.ComputeChecksumResponse)
+	ccRes := res.(*kvpb.ComputeChecksumResponse)
 
 	replicas := r.Desc().Replicas().Descriptors()
 	resultCh := make(chan ConsistencyCheckResult, len(replicas))
@@ -495,10 +496,10 @@ func CalcReplicaDigest(
 	ctx context.Context,
 	desc roachpb.RangeDescriptor,
 	snap storage.Reader,
-	mode roachpb.ChecksumMode,
+	mode kvpb.ChecksumMode,
 	limiter *quotapool.RateLimiter,
 ) (*ReplicaDigest, error) {
-	statsOnly := mode == roachpb.ChecksumMode_CHECK_STATS
+	statsOnly := mode == kvpb.ChecksumMode_CHECK_STATS
 
 	// Iterate over all the data in the range.
 	var intBuf [8]byte

@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -32,7 +32,7 @@ import (
 
 type sstSinkConf struct {
 	progCh   chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
-	enc      *roachpb.FileEncryptionOptions
+	enc      *kvpb.FileEncryptionOptions
 	id       base.SQLInstanceID
 	settings *settings.Values
 }

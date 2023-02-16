@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -43,7 +44,7 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
-type wrapRangeFeedClientFn func(client roachpb.Internal_RangeFeedClient) roachpb.Internal_RangeFeedClient
+type wrapRangeFeedClientFn func(client kvpb.Internal_RangeFeedClient) kvpb.Internal_RangeFeedClient
 type testRangefeedClient struct {
 	rpc.RestrictedInternalClient
 	muxRangeFeedEnabled bool
@@ -52,8 +53,8 @@ type testRangefeedClient struct {
 }
 
 func (c *testRangefeedClient) RangeFeed(
-	ctx context.Context, args *roachpb.RangeFeedRequest, opts ...grpc.CallOption,
-) (roachpb.Internal_RangeFeedClient, error) {
+	ctx context.Context, args *kvpb.RangeFeedRequest, opts ...grpc.CallOption,
+) (kvpb.Internal_RangeFeedClient, error) {
 	defer c.count()
 
 	if c.muxRangeFeedEnabled && ctx.Value(useMuxRangeFeedCtxKey{}) != nil {
@@ -72,7 +73,7 @@ func (c *testRangefeedClient) RangeFeed(
 
 func (c *testRangefeedClient) MuxRangeFeed(
 	ctx context.Context, opts ...grpc.CallOption,
-) (roachpb.Internal_MuxRangeFeedClient, error) {
+) (kvpb.Internal_MuxRangeFeedClient, error) {
 	defer c.count()
 
 	if !c.muxRangeFeedEnabled || ctx.Value(useMuxRangeFeedCtxKey{}) == nil {
@@ -109,8 +110,8 @@ func (c *countConnectionsTransport) IsExhausted() bool {
 }
 
 func (c *countConnectionsTransport) SendNext(
-	ctx context.Context, request *roachpb.BatchRequest,
-) (*roachpb.BatchResponse, error) {
+	ctx context.Context, request *kvpb.BatchRequest,
+) (*kvpb.BatchResponse, error) {
 	return c.wrapped.SendNext(ctx, request)
 }
 
@@ -383,13 +384,13 @@ func TestMuxRangeFeedConnectsToNodeOnce(t *testing.T) {
 }
 
 type blockRecvRangeFeedClient struct {
-	roachpb.Internal_RangeFeedClient
+	kvpb.Internal_RangeFeedClient
 	numRecvRemainingUntilBlocked int
 
 	ctxCanceled bool
 }
 
-func (b *blockRecvRangeFeedClient) Recv() (*roachpb.RangeFeedEvent, error) {
+func (b *blockRecvRangeFeedClient) Recv() (*kvpb.RangeFeedEvent, error) {
 	if !b.ctxCanceled {
 		ctx := b.Internal_RangeFeedClient.Context()
 		b.numRecvRemainingUntilBlocked--
@@ -406,7 +407,7 @@ func (b *blockRecvRangeFeedClient) Recv() (*roachpb.RangeFeedEvent, error) {
 	return b.Internal_RangeFeedClient.Recv()
 }
 
-var _ roachpb.Internal_RangeFeedClient = (*blockRecvRangeFeedClient)(nil)
+var _ kvpb.Internal_RangeFeedClient = (*blockRecvRangeFeedClient)(nil)
 
 func TestRestartsStuckRangeFeeds(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -415,7 +416,7 @@ func TestRestartsStuckRangeFeeds(t *testing.T) {
 	ctx := context.Background()
 
 	blockingClient := &blockRecvRangeFeedClient{}
-	var wrapRfClient wrapRangeFeedClientFn = func(client roachpb.Internal_RangeFeedClient) roachpb.Internal_RangeFeedClient {
+	var wrapRfClient wrapRangeFeedClientFn = func(client kvpb.Internal_RangeFeedClient) kvpb.Internal_RangeFeedClient {
 		blockingClient.Internal_RangeFeedClient = client
 		blockingClient.numRecvRemainingUntilBlocked = 1 // let first Recv through, then block
 		return blockingClient
@@ -474,18 +475,18 @@ func TestRestartsStuckRangeFeedsSecondImplementation(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
-					TestingRangefeedFilter: func(args *roachpb.RangeFeedRequest, stream roachpb.RangeFeedEventSink) *roachpb.Error {
+					TestingRangefeedFilter: func(args *kvpb.RangeFeedRequest, stream kvpb.RangeFeedEventSink) *kvpb.Error {
 						md, ok := metadata.FromIncomingContext(stream.Context())
 						if (!ok || len(md[t.Name()]) == 0) && stream.Context().Value(testKey{}) == nil {
 							return nil
 						}
 						if atomic.LoadInt32(&canceled) != 0 {
-							return roachpb.NewError(doneErr)
+							return kvpb.NewError(doneErr)
 						}
 
 						t.Logf("intercepting %s", args)
 						// Send a first response to "arm" the stuck detector in DistSender.
-						if assert.NoError(t, stream.Send(&roachpb.RangeFeedEvent{Checkpoint: &roachpb.RangeFeedCheckpoint{
+						if assert.NoError(t, stream.Send(&kvpb.RangeFeedEvent{Checkpoint: &kvpb.RangeFeedCheckpoint{
 							Span:       args.Span,
 							ResolvedTS: hlc.Timestamp{Logical: 1},
 						}})) {
@@ -493,7 +494,7 @@ func TestRestartsStuckRangeFeedsSecondImplementation(t *testing.T) {
 						}
 						select {
 						case <-time.After(testutils.DefaultSucceedsSoonDuration):
-							return roachpb.NewErrorf("timed out waiting for stuck rangefeed's ctx cancellation")
+							return kvpb.NewErrorf("timed out waiting for stuck rangefeed's ctx cancellation")
 						case <-stream.Context().Done():
 							t.Log("server side rangefeed canceled (as expected)")
 							atomic.StoreInt32(&canceled, 1)

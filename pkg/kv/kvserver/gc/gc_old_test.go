@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -70,7 +71,7 @@ func runGCOld(
 		return Info{}, errors.Wrap(err, "failed to set GC thresholds")
 	}
 
-	var batchGCKeys []roachpb.GCRequest_GCKey
+	var batchGCKeys []kvpb.GCRequest_GCKey
 	var batchGCKeysBytes int64
 	var expBaseKey roachpb.Key
 	var keys []storage.MVCCKey
@@ -148,7 +149,7 @@ func runGCOld(
 						// size, add the current timestamp to finish the current
 						// chunk and start a new one.
 						if batchGCKeysBytes >= KeyVersionChunkBytes {
-							batchGCKeys = append(batchGCKeys, roachpb.GCRequest_GCKey{Key: expBaseKey, Timestamp: keys[i].Timestamp})
+							batchGCKeys = append(batchGCKeys, kvpb.GCRequest_GCKey{Key: expBaseKey, Timestamp: keys[i].Timestamp})
 
 							err := gcer.GC(ctx, batchGCKeys, nil, nil)
 
@@ -167,7 +168,7 @@ func runGCOld(
 					}
 					// Add the key to the batch at the GC timestamp, unless it was already added.
 					if batchGCKeysBytes != 0 {
-						batchGCKeys = append(batchGCKeys, roachpb.GCRequest_GCKey{Key: expBaseKey, Timestamp: gcTS})
+						batchGCKeys = append(batchGCKeys, kvpb.GCRequest_GCKey{Key: expBaseKey, Timestamp: gcTS})
 					}
 					info.NumKeysAffected++
 				}

@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -44,8 +45,8 @@ import (
 // of one of its writes), the response will have a transaction set which should
 // be used to update the client transaction object.
 func (s *Store) Send(
-	ctx context.Context, ba *roachpb.BatchRequest,
-) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
+	ctx context.Context, ba *kvpb.BatchRequest,
+) (br *kvpb.BatchResponse, pErr *kvpb.Error) {
 	var writeBytes *kvadmission.StoreWriteBytes
 	br, writeBytes, pErr = s.SendWithWriteBytes(ctx, ba)
 	writeBytes.Release()
@@ -55,22 +56,22 @@ func (s *Store) Send(
 // SendWithWriteBytes is the implementation of Send with an additional
 // *StoreWriteBytes return value.
 func (s *Store) SendWithWriteBytes(
-	ctx context.Context, ba *roachpb.BatchRequest,
-) (br *roachpb.BatchResponse, writeBytes *kvadmission.StoreWriteBytes, pErr *roachpb.Error) {
+	ctx context.Context, ba *kvpb.BatchRequest,
+) (br *kvpb.BatchResponse, writeBytes *kvadmission.StoreWriteBytes, pErr *kvpb.Error) {
 	// Attach any log tags from the store to the context (which normally
 	// comes from gRPC).
 	ctx = s.AnnotateCtx(ctx)
 	for _, union := range ba.Requests {
 		arg := union.GetInner()
 		header := arg.Header()
-		if err := verifyKeys(header.Key, header.EndKey, roachpb.IsRange(arg)); err != nil {
-			return nil, nil, roachpb.NewError(errors.Wrapf(err,
+		if err := verifyKeys(header.Key, header.EndKey, kvpb.IsRange(arg)); err != nil {
+			return nil, nil, kvpb.NewError(errors.Wrapf(err,
 				"failed to verify keys for %s", arg.Method()))
 		}
 	}
 
 	if res, err := s.maybeThrottleBatch(ctx, ba); err != nil {
-		return nil, nil, roachpb.NewError(err)
+		return nil, nil, kvpb.NewError(err)
 	} else if res != nil {
 		defer res.Release()
 	}
@@ -84,7 +85,7 @@ func (s *Store) SendWithWriteBytes(
 	}
 
 	if err := ba.SetActiveTimestamp(s.Clock()); err != nil {
-		return nil, nil, roachpb.NewError(err)
+		return nil, nil, kvpb.NewError(err)
 	}
 
 	// Update our clock with the incoming request timestamp. This advances the
@@ -109,7 +110,7 @@ func (s *Store) SendWithWriteBytes(
 			// If the command appears to come from a node with a bad clock,
 			// reject it instead of updating the local clock and proceeding.
 			if err := s.cfg.Clock.UpdateAndCheckMaxOffset(ctx, baClockTS); err != nil {
-				return nil, nil, roachpb.NewError(err)
+				return nil, nil, kvpb.NewError(err)
 			}
 		}
 	}
@@ -180,7 +181,7 @@ func (s *Store) SendWithWriteBytes(
 		// Get range and add command to the range for execution.
 		repl, err := s.GetReplica(ba.RangeID)
 		if err != nil {
-			return nil, nil, roachpb.NewError(err)
+			return nil, nil, kvpb.NewError(err)
 		}
 		if !repl.IsInitialized() {
 			// If we have an uninitialized copy of the range, then we are probably a
@@ -190,7 +191,7 @@ func (s *Store) SendWithWriteBytes(
 			// the client that it should move on and try the next replica. Very
 			// likely, the next replica the client tries will be initialized and will
 			// have useful leaseholder information for the client.
-			return nil, nil, roachpb.NewError(&roachpb.NotLeaseHolderError{
+			return nil, nil, kvpb.NewError(&kvpb.NotLeaseHolderError{
 				RangeID: ba.RangeID,
 				// The replica doesn't have a range descriptor yet, so we have to build
 				// a ReplicaDescriptor manually.
@@ -217,7 +218,7 @@ func (s *Store) SendWithWriteBytes(
 
 		// Augment error if necessary and return.
 		switch t := pErr.GetDetail().(type) {
-		case *roachpb.RangeKeyMismatchError:
+		case *kvpb.RangeKeyMismatchError:
 			// TODO(andrei): It seems silly that, if the client specified a RangeID that
 			// doesn't match the keys it wanted to access, but this node can serve those
 			// keys anyway, we still return a RangeKeyMismatchError to the client
@@ -230,7 +231,7 @@ func (s *Store) SendWithWriteBytes(
 			// Range from this Store.
 			rSpan, err := keys.Range(ba.Requests)
 			if err != nil {
-				return nil, nil, roachpb.NewError(err)
+				return nil, nil, kvpb.NewError(err)
 			}
 
 			// The kvclient thought that a particular range id covers rSpans. It was
@@ -241,7 +242,7 @@ func (s *Store) SendWithWriteBytes(
 			// that the client requested, and all the ranges in between.
 			ri, err := t.MismatchedRange()
 			if err != nil {
-				return nil, nil, roachpb.NewError(err)
+				return nil, nil, kvpb.NewError(err)
 			}
 			skipRID := ri.Desc.RangeID // We already have info on one range, so don't add it again below.
 			startKey := ri.Desc.StartKey
@@ -307,12 +308,12 @@ func (s *Store) SendWithWriteBytes(
 			t.Ranges = append(rangeInfos, t.Ranges...)
 
 			// We have to write `t` back to `pErr` so that it picks up the changes.
-			pErr = roachpb.NewError(t)
-		case *roachpb.RaftGroupDeletedError:
+			pErr = kvpb.NewError(t)
+		case *kvpb.RaftGroupDeletedError:
 			// This error needs to be converted appropriately so that clients
 			// will retry.
-			err := roachpb.NewRangeNotFoundError(repl.RangeID, repl.store.StoreID())
-			pErr = roachpb.NewError(err)
+			err := kvpb.NewRangeNotFoundError(repl.RangeID, repl.store.StoreID())
+			pErr = kvpb.NewError(err)
 		}
 
 		// Unable to retry, exit the retry loop and return an error.
@@ -330,14 +331,14 @@ func (s *Store) SendWithWriteBytes(
 // before a request acquires latches on a range. Otherwise, the request could
 // inadvertently block others while being throttled.
 func (s *Store) maybeThrottleBatch(
-	ctx context.Context, ba *roachpb.BatchRequest,
+	ctx context.Context, ba *kvpb.BatchRequest,
 ) (limit.Reservation, error) {
 	if !ba.IsSingleRequest() {
 		return nil, nil
 	}
 
 	switch t := ba.Requests[0].GetInner().(type) {
-	case *roachpb.AddSSTableRequest:
+	case *kvpb.AddSSTableRequest:
 		limiter := s.limiters.ConcurrentAddSSTableRequests
 		if t.IngestAsWrites {
 			limiter = s.limiters.ConcurrentAddSSTableAsWritesRequests
@@ -362,7 +363,7 @@ func (s *Store) maybeThrottleBatch(
 		}
 		return res, nil
 
-	case *roachpb.ExportRequest:
+	case *kvpb.ExportRequest:
 		// Limit the number of concurrent Export requests, as these often scan and
 		// entire Range at a time and place significant read load on a Store.
 		before := timeutil.Now()
@@ -417,44 +418,44 @@ func (s *Store) maybeThrottleBatch(
 // For more information, see the "Server-side negotiation fast-path" section of
 // docs/RFCS/20210519_bounded_staleness_reads.md.
 func (s *Store) executeServerSideBoundedStalenessNegotiation(
-	ctx context.Context, ba *roachpb.BatchRequest,
-) (*roachpb.BatchRequest, *roachpb.Error) {
+	ctx context.Context, ba *kvpb.BatchRequest,
+) (*kvpb.BatchRequest, *kvpb.Error) {
 	if ba.BoundedStaleness == nil {
 		log.Fatal(ctx, "BoundedStaleness header required for server-side negotiation fast-path")
 	}
 	cfg := ba.BoundedStaleness
 	if cfg.MinTimestampBound.IsEmpty() {
-		return ba, roachpb.NewError(errors.AssertionFailedf(
+		return ba, kvpb.NewError(errors.AssertionFailedf(
 			"MinTimestampBound must be set in batch"))
 	}
 	if !cfg.MaxTimestampBound.IsEmpty() && cfg.MaxTimestampBound.LessEq(cfg.MinTimestampBound) {
-		return ba, roachpb.NewError(errors.AssertionFailedf(
+		return ba, kvpb.NewError(errors.AssertionFailedf(
 			"MaxTimestampBound, if set in batch, must be greater than MinTimestampBound"))
 	}
 	if !ba.Timestamp.IsEmpty() {
-		return ba, roachpb.NewError(errors.AssertionFailedf(
+		return ba, kvpb.NewError(errors.AssertionFailedf(
 			"MinTimestampBound and Timestamp cannot both be set in batch"))
 	}
 	if ba.Txn != nil {
-		return ba, roachpb.NewError(errors.AssertionFailedf(
+		return ba, kvpb.NewError(errors.AssertionFailedf(
 			"MinTimestampBound and Txn cannot both be set in batch"))
 	}
 
 	// Use one or more QueryResolvedTimestampRequests to compute a resolved
 	// timestamp over the read spans on the local replica.
-	queryResBa := &roachpb.BatchRequest{}
+	queryResBa := &kvpb.BatchRequest{}
 	queryResBa.RangeID = ba.RangeID
 	queryResBa.Replica = ba.Replica
 	queryResBa.ClientRangeInfo = ba.ClientRangeInfo
-	queryResBa.ReadConsistency = roachpb.INCONSISTENT
+	queryResBa.ReadConsistency = kvpb.INCONSISTENT
 	for _, ru := range ba.Requests {
 		span := ru.GetInner().Header().Span()
 		if len(span.EndKey) == 0 {
 			// QueryResolvedTimestamp is a ranged operation.
 			span.EndKey = span.Key.Next()
 		}
-		queryResBa.Add(&roachpb.QueryResolvedTimestampRequest{
-			RequestHeader: roachpb.RequestHeaderFromSpan(span),
+		queryResBa.Add(&kvpb.QueryResolvedTimestampRequest{
+			RequestHeader: kvpb.RequestHeaderFromSpan(span),
 		})
 	}
 
@@ -484,7 +485,7 @@ func (s *Store) executeServerSideBoundedStalenessNegotiation(
 		// to the current leaseholder. On the leaseholder, this may result in the
 		// request blocking on conflicting transactions.
 		if cfg.MinTimestampBoundStrict {
-			return ba, roachpb.NewError(roachpb.NewMinTimestampBoundUnsatisfiableError(
+			return ba, kvpb.NewError(kvpb.NewMinTimestampBoundUnsatisfiableError(
 				cfg.MinTimestampBound, resTS,
 			))
 		}

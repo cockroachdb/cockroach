@@ -13,13 +13,14 @@ package rangefeedbuffer
 import (
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
 // RangeFeedValueEventToKV is a function to type assert an Event into a
-// *roachpb.RangeFeedValue and then convert it to a roachpb.KeyValue.
+// *kvpb.RangeFeedValue and then convert it to a roachpb.KeyValue.
 func RangeFeedValueEventToKV(event Event) roachpb.KeyValue {
-	rfv := event.(*roachpb.RangeFeedValue)
+	rfv := event.(*kvpb.RangeFeedValue)
 	return roachpb.KeyValue{Key: rfv.Key, Value: rfv.Value}
 }
 

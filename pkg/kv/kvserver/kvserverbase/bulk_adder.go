@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -43,7 +44,7 @@ type BulkAdderOptions struct {
 
 	// DisallowShadowingBelow controls whether shadowing of existing keys is
 	// permitted when the SSTables produced by this adder are ingested. See the
-	// comment on roachpb.AddSSTableRequest for more details. Note that if this is
+	// comment on kvpb.AddSSTableRequest for more details. Note that if this is
 	// set to a non-empty timestamp, the older flag DisallowShadowing will be set
 	// on all requests as well, so callers should expect older nodes to handle any
 	// requests accordingly or check the MVCCAddSSTable version gate.
@@ -57,7 +58,7 @@ type BulkAdderOptions struct {
 	// WriteAtBatchTimestamp will rewrite the SST to use the batch timestamp, even
 	// if it gets pushed to a different timestamp on the server side. All SST MVCC
 	// timestamps must equal BatchTimestamp. See
-	// roachpb.AddSSTableRequest.SSTTimestampToRequestTimestamp.
+	// kvpb.AddSSTableRequest.SSTTimestampToRequestTimestamp.
 	WriteAtBatchTimestamp bool
 
 	// InitialSplitsIfUnordered specifies a number of splits to make before the
@@ -86,11 +87,11 @@ type BulkAdder interface {
 	// CurrentBufferFill returns how full the configured buffer is.
 	CurrentBufferFill() float32
 	// GetSummary returns a summary of rows/bytes/etc written by this batcher.
-	GetSummary() roachpb.BulkOpSummary
+	GetSummary() kvpb.BulkOpSummary
 	// Close closes the underlying buffers/writers.
 	Close(ctx context.Context)
 	// SetOnFlush sets a callback function called after flushing the buffer.
-	SetOnFlush(func(summary roachpb.BulkOpSummary))
+	SetOnFlush(func(summary kvpb.BulkOpSummary))
 }
 
 // DuplicateKeyError represents a failed attempt to ingest the same key twice

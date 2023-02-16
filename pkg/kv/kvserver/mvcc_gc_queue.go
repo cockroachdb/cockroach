@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
@@ -546,20 +547,20 @@ type replicaGCer struct {
 
 var _ gc.GCer = &replicaGCer{}
 
-func (r *replicaGCer) template() roachpb.GCRequest {
+func (r *replicaGCer) template() kvpb.GCRequest {
 	desc := r.repl.Desc()
-	var template roachpb.GCRequest
+	var template kvpb.GCRequest
 	template.Key = desc.StartKey.AsRawKey()
 	template.EndKey = desc.EndKey.AsRawKey()
 
 	return template
 }
 
-func (r *replicaGCer) send(ctx context.Context, req roachpb.GCRequest) error {
+func (r *replicaGCer) send(ctx context.Context, req kvpb.GCRequest) error {
 	n := atomic.AddInt32(&r.count, 1)
 	log.Eventf(ctx, "sending batch %d (%d keys)", n, len(req.Keys))
 
-	ba := &roachpb.BatchRequest{}
+	ba := &kvpb.BatchRequest{}
 	// Technically not needed since we're talking directly to the Replica.
 	ba.RangeID = r.repl.Desc().RangeID
 	ba.Timestamp = r.repl.Clock().Now()
@@ -569,7 +570,7 @@ func (r *replicaGCer) send(ctx context.Context, req roachpb.GCRequest) error {
 	var admissionHandle kvadmission.Handle
 	if r.admissionController != nil {
 		pri := admissionpb.WorkPriority(gc.AdmissionPriority.Get(&r.repl.ClusterSettings().SV))
-		ba.AdmissionHeader = roachpb.AdmissionHeader{
+		ba.AdmissionHeader = kvpb.AdmissionHeader{
 			// TODO(irfansharif): GC could be expected to be BulkNormalPri, so
 			// that it does not impact user-facing traffic when resources (e.g.
 			// CPU, write capacity of the store) are scarce. However long delays
@@ -595,7 +596,7 @@ func (r *replicaGCer) send(ctx context.Context, req roachpb.GCRequest) error {
 			// it'll be lessened overall.
 			Priority:                 int32(pri),
 			CreateTime:               timeutil.Now().UnixNano(),
-			Source:                   roachpb.AdmissionHeader_ROOT_KV,
+			Source:                   kvpb.AdmissionHeader_ROOT_KV,
 			NoMemoryReservedAtSource: true,
 		}
 		ba.Replica.StoreID = r.storeID
@@ -625,9 +626,9 @@ func (r *replicaGCer) SetGCThreshold(ctx context.Context, thresh gc.Threshold) e
 
 func (r *replicaGCer) GC(
 	ctx context.Context,
-	keys []roachpb.GCRequest_GCKey,
-	rangeKeys []roachpb.GCRequest_GCRangeKey,
-	clearRange *roachpb.GCRequest_GCClearRange,
+	keys []kvpb.GCRequest_GCKey,
+	rangeKeys []kvpb.GCRequest_GCRangeKey,
+	clearRange *kvpb.GCRequest_GCClearRange,
 ) error {
 	if len(keys) == 0 && len(rangeKeys) == 0 && clearRange == nil {
 		return nil
@@ -739,7 +740,7 @@ func (mgcq *mvccGCQueue) process(
 		},
 		func(ctx context.Context, intents []roachpb.Intent) error {
 			intentCount, err := repl.store.intentResolver.
-				CleanupIntents(ctx, intents, gcTimestamp, roachpb.PUSH_TOUCH)
+				CleanupIntents(ctx, intents, gcTimestamp, kvpb.PUSH_TOUCH)
 			if err == nil {
 				mgcq.store.metrics.GCResolveSuccess.Inc(int64(intentCount))
 			} else {
@@ -792,8 +793,8 @@ func (mgcq *mvccGCQueue) process(
 		log.Infof(ctx, "GC still needed following GC, recomputing MVCC stats")
 		log.Infof(ctx, "old score %s", r)
 		log.Infof(ctx, "new score %s", scoreAfter)
-		req := roachpb.RecomputeStatsRequest{
-			RequestHeader: roachpb.RequestHeader{Key: desc.StartKey.AsRawKey()},
+		req := kvpb.RecomputeStatsRequest{
+			RequestHeader: kvpb.RequestHeader{Key: desc.StartKey.AsRawKey()},
 		}
 		var b kv.Batch
 		b.AddRawRequest(&req)

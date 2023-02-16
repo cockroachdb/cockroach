@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -135,8 +136,8 @@ func (tsdb *DB) pruneTimeSeries(
 			end = start.PrefixEnd()
 		}
 
-		b.AddRawRequest(&roachpb.DeleteRangeRequest{
-			RequestHeader: roachpb.RequestHeader{
+		b.AddRawRequest(&kvpb.DeleteRangeRequest{
+			RequestHeader: kvpb.RequestHeader{
 				Key:    start,
 				EndKey: end,
 			},

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -313,7 +314,7 @@ func TestRangefeedWorksOnLivenessRange(t *testing.T) {
 	}()
 
 	// Wait for a liveness update.
-	var livenessEvent roachpb.RangeFeedValue
+	var livenessEvent kvpb.RangeFeedValue
 	timeoutC := time.After(10 * time.Second)
 	for {
 		select {

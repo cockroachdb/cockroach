@@ -8,6 +8,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvbase",
+        "//pkg/kv/kvpb",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/util/log",
@@ -28,6 +29,7 @@ go_test(
     embed = [":nodedialer"],
     deps = [
         "//pkg/clusterversion",
+        "//pkg/kv/kvpb",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/settings/cluster",

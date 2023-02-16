@@ -22,6 +22,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -528,8 +529,8 @@ func TestDistSQLReadsFillGatewayID(t *testing.T) {
 				UseDatabase: "test",
 				Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
 					EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
-						TestingEvalFilter: func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
-							scanReq, ok := filterArgs.Req.(*roachpb.ScanRequest)
+						TestingEvalFilter: func(filterArgs kvserverbase.FilterArgs) *kvpb.Error {
+							scanReq, ok := filterArgs.Req.(*kvpb.ScanRequest)
 							if !ok {
 								return nil
 							}
@@ -542,7 +543,7 @@ func TestDistSQLReadsFillGatewayID(t *testing.T) {
 
 							atomic.StoreInt64(&foundReq, 1)
 							if gw := filterArgs.Hdr.GatewayNodeID; gw != expectedGateway {
-								return roachpb.NewErrorf(
+								return kvpb.NewErrorf(
 									"expected all scans to have gateway 3, found: %d",
 									gw)
 							}

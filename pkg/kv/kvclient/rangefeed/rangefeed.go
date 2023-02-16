@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -164,7 +165,7 @@ func (f *Factory) New(
 }
 
 // OnValue is called for each rangefeed value.
-type OnValue func(ctx context.Context, value *roachpb.RangeFeedValue)
+type OnValue func(ctx context.Context, value *kvpb.RangeFeedValue)
 
 // RangeFeed represents a running RangeFeed.
 type RangeFeed struct {
@@ -309,8 +310,8 @@ func (f *RangeFeed) run(ctx context.Context, frontier *span.Frontier) {
 		}
 
 		err := ctxgroup.GoAndWait(ctx, rangeFeedTask, processEventsTask)
-		if errors.HasType(err, &roachpb.BatchTimestampBeforeGCError{}) ||
-			errors.HasType(err, &roachpb.MVCCHistoryMutationError{}) {
+		if errors.HasType(err, &kvpb.BatchTimestampBeforeGCError{}) ||
+			errors.HasType(err, &kvpb.MVCCHistoryMutationError{}) {
 			if errCallback := f.onUnrecoverableError; errCallback != nil {
 				errCallback(ctx, err)
 			}

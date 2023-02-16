@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/datadriven"
@@ -92,7 +92,7 @@ func (ts *testState) request(t *testing.T, d *datadriven.TestData) string {
 	if err := yaml.UnmarshalStrict([]byte(d.Input), &vals); err != nil {
 		d.Fatalf(t, "failed to unmarshal init values: %v", err)
 	}
-	req := roachpb.TokenBucketRequest{
+	req := kvpb.TokenBucketRequest{
 		RequestedRU:         vals.RU,
 		TargetRequestPeriod: parseDuration(t, d, vals.Period),
 	}

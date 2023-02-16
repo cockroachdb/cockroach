@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -196,7 +197,7 @@ func (p *planner) createTenantInternal(
 		b.CPut(kv.Key, &kv.Value, nil)
 	}
 	if err := p.Txn().Run(ctx, b); err != nil {
-		if errors.HasType(err, (*roachpb.ConditionFailedError)(nil)) {
+		if errors.HasType(err, (*kvpb.ConditionFailedError)(nil)) {
 			return tid, errors.Wrap(err, "programming error: "+
 				"tenant already exists but was not in system.tenants table")
 		}

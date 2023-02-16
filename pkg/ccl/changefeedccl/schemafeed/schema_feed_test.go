@@ -15,7 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -167,14 +167,14 @@ func TestIssuesHighPriorityReadsIfBlocked(t *testing.T) {
 	// Attempt to fetch descriptors; it should succeed withing reasonable time.
 	priorityAfter := 500 * time.Millisecond
 	highPriorityAfter.Override(ctx, &s.ClusterSettings().SV, priorityAfter)
-	var responseFiles []roachpb.ExportResponse_File
+	var responseFiles []kvpb.ExportResponse_File
 	testutils.SucceedsWithin(t, func() error {
 		resp, err := fetchDescriptorsWithPriorityOverride(ctx, s.ClusterSettings(),
 			kvDB.NonTransactionalSender(), keys.SystemSQLCodec, hlc.Timestamp{}, s.Clock().Now())
 		if err != nil {
 			return err
 		}
-		responseFiles = resp.(*roachpb.ExportResponse).Files
+		responseFiles = resp.(*kvpb.ExportResponse).Files
 		return nil
 	}, 10*priorityAfter)
 	require.Less(t, 0, len(responseFiles))

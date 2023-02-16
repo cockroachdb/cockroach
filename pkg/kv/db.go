@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -144,7 +145,7 @@ type Result struct {
 	ResumeSpan *roachpb.Span
 	// When ResumeSpan is populated, this specifies the reason why the operation
 	// wasn't completed and needs to be resumed.
-	ResumeReason roachpb.ResumeReason
+	ResumeReason kvpb.ResumeReason
 	// ResumeNextBytes is the size of the next result when ResumeSpan is populated.
 	ResumeNextBytes int64
 }
@@ -213,14 +214,14 @@ var _ Sender = &CrossRangeTxnWrapperSender{}
 
 // Send implements the Sender interface.
 func (s *CrossRangeTxnWrapperSender) Send(
-	ctx context.Context, ba *roachpb.BatchRequest,
-) (*roachpb.BatchResponse, *roachpb.Error) {
+	ctx context.Context, ba *kvpb.BatchRequest,
+) (*kvpb.BatchResponse, *kvpb.Error) {
 	if ba.Txn != nil {
 		log.Fatalf(ctx, "CrossRangeTxnWrapperSender can't handle transactional requests")
 	}
 
 	br, pErr := s.wrapped.Send(ctx, ba)
-	if _, ok := pErr.GetDetail().(*roachpb.OpRequiresTxnError); !ok {
+	if _, ok := pErr.GetDetail().(*kvpb.OpRequiresTxnError); !ok {
 		return br, pErr
 	}
 
@@ -237,7 +238,7 @@ func (s *CrossRangeTxnWrapperSender) Send(
 		return err
 	})
 	if err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, kvpb.NewError(err)
 	}
 	br.Txn = nil // hide the evidence
 	return br, nil
@@ -463,7 +464,7 @@ func (db *DB) scan(
 	maxRows int64,
 	isReverse bool,
 	forUpdate bool,
-	readConsistency roachpb.ReadConsistencyType,
+	readConsistency kvpb.ReadConsistencyType,
 ) ([]KeyValue, error) {
 	b := &Batch{}
 	b.Header.ReadConsistency = readConsistency
@@ -482,7 +483,7 @@ func (db *DB) scan(
 //
 // key can be either a byte slice or a string.
 func (db *DB) Scan(ctx context.Context, begin, end interface{}, maxRows int64) ([]KeyValue, error) {
-	return db.scan(ctx, begin, end, maxRows, false /* isReverse */, false /* forUpdate */, roachpb.CONSISTENT)
+	return db.scan(ctx, begin, end, maxRows, false /* isReverse */, false /* forUpdate */, kvpb.CONSISTENT)
 }
 
 // ScanForUpdate retrieves the rows between begin (inclusive) and end
@@ -495,7 +496,7 @@ func (db *DB) Scan(ctx context.Context, begin, end interface{}, maxRows int64) (
 func (db *DB) ScanForUpdate(
 	ctx context.Context, begin, end interface{}, maxRows int64,
 ) ([]KeyValue, error) {
-	return db.scan(ctx, begin, end, maxRows, false /* isReverse */, true /* forUpdate */, roachpb.CONSISTENT)
+	return db.scan(ctx, begin, end, maxRows, false /* isReverse */, true /* forUpdate */, kvpb.CONSISTENT)
 }
 
 // ReverseScan retrieves the rows between begin (inclusive) and end (exclusive)
@@ -507,7 +508,7 @@ func (db *DB) ScanForUpdate(
 func (db *DB) ReverseScan(
 	ctx context.Context, begin, end interface{}, maxRows int64,
 ) ([]KeyValue, error) {
-	return db.scan(ctx, begin, end, maxRows, true /* isReverse */, false /* forUpdate */, roachpb.CONSISTENT)
+	return db.scan(ctx, begin, end, maxRows, true /* isReverse */, false /* forUpdate */, kvpb.CONSISTENT)
 }
 
 // ReverseScanForUpdate retrieves the rows between begin (inclusive) and end
@@ -520,7 +521,7 @@ func (db *DB) ReverseScan(
 func (db *DB) ReverseScanForUpdate(
 	ctx context.Context, begin, end interface{}, maxRows int64,
 ) ([]KeyValue, error) {
-	return db.scan(ctx, begin, end, maxRows, true /* isReverse */, true /* forUpdate */, roachpb.CONSISTENT)
+	return db.scan(ctx, begin, end, maxRows, true /* isReverse */, true /* forUpdate */, kvpb.CONSISTENT)
 }
 
 // Del deletes one or more keys.
@@ -604,9 +605,9 @@ func (db *DB) AdminSplit(
 // if the range is large.
 func (db *DB) AdminScatter(
 	ctx context.Context, key roachpb.Key, maxSize int64,
-) (*roachpb.AdminScatterResponse, error) {
-	scatterReq := &roachpb.AdminScatterRequest{
-		RequestHeader:   roachpb.RequestHeaderFromSpan(roachpb.Span{Key: key, EndKey: key.Next()}),
+) (*kvpb.AdminScatterResponse, error) {
+	scatterReq := &kvpb.AdminScatterRequest{
+		RequestHeader:   kvpb.RequestHeaderFromSpan(roachpb.Span{Key: key, EndKey: key.Next()}),
 		RandomizeLeases: true,
 		MaxSize:         maxSize,
 	}
@@ -614,7 +615,7 @@ func (db *DB) AdminScatter(
 	if pErr != nil {
 		return nil, pErr.GoError()
 	}
-	resp, ok := raw.(*roachpb.AdminScatterResponse)
+	resp, ok := raw.(*kvpb.AdminScatterResponse)
 	if !ok {
 		return nil, errors.Errorf("unexpected response of type %T for AdminScatter", raw)
 	}
@@ -668,7 +669,7 @@ func (db *DB) AdminChangeReplicas(
 	ctx context.Context,
 	key interface{},
 	expDesc roachpb.RangeDescriptor,
-	chgs []roachpb.ReplicationChange,
+	chgs []kvpb.ReplicationChange,
 ) (*roachpb.RangeDescriptor, error) {
 	b := &Batch{}
 	b.adminChangeReplicas(key, expDesc, chgs)
@@ -679,7 +680,7 @@ func (db *DB) AdminChangeReplicas(
 	if len(responses) == 0 {
 		return nil, errors.Errorf("unexpected empty responses for AdminChangeReplicas")
 	}
-	resp, ok := responses[0].GetInner().(*roachpb.AdminChangeReplicasResponse)
+	resp, ok := responses[0].GetInner().(*kvpb.AdminChangeReplicasResponse)
 	if !ok {
 		return nil, errors.Errorf("unexpected response of type %T for AdminChangeReplicas",
 			responses[0].GetInner())
@@ -716,7 +717,7 @@ func (db *DB) AddSSTable(
 	ingestAsWrites bool,
 	batchTs hlc.Timestamp,
 ) (roachpb.Span, int64, error) {
-	b := &Batch{Header: roachpb.Header{Timestamp: batchTs}}
+	b := &Batch{Header: kvpb.Header{Timestamp: batchTs}}
 	b.addSSTable(begin, end, data, disallowConflicts, disallowShadowing, disallowShadowingBelow,
 		stats, ingestAsWrites, hlc.Timestamp{} /* sstTimestampToRequestTimestamp */)
 	err := getOneErr(db.Run(ctx, b), b)
@@ -747,7 +748,7 @@ func (db *DB) AddSSTableAtBatchTimestamp(
 	ingestAsWrites bool,
 	batchTs hlc.Timestamp,
 ) (hlc.Timestamp, roachpb.Span, int64, error) {
-	b := &Batch{Header: roachpb.Header{Timestamp: batchTs}}
+	b := &Batch{Header: kvpb.Header{Timestamp: batchTs}}
 	b.addSSTable(begin, end, data, disallowConflicts, disallowShadowing, disallowShadowingBelow,
 		stats, ingestAsWrites, batchTs)
 	err := getOneErr(db.Run(ctx, b), b)
@@ -784,7 +785,7 @@ func (db *DB) QueryResolvedTimestamp(
 	b := &Batch{}
 	b.queryResolvedTimestamp(begin, end)
 	if nearest {
-		b.Header.RoutingPolicy = roachpb.RoutingPolicy_NEAREST
+		b.Header.RoutingPolicy = kvpb.RoutingPolicy_NEAREST
 	}
 	if err := getOneErr(db.Run(ctx, b), b); err != nil {
 		return hlc.Timestamp{}, err
@@ -806,7 +807,7 @@ func (db *DB) Barrier(ctx context.Context, begin, end interface{}) (hlc.Timestam
 	if len(responses) == 0 {
 		return hlc.Timestamp{}, errors.Errorf("unexpected empty response for Barrier")
 	}
-	resp, ok := responses[0].GetInner().(*roachpb.BarrierResponse)
+	resp, ok := responses[0].GetInner().(*kvpb.BarrierResponse)
 	if !ok {
 		return hlc.Timestamp{}, errors.Errorf("unexpected response of type %T for Barrier",
 			responses[0].GetInner())
@@ -823,14 +824,14 @@ func sendAndFill(ctx context.Context, send SenderFunc, b *Batch) error {
 	// fails. But send() also returns its own errors, so there's some dancing
 	// here to do because we want to run fillResults() so that the individual
 	// result gets initialized with an error from the corresponding call.
-	ba := &roachpb.BatchRequest{}
+	ba := &kvpb.BatchRequest{}
 	ba.Requests = b.reqs
 	ba.Header = b.Header
 	ba.AdmissionHeader = b.AdmissionHeader
 	b.response, b.pErr = send(ctx, ba)
 	b.fillResults(ctx)
 	if b.pErr == nil {
-		b.pErr = roachpb.NewError(b.resultErr())
+		b.pErr = kvpb.NewError(b.resultErr())
 	}
 	return b.pErr.GoError()
 }
@@ -894,7 +895,7 @@ func (db *DB) NewTxn(ctx context.Context, debugName string) *Txn {
 // conscious about what they want.
 func (db *DB) Txn(ctx context.Context, retryable func(context.Context, *Txn) error) error {
 	return db.TxnWithAdmissionControl(
-		ctx, roachpb.AdmissionHeader_OTHER, admissionpb.NormalPri,
+		ctx, kvpb.AdmissionHeader_OTHER, admissionpb.NormalPri,
 		SteppingDisabled, retryable,
 	)
 }
@@ -903,7 +904,7 @@ func (db *DB) Txn(ctx context.Context, retryable func(context.Context, *Txn) err
 // control source and priority.
 func (db *DB) TxnWithAdmissionControl(
 	ctx context.Context,
-	source roachpb.AdmissionHeader_Source,
+	source kvpb.AdmissionHeader_Source,
 	priority admissionpb.WorkPriority,
 	steppingMode SteppingMode,
 	retryable func(context.Context, *Txn) error,
@@ -966,7 +967,7 @@ func runTxn(ctx context.Context, txn *Txn, retryable func(context.Context, *Txn)
 	// Terminate TransactionRetryWithProtoRefreshError here, so it doesn't cause a higher-level
 	// txn to be retried. We don't do this in any of the other functions in DB; I
 	// guess we should.
-	if errors.HasType(err, (*roachpb.TransactionRetryWithProtoRefreshError)(nil)) {
+	if errors.HasType(err, (*kvpb.TransactionRetryWithProtoRefreshError)(nil)) {
 		return errors.Wrapf(err, "terminated retryable error")
 	}
 	return err
@@ -974,21 +975,19 @@ func runTxn(ctx context.Context, txn *Txn, retryable func(context.Context, *Txn)
 
 // send runs the specified calls synchronously in a single batch and returns
 // any errors. Returns (nil, nil) for an empty batch.
-func (db *DB) send(
-	ctx context.Context, ba *roachpb.BatchRequest,
-) (*roachpb.BatchResponse, *roachpb.Error) {
+func (db *DB) send(ctx context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 	return db.sendUsingSender(ctx, ba, db.NonTransactionalSender())
 }
 
 // sendUsingSender uses the specified sender to send the batch request.
 func (db *DB) sendUsingSender(
-	ctx context.Context, ba *roachpb.BatchRequest, sender Sender,
-) (*roachpb.BatchResponse, *roachpb.Error) {
+	ctx context.Context, ba *kvpb.BatchRequest, sender Sender,
+) (*kvpb.BatchResponse, *kvpb.Error) {
 	if len(ba.Requests) == 0 {
 		return nil, nil
 	}
 	if err := ba.ReadConsistency.SupportsBatch(ba); err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, kvpb.NewError(err)
 	}
 	if ba.UserPriority == 0 && db.ctx.UserPriority != 1 {
 		ba.UserPriority = db.ctx.UserPriority
@@ -1049,8 +1048,8 @@ func IncrementValRetryable(ctx context.Context, db *DB, key roachpb.Key, inc int
 	var res KeyValue
 	for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
 		res, err = db.Inc(ctx, key, inc)
-		if errors.HasType(err, (*roachpb.UnhandledRetryableError)(nil)) ||
-			errors.HasType(err, (*roachpb.AmbiguousResultError)(nil)) {
+		if errors.HasType(err, (*kvpb.UnhandledRetryableError)(nil)) ||
+			errors.HasType(err, (*kvpb.AmbiguousResultError)(nil)) {
 			continue
 		}
 		break

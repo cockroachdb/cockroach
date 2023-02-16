@@ -8,12 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package roachpb
+package kvpb
 
 import (
 	context "context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 )
@@ -22,7 +23,7 @@ import (
 // provided with the range descriptor known to the replica, and the relevant
 // replica descriptor within.
 func NewReplicaUnavailableError(
-	cause error, desc *RangeDescriptor, replDesc ReplicaDescriptor,
+	cause error, desc *roachpb.RangeDescriptor, replDesc roachpb.ReplicaDescriptor,
 ) error {
 	return &ReplicaUnavailableError{
 		Desc:    *desc,

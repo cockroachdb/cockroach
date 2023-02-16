@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -148,7 +149,7 @@ func (n *relocateRange) relocate(params runParams, rangeDesc roachpb.RangeDescri
 		fromChangeType = roachpb.REMOVE_NON_VOTER
 	}
 	_, err := execCfg.DB.AdminChangeReplicas(
-		params.ctx, rangeDesc.StartKey, rangeDesc, []roachpb.ReplicationChange{
+		params.ctx, rangeDesc.StartKey, rangeDesc, []kvpb.ReplicationChange{
 			{ChangeType: toChangeType, Target: n.run.toTarget},
 			{ChangeType: fromChangeType, Target: n.run.fromTarget},
 		},

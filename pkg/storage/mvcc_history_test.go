@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
@@ -1106,7 +1107,7 @@ func cmdDelete(e *evalCtx) error {
 	resolve, resolveStatus := e.getResolve()
 	return e.withWriter("del", func(rw storage.ReadWriter) error {
 		foundKey, err := storage.MVCCDelete(e.ctx, rw, e.ms, key, ts, localTs, txn)
-		if err == nil || errors.HasType(err, &roachpb.WriteTooOldError{}) {
+		if err == nil || errors.HasType(err, &kvpb.WriteTooOldError{}) {
 			// We want to output foundKey even if a WriteTooOldError is returned,
 			// since the error may be swallowed/deferred during evaluation.
 			e.results.buf.Printf("del: %v: found key %v\n", key, foundKey)
@@ -1195,7 +1196,7 @@ func cmdDeleteRangePredicate(e *evalCtx) error {
 	if e.hasArg("maxBytes") {
 		e.scanArg("maxBytes", &maxBytes)
 	}
-	predicates := roachpb.DeleteRangePredicates{
+	predicates := kvpb.DeleteRangePredicates{
 		StartTime: e.getTsWithName("startTime"),
 	}
 	rangeThreshold := 64
@@ -1384,7 +1385,7 @@ func cmdExport(e *evalCtx) error {
 
 	sstFile := &storage.MemFile{}
 
-	var summary roachpb.BulkOpSummary
+	var summary kvpb.BulkOpSummary
 	var resume storage.MVCCKey
 	var fingerprint uint64
 	var hasRangeKeys bool
@@ -2253,7 +2254,7 @@ func (e *evalCtx) withWriter(cmd string, fn func(_ storage.ReadWriter) error) er
 	if batch != nil {
 		// WriteTooOldError is sometimes expected to leave behind a provisional
 		// value at a higher timestamp. We commit this for parity with the engine.
-		if err == nil || errors.HasType(err, &roachpb.WriteTooOldError{}) {
+		if err == nil || errors.HasType(err, &kvpb.WriteTooOldError{}) {
 			if err := batch.Commit(true); err != nil {
 				return err
 			}

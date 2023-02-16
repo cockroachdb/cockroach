@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -1460,7 +1461,7 @@ func (ief *InternalDB) txn(
 		}
 		run = func(ctx context.Context, f kvTxnFunc) error {
 			return db.TxnWithAdmissionControl(
-				ctx, roachpb.AdmissionHeader_FROM_SQL, priority, steppingMode, f,
+				ctx, kvpb.AdmissionHeader_FROM_SQL, priority, steppingMode, f,
 			)
 		}
 	} else if cfg.GetSteppingEnabled() {

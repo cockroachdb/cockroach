@@ -14,7 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -91,7 +91,7 @@ func (p *rangefeed) addEventsToBuffer(ctx context.Context) error {
 		select {
 		case e := <-p.eventC:
 			switch t := e.GetValue().(type) {
-			case *roachpb.RangeFeedValue:
+			case *kvpb.RangeFeedValue:
 				if p.cfg.Knobs.OnRangeFeedValue != nil {
 					if err := p.cfg.Knobs.OnRangeFeedValue(); err != nil {
 						return err
@@ -106,7 +106,7 @@ func (p *rangefeed) addEventsToBuffer(ctx context.Context) error {
 				); err != nil {
 					return err
 				}
-			case *roachpb.RangeFeedCheckpoint:
+			case *kvpb.RangeFeedCheckpoint:
 				if p.knobs.ModifyTimestamps != nil {
 					p.knobs.ModifyTimestamps(&t.ResolvedTS)
 				}
@@ -124,12 +124,12 @@ func (p *rangefeed) addEventsToBuffer(ctx context.Context) error {
 				); err != nil {
 					return err
 				}
-			case *roachpb.RangeFeedSSTable:
+			case *kvpb.RangeFeedSSTable:
 				// For now, we just error on SST ingestion, since we currently don't
 				// expect SST ingestion into spans with active changefeeds.
 				return errors.Errorf("unexpected SST ingestion: %v", t)
 
-			case *roachpb.RangeFeedDeleteRange:
+			case *kvpb.RangeFeedDeleteRange:
 				// For now, we just ignore on MVCC range tombstones. These are currently
 				// only expected to be used by schema GC and IMPORT INTO, and such spans
 				// should not have active changefeeds across them, at least at the times

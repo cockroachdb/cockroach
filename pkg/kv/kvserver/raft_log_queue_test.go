@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -729,7 +730,7 @@ func TestTruncateLog(t *testing.T) {
 
 		// Discard the first half of the log.
 		truncateArgs := truncateLogArgs(indexes[5], rangeID)
-		if _, pErr := tc.SendWrappedWith(roachpb.Header{RangeID: 1}, &truncateArgs); pErr != nil {
+		if _, pErr := tc.SendWrappedWith(kvpb.Header{RangeID: 1}, &truncateArgs); pErr != nil {
 			t.Fatal(pErr)
 		}
 
@@ -871,8 +872,8 @@ func TestTruncateLogRecompute(t *testing.T) {
 	put := func() {
 		var v roachpb.Value
 		v.SetBytes(bytes.Repeat([]byte("x"), RaftLogQueueStaleSize*5))
-		put := roachpb.NewPut(key, v)
-		ba := &roachpb.BatchRequest{}
+		put := kvpb.NewPut(key, v)
+		ba := &kvpb.BatchRequest{}
 		ba.Add(put)
 		ba.RangeID = repl.RangeID
 

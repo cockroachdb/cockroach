@@ -10,7 +10,7 @@
 
 package tenantcostmodel
 
-import "github.com/cockroachdb/cockroach/pkg/roachpb"
+import "github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 
 // RU stands for "Request Unit(s)"; the tenant cost model maps tenant activity
 // into this abstract unit.
@@ -179,7 +179,7 @@ type RequestInfo struct {
 
 // MakeRequestInfo extracts the relevant information from a BatchRequest.
 func MakeRequestInfo(
-	ba *roachpb.BatchRequest, replicas int, writeMultiplier RUMultiplier,
+	ba *kvpb.BatchRequest, replicas int, writeMultiplier RUMultiplier,
 ) RequestInfo {
 	// The cost of read-only batches is captured by MakeResponseInfo.
 	if !ba.IsWrite() {
@@ -193,11 +193,11 @@ func MakeRequestInfo(
 		// Only count non-admin requests in the batch that write user data. Other
 		// requests are considered part of the "base" cost of a batch.
 		switch req.(type) {
-		case *roachpb.PutRequest, *roachpb.ConditionalPutRequest, *roachpb.IncrementRequest,
-			*roachpb.DeleteRequest, *roachpb.DeleteRangeRequest, *roachpb.ClearRangeRequest,
-			*roachpb.RevertRangeRequest, *roachpb.InitPutRequest, *roachpb.AddSSTableRequest:
+		case *kvpb.PutRequest, *kvpb.ConditionalPutRequest, *kvpb.IncrementRequest,
+			*kvpb.DeleteRequest, *kvpb.DeleteRangeRequest, *kvpb.ClearRangeRequest,
+			*kvpb.RevertRangeRequest, *kvpb.InitPutRequest, *kvpb.AddSSTableRequest:
 			writeCount++
-			if swr, isSizedWrite := req.(roachpb.SizedWriteRequest); isSizedWrite {
+			if swr, isSizedWrite := req.(kvpb.SizedWriteRequest); isSizedWrite {
 				writeBytes += swr.WriteBytes()
 			}
 		}
@@ -268,7 +268,7 @@ type ResponseInfo struct {
 
 // MakeResponseInfo extracts the relevant information from a BatchResponse.
 func MakeResponseInfo(
-	br *roachpb.BatchResponse, isReadOnly bool, readMultiplier RUMultiplier,
+	br *kvpb.BatchResponse, isReadOnly bool, readMultiplier RUMultiplier,
 ) ResponseInfo {
 	// The cost of non read-only batches is captured by MakeRequestInfo.
 	if !isReadOnly {
@@ -282,8 +282,8 @@ func MakeResponseInfo(
 		// Only count requests in the batch that read user data. Other requests
 		// are considered part of the "base" cost of a batch.
 		switch resp.(type) {
-		case *roachpb.GetResponse, *roachpb.ScanResponse, *roachpb.ReverseScanResponse,
-			*roachpb.ExportResponse:
+		case *kvpb.GetResponse, *kvpb.ScanResponse, *kvpb.ReverseScanResponse,
+			*kvpb.ExportResponse:
 			readCount++
 			readBytes += resp.Header().NumBytes
 		}

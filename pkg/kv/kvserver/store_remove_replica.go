@@ -14,6 +14,7 @@ import (
 	"context"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -129,7 +130,7 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 		}
 
 		// Mark the replica as removed before deleting data.
-		rep.mu.destroyStatus.Set(roachpb.NewRangeNotFoundError(rep.RangeID, rep.StoreID()),
+		rep.mu.destroyStatus.Set(kvpb.NewRangeNotFoundError(rep.RangeID, rep.StoreID()),
 			destroyReasonRemoved)
 		rep.mu.Unlock()
 		rep.readOnlyCmdMu.Unlock()
@@ -167,7 +168,7 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 
 	// The replica will no longer exist, so cancel any rangefeed registrations.
 	rep.disconnectRangefeedWithReason(
-		roachpb.RangeFeedRetryError_REASON_REPLICA_REMOVED,
+		kvpb.RangeFeedRetryError_REASON_REPLICA_REMOVED,
 	)
 
 	// Mark the replica as destroyed and (optionally) destroy the on-disk data
@@ -257,7 +258,7 @@ func (s *Store) removeUninitializedReplicaRaftMuLocked(
 		}
 
 		// Mark the replica as removed before deleting data.
-		rep.mu.destroyStatus.Set(roachpb.NewRangeNotFoundError(rep.RangeID, rep.StoreID()),
+		rep.mu.destroyStatus.Set(kvpb.NewRangeNotFoundError(rep.RangeID, rep.StoreID()),
 			destroyReasonRemoved)
 
 		rep.mu.Unlock()

@@ -20,9 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -487,9 +487,9 @@ func createStatsRequestFilter(
 ) (kvserverbase.ReplicaRequestFilter, func(descpb.ID)) {
 	var tableToBlock atomic.Value
 	tableToBlock.Store(descpb.InvalidID)
-	return func(ctx context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
-		if req, ok := ba.GetArg(roachpb.Scan); ok {
-			_, tableID, _ := encoding.DecodeUvarintAscending(req.(*roachpb.ScanRequest).Key)
+	return func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
+		if req, ok := ba.GetArg(kvpb.Scan); ok {
+			_, tableID, _ := encoding.DecodeUvarintAscending(req.(*kvpb.ScanRequest).Key)
 			// Ensure that the tableID is what we expect it to be.
 			if tableID > 0 && descpb.ID(tableID) == tableToBlock.Load().(descpb.ID) {
 				// Read from the channel twice to allow jobutils.RunJob to complete

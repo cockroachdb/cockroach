@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -52,8 +53,8 @@ type testContext struct {
 func makeTestContext(stopper *stop.Stopper) testContext {
 	clock := hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(0, 123)))
 	factory := kv.MakeMockTxnSenderFactory(
-		func(context.Context, *roachpb.Transaction, *roachpb.BatchRequest,
-		) (*roachpb.BatchResponse, *roachpb.Error) {
+		func(context.Context, *roachpb.Transaction, *kvpb.BatchRequest,
+		) (*kvpb.BatchResponse, *kvpb.Error) {
 			return nil, nil
 		})
 

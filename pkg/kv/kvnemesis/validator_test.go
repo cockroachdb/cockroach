@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
+	kvpb "github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -33,7 +34,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var retryableError = roachpb.NewTransactionRetryWithProtoRefreshError(
+var retryableError = kvpb.NewTransactionRetryWithProtoRefreshError(
 	``, uuid.MakeV4(), roachpb.Transaction{})
 
 func withTimestamp(op Operation, ts int) Operation {
@@ -54,7 +55,7 @@ func withResult(op Operation) Operation {
 }
 
 func withAmbResult(op Operation) Operation {
-	err := roachpb.NewAmbiguousResultErrorf("boom")
+	err := kvpb.NewAmbiguousResultErrorf("boom")
 	op = withResultErr(op, err)
 	return op
 }
@@ -113,7 +114,7 @@ func TestValidate(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	if !buildutil.CrdbTestBuild {
-		// `roachpb.RequestHeader` and `MVCCValueHeader` have a KVNemesisSeq field
+		// `kvpb.RequestHeader` and `MVCCValueHeader` have a KVNemesisSeq field
 		// that is zero-sized outside test builds. We could revisit that should
 		// a need arise to run kvnemesis against production binaries.
 		skip.IgnoreLint(t, "kvnemesis must be run with the crdb_test build tag")
