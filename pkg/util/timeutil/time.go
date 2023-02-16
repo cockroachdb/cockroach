@@ -90,10 +90,18 @@ func Until(t time.Time) time.Duration {
 var UnixEpoch = time.Unix(0, 0).UTC()
 
 // FromUnixMicros returns the UTC time.Time corresponding to the given Unix
-// time, usec microseconds since UnixEpoch. In Go's current time.Time
+// time, usec microseconds since UnixEpoch.
+// In Go's current time.Time
 // implementation, all possible values for us can be represented as a time.Time.
 func FromUnixMicros(us int64) time.Time {
 	return time.Unix(us/1e6, (us%1e6)*1e3).UTC()
+}
+
+// FromUnixNanos returns the UTC time.Time corresponding to the given Unix
+// time, ns nanoseconds since UnixEpoch. In Go's current time.Time
+// implementation, all possible values for ns can be represented as a time.Time.
+func FromUnixNanos(ns int64) time.Time {
+	return time.Unix(ns/1e9, ns%1e9).UTC()
 }
 
 // ToUnixMicros returns t as the number of microseconds elapsed since UnixEpoch.
