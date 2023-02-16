@@ -121,6 +121,11 @@ type Metadata struct {
 	// mutation operators, used to determine the logical properties of WithScan.
 	withBindings map[WithID]Expr
 
+	// currentDatabase tracks the database that was used to resolve the query. It
+	// may be unset if the query's resolution does not depend on the current
+	// database.
+	currentDatabase string
+
 	// NOTE! When adding fields here, update Init (if reusing allocated
 	// data structures is desired), CopyFrom and TestMetadata.
 }
@@ -246,6 +251,7 @@ func (md *Metadata) CopyFrom(from *Metadata, copyScalarFn func(Expr) Expr) {
 	md.deps = append(md.deps, from.deps...)
 	md.views = append(md.views, from.views...)
 	md.currUniqueID = from.currUniqueID
+	md.currentDatabase = from.currentDatabase
 
 	// We cannot copy the bound expressions; they must be rebuilt in the new memo.
 	md.withBindings = nil
@@ -292,8 +298,24 @@ func (md *Metadata) AddDependency(name MDDepName, ds cat.DataSource, priv privil
 // perform KV operations on behalf of the transaction associated with the
 // provided catalog, and those errors are required to be propagated.
 func (md *Metadata) CheckDependencies(
-	ctx context.Context, catalog cat.Catalog,
+	ctx context.Context, evalCtx *eval.Context, catalog cat.Catalog,
 ) (upToDate bool, err error) {
+	if md.currentDatabase != "" && evalCtx.SessionData().Database != md.currentDatabase {
+		// The database has been switched, and the evaluation of the query is
+		// sensitive to this.
+		return false, nil
+	}
+	for _, schema := range md.schemas {
+		// Ensure that each schema referenced in the query resolves to the same,
+		// unchanged object.
+		toCheck, _, err := catalog.ResolveSchema(ctx, cat.Flags{}, schema.Name())
+		if err != nil {
+			return false, err
+		}
+		if !toCheck.Equals(schema) {
+			return false, nil
+		}
+	}
 	for i := range md.deps {
 		name := &md.deps[i].name
 		var toCheck cat.DataSource
@@ -347,8 +369,22 @@ func (md *Metadata) CheckDependencies(
 	return true, nil
 }
 
+// SetCurrentDatabase records the current database that was used to resolve the
+// query. It should be used when an object in the query is not qualified by
+// database, since resolution of that object will change if the current database
+// changes.
+func (md *Metadata) SetCurrentDatabase(currentDatabase string) {
+	md.currentDatabase = currentDatabase
+}
+
 // AddSchema indexes a new reference to a schema used by the query.
 func (md *Metadata) AddSchema(sch cat.Schema) SchemaID {
+	for i := range md.schemas {
+		if md.schemas[i] == sch {
+			// This is a duplicate.
+			return SchemaID(i + 1)
+		}
+	}
 	md.schemas = append(md.schemas, sch)
 	return SchemaID(len(md.schemas))
 }
