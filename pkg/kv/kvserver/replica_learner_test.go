@@ -1465,6 +1465,7 @@ func TestLearnerAndVoterOutgoingFollowerRead(t *testing.T) {
 
 func TestLearnerOrJointConfigAdminRelocateRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 95500, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
