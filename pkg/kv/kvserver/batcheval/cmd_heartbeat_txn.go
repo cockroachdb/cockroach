@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -24,13 +25,13 @@ import (
 )
 
 func init() {
-	RegisterReadWriteCommand(roachpb.HeartbeatTxn, declareKeysHeartbeatTransaction, HeartbeatTxn)
+	RegisterReadWriteCommand(kvpb.HeartbeatTxn, declareKeysHeartbeatTransaction, HeartbeatTxn)
 }
 
 func declareKeysHeartbeatTransaction(
 	rs ImmutableRangeState,
-	header *roachpb.Header,
-	req roachpb.Request,
+	header *kvpb.Header,
+	req kvpb.Request,
 	latchSpans, _ *spanset.SpanSet,
 	_ time.Duration,
 ) {
@@ -41,11 +42,11 @@ func declareKeysHeartbeatTransaction(
 // timestamp after receiving transaction heartbeat messages from
 // coordinator. Returns the updated transaction.
 func HeartbeatTxn(
-	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp kvpb.Response,
 ) (result.Result, error) {
-	args := cArgs.Args.(*roachpb.HeartbeatTxnRequest)
+	args := cArgs.Args.(*kvpb.HeartbeatTxnRequest)
 	h := cArgs.Header
-	reply := resp.(*roachpb.HeartbeatTxnResponse)
+	reply := resp.(*kvpb.HeartbeatTxnResponse)
 
 	if err := VerifyTransaction(h, args, roachpb.PENDING, roachpb.STAGING); err != nil {
 		return result.Result{}, err

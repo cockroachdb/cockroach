@@ -15,6 +15,7 @@ go_library(
         "//pkg/cloud/externalconn",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
+        "//pkg/kv/kvpb",
         "//pkg/repstream/streampb",
         "//pkg/roachpb",
         "//pkg/security/username",

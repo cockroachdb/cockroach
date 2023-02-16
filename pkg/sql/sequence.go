@@ -16,7 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -176,7 +176,7 @@ func (p *planner) incrementSequenceUsingCache(
 		}
 
 		if err != nil {
-			if errors.HasType(err, (*roachpb.IntegerOverflowError)(nil)) {
+			if errors.HasType(err, (*kvpb.IntegerOverflowError)(nil)) {
 				return 0, 0, 0, boundsExceededError(descriptor)
 			}
 			return 0, 0, 0, err

@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
@@ -32,11 +33,11 @@ func NewConsistencyChecker(db *kv.DB) *ConsistencyChecker {
 
 // CheckConsistency implements the eval.ConsistencyChecker interface.
 func (s *ConsistencyChecker) CheckConsistency(
-	ctx context.Context, from, to roachpb.Key, mode roachpb.ChecksumMode,
-) (*roachpb.CheckConsistencyResponse, error) {
+	ctx context.Context, from, to roachpb.Key, mode kvpb.ChecksumMode,
+) (*kvpb.CheckConsistencyResponse, error) {
 	var b kv.Batch
-	b.AddRawRequest(&roachpb.CheckConsistencyRequest{
-		RequestHeader: roachpb.RequestHeader{
+	b.AddRawRequest(&kvpb.CheckConsistencyRequest{
+		RequestHeader: kvpb.RequestHeader{
 			Key:    from,
 			EndKey: to,
 		},
@@ -48,6 +49,6 @@ func (s *ConsistencyChecker) CheckConsistency(
 	if err := s.db.Run(ctx, &b); err != nil {
 		return nil, err
 	}
-	resp := b.RawResponse().Responses[0].GetInner().(*roachpb.CheckConsistencyResponse)
+	resp := b.RawResponse().Responses[0].GetInner().(*kvpb.CheckConsistencyResponse)
 	return resp, nil
 }

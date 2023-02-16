@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -199,7 +200,7 @@ func (b *replicaAppBatch) runPreAddTriggersReplicaOnly(
 		// in Replica application.
 		if p, filter := b.r.getRangefeedProcessorAndFilter(); p != nil {
 			if err := populatePrevValsInLogicalOpLog(ctx, filter, ops, b.batch); err != nil {
-				b.r.disconnectRangefeedWithErr(p, roachpb.NewError(err))
+				b.r.disconnectRangefeedWithErr(p, kvpb.NewError(err))
 			}
 		}
 	}
@@ -267,7 +268,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 	// for this on appBatch.
 	if res.MVCCHistoryMutation != nil {
 		for _, span := range res.MVCCHistoryMutation.Spans {
-			b.r.disconnectRangefeedSpanWithErr(span, roachpb.NewError(&roachpb.MVCCHistoryMutationError{
+			b.r.disconnectRangefeedSpanWithErr(span, kvpb.NewError(&kvpb.MVCCHistoryMutationError{
 				Span: span,
 			}))
 		}
@@ -302,7 +303,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		// that overlap with the new range of the split and keep registrations that
 		// are only interested in keys that are still on the original range running.
 		b.r.disconnectRangefeedWithReason(
-			roachpb.RangeFeedRetryError_REASON_RANGE_SPLIT,
+			kvpb.RangeFeedRetryError_REASON_RANGE_SPLIT,
 		)
 	}
 
@@ -325,7 +326,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		rhsRepl.readOnlyCmdMu.Lock()
 		rhsRepl.mu.Lock()
 		rhsRepl.mu.destroyStatus.Set(
-			roachpb.NewRangeNotFoundError(rhsRepl.RangeID, rhsRepl.store.StoreID()),
+			kvpb.NewRangeNotFoundError(rhsRepl.RangeID, rhsRepl.store.StoreID()),
 			destroyReasonRemoved)
 		rhsRepl.mu.Unlock()
 		rhsRepl.readOnlyCmdMu.Unlock()
@@ -359,10 +360,10 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		// rangefeeds with REASON_REPLICA_REMOVED. That's ok because we will have
 		// already disconnected the rangefeed here.
 		b.r.disconnectRangefeedWithReason(
-			roachpb.RangeFeedRetryError_REASON_RANGE_MERGED,
+			kvpb.RangeFeedRetryError_REASON_RANGE_MERGED,
 		)
 		rhsRepl.disconnectRangefeedWithReason(
-			roachpb.RangeFeedRetryError_REASON_RANGE_MERGED,
+			kvpb.RangeFeedRetryError_REASON_RANGE_MERGED,
 		)
 	}
 
@@ -464,7 +465,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		b.r.readOnlyCmdMu.Lock()
 		b.r.mu.Lock()
 		b.r.mu.destroyStatus.Set(
-			roachpb.NewRangeNotFoundError(b.r.RangeID, b.r.store.StoreID()),
+			kvpb.NewRangeNotFoundError(b.r.RangeID, b.r.store.StoreID()),
 			destroyReasonRemoved)
 		span := b.r.descRLocked().RSpan()
 		b.r.mu.Unlock()

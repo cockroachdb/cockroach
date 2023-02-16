@@ -31,8 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
@@ -643,20 +643,20 @@ func TestProcessorEncountersUncertaintyError(t *testing.T) {
 					Knobs: base.TestingKnobs{
 
 						Store: &kvserver.StoreTestingKnobs{
-							TestingRequestFilter: func(_ context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
+							TestingRequestFilter: func(_ context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
 								if atomic.LoadInt64(&trapRead) == 0 {
 									return nil
 								}
 								// We're going to trap a read for the rows [6,10].
-								req, ok := ba.GetArg(roachpb.Scan)
+								req, ok := ba.GetArg(kvpb.Scan)
 								if !ok {
 									return nil
 								}
-								key := req.(*roachpb.ScanRequest).Key.String()
+								key := req.(*kvpb.ScanRequest).Key.String()
 								if strings.Contains(key, "/6") {
 									waitForUnblock()
-									return roachpb.NewError(
-										roachpb.NewReadWithinUncertaintyIntervalError(
+									return kvpb.NewError(
+										kvpb.NewReadWithinUncertaintyIntervalError(
 											ba.Timestamp,           /* readTs */
 											hlc.ClockTimestamp{},   /* localUncertaintyLimit */
 											ba.Txn,                 /* txn */

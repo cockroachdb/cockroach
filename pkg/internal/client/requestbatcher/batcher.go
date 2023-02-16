@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -184,7 +185,7 @@ type RequestBatcher struct {
 // Response is exported for use with the channel-oriented SendWithChan method.
 // At least one of Resp or Err will be populated for every sent Response.
 type Response struct {
-	Resp roachpb.Response
+	Resp kvpb.Response
 	Err  error
 }
 
@@ -226,7 +227,7 @@ func validateConfig(cfg *Config) {
 // insufficiently buffered channel can lead to deadlocks and unintended delays
 // processing requests inside the RequestBatcher.
 func (b *RequestBatcher) SendWithChan(
-	ctx context.Context, respChan chan<- Response, rangeID roachpb.RangeID, req roachpb.Request,
+	ctx context.Context, respChan chan<- Response, rangeID roachpb.RangeID, req kvpb.Request,
 ) error {
 	select {
 	case b.requestChan <- b.pool.newRequest(ctx, rangeID, req, respChan):
@@ -242,8 +243,8 @@ func (b *RequestBatcher) SendWithChan(
 // is canceled before the sending of the request completes. The context with
 // the latest deadline for a batch is used to send the underlying batch request.
 func (b *RequestBatcher) Send(
-	ctx context.Context, rangeID roachpb.RangeID, req roachpb.Request,
-) (roachpb.Response, error) {
+	ctx context.Context, rangeID roachpb.RangeID, req kvpb.Request,
+) (kvpb.Response, error) {
 	responseChan := b.pool.getResponseChan()
 	if err := b.SendWithChan(ctx, responseChan, rangeID, req); err != nil {
 		return nil, err
@@ -272,9 +273,9 @@ func (b *RequestBatcher) sendDone(ba *batch) {
 func (b *RequestBatcher) sendBatch(ctx context.Context, ba *batch) {
 	if err := b.cfg.Stopper.RunAsyncTask(ctx, "send-batch", func(ctx context.Context) {
 		defer b.sendDone(ba)
-		var br *roachpb.BatchResponse
+		var br *kvpb.BatchResponse
 		send := func(ctx context.Context) error {
-			var pErr *roachpb.Error
+			var pErr *kvpb.Error
 			if br, pErr = b.cfg.Sender.Send(ctx, ba.batchRequest(&b.cfg)); pErr != nil {
 				return pErr.GoError()
 			}
@@ -295,7 +296,7 @@ func (b *RequestBatcher) sendBatch(ctx context.Context, ba *batch) {
 		// be ordered nor guaranteed to be non-overlapping, so we can make no
 		// assumptions about the requests that will result in full responses
 		// (with no resume spans) vs. partial responses vs. empty responses (see
-		// the comment on roachpb.Header.MaxSpanRequestKeys).
+		// the comment on kvpb.Header.MaxSpanRequestKeys).
 		//
 		// To accommodate this, we keep track of all partial responses from
 		// previous iterations. After receiving a batch of responses during an
@@ -304,7 +305,7 @@ func (b *RequestBatcher) sendBatch(ctx context.Context, ba *batch) {
 		// resume spans are removed. Responses that have resume spans are
 		// updated appropriately and sent again in the next iteration. The loop
 		// proceeds until all requests have been run to completion.
-		var prevResps []roachpb.Response
+		var prevResps []kvpb.Response
 		for len(ba.reqs) > 0 {
 			err := send(ctx)
 			nextReqs, nextPrevResps := ba.reqs[:0], prevResps[:0]
@@ -314,7 +315,7 @@ func (b *RequestBatcher) sendBatch(ctx context.Context, ba *batch) {
 					resp := br.Responses[i].GetInner()
 					if prevResps != nil {
 						prevResp := prevResps[i]
-						if cErr := roachpb.CombineResponses(prevResp, resp); cErr != nil {
+						if cErr := kvpb.CombineResponses(prevResp, resp); cErr != nil {
 							log.Fatalf(ctx, "%v", cErr)
 						}
 						resp = prevResp
@@ -494,7 +495,7 @@ func (b *RequestBatcher) run(ctx context.Context) {
 
 type request struct {
 	ctx          context.Context
-	req          roachpb.Request
+	req          kvpb.Request
 	rangeID      roachpb.RangeID
 	responseChan chan<- Response
 }
@@ -526,10 +527,10 @@ func (b *batch) rangeID() roachpb.RangeID {
 	return b.reqs[0].rangeID
 }
 
-func (b *batch) batchRequest(cfg *Config) *roachpb.BatchRequest {
-	req := &roachpb.BatchRequest{
+func (b *batch) batchRequest(cfg *Config) *kvpb.BatchRequest {
+	req := &kvpb.BatchRequest{
 		// Preallocate the Requests slice.
-		Requests: make([]roachpb.RequestUnion, 0, len(b.reqs)),
+		Requests: make([]kvpb.RequestUnion, 0, len(b.reqs)),
 	}
 	for _, r := range b.reqs {
 		req.Add(r.req)
@@ -571,7 +572,7 @@ func (p *pool) putResponseChan(r chan Response) {
 }
 
 func (p *pool) newRequest(
-	ctx context.Context, rangeID roachpb.RangeID, req roachpb.Request, responseChan chan<- Response,
+	ctx context.Context, rangeID roachpb.RangeID, req kvpb.Request, responseChan chan<- Response,
 ) *request {
 	r := p.requestPool.Get().(*request)
 	*r = request{

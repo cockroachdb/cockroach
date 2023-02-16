@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -29,7 +30,7 @@ var ErrTransactionUnsupported = errors.AssertionFailedf("not supported within a 
 // VerifyTransaction runs sanity checks verifying that the transaction in the
 // header and the request are compatible.
 func VerifyTransaction(
-	h roachpb.Header, args roachpb.Request, permittedStatuses ...roachpb.TransactionStatus,
+	h kvpb.Header, args kvpb.Request, permittedStatuses ...roachpb.TransactionStatus,
 ) error {
 	if h.Txn == nil {
 		return errors.AssertionFailedf("no transaction specified to %s", args.Method())
@@ -45,11 +46,11 @@ func VerifyTransaction(
 		}
 	}
 	if !statusPermitted {
-		reason := roachpb.TransactionStatusError_REASON_UNKNOWN
+		reason := kvpb.TransactionStatusError_REASON_UNKNOWN
 		if h.Txn.Status == roachpb.COMMITTED {
-			reason = roachpb.TransactionStatusError_REASON_TXN_COMMITTED
+			reason = kvpb.TransactionStatusError_REASON_TXN_COMMITTED
 		}
-		return roachpb.NewTransactionStatusError(reason,
+		return kvpb.NewTransactionStatusError(reason,
 			redact.Sprintf("cannot perform %s with txn status %v", args.Method(), h.Txn.Status))
 	}
 	return nil
@@ -126,7 +127,7 @@ func CanCreateTxnRecord(ctx context.Context, rec EvalContext, txn *roachpb.Trans
 	ok, reason := rec.CanCreateTxnRecord(ctx, txn.ID, txn.Key, txn.MinTimestamp)
 	if !ok {
 		log.VEventf(ctx, 2, "txn tombstone present; transaction has been aborted")
-		return roachpb.NewTransactionAbortedError(reason)
+		return kvpb.NewTransactionAbortedError(reason)
 	}
 	return nil
 }

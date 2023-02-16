@@ -15,6 +15,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/keys",
+        "//pkg/kv/kvpb",
         "//pkg/roachpb",
         "//pkg/server/serverpb",
         "//pkg/settings",
@@ -49,6 +50,7 @@ go_test(
     embed = [":contention"],
     deps = [
         "//pkg/keys",
+        "//pkg/kv/kvpb",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/sql/appstatspb",

@@ -13,6 +13,7 @@ package tenantcapabilitiesauthorizer
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
@@ -29,7 +30,7 @@ func NewNoopAuthorizer() *NoopAuthorizer {
 
 // HasCapabilityForBatch implements the tenantcapabilities.Authorizer interface.
 func (n *NoopAuthorizer) HasCapabilityForBatch(
-	context.Context, roachpb.TenantID, *roachpb.BatchRequest,
+	context.Context, roachpb.TenantID, *kvpb.BatchRequest,
 ) error {
 	return nil
 }

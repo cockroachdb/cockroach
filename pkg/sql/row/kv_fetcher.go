@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvstreamer"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -51,7 +52,7 @@ var _ storage.NextKVer = &KVFetcher{}
 // as there is no concurrency).
 func newTxnKVFetcher(
 	txn *kv.Txn,
-	bsHeader *roachpb.BoundedStalenessHeader,
+	bsHeader *kvpb.BoundedStalenessHeader,
 	reverse bool,
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
@@ -66,9 +67,9 @@ func newTxnKVFetcher(
 		sendFn = makeTxnKVFetcherDefaultSendFunc(txn, &batchRequestsIssued)
 	} else {
 		negotiated := false
-		sendFn = func(ctx context.Context, ba *roachpb.BatchRequest) (br *roachpb.BatchResponse, _ error) {
-			ba.RoutingPolicy = roachpb.RoutingPolicy_NEAREST
-			var pErr *roachpb.Error
+		sendFn = func(ctx context.Context, ba *kvpb.BatchRequest) (br *kvpb.BatchResponse, _ error) {
+			ba.RoutingPolicy = kvpb.RoutingPolicy_NEAREST
+			var pErr *kvpb.Error
 			// Only use NegotiateAndSend if we have not yet negotiated a timestamp.
 			// If we have, fallback to Send which will already have the timestamp
 			// fixed.
@@ -117,7 +118,7 @@ func newTxnKVFetcher(
 // as there is no concurrency).
 func NewDirectKVBatchFetcher(
 	txn *kv.Txn,
-	bsHeader *roachpb.BoundedStalenessHeader,
+	bsHeader *kvpb.BoundedStalenessHeader,
 	spec *fetchpb.IndexFetchSpec,
 	reverse bool,
 	lockStrength descpb.ScanLockingStrength,
@@ -130,7 +131,7 @@ func NewDirectKVBatchFetcher(
 		txn, bsHeader, reverse, lockStrength, lockWaitPolicy,
 		lockTimeout, acc, forceProductionKVBatchSize,
 	)
-	f.scanFormat = roachpb.COL_BATCH_RESPONSE
+	f.scanFormat = kvpb.COL_BATCH_RESPONSE
 	f.indexFetchSpec = spec
 	return f
 }
@@ -143,7 +144,7 @@ func NewDirectKVBatchFetcher(
 // as there is no concurrency).
 func NewKVFetcher(
 	txn *kv.Txn,
-	bsHeader *roachpb.BoundedStalenessHeader,
+	bsHeader *kvpb.BoundedStalenessHeader,
 	reverse bool,
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,

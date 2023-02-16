@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -76,7 +77,7 @@ func TestScanSST(t *testing.T) {
 	) {
 		actualPointKVs := make([]storage.MVCCKeyValue, 0, len(expectedPointKVs))
 		actualRangeKVs := make([]storage.MVCCRangeKey, 0, len(expectedRangeKeys))
-		require.NoError(t, ScanSST(&roachpb.RangeFeedSSTable{
+		require.NoError(t, ScanSST(&kvpb.RangeFeedSSTable{
 			Data:    data,
 			Span:    roachpb.Span{Key: start, EndKey: end},
 			WriteTS: hlc.Timestamp{WallTime: timeutil.Now().UnixNano()},

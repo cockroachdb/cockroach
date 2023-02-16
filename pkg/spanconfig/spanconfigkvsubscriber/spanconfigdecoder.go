@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedbuffer"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -91,7 +92,7 @@ func (sd *spanConfigDecoder) decode(kv roachpb.KeyValue) (spanconfig.Record, err
 }
 
 func (sd *spanConfigDecoder) translateEvent(
-	ctx context.Context, ev *roachpb.RangeFeedValue,
+	ctx context.Context, ev *kvpb.RangeFeedValue,
 ) rangefeedbuffer.Event {
 	deleted := !ev.Value.IsPresent()
 	var value roachpb.Value

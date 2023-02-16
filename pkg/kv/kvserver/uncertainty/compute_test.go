@@ -13,6 +13,7 @@ package uncertainty
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -162,7 +163,7 @@ func TestComputeInterval(t *testing.T) {
 	}
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
-			var h roachpb.Header
+			var h kvpb.Header
 			h.Txn = test.txn
 			h.TimestampFromServerClock = test.tsFromServerClock
 			require.Equal(t, test.exp, ComputeInterval(&h, test.lease, maxOffset))

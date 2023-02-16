@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -127,17 +128,17 @@ func runRefreshRangeBenchmark(b *testing.B, emk engineMaker, opts benchOptions) 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		func() {
-			var resp roachpb.RefreshRangeResponse
+			var resp kvpb.RefreshRangeResponse
 			_, err := batcheval.RefreshRange(ctx, eng, batcheval.CommandArgs{
 				EvalCtx: evalCtx,
-				Args: &roachpb.RefreshRangeRequest{
-					RequestHeader: roachpb.RequestHeader{
+				Args: &kvpb.RefreshRangeRequest{
+					RequestHeader: kvpb.RequestHeader{
 						Key:    startKey,
 						EndKey: endKey,
 					},
 					RefreshFrom: opts.refreshFrom,
 				},
-				Header: roachpb.Header{
+				Header: kvpb.Header{
 					Txn: &roachpb.Transaction{
 						TxnMeta: enginepb.TxnMeta{
 							WriteTimestamp: opts.refreshTo,

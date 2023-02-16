@@ -14,7 +14,7 @@ put k=k v=v2 ts=0,1
 >> at end:
 data: "k"/1.000000000,2 -> /BYTES/v2
 data: "k"/1.000000000,1 -> /BYTES/v
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k" at timestamp 0,1 too old; wrote at 1.000000000,2
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k" at timestamp 0,1 too old; wrote at 1.000000000,2
 
 # Earlier logical time.
 
@@ -25,4 +25,4 @@ put k=k v=v2 ts=1,0
 data: "k"/1.000000000,3 -> /BYTES/v2
 data: "k"/1.000000000,2 -> /BYTES/v2
 data: "k"/1.000000000,1 -> /BYTES/v
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k" at timestamp 1.000000000,0 too old; wrote at 1.000000000,3
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k" at timestamp 1.000000000,0 too old; wrote at 1.000000000,3

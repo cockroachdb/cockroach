@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -82,7 +83,7 @@ func TestTruncateLog(t *testing.T) {
 	putTruncatedState(t, eng, rangeID, truncState)
 
 	// Send a truncation request.
-	req := roachpb.TruncateLogRequest{
+	req := kvpb.TruncateLogRequest{
 		RangeID: rangeID,
 		Index:   firstIndex + 7,
 	}
@@ -90,7 +91,7 @@ func TestTruncateLog(t *testing.T) {
 		EvalCtx: evalCtx.EvalContext(),
 		Args:    &req,
 	}
-	resp := &roachpb.TruncateLogResponse{}
+	resp := &kvpb.TruncateLogResponse{}
 	res, err := TruncateLog(ctx, eng, cArgs, resp)
 	if err != nil {
 		t.Fatal(err)

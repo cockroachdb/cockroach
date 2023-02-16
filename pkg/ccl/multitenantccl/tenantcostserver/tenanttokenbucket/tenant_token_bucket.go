@@ -16,6 +16,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -56,9 +57,9 @@ func (s *State) Update(since time.Duration) {
 // Request processes a request for more tokens and updates the State
 // accordingly.
 func (s *State) Request(
-	ctx context.Context, req *roachpb.TokenBucketRequest,
-) roachpb.TokenBucketResponse {
-	var res roachpb.TokenBucketResponse
+	ctx context.Context, req *kvpb.TokenBucketRequest,
+) kvpb.TokenBucketResponse {
+	var res kvpb.TokenBucketResponse
 
 	// Calculate the fallback rate.
 	res.FallbackRate = s.RURefillRate

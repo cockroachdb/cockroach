@@ -13,6 +13,7 @@ go_library(
         "//pkg/kv/kvclient/rangefeed",
         "//pkg/kv/kvclient/rangefeed/rangefeedbuffer",
         "//pkg/kv/kvclient/rangefeed/rangefeedcache",
+        "//pkg/kv/kvpb",
         "//pkg/roachpb",
         "//pkg/util/hlc",
         "//pkg/util/stop",

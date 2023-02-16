@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -88,14 +89,14 @@ func TestTxnPipelinerCondenseLockSpans(t *testing.T) {
 	// Check end transaction locks, which should be condensed and split
 	// at range boundaries.
 	expLocks := []roachpb.Span{aToBClosed, cToEClosed, fTog1}
-	sendFn := func(_ context.Context, ba *roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+	sendFn := func(_ context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
 		resp := ba.CreateReply()
 		resp.Txn = ba.Txn
-		if req, ok := ba.GetArg(roachpb.EndTxn); ok {
-			if !req.(*roachpb.EndTxnRequest).Commit {
+		if req, ok := ba.GetArg(kvpb.EndTxn); ok {
+			if !req.(*kvpb.EndTxnRequest).Commit {
 				t.Errorf("expected commit to be true")
 			}
-			et := req.(*roachpb.EndTxnRequest)
+			et := req.(*kvpb.EndTxnRequest)
 			if a, e := et.LockSpans, expLocks; !reflect.DeepEqual(a, e) {
 				t.Errorf("expected end transaction to have locks %+v; got %+v", e, a)
 			}

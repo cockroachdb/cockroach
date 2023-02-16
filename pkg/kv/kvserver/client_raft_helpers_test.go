@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -63,7 +64,7 @@ func (h *unreliableRaftHandler) HandleRaftRequest(
 	ctx context.Context,
 	req *kvserverpb.RaftMessageRequest,
 	respStream kvserver.RaftMessageResponseStream,
-) *roachpb.Error {
+) *kvpb.Error {
 	if len(req.Heartbeats)+len(req.HeartbeatResps) > 0 {
 		reqCpy := *req
 		req = &reqCpy
@@ -165,10 +166,10 @@ func (h *testClusterStoreRaftMessageHandler) HandleRaftRequest(
 	ctx context.Context,
 	req *kvserverpb.RaftMessageRequest,
 	respStream kvserver.RaftMessageResponseStream,
-) *roachpb.Error {
+) *kvpb.Error {
 	store, err := h.getStore()
 	if err != nil {
-		return roachpb.NewError(err)
+		return kvpb.NewError(err)
 	}
 	return store.HandleRaftRequest(ctx, req, respStream)
 }

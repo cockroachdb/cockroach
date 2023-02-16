@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -272,7 +273,7 @@ type DescIDGenerator interface {
 type RangeStatsFetcher interface {
 
 	// RangeStats fetches the stats for the ranges which contain the passed keys.
-	RangeStats(ctx context.Context, keys ...roachpb.Key) ([]*roachpb.RangeStatsResponse, error)
+	RangeStats(ctx context.Context, keys ...roachpb.Key) ([]*kvpb.RangeStatsResponse, error)
 }
 
 var _ tree.ParseContext = &Context{}
@@ -281,8 +282,8 @@ var _ tree.ParseContext = &Context{}
 // crdb_internal.check_consistency.
 type ConsistencyCheckRunner interface {
 	CheckConsistency(
-		ctx context.Context, from, to roachpb.Key, mode roachpb.ChecksumMode,
-	) (*roachpb.CheckConsistencyResponse, error)
+		ctx context.Context, from, to roachpb.Key, mode kvpb.ChecksumMode,
+	) (*kvpb.CheckConsistencyResponse, error)
 }
 
 // RangeProber is an interface embedded in eval.Context used by

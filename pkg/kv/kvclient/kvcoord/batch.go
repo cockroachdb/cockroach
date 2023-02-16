@@ -15,6 +15,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
@@ -80,7 +81,7 @@ type BatchTruncationHelper struct {
 	scanDir ScanDirection
 	// requests are the original requests this helper needs to process (possibly
 	// in non-original order).
-	requests []roachpb.RequestUnion
+	requests []kvpb.RequestUnion
 	// ownRequestsSlice indicates whether a separate slice was allocated for
 	// requests. It is used for the purposes of the memory accounting.
 	//
@@ -113,7 +114,7 @@ type BatchTruncationHelper struct {
 	// startKey.Next()).
 	//
 	// All keys in the headers are global.
-	headers []roachpb.RequestHeader
+	headers []kvpb.RequestHeader
 	// positions stores the corresponding indices of requests in the original
 	// requests slice. Once request is fully processed, it's position value
 	// becomes negative.
@@ -182,7 +183,7 @@ func (h descBatchTruncationHelper) Less(i, j int) bool {
 // mutated in any way.
 func NewBatchTruncationHelper(
 	scanDir ScanDirection,
-	requests []roachpb.RequestUnion,
+	requests []kvpb.RequestUnion,
 	mustPreserveOrder bool,
 	canReorderRequestsSlice bool,
 ) (*BatchTruncationHelper, error) {
@@ -196,7 +197,7 @@ func NewBatchTruncationHelper(
 
 // Init sets up the helper for the provided requests. It can be called multiple
 // times, and it will reuse as much internal allocations as possible.
-func (h *BatchTruncationHelper) Init(requests []roachpb.RequestUnion) error {
+func (h *BatchTruncationHelper) Init(requests []kvpb.RequestUnion) error {
 	// Determine whether we can use the optimized strategy before making any
 	// allocations.
 	h.foundLocalKey = false
@@ -215,7 +216,7 @@ func (h *BatchTruncationHelper) Init(requests []roachpb.RequestUnion) error {
 	} else {
 		// If we can't reorder the original requests slice, we must make a copy.
 		if cap(h.requests) < len(requests) {
-			h.requests = make([]roachpb.RequestUnion, len(requests))
+			h.requests = make([]kvpb.RequestUnion, len(requests))
 			h.ownRequestsSlice = true
 		} else {
 			if len(requests) < len(h.requests) {
@@ -227,7 +228,7 @@ func (h *BatchTruncationHelper) Init(requests []roachpb.RequestUnion) error {
 				// everything past the length is already nil-ed out.
 				oldRequests := h.requests[len(requests):len(h.requests)]
 				for i := range oldRequests {
-					oldRequests[i] = roachpb.RequestUnion{}
+					oldRequests[i] = kvpb.RequestUnion{}
 				}
 			}
 			h.requests = h.requests[:len(requests)]
@@ -235,7 +236,7 @@ func (h *BatchTruncationHelper) Init(requests []roachpb.RequestUnion) error {
 		copy(h.requests, requests)
 	}
 	if cap(h.headers) < len(requests) {
-		h.headers = make([]roachpb.RequestHeader, len(requests))
+		h.headers = make([]kvpb.RequestHeader, len(requests))
 	} else {
 		if len(requests) < len(h.headers) {
 			// Ensure that we lose references to the old header that will
@@ -246,7 +247,7 @@ func (h *BatchTruncationHelper) Init(requests []roachpb.RequestUnion) error {
 			// past the length is already nil-ed out.
 			oldHeaders := h.headers[len(requests):len(h.headers)]
 			for i := range oldHeaders {
-				oldHeaders[i] = roachpb.RequestHeader{}
+				oldHeaders[i] = kvpb.RequestHeader{}
 			}
 		}
 		h.headers = h.headers[:len(requests)]
@@ -267,7 +268,7 @@ func (h *BatchTruncationHelper) Init(requests []roachpb.RequestUnion) error {
 		req := requests[i].GetInner()
 		h.headers[i] = req.Header()
 		h.positions[i] = i
-		h.isRange[i] = roachpb.IsRange(req)
+		h.isRange[i] = kvpb.IsRange(req)
 		if h.isRange[i] {
 			// We're dealing with a range-spanning request.
 			if l, r := keys.IsLocal(h.headers[i].Key), keys.IsLocal(h.headers[i].EndKey); (l && !r) || (!l && r) {
@@ -297,8 +298,8 @@ func (h *BatchTruncationHelper) Init(requests []roachpb.RequestUnion) error {
 }
 
 const (
-	requestUnionOverhead  = int64(unsafe.Sizeof(roachpb.RequestUnion{}))
-	requestHeaderOverhead = int64(unsafe.Sizeof(roachpb.RequestHeader{}))
+	requestUnionOverhead  = int64(unsafe.Sizeof(kvpb.RequestUnion{}))
+	requestHeaderOverhead = int64(unsafe.Sizeof(kvpb.RequestHeader{}))
 	intOverhead           = int64(unsafe.Sizeof(int(0)))
 	boolOverhead          = int64(unsafe.Sizeof(false))
 )
@@ -345,8 +346,8 @@ func (h *BatchTruncationHelper) MemUsage() int64 {
 //  2. rs is intersected with the current range boundaries.
 func (h *BatchTruncationHelper) Truncate(
 	rs roachpb.RSpan,
-) ([]roachpb.RequestUnion, []int, roachpb.RKey, error) {
-	var truncReqs []roachpb.RequestUnion
+) ([]kvpb.RequestUnion, []int, roachpb.RKey, error) {
+	var truncReqs []kvpb.RequestUnion
 	var positions []int
 	var err error
 	if !h.foundLocalKey {
@@ -479,10 +480,8 @@ func (h *BatchTruncationHelper) Truncate(
 // extract out the differences into an interface; however, this leads to
 // non-trivial slowdown and increase in allocations, so we choose to duplicate
 // the code for performance.
-func (h *BatchTruncationHelper) truncateAsc(
-	rs roachpb.RSpan,
-) ([]roachpb.RequestUnion, []int, error) {
-	var truncReqs []roachpb.RequestUnion
+func (h *BatchTruncationHelper) truncateAsc(rs roachpb.RSpan) ([]kvpb.RequestUnion, []int, error) {
+	var truncReqs []kvpb.RequestUnion
 	var positions []int
 	for i := h.startIdx; i < len(h.positions); i++ {
 		pos := h.positions[i]
@@ -506,7 +505,7 @@ func (h *BatchTruncationHelper) truncateAsc(
 			// processed".
 			truncReqs = append(truncReqs, h.requests[i])
 			positions = append(positions, pos)
-			h.headers[i] = roachpb.RequestHeader{}
+			h.headers[i] = kvpb.RequestHeader{}
 			h.positions[i] = -1
 			continue
 		}
@@ -524,7 +523,7 @@ func (h *BatchTruncationHelper) truncateAsc(
 		if header.EndKey.Compare(ek) <= 0 {
 			// This is the last part of this request since it is fully contained
 			// within this range, so we mark the request as "fully processed".
-			h.headers[i] = roachpb.RequestHeader{}
+			h.headers[i] = kvpb.RequestHeader{}
 			h.positions[i] = -1
 			if origStartKey := inner.Header().Key; origStartKey.Equal(header.Key) {
 				// This range-spanning request fits within a single range, so we
@@ -541,7 +540,7 @@ func (h *BatchTruncationHelper) truncateAsc(
 		}
 		shallowCopy := inner.ShallowCopy()
 		shallowCopy.SetHeader(header)
-		truncReqs = append(truncReqs, roachpb.RequestUnion{})
+		truncReqs = append(truncReqs, kvpb.RequestUnion{})
 		truncReqs[len(truncReqs)-1].MustSetInner(shallowCopy)
 		positions = append(positions, pos)
 	}
@@ -640,10 +639,8 @@ func (h *BatchTruncationHelper) truncateAsc(
 // extract out the differences into an interface; however, this leads to
 // non-trivial slowdown and increase in allocations, so we choose to duplicate
 // the code for performance.
-func (h *BatchTruncationHelper) truncateDesc(
-	rs roachpb.RSpan,
-) ([]roachpb.RequestUnion, []int, error) {
-	var truncReqs []roachpb.RequestUnion
+func (h *BatchTruncationHelper) truncateDesc(rs roachpb.RSpan) ([]kvpb.RequestUnion, []int, error) {
+	var truncReqs []kvpb.RequestUnion
 	var positions []int
 	for i := h.startIdx; i < len(h.positions); i++ {
 		pos := h.positions[i]
@@ -667,7 +664,7 @@ func (h *BatchTruncationHelper) truncateDesc(
 			// processed".
 			truncReqs = append(truncReqs, h.requests[i])
 			positions = append(positions, pos)
-			h.headers[i] = roachpb.RequestHeader{}
+			h.headers[i] = kvpb.RequestHeader{}
 			h.positions[i] = -1
 			continue
 		}
@@ -685,7 +682,7 @@ func (h *BatchTruncationHelper) truncateDesc(
 		if header.Key.Compare(sk) >= 0 {
 			// This is the last part of this request since it is fully contained
 			// within this range, so we mark the request as "fully processed".
-			h.headers[i] = roachpb.RequestHeader{}
+			h.headers[i] = kvpb.RequestHeader{}
 			h.positions[i] = -1
 			if origEndKey := inner.Header().EndKey; len(origEndKey) == 0 || origEndKey.Equal(header.EndKey) {
 				// This range-spanning request fits within a single range, so we
@@ -702,14 +699,14 @@ func (h *BatchTruncationHelper) truncateDesc(
 		}
 		shallowCopy := inner.ShallowCopy()
 		shallowCopy.SetHeader(header)
-		truncReqs = append(truncReqs, roachpb.RequestUnion{})
+		truncReqs = append(truncReqs, kvpb.RequestUnion{})
 		truncReqs[len(truncReqs)-1].MustSetInner(shallowCopy)
 		positions = append(positions, pos)
 	}
 	return truncReqs, positions, nil
 }
 
-var emptyHeader = roachpb.RequestHeader{}
+var emptyHeader = kvpb.RequestHeader{}
 
 // truncateLegacy restricts all requests to the given key range and returns new,
 // truncated, requests. All returned requests are "truncated" to the given span,
@@ -722,11 +719,11 @@ var emptyHeader = roachpb.RequestHeader{}
 //
 // then truncateLegacy(reqs,rs) returns (Put[a], Put[b]) and positions [0,2].
 func truncateLegacy(
-	reqs []roachpb.RequestUnion, rs roachpb.RSpan,
-) ([]roachpb.RequestUnion, []int, error) {
-	truncateOne := func(args roachpb.Request) (hasRequest bool, changed bool, _ roachpb.RequestHeader, _ error) {
+	reqs []kvpb.RequestUnion, rs roachpb.RSpan,
+) ([]kvpb.RequestUnion, []int, error) {
+	truncateOne := func(args kvpb.Request) (hasRequest bool, changed bool, _ kvpb.RequestHeader, _ error) {
 		header := args.Header()
-		if !roachpb.IsRange(args) {
+		if !kvpb.IsRange(args) {
 			// This is a point request.
 			if len(header.EndKey) > 0 {
 				return false, false, emptyHeader, errors.AssertionFailedf("%T is not a range command, but EndKey is set", args)
@@ -792,7 +789,7 @@ func truncateLegacy(
 	// slice, only when something changed (copy-on-write).
 
 	var positions []int
-	var truncReqs []roachpb.RequestUnion
+	var truncReqs []kvpb.RequestUnion
 	for pos, arg := range reqs {
 		inner := arg.GetInner()
 		hasRequest, changed, newHeader, err := truncateOne(inner)
@@ -801,7 +798,7 @@ func truncateLegacy(
 			if changed {
 				shallowCopy := inner.ShallowCopy()
 				shallowCopy.SetHeader(newHeader)
-				truncReqs = append(truncReqs, roachpb.RequestUnion{})
+				truncReqs = append(truncReqs, kvpb.RequestUnion{})
 				truncReqs[len(truncReqs)-1].MustSetInner(shallowCopy)
 			} else {
 				truncReqs = append(truncReqs, arg)
@@ -854,7 +851,7 @@ func (h *BatchTruncationHelper) prev(k roachpb.RKey) (roachpb.RKey, error) {
 // Informally, a call `prevLegacy(reqs, k)` means: we've already executed the
 // parts of `reqs` that intersect `[k, KeyMax)`; please tell me how far to the
 // left the next relevant request begins.
-func prevLegacy(reqs []roachpb.RequestUnion, k roachpb.RKey) (roachpb.RKey, error) {
+func prevLegacy(reqs []kvpb.RequestUnion, k roachpb.RKey) (roachpb.RKey, error) {
 	candidate := roachpb.RKeyMin
 	for _, union := range reqs {
 		inner := union.GetInner()
@@ -952,7 +949,7 @@ func (h *BatchTruncationHelper) next(k roachpb.RKey) (roachpb.RKey, error) {
 // Informally, a call `nextLegacy(reqs, k)` means: we've already executed the
 // parts of `reqs` that intersect `[KeyMin, k)`; please tell me how far to the
 // right the next relevant request begins.
-func nextLegacy(reqs []roachpb.RequestUnion, k roachpb.RKey) (roachpb.RKey, error) {
+func nextLegacy(reqs []kvpb.RequestUnion, k roachpb.RKey) (roachpb.RKey, error) {
 	candidate := roachpb.RKeyMax
 	for _, union := range reqs {
 		inner := union.GetInner()
@@ -994,7 +991,7 @@ func nextLegacy(reqs []roachpb.RequestUnion, k roachpb.RKey) (roachpb.RKey, erro
 type orderRestorationHelper struct {
 	// scratch is reused on the next call to restoreOrder() if it has enough
 	// capacity.
-	scratch []roachpb.RequestUnion
+	scratch []kvpb.RequestUnion
 	// found is used as a map indicating whether a request for a particular
 	// positions value is included into the truncated requests and at what
 	// index, -1 if the corresponding request is not found in the truncated
@@ -1041,19 +1038,19 @@ func (h *orderRestorationHelper) memUsage() int64 {
 // 4. found[3] = 0  -> toReturn = [Get(b), Scan(a, c)]              positions = [0, 3]
 // 5. found[4] = 2  -> toReturn = [Get(b), Scan(a, c), Scan(c, d)]  positions = [0, 3, 4]
 func (h *orderRestorationHelper) restoreOrder(
-	truncReqs []roachpb.RequestUnion, positions []int,
-) ([]roachpb.RequestUnion, []int) {
+	truncReqs []kvpb.RequestUnion, positions []int,
+) ([]kvpb.RequestUnion, []int) {
 	if len(truncReqs) == 0 {
 		return truncReqs, positions
 	}
 	for i, pos := range positions {
 		h.found[pos] = i
 	}
-	var toReturn []roachpb.RequestUnion
+	var toReturn []kvpb.RequestUnion
 	if cap(h.scratch) >= len(positions) {
 		toReturn = h.scratch[:0]
 	} else {
-		toReturn = make([]roachpb.RequestUnion, 0, len(positions))
+		toReturn = make([]kvpb.RequestUnion, 0, len(positions))
 	}
 	positions = positions[:0]
 	for pos, found := range h.found {
@@ -1066,7 +1063,7 @@ func (h *orderRestorationHelper) restoreOrder(
 		positions = append(positions, pos)
 		// Lose the reference to the request so that we can keep truncReqs as
 		// the scratch space for the next call.
-		truncReqs[found] = roachpb.RequestUnion{}
+		truncReqs[found] = kvpb.RequestUnion{}
 		// Make sure that the found map is set up for the next call.
 		h.found[pos] = -1
 	}

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -64,7 +65,7 @@ func NewStores(ambient log.AmbientContext, clock *hlc.Clock) *Stores {
 // the meta1 lease. Returns an error if any.
 func (ls *Stores) IsMeta1Leaseholder(ctx context.Context, now hlc.ClockTimestamp) (bool, error) {
 	repl, _, err := ls.GetReplicaForRangeID(ctx, 1)
-	if roachpb.IsRangeNotFoundError(err) {
+	if kvpb.IsRangeNotFoundError(err) {
 		return false, nil
 	}
 	if err != nil {
@@ -95,7 +96,7 @@ func (ls *Stores) GetStore(storeID roachpb.StoreID) (*Store, error) {
 	if value, ok := ls.storeMap.Load(int64(storeID)); ok {
 		return (*Store)(value), nil
 	}
-	return nil, roachpb.NewStoreNotFoundError(storeID)
+	return nil, kvpb.NewStoreNotFoundError(storeID)
 }
 
 // AddStore adds the specified store to the store map.
@@ -153,7 +154,7 @@ func (ls *Stores) VisitStores(visitor func(s *Store) error) error {
 
 // GetReplicaForRangeID returns the replica and store which contains the
 // specified range. If the replica is not found on any store then
-// roachpb.RangeNotFoundError will be returned.
+// kvpb.RangeNotFoundError will be returned.
 func (ls *Stores) GetReplicaForRangeID(
 	ctx context.Context, rangeID roachpb.RangeID,
 ) (*Replica, *Store, error) {
@@ -169,7 +170,7 @@ func (ls *Stores) GetReplicaForRangeID(
 		log.Fatalf(ctx, "unexpected error: %s", err)
 	}
 	if replica == nil {
-		return nil, nil, roachpb.NewRangeNotFoundError(rangeID, 0)
+		return nil, nil, kvpb.NewRangeNotFoundError(rangeID, 0)
 	}
 	return replica, store, nil
 }
@@ -177,8 +178,8 @@ func (ls *Stores) GetReplicaForRangeID(
 // Send implements the client.Sender interface. The store is looked up from the
 // store map using the ID specified in the request.
 func (ls *Stores) Send(
-	ctx context.Context, ba *roachpb.BatchRequest,
-) (*roachpb.BatchResponse, *roachpb.Error) {
+	ctx context.Context, ba *kvpb.BatchRequest,
+) (*kvpb.BatchResponse, *kvpb.Error) {
 	br, writeBytes, pErr := ls.SendWithWriteBytes(ctx, ba)
 	writeBytes.Release()
 	return br, pErr
@@ -187,20 +188,20 @@ func (ls *Stores) Send(
 // SendWithWriteBytes is the implementation of Send with an additional
 // *StoreWriteBytes return value.
 func (ls *Stores) SendWithWriteBytes(
-	ctx context.Context, ba *roachpb.BatchRequest,
-) (*roachpb.BatchResponse, *kvadmission.StoreWriteBytes, *roachpb.Error) {
+	ctx context.Context, ba *kvpb.BatchRequest,
+) (*kvpb.BatchResponse, *kvadmission.StoreWriteBytes, *kvpb.Error) {
 	if err := ba.ValidateForEvaluation(); err != nil {
-		return nil, nil, roachpb.NewError(errors.Wrapf(err, "invalid batch (%s)", ba))
+		return nil, nil, kvpb.NewError(errors.Wrapf(err, "invalid batch (%s)", ba))
 	}
 
 	store, err := ls.GetStore(ba.Replica.StoreID)
 	if err != nil {
-		return nil, nil, roachpb.NewError(err)
+		return nil, nil, kvpb.NewError(err)
 	}
 
 	br, writeBytes, pErr := store.SendWithWriteBytes(ctx, ba)
 	if br != nil && br.Error != nil {
-		panic(roachpb.ErrorUnexpectedlySet(store, br))
+		panic(kvpb.ErrorUnexpectedlySet(store, br))
 	}
 	return br, writeBytes, pErr
 }
@@ -209,8 +210,8 @@ func (ls *Stores) SendWithWriteBytes(
 // the provided stream and returns with an optional error when the rangefeed is
 // complete.
 func (ls *Stores) RangeFeed(
-	args *roachpb.RangeFeedRequest, stream roachpb.RangeFeedEventSink,
-) *roachpb.Error {
+	args *kvpb.RangeFeedRequest, stream kvpb.RangeFeedEventSink,
+) *kvpb.Error {
 	ctx := stream.Context()
 	if args.RangeID == 0 {
 		log.Fatal(ctx, "rangefeed request missing range ID")
@@ -220,7 +221,7 @@ func (ls *Stores) RangeFeed(
 
 	store, err := ls.GetStore(args.Replica.StoreID)
 	if err != nil {
-		return roachpb.NewError(err)
+		return kvpb.NewError(err)
 	}
 
 	return store.RangeFeed(args, stream)

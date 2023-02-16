@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -895,9 +896,9 @@ func handleKVRequest(
 			target).Scan(&tableID)
 		require.NoError(t, err)
 		bankSpan := makeTableSpan(keys.SystemSQLCodec, tableID)
-		dr := roachpb.DeleteRangeRequest{
+		dr := kvpb.DeleteRangeRequest{
 			// Bogus span to make it a valid request.
-			RequestHeader: roachpb.RequestHeader{
+			RequestHeader: kvpb.RequestHeader{
 				Key:    bankSpan.Key,
 				EndKey: bankSpan.EndKey,
 			},

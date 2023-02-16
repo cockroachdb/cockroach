@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -168,7 +169,7 @@ func (r *Reader) GetAllInstancesUsingTxn(
 
 func (r *Reader) startRangeFeed(ctx context.Context) {
 	updateCacheFn := func(
-		ctx context.Context, keyVal *roachpb.RangeFeedValue,
+		ctx context.Context, keyVal *kvpb.RangeFeedValue,
 	) {
 		instance, err := r.rowcodec.decodeRow(keyVal.Key, &keyVal.Value)
 		if err != nil {

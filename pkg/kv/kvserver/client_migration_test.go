@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -254,7 +255,7 @@ func TestMigrateWaitsForApplication(t *testing.T) {
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
 				},
 				Store: &kvserver.StoreTestingKnobs{
-					TestingApplyCalledTwiceFilter: func(args kvserverbase.ApplyFilterArgs) (int, *roachpb.Error) {
+					TestingApplyCalledTwiceFilter: func(args kvserverbase.ApplyFilterArgs) (int, *kvpb.Error) {
 						if args.StoreID == roachpb.StoreID(n3) && args.State != nil && args.State.Version != nil {
 							<-blockApplicationCh
 						}

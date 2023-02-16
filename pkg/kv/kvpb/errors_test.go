@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package roachpb
+package kvpb
 
 import (
 	"bytes"
@@ -17,6 +17,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -52,7 +53,7 @@ func TestNewErrorNil(t *testing.T) {
 // TestSetTxn verifies that SetTxn updates the error message.
 func TestSetTxn(t *testing.T) {
 	e := NewError(NewTransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND))
-	txn := MakeTransaction("test", Key("a"), 1, hlc.Timestamp{}, 0, 99)
+	txn := roachpb.MakeTransaction("test", roachpb.Key("a"), 1, hlc.Timestamp{}, 0, 99)
 	e.SetTxn(&txn)
 	if !strings.HasPrefix(
 		e.String(), "TransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND): \"test\"") {
@@ -74,12 +75,12 @@ func TestErrPriority(t *testing.T) {
 		id1 := uuid.Must(uuid.NewV4())
 		require.Equal(t, ErrorScoreTxnRestart, ErrPriority(&TransactionRetryWithProtoRefreshError{
 			TxnID:       id1,
-			Transaction: Transaction{TxnMeta: enginepb.TxnMeta{ID: id1}},
+			Transaction: roachpb.Transaction{TxnMeta: enginepb.TxnMeta{ID: id1}},
 		}))
 		id2 := uuid.Nil
 		require.Equal(t, ErrorScoreTxnAbort, ErrPriority(&TransactionRetryWithProtoRefreshError{
 			TxnID:       id1,
-			Transaction: Transaction{TxnMeta: enginepb.TxnMeta{ID: id2}},
+			Transaction: roachpb.Transaction{TxnMeta: enginepb.TxnMeta{ID: id2}},
 		}))
 	}
 	require.Equal(t, ErrorScoreUnambiguousError, ErrPriority(&ConditionFailedError{}))
@@ -94,7 +95,7 @@ func TestErrorTxn(t *testing.T) {
 	}
 	pErr = NewErrorf("foo")
 	const name = "X"
-	pErr.SetTxn(&Transaction{Name: name})
+	pErr.SetTxn(&roachpb.Transaction{Name: name})
 	if txn := pErr.GetTxn(); txn == nil || txn.Name != name {
 		t.Fatalf("wanted name %s, unexpected: %+v", name, txn)
 	}
@@ -105,9 +106,9 @@ func TestReadWithinUncertaintyIntervalError(t *testing.T) {
 		rwueNew := NewReadWithinUncertaintyIntervalError(
 			hlc.Timestamp{WallTime: 1},
 			hlc.ClockTimestamp{WallTime: 2, Logical: 2},
-			&Transaction{
+			&roachpb.Transaction{
 				GlobalUncertaintyLimit: hlc.Timestamp{WallTime: 3},
-				ObservedTimestamps:     []ObservedTimestamp{{NodeID: 12, Timestamp: hlc.ClockTimestamp{WallTime: 4}}},
+				ObservedTimestamps:     []roachpb.ObservedTimestamp{{NodeID: 12, Timestamp: hlc.ClockTimestamp{WallTime: 4}}},
 			},
 			hlc.Timestamp{WallTime: 2},
 			hlc.ClockTimestamp{WallTime: 1, Logical: 2})
@@ -164,14 +165,14 @@ func TestErrorRedaction(t *testing.T) {
 		wrappedPErr := NewError(NewReadWithinUncertaintyIntervalError(
 			hlc.Timestamp{WallTime: 1},
 			hlc.ClockTimestamp{WallTime: 2, Logical: 2},
-			&Transaction{
+			&roachpb.Transaction{
 				GlobalUncertaintyLimit: hlc.Timestamp{WallTime: 3},
-				ObservedTimestamps:     []ObservedTimestamp{{NodeID: 12, Timestamp: hlc.ClockTimestamp{WallTime: 4}}},
+				ObservedTimestamps:     []roachpb.ObservedTimestamp{{NodeID: 12, Timestamp: hlc.ClockTimestamp{WallTime: 4}}},
 			},
 			hlc.Timestamp{WallTime: 2},
 			hlc.ClockTimestamp{WallTime: 1, Logical: 2},
 		))
-		txn := MakeTransaction("foo", Key("bar"), 1, hlc.Timestamp{WallTime: 1}, 1, 99)
+		txn := roachpb.MakeTransaction("foo", roachpb.Key("bar"), 1, hlc.Timestamp{WallTime: 1}, 1, 99)
 		txn.ID = uuid.Nil
 		txn.Priority = 1234
 		wrappedPErr.UnexposedTxn = &txn
@@ -353,15 +354,15 @@ func TestErrorGRPCStatus(t *testing.T) {
 }
 
 func TestRefreshSpanError(t *testing.T) {
-	e1 := NewRefreshFailedError(RefreshFailedError_REASON_COMMITTED_VALUE, Key("foo"), hlc.Timestamp{WallTime: 3})
+	e1 := NewRefreshFailedError(RefreshFailedError_REASON_COMMITTED_VALUE, roachpb.Key("foo"), hlc.Timestamp{WallTime: 3})
 	require.Equal(t, "encountered recently written committed value \"foo\" @0.000000003,0", e1.Error())
 
-	e2 := NewRefreshFailedError(RefreshFailedError_REASON_INTENT, Key("bar"), hlc.Timestamp{WallTime: 4})
+	e2 := NewRefreshFailedError(RefreshFailedError_REASON_INTENT, roachpb.Key("bar"), hlc.Timestamp{WallTime: 4})
 	require.Equal(t, "encountered recently written intent \"bar\" @0.000000004,0", e2.Error())
 }
 
 func TestNotLeaseholderError(t *testing.T) {
-	rd := &ReplicaDescriptor{
+	rd := &roachpb.ReplicaDescriptor{
 		ReplicaID: 1, StoreID: 1, NodeID: 1,
 	}
 	for _, tc := range []struct {
@@ -379,12 +380,12 @@ func TestNotLeaseholderError(t *testing.T) {
 			exp: `[NotLeaseHolderError] r1: replica not lease holder; current lease is repl=(n1,s1):1 seq=2 start=0.000000001,0 epo=1`,
 			err: &NotLeaseHolderError{
 				RangeID: 1,
-				Lease: &Lease{
+				Lease: &roachpb.Lease{
 					Start:           hlc.ClockTimestamp{WallTime: 1},
 					Replica:         *rd,
 					Epoch:           1,
 					Sequence:        2,
-					AcquisitionType: LeaseAcquisitionType_Transfer,
+					AcquisitionType: roachpb.LeaseAcquisitionType_Transfer,
 				},
 			},
 		},

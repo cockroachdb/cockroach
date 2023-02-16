@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -28,8 +29,8 @@ func TestOverridesStore(t *testing.T) {
 	s.Init()
 	t1 := roachpb.MustMakeTenantID(1)
 	t2 := roachpb.MustMakeTenantID(2)
-	st := func(name, val string) roachpb.TenantSetting {
-		return roachpb.TenantSetting{
+	st := func(name, val string) kvpb.TenantSetting {
+		return kvpb.TenantSetting{
 			Name: name,
 			Value: settings.EncodedValue{
 				Value: val,
@@ -56,7 +57,7 @@ func TestOverridesStore(t *testing.T) {
 	}
 	o1 := s.GetTenantOverrides(t1)
 	expect(o1, "")
-	s.SetAll(map[roachpb.TenantID][]roachpb.TenantSetting{
+	s.SetAll(map[roachpb.TenantID][]kvpb.TenantSetting{
 		t1: {st("a", "aa"), st("b", "bb"), st("d", "dd")},
 		t2: {st("x", "xx")},
 	})

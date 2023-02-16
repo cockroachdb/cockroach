@@ -70,7 +70,7 @@ data: "k"/3.000000000,0 -> /BYTES/k3
 data: "m"/1.000000000,0 -> /BYTES/m1
 data: "n"/3.000000000,0 -> /<empty>
 meta: "p"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/p0 mergeTs=<nil> txnDidNotUpdateMeta=false
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "e" at timestamp 3.000000000,0 too old; wrote at 4.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "e" at timestamp 3.000000000,0 too old; wrote at 4.000000000,1
 
 run error
 del_range_ts k=f end=g ts=3 idempotent
@@ -91,7 +91,7 @@ data: "k"/3.000000000,0 -> /BYTES/k3
 data: "m"/1.000000000,0 -> /BYTES/m1
 data: "n"/3.000000000,0 -> /<empty>
 meta: "p"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/p0 mergeTs=<nil> txnDidNotUpdateMeta=false
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "f" at timestamp 3.000000000,0 too old; wrote at 4.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "f" at timestamp 3.000000000,0 too old; wrote at 4.000000000,1
 
 run error
 del_range_ts k=l end=m ts=3 idempotent
@@ -112,7 +112,7 @@ data: "k"/3.000000000,0 -> /BYTES/k3
 data: "m"/1.000000000,0 -> /BYTES/m1
 data: "n"/3.000000000,0 -> /<empty>
 meta: "p"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/p0 mergeTs=<nil> txnDidNotUpdateMeta=false
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "l" at timestamp 3.000000000,0 too old; wrote at 4.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "l" at timestamp 3.000000000,0 too old; wrote at 4.000000000,1
 
 # Writing at the timestamp of a point or range key errors.
 run error
@@ -134,7 +134,7 @@ data: "k"/3.000000000,0 -> /BYTES/k3
 data: "m"/1.000000000,0 -> /BYTES/m1
 data: "n"/3.000000000,0 -> /<empty>
 meta: "p"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/p0 mergeTs=<nil> txnDidNotUpdateMeta=false
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "e" at timestamp 4.000000000,0 too old; wrote at 4.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "e" at timestamp 4.000000000,0 too old; wrote at 4.000000000,1
 
 run error
 del_range_ts k=l end=m ts=4 idempotent
@@ -155,7 +155,7 @@ data: "k"/3.000000000,0 -> /BYTES/k3
 data: "m"/1.000000000,0 -> /BYTES/m1
 data: "n"/3.000000000,0 -> /<empty>
 meta: "p"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/p0 mergeTs=<nil> txnDidNotUpdateMeta=false
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "l" at timestamp 4.000000000,0 too old; wrote at 4.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "l" at timestamp 4.000000000,0 too old; wrote at 4.000000000,1
 
 # Writing below intents error.
 run error
@@ -177,7 +177,7 @@ data: "k"/3.000000000,0 -> /BYTES/k3
 data: "m"/1.000000000,0 -> /BYTES/m1
 data: "n"/3.000000000,0 -> /<empty>
 meta: "p"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/p0 mergeTs=<nil> txnDidNotUpdateMeta=false
-error: (*roachpb.WriteIntentError:) conflicting intents on "i"
+error: (*kvpb.WriteIntentError:) conflicting intents on "i"
 
 # Idempotent writes: exact, left, right, subset.
 run stats ok

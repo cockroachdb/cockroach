@@ -13,7 +13,7 @@ package testutils
 import (
 	"regexp"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 )
 
@@ -36,7 +36,7 @@ func IsError(err error, re string) bool {
 
 // IsPError returns true if pErr's message matches the supplied regex.
 // An empty regex is interpreted to mean that a nil error is expected.
-func IsPError(pErr *roachpb.Error, re string) bool {
+func IsPError(pErr *kvpb.Error, re string) bool {
 	if pErr == nil && re == "" {
 		return true
 	}

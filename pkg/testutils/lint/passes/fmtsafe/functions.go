@@ -73,7 +73,7 @@ var requireConstFmt = map[string]bool{
 
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash.ReportOrPanic": true,
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb.NewAmbiguousResultErrorf": true,
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb.NewAmbiguousResultErrorf": true,
 
 	"(*github.com/cockroachdb/cockroach/pkg/util/tracing.Span).Recordf":      true,
 	"(*github.com/cockroachdb/cockroach/pkg/util/tracing.spanInner).Recordf": true,
@@ -157,7 +157,7 @@ var requireConstFmt = map[string]bool{
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis.l":                 true,
 	"(*github.com/cockroachdb/cockroach/pkg/kv/kvnemesis.logLogger).Logf": true,
 
-	"(github.com/cockroachdb/cockroach/pkg/roachpb.TestPrinter).Printf": true,
+	"(github.com/cockroachdb/cockroach/pkg/kv/kvpb.TestPrinter).Printf": true,
 
 	// Error things are populated in the init() message.
 }

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -1590,13 +1591,13 @@ func (f *IterFactory) NewFileIter(
 			Store:    f.store,
 			FilePath: f.fileSSTPath,
 		}
-		var encOpts *roachpb.FileEncryptionOptions
+		var encOpts *kvpb.FileEncryptionOptions
 		if f.encryption != nil {
 			key, err := backupencryption.GetEncryptionKey(ctx, f.encryption, f.kmsEnv)
 			if err != nil {
 				return nil, err
 			}
-			encOpts = &roachpb.FileEncryptionOptions{Key: key}
+			encOpts = &kvpb.FileEncryptionOptions{Key: key}
 		}
 		return NewFileSSTIter(ctx, storeFile, encOpts)
 	}

@@ -15,6 +15,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -265,7 +266,7 @@ func CheckSSTConflicts(
 				// of scans.
 				intents = append(intents, roachpb.MakeIntent(mvccMeta.Txn, extIter.Key().Key))
 				if int64(len(intents)) >= maxIntents {
-					return &roachpb.WriteIntentError{Intents: intents}
+					return &kvpb.WriteIntentError{Intents: intents}
 				}
 				return nil
 			}
@@ -336,7 +337,7 @@ func CheckSSTConflicts(
 		// do if AddSSTable had SSTTimestampToRequestTimestamp set, but AddSSTable
 		// cannot be used in transactions so we don't need to check.
 		if sstKey.Timestamp.LessEq(extKey.Timestamp) {
-			return roachpb.NewWriteTooOldError(
+			return kvpb.NewWriteTooOldError(
 				sstKey.Timestamp, extKey.Timestamp.Next(), sstKey.Key)
 		}
 
@@ -460,7 +461,7 @@ func CheckSSTConflicts(
 				if sstTombstone.Timestamp.Less(extRangeKeys.Versions[0].Timestamp) {
 					// Conflict. We can't slide an MVCC range tombstone below an
 					// existing MVCC range tombstone in the engine.
-					return enginepb.MVCCStats{}, roachpb.NewWriteTooOldError(
+					return enginepb.MVCCStats{}, kvpb.NewWriteTooOldError(
 						sstTombstone.Timestamp, extRangeKeys.Versions[0].Timestamp.Next(), sstRangeKeys.Bounds.Key)
 				}
 				if !extRangeKeys.Versions[0].Timestamp.Less(sstTombstone.Timestamp) {
@@ -485,7 +486,7 @@ func CheckSSTConflicts(
 			if extRangeKeys.Covers(sstKey) {
 				// A range tombstone in the engine deletes this SST key. Return
 				// a WriteTooOldError.
-				return enginepb.MVCCStats{}, roachpb.NewWriteTooOldError(
+				return enginepb.MVCCStats{}, kvpb.NewWriteTooOldError(
 					sstKey.Timestamp, extRangeKeys.Versions[0].Timestamp.Next(), sstKey.Key)
 			}
 		}
@@ -511,7 +512,7 @@ func CheckSSTConflicts(
 				}
 				intents = append(intents, roachpb.MakeIntent(mvccMeta.Txn, extIter.Key().Key))
 				if int64(len(intents)) >= maxIntents {
-					return statsDiff, &roachpb.WriteIntentError{Intents: intents}
+					return statsDiff, &kvpb.WriteIntentError{Intents: intents}
 				}
 				extIter.Next()
 				continue
@@ -519,7 +520,7 @@ func CheckSSTConflicts(
 
 			if sstBottomTombstone.Timestamp.LessEq(extKey.Timestamp) {
 				// Conflict.
-				return enginepb.MVCCStats{}, roachpb.NewWriteTooOldError(
+				return enginepb.MVCCStats{}, kvpb.NewWriteTooOldError(
 					sstBottomTombstone.Timestamp, extKey.Timestamp.Next(), sstRangeKeys.Bounds.Key)
 			}
 			if sstRangeKeys.Covers(extKey) {
@@ -1139,7 +1140,7 @@ func CheckSSTConflicts(
 		return enginepb.MVCCStats{}, sstErr
 	}
 	if len(intents) > 0 {
-		return enginepb.MVCCStats{}, &roachpb.WriteIntentError{Intents: intents}
+		return enginepb.MVCCStats{}, &kvpb.WriteIntentError{Intents: intents}
 	}
 
 	return statsDiff, nil

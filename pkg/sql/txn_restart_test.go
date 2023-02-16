@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -86,7 +87,7 @@ func checkCorrectTxn(value string, magicVals *filterVals, txn *roachpb.Transacti
 	if !found {
 		return nil
 	}
-	if errors.HasType(failureRec.err, (*roachpb.TransactionAbortedError)(nil)) {
+	if errors.HasType(failureRec.err, (*kvpb.TransactionAbortedError)(nil)) {
 		// The previous txn should have been aborted, so check that we're running
 		// in a new one.
 		if failureRec.txn.ID == txn.ID {
@@ -115,24 +116,22 @@ type injectionApproaches []injectionApproach
 func (ia injectionApproaches) Len() int      { return len(ia) }
 func (ia injectionApproaches) Swap(i, j int) { ia[i], ia[j] = ia[j], ia[i] }
 
-func injectErrors(
-	req roachpb.Request, hdr roachpb.Header, magicVals *filterVals, verifyTxn bool,
-) error {
+func injectErrors(req kvpb.Request, hdr kvpb.Header, magicVals *filterVals, verifyTxn bool) error {
 	magicVals.Lock()
 	defer magicVals.Unlock()
 
 	switch req := req.(type) {
-	case *roachpb.ConditionalPutRequest:
+	case *kvpb.ConditionalPutRequest:
 		// Create a list of each injection approach and shuffle the order of
 		// injection for some additional randomness.
 		injections := injectionApproaches{
 			{counts: magicVals.restartCounts, errFn: func() error {
 				// Note we use a retry error that cannot be automatically retried
 				// by the transaction coord sender.
-				return roachpb.NewTransactionRetryError(roachpb.RETRY_REASON_UNKNOWN, "injected err")
+				return kvpb.NewTransactionRetryError(kvpb.RETRY_REASON_UNKNOWN, "injected err")
 			}},
 			{counts: magicVals.abortCounts, errFn: func() error {
-				return roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_ABORTED_RECORD_FOUND)
+				return kvpb.NewTransactionAbortedError(kvpb.ABORT_REASON_ABORTED_RECORD_FOUND)
 			}},
 		}
 		shuffle.Shuffle(injections)
@@ -495,9 +494,9 @@ func TestTxnAutoRetry(t *testing.T) {
 		"boulanger": 2,
 	}
 	cleanupFilter := cmdFilters.AppendFilter(
-		func(args kvserverbase.FilterArgs) *roachpb.Error {
+		func(args kvserverbase.FilterArgs) *kvpb.Error {
 			if err := injectErrors(args.Req, args.Hdr, magicVals, true /* verifyTxn */); err != nil {
-				return roachpb.NewErrorWithTxn(err, args.Hdr.Txn)
+				return kvpb.NewErrorWithTxn(err, args.Hdr.Txn)
 			}
 			return nil
 		}, false)
@@ -599,9 +598,9 @@ INSERT INTO t.public.test(k, v, t) VALUES (6, 'laureal', cluster_logical_timesta
 		"hooly": 2,
 	}
 	cleanupFilter = cmdFilters.AppendFilter(
-		func(args kvserverbase.FilterArgs) *roachpb.Error {
+		func(args kvserverbase.FilterArgs) *kvpb.Error {
 			if err := injectErrors(args.Req, args.Hdr, magicVals, true /* verifyTxn */); err != nil {
-				return roachpb.NewErrorWithTxn(err, args.Hdr.Txn)
+				return kvpb.NewErrorWithTxn(err, args.Hdr.Txn)
 			}
 			return nil
 		}, false)
@@ -809,9 +808,9 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 					t.Fatal(err)
 				}
 				cleanupFilter := cmdFilters.AppendFilter(
-					func(args kvserverbase.FilterArgs) *roachpb.Error {
+					func(args kvserverbase.FilterArgs) *kvpb.Error {
 						if err := injectErrors(args.Req, args.Hdr, tc.magicVals, true /* verifyTxn */); err != nil {
-							return roachpb.NewErrorWithTxn(err, args.Hdr.Txn)
+							return kvpb.NewErrorWithTxn(err, args.Hdr.Txn)
 						}
 						return nil
 					}, false)
@@ -1112,11 +1111,11 @@ func TestNonRetryableError(t *testing.T) {
 	testKey := []byte("test_key")
 	hitError := false
 	cleanupFilter := cmdFilters.AppendFilter(
-		func(args kvserverbase.FilterArgs) *roachpb.Error {
-			if req, ok := args.Req.(*roachpb.GetRequest); ok {
+		func(args kvserverbase.FilterArgs) *kvpb.Error {
+			if req, ok := args.Req.(*kvpb.GetRequest); ok {
 				if bytes.Contains(req.Key, testKey) && !kv.TestingIsRangeLookupRequest(req) {
 					hitError = true
-					return roachpb.NewErrorWithTxn(fmt.Errorf("testError"), args.Hdr.Txn)
+					return kvpb.NewErrorWithTxn(fmt.Errorf("testError"), args.Hdr.Txn)
 				}
 			}
 			return nil
@@ -1158,8 +1157,8 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 	var s serverutils.TestServerInterface
 	var clockUpdate, restartDone int32
 	testingResponseFilter := func(
-		ctx context.Context, ba *roachpb.BatchRequest, br *roachpb.BatchResponse,
-	) *roachpb.Error {
+		ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse,
+	) *kvpb.Error {
 		for _, ru := range ba.Requests {
 			if req := ru.GetGet(); req != nil {
 				if bytes.Contains(req.Key, testKey) && !kv.TestingIsRangeLookupRequest(req) {
@@ -1183,7 +1182,7 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 						txn.ResetObservedTimestamps()
 						now := s.Clock().NowAsClockTimestamp()
 						txn.UpdateObservedTimestamp(s.(*server.TestServer).Gossip().NodeID.Get(), now)
-						return roachpb.NewErrorWithTxn(roachpb.NewReadWithinUncertaintyIntervalError(now.ToTimestamp(), now, txn, now.ToTimestamp(), now), txn)
+						return kvpb.NewErrorWithTxn(kvpb.NewReadWithinUncertaintyIntervalError(now.ToTimestamp(), now, txn, now.ToTimestamp(), now), txn)
 					}
 				}
 			}
@@ -1254,12 +1253,12 @@ func TestFlushUncommitedDescriptorCacheOnRestart(t *testing.T) {
 
 	var restartDone int32
 	cleanupFilter := cmdFilters.AppendFilter(
-		func(args kvserverbase.FilterArgs) *roachpb.Error {
+		func(args kvserverbase.FilterArgs) *kvpb.Error {
 			if atomic.LoadInt32(&restartDone) > 0 {
 				return nil
 			}
 
-			if req, ok := args.Req.(*roachpb.GetRequest); ok {
+			if req, ok := args.Req.(*kvpb.GetRequest); ok {
 				if bytes.Contains(req.Key, testKey) && !kv.TestingIsRangeLookupRequest(req) {
 					atomic.AddInt32(&restartDone, 1)
 					// Return ReadWithinUncertaintyIntervalError.
@@ -1267,7 +1266,7 @@ func TestFlushUncommitedDescriptorCacheOnRestart(t *testing.T) {
 					txn.ResetObservedTimestamps()
 					now := s.Clock().NowAsClockTimestamp()
 					txn.UpdateObservedTimestamp(s.(*server.TestServer).Gossip().NodeID.Get(), now)
-					return roachpb.NewErrorWithTxn(roachpb.NewReadWithinUncertaintyIntervalError(now.ToTimestamp(), now, txn, now.ToTimestamp(), now), txn)
+					return kvpb.NewErrorWithTxn(kvpb.NewReadWithinUncertaintyIntervalError(now.ToTimestamp(), now, txn, now.ToTimestamp(), now), txn)
 				}
 			}
 			return nil
@@ -1346,11 +1345,11 @@ func TestDistSQLRetryableError(t *testing.T) {
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
 						EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
-							TestingEvalFilter: func(fArgs kvserverbase.FilterArgs) *roachpb.Error {
-								_, ok := fArgs.Req.(*roachpb.ScanRequest)
+							TestingEvalFilter: func(fArgs kvserverbase.FilterArgs) *kvpb.Error {
+								_, ok := fArgs.Req.(*kvpb.ScanRequest)
 								if ok && fArgs.Req.Header().Key.Equal(targetKey) && fArgs.Hdr.Txn.Epoch == 0 {
 									restarted = true
-									err := roachpb.NewReadWithinUncertaintyIntervalError(
+									err := kvpb.NewReadWithinUncertaintyIntervalError(
 										fArgs.Hdr.Timestamp, /* readTS */
 										hlc.ClockTimestamp{},
 										nil,
@@ -1358,7 +1357,7 @@ func TestDistSQLRetryableError(t *testing.T) {
 										hlc.ClockTimestamp{})
 									errTxn := fArgs.Hdr.Txn.Clone()
 									errTxn.UpdateObservedTimestamp(roachpb.NodeID(2), hlc.ClockTimestamp{})
-									pErr := roachpb.NewErrorWithTxn(err, errTxn)
+									pErr := kvpb.NewErrorWithTxn(err, errTxn)
 									pErr.OriginNode = 2
 									return pErr
 								}
@@ -1637,10 +1636,10 @@ func TestTxnAutoRetryReasonAvailable(t *testing.T) {
 	retriedStmtKey := []byte("test_key")
 
 	cleanupFilter := cmdFilters.AppendFilter(
-		func(args kvserverbase.FilterArgs) *roachpb.Error {
-			if req, ok := args.Req.(*roachpb.GetRequest); ok {
+		func(args kvserverbase.FilterArgs) *kvpb.Error {
+			if req, ok := args.Req.(*kvpb.GetRequest); ok {
 				if bytes.Contains(req.Key, retriedStmtKey) && retryCount < numRetries {
-					return roachpb.NewErrorWithTxn(roachpb.NewTransactionRetryError(roachpb.RETRY_REASON_UNKNOWN,
+					return kvpb.NewErrorWithTxn(kvpb.NewTransactionRetryError(kvpb.RETRY_REASON_UNKNOWN,
 						redact.Sprintf("injected err %d", retryCount+1)), args.Hdr.Txn)
 				}
 			}

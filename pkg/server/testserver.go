@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1416,7 +1417,7 @@ func (ts *TestServer) GetFirstStoreID() roachpb.StoreID {
 // LookupRange returns the descriptor of the range containing key.
 func (ts *TestServer) LookupRange(key roachpb.Key) (roachpb.RangeDescriptor, error) {
 	rs, _, err := kv.RangeLookup(context.Background(), ts.DB().NonTransactionalSender(),
-		key, roachpb.CONSISTENT, 0 /* prefetchNum */, false /* reverse */)
+		key, kvpb.CONSISTENT, 0 /* prefetchNum */, false /* reverse */)
 	if err != nil {
 		return roachpb.RangeDescriptor{}, errors.Wrapf(
 			err, "%q: lookup range unexpected error", key)
@@ -1428,8 +1429,8 @@ func (ts *TestServer) LookupRange(key roachpb.Key) (roachpb.RangeDescriptor, err
 func (ts *TestServer) MergeRanges(leftKey roachpb.Key) (roachpb.RangeDescriptor, error) {
 
 	ctx := context.Background()
-	mergeReq := roachpb.AdminMergeRequest{
-		RequestHeader: roachpb.RequestHeader{
+	mergeReq := kvpb.AdminMergeRequest{
+		RequestHeader: kvpb.RequestHeader{
 			Key: leftKey,
 		},
 	}
@@ -1454,8 +1455,8 @@ func (ts *TestServer) SplitRangeWithExpiration(
 	splitKey roachpb.Key, expirationTime hlc.Timestamp,
 ) (roachpb.RangeDescriptor, roachpb.RangeDescriptor, error) {
 	ctx := context.Background()
-	splitReq := roachpb.AdminSplitRequest{
-		RequestHeader: roachpb.RequestHeader{
+	splitReq := kvpb.AdminSplitRequest{
+		RequestHeader: kvpb.RequestHeader{
 			Key: splitKey,
 		},
 		SplitKey:       splitKey,
@@ -1490,7 +1491,7 @@ func (ts *TestServer) SplitRangeWithExpiration(
 		// i.e. looking up key `c` will match range [a,c), not [c, d).
 		// The result will be the right descriptor, and the first prefetched result will
 		// be the left neighbor, i.e. the resulting left hand side of the split.
-		rs, more, err := kv.RangeLookup(ctx, txn, splitKey.Next(), roachpb.CONSISTENT, 1, true /* reverse */)
+		rs, more, err := kv.RangeLookup(ctx, txn, splitKey.Next(), kvpb.CONSISTENT, 1, true /* reverse */)
 		if err != nil {
 			return err
 		}
@@ -1568,21 +1569,21 @@ const (
 func (ts *TestServer) GetRangeLease(
 	ctx context.Context, key roachpb.Key, queryPolicy LeaseInfoOpt,
 ) (_ LeaseInfo, now hlc.ClockTimestamp, _ error) {
-	leaseReq := roachpb.LeaseInfoRequest{
-		RequestHeader: roachpb.RequestHeader{
+	leaseReq := kvpb.LeaseInfoRequest{
+		RequestHeader: kvpb.RequestHeader{
 			Key: key,
 		},
 	}
 	leaseResp, pErr := kv.SendWrappedWith(
 		ctx,
 		ts.DB().NonTransactionalSender(),
-		roachpb.Header{
+		kvpb.Header{
 			// INCONSISTENT read with a NEAREST routing policy, since we want to make
 			// sure that the node used to send this is the one that processes the
 			// command, regardless of whether it is the leaseholder, for the hint to
 			// matter.
-			ReadConsistency: roachpb.INCONSISTENT,
-			RoutingPolicy:   roachpb.RoutingPolicy_NEAREST,
+			ReadConsistency: kvpb.INCONSISTENT,
+			RoutingPolicy:   kvpb.RoutingPolicy_NEAREST,
 		},
 		&leaseReq,
 	)
@@ -1590,7 +1591,7 @@ func (ts *TestServer) GetRangeLease(
 		return LeaseInfo{}, hlc.ClockTimestamp{}, pErr.GoError()
 	}
 	// Adapt the LeaseInfoResponse format to LeaseInfo.
-	resp := leaseResp.(*roachpb.LeaseInfoResponse)
+	resp := leaseResp.(*kvpb.LeaseInfoResponse)
 	if queryPolicy == QueryLocalNodeOnly && resp.EvaluatedBy != ts.GetFirstStoreID() {
 		// TODO(andrei): Figure out how to deal with nodes with multiple stores.
 		// This API should permit addressing the query to a particular store.
@@ -1653,8 +1654,8 @@ func (ts *TestServer) ForceTableGC(
 	}
 	tableID := uint32(*row[0].(*tree.DInt))
 	tblKey := keys.SystemSQLCodec.TablePrefix(tableID)
-	gcr := roachpb.GCRequest{
-		RequestHeader: roachpb.RequestHeader{
+	gcr := kvpb.GCRequest{
+		RequestHeader: kvpb.RequestHeader{
 			Key:    tblKey,
 			EndKey: tblKey.PrefixEnd(),
 		},

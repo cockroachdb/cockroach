@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -27,13 +28,13 @@ import (
 // DefaultDeclareKeys is the default implementation of Command.DeclareKeys.
 func DefaultDeclareKeys(
 	_ ImmutableRangeState,
-	header *roachpb.Header,
-	req roachpb.Request,
+	header *kvpb.Header,
+	req kvpb.Request,
 	latchSpans, _ *spanset.SpanSet,
 	_ time.Duration,
 ) {
 	access := spanset.SpanReadWrite
-	if roachpb.IsReadOnly(req) && !roachpb.IsLocking(req) {
+	if kvpb.IsReadOnly(req) && !kvpb.IsLocking(req) {
 		access = spanset.SpanReadOnly
 	}
 	latchSpans.AddMVCC(access, req.Header().Span(), header.Timestamp)
@@ -46,14 +47,14 @@ func DefaultDeclareKeys(
 // when it evaluated.
 func DefaultDeclareIsolatedKeys(
 	_ ImmutableRangeState,
-	header *roachpb.Header,
-	req roachpb.Request,
+	header *kvpb.Header,
+	req kvpb.Request,
 	latchSpans, lockSpans *spanset.SpanSet,
 	maxOffset time.Duration,
 ) {
 	access := spanset.SpanReadWrite
 	timestamp := header.Timestamp
-	if roachpb.IsReadOnly(req) && !roachpb.IsLocking(req) {
+	if kvpb.IsReadOnly(req) && !kvpb.IsLocking(req) {
 		access = spanset.SpanReadOnly
 
 		// For non-locking reads, acquire read latches all the way up to the
@@ -86,9 +87,7 @@ func DefaultDeclareIsolatedKeys(
 // DeclareKeysForBatch adds all keys that the batch with the provided header
 // touches to the given SpanSet. This does not include keys touched during the
 // processing of the batch's individual commands.
-func DeclareKeysForBatch(
-	rs ImmutableRangeState, header *roachpb.Header, latchSpans *spanset.SpanSet,
-) {
+func DeclareKeysForBatch(rs ImmutableRangeState, header *kvpb.Header, latchSpans *spanset.SpanSet) {
 	if header.Txn != nil {
 		header.Txn.AssertInitialized(context.TODO())
 		latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
@@ -117,8 +116,8 @@ func declareAllKeys(latchSpans *spanset.SpanSet) {
 // constraints).
 type CommandArgs struct {
 	EvalCtx EvalContext
-	Header  roachpb.Header
-	Args    roachpb.Request
+	Header  kvpb.Header
+	Args    kvpb.Request
 	Now     hlc.ClockTimestamp
 	// *Stats should be mutated to reflect any writes made by the command.
 	Stats                 *enginepb.MVCCStats

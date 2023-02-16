@@ -13,11 +13,11 @@ package rpc
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"google.golang.org/grpc"
 )
 
-// RestrictedInternalClient represents the part of the roachpb.InternalClient
+// RestrictedInternalClient represents the part of the kvpb.InternalClient
 // interface used by the DistSender. Besides the auto-generated gRPC client,
 // this interface is also implemented by rpc.internalClientAdapter which
 // bypasses gRPC to call into the local Node.
@@ -25,7 +25,7 @@ import (
 // For a more contextualized explanation, see the comment that decorates
 // (*rpc.Context).loopbackDialFn.
 type RestrictedInternalClient interface {
-	Batch(ctx context.Context, in *roachpb.BatchRequest, opts ...grpc.CallOption) (*roachpb.BatchResponse, error)
-	RangeFeed(ctx context.Context, in *roachpb.RangeFeedRequest, opts ...grpc.CallOption) (roachpb.Internal_RangeFeedClient, error)
-	MuxRangeFeed(ctx context.Context, opts ...grpc.CallOption) (roachpb.Internal_MuxRangeFeedClient, error)
+	Batch(ctx context.Context, in *kvpb.BatchRequest, opts ...grpc.CallOption) (*kvpb.BatchResponse, error)
+	RangeFeed(ctx context.Context, in *kvpb.RangeFeedRequest, opts ...grpc.CallOption) (kvpb.Internal_RangeFeedClient, error)
+	MuxRangeFeed(ctx context.Context, opts ...grpc.CallOption) (kvpb.Internal_MuxRangeFeedClient, error)
 }

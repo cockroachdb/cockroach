@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk/bulkpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -103,7 +104,7 @@ type SSTBatcher struct {
 	mem      mon.BoundAccount
 	limiter  limit.ConcurrentRequestLimiter
 
-	// disallowShadowingBelow is described on roachpb.AddSSTableRequest.
+	// disallowShadowingBelow is described on kvpb.AddSSTableRequest.
 	disallowShadowingBelow hlc.Timestamp
 
 	// skips duplicate keys (iff they are buffered together). This is true when
@@ -180,7 +181,7 @@ type SSTBatcher struct {
 		syncutil.Mutex
 
 		maxWriteTS hlc.Timestamp
-		totalRows  roachpb.BulkOpSummary
+		totalRows  kvpb.BulkOpSummary
 		// totalStats contain the stats over the entire lifetime of the SST Batcher.
 		// As rows accumulate, the corresponding stats initially start out in
 		// currentStats. After each flush, the contents of currentStats are combined
@@ -663,12 +664,12 @@ func (b *SSTBatcher) Close(ctx context.Context) {
 }
 
 // GetBatchSummary returns this batcher's total added rows/bytes/etc.
-func (b *SSTBatcher) GetBatchSummary() roachpb.BulkOpSummary {
+func (b *SSTBatcher) GetBatchSummary() kvpb.BulkOpSummary {
 	return b.rowCounter.BulkOpSummary
 }
 
 // GetSummary returns this batcher's total added rows/bytes/etc.
-func (b *SSTBatcher) GetSummary() roachpb.BulkOpSummary {
+func (b *SSTBatcher) GetSummary() kvpb.BulkOpSummary {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.mu.totalRows
@@ -744,8 +745,8 @@ func (b *SSTBatcher) addSSTable(
 					ingestAsWriteBatch = true
 				}
 
-				req := &roachpb.AddSSTableRequest{
-					RequestHeader:                          roachpb.RequestHeader{Key: item.start, EndKey: item.end},
+				req := &kvpb.AddSSTableRequest{
+					RequestHeader:                          kvpb.RequestHeader{Key: item.start, EndKey: item.end},
 					Data:                                   item.sstBytes,
 					DisallowShadowing:                      !b.disallowShadowingBelow.IsEmpty(),
 					DisallowShadowingBelow:                 b.disallowShadowingBelow,
@@ -757,12 +758,12 @@ func (b *SSTBatcher) addSSTable(
 					req.SSTTimestampToRequestTimestamp = batchTS
 				}
 
-				ba := &roachpb.BatchRequest{
-					Header: roachpb.Header{Timestamp: batchTS, ClientRangeInfo: roachpb.ClientRangeInfo{ExplicitlyRequested: true}},
-					AdmissionHeader: roachpb.AdmissionHeader{
+				ba := &kvpb.BatchRequest{
+					Header: kvpb.Header{Timestamp: batchTS, ClientRangeInfo: roachpb.ClientRangeInfo{ExplicitlyRequested: true}},
+					AdmissionHeader: kvpb.AdmissionHeader{
 						Priority:                 int32(admissionpb.BulkNormalPri),
 						CreateTime:               timeutil.Now().UnixNano(),
-						Source:                   roachpb.AdmissionHeader_FROM_SQL,
+						Source:                   kvpb.AdmissionHeader_FROM_SQL,
 						NoMemoryReservedAtSource: true,
 					},
 				}
@@ -784,7 +785,7 @@ func (b *SSTBatcher) addSSTable(
 				}
 
 				if pErr == nil {
-					resp := br.Responses[0].GetInner().(*roachpb.AddSSTableResponse)
+					resp := br.Responses[0].GetInner().(*kvpb.AddSSTableResponse)
 					b.mu.Lock()
 					if b.writeAtBatchTS {
 						b.mu.maxWriteTS.Forward(br.Timestamp)
@@ -809,12 +810,12 @@ func (b *SSTBatcher) addSSTable(
 
 				err = pErr.GoError()
 				// Retry on AmbiguousResult.
-				if errors.HasType(err, (*roachpb.AmbiguousResultError)(nil)) {
+				if errors.HasType(err, (*kvpb.AmbiguousResultError)(nil)) {
 					log.Warningf(ctx, "addsstable [%s,%s) attempt %d failed: %+v", start, end, i, err)
 					continue
 				}
 				// This range has split -- we need to split the SST to try again.
-				if m := (*roachpb.RangeKeyMismatchError)(nil); errors.As(err, &m) {
+				if m := (*kvpb.RangeKeyMismatchError)(nil); errors.As(err, &m) {
 					// TODO(andrei): We just use the first of m.Ranges; presumably we
 					// should be using all of them to avoid further retries.
 					mr, err := m.MismatchedRange()

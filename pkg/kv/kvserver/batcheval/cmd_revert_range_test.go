@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -106,7 +107,7 @@ func TestCmdRevertRange(t *testing.T) {
 		StartKey: roachpb.RKey(startKey),
 		EndKey:   roachpb.RKey(endKey),
 	}
-	cArgs := batcheval.CommandArgs{Header: roachpb.Header{RangeID: desc.RangeID, Timestamp: tsReq, MaxSpanRequestKeys: 2}}
+	cArgs := batcheval.CommandArgs{Header: kvpb.Header{RangeID: desc.RangeID, Timestamp: tsReq, MaxSpanRequestKeys: 2}}
 	evalCtx := &batcheval.MockEvalCtx{Desc: &desc, Clock: hlc.NewClockForTesting(nil), Stats: stats}
 	cArgs.EvalCtx = evalCtx.EvalContext()
 	afterStats, err := storage.ComputeStats(eng, keys.LocalMax, keys.MaxKey, 0)
@@ -125,15 +126,15 @@ func TestCmdRevertRange(t *testing.T) {
 			batch := &wrappedBatch{Batch: eng.NewBatch()}
 			defer batch.Close()
 
-			req := roachpb.RevertRangeRequest{
-				RequestHeader: roachpb.RequestHeader{Key: startKey, EndKey: endKey},
+			req := kvpb.RevertRangeRequest{
+				RequestHeader: kvpb.RequestHeader{Key: startKey, EndKey: endKey},
 				TargetTime:    tc.ts,
 			}
 			cArgs.Stats = &enginepb.MVCCStats{}
 			cArgs.Args = &req
 			var resumes int
 			for {
-				var reply roachpb.RevertRangeResponse
+				var reply kvpb.RevertRangeResponse
 				result, err := batcheval.RevertRange(ctx, batch, cArgs, &reply)
 				if err != nil {
 					t.Fatal(err)
@@ -203,15 +204,15 @@ func TestCmdRevertRange(t *testing.T) {
 			batch := &wrappedBatch{Batch: eng.NewBatch()}
 			defer batch.Close()
 			cArgs.Stats = &enginepb.MVCCStats{}
-			req := roachpb.RevertRangeRequest{
-				RequestHeader: roachpb.RequestHeader{Key: startKey, EndKey: endKey},
+			req := kvpb.RevertRangeRequest{
+				RequestHeader: kvpb.RequestHeader{Key: startKey, EndKey: endKey},
 				TargetTime:    tc.ts,
 			}
 			cArgs.Args = &req
 			var resumes int
 			var err error
 			for {
-				var reply roachpb.RevertRangeResponse
+				var reply kvpb.RevertRangeResponse
 				var result result.Result
 				result, err = batcheval.RevertRange(ctx, batch, cArgs, &reply)
 				if err != nil || reply.ResumeSpan == nil {
@@ -286,17 +287,17 @@ func TestCmdRevertRangeMVCCRangeTombstones(t *testing.T) {
 				Clock: hlc.NewClockForTesting(nil),
 				Stats: ms,
 			}).EvalContext(),
-			Header: roachpb.Header{
+			Header: kvpb.Header{
 				RangeID:   desc.RangeID,
 				Timestamp: wallTS(10e9),
 			},
-			Args: &roachpb.RevertRangeRequest{
-				RequestHeader: roachpb.RequestHeader{Key: startKey, EndKey: endKey},
+			Args: &kvpb.RevertRangeRequest{
+				RequestHeader: kvpb.RequestHeader{Key: startKey, EndKey: endKey},
 				TargetTime:    wallTS(1e9),
 			},
 			Stats: &ms,
 		}
-		_, err := batcheval.RevertRange(ctx, batch, cArgs, &roachpb.RevertRangeResponse{})
+		_, err := batcheval.RevertRange(ctx, batch, cArgs, &kvpb.RevertRangeResponse{})
 		require.NoError(t, err)
 		require.NoError(t, batch.Commit(false))
 

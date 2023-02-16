@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -641,8 +642,8 @@ func TestNodeSendUnknownBatchRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ba := roachpb.BatchRequest{
-		Requests: make([]roachpb.RequestUnion, 1),
+	ba := kvpb.BatchRequest{
+		Requests: make([]kvpb.RequestUnion, 1),
 	}
 	n := &Node{}
 	br, err := n.batchInternal(context.Background(), roachpb.SystemTenantID, &ba)
@@ -652,7 +653,7 @@ func TestNodeSendUnknownBatchRequest(t *testing.T) {
 	if br.Error == nil {
 		t.Fatal("no batch error returned")
 	}
-	if _, ok := br.Error.GetDetail().(*roachpb.UnsupportedRequestError); !ok {
+	if _, ok := br.Error.GetDetail().(*kvpb.UnsupportedRequestError); !ok {
 		t.Fatalf("expected unsupported request, not %v", br.Error)
 	}
 }
@@ -667,15 +668,15 @@ func TestNodeBatchRequestMetricsInc(t *testing.T) {
 
 	n := ts.GetNode()
 	bCurr := n.metrics.BatchCount.Count()
-	getCurr := n.metrics.MethodCounts[roachpb.Get].Count()
-	putCurr := n.metrics.MethodCounts[roachpb.Put].Count()
+	getCurr := n.metrics.MethodCounts[kvpb.Get].Count()
+	putCurr := n.metrics.MethodCounts[kvpb.Put].Count()
 
-	var ba roachpb.BatchRequest
+	var ba kvpb.BatchRequest
 	ba.RangeID = 1
 	ba.Replica.StoreID = 1
 
-	gr := roachpb.NewGet(roachpb.Key("a"), false)
-	pr := roachpb.NewPut(gr.Header().Key, roachpb.Value{})
+	gr := kvpb.NewGet(roachpb.Key("a"), false)
+	pr := kvpb.NewPut(gr.Header().Key, roachpb.Value{})
 	ba.Add(gr, pr)
 
 	_, _ = n.Batch(context.Background(), &ba)
@@ -684,8 +685,8 @@ func TestNodeBatchRequestMetricsInc(t *testing.T) {
 	putCurr++
 
 	require.GreaterOrEqual(t, n.metrics.BatchCount.Count(), bCurr)
-	require.GreaterOrEqual(t, n.metrics.MethodCounts[roachpb.Get].Count(), getCurr)
-	require.GreaterOrEqual(t, n.metrics.MethodCounts[roachpb.Put].Count(), putCurr)
+	require.GreaterOrEqual(t, n.metrics.MethodCounts[kvpb.Get].Count(), getCurr)
+	require.GreaterOrEqual(t, n.metrics.MethodCounts[kvpb.Put].Count(), putCurr)
 }
 
 func TestGetTenantWeights(t *testing.T) {

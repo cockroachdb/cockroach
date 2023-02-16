@@ -13,24 +13,24 @@ package batcheval
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/errors"
 )
 
 func init() {
-	RegisterReadOnlyCommand(roachpb.IsSpanEmpty, DefaultDeclareKeys, IsSpanEmpty)
+	RegisterReadOnlyCommand(kvpb.IsSpanEmpty, DefaultDeclareKeys, IsSpanEmpty)
 }
 
 // IsSpanEmpty determines whether there are any keys in the key span requested
 // at any time. If there are any keys, the response header will have a NumKeys
 // value of 1.
 func IsSpanEmpty(
-	ctx context.Context, reader storage.Reader, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, reader storage.Reader, cArgs CommandArgs, resp kvpb.Response,
 ) (result.Result, error) {
-	args := cArgs.Args.(*roachpb.IsSpanEmptyRequest)
-	reply := resp.(*roachpb.IsSpanEmptyResponse)
+	args := cArgs.Args.(*kvpb.IsSpanEmptyRequest)
+	reply := resp.(*kvpb.IsSpanEmptyResponse)
 	isEmpty, err := storage.MVCCIsSpanEmpty(ctx, reader, storage.MVCCIsSpanEmptyOptions{
 		StartKey: args.Key,
 		EndKey:   args.EndKey,

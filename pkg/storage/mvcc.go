@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -924,10 +925,10 @@ type MVCCGetResult struct {
 	// consistent mode, an intent will generate a WriteIntentError with the
 	// intent embedded within and the intent parameter will be nil.
 	Intent *roachpb.Intent
-	// See the documentation for roachpb.ResponseHeader for information on
+	// See the documentation for kvpb.ResponseHeader for information on
 	// these parameters.
 	ResumeSpan      *roachpb.Span
-	ResumeReason    roachpb.ResumeReason
+	ResumeReason    kvpb.ResumeReason
 	ResumeNextBytes int64
 	NumKeys         int64
 	NumBytes        int64
@@ -1059,9 +1060,9 @@ func MVCCGetWithValueHeader(
 		// ResumeSpan for this GetRequest.
 		result.ResumeSpan = &roachpb.Span{Key: key}
 		if opts.MaxKeys < 0 {
-			result.ResumeReason = roachpb.RESUME_KEY_LIMIT
+			result.ResumeReason = kvpb.RESUME_KEY_LIMIT
 		} else if opts.TargetBytes < 0 {
-			result.ResumeReason = roachpb.RESUME_BYTE_LIMIT
+			result.ResumeReason = kvpb.RESUME_BYTE_LIMIT
 		}
 		return result, enginepb.MVCCValueHeader{}, nil
 	}
@@ -1080,7 +1081,7 @@ func MVCCGetWithValueHeader(
 		numBytes := int64(len(val.RawBytes))
 		if opts.TargetBytes > 0 && opts.AllowEmpty && numBytes > opts.TargetBytes {
 			result.ResumeSpan = &roachpb.Span{Key: key}
-			result.ResumeReason = roachpb.RESUME_BYTE_LIMIT
+			result.ResumeReason = kvpb.RESUME_BYTE_LIMIT
 			result.ResumeNextBytes = numBytes
 			return result, enginepb.MVCCValueHeader{}, nil
 		}
@@ -1159,7 +1160,7 @@ func mvccGetWithValueHeader(
 		return optionalValue{}, nil, enginepb.MVCCValueHeader{}, err
 	}
 	if opts.errOnIntents() && len(intents) > 0 {
-		return optionalValue{}, nil, enginepb.MVCCValueHeader{}, &roachpb.WriteIntentError{Intents: intents}
+		return optionalValue{}, nil, enginepb.MVCCValueHeader{}, &kvpb.WriteIntentError{Intents: intents}
 	}
 
 	if len(intents) > 1 {
@@ -1847,7 +1848,7 @@ func mvccPutInternal(
 			if txn == nil || meta.Txn.ID != txn.ID {
 				// The current Put operation does not come from the same
 				// transaction.
-				return false, &roachpb.WriteIntentError{Intents: []roachpb.Intent{
+				return false, &kvpb.WriteIntentError{Intents: []roachpb.Intent{
 					roachpb.MakeIntent(meta.Txn, key),
 				}}
 			} else if txn.Epoch < meta.Txn.Epoch {
@@ -2067,7 +2068,7 @@ func mvccPutInternal(
 			// instead of allowing their transactions to continue and be retried
 			// before committing.
 			writeTimestamp.Forward(metaTimestamp.Next())
-			maybeTooOldErr = roachpb.NewWriteTooOldError(readTimestamp, writeTimestamp, key)
+			maybeTooOldErr = kvpb.NewWriteTooOldError(readTimestamp, writeTimestamp, key)
 			// If we're in a transaction, always get the value at the orig
 			// timestamp. Outside of a transaction, the read timestamp advances
 			// to the the latest value's timestamp + 1 as well. The new
@@ -2257,7 +2258,7 @@ func MVCCIncrement(
 		if willOverflow(int64Val, inc) {
 			// Return the old value, since we've failed to modify it.
 			newInt64Val = int64Val
-			return roachpb.Value{}, &roachpb.IntegerOverflowError{
+			return roachpb.Value{}, &kvpb.IntegerOverflowError{
 				Key:            key,
 				CurrentValue:   int64Val,
 				IncrementValue: inc,
@@ -2367,12 +2368,12 @@ func mvccConditionalPutUsingIter(
 	valueFn := func(existVal optionalValue) (roachpb.Value, error) {
 		if expValPresent, existValPresent := len(expBytes) != 0, existVal.IsPresent(); expValPresent && existValPresent {
 			if !bytes.Equal(expBytes, existVal.TagAndDataBytes()) {
-				return roachpb.Value{}, &roachpb.ConditionFailedError{
+				return roachpb.Value{}, &kvpb.ConditionFailedError{
 					ActualValue: existVal.ToPointer(),
 				}
 			}
 		} else if expValPresent != existValPresent && (existValPresent || !bool(allowNoExisting)) {
-			return roachpb.Value{}, &roachpb.ConditionFailedError{
+			return roachpb.Value{}, &kvpb.ConditionFailedError{
 				ActualValue: existVal.ToPointer(),
 			}
 		}
@@ -2449,13 +2450,13 @@ func mvccInitPutUsingIter(
 	valueFn := func(existVal optionalValue) (roachpb.Value, error) {
 		if failOnTombstones && existVal.IsTombstone() {
 			// We found a tombstone and failOnTombstones is true: fail.
-			return roachpb.Value{}, &roachpb.ConditionFailedError{
+			return roachpb.Value{}, &kvpb.ConditionFailedError{
 				ActualValue: existVal.ToPointer(),
 			}
 		}
 		if existVal.IsPresent() && !existVal.EqualTagAndData(value) {
 			// The existing value does not match the supplied value.
-			return roachpb.Value{}, &roachpb.ConditionFailedError{
+			return roachpb.Value{}, &kvpb.ConditionFailedError{
 				ActualValue: existVal.ToPointer(),
 			}
 		}
@@ -3065,7 +3066,7 @@ func MVCCPredicateDeleteRange(
 	endTime hlc.Timestamp,
 	localTimestamp hlc.ClockTimestamp,
 	leftPeekBound, rightPeekBound roachpb.Key,
-	predicates roachpb.DeleteRangePredicates,
+	predicates kvpb.DeleteRangePredicates,
 	maxBatchSize, maxBatchByteSize int64,
 	rangeTombstoneThreshold int64,
 	maxIntents int64,
@@ -3101,7 +3102,7 @@ func MVCCPredicateDeleteRange(
 	if intents, err := ScanIntents(ctx, rw, startKey, endKey, maxIntents, 0); err != nil {
 		return nil, err
 	} else if len(intents) > 0 {
-		return nil, &roachpb.WriteIntentError{Intents: intents}
+		return nil, &kvpb.WriteIntentError{Intents: intents}
 	}
 
 	// continueRun returns three bools: the first is true if the current run
@@ -3126,7 +3127,7 @@ func MVCCPredicateDeleteRange(
 		if hasRangeKey {
 			newestRangeKey := rangeKeys.Newest()
 			if endTime.LessEq(rangeKeys.Newest()) {
-				return false, false, false, roachpb.NewWriteTooOldError(
+				return false, false, false, kvpb.NewWriteTooOldError(
 					endTime, newestRangeKey.Next(), k.Key.Clone())
 			}
 			if !hasPointKey {
@@ -3142,7 +3143,7 @@ func MVCCPredicateDeleteRange(
 		// At this point, there exists a point key that shadows all range keys,
 		// if they exist.
 		if endTime.LessEq(k.Timestamp) {
-			return false, false, false, roachpb.NewWriteTooOldError(endTime, k.Timestamp.Next(),
+			return false, false, false, kvpb.NewWriteTooOldError(endTime, k.Timestamp.Next(),
 				k.Key.Clone())
 		}
 		_, isTombstone, err := iter.MVCCValueLenAndIsTombstone()
@@ -3390,7 +3391,7 @@ func MVCCDeleteRangeUsingTombstone(
 	if intents, err := ScanIntents(ctx, rw, startKey, endKey, maxIntents, 0); err != nil {
 		return err
 	} else if len(intents) > 0 {
-		return &roachpb.WriteIntentError{Intents: intents}
+		return &kvpb.WriteIntentError{Intents: intents}
 	}
 
 	// If requested, check if there are any point keys/tombstones in the span that
@@ -3414,7 +3415,7 @@ func MVCCDeleteRangeUsingTombstone(
 				if hasPoint, _ := iter.HasPointAndRange(); hasPoint {
 					return false, nil
 				} else if newest := iter.RangeKeys().Newest(); timestamp.LessEq(newest) {
-					return false, roachpb.NewWriteTooOldError(timestamp, newest.Next(), iter.RangeBounds().Key)
+					return false, kvpb.NewWriteTooOldError(timestamp, newest.Next(), iter.RangeBounds().Key)
 				}
 			}
 			return true, nil
@@ -3439,7 +3440,7 @@ func MVCCDeleteRangeUsingTombstone(
 				return err
 			} else if ok {
 				key := iter.UnsafeKey()
-				return roachpb.NewWriteTooOldError(timestamp, key.Timestamp.Next(), key.Key)
+				return kvpb.NewWriteTooOldError(timestamp, key.Timestamp.Next(), key.Key)
 			}
 			return nil
 		}(); err != nil {
@@ -3477,7 +3478,7 @@ func MVCCDeleteRangeUsingTombstone(
 			if hasRange {
 				rangeKeys := iter.RangeKeys()
 				if timestamp.LessEq(rangeKeys.Newest()) {
-					return roachpb.NewWriteTooOldError(timestamp, rangeKeys.Newest().Next(),
+					return kvpb.NewWriteTooOldError(timestamp, rangeKeys.Newest().Next(),
 						rangeKeys.Bounds.Key)
 				}
 
@@ -3508,7 +3509,7 @@ func MVCCDeleteRangeUsingTombstone(
 		// Process point key.
 		key := iter.UnsafeKey()
 		if timestamp.LessEq(key.Timestamp) {
-			return roachpb.NewWriteTooOldError(timestamp, key.Timestamp.Next(), key.Key)
+			return kvpb.NewWriteTooOldError(timestamp, key.Timestamp.Next(), key.Key)
 		}
 		if key.Timestamp.IsEmpty() {
 			return errors.Errorf("can't write range tombstone across inline key %s", key)
@@ -3626,7 +3627,7 @@ func recordIteratorStats(ctx context.Context, iter MVCCIterator) {
 	seeks := stats.ReverseSeekCount[pebble.InterfaceCall] + stats.ForwardSeekCount[pebble.InterfaceCall]
 	internalSteps := stats.ReverseStepCount[pebble.InternalIterCall] + stats.ForwardStepCount[pebble.InternalIterCall]
 	internalSeeks := stats.ReverseSeekCount[pebble.InternalIterCall] + stats.ForwardSeekCount[pebble.InternalIterCall]
-	sp.RecordStructured(&roachpb.ScanStats{
+	sp.RecordStructured(&kvpb.ScanStats{
 		NumInterfaceSeeks:               uint64(seeks),
 		NumInternalSeeks:                uint64(internalSeeks),
 		NumInterfaceSteps:               uint64(steps),
@@ -3670,13 +3671,13 @@ func mvccScanInit(
 	if opts.MaxKeys < 0 {
 		return false, nil, MVCCScanResult{
 			ResumeSpan:   &roachpb.Span{Key: key, EndKey: endKey},
-			ResumeReason: roachpb.RESUME_KEY_LIMIT,
+			ResumeReason: kvpb.RESUME_KEY_LIMIT,
 		}, nil
 	}
 	if opts.TargetBytes < 0 {
 		return false, nil, MVCCScanResult{
 			ResumeSpan:   &roachpb.Span{Key: key, EndKey: endKey},
-			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
+			ResumeReason: kvpb.RESUME_BYTE_LIMIT,
 		}, nil
 	}
 
@@ -3755,7 +3756,7 @@ func finalizeScanResult(
 	}
 
 	if errOnIntents && len(res.Intents) > 0 {
-		return &roachpb.WriteIntentError{Intents: res.Intents}
+		return &kvpb.WriteIntentError{Intents: res.Intents}
 	}
 	return nil
 }
@@ -3913,7 +3914,7 @@ type MVCCScanResult struct {
 	NumBytes int64
 
 	ResumeSpan      *roachpb.Span
-	ResumeReason    roachpb.ResumeReason
+	ResumeReason    kvpb.ResumeReason
 	ResumeNextBytes int64 // populated if TargetBytes != 0, size of next resume kv
 	Intents         []roachpb.Intent
 }
@@ -4924,20 +4925,15 @@ func MVCCResolveWriteIntentRange(
 	ms *enginepb.MVCCStats,
 	intent roachpb.LockUpdate,
 	opts MVCCResolveWriteIntentRangeOptions,
-) (
-	numKeys, numBytes int64,
-	resumeSpan *roachpb.Span,
-	resumeReason roachpb.ResumeReason,
-	err error,
-) {
+) (numKeys, numBytes int64, resumeSpan *roachpb.Span, resumeReason kvpb.ResumeReason, err error) {
 	keysExceeded := opts.MaxKeys < 0
 	bytesExceeded := opts.TargetBytes < 0
 	if keysExceeded || bytesExceeded {
 		resumeSpan := intent.Span // don't inline or `intent` would escape to heap
 		if keysExceeded {
-			resumeReason = roachpb.RESUME_KEY_LIMIT
+			resumeReason = kvpb.RESUME_KEY_LIMIT
 		} else if bytesExceeded {
-			resumeReason = roachpb.RESUME_BYTE_LIMIT
+			resumeReason = kvpb.RESUME_BYTE_LIMIT
 		}
 		return 0, 0, &resumeSpan, resumeReason, nil
 	}
@@ -4986,9 +4982,9 @@ func MVCCResolveWriteIntentRange(
 		bytesExceeded = opts.TargetBytes > 0 && numBytes >= opts.TargetBytes
 		if keysExceeded || bytesExceeded {
 			if keysExceeded {
-				resumeReason = roachpb.RESUME_KEY_LIMIT
+				resumeReason = kvpb.RESUME_KEY_LIMIT
 			} else if bytesExceeded {
-				resumeReason = roachpb.RESUME_BYTE_LIMIT
+				resumeReason = kvpb.RESUME_BYTE_LIMIT
 			}
 			// We could also compute a tighter nextKey here if we wanted to.
 			return numKeys, numBytes, &roachpb.Span{Key: lastResolvedKey.Next(), EndKey: intentEndKey}, resumeReason, nil
@@ -5044,7 +5040,7 @@ func MVCCGarbageCollect(
 	ctx context.Context,
 	rw ReadWriter,
 	ms *enginepb.MVCCStats,
-	keys []roachpb.GCRequest_GCKey,
+	keys []kvpb.GCRequest_GCKey,
 	timestamp hlc.Timestamp,
 ) error {
 
@@ -6190,7 +6186,7 @@ func MVCCIsSpanEmpty(
 // allocations.
 func MVCCExportFingerprint(
 	ctx context.Context, cs *cluster.Settings, reader Reader, opts MVCCExportOptions, dest io.Writer,
-) (roachpb.BulkOpSummary, MVCCKey, uint64, bool, error) {
+) (kvpb.BulkOpSummary, MVCCKey, uint64, bool, error) {
 	ctx, span := tracing.ChildSpan(ctx, "storage.MVCCExportFingerprint")
 	defer span.Finish()
 
@@ -6200,12 +6196,12 @@ func MVCCExportFingerprint(
 
 	summary, resumeKey, err := mvccExportToWriter(ctx, reader, opts, &fingerprintWriter)
 	if err != nil {
-		return roachpb.BulkOpSummary{}, MVCCKey{}, 0, false, err
+		return kvpb.BulkOpSummary{}, MVCCKey{}, 0, false, err
 	}
 
 	fingerprint, err := fingerprintWriter.Finish()
 	if err != nil {
-		return roachpb.BulkOpSummary{}, MVCCKey{}, 0, false, err
+		return kvpb.BulkOpSummary{}, MVCCKey{}, 0, false, err
 	}
 
 	hasRangeKeys := fingerprintWriter.sstWriter.DataSize != 0
@@ -6217,7 +6213,7 @@ func MVCCExportFingerprint(
 // details.
 func MVCCExportToSST(
 	ctx context.Context, cs *cluster.Settings, reader Reader, opts MVCCExportOptions, dest io.Writer,
-) (roachpb.BulkOpSummary, MVCCKey, error) {
+) (kvpb.BulkOpSummary, MVCCKey, error) {
 	ctx, span := tracing.ChildSpan(ctx, "storage.MVCCExportToSST")
 	defer span.Finish()
 	sstWriter := MakeBackupSSTWriter(ctx, cs, dest)
@@ -6225,7 +6221,7 @@ func MVCCExportToSST(
 
 	summary, resumeKey, err := mvccExportToWriter(ctx, reader, opts, &sstWriter)
 	if err != nil {
-		return roachpb.BulkOpSummary{}, MVCCKey{}, err
+		return kvpb.BulkOpSummary{}, MVCCKey{}, err
 	}
 
 	if summary.DataSize == 0 {
@@ -6236,7 +6232,7 @@ func MVCCExportToSST(
 		// iteration may have been halted because of resource
 		// limitations before any keys were added to the
 		// returned SST.
-		return roachpb.BulkOpSummary{}, resumeKey, nil
+		return kvpb.BulkOpSummary{}, resumeKey, nil
 	}
 
 	return summary, resumeKey, sstWriter.Finish()
@@ -6299,7 +6295,7 @@ type ExportWriter interface {
 // responsibility of the caller to Finish() / Close() the passed in writer.
 func mvccExportToWriter(
 	ctx context.Context, reader Reader, opts MVCCExportOptions, writer ExportWriter,
-) (roachpb.BulkOpSummary, MVCCKey, error) {
+) (kvpb.BulkOpSummary, MVCCKey, error) {
 	// If we're not exporting all revisions then we can mask point keys below any
 	// MVCC range tombstones, since we don't care about them.
 	var rangeKeyMasking hlc.Timestamp
@@ -6383,7 +6379,7 @@ func mvccExportToWriter(
 	iter.SeekGE(opts.StartKey)
 	for {
 		if ok, err := iter.Valid(); err != nil {
-			return roachpb.BulkOpSummary{}, MVCCKey{}, err
+			return kvpb.BulkOpSummary{}, MVCCKey{}, err
 		} else if !ok {
 			break
 		} else if iter.NumCollectedIntents() > 0 {
@@ -6434,13 +6430,13 @@ func mvccExportToWriter(
 					mvccValue, err = decodeExtendedMVCCValue(v.Value)
 				}
 				if err != nil {
-					return roachpb.BulkOpSummary{}, MVCCKey{}, errors.Wrapf(err,
+					return kvpb.BulkOpSummary{}, MVCCKey{}, errors.Wrapf(err,
 						"decoding mvcc value %s", v.Value)
 				}
 				// Export only the inner roachpb.Value, not the MVCCValue header.
 				rawValue := mvccValue.Value.RawBytes
 				if err := writer.PutRawMVCCRangeKey(rangeKeys.AsRangeKey(v), rawValue); err != nil {
-					return roachpb.BulkOpSummary{}, MVCCKey{}, err
+					return kvpb.BulkOpSummary{}, MVCCKey{}, err
 				}
 			}
 			rows.BulkOpSummary.DataSize += rangeKeysSize
@@ -6485,7 +6481,7 @@ func mvccExportToWriter(
 					break
 				}
 				if reachedMaxSize {
-					return roachpb.BulkOpSummary{}, MVCCKey{}, &ExceedMaxSizeError{
+					return kvpb.BulkOpSummary{}, MVCCKey{}, &ExceedMaxSizeError{
 						reached: newSize, maxSize: opts.MaxSize}
 				}
 			}
@@ -6501,7 +6497,7 @@ func mvccExportToWriter(
 		// Process point keys.
 		unsafeValue, err := iter.UnsafeValue()
 		if err != nil {
-			return roachpb.BulkOpSummary{}, MVCCKey{}, err
+			return kvpb.BulkOpSummary{}, MVCCKey{}, err
 		}
 		skip := false
 		if unsafeKey.IsValue() {
@@ -6510,7 +6506,7 @@ func mvccExportToWriter(
 				mvccValue, err = decodeExtendedMVCCValue(unsafeValue)
 			}
 			if err != nil {
-				return roachpb.BulkOpSummary{}, MVCCKey{}, errors.Wrapf(err, "decoding mvcc value %s", unsafeKey)
+				return kvpb.BulkOpSummary{}, MVCCKey{}, errors.Wrapf(err, "decoding mvcc value %s", unsafeKey)
 			}
 
 			// Export only the inner roachpb.Value, not the MVCCValue header.
@@ -6523,7 +6519,7 @@ func mvccExportToWriter(
 
 		if !skip {
 			if err := rows.Count(unsafeKey.Key); err != nil {
-				return roachpb.BulkOpSummary{}, MVCCKey{}, errors.Wrapf(err, "decoding %s", unsafeKey)
+				return kvpb.BulkOpSummary{}, MVCCKey{}, errors.Wrapf(err, "decoding %s", unsafeKey)
 			}
 			curSize := rows.BulkOpSummary.DataSize
 			curSizeWithRangeKeys := curSize + maxRangeKeysSizeIfTruncated(unsafeKey.Key)
@@ -6532,7 +6528,7 @@ func mvccExportToWriter(
 			kvSize := int64(len(unsafeKey.Key) + len(unsafeValue))
 			if curSize == 0 && opts.MaxSize > 0 && kvSize > int64(opts.MaxSize) {
 				// This single key exceeds the MaxSize. Even if we paginate below, this will still fail.
-				return roachpb.BulkOpSummary{}, MVCCKey{}, &ExceedMaxSizeError{reached: kvSize, maxSize: opts.MaxSize}
+				return kvpb.BulkOpSummary{}, MVCCKey{}, &ExceedMaxSizeError{reached: kvSize, maxSize: opts.MaxSize}
 			}
 			newSize := curSize + kvSize
 			newSizeWithRangeKeys := curSizeWithRangeKeys + kvSize
@@ -6551,18 +6547,18 @@ func mvccExportToWriter(
 				break
 			}
 			if reachedMaxSize {
-				return roachpb.BulkOpSummary{}, MVCCKey{}, &ExceedMaxSizeError{
+				return kvpb.BulkOpSummary{}, MVCCKey{}, &ExceedMaxSizeError{
 					reached: newSizeWithRangeKeys, maxSize: opts.MaxSize}
 			}
 			if unsafeKey.Timestamp.IsEmpty() {
 				// This should never be an intent since the incremental iterator returns
 				// an error when encountering intents.
 				if err := writer.PutUnversioned(unsafeKey.Key, unsafeValue); err != nil {
-					return roachpb.BulkOpSummary{}, MVCCKey{}, errors.Wrapf(err, "adding key %s", unsafeKey)
+					return kvpb.BulkOpSummary{}, MVCCKey{}, errors.Wrapf(err, "adding key %s", unsafeKey)
 				}
 			} else {
 				if err := writer.PutRawMVCC(unsafeKey, unsafeValue); err != nil {
-					return roachpb.BulkOpSummary{}, MVCCKey{}, errors.Wrapf(err, "adding key %s", unsafeKey)
+					return kvpb.BulkOpSummary{}, MVCCKey{}, errors.Wrapf(err, "adding key %s", unsafeKey)
 				}
 			}
 			rows.BulkOpSummary.DataSize = newSize
@@ -6589,7 +6585,7 @@ func mvccExportToWriter(
 			}
 		}
 		err := iter.TryGetIntentError()
-		return roachpb.BulkOpSummary{}, MVCCKey{}, err
+		return kvpb.BulkOpSummary{}, MVCCKey{}, err
 	}
 
 	// Flush any pending buffered range keys, truncated to the resume key (if
@@ -6614,13 +6610,13 @@ func mvccExportToWriter(
 				mvccValue, err = decodeExtendedMVCCValue(v.Value)
 			}
 			if err != nil {
-				return roachpb.BulkOpSummary{}, MVCCKey{}, errors.Wrapf(err,
+				return kvpb.BulkOpSummary{}, MVCCKey{}, errors.Wrapf(err,
 					"decoding mvcc value %s", v.Value)
 			}
 			// Export only the inner roachpb.Value, not the MVCCValue header.
 			rawValue := mvccValue.Value.RawBytes
 			if err := writer.PutRawMVCCRangeKey(rangeKeys.AsRangeKey(v), rawValue); err != nil {
-				return roachpb.BulkOpSummary{}, MVCCKey{}, err
+				return kvpb.BulkOpSummary{}, MVCCKey{}, err
 			}
 		}
 		rows.BulkOpSummary.DataSize += rangeKeysSize

@@ -13,6 +13,7 @@ package storage
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -434,7 +435,7 @@ func (i *MVCCIncrementalIterator) updateMeta() error {
 	if i.startTime.Less(metaTimestamp) && metaTimestamp.LessEq(i.endTime) {
 		switch i.intentPolicy {
 		case MVCCIncrementalIterIntentPolicyError:
-			i.err = &roachpb.WriteIntentError{
+			i.err = &kvpb.WriteIntentError{
 				Intents: []roachpb.Intent{
 					roachpb.MakeIntent(i.meta.Txn, i.iter.Key().Key),
 				},
@@ -760,14 +761,14 @@ func (i *MVCCIncrementalIterator) NumCollectedIntents() int {
 	return len(i.intents)
 }
 
-// TryGetIntentError returns roachpb.WriteIntentError if intents were encountered
+// TryGetIntentError returns kvpb.WriteIntentError if intents were encountered
 // during iteration and intent aggregation is enabled. Otherwise function
-// returns nil. roachpb.WriteIntentError will contain all encountered intents.
+// returns nil. kvpb.WriteIntentError will contain all encountered intents.
 func (i *MVCCIncrementalIterator) TryGetIntentError() error {
 	if len(i.intents) == 0 {
 		return nil
 	}
-	return &roachpb.WriteIntentError{
+	return &kvpb.WriteIntentError{
 		Intents: i.intents,
 	}
 }

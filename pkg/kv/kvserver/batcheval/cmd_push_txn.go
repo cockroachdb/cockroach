@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
@@ -29,17 +30,17 @@ import (
 )
 
 func init() {
-	RegisterReadWriteCommand(roachpb.PushTxn, declareKeysPushTransaction, PushTxn)
+	RegisterReadWriteCommand(kvpb.PushTxn, declareKeysPushTransaction, PushTxn)
 }
 
 func declareKeysPushTransaction(
 	rs ImmutableRangeState,
-	_ *roachpb.Header,
-	req roachpb.Request,
+	_ *kvpb.Header,
+	req kvpb.Request,
 	latchSpans, _ *spanset.SpanSet,
 	_ time.Duration,
 ) {
-	pr := req.(*roachpb.PushTxnRequest)
+	pr := req.(*kvpb.PushTxnRequest)
 	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.TransactionKey(pr.PusheeTxn.Key, pr.PusheeTxn.ID)})
 	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.AbortSpanKey(rs.GetRangeID(), pr.PusheeTxn.ID)})
 }
@@ -109,11 +110,11 @@ func declareKeysPushTransaction(
 // purge records for which the transaction coordinator must have found out
 // via its heartbeats that the transaction has failed.
 func PushTxn(
-	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp kvpb.Response,
 ) (result.Result, error) {
-	args := cArgs.Args.(*roachpb.PushTxnRequest)
+	args := cArgs.Args.(*kvpb.PushTxnRequest)
 	h := cArgs.Header
-	reply := resp.(*roachpb.PushTxnResponse)
+	reply := resp.(*kvpb.PushTxnResponse)
 
 	if h.Txn != nil {
 		return result.Result{}, ErrTransactionUnsupported
@@ -193,7 +194,7 @@ func PushTxn(
 	// If we're trying to move the timestamp forward, and it's already
 	// far enough forward, return success.
 	pushType := args.PushType
-	if pushType == roachpb.PUSH_TIMESTAMP && args.PushTo.LessEq(reply.PusheeTxn.WriteTimestamp) {
+	if pushType == kvpb.PUSH_TIMESTAMP && args.PushTo.LessEq(reply.PusheeTxn.WriteTimestamp) {
 		// Trivial noop.
 		return result.Result{}, nil
 	}
@@ -235,8 +236,8 @@ func PushTxn(
 		// cases, the push acts the same as a short-circuited transaction
 		// recovery process, because the transaction recovery procedure always
 		// finalizes target transactions, even if initiated by a PUSH_TIMESTAMP.
-		if pushType == roachpb.PUSH_TIMESTAMP {
-			pushType = roachpb.PUSH_ABORT
+		if pushType == kvpb.PUSH_TIMESTAMP {
+			pushType = kvpb.PUSH_ABORT
 		}
 	}
 
@@ -248,9 +249,9 @@ func PushTxn(
 		reason = "pushee is expired"
 		// When cleaning up, actually clean up (as opposed to simply pushing
 		// the garbage in the path of future writers).
-		pushType = roachpb.PUSH_ABORT
+		pushType = kvpb.PUSH_ABORT
 		pusherWins = true
-	case pushType == roachpb.PUSH_TOUCH:
+	case pushType == kvpb.PUSH_TOUCH:
 		// If just attempting to cleanup old or already-committed txns,
 		// pusher always fails.
 		pusherWins = false
@@ -280,13 +281,13 @@ func PushTxn(
 	// attempting to finalize it.
 	recoverOnFailedPush := cArgs.EvalCtx.EvalKnobs().RecoverIndeterminateCommitsOnFailedPushes
 	if reply.PusheeTxn.Status == roachpb.STAGING && (pusherWins || recoverOnFailedPush) {
-		err := roachpb.NewIndeterminateCommitError(reply.PusheeTxn)
+		err := kvpb.NewIndeterminateCommitError(reply.PusheeTxn)
 		log.VEventf(ctx, 1, "%v", err)
 		return result.Result{}, err
 	}
 
 	if !pusherWins {
-		err := roachpb.NewTransactionPushError(reply.PusheeTxn)
+		err := kvpb.NewTransactionPushError(reply.PusheeTxn)
 		log.VEventf(ctx, 1, "%v", err)
 		return result.Result{}, err
 	}
@@ -296,7 +297,7 @@ func PushTxn(
 
 	// Determine what to do with the pushee, based on the push type.
 	switch pushType {
-	case roachpb.PUSH_ABORT:
+	case kvpb.PUSH_ABORT:
 		// If aborting the transaction, set the new status.
 		reply.PusheeTxn.Status = roachpb.ABORTED
 		// Forward the timestamp to accommodate AbortSpan GC. See method comment for
@@ -315,7 +316,7 @@ func PushTxn(
 				return result.Result{}, err
 			}
 		}
-	case roachpb.PUSH_TIMESTAMP:
+	case kvpb.PUSH_TIMESTAMP:
 		if existTxn.Status != roachpb.PENDING {
 			return result.Result{}, errors.AssertionFailedf(
 				"PUSH_TIMESTAMP succeeded against non-PENDING txn: %v", existTxn)

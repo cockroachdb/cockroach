@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
@@ -98,7 +98,7 @@ func TestTableRollback(t *testing.T) {
 		// Delete all keys with values after the targetTime
 		desc := desctestutils.TestingGetPublicTableDescriptor(kv, keys.SystemSQLCodec, "test", "test")
 
-		predicates := roachpb.DeleteRangePredicates{StartTime: targetTime}
+		predicates := kvpb.DeleteRangePredicates{StartTime: targetTime}
 		require.NoError(t, sql.DeleteTableWithPredicate(context.Background(), kv, execCfg.Codec,
 			&s.ClusterSettings().SV, execCfg.DistSender, desc, predicates, 10))
 
@@ -115,8 +115,8 @@ func TestRevertGCThreshold(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	kvDB := tc.Server(0).DB()
 
-	req := &roachpb.RevertRangeRequest{
-		RequestHeader: roachpb.RequestHeader{Key: bootstrap.TestingUserTableDataMin(), EndKey: keys.MaxKey},
+	req := &kvpb.RevertRangeRequest{
+		RequestHeader: kvpb.RequestHeader{Key: bootstrap.TestingUserTableDataMin(), EndKey: keys.MaxKey},
 		TargetTime:    hlc.Timestamp{WallTime: -1},
 	}
 	_, pErr := kv.SendWrapped(ctx, kvDB.NonTransactionalSender(), req)
