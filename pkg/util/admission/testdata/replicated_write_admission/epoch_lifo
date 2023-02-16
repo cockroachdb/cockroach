@@ -1,0 +1,10 @@
+# XXX: Fill this out or delete entirely after discussing I12 from
+# kvflowcontrol/doc.go. Consider disabling epoch-LIFO completely, or just for
+# IO work queues.
+
+init
+----
+[regular] 0B tokens available
+[elastic] 0B tokens available
+
+# vim:ft=sh
