@@ -10,7 +10,7 @@
 
 syntax = "proto3";
 package cockroach.kv.kvserver.ctupdate;
-option go_package = "ctpb";
+option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb";
 
 import "roachpb/data.proto";
 import "util/hlc/timestamp.proto";

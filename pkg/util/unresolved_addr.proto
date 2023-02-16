@@ -10,7 +10,7 @@
 
 syntax = "proto2";
 package cockroach.util;
-option go_package = "util";
+option go_package = "github.com/cockroachdb/cockroach/pkg/util";
 
 import "gogoproto/gogo.proto";
 

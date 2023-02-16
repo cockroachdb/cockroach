@@ -15,7 +15,7 @@
 // when needed.
 syntax = "proto3";
 package cockroach.sql.sem.semenumpb;
-option go_package = "semenumpb";
+option go_package = "github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb";
 
 import "gogoproto/gogo.proto";
 

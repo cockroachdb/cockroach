@@ -47,7 +47,7 @@ load(":bnf.bzl", "BNF_SRCS")
 _GeneratedFileInfo = provider(
     "Info needed to hoist generated files",
     fields = {
-        "generated_files": "dictionary from prefix to list of files",
+        "generated_files": "dictionary from prefix (destination directory) to list of files",
         "cleanup_tasks": "list of bash commands to run",
     },
 )
@@ -74,12 +74,7 @@ def _go_proto_srcs_impl(ctx):
     generated_files = {}
     for s in ctx.attr._srcs:
         srcs = s[GoSource]
-        lbl = srcs.library.label
-        imp = srcs.library.importpath
-        imp = imp[:imp.find(lbl.package)]
-        prefix = "{}/{}_/{}".format(lbl.package, lbl.name, imp)
-        generated_files[prefix] = [f for f in srcs.srcs]
-
+        generated_files[srcs.library.label.package] = [f for f in srcs.srcs]
     return [
         _GeneratedFileInfo(
             generated_files = generated_files,
@@ -146,8 +141,9 @@ def _hoist_files_impl(ctx):
             if prefix not in generated_files:
                 generated_files[prefix] = []
             for file in files:
-                dst = '"${{BUILD_WORKSPACE_DIRECTORY}}/{}"'.format(
-                    file.short_path[len(prefix):],
+                dst = '"${{BUILD_WORKSPACE_DIRECTORY}}/{}/{}"'.format(
+                    prefix,
+                    file.basename,
                 )
                 src_dst_pairs.append((file.short_path, dst))
                 generated_files[prefix].append(file)

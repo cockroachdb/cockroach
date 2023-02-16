@@ -10,7 +10,7 @@
 
 syntax = "proto2";
 package cockroach.sql.distsqlrun;
-option go_package = "execinfrapb";
+option go_package = "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb";
 
 import "gogoproto/gogo.proto";
 
