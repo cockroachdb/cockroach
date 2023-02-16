@@ -335,6 +335,10 @@ message LocalOnlySessionData {
   // inner, semi, and anti joins will be split. If false, only disjunctions
   // potentially containing an equijoin condition will be split.
   bool optimizer_use_improved_split_disjunction_for_joins = 91;
+  // InjectRetryErrorsOnCommitEnabled causes statements inside an explicit
+  // transaction to return a transaction retry error just before transcation commit.
+  // It is intended for developers to test their app's retry logic.
+  bool inject_retry_errors_on_commit_enabled = 92;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

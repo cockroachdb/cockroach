@@ -3416,6 +3416,10 @@ func (m *sessionDataMutator) SetOptimizerUseImprovedSplitDisjunctionForJoins(val
 	m.data.OptimizerUseImprovedSplitDisjunctionForJoins = val
 }
 
+func (m *sessionDataMutator) SetInjectRetryErrorsOnCommitEnabled(val bool) {
+	m.data.InjectRetryErrorsOnCommitEnabled = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
