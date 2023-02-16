@@ -127,7 +127,7 @@ func checkCanInitializeEngine(ctx context.Context, eng storage.Engine) error {
 	if k, err = getMVCCKey(); err != nil {
 		return err
 	}
-	if !k.Key.Equal(keys.StoreClusterVersionKey()) {
+	if !k.Key.Equal(keys.DeprecatedStoreClusterVersionKey()) {
 		return errors.New("no cluster version found on uninitialized engine")
 	}
 	valid, err = iter.NextEngineKey()
