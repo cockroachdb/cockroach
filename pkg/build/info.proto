@@ -18,7 +18,9 @@ import "gogoproto/gogo.proto";
 message Info {
   // go_version is the version of the Go toolchain used to compile this executable.
   optional string go_version = 1 [(gogoproto.nullable) = false];
-  // tag is the git tag for the revision of the source code for this executable.
+  // tag is the binary version for the revision of the source code for
+  // this executable.  This used to be the git tag for the build, but
+  // has since moved to the contents of the `version.txt` file.
   optional string tag = 2 [(gogoproto.nullable) = false];
   // time is the time at which the build started.
   optional string time = 3 [(gogoproto.nullable) = false];

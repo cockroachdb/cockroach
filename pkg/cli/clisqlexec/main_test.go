@@ -22,7 +22,7 @@ import (
 func TestMain(m *testing.M) {
 	// CLI tests are sensitive to the server version, but test binaries don't have
 	// a version injected. Pretend to be a very up-to-date version.
-	defer build.TestingOverrideTag("v999.0.0")()
+	defer build.TestingOverrideVersion("v999.0.0")()
 
 	serverutils.InitTestServerFactory(server.TestServerFactory)
 	os.Exit(m.Run())

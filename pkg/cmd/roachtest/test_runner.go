@@ -29,6 +29,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
@@ -67,8 +68,6 @@ var (
 // testRunner runs tests.
 type testRunner struct {
 	stopper *stop.Stopper
-	// buildVersion is the version of the Cockroach binary that tests will run against.
-	buildVersion version.Version
 
 	config struct {
 		// skipClusterValidationOnAttach skips validation on existing clusters that
@@ -122,15 +121,10 @@ type testRunner struct {
 //
 //	caller provides this as the caller needs to be able to shut clusters down
 //	on Ctrl+C.
-//
-// buildVersion: The version of the Cockroach binary against which tests will run.
-func newTestRunner(
-	cr *clusterRegistry, stopper *stop.Stopper, buildVersion version.Version,
-) *testRunner {
+func newTestRunner(cr *clusterRegistry, stopper *stop.Stopper) *testRunner {
 	r := &testRunner{
-		stopper:      stopper,
-		cr:           cr,
-		buildVersion: buildVersion,
+		stopper: stopper,
+		cr:      cr,
 	}
 	r.config.skipClusterWipeOnAttach = !clusterWipe
 	r.config.disableIssue = disableIssue
@@ -138,10 +132,8 @@ func newTestRunner(
 	return r
 }
 
-func newUnitTestRunner(
-	cr *clusterRegistry, stopper *stop.Stopper, buildVersion version.Version,
-) *testRunner {
-	r := newTestRunner(cr, stopper, buildVersion)
+func newUnitTestRunner(cr *clusterRegistry, stopper *stop.Stopper) *testRunner {
+	r := newTestRunner(cr, stopper)
 	// To speed up unit tests, reduce test runner shutdown time.
 	r.config.overrideShutdownPromScrapeInterval = time.Millisecond
 	return r
@@ -653,12 +645,16 @@ func (r *testRunner) runWorker(
 		if err != nil {
 			return err
 		}
+		binaryVersion, err := version.Parse(build.BinaryVersion())
+		if err != nil {
+			return err
+		}
 		t := &testImpl{
 			spec:                   &testToRun.spec,
 			cockroach:              cockroach,
 			cockroachShort:         cockroachShort,
 			deprecatedWorkload:     workload,
-			buildVersion:           r.buildVersion,
+			buildVersion:           binaryVersion,
 			artifactsDir:           artifactsDir,
 			artifactsSpec:          artifactsSpec,
 			l:                      testL,

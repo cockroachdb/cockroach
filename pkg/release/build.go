@@ -152,7 +152,7 @@ func MakeRelease(platform Platform, opts BuildOptions, pkgDir string) error {
 		if opts.BuildTag == "" {
 			return errors.Newf("must set BuildTag if Release is set")
 		}
-		buildArgs = append(buildArgs, fmt.Sprintf("--workspace_status_command=./build/bazelutil/stamp.sh %s official-binary %s release", targetTriple, opts.BuildTag))
+		buildArgs = append(buildArgs, fmt.Sprintf("--workspace_status_command=./build/bazelutil/stamp.sh %s official-binary release", targetTriple))
 	} else {
 		if opts.BuildTag != "" {
 			return errors.Newf("cannot set BuildTag if Release is not set")

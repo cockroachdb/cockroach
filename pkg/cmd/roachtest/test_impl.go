@@ -60,7 +60,7 @@ type testImpl struct {
 	debug              bool   // whether the test is in debug mode.
 	// buildVersion is the version of the Cockroach binary that the test will run
 	// against.
-	buildVersion version.Version
+	buildVersion *version.Version
 
 	// l is the logger that the test will use for its output.
 	l *logger.Logger
@@ -120,7 +120,7 @@ func newFailure(squashedErr error, errs []error) failure {
 // BuildVersion exposes the build version of the cluster
 // in this test.
 func (t *testImpl) BuildVersion() *version.Version {
-	return &t.buildVersion
+	return t.buildVersion
 }
 
 func (t *testImpl) Cockroach() string {

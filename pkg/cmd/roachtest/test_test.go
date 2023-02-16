@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
@@ -45,9 +44,7 @@ const defaultParallelism = 10
 
 func mkReg(t *testing.T) testRegistryImpl {
 	t.Helper()
-	r, err := makeTestRegistry(spec.GCE, "", "", false /* preferSSD */)
-	require.NoError(t, err)
-	return r
+	return makeTestRegistry(spec.GCE, "", "", false /* preferSSD */)
 }
 
 func TestMatchOrSkip(t *testing.T) {
@@ -247,7 +244,7 @@ func setupRunnerTest(t *testing.T, r testRegistryImpl, testFilters []string) *ru
 
 	stopper := stop.NewStopper()
 	t.Cleanup(func() { stopper.Stop(ctx) })
-	runner := newUnitTestRunner(cr, stopper, r.buildVersion)
+	runner := newUnitTestRunner(cr, stopper)
 
 	var stdout syncedBuffer
 	var stderr syncedBuffer
@@ -326,7 +323,7 @@ func TestRunnerTestTimeout(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	cr := newClusterRegistry()
-	runner := newUnitTestRunner(cr, stopper, version.Version{})
+	runner := newUnitTestRunner(cr, stopper)
 
 	var buf syncedBuffer
 	lopt := loggingOpt{
@@ -399,11 +396,8 @@ func TestRegistryPrepareSpec(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			r, err := makeTestRegistry(spec.GCE, "", "", false /* preferSSD */)
-			if err != nil {
-				t.Fatal(err)
-			}
-			err = r.prepareSpec(&c.spec)
+			r := makeTestRegistry(spec.GCE, "", "", false /* preferSSD */)
+			err := r.prepareSpec(&c.spec)
 			if !testutils.IsError(err, c.expectedErr) {
 				t.Fatalf("expected %q, but found %q", c.expectedErr, err.Error())
 			}
@@ -424,7 +418,7 @@ func runExitCodeTest(t *testing.T, injectedError error) error {
 	cr := newClusterRegistry()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	runner := newUnitTestRunner(cr, stopper, version.Version{})
+	runner := newUnitTestRunner(cr, stopper)
 	r := mkReg(t)
 	r.Add(registry.TestSpec{
 		Name:    "boom",
