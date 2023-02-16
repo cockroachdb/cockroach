@@ -174,6 +174,21 @@ func (w *Writer) WriteField(field *bytes.Buffer) (e error) {
 	return e
 }
 
+func (w *Writer) ForceEmptyField() error {
+	if w.midRow {
+		if _, err := w.w.WriteRune(w.Comma); err != nil {
+			return err
+		}
+	}
+	w.midRow = true
+	w.i = 0
+	w.currentRecordNeedsQuotes = false
+	w.scratch.Reset()
+	w.maybeTerminatorString = true
+	_, err := w.w.WriteString(`""`)
+	return err
+}
+
 // Flush writes any buffered data to the underlying io.Writer.
 // To check if an error occurred during the Flush, call Error.
 func (w *Writer) Flush() {

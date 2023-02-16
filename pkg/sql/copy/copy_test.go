@@ -11,8 +11,10 @@
 package copy
 
 import (
+	"bytes"
 	"context"
 	"database/sql/driver"
+	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -32,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
+	"github.com/jackc/pgconn"
 	"github.com/jackc/pgtype"
 	"github.com/stretchr/testify/require"
 )
@@ -71,65 +74,90 @@ func TestCopy(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Settings: cluster.MakeTestingClusterSettings(),
-	})
-	defer s.Stopper().Stop(ctx)
+	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
+		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+			Settings: cluster.MakeTestingClusterSettings(),
+		})
+		defer s.Stopper().Stop(ctx)
 
-	url, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
-	defer cleanup()
-	var sqlConnCtx clisqlclient.Context
-	conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, url.String())
+		url, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
+		defer cleanup()
+		var sqlConnCtx clisqlclient.Context
+		conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, url.String())
 
-	testCopy := func(t *testing.T, d *datadriven.TestData) string {
-		switch d.Cmd {
-		case "exec-ddl":
-			err := conn.Exec(ctx, d.Input)
-			if err != nil {
-				require.NoError(t, err, "%s: %s", d.Pos, d.Cmd)
-			}
-			return ""
-		case "copy", "copy-error":
-			lines := strings.Split(d.Input, "\n")
-			stmt := lines[0]
-			data := strings.Join(lines[1:], "\n")
-			rows, err := conn.GetDriverConn().CopyFrom(ctx, strings.NewReader(data), stmt)
-			if d.Cmd == "copy" {
-				require.NoError(t, err, "%s\n%s\n", d.Cmd, d.Input)
-				require.Equal(t, int(rows), len(lines)-1, "Not all rows were inserted")
-			} else {
-				return err.Error()
-			}
-			return fmt.Sprintf("%d", rows)
-		case "query":
-			rows, err := conn.Query(ctx, d.Input)
-			require.NoError(t, err)
-
-			vals := make([]driver.Value, len(rows.Columns()))
-			var results string
-			for {
-				if err := rows.Next(vals); err == io.EOF {
-					break
-				} else if err != nil {
+		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+			switch d.Cmd {
+			case "exec-ddl":
+				err := conn.Exec(ctx, d.Input)
+				if err != nil {
+					require.NoError(t, err, "%s: %s", d.Pos, d.Cmd)
+				}
+				return ""
+			case "copy-from", "copy-from-error":
+				lines := strings.Split(d.Input, "\n")
+				stmt := lines[0]
+				data := strings.Join(lines[1:], "\n")
+				rows, err := conn.GetDriverConn().CopyFrom(ctx, strings.NewReader(data), stmt)
+				if d.Cmd == "copy-from" {
+					require.NoError(t, err, "%s\n%s\n", d.Cmd, d.Input)
+					require.Equal(t, int(rows), len(lines)-1, "not all rows were inserted")
+				} else {
+					require.Error(t, err)
+					return err.Error()
+				}
+				return fmt.Sprintf("%d", rows)
+			case "copy-to", "copy-to-error":
+				var buf bytes.Buffer
+				err := conn.GetDriverConn().CopyTo(ctx, &buf, d.Input)
+				if d.Cmd == "copy-to" {
 					require.NoError(t, err)
+				} else {
+					require.Error(t, err)
+					return expandErrorString(err)
 				}
-				for i, v := range vals {
-					if i > 0 {
-						results += "|"
+				return buf.String()
+			case "query":
+				rows, err := conn.Query(ctx, d.Input)
+				require.NoError(t, err)
+				vals := make([]driver.Value, len(rows.Columns()))
+				var results string
+				for {
+					if err := rows.Next(vals); err == io.EOF {
+						break
+					} else if err != nil {
+						require.NoError(t, err)
 					}
-					results += fmt.Sprintf("%v", v)
+					for i, v := range vals {
+						if i > 0 {
+							results += "|"
+						}
+						results += fmt.Sprintf("%v", v)
+					}
+					results += "\n"
 				}
-				results += "\n"
+				err = rows.Close()
+				require.NoError(t, err)
+				return results
+			default:
+				return fmt.Sprintf("unknown command: %s\n", d.Cmd)
 			}
-			err = rows.Close()
-			require.NoError(t, err)
-			return results
-		default:
-			return fmt.Sprintf("unknown command: %s\n", d.Cmd)
-		}
+		})
+	})
+}
 
+func expandErrorString(err error) string {
+	var sb strings.Builder
+	sb.WriteString(err.Error())
+
+	if pgErr := (*pgconn.PgError)(nil); errors.As(err, &pgErr) {
+		if pgErr.Hint != "" {
+			sb.WriteString(fmt.Sprintf("\nHINT: %s", pgErr.Hint))
+		}
+		if pgErr.Detail != "" {
+			sb.WriteString(fmt.Sprintf("\nDETAIL: %s", pgErr.Detail))
+		}
 	}
-	datadriven.RunTest(t, datapathutils.TestDataPath(t, "copyfrom"), testCopy)
+	return sb.String()
 }
 
 // TestCopyFromTransaction tests that copy from rows are written with
