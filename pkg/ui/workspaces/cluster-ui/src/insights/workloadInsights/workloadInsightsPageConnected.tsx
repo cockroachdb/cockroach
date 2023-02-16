@@ -48,6 +48,7 @@ import { TimeScale } from "../../timeScaleDropdown";
 import { StmtInsightsReq, TxnInsightsRequest } from "src/api";
 import { selectTimeScale } from "../../store/utils/selectors";
 import { actions as analyticsActions } from "../../store/analytics";
+import { selectIsTenant } from "../../store/uiConfig";
 
 const transactionMapStateToProps = (
   state: AppState,
@@ -78,6 +79,7 @@ const statementMapStateToProps = (
   selectedColumnNames: selectColumns(state),
   timeScale: selectTimeScale(state),
   isLoading: selectStmtInsightsLoading(state),
+  isTenant: selectIsTenant(state),
 });
 
 const TransactionDispatchProps = (
