@@ -209,8 +209,8 @@ func (c *transientCluster) restoreWebSessionsInternal(
 		}
 
 		if _, err := db.ExecContext(ctx, `
-INSERT INTO system.web_sessions(id, "hashedSecret", username, "expiresAt")
-VALUES ($1, $2, $3, $4)`,
+INSERT INTO system.web_sessions(id, "hashedSecret", username, "expiresAt", user_id)
+VALUES ($1, $2, $3, $4, (SELECT user_id FROM system.users WHERE username = $3))`,
 			row.ID,
 			row.HashedSecret,
 			row.Username,
