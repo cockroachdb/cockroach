@@ -69,6 +69,10 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 )
 
+// numTxnRetryErrors is the number of times an error will be injected if
+// the transaction is retried using SAVEPOINTs.
+const numTxnRetryErrors = 3
+
 // execStmt executes one statement by dispatching according to the current
 // state. Returns an Event to be passed to the state machine, or nil if no
 // transition is needed. If nil is returned, then the cursor is supposed to
@@ -935,7 +939,15 @@ func (ex *connExecutor) commitSQLTransaction(
 ) (fsm.Event, fsm.EventPayload) {
 	ex.extraTxnState.idleLatency += ex.statsCollector.PhaseTimes().
 		GetIdleLatency(ex.statsCollector.PreviousPhaseTimes())
-
+	if ex.sessionData().InjectRetryErrorsOnCommitEnabled && ast.StatementTag() == "COMMIT" {
+		if ex.planner.Txn().Epoch() < ex.state.lastEpoch+numTxnRetryErrors {
+			retryErr := ex.state.mu.txn.GenerateForcedRetryableError(
+				ctx, "injected by `inject_retry_errors_on_commit_enabled` session variable")
+			return ex.makeErrEvent(retryErr, ast)
+		} else {
+			ex.state.lastEpoch = ex.planner.Txn().Epoch()
+		}
+	}
 	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionStartTransactionCommit, timeutil.Now())
 	if err := commitFn(ctx); err != nil {
 		if descs.IsTwoVersionInvariantViolationError(err) {
@@ -1265,9 +1277,6 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		ctx, planner, stmt.AST.StatementReturnType(), res, distribute, progAtomic,
 	)
 	if res.Err() == nil {
-		// numTxnRetryErrors is the number of times an error will be injected if
-		// the transaction is retried using SAVEPOINTs.
-		const numTxnRetryErrors = 3
 		isSetOrShow := stmt.AST.StatementTag() == "SET" || stmt.AST.StatementTag() == "SHOW"
 		if ex.sessionData().InjectRetryErrorsEnabled && !isSetOrShow &&
 			planner.Txn().Sender().TxnStatus() == roachpb.PENDING {
