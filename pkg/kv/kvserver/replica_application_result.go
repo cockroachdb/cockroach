@@ -12,6 +12,7 @@ package kvserver
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"os"
 
@@ -271,7 +272,8 @@ func tryReproposeWithNewLeaseIndex(
 		// now.
 		p.command.MaxLeaseIndex = prevMaxLeaseIndex
 		p.encodedCommand = prevEncodedCommand
-		panic(pErr.GoError())
+		fmt.Fprintln(os.Stderr, pErr.GoError())
+		os.Exit(44)
 		//return pErr
 	}
 	log.VEventf(ctx, 2, "reproposed command %x", cmd.ID)
