@@ -792,6 +792,18 @@ func (r *rangeKeyBatcher) reset() {
 	r.curRangeKVBatch = r.curRangeKVBatch[:0]
 }
 
+func (sip *streamIngestionProcessor) updateReplicationMetrics(
+	preFlushTime time.Time, logicalByteSize int, minBatchMVCCTimestamp hlc.Timestamp,
+) {
+	sip.metrics.FlushHistNanos.RecordValue(timeutil.Since(preFlushTime).Nanoseconds())
+	sip.metrics.CommitLatency.RecordValue(timeutil.Since(minBatchMVCCTimestamp.GoTime()).Nanoseconds())
+	sip.metrics.Flushes.Inc(1)
+	sip.metrics.IngestedLogicalBytes.Inc(int64(logicalByteSize))
+	sip.metrics.IngestedSSTBytes.Inc(sip.batcher.GetBatchSummary().SSTDataSize)
+	sip.metrics.IngestedEvents.Inc(int64(len(sip.curKVBatch)))
+	sip.metrics.IngestedEvents.Inc(int64(sip.rangeBatcher.size()))
+}
+
 func (sip *streamIngestionProcessor) flush() (*jobspb.ResolvedSpans, error) {
 	ctx, sp := tracing.ChildSpan(sip.Ctx(), "stream-ingestion-flush")
 	defer sp.Finish()
@@ -799,7 +811,7 @@ func (sip *streamIngestionProcessor) flush() (*jobspb.ResolvedSpans, error) {
 	flushedCheckpoints := jobspb.ResolvedSpans{ResolvedSpans: make([]jobspb.ResolvedSpan, 0)}
 	// Ensure that the current batch is sorted.
 	sort.Sort(sip.curKVBatch)
-	totalSize := 0
+	logicalByteSize := 0
 	minBatchMVCCTimestamp := hlc.MaxTimestamp
 	for _, keyVal := range sip.curKVBatch {
 		if err := sip.batcher.AddMVCCKey(ctx, keyVal.Key, keyVal.Value); err != nil {
@@ -808,11 +820,11 @@ func (sip *streamIngestionProcessor) flush() (*jobspb.ResolvedSpans, error) {
 		if keyVal.Key.Timestamp.Less(minBatchMVCCTimestamp) {
 			minBatchMVCCTimestamp = keyVal.Key.Timestamp
 		}
-		totalSize += len(keyVal.Key.Key) + len(keyVal.Value)
+		logicalByteSize += len(keyVal.Key.Key) + len(keyVal.Value)
 	}
 
 	if sip.rangeBatcher.size() > 0 {
-		totalSize += sip.rangeBatcher.size()
+		logicalByteSize += sip.rangeBatcher.size()
 		if sip.rangeBatcher.minTimestamp.Less(minBatchMVCCTimestamp) {
 			minBatchMVCCTimestamp = sip.rangeBatcher.minTimestamp
 		}
@@ -821,13 +833,6 @@ func (sip *streamIngestionProcessor) flush() (*jobspb.ResolvedSpans, error) {
 	if len(sip.curKVBatch) > 0 || sip.rangeBatcher.size() > 0 {
 		preFlushTime := timeutil.Now()
 		defer func() {
-			sip.metrics.FlushHistNanos.RecordValue(timeutil.Since(preFlushTime).Nanoseconds())
-			sip.metrics.CommitLatency.RecordValue(timeutil.Since(minBatchMVCCTimestamp.GoTime()).Nanoseconds())
-			sip.metrics.Flushes.Inc(1)
-			sip.metrics.IngestedBytes.Inc(int64(totalSize))
-			sip.metrics.SSTBytes.Inc(sip.batcher.GetSummary().SSTDataSize)
-			sip.metrics.IngestedEvents.Inc(int64(len(sip.curKVBatch)))
-			sip.metrics.IngestedEvents.Inc(int64(sip.rangeBatcher.size()))
 		}()
 		if len(sip.curKVBatch) > 0 {
 			if err := sip.batcher.Flush(ctx); err != nil {
@@ -840,6 +845,8 @@ func (sip *streamIngestionProcessor) flush() (*jobspb.ResolvedSpans, error) {
 				return nil, errors.Wrap(err, "flushing range key sst")
 			}
 		}
+
+		sip.updateReplicationMetrics(preFlushTime, logicalByteSize, minBatchMVCCTimestamp)
 	}
 
 	// Go through buffered checkpoint events, and put them on the channel to be
