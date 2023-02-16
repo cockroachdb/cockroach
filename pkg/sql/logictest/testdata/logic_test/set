@@ -141,6 +141,14 @@ SET server_encoding = 'UTF8'
 statement error parameter "server_encoding" cannot be changed
 SET server_encoding = 'other'
 
+query T
+SHOW ssl
+----
+on
+
+statement error parameter "ssl" cannot be changed
+SET ssl = 'off'
+
 statement ok
 SET escape_string_warning = 'ON'
 
