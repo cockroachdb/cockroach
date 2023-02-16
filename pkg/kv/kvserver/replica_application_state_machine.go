@@ -249,10 +249,11 @@ func (sm *replicaStateMachine) ApplySideEffects(
 			}
 			defer f.Close()
 			if err := enc.EncodeValue(reflect.ValueOf(cmd)); err != nil {
-				panic(err)
-			}
-			if _, err := io.Copy(f, &buf); err != nil {
-				panic(err)
+				log.Warningf(ctx, "%s", err)
+			} else {
+				if _, err := io.Copy(f, &buf); err != nil {
+					panic(err)
+				}
 			}
 
 			// If the command wasn't rejected, we just applied it and no higher
