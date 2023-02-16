@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -1385,12 +1386,12 @@ func runMVCCGarbageCollect(
 		return ts.Add(int64(wallTime), int32(logical))
 	}
 
-	setup := func() (gcKeys []roachpb.GCRequest_GCKey) {
+	setup := func() (gcKeys []kvpb.GCRequest_GCKey) {
 		batch := eng.NewBatch()
 		pointKeys := make([]roachpb.Key, opts.numKeys)
 		for i := 0; i < opts.numKeys; i++ {
 			pointKeys[i] = randutil.RandBytes(rng, opts.keyBytes)
-			gcKeys = append(gcKeys, roachpb.GCRequest_GCKey{
+			gcKeys = append(gcKeys, kvpb.GCRequest_GCKey{
 				Timestamp: pointKeyTs(opts.deleteVersions - 1),
 				Key:       pointKeys[i],
 			})

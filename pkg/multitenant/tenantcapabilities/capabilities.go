@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
@@ -45,7 +46,7 @@ type Authorizer interface {
 	// HasCapabilityForBatch returns an error if a tenant, referenced by its ID,
 	// is not allowed to execute the supplied batch request given the capabilities
 	// it possesses.
-	HasCapabilityForBatch(context.Context, roachpb.TenantID, *roachpb.BatchRequest) error
+	HasCapabilityForBatch(context.Context, roachpb.TenantID, *kvpb.BatchRequest) error
 
 	// BindReader is a mechanism by which the caller can bind a Reader[1] to the
 	// Authorizer post-creation. The Authorizer uses the Reader to consult the

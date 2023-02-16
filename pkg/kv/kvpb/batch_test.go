@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package roachpb
+package kvpb
 
 import (
 	"fmt"
@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/kr/pretty"
@@ -224,8 +225,8 @@ func TestLockSpanIterate(t *testing.T) {
 	type testReq struct {
 		req    Request
 		resp   Response
-		span   Span
-		resume Span
+		span   roachpb.Span
+		resume roachpb.Span
 	}
 	testReqs := []testReq{
 		{&GetRequest{}, &GetResponse{}, sp("a", ""), sp("", "")},
@@ -254,14 +255,14 @@ func TestLockSpanIterate(t *testing.T) {
 				br.Add(tr.resp)
 			}
 
-			var spans [lock.MaxDurability + 1][]Span
-			fn := func(span Span, dur lock.Durability) {
+			var spans [lock.MaxDurability + 1][]roachpb.Span
+			fn := func(span roachpb.Span, dur lock.Durability) {
 				spans[dur] = append(spans[dur], span)
 			}
 			ba.LockSpanIterate(&br, fn)
 
-			toExpSpans := func(trs ...testReq) []Span {
-				exp := make([]Span, len(trs))
+			toExpSpans := func(trs ...testReq) []roachpb.Span {
+				exp := make([]roachpb.Span, len(trs))
 				for i, tr := range trs {
 					exp[i] = tr.span
 					if resume {
@@ -284,15 +285,15 @@ func TestRefreshSpanIterate(t *testing.T) {
 	testCases := []struct {
 		req    Request
 		resp   Response
-		span   Span
-		resume Span
+		span   roachpb.Span
+		resume roachpb.Span
 	}{
-		{&ConditionalPutRequest{}, &ConditionalPutResponse{}, sp("a", ""), Span{}},
-		{&PutRequest{}, &PutResponse{}, sp("a-put", ""), Span{}},
-		{&InitPutRequest{}, &InitPutResponse{}, sp("a-initput", ""), Span{}},
-		{&IncrementRequest{}, &IncrementResponse{}, sp("a-inc", ""), Span{}},
+		{&ConditionalPutRequest{}, &ConditionalPutResponse{}, sp("a", ""), roachpb.Span{}},
+		{&PutRequest{}, &PutResponse{}, sp("a-put", ""), roachpb.Span{}},
+		{&InitPutRequest{}, &InitPutResponse{}, sp("a-initput", ""), roachpb.Span{}},
+		{&IncrementRequest{}, &IncrementResponse{}, sp("a-inc", ""), roachpb.Span{}},
 		{&ScanRequest{}, &ScanResponse{}, sp("a", "c"), sp("b", "c")},
-		{&GetRequest{}, &GetResponse{}, sp("b", ""), Span{}},
+		{&GetRequest{}, &GetResponse{}, sp("b", ""), roachpb.Span{}},
 		{&ReverseScanRequest{}, &ReverseScanResponse{}, sp("d", "f"), sp("d", "e")},
 		{&DeleteRangeRequest{}, &DeleteRangeResponse{}, sp("g", "i"), sp("h", "i")},
 	}
@@ -306,13 +307,13 @@ func TestRefreshSpanIterate(t *testing.T) {
 		br.Add(tc.resp)
 	}
 
-	var readSpans []Span
-	fn := func(span Span) {
+	var readSpans []roachpb.Span
+	fn := func(span roachpb.Span) {
 		readSpans = append(readSpans, span)
 	}
 	require.NoError(t, ba.RefreshSpanIterate(&br, fn))
 	// The conditional put and init put are not considered read spans.
-	expReadSpans := []Span{testCases[4].span, testCases[5].span, testCases[6].span, testCases[7].span}
+	expReadSpans := []roachpb.Span{testCases[4].span, testCases[5].span, testCases[6].span, testCases[7].span}
 	require.Equal(t, expReadSpans, readSpans)
 
 	// Batch responses with ResumeSpans.
@@ -328,9 +329,9 @@ func TestRefreshSpanIterate(t *testing.T) {
 		br.Add(tc.resp)
 	}
 
-	readSpans = []Span{}
+	readSpans = []roachpb.Span{}
 	require.NoError(t, ba.RefreshSpanIterate(&br, fn))
-	expReadSpans = []Span{
+	expReadSpans = []roachpb.Span{
 		sp("a", "b"),
 		sp("b", ""),
 		sp("e", "f"),
@@ -341,16 +342,16 @@ func TestRefreshSpanIterate(t *testing.T) {
 
 func TestRefreshSpanIterateSkipLocked(t *testing.T) {
 	ba := BatchRequest{}
-	ba.Add(NewGet(Key("a"), false))
-	ba.Add(NewScan(Key("b"), Key("d"), false))
-	ba.Add(NewReverseScan(Key("e"), Key("g"), false))
+	ba.Add(NewGet(roachpb.Key("a"), false))
+	ba.Add(NewScan(roachpb.Key("b"), roachpb.Key("d"), false))
+	ba.Add(NewReverseScan(roachpb.Key("e"), roachpb.Key("g"), false))
 	br := ba.CreateReply()
 
 	// Without a SkipLocked wait policy.
-	var readSpans []Span
-	fn := func(span Span) { readSpans = append(readSpans, span) }
+	var readSpans []roachpb.Span
+	fn := func(span roachpb.Span) { readSpans = append(readSpans, span) }
 	require.NoError(t, ba.RefreshSpanIterate(br, fn))
-	expReadSpans := []Span{
+	expReadSpans := []roachpb.Span{
 		sp("a", ""),
 		sp("b", "d"),
 		sp("e", "g"),
@@ -362,17 +363,17 @@ func TestRefreshSpanIterateSkipLocked(t *testing.T) {
 
 	readSpans = nil
 	require.NoError(t, ba.RefreshSpanIterate(br, fn))
-	expReadSpans = []Span(nil)
+	expReadSpans = []roachpb.Span(nil)
 	require.Equal(t, expReadSpans, readSpans)
 
 	// With a SkipLocked wait policy and with some response keys.
-	br.Responses[0].GetGet().Value = &Value{}
-	br.Responses[1].GetScan().Rows = []KeyValue{{Key: Key("b")}, {Key: Key("c")}}
-	br.Responses[2].GetReverseScan().Rows = []KeyValue{{Key: Key("f")}}
+	br.Responses[0].GetGet().Value = &roachpb.Value{}
+	br.Responses[1].GetScan().Rows = []roachpb.KeyValue{{Key: roachpb.Key("b")}, {Key: roachpb.Key("c")}}
+	br.Responses[2].GetReverseScan().Rows = []roachpb.KeyValue{{Key: roachpb.Key("f")}}
 
 	readSpans = nil
 	require.NoError(t, ba.RefreshSpanIterate(br, fn))
-	expReadSpans = []Span{
+	expReadSpans = []roachpb.Span{
 		sp("a", ""),
 		sp("b", ""),
 		sp("c", ""),
@@ -384,8 +385,8 @@ func TestRefreshSpanIterateSkipLocked(t *testing.T) {
 func TestBatchResponseCombine(t *testing.T) {
 	br := &BatchResponse{}
 	{
-		txn := MakeTransaction(
-			"test", nil /* baseKey */, NormalUserPriority,
+		txn := roachpb.MakeTransaction(
+			"test", nil /* baseKey */, roachpb.NormalUserPriority,
 			hlc.Timestamp{WallTime: 123}, 0 /* baseKey */, 99, /* coordinatorNodeID */
 		)
 		brTxn := &BatchResponse{
@@ -406,11 +407,11 @@ func TestBatchResponseCombine(t *testing.T) {
 	singleScanBR := func() *BatchResponse {
 		var union ResponseUnion
 		union.MustSetInner(&ScanResponse{
-			Rows: []KeyValue{{
-				Key: Key("bar"),
+			Rows: []roachpb.KeyValue{{
+				Key: roachpb.Key("bar"),
 			}},
-			IntentRows: []KeyValue{{
-				Key: Key("baz"),
+			IntentRows: []roachpb.KeyValue{{
+				Key: roachpb.Key("baz"),
 			}},
 		})
 		return &BatchResponse{
@@ -450,15 +451,15 @@ func TestBatchResponseCombine(t *testing.T) {
 		t.Fatalf("expected %d intent rows, got %s", expRows, pretty.Sprint(scan))
 	}
 	if err := br.Combine(singleScanBR(), []int{0}); err.Error() !=
-		`can not combine *roachpb.PutResponse and *roachpb.ScanResponse` {
+		`can not combine *kvpb.PutResponse and *kvpb.ScanResponse` {
 		t.Fatal(err)
 	}
 }
 
-func sp(start, end string) Span {
-	res := Span{Key: Key(start)}
+func sp(start, end string) roachpb.Span {
+	res := roachpb.Span{Key: roachpb.Key(start)}
 	if end != "" {
-		res.EndKey = Key(end)
+		res.EndKey = roachpb.Key(end)
 	}
 	return res
 }

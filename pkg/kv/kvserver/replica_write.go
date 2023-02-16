@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
@@ -78,12 +79,12 @@ var migrateApplicationTimeout = settings.RegisterDurationSetting(
 // as this method makes the assumption that it operates on a shallow copy (see
 // call to applyTimestampCache).
 func (r *Replica) executeWriteBatch(
-	ctx context.Context, ba *roachpb.BatchRequest, g *concurrency.Guard,
+	ctx context.Context, ba *kvpb.BatchRequest, g *concurrency.Guard,
 ) (
-	br *roachpb.BatchResponse,
+	br *kvpb.BatchResponse,
 	_ *concurrency.Guard,
 	_ *kvadmission.StoreWriteBytes,
-	pErr *roachpb.Error,
+	pErr *kvpb.Error,
 ) {
 	startTime := timeutil.Now()
 
@@ -107,14 +108,14 @@ func (r *Replica) executeWriteBatch(
 	// Verify that the batch can be executed.
 	st, err := r.checkExecutionCanProceedRWOrAdmin(ctx, ba, g)
 	if err != nil {
-		return nil, g, nil, roachpb.NewError(err)
+		return nil, g, nil, kvpb.NewError(err)
 	}
 
 	// Check the breaker. Note that we do this after
 	// checkExecutionCanProceedBeforeStorageSnapshot, so that NotLeaseholderError
 	// has precedence.
 	if err := r.signallerForBatch(ba).Err(); err != nil {
-		return nil, g, nil, roachpb.NewError(err)
+		return nil, g, nil, kvpb.NewError(err)
 	}
 
 	// Compute the transaction's local uncertainty limit using observed
@@ -166,7 +167,7 @@ func (r *Replica) executeWriteBatch(
 	// Checking the context just before proposing can help avoid ambiguous errors.
 	if err := ctx.Err(); err != nil {
 		log.VEventf(ctx, 2, "%s before proposing: %s", err, ba.Summary())
-		return nil, g, nil, roachpb.NewError(errors.Wrapf(err, "aborted before proposing"))
+		return nil, g, nil, kvpb.NewError(errors.Wrapf(err, "aborted before proposing"))
 	}
 
 	// If the command is proposed to Raft, ownership of and responsibility for
@@ -174,7 +175,7 @@ func (r *Replica) executeWriteBatch(
 	// evalAndPropose.
 	ch, abandon, _, writeBytes, pErr := r.evalAndPropose(ctx, ba, g, &st, ui, tok.Move(ctx))
 	if pErr != nil {
-		if cErr, ok := pErr.GetDetail().(*roachpb.ReplicaCorruptionError); ok {
+		if cErr, ok := pErr.GetDetail().(*kvpb.ReplicaCorruptionError); ok {
 			// Need to unlock here because setCorruptRaftMuLock needs readOnlyCmdMu not held.
 			readOnlyCmdMu.RUnlock()
 			readOnlyCmdMu = nil
@@ -274,7 +275,7 @@ func (r *Replica) executeWriteBatch(
 							// We wait for an index >= that of the migration command.
 							r.GetLeaseAppliedIndex())
 					})
-				propResult.Err = roachpb.NewError(applicationErr)
+				propResult.Err = kvpb.NewError(applicationErr)
 			}
 			if propResult.Err != nil && ba.IsSingleProbeRequest() && errors.Is(
 				propResult.Err.GoError(), kvserverbase.NoopOnProbeCommandErr.GoError(),
@@ -298,7 +299,7 @@ func (r *Replica) executeWriteBatch(
 			// txn. If the resolver's async task pool is full, just skip cleanup
 			// by setting allowSync=false, since we won't be able to
 			// backpressure clients.
-			if _, ok := ba.GetArg(roachpb.EndTxn); ok {
+			if _, ok := ba.GetArg(kvpb.EndTxn); ok {
 				const taskName = "async txn cleanup"
 				_ = r.store.stopper.RunAsyncTask(
 					r.AnnotateCtx(context.Background()),
@@ -327,7 +328,7 @@ func (r *Replica) executeWriteBatch(
 			dur := timeutil.Since(startTime)
 			log.VEventf(ctx, 2, "context cancellation after %.2fs of attempting command %s",
 				dur.Seconds(), ba)
-			return nil, nil, nil, roachpb.NewError(roachpb.NewAmbiguousResultError(
+			return nil, nil, nil, kvpb.NewError(kvpb.NewAmbiguousResultError(
 				errors.Wrapf(ctx.Err(), "after %.2fs of attempting command", dur.Seconds()),
 			))
 
@@ -337,7 +338,7 @@ func (r *Replica) executeWriteBatch(
 			abandon()
 			log.VEventf(ctx, 2, "shutdown cancellation after %0.1fs of attempting command %s",
 				timeutil.Since(startTime).Seconds(), ba)
-			return nil, nil, nil, roachpb.NewError(roachpb.NewAmbiguousResultErrorf(
+			return nil, nil, nil, kvpb.NewError(kvpb.NewAmbiguousResultErrorf(
 				"server shutdown"))
 		}
 	}
@@ -346,7 +347,7 @@ func (r *Replica) executeWriteBatch(
 // canAttempt1PCEvaluation looks at the batch and decides whether it can be
 // executed as 1PC.
 func (r *Replica) canAttempt1PCEvaluation(
-	ctx context.Context, ba *roachpb.BatchRequest, g *concurrency.Guard,
+	ctx context.Context, ba *kvpb.BatchRequest, g *concurrency.Guard,
 ) bool {
 	if !isOnePhaseCommit(ba) {
 		return false
@@ -391,11 +392,11 @@ func (r *Replica) canAttempt1PCEvaluation(
 func (r *Replica) evaluateWriteBatch(
 	ctx context.Context,
 	idKey kvserverbase.CmdIDKey,
-	ba *roachpb.BatchRequest,
+	ba *kvpb.BatchRequest,
 	g *concurrency.Guard,
 	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
-) (storage.Batch, enginepb.MVCCStats, *roachpb.BatchResponse, result.Result, *roachpb.Error) {
+) (storage.Batch, enginepb.MVCCStats, *kvpb.BatchResponse, result.Result, *kvpb.Error) {
 	log.Event(ctx, "executing read-write batch")
 
 	// If the transaction has been pushed but it can commit at the higher
@@ -423,9 +424,9 @@ func (r *Replica) evaluateWriteBatch(
 		// care about it. Note that the point of Require1PC is that we don't want to
 		// leave locks behind in case of retriable errors, so it's better to
 		// terminate this request early.
-		arg, ok := ba.GetArg(roachpb.EndTxn)
-		if ok && arg.(*roachpb.EndTxnRequest).Require1PC {
-			return nil, enginepb.MVCCStats{}, nil, result.Result{}, roachpb.NewError(kv.OnePCNotAllowedError{})
+		arg, ok := ba.GetArg(kvpb.EndTxn)
+		if ok && arg.(*kvpb.EndTxnRequest).Require1PC {
+			return nil, enginepb.MVCCStats{}, nil, result.Result{}, kvpb.NewError(kv.OnePCNotAllowedError{})
 		}
 	}
 
@@ -463,11 +464,11 @@ type onePCResult struct {
 	success onePCSuccess
 	// pErr is set if success == onePCFailed. This is the error that should be
 	// returned to the client for this request.
-	pErr *roachpb.Error
+	pErr *kvpb.Error
 
 	// The fields below are only set when success == onePCSucceeded.
 	stats enginepb.MVCCStats
-	br    *roachpb.BatchResponse
+	br    *kvpb.BatchResponse
 	res   result.Result
 	batch storage.Batch
 }
@@ -481,7 +482,7 @@ type onePCResult struct {
 func (r *Replica) evaluate1PC(
 	ctx context.Context,
 	idKey kvserverbase.CmdIDKey,
-	ba *roachpb.BatchRequest,
+	ba *kvpb.BatchRequest,
 	g *concurrency.Guard,
 	st *kvserverpb.LeaseStatus,
 ) (onePCRes onePCResult) {
@@ -508,12 +509,12 @@ func (r *Replica) evaluate1PC(
 
 	rec := NewReplicaEvalContext(ctx, r, g.LatchSpans(), ba.RequiresClosedTSOlderThanStorageSnapshot())
 	defer rec.Release()
-	var br *roachpb.BatchResponse
+	var br *kvpb.BatchResponse
 	var res result.Result
-	var pErr *roachpb.Error
+	var pErr *kvpb.Error
 
-	arg, _ := ba.GetArg(roachpb.EndTxn)
-	etArg := arg.(*roachpb.EndTxnRequest)
+	arg, _ := ba.GetArg(kvpb.EndTxn)
+	etArg := arg.(*kvpb.EndTxnRequest)
 
 	// Evaluate strippedBa. If the transaction allows, permit refreshes.
 	ms := newMVCCStats()
@@ -562,13 +563,13 @@ func (r *Replica) evaluate1PC(
 		if err != nil {
 			return onePCResult{
 				success: onePCFailed,
-				pErr:    roachpb.NewError(errors.Wrap(err, "failed to run commit trigger")),
+				pErr:    kvpb.NewError(errors.Wrap(err, "failed to run commit trigger")),
 			}
 		}
 		if err := res.MergeAndDestroy(innerResult); err != nil {
 			return onePCResult{
 				success: onePCFailed,
-				pErr:    roachpb.NewError(err),
+				pErr:    kvpb.NewError(err),
 			}
 		}
 	}
@@ -592,12 +593,12 @@ func (r *Replica) evaluate1PC(
 	br.Txn = clonedTxn
 	// Add placeholder response for the end transaction request.
 	etAlloc := new(struct {
-		et    roachpb.EndTxnResponse
-		union roachpb.ResponseUnion_EndTxn
+		et    kvpb.EndTxnResponse
+		union kvpb.ResponseUnion_EndTxn
 	})
 	etAlloc.et.OnePhaseCommit = true
 	etAlloc.union.EndTxn = &etAlloc.et
-	br.Responses = append(br.Responses, roachpb.ResponseUnion{})
+	br.Responses = append(br.Responses, kvpb.ResponseUnion{})
 	br.Responses[len(br.Responses)-1].Value = &etAlloc.union
 
 	return onePCResult{
@@ -621,12 +622,12 @@ func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
 	idKey kvserverbase.CmdIDKey,
 	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
-	ba *roachpb.BatchRequest,
+	ba *kvpb.BatchRequest,
 	g *concurrency.Guard,
 	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
 	deadline hlc.Timestamp,
-) (batch storage.Batch, br *roachpb.BatchResponse, res result.Result, pErr *roachpb.Error) {
+) (batch storage.Batch, br *kvpb.BatchResponse, res result.Result, pErr *kvpb.Error) {
 	goldenMS := *ms
 	for retries := 0; ; retries++ {
 		if retries > 0 {
@@ -671,11 +672,11 @@ func (r *Replica) evaluateWriteBatchWrapper(
 	idKey kvserverbase.CmdIDKey,
 	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
-	ba *roachpb.BatchRequest,
+	ba *kvpb.BatchRequest,
 	g *concurrency.Guard,
 	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
-) (storage.Batch, *roachpb.BatchResponse, result.Result, *roachpb.Error) {
+) (storage.Batch, *kvpb.BatchResponse, result.Result, *kvpb.Error) {
 	batch, opLogger := r.newBatchedEngine(ba, g)
 	now := timeutil.Now()
 	br, res, pErr := evaluateBatch(ctx, idKey, batch, rec, ms, ba, g, st, ui, readWrite)
@@ -695,7 +696,7 @@ func (r *Replica) evaluateWriteBatchWrapper(
 // OpLogger is attached to the returned engine.Batch, recording all operations.
 // Its recording should be attached to the Result of request evaluation.
 func (r *Replica) newBatchedEngine(
-	ba *roachpb.BatchRequest, g *concurrency.Guard,
+	ba *kvpb.BatchRequest, g *concurrency.Guard,
 ) (storage.Batch, *storage.OpLoggerBatch) {
 	batch := r.store.TODOEngine().NewBatch()
 	if !batch.ConsistentIterators() {
@@ -760,15 +761,15 @@ func (r *Replica) newBatchedEngine(
 // (4) the transaction is not in its first epoch and the EndTxn request does
 //
 //	not require one phase commit.
-func isOnePhaseCommit(ba *roachpb.BatchRequest) bool {
+func isOnePhaseCommit(ba *kvpb.BatchRequest) bool {
 	if ba.Txn == nil {
 		return false
 	}
 	if !ba.IsCompleteTransaction() {
 		return false
 	}
-	arg, _ := ba.GetArg(roachpb.EndTxn)
-	etArg := arg.(*roachpb.EndTxnRequest)
+	arg, _ := ba.GetArg(kvpb.EndTxn)
+	etArg := arg.(*kvpb.EndTxnRequest)
 	if retry, _, _ := batcheval.IsEndTxnTriggeringRetryError(ba.Txn, etArg); retry {
 		return false
 	}

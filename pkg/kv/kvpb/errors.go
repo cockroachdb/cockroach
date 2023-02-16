@@ -8,12 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package roachpb
+package kvpb
 
 import (
 	"context"
 	"fmt"
+	"reflect"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -75,7 +77,7 @@ type transactionRestartError interface {
 }
 
 // ErrorUnexpectedlySet creates a string to panic with when a response (typically
-// a roachpb.BatchResponse) unexpectedly has Error set in its response header.
+// a kvpb.BatchResponse) unexpectedly has Error set in its response header.
 func ErrorUnexpectedlySet(culprit, response interface{}) error {
 	return errors.AssertionFailedf("error is unexpectedly set, culprit is %T:\n%+v", culprit, response)
 }
@@ -173,7 +175,7 @@ func NewError(err error) *Error {
 // NewErrorWithTxn creates an Error from the given error and a transaction.
 //
 // txn is cloned before being stored in Error.
-func NewErrorWithTxn(err error, txn *Transaction) *Error {
+func NewErrorWithTxn(err error, txn *roachpb.Transaction) *Error {
 	e := NewError(err)
 	e.SetTxn(txn)
 	return e
@@ -305,6 +307,50 @@ const (
 	NumErrors int = 45
 )
 
+// Register the migration of all errors that used to be in the roachpb package
+// and are now in the kv/kvpb package.
+func init() {
+	roachpbPath := reflect.TypeOf(roachpb.Key("")).PkgPath()
+	// TODO: this doesn't have the corresponding ErrorDetailType.
+	errors.RegisterTypeMigration(roachpbPath, "*roachpb.UnhandledRetryableError", &UnhandledRetryableError{})
+	// TODO: not sure whether internalError needs a migration.
+	errors.RegisterTypeMigration(roachpbPath, "*roachpb.internalError", &internalError{})
+	errors.RegisterTypeMigration(roachpbPath, "*roachpb.NotLeaseHolderError", &NotLeaseHolderError{})
+	errors.RegisterTypeMigration(roachpbPath, "*roachpb.RangeNotFoundError", &RangeNotFoundError{})
+	errors.RegisterTypeMigration(roachpbPath, "*roachpb.RangeKeyMismatchError", &RangeKeyMismatchError{})
+	errors.RegisterTypeMigration(roachpbPath, "*roachpb.ReadWithinUncertaintyIntervalError", &ReadWithinUncertaintyIntervalError{})
+	errors.RegisterTypeMigration(roachpbPath, "*roachpb.TransactionAbortedError", &TransactionAbortedError{})
+	errors.RegisterTypeMigration(roachpbPath, "*roachpb.TransactionPushError", &TransactionPushError{})
+	errors.RegisterTypeMigration(roachpbPath, "*roachpb.TransactionRetryError", &TransactionRetryError{})
+	errors.RegisterTypeMigration(roachpbPath, "*roachpb.TransactionStatusError", &TransactionStatusError{})
+	errors.RegisterTypeMigration(roachpbPath, "*roachpb.WriteIntentError", &WriteIntentError{})
+	errors.RegisterTypeMigration(roachpbPath, "*roachpb.WriteTooOldError", &WriteTooOldError{})
+	errors.RegisterTypeMigration(roachpbPath, "*roachpb.OpRequiresTxnError", &OpRequiresTxnError{})
+	errors.RegisterTypeMigration(roachpbPath, "*roachpb.ConditionFailedError", &ConditionFailedError{})
+	errors.RegisterTypeMigration(roachpbPath, "*roachpb.LeaseRejectedError", &LeaseRejectedError{})
+	errors.RegisterTypeMigration(roachpbPath, "*roachpb.NodeUnavailableError", &NodeUnavailableError{})
+	errors.RegisterTypeMigration(roachpbPath, "*roachpb.RaftGroupDeletedError", &RaftGroupDeletedError{})
+	errors.RegisterTypeMigration(roachpbPath, "*roachpb.ReplicaCorruptionError", &ReplicaCorruptionError{})
+	errors.RegisterTypeMigration(roachpbPath, "*roachpb.ReplicaTooOldError", &ReplicaTooOldError{})
+	errors.RegisterTypeMigration(roachpbPath, "*roachpb.StoreNotFoundError", &StoreNotFoundError{})
+	errors.RegisterTypeMigration(roachpbPath, "*roachpb.TransactionRetryWithProtoRefreshError", &TransactionRetryWithProtoRefreshError{})
+	errors.RegisterTypeMigration(roachpbPath, "*roachpb.IntegerOverflowError", &IntegerOverflowError{})
+	errors.RegisterTypeMigration(roachpbPath, "*roachpb.UnsupportedRequestError", &UnsupportedRequestError{})
+	errors.RegisterTypeMigration(roachpbPath, "*roachpb.BatchTimestampBeforeGCError", &BatchTimestampBeforeGCError{})
+	errors.RegisterTypeMigration(roachpbPath, "*roachpb.TxnAlreadyEncounteredErrorError", &TxnAlreadyEncounteredErrorError{})
+	errors.RegisterTypeMigration(roachpbPath, "*roachpb.IntentMissingError", &IntentMissingError{})
+	errors.RegisterTypeMigration(roachpbPath, "*roachpb.MergeInProgressError", &MergeInProgressError{})
+	errors.RegisterTypeMigration(roachpbPath, "*roachpb.RangeFeedRetryError", &RangeFeedRetryError{})
+	errors.RegisterTypeMigration(roachpbPath, "*roachpb.IndeterminateCommitError", &IndeterminateCommitError{})
+	errors.RegisterTypeMigration(roachpbPath, "*roachpb.InvalidLeaseError", &InvalidLeaseError{})
+	errors.RegisterTypeMigration(roachpbPath, "*roachpb.OptimisticEvalConflictsError", &OptimisticEvalConflictsError{})
+	errors.RegisterTypeMigration(roachpbPath, "*roachpb.MinTimestampBoundUnsatisfiableError", &MinTimestampBoundUnsatisfiableError{})
+	errors.RegisterTypeMigration(roachpbPath, "*roachpb.RefreshFailedError", &RefreshFailedError{})
+	errors.RegisterTypeMigration(roachpbPath, "*roachpb.MVCCHistoryMutationError", &MVCCHistoryMutationError{})
+	// TODO: this doesn't have the corresponding ErrorDetailType.
+	errors.RegisterTypeMigration(roachpbPath, "*roachpb.InsufficientSpaceError", &InsufficientSpaceError{})
+}
+
 // GoError returns a Go error converted from Error. If the error is a transaction
 // retry error, it returns the error itself wrapped in an UnhandledRetryableError.
 // Otherwise, if an error detail is present, is is returned (i.e. the result will
@@ -352,14 +398,14 @@ func (e *Error) GetDetail() ErrorDetailInterface {
 
 // SetTxn sets the error transaction and resets the error message.
 // The argument is cloned before being stored in the Error.
-func (e *Error) SetTxn(txn *Transaction) {
+func (e *Error) SetTxn(txn *roachpb.Transaction) {
 	e.UnexposedTxn = nil
 	e.UpdateTxn(txn)
 }
 
 // UpdateTxn updates the error transaction and resets the error message.
 // The argument is cloned before being stored in the Error.
-func (e *Error) UpdateTxn(o *Transaction) {
+func (e *Error) UpdateTxn(o *roachpb.Transaction) {
 	if o == nil {
 		return
 	}
@@ -391,7 +437,7 @@ func (e *Error) checkTxnStatusValid() {
 }
 
 // GetTxn returns the txn.
-func (e *Error) GetTxn() *Transaction {
+func (e *Error) GetTxn() *roachpb.Transaction {
 	if e == nil {
 		return nil
 	}
@@ -435,7 +481,7 @@ func (e *NotLeaseHolderError) printError(s Printer) {
 		s.Printf("; ")
 	}
 	s.Printf("r%d: ", e.RangeID)
-	if e.Replica != (ReplicaDescriptor{}) {
+	if e.Replica != (roachpb.ReplicaDescriptor{}) {
 		s.Printf("replica %s not lease holder; ", e.Replica)
 	} else {
 		s.Printf("replica not lease holder; ")
@@ -474,7 +520,7 @@ var _ ErrorDetailInterface = &LeaseRejectedError{}
 
 // NewRangeNotFoundError initializes a new RangeNotFoundError for the given RangeID and, optionally,
 // a StoreID.
-func NewRangeNotFoundError(rangeID RangeID, storeID StoreID) *RangeNotFoundError {
+func NewRangeNotFoundError(rangeID roachpb.RangeID, storeID roachpb.StoreID) *RangeNotFoundError {
 	return &RangeNotFoundError{
 		RangeID: rangeID,
 		StoreID: storeID,
@@ -513,10 +559,10 @@ func IsRangeNotFoundError(err error) bool {
 // identical to NewRangeKeyMismatchError, with the given ClosedTimestampPolicy.
 func NewRangeKeyMismatchErrorWithCTPolicy(
 	ctx context.Context,
-	start, end Key,
-	desc *RangeDescriptor,
-	lease *Lease,
-	ctPolicy RangeClosedTimestampPolicy,
+	start, end roachpb.Key,
+	desc *roachpb.RangeDescriptor,
+	lease *roachpb.Lease,
+	ctPolicy roachpb.RangeClosedTimestampPolicy,
 ) *RangeKeyMismatchError {
 	if desc == nil {
 		panic("NewRangeKeyMismatchError with nil descriptor")
@@ -526,7 +572,7 @@ func NewRangeKeyMismatchErrorWithCTPolicy(
 		// regressions of #6027.
 		panic(fmt.Sprintf("descriptor is not initialized: %+v", desc))
 	}
-	var l Lease
+	var l roachpb.Lease
 	if lease != nil {
 		// We ignore leases that are not part of the descriptor.
 		_, ok := desc.GetReplicaDescriptorByID(lease.Replica.ReplicaID)
@@ -538,7 +584,7 @@ func NewRangeKeyMismatchErrorWithCTPolicy(
 		RequestStartKey: start,
 		RequestEndKey:   end,
 	}
-	ri := RangeInfo{
+	ri := roachpb.RangeInfo{
 		Desc:                  *desc,
 		Lease:                 l,
 		ClosedTimestampPolicy: ctPolicy,
@@ -558,14 +604,14 @@ func NewRangeKeyMismatchErrorWithCTPolicy(
 // Note that more range info is commonly added to the error after the error is
 // created.
 func NewRangeKeyMismatchError(
-	ctx context.Context, start, end Key, desc *RangeDescriptor, lease *Lease,
+	ctx context.Context, start, end roachpb.Key, desc *roachpb.RangeDescriptor, lease *roachpb.Lease,
 ) *RangeKeyMismatchError {
 	return NewRangeKeyMismatchErrorWithCTPolicy(ctx,
 		start,
 		end,
 		desc,
 		lease,
-		LAG_BY_CLUSTER_SETTING, /* default closed timestsamp policy*/
+		roachpb.LAG_BY_CLUSTER_SETTING, /* default closed timestsamp policy*/
 	)
 }
 
@@ -594,9 +640,9 @@ func (e *RangeKeyMismatchError) Type() ErrorDetailType {
 
 // MismatchedRange returns the range info for the range that the request was
 // erroneously routed to, or an error if the Ranges slice is empty.
-func (e *RangeKeyMismatchError) MismatchedRange() (RangeInfo, error) {
+func (e *RangeKeyMismatchError) MismatchedRange() (roachpb.RangeInfo, error) {
 	if len(e.Ranges) == 0 {
-		return RangeInfo{}, errors.AssertionFailedf(
+		return roachpb.RangeInfo{}, errors.AssertionFailedf(
 			"RangeKeyMismatchError (key range %s-%s) with empty RangeInfo slice", e.RequestStartKey, e.RequestEndKey,
 		)
 	}
@@ -608,7 +654,7 @@ func (e *RangeKeyMismatchError) MismatchedRange() (RangeInfo, error) {
 //
 // l can be empty. Otherwise, the leaseholder is asserted to be a replica in
 // desc.
-func (e *RangeKeyMismatchError) AppendRangeInfo(ctx context.Context, ris ...RangeInfo) {
+func (e *RangeKeyMismatchError) AppendRangeInfo(ctx context.Context, ris ...roachpb.RangeInfo) {
 	for _, ri := range ris {
 		if !ri.Lease.Empty() {
 			if _, ok := ri.Desc.GetReplicaDescriptorByID(ri.Lease.Replica.ReplicaID); !ok {
@@ -680,7 +726,7 @@ func (e *TransactionAbortedError) SafeFormatError(p errors.Printer) (next error)
 // to improve this: wrap `pErr.GoError()` with a barrier and then with the
 // TransactionRetryWithProtoRefreshError.
 func NewTransactionRetryWithProtoRefreshError(
-	msg redact.RedactableString, txnID uuid.UUID, txn Transaction,
+	msg redact.RedactableString, txnID uuid.UUID, txn roachpb.Transaction,
 ) *TransactionRetryWithProtoRefreshError {
 	return &TransactionRetryWithProtoRefreshError{
 		Msg:           msg.StripMarkers(),
@@ -708,7 +754,7 @@ func (e *TransactionRetryWithProtoRefreshError) PrevTxnAborted() bool {
 }
 
 // NewTransactionPushError initializes a new TransactionPushError.
-func NewTransactionPushError(pusheeTxn Transaction) *TransactionPushError {
+func NewTransactionPushError(pusheeTxn roachpb.Transaction) *TransactionPushError {
 	// Note: this error will cause a txn restart. The error that the client
 	// receives contains a txn that might have a modified priority.
 	return &TransactionPushError{PusheeTxn: pusheeTxn}
@@ -820,7 +866,7 @@ func (e *WriteIntentError) printError(buf Printer) {
 	// If we have a lot of intents, we only want to show the first and the last.
 	const maxBegin = 5
 	const maxEnd = 5
-	var begin, end []Intent
+	var begin, end []roachpb.Intent
 	if len(e.Intents) <= maxBegin+maxEnd {
 		begin = e.Intents
 	} else {
@@ -870,7 +916,7 @@ var _ ErrorDetailInterface = &WriteIntentError{}
 // immediately after the existing write which had a higher timestamp and which
 // caused the error. An optional Key parameter is accepted to denote one key
 // where this error was encountered.
-func NewWriteTooOldError(operationTS, actualTS hlc.Timestamp, key Key) *WriteTooOldError {
+func NewWriteTooOldError(operationTS, actualTS hlc.Timestamp, key roachpb.Key) *WriteTooOldError {
 	if len(key) > 0 {
 		oldKey := key
 		key = make([]byte, len(oldKey))
@@ -922,12 +968,12 @@ var _ transactionRestartError = &WriteTooOldError{}
 func NewReadWithinUncertaintyIntervalError(
 	readTS hlc.Timestamp,
 	localUncertaintyLimit hlc.ClockTimestamp,
-	txn *Transaction,
+	txn *roachpb.Transaction,
 	valueTS hlc.Timestamp,
 	localTS hlc.ClockTimestamp,
 ) *ReadWithinUncertaintyIntervalError {
 	var globalUncertaintyLimit hlc.Timestamp
-	var observedTSs []ObservedTimestamp
+	var observedTSs []roachpb.ObservedTimestamp
 	if txn != nil {
 		globalUncertaintyLimit = txn.GlobalUncertaintyLimit
 		observedTSs = txn.ObservedTimestamps
@@ -962,7 +1008,7 @@ func (e *ReadWithinUncertaintyIntervalError) printError(p Printer) {
 		e.ReadTimestamp, e.ValueTimestamp, localTsStr, e.LocalUncertaintyLimit, e.GlobalUncertaintyLimit)
 
 	p.Printf("[")
-	for i, ot := range observedTimestampSlice(e.ObservedTimestamps) {
+	for i, ot := range e.ObservedTimestamps {
 		if i > 0 {
 			p.Printf(" ")
 		}
@@ -1103,7 +1149,7 @@ func (e *ReplicaCorruptionError) Type() ErrorDetailType {
 var _ ErrorDetailInterface = &ReplicaCorruptionError{}
 
 // NewReplicaTooOldError initializes a new ReplicaTooOldError.
-func NewReplicaTooOldError(replicaID ReplicaID) *ReplicaTooOldError {
+func NewReplicaTooOldError(replicaID roachpb.ReplicaID) *ReplicaTooOldError {
 	return &ReplicaTooOldError{
 		ReplicaID: replicaID,
 	}
@@ -1126,7 +1172,7 @@ func (e *ReplicaTooOldError) Type() ErrorDetailType {
 var _ ErrorDetailInterface = &ReplicaTooOldError{}
 
 // NewStoreNotFoundError initializes a new StoreNotFoundError.
-func NewStoreNotFoundError(storeID StoreID) *StoreNotFoundError {
+func NewStoreNotFoundError(storeID roachpb.StoreID) *StoreNotFoundError {
 	return &StoreNotFoundError{
 		StoreID: storeID,
 	}
@@ -1234,7 +1280,7 @@ func (e *MVCCHistoryMutationError) Type() ErrorDetailType {
 var _ ErrorDetailInterface = &MVCCHistoryMutationError{}
 
 // NewIntentMissingError creates a new IntentMissingError.
-func NewIntentMissingError(key Key, wrongIntent *Intent) *IntentMissingError {
+func NewIntentMissingError(key roachpb.Key, wrongIntent *roachpb.Intent) *IntentMissingError {
 	return &IntentMissingError{
 		Key:         key,
 		WrongIntent: wrongIntent,
@@ -1305,7 +1351,7 @@ func (e *RangeFeedRetryError) Type() ErrorDetailType {
 var _ ErrorDetailInterface = &RangeFeedRetryError{}
 
 // NewIndeterminateCommitError initializes a new IndeterminateCommitError.
-func NewIndeterminateCommitError(txn Transaction) *IndeterminateCommitError {
+func NewIndeterminateCommitError(txn roachpb.Transaction) *IndeterminateCommitError {
 	return &IndeterminateCommitError{StagingTxn: txn}
 }
 
@@ -1396,7 +1442,7 @@ var _ ErrorDetailInterface = &MinTimestampBoundUnsatisfiableError{}
 // or 'intent' which caused the failed refresh, key is the key that we failed
 // refreshing, and ts is the timestamp of the committed value or intent that was written.
 func NewRefreshFailedError(
-	reason RefreshFailedError_Reason, key Key, ts hlc.Timestamp,
+	reason RefreshFailedError_Reason, key roachpb.Key, ts hlc.Timestamp,
 ) *RefreshFailedError {
 	return &RefreshFailedError{
 		Reason:    reason,
@@ -1446,7 +1492,7 @@ func (e *InsufficientSpaceError) Error() string {
 // Note that this error can be generated on the Raft processing goroutine, so
 // its output should be completely determined by its parameters.
 func NewNotLeaseHolderError(
-	l Lease, proposerStoreID StoreID, rangeDesc *RangeDescriptor, msg string,
+	l roachpb.Lease, proposerStoreID roachpb.StoreID, rangeDesc *roachpb.RangeDescriptor, msg string,
 ) *NotLeaseHolderError {
 	err := &NotLeaseHolderError{
 		RangeID:   rangeDesc.RangeID,
@@ -1465,7 +1511,7 @@ func NewNotLeaseHolderError(
 		// could catch tests in a loop, presumably due to manual clocks).
 		_, stillMember := rangeDesc.GetReplicaDescriptor(l.Replica.StoreID)
 		if stillMember {
-			err.Lease = new(Lease)
+			err.Lease = new(roachpb.Lease)
 			*err.Lease = l
 			// TODO(arul): We only need to return this for the 22.1 <-> 22.2 mixed
 			// version state, as v22.1 use this field to log NLHE messages. We can
@@ -1482,9 +1528,12 @@ func NewNotLeaseHolderError(
 // current lease is not known, but the error is being created by guessing who
 // the leaseholder may be.
 func NewNotLeaseHolderErrorWithSpeculativeLease(
-	leaseHolder ReplicaDescriptor, proposerStoreID StoreID, rangeDesc *RangeDescriptor, msg string,
+	leaseHolder roachpb.ReplicaDescriptor,
+	proposerStoreID roachpb.StoreID,
+	rangeDesc *roachpb.RangeDescriptor,
+	msg string,
 ) *NotLeaseHolderError {
-	speculativeLease := Lease{
+	speculativeLease := roachpb.Lease{
 		Replica: leaseHolder,
 	}
 	return NewNotLeaseHolderError(speculativeLease, proposerStoreID, rangeDesc, msg)

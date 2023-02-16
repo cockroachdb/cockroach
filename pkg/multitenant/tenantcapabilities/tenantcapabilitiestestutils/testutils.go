@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -27,17 +28,17 @@ import (
 // form:
 //
 // cmds=(split, scan, cput)
-func ParseBatchRequests(t *testing.T, d *datadriven.TestData) (ba roachpb.BatchRequest) {
+func ParseBatchRequests(t *testing.T, d *datadriven.TestData) (ba kvpb.BatchRequest) {
 	for _, cmd := range d.CmdArgs {
 		if cmd.Key == "cmds" {
 			for _, z := range cmd.Vals {
 				switch z {
 				case "split":
-					ba.Add(&roachpb.AdminSplitRequest{})
+					ba.Add(&kvpb.AdminSplitRequest{})
 				case "scan":
-					ba.Add(&roachpb.ScanRequest{})
+					ba.Add(&kvpb.ScanRequest{})
 				case "cput":
-					ba.Add(&roachpb.ConditionalPutRequest{})
+					ba.Add(&kvpb.ConditionalPutRequest{})
 				default:
 					t.Fatalf("unsupported request type: %s", z)
 				}

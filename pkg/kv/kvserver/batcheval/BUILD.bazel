@@ -58,6 +58,7 @@ go_library(
     deps = [
         "//pkg/clusterversion",
         "//pkg/keys",
+        "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/abortspan",
         "//pkg/kv/kvserver/batcheval/result",
         "//pkg/kv/kvserver/concurrency",
@@ -131,6 +132,7 @@ go_test(
         "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/kv",
+        "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/abortspan",
         "//pkg/kv/kvserver/batcheval/result",

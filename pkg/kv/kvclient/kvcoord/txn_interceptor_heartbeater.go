@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -154,8 +155,8 @@ type txnHeartbeater struct {
 }
 
 type abortTxnAsyncResult struct {
-	br   *roachpb.BatchResponse
-	pErr *roachpb.Error
+	br   *kvpb.BatchResponse
+	pErr *kvpb.Error
 }
 
 // init initializes the txnHeartbeater. This method exists instead of a
@@ -182,9 +183,9 @@ func (h *txnHeartbeater) init(
 
 // SendLocked is part of the txnInterceptor interface.
 func (h *txnHeartbeater) SendLocked(
-	ctx context.Context, ba *roachpb.BatchRequest,
-) (*roachpb.BatchResponse, *roachpb.Error) {
-	etArg, hasET := ba.GetArg(roachpb.EndTxn)
+	ctx context.Context, ba *kvpb.BatchRequest,
+) (*kvpb.BatchResponse, *kvpb.Error) {
+	etArg, hasET := ba.GetArg(kvpb.EndTxn)
 	firstLockingIndex, pErr := firstLockingIndex(ba)
 	if pErr != nil {
 		return nil, pErr
@@ -208,7 +209,7 @@ func (h *txnHeartbeater) SendLocked(
 	}
 
 	if hasET {
-		et := etArg.(*roachpb.EndTxnRequest)
+		et := etArg.(*kvpb.EndTxnRequest)
 
 		// Preemptively stop the heartbeat loop in case of transaction abort.
 		// In case of transaction commit we don't want to do this because commit
@@ -232,7 +233,7 @@ func (h *txnHeartbeater) SendLocked(
 				case res := <-resultC:
 					return res.br, res.pErr
 				case <-ctx.Done():
-					return nil, roachpb.NewError(ctx.Err())
+					return nil, kvpb.NewError(ctx.Err())
 				}
 			}
 		}
@@ -431,10 +432,10 @@ func (h *txnHeartbeater) heartbeatLocked(ctx context.Context) bool {
 	if txn.Key == nil {
 		log.Fatalf(ctx, "attempting to heartbeat txn without anchor key: %v", txn)
 	}
-	ba := &roachpb.BatchRequest{}
+	ba := &kvpb.BatchRequest{}
 	ba.Txn = txn
-	ba.Add(&roachpb.HeartbeatTxnRequest{
-		RequestHeader: roachpb.RequestHeader{
+	ba.Add(&kvpb.HeartbeatTxnRequest{
+		RequestHeader: kvpb.RequestHeader{
 			Key: txn.Key,
 		},
 		Now: h.clock.Now(),
@@ -460,7 +461,7 @@ func (h *txnHeartbeater) heartbeatLocked(ctx context.Context) bool {
 		//
 		// TODO(nvanbenschoten): Make this the only case where we get back an
 		// Aborted txn.
-		if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); ok {
+		if _, ok := pErr.GetDetail().(*kvpb.TransactionAbortedError); ok {
 			// Note that it's possible that the txn actually committed but its
 			// record got GC'ed. In that case, aborting won't hurt anyone though,
 			// since all intents have already been resolved.
@@ -514,9 +515,9 @@ func (h *txnHeartbeater) abortTxnAsyncLocked(ctx context.Context) {
 
 	// Construct a batch with an EndTxn request.
 	txn := h.mu.txn.Clone()
-	ba := &roachpb.BatchRequest{}
-	ba.Header = roachpb.Header{Txn: txn}
-	ba.Add(&roachpb.EndTxnRequest{
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: txn}
+	ba.Add(&kvpb.EndTxnRequest{
 		Commit: false,
 		// Resolved intents should maintain an abort span entry to prevent
 		// concurrent requests from failing to notice the transaction was aborted.
@@ -592,15 +593,15 @@ func (h *txnHeartbeater) abortTxnAsyncLocked(ctx context.Context) {
 // in the BatchRequest. Returns -1 if the batch has no intention to acquire
 // locks. It also verifies that if an EndTxnRequest is included, then it is the
 // last request in the batch.
-func firstLockingIndex(ba *roachpb.BatchRequest) (int, *roachpb.Error) {
+func firstLockingIndex(ba *kvpb.BatchRequest) (int, *kvpb.Error) {
 	for i, ru := range ba.Requests {
 		args := ru.GetInner()
 		if i < len(ba.Requests)-1 /* if not last*/ {
-			if _, ok := args.(*roachpb.EndTxnRequest); ok {
-				return -1, roachpb.NewErrorf("%s sent as non-terminal call", args.Method())
+			if _, ok := args.(*kvpb.EndTxnRequest); ok {
+				return -1, kvpb.NewErrorf("%s sent as non-terminal call", args.Method())
 			}
 		}
-		if roachpb.IsLocking(args) {
+		if kvpb.IsLocking(args) {
 			return i, nil
 		}
 	}

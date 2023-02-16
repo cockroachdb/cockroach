@@ -21,6 +21,7 @@ import (
 
 	"github.com/biogo/store/llrb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -75,14 +76,14 @@ func (k *rangeCacheKey) Compare(o llrb.Comparable) int {
 // cases it is referenced, the only acceptable values are READ_UNCOMMITTED
 // and INCONSISTENT. The hope with this alias and the consts below
 // it increase code clarity and lead readers of the code here.
-type RangeLookupConsistency = roachpb.ReadConsistencyType
+type RangeLookupConsistency = kvpb.ReadConsistencyType
 
 const (
 	// ReadFromFollower is the RangeLookupConsistency used to read from a follower.
-	ReadFromFollower = roachpb.INCONSISTENT
+	ReadFromFollower = kvpb.INCONSISTENT
 	// ReadFromLeaseholder is the RangeLookupConsistency used to read from the
 	// leaseholder.
-	ReadFromLeaseholder = roachpb.READ_UNCOMMITTED
+	ReadFromLeaseholder = kvpb.READ_UNCOMMITTED
 )
 
 // UnknownClosedTimestampPolicy is used to mark on a CacheEntry that the closed
@@ -101,7 +102,7 @@ type RangeDescriptorDB interface {
 	//
 	// Note that the acceptable consistency values are the constants defined
 	// in this package: ReadFromFollower and ReadFromLeaseholder. The
-	// RangeLookupConsistency type is aliased to roachpb.ReadConsistencyType
+	// RangeLookupConsistency type is aliased to kvpb.ReadConsistencyType
 	// in order to permit implementations of this interface to import this
 	// package.
 	RangeLookup(

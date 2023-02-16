@@ -13,6 +13,7 @@ package batcheval
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -54,8 +55,8 @@ func CollectIntentRows(
 	for i := range intents {
 		kv, err := readProvisionalVal(ctx, reader, usePrefixIter, &intents[i])
 		if err != nil {
-			if errors.HasType(err, (*roachpb.WriteIntentError)(nil)) ||
-				errors.HasType(err, (*roachpb.ReadWithinUncertaintyIntervalError)(nil)) {
+			if errors.HasType(err, (*kvpb.WriteIntentError)(nil)) ||
+				errors.HasType(err, (*kvpb.ReadWithinUncertaintyIntervalError)(nil)) {
 				log.Fatalf(ctx, "unexpected %T in CollectIntentRows: %+v", err, err)
 			}
 			return nil, err
@@ -108,24 +109,24 @@ func readProvisionalVal(
 func acquireUnreplicatedLocksOnKeys(
 	res *result.Result,
 	txn *roachpb.Transaction,
-	scanFmt roachpb.ScanFormat,
+	scanFmt kvpb.ScanFormat,
 	scanRes *storage.MVCCScanResult,
 ) error {
 	res.Local.AcquiredLocks = make([]roachpb.LockAcquisition, scanRes.NumKeys)
 	switch scanFmt {
-	case roachpb.BATCH_RESPONSE:
+	case kvpb.BATCH_RESPONSE:
 		var i int
 		return storage.MVCCScanDecodeKeyValues(scanRes.KVData, func(key storage.MVCCKey, _ []byte) error {
 			res.Local.AcquiredLocks[i] = roachpb.MakeLockAcquisition(txn, copyKey(key.Key), lock.Unreplicated)
 			i++
 			return nil
 		})
-	case roachpb.KEY_VALUES:
+	case kvpb.KEY_VALUES:
 		for i, row := range scanRes.KVs {
 			res.Local.AcquiredLocks[i] = roachpb.MakeLockAcquisition(txn, copyKey(row.Key), lock.Unreplicated)
 		}
 		return nil
-	case roachpb.COL_BATCH_RESPONSE:
+	case kvpb.COL_BATCH_RESPONSE:
 		return errors.AssertionFailedf("unexpectedly acquiring unreplicated locks with COL_BATCH_RESPONSE scan format")
 	default:
 		panic("unexpected scanFormat")

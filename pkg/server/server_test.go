@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -221,8 +222,8 @@ func TestServerStartClock(t *testing.T) {
 	// Run a command so that we are sure to touch the timestamp cache. This is
 	// actually not needed because other commands run during server
 	// initialization, but we cannot guarantee that's going to stay that way.
-	get := &roachpb.GetRequest{
-		RequestHeader: roachpb.RequestHeader{Key: roachpb.Key("a")},
+	get := &kvpb.GetRequest{
+		RequestHeader: kvpb.RequestHeader{Key: roachpb.Key("a")},
 	}
 	if _, err := kv.SendWrapped(
 		context.Background(), s.DB().NonTransactionalSender(), get,

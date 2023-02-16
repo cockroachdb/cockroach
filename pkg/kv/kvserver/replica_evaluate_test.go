@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
@@ -698,7 +699,7 @@ func TestEvaluateBatch(t *testing.T) {
 
 type data struct {
 	batcheval.MockEvalCtx
-	ba       roachpb.BatchRequest
+	ba       kvpb.BatchRequest
 	idKey    kvserverbase.CmdIDKey
 	eng      storage.Engine
 	ms       enginepb.MVCCStats
@@ -707,9 +708,9 @@ type data struct {
 
 type resp struct {
 	d    *data
-	br   *roachpb.BatchResponse
+	br   *kvpb.BatchResponse
 	res  result.Result
-	pErr *roachpb.Error
+	pErr *kvpb.Error
 }
 
 type testCase struct {
@@ -747,11 +748,11 @@ func verifyScanResult(t *testing.T, r resp, keysPerResp ...[]string) {
 		scan := r.br.Responses[i].GetInner()
 		var rows []roachpb.KeyValue
 		switch req := scan.(type) {
-		case *roachpb.ScanResponse:
+		case *kvpb.ScanResponse:
 			rows = req.Rows
-		case *roachpb.ReverseScanResponse:
+		case *kvpb.ReverseScanResponse:
 			rows = req.Rows
-		case *roachpb.GetResponse:
+		case *kvpb.GetResponse:
 			if req.Value != nil {
 				rows = []roachpb.KeyValue{{
 					Key:   r.d.ba.Requests[i].GetGet().Key,

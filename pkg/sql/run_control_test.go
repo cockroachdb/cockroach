@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -861,10 +862,10 @@ func TestTenantStatementTimeoutAdmissionQueueCancelation(t *testing.T) {
 	// client goroutine finish.
 	wg.Add(numBlockers + 1)
 
-	matchBatch := func(ctx context.Context, req *roachpb.BatchRequest) bool {
+	matchBatch := func(ctx context.Context, req *kvpb.BatchRequest) bool {
 		tid, ok := roachpb.ClientTenantFromContext(ctx)
 		if ok && tid == tenantID && len(req.Requests) > 0 {
-			scan, ok := req.Requests[0].GetInner().(*roachpb.ScanRequest)
+			scan, ok := req.Requests[0].GetInner().(*kvpb.ScanRequest)
 			if ok && tableSpan.ContainsKey(scan.Key) {
 				return true
 			}
@@ -882,7 +883,7 @@ func TestTenantStatementTimeoutAdmissionQueueCancelation(t *testing.T) {
 				TestingDisableSkipEnforcement: true,
 			},
 			Store: &kvserver.StoreTestingKnobs{
-				TestingRequestFilter: func(ctx context.Context, req *roachpb.BatchRequest) *roachpb.Error {
+				TestingRequestFilter: func(ctx context.Context, req *kvpb.BatchRequest) *kvpb.Error {
 					if matchBatch(ctx, req) {
 						// Notify we're blocking.
 						unblockClientCh <- struct{}{}
@@ -890,9 +891,9 @@ func TestTenantStatementTimeoutAdmissionQueueCancelation(t *testing.T) {
 					}
 					return nil
 				},
-				TestingResponseErrorEvent: func(ctx context.Context, req *roachpb.BatchRequest, err error) {
+				TestingResponseErrorEvent: func(ctx context.Context, req *kvpb.BatchRequest, err error) {
 					if matchBatch(ctx, req) {
-						scan, ok := req.Requests[0].GetInner().(*roachpb.ScanRequest)
+						scan, ok := req.Requests[0].GetInner().(*kvpb.ScanRequest)
 						if ok && tableSpan.ContainsKey(scan.Key) {
 							cancel()
 							wg.Done()

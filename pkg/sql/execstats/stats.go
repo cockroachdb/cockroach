@@ -14,7 +14,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -37,14 +37,14 @@ func ShouldCollectStats(ctx context.Context, collectStats bool) bool {
 // the trace are included.
 func GetCumulativeContentionTime(
 	ctx context.Context, recording tracingpb.Recording,
-) (time.Duration, []roachpb.ContentionEvent) {
+) (time.Duration, []kvpb.ContentionEvent) {
 	var cumulativeContentionTime time.Duration
 	if recording == nil {
 		recording = tracing.SpanFromContext(ctx).GetConfiguredRecording()
 	}
 
-	var contentionEvents []roachpb.ContentionEvent
-	var ev roachpb.ContentionEvent
+	var contentionEvents []kvpb.ContentionEvent
+	var ev kvpb.ContentionEvent
 	for i := range recording {
 		recording[i].Structured(func(any *pbtypes.Any, _ time.Time) {
 			if !pbtypes.Is(any, &ev) {
@@ -119,8 +119,8 @@ func GetScanStats(ctx context.Context, recording tracingpb.Recording) (scanStats
 	if recording == nil {
 		recording = tracing.SpanFromContext(ctx).GetRecording(tracingpb.RecordingStructured)
 	}
-	var ss roachpb.ScanStats
-	var tc roachpb.TenantConsumption
+	var ss kvpb.ScanStats
+	var tc kvpb.TenantConsumption
 	for i := range recording {
 		recording[i].Structured(func(any *pbtypes.Any, _ time.Time) {
 			if pbtypes.Is(any, &ss) {

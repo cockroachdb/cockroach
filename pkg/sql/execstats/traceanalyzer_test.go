@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
@@ -240,7 +240,7 @@ func TestTraceAnalyzerProcessStats(t *testing.T) {
 }
 
 func TestQueryLevelStatsAccumulate(t *testing.T) {
-	aEvent := roachpb.ContentionEvent{Duration: 7 * time.Second}
+	aEvent := kvpb.ContentionEvent{Duration: 7 * time.Second}
 	a := execstats.QueryLevelStats{
 		NetworkBytesSent:                   1,
 		MaxMemUsage:                        2,
@@ -250,7 +250,7 @@ func TestQueryLevelStatsAccumulate(t *testing.T) {
 		KVTime:                             5 * time.Second,
 		NetworkMessages:                    6,
 		ContentionTime:                     7 * time.Second,
-		ContentionEvents:                   []roachpb.ContentionEvent{aEvent},
+		ContentionEvents:                   []kvpb.ContentionEvent{aEvent},
 		MaxDiskUsage:                       8,
 		RUEstimate:                         9,
 		CPUTime:                            10 * time.Second,
@@ -268,7 +268,7 @@ func TestQueryLevelStatsAccumulate(t *testing.T) {
 		MvccRangeKeyContainedPoints:        22,
 		MvccRangeKeySkippedPoints:          23,
 	}
-	bEvent := roachpb.ContentionEvent{Duration: 14 * time.Second}
+	bEvent := kvpb.ContentionEvent{Duration: 14 * time.Second}
 	b := execstats.QueryLevelStats{
 		NetworkBytesSent:                   8,
 		MaxMemUsage:                        9,
@@ -278,7 +278,7 @@ func TestQueryLevelStatsAccumulate(t *testing.T) {
 		KVTime:                             12 * time.Second,
 		NetworkMessages:                    13,
 		ContentionTime:                     14 * time.Second,
-		ContentionEvents:                   []roachpb.ContentionEvent{bEvent},
+		ContentionEvents:                   []kvpb.ContentionEvent{bEvent},
 		MaxDiskUsage:                       15,
 		RUEstimate:                         16,
 		CPUTime:                            17 * time.Second,
@@ -305,7 +305,7 @@ func TestQueryLevelStatsAccumulate(t *testing.T) {
 		KVTime:                             17 * time.Second,
 		NetworkMessages:                    19,
 		ContentionTime:                     21 * time.Second,
-		ContentionEvents:                   []roachpb.ContentionEvent{aEvent, bEvent},
+		ContentionEvents:                   []kvpb.ContentionEvent{aEvent, bEvent},
 		MaxDiskUsage:                       15,
 		RUEstimate:                         25,
 		CPUTime:                            27 * time.Second,

@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -54,14 +55,14 @@ func TestCalculateThreshold(t *testing.T) {
 }
 
 type collectingGCer struct {
-	keys [][]roachpb.GCRequest_GCKey
+	keys [][]kvpb.GCRequest_GCKey
 }
 
 func (c *collectingGCer) GC(
 	_ context.Context,
-	keys []roachpb.GCRequest_GCKey,
-	_ []roachpb.GCRequest_GCRangeKey,
-	_ *roachpb.GCRequest_GCClearRange,
+	keys []kvpb.GCRequest_GCKey,
+	_ []kvpb.GCRequest_GCRangeKey,
+	_ *kvpb.GCRequest_GCClearRange,
 ) error {
 	c.keys = append(c.keys, keys)
 	return nil
@@ -78,10 +79,10 @@ func TestBatchingInlineGCer(t *testing.T) {
 	}
 	m.max = 10 // something reasonable for this unit test
 
-	long := roachpb.GCRequest_GCKey{
+	long := kvpb.GCRequest_GCKey{
 		Key: bytes.Repeat([]byte("x"), m.max-1),
 	}
-	short := roachpb.GCRequest_GCKey{
+	short := kvpb.GCRequest_GCKey{
 		Key: roachpb.Key("q"),
 	}
 
@@ -744,7 +745,7 @@ func TestGC(t *testing.T) {
 	}
 }
 
-type gCR roachpb.GCRequest_GCClearRange
+type gCR kvpb.GCRequest_GCClearRange
 
 // Format implements the fmt.Formatter interface.
 func (k gCR) Format(f fmt.State, r rune) {
@@ -753,7 +754,7 @@ func (k gCR) Format(f fmt.State, r rune) {
 	k.EndKey.Format(f, r)
 }
 
-type gCRS []roachpb.GCRequest_GCClearRange
+type gCRS []kvpb.GCRequest_GCClearRange
 
 func (k gCRS) toTestData() (spans []gCR) {
 	if len(k) == 0 {
@@ -770,7 +771,7 @@ func (k gCRS) toTestData() (spans []gCR) {
 	return spans
 }
 
-type clearPointsKey roachpb.GCRequest_GCKey
+type clearPointsKey kvpb.GCRequest_GCKey
 
 // Format implements the fmt.Formatter interface.
 func (k clearPointsKey) Format(f fmt.State, c rune) {
@@ -780,7 +781,7 @@ func (k clearPointsKey) Format(f fmt.State, c rune) {
 	}.Format(f, c)
 }
 
-type gcPointsBatches [][]roachpb.GCRequest_GCKey
+type gcPointsBatches [][]kvpb.GCRequest_GCKey
 
 // toTestData converts batches to test data structs that are easier to create
 // and assert. This method also ignores nil convention that allows tests to
@@ -1714,8 +1715,8 @@ func TestRangeKeyBatching(t *testing.T) {
 		return rangeKeys
 	}
 
-	mkGCr := func(start, end string, ts int) roachpb.GCRequest_GCRangeKey {
-		return roachpb.GCRequest_GCRangeKey{
+	mkGCr := func(start, end string, ts int) kvpb.GCRequest_GCRangeKey {
+		return kvpb.GCRequest_GCRangeKey{
 			StartKey: mkKey(start),
 			EndKey:   mkKey(end),
 			Timestamp: hlc.Timestamp{
@@ -1728,7 +1729,7 @@ func TestRangeKeyBatching(t *testing.T) {
 		name      string
 		data      []storage.MVCCRangeKeyStack
 		batchSize int64
-		expect    []roachpb.GCRequest_GCRangeKey
+		expect    []kvpb.GCRequest_GCRangeKey
 	}{
 		{
 			name: "single batch",
@@ -1737,7 +1738,7 @@ func TestRangeKeyBatching(t *testing.T) {
 				mkKvs("c", "d", 5, 2, 1),
 			},
 			batchSize: 99999,
-			expect: []roachpb.GCRequest_GCRangeKey{
+			expect: []kvpb.GCRequest_GCRangeKey{
 				mkGCr("a", "b", 5),
 				mkGCr("c", "d", 5),
 			},
@@ -1750,7 +1751,7 @@ func TestRangeKeyBatching(t *testing.T) {
 				mkKvs("c", "d", 3, 2),
 			},
 			batchSize: 99999,
-			expect: []roachpb.GCRequest_GCRangeKey{
+			expect: []kvpb.GCRequest_GCRangeKey{
 				mkGCr("a", "c", 5),
 				mkGCr("c", "d", 3),
 			},
@@ -1763,7 +1764,7 @@ func TestRangeKeyBatching(t *testing.T) {
 				mkKvs("c", "d", 3, 2),
 			},
 			batchSize: 40, // We could only fit 2 keys in a batch.
-			expect: []roachpb.GCRequest_GCRangeKey{
+			expect: []kvpb.GCRequest_GCRangeKey{
 				mkGCr("a", "b", 3),
 				mkGCr("a", "b", 5),
 				mkGCr("b", "c", 2),
@@ -1780,7 +1781,7 @@ func TestRangeKeyBatching(t *testing.T) {
 				mkKvs("c", "d", 3, 2),
 			},
 			batchSize: 50, // We could only fit 3 keys in a batch.
-			expect: []roachpb.GCRequest_GCRangeKey{
+			expect: []kvpb.GCRequest_GCRangeKey{
 				mkGCr("a", "b", 5),
 				mkGCr("b", "c", 5),
 				mkGCr("c", "d", 3),
@@ -1794,7 +1795,7 @@ func TestRangeKeyBatching(t *testing.T) {
 				mkKvs("c", "d", 5, 1),
 			},
 			batchSize: 85, // We could only fit 5 keys in a batch.
-			expect: []roachpb.GCRequest_GCRangeKey{
+			expect: []kvpb.GCRequest_GCRangeKey{
 				mkGCr("a", "c", 5),
 				mkGCr("c", "d", 1),
 				mkGCr("c", "d", 5),
@@ -1840,9 +1841,9 @@ type capturingGCer struct {
 
 func (c *capturingGCer) GC(
 	_ context.Context,
-	k []roachpb.GCRequest_GCKey,
-	_ []roachpb.GCRequest_GCRangeKey,
-	cr *roachpb.GCRequest_GCClearRange,
+	k []kvpb.GCRequest_GCKey,
+	_ []kvpb.GCRequest_GCRangeKey,
+	cr *kvpb.GCRequest_GCClearRange,
 ) error {
 	if len(k) > 0 {
 		kk := make([]gCR, len(k))

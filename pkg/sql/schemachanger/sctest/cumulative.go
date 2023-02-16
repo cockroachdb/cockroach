@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/corpus"
@@ -1482,7 +1482,7 @@ func ValidateMixedVersionElements(t *testing.T, path string, newCluster NewMixed
 								jobPauseResumeChannel <- p.JobID
 								<-waitForPause
 								pauseComplete = true
-								return roachpb.NewTransactionRetryError(roachpb.RETRY_REASON_UNKNOWN, "test")
+								return kvpb.NewTransactionRetryError(kvpb.RETRY_REASON_UNKNOWN, "test")
 							}
 							return nil
 						},

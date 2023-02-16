@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -42,12 +43,12 @@ func TestConnectorSettingOverrides(t *testing.T) {
 	require.NoError(t, err)
 
 	tenantID := roachpb.MustMakeTenantID(5)
-	gossipSubFn := func(req *roachpb.GossipSubscriptionRequest, stream roachpb.Internal_GossipSubscriptionServer) error {
+	gossipSubFn := func(req *kvpb.GossipSubscriptionRequest, stream kvpb.Internal_GossipSubscriptionServer) error {
 		return stream.Send(gossipEventForClusterID(rpcContext.StorageClusterID.Get()))
 	}
-	eventCh := make(chan *roachpb.TenantSettingsEvent)
+	eventCh := make(chan *kvpb.TenantSettingsEvent)
 	defer close(eventCh)
-	settingsFn := func(req *roachpb.TenantSettingsRequest, stream roachpb.Internal_TenantSettingsServer) error {
+	settingsFn := func(req *kvpb.TenantSettingsRequest, stream kvpb.Internal_TenantSettingsServer) error {
 		if req.TenantID != tenantID {
 			t.Errorf("invalid tenantID %s (expected %s)", req.TenantID, tenantID)
 		}
@@ -58,7 +59,7 @@ func TestConnectorSettingOverrides(t *testing.T) {
 		}
 		return nil
 	}
-	roachpb.RegisterInternalServer(s, &mockServer{
+	kvpb.RegisterInternalServer(s, &mockServer{
 		gossipSubFn:      gossipSubFn,
 		tenantSettingsFn: settingsFn,
 	})
@@ -89,7 +90,7 @@ func TestConnectorSettingOverrides(t *testing.T) {
 	// We should always get an initial notification.
 	waitForSettings(t, ch)
 
-	ev := &roachpb.TenantSettingsEvent{
+	ev := &kvpb.TenantSettingsEvent{
 		Precedence:  1,
 		Incremental: false,
 		Overrides:   nil,
@@ -100,58 +101,58 @@ func TestConnectorSettingOverrides(t *testing.T) {
 	waitForSettings(t, ch)
 	expectSettings(t, c, "foo=default bar=default baz=default")
 
-	st := func(name, val string) roachpb.TenantSetting {
-		return roachpb.TenantSetting{
+	st := func(name, val string) kvpb.TenantSetting {
+		return kvpb.TenantSetting{
 			Name:  name,
 			Value: settings.EncodedValue{Value: val},
 		}
 	}
 
 	// Set some all-tenant overrides.
-	ev = &roachpb.TenantSettingsEvent{
-		Precedence:  roachpb.AllTenantsOverrides,
+	ev = &kvpb.TenantSettingsEvent{
+		Precedence:  kvpb.AllTenantsOverrides,
 		Incremental: true,
-		Overrides:   []roachpb.TenantSetting{st("foo", "all"), st("bar", "all")},
+		Overrides:   []kvpb.TenantSetting{st("foo", "all"), st("bar", "all")},
 	}
 	eventCh <- ev
 	waitForSettings(t, ch)
 	expectSettings(t, c, "foo=all bar=all baz=default")
 
 	// Set some tenant-specific overrides, with all-tenant overlap.
-	ev = &roachpb.TenantSettingsEvent{
-		Precedence:  roachpb.SpecificTenantOverrides,
+	ev = &kvpb.TenantSettingsEvent{
+		Precedence:  kvpb.SpecificTenantOverrides,
 		Incremental: true,
-		Overrides:   []roachpb.TenantSetting{st("foo", "specific"), st("baz", "specific")},
+		Overrides:   []kvpb.TenantSetting{st("foo", "specific"), st("baz", "specific")},
 	}
 	eventCh <- ev
 	waitForSettings(t, ch)
 	expectSettings(t, c, "foo=specific bar=all baz=specific")
 
 	// Remove an all-tenant override that has a specific override.
-	ev = &roachpb.TenantSettingsEvent{
-		Precedence:  roachpb.AllTenantsOverrides,
+	ev = &kvpb.TenantSettingsEvent{
+		Precedence:  kvpb.AllTenantsOverrides,
 		Incremental: true,
-		Overrides:   []roachpb.TenantSetting{st("foo", "")},
+		Overrides:   []kvpb.TenantSetting{st("foo", "")},
 	}
 	eventCh <- ev
 	waitForSettings(t, ch)
 	expectSettings(t, c, "foo=specific bar=all baz=specific")
 
 	// Remove a specific override.
-	ev = &roachpb.TenantSettingsEvent{
-		Precedence:  roachpb.SpecificTenantOverrides,
+	ev = &kvpb.TenantSettingsEvent{
+		Precedence:  kvpb.SpecificTenantOverrides,
 		Incremental: true,
-		Overrides:   []roachpb.TenantSetting{st("foo", "")},
+		Overrides:   []kvpb.TenantSetting{st("foo", "")},
 	}
 	eventCh <- ev
 	waitForSettings(t, ch)
 	expectSettings(t, c, "foo=default bar=all baz=specific")
 
 	// Non-incremental change to all-tenants override.
-	ev = &roachpb.TenantSettingsEvent{
-		Precedence:  roachpb.AllTenantsOverrides,
+	ev = &kvpb.TenantSettingsEvent{
+		Precedence:  kvpb.AllTenantsOverrides,
 		Incremental: true,
-		Overrides:   []roachpb.TenantSetting{st("bar", "all")},
+		Overrides:   []kvpb.TenantSetting{st("bar", "all")},
 	}
 	eventCh <- ev
 	waitForSettings(t, ch)

@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -37,7 +38,7 @@ func TestCloneProto(t *testing.T) {
 		{&roachpb.StoreIdent{}, true},
 		{&enginepb.TxnMeta{}, true},
 		{&roachpb.Transaction{}, true},
-		{&roachpb.Error{}, true},
+		{&kvpb.Error{}, true},
 		{&protoutil.RecursiveAndUncloneable{}, true},
 
 		// Cloneable types. This includes all types for which a

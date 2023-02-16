@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -172,7 +173,7 @@ func TestUpdateRangeAddressing(t *testing.T) {
 				hlc.MaxTimestamp, storage.MVCCScanOptions{})
 			if err != nil {
 				// Wait for the intent to be resolved.
-				if errors.HasType(err, (*roachpb.WriteIntentError)(nil)) {
+				if errors.HasType(err, (*kvpb.WriteIntentError)(nil)) {
 					return err
 				}
 				t.Fatal(err)

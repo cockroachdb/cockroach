@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -176,8 +177,8 @@ type Thresholder interface {
 
 // PureGCer is part of the GCer interface.
 type PureGCer interface {
-	GC(context.Context, []roachpb.GCRequest_GCKey, []roachpb.GCRequest_GCRangeKey,
-		*roachpb.GCRequest_GCClearRange,
+	GC(context.Context, []kvpb.GCRequest_GCKey, []kvpb.GCRequest_GCRangeKey,
+		*kvpb.GCRequest_GCClearRange,
 	) error
 }
 
@@ -198,9 +199,9 @@ func (NoopGCer) SetGCThreshold(context.Context, Threshold) error { return nil }
 // GC implements storage.GCer.
 func (NoopGCer) GC(
 	context.Context,
-	[]roachpb.GCRequest_GCKey,
-	[]roachpb.GCRequest_GCRangeKey,
-	*roachpb.GCRequest_GCClearRange,
+	[]kvpb.GCRequest_GCKey,
+	[]kvpb.GCRequest_GCRangeKey,
+	*kvpb.GCRequest_GCClearRange,
 ) error {
 	return nil
 }
@@ -439,7 +440,7 @@ func processReplicatedKeyRange(
 		end := desc.EndKey.AsRawKey()
 		if coveredByRangeTombstone, err := storage.CanGCEntireRange(ctx, snap, start, end,
 			threshold); err == nil && coveredByRangeTombstone {
-			if err = gcer.GC(ctx, nil, nil, &roachpb.GCRequest_GCClearRange{
+			if err = gcer.GC(ctx, nil, nil, &kvpb.GCRequest_GCClearRange{
 				StartKey: start,
 				EndKey:   end,
 			}); err == nil {
@@ -599,7 +600,7 @@ type gcKeyBatcherThresholds struct {
 
 type pointsBatch struct {
 	gcBatchCounters
-	batchGCKeys []roachpb.GCRequest_GCKey
+	batchGCKeys []kvpb.GCRequest_GCKey
 	alloc       bufalloc.ByteAllocator
 }
 
@@ -763,7 +764,7 @@ func (b *gcKeyBatcher) foundGarbage(
 		if b.prevWasNewest || len(b.pointsBatches[i].batchGCKeys) == 0 {
 			b.pointsBatches[i].alloc, key = b.pointsBatches[i].alloc.Copy(cur.key.Key, 0)
 			b.pointsBatches[i].batchGCKeys = append(b.pointsBatches[i].batchGCKeys,
-				roachpb.GCRequest_GCKey{Key: key, Timestamp: cur.key.Timestamp})
+				kvpb.GCRequest_GCKey{Key: key, Timestamp: cur.key.Timestamp})
 			keyMemUsed := len(key) + hlcTimestampSize
 			b.pointsBatches[i].memUsed += keyMemUsed
 			b.totalMemUsed += keyMemUsed
@@ -874,7 +875,7 @@ func (b *gcKeyBatcher) maybeFlushPendingBatches(ctx context.Context) (err error)
 		if b.clearRangeCounters.keysAffected == 1 {
 			endRange = b.clearRangeStartKey.Key.Next()
 		}
-		if err := b.gcer.GC(ctx, nil, nil, &roachpb.GCRequest_GCClearRange{
+		if err := b.gcer.GC(ctx, nil, nil, &kvpb.GCRequest_GCClearRange{
 			StartKey:          b.clearRangeStartKey.Key,
 			StartKeyTimestamp: b.clearRangeStartKey.Timestamp,
 			EndKey:            endRange,
@@ -1308,9 +1309,9 @@ func (b *rangeKeyBatcher) addRangeKey(unsafeRk storage.MVCCRangeKey) {
 
 func (b *rangeKeyBatcher) flushPendingFragments(ctx context.Context) error {
 	if pendingCount := len(b.pending); pendingCount > 0 {
-		toSend := make([]roachpb.GCRequest_GCRangeKey, pendingCount)
+		toSend := make([]kvpb.GCRequest_GCRangeKey, pendingCount)
 		for i, rk := range b.pending {
-			toSend[i] = roachpb.GCRequest_GCRangeKey{
+			toSend[i] = kvpb.GCRequest_GCRangeKey{
 				StartKey:  rk.StartKey,
 				EndKey:    rk.EndKey,
 				Timestamp: rk.Timestamp,
@@ -1384,7 +1385,7 @@ type batchingInlineGCer struct {
 
 	size   int
 	max    int
-	gcKeys []roachpb.GCRequest_GCKey
+	gcKeys []kvpb.GCRequest_GCKey
 }
 
 func makeBatchingInlineGCer(gcer PureGCer, onErr func(error)) batchingInlineGCer {
@@ -1392,7 +1393,7 @@ func makeBatchingInlineGCer(gcer PureGCer, onErr func(error)) batchingInlineGCer
 }
 
 func (b *batchingInlineGCer) FlushingAdd(ctx context.Context, key roachpb.Key) {
-	b.gcKeys = append(b.gcKeys, roachpb.GCRequest_GCKey{Key: key})
+	b.gcKeys = append(b.gcKeys, kvpb.GCRequest_GCKey{Key: key})
 	b.size += len(key)
 	if b.size < b.max {
 		return

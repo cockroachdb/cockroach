@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -74,12 +75,12 @@ func TestTxnHeartbeaterSetsTransactionKey(t *testing.T) {
 
 	// No key is set on a read-only batch.
 	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
-	ba := &roachpb.BatchRequest{}
-	ba.Header = roachpb.Header{Txn: txn.Clone()}
-	ba.Add(&roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
-	ba.Add(&roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: keyB}})
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: txn.Clone()}
+	ba.Add(&kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
+	ba.Add(&kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: keyB}})
 
-	mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 2)
 		require.Equal(t, keyA, ba.Requests[0].GetInner().Header().Key)
 		require.Equal(t, keyB, ba.Requests[1].GetInner().Header().Key)
@@ -99,10 +100,10 @@ func TestTxnHeartbeaterSetsTransactionKey(t *testing.T) {
 
 	// The key of the first write is set as the transaction key.
 	ba.Requests = nil
-	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyB}})
-	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
+	ba.Add(&kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyB}})
+	ba.Add(&kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
 
-	mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 2)
 		require.Equal(t, keyB, ba.Requests[0].GetInner().Header().Key)
 		require.Equal(t, keyA, ba.Requests[1].GetInner().Header().Key)
@@ -122,9 +123,9 @@ func TestTxnHeartbeaterSetsTransactionKey(t *testing.T) {
 
 	// The transaction key is not changed on subsequent batches.
 	ba.Requests = nil
-	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
+	ba.Add(&kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
 
-	mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 1)
 		require.Equal(t, keyA, ba.Requests[0].GetInner().Header().Key)
 
@@ -156,10 +157,10 @@ func TestTxnHeartbeaterLoopStartedOnFirstLock(t *testing.T) {
 
 		// Read-only requests don't start the heartbeat loop.
 		keyA := roachpb.Key("a")
-		keyAHeader := roachpb.RequestHeader{Key: keyA}
-		ba := &roachpb.BatchRequest{}
-		ba.Header = roachpb.Header{Txn: txn.Clone()}
-		ba.Add(&roachpb.GetRequest{RequestHeader: keyAHeader})
+		keyAHeader := kvpb.RequestHeader{Key: keyA}
+		ba := &kvpb.BatchRequest{}
+		ba.Header = kvpb.Header{Txn: txn.Clone()}
+		ba.Add(&kvpb.GetRequest{RequestHeader: keyAHeader})
 
 		br, pErr := th.SendLocked(ctx, ba)
 		require.Nil(t, pErr)
@@ -173,9 +174,9 @@ func TestTxnHeartbeaterLoopStartedOnFirstLock(t *testing.T) {
 		// The heartbeat loop is started on the first locking request.
 		ba.Requests = nil
 		if write {
-			ba.Add(&roachpb.PutRequest{RequestHeader: keyAHeader})
+			ba.Add(&kvpb.PutRequest{RequestHeader: keyAHeader})
 		} else {
-			ba.Add(&roachpb.ScanRequest{RequestHeader: keyAHeader, KeyLocking: lock.Exclusive})
+			ba.Add(&kvpb.ScanRequest{RequestHeader: keyAHeader, KeyLocking: lock.Exclusive})
 		}
 
 		br, pErr = th.SendLocked(ctx, ba)
@@ -190,11 +191,11 @@ func TestTxnHeartbeaterLoopStartedOnFirstLock(t *testing.T) {
 		// The interceptor indicates whether the heartbeat loop is
 		// running on EndTxn requests.
 		ba.Requests = nil
-		ba.Add(&roachpb.EndTxnRequest{Commit: true})
+		ba.Add(&kvpb.EndTxnRequest{Commit: true})
 
-		mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 			require.Len(t, ba.Requests, 1)
-			require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[0].GetInner())
+			require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[0].GetInner())
 
 			br = ba.CreateReply()
 			br.Txn = ba.Txn
@@ -313,17 +314,17 @@ func TestTxnHeartbeaterLoopStartsBeforeExpiry(t *testing.T) {
 			th.mu.Unlock()
 
 			count := 0
-			mockGatekeeper.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			mockGatekeeper.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 				require.Len(t, ba.Requests, 1)
-				require.IsType(t, &roachpb.HeartbeatTxnRequest{}, ba.Requests[0].GetInner())
+				require.IsType(t, &kvpb.HeartbeatTxnRequest{}, ba.Requests[0].GetInner())
 
-				hbReq := ba.Requests[0].GetInner().(*roachpb.HeartbeatTxnRequest)
+				hbReq := ba.Requests[0].GetInner().(*kvpb.HeartbeatTxnRequest)
 				require.Equal(t, &txn, ba.Txn)
 				require.Equal(t, roachpb.Key(txn.Key), hbReq.Key)
 
 				// Check that this transaction isn't already considered expired.
 				if !test.consideredExpired && txnwait.IsExpired(clock.Now(), ba.Txn) {
-					return nil, roachpb.NewError(errors.New("transaction expired before heartbeat"))
+					return nil, kvpb.NewError(errors.New("transaction expired before heartbeat"))
 				}
 
 				log.Infof(ctx, "received heartbeat request")
@@ -339,11 +340,11 @@ func TestTxnHeartbeaterLoopStartsBeforeExpiry(t *testing.T) {
 
 			// The heartbeat loop is started on the first locking request, in this case
 			// a GetForUpdate request.
-			ba := &roachpb.BatchRequest{}
-			ba.Header = roachpb.Header{Txn: txn.Clone()}
+			ba := &kvpb.BatchRequest{}
+			ba.Header = kvpb.Header{Txn: txn.Clone()}
 			keyA := roachpb.Key("a")
-			keyAHeader := roachpb.RequestHeader{Key: keyA}
-			ba.Add(&roachpb.GetRequest{RequestHeader: keyAHeader, KeyLocking: lock.Exclusive})
+			keyAHeader := kvpb.RequestHeader{Key: keyA}
+			ba.Add(&kvpb.GetRequest{RequestHeader: keyAHeader, KeyLocking: lock.Exclusive})
 
 			br, pErr := th.SendLocked(ctx, ba)
 			require.Nil(t, pErr)
@@ -404,15 +405,15 @@ func TestTxnHeartbeaterLoopStartedFor1PC(t *testing.T) {
 	defer th.stopper.Stop(ctx)
 
 	keyA := roachpb.Key("a")
-	ba := &roachpb.BatchRequest{}
-	ba.Header = roachpb.Header{Txn: txn.Clone()}
-	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
-	ba.Add(&roachpb.EndTxnRequest{Commit: true})
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: txn.Clone()}
+	ba.Add(&kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
+	ba.Add(&kvpb.EndTxnRequest{Commit: true})
 
-	mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 2)
-		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
-		require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[1].GetInner())
+		require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[1].GetInner())
 
 		br := ba.CreateReply()
 		br.Txn = ba.Txn
@@ -447,11 +448,11 @@ func TestTxnHeartbeaterLoopRequests(t *testing.T) {
 
 		var count int
 		var lastTime hlc.Timestamp
-		mockGatekeeper.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		mockGatekeeper.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 			require.Len(t, ba.Requests, 1)
-			require.IsType(t, &roachpb.HeartbeatTxnRequest{}, ba.Requests[0].GetInner())
+			require.IsType(t, &kvpb.HeartbeatTxnRequest{}, ba.Requests[0].GetInner())
 
-			hbReq := ba.Requests[0].GetInner().(*roachpb.HeartbeatTxnRequest)
+			hbReq := ba.Requests[0].GetInner().(*kvpb.HeartbeatTxnRequest)
 			require.Equal(t, &txn, ba.Txn)
 			require.Equal(t, roachpb.Key(txn.Key), hbReq.Key)
 			require.True(t, lastTime.Less(hbReq.Now))
@@ -466,9 +467,9 @@ func TestTxnHeartbeaterLoopRequests(t *testing.T) {
 
 		// Kick off the heartbeat loop.
 		keyA := roachpb.Key("a")
-		ba := &roachpb.BatchRequest{}
-		ba.Header = roachpb.Header{Txn: txn.Clone()}
-		ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
+		ba := &kvpb.BatchRequest{}
+		ba.Header = kvpb.Header{Txn: txn.Clone()}
+		ba.Add(&kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
 
 		br, pErr := th.SendLocked(ctx, ba)
 		require.Nil(t, pErr)
@@ -489,9 +490,9 @@ func TestTxnHeartbeaterLoopRequests(t *testing.T) {
 		// Mark the coordinator's transaction record as COMMITTED while a heartbeat
 		// is in-flight. This should cause the heartbeat loop to shut down.
 		th.mu.Lock()
-		mockGatekeeper.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		mockGatekeeper.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 			require.Len(t, ba.Requests, 1)
-			require.IsType(t, &roachpb.HeartbeatTxnRequest{}, ba.Requests[0].GetInner())
+			require.IsType(t, &kvpb.HeartbeatTxnRequest{}, ba.Requests[0].GetInner())
 
 			br := ba.CreateReply()
 			br.Txn = ba.Txn
@@ -531,16 +532,16 @@ func TestTxnHeartbeaterAsyncAbort(t *testing.T) {
 		defer th.stopper.Stop(ctx)
 
 		putDone, asyncAbortDone := make(chan struct{}), make(chan struct{})
-		mockGatekeeper.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		mockGatekeeper.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 			// Wait for the Put to finish to avoid a data race.
 			<-putDone
 
 			require.Len(t, ba.Requests, 1)
-			require.IsType(t, &roachpb.HeartbeatTxnRequest{}, ba.Requests[0].GetInner())
+			require.IsType(t, &kvpb.HeartbeatTxnRequest{}, ba.Requests[0].GetInner())
 
 			if abortedErr {
-				return nil, roachpb.NewErrorWithTxn(
-					roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_UNKNOWN), ba.Txn,
+				return nil, kvpb.NewErrorWithTxn(
+					kvpb.NewTransactionAbortedError(kvpb.ABORT_REASON_UNKNOWN), ba.Txn,
 				)
 			}
 			br := ba.CreateReply()
@@ -551,21 +552,21 @@ func TestTxnHeartbeaterAsyncAbort(t *testing.T) {
 
 		// Kick off the heartbeat loop.
 		keyA := roachpb.Key("a")
-		ba := &roachpb.BatchRequest{}
-		ba.Header = roachpb.Header{Txn: txn.Clone()}
-		ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
+		ba := &kvpb.BatchRequest{}
+		ba.Header = kvpb.Header{Txn: txn.Clone()}
+		ba.Add(&kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
 
 		br, pErr := th.SendLocked(ctx, ba)
 		require.Nil(t, pErr)
 		require.NotNil(t, br)
 
 		// Test that the transaction is rolled back.
-		mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 			defer close(asyncAbortDone)
 			require.Len(t, ba.Requests, 1)
-			require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[0].GetInner())
+			require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[0].GetInner())
 
-			etReq := ba.Requests[0].GetInner().(*roachpb.EndTxnRequest)
+			etReq := ba.Requests[0].GetInner().(*kvpb.EndTxnRequest)
 			require.Equal(t, &txn, ba.Txn)
 			require.Nil(t, etReq.Key) // set in txnCommitter
 			require.False(t, etReq.Commit)
@@ -606,12 +607,12 @@ func TestTxnHeartbeaterAsyncAbortWaitsForInFlight(t *testing.T) {
 	// putReady then return an aborted txn and signal hbAborted.
 	putReady := make(chan struct{})
 	hbAborted := make(chan struct{})
-	mockGatekeeper.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	mockGatekeeper.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		<-putReady
 		defer close(hbAborted)
 
 		require.Len(t, ba.Requests, 1)
-		require.IsType(t, &roachpb.HeartbeatTxnRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &kvpb.HeartbeatTxnRequest{}, ba.Requests[0].GetInner())
 
 		br := ba.CreateReply()
 		br.Txn = ba.Txn
@@ -624,12 +625,12 @@ func TestTxnHeartbeaterAsyncAbortWaitsForInFlight(t *testing.T) {
 	mockSender.ChainMockSend(
 		// Mock a Put, which signals putReady and then waits for putResume
 		// before returning a response.
-		func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 			th.mu.Unlock() // without txnLockGatekeeper, we must unlock manually
 			defer th.mu.Lock()
 			close(putReady)
 			require.Len(t, ba.Requests, 1)
-			require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
+			require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
 
 			<-putResume
 
@@ -638,12 +639,12 @@ func TestTxnHeartbeaterAsyncAbortWaitsForInFlight(t *testing.T) {
 			return br, nil
 		},
 		// Mock an EndTxn, which signals rollbackSent.
-		func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 			defer close(rollbackSent)
 			require.Len(t, ba.Requests, 1)
-			require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[0].GetInner())
+			require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[0].GetInner())
 
-			etReq := ba.Requests[0].GetInner().(*roachpb.EndTxnRequest)
+			etReq := ba.Requests[0].GetInner().(*kvpb.EndTxnRequest)
 			require.Equal(t, &txn, ba.Txn)
 			require.False(t, etReq.Commit)
 			require.True(t, etReq.Poison)
@@ -657,9 +658,9 @@ func TestTxnHeartbeaterAsyncAbortWaitsForInFlight(t *testing.T) {
 
 	// Spawn a goroutine to send the Put.
 	require.NoError(t, th.stopper.RunAsyncTask(ctx, "put", func(ctx context.Context) {
-		ba := &roachpb.BatchRequest{}
-		ba.Header = roachpb.Header{Txn: txn.Clone()}
-		ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: roachpb.Key("a")}})
+		ba := &kvpb.BatchRequest{}
+		ba.Header = kvpb.Header{Txn: txn.Clone()}
+		ba.Add(&kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: roachpb.Key("a")}})
 
 		th.mu.Lock() // without TxnCoordSender, we must lock manually
 		defer th.mu.Unlock()
@@ -696,11 +697,11 @@ func TestTxnHeartbeaterAsyncAbortCollapsesRequests(t *testing.T) {
 
 	// Mock the heartbeat request, which simply aborts and signals hbAborted.
 	hbAborted := make(chan struct{})
-	mockGatekeeper.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	mockGatekeeper.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		defer close(hbAborted)
 
 		require.Len(t, ba.Requests, 1)
-		require.IsType(t, &roachpb.HeartbeatTxnRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &kvpb.HeartbeatTxnRequest{}, ba.Requests[0].GetInner())
 
 		br := ba.CreateReply()
 		br.Txn = ba.Txn
@@ -714,25 +715,25 @@ func TestTxnHeartbeaterAsyncAbortCollapsesRequests(t *testing.T) {
 	rollbackUnblock := make(chan struct{})
 	mockSender.ChainMockSend(
 		// The first Put request is expected and should just return.
-		func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 			require.Len(t, ba.Requests, 1)
-			require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
+			require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
 
 			br := ba.CreateReply()
 			br.Txn = ba.Txn
 			return br, nil
 		},
 		// The first EndTxn request from the heartbeater is expected, so block and return.
-		func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 			th.mu.Unlock() // manually unlock for concurrency, no txnLockGatekeeper
 			defer th.mu.Lock()
 			close(rollbackReady)
 			require.Len(t, ba.Requests, 1)
-			require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[0].GetInner())
+			require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[0].GetInner())
 
 			<-rollbackUnblock
 
-			etReq := ba.Requests[0].GetInner().(*roachpb.EndTxnRequest)
+			etReq := ba.Requests[0].GetInner().(*kvpb.EndTxnRequest)
 			require.Equal(t, &txn, ba.Txn)
 			require.False(t, etReq.Commit)
 			require.True(t, etReq.Poison)
@@ -744,15 +745,15 @@ func TestTxnHeartbeaterAsyncAbortCollapsesRequests(t *testing.T) {
 		},
 		// The second EndTxn request from the client is unexpected, so
 		// return an error response.
-		func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-			return nil, roachpb.NewError(errors.Errorf("unexpected request: %v", ba))
+		func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+			return nil, kvpb.NewError(errors.Errorf("unexpected request: %v", ba))
 		},
 	)
 
 	// Kick off the heartbeat loop.
-	ba := &roachpb.BatchRequest{}
-	ba.Header = roachpb.Header{Txn: txn.Clone()}
-	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: roachpb.Key("a")}})
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: txn.Clone()}
+	ba.Add(&kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: roachpb.Key("a")}})
 
 	th.mu.Lock() // manually lock, there's no TxnCoordSender
 	br, pErr := th.SendLocked(ctx, ba)
@@ -772,9 +773,9 @@ func TestTxnHeartbeaterAsyncAbortCollapsesRequests(t *testing.T) {
 		close(rollbackUnblock)
 	}))
 
-	ba = &roachpb.BatchRequest{}
-	ba.Header = roachpb.Header{Txn: txn.Clone()}
-	ba.Add(&roachpb.EndTxnRequest{Commit: false})
+	ba = &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: txn.Clone()}
+	ba.Add(&kvpb.EndTxnRequest{Commit: false})
 
 	th.mu.Lock() // manually lock, there's no TxnCoordSender
 	br, pErr = th.SendLocked(ctx, ba)
@@ -814,9 +815,9 @@ func TestTxnHeartbeaterEndTxnLoopHandling(t *testing.T) {
 
 			// Kick off the heartbeat loop.
 			key := roachpb.Key("a")
-			ba := &roachpb.BatchRequest{}
-			ba.Header = roachpb.Header{Txn: txn.Clone()}
-			ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: key}})
+			ba := &kvpb.BatchRequest{}
+			ba.Header = kvpb.Header{Txn: txn.Clone()}
+			ba.Add(&kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: key}})
 
 			br, pErr := th.SendLocked(ctx, ba)
 			require.Nil(t, pErr)
@@ -824,9 +825,9 @@ func TestTxnHeartbeaterEndTxnLoopHandling(t *testing.T) {
 			require.True(t, heartbeaterRunning(&th), "heartbeat running")
 
 			// End transaction to validate heartbeat state.
-			ba2 := &roachpb.BatchRequest{}
-			ba2.Header = roachpb.Header{Txn: txn.Clone()}
-			ba2.Add(&roachpb.EndTxnRequest{RequestHeader: roachpb.RequestHeader{Key: key}, Commit: tc.transactionCommit})
+			ba2 := &kvpb.BatchRequest{}
+			ba2.Header = kvpb.Header{Txn: txn.Clone()}
+			ba2.Add(&kvpb.EndTxnRequest{RequestHeader: kvpb.RequestHeader{Key: key}, Commit: tc.transactionCommit})
 
 			th.mu.Lock()
 			br, pErr = th.SendLocked(ctx, ba2)

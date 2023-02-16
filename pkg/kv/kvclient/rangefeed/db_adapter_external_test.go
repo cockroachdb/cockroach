@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
@@ -197,7 +198,7 @@ func TestDBClientScan(t *testing.T) {
 		retryScanErr := errors.New("retry scan")
 
 		feed, err := f.RangeFeed(ctx, "foo-feed", []roachpb.Span{fooSpan}, db.Clock().Now(),
-			func(ctx context.Context, value *roachpb.RangeFeedValue) {},
+			func(ctx context.Context, value *kvpb.RangeFeedValue) {},
 
 			rangefeed.WithScanRetryBehavior(rangefeed.ScanRetryRemaining),
 			rangefeed.WithInitialScanParallelismFn(func() int { return parallelism }),

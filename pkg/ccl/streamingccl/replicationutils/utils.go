@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -29,7 +30,7 @@ import (
 // 'scanWithin' boundaries and execute given operations on each
 // emitted MVCCKeyValue and MVCCRangeKeyValue.
 func ScanSST(
-	sst *roachpb.RangeFeedSSTable,
+	sst *kvpb.RangeFeedSSTable,
 	scanWithin roachpb.Span,
 	mvccKeyValOp func(key storage.MVCCKeyValue) error,
 	mvccRangeKeyValOp func(rangeKeyVal storage.MVCCRangeKeyValue) error,
@@ -37,7 +38,7 @@ func ScanSST(
 	rangeKVs := make([]*storage.MVCCRangeKeyValue, 0)
 	timestampToRangeKey := make(map[hlc.Timestamp]*storage.MVCCRangeKeyValue)
 	// Iterator may release fragmented ranges, we try to de-fragment them
-	// before we release roachpb.RangeFeedDeleteRange events.
+	// before we release kvpb.RangeFeedDeleteRange events.
 	mergeRangeKV := func(rangeKV storage.MVCCRangeKeyValue) {
 		// Range keys are emitted with increasing order in terms of start key,
 		// so we only need to check if the current range key can be concatenated behind

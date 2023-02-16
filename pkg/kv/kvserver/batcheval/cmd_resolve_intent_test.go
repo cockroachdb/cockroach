@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -83,13 +84,13 @@ func TestDeclareKeysResolveIntent(t *testing.T) {
 	testutils.RunTrueAndFalse(t, "ranged", func(t *testing.T, ranged bool) {
 		for _, test := range tests {
 			t.Run("", func(t *testing.T) {
-				ri := roachpb.ResolveIntentRequest{
+				ri := kvpb.ResolveIntentRequest{
 					IntentTxn: txnMeta,
 					Status:    test.status,
 					Poison:    test.poison,
 				}
 				ri.Key = roachpb.Key("b")
-				rir := roachpb.ResolveIntentRangeRequest{
+				rir := kvpb.ResolveIntentRangeRequest{
 					IntentTxn: ri.IntentTxn,
 					Status:    ri.Status,
 					Poison:    ri.Poison,
@@ -101,7 +102,7 @@ func TestDeclareKeysResolveIntent(t *testing.T) {
 
 				var latchSpans, lockSpans spanset.SpanSet
 
-				var h roachpb.Header
+				var h kvpb.Header
 				h.RangeID = desc.RangeID
 
 				cArgs := CommandArgs{Header: h}
@@ -112,7 +113,7 @@ func TestDeclareKeysResolveIntent(t *testing.T) {
 					declareKeysResolveIntent(&desc, &h, &ri, &latchSpans, &lockSpans, 0)
 					batch := spanset.NewBatch(engine.NewBatch(), &latchSpans)
 					defer batch.Close()
-					if _, err := ResolveIntent(ctx, batch, cArgs, &roachpb.ResolveIntentResponse{}); err != nil {
+					if _, err := ResolveIntent(ctx, batch, cArgs, &kvpb.ResolveIntentResponse{}); err != nil {
 						t.Fatal(err)
 					}
 				} else {
@@ -120,7 +121,7 @@ func TestDeclareKeysResolveIntent(t *testing.T) {
 					declareKeysResolveIntentRange(&desc, &h, &rir, &latchSpans, &lockSpans, 0)
 					batch := spanset.NewBatch(engine.NewBatch(), &latchSpans)
 					defer batch.Close()
-					if _, err := ResolveIntentRange(ctx, batch, cArgs, &roachpb.ResolveIntentRangeResponse{}); err != nil {
+					if _, err := ResolveIntentRange(ctx, batch, cArgs, &kvpb.ResolveIntentRangeResponse{}); err != nil {
 						t.Fatal(err)
 					}
 				}
@@ -183,7 +184,7 @@ func TestResolveIntentAfterPartialRollback(t *testing.T) {
 		// Partially revert the 2nd store above.
 		ignoredSeqNums := []enginepb.IgnoredSeqNumRange{{Start: 1, End: 1}}
 
-		h := roachpb.Header{
+		h := kvpb.Header{
 			RangeID:   desc.RangeID,
 			Timestamp: ts,
 		}
@@ -196,7 +197,7 @@ func TestResolveIntentAfterPartialRollback(t *testing.T) {
 
 		if !ranged {
 			// Resolve a point intent.
-			ri := roachpb.ResolveIntentRequest{
+			ri := kvpb.ResolveIntentRequest{
 				IntentTxn:      txn.TxnMeta,
 				Status:         roachpb.COMMITTED,
 				IgnoredSeqNums: ignoredSeqNums,
@@ -213,13 +214,13 @@ func TestResolveIntentAfterPartialRollback(t *testing.T) {
 					EvalCtx: (&MockEvalCtx{ClusterSettings: st}).EvalContext(),
 					Args:    &ri,
 				},
-				&roachpb.ResolveIntentResponse{},
+				&kvpb.ResolveIntentResponse{},
 			); err != nil {
 				t.Fatal(err)
 			}
 		} else {
 			// Resolve an intent range.
-			rir := roachpb.ResolveIntentRangeRequest{
+			rir := kvpb.ResolveIntentRangeRequest{
 				IntentTxn:      txn.TxnMeta,
 				Status:         roachpb.COMMITTED,
 				IgnoredSeqNums: ignoredSeqNums,
@@ -238,7 +239,7 @@ func TestResolveIntentAfterPartialRollback(t *testing.T) {
 					EvalCtx: (&MockEvalCtx{ClusterSettings: st}).EvalContext(),
 					Args:    &rir,
 				},
-				&roachpb.ResolveIntentRangeResponse{},
+				&kvpb.ResolveIntentRangeResponse{},
 			); err != nil {
 				t.Fatal(err)
 			}
@@ -310,7 +311,7 @@ func TestResolveIntentWithTargetBytes(t *testing.T) {
 
 		if !ranged {
 			// Resolve a point intent for testKeys[0].
-			ri := roachpb.ResolveIntentRequest{
+			ri := kvpb.ResolveIntentRequest{
 				IntentTxn: txn.TxnMeta,
 				Status:    roachpb.COMMITTED,
 			}
@@ -319,12 +320,12 @@ func TestResolveIntentWithTargetBytes(t *testing.T) {
 			{
 				// Case 1: TargetBytes = -1. In this case, we should not resolve any
 				// intents.
-				resp := &roachpb.ResolveIntentResponse{}
+				resp := &kvpb.ResolveIntentResponse{}
 				_, err := ResolveIntent(ctx, batch,
 					CommandArgs{
 						EvalCtx: (&MockEvalCtx{ClusterSettings: st}).EvalContext(),
 						Args:    &ri,
-						Header: roachpb.Header{
+						Header: kvpb.Header{
 							TargetBytes: -1,
 						},
 					},
@@ -333,7 +334,7 @@ func TestResolveIntentWithTargetBytes(t *testing.T) {
 				require.NoError(t, err)
 				require.Equal(t, resp.NumBytes, int64(0))
 				require.Equal(t, resp.ResumeSpan.Key, testKeys[0])
-				require.Equal(t, resp.ResumeReason, roachpb.RESUME_BYTE_LIMIT)
+				require.Equal(t, resp.ResumeReason, kvpb.RESUME_BYTE_LIMIT)
 				require.NoError(t, err)
 				numBytes := batch.Len()
 				require.Equal(t, numBytes, initialBytes)
@@ -345,12 +346,12 @@ func TestResolveIntentWithTargetBytes(t *testing.T) {
 			{
 				// Case 2: TargetBytes = 500. In this case, we should resolve the
 				// intent for testKeys[0].
-				resp := &roachpb.ResolveIntentResponse{}
+				resp := &kvpb.ResolveIntentResponse{}
 				_, err := ResolveIntent(ctx, batch,
 					CommandArgs{
 						EvalCtx: (&MockEvalCtx{ClusterSettings: st}).EvalContext(),
 						Args:    &ri,
-						Header: roachpb.Header{
+						Header: kvpb.Header{
 							TargetBytes: 500,
 						},
 					},
@@ -359,7 +360,7 @@ func TestResolveIntentWithTargetBytes(t *testing.T) {
 				require.Greater(t, resp.NumBytes, int64(1000))
 				require.Less(t, resp.NumBytes, int64(1100))
 				require.Nil(t, resp.ResumeSpan)
-				require.Equal(t, resp.ResumeReason, roachpb.RESUME_UNKNOWN)
+				require.Equal(t, resp.ResumeReason, kvpb.RESUME_UNKNOWN)
 				require.NoError(t, err)
 				numBytes := batch.Len()
 				require.Greater(t, numBytes, initialBytes+1000)
@@ -373,7 +374,7 @@ func TestResolveIntentWithTargetBytes(t *testing.T) {
 		} else {
 			// Resolve an intent range for testKeys[0], testKeys[1], ...,
 			// testKeys[4].
-			rir := roachpb.ResolveIntentRangeRequest{
+			rir := kvpb.ResolveIntentRangeRequest{
 				IntentTxn: txn.TxnMeta,
 				Status:    roachpb.COMMITTED,
 			}
@@ -383,12 +384,12 @@ func TestResolveIntentWithTargetBytes(t *testing.T) {
 			{
 				// Case 1: TargetBytes = -1. In this case, we should not resolve any
 				// intents.
-				respr := &roachpb.ResolveIntentRangeResponse{}
+				respr := &kvpb.ResolveIntentRangeResponse{}
 				_, err := ResolveIntentRange(ctx, batch,
 					CommandArgs{
 						EvalCtx: (&MockEvalCtx{ClusterSettings: st}).EvalContext(),
 						Args:    &rir,
-						Header: roachpb.Header{
+						Header: kvpb.Header{
 							TargetBytes: -1,
 						},
 					},
@@ -399,7 +400,7 @@ func TestResolveIntentWithTargetBytes(t *testing.T) {
 				require.Equal(t, respr.NumBytes, int64(0))
 				require.Equal(t, respr.ResumeSpan.Key, testKeys[0])
 				require.Equal(t, respr.ResumeSpan.EndKey, testKeys[nKeys-1].Next())
-				require.Equal(t, respr.ResumeReason, roachpb.RESUME_BYTE_LIMIT)
+				require.Equal(t, respr.ResumeReason, kvpb.RESUME_BYTE_LIMIT)
 				require.NoError(t, err)
 				numBytes := batch.Len()
 				require.Equal(t, numBytes, initialBytes)
@@ -412,12 +413,12 @@ func TestResolveIntentWithTargetBytes(t *testing.T) {
 				// Case 2: TargetBytes = 2900. In this case, we should resolve the
 				// first 3 intents - testKey[0], testKeys[1], and testKeys[2] (since we
 				// resolve intents until we exceed the TargetBytes limit).
-				respr := &roachpb.ResolveIntentRangeResponse{}
+				respr := &kvpb.ResolveIntentRangeResponse{}
 				_, err := ResolveIntentRange(ctx, batch,
 					CommandArgs{
 						EvalCtx: (&MockEvalCtx{ClusterSettings: st}).EvalContext(),
 						Args:    &rir,
-						Header: roachpb.Header{
+						Header: kvpb.Header{
 							TargetBytes: 2900,
 						},
 					},
@@ -428,7 +429,7 @@ func TestResolveIntentWithTargetBytes(t *testing.T) {
 				require.Less(t, respr.NumBytes, int64(3300))
 				require.Equal(t, respr.ResumeSpan.Key, testKeys[2].Next())
 				require.Equal(t, respr.ResumeSpan.EndKey, testKeys[nKeys-1].Next())
-				require.Equal(t, respr.ResumeReason, roachpb.RESUME_BYTE_LIMIT)
+				require.Equal(t, respr.ResumeReason, kvpb.RESUME_BYTE_LIMIT)
 				require.NoError(t, err)
 				numBytes := batch.Len()
 				require.Greater(t, numBytes, initialBytes+3000)
@@ -447,12 +448,12 @@ func TestResolveIntentWithTargetBytes(t *testing.T) {
 				// testKeys[4]). In this case, we should resolve the remaining
 				// intents - testKey[4] and testKeys[5] (since we resolve intents until
 				// we exceed the TargetBytes limit).
-				respr := &roachpb.ResolveIntentRangeResponse{}
+				respr := &kvpb.ResolveIntentRangeResponse{}
 				_, err := ResolveIntentRange(ctx, batch,
 					CommandArgs{
 						EvalCtx: (&MockEvalCtx{ClusterSettings: st}).EvalContext(),
 						Args:    &rir,
-						Header: roachpb.Header{
+						Header: kvpb.Header{
 							TargetBytes: 1100,
 						},
 					},
@@ -462,7 +463,7 @@ func TestResolveIntentWithTargetBytes(t *testing.T) {
 				require.Greater(t, respr.NumBytes, int64(2000))
 				require.Less(t, respr.NumBytes, int64(2200))
 				require.Nil(t, respr.ResumeSpan)
-				require.Equal(t, respr.ResumeReason, roachpb.RESUME_UNKNOWN)
+				require.Equal(t, respr.ResumeReason, kvpb.RESUME_UNKNOWN)
 				require.NoError(t, err)
 				numBytes := batch.Len()
 				require.Greater(t, numBytes, initialBytes+5000)

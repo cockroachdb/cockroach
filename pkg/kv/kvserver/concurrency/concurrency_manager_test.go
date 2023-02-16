@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -159,9 +160,9 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					txn.WriteTimestamp = ts
 				}
 
-				readConsistency := roachpb.CONSISTENT
+				readConsistency := kvpb.CONSISTENT
 				if d.HasArg("inconsistent") {
-					readConsistency = roachpb.INCONSISTENT
+					readConsistency = kvpb.INCONSISTENT
 				}
 
 				priority := scanUserPriority(t, d)
@@ -183,7 +184,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 
 				pp := scanPoisonPolicy(t, d)
 
-				// Each roachpb.Request is provided on an indented line.
+				// Each kvpb.Request is provided on an indented line.
 				reqs, reqUnions := scanRequests(t, d, c)
 				latchSpans, lockSpans := c.collectSpans(t, txn, ts, reqs)
 
@@ -327,7 +328,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				opName := fmt.Sprintf("handle write intent error %s", reqName)
 				mon.runAsync(opName, func(ctx context.Context) {
 					seq := roachpb.LeaseSequence(leaseSeq)
-					wiErr := &roachpb.WriteIntentError{Intents: intents}
+					wiErr := &kvpb.WriteIntentError{Intents: intents}
 					guard, err := m.HandleWriterIntentError(ctx, prev, seq, wiErr)
 					if err != nil {
 						log.Eventf(ctx, "handled %v, returned error: %v", wiErr, err)
@@ -401,7 +402,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				for _, ru := range guard.Req.Requests {
 					req := ru.GetInner()
 					keySpan := roachpb.Span{Key: roachpb.Key(key)}
-					if roachpb.IsLocking(req) &&
+					if kvpb.IsLocking(req) &&
 						req.Header().Span().Contains(keySpan) &&
 						req.Header().Sequence == seqNum {
 						found = true
@@ -599,15 +600,15 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 
 func scanRequests(
 	t *testing.T, d *datadriven.TestData, c *cluster,
-) ([]roachpb.Request, []roachpb.RequestUnion) {
-	// Each roachpb.Request is provided on an indented line.
-	var reqs []roachpb.Request
+) ([]kvpb.Request, []kvpb.RequestUnion) {
+	// Each kvpb.Request is provided on an indented line.
+	var reqs []kvpb.Request
 	singleReqLines := strings.Split(d.Input, "\n")
 	for _, line := range singleReqLines {
 		req := scanSingleRequest(t, d, line, c.txnsByName)
 		reqs = append(reqs, req)
 	}
-	reqUnions := make([]roachpb.RequestUnion, len(reqs))
+	reqUnions := make([]kvpb.RequestUnion, len(reqs))
 	for i, req := range reqs {
 		reqUnions[i].MustSetInner(req)
 	}
@@ -683,23 +684,23 @@ func (c *cluster) makeConfig() concurrency.Config {
 
 // PushTransaction implements the concurrency.IntentResolver interface.
 func (c *cluster) PushTransaction(
-	ctx context.Context, pushee *enginepb.TxnMeta, h roachpb.Header, pushType roachpb.PushTxnType,
-) (*roachpb.Transaction, *roachpb.Error) {
+	ctx context.Context, pushee *enginepb.TxnMeta, h kvpb.Header, pushType kvpb.PushTxnType,
+) (*roachpb.Transaction, *kvpb.Error) {
 	pusheeRecord, err := c.getTxnRecord(pushee.ID)
 	if err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, kvpb.NewError(err)
 	}
 	var pusherRecord *txnRecord
 	if h.Txn != nil {
 		pusherID := h.Txn.ID
 		pusherRecord, err = c.getTxnRecord(pusherID)
 		if err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, kvpb.NewError(err)
 		}
 
 		push, err := c.registerPush(ctx, pusherID, pushee.ID)
 		if err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, kvpb.NewError(err)
 		}
 		defer c.unregisterPush(push)
 	}
@@ -719,10 +720,10 @@ func (c *cluster) PushTransaction(
 		case pusheeTxn.Status.IsFinalized():
 			// Already finalized.
 			return pusheeTxn, nil
-		case pushType == roachpb.PUSH_TIMESTAMP && pushTo.LessEq(pusheeTxn.WriteTimestamp):
+		case pushType == kvpb.PUSH_TIMESTAMP && pushTo.LessEq(pusheeTxn.WriteTimestamp):
 			// Already pushed.
 			return pusheeTxn, nil
-		case pushType == roachpb.PUSH_TOUCH:
+		case pushType == kvpb.PUSH_TOUCH:
 			pusherWins = false
 		case txnwait.CanPushWithPriority(pusherPriority, pusheeTxn.Priority):
 			pusherWins = true
@@ -731,26 +732,26 @@ func (c *cluster) PushTransaction(
 		}
 		if pusherWins {
 			switch pushType {
-			case roachpb.PUSH_ABORT:
+			case kvpb.PUSH_ABORT:
 				log.Eventf(ctx, "pusher aborted pushee")
 				err = c.updateTxnRecord(pusheeTxn.ID, roachpb.ABORTED, pusheeTxn.WriteTimestamp)
-			case roachpb.PUSH_TIMESTAMP:
+			case kvpb.PUSH_TIMESTAMP:
 				log.Eventf(ctx, "pusher pushed pushee to %s", pushTo)
 				err = c.updateTxnRecord(pusheeTxn.ID, pusheeTxn.Status, pushTo)
 			default:
 				err = errors.Errorf("unexpected push type: %s", pushType)
 			}
 			if err != nil {
-				return nil, roachpb.NewError(err)
+				return nil, kvpb.NewError(err)
 			}
 			pusheeTxn, _ = pusheeRecord.asTxn()
 			return pusheeTxn, nil
 		}
 		// If PUSH_TOUCH, return error instead of waiting.
-		if pushType == roachpb.PUSH_TOUCH {
+		if pushType == kvpb.PUSH_TOUCH {
 			log.Eventf(ctx, "pushee not abandoned")
-			err := roachpb.NewTransactionPushError(*pusheeTxn)
-			return nil, roachpb.NewError(err)
+			err := kvpb.NewTransactionPushError(*pusheeTxn)
+			return nil, kvpb.NewError(err)
 		}
 		// Or the pusher aborted?
 		var pusherRecordSig chan struct{}
@@ -759,8 +760,8 @@ func (c *cluster) PushTransaction(
 			pusherTxn, pusherRecordSig = pusherRecord.asTxn()
 			if pusherTxn.Status == roachpb.ABORTED {
 				log.Eventf(ctx, "detected pusher aborted")
-				err := roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_PUSHER_ABORTED)
-				return nil, roachpb.NewError(err)
+				err := kvpb.NewTransactionAbortedError(kvpb.ABORT_REASON_PUSHER_ABORTED)
+				return nil, kvpb.NewError(err)
 			}
 		}
 		// Wait until either record is updated.
@@ -768,7 +769,7 @@ func (c *cluster) PushTransaction(
 		case <-pusheeRecordSig:
 		case <-pusherRecordSig:
 		case <-ctx.Done():
-			return nil, roachpb.NewError(ctx.Err())
+			return nil, kvpb.NewError(ctx.Err())
 		}
 	}
 }
@@ -776,7 +777,7 @@ func (c *cluster) PushTransaction(
 // ResolveIntent implements the concurrency.IntentResolver interface.
 func (c *cluster) ResolveIntent(
 	ctx context.Context, intent roachpb.LockUpdate, _ intentresolver.ResolveOptions,
-) *roachpb.Error {
+) *kvpb.Error {
 	var obsStr string
 	if obs := intent.ClockWhilePending; obs != (roachpb.ObservedTimestamp{}) {
 		obsStr = fmt.Sprintf(" and clock observation {%d %v}", obs.NodeID, obs.Timestamp)
@@ -790,7 +791,7 @@ func (c *cluster) ResolveIntent(
 // ResolveIntents implements the concurrency.IntentResolver interface.
 func (c *cluster) ResolveIntents(
 	ctx context.Context, intents []roachpb.LockUpdate, opts intentresolver.ResolveOptions,
-) *roachpb.Error {
+) *kvpb.Error {
 	log.Eventf(ctx, "resolving a batch of %d intent(s)", len(intents))
 	for _, intent := range intents {
 		if err := c.ResolveIntent(ctx, intent, opts); err != nil {
@@ -996,10 +997,10 @@ func (c *cluster) resetNamespace() {
 // collectSpans collects the declared spans for a set of requests.
 // Its logic mirrors that in Replica.collectSpans.
 func (c *cluster) collectSpans(
-	t *testing.T, txn *roachpb.Transaction, ts hlc.Timestamp, reqs []roachpb.Request,
+	t *testing.T, txn *roachpb.Transaction, ts hlc.Timestamp, reqs []kvpb.Request,
 ) (latchSpans, lockSpans *spanset.SpanSet) {
 	latchSpans, lockSpans = &spanset.SpanSet{}, &spanset.SpanSet{}
-	h := roachpb.Header{Txn: txn, Timestamp: ts}
+	h := kvpb.Header{Txn: txn, Timestamp: ts}
 	for _, req := range reqs {
 		if cmd, ok := batcheval.LookupCommand(req.Method()); ok {
 			cmd.DeclareKeys(c.rangeDesc, &h, req, latchSpans, lockSpans, 0)

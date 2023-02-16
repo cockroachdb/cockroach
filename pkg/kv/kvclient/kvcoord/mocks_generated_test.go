@@ -8,6 +8,7 @@ import (
 	context "context"
 	reflect "reflect"
 
+	kvpb "github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 	rpc "github.com/cockroachdb/cockroach/pkg/rpc"
 	gomock "github.com/golang/mock/gomock"
@@ -106,10 +107,10 @@ func (mr *MockTransportMockRecorder) Release() *gomock.Call {
 }
 
 // SendNext mocks base method.
-func (m *MockTransport) SendNext(arg0 context.Context, arg1 *roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+func (m *MockTransport) SendNext(arg0 context.Context, arg1 *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SendNext", arg0, arg1)
-	ret0, _ := ret[0].(*roachpb.BatchResponse)
+	ret0, _ := ret[0].(*kvpb.BatchResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

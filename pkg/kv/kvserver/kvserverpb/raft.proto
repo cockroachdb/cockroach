@@ -13,7 +13,7 @@ package cockroach.kv.kvserver.kvserverpb;
 option go_package = "kvserverpb";
 
 import "errorspb/errors.proto";
-import "roachpb/errors.proto";
+import "kv/kvpb/errors.proto";
 import "roachpb/metadata.proto";
 import "kv/kvserver/liveness/livenesspb/liveness.proto";
 import "kv/kvserver/kvserverpb/state.proto";

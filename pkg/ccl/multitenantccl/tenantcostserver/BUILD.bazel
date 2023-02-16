@@ -16,6 +16,7 @@ go_library(
         "//pkg/base",
         "//pkg/ccl/multitenantccl/tenantcostserver/tenanttokenbucket",
         "//pkg/kv",
+        "//pkg/kv/kvpb",
         "//pkg/multitenant",
         "//pkg/roachpb",
         "//pkg/server",
@@ -49,6 +50,7 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/kv",
+        "//pkg/kv/kvpb",
         "//pkg/multitenant",
         "//pkg/roachpb",
         "//pkg/security/securityassets",

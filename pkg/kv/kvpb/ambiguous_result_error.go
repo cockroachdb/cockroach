@@ -8,12 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package roachpb
+package kvpb
 
 import (
 	"context"
 	"fmt"
+	"reflect"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 )
@@ -34,7 +36,14 @@ func NewAmbiguousResultError(err error) *AmbiguousResultError {
 
 var _ errors.SafeFormatter = (*AmbiguousResultError)(nil)
 var _ fmt.Formatter = (*AmbiguousResultError)(nil)
-var _ = func() errors.Wrapper {
+
+func init() {
+	// Register the migration of the error that used to be in the roachpb
+	// package and is now in the kv/kvpb package.
+	roachpbPath := reflect.TypeOf(roachpb.Key("")).PkgPath()
+	errors.RegisterTypeMigration(roachpbPath, "*roachpb.AmbiguousResultError", &AmbiguousResultError{})
+	// Note that it is important that these wrapper methods are registered
+	// _after_ the type migration above.
 	aErr := (*AmbiguousResultError)(nil)
 	typeKey := errors.GetTypeKey(aErr)
 	errors.RegisterWrapperEncoder(typeKey, func(ctx context.Context, err error) (msgPrefix string, safeDetails []string, payload proto.Message) {
@@ -44,9 +53,7 @@ var _ = func() errors.Wrapper {
 	errors.RegisterWrapperDecoder(typeKey, func(ctx context.Context, cause error, msgPrefix string, safeDetails []string, payload proto.Message) error {
 		return payload.(*AmbiguousResultError)
 	})
-
-	return aErr
-}()
+}
 
 // SafeFormatError implements errors.SafeFormatter.
 func (e *AmbiguousResultError) SafeFormatError(p errors.Printer) error {

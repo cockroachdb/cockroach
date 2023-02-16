@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -199,7 +200,7 @@ func TestCannotTransferLeaseToVoterDemoting(t *testing.T) {
 			<-ch
 		}
 	}
-	knobs.Store.(*kvserver.StoreTestingKnobs).TestingProposalFilter = func(args kvserverbase.ProposalFilterArgs) *roachpb.Error {
+	knobs.Store.(*kvserver.StoreTestingKnobs).TestingProposalFilter = func(args kvserverbase.ProposalFilterArgs) *kvpb.Error {
 		blockIfShould(args)
 		return nil
 	}
@@ -233,7 +234,7 @@ func TestCannotTransferLeaseToVoterDemoting(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			_, err = tc.Server(0).DB().AdminChangeReplicas(ctx,
-				scratchStartKey, desc, []roachpb.ReplicationChange{
+				scratchStartKey, desc, []kvpb.ReplicationChange{
 					{ChangeType: roachpb.REMOVE_VOTER, Target: tc.Target(2)},
 				})
 			require.NoError(t, err)
@@ -299,7 +300,7 @@ func TestTransferLeaseToVoterDemotingFails(t *testing.T) {
 			<-ch
 		}
 	}
-	knobs.Store.(*kvserver.StoreTestingKnobs).TestingProposalFilter = func(args kvserverbase.ProposalFilterArgs) *roachpb.Error {
+	knobs.Store.(*kvserver.StoreTestingKnobs).TestingProposalFilter = func(args kvserverbase.ProposalFilterArgs) *kvpb.Error {
 		blockIfShould(args)
 		return nil
 	}
@@ -333,7 +334,7 @@ func TestTransferLeaseToVoterDemotingFails(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			_, err = tc.Server(0).DB().AdminChangeReplicas(ctx,
-				scratchStartKey, desc, []roachpb.ReplicationChange{
+				scratchStartKey, desc, []kvpb.ReplicationChange{
 					{ChangeType: roachpb.REMOVE_VOTER, Target: tc.Target(2)},
 					{ChangeType: roachpb.ADD_VOTER, Target: tc.Target(3)},
 				})
@@ -498,12 +499,12 @@ func internalTransferLeaseFailureDuringJointConfig(t *testing.T, isManual bool) 
 			args.Req.IsSingleTransferLeaseRequest()
 	}
 	const failureMsg = "injected lease transfer"
-	knobs.Store.(*kvserver.StoreTestingKnobs).TestingProposalFilter = func(args kvserverbase.ProposalFilterArgs) *roachpb.Error {
+	knobs.Store.(*kvserver.StoreTestingKnobs).TestingProposalFilter = func(args kvserverbase.ProposalFilterArgs) *kvpb.Error {
 		if shouldFailProposal(args) {
 			// The lease transfer should be configured to bypass safety checks.
 			// See maybeTransferLeaseDuringLeaveJoint for an explanation.
 			require.True(t, args.Req.Requests[0].GetTransferLease().BypassSafetyChecks)
-			return roachpb.NewErrorf(failureMsg)
+			return kvpb.NewErrorf(failureMsg)
 		}
 		return nil
 	}
@@ -524,7 +525,7 @@ func internalTransferLeaseFailureDuringJointConfig(t *testing.T, isManual bool) 
 	atomic.StoreInt64(&scratchRangeID, int64(desc.RangeID))
 
 	_, err = tc.Server(0).DB().AdminChangeReplicas(ctx,
-		scratchStartKey, desc, []roachpb.ReplicationChange{
+		scratchStartKey, desc, []kvpb.ReplicationChange{
 			{ChangeType: roachpb.REMOVE_VOTER, Target: tc.Target(0)},
 			{ChangeType: roachpb.ADD_VOTER, Target: tc.Target(3)},
 		})
@@ -631,7 +632,7 @@ func TestStoreLeaseTransferTimestampCacheRead(t *testing.T) {
 
 		// Read the key at readTS.
 		// NB: don't use SendWrapped because we want access to br.Timestamp.
-		ba := &roachpb.BatchRequest{}
+		ba := &kvpb.BatchRequest{}
 		ba.Timestamp = readTS
 		ba.Add(getArgs(key))
 		br, pErr := tc.Servers[0].DistSender().Send(ctx, ba)
@@ -649,7 +650,7 @@ func TestStoreLeaseTransferTimestampCacheRead(t *testing.T) {
 		// Attempt to write under the read on the new leaseholder. The batch
 		// should get forwarded to a timestamp after the read.
 		// NB: don't use SendWrapped because we want access to br.Timestamp.
-		ba = &roachpb.BatchRequest{}
+		ba = &kvpb.BatchRequest{}
 		ba.Timestamp = readTS
 		ba.Add(incrementArgs(key, 1))
 		br, pErr = tc.Servers[0].DistSender().Send(ctx, ba)
@@ -1336,11 +1337,11 @@ func TestAcquireLeaseTimeout(t *testing.T) {
 	// return the context error.
 	var blockRangeID int32
 
-	maybeBlockLeaseRequest := func(ctx context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
+	maybeBlockLeaseRequest := func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
 		if ba.IsSingleRequestLeaseRequest() && int32(ba.RangeID) == atomic.LoadInt32(&blockRangeID) {
 			t.Logf("blocked lease request for r%d", ba.RangeID)
 			<-ctx.Done()
-			return roachpb.NewError(ctx.Err())
+			return kvpb.NewError(ctx.Err())
 		}
 		return nil
 	}
@@ -1407,10 +1408,10 @@ func TestAcquireLeaseTimeout(t *testing.T) {
 
 	// Trying to acquire the lease should error with an empty NLHE, since the
 	// range doesn't have quorum.
-	var nlhe *roachpb.NotLeaseHolderError
+	var nlhe *kvpb.NotLeaseHolderError
 	_, err = repl.TestingAcquireLease(ctx)
 	require.Error(t, err)
-	require.IsType(t, &roachpb.NotLeaseHolderError{}, err) // check exact type
+	require.IsType(t, &kvpb.NotLeaseHolderError{}, err) // check exact type
 	require.ErrorAs(t, err, &nlhe)
 	require.Empty(t, nlhe.Lease)
 
@@ -1437,7 +1438,7 @@ func TestAcquireLeaseTimeout(t *testing.T) {
 
 	for err := range errC {
 		require.Error(t, err)
-		require.IsType(t, &roachpb.NotLeaseHolderError{}, err) // check exact type
+		require.IsType(t, &kvpb.NotLeaseHolderError{}, err) // check exact type
 		require.ErrorAs(t, err, &nlhe)
 		require.Empty(t, nlhe.Lease)
 	}

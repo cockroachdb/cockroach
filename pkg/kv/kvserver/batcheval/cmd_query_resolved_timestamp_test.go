@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -193,15 +194,15 @@ func TestQueryResolvedTimestamp(t *testing.T) {
 			}
 			cArgs := CommandArgs{
 				EvalCtx: evalCtx.EvalContext(),
-				Args: &roachpb.QueryResolvedTimestampRequest{
-					RequestHeader: roachpb.RequestHeader{
+				Args: &kvpb.QueryResolvedTimestampRequest{
+					RequestHeader: kvpb.RequestHeader{
 						Key:    roachpb.Key(cfg.span[0]),
 						EndKey: roachpb.Key(cfg.span[1]),
 					},
 				},
 			}
 
-			var resp roachpb.QueryResolvedTimestampResponse
+			var resp kvpb.QueryResolvedTimestampResponse
 			res, err := QueryResolvedTimestamp(ctx, db, cArgs, &resp)
 			require.NoError(t, err)
 			require.Equal(t, cfg.expResolvedTS, resp.ResolvedTS)
@@ -243,14 +244,14 @@ func TestQueryResolvedTimestampErrors(t *testing.T) {
 	}
 	cArgs := CommandArgs{
 		EvalCtx: evalCtx.EvalContext(),
-		Args: &roachpb.QueryResolvedTimestampRequest{
-			RequestHeader: roachpb.RequestHeader{
+		Args: &kvpb.QueryResolvedTimestampRequest{
+			RequestHeader: kvpb.RequestHeader{
 				Key:    roachpb.Key("a"),
 				EndKey: roachpb.Key("z"),
 			},
 		},
 	}
-	var resp roachpb.QueryResolvedTimestampResponse
+	var resp kvpb.QueryResolvedTimestampResponse
 	t.Run("LockTable entry without MVCC metadata", func(t *testing.T) {
 		require.NoError(t, db.PutEngineKey(engineKey, buf))
 		_, err := QueryResolvedTimestamp(ctx, db, cArgs, &resp)

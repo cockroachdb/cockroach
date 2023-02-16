@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -93,7 +94,7 @@ type Txn struct {
 	// transaction. Only certain paths initialize this properly, and the
 	// remaining just use the zero value. The set of code paths that initialize
 	// this are expected to expand over time.
-	admissionHeader roachpb.AdmissionHeader
+	admissionHeader kvpb.AdmissionHeader
 }
 
 // NewTxn returns a new RootTxn.
@@ -118,7 +119,7 @@ type Txn struct {
 // See also db.NewTxn().
 func NewTxn(ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID) *Txn {
 	return NewTxnWithAdmissionControl(
-		ctx, db, gatewayNodeID, roachpb.AdmissionHeader_OTHER, admissionpb.NormalPri)
+		ctx, db, gatewayNodeID, kvpb.AdmissionHeader_OTHER, admissionpb.NormalPri)
 }
 
 // NewTxnWithAdmissionControl creates a new transaction with the specified
@@ -127,7 +128,7 @@ func NewTxnWithAdmissionControl(
 	ctx context.Context,
 	db *DB,
 	gatewayNodeID roachpb.NodeID,
-	source roachpb.AdmissionHeader_Source,
+	source kvpb.AdmissionHeader_Source,
 	priority admissionpb.WorkPriority,
 ) *Txn {
 	if db == nil {
@@ -145,7 +146,7 @@ func NewTxnWithAdmissionControl(
 		int32(db.ctx.NodeID.SQLInstanceID()),
 	)
 	txn := NewTxnFromProto(ctx, db, gatewayNodeID, now, RootTxn, &kvTxn)
-	txn.admissionHeader = roachpb.AdmissionHeader{
+	txn.admissionHeader = kvpb.AdmissionHeader{
 		CreateTime: db.clock.PhysicalNow(),
 		Priority:   int32(priority),
 		Source:     source,
@@ -165,7 +166,7 @@ func NewTxnWithSteppingEnabled(
 	qualityOfService sessiondatapb.QoSLevel,
 ) *Txn {
 	txn := NewTxnWithAdmissionControl(ctx, db, gatewayNodeID,
-		roachpb.AdmissionHeader_FROM_SQL, admissionpb.WorkPriority(qualityOfService))
+		kvpb.AdmissionHeader_FROM_SQL, admissionpb.WorkPriority(qualityOfService))
 	_ = txn.ConfigureStepping(ctx, SteppingEnabled)
 	return txn
 }
@@ -178,7 +179,7 @@ func NewTxnWithSteppingEnabled(
 // details.
 func NewTxnRootKV(ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID) *Txn {
 	return NewTxnWithAdmissionControl(
-		ctx, db, gatewayNodeID, roachpb.AdmissionHeader_ROOT_KV, admissionpb.NormalPri)
+		ctx, db, gatewayNodeID, kvpb.AdmissionHeader_ROOT_KV, admissionpb.NormalPri)
 }
 
 // NewTxnFromProto is like NewTxn but assumes the Transaction object is already initialized.
@@ -680,7 +681,7 @@ func (txn *Txn) commit(ctx context.Context) error {
 	// will be subject to admission control, and the zero CreateTime will give
 	// it preference within the tenant.
 	et := endTxnReq(true, txn.deadline())
-	ba := &roachpb.BatchRequest{Requests: et.unionArr[:]}
+	ba := &kvpb.BatchRequest{Requests: et.unionArr[:]}
 	_, pErr := txn.Send(ctx, ba)
 	if pErr == nil {
 		for _, t := range txn.commitTriggers {
@@ -807,7 +808,7 @@ func (txn *Txn) Rollback(ctx context.Context) error {
 	return txn.rollback(ctx).GoError()
 }
 
-func (txn *Txn) rollback(ctx context.Context) *roachpb.Error {
+func (txn *Txn) rollback(ctx context.Context) *kvpb.Error {
 	log.VEventf(ctx, 2, "rolling back transaction")
 
 	// If the client has already disconnected, fall back to asynchronous cleanup
@@ -819,7 +820,7 @@ func (txn *Txn) rollback(ctx context.Context) *roachpb.Error {
 		// settings, it will be subject to admission control, and the zero
 		// CreateTime will give it preference within the tenant.
 		et := endTxnReq(false, hlc.Timestamp{} /* deadline */)
-		ba := &roachpb.BatchRequest{Requests: et.unionArr[:]}
+		ba := &kvpb.BatchRequest{Requests: et.unionArr[:]}
 		_, pErr := txn.Send(ctx, ba)
 		if pErr == nil {
 			return nil
@@ -845,12 +846,12 @@ func (txn *Txn) rollback(ctx context.Context) *roachpb.Error {
 		// settings, it will be subject to admission control, and the zero
 		// CreateTime will give it preference within the tenant.
 		et := endTxnReq(false, hlc.Timestamp{} /* deadline */)
-		ba := &roachpb.BatchRequest{Requests: et.unionArr[:]}
+		ba := &kvpb.BatchRequest{Requests: et.unionArr[:]}
 		_ = contextutil.RunWithTimeout(ctx, "async txn rollback", asyncRollbackTimeout,
 			func(ctx context.Context) error {
 				if _, pErr := txn.Send(ctx, ba); pErr != nil {
-					if statusErr, ok := pErr.GetDetail().(*roachpb.TransactionStatusError); ok &&
-						statusErr.Reason == roachpb.TransactionStatusError_REASON_TXN_COMMITTED {
+					if statusErr, ok := pErr.GetDetail().(*kvpb.TransactionStatusError); ok &&
+						statusErr.Reason == kvpb.TransactionStatusError_REASON_TXN_COMMITTED {
 						// A common cause of these async rollbacks failing is when they're
 						// triggered by a ctx canceled while a commit is in-flight (and it's too
 						// late for it to be canceled), and so the rollback finds the txn to be
@@ -864,7 +865,7 @@ func (txn *Txn) rollback(ctx context.Context) *roachpb.Error {
 			})
 	}); err != nil {
 		cancel()
-		return roachpb.NewError(err)
+		return kvpb.NewError(err)
 	}
 	return nil
 }
@@ -881,9 +882,9 @@ func (txn *Txn) AddCommitTrigger(trigger func(ctx context.Context)) {
 
 // endTxnReqAlloc is used to batch the heap allocations of an EndTxn request.
 type endTxnReqAlloc struct {
-	req      roachpb.EndTxnRequest
-	union    roachpb.RequestUnion_EndTxn
-	unionArr [1]roachpb.RequestUnion
+	req      kvpb.EndTxnRequest
+	union    kvpb.RequestUnion_EndTxn
+	unionArr [1]kvpb.RequestUnion
 }
 
 func endTxnReq(commit bool, deadline hlc.Timestamp) *endTxnReqAlloc {
@@ -933,7 +934,7 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 				err = txn.Commit(ctx)
 				log.Eventf(ctx, "client.Txn did AutoCommit. err: %v", err)
 				if err != nil {
-					if !errors.HasType(err, (*roachpb.TransactionRetryWithProtoRefreshError)(nil)) {
+					if !errors.HasType(err, (*kvpb.TransactionRetryWithProtoRefreshError)(nil)) {
 						// We can't retry, so let the caller know we tried to
 						// autocommit.
 						err = &AutoCommitError{cause: err}
@@ -944,14 +945,14 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 
 		var retryable bool
 		if err != nil {
-			if errors.HasType(err, (*roachpb.UnhandledRetryableError)(nil)) {
+			if errors.HasType(err, (*kvpb.UnhandledRetryableError)(nil)) {
 				if txn.typ == RootTxn {
 					// We sent transactional requests, so the TxnCoordSender was supposed to
 					// turn retryable errors into TransactionRetryWithProtoRefreshError. Note that this
 					// applies only in the case where this is the root transaction.
 					log.Fatalf(ctx, "unexpected UnhandledRetryableError at the txn.exec() level: %s", err)
 				}
-			} else if t := (*roachpb.TransactionRetryWithProtoRefreshError)(nil); errors.As(err, &t) {
+			} else if t := (*kvpb.TransactionRetryWithProtoRefreshError)(nil); errors.As(err, &t) {
 				if !txn.IsRetryableErrMeantForTxn(*t) {
 					// Make sure the txn record that err carries is for this txn.
 					// If it's not, we terminate the "retryable" character of the error. We
@@ -998,7 +999,7 @@ func (txn *Txn) PrepareForRetry(ctx context.Context) {
 // IsRetryableErrMeantForTxn returns true if err is a retryable
 // error meant to restart this client transaction.
 func (txn *Txn) IsRetryableErrMeantForTxn(
-	retryErr roachpb.TransactionRetryWithProtoRefreshError,
+	retryErr kvpb.TransactionRetryWithProtoRefreshError,
 ) bool {
 	if txn.typ != RootTxn {
 		panic(errors.AssertionFailedf("IsRetryableErrMeantForTxn() called on leaf txn"))
@@ -1026,8 +1027,8 @@ func (txn *Txn) IsRetryableErrMeantForTxn(
 // commit or clean-up explicitly even when that may not be required
 // (or even erroneous). Returns (nil, nil) for an empty batch.
 func (txn *Txn) Send(
-	ctx context.Context, ba *roachpb.BatchRequest,
-) (*roachpb.BatchResponse, *roachpb.Error) {
+	ctx context.Context, ba *kvpb.BatchRequest,
+) (*kvpb.BatchResponse, *kvpb.Error) {
 	// Fill in the GatewayNodeID on the batch if the txn knows it.
 	// NOTE(andrei): It seems a bit ugly that we're filling in the batches here as
 	// opposed to the point where the requests are being created, but
@@ -1039,7 +1040,7 @@ func (txn *Txn) Send(
 
 	// Requests with a bounded staleness header should use NegotiateAndSend.
 	if ba.BoundedStaleness != nil {
-		return nil, roachpb.NewError(errors.AssertionFailedf(
+		return nil, kvpb.NewError(errors.AssertionFailedf(
 			"bounded staleness header passed to Txn.Send: %s", ba.String()))
 	}
 
@@ -1060,7 +1061,7 @@ func (txn *Txn) Send(
 		return br, nil
 	}
 
-	if retryErr, ok := pErr.GetDetail().(*roachpb.TransactionRetryWithProtoRefreshError); ok {
+	if retryErr, ok := pErr.GetDetail().(*kvpb.TransactionRetryWithProtoRefreshError); ok {
 		if requestTxnID != retryErr.TxnID {
 			// KV should not return errors for transactions other than the one that sent
 			// the request.
@@ -1073,7 +1074,7 @@ func (txn *Txn) Send(
 }
 
 func (txn *Txn) handleRetryableErrLocked(
-	ctx context.Context, retryErr *roachpb.TransactionRetryWithProtoRefreshError,
+	ctx context.Context, retryErr *kvpb.TransactionRetryWithProtoRefreshError,
 ) {
 	txn.resetDeadlineLocked()
 	txn.replaceRootSenderIfTxnAbortedLocked(ctx, retryErr, retryErr.TxnID)
@@ -1118,13 +1119,13 @@ func (txn *Txn) handleRetryableErrLocked(
 // and perform the read. Callers can use this flexibility to trade off increased
 // staleness for reduced latency.
 func (txn *Txn) NegotiateAndSend(
-	ctx context.Context, ba *roachpb.BatchRequest,
-) (*roachpb.BatchResponse, *roachpb.Error) {
+	ctx context.Context, ba *kvpb.BatchRequest,
+) (*kvpb.BatchResponse, *kvpb.Error) {
 	if err := txn.checkNegotiateAndSendPreconditions(ctx, ba); err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, kvpb.NewError(err)
 	}
 	if err := txn.applyDeadlineToBoundedStaleness(ctx, ba.BoundedStaleness); err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, kvpb.NewError(err)
 	}
 
 	// Attempt to hit the server-side negotiation fast-path. This fast-path
@@ -1155,14 +1156,14 @@ func (txn *Txn) NegotiateAndSend(
 		// Fix the transaction's timestamp at the result of the server-side
 		// timestamp negotiation.
 		if err := txn.SetFixedTimestamp(ctx, br.Timestamp); err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, kvpb.NewError(err)
 		}
 		// Note that we do not need to inform the TxnCoordSender about the
 		// non-transactional reads that we issued on behalf of it. Now that the
 		// transaction's timestamp is fixed, it won't be able to refresh anyway.
 		return br, nil
 	}
-	if _, ok := pErr.GetDetail().(*roachpb.OpRequiresTxnError); !ok {
+	if _, ok := pErr.GetDetail().(*kvpb.OpRequiresTxnError); !ok {
 		return nil, pErr
 	}
 
@@ -1175,13 +1176,13 @@ func (txn *Txn) NegotiateAndSend(
 	//
 	// TODO(nvanbenschoten): implement this. #67554.
 
-	return nil, roachpb.NewError(unimplemented.NewWithIssue(67554,
+	return nil, kvpb.NewError(unimplemented.NewWithIssue(67554,
 		"cross-range bounded staleness reads not yet implemented"))
 }
 
 // checks preconditions on BatchRequest and Txn for NegotiateAndSend.
 func (txn *Txn) checkNegotiateAndSendPreconditions(
-	ctx context.Context, ba *roachpb.BatchRequest,
+	ctx context.Context, ba *kvpb.BatchRequest,
 ) (err error) {
 	assert := func(b bool, s string) {
 		if !b {
@@ -1200,7 +1201,7 @@ func (txn *Txn) checkNegotiateAndSendPreconditions(
 	}
 	assert(ba.Timestamp.IsEmpty(), "timestamp must not be set")
 	assert(ba.Txn == nil, "txn must not be set")
-	assert(ba.ReadConsistency == roachpb.CONSISTENT, "read consistency must be set to CONSISTENT")
+	assert(ba.ReadConsistency == kvpb.CONSISTENT, "read consistency must be set to CONSISTENT")
 	assert(ba.IsReadOnly(), "batch must be read-only")
 	assert(!ba.IsLocking(), "batch must not be locking")
 	assert(txn.typ == RootTxn, "txn must be root")
@@ -1211,7 +1212,7 @@ func (txn *Txn) checkNegotiateAndSendPreconditions(
 // applyDeadlineToBoundedStaleness modifies the bounded staleness header to
 // ensure that the negotiated timestamp respects the transaction deadline.
 func (txn *Txn) applyDeadlineToBoundedStaleness(
-	ctx context.Context, bs *roachpb.BoundedStalenessHeader,
+	ctx context.Context, bs *kvpb.BoundedStalenessHeader,
 ) error {
 	d := txn.deadline()
 	if d.IsEmpty() {
@@ -1266,7 +1267,7 @@ func (txn *Txn) GetLeafTxnInputStateOrRejectClient(
 	defer txn.mu.Unlock()
 	tfs, err := txn.mu.sender.GetLeafTxnInputState(ctx, OnlyPending)
 	if err != nil {
-		var retryErr *roachpb.TransactionRetryWithProtoRefreshError
+		var retryErr *kvpb.TransactionRetryWithProtoRefreshError
 		if errors.As(err, &retryErr) {
 			txn.handleRetryableErrLocked(ctx, retryErr)
 		}
@@ -1315,7 +1316,7 @@ func (txn *Txn) UpdateRootWithLeafFinalState(
 // UpdateStateOnRemoteRetryableErr updates the txn in response to an error
 // encountered when running a request through the txn. Returns a
 // TransactionRetryWithProtoRefreshError on success or another error on failure.
-func (txn *Txn) UpdateStateOnRemoteRetryableErr(ctx context.Context, pErr *roachpb.Error) error {
+func (txn *Txn) UpdateStateOnRemoteRetryableErr(ctx context.Context, pErr *kvpb.Error) error {
 	if txn.typ != RootTxn {
 		return errors.AssertionFailedf("UpdateStateOnRemoteRetryableErr() called on leaf txn")
 	}
@@ -1323,7 +1324,7 @@ func (txn *Txn) UpdateStateOnRemoteRetryableErr(ctx context.Context, pErr *roach
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 
-	if pErr.TransactionRestart() == roachpb.TransactionRestart_NONE {
+	if pErr.TransactionRestart() == kvpb.TransactionRestart_NONE {
 		log.Fatalf(ctx, "unexpected non-retryable error: %s", pErr)
 	}
 
@@ -1338,7 +1339,7 @@ func (txn *Txn) UpdateStateOnRemoteRetryableErr(ctx context.Context, pErr *roach
 	}
 
 	pErr = txn.mu.sender.UpdateStateOnRemoteRetryableErr(ctx, pErr)
-	txn.replaceRootSenderIfTxnAbortedLocked(ctx, pErr.GetDetail().(*roachpb.TransactionRetryWithProtoRefreshError), origTxnID)
+	txn.replaceRootSenderIfTxnAbortedLocked(ctx, pErr.GetDetail().(*kvpb.TransactionRetryWithProtoRefreshError), origTxnID)
 
 	return pErr.GoError()
 }
@@ -1350,7 +1351,7 @@ func (txn *Txn) UpdateStateOnRemoteRetryableErr(ctx context.Context, pErr *roach
 // origTxnID is the id of the txn that generated retryErr. Note that this can be
 // different from retryErr.Transaction - the latter might be a new transaction.
 func (txn *Txn) replaceRootSenderIfTxnAbortedLocked(
-	ctx context.Context, retryErr *roachpb.TransactionRetryWithProtoRefreshError, origTxnID uuid.UUID,
+	ctx context.Context, retryErr *kvpb.TransactionRetryWithProtoRefreshError, origTxnID uuid.UUID,
 ) {
 	// The proto inside the error has been prepared for use by the next
 	// transaction attempt.
@@ -1570,7 +1571,7 @@ func (txn *Txn) DeferCommitWait(ctx context.Context) func(context.Context) error
 
 // AdmissionHeader returns the admission header for work done in the context
 // of this transaction.
-func (txn *Txn) AdmissionHeader() roachpb.AdmissionHeader {
+func (txn *Txn) AdmissionHeader() kvpb.AdmissionHeader {
 	h := txn.admissionHeader
 	if txn.mu.sender.IsLocking() {
 		// Assign higher priority to requests by txns that are locking, so that

@@ -13,13 +13,13 @@ package batcheval
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 )
 
 func init() {
-	RegisterReadWriteCommand(roachpb.Merge, DefaultDeclareKeys, Merge)
+	RegisterReadWriteCommand(kvpb.Merge, DefaultDeclareKeys, Merge)
 }
 
 // Merge is used to merge a value into an existing key. Merge is an
@@ -29,9 +29,9 @@ func init() {
 // transactional, merges are not currently exposed directly to
 // clients. Merged values are explicitly not MVCC data.
 func Merge(
-	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp kvpb.Response,
 ) (result.Result, error) {
-	args := cArgs.Args.(*roachpb.MergeRequest)
+	args := cArgs.Args.(*kvpb.MergeRequest)
 	h := cArgs.Header
 
 	return result.Result{}, storage.MVCCMerge(ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, args.Value)

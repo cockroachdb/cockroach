@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -5869,8 +5870,8 @@ CREATE TABLE crdb_internal.lost_descriptors_with_data (
 			endPrefix := p.extendedEvalCtx.Codec.TablePrefix(uint32(endID - 1)).PrefixEnd()
 			var b kv.Batch
 			b.Header.MaxSpanRequestKeys = 1
-			scanRequest := roachpb.NewScan(startPrefix, endPrefix, false).(*roachpb.ScanRequest)
-			scanRequest.ScanFormat = roachpb.BATCH_RESPONSE
+			scanRequest := kvpb.NewScan(startPrefix, endPrefix, false).(*kvpb.ScanRequest)
+			scanRequest.ScanFormat = kvpb.BATCH_RESPONSE
 			b.AddRawRequest(scanRequest)
 			err = p.execCfg.DB.Run(ctx, &b)
 			if err != nil {
@@ -6946,14 +6947,14 @@ func genClusterLocksGenerator(
 			return &nextSpan
 		}
 
-		var resp *roachpb.QueryLocksResponse
+		var resp *kvpb.QueryLocksResponse
 		var locks []roachpb.LockStateInfo
 		var resumeSpan *roachpb.Span
 
 		fetchLocks := func(key, endKey roachpb.Key) error {
 			b := kv.Batch{}
-			queryLocksRequest := &roachpb.QueryLocksRequest{
-				RequestHeader: roachpb.RequestHeader{
+			queryLocksRequest := &kvpb.QueryLocksRequest{
+				RequestHeader: kvpb.RequestHeader{
 					Key:    key,
 					EndKey: endKey,
 				},

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -76,7 +77,7 @@ type Result struct {
 	// that the response is no longer needed.
 	//
 	// GetResp is guaranteed to have nil IntentValue.
-	GetResp *roachpb.GetResponse
+	GetResp *kvpb.GetResponse
 	// ScanResp can contain a partial response to a ScanRequest (when
 	// scanComplete is false). In that case, there will be a further result with
 	// the continuation; that result will use the same Key. Notably, SQL rows
@@ -84,7 +85,7 @@ type Result struct {
 	//
 	// The response is always using BATCH_RESPONSE format (meaning that Rows
 	// field is always nil). IntentRows field is also nil.
-	ScanResp *roachpb.ScanResponse
+	ScanResp *kvpb.ScanResponse
 	// Position tracks the ordinal among all originally enqueued requests that
 	// this result satisfies. See singleRangeBatch.positions for more details.
 	// TODO(yuzefovich): this might need to be []int when non-unique requests
@@ -442,7 +443,7 @@ func (s *Streamer) Init(
 // Currently, enqueuing new requests while there are still requests in progress
 // from the previous invocation is prohibited.
 // TODO(yuzefovich): lift this restriction and introduce the pipelining.
-func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (retErr error) {
+func (s *Streamer) Enqueue(ctx context.Context, reqs []kvpb.RequestUnion) (retErr error) {
 	if !s.coordinatorStarted {
 		var coordinatorCtx context.Context
 		coordinatorCtx, s.coordinatorCtxCancel = s.stopper.WithCancelOnQuiesce(ctx)
@@ -537,7 +538,7 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 			return ri.Error()
 		}
 		// Find all requests that touch the current range.
-		var singleRangeReqs []roachpb.RequestUnion
+		var singleRangeReqs []kvpb.RequestUnion
 		var positions []int
 		if allRequestsAreWithinSingleRange {
 			// All requests are within this range, so we can just use the
@@ -563,7 +564,7 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 		var subRequestIdxOverhead int64
 		if !s.hints.SingleRowLookup {
 			for i, pos := range positions {
-				if _, isScan := reqs[pos].GetInner().(*roachpb.ScanRequest); isScan {
+				if _, isScan := reqs[pos].GetInner().(*kvpb.ScanRequest); isScan {
 					if firstScanRequest {
 						// We have some ScanRequests, and each might touch
 						// multiple ranges, so we have to set up
@@ -778,7 +779,7 @@ type workerCoordinator struct {
 	asyncSem *quotapool.IntPool
 
 	// For request and response admission control.
-	requestAdmissionHeader roachpb.AdmissionHeader
+	requestAdmissionHeader kvpb.AdmissionHeader
 	responseAdmissionQ     *admission.WorkQueue
 }
 
@@ -1167,7 +1168,7 @@ func (w *workerCoordinator) performRequestAsync(
 		},
 		func(ctx context.Context) {
 			defer w.asyncRequestCleanup(false /* budgetMuAlreadyLocked */)
-			ba := &roachpb.BatchRequest{}
+			ba := &kvpb.BatchRequest{}
 			ba.Header.WaitPolicy = w.lockWaitPolicy
 			ba.Header.TargetBytes = targetBytes
 			ba.Header.AllowEmpty = !headOfLine
@@ -1323,13 +1324,13 @@ func (fp singleRangeBatchResponseFootprint) hasIncomplete() bool {
 // calculateFootprint calculates the memory footprint of the batch response as
 // well as of the requests that will have to be created for the ResumeSpans.
 func calculateFootprint(
-	req singleRangeBatch, br *roachpb.BatchResponse,
+	req singleRangeBatch, br *kvpb.BatchResponse,
 ) (fp singleRangeBatchResponseFootprint, _ error) {
 	for i, resp := range br.Responses {
 		reply := resp.GetInner()
 		switch req.reqs[i].GetInner().(type) {
-		case *roachpb.GetRequest:
-			get := reply.(*roachpb.GetResponse)
+		case *kvpb.GetRequest:
+			get := reply.(*kvpb.GetResponse)
 			if get.IntentValue != nil {
 				return fp, errors.AssertionFailedf(
 					"unexpectedly got an IntentValue back from a SQL GetRequest %v", *get.IntentValue,
@@ -1344,8 +1345,8 @@ func calculateFootprint(
 				fp.memoryFootprintBytes += getResponseSize(get)
 				fp.numGetResults++
 			}
-		case *roachpb.ScanRequest:
-			scan := reply.(*roachpb.ScanResponse)
+		case *kvpb.ScanRequest:
+			scan := reply.(*kvpb.ScanResponse)
 			if len(scan.Rows) > 0 {
 				return fp, errors.AssertionFailedf(
 					"unexpectedly got a ScanResponse using KEY_VALUES response format",
@@ -1384,7 +1385,7 @@ func processSingleRangeResponse(
 	ctx context.Context,
 	s *Streamer,
 	req singleRangeBatch,
-	br *roachpb.BatchResponse,
+	br *kvpb.BatchResponse,
 	fp singleRangeBatchResponseFootprint,
 ) {
 	processSingleRangeResults(ctx, s, req, br, fp)
@@ -1402,7 +1403,7 @@ func processSingleRangeResults(
 	ctx context.Context,
 	s *Streamer,
 	req singleRangeBatch,
-	br *roachpb.BatchResponse,
+	br *kvpb.BatchResponse,
 	fp singleRangeBatchResponseFootprint,
 ) {
 	// If there are no results, this function has nothing to do.
@@ -1458,7 +1459,7 @@ func processSingleRangeResults(
 		}
 		reply := resp.GetInner()
 		switch response := reply.(type) {
-		case *roachpb.GetResponse:
+		case *kvpb.GetResponse:
 			get := response
 			if get.ResumeSpan != nil {
 				// This Get wasn't completed.
@@ -1483,7 +1484,7 @@ func processSingleRangeResults(
 			}
 			s.results.addLocked(result)
 
-		case *roachpb.ScanResponse:
+		case *kvpb.ScanResponse:
 			scan := response
 			if len(scan.BatchResponses) == 0 && scan.ResumeSpan != nil {
 				// Only the first part of the conditional is true whenever we
@@ -1551,10 +1552,7 @@ func processSingleRangeResults(
 // Note that it should only be called if the response has any incomplete
 // requests.
 func buildResumeSingleRangeBatch(
-	s *Streamer,
-	req singleRangeBatch,
-	br *roachpb.BatchResponse,
-	fp singleRangeBatchResponseFootprint,
+	s *Streamer, req singleRangeBatch, br *kvpb.BatchResponse, fp singleRangeBatchResponseFootprint,
 ) (resumeReq singleRangeBatch) {
 	numIncompleteRequests := fp.numIncompleteGets + fp.numIncompleteScans
 	// We have to allocate the new Get and Scan requests, but we can reuse the
@@ -1571,19 +1569,19 @@ func buildResumeSingleRangeBatch(
 	// requests are modified by txnSeqNumAllocator, even if they are not
 	// evaluated due to TargetBytes limit).
 	gets := make([]struct {
-		req   roachpb.GetRequest
-		union roachpb.RequestUnion_Get
+		req   kvpb.GetRequest
+		union kvpb.RequestUnion_Get
 	}, fp.numIncompleteGets)
 	scans := make([]struct {
-		req   roachpb.ScanRequest
-		union roachpb.RequestUnion_Scan
+		req   kvpb.ScanRequest
+		union kvpb.RequestUnion_Scan
 	}, fp.numIncompleteScans)
 	var resumeReqIdx int
 	for i, resp := range br.Responses {
 		position := req.positions[i]
 		reply := resp.GetInner()
 		switch response := reply.(type) {
-		case *roachpb.GetResponse:
+		case *kvpb.GetResponse:
 			get := response
 			if get.ResumeSpan == nil {
 				continue
@@ -1605,7 +1603,7 @@ func buildResumeSingleRangeBatch(
 			}
 			resumeReqIdx++
 
-		case *roachpb.ScanResponse:
+		case *kvpb.ScanResponse:
 			scan := response
 			if scan.ResumeSpan == nil {
 				continue
@@ -1615,7 +1613,7 @@ func buildResumeSingleRangeBatch(
 			newScan := scans[0]
 			scans = scans[1:]
 			newScan.req.SetSpan(*scan.ResumeSpan)
-			newScan.req.ScanFormat = roachpb.BATCH_RESPONSE
+			newScan.req.ScanFormat = kvpb.BATCH_RESPONSE
 			newScan.req.KeyLocking = s.keyLocking
 			newScan.union.Scan = &newScan.req
 			resumeReq.reqs[resumeReqIdx].Value = &newScan.union
@@ -1665,7 +1663,7 @@ func buildResumeSingleRangeBatch(
 	// request. We don't have to do this if there aren't any incomplete requests
 	// since req and resumeReq will be garbage collected on their own.
 	for i := numIncompleteRequests; i < len(req.reqs); i++ {
-		req.reqs[i] = roachpb.RequestUnion{}
+		req.reqs[i] = kvpb.RequestUnion{}
 	}
 	atomic.AddInt64(&s.atomics.resumeBatchRequests, 1)
 	atomic.AddInt64(&s.atomics.resumeSingleRangeRequests, int64(numIncompleteRequests))

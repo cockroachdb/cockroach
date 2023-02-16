@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
+	kvpb "github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
@@ -722,7 +723,7 @@ func randMergeIsSplit(g *generator, rng *rand.Rand) Operation {
 
 func makeRemoveReplicaFn(key string, current []roachpb.ReplicationTarget) opGenFunc {
 	return func(g *generator, rng *rand.Rand) Operation {
-		change := roachpb.ReplicationChange{
+		change := kvpb.ReplicationChange{
 			ChangeType: roachpb.REMOVE_VOTER,
 			Target:     current[rng.Intn(len(current))],
 		}
@@ -745,12 +746,12 @@ func makeAddReplicaFn(key string, current []roachpb.ReplicationTarget, atomicSwa
 			candidates = append(candidates, candidate)
 		}
 		candidate := candidates[rng.Intn(len(candidates))]
-		changes := []roachpb.ReplicationChange{{
+		changes := []kvpb.ReplicationChange{{
 			ChangeType: roachpb.ADD_VOTER,
 			Target:     candidate,
 		}}
 		if atomicSwap {
-			changes = append(changes, roachpb.ReplicationChange{
+			changes = append(changes, kvpb.ReplicationChange{
 				ChangeType: roachpb.REMOVE_VOTER,
 				Target:     current[rng.Intn(len(current))],
 			})
@@ -1010,7 +1011,7 @@ func merge(key string) Operation {
 	return Operation{Merge: &MergeOperation{Key: []byte(key)}}
 }
 
-func changeReplicas(key string, changes ...roachpb.ReplicationChange) Operation {
+func changeReplicas(key string, changes ...kvpb.ReplicationChange) Operation {
 	return Operation{ChangeReplicas: &ChangeReplicasOperation{Key: []byte(key), Changes: changes}}
 }
 

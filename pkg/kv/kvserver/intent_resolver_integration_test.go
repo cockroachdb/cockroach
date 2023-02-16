@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -48,8 +49,8 @@ func beginTransaction(
 		return txn
 	}
 
-	ba := &roachpb.BatchRequest{}
-	ba.Header = roachpb.Header{Txn: txn}
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: txn}
 	put := putArgs(key, []byte("value"))
 	ba.Add(&put)
 	assignSeqNumsForReqs(txn, &put)
@@ -97,7 +98,7 @@ func TestContendedIntentWithDependencyCycle(t *testing.T) {
 	go func() {
 		put := putArgs(keyA, []byte("value"))
 		assignSeqNumsForReqs(txn1, &put)
-		if _, pErr := kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: txn1}, &put); pErr != nil {
+		if _, pErr := kv.SendWrappedWith(ctx, store.TestSender(), kvpb.Header{Txn: txn1}, &put); pErr != nil {
 			txnCh1 <- pErr.GoError()
 			return
 		}
@@ -125,7 +126,7 @@ func TestContendedIntentWithDependencyCycle(t *testing.T) {
 	go func() {
 		put := putArgs(keyB, []byte("value"))
 		assignSeqNumsForReqs(txn2, &put)
-		repl, pErr := kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: txn2}, &put)
+		repl, pErr := kv.SendWrappedWith(ctx, store.TestSender(), kvpb.Header{Txn: txn2}, &put)
 		if pErr != nil {
 			txnCh2 <- pErr.GoError()
 			return
@@ -159,13 +160,13 @@ func TestContendedIntentWithDependencyCycle(t *testing.T) {
 	go func() {
 		put := putArgs(keyB, []byte("value"))
 		assignSeqNumsForReqs(txn3, &put)
-		_, pErr := kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: txn3}, &put)
+		_, pErr := kv.SendWrappedWith(ctx, store.TestSender(), kvpb.Header{Txn: txn3}, &put)
 		txnCh3 <- pErr.GoError()
 	}()
 
 	// The third transaction will always be aborted.
 	err := <-txnCh3
-	if !errors.HasType(err, (*roachpb.UnhandledRetryableError)(nil)) {
+	if !errors.HasType(err, (*kvpb.UnhandledRetryableError)(nil)) {
 		t.Fatalf("expected transaction aborted error; got %T", err)
 	}
 	if err := <-txnCh1; err != nil {
@@ -240,24 +241,24 @@ func TestReliableIntentCleanup(t *testing.T) {
 			return readyC
 		}
 
-		requestFilter := func(ctx context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
+		requestFilter := func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
 			// If we receive a heartbeat from a txn in abortHeartbeats,
 			// close the aborted channel and return an error response.
-			if _, ok := ba.GetArg(roachpb.HeartbeatTxn); ok && ba.Txn != nil {
+			if _, ok := ba.GetArg(kvpb.HeartbeatTxn); ok && ba.Txn != nil {
 				if abortedC, ok := abortHeartbeats.LoadAndDelete(string(ba.Txn.Key)); ok {
 					close(abortedC.(chan struct{}))
-					return roachpb.NewError(roachpb.NewTransactionAbortedError(
-						roachpb.ABORT_REASON_NEW_LEASE_PREVENTS_TXN))
+					return kvpb.NewError(kvpb.NewTransactionAbortedError(
+						kvpb.ABORT_REASON_NEW_LEASE_PREVENTS_TXN))
 				}
 			}
 			return nil
 		}
 
-		evalFilter := func(args kvserverbase.FilterArgs) *roachpb.Error {
+		evalFilter := func(args kvserverbase.FilterArgs) *kvpb.Error {
 			// If we receive a Put request from a txn in blockPutEvals, signal
 			// the caller that the Put is ready to block by passing it an
 			// unblock channel, and wait for it to close.
-			if put, ok := args.Req.(*roachpb.PutRequest); ok && args.Hdr.Txn != nil {
+			if put, ok := args.Req.(*kvpb.PutRequest); ok && args.Hdr.Txn != nil {
 				if bytes.HasPrefix(put.Key, prefix) {
 					if ch, ok := blockPutEvals.LoadAndDelete(string(args.Hdr.Txn.Key)); ok {
 						readyC := ch.(chan chan<- struct{})
@@ -271,12 +272,12 @@ func TestReliableIntentCleanup(t *testing.T) {
 			return nil
 		}
 
-		responseFilter := func(ctx context.Context, ba *roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
+		responseFilter := func(ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse) *kvpb.Error {
 			// If we receive a Put request from a txn in blockPuts, signal
 			// the caller that the Put is ready to block by passing it an
 			// unblock channel, and wait for it to close.
-			if arg, ok := ba.GetArg(roachpb.Put); ok && ba.Txn != nil {
-				if bytes.HasPrefix(arg.(*roachpb.PutRequest).Key, prefix) {
+			if arg, ok := ba.GetArg(kvpb.Put); ok && ba.Txn != nil {
+				if bytes.HasPrefix(arg.(*kvpb.PutRequest).Key, prefix) {
 					if ch, ok := blockPuts.LoadAndDelete(string(ba.Txn.Key)); ok {
 						readyC := ch.(chan chan<- struct{})
 						unblockC := make(chan struct{})
@@ -402,8 +403,8 @@ func TestReliableIntentCleanup(t *testing.T) {
 		removeKeys := func(t *testing.T) {
 			t.Helper()
 			batch := &kv.Batch{}
-			batch.AddRawRequest(&roachpb.ClearRangeRequest{
-				RequestHeader: roachpb.RequestHeader{
+			batch.AddRawRequest(&kvpb.ClearRangeRequest{
+				RequestHeader: kvpb.RequestHeader{
 					Key:    prefix,
 					EndKey: prefix.PrefixEnd(),
 				},
@@ -560,7 +561,7 @@ func TestReliableIntentCleanup(t *testing.T) {
 			for attempt := 1; ; attempt++ {
 				txnKey := genKey(spec.singleRange)
 				txns[txn.ID()] = txnKey // before testTxnExecute, id may change on errors
-				retryErr := &roachpb.TransactionRetryWithProtoRefreshError{}
+				retryErr := &kvpb.TransactionRetryWithProtoRefreshError{}
 				err := testTxnExecute(t, ctx, spec, txn, txnKey)
 				if err == nil {
 					break

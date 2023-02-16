@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -203,7 +204,7 @@ func (r *errorReportingRowReceiver) ProducerDone() {}
 // A do nothing bulk adder implementation.
 type doNothingKeyAdder struct {
 	onKeyAdd func(key roachpb.Key)
-	onFlush  func(summary roachpb.BulkOpSummary)
+	onFlush  func(summary kvpb.BulkOpSummary)
 }
 
 var _ kvserverbase.BulkAdder = &doNothingKeyAdder{}
@@ -217,16 +218,16 @@ func (a *doNothingKeyAdder) Add(_ context.Context, k roachpb.Key, _ []byte) erro
 
 func (a *doNothingKeyAdder) Flush(_ context.Context) error {
 	if a.onFlush != nil {
-		a.onFlush(roachpb.BulkOpSummary{})
+		a.onFlush(kvpb.BulkOpSummary{})
 	}
 	return nil
 }
 
-func (*doNothingKeyAdder) IsEmpty() bool                                { return true }
-func (*doNothingKeyAdder) CurrentBufferFill() float32                   { return 0 }
-func (*doNothingKeyAdder) GetSummary() roachpb.BulkOpSummary            { return roachpb.BulkOpSummary{} }
-func (*doNothingKeyAdder) Close(_ context.Context)                      {}
-func (a *doNothingKeyAdder) SetOnFlush(f func(_ roachpb.BulkOpSummary)) { a.onFlush = f }
+func (*doNothingKeyAdder) IsEmpty() bool                             { return true }
+func (*doNothingKeyAdder) CurrentBufferFill() float32                { return 0 }
+func (*doNothingKeyAdder) GetSummary() kvpb.BulkOpSummary            { return kvpb.BulkOpSummary{} }
+func (*doNothingKeyAdder) Close(_ context.Context)                   {}
+func (a *doNothingKeyAdder) SetOnFlush(f func(_ kvpb.BulkOpSummary)) { a.onFlush = f }
 
 var eofOffset int64 = math.MaxInt64
 

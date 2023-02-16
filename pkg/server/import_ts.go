@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -185,8 +186,8 @@ func maybeImportTS(ctx context.Context, s *Server) (returnErr error) {
 			continue
 		}
 
-		p := roachpb.NewPut(v.Key, v.Value)
-		p.(*roachpb.PutRequest).Inline = true
+		p := kvpb.NewPut(v.Key, v.Value)
+		p.(*kvpb.PutRequest).Inline = true
 		batch.AddRawRequest(p)
 		batchSize++
 		if err := maybeFlush(false /* force */); err != nil {

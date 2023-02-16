@@ -8,6 +8,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv",
+        "//pkg/kv/kvpb",
         "//pkg/roachpb",
     ],
 )

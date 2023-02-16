@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -329,7 +330,7 @@ func TestDB_PrepareForRetryAfterHeartbeatFailure(t *testing.T) {
 		if err == nil {
 			return errors.New("the handle is not poisoned yet")
 		}
-		require.IsType(t, &roachpb.TransactionRetryWithProtoRefreshError{}, err)
+		require.IsType(t, &kvpb.TransactionRetryWithProtoRefreshError{}, err)
 		return nil
 	})
 
@@ -343,16 +344,16 @@ func TestDB_PrepareForRetryAfterHeartbeatFailure(t *testing.T) {
 }
 
 // getTxn fetches the requested key and returns the transaction info.
-func getTxn(ctx context.Context, txn *kv.Txn) (*roachpb.Transaction, *roachpb.Error) {
+func getTxn(ctx context.Context, txn *kv.Txn) (*roachpb.Transaction, *kvpb.Error) {
 	txnMeta := txn.TestingCloneTxn().TxnMeta
-	qt := &roachpb.QueryTxnRequest{
-		RequestHeader: roachpb.RequestHeader{
+	qt := &kvpb.QueryTxnRequest{
+		RequestHeader: kvpb.RequestHeader{
 			Key: txnMeta.Key,
 		},
 		Txn: txnMeta,
 	}
 
-	ba := &roachpb.BatchRequest{}
+	ba := &kvpb.BatchRequest{}
 	ba.Timestamp = txnMeta.WriteTimestamp
 	ba.Add(qt)
 
@@ -363,7 +364,7 @@ func getTxn(ctx context.Context, txn *kv.Txn) (*roachpb.Transaction, *roachpb.Er
 	if pErr != nil {
 		return nil, pErr
 	}
-	return &br.Responses[0].GetInner().(*roachpb.QueryTxnResponse).QueriedTxn, nil
+	return &br.Responses[0].GetInner().(*kvpb.QueryTxnResponse).QueriedTxn, nil
 }
 
 func verifyCleanup(
@@ -487,9 +488,9 @@ func TestTxnCoordSenderCommitCanceled(t *testing.T) {
 	// a txn ID, and the value is a ready channel (chan struct) that will be
 	// closed when the commit has been received and blocked.
 	var blockCommits sync.Map
-	responseFilter := func(_ context.Context, ba *roachpb.BatchRequest, _ *roachpb.BatchResponse) *roachpb.Error {
-		if arg, ok := ba.GetArg(roachpb.EndTxn); ok && ba.Txn != nil {
-			et := arg.(*roachpb.EndTxnRequest)
+	responseFilter := func(_ context.Context, ba *kvpb.BatchRequest, _ *kvpb.BatchResponse) *kvpb.Error {
+		if arg, ok := ba.GetArg(kvpb.EndTxn); ok && ba.Txn != nil {
+			et := arg.(*kvpb.EndTxnRequest)
 			readyC, ok := blockCommits.Load(ba.Txn.ID)
 			if ok && et.Commit && len(et.InFlightWrites) == 0 {
 				close(readyC.(chan struct{})) // notify test that commit is received and blocked
@@ -539,13 +540,13 @@ func TestTxnCoordSenderCommitCanceled(t *testing.T) {
 	// EndTxn(commit=false) async. We instead replicate what Txn.Rollback() would
 	// do here (i.e. send a EndTxn(commit=false)) and assert that we receive the
 	// expected error.
-	ba := &roachpb.BatchRequest{}
-	ba.Add(&roachpb.EndTxnRequest{Commit: false})
+	ba := &kvpb.BatchRequest{}
+	ba.Add(&kvpb.EndTxnRequest{Commit: false})
 	_, pErr := txn.Send(ctx, ba)
 	require.NotNil(t, pErr)
-	require.IsType(t, &roachpb.TransactionStatusError{}, pErr.GetDetail())
-	txnErr := pErr.GetDetail().(*roachpb.TransactionStatusError)
-	require.Equal(t, roachpb.TransactionStatusError_REASON_TXN_COMMITTED, txnErr.Reason)
+	require.IsType(t, &kvpb.TransactionStatusError{}, pErr.GetDetail())
+	txnErr := pErr.GetDetail().(*kvpb.TransactionStatusError)
+	require.Equal(t, kvpb.TransactionStatusError_REASON_TXN_COMMITTED, txnErr.Reason)
 }
 
 // TestTxnCoordSenderAddLockOnError verifies that locks are tracked if the
@@ -569,7 +570,7 @@ func TestTxnCoordSenderAddLockOnError(t *testing.T) {
 	}
 	{
 		err := txn.CPut(ctx, key, []byte("x"), kvclientutils.StrToCPutExistingValue("born to fail"))
-		if !errors.HasType(err, (*roachpb.ConditionFailedError)(nil)) {
+		if !errors.HasType(err, (*kvpb.ConditionFailedError)(nil)) {
 			t.Fatal(err)
 		}
 	}
@@ -586,7 +587,7 @@ func TestTxnCoordSenderAddLockOnError(t *testing.T) {
 
 func assertTransactionRetryError(t *testing.T, e error) {
 	t.Helper()
-	if retErr := (*roachpb.TransactionRetryWithProtoRefreshError)(nil); errors.As(e, &retErr) {
+	if retErr := (*kvpb.TransactionRetryWithProtoRefreshError)(nil); errors.As(e, &retErr) {
 		if !testutils.IsError(retErr, "TransactionRetryError") {
 			t.Fatalf("expected the cause to be TransactionRetryError, but got %s",
 				retErr)
@@ -597,7 +598,7 @@ func assertTransactionRetryError(t *testing.T, e error) {
 }
 
 func assertTransactionAbortedError(t *testing.T, e error) {
-	if retErr := (*roachpb.TransactionRetryWithProtoRefreshError)(nil); errors.As(e, &retErr) {
+	if retErr := (*kvpb.TransactionRetryWithProtoRefreshError)(nil); errors.As(e, &retErr) {
 		if !testutils.IsError(retErr, "TransactionAbortedError") {
 			t.Fatalf("expected the cause to be TransactionAbortedError, but got %s",
 				retErr)
@@ -676,12 +677,12 @@ func TestTxnCoordSenderGCWithAmbiguousResultErr(t *testing.T) {
 
 	testutils.RunTrueAndFalse(t, "errOnFirst", func(t *testing.T, errOnFirst bool) {
 		key := roachpb.Key("a")
-		are := roachpb.NewAmbiguousResultErrorf("very ambiguous")
+		are := kvpb.NewAmbiguousResultErrorf("very ambiguous")
 		knobs := &kvserver.StoreTestingKnobs{
-			TestingResponseFilter: func(ctx context.Context, ba *roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
+			TestingResponseFilter: func(ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse) *kvpb.Error {
 				for _, req := range ba.Requests {
-					if putReq, ok := req.GetInner().(*roachpb.PutRequest); ok && putReq.Key.Equal(key) {
-						return roachpb.NewError(are)
+					if putReq, ok := req.GetInner().(*kvpb.PutRequest); ok && putReq.Key.Equal(key) {
+						return kvpb.NewError(are)
 					}
 				}
 				return nil
@@ -732,7 +733,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 	testCases := []struct {
 		// The test's name.
 		name                  string
-		pErrGen               func(txn *roachpb.Transaction) *roachpb.Error
+		pErrGen               func(txn *roachpb.Transaction) *kvpb.Error
 		callPrepareForRetry   bool
 		expEpoch              enginepb.TxnEpoch
 		expPri                enginepb.TxnPriority
@@ -744,7 +745,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 		{
 			// No error, so nothing interesting either.
 			name:       "nil",
-			pErrGen:    func(_ *roachpb.Transaction) *roachpb.Error { return nil },
+			pErrGen:    func(_ *roachpb.Transaction) *kvpb.Error { return nil },
 			expEpoch:   0,
 			expPri:     1,
 			expWriteTS: origTS,
@@ -754,9 +755,9 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			// On uncertainty error, new epoch begins. Timestamp moves ahead of
 			// the existing write and LocalUncertaintyLimit, if one exists.
 			name: "ReadWithinUncertaintyIntervalError without LocalUncertaintyLimit",
-			pErrGen: func(txn *roachpb.Transaction) *roachpb.Error {
-				pErr := roachpb.NewErrorWithTxn(
-					roachpb.NewReadWithinUncertaintyIntervalError(
+			pErrGen: func(txn *roachpb.Transaction) *kvpb.Error {
+				pErr := kvpb.NewErrorWithTxn(
+					kvpb.NewReadWithinUncertaintyIntervalError(
 						origTS,               // readTS
 						hlc.ClockTimestamp{}, // localUncertaintyLimit
 						txn,                  // txn
@@ -775,9 +776,9 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			// On uncertainty error, new epoch begins. Timestamp moves ahead of
 			// the existing write and LocalUncertaintyLimit, if one exists.
 			name: "ReadWithinUncertaintyIntervalError with LocalUncertaintyLimit",
-			pErrGen: func(txn *roachpb.Transaction) *roachpb.Error {
-				pErr := roachpb.NewErrorWithTxn(
-					roachpb.NewReadWithinUncertaintyIntervalError(
+			pErrGen: func(txn *roachpb.Transaction) *kvpb.Error {
+				pErr := kvpb.NewErrorWithTxn(
+					kvpb.NewReadWithinUncertaintyIntervalError(
 						origTS,                     // readTS
 						hlc.ClockTimestamp(plus20), // localUncertaintyLimit
 						txn,                        // txn
@@ -796,10 +797,10 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			// On abort, nothing changes - we are left with a poisoned txn (unless we
 			// call PrepareForRetry as in the next test case).
 			name: "TransactionAbortedError",
-			pErrGen: func(txn *roachpb.Transaction) *roachpb.Error {
+			pErrGen: func(txn *roachpb.Transaction) *kvpb.Error {
 				txn.WriteTimestamp = plus20
 				txn.Priority = 10
-				return roachpb.NewErrorWithTxn(&roachpb.TransactionAbortedError{}, txn)
+				return kvpb.NewErrorWithTxn(&kvpb.TransactionAbortedError{}, txn)
 			},
 			expPri:     1,
 			expWriteTS: origTS,
@@ -809,10 +810,10 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			// On abort, reset the txn by calling PrepareForRetry, and then we get a
 			// new priority to use for the next attempt.
 			name: "TransactionAbortedError with PrepareForRetry",
-			pErrGen: func(txn *roachpb.Transaction) *roachpb.Error {
+			pErrGen: func(txn *roachpb.Transaction) *kvpb.Error {
 				txn.WriteTimestamp = plus20
 				txn.Priority = 10
-				return roachpb.NewErrorWithTxn(&roachpb.TransactionAbortedError{}, txn)
+				return kvpb.NewErrorWithTxn(&kvpb.TransactionAbortedError{}, txn)
 			},
 			callPrepareForRetry: true,
 			expNewTransaction:   true,
@@ -824,8 +825,8 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			// On failed push, new epoch begins just past the pushed timestamp.
 			// Additionally, priority ratchets up to just below the pusher's.
 			name: "TransactionPushError",
-			pErrGen: func(txn *roachpb.Transaction) *roachpb.Error {
-				return roachpb.NewErrorWithTxn(&roachpb.TransactionPushError{
+			pErrGen: func(txn *roachpb.Transaction) *kvpb.Error {
+				return kvpb.NewErrorWithTxn(&kvpb.TransactionPushError{
 					PusheeTxn: roachpb.Transaction{
 						TxnMeta: enginepb.TxnMeta{WriteTimestamp: plus10, Priority: 10},
 					},
@@ -839,10 +840,10 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 		{
 			// On retry, restart with new epoch, timestamp and priority.
 			name: "TransactionRetryError",
-			pErrGen: func(txn *roachpb.Transaction) *roachpb.Error {
+			pErrGen: func(txn *roachpb.Transaction) *kvpb.Error {
 				txn.WriteTimestamp = plus10
 				txn.Priority = 10
-				return roachpb.NewErrorWithTxn(&roachpb.TransactionRetryError{}, txn)
+				return kvpb.NewErrorWithTxn(&kvpb.TransactionRetryError{}, txn)
 			},
 			expEpoch:   1,
 			expPri:     10,
@@ -859,9 +860,9 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			clock := hlc.NewClockForTesting(manual)
 
 			var senderFn kv.SenderFunc = func(
-				_ context.Context, ba *roachpb.BatchRequest,
-			) (*roachpb.BatchResponse, *roachpb.Error) {
-				var reply *roachpb.BatchResponse
+				_ context.Context, ba *kvpb.BatchRequest,
+			) (*kvpb.BatchResponse, *kvpb.Error) {
+				var reply *kvpb.BatchResponse
 				pErr := test.pErrGen(ba.Txn)
 				if pErr == nil {
 					reply = ba.CreateReply()
@@ -1040,7 +1041,7 @@ func TestTxnMultipleCoord(t *testing.T) {
 	require.Equal(t, []roachpb.Span{{Key: key}, {Key: key2}}, refreshSpans)
 
 	ba := txn.NewBatch()
-	ba.AddRawRequest(&roachpb.EndTxnRequest{Commit: true})
+	ba.AddRawRequest(&kvpb.EndTxnRequest{Commit: true})
 	if err := txn.Run(ctx, ba); err != nil {
 		t.Fatal(err)
 	}
@@ -1058,12 +1059,12 @@ func TestTxnCoordSenderNoDuplicateLockSpans(t *testing.T) {
 
 	var expectedLockSpans []roachpb.Span
 
-	var senderFn kv.SenderFunc = func(_ context.Context, ba *roachpb.BatchRequest) (
-		*roachpb.BatchResponse, *roachpb.Error) {
+	var senderFn kv.SenderFunc = func(_ context.Context, ba *kvpb.BatchRequest) (
+		*kvpb.BatchResponse, *kvpb.Error) {
 		br := ba.CreateReply()
 		br.Txn = ba.Txn.Clone()
-		if rArgs, ok := ba.GetArg(roachpb.EndTxn); ok {
-			et := rArgs.(*roachpb.EndTxnRequest)
+		if rArgs, ok := ba.GetArg(kvpb.EndTxn); ok {
+			et := rArgs.(*kvpb.EndTxnRequest)
 			if !reflect.DeepEqual(et.LockSpans, expectedLockSpans) {
 				t.Errorf("Invalid lock spans: %+v; expected %+v", et.LockSpans, expectedLockSpans)
 			}
@@ -1458,8 +1459,8 @@ func TestTxnCommitWait(t *testing.T) {
 					ts := txn.TestingCloneTxn().WriteTimestamp.
 						Add(futureOffset.Nanoseconds(), 0).
 						WithSynthetic(true)
-					h := roachpb.Header{Timestamp: ts}
-					put := roachpb.NewPut(key, roachpb.Value{})
+					h := kvpb.Header{Timestamp: ts}
+					put := kvpb.NewPut(key, roachpb.Value{})
 					if _, pErr := kv.SendWrappedWith(ctx, s.DB.NonTransactionalSender(), h, put); pErr != nil {
 						return pErr.GoError()
 					}
@@ -1570,27 +1571,27 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 
 	testCases := []struct {
 		err        error
-		errFn      func(roachpb.Transaction) *roachpb.Error
+		errFn      func(roachpb.Transaction) *kvpb.Error
 		asyncAbort bool
 	}{
 		{
-			errFn: func(txn roachpb.Transaction) *roachpb.Error {
+			errFn: func(txn roachpb.Transaction) *kvpb.Error {
 				const nodeID = 0
 				// ReadWithinUncertaintyIntervalErrors need a clock to have been
 				// recorded on the origin.
 				txn.UpdateObservedTimestamp(nodeID, makeTS(123, 0).UnsafeToClockTimestamp())
-				return roachpb.NewErrorWithTxn(
-					roachpb.NewReadWithinUncertaintyIntervalError(
+				return kvpb.NewErrorWithTxn(
+					kvpb.NewReadWithinUncertaintyIntervalError(
 						hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, hlc.Timestamp{}, hlc.ClockTimestamp{}),
 					&txn)
 			},
 			asyncAbort: false},
-		{err: &roachpb.TransactionAbortedError{}, asyncAbort: true},
-		{err: &roachpb.TransactionPushError{}, asyncAbort: false},
-		{err: &roachpb.TransactionRetryError{}, asyncAbort: false},
-		{err: &roachpb.RangeNotFoundError{}, asyncAbort: false},
-		{err: &roachpb.RangeKeyMismatchError{}, asyncAbort: false},
-		{err: &roachpb.TransactionStatusError{}, asyncAbort: false},
+		{err: &kvpb.TransactionAbortedError{}, asyncAbort: true},
+		{err: &kvpb.TransactionPushError{}, asyncAbort: false},
+		{err: &kvpb.TransactionRetryError{}, asyncAbort: false},
+		{err: &kvpb.RangeNotFoundError{}, asyncAbort: false},
+		{err: &kvpb.RangeKeyMismatchError{}, asyncAbort: false},
+		{err: &kvpb.TransactionStatusError{}, asyncAbort: false},
 	}
 
 	for _, test := range testCases {
@@ -1602,18 +1603,18 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 			stopper := stop.NewStopper()
 			defer stopper.Stop(ctx)
 			var senderFn kv.SenderFunc = func(
-				_ context.Context, ba *roachpb.BatchRequest,
-			) (*roachpb.BatchResponse, *roachpb.Error) {
+				_ context.Context, ba *kvpb.BatchRequest,
+			) (*kvpb.BatchResponse, *kvpb.Error) {
 				br := ba.CreateReply()
 				br.Txn = ba.Txn.Clone()
 
-				if et, hasET := ba.GetArg(roachpb.EndTxn); hasET {
-					if et.(*roachpb.EndTxnRequest).Commit {
+				if et, hasET := ba.GetArg(kvpb.EndTxn); hasET {
+					if et.(*kvpb.EndTxnRequest).Commit {
 						commit.Store(true)
 						if test.errFn != nil {
 							return nil, test.errFn(*ba.Txn)
 						}
-						return nil, roachpb.NewErrorWithTxn(test.err, ba.Txn)
+						return nil, kvpb.NewErrorWithTxn(test.err, ba.Txn)
 					}
 					abort.Store(true)
 				}
@@ -1664,7 +1665,7 @@ type mockSender struct {
 
 var _ kv.Sender = &mockSender{}
 
-type matcher func(*roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
+type matcher func(*kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error)
 
 // match adds a matcher to the list of matchers.
 func (s *mockSender) match(m matcher) {
@@ -1673,8 +1674,8 @@ func (s *mockSender) match(m matcher) {
 
 // Send implements the client.Sender interface.
 func (s *mockSender) Send(
-	_ context.Context, ba *roachpb.BatchRequest,
-) (*roachpb.BatchResponse, *roachpb.Error) {
+	_ context.Context, ba *kvpb.BatchRequest,
+) (*kvpb.BatchResponse, *kvpb.Error) {
 	for _, m := range s.matchers {
 		br, pErr := m(ba)
 		if br != nil || pErr != nil {
@@ -1711,22 +1712,22 @@ func TestRollbackErrorStopsHeartbeat(t *testing.T) {
 	)
 	db := kv.NewDB(ambient, factory, clock, stopper)
 
-	sender.match(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		if _, ok := ba.GetArg(roachpb.EndTxn); !ok {
+	sender.match(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		if _, ok := ba.GetArg(kvpb.EndTxn); !ok {
 			resp := ba.CreateReply()
 			resp.Txn = ba.Txn
 			return resp, nil
 		}
-		return nil, roachpb.NewErrorf("injected err")
+		return nil, kvpb.NewErrorf("injected err")
 	})
 
 	txn := kv.NewTxn(ctx, db, roachpb.NodeID(1))
-	txnHeader := roachpb.Header{
+	txnHeader := kvpb.Header{
 		Txn: txn.TestingCloneTxn(),
 	}
 	if _, pErr := kv.SendWrappedWith(
-		ctx, txn, txnHeader, &roachpb.PutRequest{
-			RequestHeader: roachpb.RequestHeader{
+		ctx, txn, txnHeader, &kvpb.PutRequest{
+			RequestHeader: kvpb.RequestHeader{
 				Key: roachpb.Key("a"),
 			},
 		},
@@ -1739,7 +1740,7 @@ func TestRollbackErrorStopsHeartbeat(t *testing.T) {
 
 	if _, pErr := kv.SendWrappedWith(
 		ctx, txn, txnHeader,
-		&roachpb.EndTxnRequest{Commit: false},
+		&kvpb.EndTxnRequest{Commit: false},
 	); !testutils.IsPError(pErr, "injected err") {
 		t.Fatal(pErr)
 	}
@@ -1781,28 +1782,28 @@ func TestOnePCErrorTracking(t *testing.T) {
 	keyA, keyB, keyC := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")
 
 	// Register a matcher catching the commit attempt.
-	sender.match(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		if et, ok := ba.GetArg(roachpb.EndTxn); !ok {
+	sender.match(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		if et, ok := ba.GetArg(kvpb.EndTxn); !ok {
 			return nil, nil
-		} else if !et.(*roachpb.EndTxnRequest).Commit {
+		} else if !et.(*kvpb.EndTxnRequest).Commit {
 			return nil, nil
 		}
-		return nil, roachpb.NewErrorf("injected err")
+		return nil, kvpb.NewErrorf("injected err")
 	})
 	// Register a matcher catching the rollback attempt.
-	sender.match(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		et, ok := ba.GetArg(roachpb.EndTxn)
+	sender.match(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		et, ok := ba.GetArg(kvpb.EndTxn)
 		if !ok {
 			return nil, nil
 		}
-		etReq := et.(*roachpb.EndTxnRequest)
+		etReq := et.(*kvpb.EndTxnRequest)
 		if etReq.Commit {
 			return nil, nil
 		}
 		expLocks := []roachpb.Span{{Key: keyA}, {Key: keyB, EndKey: keyC}}
 		locks := etReq.LockSpans
 		if !reflect.DeepEqual(locks, expLocks) {
-			return nil, roachpb.NewErrorf("expected locks %s, got: %s", expLocks, locks)
+			return nil, kvpb.NewErrorf("expected locks %s, got: %s", expLocks, locks)
 		}
 		resp := ba.CreateReply()
 		// Set the response's txn to the Aborted status (as the server would). This
@@ -1813,7 +1814,7 @@ func TestOnePCErrorTracking(t *testing.T) {
 	})
 
 	txn := kv.NewTxn(ctx, db, roachpb.NodeID(1))
-	txnHeader := roachpb.Header{
+	txnHeader := kvpb.Header{
 		Txn: txn.TestingCloneTxn(),
 	}
 	b := txn.NewBatch()
@@ -1827,7 +1828,7 @@ func TestOnePCErrorTracking(t *testing.T) {
 	// to it.
 	if _, pErr := kv.SendWrappedWith(
 		ctx, txn, txnHeader,
-		&roachpb.EndTxnRequest{Commit: false},
+		&kvpb.EndTxnRequest{Commit: false},
 	); pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -1853,8 +1854,8 @@ func TestCommitReadOnlyTransaction(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	var calls []roachpb.Method
-	sender.match(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	var calls []kvpb.Method
+	sender.match(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		calls = append(calls, ba.Methods()...)
 		return nil, nil
 	})
@@ -1885,9 +1886,9 @@ func TestCommitReadOnlyTransaction(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			expectedCalls := []roachpb.Method(nil)
+			expectedCalls := []kvpb.Method(nil)
 			if withGet {
-				expectedCalls = append(expectedCalls, roachpb.Get)
+				expectedCalls = append(expectedCalls, kvpb.Get)
 			}
 			if !reflect.DeepEqual(expectedCalls, calls) {
 				t.Fatalf("expected %s, got %s", expectedCalls, calls)
@@ -1908,8 +1909,8 @@ func TestCommitMutatingTransaction(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	var calls []roachpb.Method
-	sender.match(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	var calls []kvpb.Method
+	sender.match(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		br := ba.CreateReply()
 		br.Txn = ba.Txn.Clone()
 
@@ -1917,8 +1918,8 @@ func TestCommitMutatingTransaction(t *testing.T) {
 		if !bytes.Equal(ba.Txn.Key, roachpb.Key("a")) {
 			t.Errorf("expected transaction key to be \"a\"; got %s", ba.Txn.Key)
 		}
-		if et, ok := ba.GetArg(roachpb.EndTxn); ok {
-			if !et.(*roachpb.EndTxnRequest).Commit {
+		if et, ok := ba.GetArg(kvpb.EndTxn); ok {
+			if !et.(*kvpb.EndTxnRequest).Commit {
 				t.Errorf("expected commit to be true")
 			}
 			br.Txn.Status = roachpb.COMMITTED
@@ -1939,7 +1940,7 @@ func TestCommitMutatingTransaction(t *testing.T) {
 	// Test all transactional write methods.
 	testArgs := []struct {
 		f         func(ctx context.Context, txn *kv.Txn) error
-		expMethod roachpb.Method
+		expMethod kvpb.Method
 		// pointWrite is set if the method is a "point write", which means that it
 		// will be pipelined and we should expect a QueryIntent request at commit
 		// time.
@@ -1947,12 +1948,12 @@ func TestCommitMutatingTransaction(t *testing.T) {
 	}{
 		{
 			f:          func(ctx context.Context, txn *kv.Txn) error { return txn.Put(ctx, "a", "b") },
-			expMethod:  roachpb.Put,
+			expMethod:  kvpb.Put,
 			pointWrite: true,
 		},
 		{
 			f:          func(ctx context.Context, txn *kv.Txn) error { return txn.CPut(ctx, "a", "b", nil) },
-			expMethod:  roachpb.ConditionalPut,
+			expMethod:  kvpb.ConditionalPut,
 			pointWrite: true,
 		},
 		{
@@ -1960,7 +1961,7 @@ func TestCommitMutatingTransaction(t *testing.T) {
 				_, err := txn.Inc(ctx, "a", 1)
 				return err
 			},
-			expMethod:  roachpb.Increment,
+			expMethod:  kvpb.Increment,
 			pointWrite: true,
 		},
 		{
@@ -1968,7 +1969,7 @@ func TestCommitMutatingTransaction(t *testing.T) {
 				_, err := txn.Del(ctx, "a")
 				return err
 			},
-			expMethod:  roachpb.Delete,
+			expMethod:  kvpb.Delete,
 			pointWrite: true,
 		},
 		{
@@ -1976,7 +1977,7 @@ func TestCommitMutatingTransaction(t *testing.T) {
 				_, err := txn.DelRange(ctx, "a", "b", false /* returnKeys */)
 				return err
 			},
-			expMethod:  roachpb.DeleteRange,
+			expMethod:  kvpb.DeleteRange,
 			pointWrite: false,
 		},
 	}
@@ -1987,11 +1988,11 @@ func TestCommitMutatingTransaction(t *testing.T) {
 			if err := db.Txn(ctx, test.f); err != nil {
 				t.Fatalf("%d: unexpected error on commit: %s", i, err)
 			}
-			expectedCalls := []roachpb.Method{test.expMethod}
+			expectedCalls := []kvpb.Method{test.expMethod}
 			if test.pointWrite {
-				expectedCalls = append(expectedCalls, roachpb.QueryIntent)
+				expectedCalls = append(expectedCalls, kvpb.QueryIntent)
 			}
-			expectedCalls = append(expectedCalls, roachpb.EndTxn)
+			expectedCalls = append(expectedCalls, kvpb.EndTxn)
 			if !reflect.DeepEqual(expectedCalls, calls) {
 				t.Fatalf("%d: expected %s, got %s", i, expectedCalls, calls)
 			}
@@ -2011,8 +2012,8 @@ func TestAbortReadOnlyTransaction(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	var calls []roachpb.Method
-	sender.match(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	var calls []kvpb.Method
+	sender.match(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		calls = append(calls, ba.Methods()...)
 		return nil, nil
 	})
@@ -2052,18 +2053,18 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	var calls []roachpb.Method
-	sender.match(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	var calls []kvpb.Method
+	sender.match(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		br := ba.CreateReply()
 		br.Txn = ba.Txn.Clone()
 
 		calls = append(calls, ba.Methods()...)
 		switch ba.Requests[0].GetInner().Method() {
-		case roachpb.Put, roachpb.Scan:
-			return nil, roachpb.NewErrorWithTxn(
-				roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE, "test err"),
+		case kvpb.Put, kvpb.Scan:
+			return nil, kvpb.NewErrorWithTxn(
+				kvpb.NewTransactionRetryError(kvpb.RETRY_SERIALIZABLE, "test err"),
 				ba.Txn)
-		case roachpb.EndTxn:
+		case kvpb.EndTxn:
 			br.Txn.Status = roachpb.COMMITTED
 		}
 		return br, nil
@@ -2110,11 +2111,11 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 				t.Fatalf("expected error: %t, got error: %v", !success, err)
 			}
 
-			var expCalls []roachpb.Method
+			var expCalls []kvpb.Method
 			if write {
-				expCalls = []roachpb.Method{roachpb.Put, roachpb.EndTxn}
+				expCalls = []kvpb.Method{kvpb.Put, kvpb.EndTxn}
 			} else {
-				expCalls = []roachpb.Method{roachpb.Scan, roachpb.EndTxn}
+				expCalls = []kvpb.Method{kvpb.Scan, kvpb.EndTxn}
 			}
 			if !reflect.DeepEqual(expCalls, calls) {
 				t.Fatalf("expected %v, got %v", expCalls, calls)
@@ -2138,18 +2139,18 @@ func TestTransactionKeyNotChangedInRestart(t *testing.T) {
 
 	keys := []string{"first", "second"}
 	attempt := 0
-	sender.match(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	sender.match(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		br := ba.CreateReply()
 		br.Txn = ba.Txn.Clone()
 
 		// Ignore the final EndTxnRequest.
-		if _, ok := ba.GetArg(roachpb.EndTxn); ok {
+		if _, ok := ba.GetArg(kvpb.EndTxn); ok {
 			br.Txn.Status = roachpb.COMMITTED
 			return br, nil
 		}
 
 		// Both attempts should have a PutRequest.
-		if _, ok := ba.GetArg(roachpb.Put); !ok {
+		if _, ok := ba.GetArg(kvpb.Put); !ok {
 			t.Fatalf("failed to find a put request: %v", ba)
 		}
 
@@ -2160,8 +2161,8 @@ func TestTransactionKeyNotChangedInRestart(t *testing.T) {
 		}
 
 		if attempt == 0 {
-			return nil, roachpb.NewErrorWithTxn(
-				roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE, "test err"),
+			return nil, kvpb.NewErrorWithTxn(
+				kvpb.NewTransactionRetryError(kvpb.RETRY_SERIALIZABLE, "test err"),
 				ba.Txn)
 		}
 		return br, nil
@@ -2204,10 +2205,10 @@ func TestSequenceNumbers(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	var expSequence enginepb.TxnSeq
-	sender.match(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	sender.match(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		for _, ru := range ba.Requests {
 			args := ru.GetInner()
-			if args.Method() == roachpb.QueryIntent {
+			if args.Method() == kvpb.QueryIntent {
 				// QueryIntent requests don't have sequence numbers.
 				continue
 			}
@@ -2235,9 +2236,9 @@ func TestSequenceNumbers(t *testing.T) {
 	txn := kv.NewTxn(ctx, db, 0 /* gatewayNodeID */)
 
 	for i := 0; i < 5; i++ {
-		ba := &roachpb.BatchRequest{}
+		ba := &kvpb.BatchRequest{}
 		for j := 0; j < i; j++ {
-			ba.Add(roachpb.NewPut(roachpb.Key("a"), roachpb.MakeValueFromString("foo")).(*roachpb.PutRequest))
+			ba.Add(kvpb.NewPut(roachpb.Key("a"), roachpb.MakeValueFromString("foo")).(*kvpb.PutRequest))
 		}
 		if _, pErr := txn.Send(ctx, ba); pErr != nil {
 			t.Fatal(pErr)
@@ -2258,15 +2259,15 @@ func TestConcurrentTxnRequestsProhibited(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	putSync := make(chan struct{})
-	sender.match(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		if _, ok := ba.GetArg(roachpb.Put); ok {
+	sender.match(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		if _, ok := ba.GetArg(kvpb.Put); ok {
 			// Block the Put until the Get runs.
 			putSync <- struct{}{}
 			<-putSync
 		}
 		br := ba.CreateReply()
 		br.Txn = ba.Txn.Clone()
-		if _, ok := ba.GetArg(roachpb.EndTxn); ok {
+		if _, ok := ba.GetArg(kvpb.EndTxn); ok {
 			br.Txn.Status = roachpb.COMMITTED
 		}
 		return br, nil
@@ -2338,10 +2339,10 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 		{hlc.Timestamp{WallTime: 20, Logical: 1}, hlc.Timestamp{WallTime: 20, Logical: 1}},
 	}
 
-	sender.match(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	sender.match(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		req := requests[curReq]
 		if req.expRequestTS != ba.Txn.WriteTimestamp {
-			return nil, roachpb.NewErrorf("%d: expected ts %s got %s",
+			return nil, kvpb.NewErrorf("%d: expected ts %s got %s",
 				curReq, req.expRequestTS, ba.Txn.WriteTimestamp)
 		}
 
@@ -2380,8 +2381,8 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	sender.match(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		if _, ok := ba.GetArg(roachpb.Get); ok {
+	sender.match(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		if _, ok := ba.GetArg(kvpb.Get); ok {
 			manual.Advance(100)
 			br := ba.CreateReply()
 			br.Txn = ba.Txn.Clone()
@@ -2449,14 +2450,14 @@ func TestTxnCoordSenderPipelining(t *testing.T) {
 	defer s.Stop()
 	distSender := s.DB.GetFactory().(*kvcoord.TxnCoordSenderFactory).NonTransactionalSender()
 
-	var calls []roachpb.Method
+	var calls []kvpb.Method
 	var senderFn kv.SenderFunc = func(
-		ctx context.Context, ba *roachpb.BatchRequest,
-	) (*roachpb.BatchResponse, *roachpb.Error) {
+		ctx context.Context, ba *kvpb.BatchRequest,
+	) (*kvpb.BatchResponse, *kvpb.Error) {
 		calls = append(calls, ba.Methods()...)
-		if et, ok := ba.GetArg(roachpb.EndTxn); ok {
+		if et, ok := ba.GetArg(kvpb.EndTxn); ok {
 			// Ensure that no transactions enter a STAGING state.
-			et.(*roachpb.EndTxnRequest).InFlightWrites = nil
+			et.(*kvpb.EndTxnRequest).InFlightWrites = nil
 		}
 		return distSender.Send(ctx, ba)
 	}
@@ -2489,9 +2490,9 @@ func TestTxnCoordSenderPipelining(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	require.Equal(t, []roachpb.Method{
-		roachpb.Put, roachpb.QueryIntent, roachpb.EndTxn,
-		roachpb.Put, roachpb.EndTxn,
+	require.Equal(t, []kvpb.Method{
+		kvpb.Put, kvpb.QueryIntent, kvpb.EndTxn,
+		kvpb.Put, kvpb.EndTxn,
 	}, calls)
 
 	for _, action := range []func(ctx context.Context, txn *kv.Txn) error{
@@ -2526,14 +2527,14 @@ func TestAnchorKey(t *testing.T) {
 	key2 := roachpb.Key("b")
 
 	var senderFn kv.SenderFunc = func(
-		ctx context.Context, ba *roachpb.BatchRequest,
-	) (*roachpb.BatchResponse, *roachpb.Error) {
+		ctx context.Context, ba *kvpb.BatchRequest,
+	) (*kvpb.BatchResponse, *kvpb.Error) {
 		if !roachpb.Key(ba.Txn.Key).Equal(key2) {
 			t.Fatalf("expected anchor %q, got %q", key2, ba.Txn.Key)
 		}
 		br := ba.CreateReply()
 		br.Txn = ba.Txn.Clone()
-		if _, ok := ba.GetArg(roachpb.EndTxn); ok {
+		if _, ok := ba.GetArg(kvpb.EndTxn); ok {
 			br.Txn.Status = roachpb.COMMITTED
 		}
 		return br, nil
@@ -2574,12 +2575,12 @@ func TestLeafTxnClientRejectError(t *testing.T) {
 	// where the first one gets a TransactionAbortedError.
 	errKey := roachpb.Key("a")
 	knobs := &kvserver.StoreTestingKnobs{
-		TestingRequestFilter: func(_ context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
-			if g, ok := ba.GetArg(roachpb.Get); ok && g.(*roachpb.GetRequest).Key.Equal(errKey) {
+		TestingRequestFilter: func(_ context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
+			if g, ok := ba.GetArg(kvpb.Get); ok && g.(*kvpb.GetRequest).Key.Equal(errKey) {
 				txn := ba.Txn.Clone()
 				txn.Status = roachpb.ABORTED
-				return roachpb.NewErrorWithTxn(
-					roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_UNKNOWN), txn,
+				return kvpb.NewErrorWithTxn(
+					kvpb.NewTransactionAbortedError(kvpb.ABORT_REASON_UNKNOWN), txn,
 				)
 			}
 			return nil
@@ -2606,7 +2607,7 @@ func TestLeafTxnClientRejectError(t *testing.T) {
 	// test is interested in demonstrating is that it's not a
 	// TransactionRetryWithProtoRefreshError.
 	_, err := leafTxn.Get(ctx, roachpb.Key("a"))
-	if !errors.HasType(err, (*roachpb.UnhandledRetryableError)(nil)) {
+	if !errors.HasType(err, (*kvpb.UnhandledRetryableError)(nil)) {
 		t.Fatalf("expected UnhandledRetryableError(TransactionAbortedError), got: (%T) %v", err, err)
 	}
 }
@@ -2661,9 +2662,9 @@ func TestPutsInStagingTxn(t *testing.T) {
 
 	var putInStagingSeen bool
 	var storeKnobs kvserver.StoreTestingKnobs
-	storeKnobs.TestingRequestFilter = func(ctx context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
-		put, ok := ba.GetArg(roachpb.Put)
-		if !ok || !put.(*roachpb.PutRequest).Key.Equal(keyB) {
+	storeKnobs.TestingRequestFilter = func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
+		put, ok := ba.GetArg(kvpb.Put)
+		if !ok || !put.(*kvpb.PutRequest).Key.Equal(keyB) {
 			return nil
 		}
 		txn := ba.Txn
@@ -2725,11 +2726,11 @@ func TestTxnManualRefresh(t *testing.T) {
 	// launch some requests from the client and then pass control flow of handling
 	// those requests back to the test.
 	type resp struct {
-		br   *roachpb.BatchResponse
-		pErr *roachpb.Error
+		br   *kvpb.BatchResponse
+		pErr *kvpb.Error
 	}
 	type req struct {
-		ba     *roachpb.BatchRequest
+		ba     *kvpb.BatchRequest
 		respCh chan resp
 	}
 	type testCase struct {
@@ -2757,7 +2758,7 @@ func TestTxnManualRefresh(t *testing.T) {
 				}()
 				{
 					r := <-reqCh
-					_, ok := r.ba.GetArg(roachpb.Get)
+					_, ok := r.ba.GetArg(kvpb.Get)
 					require.True(t, ok)
 					br := r.ba.CreateReply()
 					br.Txn = r.ba.Txn
@@ -2785,7 +2786,7 @@ func TestTxnManualRefresh(t *testing.T) {
 				}()
 				{
 					r := <-reqCh
-					_, ok := r.ba.GetArg(roachpb.Get)
+					_, ok := r.ba.GetArg(kvpb.Get)
 					require.True(t, ok)
 					br := r.ba.CreateReply()
 					br.Txn = r.ba.Txn
@@ -2798,7 +2799,7 @@ func TestTxnManualRefresh(t *testing.T) {
 				}()
 				{
 					r := <-reqCh
-					_, ok := r.ba.GetArg(roachpb.Put)
+					_, ok := r.ba.GetArg(kvpb.Put)
 					require.True(t, ok)
 					br := r.ba.CreateReply()
 					br.Txn = r.ba.Txn.Clone()
@@ -2814,7 +2815,7 @@ func TestTxnManualRefresh(t *testing.T) {
 				}()
 				{
 					r := <-reqCh
-					_, ok := r.ba.GetArg(roachpb.Refresh)
+					_, ok := r.ba.GetArg(kvpb.Refresh)
 					require.True(t, ok)
 					br := r.ba.CreateReply()
 					br.Txn = r.ba.Txn.Clone()
@@ -2841,7 +2842,7 @@ func TestTxnManualRefresh(t *testing.T) {
 				}()
 				{
 					r := <-reqCh
-					_, ok := r.ba.GetArg(roachpb.Get)
+					_, ok := r.ba.GetArg(kvpb.Get)
 					require.True(t, ok)
 					br := r.ba.CreateReply()
 					br.Txn = r.ba.Txn
@@ -2854,7 +2855,7 @@ func TestTxnManualRefresh(t *testing.T) {
 				}()
 				{
 					r := <-reqCh
-					_, ok := r.ba.GetArg(roachpb.Put)
+					_, ok := r.ba.GetArg(kvpb.Put)
 					require.True(t, ok)
 					br := r.ba.CreateReply()
 					br.Txn = r.ba.Txn.Clone()
@@ -2870,11 +2871,11 @@ func TestTxnManualRefresh(t *testing.T) {
 				}()
 				{
 					r := <-reqCh
-					_, ok := r.ba.GetArg(roachpb.Refresh)
+					_, ok := r.ba.GetArg(kvpb.Refresh)
 					require.True(t, ok)
 					// Rejects the refresh due to a conflicting write.
-					pErr := roachpb.NewError(roachpb.NewRefreshFailedError(
-						roachpb.RefreshFailedError_REASON_COMMITTED_VALUE, roachpb.Key("a"), hlc.Timestamp{WallTime: 1}))
+					pErr := kvpb.NewError(kvpb.NewRefreshFailedError(
+						kvpb.RefreshFailedError_REASON_COMMITTED_VALUE, roachpb.Key("a"), hlc.Timestamp{WallTime: 1}))
 					r.respCh <- resp{pErr: pErr}
 				}
 				require.Regexp(t, "TransactionRetryError: retry txn \\(RETRY_SERIALIZABLE - failed preemptive "+
@@ -2890,8 +2891,8 @@ func TestTxnManualRefresh(t *testing.T) {
 		defer stopper.Stop(ctx)
 
 		reqCh := make(chan req)
-		var senderFn kv.SenderFunc = func(_ context.Context, ba *roachpb.BatchRequest) (
-			*roachpb.BatchResponse, *roachpb.Error) {
+		var senderFn kv.SenderFunc = func(_ context.Context, ba *kvpb.BatchRequest) (
+			*kvpb.BatchResponse, *kvpb.Error) {
 			r := req{
 				ba:     ba,
 				respCh: make(chan resp),
@@ -2899,13 +2900,13 @@ func TestTxnManualRefresh(t *testing.T) {
 			select {
 			case reqCh <- r:
 			case <-ctx.Done():
-				return nil, roachpb.NewError(ctx.Err())
+				return nil, kvpb.NewError(ctx.Err())
 			}
 			select {
 			case rr := <-r.respCh:
 				return rr.br, rr.pErr
 			case <-ctx.Done():
-				return nil, roachpb.NewError(ctx.Err())
+				return nil, kvpb.NewError(ctx.Err())
 			}
 		}
 		ambient := log.MakeTestingAmbientCtxWithNewTracer()

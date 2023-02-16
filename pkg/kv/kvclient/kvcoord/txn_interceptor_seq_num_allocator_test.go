@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -43,12 +44,12 @@ func TestSequenceNumberAllocation(t *testing.T) {
 	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
 
 	// Read-only requests are not given unique sequence numbers.
-	ba := &roachpb.BatchRequest{}
-	ba.Header = roachpb.Header{Txn: &txn}
-	ba.Add(&roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
-	ba.Add(&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeader{Key: keyA, EndKey: keyB}})
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	ba.Add(&kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
+	ba.Add(&kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyA, EndKey: keyB}})
 
-	mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 2)
 		require.Equal(t, enginepb.TxnSeq(0), ba.Requests[0].GetInner().Header().Sequence)
 		require.Equal(t, enginepb.TxnSeq(0), ba.Requests[1].GetInner().Header().Sequence)
@@ -64,12 +65,12 @@ func TestSequenceNumberAllocation(t *testing.T) {
 
 	// Write requests each get a unique sequence number.
 	ba.Requests = nil
-	ba.Add(&roachpb.ConditionalPutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
-	ba.Add(&roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
-	ba.Add(&roachpb.InitPutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
-	ba.Add(&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeader{Key: keyA, EndKey: keyB}})
+	ba.Add(&kvpb.ConditionalPutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
+	ba.Add(&kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
+	ba.Add(&kvpb.InitPutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
+	ba.Add(&kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyA, EndKey: keyB}})
 
-	mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 4)
 		require.Equal(t, enginepb.TxnSeq(1), ba.Requests[0].GetInner().Header().Sequence)
 		require.Equal(t, enginepb.TxnSeq(1), ba.Requests[1].GetInner().Header().Sequence)
@@ -87,11 +88,11 @@ func TestSequenceNumberAllocation(t *testing.T) {
 
 	// EndTxn requests also get a unique sequence number.
 	ba.Requests = nil
-	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
-	ba.Add(&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeader{Key: keyA, EndKey: keyB}})
-	ba.Add(&roachpb.EndTxnRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
+	ba.Add(&kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
+	ba.Add(&kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyA, EndKey: keyB}})
+	ba.Add(&kvpb.EndTxnRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
 
-	mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 3)
 		require.Equal(t, enginepb.TxnSeq(3), ba.Requests[0].GetInner().Header().Sequence)
 		require.Equal(t, enginepb.TxnSeq(3), ba.Requests[1].GetInner().Header().Sequence)
@@ -133,12 +134,12 @@ func TestSequenceNumberAllocationWithStep(t *testing.T) {
 		t.Run(fmt.Sprintf("step %d", i), func(t *testing.T) {
 			currentStepSeqNum := s.writeSeq
 
-			ba := &roachpb.BatchRequest{}
-			ba.Header = roachpb.Header{Txn: &txn}
-			ba.Add(&roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
-			ba.Add(&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeader{Key: keyA, EndKey: keyB}})
+			ba := &kvpb.BatchRequest{}
+			ba.Header = kvpb.Header{Txn: &txn}
+			ba.Add(&kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
+			ba.Add(&kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyA, EndKey: keyB}})
 
-			mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 				require.Len(t, ba.Requests, 2)
 				require.Equal(t, currentStepSeqNum, ba.Requests[0].GetInner().Header().Sequence)
 				require.Equal(t, currentStepSeqNum, ba.Requests[1].GetInner().Header().Sequence)
@@ -155,12 +156,12 @@ func TestSequenceNumberAllocationWithStep(t *testing.T) {
 			// Write requests each get a unique sequence number. The read-only requests
 			// remain at the last step seqnum.
 			ba.Requests = nil
-			ba.Add(&roachpb.ConditionalPutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
-			ba.Add(&roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
-			ba.Add(&roachpb.InitPutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
-			ba.Add(&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeader{Key: keyA, EndKey: keyB}})
+			ba.Add(&kvpb.ConditionalPutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
+			ba.Add(&kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
+			ba.Add(&kvpb.InitPutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
+			ba.Add(&kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyA, EndKey: keyB}})
 
-			mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 				require.Len(t, ba.Requests, 4)
 				require.Equal(t, currentStepSeqNum+1, ba.Requests[0].GetInner().Header().Sequence)
 				require.Equal(t, currentStepSeqNum, ba.Requests[1].GetInner().Header().Sequence)
@@ -179,11 +180,11 @@ func TestSequenceNumberAllocationWithStep(t *testing.T) {
 			// EndTxn requests also get a unique sequence number. Meanwhile read-only
 			// requests remain at the last step.
 			ba.Requests = nil
-			ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
-			ba.Add(&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeader{Key: keyA, EndKey: keyB}})
-			ba.Add(&roachpb.EndTxnRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
+			ba.Add(&kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
+			ba.Add(&kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyA, EndKey: keyB}})
+			ba.Add(&kvpb.EndTxnRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
 
-			mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 				require.Len(t, ba.Requests, 3)
 				require.Equal(t, currentStepSeqNum+3, ba.Requests[0].GetInner().Header().Sequence)
 				require.Equal(t, currentStepSeqNum, ba.Requests[1].GetInner().Header().Sequence)
@@ -204,14 +205,14 @@ func TestSequenceNumberAllocationWithStep(t *testing.T) {
 	s.configureSteppingLocked(false /* enabled */)
 	currentStepSeqNum := s.writeSeq
 
-	ba := &roachpb.BatchRequest{}
+	ba := &kvpb.BatchRequest{}
 	ba.Requests = nil
-	ba.Add(&roachpb.ConditionalPutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
-	ba.Add(&roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
-	ba.Add(&roachpb.InitPutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
-	ba.Add(&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeader{Key: keyA, EndKey: keyB}})
+	ba.Add(&kvpb.ConditionalPutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
+	ba.Add(&kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
+	ba.Add(&kvpb.InitPutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
+	ba.Add(&kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyA, EndKey: keyB}})
 
-	mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 4)
 		require.Equal(t, currentStepSeqNum+1, ba.Requests[0].GetInner().Header().Sequence)
 		require.Equal(t, currentStepSeqNum+1, ba.Requests[1].GetInner().Header().Sequence)
@@ -242,7 +243,7 @@ func TestModifyReadSeqNum(t *testing.T) {
 	keyA := roachpb.Key("a")
 
 	s.configureSteppingLocked(true /* enabled */)
-	mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		br := ba.CreateReply()
 		br.Txn = ba.Txn
 		return br, nil
@@ -262,9 +263,9 @@ func TestModifyReadSeqNum(t *testing.T) {
 	if err := s.stepLocked(ctx); err != nil {
 		t.Fatal(err)
 	}
-	ba := &roachpb.BatchRequest{}
-	ba.Header = roachpb.Header{Txn: &txn}
-	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	ba.Add(&kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
 	br, pErr := s.SendLocked(ctx, ba)
 	require.Nil(t, pErr)
 	require.NotNil(t, br)
@@ -276,9 +277,9 @@ func TestModifyReadSeqNum(t *testing.T) {
 	if err := s.stepLocked(ctx); err != nil {
 		t.Fatal(err)
 	}
-	ba = &roachpb.BatchRequest{}
-	ba.Header = roachpb.Header{Txn: &txn}
-	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
+	ba = &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	ba.Add(&kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
 	br, pErr = s.SendLocked(ctx, ba)
 	require.Nil(t, pErr)
 	require.NotNil(t, br)
@@ -290,10 +291,10 @@ func TestModifyReadSeqNum(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.readSeq = cursorSeqNum
-	ba = &roachpb.BatchRequest{}
-	ba.Header = roachpb.Header{Txn: &txn}
-	ba.Add(&roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
-	mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	ba = &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	ba.Add(&kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Equal(t, cursorSeqNum, ba.Requests[0].GetGet().RequestHeader.Sequence)
 		br := ba.CreateReply()
 		br.Txn = ba.Txn
@@ -306,10 +307,10 @@ func TestModifyReadSeqNum(t *testing.T) {
 	if err := s.stepLocked(ctx); err != nil {
 		t.Fatal(err)
 	}
-	ba = &roachpb.BatchRequest{}
-	ba.Header = roachpb.Header{Txn: &txn}
-	ba.Add(&roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
-	mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	ba = &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	ba.Add(&kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Equal(t, curReadSeq, ba.Requests[0].GetGet().RequestHeader.Sequence)
 		br := ba.CreateReply()
 		br.Txn = ba.Txn
@@ -321,10 +322,10 @@ func TestModifyReadSeqNum(t *testing.T) {
 	if err := s.stepLocked(ctx); err != nil {
 		t.Fatal(err)
 	}
-	ba = &roachpb.BatchRequest{}
-	ba.Header = roachpb.Header{Txn: &txn}
-	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
-	mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	ba = &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	ba.Add(&kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Equal(t, s.writeSeq, ba.Requests[0].GetGet().RequestHeader.Sequence)
 		br := ba.CreateReply()
 		br.Txn = ba.Txn
@@ -338,10 +339,10 @@ func TestModifyReadSeqNum(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.readSeq = cursorSeqNum
-	ba = &roachpb.BatchRequest{}
-	ba.Header = roachpb.Header{Txn: &txn}
-	ba.Add(&roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
-	mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	ba = &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	ba.Add(&kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Equal(t, cursorSeqNum, ba.Requests[0].GetGet().RequestHeader.Sequence)
 		br := ba.CreateReply()
 		br.Txn = ba.Txn
@@ -354,10 +355,10 @@ func TestModifyReadSeqNum(t *testing.T) {
 	if err := s.stepLocked(ctx); err != nil {
 		t.Fatal(err)
 	}
-	ba = &roachpb.BatchRequest{}
-	ba.Header = roachpb.Header{Txn: &txn}
-	ba.Add(&roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
-	mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	ba = &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	ba.Add(&kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Equal(t, curReadSeq, ba.Requests[0].GetGet().RequestHeader.Sequence)
 		br := ba.CreateReply()
 		br.Txn = ba.Txn
@@ -377,12 +378,12 @@ func TestSequenceNumberAllocationTxnRequests(t *testing.T) {
 	txn := makeTxnProto()
 	keyA := roachpb.Key("a")
 
-	ba := &roachpb.BatchRequest{}
-	ba.Header = roachpb.Header{Txn: &txn}
-	ba.Add(&roachpb.HeartbeatTxnRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
-	ba.Add(&roachpb.EndTxnRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	ba.Add(&kvpb.HeartbeatTxnRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
+	ba.Add(&kvpb.EndTxnRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
 
-	mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 2)
 		require.Equal(t, enginepb.TxnSeq(0), ba.Requests[0].GetInner().Header().Sequence)
 		require.Equal(t, enginepb.TxnSeq(1), ba.Requests[1].GetInner().Header().Sequence)
@@ -409,13 +410,13 @@ func TestSequenceNumberAllocationAfterEpochBump(t *testing.T) {
 	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
 
 	// Perform a few writes to increase the sequence number counter.
-	ba := &roachpb.BatchRequest{}
-	ba.Header = roachpb.Header{Txn: &txn}
-	ba.Add(&roachpb.ConditionalPutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
-	ba.Add(&roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
-	ba.Add(&roachpb.InitPutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	ba.Add(&kvpb.ConditionalPutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
+	ba.Add(&kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
+	ba.Add(&kvpb.InitPutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
 
-	mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 3)
 		require.Equal(t, enginepb.TxnSeq(1), ba.Requests[0].GetInner().Header().Sequence)
 		require.Equal(t, enginepb.TxnSeq(1), ba.Requests[1].GetInner().Header().Sequence)
@@ -436,12 +437,12 @@ func TestSequenceNumberAllocationAfterEpochBump(t *testing.T) {
 	// Perform a few more writes. The sequence numbers assigned to requests
 	// should have started back at zero again.
 	ba.Requests = nil
-	ba.Add(&roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
-	ba.Add(&roachpb.ConditionalPutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
-	ba.Add(&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeader{Key: keyA, EndKey: keyB}})
-	ba.Add(&roachpb.InitPutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
+	ba.Add(&kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
+	ba.Add(&kvpb.ConditionalPutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
+	ba.Add(&kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyA, EndKey: keyB}})
+	ba.Add(&kvpb.InitPutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
 
-	mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 4)
 		require.Equal(t, enginepb.TxnSeq(0), ba.Requests[0].GetInner().Header().Sequence)
 		require.Equal(t, enginepb.TxnSeq(1), ba.Requests[1].GetInner().Header().Sequence)
@@ -477,12 +478,12 @@ func TestSequenceNumberAllocationAfterLeafInitialization(t *testing.T) {
 
 	// Perform a few reads and writes. The sequence numbers assigned should
 	// start at the sequence number provided in the LeafTxnInputState.
-	ba := &roachpb.BatchRequest{}
-	ba.Header = roachpb.Header{Txn: &txn}
-	ba.Add(&roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
-	ba.Add(&roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	ba.Add(&kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
+	ba.Add(&kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
 
-	mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 2)
 		require.Equal(t, enginepb.TxnSeq(4), ba.Requests[0].GetInner().Header().Sequence)
 		require.Equal(t, enginepb.TxnSeq(4), ba.Requests[1].GetInner().Header().Sequence)
@@ -508,12 +509,12 @@ func TestSequenceNumberAllocationSavepoint(t *testing.T) {
 	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
 
 	// Perform a few writes to increase the sequence number counter.
-	ba := &roachpb.BatchRequest{}
-	ba.Header = roachpb.Header{Txn: &txn}
-	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
-	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyB}})
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	ba.Add(&kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
+	ba.Add(&kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyB}})
 
-	mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		br := ba.CreateReply()
 		br.Txn = ba.Txn
 		return br, nil

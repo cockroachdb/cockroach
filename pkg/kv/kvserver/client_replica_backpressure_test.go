@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -71,13 +72,13 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
-						TestingRequestFilter: func(ctx context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
+						TestingRequestFilter: func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
 							if ba.Header.Txn != nil && ba.Header.Txn.Name == "split" && !allowSplits.Load().(bool) {
 								rangesBlocked.Store(ba.Header.RangeID, true)
 								defer rangesBlocked.Delete(ba.Header.RangeID)
 								select {
 								case <-unblockCh:
-									return roachpb.NewError(errors.Errorf("splits disabled"))
+									return kvpb.NewError(errors.Errorf("splits disabled"))
 								case <-ctx.Done():
 									<-ctx.Done()
 								}

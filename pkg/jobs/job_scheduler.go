@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -213,7 +213,7 @@ func withSavePoint(ctx context.Context, txn *kv.Txn, fn func() error) error {
 		return nil
 	}
 
-	if errors.HasType(execErr, (*roachpb.TransactionRetryWithProtoRefreshError)(nil)) {
+	if errors.HasType(execErr, (*kvpb.TransactionRetryWithProtoRefreshError)(nil)) {
 		// If function execution failed because transaction was restarted,
 		// treat this error as a savePointError so that the execution code bails out
 		// and retries scheduling loop.

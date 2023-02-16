@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -756,13 +757,13 @@ func mergeRanges(fragments [][]storage.MVCCRangeKeyValue) []storage.MVCCRangeKey
 }
 
 type fakeGCer struct {
-	gcKeys          map[string]roachpb.GCRequest_GCKey
-	gcPointsBatches [][]roachpb.GCRequest_GCKey
+	gcKeys          map[string]kvpb.GCRequest_GCKey
+	gcPointsBatches [][]kvpb.GCRequest_GCKey
 	// fake GCer stores range key batches as it since we need to be able to
 	// feed them into MVCCGarbageCollectRangeKeys and ranges argument should be
 	// non-overlapping.
-	gcRangeKeyBatches [][]roachpb.GCRequest_GCRangeKey
-	gcClearRanges     []roachpb.GCRequest_GCClearRange
+	gcRangeKeyBatches [][]kvpb.GCRequest_GCRangeKey
+	gcClearRanges     []kvpb.GCRequest_GCClearRange
 	threshold         Threshold
 	intents           []roachpb.Intent
 	batches           [][]roachpb.Intent
@@ -771,7 +772,7 @@ type fakeGCer struct {
 
 func makeFakeGCer() fakeGCer {
 	return fakeGCer{
-		gcKeys: make(map[string]roachpb.GCRequest_GCKey),
+		gcKeys: make(map[string]kvpb.GCRequest_GCKey),
 	}
 }
 
@@ -784,9 +785,9 @@ func (f *fakeGCer) SetGCThreshold(ctx context.Context, t Threshold) error {
 
 func (f *fakeGCer) GC(
 	ctx context.Context,
-	keys []roachpb.GCRequest_GCKey,
-	rangeKeys []roachpb.GCRequest_GCRangeKey,
-	clearRange *roachpb.GCRequest_GCClearRange,
+	keys []kvpb.GCRequest_GCKey,
+	rangeKeys []kvpb.GCRequest_GCRangeKey,
+	clearRange *kvpb.GCRequest_GCClearRange,
 ) error {
 	for _, k := range keys {
 		f.gcKeys[k.Key.String()] = k
@@ -798,7 +799,7 @@ func (f *fakeGCer) GC(
 		f.gcRangeKeyBatches = append(f.gcRangeKeyBatches, rangeKeys)
 	}
 	if clearRange != nil {
-		f.gcClearRanges = append(f.gcClearRanges, roachpb.GCRequest_GCClearRange{
+		f.gcClearRanges = append(f.gcClearRanges, kvpb.GCRequest_GCClearRange{
 			StartKey:          clearRange.StartKey.Clone(),
 			StartKeyTimestamp: clearRange.StartKeyTimestamp,
 			EndKey:            clearRange.EndKey.Clone(),
@@ -837,27 +838,27 @@ func (f *fakeGCer) normalize() {
 	f.gcPointsBatches = nil
 }
 
-func (f *fakeGCer) pointKeys() []roachpb.GCRequest_GCKey {
-	var reqs []roachpb.GCRequest_GCKey
+func (f *fakeGCer) pointKeys() []kvpb.GCRequest_GCKey {
+	var reqs []kvpb.GCRequest_GCKey
 	for _, r := range f.gcKeys {
 		reqs = append(reqs, r)
 	}
 	return reqs
 }
 
-func (f *fakeGCer) rangeKeyBatches() [][]roachpb.GCRequest_GCRangeKey {
+func (f *fakeGCer) rangeKeyBatches() [][]kvpb.GCRequest_GCRangeKey {
 	return f.gcRangeKeyBatches
 }
 
-func (f *fakeGCer) rangeKeys() []roachpb.GCRequest_GCRangeKey {
-	var reqs []roachpb.GCRequest_GCRangeKey
+func (f *fakeGCer) rangeKeys() []kvpb.GCRequest_GCRangeKey {
+	var reqs []kvpb.GCRequest_GCRangeKey
 	for _, r := range f.gcRangeKeyBatches {
 		reqs = append(reqs, r...)
 	}
 	return reqs
 }
 
-func (f *fakeGCer) clearRanges() []roachpb.GCRequest_GCClearRange {
+func (f *fakeGCer) clearRanges() []kvpb.GCRequest_GCClearRange {
 	return f.gcClearRanges
 }
 
@@ -881,7 +882,7 @@ type txnIntents struct {
 // makeCollectableGCRangesFromGCRequests mirrors
 // MakeCollectableGCRangesFromGCRequests to break cyclic dependecies.
 func makeCollectableGCRangesFromGCRequests(
-	rangeStart, rangeEnd roachpb.Key, rangeKeys []roachpb.GCRequest_GCRangeKey,
+	rangeStart, rangeEnd roachpb.Key, rangeKeys []kvpb.GCRequest_GCRangeKey,
 ) []storage.CollectableGCRangeKey {
 	collectableKeys := make([]storage.CollectableGCRangeKey, len(rangeKeys))
 	for i, rk := range rangeKeys {

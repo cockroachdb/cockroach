@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptcache"
@@ -193,9 +194,9 @@ func TestRefresh(t *testing.T) {
 		withCancel, cancel := context.WithCancel(ctx)
 		defer cancel()
 		done := make(chan struct{})
-		st.setFilter(func(ba *roachpb.BatchRequest) *roachpb.Error {
-			if scanReq, ok := ba.GetArg(roachpb.Scan); ok {
-				scan := scanReq.(*roachpb.ScanRequest)
+		st.setFilter(func(ba *kvpb.BatchRequest) *kvpb.Error {
+			if scanReq, ok := ba.GetArg(kvpb.Scan); ok {
+				scan := scanReq.(*kvpb.ScanRequest)
 				if scan.Span().Overlaps(metaTableSpan) {
 					<-done
 				}
@@ -208,11 +209,11 @@ func TestRefresh(t *testing.T) {
 		close(done)
 	})
 	t.Run("error propagates while fetching metadata", func(t *testing.T) {
-		st.setFilter(func(ba *roachpb.BatchRequest) *roachpb.Error {
-			if scanReq, ok := ba.GetArg(roachpb.Scan); ok {
-				scan := scanReq.(*roachpb.ScanRequest)
+		st.setFilter(func(ba *kvpb.BatchRequest) *kvpb.Error {
+			if scanReq, ok := ba.GetArg(kvpb.Scan); ok {
+				scan := scanReq.(*kvpb.ScanRequest)
 				if scan.Span().Overlaps(metaTableSpan) {
-					return roachpb.NewError(errors.New("boom"))
+					return kvpb.NewError(errors.New("boom"))
 				}
 			}
 			return nil
@@ -222,11 +223,11 @@ func TestRefresh(t *testing.T) {
 	})
 	t.Run("error propagates while fetching records", func(t *testing.T) {
 		protect(t, p, s.Clock().Now(), metaTableSpan)
-		st.setFilter(func(ba *roachpb.BatchRequest) *roachpb.Error {
-			if scanReq, ok := ba.GetArg(roachpb.Scan); ok {
-				scan := scanReq.(*roachpb.ScanRequest)
+		st.setFilter(func(ba *kvpb.BatchRequest) *kvpb.Error {
+			if scanReq, ok := ba.GetArg(kvpb.Scan); ok {
+				scan := scanReq.(*kvpb.ScanRequest)
 				if scan.Span().Overlaps(recordsTableSpan) {
-					return roachpb.NewError(errors.New("boom"))
+					return kvpb.NewError(errors.New("boom"))
 				}
 			}
 			return nil
@@ -609,7 +610,7 @@ type scanTracker struct {
 	mu                syncutil.Mutex
 	metaTableScans    int
 	recordsTableScans int
-	filterFunc        func(ba *roachpb.BatchRequest) *roachpb.Error
+	filterFunc        func(ba *kvpb.BatchRequest) *kvpb.Error
 }
 
 func (st *scanTracker) resetCounters() {
@@ -626,17 +627,17 @@ func (st *scanTracker) verifyCounters(t *testing.T, expMeta, expRecords int) {
 	require.Equal(t, expRecords, st.recordsTableScans)
 }
 
-func (st *scanTracker) setFilter(f func(*roachpb.BatchRequest) *roachpb.Error) {
+func (st *scanTracker) setFilter(f func(*kvpb.BatchRequest) *kvpb.Error) {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	st.filterFunc = f
 }
 
-func (st *scanTracker) requestFilter(_ context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
+func (st *scanTracker) requestFilter(_ context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
 	st.mu.Lock()
 	defer st.mu.Unlock()
-	if scanReq, ok := ba.GetArg(roachpb.Scan); ok {
-		scan := scanReq.(*roachpb.ScanRequest)
+	if scanReq, ok := ba.GetArg(kvpb.Scan); ok {
+		scan := scanReq.(*kvpb.ScanRequest)
 		if scan.Span().Overlaps(metaTableSpan) {
 			st.metaTableScans++
 		} else if scan.Span().Overlaps(recordsTableSpan) {

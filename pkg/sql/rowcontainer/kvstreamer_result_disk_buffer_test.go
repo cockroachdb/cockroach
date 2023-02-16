@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvstreamer"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -62,7 +63,7 @@ func TestRoundTripResult(t *testing.T) {
 
 func makeResultWithGetResp(rng *rand.Rand, empty bool) kvstreamer.Result {
 	var r kvstreamer.Result
-	r.GetResp = &roachpb.GetResponse{}
+	r.GetResp = &kvpb.GetResponse{}
 	if !empty {
 		rawBytes := make([]byte, rng.Intn(20)+1)
 		rng.Read(rawBytes)
@@ -87,7 +88,7 @@ func makeResultWithScanResp(rng *rand.Rand) kvstreamer.Result {
 		rng.Read(batchResponse)
 		batchResponses[i] = batchResponse
 	}
-	r.ScanResp = &roachpb.ScanResponse{
+	r.ScanResp = &kvpb.ScanResponse{
 		BatchResponses: batchResponses,
 	}
 	return r

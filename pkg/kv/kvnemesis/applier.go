@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
+	kvpb "github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -93,15 +94,15 @@ func exceptRollback(err error) bool { // true if intentional txn rollback
 }
 
 func exceptRetry(err error) bool { // true if retry error
-	return errors.HasInterface(err, (*roachpb.ClientVisibleRetryError)(nil))
+	return errors.HasInterface(err, (*kvpb.ClientVisibleRetryError)(nil))
 }
 
 func exceptUnhandledRetry(err error) bool {
-	return errors.HasType(err, (*roachpb.UnhandledRetryableError)(nil))
+	return errors.HasType(err, (*kvpb.UnhandledRetryableError)(nil))
 }
 
 func exceptAmbiguous(err error) bool { // true if ambiguous result
-	return errors.HasInterface(err, (*roachpb.ClientVisibleAmbiguousError)(nil))
+	return errors.HasInterface(err, (*kvpb.ClientVisibleAmbiguousError)(nil))
 }
 
 func exceptDelRangeUsingTombstoneStraddlesRangeBoundary(err error) bool {
@@ -353,8 +354,8 @@ func applyClientOp(ctx context.Context, db clientI, op *Operation, inTxn bool) {
 			// directly through to storage, including an MVCCValueHeader already
 			// tagged with the sequence number. We therefore don't need to pass the
 			// sequence number via the RequestHeader here.
-			b.AddRawRequest(&roachpb.AddSSTableRequest{
-				RequestHeader: roachpb.RequestHeader{
+			b.AddRawRequest(&kvpb.AddSSTableRequest{
+				RequestHeader: kvpb.RequestHeader{
 					Key:    o.Span.Key,
 					EndKey: o.Span.EndKey,
 				},
@@ -501,7 +502,7 @@ func getRangeDesc(ctx context.Context, key roachpb.Key, dbs ...*kv.DB) roachpb.R
 	var opts = retry.Options{}
 	for r := retry.StartWithCtx(ctx, opts); r.Next(); dbIdx = (dbIdx + 1) % len(dbs) {
 		sender := dbs[dbIdx].NonTransactionalSender()
-		descs, _, err := kv.RangeLookup(ctx, sender, key, roachpb.CONSISTENT, 0, false)
+		descs, _, err := kv.RangeLookup(ctx, sender, key, kvpb.CONSISTENT, 0, false)
 		if err != nil {
 			log.Infof(ctx, "looking up descriptor for %s: %+v", key, err)
 			continue

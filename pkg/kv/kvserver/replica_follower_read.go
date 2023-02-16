@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -36,7 +37,7 @@ var FollowerReadsEnabled = settings.RegisterBoolSetting(
 // BatchCanBeEvaluatedOnFollower determines if a batch consists exclusively of
 // requests that can be evaluated on a follower replica, given a sufficiently
 // advanced closed timestamp.
-func BatchCanBeEvaluatedOnFollower(ba *roachpb.BatchRequest) bool {
+func BatchCanBeEvaluatedOnFollower(ba *kvpb.BatchRequest) bool {
 	// Various restrictions apply to a batch for it to be successfully considered
 	// for evaluation on a follower replica, which are described inline.
 	//
@@ -58,16 +59,16 @@ func BatchCanBeEvaluatedOnFollower(ba *roachpb.BatchRequest) bool {
 	for _, ru := range ba.Requests {
 		r := ru.GetInner()
 		switch {
-		case roachpb.IsTransactional(r):
+		case kvpb.IsTransactional(r):
 			// Transactional requests have clear semantics when served under the
 			// closed timestamp. The request must be read-only, as follower replicas
 			// cannot propose writes to Raft. The request also needs to be
 			// non-locking, because unreplicated locks are only held on the
 			// leaseholder.
-			if !roachpb.IsReadOnly(r) || roachpb.IsLocking(r) {
+			if !kvpb.IsReadOnly(r) || kvpb.IsLocking(r) {
 				return false
 			}
-		case r.Method() == roachpb.Export:
+		case r.Method() == kvpb.Export:
 		// Export requests also have clear semantics when served under the closed
 		// timestamp as well, even though they are non-transactional, as they
 		// define the start and end timestamp to export data over.
@@ -83,7 +84,7 @@ func BatchCanBeEvaluatedOnFollower(ba *roachpb.BatchRequest) bool {
 // non-locking, read-only requests can be served as follower reads. The batch
 // must be transactional and composed exclusively of this kind of request to be
 // accepted as a follower read.
-func (r *Replica) canServeFollowerReadRLocked(ctx context.Context, ba *roachpb.BatchRequest) bool {
+func (r *Replica) canServeFollowerReadRLocked(ctx context.Context, ba *kvpb.BatchRequest) bool {
 	eligible := BatchCanBeEvaluatedOnFollower(ba) && FollowerReadsEnabled.Get(&r.store.cfg.Settings.SV)
 	if !eligible {
 		// We couldn't do anything with the error, propagate it.

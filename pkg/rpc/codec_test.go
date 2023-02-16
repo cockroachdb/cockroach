@@ -16,6 +16,7 @@ import (
 	"testing"
 	"unicode"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
@@ -50,15 +51,15 @@ func TestCodecMarshalUnmarshal(t *testing.T) {
 				}
 			},
 			func() interface{} { return &grpc_health_v1.HealthCheckRequest{} }},
-		{"roachpb.GetRequest",
+		{"kvpb.GetRequest",
 			func() interface{} {
-				return &roachpb.GetRequest{
-					RequestHeader: roachpb.RequestHeader{
+				return &kvpb.GetRequest{
+					RequestHeader: kvpb.RequestHeader{
 						Key: roachpb.Key("turtle"),
 					},
 				}
 			},
-			func() interface{} { return &roachpb.GetRequest{} }},
+			func() interface{} { return &kvpb.GetRequest{} }},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			input := test.filledMsgBuilder()

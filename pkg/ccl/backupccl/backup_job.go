@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/joberror"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
@@ -72,7 +73,7 @@ var BackupCheckpointInterval = settings.RegisterDurationSetting(
 
 var forceReadBackupManifest = util.ConstantWithMetamorphicTestBool("backup-read-manifest", false)
 
-func countRows(raw roachpb.BulkOpSummary, pkIDs map[uint64]bool) roachpb.RowCount {
+func countRows(raw kvpb.BulkOpSummary, pkIDs map[uint64]bool) roachpb.RowCount {
 	res := roachpb.RowCount{DataSize: raw.DataSize}
 	for id, count := range raw.EntryCounts {
 		if _, ok := pkIDs[id]; ok {
@@ -179,7 +180,7 @@ func backup(
 	pkIDs := make(map[uint64]bool)
 	for i := range backupManifest.Descriptors {
 		if t, _, _, _, _ := descpb.GetDescriptors(&backupManifest.Descriptors[i]); t != nil {
-			pkIDs[roachpb.BulkOpSummaryID(uint64(t.ID), uint64(t.PrimaryIndex.ID))] = true
+			pkIDs[kvpb.BulkOpSummaryID(uint64(t.ID), uint64(t.PrimaryIndex.ID))] = true
 		}
 	}
 
@@ -206,7 +207,7 @@ func backup(
 		urisByLocalityKV,
 		encryption,
 		&kmsEnv,
-		roachpb.MVCCFilter(backupManifest.MVCCFilter),
+		kvpb.MVCCFilter(backupManifest.MVCCFilter),
 		backupManifest.StartTime,
 		backupManifest.EndTime,
 	)

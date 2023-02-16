@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvstreamer"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -223,7 +224,7 @@ func deserialize(r *kvstreamer.Result, row rowenc.EncDatumRow, alloc *tree.Datum
 		}
 	}
 	if isGet := tree.MustBeDBool(row[isGetIdx].Datum); isGet {
-		r.GetResp = &roachpb.GetResponse{}
+		r.GetResp = &kvpb.GetResponse{}
 		if row[getRawBytesIdx].Datum != tree.DNull {
 			r.GetResp.Value = &roachpb.Value{
 				RawBytes: []byte(tree.MustBeDBytes(row[getRawBytesIdx].Datum)),
@@ -235,7 +236,7 @@ func deserialize(r *kvstreamer.Result, row rowenc.EncDatumRow, alloc *tree.Datum
 			}
 		}
 	} else {
-		r.ScanResp = &roachpb.ScanResponse{}
+		r.ScanResp = &kvpb.ScanResponse{}
 		batchResponses := tree.MustBeDArray(row[scanBatchResponsesIdx].Datum)
 		r.ScanResp.BatchResponses = make([][]byte, batchResponses.Len())
 		for i := range batchResponses.Array {

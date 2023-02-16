@@ -15,6 +15,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
+        "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/concurrency/poison",
         "//pkg/kv/kvserver/spanset",
         "//pkg/roachpb",

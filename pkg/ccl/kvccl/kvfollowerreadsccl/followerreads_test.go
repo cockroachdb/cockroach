@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -108,19 +109,19 @@ func TestCanSendToFollower(t *testing.T) {
 		txn.GlobalUncertaintyLimit = ts
 		return txn
 	}
-	batch := func(txn *roachpb.Transaction, reqs ...roachpb.Request) *roachpb.BatchRequest {
-		ba := &roachpb.BatchRequest{}
+	batch := func(txn *roachpb.Transaction, reqs ...kvpb.Request) *kvpb.BatchRequest {
+		ba := &kvpb.BatchRequest{}
 		ba.Txn = txn
 		for _, req := range reqs {
 			ba.Add(req)
 		}
 		return ba
 	}
-	withBatchTimestamp := func(ba *roachpb.BatchRequest, ts hlc.Timestamp) *roachpb.BatchRequest {
+	withBatchTimestamp := func(ba *kvpb.BatchRequest, ts hlc.Timestamp) *kvpb.BatchRequest {
 		ba.Timestamp = ts
 		return ba
 	}
-	withServerSideBatchTimestamp := func(ba *roachpb.BatchRequest, ts hlc.Timestamp) *roachpb.BatchRequest {
+	withServerSideBatchTimestamp := func(ba *kvpb.BatchRequest, ts hlc.Timestamp) *kvpb.BatchRequest {
 		ba = withBatchTimestamp(ba, ts)
 		ba.TimestampFromServerClock = (*hlc.ClockTimestamp)(&ts)
 		return ba
@@ -128,7 +129,7 @@ func TestCanSendToFollower(t *testing.T) {
 
 	testCases := []struct {
 		name                  string
-		ba                    *roachpb.BatchRequest
+		ba                    *kvpb.BatchRequest
 		ctPolicy              roachpb.RangeClosedTimestampPolicy
 		disabledEnterprise    bool
 		disabledFollowerReads bool
@@ -137,334 +138,334 @@ func TestCanSendToFollower(t *testing.T) {
 	}{
 		{
 			name: "non-txn batch, without ts",
-			ba:   batch(nil, &roachpb.GetRequest{}),
+			ba:   batch(nil, &kvpb.GetRequest{}),
 			exp:  false,
 		},
 		{
 			name: "stale non-txn batch",
-			ba:   withBatchTimestamp(batch(nil, &roachpb.GetRequest{}), stale),
+			ba:   withBatchTimestamp(batch(nil, &kvpb.GetRequest{}), stale),
 			exp:  true,
 		},
 		{
 			name: "stale non-txn export batch",
-			ba:   withBatchTimestamp(batch(nil, &roachpb.ExportRequest{}), stale),
+			ba:   withBatchTimestamp(batch(nil, &kvpb.ExportRequest{}), stale),
 			exp:  true,
 		},
 		{
 			name: "stale non-txn multiple exports batch",
-			ba:   withBatchTimestamp(batch(nil, &roachpb.ExportRequest{}, &roachpb.ExportRequest{}), stale),
+			ba:   withBatchTimestamp(batch(nil, &kvpb.ExportRequest{}, &kvpb.ExportRequest{}), stale),
 			exp:  true,
 		},
 		{
 			name: "stale non-txn mixed export-scan batch",
-			ba:   withBatchTimestamp(batch(nil, &roachpb.ExportRequest{}, &roachpb.ScanRequest{}), stale),
+			ba:   withBatchTimestamp(batch(nil, &kvpb.ExportRequest{}, &kvpb.ScanRequest{}), stale),
 			exp:  true,
 		},
 		{
 			name: "current-time non-txn batch",
-			ba:   withBatchTimestamp(batch(nil, &roachpb.GetRequest{}), current),
+			ba:   withBatchTimestamp(batch(nil, &kvpb.GetRequest{}), current),
 			exp:  false,
 		},
 		{
 			name: "current-time non-txn export batch",
-			ba:   withBatchTimestamp(batch(nil, &roachpb.ExportRequest{}), current),
+			ba:   withBatchTimestamp(batch(nil, &kvpb.ExportRequest{}), current),
 			exp:  false,
 		},
 		{
 			name: "current-time non-txn multiple exports batch",
-			ba:   withBatchTimestamp(batch(nil, &roachpb.ExportRequest{}, &roachpb.ExportRequest{}), current),
+			ba:   withBatchTimestamp(batch(nil, &kvpb.ExportRequest{}, &kvpb.ExportRequest{}), current),
 			exp:  false,
 		},
 		{
 			name: "future non-txn batch",
-			ba:   withBatchTimestamp(batch(nil, &roachpb.GetRequest{}), future),
+			ba:   withBatchTimestamp(batch(nil, &kvpb.GetRequest{}), future),
 			exp:  false,
 		},
 		{
 			name: "future non-txn export batch",
-			ba:   withBatchTimestamp(batch(nil, &roachpb.ExportRequest{}), future),
+			ba:   withBatchTimestamp(batch(nil, &kvpb.ExportRequest{}), future),
 			exp:  false,
 		},
 		{
 			name: "stale non-txn batch, server-side ts",
-			ba:   withServerSideBatchTimestamp(batch(nil, &roachpb.GetRequest{}), stale),
+			ba:   withServerSideBatchTimestamp(batch(nil, &kvpb.GetRequest{}), stale),
 			exp:  false,
 		},
 		{
 			name: "current-time non-txn batch, server-side ts",
-			ba:   withServerSideBatchTimestamp(batch(nil, &roachpb.GetRequest{}), current),
+			ba:   withServerSideBatchTimestamp(batch(nil, &kvpb.GetRequest{}), current),
 			exp:  false,
 		},
 		{
 			name: "future non-txn batch, server-side ts",
-			ba:   withServerSideBatchTimestamp(batch(nil, &roachpb.GetRequest{}), future),
+			ba:   withServerSideBatchTimestamp(batch(nil, &kvpb.GetRequest{}), future),
 			exp:  false,
 		},
 		{
 			name: "stale read",
-			ba:   batch(txn(stale), &roachpb.GetRequest{}),
+			ba:   batch(txn(stale), &kvpb.GetRequest{}),
 			exp:  true,
 		},
 		{
 			name: "stale locking read",
-			ba:   batch(txn(stale), &roachpb.GetRequest{KeyLocking: lock.Exclusive}),
+			ba:   batch(txn(stale), &kvpb.GetRequest{KeyLocking: lock.Exclusive}),
 			exp:  false,
 		},
 		{
 			name: "stale scan",
-			ba:   batch(txn(stale), &roachpb.ScanRequest{}),
+			ba:   batch(txn(stale), &kvpb.ScanRequest{}),
 			exp:  true,
 		},
 		{
 			name: "stale reverse scan",
-			ba:   batch(txn(stale), &roachpb.ReverseScanRequest{}),
+			ba:   batch(txn(stale), &kvpb.ReverseScanRequest{}),
 			exp:  true,
 		},
 		{
 			name: "stale refresh",
-			ba:   batch(txn(stale), &roachpb.RefreshRequest{}),
+			ba:   batch(txn(stale), &kvpb.RefreshRequest{}),
 			exp:  true,
 		},
 		{
 			name: "stale refresh range",
-			ba:   batch(txn(stale), &roachpb.RefreshRangeRequest{}),
+			ba:   batch(txn(stale), &kvpb.RefreshRangeRequest{}),
 			exp:  true,
 		},
 		{
 			name: "stale write",
-			ba:   batch(txn(stale), &roachpb.PutRequest{}),
+			ba:   batch(txn(stale), &kvpb.PutRequest{}),
 			exp:  false,
 		},
 		{
 			name: "stale heartbeat txn",
-			ba:   batch(txn(stale), &roachpb.HeartbeatTxnRequest{}),
+			ba:   batch(txn(stale), &kvpb.HeartbeatTxnRequest{}),
 			exp:  false,
 		},
 		{
 			name: "stale end txn",
-			ba:   batch(txn(stale), &roachpb.EndTxnRequest{}),
+			ba:   batch(txn(stale), &kvpb.EndTxnRequest{}),
 			exp:  false,
 		},
 		{
 			name: "stale non-txn request",
-			ba:   batch(txn(stale), &roachpb.QueryTxnRequest{}),
+			ba:   batch(txn(stale), &kvpb.QueryTxnRequest{}),
 			exp:  false,
 		},
 		{
 			name: "stale read with current-time writes",
-			ba:   batch(withWriteTimestamp(txn(stale), current), &roachpb.GetRequest{}),
+			ba:   batch(withWriteTimestamp(txn(stale), current), &kvpb.GetRequest{}),
 			exp:  false,
 		},
 		{
 			name: "stale read with current-time uncertainty limit",
-			ba:   batch(withUncertaintyLimit(txn(stale), current), &roachpb.GetRequest{}),
+			ba:   batch(withUncertaintyLimit(txn(stale), current), &kvpb.GetRequest{}),
 			exp:  false,
 		},
 		{
 			name:               "stale read when zero target_duration",
-			ba:                 batch(txn(stale), &roachpb.GetRequest{}),
+			ba:                 batch(txn(stale), &kvpb.GetRequest{}),
 			zeroTargetDuration: true,
 			exp:                false,
 		},
 		{
 			name: "current-time read",
-			ba:   batch(txn(current), &roachpb.GetRequest{}),
+			ba:   batch(txn(current), &kvpb.GetRequest{}),
 			exp:  false,
 		},
 		{
 			name: "future read",
-			ba:   batch(txn(future), &roachpb.GetRequest{}),
+			ba:   batch(txn(future), &kvpb.GetRequest{}),
 			exp:  false,
 		},
 		{
 			name:     "non-txn batch, without ts, global reads policy",
-			ba:       batch(nil, &roachpb.GetRequest{}),
+			ba:       batch(nil, &kvpb.GetRequest{}),
 			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
 			exp:      false,
 		},
 		{
 			name:     "stale non-txn batch, global reads policy",
-			ba:       withBatchTimestamp(batch(nil, &roachpb.GetRequest{}), stale),
+			ba:       withBatchTimestamp(batch(nil, &kvpb.GetRequest{}), stale),
 			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
 			exp:      true,
 		},
 		{
 			name:     "stale non-txn export batch, global reads policy",
-			ba:       withBatchTimestamp(batch(nil, &roachpb.ExportRequest{}), stale),
+			ba:       withBatchTimestamp(batch(nil, &kvpb.ExportRequest{}), stale),
 			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
 			exp:      true,
 		},
 		{
 			name:     "current-time non-txn batch, global reads policy",
-			ba:       withBatchTimestamp(batch(nil, &roachpb.GetRequest{}), current),
+			ba:       withBatchTimestamp(batch(nil, &kvpb.GetRequest{}), current),
 			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
 			exp:      true,
 		},
 		{
 			name:     "current-time non-txn export batch, global reads policy",
-			ba:       withBatchTimestamp(batch(nil, &roachpb.ExportRequest{}), current),
+			ba:       withBatchTimestamp(batch(nil, &kvpb.ExportRequest{}), current),
 			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
 			exp:      true,
 		},
 		{
 			name:     "future non-txn batch, global reads policy",
-			ba:       withBatchTimestamp(batch(nil, &roachpb.GetRequest{}), future),
+			ba:       withBatchTimestamp(batch(nil, &kvpb.GetRequest{}), future),
 			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
 			exp:      false,
 		},
 		{
 			name:     "future non-txn export batch, global reads policy",
-			ba:       withBatchTimestamp(batch(nil, &roachpb.ExportRequest{}), future),
+			ba:       withBatchTimestamp(batch(nil, &kvpb.ExportRequest{}), future),
 			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
 			exp:      false,
 		},
 		{
 			name:     "stale non-txn batch, server-side ts, global reads policy",
-			ba:       withServerSideBatchTimestamp(batch(nil, &roachpb.GetRequest{}), stale),
+			ba:       withServerSideBatchTimestamp(batch(nil, &kvpb.GetRequest{}), stale),
 			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
 			exp:      false,
 		},
 		{
 			name:     "current-time non-txn batch, server-side ts, global reads policy",
-			ba:       withServerSideBatchTimestamp(batch(nil, &roachpb.GetRequest{}), current),
+			ba:       withServerSideBatchTimestamp(batch(nil, &kvpb.GetRequest{}), current),
 			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
 			exp:      false,
 		},
 		{
 			name:     "future non-txn batch, server-side ts, global reads policy",
-			ba:       withServerSideBatchTimestamp(batch(nil, &roachpb.GetRequest{}), future),
+			ba:       withServerSideBatchTimestamp(batch(nil, &kvpb.GetRequest{}), future),
 			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
 			exp:      false,
 		},
 		{
 			name:     "stale read, global reads policy",
-			ba:       batch(txn(stale), &roachpb.GetRequest{}),
+			ba:       batch(txn(stale), &kvpb.GetRequest{}),
 			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
 			exp:      true,
 		},
 		{
 			name:     "stale locking read, global reads policy",
-			ba:       batch(txn(stale), &roachpb.GetRequest{KeyLocking: lock.Exclusive}),
+			ba:       batch(txn(stale), &kvpb.GetRequest{KeyLocking: lock.Exclusive}),
 			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
 			exp:      false,
 		},
 		{
 			name:     "stale scan, global reads policy",
-			ba:       batch(txn(stale), &roachpb.ScanRequest{}),
+			ba:       batch(txn(stale), &kvpb.ScanRequest{}),
 			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
 			exp:      true,
 		},
 		{
 			name:     "stale reverse scan, global reads policy",
-			ba:       batch(txn(stale), &roachpb.ReverseScanRequest{}),
+			ba:       batch(txn(stale), &kvpb.ReverseScanRequest{}),
 			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
 			exp:      true,
 		},
 		{
 			name:     "stale refresh, global reads policy",
-			ba:       batch(txn(stale), &roachpb.RefreshRequest{}),
+			ba:       batch(txn(stale), &kvpb.RefreshRequest{}),
 			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
 			exp:      true,
 		},
 		{
 			name:     "stale refresh range, global reads policy",
-			ba:       batch(txn(stale), &roachpb.RefreshRangeRequest{}),
+			ba:       batch(txn(stale), &kvpb.RefreshRangeRequest{}),
 			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
 			exp:      true,
 		},
 		{
 			name:     "stale write, global reads policy",
-			ba:       batch(txn(stale), &roachpb.PutRequest{}),
+			ba:       batch(txn(stale), &kvpb.PutRequest{}),
 			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
 			exp:      false,
 		},
 		{
 			name:     "stale heartbeat txn, global reads policy",
-			ba:       batch(txn(stale), &roachpb.HeartbeatTxnRequest{}),
+			ba:       batch(txn(stale), &kvpb.HeartbeatTxnRequest{}),
 			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
 			exp:      false,
 		},
 		{
 			name:     "stale end txn, global reads policy",
-			ba:       batch(txn(stale), &roachpb.EndTxnRequest{}),
+			ba:       batch(txn(stale), &kvpb.EndTxnRequest{}),
 			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
 			exp:      false,
 		},
 		{
 			name:     "stale non-txn request, global reads policy",
-			ba:       batch(txn(stale), &roachpb.QueryTxnRequest{}),
+			ba:       batch(txn(stale), &kvpb.QueryTxnRequest{}),
 			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
 			exp:      false,
 		},
 		{
 			name:     "stale read with current-time writes, global reads policy",
-			ba:       batch(withWriteTimestamp(txn(stale), current), &roachpb.GetRequest{}),
+			ba:       batch(withWriteTimestamp(txn(stale), current), &kvpb.GetRequest{}),
 			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
 			exp:      true,
 		},
 		{
 			name:     "stale read with current-time uncertainty limit, global reads policy",
-			ba:       batch(withUncertaintyLimit(txn(stale), current), &roachpb.GetRequest{}),
+			ba:       batch(withUncertaintyLimit(txn(stale), current), &kvpb.GetRequest{}),
 			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
 			exp:      true,
 		},
 		{
 			name:     "current-time read, global reads policy",
-			ba:       batch(txn(current), &roachpb.GetRequest{}),
+			ba:       batch(txn(current), &kvpb.GetRequest{}),
 			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
 			exp:      true,
 		},
 		{
 			name:     "current-time scan, global reads policy",
-			ba:       batch(txn(current), &roachpb.ScanRequest{}),
+			ba:       batch(txn(current), &kvpb.ScanRequest{}),
 			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
 			exp:      true,
 		},
 		{
 			name:     "current-time reverse scan, global reads policy",
-			ba:       batch(txn(current), &roachpb.ReverseScanRequest{}),
+			ba:       batch(txn(current), &kvpb.ReverseScanRequest{}),
 			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
 			exp:      true,
 		},
 		{
 			name:     "current-time refresh, global reads policy",
-			ba:       batch(txn(current), &roachpb.RefreshRequest{}),
+			ba:       batch(txn(current), &kvpb.RefreshRequest{}),
 			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
 			exp:      true,
 		},
 		{
 			name:     "current-time refresh range, global reads policy",
-			ba:       batch(txn(current), &roachpb.RefreshRangeRequest{}),
+			ba:       batch(txn(current), &kvpb.RefreshRangeRequest{}),
 			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
 			exp:      true,
 		},
 		{
 			name:     "current-time read with future writes, global reads policy",
-			ba:       batch(withWriteTimestamp(txn(current), future), &roachpb.GetRequest{}),
+			ba:       batch(withWriteTimestamp(txn(current), future), &kvpb.GetRequest{}),
 			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
 			exp:      false,
 		},
 		{
 			name:     "current-time read with future uncertainty limit, global reads policy",
-			ba:       batch(withUncertaintyLimit(txn(current), future), &roachpb.GetRequest{}),
+			ba:       batch(withUncertaintyLimit(txn(current), future), &kvpb.GetRequest{}),
 			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
 			exp:      false,
 		},
 		{
 			name:     "future read, global reads policy",
-			ba:       batch(txn(future), &roachpb.GetRequest{}),
+			ba:       batch(txn(future), &kvpb.GetRequest{}),
 			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
 			exp:      false,
 		},
 		{
 			name:               "non-enterprise",
-			ba:                 withBatchTimestamp(batch(nil, &roachpb.GetRequest{}), stale),
+			ba:                 withBatchTimestamp(batch(nil, &kvpb.GetRequest{}), stale),
 			disabledEnterprise: true,
 			exp:                false,
 		},
 		{
 			name:                  "follower reads disabled",
-			ba:                    withBatchTimestamp(batch(nil, &roachpb.GetRequest{}), stale),
+			ba:                    withBatchTimestamp(batch(nil, &kvpb.GetRequest{}), stale),
 			disabledFollowerReads: true,
 			exp:                   false,
 		},

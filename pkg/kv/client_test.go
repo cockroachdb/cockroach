@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -103,10 +104,10 @@ func TestClientRetryNonTxn(t *testing.T) {
 	}{
 		m: make(map[string]struct{}),
 	}
-	filter := func(args kvserverbase.FilterArgs) *roachpb.Error {
+	filter := func(args kvserverbase.FilterArgs) *kvpb.Error {
 		mu.Lock()
 		defer mu.Unlock()
-		pushArg, ok := args.Req.(*roachpb.PushTxnRequest)
+		pushArg, ok := args.Req.(*kvpb.PushTxnRequest)
 		if !ok || !strings.HasPrefix(string(pushArg.PusheeTxn.Key), "key-") {
 			return nil
 		}
@@ -126,16 +127,16 @@ func TestClientRetryNonTxn(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	testCases := []struct {
-		args        roachpb.Request
+		args        kvpb.Request
 		canPush     bool
 		expAttempts int
 	}{
 		// Write/write conflicts.
-		{&roachpb.PutRequest{}, true, 2},
-		{&roachpb.PutRequest{}, false, 1},
+		{&kvpb.PutRequest{}, true, 2},
+		{&kvpb.PutRequest{}, false, 1},
 		// Read/write conflicts.
-		{&roachpb.GetRequest{}, true, 1},
-		{&roachpb.GetRequest{}, false, 1},
+		{&kvpb.GetRequest{}, true, 1},
+		{&kvpb.GetRequest{}, false, 1},
 	}
 	// Lay down a write intent using a txn and attempt to access the same
 	// key from our test client, with priorities set up so that the Push
@@ -169,9 +170,9 @@ func TestClientRetryNonTxn(t *testing.T) {
 				// We must try the non-txn put or get in a goroutine because
 				// it might have to retry and will only succeed immediately in
 				// the event we can push.
-				go func(i int, args roachpb.Request) {
+				go func(i int, args kvpb.Request) {
 					var err error
-					if _, ok := args.(*roachpb.GetRequest); ok {
+					if _, ok := args.(*kvpb.GetRequest); ok {
 						_, err = db.Get(nonTxnCtx, key)
 					} else {
 						err = db.Put(nonTxnCtx, key, "value")
@@ -218,7 +219,7 @@ func TestClientRetryNonTxn(t *testing.T) {
 			t.Fatalf("%d: expected success getting %q: %s", i, key, err)
 		}
 
-		if _, isGet := test.args.(*roachpb.GetRequest); isGet || test.canPush {
+		if _, isGet := test.args.(*kvpb.GetRequest); isGet || test.canPush {
 			if !bytes.Equal(gr.ValueBytes(), []byte("txn-value")) {
 				t.Errorf("%d: expected \"txn-value\"; got %q", i, gr.ValueBytes())
 			}
@@ -750,10 +751,10 @@ func TestReadConsistencyTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	for _, rc := range []roachpb.ReadConsistencyType{
-		roachpb.CONSISTENT,
-		roachpb.READ_UNCOMMITTED,
-		roachpb.INCONSISTENT,
+	for _, rc := range []kvpb.ReadConsistencyType{
+		kvpb.CONSISTENT,
+		kvpb.READ_UNCOMMITTED,
+		kvpb.INCONSISTENT,
 	} {
 		t.Run(rc.String(), func(t *testing.T) {
 			ctx := context.Background()
@@ -762,10 +763,10 @@ func TestReadConsistencyTypes(t *testing.T) {
 			// Mock out DistSender's sender function to check the read consistency for
 			// outgoing BatchRequests and return an empty reply.
 			factory := kv.NonTransactionalFactoryFunc(
-				func(_ context.Context, ba *roachpb.BatchRequest,
-				) (*roachpb.BatchResponse, *roachpb.Error) {
+				func(_ context.Context, ba *kvpb.BatchRequest,
+				) (*kvpb.BatchResponse, *kvpb.Error) {
 					if ba.ReadConsistency != rc {
-						return nil, roachpb.NewErrorf("BatchRequest has unexpected ReadConsistency %s", ba.ReadConsistency)
+						return nil, kvpb.NewErrorf("BatchRequest has unexpected ReadConsistency %s", ba.ReadConsistency)
 					}
 					return ba.CreateReply(), nil
 				})
@@ -908,7 +909,7 @@ func TestNodeIDAndObservedTimestamps(t *testing.T) {
 	// Mock out sender function to check that created transactions
 	// have the observed timestamp set for the configured node ID.
 	factory := kv.MakeMockTxnSenderFactory(
-		func(_ context.Context, _ *roachpb.Transaction, ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		func(_ context.Context, _ *roachpb.Transaction, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 			return ba.CreateReply(), nil
 		})
 
@@ -1086,11 +1087,11 @@ func TestRollbackWithCanceledContextInsidious(t *testing.T) {
 	key := roachpb.Key("a")
 	ctx, cancel := context.WithCancel(context.Background())
 	var rollbacks int
-	storeKnobs.TestingRequestFilter = func(_ context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
+	storeKnobs.TestingRequestFilter = func(_ context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
 		if !ba.IsSingleEndTxnRequest() {
 			return nil
 		}
-		et := ba.Requests[0].GetInner().(*roachpb.EndTxnRequest)
+		et := ba.Requests[0].GetInner().(*kvpb.EndTxnRequest)
 		if !et.Commit && et.Key.Equal(key) {
 			rollbacks++
 			cancel()

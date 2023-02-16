@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -113,15 +114,15 @@ func TestCatchupScan(t *testing.T) {
 		span := roachpb.Span{Key: testKey1, EndKey: roachpb.KeyMax}
 		iter := NewCatchUpIterator(eng, span, ts1, nil, nil)
 		defer iter.Close()
-		var events []roachpb.RangeFeedValue
+		var events []kvpb.RangeFeedValue
 		// ts1 here is exclusive, so we do not want the versions at ts1.
-		require.NoError(t, iter.CatchUpScan(ctx, func(e *roachpb.RangeFeedEvent) error {
+		require.NoError(t, iter.CatchUpScan(ctx, func(e *kvpb.RangeFeedEvent) error {
 			events = append(events, *e.Val)
 			return nil
 		}, withDiff))
 		require.Equal(t, 4, len(events))
 		checkEquality := func(
-			kv storage.MVCCKeyValue, prevKV storage.MVCCKeyValue, event roachpb.RangeFeedValue) {
+			kv storage.MVCCKeyValue, prevKV storage.MVCCKeyValue, event kvpb.RangeFeedValue) {
 			require.Equal(t, string(kv.Key.Key), string(event.Key))
 			require.Equal(t, kv.Key.Timestamp, event.Value.Timestamp)
 			require.Equal(t, string(kv.Value), string(event.Value.RawBytes))
@@ -198,7 +199,7 @@ func TestCatchupScanSeesOldIntent(t *testing.T) {
 	defer iter.Close()
 
 	keys := map[string]struct{}{}
-	require.NoError(t, iter.CatchUpScan(ctx, func(e *roachpb.RangeFeedEvent) error {
+	require.NoError(t, iter.CatchUpScan(ctx, func(e *kvpb.RangeFeedEvent) error {
 		keys[string(e.Val.Key)] = struct{}{}
 		return nil
 	}, true /* withDiff */))

@@ -25,7 +25,7 @@ import "sql/catalog/descpb/structured.proto";
 import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 import "roachpb/data.proto";
-import "roachpb/api.proto";
+import "kv/kvpb/api.proto";
 import "cloud/cloudpb/external_storage.proto";
 
 // BackfillerSpec is the specification for a "schema change backfiller".

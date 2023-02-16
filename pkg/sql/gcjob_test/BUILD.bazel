@@ -15,6 +15,7 @@ go_test(
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv",
+        "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",
         "//pkg/multitenant/mtinfopb",
         "//pkg/roachpb",

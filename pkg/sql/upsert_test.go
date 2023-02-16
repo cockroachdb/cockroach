@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -45,14 +46,14 @@ func TestUpsertFastPath(t *testing.T) {
 	var gets uint64
 	var scans uint64
 	var endTxn uint64
-	filter := func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
+	filter := func(filterArgs kvserverbase.FilterArgs) *kvpb.Error {
 		if bytes.Compare(filterArgs.Req.Header().Key, bootstrap.TestingUserTableDataMin()) >= 0 {
 			switch filterArgs.Req.Method() {
-			case roachpb.Scan:
+			case kvpb.Scan:
 				atomic.AddUint64(&scans, 1)
-			case roachpb.Get:
+			case kvpb.Get:
 				atomic.AddUint64(&gets, 1)
-			case roachpb.EndTxn:
+			case kvpb.EndTxn:
 				if filterArgs.Hdr.Txn.Status == roachpb.STAGING {
 					// Ignore async explicit commits.
 					return nil

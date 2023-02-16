@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
@@ -516,7 +517,7 @@ func (r *Replica) applySnapshot(
 		sr.readOnlyCmdMu.Lock()
 		sr.mu.Lock()
 		sr.mu.destroyStatus.Set(
-			roachpb.NewRangeNotFoundError(sr.RangeID, sr.store.StoreID()),
+			kvpb.NewRangeNotFoundError(sr.RangeID, sr.store.StoreID()),
 			destroyReasonRemoved)
 		sr.mu.Unlock()
 		sr.readOnlyCmdMu.Unlock()
@@ -687,7 +688,7 @@ func (r *Replica) applySnapshot(
 	// each raft command. These will be lost during a snapshot, so disconnect
 	// the rangefeed, if one exists.
 	r.disconnectRangefeedWithReason(
-		roachpb.RangeFeedRetryError_REASON_RAFT_SNAPSHOT,
+		kvpb.RangeFeedRetryError_REASON_RAFT_SNAPSHOT,
 	)
 
 	// Update the replica's cached byte thresholds. This is a no-op if the system

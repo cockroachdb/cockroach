@@ -21,6 +21,7 @@ import (
 
 	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -564,53 +565,49 @@ func (hb *heartbeatService) Ping(
 	}, nil
 }
 
-var _ roachpb.InternalServer = &internalServer{}
+var _ kvpb.InternalServer = &internalServer{}
 
 type internalServer struct{}
 
-func (*internalServer) Batch(
-	context.Context, *roachpb.BatchRequest,
-) (*roachpb.BatchResponse, error) {
+func (*internalServer) Batch(context.Context, *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
 	return nil, nil
 }
 
 func (*internalServer) RangeLookup(
-	context.Context, *roachpb.RangeLookupRequest,
-) (*roachpb.RangeLookupResponse, error) {
+	context.Context, *kvpb.RangeLookupRequest,
+) (*kvpb.RangeLookupResponse, error) {
 	panic("unimplemented")
 }
 
-func (*internalServer) RangeFeed(
-	*roachpb.RangeFeedRequest, roachpb.Internal_RangeFeedServer,
-) error {
+func (*internalServer) RangeFeed(*kvpb.RangeFeedRequest, kvpb.Internal_RangeFeedServer) error {
 	panic("unimplemented")
 }
 
-func (s *internalServer) MuxRangeFeed(server roachpb.Internal_MuxRangeFeedServer) error {
+func (s *internalServer) MuxRangeFeed(server kvpb.Internal_MuxRangeFeedServer) error {
 	panic("implement me")
 }
 
 func (*internalServer) GossipSubscription(
-	*roachpb.GossipSubscriptionRequest, roachpb.Internal_GossipSubscriptionServer,
+	*kvpb.GossipSubscriptionRequest, kvpb.Internal_GossipSubscriptionServer,
 ) error {
 	panic("unimplemented")
 }
 
 func (*internalServer) ResetQuorum(
-	context.Context, *roachpb.ResetQuorumRequest,
-) (*roachpb.ResetQuorumResponse, error) {
+	context.Context, *kvpb.ResetQuorumRequest,
+) (*kvpb.ResetQuorumResponse, error) {
 	panic("unimplemented")
 }
 
 func (*internalServer) Join(
-	context.Context, *roachpb.JoinNodeRequest,
-) (*roachpb.JoinNodeResponse, error) {
+	context.Context, *kvpb.JoinNodeRequest,
+) (*kvpb.JoinNodeResponse, error) {
 	panic("unimplemented")
 }
 
 func (*internalServer) TokenBucket(
-	ctx context.Context, in *roachpb.TokenBucketRequest,
-) (*roachpb.TokenBucketResponse, error) {
+	ctx context.Context, in *kvpb.TokenBucketRequest,
+) (*kvpb.TokenBucketResponse, error) {
 	panic("unimplemented")
 }
 
@@ -639,13 +636,13 @@ func (s *internalServer) SpanConfigConformance(
 }
 
 func (*internalServer) TenantSettings(
-	*roachpb.TenantSettingsRequest, roachpb.Internal_TenantSettingsServer,
+	*kvpb.TenantSettingsRequest, kvpb.Internal_TenantSettingsServer,
 ) error {
 	panic("unimplemented")
 }
 
 func (*internalServer) GetRangeDescriptors(
-	*roachpb.GetRangeDescriptorsRequest, roachpb.Internal_GetRangeDescriptorsServer,
+	*kvpb.GetRangeDescriptorsRequest, kvpb.Internal_GetRangeDescriptorsServer,
 ) error {
 	panic("unimplemented")
 }
