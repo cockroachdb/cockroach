@@ -9,10 +9,11 @@
 // licenses/APL.txt.
 
 import {
+  ApiResponse,
   executeInternalSql,
+  formatApiResult,
   LARGE_RESULT_SIZE,
   LONG_TIMEOUT,
-  sqlApiErrorMessage,
   SqlExecutionRequest,
   sqlResultsAreEmpty,
   SqlTxnResult,
@@ -137,7 +138,7 @@ export const stmtInsightsByTxnExecutionQuery = (id: string): string => `
 
 export async function getStmtInsightsApi(
   req?: StmtInsightsReq,
-): Promise<StmtInsightEvent[]> {
+): Promise<ApiResponse<StmtInsightEvent>> {
   const request: SqlExecutionRequest = {
     statements: [
       {
@@ -150,21 +151,17 @@ export async function getStmtInsightsApi(
   };
 
   const result = await executeInternalSql<StmtInsightsResponseRow>(request);
-  if (result.error) {
-    throw new Error(
-      `Error while retrieving insights information: ${sqlApiErrorMessage(
-        result.error.message,
-      )}`,
-    );
-  }
 
   if (sqlResultsAreEmpty(result)) {
-    return [];
+    return formatApiResult([], result.error, "retrieving insights information");
   }
-
   const stmtInsightEvent = formatStmtInsights(result.execution?.txn_results[0]);
   await addStmtContentionInfoApi(stmtInsightEvent);
-  return stmtInsightEvent;
+  return formatApiResult(
+    stmtInsightEvent,
+    result.error,
+    "retrieving insights information",
+  );
 }
 
 async function addStmtContentionInfoApi(

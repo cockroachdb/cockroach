@@ -34,6 +34,7 @@ import {
   selectStmtInsights,
   selectStmtInsightsError,
   selectStmtInsightsLoading,
+  selectStmtInsightsMaxApiReached,
 } from "src/store/insights/statementInsights";
 import {
   actions as txnInsights,
@@ -78,6 +79,7 @@ const statementMapStateToProps = (
   selectedColumnNames: selectColumns(state),
   timeScale: selectTimeScale(state),
   isLoading: selectStmtInsightsLoading(state),
+  maxSizeApiReached: selectStmtInsightsMaxApiReached(state),
 });
 
 const TransactionDispatchProps = (

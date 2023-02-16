@@ -60,6 +60,11 @@ export type SqlExecutionErrorMessage = {
   source: { file: string; line: number; function: "string" };
 };
 
+export type ApiResponse<ResultType> = {
+  maxSizeReached: boolean;
+  results: Array<ResultType>;
+};
+
 export const SQL_API_PATH = "/api/v2/sql/";
 
 /**
@@ -158,4 +163,29 @@ export function sqlApiErrorMessage(message: string): string {
   }
 
   return message;
+}
+
+function isMaxSizeError(message: string): boolean {
+  return !!message?.includes("max result size exceeded");
+}
+
+export function formatApiResult(
+  results: Array<any>,
+  error: SqlExecutionErrorMessage,
+  errorMessageContext: string,
+): ApiResponse<any> {
+  const maxSizeError = isMaxSizeError(error?.message);
+
+  if (error && !maxSizeError) {
+    throw new Error(
+      `Error while ${errorMessageContext}: ${sqlApiErrorMessage(
+        error?.message,
+      )}`,
+    );
+  }
+
+  return {
+    maxSizeReached: maxSizeError,
+    results: results,
+  };
 }

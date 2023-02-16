@@ -20,10 +20,13 @@ import { selectStatementFingerprintID, selectID } from "src/selectors/common";
 import { InsightEnumToLabel, StmtInsightEvent } from "src/insights";
 
 export const selectStmtInsights = (state: AppState): StmtInsightEvent[] =>
-  state.adminUI.stmtInsights?.data;
+  state.adminUI.stmtInsights?.data?.results;
 
 export const selectStmtInsightsError = (state: AppState): Error | null =>
   state.adminUI.stmtInsights?.lastError;
+
+export const selectStmtInsightsMaxApiReached = (state: AppState): boolean =>
+  state.adminUI.stmtInsights?.data?.maxSizeReached;
 
 export const selectStmtInsightDetails = createSelector(
   selectStmtInsights,
