@@ -32,6 +32,7 @@ import {
 import { getAppsFromActiveExecutions } from "../activeExecutions/activeStatementUtils";
 import { inactiveFiltersState } from "../queryFilter/filter";
 import { ActiveTransactionsSection } from "src/activeExecutions/activeTransactionsSection";
+import { Pagination } from "src/pagination";
 
 import styles from "../statementsPage/statementsPage.module.scss";
 import { queryByName, syncHistory } from "src/util/query";
@@ -61,6 +62,7 @@ export type ActiveTransactionsViewProps = ActiveTransactionsViewStateProps &
   ActiveTransactionsViewDispatchProps;
 
 const ACTIVE_TXN_SEARCH_PARAM = "q";
+const PAGE_SIZE = 20;
 
 export const ActiveTransactionsView: React.FC<ActiveTransactionsViewProps> = ({
   onColumnsSelect,
@@ -77,7 +79,7 @@ export const ActiveTransactionsView: React.FC<ActiveTransactionsViewProps> = ({
 }: ActiveTransactionsViewProps) => {
   const [pagination, setPagination] = useState<ISortedTablePagination>({
     current: 1,
-    pageSize: 20,
+    pageSize: PAGE_SIZE,
   });
   const history = useHistory();
   const [search, setSearch] = useState<string>(
@@ -134,7 +136,7 @@ export const ActiveTransactionsView: React.FC<ActiveTransactionsViewProps> = ({
   const resetPagination = () => {
     setPagination({
       current: 1,
-      pageSize: 20,
+      pageSize: PAGE_SIZE,
     });
   };
 
@@ -166,6 +168,14 @@ export const ActiveTransactionsView: React.FC<ActiveTransactionsViewProps> = ({
     internalAppNamePrefix,
     search,
   );
+
+  const onChangePage = (page: number) => {
+    setPagination({
+      ...pagination,
+      current: page,
+    });
+  };
+
   return (
     <div className={cx("root")}>
       <PageConfig>
@@ -208,6 +218,12 @@ export const ActiveTransactionsView: React.FC<ActiveTransactionsViewProps> = ({
             onChangeSortSetting={onChangeSortSetting}
             onColumnsSelect={onColumnsSelect}
             isTenant={isTenant}
+          />
+          <Pagination
+            pageSize={pagination.pageSize}
+            current={pagination.current}
+            total={filteredTransactions?.length}
+            onChange={onChangePage}
           />
         </Loading>
       </div>
