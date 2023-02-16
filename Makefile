@@ -997,7 +997,7 @@ docs/generated/settings/settings-for-tenants.txt: $(COCKROACHSHORT)
 
 SETTINGS_DOC_PAGES := docs/generated/settings/settings.html docs/generated/settings/settings-for-tenants.txt
 
-# Note: We pass `-v` to `go build` and `go test -i` so that warnings
+# Note: We pass `-v` to `go build` and `go test` so that warnings
 # from the linker aren't suppressed. The usage of `-v` also shows when
 # dependencies are rebuilt which is useful when switching between
 # normal and race test builds.
@@ -1223,10 +1223,7 @@ lint: ## Run all style checkers and linters.
 lint: bin/returncheck bin/roachvet bin/optfmt
 	$(info $(yellow)[WARNING] Use `dev lint$(if $(filter . -,$(TESTS)),, --filter $(TESTS))$(if $(findstring 60m,$(TESTTIMEOUT)),, --timeout $(TESTTIMEOUT))` instead.$(term-reset))
 	@if [ -t 1 ]; then echo '$(yellow)NOTE: `make lint` is very slow! Perhaps `make lintshort`?$(term-reset)'; fi
-	@# Run 'go build -i' to ensure we have compiled object files available for all
-	@# packages. In Go 1.10, only 'go vet' recompiles on demand. For details:
-	@# https://groups.google.com/forum/#!msg/golang-dev/qfa3mHN4ZPA/X2UzjNV1BAAJ.
-	$(xgo) build -i -v $(GOFLAGS) -mod=vendor -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(PKG)
+	$(xgo) build -v $(GOFLAGS) -mod=vendor -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(PKG)
 	$(xgo) test $(GOTESTFLAGS) ./pkg/testutils/lint -v $(GOFLAGS) -mod=vendor -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -timeout $(TESTTIMEOUT) -run 'Lint/$(TESTS)'
 
 .PHONY: lintshort

@@ -1,4 +1,5 @@
 load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
 
 go_library(
@@ -28,6 +29,28 @@ go_binary(
     name = "cockroach-sql",
     embed = [":cockroach-sql_lib"],
     visibility = ["//visibility:public"],
+)
+
+disallowed_imports_test(
+    "cockroach-sql_lib",
+    disallowed_list = [
+        "//pkg/cli",
+        "//pkg/kv/kvpb",
+        "//pkg/kv/kvserver",
+        "//pkg/roachpb",
+        "//pkg/server",
+        "//pkg/sql",
+        "//pkg/sql/catalog",
+        "//pkg/sql/parser",
+        "//pkg/sql/sem/tree",
+        "//pkg/storage",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/util/tracing",
+    ],
+    disallowed_prefixes = [
+        "github.com/cockroachdb/pebble",
+    ],
 )
 
 get_x_data(name = "get_x_data")

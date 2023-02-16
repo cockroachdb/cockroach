@@ -243,7 +243,7 @@ func dumpPatchArgsForRepo(repoName string) error {
 	}
 	candidate := filepath.Join(runfiles, "build", "patches", repoName+".patch")
 	if _, err := os.Stat(candidate); err == nil {
-		fmt.Printf(`        patch_args = ["-p1"],
+		fmt.Printf(`        patch_args = ["-p1", "-s"],
         patches = [
             "@com_github_cockroachdb_cockroach//build/patches:%s.patch",
         ],

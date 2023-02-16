@@ -1595,55 +1595,6 @@ func TestLint(t *testing.T) {
 		}
 	})
 
-	t.Run("TestForbiddenImportsSQLShell", func(t *testing.T) {
-		t.Parallel()
-
-		cmd, stderr, filter, err := dirCmd(crdbDir, "go", "list", "-deps",
-			filepath.Join(cockroachDB, "./pkg/cmd/cockroach-sql"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := cmd.Start(); err != nil {
-			t.Fatal(err)
-		}
-
-		// forbiddenImportPkg
-		forbiddenImports := map[string]struct{}{
-			"github.com/cockroachdb/pebble":                     {},
-			"github.com/cockroachdb/cockroach/pkg/cli":          {},
-			"github.com/cockroachdb/cockroach/pkg/kv/kvpb":      {},
-			"github.com/cockroachdb/cockroach/pkg/kv/kvserver":  {},
-			"github.com/cockroachdb/cockroach/pkg/roachpb":      {},
-			"github.com/cockroachdb/cockroach/pkg/server":       {},
-			"github.com/cockroachdb/cockroach/pkg/sql":          {},
-			"github.com/cockroachdb/cockroach/pkg/sql/catalog":  {},
-			"github.com/cockroachdb/cockroach/pkg/sql/parser":   {},
-			"github.com/cockroachdb/cockroach/pkg/sql/sem/tree": {},
-			"github.com/cockroachdb/cockroach/pkg/storage":      {},
-			"github.com/cockroachdb/cockroach/pkg/util/log":     {},
-			"github.com/cockroachdb/cockroach/pkg/util/stop":    {},
-			"github.com/cockroachdb/cockroach/pkg/util/tracing": {},
-		}
-
-		if err := stream.ForEach(
-			stream.Sequence(
-				filter,
-				stream.Sort(),
-				stream.Uniq()),
-			func(s string) {
-				if _, ok := forbiddenImports[s]; ok {
-					t.Errorf("\ncockroach-sql depends on %s <- forbidden, this import makes the SQL shell too large", s)
-				}
-			}); err != nil {
-			t.Error(err)
-		}
-		if err := cmd.Wait(); err != nil {
-			if out := stderr.String(); len(out) > 0 {
-				t.Fatalf("err=%s, stderr=%s", err, out)
-			}
-		}
-	})
-
 	// TODO(tamird): replace this with errcheck.NewChecker() when
 	// https://github.com/dominikh/go-tools/issues/57 is fixed.
 	t.Run("TestErrCheck", func(t *testing.T) {

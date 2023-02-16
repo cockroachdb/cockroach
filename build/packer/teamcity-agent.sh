@@ -67,21 +67,11 @@ tar --strip-components=1 -C /usr -xzf /tmp/cmake.tar.gz
 rm -f /tmp/cmake.tar.gz
 
 if [ $ARCH = x86_64 ]; then
-    curl -fsSL https://dl.google.com/go/go1.19.4.linux-amd64.tar.gz > /tmp/go.tgz
+    curl -fsSL https://dl.google.com/go/go1.20.1.linux-amd64.tar.gz > /tmp/go.tgz
     sha256sum -c - <<EOF
-c9c08f783325c4cf840a94333159cc937f05f75d36a8b307951d5bd959cf2ab8  /tmp/go.tgz
+000a5b1fca4f75895f78befeb2eecf10bfff3c428597f3f1e69133b63b911b02  /tmp/go.tgz
 EOF
     tar -C /usr/local -zxf /tmp/go.tgz && rm /tmp/go.tgz
-
-    # Install the older version in parallel in order to run the acceptance test on older branches
-    # TODO: Remove this when 21.1 is EOL (2022-11-18, according to
-    # https://www.cockroachlabs.com/docs/releases/release-support-policy.html)
-    curl -fsSL https://dl.google.com/go/go1.15.14.linux-amd64.tar.gz > /tmp/go_old.tgz
-    sha256sum -c - <<EOF
-6f5410c113b803f437d7a1ee6f8f124100e536cc7361920f7e640fedf7add72d /tmp/go_old.tgz
-EOF
-    mkdir -p /usr/local/go1.15
-    tar -C /usr/local/go1.15 --strip-components=1 -zxf /tmp/go_old.tgz && rm /tmp/go_old.tgz
 
 # Explicitly symlink the pinned version to /usr/bin.
     for f in `ls /usr/local/go/bin`; do

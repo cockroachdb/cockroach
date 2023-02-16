@@ -116,14 +116,13 @@ def _validate_disallowed_prefixes(prefixes):
     repo_prefix = "github.com/cockroachdb/cockroach/"
     short_prefix = "pkg/"
     for prefix in prefixes:
-        if prefix.startswith(repo_prefix):
+        if prefix.startswith("github.com/"):
             validated.append(prefix)
         elif prefix.startswith(short_prefix):
             validated.append(repo_prefix + prefix)
         else:
-            fail("invalid prefix {}: should start with {} or {}".format(
+            fail("invalid prefix {}: should start with github.com/ or {}".format(
                 prefix,
-                repo_prefix,
                 short_prefix,
             ))
     return validated

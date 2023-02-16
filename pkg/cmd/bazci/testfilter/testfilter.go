@@ -418,7 +418,7 @@ func processTestEvent(
 			}
 		}
 
-	case "run", "pause", "cont", "bench", "output":
+	case "run", "pause", "cont", "bench", "output", "start":
 	default:
 		// We must have parsed some JSON that wasn't a testData.
 		return fmt.Errorf("unknown input: %s", line)

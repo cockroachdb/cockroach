@@ -117,6 +117,7 @@ ALL_TESTS = [
     "//pkg/cmd/bazci/testfilter:testfilter_test",
     "//pkg/cmd/cmpconn:cmpconn_test",
     "//pkg/cmd/cockroach-oss:cockroach-oss_disallowed_imports_test",
+    "//pkg/cmd/cockroach-sql:cockroach-sql_lib_disallowed_imports_test",
     "//pkg/cmd/cockroach:cockroach_lib_disallowed_imports_test",
     "//pkg/cmd/dev:dev_lib_disallowed_imports_test",
     "//pkg/cmd/dev:dev_test",
