@@ -5019,6 +5019,7 @@ session_authorization                                 root
 session_user                                          root
 show_primary_key_constraint_on_not_visible_columns    on
 sql_safe_updates                                      off
+ssl                                                   on
 ssl_renegotiation_limit                               0
 standard_conforming_strings                           on
 statement_timeout                                     0
