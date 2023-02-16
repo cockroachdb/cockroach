@@ -195,9 +195,6 @@ type StoreDetail struct {
 	// LastUnavailable is set when it's detected that a store was unavailable,
 	// i.e. failed liveness.
 	LastUnavailable time.Time
-	// LastAvailable is set when it's detected that a store was available,
-	// i.e. we got a liveness heartbeat.
-	LastAvailable time.Time
 }
 
 // isThrottled returns whether the store is currently throttled.
@@ -271,14 +268,13 @@ func (sd *StoreDetail) status(
 	// even before the first gossip arrives for a store.
 	deadAsOf := sd.LastUpdatedTime.Add(threshold)
 	if now.After(deadAsOf) {
-		// Wipe out the lastAvailable timestamp, so that once a node comes back
-		// from the dead we dont consider it suspect.
-		sd.LastAvailable = time.Time{}
+		sd.LastUnavailable = now
 		return storeStatusDead
 	}
 	// If there's no descriptor (meaning no gossip ever arrived for this
 	// store), return unavailable.
 	if sd.Desc == nil {
+		sd.LastUnavailable = now
 		return storeStatusUnknown
 	}
 
@@ -289,24 +285,19 @@ func (sd *StoreDetail) status(
 	// dead -> decommissioning -> unknown -> draining -> suspect -> available.
 	switch nl(sd.Desc.Node.NodeID, now, threshold) {
 	case livenesspb.NodeLivenessStatus_DEAD, livenesspb.NodeLivenessStatus_DECOMMISSIONED:
+		sd.LastUnavailable = now
 		return storeStatusDead
 	case livenesspb.NodeLivenessStatus_DECOMMISSIONING:
 		return storeStatusDecommissioning
 	case livenesspb.NodeLivenessStatus_UNAVAILABLE:
 		// We don't want to suspect a node on startup or when it's first added to a
 		// cluster, because we dont know its liveness yet.
-		if !sd.LastAvailable.IsZero() {
-			sd.LastUnavailable = now
-		}
+		sd.LastUnavailable = now
 		return storeStatusUnknown
 	case livenesspb.NodeLivenessStatus_UNKNOWN:
+		sd.LastUnavailable = now
 		return storeStatusUnknown
 	case livenesspb.NodeLivenessStatus_DRAINING:
-		// Wipe out the lastAvailable timestamp, so if this node comes back after a
-		// graceful restart it will not be considered as suspect. This is best effort
-		// and we may not see a store in this state. To help with that we perform
-		// a similar clear of lastAvailable on a DEAD store.
-		sd.LastAvailable = time.Time{}
 		return storeStatusDraining
 	}
 
@@ -317,7 +308,6 @@ func (sd *StoreDetail) status(
 	if sd.isSuspect(now, suspectDuration) {
 		return storeStatusSuspect
 	}
-	sd.LastAvailable = now
 	return storeStatusAvailable
 }
 
