@@ -11,7 +11,7 @@
 // Cannot be proto3 because we depend on absent-vs-empty distinction.
 syntax = "proto2";
 package cockroach.roachpb;
-option go_package = "roachpb";
+option go_package = "github.com/cockroachdb/cockroach/pkg/roachpb";
 
 import "gogoproto/gogo.proto";
 

@@ -10,7 +10,7 @@
 
 syntax = "proto3";
 package cockroach.util.timeutil.pgdate;
-option go_package = "pgdate";
+option go_package = "github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate";
 
 // DateStyle refers to the PostgreSQL DateStyle allowed variables.
 message DateStyle {

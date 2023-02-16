@@ -10,7 +10,7 @@
 
 syntax = "proto3";
 package cockroach.gossip;
-option go_package = "gossip";
+option go_package = "github.com/cockroachdb/cockroach/pkg/gossip";
 
 import "roachpb/data.proto";
 import "util/hlc/timestamp.proto";

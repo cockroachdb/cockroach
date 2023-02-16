@@ -10,7 +10,7 @@
 
 syntax = "proto3";
 package cockroach.protectedts;
-option go_package = "ptstorage";
+option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage";
 
 import "gogoproto/gogo.proto";
 import "roachpb/data.proto";

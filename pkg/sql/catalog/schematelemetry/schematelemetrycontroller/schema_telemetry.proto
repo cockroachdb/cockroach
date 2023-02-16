@@ -10,7 +10,7 @@
 
 syntax = "proto3";
 package cockroach.sql;
-option go_package = "schematelemetrycontroller";
+option go_package = "github.com/cockroachdb/cockroach/pkg/sql/catalog/schematelemetry/schematelemetrycontroller";
 
 // ScheduledSchemaTelemetryExecutionArgs is the arguments to the scheduled
 // schema telemetry job. This is required to support SHOW SCHEDULE queries.

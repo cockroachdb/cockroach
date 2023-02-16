@@ -1359,15 +1359,15 @@ $(ERRORS_PROTO): bin/.submodules-initialized
 bin/.go_protobuf_sources: $(GO_PROTOS) $(GOGOPROTO_PROTO) $(ERRORS_PROTO) bin/.bootstrap bin/protoc-gen-gogoroach c-deps/proto-rebuild vendor/modules.txt
 	$(FIND_RELEVANT) -type f -name '*.pb.go' -exec rm {} +
 	set -e; for dir in $(sort $(dir $(GO_PROTOS))); do \
-	  buf protoc -Ipkg -I$(GOGO_PROTOBUF_PATH) -I$(COREOS_PATH) -I$(PROMETHEUS_PATH) -I$(GRPC_GATEWAY_GOOGLEAPIS_PATH) -I$(ERRORS_PATH) --gogoroach_out=$(PROTO_MAPPINGS)plugins=grpc,import_prefix=github.com/cockroachdb/cockroach/pkg/:./pkg $$dir/*.proto; \
+	  buf protoc -Ipkg -I$(GOGO_PROTOBUF_PATH) -I$(COREOS_PATH) -I$(PROMETHEUS_PATH) -I$(GRPC_GATEWAY_GOOGLEAPIS_PATH) -I$(ERRORS_PATH) --gogoroach_out=$(PROTO_MAPPINGS)plugins=grpc,import_prefix=github.com/cockroachdb/cockroach/pkg/,paths=source_relative:./pkg $$dir/*.proto; \
 	done
 	gofmt -s -w $(GO_SOURCES)
 	touch $@
 
 bin/.gw_protobuf_sources: $(GW_SERVER_PROTOS) $(GW_TS_PROTOS) $(GO_PROTOS) $(GOGOPROTO_PROTO) $(ERRORS_PROTO) bin/.bootstrap c-deps/proto-rebuild vendor/modules.txt
 	$(FIND_RELEVANT) -type f -name '*.pb.gw.go' -exec rm {} +
-		buf protoc -Ipkg -I$(GOGO_PROTOBUF_PATH) -I$(ERRORS_PATH) -I$(COREOS_PATH) -I$(PROMETHEUS_PATH) -I$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --grpc-gateway_out=logtostderr=true,request_context=true:./pkg $(GW_SERVER_PROTOS)
-		buf protoc -Ipkg -I$(GOGO_PROTOBUF_PATH) -I$(ERRORS_PATH) -I$(COREOS_PATH) -I$(PROMETHEUS_PATH) -I$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --grpc-gateway_out=logtostderr=true,request_context=true:./pkg $(GW_TS_PROTOS)
+		buf protoc -Ipkg -I$(GOGO_PROTOBUF_PATH) -I$(ERRORS_PATH) -I$(COREOS_PATH) -I$(PROMETHEUS_PATH) -I$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --grpc-gateway_out=logtostderr=true,request_context=true,paths=source_relative:./pkg $(GW_SERVER_PROTOS)
+		buf protoc -Ipkg -I$(GOGO_PROTOBUF_PATH) -I$(ERRORS_PATH) -I$(COREOS_PATH) -I$(PROMETHEUS_PATH) -I$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --grpc-gateway_out=logtostderr=true,request_context=true,paths=source_relative:./pkg $(GW_TS_PROTOS)
 	gofmt -s -w $(GW_SOURCES)
 	@# TODO(jordan,benesch) This can be removed along with the above TODO.
 	goimports -w $(GW_SOURCES)

@@ -10,7 +10,7 @@
 
 syntax = "proto3";
 package cockroach.multitenant.tenantcapabilitiespb;
-option go_package = "tenantcapabilitiespb";
+option go_package = "github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb";
 
 import "gogoproto/gogo.proto";
 
