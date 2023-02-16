@@ -267,7 +267,7 @@ func TestSQLStatsCompactor(t *testing.T) {
 // SQL Stats cleanup job. We test this behavior by generating some rows in the
 // stats system table that are in the current aggregation window and previous
 // aggregation window. Before running the SQL Stats compaction, we lower the
-// row limit in the stats table so that all thw rows will be deleted by the
+// row limit in the stats table so that all the rows will be deleted by the
 // StatsCompactor, if all the generated rows live outside the current
 // aggregation window. This test asserts that, since some of generated rows live
 // in the current aggregation interval, those rows will not be deleted by the
@@ -293,7 +293,7 @@ func TestSQLStatsForegroundInterference(t *testing.T) {
 			GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
 
 	sqlConn := sqlutils.MakeSQLRunner(conn)
-	sqlConn.Exec(t, "SET CLUSTER SETTING sql.stats.persisted_rows.max = 1")
+	sqlConn.Exec(t, "SET CLUSTER SETTING sql.stats.persisted_rows.max = 10")
 
 	// Generate some data that are older than the current aggregation window,
 	// and then generate some that are within the current aggregation window.
