@@ -19,6 +19,7 @@ import {
   selectTransactionInsightDetails,
   selectTransactionInsightDetailsError,
   actions,
+  selectTransactionInsightDetailsMaxSizeReached,
 } from "src/store/insightDetails/transactionInsightDetails";
 import { TimeScale } from "../../timeScaleDropdown";
 import { actions as sqlStatsActions } from "../../store/sqlStats";
@@ -37,6 +38,10 @@ const mapStateToProps = (
     insightEventDetails: insightDetails,
     insightError: insightError,
     hasAdminRole: selectHasAdminRole(state),
+    maxSizeApiReached: selectTransactionInsightDetailsMaxSizeReached(
+      state,
+      props,
+    ),
   };
 };
 

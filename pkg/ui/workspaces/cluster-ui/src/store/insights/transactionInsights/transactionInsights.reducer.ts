@@ -11,10 +11,10 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { DOMAIN_NAME, noopReducer } from "src/store/utils";
 import moment, { Moment } from "moment";
-import { TransactionInsightEventsResponse } from "src/api/insightsApi";
+import { SqlApiResponse, TransactionInsightEventsResponse } from "src/api";
 
 export type TransactionInsightsState = {
-  data: TransactionInsightEventsResponse;
+  data: SqlApiResponse<TransactionInsightEventsResponse>;
   lastUpdated: Moment;
   lastError: Error;
   valid: boolean;
@@ -33,7 +33,7 @@ const transactionInsightsSlice = createSlice({
   reducers: {
     received: (
       state,
-      action: PayloadAction<TransactionInsightEventsResponse>,
+      action: PayloadAction<SqlApiResponse<TransactionInsightEventsResponse>>,
     ) => {
       state.data = action.payload;
       state.valid = true;

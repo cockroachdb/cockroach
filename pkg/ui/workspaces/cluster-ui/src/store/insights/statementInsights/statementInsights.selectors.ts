@@ -26,7 +26,7 @@ export const selectStatementInsightsError = (state: AppState) =>
   state.adminUI.statementInsights?.lastError;
 
 export const selectStmtInsightsMaxApiReached = (state: AppState): boolean =>
-  state.adminUI.statementInsights?.data?.maxSizeReached;
+  !!state.adminUI.statementInsights?.data?.maxSizeReached;
 
 export const selectStatementInsightDetails = createSelector(
   selectStatementInsights,

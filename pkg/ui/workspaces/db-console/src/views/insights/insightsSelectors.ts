@@ -40,7 +40,7 @@ export const sortSettingLocalSetting = new LocalSetting<
 });
 
 export const selectTransactionInsights = createSelector(
-  (state: AdminUIState) => state.cachedData.transactionInsights?.data,
+  (state: AdminUIState) => state.cachedData.transactionInsights?.data?.results,
   selectTxnInsightsCombiner,
 );
 
@@ -53,7 +53,7 @@ export const selectTransactionInsightDetails = createSelector(
     if (!insight) {
       return null;
     }
-    return insight[insightId]?.data;
+    return insight[insightId]?.data?.results;
   },
 );
 
@@ -61,7 +61,13 @@ export const selectStmtInsightsMaxApiReached = (
   state: AdminUIState,
 ): boolean => {
   return !!state.cachedData.statementInsights?.data?.maxSizeReached;
+
+export const selectTxnInsightsMaxApiReached = (
+  state: AdminUIState,
+): boolean => {
+  return !!state.cachedData.transactionInsights?.data?.maxSizeReached;
 };
+
 
 export const selectTransactionInsightDetailsError = createSelector(
   (state: AdminUIState) => state.cachedData.transactionInsightDetails,
@@ -77,6 +83,13 @@ export const selectTransactionInsightDetailsError = createSelector(
 export const selectStatementInsights = createSelector(
   (state: AdminUIState) => state.cachedData.statementInsights?.data?.results,
   selectStatementInsightsCombiner,
+);
+
+export const selectTransactionInsightDetailsMaxSizeReached = createSelector(
+  (state: AdminUIState) => state.cachedData.transactionInsightDetails,
+  selectID,
+  (insights, insightId: string): boolean =>
+    insights[insightId]?.data?.maxSizeReached,
 );
 
 export const selectStatementInsightDetails = createSelector(

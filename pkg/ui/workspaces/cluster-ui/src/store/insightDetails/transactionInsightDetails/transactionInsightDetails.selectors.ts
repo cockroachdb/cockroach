@@ -29,3 +29,8 @@ export const selectTransactionInsightDetailsError = createSelector(
   selectTransactionInsightDetailsState,
   state => state?.lastError,
 );
+
+export const selectTransactionInsightDetailsMaxSizeReached = createSelector(
+  selectTransactionInsightDetailsState,
+  state => state?.maxSizeReached,
+);

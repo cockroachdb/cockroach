@@ -16,12 +16,14 @@ import {
   TransactionInsightEventDetailsRequest,
   TransactionInsightEventDetailsResponse,
 } from "src/api/insightsApi";
+import { SqlApiResponse } from "src/api";
 
 export type TransactionInsightDetailsState = {
   data: TransactionInsightEventDetailsResponse | null;
   lastUpdated: Moment | null;
   lastError: Error;
   valid: boolean;
+  maxSizeReached: boolean;
 };
 
 const txnInitialState: TransactionInsightDetailsState = {
@@ -47,11 +49,11 @@ const transactionInsightDetailsSlice = createSlice({
   reducers: {
     received: (
       state,
-      action: PayloadAction<TransactionInsightEventDetailsResponse>,
+      action: PayloadAction<SqlApiResponse<TransactionInsightEventDetailsResponse>>,
     ) => {
-      if (action?.payload?.executionID) {
-        state.cachedData[action.payload.executionID] = {
-          data: action.payload,
+      if (action?.payload?.results?.executionID) {
+        state.cachedData[action.payload.results.executionID] = {
+          data: action.payload.results,
           valid: true,
           lastError: null,
           lastUpdated: moment.utc(),
@@ -64,6 +66,7 @@ const transactionInsightDetailsSlice = createSlice({
         valid: false,
         lastError: action?.payload?.err,
         lastUpdated: null,
+        maxSizeReached: false,
       };
     },
     invalidated: (state, action: PayloadAction<{ key: string }>) => {
