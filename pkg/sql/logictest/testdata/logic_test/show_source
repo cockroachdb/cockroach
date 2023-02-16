@@ -84,6 +84,7 @@ idle_session_timeout                                  0
 index_join_streamer_batch_size                        8.0 MiB
 index_recommendations_enabled                         off
 inject_retry_errors_enabled                           off
+inject_retry_errors_on_commit_enabled                 off
 integer_datetimes                                     on
 intervalstyle                                         postgres
 is_superuser                                          on
