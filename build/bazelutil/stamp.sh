@@ -41,15 +41,6 @@ else
     shift 1
 fi
 
-# Handle build-tag.
-if [ -z "${1+x}" ]
-then
-    BUILD_TAG=$(git describe --tags --dirty --match=v[0-9]* 2> /dev/null || git rev-parse --short HEAD;)
-else
-    BUILD_TAG="$1"
-    shift 1
-fi
-
 # Handle build-type.
 if [ -z "${1+x}" ]
 then
@@ -61,7 +52,7 @@ fi
 
 if [ "$BUILD_TYPE" = "release" ]
 then
-    CRASH_REPORT_ENV="$BUILD_TAG"
+    CRASH_REPORT_ENV=$(cat ./pkg/build/version.txt)
 else
     CRASH_REPORT_ENV="development"
 fi
