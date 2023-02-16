@@ -2610,6 +2610,7 @@ idle_session_timeout                                  0                   NULL  
 index_join_streamer_batch_size                        8.0 MiB             NULL      NULL        NULL        string
 index_recommendations_enabled                         off                 NULL      NULL        NULL        string
 inject_retry_errors_enabled                           off                 NULL      NULL        NULL        string
+inject_retry_errors_on_commit_enabled                 off                 NULL      NULL        NULL        string
 integer_datetimes                                     on                  NULL      NULL        NULL        string
 intervalstyle                                         postgres            NULL      NULL        NULL        string
 is_superuser                                          on                  NULL      NULL        NULL        string
@@ -2754,6 +2755,7 @@ idle_session_timeout                                  0                   NULL  
 index_join_streamer_batch_size                        8.0 MiB             NULL  user     NULL      8.0 MiB             8.0 MiB
 index_recommendations_enabled                         off                 NULL  user     NULL      on                  on
 inject_retry_errors_enabled                           off                 NULL  user     NULL      off                 off
+inject_retry_errors_on_commit_enabled                 off                 NULL  user     NULL      off                 off
 integer_datetimes                                     on                  NULL  user     NULL      on                  on
 intervalstyle                                         postgres            NULL  user     NULL      postgres            postgres
 is_superuser                                          on                  NULL  user     NULL      on                  on
@@ -2896,6 +2898,7 @@ idle_session_timeout                                  NULL    NULL     NULL     
 index_join_streamer_batch_size                        NULL    NULL     NULL     NULL        NULL
 index_recommendations_enabled                         NULL    NULL     NULL     NULL        NULL
 inject_retry_errors_enabled                           NULL    NULL     NULL     NULL        NULL
+inject_retry_errors_on_commit_enabled                 NULL    NULL     NULL     NULL        NULL
 integer_datetimes                                     NULL    NULL     NULL     NULL        NULL
 intervalstyle                                         NULL    NULL     NULL     NULL        NULL
 is_superuser                                          NULL    NULL     NULL     NULL        NULL

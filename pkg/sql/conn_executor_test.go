@@ -1517,6 +1517,71 @@ func TestInjectRetryErrors(t *testing.T) {
 	})
 }
 
+func TestInjectRetryOnCommitErrors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	params := base.TestServerArgs{}
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	defer db.Close()
+
+	_, err := db.Exec("SET inject_retry_errors_on_commit_enabled = 'true'")
+	require.NoError(t, err)
+
+	t.Run("test_injection_failure_on_commit_with_savepoints", func(t *testing.T) {
+		// The crdb.ExecuteTx wrapper uses SAVEPOINTs to retry the transaction,
+		// so it will automatically succeed.
+		var txRes, attemptCount int
+		err = crdb.ExecuteTx(ctx, db, nil, func(tx *gosql.Tx) error {
+			attemptCount++
+			txErr := tx.QueryRow("SELECT $1::int8", attemptCount).Scan(&txRes)
+			require.NoError(t, txErr)
+			if commitErr := tx.Commit(); commitErr != nil {
+				return commitErr
+			}
+			return nil
+		})
+		require.NoError(t, err)
+		// numTxnRetryErrors is set to 3 in conn_executor_exec, so the 4th attempt
+		// should be the one that succeeds.
+		require.Equal(t, 4, txRes)
+	})
+
+	t.Run("test_injection_failure_on_commit_without_savepoints", func(t *testing.T) {
+		var txRes int
+		for attemptCount := 1; attemptCount <= 10; attemptCount++ {
+			tx, err := db.BeginTx(ctx, nil)
+			require.NoError(t, err)
+
+			// Verify that SHOW is exempt from error injection.
+			var s string
+			err = tx.QueryRow("SHOW inject_retry_errors_on_commit_enabled").Scan(&s)
+			require.NoError(t, err)
+
+			if attemptCount == 5 {
+				_, err = tx.Exec("SET inject_retry_errors_on_commit_enabled = 'false'")
+				require.NoError(t, err)
+			}
+
+			err = tx.QueryRow("SELECT $1::int8", attemptCount).Scan(&txRes)
+			require.NoError(t, err)
+			err = tx.Commit()
+			if attemptCount >= 5 {
+				require.NoError(t, err)
+				break
+			} else {
+				pqErr := (*pq.Error)(nil)
+				require.ErrorAs(t, err, &pqErr)
+				require.Equal(t, "40001", string(pqErr.Code), "expected a transaction retry error code. got %v", pqErr)
+				// We should not expect a rollback on commit errors.
+			}
+		}
+		require.Equal(t, 5, txRes)
+	})
+}
+
 func TestTrackOnlyUserOpenTransactionsAndActiveStatements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
