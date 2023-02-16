@@ -552,40 +552,45 @@ func (s *TestState) GetQualifiedTableNameByID(
 }
 
 func (s *TestState) getQualifiedObjectNameByID(id descpb.ID) (*tree.TableName, error) {
-	db, sc, obj, err := s.getQualifiedNameComponentsByID(id)
+	prefix, obj, err := s.getQualifiedNameComponentsByID(id)
 	if err != nil {
 		return nil, err
 	}
-	return tree.NewTableNameWithSchema(tree.Name(db), tree.Name(sc), tree.Name(obj)), nil
+	return tree.NewTableNameWithSchema(prefix.CatalogName, prefix.SchemaName, obj), nil
 }
 
 func (s *TestState) GetQualifiedFunctionNameByID(
 	ctx context.Context, id int64,
 ) (*tree.FunctionName, error) {
-	db, sc, obj, err := s.getQualifiedNameComponentsByID(descpb.ID(id))
+	prefix, obj, err := s.getQualifiedNameComponentsByID(descpb.ID(id))
 	if err != nil {
 		return nil, err
 	}
-	fn := tree.MakeQualifiedFunctionName(db, sc, obj)
+	fn := tree.MakeQualifiedFunctionName(string(prefix.CatalogName), string(prefix.SchemaName), string(obj))
 	return &fn, nil
 }
 
 func (s *TestState) getQualifiedNameComponentsByID(
 	id descpb.ID,
-) (dbName string, scName string, objName string, err error) {
+) (prefix tree.ObjectNamePrefix, objName tree.Name, err error) {
 	obj, err := s.mustReadImmutableDescriptor(id)
 	if err != nil {
-		return "", "", "", err
+		return tree.ObjectNamePrefix{}, "", err
 	}
 	db, err := s.mustReadImmutableDescriptor(obj.GetParentID())
 	if err != nil {
-		return "", "", "", errors.Wrapf(err, "parent database for object #%d", id)
+		return tree.ObjectNamePrefix{}, "", errors.Wrapf(err, "parent database for object #%d", id)
 	}
 	sc, err := s.mustReadImmutableDescriptor(obj.GetParentSchemaID())
 	if err != nil {
-		return "", "", "", errors.Wrapf(err, "parent schema for object #%d", id)
+		return tree.ObjectNamePrefix{}, "", errors.Wrapf(err, "parent schema for object #%d", id)
 	}
-	return db.GetName(), sc.GetName(), obj.GetName(), nil
+	return tree.ObjectNamePrefix{
+		CatalogName:     tree.Name(db.GetName()),
+		SchemaName:      tree.Name(sc.GetName()),
+		ExplicitCatalog: true,
+		ExplicitSchema:  true,
+	}, tree.Name(obj.GetName()), nil
 }
 
 // CurrentDatabase implements the scbuild.CatalogReader interface.

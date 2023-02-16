@@ -73,6 +73,7 @@ const (
 	restoreOptIntoDB                    = "into_db"
 	restoreOptSkipMissingFKs            = "skip_missing_foreign_keys"
 	restoreOptSkipMissingSequences      = "skip_missing_sequences"
+	restoreOptSkipMissingUDFs           = "skip_missing_udfs"
 	restoreOptSkipMissingSequenceOwners = "skip_missing_sequence_owners"
 	restoreOptSkipMissingViews          = "skip_missing_views"
 	restoreOptSkipLocalitiesCheck       = "skip_localities_check"
@@ -187,6 +188,22 @@ func allocateDescriptorRewrites(
 					return nil, errors.Errorf(
 						"cannot restore table %q without referenced table %d (or %q option)",
 						table.Name, fk.ReferencedTableID, restoreOptSkipMissingFKs,
+					)
+				}
+			}
+		}
+
+		// Check that functions referenced in check constraints exist.
+		fnIDs, err := table.GetAllReferencedFunctionIDs()
+		if err != nil {
+			return nil, err
+		}
+		for _, fnID := range fnIDs.Ordered() {
+			if _, ok := functionsByID[fnID]; !ok {
+				if !opts.SkipMissingUDFs {
+					return nil, errors.Errorf(
+						"cannot restore table %q without referenced function %d (or %q option)",
+						table.Name, fnID, restoreOptSkipMissingUDFs,
 					)
 				}
 			}
@@ -869,6 +886,7 @@ func resolveOptionsForRestoreJobDescription(
 		SkipMissingSequences:      opts.SkipMissingSequences,
 		SkipMissingSequenceOwners: opts.SkipMissingSequenceOwners,
 		SkipMissingViews:          opts.SkipMissingViews,
+		SkipMissingUDFs:           opts.SkipMissingUDFs,
 		Detached:                  opts.Detached,
 		SchemaOnly:                opts.SchemaOnly,
 		VerifyData:                opts.VerifyData,

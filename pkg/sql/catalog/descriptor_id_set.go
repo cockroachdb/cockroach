@@ -117,6 +117,11 @@ func (s *ConstraintIDSet) Len() int {
 	return s.set.Len()
 }
 
+// Contains checks if the set contains the given id.
+func (s *ConstraintIDSet) Contains(id descpb.ConstraintID) bool {
+	return s.set.Contains(int(id))
+}
+
 // Ordered returns all ids as a ordered slice.
 func (s *ConstraintIDSet) Ordered() []descpb.ConstraintID {
 	if s.Empty() {

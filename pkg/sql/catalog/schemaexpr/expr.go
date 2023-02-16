@@ -606,9 +606,9 @@ func maybeReplaceUDFNameWithOIDReferenceInTypedExpr(
 	return newExpr.(tree.TypedExpr), nil
 }
 
-// GetUdfIDs extracts all UDF descriptor ids from the given expression,
+// GetUDFIDs extracts all UDF descriptor ids from the given expression,
 // assuming that the UDF names has been replaced with OID references.
-func GetUdfIDs(e tree.Expr) (catalog.DescriptorIDSet, error) {
+func GetUDFIDs(e tree.Expr) (catalog.DescriptorIDSet, error) {
 	var fnIDs catalog.DescriptorIDSet
 	if _, err := tree.SimpleVisit(e, func(ckExpr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
 		switch t := ckExpr.(type) {

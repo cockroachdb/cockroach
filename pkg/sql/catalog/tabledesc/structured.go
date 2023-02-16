@@ -385,7 +385,7 @@ func (desc *wrapper) GetAllReferencedFunctionIDs() (catalog.DescriptorIDSet, err
 // interface.
 func (desc *wrapper) GetAllReferencedFunctionIDsInConstraint(
 	cstID descpb.ConstraintID,
-) (catalog.DescriptorIDSet, error) {
+) (fnIDs catalog.DescriptorIDSet, err error) {
 	c := catalog.FindConstraintByID(desc, cstID)
 	ck := c.AsCheck()
 	if ck == nil {
@@ -395,7 +395,7 @@ func (desc *wrapper) GetAllReferencedFunctionIDsInConstraint(
 	if err != nil {
 		return catalog.DescriptorIDSet{}, err
 	}
-	ret, err := schemaexpr.GetUdfIDs(ckExpr)
+	ret, err := schemaexpr.GetUDFIDs(ckExpr)
 	if err != nil {
 		return catalog.DescriptorIDSet{}, err
 	}

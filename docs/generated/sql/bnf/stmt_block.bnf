@@ -1360,6 +1360,7 @@ unreserved_keyword ::=
 	| 'SKIP_MISSING_SEQUENCES'
 	| 'SKIP_MISSING_SEQUENCE_OWNERS'
 	| 'SKIP_MISSING_VIEWS'
+	| 'SKIP_MISSING_UDFS'
 	| 'SNAPSHOT'
 	| 'SPLIT'
 	| 'SQL'
@@ -2615,6 +2616,7 @@ restore_options ::=
 	| 'SKIP_MISSING_SEQUENCES'
 	| 'SKIP_MISSING_SEQUENCE_OWNERS'
 	| 'SKIP_MISSING_VIEWS'
+	| 'SKIP_MISSING_UDFS'
 	| 'DETACHED'
 	| 'SKIP_LOCALITIES_CHECK'
 	| 'DEBUG_PAUSE_ON' '=' string_or_placeholder
@@ -3438,6 +3440,7 @@ bare_label_keywords ::=
 	| 'TRANSFORM'
 	| 'VOLATILE'
 	| 'SETOF'
+	| 'SKIP_MISSING_VIEWS'
 
 opt_col_def_list_no_types ::=
 	'(' col_def_list_no_types ')'

@@ -583,7 +583,7 @@ func (b *builderState) WrapExpression(tableID catid.DescID, expr tree.Expr) *scp
 		}
 	}
 	// Collect function IDs
-	fnIDs, err := schemaexpr.GetUdfIDs(expr)
+	fnIDs, err := schemaexpr.GetUDFIDs(expr)
 	if err != nil {
 		panic(err)
 	}
