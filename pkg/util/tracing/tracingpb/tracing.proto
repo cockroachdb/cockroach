@@ -10,7 +10,7 @@
 
 syntax = "proto3";
 package cockroach.util.tracing.tracingpb;
-option go_package = "tracingpb";
+option go_package = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb";
 
 import "gogoproto/gogo.proto";
 

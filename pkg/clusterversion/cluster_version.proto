@@ -10,7 +10,7 @@
 
 syntax = "proto3";
 package cockroach.clusterversion;
-option go_package = "clusterversion";
+option go_package = "github.com/cockroachdb/cockroach/pkg/clusterversion";
 
 import "roachpb/metadata.proto";
 import "gogoproto/gogo.proto";

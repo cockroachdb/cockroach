@@ -10,7 +10,7 @@
 
 syntax = "proto3";
 package cockroach.storage.enginepb;
-option go_package = "enginepb";
+option go_package = "github.com/cockroachdb/cockroach/pkg/storage/enginepb";
 
 import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";

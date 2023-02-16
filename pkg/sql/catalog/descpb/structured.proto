@@ -11,7 +11,7 @@
 // Cannot be proto3 because we use nullable primitives.
 syntax = "proto2";
 package cockroach.sql.sqlbase;
-option go_package = "descpb";
+option go_package = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb";
 
 import "config/zonepb/zone.proto";
 import "util/hlc/timestamp.proto";

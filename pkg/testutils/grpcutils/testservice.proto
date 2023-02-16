@@ -10,7 +10,7 @@
 
 syntax = "proto3";
 package cockroach.testutils.grpcutils;
-option go_package = "grpcutils";
+option go_package = "github.com/cockroachdb/cockroach/pkg/testutils/grpcutils";
 
 import "google/protobuf/any.proto";
 

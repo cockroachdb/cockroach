@@ -10,7 +10,7 @@
 
 syntax = "proto3";
 package cockroach.geo.geoindex;
-option go_package = "geoindex";
+option go_package = "github.com/cockroachdb/cockroach/pkg/geo/geoindex";
 
 import "gogoproto/gogo.proto";
 

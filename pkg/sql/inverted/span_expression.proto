@@ -10,7 +10,7 @@
 
 syntax = "proto3";
 package cockroach.sql.inverted;
-option go_package = "inverted";
+option go_package = "github.com/cockroachdb/cockroach/pkg/sql/inverted";
 
 import "gogoproto/gogo.proto";
 

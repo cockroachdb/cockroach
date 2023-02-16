@@ -10,7 +10,7 @@
 
 syntax = "proto3";
 package cockroach.util.duration;
-option go_package = "duration";
+option go_package = "github.com/cockroachdb/cockroach/pkg/util/duration";
 
 // IntervalStyle matches the PostgreSQL IntervalStyle session parameter.
 enum IntervalStyle {

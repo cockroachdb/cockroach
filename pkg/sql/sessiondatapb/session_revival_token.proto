@@ -10,7 +10,7 @@
 
 syntax = "proto3";
 package cockroach.sql.sessiondatapb;
-option go_package = "sessiondatapb";
+option go_package = "github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb";
 
 import "google/protobuf/timestamp.proto";
 

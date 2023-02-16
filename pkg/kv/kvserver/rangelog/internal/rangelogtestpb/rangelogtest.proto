@@ -10,7 +10,7 @@
 
 syntax = "proto3";
 package cockroach.kv.kvserver.rangelog.rangelogtest;
-option go_package = "rangelogtestpb";
+option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangelog/internal/rangelogtestpb";
 
 import "kv/kvserver/kvserverpb/range_log.proto";
 
