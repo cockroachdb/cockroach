@@ -76,7 +76,19 @@ case "${cmd}" in
     fi
 
     # SSH into the node, since that's probably why we started it.
-    $0 ssh
+    echo "****************************************"
+    echo "Hint: you should also be able to directly invoke:"
+    echo "ssh ${FQNAME}"
+    echo "  or"
+    echo "mosh ${FQNAME}"
+    echo "instead of '$0 ssh'."
+    echo
+    if [ -z "${GCEWORKER_START_SSH_COMMAND-}" ]; then
+	echo "Connecting via SSH."
+	echo "Set GCEWORKER_START_SSH_COMMAND=mosh to use mosh instead"
+    fi
+    echo "****************************************"
+    $0 ${GCEWORKER_START_SSH_COMMAND-ssh}
     ;;
     stop)
     read -r -p "This will stop the VM. Are you sure? [yes] " response
@@ -135,13 +147,6 @@ case "${cmd}" in
     exit ${status}
     ;;
     ssh)
-    echo "****************************************"
-    echo "Hint: you should also be able to directly invoke:"
-    echo "ssh ${FQNAME}"
-    echo "  or"
-    echo "mosh ${FQNAME}"
-    echo "instead of '$0 ssh'."
-    echo "****************************************"
     gcloud compute ssh "${NAME}" --ssh-flag="-A" "$@"
     ;;
     mosh)
