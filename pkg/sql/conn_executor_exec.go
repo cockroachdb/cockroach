@@ -936,6 +936,14 @@ func (ex *connExecutor) commitSQLTransaction(
 	ex.extraTxnState.idleLatency += ex.statsCollector.PhaseTimes().
 		GetIdleLatency(ex.statsCollector.PreviousPhaseTimes())
 
+	isSetOrShow := ast.StatementTag() == "SET" || ast.StatementTag() == "SHOW"
+	if ex.sessionData().InjectRetryErrorsOnCommitEnabled && !isSetOrShow {
+		if ex.planner.Txn().Sender().TxnStatus() == roachpb.PENDING {
+			retryErr := ex.state.mu.txn.GenerateForcedRetryableError(
+				ctx, "injected by `inject_retry_errors_on_commit_enabled` session variable")
+			return ex.makeErrEvent(retryErr, ast)
+		}
+	}
 	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionStartTransactionCommit, timeutil.Now())
 	if err := commitFn(ctx); err != nil {
 		if descs.IsTwoVersionInvariantViolationError(err) {

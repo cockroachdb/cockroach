@@ -329,6 +329,10 @@ message LocalOnlySessionData {
   // DeclareCursorStatementTimeoutEnabled controls whether statement timeouts
   // apply during DECLARE CURSOR.
   bool declare_cursor_statement_timeout_enabled = 90;
+  // InjectRetryErrorsOnCommitEnabled causes statements inside an explicit
+  // transaction to return a transaction retry error just before transcation commit.
+  // It is intended for developers to test their app's retry logic.
+  bool inject_retry_errors_on_commit_enabled = 91;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
