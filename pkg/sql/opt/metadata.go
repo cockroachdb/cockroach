@@ -16,6 +16,7 @@ import (
 	"math/bits"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -120,6 +121,16 @@ type Metadata struct {
 	// withBindings store bindings for relational expressions inside With or
 	// mutation operators, used to determine the logical properties of WithScan.
 	withBindings map[WithID]Expr
+
+	// currentDatabase tracks the database that was used to resolve the query. It
+	// may be unset if the query's resolution does not depend on the current
+	// database.
+	currentDatabase string
+
+	// databaseIsUnset distinguishes between the case when the current database is
+	// not used to resolve any database objects and the case when the current
+	// database is unset.
+	databaseIsUnset bool
 
 	// NOTE! When adding fields here, update Init (if reusing allocated
 	// data structures is desired), CopyFrom and TestMetadata.
@@ -246,6 +257,8 @@ func (md *Metadata) CopyFrom(from *Metadata, copyScalarFn func(Expr) Expr) {
 	md.deps = append(md.deps, from.deps...)
 	md.views = append(md.views, from.views...)
 	md.currUniqueID = from.currUniqueID
+	md.currentDatabase = from.currentDatabase
+	md.databaseIsUnset = from.databaseIsUnset
 
 	// We cannot copy the bound expressions; they must be rebuilt in the new memo.
 	md.withBindings = nil
@@ -292,20 +305,52 @@ func (md *Metadata) AddDependency(name MDDepName, ds cat.DataSource, priv privil
 // perform KV operations on behalf of the transaction associated with the
 // provided catalog, and those errors are required to be propagated.
 func (md *Metadata) CheckDependencies(
-	ctx context.Context, catalog cat.Catalog,
+	ctx context.Context, evalCtx *eval.Context, optCatalog cat.Catalog,
 ) (upToDate bool, err error) {
+	handleDescError := func(err error) error {
+		// Handle when the object no longer exists.
+		switch pgerror.GetPGCode(err) {
+		case pgcode.UndefinedObject, pgcode.UndefinedTable, pgcode.UndefinedDatabase,
+			pgcode.UndefinedSchema, pgcode.UndefinedFunction, pgcode.InvalidName,
+			pgcode.InvalidSchemaName, pgcode.InvalidCatalogName:
+			return nil
+		}
+		if errors.Is(err, catalog.ErrDescriptorDropped) {
+			return nil
+		}
+		return err
+	}
+	if md.databaseIsUnset {
+		return false, nil
+	}
+	if md.currentDatabase != "" && evalCtx.SessionData().Database != md.currentDatabase {
+		// The database has been switched, and the evaluation of the query is
+		// sensitive to this.
+		return false, nil
+	}
+	for _, schema := range md.schemas {
+		// Ensure that each schema referenced in the query resolves to the same,
+		// unchanged object.
+		toCheck, _, err := optCatalog.ResolveSchema(ctx, cat.Flags{}, schema.Name())
+		if err != nil {
+			return false, handleDescError(err)
+		}
+		if !toCheck.Equals(schema) {
+			return false, nil
+		}
+	}
 	for i := range md.deps {
 		name := &md.deps[i].name
 		var toCheck cat.DataSource
 		var err error
 		if name.byID != 0 {
-			toCheck, _, err = catalog.ResolveDataSourceByID(ctx, cat.Flags{}, name.byID)
+			toCheck, _, err = optCatalog.ResolveDataSourceByID(ctx, cat.Flags{}, name.byID)
 		} else {
 			// Resolve data source object.
-			toCheck, _, err = catalog.ResolveDataSource(ctx, cat.Flags{}, &name.byName)
+			toCheck, _, err = optCatalog.ResolveDataSource(ctx, cat.Flags{}, &name.byName)
 		}
 		if err != nil {
-			return false, err
+			return false, handleDescError(err)
 		}
 
 		// Ensure that it's the same object, and there were no schema or table
@@ -321,7 +366,7 @@ func (md *Metadata) CheckDependencies(
 			// privileges do not need to be checked). Ignore the "zero privilege".
 			priv := privilege.Kind(bits.TrailingZeros32(uint32(privs)))
 			if priv != 0 {
-				if err := catalog.CheckPrivilege(ctx, toCheck, priv); err != nil {
+				if err := optCatalog.CheckPrivilege(ctx, toCheck, priv); err != nil {
 					return false, err
 				}
 			}
@@ -332,13 +377,9 @@ func (md *Metadata) CheckDependencies(
 	}
 	// Check that all of the user defined types present have not changed.
 	for _, typ := range md.AllUserDefinedTypes() {
-		toCheck, err := catalog.ResolveTypeByOID(ctx, typ.Oid())
+		toCheck, err := optCatalog.ResolveTypeByOID(ctx, typ.Oid())
 		if err != nil {
-			// Handle when the type no longer exists.
-			if pgerror.GetPGCode(err) == pgcode.UndefinedObject {
-				return false, nil
-			}
-			return false, err
+			return false, handleDescError(err)
 		}
 		if typ.TypeMeta.Version != toCheck.TypeMeta.Version {
 			return false, nil
@@ -347,8 +388,26 @@ func (md *Metadata) CheckDependencies(
 	return true, nil
 }
 
+// SetCurrentDatabase records the current database that was used to resolve the
+// query. It should be used when an object in the query is not qualified by
+// database, since resolution of that object will change if the current database
+// changes.
+func (md *Metadata) SetCurrentDatabase(currentDatabase string) {
+	if currentDatabase == "" {
+		// This is possible in tests.
+		md.databaseIsUnset = true
+	}
+	md.currentDatabase = currentDatabase
+}
+
 // AddSchema indexes a new reference to a schema used by the query.
 func (md *Metadata) AddSchema(sch cat.Schema) SchemaID {
+	for i := range md.schemas {
+		if md.schemas[i] == sch {
+			// This is a duplicate.
+			return SchemaID(i + 1)
+		}
+	}
 	md.schemas = append(md.schemas, sch)
 	return SchemaID(len(md.schemas))
 }

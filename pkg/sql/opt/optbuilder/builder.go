@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -137,6 +138,8 @@ type Builder struct {
 	schemaDeps     opt.SchemaDeps
 	schemaTypeDeps opt.SchemaTypeDeps
 
+	resolverHelper optTrackingResolverHelper
+
 	// If set, the data source names in the AST are rewritten to the fully
 	// qualified version (after resolution). Used to construct the strings for
 	// CREATE VIEW and CREATE TABLE AS queries.
@@ -213,11 +216,22 @@ func (b *Builder) Build() (err error) {
 	existingResolver := b.semaCtx.TypeResolver
 	// Ensure that the original TypeResolver is reset after.
 	defer func() { b.semaCtx.TypeResolver = existingResolver }()
+	b.resolverHelper = optTrackingResolverHelper{
+		metadata:   b.factory.Metadata(),
+		optCatalog: b.catalog,
+		evalCtx:    b.evalCtx,
+	}
 	typeTracker := &optTrackingTypeResolver{
-		res:      b.semaCtx.TypeResolver,
-		metadata: b.factory.Metadata(),
+		res:                       b.semaCtx.TypeResolver,
+		optTrackingResolverHelper: &b.resolverHelper,
 	}
 	b.semaCtx.TypeResolver = typeTracker
+
+	if b.evalCtx.SessionData().Database == "" {
+		// It is possible (though unsafe) to set the database to the empty string.
+		// This is done in tests in some places.
+		b.factory.Metadata().SetCurrentDatabase("" /* currentDatabase */)
+	}
 
 	// Special case for CannedOptPlan.
 	if canned, ok := b.stmt.(*tree.CannedOptPlan); ok {
@@ -491,11 +505,51 @@ func (b *Builder) maybeTrackUserDefinedTypeDepsForViews(texpr tree.TypedExpr) {
 	}
 }
 
+// optTrackingResolverHelper wraps the fields and logic common to resolving
+// schema objects (types, functions, and data sources).
+type optTrackingResolverHelper struct {
+	metadata   *opt.Metadata
+	optCatalog cat.Catalog
+	evalCtx    *eval.Context
+}
+
+// trackObjectPath adds the schema of the given object to the metadata
+// dependency tracking.
+func (o *optTrackingResolverHelper) trackObjectPath(
+	ctx context.Context, name *tree.UnresolvedObjectName,
+) error {
+	if o.evalCtx.SessionData().Database == "" {
+		// This can happen during testing. The query will not be cached, so it is
+		// not necessary to track the schema.
+		return nil
+	}
+	if _, ok := catconstants.VirtualSchemaNames[name.Schema()]; ok {
+		// Ignore virtual schemas.
+		return nil
+	}
+	schemaName := cat.SchemaName{
+		CatalogName:     tree.Name(name.Catalog()),
+		SchemaName:      tree.Name(name.Schema()),
+		ExplicitCatalog: name.HasExplicitCatalog(),
+		ExplicitSchema:  name.HasExplicitSchema(),
+	}
+	schema, schemaName, err := o.optCatalog.ResolveSchema(ctx, cat.Flags{}, &schemaName)
+	if err != nil {
+		return err
+	}
+	o.metadata.AddSchema(schema)
+	if !schemaName.ExplicitCatalog {
+		// Resolution of this object depends on the current database.
+		o.metadata.SetCurrentDatabase(o.evalCtx.SessionData().Database)
+	}
+	return nil
+}
+
 // optTrackingTypeResolver is a wrapper around a TypeReferenceResolver that
 // remembers all of the resolved types in the provided Metadata.
 type optTrackingTypeResolver struct {
-	res      tree.TypeReferenceResolver
-	metadata *opt.Metadata
+	res tree.TypeReferenceResolver
+	*optTrackingResolverHelper
 }
 
 // ResolveType implements the TypeReferenceResolver interface.
@@ -507,6 +561,9 @@ func (o *optTrackingTypeResolver) ResolveType(
 		return nil, err
 	}
 	o.metadata.AddUserDefinedType(typ)
+	if err = o.trackObjectPath(ctx, name); err != nil {
+		return nil, err
+	}
 	return typ, nil
 }
 
