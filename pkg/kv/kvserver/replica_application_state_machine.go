@@ -14,7 +14,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/gob"
-	io "io"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -165,6 +166,33 @@ func init() {
 	gob.Register(errorspb.EncodedWrapper{})
 }
 
+func dumpCmdInfo(ctx context.Context, eng storage.Engine, cmd *replicatedCmd) string {
+	if false {
+		// NB: this doesn't really work, on the decode path you get:
+		// gob: errorspb.EncodedError_Leaf is not assignable to type errorspb.isEncodedError_Error
+		// probably it's flattening the pointer when decoding and isn't
+		// smart enough to try to assign *EncodedError_Leaf instead
+		// (which is what we need to assign here).
+		var buf bytes.Buffer
+		enc := gob.NewEncoder(&buf)
+		dir := filepath.Join(eng.GetAuxiliaryDir(), "assertion")
+		_ = os.MkdirAll(dir, 0766)
+		f, err := os.CreateTemp(dir, "replicatedCmd")
+		if err != nil {
+			panic(err)
+		}
+		defer f.Close()
+		if err := enc.EncodeValue(reflect.ValueOf(cmd)); err != nil {
+			log.Warningf(ctx, "%s", err)
+		} else {
+			if _, err := io.Copy(f, &buf); err != nil {
+				panic(err)
+			}
+		}
+	}
+	return pretty.Sprint(cmd)
+}
+
 // ApplySideEffects implements the apply.StateMachine interface. The method
 // handles the third phase of applying a command to the replica state machine.
 //
@@ -238,24 +266,9 @@ func (sm *replicaStateMachine) ApplySideEffects(
 			sm.r.handleReadWriteLocalEvalResult(ctx, *cmd.localResult)
 		}
 
-		if higherReproposalsExist := cmd.proposal.Supersedes(cmd.Cmd.MaxLeaseIndex); higherReproposalsExist {
-			var buf bytes.Buffer
-			enc := gob.NewEncoder(&buf)
-			dir := filepath.Join(sm.r.store.TODOEngine().GetAuxiliaryDir(), "assertion")
-			_ = os.MkdirAll(dir, 0766)
-			f, err := os.CreateTemp(dir, "replicatedCmd")
-			if err != nil {
-				panic(err)
-			}
-			defer f.Close()
-			if err := enc.EncodeValue(reflect.ValueOf(cmd)); err != nil {
-				log.Warningf(ctx, "%s", err)
-			} else {
-				if _, err := io.Copy(f, &buf); err != nil {
-					panic(err)
-				}
-			}
+		log.Infof(ctx, "TBG %s", dumpCmdInfo(ctx, sm.r.store.TODOEngine(), cmd))
 
+		if higherReproposalsExist := cmd.proposal.Supersedes(cmd.Cmd.MaxLeaseIndex); higherReproposalsExist {
 			// If the command wasn't rejected, we just applied it and no higher
 			// reproposal must exist (since that one may also apply).
 			//
@@ -270,8 +283,9 @@ func (sm *replicaStateMachine) ApplySideEffects(
 			// initially.
 			//
 			// [^1]: see (*replicaDecoder).retrieveLocalProposals()
-			log.Fatalf(ctx, "finishing a proposal at LAI %d with forced error %s and outstanding reproposal at a higher max lease index:\n\n%+v",
-				cmd.LeaseIndex, cmd.ForcedError, cmd.proposal)
+			dumpCmdInfo(ctx, sm.r.store.TODOEngine(), cmd)
+			log.Fatalf(ctx, "finishing a proposal at idx %d LAI %d with forced error %s and outstanding reproposal at a higher max lease index:\n\n%+v",
+				cmd.Index(), cmd.LeaseIndex, cmd.ForcedError, pretty.Sprint(cmd.proposal))
 		}
 		if !cmd.Rejected() && cmd.proposal.applied {
 			// If the command already applied then we shouldn't be "finishing" its
