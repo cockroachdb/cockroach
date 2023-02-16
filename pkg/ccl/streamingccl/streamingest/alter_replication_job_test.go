@@ -359,6 +359,7 @@ func TestTenantStatusWithFutureCutoverTime(t *testing.T) {
 	// Cutover to a time far in the future, to make sure we see the pending-cutover state.
 	var cutoverTime time.Time
 	c.DestSysSQL.QueryRow(t, "SELECT clock_timestamp()").Scan(&cutoverTime)
+	//lint:ignore SA4017 ignore doesn't have side effects
 	cutoverTime.Add(time.Hour * 24)
 	c.DestSysSQL.Exec(c.T, `ALTER TENANT $1 COMPLETE REPLICATION TO SYSTEM TIME $2::string`,
 		args.DestTenantName, cutoverTime)

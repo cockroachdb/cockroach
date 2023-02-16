@@ -850,6 +850,7 @@ func TestLogSlowAcquisition(t *testing.T) {
 		})
 	}
 	acq1, err := qp.Acquire(ctx, 1)
+	require.NoError(t, err)
 	acq2, err := qp.Acquire(ctx, 8)
 	require.NoError(t, err)
 	var newAck *quotapool.IntAlloc

@@ -1038,6 +1038,7 @@ func (s *opTestInput) Next() coldata.Batch {
 						setColVal(vec, outputIdx, j, s.evalCtx)
 					case types.TimestampTZFamily:
 						t := timeutil.Unix(rng.Int63n(2000000000), rng.Int63n(1000000))
+						//lint:ignore SA4017 ignore doesn't have side effects
 						t.Round(tree.TimeFamilyPrecisionToRoundDuration(vec.Type().Precision()))
 						setColVal(vec, outputIdx, t, s.evalCtx)
 					case typeconv.DatumVecCanonicalTypeFamily:

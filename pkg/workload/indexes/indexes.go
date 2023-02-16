@@ -12,6 +12,7 @@ package indexes
 
 import (
 	"context"
+	cryptorand "crypto/rand"
 	gosql "database/sql"
 	"fmt"
 	"math"
@@ -195,7 +196,9 @@ type indexesOp struct {
 
 func (o *indexesOp) run(ctx context.Context) error {
 	keyLo := o.rand.Uint64() % o.config.cycleLength
-	_, _ = o.rand.Read(o.buf[:])
+	if _, err := cryptorand.Read(o.buf[:]); err != nil {
+		return err
+	}
 	args := []interface{}{
 		uuid.FromUint128(uint128.FromInts(0, keyLo)).String(), // key
 		int64(keyLo + 0), // col0

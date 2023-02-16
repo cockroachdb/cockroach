@@ -279,7 +279,7 @@ func (r *testRunner) Run(
 
 	// Seed the default rand source so that different runs get different cluster
 	// IDs.
-	rand.Seed(timeutil.Now().UnixNano())
+	rand.New(rand.NewSource(timeutil.Now().UnixNano())).Seed(timeutil.Now().UnixNano())
 
 	n := len(tests)
 	if n*count < parallelism {

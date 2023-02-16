@@ -12,6 +12,7 @@ package encoding
 
 import (
 	"bytes"
+	cryptorand "crypto/rand"
 	"fmt"
 	"math"
 	"math/rand"
@@ -474,7 +475,7 @@ func TestDecodeInvalid(t *testing.T) {
 func testPeekLength(t *testing.T, encoded []byte) {
 	gLen := rand.Intn(10)
 	garbage := make([]byte, gLen)
-	_, _ = rand.Read(garbage)
+	_, _ = cryptorand.Read(garbage)
 
 	var buf []byte
 	buf = append(buf, encoded...)

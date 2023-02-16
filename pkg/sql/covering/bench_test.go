@@ -24,7 +24,7 @@ func BenchmarkOverlapCoveringMerge(b *testing.B) {
 		name   string
 		inputs []Covering
 	}
-	rand.Seed(0)
+	rand.New(rand.NewSource(0)).Seed(0)
 
 	for _, numLayers := range []int{
 		1,      // single backup

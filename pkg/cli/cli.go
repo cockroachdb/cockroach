@@ -52,7 +52,7 @@ import (
 // abstracted for reuse by duplicated `main` funcs in different distributions.
 func Main() {
 	// Seed the math/rand RNG from crypto/rand.
-	rand.Seed(randutil.NewPseudoSeed())
+	rand.New(rand.NewSource(randutil.NewPseudoSeed())).Seed(randutil.NewPseudoSeed())
 
 	if len(os.Args) == 1 {
 		os.Args = append(os.Args, "help")

@@ -80,6 +80,7 @@ func flattenArgs(args ...[]tree.Datum) [][]tree.Datum {
 	res := make([][]tree.Datum, len(args[0]))
 
 	for i := range args {
+		//lint:ignore S1011 j doesn't exist without the loop
 		for j := range args[i] {
 			res[j] = append(res[j], args[i][j])
 		}

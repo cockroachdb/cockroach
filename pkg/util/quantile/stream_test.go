@@ -112,14 +112,14 @@ func populateStream(s *Stream) []float64 {
 }
 
 func TestTargetedQuery(t *testing.T) {
-	rand.Seed(42)
+	rand.New(rand.NewSource(42)).Seed(42)
 	s := NewTargeted(Targets)
 	a := populateStream(s)
 	verifyPercsWithAbsoluteEpsilon(t, a, s)
 }
 
 func TestTargetedQuerySmallSampleSize(t *testing.T) {
-	rand.Seed(42)
+	rand.New(rand.NewSource(42)).Seed(42)
 	s := NewTargeted(TargetsSmallEpsilon)
 	a := []float64{1, 2, 3, 4, 5}
 	for _, v := range a {
@@ -143,14 +143,14 @@ func TestTargetedQuerySmallSampleSize(t *testing.T) {
 }
 
 func TestLowBiasedQuery(t *testing.T) {
-	rand.Seed(42)
+	rand.New(rand.NewSource(42)).Seed(42)
 	s := NewLowBiased(RelativeEpsilon)
 	a := populateStream(s)
 	verifyLowPercsWithRelativeEpsilon(t, a, s)
 }
 
 func TestHighBiasedQuery(t *testing.T) {
-	rand.Seed(42)
+	rand.New(rand.NewSource(42)).Seed(42)
 	s := NewHighBiased(RelativeEpsilon)
 	a := populateStream(s)
 	verifyHighPercsWithRelativeEpsilon(t, a, s)
@@ -158,7 +158,7 @@ func TestHighBiasedQuery(t *testing.T) {
 
 // BrokenTestTargetedMerge is broken, see Merge doc comment.
 func BrokenTestTargetedMerge(t *testing.T) {
-	rand.Seed(42)
+	rand.New(rand.NewSource(42)).Seed(42)
 	s1 := NewTargeted(Targets)
 	s2 := NewTargeted(Targets)
 	a := populateStream(s1)
@@ -169,7 +169,7 @@ func BrokenTestTargetedMerge(t *testing.T) {
 
 // BrokenTestLowBiasedMerge is broken, see Merge doc comment.
 func BrokenTestLowBiasedMerge(t *testing.T) {
-	rand.Seed(42)
+	rand.New(rand.NewSource(42)).Seed(42)
 	s1 := NewLowBiased(RelativeEpsilon)
 	s2 := NewLowBiased(RelativeEpsilon)
 	a := populateStream(s1)
@@ -180,7 +180,7 @@ func BrokenTestLowBiasedMerge(t *testing.T) {
 
 // BrokenTestHighBiasedMerge is broken, see Merge doc comment.
 func BrokenTestHighBiasedMerge(t *testing.T) {
-	rand.Seed(42)
+	rand.New(rand.NewSource(42)).Seed(42)
 	s1 := NewHighBiased(RelativeEpsilon)
 	s2 := NewHighBiased(RelativeEpsilon)
 	a := populateStream(s1)

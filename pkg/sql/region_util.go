@@ -788,8 +788,7 @@ func prepareZoneConfigForMultiRegionTable(
 	if currentZoneConfigWithRaw == nil {
 		currentZoneConfigWithRaw = zone.NewZoneConfigWithRawBytes(zonepb.NewZoneConfig(), nil)
 	}
-	newZoneConfig := *zonepb.NewZoneConfig()
-	newZoneConfig = *currentZoneConfigWithRaw.ZoneConfigProto()
+	newZoneConfig := *currentZoneConfigWithRaw.ZoneConfigProto()
 
 	var hasNewSubzones bool
 	for _, opt := range opts {
@@ -1425,8 +1424,6 @@ func SynthesizeRegionConfig(
 		return multiregion.RegionConfig{}, err
 	}
 
-	regionConfig := multiregion.RegionConfig{}
-
 	var regionNames, transitioningRegionNames catpb.RegionNames
 	_ = regionEnumDesc.ForEachRegion(func(name catpb.RegionName, transition descpb.TypeDescriptor_EnumMember_Direction) error {
 		switch transition {
@@ -1448,7 +1445,7 @@ func SynthesizeRegionConfig(
 		}
 		return nil
 	})
-	regionConfig = multiregion.MakeRegionConfig(
+	regionConfig := multiregion.MakeRegionConfig(
 		regionNames,
 		dbDesc.GetRegionConfig().PrimaryRegion,
 		dbDesc.GetRegionConfig().SurvivalGoal,

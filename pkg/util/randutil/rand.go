@@ -195,7 +195,7 @@ func RandString(rng *rand.Rand, length int, alphabet string) string {
 // value used. This function should be called from TestMain; individual tests
 // should not touch the seed of the global random number generator.
 func SeedForTests() {
-	rand.Seed(globalSeed)
+	rand.New(rand.NewSource(globalSeed)).Seed(globalSeed)
 	log.Printf("random seed: %v", globalSeed)
 }
 

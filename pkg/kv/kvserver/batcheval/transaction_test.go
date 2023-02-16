@@ -73,6 +73,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 	// Priority don't matter other than that they allow us to detect changes
 	// in the AbortSpanEntry.
 	prevTxn := txn.Clone()
+	//lint:ignore SA4017 ignore doesn't have side effects
 	prevTxn.WriteTimestamp.Add(-1, 0)
 	prevTxn.Priority--
 	prevTxnAbortSpanEntry := roachpb.AbortSpanEntry{

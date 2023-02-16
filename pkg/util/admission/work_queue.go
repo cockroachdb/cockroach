@@ -1498,12 +1498,6 @@ var (
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
 	}
-	waitDurationSumMeta = metric.Metadata{
-		Name:        "admission.wait_sum.",
-		Help:        "Total wait time in micros",
-		Measurement: "Microseconds",
-		Unit:        metric.Unit_COUNT,
-	}
 	waitDurationsMeta = metric.Metadata{
 		Name:        "admission.wait_durations.",
 		Help:        "Wait time durations for requests that waited",

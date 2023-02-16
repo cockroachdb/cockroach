@@ -12,6 +12,7 @@ package coldatatestutils
 
 import (
 	"context"
+	cryptorand "crypto/rand"
 	"math/rand"
 	"time"
 
@@ -113,7 +114,7 @@ func RandomVec(args RandomVecArgs) {
 				}
 				randBytes := make([]byte, bytesLen)
 				// Read always returns len(bytes[i]) and nil.
-				_, _ = rand.Read(randBytes)
+				_, _ = cryptorand.Read(randBytes)
 				bytes.Set(i, randBytes)
 			}
 		}

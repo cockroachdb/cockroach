@@ -13,8 +13,8 @@ package spanlatch
 import (
 	"bytes"
 	"context"
+	cryptorand "crypto/rand"
 	"fmt"
-	"math/rand"
 	"strings"
 	"testing"
 	"time"
@@ -735,7 +735,7 @@ func BenchmarkLatchManagerReadWriteMix(b *testing.B) {
 
 func randBytes(n int) []byte {
 	b := make([]byte, n)
-	_, err := rand.Read(b)
+	_, err := cryptorand.Read(b)
 	if err != nil {
 		panic(err)
 	}

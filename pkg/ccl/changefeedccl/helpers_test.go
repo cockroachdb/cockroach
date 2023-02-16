@@ -631,6 +631,7 @@ func makeOptions(opts ...feedTestOption) feedTestOptions {
 			}
 			knobs.DistSQL.(*execinfra.TestingKnobs).
 				Changefeed.(*TestingKnobs).FeedKnobs.ModifyTimestamps = func(t *hlc.Timestamp) {
+				//lint:ignore SA4017 ignore doesn't have side effects
 				t.Add(offset, 0)
 				t.Synthetic = true
 			}

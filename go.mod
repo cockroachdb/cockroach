@@ -1,6 +1,6 @@
 module github.com/cockroachdb/cockroach
 
-go 1.19
+go 1.20
 
 // The following dependencies are key infrastructure dependencies and
 // should be updated as their own commit (i.e. not bundled with a dep
@@ -18,15 +18,15 @@ require (
 	github.com/google/uuid v1.3.0
 	golang.org/x/crypto v0.0.0-20220817201139-bc19a97f63c8
 	golang.org/x/exp v0.0.0-20220104160115-025e73f80486
-	golang.org/x/exp/typeparams v0.0.0-20220713135740-79cabaa25d75 // indirect
-	golang.org/x/mod v0.7.0 // indirect
-	golang.org/x/net v0.0.0-20220722155237-a158d28d115b
+	golang.org/x/exp/typeparams v0.0.0-20221208152030-732eee02a75a // indirect
+	golang.org/x/mod v0.8.0 // indirect
+	golang.org/x/net v0.6.0
 	golang.org/x/oauth2 v0.0.0-20220411215720-9780585627b5
-	golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4
-	golang.org/x/sys v0.3.0
-	golang.org/x/text v0.4.0
+	golang.org/x/sync v0.1.0
+	golang.org/x/sys v0.5.0
+	golang.org/x/text v0.7.0
 	golang.org/x/time v0.0.0-20210723032227-1f47c861a9ac
-	golang.org/x/tools v0.1.12
+	golang.org/x/tools v0.6.0
 	google.golang.org/api v0.80.0
 	google.golang.org/genproto v0.0.0-20220505152158-f39f71e6c8f3
 	google.golang.org/grpc v1.51.0
@@ -82,7 +82,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.1.0
 	github.com/Azure/azure-sdk-for-go/sdk/keyvault/azkeys v0.9.0
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v0.6.1
-	github.com/BurntSushi/toml v0.4.1
+	github.com/BurntSushi/toml v1.2.1
 	github.com/Masterminds/semver/v3 v3.1.1
 	github.com/MichaelTJones/walk v0.0.0-20161122175330-4748e29d5718
 	github.com/NYTimes/gziphandler v0.0.0-20170623195520-56545f4a5d46
@@ -118,7 +118,7 @@ require (
 	github.com/cockroachdb/redact v1.1.3
 	github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd
 	github.com/cockroachdb/stress v0.0.0-20220803192808-1806698b1b7b
-	github.com/cockroachdb/tools v0.0.0-20211112185054-642e51449b40
+	github.com/cockroachdb/tools v0.0.0-20230222013927-64f705ca010c
 	github.com/cockroachdb/ttycolor v0.0.0-20210902133924-c7d7dcdde4e8
 	github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd
 	github.com/containerd/containerd v1.5.4
@@ -220,10 +220,10 @@ require (
 	go.opentelemetry.io/otel/sdk v1.0.0-RC3
 	go.opentelemetry.io/otel/trace v1.0.0-RC3
 	golang.org/x/perf v0.0.0-20230113213139-801c7ef9e5c5
-	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211
+	golang.org/x/term v0.5.0
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
-	honnef.co/go/tools v0.3.2
+	honnef.co/go/tools v0.4.2
 	vitess.io/vitess v0.0.0-00010101000000-000000000000
 )
 

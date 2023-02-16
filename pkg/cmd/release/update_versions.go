@@ -266,7 +266,7 @@ func sendPrReport(version *semver.Version, prs []string, smtpPassword string) er
 	return nil
 }
 func randomString(n int) string {
-	rand.Seed(timeutil.Now().UnixNano())
+	rand.New(rand.NewSource(timeutil.Now().UnixNano())).Seed(timeutil.Now().UnixNano())
 	var alphanumerics = []rune("abcdefghijklmnopqrstuvwxyz0123456789")
 
 	s := make([]rune, n)

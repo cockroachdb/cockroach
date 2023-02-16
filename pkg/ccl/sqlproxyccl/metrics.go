@@ -66,12 +66,6 @@ var (
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaConnectionLatency = metric.Metadata{
-		Name:        "proxy.sql.connection_latency",
-		Unit:        metric.Unit_NANOSECONDS,
-		Help:        "Latency histogram for connecting and authenticating to a tenant cluster.",
-		Measurement: "Latency",
-	}
 	metaRoutingErrCount = metric.Metadata{
 		Name:        "proxy.err.routing",
 		Help:        "Number of errors encountered when attempting to route clients",
