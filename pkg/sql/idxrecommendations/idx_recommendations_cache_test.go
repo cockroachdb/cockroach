@@ -56,13 +56,13 @@ func TestIndexRecommendationsStats(t *testing.T) {
 			{
 				stmt:            "SELECT * FROM t WHERE v > 123",
 				fingerprint:     "SELECT * FROM t WHERE v > _",
-				recommendations: "{\"creation : CREATE INDEX ON t (v);\"}",
+				recommendations: "{\"creation : CREATE INDEX ON idxrectest.public.t (v);\"}",
 			},
 			{
 				stmt:        "SELECT t1.k FROM t1 JOIN t2 ON t1.k = t2.k WHERE t1.i > 3 AND t2.i > 3",
 				fingerprint: "SELECT t1.k FROM t1 JOIN t2 ON t1.k = t2.k WHERE (t1.i > _) AND (t2.i > _)",
-				recommendations: "{\"replacement : CREATE UNIQUE INDEX ON t1 (i) STORING (k); DROP INDEX t1@existing_t1_i;\"," +
-					"\"creation : CREATE INDEX ON t2 (i) STORING (k);\"}",
+				recommendations: "{\"replacement : CREATE UNIQUE INDEX ON idxrectest.public.t1 (i) STORING (k); DROP INDEX idxrectest.public.t1@existing_t1_i;\"," +
+					"\"creation : CREATE INDEX ON idxrectest.public.t2 (i) STORING (k);\"}",
 			},
 		}
 

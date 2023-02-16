@@ -134,7 +134,7 @@ vectorized: true
 ·
 index recommendations: 1
 1. type: index creation
-   SQL command: CREATE INDEX ON t93887 (y);
+   SQL command: CREATE INDEX ON test.public.t93887 (y);
 
 statement ok
 RESET index_recommendations_enabled;
