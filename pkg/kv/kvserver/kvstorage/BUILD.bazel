@@ -36,6 +36,7 @@ go_test(
     srcs = [
         "cluster_version_test.go",
         "datadriven_test.go",
+        "raft_log_debug_test.go",
     ],
     args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
@@ -44,7 +45,9 @@ go_test(
         "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/kv/kvserver/logstore",
+        "//pkg/kv/kvserver/raftlog",
         "//pkg/roachpb",
+        "//pkg/settings/cluster",
         "//pkg/storage",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",

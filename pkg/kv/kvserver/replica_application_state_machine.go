@@ -17,6 +17,7 @@ import (
 	io "io"
 	"os"
 	"path/filepath"
+	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/errorspb"
 	"github.com/kr/pretty"
 	"go.etcd.io/raft/v3"
 )
@@ -154,6 +156,15 @@ func (sm *replicaStateMachine) NewBatch() apply.Batch {
 	return b
 }
 
+func init() {
+	gob.Register(errorspb.EncodedError_Leaf{})
+	gob.Register(errorspb.EncodedErrorLeaf{})
+	gob.Register(errorspb.EncodedError{})
+	gob.Register(errorspb.EncodedError_Wrapper{})
+	gob.Register(errorspb.EncodedErrorDetails{})
+	gob.Register(errorspb.EncodedWrapper{})
+}
+
 // ApplySideEffects implements the apply.StateMachine interface. The method
 // handles the third phase of applying a command to the replica state machine.
 //
@@ -237,7 +248,7 @@ func (sm *replicaStateMachine) ApplySideEffects(
 				panic(err)
 			}
 			defer f.Close()
-			if err := enc.Encode(cmd); err != nil {
+			if err := enc.EncodeValue(reflect.ValueOf(cmd)); err != nil {
 				panic(err)
 			}
 			if _, err := io.Copy(f, &buf); err != nil {
