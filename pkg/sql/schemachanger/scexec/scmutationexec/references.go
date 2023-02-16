@@ -281,19 +281,6 @@ func (i *immediateVisitor) RemoveTableConstraintBackReferencesFromFunctions(
 	return nil
 }
 
-func (i *immediateVisitor) RemoveAllTableBackReferencesFromFunctions(
-	ctx context.Context, op scop.RemoveAllTableBackReferencesFromFunctions,
-) error {
-	for _, fnID := range op.FunctionIDs {
-		fnDesc, err := i.checkOutFunction(ctx, fnID)
-		if err != nil {
-			return err
-		}
-		fnDesc.RemoveReference(op.BackReferencedTableID)
-	}
-	return nil
-}
-
 // Look through `seqID`'s dependedOnBy slice, find the back-reference to `tblID`,
 // and update it to either
 //   - upsert `colID` to ColumnIDs field of that back-reference, if `forwardRefs` contains `seqID`; or
