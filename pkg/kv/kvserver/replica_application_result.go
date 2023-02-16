@@ -131,11 +131,11 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 
 				r.mu.RLock()
 				_, inMap := r.mu.proposals[cmd.ID]
-				r.mu.RUnlock()
-
 				if inMap {
+					// NB: intentionally still holding lock, or access to `cmd.proposal` is unsafe.
 					log.Fatalf(ctx, "failed reproposal unexpectedly in proposals map: %s", dumpCmdInfo(ctx, r.store.TODOEngine(), cmd))
 				}
+				r.mu.RUnlock()
 			} else {
 				// Unbind the entry's local proposal because we just succeeded
 				// in reproposing it and we don't want to acknowledge the client
