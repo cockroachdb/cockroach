@@ -135,7 +135,10 @@ func (os *optSchema) PostgresDescriptorID() catid.DescID {
 // Equals is part of the cat.Object interface.
 func (os *optSchema) Equals(other cat.Object) bool {
 	otherSchema, ok := other.(*optSchema)
-	return ok && os.ID() == otherSchema.ID()
+	return ok && os.ID() == otherSchema.ID() &&
+		os.database.GetID() == otherSchema.database.GetID() &&
+		os.schema.GetVersion() == otherSchema.schema.GetVersion() &&
+		os.database.GetVersion() == otherSchema.database.GetVersion()
 }
 
 // Name is part of the cat.Schema interface.
