@@ -125,7 +125,7 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 				// retrieveLocalProposals for removing from the map. So we're not leaking
 				// a map entry here, which we assert against below (and which has coverage,
 				// at time of writing, through TestReplicaReproposalWithNewLeaseIndexError).
-				log.Warningf(ctx, "failed to repropose with new lease index: %s", pErr)
+				log.Warningf(ctx, "failed to repropose %s at idx %d with new lease index: %s", cmd.ID, cmd.Entry.Index, pErr)
 				cmd.response.Err = pErr
 
 				r.mu.RLock()
@@ -263,7 +263,8 @@ func tryReproposeWithNewLeaseIndex(
 		// now.
 		p.command.MaxLeaseIndex = prevMaxLeaseIndex
 		p.encodedCommand = prevEncodedCommand
-		return pErr
+		panic(pErr.GoError())
+		//return pErr
 	}
 	log.VEventf(ctx, 2, "reproposed command %x", cmd.ID)
 	return nil

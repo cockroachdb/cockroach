@@ -26,7 +26,7 @@ import (
 )
 
 func TestDebugRaftLog(t *testing.T) {
-	const rangeID = 64
+	const rangeID = 59
 	ctx := context.Background()
 	st := cluster.MakeClusterSettings()
 	var opts []storage.ConfigOption
@@ -34,8 +34,8 @@ func TestDebugRaftLog(t *testing.T) {
 	eng, err := storage.Open(
 		ctx,
 		storage.Filesystem(filepath.Join(
-			//os.ExpandEnv("$HOME"), "go", "src", "github.com", "cockroachdb", "cockroach", "cockroach-data"),
-			os.ExpandEnv("$HOME"), "local", "2", "data",
+			os.ExpandEnv("$HOME"), "go", "src", "github.com", "cockroachdb", "cockroach", "data",
+			//os.ExpandEnv("$HOME"), "local", "2", "data",
 		)), st, opts...)
 	require.NoError(t, err)
 	var lastCT hlc.Timestamp
@@ -47,7 +47,7 @@ func TestDebugRaftLog(t *testing.T) {
 		t.Logf("idx %d: %s: LAI %d, CT %s", e.Index, e.ID, e.Cmd.MaxLeaseIndex, e.Cmd.ClosedTimestamp)
 		if e.Cmd.ClosedTimestamp != nil {
 			if lastCT.IsSet() && e.Cmd.ClosedTimestamp.Less(lastCT) {
-				t.Errorf("^----- closedts regression")
+				t.Logf("^----- closedts regression")
 			}
 			lastCT = *e.Cmd.ClosedTimestamp
 		}

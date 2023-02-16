@@ -11,7 +11,12 @@
 package kvserver
 
 import (
+	"bytes"
 	"context"
+	"encoding/gob"
+	io "io"
+	"os"
+	"path/filepath"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
@@ -223,6 +228,22 @@ func (sm *replicaStateMachine) ApplySideEffects(
 		}
 
 		if higherReproposalsExist := cmd.proposal.Supersedes(cmd.Cmd.MaxLeaseIndex); higherReproposalsExist {
+			var buf bytes.Buffer
+			enc := gob.NewEncoder(&buf)
+			dir := filepath.Join(sm.r.store.TODOEngine().GetAuxiliaryDir(), "assertion")
+			_ = os.MkdirAll(dir, 0766)
+			f, err := os.CreateTemp(dir, "replicatedCmd")
+			if err != nil {
+				panic(err)
+			}
+			defer f.Close()
+			if err := enc.Encode(cmd); err != nil {
+				panic(err)
+			}
+			if _, err := io.Copy(f, &buf); err != nil {
+				panic(err)
+			}
+
 			// If the command wasn't rejected, we just applied it and no higher
 			// reproposal must exist (since that one may also apply).
 			//
@@ -237,8 +258,8 @@ func (sm *replicaStateMachine) ApplySideEffects(
 			// initially.
 			//
 			// [^1]: see (*replicaDecoder).retrieveLocalProposals()
-			log.Fatalf(ctx, "finishing a proposal with outstanding reproposal at a higher max lease index:\n\n%+v",
-				cmd)
+			log.Fatalf(ctx, "finishing a proposal at LAI %d with forced error %s and outstanding reproposal at a higher max lease index:\n\n%+v",
+				cmd.LeaseIndex, cmd.ForcedError, cmd.proposal)
 		}
 		if !cmd.Rejected() && cmd.proposal.applied {
 			// If the command already applied then we shouldn't be "finishing" its
