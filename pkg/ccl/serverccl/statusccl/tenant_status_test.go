@@ -83,6 +83,12 @@ func TestTenantStatusAPI(t *testing.T) {
 
 	defer testHelper.Cleanup(ctx, t)
 
+	// Speed up propagation of tenant capability changes.
+	db := testHelper.HostCluster().ServerConn(0)
+	tdb := sqlutils.MakeSQLRunner(db)
+	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms'")
+	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10 ms'")
+
 	t.Run("reset_sql_stats", func(t *testing.T) {
 		testResetSQLStatsRPCForTenant(ctx, t, testHelper)
 	})
@@ -145,6 +151,10 @@ func TestTenantStatusAPI(t *testing.T) {
 
 	t.Run("tenant_span_stats", func(t *testing.T) {
 		testTenantSpanStats(ctx, t, testHelper)
+	})
+
+	t.Run("tenant_nodes_capability", func(t *testing.T) {
+		testTenantNodesCapability(ctx, t, testHelper)
 	})
 }
 
@@ -210,6 +220,31 @@ func testTenantSpanStats(ctx context.Context, t *testing.T, helper serverccl.Ten
 		require.NoError(t, err)
 		require.Equal(t, controlStats.RangeCount+1, stats.RangeCount)
 		require.Equal(t, controlStats.TotalStats.LiveCount+int64(len(incKeys)), stats.TotalStats.LiveCount)
+	})
+
+}
+
+func testTenantNodesCapability(
+	ctx context.Context, t *testing.T, helper serverccl.TenantTestHelper,
+) {
+	tenant := helper.TestCluster().TenantStatusSrv(0)
+
+	_, err := tenant.NodesUI(ctx, &serverpb.NodesRequest{})
+	require.Error(t, err)
+
+	db := helper.HostCluster().ServerConn(0)
+	_, err = db.Exec("ALTER TENANT [10] GRANT CAPABILITY can_view_node_info=true\n")
+	require.NoError(t, err)
+
+	testutils.SucceedsSoon(t, func() error {
+		resp, err := tenant.NodesUI(ctx, &serverpb.NodesRequest{})
+		if err != nil {
+			return err
+		}
+		if len(resp.Nodes) == 0 || len(resp.LivenessByNodeID) == 0 {
+			return errors.New("missing nodes or liveness data")
+		}
+		return nil
 	})
 }
 

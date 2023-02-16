@@ -121,6 +121,14 @@ func (n *showTenantNode) getTenantValues(
 				// TODO(sql-sessions): handle this capability.
 				value: strconv.FormatBool(false),
 			},
+			{
+				name:  canViewNodeInfoCapabilityName,
+				value: strconv.FormatBool(capabilities.CanViewNodeInfo),
+			},
+			{
+				name:  canViewTsdbMetricsCapabilityName,
+				value: strconv.FormatBool(capabilities.CanViewTsdbMetrics),
+			},
 		}
 	}
 

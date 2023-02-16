@@ -141,14 +141,14 @@ func (a tenantAuthorizer) authorize(
 	case "/cockroach.server.serverpb.Status/HotRangesV2":
 		return a.authHotRangesV2(tenID)
 
-	case "/cockroach.server.serverpb.Status/NodesUI":
-		return a.authCapability(tenID)
+	case "/cockroach.server.serverpb.Status/Nodes":
+		return a.capabilitiesAuthorizer.HasNodeStatusCapability(ctx, tenID)
 
 	case "/cockroach.server.serverpb.Admin/Liveness":
-		return a.authCapability(tenID)
+		return a.capabilitiesAuthorizer.HasNodeStatusCapability(ctx, tenID)
 
 	case "/cockroach.ts.tspb.TimeSeries/Query":
-		return a.authCapability(tenID)
+		return a.capabilitiesAuthorizer.HasTSDBQueryCapability(ctx, tenID)
 
 	default:
 		return authErrorf("unknown method %q", fullMethod)
@@ -288,12 +288,6 @@ func (a tenantAuthorizer) authTenant(id roachpb.TenantID) error {
 	if a.tenantID != id {
 		return authErrorf("request from tenant %s not permitted on tenant %s", id, a.tenantID)
 	}
-	return nil
-}
-
-// authCapability checks if the current tenant has the requested capability.
-func (a tenantAuthorizer) authCapability(id roachpb.TenantID) error {
-	// TODO(davidh): add capability-specific checks here that correspond to specific requests.
 	return nil
 }
 

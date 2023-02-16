@@ -109,6 +109,10 @@ type TenantServer struct {
 
 var _ tspb.TenantTimeSeriesServer = &TenantServer{}
 
+// Query delegates to the tenant connector to query
+// the tsdb on the system tenant. The only authorization
+// necessary is the tenant capability check on the
+// connector.
 func (t *TenantServer) Query(
 	ctx context.Context, req *tspb.TimeSeriesQueryRequest,
 ) (*tspb.TimeSeriesQueryResponse, error) {

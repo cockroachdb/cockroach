@@ -25,10 +25,14 @@ import (
 
 const canAdminSplitCapabilityName = "can_admin_split"
 const canAdminUnsplitCapabilityName = "can_admin_unsplit"
+const canViewNodeInfoCapabilityName = "can_view_node_info"
+const canViewTsdbMetricsCapabilityName = "can_view_tsdb_metrics"
 
 var capabilityTypes = map[string]*types.T{
-	canAdminSplitCapabilityName:   types.Bool,
-	canAdminUnsplitCapabilityName: types.Bool,
+	canAdminSplitCapabilityName:      types.Bool,
+	canAdminUnsplitCapabilityName:    types.Bool,
+	canViewNodeInfoCapabilityName:    types.Bool,
+	canViewTsdbMetricsCapabilityName: types.Bool,
 }
 
 const alterTenantCapabilityOp = "ALTER TENANT CAPABILITY"
@@ -130,6 +134,28 @@ func (n *alterTenantCapabilityNode) startExec(params runParams) error {
 		case canAdminUnsplitCapabilityName:
 			// TODO(sql-sessions): handle this capability.
 			return unimplemented.Newf("cap-unsplit", "update capability %q", cap.Name)
+
+		case canViewNodeInfoCapabilityName:
+			if n.n.IsRevoke {
+				dst.CanViewNodeInfo = false
+			} else {
+				b, err := paramparse.DatumAsBool(ctx, p.EvalContext(), cap.Name, n.typedExprs[i])
+				if err != nil {
+					return err
+				}
+				dst.CanViewNodeInfo = b
+			}
+
+		case canViewTsdbMetricsCapabilityName:
+			if n.n.IsRevoke {
+				dst.CanViewTsdbMetrics = false
+			} else {
+				b, err := paramparse.DatumAsBool(ctx, p.EvalContext(), cap.Name, n.typedExprs[i])
+				if err != nil {
+					return err
+				}
+				dst.CanViewTsdbMetrics = b
+			}
 
 		default:
 			return errors.AssertionFailedf("unhandled: %q", cap.Name)

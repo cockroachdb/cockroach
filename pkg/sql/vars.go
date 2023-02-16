@@ -1308,6 +1308,15 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
+	// See https://www.postgresql.org/docs/9.4/runtime-config-connection.html
+	`ssl`: {
+		Hidden: true,
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			insecure := evalCtx.ExecCfg.RPCContext.Config.Insecure || evalCtx.ExecCfg.RPCContext.Config.AcceptSQLWithoutTLS
+			return formatBoolAsPostgresSetting(!insecure), nil
+		},
+	},
+
 	// CockroachDB extension.
 	`crdb_version`: makeReadOnlyVarWithFn(func() string {
 		return build.GetInfo().Short()
