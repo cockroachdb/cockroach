@@ -85,3 +85,39 @@ func (a *Authorizer) HasCapabilityForBatch(
 func (a *Authorizer) BindReader(reader tenantcapabilities.Reader) {
 	a.capabilitiesReader = reader
 }
+
+func (a *Authorizer) HasNodeStatusCapability(ctx context.Context, tenID roachpb.TenantID) error {
+	if tenID.IsSystem() {
+		return nil // the system tenant is allowed to do as it pleases
+	}
+	cp, found := a.capabilitiesReader.GetCapabilities(tenID)
+	if !found {
+		log.Infof(
+			ctx,
+			"no capability information for tenant %s; requests that require capabilities may be denied",
+			tenID,
+		)
+	}
+	if !cp.CanViewNodeInfo {
+		return errors.Newf("tenant %s does not have capability to query cluster node metadata", tenID)
+	}
+	return nil
+}
+
+func (a *Authorizer) HasTSDBQueryCapability(ctx context.Context, tenID roachpb.TenantID) error {
+	if tenID.IsSystem() {
+		return nil // the system tenant is allowed to do as it pleases
+	}
+	cp, found := a.capabilitiesReader.GetCapabilities(tenID)
+	if !found {
+		log.Infof(
+			ctx,
+			"no capability information for tenant %s; requests that require capabilities may be denied",
+			tenID,
+		)
+	}
+	if !cp.CanViewTsdbMetrics {
+		return errors.Newf("tenant %s does not have capability to query timeseries data", tenID)
+	}
+	return nil
+}
