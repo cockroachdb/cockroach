@@ -43,7 +43,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCopyNullInfNaN(t *testing.T) {
+func TestCopyFromNullInfNaN(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -142,9 +142,9 @@ func TestCopyNullInfNaN(t *testing.T) {
 	}
 }
 
-// TestCopyRandom inserts random rows using COPY and ensures the SELECT'd
+// TestCopyFromRandom inserts random rows using COPY and ensures the SELECT'd
 // data is the same.
-func TestCopyRandom(t *testing.T) {
+func TestCopyFromRandom(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -293,8 +293,8 @@ func TestCopyRandom(t *testing.T) {
 	}
 }
 
-// TestCopyBinary uses the pgx driver, which hard codes COPY ... BINARY.
-func TestCopyBinary(t *testing.T) {
+// TestCopyFromBinary uses the pgx driver, which hard codes COPY ... BINARY.
+func TestCopyFromBinary(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -362,7 +362,7 @@ func TestCopyBinary(t *testing.T) {
 	sqlDB.CheckQueryResults(t, "SELECT * FROM t ORDER BY id", expect)
 }
 
-func TestCopyError(t *testing.T) {
+func TestCopyFromError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -412,106 +412,6 @@ func TestCopyError(t *testing.T) {
 	}
 	if err := txn.Rollback(); err != nil {
 		t.Fatal(err)
-	}
-}
-
-// TestCopyTrace verifies copy works with tracing turned on.
-func TestCopyTrace(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	for _, strings := range [][]string{
-		{`SET CLUSTER SETTING sql.trace.log_statement_execute = true`},
-		{`SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true`},
-		{`SET CLUSTER SETTING sql.log.unstructured_entries.enabled = true`, `SET CLUSTER SETTING sql.trace.log_statement_execute = true`},
-		{`SET CLUSTER SETTING sql.log.admin_audit.enabled = true`},
-	} {
-		t.Run(strings[0], func(t *testing.T) {
-			params, _ := tests.CreateTestServerParams()
-			s, db, _ := serverutils.StartServer(t, params)
-			defer s.Stopper().Stop(context.Background())
-
-			_, err := db.Exec(`
-		CREATE TABLE t (
-			i INT PRIMARY KEY
-		);
-	`)
-			require.NoError(t, err)
-
-			for _, str := range strings {
-				_, err = db.Exec(str)
-				require.NoError(t, err)
-			}
-
-			// We have to start a new connection every time to exercise all possible paths.
-			t.Run("success", func(t *testing.T) {
-				db := serverutils.OpenDBConn(
-					t, s.ServingSQLAddr(), params.UseDatabase, params.Insecure, s.Stopper())
-				require.NoError(t, err)
-				txn, err := db.Begin()
-				const val = 2
-				require.NoError(t, err)
-				{
-					stmt, err := txn.Prepare(pq.CopyIn("t", "i"))
-					require.NoError(t, err)
-					_, err = stmt.Exec(val)
-					require.NoError(t, err)
-					require.NoError(t, stmt.Close())
-				}
-				require.NoError(t, txn.Commit())
-
-				var i int
-				require.NoError(t, db.QueryRow("SELECT i FROM t").Scan(&i))
-				require.Equal(t, val, i)
-			})
-
-			t.Run("error in statement", func(t *testing.T) {
-				db := serverutils.OpenDBConn(
-					t, s.ServingSQLAddr(), params.UseDatabase, params.Insecure, s.Stopper())
-				txn, err := db.Begin()
-				require.NoError(t, err)
-				{
-					_, err := txn.Prepare(pq.CopyIn("xxx", "yyy"))
-					require.Error(t, err)
-					require.ErrorContains(t, err, `relation "xxx" does not exist`)
-				}
-				require.NoError(t, txn.Rollback())
-			})
-
-			t.Run("error during copy", func(t *testing.T) {
-				db := serverutils.OpenDBConn(
-					t, s.ServingSQLAddr(), params.UseDatabase, params.Insecure, s.Stopper())
-				txn, err := db.Begin()
-				require.NoError(t, err)
-				{
-					stmt, err := txn.Prepare(pq.CopyIn("t", "i"))
-					require.NoError(t, err)
-					_, err = stmt.Exec("bob")
-					require.NoError(t, err)
-					err = stmt.Close()
-					require.Error(t, err)
-					require.ErrorContains(t, err, `could not parse "bob" as type int`)
-				}
-				require.NoError(t, txn.Rollback())
-			})
-
-			t.Run("error during insert phase of copy", func(t *testing.T) {
-				db := serverutils.OpenDBConn(
-					t, s.ServingSQLAddr(), params.UseDatabase, params.Insecure, s.Stopper())
-				txn, err := db.Begin()
-				require.NoError(t, err)
-				{
-					stmt, err := txn.Prepare(pq.CopyIn("t", "i"))
-					require.NoError(t, err)
-					_, err = stmt.Exec("2")
-					require.NoError(t, err)
-					err = stmt.Close()
-					require.Error(t, err)
-					require.ErrorContains(t, err, `duplicate key value violates unique constraint "t_pkey"`)
-				}
-				require.NoError(t, txn.Rollback())
-			})
-		})
 	}
 }
 
@@ -716,8 +616,8 @@ func TestCopyTransaction(t *testing.T) {
 	}
 }
 
-// TestCopyFKCheck verifies that foreign keys are checked during COPY.
-func TestCopyFKCheck(t *testing.T) {
+// TestCopyFromFKCheck verifies that foreign keys are checked during COPY.
+func TestCopyFromFKCheck(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 

@@ -17,7 +17,7 @@ import (
 )
 
 // Conn exposes some functionality of a pgwire network connection to be
-// used by the Copy-in subprotocol implemented in the sql package.
+// used by the Copy subprotocol implemented in the sql package.
 type Conn interface {
 	// Rd returns a reader to be used to consume bytes from the connection.
 	// This reader can be used with a pgwirebase.ReadBuffer for reading messages.
@@ -30,6 +30,17 @@ type Conn interface {
 	// subprotocol (COPY ... FROM STDIN). This message informs the client about
 	// the columns that are expected for the rows to be inserted.
 	BeginCopyIn(ctx context.Context, columns []colinfo.ResultColumn, format FormatCode) error
+
+	// BeginCopyOut sends the message server message initiating the Copy-in
+	// subprotocol (COPY ... TO STDOUT). This message informs the client about
+	// the columns that are expected for the rows to be output in CopyData format.
+	BeginCopyOut(ctx context.Context, columns []colinfo.ResultColumn, format FormatCode) error
+
+	// SendCopyData sends CopyData out to the connection.
+	SendCopyData(ctx context.Context, copyData []byte) error
+
+	// SendCopyDone sends CopyDone to the connection.
+	SendCopyDone(ctx context.Context) error
 
 	// SendCommandComplete sends a serverMsgCommandComplete with the given
 	// payload.
