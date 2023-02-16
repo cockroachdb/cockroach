@@ -43,6 +43,7 @@ import { Dispatch } from "redux";
 import { TimeScale } from "../../timeScaleDropdown";
 import { actions as sqlStatsActions } from "../../store/sqlStats";
 import { actions as analyticsActions } from "../../store/analytics";
+import { selectIsTenant } from "../../store/uiConfig";
 
 const transactionMapStateToProps = (
   state: AppState,
@@ -63,6 +64,7 @@ const statementMapStateToProps = (
   filters: selectFilters(state),
   sortSetting: selectSortSetting(state),
   selectedColumnNames: selectColumns(state),
+  isTenant: selectIsTenant(state),
 });
 
 const TransactionDispatchProps = (
