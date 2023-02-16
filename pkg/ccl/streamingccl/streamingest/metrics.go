@@ -133,8 +133,8 @@ var (
 // Metrics are for production monitoring of stream ingestion jobs.
 type Metrics struct {
 	IngestedEvents              *metric.Counter
-	IngestedBytes               *metric.Counter
-	SSTBytes                    *metric.Counter
+	IngestedLogicalBytes        *metric.Counter
+	IngestedSSTBytes            *metric.Counter
 	Flushes                     *metric.Counter
 	JobProgressUpdates          *metric.Counter
 	ResolvedEvents              *metric.Counter
@@ -156,12 +156,12 @@ func (*Metrics) MetricStruct() {}
 // MakeMetrics makes the metrics for stream ingestion job monitoring.
 func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 	m := &Metrics{
-		IngestedEvents:     metric.NewCounter(metaReplicationEventsIngested),
-		IngestedBytes:      metric.NewCounter(metaReplicationIngestedBytes),
-		SSTBytes:           metric.NewCounter(metaReplicationSSTBytes),
-		Flushes:            metric.NewCounter(metaReplicationFlushes),
-		ResolvedEvents:     metric.NewCounter(metaReplicationResolvedEventsIngested),
-		JobProgressUpdates: metric.NewCounter(metaJobProgressUpdates),
+		IngestedEvents:       metric.NewCounter(metaReplicationEventsIngested),
+		IngestedLogicalBytes: metric.NewCounter(metaReplicationIngestedBytes),
+		IngestedSSTBytes:     metric.NewCounter(metaReplicationSSTBytes),
+		Flushes:              metric.NewCounter(metaReplicationFlushes),
+		ResolvedEvents:       metric.NewCounter(metaReplicationResolvedEventsIngested),
+		JobProgressUpdates:   metric.NewCounter(metaJobProgressUpdates),
 		FlushHistNanos: metric.NewHistogram(metric.HistogramOptions{
 			Metadata: metaReplicationFlushHistNanos,
 			Duration: histogramWindow,
