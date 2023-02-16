@@ -14,10 +14,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/gob"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
@@ -166,7 +168,21 @@ func init() {
 	gob.Register(errorspb.EncodedWrapper{})
 }
 
-func dumpCmdInfo(ctx context.Context, eng storage.Engine, cmd *replicatedCmd) string {
+func dumpCmdInfo(ctx context.Context, eng storage.Engine, cmd *replicatedCmd) (s string) {
+	defer func() {
+		if r := recover(); r != nil {
+			s = fmt.Sprint(r)
+		}
+	}()
+
+	dir := filepath.Join(eng.GetAuxiliaryDir(), "assertion")
+	_ = os.MkdirAll(dir, 0766)
+	f, err := os.CreateTemp(dir, "replicatedCmd")
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+
 	if false {
 		// NB: this doesn't really work, on the decode path you get:
 		// gob: errorspb.EncodedError_Leaf is not assignable to type errorspb.isEncodedError_Error
@@ -175,13 +191,7 @@ func dumpCmdInfo(ctx context.Context, eng storage.Engine, cmd *replicatedCmd) st
 		// (which is what we need to assign here).
 		var buf bytes.Buffer
 		enc := gob.NewEncoder(&buf)
-		dir := filepath.Join(eng.GetAuxiliaryDir(), "assertion")
-		_ = os.MkdirAll(dir, 0766)
-		f, err := os.CreateTemp(dir, "replicatedCmd")
-		if err != nil {
-			panic(err)
-		}
-		defer f.Close()
+
 		if err := enc.EncodeValue(reflect.ValueOf(cmd)); err != nil {
 			log.Warningf(ctx, "%s", err)
 		} else {
@@ -190,7 +200,17 @@ func dumpCmdInfo(ctx context.Context, eng storage.Engine, cmd *replicatedCmd) st
 			}
 		}
 	}
-	return pretty.Sprint(cmd)
+	p2 := *cmd.proposal
+	p2.ctx = nil
+	p2.sp = nil
+	p2.quotaAlloc = nil
+	p2.ec = endCmds{} // <-- I think this one throws `pretty` under the bus
+
+	s = pretty.Sprintf("cmd:%# v\n\nproposal: %# v", cmd.ReplicatedCmd, p2)
+	if _, err := io.Copy(f, strings.NewReader(s)); err != nil {
+		panic(err)
+	}
+	return s + "\n^---- also written to " + f.Name()
 }
 
 // ApplySideEffects implements the apply.StateMachine interface. The method
@@ -266,8 +286,6 @@ func (sm *replicaStateMachine) ApplySideEffects(
 			sm.r.handleReadWriteLocalEvalResult(ctx, *cmd.localResult)
 		}
 
-		log.Infof(ctx, "TBG %s", dumpCmdInfo(ctx, sm.r.store.TODOEngine(), cmd))
-
 		if higherReproposalsExist := cmd.proposal.Supersedes(cmd.Cmd.MaxLeaseIndex); higherReproposalsExist {
 			// If the command wasn't rejected, we just applied it and no higher
 			// reproposal must exist (since that one may also apply).
@@ -283,9 +301,8 @@ func (sm *replicaStateMachine) ApplySideEffects(
 			// initially.
 			//
 			// [^1]: see (*replicaDecoder).retrieveLocalProposals()
-			dumpCmdInfo(ctx, sm.r.store.TODOEngine(), cmd)
-			log.Fatalf(ctx, "finishing a proposal at idx %d LAI %d with forced error %s and outstanding reproposal at a higher max lease index:\n\n%+v",
-				cmd.Index(), cmd.LeaseIndex, cmd.ForcedError, pretty.Sprint(cmd.proposal))
+			s := dumpCmdInfo(ctx, sm.r.store.TODOEngine(), cmd)
+			log.Fatalf(ctx, "finishing a proposal with outstanding reproposal at a higher max lease index:\n\n%s", s)
 		}
 		if !cmd.Rejected() && cmd.proposal.applied {
 			// If the command already applied then we shouldn't be "finishing" its
@@ -293,7 +310,7 @@ func (sm *replicaStateMachine) ApplySideEffects(
 			// once. We expect that when any reproposal for the same command attempts
 			// to apply it will be rejected by the below raft lease sequence or lease
 			// index check in checkForcedErr.
-			log.Fatalf(ctx, "command already applied: %+v; unexpected successful result", cmd)
+			log.Fatalf(ctx, "command already applied; unexpected successful result: %s", dumpCmdInfo(ctx, sm.r.store.TODOEngine(), cmd))
 		}
 		cmd.proposal.applied = true
 	}

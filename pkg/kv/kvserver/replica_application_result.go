@@ -134,7 +134,7 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 				r.mu.RUnlock()
 
 				if inMap {
-					log.Fatalf(ctx, "failed reproposal unexpectedly in proposals map: %+v", cmd)
+					log.Fatalf(ctx, "failed reproposal unexpectedly in proposals map: %s", dumpCmdInfo(ctx, r.store.TODOEngine(), cmd))
 				}
 			} else {
 				// Unbind the entry's local proposal because we just succeeded

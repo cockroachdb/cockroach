@@ -735,12 +735,14 @@ func (b *replicaAppBatch) assertNoCmdClosedTimestampRegression(
 		}
 
 		return errors.AssertionFailedf(
-			"raft closed timestamp regression in cmd: %x (term: %d, index: %d); batch state: %s, command: %s, lease: %s, req: %s, applying at LAI: %d.\n"+
+			"raft closed timestamp regression; batch state: %s > command: %s, lease: %s, req: %s.\n"+
 				"Closed timestamp was set by req: %s under lease: %s; applied at LAI: %d. Batch idx: %d.\n"+
-				"This assertion will fire again on restart; to ignore run with env var COCKROACH_RAFT_CLOSEDTS_ASSERTIONS_ENABLED=false\n"+
-				"Raft log tail:\n%s",
-			cmd.ID, cmd.Term, cmd.Index(), existingClosed, newClosed, b.state.Lease, req, cmd.LeaseIndex,
+				"command: %s\n\n"+
+				"Raft log tail:\n%s\n\n"+
+				"This assertion will fire again on restart; to ignore run with env var COCKROACH_RAFT_CLOSEDTS_ASSERTIONS_ENABLED=false",
+			existingClosed, newClosed, b.state.Lease, req,
 			prevReq, b.closedTimestampSetter.lease, b.closedTimestampSetter.leaseIdx, b.ab.numEntriesProcessed,
+			dumpCmdInfo(ctx, b.r.store.TODOEngine(), cmd),
 			logTail)
 	}
 	return nil
