@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -669,7 +670,7 @@ func TestQueryResolvedTimestamp(t *testing.T) {
 			{
 				pArgs := putArgs(intentKey, []byte("val"))
 				assignSeqNumsForReqs(&txn, &pArgs)
-				_, pErr := kv.SendWrappedWith(ctx, tc.Sender(), roachpb.Header{Txn: &txn}, &pArgs)
+				_, pErr := kv.SendWrappedWith(ctx, tc.Sender(), kvpb.Header{Txn: &txn}, &pArgs)
 				require.Nil(t, pErr)
 			}
 
@@ -713,22 +714,22 @@ func TestQueryResolvedTimestampResolvesAbandonedIntents(t *testing.T) {
 	txn := roachpb.MakeTransaction("test", key, 0, ts10, 0, 0)
 	pArgs := putArgs(key, []byte("val"))
 	assignSeqNumsForReqs(&txn, &pArgs)
-	_, pErr := kv.SendWrappedWith(ctx, tc.Sender(), roachpb.Header{Txn: &txn}, &pArgs)
+	_, pErr := kv.SendWrappedWith(ctx, tc.Sender(), kvpb.Header{Txn: &txn}, &pArgs)
 	require.Nil(t, pErr)
 
 	intentExists := func() bool {
 		t.Helper()
 		gArgs := getArgs(key)
 		assignSeqNumsForReqs(&txn, &gArgs)
-		resp, pErr := kv.SendWrappedWith(ctx, tc.Sender(), roachpb.Header{Txn: &txn}, &gArgs)
+		resp, pErr := kv.SendWrappedWith(ctx, tc.Sender(), kvpb.Header{Txn: &txn}, &gArgs)
 
-		abortErr, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError)
-		if ok && abortErr.Reason == roachpb.ABORT_REASON_ABORT_SPAN {
+		abortErr, ok := pErr.GetDetail().(*kvpb.TransactionAbortedError)
+		if ok && abortErr.Reason == kvpb.ABORT_REASON_ABORT_SPAN {
 			// When the intent is resolved, it will be replaced by an abort span entry.
 			return false
 		}
 		require.Nil(t, pErr)
-		require.NotNil(t, resp.(*roachpb.GetResponse).Value)
+		require.NotNil(t, resp.(*kvpb.GetResponse).Value)
 		return true
 	}
 	require.True(t, intentExists())
@@ -800,7 +801,7 @@ func TestServerSideBoundedStalenessNegotiation(t *testing.T) {
 
 		for _, test := range []struct {
 			name           string
-			reqs           []roachpb.Request
+			reqs           []kvpb.Request
 			minTSBound     hlc.Timestamp
 			maxTSBound     hlc.Timestamp
 			withTS         bool // error case
@@ -812,19 +813,19 @@ func TestServerSideBoundedStalenessNegotiation(t *testing.T) {
 		}{
 			{
 				name:       "empty key, min bound below closed ts",
-				reqs:       []roachpb.Request{&getEmptyKey},
+				reqs:       []kvpb.Request{&getEmptyKey},
 				minTSBound: ts20,
 				expRespTS:  ts30,
 			},
 			{
 				name:       "empty key, min bound equal to closed ts",
-				reqs:       []roachpb.Request{&getEmptyKey},
+				reqs:       []kvpb.Request{&getEmptyKey},
 				minTSBound: ts30,
 				expRespTS:  ts30,
 			},
 			{
 				name:       "empty key, min bound above closed ts",
-				reqs:       []roachpb.Request{&getEmptyKey},
+				reqs:       []kvpb.Request{&getEmptyKey},
 				minTSBound: ts40,
 				expRespTS:  ts40, // for !strict case
 				expErr: ifStrict(
@@ -834,13 +835,13 @@ func TestServerSideBoundedStalenessNegotiation(t *testing.T) {
 			},
 			{
 				name:       "intent key, min bound below intent ts, min bound below closed ts",
-				reqs:       []roachpb.Request{&getIntentKey},
+				reqs:       []kvpb.Request{&getIntentKey},
 				minTSBound: ts10,
 				expRespTS:  ts20.Prev(),
 			},
 			{
 				name:       "intent key, min bound equal to intent ts, min bound below closed ts",
-				reqs:       []roachpb.Request{&getIntentKey},
+				reqs:       []kvpb.Request{&getIntentKey},
 				minTSBound: ts20,
 				expErr: ifStrict(
 					"bounded staleness read .* could not be satisfied",
@@ -849,7 +850,7 @@ func TestServerSideBoundedStalenessNegotiation(t *testing.T) {
 			},
 			{
 				name:       "intent key, min bound above intent ts, min bound equal to closed ts",
-				reqs:       []roachpb.Request{&getIntentKey},
+				reqs:       []kvpb.Request{&getIntentKey},
 				minTSBound: ts30,
 				expErr: ifStrict(
 					"bounded staleness read .* could not be satisfied",
@@ -858,7 +859,7 @@ func TestServerSideBoundedStalenessNegotiation(t *testing.T) {
 			},
 			{
 				name:       "intent key, min bound above intent ts, min bound above closed ts",
-				reqs:       []roachpb.Request{&getIntentKey},
+				reqs:       []kvpb.Request{&getIntentKey},
 				minTSBound: ts40,
 				expErr: ifStrict(
 					"bounded staleness read .* could not be satisfied",
@@ -867,13 +868,13 @@ func TestServerSideBoundedStalenessNegotiation(t *testing.T) {
 			},
 			{
 				name:       "empty and intent key, min bound below intent ts, min bound below closed ts",
-				reqs:       []roachpb.Request{&getEmptyKey, &getIntentKey},
+				reqs:       []kvpb.Request{&getEmptyKey, &getIntentKey},
 				minTSBound: ts10,
 				expRespTS:  ts20.Prev(),
 			},
 			{
 				name:       "empty and intent key, min bound equal to intent ts, min bound below closed ts",
-				reqs:       []roachpb.Request{&getEmptyKey, &getIntentKey},
+				reqs:       []kvpb.Request{&getEmptyKey, &getIntentKey},
 				minTSBound: ts20,
 				expErr: ifStrict(
 					"bounded staleness read .* could not be satisfied",
@@ -882,7 +883,7 @@ func TestServerSideBoundedStalenessNegotiation(t *testing.T) {
 			},
 			{
 				name:       "empty and intent key, min bound above intent ts, min bound equal to closed ts",
-				reqs:       []roachpb.Request{&getEmptyKey, &getIntentKey},
+				reqs:       []kvpb.Request{&getEmptyKey, &getIntentKey},
 				minTSBound: ts30,
 				expErr: ifStrict(
 					"bounded staleness read .* could not be satisfied",
@@ -891,7 +892,7 @@ func TestServerSideBoundedStalenessNegotiation(t *testing.T) {
 			},
 			{
 				name:       "empty and intent key, min bound above intent ts, min bound above closed ts",
-				reqs:       []roachpb.Request{&getEmptyKey, &getIntentKey},
+				reqs:       []kvpb.Request{&getEmptyKey, &getIntentKey},
 				minTSBound: ts40,
 				expErr: ifStrict(
 					"bounded staleness read .* could not be satisfied",
@@ -900,61 +901,61 @@ func TestServerSideBoundedStalenessNegotiation(t *testing.T) {
 			},
 			{
 				name:       "empty key, min and max bound below closed ts",
-				reqs:       []roachpb.Request{&getEmptyKey},
+				reqs:       []kvpb.Request{&getEmptyKey},
 				minTSBound: ts10,
 				maxTSBound: ts20.Next(),
 				expRespTS:  ts20,
 			},
 			{
 				name:       "intent key, min and max bound below intent ts, min and max bound below closed ts",
-				reqs:       []roachpb.Request{&getIntentKey},
+				reqs:       []kvpb.Request{&getIntentKey},
 				minTSBound: ts10,
 				maxTSBound: ts10.Next(),
 				expRespTS:  ts10,
 			},
 			{
 				name:       "empty and intent key, min and max bound below intent ts, min and max bound below closed ts",
-				reqs:       []roachpb.Request{&getEmptyKey, &getIntentKey},
+				reqs:       []kvpb.Request{&getEmptyKey, &getIntentKey},
 				minTSBound: ts10,
 				maxTSBound: ts10.Next(),
 				expRespTS:  ts10,
 			},
 			{
 				name:   "req without min_timestamp_bound",
-				reqs:   []roachpb.Request{&getEmptyKey},
+				reqs:   []kvpb.Request{&getEmptyKey},
 				expErr: "MinTimestampBound must be set in batch",
 			},
 			{
 				name:       "req with equal min_timestamp_bound and max_timestamp_bound",
-				reqs:       []roachpb.Request{&getEmptyKey},
+				reqs:       []kvpb.Request{&getEmptyKey},
 				minTSBound: ts10,
 				maxTSBound: ts10,
 				expErr:     "MaxTimestampBound, if set in batch, must be greater than MinTimestampBound",
 			},
 			{
 				name:       "req with inverted min_timestamp_bound and max_timestamp_bound",
-				reqs:       []roachpb.Request{&getEmptyKey},
+				reqs:       []kvpb.Request{&getEmptyKey},
 				minTSBound: ts20,
 				maxTSBound: ts10,
 				expErr:     "MaxTimestampBound, if set in batch, must be greater than MinTimestampBound",
 			},
 			{
 				name:       "req with timestamp",
-				reqs:       []roachpb.Request{&getEmptyKey},
+				reqs:       []kvpb.Request{&getEmptyKey},
 				minTSBound: ts20,
 				withTS:     true,
 				expErr:     "MinTimestampBound and Timestamp cannot both be set in batch",
 			},
 			{
 				name:       "req with transaction",
-				reqs:       []roachpb.Request{&getEmptyKey},
+				reqs:       []kvpb.Request{&getEmptyKey},
 				minTSBound: ts20,
 				withTxn:    true,
 				expErr:     "MinTimestampBound and Txn cannot both be set in batch",
 			},
 			{
 				name:           "req with wrong range",
-				reqs:           []roachpb.Request{&getEmptyKey},
+				reqs:           []kvpb.Request{&getEmptyKey},
 				minTSBound:     ts20,
 				withWrongRange: true,
 				expErr:         "r2 was not found on s1",
@@ -976,7 +977,7 @@ func TestServerSideBoundedStalenessNegotiation(t *testing.T) {
 				txn := roachpb.MakeTransaction("test", intentKey, 0, intentTS, 0, 0)
 				pArgs := putArgs(intentKey, []byte("val"))
 				assignSeqNumsForReqs(&txn, &pArgs)
-				_, pErr := kv.SendWrappedWith(ctx, tc.Sender(), roachpb.Header{Txn: &txn}, &pArgs)
+				_, pErr := kv.SendWrappedWith(ctx, tc.Sender(), kvpb.Header{Txn: &txn}, &pArgs)
 				require.Nil(t, pErr)
 
 				// Inject a closed timestamp.
@@ -985,9 +986,9 @@ func TestServerSideBoundedStalenessNegotiation(t *testing.T) {
 				tc.repl.mu.Unlock()
 
 				// Construct and issue the request.
-				ba := &roachpb.BatchRequest{}
+				ba := &kvpb.BatchRequest{}
 				ba.RangeID = tc.rangeID
-				ba.BoundedStaleness = &roachpb.BoundedStalenessHeader{
+				ba.BoundedStaleness = &kvpb.BoundedStalenessHeader{
 					MinTimestampBound:       test.minTSBound,
 					MinTimestampBoundStrict: strict,
 					MaxTimestampBound:       test.maxTSBound,
@@ -1050,19 +1051,19 @@ func TestServerSideBoundedStalenessNegotiationWithResumeSpan(t *testing.T) {
 	setup := func(t *testing.T, tc *testContext) hlc.Timestamp {
 		// Write values and intents.
 		val := []byte("val")
-		send := func(h roachpb.Header, args roachpb.Request) {
+		send := func(h kvpb.Header, args kvpb.Request) {
 			_, pErr := kv.SendWrappedWith(ctx, tc.Sender(), h, args)
 			require.Nil(t, pErr)
 		}
 		writeValue := func(k string, ts int64) {
 			pArgs := putArgs(roachpb.Key(k), val)
-			send(roachpb.Header{Timestamp: makeTS(ts)}, &pArgs)
+			send(kvpb.Header{Timestamp: makeTS(ts)}, &pArgs)
 		}
 		writeIntent := func(k string, ts int64) {
 			txn := roachpb.MakeTransaction("test", roachpb.Key(k), 0, makeTS(ts), 0, 0)
 			pArgs := putArgs(roachpb.Key(k), val)
 			assignSeqNumsForReqs(&txn, &pArgs)
-			send(roachpb.Header{Txn: &txn}, &pArgs)
+			send(kvpb.Header{Txn: &txn}, &pArgs)
 		}
 		writeValue("a", 9)
 		writeValue("b", 20)
@@ -1089,9 +1090,9 @@ func TestServerSideBoundedStalenessNegotiationWithResumeSpan(t *testing.T) {
 	//  get:  [g]
 	//  get:  [h]
 	//
-	makeReq := func(maxKeys int) *roachpb.BatchRequest {
-		ba := &roachpb.BatchRequest{}
-		ba.BoundedStaleness = &roachpb.BoundedStalenessHeader{
+	makeReq := func(maxKeys int) *kvpb.BatchRequest {
+		ba := &kvpb.BatchRequest{}
+		ba.BoundedStaleness = &kvpb.BoundedStalenessHeader{
 			MinTimestampBound: makeTS(5),
 		}
 		ba.WaitPolicy = lock.WaitPolicy_Error
@@ -1178,11 +1179,11 @@ func TestServerSideBoundedStalenessNegotiationWithResumeSpan(t *testing.T) {
 			for i, ru := range br.Responses {
 				req := ru.GetInner()
 				switch v := req.(type) {
-				case *roachpb.ScanResponse:
+				case *kvpb.ScanResponse:
 					for _, kv := range v.Rows {
 						respKeys = append(respKeys, string(kv.Key))
 					}
-				case *roachpb.GetResponse:
+				case *kvpb.GetResponse:
 					if v.Value.IsPresent() {
 						respKeys = append(respKeys, string(ba.Requests[i].GetGet().Key))
 					}

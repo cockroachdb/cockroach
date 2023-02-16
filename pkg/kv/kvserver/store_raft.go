@@ -16,6 +16,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -266,7 +267,7 @@ func (s *Store) uncoalesceBeats(
 // requires that s.mu is not held.
 func (s *Store) HandleRaftRequest(
 	ctx context.Context, req *kvserverpb.RaftMessageRequest, respStream RaftMessageResponseStream,
-) *roachpb.Error {
+) *kvpb.Error {
 	// NB: unlike the other two RaftMessageHandler methods implemented by Store,
 	// this one doesn't need to directly run through a Stopper task because it
 	// delegates all work through a raftScheduler, whose workers' lifetimes are
@@ -324,8 +325,8 @@ func (s *Store) HandleRaftUncoalescedRequest(
 func (s *Store) withReplicaForRequest(
 	ctx context.Context,
 	req *kvserverpb.RaftMessageRequest,
-	f func(context.Context, *Replica) *roachpb.Error,
-) *roachpb.Error {
+	f func(context.Context, *Replica) *kvpb.Error,
+) *kvpb.Error {
 	// Lazily create the replica.
 	r, _, err := s.getOrCreateReplica(
 		ctx,
@@ -334,7 +335,7 @@ func (s *Store) withReplicaForRequest(
 		&req.FromReplica,
 	)
 	if err != nil {
-		return roachpb.NewError(err)
+		return kvpb.NewError(err)
 	}
 	defer r.raftMu.Unlock()
 	r.setLastReplicaDescriptors(req)
@@ -346,7 +347,7 @@ func (s *Store) withReplicaForRequest(
 // state; callers will probably want to handle this themselves at some point.
 func (s *Store) processRaftRequestWithReplica(
 	ctx context.Context, r *Replica, req *kvserverpb.RaftMessageRequest,
-) *roachpb.Error {
+) *kvpb.Error {
 	// Record the CPU time processing the request for this replica. This is
 	// recorded regardless of errors that are encountered.
 	defer r.MeasureRaftCPUNanos(grunning.Time())
@@ -375,7 +376,7 @@ func (s *Store) processRaftRequestWithReplica(
 	if req.ToReplica.ReplicaID == 0 {
 		log.VEventf(ctx, 1, "refusing incoming Raft message %s from %+v to %+v",
 			req.Message.Type, req.FromReplica, req.ToReplica)
-		return roachpb.NewErrorf(
+		return kvpb.NewErrorf(
 			"cannot recreate replica that is not a member of its range (StoreID %s not found in r%d)",
 			r.store.StoreID(), req.RangeID,
 		)
@@ -384,7 +385,7 @@ func (s *Store) processRaftRequestWithReplica(
 	drop := maybeDropMsgApp(ctx, (*replicaMsgAppDropper)(r), &req.Message, req.RangeStartKey)
 	if !drop {
 		if err := r.stepRaftGroup(req); err != nil {
-			return roachpb.NewError(err)
+			return kvpb.NewError(err)
 		}
 	}
 	return nil
@@ -400,10 +401,10 @@ func (s *Store) processRaftRequestWithReplica(
 // will have been removed.
 func (s *Store) processRaftSnapshotRequest(
 	ctx context.Context, snapHeader *kvserverpb.SnapshotRequest_Header, inSnap IncomingSnapshot,
-) *roachpb.Error {
+) *kvpb.Error {
 	return s.withReplicaForRequest(ctx, &snapHeader.RaftMessageRequest, func(
 		ctx context.Context, r *Replica,
-	) (pErr *roachpb.Error) {
+	) (pErr *kvpb.Error) {
 		ctx = r.AnnotateCtx(ctx)
 		if snapHeader.RaftMessageRequest.Message.Type != raftpb.MsgSnap {
 			log.Fatalf(ctx, "expected snapshot: %+v", snapHeader.RaftMessageRequest)
@@ -450,7 +451,7 @@ func (s *Store) processRaftSnapshotRequest(
 		// withReplicaForRequest that this replica is not currently being removed
 		// and we've been holding the raftMu the entire time.
 		if err := r.stepRaftGroup(&snapHeader.RaftMessageRequest); err != nil {
-			return roachpb.NewError(err)
+			return kvpb.NewError(err)
 		}
 
 		// We've handed the snapshot to Raft, which will typically apply it (in
@@ -489,12 +490,12 @@ func (s *Store) HandleRaftResponse(
 			ctx = repl.AnnotateCtx(ctx)
 		}
 		switch val := resp.Union.GetValue().(type) {
-		case *roachpb.Error:
+		case *kvpb.Error:
 			switch tErr := val.GetDetail().(type) {
-			case *roachpb.ReplicaTooOldError:
+			case *kvpb.ReplicaTooOldError:
 				if replErr != nil {
 					// RangeNotFoundErrors are expected here; nothing else is.
-					if !errors.HasType(replErr, (*roachpb.RangeNotFoundError)(nil)) {
+					if !errors.HasType(replErr, (*kvpb.RangeNotFoundError)(nil)) {
 						log.Errorf(ctx, "%v", replErr)
 					}
 					return nil
@@ -532,10 +533,10 @@ func (s *Store) HandleRaftResponse(
 				return s.removeReplicaRaftMuLocked(ctx, repl, nextReplicaID, RemoveOptions{
 					DestroyData: true,
 				})
-			case *roachpb.RaftGroupDeletedError:
+			case *kvpb.RaftGroupDeletedError:
 				if replErr != nil {
 					// RangeNotFoundErrors are expected here; nothing else is.
-					if !errors.HasType(replErr, (*roachpb.RangeNotFoundError)(nil)) {
+					if !errors.HasType(replErr, (*kvpb.RangeNotFoundError)(nil)) {
 						log.Errorf(ctx, "%v", replErr)
 					}
 					return nil
@@ -547,7 +548,7 @@ func (s *Store) HandleRaftResponse(
 				// other replicas are (#23994). Add it to the replica GC queue to do a
 				// proper check.
 				s.replicaGCQueue.AddAsync(ctx, repl, replicaGCPriorityDefault)
-			case *roachpb.StoreNotFoundError:
+			case *kvpb.StoreNotFoundError:
 				log.Warningf(ctx, "raft error: node %d claims to not contain store %d for replica %s: %s",
 					resp.FromReplica.NodeID, resp.FromReplica.StoreID, resp.FromReplica, val)
 				return val.GetDetail() // close Raft connection
@@ -584,7 +585,7 @@ func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID
 	for i := range infos {
 		info := &infos[i]
 		if pErr := s.withReplicaForRequest(
-			ctx, info.req, func(_ context.Context, r *Replica) *roachpb.Error {
+			ctx, info.req, func(_ context.Context, r *Replica) *kvpb.Error {
 				return s.processRaftRequestWithReplica(r.raftCtx, r, info.req)
 			},
 		); pErr != nil {
@@ -737,7 +738,7 @@ func (s *Store) processRaft(ctx context.Context) {
 				prop.finishApplication(
 					context.Background(),
 					proposalResult{
-						Err: roachpb.NewError(roachpb.NewAmbiguousResultErrorf("store is stopping")),
+						Err: kvpb.NewError(kvpb.NewAmbiguousResultErrorf("store is stopping")),
 					},
 				)
 			}

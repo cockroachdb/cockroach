@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -151,7 +152,7 @@ func scanPoisonPolicy(t *testing.T, d *datadriven.TestData) poison.Policy {
 
 func scanSingleRequest(
 	t *testing.T, d *datadriven.TestData, line string, txns map[string]*roachpb.Transaction,
-) roachpb.Request {
+) kvpb.Request {
 	cmd, cmdArgs, err := datadriven.ParseLine(line)
 	if err != nil {
 		d.Fatalf(t, "error parsing single request: %v", err)
@@ -187,13 +188,13 @@ func scanSingleRequest(
 
 	switch cmd {
 	case "get":
-		var r roachpb.GetRequest
+		var r kvpb.GetRequest
 		r.Sequence = maybeGetSeq()
 		r.Key = roachpb.Key(mustGetField("key"))
 		return &r
 
 	case "scan":
-		var r roachpb.ScanRequest
+		var r kvpb.ScanRequest
 		r.Sequence = maybeGetSeq()
 		r.Key = roachpb.Key(mustGetField("key"))
 		if v, ok := fields["endkey"]; ok {
@@ -202,25 +203,25 @@ func scanSingleRequest(
 		return &r
 
 	case "put":
-		var r roachpb.PutRequest
+		var r kvpb.PutRequest
 		r.Sequence = maybeGetSeq()
 		r.Key = roachpb.Key(mustGetField("key"))
 		r.Value.SetString(mustGetField("value"))
 		return &r
 
 	case "resolve-intent":
-		var r roachpb.ResolveIntentRequest
+		var r kvpb.ResolveIntentRequest
 		r.IntentTxn = txns[mustGetField("txn")].TxnMeta
 		r.Key = roachpb.Key(mustGetField("key"))
 		r.Status = parseTxnStatus(t, d, mustGetField("status"))
 		return &r
 
 	case "request-lease":
-		var r roachpb.RequestLeaseRequest
+		var r kvpb.RequestLeaseRequest
 		return &r
 
 	case "barrier":
-		var r roachpb.BarrierRequest
+		var r kvpb.BarrierRequest
 		r.Key = roachpb.Key(mustGetField("key"))
 		if v, ok := fields["endkey"]; ok {
 			r.EndKey = roachpb.Key(v)

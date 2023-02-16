@@ -15,6 +15,7 @@ go_library(
     deps = [
         "//pkg/clusterversion",
         "//pkg/keys",
+        "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/kv/kvserver/logstore",
         "//pkg/kv/kvserver/rditer",

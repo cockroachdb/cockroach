@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -39,12 +40,12 @@ import (
 
 type interceptingTransport struct {
 	kvcoord.Transport
-	sendNext func(context.Context, *roachpb.BatchRequest) (*roachpb.BatchResponse, error)
+	sendNext func(context.Context, *kvpb.BatchRequest) (*kvpb.BatchResponse, error)
 }
 
 func (t *interceptingTransport) SendNext(
-	ctx context.Context, ba *roachpb.BatchRequest,
-) (*roachpb.BatchResponse, error) {
+	ctx context.Context, ba *kvpb.BatchRequest,
+) (*kvpb.BatchResponse, error) {
 	if fn := t.sendNext; fn != nil {
 		return fn(ctx, ba)
 	} else {
@@ -77,9 +78,9 @@ func TestAmbiguousCommit(t *testing.T) {
 		var processed int32
 		var tableStartKey atomic.Value
 
-		translateToRPCError := roachpb.NewError(errors.Errorf("%s: RPC error: success=%t", t.Name(), ambiguousSuccess))
+		translateToRPCError := kvpb.NewError(errors.Errorf("%s: RPC error: success=%t", t.Name(), ambiguousSuccess))
 
-		maybeRPCError := func(req *roachpb.ConditionalPutRequest) *roachpb.Error {
+		maybeRPCError := func(req *kvpb.ConditionalPutRequest) *kvpb.Error {
 			tsk, ok := tableStartKey.Load().(roachpb.Key)
 			if !ok {
 				return nil
@@ -100,7 +101,7 @@ func TestAmbiguousCommit(t *testing.T) {
 				transport, err := kvcoord.GRPCTransportFactory(opts, nodeDialer, replicas)
 				return &interceptingTransport{
 					Transport: transport,
-					sendNext: func(ctx context.Context, ba *roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+					sendNext: func(ctx context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
 						if ambiguousSuccess {
 							br, err := transport.SendNext(ctx, ba)
 							// During shutdown, we may get responses that
@@ -116,8 +117,8 @@ func TestAmbiguousCommit(t *testing.T) {
 							}
 							return br, err
 						} else {
-							if req, ok := ba.GetArg(roachpb.ConditionalPut); ok {
-								if pErr := maybeRPCError(req.(*roachpb.ConditionalPutRequest)); pErr != nil {
+							if req, ok := ba.GetArg(kvpb.ConditionalPut); ok {
+								if pErr := maybeRPCError(req.(*kvpb.ConditionalPutRequest)); pErr != nil {
 									// Blackhole the RPC and return an
 									// error to simulate an ambiguous
 									// result.
@@ -134,10 +135,10 @@ func TestAmbiguousCommit(t *testing.T) {
 		if ambiguousSuccess {
 			params.Knobs.Store = &kvserver.StoreTestingKnobs{
 				TestingResponseFilter: func(
-					ctx context.Context, args *roachpb.BatchRequest, _ *roachpb.BatchResponse,
-				) *roachpb.Error {
-					if req, ok := args.GetArg(roachpb.ConditionalPut); ok {
-						return maybeRPCError(req.(*roachpb.ConditionalPutRequest))
+					ctx context.Context, args *kvpb.BatchRequest, _ *kvpb.BatchResponse,
+				) *kvpb.Error {
+					if req, ok := args.GetArg(kvpb.ConditionalPut); ok {
+						return maybeRPCError(req.(*kvpb.ConditionalPutRequest))
 					}
 					return nil
 				},

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -131,9 +132,9 @@ func getSystemDescriptorAndZonesSpans(
 	ctx context.Context, t *testing.T, codec keys.SQLCodec, kvDB *kv.DB,
 ) []roachpb.KeyValue {
 	scanSpanForRows := func(startKey, endKey roachpb.Key) (rows []roachpb.KeyValue) {
-		ba := &roachpb.BatchRequest{}
+		ba := &kvpb.BatchRequest{}
 		ba.Add(
-			roachpb.NewScan(
+			kvpb.NewScan(
 				append(codec.TenantPrefix(), startKey...),
 				append(codec.TenantPrefix(), endKey...),
 				false, // forUpdate

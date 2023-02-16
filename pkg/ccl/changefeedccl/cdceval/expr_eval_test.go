@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -682,7 +683,7 @@ func TestUnsupportedCDCFunctions(t *testing.T) {
 }
 
 func decodeRowErr(
-	decoder cdcevent.Decoder, v *roachpb.RangeFeedValue, rt cdcevent.RowType,
+	decoder cdcevent.Decoder, v *kvpb.RangeFeedValue, rt cdcevent.RowType,
 ) (cdcevent.Row, error) {
 	keyVal := roachpb.KeyValue{Key: v.Key}
 	if rt == cdcevent.PrevRow {
@@ -695,7 +696,7 @@ func decodeRowErr(
 }
 
 func decodeRow(
-	t *testing.T, decoder cdcevent.Decoder, v *roachpb.RangeFeedValue, rt cdcevent.RowType,
+	t *testing.T, decoder cdcevent.Decoder, v *kvpb.RangeFeedValue, rt cdcevent.RowType,
 ) cdcevent.Row {
 	r, err := decodeRowErr(decoder, v, rt)
 	require.NoError(t, err)
@@ -738,8 +739,8 @@ func randEncDatumPrimaryFamily(
 
 // readSortedRangeFeedValues reads n values, and sorts them based on key order.
 func readSortedRangeFeedValues(
-	t *testing.T, n int, row func(t *testing.T) *roachpb.RangeFeedValue,
-) (res []roachpb.RangeFeedValue) {
+	t *testing.T, n int, row func(t *testing.T) *kvpb.RangeFeedValue,
+) (res []kvpb.RangeFeedValue) {
 	t.Helper()
 	for i := 0; i < n; i++ {
 		v := row(t)

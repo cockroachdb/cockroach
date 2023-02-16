@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -185,7 +186,7 @@ func TestStoresGetReplicaForRangeID(t *testing.T) {
 	if replica2 != nil {
 		t.Fatalf("expected replica to be nil; was %v", replica2)
 	}
-	expectedError := roachpb.NewRangeNotFoundError(rangeID2, 0)
+	expectedError := kvpb.NewRangeNotFoundError(rangeID2, 0)
 	if err2.Error() != expectedError.Error() {
 		t.Fatalf("expected err to be %v; was %v", expectedError, err2)
 	}

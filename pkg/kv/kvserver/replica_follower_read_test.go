@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -88,8 +89,8 @@ func TestCanServeFollowerRead(t *testing.T) {
 				0, // coordinatorNodeID
 			)
 
-			ba := &roachpb.BatchRequest{}
-			ba.Header = roachpb.Header{Txn: &txn}
+			ba := &kvpb.BatchRequest{}
+			ba.Header = kvpb.Header{Txn: &txn}
 			ba.Add(&gArgs)
 			r := tc.repl
 			r.mu.RLock()
@@ -114,7 +115,7 @@ func TestCheckExecutionCanProceedAllowsFollowerReadWithInvalidLease(t *testing.T
 	// Permit only one lease attempt. The test is flaky if we allow the lease to
 	// be renewed by background processes.
 	var leaseOnce sync.Once
-	tsc.TestingKnobs.LeaseRequestEvent = func(ts hlc.Timestamp, _ roachpb.StoreID, _ roachpb.RangeID) *roachpb.Error {
+	tsc.TestingKnobs.LeaseRequestEvent = func(ts hlc.Timestamp, _ roachpb.StoreID, _ roachpb.RangeID) *kvpb.Error {
 		admitted := false
 		leaseOnce.Do(func() {
 			admitted = true
@@ -122,7 +123,7 @@ func TestCheckExecutionCanProceedAllowsFollowerReadWithInvalidLease(t *testing.T
 		if admitted {
 			return nil
 		}
-		return roachpb.NewErrorf("boom")
+		return kvpb.NewErrorf("boom")
 	}
 	const closedTimestampLag = time.Second
 	closedts.TargetDuration.Override(ctx, &tsc.Settings.SV, closedTimestampLag)
@@ -168,8 +169,8 @@ func TestCheckExecutionCanProceedAllowsFollowerReadWithInvalidLease(t *testing.T
 		0, // coordinatorNodeID
 	)
 
-	ba := &roachpb.BatchRequest{}
-	ba.Header = roachpb.Header{
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{
 		Txn:       &txn,
 		Timestamp: txn.ReadTimestamp,
 	}

@@ -17,6 +17,7 @@ import (
 	"math/rand"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -92,7 +93,7 @@ func TestCheckSSTConflictsMaxIntents(t *testing.T) {
 					_, err := CheckSSTConflicts(ctx, sstFile.Bytes(), engine, startKey, endKey, startKey.Key, endKey.Key.Next(),
 						false /*disallowShadowing*/, hlc.Timestamp{} /*disallowShadowingBelow*/, hlc.Timestamp{} /* sstReqTS */, tc.maxIntents, usePrefixSeek)
 					require.Error(t, err)
-					writeIntentErr := &roachpb.WriteIntentError{}
+					writeIntentErr := &kvpb.WriteIntentError{}
 					require.ErrorAs(t, err, &writeIntentErr)
 
 					actual := []string{}

@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvstreamer"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -31,7 +32,7 @@ type txnKVStreamer struct {
 
 	spans       roachpb.Spans
 	spanIDs     []int
-	reqsScratch []roachpb.RequestUnion
+	reqsScratch []kvpb.RequestUnion
 
 	acc *mon.BoundAccount
 
@@ -93,10 +94,10 @@ func (f *txnKVStreamer) SetupNextFetch(
 	// about the slice reuse.
 	reqsScratch := f.reqsScratch[:cap(f.reqsScratch)]
 	for i := len(spans); i < len(reqsScratch); i++ {
-		reqsScratch[i] = roachpb.RequestUnion{}
+		reqsScratch[i] = kvpb.RequestUnion{}
 	}
 	// TODO(yuzefovich): consider supporting COL_BATCH_RESPONSE scan format.
-	reqs := spansToRequests(spans, roachpb.BATCH_RESPONSE, false /* reverse */, f.keyLocking, reqsScratch)
+	reqs := spansToRequests(spans, kvpb.BATCH_RESPONSE, false /* reverse */, f.keyLocking, reqsScratch)
 	if err := f.streamer.Enqueue(ctx, reqs); err != nil {
 		return err
 	}

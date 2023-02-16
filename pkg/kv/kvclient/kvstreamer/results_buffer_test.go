@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -165,7 +166,7 @@ func TestInOrderResultsBuffer(t *testing.T) {
 
 func makeResultWithGetResp(rng *rand.Rand, empty bool) Result {
 	var r Result
-	r.GetResp = &roachpb.GetResponse{}
+	r.GetResp = &kvpb.GetResponse{}
 	if !empty {
 		rawBytes := make([]byte, rng.Intn(20)+1)
 		rng.Read(rawBytes)
@@ -190,7 +191,7 @@ func makeResultWithScanResp(rng *rand.Rand) Result {
 		rng.Read(batchResponse)
 		batchResponses[i] = batchResponse
 	}
-	r.ScanResp = &roachpb.ScanResponse{
+	r.ScanResp = &kvpb.ScanResponse{
 		BatchResponses: batchResponses,
 	}
 	return r

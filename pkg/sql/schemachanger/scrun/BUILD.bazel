@@ -12,7 +12,7 @@ go_library(
     deps = [
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
-        "//pkg/roachpb",
+        "//pkg/kv/kvpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog",

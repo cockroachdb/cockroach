@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -24,7 +25,7 @@ import (
 var errRetry = errors.New("retry: orphaned replica")
 
 // getOrCreateReplica returns an existing or newly created replica with the
-// given replicaID for the given rangeID, or roachpb.RaftGroupDeletedError if
+// given replicaID for the given rangeID, or kvpb.RaftGroupDeletedError if
 // this replicaID has been deleted. A returned replica's Replica.raftMu is
 // locked, and the caller is responsible for unlocking it.
 //
@@ -47,7 +48,7 @@ var errRetry = errors.New("retry: orphaned replica")
 //   - The Replica is not being removed as seen by its Replica.mu.destroyStatus
 //   - The RangeTombstone in storage does not see this replica as removed
 //
-// If getOrCreateReplica returns roachpb.RaftGroupDeletedError, the guarantee is:
+// If getOrCreateReplica returns kvpb.RaftGroupDeletedError, the guarantee is:
 //
 //   - getOrCreateReplica will never return this replica
 //   - Store.GetReplica(rangeID) can now only return replicas with higher IDs
@@ -120,7 +121,7 @@ func (s *Store) tryGetReplica(
 	if fromReplicaIsTooOldRLocked(repl, creatingReplica) {
 		repl.mu.RUnlock()
 		repl.raftMu.Unlock()
-		return nil, roachpb.NewReplicaTooOldError(creatingReplica.ReplicaID)
+		return nil, kvpb.NewReplicaTooOldError(creatingReplica.ReplicaID)
 	}
 
 	// The current replica needs to be removed, remove it and go back around.
@@ -146,7 +147,7 @@ func (s *Store) tryGetReplica(
 		// We could silently drop this message but this way we'll inform the
 		// sender that they may no longer exist.
 		repl.raftMu.Unlock()
-		return nil, &roachpb.RaftGroupDeletedError{}
+		return nil, &kvpb.RaftGroupDeletedError{}
 	}
 	if repl.replicaID != replicaID {
 		// This case should have been caught by handleToReplicaTooOld.

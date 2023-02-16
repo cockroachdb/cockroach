@@ -13,6 +13,7 @@ package batcheval
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -21,19 +22,19 @@ import (
 )
 
 func init() {
-	RegisterReadOnlyCommand(roachpb.Get, DefaultDeclareIsolatedKeys, Get)
+	RegisterReadOnlyCommand(kvpb.Get, DefaultDeclareIsolatedKeys, Get)
 }
 
 // Get returns the value for a specified key.
 func Get(
-	ctx context.Context, reader storage.Reader, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, reader storage.Reader, cArgs CommandArgs, resp kvpb.Response,
 ) (result.Result, error) {
-	args := cArgs.Args.(*roachpb.GetRequest)
+	args := cArgs.Args.(*kvpb.GetRequest)
 	h := cArgs.Header
-	reply := resp.(*roachpb.GetResponse)
+	reply := resp.(*kvpb.GetResponse)
 
 	getRes, err := storage.MVCCGet(ctx, reader, args.Key, h.Timestamp, storage.MVCCGetOptions{
-		Inconsistent:          h.ReadConsistency != roachpb.CONSISTENT,
+		Inconsistent:          h.ReadConsistency != kvpb.CONSISTENT,
 		SkipLocked:            h.WaitPolicy == lock.WaitPolicy_SkipLocked,
 		Txn:                   h.Txn,
 		FailOnMoreRecent:      args.KeyLocking != lock.None,
@@ -62,7 +63,7 @@ func Get(
 	}
 
 	reply.Value = getRes.Value
-	if h.ReadConsistency == roachpb.READ_UNCOMMITTED {
+	if h.ReadConsistency == kvpb.READ_UNCOMMITTED {
 		var intentVals []roachpb.KeyValue
 		// NOTE: MVCCGet uses a Prefix iterator, so we want to use one in
 		// CollectIntentRows as well so that we're guaranteed to use the same

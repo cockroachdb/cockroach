@@ -13,6 +13,7 @@ package batcheval
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -35,8 +36,8 @@ func TestRequestsSerializeWithAllKeys(t *testing.T) {
 		if command.isEmpty() {
 			continue
 		}
-		method := roachpb.Method(i)
-		if method == roachpb.Probe {
+		method := kvpb.Method(i)
+		if method == kvpb.Probe {
 			// Probe is special since it's a no-op round-trip through the replication
 			// layer. It does not declare any keys.
 			continue
@@ -59,16 +60,16 @@ func TestRequestsSerializeWithAllKeys(t *testing.T) {
 				},
 				Name: "test txn",
 			}
-			header := roachpb.Header{Txn: testTxn}
-			otherRequest := roachpb.CreateRequest(method)
-			if queryTxnReq, ok := otherRequest.(*roachpb.QueryTxnRequest); ok {
+			header := kvpb.Header{Txn: testTxn}
+			otherRequest := kvpb.CreateRequest(method)
+			if queryTxnReq, ok := otherRequest.(*kvpb.QueryTxnRequest); ok {
 				// QueryTxnRequest declares read-only access over the txn record of the txn
 				// it is supposed to query and not the txn that sent it. We fill this Txn
 				// field in here to prevent it from being nil and leading to the txn key
 				// falling outside our test range's keyspace.
 				queryTxnReq.Txn = testTxn.TxnMeta
 			}
-			otherRequest.SetHeader(roachpb.RequestHeader{
+			otherRequest.SetHeader(kvpb.RequestHeader{
 				Key:      startKey,
 				EndKey:   endKey,
 				Sequence: 0,

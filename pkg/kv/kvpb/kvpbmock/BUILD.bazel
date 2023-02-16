@@ -3,16 +3,16 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 load("@bazel_gomock//:gomock.bzl", "gomock")
 
 gomock(
-    name = "mock_roachpb",
+    name = "mock_kvpb",
     out = "mocks_generated.go",
     interfaces = [
         "InternalClient",
         "Internal_RangeFeedClient",
         "Internal_MuxRangeFeedClient",
     ],
-    library = "//pkg/roachpb",
-    package = "roachpbmock",
-    self_package = "github.com/cockroachdb/cockroach/pkg/roachpb/roachpbmock",
+    library = "//pkg/kv/kvpb",
+    package = "kvpbmock",
+    self_package = "github.com/cockroachdb/cockroach/pkg/kv/kvpb/kvpbmock",
     visibility = [
         ":__pkg__",
         "//pkg/gen:__pkg__",
@@ -20,13 +20,14 @@ gomock(
 )
 
 go_library(
-    name = "roachpbmock",
+    name = "kvpbmock",
     srcs = [
-        ":mock_roachpb",  # keep
+        ":mock_kvpb",  # keep
     ],
-    importpath = "github.com/cockroachdb/cockroach/pkg/roachpb/roachpbmock",  # keep
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvpb/kvpbmock",  # keep
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/kv/kvpb",  # keep
         "//pkg/roachpb",  # keep
         "@com_github_golang_mock//gomock",  # keep
         "@org_golang_google_grpc//:go_default_library",  # keep

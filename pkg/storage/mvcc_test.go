@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -619,7 +620,7 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 		t.Run(scan.name, func(t *testing.T) {
 			res, err := MVCCScan(ctx, engine, testKey1, testKey6.Next(),
 				hlc.Timestamp{WallTime: 1}, MVCCScanOptions{Inconsistent: !scan.consistent, Txn: scan.txn, MaxIntents: 2})
-			var wiErr *roachpb.WriteIntentError
+			var wiErr *kvpb.WriteIntentError
 			_ = errors.As(err, &wiErr)
 			if (err == nil) != (wiErr == nil) {
 				t.Errorf("unexpected error: %+v", err)
@@ -746,7 +747,7 @@ func TestMVCCGetProtoInconsistent(t *testing.T) {
 		Txn:          txn1,
 	}); err == nil {
 		t.Error("expected an error getting inconsistently in txn")
-	} else if errors.HasType(err, (*roachpb.WriteIntentError)(nil)) {
+	} else if errors.HasType(err, (*kvpb.WriteIntentError)(nil)) {
 		t.Error("expected non-WriteIntentError with inconsistent read in txn")
 	}
 
@@ -1697,7 +1698,7 @@ func TestMVCCDeleteRangeOldTimestamp(t *testing.T) {
 	require.Nil(t, resume)
 	require.Equal(t, int64(0), keyCount)
 	require.NotNil(t, err)
-	require.IsType(t, (*roachpb.WriteTooOldError)(nil), err)
+	require.IsType(t, (*kvpb.WriteTooOldError)(nil), err)
 
 	// Delete at the same time as the tombstone. Should return a WriteTooOld error.
 	b = engine.NewBatch()
@@ -1708,7 +1709,7 @@ func TestMVCCDeleteRangeOldTimestamp(t *testing.T) {
 	require.Nil(t, resume)
 	require.Equal(t, int64(0), keyCount)
 	require.NotNil(t, err)
-	require.IsType(t, (*roachpb.WriteTooOldError)(nil), err)
+	require.IsType(t, (*kvpb.WriteTooOldError)(nil), err)
 
 	// Delete at a time after the tombstone. Should succeed and should not
 	// include the tombstone in the returned keys.
@@ -2219,7 +2220,7 @@ func TestMVCCInitPut(t *testing.T) {
 
 	// Reinserting the value fails if we fail on tombstones.
 	err = MVCCInitPut(ctx, engine, nil, testKey1, hlc.Timestamp{Logical: 4}, hlc.ClockTimestamp{}, value1, true, nil)
-	if e := (*roachpb.ConditionFailedError)(nil); errors.As(err, &e) {
+	if e := (*kvpb.ConditionFailedError)(nil); errors.As(err, &e) {
 		if !bytes.Equal(e.ActualValue.RawBytes, nil) {
 			t.Fatalf("the value %s in get result is not a tombstone", e.ActualValue.RawBytes)
 		}
@@ -2237,7 +2238,7 @@ func TestMVCCInitPut(t *testing.T) {
 
 	// A repeat of the command with a different value will fail.
 	err = MVCCInitPut(ctx, engine, nil, testKey1, hlc.Timestamp{Logical: 6}, hlc.ClockTimestamp{}, value2, false, nil)
-	if e := (*roachpb.ConditionFailedError)(nil); errors.As(err, &e) {
+	if e := (*kvpb.ConditionFailedError)(nil); errors.As(err, &e) {
 		if !bytes.Equal(e.ActualValue.RawBytes, value1.RawBytes) {
 			t.Fatalf("the value %s in get result does not match the value %s in request",
 				e.ActualValue.RawBytes, value1.RawBytes)
@@ -2325,7 +2326,7 @@ func TestMVCCInitPutWithTxn(t *testing.T) {
 
 	// Write value4 with an old timestamp without txn...should get an error.
 	err = MVCCInitPut(ctx, engine, nil, testKey1, clock.Now(), hlc.ClockTimestamp{}, value4, false, nil)
-	if e := (*roachpb.ConditionFailedError)(nil); errors.As(err, &e) {
+	if e := (*kvpb.ConditionFailedError)(nil); errors.As(err, &e) {
 		if !bytes.Equal(e.ActualValue.RawBytes, value2.RawBytes) {
 			t.Fatalf("the value %s in get result does not match the value %s in request",
 				e.ActualValue.RawBytes, value2.RawBytes)
@@ -2653,7 +2654,7 @@ func TestMVCCResolveNewerIntent(t *testing.T) {
 	// Now, put down an intent which should return a write too old error
 	// (but will still write the intent at tx1Commit.Timestamp+1.
 	err := MVCCPut(ctx, engine, nil, testKey1, txn1.ReadTimestamp, hlc.ClockTimestamp{}, value2, txn1)
-	if !errors.HasType(err, (*roachpb.WriteTooOldError)(nil)) {
+	if !errors.HasType(err, (*kvpb.WriteTooOldError)(nil)) {
 		t.Fatalf("expected write too old error; got %s", err)
 	}
 
@@ -2714,7 +2715,7 @@ func TestMVCCResolveIntentTxnTimestampMismatch(t *testing.T) {
 		{hlc.MaxTimestamp, true},
 	} {
 		_, err := MVCCGet(ctx, engine, testKey1, test.Timestamp, MVCCGetOptions{})
-		if errors.HasType(err, (*roachpb.WriteIntentError)(nil)) != test.found {
+		if errors.HasType(err, (*kvpb.WriteIntentError)(nil)) != test.found {
 			t.Fatalf("%d: expected write intent error: %t, got %v", i, test.found, err)
 		}
 	}
@@ -2747,7 +2748,7 @@ func TestMVCCConditionalPutOldTimestamp(t *testing.T) {
 	if err == nil {
 		t.Errorf("unexpected success on conditional put")
 	}
-	if !errors.HasType(err, (*roachpb.ConditionFailedError)(nil)) {
+	if !errors.HasType(err, (*kvpb.ConditionFailedError)(nil)) {
 		t.Errorf("unexpected error on conditional put: %+v", err)
 	}
 
@@ -2757,7 +2758,7 @@ func TestMVCCConditionalPutOldTimestamp(t *testing.T) {
 	if err == nil {
 		t.Errorf("unexpected success on conditional put")
 	}
-	if !errors.HasType(err, (*roachpb.WriteTooOldError)(nil)) {
+	if !errors.HasType(err, (*kvpb.WriteTooOldError)(nil)) {
 		t.Errorf("unexpected error on conditional put: %+v", err)
 	}
 	// Verify new value was actually written at (3, 1).
@@ -2792,7 +2793,7 @@ func TestMVCCMultiplePutOldTimestamp(t *testing.T) {
 	txn := makeTxn(*txn1, hlc.Timestamp{WallTime: 1})
 	txn.Sequence++
 	err = MVCCPut(ctx, engine, nil, testKey1, txn.ReadTimestamp, hlc.ClockTimestamp{}, value2, txn)
-	if !errors.HasType(err, (*roachpb.WriteTooOldError)(nil)) {
+	if !errors.HasType(err, (*kvpb.WriteTooOldError)(nil)) {
 		t.Errorf("expected WriteTooOldError on Put; got %v", err)
 	}
 	// Verify new value was actually written at (3, 1).
@@ -2868,7 +2869,7 @@ func TestMVCCPutOldOrigTimestampNewCommitTimestamp(t *testing.T) {
 	// Verify that the Put returned a WriteTooOld with the ActualTime set to the
 	// transactions provisional commit timestamp.
 	expTS := txn.WriteTimestamp
-	if wtoErr := (*roachpb.WriteTooOldError)(nil); !errors.As(err, &wtoErr) || wtoErr.ActualTimestamp != expTS {
+	if wtoErr := (*kvpb.WriteTooOldError)(nil); !errors.As(err, &wtoErr) || wtoErr.ActualTimestamp != expTS {
 		t.Fatalf("expected WriteTooOldError with actual time = %s; got %s", expTS, wtoErr)
 	}
 
@@ -3016,7 +3017,7 @@ func TestMVCCWriteWithDiffTimestampsAndEpochs(t *testing.T) {
 
 	// Now try writing an earlier value without a txn--should get WriteTooOldError.
 	err := MVCCPut(ctx, engine, nil, testKey1, hlc.Timestamp{Logical: 1}, hlc.ClockTimestamp{}, value4, nil)
-	if wtoErr := (*roachpb.WriteTooOldError)(nil); !errors.As(err, &wtoErr) {
+	if wtoErr := (*kvpb.WriteTooOldError)(nil); !errors.As(err, &wtoErr) {
 		t.Fatal("unexpected success")
 	} else if wtoErr.ActualTimestamp != expTS {
 		t.Fatalf("expected write too old error with actual ts %s; got %s", expTS, wtoErr.ActualTimestamp)
@@ -3030,7 +3031,7 @@ func TestMVCCWriteWithDiffTimestampsAndEpochs(t *testing.T) {
 	// Now write an intent with exactly the same timestamp--ties also get WriteTooOldError.
 	err = MVCCPut(ctx, engine, nil, testKey1, txn2.ReadTimestamp, hlc.ClockTimestamp{}, value5, txn2)
 	intentTS := expTS.Next()
-	if wtoErr := (*roachpb.WriteTooOldError)(nil); !errors.As(err, &wtoErr) {
+	if wtoErr := (*kvpb.WriteTooOldError)(nil); !errors.As(err, &wtoErr) {
 		t.Fatal("unexpected success")
 	} else if wtoErr.ActualTimestamp != intentTS {
 		t.Fatalf("expected write too old error with actual ts %s; got %s", intentTS, wtoErr.ActualTimestamp)
@@ -3103,7 +3104,7 @@ func TestMVCCGetWithDiffEpochs(t *testing.T) {
 			if test.expErr {
 				if err == nil {
 					t.Errorf("test %d: unexpected success", i)
-				} else if !errors.HasType(err, (*roachpb.WriteIntentError)(nil)) {
+				} else if !errors.HasType(err, (*kvpb.WriteIntentError)(nil)) {
 					t.Errorf("test %d: expected write intent error; got %v", i, err)
 				}
 			} else if err != nil || valueRes.Value == nil || !bytes.Equal(test.expValue.RawBytes, valueRes.Value.RawBytes) {
@@ -3142,7 +3143,7 @@ func TestMVCCGetWithDiffEpochsAndTimestamps(t *testing.T) {
 	txn1ts.WriteTimestamp = hlc.Timestamp{WallTime: 4}
 	// Expected to hit WriteTooOld error but to still lay down intent.
 	err := MVCCPut(ctx, engine, nil, testKey1, txn1ts.ReadTimestamp, hlc.ClockTimestamp{}, value3, txn1ts)
-	if wtoErr := (*roachpb.WriteTooOldError)(nil); !errors.As(err, &wtoErr) {
+	if wtoErr := (*kvpb.WriteTooOldError)(nil); !errors.As(err, &wtoErr) {
 		t.Fatalf("unexpectedly not WriteTooOld: %+v", err)
 	} else if expTS, actTS := txn1ts.WriteTimestamp, wtoErr.ActualTimestamp; expTS != actTS {
 		t.Fatalf("expected write too old error with actual ts %s; got %s", expTS, actTS)
@@ -4600,7 +4601,7 @@ func TestMVCCGarbageCollect(t *testing.T) {
 	}
 
 	gcTime := ts5
-	gcKeys := []roachpb.GCRequest_GCKey{
+	gcKeys := []kvpb.GCRequest_GCKey{
 		{Key: roachpb.Key("a"), Timestamp: ts1},
 		{Key: roachpb.Key("a-del"), Timestamp: ts2},
 		{Key: roachpb.Key("b"), Timestamp: ts1},
@@ -4711,7 +4712,7 @@ func TestMVCCGarbageCollectNonDeleted(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		keys := []roachpb.GCRequest_GCKey{
+		keys := []kvpb.GCRequest_GCKey{
 			{Key: test.key, Timestamp: ts2},
 		}
 		err := MVCCGarbageCollect(ctx, engine, nil, keys, ts2)
@@ -4748,7 +4749,7 @@ func TestMVCCGarbageCollectIntent(t *testing.T) {
 	if _, err := MVCCDelete(ctx, engine, nil, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, txn); err != nil {
 		t.Fatal(err)
 	}
-	keys := []roachpb.GCRequest_GCKey{
+	keys := []kvpb.GCRequest_GCKey{
 		{Key: key, Timestamp: ts2},
 	}
 	if err := MVCCGarbageCollect(ctx, engine, nil, keys, ts2); err == nil {
@@ -4770,7 +4771,7 @@ func TestMVCCGarbageCollectPanicsWithMixOfLocalAndGlobalKeys(t *testing.T) {
 	require.Panics(t, func() {
 		ts := hlc.Timestamp{WallTime: 1e9}
 		k := roachpb.Key("a")
-		keys := []roachpb.GCRequest_GCKey{
+		keys := []kvpb.GCRequest_GCKey{
 			{Key: k, Timestamp: ts},
 			{Key: keys.RangeDescriptorKey(roachpb.RKey(k))},
 		}
@@ -4842,10 +4843,10 @@ func TestMVCCGarbageCollectUsesSeekLTAppropriately(t *testing.T) {
 			}
 		}
 
-		var keys []roachpb.GCRequest_GCKey
+		var keys []kvpb.GCRequest_GCKey
 		var expectedSeekLTs int
 		for _, key := range tc.keys {
-			keys = append(keys, roachpb.GCRequest_GCKey{
+			keys = append(keys, kvpb.GCRequest_GCKey{
 				Key:       roachpb.Key(key.key),
 				Timestamp: toHLC(key.gcTimestamp),
 			})
@@ -5063,7 +5064,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 		name string
 		// Note that range test data should be in ascending order (valid writes).
 		before  rangeTestData
-		request []roachpb.GCRequest_GCRangeKey
+		request []kvpb.GCRequest_GCRangeKey
 		// Note that expectations should be in timestamp descending order
 		// (forward iteration).
 		after []MVCCRangeKey
@@ -5077,7 +5078,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 			before: rangeTestData{
 				rng(keyA, keyD, ts3),
 			},
-			request: []roachpb.GCRequest_GCRangeKey{
+			request: []kvpb.GCRequest_GCRangeKey{
 				{StartKey: keyA, EndKey: keyD, Timestamp: ts3},
 			},
 			after: []MVCCRangeKey{},
@@ -5088,7 +5089,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 				rng(keyA, keyD, ts2),
 				rng(keyB, keyC, ts4),
 			},
-			request: []roachpb.GCRequest_GCRangeKey{
+			request: []kvpb.GCRequest_GCRangeKey{
 				{StartKey: keyA, EndKey: keyD, Timestamp: ts2},
 			},
 			after: []MVCCRangeKey{
@@ -5101,7 +5102,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 				rng(keyA, keyB, ts2),
 				rng(keyC, keyD, ts2),
 			},
-			request: []roachpb.GCRequest_GCRangeKey{
+			request: []kvpb.GCRequest_GCRangeKey{
 				{StartKey: keyA, EndKey: keyD, Timestamp: ts2},
 			},
 			after: []MVCCRangeKey{},
@@ -5112,7 +5113,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 				rng(keyA, keyB, ts2),
 				rng(keyC, keyD, ts2),
 			},
-			request: []roachpb.GCRequest_GCRangeKey{
+			request: []kvpb.GCRequest_GCRangeKey{
 				{StartKey: keyB, EndKey: keyC, Timestamp: ts2},
 			},
 			after: []MVCCRangeKey{
@@ -5125,7 +5126,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 			before: rangeTestData{
 				rng(keyB, keyC, ts2),
 			},
-			request: []roachpb.GCRequest_GCRangeKey{
+			request: []kvpb.GCRequest_GCRangeKey{
 				{StartKey: keyA, EndKey: keyD, Timestamp: ts2},
 			},
 			after: []MVCCRangeKey{},
@@ -5135,7 +5136,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 			before: rangeTestData{
 				rng(keyB, keyD, ts2),
 			},
-			request: []roachpb.GCRequest_GCRangeKey{
+			request: []kvpb.GCRequest_GCRangeKey{
 				{StartKey: keyA, EndKey: keyC, Timestamp: ts2},
 			},
 			after: []MVCCRangeKey{
@@ -5147,7 +5148,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 			before: rangeTestData{
 				rng(keyA, keyC, ts2),
 			},
-			request: []roachpb.GCRequest_GCRangeKey{
+			request: []kvpb.GCRequest_GCRangeKey{
 				{StartKey: keyB, EndKey: keyD, Timestamp: ts2},
 			},
 			after: []MVCCRangeKey{
@@ -5159,7 +5160,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 			before: rangeTestData{
 				rng(keyA, keyD, ts2),
 			},
-			request: []roachpb.GCRequest_GCRangeKey{
+			request: []kvpb.GCRequest_GCRangeKey{
 				{StartKey: keyB, EndKey: keyC, Timestamp: ts2},
 			},
 			after: []MVCCRangeKey{
@@ -5172,7 +5173,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 			before: rangeTestData{
 				rng(keyA, keyD, ts2),
 			},
-			request: []roachpb.GCRequest_GCRangeKey{
+			request: []kvpb.GCRequest_GCRangeKey{
 				{StartKey: keyA, EndKey: keyB, Timestamp: ts2},
 			},
 			after: []MVCCRangeKey{
@@ -5184,7 +5185,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 			before: rangeTestData{
 				rng(keyA, keyB, ts2),
 			},
-			request: []roachpb.GCRequest_GCRangeKey{
+			request: []kvpb.GCRequest_GCRangeKey{
 				{StartKey: keyA, EndKey: keyD, Timestamp: ts2},
 			},
 			after: []MVCCRangeKey{},
@@ -5194,7 +5195,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 			before: rangeTestData{
 				rng(keyA, keyD, ts2),
 			},
-			request: []roachpb.GCRequest_GCRangeKey{
+			request: []kvpb.GCRequest_GCRangeKey{
 				{StartKey: keyB, EndKey: keyD, Timestamp: ts2},
 			},
 			after: []MVCCRangeKey{
@@ -5206,7 +5207,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 			before: rangeTestData{
 				rng(keyB, keyD, ts2),
 			},
-			request: []roachpb.GCRequest_GCRangeKey{
+			request: []kvpb.GCRequest_GCRangeKey{
 				{StartKey: keyA, EndKey: keyD, Timestamp: ts2},
 			},
 			after: []MVCCRangeKey{},
@@ -5217,7 +5218,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 				rng(keyB, keyD, ts2),
 				pt(keyA, ts4),
 			},
-			request: []roachpb.GCRequest_GCRangeKey{
+			request: []kvpb.GCRequest_GCRangeKey{
 				{StartKey: keyC, EndKey: keyD, Timestamp: ts2},
 			},
 			after: []MVCCRangeKey{
@@ -5230,7 +5231,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 				rng(keyA, keyD, ts2),
 				pt(keyA, ts4),
 			},
-			request: []roachpb.GCRequest_GCRangeKey{
+			request: []kvpb.GCRequest_GCRangeKey{
 				{StartKey: keyB, EndKey: keyD, Timestamp: ts2},
 			},
 			after: []MVCCRangeKey{
@@ -5243,7 +5244,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 				rng(keyA, keyD, ts2),
 				pt(keyB, ts4),
 			},
-			request: []roachpb.GCRequest_GCRangeKey{
+			request: []kvpb.GCRequest_GCRangeKey{
 				{StartKey: keyC, EndKey: keyD, Timestamp: ts2},
 			},
 			after: []MVCCRangeKey{
@@ -5256,7 +5257,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 				rng(keyA, keyD, ts2),
 				pt(keyB, ts4),
 			},
-			request: []roachpb.GCRequest_GCRangeKey{
+			request: []kvpb.GCRequest_GCRangeKey{
 				{StartKey: keyB, EndKey: keyD, Timestamp: ts2},
 			},
 			after: []MVCCRangeKey{
@@ -5269,7 +5270,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 				rng(keyC, keyD, ts2),
 				pt(keyA, ts4),
 			},
-			request: []roachpb.GCRequest_GCRangeKey{
+			request: []kvpb.GCRequest_GCRangeKey{
 				{StartKey: keyB, EndKey: keyD, Timestamp: ts2},
 			},
 			after: []MVCCRangeKey{},
@@ -5280,7 +5281,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 				rng(keyB, keyD, ts2),
 				pt(keyA, ts4),
 			},
-			request: []roachpb.GCRequest_GCRangeKey{
+			request: []kvpb.GCRequest_GCRangeKey{
 				{StartKey: keyA, EndKey: keyD, Timestamp: ts2},
 			},
 			after: []MVCCRangeKey{},
@@ -5291,7 +5292,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 				rng(keyC, keyD, ts2),
 				pt(keyB, ts4),
 			},
-			request: []roachpb.GCRequest_GCRangeKey{
+			request: []kvpb.GCRequest_GCRangeKey{
 				{StartKey: keyA, EndKey: keyD, Timestamp: ts2},
 			},
 			after: []MVCCRangeKey{},
@@ -5302,7 +5303,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 				rng(keyB, keyD, ts2),
 				pt(keyB, ts4),
 			},
-			request: []roachpb.GCRequest_GCRangeKey{
+			request: []kvpb.GCRequest_GCRangeKey{
 				{StartKey: keyA, EndKey: keyD, Timestamp: ts2},
 			},
 			after: []MVCCRangeKey{},
@@ -5313,7 +5314,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 				rng(keyA, keyD, ts2),
 				txn(pt(keyA, ts4)),
 			},
-			request: []roachpb.GCRequest_GCRangeKey{
+			request: []kvpb.GCRequest_GCRangeKey{
 				{StartKey: keyA, EndKey: keyD, Timestamp: ts2},
 			},
 			after: []MVCCRangeKey{},
@@ -5324,7 +5325,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 				rng(keyB, keyC, ts2),
 				rng(keyA, keyD, ts4),
 			},
-			request: []roachpb.GCRequest_GCRangeKey{
+			request: []kvpb.GCRequest_GCRangeKey{
 				{StartKey: keyA, EndKey: keyD, Timestamp: ts4},
 			},
 			after: []MVCCRangeKey{},
@@ -5335,7 +5336,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 				pt(keyA, ts2),
 				rng(keyB, keyC, ts3),
 			},
-			request: []roachpb.GCRequest_GCRangeKey{
+			request: []kvpb.GCRequest_GCRangeKey{
 				{StartKey: keyB, EndKey: keyC, Timestamp: ts3},
 			},
 			after: []MVCCRangeKey{},
@@ -5346,7 +5347,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 				pt(keyC, ts2),
 				rng(keyB, keyC, ts3),
 			},
-			request: []roachpb.GCRequest_GCRangeKey{
+			request: []kvpb.GCRequest_GCRangeKey{
 				{StartKey: keyB, EndKey: keyC, Timestamp: ts3},
 			},
 			after: []MVCCRangeKey{},
@@ -5357,7 +5358,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 				rng(keyA, keyD, ts1),
 				rng(keyA, keyD, ts3),
 			},
-			request: []roachpb.GCRequest_GCRangeKey{
+			request: []kvpb.GCRequest_GCRangeKey{
 				{StartKey: keyB, EndKey: keyC, Timestamp: ts1},
 			},
 			after: []MVCCRangeKey{
@@ -5374,7 +5375,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 				rng(keyB, keyC, ts1),
 				rng(keyA, keyD, ts3),
 			},
-			request: []roachpb.GCRequest_GCRangeKey{
+			request: []kvpb.GCRequest_GCRangeKey{
 				{StartKey: keyB, EndKey: keyC, Timestamp: ts1},
 			},
 			after: []MVCCRangeKey{
@@ -5387,7 +5388,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 				rng(keyB, keyC, ts1),
 				rng(keyA, keyC, ts3),
 			},
-			request: []roachpb.GCRequest_GCRangeKey{
+			request: []kvpb.GCRequest_GCRangeKey{
 				{StartKey: keyB, EndKey: keyC, Timestamp: ts1},
 			},
 			after: []MVCCRangeKey{
@@ -5400,7 +5401,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 				rng(keyA, keyB, ts1),
 				rng(keyA, keyD, ts3),
 			},
-			request: []roachpb.GCRequest_GCRangeKey{
+			request: []kvpb.GCRequest_GCRangeKey{
 				{StartKey: keyA, EndKey: keyB, Timestamp: ts1},
 			},
 			after: []MVCCRangeKey{
@@ -5415,7 +5416,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 				rng(keyA, keyF, ts3),
 				rng(keyA, keyF, ts4),
 			},
-			request: []roachpb.GCRequest_GCRangeKey{
+			request: []kvpb.GCRequest_GCRangeKey{
 				{StartKey: keyB, EndKey: keyC, Timestamp: ts1},
 				{StartKey: keyD, EndKey: keyE, Timestamp: ts2},
 			},
@@ -5431,7 +5432,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 				rng(keyB, keyD, ts2),
 				rng(keyA, keyE, ts3),
 			},
-			request: []roachpb.GCRequest_GCRangeKey{
+			request: []kvpb.GCRequest_GCRangeKey{
 				{StartKey: keyB, EndKey: keyC, Timestamp: ts2},
 				{StartKey: keyC, EndKey: keyD, Timestamp: ts2},
 			},
@@ -5446,7 +5447,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 				// Tombstone spanning multiple ranges.
 				rng(keyA, keyD, ts4),
 			},
-			request: []roachpb.GCRequest_GCRangeKey{
+			request: []kvpb.GCRequest_GCRangeKey{
 				{StartKey: keyB, EndKey: keyC, Timestamp: ts1},
 			},
 			after: []MVCCRangeKey{
@@ -5511,7 +5512,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 }
 
 func rangesFromRequests(
-	rangeStart, rangeEnd roachpb.Key, rangeKeys []roachpb.GCRequest_GCRangeKey,
+	rangeStart, rangeEnd roachpb.Key, rangeKeys []kvpb.GCRequest_GCRangeKey,
 ) []CollectableGCRangeKey {
 	collectableKeys := make([]CollectableGCRangeKey, len(rangeKeys))
 	for i, rk := range rangeKeys {
@@ -5566,7 +5567,7 @@ func TestMVCCGarbageCollectRangesFailures(t *testing.T) {
 	testData := []struct {
 		name    string
 		before  rangeTestData
-		request []roachpb.GCRequest_GCRangeKey
+		request []kvpb.GCRequest_GCRangeKey
 		error   string
 	}{
 		{
@@ -5574,7 +5575,7 @@ func TestMVCCGarbageCollectRangesFailures(t *testing.T) {
 			before: rangeTestData{
 				rng(keyA, keyD, ts3),
 			},
-			request: []roachpb.GCRequest_GCRangeKey{
+			request: []kvpb.GCRequest_GCRangeKey{
 				{StartKey: keyA, EndKey: keyC, Timestamp: ts3},
 				{StartKey: keyB, EndKey: keyD, Timestamp: ts3},
 			},
@@ -5586,7 +5587,7 @@ func TestMVCCGarbageCollectRangesFailures(t *testing.T) {
 				pt(keyB, ts2),
 				rng(keyA, keyD, ts3),
 			},
-			request: []roachpb.GCRequest_GCRangeKey{
+			request: []kvpb.GCRequest_GCRangeKey{
 				{StartKey: keyA, EndKey: keyD, Timestamp: ts3},
 			},
 			error: "attempt to delete range tombstone .* hiding key at .*",
@@ -5602,7 +5603,7 @@ func TestMVCCGarbageCollectRangesFailures(t *testing.T) {
 				rng(keyA, keyD, ts2),
 				txn(pt(keyB, ts3)),
 			},
-			request: []roachpb.GCRequest_GCRangeKey{
+			request: []kvpb.GCRequest_GCRangeKey{
 				{StartKey: keyA, EndKey: keyD, Timestamp: ts4},
 			},
 			error: "attempt to delete range tombstone .* hiding key at .*",
@@ -5619,7 +5620,7 @@ func TestMVCCGarbageCollectRangesFailures(t *testing.T) {
 				pt(keyB, ts7),
 				pt(keyB, ts8),
 			},
-			request: []roachpb.GCRequest_GCRangeKey{
+			request: []kvpb.GCRequest_GCRangeKey{
 				{StartKey: keyA, EndKey: keyD, Timestamp: ts2},
 			},
 			error: "attempt to delete range tombstone .* hiding key at .*",
@@ -5671,8 +5672,8 @@ func TestMVCCGarbageCollectClearRange(t *testing.T) {
 	tsGC := mkTs(5)
 	tsMax := mkTs(9)
 
-	mkGCReq := func(start roachpb.Key, end roachpb.Key) roachpb.GCRequest_GCClearRange {
-		return roachpb.GCRequest_GCClearRange{
+	mkGCReq := func(start roachpb.Key, end roachpb.Key) kvpb.GCRequest_GCClearRange {
+		return kvpb.GCRequest_GCClearRange{
 			StartKey: start,
 			EndKey:   end,
 		}
@@ -5734,8 +5735,8 @@ func TestMVCCGarbageCollectClearRangeInlinedValue(t *testing.T) {
 
 	tsGC := mkTs(5)
 
-	mkGCReq := func(start roachpb.Key, end roachpb.Key) roachpb.GCRequest_GCClearRange {
-		return roachpb.GCRequest_GCClearRange{
+	mkGCReq := func(start roachpb.Key, end roachpb.Key) kvpb.GCRequest_GCClearRange {
+		return kvpb.GCRequest_GCClearRange{
 			StartKey: start,
 			EndKey:   end,
 		}
@@ -6303,7 +6304,7 @@ func TestMVCCExportToSSTFailureIntentBatching(t *testing.T) {
 				require.NoError(t, err)
 			} else {
 				require.Error(t, err)
-				e := (*roachpb.WriteIntentError)(nil)
+				e := (*kvpb.WriteIntentError)(nil)
 				if !errors.As(err, &e) {
 					require.Fail(t, "Expected WriteIntentFailure, got %T", err)
 				}
@@ -6440,7 +6441,7 @@ func TestMVCCExportFingerprint(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 
-	fingerprint := func(opts MVCCExportOptions, engine Engine) (uint64, []byte, roachpb.BulkOpSummary, MVCCKey) {
+	fingerprint := func(opts MVCCExportOptions, engine Engine) (uint64, []byte, kvpb.BulkOpSummary, MVCCKey) {
 		dest := &MemFile{}
 		var err error
 		res, resumeKey, fingerprint, hasRangeKeys, err := MVCCExportFingerprint(

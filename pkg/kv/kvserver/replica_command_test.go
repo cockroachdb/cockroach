@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -132,7 +133,7 @@ func TestValidateReplicationChanges(t *testing.T) {
 	type testCase struct {
 		name          string
 		rangeDesc     *roachpb.RangeDescriptor
-		changes       roachpb.ReplicationChanges
+		changes       kvpb.ReplicationChanges
 		shouldFail    bool
 		expErrorRegex string
 	}
@@ -141,21 +142,21 @@ func TestValidateReplicationChanges(t *testing.T) {
 		{
 			name:      "add a new voter to another node",
 			rangeDesc: twoVotersAndALearner,
-			changes: roachpb.ReplicationChanges{
+			changes: kvpb.ReplicationChanges{
 				{ChangeType: roachpb.ADD_VOTER, Target: roachpb.ReplicationTarget{NodeID: 2, StoreID: 2}},
 			},
 		},
 		{
 			name:      "remove a voter from an existing node",
 			rangeDesc: twoVotersAndALearner,
-			changes: roachpb.ReplicationChanges{
+			changes: kvpb.ReplicationChanges{
 				{ChangeType: roachpb.REMOVE_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 1}},
 			},
 		},
 		{
 			name:      "remove a voter from the wrong node",
 			rangeDesc: twoVotersAndALearner,
-			changes: roachpb.ReplicationChanges{
+			changes: kvpb.ReplicationChanges{
 				{ChangeType: roachpb.REMOVE_VOTER, Target: roachpb.ReplicationTarget{NodeID: 2, StoreID: 2}},
 			},
 			shouldFail:    true,
@@ -164,7 +165,7 @@ func TestValidateReplicationChanges(t *testing.T) {
 		{
 			name:      "remove a voter from the wrong store",
 			rangeDesc: twoVotersAndALearner,
-			changes: roachpb.ReplicationChanges{
+			changes: kvpb.ReplicationChanges{
 				{ChangeType: roachpb.REMOVE_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 2}},
 			},
 			shouldFail:    true,
@@ -173,7 +174,7 @@ func TestValidateReplicationChanges(t *testing.T) {
 		{
 			name:      "rebalance within a node",
 			rangeDesc: twoVotersAndALearner,
-			changes: roachpb.ReplicationChanges{
+			changes: kvpb.ReplicationChanges{
 				{ChangeType: roachpb.ADD_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 2}},
 				{ChangeType: roachpb.REMOVE_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 1}},
 			},
@@ -181,7 +182,7 @@ func TestValidateReplicationChanges(t *testing.T) {
 		{
 			name:      "rebalance within a node but attempt to remove from the wrong one",
 			rangeDesc: twoVotersAndALearner,
-			changes: roachpb.ReplicationChanges{
+			changes: kvpb.ReplicationChanges{
 				{ChangeType: roachpb.ADD_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 5}},
 				{ChangeType: roachpb.REMOVE_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 2}},
 			},
@@ -191,7 +192,7 @@ func TestValidateReplicationChanges(t *testing.T) {
 		{
 			name:      "re-add an existing voter",
 			rangeDesc: twoVotersAndALearner,
-			changes: roachpb.ReplicationChanges{
+			changes: kvpb.ReplicationChanges{
 				{ChangeType: roachpb.ADD_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 1}},
 			},
 			shouldFail:    true,
@@ -200,7 +201,7 @@ func TestValidateReplicationChanges(t *testing.T) {
 		{
 			name:      "add voter to a node that already has one",
 			rangeDesc: twoVotersAndALearner,
-			changes: roachpb.ReplicationChanges{
+			changes: kvpb.ReplicationChanges{
 				{ChangeType: roachpb.ADD_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 2}},
 			},
 			shouldFail:    true,
@@ -209,7 +210,7 @@ func TestValidateReplicationChanges(t *testing.T) {
 		{
 			name:      "add non-voter to a store that already has one",
 			rangeDesc: oneVoterAndOneNonVoter,
-			changes: roachpb.ReplicationChanges{
+			changes: kvpb.ReplicationChanges{
 				{ChangeType: roachpb.ADD_NON_VOTER, Target: roachpb.ReplicationTarget{NodeID: 2, StoreID: 2}},
 			},
 			shouldFail:    true,
@@ -218,7 +219,7 @@ func TestValidateReplicationChanges(t *testing.T) {
 		{
 			name:      "add non-voter to a node that already has one",
 			rangeDesc: oneVoterAndOneNonVoter,
-			changes: roachpb.ReplicationChanges{
+			changes: kvpb.ReplicationChanges{
 				{ChangeType: roachpb.ADD_NON_VOTER, Target: roachpb.ReplicationTarget{NodeID: 2, StoreID: 5}},
 			},
 			shouldFail:    true,
@@ -227,7 +228,7 @@ func TestValidateReplicationChanges(t *testing.T) {
 		{
 			name:      "add non-voter to a store that already has a voter",
 			rangeDesc: oneVoterAndOneNonVoter,
-			changes: roachpb.ReplicationChanges{
+			changes: kvpb.ReplicationChanges{
 				{ChangeType: roachpb.ADD_NON_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 1}},
 			},
 			shouldFail:    true,
@@ -236,7 +237,7 @@ func TestValidateReplicationChanges(t *testing.T) {
 		{
 			name:      "try to rebalance within a node, but also add an extra",
 			rangeDesc: twoVotersAndALearner,
-			changes: roachpb.ReplicationChanges{
+			changes: kvpb.ReplicationChanges{
 				{ChangeType: roachpb.REMOVE_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 1}},
 				{ChangeType: roachpb.ADD_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 2}},
 				{ChangeType: roachpb.ADD_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 5}},
@@ -247,7 +248,7 @@ func TestValidateReplicationChanges(t *testing.T) {
 		{
 			name:      "try to add twice to the same node",
 			rangeDesc: twoVotersAndALearner,
-			changes: roachpb.ReplicationChanges{
+			changes: kvpb.ReplicationChanges{
 				{ChangeType: roachpb.ADD_VOTER, Target: roachpb.ReplicationTarget{NodeID: 5, StoreID: 6}},
 				{ChangeType: roachpb.ADD_VOTER, Target: roachpb.ReplicationTarget{NodeID: 5, StoreID: 5}},
 			},
@@ -257,7 +258,7 @@ func TestValidateReplicationChanges(t *testing.T) {
 		{
 			name:      "try to remove twice from the same store, while the range only has 1 replica",
 			rangeDesc: oneReplica,
-			changes: roachpb.ReplicationChanges{
+			changes: kvpb.ReplicationChanges{
 				{ChangeType: roachpb.REMOVE_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 1}},
 				{ChangeType: roachpb.REMOVE_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 1}},
 			},
@@ -267,7 +268,7 @@ func TestValidateReplicationChanges(t *testing.T) {
 		{
 			name:      "try to remove twice from the same node",
 			rangeDesc: twoVotersAndALearner,
-			changes: roachpb.ReplicationChanges{
+			changes: kvpb.ReplicationChanges{
 				{ChangeType: roachpb.REMOVE_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 1}},
 				{ChangeType: roachpb.REMOVE_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 2}},
 			},
@@ -276,7 +277,7 @@ func TestValidateReplicationChanges(t *testing.T) {
 		{
 			name:      "try to add on a node that already has a learner",
 			rangeDesc: twoVotersAndALearner,
-			changes: roachpb.ReplicationChanges{
+			changes: kvpb.ReplicationChanges{
 				{ChangeType: roachpb.ADD_VOTER, Target: roachpb.ReplicationTarget{NodeID: 4, StoreID: 5}},
 			},
 			shouldFail:    true,
@@ -285,7 +286,7 @@ func TestValidateReplicationChanges(t *testing.T) {
 		{
 			name:      "add/remove multiple replicas",
 			rangeDesc: twoVotersAndALearner,
-			changes: roachpb.ReplicationChanges{
+			changes: kvpb.ReplicationChanges{
 				{ChangeType: roachpb.ADD_VOTER, Target: roachpb.ReplicationTarget{NodeID: 2, StoreID: 2}},
 				{ChangeType: roachpb.ADD_VOTER, Target: roachpb.ReplicationTarget{NodeID: 5, StoreID: 5}},
 				{ChangeType: roachpb.ADD_VOTER, Target: roachpb.ReplicationTarget{NodeID: 6, StoreID: 6}},
@@ -300,21 +301,21 @@ func TestValidateReplicationChanges(t *testing.T) {
 			// Regression test for #60545.
 			name:      "remove a learner from a node that has two replicas",
 			rangeDesc: twoReplicasOnOneNode,
-			changes: roachpb.ReplicationChanges{
+			changes: kvpb.ReplicationChanges{
 				{ChangeType: roachpb.REMOVE_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 3}},
 			},
 		},
 		{
 			name:      "remove a voter from a node that has two replicas",
 			rangeDesc: twoReplicasOnOneNode,
-			changes: roachpb.ReplicationChanges{
+			changes: kvpb.ReplicationChanges{
 				{ChangeType: roachpb.REMOVE_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 1}},
 			},
 		},
 		{
 			name:      "remove a replica with the wrong type from a node that has two replicas",
 			rangeDesc: twoReplicasOnOneNode,
-			changes: roachpb.ReplicationChanges{
+			changes: kvpb.ReplicationChanges{
 				{ChangeType: roachpb.REMOVE_NON_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 2}},
 			},
 			shouldFail:    true,
@@ -323,14 +324,14 @@ func TestValidateReplicationChanges(t *testing.T) {
 		{
 			name:      "add to a different node while one node is in the midst of a lateral rebalance",
 			rangeDesc: twoReplicasOnOneNode,
-			changes: roachpb.ReplicationChanges{
+			changes: kvpb.ReplicationChanges{
 				{ChangeType: roachpb.ADD_VOTER, Target: roachpb.ReplicationTarget{NodeID: 4, StoreID: 4}},
 			},
 		},
 		{
 			name:      "add-remove to a node that is in the middle of a lateral rebalance",
 			rangeDesc: twoReplicasOnOneNode,
-			changes: roachpb.ReplicationChanges{
+			changes: kvpb.ReplicationChanges{
 				{ChangeType: roachpb.ADD_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 5}},
 				{ChangeType: roachpb.REMOVE_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 3}},
 			},
@@ -340,7 +341,7 @@ func TestValidateReplicationChanges(t *testing.T) {
 		{
 			name:      "remove two replicas from a node that is in the middle of a lateral rebalance",
 			rangeDesc: twoReplicasOnOneNode,
-			changes: roachpb.ReplicationChanges{
+			changes: kvpb.ReplicationChanges{
 				{ChangeType: roachpb.REMOVE_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 1}},
 				{ChangeType: roachpb.REMOVE_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 3}},
 			},
@@ -350,7 +351,7 @@ func TestValidateReplicationChanges(t *testing.T) {
 		{
 			name:      "remove then add within a node",
 			rangeDesc: twoVotersAndALearner,
-			changes: roachpb.ReplicationChanges{
+			changes: kvpb.ReplicationChanges{
 				{ChangeType: roachpb.REMOVE_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 1}},
 				{ChangeType: roachpb.ADD_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 2}},
 			},
@@ -360,7 +361,7 @@ func TestValidateReplicationChanges(t *testing.T) {
 		{
 			name:      "add to a node when we only have one replica",
 			rangeDesc: oneReplica,
-			changes: roachpb.ReplicationChanges{
+			changes: kvpb.ReplicationChanges{
 				{ChangeType: roachpb.ADD_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 2}},
 			},
 		},
@@ -368,7 +369,7 @@ func TestValidateReplicationChanges(t *testing.T) {
 			name: "adding a non-voter where we already have a voting replica, without an accompanying" +
 				" removal of that voter",
 			rangeDesc: oneReplica,
-			changes: roachpb.ReplicationChanges{
+			changes: kvpb.ReplicationChanges{
 				{ChangeType: roachpb.ADD_NON_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 1}},
 			},
 			shouldFail:    true,
@@ -377,7 +378,7 @@ func TestValidateReplicationChanges(t *testing.T) {
 		{
 			name:      "voter demotion",
 			rangeDesc: oneReplica,
-			changes: roachpb.ReplicationChanges{
+			changes: kvpb.ReplicationChanges{
 				{ChangeType: roachpb.ADD_NON_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 1}},
 				{ChangeType: roachpb.REMOVE_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 1}},
 			},
@@ -385,7 +386,7 @@ func TestValidateReplicationChanges(t *testing.T) {
 		{
 			name:      "non-voter promotion",
 			rangeDesc: oneVoterAndOneNonVoter,
-			changes: roachpb.ReplicationChanges{
+			changes: kvpb.ReplicationChanges{
 				{ChangeType: roachpb.ADD_VOTER, Target: roachpb.ReplicationTarget{NodeID: 2, StoreID: 2}},
 				{ChangeType: roachpb.REMOVE_NON_VOTER, Target: roachpb.ReplicationTarget{NodeID: 2, StoreID: 2}},
 			},
@@ -393,7 +394,7 @@ func TestValidateReplicationChanges(t *testing.T) {
 		{
 			name:      "swapping voter with non-voter",
 			rangeDesc: oneVoterAndOneNonVoter,
-			changes: roachpb.ReplicationChanges{
+			changes: kvpb.ReplicationChanges{
 				{ChangeType: roachpb.ADD_NON_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 1}},
 				{ChangeType: roachpb.REMOVE_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 1}},
 				{ChangeType: roachpb.ADD_VOTER, Target: roachpb.ReplicationTarget{NodeID: 2, StoreID: 2}},
@@ -403,7 +404,7 @@ func TestValidateReplicationChanges(t *testing.T) {
 		{
 			name:      "trying to promote a non-voter that doesnt exist",
 			rangeDesc: oneVoterAndOneNonVoter,
-			changes: roachpb.ReplicationChanges{
+			changes: kvpb.ReplicationChanges{
 				{ChangeType: roachpb.ADD_VOTER, Target: roachpb.ReplicationTarget{NodeID: 3, StoreID: 3}},
 				{ChangeType: roachpb.REMOVE_NON_VOTER, Target: roachpb.ReplicationTarget{NodeID: 3, StoreID: 3}},
 			},
@@ -428,7 +429,7 @@ func TestSynthesizeTargetsByChangeType(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	type testCase struct {
 		name                                      string
-		changes                                   []roachpb.ReplicationChange
+		changes                                   []kvpb.ReplicationChange
 		expPromotions, expDemotions               []int32
 		expVoterAdditions, expVoterRemovals       []int32
 		expNonVoterAdditions, expNonVoterRemovals []int32
@@ -454,35 +455,35 @@ func TestSynthesizeTargetsByChangeType(t *testing.T) {
 	tests := []testCase{
 		{
 			name: "simple voter addition",
-			changes: []roachpb.ReplicationChange{
+			changes: []kvpb.ReplicationChange{
 				{ChangeType: roachpb.ADD_VOTER, Target: mkTarget(2)},
 			},
 			expVoterAdditions: []int32{2},
 		},
 		{
 			name: "simple voter removal",
-			changes: []roachpb.ReplicationChange{
+			changes: []kvpb.ReplicationChange{
 				{ChangeType: roachpb.REMOVE_VOTER, Target: mkTarget(2)},
 			},
 			expVoterRemovals: []int32{2},
 		},
 		{
 			name: "simple non-voter addition",
-			changes: []roachpb.ReplicationChange{
+			changes: []kvpb.ReplicationChange{
 				{ChangeType: roachpb.ADD_NON_VOTER, Target: mkTarget(2)},
 			},
 			expNonVoterAdditions: []int32{2},
 		},
 		{
 			name: "simple non-voter removal",
-			changes: []roachpb.ReplicationChange{
+			changes: []kvpb.ReplicationChange{
 				{ChangeType: roachpb.REMOVE_NON_VOTER, Target: mkTarget(2)},
 			},
 			expNonVoterRemovals: []int32{2},
 		},
 		{
 			name: "promote non_voter to voter",
-			changes: []roachpb.ReplicationChange{
+			changes: []kvpb.ReplicationChange{
 				{ChangeType: roachpb.ADD_VOTER, Target: mkTarget(2)},
 				{ChangeType: roachpb.REMOVE_NON_VOTER, Target: mkTarget(2)},
 			},
@@ -490,7 +491,7 @@ func TestSynthesizeTargetsByChangeType(t *testing.T) {
 		},
 		{
 			name: "demote voter to non_voter",
-			changes: []roachpb.ReplicationChange{
+			changes: []kvpb.ReplicationChange{
 				{ChangeType: roachpb.ADD_NON_VOTER, Target: mkTarget(1)},
 				{ChangeType: roachpb.REMOVE_VOTER, Target: mkTarget(1)},
 			},
@@ -498,7 +499,7 @@ func TestSynthesizeTargetsByChangeType(t *testing.T) {
 		},
 		{
 			name: "swap voter with non_voter",
-			changes: []roachpb.ReplicationChange{
+			changes: []kvpb.ReplicationChange{
 				{ChangeType: roachpb.ADD_NON_VOTER, Target: mkTarget(1)},
 				{ChangeType: roachpb.REMOVE_VOTER, Target: mkTarget(1)},
 				{ChangeType: roachpb.ADD_VOTER, Target: mkTarget(2)},
@@ -509,7 +510,7 @@ func TestSynthesizeTargetsByChangeType(t *testing.T) {
 		},
 		{
 			name: "swap with simple addition",
-			changes: []roachpb.ReplicationChange{
+			changes: []kvpb.ReplicationChange{
 				{ChangeType: roachpb.ADD_NON_VOTER, Target: mkTarget(1)},
 				{ChangeType: roachpb.REMOVE_VOTER, Target: mkTarget(1)},
 				{ChangeType: roachpb.ADD_VOTER, Target: mkTarget(2)},
@@ -522,7 +523,7 @@ func TestSynthesizeTargetsByChangeType(t *testing.T) {
 		},
 		{
 			name: "swap with simple removal",
-			changes: []roachpb.ReplicationChange{
+			changes: []kvpb.ReplicationChange{
 				{ChangeType: roachpb.ADD_NON_VOTER, Target: mkTarget(1)},
 				{ChangeType: roachpb.REMOVE_VOTER, Target: mkTarget(1)},
 				{ChangeType: roachpb.ADD_VOTER, Target: mkTarget(2)},
@@ -535,7 +536,7 @@ func TestSynthesizeTargetsByChangeType(t *testing.T) {
 		},
 		{
 			name: "swap with addition promotion",
-			changes: []roachpb.ReplicationChange{
+			changes: []kvpb.ReplicationChange{
 				{ChangeType: roachpb.ADD_NON_VOTER, Target: mkTarget(1)},
 				{ChangeType: roachpb.REMOVE_VOTER, Target: mkTarget(1)},
 				{ChangeType: roachpb.ADD_VOTER, Target: mkTarget(2)},
@@ -548,7 +549,7 @@ func TestSynthesizeTargetsByChangeType(t *testing.T) {
 		},
 		{
 			name: "swap with additional demotion",
-			changes: []roachpb.ReplicationChange{
+			changes: []kvpb.ReplicationChange{
 				{ChangeType: roachpb.ADD_NON_VOTER, Target: mkTarget(1)},
 				{ChangeType: roachpb.REMOVE_VOTER, Target: mkTarget(1)},
 				{ChangeType: roachpb.ADD_VOTER, Target: mkTarget(2)},
@@ -561,7 +562,7 @@ func TestSynthesizeTargetsByChangeType(t *testing.T) {
 		},
 		{
 			name: "two swaps",
-			changes: []roachpb.ReplicationChange{
+			changes: []kvpb.ReplicationChange{
 				{ChangeType: roachpb.ADD_NON_VOTER, Target: mkTarget(1)},
 				{ChangeType: roachpb.REMOVE_VOTER, Target: mkTarget(1)},
 				{ChangeType: roachpb.ADD_VOTER, Target: mkTarget(2)},
@@ -576,7 +577,7 @@ func TestSynthesizeTargetsByChangeType(t *testing.T) {
 		},
 		{
 			name: "all at once",
-			changes: []roachpb.ReplicationChange{
+			changes: []kvpb.ReplicationChange{
 				{ChangeType: roachpb.ADD_NON_VOTER, Target: mkTarget(1)},
 				{ChangeType: roachpb.REMOVE_VOTER, Target: mkTarget(1)},
 				{ChangeType: roachpb.ADD_VOTER, Target: mkTarget(2)},

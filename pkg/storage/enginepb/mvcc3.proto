@@ -150,7 +150,7 @@ message IgnoredSeqNumRange {
 // change, need to update mvccGetWithValueHeader.
 //
 // NB: ensure that this struct stays in sync with MVCCValueHeader{Pure,CrdbTest}.
-// See roachpb.RequestHeader for details on how they help us keep the KVNemesisSeq
+// See kvpb.RequestHeader for details on how they help us keep the KVNemesisSeq
 // field out of production code.
 message MVCCValueHeader {
   option (gogoproto.equal) = true;

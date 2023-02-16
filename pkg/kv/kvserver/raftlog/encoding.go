@@ -40,7 +40,7 @@ const (
 	// below-raft admission control (Admission{Priority,CreateTime,OriginNode}).
 	EntryEncodingStandardWithAC
 	// EntryEncodingSideloadedWithAC indicates a proposal representing the
-	// result of a roachpb.AddSSTableRequest for which the payload (the SST) is
+	// result of a kvpb.AddSSTableRequest for which the payload (the SST) is
 	// stored outside the storage engine to improve storage performance.
 	//
 	// This is a raftpb.Entry of type EntryNormal whose data slice is either

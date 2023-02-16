@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -132,7 +133,7 @@ type readImportDataProcessor struct {
 	seqChunkProvider *row.SeqChunkProvider
 
 	importErr error
-	summary   *roachpb.BulkOpSummary
+	summary   *kvpb.BulkOpSummary
 }
 
 var (
@@ -219,7 +220,7 @@ func (idp *readImportDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pro
 	}
 
 	// Once the import is done, send back to the controller the serialized
-	// summary of the import operation. For more info see roachpb.BulkOpSummary.
+	// summary of the import operation. For more info see kvpb.BulkOpSummary.
 	countsBytes, err := protoutil.Marshal(idp.summary)
 	idp.MoveToDraining(err)
 	if err != nil {
@@ -359,7 +360,7 @@ func ingestKvs(
 	spec *execinfrapb.ReadImportDataSpec,
 	progCh chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 	kvCh <-chan row.KVBatch,
-) (*roachpb.BulkOpSummary, error) {
+) (*kvpb.BulkOpSummary, error) {
 	ctx, span := tracing.ChildSpan(ctx, "import-ingest-kvs")
 	defer span.Finish()
 
@@ -435,13 +436,13 @@ func ingestKvs(
 
 	bulkSummaryMu := &struct {
 		syncutil.Mutex
-		summary roachpb.BulkOpSummary
+		summary kvpb.BulkOpSummary
 	}{}
 
 	// When the PK adder flushes, everything written has been flushed, so we set
 	// pkFlushedRow to writtenRow. Additionally if the indexAdder is empty then we
 	// can treat it as flushed as well (in case we're not adding anything to it).
-	pkIndexAdder.SetOnFlush(func(summary roachpb.BulkOpSummary) {
+	pkIndexAdder.SetOnFlush(func(summary kvpb.BulkOpSummary) {
 		for i, emitted := range writtenRow {
 			atomic.StoreInt64(&pkFlushedRow[i], emitted)
 			bulkSummaryMu.Lock()
@@ -454,7 +455,7 @@ func ingestKvs(
 			}
 		}
 	})
-	indexAdder.SetOnFlush(func(summary roachpb.BulkOpSummary) {
+	indexAdder.SetOnFlush(func(summary kvpb.BulkOpSummary) {
 		for i, emitted := range writtenRow {
 			atomic.StoreInt64(&idxFlushedRow[i], emitted)
 			bulkSummaryMu.Lock()

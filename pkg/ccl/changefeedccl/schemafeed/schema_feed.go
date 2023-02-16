@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedvalidators"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -577,17 +578,17 @@ func fetchDescriptorsWithPriorityOverride(
 	sender kv.Sender,
 	codec keys.SQLCodec,
 	startTS, endTS hlc.Timestamp,
-) (roachpb.Response, error) {
+) (kvpb.Response, error) {
 	span := roachpb.Span{Key: codec.TablePrefix(keys.DescriptorTableID)}
 	span.EndKey = span.Key.PrefixEnd()
-	header := roachpb.Header{Timestamp: endTS}
-	req := &roachpb.ExportRequest{
-		RequestHeader: roachpb.RequestHeaderFromSpan(span),
+	header := kvpb.Header{Timestamp: endTS}
+	req := &kvpb.ExportRequest{
+		RequestHeader: kvpb.RequestHeaderFromSpan(span),
 		StartTime:     startTS,
-		MVCCFilter:    roachpb.MVCCFilter_All,
+		MVCCFilter:    kvpb.MVCCFilter_All,
 	}
 
-	fetchDescriptors := func(ctx context.Context) (roachpb.Response, error) {
+	fetchDescriptors := func(ctx context.Context) (kvpb.Response, error) {
 		resp, pErr := kv.SendWrappedWith(ctx, sender, header, req)
 		if pErr != nil {
 			err := pErr.GoError()
@@ -601,7 +602,7 @@ func fetchDescriptorsWithPriorityOverride(
 		return fetchDescriptors(ctx)
 	}
 
-	var resp roachpb.Response
+	var resp kvpb.Response
 	err := contextutil.RunWithTimeout(
 		ctx, "schema-feed", priorityAfter,
 		func(ctx context.Context) error {
@@ -642,7 +643,7 @@ func (tf *schemaFeed) fetchDescriptorVersions(
 
 	var descriptors []catalog.Descriptor
 	found := errors.New(``)
-	for _, file := range res.(*roachpb.ExportResponse).Files {
+	for _, file := range res.(*kvpb.ExportResponse).Files {
 		if err := func() error {
 			it, err := storage.NewMemSSTIterator(file.SST, false /* verify */, storage.IterOptions{
 				// NB: We assume there will be no MVCC range tombstones here.

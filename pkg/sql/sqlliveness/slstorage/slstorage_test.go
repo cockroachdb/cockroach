@@ -23,8 +23,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -485,13 +485,13 @@ func TestConcurrentAccessSynchronization(t *testing.T) {
 }
 func testConcurrentAccessSynchronization(t *testing.T) {
 	ctx := context.Background()
-	type filterFunc = func(ctx context.Context, request *roachpb.BatchRequest) *roachpb.Error
+	type filterFunc = func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error
 	var requestFilter atomic.Value
 	requestFilter.Store(filterFunc(nil))
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
-				TestingRequestFilter: func(ctx context.Context, request *roachpb.BatchRequest) *roachpb.Error {
+				TestingRequestFilter: func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error {
 					if f := requestFilter.Load().(filterFunc); f != nil {
 						return f(ctx, request)
 					}
@@ -533,19 +533,19 @@ func testConcurrentAccessSynchronization(t *testing.T) {
 		})
 	}
 	unblock := func() { close(blockChannel.Load().(chan struct{})) }
-	requestFilter.Store(func(ctx context.Context, request *roachpb.BatchRequest) *roachpb.Error {
-		getRequest, ok := request.GetArg(roachpb.Get)
+	requestFilter.Store(func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error {
+		getRequest, ok := request.GetArg(kvpb.Get)
 		if !ok {
 			return nil
 		}
-		get := getRequest.(*roachpb.GetRequest)
+		get := getRequest.(*kvpb.GetRequest)
 		if !bytes.HasPrefix(get.Key, prefix) {
 			return nil
 		}
 		atomic.AddInt64(&blocked, 1)
 		defer atomic.AddInt64(&blocked, -1)
 		<-blockChannel.Load().(chan struct{})
-		return roachpb.NewError(ctx.Err())
+		return kvpb.NewError(ctx.Err())
 	})
 
 	t.Run("CachedReader does not block", func(t *testing.T) {
@@ -688,15 +688,15 @@ func TestDeleteMidUpdateFails(t *testing.T) {
 }
 func testDeleteMidUpdateFails(t *testing.T) {
 	ctx := context.Background()
-	type filterFunc = func(context.Context, *roachpb.BatchRequest, *roachpb.BatchResponse) *roachpb.Error
+	type filterFunc = func(context.Context, *kvpb.BatchRequest, *kvpb.BatchResponse) *kvpb.Error
 	var respFilter atomic.Value
 	respFilter.Store(filterFunc(nil))
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				TestingResponseFilter: func(
-					ctx context.Context, request *roachpb.BatchRequest, resp *roachpb.BatchResponse,
-				) *roachpb.Error {
+					ctx context.Context, request *kvpb.BatchRequest, resp *kvpb.BatchResponse,
+				) *kvpb.Error {
 					if f := respFilter.Load().(filterFunc); f != nil {
 						return f(ctx, request, resp)
 					}
@@ -726,10 +726,10 @@ func testDeleteMidUpdateFails(t *testing.T) {
 	// to perform an update after the get has evaluated.
 	getChan := make(chan chan struct{})
 	respFilter.Store(func(
-		ctx context.Context, request *roachpb.BatchRequest, _ *roachpb.BatchResponse,
-	) *roachpb.Error {
-		if get, ok := request.GetArg(roachpb.Get); !ok || !bytes.HasPrefix(
-			get.(*roachpb.GetRequest).Key,
+		ctx context.Context, request *kvpb.BatchRequest, _ *kvpb.BatchResponse,
+	) *kvpb.Error {
+		if get, ok := request.GetArg(kvpb.Get); !ok || !bytes.HasPrefix(
+			get.(*kvpb.GetRequest).Key,
 			keys.SystemSQLCodec.TablePrefix(uint32(tableID)),
 		) {
 			return nil

@@ -17,6 +17,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -37,7 +38,7 @@ var capabilityRe = regexp.MustCompile(`^{(CanAdminSplit=(true|false))}$`)
 // cput
 func ParseBatchRequestString(
 	t *testing.T, input string,
-) (tenID roachpb.TenantID, ba roachpb.BatchRequest) {
+) (tenID roachpb.TenantID, ba kvpb.BatchRequest) {
 	for i, line := range strings.Split(input, "\n") {
 		if i == 0 { // first line describes the tenant ID.
 			tenID = ParseTenantID(t, line)
@@ -45,11 +46,11 @@ func ParseBatchRequestString(
 		}
 		switch line {
 		case "split":
-			ba.Add(&roachpb.AdminSplitRequest{})
+			ba.Add(&kvpb.AdminSplitRequest{})
 		case "scan":
-			ba.Add(&roachpb.ScanRequest{})
+			ba.Add(&kvpb.ScanRequest{})
 		case "cput":
-			ba.Add(&roachpb.ConditionalPutRequest{})
+			ba.Add(&kvpb.ConditionalPutRequest{})
 		default:
 			t.Fatalf("unsupported request type: %s", line)
 		}

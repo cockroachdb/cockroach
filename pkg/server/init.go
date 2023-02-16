@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -447,7 +448,7 @@ func (s *initServer) startJoinLoop(ctx context.Context, stopper *stop.Stopper) (
 // attemptJoinTo attempts to join to the node running at the given address.
 func (s *initServer) attemptJoinTo(
 	ctx context.Context, addr string,
-) (*roachpb.JoinNodeResponse, error) {
+) (*kvpb.JoinNodeResponse, error) {
 	dialOpts, err := s.config.getDialOpts(ctx, addr, rpc.SystemClass)
 	if err != nil {
 		return nil, err
@@ -462,11 +463,11 @@ func (s *initServer) attemptJoinTo(
 	}()
 
 	binaryVersion := s.config.binaryVersion
-	req := &roachpb.JoinNodeRequest{
+	req := &kvpb.JoinNodeRequest{
 		BinaryVersion: &binaryVersion,
 	}
 
-	initClient := roachpb.NewInternalClient(conn)
+	initClient := kvpb.NewInternalClient(conn)
 	resp, err := initClient.Join(ctx, req)
 	if err != nil {
 		status, ok := grpcstatus.FromError(errors.UnwrapAll(err))
@@ -521,7 +522,7 @@ func (s *initServer) DiskClusterVersion() clusterversion.ClusterVersion {
 // and persists the appropriate cluster version to disk. After having done so,
 // it returns an initState that captures the newly initialized store.
 func (s *initServer) initializeFirstStoreAfterJoin(
-	ctx context.Context, resp *roachpb.JoinNodeResponse,
+	ctx context.Context, resp *kvpb.JoinNodeResponse,
 ) (*initState, error) {
 	// We expect all the stores to be empty at this point, except for
 	// the store cluster version key. Assert so.

@@ -15,6 +15,7 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/errors"
@@ -53,21 +54,21 @@ func (a tenantAuthorizer) authorize(
 ) error {
 	switch fullMethod {
 	case "/cockroach.roachpb.Internal/Batch":
-		return a.authBatch(ctx, tenID, req.(*roachpb.BatchRequest))
+		return a.authBatch(ctx, tenID, req.(*kvpb.BatchRequest))
 
 	case "/cockroach.roachpb.Internal/RangeLookup":
-		return a.authRangeLookup(tenID, req.(*roachpb.RangeLookupRequest))
+		return a.authRangeLookup(tenID, req.(*kvpb.RangeLookupRequest))
 
 	case "/cockroach.roachpb.Internal/RangeFeed", "/cockroach.roachpb.Internal/MuxRangeFeed":
-		return a.authRangeFeed(tenID, req.(*roachpb.RangeFeedRequest))
+		return a.authRangeFeed(tenID, req.(*kvpb.RangeFeedRequest))
 	case "/cockroach.roachpb.Internal/GossipSubscription":
-		return a.authGossipSubscription(tenID, req.(*roachpb.GossipSubscriptionRequest))
+		return a.authGossipSubscription(tenID, req.(*kvpb.GossipSubscriptionRequest))
 
 	case "/cockroach.roachpb.Internal/TokenBucket":
-		return a.authTokenBucket(tenID, req.(*roachpb.TokenBucketRequest))
+		return a.authTokenBucket(tenID, req.(*kvpb.TokenBucketRequest))
 
 	case "/cockroach.roachpb.Internal/TenantSettings":
-		return a.authTenantSettings(tenID, req.(*roachpb.TenantSettingsRequest))
+		return a.authTenantSettings(tenID, req.(*kvpb.TenantSettingsRequest))
 
 	case "/cockroach.rpc.Heartbeat/Ping":
 		return nil // no restriction to usage of this endpoint by tenants
@@ -136,7 +137,7 @@ func (a tenantAuthorizer) authorize(
 		return a.authUpdateSpanConfigs(tenID, req.(*roachpb.UpdateSpanConfigsRequest))
 
 	case "/cockroach.roachpb.Internal/GetRangeDescriptors":
-		return a.authGetRangeDescriptors(tenID, req.(*roachpb.GetRangeDescriptorsRequest))
+		return a.authGetRangeDescriptors(tenID, req.(*kvpb.GetRangeDescriptorsRequest))
 
 	case "/cockroach.server.serverpb.Status/HotRangesV2":
 		return a.authHotRangesV2(tenID)
@@ -165,7 +166,7 @@ func checkSpanBounds(rSpan, tenSpan roachpb.RSpan) error {
 // authBatch authorizes the provided tenant to invoke the Batch RPC with the
 // provided args.
 func (a tenantAuthorizer) authBatch(
-	ctx context.Context, tenID roachpb.TenantID, args *roachpb.BatchRequest,
+	ctx context.Context, tenID roachpb.TenantID, args *kvpb.BatchRequest,
 ) error {
 	if err := a.capabilitiesAuthorizer.HasCapabilityForBatch(ctx, tenID, args); err != nil {
 		return authError(err.Error())
@@ -178,35 +179,35 @@ func (a tenantAuthorizer) authBatch(
 	for _, ru := range args.Requests {
 		switch ru.GetInner().(type) {
 		case
-			*roachpb.AddSSTableRequest,
-			*roachpb.AdminChangeReplicasRequest,
-			*roachpb.AdminRelocateRangeRequest,
-			*roachpb.AdminScatterRequest,
-			*roachpb.AdminSplitRequest,
-			*roachpb.AdminTransferLeaseRequest,
-			*roachpb.AdminUnsplitRequest,
-			*roachpb.ClearRangeRequest,
-			*roachpb.ConditionalPutRequest,
-			*roachpb.DeleteRangeRequest,
-			*roachpb.DeleteRequest,
-			*roachpb.EndTxnRequest,
-			*roachpb.ExportRequest,
-			*roachpb.GetRequest,
-			*roachpb.HeartbeatTxnRequest,
-			*roachpb.IncrementRequest,
-			*roachpb.InitPutRequest,
-			*roachpb.IsSpanEmptyRequest,
-			*roachpb.LeaseInfoRequest,
-			*roachpb.PutRequest,
-			*roachpb.QueryIntentRequest,
-			*roachpb.QueryLocksRequest,
-			*roachpb.QueryTxnRequest,
-			*roachpb.RangeStatsRequest,
-			*roachpb.RefreshRangeRequest,
-			*roachpb.RefreshRequest,
-			*roachpb.ReverseScanRequest,
-			*roachpb.RevertRangeRequest,
-			*roachpb.ScanRequest:
+			*kvpb.AddSSTableRequest,
+			*kvpb.AdminChangeReplicasRequest,
+			*kvpb.AdminRelocateRangeRequest,
+			*kvpb.AdminScatterRequest,
+			*kvpb.AdminSplitRequest,
+			*kvpb.AdminTransferLeaseRequest,
+			*kvpb.AdminUnsplitRequest,
+			*kvpb.ClearRangeRequest,
+			*kvpb.ConditionalPutRequest,
+			*kvpb.DeleteRangeRequest,
+			*kvpb.DeleteRequest,
+			*kvpb.EndTxnRequest,
+			*kvpb.ExportRequest,
+			*kvpb.GetRequest,
+			*kvpb.HeartbeatTxnRequest,
+			*kvpb.IncrementRequest,
+			*kvpb.InitPutRequest,
+			*kvpb.IsSpanEmptyRequest,
+			*kvpb.LeaseInfoRequest,
+			*kvpb.PutRequest,
+			*kvpb.QueryIntentRequest,
+			*kvpb.QueryLocksRequest,
+			*kvpb.QueryTxnRequest,
+			*kvpb.RangeStatsRequest,
+			*kvpb.RefreshRangeRequest,
+			*kvpb.RefreshRequest,
+			*kvpb.ReverseScanRequest,
+			*kvpb.RevertRangeRequest,
+			*kvpb.ScanRequest:
 			continue
 		}
 		return authErrorf("request [%s] not permitted", args.Summary())
@@ -222,7 +223,7 @@ func (a tenantAuthorizer) authBatch(
 }
 
 func (a tenantAuthorizer) authGetRangeDescriptors(
-	tenID roachpb.TenantID, args *roachpb.GetRangeDescriptorsRequest,
+	tenID roachpb.TenantID, args *kvpb.GetRangeDescriptorsRequest,
 ) error {
 	return validateSpan(tenID, args.Span)
 }
@@ -239,7 +240,7 @@ func (a tenantAuthorizer) authSpanStats(
 // authRangeLookup authorizes the provided tenant to invoke the RangeLookup RPC
 // with the provided args.
 func (a tenantAuthorizer) authRangeLookup(
-	tenID roachpb.TenantID, args *roachpb.RangeLookupRequest,
+	tenID roachpb.TenantID, args *kvpb.RangeLookupRequest,
 ) error {
 	tenSpan := tenantPrefix(tenID)
 	if !tenSpan.ContainsKey(args.Key) {
@@ -250,9 +251,7 @@ func (a tenantAuthorizer) authRangeLookup(
 
 // authRangeFeed authorizes the provided tenant to invoke the RangeFeed RPC with
 // the provided args.
-func (a tenantAuthorizer) authRangeFeed(
-	tenID roachpb.TenantID, args *roachpb.RangeFeedRequest,
-) error {
+func (a tenantAuthorizer) authRangeFeed(tenID roachpb.TenantID, args *kvpb.RangeFeedRequest) error {
 	rSpan, err := keys.SpanAddr(args.Span)
 	if err != nil {
 		return authError(err.Error())
@@ -264,7 +263,7 @@ func (a tenantAuthorizer) authRangeFeed(
 // authGossipSubscription authorizes the provided tenant to invoke the
 // GossipSubscription RPC with the provided args.
 func (a tenantAuthorizer) authGossipSubscription(
-	tenID roachpb.TenantID, args *roachpb.GossipSubscriptionRequest,
+	tenID roachpb.TenantID, args *kvpb.GossipSubscriptionRequest,
 ) error {
 	for _, pat := range args.Patterns {
 		allowed := false
@@ -320,7 +319,7 @@ func (a tenantAuthorizer) authTenantRanges(tenID roachpb.TenantID) error {
 // authTokenBucket authorizes the provided tenant to invoke the
 // TokenBucket RPC with the provided args.
 func (a tenantAuthorizer) authTokenBucket(
-	tenID roachpb.TenantID, args *roachpb.TokenBucketRequest,
+	tenID roachpb.TenantID, args *kvpb.TokenBucketRequest,
 ) error {
 	if args.TenantID == 0 {
 		return authErrorf("token bucket request with unspecified tenant not permitted")
@@ -334,7 +333,7 @@ func (a tenantAuthorizer) authTokenBucket(
 // authTenantSettings authorizes the provided tenant to invoke the
 // TenantSettings RPC with the provided args.
 func (a tenantAuthorizer) authTenantSettings(
-	tenID roachpb.TenantID, args *roachpb.TenantSettingsRequest,
+	tenID roachpb.TenantID, args *kvpb.TenantSettingsRequest,
 ) error {
 	if !args.TenantID.IsSet() {
 		return authErrorf("tenant settings request with unspecified tenant not permitted")

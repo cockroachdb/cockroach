@@ -16,6 +16,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -568,7 +569,7 @@ func (m *Manager) waitForSignal(
 		case <-m.stopper.ShouldQuiesce():
 			// While shutting down, requests may acquire
 			// latches and never release them.
-			return &roachpb.NodeUnavailableError{}
+			return &kvpb.NodeUnavailableError{}
 		}
 	}
 }

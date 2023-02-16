@@ -47,8 +47,8 @@
             ".*\\.pb\\.gw\\.go$": "generated code",
             "cockroach/pkg/.*_generated\\.go$": "generated code",
             "cockroach/pkg/kv/kvclient/kvcoord/lock_spans_over_budget_error\\.go$": "invalid direct cast on error object",
-            "cockroach/pkg/roachpb/batch_generated-gen\\.go$": "invalid direct cast on error object",
-            "cockroach/pkg/roachpb/errors\\.go$": "invalid direct cast on error object",
+            "cockroach/pkg/kv/kvpb/batch_generated-gen\\.go$": "invalid direct cast on error object",
+            "cockroach/pkg/kv/kvpb/errors\\.go$": "invalid direct cast on error object",
             "cockroach/pkg/sql/pgwire/pgerror/constraint_name\\.go$": "invalid direct cast on error object",
             "cockroach/pkg/sql/pgwire/pgerror/pgcode\\.go$": "invalid direct cast on error object",
             "cockroach/pkg/testutils/lint/lint_test\\.go$": "invalid direct cast on error object",
@@ -719,7 +719,7 @@
     },
     "SA1019": {
         "exclude_files": {
-            "cockroach/pkg/roachpb/api_test.go$": "same package that grpc-go imports",
+            "cockroach/pkg/kv/kvpb/api_test.go$": "same package that grpc-go imports",
             "cockroach/pkg/rpc/codec.go$": "rpc/codec.go imports the same proto package that grpc-go imports (as of crdb@dd87d1145 and grpc-go@7b167fd6).",
             "cockroach/pkg/rpc/stats_handler.go$": "Using deprecated WireLength call",
             "cockroach/pkg/.*\\.eg\\.go$": "generated code",

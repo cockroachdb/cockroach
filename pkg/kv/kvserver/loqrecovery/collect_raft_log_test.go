@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery"
@@ -145,7 +146,7 @@ func checkRaftLog(
 	makeSnapshot := make(chan storage.Engine, 2)
 	snapshots := make(chan storage.Reader, 2)
 
-	raftFilter := func(args kvserverbase.ApplyFilterArgs) (int, *roachpb.Error) {
+	raftFilter := func(args kvserverbase.ApplyFilterArgs) (int, *kvpb.Error) {
 		t.Helper()
 		select {
 		case store := <-makeSnapshot:

@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -119,8 +120,8 @@ func clearTenant(ctx context.Context, execCfg *ExecutorConfig, info *mtinfopb.Te
 	// ClearRange cannot be run in a transaction, so create a non-transactional
 	// batch to send the request.
 	b := &kv.Batch{}
-	b.AddRawRequest(&roachpb.ClearRangeRequest{
-		RequestHeader: roachpb.RequestHeader{Key: prefix, EndKey: prefixEnd},
+	b.AddRawRequest(&kvpb.ClearRangeRequest{
+		RequestHeader: kvpb.RequestHeader{Key: prefix, EndKey: prefixEnd},
 	})
 
 	return errors.Wrapf(execCfg.DB.Run(ctx, b), "clearing tenant %d data", info.ID)

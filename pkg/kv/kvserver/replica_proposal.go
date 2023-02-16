@@ -17,6 +17,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -114,7 +115,7 @@ type ProposalData struct {
 	// applies. Other than tests, we only need a few bits of the request
 	// here; this could be replaced with isLease and isChangeReplicas
 	// booleans.
-	Request *roachpb.BatchRequest
+	Request *kvpb.BatchRequest
 
 	// leaseStatus represents the lease under which the Request was evaluated and
 	// under which this proposal is being made. For lease requests, this is the
@@ -680,8 +681,8 @@ func (r *Replica) handleReadWriteLocalEvalResult(ctx context.Context, lResult re
 // proposalResult indicates the result of a proposal. Exactly one of
 // Reply and Err is set, and it represents the result of the proposal.
 type proposalResult struct {
-	Reply              *roachpb.BatchResponse
-	Err                *roachpb.Error
+	Reply              *kvpb.BatchResponse
+	Err                *kvpb.Error
 	EncounteredIntents []roachpb.Intent
 	EndTxns            []result.EndTxnIntents
 }
@@ -702,13 +703,13 @@ type proposalResult struct {
 func (r *Replica) evaluateProposal(
 	ctx context.Context,
 	idKey kvserverbase.CmdIDKey,
-	ba *roachpb.BatchRequest,
+	ba *kvpb.BatchRequest,
 	g *concurrency.Guard,
 	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
-) (*result.Result, bool, *roachpb.Error) {
+) (*result.Result, bool, *kvpb.Error) {
 	if ba.Timestamp.IsEmpty() {
-		return nil, false, roachpb.NewErrorf("can't propose Raft command with zero timestamp")
+		return nil, false, kvpb.NewErrorf("can't propose Raft command with zero timestamp")
 	}
 
 	// Evaluate the commands. If this returns without an error, the batch should
@@ -731,7 +732,7 @@ func (r *Replica) evaluateProposal(
 	}
 
 	if pErr != nil {
-		if _, ok := pErr.GetDetail().(*roachpb.ReplicaCorruptionError); ok {
+		if _, ok := pErr.GetDetail().(*kvpb.ReplicaCorruptionError); ok {
 			return &res, false /* needConsensus */, pErr
 		}
 
@@ -799,16 +800,16 @@ func (r *Replica) evaluateProposal(
 
 // requestToProposal converts a BatchRequest into a ProposalData, by
 // evaluating it. The returned ProposalData is partially valid even
-// on a non-nil *roachpb.Error and should be proposed through Raft
+// on a non-nil *kvpb.Error and should be proposed through Raft
 // if ProposalData.command is non-nil.
 func (r *Replica) requestToProposal(
 	ctx context.Context,
 	idKey kvserverbase.CmdIDKey,
-	ba *roachpb.BatchRequest,
+	ba *kvpb.BatchRequest,
 	g *concurrency.Guard,
 	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
-) (*ProposalData, *roachpb.Error) {
+) (*ProposalData, *kvpb.Error) {
 	res, needConsensus, pErr := r.evaluateProposal(ctx, idKey, ba, g, st, ui)
 
 	// Fill out the results even if pErr != nil; we'll return the error below.

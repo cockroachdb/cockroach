@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -50,22 +51,22 @@ func TestExportCmd(t *testing.T) {
 	kvDB := tc.Server(0).DB()
 
 	export := func(
-		t *testing.T, start hlc.Timestamp, mvccFilter roachpb.MVCCFilter, maxResponseSSTBytes int64,
-	) (roachpb.Response, *roachpb.Error) {
-		req := &roachpb.ExportRequest{
-			RequestHeader:  roachpb.RequestHeader{Key: bootstrap.TestingUserTableDataMin(), EndKey: keys.MaxKey},
+		t *testing.T, start hlc.Timestamp, mvccFilter kvpb.MVCCFilter, maxResponseSSTBytes int64,
+	) (kvpb.Response, *kvpb.Error) {
+		req := &kvpb.ExportRequest{
+			RequestHeader:  kvpb.RequestHeader{Key: bootstrap.TestingUserTableDataMin(), EndKey: keys.MaxKey},
 			StartTime:      start,
 			MVCCFilter:     mvccFilter,
 			TargetFileSize: batcheval.ExportRequestTargetFileSize.Get(&tc.Server(0).ClusterSettings().SV),
 		}
-		var h roachpb.Header
+		var h kvpb.Header
 		h.TargetBytes = maxResponseSSTBytes
 		return kv.SendWrappedWith(ctx, kvDB.NonTransactionalSender(), h, req)
 	}
 
 	exportAndSlurpOne := func(
-		t *testing.T, start hlc.Timestamp, mvccFilter roachpb.MVCCFilter, maxResponseSSTBytes int64,
-	) ([]string, []storage.MVCCKeyValue, roachpb.ResponseHeader) {
+		t *testing.T, start hlc.Timestamp, mvccFilter kvpb.MVCCFilter, maxResponseSSTBytes int64,
+	) ([]string, []storage.MVCCKeyValue, kvpb.ResponseHeader) {
 		res, pErr := export(t, start, mvccFilter, maxResponseSSTBytes)
 		if pErr != nil {
 			t.Fatalf("%+v", pErr)
@@ -73,7 +74,7 @@ func TestExportCmd(t *testing.T) {
 
 		var paths []string
 		var kvs []storage.MVCCKeyValue
-		for _, file := range res.(*roachpb.ExportResponse).Files {
+		for _, file := range res.(*kvpb.ExportResponse).Files {
 			paths = append(paths, file.Path)
 			iterOpts := storage.IterOptions{
 				KeyTypes:   storage.IterKeyTypePointsOnly,
@@ -105,7 +106,7 @@ func TestExportCmd(t *testing.T) {
 			}
 		}
 
-		return paths, kvs, res.(*roachpb.ExportResponse).Header()
+		return paths, kvs, res.(*kvpb.ExportResponse).Header()
 	}
 	type ExportAndSlurpResult struct {
 		end                      hlc.Timestamp
@@ -113,17 +114,17 @@ func TestExportCmd(t *testing.T) {
 		mvccLatestKVs            []storage.MVCCKeyValue
 		mvccAllFiles             []string
 		mvccAllKVs               []storage.MVCCKeyValue
-		mvccLatestResponseHeader roachpb.ResponseHeader
-		mvccAllResponseHeader    roachpb.ResponseHeader
+		mvccLatestResponseHeader kvpb.ResponseHeader
+		mvccAllResponseHeader    kvpb.ResponseHeader
 	}
 	exportAndSlurp := func(t *testing.T, start hlc.Timestamp,
 		maxResponseSSTBytes int64) ExportAndSlurpResult {
 		var ret ExportAndSlurpResult
 		ret.end = hlc.NewClockForTesting(nil).Now()
 		ret.mvccLatestFiles, ret.mvccLatestKVs, ret.mvccLatestResponseHeader = exportAndSlurpOne(t,
-			start, roachpb.MVCCFilter_Latest, maxResponseSSTBytes)
+			start, kvpb.MVCCFilter_Latest, maxResponseSSTBytes)
 		ret.mvccAllFiles, ret.mvccAllKVs, ret.mvccAllResponseHeader = exportAndSlurpOne(t, start,
-			roachpb.MVCCFilter_All, maxResponseSSTBytes)
+			kvpb.MVCCFilter_All, maxResponseSSTBytes)
 		return ret
 	}
 
@@ -139,8 +140,8 @@ func TestExportCmd(t *testing.T) {
 	}
 
 	expectResponseHeader := func(
-		t *testing.T, res ExportAndSlurpResult, mvccLatestResponseHeader roachpb.ResponseHeader,
-		mvccAllResponseHeader roachpb.ResponseHeader) {
+		t *testing.T, res ExportAndSlurpResult, mvccLatestResponseHeader kvpb.ResponseHeader,
+		mvccAllResponseHeader kvpb.ResponseHeader) {
 		t.Helper()
 		requireResumeSpan := func(expect, actual *roachpb.Span, msgAndArgs ...interface{}) {
 			t.Helper()
@@ -284,13 +285,13 @@ INTO
 		defer resetMaxOverage(t)
 		setMaxOverage(t, "'1b'")
 		const expectedError = `export size \(11 bytes\) exceeds max size \(2 bytes\)`
-		_, pErr := export(t, res5.end, roachpb.MVCCFilter_Latest, noTargetBytes)
+		_, pErr := export(t, res5.end, kvpb.MVCCFilter_Latest, noTargetBytes)
 		require.Regexp(t, expectedError, pErr)
 		hints := errors.GetAllHints(pErr.GoError())
 		require.Equal(t, 1, len(hints))
 		const expectedHint = `consider increasing cluster setting "kv.bulk_sst.max_allowed_overage"`
 		require.Regexp(t, expectedHint, hints[0])
-		_, pErr = export(t, res5.end, roachpb.MVCCFilter_All, noTargetBytes)
+		_, pErr = export(t, res5.end, kvpb.MVCCFilter_All, noTargetBytes)
 		require.Regexp(t, expectedError, pErr)
 
 		// Disable the TargetSize and ensure that we don't get any errors
@@ -317,10 +318,10 @@ INTO
 		maxResponseSSTBytes = kvByteSize + 1
 		res7 = exportAndSlurp(t, res5.end, maxResponseSSTBytes)
 		expect(t, res7, 2, 100, 2, 100)
-		latestRespHeader := roachpb.ResponseHeader{
+		latestRespHeader := kvpb.ResponseHeader{
 			NumBytes: maxResponseSSTBytes,
 		}
-		allRespHeader := roachpb.ResponseHeader{
+		allRespHeader := kvpb.ResponseHeader{
 			NumBytes: maxResponseSSTBytes,
 		}
 		expectResponseHeader(t, res7, latestRespHeader, allRespHeader)
@@ -332,20 +333,20 @@ INTO
 		maxResponseSSTBytes = kvByteSize
 		res7 = exportAndSlurp(t, res5.end, maxResponseSSTBytes)
 		expect(t, res7, 1, 1, 1, 1)
-		latestRespHeader = roachpb.ResponseHeader{
+		latestRespHeader = kvpb.ResponseHeader{
 			ResumeSpan: &roachpb.Span{
 				Key:    []byte(fmt.Sprintf("/Table/%d/1/2", tableID)),
 				EndKey: []byte("/Max"),
 			},
-			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
+			ResumeReason: kvpb.RESUME_BYTE_LIMIT,
 			NumBytes:     maxResponseSSTBytes,
 		}
-		allRespHeader = roachpb.ResponseHeader{
+		allRespHeader = kvpb.ResponseHeader{
 			ResumeSpan: &roachpb.Span{
 				Key:    []byte(fmt.Sprintf("/Table/%d/1/2", tableID)),
 				EndKey: []byte("/Max"),
 			},
-			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
+			ResumeReason: kvpb.RESUME_BYTE_LIMIT,
 			NumBytes:     maxResponseSSTBytes,
 		}
 		expectResponseHeader(t, res7, latestRespHeader, allRespHeader)
@@ -356,20 +357,20 @@ INTO
 		maxResponseSSTBytes = 2 * kvByteSize
 		res7 = exportAndSlurp(t, res5.end, maxResponseSSTBytes)
 		expect(t, res7, 2, 2, 2, 2)
-		latestRespHeader = roachpb.ResponseHeader{
+		latestRespHeader = kvpb.ResponseHeader{
 			ResumeSpan: &roachpb.Span{
 				Key:    []byte(fmt.Sprintf("/Table/%d/1/3/0", tableID)),
 				EndKey: []byte("/Max"),
 			},
-			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
+			ResumeReason: kvpb.RESUME_BYTE_LIMIT,
 			NumBytes:     maxResponseSSTBytes,
 		}
-		allRespHeader = roachpb.ResponseHeader{
+		allRespHeader = kvpb.ResponseHeader{
 			ResumeSpan: &roachpb.Span{
 				Key:    []byte(fmt.Sprintf("/Table/%d/1/3/0", tableID)),
 				EndKey: []byte("/Max"),
 			},
-			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
+			ResumeReason: kvpb.RESUME_BYTE_LIMIT,
 			NumBytes:     maxResponseSSTBytes,
 		}
 		expectResponseHeader(t, res7, latestRespHeader, allRespHeader)
@@ -379,20 +380,20 @@ INTO
 		maxResponseSSTBytes = 99 * kvByteSize
 		res7 = exportAndSlurp(t, res5.end, maxResponseSSTBytes)
 		expect(t, res7, 99, 99, 99, 99)
-		latestRespHeader = roachpb.ResponseHeader{
+		latestRespHeader = kvpb.ResponseHeader{
 			ResumeSpan: &roachpb.Span{
 				Key:    []byte(fmt.Sprintf("/Table/%d/1/100/0", tableID)),
 				EndKey: []byte("/Max"),
 			},
-			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
+			ResumeReason: kvpb.RESUME_BYTE_LIMIT,
 			NumBytes:     maxResponseSSTBytes,
 		}
-		allRespHeader = roachpb.ResponseHeader{
+		allRespHeader = kvpb.ResponseHeader{
 			ResumeSpan: &roachpb.Span{
 				Key:    []byte(fmt.Sprintf("/Table/%d/1/100/0", tableID)),
 				EndKey: []byte("/Max"),
 			},
-			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
+			ResumeReason: kvpb.RESUME_BYTE_LIMIT,
 			NumBytes:     maxResponseSSTBytes,
 		}
 		expectResponseHeader(t, res7, latestRespHeader, allRespHeader)
@@ -404,10 +405,10 @@ INTO
 		maxResponseSSTBytes = 101 * kvByteSize
 		res7 = exportAndSlurp(t, res5.end, maxResponseSSTBytes)
 		expect(t, res7, 100, 100, 100, 100)
-		latestRespHeader = roachpb.ResponseHeader{
+		latestRespHeader = kvpb.ResponseHeader{
 			NumBytes: 100 * kvByteSize,
 		}
-		allRespHeader = roachpb.ResponseHeader{
+		allRespHeader = kvpb.ResponseHeader{
 			NumBytes: 100 * kvByteSize,
 		}
 		expectResponseHeader(t, res7, latestRespHeader, allRespHeader)
@@ -422,8 +423,8 @@ func TestExportGCThreshold(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	kvDB := tc.Server(0).DB()
 
-	req := &roachpb.ExportRequest{
-		RequestHeader: roachpb.RequestHeader{Key: bootstrap.TestingUserTableDataMin(), EndKey: keys.MaxKey},
+	req := &kvpb.ExportRequest{
+		RequestHeader: kvpb.RequestHeader{Key: bootstrap.TestingUserTableDataMin(), EndKey: keys.MaxKey},
 		StartTime:     hlc.Timestamp{WallTime: -1},
 	}
 	_, pErr := kv.SendWrapped(ctx, kvDB.NonTransactionalSender(), req)
@@ -436,7 +437,7 @@ func TestExportGCThreshold(t *testing.T) {
 // as an oracle to check the correctness of pebbleExportToSst.
 func exportUsingGoIterator(
 	ctx context.Context,
-	filter roachpb.MVCCFilter,
+	filter kvpb.MVCCFilter,
 	startTime, endTime hlc.Timestamp,
 	startKey, endKey roachpb.Key,
 	reader storage.Reader,
@@ -450,10 +451,10 @@ func exportUsingGoIterator(
 	var skipTombstones bool
 	var iterFn func(*storage.MVCCIncrementalIterator)
 	switch filter {
-	case roachpb.MVCCFilter_Latest:
+	case kvpb.MVCCFilter_Latest:
 		skipTombstones = true
 		iterFn = (*storage.MVCCIncrementalIterator).NextKey
-	case roachpb.MVCCFilter_All:
+	case kvpb.MVCCFilter_All:
 		skipTombstones = false
 		iterFn = (*storage.MVCCIncrementalIterator).Next
 	default:
@@ -571,11 +572,11 @@ func assertEqualKVs(
 	return func(t *testing.T) {
 		t.Helper()
 
-		var filter roachpb.MVCCFilter
+		var filter kvpb.MVCCFilter
 		if exportAllRevisions {
-			filter = roachpb.MVCCFilter_All
+			filter = kvpb.MVCCFilter_All
 		} else {
-			filter = roachpb.MVCCFilter_Latest
+			filter = kvpb.MVCCFilter_Latest
 		}
 
 		// Run the oracle which is a legacy implementation of pebbleExportToSst
@@ -590,7 +591,7 @@ func assertEqualKVs(
 		start := storage.MVCCKey{Key: startKey}
 		for start.Key != nil {
 			var sst []byte
-			var summary roachpb.BulkOpSummary
+			var summary kvpb.BulkOpSummary
 			maxSize := uint64(0)
 			prevStart := start
 			sstFile := &storage.MemFile{}

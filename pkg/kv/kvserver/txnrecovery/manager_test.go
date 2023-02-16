@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -29,8 +30,8 @@ func makeManager(s *kv.Sender) (Manager, *hlc.Clock, *stop.Stopper) {
 	clock := hlc.NewClockForTesting(nil)
 	stopper := stop.NewStopper()
 	db := kv.NewDB(ac, kv.NonTransactionalFactoryFunc(func(
-		ctx context.Context, ba *roachpb.BatchRequest,
-	) (*roachpb.BatchResponse, *roachpb.Error) {
+		ctx context.Context, ba *kvpb.BatchRequest,
+	) (*kvpb.BatchResponse, *kvpb.Error) {
 		return (*s).Send(ctx, ba)
 	}), clock, stopper)
 	return NewManager(ac, clock, db, stopper), clock, stopper
@@ -90,41 +91,41 @@ func TestResolveIndeterminateCommit(t *testing.T) {
 		}
 
 		mockSender = kv.SenderFunc(func(
-			_ context.Context, ba *roachpb.BatchRequest,
-		) (*roachpb.BatchResponse, *roachpb.Error) {
+			_ context.Context, ba *kvpb.BatchRequest,
+		) (*kvpb.BatchResponse, *kvpb.Error) {
 			// Probing Phase.
 			assertMetrics(t, m, metricVals{attemptsPending: 1, attempts: 1})
 
 			assert.Equal(t, 3, len(ba.Requests))
-			assert.IsType(t, &roachpb.QueryTxnRequest{}, ba.Requests[0].GetInner())
-			assert.IsType(t, &roachpb.QueryIntentRequest{}, ba.Requests[1].GetInner())
-			assert.IsType(t, &roachpb.QueryIntentRequest{}, ba.Requests[2].GetInner())
+			assert.IsType(t, &kvpb.QueryTxnRequest{}, ba.Requests[0].GetInner())
+			assert.IsType(t, &kvpb.QueryIntentRequest{}, ba.Requests[1].GetInner())
+			assert.IsType(t, &kvpb.QueryIntentRequest{}, ba.Requests[2].GetInner())
 
 			assert.Equal(t, roachpb.Key(txn.Key), ba.Requests[0].GetInner().Header().Key)
 			assert.Equal(t, roachpb.Key("a"), ba.Requests[1].GetInner().Header().Key)
 			assert.Equal(t, roachpb.Key("b"), ba.Requests[2].GetInner().Header().Key)
 
 			br := ba.CreateReply()
-			br.Responses[0].GetInner().(*roachpb.QueryTxnResponse).QueriedTxn = txn
-			br.Responses[1].GetInner().(*roachpb.QueryIntentResponse).FoundIntent = true
-			br.Responses[2].GetInner().(*roachpb.QueryIntentResponse).FoundIntent = !prevent
+			br.Responses[0].GetInner().(*kvpb.QueryTxnResponse).QueriedTxn = txn
+			br.Responses[1].GetInner().(*kvpb.QueryIntentResponse).FoundIntent = true
+			br.Responses[2].GetInner().(*kvpb.QueryIntentResponse).FoundIntent = !prevent
 
 			mockSender = kv.SenderFunc(func(
-				_ context.Context, ba *roachpb.BatchRequest,
-			) (*roachpb.BatchResponse, *roachpb.Error) {
+				_ context.Context, ba *kvpb.BatchRequest,
+			) (*kvpb.BatchResponse, *kvpb.Error) {
 				// Recovery Phase.
 				assertMetrics(t, m, metricVals{attemptsPending: 1, attempts: 1})
 
 				assert.Equal(t, 1, len(ba.Requests))
-				assert.IsType(t, &roachpb.RecoverTxnRequest{}, ba.Requests[0].GetInner())
+				assert.IsType(t, &kvpb.RecoverTxnRequest{}, ba.Requests[0].GetInner())
 
-				recTxnReq := ba.Requests[0].GetInner().(*roachpb.RecoverTxnRequest)
+				recTxnReq := ba.Requests[0].GetInner().(*kvpb.RecoverTxnRequest)
 				assert.Equal(t, roachpb.Key(txn.Key), recTxnReq.Key)
 				assert.Equal(t, txn.TxnMeta, recTxnReq.Txn)
 				assert.Equal(t, !prevent, recTxnReq.ImplicitlyCommitted)
 
 				br2 := ba.CreateReply()
-				recTxnResp := br2.Responses[0].GetInner().(*roachpb.RecoverTxnResponse)
+				recTxnResp := br2.Responses[0].GetInner().(*kvpb.RecoverTxnResponse)
 				recTxnResp.RecoveredTxn = txn
 				if !prevent {
 					recTxnResp.RecoveredTxn.Status = roachpb.COMMITTED
@@ -137,7 +138,7 @@ func TestResolveIndeterminateCommit(t *testing.T) {
 		})
 
 		assertMetrics(t, m, metricVals{})
-		iceErr := roachpb.NewIndeterminateCommitError(txn)
+		iceErr := kvpb.NewIndeterminateCommitError(txn)
 		resTxn, err := m.ResolveIndeterminateCommit(context.Background(), iceErr)
 		assert.NotNil(t, resTxn)
 		assert.Nil(t, err)
@@ -267,15 +268,15 @@ func TestResolveIndeterminateCommitTxnChanges(t *testing.T) {
 	for _, c := range testCases {
 		t.Run(c.name, func(t *testing.T) {
 			mockSender = kv.SenderFunc(func(
-				_ context.Context, ba *roachpb.BatchRequest,
-			) (*roachpb.BatchResponse, *roachpb.Error) {
+				_ context.Context, ba *kvpb.BatchRequest,
+			) (*kvpb.BatchResponse, *kvpb.Error) {
 				// Probing Phase.
 				assertMetrics(t, m, expMetrics.merge(metricVals{attemptsPending: 1, attempts: 1}))
 
 				assert.Equal(t, 3, len(ba.Requests))
-				assert.IsType(t, &roachpb.QueryTxnRequest{}, ba.Requests[0].GetInner())
-				assert.IsType(t, &roachpb.QueryIntentRequest{}, ba.Requests[1].GetInner())
-				assert.IsType(t, &roachpb.QueryIntentRequest{}, ba.Requests[2].GetInner())
+				assert.IsType(t, &kvpb.QueryTxnRequest{}, ba.Requests[0].GetInner())
+				assert.IsType(t, &kvpb.QueryIntentRequest{}, ba.Requests[1].GetInner())
+				assert.IsType(t, &kvpb.QueryIntentRequest{}, ba.Requests[2].GetInner())
 
 				assert.Equal(t, roachpb.Key(txn.Key), ba.Requests[0].GetInner().Header().Key)
 				assert.Equal(t, roachpb.Key("a"), ba.Requests[1].GetInner().Header().Key)
@@ -283,36 +284,36 @@ func TestResolveIndeterminateCommitTxnChanges(t *testing.T) {
 
 				br := ba.CreateReply()
 				if c.duringProbing {
-					br.Responses[0].GetInner().(*roachpb.QueryTxnResponse).QueriedTxn = c.changedTxn
+					br.Responses[0].GetInner().(*kvpb.QueryTxnResponse).QueriedTxn = c.changedTxn
 				} else {
-					br.Responses[0].GetInner().(*roachpb.QueryTxnResponse).QueriedTxn = txn
+					br.Responses[0].GetInner().(*kvpb.QueryTxnResponse).QueriedTxn = txn
 				}
-				br.Responses[1].GetInner().(*roachpb.QueryIntentResponse).FoundIntent = true
-				br.Responses[2].GetInner().(*roachpb.QueryIntentResponse).FoundIntent = false
+				br.Responses[1].GetInner().(*kvpb.QueryIntentResponse).FoundIntent = true
+				br.Responses[2].GetInner().(*kvpb.QueryIntentResponse).FoundIntent = false
 
 				mockSender = kv.SenderFunc(func(
-					_ context.Context, ba *roachpb.BatchRequest,
-				) (*roachpb.BatchResponse, *roachpb.Error) {
+					_ context.Context, ba *kvpb.BatchRequest,
+				) (*kvpb.BatchResponse, *kvpb.Error) {
 					// Recovery Phase.
 					assert.False(t, c.duringProbing, "the recovery phase should not be run")
 					assertMetrics(t, m, expMetrics.merge(metricVals{attemptsPending: 1, attempts: 1}))
 
 					assert.Equal(t, 1, len(ba.Requests))
-					assert.IsType(t, &roachpb.RecoverTxnRequest{}, ba.Requests[0].GetInner())
+					assert.IsType(t, &kvpb.RecoverTxnRequest{}, ba.Requests[0].GetInner())
 
-					recTxnReq := ba.Requests[0].GetInner().(*roachpb.RecoverTxnRequest)
+					recTxnReq := ba.Requests[0].GetInner().(*kvpb.RecoverTxnRequest)
 					assert.Equal(t, roachpb.Key(txn.Key), recTxnReq.Key)
 					assert.Equal(t, txn.TxnMeta, recTxnReq.Txn)
 					assert.Equal(t, false, recTxnReq.ImplicitlyCommitted)
 
 					br2 := ba.CreateReply()
-					br2.Responses[0].GetInner().(*roachpb.RecoverTxnResponse).RecoveredTxn = c.changedTxn
+					br2.Responses[0].GetInner().(*kvpb.RecoverTxnResponse).RecoveredTxn = c.changedTxn
 					return br2, nil
 				})
 				return br, nil
 			})
 
-			iceErr := roachpb.NewIndeterminateCommitError(txn)
+			iceErr := kvpb.NewIndeterminateCommitError(txn)
 			resTxn, err := m.ResolveIndeterminateCommit(context.Background(), iceErr)
 			assert.NotNil(t, resTxn)
 			assert.Equal(t, c.changedTxn, *resTxn)
@@ -341,25 +342,25 @@ func TestResolveIndeterminateCommitTxnWithoutInFlightWrites(t *testing.T) {
 	txn := makeStagingTransaction(clock)
 
 	mockSender = kv.SenderFunc(func(
-		_ context.Context, ba *roachpb.BatchRequest,
-	) (*roachpb.BatchResponse, *roachpb.Error) {
+		_ context.Context, ba *kvpb.BatchRequest,
+	) (*kvpb.BatchResponse, *kvpb.Error) {
 		// Recovery Phase. Probing phase skipped.
 		assert.Equal(t, 1, len(ba.Requests))
-		assert.IsType(t, &roachpb.RecoverTxnRequest{}, ba.Requests[0].GetInner())
+		assert.IsType(t, &kvpb.RecoverTxnRequest{}, ba.Requests[0].GetInner())
 
-		recTxnReq := ba.Requests[0].GetInner().(*roachpb.RecoverTxnRequest)
+		recTxnReq := ba.Requests[0].GetInner().(*kvpb.RecoverTxnRequest)
 		assert.Equal(t, roachpb.Key(txn.Key), recTxnReq.Key)
 		assert.Equal(t, txn.TxnMeta, recTxnReq.Txn)
 		assert.Equal(t, true, recTxnReq.ImplicitlyCommitted)
 
 		br := ba.CreateReply()
-		recTxnResp := br.Responses[0].GetInner().(*roachpb.RecoverTxnResponse)
+		recTxnResp := br.Responses[0].GetInner().(*kvpb.RecoverTxnResponse)
 		recTxnResp.RecoveredTxn = txn
 		recTxnResp.RecoveredTxn.Status = roachpb.COMMITTED
 		return br, nil
 	})
 
-	iceErr := roachpb.NewIndeterminateCommitError(txn)
+	iceErr := kvpb.NewIndeterminateCommitError(txn)
 	resTxn, err := m.ResolveIndeterminateCommit(context.Background(), iceErr)
 	assert.NotNil(t, resTxn)
 	assert.Equal(t, roachpb.COMMITTED, resTxn.Status)

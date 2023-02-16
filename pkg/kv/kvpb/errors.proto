@@ -24,7 +24,7 @@ syntax = "proto2";
 // correct name, the files can be moved into a newly created `kvpb` package
 // at leisure.
 package cockroach.kv.kvpb;
-option go_package = "roachpb";
+option go_package = "kvpb";
 
 import "errorspb/errors.proto";
 import "roachpb/data.proto";
@@ -60,7 +60,8 @@ message NotLeaseHolderError {
   // set.
   optional roachpb.Lease lease = 4;
   optional int64 range_id = 3 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
+      (gogoproto.customname) = "RangeID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
   // The range descriptor from the replica the error originated from.
   // The generation of the descriptor is used by the DistSender's RangeCache to
   // determine whether the error was returned because the replica had a stale
@@ -88,17 +89,19 @@ message UnsupportedRequestError {
 // which is not hosted on this store.
 message RangeNotFoundError {
   optional int64 range_id = 1 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
+      (gogoproto.customname) = "RangeID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
   // store_id is nonzero only if the error originated on a Store.
   optional int64 store_id = 2 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "StoreID", (gogoproto.casttype) = "StoreID"];
+      (gogoproto.customname) = "StoreID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
 }
 
 // A RangeKeyMismatchError indicates that a command was sent to a
 // range which did not contain the key(s) specified by the command.
 message RangeKeyMismatchError {
-  optional bytes request_start_key = 1 [(gogoproto.casttype) = "Key"];
-  optional bytes request_end_key = 2 [(gogoproto.casttype) = "Key"];
+  optional bytes request_start_key = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+  optional bytes request_end_key = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
 
   // Ranges contains information intended for the client's range cache. The
   // server populates it with info on the range with the ID addressed by the
@@ -322,7 +325,7 @@ message WriteIntentError {
   // operating under. Used on the server to avoid adding discovered locks
   // which were discovered under old leases to the lock table.
   optional int64 lease_sequence = 3 [(gogoproto.nullable) = false,
-    (gogoproto.casttype) = "LeaseSequence"];
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.LeaseSequence"];
   enum Reason {
     // The reason for the WriteIntentError is unspecified. This will
     // always be the case for errors returned from MVCC.
@@ -363,7 +366,7 @@ message WriteTooOldError {
   // to be used in any transaction logic. As a result, it's not even necessary
   // for this key to be at actual_timestamp; it could be at any timestamp in
   // between timestamp and actual_timestamp.
-  optional bytes key = 3 [(gogoproto.casttype) = "Key"];
+  optional bytes key = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
 }
 
 // An OpRequiresTxnError indicates that a command required to be
@@ -424,14 +427,16 @@ message ReplicaCorruptionError {
 message ReplicaTooOldError {
   // replica_id is the ID of the replica that is too old.
   optional int32 replica_id = 1 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "ReplicaID", (gogoproto.casttype) = "ReplicaID"];
+      (gogoproto.customname) = "ReplicaID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.ReplicaID"];
 }
 
 // A StoreNotFoundError indicates that a command was sent to a store
 // which is not hosted on this node.
 message StoreNotFoundError {
   optional int64 store_id = 1 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "StoreID", (gogoproto.casttype) = "StoreID"];
+      (gogoproto.customname) = "StoreID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
 }
 
 // UnhandledRetryableError tells the recipient that a KV request must be
@@ -499,7 +504,7 @@ message TxnAlreadyEncounteredErrorError{
 // An IntegerOverflowError indicates that an operation was aborted because
 // it would have caused an integer overflow.
 message IntegerOverflowError {
-  optional bytes key = 1 [(gogoproto.casttype) = "Key"];
+  optional bytes key = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
   optional int64 current_value = 2 [(gogoproto.nullable) = false];
   optional int64 increment_value = 3 [(gogoproto.nullable) = false];
 }
@@ -528,7 +533,7 @@ message IntentMissingError {
   // The non-matching intent that was found at that key, if any.
   optional roachpb.Intent wrong_intent = 1;
   // The key where the intent was expected.
-  optional bytes key = 2 [(gogoproto.casttype) = "Key"];
+  optional bytes key = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
 }
 
 // A MergeInProgressError indicates that the request could not be completed
@@ -607,7 +612,7 @@ message RefreshFailedError {
     REASON_INTENT = 1;
   }
   optional Reason reason = 1 [(gogoproto.nullable) = false];
-  optional bytes key = 2 [(gogoproto.casttype) = "Key"];
+  optional bytes key = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
 
   // The timestamp the key was last updated.
   optional util.hlc.Timestamp timestamp = 3 [(gogoproto.nullable) = false];
@@ -698,7 +703,8 @@ message Error {
   optional roachpb.Transaction unexposed_txn = 4;
 
   // Node at which the error was generated (zero if does not apply).
-  optional int32 origin_node = 5 [(gogoproto.nullable) = false, (gogoproto.casttype) = "NodeID"];
+  optional int32 origin_node = 5 [(gogoproto.nullable) = false,
+                                  (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
 
   // encoded_error is the Go error that caused this Error.
   optional errorspb.EncodedError encoded_error = 9 [(gogoproto.nullable) = false];
@@ -720,7 +726,8 @@ message Error {
 message InsufficientSpaceError {
    // StoreID is the store that had insufficient space.
    optional int64 store_id = 1 [(gogoproto.nullable) = false,
-   (gogoproto.customname) = "StoreID", (gogoproto.casttype) = "StoreID"];
+   (gogoproto.customname) = "StoreID",
+   (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
 
   // Op is the operaton that was unable to be performed.
   optional string op = 2 [(gogoproto.nullable) = false];

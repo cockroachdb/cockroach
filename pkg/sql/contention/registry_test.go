@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
@@ -148,7 +149,7 @@ func TestRegistry(t *testing.T) {
 				return fmt.Sprintf("could not parse duration %s as int: %v", duration, err)
 			}
 			keyBytes = encoding.EncodeStringAscending(keyBytes, key)
-			addContentionEvent(registry, roachpb.ContentionEvent{
+			addContentionEvent(registry, kvpb.ContentionEvent{
 				Key: keyBytes,
 				TxnMeta: enginepb.TxnMeta{
 					ID:                contendingTxnID,
@@ -182,7 +183,7 @@ func TestRegistryConcurrentAdds(t *testing.T) {
 	for i := 0; i < numGoroutines; i++ {
 		go func() {
 			defer wg.Done()
-			addContentionEvent(registry, roachpb.ContentionEvent{
+			addContentionEvent(registry, kvpb.ContentionEvent{
 				Key: keys.MakeTableIDIndexID(nil /* key */, 1 /* tableID */, 1 /* indexID */),
 			})
 		}()
@@ -240,7 +241,7 @@ func TestSerializedRegistryInvariants(t *testing.T) {
 				key = keys.MakeTableIDIndexID(key, tableID, indexID)
 			}
 			key = append(key, getKey()...)
-			addContentionEvent(r, roachpb.ContentionEvent{
+			addContentionEvent(r, kvpb.ContentionEvent{
 				Key: key,
 				TxnMeta: enginepb.TxnMeta{
 					ID:                uuid.MakeV4(),
@@ -331,7 +332,7 @@ func TestSerializedRegistryInvariants(t *testing.T) {
 	}
 }
 
-func addContentionEvent(r *contention.Registry, ev roachpb.ContentionEvent) {
+func addContentionEvent(r *contention.Registry, ev kvpb.ContentionEvent) {
 	r.AddContentionEvent(contentionpb.ExtendedContentionEvent{
 		BlockingEvent: ev,
 	})

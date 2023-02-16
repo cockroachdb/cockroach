@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -85,8 +86,8 @@ func RevertTables(
 	for len(spans) != 0 {
 		var b kv.Batch
 		for _, span := range spans {
-			b.AddRawRequest(&roachpb.RevertRangeRequest{
-				RequestHeader: roachpb.RequestHeader{
+			b.AddRawRequest(&kvpb.RevertRangeRequest{
+				RequestHeader: kvpb.RequestHeader{
 					Key:    span.Key,
 					EndKey: span.EndKey,
 				},
@@ -136,7 +137,7 @@ func DeleteTableWithPredicate(
 	sv *settings.Values,
 	distSender *kvcoord.DistSender,
 	table catalog.TableDescriptor,
-	predicates roachpb.DeleteRangePredicates,
+	predicates kvpb.DeleteRangePredicates,
 	batchSize int64,
 ) error {
 
@@ -175,14 +176,14 @@ func DeleteTableWithPredicate(
 					// returned.
 					resumeCount := 1
 					for span != nil {
-						admissionHeader := roachpb.AdmissionHeader{
+						admissionHeader := kvpb.AdmissionHeader{
 							Priority:                 int32(admissionpb.BulkNormalPri),
 							CreateTime:               timeutil.Now().UnixNano(),
-							Source:                   roachpb.AdmissionHeader_FROM_SQL,
+							Source:                   kvpb.AdmissionHeader_FROM_SQL,
 							NoMemoryReservedAtSource: true,
 						}
-						delRangeRequest := &roachpb.DeleteRangeRequest{
-							RequestHeader: roachpb.RequestHeader{
+						delRangeRequest := &kvpb.DeleteRangeRequest{
+							RequestHeader: kvpb.RequestHeader{
 								Key:    span.Key,
 								EndKey: span.EndKey,
 							},
@@ -194,7 +195,7 @@ func DeleteTableWithPredicate(
 						rawResp, err := kv.SendWrappedWithAdmission(
 							ctx,
 							db.NonTransactionalSender(),
-							roachpb.Header{MaxSpanRequestKeys: batchSize},
+							kvpb.Header{MaxSpanRequestKeys: batchSize},
 							admissionHeader,
 							delRangeRequest)
 
@@ -203,7 +204,7 @@ func DeleteTableWithPredicate(
 							return errors.Wrapf(err.GoError(), "delete range %s - %s", span.Key, span.EndKey)
 						}
 						span = nil
-						resp := rawResp.(*roachpb.DeleteRangeResponse)
+						resp := rawResp.(*kvpb.DeleteRangeResponse)
 						if resp.ResumeSpan != nil {
 							if !resp.ResumeSpan.Valid() {
 								return errors.Errorf("invalid resume span: %s", resp.ResumeSpan)

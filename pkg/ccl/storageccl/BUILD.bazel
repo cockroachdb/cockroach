@@ -12,7 +12,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/cloud",
-        "//pkg/roachpb",
+        "//pkg/kv/kvpb",
         "//pkg/settings",
         "//pkg/storage",
         "//pkg/util/ioctx",

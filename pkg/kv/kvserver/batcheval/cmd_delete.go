@@ -13,23 +13,23 @@ package batcheval
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 )
 
 func init() {
-	RegisterReadWriteCommand(roachpb.Delete, DefaultDeclareIsolatedKeys, Delete)
+	RegisterReadWriteCommand(kvpb.Delete, DefaultDeclareIsolatedKeys, Delete)
 }
 
 // Delete deletes the key and value specified by key.
 func Delete(
-	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp kvpb.Response,
 ) (result.Result, error) {
-	args := cArgs.Args.(*roachpb.DeleteRequest)
+	args := cArgs.Args.(*kvpb.DeleteRequest)
 	h := cArgs.Header
-	reply := resp.(*roachpb.DeleteResponse)
+	reply := resp.(*kvpb.DeleteResponse)
 
 	var err error
 	reply.FoundKey, err = storage.MVCCDelete(

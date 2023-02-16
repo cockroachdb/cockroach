@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	aload "github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
@@ -115,18 +116,18 @@ func TestAddSSTQPSStat(t *testing.T) {
 	sst, start, end := storageutils.MakeSST(t, ts.ClusterSettings(), sstKeys)
 	requestSize := float64(len(sst))
 
-	sstReq := &roachpb.AddSSTableRequest{
-		RequestHeader: roachpb.RequestHeader{Key: start, EndKey: end},
+	sstReq := &kvpb.AddSSTableRequest{
+		RequestHeader: kvpb.RequestHeader{Key: start, EndKey: end},
 		Data:          sst,
 		MVCCStats:     storageutils.SSTStats(t, sst, 0),
 	}
 
-	get := &roachpb.GetRequest{
-		RequestHeader: roachpb.RequestHeader{Key: start},
+	get := &kvpb.GetRequest{
+		RequestHeader: kvpb.RequestHeader{Key: start},
 	}
 
-	addSSTBA := &roachpb.BatchRequest{}
-	nonSSTBA := &roachpb.BatchRequest{}
+	addSSTBA := &kvpb.BatchRequest{}
+	nonSSTBA := &kvpb.BatchRequest{}
 	addSSTBA.Add(sstReq)
 	nonSSTBA.Add(get)
 
@@ -137,7 +138,7 @@ func TestAddSSTQPSStat(t *testing.T) {
 	testCases := []struct {
 		addsstRequestFactor int
 		expectedQPS         float64
-		ba                  *roachpb.BatchRequest
+		ba                  *kvpb.BatchRequest
 	}{
 		{0, 1, addSSTBA},
 		{100, 1, nonSSTBA},
@@ -184,9 +185,9 @@ func TestAddSSTQPSStat(t *testing.T) {
 }
 
 // genVariableRead returns a batch request containing, start-end sequential key reads.
-func genVariableRead(ctx context.Context, start, end roachpb.Key) *roachpb.BatchRequest {
-	scan := roachpb.NewScan(start, end, false)
-	readBa := &roachpb.BatchRequest{}
+func genVariableRead(ctx context.Context, start, end roachpb.Key) *kvpb.BatchRequest {
+	scan := kvpb.NewScan(start, end, false)
+	readBa := &kvpb.BatchRequest{}
 	readBa.Add(scan)
 	return readBa
 }
@@ -318,35 +319,35 @@ func TestReadLoadMetricAccounting(t *testing.T) {
 		nextKey = nextKey.Next()
 	}
 	sst, start, end := storageutils.MakeSST(t, ts.ClusterSettings(), sstKeys)
-	sstReq := &roachpb.AddSSTableRequest{
-		RequestHeader: roachpb.RequestHeader{Key: start, EndKey: end},
+	sstReq := &kvpb.AddSSTableRequest{
+		RequestHeader: kvpb.RequestHeader{Key: start, EndKey: end},
 		Data:          sst,
 		MVCCStats:     storageutils.SSTStats(t, sst, 0),
 	}
 
-	addSSTBA := &roachpb.BatchRequest{}
+	addSSTBA := &kvpb.BatchRequest{}
 	addSSTBA.Add(sstReq)
 
 	// Send an AddSSTRequest once to create the key range.
 	_, pErr := db.NonTransactionalSender().Send(ctx, addSSTBA)
 	require.Nil(t, pErr)
 
-	get := &roachpb.GetRequest{
-		RequestHeader: roachpb.RequestHeader{Key: start},
+	get := &kvpb.GetRequest{
+		RequestHeader: kvpb.RequestHeader{Key: start},
 	}
 
-	getReadBA := &roachpb.BatchRequest{}
+	getReadBA := &kvpb.BatchRequest{}
 	getReadBA.Add(get)
 
-	scan := &roachpb.ScanRequest{
-		RequestHeader: roachpb.RequestHeader{Key: start, EndKey: end},
+	scan := &kvpb.ScanRequest{
+		RequestHeader: kvpb.RequestHeader{Key: start, EndKey: end},
 	}
 
-	scanReadBA := &roachpb.BatchRequest{}
+	scanReadBA := &kvpb.BatchRequest{}
 	scanReadBA.Add(scan)
 
 	testCases := []struct {
-		ba           *roachpb.BatchRequest
+		ba           *kvpb.BatchRequest
 		expectedRQPS float64
 		expectedWPS  float64
 		expectedRPS  float64

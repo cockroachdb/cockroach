@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedbuffer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -111,9 +112,9 @@ func (w *Watcher) startRangeFeed(
 		ch: make(chan struct{}),
 	}
 
-	allOverrides := make(map[roachpb.TenantID][]roachpb.TenantSetting)
+	allOverrides := make(map[roachpb.TenantID][]kvpb.TenantSetting)
 
-	translateEvent := func(ctx context.Context, kv *roachpb.RangeFeedValue) rangefeedbuffer.Event {
+	translateEvent := func(ctx context.Context, kv *kvpb.RangeFeedValue) rangefeedbuffer.Event {
 		tenantID, setting, tombstone, err := w.dec.DecodeRow(roachpb.KeyValue{
 			Key:   kv.Key,
 			Value: kv.Value,
@@ -158,7 +159,7 @@ func (w *Watcher) startRangeFeed(
 			close(initialScan.ch)
 		} else {
 			// The rangefeed will be restarted and will scan the table anew.
-			allOverrides = make(map[roachpb.TenantID][]roachpb.TenantSetting)
+			allOverrides = make(map[roachpb.TenantID][]kvpb.TenantSetting)
 		}
 	}
 
@@ -217,7 +218,7 @@ func (w *Watcher) WaitForStart(ctx context.Context) error {
 // The caller must not modify the returned overrides slice.
 func (w *Watcher) GetTenantOverrides(
 	tenantID roachpb.TenantID,
-) (overrides []roachpb.TenantSetting, changeCh <-chan struct{}) {
+) (overrides []kvpb.TenantSetting, changeCh <-chan struct{}) {
 	o := w.store.GetTenantOverrides(tenantID)
 	return o.overrides, o.changeCh
 }
@@ -228,7 +229,7 @@ func (w *Watcher) GetTenantOverrides(
 //
 // The caller must not modify the returned overrides slice.
 func (w *Watcher) GetAllTenantOverrides() (
-	overrides []roachpb.TenantSetting,
+	overrides []kvpb.TenantSetting,
 	changeCh <-chan struct{},
 ) {
 	return w.GetTenantOverrides(allTenantOverridesID)

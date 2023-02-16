@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
@@ -567,8 +568,8 @@ func maybeRevertToCutoverTimestamp(
 		}
 		var b kv.Batch
 		for _, span := range spans {
-			b.AddRawRequest(&roachpb.RevertRangeRequest{
-				RequestHeader: roachpb.RequestHeader{
+			b.AddRawRequest(&kvpb.RevertRangeRequest{
+				RequestHeader: kvpb.RequestHeader{
 					Key:    span.Key,
 					EndKey: span.EndKey,
 				},

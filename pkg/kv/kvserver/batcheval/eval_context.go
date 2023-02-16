@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -73,7 +74,7 @@ type EvalContext interface {
 	// for details about its arguments, return values, and preconditions.
 	CanCreateTxnRecord(
 		ctx context.Context, txnID uuid.UUID, txnKey []byte, txnMinTS hlc.Timestamp,
-	) (ok bool, reason roachpb.TransactionAbortedReason)
+	) (ok bool, reason kvpb.TransactionAbortedReason)
 
 	// MinTxnCommitTS determines the minimum timestamp at which a transaction with
 	// the provided ID and key can commit. See Replica.MinTxnCommitTS for details
@@ -172,7 +173,7 @@ type MockEvalCtx struct {
 	AbortSpan            *abortspan.AbortSpan
 	GCThreshold          hlc.Timestamp
 	Term, FirstIndex     uint64
-	CanCreateTxnRecordFn func() (bool, roachpb.TransactionAbortedReason)
+	CanCreateTxnRecordFn func() (bool, kvpb.TransactionAbortedReason)
 	MinTxnCommitTSFn     func() hlc.Timestamp
 	Lease                roachpb.Lease
 	CurrentReadSummary   rspb.ReadSummary
@@ -253,7 +254,7 @@ func (m *mockEvalCtxImpl) GetMaxSplitCPU(context.Context) (float64, bool) {
 }
 func (m *mockEvalCtxImpl) CanCreateTxnRecord(
 	context.Context, uuid.UUID, []byte, hlc.Timestamp,
-) (bool, roachpb.TransactionAbortedReason) {
+) (bool, kvpb.TransactionAbortedReason) {
 	if m.CanCreateTxnRecordFn == nil {
 		return true, 0
 	}

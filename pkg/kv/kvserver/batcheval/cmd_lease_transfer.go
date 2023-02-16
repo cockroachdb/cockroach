@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -23,13 +24,13 @@ import (
 )
 
 func init() {
-	RegisterReadWriteCommand(roachpb.TransferLease, declareKeysTransferLease, TransferLease)
+	RegisterReadWriteCommand(kvpb.TransferLease, declareKeysTransferLease, TransferLease)
 }
 
 func declareKeysTransferLease(
 	_ ImmutableRangeState,
-	_ *roachpb.Header,
-	_ roachpb.Request,
+	_ *kvpb.Header,
+	_ kvpb.Request,
 	latchSpans, _ *spanset.SpanSet,
 	_ time.Duration,
 ) {
@@ -61,11 +62,11 @@ func declareKeysTransferLease(
 // ex-) lease holder which must have dropped all of its lease holder powers
 // before proposing.
 func TransferLease(
-	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp kvpb.Response,
 ) (result.Result, error) {
 	// When returning an error from this method, must always return
 	// a newFailedLeaseTrigger() to satisfy stats.
-	args := cArgs.Args.(*roachpb.TransferLeaseRequest)
+	args := cArgs.Args.(*kvpb.TransferLeaseRequest)
 
 	// NOTE: we use the range's current lease as prevLease instead of
 	// args.PrevLease so that we can detect lease transfers that will

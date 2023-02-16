@@ -15,6 +15,6 @@ batch_gen = rule(
    attrs = {
        "out": attr.output(mandatory = True),
        "src": attr.label(providers = [GoSource]),
-       "_tool": attr.label(default = "//pkg/roachpb/gen", executable = True, cfg = "exec"),
+       "_tool": attr.label(default = "//pkg/kv/kvpb/gen", executable = True, cfg = "exec"),
    },
 )

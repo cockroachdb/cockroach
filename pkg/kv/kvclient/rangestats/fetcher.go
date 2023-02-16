@@ -15,6 +15,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 )
@@ -34,9 +35,9 @@ func NewFetcher(db *kv.DB) *Fetcher {
 // RangeStats is part of the eval.RangeStatsFetcher interface.
 func (f Fetcher) RangeStats(
 	ctx context.Context, keys ...roachpb.Key,
-) ([]*roachpb.RangeStatsResponse, error) {
+) ([]*kvpb.RangeStatsResponse, error) {
 	var ba kv.Batch
-	reqs := make([]roachpb.RangeStatsRequest, len(keys))
+	reqs := make([]kvpb.RangeStatsRequest, len(keys))
 	for i, k := range keys {
 		reqs[i].Key = k
 		ba.AddRawRequest(&reqs[i])
@@ -44,9 +45,9 @@ func (f Fetcher) RangeStats(
 	if err := f.db.Run(ctx, &ba); err != nil {
 		return nil, err
 	}
-	resps := make([]*roachpb.RangeStatsResponse, len(keys))
+	resps := make([]*kvpb.RangeStatsResponse, len(keys))
 	for i, r := range ba.RawResponse().Responses {
-		resps[i] = r.GetInner().(*roachpb.RangeStatsResponse)
+		resps[i] = r.GetInner().(*kvpb.RangeStatsResponse)
 	}
 	return resps, nil
 }

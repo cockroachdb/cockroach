@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -58,7 +59,7 @@ func testTenantTracesAreRedactedImpl(t *testing.T, redactable bool) {
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
-					TestingEvalFilter: func(args kvserverbase.FilterArgs) *roachpb.Error {
+					TestingEvalFilter: func(args kvserverbase.FilterArgs) *kvpb.Error {
 						log.Eventf(args.Ctx, "%v", sensitiveString)
 						log.Eventf(args.Ctx, "%v", redact.Safe(visibleString))
 						return nil

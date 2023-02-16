@@ -73,7 +73,7 @@ data: "k"/0,1 -> /INT/2
 data: "r"/3.000000000,1 -> /INT/3
 data: "r"/3.000000000,0 -> /INT/2
 data: "r"/1.000000000,0 -> /INT/1
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "r" at timestamp 2.000000000,0 too old; wrote at 3.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "r" at timestamp 2.000000000,0 too old; wrote at 3.000000000,1
 
 # Ditto with transactional.
 run error
@@ -90,4 +90,4 @@ data: "r"/3.000000000,2 -> /INT/2
 data: "r"/3.000000000,1 -> /INT/3
 data: "r"/3.000000000,0 -> /INT/2
 data: "r"/1.000000000,0 -> /INT/1
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "r" at timestamp 2.000000000,0 too old; wrote at 3.000000000,2
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "r" at timestamp 2.000000000,0 too old; wrote at 3.000000000,2

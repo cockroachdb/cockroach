@@ -44,6 +44,7 @@ go_library(
         "//pkg/build",
         "//pkg/keys",
         "//pkg/kv",
+        "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/liveness",
         "//pkg/roachpb",
         "//pkg/rpc",

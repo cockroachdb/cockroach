@@ -14,6 +14,7 @@ go_library(
         "//pkg/ccl/streamingccl",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
+        "//pkg/kv/kvpb",
         "//pkg/repstream/streampb",
         "//pkg/roachpb",
         "//pkg/security/username",

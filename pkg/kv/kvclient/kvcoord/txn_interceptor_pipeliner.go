@@ -14,6 +14,7 @@ import (
 	"context"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -258,8 +259,8 @@ func (f rangeIteratorFactory) newRangeIterator() condensableSpanSetRangeIterator
 
 // SendLocked implements the lockedSender interface.
 func (tp *txnPipeliner) SendLocked(
-	ctx context.Context, ba *roachpb.BatchRequest,
-) (*roachpb.BatchResponse, *roachpb.Error) {
+	ctx context.Context, ba *kvpb.BatchRequest,
+) (*kvpb.BatchResponse, *kvpb.Error) {
 	// If an EndTxn request is part of this batch, attach the in-flight writes
 	// and the lock footprint to it.
 	ba, pErr := tp.attachLocksToEndTxn(ctx, ba)
@@ -277,7 +278,7 @@ func (tp *txnPipeliner) SendLocked(
 	maxBytes := TrackedWritesMaxSize.Get(&tp.st.SV)
 	if rejectOverBudget {
 		if err := tp.maybeRejectOverBudget(ba, maxBytes); err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, kvpb.NewError(err)
 		}
 	}
 
@@ -321,7 +322,7 @@ func (tp *txnPipeliner) SendLocked(
 // the transaction commits. If it fails, then we'd add the lock spans to our
 // tracking and exceed the budget. It's easier for this code and more
 // predictable for the user if we just reject this batch, though.
-func (tp *txnPipeliner) maybeRejectOverBudget(ba *roachpb.BatchRequest, maxBytes int64) error {
+func (tp *txnPipeliner) maybeRejectOverBudget(ba *kvpb.BatchRequest, maxBytes int64) error {
 	// Bail early if the current request is not locking, even if we are already
 	// over budget. In particular, we definitely want to permit rollbacks. We also
 	// want to permit lone commits, since the damage in taking too much memory has
@@ -354,18 +355,18 @@ func (tp *txnPipeliner) maybeRejectOverBudget(ba *roachpb.BatchRequest, maxBytes
 // provided batch. It augments these sets with locking requests from the current
 // batch.
 func (tp *txnPipeliner) attachLocksToEndTxn(
-	ctx context.Context, ba *roachpb.BatchRequest,
-) (*roachpb.BatchRequest, *roachpb.Error) {
-	args, hasET := ba.GetArg(roachpb.EndTxn)
+	ctx context.Context, ba *kvpb.BatchRequest,
+) (*kvpb.BatchRequest, *kvpb.Error) {
+	args, hasET := ba.GetArg(kvpb.EndTxn)
 	if !hasET {
 		return ba, nil
 	}
-	et := args.(*roachpb.EndTxnRequest)
+	et := args.(*kvpb.EndTxnRequest)
 	if len(et.LockSpans) > 0 {
-		return ba, roachpb.NewErrorf("client must not pass intents to EndTxn")
+		return ba, kvpb.NewErrorf("client must not pass intents to EndTxn")
 	}
 	if len(et.InFlightWrites) > 0 {
-		return ba, roachpb.NewErrorf("client must not pass in-flight writes to EndTxn")
+		return ba, kvpb.NewErrorf("client must not pass in-flight writes to EndTxn")
 	}
 
 	// Populate et.LockSpans and et.InFlightWrites.
@@ -384,7 +385,7 @@ func (tp *txnPipeliner) attachLocksToEndTxn(
 	for _, ru := range ba.Requests[:len(ba.Requests)-1] {
 		req := ru.GetInner()
 		h := req.Header()
-		if roachpb.IsLocking(req) {
+		if kvpb.IsLocking(req) {
 			// Ranged writes are added immediately to the lock spans because
 			// it's not clear where they will actually leave intents. Point
 			// writes are added to the in-flight writes set. All other locking
@@ -394,7 +395,7 @@ func (tp *txnPipeliner) attachLocksToEndTxn(
 			// will fold the in-flight writes into the lock spans immediately
 			// and forgo a parallel commit, but let's not break that abstraction
 			// boundary here.
-			if roachpb.IsIntentWrite(req) && !roachpb.IsRange(req) {
+			if kvpb.IsIntentWrite(req) && !kvpb.IsRange(req) {
 				w := roachpb.SequencedWrite{Key: h.Key, Sequence: h.Sequence}
 				et.InFlightWrites = append(et.InFlightWrites, w)
 			} else {
@@ -420,13 +421,13 @@ func (tp *txnPipeliner) attachLocksToEndTxn(
 
 // canUseAsyncConsensus checks the conditions necessary for this batch to be
 // allowed to set the AsyncConsensus flag.
-func (tp *txnPipeliner) canUseAsyncConsensus(ctx context.Context, ba *roachpb.BatchRequest) bool {
+func (tp *txnPipeliner) canUseAsyncConsensus(ctx context.Context, ba *kvpb.BatchRequest) bool {
 	// Short-circuit for EndTransactions; it's common enough to have batches
 	// containing a prefix of writes (which, by themselves, are all eligible for
 	// async consensus) and then an EndTxn (which is not eligible). Note that
 	// ba.GetArg() is efficient for EndTransactions, having its own internal
 	// optimization.
-	if _, hasET := ba.GetArg(roachpb.EndTxn); hasET {
+	if _, hasET := ba.GetArg(kvpb.EndTxn); hasET {
 		return false
 	}
 
@@ -456,7 +457,7 @@ func (tp *txnPipeliner) canUseAsyncConsensus(ctx context.Context, ba *roachpb.Ba
 
 		// Determine whether the current request prevents us from performing async
 		// consensus on the batch.
-		if !roachpb.IsIntentWrite(req) || roachpb.IsRange(req) {
+		if !kvpb.IsIntentWrite(req) || kvpb.IsRange(req) {
 			// Only allow batches consisting of solely transactional point
 			// writes to perform consensus asynchronously.
 			// TODO(nvanbenschoten): We could allow batches with reads and point
@@ -493,7 +494,7 @@ func (tp *txnPipeliner) canUseAsyncConsensus(ctx context.Context, ba *roachpb.Ba
 // a write succeeded before depending on its existence. We later prune down the
 // list of writes we proved to exist that are no longer "in-flight" in
 // updateLockTracking.
-func (tp *txnPipeliner) chainToInFlightWrites(ba *roachpb.BatchRequest) *roachpb.BatchRequest {
+func (tp *txnPipeliner) chainToInFlightWrites(ba *kvpb.BatchRequest) *kvpb.BatchRequest {
 	// If there are no in-flight writes, there's nothing to chain to.
 	if tp.ifWrites.len() == 0 {
 		return ba
@@ -519,7 +520,7 @@ func (tp *txnPipeliner) chainToInFlightWrites(ba *roachpb.BatchRequest) *roachpb
 				// so fork it before modifying it.
 				if !forked {
 					ba = ba.ShallowCopy()
-					ba.Requests = append([]roachpb.RequestUnion(nil), ba.Requests[:i]...)
+					ba.Requests = append([]kvpb.RequestUnion(nil), ba.Requests[:i]...)
 					forked = true
 				}
 
@@ -530,8 +531,8 @@ func (tp *txnPipeliner) chainToInFlightWrites(ba *roachpb.BatchRequest) *roachpb
 					// chain on to the success of the in-flight write.
 					meta := ba.Txn.TxnMeta
 					meta.Sequence = w.Sequence
-					ba.Add(&roachpb.QueryIntentRequest{
-						RequestHeader: roachpb.RequestHeader{
+					ba.Add(&kvpb.QueryIntentRequest{
+						RequestHeader: kvpb.RequestHeader{
 							Key: w.Key,
 						},
 						Txn:            meta,
@@ -547,13 +548,13 @@ func (tp *txnPipeliner) chainToInFlightWrites(ba *roachpb.BatchRequest) *roachpb
 				}
 			}
 
-			if !roachpb.IsTransactional(req) {
+			if !kvpb.IsTransactional(req) {
 				// Non-transactional requests require that we stall the entire
 				// pipeline by chaining on to all in-flight writes. This is
 				// because their request header is often insufficient to
 				// determine all of the keys that they will interact with.
 				tp.ifWrites.ascend(writeIter)
-			} else if et, ok := req.(*roachpb.EndTxnRequest); ok {
+			} else if et, ok := req.(*kvpb.EndTxnRequest); ok {
 				if et.Commit {
 					// EndTxns need to prove all in-flight writes before being
 					// allowed to succeed themselves.
@@ -598,9 +599,9 @@ func (tp *txnPipeliner) chainToInFlightWrites(ba *roachpb.BatchRequest) *roachpb
 // transaction cleans up.
 func (tp *txnPipeliner) updateLockTracking(
 	ctx context.Context,
-	ba *roachpb.BatchRequest,
-	br *roachpb.BatchResponse,
-	pErr *roachpb.Error,
+	ba *kvpb.BatchRequest,
+	br *kvpb.BatchResponse,
+	pErr *kvpb.Error,
 	maxBytes int64,
 	condenseLocksIfOverBudget bool,
 ) {
@@ -642,7 +643,7 @@ func (tp *txnPipeliner) updateLockTracking(
 }
 
 func (tp *txnPipeliner) updateLockTrackingInner(
-	ctx context.Context, ba *roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error,
+	ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse, pErr *kvpb.Error,
 ) {
 	// If the request failed, add all lock acquisitions attempts directly to the
 	// lock footprint. This reduces the likelihood of dangling locks blocking
@@ -660,8 +661,8 @@ func (tp *txnPipeliner) updateLockTrackingInner(
 		// these transactions from adding even more load to the contended key by
 		// trying to perform unnecessary intent resolution.
 		baStripped := *ba
-		if roachpb.ErrPriority(pErr.GoError()) <= roachpb.ErrorScoreUnambiguousError && pErr.Index != nil {
-			baStripped.Requests = make([]roachpb.RequestUnion, len(ba.Requests)-1)
+		if kvpb.ErrPriority(pErr.GoError()) <= kvpb.ErrorScoreUnambiguousError && pErr.Index != nil {
+			baStripped.Requests = make([]kvpb.RequestUnion, len(ba.Requests)-1)
 			copy(baStripped.Requests, ba.Requests[:pErr.Index.Index])
 			copy(baStripped.Requests[pErr.Index.Index:], ba.Requests[pErr.Index.Index+1:])
 		}
@@ -697,18 +698,18 @@ func (tp *txnPipeliner) updateLockTrackingInner(
 		req := ru.GetInner()
 		resp := br.Responses[i].GetInner()
 
-		if qiReq, ok := req.(*roachpb.QueryIntentRequest); ok {
+		if qiReq, ok := req.(*kvpb.QueryIntentRequest); ok {
 			// Remove any in-flight writes that were proven to exist.
 			// It shouldn't be possible for a QueryIntentRequest with
 			// the ErrorIfMissing option set to return without error
 			// and with with FoundIntent=false, but we handle that
 			// case here because it happens a lot in tests.
-			if resp.(*roachpb.QueryIntentResponse).FoundIntent {
+			if resp.(*kvpb.QueryIntentResponse).FoundIntent {
 				tp.ifWrites.remove(qiReq.Key, qiReq.Txn.Sequence)
 				// Move to lock footprint.
 				tp.lockFootprint.insert(roachpb.Span{Key: qiReq.Key})
 			}
-		} else if roachpb.IsLocking(req) {
+		} else if kvpb.IsLocking(req) {
 			// If the request intended to acquire locks, track its lock spans.
 			if ba.AsyncConsensus {
 				// Record any writes that were performed asynchronously. We'll
@@ -718,7 +719,7 @@ func (tp *txnPipeliner) updateLockTrackingInner(
 				// The request is not expected to be a ranged one, as we're only
 				// tracking one key in the ifWrites. Ranged requests do not admit
 				// ba.AsyncConsensus.
-				if roachpb.IsRange(req) {
+				if kvpb.IsRange(req) {
 					log.Fatalf(ctx, "unexpected range request with AsyncConsensus: %s", req)
 				}
 			} else {
@@ -726,7 +727,7 @@ func (tp *txnPipeliner) updateLockTrackingInner(
 				// then add them directly to our lock footprint. Locking read
 				// requests will always hit this path because they will never
 				// use async consensus.
-				if sp, ok := roachpb.ActualSpan(req, resp); ok {
+				if sp, ok := kvpb.ActualSpan(req, resp); ok {
 					tp.lockFootprint.insert(sp)
 				}
 			}
@@ -741,7 +742,7 @@ func (tp *txnPipeliner) trackLocks(s roachpb.Span, _ lock.Durability) {
 // stripQueryIntents adjusts the BatchResponse to hide the fact that this
 // interceptor added new requests to the batch. It returns an adjusted batch
 // response without the responses that correspond to these added requests.
-func (tp *txnPipeliner) stripQueryIntents(br *roachpb.BatchResponse) *roachpb.BatchResponse {
+func (tp *txnPipeliner) stripQueryIntents(br *kvpb.BatchResponse) *kvpb.BatchResponse {
 	j := 0
 	for i, ru := range br.Responses {
 		if ru.GetQueryIntent() != nil {
@@ -760,14 +761,14 @@ func (tp *txnPipeliner) stripQueryIntents(br *roachpb.BatchResponse) *roachpb.Ba
 // It transforms any IntentMissingError into a TransactionRetryError and fixes
 // the error's index position.
 func (tp *txnPipeliner) adjustError(
-	ctx context.Context, ba *roachpb.BatchRequest, pErr *roachpb.Error,
-) *roachpb.Error {
+	ctx context.Context, ba *kvpb.BatchRequest, pErr *kvpb.Error,
+) *kvpb.Error {
 	// Fix the error index to hide the impact of any QueryIntent requests.
 	if pErr.Index != nil {
 		before := int32(0)
 		for _, ru := range ba.Requests[:int(pErr.Index.Index)] {
 			req := ru.GetInner()
-			if req.Method() == roachpb.QueryIntent {
+			if req.Method() == kvpb.QueryIntent {
 				before++
 			}
 		}
@@ -775,11 +776,11 @@ func (tp *txnPipeliner) adjustError(
 	}
 
 	// Turn an IntentMissingError into a transactional retry error.
-	if ime, ok := pErr.GetDetail().(*roachpb.IntentMissingError); ok {
+	if ime, ok := pErr.GetDetail().(*kvpb.IntentMissingError); ok {
 		log.VEventf(ctx, 2, "transforming intent missing error into retry: %v", ime)
-		err := roachpb.NewTransactionRetryError(
-			roachpb.RETRY_ASYNC_WRITE_FAILURE, redact.Sprintf("missing intent on: %s", ime.Key))
-		retryErr := roachpb.NewErrorWithTxn(err, pErr.GetTxn())
+		err := kvpb.NewTransactionRetryError(
+			kvpb.RETRY_ASYNC_WRITE_FAILURE, redact.Sprintf("missing intent on: %s", ime.Key))
+		retryErr := kvpb.NewErrorWithTxn(err, pErr.GetTxn())
 		retryErr.Index = pErr.Index
 		return retryErr
 	}

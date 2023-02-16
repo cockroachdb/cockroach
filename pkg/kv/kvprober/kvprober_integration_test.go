@@ -20,9 +20,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvprober"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -87,11 +87,11 @@ func TestProberDoesReadsAndWrites(t *testing.T) {
 	t.Run("a single range is unavailable for all KV ops", func(t *testing.T) {
 		s, _, p, cleanup := initTestProber(t, base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
-				TestingRequestFilter: func(i context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
+				TestingRequestFilter: func(i context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
 					for _, ru := range ba.Requests {
 						key := ru.GetInner().Header().Key
 						if bytes.HasPrefix(key, keys.TimeseriesPrefix) {
-							return roachpb.NewError(fmt.Errorf("boom"))
+							return kvpb.NewError(fmt.Errorf("boom"))
 						}
 					}
 					return nil
@@ -129,11 +129,11 @@ func TestProberDoesReadsAndWrites(t *testing.T) {
 
 		s, _, p, cleanup := initTestProber(t, base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
-				TestingRequestFilter: func(i context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
+				TestingRequestFilter: func(i context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
 					if !dbIsAvailable.Get() {
 						for _, ru := range ba.Requests {
 							if ru.GetGet() != nil {
-								return roachpb.NewError(fmt.Errorf("boom"))
+								return kvpb.NewError(fmt.Errorf("boom"))
 							}
 						}
 						return nil
@@ -174,11 +174,11 @@ func TestProberDoesReadsAndWrites(t *testing.T) {
 
 		s, _, p, cleanup := initTestProber(t, base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
-				TestingRequestFilter: func(i context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
+				TestingRequestFilter: func(i context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
 					if !dbIsAvailable.Get() {
 						for _, ru := range ba.Requests {
 							if ru.GetPut() != nil {
-								return roachpb.NewError(fmt.Errorf("boom"))
+								return kvpb.NewError(fmt.Errorf("boom"))
 							}
 						}
 						return nil

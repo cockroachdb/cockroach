@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multitenantccl/tenantcostserver"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -172,13 +173,13 @@ func (ts *testState) tokenBucketRequest(t *testing.T, d *datadriven.TestData) st
 	if err != nil {
 		d.Fatalf(t, "failed to parse duration: %v", args.Period)
 	}
-	req := roachpb.TokenBucketRequest{
+	req := kvpb.TokenBucketRequest{
 		TenantID:           tenantID,
 		InstanceID:         args.InstanceID,
 		InstanceLease:      []byte(args.InstanceLease),
 		NextLiveInstanceID: args.NextLiveInstanceID,
 		SeqNum:             args.SeqNum,
-		ConsumptionSinceLastRequest: roachpb.TenantConsumption{
+		ConsumptionSinceLastRequest: kvpb.TenantConsumption{
 			RU:                     args.Consumption.RU,
 			KVRU:                   args.Consumption.KVRU,
 			ReadBatches:            args.Consumption.ReadBatches,
@@ -352,7 +353,7 @@ func TestInstanceCleanup(t *testing.T) {
 		// Send one token bucket update from each instance, in random order.
 		instances := liveset.Ordered()
 		for _, i := range rand.Perm(len(instances)) {
-			req := roachpb.TokenBucketRequest{
+			req := kvpb.TokenBucketRequest{
 				TenantID:   5,
 				InstanceID: uint32(instances[i]),
 			}

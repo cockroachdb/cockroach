@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -175,7 +176,7 @@ func (s storage) acquire(
 	// are propagated up to the caller.
 	for r := retry.StartWithCtx(ctx, retry.Options{}); r.Next(); {
 		err := s.db.KV().Txn(ctx, acquireInTxn)
-		var pErr *roachpb.AmbiguousResultError
+		var pErr *kvpb.AmbiguousResultError
 		switch {
 		case errors.As(err, &pErr):
 			log.Infof(ctx, "ambiguous error occurred during lease acquisition for %v, retrying: %v", id, err)

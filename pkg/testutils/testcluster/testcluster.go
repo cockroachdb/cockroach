@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -740,7 +741,7 @@ func (tc *TestCluster) changeReplicas(
 		}
 		var err error
 		desc, err = tc.Servers[0].DB().AdminChangeReplicas(
-			ctx, startKey.AsRawKey(), beforeDesc, roachpb.MakeReplicationChanges(changeType, targets...),
+			ctx, startKey.AsRawKey(), beforeDesc, kvpb.MakeReplicationChanges(changeType, targets...),
 		)
 		if kvserver.IsRetriableReplicationChangeError(err) {
 			tc.t.Logf("encountered retriable replication change error: %v", err)
@@ -962,7 +963,7 @@ func (tc *TestCluster) SwapVoterWithNonVoter(
 	); err != nil {
 		return nil, errors.Wrap(err, "range descriptor lookup error")
 	}
-	changes := []roachpb.ReplicationChange{
+	changes := []kvpb.ReplicationChange{
 		{ChangeType: roachpb.ADD_VOTER, Target: nonVoterTarget},
 		{ChangeType: roachpb.REMOVE_NON_VOTER, Target: nonVoterTarget},
 		{ChangeType: roachpb.ADD_NON_VOTER, Target: voterTarget},
@@ -1001,7 +1002,7 @@ func (tc *TestCluster) RebalanceVoter(
 	); err != nil {
 		return nil, errors.Wrap(err, "range descriptor lookup error")
 	}
-	changes := []roachpb.ReplicationChange{
+	changes := []kvpb.ReplicationChange{
 		{ChangeType: roachpb.REMOVE_VOTER, Target: src},
 		{ChangeType: roachpb.ADD_VOTER, Target: dest},
 	}
@@ -1152,7 +1153,7 @@ func (tc *TestCluster) MoveRangeLeaseNonCooperatively(
 		ls, err := r.TestingAcquireLease(ctx)
 		if err != nil {
 			log.Infof(ctx, "TestingAcquireLease failed: %s", err)
-			if lErr := (*roachpb.NotLeaseHolderError)(nil); errors.As(err, &lErr) && lErr.Lease != nil {
+			if lErr := (*kvpb.NotLeaseHolderError)(nil); errors.As(err, &lErr) && lErr.Lease != nil {
 				newLease = lErr.Lease
 			} else {
 				return err

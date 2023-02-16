@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -274,16 +275,16 @@ func TestGCJobRetry(t *testing.T) {
 	params := base.TestServerArgs{Settings: cs}
 	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 	params.Knobs.Store = &kvserver.StoreTestingKnobs{
-		TestingRequestFilter: func(ctx context.Context, request *roachpb.BatchRequest) *roachpb.Error {
-			r, ok := request.GetArg(roachpb.DeleteRange)
-			if !ok || !r.(*roachpb.DeleteRangeRequest).UseRangeTombstone {
+		TestingRequestFilter: func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error {
+			r, ok := request.GetArg(kvpb.DeleteRange)
+			if !ok || !r.(*kvpb.DeleteRangeRequest).UseRangeTombstone {
 				return nil
 			}
 			if failed.Load().(bool) {
 				return nil
 			}
 			failed.Store(true)
-			return roachpb.NewError(&roachpb.BatchTimestampBeforeGCError{
+			return kvpb.NewError(&kvpb.BatchTimestampBeforeGCError{
 				Timestamp: hlc.Timestamp{},
 				Threshold: hlc.Timestamp{},
 			})
@@ -582,13 +583,13 @@ func TestDropIndexWithDroppedDescriptor(t *testing.T) {
 		if !beforeDelRange {
 			knobs.Store = &kvserver.StoreTestingKnobs{
 				TestingRequestFilter: func(
-					ctx context.Context, request *roachpb.BatchRequest,
-				) *roachpb.Error {
-					req, ok := request.GetArg(roachpb.DeleteRange)
+					ctx context.Context, request *kvpb.BatchRequest,
+				) *kvpb.Error {
+					req, ok := request.GetArg(kvpb.DeleteRange)
 					if !ok {
 						return nil
 					}
-					dr := req.(*roachpb.DeleteRangeRequest)
+					dr := req.(*kvpb.DeleteRangeRequest)
 					if !dr.UseRangeTombstone {
 						return nil
 					}

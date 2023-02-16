@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -235,8 +235,8 @@ func makeKVEventKeyOnly(rng *rand.Rand, upper int) kvevent.Event {
 		panic(err)
 	}
 
-	return kvevent.MakeKVEvent(&roachpb.RangeFeedEvent{
-		Val: &roachpb.RangeFeedValue{
+	return kvevent.MakeKVEvent(&kvpb.RangeFeedEvent{
+		Val: &kvpb.RangeFeedValue{
 			Key: key,
 		},
 	})
