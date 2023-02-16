@@ -3118,10 +3118,10 @@
   resolved "https://storage.googleapis.com/cockroach-npm-deps/@cockroachlabs/icons/-/icons-0.5.5.tgz#0bcdab5bb01166a79d76d5f65753999fcc71dac5"
   integrity sha512-WaU1/ZYV1noGBWVesLwEx43A+1BUQGnAyZLo63UAVds2dNb5CLgJxNr/rpuRMq2ZTau81Wf8RImgH8lytMkFkA==
 
-"@cockroachlabs/ui-components@0.4.2":
-  version "0.4.2"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/@cockroachlabs/ui-components/-/ui-components-0.4.2.tgz#e663b5fa7c6b2d19262e4e2199f96b80e7db85fb"
-  integrity sha512-0AnDDgcgoz5/umsssNob1peNlkccL9vHIH5lAMYiG76EQH8mO4EeWVvsDFblENH70s+4N247BKxx9sUae2PZCQ==
+"@cockroachlabs/ui-components@0.4.3":
+  version "0.4.3"
+  resolved "https://storage.googleapis.com/cockroach-npm-deps/@cockroachlabs/ui-components/-/ui-components-0.4.3.tgz#84260ed527bff6cf5e6160c0c387e910bc283eed"
+  integrity sha512-2fxd8ecIyDtARBdCWtyAExWOjne0ueQLpYauDjVX1nWLpOp1BUVlB4oC+mfzC3VZXuHK1iPQGKVw+G0E/A6WPw==
   dependencies:
     "@cockroachlabs/icons" "^0.5.5"
     "@popperjs/core" "^2.9.2"
