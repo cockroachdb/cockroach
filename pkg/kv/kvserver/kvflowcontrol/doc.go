@@ -327,6 +327,76 @@ package kvflowcontrol
 //   it can transition into the mode described in I3a where we deduct/block for
 //   flow tokens for subsequent quorum writes.
 //
+// I12. How does this interact with epoch-LIFO? Or CreateTime ordering
+//      generally?
+// - Background: Epoch-LIFO tries to reduce lower percentile admission queueing
+//   delay (at the expense of higher percentile delay) by switching between the
+//   standard CreateTime-based FIFO ordering to LIFO-within-an-epoch. Work
+//   submitted by a transaction with CreateTime T is slotted into the epoch
+//   number with time interval [E, E+100ms) where T is contained in this
+//   interval. The work will start executing after the epoch is closed, at
+//   ~E+100ms. This increases transaction latency by at most ~100ms. When the
+//   epoch closes, all nodes start executing the transactions in that epoch in
+//   LIFO order, and will implicitly have the same set of competing
+//   transactions[^10], a set that stays unchanged until the next epoch closes.
+//   And by the time the next epoch closes, and the current epoch's transactions
+//   are deprioritized, 100ms will have elapsed, which is selected to be long
+//   enough for most of these now-admitted to have finished their work.
+//   - We switch to LIFO-within-an-epoch once we start observing that the
+//     maximum queuing delay for work within a <tenant,priority> starts
+//     exceeding the ~100ms we'd add with epoch-LIFO.
+// - For below-raft work queue ordering, we ignore CreateTime when ordering work
+//   within the same range. Within a given <tenant,priority,range>, admission
+//   takes place in raft log order (i.e. entries with lower terms get admitted
+//   first, or lower indexes within the same term).
+//   - NB: Regarding "admission takes place in raft log order", we can implement
+//     this differently. We introduced log-position based ordering to simplify
+//     the implementation of token returns where we release tokens by specifying
+//     the log position up-to-which we want to release held tokens[^11]. But
+//     with additional tracking in the below-raft work queues, if we know that
+//     work W2 with log position L2 got admitted, and corresponded to F flow
+//     token deductions at the origin, and we also know that work W1 with log
+//     position L1 is currently queued, also corresponding to F flow token
+//     deductions at the origin, we could inform the origin node to return flow
+//     tokens up to L1 and still get what we want -- a return of F flow tokens
+//     when each work gets admitted.
+// - To operate within cluster-wide FIFO ordering, we order by CreateTime when
+//   comparing work across different ranges. Writes for a single range, as
+//   observed by a given store below-raft (follower or otherwise) travel along
+//   a single stream. Consider the case where a single store S3 receives
+//   replication traffic for two ranges R1 and R2, originating from two separate
+//   nodes N1 and N2. If N1 is issuing writes with strictly older CreateTimes,
+//   when returning flow tokens we should prefer N1.
+//   - What about CreateTime ordering within a <tenant,priority,range>? Flow
+//     tokens deductions aren't tied to create times -- they're tied to work
+//     classes on the sender. So we still want priority-based ordering to
+//     release regular flow tokens before elastic ones, but releasing flow
+//     tokens for work with lower CreateTimes does not actually promote doing
+//     older work. Below-raft admission is all asynchronous. To get back to
+//     CreateTime ordering, we'd need to do it above-raft, by introducing a
+//     WorkQueue-like structure for requests waiting for flow tokens.
+//   - We could do the same for epoch-LIFO, but implementing it above-raft in
+//     WorkQueue-like structures where requests wait for flow tokens.
+//     Cluster-wide we'd allow work within a given epoch to start issuing
+//     replication traffic.
+//   - How does this interact with the CreateTime ordering below-raft when
+//     comparing work across different ranges?
+//     - When there's no epoch-LIFO happening, we have cluster-wide FIFO
+//       ordering within a <tenant,priority> pair as described above.
+//     - When epoch-LIFO is happening across all senders issuing replication
+//       traffic to a given receiver store, we're seeing work within the same
+//       epoch, but we'll be returning flow tokens to nodes issuing work with
+//       older CreateTimes. So defeating the LIFO in epoch-LIFO.
+//     - When epoch-LIFO is happening only on a subset of the senders issuing
+//       replication traffic, we'll again be returning flow tokens to nodes
+//       issuing work with older CreateTimes. Which is undefined.
+//     - Is it strange that different nodes can admit work from "different
+//       epochs"? What are we to do below-raft, when deciding where to return flow
+//       tokens back to, since it's all for the same <tenant,priority>? Maybe we
+//       need to pass down whether the work was admitted at the sender with
+//       LIFO/FIFO, and return flow tokens in {LIFO,FIFO} order across all nodes
+//       that issued {LIFO,FIFO} work?
+//
 // ---
 //
 // [^1]: kvserverpb.RaftMessageRequest is the unit of what's sent
@@ -373,6 +443,9 @@ package kvflowcontrol
 //         machine application get significantly behind due to local scheduling
 //         reasons by using the same goroutine to do both async raft log writes
 //         and state machine application.
+// [^10]: This relies on partially synchronized clocks without requiring
+//        explicit coordination.
+// [^11]: See UpToRaftLogPosition in AdmittedRaftLogEntries.
 //
 // TODO(irfansharif): These descriptions are too high-level, imprecise and
 // possibly wrong. Fix that. After implementing these interfaces and integrating

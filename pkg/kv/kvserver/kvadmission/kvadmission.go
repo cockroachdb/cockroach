@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -120,7 +121,7 @@ type Controller interface {
 	FollowerStoreWriteBytes(roachpb.StoreID, FollowerStoreWriteBytes)
 	// AdmitRaftEntry informs admission control of a raft log entry being
 	// written to storage.
-	AdmitRaftEntry(roachpb.TenantID, roachpb.StoreID, roachpb.RangeID, raftpb.Entry)
+	AdmitRaftEntry(context.Context, roachpb.TenantID, roachpb.StoreID, roachpb.RangeID, raftpb.Entry)
 }
 
 // TenantWeightProvider can be periodically asked to provide the tenant
@@ -244,7 +245,7 @@ func (n *controllerImpl) AdmitKVWork(
 			if err != nil {
 				return Handle{}, err
 			}
-			admissionEnabled = storeWorkHandle.AdmissionEnabled()
+			admissionEnabled = storeWorkHandle.UseAdmittedWorkDone()
 			if admissionEnabled {
 				defer func() {
 					if retErr != nil {
@@ -409,9 +410,60 @@ func (n *controllerImpl) FollowerStoreWriteBytes(
 
 // AdmitRaftEntry implements the Controller interface.
 func (n *controllerImpl) AdmitRaftEntry(
-	roachpb.TenantID, roachpb.StoreID, roachpb.RangeID, raftpb.Entry,
+	ctx context.Context,
+	tenantID roachpb.TenantID,
+	storeID roachpb.StoreID,
+	rangeID roachpb.RangeID,
+	entry raftpb.Entry,
 ) {
-	panic("unimplemented")
+	typ, err := raftlog.EncodingOf(entry)
+	if err != nil {
+		log.Errorf(ctx, "unable to determine raft command encoding: %v", err)
+		return
+	}
+	if !typ.UsesAdmissionControl() {
+		return // nothing to do
+	}
+	meta, err := raftlog.DecodeRaftAdmissionMeta(entry.Data)
+	if err != nil {
+		log.Errorf(ctx, "unable to decode raft command admission data: %v", err)
+		return
+	}
+
+	storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(int32(storeID))
+	if storeAdmissionQ == nil {
+		log.Errorf(ctx, "unable to find queue for store: %s", storeID)
+		return // nothing to do
+	}
+
+	wi := admission.WorkInfo{
+		TenantID:        tenantID,
+		Priority:        admissionpb.WorkPriority(meta.AdmissionPriority),
+		CreateTime:      meta.AdmissionCreateTime,
+		BypassAdmission: false,
+		RequestedCount:  int64(entry.Size()),
+	}
+	wi.ReplicatedWorkInfo = admission.ReplicatedWorkInfo{
+		Enabled: true,
+		RangeID: rangeID,
+		Origin:  meta.AdmissionOriginNode,
+		LogPosition: admission.LogPosition{
+			Term:  entry.Term,
+			Index: entry.Index,
+		},
+		Ingested: typ.IsSideloaded(),
+	}
+
+	handle, err := storeAdmissionQ.Admit(ctx, admission.StoreWriteWorkInfo{
+		WorkInfo: wi,
+	})
+	if err != nil {
+		log.Errorf(ctx, "error while admitting to store admission queue: %v", err)
+		return
+	}
+	if handle.UseAdmittedWorkDone() {
+		log.Fatalf(ctx, "unexpected handle.UseAdmittedWorkDone")
+	}
 }
 
 // FollowerStoreWriteBytes captures stats about writes done to a store by a
