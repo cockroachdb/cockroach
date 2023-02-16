@@ -138,7 +138,7 @@ type SSTBatcher struct {
 	disableScatters bool
 
 	// The rest of the fields accumulated state as opposed to configuration. Some,
-	// like totalRows, are accumulated _across_ batches and are not reset between
+	// like totalBulkOpSummary, are accumulated _across_ batches and are not reset between
 	// batches when Reset() is called.
 	//
 	// currentStats contain the stats since the last flush. After each flush,
@@ -172,15 +172,15 @@ type SSTBatcher struct {
 	// stores on-the-fly stats for the SST if disallowShadowingBelow is set.
 	ms enginepb.MVCCStats
 	// rows written in the current batch.
-	rowCounter storage.RowCounter
+	batchRowCounter storage.RowCounter
 
 	asyncAddSSTs ctxgroup.Group
 
 	mu struct {
 		syncutil.Mutex
 
-		maxWriteTS hlc.Timestamp
-		totalRows  roachpb.BulkOpSummary
+		maxWriteTS         hlc.Timestamp
+		totalBulkOpSummary roachpb.BulkOpSummary
 		// totalStats contain the stats over the entire lifetime of the SST Batcher.
 		// As rows accumulate, the corresponding stats initially start out in
 		// currentStats. After each flush, the contents of currentStats are combined
@@ -321,7 +321,7 @@ func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key storage.MVCCKey, value 
 	b.batchEndKey = append(b.batchEndKey[:0], key.Key...)
 	b.batchEndValue = append(b.batchEndValue[:0], value...)
 
-	if err := b.rowCounter.Count(key.Key); err != nil {
+	if err := b.batchRowCounter.Count(key.Key); err != nil {
 		return err
 	}
 
@@ -356,7 +356,7 @@ func (b *SSTBatcher) Reset(ctx context.Context) error {
 		b.batchTS = hlc.Timestamp{}
 	}
 
-	b.rowCounter.BulkOpSummary.Reset()
+	b.batchRowCounter.BulkOpSummary.Reset()
 
 	if b.currentStats.SendWaitByStore == nil {
 		b.currentStats.SendWaitByStore = make(map[roachpb.StoreID]time.Duration)
@@ -572,7 +572,7 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 	}
 
 	stats := b.ms
-	summary := b.rowCounter.BulkOpSummary
+	curBatchSummary := b.batchRowCounter.BulkOpSummary
 	data := b.sstFile.Data()
 	batchTS := b.batchTS
 
@@ -623,11 +623,11 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 
 		b.mu.Lock()
 		defer b.mu.Unlock()
-		summary.DataSize += int64(size)
-		summary.SSTDataSize += int64(len(data))
+		curBatchSummary.DataSize += int64(size)
+		curBatchSummary.SSTDataSize += int64(len(data))
 		currentBatchStatsCopy.LogicalDataSize += int64(size)
 		currentBatchStatsCopy.SSTDataSize += int64(len(data))
-		b.mu.totalRows.Add(summary)
+		b.mu.totalBulkOpSummary.Add(curBatchSummary)
 
 		afterFlush := timeutil.Now()
 		currentBatchStatsCopy.BatchWait += afterFlush.Sub(beforeFlush)
@@ -664,14 +664,14 @@ func (b *SSTBatcher) Close(ctx context.Context) {
 
 // GetBatchSummary returns this batcher's total added rows/bytes/etc.
 func (b *SSTBatcher) GetBatchSummary() roachpb.BulkOpSummary {
-	return b.rowCounter.BulkOpSummary
+	return b.batchRowCounter.BulkOpSummary
 }
 
 // GetSummary returns this batcher's total added rows/bytes/etc.
 func (b *SSTBatcher) GetSummary() roachpb.BulkOpSummary {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return b.mu.totalRows
+	return b.mu.totalBulkOpSummary
 }
 
 type sstSpan struct {

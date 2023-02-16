@@ -256,7 +256,7 @@ func (b *BufferingAdder) doFlush(ctx context.Context, forSize bool) error {
 		before = b.sink.mu.totalStats.Identity().(*bulkpb.IngestionPerformanceStats)
 		before.Combine(&b.sink.mu.totalStats)
 		before.Combine(&b.sink.currentStats)
-		beforeSize = b.sink.mu.totalRows.DataSize
+		beforeSize = b.sink.mu.totalBulkOpSummary.DataSize
 		b.sink.mu.Unlock()
 	}
 
@@ -308,7 +308,7 @@ func (b *BufferingAdder) doFlush(ctx context.Context, forSize bool) error {
 
 	if log.V(3) && before != nil {
 		b.sink.mu.Lock()
-		written := b.sink.mu.totalRows.DataSize - beforeSize
+		written := b.sink.mu.totalBulkOpSummary.DataSize - beforeSize
 		afterStats := b.sink.mu.totalStats.Identity().(*bulkpb.IngestionPerformanceStats)
 		afterStats.Combine(&b.sink.mu.totalStats)
 		afterStats.Combine(&b.sink.currentStats)
