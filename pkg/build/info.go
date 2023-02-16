@@ -12,8 +12,10 @@ package build
 
 import (
 	"bytes"
+	_ "embed"
 	"fmt"
 	"runtime"
+	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -26,20 +28,21 @@ import (
 const TimeFormat = "2006/01/02 15:04:05"
 
 var (
-	// These variables are initialized via the linker -X flag in the
-	// top-level Makefile when compiling release binaries.
-	tag             = "unknown" // Tag of this build (git describe --tags w/ optional '-dirty' suffix)
-	utcTime         string      // Build time in UTC (year/month/day hour:min:sec)
-	rev             string      // SHA-1 of this build (git rev-parse)
+	// These variables are initialized by Bazel via the linker -X flag
+	// when compiling release binaries.
+	utcTime         string // Build time in UTC (year/month/day hour:min:sec)
+	rev             string // SHA-1 of this build (git rev-parse)
 	cgoCompiler     = cgoVersion()
 	cgoTargetTriple string
 	platform        = fmt.Sprintf("%s %s", runtime.GOOS, runtime.GOARCH)
 	// Distribution is changed by the CCL init-time hook in non-APL builds.
-	Distribution  = "OSS"
-	typ           string // Type of this build: <empty>, "development", or "release"
-	channel       = "unknown"
-	envChannel    = envutil.EnvOrDefaultString("COCKROACH_CHANNEL", "unknown")
-	binaryVersion = computeVersion(tag)
+	Distribution = "OSS"
+	typ          string // Type of this build: <empty>, "development", or "release"
+	channel      = "unknown"
+	envChannel   = envutil.EnvOrDefaultString("COCKROACH_CHANNEL", "unknown")
+	//go:embed version.txt
+	cockroachVersion string
+	binaryVersion    = computeBinaryVersion(cockroachVersion, rev)
 )
 
 // IsRelease returns true if the binary was produced by a "release" build.
@@ -53,12 +56,16 @@ func SeemsOfficial() bool {
 	return channel == "official-binary" || channel == "source-archive"
 }
 
-func computeVersion(tag string) string {
-	v, err := version.Parse(tag)
+func computeBinaryVersion(versionTxt, revision string) string {
+	txt := strings.TrimSuffix(versionTxt, "\n")
+	v, err := version.Parse(txt)
 	if err != nil {
-		return "dev"
+		panic(fmt.Errorf("could not parse version.txt: %w", err))
 	}
-	return v.String()
+	if IsRelease() {
+		return v.String()
+	}
+	return fmt.Sprintf("%s-dev-%s", v.String(), revision)
 }
 
 // BinaryVersion returns the version prefix, patch number and metadata of the current build.
@@ -68,7 +75,7 @@ func BinaryVersion() string {
 
 // BinaryVersionPrefix returns the version prefix of the current build.
 func BinaryVersionPrefix() string {
-	v, err := version.Parse(tag)
+	v, err := version.Parse(binaryVersion)
 	if err != nil {
 		return "dev"
 	}
@@ -76,10 +83,10 @@ func BinaryVersionPrefix() string {
 }
 
 func init() {
-	// Allow tests to override the tag.
-	if tagOverride := envutil.EnvOrDefaultString(
-		"COCKROACH_TESTING_VERSION_TAG", ""); tagOverride != "" {
-		tag = tagOverride
+	// Allow tests to override the version.txt contents.
+	if versionOverride := envutil.EnvOrDefaultString(
+		"COCKROACH_TESTING_VERSION_OVERRIDE", ""); versionOverride != "" {
+		TestingOverrideVersion(versionOverride)
 	}
 }
 
@@ -135,7 +142,7 @@ func (b Info) Timestamp() (int64, error) {
 func GetInfo() Info {
 	return Info{
 		GoVersion:       runtime.Version(),
-		Tag:             tag,
+		Tag:             binaryVersion,
 		Time:            utcTime,
 		Revision:        rev,
 		CgoCompiler:     cgoCompiler,
@@ -148,13 +155,12 @@ func GetInfo() Info {
 	}
 }
 
-// TestingOverrideTag allows tests to override the build tag.
-func TestingOverrideTag(t string) func() {
-	prev := tag
-	prevVersion := binaryVersion
-	tag = t
-	binaryVersion = computeVersion(tag)
-	return func() { tag = prev; binaryVersion = prevVersion }
+// TestingOverrideVersion allows tests to override the binary version
+// reported by cockroach.
+func TestingOverrideVersion(v string) func() {
+	prevBinaryVersion := binaryVersion
+	binaryVersion = v
+	return func() { binaryVersion = prevBinaryVersion }
 }
 
 // MakeIssueURL produces a URL to a CockroachDB issue.
