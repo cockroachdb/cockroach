@@ -43,6 +43,7 @@ import {
   selectFilters,
   selectSortSetting,
   selectTransactionInsightsLoading,
+  selectTransactionInsightsMaxApiReached,
 } from "src/store/insights/transactionInsights";
 import { Dispatch } from "redux";
 import { TimeScale } from "../../timeScaleDropdown";
@@ -63,6 +64,7 @@ const transactionMapStateToProps = (
   sortSetting: selectSortSetting(state),
   timeScale: selectTimeScale(state),
   isLoading: selectTransactionInsightsLoading(state),
+  maxSizeApiReached: selectTransactionInsightsMaxApiReached(state),
 });
 
 const statementMapStateToProps = (

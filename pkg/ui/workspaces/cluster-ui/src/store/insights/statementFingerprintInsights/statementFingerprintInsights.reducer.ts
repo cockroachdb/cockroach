@@ -11,11 +11,11 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { DOMAIN_NAME } from "../../utils";
 import moment, { Moment } from "moment";
-import { ApiResponse, ErrorWithKey, StmtInsightsReq } from "src/api";
+import { SqlApiResponse, ErrorWithKey, StmtInsightsReq } from "src/api";
 import { StmtInsightEvent } from "../../../insights";
 
 export type StatementFingerprintInsightsState = {
-  data: ApiResponse<StmtInsightEvent> | null;
+  data: SqlApiResponse<StmtInsightEvent[]> | null;
   lastUpdated: Moment | null;
   lastError: Error;
   valid: boolean;
@@ -26,7 +26,7 @@ export type StatementFingerprintInsightsCachedState = {
 };
 
 export type FingerprintInsightResponseWithKey = {
-  response: ApiResponse<StmtInsightEvent>;
+  response: SqlApiResponse<StmtInsightEvent[]>;
   key: string;
 };
 

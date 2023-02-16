@@ -60,6 +60,7 @@ type Props = {
   hasAdminRole: boolean;
   errors: TxnInsightDetailsReqErrs | null;
   maxRequestsReached: boolean;
+  maxApiSizeReached: boolean;
 };
 
 export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
@@ -78,9 +79,13 @@ export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
   const isCockroachCloud = useContext(CockroachCloudContext);
 
   const queryFromStmts = statements?.map(s => s.query)?.join("\n");
-  const insightQueries = queryFromStmts?.length
+  let insightQueries = queryFromStmts?.length
     ? queryFromStmts
     : txnDetails?.query ?? "Insight not found.";
+  if (maxRequestsReached) {
+    insightQueries = `${insightQueries} \n\nNot all statements are displayed because 
+the maximum number of statements was reached in the console.`;
+  }
   const insightsColumns = makeInsightsColumns(
     isCockroachCloud,
     hasAdminRole,
