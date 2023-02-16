@@ -20,8 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
-	"google.golang.org/grpc/codes"
-	grpcstatus "google.golang.org/grpc/status"
 )
 
 // sqlMux redirects incoming SQL connections to the server selected
@@ -36,7 +34,6 @@ func (c *serverController) sqlMux(
 		// simply broadcast them to all servers. One of the servers will
 		// pick it up.
 		servers := c.getServers()
-		errCh := make(chan error, len(servers))
 		for i := range servers {
 			s := servers[i]
 			// We dispatch the request concurrently to all the servers.
@@ -53,37 +50,12 @@ func (c *serverController) sqlMux(
 			// servers to see and process the cancel at approximately the
 			// same time as every other.
 			if err := c.stopper.RunAsyncTask(ctx, "cancel", func(ctx context.Context) {
-				errCh <- s.server.handleCancel(ctx, status.CancelKey)
+				s.server.handleCancel(ctx, status.CancelKey)
 			}); err != nil {
 				return err
 			}
 		}
-		// Wait for the cancellation to be processed.
-		return c.stopper.RunAsyncTask(ctx, "wait-cancel", func(ctx context.Context) {
-			var err error
-			sawSuccess := false
-			for i := 0; i < len(servers); i++ {
-				select {
-				case thisErr := <-errCh:
-					err = errors.CombineErrors(err, thisErr)
-					sawSuccess = sawSuccess || thisErr == nil
-				case <-c.stopper.ShouldQuiesce():
-					return
-				}
-			}
-			if !sawSuccess {
-				// We don't want to log a warning if cancellation has succeeded.
-				_, rateLimited := errors.If(err, func(err error) (interface{}, bool) {
-					if respStatus := grpcstatus.Convert(err); respStatus.Code() == codes.ResourceExhausted {
-						return nil, true
-					}
-					return nil, false
-				})
-				if rateLimited {
-					log.Sessions.Warningf(ctx, "unexpected while handling pgwire cancellation request: %v", err)
-				}
-			}
-		})
+		return nil
 
 	case pgwire.PreServeReady:
 		tenantName := roachpb.TenantName(status.GetTenantName())
@@ -107,10 +79,10 @@ func (c *serverController) sqlMux(
 
 func (t *systemServerWrapper) handleCancel(
 	ctx context.Context, cancelKey pgwirecancel.BackendKeyData,
-) error {
+) {
 	pgCtx := t.server.sqlServer.AnnotateCtx(context.Background())
 	pgCtx = logtags.AddTags(pgCtx, logtags.FromContext(ctx))
-	return t.server.sqlServer.pgServer.HandleCancel(pgCtx, cancelKey)
+	t.server.sqlServer.pgServer.HandleCancel(pgCtx, cancelKey)
 }
 
 func (t *systemServerWrapper) serveConn(
@@ -123,10 +95,10 @@ func (t *systemServerWrapper) serveConn(
 
 func (t *tenantServerWrapper) handleCancel(
 	ctx context.Context, cancelKey pgwirecancel.BackendKeyData,
-) error {
+) {
 	pgCtx := t.server.sqlServer.AnnotateCtx(context.Background())
 	pgCtx = logtags.AddTags(pgCtx, logtags.FromContext(ctx))
-	return t.server.sqlServer.pgServer.HandleCancel(pgCtx, cancelKey)
+	t.server.sqlServer.pgServer.HandleCancel(pgCtx, cancelKey)
 }
 
 func (t *tenantServerWrapper) serveConn(
