@@ -106,4 +106,8 @@ const (
 	// SetCheckConstraintColumnIDs indicates that a table's check constraint's
 	// ColumnIDs slice hadn't been set yet, and was set to a non-empty slice.
 	SetCheckConstraintColumnIDs
+
+	// UpgradedDeclarativeSchemaChangerState indicates the declarative schema changer
+	// state was modified.
+	UpgradedDeclarativeSchemaChangerState = 15
 )

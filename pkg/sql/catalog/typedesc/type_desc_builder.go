@@ -11,10 +11,12 @@
 package typedesc
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -116,7 +118,13 @@ func (tdb *typeDescriptorBuilder) RunPostDeserializationChanges() (err error) {
 }
 
 // RunRestoreChanges implements the catalog.DescriptorBuilder interface.
-func (tdb *typeDescriptorBuilder) RunRestoreChanges(_ func(id descpb.ID) catalog.Descriptor) error {
+func (tdb *typeDescriptorBuilder) RunRestoreChanges(
+	version clusterversion.ClusterVersion, descLookupFn func(id descpb.ID) catalog.Descriptor,
+) error {
+	// Upgrade the declarative schema changer state
+	if scpb.MigrateDescriptorState(version, tdb.maybeModified.DeclarativeSchemaChangerState) {
+		tdb.changes.Add(catalog.UpgradedDeclarativeSchemaChangerState)
+	}
 	return nil
 }
 

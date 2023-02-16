@@ -426,6 +426,11 @@ const (
 	// user_id column in the system.web_sessions table has been backfilled.
 	V23_1WebSessionsTableUserIDColumnBackfilled
 
+	// V23_1_SchemaChangerDeprecatedIndexPredicates is the version where the
+	// declarative schema changer no longer produces scpb.SecondaryIndexPartial
+	// elements.
+	V23_1_SchemaChangerDeprecatedIndexPredicates
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -734,6 +739,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1WebSessionsTableUserIDColumnBackfilled,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 48},
+	},
+	{
+		Key:     V23_1_SchemaChangerDeprecatedIndexPredicates,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 50},
 	},
 
 	// *************************************************

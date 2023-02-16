@@ -13,6 +13,7 @@ package scbuild
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -84,9 +85,15 @@ func Build(
 			// Explicitly-set targets have non-zero values in the target metadata.
 			continue
 		}
-		if !version.IsActive(screl.MinVersion(e.element)) {
+		if !version.IsActive(screl.MinElementVersion(e.element)) {
 			// Exclude targets which are not yet usable in the currently active
 			// cluster version.
+			continue
+		}
+		maxVersion := screl.MaxElementVersion(e.element)
+		if maxVersion != nil && version.IsActive(*maxVersion) {
+			// Exclude the target which are no longer allowed at the active
+			// max version.
 			continue
 		}
 		t := scpb.MakeTarget(e.target, e.element, &e.metadata)
@@ -119,8 +126,8 @@ func Build(
 
 // CheckIfSupported returns if a statement is fully supported by the declarative
 // schema changer.
-func CheckIfSupported(statement tree.Statement) bool {
-	return scbuildstmt.CheckIfStmtIsSupported(statement, sessiondatapb.UseNewSchemaChangerOn)
+func CheckIfSupported(version clusterversion.ClusterVersion, statement tree.Statement) bool {
+	return scbuildstmt.CheckIfStmtIsSupported(version, statement, sessiondatapb.UseNewSchemaChangerOn)
 }
 
 // Export dependency interfaces.

@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
@@ -60,6 +61,12 @@ type NewClusterFunc func(
 	t *testing.T, knobs *scexec.TestingKnobs,
 ) (_ serverutils.TestServerInterface, _ *gosql.DB, cleanup func())
 
+// NewMixedClusterFunc provides functionality to construct a new cluster
+// given testing knobs.
+type NewMixedClusterFunc func(
+	t *testing.T, knobs *scexec.TestingKnobs, downlevelVersion bool,
+) (_ serverutils.TestServerInterface, _ *gosql.DB, cleanup func())
+
 // SingleNodeCluster is a NewClusterFunc.
 func SingleNodeCluster(
 	t *testing.T, knobs *scexec.TestingKnobs,
@@ -75,6 +82,36 @@ func SingleNodeCluster(
 			},
 		},
 	})
+
+	return s, db, func() {
+		s.Stopper().Stop(context.Background())
+	}
+}
+
+// SingleNodeMixedCluster is a NewClusterFunc.
+func SingleNodeMixedCluster(
+	t *testing.T, knobs *scexec.TestingKnobs, downlevelVersion bool,
+) (serverutils.TestServerInterface, *gosql.DB, func()) {
+	targetVersion := clusterversion.TestingBinaryVersion
+	if downlevelVersion {
+		targetVersion = clusterversion.ByKey(clusterversion.V22_2)
+	}
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disabled due to a failure in TestBackupRestore. Tracked with #76378.
+		DisableDefaultTestTenant: true,
+		Knobs: base.TestingKnobs{
+			Server: &server.TestingKnobs{
+				BinaryVersionOverride:          targetVersion,
+				DisableAutomaticVersionUpgrade: make(chan struct{}),
+			},
+			SQLDeclarativeSchemaChanger: knobs,
+			JobsTestingKnobs:            newJobsKnobs(),
+			SQLExecutor: &sql.ExecutorTestingKnobs{
+				UseTransactionalDescIDGenerator: true,
+			},
+		},
+	})
+
 	return s, db, func() {
 		s.Stopper().Stop(context.Background())
 	}

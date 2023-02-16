@@ -11,6 +11,7 @@
 package dbdesc
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -19,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -154,8 +156,12 @@ func (ddb *databaseDescriptorBuilder) RunPostDeserializationChanges() (err error
 
 // RunRestoreChanges implements the catalog.DescriptorBuilder interface.
 func (ddb *databaseDescriptorBuilder) RunRestoreChanges(
-	_ func(id descpb.ID) catalog.Descriptor,
+	version clusterversion.ClusterVersion, descLookupFn func(id descpb.ID) catalog.Descriptor,
 ) error {
+	// Upgrade the declarative schema changer state.
+	if scpb.MigrateDescriptorState(version, ddb.maybeModified.DeclarativeSchemaChangerState) {
+		ddb.changes.Add(catalog.UpgradedDeclarativeSchemaChangerState)
+	}
 	return nil
 }
 
