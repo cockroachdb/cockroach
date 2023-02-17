@@ -12,7 +12,12 @@ go_library(
     embed = [":lock_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_cockroachdb_redact//:redact"],
+    deps = [
+        "//pkg/settings",
+        "//pkg/util/hlc",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
 )
 
 proto_library(
@@ -25,6 +30,7 @@ proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/storage/enginepb:enginepb_proto",
+        "//pkg/util/hlc:hlc_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
         "@com_google_protobuf//:duration_proto",
     ],
@@ -38,18 +44,24 @@ go_proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/storage/enginepb",
+        "//pkg/util/hlc",
         "@com_github_gogo_protobuf//gogoproto",
     ],
 )
 
 go_test(
     name = "lock_test",
-    srcs = ["lock_waiter_test.go"],
+    srcs = [
+        "lock_waiter_test.go",
+        "locking_test.go",
+    ],
     args = ["-test.timeout=295s"],
     deps = [
         ":lock",
         "//pkg/roachpb",
+        "//pkg/settings/cluster",
         "//pkg/storage/enginepb",
+        "//pkg/testutils",
         "//pkg/util/hlc",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_redact//:redact",
