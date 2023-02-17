@@ -908,7 +908,7 @@ var grafanaStartCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
 		return roachprod.StartGrafana(context.Background(), roachprodLibraryLogger, args[0],
-			grafanaConfig, nil)
+			grafanaConfig, nil, nil)
 	}),
 }
 
