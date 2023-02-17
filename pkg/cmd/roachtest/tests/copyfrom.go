@@ -13,6 +13,7 @@ package tests
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"runtime"
 	"strings"
 
@@ -49,6 +50,9 @@ CREATE TABLE  lineitem (
 	l_comment       VARCHAR(44) NOT NULL,
 	l_dummy         CHAR(1),
 	PRIMARY KEY     (l_orderkey, l_linenumber));
+	`
+
+var lineitemSchemaIndexes string = `
 CREATE INDEX  l_ok ON lineitem    (l_orderkey);
 CREATE INDEX  l_pk ON lineitem    (l_partkey);
 CREATE INDEX  l_sk ON lineitem    (l_suppkey);
@@ -121,24 +125,46 @@ func runCopyFromPG(ctx context.Context, t test.Test, c cluster.Cluster, sf int) 
 	runTest(ctx, t, c, "sudo -i -u postgres psql")
 }
 
-func runCopyFromCRDB(ctx context.Context, t test.Test, c cluster.Cluster, sf int, atomic bool) {
+func runCopyFromCRDB(
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	sf int,
+	fastPath, atomic bool,
+	vectorize string,
+) {
 	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+	clusterSettings := install.MakeClusterSettings()
+	clusterSettings.Env = append(clusterSettings.Env, "GODEBUG=gctrace=1,schedtrace=1000")
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), clusterSettings, c.All())
 	initTest(ctx, t, c, sf)
 	db, err := c.ConnE(ctx, t.L(), 1)
 	require.NoError(t, err)
-	stmt := fmt.Sprintf("ALTER ROLE ALL SET copy_from_atomic_enabled = %t", atomic)
-	_, err = db.ExecContext(ctx, stmt)
-	require.NoError(t, err)
+
+	for _, stmt := range []string{
+		"CREATE USER test",
+		"GRANT admin TO test",
+		fmt.Sprintf("ALTER ROLE ALL SET copy_from_atomic_enabled = %t", atomic),
+		fmt.Sprintf("ALTER ROLE ALL SET vectorize = '%s'", vectorize),
+		fmt.Sprintf("ALTER ROLE ALL SET copy_fast_path_enabled = %t", fastPath),
+	} {
+		_, err = db.ExecContext(ctx, stmt)
+		require.NoError(t, err)
+	}
 	urls, err := c.InternalPGUrl(ctx, t.L(), c.Node(1), "")
 	require.NoError(t, err)
 	m := c.NewMonitor(ctx, c.All())
 	m.Go(func(ctx context.Context) error {
-		// psql w/ url first are doesn't support --db arg so have to do this.
-		url := strings.Replace(urls[0], "?", "/defaultdb?", 1)
-		c.Run(ctx, c.Node(1), fmt.Sprintf("psql %s -c 'SELECT 1'", url))
-		c.Run(ctx, c.Node(1), fmt.Sprintf("psql %s -c '%s'", url, lineitemSchema))
-		runTest(ctx, t, c, fmt.Sprintf("psql '%s'", url))
+		// psql w/ url first are doesn't support --db arg so have to stick it in url.
+		urlStr := strings.Replace(urls[0], "?", "/defaultdb?", 1)
+		u, err := url.Parse(urlStr)
+		require.NoError(t, err)
+		u.User = url.User("test")
+		t.L().Printf("url: %s", u.String())
+		c.Run(ctx, c.Node(1), fmt.Sprintf("psql %s -c 'SELECT 1'", u))
+		c.Run(ctx, c.Node(1), fmt.Sprintf("psql %s -c '%s'", u, lineitemSchema))
+		c.Run(ctx, c.Node(1), fmt.Sprintf("psql %s -c '%s'", u, lineitemSchemaIndexes))
+		runTest(ctx, t, c, fmt.Sprintf("psql '%s'", u))
 		return nil
 	})
 	m.Wait()
@@ -146,37 +172,41 @@ func runCopyFromCRDB(ctx context.Context, t test.Test, c cluster.Cluster, sf int
 
 func registerCopyFrom(r registry.Registry) {
 	testcases := []struct {
-		sf    int
-		nodes int
+		sf        int
+		nodes     int
+		vectorize string
 	}{
-		{sf: 1, nodes: 1},
+		{1, 1, "off"},
+		{1, 1, "on"},
+		{1, 3, "off"},
+		{1, 3, "on"},
 	}
 
 	for _, tc := range testcases {
 		tc := tc
 		r.Add(registry.TestSpec{
-			Name:    fmt.Sprintf("copyfrom/crdb-atomic/sf=%d/nodes=%d", tc.sf, tc.nodes),
+			Name:    fmt.Sprintf("copyfrom/crdb-atomic/sf=%d/nodes=%d/vectorize=%s", tc.sf, tc.nodes, tc.vectorize),
 			Owner:   registry.OwnerKV,
 			Cluster: r.MakeClusterSpec(tc.nodes),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				runCopyFromCRDB(ctx, t, c, tc.sf, true /*atomic*/)
+				runCopyFromCRDB(ctx, t, c, tc.sf, true /*fastpath*/, true /*atomic*/, tc.vectorize)
 			},
 		})
 		r.Add(registry.TestSpec{
-			Name:    fmt.Sprintf("copyfrom/crdb-nonatomic/sf=%d/nodes=%d", tc.sf, tc.nodes),
+			Name:    fmt.Sprintf("copyfrom/crdb-nonatomic/sf=%d/nodes=%d/vectorize=%s", tc.sf, tc.nodes, tc.vectorize),
 			Owner:   registry.OwnerKV,
 			Cluster: r.MakeClusterSpec(tc.nodes),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				runCopyFromCRDB(ctx, t, c, tc.sf, false /*atomic*/)
-			},
-		})
-		r.Add(registry.TestSpec{
-			Name:    fmt.Sprintf("copyfrom/pg/sf=%d/nodes=%d", tc.sf, tc.nodes),
-			Owner:   registry.OwnerKV,
-			Cluster: r.MakeClusterSpec(tc.nodes),
-			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				runCopyFromPG(ctx, t, c, tc.sf)
+				runCopyFromCRDB(ctx, t, c, tc.sf, true /*fastpath*/, false /*atomic*/, tc.vectorize)
 			},
 		})
 	}
+	r.Add(registry.TestSpec{
+		Name:    fmt.Sprintf("copyfrom/pg/sf=%d/nodes=%d", 1, 1),
+		Owner:   registry.OwnerKV,
+		Cluster: r.MakeClusterSpec(1),
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runCopyFromPG(ctx, t, c, 1)
+		},
+	})
 }
