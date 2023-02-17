@@ -73,6 +73,13 @@ var transferExpirationLeasesFirstEnabled = settings.RegisterBoolSetting(
 	true,
 )
 
+var expirationLeasesOnly = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.expiration_leases_only.enabled",
+	"only use expiration-bases leases, not epoch-based ones (experimental, affects performance)",
+	false,
+)
+
 var leaseStatusLogLimiter = func() *log.EveryN {
 	e := log.Every(15 * time.Second)
 	e.ShouldLog() // waste the first shot
@@ -255,7 +262,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		ProposedTS: &status.Now,
 	}
 
-	if p.repl.requiresExpirationLeaseRLocked() ||
+	if p.repl.shouldUseExpirationLeaseRLocked() ||
 		(transfer &&
 			transferExpirationLeasesFirstEnabled.Get(&p.repl.store.ClusterSettings().SV) &&
 			p.repl.store.ClusterSettings().Version.IsActive(ctx, clusterversion.TODODelete_V22_2EnableLeaseUpgrade)) {
@@ -801,6 +808,13 @@ func (r *Replica) requiresExpirationLeaseRLocked() bool {
 	return r.mu.requiresExpirationLease
 }
 
+// shouldUseExpirationLeaseRLocked returns true if this range should be using an
+// expiration-based lease, either because it requires one or because
+// kv.expiration_leases_only.enabled is enabled.
+func (r *Replica) shouldUseExpirationLeaseRLocked() bool {
+	return expirationLeasesOnly.Get(&r.ClusterSettings().SV) || r.requiresExpirationLeaseRLocked()
+}
+
 // requestLeaseLocked executes a request to obtain or extend a lease
 // asynchronously and returns a channel on which the result will be posted. If
 // there's already a request in progress, we join in waiting for the results of
@@ -1030,7 +1044,7 @@ func NewLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(
 // lease's expiration (and stasis period).
 func (r *Replica) checkRequestTimeRLocked(now hlc.ClockTimestamp, reqTS hlc.Timestamp) error {
 	var leaseRenewal time.Duration
-	if r.requiresExpirationLeaseRLocked() {
+	if r.shouldUseExpirationLeaseRLocked() {
 		_, leaseRenewal = r.store.cfg.RangeLeaseDurations()
 	} else {
 		_, leaseRenewal = r.store.cfg.NodeLivenessDurations()
@@ -1407,18 +1421,31 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 }
 
 // shouldRenewLeaseRLocked determines whether the lease should be renewed
-// asynchronously, even if it is currently valid. The method returns true if
-// this range uses expiration-based leases, the lease is in need of renewal, and
-// there's not already an extension pending.
+// asynchronously, even if it is currently valid. The method returns true either
+// if this range uses expiration-based leases and the lease is in need of an
+// extension, or if the lease type should be changed due to e.g. a change in
+// kv.expiration_leases_only.enabled (from epoch to expiration or vice versa).
 func (r *Replica) shouldRenewLeaseRLocked(st kvserverpb.LeaseStatus) bool {
-	if st.Lease.Type() != roachpb.LeaseExpiration {
-		return false
+	var shouldRenew bool
+	isExpirationLease := st.Lease.Type() == roachpb.LeaseExpiration
+	if isExpirationLease != r.shouldUseExpirationLeaseRLocked() {
+		// Renew the lease if it should be using a different lease type. The caller
+		// will renew the lease using the correct type.
+		//
+		// TODO(erikgrinaker): This can slam the cluster pretty hard when flipping
+		// kv.expiration_leases_only.enabled, since we'll renew leases for all
+		// ranges on the next request. Consider throttling lease requests.
+		shouldRenew = true
+	} else if isExpirationLease {
+		renewal := st.Lease.Expiration.Add(-r.store.cfg.RangeLeaseRenewalDuration().Nanoseconds(), 0)
+		shouldRenew = renewal.LessEq(st.Now.ToTimestamp())
 	}
-	if _, ok := r.mu.pendingLeaseRequest.RequestPending(); ok {
-		return false
+	if shouldRenew {
+		if _, ok := r.mu.pendingLeaseRequest.RequestPending(); ok {
+			shouldRenew = false
+		}
 	}
-	renewal := st.Lease.Expiration.Add(-r.store.cfg.RangeLeaseRenewalDuration().Nanoseconds(), 0)
-	return renewal.LessEq(st.Now.ToTimestamp())
+	return shouldRenew
 }
 
 // maybeRenewLeaseAsync attempts to renew the lease asynchronously, if doing so

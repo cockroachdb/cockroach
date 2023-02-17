@@ -4024,3 +4024,69 @@ func BenchmarkStoreGetReplica(b *testing.B) {
 		}
 	})
 }
+
+// TestExpirationLeasesOnlyChanged tests that changing
+// kv.expiration_leases_only.enabled switches all leases to the correct kind.
+func TestExpirationLeasesOnlyChanged(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	require.NoError(t, tc.WaitForFullReplication())
+
+	db := tc.Server(0).DB()
+	sqlDB := tc.ServerConn(0)
+
+	// Split off ranges so we have something to work with.
+	scratchKey := tc.ScratchRange(t)
+	for i := 0; i <= 255; i++ {
+		splitKey := append(scratchKey, byte(i))
+		require.NoError(t, db.AdminSplit(ctx, splitKey, hlc.MaxTimestamp))
+	}
+
+	countLeases := func() (epoch int64, expiration int64) {
+		for i := 0; i < tc.NumServers(); i++ {
+			require.NoError(t, tc.Server(i).GetStores().(*Stores).VisitStores(func(s *Store) error {
+				require.NoError(t, s.updateReplicationGauges(ctx))
+				expiration += s.metrics.LeaseExpirationCount.Value()
+				epoch += s.metrics.LeaseEpochCount.Value()
+				return nil
+			}))
+		}
+		return
+	}
+
+	// We expect to have both expiration and epoch leases at the start, since the
+	// meta and liveness ranges require expiration leases.
+	epochLeases, expLeases := countLeases()
+	require.NotZero(t, epochLeases)
+	require.NotZero(t, expLeases)
+	requiredExpLeases := expLeases
+
+	// Switch to expiration leases and wait for them to change.
+	_, err := sqlDB.ExecContext(ctx, `SET CLUSTER SETTING kv.expiration_leases_only.enabled = true`)
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		epochLeases, expLeases = countLeases()
+		return epochLeases == 0 && expLeases > 0
+	}, 5*time.Second, 200*time.Millisecond)
+
+	// Run a scan across the ranges, just to make sure they work.
+	scanCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	_, err = db.Scan(scanCtx, scratchKey, scratchKey.PrefixEnd(), 1)
+	require.NoError(t, err)
+
+	// Switch back to epoch leases and wait for them to change. We still expect
+	// to have some required expiration leases, but they should match what
+	// we had at the start.
+	_, err = sqlDB.ExecContext(ctx, `SET CLUSTER SETTING kv.expiration_leases_only.enabled = false`)
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		epochLeases, expLeases = countLeases()
+		return epochLeases > 0 && expLeases == requiredExpLeases
+	}, 5*time.Second, 200*time.Millisecond)
+}
