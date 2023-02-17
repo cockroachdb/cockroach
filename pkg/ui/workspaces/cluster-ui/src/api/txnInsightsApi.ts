@@ -9,7 +9,9 @@
 // licenses/APL.txt.
 
 import {
+  SqlApiResponse,
   executeInternalSql,
+  formatApiResult,
   INTERNAL_SQL_API_APP,
   LARGE_RESULT_SIZE,
   LONG_TIMEOUT,
@@ -17,6 +19,7 @@ import {
   SqlExecutionRequest,
   SqlExecutionResponse,
   sqlResultsAreEmpty,
+  isMaxSizeError,
 } from "./sqlApi";
 import {
   ContentionDetails,
@@ -129,11 +132,6 @@ function createStmtFingerprintToQueryMap(
   return idToQuery;
 }
 
-export type TransactionContentionEventDetails = Omit<
-  TxnContentionInsightDetails,
-  "application" | "queries" | "blockingQueries"
->;
-
 type PartialTxnContentionDetails = Omit<
   TxnContentionInsightDetails,
   "application" | "queries"
@@ -158,12 +156,6 @@ function formatTxnContentionDetailsResponse(
     execType: InsightExecEnum.TRANSACTION,
   };
 }
-
-export type TxnContentionDetailsRequest = {
-  txnExecutionID?: string;
-  start?: moment.Moment;
-  end?: moment.Moment;
-};
 
 export async function getTxnInsightsContentionDetailsApi(
   req: TxnInsightDetailsRequest,
@@ -411,9 +403,9 @@ export type TxnInsightsRequest = {
   end?: moment.Moment;
 };
 
-export function getTxnInsightsApi(
+export async function getTxnInsightsApi(
   req?: TxnInsightsRequest,
-): Promise<TxnInsightEvent[]> {
+): Promise<SqlApiResponse<TxnInsightEvent[]>> {
   const filters: TxnQueryFilters = {
     start: req?.start,
     end: req?.end,
@@ -421,20 +413,17 @@ export function getTxnInsightsApi(
     fingerprintID: req?.txnFingerprintID,
   };
   const request = makeInsightsSqlRequest([createTxnInsightsQuery(filters)]);
-  return executeInternalSql<TxnInsightsResponseRow>(request).then(result => {
-    if (result.error) {
-      throw new Error(
-        `Error while retrieving insights information: ${sqlApiErrorMessage(
-          result.error.message,
-        )}`,
-      );
-    }
+  const result = await executeInternalSql<TxnInsightsResponseRow>(request);
 
-    if (sqlResultsAreEmpty(result)) {
-      return [];
-    }
-    return result.execution.txn_results[0].rows.map(formatTxnInsightsRow);
-  });
+  if (sqlResultsAreEmpty(result)) {
+    return formatApiResult([], result.error, "retrieving insights information");
+  }
+
+  return formatApiResult(
+    result.execution.txn_results[0].rows.map(formatTxnInsightsRow),
+    result.error,
+    "retrieving insights information",
+  );
 }
 
 export type TxnInsightDetailsRequest = {
@@ -461,7 +450,7 @@ export type TxnInsightDetailsResponse = {
 
 export async function getTxnInsightDetailsApi(
   req: TxnInsightDetailsRequest,
-): Promise<TxnInsightDetailsResponse> {
+): Promise<SqlApiResponse<TxnInsightDetailsResponse>> {
   // All queries in this request read from virtual tables, which is an
   // expensive operation. To reduce the number of RPC fanouts, we have the
   // caller specify which parts of the txn details we should return, since
@@ -481,6 +470,7 @@ export async function getTxnInsightDetailsApi(
     statementsErr: null,
   };
 
+  let maxSizeReached = false;
   if (!req.excludeTxn) {
     const request = makeInsightsSqlRequest([
       createTxnInsightsQuery({
@@ -489,10 +479,12 @@ export async function getTxnInsightDetailsApi(
         end: req?.end,
       }),
     ]);
+
     try {
       const result = await executeInternalSql<TxnInsightsResponseRow>(request);
+      maxSizeReached = isMaxSizeError(result.error?.message);
 
-      if (result.error) {
+      if (result.error && !maxSizeReached) {
         throw new Error(
           `Error while retrieving insights information: ${sqlApiErrorMessage(
             result.error.message,
@@ -517,14 +509,16 @@ export async function getTxnInsightDetailsApi(
       ]);
 
       const result = await executeInternalSql<StmtInsightsResponseRow>(request);
+      const maxSizeStmtReached = isMaxSizeError(result.error?.message);
 
-      if (result.error) {
+      if (result.error && !maxSizeStmtReached) {
         throw new Error(
           `Error while retrieving insights information: ${sqlApiErrorMessage(
             result.error.message,
           )}`,
         );
       }
+      maxSizeReached = maxSizeReached || maxSizeStmtReached;
 
       const stmts = result.execution.txn_results[0];
       if (stmts.rows?.length) {
@@ -550,8 +544,11 @@ export async function getTxnInsightDetailsApi(
   }
 
   return {
-    txnExecutionID: req.txnExecutionID,
-    result: txnInsightDetails,
-    errors,
+    maxSizeReached: maxSizeReached,
+    results: {
+      txnExecutionID: req.txnExecutionID,
+      result: txnInsightDetails,
+      errors,
+    },
   };
 }

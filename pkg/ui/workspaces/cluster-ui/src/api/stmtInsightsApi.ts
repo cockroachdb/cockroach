@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import {
-  ApiResponse,
+  SqlApiResponse,
   executeInternalSql,
   formatApiResult,
   LARGE_RESULT_SIZE,
@@ -138,7 +138,7 @@ export const stmtInsightsByTxnExecutionQuery = (id: string): string => `
 
 export async function getStmtInsightsApi(
   req?: StmtInsightsReq,
-): Promise<ApiResponse<StmtInsightEvent>> {
+): Promise<SqlApiResponse<StmtInsightEvent[]>> {
   const request: SqlExecutionRequest = {
     statements: [
       {

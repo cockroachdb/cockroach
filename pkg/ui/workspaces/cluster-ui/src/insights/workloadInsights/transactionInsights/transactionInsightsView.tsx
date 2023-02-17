@@ -51,6 +51,9 @@ import styles from "src/statementsPage/statementsPage.module.scss";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 import { commonStyles } from "../../../common";
 import { useFetchDataWithPolling } from "src/util/hooks";
+import { InlineAlert } from "@cockroachlabs/ui-components";
+import { insights } from "src/util";
+import { Anchor } from "src/anchor";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -66,6 +69,7 @@ export type TransactionInsightsViewStateProps = {
   isLoading?: boolean;
   dropDownSelect?: React.ReactElement;
   timeScale?: TimeScale;
+  maxSizeApiReached?: boolean;
 };
 
 export type TransactionInsightsViewDispatchProps = {
@@ -99,6 +103,7 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
     onSortChange,
     setTimeScale,
     dropDownSelect,
+    maxSizeApiReached,
   } = props;
 
   const [pagination, setPagination] = useState<ISortedTablePagination>({
@@ -293,6 +298,20 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
               total={filteredTransactions?.length}
               onChange={onChangePage}
             />
+            {maxSizeApiReached && (
+              <InlineAlert
+                intent="info"
+                title={
+                  <>
+                    Not all insights are displayed because the maximum number of
+                    insights was reached in the console.&nbsp;
+                    <Anchor href={insights} target="_blank">
+                      Learn more
+                    </Anchor>
+                  </>
+                }
+              />
+            )}
           </div>
         </Loading>
       </div>

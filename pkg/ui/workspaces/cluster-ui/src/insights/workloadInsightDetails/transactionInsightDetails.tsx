@@ -14,6 +14,7 @@ import { ArrowLeft } from "@cockroachlabs/icons";
 import { Tabs } from "antd";
 import "antd/lib/col/style";
 import "antd/lib/row/style";
+import "antd/lib/tabs/style";
 import { Button } from "src/button";
 import { getMatchParamByName } from "src/util/query";
 import { TxnInsightDetailsRequest, TxnInsightDetailsReqErrs } from "src/api";
@@ -25,14 +26,16 @@ import { idAttr } from "src/util";
 import { TransactionInsightDetailsOverviewTab } from "./transactionInsightDetailsOverviewTab";
 import { TransactionInsightsDetailsStmtsTab } from "./transactionInsightDetailsStmtsTab";
 import { timeScaleRangeToObj } from "src/timeScaleDropdown/utils";
-
-import "antd/lib/tabs/style";
+import { InlineAlert } from "@cockroachlabs/ui-components";
+import { insights } from "src/util";
+import { Anchor } from "src/anchor";
 
 export interface TransactionInsightDetailsStateProps {
   insightDetails: TxnInsightDetails;
   insightError: TxnInsightDetailsReqErrs | null;
   timeScale?: TimeScale;
   hasAdminRole: boolean;
+  maxSizeApiReached?: boolean;
 }
 
 export interface TransactionInsightDetailsDispatchProps {
@@ -65,6 +68,7 @@ export const TransactionInsightDetails: React.FC<
   match,
   hasAdminRole,
   refreshUserSQLRoles,
+  maxSizeApiReached,
 }) => {
   const fetches = useRef<number>(0);
   const executionID = getMatchParamByName(match, idAttr);
@@ -153,6 +157,7 @@ export const TransactionInsightDetails: React.FC<
               contentionDetails={insightDetails.blockingContentionDetails}
               setTimeScale={setTimeScale}
               hasAdminRole={hasAdminRole}
+              maxApiSizeReached={maxSizeApiReached}
             />
           </Tabs.TabPane>
           {(insightDetails.txnDetails?.stmtExecutionIDs?.length ||
@@ -169,6 +174,20 @@ export const TransactionInsightDetails: React.FC<
                 error={insightError?.statementsErr}
                 statements={insightDetails?.statements}
               />
+              {maxSizeApiReached && (
+                <InlineAlert
+                  intent="info"
+                  title={
+                    <>
+                      Not all statements are displayed because the maximum
+                      number of statements was reached in the console.&nbsp;
+                      <Anchor href={insights} target="_blank">
+                        Learn more
+                      </Anchor>
+                    </>
+                  }
+                />
+              )}
             </Tabs.TabPane>
           )}
         </Tabs>
