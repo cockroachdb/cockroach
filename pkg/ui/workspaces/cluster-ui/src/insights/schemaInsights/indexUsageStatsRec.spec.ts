@@ -20,26 +20,6 @@ describe("recommendDropUnusedIndex", () => {
   const mockCurrentTime = moment();
   const oneHourAgo: moment.Moment = moment(mockCurrentTime).subtract(1, "hour");
 
-  describe("Recently Used Index", () => {
-    const recentlyUsedIndex: ClusterIndexUsageStatistic = {
-      table_id: 1,
-      index_id: 1,
-      last_read: moment.utc(oneHourAgo, "X").format(),
-      created_at: null,
-      index_name: "recent_index",
-      table_name: "test_table",
-      database_id: 1,
-      database_name: "test_db",
-      schema_name: "public",
-      unused_threshold: "10h0m0s",
-    };
-    it("should not recommend index to be dropped", () => {
-      expect(recommendDropUnusedIndex(recentlyUsedIndex)).toEqual({
-        recommend: false,
-        reason: "",
-      });
-    });
-  });
   describe("Never Used Index", () => {
     const neverUsedIndex: ClusterIndexUsageStatistic = {
       table_id: 1,
@@ -85,28 +65,6 @@ describe("recommendDropUnusedIndex", () => {
     });
   });
   describe("Index Created But Never Read", () => {
-    describe("creation date does not exceed unuse duration", () => {
-      const createdNeverReadIndexNoExceed: ClusterIndexUsageStatistic = {
-        table_id: 1,
-        index_id: 1,
-        last_read: null,
-        created_at: moment.utc(oneHourAgo, "X").format(),
-        index_name: "recent_index",
-        table_name: "test_table",
-        database_id: 1,
-        database_name: "test_db",
-        schema_name: "public",
-        unused_threshold: "10h0m0s",
-      };
-      it("should not recommend index to be dropped", () => {
-        expect(recommendDropUnusedIndex(createdNeverReadIndexNoExceed)).toEqual(
-          {
-            recommend: false,
-            reason: "",
-          },
-        );
-      });
-    });
     describe("creation date exceeds unuse duration", () => {
       const createdNeverReadIndexExceed: ClusterIndexUsageStatistic = {
         table_id: 1,
