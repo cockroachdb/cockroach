@@ -300,6 +300,9 @@ func (mb *mutationBuilder) buildAntiJoinForDoNothingArbiter(
 	// wraps the scan on the right side of the anti-join with the partial
 	// index predicate expression as the filter.
 	if pred != nil {
+		// TODO(mgartner): Use the predicate expression in the table metadata here,
+		// replacing column references with fetch column references, rather than
+		// re-building the expression.
 		texpr := fetchScope.resolveAndRequireType(pred, types.Bool)
 		predScalar := mb.b.buildScalar(texpr, fetchScope, nil, nil, nil)
 		fetchScope.expr = mb.b.factory.ConstructSelect(
@@ -387,6 +390,9 @@ func (mb *mutationBuilder) buildLeftJoinForUpsertArbiter(
 	// the scan on the right side of the left outer join with the partial index
 	// predicate expression as the filter.
 	if pred != nil {
+		// TODO(mgartner): Use the predicate expression in the table metadata here,
+		// replacing column references with fetch column references, rather than
+		// re-building the expression.
 		texpr := mb.fetchScope.resolveAndRequireType(pred, types.Bool)
 		predScalar := mb.b.buildScalar(texpr, mb.fetchScope, nil, nil, nil)
 		mb.fetchScope.expr = mb.b.factory.ConstructSelect(
@@ -521,6 +527,9 @@ func (mb *mutationBuilder) projectPartialArbiterDistinctColumn(
 		Left:  pred,
 		Right: tree.DNull,
 	}
+	// TODO(mgartner): Use the predicate expression in the table metadata here,
+	// replacing column references with fetch column references, rather than
+	// re-building the expression.
 	texpr := insertScope.resolveAndRequireType(expr, types.Bool)
 
 	// Use an anonymous name because the column cannot be referenced

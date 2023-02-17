@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -832,83 +833,158 @@ func (mb *mutationBuilder) mutationColumnIDs() opt.ColSet {
 	return cols
 }
 
-// projectPartialIndexPutCols builds a Project that synthesizes boolean PUT
-// columns for each partial index defined on the target table. See
-// partialIndexPutColIDs for more info on these columns.
-func (mb *mutationBuilder) projectPartialIndexPutCols() {
-	mb.projectPartialIndexColsImpl(mb.outScope, nil /* delScope */)
-}
+// projectPartialIndexCols builds a Project that synthesizes boolean PUT and DEL
+// columns  for each partial index defined on the target table. PUT and DEL
+// columns are only projected if the given partialIndexProjectOption indicates
+// that they should be.
+func (mb *mutationBuilder) projectPartialIndexCols(includePutCols, includeDelCols bool) {
+	numPartialIndexes := partialIndexCount(mb.tab)
+	if numPartialIndexes == 0 {
+		return
+	}
 
-// projectPartialIndexDelCols builds a Project that synthesizes boolean PUT
-// columns for each partial index defined on the target table. See
-// partialIndexDelColIDs for more info on these columns.
-func (mb *mutationBuilder) projectPartialIndexDelCols() {
-	mb.projectPartialIndexColsImpl(nil /* putScope */, mb.fetchScope)
-}
+	// The DEL column projections should reference fetch columns because DEL
+	// columns indicate whether the previous version of the row existed in the
+	// partial index.
+	//
+	// The PUT column projections should reference the columns representing the
+	// new version of the row because PUT columns indicate whether the new
+	// version of the row exists in the partial index.
+	delCols := mb.fetchColIDs
+	var putCols opt.OptionalColList
+	if includePutCols {
+		putCols = make(opt.OptionalColList, len(mb.fetchColIDs))
+		for i := range putCols {
+			putCols[i] = mb.mapToReturnColID(i)
+		}
+	}
 
-// projectPartialIndexPutAndDelCols builds a Project that synthesizes boolean
-// PUT and DEL columns for each partial index defined on the target table. See
-// partialIndexPutColIDs and partialIndexDelColIDs for more info on these
-// columns.
-func (mb *mutationBuilder) projectPartialIndexPutAndDelCols() {
-	mb.projectPartialIndexColsImpl(mb.outScope, mb.fetchScope)
-}
+	var projections memo.ProjectionsExpr
+	if includePutCols && includeDelCols {
+		projections = make(memo.ProjectionsExpr, 0, numPartialIndexes*2)
+	} else {
+		projections = make(memo.ProjectionsExpr, 0, numPartialIndexes)
+	}
 
-// projectPartialIndexColsImpl builds a Project that synthesizes boolean PUT and
-// DEL columns  for each partial index defined on the target table. PUT columns
-// are only projected if putScope is non-nil and DEL columns are only projected
-// if delScope is non-nil.
-//
-// NOTE: This function should only be called via projectPartialIndexPutCols,
-// projectPartialIndexDelCols, or projectPartialIndexPutAndDelCols.
-func (mb *mutationBuilder) projectPartialIndexColsImpl(putScope, delScope *scope) {
-	if partialIndexCount(mb.tab) > 0 {
-		projectionScope := mb.outScope.replace()
-		projectionScope.appendColumnsFromScope(mb.outScope)
-
-		ord := 0
-		for i, n := 0, mb.tab.DeletableIndexCount(); i < n; i++ {
-			index := mb.tab.Index(i)
-
-			// Skip non-partial indexes.
-			if _, isPartial := index.Predicate(); !isPartial {
-				continue
+	// findExistingProjectionCol returns a column of an existing projection with
+	// the expression e, if one exists.
+	findExistingProjectionCol := func(e opt.ScalarExpr) (_ opt.ColumnID, ok bool) {
+		for i := range projections {
+			if e == projections[i].Element {
+				return projections[i].Col, true
 			}
+		}
+		return 0, false
+	}
 
-			expr := mb.parsePartialIndexPredicateExpr(i)
+	f := mb.b.factory
+	ord := 0
+	writeableIndexCount := mb.tab.WritableIndexCount()
+	for i, n := 0, mb.tab.DeletableIndexCount(); i < n; i++ {
+		index := mb.tab.Index(i)
 
-			// Build synthesized PUT columns.
-			if putScope != nil {
-				texpr := putScope.resolveAndRequireType(expr, types.Bool)
-
-				// Use an anonymous name because the column cannot be referenced
-				// in other expressions.
-				colName := scopeColName("").WithMetadataName(fmt.Sprintf("partial_index_put%d", ord+1))
-				scopeCol := projectionScope.addColumn(colName, texpr)
-
-				mb.b.buildScalar(texpr, putScope, projectionScope, scopeCol, nil)
-				mb.partialIndexPutColIDs[ord] = scopeCol.id
-			}
-
-			// Build synthesized DEL columns.
-			if delScope != nil {
-				texpr := delScope.resolveAndRequireType(expr, types.Bool)
-
-				// Use an anonymous name because the column cannot be referenced
-				// in other expressions.
-				colName := scopeColName("").WithMetadataName(fmt.Sprintf("partial_index_del%d", ord+1))
-				scopeCol := projectionScope.addColumn(colName, texpr)
-
-				mb.b.buildScalar(texpr, delScope, projectionScope, scopeCol, nil)
-				mb.partialIndexDelColIDs[ord] = scopeCol.id
-			}
-
-			ord++
+		// Skip non-partial indexes.
+		if _, isPartial := index.Predicate(); !isPartial {
+			continue
 		}
 
-		mb.b.constructProjectForScope(mb.outScope, projectionScope)
-		mb.outScope = projectionScope
+		// Fetch the partial index predicate expression that has already been
+		// built.
+		pred, ok := mb.md.TableMeta(mb.tabID).PartialIndexPredicate(i)
+		if !ok {
+			panic(errors.AssertionFailedf("expected metadata to contain partial index predicate"))
+		}
+		pred = mb.convertFiltersToProjectableExpr(*pred.(*memo.FiltersExpr))
+
+		// Build synthesized PUT columns.
+		if includePutCols {
+			// If the index is in the DELETE-ONLY state, then project false for
+			// the PUT column. This is more convenient than not projecting a
+			// column at all. It guarantees that the number of PUT and DEL
+			// columns are the same (if both are requested to be projected),
+			// allowing for simpler execution logic.
+			putPred := pred
+			if isDeleteOnly := i >= writeableIndexCount; isDeleteOnly {
+				putPred = memo.FalseSingleton
+			}
+			putExpr := mb.replaceTargetCols(putPred, putCols).(opt.ScalarExpr)
+			if v, ok := putExpr.(*memo.VariableExpr); ok {
+				// Reuse the existing column if the expression is only a single
+				// variable.
+				mb.partialIndexPutColIDs[ord] = v.Col
+			} else if col, ok := findExistingProjectionCol(putExpr); ok {
+				// Reuse an existing projection if one exists.
+				mb.partialIndexPutColIDs[ord] = col
+			} else {
+				// Otherwise, project a new column for the predicate expression.
+				putCol := mb.md.AddColumn(fmt.Sprintf("partial_index_put%d", ord+1), types.Bool)
+				projections = append(projections, f.ConstructProjectionsItem(putExpr, putCol))
+				mb.partialIndexPutColIDs[ord] = putCol
+			}
+		}
+
+		// Build synthesized DEL columns.
+		if includeDelCols {
+			delExpr := mb.replaceTargetCols(pred, delCols).(opt.ScalarExpr)
+			if v, ok := delExpr.(*memo.VariableExpr); ok {
+				// Reuse the existing column if the expression is only a single
+				// variable.
+				mb.partialIndexDelColIDs[ord] = v.Col
+			} else if col, ok := findExistingProjectionCol(delExpr); ok {
+				// Reuse an existing projection if one exists.
+				mb.partialIndexDelColIDs[ord] = col
+			} else {
+				// Otherwise, project a new column for the predicate expression.
+				delCol := mb.md.AddColumn(fmt.Sprintf("partial_index_del%d", ord+1), types.Bool)
+				projections = append(projections, f.ConstructProjectionsItem(delExpr, delCol))
+				mb.partialIndexDelColIDs[ord] = delCol
+			}
+		}
+
+		ord++
 	}
+
+	// Only create a Project if necessary.
+	if len(projections) > 0 {
+		// The columns that were previously in-scope are passthrough columns in
+		// the projection.
+		passthrough := mb.outScope.colSet()
+		mb.outScope.expr = f.ConstructProject(mb.outScope.expr, projections, passthrough)
+	}
+}
+
+// convertFiltersToProjectableExpr converts a FiltersExpr to an equivalent
+// scalar expression that can be projected.
+func (mb *mutationBuilder) convertFiltersToProjectableExpr(
+	filters memo.FiltersExpr,
+) opt.ScalarExpr {
+	// If the filters are empty, then they represent the true value.
+	if len(filters) == 0 {
+		return memo.TrueSingleton
+	}
+	andedPred := filters[0].Condition
+	for i := 1; i < len(filters); i++ {
+		andedPred = mb.b.factory.ConstructAnd(andedPred, filters[i].Condition)
+	}
+	return andedPred
+}
+
+// replaceTargetCols replaces columns in the expression from the target table
+// with the ordinal-corresponding columns in replacementCols.
+func (mb *mutationBuilder) replaceTargetCols(
+	e opt.Expr, replacementCols opt.OptionalColList,
+) opt.Expr {
+	f := mb.b.factory
+	var replaceFn norm.ReplaceFunc
+	replaceFn = func(e opt.Expr) opt.Expr {
+		switch t := e.(type) {
+		case *memo.VariableExpr:
+			ord := mb.tabID.ColumnOrdinal(t.Col)
+			return f.ConstructVariable(replacementCols[ord])
+		}
+		return f.CopyAndReplaceDefault(e, replaceFn)
+	}
+	return replaceFn(e)
 }
 
 // disambiguateColumns ranges over the scope and ensures that at most one column

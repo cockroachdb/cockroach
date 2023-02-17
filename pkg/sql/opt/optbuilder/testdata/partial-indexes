@@ -110,7 +110,7 @@ insert partial_indexes
            ├── column3:8 = 'foo' [as=partial_index_put1:9]
            ├── (column1:6 > column2:7) AND (column3:8 = 'bar') [as=partial_index_put2:10]
            ├── column3:8 = 'write-only' [as=partial_index_put3:11]
-           └── column3:8 = 'delete-only' [as=partial_index_put4:12]
+           └── false [as=partial_index_put4:12]
 
 # Do not error with "column reference is ambiguous" when table column names
 # match synthesized column names.
@@ -292,9 +292,9 @@ update partial_indexes
  ├── update-mapping:
  │    └── a_new:11 => a:1
  ├── partial index put columns: partial_index_put1:12 partial_index_put2:13 partial_index_put3:15 partial_index_put4:16
- ├── partial index del columns: partial_index_put1:12 partial_index_del2:14 partial_index_put3:15 partial_index_put4:16
+ ├── partial index del columns: partial_index_put1:12 partial_index_del2:14 partial_index_put3:15 partial_index_del4:17
  └── project
-      ├── columns: partial_index_put1:12 partial_index_put2:13 partial_index_del2:14 partial_index_put3:15 partial_index_put4:16 a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10 a_new:11!null
+      ├── columns: partial_index_put1:12 partial_index_put2:13 partial_index_del2:14 partial_index_put3:15 partial_index_put4:16!null partial_index_del4:17 a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10 a_new:11!null
       ├── project
       │    ├── columns: a_new:11!null a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10
       │    ├── scan partial_indexes
@@ -315,7 +315,8 @@ update partial_indexes
            ├── (a_new:11 > b:7) AND (c:8 = 'bar') [as=partial_index_put2:13]
            ├── (a:6 > b:7) AND (c:8 = 'bar') [as=partial_index_del2:14]
            ├── c:8 = 'write-only' [as=partial_index_put3:15]
-           └── c:8 = 'delete-only' [as=partial_index_put4:16]
+           ├── false [as=partial_index_put4:16]
+           └── c:8 = 'delete-only' [as=partial_index_del4:17]
 
 build
 UPDATE partial_indexes SET a = a + 5 RETURNING *
@@ -330,9 +331,9 @@ update partial_indexes
  │    ├── b:7 => b:2
  │    └── c:8 => c:3
  ├── partial index put columns: partial_index_put1:12 partial_index_put2:13 partial_index_put3:15 partial_index_put4:16
- ├── partial index del columns: partial_index_put1:12 partial_index_del2:14 partial_index_put3:15 partial_index_put4:16
+ ├── partial index del columns: partial_index_put1:12 partial_index_del2:14 partial_index_put3:15 partial_index_del4:17
  └── project
-      ├── columns: partial_index_put1:12 partial_index_put2:13 partial_index_del2:14 partial_index_put3:15 partial_index_put4:16 a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10 a_new:11!null
+      ├── columns: partial_index_put1:12 partial_index_put2:13 partial_index_del2:14 partial_index_put3:15 partial_index_put4:16!null partial_index_del4:17 a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10 a_new:11!null
       ├── project
       │    ├── columns: a_new:11!null a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10
       │    ├── scan partial_indexes
@@ -353,7 +354,8 @@ update partial_indexes
            ├── (a_new:11 > b:7) AND (c:8 = 'bar') [as=partial_index_put2:13]
            ├── (a:6 > b:7) AND (c:8 = 'bar') [as=partial_index_del2:14]
            ├── c:8 = 'write-only' [as=partial_index_put3:15]
-           └── c:8 = 'delete-only' [as=partial_index_put4:16]
+           ├── false [as=partial_index_put4:16]
+           └── c:8 = 'delete-only' [as=partial_index_del4:17]
 
 build
 UPDATE partial_indexes SET a = v.a FROM (VALUES (1), (2)) AS v(a) WHERE partial_indexes.a = v.a
@@ -365,9 +367,9 @@ update partial_indexes
  ├── update-mapping:
  │    └── column1:11 => a:1
  ├── partial index put columns: partial_index_put1:12 partial_index_put2:13 partial_index_put3:15 partial_index_put4:16
- ├── partial index del columns: partial_index_put1:12 partial_index_del2:14 partial_index_put3:15 partial_index_put4:16
+ ├── partial index del columns: partial_index_put1:12 partial_index_del2:14 partial_index_put3:15 partial_index_del4:17
  └── project
-      ├── columns: partial_index_put1:12 partial_index_put2:13 partial_index_del2:14 partial_index_put3:15 partial_index_put4:16 a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10 column1:11!null
+      ├── columns: partial_index_put1:12 partial_index_put2:13 partial_index_del2:14 partial_index_put3:15 partial_index_put4:16!null partial_index_del4:17 a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10 column1:11!null
       ├── distinct-on
       │    ├── columns: a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10 column1:11!null
       │    ├── grouping columns: a:6!null
@@ -409,7 +411,8 @@ update partial_indexes
            ├── (column1:11 > b:7) AND (c:8 = 'bar') [as=partial_index_put2:13]
            ├── (a:6 > b:7) AND (c:8 = 'bar') [as=partial_index_del2:14]
            ├── c:8 = 'write-only' [as=partial_index_put3:15]
-           └── c:8 = 'delete-only' [as=partial_index_put4:16]
+           ├── false [as=partial_index_put4:16]
+           └── c:8 = 'delete-only' [as=partial_index_del4:17]
 
 # Do not error with "column reference is ambiguous" when table column names
 # match synthesized column names.
@@ -676,7 +679,7 @@ insert partial_indexes
            ├── column3:8 = 'foo' [as=partial_index_put1:19]
            ├── (column1:6 > column2:7) AND (column3:8 = 'bar') [as=partial_index_put2:20]
            ├── column3:8 = 'write-only' [as=partial_index_put3:21]
-           └── column3:8 = 'delete-only' [as=partial_index_put4:22]
+           └── false [as=partial_index_put4:22]
 
 build
 INSERT INTO partial_indexes VALUES (2, 1, 'bar') ON CONFLICT (b, c) DO UPDATE SET b = partial_indexes.b + 1, c = 'baz'
@@ -741,7 +744,7 @@ upsert partial_indexes
            ├── (a:9 > b:10) AND (c:11 = 'bar') [as=partial_index_del2:22]
            ├── upsert_c:18 = 'write-only' [as=partial_index_put3:23]
            ├── c:11 = 'write-only' [as=partial_index_del3:24]
-           ├── upsert_c:18 = 'delete-only' [as=partial_index_put4:25]
+           ├── false [as=partial_index_put4:25]
            └── c:11 = 'delete-only' [as=partial_index_del4:26]
 
 build
@@ -801,7 +804,7 @@ upsert partial_indexes
            ├── (a:9 > b:10) AND (c:11 = 'bar') [as=partial_index_del2:18]
            ├── column3:8 = 'write-only' [as=partial_index_put3:19]
            ├── c:11 = 'write-only' [as=partial_index_del3:20]
-           ├── column3:8 = 'delete-only' [as=partial_index_put4:21]
+           ├── false [as=partial_index_put4:21]
            └── c:11 = 'delete-only' [as=partial_index_del4:22]
 
 # Columns referenced in the SET expression are ambiguous without a table name.
@@ -1695,7 +1698,7 @@ insert comp
       │              └── first-agg [as=e_comp:12]
       │                   └── e_comp:12
       └── projections
-           ├── d_comp:11 = 'foo' [as=partial_index_put1:29]
+           ├── lower(column3:10) = 'foo' [as=partial_index_put1:29]
            ├── e_comp:12 = 'FOO' [as=partial_index_put2:30]
            └── e_comp:12 = 'bar' [as=partial_index_put4:31]
 
@@ -1775,7 +1778,7 @@ insert comp
       │         └── first-agg [as=e_comp:12]
       │              └── e_comp:12
       └── projections
-           ├── d_comp:11 = 'foo' [as=partial_index_put1:20]
+           ├── lower(column3:10) = 'foo' [as=partial_index_put1:20]
            ├── e_comp:12 = 'FOO' [as=partial_index_put2:21]
            └── e_comp:12 = 'bar' [as=partial_index_put4:22]
 
@@ -1889,8 +1892,8 @@ upsert comp
       │         ├── CASE WHEN a:14 IS NULL THEN d_comp:11 ELSE d:17 END [as=upsert_d:27]
       │         └── CASE WHEN a:14 IS NULL THEN e_comp:12 ELSE e:18 END [as=upsert_e:28]
       └── projections
-           ├── upsert_d:27 = 'foo' [as=partial_index_put1:29]
-           ├── d:17 = 'foo' [as=partial_index_del1:30]
+           ├── lower(upsert_c:26) = 'foo' [as=partial_index_put1:29]
+           ├── lower(c:16) = 'foo' [as=partial_index_del1:30]
            ├── upsert_e:28 = 'FOO' [as=partial_index_put2:31]
            ├── e:18 = 'FOO' [as=partial_index_del2:32]
            ├── upsert_e:28 = 'bar' [as=partial_index_put4:33]
