@@ -35,6 +35,9 @@ type valuesNode struct {
 	externallyOwnedContainer bool
 
 	valuesRun
+
+	// Allow passing a coldata.Batch through a valuesNode.
+	coldataBatch interface{}
 }
 
 func (p *planner) newContainerValuesNode(columns colinfo.ResultColumns, capacity int) *valuesNode {

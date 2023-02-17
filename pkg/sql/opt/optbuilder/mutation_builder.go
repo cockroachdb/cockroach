@@ -562,7 +562,7 @@ func (mb *mutationBuilder) extractValuesInput(inputRows *tree.Select) *tree.Valu
 // or just the unchanged input expression if there are no DEFAULT values.
 func (mb *mutationBuilder) replaceDefaultExprs(inRows *tree.Select) (outRows *tree.Select) {
 	values := mb.extractValuesInput(inRows)
-	if values == nil {
+	if values == nil || len(values.Rows) == 0 {
 		return inRows
 	}
 

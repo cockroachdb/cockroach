@@ -106,12 +106,24 @@ func (ef *execFactory) ConstructLiteralValues(
 	if rows.NumRows() == 0 {
 		return &zeroNode{columns: cols}, nil
 	}
-	return &valuesNode{
-		columns:                  cols,
-		specifiedInQuery:         true,
-		externallyOwnedContainer: true,
-		valuesRun:                valuesRun{rows: rows.(*rowcontainer.RowContainer)},
-	}, nil
+	switch t := rows.(type) {
+	case *rowcontainer.RowContainer:
+		return &valuesNode{
+			columns:                  cols,
+			specifiedInQuery:         true,
+			externallyOwnedContainer: true,
+			valuesRun:                valuesRun{rows: t},
+		}, nil
+	case *tree.VectorRows:
+		return &valuesNode{
+			columns:                  cols,
+			specifiedInQuery:         true,
+			externallyOwnedContainer: true,
+			coldataBatch:             t.Batch,
+		}, nil
+	default:
+		return nil, errors.AssertionFailedf("unexpected rows type %T in ConstructLiteralValues", rows)
+	}
 }
 
 // ConstructScan is part of the exec.Factory interface.

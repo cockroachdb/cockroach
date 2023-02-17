@@ -48,6 +48,8 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/col/coldata",
+        "//pkg/col/coldataext",
         "//pkg/server/telemetry",
         "//pkg/settings",
         "//pkg/sql/catalog/colinfo",

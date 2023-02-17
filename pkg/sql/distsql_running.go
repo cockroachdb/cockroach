@@ -688,6 +688,7 @@ func (dsp *DistSQLPlanner) Run(
 	localState.ParallelCheck = planCtx.parallelCheck
 	localState.Txn = txn
 	localState.LocalProcs = plan.LocalProcessors
+	localState.LocalVectorSources = plan.LocalVectorSources
 	// If we have access to a planner and are currently being used to plan
 	// statements in a user transaction, then take the descs.Collection to resolve
 	// types with during flow execution. This is necessary to do in the case of
