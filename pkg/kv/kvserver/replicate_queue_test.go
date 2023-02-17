@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
@@ -2349,4 +2350,86 @@ func TestPromoteNonVoterInAddVoter(t *testing.T) {
 				addVoterEvent.AddedReplica.Type, addVoterEvents)
 		}
 	}
+}
+
+// TestReplicateQueueExpirationLeasesOnly tests that changing
+// kv.expiration_leases_only.enabled switches all leases to the correct kind.
+func TestReplicateQueueExpirationLeasesOnly(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t) // too slow under stressrace
+	skip.UnderShort(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			// Speed up the replicate queue, which switches the lease type.
+			ScanMinIdleTime: time.Millisecond,
+			ScanMaxIdleTime: time.Millisecond,
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	require.NoError(t, tc.WaitForFullReplication())
+
+	db := tc.Server(0).DB()
+	sqlDB := tc.ServerConn(0)
+
+	// Split off a few ranges so we have something to work with.
+	scratchKey := tc.ScratchRange(t)
+	for i := 0; i <= 255; i++ {
+		splitKey := append(scratchKey.Clone(), byte(i))
+		require.NoError(t, db.AdminSplit(ctx, splitKey, hlc.MaxTimestamp))
+	}
+
+	countLeases := func() (epoch int64, expiration int64) {
+		for i := 0; i < tc.NumServers(); i++ {
+			require.NoError(t, tc.Server(i).GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
+				require.NoError(t, s.ComputeMetrics(ctx))
+				expiration += s.Metrics().LeaseExpirationCount.Value()
+				epoch += s.Metrics().LeaseEpochCount.Value()
+				return nil
+			}))
+		}
+		return
+	}
+
+	// We expect to have both expiration and epoch leases at the start, since the
+	// meta and liveness ranges require expiration leases. However, it's possible
+	// that there are a few other stray expiration leases too, since lease
+	// transfers use expiration leases as well.
+	epochLeases, expLeases := countLeases()
+	require.NotZero(t, epochLeases)
+	require.NotZero(t, expLeases)
+	initialExpLeases := expLeases
+	t.Logf("initial: epochLeases=%d expLeases=%d", epochLeases, expLeases)
+
+	// Switch to expiration leases and wait for them to change.
+	_, err := sqlDB.ExecContext(ctx, `SET CLUSTER SETTING kv.expiration_leases_only.enabled = true`)
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		epochLeases, expLeases = countLeases()
+		return epochLeases == 0 && expLeases > 0
+	}, 10*time.Second, 200*time.Millisecond)
+	t.Logf("enabled: epochLeases=%d expLeases=%d", epochLeases, expLeases)
+
+	// Run a scan across the ranges, just to make sure they work.
+	scanCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	_, err = db.Scan(scanCtx, scratchKey, scratchKey.PrefixEnd(), 1)
+	require.NoError(t, err)
+
+	// Switch back to epoch leases and wait for them to change. We still expect to
+	// have some required expiration leases, but they should be at or below the
+	// number of expiration leases we had at the start (primarily the meta and
+	// liveness ranges, but possibly a few more since lease transfers also use
+	// expiration leases).
+	_, err = sqlDB.ExecContext(ctx, `SET CLUSTER SETTING kv.expiration_leases_only.enabled = false`)
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		epochLeases, expLeases = countLeases()
+		return epochLeases > 0 && expLeases > 0 && expLeases <= initialExpLeases
+	}, 10*time.Second, 200*time.Millisecond)
+	t.Logf("disabled: epochLeases=%d expLeases=%d", epochLeases, expLeases)
 }
