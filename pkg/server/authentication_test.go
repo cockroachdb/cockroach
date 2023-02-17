@@ -570,6 +570,31 @@ func TestAuthenticationAPIUserLogin(t *testing.T) {
 	}
 }
 
+func TestLogoutClearsCookies(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+	ts := s.(*TestServer)
+
+	// Log in.
+	authHTTPClient, _, err := ts.getAuthenticatedHTTPClientAndCookie(authenticatedUserName(), true)
+	require.NoError(t, err)
+
+	// Log out.
+	resp, err := authHTTPClient.Get(ts.AdminURL() + logoutPath)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	cookies := resp.Cookies()
+	cNames := make([]string, len(cookies))
+	for i, c := range cookies {
+		require.Equal(t, "", c.Value)
+		cNames[i] = c.Name
+	}
+	require.ElementsMatch(t, cNames, []string{SessionCookieName, MultitenantSessionCookieName, TenantSelectCookieName})
+}
+
 func TestLogout(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
