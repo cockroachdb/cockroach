@@ -300,7 +300,7 @@ function descriptionCell(
 }
 
 function linkCell(insightRec: InsightRecommendation): React.ReactElement {
-  switch (insightRec.execution.execType) {
+  switch (insightRec.execution?.execType) {
     case InsightExecEnum.STATEMENT:
       return (
         <>
