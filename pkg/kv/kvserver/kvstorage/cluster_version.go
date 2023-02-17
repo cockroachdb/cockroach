@@ -168,11 +168,10 @@ func SynthesizeClusterVersionFromEngines(
 	}
 	log.Eventf(ctx, "read clusterVersion %+v", cv)
 
-	// We now check for old versions up front when we open the database. We leave
-	// this older check for the case where a store is so old that it doesn't have
-	// a min version file.
 	if minStoreVersion.Version.Less(binaryMinSupportedVersion) {
-		return clusterversion.ClusterVersion{}, errors.Errorf("store %s, last used with cockroach version v%s, "+
+		// We now check for old versions before opening the store. This case should
+		// no longer be possible.
+		return clusterversion.ClusterVersion{}, errors.AssertionFailedf("store %s, last used with cockroach version v%s, "+
 			"is too old for running version v%s (which requires data from v%s or later)",
 			minStoreVersion.origin, minStoreVersion.Version, binaryVersion, binaryMinSupportedVersion)
 	}
