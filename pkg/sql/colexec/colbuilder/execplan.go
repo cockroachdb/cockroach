@@ -238,6 +238,9 @@ func supportedNatively(core *execinfrapb.ProcessorCoreUnion) error {
 		// distinguish from other unsupported cores.
 		return errLocalPlanNodeWrap
 
+	case core.Insert != nil:
+		return nil
+
 	default:
 		return errCoreUnsupportedNatively
 	}
@@ -818,11 +821,20 @@ func NewColOperator(
 				return r, err
 			}
 			if core.Values.NumRows == 0 || len(core.Values.Columns) == 0 {
-				// To simplify valuesOp we handle some special cases with
-				// fixedNumTuplesNoInputOp.
-				result.Root = colexecutils.NewFixedNumTuplesNoInputOp(
-					getStreamingAllocator(ctx, args), int(core.Values.NumRows), nil, /* opToInitialize */
-				)
+				// Handle coldata.Batch vector source.
+				if b, ok := args.LocalVectorSources[args.Spec.ProcessorID]; ok {
+					batch, ok := b.(coldata.Batch)
+					if !ok {
+						colexecerror.InternalError(errors.AssertionFailedf("LocalVectorSource wasn't a coldata.Batch"))
+					}
+					result.Root = colexecutils.NewRawColDataBatchOp(batch)
+				} else {
+					// To simplify valuesOp we handle some special cases with
+					// fixedNumTuplesNoInputOp.
+					result.Root = colexecutils.NewFixedNumTuplesNoInputOp(
+						getStreamingAllocator(ctx, args), int(core.Values.NumRows), nil, /* opToInitialize */
+					)
+				}
 			} else {
 				result.Root = colexec.NewValuesOp(
 					getStreamingAllocator(ctx, args), core.Values, execinfra.GetWorkMemLimit(flowCtx),
@@ -1727,6 +1739,15 @@ func NewColOperator(
 				result.ColumnTypes = appendOneType(result.ColumnTypes, returnType)
 				input = result.Root
 			}
+
+		case core.Insert != nil:
+			if err := checkNumIn(inputs, 1); err != nil {
+				return r, err
+			}
+			outputIdx := len(spec.Input[0].ColumnTypes)
+			result.Root = colexec.NewInsertOp(ctx, flowCtx, core.Insert, inputs[0].Root, spec.ResultTypes, outputIdx,
+				getStreamingAllocator(ctx, args), args.ExprHelper.SemaCtx)
+			result.ColumnTypes = spec.ResultTypes
 
 		default:
 			return r, errors.AssertionFailedf("unsupported processor core %q", core)

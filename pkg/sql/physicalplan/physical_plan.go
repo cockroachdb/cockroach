@@ -83,6 +83,20 @@ type PhysicalInfrastructure struct {
 	// wrapping had to happen.
 	LocalProcessors []execinfra.LocalProcessor
 
+	// LocalVectorSources contains canned coldata.Batch's to be used as vector
+	// engine input sources. This is currently used for COPY, eventually
+	// should probably be replaced by a proper copy processor that
+	// materializes coldata batches from pgwire stream in a distsql
+	// processor itself but that might have to wait until we deprecate
+	// non-atomic COPY support (maybe? a COPY distsql processor could just
+	// just finish when running non atomic and N rows were inserted if we
+	// could pull rows from the pgwire buffer across distsql executions).
+	// In that case we wouldn't be plumbing coldata.Batch's here we'd be
+	// plumbing "vector" sources which would be an interface with
+	// implementations for COPY and other batch streams (ie prepared
+	// batches). Use any to avoid creating unwanted package dependencies.
+	LocalVectorSources map[int32]any
+
 	// Streams accumulates the streams in the plan - both local (intra-node) and
 	// remote (inter-node); when we have a final plan, the streams are used to
 	// generate processor input and output specs (see PopulateEndpoints).

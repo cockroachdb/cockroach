@@ -64,13 +64,15 @@ type NewColOperatorArgs struct {
 	StreamingMemAccount  *mon.BoundAccount
 	ProcessorConstructor execinfra.ProcessorConstructor
 	LocalProcessors      []execinfra.LocalProcessor
-	DiskQueueCfg         colcontainer.DiskQueueCfg
-	FDSemaphore          semaphore.Semaphore
-	ExprHelper           *ExprHelper
-	Factory              coldata.ColumnFactory
-	MonitorRegistry      *MonitorRegistry
-	TypeResolver         *descs.DistSQLTypeResolver
-	TestingKnobs         struct {
+	// any is actually a coldata.Batch, see physicalplan.PhysicalInfrastructure comments.
+	LocalVectorSources map[int32]any
+	DiskQueueCfg       colcontainer.DiskQueueCfg
+	FDSemaphore        semaphore.Semaphore
+	ExprHelper         *ExprHelper
+	Factory            coldata.ColumnFactory
+	MonitorRegistry    *MonitorRegistry
+	TypeResolver       *descs.DistSQLTypeResolver
+	TestingKnobs       struct {
 		// SpillingCallbackFn will be called when the spilling from an in-memory
 		// to disk-backed operator occurs. It should only be set in tests.
 		SpillingCallbackFn func()

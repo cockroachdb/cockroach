@@ -186,7 +186,8 @@ type FlowBase struct {
 	// pushing coldata.Batches to locally.
 	batchSyncFlowConsumer execinfra.BatchReceiver
 
-	localProcessors []execinfra.LocalProcessor
+	localProcessors    []execinfra.LocalProcessor
+	localVectorSources map[int32]any
 
 	// startedGoroutines specifies whether this flow started any goroutines. This
 	// is used in Wait() to avoid the overhead of waiting for non-existent
@@ -283,6 +284,7 @@ func NewFlowBase(
 	rowSyncFlowConsumer execinfra.RowReceiver,
 	batchSyncFlowConsumer execinfra.BatchReceiver,
 	localProcessors []execinfra.LocalProcessor,
+	localVectorSources map[int32]any,
 	onFlowCleanupEnd func(),
 	statementSQL string,
 ) *FlowBase {
@@ -306,6 +308,7 @@ func NewFlowBase(
 		rowSyncFlowConsumer:   rowSyncFlowConsumer,
 		batchSyncFlowConsumer: batchSyncFlowConsumer,
 		localProcessors:       localProcessors,
+		localVectorSources:    localVectorSources,
 		admissionInfo:         admissionInfo,
 		onCleanupEnd:          onFlowCleanupEnd,
 		status:                flowNotStarted,
@@ -387,6 +390,11 @@ func (f *FlowBase) GetBatchSyncFlowConsumer() execinfra.BatchReceiver {
 // GetLocalProcessors return the execinfra.LocalProcessors of this flow.
 func (f *FlowBase) GetLocalProcessors() []execinfra.LocalProcessor {
 	return f.localProcessors
+}
+
+// GetLocalVectorSources return the LocalVectorSources of this flow.
+func (f *FlowBase) GetLocalVectorSources() map[int32]any {
+	return f.localVectorSources
 }
 
 // GetAdmissionInfo returns the information to use for admission control on
