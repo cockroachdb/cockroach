@@ -25,6 +25,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvpb",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/col/coldata",
         "//pkg/kv/kvnemesis/kvnemesisutil",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/roachpb",

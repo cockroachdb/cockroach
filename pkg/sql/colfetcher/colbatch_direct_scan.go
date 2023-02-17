@@ -14,11 +14,11 @@ import (
 	"context"
 	"time"
 
-	"github.com/apache/arrow/go/arrow/array"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/colserde"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -38,11 +38,10 @@ type ColBatchDirectScan struct {
 	allocator   *colmem.Allocator
 	spec        *fetchpb.IndexFetchSpec
 	resultTypes []*types.T
+	hasDatumVec bool
 
-	data      []array.Data
-	batch     coldata.Batch
-	converter *colserde.ArrowBatchConverter
-	deser     *colserde.RecordBatchSerializer
+	deserializer            colexecutils.Deserializer
+	deserializerInitialized bool
 }
 
 var _ ScanOperator = &ColBatchDirectScan{}
@@ -57,17 +56,8 @@ func (s *ColBatchDirectScan) Init(ctx context.Context) {
 	// fetcher. Note that ProcessorSpan method itself will check whether tracing
 	// is enabled.
 	s.Ctx, s.tracingSpan = execinfra.ProcessorSpan(s.Ctx, "colbatchdirectscan")
-	var err error
-	s.deser, err = colserde.NewRecordBatchSerializer(s.resultTypes)
-	if err != nil {
-		colexecerror.InternalError(err)
-	}
-	s.converter, err = colserde.NewArrowBatchConverter(s.resultTypes, colserde.ArrowToBatchOnly, nil /* acc */)
-	if err != nil {
-		colexecerror.InternalError(err)
-	}
 	firstBatchLimit := cFetcherFirstBatchLimit(s.limitHint, s.spec.MaxKeysPerRow)
-	err = s.fetcher.SetupNextFetch(
+	err := s.fetcher.SetupNextFetch(
 		ctx, s.Spans, nil /* spanIDs */, s.batchBytesLimit, firstBatchLimit,
 	)
 	if err != nil {
@@ -90,28 +80,42 @@ func (s *ColBatchDirectScan) Next() (ret coldata.Batch) {
 		if res.KVs != nil {
 			colexecerror.InternalError(errors.AssertionFailedf("unexpectedly encountered KVs in a direct scan"))
 		}
+		if res.ColBatch != nil {
+			// If there are any datum-backed vectors in this batch, then they
+			// are "incomplete", and we have to properly initialize them here.
+			if s.hasDatumVec {
+				for _, vec := range res.ColBatch.ColVecs() {
+					if vec.CanonicalTypeFamily() == typeconv.DatumVecCanonicalTypeFamily {
+						vec.Datum().SetEvalCtx(s.flowCtx.EvalCtx)
+					}
+				}
+			}
+			s.mu.Lock()
+			s.mu.rowsRead += int64(res.ColBatch.Length())
+			s.mu.Unlock()
+			// Note that this batch has already been accounted for by the
+			// KVBatchFetcher, so we don't need to do that.
+			return res.ColBatch
+		}
 		if res.BatchResponse != nil {
 			break
 		}
 		// If BatchResponse is nil, then it was an empty response for a
 		// ScanRequest, and we need to proceed further.
 	}
-	s.data = s.data[:0]
-	batchLength, err := s.deser.Deserialize(&s.data, res.BatchResponse)
-	if err != nil {
-		colexecerror.InternalError(err)
-	}
-	// We rely on the cFetcherWrapper to produce reasonably sized batches.
-	s.batch, _ = s.allocator.ResetMaybeReallocateNoMemLimit(s.resultTypes, s.batch, batchLength)
-	s.allocator.PerformOperation(s.batch.ColVecs(), func() {
-		if err = s.converter.ArrowToBatch(s.data, batchLength, s.batch); err != nil {
+	if !s.deserializerInitialized {
+		if err = s.deserializer.Init(
+			s.allocator, s.resultTypes, false, /* alwaysReallocate */
+		); err != nil {
 			colexecerror.InternalError(err)
 		}
-	})
+		s.deserializerInitialized = true
+	}
+	batch := s.deserializer.Deserialize(res.BatchResponse)
 	s.mu.Lock()
-	s.mu.rowsRead += int64(batchLength)
+	s.mu.rowsRead += int64(batch.Length())
 	s.mu.Unlock()
-	return s.batch
+	return batch
 }
 
 // DrainMeta is part of the colexecop.MetadataSource interface.
@@ -154,7 +158,7 @@ func (s *ColBatchDirectScan) Close(context.Context) error {
 	// tracing span.
 	ctx := s.EnsureCtx()
 	s.fetcher.Close(ctx)
-	s.converter.Release(ctx)
+	s.deserializer.Close(ctx)
 	return s.colBatchScanBase.close()
 }
 
@@ -197,12 +201,19 @@ func NewColBatchDirectScan(
 		kvFetcherMemAcc,
 		flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
 	)
+	var hasDatumVec bool
+	for _, t := range tableArgs.typs {
+		if typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) == typeconv.DatumVecCanonicalTypeFamily {
+			hasDatumVec = true
+			break
+		}
+	}
 	return &ColBatchDirectScan{
 		colBatchScanBase: base,
 		fetcher:          fetcher,
 		allocator:        allocator,
 		spec:             &fetchSpec,
 		resultTypes:      tableArgs.typs,
-		data:             make([]array.Data, len(tableArgs.typs)),
+		hasDatumVec:      hasDatumVec,
 	}, tableArgs.typs, nil
 }

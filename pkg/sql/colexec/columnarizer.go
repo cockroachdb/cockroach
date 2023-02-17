@@ -169,7 +169,7 @@ func newColumnarizer(
 	)
 	c.AddInputToDrain(input)
 	c.typs = c.input.OutputTypes()
-	c.helper.Init(batchAllocator, execinfra.GetWorkMemLimit(flowCtx), c.typs)
+	c.helper.Init(batchAllocator, execinfra.GetWorkMemLimit(flowCtx), c.typs, false /* alwaysReallocate */)
 	return c
 }
 

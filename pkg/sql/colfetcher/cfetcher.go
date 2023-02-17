@@ -181,6 +181,15 @@ type cFetcherArgs struct {
 	// collectStats, if true, indicates that cFetcher should collect execution
 	// statistics (e.g. CPU time).
 	collectStats bool
+	// alwaysReallocate indicates whether the cFetcher will allocate new batches
+	// on each NextBatch invocation (if true), or will reuse a single batch (if
+	// false).
+	//
+	// Note that if alwaysReallocate=true is used, it is the caller's
+	// responsibility to perform memory accounting for all batches except for
+	// the last one returned on the NextBatch calls if the caller wishes to keep
+	// multiple batches at the same time.
+	alwaysReallocate bool
 }
 
 // noOutputColumn is a sentinel value to denote that a system column is not
@@ -483,7 +492,7 @@ func (cf *cFetcher) Init(
 		cf.fetcher = kvFetcher
 	}
 	cf.stableKVs = nextKVer.Init(cf.getFirstKeyOfRow)
-	cf.accountingHelper.Init(allocator, cf.memoryLimit, cf.table.typs)
+	cf.accountingHelper.Init(allocator, cf.memoryLimit, cf.table.typs, cf.alwaysReallocate)
 	if cf.cFetcherArgs.collectStats {
 		cf.cpuStopWatch = timeutil.NewCPUStopWatch()
 	}
