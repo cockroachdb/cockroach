@@ -1997,8 +1997,11 @@ func shouldCampaignOnWake(
 	if raftStatus.Lead == raft.None {
 		return true
 	}
-	// Avoid a circular dependency on liveness and skip the is leader alive
-	// check for ranges that always use expiration based leases.
+	// Avoid a circular dependency on liveness and skip the is leader alive check
+	// for ranges that require expiration based leases (the meta and liveness
+	// ranges). We do want to check the liveness entry for other expiration
+	// leases, since in the case of a dead leader it allows us to campaign
+	// immediately without waiting out the election timeout.
 	if requiresExpirationLease {
 		return false
 	}
@@ -2061,7 +2064,7 @@ func shouldCampaignOnLeaseRequestRedirect(
 	raftStatus raft.BasicStatus,
 	livenessMap livenesspb.IsLiveMap,
 	desc *roachpb.RangeDescriptor,
-	requiresExpirationLease bool,
+	shouldUseExpirationLease bool,
 	now hlc.Timestamp,
 ) bool {
 	// If we're already campaigning don't start a new term.
@@ -2076,15 +2079,14 @@ func shouldCampaignOnLeaseRequestRedirect(
 	if raftStatus.Lead == raft.None {
 		return true
 	}
-	// Avoid a circular dependency on liveness and skip the is leader alive check
-	// for ranges that always use expiration based leases. These ranges don't need
-	// to campaign based on liveness state because there can never be a case where
-	// a node can retain Raft leadership but still be unable to acquire the lease.
-	// This is possible on ranges that use epoch-based leases because the Raft
-	// leader may be partitioned from the liveness range.
+	// If we should be using an expiration lease then we don't need to campaign
+	// based on liveness state because there can never be a case where a node can
+	// retain Raft leadership but still be unable to acquire the lease. This is
+	// possible on ranges that use epoch-based leases because the Raft leader may
+	// be partitioned from the liveness range.
 	// See TestRequestsOnFollowerWithNonLiveLeaseholder for an example of a test
 	// that demonstrates this case.
-	if requiresExpirationLease {
+	if shouldUseExpirationLease {
 		return false
 	}
 	// Determine if we think the leader is alive, if we don't have the leader in

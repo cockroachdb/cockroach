@@ -75,6 +75,13 @@ var transferExpirationLeasesFirstEnabled = settings.RegisterBoolSetting(
 	true,
 )
 
+var expirationLeasesOnly = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.expiration_leases_only.enabled",
+	"only use expiration-based leases, never epoch-based ones (experimental, affects performance)",
+	false,
+)
+
 var leaseStatusLogLimiter = func() *log.EveryN {
 	e := log.Every(15 * time.Second)
 	e.ShouldLog() // waste the first shot
@@ -244,23 +251,23 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		ProposedTS: &status.Now,
 	}
 
-	if p.repl.requiresExpirationLeaseRLocked() ||
+	if p.repl.shouldUseExpirationLeaseRLocked() ||
 		(transfer &&
 			transferExpirationLeasesFirstEnabled.Get(&p.repl.store.ClusterSettings().SV) &&
 			p.repl.store.ClusterSettings().Version.IsActive(ctx, clusterversion.TODODelete_V22_2EnableLeaseUpgrade)) {
-		// In addition to ranges that unconditionally require expiration-based
-		// leases (node liveness and earlier), we also use them during lease
-		// transfers for all other ranges. After acquiring these expiration
-		// based leases, the leaseholders are expected to upgrade them to the
-		// more efficient epoch-based ones. But by transferring an
-		// expiration-based lease, we can limit the effect of an ill-advised
-		// lease transfer since the incoming leaseholder needs to recognize
-		// itself as such within a few seconds; if it doesn't (we accidentally
-		// sent the lease to a replica in need of a snapshot or far behind on
-		// its log), the lease is up for grabs. If we simply transferred epoch
-		// based leases, it's possible for the new leaseholder that's delayed
-		// in applying the lease transfer to maintain its lease (assuming the
-		// node it's on is able to heartbeat its liveness record).
+		// In addition to ranges that should be using expiration-based leases
+		// (typically the meta and liveness ranges), we also use them during lease
+		// transfers for all other ranges. After acquiring these expiration based
+		// leases, the leaseholders are expected to upgrade them to the more
+		// efficient epoch-based ones. But by transferring an expiration-based
+		// lease, we can limit the effect of an ill-advised lease transfer since the
+		// incoming leaseholder needs to recognize itself as such within a few
+		// seconds; if it doesn't (we accidentally sent the lease to a replica in
+		// need of a snapshot or far behind on its log), the lease is up for grabs.
+		// If we simply transferred epoch based leases, it's possible for the new
+		// leaseholder that's delayed in applying the lease transfer to maintain its
+		// lease (assuming the node it's on is able to heartbeat its liveness
+		// record).
 		reqLease.Expiration = &hlc.Timestamp{}
 		*reqLease.Expiration = status.Now.ToTimestamp().Add(int64(p.repl.store.cfg.RangeLeaseDuration), 0)
 	} else {
@@ -769,9 +776,20 @@ func (r *Replica) ownsValidLeaseRLocked(ctx context.Context, now hlc.ClockTimest
 // dependencies on the node liveness table. All other ranges typically use
 // epoch-based leases, but may temporarily use expiration based leases during
 // lease transfers.
+//
+// TODO(erikgrinaker): It isn't always clear when to use this and when to use
+// shouldUseExpirationLeaseRLocked. We can merge these once there are no more
+// callers: when expiration leases don't quiesce and are always eagerly renewed.
 func (r *Replica) requiresExpirationLeaseRLocked() bool {
 	return r.store.cfg.NodeLiveness == nil ||
 		r.mu.state.Desc.StartKey.Less(roachpb.RKey(keys.NodeLivenessKeyMax))
+}
+
+// shouldUseExpirationLeaseRLocked returns true if this range should be using an
+// expiration-based lease, either because it requires one or because
+// kv.expiration_leases_only.enabled is enabled.
+func (r *Replica) shouldUseExpirationLeaseRLocked() bool {
+	return expirationLeasesOnly.Get(&r.ClusterSettings().SV) || r.requiresExpirationLeaseRLocked()
 }
 
 // requestLeaseLocked executes a request to obtain or extend a lease
@@ -1003,7 +1021,7 @@ func NewLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(
 // lease's expiration (and stasis period).
 func (r *Replica) checkRequestTimeRLocked(now hlc.ClockTimestamp, reqTS hlc.Timestamp) error {
 	var leaseRenewal time.Duration
-	if r.requiresExpirationLeaseRLocked() {
+	if r.shouldUseExpirationLeaseRLocked() {
 		_, leaseRenewal = r.store.cfg.RangeLeaseDurations()
 	} else {
 		_, leaseRenewal = r.store.cfg.NodeLivenessDurations()
@@ -1426,6 +1444,44 @@ func (r *Replica) maybeExtendLeaseAsyncLocked(ctx context.Context, st kvserverpb
 	// completes), but the lease request will continue to completion independently
 	// of the caller's context
 	_ = r.requestLeaseLocked(ctx, st)
+}
+
+// maybeSwitchLeaseType will synchronously renew a lease using the appropriate
+// type if it is (or was) owned by this replica and has an incorrect type. This
+// typically happens when changing kv.expiration_leases_only.enabled.
+func (r *Replica) maybeSwitchLeaseType(ctx context.Context, st kvserverpb.LeaseStatus) *kvpb.Error {
+	if !st.OwnedBy(r.store.StoreID()) {
+		return nil
+	}
+
+	var llHandle *leaseRequestHandle
+	r.mu.Lock()
+	if !r.hasCorrectLeaseTypeRLocked(st.Lease) {
+		llHandle = r.requestLeaseLocked(ctx, st)
+	}
+	r.mu.Unlock()
+
+	if llHandle != nil {
+		select {
+		case pErr := <-llHandle.C():
+			return pErr
+		case <-ctx.Done():
+			return kvpb.NewError(ctx.Err())
+		}
+	}
+	return nil
+}
+
+// hasCorrectLeaseType returns true if the lease type is correct for this replica.
+func (r *Replica) hasCorrectLeaseType(lease roachpb.Lease) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.hasCorrectLeaseTypeRLocked(lease)
+}
+
+func (r *Replica) hasCorrectLeaseTypeRLocked(lease roachpb.Lease) bool {
+	hasExpirationLease := lease.Type() == roachpb.LeaseExpiration
+	return hasExpirationLease == r.shouldUseExpirationLeaseRLocked()
 }
 
 // leaseViolatesPreferences checks if current replica owns the lease and if it
