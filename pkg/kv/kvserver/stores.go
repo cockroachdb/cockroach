@@ -300,14 +300,3 @@ func (ls *Stores) updateBootstrapInfoLocked(bi *gossip.BootstrapInfo) error {
 	})
 	return err
 }
-
-func (ls *Stores) engines() []storage.Engine {
-	var engines []storage.Engine
-	ls.storeMap.Range(func(_ int64, v unsafe.Pointer) bool {
-		// TODO(sep-raft-log): at time of writing the only caller to this is
-		// TestClusterVersionWriteSynthesize.
-		engines = append(engines, (*Store)(v).TODOEngine())
-		return true // want more
-	})
-	return engines
-}

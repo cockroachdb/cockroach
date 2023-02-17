@@ -751,6 +751,9 @@ type Pebble struct {
 	}
 	asyncDone sync.WaitGroup
 
+	// minVersion is the minimum CockroachDB version that can open this store.
+	minVersion roachpb.Version
+
 	// closer is populated when the database is opened. The closer is associated
 	// with the filesyetem
 	closer io.Closer
@@ -1951,10 +1954,13 @@ func (p *Pebble) CreateCheckpoint(dir string, spans []roachpb.Span) error {
 
 // SetMinVersion implements the Engine interface.
 func (p *Pebble) SetMinVersion(version roachpb.Version) error {
+	p.minVersion = version
+
 	if p.readOnly {
 		// Don't make any on-disk changes.
 		return nil
 	}
+
 	// NB: SetMinVersion must be idempotent. It may called multiple
 	// times with the same version.
 
@@ -2008,6 +2014,11 @@ func (p *Pebble) SetMinVersion(version roachpb.Version) error {
 		}
 	}
 	return nil
+}
+
+// MinVersion implements the Engine interface.
+func (p *Pebble) MinVersion() roachpb.Version {
+	return p.minVersion
 }
 
 // BufferedSize implements the Engine interface.
