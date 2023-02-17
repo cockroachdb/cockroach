@@ -88,9 +88,8 @@ func (cb *onDeleteCascadeBuilder) Build(
 	return buildCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, func(b *Builder) memo.RelExpr {
 		fk := cb.mutatedTable.InboundForeignKey(cb.fkInboundOrdinal)
 
-		dep := opt.DepByID(fk.OriginTableID())
-		b.checkPrivilege(dep, cb.childTable, privilege.DELETE)
-		b.checkPrivilege(dep, cb.childTable, privilege.SELECT)
+		b.checkPrivilege(cb.childTable, privilege.DELETE)
+		b.checkPrivilege(cb.childTable, privilege.SELECT)
 
 		var mb mutationBuilder
 		mb.init(b, "delete", cb.childTable, tree.MakeUnqualifiedTableName(cb.childTable.Name()))
@@ -279,9 +278,8 @@ func (cb *onDeleteFastCascadeBuilder) Build(
 	return buildCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, func(b *Builder) memo.RelExpr {
 		fk := cb.mutatedTable.InboundForeignKey(cb.fkInboundOrdinal)
 
-		dep := opt.DepByID(fk.OriginTableID())
-		b.checkPrivilege(dep, cb.childTable, privilege.DELETE)
-		b.checkPrivilege(dep, cb.childTable, privilege.SELECT)
+		b.checkPrivilege(cb.childTable, privilege.DELETE)
+		b.checkPrivilege(cb.childTable, privilege.SELECT)
 
 		var mb mutationBuilder
 		mb.init(b, "delete", cb.childTable, tree.MakeUnqualifiedTableName(cb.childTable.Name()))
@@ -428,9 +426,8 @@ func (cb *onDeleteSetBuilder) Build(
 	return buildCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, func(b *Builder) memo.RelExpr {
 		fk := cb.mutatedTable.InboundForeignKey(cb.fkInboundOrdinal)
 
-		dep := opt.DepByID(fk.OriginTableID())
-		b.checkPrivilege(dep, cb.childTable, privilege.UPDATE)
-		b.checkPrivilege(dep, cb.childTable, privilege.SELECT)
+		b.checkPrivilege(cb.childTable, privilege.UPDATE)
+		b.checkPrivilege(cb.childTable, privilege.SELECT)
 
 		var mb mutationBuilder
 		mb.init(b, "update", cb.childTable, tree.MakeUnqualifiedTableName(cb.childTable.Name()))
@@ -641,9 +638,8 @@ func (cb *onUpdateCascadeBuilder) Build(
 	return buildCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, func(b *Builder) memo.RelExpr {
 		fk := cb.mutatedTable.InboundForeignKey(cb.fkInboundOrdinal)
 
-		dep := opt.DepByID(fk.OriginTableID())
-		b.checkPrivilege(dep, cb.childTable, privilege.UPDATE)
-		b.checkPrivilege(dep, cb.childTable, privilege.SELECT)
+		b.checkPrivilege(cb.childTable, privilege.UPDATE)
+		b.checkPrivilege(cb.childTable, privilege.SELECT)
 
 		var mb mutationBuilder
 		mb.init(b, "update", cb.childTable, tree.MakeUnqualifiedTableName(cb.childTable.Name()))

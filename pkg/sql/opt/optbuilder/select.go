@@ -115,11 +115,16 @@ func (b *Builder) buildDataSource(
 			return outScope
 		}
 
-		ds, depName, resName := b.resolveDataSource(tn, privilege.SELECT)
+		ds, resName := b.resolveDataSource(tn, privilege.SELECT)
 		locking = locking.filter(tn.ObjectName)
 		if locking.isSet() {
 			// SELECT ... FOR [KEY] UPDATE/SHARE also requires UPDATE privileges.
-			b.checkPrivilege(depName, ds, privilege.UPDATE)
+			b.checkPrivilege(ds, privilege.UPDATE)
+		}
+		// Track the schema referenced (implicitly or explicitly) by the table name.
+		unresolvedName := resName.ToUnresolvedObjectName()
+		if err := b.resolverHelper.trackObjectPath(b.ctx, unresolvedName); err != nil {
+			panic(err)
 		}
 
 		switch t := ds.(type) {
@@ -226,12 +231,12 @@ func (b *Builder) buildDataSource(
 		return outScope
 
 	case *tree.TableRef:
-		ds, depName := b.resolveDataSourceRef(source, privilege.SELECT)
+		ds := b.resolveDataSourceRef(source, privilege.SELECT)
 
 		locking = locking.filter(source.As.Alias)
 		if locking.isSet() {
 			// SELECT ... FOR [KEY] UPDATE/SHARE also requires UPDATE privileges.
-			b.checkPrivilege(depName, ds, privilege.UPDATE)
+			b.checkPrivilege(ds, privilege.UPDATE)
 		}
 
 		switch t := ds.(type) {

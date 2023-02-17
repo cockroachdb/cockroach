@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -473,7 +474,7 @@ func (b *Builder) maybeTrackRegclassDependenciesForViews(texpr tree.TypedExpr) {
 					}
 				} else {
 					tn := tree.MakeUnqualifiedTableName(tree.Name(regclass.String()))
-					ds, _, _ = b.resolveDataSource(&tn, privilege.SELECT)
+					ds, _ = b.resolveDataSource(&tn, privilege.SELECT)
 				}
 
 				b.schemaDeps = append(b.schemaDeps, opt.SchemaDep{
@@ -507,6 +508,10 @@ type optTrackingResolverHelper struct {
 func (o *optTrackingResolverHelper) trackObjectPath(
 	ctx context.Context, name *tree.UnresolvedObjectName,
 ) error {
+	if _, ok := catconstants.VirtualSchemaNames[name.Schema()]; ok {
+		// Ignore virtual schemas.
+		return nil
+	}
 	schemaName := cat.SchemaName{
 		CatalogName:     tree.Name(name.Catalog()),
 		SchemaName:      tree.Name(name.Schema()),

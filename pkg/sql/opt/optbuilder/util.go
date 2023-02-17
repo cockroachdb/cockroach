@@ -549,7 +549,7 @@ func (b *Builder) checkMultipleMutations(tab cat.Table, simpleInsert bool) {
 // raised if the current user does not have the given privilege.
 func (b *Builder) resolveTableForMutation(
 	n tree.TableExpr, priv privilege.Kind,
-) (tab cat.Table, depName opt.MDDepName, alias tree.TableName, columns []tree.ColumnID) {
+) (tab cat.Table, alias tree.TableName, columns []tree.ColumnID) {
 	// Strip off an outer AliasedTableExpr if there is one.
 	var outerAlias *tree.TableName
 	if ate, ok := n.(*tree.AliasedTableExpr); ok {
@@ -565,12 +565,10 @@ func (b *Builder) resolveTableForMutation(
 	switch t := n.(type) {
 	case *tree.TableName:
 		tab, alias = b.resolveTable(t, priv)
-		depName = opt.DepByName(t)
 
 	case *tree.TableRef:
 		tab = b.resolveTableRef(t, priv)
 		alias = tree.MakeUnqualifiedTableName(t.As.Alias)
-		depName = opt.DepByID(cat.StableID(t.TableID))
 
 		// See tree.TableRef: "Note that a nil [Columns] array means 'unspecified'
 		// (all columns). whereas an array of length 0 means 'zero columns'.
@@ -595,7 +593,7 @@ func (b *Builder) resolveTableForMutation(
 		panic(pgerror.Newf(pgcode.WrongObjectType, "cannot mutate materialized view %q", tab.Name()))
 	}
 
-	return tab, depName, alias, columns
+	return tab, alias, columns
 }
 
 // resolveTable returns the table in the catalog with the given name. If the
@@ -604,7 +602,7 @@ func (b *Builder) resolveTableForMutation(
 func (b *Builder) resolveTable(
 	tn *tree.TableName, priv privilege.Kind,
 ) (cat.Table, tree.TableName) {
-	ds, _, resName := b.resolveDataSource(tn, priv)
+	ds, resName := b.resolveDataSource(tn, priv)
 	tab, ok := ds.(cat.Table)
 	if !ok {
 		panic(sqlerrors.NewWrongObjectTypeError(tn, "table"))
@@ -616,7 +614,7 @@ func (b *Builder) resolveTable(
 // TableRef spec. If the name does not resolve to a table, or if the current
 // user does not have the given privilege, then resolveTableRef raises an error.
 func (b *Builder) resolveTableRef(ref *tree.TableRef, priv privilege.Kind) cat.Table {
-	ds, _ := b.resolveDataSourceRef(ref, priv)
+	ds := b.resolveDataSourceRef(ref, priv)
 	tab, ok := ds.(cat.Table)
 	if !ok {
 		panic(sqlerrors.NewWrongObjectTypeError(ref, "table"))
@@ -625,15 +623,15 @@ func (b *Builder) resolveTableRef(ref *tree.TableRef, priv privilege.Kind) cat.T
 }
 
 // resolveDataSource returns the data source in the catalog with the given name,
-// along with the table's MDDepName and data source name. If the name does not
-// resolve to a table, or if the current user does not have the given privilege,
-// then resolveDataSource raises an error.
+// along with the data source name. If the name does not resolve to a table, or
+// if the current user does not have the given privilege, then resolveDataSource
+// raises an error.
 //
 // If the b.qualifyDataSourceNamesInAST flag is set, tn is updated to contain
 // the fully qualified name.
 func (b *Builder) resolveDataSource(
 	tn *tree.TableName, priv privilege.Kind,
-) (cat.DataSource, opt.MDDepName, cat.DataSourceName) {
+) (cat.DataSource, cat.DataSourceName) {
 	var flags cat.Flags
 	if b.insideViewDef || b.insideFuncDef {
 		// Avoid taking descriptor leases when we're creating a view or a
@@ -644,24 +642,21 @@ func (b *Builder) resolveDataSource(
 	if err != nil {
 		panic(err)
 	}
-	depName := opt.DepByName(tn)
-	b.checkPrivilege(depName, ds, priv)
+	b.checkPrivilege(ds, priv)
 
 	if b.qualifyDataSourceNamesInAST {
 		*tn = resName
 		tn.ExplicitCatalog = true
 		tn.ExplicitSchema = true
 	}
-	return ds, depName, resName
+	return ds, resName
 }
 
 // resolveDataSourceFromRef returns the data source in the catalog that matches
-// the given TableRef spec, along with the table's MDDepName. If no data source
-// matches, or if the current user does not have the given privilege, then
-// resolveDataSourceFromRef raises an error.
-func (b *Builder) resolveDataSourceRef(
-	ref *tree.TableRef, priv privilege.Kind,
-) (cat.DataSource, opt.MDDepName) {
+// the given TableRef spec. If no data source matches, or if the current user
+// does not have the given privilege, then resolveDataSourceFromRef raises an
+// error.
+func (b *Builder) resolveDataSourceRef(ref *tree.TableRef, priv privilege.Kind) cat.DataSource {
 	var flags cat.Flags
 	if b.insideViewDef || b.insideFuncDef {
 		// Avoid taking table leases when we're creating a view or a function.
@@ -671,9 +666,8 @@ func (b *Builder) resolveDataSourceRef(
 	if err != nil {
 		panic(pgerror.Wrapf(err, pgcode.UndefinedObject, "%s", tree.ErrString(ref)))
 	}
-	depName := opt.DepByID(cat.StableID(ref.TableID))
-	b.checkPrivilege(depName, ds, priv)
-	return ds, depName
+	b.checkPrivilege(ds, priv)
+	return ds
 }
 
 // checkPrivilege ensures that the current user has the privilege needed to
@@ -681,7 +675,7 @@ func (b *Builder) resolveDataSourceRef(
 // error. It also adds the object and it's original unresolved name as a
 // dependency to the metadata, so that the privileges can be re-checked on reuse
 // of the memo.
-func (b *Builder) checkPrivilege(name opt.MDDepName, ds cat.DataSource, priv privilege.Kind) {
+func (b *Builder) checkPrivilege(ds cat.DataSource, priv privilege.Kind) {
 	if !(priv == privilege.SELECT && b.skipSelectPrivilegeChecks) {
 		err := b.catalog.CheckPrivilege(b.ctx, ds, priv)
 		if err != nil {
@@ -694,7 +688,7 @@ func (b *Builder) checkPrivilege(name opt.MDDepName, ds cat.DataSource, priv pri
 
 	// Add dependency on this object to the metadata, so that the metadata can be
 	// cached and later checked for freshness.
-	b.factory.Metadata().AddDependency(name, ds, priv)
+	b.factory.Metadata().AddDependency(ds, priv)
 }
 
 // resolveNumericColumnRefs converts a list of tree.ColumnIDs from a
