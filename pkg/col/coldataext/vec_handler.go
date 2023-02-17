@@ -99,9 +99,11 @@ func (v *vecHandler) Null() {
 }
 
 // String is part of the tree.ValueHandler interface.
-func (v *vecHandler) String(s string) {
+func (v *vecHandler) String(s string) (extraSize int64) {
 	v.bytes.Set(v.row, encoding.UnsafeConvertStringToBytes(s))
+	extraSize = v.bytes.ElemSize(v.row) - coldata.ElementSize
 	v.row++
+	return
 }
 
 // Date is part of the tree.ValueHandler interface.
@@ -123,9 +125,11 @@ func (v *vecHandler) Bool(b bool) {
 }
 
 // Bytes is part of the tree.ValueHandler interface.
-func (v *vecHandler) Bytes(b []byte) {
+func (v *vecHandler) Bytes(b []byte) (extraSize int64) {
 	v.bytes.Set(v.row, b)
+	extraSize = v.bytes.ElemSize(v.row) - coldata.ElementSize
 	v.row++
+	return
 }
 
 // Float is part of the tree.ValueHandler interface.
@@ -147,9 +151,11 @@ func (v *vecHandler) Duration(d duration.Duration) {
 }
 
 // JSON is part of the tree.ValueHandler interface.
-func (v *vecHandler) JSON(j json.JSON) {
+func (v *vecHandler) JSON(j json.JSON) (extraSize int64) {
 	v.jsons.Set(v.row, j)
+	extraSize = v.jsons.ElemSize(v.row) - coldata.ElementSize
 	v.row++
+	return
 }
 
 // TimestampTZ is part of the tree.ValueHandler interface.

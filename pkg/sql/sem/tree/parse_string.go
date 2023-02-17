@@ -160,30 +160,34 @@ func FormatBitArrayToType(d *DBitArray, t *types.T) *DBitArray {
 }
 
 // ValueHandler is an interface to allow raw types to be extracted from strings.
+// For types that don't pack perfectly in a machine type they return a size
+// indicator for memory accounting purposes.
 type ValueHandler interface {
 	Len() int
 	Null()
 	Date(d pgdate.Date)
 	Datum(d Datum)
 	Bool(b bool)
-	Bytes(b []byte)
+	Bytes(b []byte) int64
 	// Decimal returns a pointer into the vec for in place construction.
 	Decimal() *apd.Decimal
 	Float(f float64)
 	Int(i int64)
 	Duration(d duration.Duration)
-	JSON(j json.JSON)
-	String(s string)
+	JSON(j json.JSON) int64
+	String(s string) int64
 	TimestampTZ(t time.Time)
 	Reset()
 }
+
+var fixedDecimalSize uintptr = (&apd.Decimal{}).Size()
 
 // ParseAndRequireStringHandler parses a string and passes values
 // supported by the vector engine directly to a ValueHandler. Other types are
 // handled by ParseAndRequireString.
 func ParseAndRequireStringHandler(
 	t *types.T, s string, ctx ParseContext, vh ValueHandler, ph *pgdate.ParseHelper,
-) (err error) {
+) (extraSize int64, err error) {
 	switch t.Family() {
 	case types.BoolFamily:
 		var b bool
@@ -193,7 +197,7 @@ func ParseAndRequireStringHandler(
 	case types.BytesFamily:
 		var res []byte
 		if res, err = lex.DecodeRawBytesToByteArrayAuto(encoding.UnsafeConvertStringToBytes(s)); err == nil {
-			vh.Bytes(res)
+			extraSize = vh.Bytes(res)
 		} else {
 			err = MakeParseError(s, types.Bytes, err)
 		}
@@ -210,6 +214,7 @@ func ParseAndRequireStringHandler(
 			// Erase any invalid results.
 			*dec = apd.Decimal{}
 		}
+		extraSize = int64(dec.Size() - fixedDecimalSize)
 	case types.FloatFamily:
 		var f float64
 		if f, err = strconv.ParseFloat(s, 64); err == nil {
@@ -227,13 +232,13 @@ func ParseAndRequireStringHandler(
 	case types.JsonFamily:
 		var j json.JSON
 		if j, err = json.ParseJSON(s); err == nil {
-			vh.JSON(j)
+			extraSize = vh.JSON(j)
 		} else {
 			err = pgerror.Wrapf(err, pgcode.Syntax, "could not parse JSON")
 		}
 	case types.StringFamily:
 		s = truncateString(s, t)
-		vh.String(s)
+		extraSize += vh.String(s)
 	case types.TimestampTZFamily:
 		// TODO(cucaroach): can we refactor the next 3 case arms to be simpler
 		// and avoid code duplication?
@@ -276,16 +281,17 @@ func ParseAndRequireStringHandler(
 		var d DEnum
 		d, err = MakeDEnumFromLogicalRepresentation(t, s)
 		if err == nil {
-			vh.Bytes(d.PhysicalRep)
+			extraSize = vh.Bytes(d.PhysicalRep)
 		}
 	default:
 		if typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) != typeconv.DatumVecCanonicalTypeFamily {
-			return errors.AssertionFailedf("unexpected type %v in datum case arm, does a new type need to be handled?", t)
+			return 0, errors.AssertionFailedf("unexpected type %v in datum case arm, does a new type need to be handled?", t)
 		}
 		var d Datum
 		if d, _, err = ParseAndRequireString(t, s, ctx); err == nil {
 			vh.Datum(d)
+			extraSize = int64(d.Size())
 		}
 	}
-	return err
+	return extraSize, err
 }

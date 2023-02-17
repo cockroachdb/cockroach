@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -36,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgconn"
@@ -513,6 +515,90 @@ func TestShowQueriesIncludesCopy(t *testing.T) {
 		err = g.Wait()
 		require.ErrorContains(t, err, "query execution canceled")
 	})
+}
+
+// TestLargeDynamicRows ensure that we don't overflow memory with large rows by
+// testing that we break the inserts into batches, in this case at least 1
+// batch per row.  Also make sure adequately sized buffers just use 1 batch.
+func TestLargeDynamicRows(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	params, _ := tests.CreateTestServerParams()
+	var batchNumber int
+	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
+		BeforeCopyFromInsert: func() error {
+			batchNumber++
+			return nil
+		},
+	}
+	s, _, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	url, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), "copytest", url.User(username.RootUser))
+	defer cleanup()
+	var sqlConnCtx clisqlclient.Context
+	conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, url.String())
+
+	// Only copy-fast-path has proper row accounting, override metamorphic that
+	// might turn it off.
+	err := conn.Exec(ctx, `SET COPY_FAST_PATH_ENABLED = 'true'`)
+	require.NoError(t, err)
+
+	// 4.0 MiB is minimum, copy sets max row size to this value / 3
+	err = conn.Exec(ctx, "SET CLUSTER SETTING kv.raft.command.max_size = '4.0MiB'")
+	require.NoError(t, err)
+
+	err = conn.Exec(ctx, "CREATE TABLE t (s STRING)")
+	require.NoError(t, err)
+
+	rng, _ := randutil.NewTestRand()
+	str := randutil.RandString(rng, (2<<20)+1, "asdf")
+
+	var sb strings.Builder
+	for i := 0; i < 4; i++ {
+		sb.WriteString(str)
+		sb.WriteString("\n")
+	}
+	_, err = conn.GetDriverConn().CopyFrom(ctx, strings.NewReader(sb.String()), "COPY t FROM STDIN")
+	require.NoError(t, err)
+	require.Greater(t, batchNumber, 4)
+	batchNumber = 0
+
+	// Reset and make sure we use 1 batch.
+	err = conn.Exec(ctx, "RESET CLUSTER SETTING kv.raft.command.max_size")
+	require.NoError(t, err)
+
+	// This won't work if the batch size gets set to less than 4.
+	if sql.CopyBatchRowSize < 4 {
+		sql.SetCopyFromBatchSize(4)
+	}
+
+	_, err = conn.GetDriverConn().CopyFrom(ctx, strings.NewReader(sb.String()), "COPY t FROM STDIN")
+	require.NoError(t, err)
+	require.Equal(t, 1, batchNumber)
+}
+
+// TestTinyRows ensures batch sizing logic doesn't explode with small table.
+func TestTinyRows(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	params, _ := tests.CreateTestServerParams()
+	s, _, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	url, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), "copytest", url.User(username.RootUser))
+	defer cleanup()
+	var sqlConnCtx clisqlclient.Context
+	conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, url.String())
+
+	err := conn.Exec(ctx, "CREATE TABLE t (b BOOL PRIMARY KEY)")
+	require.NoError(t, err)
+
+	_, err = conn.GetDriverConn().CopyFrom(ctx, strings.NewReader("true\nfalse\n"), "COPY t FROM STDIN")
+	require.NoError(t, err)
 }
 
 // BenchmarkCopyFrom measures copy performance against a TestServer.
