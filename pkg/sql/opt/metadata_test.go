@@ -94,7 +94,7 @@ func TestMetadata(t *testing.T) {
 		t.Fatalf("unexpected types")
 	}
 
-	md.AddDependency(opt.DepByName(&tab.TabName), tab, privilege.CREATE)
+	md.AddDependency(tab, privilege.CREATE)
 	depsUpToDate, err := md.CheckDependencies(context.Background(), &evalCtx, testCat)
 	if err == nil || depsUpToDate {
 		t.Fatalf("expected table privilege to be revoked")

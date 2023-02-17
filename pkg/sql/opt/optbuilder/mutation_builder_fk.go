@@ -533,7 +533,7 @@ func (h *fkCheckHelper) initWithOutboundFK(mb *mutationBuilder, fkOrdinal int) b
 		return false
 	}
 	// We need SELECT privileges on the referenced table.
-	mb.b.checkPrivilege(opt.DepByID(refID), h.otherTab, privilege.SELECT)
+	mb.b.checkPrivilege(h.otherTab, privilege.SELECT)
 
 	numCols := h.fk.ColumnCount()
 	h.allocOrdinals(numCols)
@@ -584,7 +584,7 @@ func (h *fkCheckHelper) initWithInboundFK(mb *mutationBuilder, fkOrdinal int) (o
 		return false
 	}
 	// We need SELECT privileges on the origin table.
-	mb.b.checkPrivilege(opt.DepByID(originID), h.otherTab, privilege.SELECT)
+	mb.b.checkPrivilege(h.otherTab, privilege.SELECT)
 
 	numCols := h.fk.ColumnCount()
 	h.allocOrdinals(numCols)

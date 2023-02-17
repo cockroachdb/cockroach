@@ -361,12 +361,12 @@ func (c *CustomFuncs) foldOIDFamilyCast(
 				return nil, true, err
 			}
 
-			ds, resName, err := c.f.catalog.ResolveDataSource(c.f.ctx, flags, tn)
+			ds, _, err := c.f.catalog.ResolveDataSource(c.f.ctx, flags, tn)
 			if err != nil {
 				return nil, true, err
 			}
 
-			c.mem.Metadata().AddDependency(opt.DepByName(&resName), ds, privilege.SELECT)
+			c.mem.Metadata().AddDependency(ds, privilege.SELECT)
 			dOid = tree.NewDOidWithName(oid.Oid(ds.PostgresDescriptorID()), types.RegClass, string(tn.ObjectName))
 
 		default:

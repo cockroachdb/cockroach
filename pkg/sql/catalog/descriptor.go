@@ -955,7 +955,6 @@ type FunctionDescriptor interface {
 func FilterDroppedDescriptor(desc Descriptor) error {
 	if !desc.Dropped() {
 		return nil
-
 	}
 	return NewInactiveDescriptorError(ErrDescriptorDropped)
 }

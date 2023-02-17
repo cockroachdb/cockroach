@@ -39,7 +39,7 @@ func (b *Builder) buildDelete(del *tree.Delete, inScope *scope) (outScope *scope
 	}
 
 	// Find which table we're working on, check the permissions.
-	tab, depName, alias, refColumns := b.resolveTableForMutation(del.Table, privilege.DELETE)
+	tab, alias, refColumns := b.resolveTableForMutation(del.Table, privilege.DELETE)
 
 	if refColumns != nil {
 		panic(pgerror.Newf(pgcode.Syntax,
@@ -47,7 +47,7 @@ func (b *Builder) buildDelete(del *tree.Delete, inScope *scope) (outScope *scope
 	}
 
 	// Check Select permission as well, since existing values must be read.
-	b.checkPrivilege(depName, tab, privilege.SELECT)
+	b.checkPrivilege(tab, privilege.SELECT)
 
 	// Check if this table has already been mutated in another subquery.
 	b.checkMultipleMutations(tab, false /* simpleInsert */)
