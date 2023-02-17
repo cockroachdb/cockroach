@@ -16,6 +16,7 @@ go_library(
         "count.go",
         "hash_aggregator.go",
         "hash_group_joiner.go",
+        "insert.go",
         "invariants_checker.go",
         "limit.go",
         "materializer.go",
@@ -43,12 +44,16 @@ go_library(
         "//pkg/col/coldata",
         "//pkg/col/coldataext",  # keep
         "//pkg/col/typeconv",  # keep
+        "//pkg/kv/kvserver/kvserverbase",
         "//pkg/roachpb",
         "//pkg/server/telemetry",  # keep
         "//pkg/settings",
+        "//pkg/sql/catalog",
         "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/catalog/colinfo",  # keep
+        "//pkg/sql/catalog/descpb",
         "//pkg/sql/colconv",
+        "//pkg/sql/colenc",
         "//pkg/sql/colexec/colexecagg",  # keep
         "//pkg/sql/colexec/colexecargs",
         "//pkg/sql/colexec/colexecbase",
@@ -64,7 +69,9 @@ go_library(
         "//pkg/sql/execinfra/execreleasable",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/memsize",
+        "//pkg/sql/row",
         "//pkg/sql/rowenc",
+        "//pkg/sql/sem/catid",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqltelemetry",  # keep
@@ -73,7 +80,9 @@ go_library(
         "//pkg/util/buildutil",
         "//pkg/util/duration",  # keep
         "//pkg/util/encoding",  # keep
+        "//pkg/util/intsets",
         "//pkg/util/json",  # keep
+        "//pkg/util/log",
         "//pkg/util/stringarena",
         "//pkg/util/tracing",
         "@com_github_cockroachdb_apd_v3//:apd",  # keep

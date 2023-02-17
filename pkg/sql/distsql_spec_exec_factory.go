@@ -106,7 +106,7 @@ func (e *distSQLSpecExecFactory) ConstructValues(
 		planCtx := e.getPlanCtx(canDistribute)
 		colTypes := getTypesFromResultColumns(cols)
 		spec := e.dsp.createValuesSpec(planCtx, colTypes, len(rows), nil /* rawBytes */)
-		physPlan, err := e.dsp.createValuesPlan(planCtx, spec, colTypes)
+		physPlan, _, err := e.dsp.createValuesPlan(planCtx, spec, colTypes)
 		if err != nil {
 			return nil, err
 		}
@@ -149,7 +149,7 @@ func (e *distSQLSpecExecFactory) ConstructValues(
 		if err != nil {
 			return nil, err
 		}
-		physPlan, err = e.dsp.createValuesPlan(planCtx, spec, colTypes)
+		physPlan, _, err = e.dsp.createValuesPlan(planCtx, spec, colTypes)
 	}
 	if err != nil {
 		return nil, err
