@@ -36,7 +36,7 @@ func TestEncodeCopy(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("%s, delimiter %c", tc.in, tc.delimiter), func(t *testing.T) {
 			var b bytes.Buffer
-			require.NoError(t, encodeCopy(&b, []byte(tc.in), tc.delimiter))
+			require.NoError(t, EncodeCopy(&b, []byte(tc.in), tc.delimiter))
 			require.Equal(t, tc.expected, b.String())
 
 			// Check decode is the same.
