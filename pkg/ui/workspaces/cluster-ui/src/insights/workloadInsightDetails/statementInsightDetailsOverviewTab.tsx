@@ -56,7 +56,7 @@ export const StatementInsightDetailsOverviewTab: React.FC<
   const isCockroachCloud = useContext(CockroachCloudContext);
 
   const insightsColumns = useMemo(
-    () => makeInsightsColumns(isCockroachCloud, hasAdminRole, true),
+    () => makeInsightsColumns(isCockroachCloud, hasAdminRole),
     [isCockroachCloud, hasAdminRole],
   );
 

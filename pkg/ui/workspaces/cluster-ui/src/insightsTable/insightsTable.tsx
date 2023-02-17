@@ -131,11 +131,15 @@ const StatementExecution = ({
 
 function descriptionCell(
   insightRec: InsightRecommendation,
-  isExecution: boolean,
+  disableStmtLink: boolean,
   isCockroachCloud: boolean,
+  isFingerprint: boolean,
 ): React.ReactElement {
   const stmtLink = isIndexRec(insightRec) ? (
-    <StatementExecution rec={insightRec} disableLink={!isExecution} />
+    <StatementExecution
+      rec={insightRec}
+      disableLink={disableStmtLink || isFingerprint}
+    />
   ) : null;
 
   const clusterSettingsLink = (
@@ -201,7 +205,7 @@ function descriptionCell(
     case "HighContention":
       return (
         <>
-          {isExecution && (
+          {!isFingerprint && (
             <div className={cx("description-item")}>
               <span className={cx("label-bold")}>Time Spent Waiting: </span>{" "}
               {Duration(insightRec.details.duration * 1e6)}
@@ -209,7 +213,7 @@ function descriptionCell(
           )}
           {stmtLink}
           <div className={cx("description-item")}>
-            {isExecution && (
+            {!isFingerprint && (
               <span className={cx("label-bold")}>Description: </span>
             )}
             {insightRec.details.description} {clusterSettingsLink}
@@ -272,7 +276,7 @@ function descriptionCell(
     case "Unknown":
       return (
         <>
-          {isExecution && (
+          {!isFingerprint && (
             <div className={cx("description-item")}>
               <span className={cx("label-bold")}>Elapsed Time: </span>
               {Duration(insightRec.details.duration * 1e6)}
@@ -280,7 +284,7 @@ function descriptionCell(
           )}
           {stmtLink}
           <div className={cx("description-item")}>
-            {isExecution && (
+            {!isFingerprint && (
               <span className={cx("label-bold")}>Description: </span>
             )}
             {insightRec.details.description} {clusterSettingsLink}
@@ -390,7 +394,8 @@ const isIndexRec = (rec: InsightRecommendation) => {
 export function makeInsightsColumns(
   isCockroachCloud: boolean,
   hasAdminRole: boolean,
-  isExecution?: boolean,
+  disableStmtLink?: boolean,
+  isFingerprint?: boolean,
 ): ColumnDescriptor<InsightRecommendation>[] {
   const columns: ColumnDescriptor<InsightRecommendation>[] = [
     {
@@ -403,17 +408,17 @@ export function makeInsightsColumns(
       name: "details",
       title: insightsTableTitles.details(),
       cell: (item: InsightRecommendation) =>
-        descriptionCell(item, isExecution, isCockroachCloud),
+        descriptionCell(item, disableStmtLink, isCockroachCloud, isFingerprint),
       sort: (item: InsightRecommendation) => item.type,
     },
     {
       name: "action",
       title: insightsTableTitles.actions(),
       cell: (item: InsightRecommendation) =>
-        actionCell(item, isCockroachCloud || !hasAdminRole || !isExecution),
+        actionCell(item, isCockroachCloud || !hasAdminRole || isFingerprint),
     },
   ];
-  if (!isExecution) {
+  if (isFingerprint) {
     columns.push({
       name: "latestExecution",
       title: insightsTableTitles.latestExecution(),
