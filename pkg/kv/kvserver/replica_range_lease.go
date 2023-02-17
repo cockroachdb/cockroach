@@ -75,6 +75,13 @@ var transferExpirationLeasesFirstEnabled = settings.RegisterBoolSetting(
 	true,
 )
 
+var expirationLeasesOnly = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.expiration_leases_only.enabled",
+	"only use expiration-based leases, never epoch-based ones (experimental, affects performance)",
+	false,
+)
+
 var leaseStatusLogLimiter = func() *log.EveryN {
 	e := log.Every(15 * time.Second)
 	e.ShouldLog() // waste the first shot
@@ -257,23 +264,23 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		ProposedTS: &status.Now,
 	}
 
-	if p.repl.requiresExpirationLeaseRLocked() ||
+	if p.repl.shouldUseExpirationLeaseRLocked() ||
 		(transfer &&
 			transferExpirationLeasesFirstEnabled.Get(&p.repl.store.ClusterSettings().SV) &&
 			p.repl.store.ClusterSettings().Version.IsActive(ctx, clusterversion.TODODelete_V22_2EnableLeaseUpgrade)) {
-		// In addition to ranges that unconditionally require expiration-based
-		// leases (node liveness and earlier), we also use them during lease
-		// transfers for all other ranges. After acquiring these expiration
-		// based leases, the leaseholders are expected to upgrade them to the
-		// more efficient epoch-based ones. But by transferring an
-		// expiration-based lease, we can limit the effect of an ill-advised
-		// lease transfer since the incoming leaseholder needs to recognize
-		// itself as such within a few seconds; if it doesn't (we accidentally
-		// sent the lease to a replica in need of a snapshot or far behind on
-		// its log), the lease is up for grabs. If we simply transferred epoch
-		// based leases, it's possible for the new leaseholder that's delayed
-		// in applying the lease transfer to maintain its lease (assuming the
-		// node it's on is able to heartbeat its liveness record).
+		// In addition to ranges that should be using expiration-based leases
+		// (typically the meta and liveness ranges), we also use them during lease
+		// transfers for all other ranges. After acquiring these expiration based
+		// leases, the leaseholders are expected to upgrade them to the more
+		// efficient epoch-based ones. But by transferring an expiration-based
+		// lease, we can limit the effect of an ill-advised lease transfer since the
+		// incoming leaseholder needs to recognize itself as such within a few
+		// seconds; if it doesn't (we accidentally sent the lease to a replica in
+		// need of a snapshot or far behind on its log), the lease is up for grabs.
+		// If we simply transferred epoch based leases, it's possible for the new
+		// leaseholder that's delayed in applying the lease transfer to maintain its
+		// lease (assuming the node it's on is able to heartbeat its liveness
+		// record).
 		reqLease.Expiration = &hlc.Timestamp{}
 		*reqLease.Expiration = status.Now.ToTimestamp().Add(int64(p.repl.store.cfg.RangeLeaseActiveDuration()), 0)
 	} else {
@@ -804,6 +811,13 @@ func (r *Replica) requiresExpirationLeaseRLocked() bool {
 		r.mu.state.Desc.StartKey.Less(roachpb.RKey(keys.NodeLivenessKeyMax))
 }
 
+// shouldUseExpirationLeaseRLocked returns true if this range should be using an
+// expiration-based lease, either because it requires one or because
+// kv.expiration_leases_only.enabled is enabled.
+func (r *Replica) shouldUseExpirationLeaseRLocked() bool {
+	return expirationLeasesOnly.Get(&r.ClusterSettings().SV) || r.requiresExpirationLeaseRLocked()
+}
+
 // requestLeaseLocked executes a request to obtain or extend a lease
 // asynchronously and returns a channel on which the result will be posted. If
 // there's already a request in progress, we join in waiting for the results of
@@ -1033,7 +1047,7 @@ func NewLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(
 // lease's expiration (and stasis period).
 func (r *Replica) checkRequestTimeRLocked(now hlc.ClockTimestamp, reqTS hlc.Timestamp) error {
 	var leaseRenewal time.Duration
-	if r.requiresExpirationLeaseRLocked() {
+	if r.shouldUseExpirationLeaseRLocked() {
 		_, leaseRenewal = r.store.cfg.RangeLeaseDurations()
 	} else {
 		_, leaseRenewal = r.store.cfg.NodeLivenessDurations()
