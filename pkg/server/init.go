@@ -554,7 +554,7 @@ func (s *initServer) initializeFirstStoreAfterJoin(
 }
 
 func assertEnginesEmpty(engines []storage.Engine) error {
-	storeClusterVersionKey := keys.StoreClusterVersionKey()
+	storeClusterVersionKey := keys.DeprecatedStoreClusterVersionKey()
 
 	for _, engine := range engines {
 		err := func() error {
