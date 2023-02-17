@@ -160,6 +160,8 @@ func FormatBitArrayToType(d *DBitArray, t *types.T) *DBitArray {
 }
 
 // ValueHandler is an interface to allow raw types to be extracted from strings.
+// For types that don't pack perfectly in a machine type they return a size
+// indicator for memory accounting purposes.
 type ValueHandler interface {
 	Len() int
 	Null()
@@ -177,6 +179,8 @@ type ValueHandler interface {
 	TimestampTZ(t time.Time)
 	Reset()
 }
+
+var fixedDecimalSize uintptr = (&apd.Decimal{}).Size()
 
 // ParseAndRequireStringHandler parses a string and passes values
 // supported by the vector engine directly to a ValueHandler. Other types are

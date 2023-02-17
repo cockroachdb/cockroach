@@ -13,6 +13,8 @@ package optbuilder
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -20,6 +22,29 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
+
+// hlper to see if all exprs are Datums
+func isLiteralValues(values *tree.ValuesClause) bool {
+	for _, exprs := range values.Rows {
+		for _, expr := range exprs {
+			if _, ok := expr.(tree.Datum); !ok {
+				return false
+			}
+			if _, ok := expr.(*tree.Placeholder); ok {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func (b *Builder) buildVectorRows(
+	values *tree.ValuesClause, desiredTypes []*types.T,
+) tree.ExprContainer {
+	factory := coldataext.NewExtendedColumnFactory(b.evalCtx)
+	batch := coldata.NewMemBatchWithCapacity(desiredTypes, len(values.Rows), factory)
+	return tree.VectorRows{Batch: batch}
+}
 
 // buildValuesClause builds a set of memo groups that represent the given values
 // clause.
