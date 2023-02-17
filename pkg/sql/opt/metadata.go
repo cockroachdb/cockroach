@@ -103,12 +103,7 @@ type Metadata struct {
 	userDefinedTypesSlice []*types.T
 
 	// deps stores information about all data source objects depended on by the
-	// query, as well as the privileges required to access them. The objects are
-	// deduplicated: any name/object pair shows up at most once.
-	// Note: the same data source object can appear multiple times if different
-	// names were used. For example, in the query `SELECT * from t, db.t` the two
-	// tables might resolve to the same object now but to different objects later;
-	// we want to verify the resolution of both names.
+	// query, as well as the privileges required to access them.
 	deps []mdDep
 
 	// views stores the list of referenced views. This information is only
@@ -139,26 +134,8 @@ type Metadata struct {
 type mdDep struct {
 	ds cat.DataSource
 
-	name MDDepName
-
 	// privileges is the union of all required privileges.
 	privileges privilegeBitmap
-}
-
-// MDDepName stores either the unresolved DataSourceName or the StableID from
-// the query that was used to resolve a data source.
-type MDDepName struct {
-	// byID is non-zero if and only if the data source was looked up using the
-	// StableID.
-	byID cat.StableID
-
-	// byName is non-zero if and only if the data source was looked up using a
-	// name.
-	byName cat.DataSourceName
-}
-
-func (n *MDDepName) equals(other *MDDepName) bool {
-	return n.byID == other.byID && n.byName.Equals(&other.byName)
 }
 
 // Init prepares the metadata for use (or reuse).
@@ -264,33 +241,21 @@ func (md *Metadata) CopyFrom(from *Metadata, copyScalarFn func(Expr) Expr) {
 	md.withBindings = nil
 }
 
-// DepByName is used with AddDependency when the data source was looked up using a
-// data source name.
-func DepByName(name *cat.DataSourceName) MDDepName {
-	return MDDepName{byName: *name}
-}
-
-// DepByID is used with AddDependency when the data source was looked up by ID.
-func DepByID(id cat.StableID) MDDepName {
-	return MDDepName{byID: id}
-}
-
 // AddDependency tracks one of the catalog data sources on which the query
 // depends, as well as the privilege required to access that data source. If
 // the Memo using this metadata is cached, then a call to CheckDependencies can
 // detect if the name resolves to a different data source now, or if changes to
 // schema or permissions on the data source has invalidated the cached metadata.
-func (md *Metadata) AddDependency(name MDDepName, ds cat.DataSource, priv privilege.Kind) {
-	// Search for the same name / object pair.
+func (md *Metadata) AddDependency(ds cat.DataSource, priv privilege.Kind) {
+	// Search for the same object.
 	for i := range md.deps {
-		if md.deps[i].ds == ds && md.deps[i].name.equals(&name) {
+		if md.deps[i].ds == ds {
 			md.deps[i].privileges |= (1 << priv)
 			return
 		}
 	}
 	md.deps = append(md.deps, mdDep{
 		ds:         ds,
-		name:       name,
 		privileges: (1 << priv),
 	})
 }
@@ -301,7 +266,8 @@ func (md *Metadata) AddDependency(name MDDepName, ds cat.DataSource, priv privil
 // objects. If the dependencies are no longer up-to-date, then CheckDependencies
 // returns false.
 //
-// This function cannot swallow errors and return only a boolean, as it may
+// This function can swallow "undefined" and "dropped" object errors, since
+// these are expected. Other errors cannot be swallowed, as the function may
 // perform KV operations on behalf of the transaction associated with the
 // provided catalog, and those errors are required to be propagated.
 func (md *Metadata) CheckDependencies(
@@ -340,15 +306,7 @@ func (md *Metadata) CheckDependencies(
 		}
 	}
 	for i := range md.deps {
-		name := &md.deps[i].name
-		var toCheck cat.DataSource
-		var err error
-		if name.byID != 0 {
-			toCheck, _, err = optCatalog.ResolveDataSourceByID(ctx, cat.Flags{}, name.byID)
-		} else {
-			// Resolve data source object.
-			toCheck, _, err = optCatalog.ResolveDataSource(ctx, cat.Flags{}, &name.byName)
-		}
+		toCheck, _, err := optCatalog.ResolveDataSourceByID(ctx, cat.Flags{}, md.deps[i].ds.ID())
 		if err != nil {
 			return false, handleDescError(err)
 		}

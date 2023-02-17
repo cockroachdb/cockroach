@@ -182,7 +182,7 @@ func init() {
 // and thereby scrambles the input ordering.
 func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope) {
 	// Find which table we're working on, check the permissions.
-	tab, depName, alias, refColumns := b.resolveTableForMutation(ins.Table, privilege.INSERT)
+	tab, alias, refColumns := b.resolveTableForMutation(ins.Table, privilege.INSERT)
 
 	// It is possible to insert into specific columns using table reference
 	// syntax:
@@ -204,12 +204,12 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 	if ins.OnConflict != nil {
 		// UPSERT and INDEX ON CONFLICT will read from the table to check for
 		// duplicates.
-		b.checkPrivilege(depName, tab, privilege.SELECT)
+		b.checkPrivilege(tab, privilege.SELECT)
 
 		if !ins.OnConflict.DoNothing {
 			// UPSERT and INDEX ON CONFLICT DO UPDATE may modify rows if the
 			// DO NOTHING clause is not present.
-			b.checkPrivilege(depName, tab, privilege.UPDATE)
+			b.checkPrivilege(tab, privilege.UPDATE)
 		}
 	}
 
