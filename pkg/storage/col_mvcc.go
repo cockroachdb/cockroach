@@ -15,11 +15,13 @@ import (
 	"context"
 	"math"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
@@ -135,9 +137,14 @@ type NextKVer interface {
 // the needed (according to the fetchpb.IndexFetchSpec) vectors and returns a
 // serialized representation of coldata.Batch.
 type CFetcherWrapper interface {
-	// NextBatch gives back the next column-oriented batch, serialized in Arrow
-	// batch format.
-	NextBatch(ctx context.Context) ([]byte, error)
+	// NextBatch gives back the next column-oriented batch, possibly serialized
+	// in Arrow batch format. If the serialized representation is returned, then
+	// it'll be invalidated on the next call, so the caller must perform a copy.
+	//
+	// Regardless of the format of the return value, the memory accounting for
+	// all returned batches throughout the lifetime of the CFetcherWrapper is
+	// done against the provided in GetCFetcherWrapper() memory accounts.
+	NextBatch(ctx context.Context) ([]byte, coldata.Batch, error)
 
 	// Close release the resources held by this CFetcherWrapper. It *must* be
 	// called after use of the wrapper.
@@ -147,12 +154,15 @@ type CFetcherWrapper interface {
 // GetCFetcherWrapper returns a CFetcherWrapper. It's injected from
 // pkg/sql/colfetcher to avoid circular dependencies since storage can't depend
 // on higher levels of the system.
+//
+// Note: the fetcherAccount must **not** be shared with any other component.
 var GetCFetcherWrapper func(
 	ctx context.Context,
 	fetcherAccount, converterAccount *mon.BoundAccount,
 	indexFetchSpec *fetchpb.IndexFetchSpec,
 	nextKVer NextKVer,
 	startKey roachpb.Key,
+	mustSerialize bool,
 ) (CFetcherWrapper, error)
 
 // onNextKVFn represents the transition that the mvccScanFetchAdapter needs to
@@ -438,6 +448,8 @@ func mvccScanToCols(
 	fetcherAcc, converterAcc := monitor.MakeBoundAccount(), monitor.MakeBoundAccount()
 	defer fetcherAcc.Close(ctx)
 	defer converterAcc.Close(ctx)
+	_, isLocal := grpcutil.IsLocalRequestContext(ctx)
+	mustSerialize := !isLocal
 	wrapper, err := GetCFetcherWrapper(
 		ctx,
 		&fetcherAcc,
@@ -445,6 +457,7 @@ func mvccScanToCols(
 		indexFetchSpec,
 		&adapter,
 		key,
+		mustSerialize,
 	)
 	if err != nil {
 		return MVCCScanResult{}, err
@@ -457,18 +470,22 @@ func mvccScanToCols(
 		res = MVCCScanResult{}
 	}
 	for {
-		batch, err := wrapper.NextBatch(ctx)
+		serializedBatch, colBatch, err := wrapper.NextBatch(ctx)
 		if err != nil {
 			return res, err
 		}
-		if batch == nil {
+		if serializedBatch == nil && colBatch == nil {
 			break
 		}
-		// We need to make a copy since the wrapper reuses underlying bytes
-		// buffer.
-		b := make([]byte, len(batch))
-		copy(b, batch)
-		res.KVData = append(res.KVData, b)
+		if len(serializedBatch) > 0 {
+			// We need to make a copy since the wrapper reuses underlying bytes
+			// buffer.
+			b := make([]byte, len(serializedBatch))
+			copy(b, serializedBatch)
+			res.KVData = append(res.KVData, b)
+		} else {
+			res.ColBatches = append(res.ColBatches, colBatch)
+		}
 	}
 
 	res.ResumeSpan, res.ResumeReason, res.ResumeNextBytes, err = mvccScanner.afterScan()

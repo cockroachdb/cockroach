@@ -69,7 +69,7 @@ func NewValuesOp(
 	for i := range spec.Columns {
 		v.typs[i] = spec.Columns[i].Type
 	}
-	v.helper.Init(allocator, memoryLimit, v.typs)
+	v.helper.Init(allocator, memoryLimit, v.typs, false /* noBatchReuse */)
 	return v
 }
 

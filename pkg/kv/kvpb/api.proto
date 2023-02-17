@@ -558,10 +558,25 @@ enum ScanFormat {
   // The batch_response format: a byte slice of alternating keys and values,
   // each prefixed by their length as a varint.
   BATCH_RESPONSE = 1;
-  // The serialized (in the Apache Arrow format) representation of
-  // coldata.Batch'es that contain only necessary (according to the
-  // fetchpb.IndexFetchSpec) columns.
+  // The coldata.Batch response format: only necessary (according to the
+  // fetchpb.IndexFetchSpec) columns are populated in the coldata.Batch'es which
+  // are either serialized (in the Apache Arrow format) in the batch_responses
+  // field or passed as is in the col_batches field of the response,
+  // respectively.
   COL_BATCH_RESPONSE = 2;
+}
+
+// ColBatches is a way to pass []coldata.Batch without serialization through the
+// protobufs for Scans and ReverseScans, when they are executed locally and with
+// the COL_BATCH_RESPONSE scan format.
+message ColBatches {
+  option (gogoproto.goproto_stringer) = false;
+  option (gogoproto.equal) = false;
+  option (gogoproto.marshaler) = false;
+  option (gogoproto.sizer) = false;
+  option (gogoproto.unmarshaler) = false;
+  repeated bytes col_batches = 1 [(gogoproto.nullable) = false,
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/col/coldata.Batch"];
 }
 
 
@@ -574,8 +589,8 @@ message ScanRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 
   // The desired format for the response. If set to BATCH_RESPONSE or
-  // COL_BATCH_RESPONSE, the server will set the batch_responses field in the
-  // ScanResponse instead of the rows field.
+  // COL_BATCH_RESPONSE, the server will set either the batch_responses field or
+  // the col_batches field in the ScanResponse instead of the rows field.
   ScanFormat scan_format = 4;
 
   // The desired key-level locking mode used during this scan. When set to None
@@ -594,7 +609,8 @@ message ScanRequest {
 // A ScanResponse is the return value from the Scan() method.
 message ScanResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  // Empty if no rows were scanned.
+  // Empty if no rows were scanned or BATCH_RESPONSE / COL_BATCH_RESPONSE scan
+  // format was used.
   repeated KeyValue rows = 2 [(gogoproto.nullable) = false];
   // The intent rows seen when performing a scan at the READ_UNCOMMITTED
   // consistency level. These rows do not count against the MaxSpanRequestKeys
@@ -618,8 +634,18 @@ message ScanResponse {
   // complete. num_keys total key-value pairs were used to populate all of the
   // coldata.Batch'es in this field.
   //
-  // If set, rows will not be set and vice versa.
+  // If set, rows and col_batches will not be set.
   repeated bytes batch_responses = 4;
+  // If set, then each element in the slice is a single non-serialized
+  // coldata.Batch. Each SQL row in that coldata.Batch is complete. num_keys
+  // total key-value pairs were used to populate all of the coldata.Batch'es in
+  // this field.
+  //
+  // If set, rows and batch_responses will not be set.
+  // TODO(feedback wanted): should this be nullable? This will decrease the size
+  // of the struct in cases when this field is not used by 16 bytes, but it'd
+  // introduce an extra allocation and extra 8 bytes when it is used.
+  ColBatches col_batches = 5 [(gogoproto.nullable) = false];
 }
 
 // A ReverseScanRequest is the argument to the ReverseScan() method. It specifies the
@@ -631,8 +657,8 @@ message ReverseScanRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 
   // The desired format for the response. If set to BATCH_RESPONSE or
-  // COL_BATCH_RESPONSE, the server will set the batch_responses field in the
-  // ScanResponse instead of the rows field.
+  // COL_BATCH_RESPONSE, the server will set either the batch_responses field or
+  // the col_batches field in the ReverseScanResponse instead of the rows field.
   ScanFormat scan_format = 4;
 
   // The desired key-level locking mode used during this scan. When set to None
@@ -651,7 +677,8 @@ message ReverseScanRequest {
 // A ReverseScanResponse is the return value from the ReverseScan() method.
 message ReverseScanResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  // Empty if no rows were scanned.
+  // Empty if no rows were scanned or BATCH_RESPONSE / COL_BATCH_RESPONSE scan
+  // format was used.
   repeated KeyValue rows = 2 [(gogoproto.nullable) = false];
   // The intent rows seen when performing a scan at the READ_UNCOMMITTED
   // consistency level. These rows do not count against the MaxSpanRequestKeys
@@ -675,8 +702,18 @@ message ReverseScanResponse {
   // complete. num_keys total key-value pairs were used to populate all of the
   // coldata.Batch'es in this field.
   //
-  // If set, rows will not be set and vice versa.
+  // If set, rows and col_batches will not be set.
   repeated bytes batch_responses = 4;
+  // If set, then each element in the slice is a single non-serialized
+  // coldata.Batch. Each SQL row in that coldata.Batch is complete. num_keys
+  // total key-value pairs were used to populate all of the coldata.Batch'es in
+  // this field.
+  //
+  // If set, rows and batch_responses will not be set.
+  // TODO(feedback wanted): should this be nullable? This will decrease the size
+  // of the struct in cases when this field is not used by 16 bytes, but it'd
+  // introduce an extra allocation and extra 8 bytes when it is used.
+  ColBatches col_batches = 5 [(gogoproto.nullable) = false];
 }
 
 

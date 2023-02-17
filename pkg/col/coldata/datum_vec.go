@@ -56,4 +56,6 @@ type DatumVec interface {
 	// Reset resets the vector for reuse. It returns the number of bytes
 	// released.
 	Reset() int64
+	// SetEvalCtx updates the vector with the provided *eval.Context.
+	SetEvalCtx(evalCtx interface{})
 }

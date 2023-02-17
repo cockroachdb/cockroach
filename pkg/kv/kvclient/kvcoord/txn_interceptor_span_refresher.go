@@ -372,7 +372,7 @@ func (sr *txnSpanRefresher) splitEndTxnAndRetrySend(
 	// Combine the responses.
 	br := brPrefix
 	br.Responses = append(br.Responses, kvpb.ResponseUnion{})
-	if err := br.Combine(brSuffix, []int{etIdx}); err != nil {
+	if err := br.Combine(ctx, brSuffix, []int{etIdx}, ba); err != nil {
 		return nil, kvpb.NewError(err)
 	}
 	return br, nil

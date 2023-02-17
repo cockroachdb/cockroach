@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -599,6 +600,9 @@ func ResponseKeyIterate(req Request, resp Response, fn func(roachpb.Key)) error 
 						"ScanRequest with COL_BATCH_RESPONSE scan format",
 				)
 			}
+			if len(v.ColBatches.ColBatches) > 0 {
+				return errors.AssertionFailedf("unexpectedly non-empty ColBatches")
+			}
 		}
 	case *ReverseScanResponse:
 		// If ScanFormat == KEY_VALUES.
@@ -623,6 +627,9 @@ func ResponseKeyIterate(req Request, resp Response, fn func(roachpb.Key)) error 
 						"ReverseScanRequest with COL_BATCH_RESPONSE scan format",
 				)
 			}
+			if len(v.ColBatches.ColBatches) > 0 {
+				return errors.AssertionFailedf("unexpectedly non-empty ColBatches")
+			}
 		}
 	default:
 		return errors.Errorf("cannot iterate over response keys of %s request", req.Method())
@@ -637,7 +644,9 @@ func ResponseKeyIterate(req Request, resp Response, fn func(roachpb.Key)) error 
 // the supplied BatchResponse must not be used any more.
 // It is an error to call Combine on responses with errors in them. The
 // DistSender strips the errors from any responses that it combines.
-func (br *BatchResponse) Combine(otherBatch *BatchResponse, positions []int) error {
+func (br *BatchResponse) Combine(
+	ctx context.Context, otherBatch *BatchResponse, positions []int, ba *BatchRequest,
+) error {
 	if err := br.BatchResponse_Header.combine(otherBatch.BatchResponse_Header); err != nil {
 		return err
 	}
@@ -649,7 +658,7 @@ func (br *BatchResponse) Combine(otherBatch *BatchResponse, positions []int) err
 		}
 		valLeft := br.Responses[pos].GetInner()
 		valRight := otherBatch.Responses[i].GetInner()
-		if err := CombineResponses(valLeft, valRight); err != nil {
+		if err := CombineResponses(ctx, valLeft, valRight, ba); err != nil {
 			return err
 		}
 	}
@@ -874,4 +883,34 @@ func (ba BatchRequest) ValidateForEvaluation() error {
 		}
 	}
 	return nil
+}
+
+func (cb ColBatches) Size() int {
+	var size int
+	for _, b := range cb.ColBatches {
+		size += int(coldata.GetBatchMemSize(b))
+	}
+	return size
+}
+
+func (ColBatches) MarshalToSizedBuffer([]byte) (int, error) { return 0, nil }
+
+func (ColBatches) Unmarshal(b []byte) error {
+	if buildutil.CrdbTestBuild {
+		if len(b) > 0 {
+			return errors.AssertionFailedf("unexpectedly unmarshaling a non-empty ColBatches")
+		}
+	}
+	return nil
+}
+
+func (cb ColBatches) String() string {
+	var sb strings.Builder
+	for i, b := range cb.ColBatches {
+		sb.WriteString(b.String())
+		if i > 0 {
+			sb.WriteString("\n")
+		}
+	}
+	return sb.String()
 }
