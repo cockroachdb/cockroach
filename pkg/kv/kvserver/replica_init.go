@@ -395,6 +395,15 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 	r.concMgr.OnRangeDescUpdated(desc)
 	r.mu.state.Desc = desc
 
+	// Determine whether the replica unconditionally requires an expiration-based
+	// lease. Ranges located before or including the node liveness table must
+	// always use expiration leases to avoid circular dependencies on the node
+	// liveness table.
+	//
+	// Some tests don't use node liveness, and require expiration leases.
+	r.mu.requiresExpirationLease = r.store.cfg.NodeLiveness == nil ||
+		r.mu.state.Desc.StartKey.Less(roachpb.RKey(keys.NodeLivenessKeyMax))
+
 	// Prioritize the NodeLiveness Range in the Raft scheduler above all other
 	// Ranges to ensure that liveness never sees high Raft scheduler latency.
 	if bytes.HasPrefix(desc.StartKey, keys.NodeLivenessPrefix) {

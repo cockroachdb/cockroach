@@ -399,6 +399,15 @@ type Replica struct {
 		// The state of the Raft state machine. Updated only when raftMu and mu are
 		// both held.
 		state kvserverpb.ReplicaState
+		// requiresExpirationLease specifies whether this range unconditionally
+		// requires an expiration-based lease. Ranges located before or including
+		// the node liveness table must always use expiration leases to avoid
+		// circular dependencies on the node liveness table. Other ranges may use
+		// expiration-based leases regardless of this value, e.g. during lease
+		// transfers.
+		//
+		// This field is updated whenever state.Desc changes.
+		requiresExpirationLease bool
 		// Last index/term written to the raft log (not necessarily durable locally
 		// or committed by the group). Note that lastTermNotDurable may be 0 (and
 		// thus invalid) even when lastIndexNotDurable is known, in which case the

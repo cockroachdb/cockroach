@@ -362,7 +362,7 @@ func (r *Replica) leasePostApplyLocked(
 	// lease but not the updated merge or timestamp cache state, which can result
 	// in serializability violations.
 	r.mu.state.Lease = newLease
-	requiresExpirationBasedLease := r.requiresExpiringLeaseRLocked()
+	requiresExpirationBasedLease := r.requiresExpirationLeaseRLocked()
 	hasExpirationBasedLease := newLease.Type() == roachpb.LeaseExpiration
 
 	now := r.store.Clock().NowAsClockTimestamp()
