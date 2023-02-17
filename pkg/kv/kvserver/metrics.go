@@ -531,6 +531,12 @@ var (
 		Measurement: "Keys",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaRdbKeysTombstones = metric.Metadata{
+		Name:        "storage.keys.tombstone.count",
+		Help:        "Approximate count of DEL, SINGLEDEL and RANGEDEL internal keys across the storage engine.",
+		Measurement: "Keys",
+		Unit:        metric.Unit_COUNT,
+	}
 	// NB: bytes only ever get flushed into L0, so this metric does not
 	// exist for any other level.
 	metaRdbL0BytesFlushed = storageLevelMetricMetadata(
@@ -1811,6 +1817,7 @@ type StoreMetrics struct {
 	RdbPendingCompaction        *metric.Gauge
 	RdbMarkedForCompactionFiles *metric.Gauge
 	RdbKeysRangeKeySets         *metric.Gauge
+	RdbKeysTombstones           *metric.Gauge
 	RdbL0BytesFlushed           *metric.Gauge
 	RdbL0Sublevels              *metric.Gauge
 	RdbL0NumFiles               *metric.Gauge
@@ -2349,6 +2356,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RdbPendingCompaction:        metric.NewGauge(metaRdbPendingCompaction),
 		RdbMarkedForCompactionFiles: metric.NewGauge(metaRdbMarkedForCompactionFiles),
 		RdbKeysRangeKeySets:         metric.NewGauge(metaRdbKeysRangeKeySets),
+		RdbKeysTombstones:           metric.NewGauge(metaRdbKeysTombstones),
 		RdbL0BytesFlushed:           metric.NewGauge(metaRdbL0BytesFlushed),
 		RdbL0Sublevels:              metric.NewGauge(metaRdbL0Sublevels),
 		RdbL0NumFiles:               metric.NewGauge(metaRdbL0NumFiles),
@@ -2677,6 +2685,7 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.RdbPendingCompaction.Update(int64(m.Compact.EstimatedDebt))
 	sm.RdbMarkedForCompactionFiles.Update(int64(m.Compact.MarkedFiles))
 	sm.RdbKeysRangeKeySets.Update(int64(m.Keys.RangeKeySetsCount))
+	sm.RdbKeysTombstones.Update(int64(m.Keys.TombstoneCount))
 	sm.RdbNumSSTables.Update(m.NumSSTables())
 	sm.RdbWriteStalls.Update(m.WriteStallCount)
 	sm.RdbWriteStallNanos.Update(m.WriteStallDuration.Nanoseconds())
