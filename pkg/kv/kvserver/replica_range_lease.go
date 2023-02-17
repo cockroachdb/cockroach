@@ -1084,22 +1084,22 @@ func (r *Replica) checkRequestTimeRLocked(now hlc.ClockTimestamp, reqTS hlc.Time
 //	given request. In this case, no error is returned.
 //
 // In addition to the lease status, the method also returns whether the
-// lease should be considered for extension using maybeExtendLeaseAsync
+// lease should be considered for extension using maybeRenewLeaseAsync
 // after the replica's read lock has been dropped.
 func (r *Replica) leaseGoodToGoRLocked(
 	ctx context.Context, now hlc.ClockTimestamp, reqTS hlc.Timestamp,
-) (_ kvserverpb.LeaseStatus, shouldExtend bool, _ error) {
+) (_ kvserverpb.LeaseStatus, shouldRenew bool, _ error) {
 	st := r.leaseStatusForRequestRLocked(ctx, now, reqTS)
-	shouldExtend, err := r.leaseGoodToGoForStatusRLocked(ctx, now, reqTS, st)
+	shouldRenew, err := r.leaseGoodToGoForStatusRLocked(ctx, now, reqTS, st)
 	if err != nil {
 		return kvserverpb.LeaseStatus{}, false, err
 	}
-	return st, shouldExtend, err
+	return st, shouldRenew, err
 }
 
 func (r *Replica) leaseGoodToGoForStatusRLocked(
 	ctx context.Context, now hlc.ClockTimestamp, reqTS hlc.Timestamp, st kvserverpb.LeaseStatus,
-) (shouldExtend bool, _ error) {
+) (shouldRenew bool, _ error) {
 	if err := r.checkRequestTimeRLocked(now, reqTS); err != nil {
 		// Case (1): invalid request.
 		return false, err
@@ -1153,14 +1153,14 @@ func (r *Replica) leaseGoodToGoForStatusRLocked(
 		)
 	}
 	// Case (4): all good.
-	return r.shouldExtendLeaseRLocked(st), nil
+	return r.shouldRenewLeaseRLocked(st), nil
 }
 
 // leaseGoodToGo is like leaseGoodToGoRLocked, but will acquire the replica read
 // lock.
 func (r *Replica) leaseGoodToGo(
 	ctx context.Context, now hlc.ClockTimestamp, reqTS hlc.Timestamp,
-) (_ kvserverpb.LeaseStatus, shouldExtend bool, _ error) {
+) (_ kvserverpb.LeaseStatus, shouldRenew bool, _ error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.leaseGoodToGoRLocked(ctx, now, reqTS)
@@ -1210,10 +1210,10 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 	// Try fast-path.
 	now := r.store.Clock().NowAsClockTimestamp()
 	{
-		status, shouldExtend, err := r.leaseGoodToGo(ctx, now, reqTS)
+		status, shouldRenew, err := r.leaseGoodToGo(ctx, now, reqTS)
 		if err == nil {
-			if shouldExtend {
-				r.maybeExtendLeaseAsync(ctx, status)
+			if shouldRenew {
+				r.maybeRenewLeaseAsync(ctx, status)
 			}
 			return status, nil
 		} else if !errors.HasType(err, (*kvpb.InvalidLeaseError)(nil)) {
@@ -1409,11 +1409,11 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 	}
 }
 
-// shouldExtendLeaseRLocked determines whether the lease should be
-// extended asynchronously, even if it is currently valid. The method
-// returns true if this range uses expiration-based leases, the lease is
-// in need of renewal, and there's not already an extension pending.
-func (r *Replica) shouldExtendLeaseRLocked(st kvserverpb.LeaseStatus) bool {
+// shouldRenewLeaseRLocked determines whether the lease should be renewed
+// asynchronously, even if it is currently valid. The method returns true if
+// this range uses expiration-based leases, the lease is in need of renewal, and
+// there's not already an extension pending.
+func (r *Replica) shouldRenewLeaseRLocked(st kvserverpb.LeaseStatus) bool {
 	if st.Lease.Type() != roachpb.LeaseExpiration {
 		return false
 	}
@@ -1424,25 +1424,24 @@ func (r *Replica) shouldExtendLeaseRLocked(st kvserverpb.LeaseStatus) bool {
 	return renewal.LessEq(st.Now.ToTimestamp())
 }
 
-// maybeExtendLeaseAsync attempts to extend the expiration-based lease
-// asynchronously, if doing so is deemed beneficial by an earlier call
-// to shouldExtendLeaseRLocked.
-func (r *Replica) maybeExtendLeaseAsync(ctx context.Context, st kvserverpb.LeaseStatus) {
+// maybeRenewLeaseAsync attempts to renew the lease asynchronously, if doing so
+// is deemed beneficial by an earlier call to shouldRenewLeaseRLocked.
+func (r *Replica) maybeRenewLeaseAsync(ctx context.Context, st kvserverpb.LeaseStatus) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	r.maybeExtendLeaseAsyncLocked(ctx, st)
+	r.maybeRenewLeaseAsyncLocked(ctx, st)
 }
 
-func (r *Replica) maybeExtendLeaseAsyncLocked(ctx context.Context, st kvserverpb.LeaseStatus) {
-	// Check shouldExtendLeaseRLocked again, because others may have raced to
-	// extend the lease and beaten us here after we made the determination
-	// (under a shared lock) that the extension was needed.
-	if !r.shouldExtendLeaseRLocked(st) {
+func (r *Replica) maybeRenewLeaseAsyncLocked(ctx context.Context, st kvserverpb.LeaseStatus) {
+	// Check shouldRenewLeaseRLocked again, because others may have raced to
+	// renew the lease and beaten us here after we made the determination
+	// (under a shared lock) that the renewal was needed.
+	if !r.shouldRenewLeaseRLocked(st) {
 		return
 	}
 	if log.ExpensiveLogEnabled(ctx, 2) {
-		log.Infof(ctx, "extending lease %s at %s", st.Lease, st.Now)
+		log.Infof(ctx, "renewing lease %s at %s", st.Lease, st.Now)
 	}
 	// We explicitly ignore the returned handle as we won't block on it.
 	//
