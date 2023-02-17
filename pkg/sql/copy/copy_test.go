@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"regexp"
 	"runtime/pprof"
 	"strings"
 	"testing"
@@ -145,6 +146,8 @@ func TestCopy(t *testing.T) {
 	})
 }
 
+var issueLinkRE = regexp.MustCompile("https://go.crdb.dev/issue-v/([0-9]+)/.*")
+
 func expandErrorString(err error) string {
 	var sb strings.Builder
 	sb.WriteString(err.Error())
@@ -157,7 +160,7 @@ func expandErrorString(err error) string {
 			sb.WriteString(fmt.Sprintf("\nDETAIL: %s", pgErr.Detail))
 		}
 	}
-	return sb.String()
+	return issueLinkRE.ReplaceAllString(sb.String(), `https://go.crdb.dev/issue-v/$1/`)
 }
 
 // TestCopyFromTransaction tests that copy from rows are written with
