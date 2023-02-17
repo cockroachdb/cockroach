@@ -14,7 +14,9 @@ import {
   executeInternalSql,
   LONG_TIMEOUT,
   sqlResultsAreEmpty,
-  sqlApiErrorMessage,
+  LARGE_RESULT_SIZE,
+  SqlApiResponse,
+  formatApiResult,
 } from "./sqlApi";
 import {
   InsightRecommendation,
@@ -130,21 +132,31 @@ function createIndexRecommendationsToSchemaInsight(
 
 const dropUnusedIndexQuery: SchemaInsightQuery<ClusterIndexUsageStatistic> = {
   name: "DropIndex",
-  query: `SELECT
-            us.table_id,
-            us.index_id,
-            us.last_read,
-            ti.created_at,
-            ti.index_name,
-            t.name as table_name,
-            t.parent_id as database_id,
-            t.database_name,
-            t.schema_name,
-            (SELECT value FROM crdb_internal.cluster_settings WHERE variable = 'sql.index_recommendation.drop_unused_duration') AS unused_threshold
-          FROM "".crdb_internal.index_usage_statistics AS us
-                 JOIN "".crdb_internal.table_indexes as ti ON us.index_id = ti.index_id AND us.table_id = ti.descriptor_id
-                 JOIN "".crdb_internal.tables as t ON t.table_id = ti.descriptor_id and t.name = ti.descriptor_name
-          WHERE t.database_name != 'system' AND ti.index_type != 'primary';`,
+  query: `WITH cs AS (
+    SELECT value 
+        FROM crdb_internal.cluster_settings 
+    WHERE variable = 'sql.index_recommendation.drop_unused_duration'
+    )
+    SELECT * FROM (SELECT us.table_id,
+                          us.index_id,
+                          us.last_read,
+                          ti.created_at,
+                          ti.index_name,
+                          t.name      as table_name,
+                          t.parent_id as database_id,
+                          t.database_name,
+                          t.schema_name,
+                          cs.value as unused_threshold,
+                          cs.value::interval as interval_threshold, 
+                          now() - COALESCE(us.last_read AT TIME ZONE 'UTC', COALESCE(ti.created_at, '0001-01-01')) as unused_interval
+                   FROM "".crdb_internal.index_usage_statistics AS us
+                            JOIN "".crdb_internal.table_indexes as ti
+                                 ON us.index_id = ti.index_id AND us.table_id = ti.descriptor_id
+                            JOIN "".crdb_internal.tables as t
+                                 ON t.table_id = ti.descriptor_id and t.name = ti.descriptor_name
+                            CROSS JOIN cs
+                   WHERE t.database_name != 'system' AND ti.index_type != 'primary')
+          WHERE unused_interval > interval_threshold;`,
   toSchemaInsight: clusterIndexUsageStatsToSchemaInsight,
 };
 
@@ -181,26 +193,22 @@ const schemaInsightQueries: SchemaInsightQuery<SchemaInsightResponse>[] = [
 
 // getSchemaInsights makes requests over the SQL API and transforms the corresponding
 // SQL responses into schema insights.
-export async function getSchemaInsights(): Promise<InsightRecommendation[]> {
+export async function getSchemaInsights(): Promise<
+  SqlApiResponse<InsightRecommendation[]>
+> {
   const request: SqlExecutionRequest = {
     statements: schemaInsightQueries.map(insightQuery => ({
       sql: insightQuery.query,
     })),
     execute: true,
+    max_result_size: LARGE_RESULT_SIZE,
     timeout: LONG_TIMEOUT,
   };
   const result = await executeInternalSql<SchemaInsightResponse>(request);
-  if (result.error) {
-    throw new Error(
-      `Error while retrieving insights information: ${sqlApiErrorMessage(
-        result.error.message,
-      )}`,
-    );
-  }
+
   const results: InsightRecommendation[] = [];
   if (sqlResultsAreEmpty(result)) {
-    // No data.
-    return results;
+    return formatApiResult([], result.error, "retrieving insights information");
   }
   result.execution.txn_results.map(txn_result => {
     // Note: txn_result.statement values begin at 1, not 0.
@@ -210,5 +218,9 @@ export async function getSchemaInsights(): Promise<InsightRecommendation[]> {
       results.push(...insightQuery.toSchemaInsight(txn_result));
     }
   });
-  return results;
+  return formatApiResult(
+    results,
+    result.error,
+    "retrieving insights information",
+  );
 }
