@@ -191,6 +191,7 @@ func runBundleRecreate(cmd *cobra.Command, args []string) error {
 
 	if placeholderPairs != nil {
 		placeholderToColMap := make(map[int]string)
+		placeholderFQColNames := make(map[string]struct{})
 		for _, placeholderPairStr := range placeholderPairs {
 			pair := strings.Split(placeholderPairStr, "=")
 			if len(pair) != 2 {
@@ -201,8 +202,11 @@ func runBundleRecreate(cmd *cobra.Command, args []string) error {
 				return err
 			}
 			placeholderToColMap[n] = pair[1]
+			placeholderFQColNames[pair[1]] = struct{}{}
 		}
-		inputs, outputs, err := getExplainCombinations(conn, explainPrefix, placeholderToColMap, bundle)
+		inputs, outputs, err := getExplainCombinations(
+			conn, explainPrefix, placeholderToColMap, placeholderFQColNames, bundle,
+		)
 		if err != nil {
 			return err
 		}
@@ -251,6 +255,7 @@ func getExplainCombinations(
 	conn clisqlclient.Conn,
 	explainPrefix string,
 	placeholderToColMap map[int]string,
+	placeholderFQColNames map[string]struct{},
 	bundle *statementBundle,
 ) (inputs [][]string, explainOutputs []string, err error) {
 
@@ -315,6 +320,11 @@ func getExplainCombinations(
 			}
 			col := columns[0]
 			fqColName := fmt.Sprintf("%s.%s", tableName, col)
+			if _, isPlaceholder := placeholderFQColNames[fqColName]; !isPlaceholder {
+				// This column is not one of the placeholder values, so simply
+				// ignore it.
+				continue
+			}
 			d, _, err := tree.ParseDTimestamp(nil, stat["created_at"].(string), time.Microsecond)
 			if err != nil {
 				panic(err)
@@ -327,7 +337,9 @@ func getExplainCombinations(
 
 			typ := stat["histo_col_type"].(string)
 			if typ == "" {
-				fmt.Println("Ignoring column with empty type ", col)
+				// Empty 'histo_col_type' is used when there is no histogram for
+				// the column, simply skip this stat (see stats/json.go for more
+				// details).
 				continue
 			}
 			colTypeRef, err := parser.GetTypeFromValidSQLSyntax(typ)
@@ -342,6 +354,10 @@ func getExplainCombinations(
 				continue
 			}
 			buckets := stat["histo_buckets"].([]interface{})
+			// addedNonExistent tracks whether we included at least one
+			// "previous" datum which - according to the histograms - is not
+			// present in the table.
+			var addedNonExistent bool
 			var maxUpperBound tree.Datum
 			for _, b := range buckets {
 				bucket := b.(map[string]interface{})
@@ -360,9 +376,24 @@ func getExplainCombinations(
 				if maxUpperBound == nil || maxUpperBound.Compare(&evalCtx, datum) < 0 {
 					maxUpperBound = datum
 				}
-				if numRange > 0 {
-					if prev, ok := datum.Prev(&evalCtx); ok {
+				// If we have any datums within the bucket (i.e. not equal to
+				// the upper bound), we always attempt to add a "previous" to
+				// the upper bound datum.
+				addPrevious := numRange > 0
+				if numRange == 0 && !addedNonExistent {
+					// If our bucket says that there are no values present in
+					// the table between the current upper bound and the upper
+					// bound of the previous histogram bucket, then we only
+					// attempt to add the "previous" non-existent datum if we
+					// haven't done so already (this is to avoid the redundant
+					// non-existent values which would get treated in the same
+					// fashion anyway).
+					addPrevious = true
+				}
+				if addPrevious {
+					if prev, ok := tree.DatumPrev(datum, &evalCtx, &evalCtx.CollationEnv); ok {
 						bucketMap[key] = append(bucketMap[key], tree.AsStringWithFlags(prev, fmtCtx))
+						addedNonExistent = addedNonExistent || numRange == 0
 					}
 				}
 			}
@@ -372,7 +403,7 @@ func getExplainCombinations(
 			}
 			// Create a value that's outside of histogram range by incrementing the
 			// max value that we've seen.
-			if outside, ok := maxUpperBound.Next(&evalCtx); ok {
+			if outside, ok := tree.DatumNext(maxUpperBound, &evalCtx, &evalCtx.CollationEnv); ok {
 				colSamples = append(colSamples, tree.AsStringWithFlags(outside, fmtCtx))
 			}
 			sort.Strings(colSamples)
@@ -428,7 +459,8 @@ func getExplainCombinations(
 func getExplainOutputs(
 	conn clisqlclient.Conn, explainPrefix string, statement string, inputs [][]string,
 ) (explainStrings []string, err error) {
-	for _, values := range inputs {
+	fmt.Printf("trying %d placeholder combinations\n", len(inputs))
+	for i, values := range inputs {
 		// Run an explain for each possible input.
 		query := fmt.Sprintf("%s %s", explainPrefix, statement)
 		args := make([]interface{}, len(values))
@@ -451,6 +483,9 @@ func getExplainOutputs(
 			return nil, err
 		}
 		explainStrings = append(explainStrings, explainStr.String())
+		if (i+1)%1000 == 0 {
+			fmt.Printf("%d placeholder combinations are done\n", i+1)
+		}
 	}
 	return explainStrings, nil
 }
