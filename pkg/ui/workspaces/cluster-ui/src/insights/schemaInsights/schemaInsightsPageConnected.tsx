@@ -15,6 +15,7 @@ import {
   selectSchemaInsights,
   selectSchemaInsightsDatabases,
   selectSchemaInsightsError,
+  selectSchemaInsightsMaxApiSizeReached,
   selectSchemaInsightsTypes,
   selectFilters,
   selectSortSetting,
@@ -43,6 +44,7 @@ const mapStateToProps = (
   filters: selectFilters(state),
   sortSetting: selectSortSetting(state),
   hasAdminRole: selectHasAdminRole(state),
+  maxSizeApiReached: selectSchemaInsightsMaxApiSizeReached(state),
 });
 
 const mapDispatchToProps = (

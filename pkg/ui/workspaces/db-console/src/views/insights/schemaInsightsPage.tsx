@@ -27,6 +27,7 @@ import {
   schemaInsightsSortLocalSetting,
   selectSchemaInsights,
   selectSchemaInsightsDatabases,
+  selectSchemaInsightsMaxApiReached,
   selectSchemaInsightsTypes,
 } from "src/views/insights/insightsSelectors";
 import { selectHasAdminRole } from "src/redux/user";
@@ -42,6 +43,7 @@ const mapStateToProps = (
   filters: schemaInsightsFiltersLocalSetting.selector(state),
   sortSetting: schemaInsightsSortLocalSetting.selector(state),
   hasAdminRole: selectHasAdminRole(state),
+  maxSizeApiReached: selectSchemaInsightsMaxApiReached(state),
 });
 
 const mapDispatchToProps = {

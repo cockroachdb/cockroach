@@ -501,10 +501,18 @@ export interface APIReducersState {
   userSQLRoles: CachedDataReducerState<api.UserSQLRolesResponseMessage>;
   hotRanges: PaginatedCachedDataReducerState<api.HotRangesV2ResponseMessage>;
   clusterLocks: CachedDataReducerState<clusterUiApi.ClusterLocksResponse>;
-  transactionInsights: CachedDataReducerState<clusterUiApi.SqlApiResponse<clusterUiApi.TransactionInsightEventsResponse>>;
-  transactionInsightDetails: KeyedCachedDataReducerState<clusterUiApi.SqlApiResponse<clusterUiApi.TransactionInsightEventDetailsResponse>>;
-  statementInsights: CachedDataReducerState<clusterUiApi.SqlApiResponse<clusterUiApi.StatementInsights>>;
-  schemaInsights: CachedDataReducerState<clusterUiApi.InsightRecommendation[]>;
+  transactionInsights: CachedDataReducerState<
+    clusterUiApi.SqlApiResponse<clusterUiApi.TransactionInsightEventsResponse>
+  >;
+  transactionInsightDetails: KeyedCachedDataReducerState<
+    clusterUiApi.SqlApiResponse<clusterUiApi.TransactionInsightEventDetailsResponse>
+  >;
+  statementInsights: CachedDataReducerState<
+    clusterUiApi.SqlApiResponse<clusterUiApi.StatementInsights>
+  >;
+  schemaInsights: CachedDataReducerState<
+    clusterUiApi.SqlApiResponse<clusterUiApi.InsightRecommendation[]>
+  >;
   schedules: KeyedCachedDataReducerState<clusterUiApi.Schedules>;
   schedule: KeyedCachedDataReducerState<clusterUiApi.Schedule>;
 }

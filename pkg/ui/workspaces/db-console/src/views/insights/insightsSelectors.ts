@@ -122,9 +122,15 @@ export const selectSchemaInsights = createSelector(
   (state: AdminUIState) => state.cachedData,
   adminUiState => {
     if (!adminUiState.schemaInsights) return [];
-    return adminUiState.schemaInsights.data;
+    return adminUiState.schemaInsights.data?.results;
   },
 );
+
+export const selectSchemaInsightsMaxApiReached = (
+  state: AdminUIState,
+): boolean => {
+  return !!state.cachedData.schemaInsights?.data?.maxSizeReached;
+};
 
 export const selectSchemaInsightsDatabases = createSelector(
   selectSchemaInsights,
