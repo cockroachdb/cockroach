@@ -55,4 +55,6 @@ type DatumVec interface {
 	// be used when elements before startIdx are guaranteed not to have been
 	// modified.
 	Size(startIdx int) int64
+	// SetEvalCtx updates the vector with the provided *eval.Context.
+	SetEvalCtx(evalCtx interface{})
 }

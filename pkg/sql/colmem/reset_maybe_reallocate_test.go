@@ -50,13 +50,13 @@ func TestResetMaybeReallocate(t *testing.T) {
 		typs := []*types.T{types.Bytes}
 
 		// Allocate a new batch and modify it.
-		b, _, _ = testAllocator.resetMaybeReallocate(typs, b, coldata.BatchSize(), math.MaxInt64, false /* desiredCapacitySufficient */)
+		b, _, _ = testAllocator.resetMaybeReallocate(typs, b, coldata.BatchSize(), math.MaxInt64, false /* desiredCapacitySufficient */, false /* alwaysReallocate */)
 		b.SetSelection(true)
 		b.Selection()[0] = 1
 		b.ColVec(0).Bytes().Set(1, []byte("foo"))
 
 		oldBatch := b
-		b, _, _ = testAllocator.resetMaybeReallocate(typs, b, coldata.BatchSize(), math.MaxInt64, false /* desiredCapacitySufficient */)
+		b, _, _ = testAllocator.resetMaybeReallocate(typs, b, coldata.BatchSize(), math.MaxInt64, false /* desiredCapacitySufficient */, false /* alwaysReallocate */)
 		// We should have used the same batch, and now it should be in a "reset"
 		// state.
 		require.Equal(t, oldBatch, b)
@@ -83,7 +83,7 @@ func TestResetMaybeReallocate(t *testing.T) {
 		// Allocate a new batch attempting to use the batch with too small of a
 		// capacity - new batch should **not** be allocated because the memory
 		// limit is already exceeded.
-		b, _, _ = testAllocator.resetMaybeReallocate(typs, smallBatch, minDesiredCapacity, smallMemSize, false /* desiredCapacitySufficient */)
+		b, _, _ = testAllocator.resetMaybeReallocate(typs, smallBatch, minDesiredCapacity, smallMemSize, false /* desiredCapacitySufficient */, false /* alwaysReallocate */)
 		require.Equal(t, smallBatch, b)
 		require.Equal(t, minDesiredCapacity/2, b.Capacity())
 
@@ -91,13 +91,13 @@ func TestResetMaybeReallocate(t *testing.T) {
 
 		// Reset the batch asking for the same small desired capacity when it is
 		// sufficient - the same batch should be returned.
-		b, _, _ = testAllocator.resetMaybeReallocate(typs, b, minDesiredCapacity/2, smallMemSize, true /* desiredCapacitySufficient */)
+		b, _, _ = testAllocator.resetMaybeReallocate(typs, b, minDesiredCapacity/2, smallMemSize, true /* desiredCapacitySufficient */, false /* alwaysReallocate */)
 		require.Equal(t, smallBatch, b)
 		require.Equal(t, minDesiredCapacity/2, b.Capacity())
 
 		// Reset the batch and confirm that a new batch is allocated because we
 		// have given larger memory limit.
-		b, _, _ = testAllocator.resetMaybeReallocate(typs, b, minDesiredCapacity, largeMemSize, false /* desiredCapacitySufficient */)
+		b, _, _ = testAllocator.resetMaybeReallocate(typs, b, minDesiredCapacity, largeMemSize, false /* desiredCapacitySufficient */, false /* alwaysReallocate */)
 		require.NotEqual(t, oldBatch, b)
 		require.Equal(t, minDesiredCapacity, b.Capacity())
 
@@ -108,7 +108,7 @@ func TestResetMaybeReallocate(t *testing.T) {
 			// resetMaybeReallocate truncates the capacity at
 			// coldata.BatchSize(), so we run this part of the test only when
 			// doubled capacity will not be truncated.
-			b, _, _ = testAllocator.resetMaybeReallocate(typs, b, minDesiredCapacity, largeMemSize, false /* desiredCapacitySufficient */)
+			b, _, _ = testAllocator.resetMaybeReallocate(typs, b, minDesiredCapacity, largeMemSize, false /* desiredCapacitySufficient */, false /* alwaysReallocate */)
 			require.NotEqual(t, oldBatch, b)
 			require.Equal(t, 2*minDesiredCapacity, b.Capacity())
 		}
