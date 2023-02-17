@@ -72,7 +72,11 @@ func Scan(
 		if err != nil {
 			return result.Result{}, err
 		}
-		reply.BatchResponses = scanRes.KVData
+		if len(scanRes.ColBatches) > 0 {
+			reply.ColBatches.ColBatches = scanRes.ColBatches
+		} else {
+			reply.BatchResponses = scanRes.KVData
+		}
 	case kvpb.KEY_VALUES:
 		scanRes, err = storage.MVCCScan(
 			ctx, reader, args.Key, args.EndKey, h.Timestamp, opts)

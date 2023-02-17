@@ -216,7 +216,7 @@ func NewHashAggregator(
 		aggFnsAlloc:        aggFnsAlloc,
 		hashAlloc:          aggBucketAlloc{allocator: args.Allocator},
 	}
-	hashAgg.accountingHelper.Init(args.OutputUnlimitedAllocator, args.MaxOutputBatchMemSize, args.OutputTypes)
+	hashAgg.accountingHelper.Init(args.OutputUnlimitedAllocator, args.MaxOutputBatchMemSize, args.OutputTypes, false /* noBatchReuse */)
 	hashAgg.bufferingState.tuples = colexecutils.NewAppendOnlyBufferedBatch(args.Allocator, args.InputTypes, nil /* colsToStore */)
 	hashAgg.datumAlloc.AllocSize = hashAggregatorAllocSize
 	hashAgg.aggHelper = newAggregatorHelper(args.NewAggregatorArgs, &hashAgg.datumAlloc, true /* isHashAgg */, hashAggregatorMaxBuffered)

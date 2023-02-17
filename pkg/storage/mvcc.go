@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -3906,9 +3907,10 @@ func (opts *MVCCScanOptions) errOnIntents() bool {
 // MVCCScanResult groups the values returned from an MVCCScan operation. Depending
 // on the operation invoked, KVData or KVs is populated, but never both.
 type MVCCScanResult struct {
-	KVData  [][]byte
-	KVs     []roachpb.KeyValue
-	NumKeys int64
+	KVData     [][]byte
+	ColBatches []coldata.Batch
+	KVs        []roachpb.KeyValue
+	NumKeys    int64
 	// NumBytes is the number of bytes this scan result accrued in terms of the
 	// MVCCScanOptions.TargetBytes parameter. This roughly measures the bytes
 	// used for encoding the uncompressed kv pairs contained in the result.

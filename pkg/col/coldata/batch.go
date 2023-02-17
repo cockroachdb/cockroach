@@ -350,3 +350,9 @@ func (m *MemBatch) String() string {
 // The implementation lives in colconv package and is injected during the
 // initialization.
 var VecsToStringWithRowPrefix func(vecs []Vec, length int, sel []int, prefix string) []string
+
+// GetBatchMemSize returns the total memory footprint of the batch.
+//
+// The implementation lives in the sql/colmem package since it depends on
+// sem/tree, and we don't want to make coldata depend on that.
+var GetBatchMemSize func(Batch) int64

@@ -100,7 +100,7 @@ func NewOrderedSynchronizer(
 		canonicalTypeFamilies: typeconv.ToCanonicalTypeFamilies(typs),
 		tuplesToMerge:         tuplesToMerge,
 	}
-	os.accountingHelper.Init(allocator, memoryLimit, typs)
+	os.accountingHelper.Init(allocator, memoryLimit, typs, false /* noBatchReuse */)
 	return os
 }
 

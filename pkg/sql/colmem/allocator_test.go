@@ -384,7 +384,7 @@ func TestSetAccountingHelper(t *testing.T) {
 	}
 
 	var helper colmem.SetAccountingHelper
-	helper.Init(testAllocator, math.MaxInt64, typs)
+	helper.Init(testAllocator, math.MaxInt64, typs, false /* noBatchReuse */)
 
 	numIterations := rng.Intn(10) + 1
 	numRows := rng.Intn(coldata.BatchSize()) + 1
@@ -472,7 +472,7 @@ func TestSetAccountingHelperMemoryLimit(t *testing.T) {
 	testAllocator.ReleaseAll()
 
 	var helper colmem.SetAccountingHelper
-	helper.Init(testAllocator, memoryLimit, typs)
+	helper.Init(testAllocator, memoryLimit, typs, false /* noBatchReuse */)
 
 	// Allocate the small batch and ensure that we use all tuples inside of it.
 	b, _ := helper.ResetMaybeReallocate(typs, nil /* oldBatch */, smallCap)
