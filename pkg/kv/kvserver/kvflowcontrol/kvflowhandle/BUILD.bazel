@@ -2,20 +2,20 @@ load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
-    name = "kvflowcontroller",
+    name = "kvflowhandle",
     srcs = [
-        "kvflowcontroller.go",
-        "kvflowcontroller_metrics.go",
+        "connected_stream.go",
+        "kvflowhandle.go",
+        "kvflowhandle_metrics.go",
     ],
-    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontroller",
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowhandle",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
         "//pkg/kv/kvserver/kvflowcontrol",
-        "//pkg/settings",
-        "//pkg/settings/cluster",
+        "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb",
+        "//pkg/kv/kvserver/kvflowcontrol/kvflowtokentracker",
         "//pkg/util/admission/admissionpb",
-        "//pkg/util/buildutil",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/metric",
@@ -24,13 +24,14 @@ go_library(
 )
 
 go_test(
-    name = "kvflowcontroller_test",
-    srcs = ["kvflowcontrol_token_adjustment_test.go"],
+    name = "kvflowhandle_test",
+    srcs = ["kvflowhandle_test.go"],
     args = ["-test.timeout=295s"],
-    data = glob(["testdata/**"]),
-    embed = [":kvflowcontroller"],
     deps = [
+        ":kvflowhandle",
         "//pkg/kv/kvserver/kvflowcontrol",
+        "//pkg/kv/kvserver/kvflowcontrol/kvflowcontroller",
+        "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/util/admission/admissionpb",
@@ -38,8 +39,6 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/metric",
-        "@com_github_cockroachdb_datadriven//:datadriven",
-        "@com_github_dustin_go_humanize//:go-humanize",
         "@com_github_stretchr_testify//require",
     ],
 )

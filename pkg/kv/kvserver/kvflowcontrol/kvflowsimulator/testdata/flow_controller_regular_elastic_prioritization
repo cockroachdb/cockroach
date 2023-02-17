@@ -6,12 +6,9 @@ init
 # Kick off two threads, one for each work class, each writing at 1MiB/s over
 # across reqs/s.
 timeline
-start=0s  end=16s class=regular stream=t1/s1 adjust=-1MiB/s rate=100/s
-start=0s  end=8s  class=elastic stream=t1/s1 adjust=-1MiB/s rate=100/s
+t=[0s,16s) class=regular stream=t1/s1 adjust=-1MiB/s rate=100/s
+t=[0s,8s)  class=elastic stream=t1/s1 adjust=-1MiB/s rate=100/s
 ----
-
-# start=16s end=32s class=regular stream=t1/s1 adjust=+2MiB/s rate=100/s
-# start=32s end=36s class=elastic stream=t1/s1 adjust=+2MiB/s rate=100/s
 
 simulate
 ----
@@ -119,4 +116,4 @@ kvadmission.flow_controller.elastic_tokens_deducted  unit=MiB rate=true
  0.0 ┼──╯
         rate(elastic_tokens_deducted) (MiB)
 
-# vim:ft=sh
+# vim:ft=conf
