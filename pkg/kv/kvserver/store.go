@@ -2032,6 +2032,10 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		s.startLeaseRenewer(ctx)
 	}
 
+	// When kv.expiration_leases_only.enabled changes, eagerly switch all leases
+	// to the correct type.
+	expirationLeasesOnly.SetOnChange(&s.ClusterSettings().SV, s.onExpirationLeasesOnlyChanged)
+
 	// Connect rangefeeds to closed timestamp updates.
 	s.startRangefeedUpdater(ctx)
 
@@ -2096,6 +2100,12 @@ func (s *Store) GetConfReader(ctx context.Context) (spanconfig.StoreReader, erro
 // This reduces user-visible latency when range lookups are needed to serve a
 // request and reduces ping-ponging of r1's lease to different replicas as
 // maybeGossipFirstRange is called on each (e.g.  #24753).
+//
+// Currently, this is only used for ranges that _require_ expiration-based
+// leases, as determined by Replica.requiresExpirationLeaseRLocked(), i.e. the
+// meta and liveness ranges. For large numbers of expiration-based leases, e.g.
+// with kv.expiration_leases_only.enabled, a more sophisticated scheduler is
+// needed since the linear scan here can't keep up.
 func (s *Store) startLeaseRenewer(ctx context.Context) {
 	// Start a goroutine that watches and proactively renews certain
 	// expiration-based leases.
@@ -2143,6 +2153,48 @@ func (s *Store) startLeaseRenewer(ctx context.Context) {
 				return
 			}
 		}
+	})
+}
+
+// onExpirationLeasesOnlyChanged asynchronously switches leases to the
+// appropriate kind when kv.expiration_leases_only.enabled changes.
+func (s *Store) onExpirationLeasesOnlyChanged(ctx context.Context) {
+	useExpiration := expirationLeasesOnly.Get(&s.ClusterSettings().SV)
+
+	_ = s.stopper.RunAsyncTask(ctx, "switch-lease-type", func(ctx context.Context) {
+		log.Infof(ctx, "renewing leases for %s = %t",
+			redact.Safe(expirationLeasesOnly.Key()), useExpiration)
+
+		var acquired, replicas int
+		newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
+			replicas++
+
+			if ctx.Err() != nil {
+				return false
+			}
+
+			// If the setting changed, a new goroutine will take care of it.
+			if useExpiration != expirationLeasesOnly.Get(&s.ClusterSettings().SV) {
+				return false
+			}
+
+			// Attempt to renew the lease, which also checks and switches the lease
+			// type as necessary. If there's a valid leaseholder elsewhere, we'll let
+			// it make the switch.
+			if _, pErr := repl.redirectOnOrAcquireLease(ctx); pErr != nil {
+				if _, ok := pErr.GetDetail().(*kvpb.NotLeaseHolderError); !ok {
+					log.Warningf(repl.AnnotateCtx(ctx), "failed to renew lease for %s = %t: %s",
+						redact.Safe(expirationLeasesOnly.Key()), useExpiration, pErr)
+				}
+				return true
+			}
+			acquired++
+
+			return true
+		})
+
+		log.Infof(ctx, "renewed %d leases (out of %d replicas) for %s = %t",
+			acquired, replicas, redact.Safe(expirationLeasesOnly.Key()), useExpiration)
 	})
 }
 
