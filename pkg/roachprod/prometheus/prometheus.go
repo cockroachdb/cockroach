@@ -76,6 +76,10 @@ type GrafanaConfig struct {
 	// NB: when using gists, https://gist.github.com/[gist_user]/[gist_id]/raw/
 	// provides a link that always references the most up to date version.
 	DashboardURLs []string
+
+	// DashboardJSON are strings containing the JSON for dashboards to
+	// provision in addition to any other sources.
+	DashboardJSON []string
 }
 
 // WithWorkload sets up a scraping config for a single `workload` running on the
@@ -144,6 +148,16 @@ func (cfg *Config) WithTenantPod(node install.Node, tenantID int) *Config {
 func (cfg *Config) WithGrafanaDashboard(url string) *Config {
 	cfg.Grafana.Enabled = true
 	cfg.Grafana.DashboardURLs = append(cfg.Grafana.DashboardURLs, url)
+	return cfg
+}
+
+// WithGrafanaDashboardJSON adds a string containing the JSON for a dashboard
+// to provision into Grafana.
+// Enables Grafana if not already enabled.
+// Chains for convenience.
+func (cfg *Config) WithGrafanaDashboardJSON(str string) *Config {
+	cfg.Grafana.Enabled = true
+	cfg.Grafana.DashboardJSON = append(cfg.Grafana.DashboardJSON, str)
 	return cfg
 }
 
@@ -378,6 +392,13 @@ org_role = Admin
 			if err := c.Run(ctx, l, l.Stdout, l.Stderr, cfg.PrometheusNode, "download dashboard",
 				cmd); err != nil {
 				l.PrintfCtx(ctx, "failed to download dashboard from %s: %s", u, err)
+			}
+		}
+
+		for idx, json := range cfg.Grafana.DashboardJSON {
+			if err := c.PutString(ctx, l, cfg.PrometheusNode, json,
+				fmt.Sprintf("/var/lib/grafana/dashboards/s-%d.json", idx), 0777); err != nil {
+				return nil, err
 			}
 		}
 
