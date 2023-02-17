@@ -70,6 +70,8 @@ go_test(
         ],
         "@io_bazel_rules_go//go/platform:darwin_arm64": [
             ":grunning",
+            "//pkg/testutils/skip",
+            "//pkg/util/syncutil",
             "@com_github_stretchr_testify//require",
         ],
         "@io_bazel_rules_go//go/platform:dragonfly_amd64": [
@@ -108,6 +110,8 @@ go_test(
         ],
         "@io_bazel_rules_go//go/platform:ios_arm64": [
             ":grunning",
+            "//pkg/testutils/skip",
+            "//pkg/util/syncutil",
             "@com_github_stretchr_testify//require",
         ],
         "@io_bazel_rules_go//go/platform:js_wasm": [
