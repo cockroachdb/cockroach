@@ -9924,7 +9924,8 @@ type testQuiescer struct {
 	status          *raftSparseStatus
 	lastIndex       uint64
 	raftReady       bool
-	ownsValidLease  bool
+	leaseStatus     kvserverpb.LeaseStatus
+	storeID         roachpb.StoreID
 	mergeInProgress bool
 	isDestroyed     bool
 
@@ -9965,8 +9966,14 @@ func (q *testQuiescer) hasPendingProposalQuotaRLocked() bool {
 	return q.pendingQuota
 }
 
-func (q *testQuiescer) ownsValidLeaseRLocked(context.Context, hlc.ClockTimestamp) bool {
-	return q.ownsValidLease
+func (q *testQuiescer) leaseStatusAtRLocked(
+	ctx context.Context, now hlc.ClockTimestamp,
+) kvserverpb.LeaseStatus {
+	return q.leaseStatus
+}
+
+func (q *testQuiescer) StoreID() roachpb.StoreID {
+	return q.storeID
 }
 
 func (q *testQuiescer) mergeInProgressRLocked() bool {
@@ -9992,6 +9999,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 			// true. The transform function is intended to perform one mutation to
 			// this quiescer so that shouldReplicaQuiesce will return false.
 			q := &testQuiescer{
+				storeID: 1,
 				desc: roachpb.RangeDescriptor{
 					InternalReplicas: []roachpb.ReplicaDescriptor{
 						{NodeID: 1, ReplicaID: 1},
@@ -10017,9 +10025,18 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 						3: {Match: logIndex},
 					},
 				},
-				lastIndex:      logIndex,
-				raftReady:      false,
-				ownsValidLease: true,
+				lastIndex: logIndex,
+				raftReady: false,
+				leaseStatus: kvserverpb.LeaseStatus{
+					State: kvserverpb.LeaseState_VALID,
+					Lease: roachpb.Lease{
+						Replica: roachpb.ReplicaDescriptor{
+							NodeID:    1,
+							StoreID:   1,
+							ReplicaID: 1,
+						},
+					},
+				},
 				livenessMap: livenesspb.IsLiveMap{
 					1: {IsLive: true},
 					2: {IsLive: true},
@@ -10101,7 +10118,52 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 		return q
 	})
 	test(false, func(q *testQuiescer) *testQuiescer {
-		q.ownsValidLease = false
+		q.leaseStatus.State = kvserverpb.LeaseState_ERROR
+		return q
+	})
+	test(true, func(q *testQuiescer) *testQuiescer {
+		q.leaseStatus.State = kvserverpb.LeaseState_VALID
+		return q
+	})
+	test(true, func(q *testQuiescer) *testQuiescer {
+		q.leaseStatus.State = kvserverpb.LeaseState_UNUSABLE
+		return q
+	})
+	test(true, func(q *testQuiescer) *testQuiescer {
+		q.leaseStatus.State = kvserverpb.LeaseState_EXPIRED
+		return q
+	})
+	test(true, func(q *testQuiescer) *testQuiescer {
+		q.leaseStatus.State = kvserverpb.LeaseState_PROSCRIBED
+		return q
+	})
+	test(false, func(q *testQuiescer) *testQuiescer {
+		q.leaseStatus.State = -99
+		return q
+	})
+	test(false, func(q *testQuiescer) *testQuiescer {
+		q.leaseStatus.Lease.Replica.StoreID = 9
+		q.leaseStatus.State = kvserverpb.LeaseState_ERROR
+		return q
+	})
+	test(false, func(q *testQuiescer) *testQuiescer {
+		q.leaseStatus.Lease.Replica.StoreID = 9
+		q.leaseStatus.State = kvserverpb.LeaseState_VALID
+		return q
+	})
+	test(false, func(q *testQuiescer) *testQuiescer {
+		q.leaseStatus.Lease.Replica.StoreID = 9
+		q.leaseStatus.State = kvserverpb.LeaseState_UNUSABLE
+		return q
+	})
+	test(true, func(q *testQuiescer) *testQuiescer {
+		q.leaseStatus.Lease.Replica.StoreID = 9
+		q.leaseStatus.State = kvserverpb.LeaseState_EXPIRED
+		return q
+	})
+	test(false, func(q *testQuiescer) *testQuiescer {
+		q.leaseStatus.Lease.Replica.StoreID = 9
+		q.leaseStatus.State = kvserverpb.LeaseState_PROSCRIBED
 		return q
 	})
 	test(false, func(q *testQuiescer) *testQuiescer {
