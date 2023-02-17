@@ -11,10 +11,12 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { JobsRequest, JobsResponse } from "src/api/jobsApi";
 import { DOMAIN_NAME } from "../utils";
+import moment from "moment";
 
 export type JobsState = {
   data: JobsResponse;
   lastError: Error;
+  lastUpdated: moment.Moment;
   valid: boolean;
   inFlight: boolean;
 };
@@ -24,6 +26,7 @@ const initialState: JobsState = {
   lastError: null,
   valid: true,
   inFlight: false,
+  lastUpdated: null,
 };
 
 const JobsSlice = createSlice({
@@ -35,16 +38,23 @@ const JobsSlice = createSlice({
       state.valid = true;
       state.lastError = null;
       state.inFlight = false;
+      state.lastUpdated = moment.utc();
     },
     failed: (state, action: PayloadAction<Error>) => {
+      state.inFlight = false;
       state.valid = false;
       state.lastError = action.payload;
+      state.lastUpdated = moment.utc();
     },
     invalidated: state => {
       state.valid = false;
     },
-    refresh: (_, action: PayloadAction<JobsRequest>) => {},
-    request: (_, action: PayloadAction<JobsRequest>) => {},
+    refresh: (state, _action: PayloadAction<JobsRequest>) => {
+      state.inFlight = true;
+    },
+    request: (state, _action: PayloadAction<JobsRequest>) => {
+      state.inFlight = true;
+    },
   },
 });
 

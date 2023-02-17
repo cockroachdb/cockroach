@@ -24,8 +24,11 @@ import {
   allJobsFixture,
   earliestRetainedTime,
 } from "../../jobs/jobsPage/jobsPage.fixture";
+import moment from "moment";
 
 describe("jobs sagas", () => {
+  const lastUpdated = moment.utc(new Date("2023-02-21T12:00:00.000Z"));
+
   const payload = new cockroach.server.serverpb.JobsRequest({
     limit: 0,
     type: 0,
@@ -39,6 +42,16 @@ describe("jobs sagas", () => {
   const jobsAPIProvider: (EffectProviders | StaticProvider)[] = [
     [matchers.call.fn(getJobs), jobsResponse],
   ];
+
+  let spy: jest.SpyInstance;
+
+  beforeAll(() => {
+    spy = jest.spyOn(moment, "utc").mockImplementation(() => lastUpdated);
+  });
+
+  afterAll(() => {
+    spy.mockRestore();
+  });
 
   describe("refreshJobsSaga", () => {
     it("dispatches refresh jobs action", () => {
@@ -60,6 +73,7 @@ describe("jobs sagas", () => {
           lastError: null,
           valid: true,
           inFlight: false,
+          lastUpdated,
         })
         .run();
     });
@@ -75,6 +89,7 @@ describe("jobs sagas", () => {
           lastError: error,
           valid: false,
           inFlight: false,
+          lastUpdated,
         })
         .run();
     });

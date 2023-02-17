@@ -12,7 +12,6 @@ import {
   JobsPageStateProps,
   SortSetting,
   defaultLocalOptions,
-  defaultRequestOptions,
 } from "@cockroachlabs/cluster-ui";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
@@ -78,26 +77,23 @@ const mapStateToProps = (
   const show = showSetting.selector(state);
   const type = typeSetting.selector(state);
   const columns = columnsLocalSetting.selectorToArray(state);
-  const key = jobsKey(
-    defaultRequestOptions.status,
-    defaultRequestOptions.type,
-    defaultRequestOptions.limit,
-  );
+  const showAsNum = parseInt(show, 10);
+  const key = jobsKey(status, type, isNaN(showAsNum) ? 0 : showAsNum);
   const jobsState = selectJobsState(state, key);
   const jobs = jobsState ? jobsState.data : null;
-  const jobsLoading = jobsState
-    ? jobsState.inFlight && !jobsState.valid
-    : false;
   const jobsError = jobsState ? jobsState.lastError : null;
+  const lastUpdated = jobsError ? jobsState.requestedAt : jobsState?.setAt;
   return {
     sort,
     status,
     show,
     type,
     jobs,
-    jobsLoading,
+    reqInFlight: jobsState?.inFlight,
+    isDataValid: jobsState?.valid,
     jobsError,
     columns,
+    lastUpdated,
   };
 };
 
