@@ -18,10 +18,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -41,35 +41,22 @@ type databaseRegionChangeFinalizer struct {
 // newDatabaseRegionChangeFinalizer returns a databaseRegionChangeFinalizer.
 // It pre-fetches all REGIONAL BY ROW tables from the database.
 func newDatabaseRegionChangeFinalizer(
-	ctx context.Context,
-	txn *kv.Txn,
-	execCfg *ExecutorConfig,
-	descsCol *descs.Collection,
-	dbID descpb.ID,
-	typeID descpb.ID,
+	ctx context.Context, txn descs.Txn, execCfg *ExecutorConfig, dbID descpb.ID, typeID descpb.ID,
 ) (*databaseRegionChangeFinalizer, error) {
 	p, cleanup := NewInternalPlanner(
 		"repartition-regional-by-row-tables",
-		txn,
+		txn.KV(),
 		username.RootUserName(),
 		&MemoryMetrics{},
 		execCfg,
-		sessiondatapb.SessionData{},
-		WithDescCollection(descsCol),
+		txn.SessionData().SessionData,
+		WithDescCollection(txn.Descriptors()),
 	)
 	localPlanner := p.(*planner)
 
 	var regionalByRowTables []*tabledesc.Mutable
 	if err := func() error {
-		_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
-			ctx,
-			txn,
-			dbID,
-			tree.DatabaseLookupFlags{
-				Required:    true,
-				AvoidLeased: true,
-			},
-		)
+		dbDesc, err := txn.Descriptors().ByID(txn.KV()).WithoutNonPublic().Get().Database(ctx, dbID)
 		if err != nil {
 			return err
 		}
@@ -112,8 +99,8 @@ func (r *databaseRegionChangeFinalizer) cleanup() {
 
 // finalize updates the zone configurations of the database and all enclosed
 // REGIONAL BY ROW tables once the region promotion/demotion is complete.
-func (r *databaseRegionChangeFinalizer) finalize(ctx context.Context, txn *kv.Txn) error {
-	if err := r.updateDatabaseZoneConfig(ctx, txn); err != nil {
+func (r *databaseRegionChangeFinalizer) finalize(ctx context.Context, txn descs.Txn) error {
+	if err := r.updateDatabaseZoneConfig(ctx, txn.KV()); err != nil {
 		return err
 	}
 	if err := r.preDrop(ctx, txn); err != nil {
@@ -127,19 +114,19 @@ func (r *databaseRegionChangeFinalizer) finalize(ctx context.Context, txn *kv.Tx
 // advance of the type descriptor change, to ensure that the table and type
 // descriptors never become incorrect (from a query perspective). For more info,
 // see the callers.
-func (r *databaseRegionChangeFinalizer) preDrop(ctx context.Context, txn *kv.Txn) error {
-	repartitioned, zoneConfigUpdates, err := r.repartitionRegionalByRowTables(ctx, txn)
+func (r *databaseRegionChangeFinalizer) preDrop(ctx context.Context, txn isql.Txn) error {
+	repartitioned, zoneConfigUpdates, err := r.repartitionRegionalByRowTables(ctx, txn.KV())
 	if err != nil {
 		return err
 	}
 	for _, update := range zoneConfigUpdates {
 		if _, err := writeZoneConfigUpdate(
-			ctx, txn, r.localPlanner.ExtendedEvalContext().Tracing.KVTracingEnabled(), r.localPlanner.Descriptors(), update,
+			ctx, txn.KV(), r.localPlanner.ExtendedEvalContext().Tracing.KVTracingEnabled(), r.localPlanner.Descriptors(), update,
 		); err != nil {
 			return err
 		}
 	}
-	b := txn.NewBatch()
+	b := txn.KV().NewBatch()
 	for _, t := range repartitioned {
 		const kvTrace = false
 		if err := r.localPlanner.Descriptors().WriteDescToBatch(
@@ -148,7 +135,7 @@ func (r *databaseRegionChangeFinalizer) preDrop(ctx context.Context, txn *kv.Txn
 			return err
 		}
 	}
-	return txn.Run(ctx, b)
+	return txn.KV().Run(ctx, b)
 }
 
 // updateGlobalTablesZoneConfig refreshes all global tables' zone configs so
@@ -158,9 +145,9 @@ func (r *databaseRegionChangeFinalizer) preDrop(ctx context.Context, txn *kv.Txn
 // will inherit the database's constraints. In the RESTRICTED case, however,
 // constraints must be explicitly refreshed when new regions are added/removed.
 func (r *databaseRegionChangeFinalizer) updateGlobalTablesZoneConfig(
-	ctx context.Context, txn *kv.Txn,
+	ctx context.Context, txn isql.Txn,
 ) error {
-	regionConfig, err := SynthesizeRegionConfig(ctx, txn, r.dbID, r.localPlanner.Descriptors())
+	regionConfig, err := SynthesizeRegionConfig(ctx, txn.KV(), r.dbID, r.localPlanner.Descriptors())
 	if err != nil {
 		return err
 	}
@@ -173,15 +160,7 @@ func (r *databaseRegionChangeFinalizer) updateGlobalTablesZoneConfig(
 
 	descsCol := r.localPlanner.Descriptors()
 
-	_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
-		ctx,
-		txn,
-		r.dbID,
-		tree.DatabaseLookupFlags{
-			Required:    true,
-			AvoidLeased: true,
-		},
-	)
+	dbDesc, err := descsCol.ByID(txn.KV()).WithoutNonPublic().Get().Database(ctx, r.dbID)
 	if err != nil {
 		return err
 	}
@@ -249,19 +228,14 @@ func (r *databaseRegionChangeFinalizer) repartitionRegionalByRowTables(
 		for i := range tableDesc.Columns {
 			col := &tableDesc.Columns[i]
 			if col.Type.UserDefined() {
-				tid, err := typedesc.UserDefinedTypeOIDToID(col.Type.Oid())
-				if err != nil {
-					return nil, nil, err
-				}
+				tid := typedesc.UserDefinedTypeOIDToID(col.Type.Oid())
 				if tid == r.typeID {
 					col.Type.TypeMeta = types.UserDefinedTypeMetadata{}
 				}
 			}
 		}
-		if err := typedesc.HydrateTypesInTableDescriptor(
-			ctx,
-			tableDesc.TableDesc(),
-			r.localPlanner,
+		if err := typedesc.HydrateTypesInDescriptor(
+			ctx, tableDesc, r.localPlanner,
 		); err != nil {
 			return nil, nil, err
 		}
@@ -270,7 +244,7 @@ func (r *databaseRegionChangeFinalizer) repartitionRegionalByRowTables(
 		if err != nil {
 			return nil, nil, err
 		}
-		partitionAllBy := partitionByForRegionalByRow(regionConfig, colName)
+		partitionAllBy := multiregion.PartitionByForRegionalByRow(regionConfig, colName)
 
 		// oldPartitionings saves the old partitionings for each
 		// index that is repartitioned. This is later used to remove zone

@@ -29,10 +29,9 @@ func updateMetricsAndSendErrToClient(err error, conn net.Conn, metrics *metrics)
 }
 
 func toPgError(err error) *pgproto3.ErrorResponse {
-	codeErr := (*codeError)(nil)
-	if errors.As(err, &codeErr) {
+	if getErrorCode(err) != codeNone {
 		var msg string
-		switch codeErr.code {
+		switch getErrorCode(err) {
 		// These are send as is.
 		case codeExpiredClientConnection,
 			codeBackendDown,
@@ -42,7 +41,7 @@ func toPgError(err error) *pgproto3.ErrorResponse {
 			codeAuthFailed,
 			codeProxyRefusedConnection,
 			codeUnavailable:
-			msg = codeErr.Error()
+			msg = err.Error()
 		// The rest - the message sent back is sanitized.
 		case codeUnexpectedInsecureStartupMessage:
 			msg = "server requires encryption"
@@ -50,7 +49,7 @@ func toPgError(err error) *pgproto3.ErrorResponse {
 
 		return &pgproto3.ErrorResponse{
 			Severity: "FATAL",
-			Code:     pgcode.SQLserverRejectedEstablishmentOfSQLconnection.String(),
+			Code:     pgcode.ProxyConnectionError.String(),
 			Message:  msg,
 			Hint:     errors.FlattenHints(err),
 		}
@@ -58,7 +57,7 @@ func toPgError(err error) *pgproto3.ErrorResponse {
 	// Return a generic "internal server error" message.
 	return &pgproto3.ErrorResponse{
 		Severity: "FATAL",
-		Code:     pgcode.SQLserverRejectedEstablishmentOfSQLconnection.String(),
+		Code:     pgcode.ProxyConnectionError.String(),
 		Message:  "internal server error",
 	}
 }

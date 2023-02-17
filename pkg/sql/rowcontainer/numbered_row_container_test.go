@@ -565,7 +565,7 @@ func BenchmarkNumberedContainerIteratorCaching(b *testing.B) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)
-	tempEngine, _, err := storage.NewTempEngine(ctx, base.TempStorageConfig{InMemory: true}, base.DefaultTestStoreSpec)
+	tempEngine, _, err := storage.NewTempEngine(ctx, base.TempStorageConfig{InMemory: true, Settings: st}, base.DefaultTestStoreSpec)
 	if err != nil {
 		b.Fatal(err)
 	}

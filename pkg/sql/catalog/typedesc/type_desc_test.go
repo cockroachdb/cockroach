@@ -862,11 +862,11 @@ func TestOIDToIDConversion(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(fmt.Sprint(test.oid), func(t *testing.T) {
-			_, err := typedesc.UserDefinedTypeOIDToID(test.oid)
+			id := typedesc.UserDefinedTypeOIDToID(test.oid)
 			if test.ok {
-				require.NoError(t, err)
+				require.NotZero(t, id)
 			} else {
-				require.Error(t, err)
+				require.Zero(t, id)
 			}
 		})
 	}

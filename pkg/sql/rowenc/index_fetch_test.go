@@ -17,11 +17,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/datadriven"
@@ -39,7 +40,7 @@ func TestInitIndexFetchSpec(t *testing.T) {
 	}
 
 	datadriven.RunTest(
-		t, testutils.TestDataPath(t, "index-fetch"),
+		t, datapathutils.TestDataPath(t, "index-fetch"),
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "exec":
@@ -58,21 +59,21 @@ func TestInitIndexFetchSpec(t *testing.T) {
 					d.Fatalf(t, "failed to parse index-fetch params: %v", err)
 				}
 				table := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "testdb", params.Table)
-				index, err := table.FindIndexWithName(params.Index)
+				index, err := catalog.MustFindIndexByName(table, params.Index)
 				if err != nil {
 					d.Fatalf(t, "%+v", err)
 				}
 
 				fetchColumnIDs := make([]descpb.ColumnID, len(params.Columns))
 				for i, name := range params.Columns {
-					col, err := table.FindColumnWithName(tree.Name(name))
+					col, err := catalog.MustFindColumnByName(table, name)
 					if err != nil {
 						d.Fatalf(t, "%+v", err)
 					}
 					fetchColumnIDs[i] = col.GetID()
 				}
 
-				var spec descpb.IndexFetchSpec
+				var spec fetchpb.IndexFetchSpec
 				if err := rowenc.InitIndexFetchSpec(&spec, keys.SystemSQLCodec, table, index, fetchColumnIDs); err != nil {
 					d.Fatalf(t, "%+v", err)
 				}

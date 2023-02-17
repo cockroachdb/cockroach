@@ -90,8 +90,8 @@ const (
 
 // CheckNoRegistryFile checks that no registry file currently exists.
 // CheckNoRegistryFile should be called if the file registry will not be used.
-func (r *PebbleFileRegistry) CheckNoRegistryFile() error {
-	filename, err := atomicfs.ReadMarker(r.FS, r.DBDir, registryMarkerName)
+func CheckNoRegistryFile(fs vfs.FS, dbDir string) error {
+	filename, err := atomicfs.ReadMarker(fs, dbDir, registryMarkerName)
 	if oserror.IsNotExist(err) {
 		// ReadMarker may return oserror.IsNotExist if the data
 		// directory does not exist.

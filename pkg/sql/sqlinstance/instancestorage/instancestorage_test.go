@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"math/rand"
 	"sort"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -24,8 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
@@ -34,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -70,15 +71,13 @@ func TestStorage(t *testing.T) {
 	) {
 		dbName := t.Name()
 		tDB.Exec(t, `CREATE DATABASE "`+dbName+`"`)
-		schema := strings.Replace(systemschema.SQLInstancesTableSchema,
-			`CREATE TABLE system.sql_instances`,
-			`CREATE TABLE "`+dbName+`".sql_instances`, 1)
+		schema := instancestorage.GetTableSQLForDatabase(dbName)
 		tDB.Exec(t, schema)
-		tableID := getTableID(t, tDB, dbName, "sql_instances")
-		clock := hlc.NewClock(timeutil.NewTestTimeSource(), base.DefaultMaxClockOffset)
+		table := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), dbName, "sql_instances")
+		clock := hlc.NewClockForTesting(nil)
 		stopper := stop.NewStopper()
 		slStorage := slstorage.NewFakeStorage()
-		storage := instancestorage.NewTestingStorage(kvDB, keys.SystemSQLCodec, tableID, slStorage, s.ClusterSettings())
+		storage := instancestorage.NewTestingStorage(kvDB, keys.SystemSQLCodec, table, slStorage, s.ClusterSettings())
 		return stopper, storage, slStorage, clock
 	}
 
@@ -90,11 +89,12 @@ func TestStorage(t *testing.T) {
 		defer stopper.Stop(ctx)
 		const id = base.SQLInstanceID(1)
 		sessionID := makeSession()
-		const addr = "addr"
+		const rpcAddr = "rpcAddr"
+		const sqlAddr = "sqlAddr"
 		locality := roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "test"}, {Key: "az", Value: "a"}}}
 		const expiration = time.Minute
 		{
-			instance, err := storage.CreateInstance(ctx, sessionID, clock.Now().Add(expiration.Nanoseconds(), 0), addr, locality)
+			instance, err := storage.CreateInstance(ctx, sessionID, clock.Now().Add(expiration.Nanoseconds(), 0), rpcAddr, sqlAddr, locality)
 			require.NoError(t, err)
 			require.Equal(t, id, instance.InstanceID)
 		}
@@ -108,7 +108,8 @@ func TestStorage(t *testing.T) {
 		// Create three instances and release one.
 		region := enum.One
 		instanceIDs := [...]base.SQLInstanceID{1, 2, 3, 4, 5}
-		addresses := [...]string{"addr1", "addr2", "addr3", "addr4", "addr5"}
+		rpcAddresses := [...]string{"addr1", "addr2", "addr3", "addr4", "addr5"}
+		sqlAddresses := [...]string{"addr6", "addr7", "addr8", "addr9", "addr10"}
 		sessionIDs := [...]sqlliveness.SessionID{makeSession(), makeSession(), makeSession(), makeSession(), makeSession()}
 		localities := [...]roachpb.Locality{
 			{Tiers: []roachpb.Tier{{Key: "region", Value: "region1"}}},
@@ -119,7 +120,7 @@ func TestStorage(t *testing.T) {
 		}
 		sessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
 		for _, index := range []int{0, 1, 2} {
-			instance, err := storage.CreateInstance(ctx, sessionIDs[index], sessionExpiry, addresses[index], localities[index])
+			instance, err := storage.CreateInstance(ctx, sessionIDs[index], sessionExpiry, rpcAddresses[index], sqlAddresses[index], localities[index])
 			require.NoError(t, err)
 			require.NoError(t, slStorage.Insert(ctx, sessionIDs[index], sessionExpiry))
 			require.Equal(t, instanceIDs[index], instance.InstanceID)
@@ -134,20 +135,22 @@ func TestStorage(t *testing.T) {
 			for _, i := range []int{0, 1, 2} {
 				require.Equal(t, instanceIDs[i], instances[i].InstanceID)
 				require.Equal(t, sessionIDs[i], instances[i].SessionID)
-				require.Equal(t, addresses[i], instances[i].InstanceAddr)
+				require.Equal(t, rpcAddresses[i], instances[i].InstanceRPCAddr)
+				require.Equal(t, sqlAddresses[i], instances[i].InstanceSQLAddr)
 				require.Equal(t, localities[i], instances[i].Locality)
 			}
 			for _, i := range []int{3, 4} {
 				require.Equal(t, base.SQLInstanceID(i+1), instances[i].InstanceID)
 				require.Empty(t, instances[i].SessionID)
-				require.Empty(t, instances[i].InstanceAddr)
+				require.Empty(t, instances[i].InstanceRPCAddr)
+				require.Empty(t, instances[i].InstanceSQLAddr)
 				require.Empty(t, instances[i].Locality)
 			}
 		}
 
 		// Create two more instances.
 		for _, index := range []int{3, 4} {
-			instance, err := storage.CreateInstance(ctx, sessionIDs[index], sessionExpiry, addresses[index], localities[index])
+			instance, err := storage.CreateInstance(ctx, sessionIDs[index], sessionExpiry, rpcAddresses[index], sqlAddresses[index], localities[index])
 			require.NoError(t, err)
 			require.NoError(t, slStorage.Insert(ctx, sessionIDs[index], sessionExpiry))
 			require.Equal(t, instanceIDs[index], instance.InstanceID)
@@ -162,7 +165,8 @@ func TestStorage(t *testing.T) {
 			for i := range instances {
 				require.Equal(t, instanceIDs[i], instances[i].InstanceID)
 				require.Equal(t, sessionIDs[i], instances[i].SessionID)
-				require.Equal(t, addresses[i], instances[i].InstanceAddr)
+				require.Equal(t, rpcAddresses[i], instances[i].InstanceRPCAddr)
+				require.Equal(t, sqlAddresses[i], instances[i].InstanceSQLAddr)
 				require.Equal(t, localities[i], instances[i].Locality)
 			}
 		}
@@ -177,19 +181,21 @@ func TestStorage(t *testing.T) {
 			for i := 0; i < len(instances)-1; i++ {
 				require.Equal(t, instanceIDs[i+1], instances[i].InstanceID)
 				require.Equal(t, sessionIDs[i+1], instances[i].SessionID)
-				require.Equal(t, addresses[i+1], instances[i].InstanceAddr)
+				require.Equal(t, rpcAddresses[i+1], instances[i].InstanceRPCAddr)
+				require.Equal(t, sqlAddresses[i+1], instances[i].InstanceSQLAddr)
 				require.Equal(t, localities[i+1], instances[i].Locality)
 			}
 		}
 
 		// Verify instance ID associated with an expired session gets reused.
 		sessionID6 := makeSession()
-		addr6 := "addr6"
+		rpcAddr6 := "rpcAddr6"
+		sqlAddr6 := "sqlAddr6"
 		locality6 := roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "region6"}}}
 		{
 			require.NoError(t, slStorage.Delete(ctx, sessionIDs[4]))
 			require.NoError(t, slStorage.Insert(ctx, sessionID6, sessionExpiry))
-			instance, err := storage.CreateInstance(ctx, sessionID6, sessionExpiry, addr6, locality6)
+			instance, err := storage.CreateInstance(ctx, sessionID6, sessionExpiry, rpcAddr6, sqlAddr6, locality6)
 			require.NoError(t, err)
 			require.Equal(t, instanceIDs[4], instance.InstanceID)
 			instances, err := storage.GetAllInstancesDataForTest(ctx)
@@ -201,12 +207,14 @@ func TestStorage(t *testing.T) {
 				foundIDs = append(foundIDs, instance.InstanceID)
 				if index == 3 {
 					require.Equal(t, sessionID6, instance.SessionID)
-					require.Equal(t, addr6, instance.InstanceAddr)
+					require.Equal(t, rpcAddr6, instance.InstanceRPCAddr)
+					require.Equal(t, sqlAddr6, instance.InstanceSQLAddr)
 					require.Equal(t, locality6, instance.Locality)
 					continue
 				}
 				require.Equal(t, sessionIDs[index+1], instance.SessionID)
-				require.Equal(t, addresses[index+1], instance.InstanceAddr)
+				require.Equal(t, rpcAddresses[index+1], instance.InstanceRPCAddr)
+				require.Equal(t, sqlAddresses[index+1], instance.InstanceSQLAddr)
 				require.Equal(t, localities[index+1], instance.Locality)
 			}
 			require.Equal(t, []base.SQLInstanceID{2, 3, 4, 5}, foundIDs)
@@ -215,9 +223,10 @@ func TestStorage(t *testing.T) {
 		// Verify released instance ID gets reused.
 		{
 			newSessionID := makeSession()
-			newAddr := "addr7"
+			newRPCAddr := "rpcAddr7"
+			newSQLAddr := "sqlAddr7"
 			newLocality := roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "region7"}}}
-			instance, err := storage.CreateInstance(ctx, newSessionID, sessionExpiry, newAddr, newLocality)
+			instance, err := storage.CreateInstance(ctx, newSessionID, sessionExpiry, newRPCAddr, newSQLAddr, newLocality)
 			require.NoError(t, err)
 			require.Equal(t, instanceIDs[0], instance.InstanceID)
 			instances, err := storage.GetAllInstancesDataForTest(ctx)
@@ -229,22 +238,26 @@ func TestStorage(t *testing.T) {
 				switch index {
 				case 0:
 					require.Equal(t, newSessionID, instances[index].SessionID)
-					require.Equal(t, newAddr, instances[index].InstanceAddr)
+					require.Equal(t, newRPCAddr, instances[index].InstanceRPCAddr)
+					require.Equal(t, newSQLAddr, instances[index].InstanceSQLAddr)
 					require.Equal(t, newLocality, instances[index].Locality)
 				case 4:
 					require.Equal(t, sessionID6, instances[index].SessionID)
-					require.Equal(t, addr6, instances[index].InstanceAddr)
+					require.Equal(t, rpcAddr6, instances[index].InstanceRPCAddr)
+					require.Equal(t, sqlAddr6, instances[index].InstanceSQLAddr)
 					require.Equal(t, locality6, instances[index].Locality)
 				default:
 					require.Equal(t, sessionIDs[index], instances[index].SessionID)
-					require.Equal(t, addresses[index], instances[index].InstanceAddr)
+					require.Equal(t, rpcAddresses[index], instances[index].InstanceRPCAddr)
+					require.Equal(t, sqlAddresses[index], instances[index].InstanceSQLAddr)
 					require.Equal(t, localities[index], instances[index].Locality)
 				}
 			}
 			for index := len(instanceIDs); index < len(instances); index++ {
 				require.Equal(t, base.SQLInstanceID(index+1), instances[index].InstanceID)
 				require.Empty(t, instances[index].SessionID)
-				require.Empty(t, instances[index].InstanceAddr)
+				require.Empty(t, instances[index].InstanceRPCAddr)
+				require.Empty(t, instances[index].InstanceSQLAddr)
 				require.Empty(t, instances[index].Locality)
 			}
 		}
@@ -260,23 +273,21 @@ func TestSQLAccess(t *testing.T) {
 	ctx := context.Background()
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	clock := hlc.NewClock(timeutil.NewTestTimeSource(), base.DefaultMaxClockOffset)
+	clock := hlc.NewClockForTesting(nil)
 	tDB := sqlutils.MakeSQLRunner(sqlDB)
 	dbName := t.Name()
 	tDB.Exec(t, `CREATE DATABASE "`+dbName+`"`)
-	schema := strings.Replace(systemschema.SQLInstancesTableSchema,
-		`CREATE TABLE system.sql_instances`,
-		`CREATE TABLE "`+dbName+`".sql_instances`, 1)
+	schema := instancestorage.GetTableSQLForDatabase(dbName)
 	tDB.Exec(t, schema)
-	tableID := getTableID(t, tDB, dbName, "sql_instances")
+	table := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), dbName, "sql_instances")
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	storage := instancestorage.NewTestingStorage(
-		kvDB, keys.SystemSQLCodec, tableID, slstorage.NewFakeStorage(), s.ClusterSettings())
+		kvDB, keys.SystemSQLCodec, table, slstorage.NewFakeStorage(), s.ClusterSettings())
 	const (
 		tierStr         = "region=test1,zone=test2"
 		expiration      = time.Minute
-		expectedNumCols = 4
+		expectedNumCols = 5
 	)
 	var locality roachpb.Locality
 	require.NoError(t, locality.Set(tierStr))
@@ -284,13 +295,14 @@ func TestSQLAccess(t *testing.T) {
 		ctx,
 		makeSession(),
 		clock.Now().Add(expiration.Nanoseconds(), 0),
-		"addr",
+		"rpcAddr",
+		"sqlAddr",
 		locality,
 	)
 	require.NoError(t, err)
 
 	// Query the table through SQL and verify the query completes successfully.
-	rows := tDB.Query(t, fmt.Sprintf("SELECT id, addr, session_id, locality FROM \"%s\".sql_instances", dbName))
+	rows := tDB.Query(t, fmt.Sprintf("SELECT id, addr, sql_addr, session_id, locality FROM \"%s\".sql_instances", dbName))
 	defer rows.Close()
 	columns, err := rows.Columns()
 	require.NoError(t, err)
@@ -298,27 +310,83 @@ func TestSQLAccess(t *testing.T) {
 	var parsedInstanceID base.SQLInstanceID
 	var parsedSessionID gosql.NullString
 	var parsedAddr gosql.NullString
+	var parsedSqlAddr gosql.NullString
 	var parsedLocality gosql.NullString
-	rows.Next()
-	err = rows.Scan(&parsedInstanceID, &parsedAddr, &parsedSessionID, &parsedLocality)
+	if !assert.True(t, rows.Next()) {
+		require.NoError(t, rows.Err())
+		require.NoError(t, rows.Close())
+	}
+	err = rows.Scan(&parsedInstanceID, &parsedAddr, &parsedSqlAddr, &parsedSessionID, &parsedLocality)
 	require.NoError(t, err)
 	require.Equal(t, instance.InstanceID, parsedInstanceID)
 	require.Equal(t, instance.SessionID, sqlliveness.SessionID(parsedSessionID.String))
-	require.Equal(t, instance.InstanceAddr, parsedAddr.String)
+	require.Equal(t, instance.InstanceRPCAddr, parsedAddr.String)
+	require.Equal(t, instance.InstanceSQLAddr, parsedSqlAddr.String)
 	require.Equal(t, instance.Locality, locality)
 
 	// Verify that the remaining entries are preallocated ones.
 	i := 2
 	for rows.Next() {
-		err = rows.Scan(&parsedInstanceID, &parsedAddr, &parsedSessionID, &parsedLocality)
+		err = rows.Scan(&parsedInstanceID, &parsedAddr, &parsedSqlAddr, &parsedSessionID, &parsedLocality)
 		require.NoError(t, err)
 		require.Equal(t, base.SQLInstanceID(i), parsedInstanceID)
 		require.Empty(t, parsedSessionID.String)
 		require.Empty(t, parsedAddr.String)
+		require.Empty(t, parsedSqlAddr.String)
 		require.Empty(t, parsedLocality.String)
 		i++
 	}
 	require.NoError(t, rows.Err())
+}
+
+func TestRefreshSession(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	if systemschema.TestSupportMultiRegion() {
+		skip.IgnoreLintf(t, "this test gets run twice and is not set up for use with the MR schema")
+	}
+
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{Locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "abc", Value: "xyz"}}}})
+	defer s.Stopper().Stop(ctx)
+
+	c1 := sqlutils.MakeSQLRunner(sqlDB)
+
+	// Everything but the session should stay the same so observe the initial row.
+	rowBeforeNoSession := c1.QueryStr(t, "SELECT id, addr, sql_addr, locality FROM system.sql_instances WHERE id = 1")
+	require.Len(t, rowBeforeNoSession, 1)
+
+	// This initial session should go away once we expire it below, but let's
+	// verify it is there for starters and remember it.
+	sess := c1.QueryStr(t, "SELECT encode(session_id, 'hex') FROM system.sql_instances WHERE id = 1")
+	require.Len(t, sess, 1)
+	require.Len(t, sess[0][0], 38)
+
+	// First let's delete the instance AND expire the session; the instance should
+	// reappear when a new session is acquired, with the new session.
+	c1.ExecRowsAffected(t, 1, "DELETE FROM system.sql_instances WHERE session_id = decode($1, 'hex')", sess[0][0])
+	c1.ExecRowsAffected(t, 1, "DELETE FROM system.sqlliveness WHERE session_id = decode($1, 'hex')", sess[0][0])
+
+	// Wait until we see the right row appear.
+	query := fmt.Sprintf(`SELECT count(*) FROM system.sql_instances WHERE id = 1 AND session_id <> decode('%s', 'hex')`, sess[0][0])
+	c1.CheckQueryResultsRetry(t, query, [][]string{{"1"}})
+
+	// Verify that everything else is the same after recreate.
+	c1.CheckQueryResults(t, "SELECT id, addr, sql_addr, locality FROM system.sql_instances WHERE id = 1", rowBeforeNoSession)
+
+	sess = c1.QueryStr(t, "SELECT encode(session_id, 'hex') FROM system.sql_instances WHERE id = 1")
+	// Now let's just expire the session and leave the row; the instance row
+	// should still become correct once it is updated with the new session.
+	c1.ExecRowsAffected(t, 1, "DELETE FROM system.sqlliveness WHERE session_id = decode($1, 'hex')", sess[0][0])
+
+	// Wait until we see the right row appear.
+	query = fmt.Sprintf(`SELECT count(*) FROM system.sql_instances WHERE id = 1 AND session_id <> decode('%s', 'hex')`, sess[0][0])
+	c1.CheckQueryResultsRetry(t, query, [][]string{{"1"}})
+
+	// Verify everything else is still the same after update.
+	c1.CheckQueryResults(t, "SELECT id, addr, sql_addr, locality FROM system.sql_instances WHERE id = 1", rowBeforeNoSession)
+
 }
 
 // TestConcurrentCreateAndRelease verifies that concurrent access to instancestorage
@@ -330,26 +398,25 @@ func TestConcurrentCreateAndRelease(t *testing.T) {
 	ctx := context.Background()
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	clock := hlc.NewClock(timeutil.NewTestTimeSource(), base.DefaultMaxClockOffset)
+	clock := hlc.NewClockForTesting(nil)
 	tDB := sqlutils.MakeSQLRunner(sqlDB)
 	dbName := t.Name()
 	tDB.Exec(t, `CREATE DATABASE "`+dbName+`"`)
-	schema := strings.Replace(systemschema.SQLInstancesTableSchema,
-		`CREATE TABLE system.sql_instances`,
-		`CREATE TABLE "`+dbName+`".sql_instances`, 1)
+	schema := instancestorage.GetTableSQLForDatabase(dbName)
 	tDB.Exec(t, schema)
-	tableID := getTableID(t, tDB, dbName, "sql_instances")
+	table := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), dbName, "sql_instances")
 	stopper := stop.NewStopper()
 	slStorage := slstorage.NewFakeStorage()
 	defer stopper.Stop(ctx)
-	storage := instancestorage.NewTestingStorage(kvDB, keys.SystemSQLCodec, tableID, slStorage, s.ClusterSettings())
+	storage := instancestorage.NewTestingStorage(kvDB, keys.SystemSQLCodec, table, slStorage, s.ClusterSettings())
 	instancestorage.PreallocatedCount.Override(ctx, &s.ClusterSettings().SV, 1)
 
 	const (
 		runsPerWorker   = 100
 		workers         = 100
 		controllerSteps = 100
-		addr            = "addr"
+		rpcAddr         = "rpcAddr"
+		sqlAddr         = "sqlAddr"
 		expiration      = time.Minute
 	)
 	sessionID := makeSession()
@@ -379,7 +446,7 @@ func TestConcurrentCreateAndRelease(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			instance, err := storage.CreateInstance(ctx, sessionID, sessionExpiry, addr, locality)
+			instance, err := storage.CreateInstance(ctx, sessionID, sessionExpiry, rpcAddr, sqlAddr, locality)
 			require.NoError(t, err)
 			if len(state.freeInstances) > 0 {
 				_, free := state.freeInstances[instance.InstanceID]
@@ -437,7 +504,8 @@ func TestConcurrentCreateAndRelease(t *testing.T) {
 				require.ErrorIs(t, err, sqlinstance.NonExistentInstanceError)
 			} else {
 				require.NoError(t, err)
-				require.Equal(t, addr, instanceInfo.InstanceAddr)
+				require.Equal(t, rpcAddr, instanceInfo.InstanceRPCAddr)
+				require.Equal(t, sqlAddr, instanceInfo.InstanceSQLAddr)
 				require.Equal(t, sessionID, instanceInfo.SessionID)
 				require.Equal(t, locality, instanceInfo.Locality)
 				_, live := state.liveInstances[i]
@@ -477,15 +545,13 @@ func TestReclaimLoop(t *testing.T) {
 	ctx := context.Background()
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	clock := hlc.NewClock(timeutil.NewTestTimeSource(), base.DefaultMaxClockOffset)
+	clock := hlc.NewClockForTesting(nil)
 	tDB := sqlutils.MakeSQLRunner(sqlDB)
 	dbName := t.Name()
 	tDB.Exec(t, `CREATE DATABASE "`+dbName+`"`)
-	schema := strings.Replace(systemschema.SQLInstancesTableSchema,
-		`CREATE TABLE system.sql_instances`,
-		`CREATE TABLE "`+dbName+`".sql_instances`, 1)
+	schema := instancestorage.GetTableSQLForDatabase(dbName)
 	tDB.Exec(t, schema)
-	tableID := getTableID(t, tDB, dbName, "sql_instances")
+	tableID := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), dbName, "sql_instances")
 	slStorage := slstorage.NewFakeStorage()
 	storage := instancestorage.NewTestingStorage(kvDB, keys.SystemSQLCodec, tableID, slStorage, s.ClusterSettings())
 	storage.TestingKnobs.JitteredIntervalFn = func(d time.Duration) time.Duration {
@@ -503,8 +569,8 @@ func TestReclaimLoop(t *testing.T) {
 	const expiration = 5 * time.Hour
 	sessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
 
-	ief := s.InternalExecutorFactory().(descs.TxnManager)
-	err := storage.RunInstanceIDReclaimLoop(ctx, s.Stopper(), ts, ief, func() hlc.Timestamp {
+	db := s.InternalDB().(descs.DB)
+	err := storage.RunInstanceIDReclaimLoop(ctx, s.Stopper(), ts, db, func() hlc.Timestamp {
 		return sessionExpiry
 	})
 	require.NoError(t, err)
@@ -541,7 +607,8 @@ func TestReclaimLoop(t *testing.T) {
 	require.Equal(t, preallocatedCount, len(instances))
 	for id, instance := range instances {
 		require.Equal(t, base.SQLInstanceID(id+1), instance.InstanceID)
-		require.Empty(t, instance.InstanceAddr)
+		require.Empty(t, instance.InstanceRPCAddr)
+		require.Empty(t, instance.InstanceSQLAddr)
 		require.Empty(t, instance.SessionID)
 		require.Empty(t, instance.Locality)
 	}
@@ -549,7 +616,8 @@ func TestReclaimLoop(t *testing.T) {
 	// Consume two rows.
 	region := enum.One
 	instanceIDs := [...]base.SQLInstanceID{1, 2}
-	addresses := [...]string{"addr1", "addr2"}
+	rpcAddresses := [...]string{"addr1", "addr2"}
+	sqlAddresses := [...]string{"addr3", "addr4"}
 	sessionIDs := [...]sqlliveness.SessionID{makeSession(), makeSession()}
 	localities := [...]roachpb.Locality{
 		{Tiers: []roachpb.Tier{{Key: "region", Value: "region1"}}},
@@ -561,7 +629,8 @@ func TestReclaimLoop(t *testing.T) {
 			ctx,
 			region,
 			id,
-			addresses[i],
+			rpcAddresses[i],
+			sqlAddresses[i],
 			sessionIDs[i],
 			sessionExpiry,
 			localities[i],
@@ -595,29 +664,17 @@ func TestReclaimLoop(t *testing.T) {
 		require.Equal(t, base.SQLInstanceID(i+1), instance.InstanceID)
 		switch i {
 		case 0, 1:
-			require.Equal(t, addresses[i], instance.InstanceAddr)
+			require.Equal(t, rpcAddresses[i], instance.InstanceRPCAddr)
+			require.Equal(t, sqlAddresses[i], instance.InstanceSQLAddr)
 			require.Equal(t, sessionIDs[i], instance.SessionID)
 			require.Equal(t, localities[i], instance.Locality)
 		default:
-			require.Empty(t, instance.InstanceAddr)
+			require.Empty(t, instance.InstanceRPCAddr)
+			require.Empty(t, instance.InstanceSQLAddr)
 			require.Empty(t, instance.SessionID)
 			require.Empty(t, instance.Locality)
 		}
 	}
-}
-
-func getTableID(
-	t *testing.T, db *sqlutils.SQLRunner, dbName, tableName string,
-) (tableID descpb.ID) {
-	t.Helper()
-	db.QueryRow(t, `
- select u.id
-  from system.namespace t
-  join system.namespace u
-  on t.id = u."parentID"
-  where t.name = $1 and u.name = $2`,
-		dbName, tableName).Scan(&tableID)
-	return tableID
 }
 
 func sortInstances(instances []sqlinstance.InstanceInfo) {

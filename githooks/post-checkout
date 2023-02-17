@@ -5,3 +5,22 @@ if [ "$1" != "$2" ]; then # previous ref != new ref.
   git clean -fd "pkg/**.pb.go" "pkg/**.pb.gw.go" "pkg/**.eg.go" "pkg/**.og.go" "pkg/**generated.go"
   exec git submodule update --init --recursive
 fi
+
+# Only if this is a branch checkout.
+if [ "$3" == "1" ]; then 
+    # Check for commit where vendor submodule was removed.
+    if git merge-base --is-ancestor 9aa666b17e11926c1ad88e3d2b21bf2161e9baa2 HEAD; then
+        if [ -d vendor ]; then
+            echo "post-checkout: removing vendor directory"
+            rm -rf vendor
+        fi
+    fi
+    # Check for commit where pkg/ui/yarn-vendor submodule was removed.
+    if git merge-base --is-ancestor 1a97354906ea56d3e75d387a095bd6d7786efc1c HEAD; then
+        if [ -d pkg/ui/yarn-vendor ]; then
+            echo "post-checkout: removing pkg/ui/yarn-vendor directory"
+            rm -rf pkg/ui/yarn-vendor
+        fi
+    fi
+fi
+

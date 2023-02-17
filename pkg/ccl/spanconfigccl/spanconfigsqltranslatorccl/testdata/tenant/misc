@@ -26,6 +26,7 @@ translate database=db
 # Same as above, except this time the translation starts from the table's ID.
 translate id=56
 ----
+/Tenant/10/Table/5{6-7}                    database system (tenant)
 
 subtest offline-descriptors
 

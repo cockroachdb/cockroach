@@ -45,7 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/raft/v3"
+	raft "go.etcd.io/raft/v3"
 	"go.etcd.io/raft/v3/tracker"
 )
 
@@ -1316,7 +1316,7 @@ func TestAlterRangeRelocate(t *testing.T) {
 	})
 
 	// Move lease 3 -> 5.
-	_, err = db.Exec("ALTER RANGE RELOCATE FROM $1 TO $2 FOR (SELECT range_id from crdb_internal.ranges where range_id = $3)", 3, 5, rhsDesc.RangeID)
+	_, err = db.Exec("ALTER RANGE RELOCATE FROM $1 TO $2 FOR (SELECT range_id from crdb_internal.ranges_no_leases where range_id = $3)", 3, 5, rhsDesc.RangeID)
 	require.NoError(t, err)
 	require.NoError(t, tc.WaitForVoters(rhsDesc.StartKey.AsRawKey(), tc.Targets(0, 3, 4)...))
 }
@@ -1523,7 +1523,7 @@ func TestLeaseUpgradeVersionGate(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettingsWithVersions(
 		clusterversion.TestingBinaryVersion,
-		clusterversion.ByKey(clusterversion.V22_2EnableLeaseUpgrade-1),
+		clusterversion.ByKey(clusterversion.TODODelete_V22_2EnableLeaseUpgrade-1),
 		false, /* initializeVersion */
 	)
 	tci := serverutils.StartNewTestCluster(t, 2, base.TestClusterArgs{
@@ -1533,7 +1533,7 @@ func TestLeaseUpgradeVersionGate(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
-					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.V22_2EnableLeaseUpgrade - 1),
+					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.TODODelete_V22_2EnableLeaseUpgrade - 1),
 				},
 			},
 		},
@@ -1564,7 +1564,7 @@ func TestLeaseUpgradeVersionGate(t *testing.T) {
 
 	// Enable the version gate.
 	_, err := tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
-		clusterversion.ByKey(clusterversion.V22_2EnableLeaseUpgrade).String())
+		clusterversion.ByKey(clusterversion.TODODelete_V22_2EnableLeaseUpgrade).String())
 	require.NoError(t, err)
 
 	// Transfer the lease back from n2 to n1. It should be transferred as an

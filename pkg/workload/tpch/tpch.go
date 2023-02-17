@@ -96,23 +96,23 @@ var tpchMeta = workload.Meta{
 			`enable-checks`: {RuntimeOnly: true},
 			`vectorize`:     {RuntimeOnly: true},
 		}
-		g.flags.Uint64Var(&g.seed, `seed`, 1, `Random number generator seed`)
+		g.flags.Uint64Var(&g.seed, `seed`, 1, `Random number generator seed.`)
 		g.flags.IntVar(&g.scaleFactor, `scale-factor`, 1,
-			`Linear scale of how much data to use (each SF is ~1GB)`)
-		g.flags.BoolVar(&g.fks, `fks`, true, `Add the foreign keys`)
+			`Linear scale of how much data to use (each SF is ~1GB).`)
+		g.flags.BoolVar(&g.fks, `fks`, true, `Add foreign keys relationships.`)
 		g.flags.StringVar(&g.queriesRaw, `queries`,
 			`1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22`,
-			`Queries to run. Use a comma separated list of query numbers`)
+			`Queries to run. Use a comma separated list of query numbers.`)
 		g.flags.BoolVar(&g.enableChecks, `enable-checks`, false,
 			"Enable checking the output against the expected rows (default false). "+
 				"Note that the checks are only supported for scale factor 1 of the backup "+
-				"stored at 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup'")
+				"stored at 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup'.")
 		g.flags.StringVar(&g.vectorize, `vectorize`, `on`,
-			`Set vectorize session variable`)
+			`Set vectorize session variable.`)
 		g.flags.BoolVar(&g.useClusterVectorizeSetting, `default-vectorize`, false,
-			`Ignore vectorize option and use the current cluster setting sql.defaults.vectorize`)
+			`Ignore vectorize option and use the current cluster setting sql.defaults.vectorize.`)
 		g.flags.BoolVar(&g.verbose, `verbose`, false,
-			`Prints out the queries being run as well as histograms`)
+			`Prints out the queries being run as well as histograms.`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -190,9 +190,6 @@ func (w *tpch) Hooks() workload.Hooks {
 type generateLocals struct {
 	rng *rand.Rand
 
-	// namePerm is a slice of ordinals into randPartNames.
-	namePerm []int
-
 	orderData *orderSharedRandomData
 }
 
@@ -201,13 +198,8 @@ func (w *tpch) Tables() []workload.Table {
 	if w.localsPool == nil {
 		w.localsPool = &sync.Pool{
 			New: func() interface{} {
-				namePerm := make([]int, len(randPartNames))
-				for i := range namePerm {
-					namePerm[i] = i
-				}
 				return &generateLocals{
-					rng:      rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano()))),
-					namePerm: namePerm,
+					rng: rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano()))),
 					orderData: &orderSharedRandomData{
 						partKeys:   make([]int, 0, 7),
 						shipDates:  make([]int64, 0, 7),

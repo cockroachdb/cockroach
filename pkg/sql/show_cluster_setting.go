@@ -19,10 +19,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -55,10 +57,10 @@ func (p *planner) getCurrentEncodedVersionSettingValue(
 
 			// The (slight ab)use of WithMaxAttempts achieves convenient context cancellation.
 			return retry.WithMaxAttempts(ctx, retry.Options{}, math.MaxInt32, func() error {
-				return p.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-					datums, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRowEx(
+				return p.execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+					datums, err := txn.QueryRowEx(
 						ctx, "read-setting",
-						txn,
+						txn.KV(),
 						sessiondata.RootUserSessionDataOverride,
 						"SELECT value FROM system.settings WHERE name = $1", name,
 					)
@@ -124,6 +126,17 @@ func (p *planner) ShowClusterSetting(
 
 	if err := checkPrivilegesForSetting(ctx, p, name, "show"); err != nil {
 		return nil, err
+	}
+
+	if strings.HasPrefix(n.Name, "sql.defaults") {
+		p.BufferClientNotice(
+			ctx,
+			errors.WithHintf(
+				pgnotice.Newf("using global default %s is not recommended", n.Name),
+				"use the `ALTER ROLE ... SET` syntax to control session variable defaults at a finer-grained level. See: %s",
+				docs.URL("alter-role.html#set-default-session-variable-values-for-a-role"),
+			),
+		)
 	}
 
 	setting, ok := val.(settings.NonMaskedSetting)

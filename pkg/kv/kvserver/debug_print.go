@@ -366,7 +366,7 @@ func tryRaftLogEntry(kv storage.MVCCKeyValue) (string, error) {
 	}
 	cmd.WriteBatch = nil
 
-	return fmt.Sprintf("%s by %s\n%s\nwrite batch:\n%s", &e.Entry, leaseStr, &cmd, wbStr), nil
+	return fmt.Sprintf("%s (ID %s) by %s\n%s\nwrite batch:\n%s", &e.Entry, e.ID, leaseStr, &cmd, wbStr), nil
 }
 
 func tryTxn(kv storage.MVCCKeyValue) (string, error) {

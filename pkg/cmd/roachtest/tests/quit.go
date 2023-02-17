@@ -181,7 +181,7 @@ func (q *quitTest) createRanges(ctx context.Context) {
 	db := q.c.Conn(ctx, q.t.L(), 1)
 	defer db.Close()
 	if _, err := db.ExecContext(ctx, fmt.Sprintf(`
-CREATE TABLE t(x, y, PRIMARY KEY(x)) AS SELECT @1, 1 FROM generate_series(1,%[1]d)`,
+CREATE TABLE t(x, y, PRIMARY KEY(x)) AS SELECT i, 1 FROM generate_series(1,%[1]d) g(i)`,
 		numRanges)); err != nil {
 		q.Fatal(err)
 	}

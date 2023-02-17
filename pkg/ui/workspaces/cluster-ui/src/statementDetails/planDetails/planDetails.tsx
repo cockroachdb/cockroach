@@ -19,7 +19,8 @@ import {
 import { Button } from "../../button";
 import { SqlBox, SqlBoxSize } from "../../sql";
 import { SortSetting } from "../../sortedtable";
-import { Row } from "antd";
+import { Col, Row } from "antd";
+import "antd/lib/col/style";
 import "antd/lib/row/style";
 import {
   InsightsSortedTable,
@@ -29,17 +30,30 @@ import classNames from "classnames/bind";
 import styles from "../statementDetails.module.scss";
 import { CockroachCloudContext } from "../../contexts";
 import { InsightRecommendation, InsightType } from "../../insights";
+import { SummaryCard, SummaryCardItem } from "../../summaryCard";
+import {
+  Count,
+  DATE_FORMAT_24_UTC,
+  Duration,
+  formatNumberForDisplay,
+  longToInt,
+  RenderCount,
+  TimestampToMoment,
+} from "../../util";
+import { formatIndexes } from "./plansTable";
 
 const cx = classNames.bind(styles);
 
 interface PlanDetailsProps {
   plans: PlanHashStats[];
   statementFingerprintID: string;
+  hasAdminRole: boolean;
 }
 
 export function PlanDetails({
   plans,
   statementFingerprintID,
+  hasAdminRole,
 }: PlanDetailsProps): React.ReactElement {
   const [plan, setPlan] = useState<PlanHashStats | null>(null);
   const [plansSortSetting, setPlansSortSetting] = useState<SortSetting>({
@@ -65,6 +79,7 @@ export function PlanDetails({
         backToPlanTable={backToPlanTable}
         sortSetting={insightsSortSetting}
         onChangeSortSetting={setInsightsSortSetting}
+        hasAdminRole={hasAdminRole}
       />
     );
   } else {
@@ -112,6 +127,7 @@ interface ExplainPlanProps {
   backToPlanTable: () => void;
   sortSetting: SortSetting;
   onChangeSortSetting: (ss: SortSetting) => void;
+  hasAdminRole: boolean;
 }
 
 function ExplainPlan({
@@ -120,11 +136,14 @@ function ExplainPlan({
   backToPlanTable,
   sortSetting,
   onChangeSortSetting,
+  hasAdminRole,
 }: ExplainPlanProps): React.ReactElement {
   const explainPlan =
     `Plan Gist: ${plan.stats.plan_gists[0]} \n\n` +
     (plan.explain_plan === "" ? "unavailable" : plan.explain_plan);
   const hasInsights = plan.stats.index_recommendations?.length > 0;
+  const duration = (v: number) => Duration(v * 1e9);
+  const count = (v: number) => v.toFixed(1);
   return (
     <div>
       <Helmet title="Plan Details" />
@@ -139,6 +158,62 @@ function ExplainPlan({
         All Plans
       </Button>
       <SqlBox value={explainPlan} size={SqlBoxSize.custom} />
+      <Row gutter={24} className={cx("margin-left-neg", "margin-bottom")}>
+        <Col className="gutter-row" span={12}>
+          <SummaryCard className={cx("summary-card")}>
+            <SummaryCardItem
+              label="Last Execution Time"
+              value={TimestampToMoment(plan.stats.last_exec_timestamp).format(
+                DATE_FORMAT_24_UTC,
+              )}
+            />
+            <SummaryCardItem
+              label="Average Execution Time"
+              value={formatNumberForDisplay(plan.stats.run_lat.mean, duration)}
+            />
+            <SummaryCardItem
+              label="Execution Count"
+              value={Count(longToInt(plan.stats.count))}
+            />
+            <SummaryCardItem
+              label="Average Rows Read"
+              value={formatNumberForDisplay(plan.stats.rows_read.mean, count)}
+            />
+          </SummaryCard>
+        </Col>
+        <Col className="gutter-row" span={12}>
+          <SummaryCard className={cx("summary-card")}>
+            <SummaryCardItem
+              label="Full Scan"
+              value={RenderCount(
+                plan.metadata.full_scan_count,
+                plan.metadata.total_count,
+              )}
+            />
+            <SummaryCardItem
+              label="Distributed"
+              value={RenderCount(
+                plan.metadata.dist_sql_count,
+                plan.metadata.total_count,
+              )}
+            />
+            <SummaryCardItem
+              label="Vectorized"
+              value={RenderCount(
+                plan.metadata.vec_count,
+                plan.metadata.total_count,
+              )}
+            />
+            <SummaryCardItem
+              label="Used Indexes"
+              value={formatIndexes(
+                plan.stats.indexes,
+                plan.metadata.databases[0],
+              )}
+            />
+          </SummaryCard>
+        </Col>
+      </Row>
       {hasInsights && (
         <Insights
           idxRecommendations={plan.stats.index_recommendations}
@@ -148,6 +223,7 @@ function ExplainPlan({
           statementFingerprintID={statementFingerprintID}
           sortSetting={sortSetting}
           onChangeSortSetting={onChangeSortSetting}
+          hasAdminRole={hasAdminRole}
         />
       )}
     </div>
@@ -205,6 +281,7 @@ interface InsightsProps {
   statementFingerprintID?: string;
   sortSetting?: SortSetting;
   onChangeSortSetting?: (ss: SortSetting) => void;
+  hasAdminRole: boolean;
 }
 
 export function Insights({
@@ -215,9 +292,10 @@ export function Insights({
   statementFingerprintID,
   sortSetting,
   onChangeSortSetting,
+  hasAdminRole,
 }: InsightsProps): React.ReactElement {
-  const hideAction = useContext(CockroachCloudContext) && database?.length == 0;
-  const insightsColumns = makeInsightsColumns(hideAction, false, true);
+  const hideAction = useContext(CockroachCloudContext) || database?.length == 0;
+  const insightsColumns = makeInsightsColumns(hideAction, hasAdminRole, false);
   const data = formatIdxRecommendations(
     idxRecommendations,
     database,

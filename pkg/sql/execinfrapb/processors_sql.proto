@@ -24,7 +24,7 @@ import "roachpb/data.proto";
 import "sql/catalog/descpb/structured.proto";
 import "sql/catalog/descpb/join_type.proto";
 import "sql/catalog/descpb/locking.proto";
-import "sql/catalog/descpb/index_fetch.proto";
+import "sql/catalog/fetchpb/index_fetch.proto";
 import "sql/types/types.proto";
 import "sql/execinfrapb/data.proto";
 import "sql/execinfrapb/processors_base.proto";
@@ -397,6 +397,11 @@ message JoinReaderSpec {
   // a prefix of input columns followed by index (lookup) columns without
   // requiring a (buffered) sort.
   optional bool maintain_lookup_ordering = 22 [(gogoproto.nullable) = false];
+
+  // RemoteOnlyLookups is true when this join is defined with only lookups
+  // that read into remote regions, though the lookups are defined in
+  // LookupExpr, not RemoteLookupExpr.
+  optional bool remote_only_lookups = 23 [(gogoproto.nullable) = false];
 }
 
 // SorterSpec is the specification for a "sorting aggregator". A sorting

@@ -16,8 +16,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/stretchr/testify/require"
@@ -82,10 +84,15 @@ func TestLeaseTransferOp(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 			ctx := context.Background()
-			s := state.NewTestStateReplCounts(map[state.StoreID]int{1: tc.ranges + 1, 2: tc.ranges + 1, 3: tc.ranges + 1}, 3, 1000 /* keyspace */)
 			settings := config.DefaultSimulationSettings()
+			s := state.NewStateWithReplCounts(
+				map[state.StoreID]int{1: tc.ranges + 1, 2: tc.ranges + 1, 3: tc.ranges + 1},
+				3,
+				1000, /* keyspace */
+				settings,
+			)
 			changer := state.NewReplicaChanger()
-			controller := NewController(changer, allocatorimpl.Allocator{}, settings)
+			controller := NewController(changer, allocatorimpl.Allocator{}, nil /* storePool */, settings, 1 /* storeID */)
 
 			for i := 2; i <= tc.ranges+1; i++ {
 				s.TransferLease(state.RangeID(i), 1)
@@ -99,7 +106,13 @@ func TestLeaseTransferOp(t *testing.T) {
 
 				for _, transfers := range tc.transfers[tick] {
 					rangeID, target := transfers[0], transfers[1]
-					op := NewTransferLeaseOp(state.OffsetTick(start, tick), roachpb.RangeID(rangeID), 0, roachpb.StoreID(target), 0)
+					op := NewTransferLeaseOp(
+						state.OffsetTick(start, tick),
+						roachpb.RangeID(rangeID),
+						0,
+						roachpb.StoreID(target),
+						allocator.RangeUsageInfo{},
+					)
 					ticket := controller.Dispatch(ctx, state.OffsetTick(start, tick), s, op)
 					pending = append(pending, ticket)
 				}
@@ -131,11 +144,12 @@ func TestLeaseTransferOp(t *testing.T) {
 }
 
 func TestRelocateRangeOp(t *testing.T) {
-	start := state.TestingStartTime()
-
 	settings := config.DefaultSimulationSettings()
+	start := settings.StartTime
 	settings.ReplicaAddRate = 1
 	settings.ReplicaChangeBaseDelay = 5 * time.Second
+	settings.StateExchangeInterval = 1 * time.Second
+	settings.StateExchangeDelay = 0
 
 	type testRelocationArgs struct {
 		voters               []state.StoreID
@@ -267,10 +281,16 @@ func TestRelocateRangeOp(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 			ctx := context.Background()
-			s := state.NewTestStateReplCounts(map[state.StoreID]int{1: 3, 2: 3, 3: 3, 4: 0, 5: 0, 6: 0}, 3, 1000 /* keyspace */)
+			s := state.NewStateWithReplCounts(
+				map[state.StoreID]int{1: 3, 2: 3, 3: 3, 4: 0, 5: 0, 6: 0},
+				3,
+				1000, /* keyspace */
+				settings,
+			)
 			changer := state.NewReplicaChanger()
 			allocator := s.MakeAllocator(state.StoreID(1))
-			controller := NewController(changer, allocator, settings)
+			storePool := s.StorePool(state.StoreID(1))
+			controller := NewController(changer, allocator, storePool, settings, 1 /* storeID */)
 
 			// Transfer the lease to store 1 for all ranges.
 			for i := 2; i < 4; i++ {
@@ -282,19 +302,8 @@ func TestRelocateRangeOp(t *testing.T) {
 				}
 			}
 
-			exchange := state.NewFixedDelayExhange(
-				start,
-				time.Second,
-				time.Second*0, /* no state update delay */
-			)
-
-			// Update the storepool for informing allocator decisions.
-			storeDescriptors := s.StoreDescriptors()
-			exchange.Put(state.OffsetTick(start, 0), storeDescriptors...)
-			for _, store := range s.Stores() {
-				storeID := store.StoreID()
-				s.UpdateStorePool(storeID, exchange.Get(state.OffsetTick(start, 1), roachpb.StoreID(storeID)))
-			}
+			gossip := gossip.NewGossip(s, settings)
+			gossip.Tick(ctx, start, s)
 
 			results := map[int64]map[state.RangeID]rangeState{}
 			pending := []DispatchedTicket{}

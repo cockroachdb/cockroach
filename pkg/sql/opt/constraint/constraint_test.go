@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -596,7 +596,7 @@ func TestConsolidateLocalAndRemoteSpans(t *testing.T) {
 			// only has the partitions and ps (PrefixSorter) elements populated.
 			partitionSpans := parseSpans(&evalCtx, tc.partitionSpans)
 			partitions := make([]testcat.Partition, partitionSpans.Count())
-			localPartitions := util.FastIntSet{}
+			localPartitions := intsets.Fast{}
 			for j := 0; j < partitionSpans.Count(); j++ {
 				span := partitionSpans.Get(j)
 				spanDatums := make([]tree.Datums, 1)

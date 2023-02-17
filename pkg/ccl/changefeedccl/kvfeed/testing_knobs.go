@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // TestingKnobs are the testing knobs for kvfeed.
@@ -29,6 +30,9 @@ type TestingKnobs struct {
 	// EndTimeReached is a callback that may return true to indicate the
 	// feed should exit because its end time has been reached.
 	EndTimeReached func() bool
+	// ModifyTimestamps is called on the timestamp for each RangefeedMessage
+	// before converting it into a kv event.
+	ModifyTimestamps func(*hlc.Timestamp)
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

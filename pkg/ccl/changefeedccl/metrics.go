@@ -28,6 +28,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
+const (
+	changefeedCheckpointHistMaxLatency = 30 * time.Second
+	changefeedBatchHistMaxLatency      = 30 * time.Second
+	changefeedFlushHistMaxLatency      = 1 * time.Minute
+	admitLatencyMaxValue               = 1 * time.Minute
+	commitLatencyMaxValue              = 10 * time.Minute
+)
+
 // max length for the scope name.
 const maxSLIScopeNameLen = 128
 
@@ -39,6 +47,7 @@ const defaultSLIScope = "default"
 // indicators, combined with a limited number of per-changefeed indicators.
 type AggMetrics struct {
 	EmittedMessages           *aggmetric.AggCounter
+	FilteredMessages          *aggmetric.AggCounter
 	MessageSize               *aggmetric.AggHistogram
 	EmittedBytes              *aggmetric.AggCounter
 	FlushedBytes              *aggmetric.AggCounter
@@ -92,6 +101,7 @@ func (a *AggMetrics) MetricStruct() {}
 // sliMetrics holds all SLI related metrics aggregated into AggMetrics.
 type sliMetrics struct {
 	EmittedMessages           *aggmetric.Counter
+	FilteredMessages          *aggmetric.Counter
 	MessageSize               *aggmetric.Histogram
 	EmittedBytes              *aggmetric.Counter
 	FlushedBytes              *aggmetric.Counter
@@ -245,23 +255,28 @@ func maybeWrapMetrics(
 	return &wrappingCostController{ctx: ctx, inner: inner, recorder: recorder}
 }
 
-func (w *wrappingCostController) recordOneMessage() recordOneMessageCallback {
-	innerCallback := w.inner.recordOneMessage()
-	return func(mvcc hlc.Timestamp, bytes int, compressedBytes int) {
-		w.recordEmittedBatch(time.Time{}, 1, mvcc, bytes, compressedBytes)
-		innerCallback(mvcc, bytes, compressedBytes)
-	}
-}
-
-func (w *wrappingCostController) recordEmittedBatch(
-	_ time.Time, _ int, _ hlc.Timestamp, bytes int, compressedBytes int,
-) {
+func (w *wrappingCostController) recordExternalIO(bytes int, compressedBytes int) {
 	if compressedBytes == sinkDoesNotCompress {
 		compressedBytes = bytes
 	}
 	// NB: We don't Wait for RUs for changefeeds; but, this call may put the RU limiter in debt which
 	// will impact future KV requests.
 	w.recorder.OnExternalIO(w.ctx, multitenant.ExternalIOUsage{EgressBytes: int64(compressedBytes)})
+}
+
+func (w *wrappingCostController) recordOneMessage() recordOneMessageCallback {
+	innerCallback := w.inner.recordOneMessage()
+	return func(mvcc hlc.Timestamp, bytes int, compressedBytes int) {
+		w.recordExternalIO(bytes, compressedBytes)
+		innerCallback(mvcc, bytes, compressedBytes)
+	}
+}
+
+func (w *wrappingCostController) recordEmittedBatch(
+	startTime time.Time, numMessages int, mvcc hlc.Timestamp, bytes int, compressedBytes int,
+) {
+	w.recordExternalIO(bytes, compressedBytes)
+	w.inner.recordEmittedBatch(startTime, numMessages, mvcc, bytes, compressedBytes)
 }
 
 func (w *wrappingCostController) recordMessageSize(sz int64) {
@@ -380,6 +395,14 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaChangefeedFilteredMessages := metric.Metadata{
+		Name: "changefeed.filtered_messages",
+		Help: "Messages filtered out by all feeds. " +
+			"This count does not include the number of messages that may be filtered " +
+			"due to the range constraints.",
+		Measurement: "Messages",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaChangefeedEmittedBytes := metric.Metadata{
 		Name:        "changefeed.emitted_bytes",
 		Help:        "Bytes emitted by all feeds",
@@ -477,16 +500,47 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 	a := &AggMetrics{
 		ErrorRetries:     b.Counter(metaChangefeedErrorRetries),
 		EmittedMessages:  b.Counter(metaChangefeedEmittedMessages),
-		MessageSize:      b.Histogram(metaMessageSize, histogramWindow, metric.DataSize16MBBuckets),
+		FilteredMessages: b.Counter(metaChangefeedFilteredMessages),
+		MessageSize: b.Histogram(metric.HistogramOptions{
+			Metadata: metaMessageSize,
+			Duration: histogramWindow,
+			MaxVal:   10 << 20, /* 10MB max message size */
+			SigFigs:  1,
+			Buckets:  metric.DataSize16MBBuckets,
+		}),
 		EmittedBytes:     b.Counter(metaChangefeedEmittedBytes),
 		FlushedBytes:     b.Counter(metaChangefeedFlushedBytes),
 		Flushes:          b.Counter(metaChangefeedFlushes),
 		SizeBasedFlushes: b.Counter(metaSizeBasedFlushes),
 
-		BatchHistNanos:            b.Histogram(metaChangefeedBatchHistNanos, histogramWindow, metric.BatchProcessLatencyBuckets),
-		FlushHistNanos:            b.Histogram(metaChangefeedFlushHistNanos, histogramWindow, metric.BatchProcessLatencyBuckets),
-		CommitLatency:             b.Histogram(metaCommitLatency, histogramWindow, metric.BatchProcessLatencyBuckets),
-		AdmitLatency:              b.Histogram(metaAdmitLatency, histogramWindow, metric.BatchProcessLatencyBuckets),
+		BatchHistNanos: b.Histogram(metric.HistogramOptions{
+			Metadata: metaChangefeedBatchHistNanos,
+			Duration: histogramWindow,
+			MaxVal:   changefeedBatchHistMaxLatency.Nanoseconds(),
+			SigFigs:  1,
+			Buckets:  metric.BatchProcessLatencyBuckets,
+		}),
+		FlushHistNanos: b.Histogram(metric.HistogramOptions{
+			Metadata: metaChangefeedFlushHistNanos,
+			Duration: histogramWindow,
+			MaxVal:   changefeedFlushHistMaxLatency.Nanoseconds(),
+			SigFigs:  2,
+			Buckets:  metric.BatchProcessLatencyBuckets,
+		}),
+		CommitLatency: b.Histogram(metric.HistogramOptions{
+			Metadata: metaCommitLatency,
+			Duration: histogramWindow,
+			MaxVal:   commitLatencyMaxValue.Nanoseconds(),
+			SigFigs:  1,
+			Buckets:  metric.BatchProcessLatencyBuckets,
+		}),
+		AdmitLatency: b.Histogram(metric.HistogramOptions{
+			Metadata: metaAdmitLatency,
+			Duration: histogramWindow,
+			MaxVal:   admitLatencyMaxValue.Nanoseconds(),
+			SigFigs:  1,
+			Buckets:  metric.BatchProcessLatencyBuckets,
+		}),
 		BackfillCount:             b.Gauge(metaChangefeedBackfillCount),
 		BackfillPendingRanges:     b.Gauge(metaChangefeedBackfillPendingRanges),
 		RunningCount:              b.Gauge(metaChangefeedRunning),
@@ -531,6 +585,7 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 
 	sm := &sliMetrics{
 		EmittedMessages:           a.EmittedMessages.AddChild(scope),
+		FilteredMessages:          a.FilteredMessages.AddChild(scope),
 		MessageSize:               a.MessageSize.AddChild(scope),
 		EmittedBytes:              a.EmittedBytes.AddChild(scope),
 		FlushedBytes:              a.FlushedBytes.AddChild(scope),
@@ -560,12 +615,12 @@ type Metrics struct {
 	Failures                       *metric.Counter
 	ResolvedMessages               *metric.Counter
 	QueueTimeNanos                 *metric.Counter
-	CheckpointHistNanos            *metric.Histogram
+	CheckpointHistNanos            metric.IHistogram
 	FrontierUpdates                *metric.Counter
 	ThrottleMetrics                cdcutils.Metrics
 	ReplanCount                    *metric.Counter
-	ParallelConsumerFlushNanos     *metric.Histogram
-	ParallelConsumerConsumeNanos   *metric.Histogram
+	ParallelConsumerFlushNanos     metric.IHistogram
+	ParallelConsumerConsumeNanos   metric.IHistogram
 	ParallelConsumerInFlightEvents *metric.Gauge
 
 	mu struct {
@@ -587,18 +642,36 @@ func (m *Metrics) getSLIMetrics(scope string) (*sliMetrics, error) {
 // MakeMetrics makes the metrics for changefeed monitoring.
 func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 	m := &Metrics{
-		AggMetrics:                     newAggregateMetrics(histogramWindow),
-		KVFeedMetrics:                  kvevent.MakeMetrics(histogramWindow),
-		SchemaFeedMetrics:              schemafeed.MakeMetrics(histogramWindow),
-		ResolvedMessages:               metric.NewCounter(metaChangefeedForwardedResolvedMessages),
-		Failures:                       metric.NewCounter(metaChangefeedFailures),
-		QueueTimeNanos:                 metric.NewCounter(metaEventQueueTime),
-		CheckpointHistNanos:            metric.NewHistogram(metaChangefeedCheckpointHistNanos, histogramWindow, metric.IOLatencyBuckets),
-		FrontierUpdates:                metric.NewCounter(metaChangefeedFrontierUpdates),
-		ThrottleMetrics:                cdcutils.MakeMetrics(histogramWindow),
-		ReplanCount:                    metric.NewCounter(metaChangefeedReplanCount),
-		ParallelConsumerFlushNanos:     metric.NewHistogram(metaChangefeedEventConsumerFlushNanos, histogramWindow, metric.IOLatencyBuckets),
-		ParallelConsumerConsumeNanos:   metric.NewHistogram(metaChangefeedEventConsumerConsumeNanos, histogramWindow, metric.IOLatencyBuckets),
+		AggMetrics:        newAggregateMetrics(histogramWindow),
+		KVFeedMetrics:     kvevent.MakeMetrics(histogramWindow),
+		SchemaFeedMetrics: schemafeed.MakeMetrics(histogramWindow),
+		ResolvedMessages:  metric.NewCounter(metaChangefeedForwardedResolvedMessages),
+		Failures:          metric.NewCounter(metaChangefeedFailures),
+		QueueTimeNanos:    metric.NewCounter(metaEventQueueTime),
+		CheckpointHistNanos: metric.NewHistogram(metric.HistogramOptions{
+			Metadata: metaChangefeedCheckpointHistNanos,
+			Duration: histogramWindow,
+			MaxVal:   changefeedCheckpointHistMaxLatency.Nanoseconds(),
+			SigFigs:  2,
+			Buckets:  metric.IOLatencyBuckets,
+		}),
+		FrontierUpdates: metric.NewCounter(metaChangefeedFrontierUpdates),
+		ThrottleMetrics: cdcutils.MakeMetrics(histogramWindow),
+		ReplanCount:     metric.NewCounter(metaChangefeedReplanCount),
+		// Below two metrics were never implemented using the hdr histogram. Set ForceUsePrometheus
+		// to true.
+		ParallelConsumerFlushNanos: metric.NewHistogram(metric.HistogramOptions{
+			Metadata: metaChangefeedEventConsumerFlushNanos,
+			Duration: histogramWindow,
+			Buckets:  metric.IOLatencyBuckets,
+			Mode:     metric.HistogramModePrometheus,
+		}),
+		ParallelConsumerConsumeNanos: metric.NewHistogram(metric.HistogramOptions{
+			Metadata: metaChangefeedEventConsumerConsumeNanos,
+			Duration: histogramWindow,
+			Buckets:  metric.IOLatencyBuckets,
+			Mode:     metric.HistogramModePrometheus,
+		}),
 		ParallelConsumerInFlightEvents: metric.NewGauge(metaChangefeedEventConsumerInFlightEvents),
 	}
 

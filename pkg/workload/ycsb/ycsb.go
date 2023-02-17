@@ -87,11 +87,12 @@ const (
 	timeFormatTemplate = `2006-01-02 15:04:05.000000-07:00`
 )
 
+var RandomSeed = workload.NewUint64RandomSeed()
+
 type ycsb struct {
 	flags     workload.Flags
 	connFlags *workload.ConnFlags
 
-	seed        uint64
 	timeString  bool
 	insertHash  bool
 	zeroPadding int
@@ -115,32 +116,32 @@ func init() {
 }
 
 var ycsbMeta = workload.Meta{
-	Name:         `ycsb`,
-	Description:  `YCSB is the Yahoo! Cloud Serving Benchmark`,
-	Version:      `1.0.0`,
-	PublicFacing: true,
+	Name:        `ycsb`,
+	Description: `YCSB is the Yahoo! Cloud Serving Benchmark.`,
+	Version:     `1.0.0`,
+	RandomSeed:  RandomSeed,
 	New: func() workload.Generator {
 		g := &ycsb{}
 		g.flags.FlagSet = pflag.NewFlagSet(`ycsb`, pflag.ContinueOnError)
 		g.flags.Meta = map[string]workload.FlagMeta{
 			`workload`: {RuntimeOnly: true},
 		}
-		g.flags.Uint64Var(&g.seed, `seed`, 1, `Key hash seed.`)
 		g.flags.BoolVar(&g.timeString, `time-string`, false, `Prepend field[0-9] data with current time in microsecond precision.`)
 		g.flags.BoolVar(&g.insertHash, `insert-hash`, true, `Key to be hashed or ordered.`)
 		g.flags.IntVar(&g.zeroPadding, `zero-padding`, 1, `Key using "insert-hash=false" has zeros padded to left to make this length of digits.`)
 		g.flags.IntVar(&g.insertStart, `insert-start`, 0, `Key to start initial sequential insertions from. (default 0)`)
 		g.flags.IntVar(&g.insertCount, `insert-count`, 10000, `Number of rows to sequentially insert before beginning workload.`)
 		g.flags.IntVar(&g.recordCount, `record-count`, 0, `Key to start workload insertions from. Must be >= insert-start + insert-count. (Default: insert-start + insert-count)`)
-		g.flags.BoolVar(&g.json, `json`, false, `Use JSONB rather than relational data`)
-		g.flags.BoolVar(&g.families, `families`, true, `Place each column in its own column family`)
-		g.flags.BoolVar(&g.sfu, `select-for-update`, true, `Use SELECT FOR UPDATE syntax in read-modify-write transactions`)
-		g.flags.IntVar(&g.splits, `splits`, 0, `Number of splits to perform before starting normal operations`)
+		g.flags.BoolVar(&g.json, `json`, false, `Use JSONB rather than relational data.`)
+		g.flags.BoolVar(&g.families, `families`, true, `Place each column in its own column family.`)
+		g.flags.BoolVar(&g.sfu, `select-for-update`, true, `Use SELECT FOR UPDATE syntax in read-modify-write transactions.`)
+		g.flags.IntVar(&g.splits, `splits`, 0, `Number of splits to perform before starting normal operations.`)
 		g.flags.StringVar(&g.workload, `workload`, `B`, `Workload type. Choose from A-F.`)
 		g.flags.StringVar(&g.requestDistribution, `request-distribution`, ``, `Distribution for request key generation [zipfian, uniform, latest]. The default for workloads A, B, C, E, and F is zipfian, and the default for workload D is latest.`)
 		g.flags.StringVar(&g.scanLengthDistribution, `scan-length-distribution`, `uniform`, `Distribution for scan length generation [zipfian, uniform]. Primarily used for workload E.`)
 		g.flags.Uint64Var(&g.minScanLength, `min-scan-length`, 1, `The minimum length for scan operations. Primarily used for workload E.`)
 		g.flags.Uint64Var(&g.maxScanLength, `max-scan-length`, 1000, `The maximum length for scan operations. Primarily used for workload E.`)
+		RandomSeed.AddFlag(&g.flags)
 
 		// TODO(dan): g.flags.Uint64Var(&g.maxWrites, `max-writes`,
 		//     7*24*3600*1500,  // 7 days at 5% writes and 30k ops/s
@@ -348,7 +349,7 @@ func (g *ycsb) Tables() []workload.Table {
 					config:   g,
 					hashFunc: fnv.New64(),
 				}
-				rng := rand.NewSource(g.seed + uint64(batchIdx))
+				rng := rand.NewSource(RandomSeed.Seed() + uint64(batchIdx))
 
 				var tmpbuf [fieldLength]byte
 				for rowIdx := rowBegin; rowIdx < rowEnd; rowIdx++ {
@@ -429,7 +430,7 @@ func (g *ycsb) Ops(
 	rowCounter := NewAcknowledgedCounter((uint64)(g.recordCount))
 
 	var requestGen randGenerator
-	requestGenRng := rand.New(rand.NewSource(g.seed))
+	requestGenRng := rand.New(rand.NewSource(RandomSeed.Seed()))
 	switch strings.ToLower(g.requestDistribution) {
 	case "zipfian":
 		requestGen, err = NewZipfGenerator(
@@ -447,7 +448,7 @@ func (g *ycsb) Ops(
 	}
 
 	var scanLengthGen randGenerator
-	scanLengthGenRng := rand.New(rand.NewSource(g.seed + 1))
+	scanLengthGenRng := rand.New(rand.NewSource(RandomSeed.Seed() + 1))
 	switch strings.ToLower(g.scanLengthDistribution) {
 	case "zipfian":
 		scanLengthGen, err = NewZipfGenerator(scanLengthGenRng, g.minScanLength, g.maxScanLength, defaultTheta, false /* verbose */)
@@ -460,8 +461,8 @@ func (g *ycsb) Ops(
 		return workload.QueryLoad{}, err
 	}
 	pool, err := workload.NewMultiConnPool(ctx, workload.MultiConnPoolCfg{
+		// We want number of connections = number of workers.
 		MaxTotalConnections: g.connFlags.Concurrency,
-		MaxConnsPerPool:     (g.connFlags.Concurrency / len(urls)) + 1,
 	}, urls...)
 	if err != nil {
 		return workload.QueryLoad{}, err
@@ -491,12 +492,35 @@ func (g *ycsb) Ops(
 		pool.AddPreparedStatement(key, q)
 		updateStmts[i] = key
 	}
+
 	for i := 0; i < g.connFlags.Concurrency; i++ {
-		rng := rand.New(rand.NewSource(g.seed + uint64(i)))
-		conn, err := pool.Get().Acquire(ctx)
+		// We want to have 1 connection per worker, however the
+		// multi-connection pool round robins access to different pools so it
+		// is always possible that we hit a pool that is full, unless we create
+		// more connections than necessary. To avoid this, first check if the
+		// pool we are attempting to acquire a connection from is full. If
+		// full, skip this pool and continue to the next one, otherwise grab
+		// the connection and move on.
+		var pl *pgxpool.Pool
+		var try int
+		for try = 0; try < g.connFlags.Concurrency; try++ {
+			pl = pool.Get()
+			plStat := pl.Stat()
+			if plStat.MaxConns()-plStat.AcquiredConns() > 0 {
+				break
+			}
+		}
+		if try == g.connFlags.Concurrency {
+			return workload.QueryLoad{},
+				errors.AssertionFailedf("Unable to acquire connection for worker %d", i)
+		}
+
+		conn, err := pl.Acquire(ctx)
 		if err != nil {
 			return workload.QueryLoad{}, err
 		}
+
+		rng := rand.New(rand.NewSource(RandomSeed.Seed() + uint64(i)))
 		w := &ycsbWorker{
 			config:                  g,
 			hists:                   reg.GetHandle(),

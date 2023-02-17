@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -38,6 +39,8 @@ import (
 func TestWaitForSchemaChangeMigration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.WithIssue(t, 95530, "bump minBinary to 22.2. Skip 22.2 mixed-version tests for future cleanup")
 
 	ctx := context.Background()
 	testCases := []struct {
@@ -122,7 +125,7 @@ func TestWaitForSchemaChangeMigration(t *testing.T) {
 			params, _ := tests.CreateTestServerParams()
 			params.Knobs.Server = &server.TestingKnobs{
 				DisableAutomaticVersionUpgrade: make(chan struct{}),
-				BinaryVersionOverride:          clusterversion.ByKey(clusterversion.V22_2NoNonMVCCAddSSTable - 1),
+				BinaryVersionOverride:          clusterversion.ByKey(clusterversion.TODODelete_V22_2NoNonMVCCAddSSTable - 1),
 			}
 
 			var (
@@ -147,7 +150,7 @@ func TestWaitForSchemaChangeMigration(t *testing.T) {
 			jobKnobs.IntervalOverrides.WaitForJobsMaxDelay = shortInterval()
 
 			var waitCount int32
-			jobKnobs.BeforeWaitForJobsQuery = func() {
+			jobKnobs.BeforeWaitForJobsQuery = func(_ []jobspb.JobID) {
 				if secondWaitChan != nil {
 					if atomic.AddInt32(&waitCount, 1) == 2 {
 						close(secondWaitChan)
@@ -195,6 +198,8 @@ func TestWaitForSchemaChangeMigration(t *testing.T) {
 func TestWaitForSchemaChangeMigrationSynthetic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.WithIssue(t, 95530, "bump minBinary to 22.2. Skip 22.2 mixed-version tests for future cleanup")
 
 	ctx := context.Background()
 
@@ -248,13 +253,13 @@ func TestWaitForSchemaChangeMigrationSynthetic(t *testing.T) {
 			params, _ := tests.CreateTestServerParams()
 			params.Knobs.Server = &server.TestingKnobs{
 				DisableAutomaticVersionUpgrade: make(chan struct{}),
-				BinaryVersionOverride:          clusterversion.ByKey(clusterversion.V22_2NoNonMVCCAddSSTable - 1),
+				BinaryVersionOverride:          clusterversion.ByKey(clusterversion.TODODelete_V22_2NoNonMVCCAddSSTable - 1),
 			}
 
 			var waitCount int32
 			var secondWaitChan chan struct{}
 			params.Knobs.JobsTestingKnobs = &jobs.TestingKnobs{
-				BeforeWaitForJobsQuery: func() {
+				BeforeWaitForJobsQuery: func(_ []jobspb.JobID) {
 					if secondWaitChan != nil {
 						if atomic.AddInt32(&waitCount, 1) == 2 {
 							close(secondWaitChan)

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
@@ -152,8 +153,7 @@ func (n *scrubNode) Close(ctx context.Context) {
 func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tree.Name) error {
 	// Check that the database exists.
 	database := string(*name)
-	db, err := p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn,
-		database, tree.DatabaseLookupFlags{Required: true})
+	db, err := p.Descriptors().ByNameWithLeased(p.txn).Get().Database(ctx, database)
 	if err != nil {
 		return err
 	}
@@ -165,9 +165,7 @@ func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tr
 
 	var tbNames tree.TableNames
 	for _, schema := range schemas {
-		sc, err := p.Descriptors().GetImmutableSchemaByName(
-			ctx, p.txn, db, schema, p.CommonLookupFlagsRequired(),
-		)
+		sc, err := p.byNameGetterBuilder().Get().Schema(ctx, db, schema)
 		if err != nil {
 			return err
 		}
@@ -180,16 +178,19 @@ func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tr
 
 	for i := range tbNames {
 		tableName := &tbNames[i]
-		_, objDesc, err := p.descCollection.GetObjectByName(
-			ctx, p.txn, tableName.Catalog(), tableName.Schema(), tableName.Table(),
-			p.ObjectLookupFlags(true /*required*/, false /*requireMutable*/),
+		flags := tree.ObjectLookupFlags{DesiredObjectKind: tree.TableObject}
+		_, _, objDesc, err := p.LookupObject(
+			ctx, flags, tableName.Catalog(), tableName.Schema(), tableName.Table(),
 		)
-		if err != nil {
-			return err
-		}
 		// Skip over descriptors that are not tables (like types).
 		// Note: We are asking for table objects above, so It's valid to only
 		// get a prefix, and no descriptor.
+		if errors.Is(err, catalog.ErrDescriptorWrongType) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
 		if objDesc == nil || objDesc.DescriptorType() != catalog.Table {
 			continue
 		}
@@ -419,10 +420,9 @@ func createConstraintCheckOperations(
 	// constraintNames.
 	if constraintNames != nil {
 		for _, constraintName := range constraintNames {
-			c, _ := tableDesc.FindConstraintWithName(string(constraintName))
+			c := catalog.FindConstraintByName(tableDesc, string(constraintName))
 			if c == nil {
-				return nil, pgerror.Newf(pgcode.UndefinedObject,
-					"constraint %q of relation %q does not exist", constraintName, tableDesc.GetName())
+				return nil, sqlerrors.NewUndefinedConstraintError(string(constraintName), tableDesc.GetName())
 			}
 			constraints = append(constraints, c)
 		}
@@ -436,9 +436,7 @@ func createConstraintCheckOperations(
 		if ck := constraint.AsCheck(); ck != nil {
 			op = newSQLCheckConstraintCheckOperation(tableName, tableDesc, ck, asOf)
 		} else if fk := constraint.AsForeignKey(); fk != nil {
-			referencedTable, err := p.Descriptors().GetImmutableTableByID(
-				ctx, p.Txn(), fk.GetReferencedTableID(), tree.ObjectLookupFlagsWithRequired(),
-			)
+			referencedTable, err := p.Descriptors().ByIDWithLeased(p.Txn()).WithoutNonPublic().Get().Table(ctx, fk.GetReferencedTableID())
 			if err != nil {
 				return nil, err
 			}

@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/errors"
@@ -60,8 +61,7 @@ func (p *planner) AlterDatabaseOwner(
 		return nil, err
 	}
 
-	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
-		tree.DatabaseLookupFlags{Required: true})
+	dbDesc, err := p.Descriptors().MutableByName(p.txn).Database(ctx, string(n.Name))
 	if err != nil {
 		return nil, err
 	}
@@ -146,9 +146,7 @@ func (p *planner) AlterDatabaseAddRegion(
 		return nil, err
 	}
 
-	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
-		tree.DatabaseLookupFlags{Required: true},
-	)
+	dbDesc, err := p.Descriptors().MutableByName(p.txn).Database(ctx, string(n.Name))
 	if err != nil {
 		return nil, err
 	}
@@ -221,11 +219,7 @@ func (n *alterDatabaseAddRegionNode) startExec(params runParams) error {
 	}
 
 	// Get the type descriptor for the multi-region enum.
-	typeDesc, err := params.p.Descriptors().GetMutableTypeVersionByID(
-		params.ctx,
-		params.p.txn,
-		n.desc.RegionConfig.RegionEnumID,
-	)
+	typeDesc, err := params.p.Descriptors().MutableByID(params.p.txn).Type(params.ctx, n.desc.RegionConfig.RegionEnumID)
 	if err != nil {
 		return err
 	}
@@ -312,8 +306,7 @@ func (p *planner) AlterDatabaseDropRegion(
 		return nil, err
 	}
 
-	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
-		tree.DatabaseLookupFlags{Required: true})
+	dbDesc, err := p.Descriptors().MutableByName(p.txn).Database(ctx, string(n.Name))
 	if err != nil {
 		return nil, err
 	}
@@ -384,19 +377,26 @@ func (p *planner) AlterDatabaseDropRegion(
 		if err != nil {
 			return nil, err
 		}
-		typeDesc, err := p.Descriptors().GetMutableTypeVersionByID(ctx, p.txn, typeID)
+		typeDesc, err := p.Descriptors().MutableByID(p.txn).Type(ctx, typeID)
 		if err != nil {
 			return nil, err
+		}
+		regionEnumDesc := typeDesc.AsRegionEnumTypeDescriptor()
+		if regionEnumDesc == nil {
+			return nil, errors.AssertionFailedf(
+				"expected region enum type, not %s for type %q (%d)",
+				typeDesc.GetKind(), typeDesc.GetName(), typeDesc.GetID())
 		}
 
 		// Ensure that there's only 1 region on the multi-region enum (the primary
 		// region) as this can only be dropped once all other regions have been
 		// dropped. This check must account for regions that are transitioning,
 		// as transitions aren't guaranteed to succeed.
-		regions, err := typeDesc.RegionNamesIncludingTransitioning()
-		if err != nil {
-			return nil, err
-		}
+		var regions catpb.RegionNames
+		_ = regionEnumDesc.ForEachRegion(func(name catpb.RegionName, _ descpb.TypeDescriptor_EnumMember_Direction) error {
+			regions = append(regions, name)
+			return nil
+		})
 		if len(regions) != 1 {
 			return nil, errors.WithHintf(
 				pgerror.Newf(
@@ -423,7 +423,7 @@ func (p *planner) AlterDatabaseDropRegion(
 		// detritus multi-region type descriptor. This includes both the
 		// type descriptor and its array counterpart.
 		toDrop = append(toDrop, typeDesc)
-		arrayTypeDesc, err := p.Descriptors().GetMutableTypeVersionByID(ctx, p.txn, typeDesc.ArrayTypeID)
+		arrayTypeDesc, err := p.Descriptors().MutableByID(p.txn).Type(ctx, typeDesc.ArrayTypeID)
 		if err != nil {
 			return nil, err
 		}
@@ -481,10 +481,13 @@ func (p *planner) checkPrivilegesForMultiRegionOp(
 		// TODO(arul): It's worth noting CREATE isn't a thing on tables in postgres,
 		// so this will require some changes when (if) we move our privilege system
 		// to be more in line with postgres.
-		err := p.CheckPrivilege(ctx, desc, privilege.CREATE)
+		hasPriv, err := p.HasPrivilege(ctx, desc, privilege.CREATE, p.User())
+		if err != nil {
+			return err
+		}
 		// Wrap an insufficient privileges error a bit better to reflect the lack
 		// of ownership as well.
-		if pgerror.GetPGCode(err) == pgcode.InsufficientPrivilege {
+		if !hasPriv {
 			return pgerror.Newf(pgcode.InsufficientPrivilege,
 				"user %s must be owner of %s or have %s privilege on %s %s",
 				p.SessionData().User(),
@@ -494,7 +497,6 @@ func (p *planner) checkPrivilegesForMultiRegionOp(
 				desc.GetName(),
 			)
 		}
-		return err
 	}
 	return nil
 }
@@ -548,7 +550,7 @@ func removeLocalityConfigFromAllTablesInDB(
 			case *catpb.LocalityConfig_Global_:
 				if err := ApplyZoneConfigForMultiRegionTable(
 					ctx,
-					p.txn,
+					p.Txn(),
 					p.ExecCfg(),
 					p.extendedEvalCtx.Tracing.KVTracingEnabled(),
 					p.Descriptors(),
@@ -592,11 +594,7 @@ func (n *alterDatabaseDropRegionNode) startExec(params runParams) error {
 	if n.n == nil {
 		return nil
 	}
-	typeDesc, err := params.p.Descriptors().GetMutableTypeVersionByID(
-		params.ctx,
-		params.p.txn,
-		n.desc.RegionConfig.RegionEnumID,
-	)
+	typeDesc, err := params.p.Descriptors().MutableByID(params.p.txn).Type(params.ctx, n.desc.RegionConfig.RegionEnumID)
 	if err != nil {
 		return err
 	}
@@ -620,7 +618,7 @@ func (n *alterDatabaseDropRegionNode) startExec(params runParams) error {
 		if err := discardMultiRegionFieldsForDatabaseZoneConfig(
 			params.ctx,
 			n.desc.ID,
-			params.p.txn,
+			params.p.Txn(),
 			params.p.execCfg,
 			params.p.Descriptors(),
 			params.extendedEvalCtx.Tracing.KVTracingEnabled(),
@@ -693,9 +691,7 @@ func (p *planner) AlterDatabasePrimaryRegion(
 		return nil, err
 	}
 
-	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
-		tree.DatabaseLookupFlags{Required: true},
-	)
+	dbDesc, err := p.Descriptors().MutableByName(p.txn).Database(ctx, string(n.Name))
 	if err != nil {
 		return nil, err
 	}
@@ -750,10 +746,7 @@ func (n *alterDatabasePrimaryRegionNode) switchPrimaryRegion(params runParams) e
 	}
 
 	// Get the type descriptor for the multi-region enum.
-	typeDesc, err := params.p.Descriptors().GetMutableTypeVersionByID(
-		params.ctx,
-		params.p.txn,
-		n.desc.RegionConfig.RegionEnumID)
+	typeDesc, err := params.p.Descriptors().MutableByID(params.p.txn).Type(params.ctx, n.desc.RegionConfig.RegionEnumID)
 	if err != nil {
 		return err
 	}
@@ -789,7 +782,7 @@ func (n *alterDatabasePrimaryRegionNode) switchPrimaryRegion(params runParams) e
 		params.ctx,
 		n.desc.ID,
 		updatedRegionConfig,
-		params.p.txn,
+		params.p.Txn(),
 		params.p.execCfg,
 		params.p.Descriptors(),
 		params.extendedEvalCtx.Tracing.KVTracingEnabled(),
@@ -1085,9 +1078,7 @@ func (p *planner) AlterDatabaseSurvivalGoal(
 		return nil, err
 	}
 
-	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
-		tree.DatabaseLookupFlags{Required: true},
-	)
+	dbDesc, err := p.Descriptors().MutableByName(p.txn).Database(ctx, string(n.Name))
 	if err != nil {
 		return nil, err
 	}
@@ -1170,7 +1161,7 @@ func (n *alterDatabaseSurvivalGoalNode) startExec(params runParams) error {
 		params.ctx,
 		n.desc.ID,
 		regionConfig,
-		params.p.txn,
+		params.p.Txn(),
 		params.p.execCfg,
 		params.p.Descriptors(),
 		params.extendedEvalCtx.Tracing.KVTracingEnabled(),
@@ -1228,9 +1219,7 @@ func (p *planner) AlterDatabasePlacement(
 		)
 	}
 
-	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
-		tree.DatabaseLookupFlags{Required: true},
-	)
+	dbDesc, err := p.Descriptors().MutableByName(p.txn).Database(ctx, string(n.Name))
 	if err != nil {
 		return nil, err
 	}
@@ -1301,7 +1290,7 @@ func (n *alterDatabasePlacementNode) startExec(params runParams) error {
 		params.ctx,
 		n.desc.ID,
 		regionConfig,
-		params.p.txn,
+		params.p.Txn(),
 		params.p.execCfg,
 		params.p.Descriptors(),
 		params.extendedEvalCtx.Tracing.KVTracingEnabled(),
@@ -1362,9 +1351,7 @@ func (p *planner) AlterDatabaseAddSuperRegion(
 		return nil, err
 	}
 
-	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.DatabaseName),
-		tree.DatabaseLookupFlags{Required: true},
-	)
+	dbDesc, err := p.Descriptors().MutableByName(p.txn).Database(ctx, string(n.DatabaseName))
 	if err != nil {
 		return nil, err
 	}
@@ -1410,7 +1397,7 @@ func (n *alterDatabaseAddSuperRegion) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
-	typeDesc, err := params.p.Descriptors().GetMutableTypeVersionByID(params.ctx, params.p.txn, typeID)
+	typeDesc, err := params.p.Descriptors().MutableByID(params.p.txn).Type(params.ctx, typeID)
 	if err != nil {
 		return err
 	}
@@ -1458,9 +1445,7 @@ func (p *planner) AlterDatabaseDropSuperRegion(
 		return nil, err
 	}
 
-	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.DatabaseName),
-		tree.DatabaseLookupFlags{Required: true},
-	)
+	dbDesc, err := p.Descriptors().MutableByName(p.txn).Database(ctx, string(n.DatabaseName))
 	if err != nil {
 		return nil, err
 	}
@@ -1489,7 +1474,7 @@ func (n *alterDatabaseDropSuperRegion) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
-	typeDesc, err := params.p.Descriptors().GetMutableTypeVersionByID(params.ctx, params.p.txn, typeID)
+	typeDesc, err := params.p.Descriptors().MutableByID(params.p.txn).Type(params.ctx, typeID)
 	if err != nil {
 		return err
 	}
@@ -1554,7 +1539,7 @@ func (p *planner) getSuperRegionsForDatabase(
 	if err != nil {
 		return nil, err
 	}
-	typeDesc, err := p.Descriptors().GetMutableTypeVersionByID(ctx, p.txn, typeID)
+	typeDesc, err := p.Descriptors().MutableByID(p.txn).Type(ctx, typeID)
 	if err != nil {
 		return nil, err
 	}
@@ -1586,9 +1571,7 @@ func (p *planner) AlterDatabaseAlterSuperRegion(
 		return nil, err
 	}
 
-	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.DatabaseName),
-		tree.DatabaseLookupFlags{Required: true},
-	)
+	dbDesc, err := p.Descriptors().MutableByName(p.txn).Database(ctx, string(n.DatabaseName))
 	if err != nil {
 		return nil, err
 	}
@@ -1617,7 +1600,7 @@ func (n *alterDatabaseAlterSuperRegion) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
-	typeDesc, err := params.p.Descriptors().GetMutableTypeVersionByID(params.ctx, params.p.txn, typeID)
+	typeDesc, err := params.p.Descriptors().MutableByID(params.p.txn).Type(params.ctx, typeID)
 	if err != nil {
 		return err
 	}
@@ -1659,11 +1642,17 @@ func (p *planner) addSuperRegion(
 	superRegionName tree.Name,
 	op string,
 ) error {
-
-	regionNames, err := typeDesc.RegionNames()
-	if err != nil {
-		return err
+	regionsDesc := typeDesc.AsRegionEnumTypeDescriptor()
+	if regionsDesc == nil {
+		return errors.AssertionFailedf("expected region enum type, not %s for type %q (%d)",
+			typeDesc.GetKind(), typeDesc.GetName(), typeDesc.GetID())
 	}
+
+	var regionNames catpb.RegionNames
+	_ = regionsDesc.ForEachPublicRegion(func(name catpb.RegionName) error {
+		regionNames = append(regionNames, name)
+		return nil
+	})
 
 	regionsInDatabase := make(map[catpb.RegionName]struct{})
 	for _, regionName := range regionNames {
@@ -1695,16 +1684,18 @@ func (p *planner) addSuperRegion(
 
 	// Ensure that the super region name is not already used and that
 	// the super regions don't overlap.
-	for _, superRegion := range typeDesc.RegionConfig.SuperRegions {
-		if superRegion.SuperRegionName == string(superRegionName) {
-			return errors.Newf("super region %s already exists", superRegion.SuperRegionName)
+	if err := regionsDesc.ForEachSuperRegion(func(superRegion string) error {
+		if superRegion == string(superRegionName) {
+			return errors.Newf("super region %s already exists", superRegion)
 		}
-
-		for _, region := range superRegion.Regions {
+		return regionsDesc.ForEachRegionInSuperRegion(superRegion, func(region catpb.RegionName) error {
 			if _, found := regionSet[region]; found {
-				return errors.Newf("region %s is already part of super region %s", region, superRegion.SuperRegionName)
+				return errors.Newf("region %s is already part of super region %s", region, superRegion)
 			}
-		}
+			return nil
+		})
+	}); err != nil {
+		return err
 	}
 
 	addSuperRegion(typeDesc.RegionConfig, descpb.SuperRegion{
@@ -1739,9 +1730,7 @@ func (p *planner) AlterDatabaseSecondaryRegion(
 		return nil, err
 	}
 
-	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.DatabaseName),
-		tree.DatabaseLookupFlags{Required: true},
-	)
+	dbDesc, err := p.Descriptors().MutableByName(p.txn).Database(ctx, string(n.DatabaseName))
 	if err != nil {
 		return nil, err
 	}
@@ -1809,10 +1798,7 @@ func (n *alterDatabaseSecondaryRegion) startExec(params runParams) error {
 	}
 
 	// Get the type descriptor for the multi-region enum.
-	typeDesc, err := params.p.Descriptors().GetMutableTypeVersionByID(
-		params.ctx,
-		params.p.txn,
-		n.desc.RegionConfig.RegionEnumID)
+	typeDesc, err := params.p.Descriptors().MutableByID(params.p.txn).Type(params.ctx, n.desc.RegionConfig.RegionEnumID)
 	if err != nil {
 		return err
 	}
@@ -1846,7 +1832,7 @@ func (n *alterDatabaseSecondaryRegion) startExec(params runParams) error {
 		params.ctx,
 		n.desc.ID,
 		updatedRegionConfig,
-		params.p.txn,
+		params.p.Txn(),
 		params.p.execCfg,
 		params.p.Descriptors(),
 		params.extendedEvalCtx.Tracing.KVTracingEnabled(),
@@ -1882,9 +1868,7 @@ func (p *planner) AlterDatabaseDropSecondaryRegion(
 		return nil, err
 	}
 
-	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.DatabaseName),
-		tree.DatabaseLookupFlags{Required: true},
-	)
+	dbDesc, err := p.Descriptors().MutableByName(p.txn).Database(ctx, string(n.DatabaseName))
 	if err != nil {
 		return nil, err
 	}
@@ -1922,7 +1906,7 @@ func (n *alterDatabaseDropSecondaryRegion) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
-	typeDesc, err := params.p.Descriptors().GetMutableTypeVersionByID(params.ctx, params.p.txn, typeID)
+	typeDesc, err := params.p.Descriptors().MutableByID(params.p.txn).Type(params.ctx, typeID)
 	if err != nil {
 		return err
 	}
@@ -1954,7 +1938,7 @@ func (n *alterDatabaseDropSecondaryRegion) startExec(params runParams) error {
 		params.ctx,
 		n.desc.ID,
 		updatedRegionConfig,
-		params.p.txn,
+		params.p.Txn(),
 		params.p.execCfg,
 		params.p.Descriptors(),
 		params.extendedEvalCtx.Tracing.KVTracingEnabled(),
@@ -2034,9 +2018,7 @@ func (p *planner) AlterDatabaseSetZoneConfigExtension(
 		return nil, err
 	}
 
-	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.DatabaseName),
-		tree.DatabaseLookupFlags{Required: true},
-	)
+	dbDesc, err := p.Descriptors().MutableByName(p.txn).Database(ctx, string(n.DatabaseName))
 	if err != nil {
 		return nil, err
 	}
@@ -2099,24 +2081,26 @@ func (n *alterDatabaseSetZoneConfigExtensionNode) startExec(params runParams) er
 	if err != nil {
 		return err
 	}
-	typeDesc, err := params.p.Descriptors().GetMutableTypeVersionByID(params.ctx, params.p.txn, typeID)
+	typeDesc, err := params.p.Descriptors().MutableByID(params.p.txn).Type(params.ctx, typeID)
 	if err != nil {
 		return err
 	}
-	regionNames, err := typeDesc.RegionNames()
-	if err != nil {
-		return err
+	regionsDesc := typeDesc.AsRegionEnumTypeDescriptor()
+	if regionsDesc == nil {
+		return errors.AssertionFailedf("expected region enum type, not %s for type %q (%d)",
+			typeDesc.GetKind(), typeDesc.GetName(), typeDesc.GetID())
 	}
 
 	// Verify that the region is present in the database, if necessary.
 	if n.n.LocalityLevel == tree.LocalityLevelTable && n.n.RegionName != "" {
-		found := false
-		for _, region := range regionNames {
-			if region == catpb.RegionName(n.n.RegionName) {
+		var found bool
+		_ = regionsDesc.ForEachPublicRegion(func(name catpb.RegionName) error {
+			if name == catpb.RegionName(n.n.RegionName) {
 				found = true
-				break
+				return iterutil.StopIteration()
 			}
-		}
+			return nil
+		})
 		if !found {
 			return pgerror.Newf(
 				pgcode.UndefinedObject,
@@ -2250,7 +2234,7 @@ func (n *alterDatabaseSetZoneConfigExtensionNode) startExec(params runParams) er
 		params.ctx,
 		n.desc.ID,
 		dbZoneConfig,
-		params.p.txn,
+		params.p.Txn(),
 		params.p.execCfg,
 		params.p.Descriptors(),
 		params.extendedEvalCtx.Tracing.KVTracingEnabled(),

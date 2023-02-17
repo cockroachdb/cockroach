@@ -45,6 +45,7 @@ type BackupOptions struct {
 	Detached               *DBool
 	EncryptionKMSURI       StringOrPlaceholderOptList
 	IncrementalStorage     StringOrPlaceholderOptList
+	CoordinatorLocality    Expr
 }
 
 var _ NodeFormatter = &BackupOptions{}
@@ -137,6 +138,7 @@ type RestoreOptions struct {
 	NewDBName                 Expr
 	IncrementalStorage        StringOrPlaceholderOptList
 	AsTenant                  Expr
+	ForceTenantID             Expr
 	SchemaOnly                bool
 	VerifyData                bool
 }
@@ -272,9 +274,12 @@ func (o *BackupOptions) Format(ctx *FmtCtx) {
 		}
 	}
 
-	if o.Detached == DBoolTrue {
+	if o.Detached != nil {
 		maybeAddSep()
 		ctx.WriteString("detached")
+		if o.Detached != DBoolTrue {
+			ctx.WriteString(" = FALSE")
+		}
 	}
 
 	if o.EncryptionKMSURI != nil {
@@ -288,6 +293,13 @@ func (o *BackupOptions) Format(ctx *FmtCtx) {
 		ctx.WriteString("incremental_location = ")
 		ctx.FormatNode(&o.IncrementalStorage)
 	}
+
+	if o.CoordinatorLocality != nil {
+		maybeAddSep()
+		ctx.WriteString("coordinator_locality = ")
+		ctx.FormatNode(o.CoordinatorLocality)
+	}
+
 }
 
 // CombineWith merges other backup options into this backup options struct.
@@ -327,6 +339,12 @@ func (o *BackupOptions) CombineWith(other *BackupOptions) error {
 		return errors.New("incremental_location option specified multiple times")
 	}
 
+	if o.CoordinatorLocality == nil {
+		o.CoordinatorLocality = other.CoordinatorLocality
+	} else if other.CoordinatorLocality != nil {
+		return errors.New("coordinator_locality option specified multiple times")
+	}
+
 	return nil
 }
 
@@ -334,9 +352,11 @@ func (o *BackupOptions) CombineWith(other *BackupOptions) error {
 func (o BackupOptions) IsDefault() bool {
 	options := BackupOptions{}
 	return o.CaptureRevisionHistory == options.CaptureRevisionHistory &&
-		o.Detached == options.Detached && cmp.Equal(o.EncryptionKMSURI, options.EncryptionKMSURI) &&
+		o.Detached == options.Detached &&
+		cmp.Equal(o.EncryptionKMSURI, options.EncryptionKMSURI) &&
 		o.EncryptionPassphrase == options.EncryptionPassphrase &&
-		cmp.Equal(o.IncrementalStorage, options.IncrementalStorage)
+		cmp.Equal(o.IncrementalStorage, options.IncrementalStorage) &&
+		o.CoordinatorLocality == options.CoordinatorLocality
 }
 
 // Format implements the NodeFormatter interface.
@@ -351,7 +371,11 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 	if o.EncryptionPassphrase != nil {
 		addSep = true
 		ctx.WriteString("encryption_passphrase = ")
-		ctx.FormatNode(o.EncryptionPassphrase)
+		if ctx.flags.HasFlags(FmtShowPasswords) {
+			ctx.FormatNode(o.EncryptionPassphrase)
+		} else {
+			ctx.WriteString(PasswordSubstitution)
+		}
 	}
 
 	if o.DecryptionKMSURI != nil {
@@ -416,9 +440,16 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 
 	if o.AsTenant != nil {
 		maybeAddSep()
-		ctx.WriteString("tenant = ")
+		ctx.WriteString("tenant_name = ")
 		ctx.FormatNode(o.AsTenant)
 	}
+
+	if o.ForceTenantID != nil {
+		maybeAddSep()
+		ctx.WriteString("tenant = ")
+		ctx.FormatNode(o.ForceTenantID)
+	}
+
 	if o.SchemaOnly {
 		maybeAddSep()
 		ctx.WriteString("schema_only")
@@ -519,6 +550,12 @@ func (o *RestoreOptions) CombineWith(other *RestoreOptions) error {
 	if o.AsTenant == nil {
 		o.AsTenant = other.AsTenant
 	} else if other.AsTenant != nil {
+		return errors.New("tenant_name option specified multiple times")
+	}
+
+	if o.ForceTenantID == nil {
+		o.ForceTenantID = other.ForceTenantID
+	} else if other.ForceTenantID != nil {
 		return errors.New("tenant option specified multiple times")
 	}
 
@@ -555,6 +592,7 @@ func (o RestoreOptions) IsDefault() bool {
 		o.NewDBName == options.NewDBName &&
 		cmp.Equal(o.IncrementalStorage, options.IncrementalStorage) &&
 		o.AsTenant == options.AsTenant &&
+		o.ForceTenantID == options.ForceTenantID &&
 		o.SchemaOnly == options.SchemaOnly &&
 		o.VerifyData == options.VerifyData
 }

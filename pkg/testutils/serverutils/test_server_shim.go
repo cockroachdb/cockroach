@@ -127,19 +127,16 @@ type TestServerInterface interface {
 	// Note: use ServingRPCAddr() instead unless specific reason not to.
 	RPCAddr() string
 
-	// DB returns a *client.DB instance for talking to this KV server.
-	DB() *kv.DB
-
 	// LeaseManager() returns the *sql.LeaseManager as an interface{}.
 	LeaseManager() interface{}
 
 	// InternalExecutor returns a *sql.InternalExecutor as an interface{} (which
-	// also implements sqlutil.InternalExecutor if the test cannot depend on sql).
+	// also implements insql.InternalExecutor if the test cannot depend on sql).
 	InternalExecutor() interface{}
 
 	// InternalExecutorInternalExecutorFactory returns a
-	// sqlutil.InternalExecutorFactory as an interface{}.
-	InternalExecutorFactory() interface{}
+	// insql.InternalDB as an interface{}.
+	InternalDB() interface{}
 
 	// TracerI returns a *tracing.Tracer as an interface{}.
 	TracerI() interface{}
@@ -235,7 +232,22 @@ type TestServerInterface interface {
 	// updates that are available.
 	UpdateChecker() interface{}
 
-	// StartTenant spawns off tenant process connecting to this TestServer.
+	// StartSharedProcessTenant starts a "shared-process" tenant - i.e. a tenant
+	// running alongside a KV server.
+	//
+	// args.TenantName must be specified. If a tenant with that name already
+	// exists, its ID is checked against args.TenantID (if set), and, if it
+	// matches, new tenant metadata is not created in the system.tenants table.
+	//
+	// See also StartTenant(), which starts a tenant mimicking out-of-process tenant
+	// servers.
+	StartSharedProcessTenant(
+		ctx context.Context, args base.TestSharedProcessTenantArgs,
+	) (TestTenantInterface, *gosql.DB, error)
+
+	// StartTenant starts a tenant server connecting to this TestServer. The
+	// tenant server simulates an out-of-process server. See also
+	// StartSharedProcessTenant() for a tenant simulating a shared-memory server.
 	StartTenant(ctx context.Context, params base.TestTenantArgs) (TestTenantInterface, error)
 
 	// ScratchRange splits off a range suitable to be used as KV scratch space.
@@ -407,6 +419,20 @@ func StartTenant(
 // into the test certificates.
 func TestTenantID() roachpb.TenantID {
 	return roachpb.MustMakeTenantID(security.EmbeddedTenantIDs()[0])
+}
+
+// TestTenantID2 returns another roachpb.TenantID that can be used when
+// starting a test Tenant. The returned tenant IDs match those built
+// into the test certificates.
+func TestTenantID2() roachpb.TenantID {
+	return roachpb.MustMakeTenantID(security.EmbeddedTenantIDs()[1])
+}
+
+// TestTenantID3 returns another roachpb.TenantID that can be used when
+// starting a test Tenant. The returned tenant IDs match those built
+// into the test certificates.
+func TestTenantID3() roachpb.TenantID {
+	return roachpb.MustMakeTenantID(security.EmbeddedTenantIDs()[2])
 }
 
 // GetJSONProto uses the supplied client to GET the URL specified by the parameters

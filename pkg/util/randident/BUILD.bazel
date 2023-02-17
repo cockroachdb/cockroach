@@ -1,0 +1,27 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "randident",
+    srcs = [
+        "api.go",
+        "namegen.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/randident",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/lexbase",
+        "//pkg/util/randident/randidentcfg",
+        "//pkg/util/randutil",
+    ],
+)
+
+go_test(
+    name = "randident_test",
+    srcs = ["namegen_test.go"],
+    args = ["-test.timeout=295s"],
+    embed = [":randident"],
+    deps = ["@org_golang_x_text//unicode/norm"],
+)
+
+get_x_data(name = "get_x_data")

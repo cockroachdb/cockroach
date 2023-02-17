@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/tracker"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -96,11 +97,11 @@ func (t *testProposerRaft) Step(msg raftpb.Message) error {
 	}
 	// Decode and save all the commands.
 	for _, e := range msg.Entries {
-		_ /* idKey */, encodedCommand := kvserverbase.DecodeRaftCommand(e.Data)
-		t.proposals = append(t.proposals, kvserverpb.RaftCommand{})
-		if err := protoutil.Unmarshal(encodedCommand, &t.proposals[len(t.proposals)-1]); err != nil {
+		ent, err := raftlog.NewEntry(e)
+		if err != nil {
 			return err
 		}
+		t.proposals = append(t.proposals, ent.Cmd)
 	}
 	return nil
 }
@@ -300,11 +301,11 @@ func (pc proposalCreator) newProposal(ba *roachpb.BatchRequest) *ProposalData {
 
 func (pc proposalCreator) encodeProposal(p *ProposalData) []byte {
 	cmdLen := p.command.Size()
-	needed := kvserverbase.RaftCommandPrefixLen + cmdLen + kvserverpb.MaxRaftCommandFooterSize()
-	data := make([]byte, kvserverbase.RaftCommandPrefixLen, needed)
-	kvserverbase.EncodeRaftCommandPrefix(data, kvserverbase.RaftVersionStandard, p.idKey)
-	data = data[:kvserverbase.RaftCommandPrefixLen+p.command.Size()]
-	if _, err := protoutil.MarshalTo(p.command, data[kvserverbase.RaftCommandPrefixLen:]); err != nil {
+	needed := raftlog.RaftCommandPrefixLen + cmdLen + kvserverpb.MaxRaftCommandFooterSize()
+	data := make([]byte, raftlog.RaftCommandPrefixLen, needed)
+	raftlog.EncodeRaftCommandPrefix(data, raftlog.EntryEncodingStandardWithoutAC, p.idKey)
+	data = data[:raftlog.RaftCommandPrefixLen+p.command.Size()]
+	if _, err := protoutil.MarshalTo(p.command, data[raftlog.RaftCommandPrefixLen:]); err != nil {
 		panic(err)
 	}
 	return data
@@ -322,7 +323,7 @@ func TestProposalBuffer(t *testing.T) {
 	}
 	var b propBuf
 	var pc proposalCreator
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	b.Init(&p, tracker.NewLockfreeTracker(), clock, cluster.MakeTestingClusterSettings())
 
 	// Insert propBufArrayMinSize proposals. The buffer should not be flushed.
@@ -391,7 +392,7 @@ func TestProposalBufferConcurrentWithDestroy(t *testing.T) {
 	}
 	var b propBuf
 	var pc proposalCreator
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	b.Init(&p, tracker.NewLockfreeTracker(), clock, cluster.MakeTestingClusterSettings())
 
 	dsErr := errors.New("destroyed")
@@ -459,7 +460,7 @@ func TestProposalBufferRegistersAllOnProposalError(t *testing.T) {
 	p.raftGroup = raft
 	var b propBuf
 	var pc proposalCreator
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	b.Init(&p, tracker.NewLockfreeTracker(), clock, cluster.MakeTestingClusterSettings())
 
 	num := propBufArrayMinSize
@@ -619,7 +620,7 @@ func TestProposalBufferRejectLeaseAcqOnFollower(t *testing.T) {
 			p.leaderNotLive = tc.leaderNotLive
 
 			var b propBuf
-			clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+			clock := hlc.NewClockForTesting(nil)
 			tracker := tracker.NewLockfreeTracker()
 			b.Init(&p, tracker, clock, cluster.MakeTestingClusterSettings())
 
@@ -760,7 +761,7 @@ func TestProposalBufferRejectUnsafeLeaseTransfer(t *testing.T) {
 			p.fi = proposerFirstIndex
 
 			var b propBuf
-			clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+			clock := hlc.NewClockForTesting(nil)
 			tracker := tracker.NewLockfreeTracker()
 			b.Init(&p, tracker, clock, cluster.MakeTestingClusterSettings())
 
@@ -800,7 +801,7 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 
 	const maxOffset = 500 * time.Millisecond
 	mc := timeutil.NewManualTime(timeutil.Unix(1613588135, 0))
-	clock := hlc.NewClock(mc, maxOffset /* maxOffset */)
+	clock := hlc.NewClock(mc, maxOffset, maxOffset)
 	st := cluster.MakeTestingClusterSettings()
 	closedts.TargetDuration.Override(ctx, &st.SV, time.Second)
 	closedts.SideTransportCloseInterval.Override(ctx, &st.SV, 200*time.Millisecond)

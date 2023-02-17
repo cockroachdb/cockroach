@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -352,10 +353,11 @@ func (n *DropRoleNode) startExec(params runParams) error {
 		}
 
 		// Check if user owns any scheduled jobs.
-		numSchedulesRow, err := params.ExecCfg().InternalExecutor.QueryRow(
+		numSchedulesRow, err := params.p.InternalSQLTxn().QueryRowEx(
 			params.ctx,
 			"check-user-schedules",
 			params.p.txn,
+			sessiondata.NodeUserSessionDataOverride,
 			"SELECT count(*) FROM system.scheduled_jobs WHERE owner=$1",
 			normalizedUsername,
 		)
@@ -372,10 +374,11 @@ func (n *DropRoleNode) startExec(params runParams) error {
 				normalizedUsername, numSchedules)
 		}
 
-		numUsersDeleted, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
+		numUsersDeleted, err := params.p.InternalSQLTxn().ExecEx(
 			params.ctx,
 			opName,
 			params.p.txn,
+			sessiondata.NodeUserSessionDataOverride,
 			`DELETE FROM system.users WHERE username=$1`,
 			normalizedUsername,
 		)
@@ -384,14 +387,15 @@ func (n *DropRoleNode) startExec(params runParams) error {
 		}
 
 		if numUsersDeleted == 0 && !n.ifExists {
-			return errors.Errorf("role/user %s does not exist", normalizedUsername)
+			return sqlerrors.NewUndefinedUserError(normalizedUsername)
 		}
 
 		// Drop all role memberships involving the user/role.
-		rowsDeleted, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
+		rowsDeleted, err := params.p.InternalSQLTxn().ExecEx(
 			params.ctx,
 			"drop-role-membership",
 			params.p.txn,
+			sessiondata.NodeUserSessionDataOverride,
 			`DELETE FROM system.role_members WHERE "role" = $1 OR "member" = $1`,
 			normalizedUsername,
 		)
@@ -400,10 +404,11 @@ func (n *DropRoleNode) startExec(params runParams) error {
 		}
 		numRoleMembershipsDeleted += rowsDeleted
 
-		_, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
+		_, err = params.p.InternalSQLTxn().ExecEx(
 			params.ctx,
 			opName,
 			params.p.txn,
+			sessiondata.NodeUserSessionDataOverride,
 			fmt.Sprintf(
 				`DELETE FROM %s WHERE username=$1`,
 				sessioninit.RoleOptionsTableName,
@@ -414,10 +419,11 @@ func (n *DropRoleNode) startExec(params runParams) error {
 			return err
 		}
 
-		rowsDeleted, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
+		rowsDeleted, err = params.p.InternalSQLTxn().ExecEx(
 			params.ctx,
 			opName,
 			params.p.txn,
+			sessiondata.NodeUserSessionDataOverride,
 			fmt.Sprintf(
 				`DELETE FROM %s WHERE role_name = $1`,
 				sessioninit.DatabaseRoleSettingsTableName,

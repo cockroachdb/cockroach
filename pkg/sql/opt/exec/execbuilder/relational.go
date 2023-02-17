@@ -403,12 +403,12 @@ func (b *Builder) maybeAnnotateWithEstimates(node exec.Node, e memo.RelExpr) {
 		if scan, ok := e.(*memo.ScanExpr); ok {
 			tab := b.mem.Metadata().Table(scan.Table)
 			if tab.StatisticCount() > 0 {
-				// The first stat is the most recent one.
+				// The first stat is the most recent full one.
 				var first int
-				if !b.evalCtx.SessionData().OptimizerUseForecasts {
-					for first < tab.StatisticCount() && tab.Statistic(first).IsForecast() {
-						first++
-					}
+				for first < tab.StatisticCount() &&
+					tab.Statistic(first).IsPartial() ||
+					(tab.Statistic(first).IsForecast() && !b.evalCtx.SessionData().OptimizerUseForecasts) {
+					first++
 				}
 
 				if first < tab.StatisticCount() {
@@ -422,10 +422,10 @@ func (b *Builder) maybeAnnotateWithEstimates(node exec.Node, e memo.RelExpr) {
 					val.Forecast = stat.IsForecast()
 					if val.Forecast {
 						val.ForecastAt = stat.CreatedAt()
-						// Find the first non-forecast stat.
+						// Find the first non-forecast full stat.
 						for i := first + 1; i < tab.StatisticCount(); i++ {
 							nextStat := tab.Statistic(i)
-							if !nextStat.IsForecast() {
+							if !nextStat.IsPartial() && !nextStat.IsForecast() {
 								val.TableStatsCreatedAt = nextStat.CreatedAt()
 								break
 							}
@@ -611,6 +611,7 @@ func (b *Builder) scanParams(
 	if b.forceForUpdateLocking {
 		locking = forUpdateLocking
 	}
+	b.ContainsNonDefaultKeyLocking = b.ContainsNonDefaultKeyLocking || locking.IsLocking()
 
 	// Raise error if row-level locking is part of a read-only transaction.
 	// TODO(nvanbenschoten): this check should be shared across all expressions
@@ -759,8 +760,11 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		b.TotalScanRows += stats.RowCount
 		b.ScanCounts[exec.ScanWithStatsCount]++
 
-		// The first stat is the most recent one. Check if it was a forecast.
+		// The first stat is the most recent full one. Check if it was a forecast.
 		var first int
+		for first < tab.StatisticCount() && tab.Statistic(first).IsPartial() {
+			first++
+		}
 		if first < tab.StatisticCount() && tab.Statistic(first).IsForecast() {
 			if b.evalCtx.SessionData().OptimizerUseForecasts {
 				b.ScanCounts[exec.ScanWithStatsForecastCount]++
@@ -771,8 +775,9 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 					b.NanosSinceStatsForecasted = nanosSinceStatsForecasted
 				}
 			}
-			// Find the first non-forecast stat.
-			for first < tab.StatisticCount() && tab.Statistic(first).IsForecast() {
+			// Find the first non-forecast full stat.
+			for first < tab.StatisticCount() &&
+				(tab.Statistic(first).IsPartial() || tab.Statistic(first).IsForecast()) {
 				first++
 			}
 		}
@@ -1705,6 +1710,7 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (execPlan, error) {
 	}
 
 	hardLimit := uint64(0)
+	enforceHomeRegion := false
 	if set.Op() == opt.LocalityOptimizedSearchOp {
 		if !b.disableTelemetry {
 			telemetry.Inc(sqltelemetry.LocalityOptimizedSearchUseCounter)
@@ -1713,9 +1719,13 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (execPlan, error) {
 		// If we are performing locality optimized search, set a limit equal to
 		// the maximum possible number of rows. This will tell the execution engine
 		// not to execute the right child if the limit is reached by the left
-		// child.
+		// child. A value of `math.MaxUint32` means the cardinality is unbounded,
+		// so don't use that as a hard limit.
 		// TODO(rytaft): Store the limit in the expression.
-		hardLimit = uint64(set.Relational().Cardinality.Max)
+		if set.Relational().Cardinality.Max != math.MaxUint32 {
+			hardLimit = uint64(set.Relational().Cardinality.Max)
+		}
+		enforceHomeRegion = b.IsANSIDML && b.evalCtx.SessionData().EnforceHomeRegion
 	}
 
 	ep := execPlan{}
@@ -1728,7 +1738,7 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (execPlan, error) {
 	reqOrdering := ep.reqOrdering(set)
 
 	if typ == tree.UnionOp && all {
-		ep.root, err = b.factory.ConstructUnionAll(left.root, right.root, reqOrdering, hardLimit)
+		ep.root, err = b.factory.ConstructUnionAll(left.root, right.root, reqOrdering, hardLimit, enforceHomeRegion)
 	} else if len(streamingOrdering) > 0 {
 		if typ != tree.UnionOp {
 			b.recordJoinAlgorithm(exec.MergeJoin)
@@ -1840,6 +1850,41 @@ func (b *Builder) enforceScanWithHomeRegion(skipID cat.StableID) error {
 	if !foundLocalRegion {
 		return errors.AssertionFailedf("The gateway region could not be determined while enforcing query home region.")
 	}
+	regionSet := make(map[string]struct{})
+	moreThanOneRegionScans := make([]*memo.ScanExpr, 0, len(b.builtScans))
+	for _, scan := range b.builtScans {
+		if scan.Distribution.Any() {
+			return pgerror.Newf(pgcode.QueryHasNoHomeRegion,
+				"Query has no home region. Try accessing only tables defined in multi-region databases.")
+		}
+		if len(scan.Distribution.Regions) > 1 {
+			if scan.Table == opt.TableID(0) {
+				return pgerror.Newf(pgcode.QueryHasNoHomeRegion,
+					"Query has no home region. Try adding a LIMIT clause.")
+			}
+			moreThanOneRegionScans = append(moreThanOneRegionScans, scan)
+		} else {
+			regionSet[scan.Distribution.Regions[0]] = struct{}{}
+		}
+	}
+	if len(moreThanOneRegionScans) > 0 {
+		md := moreThanOneRegionScans[0].Memo().Metadata()
+		tabMeta := md.TableMeta(moreThanOneRegionScans[0].Table)
+		if len(moreThanOneRegionScans) == 1 {
+			return b.filterSuggestionError(tabMeta, moreThanOneRegionScans[0].Index, nil /* table2Meta */, 0 /* indexOrdinal2 */)
+		}
+		tabMeta2 := md.TableMeta(moreThanOneRegionScans[1].Table)
+		return b.filterSuggestionError(
+			tabMeta,
+			moreThanOneRegionScans[0].Index,
+			tabMeta2,
+			moreThanOneRegionScans[1].Index,
+		)
+	}
+	if len(regionSet) > 2 {
+		return pgerror.Newf(pgcode.QueryHasNoHomeRegion,
+			"Query has no home region. Try adding a LIMIT clause.")
+	}
 	for i, scan := range b.builtScans {
 		inputTableMeta := scan.Memo().Metadata().TableMeta(scan.Table)
 		inputTable := inputTableMeta.Table
@@ -1861,7 +1906,7 @@ func (b *Builder) enforceScanWithHomeRegion(skipID cat.StableID) error {
 		if queryHasHomeRegion {
 			if homeRegion != queryHomeRegion {
 				return pgerror.Newf(pgcode.QueryHasNoHomeRegion,
-					`Query has no home region. The home region ('%s') of table '%s' does not match the home region ('%s') of lookup table '%s'.`,
+					`Query has no home region. The home region ('%s') of operation on table '%s' does not match the home region ('%s') of operation on table '%s'.`,
 					queryHomeRegion,
 					inputTableName,
 					homeRegion,
@@ -2004,6 +2049,7 @@ func (b *Builder) buildIndexJoin(join *memo.IndexJoinExpr) (execPlan, error) {
 	if b.forceForUpdateLocking {
 		locking = forUpdateLocking
 	}
+	b.ContainsNonDefaultKeyLocking = b.ContainsNonDefaultKeyLocking || locking.IsLocking()
 
 	res := execPlan{outputCols: output}
 	b.recordJoinAlgorithm(exec.IndexJoin)
@@ -2111,7 +2157,7 @@ func (b *Builder) handleRemoteLookupJoinError(join *memo.LookupJoinExpr) (err er
 	}
 
 	homeRegion := ""
-	if lookupTable.IsGlobalTable() || join.LocalityOptimized {
+	if lookupTable.IsGlobalTable() || join.LocalityOptimized || join.ChildOfLocalityOptimizedSearch {
 		// HomeRegion() does not automatically fill in the home region of a global
 		// table as the gateway region, so let's manually set it here.
 		// Locality optimized joins are considered local in phase 1.
@@ -2292,6 +2338,7 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 	if b.forceForUpdateLocking {
 		locking = forUpdateLocking
 	}
+	b.ContainsNonDefaultKeyLocking = b.ContainsNonDefaultKeyLocking || locking.IsLocking()
 
 	joinType := joinOpToJoinType(join.JoinType)
 	b.recordJoinType(joinType)
@@ -2312,6 +2359,7 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 		res.reqOrdering(join),
 		locking,
 		join.RequiredPhysical().LimitHintInt64(),
+		join.RemoteOnlyLookups,
 	)
 	if err != nil {
 		return execPlan{}, err
@@ -2518,6 +2566,7 @@ func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, erro
 	if b.forceForUpdateLocking {
 		locking = forUpdateLocking
 	}
+	b.ContainsNonDefaultKeyLocking = b.ContainsNonDefaultKeyLocking || locking.IsLocking()
 
 	joinType := joinOpToJoinType(join.JoinType)
 	b.recordJoinType(joinType)
@@ -2592,6 +2641,7 @@ func (b *Builder) buildZigzagJoin(join *memo.ZigzagJoinExpr) (execPlan, error) {
 		leftLocking = forUpdateLocking
 		rightLocking = forUpdateLocking
 	}
+	b.ContainsNonDefaultKeyLocking = b.ContainsNonDefaultKeyLocking || leftLocking.IsLocking() || rightLocking.IsLocking()
 
 	allCols := joinOutputMap(leftColMap, rightColMap)
 

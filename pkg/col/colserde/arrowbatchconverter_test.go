@@ -12,6 +12,7 @@ package colserde_test
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"testing"
 
@@ -38,7 +39,8 @@ func randomBatch(allocator *colmem.Allocator) ([]*types.T, coldata.Batch) {
 
 	capacity := rng.Intn(coldata.BatchSize()) + 1
 	length := rng.Intn(capacity)
-	b := coldatatestutils.RandomBatch(allocator, rng, typs, capacity, length, rng.Float64())
+	args := coldatatestutils.RandomVecArgs{Rand: rng, NullProbability: rng.Float64()}
+	b := coldatatestutils.RandomBatch(allocator, args, typs, capacity, length)
 	return typs, b
 }
 
@@ -46,14 +48,15 @@ func TestArrowBatchConverterRandom(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	typs, b := randomBatch(testAllocator)
-	c, err := colserde.NewArrowBatchConverter(typs)
+	c, err := colserde.NewArrowBatchConverter(typs, colserde.BiDirectional, testMemAcc)
 	require.NoError(t, err)
+	defer c.Release(context.Background())
 
 	// Make a copy of the original batch because the converter modifies and casts
 	// data without copying for performance reasons.
 	expected := coldatatestutils.CopyBatch(b, typs, testColumnFactory)
 
-	arrowData, err := c.BatchToArrow(b)
+	arrowData, err := c.BatchToArrow(context.Background(), b)
 	require.NoError(t, err)
 	actual := testAllocator.NewMemBatchWithFixedCapacity(typs, b.Length())
 	require.NoError(t, c.ArrowToBatch(arrowData, b.Length(), actual))
@@ -67,7 +70,7 @@ func roundTripBatch(
 	src, dest coldata.Batch, c *colserde.ArrowBatchConverter, r *colserde.RecordBatchSerializer,
 ) error {
 	var buf bytes.Buffer
-	arrowDataIn, err := c.BatchToArrow(src)
+	arrowDataIn, err := c.BatchToArrow(context.Background(), src)
 	if err != nil {
 		return err
 	}
@@ -76,7 +79,7 @@ func roundTripBatch(
 		return err
 	}
 
-	var arrowDataOut []*array.Data
+	var arrowDataOut []array.Data
 	batchLength, err := r.Deserialize(&arrowDataOut, buf.Bytes())
 	if err != nil {
 		return err
@@ -99,8 +102,9 @@ func TestRecordBatchRoundtripThroughBytes(t *testing.T) {
 			typs, src = randomBatch(testAllocator)
 		}
 		dest := testAllocator.NewMemBatchWithMaxCapacity(typs)
-		c, err := colserde.NewArrowBatchConverter(typs)
+		c, err := colserde.NewArrowBatchConverter(typs, colserde.BiDirectional, testMemAcc)
 		require.NoError(t, err)
+		defer c.Release(context.Background())
 		r, err := colserde.NewRecordBatchSerializer(typs)
 		require.NoError(t, err)
 
@@ -127,73 +131,67 @@ func TestRecordBatchRoundtripThroughBytes(t *testing.T) {
 			}
 			capacity := rng.Intn(coldata.BatchSize()) + 1
 			length := rng.Intn(capacity)
-			src = coldatatestutils.RandomBatch(testAllocator, rng, typs, capacity, length, nullProbability)
+			args := coldatatestutils.RandomVecArgs{Rand: rng, NullProbability: nullProbability}
+			src = coldatatestutils.RandomBatch(testAllocator, args, typs, capacity, length)
 		}
 	}
 }
 
-func BenchmarkArrowBatchConverter(b *testing.B) {
-	// fixedLen specifies how many bytes we should fit variable length data types
-	// to in order to reduce benchmark noise.
-	const fixedLen = 64
+// runConversionBenchmarks runs two kinds ("from coldata.Batch" and "to
+// coldata.Batch") of conversion benchmarks over different input types and null
+// fractions. Both benchmark kinds are represented by a "run" function which is
+// expected to perform some optional setup first before resetting the timer and
+// then running the benchmark loop.
+func runConversionBenchmarks(
+	b *testing.B,
+	fromBatchBenchName string,
+	fromBatch func(*testing.B, coldata.Batch, *types.T),
+	toBatchBenchName string,
+	toBatch func(*testing.B, coldata.Batch, *types.T),
+) {
+	const bytesInlinedLen = 16
+	const bytesNonInlinedLen = 64
 
 	rng, _ := randutil.NewTestRand()
 
-	typs := []*types.T{
-		types.Bool,
-		types.Bytes,
-		types.Decimal,
-		types.Int,
-		types.Timestamp,
-		types.Interval,
-	}
-	// numBytes corresponds 1:1 to typs and specifies how many bytes we are
-	// converting on one iteration of the benchmark for the corresponding type in
-	// typs.
-	numBytes := []int64{
-		int64(coldata.BatchSize()),
-		fixedLen * int64(coldata.BatchSize()),
-		0, // The number of bytes for decimals will be set below.
-		8 * int64(coldata.BatchSize()),
-		3 * 8 * int64(coldata.BatchSize()),
-		3 * 8 * int64(coldata.BatchSize()),
-	}
 	// Run a benchmark on every type we care about.
-	for typIdx, typ := range typs {
-		batch := coldatatestutils.RandomBatch(testAllocator, rng, []*types.T{typ}, coldata.BatchSize(), 0 /* length */, 0 /* nullProbability */)
+	for _, tc := range []struct {
+		t *types.T
+		// numBytes specifies how many bytes we are converting on one iteration
+		// of the benchmark for the corresponding type.
+		numBytes         int64
+		bytesFixedLength int
+	}{
+		{t: types.Bool, numBytes: int64(coldata.BatchSize())},
+		{t: types.Bytes, bytesFixedLength: bytesInlinedLen},    // The number of bytes will be set below.
+		{t: types.Bytes, bytesFixedLength: bytesNonInlinedLen}, // The number of bytes will be set below.
+		{t: types.Decimal}, // The number of bytes will be set below.
+		{t: types.Int, numBytes: 8 * int64(coldata.BatchSize())},
+		{t: types.Timestamp, numBytes: 3 * 8 * int64(coldata.BatchSize())},
+		{t: types.Interval, numBytes: 3 * 8 * int64(coldata.BatchSize())},
+	} {
+		typ := tc.t
+		args := coldatatestutils.RandomVecArgs{Rand: rng, BytesFixedLength: tc.bytesFixedLength}
+		batch := coldatatestutils.RandomBatch(testAllocator, args, []*types.T{typ}, coldata.BatchSize(), 0 /* length */)
 		if batch.Width() != 1 {
 			b.Fatalf("unexpected batch width: %d", batch.Width())
 		}
-		if typ.Identical(types.Bytes) {
-			// This type has variable length elements, fit all of them to be fixedLen
-			// bytes long so that we can compare results of one benchmark with
-			// another. Since we can't overwrite elements in a Bytes, create a new
-			// one.
-			// TODO(asubiotto): We should probably create some random spec struct that
-			//  we pass in to RandomBatch.
-			bytes := batch.ColVec(0).Bytes()
-			newBytes := coldata.NewBytes(bytes.Len())
-			for i := 0; i < bytes.Len(); i++ {
-				diff := len(bytes.Get(i)) - fixedLen
-				if diff < 0 {
-					newBytes.Set(i, append(bytes.Get(i), make([]byte, -diff)...))
-				} else if diff >= 0 {
-					newBytes.Set(i, bytes.Get(i)[:fixedLen])
-				}
+		var typNameSuffix string
+		if typ == types.Bytes {
+			tc.numBytes = int64(tc.bytesFixedLength * coldata.BatchSize())
+			if tc.bytesFixedLength == bytesInlinedLen {
+				typNameSuffix = "_inlined"
 			}
-			batch.ColVec(0).SetCol(newBytes)
-		} else if typ.Identical(types.Decimal) {
+		} else if typ == types.Decimal {
 			// Decimal is variable length type, so we want to calculate precisely the
 			// total size of all decimals in the vector.
 			decimals := batch.ColVec(0).Decimal()
 			for _, d := range decimals {
 				marshaled, err := d.MarshalText()
 				require.NoError(b, err)
-				numBytes[typIdx] += int64(len(marshaled))
+				tc.numBytes += int64(len(marshaled))
 			}
 		}
-		c, err := colserde.NewArrowBatchConverter([]*types.T{typ})
-		require.NoError(b, err)
 		nullFractions := []float64{0, 0.25, 0.5}
 		setNullFraction := func(batch coldata.Batch, nullFraction float64) {
 			vec := batch.ColVec(0)
@@ -206,47 +204,66 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 		}
 		for _, nullFraction := range nullFractions {
 			setNullFraction(batch, nullFraction)
-			testPrefix := fmt.Sprintf("%s/nullFraction=%0.2f", typ.String(), nullFraction)
-			var data []*array.Data
-			b.Run(testPrefix+"/BatchToArrow", func(b *testing.B) {
-				b.SetBytes(numBytes[typIdx])
-				for i := 0; i < b.N; i++ {
-					data, _ = c.BatchToArrow(batch)
-					if len(data) != 1 {
-						b.Fatal("expected arrow batch of length 1")
-					}
-					if data[0].Len() != coldata.BatchSize() {
-						b.Fatal("unexpected number of elements")
-					}
-				}
+			testPrefix := fmt.Sprintf("%s/nullFraction=%0.2f/", typ.String()+typNameSuffix, nullFraction)
+			b.Run(testPrefix+fromBatchBenchName, func(b *testing.B) {
+				b.SetBytes(tc.numBytes)
+				fromBatch(b, batch, typ)
 			})
-		}
-		for _, nullFraction := range nullFractions {
-			setNullFraction(batch, nullFraction)
-			data, err := c.BatchToArrow(batch)
-			dataCopy := make([]*array.Data, len(data))
-			require.NoError(b, err)
-			testPrefix := fmt.Sprintf("%s/nullFraction=%0.2f", typ.String(), nullFraction)
-			result := testAllocator.NewMemBatchWithMaxCapacity([]*types.T{typ})
-			b.Run(testPrefix+"/ArrowToBatch", func(b *testing.B) {
-				b.SetBytes(numBytes[typIdx])
-				for i := 0; i < b.N; i++ {
-					// Since ArrowToBatch eagerly nils things out, we have to make a
-					// shallow copy each time.
-					copy(dataCopy, data)
-					// Using require.NoError here causes large enough allocations to
-					// affect the result.
-					if err := c.ArrowToBatch(dataCopy, batch.Length(), result); err != nil {
-						b.Fatal(err)
-					}
-					if result.Width() != 1 {
-						b.Fatal("expected one column")
-					}
-					if result.Length() != coldata.BatchSize() {
-						b.Fatal("unexpected number of elements")
-					}
-				}
+			b.Run(testPrefix+toBatchBenchName, func(b *testing.B) {
+				b.SetBytes(tc.numBytes)
+				toBatch(b, batch, typ)
 			})
 		}
 	}
+}
+
+func BenchmarkArrowBatchConverter(b *testing.B) {
+	ctx := context.Background()
+	runConversionBenchmarks(
+		b,
+		"BatchToArrow",
+		func(b *testing.B, batch coldata.Batch, typ *types.T) {
+			c, err := colserde.NewArrowBatchConverter([]*types.T{typ}, colserde.BiDirectional, testMemAcc)
+			require.NoError(b, err)
+			defer c.Release(ctx)
+			var data []array.Data
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				data, _ = c.BatchToArrow(ctx, batch)
+				if len(data) != 1 {
+					b.Fatal("expected arrow batch of length 1")
+				}
+				if data[0].Len() != coldata.BatchSize() {
+					b.Fatal("unexpected number of elements")
+				}
+			}
+		},
+		"ArrowToBatch",
+		func(b *testing.B, batch coldata.Batch, typ *types.T) {
+			c, err := colserde.NewArrowBatchConverter([]*types.T{typ}, colserde.BiDirectional, testMemAcc)
+			require.NoError(b, err)
+			defer c.Release(ctx)
+			data, err := c.BatchToArrow(ctx, batch)
+			dataCopy := make([]array.Data, len(data))
+			require.NoError(b, err)
+			result := testAllocator.NewMemBatchWithMaxCapacity([]*types.T{typ})
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				// Since ArrowToBatch eagerly nils things out, we have to make a
+				// shallow copy each time.
+				copy(dataCopy, data)
+				// Using require.NoError here causes large enough allocations to
+				// affect the result.
+				if err := c.ArrowToBatch(dataCopy, batch.Length(), result); err != nil {
+					b.Fatal(err)
+				}
+				if result.Width() != 1 {
+					b.Fatal("expected one column")
+				}
+				if result.Length() != coldata.BatchSize() {
+					b.Fatal("unexpected number of elements")
+				}
+			}
+		},
+	)
 }

@@ -47,7 +47,7 @@ func BenchmarkResolveExistingObject(b *testing.B) {
 				"CREATE TABLE foo ()",
 			},
 			name:  tree.MakeUnresolvedName("foo"),
-			flags: tree.ObjectLookupFlagsWithRequired(),
+			flags: tree.ObjectLookupFlags{Required: true},
 		},
 		{
 			testName: "in schema, explicit",
@@ -56,7 +56,7 @@ func BenchmarkResolveExistingObject(b *testing.B) {
 				"CREATE TABLE sc.foo ()",
 			},
 			name:  tree.MakeUnresolvedName("sc", "foo"),
-			flags: tree.ObjectLookupFlagsWithRequired(),
+			flags: tree.ObjectLookupFlags{Required: true},
 		},
 		{
 			testName: "in schema, implicit",
@@ -65,7 +65,7 @@ func BenchmarkResolveExistingObject(b *testing.B) {
 				"CREATE TABLE sc.foo ()",
 			},
 			name:       tree.MakeUnresolvedName("foo"),
-			flags:      tree.ObjectLookupFlagsWithRequired(),
+			flags:      tree.ObjectLookupFlags{Required: true},
 			searchPath: "public,$user,sc",
 		},
 	} {
@@ -136,7 +136,7 @@ func BenchmarkResolveFunction(b *testing.B) {
 				"CREATE FUNCTION foo() RETURNS int IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$",
 			},
 			name:  tree.MakeUnresolvedName("foo"),
-			flags: tree.ObjectLookupFlagsWithRequired(),
+			flags: tree.ObjectLookupFlags{Required: true},
 		},
 		{
 			testName: "in schema, explicit",
@@ -145,7 +145,7 @@ func BenchmarkResolveFunction(b *testing.B) {
 				"CREATE FUNCTION sc.foo() RETURNS int IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$",
 			},
 			name:  tree.MakeUnresolvedName("sc", "foo"),
-			flags: tree.ObjectLookupFlagsWithRequired(),
+			flags: tree.ObjectLookupFlags{Required: true},
 		},
 		{
 			testName: "in schema, implicit",
@@ -154,7 +154,7 @@ func BenchmarkResolveFunction(b *testing.B) {
 				"CREATE FUNCTION sc.foo() RETURNS int IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$",
 			},
 			name:       tree.MakeUnresolvedName("foo"),
-			flags:      tree.ObjectLookupFlagsWithRequired(),
+			flags:      tree.ObjectLookupFlags{Required: true},
 			searchPath: "public,$user,sc",
 		},
 	} {

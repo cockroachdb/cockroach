@@ -15,10 +15,39 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"golang.org/x/time/rate"
 )
+
+type appBatchStats struct {
+	// TODO(sep-raft-log):
+	// numEntries
+	// numEntriesBytes
+	// numEntriesEmpty
+
+	// numMutations is the number of keys mutated, both via
+	// WriteBatch and AddSST.
+	numMutations               int
+	numEntriesProcessed        int
+	numEntriesProcessedBytes   int64
+	numEmptyEntries            int
+	numAddSST, numAddSSTCopies int
+
+	// NB: update `merge` when adding a new field.
+}
+
+func (s *appBatchStats) merge(ss appBatchStats) {
+	s.numMutations += ss.numMutations
+	s.numEntriesProcessed += ss.numEntriesProcessed
+	s.numEntriesProcessedBytes += ss.numEntriesProcessedBytes
+	ss.numEmptyEntries += ss.numEmptyEntries
+}
 
 // appBatch is the in-progress foundation for standalone log entry
 // application[^1], i.e. the act of applying raft log entries to the state
@@ -44,6 +73,7 @@ import (
 //
 // [^1]: https://github.com/cockroachdb/cockroach/issues/75729
 type appBatch struct {
+	appBatchStats
 	// TODO(tbg): this will absorb the following fields from replicaAppBatch:
 	//
 	// - batch
@@ -88,6 +118,96 @@ func (b *appBatch) toCheckedCmd(
 		cmd.Cmd.LogicalOpLog = nil
 		cmd.Cmd.ClosedTimestamp = nil
 	} else {
+		// If the command was using the deprecated version of the MVCCStats proto,
+		// migrate it to the new version and clear out the field.
+		res := cmd.ReplicatedResult()
+		if deprecatedDelta := res.DeprecatedDelta; deprecatedDelta != nil {
+			if res.Delta != (enginepb.MVCCStatsDelta{}) {
+				log.Fatalf(ctx, "stats delta not empty but deprecated delta provided: %+v", cmd)
+			}
+			res.Delta = deprecatedDelta.ToStatsDelta()
+			res.DeprecatedDelta = nil
+		}
 		log.Event(ctx, "applying command")
 	}
+}
+
+// runPreAddTriggers runs any triggers that must fire before the command is
+// added to the appBatch's pebble batch. That is, the pebble batch at this point
+// will have materialized the raft log up to but excluding the current command.
+func (b *appBatch) runPreAddTriggers(ctx context.Context, cmd *raftlog.ReplicatedCmd) error {
+	// None currently.
+	return nil
+}
+
+// addWriteBatch adds the command's writes to the batch.
+func (b *appBatch) addWriteBatch(
+	ctx context.Context, batch storage.Batch, cmd *replicatedCmd,
+) error {
+	wb := cmd.Cmd.WriteBatch
+	if wb == nil {
+		return nil
+	}
+	if mutations, err := storage.PebbleBatchCount(wb.Data); err != nil {
+		log.Errorf(ctx, "unable to read header of committed WriteBatch: %+v", err)
+	} else {
+		b.numMutations += mutations
+	}
+	if err := batch.ApplyBatchRepr(wb.Data, false); err != nil {
+		return errors.Wrapf(err, "unable to apply WriteBatch")
+	}
+	return nil
+}
+
+type postAddEnv struct {
+	st          *cluster.Settings
+	eng         storage.Engine
+	sideloaded  logstore.SideloadStorage
+	bulkLimiter *rate.Limiter
+}
+
+func (b *appBatch) runPostAddTriggers(
+	ctx context.Context, cmd *raftlog.ReplicatedCmd, env postAddEnv,
+) error {
+	// TODO(sep-raft-log): currently they are commingled in runPostAddTriggersReplicaOnly,
+	// extract them from that method.
+
+	res := cmd.ReplicatedResult()
+
+	// AddSSTable ingestions run before the actual batch gets written to the
+	// storage engine. This makes sure that when the Raft command is applied,
+	// the ingestion has definitely succeeded. Note that we have taken
+	// precautions during command evaluation to avoid having mutations in the
+	// WriteBatch that affect the SSTable. Not doing so could result in order
+	// reversal (and missing values) here.
+	//
+	// NB: any command which has an AddSSTable is non-trivial and will be
+	// applied in its own batch so it's not possible that any other commands
+	// which precede this command can shadow writes from this SSTable.
+	if res.AddSSTable != nil {
+		copied := addSSTablePreApply(
+			ctx,
+			env.st,
+			env.eng,
+			env.sideloaded,
+			cmd.Term,
+			cmd.Index(),
+			*res.AddSSTable,
+			env.bulkLimiter,
+		)
+		b.numAddSST++
+		if copied {
+			b.numAddSSTCopies++
+		}
+		if added := res.Delta.KeyCount; added > 0 {
+			// So far numMutations only tracks the number of keys in
+			// WriteBatches but here we have a trivial WriteBatch.
+			// Also account for keys added via AddSST. We do this
+			// indirectly by relying on the stats, since there isn't
+			// a cheap way to get the number of keys in the SST.
+			b.numMutations += int(added)
+		}
+	}
+
+	return nil
 }

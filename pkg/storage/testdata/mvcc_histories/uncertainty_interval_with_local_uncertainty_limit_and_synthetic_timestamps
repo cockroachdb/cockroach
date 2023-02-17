@@ -204,13 +204,13 @@ run error
 get t=txn1 k=k2 localUncertaintyLimit=5,0
 ----
 get: "k2" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=10.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=10.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn1 k=k2 localUncertaintyLimit=5,0
 ----
 scan: "k2"-"k2\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=10.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=10.000000000,0)`; observed timestamps: []
 
 run ok
 get t=txn1 k=k3 localUncertaintyLimit=5,0
@@ -226,13 +226,13 @@ run error
 get t=txn1 k=k4 localUncertaintyLimit=5,0
 ----
 get: "k4" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=10.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=10.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn1 k=k4 localUncertaintyLimit=5,0
 ----
 scan: "k4"-"k4\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=10.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=10.000000000,0)`; observed timestamps: []
 
 run ok
 get t=txn1 k=k5 localUncertaintyLimit=5,0
@@ -248,13 +248,13 @@ run error
 get t=txn1 k=k6 localUncertaintyLimit=5,0
 ----
 get: "k6" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=10.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=10.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn1 k=k6 localUncertaintyLimit=5,0
 ----
 scan: "k6"-"k6\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=10.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=10.000000000,0)`; observed timestamps: []
 
 run ok
 get t=txn1 k=k7 localUncertaintyLimit=5,0
@@ -270,13 +270,13 @@ run error
 get t=txn1 k=k8 localUncertaintyLimit=5,0
 ----
 get: "k8" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=10.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=10.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn1 k=k8 localUncertaintyLimit=5,0
 ----
 scan: "k8"-"k8\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=10.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=10.000000000,0)`; observed timestamps: []
 
 
 run ok
@@ -299,13 +299,13 @@ run error
 get t=txn2 k=k2 localUncertaintyLimit=5,0
 ----
 get: "k2" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=15.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=15.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn2 k=k2 localUncertaintyLimit=5,0
 ----
 scan: "k2"-"k2\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=15.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=15.000000000,0)`; observed timestamps: []
 
 run ok
 get t=txn2 k=k3 localUncertaintyLimit=5,0
@@ -321,13 +321,13 @@ run error
 get t=txn2 k=k4 localUncertaintyLimit=5,0
 ----
 get: "k4" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=15.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=15.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn2 k=k4 localUncertaintyLimit=5,0
 ----
 scan: "k4"-"k4\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=15.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=15.000000000,0)`; observed timestamps: []
 
 run ok
 get t=txn2 k=k5 localUncertaintyLimit=5,0
@@ -343,13 +343,13 @@ run error
 get t=txn2 k=k6 localUncertaintyLimit=5,0
 ----
 get: "k6" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=15.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=15.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn2 k=k6 localUncertaintyLimit=5,0
 ----
 scan: "k6"-"k6\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=15.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=15.000000000,0)`; observed timestamps: []
 
 run ok
 get t=txn2 k=k7 localUncertaintyLimit=5,0
@@ -365,13 +365,13 @@ run error
 get t=txn2 k=k8 localUncertaintyLimit=5,0
 ----
 get: "k8" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=15.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=15.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn2 k=k8 localUncertaintyLimit=5,0
 ----
 scan: "k8"-"k8\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=15.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=15.000000000,0)`; observed timestamps: []
 
 
 run ok
@@ -394,37 +394,37 @@ run error
 get t=txn3 k=k2 localUncertaintyLimit=5,0
 ----
 get: "k2" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn3 k=k2 localUncertaintyLimit=5,0
 ----
 scan: "k2"-"k2\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn3 k=k3 localUncertaintyLimit=5,0
 ----
 get: "k3" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn3 k=k3 localUncertaintyLimit=5,0
 ----
 scan: "k3"-"k3\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn3 k=k4 localUncertaintyLimit=5,0
 ----
 get: "k4" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn3 k=k4 localUncertaintyLimit=5,0
 ----
 scan: "k4"-"k4\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run ok
 get t=txn3 k=k5 localUncertaintyLimit=5,0
@@ -440,37 +440,37 @@ run error
 get t=txn3 k=k6 localUncertaintyLimit=5,0
 ----
 get: "k6" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn3 k=k6 localUncertaintyLimit=5,0
 ----
 scan: "k6"-"k6\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn3 k=k7 localUncertaintyLimit=5,0
 ----
 get: "k7" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn3 k=k7 localUncertaintyLimit=5,0
 ----
 scan: "k7"-"k7\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn3 k=k8 localUncertaintyLimit=5,0
 ----
 get: "k8" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn3 k=k8 localUncertaintyLimit=5,0
 ----
 scan: "k8"-"k8\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 
 run ok
@@ -493,37 +493,37 @@ run error
 get t=txn4 k=k2 localUncertaintyLimit=5,0
 ----
 get: "k2" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn4 k=k2 localUncertaintyLimit=5,0
 ----
 scan: "k2"-"k2\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn4 k=k3 localUncertaintyLimit=5,0
 ----
 get: "k3" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn4 k=k3 localUncertaintyLimit=5,0
 ----
 scan: "k3"-"k3\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn4 k=k4 localUncertaintyLimit=5,0
 ----
 get: "k4" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn4 k=k4 localUncertaintyLimit=5,0
 ----
 scan: "k4"-"k4\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run ok
 get t=txn4 k=k5 localUncertaintyLimit=5,0
@@ -539,37 +539,37 @@ run error
 get t=txn4 k=k6 localUncertaintyLimit=5,0
 ----
 get: "k6" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn4 k=k6 localUncertaintyLimit=5,0
 ----
 scan: "k6"-"k6\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn4 k=k7 localUncertaintyLimit=5,0
 ----
 get: "k7" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn4 k=k7 localUncertaintyLimit=5,0
 ----
 scan: "k7"-"k7\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn4 k=k8 localUncertaintyLimit=5,0
 ----
 get: "k8" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn4 k=k8 localUncertaintyLimit=5,0
 ----
 scan: "k8"-"k8\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 
 run ok
@@ -594,13 +594,13 @@ run error
 get t=txn5 k=k2 localUncertaintyLimit=10,0
 ----
 get: "k2" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=15.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=15.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn5 k=k2 localUncertaintyLimit=10,0
 ----
 scan: "k2"-"k2\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=15.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=15.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn5 k=k3 localUncertaintyLimit=10,0
@@ -618,13 +618,13 @@ run error
 get t=txn5 k=k4 localUncertaintyLimit=10,0
 ----
 get: "k4" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=15.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=15.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn5 k=k4 localUncertaintyLimit=10,0
 ----
 scan: "k4"-"k4\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=15.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=15.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn5 k=k5 localUncertaintyLimit=10,0
@@ -642,13 +642,13 @@ run error
 get t=txn5 k=k6 localUncertaintyLimit=10,0
 ----
 get: "k6" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=15.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=15.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn5 k=k6 localUncertaintyLimit=10,0
 ----
 scan: "k6"-"k6\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=15.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=15.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn5 k=k7 localUncertaintyLimit=10,0
@@ -666,13 +666,13 @@ run error
 get t=txn5 k=k8 localUncertaintyLimit=10,0
 ----
 get: "k8" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=15.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=15.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn5 k=k8 localUncertaintyLimit=10,0
 ----
 scan: "k8"-"k8\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=15.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=15.000000000,0)`; observed timestamps: []
 
 
 run ok
@@ -697,37 +697,37 @@ run error
 get t=txn6 k=k2 localUncertaintyLimit=10,0
 ----
 get: "k2" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn6 k=k2 localUncertaintyLimit=10,0
 ----
 scan: "k2"-"k2\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn6 k=k3 localUncertaintyLimit=10,0
 ----
 get: "k3" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn6 k=k3 localUncertaintyLimit=10,0
 ----
 scan: "k3"-"k3\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn6 k=k4 localUncertaintyLimit=10,0
 ----
 get: "k4" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn6 k=k4 localUncertaintyLimit=10,0
 ----
 scan: "k4"-"k4\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn6 k=k5 localUncertaintyLimit=10,0
@@ -745,37 +745,37 @@ run error
 get t=txn6 k=k6 localUncertaintyLimit=10,0
 ----
 get: "k6" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn6 k=k6 localUncertaintyLimit=10,0
 ----
 scan: "k6"-"k6\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn6 k=k7 localUncertaintyLimit=10,0
 ----
 get: "k7" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn6 k=k7 localUncertaintyLimit=10,0
 ----
 scan: "k7"-"k7\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn6 k=k8 localUncertaintyLimit=10,0
 ----
 get: "k8" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn6 k=k8 localUncertaintyLimit=10,0
 ----
 scan: "k8"-"k8\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 
 run ok
@@ -800,37 +800,37 @@ run error
 get t=txn7 k=k2 localUncertaintyLimit=10,0
 ----
 get: "k2" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn7 k=k2 localUncertaintyLimit=10,0
 ----
 scan: "k2"-"k2\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn7 k=k3 localUncertaintyLimit=10,0
 ----
 get: "k3" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn7 k=k3 localUncertaintyLimit=10,0
 ----
 scan: "k3"-"k3\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn7 k=k4 localUncertaintyLimit=10,0
 ----
 get: "k4" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn7 k=k4 localUncertaintyLimit=10,0
 ----
 scan: "k4"-"k4\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn7 k=k5 localUncertaintyLimit=10,0
@@ -848,37 +848,37 @@ run error
 get t=txn7 k=k6 localUncertaintyLimit=10,0
 ----
 get: "k6" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn7 k=k6 localUncertaintyLimit=10,0
 ----
 scan: "k6"-"k6\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn7 k=k7 localUncertaintyLimit=10,0
 ----
 get: "k7" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn7 k=k7 localUncertaintyLimit=10,0
 ----
 scan: "k7"-"k7\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn7 k=k8 localUncertaintyLimit=10,0
 ----
 get: "k8" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn7 k=k8 localUncertaintyLimit=10,0
 ----
 scan: "k8"-"k8\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 
 run ok
@@ -903,37 +903,37 @@ run error
 get t=txn8 k=k2 localUncertaintyLimit=15,0
 ----
 get: "k2" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn8 k=k2 localUncertaintyLimit=15,0
 ----
 scan: "k2"-"k2\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn8 k=k3 localUncertaintyLimit=15,0
 ----
 get: "k3" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn8 k=k3 localUncertaintyLimit=15,0
 ----
 scan: "k3"-"k3\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn8 k=k4 localUncertaintyLimit=15,0
 ----
 get: "k4" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn8 k=k4 localUncertaintyLimit=15,0
 ----
 scan: "k4"-"k4\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn8 k=k5 localUncertaintyLimit=15,0
@@ -951,37 +951,37 @@ run error
 get t=txn8 k=k6 localUncertaintyLimit=15,0
 ----
 get: "k6" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn8 k=k6 localUncertaintyLimit=15,0
 ----
 scan: "k6"-"k6\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn8 k=k7 localUncertaintyLimit=15,0
 ----
 get: "k7" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn8 k=k7 localUncertaintyLimit=15,0
 ----
 scan: "k7"-"k7\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn8 k=k8 localUncertaintyLimit=15,0
 ----
 get: "k8" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn8 k=k8 localUncertaintyLimit=15,0
 ----
 scan: "k8"-"k8\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 
 run ok
@@ -1006,37 +1006,37 @@ run error
 get t=txn9 k=k2 localUncertaintyLimit=15,0
 ----
 get: "k2" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn9 k=k2 localUncertaintyLimit=15,0
 ----
 scan: "k2"-"k2\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn9 k=k3 localUncertaintyLimit=15,0
 ----
 get: "k3" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn9 k=k3 localUncertaintyLimit=15,0
 ----
 scan: "k3"-"k3\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn9 k=k4 localUncertaintyLimit=15,0
 ----
 get: "k4" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn9 k=k4 localUncertaintyLimit=15,0
 ----
 scan: "k4"-"k4\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn9 k=k5 localUncertaintyLimit=15,0
@@ -1054,37 +1054,37 @@ run error
 get t=txn9 k=k6 localUncertaintyLimit=15,0
 ----
 get: "k6" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn9 k=k6 localUncertaintyLimit=15,0
 ----
 scan: "k6"-"k6\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn9 k=k7 localUncertaintyLimit=15,0
 ----
 get: "k7" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn9 k=k7 localUncertaintyLimit=15,0
 ----
 scan: "k7"-"k7\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn9 k=k8 localUncertaintyLimit=15,0
 ----
 get: "k8" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn9 k=k8 localUncertaintyLimit=15,0
 ----
 scan: "k8"-"k8\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 
 run ok
@@ -1121,25 +1121,25 @@ run error
 get t=txn10 k=k3 localUncertaintyLimit=20,0
 ----
 get: "k3" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn10 k=k3 localUncertaintyLimit=20,0
 ----
 scan: "k3"-"k3\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn10 k=k4 localUncertaintyLimit=20,0
 ----
 get: "k4" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn10 k=k4 localUncertaintyLimit=20,0
 ----
 scan: "k4"-"k4\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn10 k=k5 localUncertaintyLimit=20,0
@@ -1169,25 +1169,25 @@ run error
 get t=txn10 k=k7 localUncertaintyLimit=20,0
 ----
 get: "k7" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn10 k=k7 localUncertaintyLimit=20,0
 ----
 scan: "k7"-"k7\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn10 k=k8 localUncertaintyLimit=20,0
 ----
 get: "k8" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn10 k=k8 localUncertaintyLimit=20,0
 ----
 scan: "k8"-"k8\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 
 run ok
@@ -1307,25 +1307,25 @@ run error
 get t=txn12 k=k3 localUncertaintyLimit=10,0
 ----
 get: "k3" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn12 k=k3 localUncertaintyLimit=10,0
 ----
 scan: "k3"-"k3\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn12 k=k4 localUncertaintyLimit=10,0
 ----
 get: "k4" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn12 k=k4 localUncertaintyLimit=10,0
 ----
 scan: "k4"-"k4\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run ok
 get t=txn12 k=k5 localUncertaintyLimit=10,0
@@ -1351,25 +1351,25 @@ run error
 get t=txn12 k=k7 localUncertaintyLimit=10,0
 ----
 get: "k7" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn12 k=k7 localUncertaintyLimit=10,0
 ----
 scan: "k7"-"k7\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn12 k=k8 localUncertaintyLimit=10,0
 ----
 get: "k8" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn12 k=k8 localUncertaintyLimit=10,0
 ----
 scan: "k8"-"k8\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 
 run ok
@@ -1402,25 +1402,25 @@ run error
 get t=txn13 k=k3 localUncertaintyLimit=10,0
 ----
 get: "k3" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn13 k=k3 localUncertaintyLimit=10,0
 ----
 scan: "k3"-"k3\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn13 k=k4 localUncertaintyLimit=10,0
 ----
 get: "k4" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn13 k=k4 localUncertaintyLimit=10,0
 ----
 scan: "k4"-"k4\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run ok
 get t=txn13 k=k5 localUncertaintyLimit=10,0
@@ -1446,25 +1446,25 @@ run error
 get t=txn13 k=k7 localUncertaintyLimit=10,0
 ----
 get: "k7" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn13 k=k7 localUncertaintyLimit=10,0
 ----
 scan: "k7"-"k7\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn13 k=k8 localUncertaintyLimit=10,0
 ----
 get: "k8" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn13 k=k8 localUncertaintyLimit=10,0
 ----
 scan: "k8"-"k8\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=10.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=10.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 
 run ok
@@ -1497,25 +1497,25 @@ run error
 get t=txn14 k=k3 localUncertaintyLimit=15,0
 ----
 get: "k3" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn14 k=k3 localUncertaintyLimit=15,0
 ----
 scan: "k3"-"k3\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn14 k=k4 localUncertaintyLimit=15,0
 ----
 get: "k4" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn14 k=k4 localUncertaintyLimit=15,0
 ----
 scan: "k4"-"k4\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run ok
 get t=txn14 k=k5 localUncertaintyLimit=15,0
@@ -1541,25 +1541,25 @@ run error
 get t=txn14 k=k7 localUncertaintyLimit=15,0
 ----
 get: "k7" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn14 k=k7 localUncertaintyLimit=15,0
 ----
 scan: "k7"-"k7\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn14 k=k8 localUncertaintyLimit=15,0
 ----
 get: "k8" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn14 k=k8 localUncertaintyLimit=15,0
 ----
 scan: "k8"-"k8\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 
 run ok
@@ -1592,25 +1592,25 @@ run error
 get t=txn15 k=k3 localUncertaintyLimit=15,0
 ----
 get: "k3" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn15 k=k3 localUncertaintyLimit=15,0
 ----
 scan: "k3"-"k3\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn15 k=k4 localUncertaintyLimit=15,0
 ----
 get: "k4" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn15 k=k4 localUncertaintyLimit=15,0
 ----
 scan: "k4"-"k4\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run ok
 get t=txn15 k=k5 localUncertaintyLimit=15,0
@@ -1636,25 +1636,25 @@ run error
 get t=txn15 k=k7 localUncertaintyLimit=15,0
 ----
 get: "k7" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn15 k=k7 localUncertaintyLimit=15,0
 ----
 scan: "k7"-"k7\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn15 k=k8 localUncertaintyLimit=15,0
 ----
 get: "k8" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn15 k=k8 localUncertaintyLimit=15,0
 ----
 scan: "k8"-"k8\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 
 run ok
@@ -1691,25 +1691,25 @@ run error
 get t=txn16 k=k3 localUncertaintyLimit=20,0
 ----
 get: "k3" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn16 k=k3 localUncertaintyLimit=20,0
 ----
 scan: "k3"-"k3\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn16 k=k4 localUncertaintyLimit=20,0
 ----
 get: "k4" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn16 k=k4 localUncertaintyLimit=20,0
 ----
 scan: "k4"-"k4\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn16 k=k5 localUncertaintyLimit=20,0
@@ -1739,25 +1739,25 @@ run error
 get t=txn16 k=k7 localUncertaintyLimit=20,0
 ----
 get: "k7" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn16 k=k7 localUncertaintyLimit=20,0
 ----
 scan: "k7"-"k7\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn16 k=k8 localUncertaintyLimit=20,0
 ----
 get: "k8" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn16 k=k8 localUncertaintyLimit=20,0
 ----
 scan: "k8"-"k8\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 10.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 
 run ok
@@ -1790,25 +1790,25 @@ run error
 get t=txn17 k=k3 localUncertaintyLimit=15,0
 ----
 get: "k3" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn17 k=k3 localUncertaintyLimit=15,0
 ----
 scan: "k3"-"k3\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn17 k=k4 localUncertaintyLimit=15,0
 ----
 get: "k4" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn17 k=k4 localUncertaintyLimit=15,0
 ----
 scan: "k4"-"k4\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run ok
 get t=txn17 k=k5 localUncertaintyLimit=15,0
@@ -1834,25 +1834,25 @@ run error
 get t=txn17 k=k7 localUncertaintyLimit=15,0
 ----
 get: "k7" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn17 k=k7 localUncertaintyLimit=15,0
 ----
 scan: "k7"-"k7\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn17 k=k8 localUncertaintyLimit=15,0
 ----
 get: "k8" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn17 k=k8 localUncertaintyLimit=15,0
 ----
 scan: "k8"-"k8\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=20.000000000,0)`; observed timestamps: []
 
 
 run ok
@@ -1885,25 +1885,25 @@ run error
 get t=txn18 k=k3 localUncertaintyLimit=15,0
 ----
 get: "k3" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn18 k=k3 localUncertaintyLimit=15,0
 ----
 scan: "k3"-"k3\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn18 k=k4 localUncertaintyLimit=15,0
 ----
 get: "k4" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn18 k=k4 localUncertaintyLimit=15,0
 ----
 scan: "k4"-"k4\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run ok
 get t=txn18 k=k5 localUncertaintyLimit=15,0
@@ -1929,25 +1929,25 @@ run error
 get t=txn18 k=k7 localUncertaintyLimit=15,0
 ----
 get: "k7" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn18 k=k7 localUncertaintyLimit=15,0
 ----
 scan: "k7"-"k7\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn18 k=k8 localUncertaintyLimit=15,0
 ----
 get: "k8" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn18 k=k8 localUncertaintyLimit=15,0
 ----
 scan: "k8"-"k8\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 
 run ok
@@ -1984,25 +1984,25 @@ run error
 get t=txn19 k=k3 localUncertaintyLimit=20,0
 ----
 get: "k3" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn19 k=k3 localUncertaintyLimit=20,0
 ----
 scan: "k3"-"k3\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn19 k=k4 localUncertaintyLimit=20,0
 ----
 get: "k4" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn19 k=k4 localUncertaintyLimit=20,0
 ----
 scan: "k4"-"k4\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn19 k=k5 localUncertaintyLimit=20,0
@@ -2032,25 +2032,25 @@ run error
 get t=txn19 k=k7 localUncertaintyLimit=20,0
 ----
 get: "k7" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn19 k=k7 localUncertaintyLimit=20,0
 ----
 scan: "k7"-"k7\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 get t=txn19 k=k8 localUncertaintyLimit=20,0
 ----
 get: "k8" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 run error
 scan t=txn19 k=k8 localUncertaintyLimit=20,0
 ----
 scan: "k8"-"k8\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=20.000000000,0, global=25.000000000,0)`; observed timestamps: []
 
 
 run ok
@@ -2254,13 +2254,13 @@ run error
 get k=k2 ts=5,0 localUncertaintyLimit=5,0 globalUncertaintyLimit=15,0
 ----
 get: "k2" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 scan k=k2 ts=5,0 localUncertaintyLimit=5,0 globalUncertaintyLimit=15,0
 ----
 scan: "k2"-"k2\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=0,0)`; observed timestamps: []
 
 run ok
 get k=k3 ts=5,0 localUncertaintyLimit=5,0 globalUncertaintyLimit=15,0
@@ -2276,13 +2276,13 @@ run error
 get k=k4 ts=5,0 localUncertaintyLimit=5,0 globalUncertaintyLimit=15,0
 ----
 get: "k4" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 scan k=k4 ts=5,0 localUncertaintyLimit=5,0 globalUncertaintyLimit=15,0
 ----
 scan: "k4"-"k4\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=0,0)`; observed timestamps: []
 
 run ok
 get k=k5 ts=5,0 localUncertaintyLimit=5,0 globalUncertaintyLimit=15,0
@@ -2298,13 +2298,13 @@ run error
 get k=k6 ts=5,0 localUncertaintyLimit=5,0 globalUncertaintyLimit=15,0
 ----
 get: "k6" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 scan k=k6 ts=5,0 localUncertaintyLimit=5,0 globalUncertaintyLimit=15,0
 ----
 scan: "k6"-"k6\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=0,0)`; observed timestamps: []
 
 run ok
 get k=k7 ts=5,0 localUncertaintyLimit=5,0 globalUncertaintyLimit=15,0
@@ -2320,13 +2320,13 @@ run error
 get k=k8 ts=5,0 localUncertaintyLimit=5,0 globalUncertaintyLimit=15,0
 ----
 get: "k8" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 scan k=k8 ts=5,0 localUncertaintyLimit=5,0 globalUncertaintyLimit=15,0
 ----
 scan: "k8"-"k8\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=0,0)`; observed timestamps: []
 
 run ok
 get k=k1 ts=5,0 localUncertaintyLimit=5,0 globalUncertaintyLimit=25,0
@@ -2342,37 +2342,37 @@ run error
 get k=k2 ts=5,0 localUncertaintyLimit=5,0 globalUncertaintyLimit=25,0
 ----
 get: "k2" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 scan k=k2 ts=5,0 localUncertaintyLimit=5,0 globalUncertaintyLimit=25,0
 ----
 scan: "k2"-"k2\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 get k=k3 ts=5,0 localUncertaintyLimit=5,0 globalUncertaintyLimit=25,0
 ----
 get: "k3" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 scan k=k3 ts=5,0 localUncertaintyLimit=5,0 globalUncertaintyLimit=25,0
 ----
 scan: "k3"-"k3\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 get k=k4 ts=5,0 localUncertaintyLimit=5,0 globalUncertaintyLimit=25,0
 ----
 get: "k4" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 scan k=k4 ts=5,0 localUncertaintyLimit=5,0 globalUncertaintyLimit=25,0
 ----
 scan: "k4"-"k4\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=0,0)`; observed timestamps: []
 
 run ok
 get k=k5 ts=5,0 localUncertaintyLimit=5,0 globalUncertaintyLimit=25,0
@@ -2388,37 +2388,37 @@ run error
 get k=k6 ts=5,0 localUncertaintyLimit=5,0 globalUncertaintyLimit=25,0
 ----
 get: "k6" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 scan k=k6 ts=5,0 localUncertaintyLimit=5,0 globalUncertaintyLimit=25,0
 ----
 scan: "k6"-"k6\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 get k=k7 ts=5,0 localUncertaintyLimit=5,0 globalUncertaintyLimit=25,0
 ----
 get: "k7" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 scan k=k7 ts=5,0 localUncertaintyLimit=5,0 globalUncertaintyLimit=25,0
 ----
 scan: "k7"-"k7\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 get k=k8 ts=5,0 localUncertaintyLimit=5,0 globalUncertaintyLimit=25,0
 ----
 get: "k8" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 scan k=k8 ts=5,0 localUncertaintyLimit=5,0 globalUncertaintyLimit=25,0
 ----
 scan: "k8"-"k8\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=5.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=5.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 get k=k1 ts=5,0 localUncertaintyLimit=15,0 globalUncertaintyLimit=15,0
@@ -2436,13 +2436,13 @@ run error
 get k=k2 ts=5,0 localUncertaintyLimit=15,0 globalUncertaintyLimit=15,0
 ----
 get: "k2" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 scan k=k2 ts=5,0 localUncertaintyLimit=15,0 globalUncertaintyLimit=15,0
 ----
 scan: "k2"-"k2\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 get k=k3 ts=5,0 localUncertaintyLimit=15,0 globalUncertaintyLimit=15,0
@@ -2460,13 +2460,13 @@ run error
 get k=k4 ts=5,0 localUncertaintyLimit=15,0 globalUncertaintyLimit=15,0
 ----
 get: "k4" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 scan k=k4 ts=5,0 localUncertaintyLimit=15,0 globalUncertaintyLimit=15,0
 ----
 scan: "k4"-"k4\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 get k=k5 ts=5,0 localUncertaintyLimit=15,0 globalUncertaintyLimit=15,0
@@ -2484,13 +2484,13 @@ run error
 get k=k6 ts=5,0 localUncertaintyLimit=15,0 globalUncertaintyLimit=15,0
 ----
 get: "k6" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 scan k=k6 ts=5,0 localUncertaintyLimit=15,0 globalUncertaintyLimit=15,0
 ----
 scan: "k6"-"k6\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 get k=k7 ts=5,0 localUncertaintyLimit=15,0 globalUncertaintyLimit=15,0
@@ -2508,13 +2508,13 @@ run error
 get k=k8 ts=5,0 localUncertaintyLimit=15,0 globalUncertaintyLimit=15,0
 ----
 get: "k8" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 scan k=k8 ts=5,0 localUncertaintyLimit=15,0 globalUncertaintyLimit=15,0
 ----
 scan: "k8"-"k8\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 get k=k1 ts=5,0 localUncertaintyLimit=15,0 globalUncertaintyLimit=25,0
@@ -2532,37 +2532,37 @@ run error
 get k=k2 ts=5,0 localUncertaintyLimit=15,0 globalUncertaintyLimit=25,0
 ----
 get: "k2" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 scan k=k2 ts=5,0 localUncertaintyLimit=15,0 globalUncertaintyLimit=25,0
 ----
 scan: "k2"-"k2\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 get k=k3 ts=5,0 localUncertaintyLimit=15,0 globalUncertaintyLimit=25,0
 ----
 get: "k3" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 scan k=k3 ts=5,0 localUncertaintyLimit=15,0 globalUncertaintyLimit=25,0
 ----
 scan: "k3"-"k3\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 get k=k4 ts=5,0 localUncertaintyLimit=15,0 globalUncertaintyLimit=25,0
 ----
 get: "k4" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 scan k=k4 ts=5,0 localUncertaintyLimit=15,0 globalUncertaintyLimit=25,0
 ----
 scan: "k4"-"k4\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 get k=k5 ts=5,0 localUncertaintyLimit=15,0 globalUncertaintyLimit=25,0
@@ -2580,37 +2580,37 @@ run error
 get k=k6 ts=5,0 localUncertaintyLimit=15,0 globalUncertaintyLimit=25,0
 ----
 get: "k6" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 scan k=k6 ts=5,0 localUncertaintyLimit=15,0 globalUncertaintyLimit=25,0
 ----
 scan: "k6"-"k6\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 10.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 get k=k7 ts=5,0 localUncertaintyLimit=15,0 globalUncertaintyLimit=25,0
 ----
 get: "k7" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 scan k=k7 ts=5,0 localUncertaintyLimit=15,0 globalUncertaintyLimit=25,0
 ----
 scan: "k7"-"k7\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 get k=k8 ts=5,0 localUncertaintyLimit=15,0 globalUncertaintyLimit=25,0
 ----
 get: "k8" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 scan k=k8 ts=5,0 localUncertaintyLimit=15,0 globalUncertaintyLimit=25,0
 ----
 scan: "k8"-"k8\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 get k=k1 ts=5,0 localUncertaintyLimit=25,0 globalUncertaintyLimit=25,0
@@ -2640,25 +2640,25 @@ run error
 get k=k3 ts=5,0 localUncertaintyLimit=25,0 globalUncertaintyLimit=25,0
 ----
 get: "k3" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=25.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=25.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 scan k=k3 ts=5,0 localUncertaintyLimit=25,0 globalUncertaintyLimit=25,0
 ----
 scan: "k3"-"k3\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=25.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=25.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 get k=k4 ts=5,0 localUncertaintyLimit=25,0 globalUncertaintyLimit=25,0
 ----
 get: "k4" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=25.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=25.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 scan k=k4 ts=5,0 localUncertaintyLimit=25,0 globalUncertaintyLimit=25,0
 ----
 scan: "k4"-"k4\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=25.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=25.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 get k=k5 ts=5,0 localUncertaintyLimit=25,0 globalUncertaintyLimit=25,0
@@ -2688,25 +2688,25 @@ run error
 get k=k7 ts=5,0 localUncertaintyLimit=25,0 globalUncertaintyLimit=25,0
 ----
 get: "k7" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=25.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=25.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 scan k=k7 ts=5,0 localUncertaintyLimit=25,0 globalUncertaintyLimit=25,0
 ----
 scan: "k7"-"k7\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=25.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=25.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 get k=k8 ts=5,0 localUncertaintyLimit=25,0 globalUncertaintyLimit=25,0
 ----
 get: "k8" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=25.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=25.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 scan k=k8 ts=5,0 localUncertaintyLimit=25,0 globalUncertaintyLimit=25,0
 ----
 scan: "k8"-"k8\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=25.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 5.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=25.000000000,0, global=0,0)`; observed timestamps: []
 
 run ok
 get k=k1 ts=15,0 localUncertaintyLimit=15,0 globalUncertaintyLimit=15,0
@@ -2812,25 +2812,25 @@ run error
 get k=k3 ts=15,0 localUncertaintyLimit=15,0 globalUncertaintyLimit=25,0
 ----
 get: "k3" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 scan k=k3 ts=15,0 localUncertaintyLimit=15,0 globalUncertaintyLimit=25,0
 ----
 scan: "k3"-"k3\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 get k=k4 ts=15,0 localUncertaintyLimit=15,0 globalUncertaintyLimit=25,0
 ----
 get: "k4" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 scan k=k4 ts=15,0 localUncertaintyLimit=15,0 globalUncertaintyLimit=25,0
 ----
 scan: "k4"-"k4\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
 
 run ok
 get k=k5 ts=15,0 localUncertaintyLimit=15,0 globalUncertaintyLimit=25,0
@@ -2856,25 +2856,25 @@ run error
 get k=k7 ts=15,0 localUncertaintyLimit=15,0 globalUncertaintyLimit=25,0
 ----
 get: "k7" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 scan k=k7 ts=15,0 localUncertaintyLimit=15,0 globalUncertaintyLimit=25,0
 ----
 scan: "k7"-"k7\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 get k=k8 ts=15,0 localUncertaintyLimit=15,0 globalUncertaintyLimit=25,0
 ----
 get: "k8" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 scan k=k8 ts=15,0 localUncertaintyLimit=15,0 globalUncertaintyLimit=25,0
 ----
 scan: "k8"-"k8\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=15.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 get k=k1 ts=15,0 localUncertaintyLimit=25,0 globalUncertaintyLimit=25,0
@@ -2904,25 +2904,25 @@ run error
 get k=k3 ts=15,0 localUncertaintyLimit=25,0 globalUncertaintyLimit=25,0
 ----
 get: "k3" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=25.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=25.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 scan k=k3 ts=15,0 localUncertaintyLimit=25,0 globalUncertaintyLimit=25,0
 ----
 scan: "k3"-"k3\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=25.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=25.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 get k=k4 ts=15,0 localUncertaintyLimit=25,0 globalUncertaintyLimit=25,0
 ----
 get: "k4" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=25.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=25.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 scan k=k4 ts=15,0 localUncertaintyLimit=25,0 globalUncertaintyLimit=25,0
 ----
 scan: "k4"-"k4\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=25.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=25.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 get k=k5 ts=15,0 localUncertaintyLimit=25,0 globalUncertaintyLimit=25,0
@@ -2952,25 +2952,25 @@ run error
 get k=k7 ts=15,0 localUncertaintyLimit=25,0 globalUncertaintyLimit=25,0
 ----
 get: "k7" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=25.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=25.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 scan k=k7 ts=15,0 localUncertaintyLimit=25,0 globalUncertaintyLimit=25,0
 ----
 scan: "k7"-"k7\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=25.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=25.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 get k=k8 ts=15,0 localUncertaintyLimit=25,0 globalUncertaintyLimit=25,0
 ----
 get: "k8" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=25.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=25.000000000,0, global=0,0)`; observed timestamps: []
 
 run error
 scan k=k8 ts=15,0 localUncertaintyLimit=25,0 globalUncertaintyLimit=25,0
 ----
 scan: "k8"-"k8\x00" -> <no data>
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? within uncertainty interval `t <= (local=25.000000000,0, global=0,0)`; observed timestamps: []
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 15.000000000,0 encountered previous write with future timestamp 20.000000000,0? (local=0,1) within uncertainty interval `t <= (local=25.000000000,0, global=0,0)`; observed timestamps: []
 
 run ok
 get k=k1 ts=25,0 localUncertaintyLimit=25,0 globalUncertaintyLimit=25,0

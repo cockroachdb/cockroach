@@ -32,7 +32,7 @@ func TestAllElementsHaveDescID(t *testing.T) {
 func TestAllElementsHaveMinVersion(t *testing.T) {
 	forEachElementType(func(elem scpb.Element) {
 		// If `elem` does not have a min version, the following function call will panic.
-		MinVersion(elem)
+		MinElementVersion(elem)
 	})
 }
 

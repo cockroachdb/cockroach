@@ -19,7 +19,7 @@ go_test(
     args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":echotest"],
-    deps = ["//pkg/testutils"],
+    deps = ["//pkg/testutils/datapathutils"],
 )
 
 get_x_data(name = "get_x_data")

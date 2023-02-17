@@ -267,8 +267,10 @@ func initBinariesAndLibraries() {
 }
 
 // execCmd is like execCmdEx, but doesn't return the command's output.
-func execCmd(ctx context.Context, l *logger.Logger, clusterName string, args ...string) error {
-	return execCmdEx(ctx, l, clusterName, args...).err
+func execCmd(
+	ctx context.Context, l *logger.Logger, clusterName string, secure bool, args ...string,
+) error {
+	return execCmdEx(ctx, l, clusterName, secure, args...).err
 }
 
 type cmdRes struct {
@@ -283,7 +285,9 @@ type cmdRes struct {
 // Note that the output is truncated; only a tail is returned.
 // Also note that if the command exits with an error code, its output is also
 // included in cmdRes.err.
-func execCmdEx(ctx context.Context, l *logger.Logger, clusterName string, args ...string) cmdRes {
+func execCmdEx(
+	ctx context.Context, l *logger.Logger, clusterName string, secure bool, args ...string,
+) cmdRes {
 	var cancel func()
 	ctx, cancel = context.WithCancel(ctx)
 	defer cancel()
@@ -380,7 +384,7 @@ func execCmdEx(ctx context.Context, l *logger.Logger, clusterName string, args .
 		}
 	}
 
-	err := roachprod.Run(ctx, l, clusterName, "" /* SSHOptions */, "" /* processTag */, false /* secure */, roachprodRunStdout, roachprodRunStderr, args)
+	err := roachprod.Run(ctx, l, clusterName, "" /* SSHOptions */, "" /* processTag */, secure, roachprodRunStdout, roachprodRunStderr, args)
 	closePipes(ctx)
 	wg.Wait()
 
@@ -1043,14 +1047,14 @@ func (c *clusterImpl) StopCockroachGracefullyOnNode(
 	gracefulOpts.RoachprodOpts.Sig = 15 // SIGTERM
 	gracefulOpts.RoachprodOpts.Wait = true
 	gracefulOpts.RoachprodOpts.MaxWait = 60
-	c.Stop(ctx, l, gracefulOpts, c.Node(node))
-	// NB: we still call Stop to make sure the process is dead when we try
-	// to restart it (or we'll catch an error from the RocksDB dir being
-	// locked). This won't happen unless run with --local due to timing.
-	c.Stop(ctx, l, option.DefaultStopOpts(), c.Node(node))
-	// TODO(tschottdorf): should return an error. I doubt that we want to
-	//  call these *testing.T-style methods on goroutines.
-	return nil
+	if err := c.StopE(ctx, l, gracefulOpts, c.Node(node)); err != nil {
+		return err
+	}
+
+	// NB: we still call Stop to make sure the process is dead when we
+	// try to restart it (in case it takes longer than `MaxWait` for it
+	// to finish).
+	return c.StopE(ctx, l, option.DefaultStopOpts(), c.Node(node))
 }
 
 // Save marks the cluster as "saved" so that it doesn't get destroyed.
@@ -1302,10 +1306,13 @@ func (c *clusterImpl) FetchDebugZip(ctx context.Context, l *logger.Logger) error
 			//
 			// Ignore the files in the the log directory; we pull the logs separately anyway
 			// so this would only cause duplication.
-			si := strconv.Itoa(i)
-			cmd := []string{"./cockroach", "debug", "zip", "--exclude-files='*.log,*.txt,*.pprof'", "--url", "{pgurl:" + si + "}", zipName}
-			if err := c.RunE(ctx, c.All(), cmd...); err != nil {
-				l.Printf("./cockroach debug zip failed: %v", err)
+			excludeFiles := "*.log,*.txt,*.pprof"
+			cmd := fmt.Sprintf(
+				"./cockroach debug zip --exclude-files='%s' --url {pgurl:%d} %s",
+				excludeFiles, i, zipName,
+			)
+			if err := c.RunE(ctx, c.Node(i), cmd); err != nil {
+				l.Printf("./cockroach debug zip failed on node %d: %v", i, err)
 				if i < c.spec.NodeCount {
 					continue
 				}
@@ -1399,7 +1406,7 @@ func (c *clusterImpl) FetchDmesg(ctx context.Context, l *logger.Logger) error {
 		}
 
 		// Run dmesg on all nodes to redirect the kernel ring buffer content to a file.
-		cmd := []string{"/bin/bash", "-c", "'sudo dmesg > " + name + "'"}
+		cmd := []string{"/bin/bash", "-c", "'sudo dmesg -T > " + name + "'"}
 		var results []install.RunResultDetails
 		var combinedDmesgError error
 		if results, combinedDmesgError = c.RunWithDetails(ctx, nil, c.All(), cmd...); combinedDmesgError != nil {
@@ -1950,7 +1957,7 @@ func (c *clusterImpl) RunE(ctx context.Context, node option.NodeListOption, args
 	if err := errors.Wrap(ctx.Err(), "cluster.RunE"); err != nil {
 		return err
 	}
-	err = execCmd(ctx, l, c.MakeNodes(node), args...)
+	err = execCmd(ctx, l, c.MakeNodes(node), c.IsSecure(), args...)
 
 	l.Printf("> result: %+v", err)
 	if err := ctx.Err(); err != nil {
@@ -2071,29 +2078,13 @@ func (c *clusterImpl) Install(
 	return errors.Wrap(roachprod.Install(ctx, l, c.MakeNodes(nodes), software), "cluster.Install")
 }
 
-var reOnlyAlphanumeric = regexp.MustCompile(`[^a-zA-Z0-9]+`)
-
 // cmdLogFileName comes up with a log file to use for the given argument string.
 func cmdLogFileName(t time.Time, nodes option.NodeListOption, args ...string) string {
-	// Make sure we treat {"./cockroach start"} like {"./cockroach", "start"}.
-	args = strings.Split(strings.Join(args, " "), " ")
-	prefix := []string{reOnlyAlphanumeric.ReplaceAllString(args[0], "")}
-	for _, arg := range args[1:] {
-		if s := reOnlyAlphanumeric.ReplaceAllString(arg, ""); s != arg {
-			break
-		}
-		prefix = append(prefix, arg)
-	}
-	s := strings.Join(prefix, "_")
-	const maxLen = 70
-	if len(s) > maxLen {
-		s = s[:maxLen]
-	}
 	logFile := fmt.Sprintf(
 		"run_%s_n%s_%s",
 		t.Format(`150405.000000000`),
 		nodes.String()[1:],
-		s,
+		install.GenFilenameFromArgs(20, args...),
 	)
 	return logFile
 }
@@ -2117,9 +2108,12 @@ func (c *clusterImpl) loggerForCmd(
 // internal IPs and communication from a test driver to nodes in a cluster
 // should use external IPs.
 func (c *clusterImpl) pgURLErr(
-	ctx context.Context, l *logger.Logger, node option.NodeListOption, external bool,
+	ctx context.Context, l *logger.Logger, node option.NodeListOption, external bool, tenant string,
 ) ([]string, error) {
-	urls, err := roachprod.PgURL(ctx, l, c.MakeNodes(node), c.localCertsDir, external, c.localCertsDir != "" /* secure */)
+	urls, err := roachprod.PgURL(ctx, l, c.MakeNodes(node), c.localCertsDir, roachprod.PGURLOptions{
+		External:   external,
+		Secure:     c.localCertsDir != "",
+		TenantName: tenant})
 	if err != nil {
 		return nil, err
 	}
@@ -2131,9 +2125,9 @@ func (c *clusterImpl) pgURLErr(
 
 // InternalPGUrl returns the internal Postgres endpoint for the specified nodes.
 func (c *clusterImpl) InternalPGUrl(
-	ctx context.Context, l *logger.Logger, node option.NodeListOption,
+	ctx context.Context, l *logger.Logger, node option.NodeListOption, tenant string,
 ) ([]string, error) {
-	return c.pgURLErr(ctx, l, node, false /* external */)
+	return c.pgURLErr(ctx, l, node, false, tenant)
 }
 
 // Silence unused warning.
@@ -2141,9 +2135,9 @@ var _ = (&clusterImpl{}).InternalPGUrl
 
 // ExternalPGUrl returns the external Postgres endpoint for the specified nodes.
 func (c *clusterImpl) ExternalPGUrl(
-	ctx context.Context, l *logger.Logger, node option.NodeListOption,
+	ctx context.Context, l *logger.Logger, node option.NodeListOption, tenant string,
 ) ([]string, error) {
-	return c.pgURLErr(ctx, l, node, true /* external */)
+	return c.pgURLErr(ctx, l, node, true, tenant)
 }
 
 func addrToAdminUIAddr(c *clusterImpl, addr string) (string, error) {
@@ -2233,7 +2227,7 @@ func (c *clusterImpl) InternalAddr(
 	ctx context.Context, l *logger.Logger, node option.NodeListOption,
 ) ([]string, error) {
 	var addrs []string
-	urls, err := c.pgURLErr(ctx, l, node, false /* external */)
+	urls, err := c.pgURLErr(ctx, l, node, false, "")
 	if err != nil {
 		return nil, err
 	}
@@ -2272,7 +2266,7 @@ func (c *clusterImpl) ExternalAddr(
 	ctx context.Context, l *logger.Logger, node option.NodeListOption,
 ) ([]string, error) {
 	var addrs []string
-	urls, err := c.pgURLErr(ctx, l, node, true /* external */)
+	urls, err := c.pgURLErr(ctx, l, node, true, "")
 	if err != nil {
 		return nil, err
 	}
@@ -2309,12 +2303,10 @@ func (c *clusterImpl) ExternalIP(
 var _ = (&clusterImpl{}).ExternalIP
 
 // Conn returns a SQL connection to the specified node.
-func (c *clusterImpl) Conn(ctx context.Context, l *logger.Logger, node int) *gosql.DB {
-	urls, err := c.ExternalPGUrl(ctx, l, c.Node(node))
-	if err != nil {
-		c.t.Fatal(err)
-	}
-	db, err := gosql.Open("postgres", urls[0])
+func (c *clusterImpl) Conn(
+	ctx context.Context, l *logger.Logger, node int, opts ...func(*option.ConnOption),
+) *gosql.DB {
+	db, err := c.ConnE(ctx, l, node, opts...)
 	if err != nil {
 		c.t.Fatal(err)
 	}
@@ -2322,33 +2314,28 @@ func (c *clusterImpl) Conn(ctx context.Context, l *logger.Logger, node int) *gos
 }
 
 // ConnE returns a SQL connection to the specified node.
-func (c *clusterImpl) ConnE(ctx context.Context, l *logger.Logger, node int) (*gosql.DB, error) {
-	urls, err := c.ExternalPGUrl(ctx, l, c.Node(node))
-	if err != nil {
-		return nil, err
-	}
-	db, err := gosql.Open("postgres", urls[0])
-	if err != nil {
-		return nil, err
-	}
-	return db, nil
-}
-
-// ConnEAsUser returns a SQL connection to the specified node as a specific user
-func (c *clusterImpl) ConnEAsUser(
-	ctx context.Context, l *logger.Logger, node int, user string,
+func (c *clusterImpl) ConnE(
+	ctx context.Context, l *logger.Logger, node int, opts ...func(*option.ConnOption),
 ) (*gosql.DB, error) {
-	urls, err := c.ExternalPGUrl(ctx, l, c.Node(node))
+
+	connOptions := &option.ConnOption{}
+	for _, opt := range opts {
+		opt(connOptions)
+	}
+	urls, err := c.ExternalPGUrl(ctx, l, c.Node(node), connOptions.TenantName)
 	if err != nil {
 		return nil, err
 	}
 
-	u, err := url.Parse(urls[0])
-	if err != nil {
-		return nil, err
+	dataSourceName := urls[0]
+	if connOptions.User != "" {
+		u, err := url.Parse(urls[0])
+		if err != nil {
+			return nil, err
+		}
+		u.User = url.User(connOptions.User)
+		dataSourceName = u.String()
 	}
-	u.User = url.User(user)
-	dataSourceName := u.String()
 	db, err := gosql.Open("postgres", dataSourceName)
 	if err != nil {
 		return nil, err

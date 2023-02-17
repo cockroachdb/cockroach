@@ -1,0 +1,20 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "keyvisjob",
+    srcs = ["job.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/keyvisualizer/keyvisjob",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/jobs",
+        "//pkg/jobs/jobspb",
+        "//pkg/keyvisualizer/keyvissettings",
+        "//pkg/settings/cluster",
+        "//pkg/sql",
+        "//pkg/util/log",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+get_x_data(name = "get_x_data")

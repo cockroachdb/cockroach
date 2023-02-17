@@ -17,6 +17,8 @@ import { StatementDetailsResponse } from "../api";
 
 const history = createMemoryHistory({ initialEntries: ["/statements"] });
 
+const lastUpdated = moment("Nov 28 2022 01:30:00 GMT");
+
 const statementDetailsNoData: StatementDetailsResponse = {
   statement: {
     metadata: {
@@ -58,6 +60,7 @@ const statementDetailsNoData: StatementDetailsResponse = {
         contention_time: { mean: 0, squared_diffs: 0 },
         network_messages: { mean: 0, squared_diffs: 0 },
         max_disk_usage: { mean: 0, squared_diffs: 0 },
+        cpu_sql_nanos: { mean: 0, squared_diffs: 0 },
       },
       sql_type: "",
       last_exec_timestamp: { seconds: new Long(-62135596800) },
@@ -172,6 +175,10 @@ const statementDetailsData: StatementDetailsResponse = {
           mean: 0,
           squared_diffs: 0,
         },
+        cpu_sql_nanos: {
+          mean: 0,
+          squared_diffs: 0,
+        },
       },
       sql_type: "TypeDML",
       last_exec_timestamp: {
@@ -266,6 +273,10 @@ const statementDetailsData: StatementDetailsResponse = {
             squared_diffs: 0,
           },
           max_disk_usage: {
+            mean: 0,
+            squared_diffs: 0,
+          },
+          cpu_sql_nanos: {
             mean: 0,
             squared_diffs: 0,
           },
@@ -369,6 +380,10 @@ const statementDetailsData: StatementDetailsResponse = {
             mean: 0,
             squared_diffs: 0,
           },
+          cpu_sql_nanos: {
+            mean: 0,
+            squared_diffs: 0,
+          },
         },
         sql_type: "TypeDML",
         last_exec_timestamp: {
@@ -469,6 +484,10 @@ const statementDetailsData: StatementDetailsResponse = {
             mean: 0,
             squared_diffs: 0,
           },
+          cpu_sql_nanos: {
+            mean: 0,
+            squared_diffs: 0,
+          },
         },
         sql_type: "TypeDML",
         last_exec_timestamp: {
@@ -566,6 +585,10 @@ const statementDetailsData: StatementDetailsResponse = {
             squared_diffs: 0,
           },
           max_disk_usage: {
+            mean: 0,
+            squared_diffs: 0,
+          },
+          cpu_sql_nanos: {
             mean: 0,
             squared_diffs: 0,
           },
@@ -671,6 +694,10 @@ const statementDetailsData: StatementDetailsResponse = {
             mean: 0,
             squared_diffs: 0,
           },
+          cpu_sql_nanos: {
+            mean: 0,
+            squared_diffs: 0,
+          },
         },
         sql_type: "TypeDML",
         last_exec_timestamp: {
@@ -769,6 +796,10 @@ const statementDetailsData: StatementDetailsResponse = {
             mean: 0,
             squared_diffs: 0,
           },
+          cpu_sql_nanos: {
+            mean: 0,
+            squared_diffs: 0,
+          },
         },
         sql_type: "TypeDML",
         last_exec_timestamp: {
@@ -806,6 +837,7 @@ export const getStatementDetailsPropsFixture = (
     },
   },
   isLoading: false,
+  lastUpdated: lastUpdated,
   timeScale: {
     windowSize: moment.duration(5, "day"),
     sampleSize: moment.duration(5, "minutes"),
@@ -826,6 +858,7 @@ export const getStatementDetailsPropsFixture = (
   refreshNodes: noop,
   refreshNodesLiveness: noop,
   refreshUserSQLRoles: noop,
+  refreshStatementFingerprintInsights: noop,
   diagnosticsReports: [],
   dismissStatementDiagnosticsAlertMessage: noop,
   onTimeScaleChange: noop,

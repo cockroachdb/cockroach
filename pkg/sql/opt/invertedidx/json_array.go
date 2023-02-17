@@ -392,6 +392,12 @@ func (j *jsonOrArrayFilterPlanner) extractInvertedFilterConditionFromLeaf(
 		if fetch, ok := t.Left.(*memo.FetchValExpr); ok {
 			invertedExpr = j.extractJSONFetchValEqCondition(ctx, evalCtx, fetch, t.Right)
 		}
+	case *memo.InExpr:
+		if fetch, ok := t.Left.(*memo.FetchValExpr); ok {
+			if tuple, ok := t.Right.(*memo.TupleExpr); ok {
+				invertedExpr = j.extractJSONInCondition(ctx, evalCtx, fetch, tuple)
+			}
+		}
 	case *memo.OverlapsExpr:
 		invertedExpr = j.extractArrayOverlapsCondition(ctx, evalCtx, t.Left, t.Right)
 	}
@@ -410,6 +416,38 @@ func (j *jsonOrArrayFilterPlanner) extractInvertedFilterConditionFromLeaf(
 	// We do not currently support pre-filtering for JSON and Array indexes, so
 	// the returned pre-filter state is nil.
 	return invertedExpr, remainingFilters, nil
+}
+
+// extractJSONInCondition extracts an InvertedExpression representing
+// an inverted filter over the planner's inverted index, based on the
+// give left and right expression arguments. If an
+// InvertedExpression cannot be generated from the expression, an
+// inverted.NonInvertedColExpression is returned.
+func (j *jsonOrArrayFilterPlanner) extractJSONInCondition(
+	ctx context.Context, evalCtx *eval.Context, left *memo.FetchValExpr, right *memo.TupleExpr,
+) inverted.Expression {
+	// The right side of the expression should be a constant JSON value.
+	if !memo.CanExtractConstDatum(right) {
+		return inverted.NonInvertedColExpression{}
+	}
+	var invertedExpr inverted.Expression
+	for i := range right.Elems {
+		scalarExprElem := right.Elems[i]
+		expr := j.extractJSONFetchValEqCondition(ctx, evalCtx, left, scalarExprElem)
+		if invertedExpr == nil {
+			invertedExpr = expr
+		} else {
+			invertedExpr = inverted.Or(invertedExpr, expr)
+		}
+	}
+
+	if invertedExpr == nil {
+		// An inverted expression could not be extracted.
+		return inverted.NonInvertedColExpression{}
+	}
+
+	return invertedExpr
+
 }
 
 // extractArrayOverlapsCondition extracts an InvertedExpression
@@ -529,7 +567,7 @@ func (j *jsonOrArrayFilterPlanner) extractJSONFetchValEqCondition(
 	}
 
 	// Collect a slice of keys from the fetch val expression.
-	var keys []string
+	var keys tree.Datums
 	keys = j.collectKeys(keys, left)
 	if len(keys) == 0 {
 		return inverted.NonInvertedColExpression{}
@@ -548,6 +586,28 @@ func (j *jsonOrArrayFilterPlanner) extractJSONFetchValEqCondition(
 	typ := val.JSON.Type()
 	if typ == json.ArrayJSONType || typ == json.ObjectJSONType {
 		invertedExpr.SetNotTight()
+	}
+
+	// If a key is of the type DInt, the InvertedExpression generated is
+	// not tight. This is because key encodings for JSON arrays don't
+	// contain the respective index positions for each of their elements.
+	// A JSON array of the form ["a", 31] will have the following encoding
+	// into an index key:
+	//
+	// 1/2/arr/a/pk1
+	// 1/2/arr/31/pk1
+	//
+	// where arr is an ARRAY type tag used to indicate that the next key is
+	// part of an array, 1 is the table id, 2 is the inverted index id and
+	// pk is a primary key of a row in the table. Since the array
+	// elements do not have their respective indices stored in
+	// the encoding, the original filter needs to be applied after the initial
+	// scan.
+	for i := range keys {
+		if _, ok := keys[i].(*tree.DInt); ok {
+			invertedExpr.SetNotTight()
+			break
+		}
 	}
 	return invertedExpr
 }
@@ -584,7 +644,7 @@ func (j *jsonOrArrayFilterPlanner) extractJSONFetchValContainsCondition(
 	}
 
 	// Collect a slice of keys from the fetch val expression.
-	var keys []string
+	var keys tree.Datums
 	keys = j.collectKeys(keys, left)
 	if len(keys) == 0 {
 		return inverted.NonInvertedColExpression{}
@@ -617,6 +677,29 @@ func (j *jsonOrArrayFilterPlanner) extractJSONFetchValContainsCondition(
 			invertedExpr = inverted.Or(invertedExpr, expr)
 		}
 	}
+
+	// If a key is of the type DInt, the InvertedExpression generated is
+	// not tight. This is because key encodings for JSON arrays don't
+	// contain the respective index positions for each of their elements.
+	// A JSON array of the form ["a", 31] will have the following encoding
+	// into an index key:
+	//
+	// 1/2/arr/a/pk1
+	// 1/2/arr/31/pk1
+	//
+	// where arr is an ARRAY type tag used to indicate that the next key is
+	// part of an array, 1 is the table id, 2 is the inverted index id and
+	// pk is a primary key of a row in the table. Since the array
+	// elements do not have their respective indices stored in
+	// the encoding, the original filter needs to be applied after the initial
+	// scan.
+	for i := range keys {
+		if _, ok := keys[i].(*tree.DInt); ok {
+			invertedExpr.SetNotTight()
+			break
+		}
+	}
+
 	return invertedExpr
 }
 
@@ -638,22 +721,30 @@ func (j *jsonOrArrayFilterPlanner) extractJSONFetchValContainsCondition(
 //
 // As an example, when left is (j->'a'->'b') and right is ('1'), the keys
 // {"b", "a"} are collected and the JSON object {"a": {"b": 1}} is built.
+//
+// Moreover, the index of the fetch value can also be a DInt, the Int
+// Datum which refers to an index of a JSON array. In this case, as an
+// example, left can be (j->0) and right can be ('1') resulting in the
+// collected keys to become {0} with the JSON object built as ['1'].
 func (j *jsonOrArrayFilterPlanner) collectKeys(
-	currKeys []string, fetch *memo.FetchValExpr,
-) (keys []string) {
+	currKeys tree.Datums, fetch *memo.FetchValExpr,
+) (keys tree.Datums) {
 	// The right side of the fetch val expression, the Index field, must be
-	// a constant string. If not, then we cannot build an inverted
-	// expression.
+	// a constant string or an integer. If not, then we cannot build an
+	// inverted expression.
 	if !memo.CanExtractConstDatum(fetch.Index) {
 		return nil
 	}
-	key, ok := memo.ExtractConstDatum(fetch.Index).(*tree.DString)
-	if !ok {
+	key := memo.ExtractConstDatum(fetch.Index)
+
+	switch key.(type) {
+	case *tree.DString, *tree.DInt:
+	default:
 		return nil
 	}
 
 	// Append the key to the list of keys.
-	keys = append(currKeys, string(*key))
+	keys = append(currKeys, key)
 
 	// If the left side of the fetch val expression, the Json field, is a
 	// variable or expression corresponding to the index column, then we
@@ -678,7 +769,7 @@ func (j *jsonOrArrayFilterPlanner) collectKeys(
 // {"a", "b"} as keys, "c" as val, and construct {"a": "b": ["c"]}.
 // An array of the constructed JSONs is returned.
 func buildFetchContainmentObjects(
-	keys []string, val json.JSON, containedBy bool,
+	keys tree.Datums, val json.JSON, containedBy bool,
 ) ([]json.JSON, error) {
 	var objs []json.JSON
 	typ := val.Type()
@@ -745,16 +836,41 @@ func buildFetchContainmentObjects(
 // Where the keys and val are extracted from a fetch val expression by the
 // caller. Note that key0 is the outer-most fetch val index, so the expression
 // j->'a'->'b' = 1 results in {"a": {"b": 1}}.
-func buildObject(keys []string, val json.JSON) json.JSON {
-	var obj json.JSON
+//
+// It can also construct a new JSON array in the form:
+//
+// [val]
+//
+// where val is extracted from a fetch val expression and an array
+// is built due to the filter being of the form j->index_pos = val, where
+// index_pos is an integer that denotes the index position in a JSON array.
+// An array is built with val at position 0 (regardless of the actual value
+// of index_pos), since the index position of the JSON array is not present
+// in the inverted index key. This removes the need for the actual integer
+// value of the index position and the original filter will be applied after
+// the initial scan.
+
+// Moreover, the function can also result in creating JSON objects that are
+// a combination of both JSON objects and JSON arrays.
+// For example, the expression j->0->'a' = 1 results in [{'a': 1}].
+func buildObject(keys tree.Datums, val json.JSON) json.JSON {
 	for i := 0; i < len(keys); i++ {
-		b := json.NewObjectBuilder(1)
-		if i == 0 {
-			b.Add(keys[i], val)
-		} else {
-			b.Add(keys[i], obj)
+		switch t := keys[i].(type) {
+		case *tree.DString:
+			b := json.NewObjectBuilder(1)
+			b.Add(string(*t), val)
+			val = b.Build()
+		case *tree.DInt:
+			b := json.NewArrayBuilder(1)
+			// We never look at the integer value of the key since
+			// the integer value, denoting an index position in the
+			// JSON array, is never considered while building an
+			// inverted expression. The inverted expression generated
+			// is thus not tight and will thus have the original
+			// filter applied.
+			b.Add(val)
+			val = b.Build()
 		}
-		obj = b.Build()
 	}
-	return obj
+	return val
 }

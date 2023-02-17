@@ -17,7 +17,6 @@ import (
 	"net"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -59,7 +58,7 @@ func TestOutbox(t *testing.T) {
 	// Create a mock server that the outbox will connect and push rows to.
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	clusterID, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(ctx, clock, stopper, execinfra.StaticSQLInstanceID)
 	if err != nil {
 		t.Fatal(err)
@@ -122,7 +121,7 @@ func TestOutbox(t *testing.T) {
 			// Now send another row that the outbox will discard.
 			row = rowenc.EncDatumRow{rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(2)))}
 			if consumerStatus := outbox.Push(row, nil /* meta */); consumerStatus != execinfra.DrainRequested {
-				return errors.Errorf("expected status: %d, got: %d", execinfra.NeedMoreRows, consumerStatus)
+				return errors.Errorf("expected status: %d, got: %d", execinfra.DrainRequested, consumerStatus)
 			}
 
 			// Send some metadata.
@@ -206,10 +205,10 @@ func TestOutbox(t *testing.T) {
 		t.Errorf("invalid results: %s, expected %s'", str, expected)
 	}
 
-	// The outbox should shut down since the producer closed.
-	outboxWG.Wait()
 	// Signal the server to shut down the stream.
 	streamNotification.Donec <- nil
+	// The outbox should shut down since the stream is closed.
+	outboxWG.Wait()
 }
 
 // Test that an outbox connects its stream as soon as possible (i.e. before
@@ -224,7 +223,7 @@ func TestOutboxInitializesStreamBeforeReceivingAnyRows(t *testing.T) {
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	clusterID, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(ctx, clock, stopper, execinfra.StaticSQLInstanceID)
 	if err != nil {
 		t.Fatal(err)
@@ -297,7 +296,7 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 			ctx := context.Background()
 			stopper := stop.NewStopper()
 			defer stopper.Stop(ctx)
-			clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+			clock := hlc.NewClockForTesting(nil)
 			clusterID, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(ctx, clock, stopper, execinfra.StaticSQLInstanceID)
 			if err != nil {
 				t.Fatal(err)
@@ -375,7 +374,7 @@ func TestOutboxCancelsFlowOnError(t *testing.T) {
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	clusterID, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(ctx, clock, stopper, execinfra.StaticSQLInstanceID)
 	if err != nil {
 		t.Fatal(err)
@@ -501,7 +500,7 @@ func BenchmarkOutbox(b *testing.B) {
 	// Create a mock server that the outbox will connect and push rows to.
 	stopper := stop.NewStopper()
 	defer stopper.Stop(bgCtx)
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	clusterID, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(bgCtx, clock, stopper, execinfra.StaticSQLInstanceID)
 	if err != nil {
 		b.Fatal(err)
@@ -559,8 +558,8 @@ func BenchmarkOutbox(b *testing.B) {
 				}
 			}
 			outbox.ProducerDone()
-			outboxWG.Wait()
 			streamNotification.Donec <- nil
+			outboxWG.Wait()
 		})
 	}
 }

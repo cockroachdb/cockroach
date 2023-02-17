@@ -195,7 +195,7 @@ type BytesMonitor struct {
 
 		// maxBytesHist is the metric object used to track the high watermark of bytes
 		// allocated by the monitor during its lifetime.
-		maxBytesHist *metric.Histogram
+		maxBytesHist metric.IHistogram
 	}
 
 	// name identifies this monitor in logging messages.
@@ -273,7 +273,7 @@ func NewMonitor(
 	name redact.RedactableString,
 	res Resource,
 	curCount *metric.Gauge,
-	maxHist *metric.Histogram,
+	maxHist metric.IHistogram,
 	increment int64,
 	noteworthy int64,
 	settings *cluster.Settings,
@@ -289,7 +289,7 @@ func NewMonitorWithLimit(
 	res Resource,
 	limit int64,
 	curCount *metric.Gauge,
-	maxHist *metric.Histogram,
+	maxHist metric.IHistogram,
 	increment int64,
 	noteworthy int64,
 	settings *cluster.Settings,
@@ -386,7 +386,7 @@ func NewUnlimitedMonitor(
 	name redact.RedactableString,
 	res Resource,
 	curCount *metric.Gauge,
-	maxHist *metric.Histogram,
+	maxHist metric.IHistogram,
 	noteworthy int64,
 	settings *cluster.Settings,
 ) *BytesMonitor {
@@ -485,7 +485,7 @@ func (mm *BytesMonitor) AllocBytes() int64 {
 }
 
 // SetMetrics sets the metric objects for the monitor.
-func (mm *BytesMonitor) SetMetrics(curCount *metric.Gauge, maxHist *metric.Histogram) {
+func (mm *BytesMonitor) SetMetrics(curCount *metric.Gauge, maxHist metric.IHistogram) {
 	mm.mu.Lock()
 	defer mm.mu.Unlock()
 	mm.mu.curBytesCount = curCount
@@ -565,6 +565,24 @@ func (mm *BytesMonitor) MakeBoundAccount() BoundAccount {
 	return BoundAccount{mon: mm}
 }
 
+// TransferAccount creates a new account with the budget
+// allocated in the given origAccount.
+// The new account is owned by this monitor.
+//
+// If the operation succeeds, origAccount is released.
+// If an error occurs, origAccount remains open and the caller
+// remains responsible for closing / shrinking it.
+func (mm *BytesMonitor) TransferAccount(
+	ctx context.Context, origAccount *BoundAccount,
+) (newAccount BoundAccount, err error) {
+	b := mm.MakeBoundAccount()
+	if err = b.Grow(ctx, origAccount.used); err != nil {
+		return newAccount, err
+	}
+	origAccount.Close(ctx)
+	return b, nil
+}
+
 // Init initializes a BoundAccount, connecting it to the given monitor. It is
 // similar to MakeBoundAccount, but allows the caller to save a BoundAccount
 // allocation.
@@ -631,6 +649,7 @@ func (b *BoundAccount) Clear(ctx context.Context) {
 }
 
 // Close releases all the cumulated allocations of an account at once.
+// TODO(yuzefovich): consider removing this method in favor of Clear.
 func (b *BoundAccount) Close(ctx context.Context) {
 	if b == nil {
 		return

@@ -1,8 +1,43 @@
-# tenant-cluster-setting-override-opt: allow-multi-region-abstractions-for-secondary-tenants
+# tenant-cluster-setting-override-opt: sql.multi_region.allow_abstractions_for_secondary_tenants.enabled=true
 # LogicTest: multiregion-15node-5region-3azs
 
 statement ok
 SET enable_super_regions = 'on'
+
+statement ok
+CREATE DATABASE oncreate PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1" SUPER REGION "create" VALUES "ap-southeast-2", "us-east-1"
+
+statement ok
+CREATE TABLE oncreate.rbt(x INT) LOCALITY REGIONAL BY TABLE IN "us-east-1";
+
+statement ok
+CREATE TABLE oncreate.rbr(x INT) LOCALITY REGIONAL BY ROW;
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE oncreate.rbt;
+----
+TABLE oncreate.public.rbt  ALTER TABLE oncreate.public.rbt CONFIGURE ZONE USING
+                             range_min_bytes = 134217728,
+                             range_max_bytes = 536870912,
+                             gc.ttlseconds = 14400,
+                             num_replicas = 4,
+                             num_voters = 3,
+                             constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
+                             voter_constraints = '[+region=us-east-1]',
+                             lease_preferences = '[[+region=us-east-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "us-east-1" OF TABLE oncreate.rbr
+----
+PARTITION "us-east-1" OF TABLE oncreate.public.rbr  ALTER PARTITION "us-east-1" OF TABLE oncreate.public.rbr CONFIGURE ZONE USING
+                                                      range_min_bytes = 134217728,
+                                                      range_max_bytes = 536870912,
+                                                      gc.ttlseconds = 14400,
+                                                      num_replicas = 4,
+                                                      num_voters = 3,
+                                                      constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
+                                                      voter_constraints = '[+region=us-east-1]',
+                                                      lease_preferences = '[[+region=us-east-1]]'
 
 statement ok
 CREATE DATABASE db PRIMARY REGION "ca-central-1"
@@ -46,41 +81,41 @@ query TT
 SHOW ZONE CONFIGURATION FOR TABLE mr1.rbt;
 ----
 TABLE mr1.public.rbt  ALTER TABLE mr1.public.rbt CONFIGURE ZONE USING
-                      range_min_bytes = 134217728,
-                      range_max_bytes = 536870912,
-                      gc.ttlseconds = 90000,
-                      num_replicas = 3,
-                      num_voters = 3,
-                      constraints = '{+region=us-east-1: 1}',
-                      voter_constraints = '[+region=us-east-1]',
-                      lease_preferences = '[[+region=us-east-1]]'
+                        range_min_bytes = 134217728,
+                        range_max_bytes = 536870912,
+                        gc.ttlseconds = 14400,
+                        num_replicas = 3,
+                        num_voters = 3,
+                        constraints = '{+region=us-east-1: 1}',
+                        voter_constraints = '[+region=us-east-1]',
+                        lease_preferences = '[[+region=us-east-1]]'
 
 # mr1.rbr should only have its subzones changed.
 query TT
-SHOW ZONE CONFIGURATION FOR TABLE mr1.rbr
+SHOW ZONE CONFIGURATION FOR TABLE mr1.public.rbr
 ----
 DATABASE mr1  ALTER DATABASE mr1 CONFIGURE ZONE USING
-              range_min_bytes = 134217728,
-              range_max_bytes = 536870912,
-              gc.ttlseconds = 90000,
-              num_replicas = 3,
-              num_voters = 3,
-              constraints = '{+region=us-east-1: 1}',
-              voter_constraints = '[+region=us-east-1]',
-              lease_preferences = '[[+region=us-east-1]]'
+                range_min_bytes = 134217728,
+                range_max_bytes = 536870912,
+                gc.ttlseconds = 14400,
+                num_replicas = 3,
+                num_voters = 3,
+                constraints = '{+region=us-east-1: 1}',
+                voter_constraints = '[+region=us-east-1]',
+                lease_preferences = '[[+region=us-east-1]]'
 
 query TT
 SHOW ZONE CONFIGURATION FOR PARTITION "us-east-1" OF TABLE mr1.rbr
 ----
 PARTITION "us-east-1" OF TABLE mr1.public.rbr  ALTER PARTITION "us-east-1" OF TABLE mr1.public.rbr CONFIGURE ZONE USING
-                                               range_min_bytes = 134217728,
-                                               range_max_bytes = 536870912,
-                                               gc.ttlseconds = 90000,
-                                               num_replicas = 3,
-                                               num_voters = 3,
-                                               constraints = '{+region=us-east-1: 1}',
-                                               voter_constraints = '[+region=us-east-1]',
-                                               lease_preferences = '[[+region=us-east-1]]'
+                                                 range_min_bytes = 134217728,
+                                                 range_max_bytes = 536870912,
+                                                 gc.ttlseconds = 14400,
+                                                 num_replicas = 3,
+                                                 num_voters = 3,
+                                                 constraints = '{+region=us-east-1: 1}',
+                                                 voter_constraints = '[+region=us-east-1]',
+                                                 lease_preferences = '[[+region=us-east-1]]'
 
 statement ok
 use mr1;
@@ -119,119 +154,119 @@ query TT
 SHOW ZONE CONFIGURATION FOR TABLE mr2.t_rt_us_east_1
 ----
 TABLE mr2.public.t_rt_us_east_1  ALTER TABLE mr2.public.t_rt_us_east_1 CONFIGURE ZONE USING
-                                 range_min_bytes = 134217728,
-                                 range_max_bytes = 536870912,
-                                 gc.ttlseconds = 90000,
-                                 num_replicas = 4,
-                                 num_voters = 3,
-                                 constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
-                                 voter_constraints = '[+region=us-east-1]',
-                                 lease_preferences = '[[+region=us-east-1]]'
+                                   range_min_bytes = 134217728,
+                                   range_max_bytes = 536870912,
+                                   gc.ttlseconds = 14400,
+                                   num_replicas = 4,
+                                   num_voters = 3,
+                                   constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
+                                   voter_constraints = '[+region=us-east-1]',
+                                   lease_preferences = '[[+region=us-east-1]]'
 
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE mr2.t_rt_primary_region
 ----
 TABLE mr2.public.t_rt_primary_region  ALTER TABLE mr2.public.t_rt_primary_region CONFIGURE ZONE USING
-                                      range_min_bytes = 134217728,
-                                      range_max_bytes = 536870912,
-                                      gc.ttlseconds = 90000,
-                                      num_replicas = 4,
-                                      num_voters = 3,
-                                      constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
-                                      voter_constraints = '[+region=us-east-1]',
-                                      lease_preferences = '[[+region=us-east-1]]'
+                                        range_min_bytes = 134217728,
+                                        range_max_bytes = 536870912,
+                                        gc.ttlseconds = 14400,
+                                        num_replicas = 4,
+                                        num_voters = 3,
+                                        constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
+                                        voter_constraints = '[+region=us-east-1]',
+                                        lease_preferences = '[[+region=us-east-1]]'
 
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE mr2.t_rt
 ----
 TABLE mr2.public.t_rt  ALTER TABLE mr2.public.t_rt CONFIGURE ZONE USING
-                       range_min_bytes = 134217728,
-                       range_max_bytes = 536870912,
-                       gc.ttlseconds = 90000,
-                       num_replicas = 4,
-                       num_voters = 3,
-                       constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
-                       voter_constraints = '[+region=ap-southeast-2]',
-                       lease_preferences = '[[+region=ap-southeast-2]]'
+                         range_min_bytes = 134217728,
+                         range_max_bytes = 536870912,
+                         gc.ttlseconds = 14400,
+                         num_replicas = 4,
+                         num_voters = 3,
+                         constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
+                         voter_constraints = '[+region=ap-southeast-2]',
+                         lease_preferences = '[[+region=ap-southeast-2]]'
 
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE mr2.t_rt_with_idx
 ----
 TABLE mr2.public.t_rt_with_idx  ALTER TABLE mr2.public.t_rt_with_idx CONFIGURE ZONE USING
-                                range_min_bytes = 134217728,
-                                range_max_bytes = 536870912,
-                                gc.ttlseconds = 90000,
-                                num_replicas = 4,
-                                num_voters = 3,
-                                constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
-                                voter_constraints = '[+region=ap-southeast-2]',
-                                lease_preferences = '[[+region=ap-southeast-2]]'
+                                  range_min_bytes = 134217728,
+                                  range_max_bytes = 536870912,
+                                  gc.ttlseconds = 14400,
+                                  num_replicas = 4,
+                                  num_voters = 3,
+                                  constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
+                                  voter_constraints = '[+region=ap-southeast-2]',
+                                  lease_preferences = '[[+region=ap-southeast-2]]'
 
 query TT
 SHOW ZONE CONFIGURATION FOR INDEX mr2.t_rt_with_idx@idx
 ----
 TABLE mr2.public.t_rt_with_idx  ALTER TABLE mr2.public.t_rt_with_idx CONFIGURE ZONE USING
-                                range_min_bytes = 134217728,
-                                range_max_bytes = 536870912,
-                                gc.ttlseconds = 90000,
-                                num_replicas = 4,
-                                num_voters = 3,
-                                constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
-                                voter_constraints = '[+region=ap-southeast-2]',
-                                lease_preferences = '[[+region=ap-southeast-2]]'
+                                  range_min_bytes = 134217728,
+                                  range_max_bytes = 536870912,
+                                  gc.ttlseconds = 14400,
+                                  num_replicas = 4,
+                                  num_voters = 3,
+                                  constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
+                                  voter_constraints = '[+region=ap-southeast-2]',
+                                  lease_preferences = '[[+region=ap-southeast-2]]'
 
 query TT
 SHOW ZONE CONFIGURATION FOR PARTITION "us-east-1" OF TABLE mr2.t_rbr;
 ----
 PARTITION "us-east-1" OF TABLE mr2.public.t_rbr  ALTER PARTITION "us-east-1" OF TABLE mr2.public.t_rbr CONFIGURE ZONE USING
-                                                 range_min_bytes = 134217728,
-                                                 range_max_bytes = 536870912,
-                                                 gc.ttlseconds = 90000,
-                                                 num_replicas = 4,
-                                                 num_voters = 3,
-                                                 constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
-                                                 voter_constraints = '[+region=us-east-1]',
-                                                 lease_preferences = '[[+region=us-east-1]]'
+                                                   range_min_bytes = 134217728,
+                                                   range_max_bytes = 536870912,
+                                                   gc.ttlseconds = 14400,
+                                                   num_replicas = 4,
+                                                   num_voters = 3,
+                                                   constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
+                                                   voter_constraints = '[+region=us-east-1]',
+                                                   lease_preferences = '[[+region=us-east-1]]'
 
 query TT
 SHOW ZONE CONFIGURATION FOR PARTITION "ap-southeast-2" OF TABLE mr2.t_rbr_with_idx;
 ----
 PARTITION "ap-southeast-2" OF TABLE mr2.public.t_rbr_with_idx  ALTER PARTITION "ap-southeast-2" OF TABLE mr2.public.t_rbr_with_idx CONFIGURE ZONE USING
-                                                               range_min_bytes = 134217728,
-                                                               range_max_bytes = 536870912,
-                                                               gc.ttlseconds = 90000,
-                                                               num_replicas = 4,
-                                                               num_voters = 3,
-                                                               constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
-                                                               voter_constraints = '[+region=ap-southeast-2]',
-                                                               lease_preferences = '[[+region=ap-southeast-2]]'
+                                                                 range_min_bytes = 134217728,
+                                                                 range_max_bytes = 536870912,
+                                                                 gc.ttlseconds = 14400,
+                                                                 num_replicas = 4,
+                                                                 num_voters = 3,
+                                                                 constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
+                                                                 voter_constraints = '[+region=ap-southeast-2]',
+                                                                 lease_preferences = '[[+region=ap-southeast-2]]'
 
 query TT
 SHOW ZONE CONFIGURATION FOR PARTITION "ca-central-1" OF TABLE mr2.t_rbr_with_idx;
 ----
 PARTITION "ca-central-1" OF TABLE mr2.public.t_rbr_with_idx  ALTER PARTITION "ca-central-1" OF TABLE mr2.public.t_rbr_with_idx CONFIGURE ZONE USING
-                                                             range_min_bytes = 134217728,
-                                                             range_max_bytes = 536870912,
-                                                             gc.ttlseconds = 90000,
-                                                             num_replicas = 5,
-                                                             num_voters = 3,
-                                                             constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
-                                                             voter_constraints = '[+region=ca-central-1]',
-                                                             lease_preferences = '[[+region=ca-central-1]]'
+                                                               range_min_bytes = 134217728,
+                                                               range_max_bytes = 536870912,
+                                                               gc.ttlseconds = 14400,
+                                                               num_replicas = 5,
+                                                               num_voters = 3,
+                                                               constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                                                               voter_constraints = '[+region=ca-central-1]',
+                                                               lease_preferences = '[[+region=ca-central-1]]'
 
 # Check that indexes also have the updated zone configs.
 query TT
 SHOW ZONE CONFIGURATION FOR PARTITION "ap-southeast-2" OF INDEX mr2.t_rbr_with_idx@idx
 ----
 PARTITION "ap-southeast-2" OF INDEX mr2.public.t_rbr_with_idx@idx  ALTER PARTITION "ap-southeast-2" OF INDEX mr2.public.t_rbr_with_idx@idx CONFIGURE ZONE USING
-                                                                   range_min_bytes = 134217728,
-                                                                   range_max_bytes = 536870912,
-                                                                   gc.ttlseconds = 90000,
-                                                                   num_replicas = 4,
-                                                                   num_voters = 3,
-                                                                   constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
-                                                                   voter_constraints = '[+region=ap-southeast-2]',
-                                                                   lease_preferences = '[[+region=ap-southeast-2]]'
+                                                                     range_min_bytes = 134217728,
+                                                                     range_max_bytes = 536870912,
+                                                                     gc.ttlseconds = 14400,
+                                                                     num_replicas = 4,
+                                                                     num_voters = 3,
+                                                                     constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
+                                                                     voter_constraints = '[+region=ap-southeast-2]',
+                                                                     lease_preferences = '[[+region=ap-southeast-2]]'
 
 # Create new tables and ensure they adhere to the super region zone configs.
 statement ok
@@ -250,93 +285,93 @@ query TT
 SHOW ZONE CONFIGURATION FOR TABLE mr2.t_rt2
 ----
 TABLE mr2.public.t_rt2  ALTER TABLE mr2.public.t_rt2 CONFIGURE ZONE USING
-                        range_min_bytes = 134217728,
-                        range_max_bytes = 536870912,
-                        gc.ttlseconds = 90000,
-                        num_replicas = 4,
-                        num_voters = 3,
-                        constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
-                        voter_constraints = '[+region=ap-southeast-2]',
-                        lease_preferences = '[[+region=ap-southeast-2]]'
+                          range_min_bytes = 134217728,
+                          range_max_bytes = 536870912,
+                          gc.ttlseconds = 14400,
+                          num_replicas = 4,
+                          num_voters = 3,
+                          constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
+                          voter_constraints = '[+region=ap-southeast-2]',
+                          lease_preferences = '[[+region=ap-southeast-2]]'
 
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE mr2.t_rt_with_idx2
 ----
 TABLE mr2.public.t_rt_with_idx2  ALTER TABLE mr2.public.t_rt_with_idx2 CONFIGURE ZONE USING
-                                 range_min_bytes = 134217728,
-                                 range_max_bytes = 536870912,
-                                 gc.ttlseconds = 90000,
-                                 num_replicas = 4,
-                                 num_voters = 3,
-                                 constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
-                                 voter_constraints = '[+region=ap-southeast-2]',
-                                 lease_preferences = '[[+region=ap-southeast-2]]'
+                                   range_min_bytes = 134217728,
+                                   range_max_bytes = 536870912,
+                                   gc.ttlseconds = 14400,
+                                   num_replicas = 4,
+                                   num_voters = 3,
+                                   constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
+                                   voter_constraints = '[+region=ap-southeast-2]',
+                                   lease_preferences = '[[+region=ap-southeast-2]]'
 
 query TT
 SHOW ZONE CONFIGURATION FOR INDEX mr2.t_rt_with_idx2@idx
 ----
 TABLE mr2.public.t_rt_with_idx2  ALTER TABLE mr2.public.t_rt_with_idx2 CONFIGURE ZONE USING
-                                 range_min_bytes = 134217728,
-                                 range_max_bytes = 536870912,
-                                 gc.ttlseconds = 90000,
-                                 num_replicas = 4,
-                                 num_voters = 3,
-                                 constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
-                                 voter_constraints = '[+region=ap-southeast-2]',
-                                 lease_preferences = '[[+region=ap-southeast-2]]'
+                                   range_min_bytes = 134217728,
+                                   range_max_bytes = 536870912,
+                                   gc.ttlseconds = 14400,
+                                   num_replicas = 4,
+                                   num_voters = 3,
+                                   constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
+                                   voter_constraints = '[+region=ap-southeast-2]',
+                                   lease_preferences = '[[+region=ap-southeast-2]]'
 
 query TT
 SHOW ZONE CONFIGURATION FOR PARTITION "us-east-1" OF TABLE mr2.t_rbr2;
 ----
 PARTITION "us-east-1" OF TABLE mr2.public.t_rbr2  ALTER PARTITION "us-east-1" OF TABLE mr2.public.t_rbr2 CONFIGURE ZONE USING
-                                                  range_min_bytes = 134217728,
-                                                  range_max_bytes = 536870912,
-                                                  gc.ttlseconds = 90000,
-                                                  num_replicas = 4,
-                                                  num_voters = 3,
-                                                  constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
-                                                  voter_constraints = '[+region=us-east-1]',
-                                                  lease_preferences = '[[+region=us-east-1]]'
+                                                    range_min_bytes = 134217728,
+                                                    range_max_bytes = 536870912,
+                                                    gc.ttlseconds = 14400,
+                                                    num_replicas = 4,
+                                                    num_voters = 3,
+                                                    constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
+                                                    voter_constraints = '[+region=us-east-1]',
+                                                    lease_preferences = '[[+region=us-east-1]]'
 
 query TT
 SHOW ZONE CONFIGURATION FOR PARTITION "ap-southeast-2" OF TABLE mr2.t_rbr_with_idx2;
 ----
 PARTITION "ap-southeast-2" OF TABLE mr2.public.t_rbr_with_idx2  ALTER PARTITION "ap-southeast-2" OF TABLE mr2.public.t_rbr_with_idx2 CONFIGURE ZONE USING
-                                                                range_min_bytes = 134217728,
-                                                                range_max_bytes = 536870912,
-                                                                gc.ttlseconds = 90000,
-                                                                num_replicas = 4,
-                                                                num_voters = 3,
-                                                                constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
-                                                                voter_constraints = '[+region=ap-southeast-2]',
-                                                                lease_preferences = '[[+region=ap-southeast-2]]'
+                                                                  range_min_bytes = 134217728,
+                                                                  range_max_bytes = 536870912,
+                                                                  gc.ttlseconds = 14400,
+                                                                  num_replicas = 4,
+                                                                  num_voters = 3,
+                                                                  constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
+                                                                  voter_constraints = '[+region=ap-southeast-2]',
+                                                                  lease_preferences = '[[+region=ap-southeast-2]]'
 
 # Check that indexes also have the updated zone configs.
 query TT
 SHOW ZONE CONFIGURATION FOR PARTITION "ap-southeast-2" OF INDEX mr2.t_rbr_with_idx2@idx
 ----
 PARTITION "ap-southeast-2" OF INDEX mr2.public.t_rbr_with_idx2@idx  ALTER PARTITION "ap-southeast-2" OF INDEX mr2.public.t_rbr_with_idx2@idx CONFIGURE ZONE USING
-                                                                    range_min_bytes = 134217728,
-                                                                    range_max_bytes = 536870912,
-                                                                    gc.ttlseconds = 90000,
-                                                                    num_replicas = 4,
-                                                                    num_voters = 3,
-                                                                    constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
-                                                                    voter_constraints = '[+region=ap-southeast-2]',
-                                                                    lease_preferences = '[[+region=ap-southeast-2]]'
+                                                                      range_min_bytes = 134217728,
+                                                                      range_max_bytes = 536870912,
+                                                                      gc.ttlseconds = 14400,
+                                                                      num_replicas = 4,
+                                                                      num_voters = 3,
+                                                                      constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
+                                                                      voter_constraints = '[+region=ap-southeast-2]',
+                                                                      lease_preferences = '[[+region=ap-southeast-2]]'
 
 query TT
 SHOW ZONE CONFIGURATION FOR PARTITION "us-east-1" OF INDEX mr2.t_rbr_with_idx2@idx
 ----
 PARTITION "us-east-1" OF INDEX mr2.public.t_rbr_with_idx2@idx  ALTER PARTITION "us-east-1" OF INDEX mr2.public.t_rbr_with_idx2@idx CONFIGURE ZONE USING
-                                                               range_min_bytes = 134217728,
-                                                               range_max_bytes = 536870912,
-                                                               gc.ttlseconds = 90000,
-                                                               num_replicas = 4,
-                                                               num_voters = 3,
-                                                               constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
-                                                               voter_constraints = '[+region=us-east-1]',
-                                                               lease_preferences = '[[+region=us-east-1]]'
+                                                                 range_min_bytes = 134217728,
+                                                                 range_max_bytes = 536870912,
+                                                                 gc.ttlseconds = 14400,
+                                                                 num_replicas = 4,
+                                                                 num_voters = 3,
+                                                                 constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
+                                                                 voter_constraints = '[+region=us-east-1]',
+                                                                 lease_preferences = '[[+region=us-east-1]]'
 
 # "ca-central-1" is not part of any super region so replicas should be placed in
 # all 3 regions.
@@ -344,14 +379,14 @@ query TT
 SHOW ZONE CONFIGURATION FOR PARTITION "ca-central-1" OF INDEX mr2.t_rbr_with_idx2@idx
 ----
 PARTITION "ca-central-1" OF INDEX mr2.public.t_rbr_with_idx2@idx  ALTER PARTITION "ca-central-1" OF INDEX mr2.public.t_rbr_with_idx2@idx CONFIGURE ZONE USING
-                                                                  range_min_bytes = 134217728,
-                                                                  range_max_bytes = 536870912,
-                                                                  gc.ttlseconds = 90000,
-                                                                  num_replicas = 5,
-                                                                  num_voters = 3,
-                                                                  constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
-                                                                  voter_constraints = '[+region=ca-central-1]',
-                                                                  lease_preferences = '[[+region=ca-central-1]]'
+                                                                    range_min_bytes = 134217728,
+                                                                    range_max_bytes = 536870912,
+                                                                    gc.ttlseconds = 14400,
+                                                                    num_replicas = 5,
+                                                                    num_voters = 3,
+                                                                    constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                                                                    voter_constraints = '[+region=ca-central-1]',
+                                                                    lease_preferences = '[[+region=ca-central-1]]'
 
 statement ok
 CREATE TABLE mr2.t_rt_ca_central_1() LOCALITY REGIONAL BY TABLE IN "ca-central-1";
@@ -360,14 +395,14 @@ query TT
 SHOW ZONE CONFIGURATION FOR TABLE mr2.t_rt_ca_central_1;
 ----
 TABLE mr2.public.t_rt_ca_central_1  ALTER TABLE mr2.public.t_rt_ca_central_1 CONFIGURE ZONE USING
-                                    range_min_bytes = 134217728,
-                                    range_max_bytes = 536870912,
-                                    gc.ttlseconds = 90000,
-                                    num_replicas = 5,
-                                    num_voters = 3,
-                                    constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
-                                    voter_constraints = '[+region=ca-central-1]',
-                                    lease_preferences = '[[+region=ca-central-1]]'
+                                      range_min_bytes = 134217728,
+                                      range_max_bytes = 536870912,
+                                      gc.ttlseconds = 14400,
+                                      num_replicas = 5,
+                                      num_voters = 3,
+                                      constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                                      voter_constraints = '[+region=ca-central-1]',
+                                      lease_preferences = '[[+region=ca-central-1]]'
 
 # Now let's create a super region with only "ca-central-1" and ensure
 # mr2.t_rt_ca_central_1's zone configs are updated to only be part of
@@ -379,14 +414,14 @@ query TT
 SHOW ZONE CONFIGURATION FOR TABLE mr2.t_rt_ca_central_1;
 ----
 TABLE mr2.public.t_rt_ca_central_1  ALTER TABLE mr2.public.t_rt_ca_central_1 CONFIGURE ZONE USING
-                                    range_min_bytes = 134217728,
-                                    range_max_bytes = 536870912,
-                                    gc.ttlseconds = 90000,
-                                    num_replicas = 3,
-                                    num_voters = 3,
-                                    constraints = '{+region=ca-central-1: 1}',
-                                    voter_constraints = '[+region=ca-central-1]',
-                                    lease_preferences = '[[+region=ca-central-1]]'
+                                      range_min_bytes = 134217728,
+                                      range_max_bytes = 536870912,
+                                      gc.ttlseconds = 14400,
+                                      num_replicas = 3,
+                                      num_voters = 3,
+                                      constraints = '{+region=ca-central-1: 1}',
+                                      voter_constraints = '[+region=ca-central-1]',
+                                      lease_preferences = '[[+region=ca-central-1]]'
 
 # Ensure regional by row table partitions have the correct zone configs
 # when there are multiple super regions defined.
@@ -407,66 +442,66 @@ query TT
 SHOW ZONE CONFIGURATION FOR PARTITION "us-east-1" OF TABLE mr3.rt
 ----
 PARTITION "us-east-1" OF TABLE mr3.public.rt  ALTER PARTITION "us-east-1" OF TABLE mr3.public.rt CONFIGURE ZONE USING
-                                              range_min_bytes = 134217728,
-                                              range_max_bytes = 536870912,
-                                              gc.ttlseconds = 90000,
-                                              num_replicas = 4,
-                                              num_voters = 3,
-                                              constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
-                                              voter_constraints = '[+region=us-east-1]',
-                                              lease_preferences = '[[+region=us-east-1]]'
+                                                range_min_bytes = 134217728,
+                                                range_max_bytes = 536870912,
+                                                gc.ttlseconds = 14400,
+                                                num_replicas = 4,
+                                                num_voters = 3,
+                                                constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
+                                                voter_constraints = '[+region=us-east-1]',
+                                                lease_preferences = '[[+region=us-east-1]]'
 
 query TT
 SHOW ZONE CONFIGURATION FOR PARTITION "ap-southeast-2" OF TABLE mr3.rt
 ----
 PARTITION "ap-southeast-2" OF TABLE mr3.public.rt  ALTER PARTITION "ap-southeast-2" OF TABLE mr3.public.rt CONFIGURE ZONE USING
-                                                   range_min_bytes = 134217728,
-                                                   range_max_bytes = 536870912,
-                                                   gc.ttlseconds = 90000,
-                                                   num_replicas = 4,
-                                                   num_voters = 3,
-                                                   constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
-                                                   voter_constraints = '[+region=ap-southeast-2]',
-                                                   lease_preferences = '[[+region=ap-southeast-2]]'
+                                                     range_min_bytes = 134217728,
+                                                     range_max_bytes = 536870912,
+                                                     gc.ttlseconds = 14400,
+                                                     num_replicas = 4,
+                                                     num_voters = 3,
+                                                     constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
+                                                     voter_constraints = '[+region=ap-southeast-2]',
+                                                     lease_preferences = '[[+region=ap-southeast-2]]'
 
 query TT
 SHOW ZONE CONFIGURATION FOR PARTITION "ca-central-1" OF TABLE mr3.rt
 ----
 PARTITION "ca-central-1" OF TABLE mr3.public.rt  ALTER PARTITION "ca-central-1" OF TABLE mr3.public.rt CONFIGURE ZONE USING
-                                                 range_min_bytes = 134217728,
-                                                 range_max_bytes = 536870912,
-                                                 gc.ttlseconds = 90000,
-                                                 num_replicas = 5,
-                                                 num_voters = 3,
-                                                 constraints = '{+region=ca-central-1: 1, +region=us-central-1: 1, +region=us-west-1: 1}',
-                                                 voter_constraints = '[+region=ca-central-1]',
-                                                 lease_preferences = '[[+region=ca-central-1]]'
+                                                   range_min_bytes = 134217728,
+                                                   range_max_bytes = 536870912,
+                                                   gc.ttlseconds = 14400,
+                                                   num_replicas = 5,
+                                                   num_voters = 3,
+                                                   constraints = '{+region=ca-central-1: 1, +region=us-central-1: 1, +region=us-west-1: 1}',
+                                                   voter_constraints = '[+region=ca-central-1]',
+                                                   lease_preferences = '[[+region=ca-central-1]]'
 
 query TT
 SHOW ZONE CONFIGURATION FOR PARTITION "us-west-1" OF TABLE mr3.rt
 ----
 PARTITION "us-west-1" OF TABLE mr3.public.rt  ALTER PARTITION "us-west-1" OF TABLE mr3.public.rt CONFIGURE ZONE USING
-                                              range_min_bytes = 134217728,
-                                              range_max_bytes = 536870912,
-                                              gc.ttlseconds = 90000,
-                                              num_replicas = 5,
-                                              num_voters = 3,
-                                              constraints = '{+region=ca-central-1: 1, +region=us-central-1: 1, +region=us-west-1: 1}',
-                                              voter_constraints = '[+region=us-west-1]',
-                                              lease_preferences = '[[+region=us-west-1]]'
+                                                range_min_bytes = 134217728,
+                                                range_max_bytes = 536870912,
+                                                gc.ttlseconds = 14400,
+                                                num_replicas = 5,
+                                                num_voters = 3,
+                                                constraints = '{+region=ca-central-1: 1, +region=us-central-1: 1, +region=us-west-1: 1}',
+                                                voter_constraints = '[+region=us-west-1]',
+                                                lease_preferences = '[[+region=us-west-1]]'
 
 query TT
 SHOW ZONE CONFIGURATION FOR PARTITION "us-central-1" OF TABLE mr3.rt
 ----
 PARTITION "us-central-1" OF TABLE mr3.public.rt  ALTER PARTITION "us-central-1" OF TABLE mr3.public.rt CONFIGURE ZONE USING
-                                                 range_min_bytes = 134217728,
-                                                 range_max_bytes = 536870912,
-                                                 gc.ttlseconds = 90000,
-                                                 num_replicas = 5,
-                                                 num_voters = 3,
-                                                 constraints = '{+region=ca-central-1: 1, +region=us-central-1: 1, +region=us-west-1: 1}',
-                                                 voter_constraints = '[+region=us-central-1]',
-                                                 lease_preferences = '[[+region=us-central-1]]'
+                                                   range_min_bytes = 134217728,
+                                                   range_max_bytes = 536870912,
+                                                   gc.ttlseconds = 14400,
+                                                   num_replicas = 5,
+                                                   num_voters = 3,
+                                                   constraints = '{+region=ca-central-1: 1, +region=us-central-1: 1, +region=us-west-1: 1}',
+                                                   voter_constraints = '[+region=us-central-1]',
+                                                   lease_preferences = '[[+region=us-central-1]]'
 
 statement ok
 ALTER DATABASE mr3 DROP SUPER REGION "r2"
@@ -475,40 +510,40 @@ query TT
 SHOW ZONE CONFIGURATION FOR PARTITION "ca-central-1" OF TABLE mr3.rt
 ----
 PARTITION "ca-central-1" OF TABLE mr3.public.rt  ALTER PARTITION "ca-central-1" OF TABLE mr3.public.rt CONFIGURE ZONE USING
-                                                 range_min_bytes = 134217728,
-                                                 range_max_bytes = 536870912,
-                                                 gc.ttlseconds = 90000,
-                                                 num_replicas = 7,
-                                                 num_voters = 3,
-                                                 constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-central-1: 1, +region=us-east-1: 1, +region=us-west-1: 1}',
-                                                 voter_constraints = '[+region=ca-central-1]',
-                                                 lease_preferences = '[[+region=ca-central-1]]'
+                                                   range_min_bytes = 134217728,
+                                                   range_max_bytes = 536870912,
+                                                   gc.ttlseconds = 14400,
+                                                   num_replicas = 7,
+                                                   num_voters = 3,
+                                                   constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-central-1: 1, +region=us-east-1: 1, +region=us-west-1: 1}',
+                                                   voter_constraints = '[+region=ca-central-1]',
+                                                   lease_preferences = '[[+region=ca-central-1]]'
 
 query TT
 SHOW ZONE CONFIGURATION FOR PARTITION "us-west-1" OF TABLE mr3.rt
 ----
 PARTITION "us-west-1" OF TABLE mr3.public.rt  ALTER PARTITION "us-west-1" OF TABLE mr3.public.rt CONFIGURE ZONE USING
-                                              range_min_bytes = 134217728,
-                                              range_max_bytes = 536870912,
-                                              gc.ttlseconds = 90000,
-                                              num_replicas = 7,
-                                              num_voters = 3,
-                                              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-central-1: 1, +region=us-east-1: 1, +region=us-west-1: 1}',
-                                              voter_constraints = '[+region=us-west-1]',
-                                              lease_preferences = '[[+region=us-west-1]]'
+                                                range_min_bytes = 134217728,
+                                                range_max_bytes = 536870912,
+                                                gc.ttlseconds = 14400,
+                                                num_replicas = 7,
+                                                num_voters = 3,
+                                                constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-central-1: 1, +region=us-east-1: 1, +region=us-west-1: 1}',
+                                                voter_constraints = '[+region=us-west-1]',
+                                                lease_preferences = '[[+region=us-west-1]]'
 
 query TT
 SHOW ZONE CONFIGURATION FOR PARTITION "us-central-1" OF TABLE mr3.rt
 ----
 PARTITION "us-central-1" OF TABLE mr3.public.rt  ALTER PARTITION "us-central-1" OF TABLE mr3.public.rt CONFIGURE ZONE USING
-                                                 range_min_bytes = 134217728,
-                                                 range_max_bytes = 536870912,
-                                                 gc.ttlseconds = 90000,
-                                                 num_replicas = 7,
-                                                 num_voters = 3,
-                                                 constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-central-1: 1, +region=us-east-1: 1, +region=us-west-1: 1}',
-                                                 voter_constraints = '[+region=us-central-1]',
-                                                 lease_preferences = '[[+region=us-central-1]]'
+                                                   range_min_bytes = 134217728,
+                                                   range_max_bytes = 536870912,
+                                                   gc.ttlseconds = 14400,
+                                                   num_replicas = 7,
+                                                   num_voters = 3,
+                                                   constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-central-1: 1, +region=us-east-1: 1, +region=us-west-1: 1}',
+                                                   voter_constraints = '[+region=us-central-1]',
+                                                   lease_preferences = '[[+region=us-central-1]]'
 
 # Test cases for survive region failure.
 
@@ -533,27 +568,27 @@ query TT
 SHOW ZONE CONFIGURATION FOR PARTITION "us-central-1" OF TABLE mr3.rt
 ----
 PARTITION "us-central-1" OF TABLE mr3.public.rt  ALTER PARTITION "us-central-1" OF TABLE mr3.public.rt CONFIGURE ZONE USING
-                                                 range_min_bytes = 134217728,
-                                                 range_max_bytes = 536870912,
-                                                 gc.ttlseconds = 90000,
-                                                 num_replicas = 5,
-                                                 num_voters = 5,
-                                                 constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-central-1: 1}',
-                                                 voter_constraints = '{+region=us-central-1: 2}',
-                                                 lease_preferences = '[[+region=us-central-1]]'
+                                                   range_min_bytes = 134217728,
+                                                   range_max_bytes = 536870912,
+                                                   gc.ttlseconds = 14400,
+                                                   num_replicas = 5,
+                                                   num_voters = 5,
+                                                   constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-central-1: 1}',
+                                                   voter_constraints = '{+region=us-central-1: 2}',
+                                                   lease_preferences = '[[+region=us-central-1]]'
 
 query TT
 SHOW ZONE CONFIGURATION FOR PARTITION "ap-southeast-2" OF TABLE mr3.rt
 ----
 PARTITION "ap-southeast-2" OF TABLE mr3.public.rt  ALTER PARTITION "ap-southeast-2" OF TABLE mr3.public.rt CONFIGURE ZONE USING
-                                                   range_min_bytes = 134217728,
-                                                   range_max_bytes = 536870912,
-                                                   gc.ttlseconds = 90000,
-                                                   num_replicas = 5,
-                                                   num_voters = 5,
-                                                   constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 2, +region=us-central-1: 1}',
-                                                   voter_constraints = '{+region=ap-southeast-2: 2}',
-                                                   lease_preferences = '[[+region=ap-southeast-2]]'
+                                                     range_min_bytes = 134217728,
+                                                     range_max_bytes = 536870912,
+                                                     gc.ttlseconds = 14400,
+                                                     num_replicas = 5,
+                                                     num_voters = 5,
+                                                     constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 2, +region=us-central-1: 1}',
+                                                     voter_constraints = '{+region=ap-southeast-2: 2}',
+                                                     lease_preferences = '[[+region=ap-southeast-2]]'
 
 # Test region failure with 5 regions in a super region.
 # 5 regions is the minimum number of regions we need to have more than
@@ -566,27 +601,27 @@ query TT
 SHOW ZONE CONFIGURATION FOR PARTITION "us-central-1" OF TABLE mr3.rt
 ----
 PARTITION "us-central-1" OF TABLE mr3.public.rt  ALTER PARTITION "us-central-1" OF TABLE mr3.public.rt CONFIGURE ZONE USING
-                                                 range_min_bytes = 134217728,
-                                                 range_max_bytes = 536870912,
-                                                 gc.ttlseconds = 90000,
-                                                 num_replicas = 6,
-                                                 num_voters = 5,
-                                                 constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-central-1: 1, +region=us-east-1: 1, +region=us-west-1: 1}',
-                                                 voter_constraints = '{+region=us-central-1: 2}',
-                                                 lease_preferences = '[[+region=us-central-1]]'
+                                                   range_min_bytes = 134217728,
+                                                   range_max_bytes = 536870912,
+                                                   gc.ttlseconds = 14400,
+                                                   num_replicas = 6,
+                                                   num_voters = 5,
+                                                   constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-central-1: 1, +region=us-east-1: 1, +region=us-west-1: 1}',
+                                                   voter_constraints = '{+region=us-central-1: 2}',
+                                                   lease_preferences = '[[+region=us-central-1]]'
 
 query TT
 SHOW ZONE CONFIGURATION FOR PARTITION "ap-southeast-2" OF TABLE mr3.rt
 ----
 PARTITION "ap-southeast-2" OF TABLE mr3.public.rt  ALTER PARTITION "ap-southeast-2" OF TABLE mr3.public.rt CONFIGURE ZONE USING
-                                                   range_min_bytes = 134217728,
-                                                   range_max_bytes = 536870912,
-                                                   gc.ttlseconds = 90000,
-                                                   num_replicas = 6,
-                                                   num_voters = 5,
-                                                   constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-central-1: 1, +region=us-east-1: 1, +region=us-west-1: 1}',
-                                                   voter_constraints = '{+region=ap-southeast-2: 2}',
-                                                   lease_preferences = '[[+region=ap-southeast-2]]'
+                                                     range_min_bytes = 134217728,
+                                                     range_max_bytes = 536870912,
+                                                     gc.ttlseconds = 14400,
+                                                     num_replicas = 6,
+                                                     num_voters = 5,
+                                                     constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-central-1: 1, +region=us-east-1: 1, +region=us-west-1: 1}',
+                                                     voter_constraints = '{+region=ap-southeast-2: 2}',
+                                                     lease_preferences = '[[+region=ap-southeast-2]]'
 
 # a user should not be able to drop a region that is a member of a super region.
 statement error pq: region us-east-1 is part of super region test
@@ -621,14 +656,14 @@ query TT
 SHOW ZONE CONFIGURATION FOR TABLE db3.t
 ----
 TABLE db3.public.t  ALTER TABLE db3.public.t CONFIGURE ZONE USING
-                    range_min_bytes = 134217728,
-                    range_max_bytes = 536870912,
-                    gc.ttlseconds = 90000,
-                    num_replicas = 4,
-                    num_voters = 3,
-                    constraints = '{+region=ca-central-1: 1, +region=us-west-1: 1}',
-                    voter_constraints = '[+region=ca-central-1]',
-                    lease_preferences = '[[+region=ca-central-1]]'
+                      range_min_bytes = 134217728,
+                      range_max_bytes = 536870912,
+                      gc.ttlseconds = 14400,
+                      num_replicas = 4,
+                      num_voters = 3,
+                      constraints = '{+region=ca-central-1: 1, +region=us-west-1: 1}',
+                      voter_constraints = '[+region=ca-central-1]',
+                      lease_preferences = '[[+region=ca-central-1]]'
 
 # ALTER PRIMARY REGION to "us-west-1" does not block because the primary
 # region does not change super regions.
@@ -653,14 +688,14 @@ query TT
 SHOW ZONE CONFIGURATION FOR TABLE db3.t
 ----
 TABLE db3.public.t  ALTER TABLE db3.public.t CONFIGURE ZONE USING
-                    range_min_bytes = 134217728,
-                    range_max_bytes = 536870912,
-                    gc.ttlseconds = 90000,
-                    num_replicas = 3,
-                    num_voters = 3,
-                    constraints = '{+region=us-east-1: 1}',
-                    voter_constraints = '[+region=us-east-1]',
-                    lease_preferences = '[[+region=us-east-1]]'
+                      range_min_bytes = 134217728,
+                      range_max_bytes = 536870912,
+                      gc.ttlseconds = 14400,
+                      num_replicas = 3,
+                      num_voters = 3,
+                      constraints = '{+region=us-east-1: 1}',
+                      voter_constraints = '[+region=us-east-1]',
+                      lease_preferences = '[[+region=us-east-1]]'
 
 # Alter primary region to "us-west-1" such that db3.t is no longer in a
 # super region.
@@ -675,14 +710,14 @@ query TT
 SHOW ZONE CONFIGURATION FOR TABLE db3.t
 ----
 TABLE db3.public.t  ALTER TABLE db3.public.t CONFIGURE ZONE USING
-                    range_min_bytes = 134217728,
-                    range_max_bytes = 536870912,
-                    gc.ttlseconds = 90000,
-                    num_replicas = 4,
-                    num_voters = 3,
-                    constraints = '{+region=ca-central-1: 1, +region=us-west-1: 1}',
-                    voter_constraints = '[+region=us-west-1]',
-                    lease_preferences = '[[+region=us-west-1]]'
+                      range_min_bytes = 134217728,
+                      range_max_bytes = 536870912,
+                      gc.ttlseconds = 14400,
+                      num_replicas = 4,
+                      num_voters = 3,
+                      constraints = '{+region=ca-central-1: 1, +region=us-west-1: 1}',
+                      voter_constraints = '[+region=us-west-1]',
+                      lease_preferences = '[[+region=us-west-1]]'
 
 # ALTER SUPER REGION test cases.
 
@@ -710,14 +745,14 @@ query TT
 SHOW ZONE CONFIGURATION FOR TABLE db3.t
 ----
 TABLE db3.public.t  ALTER TABLE db3.public.t CONFIGURE ZONE USING
-                    range_min_bytes = 134217728,
-                    range_max_bytes = 536870912,
-                    gc.ttlseconds = 90000,
-                    num_replicas = 5,
-                    num_voters = 3,
-                    constraints = '{+region=ca-central-1: 1, +region=us-east-1: 1, +region=us-west-1: 1}',
-                    voter_constraints = '[+region=us-west-1]',
-                    lease_preferences = '[[+region=us-west-1]]'
+                      range_min_bytes = 134217728,
+                      range_max_bytes = 536870912,
+                      gc.ttlseconds = 14400,
+                      num_replicas = 5,
+                      num_voters = 3,
+                      constraints = '{+region=ca-central-1: 1, +region=us-east-1: 1, +region=us-west-1: 1}',
+                      voter_constraints = '[+region=us-west-1]',
+                      lease_preferences = '[[+region=us-west-1]]'
 
 statement ok
 ALTER DATABASE db3 ALTER SUPER REGION "test1" VALUES "us-west-1";
@@ -726,25 +761,26 @@ query TT
 SHOW ZONE CONFIGURATION FOR TABLE db3.t
 ----
 TABLE db3.public.t  ALTER TABLE db3.public.t CONFIGURE ZONE USING
-                    range_min_bytes = 134217728,
-                    range_max_bytes = 536870912,
-                    gc.ttlseconds = 90000,
-                    num_replicas = 3,
-                    num_voters = 3,
-                    constraints = '{+region=us-west-1: 1}',
-                    voter_constraints = '[+region=us-west-1]',
-                    lease_preferences = '[[+region=us-west-1]]'
+                      range_min_bytes = 134217728,
+                      range_max_bytes = 536870912,
+                      gc.ttlseconds = 14400,
+                      num_replicas = 3,
+                      num_voters = 3,
+                      constraints = '{+region=us-west-1: 1}',
+                      voter_constraints = '[+region=us-west-1]',
+                      lease_preferences = '[[+region=us-west-1]]'
 
 query ITTT
 SELECT id, database_name, super_region_name, regions FROM crdb_internal.super_regions
 ----
-106  db   test           {ap-southeast-2,us-east-1}
-136  db2  test           {ca-central-1}
-140  db3  test1          {us-west-1}
-110  mr1  test           {us-east-1}
-116  mr2  ca-central-sr  {ca-central-1}
-116  mr2  test           {ap-southeast-2,us-east-1}
-131  mr3  r1             {ap-southeast-2,ca-central-1,us-central-1,us-east-1,us-west-1}
+112  db        test           {ap-southeast-2,us-east-1}
+142  db2       test           {ca-central-1}
+146  db3       test1          {us-west-1}
+116  mr1       test           {us-east-1}
+122  mr2       ca-central-sr  {ca-central-1}
+122  mr2       test           {ap-southeast-2,us-east-1}
+137  mr3       r1             {ap-southeast-2,ca-central-1,us-central-1,us-east-1,us-west-1}
+106  oncreate  create         {ap-southeast-2,us-east-1}
 
 query TTT
 SHOW SUPER REGIONS FROM DATABASE test

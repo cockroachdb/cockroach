@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/pebbleiter"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -171,7 +172,7 @@ type SimpleMVCCIterator interface {
 	//
 	// The memory is invalidated on the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}.
 	// Use Value() if that is undesirable.
-	UnsafeValue() []byte
+	UnsafeValue() ([]byte, error)
 	// MVCCValueLenAndIsTombstone should be called only for MVCC (i.e.,
 	// UnsafeKey().IsValue()) point values, when the actual point value is not
 	// needed, for example when updating stats and making GC decisions, and it
@@ -204,7 +205,9 @@ type SimpleMVCCIterator interface {
 	// https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md
 	RangeKeys() MVCCRangeKeyStack
 	// RangeKeyChanged returns true if the previous seek or step moved to a
-	// different range key (or none at all). This includes an exhausted iterator.
+	// different range key (or none at all). Requires a valid iterator, but an
+	// exhausted iterator is considered to have had no range keys when calling
+	// this after repositioning.
 	RangeKeyChanged() bool
 }
 
@@ -278,7 +281,7 @@ type MVCCIterator interface {
 	// this seems avoidable, and we should consider cleaning up the callers.
 	UnsafeRawMVCCKey() []byte
 	// Value is like UnsafeValue, but returns memory owned by the caller.
-	Value() []byte
+	Value() ([]byte, error)
 	// ValueProto unmarshals the value the iterator is currently
 	// pointing to using a protobuf decoder.
 	ValueProto(msg protoutil.Message) error
@@ -297,6 +300,14 @@ type MVCCIterator interface {
 	// IsPrefix returns true if the MVCCIterator is a prefix iterator, i.e.
 	// created with IterOptions.Prefix enabled.
 	IsPrefix() bool
+	// UnsafeLazyValue is only for use inside the storage package. It exposes
+	// the LazyValue at the current iterator position, and hence delays fetching
+	// the actual value. It is exposed for reverse scans that need to search for
+	// the most recent relevant version, and can't know whether the current
+	// value is that version, and need to step back to make that determination.
+	//
+	// REQUIRES: Valid() returns true.
+	UnsafeLazyValue() pebble.LazyValue
 }
 
 // EngineIterator is an iterator over key-value pairs where the key is
@@ -348,13 +359,13 @@ type EngineIterator interface {
 	// UnsafeValue returns the same value as Value, but the memory is
 	// invalidated on the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}.
 	// REQUIRES: latest positioning function returned valid=true.
-	UnsafeValue() []byte
+	UnsafeValue() ([]byte, error)
 	// Value returns the current value as a byte slice.
 	// REQUIRES: latest positioning function returned valid=true.
-	Value() []byte
+	Value() ([]byte, error)
 	// GetRawIter is a low-level method only for use in the storage package,
 	// that returns the underlying pebble Iterator.
-	GetRawIter() *pebble.Iterator
+	GetRawIter() pebbleiter.Iterator
 	// SeekEngineKeyGEWithLimit is similar to SeekEngineKeyGE, but takes an
 	// additional exclusive upper limit parameter. The limit is semantically
 	// best-effort, and is an optimization to avoid O(n^2) iteration behavior in
@@ -580,11 +591,6 @@ type Reader interface {
 	// underlying Engine state. This is not true about Batch writes: new iterators
 	// will see new writes made to the batch, existing iterators won't.
 	ConsistentIterators() bool
-	// SupportsRangeKeys returns true if the Reader implementation supports
-	// range keys.
-	//
-	// TODO(erikgrinaker): Remove this after 22.2.
-	SupportsRangeKeys() bool
 
 	// PinEngineStateForIterators ensures that the state seen by iterators
 	// without timestamp hints (see IterOptions) is pinned and will not see
@@ -816,6 +822,12 @@ type Writer interface {
 	// This method is temporary, to handle the transition from clusters where not
 	// all nodes understand local timestamps.
 	ShouldWriteLocalTimestamps(ctx context.Context) bool
+
+	// BufferedSize returns the size of the underlying buffered writes if the
+	// Writer implementation is buffered, and 0 if the Writer implementation is
+	// not buffered. Buffered writers are expected to always give a monotonically
+	// increasing size.
+	BufferedSize() int
 }
 
 // ReadWriter is the read/write interface to an engine's data.
@@ -934,16 +946,13 @@ type Engine interface {
 	fs.FS
 	// CreateCheckpoint creates a checkpoint of the engine in the given directory,
 	// which must not exist. The directory should be on the same file system so
-	// that hard links can be used.
-	CreateCheckpoint(dir string) error
+	// that hard links can be used. If spans is not empty, the checkpoint excludes
+	// SSTs that don't overlap with any of these key spans.
+	CreateCheckpoint(dir string, spans []roachpb.Span) error
 
 	// SetMinVersion is used to signal to the engine the current minimum
 	// version that it must maintain compatibility with.
 	SetMinVersion(version roachpb.Version) error
-
-	// MinVersionIsAtLeastTargetVersion returns whether the engine's recorded
-	// storage min version is at least the target version.
-	MinVersionIsAtLeastTargetVersion(target roachpb.Version) (bool, error)
 
 	// SetCompactionConcurrency is used to set the engine's compaction
 	// concurrency. It returns the previous compaction concurrency.
@@ -961,6 +970,14 @@ type Batch interface {
 	// engine. This is a noop unless the batch was created via NewBatch(). If
 	// sync is true, the batch is synchronously committed to disk.
 	Commit(sync bool) error
+	// CommitNoSyncWait atomically applies any batched updates to the underlying
+	// engine and initiates a disk write, but does not wait for that write to
+	// complete. The caller must call SyncWait to wait for the fsync to complete.
+	// The caller must not Close the Batch without first calling SyncWait.
+	CommitNoSyncWait() error
+	// SyncWait waits for the disk write initiated by a call to CommitNoSyncWait
+	// to complete.
+	SyncWait() error
 	// Empty returns whether the batch has been written to or not.
 	Empty() bool
 	// Count returns the number of memtable-modifying operations in the batch.
@@ -993,6 +1010,10 @@ type Metrics struct {
 	// DiskStallCount counts the number of times Pebble observes slow writes
 	// on disk lasting longer than MaxSyncDuration (`storage.max_sync_duration`).
 	DiskStallCount int64
+	// SharedStorageWriteBytes counts the number of bytes written to shared storage.
+	SharedStorageWriteBytes int64
+	// SharedStorageReadBytes counts the number of bytes read from shared storage.
+	SharedStorageReadBytes int64
 }
 
 // MetricsForInterval is a set of pebble.Metrics that need to be saved in order to
@@ -1153,7 +1174,11 @@ func GetIntent(reader Reader, key roachpb.Key) (*roachpb.Intent, error) {
 		return nil, errors.AssertionFailedf("key does not match expected %v != %v", checkKey, key)
 	}
 	var meta enginepb.MVCCMetadata
-	if err = protoutil.Unmarshal(iter.UnsafeValue(), &meta); err != nil {
+	v, err := iter.UnsafeValue()
+	if err != nil {
+		return nil, err
+	}
+	if err = protoutil.Unmarshal(v, &meta); err != nil {
 		return nil, err
 	}
 	if meta.Txn == nil {
@@ -1236,11 +1261,15 @@ func ScanIntents(
 		if err != nil {
 			return nil, err
 		}
-		if err = protoutil.Unmarshal(iter.UnsafeValue(), &meta); err != nil {
+		v, err := iter.UnsafeValue()
+		if err != nil {
+			return nil, err
+		}
+		if err = protoutil.Unmarshal(v, &meta); err != nil {
 			return nil, err
 		}
 		intents = append(intents, roachpb.MakeIntent(meta.Txn, lockedKey))
-		intentBytes += int64(len(lockedKey)) + int64(len(iter.Value()))
+		intentBytes += int64(len(lockedKey)) + int64(len(v))
 	}
 	if err != nil {
 		return nil, err
@@ -1480,7 +1509,11 @@ func iterateOnReader(
 
 		var kv MVCCKeyValue
 		if hasPoint, _ := it.HasPointAndRange(); hasPoint {
-			kv = MVCCKeyValue{Key: it.Key(), Value: it.Value()}
+			v, err := it.Value()
+			if err != nil {
+				return err
+			}
+			kv = MVCCKeyValue{Key: it.Key(), Value: v}
 		}
 		if !it.RangeBounds().Key.Equal(rangeKeys.Bounds.Key) {
 			rangeKeys = it.RangeKeys().Clone()
@@ -1577,7 +1610,10 @@ func assertSimpleMVCCIteratorInvariants(iter SimpleMVCCIterator) error {
 		}
 	}
 	if hasPoint {
-		value := iter.UnsafeValue()
+		value, err := iter.UnsafeValue()
+		if err != nil {
+			return err
+		}
 		valueLen := iter.ValueLen()
 		if len(value) != valueLen {
 			return errors.AssertionFailedf("length of UnsafeValue %d != ValueLen %d", len(value), valueLen)
@@ -1660,7 +1696,15 @@ func assertMVCCIteratorInvariants(iter MVCCIterator) error {
 	}
 
 	// Value must equal UnsafeValue.
-	if v, u := iter.Value(), iter.UnsafeValue(); !bytes.Equal(v, u) {
+	u, err := iter.UnsafeValue()
+	if err != nil {
+		return err
+	}
+	v, err := iter.Value()
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(v, u) {
 		return errors.AssertionFailedf("Value %x does not match UnsafeValue %x at %s", v, u, key)
 	}
 
@@ -1732,7 +1776,11 @@ func ScanConflictingIntentsForDroppingLatchesEarly(
 			// not needing intent history.
 			return true /* needsIntentHistory */, nil
 		}
-		if err = protoutil.Unmarshal(iter.UnsafeValue(), &meta); err != nil {
+		v, err := iter.UnsafeValue()
+		if err != nil {
+			return false, err
+		}
+		if err = protoutil.Unmarshal(v, &meta); err != nil {
 			return false, err
 		}
 		if meta.Txn == nil {

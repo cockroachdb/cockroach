@@ -29,8 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/internal/codeowners"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	_ "github.com/cockroachdb/cockroach/pkg/testutils/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/errors"
 	"github.com/ghemawat/stream"
@@ -726,6 +726,40 @@ func TestLint(t *testing.T) {
 		}
 	})
 
+	t.Run("TestCollateSupported", func(t *testing.T) {
+		t.Parallel()
+		cmd, stderr, filter, err := dirCmd(
+			pkgDir,
+			"git",
+			"grep",
+			"-nE",
+			`\bcollate\.Supported\(`,
+			"--",
+			"*.go",
+			":!util/collatedstring/collatedstring.go",
+			":!ccl/changefeedccl/avro_test.go",
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := stream.ForEach(filter, func(s string) {
+			t.Errorf("\n%s <- forbidden; use 'collatedstring.Supported()' instead", s)
+		}); err != nil {
+			t.Error(err)
+		}
+
+		if err := cmd.Wait(); err != nil {
+			if out := stderr.String(); len(out) > 0 {
+				t.Fatalf("err=%s, stderr=%s", err, out)
+			}
+		}
+	})
+
 	t.Run("TestTimeutil", func(t *testing.T) {
 		t.Parallel()
 		cmd, stderr, filter, err := dirCmd(
@@ -895,6 +929,8 @@ func TestLint(t *testing.T) {
 			":!ccl/sqlproxyccl/tenantdirsvr/test_directory_svr.go",
 			":!ccl/sqlproxyccl/tenantdirsvr/test_simple_directory_svr.go",
 			":!ccl/sqlproxyccl/tenantdirsvr/test_static_directory_svr.go",
+			":!obsservice/cmd/obsservice/main.go",
+			":!obsservice/obslib/ingest/ingest_test.go",
 			":!cmd/bazci/*.go",
 		)
 		if err != nil {
@@ -1613,7 +1649,7 @@ func TestLint(t *testing.T) {
 		if bazel.BuiltWithBazel() {
 			skip.IgnoreLint(t, "the errcheck tests are run during the bazel build")
 		}
-		excludesPath, err := filepath.Abs(testutils.TestDataPath(t, "errcheck_excludes.txt"))
+		excludesPath, err := filepath.Abs(datapathutils.TestDataPath(t, "errcheck_excludes.txt"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1704,7 +1740,7 @@ func TestLint(t *testing.T) {
 				// These binaries are Bazel-only and the unused linter gets confused
 				// about the stub implementation mentioned in
 				// pkg/build/bazel/non_bazel.go above.
-				stream.GrepNot(`pkg/cmd/mirror/mirror.go`),
+				stream.GrepNot(`pkg/cmd/mirror/go/mirror.go`),
 				stream.GrepNot(`pkg/cmd/generate-distdir/main.go`),
 				// Skip generated file.
 				stream.GrepNot(`pkg/ui/distoss/bindata.go`),
@@ -1749,6 +1785,7 @@ func TestLint(t *testing.T) {
 				stream.GrepNot(`pkg/sql/importer/import_table_creation.go:.* evalCtx.SetDeprecatedContext is deprecated: .*`),
 				stream.GrepNot(`pkg/sql/row/expr_walker_test.go:.* evalCtx.SetDeprecatedContext is deprecated: .*`),
 				stream.GrepNot(`pkg/sql/schemachanger/scbuild/tree_context_builder.go:.* evalCtx.SetDeprecatedContext is deprecated: .*`),
+				stream.GrepNot(`pkg/sql/schemachanger/scplan/internal/rules/.*/.*go:.* should not use dot imports \(ST1001\)`),
 			), func(s string) {
 				t.Errorf("\n%s", s)
 			}); err != nil {
@@ -2000,6 +2037,7 @@ func TestLint(t *testing.T) {
 
 		gcassertPaths := []string{
 			"../../col/coldata",
+			"../../col/colserde",
 			"../../keys",
 			"../../kv/kvclient/rangecache",
 			"../../roachpb",
@@ -2021,8 +2059,11 @@ func TestLint(t *testing.T) {
 			"../../sql/row",
 			"../../storage",
 			"../../storage/enginepb",
+			"../../storage/pebbleiter",
 			"../../util",
+			"../../util/admission",
 			"../../util/hlc",
+			"../../util/intsets",
 		}
 
 		// Ensure that all packages that have '//gcassert' or '// gcassert'

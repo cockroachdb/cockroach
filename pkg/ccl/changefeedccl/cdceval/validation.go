@@ -35,15 +35,25 @@ type NormalizedSelectClause struct {
 	desc *cdcevent.EventDescriptor
 }
 
-// RequiresPrev returns true if expression requires access to the previous
-// version of the row.
-func (n *NormalizedSelectClause) RequiresPrev() bool {
-	return len(n.From.Tables) > 1
-}
+// SelectStatementForFamily returns tree.Select representing this object.
+func (n *NormalizedSelectClause) SelectStatementForFamily() *tree.Select {
+	if !n.desc.HasOtherFamilies {
+		return &tree.Select{Select: n.SelectClause}
+	}
 
-// SelectStatement returns tree.Select representing this object.
-func (n *NormalizedSelectClause) SelectStatement() *tree.Select {
-	return &tree.Select{Select: n.SelectClause}
+	// Configure index flags to restrict access to specific column family. To do
+	// this, we construct table expression with appropriate index flag. We want to
+	// make sure that when we do that, we do not mutate underlying select clause.
+	// This is done so that the same NormalizedSelectClause can be used to build
+	// expression evaluation for different table column families.
+	sc := *n.SelectClause
+	sc.From.Tables = append(tree.TableExprs(nil), n.SelectClause.From.Tables...)
+	sc.From.Tables[0] = &tree.AliasedTableExpr{
+		Expr:       n.SelectClause.From.Tables[0],
+		IndexFlags: &tree.IndexFlags{FamilyID: &n.desc.FamilyID},
+	}
+
+	return &tree.Select{Select: &sc}
 }
 
 // normalizeAndValidateSelectForTarget normalizes select expression and verifies
@@ -70,10 +80,10 @@ func normalizeAndValidateSelectForTarget(
 		}
 	}()
 
-	if !execCfg.Settings.Version.IsActive(ctx, clusterversion.V22_2EnablePredicateProjectionChangefeed) {
+	if !execCfg.Settings.Version.IsActive(ctx, clusterversion.TODODelete_V22_2EnablePredicateProjectionChangefeed) {
 		return nil, errors.Newf(
 			`filters and projections not supported until upgrade to version %s or higher is finalized`,
-			clusterversion.V22_2EnablePredicateProjectionChangefeed.String())
+			clusterversion.TODODelete_V22_2EnablePredicateProjectionChangefeed.String())
 	}
 
 	// This really shouldn't happen as it's enforced by sql.y.
@@ -218,7 +228,7 @@ func getTargetFamilyDescriptor(
 ) (*descpb.ColumnFamilyDescriptor, error) {
 	switch target.Type {
 	case jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY:
-		return desc.FindFamilyByID(0)
+		return catalog.MustFindFamilyByID(desc, 0 /* id */)
 	case jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY:
 		var fd *descpb.ColumnFamilyDescriptor
 		for _, family := range desc.GetFamilies() {
@@ -249,42 +259,6 @@ func normalizeSelectClause(
 	sc *tree.SelectClause,
 	desc *cdcevent.EventDescriptor,
 ) (*NormalizedSelectClause, error) {
-	// Turn FROM clause to table reference.
-	// Note: must specify AliasClause for TableRef expression; otherwise we
-	// won't be able to deserialize string representation (grammar requires
-	// "select ... from [table_id as tableAlias]")
-	var tableAlias tree.AliasClause
-	switch t := sc.From.Tables[0].(type) {
-	case *tree.AliasedTableExpr:
-		tableAlias = t.As
-	case tree.TablePattern:
-	case *tree.TableRef:
-		tableAlias = t.As
-	default:
-		// This is verified by sql.y -- but be safe.
-		return nil, errors.AssertionFailedf("unexpected table expression type %T",
-			sc.From.Tables[0])
-	}
-
-	if tableAlias.Alias == "" {
-		tableAlias.Alias = tree.Name(desc.TableName)
-	}
-
-	if tableAlias.Alias == prevTupleName {
-		return nil, pgerror.Newf(pgcode.ReservedName,
-			"%s is a reserved name in CDC; Specify different alias with AS clause", prevTupleName)
-	}
-
-	sc.From.Tables[0] = &tree.TableRef{
-		TableID: int64(desc.TableID),
-		As:      tableAlias,
-	}
-
-	// Setup sema ctx to handle cdc expressions. We want to make sure we only
-	// override some properties, while keeping other properties (type resolver)
-	// intact.
-	defer configSemaForCDC(semaCtx, desc)()
-
 	// Keep track of user defined types used in the expression.
 	var udts map[oid.Oid]struct{}
 
@@ -304,7 +278,6 @@ func normalizeSelectClause(
 		return typ, nil
 	}
 
-	requiresPrev := false
 	stmt, err := tree.SimpleStmtVisit(
 		sc,
 		func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
@@ -325,45 +298,13 @@ func normalizeSelectClause(
 				e.Type = typ
 				return true, e, nil
 			case *tree.FuncExpr:
-				fn, err := checkFunctionSupported(ctx, e, semaCtx)
-				if err != nil {
+				if err := checkFunctionSupported(ctx, e, semaCtx); err != nil {
 					return false, e, err
 				}
-				return true, fn, nil
+				return true, expr, nil
 			case *tree.Subquery:
 				return false, e, pgerror.New(
 					pgcode.FeatureNotSupported, "sub-query expressions not supported by CDC")
-			case *tree.UnresolvedName:
-				switch e.NumParts {
-				case 1:
-					if e.Parts[0] == prevTupleName {
-						if _, err := desc.TableDescriptor().FindColumnWithName(prevTupleName); err == nil {
-							return false, e,
-								pgerror.Newf(pgcode.AmbiguousColumn,
-									"ambiguous cdc_prev column collides with CDC reserved keyword.  "+
-										"Disambiguate with %s.cdc_prev", desc.TableName)
-						}
-
-						requiresPrev = true
-						return true, e, nil
-					}
-
-					// Qualify unqualified names.  Since we might be adding access to the
-					// previous row, column names become ambiguous if they are not
-					// qualified.
-					return true, tree.NewUnresolvedName(string(tableAlias.Alias), e.Parts[0]), nil
-				case 2:
-					if e.Parts[1] == prevTupleName {
-						requiresPrev = true
-					}
-				}
-				return true, e, nil
-			case tree.UnqualifiedStar:
-				// Qualify unqualified stars.  Since we might be adding
-				// access to the previous row, column names become ambiguous.
-				return true, &tree.AllColumnsSelector{
-					TableName: tree.NewUnqualifiedTableName(tableAlias.Alias).ToUnresolvedObjectName(),
-				}, nil
 			default:
 				return true, expr, nil
 			}
@@ -376,9 +317,6 @@ func normalizeSelectClause(
 	var norm *NormalizedSelectClause
 	switch t := stmt.(type) {
 	case *tree.SelectClause:
-		if err := scopeAndRewrite(t, desc, requiresPrev); err != nil {
-			return nil, err
-		}
 		norm = &NormalizedSelectClause{
 			SelectClause: t,
 			desc:         desc,
@@ -428,7 +366,7 @@ func (c *checkColumnsVisitor) VisitCols(expr tree.Expr) (bool, tree.Expr) {
 		return c.VisitCols(vn)
 
 	case *tree.ColumnItem:
-		col, err := c.desc.FindColumnWithName(e.ColumnName)
+		col, err := catalog.MustFindColumnByTreeName(c.desc, e.ColumnName)
 		if err != nil {
 			c.err = err
 			return false, expr
@@ -447,111 +385,4 @@ func (c *checkColumnsVisitor) FindColumnFamilies(sc *tree.SelectClause) error {
 		return recurse, newExpr, nil
 	})
 	return err
-}
-
-// scopeAndRewrite restricts this expression scope only to the columns
-// being accessed, and rewrites select clause as needed to reflect that.
-func scopeAndRewrite(
-	sc *tree.SelectClause, desc *cdcevent.EventDescriptor, requiresPrev bool,
-) error {
-	tables := append(tree.TableExprs(nil), sc.From.Tables...)
-	if len(tables) != 1 {
-		return errors.AssertionFailedf("expected single table")
-	}
-
-	table := tables[0]
-	if aliased, ok := table.(*tree.AliasedTableExpr); ok {
-		table = aliased.Expr
-	}
-	tableRef, ok := table.(*tree.TableRef)
-	if !ok {
-		return errors.AssertionFailedf("expected table reference, found %T", tables[0])
-	}
-
-	tables[0] = maybeScopeTable(desc, tableRef)
-
-	if requiresPrev {
-		// prevTupleTableExpr is a table expression to select contents of tuple
-		// representing the previous row state.
-		// That's a bit of a mouthful, but all we're doing here is adding
-		// another table sub-select to the query to produce cdc_prev tuple:
-		// SELECT ... FROM tbl, (SELECT ((crdb_internal.cdc_prev_row()).*)) AS cdc_prev
-		// Note: even though this expression is the same for all queries, we should not
-		// make it global because the underlying call (FunctionReference) to previous row
-		// function will be replaced with function definition (concrete implementation).
-		// Thus, if we reuse the same expression across different versions of event
-		// descriptors, we will get unexpected errors.
-		prevTupleTableExpr := &tree.AliasedTableExpr{
-			As: tree.AliasClause{Alias: prevTupleName},
-			Expr: &tree.Subquery{
-				Select: &tree.ParenSelect{
-					Select: &tree.Select{
-						Select: &tree.SelectClause{
-							Exprs: tree.SelectExprs{
-								tree.SelectExpr{
-									Expr: &tree.TupleStar{
-										Expr: &tree.FuncExpr{
-											Func: tree.ResolvableFunctionReference{FunctionReference: &prevRowFnName},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		}
-
-		tables = append(tables, prevTupleTableExpr)
-	}
-
-	sc.From = tree.From{Tables: tables}
-	return nil
-}
-
-// maybeScopeTable returns possibly "scoped" table expression.
-// If event descriptor targets all columns, then table expression returned
-// unmodified. However, if the event descriptor targets a subset of columns,
-// then returns table expression restricted to targeted columns.
-func maybeScopeTable(ed *cdcevent.EventDescriptor, tableRef *tree.TableRef) tree.TableExpr {
-	// If the event descriptor targets all columns in the table, we can use
-	// table as is.
-	if ed.FamilyID == 0 && !ed.HasVirtual && !ed.HasOtherFamilies {
-		return tableRef
-	}
-
-	// If the event descriptor targets specific column family, we need to scope
-	// expression to select only the columns in the event descriptor.
-	// The code below is a bit of a mouth full.  Assuming that we were selecting from
-	// table named 'tbl', all we're doing here is turning
-	// from clause (FROM tbl) into something that looks like:
-	//  FROM (SELECT col1, col2, ... FROM [tableID AS t]) AS tbl
-	// Where col1, col2, ... are columns in the target column family, tableID is the table
-	// ID of the target table.
-	scopedTable := &tree.SelectClause{
-		From: tree.From{
-			Tables: tree.TableExprs{&tree.TableRef{
-				TableID: tableRef.TableID,
-				As:      tree.AliasClause{Alias: "t"},
-			}},
-		},
-		Exprs: func() (exprs tree.SelectExprs) {
-			exprs = make(tree.SelectExprs, len(ed.ResultColumns()))
-			for i, c := range ed.ResultColumns() {
-				exprs[i] = tree.SelectExpr{Expr: &tree.ColumnItem{ColumnName: tree.Name(c.Name)}}
-			}
-			return exprs
-		}(),
-	}
-
-	return &tree.AliasedTableExpr{
-		Expr: &tree.Subquery{
-			Select: &tree.ParenSelect{
-				Select: &tree.Select{
-					Select: scopedTable,
-				},
-			},
-		},
-		As: tableRef.As,
-	}
 }

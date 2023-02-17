@@ -106,7 +106,7 @@ func (dsp *DistSQLPlanner) createBackfillerPhysicalPlan(
 		pIdx := p.AddProcessor(proc)
 		p.ResultRouters[i] = pIdx
 	}
-	dsp.FinalizePlan(planCtx, p)
+	FinalizePlan(ctx, planCtx, p)
 	return p, nil
 }
 
@@ -178,7 +178,7 @@ func (dsp *DistSQLPlanner) createIndexBackfillerMergePhysicalPlan(
 		pIdx := p.AddProcessor(proc)
 		p.ResultRouters[i] = pIdx
 	}
-	dsp.FinalizePlan(planCtx, p)
+	FinalizePlan(ctx, planCtx, p)
 	return p, nil
 }
 

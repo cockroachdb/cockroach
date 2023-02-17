@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
@@ -44,7 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -1122,12 +1123,12 @@ func TestJoinReader(t *testing.T) {
 
 							index := td.ActiveIndexes()[c.indexIdx]
 							var fetchColIDs []descpb.ColumnID
-							var neededOrds util.FastIntSet
+							var neededOrds intsets.Fast
 							for _, ord := range c.fetchCols {
 								neededOrds.Add(int(ord))
 								fetchColIDs = append(fetchColIDs, td.PublicColumns()[ord].GetID())
 							}
-							var fetchSpec descpb.IndexFetchSpec
+							var fetchSpec fetchpb.IndexFetchSpec
 							if err := rowenc.InitIndexFetchSpec(
 								&fetchSpec,
 								keys.SystemSQLCodec,
@@ -1297,7 +1298,7 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 		rowenc.EncDatumRow{rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(key))}},
 		rowenc.EncDatumRow{rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(key))}},
 	}
-	var fetchSpec descpb.IndexFetchSpec
+	var fetchSpec fetchpb.IndexFetchSpec
 	if err := rowenc.InitIndexFetchSpec(
 		&fetchSpec,
 		keys.SystemSQLCodec,
@@ -1405,7 +1406,7 @@ func TestJoinReaderDrain(t *testing.T) {
 	encRow := make(rowenc.EncDatumRow, 1)
 	encRow[0] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(1))
 
-	var fetchSpec descpb.IndexFetchSpec
+	var fetchSpec fetchpb.IndexFetchSpec
 	if err := rowenc.InitIndexFetchSpec(
 		&fetchSpec,
 		keys.SystemSQLCodec,
@@ -1579,7 +1580,7 @@ func TestIndexJoiner(t *testing.T) {
 
 	for _, c := range testCases {
 		t.Run(c.description, func(t *testing.T) {
-			var fetchSpec descpb.IndexFetchSpec
+			var fetchSpec fetchpb.IndexFetchSpec
 			if err := rowenc.InitIndexFetchSpec(
 				&fetchSpec,
 				keys.SystemSQLCodec,
@@ -1588,7 +1589,7 @@ func TestIndexJoiner(t *testing.T) {
 			); err != nil {
 				t.Fatal(err)
 			}
-			splitter := span.MakeSplitter(c.desc, c.desc.GetPrimaryIndex(), util.MakeFastIntSet(0, 1, 2, 3))
+			splitter := span.MakeSplitter(c.desc, c.desc.GetPrimaryIndex(), intsets.MakeFast(0, 1, 2, 3))
 
 			spec := execinfrapb.JoinReaderSpec{
 				FetchSpec:      fetchSpec,
@@ -1701,7 +1702,11 @@ func benchmarkJoinReader(b *testing.B, bc JRBenchConfig) {
 	defer cleanupTempDir()
 	tempStoreSpec, err := base.NewStoreSpec(fmt.Sprintf("path=%s", tempStoragePath))
 	require.NoError(b, err)
-	tempEngine, _, err := storage.NewTempEngine(ctx, base.TempStorageConfig{Path: tempStoragePath, Mon: diskMonitor}, tempStoreSpec)
+	tempEngine, _, err := storage.NewTempEngine(ctx, base.TempStorageConfig{
+		Path:     tempStoragePath,
+		Mon:      diskMonitor,
+		Settings: st,
+	}, tempStoreSpec)
 	require.NoError(b, err)
 	defer tempEngine.Close()
 	flowCtx.Cfg.TempStorage = tempEngine
@@ -1821,7 +1826,7 @@ func benchmarkJoinReader(b *testing.B, bc JRBenchConfig) {
 								}), numLookupRows)
 								output := rowDisposer{}
 
-								var fetchSpec descpb.IndexFetchSpec
+								var fetchSpec fetchpb.IndexFetchSpec
 								if err := rowenc.InitIndexFetchSpec(
 									&fetchSpec,
 									keys.SystemSQLCodec,
@@ -1966,7 +1971,11 @@ func BenchmarkJoinReaderLookupStress(b *testing.B) {
 	defer cleanupTempDir()
 	tempStoreSpec, err := base.NewStoreSpec(fmt.Sprintf("path=%s", tempStoragePath))
 	require.NoError(b, err)
-	tempEngine, _, err := storage.NewTempEngine(ctx, base.TempStorageConfig{Path: tempStoragePath, Mon: diskMonitor}, tempStoreSpec)
+	tempEngine, _, err := storage.NewTempEngine(ctx, base.TempStorageConfig{
+		Path:     tempStoragePath,
+		Mon:      diskMonitor,
+		Settings: st,
+	}, tempStoreSpec)
 	require.NoError(b, err)
 	defer tempEngine.Close()
 	flowCtx.Cfg.TempStorage = tempEngine
@@ -2031,7 +2040,7 @@ func BenchmarkJoinReaderLookupStress(b *testing.B) {
 				fetchColumnIDs = append(fetchColumnIDs, descpb.ColumnID(i))
 			}
 
-			var fetchSpec descpb.IndexFetchSpec
+			var fetchSpec fetchpb.IndexFetchSpec
 			if err := rowenc.InitIndexFetchSpec(
 				&fetchSpec,
 				keys.SystemSQLCodec,

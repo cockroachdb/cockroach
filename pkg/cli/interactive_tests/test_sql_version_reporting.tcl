@@ -55,10 +55,9 @@ system "mv logs/db logs/db-bak"
 start_server $argv
 send "select 1;\r"
 eexpect "opening new connection"
-eexpect "error"
 eexpect "the cluster ID has changed!"
 eexpect "Previous ID:"
-eexpect "New ID:"
+eexpect "New Cluster ID:"
 eexpect root@
 end_test
 

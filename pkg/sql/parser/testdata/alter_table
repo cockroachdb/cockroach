@@ -193,6 +193,24 @@ ALTER TABLE a ADD COLUMN b INT8 -- literals removed
 ALTER TABLE _ ADD COLUMN _ INT8 -- identifiers removed
 
 parse
+ALTER TABLE a ADD COLUMN b
+"char"
+----
+ALTER TABLE a ADD COLUMN b "char" -- normalized!
+ALTER TABLE a ADD COLUMN b "char" -- fully parenthesized
+ALTER TABLE a ADD COLUMN b "char" -- literals removed
+ALTER TABLE _ ADD COLUMN _ "char" -- identifiers removed
+
+parse
+ALTER TABLE a ADD COLUMN "b"
+"char"
+----
+ALTER TABLE a ADD COLUMN b "char" -- normalized!
+ALTER TABLE a ADD COLUMN b "char" -- fully parenthesized
+ALTER TABLE a ADD COLUMN b "char" -- literals removed
+ALTER TABLE _ ADD COLUMN _ "char" -- identifiers removed
+
+parse
 ALTER TABLE a ADD IF NOT EXISTS b INT8
 ----
 ALTER TABLE a ADD COLUMN IF NOT EXISTS b INT8 -- normalized!

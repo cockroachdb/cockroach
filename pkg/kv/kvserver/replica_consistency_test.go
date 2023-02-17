@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -76,6 +77,96 @@ func TestReplicaChecksumVersion(t *testing.T) {
 			require.NotNil(t, rc.Checksum)
 		}
 	})
+}
+
+func TestStoreCheckpointSpans(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s := Store{}
+	s.mu.replicasByKey = newStoreReplicaBTree()
+	s.mu.replicaPlaceholders = map[roachpb.RangeID]*ReplicaPlaceholder{}
+
+	makeDesc := func(rangeID roachpb.RangeID, start, end string) roachpb.RangeDescriptor {
+		desc := roachpb.RangeDescriptor{RangeID: rangeID}
+		if start != "" {
+			desc.StartKey = roachpb.RKey(start)
+			desc.EndKey = roachpb.RKey(end)
+		}
+		return desc
+	}
+	var descs []roachpb.RangeDescriptor
+	addReplica := func(rangeID roachpb.RangeID, start, end string) {
+		desc := makeDesc(rangeID, start, end)
+		r := &Replica{RangeID: rangeID, startKey: desc.StartKey}
+		// NB: locking is unnecessary during Replica creation, but this is to work
+		// around the mutex hold asserts in "Locked" methods below.
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		r.mu.state.Desc = &desc
+		r.isInitialized.Set(desc.IsInitialized())
+		require.NoError(t, s.addToReplicasByRangeIDLocked(r))
+		if r.IsInitialized() {
+			require.NoError(t, s.addToReplicasByKeyLockedReplicaRLocked(r))
+			descs = append(descs, desc)
+		}
+	}
+	addPlaceholder := func(rangeID roachpb.RangeID, start, end string) {
+		require.NoError(t, s.addPlaceholderLocked(
+			&ReplicaPlaceholder{rangeDesc: makeDesc(rangeID, start, end)},
+		))
+	}
+
+	addReplica(1, "a", "b")
+	addReplica(4, "b", "c")
+	addPlaceholder(5, "c", "d")
+	addReplica(2, "e", "f")
+	addReplica(3, "", "") // uninitialized
+
+	want := [][]string{{
+		// r1 with keys [a, b). The checkpoint includes range-ID replicated and
+		// unreplicated keyspace for ranges 1-2 and 4. Range 2 is included because
+		// it's a neighbour of r1 by range ID. The checkpoint also includes
+		// replicated user keyspace {a-c} owned by ranges 1 and 4.
+		"/Local/RangeID/{1\"\"-3\"\"}",
+		"/Local/RangeID/{4\"\"-5\"\"}",
+		"/Local/Range\"{a\"-c\"}",
+		"/Local/Lock/Intent/Local/Range\"{a\"-c\"}",
+		"/Local/Lock/Intent\"{a\"-c\"}",
+		"{a-c}",
+	}, {
+		// r4 with keys [b, c). The checkpoint includes range-ID replicated and
+		// unreplicated keyspace for ranges 3-4, 1 and 2. Range 3 is included
+		// because it's a neighbour of r4 by range ID. The checkpoint also includes
+		// replicated user keyspace {a-f} owned by ranges 1, 4, and 2.
+		"/Local/RangeID/{3\"\"-5\"\"}",
+		"/Local/RangeID/{1\"\"-2\"\"}",
+		"/Local/RangeID/{2\"\"-3\"\"}",
+		"/Local/Range\"{a\"-f\"}",
+		"/Local/Lock/Intent/Local/Range\"{a\"-f\"}",
+		"/Local/Lock/Intent\"{a\"-f\"}",
+		"{a-f}",
+	}, {
+		// r2 with keys [e, f). The checkpoint includes range-ID replicated and
+		// unreplicated keyspace for ranges 1-3 and 4. Ranges 1 and 3 are included
+		// because they are neighbours of r2 by range ID. The checkpoint also
+		// includes replicated user keyspace {b-f} owned by ranges 4 and 2.
+		"/Local/RangeID/{1\"\"-4\"\"}",
+		"/Local/RangeID/{4\"\"-5\"\"}",
+		"/Local/Range\"{b\"-f\"}",
+		"/Local/Lock/Intent/Local/Range\"{b\"-f\"}",
+		"/Local/Lock/Intent\"{b\"-f\"}",
+		"{b-f}",
+	}}
+
+	require.Len(t, want, len(descs))
+	for i, desc := range descs {
+		spans := s.checkpointSpans(&desc)
+		got := make([]string, 0, len(spans))
+		for _, s := range spans {
+			got = append(got, s.String())
+		}
+		require.Equal(t, want[i], got, i)
+	}
 }
 
 func TestGetChecksumNotSuccessfulExitConditions(t *testing.T) {
@@ -234,5 +325,5 @@ func TestReplicaChecksumSHA512(t *testing.T) {
 	require.NoError(t, err)
 	fmt.Fprintf(sb, "stats: %s\n", string(json))
 
-	echotest.Require(t, sb.String(), testutils.TestDataPath(t, "replica_consistency_sha512"))
+	echotest.Require(t, sb.String(), datapathutils.TestDataPath(t, "replica_consistency_sha512"))
 }

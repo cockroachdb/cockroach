@@ -64,9 +64,6 @@ func (b *Builder) expandStar(
 	if b.insideViewDef {
 		panic(unimplemented.NewWithIssue(10028, "views do not currently support * expressions"))
 	}
-	if b.insideFuncDef {
-		panic(unimplemented.NewWithIssue(90080, "functions do not currently support * expressions"))
-	}
 	switch t := expr.(type) {
 	case *tree.TupleStar:
 		texpr := inScope.resolveType(t.Expr, types.Any)

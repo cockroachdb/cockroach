@@ -14,8 +14,8 @@ import (
 	"context"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/errors"
 )
 
@@ -23,7 +23,7 @@ import (
 // in-memory and persisted stmt stats provided by the in-memory iterator and
 // the on-disk iterator.
 type CombinedStmtStatsIterator struct {
-	nextToRead     *roachpb.CollectedStatementStatistics
+	nextToRead     *appstatspb.CollectedStatementStatistics
 	expectedColCnt int
 
 	mem struct {
@@ -35,14 +35,14 @@ type CombinedStmtStatsIterator struct {
 	disk struct {
 		canBeAdvanced bool
 		paused        bool
-		it            sqlutil.InternalRows
+		it            isql.Rows
 	}
 }
 
 // NewCombinedStmtStatsIterator returns a new instance of
 // CombinedStmtStatsIterator.
 func NewCombinedStmtStatsIterator(
-	memIter *memStmtStatsIterator, diskIter sqlutil.InternalRows, expectedColCnt int,
+	memIter *memStmtStatsIterator, diskIter isql.Rows, expectedColCnt int,
 ) *CombinedStmtStatsIterator {
 	c := &CombinedStmtStatsIterator{
 		expectedColCnt: expectedColCnt,
@@ -157,13 +157,13 @@ func (c *CombinedStmtStatsIterator) Next(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-// Cur returns the roachpb.CollectedStatementStatistics at the current internal
+// Cur returns the appstatspb.CollectedStatementStatistics at the current internal
 // counter.
-func (c *CombinedStmtStatsIterator) Cur() *roachpb.CollectedStatementStatistics {
+func (c *CombinedStmtStatsIterator) Cur() *appstatspb.CollectedStatementStatistics {
 	return c.nextToRead
 }
 
-func compareStmtStats(lhs, rhs *roachpb.CollectedStatementStatistics) int {
+func compareStmtStats(lhs, rhs *appstatspb.CollectedStatementStatistics) int {
 	// 1. we compare their aggregated_ts
 	if lhs.AggregatedTs.Before(rhs.AggregatedTs) {
 		return -1
@@ -209,7 +209,7 @@ func compareStmtStats(lhs, rhs *roachpb.CollectedStatementStatistics) int {
 // in-memory and persisted txn stats provided by the in-memory iterator and
 // the on-disk iterator.
 type CombinedTxnStatsIterator struct {
-	nextToReadVal  *roachpb.CollectedTransactionStatistics
+	nextToReadVal  *appstatspb.CollectedTransactionStatistics
 	expectedColCnt int
 
 	mem struct {
@@ -221,14 +221,14 @@ type CombinedTxnStatsIterator struct {
 	disk struct {
 		canBeAdvanced bool
 		paused        bool
-		it            sqlutil.InternalRows
+		it            isql.Rows
 	}
 }
 
 // NewCombinedTxnStatsIterator returns a new instance of
 // CombinedTxnStatsIterator.
 func NewCombinedTxnStatsIterator(
-	memIter *memTxnStatsIterator, diskIter sqlutil.InternalRows, expectedColCnt int,
+	memIter *memTxnStatsIterator, diskIter isql.Rows, expectedColCnt int,
 ) *CombinedTxnStatsIterator {
 	c := &CombinedTxnStatsIterator{
 		expectedColCnt: expectedColCnt,
@@ -343,13 +343,13 @@ func (c *CombinedTxnStatsIterator) Next(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-// Cur returns the roachpb.CollectedTransactionStatistics at the current internal
+// Cur returns the appstatspb.CollectedTransactionStatistics at the current internal
 // counter.
-func (c *CombinedTxnStatsIterator) Cur() *roachpb.CollectedTransactionStatistics {
+func (c *CombinedTxnStatsIterator) Cur() *appstatspb.CollectedTransactionStatistics {
 	return c.nextToReadVal
 }
 
-func compareTxnStats(lhs, rhs *roachpb.CollectedTransactionStatistics) int {
+func compareTxnStats(lhs, rhs *appstatspb.CollectedTransactionStatistics) int {
 	// 1. we compare their aggregated_ts
 	if lhs.AggregatedTs.Before(rhs.AggregatedTs) {
 		return -1

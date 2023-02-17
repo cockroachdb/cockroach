@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/stretchr/testify/require"
 )
@@ -38,7 +39,7 @@ func TestConstraintRetrieval(t *testing.T) {
 		Unique:       true,
 		KeyColumnIDs: []descpb.ColumnID{1},
 		ConstraintID: 1,
-		EncodingType: descpb.PrimaryIndexEncoding,
+		EncodingType: catenumpb.PrimaryIndexEncoding,
 	}
 
 	indexes := []descpb.IndexDescriptor{
@@ -147,14 +148,14 @@ func TestConstraintRetrieval(t *testing.T) {
 			return all[i].GetConstraintID() < all[j].GetConstraintID()
 		})
 		require.Len(t, all, 7)
-		checkIndexBackedConstraint(t, all[0], 1, descpb.ConstraintValidity_Validated, descpb.PrimaryIndexEncoding)
+		checkIndexBackedConstraint(t, all[0], 1, descpb.ConstraintValidity_Validated, catenumpb.PrimaryIndexEncoding)
 		checkNonIndexBackedConstraint(t, all[1], 2, descpb.ConstraintValidity_Validated, descpb.ConstraintToUpdate_CHECK)
 		checkNonIndexBackedConstraint(t, all[2], 3, descpb.ConstraintValidity_Unvalidated, descpb.ConstraintToUpdate_CHECK)
-		checkIndexBackedConstraint(t, all[3], 4, descpb.ConstraintValidity_Validated, descpb.SecondaryIndexEncoding)
+		checkIndexBackedConstraint(t, all[3], 4, descpb.ConstraintValidity_Validated, catenumpb.SecondaryIndexEncoding)
 		// ID 5 is missing: inbound foreign keys are not constraints.
 		checkNonIndexBackedConstraint(t, all[4], 6, descpb.ConstraintValidity_Validated, descpb.ConstraintToUpdate_FOREIGN_KEY)
 		checkNonIndexBackedConstraint(t, all[5], 7, descpb.ConstraintValidity_Dropping, descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX)
-		checkIndexBackedConstraint(t, all[6], 8, descpb.ConstraintValidity_Validating, descpb.SecondaryIndexEncoding)
+		checkIndexBackedConstraint(t, all[6], 8, descpb.ConstraintValidity_Validating, catenumpb.SecondaryIndexEncoding)
 	})
 	t.Run("test-EnforcedConstraints", func(t *testing.T) {
 		enforced := tableDesc.EnforcedConstraints()
@@ -162,10 +163,10 @@ func TestConstraintRetrieval(t *testing.T) {
 			return enforced[i].GetConstraintID() < enforced[j].GetConstraintID()
 		})
 		require.Len(t, enforced, 6)
-		checkIndexBackedConstraint(t, enforced[0], 1, descpb.ConstraintValidity_Validated, descpb.PrimaryIndexEncoding)
+		checkIndexBackedConstraint(t, enforced[0], 1, descpb.ConstraintValidity_Validated, catenumpb.PrimaryIndexEncoding)
 		checkNonIndexBackedConstraint(t, enforced[1], 2, descpb.ConstraintValidity_Validated, descpb.ConstraintToUpdate_CHECK)
 		checkNonIndexBackedConstraint(t, enforced[2], 3, descpb.ConstraintValidity_Unvalidated, descpb.ConstraintToUpdate_CHECK)
-		checkIndexBackedConstraint(t, enforced[3], 4, descpb.ConstraintValidity_Validated, descpb.SecondaryIndexEncoding)
+		checkIndexBackedConstraint(t, enforced[3], 4, descpb.ConstraintValidity_Validated, catenumpb.SecondaryIndexEncoding)
 		// ID 5 is missing: inbound foreign keys are not constraints.
 		checkNonIndexBackedConstraint(t, enforced[4], 6, descpb.ConstraintValidity_Validated, descpb.ConstraintToUpdate_FOREIGN_KEY)
 		checkNonIndexBackedConstraint(t, enforced[5], 7, descpb.ConstraintValidity_Dropping, descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX)
@@ -182,14 +183,14 @@ func checkIndexBackedConstraint(
 	c catalog.Constraint,
 	expectedID descpb.ConstraintID,
 	expectedValidity descpb.ConstraintValidity,
-	expectedEncodingType descpb.IndexDescriptorEncodingType,
+	expectedEncodingType catenumpb.IndexDescriptorEncodingType,
 ) {
 	require.Equal(t, expectedID, c.GetConstraintID())
 	require.Equal(t, expectedValidity, c.GetConstraintValidity())
 	idx := c.AsUniqueWithIndex()
 	require.NotNil(t, idx)
 	require.Equal(t, expectedEncodingType, idx.IndexDesc().EncodingType)
-	if expectedEncodingType == descpb.SecondaryIndexEncoding {
+	if expectedEncodingType == catenumpb.SecondaryIndexEncoding {
 		require.Equal(t, true, idx.IndexDesc().Unique)
 	}
 }

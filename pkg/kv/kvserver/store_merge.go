@@ -133,7 +133,7 @@ func (s *Store) MergeRange(
 	// we'll drop atomically with extending the right-hand side down below.
 	ph, err := s.removeInitializedReplicaRaftMuLocked(ctx, rightRepl, rightDesc.NextReplicaID, RemoveOptions{
 		// The replica was destroyed by the tombstones added to the batch in
-		// runPreApplyTriggersAfterStagingWriteBatch.
+		// runPostAddTriggers.
 		DestroyData:       false,
 		InsertPlaceholder: true,
 	})
@@ -145,7 +145,7 @@ func (s *Store) MergeRange(
 		return err
 	}
 
-	leftRepl.loadStats.merge(rightRepl.loadStats)
+	leftRepl.loadStats.Merge(rightRepl.loadStats)
 
 	// Clear the concurrency manager's lock and txn wait-queues to redirect the
 	// queued transactions to the left-hand replica, if necessary.

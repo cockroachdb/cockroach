@@ -25,7 +25,7 @@ import (
 // are logged to the telemetry channel.
 const defaultMaxEventFrequency = 8
 
-var telemetryMaxEventFrequency = settings.RegisterIntSetting(
+var TelemetryMaxEventFrequency = settings.RegisterIntSetting(
 	settings.TenantWritable,
 	"sql.telemetry.query_sampling.max_event_frequency",
 	"the max event frequency at which we sample queries for telemetry, "+
@@ -60,6 +60,18 @@ type TelemetryLoggingTestingKnobs struct {
 	// getTracingStatus allows tests to override whether the current query has tracing
 	// enabled or not. Queries with tracing enabled are always sampled to telemetry.
 	getTracingStatus func() bool
+}
+
+func NewTelemetryLoggingTestingKnobs(
+	getTimeNowFunc func() time.Time,
+	getQueryLevelStatsFunc func() execstats.QueryLevelStats,
+	getTracingStatusFunc func() bool,
+) *TelemetryLoggingTestingKnobs {
+	return &TelemetryLoggingTestingKnobs{
+		getTimeNow:         getTimeNowFunc,
+		getQueryLevelStats: getQueryLevelStatsFunc,
+		getTracingStatus:   getTracingStatusFunc,
+	}
 }
 
 // ModuleTestingKnobs implements base.ModuleTestingKnobs interface.

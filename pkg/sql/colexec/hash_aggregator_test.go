@@ -514,6 +514,7 @@ func BenchmarkHashAggregatorInputTuplesTracking(b *testing.B) {
 								DiskQueueCfg:       queueCfg,
 								FDSemaphore:        &colexecop.TestingSemaphore{},
 								DiskAcc:            testDiskAcc,
+								ConverterMemAcc:    testMemAcc,
 							},
 						)
 					},
@@ -577,6 +578,7 @@ func BenchmarkHashAggregatorPartialOrder(b *testing.B) {
 				DiskQueueCfg:       queueCfg,
 				FDSemaphore:        &colexecop.TestingSemaphore{},
 				DiskAcc:            testDiskAcc,
+				ConverterMemAcc:    testMemAcc,
 			},
 		)
 	}

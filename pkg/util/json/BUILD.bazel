@@ -28,6 +28,7 @@ go_library(
         "//pkg/sql/pgwire/pgerror",
         "//pkg/util",
         "//pkg/util/encoding",
+        "//pkg/util/intsets",
         "//pkg/util/json/tokenizer",
         "//pkg/util/randutil",
         "//pkg/util/syncutil",
@@ -50,7 +51,7 @@ go_test(
     deps = [
         "//pkg/sql/inverted",
         "//pkg/sql/pgwire/pgerror",
-        "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/util/encoding",
         "//pkg/util/randutil",
         "//pkg/util/timeutil",

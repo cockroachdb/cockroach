@@ -979,6 +979,14 @@ func (*DFloat) AmbiguousFormat() bool { return true }
 func (d *DFloat) Format(ctx *FmtCtx) {
 	fl := float64(*d)
 
+	// TODO(#sql-sessions): formatting float4s are broken here as we cannot
+	// differentiate float4 vs float8.
+	// #73743, ##84326, #41689 are partially related.
+	if ctx.HasFlags(fmtPgwireFormat) {
+		ctx.Write(PgwireFormatFloat(ctx.scratch[:0], float64(*d), ctx.dataConversionConfig, d.ResolvedType()))
+		return
+	}
+
 	disambiguate := ctx.flags.HasFlags(fmtDisambiguateDatumTypes)
 	parsable := ctx.flags.HasFlags(FmtParsableNumerics)
 	quote := parsable && (math.IsNaN(fl) || math.IsInf(fl, 0))
@@ -1043,7 +1051,7 @@ func ParseDDecimal(s string) (*DDecimal, error) {
 func (d *DDecimal) SetString(s string) error {
 	// ExactCtx should be able to handle any decimal, but if there is any rounding
 	// or other inexact conversion, it will result in an error.
-	//_, res, err := HighPrecisionCtx.SetString(&d.Decimal, s)
+	// _, res, err := HighPrecisionCtx.SetString(&d.Decimal, s)
 	_, res, err := ExactCtx.SetString(&d.Decimal, s)
 	if res != 0 || err != nil {
 		return MakeParseError(s, types.Decimal, err)
@@ -1311,7 +1319,7 @@ func (*DString) AmbiguousFormat() bool { return true }
 // Format implements the NodeFormatter interface.
 func (d *DString) Format(ctx *FmtCtx) {
 	buf, f := &ctx.Buffer, ctx.flags
-	if f.HasFlags(fmtRawStrings) {
+	if f.HasFlags(fmtRawStrings) || f.HasFlags(fmtPgwireFormat) {
 		buf.WriteString(string(*d))
 	} else {
 		lexbase.EncodeSQLStringWithFlags(buf, string(*d), f.EncodeFlags())
@@ -1570,9 +1578,8 @@ func writeAsHexString(ctx *FmtCtx, b string) {
 func (d *DBytes) Format(ctx *FmtCtx) {
 	f := ctx.flags
 	if f.HasFlags(fmtPgwireFormat) {
-		ctx.WriteString(`"\\x`)
+		ctx.WriteString(`\x`)
 		writeAsHexString(ctx, string(*d))
-		ctx.WriteString(`"`)
 	} else if f.HasFlags(fmtFormatByteLiterals) {
 		ctx.WriteByte('x')
 		ctx.WriteByte('\'')
@@ -1630,7 +1637,7 @@ func (d *DEncodedKey) Prev(ctx CompareContext) (Datum, bool) {
 
 // Next implements the Datum interface.
 func (d *DEncodedKey) Next(ctx CompareContext) (Datum, bool) {
-	return nil, true
+	return nil, false
 }
 
 // IsMax implements the Datum interface.
@@ -1992,16 +1999,18 @@ func NewDDateFromTime(t time.Time) (*DDate, error) {
 	return NewDDate(d), err
 }
 
-// ParseTimeContext provides the information necessary for
-// parsing dates, intervals times, and timestamps.
+// ParseContext provides the information necessary for
+// parsing dates.
 // A nil value is generally acceptable and will result in
 // reasonable defaults being applied.
-type ParseTimeContext interface {
+type ParseContext interface {
 	// GetRelativeParseTime returns the transaction time in the session's
 	// timezone (i.e. now()). This is used to calculate relative dates,
 	// like "tomorrow", and also provides a default time.Location for
 	// parsed times.
 	GetRelativeParseTime() time.Time
+	// GetCollationEnv returns the collation environment.
+	GetCollationEnv() *CollationEnvironment
 	// GetIntervalStyle returns the interval style in the session.
 	GetIntervalStyle() duration.IntervalStyle
 	// GetDateStyle returns the date style in the session.
@@ -2010,24 +2019,22 @@ type ParseTimeContext interface {
 	GetDateHelper() *pgdate.ParseHelper
 }
 
-var _ ParseTimeContext = &simpleParseTimeContext{}
+var _ ParseContext = &simpleParseContext{}
 
-// NewParseTimeContextOption is an option to NewParseTimeContext.
-type NewParseTimeContextOption func(ret *simpleParseTimeContext)
+// NewParseContextOption is an option to NewParseContext.
+type NewParseContextOption func(ret *simpleParseContext)
 
-// NewParseTimeContextOptionDateStyle sets the DateStyle for the context.
-func NewParseTimeContextOptionDateStyle(dateStyle pgdate.DateStyle) NewParseTimeContextOption {
-	return func(ret *simpleParseTimeContext) {
+// NewParseContextOptionDateStyle sets the DateStyle for the context.
+func NewParseContextOptionDateStyle(dateStyle pgdate.DateStyle) NewParseContextOption {
+	return func(ret *simpleParseContext) {
 		ret.DateStyle = dateStyle
 	}
 }
 
-// NewParseTimeContext constructs a ParseTimeContext that returns
+// NewParseContext constructs a ParseContext that returns
 // the given values.
-func NewParseTimeContext(
-	relativeParseTime time.Time, opts ...NewParseTimeContextOption,
-) ParseTimeContext {
-	ret := &simpleParseTimeContext{
+func NewParseContext(relativeParseTime time.Time, opts ...NewParseContextOption) ParseContext {
+	ret := &simpleParseContext{
 		RelativeParseTime: relativeParseTime,
 	}
 	for _, opt := range opts {
@@ -2036,57 +2043,63 @@ func NewParseTimeContext(
 	return ret
 }
 
-type simpleParseTimeContext struct {
-	RelativeParseTime time.Time
-	DateStyle         pgdate.DateStyle
-	IntervalStyle     duration.IntervalStyle
-	dateHelper        pgdate.ParseHelper
+type simpleParseContext struct {
+	RelativeParseTime    time.Time
+	CollationEnvironment CollationEnvironment
+	DateStyle            pgdate.DateStyle
+	IntervalStyle        duration.IntervalStyle
+	dateHelper           pgdate.ParseHelper
 }
 
-// GetRelativeParseTime implements ParseTimeContext.
-func (ctx simpleParseTimeContext) GetRelativeParseTime() time.Time {
+// GetRelativeParseTime implements ParseContext.
+func (ctx *simpleParseContext) GetRelativeParseTime() time.Time {
 	return ctx.RelativeParseTime
 }
 
-// GetIntervalStyle implements ParseTimeContext.
-func (ctx simpleParseTimeContext) GetIntervalStyle() duration.IntervalStyle {
+// GetCollationEnv implements ParseContext.
+func (ctx *simpleParseContext) GetCollationEnv() *CollationEnvironment {
+	return &ctx.CollationEnvironment
+}
+
+// GetIntervalStyle implements ParseContext.
+func (ctx *simpleParseContext) GetIntervalStyle() duration.IntervalStyle {
 	return ctx.IntervalStyle
 }
 
-// GetDateStyle implements ParseTimeContext.
-func (ctx simpleParseTimeContext) GetDateStyle() pgdate.DateStyle {
+// GetDateStyle implements ParseContext.
+func (ctx *simpleParseContext) GetDateStyle() pgdate.DateStyle {
 	return ctx.DateStyle
 }
 
 // GetDateHelper implements ParseTimeContext.
-func (ctx simpleParseTimeContext) GetDateHelper() *pgdate.ParseHelper {
+func (ctx *simpleParseContext) GetDateHelper() *pgdate.ParseHelper {
 	return &ctx.dateHelper
 }
 
 // relativeParseTime chooses a reasonable "now" value for
 // performing date parsing.
-func relativeParseTime(ctx ParseTimeContext) time.Time {
+func relativeParseTime(ctx ParseContext) time.Time {
 	if ctx == nil {
 		return timeutil.Now()
 	}
 	return ctx.GetRelativeParseTime()
 }
 
-func dateStyle(ctx ParseTimeContext) pgdate.DateStyle {
+func dateStyle(ctx ParseContext) pgdate.DateStyle {
 	if ctx == nil {
 		return pgdate.DefaultDateStyle()
 	}
 	return ctx.GetDateStyle()
 }
 
-func intervalStyle(ctx ParseTimeContext) duration.IntervalStyle {
+func intervalStyle(ctx ParseContext) duration.IntervalStyle {
 	if ctx == nil {
 		return duration.IntervalStyle_POSTGRES
 	}
 	return ctx.GetIntervalStyle()
 }
 
-func dateParseHelper(ctx ParseTimeContext) *pgdate.ParseHelper {
+func dateParseHelper(ctx ParseContext) *pgdate.ParseHelper {
 	if ctx == nil {
 		return nil
 	}
@@ -2097,8 +2110,8 @@ func dateParseHelper(ctx ParseTimeContext) *pgdate.ParseHelper {
 // string in the provided location, or an error if parsing is unsuccessful.
 //
 // The dependsOnContext return value indicates if we had to consult the
-// ParseTimeContext (either for the time or the local timezone).
-func ParseDDate(ctx ParseTimeContext, s string) (_ *DDate, dependsOnContext bool, _ error) {
+// ParseContext (either for the time or the local timezone).
+func ParseDDate(ctx ParseContext, s string) (_ *DDate, dependsOnContext bool, _ error) {
 	now := relativeParseTime(ctx)
 	t, dependsOnContext, err := pgdate.ParseDate(now, dateStyle(ctx), s, dateParseHelper(ctx))
 	return NewDDate(t), dependsOnContext, err
@@ -2263,9 +2276,9 @@ func MakeDTime(t timeofday.TimeOfDay) *DTime {
 // provided string, or an error if parsing is unsuccessful.
 //
 // The dependsOnContext return value indicates if we had to consult the
-// ParseTimeContext (either for the time or the local timezone).
+// ParseContext (either for the time or the local timezone).
 func ParseDTime(
-	ctx ParseTimeContext, s string, precision time.Duration,
+	ctx ParseContext, s string, precision time.Duration,
 ) (_ *DTime, dependsOnContext bool, _ error) {
 	now := relativeParseTime(ctx)
 
@@ -2363,7 +2376,7 @@ func (d *DTime) Format(ctx *FmtCtx) {
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
-	ctx.Write(timeofday.TimeOfDay(*d).AppendFormat(ctx.scratch[:0]))
+	ctx.Write(PGWireFormatTime(timeofday.TimeOfDay(*d), ctx.scratch[:0]))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -2411,9 +2424,9 @@ func NewDTimeTZFromLocation(t timeofday.TimeOfDay, loc *time.Location) *DTimeTZ 
 // provided string, or an error if parsing is unsuccessful.
 //
 // The dependsOnContext return value indicates if we had to consult the
-// ParseTimeContext (either for the time or the local timezone).
+// ParseContext (either for the time or the local timezone).
 func ParseDTimeTZ(
-	ctx ParseTimeContext, s string, precision time.Duration,
+	ctx ParseContext, s string, precision time.Duration,
 ) (_ *DTimeTZ, dependsOnContext bool, _ error) {
 	now := relativeParseTime(ctx)
 	d, dependsOnContext, err := timetz.ParseTimeTZ(now, dateStyle(ctx), s, precision)
@@ -2539,7 +2552,7 @@ func (d *DTimeTZ) Format(ctx *FmtCtx) {
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
-	ctx.Write(d.TimeTZ.AppendFormat(ctx.scratch[:0]))
+	ctx.Write(PGWireFormatTimeTZ(d.TimeTZ, ctx.scratch[:0]))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -2588,23 +2601,13 @@ func MustMakeDTimestamp(t time.Time, precision time.Duration) *DTimestamp {
 // DZeroTimestamp is the zero-valued DTimestamp.
 var DZeroTimestamp = &DTimestamp{}
 
-// time.Time formats.
-const (
-	// timestampTZOutputFormat is used to output all TimestampTZs.
-	// Note the second offset is missing here -- this is to maintain
-	// backward compatibility with casting timestamptz to strings.
-	timestampTZOutputFormat = "2006-01-02 15:04:05.999999-07:00"
-	// timestampOutputFormat is used to output all Timestamps.
-	timestampOutputFormat = "2006-01-02 15:04:05.999999"
-)
-
 // ParseDTimestamp parses and returns the *DTimestamp Datum value represented by
 // the provided string in UTC, or an error if parsing is unsuccessful.
 //
 // The dependsOnContext return value indicates if we had to consult the
-// ParseTimeContext (either for the time or the local timezone).
+// ParseContext (either for the time or the local timezone).
 func ParseDTimestamp(
-	ctx ParseTimeContext, s string, precision time.Duration,
+	ctx ParseContext, s string, precision time.Duration,
 ) (_ *DTimestamp, dependsOnContext bool, _ error) {
 	now := relativeParseTime(ctx)
 	t, dependsOnContext, err := pgdate.ParseTimestampWithoutTimezone(now, dateStyle(ctx), s)
@@ -2826,11 +2829,6 @@ func (d *DTimestamp) Max(ctx CompareContext) (Datum, bool) {
 // AmbiguousFormat implements the Datum interface.
 func (*DTimestamp) AmbiguousFormat() bool { return true }
 
-// FormatTimestamp outputs a timestamp in the UTC timezone.
-func FormatTimestamp(t time.Time) string {
-	return t.UTC().Format(timestampOutputFormat)
-}
-
 // Format implements the NodeFormatter interface.
 func (d *DTimestamp) Format(ctx *FmtCtx) {
 	f := ctx.flags
@@ -2838,7 +2836,9 @@ func (d *DTimestamp) Format(ctx *FmtCtx) {
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
-	ctx.WriteString(FormatTimestamp(d.Time))
+
+	ctx.Write(PGWireFormatTimestamp(d.Time, nil, ctx.scratch[:0]))
+
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -2890,9 +2890,9 @@ func MakeDTimestampTZFromDate(loc *time.Location, d *DDate) (*DTimestampTZ, erro
 // the provided string in the provided location, or an error if parsing is unsuccessful.
 //
 // The dependsOnContext return value indicates if we had to consult the
-// ParseTimeContext (either for the time or the local timezone).
+// ParseContext (either for the time or the local timezone).
 func ParseDTimestampTZ(
-	ctx ParseTimeContext, s string, precision time.Duration,
+	ctx ParseContext, s string, precision time.Duration,
 ) (_ *DTimestampTZ, dependsOnContext bool, _ error) {
 	now := relativeParseTime(ctx)
 	t, dependsOnContext, err := pgdate.ParseTimestamp(now, dateStyle(ctx), s)
@@ -2998,23 +2998,6 @@ func (d *DTimestampTZ) Max(ctx CompareContext) (Datum, bool) {
 // AmbiguousFormat implements the Datum interface.
 func (*DTimestampTZ) AmbiguousFormat() bool { return true }
 
-// FormatTimestampTZ formats the given timestamp with timezone into the provided
-// buffer.
-func FormatTimestampTZ(t time.Time, buf *bytes.Buffer) {
-	buf.WriteString(t.Format(timestampTZOutputFormat))
-	_, offsetSecs := t.Zone()
-	// Only output remaining seconds offsets if it is available.
-	// This is to maintain backward compatibility with older CRDB versions,
-	// where we only output HH:MM.
-	if secondOffset := offsetSecs % 60; secondOffset != 0 {
-		if secondOffset < 0 {
-			secondOffset = 60 + secondOffset
-		}
-		buf.WriteByte(':')
-		buf.WriteString(fmt.Sprintf("%02d", secondOffset))
-	}
-}
-
 // Format implements the NodeFormatter interface.
 func (d *DTimestampTZ) Format(ctx *FmtCtx) {
 	f := ctx.flags
@@ -3022,7 +3005,20 @@ func (d *DTimestampTZ) Format(ctx *FmtCtx) {
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
-	FormatTimestampTZ(d.Time, &ctx.Buffer)
+	// By default, rely on the ctx location.
+	loc := ctx.location
+	// We sometimes set location correctly in DTimestampTZ.
+	if loc == nil {
+		loc = d.Location()
+	}
+	if f.HasFlags(fmtPgwireFormat) {
+		// This assertion should be in place everywhere, but that's a
+		// huge change for a different day.
+		if loc == nil {
+			panic(errors.AssertionFailedf("location on ctx for fmtPgwireFormat must be set for TimestampTZ types"))
+		}
+	}
+	ctx.Write(PGWireFormatTimestamp(d.Time, loc, ctx.scratch[:0]))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -3714,7 +3710,9 @@ func AsJSON(
 		return json.FromString(formatTime(t.UTC(), "2006-01-02T15:04:05.999999999")), nil
 	case *DDate, *DUuid, *DOid, *DInterval, *DBytes, *DIPAddr, *DTime, *DTimeTZ, *DBitArray, *DBox2D,
 		*DTSVector, *DTSQuery:
-		return json.FromString(AsStringWithFlags(t, FmtBareStrings, FmtDataConversionConfig(dcc))), nil
+		return json.FromString(
+			AsStringWithFlags(t, FmtBareStrings, FmtDataConversionConfig(dcc), FmtLocation(loc)),
+		), nil
 	case *DGeometry:
 		return json.FromSpatialObject(t.Geometry.SpatialObject(), geo.DefaultGeoJSONDecimalDigits)
 	case *DGeography:
@@ -3809,7 +3807,7 @@ func (d *DJSON) Format(ctx *FmtCtx) {
 	// TODO(justin): ideally the JSON string encoder should know it needs to
 	// escape things to be inside SQL strings in order to avoid this allocation.
 	s := d.JSON.String()
-	if ctx.flags.HasFlags(fmtRawStrings) {
+	if ctx.HasFlags(fmtRawStrings) || ctx.HasFlags(fmtPgwireFormat) {
 		ctx.WriteString(s)
 	} else {
 		// TODO(knz): This seems incorrect,
@@ -5690,6 +5688,25 @@ func NewDefaultDatum(collationEnv *CollationEnvironment, t *types.T) (d Datum, e
 	}
 }
 
+// PGWireTypeSize is the size of the type as reported in pg_catalog and over
+// the wire protocol.
+func PGWireTypeSize(t *types.T) int {
+	tOid := t.Oid()
+	if tOid == oid.T_timestamptz || tOid == oid.T_timestamp || tOid == oid.T_time {
+		return 8
+	}
+	if tOid == oid.T_timetz {
+		return 12
+	}
+	if tOid == oid.T_date {
+		return 4
+	}
+	if sz, variable := DatumTypeSize(t); !variable {
+		return int(sz)
+	}
+	return -1
+}
+
 // DatumTypeSize returns a lower bound on the total size of a Datum
 // of the given type in bytes, including memory that is
 // pointed at (even if shared between Datum instances) but excluding
@@ -5766,7 +5783,7 @@ var baseDatumTypeSizes = map[types.Family]struct {
 	types.JsonFamily:           {unsafe.Sizeof(DJSON{}), variableSize},
 	types.UuidFamily:           {unsafe.Sizeof(DUuid{}), fixedSize},
 	types.INetFamily:           {unsafe.Sizeof(DIPAddr{}), fixedSize},
-	types.OidFamily:            {unsafe.Sizeof(DInt(0)), fixedSize},
+	types.OidFamily:            {unsafe.Sizeof(DOid{}.Oid), fixedSize},
 	types.EnumFamily:           {unsafe.Sizeof(DEnum{}), variableSize},
 
 	types.VoidFamily: {sz: unsafe.Sizeof(DVoid{}), variable: fixedSize},
@@ -6082,4 +6099,121 @@ func AdjustValueToType(typ *types.T, inVal Datum) (outVal Datum, err error) {
 		}
 	}
 	return inVal, nil
+}
+
+// DatumPrev returns a datum that is "previous" to the given one. For many types
+// it just delegates to Datum.Prev, but for some types that don't have an
+// implementation of that function this method makes the best effort to come up
+// with a reasonable previous datum that is smaller than the given one.
+//
+// The return value is undefined if Datum.IsMin returns true or if the value is
+// NaN of an infinity (for floats and decimals).
+func DatumPrev(
+	datum Datum, cmpCtx CompareContext, collationEnv *CollationEnvironment,
+) (Datum, bool) {
+	datum = UnwrapDOidWrapper(datum)
+	prevString := func(s string) (string, bool) {
+		// In order to obtain a previous string we subtract 1 from the last
+		// non-zero byte.
+		b := []byte(s)
+		lastNonZeroByteIdx := len(b) - 1
+		for ; lastNonZeroByteIdx >= 0 && b[lastNonZeroByteIdx] == 0; lastNonZeroByteIdx-- {
+		}
+		if lastNonZeroByteIdx < 0 {
+			return "", false
+		}
+		b[lastNonZeroByteIdx]--
+		return string(b), true
+	}
+	switch d := datum.(type) {
+	case *DDecimal:
+		var prev DDecimal
+		var sub apd.Decimal
+		_, err := sub.SetFloat64(1e-6)
+		if err != nil {
+			return nil, false
+		}
+		_, err = ExactCtx.Sub(&prev.Decimal, &d.Decimal, &sub)
+		if err != nil {
+			return nil, false
+		}
+		return &prev, true
+	case *DString:
+		prev, ok := prevString(string(*d))
+		if !ok {
+			return nil, false
+		}
+		return NewDString(prev), true
+	case *DCollatedString:
+		prev, ok := prevString(d.Contents)
+		if !ok {
+			return nil, false
+		}
+		c, err := NewDCollatedString(prev, d.Locale, collationEnv)
+		if err != nil {
+			return nil, false
+		}
+		return c, true
+	case *DBytes:
+		prev, ok := prevString(string(*d))
+		if !ok {
+			return nil, false
+		}
+		return NewDBytes(DBytes(prev)), true
+	case *DInterval:
+		// Subtract 1ms.
+		prev := d.Sub(duration.MakeDuration(1000000 /* nanos */, 0 /* days */, 0 /* months */))
+		return NewDInterval(prev, types.DefaultIntervalTypeMetadata), true
+	default:
+		// TODO(yuzefovich): consider adding support for other datums that don't
+		// have Datum.Prev implementation (DBitArray, DGeography, DGeometry,
+		// DBox2D, DJSON, DArray).
+		return datum.Prev(cmpCtx)
+	}
+}
+
+// DatumNext returns a datum that is "next" to the given one. For many types it
+// just delegates to Datum.Next, but for some types that don't have an
+// implementation of that function this method makes the best effort to come up
+// with a reasonable next datum that is greater than the given one.
+//
+// The return value is undefined if Datum.IsMax returns true or if the value is
+// NaN of an infinity (for floats and decimals).
+func DatumNext(
+	datum Datum, cmpCtx CompareContext, collationEnv *CollationEnvironment,
+) (Datum, bool) {
+	datum = UnwrapDOidWrapper(datum)
+	switch d := datum.(type) {
+	case *DDecimal:
+		var next DDecimal
+		var add apd.Decimal
+		_, err := add.SetFloat64(1e-6)
+		if err != nil {
+			return nil, false
+		}
+		_, err = ExactCtx.Add(&next.Decimal, &d.Decimal, &add)
+		if err != nil {
+			return nil, false
+		}
+		return &next, true
+	case *DCollatedString:
+		s := NewDString(d.Contents)
+		next, ok := s.Next(cmpCtx)
+		if !ok {
+			return nil, false
+		}
+		c, err := NewDCollatedString(string(*next.(*DString)), d.Locale, collationEnv)
+		if err != nil {
+			return nil, false
+		}
+		return c, true
+	case *DInterval:
+		next := d.Add(duration.MakeDuration(1000000 /* nanos */, 0 /* days */, 0 /* months */))
+		return NewDInterval(next, types.DefaultIntervalTypeMetadata), true
+	default:
+		// TODO(yuzefovich): consider adding support for other datums that don't
+		// have Datum.Next implementation (DGeography, DGeometry, DBox2D,
+		// DJSON).
+		return datum.Next(cmpCtx)
+	}
 }

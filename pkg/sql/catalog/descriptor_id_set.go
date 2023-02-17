@@ -12,12 +12,12 @@ package catalog
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 )
 
 // DescriptorIDSet efficiently stores an unordered set of descriptor ids.
 type DescriptorIDSet struct {
-	set util.FastIntSet
+	set intsets.Fast
 }
 
 // MakeDescriptorIDSet returns a set initialized with the given values.
@@ -76,4 +76,9 @@ func (d *DescriptorIDSet) Remove(id descpb.ID) {
 // Difference returns the elements of d that are not in o as a new set.
 func (d DescriptorIDSet) Difference(o DescriptorIDSet) DescriptorIDSet {
 	return DescriptorIDSet{set: d.set.Difference(o.set)}
+}
+
+// Union returns the union of d and o as a new set.
+func (d DescriptorIDSet) Union(o DescriptorIDSet) DescriptorIDSet {
+	return DescriptorIDSet{set: d.set.Union(o.set)}
 }

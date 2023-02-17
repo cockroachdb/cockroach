@@ -18,13 +18,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -82,7 +81,7 @@ func newTestHelperForTables(
 		argsFn(&args)
 	}
 
-	s, db, kvDB := serverutils.StartServer(t, args)
+	s, db, _ := serverutils.StartServer(t, args)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
@@ -96,10 +95,9 @@ func newTestHelperForTables(
 			env:    env,
 			server: s,
 			cfg: &scheduledjobs.JobExecutionConfig{
-				Settings:         s.ClusterSettings(),
-				InternalExecutor: s.InternalExecutor().(sqlutil.InternalExecutor),
-				DB:               kvDB,
-				TestingKnobs:     knobs,
+				Settings:     s.ClusterSettings(),
+				DB:           s.InternalDB().(isql.DB),
+				TestingKnobs: knobs,
 			},
 			sqlDB:         sqlDB,
 			execSchedules: execSchedules,
@@ -139,7 +137,7 @@ func (h *testHelper) newScheduledJobForExecutor(
 // loadSchedule loads  all columns for the specified scheduled job.
 func (h *testHelper) loadSchedule(t *testing.T, id int64) *ScheduledJob {
 	j := NewScheduledJob(h.env)
-	row, cols, err := h.cfg.InternalExecutor.QueryRowExWithCols(
+	row, cols, err := h.cfg.DB.Executor().QueryRowExWithCols(
 		context.Background(), "sched-load", nil,
 		sessiondata.RootUserSessionDataOverride,
 		fmt.Sprintf(
@@ -171,10 +169,10 @@ func registerScopedScheduledJobExecutor(name string, ex ScheduledJobExecutor) fu
 // addFakeJob adds a fake job associated with the specified scheduleID.
 // Returns the id of the newly created job.
 func addFakeJob(
-	t *testing.T, h *testHelper, scheduleID int64, status Status, txn *kv.Txn,
+	t *testing.T, h *testHelper, scheduleID int64, status Status, txn isql.Txn,
 ) jobspb.JobID {
 	payload := []byte("fake payload")
-	datums, err := h.cfg.InternalExecutor.QueryRowEx(context.Background(), "fake-job", txn,
+	datums, err := txn.QueryRowEx(context.Background(), "fake-job", txn.KV(),
 		sessiondata.RootUserSessionDataOverride,
 		fmt.Sprintf(`
 INSERT INTO %s (created_by_type, created_by_id, status, payload)

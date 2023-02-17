@@ -57,7 +57,7 @@ func TestCloudBackupRestoreS3(t *testing.T) {
 	defer cleanupFn()
 	prefix := fmt.Sprintf("TestBackupRestoreS3-%d", timeutil.Now().UnixNano())
 	uri := setupS3URI(t, db, bucket, prefix, creds)
-	backupAndRestore(ctx, t, tc, []string{uri.String()}, []string{uri.String()}, numAccounts)
+	backupAndRestore(ctx, t, tc, []string{uri.String()}, []string{uri.String()}, numAccounts, nil)
 }
 
 // TestCloudBackupRestoreS3WithLegacyPut tests that backup/restore works when
@@ -75,7 +75,7 @@ func TestCloudBackupRestoreS3WithLegacyPut(t *testing.T) {
 	prefix := fmt.Sprintf("TestBackupRestoreS3-%d", timeutil.Now().UnixNano())
 	db.Exec(t, "SET CLUSTER SETTING cloudstorage.s3.buffer_and_put_uploads.enabled=true")
 	uri := setupS3URI(t, db, bucket, prefix, creds)
-	backupAndRestore(ctx, t, tc, []string{uri.String()}, []string{uri.String()}, numAccounts)
+	backupAndRestore(ctx, t, tc, []string{uri.String()}, []string{uri.String()}, numAccounts, nil)
 }
 
 func requiredS3CredsAndBucket(t *testing.T) (credentials.Value, string) {
@@ -136,38 +136,107 @@ func TestCloudBackupRestoreGoogleCloudStorage(t *testing.T) {
 	values := uri.Query()
 	values.Add(cloud.AuthParam, cloud.AuthParamImplicit)
 	uri.RawQuery = values.Encode()
-	backupAndRestore(ctx, t, tc, []string{uri.String()}, []string{uri.String()}, numAccounts)
+	backupAndRestore(ctx, t, tc, []string{uri.String()}, []string{uri.String()}, numAccounts, nil)
 }
 
-// TestBackupRestoreAzure hits the real Azure Blob Storage and so could
-// occasionally be flaky. It's only run if the AZURE_ACCOUNT_NAME and
-// AZURE_ACCOUNT_KEY environment vars are set.
+// TestCloudBackupRestoreAzure hits the real Azure Blob Storage and so could
+// occasionally be flaky. It's only run if the AZURE_ACCOUNT_NAME
+// and AZURE_CONTAINER environment vars are set.
 func TestCloudBackupRestoreAzure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	accountName := os.Getenv("AZURE_ACCOUNT_NAME")
-
-	// NB: the Azure Account key must not be url encoded.
-	accountKey := os.Getenv("AZURE_ACCOUNT_KEY")
-	if accountName == "" || accountKey == "" {
-		skip.IgnoreLint(t, "AZURE_ACCOUNT_NAME and AZURE_ACCOUNT_KEY env vars must be set")
+	if accountName == "" {
+		skip.IgnoreLint(t, "AZURE_ACCOUNT_NAME env var must be set")
 	}
+
 	bucket := os.Getenv("AZURE_CONTAINER")
 	if bucket == "" {
 		skip.IgnoreLint(t, "AZURE_CONTAINER env var must be set")
 	}
 
-	const numAccounts = 1000
+	storageCases := []struct {
+		name   string
+		params map[string]string
+	}{
+		{
+			"storage auth legacy",
+			map[string]string{
+				// NB: the Azure Account key must not be url encoded.
+				"AZURE_ACCOUNT_KEY": os.Getenv("AZURE_ACCOUNT_KEY")},
+		},
+		{
+			"storage auth explicit",
+			map[string]string{
+				"AZURE_CLIENT_ID":     os.Getenv("AZURE_CLIENT_ID"),
+				"AZURE_CLIENT_SECRET": os.Getenv("AZURE_CLIENT_SECRET"),
+				"AZURE_TENANT_ID":     os.Getenv("AZURE_TENANT_ID")},
+		},
+		{
+			"storage auth implicit",
+			map[string]string{"AUTH": "implicit"},
+		},
+	}
 
-	ctx := context.Background()
-	tc, _, _, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts, InitManualReplication)
-	defer cleanupFn()
-	prefix := fmt.Sprintf("TestBackupRestoreAzure-%d", timeutil.Now().UnixNano())
-	uri := url.URL{Scheme: "azure", Host: bucket, Path: prefix}
-	values := uri.Query()
-	values.Add(azure.AzureAccountNameParam, accountName)
-	values.Add(azure.AzureAccountKeyParam, accountKey)
-	uri.RawQuery = values.Encode()
+	kmsCases := []struct {
+		name   string
+		params map[string]string
+	}{
+		{
+			"no kms",
+			map[string]string{},
+		},
+		{
+			"kms auth explicit",
+			map[string]string{
+				"AZURE_CLIENT_ID":     os.Getenv("AZURE_CLIENT_ID"),
+				"AZURE_CLIENT_SECRET": os.Getenv("AZURE_CLIENT_SECRET"),
+				"AZURE_TENANT_ID":     os.Getenv("AZURE_TENANT_ID"),
+				"AZURE_VAULT_NAME":    os.Getenv("AZURE_VAULT_NAME")},
+		},
+		{
+			"kms auth implicit",
+			map[string]string{
+				"AUTH":             "implicit",
+				"AZURE_VAULT_NAME": os.Getenv("AZURE_VAULT_NAME")},
+		},
+	}
 
-	backupAndRestore(ctx, t, tc, []string{uri.String()}, []string{uri.String()}, numAccounts)
+	for _, sc := range storageCases {
+		for _, kc := range kmsCases {
+			name := fmt.Sprintf("%s/%s", sc.name, kc.name)
+			t.Run(name, func(t *testing.T) {
+				const numAccounts = 1000
+
+				ctx := context.Background()
+				testCluster, _, _, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts, InitManualReplication)
+				defer cleanupFn()
+				prefix := fmt.Sprintf("TestBackupRestoreAzure-%d", timeutil.Now().UnixNano())
+
+				storageURI := url.URL{Scheme: "azure", Host: bucket, Path: prefix}
+				storageValues := storageURI.Query()
+				storageValues.Add(azure.AzureAccountNameParam, accountName)
+				for k, v := range sc.params {
+					storageValues.Add(k, v)
+				}
+				storageURI.RawQuery = storageValues.Encode()
+
+				var kmsURI []string
+				if len(kc.params) != 0 {
+					kmsValues := make(url.Values)
+					for k, v := range kc.params {
+						kmsValues.Add(k, v)
+					}
+					kmsURI = append(kmsURI,
+						fmt.Sprintf(
+							"azure-kms:///%s/%s?%s",
+							os.Getenv("AZURE_KMS_KEY_NAME"),
+							os.Getenv("AZURE_KMS_KEY_VERSION"),
+							kmsValues.Encode()))
+				}
+
+				backupAndRestore(ctx, t, testCluster, []string{storageURI.String()}, []string{storageURI.String()}, numAccounts, kmsURI)
+			})
+		}
+	}
 }

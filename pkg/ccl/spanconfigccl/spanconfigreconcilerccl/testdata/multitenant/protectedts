@@ -25,7 +25,12 @@ state offset=47
 /Table/5{1-2}                              database system (host)
 /Table/5{2-3}                              database system (host)
 /Table/5{3-4}                              database system (host)
+/Table/5{4-5}                              database system (host)
+/Table/5{5-6}                              database system (host)
+/Table/5{6-7}                              database system (host)
+/Table/5{7-8}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Tenant/10{-\x00}                          database system (tenant)
+/Tenant/11{-\x00}                          database system (tenant)
 
 # Write a protected timestamp record on the system tenant cluster.
 protect record-id=1 ts=1
@@ -93,6 +98,10 @@ upsert /Tenant/10/Table/5{0-1}             database system (tenant)
 upsert /Tenant/10/Table/5{1-2}             database system (tenant)
 upsert /Tenant/10/Table/5{2-3}             database system (tenant)
 upsert /Tenant/10/Table/5{3-4}             database system (tenant)
+upsert /Tenant/10/Table/5{4-5}             database system (tenant)
+upsert /Tenant/10/Table/5{5-6}             database system (tenant)
+upsert /Tenant/10/Table/5{6-7}             database system (tenant)
+upsert /Tenant/10/Table/5{7-8}             database system (tenant)
 
 exec-sql tenant=10
 CREATE DATABASE db;

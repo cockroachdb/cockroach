@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -65,7 +66,7 @@ func TestTenantZip(t *testing.T) {
 	// We use datadriven simply to read the golden output file; we don't actually
 	// run any commands. Using datadriven allows TESTFLAGS=-rewrite.
 	datadriven.RunTest(t,
-		testutils.TestDataPath(t, "zip", "testzip_tenant"),
+		datapathutils.TestDataPath(t, "zip", "testzip_tenant"),
 		func(t *testing.T, td *datadriven.TestData) string {
 			return out
 		},

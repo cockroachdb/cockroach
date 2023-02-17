@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 )
 
 // FindIndexCandidateSet returns a map storing potential indexes for each table
@@ -281,7 +281,7 @@ func constructLeftIndexCombination(
 	rightIndexes [][]cat.IndexColumn,
 	outputIndexes map[cat.Table][][]cat.IndexColumn,
 ) {
-	var leftIndexColSet util.FastIntSet
+	var leftIndexColSet intsets.Fast
 	// Store left columns in a set for fast access.
 	for _, leftCol := range leftIndex {
 		leftIndexColSet.Add(int(leftCol.ColID()))

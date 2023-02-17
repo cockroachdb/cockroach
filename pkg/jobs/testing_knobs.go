@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -81,7 +82,7 @@ type TestingKnobs struct {
 
 	// BeforeWaitForJobsQuery is called once per invocation of the
 	// poll-show-jobs query in WaitForJobs.
-	BeforeWaitForJobsQuery func()
+	BeforeWaitForJobsQuery func(jobs []jobspb.JobID)
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
@@ -116,15 +117,17 @@ type TestingIntervalOverrides struct {
 	WaitForJobsMaxDelay *time.Duration
 }
 
+const defaultShortInterval = 10 * time.Millisecond
+
 // NewTestingKnobsWithShortIntervals return a TestingKnobs structure with
-// overrides for short adopt and cancel intervals.
+// overrides for short adopt, cancel, and retry intervals.
 func NewTestingKnobsWithShortIntervals() *TestingKnobs {
-	defaultShortInterval := 10 * time.Millisecond
+	interval := defaultShortInterval
 	if util.RaceEnabled {
-		defaultShortInterval *= 5
+		interval *= 5
 	}
 	return NewTestingKnobsWithIntervals(
-		defaultShortInterval, defaultShortInterval, defaultShortInterval, defaultShortInterval,
+		interval, interval, interval, interval,
 	)
 }
 

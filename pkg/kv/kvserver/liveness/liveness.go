@@ -144,7 +144,7 @@ type Metrics struct {
 	HeartbeatSuccesses *metric.Counter
 	HeartbeatFailures  telemetry.CounterWithMetric
 	EpochIncrements    telemetry.CounterWithMetric
-	HeartbeatLatency   *metric.Histogram
+	HeartbeatLatency   metric.IHistogram
 }
 
 // IsLiveCallback is invoked when a node's IsLive state changes to true.
@@ -310,9 +310,12 @@ func NewNodeLiveness(opts NodeLivenessOptions) *NodeLiveness {
 		HeartbeatSuccesses: metric.NewCounter(metaHeartbeatSuccesses),
 		HeartbeatFailures:  telemetry.NewCounterWithMetric(metaHeartbeatFailures),
 		EpochIncrements:    telemetry.NewCounterWithMetric(metaEpochIncrements),
-		HeartbeatLatency: metric.NewHistogram(
-			metaHeartbeatLatency, opts.HistogramWindowInterval, metric.NetworkLatencyBuckets,
-		),
+		HeartbeatLatency: metric.NewHistogram(metric.HistogramOptions{
+			Mode:     metric.HistogramModePreferHdrLatency,
+			Metadata: metaHeartbeatLatency,
+			Duration: opts.HistogramWindowInterval,
+			Buckets:  metric.NetworkLatencyBuckets,
+		}),
 	}
 	nl.mu.nodes = make(map[roachpb.NodeID]Record)
 	nl.heartbeatToken <- struct{}{}
@@ -1523,6 +1526,27 @@ func (nl *NodeLiveness) GetNodeCount() int {
 	for _, l := range nl.mu.nodes {
 		if l.Membership.Active() {
 			count++
+		}
+	}
+	return count
+}
+
+// GetNodeCountWithOverrides returns a count of the number of nodes in the cluster,
+// including dead nodes, but excluding decommissioning or decommissioned nodes,
+// using the provided set of liveness overrides.
+func (nl *NodeLiveness) GetNodeCountWithOverrides(
+	overrides map[roachpb.NodeID]livenesspb.NodeLivenessStatus,
+) int {
+	nl.mu.RLock()
+	defer nl.mu.RUnlock()
+	var count int
+	for _, l := range nl.mu.nodes {
+		if l.Membership.Active() {
+			if overrideStatus, ok := overrides[l.NodeID]; !ok ||
+				(overrideStatus != livenesspb.NodeLivenessStatus_DECOMMISSIONING &&
+					overrideStatus != livenesspb.NodeLivenessStatus_DECOMMISSIONED) {
+				count++
+			}
 		}
 	}
 	return count

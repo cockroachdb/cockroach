@@ -14,6 +14,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -45,6 +46,7 @@ func NewTestingDiskQueueCfg(t testing.TB, inMem bool) (colcontainer.DiskQueueCfg
 	ngn, err := storage.Open(
 		context.Background(),
 		loc,
+		cluster.MakeClusterSettings(),
 		storage.ForTesting,
 		storage.CacheSize(0))
 	if err != nil {

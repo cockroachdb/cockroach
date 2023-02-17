@@ -133,13 +133,35 @@ message KVStats {
   // other transactions. This time accounts for a portion of KVTime above.
   optional util.optional.Duration contention_time = 4 [(gogoproto.nullable) = false];
 
+  // Internal iteration statistics.
+  // For details, see pkg/sql/opt/exec/factory.go, pkg/storage/engine.go,
+  // pebble.InternalIteratorStats, and pebble.RangeKeyIteratorStats.
+
   optional util.optional.Uint num_interface_steps = 5 [(gogoproto.nullable) = false];
   optional util.optional.Uint num_internal_steps = 6 [(gogoproto.nullable) = false];
   optional util.optional.Uint num_interface_seeks = 7 [(gogoproto.nullable) = false];
   optional util.optional.Uint num_internal_seeks = 8 [(gogoproto.nullable) = false];
+  optional util.optional.Uint block_bytes = 12 [(gogoproto.nullable) = false];
+  optional util.optional.Uint block_bytes_in_cache = 13 [(gogoproto.nullable) = false];
+  optional util.optional.Uint key_bytes = 14 [(gogoproto.nullable) = false];
+  optional util.optional.Uint value_bytes = 15 [(gogoproto.nullable) = false];
+  optional util.optional.Uint point_count = 16 [(gogoproto.nullable) = false];
+  optional util.optional.Uint points_covered_by_range_tombstones = 17 [(gogoproto.nullable) = false];
+  optional util.optional.Uint range_key_count = 18 [(gogoproto.nullable) = false];
+  optional util.optional.Uint range_key_contained_points = 19 [(gogoproto.nullable) = false];
+  optional util.optional.Uint range_key_skipped_points = 20 [(gogoproto.nullable) = false];
 
   // contention_events hit at the statement level.
   repeated cockroach.roachpb.ContentionEvent contention_events = 10 [(gogoproto.nullable) = false];
+
+  // Cumulated CPU time spent fulfilling KV requests on a SQL goroutine. This
+  // would not include CPU time spent on a remote node, but would include time
+  // spent on a Scan's goroutine. This is only used to calculate SQL CPU time
+  // for processors in the row-engine that perform KV requests.
+  // TODO(drewk): measure wall-clock KV time directly as well, and display it
+  // alongside total execution time for operators that perform KV work.
+  optional util.optional.Duration kv_cpu_time = 11 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "KVCPUTime"];
 }
 
 // ExecStats contains statistics about the execution of a component.
@@ -151,7 +173,11 @@ message ExecStats {
   // Maximum scratch disk allocated by the component.
   optional util.optional.Uint max_allocated_disk = 3 [(gogoproto.nullable) = false];
   // Amount of RUs consumed while executing the component.
-  optional util.optional.Uint consumed_r_u = 4 [(gogoproto.nullable) = false];
+  optional util.optional.Uint consumed_ru = 4 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "ConsumedRU"];
+  // CPU time spent executing the component.
+  optional util.optional.Duration cpu_time = 5 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "CPUTime"];
 }
 
 // OutputStats contains statistics about the output (results) of a component.
@@ -169,5 +195,6 @@ message FlowStats {
   optional util.optional.Uint max_disk_usage = 2 [(gogoproto.nullable) = false];
   // Amount of RUs consumed due to CPU usage while executing the flow. Currently
   // only used for remote flows.
-  optional util.optional.Uint consumed_r_u = 3 [(gogoproto.nullable) = false];
+  optional util.optional.Uint consumed_ru = 3 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "ConsumedRU"];
 }

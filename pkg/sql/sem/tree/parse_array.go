@@ -119,7 +119,7 @@ func (p *parseState) gobbleString(isTerminatingChar func(ch byte) bool) (out str
 
 type parseState struct {
 	s                string
-	ctx              ParseTimeContext
+	ctx              ParseContext
 	dependsOnContext bool
 	result           *DArray
 	t                *types.T
@@ -199,9 +199,9 @@ func (p *parseState) parseElement() error {
 // parameter of the array to parse.
 //
 // The dependsOnContext return value indicates if we had to consult the
-// ParseTimeContext (either for the time or the local timezone).
+// ParseContext (either for the time or the local timezone).
 func ParseDArrayFromString(
-	ctx ParseTimeContext, s string, t *types.T,
+	ctx ParseContext, s string, t *types.T,
 ) (_ *DArray, dependsOnContext bool, _ error) {
 	ret, dependsOnContext, err := doParseDArrayFromString(ctx, s, t)
 	if err != nil {
@@ -214,9 +214,9 @@ func ParseDArrayFromString(
 // except the error it returns isn't prettified as a parsing error.
 //
 // The dependsOnContext return value indicates if we had to consult the
-// ParseTimeContext (either for the time or the local timezone).
+// ParseContext (either for the time or the local timezone).
 func doParseDArrayFromString(
-	ctx ParseTimeContext, s string, t *types.T,
+	ctx ParseContext, s string, t *types.T,
 ) (_ *DArray, dependsOnContext bool, _ error) {
 	parser := parseState{
 		s:      s,

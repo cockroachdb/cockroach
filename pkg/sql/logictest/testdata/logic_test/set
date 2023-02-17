@@ -141,6 +141,14 @@ SET server_encoding = 'UTF8'
 statement error parameter "server_encoding" cannot be changed
 SET server_encoding = 'other'
 
+query T
+SHOW ssl
+----
+on
+
+statement error parameter "ssl" cannot be changed
+SET ssl = 'off'
+
 statement ok
 SET escape_string_warning = 'ON'
 
@@ -277,12 +285,20 @@ SHOW server_version_num
 server_version_num
 130000
 
+query T
+SHOW log_timezone
+----
+UTC
+
 # Test read-only variables
 statement error parameter "max_index_keys" cannot be changed
 SET max_index_keys = 32
 
 statement error parameter "node_id" cannot be changed
 SET node_id = 123
+
+statement error invalid value for parameter "log_timezone"
+SET log_timezone = 'Australia/South'
 
 query TT
 SELECT name, value FROM system.settings WHERE name = 'testing.str'

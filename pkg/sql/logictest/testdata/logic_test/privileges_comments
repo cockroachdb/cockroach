@@ -81,8 +81,10 @@ p45707
 user root
 
 statement ok
-GRANT ALL ON DATABASE d45707 TO testuser;
-  GRANT ALL ON TABLE d45707.t45707 TO testuser
+GRANT ALL ON DATABASE d45707 TO testuser
+
+statement ok
+GRANT ALL ON TABLE d45707.t45707 TO testuser
 
 user testuser
 

@@ -18,30 +18,53 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
 // Evaluator is a responsible for evaluating expressions in CDC.
 type Evaluator struct {
-	norm *NormalizedSelectClause
+	sc *tree.SelectClause
+
+	statementTS hlc.Timestamp
+	// Execution context.
+	execCfg     *sql.ExecutorConfig
+	user        username.SQLUsername
+	sessionData sessiondatapb.SessionData
+	withDiff    bool
+	familyEval  map[descpb.FamilyID]*familyEvaluator
+}
+
+// familyEvaluator is a responsible for evaluating expressions in CDC
+// targeted to specific column family.
+type familyEvaluator struct {
+	norm           *NormalizedSelectClause
+	targetFamilyID descpb.FamilyID
 
 	// Plan related state.
-	input     execinfra.RowReceiver
-	planGroup ctxgroup.Group
-	errCh     chan error
-	currDesc  *cdcevent.EventDescriptor
-	prevDesc  *cdcevent.EventDescriptor
+	cleanup      func()
+	input        execinfra.RowReceiver
+	planGroup    ctxgroup.Group
+	errCh        chan error
+	currDesc     *cdcevent.EventDescriptor
+	prevDesc     *cdcevent.EventDescriptor
+	prevRowTuple *tree.DTuple
+	alloc        tree.DatumAlloc
 
 	// Execution context.
-	execCfg    *sql.ExecutorConfig
-	user       username.SQLUsername
-	fnResolver CDCFunctionResolver
+	execCfg     *sql.ExecutorConfig
+	user        username.SQLUsername
+	sessionData sessiondatapb.SessionData
 
 	// rowCh receives projection datums.
 	rowCh      chan tree.Datums
@@ -54,21 +77,59 @@ type Evaluator struct {
 
 // NewEvaluator constructs new evaluator for changefeed expression.
 func NewEvaluator(
-	sc *tree.SelectClause, execCfg *sql.ExecutorConfig, user username.SQLUsername,
-) (*Evaluator, error) {
-	e := Evaluator{
-		execCfg: execCfg,
-		user:    user,
+	sc *tree.SelectClause,
+	execCfg *sql.ExecutorConfig,
+	user username.SQLUsername,
+	sd sessiondatapb.SessionData,
+	statementTS hlc.Timestamp,
+	withDiff bool,
+) *Evaluator {
+	return &Evaluator{
+		sc:          sc,
+		execCfg:     execCfg,
+		user:        user,
+		sessionData: sd,
+		statementTS: statementTS,
+		withDiff:    withDiff,
+		familyEval:  make(map[descpb.FamilyID]*familyEvaluator, 1), // usually, just 1 family.
+	}
+}
+
+// NewEvaluator constructs new familyEvaluator for changefeed expression.
+func newFamilyEvaluator(
+	sc *tree.SelectClause,
+	targetFamilyID descpb.FamilyID,
+	execCfg *sql.ExecutorConfig,
+	user username.SQLUsername,
+	sd sessiondatapb.SessionData,
+	statementTS hlc.Timestamp,
+	withDiff bool,
+) *familyEvaluator {
+	e := familyEvaluator{
+		targetFamilyID: targetFamilyID,
+		execCfg:        execCfg,
+		user:           user,
+		sessionData:    sd,
 		norm: &NormalizedSelectClause{
 			SelectClause: sc,
 		},
 		rowCh: make(chan tree.Datums, 1),
 	}
+	e.rowEvalCtx.startTime = statementTS
+	e.rowEvalCtx.withDiff = withDiff
 
 	// Arrange to be notified when event does not match predicate.
 	predicateAsProjection(e.norm)
 
-	return &e, nil
+	return &e
+}
+
+// Close closes currently running execution.
+func (e *Evaluator) Close() {
+	for _, fe := range e.familyEval {
+		_ = fe.closeErr() // We expect to see an error, such as context cancelled.
+	}
+
 }
 
 // Eval evaluates projection for the specified updated and (optional) previous row.
@@ -85,7 +146,36 @@ func (e *Evaluator) Eval(
 		}
 	}()
 
-	if !e.sameVersion(updatedRow.EventDescriptor, prevRow.EventDescriptor) {
+	fe, ok := e.familyEval[updatedRow.FamilyID]
+	if !ok {
+		fe = newFamilyEvaluator(
+			e.sc, updatedRow.FamilyID, e.execCfg, e.user, e.sessionData, e.statementTS, e.withDiff,
+		)
+		e.familyEval[updatedRow.FamilyID] = fe
+	}
+
+	return fe.eval(ctx, updatedRow, prevRow)
+}
+
+// eval evaluates projection for the specified updated and (optional) previous row.
+// Returns projection result.  If the filter does not match the event, returns
+// "zero" Row.
+func (e *familyEvaluator) eval(
+	ctx context.Context, updatedRow cdcevent.Row, prevRow cdcevent.Row,
+) (projection cdcevent.Row, evalErr error) {
+	if updatedRow.FamilyID != e.targetFamilyID {
+		return cdcevent.Row{}, errors.AssertionFailedf(
+			"row family id (%d) differs from target id (%d)", updatedRow.FamilyID, e.targetFamilyID)
+	}
+
+	if prevRow.IsInitialized() && updatedRow.FamilyID != prevRow.FamilyID {
+		return cdcevent.Row{}, errors.AssertionFailedf(
+			"current family id (%d) differs from previous (%d)", updatedRow.FamilyID, prevRow.FamilyID)
+	}
+
+	havePrev := prevRow.IsInitialized()
+	if !(sameVersion(e.currDesc, updatedRow.EventDescriptor) &&
+		(!havePrev || sameVersion(e.prevDesc, prevRow.EventDescriptor))) {
 		// Descriptor versions changed; re-initialize.
 		if err := e.closeErr(); err != nil {
 			return cdcevent.Row{}, err
@@ -104,9 +194,17 @@ func (e *Evaluator) Eval(
 		return cdcevent.Row{}, err
 	}
 
+	encDatums := updatedRow.EncDatums()
+	if havePrev {
+		if err := e.copyPrevRow(prevRow); err != nil {
+			return cdcevent.Row{}, err
+		}
+		encDatums = append(encDatums, rowenc.EncDatum{Datum: e.prevRowTuple})
+	}
+
 	// Push data into DistSQL.
-	if st := e.input.Push(updatedRow.EncDatums(), nil); st != execinfra.NeedMoreRows {
-		return cdcevent.Row{}, errors.Newf("evaluator shutting down due to status %s", st)
+	if st := e.input.Push(encDatums, nil); st != execinfra.NeedMoreRows {
+		return cdcevent.Row{}, errors.Newf("familyEvaluator shutting down due to status %s", st)
 	}
 
 	// Read the evaluation result.
@@ -116,7 +214,11 @@ func (e *Evaluator) Eval(
 	case err := <-e.errCh:
 		return cdcevent.Row{}, err
 	case row := <-e.rowCh:
-		if !tree.MustBeDBool(row[0]) {
+		filter, err := tree.GetBool(row[0])
+		if err != nil {
+			return cdcevent.Row{}, err
+		}
+		if !filter {
 			// Filter did not match.
 			return cdcevent.Row{}, nil
 		}
@@ -137,41 +239,51 @@ func (e *Evaluator) Eval(
 	}
 }
 
-// sameVersion returns true if row descriptor versions match this evaluator
-// versions. Note: current, and previous maybe at different versions, but we
-// don't really care about that.
-func (e *Evaluator) sameVersion(curr, prev *cdcevent.EventDescriptor) bool {
-	if e.currDesc == nil {
+// sameVersion returns true if row descriptor versions match.
+func sameVersion(currentVersion, newVersion *cdcevent.EventDescriptor) bool {
+	if currentVersion == nil {
 		return false
 	}
-	if sameVersion, sameTypes := e.currDesc.EqualsWithUDTCheck(curr); !(sameVersion && sameTypes) {
-		return false
-	}
-
-	if !e.norm.RequiresPrev() {
-		return true
-	}
-	sameVersion, sameTypes := e.prevDesc.EqualsWithUDTCheck(prev)
+	sameVersion, sameTypes := newVersion.EqualsWithUDTCheck(currentVersion)
 	return sameVersion && sameTypes
 }
 
 // planAndRun plans CDC expression and starts execution pipeline.
-func (e *Evaluator) planAndRun(ctx context.Context) (err error) {
-	var plan sql.CDCExpressionPlan
-	if err := e.preparePlan(ctx, &plan); err != nil {
-		return err
+func (e *familyEvaluator) planAndRun(ctx context.Context) (err error) {
+	if log.V(1) {
+		start := timeutil.Now()
+		defer func() {
+			log.Infof(ctx, "Planning for CDC expression %s (v=%d) took %s (err=%v)",
+				tree.AsString(e.norm), e.norm.desc.Version, timeutil.Since(start), err)
+		}()
 	}
+
+	var plan sql.CDCExpressionPlan
+	var prevCol catalog.Column
+	plan, prevCol, err = e.preparePlan(ctx)
+	if err != nil {
+		return withErrorHint(err, e.currDesc.FamilyName, e.currDesc.HasOtherFamilies)
+	}
+
 	e.setupProjection(plan.Presentation)
-	e.input, err = e.executePlan(ctx, plan)
+	e.input, err = e.executePlan(ctx, plan, prevCol)
 	return err
 }
 
-func (e *Evaluator) preparePlan(ctx context.Context, plan *sql.CDCExpressionPlan) error {
-	return withPlanner(
-		ctx, e.execCfg, e.user, e.currDesc.SchemaTS, sessiondatapb.SessionData{},
-		func(ctx context.Context, execCtx sql.JobExecContext) error {
+func (e *familyEvaluator) preparePlan(
+	ctx context.Context,
+) (plan sql.CDCExpressionPlan, prevCol catalog.Column, err error) {
+	if e.cleanup != nil {
+		e.cleanup()
+		e.cleanup = nil
+	}
+
+	err = withPlanner(
+		ctx, e.execCfg, e.user, e.currDesc.SchemaTS, e.sessionData,
+		func(ctx context.Context, execCtx sql.JobExecContext, cleanup func()) error {
+			e.cleanup = cleanup
 			semaCtx := execCtx.SemaCtx()
-			semaCtx.FunctionResolver = &e.fnResolver
+			semaCtx.FunctionResolver = newCDCFunctionResolver(semaCtx.FunctionResolver)
 			semaCtx.Properties.Require("cdc", rejectInvalidCDCExprs)
 			semaCtx.Annotations = tree.MakeAnnotations(cdcAnnotationAddr)
 
@@ -180,24 +292,30 @@ func (e *Evaluator) preparePlan(ctx context.Context, plan *sql.CDCExpressionPlan
 			evalCtx.Annotations.Set(cdcAnnotationAddr, &e.rowEvalCtx)
 
 			e.norm.desc = e.currDesc
-			if e.norm.RequiresPrev() {
-				e.rowEvalCtx.prevRowTuple = e.fnResolver.setPrevFuncForEventDescriptor(e.prevDesc)
-			} else {
-				e.rowEvalCtx.prevRowTuple = nil
+			requiresPrev := e.prevDesc != nil
+			var opts []sql.CDCOption
+			if requiresPrev {
+				prevCol, err = newPrevColumnForDesc(e.prevDesc)
+				if err != nil {
+					return err
+				}
+				e.prevRowTuple = tree.NewDTupleWithLen(
+					prevCol.GetType(), len(prevCol.GetType().InternalType.TupleContents))
+				opts = append(opts, sql.WithExtraColumn(prevCol))
 			}
 
-			p, err := sql.PlanCDCExpression(ctx, execCtx, e.norm.SelectStatement())
-			if err != nil {
-				return err
-			}
-			*plan = p
-			return nil
+			plan, err = sql.PlanCDCExpression(ctx, execCtx, e.norm.SelectStatementForFamily(), opts...)
+			return err
 		},
 	)
+	if err != nil {
+		return sql.CDCExpressionPlan{}, nil, err
+	}
+	return plan, prevCol, nil
 }
 
-// setupProjection configures evaluator projection.
-func (e *Evaluator) setupProjection(presentation colinfo.ResultColumns) {
+// setupProjection configures familyEvaluator projection.
+func (e *familyEvaluator) setupProjection(presentation colinfo.ResultColumns) {
 	e.projection = cdcevent.MakeProjection(e.currDesc)
 
 	// makeUniqueName returns a unique name for the specified name. We do this
@@ -224,31 +342,46 @@ func (e *Evaluator) setupProjection(presentation colinfo.ResultColumns) {
 // inputSpecForEventDescriptor returns input specification for the
 // event descriptor.
 func inputSpecForEventDescriptor(
-	ed *cdcevent.EventDescriptor,
-) (inputTypes []*types.T, inputCols catalog.TableColMap, _ error) {
+	ed *cdcevent.EventDescriptor, prevCol catalog.Column,
+) ([]*types.T, catalog.TableColMap, error) {
+	numCols := len(ed.ResultColumns()) + len(colinfo.AllSystemColumnDescs)
+	inputTypes := make([]*types.T, 0, numCols)
+	var inputCols catalog.TableColMap
 	for i, c := range ed.ResultColumns() {
-		col, err := ed.TableDescriptor().FindColumnWithName(tree.Name(c.Name))
+		col, err := catalog.MustFindColumnByName(ed.TableDescriptor(), c.Name)
 		if err != nil {
 			return inputTypes, inputCols, err
 		}
 		inputCols.Set(col.GetID(), i)
 		inputTypes = append(inputTypes, c.Typ)
 	}
+
+	// Add system columns.
+	for _, sc := range colinfo.AllSystemColumnDescs {
+		inputCols.Set(sc.ID, inputCols.Len())
+		inputTypes = append(inputTypes, sc.Type)
+	}
+
+	// Setup cdc_prev if needed.
+	if prevCol != nil {
+		inputCols.Set(prevCol.GetID(), inputCols.Len())
+		inputTypes = append(inputTypes, prevCol.GetType())
+	}
 	return inputTypes, inputCols, nil
 }
 
 // executePlan starts execution of the plan and returns input which receives
 // rows that need to be evaluated.
-func (e *Evaluator) executePlan(
-	ctx context.Context, plan sql.CDCExpressionPlan,
+func (e *familyEvaluator) executePlan(
+	ctx context.Context, plan sql.CDCExpressionPlan, prevCol catalog.Column,
 ) (inputReceiver execinfra.RowReceiver, err error) {
 	// Configure input.
-	inputTypes, inputCols, err := inputSpecForEventDescriptor(e.currDesc)
+	inputTypes, inputCols, err := inputSpecForEventDescriptor(e.currDesc, prevCol)
 	if err != nil {
 		return nil, err
 	}
 
-	// The row channel created below will have exactly 1 sender (this evaluator).
+	// The row channel created below will have exactly 1 sender (this familyEvaluator).
 	// The buffer size parameter doesn't matter much, as long as it is greater
 	// than 0 to make sure that if the main context is cancelled and the flow
 	// exits, that we can still push data into the row channel without blocking,
@@ -278,7 +411,6 @@ func (e *Evaluator) executePlan(
 		nil,
 		nil, /* clockUpdater */
 		&sql.SessionTracing{},
-		e.execCfg.ContentionRegistry,
 	)
 
 	// Start execution.
@@ -302,27 +434,58 @@ func (e *Evaluator) executePlan(
 	return &input, nil
 }
 
-// setupContextForRow configures evaluation context with the provided row
-// information.
-func (e *Evaluator) setupContextForRow(ctx context.Context, updated, prev cdcevent.Row) error {
-	e.rowEvalCtx.ctx = ctx
-	e.rowEvalCtx.updatedRow = updated
-	if e.norm.RequiresPrev() {
-		if err := prev.CopyInto(e.rowEvalCtx.prevRowTuple); err != nil {
-			return err
+// copyPrevRow copies previous row into prevRowTuple.
+func (e *familyEvaluator) copyPrevRow(prev cdcevent.Row) error {
+	tupleTypes := e.prevRowTuple.ResolvedType().InternalType.TupleContents
+	encDatums := prev.EncDatums()
+	if len(tupleTypes) != len(encDatums) {
+		return errors.AssertionFailedf("cannot copy row with %d datums into tuple with %d",
+			len(encDatums), len(tupleTypes))
+	}
+
+	for i, typ := range tupleTypes {
+		if err := encDatums[i].EnsureDecoded(typ, &e.alloc); err != nil {
+			return errors.Wrapf(err, "error decoding column [%d] as type %s", i, typ)
 		}
+		e.prevRowTuple.D[i] = encDatums[i].Datum
 	}
 	return nil
 }
 
-// Close closes currently running execution.
-func (e *Evaluator) Close() {
-	_ = e.closeErr() // We expect to see an error, such as context cancelled.
+// setupContextForRow configures evaluation context with the provided row
+// information.
+func (e *familyEvaluator) setupContextForRow(
+	ctx context.Context, updated cdcevent.Row, prevRow cdcevent.Row,
+) error {
+	e.rowEvalCtx.ctx = ctx
+	e.rowEvalCtx.updatedRow = updated
+
+	if updated.IsDeleted() {
+		e.rowEvalCtx.op = eventTypeDelete
+	} else {
+		// Insert or update.
+		if e.rowEvalCtx.withDiff {
+			if prevRow.IsInitialized() {
+				e.rowEvalCtx.op = eventTypeUpdate
+			} else {
+				e.rowEvalCtx.op = eventTypeInsert
+			}
+		} else {
+			// Without diff option we can't tell insert from update; so, use upsert.
+			e.rowEvalCtx.op = eventTypeUpsert
+		}
+	}
+
+	return nil
 }
 
-func (e *Evaluator) closeErr() error {
+func (e *familyEvaluator) closeErr() error {
 	if e.errCh != nil {
-		defer close(e.errCh) // Must be deferred since planGroup  go routine might write.
+		// Must be deferred since planGroup  go routine might write.
+		defer func() {
+			close(e.errCh)
+			e.errCh = nil
+		}()
 	}
 
 	if e.input != nil {
@@ -330,14 +493,20 @@ func (e *Evaluator) closeErr() error {
 		e.input = nil
 		return e.planGroup.Wait()
 	}
+
+	if e.cleanup != nil {
+		e.cleanup()
+	}
 	return nil
 }
 
 // rowEvalContext represents the context needed to evaluate row expressions.
 type rowEvalContext struct {
-	ctx          context.Context
-	updatedRow   cdcevent.Row
-	prevRowTuple *tree.DTuple
+	ctx        context.Context
+	startTime  hlc.Timestamp
+	withDiff   bool
+	updatedRow cdcevent.Row
+	op         tree.Datum
 }
 
 // cdcAnnotationAddr is the address used to store relevant information
@@ -355,11 +524,9 @@ const rejectInvalidCDCExprs = tree.RejectAggregates | tree.RejectGenerators |
 
 // configSemaForCDC configures existing semaCtx to be used for CDC expression
 // evaluation; returns cleanup function which restores previous configuration.
-func configSemaForCDC(semaCtx *tree.SemaContext, d *cdcevent.EventDescriptor) func() {
+func configSemaForCDC(semaCtx *tree.SemaContext) func() {
 	origProps, origResolver := semaCtx.Properties, semaCtx.FunctionResolver
-	var r CDCFunctionResolver
-	r.setPrevFuncForEventDescriptor(d)
-	semaCtx.FunctionResolver = &r
+	semaCtx.FunctionResolver = newCDCFunctionResolver(semaCtx.FunctionResolver)
 	semaCtx.Properties.Require("cdc", rejectInvalidCDCExprs)
 
 	return func() {

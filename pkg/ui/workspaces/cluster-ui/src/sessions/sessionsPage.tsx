@@ -20,9 +20,7 @@ import {
 } from "./sessionsTable";
 import { RouteComponentProps } from "react-router-dom";
 import classNames from "classnames/bind";
-import { sessionsTable } from "src/util/docs";
 
-import emptyTableResultsIcon from "../assets/emptyState/empty-table-results.svg";
 import LoadingError from "../sqlActivity/errorComponent";
 import { Pagination } from "src/pagination";
 import {
@@ -32,8 +30,6 @@ import {
   ColumnDescriptor,
 } from "src/sortedtable";
 import { Loading } from "src/loading";
-import { Anchor } from "src/anchor";
-import { EmptyTable } from "src/empty";
 import {
   calculateActiveFilters,
   defaultFilters,
@@ -67,9 +63,12 @@ import {
   StatisticTableColumnKeys,
 } from "../statsTableUtil/statsTableUtil";
 import { TableStatistics } from "../tableStatistics";
+import { EmptySessionsTablePlaceholder } from "./emptySessionsTablePlaceholder";
 
 const statementsPageCx = classNames.bind(statementsPageStyles);
 const sessionsPageCx = classNames.bind(sessionPageStyles);
+
+const sessionStatusFilterOptions = ["Active", "Closed", "Idle"];
 
 export interface OwnProps {
   sessions: SessionInfo[];
@@ -120,14 +119,6 @@ function getSessionUsernameFilterOptions(sessions: SessionInfo[]): string[] {
   const uniqueUsernames = new Set(sessions.map(s => s.session.username));
 
   return Array.from(uniqueUsernames).sort();
-}
-
-function getSessionStatusFilterOptions(sessions: SessionInfo[]): string[] {
-  const uniqueStatuses = new Set(
-    sessions.map(s => getStatusString(s.session.status)),
-  );
-
-  return Array.from(uniqueStatuses).sort();
 }
 
 export class SessionsPage extends React.Component<
@@ -360,7 +351,7 @@ export class SessionsPage extends React.Component<
 
     const appNames = getSessionAppFilterOptions(sessionsData);
     const usernames = getSessionUsernameFilterOptions(sessionsData);
-    const sessionStatuses = getSessionStatusFilterOptions(sessionsData);
+    const sessionStatuses = sessionStatusFilterOptions;
     const columns = makeSessionsColumns(
       "session",
       this.terminateSessionRef,
@@ -427,14 +418,9 @@ export class SessionsPage extends React.Component<
             data={sessionsToDisplay}
             columns={displayColumns}
             renderNoResult={
-              <EmptyTable
-                title="No sessions are currently running"
-                icon={emptyTableResultsIcon}
-                message="Sessions show you which statements and transactions are running for the active session."
-                footer={
-                  <Anchor href={sessionsTable} target="_blank">
-                    Learn more about sessions
-                  </Anchor>
+              <EmptySessionsTablePlaceholder
+                isEmptySearchResults={
+                  activeFilters > 0 && sessionsToDisplay.length === 0
                 }
               />
             }

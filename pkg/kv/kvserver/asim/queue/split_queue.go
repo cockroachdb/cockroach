@@ -101,6 +101,7 @@ func (sq *splitQueue) Tick(ctx context.Context, tick time.Time, s state.State) {
 			Leaseholder: sq.storeID,
 			SplitKey:    splitKey,
 			Wait:        sq.delay(),
+			Author:      sq.storeID,
 		}
 
 		if completeAt, ok := sq.stateChanger.Push(sq.next, &change); ok {

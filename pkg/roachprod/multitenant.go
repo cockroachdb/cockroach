@@ -66,7 +66,7 @@ func StartTenant(
 	saveNodes := hc.Nodes
 	hc.Nodes = hc.Nodes[:1]
 	l.Printf("Creating tenant metadata")
-	if err := hc.RunSQL(ctx, l, []string{
+	if err := hc.ExecSQL(ctx, l, "", []string{
 		`-e`,
 		fmt.Sprintf(createTenantIfNotExistsQuery, startOpts.TenantID),
 	}); err != nil {

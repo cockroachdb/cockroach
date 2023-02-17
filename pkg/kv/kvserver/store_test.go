@@ -32,11 +32,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
@@ -45,10 +49,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/gossiputil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
@@ -173,22 +179,23 @@ func createTestStoreWithoutStart(
 
 	rpcContext := rpc.NewContext(ctx,
 		rpc.ContextOptions{
-			TenantID:  roachpb.SystemTenantID,
-			Config:    &base.Config{Insecure: true},
-			Clock:     cfg.Clock.WallClock(),
-			MaxOffset: cfg.Clock.MaxOffset(),
-			Stopper:   stopper,
-			Settings:  cfg.Settings,
+			TenantID:        roachpb.SystemTenantID,
+			Config:          &base.Config{Insecure: true},
+			Clock:           cfg.Clock.WallClock(),
+			ToleratedOffset: cfg.Clock.ToleratedOffset(),
+			Stopper:         stopper,
+			Settings:        cfg.Settings,
 		})
 	stopper.SetTracer(cfg.AmbientCtx.Tracer)
-	server := rpc.NewServer(rpcContext) // never started
+	server, err := rpc.NewServer(rpcContext) // never started
+	require.NoError(t, err)
 
 	// Some tests inject their own Gossip and StorePool, via
 	// createTestAllocatorWithKnobs, at the time of writing
 	// TestChooseLeaseToTransfer and TestNoLeaseTransferToBehindReplicas. This is
 	// generally considered bad and should eventually be refactored away.
 	if cfg.Gossip == nil {
-		cfg.Gossip = gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
+		cfg.Gossip = gossip.NewTest(1, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
 	}
 	if cfg.StorePool == nil {
 		cfg.StorePool = NewTestStorePool(*cfg)
@@ -258,8 +265,8 @@ func createTestStoreWithoutStart(
 	if opts.bootstrapVersion != (roachpb.Version{}) {
 		cv = clusterversion.ClusterVersion{Version: opts.bootstrapVersion}
 	}
-	require.NoError(t, WriteClusterVersion(ctx, eng, cv))
-	if err := InitEngine(
+	require.NoError(t, kvstorage.WriteClusterVersion(ctx, eng, cv))
+	if err := kvstorage.InitEngine(
 		ctx, eng, storeIdent,
 	); err != nil {
 		t.Fatal(err)
@@ -282,7 +289,7 @@ func createTestStore(
 	ctx context.Context, t testing.TB, opts testStoreOpts, stopper *stop.Stopper,
 ) (*Store, *timeutil.ManualTime) {
 	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
-	cfg := TestStoreConfig(hlc.NewClock(manual, time.Nanosecond) /* maxOffset */)
+	cfg := TestStoreConfig(hlc.NewClockForTesting(manual))
 	store := createTestStoreWithConfig(ctx, t, stopper, opts, &cfg)
 	return store, manual
 }
@@ -417,7 +424,7 @@ func TestIterateIDPrefixKeys(t *testing.T) {
 		return nil
 	}
 
-	if err := IterateIDPrefixKeys(ctx, eng, keys.RangeTombstoneKey, &tombstone, handleTombstone); err != nil {
+	if err := kvstorage.IterateIDPrefixKeys(ctx, eng, keys.RangeTombstoneKey, &tombstone, handleTombstone); err != nil {
 		t.Fatal(err)
 	}
 	placeholder := seenT{
@@ -452,7 +459,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	store := createTestStoreWithConfig(ctx, t, stopper, testStoreOpts{}, &cfg)
 	defer stopper.Stop(ctx)
 
-	if _, err := ReadStoreIdent(ctx, store.Engine()); err != nil {
+	if _, err := kvstorage.ReadStoreIdent(ctx, store.TODOEngine()); err != nil {
 		t.Fatalf("unable to read store ident: %+v", err)
 	}
 
@@ -465,7 +472,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 		memMS := repl.GetMVCCStats()
 		// Stats should agree with a recomputation.
 		now := store.Clock().Now()
-		diskMS, err := rditer.ComputeStatsForRange(repl.Desc(), store.Engine(), now.WallTime)
+		diskMS, err := rditer.ComputeStatsForRange(repl.Desc(), store.TODOEngine(), now.WallTime)
 		require.NoError(t, err)
 		memMS.AgeTo(diskMS.LastUpdateNanos)
 		require.Equal(t, memMS, diskMS)
@@ -485,10 +492,10 @@ func TestInitializeEngineErrors(t *testing.T) {
 	stopper.AddCloser(eng)
 
 	// Bootstrap should fail if engine has no cluster version yet.
-	err := InitEngine(ctx, eng, testIdent)
+	err := kvstorage.InitEngine(ctx, eng, testIdent)
 	require.ErrorContains(t, err, "no cluster version")
 
-	require.NoError(t, WriteClusterVersion(ctx, eng, clusterversion.TestingClusterVersion))
+	require.NoError(t, kvstorage.WriteClusterVersion(ctx, eng, clusterversion.TestingClusterVersion))
 
 	// Put some random garbage into the engine.
 	require.NoError(t, eng.PutUnversioned(roachpb.Key("foo"), []byte("bar")))
@@ -499,10 +506,10 @@ func TestInitializeEngineErrors(t *testing.T) {
 
 	// Can't init as haven't bootstrapped.
 	err = store.Start(ctx, stopper)
-	require.ErrorIs(t, err, &NotBootstrappedError{})
+	require.ErrorIs(t, err, &kvstorage.NotBootstrappedError{})
 
 	// Bootstrap should fail on non-empty engine.
-	err = InitEngine(ctx, eng, testIdent)
+	err = kvstorage.InitEngine(ctx, eng, testIdent)
 	require.ErrorContains(t, err, "cannot be bootstrapped")
 
 	// Bootstrap should fail on MVCC range key in engine.
@@ -512,7 +519,7 @@ func TestInitializeEngineErrors(t *testing.T) {
 		Timestamp: hlc.MinTimestamp,
 	}, storage.MVCCValue{}))
 
-	err = InitEngine(ctx, eng, testIdent)
+	err = kvstorage.InitEngine(ctx, eng, testIdent)
 	require.ErrorContains(t, err, "found mvcc range key")
 }
 
@@ -536,11 +543,11 @@ func createReplica(s *Store, rangeID roachpb.RangeID, start, end roachpb.RKey) *
 	}
 	const replicaID = 1
 	if err := stateloader.WriteInitialRangeState(
-		ctx, s.engine, *desc, replicaID, clusterversion.TestingClusterVersion.Version,
+		ctx, s.TODOEngine(), *desc, replicaID, clusterversion.TestingClusterVersion.Version,
 	); err != nil {
 		panic(err)
 	}
-	r, err := newReplica(ctx, desc, s, replicaID)
+	r, err := loadInitializedReplicaForTesting(ctx, s, desc, replicaID)
 	if err != nil {
 		panic(err)
 	}
@@ -659,9 +666,9 @@ func TestReplicasByKey(t *testing.T) {
 		expectedErrorOnAdd string
 	}{
 		// [a,c) is contained in [KeyMin, e)
-		{nil, 2, roachpb.RKey("a"), roachpb.RKey("c"), ".*has overlapping range"},
+		{nil, 2, roachpb.RKey("a"), roachpb.RKey("c"), "overlaps with"},
 		// [c,f) partially overlaps with [KeyMin, e)
-		{nil, 3, roachpb.RKey("c"), roachpb.RKey("f"), ".*has overlapping range"},
+		{nil, 3, roachpb.RKey("c"), roachpb.RKey("f"), "overlaps with"},
 		// [e, f) is disjoint from [KeyMin, e)
 		{nil, 4, roachpb.RKey("e"), roachpb.RKey("f"), ""},
 	}
@@ -798,7 +805,7 @@ func TestStoreReplicaVisitor(t *testing.T) {
 	}
 }
 
-func TestMaybeMarkReplicaInitialized(t *testing.T) {
+func TestMarkReplicaInitialized(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
@@ -829,33 +836,28 @@ func TestMaybeMarkReplicaInitialized(t *testing.T) {
 	}
 
 	newRangeID := roachpb.RangeID(3)
-	desc := &roachpb.RangeDescriptor{
-		RangeID: newRangeID,
-	}
-
 	const replicaID = 1
 	require.NoError(t,
-		logstore.NewStateLoader(desc.RangeID).SetRaftReplicaID(ctx, store.engine, replicaID))
-	r, err := newReplica(ctx, desc, store, replicaID)
-	if err != nil {
-		t.Fatal(err)
-	}
+		logstore.NewStateLoader(newRangeID).SetRaftReplicaID(ctx, store.TODOEngine(), replicaID))
+
+	r := newUninitializedReplica(store, newRangeID, replicaID)
+	require.NoError(t, err)
 
 	store.mu.Lock()
 	defer store.mu.Unlock()
 
-	expectedResult := "attempted to process uninitialized range.*"
+	expectedResult := "attempted to process uninitialized replica"
 	ctx = r.AnnotateCtx(ctx)
 	func() {
 		r.mu.Lock()
 		defer r.mu.Unlock()
-		if err := store.maybeMarkReplicaInitializedLockedReplLocked(ctx, r); !testutils.IsError(err, expectedResult) {
-			t.Errorf("expected maybeMarkReplicaInitializedLocked with uninitialized replica to fail, got %v", err)
+		if err := store.markReplicaInitializedLockedReplLocked(ctx, r); !testutils.IsError(err, expectedResult) {
+			t.Errorf("expected markReplicaInitializedLocked with uninitialized replica to fail, got %v", err)
 		}
 	}()
 
 	// Initialize the range with start and end keys.
-	desc = protoutil.Clone(desc).(*roachpb.RangeDescriptor)
+	desc := protoutil.Clone(r.Desc()).(*roachpb.RangeDescriptor)
 	desc.StartKey = roachpb.RKey("b")
 	desc.EndKey = roachpb.RKey("d")
 	desc.InternalReplicas = []roachpb.ReplicaDescriptor{{
@@ -865,22 +867,24 @@ func TestMaybeMarkReplicaInitialized(t *testing.T) {
 	}}
 	desc.NextReplicaID = 2
 	r.setDescRaftMuLocked(ctx, desc)
+	expectedResult = "not in uninitReplicas"
 	func() {
 		r.mu.Lock()
 		defer r.mu.Unlock()
-		if err := store.maybeMarkReplicaInitializedLockedReplLocked(ctx, r); err != nil {
-			t.Errorf("expected maybeMarkReplicaInitializedLocked on a replica that's not in the uninit map to silently succeed, got %v", err)
+		if err := store.markReplicaInitializedLockedReplLocked(ctx, r); !testutils.IsError(err, expectedResult) {
+			t.Errorf("expected markReplicaInitializedLocked on a replica that's not in the uninit map to fail, got %v", err)
 		}
 	}()
 
 	store.mu.uninitReplicas[newRangeID] = r
+	require.NoError(t, store.addToReplicasByRangeIDLocked(r))
 
-	expectedResult = ".*cannot initialize replica.*"
+	expectedResult = "overlaps with"
 	func() {
 		r.mu.Lock()
 		defer r.mu.Unlock()
-		if err := store.maybeMarkReplicaInitializedLockedReplLocked(ctx, r); !testutils.IsError(err, expectedResult) {
-			t.Errorf("expected maybeMarkReplicaInitializedLocked with overlapping keys to fail, got %v", err)
+		if err := store.markReplicaInitializedLockedReplLocked(ctx, r); !testutils.IsError(err, expectedResult) {
+			t.Errorf("expected markReplicaInitializedLocked with overlapping keys to fail, got %v", err)
 		}
 	}()
 }
@@ -957,7 +961,7 @@ func TestStoreObservedTimestamp(t *testing.T) {
 	for _, test := range testCases {
 		func() {
 			manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
-			cfg := TestStoreConfig(hlc.NewClock(manual, time.Nanosecond) /* maxOffset */)
+			cfg := TestStoreConfig(hlc.NewClockForTesting(manual))
 			cfg.TestingKnobs.EvalKnobs.TestingEvalFilter =
 				func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 					if bytes.Equal(filterArgs.Req.Header().Key, badKey) {
@@ -1168,7 +1172,9 @@ func TestStoreSendWithClockOffset(t *testing.T) {
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	store, _ := createTestStore(ctx, t, testStoreOpts{createSystemRanges: true}, stopper)
+	cfg := TestStoreConfig(hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 123)),
+		time.Millisecond /* maxOffset */, time.Millisecond /* toleratedOffset */))
+	store := createTestStoreWithConfig(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 	args := getArgs([]byte("a"))
 	// Set args timestamp to exceed max offset.
 	now := hlc.ClockTimestamp(store.cfg.Clock.Now().Add(store.cfg.Clock.MaxOffset().Nanoseconds()+1, 0))
@@ -1316,7 +1322,8 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
-	cfg := TestStoreConfig(hlc.NewClock(manual, 1000*time.Nanosecond /* maxOffset */))
+	cfg := TestStoreConfig(hlc.NewClock(
+		manual, 1000*time.Nanosecond /* maxOffset */, 1000*time.Nanosecond /* toleratedOffset */))
 	cfg.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 			pr, ok := filterArgs.Req.(*roachpb.PushTxnRequest)
@@ -1369,7 +1376,7 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 			txnKey := keys.TransactionKey(pushee.Key, pushee.ID)
 			var txn roachpb.Transaction
 			if ok, err := storage.MVCCGetProto(
-				ctx, store.Engine(), txnKey, hlc.Timestamp{}, &txn, storage.MVCCGetOptions{},
+				ctx, store.TODOEngine(), txnKey, hlc.Timestamp{}, &txn, storage.MVCCGetOptions{},
 			); err != nil {
 				t.Fatal(err)
 			} else if ok {
@@ -1680,7 +1687,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	txnKey := keys.TransactionKey(pushee.Key, pushee.ID)
 	var txn roachpb.Transaction
 	if ok, err := storage.MVCCGetProto(
-		ctx, store.Engine(), txnKey, hlc.Timestamp{}, &txn, storage.MVCCGetOptions{},
+		ctx, store.TODOEngine(), txnKey, hlc.Timestamp{}, &txn, storage.MVCCGetOptions{},
 	); !ok || err != nil {
 		t.Fatalf("not found or err: %+v", err)
 	}
@@ -1934,7 +1941,7 @@ func TestStoreScanResumeTSCache(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	manualClock := timeutil.NewManualTime(timeutil.Unix(0, 123))
-	cfg := TestStoreConfig(hlc.NewClock(manualClock, time.Nanosecond))
+	cfg := TestStoreConfig(hlc.NewClockForTesting(manualClock))
 	cfg.Settings = cluster.MakeTestingClusterSettings()
 	allowDroppingLatchesBeforeEval.Override(ctx, &cfg.Settings.SV, false)
 	store := createTestStoreWithConfig(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
@@ -2459,7 +2466,7 @@ func TestStoreScanMultipleIntents(t *testing.T) {
 
 	var resolveCount int32
 	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
-	cfg := TestStoreConfig(hlc.NewClock(manual, time.Nanosecond) /* maxOffset */)
+	cfg := TestStoreConfig(hlc.NewClockForTesting(manual))
 	cfg.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 			if _, ok := filterArgs.Req.(*roachpb.ResolveIntentRequest); ok {
@@ -2668,7 +2675,7 @@ func TestStoreGCThreshold(t *testing.T) {
 		}
 		repl.mu.Lock()
 		gcThreshold := *repl.mu.state.GCThreshold
-		pgcThreshold, err := repl.mu.stateLoader.LoadGCThreshold(context.Background(), store.Engine())
+		pgcThreshold, err := repl.mu.stateLoader.LoadGCThreshold(context.Background(), store.TODOEngine())
 		repl.mu.Unlock()
 		if err != nil {
 			t.Fatal(err)
@@ -2888,37 +2895,18 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 	tc.Start(ctx, t, stopper)
 	s := tc.store
 
-	// Clobber the existing range and recreated it with an uninitialized
-	// descriptor so we can test nonoverlapping placeholders.
+	// Remove the existing replica so we can insert a placeholder.
 	repl1, err := s.GetReplica(1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := s.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, RemoveOptions{
+	desc := repl1.Desc()
+	require.NoError(t, err)
+	require.NoError(t, s.RemoveReplica(ctx, repl1, desc.NextReplicaID, RemoveOptions{
 		DestroyData: true,
-	}); err != nil {
-		t.Fatal(err)
-	}
+	}))
 
-	uninitDesc := roachpb.RangeDescriptor{RangeID: repl1.Desc().RangeID}
-	if err := stateloader.WriteInitialRangeState(
-		ctx, s.Engine(), uninitDesc, 2, roachpb.Version{},
-	); err != nil {
-		t.Fatal(err)
-	}
-	uninitRepl1, err := newReplica(ctx, &uninitDesc, s, 2)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := s.addReplicaToRangeMapLocked(uninitRepl1); err != nil {
-		t.Fatal(err)
-	}
-
-	// Wrap the snapshot in a minimal header. The request will be dropped
-	// because the Raft log index and term are less than the hard state written
-	// above.
+	// Wrap the snapshot in a minimal header. The request will be dropped because
+	// replica 2 is not in the ConfState.
 	req := &kvserverpb.SnapshotRequest_Header{
-		State: kvserverpb.ReplicaState{Desc: repl1.Desc()},
+		State: kvserverpb.ReplicaState{Desc: desc},
 		RaftMessageRequest: kvserverpb.RaftMessageRequest{
 			RangeID: 1,
 			ToReplica: roachpb.ReplicaDescriptor{
@@ -2944,7 +2932,7 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 		},
 	}
 
-	placeholder := &ReplicaPlaceholder{rangeDesc: *repl1.Desc()}
+	placeholder := &ReplicaPlaceholder{rangeDesc: *desc}
 
 	{
 		s.mu.Lock()
@@ -2953,15 +2941,13 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	if err := s.processRaftSnapshotRequest(ctx, req,
+	require.NoError(t, s.processRaftSnapshotRequest(ctx, req,
 		IncomingSnapshot{
 			SnapUUID:    uuid.MakeV4(),
-			Desc:        repl1.Desc(),
+			Desc:        desc,
 			placeholder: placeholder,
 		},
-	); err != nil {
-		t.Fatal(err)
-	}
+	).GoError())
 
 	testutils.SucceedsSoon(t, func() error {
 		s.mu.Lock()
@@ -3010,7 +2996,7 @@ func (sp *fakeStorePool) Throttle(
 }
 
 // TestSendSnapshotThrottling tests the store pool throttling behavior of
-// store.sendSnapshot, ensuring that it properly updates the StorePool on
+// store.sendSnapshotUsingDelegate, ensuring that it properly updates the StorePool on
 // various exceptional conditions and new capacity estimates.
 func TestSendSnapshotThrottling(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -3081,60 +3067,82 @@ func TestSendSnapshotConcurrency(t *testing.T) {
 	s := tc.store
 
 	// Checking this now makes sure that if the defaults change this test will also.
-	require.Equal(t, 2, s.snapshotSendQueue.Len())
-	cleanup1, err := s.reserveSendSnapshot(ctx, &kvserverpb.DelegateSnapshotRequest{
+	require.Equal(t, 2, s.snapshotSendQueue.AvailableLen())
+	require.Equal(t, 0, s.snapshotSendQueue.QueueLen())
+	cleanup1, err := s.reserveSendSnapshot(ctx, &kvserverpb.DelegateSendSnapshotRequest{
 		SenderQueueName:     kvserverpb.SnapshotRequest_REPLICATE_QUEUE,
 		SenderQueuePriority: 1,
 	}, 1)
-	require.Nil(t, err)
-	require.Equal(t, 1, s.snapshotSendQueue.Len())
-	cleanup2, err := s.reserveSendSnapshot(ctx, &kvserverpb.DelegateSnapshotRequest{
+	require.NoError(t, err)
+	cleanup2, err := s.reserveSendSnapshot(ctx, &kvserverpb.DelegateSendSnapshotRequest{
 		SenderQueueName:     kvserverpb.SnapshotRequest_REPLICATE_QUEUE,
 		SenderQueuePriority: 1,
 	}, 1)
-	require.Nil(t, err)
-	require.Equal(t, 0, s.snapshotSendQueue.Len())
+	require.NoError(t, err)
+	require.Equal(t, 0, s.snapshotSendQueue.AvailableLen())
+	require.Equal(t, 1, s.snapshotSendQueue.QueueLen())
+
 	// At this point both the first two tasks will be holding reservations and
-	// waiting for cleanup, a third task will block.
+	// waiting for cleanup, a third task will block or fail First send one with
+	// the queue length set to 0 - this will fail since the first tasks are still
+	// running.
+	_, err = s.reserveSendSnapshot(ctx, &kvserverpb.DelegateSendSnapshotRequest{
+		SenderQueueName:     kvserverpb.SnapshotRequest_REPLICATE_QUEUE,
+		SenderQueuePriority: 1,
+		QueueOnDelegateLen:  0,
+	}, 1)
+	require.Error(t, err)
+	require.Equal(t, 0, s.snapshotSendQueue.AvailableLen())
+	require.Equal(t, 1, s.snapshotSendQueue.QueueLen())
+
+	// Now add a task that will wait indefinitely for another task to finish.
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() {
 		before := timeutil.Now()
-		cleanup3, err := s.reserveSendSnapshot(ctx, &kvserverpb.DelegateSnapshotRequest{
+		cleanup3, err := s.reserveSendSnapshot(ctx, &kvserverpb.DelegateSendSnapshotRequest{
 			SenderQueueName:     kvserverpb.SnapshotRequest_REPLICATE_QUEUE,
 			SenderQueuePriority: 1,
+			QueueOnDelegateLen:  -1,
 		}, 1)
 		after := timeutil.Now()
+		require.NoError(t, err)
+		require.GreaterOrEqual(t, after.Sub(before), 10*time.Millisecond)
 		cleanup3()
 		wg.Done()
-		require.Nil(t, err)
-		require.GreaterOrEqual(t, after.Sub(before), 10*time.Millisecond)
 	}()
 
-	// This task will not block for more than a few MS, but we want to wait for
-	// it to complete to make sure it frees the permit.
+	// Now add one that will queue up and wait for another task to finish. This
+	// task will not block for more than 8ms, but we want to wait for it to
+	// complete to make sure it frees the permit.
 	go func() {
-		deadlineCtx, cancel := context.WithTimeout(ctx, 1*time.Millisecond)
+		deadlineCtx, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
 		defer cancel()
 
 		// This will time out since the deadline is set artificially low. Make sure
 		// the permit is released.
-		_, err := s.reserveSendSnapshot(deadlineCtx, &kvserverpb.DelegateSnapshotRequest{
+		_, err := s.reserveSendSnapshot(deadlineCtx, &kvserverpb.DelegateSendSnapshotRequest{
 			SenderQueueName:     kvserverpb.SnapshotRequest_REPLICATE_QUEUE,
 			SenderQueuePriority: 1,
+			QueueOnDelegateLen:  -1,
 		}, 1)
+		require.Error(t, err)
 		wg.Done()
-		require.NotNil(t, err)
 	}()
 
 	// Wait a little time before calling signaling the first two as complete.
 	time.Sleep(100 * time.Millisecond)
+	require.Equal(t, 0, s.snapshotSendQueue.AvailableLen())
+	// One remaining task are queued at this point.
+	require.Equal(t, 2, s.snapshotSendQueue.QueueLen())
+
 	cleanup1()
 	cleanup2()
 
 	// Wait until all cleanup run before checking the number of permits.
 	wg.Wait()
-	require.Equal(t, 2, s.snapshotSendQueue.Len())
+	require.Equal(t, 2, s.snapshotSendQueue.AvailableLen())
+	require.Equal(t, 0, s.snapshotSendQueue.QueueLen())
 }
 
 func TestReserveSnapshotThrottling(t *testing.T) {
@@ -3398,6 +3406,560 @@ func TestSnapshotRateLimit(t *testing.T) {
 	}
 }
 
+type mockSpanConfigReader struct {
+	real      spanconfig.StoreReader
+	overrides map[string]roachpb.SpanConfig
+}
+
+func (m *mockSpanConfigReader) NeedsSplit(ctx context.Context, start, end roachpb.RKey) bool {
+	panic("unimplemented")
+}
+
+func (m *mockSpanConfigReader) ComputeSplitKey(
+	ctx context.Context, start, end roachpb.RKey,
+) roachpb.RKey {
+	panic("unimplemented")
+}
+
+func (m *mockSpanConfigReader) GetSpanConfigForKey(
+	ctx context.Context, key roachpb.RKey,
+) (roachpb.SpanConfig, error) {
+	if conf, ok := m.overrides[string(key)]; ok {
+		return conf, nil
+	}
+	return m.GetSpanConfigForKey(ctx, key)
+}
+
+var _ spanconfig.StoreReader = &mockSpanConfigReader{}
+
+// TestAllocatorCheckRangeUnconfigured tests evaluating the allocation decisions
+// for a range with a single replica using the default system configuration and
+// no other available allocation targets.
+func TestAllocatorCheckRangeUnconfigured(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunTrueAndFalse(t, "confAvailable", func(t *testing.T, confAvailable bool) {
+		ctx := context.Background()
+		stopper := stop.NewStopper()
+		defer stopper.Stop(ctx)
+
+		tc := testContext{}
+		tc.manualClock = timeutil.NewManualTime(timeutil.Unix(0, 123))
+		cfg := TestStoreConfig(hlc.NewClockForTesting(tc.manualClock))
+		if !confAvailable {
+			cfg.TestingKnobs.MakeSystemConfigSpanUnavailableToQueues = true
+		}
+
+		tc.StartWithStoreConfig(ctx, t, stopper, cfg)
+		s := tc.store
+
+		action, _, _, err := s.AllocatorCheckRange(ctx, tc.repl.Desc(),
+			false /* collectTraces */, nil, /* overrideStorePool */
+		)
+		require.Error(t, err)
+
+		if confAvailable {
+			// Expect allocator error if range has nowhere to upreplicate.
+			var allocatorError allocator.AllocationError
+			require.ErrorAs(t, err, &allocatorError)
+			require.Equal(t, allocatorimpl.AllocatorAddVoter, action)
+		} else {
+			// Expect error looking up spanConfig if we can't use the system config span,
+			// as the spanconfig.KVSubscriber infrastructure is not initialized.
+			require.ErrorIs(t, err, errSysCfgUnavailable)
+			require.Equal(t, allocatorimpl.AllocatorNoop, action)
+		}
+	})
+}
+
+// TestAllocatorCheckRange runs a number of tests to check the allocator's
+// range repair action and target based on a number of different configured
+// stores.
+func TestAllocatorCheckRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	defaultSystemSpanConfig := zonepb.DefaultSystemZoneConfigRef().AsSpanConfig()
+
+	for _, tc := range []struct {
+		name               string
+		stores             []*roachpb.StoreDescriptor
+		existingReplicas   []roachpb.ReplicaDescriptor
+		spanConfig         *roachpb.SpanConfig
+		livenessOverrides  map[roachpb.NodeID]livenesspb.NodeLivenessStatus
+		expectedAction     allocatorimpl.AllocatorAction
+		expectValidTarget  bool
+		expectedTarget     roachpb.ReplicationTarget
+		expectedLogMessage string
+		expectErr          bool
+		expectAllocatorErr bool
+		expectedErr        error
+		expectedErrStr     string
+	}{
+		{
+			name:   "overreplicated",
+			stores: multiRegionStores, // Nine stores
+			existingReplicas: []roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1, ReplicaID: 1},
+				{NodeID: 2, StoreID: 2, ReplicaID: 2},
+				{NodeID: 3, StoreID: 3, ReplicaID: 3},
+				{NodeID: 4, StoreID: 4, ReplicaID: 4},
+			},
+			livenessOverrides: nil,
+			expectedAction:    allocatorimpl.AllocatorRemoveVoter,
+			expectErr:         false,
+		},
+		{
+			name:   "overreplicated but store dead",
+			stores: multiRegionStores, // Nine stores
+			existingReplicas: []roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1, ReplicaID: 1},
+				{NodeID: 2, StoreID: 2, ReplicaID: 2},
+				{NodeID: 3, StoreID: 3, ReplicaID: 3},
+				{NodeID: 4, StoreID: 4, ReplicaID: 4},
+			},
+			livenessOverrides: map[roachpb.NodeID]livenesspb.NodeLivenessStatus{
+				3: livenesspb.NodeLivenessStatus_DEAD,
+			},
+			expectedAction: allocatorimpl.AllocatorRemoveDeadVoter,
+			expectErr:      false,
+		},
+		{
+			name:   "decommissioning but underreplicated",
+			stores: multiRegionStores, // Nine stores
+			existingReplicas: []roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1, ReplicaID: 1},
+				{NodeID: 2, StoreID: 2, ReplicaID: 2},
+			},
+			livenessOverrides: map[roachpb.NodeID]livenesspb.NodeLivenessStatus{
+				2: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+			},
+			expectedAction:    allocatorimpl.AllocatorAddVoter,
+			expectErr:         false,
+			expectValidTarget: true,
+		},
+		{
+			name:   "decommissioning with replacement",
+			stores: multiRegionStores, // Nine stores
+			existingReplicas: []roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1, ReplicaID: 1},
+				{NodeID: 2, StoreID: 2, ReplicaID: 2},
+				{NodeID: 3, StoreID: 3, ReplicaID: 3},
+			},
+			livenessOverrides: map[roachpb.NodeID]livenesspb.NodeLivenessStatus{
+				3: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+			},
+			expectedAction:    allocatorimpl.AllocatorReplaceDecommissioningVoter,
+			expectErr:         false,
+			expectValidTarget: true,
+		},
+		{
+			name:   "decommissioning without valid replacement",
+			stores: threeStores,
+			existingReplicas: []roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1, ReplicaID: 1},
+				{NodeID: 2, StoreID: 2, ReplicaID: 2},
+				{NodeID: 3, StoreID: 3, ReplicaID: 3},
+			},
+			livenessOverrides: map[roachpb.NodeID]livenesspb.NodeLivenessStatus{
+				3: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+			},
+			expectedAction:     allocatorimpl.AllocatorReplaceDecommissioningVoter,
+			expectAllocatorErr: true,
+			expectedErrStr:     "likely not enough nodes in cluster",
+		},
+		{
+			name:   "five to four nodes at RF five",
+			stores: noLocalityStores, // Five stores
+			existingReplicas: []roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1, ReplicaID: 1},
+				{NodeID: 2, StoreID: 2, ReplicaID: 2},
+				{NodeID: 3, StoreID: 3, ReplicaID: 3},
+				{NodeID: 4, StoreID: 4, ReplicaID: 4},
+				{NodeID: 5, StoreID: 5, ReplicaID: 5},
+			},
+			spanConfig: &defaultSystemSpanConfig,
+			livenessOverrides: map[roachpb.NodeID]livenesspb.NodeLivenessStatus{
+				3: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+			},
+			expectedAction:    allocatorimpl.AllocatorRemoveDecommissioningVoter,
+			expectErr:         false,
+			expectValidTarget: false,
+		},
+		{
+			name:   "five to two nodes at RF five replaces first",
+			stores: noLocalityStores, // Five stores
+			existingReplicas: []roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1, ReplicaID: 1},
+				{NodeID: 2, StoreID: 2, ReplicaID: 2},
+				{NodeID: 3, StoreID: 3, ReplicaID: 3},
+				{NodeID: 4, StoreID: 4, ReplicaID: 4},
+				{NodeID: 5, StoreID: 5, ReplicaID: 5},
+			},
+			spanConfig: &defaultSystemSpanConfig,
+			livenessOverrides: map[roachpb.NodeID]livenesspb.NodeLivenessStatus{
+				3: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+				4: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+				5: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+			},
+			expectedAction:     allocatorimpl.AllocatorReplaceDecommissioningVoter,
+			expectValidTarget:  false,
+			expectAllocatorErr: true,
+			expectedErrStr:     "likely not enough nodes in cluster",
+		},
+		{
+			name:   "replace first when lowering effective RF",
+			stores: multiRegionStores, // Nine stores
+			existingReplicas: []roachpb.ReplicaDescriptor{
+				// Region "a"
+				{NodeID: 1, StoreID: 1, ReplicaID: 1},
+				{NodeID: 2, StoreID: 2, ReplicaID: 2},
+				// Region "b"
+				{NodeID: 4, StoreID: 4, ReplicaID: 3},
+				{NodeID: 5, StoreID: 5, ReplicaID: 4},
+				// Region "c"
+				{NodeID: 7, StoreID: 7, ReplicaID: 5},
+			},
+			spanConfig: &defaultSystemSpanConfig,
+			livenessOverrides: map[roachpb.NodeID]livenesspb.NodeLivenessStatus{
+				// Downsize to one node per region: 3,6,9.
+				1: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+				2: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+				4: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+				5: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+				7: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+				8: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+			},
+			expectedAction:    allocatorimpl.AllocatorReplaceDecommissioningVoter,
+			expectErr:         false,
+			expectValidTarget: true,
+		},
+		{
+			name:   "replace dead first when lowering effective RF",
+			stores: multiRegionStores, // Nine stores
+			existingReplicas: []roachpb.ReplicaDescriptor{
+				// Region "a"
+				{NodeID: 1, StoreID: 1, ReplicaID: 1},
+				{NodeID: 2, StoreID: 2, ReplicaID: 2},
+				// Region "b"
+				{NodeID: 4, StoreID: 4, ReplicaID: 3},
+				{NodeID: 5, StoreID: 5, ReplicaID: 4},
+				// Region "c"
+				{NodeID: 7, StoreID: 7, ReplicaID: 5},
+			},
+			spanConfig: &defaultSystemSpanConfig,
+			livenessOverrides: map[roachpb.NodeID]livenesspb.NodeLivenessStatus{
+				// Downsize to: 1,4,7,9 but 7 is dead.
+				// Replica on n7 should be replaced first.
+				2: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+				3: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+				5: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+				6: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+				7: livenesspb.NodeLivenessStatus_DEAD,
+				8: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+			},
+			expectedAction:    allocatorimpl.AllocatorReplaceDeadVoter,
+			expectErr:         false,
+			expectValidTarget: true,
+		},
+		{
+			name:   "decommissioning without satisfying partially constrained locality",
+			stores: fourSingleStoreRacks,
+			existingReplicas: []roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1, ReplicaID: 1},
+				{NodeID: 2, StoreID: 2, ReplicaID: 2},
+				{NodeID: 4, StoreID: 4, ReplicaID: 3},
+			},
+			livenessOverrides: map[roachpb.NodeID]livenesspb.NodeLivenessStatus{
+				4: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+			},
+			spanConfig: &roachpb.SpanConfig{
+				NumReplicas: 3,
+				Constraints: []roachpb.ConstraintsConjunction{
+					{
+						NumReplicas: 1,
+						Constraints: []roachpb.Constraint{
+							{
+								Type:  roachpb.Constraint_REQUIRED,
+								Key:   "rack",
+								Value: "4",
+							},
+						},
+					},
+				},
+			},
+			expectedAction:     allocatorimpl.AllocatorReplaceDecommissioningVoter,
+			expectAllocatorErr: true,
+			expectedErrStr:     "replicas must match constraints",
+			expectedLogMessage: "cannot allocate necessary voter on s3",
+		},
+		{
+			name:   "decommissioning without satisfying multiple partial constraints",
+			stores: fourSingleStoreRacks,
+			existingReplicas: []roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1, ReplicaID: 1},
+				{NodeID: 2, StoreID: 2, ReplicaID: 2},
+				{NodeID: 4, StoreID: 4, ReplicaID: 3},
+			},
+			livenessOverrides: map[roachpb.NodeID]livenesspb.NodeLivenessStatus{
+				4: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+			},
+			spanConfig: &roachpb.SpanConfig{
+				NumReplicas: 3,
+				Constraints: []roachpb.ConstraintsConjunction{
+					{
+						NumReplicas: 1,
+						Constraints: []roachpb.Constraint{
+							{
+								Type:  roachpb.Constraint_REQUIRED,
+								Value: "black",
+							},
+						},
+					},
+					{
+						NumReplicas: 1,
+						Constraints: []roachpb.Constraint{
+							{
+								Type:  roachpb.Constraint_REQUIRED,
+								Key:   "rack",
+								Value: "4",
+							},
+						},
+					},
+				},
+			},
+			expectedAction:     allocatorimpl.AllocatorReplaceDecommissioningVoter,
+			expectAllocatorErr: true,
+			expectedErrStr:     "replicas must match constraints",
+			expectedLogMessage: "cannot allocate necessary voter on s3",
+		},
+		{
+			name:   "decommissioning during upreplication with partial constraints",
+			stores: fourSingleStoreRacks,
+			existingReplicas: []roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1, ReplicaID: 1},
+			},
+			livenessOverrides: map[roachpb.NodeID]livenesspb.NodeLivenessStatus{
+				4: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+			},
+			spanConfig: &roachpb.SpanConfig{
+				NumReplicas: 3,
+				Constraints: []roachpb.ConstraintsConjunction{
+					{
+						NumReplicas: 1,
+						Constraints: []roachpb.Constraint{
+							{
+								Type:  roachpb.Constraint_REQUIRED,
+								Key:   "rack",
+								Value: "4",
+							},
+						},
+					},
+				},
+			},
+			expectedAction:    allocatorimpl.AllocatorAddVoter,
+			expectValidTarget: true,
+		},
+		{
+			name:   "decommissioning with replacement satisfying locality",
+			stores: multiRegionStores,
+			existingReplicas: []roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1, ReplicaID: 1},
+				{NodeID: 4, StoreID: 4, ReplicaID: 2},
+				{NodeID: 7, StoreID: 7, ReplicaID: 3},
+			},
+			livenessOverrides: map[roachpb.NodeID]livenesspb.NodeLivenessStatus{
+				1: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+				3: livenesspb.NodeLivenessStatus_DEAD,
+			},
+			spanConfig: &roachpb.SpanConfig{
+				NumReplicas: 3,
+				Constraints: []roachpb.ConstraintsConjunction{
+					{
+						NumReplicas: 1,
+						Constraints: []roachpb.Constraint{
+							{
+								Type:  roachpb.Constraint_REQUIRED,
+								Key:   "region",
+								Value: "a",
+							},
+						},
+					},
+					{
+						NumReplicas: 1,
+						Constraints: []roachpb.Constraint{
+							{
+								Type:  roachpb.Constraint_REQUIRED,
+								Key:   "region",
+								Value: "b",
+							},
+						},
+					},
+				},
+			},
+			expectedAction:    allocatorimpl.AllocatorReplaceDecommissioningVoter,
+			expectValidTarget: true,
+			expectedTarget:    roachpb.ReplicationTarget{NodeID: 2, StoreID: 2},
+			expectErr:         false,
+		},
+		{
+			name:   "decommissioning without satisfying fully constrained locality",
+			stores: fourSingleStoreRacks,
+			existingReplicas: []roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1, ReplicaID: 1},
+				{NodeID: 2, StoreID: 2, ReplicaID: 2},
+				{NodeID: 4, StoreID: 4, ReplicaID: 3},
+			},
+			livenessOverrides: map[roachpb.NodeID]livenesspb.NodeLivenessStatus{
+				4: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+			},
+			spanConfig: &roachpb.SpanConfig{
+				NumReplicas: 3,
+				Constraints: []roachpb.ConstraintsConjunction{
+					{
+						NumReplicas: 1,
+						Constraints: []roachpb.Constraint{
+							{
+								Type:  roachpb.Constraint_REQUIRED,
+								Key:   "rack",
+								Value: "1",
+							},
+						},
+					},
+					{
+						NumReplicas: 1,
+						Constraints: []roachpb.Constraint{
+							{
+								Type:  roachpb.Constraint_REQUIRED,
+								Key:   "rack",
+								Value: "2",
+							},
+						},
+					},
+					{
+						NumReplicas: 1,
+						Constraints: []roachpb.Constraint{
+							{
+								Type:  roachpb.Constraint_REQUIRED,
+								Key:   "rack",
+								Value: "4",
+							},
+						},
+					},
+				},
+			},
+			expectedAction:     allocatorimpl.AllocatorReplaceDecommissioningVoter,
+			expectAllocatorErr: true,
+			expectedErrStr:     "replicas must match constraints",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// Setup store pool based on store descriptors and configure test store.
+			nodesSeen := make(map[roachpb.NodeID]struct{})
+			for _, storeDesc := range tc.stores {
+				nodesSeen[storeDesc.Node.NodeID] = struct{}{}
+			}
+			numNodes := len(nodesSeen)
+
+			// Create a test store simulating n1s1, where we have other nodes/stores as
+			// determined by the test configuration. As we do not start the test store,
+			// queues will not be running.
+			stopper, g, sp, _, manual := allocatorimpl.CreateTestAllocator(ctx, numNodes, false /* deterministic */)
+			defer stopper.Stop(context.Background())
+			gossiputil.NewStoreGossiper(g).GossipStores(tc.stores, t)
+
+			clock := hlc.NewClockForTesting(manual)
+			cfg := TestStoreConfig(clock)
+			cfg.Gossip = g
+			cfg.StorePool = sp
+			if tc.spanConfig != nil {
+				mockSr := &mockSpanConfigReader{
+					real: cfg.SystemConfigProvider.GetSystemConfig(),
+					overrides: map[string]roachpb.SpanConfig{
+						"a": *tc.spanConfig,
+					},
+				}
+
+				cfg.TestingKnobs.ConfReaderInterceptor = func() spanconfig.StoreReader {
+					return mockSr
+				}
+			}
+
+			s := createTestStoreWithoutStart(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
+
+			desc := &roachpb.RangeDescriptor{
+				RangeID:          789,
+				StartKey:         roachpb.RKey("a"),
+				EndKey:           roachpb.RKey("b"),
+				InternalReplicas: tc.existingReplicas,
+			}
+
+			var storePoolOverride storepool.AllocatorStorePool
+			if len(tc.livenessOverrides) > 0 {
+				livenessOverride := storepool.OverrideNodeLivenessFunc(tc.livenessOverrides, sp.NodeLivenessFn)
+				nodeCountOverride := func() int {
+					numDecomOverrides := 0
+					for _, livenessStatus := range tc.livenessOverrides {
+						if livenessStatus == livenesspb.NodeLivenessStatus_DECOMMISSIONING ||
+							livenessStatus == livenesspb.NodeLivenessStatus_DECOMMISSIONED {
+							numDecomOverrides++
+						}
+					}
+					return numNodes - numDecomOverrides
+				}
+				storePoolOverride = storepool.NewOverrideStorePool(sp, livenessOverride, nodeCountOverride)
+			}
+
+			// Execute actual allocator range repair check.
+			action, target, recording, err := s.AllocatorCheckRange(ctx, desc,
+				true /* collectTraces */, storePoolOverride,
+			)
+
+			require.Equalf(t, tc.expectedAction, action,
+				"expected action \"%s\", got action \"%s\"", tc.expectedAction, action,
+			)
+
+			// Validate expectations from test case.
+			if tc.expectErr || tc.expectAllocatorErr {
+				require.Error(t, err)
+
+				if tc.expectedErr != nil {
+					require.ErrorIs(t, err, tc.expectedErr)
+				}
+				if tc.expectAllocatorErr {
+					var allocatorError allocator.AllocationError
+					require.ErrorAs(t, err, &allocatorError)
+				}
+				if tc.expectedErrStr != "" {
+					require.ErrorContains(t, err, tc.expectedErrStr)
+				}
+			} else {
+				require.NoError(t, err)
+			}
+
+			if tc.expectValidTarget {
+				require.Falsef(t, roachpb.Empty(target), "expected valid target")
+			}
+
+			if !roachpb.Empty(tc.expectedTarget) {
+				require.Equalf(t, tc.expectedTarget, target, "expected target %s, got %s",
+					tc.expectedTarget, target,
+				)
+			}
+
+			if tc.expectedLogMessage != "" {
+				_, ok := recording.FindLogMessage(tc.expectedLogMessage)
+				require.Truef(t, ok, "expected to find \"%s\" in trace:\n%s", tc.expectedLogMessage, recording)
+			}
+		})
+	}
+}
+
 // TestManuallyEnqueueUninitializedReplica makes sure that uninitialized
 // replicas cannot be enqueued.
 func TestManuallyEnqueueUninitializedReplica(t *testing.T) {
@@ -3442,10 +4004,9 @@ func TestStoreGetOrCreateReplicaWritesRaftReplicaID(t *testing.T) {
 		})
 	require.NoError(t, err)
 	require.True(t, created)
-	replicaID, found, err := repl.mu.stateLoader.LoadRaftReplicaID(ctx, tc.store.Engine())
+	replicaID, err := repl.mu.stateLoader.LoadRaftReplicaID(ctx, tc.store.TODOEngine())
 	require.NoError(t, err)
-	require.True(t, found)
-	require.Equal(t, roachpb.RaftReplicaID{ReplicaID: 7}, replicaID)
+	require.Equal(t, &roachpb.RaftReplicaID{ReplicaID: 7}, replicaID)
 }
 
 func BenchmarkStoreGetReplica(b *testing.B) {

@@ -236,16 +236,20 @@ type HashTable struct {
 	// currently being probed.
 	Keys []coldata.Vec
 
-	// Same and Visited are only used when the HashTable contains non-distinct
-	// keys (in HashTableFullBuildMode mode).
-	//
 	// Same is a densely-packed list that stores the keyID of the next key in
 	// the hash table that has the same value as the current key. The HeadID of
 	// the key is the first key of that value found in the next linked list.
 	// This field will be lazily populated by the prober.
+	//
+	// Same is only used when the HashTable contains non-distinct keys (in
+	// HashTableFullBuildMode mode) and is probed via HashTableDefaultProbeMode
+	// mode.
 	Same []keyID
 	// Visited represents whether each of the corresponding keys have been
 	// touched by the prober.
+	//
+	// Visited is only used by the hash joiner when the HashTable contains
+	// non-distinct keys or when performing set-operation joins.
 	Visited []bool
 
 	// Vals stores columns of the build source that are specified in colsToStore

@@ -280,9 +280,7 @@ func GC(
 				res.Replicated.State = &kvserverpb.ReplicaState{
 					GCHint: hint,
 				}
-				// If we got here, that means hint is already not empty and is enabled by
-				// version gate.
-				if _, err := sl.SetGCHint(ctx, readWriter, cArgs.Stats, hint, true); err != nil {
+				if _, err := sl.SetGCHint(ctx, readWriter, cArgs.Stats, hint); err != nil {
 					return result.Result{}, err
 				}
 			}

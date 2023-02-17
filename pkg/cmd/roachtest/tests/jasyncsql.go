@@ -82,18 +82,11 @@ func registerJasyncSQL(r registry.Registry) {
 		}
 		t.Status("building jasyncsql (without tests)")
 
-		blocklistName, expectedFailures, ignorelistName, ignorelist := jasyncsqlBlocklists.getLists(version)
-		if expectedFailures == nil {
-			t.Fatalf("No jasyncsql blocklist defined for cockroach version %s", version)
-		}
-		status := fmt.Sprintf("running cockraoch version %s, using blocklist %s", version, blocklistName)
-		if ignorelist != nil {
-			status = fmt.Sprintf(
-				"Running cockroach %s, using blocklist %s, using ignorelist %s",
-				version,
-				blocklistName,
-				ignorelistName)
-		}
+		status := fmt.Sprintf(
+			"Running cockroach %s, using blocklist %s, using ignorelist %s",
+			version,
+			"jasyncSqlBlocklist",
+			"jasyncIgnorelist")
 		t.L().Printf("%s", status)
 
 		t.Status("running jasyncsql test suite")
@@ -143,12 +136,12 @@ func registerJasyncSQL(r registry.Registry) {
 
 		parseAndSummarizeJavaORMTestsResults(
 			ctx, t, c, node, "jasyncsql", []byte(result.Stdout),
-			blocklistName, expectedFailures, ignorelist, version, supportedJasyncCommit)
+			"jasyncSqlBlocklist", jasyncSqlBlocklist, jasyncsqlIgnoreList, version, supportedJasyncCommit)
 	}
 
 	r.Add(registry.TestSpec{
 		Name:    "jasync",
-		Owner:   registry.OwnerSQLExperience,
+		Owner:   registry.OwnerSQLSessions,
 		Cluster: r.MakeClusterSpec(1),
 		Tags:    []string{`default`, `orm`},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

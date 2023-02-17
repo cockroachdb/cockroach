@@ -142,3 +142,13 @@
   margin-top: 20px;
 }
 
+.bottom-space {
+  margin-bottom: 40px;
+}
+
+.table-scroll {
+  width: calc(100% - -23px);
+  overflow-x: scroll;
+  padding-left: 0;
+}
+

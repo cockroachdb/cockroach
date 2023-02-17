@@ -161,20 +161,17 @@ message ReplicaIdent {
 // A range is described using an inclusive start key, a non-inclusive end key,
 // and a list of replicas where the range is stored.
 //
-// NOTE: Care must be taken when adding or removing fields from this proto
-// because we have code relies on the descriptor comparing Equal() after
-// round-tripping through a previous/next version node (i.e. in mixed-version
-// clusters). Note that we don't need to proto encoding to be stable since, when
-// doing CPuts we use the raw bytes we've read from the DB as the expected value
-// (instead of re-marshaling the proto), but unfortunately we also need the
-// Equal() method to work. Also note that we configure our protos to not
-// maintain unrecognized fields.
+// NOTE: Care must be taken when making changes to this proto because we have
+// code that relies on the descriptor comparing Equal() after round-tripping
+// through a previous/next version node (i.e. in mixed-version clusters). Note
+// that we don't need the proto encoding to be stable since, when doing CPuts we
+// use the raw bytes we've read from the DB as the expected value (instead of
+// re-marshaling the proto), but unfortunately we also need the Equal() method
+// to work. Also note that we configure our protos to not maintain unrecognized
+// fields.
 message RangeDescriptor {
   option (gogoproto.goproto_stringer) = false;
-  // We implement the Equal method by hand so that it can ignore deprecated
-  // fields. This can be reverted in 21.1 once the "previous version" no longer
-  // populates deprecated_generation_comparable.
-  option (gogoproto.equal) = false;
+  option (gogoproto.equal) = true;
   option (gogoproto.populate) = true;
 
   optional int64 range_id = 1 [(gogoproto.nullable) = false,
@@ -326,6 +323,10 @@ message StoreCapacity {
   // instances where overlapping node-binary versions within a cluster result
   // in this this field missing.
   optional int64 l0_sublevels = 12 [(gogoproto.nullable) = false];
+  // cpu_per_second tracks the average store cpu use (ns) per second.
+  // This is the sum of all the replica's cpu time on this store, which is
+  // tracked in replica stats.
+  optional double cpu_per_second = 14 [(gogoproto.nullable) = false, (gogoproto.customname) = "CPUPerSecond"];
   optional cockroach.util.admission.admissionpb.IOThreshold io_threshold = 13 [(gogoproto.nullable) = false, (gogoproto.customname) = "IOThreshold" ];
   // bytes_per_replica and writes_per_replica contain percentiles for the
   // number of bytes and writes-per-second to each replica in the store.

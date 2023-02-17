@@ -32,10 +32,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuptestutils"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -93,7 +96,16 @@ func backupRestoreTestSetupWithParams(
 		}
 		params.ServerArgs.Knobs.Store.(*kvserver.StoreTestingKnobs).SmallEngineBlocks = true
 	}
+	params.ServerArgs.Knobs.TenantCapabilitiesTestingKnobs = &tenantcapabilities.TestingKnobs{
+		// TODO(arul): This can be removed once
+		// https://github.com/cockroachdb/cockroach/issues/96736  is fixed.
+		AuthorizerSkipAdminSplitCapabilityChecks: true,
+	}
 
+	params.ServerArgs.Knobs.KeyVisualizer = &keyvisualizer.TestingKnobs{
+		SkipJobBootstrap:        true,
+		SkipZoneConfigBootstrap: true,
+	}
 	tc = testcluster.StartTestCluster(t, clusterSize, params)
 	init(tc)
 
@@ -139,7 +151,17 @@ func backupRestoreTestSetup(
 ) (tc *testcluster.TestCluster, sqlDB *sqlutils.SQLRunner, tempDir string, cleanup func()) {
 	// TODO (msbutler): DisableDefaultTestTenant should be disabled by the caller of this function
 	return backupRestoreTestSetupWithParams(t, clusterSize, numAccounts, init,
-		base.TestClusterArgs{ServerArgs: base.TestServerArgs{DisableDefaultTestTenant: true}})
+		base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				DisableDefaultTestTenant: true,
+				Knobs: base.TestingKnobs{
+					TenantCapabilitiesTestingKnobs: &tenantcapabilities.TestingKnobs{
+						// TODO(arul): This can be removed once
+						// https://github.com/cockroachdb/cockroach/issues/96736  is fixed.
+						AuthorizerSkipAdminSplitCapabilityChecks: true,
+					},
+				},
+			}})
 }
 
 func backupRestoreTestSetupEmpty(
@@ -151,6 +173,11 @@ func backupRestoreTestSetupEmpty(
 ) (tc *testcluster.TestCluster, sqlDB *sqlutils.SQLRunner, cleanup func()) {
 	// TODO (msbutler): this should be disabled by callers of this function
 	params.ServerArgs.DisableDefaultTestTenant = true
+	params.ServerArgs.Knobs.TenantCapabilitiesTestingKnobs = &tenantcapabilities.TestingKnobs{
+		// TODO(arul): This can be removed once
+		// https://github.com/cockroachdb/cockroach/issues/96736  is fixed.
+		AuthorizerSkipAdminSplitCapabilityChecks: true,
+	}
 	return backupRestoreTestSetupEmptyWithParams(t, clusterSize, tempDir, init, params)
 }
 
@@ -178,6 +205,11 @@ func backupRestoreTestSetupEmptyWithParams(
 		}
 		params.ServerArgs.Knobs.Store.(*kvserver.StoreTestingKnobs).SmallEngineBlocks = true
 	}
+	params.ServerArgs.Knobs.TenantCapabilitiesTestingKnobs = &tenantcapabilities.TestingKnobs{
+		// TODO(arul): This can be removed once
+		// https://github.com/cockroachdb/cockroach/issues/96736  is fixed.
+		AuthorizerSkipAdminSplitCapabilityChecks: true,
+	}
 
 	tc = testcluster.StartTestCluster(t, clusterSize, params)
 	init(tc)
@@ -202,6 +234,11 @@ func createEmptyCluster(
 	params.ServerArgs.ExternalIODir = dir
 	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
 		SmallEngineBlocks: smallEngineBlocks,
+	}
+	params.ServerArgs.Knobs.TenantCapabilitiesTestingKnobs = &tenantcapabilities.TestingKnobs{
+		// TODO(arul): This can be removed once
+		// https://github.com/cockroachdb/cockroach/issues/96736  is fixed.
+		AuthorizerSkipAdminSplitCapabilityChecks: true,
 	}
 	tc := testcluster.StartTestCluster(t, clusterSize, params)
 
@@ -372,7 +409,10 @@ func getKVCount(
 
 // uriFmtStringAndArgs returns format strings like "$1" or "($1, $2, $3)" and
 // an []interface{} of URIs for the BACKUP/RESTORE queries.
-func uriFmtStringAndArgs(uris []string) (string, []interface{}) {
+//
+// Passing startIndex=i will start the fmt strings at $i+1. This can be useful
+// when formatting different blocks of strings/args in the same query.
+func uriFmtStringAndArgs(uris []string, startIndex int) (string, []interface{}) {
 	urisForFormat := make([]interface{}, len(uris))
 	var fmtString strings.Builder
 	if len(uris) > 1 {
@@ -382,7 +422,7 @@ func uriFmtStringAndArgs(uris []string) (string, []interface{}) {
 		if i > 0 {
 			fmtString.WriteString(", ")
 		}
-		fmtString.WriteString(fmt.Sprintf("$%d", i+1))
+		fmtString.WriteString(fmt.Sprintf("$%d", startIndex+i+1))
 		urisForFormat[i] = uri
 	}
 	if len(uris) > 1 {
@@ -399,11 +439,8 @@ func waitForTableSplit(t *testing.T, conn *gosql.DB, tableName, dbName string) {
 	testutils.SucceedsSoon(t, func() error {
 		count := 0
 		if err := conn.QueryRow(
-			"SELECT count(*) "+
-				"FROM crdb_internal.ranges_no_leases "+
-				"WHERE table_name = $1 "+
-				"AND database_name = $2",
-			tableName, dbName).Scan(&count); err != nil {
+			fmt.Sprintf("SELECT count(*) FROM [SHOW RANGES FROM TABLE %s.%s]",
+				tree.NameString(dbName), tree.NameString(tableName))).Scan(&count); err != nil {
 			return err
 		}
 		if count == 0 {
@@ -416,13 +453,8 @@ func waitForTableSplit(t *testing.T, conn *gosql.DB, tableName, dbName string) {
 func getTableStartKey(t *testing.T, conn *gosql.DB, tableName, dbName string) roachpb.Key {
 	t.Helper()
 	row := conn.QueryRow(
-		"SELECT start_key "+
-			"FROM crdb_internal.ranges_no_leases "+
-			"WHERE table_name = $1 "+
-			"AND database_name = $2 "+
-			"ORDER BY start_key ASC "+
-			"LIMIT 1",
-		tableName, dbName)
+		fmt.Sprintf(`SELECT crdb_internal.table_span('%s.%s'::regclass::oid::int)[1]`,
+			tree.NameString(dbName), tree.NameString(tableName)))
 	var startKey roachpb.Key
 	require.NoError(t, row.Scan(&startKey))
 	return startKey
@@ -450,10 +482,22 @@ func getStoreAndReplica(
 ) (*kvserver.Store, *kvserver.Replica) {
 	t.Helper()
 	startKey := getTableStartKey(t, conn, tableName, dbName)
+
 	// Okay great now we have a key and can go find replicas and stores and what not.
 	r := tc.LookupRangeOrFatal(t, startKey)
-	l, _, err := tc.FindRangeLease(r, nil)
-	require.NoError(t, err)
+
+	var l roachpb.Lease
+	testutils.SucceedsSoon(t, func() error {
+		var err error
+		l, _, err = tc.FindRangeLease(r, nil)
+		if err != nil {
+			return err
+		}
+		if l.Replica.NodeID == 0 {
+			return errors.New("range does not have a lease yet")
+		}
+		return nil
+	})
 
 	lhServer := tc.Server(int(l.Replica.NodeID) - 1)
 	return getFirstStoreReplica(t, lhServer, startKey)
@@ -500,7 +544,7 @@ func setAndWaitForTenantReadOnlyClusterSetting(
 	systemTenantRunner.Exec(
 		t,
 		fmt.Sprintf(
-			"ALTER TENANT $1 SET CLUSTER	SETTING %s = '%s'",
+			"ALTER TENANT [$1] SET CLUSTER SETTING %s = '%s'",
 			setting,
 			val,
 		),
@@ -572,10 +616,10 @@ func runGCAndCheckTraceOnCluster(
 	t.Helper()
 	var startKey roachpb.Key
 	testutils.SucceedsSoon(t, func() error {
-		err := runner.DB.QueryRowContext(ctx, `
-SELECT start_key FROM crdb_internal.ranges_no_leases
-WHERE table_name = $1 AND database_name = $2
-ORDER BY start_key ASC`, tableName, databaseName).Scan(&startKey)
+		err := runner.DB.QueryRowContext(ctx, fmt.Sprintf(`
+SELECT raw_start_key
+FROM [SHOW RANGES FROM TABLE %s.%s WITH KEYS]
+ORDER BY raw_start_key ASC`, tree.NameString(databaseName), tree.NameString(tableName))).Scan(&startKey)
 		if err != nil {
 			return errors.Wrap(err, "failed to query start_key ")
 		}

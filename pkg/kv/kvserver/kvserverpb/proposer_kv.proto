@@ -358,6 +358,23 @@ message RaftCommand {
   // from" the proposer.
   map<string, string> trace_data = 16;
 
+  // Fields used below-raft for replication admission control. See
+  // kvflowcontrolpb.RaftAdmissionMeta for how this data is selectively decoded.
+  // The field tags and types must be kept identical with what's found there.
+
+  // AdmissionPriority of the command (maps to admission.WorkPriority); used
+  // within a tenant below-raft for replication admission control.
+  int32 admission_priority = 18;
+  // AdmissionCreateTime is equivalent to Time.UnixNano() at the creation time
+  // of the request (or a parent request) for which this command is a part of.
+  // It's used within a tenant below-raft for replication admission control; see
+  // admission.WorkInfo.CreateTime for details.
+  int64 admission_create_time = 19;
+  // AdmissionOriginNode captures where this raft command originated. It's used
+  // to inform said node of this raft command's (virtual) admission in order for
+  // it to release flow tokens for subsequent commands.
+  int32 admission_origin_node = 20 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+
   reserved 1, 2, 10001 to 10014;
 }
 

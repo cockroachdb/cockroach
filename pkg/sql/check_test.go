@@ -28,8 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -53,16 +53,16 @@ func TestValidateTTLScheduledJobs(t *testing.T) {
 		{
 			desc: "not pointing at a valid scheduled job",
 			setup: func(t *testing.T, sqlDB *gosql.DB, kvDB *kv.DB, s serverutils.TestServerInterface, tableDesc *tabledesc.Mutable, scheduleID int64) {
-				require.NoError(t, sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
+				require.NoError(t, sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
 					// We need the collection to read the descriptor from storage for
 					// the subsequent write to succeed.
-					tableDesc, err = col.GetMutableTableByID(ctx, txn, tableDesc.GetID(), tree.ObjectLookupFlagsWithRequired())
+					tableDesc, err = col.MutableByID(txn.KV()).Table(ctx, tableDesc.GetID())
 					tableDesc.RowLevelTTL.ScheduleID = 0
 					tableDesc.Version++
 					if err != nil {
 						return err
 					}
-					return col.WriteDesc(ctx, false /* kvBatch */, tableDesc, txn)
+					return col.WriteDesc(ctx, false /* kvBatch */, tableDesc, txn.KV())
 				}))
 			},
 			expectedErrRe: func(tableID descpb.ID, scheduleID int64) string {
@@ -72,9 +72,10 @@ func TestValidateTTLScheduledJobs(t *testing.T) {
 		{
 			desc: "scheduled job points at an different table",
 			setup: func(t *testing.T, sqlDB *gosql.DB, kvDB *kv.DB, s serverutils.TestServerInterface, tableDesc *tabledesc.Mutable, scheduleID int64) {
-				ie := s.InternalExecutor().(sqlutil.InternalExecutor)
-				require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-					sj, err := jobs.LoadScheduledJob(
+				db := s.InternalDB().(isql.DB)
+				require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+					schedules := jobs.ScheduledJobTxn(txn)
+					sj, err := schedules.Load(
 						ctx,
 						jobstest.NewJobSchedulerTestEnv(
 							jobstest.UseSystemTables,
@@ -82,8 +83,6 @@ func TestValidateTTLScheduledJobs(t *testing.T) {
 							tree.ScheduledBackupExecutor,
 						),
 						scheduleID,
-						ie,
-						txn,
 					)
 					if err != nil {
 						return err
@@ -98,7 +97,7 @@ func TestValidateTTLScheduledJobs(t *testing.T) {
 						return err
 					}
 					sj.SetExecutionDetails(sj.ExecutorType(), jobspb.ExecutionArguments{Args: any})
-					return sj.Update(ctx, ie, txn)
+					return schedules.Update(ctx, sj)
 				}))
 			},
 			expectedErrRe: func(tableID descpb.ID, scheduleID int64) string {

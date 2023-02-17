@@ -15,17 +15,57 @@ import {
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { createSelector } from "reselect";
-import { CachedDataReducerState, refreshJob } from "src/redux/apiReducers";
+import { KeyedCachedDataReducerState, refreshJob } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import { JobResponseMessage } from "src/util/api";
 
 const selectJobState = createSelector(
-  [(state: AdminUIState) => state.cachedData.job, selectID],
-  (job, jobID): CachedDataReducerState<JobResponseMessage> => {
-    if (!job) {
+  [(state: AdminUIState) => state.cachedData?.job],
+  (jobState): KeyedCachedDataReducerState<JobResponseMessage> => {
+    if (!jobState) {
       return null;
     }
-    return job[jobID];
+    return jobState;
+  },
+);
+
+export const selectJob = createSelector(
+  [(state: AdminUIState) => state.cachedData?.jobs, selectJobState, selectID],
+  (jobsState, jobState, jobID) => {
+    const jobsCache = jobsState.data;
+    let job: JobResponseMessage;
+    if (!jobID || (!jobsCache && !jobState)) {
+      return null;
+    } else if (jobsCache) {
+      job = Object(
+        jobsCache.data.jobs.find(job => job.id.toString() === jobID),
+      );
+    } else if (jobState) {
+      job = jobState[jobID]?.data;
+    }
+    return job;
+  },
+);
+
+export const selectJobError = createSelector(
+  selectJobState,
+  selectID,
+  (state: KeyedCachedDataReducerState<JobResponseMessage>, jobID) => {
+    if (!state || !jobID) {
+      return null;
+    }
+    return state[jobID]?.lastError;
+  },
+);
+
+export const selectJobLoading = createSelector(
+  selectJobState,
+  selectID,
+  (state: KeyedCachedDataReducerState<JobResponseMessage>, jobID) => {
+    if (!state || !jobID) {
+      return null;
+    }
+    return state[jobID]?.inFlight;
   },
 );
 
@@ -33,10 +73,9 @@ const mapStateToProps = (
   state: AdminUIState,
   props: RouteComponentProps,
 ): JobDetailsStateProps => {
-  const jobState = selectJobState(state, props);
-  const job = jobState ? jobState.data : null;
-  const jobLoading = jobState ? jobState.inFlight : false;
-  const jobError = jobState ? jobState.lastError : null;
+  const job = selectJob(state, props);
+  const jobLoading = selectJobLoading(state, props);
+  const jobError = selectJobError(state, props);
   return {
     job,
     jobLoading,

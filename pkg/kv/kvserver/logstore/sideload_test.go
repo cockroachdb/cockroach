@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -36,37 +37,23 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
-	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/raft/v3/raftpb"
 	"golang.org/x/time/rate"
 )
 
-func entryEq(l, r raftpb.Entry) error {
-	if reflect.DeepEqual(l, r) {
-		return nil
-	}
-	_, lData := kvserverbase.DecodeRaftCommand(l.Data)
-	_, rData := kvserverbase.DecodeRaftCommand(r.Data)
-	var lc, rc kvserverpb.RaftCommand
-	if err := protoutil.Unmarshal(lData, &lc); err != nil {
-		return errors.Wrap(err, "unmarshalling LHS")
-	}
-	if err := protoutil.Unmarshal(rData, &rc); err != nil {
-		return errors.Wrap(err, "unmarshalling RHS")
-	}
-	if !reflect.DeepEqual(lc, rc) {
-		return errors.Newf("unexpected:\n%s", strings.Join(pretty.Diff(lc, rc), "\n"))
-	}
-	return nil
+func mustEntryEq(t testing.TB, l, r raftpb.Entry) {
+	el, err := raftlog.NewEntry(l)
+	require.NoError(t, err)
+	er, err := raftlog.NewEntry(r)
+	require.NoError(t, err)
+	require.Equal(t, el, er)
 }
 
 func mkEnt(
-	v kvserverbase.RaftCommandEncodingVersion,
-	index, term uint64,
-	as *kvserverpb.ReplicatedEvalResult_AddSSTable,
+	enc raftlog.EntryEncoding, index, term uint64, as *kvserverpb.ReplicatedEvalResult_AddSSTable,
 ) raftpb.Entry {
-	cmdIDKey := strings.Repeat("x", kvserverbase.RaftCommandIDLen)
+	cmdIDKey := strings.Repeat("x", raftlog.RaftCommandIDLen)
 	var cmd kvserverpb.RaftCommand
 	cmd.ReplicatedEvalResult.AddSSTable = as
 	b, err := protoutil.Marshal(&cmd)
@@ -75,7 +62,7 @@ func mkEnt(
 	}
 	var ent raftpb.Entry
 	ent.Index, ent.Term = index, term
-	ent.Data = kvserverbase.EncodeRaftCommand(v, kvserverbase.CmdIDKey(cmdIDKey), b)
+	ent.Data = raftlog.EncodeRaftCommand(enc, kvserverbase.CmdIDKey(cmdIDKey), b)
 	return ent
 }
 
@@ -96,19 +83,16 @@ func TestSideloadingSideloadedStorage(t *testing.T) {
 	})
 }
 
-func newTestingSideloadStorage(t *testing.T, eng storage.Engine) *DiskSideloadStorage {
-	st := cluster.MakeTestingClusterSettings()
-	ss, err := NewDiskSideloadStorage(
-		st, 1, 2, filepath.Join(eng.GetAuxiliaryDir(), "fake", "testing", "dir"),
-		rate.NewLimiter(rate.Inf, math.MaxInt64), eng,
-	)
-	require.NoError(t, err)
-	return ss
+func newTestingSideloadStorage(eng storage.Engine) *DiskSideloadStorage {
+	return NewDiskSideloadStorage(
+		cluster.MakeTestingClusterSettings(), 1,
+		filepath.Join(eng.GetAuxiliaryDir(), "fake", "testing", "dir"),
+		rate.NewLimiter(rate.Inf, math.MaxInt64), eng)
 }
 
 func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 	ctx := context.Background()
-	ss := newTestingSideloadStorage(t, eng)
+	ss := newTestingSideloadStorage(eng)
 
 	assertCreated := func(isCreated bool) {
 		t.Helper()
@@ -371,7 +355,7 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	v1, v2 := kvserverbase.RaftVersionStandard, kvserverbase.RaftVersionSideloaded
+	v1, v2 := raftlog.EntryEncodingStandardWithAC, raftlog.EntryEncodingSideloadedWithAC
 	rangeID := roachpb.RangeID(1)
 
 	type testCase struct {
@@ -440,7 +424,7 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 
 		eng := storage.NewDefaultInMemForTesting()
 		defer eng.Close()
-		ss := newTestingSideloadStorage(t, eng)
+		ss := newTestingSideloadStorage(eng)
 		ec := raftentry.NewCache(1024) // large enough
 		if test.setup != nil {
 			test.setup(ec, ss)
@@ -454,16 +438,14 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 			}
 		} else if test.expErr != "" {
 			t.Fatalf("%s: success, but expected error: %s", k, test.expErr)
-		} else if err := entryEq(thinCopy, test.thin); err != nil {
-			t.Fatalf("%s: mutated the original entry: %s", k, pretty.Diff(thinCopy, test.thin))
+		} else {
+			mustEntryEq(t, thinCopy, test.thin)
 		}
 
 		if newEnt == nil {
 			newEnt = &thinCopy
 		}
-		if err := entryEq(*newEnt, test.fat); err != nil {
-			t.Fatalf("%s: %+v", k, err)
-		}
+		mustEntryEq(t, *newEnt, test.fat)
 
 		if dump := getRecAndFinish().String(); test.expTrace != "" {
 			if ok, err := regexp.MatchString(test.expTrace, dump); err != nil {
@@ -495,11 +477,11 @@ func TestRaftSSTableSideloadingSideload(t *testing.T) {
 	addSSTStripped := addSST
 	addSSTStripped.Data = nil
 
-	entV1Reg := mkEnt(kvserverbase.RaftVersionStandard, 10, 99, nil)
-	entV1SST := mkEnt(kvserverbase.RaftVersionStandard, 11, 99, &addSST)
-	entV2Reg := mkEnt(kvserverbase.RaftVersionSideloaded, 12, 99, nil)
-	entV2SST := mkEnt(kvserverbase.RaftVersionSideloaded, 13, 99, &addSST)
-	entV2SSTStripped := mkEnt(kvserverbase.RaftVersionSideloaded, 13, 99, &addSSTStripped)
+	entV1Reg := mkEnt(raftlog.EntryEncodingStandardWithAC, 10, 99, nil)
+	entV1SST := mkEnt(raftlog.EntryEncodingStandardWithAC, 11, 99, &addSST)
+	entV2Reg := mkEnt(raftlog.EntryEncodingSideloadedWithAC, 12, 99, nil)
+	entV2SST := mkEnt(raftlog.EntryEncodingSideloadedWithAC, 13, 99, &addSST)
+	entV2SSTStripped := mkEnt(raftlog.EntryEncodingSideloadedWithAC, 13, 99, &addSSTStripped)
 
 	type tc struct {
 		name              string
@@ -547,7 +529,7 @@ func TestRaftSSTableSideloadingSideload(t *testing.T) {
 			ctx := context.Background()
 			eng := storage.NewDefaultInMemForTesting()
 			defer eng.Close()
-			sideloaded := newTestingSideloadStorage(t, eng)
+			sideloaded := newTestingSideloadStorage(eng)
 			postEnts, numSideloaded, size, nonSideloadedSize, err := MaybeSideloadEntries(ctx, test.preEnts, sideloaded)
 			if err != nil {
 				t.Fatal(err)
@@ -561,9 +543,7 @@ func TestRaftSSTableSideloadingSideload(t *testing.T) {
 				expNumSideloaded = 1
 			}
 			require.Equal(t, expNumSideloaded, numSideloaded)
-			if !reflect.DeepEqual(postEnts, test.postEnts) {
-				t.Fatalf("result differs from expected: %s", pretty.Diff(postEnts, test.postEnts))
-			}
+			require.Equal(t, test.postEnts, postEnts)
 			if test.size != size {
 				t.Fatalf("expected %d sideloadedSize, but found %d", test.size, size)
 			}
@@ -586,6 +566,7 @@ func newOnDiskEngine(ctx context.Context, t *testing.T) (func(), storage.Engine)
 	eng, err := storage.Open(
 		ctx,
 		storage.Filesystem(dir),
+		cluster.MakeClusterSettings(),
 		storage.CacheSize(1<<20 /* 1 MiB */))
 	if err != nil {
 		t.Fatal(err)

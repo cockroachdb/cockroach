@@ -1,11 +1,13 @@
 setup
+SET experimental_enable_unique_without_index_constraints = true;
 CREATE TABLE parent (id INT PRIMARY KEY);
 CREATE TABLE tbl (
   id INT PRIMARY KEY,
   name STRING NOT NULL,
   price DECIMAL(8,2),
   INDEX sec (name) STORING (price) WHERE (id > 0),
-  CONSTRAINT myfk FOREIGN KEY (id) REFERENCES parent (id)
+  CONSTRAINT myfk FOREIGN KEY (id) REFERENCES parent (id),
+  CONSTRAINT mycheck1 CHECK (id > 0)
 );
 COMMENT ON TABLE tbl IS 'tbl is good table';
 COMMENT ON INDEX tbl@tbl_pkey IS 'tbl_pkey is a primary key';
@@ -13,6 +15,10 @@ COMMENT ON COLUMN tbl.id IS 'id is a identifier';
 COMMENT ON CONSTRAINT myfk ON tbl IS 'must have a parent';
 ALTER TABLE tbl CONFIGURE ZONE USING gc.ttlseconds=10;
 COMMENT ON CONSTRAINT tbl_pkey ON tbl IS 'primary key';
+ALTER TABLE tbl ADD CONSTRAINT mycheck2 CHECK (id < 10) NOT VALID;
+ALTER TABLE tbl ADD CONSTRAINT myuwi1 UNIQUE WITHOUT INDEX (price);
+ALTER TABLE tbl ADD CONSTRAINT myuwi2 UNIQUE WITHOUT INDEX (price) NOT VALID;
+ALTER TABLE tbl ADD CONSTRAINT myfk2 FOREIGN KEY (id) REFERENCES parent (id) NOT VALID;
 ----
 
 decompose
@@ -97,6 +103,8 @@ ElementState:
     closedTypeIds: []
     columnId: 1
     computeExpr: null
+    elementCreationMetadata:
+      in231OrLater: true
     familyId: 0
     isNullable: false
     isVirtual: false
@@ -122,6 +130,8 @@ ElementState:
     closedTypeIds: []
     columnId: 4.294967294e+09
     computeExpr: null
+    elementCreationMetadata:
+      in231OrLater: true
     familyId: 0
     isNullable: true
     isVirtual: false
@@ -147,6 +157,8 @@ ElementState:
     closedTypeIds: []
     columnId: 4.294967295e+09
     computeExpr: null
+    elementCreationMetadata:
+      in231OrLater: true
     familyId: 0
     isNullable: true
     isVirtual: false
@@ -167,6 +179,11 @@ ElementState:
       udtMetadata: null
       visibleType: 0
       width: 0
+  Status: PUBLIC
+- ColumnNotNull:
+    columnId: 1
+    indexIdForValidation: 0
+    tableId: 104
   Status: PUBLIC
 - IndexName:
     indexId: 1
@@ -199,13 +216,15 @@ ElementState:
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 104
-    privileges: 2
+    privileges: "2"
     userName: admin
+    withGrantOption: "2"
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 104
-    privileges: 2
+    privileges: "2"
     userName: root
+    withGrantOption: "2"
   Status: PUBLIC
 - ObjectParent:
     objectId: 104
@@ -292,6 +311,7 @@ ElementState:
   Status: PUBLIC
 - SecondaryIndex:
     constraintId: 0
+    expr: id > 0:::INT8
     geoConfig: null
     indexId: 2
     isConcurrently: false
@@ -299,15 +319,74 @@ ElementState:
     isInverted: false
     isNotVisible: false
     isUnique: false
+    referencedColumnIds:
+    - 1
     sharding: null
     sourceIndexId: 0
     tableId: 105
     temporaryIndexId: 0
+    usesSequenceIds: []
+    usesTypeIds: []
+  Status: PUBLIC
+- UniqueWithoutIndexConstraint:
+    columnIds:
+    - 3
+    constraintId: 5
+    indexIdForValidation: 0
+    predicate: null
+    tableId: 105
+  Status: PUBLIC
+- UniqueWithoutIndexConstraintUnvalidated:
+    columnIds:
+    - 3
+    constraintId: 6
+    predicate: null
+    tableId: 105
+  Status: PUBLIC
+- CheckConstraint:
+    columnIds:
+    - 1
+    constraintId: 3
+    expr: id > 0:::INT8
+    fromHashShardedColumn: false
+    indexIdForValidation: 0
+    referencedColumnIds:
+    - 1
+    tableId: 105
+    usesSequenceIds: []
+    usesTypeIds: []
+  Status: PUBLIC
+- CheckConstraintUnvalidated:
+    columnIds:
+    - 1
+    constraintId: 4
+    expr: id < 10:::INT8
+    referencedColumnIds:
+    - 1
+    tableId: 105
+    usesSequenceIds: []
+    usesTypeIds: []
   Status: PUBLIC
 - ForeignKeyConstraint:
     columnIds:
     - 1
+    compositeKeyMatchMethod: SIMPLE
     constraintId: 2
+    indexIdForValidation: 0
+    onDeleteAction: NO_ACTION
+    onUpdateAction: NO_ACTION
+    referencedColumnIds:
+    - 1
+    referencedTableId: 104
+    tableId: 105
+  Status: PUBLIC
+- ForeignKeyConstraintUnvalidated:
+    columnIds:
+    - 1
+    compositeKeyMatchMethod: SIMPLE
+    constraintId: 7
+    onDeleteAction: NO_ACTION
+    onUpdateAction: NO_ACTION
     referencedColumnIds:
     - 1
     referencedTableId: 104
@@ -353,6 +432,8 @@ ElementState:
     closedTypeIds: []
     columnId: 1
     computeExpr: null
+    elementCreationMetadata:
+      in231OrLater: true
     familyId: 0
     isNullable: false
     isVirtual: false
@@ -378,6 +459,8 @@ ElementState:
     closedTypeIds: []
     columnId: 2
     computeExpr: null
+    elementCreationMetadata:
+      in231OrLater: true
     familyId: 0
     isNullable: false
     isVirtual: false
@@ -403,6 +486,8 @@ ElementState:
     closedTypeIds: []
     columnId: 3
     computeExpr: null
+    elementCreationMetadata:
+      in231OrLater: true
     familyId: 0
     isNullable: true
     isVirtual: false
@@ -428,6 +513,8 @@ ElementState:
     closedTypeIds: []
     columnId: 4.294967294e+09
     computeExpr: null
+    elementCreationMetadata:
+      in231OrLater: true
     familyId: 0
     isNullable: true
     isVirtual: false
@@ -453,6 +540,8 @@ ElementState:
     closedTypeIds: []
     columnId: 4.294967295e+09
     computeExpr: null
+    elementCreationMetadata:
+      in231OrLater: true
     familyId: 0
     isNullable: true
     isVirtual: false
@@ -480,6 +569,16 @@ ElementState:
     pgAttributeNum: 1
     tableId: 105
   Status: PUBLIC
+- ColumnNotNull:
+    columnId: 1
+    indexIdForValidation: 0
+    tableId: 105
+  Status: PUBLIC
+- ColumnNotNull:
+    columnId: 2
+    indexIdForValidation: 0
+    tableId: 105
+  Status: PUBLIC
 - IndexName:
     indexId: 1
     name: tbl_pkey
@@ -489,15 +588,6 @@ ElementState:
     indexId: 2
     name: sec
     tableId: 105
-  Status: PUBLIC
-- SecondaryIndexPartial:
-    expr: id > 0:::INT8
-    indexId: 2
-    referencedColumnIds:
-    - 1
-    tableId: 105
-    usesSequenceIds: []
-    usesTypeIds: []
   Status: PUBLIC
 - IndexComment:
     comment: tbl_pkey is a primary key
@@ -577,6 +667,31 @@ ElementState:
     name: myfk
     tableId: 105
   Status: PUBLIC
+- ConstraintWithoutIndexName:
+    constraintId: 3
+    name: mycheck1
+    tableId: 105
+  Status: PUBLIC
+- ConstraintWithoutIndexName:
+    constraintId: 4
+    name: mycheck2
+    tableId: 105
+  Status: PUBLIC
+- ConstraintWithoutIndexName:
+    constraintId: 5
+    name: myuwi1
+    tableId: 105
+  Status: PUBLIC
+- ConstraintWithoutIndexName:
+    constraintId: 6
+    name: myuwi2
+    tableId: 105
+  Status: PUBLIC
+- ConstraintWithoutIndexName:
+    constraintId: 7
+    name: myfk2
+    tableId: 105
+  Status: PUBLIC
 - ConstraintComment:
     comment: must have a parent
     constraintId: 2
@@ -599,13 +714,15 @@ ElementState:
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 105
-    privileges: 2
+    privileges: "2"
     userName: admin
+    withGrantOption: "2"
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 105
-    privileges: 2
+    privileges: "2"
     userName: root
+    withGrantOption: "2"
   Status: PUBLIC
 - ObjectParent:
     objectId: 105
@@ -718,6 +835,8 @@ ElementState:
     closedTypeIds: []
     columnId: 1
     computeExpr: null
+    elementCreationMetadata:
+      in231OrLater: true
     familyId: 0
     isNullable: false
     isVirtual: false
@@ -743,6 +862,8 @@ ElementState:
     closedTypeIds: []
     columnId: 2
     computeExpr: null
+    elementCreationMetadata:
+      in231OrLater: true
     familyId: 1
     isNullable: true
     isVirtual: false
@@ -768,6 +889,8 @@ ElementState:
     closedTypeIds: []
     columnId: 4.294967294e+09
     computeExpr: null
+    elementCreationMetadata:
+      in231OrLater: true
     familyId: 0
     isNullable: true
     isVirtual: false
@@ -793,6 +916,8 @@ ElementState:
     closedTypeIds: []
     columnId: 4.294967295e+09
     computeExpr: null
+    elementCreationMetadata:
+      in231OrLater: true
     familyId: 0
     isNullable: true
     isVirtual: false
@@ -813,6 +938,11 @@ ElementState:
       udtMetadata: null
       visibleType: 0
       width: 0
+  Status: PUBLIC
+- ColumnNotNull:
+    columnId: 1
+    indexIdForValidation: 0
+    tableId: 104
   Status: PUBLIC
 - IndexName:
     indexId: 1
@@ -855,13 +985,15 @@ ElementState:
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 104
-    privileges: 2
+    privileges: "2"
     userName: admin
+    withGrantOption: "2"
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 104
-    privileges: 2
+    privileges: "2"
     userName: root
+    withGrantOption: "2"
   Status: PUBLIC
 - ObjectParent:
     objectId: 104
@@ -975,6 +1107,8 @@ ElementState:
       usesTypeIds:
       - 106
       - 107
+    elementCreationMetadata:
+      in231OrLater: true
     familyId: 0
     isNullable: true
     isVirtual: false
@@ -1000,6 +1134,8 @@ ElementState:
     closedTypeIds: []
     columnId: 2
     computeExpr: null
+    elementCreationMetadata:
+      in231OrLater: true
     familyId: 0
     isNullable: false
     isVirtual: false
@@ -1025,6 +1161,8 @@ ElementState:
     closedTypeIds: []
     columnId: 4.294967294e+09
     computeExpr: null
+    elementCreationMetadata:
+      in231OrLater: true
     familyId: 0
     isNullable: true
     isVirtual: false
@@ -1050,6 +1188,8 @@ ElementState:
     closedTypeIds: []
     columnId: 4.294967295e+09
     computeExpr: null
+    elementCreationMetadata:
+      in231OrLater: true
     familyId: 0
     isNullable: true
     isVirtual: false
@@ -1078,6 +1218,11 @@ ElementState:
     tableId: 108
     usesSequenceIds: []
     usesTypeIds: []
+  Status: PUBLIC
+- ColumnNotNull:
+    columnId: 2
+    indexIdForValidation: 0
+    tableId: 108
   Status: PUBLIC
 - IndexName:
     indexId: 1
@@ -1120,13 +1265,15 @@ ElementState:
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 108
-    privileges: 2
+    privileges: "2"
     userName: admin
+    withGrantOption: "2"
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 108
-    privileges: 2
+    privileges: "2"
     userName: root
+    withGrantOption: "2"
   Status: PUBLIC
 - ObjectParent:
     objectId: 108

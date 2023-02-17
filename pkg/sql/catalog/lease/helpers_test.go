@@ -167,7 +167,7 @@ func (m *Manager) PublishMultiple(
 		descs := make(map[descpb.ID]catalog.MutableDescriptor)
 		// There should be only one version of the descriptor, but it's
 		// a race now to update to the next version.
-		err := m.storage.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		err := m.storage.db.KV().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			versions := make(map[descpb.ID]descpb.DescriptorVersion)
 			descsToUpdate := make(map[descpb.ID]catalog.MutableDescriptor)
 			for _, id := range ids {

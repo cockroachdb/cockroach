@@ -1,5 +1,7 @@
+# cluster-opt: can-admin-split
+
 # Tests for creating a hash sharded primary key
-statement ok 
+statement ok
 CREATE TABLE sharded_primary (a INT PRIMARY KEY USING HASH WITH (bucket_count=10))
 
 query TT
@@ -769,7 +771,7 @@ statement ok
 $create_statement
 
 query T
-SELECT @2 FROM [SHOW CREATE TABLE t]
+SELECT create_statement FROM [SHOW CREATE TABLE t]
 ----
 CREATE TABLE public.t (
   crdb_internal_a_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 8:::INT8)) VIRTUAL,
@@ -792,7 +794,7 @@ CREATE TABLE public.t (
 )
 
 query T
-SELECT @2 FROM [SHOW CREATE TABLE t]
+SELECT create_statement FROM [SHOW CREATE TABLE t]
 ----
 CREATE TABLE public.t (
   crdb_internal_a_shard_8 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 8:::INT8)) VIRTUAL,
@@ -810,28 +812,24 @@ CREATE TABLE t_hash_pre_split (
 );
 
 skipif config 3node-tenant-default-configs
-query TITTT retry
-SELECT t.name, r.table_id, r.index_name, r.start_pretty, r.end_pretty
-FROM crdb_internal.tables t
-JOIN crdb_internal.ranges r ON t.table_id = r.table_id
-WHERE t.name = 't_hash_pre_split'
-AND t.state = 'PUBLIC'
-AND r.split_enforced_until IS NOT NULL;
+query TITTT retry,rowsort
+SELECT table_name, table_id, index_name, start_key, end_key
+  FROM [SHOW RANGES FROM DATABASE test WITH INDEXES]
+ WHERE table_name = 't_hash_pre_split'
 ----
+t_hash_pre_split  133  t_hash_pre_split_pkey  /Table/128/3/7  /Max
 
 statement ok
 CREATE INDEX t_hash_pre_split_idx_b ON t_hash_pre_split (b) USING HASH WITH (bucket_count=8);
 
 skipif config 3node-tenant-default-configs
-query TITTT colnames,retry
-SELECT t.name, r.table_id, r.index_name, r.start_pretty, r.end_pretty
-FROM crdb_internal.tables t
-JOIN crdb_internal.ranges r ON t.table_id = r.table_id
-WHERE t.name = 't_hash_pre_split'
-AND t.state = 'PUBLIC'
-AND r.split_enforced_until IS NOT NULL;
+query TITTT colnames,retry,rowsort
+SELECT table_name, table_id, index_name, start_key, end_key
+  FROM [SHOW RANGES FROM DATABASE test WITH INDEXES]
+ WHERE table_name = 't_hash_pre_split'
 ----
-name              table_id  index_name              start_pretty    end_pretty
+table_name        table_id  index_name              start_key       end_key
+t_hash_pre_split  133       t_hash_pre_split_pkey   /Table/128/3/7  /Table/133/2
 t_hash_pre_split  133       t_hash_pre_split_idx_b  /Table/133/2    /Table/133/2/0
 t_hash_pre_split  133       t_hash_pre_split_idx_b  /Table/133/2/0  /Table/133/2/1
 t_hash_pre_split  133       t_hash_pre_split_idx_b  /Table/133/2/1  /Table/133/2/2
@@ -856,7 +854,7 @@ CREATE TABLE t_default_bucket_16 (
 );
 
 query T
-SELECT @2 FROM [SHOW CREATE TABLE t_default_bucket_16]
+SELECT create_statement FROM [SHOW CREATE TABLE t_default_bucket_16]
 ----
 CREATE TABLE public.t_default_bucket_16 (
   crdb_internal_a_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 16:::INT8)) VIRTUAL,
@@ -879,7 +877,7 @@ statement ok
 CREATE TABLE t_default_bucket_8 (a INT PRIMARY KEY USING HASH);
 
 query T
-SELECT @2 FROM [SHOW CREATE TABLE t_default_bucket_8]
+SELECT create_statement FROM [SHOW CREATE TABLE t_default_bucket_8]
 ----
 CREATE TABLE public.t_default_bucket_8 (
   crdb_internal_a_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 8:::INT8)) VIRTUAL,

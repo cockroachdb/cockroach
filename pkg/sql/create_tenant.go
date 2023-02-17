@@ -13,22 +13,38 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 type createTenantNode struct {
-	name roachpb.TenantName
+	tenantSpec tenantSpec
 }
 
-func (p *planner) CreateTenantNode(_ context.Context, n *tree.CreateTenant) (planNode, error) {
+func (p *planner) CreateTenantNode(ctx context.Context, n *tree.CreateTenant) (planNode, error) {
+	tspec, err := p.planTenantSpec(ctx, n.TenantSpec, "CREATE TENANT")
+	if err != nil {
+		return nil, err
+	}
 	return &createTenantNode{
-		name: roachpb.TenantName(n.Name),
+		tenantSpec: tspec,
 	}, nil
 }
 
 func (n *createTenantNode) startExec(params runParams) error {
-	_, err := params.p.CreateTenant(params.ctx, n.name)
+	tid, tenantName, err := n.tenantSpec.getTenantParameters(params.ctx, params.p)
+	if err != nil {
+		return err
+	}
+
+	var ctcfg createTenantConfig
+	if tenantName != "" {
+		ctcfg.Name = (*string)(&tenantName)
+	}
+	if tid.IsSet() {
+		tenantID := tid.ToUint64()
+		ctcfg.ID = &tenantID
+	}
+	_, err = params.p.createTenantInternal(params.ctx, ctcfg)
 	return err
 }
 

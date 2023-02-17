@@ -27,6 +27,12 @@ func init() {
 						Index: *protoutil.Clone(&this.Index).(*scpb.Index),
 					}
 				}),
+				emit(func(this *scpb.PrimaryIndex) *scop.MaybeAddSplitForIndex {
+					return &scop.MaybeAddSplitForIndex{
+						TableID: this.TableID,
+						IndexID: this.IndexID,
+					}
+				}),
 			),
 			to(scpb.Status_BACKFILLED,
 				emit(func(this *scpb.PrimaryIndex) *scop.BackfillIndex {
@@ -87,9 +93,8 @@ func init() {
 			to(scpb.Status_PUBLIC,
 				emit(func(this *scpb.PrimaryIndex, md *opGenContext) *scop.MakeValidatedPrimaryIndexPublic {
 					return &scop.MakeValidatedPrimaryIndexPublic{
-						EventBase: newLogEventBase(this, md),
-						TableID:   this.TableID,
-						IndexID:   this.IndexID,
+						TableID: this.TableID,
+						IndexID: this.IndexID,
 					}
 				}),
 			),
@@ -134,9 +139,8 @@ func init() {
 				}),
 				emit(func(this *scpb.PrimaryIndex, md *opGenContext) *scop.MakeIndexAbsent {
 					return &scop.MakeIndexAbsent{
-						EventBase: newLogEventBase(this, md),
-						TableID:   this.TableID,
-						IndexID:   this.IndexID,
+						TableID: this.TableID,
+						IndexID: this.IndexID,
 					}
 				}),
 			),

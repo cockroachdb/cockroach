@@ -14,6 +14,9 @@ func _() {
 	_ = x[ServerMsgCommandComplete-67]
 	_ = x[ServerMsgCloseComplete-51]
 	_ = x[ServerMsgCopyInResponse-71]
+	_ = x[ServerMsgCopyOutResponse-72]
+	_ = x[ServerMsgCopyDataCommand-100]
+	_ = x[ServerMsgCopyDoneCommand-99]
 	_ = x[ServerMsgDataRow-68]
 	_ = x[ServerMsgEmptyQuery-73]
 	_ = x[ServerMsgErrorResponse-69]
@@ -30,12 +33,12 @@ func _() {
 const (
 	_ServerMessageType_name_0 = "ServerMsgParseCompleteServerMsgBindCompleteServerMsgCloseComplete"
 	_ServerMessageType_name_1 = "ServerMsgCommandCompleteServerMsgDataRowServerMsgErrorResponse"
-	_ServerMessageType_name_2 = "ServerMsgCopyInResponse"
-	_ServerMessageType_name_3 = "ServerMsgEmptyQuery"
-	_ServerMessageType_name_4 = "ServerMsgBackendKeyData"
-	_ServerMessageType_name_5 = "ServerMsgNoticeResponse"
-	_ServerMessageType_name_6 = "ServerMsgAuthServerMsgParameterStatusServerMsgRowDescription"
-	_ServerMessageType_name_7 = "ServerMsgReady"
+	_ServerMessageType_name_2 = "ServerMsgCopyInResponseServerMsgCopyOutResponseServerMsgEmptyQuery"
+	_ServerMessageType_name_3 = "ServerMsgBackendKeyData"
+	_ServerMessageType_name_4 = "ServerMsgNoticeResponse"
+	_ServerMessageType_name_5 = "ServerMsgAuthServerMsgParameterStatusServerMsgRowDescription"
+	_ServerMessageType_name_6 = "ServerMsgReady"
+	_ServerMessageType_name_7 = "ServerMsgCopyDoneCommandServerMsgCopyDataCommand"
 	_ServerMessageType_name_8 = "ServerMsgNoData"
 	_ServerMessageType_name_9 = "ServerMsgPortalSuspendedServerMsgParameterDescription"
 )
@@ -43,7 +46,9 @@ const (
 var (
 	_ServerMessageType_index_0 = [...]uint8{0, 22, 43, 65}
 	_ServerMessageType_index_1 = [...]uint8{0, 24, 40, 62}
-	_ServerMessageType_index_6 = [...]uint8{0, 13, 37, 60}
+	_ServerMessageType_index_2 = [...]uint8{0, 23, 47, 66}
+	_ServerMessageType_index_5 = [...]uint8{0, 13, 37, 60}
+	_ServerMessageType_index_7 = [...]uint8{0, 24, 48}
 	_ServerMessageType_index_9 = [...]uint8{0, 24, 53}
 )
 
@@ -55,19 +60,21 @@ func (i ServerMessageType) String() string {
 	case 67 <= i && i <= 69:
 		i -= 67
 		return _ServerMessageType_name_1[_ServerMessageType_index_1[i]:_ServerMessageType_index_1[i+1]]
-	case i == 71:
-		return _ServerMessageType_name_2
-	case i == 73:
-		return _ServerMessageType_name_3
+	case 71 <= i && i <= 73:
+		i -= 71
+		return _ServerMessageType_name_2[_ServerMessageType_index_2[i]:_ServerMessageType_index_2[i+1]]
 	case i == 75:
-		return _ServerMessageType_name_4
+		return _ServerMessageType_name_3
 	case i == 78:
-		return _ServerMessageType_name_5
+		return _ServerMessageType_name_4
 	case 82 <= i && i <= 84:
 		i -= 82
-		return _ServerMessageType_name_6[_ServerMessageType_index_6[i]:_ServerMessageType_index_6[i+1]]
+		return _ServerMessageType_name_5[_ServerMessageType_index_5[i]:_ServerMessageType_index_5[i+1]]
 	case i == 90:
-		return _ServerMessageType_name_7
+		return _ServerMessageType_name_6
+	case 99 <= i && i <= 100:
+		i -= 99
+		return _ServerMessageType_name_7[_ServerMessageType_index_7[i]:_ServerMessageType_index_7[i+1]]
 	case i == 110:
 		return _ServerMessageType_name_8
 	case 115 <= i && i <= 116:

@@ -14,14 +14,12 @@ trap remove_files_on_exit EXIT
 
 # By default, set dry-run variables
 google_credentials="$GCS_CREDENTIALS_DEV"
-s3_bucket="cockroach-builds-test"
 gcs_bucket="cockroach-release-artifacts-dryrun"
 
 # override dev defaults with production values
 if [[ -z "${DRY_RUN}" ]] ; then
   echo "Setting production variable values"
   google_credentials="$GCS_CREDENTIALS_PROD"
-  s3_bucket="binaries.cockroachdb.com"
   gcs_bucket="cockroach-release-artifacts-prod"
 fi
 
@@ -48,8 +46,7 @@ cd artifacts
 
 for product in cockroach cockroach-sql; do
   # TODO: add Intel binaries too.
-  # for platform in darwin-11.0-aarch64 darwin-10.9-amd64; do
-  for platform in darwin-11.0-aarch64; do
+  for platform in darwin-11.0-arm64; do
     base=${product}-${VERSION}.${platform}
     unsigned_base=${product}-${VERSION}.${platform}.unsigned
     unsigned_file=${unsigned_base}.tgz
@@ -76,10 +73,6 @@ for product in cockroach cockroach-sql; do
     rm -rf "$base" "$unsigned_file" "$unsigned_file.sha256sum" crl.zip
 
     shasum --algorithm 256 "$target" > "$target.sha256sum"
-    "$BAZEL_BIN/pkg/cmd/cloudupload/cloudupload_/cloudupload" \
-      "$target" "s3://$s3_bucket/$target"
-    "$BAZEL_BIN/pkg/cmd/cloudupload/cloudupload_/cloudupload" \
-      "$target.sha256sum" "s3://$s3_bucket/$target.sha256sum"
     "$BAZEL_BIN/pkg/cmd/cloudupload/cloudupload_/cloudupload" \
       "$target" "gs://$gcs_bucket/$target"
     "$BAZEL_BIN/pkg/cmd/cloudupload/cloudupload_/cloudupload" \

@@ -11,6 +11,7 @@ package cdceval
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"sort"
 	"strconv"
 	"testing"
@@ -34,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -56,11 +56,24 @@ CREATE TABLE foo (
   e status DEFAULT 'inactive',
   f STRING,
   g STRING,
+  h STRING NOT VISIBLE,
+  flag BOOL,
   PRIMARY KEY (b, a),
-  FAMILY main (a, b, e),
+  FAMILY main (a, b, e, h),
   FAMILY only_c (c),
-  FAMILY f_g_fam(f,g)
+  FAMILY f_g_fam(f, g, flag)
 )`)
+	sqlDB.Exec(t, `
+CREATE FUNCTION yesterday(mvcc DECIMAL) 
+RETURNS DECIMAL IMMUTABLE LEAKPROOF LANGUAGE SQL AS $$
+  SELECT mvcc - 24 * 3600 * 1e9
+$$`)
+	sqlDB.Exec(t, `
+CREATE FUNCTION volatile() 
+RETURNS FLOAT VOLATILE LANGUAGE SQL AS $$
+  SELECT random()
+$$`)
+
 	desc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "foo")
 
 	type decodeExpectation struct {
@@ -132,15 +145,15 @@ CREATE TABLE foo (
 				"INSERT INTO foo (a, b) VALUES (2, '2nd test')",
 				"DELETE FROM foo WHERE a=2 AND b='2nd test'",
 			},
-			stmt: "SELECT *, cdc_is_delete() FROM foo WHERE 'hello' != 'world'",
+			stmt: "SELECT *, event_op() = 'delete' AS deleted FROM foo WHERE 'hello' != 'world'",
 			expectMainFamily: []decodeExpectation{
 				{
 					keyValues: []string{"2nd test", "2"},
-					allValues: map[string]string{"a": "2", "b": "2nd test", "e": "inactive", "cdc_is_delete": "false"},
+					allValues: map[string]string{"a": "2", "b": "2nd test", "e": "inactive", "deleted": "false"},
 				},
 				{
 					keyValues: []string{"2nd test", "2"},
-					allValues: map[string]string{"a": "2", "b": "2nd test", "e": "NULL", "cdc_is_delete": "true"},
+					allValues: map[string]string{"a": "2", "b": "2nd test", "e": "NULL", "deleted": "true"},
 				},
 			},
 		},
@@ -178,7 +191,7 @@ CREATE TABLE foo (
 				"INSERT INTO foo (a, b, e) VALUES (4, '4th test', 'closed')",
 				"INSERT INTO foo (a, b, e) VALUES (5, '4th test', 'inactive')",
 			},
-			stmt: "SELECT a FROM _ WHERE e IN ('open', 'inactive')",
+			stmt: "SELECT a FROM foo WHERE e IN ('open', 'inactive')",
 			expectMainFamily: []decodeExpectation{
 				{
 					expectFiltered: true,
@@ -235,15 +248,15 @@ CREATE TABLE foo (
 			testName:   "main/no_col_c",
 			familyName: "main",
 			actions:    []string{"INSERT INTO foo (a, b) VALUES (1, 'no_c')"},
-			stmt:       "SELECT a, c FROM _",
-			expectErr:  `column "foo.c" does not exist`,
+			stmt:       "SELECT a, c FROM foo",
+			expectErr:  `column "c" does not exist`,
 		},
 		{
 			testName:   "main/no_col_c_star",
 			familyName: "main",
 			actions:    []string{"INSERT INTO foo (a, b) VALUES (1, 'no_c')"},
-			stmt:       "SELECT *, c FROM _",
-			expectErr:  `column "foo.c" does not exist`,
+			stmt:       "SELECT *, c FROM foo",
+			expectErr:  `column "c" does not exist`,
 		},
 		{
 			testName:   "main/non_primary_family_with_var_free",
@@ -263,7 +276,7 @@ CREATE TABLE foo (
 			},
 		},
 		{
-			testName:   "main/concat",
+			testName:   "concat",
 			familyName: "f_g_fam",
 			actions: []string{
 				"INSERT INTO foo (a, b, f) VALUES (42, 'concat', 'hello')",
@@ -282,13 +295,44 @@ CREATE TABLE foo (
 			},
 		},
 		{
+			testName:   "boolean flag",
+			familyName: "f_g_fam",
+			actions: []string{
+				"INSERT INTO foo (a, b, g, flag) VALUES (42, 'true', 'gee', true)",
+				"INSERT INTO foo (a, b, g, flag) VALUES (42, 'false', 'gee', false)",
+				"INSERT INTO foo (a, b, g) VALUES (42, 'maybe', 'gee')", // NULL flag should be treated as false.
+			},
+			stmt:             "SELECT a, b, flag FROM foo WHERE flag",
+			expectMainFamily: repeatExpectation(decodeExpectation{expectUnwatchedErr: true}, 3),
+			expectFGFamily: []decodeExpectation{
+				{
+					keyValues:      []string{"false", "42"},
+					expectFiltered: true,
+				},
+				{
+					// null boolean value should also be filtered.
+					keyValues:      []string{"maybe", "42"},
+					expectFiltered: true,
+				},
+				{
+					keyValues: []string{"true", "42"},
+					allValues: map[string]string{"a": "42", "b": "true", "flag": "true"},
+				},
+			},
+		},
+		{
 			testName:   "main/cdc_prev_select",
 			familyName: "only_c",
 			actions: []string{
 				"INSERT INTO foo (a, b, c) VALUES (42, 'prev_select', 'c value old')",
 				"UPSERT INTO foo (a, b, c) VALUES (42, 'prev_select', 'c value updated')",
 			},
-			stmt: "SELECT a, b, c, (CASE WHEN cdc_prev.c IS NULL THEN 'not there' ELSE cdc_prev.c END) AS old_c FROM foo",
+			stmt: `SELECT
+               a, b, c,
+               (CASE WHEN (cdc_prev).c IS NULL THEN 'not there' ELSE (cdc_prev).c END) AS old_c
+             FROM foo
+             WHERE (cdc_prev).crdb_internal_mvcc_timestamp IS NULL OR
+                   (cdc_prev).crdb_internal_mvcc_timestamp < crdb_internal_mvcc_timestamp`,
 			expectMainFamily: []decodeExpectation{
 				{
 					expectUnwatchedErr: true,
@@ -312,7 +356,7 @@ CREATE TABLE foo (
 				"INSERT INTO foo (a, b) VALUES (123, 'select_if')",
 				"DELETE FROM foo where a=123",
 			},
-			stmt: "SELECT IF(cdc_is_delete(),'deleted',a::string) AS conditional FROM _",
+			stmt: "SELECT IF(event_op() = 'delete','deleted',a::string) AS conditional FROM foo",
 			expectMainFamily: []decodeExpectation{
 				{
 					keyValues: []string{"select_if", "123"},
@@ -330,47 +374,53 @@ CREATE TABLE foo (
 			actions: []string{
 				"INSERT INTO foo (a, b) VALUES (1, '   spaced out      ')",
 			},
-			stmt: "SELECT btrim(b), parse_timetz('1:00-0') AS past FROM _",
+			stmt: "SELECT btrim(b), parse_timetz('1:00-0') AS past FROM foo",
 			expectMainFamily: []decodeExpectation{
 				{
 					keyValues: []string{"   spaced out      ", "1"},
-					allValues: map[string]string{"btrim": "spaced out", "past": "01:00:00+00:00:00"},
+					allValues: map[string]string{"btrim": "spaced out", "past": "01:00:00+00"},
 				},
 			},
 		},
-		// TODO(yevgeniy): enable this test.
-		// This requires adding support to "fetch" those magic system columns from
-		// row fetcher, or replace them with a function call.
-		//{
-		//	testName:   "main/magic_column",
-		//	familyName: "main",
-		//	actions: []string{
-		//		"INSERT INTO foo (a, b) VALUES (1,  'hello')",
-		//	},
-		//	stmt: "SELECT a,  crdb_internal_mvcc_timestamp FROM foo",
-		//	expectMainFamily: []decodeExpectation{
-		//		{
-		//			keyValues: []string{"hello", "1"},
-		//			allValues: map[string]string{"a": "1", "crdb_internal_mvcc_timestamp": "xxx"},
-		//		},
-		//	},
-		//},
-		// {
-		//  // TODO(yevgeniy): Test currently disable since session data is not serialized.
-		//  // Issue #90421
-		//	testName:   "main/trigram",
-		//	familyName: "main",
-		//	actions: []string{
-		//		"INSERT INTO foo (a, b) VALUES (1,  'hello')",
-		//	},
-		//	stmt: "SELECT a,  b % 'hel' as trigram, b % 'heh' AS trigram2 FROM foo",
-		//	expectMainFamily: []decodeExpectation{
-		//		{
-		//			keyValues: []string{"hello", "1"},
-		//			allValues: map[string]string{"a": "1", "trigram": "true", "trigram2": "false"},
-		//		},
-		//	},
-		//},
+		{
+			testName:   "main/system_and_hidden_columns",
+			familyName: "main",
+			actions: []string{
+				"INSERT INTO foo (a, b, h) VALUES (1,  'hello', 'invisible')",
+			},
+			stmt: "SELECT a, tableoid, h FROM foo WHERE crdb_internal_mvcc_timestamp > 0",
+			expectMainFamily: []decodeExpectation{
+				{
+					keyValues: []string{"hello", "1"},
+					allValues: map[string]string{
+						"a": "1", "tableoid": strconv.Itoa(int(desc.GetID())), "h": "invisible",
+					},
+				},
+			},
+		},
+		{
+			testName:   "main/system_and_hidden_columns_error",
+			familyName: "only_c",
+			actions: []string{
+				"INSERT INTO foo (a, b, h) VALUES (1,  'hello', 'invisible')",
+			},
+			stmt:      "SELECT a, tableoid, h FROM foo WHERE crdb_internal_mvcc_timestamp > 0",
+			expectErr: `column "h" does not exist`,
+		},
+		{
+			testName:   "main/trigram",
+			familyName: "main",
+			actions: []string{
+				"INSERT INTO foo (a, b) VALUES (1,  'hello')",
+			},
+			stmt: "SELECT a,  b % 'hel' as trigram, b % 'heh' AS trigram2 FROM foo",
+			expectMainFamily: []decodeExpectation{
+				{
+					keyValues: []string{"hello", "1"},
+					allValues: map[string]string{"a": "1", "trigram": "true", "trigram2": "false"},
+				},
+			},
+		},
 		{
 			testName:   "main/btrim_wrong_type",
 			familyName: "main",
@@ -390,7 +440,7 @@ CREATE TABLE foo (
 		{
 			testName:   "main/no_sleep",
 			familyName: "main",
-			stmt:       "SELECT *, pg_sleep(86400) AS wake_up FROM _",
+			stmt:       "SELECT *, pg_sleep(86400) AS wake_up FROM foo",
 			expectErr:  `function "pg_sleep" unsupported by CDC`,
 		},
 		{
@@ -446,7 +496,7 @@ CREATE TABLE foo (
 					"SELECT x, 'only_some_deleted_values', x::string FROM s",
 			},
 			actions:          []string{"DELETE FROM foo WHERE b='only_some_deleted_values'"},
-			stmt:             `SELECT * FROM foo WHERE cdc_is_delete() AND cdc_prev.a % 33 = 0`,
+			stmt:             `SELECT * FROM foo WHERE event_op() = 'delete' AND (cdc_prev).a % 33 = 0`,
 			expectMainFamily: repeatExpectation(decodeExpectation{expectUnwatchedErr: true}, 100),
 			expectOnlyCFamily: func() (expectations []decodeExpectation) {
 				for i := 1; i <= 100; i++ {
@@ -460,6 +510,25 @@ CREATE TABLE foo (
 				}
 				return expectations
 			}(),
+		},
+		{
+			testName:   "user defined function",
+			familyName: "main",
+			actions:    []string{"INSERT INTO foo (a, b) VALUES (1, '1st test')"},
+			stmt:       "SELECT  crdb_internal_mvcc_timestamp - yesterday(crdb_internal_mvcc_timestamp) AS elapsed FROM foo",
+			expectMainFamily: []decodeExpectation{
+				{
+					keyValues: []string{"1st test", "1"},
+					allValues: map[string]string{"elapsed": "86400000000000.0000000000"},
+				},
+			},
+		},
+		{
+			testName:   "disallow volatile UDF",
+			familyName: "main",
+			actions:    []string{"INSERT INTO foo (a, b) VALUES (1, '1st test')"},
+			stmt:       "SELECT  volatile() AS v FROM foo",
+			expectErr:  `volatile functions "volatile" unsupported by CDC`,
 		},
 	} {
 		t.Run(tc.testName, func(t *testing.T) {
@@ -516,7 +585,7 @@ CREATE TABLE foo (
 					expect, tc.expectFGFamily = popExpectation(t, tc.expectFGFamily)
 				}
 
-				updatedRow, err := decodeRowErr(decoder, &v, false)
+				updatedRow, err := decodeRowErr(decoder, &v, cdcevent.CurrentRow)
 				if expect.expectUnwatchedErr {
 					require.ErrorIs(t, err, cdcevent.ErrUnwatchedFamily)
 					continue
@@ -524,7 +593,7 @@ CREATE TABLE foo (
 
 				require.NoError(t, err)
 				require.True(t, updatedRow.IsInitialized())
-				prevRow := decodeRow(t, decoder, &v, true)
+				prevRow := decodeRow(t, decoder, &v, cdcevent.PrevRow)
 				require.NoError(t, err)
 
 				require.Equal(t, expect.keyValues, slurpKeys(t, updatedRow),
@@ -544,6 +613,16 @@ CREATE TABLE foo (
 
 				require.Equal(t, expect.keyValues, slurpKeys(t, projection))
 				require.Equal(t, expect.allValues, slurpValues(t, projection))
+
+				// Repeat the same eval, pretending that versions changed.
+				// Event descriptor versions are cached, so updated and prev row share
+				// same descriptor; we have to jump through some hoops to update
+				// just one.
+				descriptorCopy := *updatedRow.EventDescriptor
+				descriptorCopy.Version++
+				updatedRow.EventDescriptor = &descriptorCopy
+				_, err = e.Eval(ctx, updatedRow, prevRow)
+				require.NoError(t, err)
 			}
 		})
 	}
@@ -560,7 +639,7 @@ func TestUnsupportedCDCFunctions(t *testing.T) {
 
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	sqlDB := sqlutils.MakeSQLRunner(db)
-	sqlDB.Exec(t, "CREATE TABLE foo (a INT PRIMARY KEY)")
+	sqlDB.Exec(t, "CREATE TABLE foo (a INT PRIMARY KEY, b STRING)")
 	desc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "foo")
 	target := changefeedbase.Target{
 		TableID:    desc.GetID(),
@@ -582,9 +661,10 @@ func TestUnsupportedCDCFunctions(t *testing.T) {
 		"generate_series(1, 10)": "generate_series",
 
 		// Unsupported functions that take arguments from foo.
-		"generate_series(1, a)":            "generate_series",
-		"crdb_internal.read_file(b)":       "crdb_internal.read_file",
-		"crdb_internal.get_namespace_id()": "crdb_internal.get_namespace_id",
+		"generate_series(1, a)": "generate_series",
+
+		"crdb_internal.read_file(b)":               "crdb_internal.read_file",
+		"crdb_internal.get_namespace_id(0, 'foo')": "crdb_internal.get_namespace_id",
 	} {
 		t.Run(fmt.Sprintf("select/%s", errFn), func(t *testing.T) {
 			_, err := newEvaluatorWithNormCheck(&execCfg, desc, execCfg.Clock.Now(), target,
@@ -602,22 +682,22 @@ func TestUnsupportedCDCFunctions(t *testing.T) {
 }
 
 func decodeRowErr(
-	decoder cdcevent.Decoder, v *roachpb.RangeFeedValue, prev bool,
+	decoder cdcevent.Decoder, v *roachpb.RangeFeedValue, rt cdcevent.RowType,
 ) (cdcevent.Row, error) {
 	keyVal := roachpb.KeyValue{Key: v.Key}
-	if prev {
+	if rt == cdcevent.PrevRow {
 		keyVal.Value = v.PrevValue
 	} else {
 		keyVal.Value = v.Value
 	}
 	const keyOnly = false
-	return decoder.DecodeKV(context.Background(), keyVal, v.Timestamp(), keyOnly)
+	return decoder.DecodeKV(context.Background(), keyVal, rt, v.Timestamp(), keyOnly)
 }
 
 func decodeRow(
-	t *testing.T, decoder cdcevent.Decoder, v *roachpb.RangeFeedValue, prev bool,
+	t *testing.T, decoder cdcevent.Decoder, v *roachpb.RangeFeedValue, rt cdcevent.RowType,
 ) cdcevent.Row {
-	r, err := decodeRowErr(decoder, v, prev)
+	r, err := decodeRowErr(decoder, v, rt)
 	require.NoError(t, err)
 	return r
 }
@@ -642,15 +722,14 @@ func slurpValues(t *testing.T, r cdcevent.Row) map[string]string {
 }
 
 func randEncDatumPrimaryFamily(
-	t *testing.T, desc catalog.TableDescriptor,
+	t *testing.T, rng *rand.Rand, desc catalog.TableDescriptor,
 ) (row rowenc.EncDatumRow) {
 	t.Helper()
-	rng, _ := randutil.NewTestRand()
 
-	family, err := desc.FindFamilyByID(0)
+	family, err := catalog.MustFindFamilyByID(desc, 0 /* id */)
 	require.NoError(t, err)
 	for _, colID := range family.ColumnIDs {
-		col, err := desc.FindColumnWithID(colID)
+		col, err := catalog.MustFindColumnByID(desc, colID)
 		require.NoError(t, err)
 		row = append(row, rowenc.EncDatum{Datum: randgen.RandDatum(rng, col.GetType(), col.IsNullable())})
 	}
@@ -688,7 +767,7 @@ func newEvaluatorWithNormCheck(
 	}
 
 	const splitFamilies = true
-	norm, err := NormalizeExpression(
+	norm, _, _, err := normalizeAndPlan(
 		context.Background(), execCfg, username.RootUserName(), defaultDBSessionData, desc, schemaTS,
 		jobspb.ChangefeedTargetSpecification{
 			Type:       target.Type,
@@ -701,10 +780,13 @@ func newEvaluatorWithNormCheck(
 		return nil, err
 	}
 
-	return NewEvaluator(norm.SelectClause, execCfg, username.RootUserName())
+	const withDiff = true
+	return NewEvaluator(norm.SelectClause, execCfg, username.RootUserName(),
+		defaultDBSessionData, hlc.Timestamp{}, withDiff), nil
 }
 
 var defaultDBSessionData = sessiondatapb.SessionData{
-	Database:   "defaultdb",
-	SearchPath: sessiondata.DefaultSearchPath.GetPathArray(),
+	Database:                   "defaultdb",
+	SearchPath:                 sessiondata.DefaultSearchPath.GetPathArray(),
+	TrigramSimilarityThreshold: 0.3,
 }

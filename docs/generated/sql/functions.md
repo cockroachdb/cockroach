@@ -323,11 +323,11 @@
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="cardinality"></a><code>cardinality(input: anyelement[]) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the number of elements contained in <code>input</code></p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="crdb_internal.merge_statement_stats"></a><code>crdb_internal.merge_statement_stats(input: jsonb[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Merge an array of roachpb.StatementStatistics into a single JSONB object</p>
+<tr><td><a name="crdb_internal.merge_statement_stats"></a><code>crdb_internal.merge_statement_stats(input: jsonb[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Merge an array of appstatspb.StatementStatistics into a single JSONB object</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="crdb_internal.merge_stats_metadata"></a><code>crdb_internal.merge_stats_metadata(input: jsonb[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Merge an array of StmtStatsMetadata into a single JSONB object</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="crdb_internal.merge_transaction_stats"></a><code>crdb_internal.merge_transaction_stats(input: jsonb[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Merge an array of roachpb.TransactionStatistics into a single JSONB object</p>
+<tr><td><a name="crdb_internal.merge_transaction_stats"></a><code>crdb_internal.merge_transaction_stats(input: jsonb[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Merge an array of appstatspb.TransactionStatistics into a single JSONB object</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="string_to_array"></a><code>string_to_array(str: <a href="string.html">string</a>, delimiter: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a>[]</code></td><td><span class="funcdesc"><p>Split a string into components on a delimiter.</p>
 </span></td><td>Immutable</td></tr>
@@ -2705,6 +2705,34 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.decode_plan_gist"></a><code>crdb_internal.decode_plan_gist(gist: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns rows of output similar to EXPLAIN from a gist such as those found in planGists element of the statistics column of the statement_statistics table.</p>
 </span></td><td>Volatile</td></tr>
+<tr><td><a name="crdb_internal.gen_rand_ident"></a><code>crdb_internal.gen_rand_ident(name_pattern: <a href="string.html">string</a>, count: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns random SQL identifiers.</p>
+<p>gen_rand_ident(pattern, count) is an alias for gen_rand_ident(pattern, count, ‘’).
+See the documentation of the other gen_rand_ident overload for details.</p>
+</span></td><td>Volatile</td></tr>
+<tr><td><a name="crdb_internal.gen_rand_ident"></a><code>crdb_internal.gen_rand_ident(name_pattern: <a href="string.html">string</a>, count: <a href="int.html">int</a>, parameters: jsonb) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns count random SQL identifiers that resemble the name_pattern.</p>
+<p>The last argument is a JSONB object containing the following optional fields:</p>
+<ul>
+<li>“seed”: the seed to use for the pseudo-random generator (default: random).</li>
+<li>“number”: whether to add a number to the generated names (default true).
+When enabled, occurrences of the character ‘#’ in the name pattern are
+replaced by the number. If ‘#’ is not present, the number is added at the end.</li>
+<li>“noise”: whether to add noise to the generated names (default true).
+It adds a non-zero probability for each of the probability options below left to zero.
+(To enable noise generally but disable one type of noise, set its probability to -1.)</li>
+<li>“punctuate”: probability of adding punctuation.</li>
+<li>“fmt”: probability of adding random Go/C formatting directives.</li>
+<li>“escapes”: probability of adding random escape sequences.</li>
+<li>“quote”: probabiltiy of adding single or double quotes.</li>
+<li>“emote”: probability of adding emojis.</li>
+<li>“space”: probability of adding simple spaces.</li>
+<li>“whitespace”: probability of adding complex whitespace.</li>
+<li>“capitals”: probability of using capital letters.
+Note: the name pattern must contain ASCII letters already for capital letters to be used.</li>
+<li>“diacritics”: probability of adding diacritics.</li>
+<li>“diacritic_depth”: max number of diacritics to add at a time (default 1).</li>
+<li>“zalgo”: special option that overrides diacritics and diacritic_depth (default false).</li>
+</ul>
+</span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.show_create_all_schemas"></a><code>crdb_internal.show_create_all_schemas(database_name: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns rows of CREATE schema statements.
 The output can be used to recreate a database.’</p>
 </span></td><td>Volatile</td></tr>
@@ -3074,6 +3102,54 @@ may increase either contention or retry errors, or both.</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.force_retry"></a><code>crdb_internal.force_retry(val: <a href="interval.html">interval</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
 </span></td><td>Volatile</td></tr>
+<tr><td><a name="crdb_internal.generate_test_objects"></a><code>crdb_internal.generate_test_objects(names: <a href="string.html">string</a>, counts: <a href="int.html">int</a>[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Generates a number of objects whose name follow the provided pattern.</p>
+<p>generate_test_objects(pat, counts) is an alias for
+generate_test_objects(’{“names”:pat, “counts”:counts}’::jsonb)</p>
+</span></td><td>Volatile</td></tr>
+<tr><td><a name="crdb_internal.generate_test_objects"></a><code>crdb_internal.generate_test_objects(names: <a href="string.html">string</a>, number: <a href="int.html">int</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Generates a number of objects whose name follow the provided pattern.</p>
+<p>generate_test_objects(pat, num) is an alias for
+generate_test_objects(’{“names”:pat, “counts”:[num]}’::jsonb)</p>
+</span></td><td>Volatile</td></tr>
+<tr><td><a name="crdb_internal.generate_test_objects"></a><code>crdb_internal.generate_test_objects(parameters: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Generates a number of objects whose name follow the provided pattern.</p>
+<p>Parameters:</p>
+<ul>
+<li>“names”: pattern to use to name the generated objects (default:
+“test”).</li>
+<li>“counts”: counts of generated objects (default: [10]).</li>
+<li>“dry_run”: prepare the schema but do not actually write it
+(default: false).</li>
+<li>“seed”: random seed to use (default: auto).</li>
+<li>“randomize_columns”: whether to randomize the column names on tables
+(default: true).</li>
+<li>“table_templates”: table templates to use.
+If the last part of “names” is “_”, the name of the template
+will be used as base pattern during name generation for tables.
+Otherwise, the last part of “names” will be used as pattern.
+If no table templates are specified, a simple template is used.</li>
+<li>“name_gen”: configuration for the name generation, see below.</li>
+</ul>
+<p>Name generation options:</p>
+<ul>
+<li>“number”: whether to add a number to the generated names (default true).
+When enabled, occurrences of the character ‘#’ in the name pattern are
+replaced by the number. If ‘#’ is not present, the number is added at the end.</li>
+<li>“noise”: whether to add noise to the generated names (default true).
+It adds a non-zero probability for each of the probability options below left to zero.
+(To enable noise generally but disable one type of noise, set its probability to -1.)</li>
+<li>“punctuate”: probability of adding punctuation.</li>
+<li>“fmt”: probability of adding random Go/C formatting directives.</li>
+<li>“escapes”: probability of adding random escape sequences.</li>
+<li>“quote”: probabiltiy of adding single or double quotes.</li>
+<li>“emote”: probability of adding emojis.</li>
+<li>“space”: probability of adding simple spaces.</li>
+<li>“whitespace”: probability of adding complex whitespace.</li>
+<li>“capitals”: probability of using capital letters.
+Note: the name pattern must contain ASCII letters already for capital letters to be used.</li>
+<li>“diacritics”: probability of adding diacritics.</li>
+<li>“diacritic_depth”: max number of diacritics to add at a time (default 1).</li>
+<li>“zalgo”: special option that overrides diacritics and diacritic_depth (default false).</li>
+</ul>
+</span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.get_database_id"></a><code>crdb_internal.get_database_id(name: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td></td><td>Stable</td></tr>
 <tr><td><a name="crdb_internal.get_namespace_id"></a><code>crdb_internal.get_namespace_id(parent_id: <a href="int.html">int</a>, name: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td></td><td>Stable</td></tr>
 <tr><td><a name="crdb_internal.get_namespace_id"></a><code>crdb_internal.get_namespace_id(parent_id: <a href="int.html">int</a>, parent_schema_id: <a href="int.html">int</a>, name: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td></td><td>Stable</td></tr>
@@ -3120,6 +3196,8 @@ active for the current transaction.</p>
 <tr><td><a name="crdb_internal.num_inverted_index_entries"></a><code>crdb_internal.num_inverted_index_entries(val: jsonb) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="crdb_internal.num_inverted_index_entries"></a><code>crdb_internal.num_inverted_index_entries(val: jsonb, version: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="crdb_internal.num_inverted_index_entries"></a><code>crdb_internal.num_inverted_index_entries(val: tsvector, version: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="crdb_internal.payloads_for_span"></a><code>crdb_internal.payloads_for_span(span_id: <a href="int.html">int</a>) &rarr; tuple{string AS payload_type, jsonb AS payload_jsonb}</code></td><td><span class="funcdesc"><p>Returns the payload(s) of the requested span and all its children.</p>
 </span></td><td>Volatile</td></tr>
@@ -3266,6 +3344,8 @@ table. Returns an error if validation fails.</p>
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th><th>Volatility</th></tr></thead>
 <tbody>
+<tr><td><a name="col_description"></a><code>col_description(table_oid: oid, column_number: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the comment for a table column, which is specified by the OID of its table and its column number. (obj_description cannot be used for table columns, since columns do not have OIDs of their own.)</p>
+</span></td><td>Stable</td></tr>
 <tr><td><a name="current_setting"></a><code>current_setting(setting_name: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>System info</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="current_setting"></a><code>current_setting(setting_name: <a href="string.html">string</a>, missing_ok: <a href="bool.html">bool</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>System info</p>
@@ -3436,6 +3516,10 @@ table. Returns an error if validation fails.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="information_schema._pg_numeric_scale"></a><code>information_schema._pg_numeric_scale(typid: oid, typmod: int4) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the scale of the given type with type modifier</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="obj_description"></a><code>obj_description(object_oid: oid) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the comment for a database object specified by its OID alone. This is deprecated since there is no guarantee that OIDs are unique across different system catalogs; therefore, the wrong comment might be returned.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="obj_description"></a><code>obj_description(object_oid: oid, catalog_name: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the comment for a database object specified by its OID and the name of the containing system catalog. For example, obj_description(123456, ‘pg_class’) would retrieve the comment for the table with OID 123456.</p>
+</span></td><td>Stable</td></tr>
 <tr><td><a name="oid"></a><code>oid(int: <a href="int.html">int</a>) &rarr; oid</code></td><td><span class="funcdesc"><p>Converts an integer to an OID.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="pg_backend_pid"></a><code>pg_backend_pid() &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns a numerical ID attached to this session. This ID is part of the query cancellation key used by the wire protocol. This function was only added for compatibility, and unlike in Postgres, the returned value does not correspond to a real process ID.</p>
@@ -3455,6 +3539,10 @@ table. Returns an error if validation fails.</p>
 <tr><td><a name="pg_get_function_result"></a><code>pg_get_function_result(func_oid: oid) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the types of the result of the specified function.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="pg_get_functiondef"></a><code>pg_get_functiondef(func_oid: oid) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>For user-defined functions, returns the definition of the specified function. For builtin functions, returns the name of the function.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="pg_get_indexdef"></a><code>pg_get_indexdef(index_oid: oid) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Gets the CREATE INDEX command for index</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="pg_get_indexdef"></a><code>pg_get_indexdef(index_oid: oid, column_no: <a href="int.html">int</a>, pretty_bool: <a href="bool.html">bool</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Gets the CREATE INDEX command for index, or definition of just one index column when given a non-zero column number</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="pg_get_serial_sequence"></a><code>pg_get_serial_sequence(table_name: <a href="string.html">string</a>, column_name: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the name of the sequence used by the given column_name in the table table_name.</p>
 </span></td><td>Stable</td></tr>
@@ -3487,6 +3575,8 @@ table. Returns an error if validation fails.</p>
 <tr><td><a name="pg_type_is_visible"></a><code>pg_type_is_visible(oid: oid) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the type with the given OID belongs to one of the schemas on the search path.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="set_config"></a><code>set_config(setting_name: <a href="string.html">string</a>, new_value: <a href="string.html">string</a>, is_local: <a href="bool.html">bool</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>System info</p>
-</span></td><td>Volatile</td></tr></tbody>
+</span></td><td>Volatile</td></tr>
+<tr><td><a name="shobj_description"></a><code>shobj_description(object_oid: oid, catalog_name: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the comment for a shared database object specified by its OID and the name of the containing system catalog. This is just like obj_description except that it is used for retrieving comments on shared objects (e.g. databases).</p>
+</span></td><td>Stable</td></tr></tbody>
 </table>
 

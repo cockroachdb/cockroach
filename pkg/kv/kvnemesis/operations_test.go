@@ -11,14 +11,21 @@
 package kvnemesis
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -38,6 +45,28 @@ var (
 func TestOperationsFormat(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	var sstValueHeader enginepb.MVCCValueHeader
+	sstValueHeader.KVNemesisSeq.Set(1)
+	sstSpan := roachpb.Span{Key: roachpb.Key(k1), EndKey: roachpb.Key(k4)}
+	sstTS := hlc.Timestamp{WallTime: 1}
+	sstFile := &storage.MemFile{}
+	{
+		st := cluster.MakeTestingClusterSettings()
+		storage.ValueBlocksEnabled.Override(ctx, &st.SV, false)
+		w := storage.MakeIngestionSSTWriter(ctx, st, sstFile)
+		defer w.Close()
+
+		require.NoError(t, w.PutMVCC(storage.MVCCKey{Key: roachpb.Key(k1), Timestamp: sstTS},
+			storage.MVCCValue{MVCCValueHeader: sstValueHeader, Value: roachpb.MakeValueFromString("v1")}))
+		require.NoError(t, w.PutMVCC(storage.MVCCKey{Key: roachpb.Key(k2), Timestamp: sstTS},
+			storage.MVCCValue{MVCCValueHeader: sstValueHeader}))
+		require.NoError(t, w.PutMVCCRangeKey(
+			storage.MVCCRangeKey{StartKey: roachpb.Key(k3), EndKey: roachpb.Key(k4), Timestamp: sstTS},
+			storage.MVCCValue{MVCCValueHeader: sstValueHeader}))
+		require.NoError(t, w.Finish())
+	}
 
 	tests := []struct {
 		step Step
@@ -53,9 +82,12 @@ func TestOperationsFormat(t *testing.T) {
 					put(k11, 3),
 				)),
 		},
+		{
+			step: step(addSSTable(sstFile.Data(), sstSpan, sstTS, sstValueHeader.KVNemesisSeq.Get(), true)),
+		},
 	}
 
-	w := echotest.NewWalker(t, testutils.TestDataPath(t, t.Name()))
+	w := echotest.NewWalker(t, datapathutils.TestDataPath(t, t.Name()))
 	for i, test := range tests {
 		name := fmt.Sprint(i)
 		t.Run(name, w.Run(t, name, func(t *testing.T) string {

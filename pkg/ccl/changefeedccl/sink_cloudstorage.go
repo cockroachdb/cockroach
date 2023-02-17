@@ -37,6 +37,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/google/btree"
+	// Placeholder for pgzip and zdstd.
+	_ "github.com/klauspost/compress/zstd"
+	_ "github.com/klauspost/pgzip"
 )
 
 func isCloudStorageSink(u *url.URL) bool {
@@ -319,6 +322,10 @@ type flushRequest struct {
 	flush chan struct{}
 }
 
+func (s *cloudStorageSink) getConcreteType() sinkType {
+	return sinkTypeCloudstorage
+}
+
 var cloudStorageSinkIDAtomic int64
 
 // Files that are emitted can be partitioned by their earliest event time,
@@ -434,8 +441,8 @@ func makeCloudStorageSink(
 			changefeedbase.OptEnvelope, encodingOpts.Envelope)
 	}
 
-	if encodingOpts.Envelope != changefeedbase.OptEnvelopeBare && !encodingOpts.KeyInValue {
-		return nil, errors.Errorf(`this sink requires the WITH %s option`, changefeedbase.OptKeyInValue)
+	if encodingOpts.Envelope != changefeedbase.OptEnvelopeBare {
+		encodingOpts.KeyInValue = true
 	}
 
 	if codec := encodingOpts.Compression; codec != "" {
@@ -454,7 +461,7 @@ func makeCloudStorageSink(
 	if s.es, err = makeExternalStorageFromURI(ctx, u.String(), user, cloud.WithIOAccountingInterceptor(nil)); err != nil {
 		return nil, err
 	}
-	if mb != nil {
+	if mb != nil && s.es != nil {
 		s.metrics = mb(s.es.RequiresExternalIOAccounting())
 	} else {
 		s.metrics = (*sliMetrics)(nil)

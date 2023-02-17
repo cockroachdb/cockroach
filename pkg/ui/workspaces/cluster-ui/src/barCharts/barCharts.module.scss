@@ -74,6 +74,7 @@
   .bytes-read-dev,
   .rows-written-dev,
   .contention-dev,
+  .cpu-dev,
   .max-mem-usage-dev,
   .network-bytes-dev {
     background-color: $colors--primary-blue-3;

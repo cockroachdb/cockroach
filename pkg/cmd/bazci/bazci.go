@@ -247,7 +247,7 @@ func (s *monitorBuildServer) Finalize() error {
 	if s.action == "build" {
 		for _, target := range s.builtTargets {
 			for _, outputGroup := range target.OutputGroup {
-				if outputGroup.Incomplete {
+				if outputGroup == nil || outputGroup.Incomplete {
 					continue
 				}
 				for _, set := range outputGroup.FileSets {
@@ -497,6 +497,8 @@ func processTestXmls(testXmls []string) error {
 		if len(postErrors) != 0 {
 			return errors.Newf("%s", strings.Join(postErrors, "\n"))
 		}
+	} else {
+		fmt.Printf("branch %s does not appear to be a release branch; skipping reporting issues to GitHub\n", branch)
 	}
 	return nil
 }

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -54,10 +55,10 @@ var validTableDesc = &descpb.Descriptor{
 				ID:                  1,
 				Unique:              true,
 				KeyColumnNames:      []string{"col"},
-				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{1},
 				Version:             descpb.LatestIndexDescriptorVersion,
-				EncodingType:        descpb.PrimaryIndexEncoding,
+				EncodingType:        catenumpb.PrimaryIndexEncoding,
 				ConstraintID:        1,
 			},
 			NextIndexID: 2,
@@ -243,7 +244,7 @@ func TestExamineDescriptors(t *testing.T) {
 			},
 			expected: `Examining 2 descriptors and 2 namespace entries...
   ParentID  52, ParentSchemaID 29: relation "t" (51): expected matching namespace entry, found none
-  ParentID   0, ParentSchemaID 29: namespace entry "t" (51): no matching name info found in non-dropped relation "t"
+  ParentID   0, ParentSchemaID 29: namespace entry "t" (51): mismatched name "t" in relation descriptor
 `,
 		},
 		{ // 8
@@ -372,7 +373,7 @@ func TestExamineDescriptors(t *testing.T) {
 				{NameInfo: descpb.NameInfo{Name: "causes_error"}, ID: 2},
 			},
 			expected: `Examining 0 descriptors and 4 namespace entries...
-  ParentID   0, ParentSchemaID  0: namespace entry "causes_error" (2): descriptor not found
+  ParentID   0, ParentSchemaID  0: namespace entry "causes_error" (2): referenced descriptor not found
 `,
 		},
 		{ // 14
@@ -380,7 +381,7 @@ func TestExamineDescriptors(t *testing.T) {
 				{NameInfo: descpb.NameInfo{Name: "null"}, ID: int64(descpb.InvalidID)},
 			},
 			expected: `Examining 0 descriptors and 1 namespace entries...
-  ParentID   0, ParentSchemaID  0: namespace entry "null" (0): invalid descriptor ID
+  ParentID   0, ParentSchemaID  0: namespace entry "null" (0): invalid namespace entry
 `,
 		},
 		{ // 15
@@ -415,7 +416,7 @@ func TestExamineDescriptors(t *testing.T) {
 				{NameInfo: descpb.NameInfo{Name: "db"}, ID: 52},
 			},
 			expected: `Examining 2 descriptors and 2 namespace entries...
-  ParentID  52, ParentSchemaID 29: namespace entry "t" (51): no matching name info in draining names of dropped relation
+  ParentID  52, ParentSchemaID 29: namespace entry "t" (51): descriptor is being dropped
 `,
 		},
 		{ // 17

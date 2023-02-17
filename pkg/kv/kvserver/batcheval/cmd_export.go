@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -61,21 +60,6 @@ var ExportRequestMaxAllowedFileSizeOverage = settings.RegisterByteSizeSetting(
 	),
 	64<<20, /* 64 MiB */
 ).WithPublic()
-
-// exportRequestMaxIterationTime controls time spent by export request iterating
-// over data in underlying storage. This threshold preventing export request from
-// holding locks for too long and preventing non mvcc operations from progressing.
-// If request takes longer than this threshold it would stop and return already
-// collected data and allow caller to use resume span to continue.
-var exportRequestMaxIterationTime = settings.RegisterDurationSetting(
-	settings.TenantWritable,
-	"kv.bulk_sst.max_request_time",
-	"if set, limits amount of time spent in export requests; "+
-		"if export request can not finish within allocated time it will resume from the point it stopped in "+
-		"subsequent request",
-	// Feature is disabled by default.
-	0,
-)
 
 func init() {
 	RegisterReadOnlyCommand(roachpb.Export, declareKeysExport, evalExport)
@@ -165,8 +149,6 @@ func evalExport(
 		maxSize = targetSize + uint64(allowedOverage)
 	}
 
-	maxRunTime := exportRequestMaxIterationTime.Get(&cArgs.EvalCtx.ClusterSettings().SV)
-
 	var maxIntents uint64
 	if m := storage.MaxIntentsPerWriteIntentError.Get(&cArgs.EvalCtx.ClusterSettings().SV); m > 0 {
 		maxIntents = uint64(m)
@@ -176,6 +158,14 @@ func evalExport(
 	resumeKeyTS := hlc.Timestamp{}
 	if args.SplitMidKey {
 		resumeKeyTS = args.ResumeKeyTS
+	}
+
+	maybeAnnotateExceedMaxSizeError := func(err error) error {
+		if errors.HasType(err, (*storage.ExceedMaxSizeError)(nil)) {
+			return errors.WithHintf(err,
+				"consider increasing cluster setting %q", MaxExportOverageSetting)
+		}
+		return err
 	}
 
 	var curSizeOfExportedSSTs int64
@@ -191,7 +181,6 @@ func evalExport(
 			MaxSize:            maxSize,
 			MaxIntents:         maxIntents,
 			StopMidKey:         args.SplitMidKey,
-			ResourceLimiter:    storage.NewResourceLimiter(storage.ResourceLimiterOptions{MaxRunTime: maxRunTime}, timeutil.DefaultTimeSource{}),
 		}
 		var summary roachpb.BulkOpSummary
 		var resume storage.MVCCKey
@@ -205,16 +194,26 @@ func evalExport(
 				StripTenantPrefix:  true,
 				StripValueChecksum: true,
 			}
-			summary, resume, fingerprint, err = storage.MVCCExportFingerprint(ctx, cArgs.EvalCtx.ClusterSettings(), reader, opts, destFile)
-		} else {
-			summary, resume, err = storage.MVCCExportToSST(ctx, cArgs.EvalCtx.ClusterSettings(), reader, opts, destFile)
-		}
-		if err != nil {
-			if errors.HasType(err, (*storage.ExceedMaxSizeError)(nil)) {
-				err = errors.WithHintf(err,
-					"consider increasing cluster setting %q", MaxExportOverageSetting)
+			var hasRangeKeys bool
+			summary, resume, fingerprint, hasRangeKeys, err = storage.MVCCExportFingerprint(ctx,
+				cArgs.EvalCtx.ClusterSettings(), reader, opts, destFile)
+			if err != nil {
+				return result.Result{}, maybeAnnotateExceedMaxSizeError(err)
 			}
-			return result.Result{}, err
+
+			// If no range keys were encountered during fingerprinting then we zero
+			// out the underlying SST file as there is no use in sending an empty file
+			// part of the ExportResponse. This frees up the memory used by the empty
+			// SST file.
+			if !hasRangeKeys {
+				destFile = &storage.MemFile{}
+			}
+		} else {
+			summary, resume, err = storage.MVCCExportToSST(ctx, cArgs.EvalCtx.ClusterSettings(), reader,
+				opts, destFile)
+			if err != nil {
+				return result.Result{}, maybeAnnotateExceedMaxSizeError(err)
+			}
 		}
 		data := destFile.Data()
 
@@ -241,12 +240,26 @@ func evalExport(
 		} else {
 			span.EndKey = args.EndKey
 		}
-		exported := roachpb.ExportResponse_File{
-			Span:        span,
-			EndKeyTS:    resume.Timestamp,
-			Exported:    summary,
-			SST:         data,
-			Fingerprint: fingerprint,
+
+		var exported roachpb.ExportResponse_File
+		if args.ExportFingerprint {
+			// A fingerprinting ExportRequest does not need to return the
+			// BulkOpSummary or the exported Span. This is because we do not expect
+			// the sender of a fingerprint ExportRequest to use anything but the
+			// `Fingerprint` for point-keys and the SST file that contains the
+			// rangekeys we encountered during ExportRequest evaluation.
+			exported = roachpb.ExportResponse_File{
+				EndKeyTS:    resume.Timestamp,
+				SST:         data,
+				Fingerprint: fingerprint,
+			}
+		} else {
+			exported = roachpb.ExportResponse_File{
+				Span:     span,
+				EndKeyTS: resume.Timestamp,
+				Exported: summary,
+				SST:      data,
+			}
 		}
 		reply.Files = append(reply.Files, exported)
 		start = resume.Key

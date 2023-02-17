@@ -1,4 +1,4 @@
-# tenant-cluster-setting-override-opt: allow-multi-region-abstractions-for-secondary-tenants
+# tenant-cluster-setting-override-opt: sql.multi_region.allow_abstractions_for_secondary_tenants.enabled=true
 # LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-tenant
 
 query TTTTT
@@ -27,27 +27,27 @@ query TT
 SHOW ZONE CONFIGURATION FOR DATABASE "mr-zone-configs"
 ----
 DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING
-                            range_min_bytes = 134217728,
-                            range_max_bytes = 536870912,
-                            gc.ttlseconds = 90000,
-                            num_replicas = 5,
-                            num_voters = 5,
-                            constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
-                            voter_constraints = '{+region=ca-central-1: 2}',
-                            lease_preferences = '[[+region=ca-central-1]]'
+                              range_min_bytes = 134217728,
+                              range_max_bytes = 536870912,
+                              gc.ttlseconds = 14400,
+                              num_replicas = 5,
+                              num_voters = 5,
+                              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                              voter_constraints = '{+region=ca-central-1: 2}',
+                              lease_preferences = '[[+region=ca-central-1]]'
 
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE tbl
 ----
 DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING
-                            range_min_bytes = 134217728,
-                            range_max_bytes = 536870912,
-                            gc.ttlseconds = 90000,
-                            num_replicas = 5,
-                            num_voters = 5,
-                            constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
-                            voter_constraints = '{+region=ca-central-1: 2}',
-                            lease_preferences = '[[+region=ca-central-1]]'
+                              range_min_bytes = 134217728,
+                              range_max_bytes = 536870912,
+                              gc.ttlseconds = 14400,
+                              num_replicas = 5,
+                              num_voters = 5,
+                              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                              voter_constraints = '{+region=ca-central-1: 2}',
+                              lease_preferences = '[[+region=ca-central-1]]'
 
 
 # REGIONAL zone config extensions.
@@ -59,27 +59,27 @@ query TT
 SHOW ZONE CONFIGURATION FOR DATABASE "mr-zone-configs"
 ----
 DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING
-                            range_min_bytes = 134217728,
-                            range_max_bytes = 536870912,
-                            gc.ttlseconds = 90000,
-                            num_replicas = 9,
-                            num_voters = 5,
-                            constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
-                            voter_constraints = '{+region=ca-central-1: 2}',
-                            lease_preferences = '[[+region=ca-central-1]]'
+                              range_min_bytes = 134217728,
+                              range_max_bytes = 536870912,
+                              gc.ttlseconds = 14400,
+                              num_replicas = 9,
+                              num_voters = 5,
+                              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                              voter_constraints = '{+region=ca-central-1: 2}',
+                              lease_preferences = '[[+region=ca-central-1]]'
 
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE tbl
 ----
 DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING
-                            range_min_bytes = 134217728,
-                            range_max_bytes = 536870912,
-                            gc.ttlseconds = 90000,
-                            num_replicas = 9,
-                            num_voters = 5,
-                            constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
-                            voter_constraints = '{+region=ca-central-1: 2}',
-                            lease_preferences = '[[+region=ca-central-1]]'
+                              range_min_bytes = 134217728,
+                              range_max_bytes = 536870912,
+                              gc.ttlseconds = 14400,
+                              num_replicas = 9,
+                              num_voters = 5,
+                              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                              voter_constraints = '{+region=ca-central-1: 2}',
+                              lease_preferences = '[[+region=ca-central-1]]'
 
 
 # REGIONAL IN zone config extensions.
@@ -96,27 +96,27 @@ query TT
 SHOW ZONE CONFIGURATION FOR DATABASE "mr-zone-configs"
 ----
 DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING
-                            range_min_bytes = 134217728,
-                            range_max_bytes = 536870912,
-                            gc.ttlseconds = 90000,
-                            num_replicas = 9,
-                            num_voters = 5,
-                            constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
-                            voter_constraints = '{+region=ca-central-1: 2}',
-                            lease_preferences = '[[+region=ca-central-1], [+region=ap-southeast-2]]'
+                              range_min_bytes = 134217728,
+                              range_max_bytes = 536870912,
+                              gc.ttlseconds = 14400,
+                              num_replicas = 9,
+                              num_voters = 5,
+                              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                              voter_constraints = '{+region=ca-central-1: 2}',
+                              lease_preferences = '[[+region=ca-central-1], [+region=ap-southeast-2]]'
 
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE tbl
 ----
 DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING
-                            range_min_bytes = 134217728,
-                            range_max_bytes = 536870912,
-                            gc.ttlseconds = 90000,
-                            num_replicas = 9,
-                            num_voters = 5,
-                            constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
-                            voter_constraints = '{+region=ca-central-1: 2}',
-                            lease_preferences = '[[+region=ca-central-1], [+region=ap-southeast-2]]'
+                              range_min_bytes = 134217728,
+                              range_max_bytes = 536870912,
+                              gc.ttlseconds = 14400,
+                              num_replicas = 9,
+                              num_voters = 5,
+                              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                              voter_constraints = '{+region=ca-central-1: 2}',
+                              lease_preferences = '[[+region=ca-central-1], [+region=ap-southeast-2]]'
 
 statement ok
 ALTER TABLE tbl SET LOCALITY REGIONAL IN "ca-central-1"
@@ -125,14 +125,14 @@ query TT
 SHOW ZONE CONFIGURATION FOR TABLE tbl
 ----
 TABLE tbl  ALTER TABLE tbl CONFIGURE ZONE USING
-           range_min_bytes = 134217728,
-           range_max_bytes = 536870912,
-           gc.ttlseconds = 90000,
-           num_replicas = 9,
-           num_voters = 5,
-           constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
-           voter_constraints = '{+region=ca-central-1: 2}',
-           lease_preferences = '[[+region=ca-central-1], [+region=ap-southeast-2]]'
+             range_min_bytes = 134217728,
+             range_max_bytes = 536870912,
+             gc.ttlseconds = 14400,
+             num_replicas = 9,
+             num_voters = 5,
+             constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+             voter_constraints = '{+region=ca-central-1: 2}',
+             lease_preferences = '[[+region=ca-central-1], [+region=ap-southeast-2]]'
 
 statement ok
 ALTER TABLE tbl SET LOCALITY REGIONAL IN "ap-southeast-2"
@@ -141,14 +141,14 @@ query TT
 SHOW ZONE CONFIGURATION FOR TABLE tbl
 ----
 TABLE tbl  ALTER TABLE tbl CONFIGURE ZONE USING
-           range_min_bytes = 134217728,
-           range_max_bytes = 536870912,
-           gc.ttlseconds = 90000,
-           num_replicas = 9,
-           num_voters = 5,
-           constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
-           voter_constraints = '{+region=ap-southeast-2: 2}',
-           lease_preferences = '[[+region=ap-southeast-2], [+region=us-east-1]]'
+             range_min_bytes = 134217728,
+             range_max_bytes = 536870912,
+             gc.ttlseconds = 14400,
+             num_replicas = 9,
+             num_voters = 5,
+             constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+             voter_constraints = '{+region=ap-southeast-2: 2}',
+             lease_preferences = '[[+region=ap-southeast-2], [+region=us-east-1]]'
 
 statement ok
 ALTER TABLE tbl SET LOCALITY REGIONAL IN "us-east-1"
@@ -157,14 +157,14 @@ query TT
 SHOW ZONE CONFIGURATION FOR TABLE tbl
 ----
 TABLE tbl  ALTER TABLE tbl CONFIGURE ZONE USING
-           range_min_bytes = 134217728,
-           range_max_bytes = 536870912,
-           gc.ttlseconds = 90000,
-           num_replicas = 9,
-           num_voters = 5,
-           constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
-           voter_constraints = '{+region=us-east-1: 2}',
-           lease_preferences = '[[+region=us-east-1]]'
+             range_min_bytes = 134217728,
+             range_max_bytes = 536870912,
+             gc.ttlseconds = 14400,
+             num_replicas = 9,
+             num_voters = 5,
+             constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+             voter_constraints = '{+region=us-east-1: 2}',
+             lease_preferences = '[[+region=us-east-1]]'
 
 # GLOBAL zone config extensions.
 
@@ -175,15 +175,15 @@ query TT
 SHOW ZONE CONFIGURATION FOR TABLE tbl
 ----
 TABLE tbl  ALTER TABLE tbl CONFIGURE ZONE USING
-           range_min_bytes = 134217728,
-           range_max_bytes = 536870912,
-           gc.ttlseconds = 90000,
-           global_reads = true,
-           num_replicas = 5,
-           num_voters = 5,
-           constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
-           voter_constraints = '{+region=ca-central-1: 2}',
-           lease_preferences = '[[+region=ca-central-1]]'
+             range_min_bytes = 134217728,
+             range_max_bytes = 536870912,
+             gc.ttlseconds = 14400,
+             global_reads = true,
+             num_replicas = 5,
+             num_voters = 5,
+             constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+             voter_constraints = '{+region=ca-central-1: 2}',
+             lease_preferences = '[[+region=ca-central-1]]'
 
 
 statement ok
@@ -196,28 +196,28 @@ query TT
 SHOW ZONE CONFIGURATION FOR DATABASE "mr-zone-configs"
 ----
 DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING
-                            range_min_bytes = 134217728,
-                            range_max_bytes = 536870912,
-                            gc.ttlseconds = 90000,
-                            num_replicas = 9,
-                            num_voters = 5,
-                            constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
-                            voter_constraints = '{+region=ca-central-1: 2}',
-                            lease_preferences = '[[+region=ca-central-1], [+region=ap-southeast-2]]'
+                              range_min_bytes = 134217728,
+                              range_max_bytes = 536870912,
+                              gc.ttlseconds = 14400,
+                              num_replicas = 9,
+                              num_voters = 5,
+                              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                              voter_constraints = '{+region=ca-central-1: 2}',
+                              lease_preferences = '[[+region=ca-central-1], [+region=ap-southeast-2]]'
 
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE tbl
 ----
 TABLE tbl  ALTER TABLE tbl CONFIGURE ZONE USING
-           range_min_bytes = 134217728,
-           range_max_bytes = 536870912,
-           gc.ttlseconds = 90000,
-           global_reads = true,
-           num_replicas = 6,
-           num_voters = 6,
-           constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
-           voter_constraints = '{+region=ca-central-1: 2}',
-           lease_preferences = '[[+region=ca-central-1], [+region=ap-southeast-2], [+region=us-east-1]]'
+             range_min_bytes = 134217728,
+             range_max_bytes = 536870912,
+             gc.ttlseconds = 14400,
+             global_reads = true,
+             num_replicas = 6,
+             num_voters = 6,
+             constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+             voter_constraints = '{+region=ca-central-1: 2}',
+             lease_preferences = '[[+region=ca-central-1], [+region=ap-southeast-2], [+region=us-east-1]]'
 
 statement ok
 ALTER DATABASE "mr-zone-configs" ALTER LOCALITY GLOBAL CONFIGURE ZONE DISCARD
@@ -226,28 +226,28 @@ query TT
 SHOW ZONE CONFIGURATION FOR DATABASE "mr-zone-configs"
 ----
 DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING
-                            range_min_bytes = 134217728,
-                            range_max_bytes = 536870912,
-                            gc.ttlseconds = 90000,
-                            num_replicas = 9,
-                            num_voters = 5,
-                            constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
-                            voter_constraints = '{+region=ca-central-1: 2}',
-                            lease_preferences = '[[+region=ca-central-1], [+region=ap-southeast-2]]'
+                              range_min_bytes = 134217728,
+                              range_max_bytes = 536870912,
+                              gc.ttlseconds = 14400,
+                              num_replicas = 9,
+                              num_voters = 5,
+                              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                              voter_constraints = '{+region=ca-central-1: 2}',
+                              lease_preferences = '[[+region=ca-central-1], [+region=ap-southeast-2]]'
 
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE tbl
 ----
 TABLE tbl  ALTER TABLE tbl CONFIGURE ZONE USING
-           range_min_bytes = 134217728,
-           range_max_bytes = 536870912,
-           gc.ttlseconds = 90000,
-           global_reads = true,
-           num_replicas = 5,
-           num_voters = 5,
-           constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
-           voter_constraints = '{+region=ca-central-1: 2}',
-           lease_preferences = '[[+region=ca-central-1]]'
+             range_min_bytes = 134217728,
+             range_max_bytes = 536870912,
+             gc.ttlseconds = 14400,
+             global_reads = true,
+             num_replicas = 5,
+             num_voters = 5,
+             constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+             voter_constraints = '{+region=ca-central-1: 2}',
+             lease_preferences = '[[+region=ca-central-1]]'
 
 subtest conflicting_zone_config_extension
 

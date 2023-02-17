@@ -20,39 +20,38 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
-var allBuiltinNames orderedStrings
+var allBuiltinNames stringSet
 
 // AllBuiltinNames returns a slice containing all the built-in function
 // names, sorted in alphabetical order. This can be used for a
 // deterministic walk through the Builtins map.
 func AllBuiltinNames() []string {
-	allBuiltinNames.sort()
-	return allBuiltinNames.strings
+	return allBuiltinNames.Ordered()
 }
 
-var allAggregateBuiltinNames orderedStrings
+var allAggregateBuiltinNames stringSet
 
 // AllAggregateBuiltinNames returns a slice containing the subset of
 // AllBuiltinNames that corresponds to aggregate functions.
 func AllAggregateBuiltinNames() []string {
-	allAggregateBuiltinNames.sort()
-	return allAggregateBuiltinNames.strings
+	return allAggregateBuiltinNames.Ordered()
 }
 
-var allWindowBuiltinNames orderedStrings
+var allWindowBuiltinNames stringSet
 
 // AllWindowBuiltinNames returns a slice containing the subset of
 // AllBuiltinNames that corresponds to window functions.
 func AllWindowBuiltinNames() []string {
-	allWindowBuiltinNames.sort()
-	return allWindowBuiltinNames.strings
+	return allWindowBuiltinNames.Ordered()
 }
 
 func init() {
 	tree.FunDefs = make(map[string]*tree.FunctionDefinition)
 	tree.ResolvedBuiltinFuncDefs = make(map[string]*tree.ResolvedFunctionDefinition)
+	tree.OidToQualifiedBuiltinOverload = make(map[oid.Oid]tree.QualifiedOverload)
 
 	builtinsregistry.AddSubscription(func(name string, props *tree.FunctionProperties, overloads []tree.Overload) {
 		for i, fn := range overloads {
@@ -60,23 +59,27 @@ func init() {
 			overloads[i].Oid = signatureMustHaveHardcodedOID(signature)
 		}
 		fDef := tree.NewFunctionDefinition(name, props, overloads)
-		addResolvedFuncDef(tree.ResolvedBuiltinFuncDefs, fDef)
+		addResolvedFuncDef(tree.ResolvedBuiltinFuncDefs, tree.OidToQualifiedBuiltinOverload, fDef)
 		tree.FunDefs[name] = fDef
 		if !fDef.ShouldDocument() {
 			// Avoid listing help for undocumented functions.
 			return
 		}
-		allBuiltinNames.add(name)
-		if props.Class == tree.AggregateClass {
-			allAggregateBuiltinNames.add(name)
-		} else if props.Class == tree.WindowClass {
-			allWindowBuiltinNames.add(name)
+		allBuiltinNames.Add(name)
+		for _, fn := range overloads {
+			if fn.Class == tree.AggregateClass {
+				allAggregateBuiltinNames.Add(name)
+			} else if fn.Class == tree.WindowClass {
+				allWindowBuiltinNames.Add(name)
+			}
 		}
 	})
 }
 
 func addResolvedFuncDef(
-	resolved map[string]*tree.ResolvedFunctionDefinition, def *tree.FunctionDefinition,
+	resolved map[string]*tree.ResolvedFunctionDefinition,
+	oidToOl map[oid.Oid]tree.QualifiedOverload,
+	def *tree.FunctionDefinition,
 ) {
 	parts := strings.Split(def.Name, ".")
 	if len(parts) > 2 || len(parts) == 0 {
@@ -84,21 +87,28 @@ func addResolvedFuncDef(
 		panic(errors.AssertionFailedf("invalid builtin function name: %s", def.Name))
 	}
 
+	var fd *tree.ResolvedFunctionDefinition
 	if len(parts) == 2 {
-		resolved[def.Name] = tree.QualifyBuiltinFunctionDefinition(def, parts[0])
+		fd = tree.QualifyBuiltinFunctionDefinition(def, parts[0])
+		resolved[def.Name] = fd
 		return
+	} else {
+		resolvedName := catconstants.PgCatalogName + "." + def.Name
+		fd = tree.QualifyBuiltinFunctionDefinition(def, catconstants.PgCatalogName)
+		resolved[resolvedName] = fd
+		if def.AvailableOnPublicSchema {
+			resolvedName = catconstants.PublicSchemaName + "." + def.Name
+			resolved[resolvedName] = tree.QualifyBuiltinFunctionDefinition(def, catconstants.PublicSchemaName)
+		}
 	}
-
-	resolvedName := catconstants.PgCatalogName + "." + def.Name
-	resolved[resolvedName] = tree.QualifyBuiltinFunctionDefinition(def, catconstants.PgCatalogName)
-	if def.AvailableOnPublicSchema {
-		resolvedName = catconstants.PublicSchemaName + "." + def.Name
-		resolved[resolvedName] = tree.QualifyBuiltinFunctionDefinition(def, catconstants.PublicSchemaName)
+	for _, o := range fd.Overloads {
+		oidToOl[o.Oid] = o
 	}
 }
 
 func registerBuiltin(name string, def builtinDefinition) {
-	for _, overload := range def.overloads {
+	for i := range def.overloads {
+		overload := &def.overloads[i]
 		fnCount := 0
 		if overload.Fn != nil {
 			fnCount++
@@ -159,35 +169,29 @@ func collectOverloads(
 	return makeBuiltin(props, r...)
 }
 
-// orderedStrings sorts a slice of strings lazily
-// for better performance.
-type orderedStrings struct {
-	strings []string
-	sorted  bool
+// stringSet is a set of strings that can be ordered.
+type stringSet struct {
+	set     map[string]struct{}
+	ordered []string
 }
 
-// add a string without changing whether or not
-// the strings are sorted yet.
-func (o *orderedStrings) add(s string) {
-	if o.sorted {
-		o.insert(s)
-	} else {
-		o.strings = append(o.strings, s)
+// Add adds a string to the set.
+func (s *stringSet) Add(str string) {
+	if s.set == nil {
+		s.set = make(map[string]struct{})
 	}
+	s.set[str] = struct{}{}
+	s.ordered = nil
 }
 
-func (o *orderedStrings) sort() {
-	if !o.sorted {
-		sort.Strings(o.strings)
+// Ordered returns an ordered slice of the strings in the set.
+func (s stringSet) Ordered() []string {
+	if s.ordered == nil {
+		s.ordered = make([]string, 0, len(s.set))
+		for str := range s.set {
+			s.ordered = append(s.ordered, str)
+		}
+		sort.Strings(s.ordered)
 	}
-	o.sorted = true
-}
-
-// insert assumes the strings are already sorted
-// and inserts s in the right place.
-func (o *orderedStrings) insert(s string) {
-	i := sort.SearchStrings(o.strings, s)
-	o.strings = append(o.strings, "")
-	copy(o.strings[i+1:], o.strings[i:])
-	o.strings[i] = s
+	return s.ordered
 }

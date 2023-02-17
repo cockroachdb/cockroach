@@ -52,3 +52,14 @@ export const selectAutomaticStatsCollectionEnabled = createSelector(
     return value === "true";
   },
 );
+
+export const selectCrossClusterReplicationEnabled = createSelector(
+  selectClusterSettings,
+  (settings): boolean | undefined => {
+    if (!settings) {
+      return undefined;
+    }
+    const value = settings["cross_cluster_replication.enabled"]?.value;
+    return value === "true";
+  },
+);

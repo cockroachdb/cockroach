@@ -55,6 +55,10 @@ if [[ -n "${release_branch}" ]] ; then
   log_into_gcloud
   gcloud container images add-tag "${gcr_repository}:${build_name}" "${gcr_repository}:latest-${release_branch}-build"
 fi
+if [[ "$TC_BUILD_BRANCH" == "master" ]]; then
+  log_into_gcloud
+  gcloud container images add-tag "${gcr_repository}:${build_name}" "${gcr_repository}:latest-master-build"
+fi
 tc_end_block "Tag docker image as latest-build"
 
 

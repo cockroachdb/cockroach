@@ -305,7 +305,7 @@ func TestBiDirectionalRangefeedNotUsedUntilUpgradeFinalilzed(t *testing.T) {
 	}
 
 	t.Run("rangefeed-stream-disabled-prior-to-version-upgrade", func(t *testing.T) {
-		noRfStreamVer := clusterversion.ByKey(clusterversion.V22_2RangefeedUseOneStreamPerNode - 1)
+		noRfStreamVer := clusterversion.ByKey(clusterversion.TODODelete_V22_2RangefeedUseOneStreamPerNode - 1)
 		tc, cleanup := startServerAtVer(noRfStreamVer)
 		defer cleanup()
 		runRangeFeed(tc)
@@ -314,7 +314,7 @@ func TestBiDirectionalRangefeedNotUsedUntilUpgradeFinalilzed(t *testing.T) {
 	t.Run("rangefeed-stream-disabled-via-environment", func(t *testing.T) {
 		defer kvcoord.TestingSetEnableMuxRangeFeed(false)()
 		// Even though we could use rangefeed stream, it's disabled via kill switch.
-		rfStreamVer := clusterversion.ByKey(clusterversion.V22_2RangefeedUseOneStreamPerNode)
+		rfStreamVer := clusterversion.ByKey(clusterversion.TODODelete_V22_2RangefeedUseOneStreamPerNode)
 		tc, cleanup := startServerAtVer(rfStreamVer)
 		defer cleanup()
 		runRangeFeed(tc, kvcoord.WithMuxRangeFeed())

@@ -231,13 +231,13 @@ func (e *jsonEncoder) initRawEnvelope() error {
 		}
 
 		if e.updatedField {
-			if err := metaBuilder.Set("updated", json.FromString(evCtx.updated.AsOfSystemTime())); err != nil {
+			if err := metaBuilder.Set("updated", json.FromString(timestampToString(evCtx.updated))); err != nil {
 				return nil, err
 			}
 		}
 
 		if e.mvccTimestampField {
-			if err := metaBuilder.Set("mvcc_timestamp", json.FromString(evCtx.mvcc.AsOfSystemTime())); err != nil {
+			if err := metaBuilder.Set("mvcc_timestamp", json.FromString(timestampToString(evCtx.mvcc))); err != nil {
 				return nil, err
 			}
 		}
@@ -324,13 +324,13 @@ func (e *jsonEncoder) initWrappedEnvelope() error {
 		}
 
 		if e.updatedField {
-			if err := b.Set("updated", json.FromString(evCtx.updated.AsOfSystemTime())); err != nil {
+			if err := b.Set("updated", json.FromString(timestampToString(evCtx.updated))); err != nil {
 				return nil, err
 			}
 		}
 
 		if e.mvccTimestampField {
-			if err := b.Set("mvcc_timestamp", json.FromString(evCtx.mvcc.AsOfSystemTime())); err != nil {
+			if err := b.Set("mvcc_timestamp", json.FromString(timestampToString(evCtx.mvcc))); err != nil {
 				return nil, err
 			}
 		}
@@ -426,7 +426,8 @@ func init() {
 			}
 			return tree.NewDBytes(tree.DBytes(o)), nil
 		},
-		Info: "Strings can be of the form 'resolved' or 'resolved=1s'.",
+		Class: tree.NormalClass,
+		Info:  "Strings can be of the form 'resolved' or 'resolved=1s'.",
 		// Probably actually stable, but since this is tightly coupled to changefeed logic by design,
 		// best to be defensive.
 		Volatility: volatility.Volatile,

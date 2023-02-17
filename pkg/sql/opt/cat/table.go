@@ -228,8 +228,21 @@ type TableStatistic interface {
 	// inverted index histograms, this will always return types.Bytes.
 	HistogramType() *types.T
 
-	// IsForecast returns true if this statistic is a forecast.
+	// IsPartial returns true if this statistic was collected with a where
+	// clause. (If the where clause was something like "WHERE 1 = 1" or "WHERE
+	// true" this could technically be a full statistic rather than a partial
+	// statistic, but this function does not check for this.)
+	IsPartial() bool
+
+	// IsMerged returns true if this statistic was created by merging a partial
+	// and a full statistic.
+	IsMerged() bool
+
+	// IsForecast returns true if this statistic was created by forecasting.
 	IsForecast() bool
+
+	// IsAuto returns true if this statistic was collected automatically.
+	IsAuto() bool
 }
 
 // HistogramBucket contains the data for a single histogram bucket. Note

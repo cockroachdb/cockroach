@@ -179,27 +179,17 @@ testuser    DELETE FROM t WHERE (k >= 'b') AND (k < 'x')  executing
 query TTTTTTBB colnames,retry
 SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended FROM crdb_internal.cluster_locks WHERE table_name='t' AND txn_id='$txn3'
 ----
-database_name schema_name table_name  lock_key_pretty     lock_strength   durability    granted contended
-test          public      t           /Table/106/1/"a"/0  Exclusive       Unreplicated  true    false
-test          public      t           /Table/106/1/"b"/0  Exclusive       Unreplicated  true    true
-test          public      t           /Table/106/1/"c"/0  Exclusive       Unreplicated  true    false
-test          public      t           /Table/106/1/"l"/0  Exclusive       Unreplicated  true    false
-test          public      t           /Table/106/1/"m"/0  Exclusive       Unreplicated  true    false
-test          public      t           /Table/106/1/"p"/0  Exclusive       Unreplicated  true    false
-test          public      t           /Table/106/1/"s"/0  Exclusive       Unreplicated  true    false
-test          public      t           /Table/106/1/"t"/0  Exclusive       Unreplicated  true    false
-test          public      t           /Table/106/1/"z"/0  Exclusive       Unreplicated  true    false
+database_name  schema_name  table_name  lock_key_pretty  lock_strength  durability  granted  contended
 
 query TTTTTTBB colnames
 SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended FROM crdb_internal.cluster_locks WHERE table_name='t' AND txn_id='$txn4'
 ----
-database_name schema_name table_name  lock_key_pretty     lock_strength   durability    granted contended
-test          public      t           /Table/106/1/"b"/0  Exclusive       Unreplicated  false   true
+database_name  schema_name  table_name  lock_key_pretty  lock_strength  durability  granted  contended
 
 query I
 SELECT count(*) FROM crdb_internal.cluster_locks WHERE table_name = 't'
 ----
-10
+0
 
 statement ok
 ROLLBACK

@@ -193,10 +193,10 @@ scan g
  ├── columns: a:1
  ├── constraint: /1: [/0 - /99]
  ├── cardinality: [0 - 100]
- ├── stats: [rows=12, distinct(1)=10, null(1)=0]
- │   histogram(1)=  0 1.3333 0 0.66667 0 0.66667 0 1.3333 0 1.3333 0 0.66667 0 0.66667 0 1.3333 0 1.3333 0 0.66667 0 0.66667 0 1.3333
- │                <---- 0 ------- 1 ------- 2 ------ 3 ------ 4 ------- 5 ------- 6 ------ 7 ------ 8 ------- 9 ------ 10 ------ 11 -
- ├── cost: 21.13
+ ├── stats: [rows=12, distinct(1)=12, null(1)=0]
+ │   histogram(1)=  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1   0  1
+ │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9 --- 10 --- 11
+ ├── cost: 25.13
  ├── key: (1)
  └── distribution: test
 
@@ -415,7 +415,7 @@ scan s
  ├── cardinality: [0 - 100]
  ├── stats: [rows=1, distinct(1)=1, null(1)=0]
  │   histogram(1)=
- ├── cost: 10.02
+ ├── cost: 14.02
  ├── key: (1)
  └── distribution: test
 
@@ -583,18 +583,18 @@ vectorized: true
 • scan
   estimated row count: 24 (100% of the table; stats collected <hidden> ago; using stats forecast)
   table: c@c_pkey
-  spans: [/'1988-08-07 00:00:00+00:00' - ]
+  spans: [/'1988-08-07 00:00:00+00' - ]
 
 query T
 EXPLAIN (OPT, VERBOSE) SELECT * FROM c WHERE h >= '1988-08-07'
 ----
 scan c
  ├── columns: h:1
- ├── constraint: /1: [/'1988-08-07 00:00:00+00:00' - ]
+ ├── constraint: /1: [/'1988-08-07 00:00:00+00' - ]
  ├── stats: [rows=24, distinct(1)=24, null(1)=0]
- │   histogram(1)=  0               1               5               1               5               1               5               1               5               0
- │                <--- '1988-08-07 00:00:00+00:00' --- '1988-08-07 06:00:00+00:00' --- '1988-08-07 12:00:00+00:00' --- '1988-08-07 18:00:00+00:00' --- '1988-08-08 00:00:00+00:00'
- ├── cost: 39.7
+ │   histogram(1)=  0             1              5             1              5             1              5             1              5             0
+ │                <--- '1988-08-07 00:00:00+00' --- '1988-08-07 06:00:00+00' --- '1988-08-07 12:00:00+00' --- '1988-08-07 18:00:00+00' --- '1988-08-08 00:00:00+00'
+ ├── cost: 43.7
  ├── key: (1)
  └── distribution: test
 
@@ -879,7 +879,7 @@ scan d
  ├── stats: [rows=3, distinct(1)=3, null(1)=0]
  │   histogram(1)=  0       0        3       0
  │                <--- '1999-12-16' --- '1999-12-31'
- ├── cost: 17.11
+ ├── cost: 21.11
  ├── key: (1)
  └── distribution: test
 
@@ -907,7 +907,7 @@ scan g
  ├── constraint: /1: [/9 - ]
  ├── stats: [rows=1.8e-09, distinct(1)=1.8e-09, null(1)=0]
  │   histogram(1)=
- ├── cost: 14.02
+ ├── cost: 18.02
  ├── key: (1)
  └── distribution: test
 
@@ -931,7 +931,7 @@ scan s
  ├── stats: [rows=3, distinct(1)=3, null(1)=0]
  │   histogram(1)=  0  1  0  1  0  1
  │                <--- 0 --- 1 --- 2
- ├── cost: 17.05
+ ├── cost: 21.05
  ├── key: (1)
  └── distribution: test
 
@@ -944,17 +944,17 @@ vectorized: true
 • scan
   estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
   table: c@c_pkey
-  spans: [/'1988-08-07 00:00:00.000001+00:00' - ]
+  spans: [/'1988-08-07 00:00:00.000001+00' - ]
 
 query T
 EXPLAIN (OPT, VERBOSE) SELECT * FROM c WHERE h > '1988-08-07'
 ----
 scan c
  ├── columns: h:1
- ├── constraint: /1: [/'1988-08-07 00:00:00.000001+00:00' - ]
+ ├── constraint: /1: [/'1988-08-07 00:00:00.000001+00' - ]
  ├── stats: [rows=4.8e-09, distinct(1)=4.8e-09, null(1)=0]
  │   histogram(1)=
- ├── cost: 14.02
+ ├── cost: 18.02
  ├── key: (1)
  └── distribution: test
 
@@ -977,7 +977,7 @@ scan x
  ├── constraint: /1: [/17 - ]
  ├── stats: [rows=8e-10, distinct(1)=8e-10, null(1)=0]
  │   histogram(1)=
- ├── cost: 14.02
+ ├── cost: 18.02
  ├── key: (1)
  └── distribution: test
 
@@ -1001,7 +1001,7 @@ scan d
  ├── stats: [rows=3, distinct(1)=3, null(1)=0]
  │   histogram(1)=  0       0        3       0
  │                <--- '1999-12-16' --- '1999-12-31'
- ├── cost: 17.11
+ ├── cost: 21.11
  ├── key: (1)
  └── distribution: test
 
@@ -1015,7 +1015,7 @@ distribution: local
 vectorized: true
 ·
 • scan
-  estimated row count: 3 (22% of the table; stats collected <hidden> ago; using stats forecast)
+  estimated row count: 3 (25% of the table; stats collected <hidden> ago; using stats forecast)
   table: g@g_pkey
   spans: [/9 - ]
 
@@ -1025,10 +1025,10 @@ EXPLAIN (OPT, VERBOSE) SELECT * FROM g WHERE a > 8
 scan g
  ├── columns: a:1
  ├── constraint: /1: [/9 - ]
- ├── stats: [rows=2.666667, distinct(1)=2.33333, null(1)=0]
- │   histogram(1)=  0 0.66667 0 0.66667 0 1.3333
- │                <----- 9 ------ 10 ------ 11 -
- ├── cost: 16.7133333
+ ├── stats: [rows=3, distinct(1)=3, null(1)=0]
+ │   histogram(1)=  0  1  0  1   0  1
+ │                <--- 9 --- 10 --- 11
+ ├── cost: 21.05
  ├── key: (1)
  └── distribution: test
 
@@ -1051,7 +1051,7 @@ scan s
  ├── constraint: /1: [ - /2]
  ├── stats: [rows=1, distinct(1)=1, null(1)=0]
  │   histogram(1)=
- ├── cost: 15.03
+ ├── cost: 19.03
  ├── key: (1)
  └── distribution: test
 
@@ -1064,18 +1064,18 @@ vectorized: true
 • scan
   estimated row count: 23 (96% of the table; stats collected <hidden> ago; using stats forecast)
   table: c@c_pkey
-  spans: [/'1988-08-07 00:00:00.000001+00:00' - ]
+  spans: [/'1988-08-07 00:00:00.000001+00' - ]
 
 query T
 EXPLAIN (OPT, VERBOSE) SELECT * FROM c WHERE h > '1988-08-07'
 ----
 scan c
  ├── columns: h:1
- ├── constraint: /1: [/'1988-08-07 00:00:00.000001+00:00' - ]
+ ├── constraint: /1: [/'1988-08-07 00:00:00.000001+00' - ]
  ├── stats: [rows=23, distinct(1)=23, null(1)=0]
- │   histogram(1)=  0               0               5               1               5               1               5               1               5               0
- │                <--- '1988-08-07 00:00:00+00:00' --- '1988-08-07 06:00:00+00:00' --- '1988-08-07 12:00:00+00:00' --- '1988-08-07 18:00:00+00:00' --- '1988-08-08 00:00:00+00:00'
- ├── cost: 38.63
+ │   histogram(1)=  0             0              5             1              5             1              5             1              5             0
+ │                <--- '1988-08-07 00:00:00+00' --- '1988-08-07 06:00:00+00' --- '1988-08-07 12:00:00+00' --- '1988-08-07 18:00:00+00' --- '1988-08-08 00:00:00+00'
+ ├── cost: 42.63
  ├── key: (1)
  └── distribution: test
 
@@ -1099,7 +1099,7 @@ scan x
  ├── stats: [rows=2, distinct(1)=2, null(1)=0]
  │   histogram(1)=  0  0   2  0
  │                <--- 16 --- 19
- ├── cost: 16.04
+ ├── cost: 20.04
  ├── key: (1)
  └── distribution: test
 
@@ -1123,7 +1123,7 @@ scan d
  ├── stats: [rows=3, distinct(1)=3, null(1)=0]
  │   histogram(1)=  0       0        3       0
  │                <--- '1999-12-16' --- '1999-12-31'
- ├── cost: 17.11
+ ├── cost: 21.11
  ├── key: (1)
  └── distribution: test
 
@@ -1164,7 +1164,7 @@ vectorized: true
 • scan
   estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
   table: c@c_pkey
-  spans: [/'1988-08-07 00:00:00.000001+00:00' - ]
+  spans: [/'1988-08-07 00:00:00.000001+00' - ]
 
 query T
 EXPLAIN SELECT * FROM x WHERE a > 16
@@ -1203,7 +1203,7 @@ vectorized: true
 • scan
   estimated row count: 23 (96% of the table; stats collected <hidden> ago; using stats forecast)
   table: c@c_pkey
-  spans: [/'1988-08-07 00:00:00.000001+00:00' - ]
+  spans: [/'1988-08-07 00:00:00.000001+00' - ]
 
 # Now check that we resume using forecasts when sql.stats.forecasts.enabled is
 # reset.
@@ -1218,7 +1218,7 @@ distribution: local
 vectorized: true
 ·
 • scan
-  estimated row count: 3 (22% of the table; stats collected <hidden> ago; using stats forecast)
+  estimated row count: 3 (25% of the table; stats collected <hidden> ago; using stats forecast)
   table: g@g_pkey
   spans: [/9 - ]
 
@@ -1242,7 +1242,7 @@ vectorized: true
 • scan
   estimated row count: 23 (96% of the table; stats collected <hidden> ago; using stats forecast)
   table: c@c_pkey
-  spans: [/'1988-08-07 00:00:00.000001+00:00' - ]
+  spans: [/'1988-08-07 00:00:00.000001+00' - ]
 
 query T
 EXPLAIN SELECT * FROM x WHERE a > 16
@@ -1536,7 +1536,7 @@ select
  │   histogram(1)=
  │   histogram(2)=  0 2e-08
  │                <--- 13 -
- ├── cost: 14.05
+ ├── cost: 18.05
  ├── fd: ()-->(1,2)
  ├── distribution: test
  ├── scan t@t_a_idx
@@ -1544,7 +1544,7 @@ select
  │    ├── constraint: /1/3: [/3 - /3]
  │    ├── stats: [rows=2e-08, distinct(1)=2e-08, null(1)=0]
  │    │   histogram(1)=
- │    ├── cost: 14.02
+ │    ├── cost: 18.02
  │    ├── fd: ()-->(1)
  │    └── distribution: test
  └── filters
@@ -1577,7 +1577,7 @@ select
  │   histogram(1)=  0 2e-08
  │                <---- 3 -
  │   histogram(2)=
- ├── cost: 14.05
+ ├── cost: 18.05
  ├── fd: ()-->(1,2)
  ├── distribution: test
  ├── scan t@t_b_idx
@@ -1585,7 +1585,7 @@ select
  │    ├── constraint: /2/3: [/13 - /13]
  │    ├── stats: [rows=2e-08, distinct(2)=2e-08, null(2)=0]
  │    │   histogram(2)=
- │    ├── cost: 14.02
+ │    ├── cost: 18.02
  │    ├── fd: ()-->(2)
  │    └── distribution: test
  └── filters

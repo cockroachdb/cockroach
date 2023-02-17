@@ -353,6 +353,35 @@ func ParseTableName(sql string) (*tree.UnresolvedObjectName, error) {
 	return rename.Name, nil
 }
 
+// ParseTablePattern parses a table pattern. The table name must contain one
+// or more name parts, using the full input SQL syntax: each name
+// part containing special characters, or non-lowercase characters,
+// must be enclosed in double quote. The name may not be an invalid
+// table name (the caller is responsible for guaranteeing that only
+// valid table names are provided as input).
+// The last part may be '*' to denote a wildcard.
+func ParseTablePattern(sql string) (tree.TablePattern, error) {
+	// We wrap the name we want to parse into a dummy statement since our parser
+	// can only parse full statements.
+	stmt, err := ParseOne(fmt.Sprintf("GRANT SELECT ON TABLE %s TO admin", sql))
+	if err != nil {
+		return nil, err
+	}
+	grant, ok := stmt.AST.(*tree.Grant)
+	if !ok {
+		return nil, errors.AssertionFailedf("expected a GRANT statement, but found %T", stmt)
+	}
+	if len(grant.Targets.Tables.TablePatterns) == 0 {
+		return nil, errors.AssertionFailedf("expected at least one pattern")
+	}
+	u := grant.Targets.Tables.TablePatterns[0]
+	un, ok := u.(*tree.UnresolvedName)
+	if !ok {
+		return nil, errors.AssertionFailedf("expected an unresolved name, but found %T", u)
+	}
+	return un.NormalizeTablePattern()
+}
+
 // parseExprsWithInt parses one or more sql expressions.
 func parseExprsWithInt(exprs []string, nakedIntType *types.T) (tree.Exprs, error) {
 	stmt, err := ParseOneWithInt(fmt.Sprintf("SET ROW (%s)", strings.Join(exprs, ",")), nakedIntType)

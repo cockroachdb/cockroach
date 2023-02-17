@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
@@ -35,6 +36,16 @@ type SerialUnorderedSynchronizer struct {
 	inputs []colexecargs.OpWithMetaInfo
 	// curSerialInputIdx indicates the index of the current input being consumed.
 	curSerialInputIdx int
+
+	// serialInputIdxExclusiveUpperBound indicates the InputIdx to error out on
+	// should execution fail to halt prior to this input. This is only valid if
+	// non-zero.
+	serialInputIdxExclusiveUpperBound uint32
+
+	// exceedsInputIdxExclusiveUpperBoundError is the error to return when
+	// curSerialInputIdx has incremented to match
+	// serialInputIdxExclusiveUpperBound.
+	exceedsInputIdxExclusiveUpperBoundError error
 }
 
 var (
@@ -56,9 +67,13 @@ func (s *SerialUnorderedSynchronizer) Child(nth int, verbose bool) execopnode.Op
 // NewSerialUnorderedSynchronizer creates a new SerialUnorderedSynchronizer.
 func NewSerialUnorderedSynchronizer(
 	inputs []colexecargs.OpWithMetaInfo,
+	serialInputIdxExclusiveUpperBound uint32,
+	exceedsInputIdxExclusiveUpperBoundError error,
 ) *SerialUnorderedSynchronizer {
 	return &SerialUnorderedSynchronizer{
-		inputs: inputs,
+		inputs:                                  inputs,
+		serialInputIdxExclusiveUpperBound:       serialInputIdxExclusiveUpperBound,
+		exceedsInputIdxExclusiveUpperBoundError: exceedsInputIdxExclusiveUpperBoundError,
 	}
 }
 
@@ -82,6 +97,9 @@ func (s *SerialUnorderedSynchronizer) Next() coldata.Batch {
 		b := s.inputs[s.curSerialInputIdx].Root.Next()
 		if b.Length() == 0 {
 			s.curSerialInputIdx++
+			if s.serialInputIdxExclusiveUpperBound > 0 && s.curSerialInputIdx >= int(s.serialInputIdxExclusiveUpperBound) {
+				colexecerror.ExpectedError(s.exceedsInputIdxExclusiveUpperBoundError)
+			}
 		} else {
 			return b
 		}

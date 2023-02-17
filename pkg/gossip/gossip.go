@@ -47,14 +47,11 @@ the system with minimal total hops. The algorithm is as follows:
 package gossip
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"math"
 	"math/rand"
 	"net"
-	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -79,7 +76,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
-	"google.golang.org/grpc"
 )
 
 const (
@@ -107,12 +103,6 @@ const (
 	// "useful" outgoing gossip connection to free up space for a more
 	// efficiently targeted connection to the most distant node.
 	defaultCullInterval = 60 * time.Second
-
-	// defaultClientsInterval is the default interval for updating the gossip
-	// clients key which allows every node in the cluster to create a map of
-	// gossip connectivity. This value is intentionally small as we want to
-	// detect gossip partitions faster that the node liveness timeout (9s).
-	defaultClientsInterval = 2 * time.Second
 
 	// NodeDescriptorInterval is the interval for gossiping the node descriptor.
 	// Note that increasing this duration may increase the likelihood of gossip
@@ -231,7 +221,6 @@ type Gossip struct {
 
 	Connected     chan struct{}       // Closed upon initial connection
 	hasConnected  bool                // Set first time network is connected
-	rpcContext    *rpc.Context        // The context required for RPC
 	outgoing      nodeSet             // Set of outgoing client node IDs
 	storage       Storage             // Persistent storage interface
 	bootstrapInfo BootstrapInfo       // BootstrapInfo proto for persistent storage
@@ -280,31 +269,17 @@ type Gossip struct {
 
 	locality roachpb.Locality
 
-	lastConnectivity redact.RedactableString
-
 	defaultZoneConfig *zonepb.ZoneConfig
 }
 
 // New creates an instance of a gossip node.
 // The higher level manages the ClusterIDContainer and NodeIDContainer instances
-// (which can be shared by various server components). The ambient context is
-// expected to already contain the node ID.
-//
-// grpcServer: The server on which the new Gossip instance will register its RPC
-//
-//	service. Can be nil, in which case the Gossip will not register the
-//	service.
-//
-// rpcContext: The context used to connect to other nodes. Can be nil for tests
-//
-//	that also specify a nil grpcServer and that plan on using the Gossip in a
-//	restricted way by populating it with data manually.
+// (which can be shared by various server components).
+// The struct returned is started by calling Start and passing a rpc.Context.
 func New(
 	ambient log.AmbientContext,
 	clusterID *base.ClusterIDContainer,
 	nodeID *base.NodeIDContainer,
-	rpcContext *rpc.Context,
-	grpcServer *grpc.Server,
 	stopper *stop.Stopper,
 	registry *metric.Registry,
 	locality roachpb.Locality,
@@ -314,7 +289,6 @@ func New(
 	g := &Gossip{
 		server:            newServer(ambient, clusterID, nodeID, stopper, registry),
 		Connected:         make(chan struct{}),
-		rpcContext:        rpcContext,
 		outgoing:          makeNodeSet(minPeers, metric.NewGauge(MetaConnectionsOutgoingGauge)),
 		bootstrapping:     map[string]struct{}{},
 		disconnected:      make(chan *client, 10),
@@ -340,43 +314,25 @@ func New(
 	// Add ourselves as a node descriptor watcher.
 	g.mu.is.registerCallback(MakePrefixPattern(KeyNodeDescPrefix), g.updateNodeAddress)
 	g.mu.is.registerCallback(MakePrefixPattern(KeyStoreDescPrefix), g.updateStoreMap)
-	// Log gossip connectivity whenever we receive an update.
 	g.mu.Unlock()
 
-	if grpcServer != nil {
-		RegisterGossipServer(grpcServer, g.server)
-	}
 	return g
 }
 
 // NewTest is a simplified wrapper around New that creates the
 // ClusterIDContainer and NodeIDContainer internally. Used for testing.
-//
-// grpcServer: The server on which the new Gossip instance will register its RPC
-//
-//	service. Can be nil, in which case the Gossip will not register the
-//	service.
-//
-// rpcContext: The context used to connect to other nodes. Can be nil for tests
-//
-//	that also specify a nil grpcServer and that plan on using the Gossip in a
-//	restricted way by populating it with data manually.
 func NewTest(
 	nodeID roachpb.NodeID,
-	rpcContext *rpc.Context,
-	grpcServer *grpc.Server,
 	stopper *stop.Stopper,
 	registry *metric.Registry,
 	defaultZoneConfig *zonepb.ZoneConfig,
 ) *Gossip {
-	return NewTestWithLocality(nodeID, rpcContext, grpcServer, stopper, registry, roachpb.Locality{}, defaultZoneConfig)
+	return NewTestWithLocality(nodeID, stopper, registry, roachpb.Locality{}, defaultZoneConfig)
 }
 
 // NewTestWithLocality calls NewTest with an explicit locality value.
 func NewTestWithLocality(
 	nodeID roachpb.NodeID,
-	rpcContext *rpc.Context,
-	grpcServer *grpc.Server,
 	stopper *stop.Stopper,
 	registry *metric.Registry,
 	locality roachpb.Locality,
@@ -386,7 +342,7 @@ func NewTestWithLocality(
 	n := &base.NodeIDContainer{}
 	var ac log.AmbientContext
 	ac.AddLogTag("n", n)
-	gossip := New(ac, c, n, rpcContext, grpcServer, stopper, registry, locality, defaultZoneConfig)
+	gossip := New(ac, c, n, stopper, registry, locality, defaultZoneConfig)
 	if nodeID != 0 {
 		n.Set(context.TODO(), nodeID)
 	}
@@ -415,7 +371,6 @@ func (g *Gossip) SetNodeDescriptor(desc *roachpb.NodeDescriptor) error {
 	if err := g.AddInfoProto(MakeNodeIDKey(desc.NodeID), desc, NodeDescriptorTTL); err != nil {
 		return errors.Wrapf(err, "n%d: couldn't gossip descriptor", desc.NodeID)
 	}
-	g.updateClients()
 	return nil
 }
 
@@ -596,17 +551,10 @@ func (g *Gossip) LogStatus() {
 	}
 	g.mu.RUnlock()
 
-	var connectivity redact.RedactableString
-	if s := redact.Sprint(g.Connectivity()); s != g.lastConnectivity {
-		g.lastConnectivity = s
-		connectivity = s
-	}
-
 	ctx := g.AnnotateCtx(context.TODO())
-	log.Health.Infof(ctx, "gossip status (%s, %d node%s)\n%s%s%s",
+	log.Health.Infof(ctx, "gossip status (%s, %d node%s)\n%s%s",
 		status, n, util.Pluralize(int64(n)),
-		g.clientStatus(), g.server.status(),
-		connectivity)
+		g.clientStatus(), g.server.status())
 }
 
 func (g *Gossip) clientStatus() ClientStatus {
@@ -630,63 +578,6 @@ func (g *Gossip) clientStatus() ClientStatus {
 		})
 	}
 	return status
-}
-
-// Connectivity returns the current view of the gossip network as seen by this
-// node.
-func (g *Gossip) Connectivity() Connectivity {
-	ctx := g.AnnotateCtx(context.TODO())
-	var c Connectivity
-
-	g.mu.RLock()
-
-	if i := g.mu.is.getInfo(KeySentinel); i != nil {
-		c.SentinelNodeID = i.NodeID
-	}
-
-	g.nodeDescs.Range(func(nodeID int64, _ unsafe.Pointer) bool {
-		key := MakeGossipClientsKey(roachpb.NodeID(nodeID))
-		i := g.mu.is.getInfo(key)
-		if i == nil {
-			return true
-		}
-
-		v, err := i.Value.GetBytes()
-		if err != nil {
-			log.Errorf(ctx, "unable to retrieve gossip value for %s: %v", key, err)
-			return true
-		}
-		if len(v) == 0 {
-			return true
-		}
-
-		for _, part := range strings.Split(string(v), ",") {
-			id, err := strconv.ParseInt(part, 10 /* base */, 64 /* bitSize */)
-			if err != nil {
-				log.Errorf(ctx, "unable to parse node ID: %v", err)
-			}
-			c.ClientConns = append(c.ClientConns, Connectivity_Conn{
-				SourceID: roachpb.NodeID(nodeID),
-				TargetID: roachpb.NodeID(id),
-			})
-		}
-		return true
-	})
-
-	g.mu.RUnlock()
-
-	sort.Slice(c.ClientConns, func(i, j int) bool {
-		a, b := &c.ClientConns[i], &c.ClientConns[j]
-		if a.SourceID < b.SourceID {
-			return true
-		}
-		if a.SourceID > b.SourceID {
-			return false
-		}
-		return a.TargetID < b.TargetID
-	})
-
-	return c
 }
 
 // EnableSimulationCycler is for TESTING PURPOSES ONLY. It sets a
@@ -919,31 +810,6 @@ func (g *Gossip) updateStoreMap(key string, content roachpb.Value) {
 	g.storeDescs.Store(int64(desc.StoreID), unsafe.Pointer(&desc))
 }
 
-func (g *Gossip) updateClients() {
-	nodeID := g.NodeID.Get()
-	if nodeID == 0 {
-		return
-	}
-
-	var buf bytes.Buffer
-	var sep string
-
-	g.mu.RLock()
-	g.clientsMu.Lock()
-	for _, c := range g.clientsMu.clients {
-		if c.peerID != 0 {
-			fmt.Fprintf(&buf, "%s%d", sep, c.peerID)
-			sep = ","
-		}
-	}
-	g.clientsMu.Unlock()
-	g.mu.RUnlock()
-
-	if err := g.AddInfo(MakeGossipClientsKey(nodeID), buf.Bytes(), 2*defaultClientsInterval); err != nil {
-		log.Errorf(g.AnnotateCtx(context.Background()), "%v", err)
-	}
-}
-
 // recomputeMaxPeersLocked recomputes max peers based on size of
 // network and set the max sizes for incoming and outgoing node sets.
 //
@@ -1149,15 +1015,13 @@ func (g *Gossip) InfoOriginatedHere(key string) bool {
 func (g *Gossip) GetInfoStatus() InfoStatus {
 	clientStatus := g.clientStatus()
 	serverStatus := g.server.status()
-	connectivity := g.Connectivity()
 
 	g.mu.RLock()
 	defer g.mu.RUnlock()
 	is := InfoStatus{
-		Infos:        make(map[string]Info),
-		Client:       clientStatus,
-		Server:       serverStatus,
-		Connectivity: connectivity,
+		Infos:  make(map[string]Info),
+		Client: clientStatus,
+		Server: serverStatus,
 	}
 	for k, v := range g.mu.is.Infos {
 		is.Infos[k] = *protoutil.Clone(v).(*Info)
@@ -1277,15 +1141,20 @@ func (g *Gossip) MaxHops() uint32 {
 // instance in the gossip network; it will be used by other instances
 // to connect to this instance.
 //
-// This method starts bootstrap loop, gossip server, and client
-// management in separate goroutines and returns.
-func (g *Gossip) Start(advertAddr net.Addr, addresses []util.UnresolvedAddr) {
+// This method starts bootstrap loop, gossip server, and client management in
+// separate goroutines and returns.
+//
+// The rpcContext is passed in here rather than at struct creation time to allow
+// a looser coupling between the objects at construction.
+func (g *Gossip) Start(
+	advertAddr net.Addr, addresses []util.UnresolvedAddr, rpcContext *rpc.Context,
+) {
 	g.AssertNotStarted(context.Background())
 	g.started = true
 	g.setAddresses(addresses)
 	g.server.start(advertAddr) // serve gossip protocol
-	g.bootstrap()              // bootstrap gossip client
-	g.manage()                 // manage gossip clients
+	g.bootstrap(rpcContext)    // bootstrap gossip client
+	g.manage(rpcContext)       // manage gossip clients
 }
 
 // hasIncomingLocked returns whether the server has an incoming gossip
@@ -1341,7 +1210,7 @@ func (g *Gossip) getNextBootstrapAddressLocked() util.UnresolvedAddr {
 // connection, this method will block on the stalled condvar, which
 // receives notifications that gossip network connectivity has been
 // lost and requires re-bootstrapping.
-func (g *Gossip) bootstrap() {
+func (g *Gossip) bootstrap(rpcContext *rpc.Context) {
 	ctx := g.AnnotateCtx(context.Background())
 	_ = g.server.stopper.RunAsyncTask(ctx, "gossip-bootstrap", func(ctx context.Context) {
 		ctx = logtags.AddTag(ctx, "bootstrap", nil)
@@ -1357,7 +1226,7 @@ func (g *Gossip) bootstrap() {
 				if !haveClients || !haveSentinel {
 					// Try to get another bootstrap address.
 					if addr := g.getNextBootstrapAddressLocked(); !addr.IsEmpty() {
-						g.startClientLocked(addr)
+						g.startClientLocked(addr, rpcContext)
 					} else {
 						bootstrapAddrs := make([]string, 0, len(g.bootstrapping))
 						for addr := range g.bootstrapping {
@@ -1404,17 +1273,14 @@ func (g *Gossip) bootstrap() {
 // the outgoing address set. If there are no longer any outgoing
 // connections or the sentinel gossip is unavailable, the bootstrapper
 // is notified via the stalled conditional variable.
-func (g *Gossip) manage() {
+func (g *Gossip) manage(rpcContext *rpc.Context) {
 	ctx := g.AnnotateCtx(context.Background())
 	_ = g.server.stopper.RunAsyncTask(ctx, "gossip-manage", func(ctx context.Context) {
-		clientsTimer := timeutil.NewTimer()
 		cullTimer := timeutil.NewTimer()
 		stallTimer := timeutil.NewTimer()
-		defer clientsTimer.Stop()
 		defer cullTimer.Stop()
 		defer stallTimer.Stop()
 
-		clientsTimer.Reset(defaultClientsInterval)
 		cullTimer.Reset(jitteredInterval(g.cullInterval))
 		stallTimer.Reset(jitteredInterval(g.stallInterval))
 		for {
@@ -1422,13 +1288,9 @@ func (g *Gossip) manage() {
 			case <-g.server.stopper.ShouldQuiesce():
 				return
 			case c := <-g.disconnected:
-				g.doDisconnected(c)
+				g.doDisconnected(c, rpcContext)
 			case <-g.tighten:
-				g.tightenNetwork(ctx)
-			case <-clientsTimer.C:
-				clientsTimer.Read = true
-				g.updateClients()
-				clientsTimer.Reset(defaultClientsInterval)
+				g.tightenNetwork(ctx, rpcContext)
 			case <-cullTimer.C:
 				cullTimer.Read = true
 				cullTimer.Reset(jitteredInterval(g.cullInterval))
@@ -1446,7 +1308,7 @@ func (g *Gossip) manage() {
 
 							// After releasing the lock, block until the client disconnects.
 							defer func() {
-								g.doDisconnected(<-g.disconnected)
+								g.doDisconnected(<-g.disconnected, rpcContext)
 							}()
 						} else {
 							if log.V(1) {
@@ -1480,7 +1342,7 @@ func jitteredInterval(interval time.Duration) time.Duration {
 // client to the most distant node to which we don't already have an outgoing
 // connection. Does nothing if we don't have room for any more outgoing
 // connections.
-func (g *Gossip) tightenNetwork(ctx context.Context) {
+func (g *Gossip) tightenNetwork(ctx context.Context, rpcContext *rpc.Context) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
@@ -1506,21 +1368,19 @@ func (g *Gossip) tightenNetwork(ctx context.Context) {
 			log.Health.Infof(ctx, "starting client to n%d (%d > %d) to tighten network graph",
 				distantNodeID, distantHops, maxHops)
 			log.Eventf(ctx, "tightening network with new client to %s", nodeAddr)
-			g.startClientLocked(*nodeAddr)
+			g.startClientLocked(*nodeAddr, rpcContext)
 		}
 	}
 }
 
-func (g *Gossip) doDisconnected(c *client) {
-	defer g.updateClients()
-
+func (g *Gossip) doDisconnected(c *client, rpcContext *rpc.Context) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.removeClientLocked(c)
 
 	// If the client was disconnected with a forwarding address, connect now.
 	if c.forwardAddr != nil {
-		g.startClientLocked(*c.forwardAddr)
+		g.startClientLocked(*c.forwardAddr, rpcContext)
 	}
 	g.maybeSignalStatusChangeLocked()
 }
@@ -1592,20 +1452,20 @@ func (g *Gossip) signalConnectedLocked() {
 // startClientLocked launches a new client connected to remote address.
 // The client is added to the outgoing address set and launched in
 // a goroutine.
-func (g *Gossip) startClientLocked(addr util.UnresolvedAddr) {
+func (g *Gossip) startClientLocked(addr util.UnresolvedAddr, rpcContext *rpc.Context) {
 	g.clientsMu.Lock()
 	defer g.clientsMu.Unlock()
 	breaker, ok := g.clientsMu.breakers[addr.String()]
 	if !ok {
-		name := fmt.Sprintf("gossip %v->%v", g.rpcContext.Config.Addr, addr)
-		breaker = g.rpcContext.NewBreaker(name)
+		name := fmt.Sprintf("gossip %v->%v", rpcContext.Config.Addr, addr)
+		breaker = rpcContext.NewBreaker(name)
 		g.clientsMu.breakers[addr.String()] = breaker
 	}
 	ctx := g.AnnotateCtx(context.TODO())
 	log.VEventf(ctx, 1, "starting new client to %s", addr)
 	c := newClient(g.server.AmbientContext, &addr, g.serverMetrics)
 	g.clientsMu.clients = append(g.clientsMu.clients, c)
-	c.startLocked(g, g.disconnected, g.rpcContext, g.server.stopper, breaker)
+	c.startLocked(g, g.disconnected, rpcContext, g.server.stopper, breaker)
 }
 
 // removeClientLocked removes the specified client. Called when a client

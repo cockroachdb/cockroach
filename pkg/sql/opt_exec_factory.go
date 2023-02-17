@@ -41,9 +41,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
 
@@ -66,6 +65,11 @@ func newExecFactory(ctx context.Context, p *planner) *execFactory {
 		ctx:     ctx,
 		planner: p,
 	}
+}
+
+// Ctx implements the Factory interface.
+func (ef *execFactory) Ctx() context.Context {
+	return ef.ctx
 }
 
 func (ef *execFactory) getDatumAlloc() *tree.DatumAlloc {
@@ -297,7 +301,7 @@ func constructSimpleProjectForPlanNode(
 }
 
 func hasDuplicates(cols []exec.NodeColumnOrdinal) bool {
-	var set util.FastIntSet
+	var set intsets.Fast
 	for _, c := range cols {
 		if set.Contains(int(c)) {
 			return true
@@ -558,6 +562,7 @@ func (ef *execFactory) ConstructHashSetOp(
 ) (exec.Node, error) {
 	return ef.planner.newUnionNode(
 		typ, all, left.(planNode), right.(planNode), nil, nil, 0, /* hardLimit */
+		false, /* enforceHomeRegion */
 	)
 }
 
@@ -576,13 +581,14 @@ func (ef *execFactory) ConstructStreamingSetOp(
 		right.(planNode),
 		streamingOrdering,
 		ReqOrdering(reqOrdering),
-		0, /* hardLimit */
+		0,     /* hardLimit */
+		false, /* enforceHomeRegion */
 	)
 }
 
 // ConstructUnionAll is part of the exec.Factory interface.
 func (ef *execFactory) ConstructUnionAll(
-	left, right exec.Node, reqOrdering exec.OutputOrdering, hardLimit uint64,
+	left, right exec.Node, reqOrdering exec.OutputOrdering, hardLimit uint64, enforceHomeRegion bool,
 ) (exec.Node, error) {
 	return ef.planner.newUnionNode(
 		tree.UnionOp,
@@ -592,6 +598,7 @@ func (ef *execFactory) ConstructUnionAll(
 		colinfo.ColumnOrdering(reqOrdering),
 		ReqOrdering(reqOrdering),
 		hardLimit,
+		enforceHomeRegion,
 	)
 }
 
@@ -690,6 +697,7 @@ func (ef *execFactory) ConstructLookupJoin(
 	reqOrdering exec.OutputOrdering,
 	locking opt.Locking,
 	limitHint int64,
+	remoteOnlyLookups bool,
 ) (exec.Node, error) {
 	if table.IsVirtualTable() {
 		return ef.constructVirtualTableLookupJoin(joinType, input, table, index, eqCols, lookupCols, onCond)
@@ -724,6 +732,7 @@ func (ef *execFactory) ConstructLookupJoin(
 		isSecondJoinInPairedJoiner: isSecondJoinInPairedJoiner,
 		reqOrdering:                ReqOrdering(reqOrdering),
 		limitHint:                  limitHint,
+		remoteOnlyLookups:          remoteOnlyLookups,
 	}
 	n.eqCols = make([]int, len(eqCols))
 	for i, c := range eqCols {
@@ -1197,7 +1206,7 @@ func (e *urlOutputter) finish() (url.URL, error) {
 func (ef *execFactory) showEnv(plan string, envOpts exec.ExplainEnvData) (exec.Node, error) {
 	var out urlOutputter
 
-	ie := ef.planner.extendedEvalCtx.ExecCfg.InternalExecutorFactory.NewInternalExecutor(
+	ie := ef.planner.extendedEvalCtx.ExecCfg.InternalDB.NewInternalExecutor(
 		ef.planner.SessionData(),
 	)
 	c := makeStmtEnvCollector(ef.ctx, ie.(*InternalExecutor))
@@ -1209,7 +1218,7 @@ func (ef *execFactory) showEnv(plan string, envOpts exec.ExplainEnvData) (exec.N
 	out.writef("")
 	// Show the values of any non-default session variables that can impact
 	// planning decisions.
-	if err := c.PrintSessionSettings(&out.buf); err != nil {
+	if err := c.PrintSessionSettings(&out.buf, &ef.planner.extendedEvalCtx.Settings.SV); err != nil {
 		return nil, err
 	}
 
@@ -1752,7 +1761,7 @@ func (ef *execFactory) ConstructDeleteRange(
 
 	splitter := span.NoopSplitter()
 	canUsePointDelete := ef.planner.ExecCfg().Settings.Version.IsActive(
-		ef.ctx, clusterversion.V22_2DeleteRequestReturnKey,
+		ef.ctx, clusterversion.TODODelete_V22_2DeleteRequestReturnKey,
 	)
 	if canUsePointDelete {
 		splitter = span.MakeSplitterForDelete(
@@ -1865,6 +1874,14 @@ func (ef *execFactory) ConstructCreateFunction(
 		return nil, err
 	}
 
+	plan, err := ef.planner.SchemaChange(ef.ctx, cf)
+	if err != nil {
+		return nil, err
+	}
+	if plan != nil {
+		return plan, nil
+	}
+
 	planDeps, typeDepSet, err := toPlanDependencies(deps, typeDeps)
 	if err != nil {
 		return nil, err
@@ -1944,11 +1961,17 @@ func (ef *execFactory) ConstructOpaque(metadata opt.OpaqueMetadata) (exec.Node, 
 func (ef *execFactory) ConstructAlterTableSplit(
 	index cat.Index, input exec.Node, expiration tree.TypedExpr,
 ) (exec.Node, error) {
+
+	execCfg := ef.planner.ExecCfg()
 	if err := checkSchemaChangeEnabled(
 		ef.ctx,
-		ef.planner.ExecCfg(),
+		execCfg,
 		"ALTER TABLE/INDEX SPLIT AT",
 	); err != nil {
+		return nil, err
+	}
+
+	if err := execCfg.RequireSystemTenantOrClusterSetting(SecondaryTenantSplitAtEnabled); err != nil {
 		return nil, err
 	}
 
@@ -1957,14 +1980,11 @@ func (ef *execFactory) ConstructAlterTableSplit(
 		return nil, err
 	}
 
-	knobs := ef.planner.ExecCfg().TenantTestingKnobs
 	return &splitNode{
 		tableDesc:      index.Table().(*optTable).desc,
 		index:          index.(*optIndex).idx,
 		rows:           input.(planNode),
 		expirationTime: expirationTime,
-		// Tests can override tenant split permissions to allow secondary tenants to split.
-		testAllowSplitAndScatter: knobs != nil && knobs.AllowSplitAndScatter,
 	}, nil
 }
 
@@ -1972,11 +1992,17 @@ func (ef *execFactory) ConstructAlterTableSplit(
 func (ef *execFactory) ConstructAlterTableUnsplit(
 	index cat.Index, input exec.Node,
 ) (exec.Node, error) {
+
+	execCfg := ef.planner.ExecCfg()
 	if err := checkSchemaChangeEnabled(
 		ef.ctx,
-		ef.planner.ExecCfg(),
+		execCfg,
 		"ALTER TABLE/INDEX UNSPLIT AT",
 	); err != nil {
+		return nil, err
+	}
+
+	if err := execCfg.RequireSystemTenant(); err != nil {
 		return nil, err
 	}
 
@@ -1989,14 +2015,17 @@ func (ef *execFactory) ConstructAlterTableUnsplit(
 
 // ConstructAlterTableUnsplitAll is part of the exec.Factory interface.
 func (ef *execFactory) ConstructAlterTableUnsplitAll(index cat.Index) (exec.Node, error) {
+	execCfg := ef.planner.ExecCfg()
 	if err := checkSchemaChangeEnabled(
 		ef.ctx,
-		ef.planner.ExecCfg(),
+		execCfg,
 		"ALTER TABLE/INDEX UNSPLIT ALL",
 	); err != nil {
 		return nil, err
 	}
-
+	if err := execCfg.RequireSystemTenant(); err != nil {
+		return nil, err
+	}
 	return &unsplitAllNode{
 		tableDesc: index.Table().(*optTable).desc,
 		index:     index.(*optIndex).idx,
@@ -2007,8 +2036,9 @@ func (ef *execFactory) ConstructAlterTableUnsplitAll(index cat.Index) (exec.Node
 func (ef *execFactory) ConstructAlterTableRelocate(
 	index cat.Index, input exec.Node, relocateSubject tree.RelocateSubject,
 ) (exec.Node, error) {
-	if !ef.planner.ExecCfg().IsSystemTenant() {
-		return nil, errorutil.UnsupportedWithMultiTenancy(54250)
+
+	if err := ef.planner.ExecCfg().RequireSystemTenant(); err != nil {
+		return nil, err
 	}
 
 	return &relocateNode{
@@ -2026,10 +2056,9 @@ func (ef *execFactory) ConstructAlterRangeRelocate(
 	toStoreID tree.TypedExpr,
 	fromStoreID tree.TypedExpr,
 ) (exec.Node, error) {
-	if !ef.planner.ExecCfg().IsSystemTenant() {
-		return nil, errorutil.UnsupportedWithMultiTenancy(54250)
+	if err := ef.planner.ExecCfg().RequireSystemTenant(); err != nil {
+		return nil, err
 	}
-
 	return &relocateRange{
 		rows:            input.(planNode),
 		subjectReplicas: relocateSubject,

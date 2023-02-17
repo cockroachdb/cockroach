@@ -23,8 +23,11 @@ func (SnapshotRequest_Type) SafeValue() {}
 //
 // The bool indicates whether this message uses the deprecated behavior of
 // encoding an error as a string.
-func (m *DelegateSnapshotResponse) Error() (deprecated bool, _ error) {
-	return m.SnapResponse.Error()
+func (m *DelegateSnapshotResponse) Error() error {
+	if m.Status != DelegateSnapshotResponse_ERROR {
+		return nil
+	}
+	return errors.DecodeError(context.Background(), m.EncodedError)
 }
 
 // Error returns the error contained in the snapshot response, if any.

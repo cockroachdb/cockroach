@@ -157,7 +157,7 @@ func TestingDefaultSpanConfig() SpanConfig {
 		RangeMinBytes: 128 << 20, // 128 MB
 		RangeMaxBytes: 512 << 20, // 512 MB
 		GCPolicy: GCPolicy{
-			TTLSeconds: 25 * 60 * 60,
+			TTLSeconds: 4 * 60 * 60, // 4 hrs
 		},
 		NumReplicas: 3,
 	}
@@ -238,5 +238,18 @@ func NewAllTenantKeyspaceTargetsSetTargetType() *SystemSpanConfigTarget_Type {
 		Type: &SystemSpanConfigTarget_Type_AllTenantKeyspaceTargetsSet{
 			AllTenantKeyspaceTargetsSet: &SystemSpanConfigTarget_AllTenantKeyspaceTargetsSet{},
 		},
+	}
+}
+
+const numSpanConfigConformanceReportSlices = 5
+
+// IsEmpty returns true if there are no entries in the report.
+func (m *SpanConfigConformanceReport) IsEmpty() bool {
+	return [numSpanConfigConformanceReportSlices]int{} == [...]int{
+		len(m.OverReplicated),
+		len(m.UnderReplicated),
+		len(m.ViolatingConstraints),
+		len(m.Unavailable),
+		len(m.UnavailableNodeIDs),
 	}
 }

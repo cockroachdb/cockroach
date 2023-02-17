@@ -13,6 +13,7 @@ package syntheticprivilegecache
 import (
 	"context"
 	"fmt"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -23,11 +24,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
@@ -43,7 +44,7 @@ type Cache struct {
 	db             *kv.DB
 	c              *cacheutil.Cache
 	virtualSchemas catalog.VirtualSchemas
-	ief            descs.TxnManager
+	ief            descs.DB
 	warmed         chan struct{}
 	stopper        *stop.Stopper
 }
@@ -55,7 +56,7 @@ func New(
 	db *kv.DB,
 	account mon.BoundAccount,
 	virtualSchemas catalog.VirtualSchemas,
-	ief descs.TxnManager,
+	ief descs.DB,
 ) *Cache {
 	return &Cache{
 		settings:       settings,
@@ -69,14 +70,9 @@ func New(
 }
 
 func (c *Cache) Get(
-	ctx context.Context, txn *kv.Txn, col *descs.Collection, spo syntheticprivilege.Object,
+	ctx context.Context, txn isql.Txn, col *descs.Collection, spo syntheticprivilege.Object,
 ) (*catpb.PrivilegeDescriptor, error) {
-	_, desc, err := col.GetImmutableTableByName(
-		ctx,
-		txn,
-		syntheticprivilege.SystemPrivilegesTableName,
-		tree.ObjectLookupFlagsWithRequired(),
-	)
+	_, desc, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).Get(), syntheticprivilege.SystemPrivilegesTableName)
 	if err != nil {
 		return nil, err
 	}
@@ -101,9 +97,9 @@ func (c *Cache) Get(
 		return nil, err
 	}
 	privDesc := val.(*catpb.PrivilegeDescriptor)
-	// Only write back to the cache if the table version is
-	// committed.
-	c.c.MaybeWriteBackToCache(ctx, []descpb.DescriptorVersion{desc.GetVersion()}, spo.GetPath(), *privDesc)
+	entrySize := int64(len(spo.GetPath())) + computePrivDescSize(privDesc)
+	// Only write back to the cache if the table version is committed.
+	c.c.MaybeWriteBackToCache(ctx, []descpb.DescriptorVersion{desc.GetVersion()}, spo.GetPath(), *privDesc, entrySize)
 	return privDesc, nil
 }
 
@@ -128,7 +124,7 @@ func (c *Cache) getFromCache(
 // corresponding privilege object. This is only used if the we cannot
 // resolve the PrivilegeDescriptor from the cache.
 func (c *Cache) readFromStorage(
-	ctx context.Context, txn *kv.Txn, spo syntheticprivilege.Object,
+	ctx context.Context, txn isql.Txn, spo syntheticprivilege.Object,
 ) (_ *catpb.PrivilegeDescriptor, retErr error) {
 
 	query := fmt.Sprintf(
@@ -136,9 +132,8 @@ func (c *Cache) readFromStorage(
 		catconstants.SystemPrivilegeTableName,
 	)
 	// TODO(ajwerner): Use an internal executor bound to the transaction.
-	ie := c.ief.MakeInternalExecutorWithoutTxn()
-	it, err := ie.QueryIteratorEx(
-		ctx, `get-system-privileges`, txn, sessiondata.NodeUserSessionDataOverride, query, spo.GetPath(),
+	it, err := txn.QueryIteratorEx(
+		ctx, `get-system-privileges`, txn.KV(), sessiondata.NodeUserSessionDataOverride, query, spo.GetPath(),
 	)
 	if err != nil {
 		return nil, err
@@ -194,7 +189,7 @@ func (c *Cache) readFromStorage(
 func (c *Cache) Start(ctx context.Context) {
 	if err := c.stopper.RunAsyncTask(ctx, "syntheticprivilegecache-warm", func(ctx context.Context) {
 		defer close(c.warmed)
-		if !c.settings.Version.IsActive(ctx, clusterversion.V22_2SystemPrivilegesTable) {
+		if !c.settings.Version.IsActive(ctx, clusterversion.TODODelete_V22_2SystemPrivilegesTable) {
 			return
 		}
 		start := timeutil.Now()
@@ -215,14 +210,10 @@ func (c *Cache) start(ctx context.Context) error {
 		`SELECT path, username, privileges, grant_options FROM system.%s WHERE path LIKE $1`,
 		catconstants.SystemPrivilegeTableName,
 	)
-	if err := c.ief.DescsTxnWithExecutor(ctx, c.db, nil /* sessionData */, func(
-		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, ie sqlutil.InternalExecutor) (retErr error) {
-		_, systemPrivDesc, err := descsCol.GetImmutableTableByName(
-			ctx,
-			txn,
-			syntheticprivilege.SystemPrivilegesTableName,
-			tree.ObjectLookupFlagsWithRequired(),
-		)
+	if err := c.ief.DescsTxn(ctx, func(
+		ctx context.Context, txn descs.Txn,
+	) (retErr error) {
+		_, systemPrivDesc, err := descs.PrefixAndTable(ctx, txn.Descriptors().ByNameWithLeased(txn.KV()).Get(), syntheticprivilege.SystemPrivilegesTableName)
 		if err != nil {
 			return err
 		}
@@ -240,8 +231,8 @@ func (c *Cache) start(ctx context.Context) error {
 		}
 		tableVersions = []descpb.DescriptorVersion{systemPrivDesc.GetVersion()}
 
-		it, err := ie.QueryIteratorEx(
-			ctx, `get-vtable-privileges`, txn, sessiondata.NodeUserSessionDataOverride,
+		it, err := txn.QueryIteratorEx(
+			ctx, `get-vtable-privileges`, txn.KV(), sessiondata.NodeUserSessionDataOverride,
 			query, fmt.Sprintf("/%s/%%", syntheticprivilege.VirtualTablePathPrefix),
 		)
 		if err != nil {
@@ -288,7 +279,8 @@ func (c *Cache) start(ctx context.Context) error {
 			if accum, ok := vtablePathToPrivilegeAccumulator[vtablePriv.GetPath()]; ok {
 				privDesc = accum.finish()
 			}
-			c.c.MaybeWriteBackToCache(ctx, tableVersions, vtablePriv.GetPath(), *privDesc)
+			entrySize := int64(len(vtablePriv.GetPath())) + computePrivDescSize(privDesc)
+			c.c.MaybeWriteBackToCache(ctx, tableVersions, vtablePriv.GetPath(), *privDesc, entrySize)
 		})
 	}
 	return nil
@@ -301,4 +293,16 @@ func (c *Cache) waitForWarmed(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+}
+
+// computePrivDescSize computes the size in bytes required by the data in this
+// descriptor.
+func computePrivDescSize(privDesc *catpb.PrivilegeDescriptor) int64 {
+	privDescSize := int(unsafe.Sizeof(*privDesc))
+	privDescSize += len(privDesc.OwnerProto)
+	for _, u := range privDesc.Users {
+		privDescSize += int(unsafe.Sizeof(u))
+		privDescSize += len(u.UserProto)
+	}
+	return int64(privDescSize)
 }

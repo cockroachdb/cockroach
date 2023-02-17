@@ -12,6 +12,7 @@ import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { AppState } from "src/store";
 import { actions as localStorageActions } from "src/store/localStorage";
+import { actions as sqlActions } from "src/store/sqlStats";
 import {
   TransactionInsightsViewDispatchProps,
   TransactionInsightsViewStateProps,
@@ -29,107 +30,183 @@ import { SortSetting } from "src/sortedtable";
 import {
   actions as statementInsights,
   selectColumns,
-  selectStatementInsights,
-  selectStatementInsightsError,
+  selectInsightTypes,
+  selectStmtInsights,
+  selectStmtInsightsError,
+  selectStmtInsightsLoading,
+  selectStmtInsightsMaxApiReached,
 } from "src/store/insights/statementInsights";
 import {
-  actions as transactionInsights,
+  actions as txnInsights,
   selectTransactionInsights,
   selectTransactionInsightsError,
   selectFilters,
   selectSortSetting,
+  selectTransactionInsightsLoading,
 } from "src/store/insights/transactionInsights";
 import { Dispatch } from "redux";
 import { TimeScale } from "../../timeScaleDropdown";
-import { actions as sqlStatsActions } from "../../store/sqlStats";
+import { StmtInsightsReq, TxnInsightsRequest } from "src/api";
+import { selectTimeScale } from "../../store/utils/selectors";
+import { actions as analyticsActions } from "../../store/analytics";
 
 const transactionMapStateToProps = (
   state: AppState,
   _props: RouteComponentProps,
 ): TransactionInsightsViewStateProps => ({
+  isDataValid: state.adminUI.txnInsights?.valid,
+  lastUpdated: state.adminUI.txnInsights.lastUpdated,
   transactions: selectTransactionInsights(state),
   transactionsError: selectTransactionInsightsError(state),
+  insightTypes: selectInsightTypes(),
   filters: selectFilters(state),
   sortSetting: selectSortSetting(state),
+  timeScale: selectTimeScale(state),
+  isLoading: selectTransactionInsightsLoading(state),
 });
 
 const statementMapStateToProps = (
   state: AppState,
   _props: RouteComponentProps,
 ): StatementInsightsViewStateProps => ({
-  statements: selectStatementInsights(state),
-  statementsError: selectStatementInsightsError(state),
+  isDataValid: state.adminUI.stmtInsights?.valid,
+  lastUpdated: state.adminUI.stmtInsights.lastUpdated,
+  statements: selectStmtInsights(state),
+  statementsError: selectStmtInsightsError(state),
+  insightTypes: selectInsightTypes(),
   filters: selectFilters(state),
   sortSetting: selectSortSetting(state),
   selectedColumnNames: selectColumns(state),
+  timeScale: selectTimeScale(state),
+  isLoading: selectStmtInsightsLoading(state),
+  maxSizeApiReached: selectStmtInsightsMaxApiReached(state),
 });
 
 const TransactionDispatchProps = (
   dispatch: Dispatch,
 ): TransactionInsightsViewDispatchProps => ({
-  onFiltersChange: (filters: WorkloadInsightEventFilters) =>
+  onFiltersChange: (filters: WorkloadInsightEventFilters) => {
     dispatch(
       localStorageActions.update({
         key: "filters/InsightsPage",
         value: filters,
       }),
-    ),
-  onSortChange: (ss: SortSetting) =>
+    );
+    dispatch(
+      analyticsActions.track({
+        name: "Filter Clicked",
+        page: "Workload Insights - Transaction",
+        filterName: "filters",
+        value: filters.toString(),
+      }),
+    );
+  },
+  onSortChange: (ss: SortSetting) => {
     dispatch(
       localStorageActions.update({
         key: "sortSetting/InsightsPage",
         value: ss,
       }),
-    ),
-  setTimeScale: (ts: TimeScale) => {
+    );
     dispatch(
-      sqlStatsActions.updateTimeScale({
-        ts: ts,
+      analyticsActions.track({
+        name: "Column Sorted",
+        page: "Workload Insights - Transaction",
+        tableName: "Workload Transaction Insights Table",
+        columnName: ss.columnTitle,
       }),
     );
   },
-  refreshTransactionInsights: () => {
-    dispatch(transactionInsights.refresh());
+  setTimeScale: (ts: TimeScale) => {
+    dispatch(
+      sqlActions.updateTimeScale({
+        ts: ts,
+      }),
+    );
+    dispatch(
+      analyticsActions.track({
+        name: "TimeScale changed",
+        page: "Workload Insights - Transaction",
+        value: ts.key,
+      }),
+    );
+  },
+  refreshTransactionInsights: (req: TxnInsightsRequest) => {
+    dispatch(txnInsights.refresh(req));
   },
 });
 
 const StatementDispatchProps = (
   dispatch: Dispatch,
 ): StatementInsightsViewDispatchProps => ({
-  onFiltersChange: (filters: WorkloadInsightEventFilters) =>
+  onFiltersChange: (filters: WorkloadInsightEventFilters) => {
     dispatch(
       localStorageActions.update({
         key: "filters/InsightsPage",
         value: filters,
       }),
-    ),
-  onSortChange: (ss: SortSetting) =>
+    );
+    dispatch(
+      analyticsActions.track({
+        name: "Filter Clicked",
+        page: "Workload Insights - Statement",
+        filterName: "filters",
+        value: filters.toString(),
+      }),
+    );
+  },
+  onSortChange: (ss: SortSetting) => {
     dispatch(
       localStorageActions.update({
         key: "sortSetting/InsightsPage",
         value: ss,
       }),
-    ),
+    );
+    dispatch(
+      analyticsActions.track({
+        name: "Column Sorted",
+        page: "Workload Insights - Statement",
+        tableName: "Workload Statement Insights Table",
+        columnName: ss.columnTitle,
+      }),
+    );
+  },
   // We use `null` when the value was never set and it will show all columns.
   // If the user modifies the selection and no columns are selected,
   // the function will save the value as a blank space, otherwise
   // it gets saved as `null`.
-  onColumnsChange: (value: string[]) =>
+  onColumnsChange: (value: string[]) => {
+    const columns = value.length === 0 ? " " : value.join(",");
     dispatch(
       localStorageActions.update({
         key: "showColumns/StatementInsightsPage",
-        value: value.length === 0 ? " " : value.join(","),
+        value: columns,
       }),
-    ),
-  setTimeScale: (ts: TimeScale) => {
+    );
     dispatch(
-      sqlStatsActions.updateTimeScale({
-        ts: ts,
+      analyticsActions.track({
+        name: "Columns Selected change",
+        page: "Workload Insights - Statement",
+        value: columns,
       }),
     );
   },
-  refreshStatementInsights: () => {
-    dispatch(statementInsights.refresh());
+  setTimeScale: (ts: TimeScale) => {
+    dispatch(
+      sqlActions.updateTimeScale({
+        ts: ts,
+      }),
+    );
+    dispatch(
+      analyticsActions.track({
+        name: "TimeScale changed",
+        page: "Workload Insights - Statement",
+        value: ts.key,
+      }),
+    );
+  },
+  refreshStatementInsights: (req: StmtInsightsReq) => {
+    dispatch(statementInsights.refresh(req));
   },
 });
 

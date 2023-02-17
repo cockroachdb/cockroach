@@ -17,8 +17,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/pebbleiter"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -31,7 +31,7 @@ import (
 // should only be used in one of the two modes.
 type pebbleIterator struct {
 	// Underlying iterator for the DB.
-	iter    *pebble.Iterator
+	iter    pebbleiter.Iterator
 	options pebble.IterOptions
 	// Reusable buffer for MVCCKey or EngineKey encoding.
 	keyBuf []byte
@@ -47,10 +47,6 @@ type pebbleIterator struct {
 	// initialized the first time an iterator's RangeKeys() method is called.
 	mvccRangeKeyVersions []MVCCRangeKeyVersion
 
-	// True if the iterator's underlying reader supports range keys.
-	//
-	// TODO(erikgrinaker): Remove after 22.2.
-	supportsRangeKeys bool
 	// Set to true to govern whether to call SeekPrefixGE or SeekGE. Skips
 	// SSTables based on MVCC/Engine key when true.
 	prefix bool
@@ -86,24 +82,24 @@ var pebbleIterPool = sync.Pool{
 
 // newPebbleIterator creates a new Pebble iterator for the given Pebble reader.
 func newPebbleIterator(
-	handle pebble.Reader, opts IterOptions, durability DurabilityRequirement, supportsRangeKeys bool,
+	handle pebble.Reader, opts IterOptions, durability DurabilityRequirement,
 ) *pebbleIterator {
 	p := pebbleIterPool.Get().(*pebbleIterator)
 	p.reusable = false // defensive
-	p.init(nil, opts, durability, supportsRangeKeys)
-	p.iter = handle.NewIter(&p.options)
+	p.init(nil, opts, durability)
+	p.iter = pebbleiter.MaybeWrap(handle.NewIter(&p.options))
 	return p
 }
 
 // newPebbleIteratorByCloning creates a new Pebble iterator by cloning the given
 // iterator and reconfiguring it.
 func newPebbleIteratorByCloning(
-	iter *pebble.Iterator, opts IterOptions, durability DurabilityRequirement, supportsRangeKeys bool,
+	iter pebbleiter.Iterator, opts IterOptions, durability DurabilityRequirement,
 ) *pebbleIterator {
 	var err error
 	p := pebbleIterPool.Get().(*pebbleIterator)
 	p.reusable = false // defensive
-	p.init(nil, opts, durability, supportsRangeKeys)
+	p.init(nil, opts, durability)
 	p.iter, err = iter.Clone(pebble.CloneOptions{
 		IterOptions:      &p.options,
 		RefreshBatchView: true,
@@ -121,18 +117,19 @@ func newPebbleSSTIterator(
 ) (*pebbleIterator, error) {
 	p := pebbleIterPool.Get().(*pebbleIterator)
 	p.reusable = false // defensive
-	p.init(nil, opts, StandardDurability, true /* supportsRangeKeys */)
+	p.init(nil, opts, StandardDurability)
 
 	var externalIterOpts []pebble.ExternalIterOption
 	if forwardOnly {
 		externalIterOpts = append(externalIterOpts, pebble.ExternalIterForwardOnly{})
 	}
 
-	var err error
-	if p.iter, err = pebble.NewExternalIter(DefaultPebbleOptions(), &p.options, files, externalIterOpts...); err != nil {
+	iter, err := pebble.NewExternalIter(DefaultPebbleOptions(), &p.options, files, externalIterOpts...)
+	if err != nil {
 		p.Close()
 		return nil, err
 	}
+	p.iter = pebbleiter.MaybeWrap(iter)
 	p.external = true
 	return p, nil
 }
@@ -141,7 +138,7 @@ func newPebbleSSTIterator(
 // reconfiguring the given iter. It is valid to pass a nil iter and then create
 // p.iter using p.options, to avoid redundant reconfiguration via SetOptions().
 func (p *pebbleIterator) init(
-	iter *pebble.Iterator, opts IterOptions, durability DurabilityRequirement, supportsRangeKeys bool,
+	iter pebbleiter.Iterator, opts IterOptions, durability DurabilityRequirement,
 ) {
 	*p = pebbleIterator{
 		iter:               iter,
@@ -150,7 +147,6 @@ func (p *pebbleIterator) init(
 		upperBoundBuf:      p.upperBoundBuf,
 		rangeKeyMaskingBuf: p.rangeKeyMaskingBuf,
 		reusable:           p.reusable,
-		supportsRangeKeys:  supportsRangeKeys,
 	}
 	p.setOptions(opts, durability)
 	p.inuse = true // after setOptions(), so panic won't cause reader to panic too
@@ -164,20 +160,19 @@ func (p *pebbleIterator) init(
 // 3. iter == nil: create a new iterator from handle.
 func (p *pebbleIterator) initReuseOrCreate(
 	handle pebble.Reader,
-	iter *pebble.Iterator,
+	iter pebbleiter.Iterator,
 	clone bool,
 	opts IterOptions,
 	durability DurabilityRequirement,
-	supportsRangeKeys bool, // TODO(erikgrinaker): remove after 22.2
 ) {
 	if iter != nil && !clone {
-		p.init(iter, opts, durability, supportsRangeKeys)
+		p.init(iter, opts, durability)
 		return
 	}
 
-	p.init(nil, opts, durability, supportsRangeKeys)
+	p.init(nil, opts, durability)
 	if iter == nil {
-		p.iter = handle.NewIter(&p.options)
+		p.iter = pebbleiter.MaybeWrap(handle.NewIter(&p.options))
 	} else if clone {
 		var err error
 		p.iter, err = iter.Clone(pebble.CloneOptions{
@@ -202,19 +197,6 @@ func (p *pebbleIterator) setOptions(opts IterOptions, durability DurabilityRequi
 	}
 	if opts.Prefix && opts.RangeKeyMaskingBelow.IsSet() {
 		panic("can't use range key masking with prefix iterators") // very high overhead
-	}
-
-	// If this Pebble database does not support range keys yet, fall back to
-	// only iterating over point keys to avoid panics. This is effectively the
-	// same, since a database without range key support contains no range keys,
-	// except in the case of RangesOnly where the iterator must always be empty.
-	if !p.supportsRangeKeys {
-		if opts.KeyTypes == IterKeyTypeRangesOnly {
-			opts.LowerBound = nil
-			opts.UpperBound = []byte{0}
-		}
-		opts.KeyTypes = IterKeyTypePointsOnly
-		opts.RangeKeyMaskingBelow = hlc.Timestamp{}
 	}
 
 	// Generate new Pebble iterator options.
@@ -454,9 +436,6 @@ func (p *pebbleIterator) NextEngineKeyWithLimit(
 
 // NextKey implements the MVCCIterator interface.
 func (p *pebbleIterator) NextKey() {
-	// Even though NextKey() is not allowed for switching direction by the
-	// MVCCIterator interface, pebbleIterator works correctly even when
-	// switching direction. So we set mvccDirIsReverse = false.
 	if p.mvccDirIsReverse {
 		// Switching directions.
 		p.mvccDirIsReverse = false
@@ -468,49 +447,10 @@ func (p *pebbleIterator) NextKey() {
 	if valid, err := p.Valid(); err != nil || !valid {
 		return
 	}
-	p.keyBuf = append(p.keyBuf[:0], p.UnsafeKey().Key...)
-	if !p.iter.Next() {
-		return
-	}
 
-	// Prefix iterators can't move onto a separate key by definition, so we
-	// exhaust the iterator. We could just set mvccDone, but that wouldn't
-	// propagate RangeKeyChanged() correctly.
-	if p.prefix {
-		// Seek to the latest possible key for this prefix, exhausting iter.
-		seekKey := append(p.keyBuf,
-			append([]byte{0}, EncodeMVCCTimestampSuffix(hlc.MinTimestamp)...)...)
-		if p.iter.SeekPrefixGE(seekKey) {
-			// In practice we'll never hit this loop. It's included for completeness.
-			for p.iter.Next() {
-			}
-		}
-		return
-	}
-
-	// If the Next() call above didn't move to a different key, seek to it.
-	if p.UnsafeKey().Key.Equal(p.keyBuf) {
-		// This is equivalent to:
-		// p.iter.SeekGE(EncodeKey(MVCCKey{p.UnsafeKey().Key.Next(), hlc.Timestamp{}}))
-		seekKey := append(p.keyBuf, 0, 0)
-		p.iter.SeekGE(seekKey)
-		// If there's a range key straddling the seek point (e.g. a-c when seeking
-		// to b), it will be surfaced first as a bare range key. However, unless it
-		// started exactly at the seek key then it has already been emitted, so we
-		// step past it to the next key, which may be either a point key or range
-		// key starting past the seek key.
-		//
-		// NB: We have to be careful to use p.iter methods below, rather than
-		// pebbleIterator methods, since seekKey is an already-encoded roachpb.Key
-		// in raw Pebble key form.
-		if p.iter.Valid() {
-			if hasPoint, hasRange := p.iter.HasPointAndRange(); !hasPoint && hasRange {
-				if startKey, _ := p.iter.RangeBounds(); bytes.Compare(startKey, seekKey) < 0 {
-					p.iter.Next()
-				}
-			}
-		}
-	}
+	// NB: If p.prefix, iterators can't move onto a separate key by definition,
+	// so the below call to NextPrefix will exhaust the iterator.
+	p.iter.NextPrefix()
 }
 
 // UnsafeKey implements the MVCCIterator interface.
@@ -547,30 +487,41 @@ func (p *pebbleIterator) UnsafeRawEngineKey() []byte {
 }
 
 // UnsafeValue implements the MVCCIterator and EngineIterator interfaces.
-func (p *pebbleIterator) UnsafeValue() []byte {
+func (p *pebbleIterator) UnsafeValue() ([]byte, error) {
 	if ok := p.iter.Valid(); !ok {
-		return nil
+		return nil, nil
 	}
-	// TODO(sumeer): change the UnsafeValue and Value interfaces to return an
-	// error. Meanwhile, we rely on the fact that pebble.Iterator will remember
-	// the error, so if the caller subsequently calls pebbleIterator.Valid(),
-	// they will see the error. However, there is no guarantee that a caller
-	// will call Valid() since it may be done iterating.
-	v, _ := p.iter.ValueAndErr()
-	return v
+	return p.iter.ValueAndErr()
+}
+
+// UnsafeLazyValue implements the MVCCIterator interface.
+func (p *pebbleIterator) UnsafeLazyValue() pebble.LazyValue {
+	if ok := p.iter.Valid(); !ok {
+		panic(errors.AssertionFailedf("UnsafeLazyValue called on !Valid iterator"))
+	}
+	return p.iter.LazyValue()
 }
 
 // MVCCValueLenAndIsTombstone implements the MVCCIterator interface.
 func (p *pebbleIterator) MVCCValueLenAndIsTombstone() (int, bool, error) {
 	lv := p.iter.LazyValue()
-	// TODO(sumeer): fix this to use LazyValue.TryGetShortAttribute when
-	// https://github.com/cockroachdb/pebble/pull/2142 is merged.
-	val := lv.InPlaceValue()
-	isTombstone, err := EncodedMVCCValueIsTombstone(val)
-	if err != nil {
-		return 0, false, err
+	attr, ok := lv.TryGetShortAttribute()
+	var isTombstone bool
+	var valLen int
+	if ok {
+		isTombstone = attr != 0
+		valLen = lv.Len()
+	} else {
+		// Must be an in-place value, since it did not have a short attribute.
+		val := lv.InPlaceValue()
+		var err error
+		isTombstone, err = EncodedMVCCValueIsTombstone(val)
+		if err != nil {
+			return 0, false, err
+		}
+		valLen = len(val)
 	}
-	return len(val), isTombstone, nil
+	return valLen, isTombstone, nil
 }
 
 // ValueLen implements the MVCCIterator interface.
@@ -673,17 +624,22 @@ func (p *pebbleIterator) EngineKey() (EngineKey, error) {
 }
 
 // Value implements the MVCCIterator and EngineIterator interfaces.
-func (p *pebbleIterator) Value() []byte {
-	value := p.UnsafeValue()
+func (p *pebbleIterator) Value() ([]byte, error) {
+	value, err := p.UnsafeValue()
+	if err != nil {
+		return nil, err
+	}
 	valueCopy := make([]byte, len(value))
 	copy(valueCopy, value)
-	return valueCopy
+	return valueCopy, nil
 }
 
 // ValueProto implements the MVCCIterator interface.
 func (p *pebbleIterator) ValueProto(msg protoutil.Message) error {
-	value := p.UnsafeValue()
-
+	value, err := p.UnsafeValue()
+	if err != nil {
+		return err
+	}
 	return protoutil.Unmarshal(value, msg)
 }
 
@@ -942,7 +898,7 @@ func (p *pebbleIterator) IsPrefix() bool {
 }
 
 // GetRawIter is part of the EngineIterator interface.
-func (p *pebbleIterator) GetRawIter() *pebble.Iterator {
+func (p *pebbleIterator) GetRawIter() pebbleiter.Iterator {
 	return p.iter
 }
 
@@ -1024,13 +980,6 @@ func (p *pebbleIterator) assertMVCCInvariants() error {
 	// Prefix must be exposed.
 	if p.prefix != p.IsPrefix() {
 		return errors.AssertionFailedf("IsPrefix() does not match prefix=%v", p.prefix)
-	}
-
-	// Ensure !supportsRangeKeys never exposes range keys.
-	if !p.supportsRangeKeys {
-		if _, hasRange := p.HasPointAndRange(); hasRange {
-			return errors.AssertionFailedf("hasRange=true but supportsRangeKeys=false")
-		}
 	}
 
 	return nil

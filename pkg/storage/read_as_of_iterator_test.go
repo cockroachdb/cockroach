@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -34,7 +35,7 @@ func TestReadAsOfIterator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	pebble, err := Open(context.Background(), InMemory(), CacheSize(1<<20 /* 1 MiB */))
+	pebble, err := Open(context.Background(), InMemory(), cluster.MakeClusterSettings(), CacheSize(1<<20 /* 1 MiB */))
 	require.NoError(t, err)
 	defer pebble.Close()
 
@@ -108,7 +109,7 @@ func TestReadAsOfIteratorSeek(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	pebble, err := Open(context.Background(), InMemory(), CacheSize(1<<20 /* 1 MiB */))
+	pebble, err := Open(context.Background(), InMemory(), cluster.MakeClusterSettings(), CacheSize(1<<20 /* 1 MiB */))
 	require.NoError(t, err)
 	defer pebble.Close()
 
@@ -240,7 +241,7 @@ func iterateSimpleMVCCIterator(t *testing.T, it SimpleMVCCIterator, subtest iter
 			output.WriteRune('M')
 		} else {
 			output.WriteByte(byte(it.UnsafeKey().Timestamp.WallTime))
-			v, err := DecodeMVCCValue(it.UnsafeValue())
+			v, err := DecodeMVCCValueAndErr(it.UnsafeValue())
 			require.NoError(t, err)
 			if v.IsTombstone() {
 				output.WriteRune('X')

@@ -22,12 +22,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -199,22 +199,22 @@ func (r *rowDisposer) NumRowsDisposed() int {
 //	makeFetchSpec(t, table, "idx_c", "a,b,c")
 func makeFetchSpec(
 	t testing.TB, table catalog.TableDescriptor, indexName string, colNames string,
-) descpb.IndexFetchSpec {
-	index, err := table.FindIndexWithName(indexName)
+) fetchpb.IndexFetchSpec {
+	index, err := catalog.MustFindIndexByName(table, indexName)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var colIDs []descpb.ColumnID
 	if colNames != "" {
 		for _, col := range strings.Split(colNames, ",") {
-			col, err := table.FindColumnWithName(tree.Name(col))
+			col, err := catalog.MustFindColumnByName(table, col)
 			if err != nil {
 				t.Fatal(err)
 			}
 			colIDs = append(colIDs, col.GetID())
 		}
 	}
-	var fetchSpec descpb.IndexFetchSpec
+	var fetchSpec fetchpb.IndexFetchSpec
 	if err := rowenc.InitIndexFetchSpec(&fetchSpec, keys.SystemSQLCodec, table, index, colIDs); err != nil {
 		t.Fatal(err)
 	}

@@ -17,12 +17,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
@@ -231,7 +231,10 @@ func (oc *optCatalog) ResolveDataSource(
 	}
 
 	oc.tn = *name
-	lflags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveAnyTableKind)
+	lflags := tree.ObjectLookupFlags{
+		Required:          true,
+		DesiredObjectKind: tree.TableObject,
+	}
 	prefix, desc, err := resolver.ResolveExistingTableObject(ctx, oc.planner, &oc.tn, lflags)
 	if err != nil {
 		return nil, cat.DataSourceName{}, err
@@ -262,8 +265,11 @@ func (oc *optCatalog) ResolveIndex(
 			ctx,
 			oc.planner,
 			name,
-			true, /* required */
-			true, /* requireActiveIndex */
+			tree.IndexLookupFlags{
+				Required:              true,
+				IncludeNonActiveIndex: flags.IncludeNonActiveIndexes,
+				IncludeOfflineTable:   flags.IncludeOfflineTables,
+			},
 		)
 	})
 	if err != nil {
@@ -305,7 +311,7 @@ func (oc *optCatalog) ResolveDataSourceByID(
 	tableLookup, err := oc.planner.LookupTableByID(ctx, descpb.ID(dataSourceID))
 
 	if err != nil {
-		isAdding := catalog.HasAddingTableError(err)
+		isAdding := catalog.HasAddingDescriptorError(err)
 		if errors.Is(err, catalog.ErrDescriptorNotFound) || isAdding {
 			return nil, isAdding, sqlerrors.NewUndefinedRelationError(&tree.TableRef{TableID: int64(dataSourceID)})
 		}
@@ -338,7 +344,7 @@ func (oc *optCatalog) ResolveFunction(
 
 func (oc *optCatalog) ResolveFunctionByOID(
 	ctx context.Context, oid oid.Oid,
-) (string, *tree.Overload, error) {
+) (*tree.FunctionName, *tree.Overload, error) {
 	return oc.planner.ResolveFunctionByOID(ctx, oid)
 }
 
@@ -434,9 +440,7 @@ func (oc *optCatalog) fullyQualifiedNameWithTxn(
 	}
 
 	dbID := desc.GetParentID()
-	_, dbDesc, err := oc.planner.Descriptors().GetImmutableDatabaseByID(
-		ctx, txn, dbID, tree.DatabaseLookupFlags{AvoidLeased: true},
-	)
+	dbDesc, err := oc.planner.Descriptors().ByID(txn).WithoutNonPublic().Get().Database(ctx, dbID)
 	if err != nil {
 		return cat.DataSourceName{}, err
 	}
@@ -446,9 +450,7 @@ func (oc *optCatalog) fullyQualifiedNameWithTxn(
 	if scID == keys.PublicSchemaID {
 		scName = tree.PublicSchemaName
 	} else {
-		scDesc, err := oc.planner.Descriptors().GetImmutableSchemaByID(
-			ctx, txn, scID, tree.SchemaLookupFlags{AvoidLeased: true},
-		)
+		scDesc, err := oc.planner.Descriptors().ByID(txn).WithoutNonPublic().Get().Schema(ctx, scID)
 		if err != nil {
 			return cat.DataSourceName{}, err
 		}
@@ -464,7 +466,7 @@ func (oc *optCatalog) fullyQualifiedNameWithTxn(
 
 // RoleExists is part of the cat.Catalog interface.
 func (oc *optCatalog) RoleExists(ctx context.Context, role username.SQLUsername) (bool, error) {
-	return RoleExists(ctx, oc.planner.ExecCfg().InternalExecutor, oc.planner.Txn(), role)
+	return RoleExists(ctx, oc.planner.InternalSQLTxn(), role)
 }
 
 // dataSourceForDesc returns a data source wrapper for the given descriptor.
@@ -788,6 +790,7 @@ func newOptTable(
 		// "stored" from the perspective of the optimizer because they are
 		// written to the primary index and all secondary indexes.
 		if !col.IsVirtual() || pkCols.Contains(col.GetID()) {
+			cd := col.ColumnDesc()
 			ot.columns[col.Ordinal()].Init(
 				col.Ordinal(),
 				cat.StableID(col.GetID()),
@@ -796,11 +799,11 @@ func newOptTable(
 				col.GetType(),
 				col.IsNullable(),
 				visibility,
-				col.ColumnDesc().DefaultExpr,
-				col.ColumnDesc().ComputeExpr,
-				col.ColumnDesc().OnUpdateExpr,
+				cd.DefaultExpr,
+				cd.ComputeExpr,
+				cd.OnUpdateExpr,
 				mapGeneratedAsIdentityType(col.GetGeneratedAsIdentityType()),
-				col.ColumnDesc().GeneratedAsIdentitySequenceOption,
+				cd.GeneratedAsIdentitySequenceOption,
 			)
 		} else {
 			// We need to propagate the mutation state for computed columns, so that
@@ -832,9 +835,10 @@ func newOptTable(
 	// This check is done for upgrade purposes. We need to avoid adding the
 	// system column if the table has a column with this name for some reason.
 	for _, sysCol := range ot.desc.SystemColumns() {
-		found, _ := desc.FindColumnWithName(sysCol.ColName())
+		found := catalog.FindColumnByTreeName(desc, sysCol.ColName())
 		if found == nil || found.IsSystemColumn() {
 			col, ord := newColumn()
+			cd := sysCol.ColumnDesc()
 			col.Init(
 				ord,
 				cat.StableID(sysCol.GetID()),
@@ -843,11 +847,11 @@ func newOptTable(
 				sysCol.GetType(),
 				sysCol.IsNullable(),
 				cat.MaybeHidden(sysCol.IsHidden()),
-				sysCol.ColumnDesc().DefaultExpr,
-				sysCol.ColumnDesc().ComputeExpr,
-				sysCol.ColumnDesc().OnUpdateExpr,
+				cd.DefaultExpr,
+				cd.ComputeExpr,
+				cd.OnUpdateExpr,
 				mapGeneratedAsIdentityType(sysCol.GetGeneratedAsIdentityType()),
-				sysCol.ColumnDesc().GeneratedAsIdentitySequenceOption,
+				cd.GeneratedAsIdentitySequenceOption,
 			)
 		}
 	}
@@ -969,9 +973,9 @@ func newOptTable(
 			referencedTable:   cat.StableID(fk.GetReferencedTableID()),
 			referencedColumns: fk.ForeignKeyDesc().ReferencedColumnIDs,
 			validity:          fk.GetConstraintValidity(),
-			match:             fk.Match(),
-			deleteAction:      fk.OnDelete(),
-			updateAction:      fk.OnUpdate(),
+			match:             tree.CompositeKeyMatchMethodType[fk.Match()],
+			deleteAction:      tree.ForeignKeyReferenceActionType[fk.OnDelete()],
+			updateAction:      tree.ForeignKeyReferenceActionType[fk.OnUpdate()],
 		})
 	}
 	for _, fk := range ot.desc.InboundForeignKeys() {
@@ -982,9 +986,9 @@ func newOptTable(
 			referencedTable:   ot.ID(),
 			referencedColumns: fk.ForeignKeyDesc().ReferencedColumnIDs,
 			validity:          fk.GetConstraintValidity(),
-			match:             fk.Match(),
-			deleteAction:      fk.OnDelete(),
-			updateAction:      fk.OnUpdate(),
+			match:             tree.CompositeKeyMatchMethodType[fk.Match()],
+			deleteAction:      tree.ForeignKeyReferenceActionType[fk.OnDelete()],
+			updateAction:      tree.ForeignKeyReferenceActionType[fk.OnUpdate()],
 		})
 	}
 
@@ -1583,7 +1587,7 @@ func (oi *optIndex) NonInvertedPrefixColumnCount() int {
 func (oi *optIndex) Column(i int) cat.IndexColumn {
 	ord := oi.columnOrds[i]
 	// Only key columns have a direction.
-	descending := i < oi.idx.NumKeyColumns() && oi.idx.GetKeyColumnDirection(i) == catpb.IndexColumn_DESC
+	descending := i < oi.idx.NumKeyColumns() && oi.idx.GetKeyColumnDirection(i) == catenumpb.IndexColumn_DESC
 	return cat.IndexColumn{
 		Column:     oi.tab.Column(ord),
 		Descending: descending,
@@ -1768,9 +1772,24 @@ func (os *optTableStat) HistogramType() *types.T {
 	return os.stat.HistogramData.ColumnType
 }
 
+// IsPartial is part of the cat.TableStatistic interface.
+func (os *optTableStat) IsPartial() bool {
+	return os.stat.IsPartial()
+}
+
+// IsMerged is part of the cat.TableStatistic interface.
+func (os *optTableStat) IsMerged() bool {
+	return os.stat.IsMerged()
+}
+
 // IsForecast is part of the cat.TableStatistic interface.
 func (os *optTableStat) IsForecast() bool {
-	return os.stat.Name == jobspb.ForecastStatsName
+	return os.stat.IsForecast()
+}
+
+// IsAuto is part of the cat.TableStatistic interface.
+func (os *optTableStat) IsAuto() bool {
+	return os.stat.IsAuto()
 }
 
 // optFamily is a wrapper around descpb.ColumnFamilyDescriptor that keeps a
@@ -1897,9 +1916,9 @@ type optForeignKeyConstraint struct {
 	referencedColumns []descpb.ColumnID
 
 	validity     descpb.ConstraintValidity
-	match        descpb.ForeignKeyReference_Match
-	deleteAction catpb.ForeignKeyAction
-	updateAction catpb.ForeignKeyAction
+	match        tree.CompositeKeyMatchMethod
+	deleteAction tree.ReferenceAction
+	updateAction tree.ReferenceAction
 }
 
 var _ cat.ForeignKeyConstraint = &optForeignKeyConstraint{}
@@ -1958,17 +1977,17 @@ func (fk *optForeignKeyConstraint) Validated() bool {
 
 // MatchMethod is part of the cat.ForeignKeyConstraint interface.
 func (fk *optForeignKeyConstraint) MatchMethod() tree.CompositeKeyMatchMethod {
-	return descpb.ForeignKeyReferenceMatchValue[fk.match]
+	return fk.match
 }
 
 // DeleteReferenceAction is part of the cat.ForeignKeyConstraint interface.
 func (fk *optForeignKeyConstraint) DeleteReferenceAction() tree.ReferenceAction {
-	return descpb.ForeignKeyReferenceActionType[fk.deleteAction]
+	return fk.deleteAction
 }
 
 // UpdateReferenceAction is part of the cat.ForeignKeyConstraint interface.
 func (fk *optForeignKeyConstraint) UpdateReferenceAction() tree.ReferenceAction {
-	return descpb.ForeignKeyReferenceActionType[fk.updateAction]
+	return fk.updateAction
 }
 
 // optVirtualTable is similar to optTable but is used with virtual tables.
@@ -2062,6 +2081,7 @@ func newOptVirtualTable(
 		nil, /* generatedAsIdentitySequenceOption */
 	)
 	for i, d := range desc.PublicColumns() {
+		cd := d.ColumnDesc()
 		ot.columns[i+1].Init(
 			i+1,
 			cat.StableID(d.GetID()),
@@ -2070,11 +2090,11 @@ func newOptVirtualTable(
 			d.GetType(),
 			d.IsNullable(),
 			cat.MaybeHidden(d.IsHidden()),
-			d.ColumnDesc().DefaultExpr,
-			d.ColumnDesc().ComputeExpr,
-			d.ColumnDesc().OnUpdateExpr,
+			cd.DefaultExpr,
+			cd.ComputeExpr,
+			cd.OnUpdateExpr,
 			mapGeneratedAsIdentityType(d.GetGeneratedAsIdentityType()),
-			d.ColumnDesc().GeneratedAsIdentitySequenceOption,
+			cd.GeneratedAsIdentitySequenceOption,
 		)
 	}
 
@@ -2581,10 +2601,7 @@ func collectTypes(col catalog.Column) (descpb.IDs, error) {
 
 	ids := make(descpb.IDs, 0, len(visitor.OIDs))
 	for collectedOid := range visitor.OIDs {
-		id, err := typedesc.UserDefinedTypeOIDToID(collectedOid)
-		if err != nil {
-			return nil, err
-		}
+		id := typedesc.UserDefinedTypeOIDToID(collectedOid)
 		ids = append(ids, id)
 	}
 	return ids, nil

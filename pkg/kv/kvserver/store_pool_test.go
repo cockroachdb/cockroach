@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -37,7 +38,7 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
-	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(manual)
 	ctx := context.Background()
 	// We're going to manually mark stores dead in this test.
 	st := cluster.MakeTestingClusterSettings()
@@ -77,7 +78,21 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 			},
 		},
 	}
+	callbacks := []roachpb.StoreID{}
+	sp.SetOnCapacityChange(func(
+		storeID roachpb.StoreID,
+		_, _ roachpb.StoreCapacity,
+	) {
+		callbacks = append(callbacks, storeID)
+	})
+	// Gossip the initial stores. There should trigger two callbacks as the
+	// capacity has changed from no capacity to a new capacity.
 	sg.GossipStores(stores, t)
+	require.Len(t, callbacks, 2)
+	// Gossip the initial stores again, with the same capacity. This shouldn't
+	// trigger any callbacks as the capacity hasn't changed.
+	sg.GossipStores(stores, t)
+	require.Len(t, callbacks, 2)
 
 	replica := Replica{RangeID: 1}
 	replica.mu.Lock()
@@ -86,16 +101,17 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 		ValBytes: 4,
 	}
 	replica.mu.Unlock()
-	replica.loadStats = NewReplicaLoad(clock, nil)
+	replica.loadStats = load.NewReplicaLoad(clock, nil)
 	for _, store := range stores {
-		replica.loadStats.batchRequests.RecordCount(1, store.Node.NodeID)
-		replica.loadStats.writeKeys.RecordCount(1, store.Node.NodeID)
+		replica.loadStats.RecordBatchRequests(1, store.Node.NodeID)
+		replica.loadStats.RecordWriteKeys(1)
 	}
 	manual.Advance(replicastats.MinStatsDuration + time.Second)
 
-	rangeUsageInfo := rangeUsageInfoForRepl(&replica)
-	QPS, _ := replica.loadStats.batchRequests.AverageRatePerSecond()
-	WPS, _ := replica.loadStats.writeKeys.AverageRatePerSecond()
+	rangeUsageInfo := RangeUsageInfoForRepl(&replica)
+	stats := replica.LoadStats()
+	QPS := stats.QueriesPerSecond
+	WPS := stats.WriteKeysPerSecond
 
 	sp.UpdateLocalStoreAfterRebalance(roachpb.StoreID(1), rangeUsageInfo, roachpb.ADD_VOTER)
 	desc, ok := sp.GetStoreDescriptor(roachpb.StoreID(1))
@@ -139,7 +155,7 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 		t.Errorf("expected L0 Sub-Levels %d, but got %d", expectedL0Sublevels, desc.Capacity.L0Sublevels)
 	}
 
-	sp.UpdateLocalStoresAfterLeaseTransfer(roachpb.StoreID(1), roachpb.StoreID(2), rangeUsageInfo.QueriesPerSecond)
+	sp.UpdateLocalStoresAfterLeaseTransfer(roachpb.StoreID(1), roachpb.StoreID(2), rangeUsageInfo)
 	desc, ok = sp.GetStoreDescriptor(roachpb.StoreID(1))
 	if !ok {
 		t.Fatalf("couldn't find StoreDescriptor for Store ID %d", 1)
@@ -164,7 +180,7 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 	sp.UpdateLocalStoreAfterRelocate(
 		[]roachpb.ReplicationTarget{{StoreID: roachpb.StoreID(1)}}, []roachpb.ReplicationTarget{},
 		[]roachpb.ReplicaDescriptor{{StoreID: roachpb.StoreID(2)}}, []roachpb.ReplicaDescriptor{},
-		roachpb.StoreID(2), rangeUsageInfo.QueriesPerSecond)
+		roachpb.StoreID(2), rangeUsageInfo)
 
 	desc, ok = sp.GetStoreDescriptor(roachpb.StoreID(1))
 	require.True(t, ok)
@@ -185,7 +201,7 @@ func TestStorePoolUpdateLocalStoreBeforeGossip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 123)), time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(0, 123)))
 	cfg := TestStoreConfig(clock)
 	var stopper *stop.Stopper
 	stopper, _, _, cfg.StorePool, _ = storepool.CreateTestStorePool(ctx, cfg.Settings,
@@ -220,14 +236,14 @@ func TestStorePoolUpdateLocalStoreBeforeGossip(t *testing.T) {
 
 	const replicaID = 1
 	require.NoError(t,
-		logstore.NewStateLoader(rg.RangeID).SetRaftReplicaID(ctx, store.engine, replicaID))
-	replica, err := newReplica(ctx, &rg, store, replicaID)
+		logstore.NewStateLoader(rg.RangeID).SetRaftReplicaID(ctx, store.TODOEngine(), replicaID))
+	replica, err := loadInitializedReplicaForTesting(ctx, store, &rg, replicaID)
 	if err != nil {
 		t.Fatalf("make replica error : %+v", err)
 	}
-	replica.loadStats = NewReplicaLoad(store.Clock(), nil)
+	replica.loadStats = load.NewReplicaLoad(store.Clock(), nil)
 
-	rangeUsageInfo := rangeUsageInfoForRepl(replica)
+	rangeUsageInfo := RangeUsageInfoForRepl(replica)
 
 	// Update StorePool, which should be a no-op.
 	storeID := roachpb.StoreID(1)

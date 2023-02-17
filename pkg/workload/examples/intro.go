@@ -23,11 +23,10 @@ func init() {
 }
 
 var introMeta = workload.Meta{
-	Name:         `intro`,
-	Description:  `Intro contains a single table with a hidden message`,
-	Version:      `1.0.0`,
-	PublicFacing: true,
-	New:          func() workload.Generator { return intro{} },
+	Name:        `intro`,
+	Description: `Intro contains a single table with a hidden message.`,
+	Version:     `1.0.0`,
+	New:         func() workload.Generator { return intro{} },
 }
 
 // Meta implements the Generator interface.

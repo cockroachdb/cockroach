@@ -15,9 +15,11 @@ option go_package = "descpb";
 
 import "config/zonepb/zone.proto";
 import "util/hlc/timestamp.proto";
+import "sql/catalog/catenumpb/index.proto";
 import "sql/catalog/catpb/catalog.proto";
+import "sql/catalog/catpb/enum.proto";
+import "sql/sem/semenumpb/constraint.proto";
 import "sql/catalog/catpb/privilege.proto";
-import "sql/catalog/catpb/index.proto";
 import "sql/catalog/catpb/function.proto";
 import "sql/schemachanger/scpb/scpb.proto";
 import "sql/types/types.proto";
@@ -47,15 +49,6 @@ enum ConstraintValidity {
 // traditional foreign key references.
 message ForeignKeyReference {
   option (gogoproto.equal) = true;
-
-  // Match is the algorithm used to compare composite keys.
-  enum Match {
-    option (gogoproto.goproto_enum_stringer) = false;
-    SIMPLE = 0;
-    FULL = 1;
-    PARTIAL = 2; // Note: not actually supported, but we reserve the value for future use.
-  }
-
   optional uint32 table = 1 [(gogoproto.nullable) = false, (gogoproto.casttype) = "ID"];
   optional uint32 index = 2 [(gogoproto.nullable) = false, (gogoproto.casttype) = "IndexID"];
   optional string name = 3 [(gogoproto.nullable) = false];
@@ -63,11 +56,11 @@ message ForeignKeyReference {
   // If this FK only uses a prefix of the columns in its index, we record how
   // many to avoid spuriously counting the additional cols as used by this FK.
   optional int32 shared_prefix_len = 5 [(gogoproto.nullable) = false];
-  optional cockroach.sql.catalog.catpb.ForeignKeyAction on_delete = 6 [(gogoproto.nullable) = false];
-  optional cockroach.sql.catalog.catpb.ForeignKeyAction on_update = 7 [(gogoproto.nullable) = false];
+  optional cockroach.sql.sem.semenumpb.ForeignKeyAction on_delete = 6 [(gogoproto.nullable) = false];
+  optional cockroach.sql.sem.semenumpb.ForeignKeyAction on_update = 7 [(gogoproto.nullable) = false];
   // This is only important for composite keys. For all prior matches before
   // the addition of this value, MATCH SIMPLE will be used.
-  optional Match match = 8 [(gogoproto.nullable) = false];
+  optional cockroach.sql.sem.semenumpb.Match match = 8 [(gogoproto.nullable) = false];
 }
 
 // ForeignKeyConstraint is the new (as of 19.2 and VersionTopLevelForeignKeys)
@@ -89,11 +82,11 @@ message ForeignKeyConstraint {
                                           (gogoproto.casttype) = "ID"];
   optional string name = 5 [(gogoproto.nullable) = false];
   optional ConstraintValidity validity = 6 [(gogoproto.nullable) = false];
-  optional cockroach.sql.catalog.catpb.ForeignKeyAction on_delete = 7 [(gogoproto.nullable) = false];
-  optional cockroach.sql.catalog.catpb.ForeignKeyAction on_update = 8 [(gogoproto.nullable) = false];
+  optional cockroach.sql.sem.semenumpb.ForeignKeyAction on_delete = 7 [(gogoproto.nullable) = false];
+  optional cockroach.sql.sem.semenumpb.ForeignKeyAction on_update = 8 [(gogoproto.nullable) = false];
   // This is only important for composite keys. For all prior matches before
   // the addition of this value, MATCH SIMPLE will be used.
-  optional ForeignKeyReference.Match match = 9 [(gogoproto.nullable) = false];
+  optional cockroach.sql.sem.semenumpb.Match match = 9 [(gogoproto.nullable) = false];
 
   // These fields were used for foreign keys until 20.1.
   reserved 10, 11, 12, 13;
@@ -436,8 +429,8 @@ message IndexDescriptor {
   // EncodingType represents what sort of k/v encoding is used to store this descriptor on disk.
   // As of now, this includes the existing secondary index encoding, or the primary index encoding.
   // N.B. This field is only recognized on secondary indexes.
-  optional uint32 encoding_type = 19
-    [(gogoproto.nullable) = false, (gogoproto.casttype) = "IndexDescriptorEncodingType"];
+  optional uint32 encoding_type = 19 [(gogoproto.nullable) = false,
+                                      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb.IndexDescriptorEncodingType"];
 
   // Sharded, if it's not the zero value, describes how this index is sharded.
   optional cockroach.sql.catalog.catpb.ShardedDescriptor sharded = 20 [(gogoproto.nullable) = false];
@@ -1507,8 +1500,8 @@ message SchemaDescriptor {
   // descriptor being changed as part of a declarative schema change.
   optional cockroach.sql.schemachanger.scpb.DescriptorState declarative_schema_changer_state = 11;
 
-  // FunctionOverload represent a UDF signature and its descriptor ID.
-  message FunctionOverload {
+  // FunctionSignature represent a UDF signature and its descriptor ID.
+  message FunctionSignature {
     option (gogoproto.equal) = true;
 
     optional uint32 id = 1 [(gogoproto.nullable) = false,
@@ -1526,7 +1519,7 @@ message SchemaDescriptor {
   message Function {
     option (gogoproto.equal) = true;
     optional string name = 1 [(gogoproto.nullable) = false];
-    repeated FunctionOverload overloads = 2 [(gogoproto.nullable) = false];
+    repeated FunctionSignature signatures = 2 [(gogoproto.nullable) = false];
   }
 
   // functions contains all UDFs created in this schema.

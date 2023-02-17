@@ -17,11 +17,15 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/strutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -97,7 +101,7 @@ func PrepareUpdateReplicas(
 
 	// Map contains a set of store names that were found in plan for this node,
 	// but were not configured in this command invocation.
-	missing := make(map[roachpb.StoreID]struct{})
+	missing := make(storeIDSet)
 	for _, update := range plan.Updates {
 		if nodeID != update.NodeID() {
 			continue
@@ -132,7 +136,7 @@ func PrepareUpdateReplicas(
 	}
 
 	if len(missing) > 0 {
-		report.MissingStores = storeSliceFromSet(missing)
+		report.MissingStores = missing.storeSliceFromSet()
 	}
 	return report, nil
 }
@@ -140,7 +144,7 @@ func PrepareUpdateReplicas(
 func applyReplicaUpdate(
 	ctx context.Context, readWriter storage.ReadWriter, update loqrecoverypb.ReplicaUpdate,
 ) (PrepareReplicaReport, error) {
-	clock := hlc.NewClockWithSystemTimeSource(0 /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	report := PrepareReplicaReport{
 		Replica: update.NewReplica,
 	}
@@ -177,9 +181,9 @@ func applyReplicaUpdate(
 	// there will be keys not represented by any ranges or vice
 	// versa).
 	key := keys.RangeDescriptorKey(update.StartKey.AsRKey())
-	value, intent, err := storage.MVCCGet(
+	res, err := storage.MVCCGet(
 		ctx, readWriter, key, clock.Now(), storage.MVCCGetOptions{Inconsistent: true})
-	if value == nil {
+	if res.Value == nil {
 		return PrepareReplicaReport{}, errors.Errorf(
 			"failed to find a range descriptor for range %v", key)
 	}
@@ -187,7 +191,7 @@ func applyReplicaUpdate(
 		return PrepareReplicaReport{}, err
 	}
 	var localDesc roachpb.RangeDescriptor
-	if err := value.GetProto(&localDesc); err != nil {
+	if err := res.Value.GetProto(&localDesc); err != nil {
 		return PrepareReplicaReport{}, err
 	}
 	// Sanity check that this is indeed the right range.
@@ -202,6 +206,11 @@ func applyReplicaUpdate(
 		report.AlreadyUpdated = true
 		return report, nil
 	}
+	// Sanity check if removed replica ID matches one in the plan.
+	if _, ok := localDesc.Replicas().GetReplicaDescriptorByID(update.OldReplicaID); !ok {
+		return PrepareReplicaReport{}, errors.Errorf(
+			"can not find replica with ID %d for range r%d", update.OldReplicaID, update.RangeID)
+	}
 
 	sl := stateloader.Make(localDesc.RangeID)
 	ms, err := sl.LoadMVCCStats(ctx, readWriter)
@@ -213,7 +222,7 @@ func applyReplicaUpdate(
 	// we won't be able to do MVCCPut later during recovery for the new
 	// descriptor. It should have no effect on the recovery process itself as
 	// transaction would be rolled back anyways.
-	if intent != nil {
+	if res.Intent != nil {
 		// We rely on the property that transactions involving the range
 		// descriptor always start on the range-local descriptor's key. When there
 		// is an intent, this means that it is likely that the transaction did not
@@ -251,24 +260,24 @@ func applyReplicaUpdate(
 		// plan is trivially achievable, due to any of the above problems. But
 		// in the common case, we do expect one to exist.
 		report.AbortedTransaction = true
-		report.AbortedTransactionID = intent.Txn.ID
+		report.AbortedTransactionID = res.Intent.Txn.ID
 
 		// A crude form of the intent resolution process: abort the
 		// transaction by deleting its record.
-		txnKey := keys.TransactionKey(intent.Txn.Key, intent.Txn.ID)
+		txnKey := keys.TransactionKey(res.Intent.Txn.Key, res.Intent.Txn.ID)
 		if _, err := storage.MVCCDelete(ctx, readWriter, &ms, txnKey, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil); err != nil {
 			return PrepareReplicaReport{}, err
 		}
 		update := roachpb.LockUpdate{
-			Span:   roachpb.Span{Key: intent.Key},
-			Txn:    intent.Txn,
+			Span:   roachpb.Span{Key: res.Intent.Key},
+			Txn:    res.Intent.Txn,
 			Status: roachpb.ABORTED,
 		}
-		if _, err := storage.MVCCResolveWriteIntent(ctx, readWriter, &ms, update); err != nil {
+		if _, _, _, err := storage.MVCCResolveWriteIntent(ctx, readWriter, &ms, update, storage.MVCCResolveWriteIntentOptions{}); err != nil {
 			return PrepareReplicaReport{}, err
 		}
 		report.AbortedTransaction = true
-		report.AbortedTransactionID = intent.Txn.ID
+		report.AbortedTransactionID = res.Intent.Txn.ID
 	}
 	newDesc := localDesc
 	replicas := []roachpb.ReplicaDescriptor{
@@ -316,7 +325,6 @@ type ApplyUpdateReport struct {
 // second step of applying recovery plan.
 func CommitReplicaChanges(batches map[roachpb.StoreID]storage.Batch) (ApplyUpdateReport, error) {
 	var report ApplyUpdateReport
-	failed := false
 	var updateErrors []string
 	// Commit changes to all stores. Stores could have pending changes if plan
 	// contains replicas belonging to them, or have no changes if no replicas
@@ -330,14 +338,101 @@ func CommitReplicaChanges(batches map[roachpb.StoreID]storage.Batch) (ApplyUpdat
 			// If we fail here, we can only try to run the whole process from scratch
 			// as this store is somehow broken.
 			updateErrors = append(updateErrors, fmt.Sprintf("failed to update store s%d: %v", id, err))
-			failed = true
 		} else {
 			report.UpdatedStores = append(report.UpdatedStores, id)
 		}
 	}
-	if failed {
+	if len(updateErrors) > 0 {
 		return report, errors.Errorf(
 			"failed to commit update to one or more stores: %s", strings.Join(updateErrors, "; "))
 	}
 	return report, nil
+}
+
+// MaybeApplyPendingRecoveryPlan applies loss of quorum recovery plan if it is
+// staged in planStore. Changes would be applied to engines when their
+// identities match storeIDs of replicas in the plan.
+// Plan applications errors like mismatch of store with plan, inability to
+// deserialize values ets are only reported to logs and application status but
+// are not propagated to caller. Only serious errors that imply misconfiguration
+// or planStorage issues are propagated.
+// Regardless of application success or failure, staged plan would be removed.
+func MaybeApplyPendingRecoveryPlan(
+	ctx context.Context, planStore PlanStore, engines []storage.Engine, clock timeutil.TimeSource,
+) error {
+	if len(engines) < 1 {
+		return nil
+	}
+
+	applyPlan := func(nodeID roachpb.NodeID, plan loqrecoverypb.ReplicaUpdatePlan) error {
+		log.Infof(ctx, "applying staged loss of quorum recovery plan %s", plan.PlanID)
+		batches := make(map[roachpb.StoreID]storage.Batch)
+		for _, e := range engines {
+			ident, err := kvstorage.ReadStoreIdent(ctx, e)
+			if err != nil {
+				return errors.Wrap(err, "failed to read store ident when trying to apply loss of quorum recovery plan")
+			}
+			b := e.NewBatch()
+			defer b.Close()
+			batches[ident.StoreID] = b
+		}
+		prepRep, err := PrepareUpdateReplicas(ctx, plan, uuid.DefaultGenerator, clock.Now(), nodeID, batches)
+		if err != nil {
+			return err
+		}
+		if len(prepRep.MissingStores) > 0 {
+			log.Warningf(ctx, "loss of quorum recovery plan application expected stores on the node %s",
+				strutil.JoinIDs("s", prepRep.MissingStores))
+		}
+		_, err = CommitReplicaChanges(batches)
+		if err != nil {
+			// This is not very good as are in a partial success situation, but we don't
+			// have a good solution other than report that as error. Let the user
+			// decide what to do next.
+			return err
+		}
+		return nil
+	}
+
+	plan, exists, err := planStore.LoadPlan()
+	if err != nil {
+		// This is fatal error, we don't write application report since we didn't
+		// check the store yet.
+		return errors.Wrap(err, "failed to check if loss of quorum recovery plan is staged")
+	}
+	if !exists {
+		return nil
+	}
+
+	// First read node parameters from the first store.
+	storeIdent, err := kvstorage.ReadStoreIdent(ctx, engines[0])
+	if err != nil {
+		if errors.Is(err, &kvstorage.NotBootstrappedError{}) {
+			// This is wrong, we must not have staged plans in a non-bootstrapped
+			// node. But we can't write an error here as store init might refuse to
+			// work if there are already some keys in store.
+			log.Errorf(ctx, "node is not bootstrapped but it already has a recovery plan staged: %s", err)
+			return nil
+		}
+		return err
+	}
+
+	if err := planStore.RemovePlan(); err != nil {
+		log.Errorf(ctx, "failed to remove loss of quorum recovery plan: %s", err)
+	}
+
+	err = applyPlan(storeIdent.NodeID, plan)
+	r := loqrecoverypb.PlanApplicationResult{
+		AppliedPlanID:  plan.PlanID,
+		ApplyTimestamp: clock.Now(),
+	}
+	if err != nil {
+		r.Error = err.Error()
+		log.Errorf(ctx, "failed to apply staged loss of quorum recovery plan %s", err)
+	}
+	if err = writeNodeRecoveryResults(ctx, engines[0], r,
+		loqrecoverypb.DeferredRecoveryActions{DecommissionedNodeIDs: plan.DecommissionedNodeIDs}); err != nil {
+		log.Errorf(ctx, "failed to write loss of quorum recovery results to store: %s", err)
+	}
+	return nil
 }

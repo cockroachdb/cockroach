@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -43,7 +44,7 @@ func runTestRoleOptionsMigration(t *testing.T, numUsers int) {
 
 	settings := cluster.MakeTestingClusterSettingsWithVersions(
 		clusterversion.TestingBinaryVersion,
-		clusterversion.ByKey(clusterversion.V22_2RoleOptionsTableHasIDColumn-1),
+		clusterversion.ByKey(clusterversion.TODODelete_V22_2RoleOptionsTableHasIDColumn-1),
 		false,
 	)
 
@@ -53,7 +54,7 @@ func runTestRoleOptionsMigration(t *testing.T, numUsers int) {
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
-					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.V22_2RoleOptionsTableHasIDColumn - 1),
+					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.TODODelete_V22_2RoleOptionsTableHasIDColumn - 1),
 				},
 			},
 		},
@@ -75,7 +76,7 @@ func runTestRoleOptionsMigration(t *testing.T, numUsers int) {
 		{"testuser", "CONTROLJOB", "NULL"},
 		{"testuser", "CREATEROLE", "NULL"},
 		{"testuser", "NOLOGIN", "NULL"},
-		{"testuser", "VALID UNTIL", "2021-01-01 00:00:00+00:00"},
+		{"testuser", "VALID UNTIL", "2021-01-01 00:00:00+00"},
 	})
 
 	type roleOption struct {
@@ -161,27 +162,27 @@ func runTestRoleOptionsMigration(t *testing.T, numUsers int) {
 		{"testuser", "CONTROLJOB", "NULL"},
 		{"testuser", "CREATEROLE", "NULL"},
 		{"testuser", "NOLOGIN", "NULL"},
-		{"testuser", "VALID UNTIL", "2021-01-01 00:00:00+00:00"},
+		{"testuser", "VALID UNTIL", "2021-01-01 00:00:00+00"},
 		{"testuser_last", "CREATEROLE", "NULL"},
 	})
 
 	_, err := tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
-		clusterversion.ByKey(clusterversion.V22_2RoleOptionsTableHasIDColumn).String())
+		clusterversion.ByKey(clusterversion.TODODelete_V22_2RoleOptionsTableHasIDColumn).String())
 	require.NoError(t, err)
 
 	_, err = tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
-		clusterversion.ByKey(clusterversion.V22_2RoleOptionsIDColumnIsBackfilled).String())
+		clusterversion.ByKey(clusterversion.TODODelete_V22_2RoleOptionsIDColumnIsBackfilled).String())
 	require.NoError(t, err)
 
 	_, err = tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
-		clusterversion.ByKey(clusterversion.V22_2SetRoleOptionsUserIDColumnNotNull).String())
+		clusterversion.ByKey(clusterversion.TODODelete_V22_2SetRoleOptionsUserIDColumnNotNull).String())
 	require.NoError(t, err)
 
 	tdb.CheckQueryResults(t, `SELECT * FROM system.role_options WHERE username = 'testuser' or username = 'testuser_last'`, [][]string{
 		{"testuser", "CONTROLJOB", "NULL", fmt.Sprintf("%d", testuserID)},
 		{"testuser", "CREATEROLE", "NULL", fmt.Sprintf("%d", testuserID)},
 		{"testuser", "NOLOGIN", "NULL", fmt.Sprintf("%d", testuserID)},
-		{"testuser", "VALID UNTIL", "2021-01-01 00:00:00+00:00", fmt.Sprintf("%d", testuserID)},
+		{"testuser", "VALID UNTIL", "2021-01-01 00:00:00+00", fmt.Sprintf("%d", testuserID)},
 		{"testuser_last", "CREATEROLE", "NULL", fmt.Sprintf(`%d`, testuserLastID)},
 	})
 
@@ -245,7 +246,7 @@ func getDeprecatedSystemRoleOptionsTable() *descpb.TableDescriptor {
 			ID:                  1,
 			Unique:              true,
 			KeyColumnNames:      []string{"username", "option"},
-			KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
+			KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
 			KeyColumnIDs:        []descpb.ColumnID{1, 2},
 		},
 		NextIndexID:      2,

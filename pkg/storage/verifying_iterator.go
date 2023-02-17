@@ -13,6 +13,7 @@ package storage
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/pebble"
 )
 
 // verifyingMVCCIterator is an MVCC iterator that wraps a pebbleIterator and
@@ -42,7 +43,7 @@ func (i *verifyingMVCCIterator) saveAndVerify() {
 	i.key = i.pebbleIterator.UnsafeKey()
 	i.hasPoint, i.hasRange = i.pebbleIterator.HasPointAndRange()
 	if i.hasPoint {
-		i.value = i.pebbleIterator.UnsafeValue()
+		i.value, _ = i.pebbleIterator.UnsafeValue()
 		if i.key.IsValue() {
 			mvccValue, ok, err := tryDecodeSimpleMVCCValue(i.value)
 			if !ok && err == nil {
@@ -102,8 +103,8 @@ func (i *verifyingMVCCIterator) UnsafeKey() MVCCKey {
 }
 
 // UnsafeValue implements MVCCIterator.
-func (i *verifyingMVCCIterator) UnsafeValue() []byte {
-	return i.value
+func (i *verifyingMVCCIterator) UnsafeValue() ([]byte, error) {
+	return i.value, nil
 }
 
 // MVCCValueLenAndIsTombstone implements MVCCIterator.
@@ -128,4 +129,9 @@ func (i *verifyingMVCCIterator) Valid() (bool, error) {
 // HasPointAndRange implements MVCCIterator.
 func (i *verifyingMVCCIterator) HasPointAndRange() (bool, bool) {
 	return i.hasPoint, i.hasRange
+}
+
+// UnsafeLazyValue implements MVCCIterator.
+func (i *verifyingMVCCIterator) UnsafeLazyValue() pebble.LazyValue {
+	return pebble.LazyValue{ValueOrHandle: i.value}
 }

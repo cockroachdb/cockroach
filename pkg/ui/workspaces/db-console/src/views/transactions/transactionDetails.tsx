@@ -14,6 +14,7 @@ import { RouteComponentProps, withRouter } from "react-router-dom";
 import {
   refreshNodes,
   refreshStatements,
+  refreshTxnInsights,
   refreshUserSQLRoles,
 } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
@@ -32,6 +33,8 @@ import {
 } from "@cockroachlabs/cluster-ui";
 import { setGlobalTimeScaleAction } from "src/redux/statements";
 import { selectTimeScale } from "src/redux/timeScale";
+import { selectTxnInsightsByFingerprint } from "src/views/insights/insightsSelectors";
+import { selectHasAdminRole } from "src/redux/user";
 
 export const selectTransaction = createSelector(
   (state: AdminUIState) => state.cachedData.statements,
@@ -42,6 +45,7 @@ export const selectTransaction = createSelector(
       return {
         isLoading: true,
         transaction: null,
+        lastUpdated: null,
       };
     }
     const txnFingerprintId = getMatchParamByName(
@@ -57,6 +61,7 @@ export const selectTransaction = createSelector(
     return {
       isLoading: false,
       transaction: transaction,
+      lastUpdated: transactionState?.setAt?.utc(),
     };
   },
 );
@@ -67,7 +72,10 @@ export default withRouter(
       state: AdminUIState,
       props: TransactionDetailsProps,
     ): TransactionDetailsStateProps => {
-      const { isLoading, transaction } = selectTransaction(state, props);
+      const { isLoading, transaction, lastUpdated } = selectTransaction(
+        state,
+        props,
+      );
       return {
         timeScale: selectTimeScale(state),
         error: selectLastError(state),
@@ -80,6 +88,9 @@ export default withRouter(
           txnFingerprintIdAttr,
         ),
         isLoading: isLoading,
+        lastUpdated: lastUpdated,
+        transactionInsights: selectTxnInsightsByFingerprint(state, props),
+        hasAdminRole: selectHasAdminRole(state),
       };
     },
     {
@@ -87,6 +98,7 @@ export default withRouter(
       refreshNodes,
       refreshUserSQLRoles,
       onTimeScaleChange: setGlobalTimeScaleAction,
+      refreshTransactionInsights: refreshTxnInsights,
     },
   )(TransactionDetails),
 );

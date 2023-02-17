@@ -17,13 +17,15 @@ import { noop } from "lodash";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import { RequestError } from "src/util";
 import { StatementDiagnosticsReport } from "../api";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import ILatencyInfo = cockroach.sql.ILatencyInfo;
 
 type IStatementStatistics = protos.cockroach.sql.IStatementStatistics;
 type IExecStats = protos.cockroach.sql.IExecStats;
 
 const history = createMemoryHistory({ initialEntries: ["/statements"] });
 
-const execStats: Required<IExecStats> = {
+const execStats: IExecStats = {
   count: Long.fromNumber(180),
   network_bytes: {
     mean: 80,
@@ -45,7 +47,19 @@ const execStats: Required<IExecStats> = {
     mean: 80,
     squared_diffs: 0.01,
   },
+  cpu_sql_nanos: {
+    mean: 80,
+    squared_diffs: 0.01,
+  },
 };
+
+const latencyInfo: Required<ILatencyInfo> = {
+  min: 0.00008,
+  max: 0.00028,
+  p50: 0.00015,
+  p90: 0.00016,
+  p99: 0.00018,
+}
 
 const statementStats: Required<IStatementStatistics> = {
   count: Long.fromNumber(180000),
@@ -99,10 +113,12 @@ const statementStats: Required<IStatementStatistics> = {
   index_recommendations: [""],
   indexes: ["123@456"],
   exec_stats: execStats,
+  latency_info: latencyInfo,
   last_exec_timestamp: {
     seconds: Long.fromInt(1599670292),
     nanos: 111613000,
   },
+  last_error_code: "",
   sensitive_info: {
     last_err: "",
     most_recent_plan_description: {
@@ -217,34 +233,34 @@ const statementStats: Required<IStatementStatistics> = {
 
 const diagnosticsReports: StatementDiagnosticsReport[] = [
   {
-    id: '594413966918975489',
+    id: "594413966918975489",
     completed: true,
     statement_fingerprint: "SHOW database",
-    statement_diagnostics_id: '594413981435920385',
+    statement_diagnostics_id: "594413981435920385",
     requested_at: moment(1601471146),
   },
   {
-    id: '594413966918975429',
+    id: "594413966918975429",
     completed: true,
     statement_fingerprint: "SHOW database",
-    statement_diagnostics_id: '594413281435920385',
+    statement_diagnostics_id: "594413281435920385",
     requested_at: moment(1601491146),
   },
 ];
 
 const diagnosticsReportsInProgress: StatementDiagnosticsReport[] = [
   {
-    id: '594413966918975489',
+    id: "594413966918975489",
     completed: false,
     statement_fingerprint: "SHOW database",
-    statement_diagnostics_id: '594413981435920385',
+    statement_diagnostics_id: "594413981435920385",
     requested_at: moment(1601471146),
   },
   {
-    id: '594413966918975429',
+    id: "594413966918975429",
     completed: true,
     statement_fingerprint: "SHOW database",
-    statement_diagnostics_id: '594413281435920385',
+    statement_diagnostics_id: "594413281435920385",
     requested_at: moment(1601491146),
   },
 ];
@@ -290,6 +306,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     nodes: "",
   },
   lastUpdated,
+  isDataValid: true,
   // Aggregate key values in these statements will need to change if implementation
   // of 'statementKey' in appStats.ts changes.
   statements: [
@@ -592,7 +609,8 @@ const statementsPagePropsFixture: StatementsPageProps = {
       aggregatedFingerprintID: "6325213731862855938",
       aggregatedFingerprintHexID:
         Long.fromNumber(6325213731862855938).toString(16),
-      label: "INSERT INTO users VALUES ($1, $2, __more1_10__), (__more10_100__)",
+      label:
+        "INSERT INTO users VALUES ($1, $2, __more1_10__), (__more10_100__)",
       summary: "INSERT INTO users VALUES",
       aggregatedTs,
       aggregationInterval,
@@ -904,7 +922,8 @@ const statementsPagePropsFixture: StatementsPageProps = {
       aggregatedFingerprintID: "16819876564846676829",
       aggregatedFingerprintHexID:
         Long.fromNumber(16819876564846676829).toString(16),
-      label: "INSERT INTO vehicles VALUES ($1, $2, __more1_10__), (__more1_10__)",
+      label:
+        "INSERT INTO vehicles VALUES ($1, $2, __more1_10__), (__more1_10__)",
       summary: "INSERT INTO vehicles",
       aggregatedTs,
       aggregationInterval,
@@ -928,7 +947,9 @@ const statementsPagePropsFixture: StatementsPageProps = {
   columns: null,
   isTenant: false,
   hasViewActivityRedactedRole: false,
+  hasAdminRole: true,
   dismissAlertMessage: noop,
+  refreshDatabases: noop,
   refreshStatementDiagnosticsRequests: noop,
   refreshStatements: noop,
   refreshUserSQLRoles: noop,

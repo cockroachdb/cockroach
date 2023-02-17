@@ -14,18 +14,13 @@ package tree
 // SET CLUSTER SETTING statement.
 type AlterTenantSetClusterSetting struct {
 	SetClusterSetting
-	TenantID  Expr
-	TenantAll bool
+	TenantSpec *TenantSpec
 }
 
 // Format implements the NodeFormatter interface.
 func (n *AlterTenantSetClusterSetting) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER TENANT ")
-	if n.TenantAll {
-		ctx.WriteString("ALL")
-	} else {
-		ctx.FormatNode(n.TenantID)
-	}
+	ctx.FormatNode(n.TenantSpec)
 	ctx.WriteByte(' ')
 	ctx.FormatNode(&n.SetClusterSetting)
 }
@@ -33,25 +28,25 @@ func (n *AlterTenantSetClusterSetting) Format(ctx *FmtCtx) {
 // ShowTenantClusterSetting represents a SHOW CLUSTER SETTING ... FOR TENANT statement.
 type ShowTenantClusterSetting struct {
 	*ShowClusterSetting
-	TenantID Expr
+	TenantSpec *TenantSpec
 }
 
 // Format implements the NodeFormatter interface.
 func (node *ShowTenantClusterSetting) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.ShowClusterSetting)
 	ctx.WriteString(" FOR TENANT ")
-	ctx.FormatNode(node.TenantID)
+	ctx.FormatNode(node.TenantSpec)
 }
 
 // ShowTenantClusterSettingList represents a SHOW CLUSTER SETTINGS FOR TENANT statement.
 type ShowTenantClusterSettingList struct {
 	*ShowClusterSettingList
-	TenantID Expr
+	TenantSpec *TenantSpec
 }
 
 // Format implements the NodeFormatter interface.
 func (node *ShowTenantClusterSettingList) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.ShowClusterSettingList)
 	ctx.WriteString(" FOR TENANT ")
-	ctx.FormatNode(node.TenantID)
+	ctx.FormatNode(node.TenantSpec)
 }

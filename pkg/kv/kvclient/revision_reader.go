@@ -72,8 +72,12 @@ func GetAllRevisions(
 			keyCopy := make([]byte, len(key.Key))
 			copy(keyCopy, key.Key)
 			key.Key = keyCopy
-			value := make([]byte, len(iter.UnsafeValue()))
-			copy(value, iter.UnsafeValue())
+			v, err := iter.UnsafeValue()
+			if err != nil {
+				return nil, err
+			}
+			value := make([]byte, len(v))
+			copy(value, v)
 			if len(res) == 0 || !res[len(res)-1].Key.Equal(key.Key) {
 				res = append(res, VersionedValues{Key: key.Key})
 			}

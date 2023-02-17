@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -79,12 +79,14 @@ func Test_handleRaftReadyStats_SafeFormat(t *testing.T) {
 		tApplicationBegin: ts(1),
 		tApplicationEnd:   ts(2),
 		apply: applyCommittedEntriesStats{
-			batchesProcessed:      9,
-			entriesProcessed:      2,
-			entriesProcessedBytes: 3,
-			stateAssertions:       4,
-			numEmptyEntries:       5,
-			numConfChangeEntries:  6,
+			numBatchesProcessed: 9,
+			appBatchStats: appBatchStats{
+				numEntriesProcessed:      2,
+				numEntriesProcessedBytes: 3,
+				numEmptyEntries:          5,
+			},
+			stateAssertions:      4,
+			numConfChangeEntries: 6,
 		},
 		append: logstore.AppendStats{
 			Begin:             ts(2),
@@ -107,5 +109,5 @@ func Test_handleRaftReadyStats_SafeFormat(t *testing.T) {
 	}
 
 	echotest.Require(t, string(redact.Sprint(stats)),
-		filepath.Join(testutils.TestDataPath(t, "handle_raft_ready_stats.txt")))
+		filepath.Join(datapathutils.TestDataPath(t, "handle_raft_ready_stats.txt")))
 }

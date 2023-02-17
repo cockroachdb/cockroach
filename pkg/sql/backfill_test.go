@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -92,8 +93,8 @@ func TestShouldSkipConstraintValidation(t *testing.T) {
 		PrimaryIndex: descpb.IndexDescriptor{
 			ID: 1, Name: "pri", KeyColumnIDs: []descpb.ColumnID{1},
 			KeyColumnNames:      []string{"c1"},
-			KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
-			EncodingType:        descpb.PrimaryIndexEncoding,
+			KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
+			EncodingType:        catenumpb.PrimaryIndexEncoding,
 			Version:             descpb.LatestIndexDescriptorVersion,
 		},
 		Mutations: []descpb.DescriptorMutation{
@@ -102,11 +103,11 @@ func TestShouldSkipConstraintValidation(t *testing.T) {
 					Index: &descpb.IndexDescriptor{
 						ID: 2, Name: "new_hash_index", KeyColumnIDs: []descpb.ColumnID{2, 3},
 						KeyColumnNames: []string{"c2", "c3"},
-						KeyColumnDirections: []catpb.IndexColumn_Direction{
-							catpb.IndexColumn_ASC,
-							catpb.IndexColumn_ASC,
+						KeyColumnDirections: []catenumpb.IndexColumn_Direction{
+							catenumpb.IndexColumn_ASC,
+							catenumpb.IndexColumn_ASC,
 						},
-						EncodingType: descpb.PrimaryIndexEncoding,
+						EncodingType: catenumpb.PrimaryIndexEncoding,
 						Version:      descpb.LatestIndexDescriptorVersion,
 						Sharded: catpb.ShardedDescriptor{
 							IsSharded:    true,

@@ -56,7 +56,7 @@ exec-sql user=testuser
 RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/foo' WITH new_db_name = ddup_nonroot_fail;
 ----
 pq: only users with the CREATEDB privilege can restore databases
-HINT: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here <link>. In a future release, to run RESTORE DATABASE, user testuser will exclusively require the RESTORE system privilege.
+HINT: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here https://www.cockroachlabs.com/docs/stable/restore.html#required-privileges. In a future release, to run RESTORE DATABASE, user testuser will exclusively require the RESTORE system privilege.
 
 exec-sql
 GRANT SYSTEM RESTORE TO testuser;
@@ -147,7 +147,7 @@ exec-sql user=testuser
 RESTORE TABLE d.ds.t FROM LATEST IN 'nodelocal://1/foo' WITH into_db = nonadmin;
 ----
 pq: user testuser does not have CREATE privilege on database nonadmin
-HINT: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here <link>. In a future release, to run RESTORE TABLE, user testuser will exclusively require the RESTORE privilege on database nonadmin.
+HINT: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here https://www.cockroachlabs.com/docs/stable/restore.html#required-privileges. In a future release, to run RESTORE TABLE, user testuser will exclusively require the RESTORE privilege on database nonadmin.
 
 exec-sql
 GRANT RESTORE ON DATABASE nonadmin TO testuser;

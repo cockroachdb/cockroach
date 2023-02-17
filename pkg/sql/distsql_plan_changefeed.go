@@ -18,14 +18,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -35,6 +36,20 @@ import (
 // (see cdc_eval library) to ensure the expression is safe to use in CDC
 // context.
 type CDCExpression = *tree.Select
+
+// CDCOption is an option to configure cdc expression planning and execution.
+type CDCOption interface {
+	apply(cfg *cdcConfig)
+}
+
+// WithExtraColumn returns an option to add column to the
+// CDC table. The caller expected to provide the value
+// of this column when executing this flow.
+func WithExtraColumn(c catalog.Column) CDCOption {
+	return funcOpt(func(config *cdcConfig) {
+		config.extraColumns = append(config.extraColumns, c)
+	})
+}
 
 // CDCExpressionPlan encapsulates execution plan for evaluation of CDC expressions.
 type CDCExpressionPlan struct {
@@ -54,11 +69,16 @@ type CDCExpressionPlan struct {
 // planning and execution of CDC expressions. This planner ought to be
 // configured appropriately to resolve correct descriptor versions.
 func PlanCDCExpression(
-	ctx context.Context, localPlanner interface{}, cdcExpr CDCExpression,
+	ctx context.Context, localPlanner interface{}, cdcExpr CDCExpression, opts ...CDCOption,
 ) (cdcPlan CDCExpressionPlan, _ error) {
 	p, ok := localPlanner.(*planner)
 	if !ok {
 		return CDCExpressionPlan{}, errors.AssertionFailedf("expected planner, found %T", localPlanner)
+	}
+
+	var cfg cdcConfig
+	for _, opt := range opts {
+		opt.apply(&cfg)
 	}
 
 	p.stmt = makeStatement(parser.Statement{
@@ -67,15 +87,27 @@ func PlanCDCExpression(
 	}, clusterunique.ID{} /* queryID */)
 
 	p.curPlan.init(&p.stmt, &p.instrumentation)
-	p.optPlanningCtx.init(p)
 	opc := &p.optPlanningCtx
+	opc.init(p)
 	opc.reset(ctx)
+	opc.useCache = false
+	opc.allowMemoReuse = false
+
+	familyID, err := extractFamilyID(cdcExpr)
+	if err != nil {
+		return cdcPlan, err
+	}
 
 	cdcCat := &cdcOptCatalog{
-		optCatalog: opc.catalog.(*optCatalog),
-		semaCtx:    &p.semaCtx,
+		optCatalog:     opc.catalog.(*optCatalog),
+		cdcConfig:      cfg,
+		targetFamilyID: familyID,
+		semaCtx:        &p.semaCtx,
 	}
+
+	// Reset catalog to cdc specific implementation.
 	opc.catalog = cdcCat
+	opc.optimizer.Init(ctx, p.EvalContext(), opc.catalog)
 
 	memo, err := opc.buildExecMemo(ctx)
 	if err != nil {
@@ -165,10 +197,22 @@ func RunCDCEvaluation(
 		return err
 	}
 
-	// Execute.
+	// Execute the flow.  Force the use of planner descriptor cache when setting
+	// up this local flow.  This is necessary so that as soon as the local flow
+	// setup completes, and all descriptors have been resolved (including leases
+	// for user defined types), we can release those descriptors. If we don't,
+	// then the descriptor leases acquired will be held for the
+	// DefaultDescriptorLeaseDuration (5 minutes), blocking potential schema
+	// changes.
+	cdcPlan.PlanCtx.usePlannerDescriptorsForLocalFlow = true
 	p := cdcPlan.PlanCtx.planner
+	finishedSetupFn := func() {
+		p.Descriptors().ReleaseAll(ctx)
+	}
+
 	p.DistSQLPlanner().PlanAndRun(
-		ctx, &p.extendedEvalCtx, cdcPlan.PlanCtx, p.txn, cdcPlan.Plan, receiver)
+		ctx, &p.extendedEvalCtx, cdcPlan.PlanCtx, p.txn, cdcPlan.Plan, receiver, finishedSetupFn,
+	)
 	return nil
 }
 
@@ -198,6 +242,25 @@ func prepareCDCPlan(
 		return nil, errors.AssertionFailedf("expected to find one scan node, found none")
 	}
 	return plan, nil
+}
+
+// CollectPlanColumns invokes collector callback for each column accessed
+// by this plan.  Collector may return false to stop iteration.
+// Collector function may be invoked multiple times for the same column.
+func (p CDCExpressionPlan) CollectPlanColumns(collector func(column colinfo.ResultColumn) bool) {
+	v := makePlanVisitor(context.Background(), planObserver{
+		enterNode: func(ctx context.Context, nodeName string, plan planNode) (bool, error) {
+			cols := planColumns(plan)
+			for _, c := range cols {
+				stop := collector(c)
+				if stop {
+					return false, nil
+				}
+			}
+			return true, nil // Continue onto the next node.
+		},
+	})
+	_ = v.visit(p.Plan.planNode)
 }
 
 // cdcValuesNode replaces regular scanNode with cdc specific implementation
@@ -281,10 +344,26 @@ func (n *cdcValuesNode) Close(ctx context.Context) {
 
 type cdcOptCatalog struct {
 	*optCatalog
-	semaCtx *tree.SemaContext
+	cdcConfig
+	targetFamilyID catid.FamilyID
+	semaCtx        *tree.SemaContext
 }
 
 var _ cat.Catalog = (*cdcOptCatalog)(nil)
+
+// extractFamilyID extracts family ID hint from CDCExpression.
+func extractFamilyID(stmt CDCExpression) (catid.FamilyID, error) {
+	sc, ok := stmt.Select.(*tree.SelectClause)
+	if !ok {
+		return 0, errors.AssertionFailedf("unexpected expression type %T", stmt.Select)
+	}
+	if t, ok := sc.From.Tables[0].(*tree.AliasedTableExpr); ok {
+		if t.IndexFlags != nil && t.IndexFlags.FamilyID != nil {
+			return *t.IndexFlags.FamilyID, nil
+		}
+	}
+	return 0, nil
+}
 
 // ResolveDataSource implements cat.Catalog interface.
 // We provide custom implementation to ensure that we return data source for
@@ -292,13 +371,17 @@ var _ cat.Catalog = (*cdcOptCatalog)(nil)
 func (c *cdcOptCatalog) ResolveDataSource(
 	ctx context.Context, flags cat.Flags, name *cat.DataSourceName,
 ) (cat.DataSource, cat.DataSourceName, error) {
-	lflags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireTableDesc)
+	lflags := tree.ObjectLookupFlags{
+		Required:             true,
+		DesiredObjectKind:    tree.TableObject,
+		DesiredTableDescKind: tree.ResolveRequireTableDesc,
+	}
 	_, desc, err := resolver.ResolveExistingTableObject(ctx, c.planner, name, lflags)
 	if err != nil {
 		return nil, cat.DataSourceName{}, err
 	}
 
-	ds, err := c.newCDCDataSource(desc)
+	ds, err := c.newCDCDataSource(desc, c.targetFamilyID)
 	if err != nil {
 		return nil, cat.DataSourceName{}, err
 	}
@@ -315,7 +398,8 @@ func (c *cdcOptCatalog) ResolveDataSourceByID(
 	if err != nil {
 		return nil, false, err
 	}
-	ds, err := c.newCDCDataSource(desc)
+
+	ds, err := c.newCDCDataSource(desc, c.targetFamilyID)
 	if err != nil {
 		return nil, false, err
 	}
@@ -337,14 +421,161 @@ func (c *cdcOptCatalog) ResolveFunction(
 	return c.optCatalog.ResolveFunction(ctx, fnName, path)
 }
 
-// newCDCDataSource builds an optTable for the target cdc table.
-// The descriptor presented to the optimizer hides all but the primary index.
+// newCDCDataSource builds an optTable for the target cdc table and family.
+func (c *cdcOptCatalog) newCDCDataSource(
+	original catalog.TableDescriptor, familyID catid.FamilyID,
+) (cat.DataSource, error) {
+	d, err := newFamilyTableDescriptor(original, familyID, c.extraColumns)
+	if err != nil {
+		return nil, err
+	}
+	return newOptTable(d, c.codec(), nil /* stats */, emptyZoneConfig)
+}
+
+// familyTableDescriptor wraps underlying catalog.TableDescriptor,
+// but restricts access to a single column family.
+type familyTableDescriptor struct {
+	catalog.TableDescriptor
+	includeSet catalog.TableColSet
+	extraCols  []catalog.Column
+}
+
+func newFamilyTableDescriptor(
+	original catalog.TableDescriptor, familyID catid.FamilyID, extraCols []catalog.Column,
+) (catalog.TableDescriptor, error) {
+	// Build the set of columns in the family, along with the primary
+	// key columns.
+	fam, err := catalog.MustFindFamilyByID(original, familyID)
+	if err != nil {
+		return nil, err
+	}
+
+	includeSet := original.GetPrimaryIndex().CollectKeyColumnIDs()
+	for _, id := range fam.ColumnIDs {
+		includeSet.Add(id)
+	}
+
+	// Add system columns -- those are always available.
+	includeSet.Add(colinfo.MVCCTimestampColumnID)
+	includeSet.Add(colinfo.TableOIDColumnID)
+
+	return &familyTableDescriptor{
+		TableDescriptor: original,
+		includeSet:      includeSet,
+		extraCols:       extraCols,
+	}, nil
+}
+
+// DeletableNonPrimaryIndexes implements catalog.TableDescriptor interface.
+// CDC currently supports primary index only.
 // TODO(yevgeniy): We should be able to use secondary indexes provided
 // the CDC expression access only the columns available in that secondary index.
-func (c *cdcOptCatalog) newCDCDataSource(original catalog.TableDescriptor) (cat.DataSource, error) {
-	// Build descriptor with all indexes other than primary removed.
-	desc := protoutil.Clone(original.TableDesc()).(*descpb.TableDescriptor)
-	desc.Indexes = desc.Indexes[:0]
-	updated := tabledesc.NewBuilder(desc).BuildImmutableTable()
-	return newOptTable(updated, c.codec(), nil /* stats */, emptyZoneConfig)
+func (d *familyTableDescriptor) DeletableNonPrimaryIndexes() []catalog.Index {
+	return nil
+}
+
+// ActiveIndexes implements catalog.TableDescriptor.
+// Only primary index supported for now.
+func (d *familyTableDescriptor) ActiveIndexes() []catalog.Index {
+	return d.TableDescriptor.ActiveIndexes()[:1]
+}
+
+// DeletableColumns implements catalog.TableDescriptor interface.
+// This implementation filters out underlying descriptor DeletableColumns to
+// only include columns referenced by the target column family.
+func (d *familyTableDescriptor) DeletableColumns() []catalog.Column {
+	return d.familyColumns(d.TableDescriptor.DeletableColumns())
+}
+
+// AllColumns implements catalog.TableDescriptor interface.
+// This implementation filters out underlying descriptor AllColumns to
+// only include columns referenced by the target column family.
+func (d *familyTableDescriptor) AllColumns() []catalog.Column {
+	return d.familyColumns(d.TableDescriptor.AllColumns())
+}
+
+// VisibleColumns implements catalog.TableDescriptor interface.
+// This implementation filters out underlying descriptor AllColumns to
+// only include columns referenced by the target column family.
+func (d *familyTableDescriptor) VisibleColumns() []catalog.Column {
+	return d.familyColumns(d.TableDescriptor.VisibleColumns())
+}
+
+// EnforcedUniqueConstraintsWithoutIndex implements catalog.TableDescriptor interface.
+// This implementation filters out constraints that reference columns outside of
+// target column family.
+func (d *familyTableDescriptor) EnforcedUniqueConstraintsWithoutIndex() []catalog.UniqueWithoutIndexConstraint {
+	constraints := d.TableDescriptor.EnforcedUniqueConstraintsWithoutIndex()
+	filtered := make([]catalog.UniqueWithoutIndexConstraint, 0, len(constraints))
+	for _, c := range constraints {
+		if c.CollectKeyColumnIDs().SubsetOf(d.includeSet) {
+			filtered = append(filtered, c)
+		}
+	}
+	return filtered
+}
+
+// FindColumnWithID implements catalog.TableDescriptor and provides
+// access to extra CDC columns.
+func (d *familyTableDescriptor) FindColumnWithID(id descpb.ColumnID) (catalog.Column, error) {
+	c := catalog.FindColumnByID(d.TableDescriptor, id)
+	if c != nil {
+		return c, nil
+	}
+	for _, extra := range d.extraCols {
+		if extra.GetID() == id {
+			return c, nil
+		}
+	}
+	return nil, pgerror.Newf(pgcode.UndefinedColumn, "column-id \"%d\" does not exist", id)
+}
+
+// EnforcedCheckConstraints implements catalog.TableDescriptor interface.
+// This implementation filters out constraints that reference columns outside of
+// target column family.
+func (d *familyTableDescriptor) EnforcedCheckConstraints() []catalog.CheckConstraint {
+	constraints := d.TableDescriptor.EnforcedCheckConstraints()
+	filtered := make([]catalog.CheckConstraint, 0, len(constraints))
+	for _, c := range constraints {
+		if c.CollectReferencedColumnIDs().SubsetOf(d.includeSet) {
+			filtered = append(filtered, c)
+		}
+	}
+	return filtered
+}
+
+// familyColumns returns column list adopted for targeted column family.
+func (d *familyTableDescriptor) familyColumns(cols []catalog.Column) []catalog.Column {
+	filtered := make([]catalog.Column, 0, len(cols)+1)
+	for _, col := range cols {
+		if d.includeSet.Contains(col.GetID()) {
+			filtered = append(filtered, &remappedOrdinalColumn{Column: col, ord: len(filtered)})
+		}
+	}
+	for _, col := range d.extraCols {
+		filtered = append(filtered, &remappedOrdinalColumn{Column: col, ord: len(filtered)})
+	}
+	return filtered
+}
+
+// remappedOrdinalColumn wraps underlying catalog.Column
+// but changes its ordinal position.
+type remappedOrdinalColumn struct {
+	catalog.Column
+	ord int
+}
+
+// Ordinal implements catalog.Column interface.
+func (c *remappedOrdinalColumn) Ordinal() int {
+	return c.ord
+}
+
+type cdcConfig struct {
+	extraColumns []catalog.Column
+}
+
+type funcOpt func(config *cdcConfig)
+
+func (fn funcOpt) apply(config *cdcConfig) {
+	fn(config)
 }

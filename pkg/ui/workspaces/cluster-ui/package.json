@@ -1,6 +1,6 @@
 {
   "name": "@cockroachlabs/cluster-ui",
-  "version": "23.1.0-prerelease.2",
+  "version": "23.1.0-prerelease.3",
   "description": "Cluster UI is a library of large features shared between CockroachDB and CockroachCloud",
   "repository": {
     "type": "git",
@@ -8,6 +8,10 @@
   },
   "main": "dist/js/main.js",
   "types": "dist/types/index.d.ts",
+  "files": [
+    "dist/",
+    "AUTHORS"
+  ],
   "scripts": {
     "build": "npm-run-all -p build:typescript build:bundle",
     "build:bundle": "NODE_ENV=production webpack --display-error-details --mode=production",
@@ -18,7 +22,6 @@
     "clean": "rm -rf  ./dist/*",
     "lint": "eslint './src/**/*.{tsx,ts,js}' --format=codeframe",
     "lint:fix": "eslint './src/**/*.{tsx,ts,js}' --format=codeframe --fix",
-    "prepublishOnly": "npm-run-all clean build",
     "test": "jest --watch",
     "start": "npm-run-all -p build:watch tsc:watch",
     "storybook": "start-storybook -p 6006",
@@ -47,7 +50,7 @@
     "@cockroachlabs/eslint-config": "^0.1.11",
     "@cockroachlabs/eslint-plugin-crdb": "link:../eslint-plugin-crdb",
     "@cockroachlabs/icons": "0.5.2",
-    "@cockroachlabs/ui-components": "0.2.20",
+    "@cockroachlabs/ui-components": "0.4.3",
     "@popperjs/core": "^2.4.0",
     "@reduxjs/toolkit": "^1.5.0",
     "@storybook/addon-actions": "^6.1.21",
@@ -166,7 +169,7 @@
     "yargs-parser": "~13.1.2",
     "protobufjs": "6.8.6",
     "**/jest-environment-jsdom": "^27.5.1",
-    "aria-query": "file:../../yarn-vendor/aria-query-5.0.0-no-spaced-files.tgz",
+    "aria-query": "5.0.1",
     "esbuild": "0.14.43"
   }
 }

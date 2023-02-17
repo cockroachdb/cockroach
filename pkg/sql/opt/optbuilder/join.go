@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
 
@@ -171,12 +171,12 @@ func (b *Builder) validateJoinTableNames(leftScope, rightScope *scope) {
 	}
 }
 
-// findJoinColsToValidate creates a FastIntSet containing the ordinal of each
+// findJoinColsToValidate creates a Fast containing the ordinal of each
 // column that has a different table name than the previous column. This is a
 // fast way of reducing the set of columns that need to checked for duplicate
 // names by validateJoinTableNames.
-func (b *Builder) findJoinColsToValidate(scope *scope) util.FastIntSet {
-	var ords util.FastIntSet
+func (b *Builder) findJoinColsToValidate(scope *scope) intsets.Fast {
+	var ords intsets.Fast
 	for i := range scope.cols {
 		// Allow joins of sources that define columns with no
 		// associated table name. At worst, the USING/NATURAL

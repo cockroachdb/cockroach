@@ -6,13 +6,15 @@ go_library(
     name = "scop",
     srcs = [
         "backfill.go",
+        "deferred_mutation.go",
+        "immediate_mutation.go",
         "metadata.go",
-        "mutation.go",
         "ops.go",
         "phase.go",
         "validation.go",
         ":gen-backfill",  # keep
-        ":gen-mutation",  # keep
+        ":gen-deferred-mutation",  # keep
+        ":gen-immediate-mutation",  # keep
         ":gen-phase-stringer",  # keep
         ":gen-type-stringer",  # keep
         ":gen-validation",  # keep
@@ -21,9 +23,12 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/jobs/jobspb",
+        "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/sem/catid",
+        "//pkg/sql/sem/semenumpb",
     ],
 )
 
@@ -39,11 +44,27 @@ go_binary(
 )
 
 genrule(
-    name = "gen-mutation",
-    srcs = ["mutation.go"],
-    outs = ["mutation_visitor_generated.go"],
+    name = "gen-immediate-mutation",
+    srcs = ["immediate_mutation.go"],
+    outs = ["immediate_mutation_visitor_generated.go"],
     cmd = """
-        $(location :gen-visitors) scop Mutation $(location mutation.go) $(location mutation_visitor_generated.go)
+        $(location :gen-visitors) scop ImmediateMutation $(location immediate_mutation.go) $(location immediate_mutation_visitor_generated.go)
+       """,
+    exec_tools = [
+        ":gen-visitors",
+    ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
+)
+
+genrule(
+    name = "gen-deferred-mutation",
+    srcs = ["deferred_mutation.go"],
+    outs = ["deferred_mutation_visitor_generated.go"],
+    cmd = """
+        $(location :gen-visitors) scop DeferredMutation $(location deferred_mutation.go) $(location deferred_mutation_visitor_generated.go)
        """,
     exec_tools = [
         ":gen-visitors",

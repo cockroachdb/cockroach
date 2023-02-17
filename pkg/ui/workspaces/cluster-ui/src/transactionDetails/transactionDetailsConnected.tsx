@@ -16,6 +16,11 @@ import { Dispatch } from "redux";
 import { AppState, uiConfigActions } from "src/store";
 import { actions as nodesActions } from "../store/nodes";
 import { actions as sqlStatsActions } from "src/store/sqlStats";
+import { TxnInsightsRequest } from "../api";
+import {
+  actions as transactionInsights,
+  selectTxnInsightsByFingerprint,
+} from "src/store/insights/transactionInsights";
 import {
   TransactionDetails,
   TransactionDetailsDispatchProps,
@@ -29,15 +34,17 @@ import {
 import {
   selectIsTenant,
   selectHasViewActivityRedactedRole,
+  selectHasAdminRole,
 } from "../store/uiConfig";
 import { nodeRegionsByIDSelector } from "../store/nodes";
-import { selectTimeScale } from "src/statementsPage/statementsPage.selectors";
+import { selectTimeScale } from "../store/utils/selectors";
 import { StatementsRequest } from "src/api/statementsApi";
 import { txnFingerprintIdAttr, getMatchParamByName } from "../util";
 import { TimeScale } from "../timeScaleDropdown";
+import { actions as analyticsActions } from "../store/analytics";
 
 export const selectTransaction = createSelector(
-  (state: AppState) => state.adminUI.sqlStats,
+  (state: AppState) => state.adminUI?.sqlStats,
   (_state: AppState, props: RouteComponentProps) => props,
   (transactionState, props) => {
     const transactions = transactionState.data?.transactions;
@@ -60,6 +67,7 @@ export const selectTransaction = createSelector(
     return {
       isLoading: false,
       transaction: transaction,
+      lastUpdated: transactionState.lastUpdated,
     };
   },
 );
@@ -68,7 +76,10 @@ const mapStateToProps = (
   state: AppState,
   props: TransactionDetailsProps,
 ): TransactionDetailsStateProps => {
-  const { isLoading, transaction } = selectTransaction(state, props);
+  const { isLoading, transaction, lastUpdated } = selectTransaction(
+    state,
+    props,
+  );
   return {
     timeScale: selectTimeScale(state),
     error: selectTransactionsLastError(state),
@@ -81,7 +92,10 @@ const mapStateToProps = (
       txnFingerprintIdAttr,
     ),
     isLoading: isLoading,
+    lastUpdated: lastUpdated,
     hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),
+    transactionInsights: selectTxnInsightsByFingerprint(state, props),
+    hasAdminRole: selectHasAdminRole(state),
   };
 };
 
@@ -98,6 +112,16 @@ const mapDispatchToProps = (
         ts: ts,
       }),
     );
+    dispatch(
+      analyticsActions.track({
+        name: "TimeScale changed",
+        page: "Transaction Details",
+        value: ts.key,
+      }),
+    );
+  },
+  refreshTransactionInsights: (req: TxnInsightsRequest) => {
+    dispatch(transactionInsights.refresh(req));
   },
 });
 

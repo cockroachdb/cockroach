@@ -48,7 +48,10 @@ func DropIndex(b BuildCtx, n *tree.DropIndex) {
 
 	var anyIndexesDropped bool
 	for _, index := range n.IndexList {
-		anyIndexesDropped = dropAnIndex(b, index, n.IfExists, n.DropBehavior) || anyIndexesDropped
+		if droppedIndex := maybeDropIndex(b, index, n.IfExists, n.DropBehavior); droppedIndex != nil {
+			b.LogEventForExistingTarget(droppedIndex)
+			anyIndexesDropped = true
+		}
 		// Increment subwork ID so we know exactly which portion in
 		// a `DROP INDEX index1, index2, ...` statement is responsible
 		// for the creation of the targets.
@@ -67,11 +70,11 @@ func DropIndex(b BuildCtx, n *tree.DropIndex) {
 	}
 }
 
-// dropAnIndex resolves `index` and mark its constituent elements as ToAbsent
+// maybeDropIndex resolves `index` and mark its constituent elements as ToAbsent
 // in the builder state enclosed by `b`.
-func dropAnIndex(
+func maybeDropIndex(
 	b BuildCtx, indexName *tree.TableIndexName, ifExists bool, dropBehavior tree.DropBehavior,
-) (indexDropped bool) {
+) (droppedIndex *scpb.SecondaryIndex) {
 	toBeDroppedIndexElms := b.ResolveIndexByName(indexName, ResolveParams{
 		IsExistenceOptional: ifExists,
 		RequiredPrivilege:   privilege.CREATE,
@@ -79,7 +82,7 @@ func dropAnIndex(
 	if toBeDroppedIndexElms == nil {
 		// Attempt to resolve this index failed but `IF EXISTS` is set.
 		b.MarkNameAsNonExistent(&indexName.Table)
-		return false
+		return nil
 	}
 	// Panic if dropping primary index.
 	_, _, pie := scpb.FindPrimaryIndex(toBeDroppedIndexElms)
@@ -107,7 +110,7 @@ func dropAnIndex(
 		))
 	}
 	dropSecondaryIndex(b, indexName, dropBehavior, sie)
-	return true
+	return sie
 }
 
 // dropSecondaryIndex is a helper to drop a secondary index which may be used
@@ -125,6 +128,9 @@ func dropSecondaryIndex(
 		// to-be-dropped index), then we will drop all dependent views and their
 		// dependents.
 		maybeDropDependentViews(next, sie, indexName.Index.String(), dropBehavior)
+
+		// Maybe drop dependent functions.
+		maybeDropDependentFunctions(next, sie, indexName.Index.String(), dropBehavior)
 
 		// Maybe drop dependent FK constraints.
 		// A PK or unique constraint is required to serve an inbound FK constraint.
@@ -178,6 +184,33 @@ func maybeDropDependentViews(
 						toBeDroppedIndexName, ns.Name), "you can drop %q instead.", ns.Name))
 			} else {
 				dropCascadeDescriptor(b, ve.ViewID)
+			}
+		}
+	})
+}
+
+func maybeDropDependentFunctions(
+	b BuildCtx,
+	toBeDroppedIndex *scpb.SecondaryIndex,
+	toBeDroppedIndexName string,
+	dropBehavior tree.DropBehavior,
+) {
+	scpb.ForEachFunctionBody(b.BackReferences(toBeDroppedIndex.TableID), func(
+		current scpb.Status, target scpb.TargetStatus, e *scpb.FunctionBody,
+	) {
+		for _, forwardRef := range e.UsesTables {
+			if forwardRef.IndexID != toBeDroppedIndex.IndexID {
+				continue
+			}
+			// This view depends on the to-be-dropped index;
+			if dropBehavior != tree.DropCascade {
+				// Get view name for the error message
+				_, _, fnName := scpb.FindFunctionName(b.QueryByID(e.FunctionID))
+				panic(errors.WithHintf(
+					sqlerrors.NewDependentObjectErrorf("cannot drop index %q because function %q depends on it",
+						toBeDroppedIndexName, fnName.Name), "you can drop %q instead.", fnName.Name))
+			} else {
+				dropCascadeDescriptor(b, e.FunctionID)
 			}
 		}
 	})
@@ -379,12 +412,6 @@ func explicitColumnStartIdx(b BuildCtx, ie *scpb.Index) int {
 			start = int(ipe.NumImplicitColumns)
 		}
 	})
-	// Currently, we only allow implicit partitioning on hash sharded index. When
-	// that happens, the shard column always comes after implicit partition
-	// columns.
-	if ie.Sharding != nil && ie.Sharding.IsSharded {
-		start++
-	}
 	return start
 }
 
@@ -420,6 +447,10 @@ func explicitKeyColumnIDsWithoutShardColumn(b BuildCtx, ie *scpb.Index) descpb.C
 func isIndexUniqueAndCanServeFK(
 	b BuildCtx, ie *scpb.Index, fkReferencedColIDs []tree.ColumnID,
 ) bool {
+	if !ie.IsUnique {
+		return false
+	}
+
 	isPartial := false
 	scpb.ForEachSecondaryIndexPartial(b.QueryByID(ie.TableID), func(
 		current scpb.Status, target scpb.TargetStatus, sipe *scpb.SecondaryIndexPartial,
@@ -428,9 +459,16 @@ func isIndexUniqueAndCanServeFK(
 			isPartial = true
 		}
 	})
+	if isPartial {
+		return false
+	}
 
-	return ie.IsUnique && !isPartial &&
-		explicitKeyColumnIDsWithoutShardColumn(b, ie).PermutationOf(fkReferencedColIDs)
+	keyColIDs, _, _ := getSortedColumnIDsInIndex(b, ie.TableID, ie.IndexID)
+	implicitKeyColIDs := keyColIDs[:explicitColumnStartIdx(b, ie)]
+	explicitKeyColIDsWithoutShardCol := explicitKeyColumnIDsWithoutShardColumn(b, ie)
+	allKeyColIDsWithoutShardCol := descpb.ColumnIDs(append(implicitKeyColIDs, explicitKeyColIDsWithoutShardCol...))
+	return explicitKeyColIDsWithoutShardCol.PermutationOf(fkReferencedColIDs) ||
+		allKeyColIDsWithoutShardCol.PermutationOf(fkReferencedColIDs)
 }
 
 // uniqueConstraintHasReplacementCandidate returns true if `elms` contains an index

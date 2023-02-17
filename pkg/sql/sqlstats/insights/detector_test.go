@@ -16,8 +16,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -119,6 +119,63 @@ func TestLatencyQuantileDetector(t *testing.T) {
 		}
 	})
 
+	// Testing the slow and failure detectors at the same time.
+	t.Run("isSlow and isFailed", func(t *testing.T) {
+		ctx := context.Background()
+		st := cluster.MakeTestingClusterSettings()
+		AnomalyDetectionEnabled.Override(ctx, &st.SV, true)
+		AnomalyDetectionLatencyThreshold.Override(ctx, &st.SV, 100*time.Millisecond)
+
+		tests := []struct {
+			name             string
+			seedLatency      time.Duration
+			candidateLatency time.Duration
+			status           Statement_Status
+			isSlow           bool
+			isFailed         bool
+		}{{
+			name:             "slow and failed statement",
+			seedLatency:      100 * time.Millisecond,
+			candidateLatency: 200 * time.Millisecond,
+			status:           Statement_Failed,
+			isSlow:           true,
+			isFailed:         true,
+		}, {
+			name:             "slow and non-failed statement",
+			seedLatency:      100 * time.Millisecond,
+			candidateLatency: 200 * time.Millisecond,
+			status:           Statement_Completed,
+			isSlow:           true,
+			isFailed:         false,
+		}, {
+			name:             "fast and non-failed statement",
+			seedLatency:      100 * time.Millisecond,
+			candidateLatency: 50 * time.Millisecond,
+			status:           Statement_Completed,
+			isSlow:           false,
+			isFailed:         false,
+		}, {
+			name:             "fast and failed statement",
+			seedLatency:      100 * time.Millisecond,
+			candidateLatency: 50 * time.Millisecond,
+			status:           Statement_Failed,
+			isSlow:           false,
+			isFailed:         true,
+		}}
+
+		for _, test := range tests {
+			t.Run(test.name, func(t *testing.T) {
+				d := newAnomalyDetector(st, NewMetrics())
+				for i := 0; i < 1000; i++ {
+					d.isSlow(&Statement{LatencyInSeconds: test.seedLatency.Seconds()})
+				}
+				stmt := &Statement{LatencyInSeconds: test.candidateLatency.Seconds(), Status: test.status}
+				require.Equal(t, test.isSlow, d.isSlow(stmt))
+				require.Equal(t, test.isFailed, isFailed(stmt))
+			})
+		}
+	})
+
 	t.Run("metrics", func(t *testing.T) {
 		ctx := context.Background()
 		st := cluster.MakeTestingClusterSettings()
@@ -173,7 +230,7 @@ func TestLatencyQuantileDetector(t *testing.T) {
 				for i := 0; i < test.fingerprints; i++ {
 					d.isSlow(&Statement{
 						LatencyInSeconds: AnomalyDetectionLatencyThreshold.Get(&st.SV).Seconds(),
-						FingerprintID:    roachpb.StmtFingerprintID(i),
+						FingerprintID:    appstatspb.StmtFingerprintID(i),
 					})
 				}
 				test.assertion(t, metrics)

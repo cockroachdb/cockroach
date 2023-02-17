@@ -22,8 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvaccessor"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -69,7 +70,7 @@ import (
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	datadriven.Walk(t, testutils.TestDataPath(t), func(t *testing.T, path string) {
+	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 		ctx := context.Background()
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 		defer tc.Stopper().Stop(ctx)
@@ -79,7 +80,7 @@ func TestDataDriven(t *testing.T) {
 		tdb.Exec(t, fmt.Sprintf("CREATE TABLE %s (LIKE system.span_configurations INCLUDING ALL)", dummySpanConfigurationsFQN))
 		accessor := spanconfigkvaccessor.New(
 			tc.Server(0).DB(),
-			tc.Server(0).InternalExecutor().(sqlutil.InternalExecutor),
+			tc.Server(0).InternalExecutor().(isql.Executor),
 			tc.Server(0).ClusterSettings(),
 			tc.Server(0).Clock(),
 			dummySpanConfigurationsFQN,
@@ -161,7 +162,7 @@ func BenchmarkKVAccessorUpdate(b *testing.B) {
 
 			accessor := spanconfigkvaccessor.New(
 				tc.Server(0).DB(),
-				tc.Server(0).InternalExecutor().(sqlutil.InternalExecutor),
+				tc.Server(0).InternalExecutor().(isql.Executor),
 				tc.Server(0).ClusterSettings(),
 				tc.Server(0).Clock(),
 				dummySpanConfigurationsFQN,
@@ -204,7 +205,7 @@ func TestKVAccessorPagination(t *testing.T) {
 	var batches, batchSize int
 	accessor := spanconfigkvaccessor.New(
 		tc.Server(0).DB(),
-		tc.Server(0).InternalExecutor().(sqlutil.InternalExecutor),
+		tc.Server(0).InternalExecutor().(isql.Executor),
 		tc.Server(0).ClusterSettings(),
 		tc.Server(0).Clock(),
 		dummySpanConfigurationsFQN,
@@ -323,7 +324,7 @@ func TestKVAccessorCommitMinTSWaitRespondsToCtxCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	accessor := spanconfigkvaccessor.New(
 		tc.Server(0).DB(),
-		tc.Server(0).InternalExecutor().(sqlutil.InternalExecutor),
+		tc.Server(0).InternalExecutor().(isql.Executor),
 		tc.Server(0).ClusterSettings(),
 		tc.Server(0).Clock(),
 		dummySpanConfigurationsFQN,

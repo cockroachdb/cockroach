@@ -49,16 +49,18 @@ func (f *FakeStorage) CreateInstance(
 	ctx context.Context,
 	sessionID sqlliveness.SessionID,
 	sessionExpiration hlc.Timestamp,
-	addr string,
+	rpcAddr string,
+	sqlAddr string,
 	locality roachpb.Locality,
 ) (base.SQLInstanceID, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	i := sqlinstance.InstanceInfo{
-		InstanceID:   f.mu.instanceIDCtr,
-		InstanceAddr: addr,
-		SessionID:    sessionID,
-		Locality:     locality,
+		InstanceID:      f.mu.instanceIDCtr,
+		InstanceRPCAddr: rpcAddr,
+		InstanceSQLAddr: sqlAddr,
+		SessionID:       sessionID,
+		Locality:        locality,
 	}
 	f.mu.instances[f.mu.instanceIDCtr] = i
 	f.mu.instanceIDCtr++
@@ -79,7 +81,8 @@ func (s *Storage) CreateInstanceDataForTest(
 	ctx context.Context,
 	region []byte,
 	instanceID base.SQLInstanceID,
-	addr string,
+	rpcAddr string,
+	sqlAddr string,
 	sessionID sqlliveness.SessionID,
 	sessionExpiration hlc.Timestamp,
 	locality roachpb.Locality,
@@ -93,7 +96,7 @@ func (s *Storage) CreateInstanceDataForTest(
 			return err
 		}
 		key := s.rowcodec.encodeKey(region, instanceID)
-		value, err := s.rowcodec.encodeValue(addr, sessionID, locality)
+		value, err := s.rowcodec.encodeValue(rpcAddr, sqlAddr, sessionID, locality)
 		if err != nil {
 			return err
 		}
@@ -117,15 +120,16 @@ func (s *Storage) GetInstanceDataForTest(
 	if row.Value == nil {
 		return sqlinstance.InstanceInfo{}, sqlinstance.NonExistentInstanceError
 	}
-	addr, sessionID, locality, _, err := s.rowcodec.decodeValue(*row.Value)
+	rpcAddr, sqlAddr, sessionID, locality, _, err := s.rowcodec.decodeValue(*row.Value)
 	if err != nil {
 		return sqlinstance.InstanceInfo{}, errors.Wrapf(err, "could not decode data for instance %d", instanceID)
 	}
 	instanceInfo := sqlinstance.InstanceInfo{
-		InstanceID:   instanceID,
-		InstanceAddr: addr,
-		SessionID:    sessionID,
-		Locality:     locality,
+		InstanceID:      instanceID,
+		InstanceRPCAddr: rpcAddr,
+		InstanceSQLAddr: sqlAddr,
+		SessionID:       sessionID,
+		Locality:        locality,
 	}
 	return instanceInfo, nil
 }
@@ -134,24 +138,15 @@ func (s *Storage) GetInstanceDataForTest(
 // testing purposes.
 func (s *Storage) GetAllInstancesDataForTest(
 	ctx context.Context,
-) (instances []sqlinstance.InstanceInfo, err error) {
+) ([]sqlinstance.InstanceInfo, error) {
 	var rows []instancerow
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
-	err = s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		var err error
 		rows, err = s.getInstanceRows(ctx, nil /*global*/, txn, lock.WaitPolicy_Block)
 		return err
-	})
-	if err != nil {
+	}); err != nil {
 		return nil, err
 	}
-	for _, instance := range rows {
-		instanceInfo := sqlinstance.InstanceInfo{
-			InstanceID:   instance.instanceID,
-			InstanceAddr: instance.addr,
-			SessionID:    instance.sessionID,
-			Locality:     instance.locality,
-		}
-		instances = append(instances, instanceInfo)
-	}
-	return instances, nil
+	return makeInstanceInfos(rows), nil
 }

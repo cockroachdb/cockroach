@@ -20,6 +20,7 @@ go_library(
         "//pkg/spanconfig",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
+        "//pkg/ts/tspb",
         "//pkg/util/log",
         "//pkg/util/rangedesc",
         "//pkg/util/retry",

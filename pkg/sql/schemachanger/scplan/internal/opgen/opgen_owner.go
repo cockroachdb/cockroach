@@ -20,8 +20,10 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.Owner) *scop.NotImplemented {
-					return notImplemented(this)
+				emit(func(this *scpb.Owner) *scop.UpdateOwner {
+					return &scop.UpdateOwner{
+						Owner: *this,
+					}
 				}),
 			),
 		),
@@ -30,8 +32,8 @@ func init() {
 			to(scpb.Status_ABSENT,
 				// TODO(postamar): remove revertibility constraint when possible
 				revertible(false),
-				emit(func(this *scpb.Owner) *scop.NotImplemented {
-					return notImplemented(this)
+				emit(func(this *scpb.Owner) *scop.NotImplementedForPublicObjects {
+					return notImplementedForPublicObjects(this)
 				}),
 			),
 		),

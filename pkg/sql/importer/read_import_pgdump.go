@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -41,11 +42,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -247,11 +248,11 @@ func createPostgresSchemas(
 	sessionData *sessiondata.SessionData,
 ) ([]*schemadesc.Mutable, error) {
 	createSchema := func(
-		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		ctx context.Context, txn descs.Txn,
 		dbDesc catalog.DatabaseDescriptor, schema *tree.CreateSchema,
 	) (*schemadesc.Mutable, error) {
 		desc, _, err := sql.CreateUserDefinedSchemaDescriptor(
-			ctx, sessionData, schema, txn, descriptors, execCfg.InternalExecutor,
+			ctx, sessionData, schema, txn,
 			execCfg.DescIDGenerator, dbDesc, false, /* allocateID */
 		)
 		if err != nil {
@@ -275,18 +276,15 @@ func createPostgresSchemas(
 	}
 	var schemaDescs []*schemadesc.Mutable
 	createSchemaDescs := func(
-		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		ctx context.Context, txn descs.Txn,
 	) error {
 		schemaDescs = nil // reset for retries
-		_, dbDesc, err := descriptors.GetImmutableDatabaseByID(ctx, txn, parentID, tree.DatabaseLookupFlags{
-			Required:    true,
-			AvoidLeased: true,
-		})
+		dbDesc, err := txn.Descriptors().ByID(txn.KV()).WithoutNonPublic().Get().Database(ctx, parentID)
 		if err != nil {
 			return err
 		}
 		for _, schema := range schemasToCreate {
-			scDesc, err := createSchema(ctx, txn, descriptors, dbDesc, schema)
+			scDesc, err := createSchema(ctx, txn, dbDesc, schema)
 			if err != nil {
 				return err
 			}
@@ -296,7 +294,7 @@ func createPostgresSchemas(
 		}
 		return nil
 	}
-	if err := sql.DescsTxn(ctx, execCfg, createSchemaDescs); err != nil {
+	if err := execCfg.InternalDB.DescsTxn(ctx, createSchemaDescs); err != nil {
 		return nil, err
 	}
 	return schemaDescs, nil
@@ -876,19 +874,15 @@ func readPostgresStmt(
 		// Otherwise, we silently ignore the drop statement and continue with the import.
 		for _, name := range names {
 			tableName := name.ToUnresolvedObjectName().String()
-			if err := sql.DescsTxn(ctx, p.ExecCfg(), func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-				_, dbDesc, err := col.GetImmutableDatabaseByID(ctx, txn, parentID, tree.CommonLookupFlags{
-					AvoidLeased:    true,
-					IncludeDropped: true,
-					IncludeOffline: true,
-				})
+			if err := sql.DescsTxn(ctx, p.ExecCfg(), func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+				dbDesc, err := col.ByID(txn.KV()).Get().Database(ctx, parentID)
 				if err != nil {
 					return err
 				}
 				err = descs.CheckObjectNameCollision(
 					ctx,
 					col,
-					txn,
+					txn.KV(),
 					parentID,
 					dbDesc.GetSchemaID(tree.PublicSchema),
 					tree.NewUnqualifiedTableName(tree.Name(tableName)),
@@ -1127,7 +1121,7 @@ func (m *pgDumpReader) readFile(
 			var targetColMapIdx []int
 			if len(i.Columns) != 0 {
 				targetColMapIdx = make([]int, len(i.Columns))
-				conv.TargetColOrds = util.FastIntSet{}
+				conv.TargetColOrds = intsets.Fast{}
 				for j := range i.Columns {
 					colName := string(i.Columns[j])
 					idx, ok := m.colMap[conv][colName]
@@ -1194,7 +1188,7 @@ func (m *pgDumpReader) readFile(
 			var targetColMapIdx []int
 			if conv != nil {
 				targetColMapIdx = make([]int, len(i.Columns))
-				conv.TargetColOrds = util.FastIntSet{}
+				conv.TargetColOrds = intsets.Fast{}
 				for j := range i.Columns {
 					colName := string(i.Columns[j])
 					idx, ok := m.colMap[conv][colName]

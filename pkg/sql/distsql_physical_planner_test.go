@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan/replicaoracle"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -204,7 +205,6 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 		nil, /* txn */
 		nil, /* clockUpdater */
 		&SessionTracing{},
-		nil, /* contentionRegistry */
 	)
 
 	replicas := []roachpb.ReplicaDescriptor{{ReplicaID: 1}, {ReplicaID: 2}, {ReplicaID: 3}}
@@ -418,14 +418,16 @@ func TestDistSQLDeadHosts(t *testing.T) {
 		))
 	}
 	r.CheckQueryResults(t,
-		"SELECT start_key, end_key, lease_holder, replicas FROM [SHOW RANGES FROM TABLE t]",
+		`SELECT IF(substring(start_key for 1)='…',start_key,NULL),
+            IF(substring(end_key for 1)='…',end_key,NULL),
+            lease_holder, replicas FROM [SHOW RANGES FROM TABLE t WITH DETAILS]`,
 		[][]string{
-			{"NULL", "/0", "1", "{1}"},
-			{"/0", "/20", "1", "{1,2,3}"},
-			{"/20", "/40", "2", "{2,3,4}"},
-			{"/40", "/60", "3", "{1,3,4}"},
-			{"/60", "/80", "4", "{1,2,4}"},
-			{"/80", "NULL", "5", "{2,3,5}"},
+			{"NULL", "…/1/0", "1", "{1}"},
+			{"…/1/0", "…/1/20", "1", "{1,2,3}"},
+			{"…/1/20", "…/1/40", "2", "{2,3,4}"},
+			{"…/1/40", "…/1/60", "3", "{1,3,4}"},
+			{"…/1/60", "…/1/80", "4", "{1,2,4}"},
+			{"…/1/80", "NULL", "5", "{2,3,5}"},
 		},
 	)
 
@@ -576,7 +578,9 @@ type testSpanResolver struct {
 }
 
 // NewSpanResolverIterator is part of the SpanResolver interface.
-func (tsr *testSpanResolver) NewSpanResolverIterator(_ *kv.Txn) physicalplan.SpanResolverIterator {
+func (tsr *testSpanResolver) NewSpanResolverIterator(
+	txn *kv.Txn, optionalOracle replicaoracle.Oracle,
+) physicalplan.SpanResolverIterator {
 	return &testSpanResolverIterator{tsr: tsr}
 }
 
@@ -790,8 +794,7 @@ func TestPartitionSpans(t *testing.T) {
 	// DistSQLPlanner will not plan flows on them.
 	testStopper := stop.NewStopper()
 	defer testStopper.Stop(context.Background())
-	mockGossip := gossip.NewTest(roachpb.NodeID(1), nil /* rpcContext */, nil, /* grpcServer */
-		testStopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
+	mockGossip := gossip.NewTest(roachpb.NodeID(1), testStopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
 	var nodeDescs []*roachpb.NodeDescriptor
 	for i := 1; i <= 10; i++ {
 		sqlInstanceID := base.SQLInstanceID(i)
@@ -986,8 +989,7 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 			// reflect tc.nodesNotAdvertisingDistSQLVersion.
 			testStopper := stop.NewStopper()
 			defer testStopper.Stop(context.Background())
-			mockGossip := gossip.NewTest(roachpb.NodeID(1), nil /* rpcContext */, nil, /* grpcServer */
-				testStopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
+			mockGossip := gossip.NewTest(roachpb.NodeID(1), testStopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
 			var nodeDescs []*roachpb.NodeDescriptor
 			for i := 1; i <= 2; i++ {
 				sqlInstanceID := base.SQLInstanceID(i)
@@ -1081,8 +1083,7 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	mockGossip := gossip.NewTest(roachpb.NodeID(1), nil /* rpcContext */, nil, /* grpcServer */
-		stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
+	mockGossip := gossip.NewTest(roachpb.NodeID(1), stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
 	var nodeDescs []*roachpb.NodeDescriptor
 	for i := 1; i <= 2; i++ {
 		sqlInstanceID := base.SQLInstanceID(i)
@@ -1177,7 +1178,7 @@ func TestCheckNodeHealth(t *testing.T) {
 
 	const sqlInstanceID = base.SQLInstanceID(5)
 
-	mockGossip := gossip.NewTest(roachpb.NodeID(sqlInstanceID), nil /* rpcContext */, nil, /* grpcServer */
+	mockGossip := gossip.NewTest(roachpb.NodeID(sqlInstanceID),
 		stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
 
 	desc := &roachpb.NodeDescriptor{

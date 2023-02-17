@@ -11,12 +11,12 @@
 package roachpb
 
 import (
-	"bytes"
 	"fmt"
 	"sort"
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -36,6 +36,13 @@ func (n NodeID) String() string {
 
 // SafeValue implements the redact.SafeValue interface.
 func (n NodeID) SafeValue() {}
+
+// NodeIDSlice implements sort.Interface.
+type NodeIDSlice []NodeID
+
+func (s NodeIDSlice) Len() int           { return len(s) }
+func (s NodeIDSlice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+func (s NodeIDSlice) Less(i, j int) bool { return s[i] < s[j] }
 
 // StoreID is a custom type for a cockroach store ID.
 type StoreID int32
@@ -144,44 +151,6 @@ func NewRangeDescriptor(rangeID RangeID, start, end RKey, replicas ReplicaSet) *
 	return desc
 }
 
-// Equal compares two descriptors for equality. This was copied over from the
-// gogoproto generated version in order to ignore deprecated fields.
-func (r *RangeDescriptor) Equal(other *RangeDescriptor) bool {
-	if other == nil {
-		return r == nil
-	}
-	if r == nil {
-		return false
-	}
-	if r.RangeID != other.RangeID {
-		return false
-	}
-	if r.Generation != other.Generation {
-		return false
-	}
-	if !bytes.Equal(r.StartKey, other.StartKey) {
-		return false
-	}
-	if !bytes.Equal(r.EndKey, other.EndKey) {
-		return false
-	}
-	if len(r.InternalReplicas) != len(other.InternalReplicas) {
-		return false
-	}
-	for i := range r.InternalReplicas {
-		if !r.InternalReplicas[i].Equal(&other.InternalReplicas[i]) {
-			return false
-		}
-	}
-	if r.NextReplicaID != other.NextReplicaID {
-		return false
-	}
-	if !r.StickyBit.Equal(other.StickyBit) {
-		return false
-	}
-	return true
-}
-
 // GetRangeID returns the RangeDescriptor's ID.
 // The method implements the batcheval.ImmutableRangeState interface.
 func (r *RangeDescriptor) GetRangeID() RangeID {
@@ -200,23 +169,11 @@ func (r *RangeDescriptor) RSpan() RSpan {
 }
 
 // KeySpan returns the keys covered by this range. Local keys are not included.
+// This is identical to RSpan(), but for r1 the StartKey is forwarded to LocalMax.
 //
-// TODO(andrei): Consider if this logic should be lifted to
-// RangeDescriptor.RSpan(). Or better yet, see if we can changes things such
-// that the first range starts at LocalMax instead at starting at an empty key.
+// See: https://github.com/cockroachdb/cockroach/issues/95055
 func (r *RangeDescriptor) KeySpan() RSpan {
-	start := r.StartKey
-	if r.StartKey.Equal(RKeyMin) {
-		// The first range in the keyspace is declared to start at KeyMin (the
-		// lowest possible key). That is a lie, however, since the local key space
-		// ([LocalMin,LocalMax)) doesn't belong to this range; it doesn't belong to
-		// any range in particular.
-		start = RKey(LocalMax)
-	}
-	return RSpan{
-		Key:    start,
-		EndKey: r.EndKey,
-	}
+	return r.RSpan().KeySpan()
 }
 
 // ContainsKey returns whether this RangeDescriptor contains the specified key.
@@ -583,6 +540,15 @@ func (sc StoreCapacity) FractionUsed() float64 {
 	return float64(sc.Used) / float64(sc.Available+sc.Used)
 }
 
+// Load returns an allocator load representation of the store capacity.
+func (sc StoreCapacity) Load() load.Load {
+	dims := load.Vector{}
+	dims[load.Queries] = sc.QueriesPerSecond
+	dims[load.CPU] = sc.CPUPerSecond
+	return dims
+
+}
+
 // AddressForLocality returns the network address that nodes in the specified
 // locality should use when connecting to the node described by the descriptor.
 func (n *NodeDescriptor) AddressForLocality(loc Locality) *util.UnresolvedAddr {
@@ -637,6 +603,23 @@ func (l Locality) String() string {
 		tiers[i] = tier.String()
 	}
 	return strings.Join(tiers, ",")
+}
+
+// NonEmpty returns true if the tiers are non-empty.
+func (l Locality) NonEmpty() bool {
+	return len(l.Tiers) > 0
+}
+
+// Matches checks if this locality has a tier with a matching value for each
+// tier of the passed filter, returning true if so or false if not along with
+// the first tier of the filters that did not matched.
+func (l Locality) Matches(filter Locality) (bool, Tier) {
+	for _, t := range filter.Tiers {
+		if v, ok := l.Find(t.Key); !ok || v != t.Value {
+			return false, t
+		}
+	}
+	return true, Tier{}
 }
 
 // Type returns the underlying type in string form. This is part of pflag's

@@ -181,7 +181,7 @@ func distBackup(
 	p.AddNoInputStage(corePlacement, execinfrapb.PostProcessSpec{}, []*types.T{}, execinfrapb.Ordering{})
 	p.PlanToStreamColMap = []int{}
 
-	dsp.FinalizePlan(planCtx, p)
+	sql.FinalizePlan(ctx, planCtx, p)
 
 	metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) error {
 		if meta.BulkProcessorProgress != nil {
@@ -201,7 +201,6 @@ func distBackup(
 		noTxn, /* txn - the flow does not read or write the database */
 		nil,   /* clockUpdater */
 		evalCtx.Tracing,
-		evalCtx.ExecCfg.ContentionRegistry,
 	)
 	defer recv.Release()
 

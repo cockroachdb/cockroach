@@ -251,7 +251,9 @@ func TestConnHealthInternal(t *testing.T) {
 	// Set up an internal server and relevant configuration. The RPC connection
 	// will then be considered internal, and we don't have to dial it.
 	rpcCtx := newTestContext(clock, maxOffset, stopper)
-	rpcCtx.SetLocalInternalServer(&internalServer{}, rpc.ServerInterceptorInfo{}, rpc.ClientInterceptorInfo{})
+	rpcCtx.SetLocalInternalServer(
+		&internalServer{},
+		rpc.ServerInterceptorInfo{}, rpc.ClientInterceptorInfo{})
 	rpcCtx.NodeID.Set(ctx, staticNodeID)
 	rpcCtx.Config.AdvertiseAddr = localAddr.String()
 
@@ -466,12 +468,12 @@ func newTestContext(
 	cfg.RPCHeartbeatTimeout = 100 * time.Millisecond
 	ctx := context.Background()
 	rctx := rpc.NewContext(ctx, rpc.ContextOptions{
-		TenantID:  roachpb.SystemTenantID,
-		Config:    cfg,
-		Clock:     clock,
-		MaxOffset: maxOffset,
-		Stopper:   stopper,
-		Settings:  cluster.MakeTestingClusterSettings(),
+		TenantID:        roachpb.SystemTenantID,
+		Config:          cfg,
+		Clock:           clock,
+		ToleratedOffset: maxOffset,
+		Stopper:         stopper,
+		Settings:        cluster.MakeTestingClusterSettings(),
 	})
 	// Ensure that tests using this test context and restart/shut down
 	// their servers do not inadvertently start talking to servers from

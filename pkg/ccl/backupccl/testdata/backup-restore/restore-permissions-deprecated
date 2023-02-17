@@ -44,7 +44,7 @@ exec-sql cluster=s2 user=testuser
 RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/test/'
 ----
 pq: only users with the CREATEDB privilege can restore databases
-HINT: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here <link>. In a future release, to run RESTORE DATABASE, user testuser will exclusively require the RESTORE system privilege.
+HINT: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here https://www.cockroachlabs.com/docs/stable/restore.html#required-privileges. In a future release, to run RESTORE DATABASE, user testuser will exclusively require the RESTORE system privilege.
 
 exec-sql cluster=s2
 CREATE DATABASE d
@@ -54,7 +54,7 @@ exec-sql cluster=s2 user=testuser
 RESTORE TABLE d.t FROM LATEST IN 'nodelocal://0/test/'
 ----
 pq: user testuser does not have CREATE privilege on database d
-HINT: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here <link>. In a future release, to run RESTORE TABLE, user testuser will exclusively require the RESTORE privilege on database d.
+HINT: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here https://www.cockroachlabs.com/docs/stable/restore.html#required-privileges. In a future release, to run RESTORE TABLE, user testuser will exclusively require the RESTORE privilege on database d.
 
 exec-sql cluster=s2
 GRANT CREATE ON DATABASE d TO testuser
@@ -63,7 +63,7 @@ GRANT CREATE ON DATABASE d TO testuser
 exec-sql cluster=s2 user=testuser
 RESTORE TABLE d.t FROM LATEST IN 'nodelocal://0/test/'
 ----
-NOTICE: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here <link>. In a future release, to run RESTORE TABLE, user testuser will exclusively require the RESTORE privilege on databases d
+NOTICE: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here https://www.cockroachlabs.com/docs/stable/restore.html#required-privileges. In a future release, to run RESTORE TABLE, user testuser will exclusively require the RESTORE privilege on databases d
 
 query-sql cluster=s2
 SELECT x FROM d.t ORDER BY x
@@ -83,7 +83,7 @@ ALTER USER testuser CREATEDB
 exec-sql cluster=s2 user=testuser
 RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/test/'
 ----
-NOTICE: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here <link>. In a future release, to run RESTORE DATABASE, user testuser will exclusively require the RESTORE system privilege.
+NOTICE: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here https://www.cockroachlabs.com/docs/stable/restore.html#required-privileges. In a future release, to run RESTORE DATABASE, user testuser will exclusively require the RESTORE system privilege.
 
 query-sql cluster=s2
 SELECT x FROM d.t ORDER BY x

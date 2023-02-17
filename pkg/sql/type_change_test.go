@@ -16,10 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -30,48 +27,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
-
-// TestTypeSchemaChangeHandlesDeletedDescriptor ensures that the type schema
-// change process is resilient to deleted descriptors.
-func TestTypeSchemaChangeHandlesDeletedDescriptor(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	var delTypeDesc func()
-	params, _ := tests.CreateTestServerParams()
-	params.Knobs.SQLTypeSchemaChanger = &sql.TypeSchemaChangerTestingKnobs{
-		RunBeforeExec: func() error {
-			delTypeDesc()
-			return nil
-		},
-	}
-
-	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
-
-	// Create a type.
-	if _, err := sqlDB.Exec(`
-CREATE DATABASE d;
-CREATE TYPE d.t AS ENUM();
-`); err != nil {
-		t.Fatal(err)
-	}
-
-	// Set up delTypeDesc to delete t.
-	desc := desctestutils.TestingGetPublicTypeDescriptor(kvDB, keys.SystemSQLCodec, "d", "t")
-	delTypeDesc = func() {
-		// Delete the descriptor.
-		if _, err := kvDB.Del(ctx, catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, desc.GetID())); err != nil {
-			t.Error(err)
-		}
-	}
-
-	// A job running on this descriptor shouldn't fail horribly.
-	if _, err := sqlDB.Exec(`ALTER TYPE d.t RENAME TO t2`); err != nil {
-		t.Fatal(err)
-	}
-}
 
 // TestTypeSchemaChangeRetriesTransparently tests that a type schema change
 // that runs into a non permanent error will retry transparently.

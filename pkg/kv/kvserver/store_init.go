@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
@@ -22,55 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/errors"
 )
-
-// FirstNodeID is the NodeID assigned to the node bootstrapping a new cluster.
-const FirstNodeID = roachpb.NodeID(1)
-
-// FirstStoreID is the StoreID assigned to the first store on the node with ID
-// FirstNodeID.
-const FirstStoreID = roachpb.StoreID(1)
-
-// InitEngine writes a new store ident to the underlying engine. To
-// ensure that no crufty data already exists in the engine, it scans
-// the engine contents before writing the new store ident. The engine
-// should be completely empty save for a cluster version, which must
-// already have been persisted to it. Returns an error if this is not
-// the case.
-func InitEngine(ctx context.Context, eng storage.Engine, ident roachpb.StoreIdent) error {
-	exIdent, err := ReadStoreIdent(ctx, eng)
-	if err == nil {
-		return errors.Errorf("engine %s is already initialized with ident %s", eng, exIdent.String())
-	}
-	if !errors.HasType(err, (*NotBootstrappedError)(nil)) {
-		return err
-	}
-
-	if err := checkCanInitializeEngine(ctx, eng); err != nil {
-		return errors.Wrap(err, "while trying to initialize engine")
-	}
-
-	batch := eng.NewBatch()
-	if err := storage.MVCCPutProto(
-		ctx,
-		batch,
-		nil,
-		keys.StoreIdentKey(),
-		hlc.Timestamp{},
-		hlc.ClockTimestamp{},
-		nil,
-		&ident,
-	); err != nil {
-		batch.Close()
-		return err
-	}
-	if err := batch.Commit(true /* sync */); err != nil {
-		return errors.Wrap(err, "persisting engine initialization data")
-	}
-
-	return nil
-}
 
 // WriteInitialClusterData writes initialization data to an engine. It creates
 // system ranges (filling in meta1 and meta2) and the default zone config.
@@ -112,9 +65,9 @@ func WriteInitialClusterData(
 	// Initialize various sequence generators.
 	var nodeIDVal, storeIDVal, rangeIDVal, livenessVal roachpb.Value
 
-	nodeIDVal.SetInt(int64(FirstNodeID))
+	nodeIDVal.SetInt(int64(kvstorage.FirstNodeID))
 	// The caller will initialize the stores with ids FirstStoreID, ..., FirstStoreID+numStores-1.
-	storeIDVal.SetInt(int64(FirstStoreID) + int64(numStores) - 1)
+	storeIDVal.SetInt(int64(kvstorage.FirstStoreID) + int64(numStores) - 1)
 	// The last range has id = len(splits) + 1
 	rangeIDVal.SetInt(int64(len(splits) + 1))
 
@@ -128,7 +81,7 @@ func WriteInitialClusterData(
 	//
 	// [1]: See `(*NodeLiveness).CreateLivenessRecord` and usages for where that happens.
 	// [2]: See `(*NodeLiveness).Start` for where that happens.
-	livenessRecord := livenesspb.Liveness{NodeID: FirstNodeID, Epoch: 0}
+	livenessRecord := livenesspb.Liveness{NodeID: kvstorage.FirstNodeID, Epoch: 0}
 	if err := livenessVal.SetProto(&livenessRecord); err != nil {
 		return err
 	}
@@ -136,7 +89,7 @@ func WriteInitialClusterData(
 		roachpb.KeyValue{Key: keys.NodeIDGenerator, Value: nodeIDVal},
 		roachpb.KeyValue{Key: keys.StoreIDGenerator, Value: storeIDVal},
 		roachpb.KeyValue{Key: keys.RangeIDGenerator, Value: rangeIDVal},
-		roachpb.KeyValue{Key: keys.NodeLivenessKey(FirstNodeID), Value: livenessVal})
+		roachpb.KeyValue{Key: keys.NodeLivenessKey(kvstorage.FirstNodeID), Value: livenessVal})
 
 	// firstRangeMS is going to accumulate the stats for the first range, as we
 	// write the meta records for all the other ranges.
@@ -181,8 +134,8 @@ func WriteInitialClusterData(
 		const firstReplicaID = 1
 		replicas := []roachpb.ReplicaDescriptor{
 			{
-				NodeID:    FirstNodeID,
-				StoreID:   FirstStoreID,
+				NodeID:    kvstorage.FirstNodeID,
+				StoreID:   kvstorage.FirstStoreID,
 				ReplicaID: firstReplicaID,
 			},
 		}

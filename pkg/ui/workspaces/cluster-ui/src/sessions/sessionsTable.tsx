@@ -16,7 +16,7 @@ import {
   DurationToNumber,
   TimestampToMoment,
 } from "src/util/convert";
-import { BytesWithPrecision } from "src/util/format";
+import { BytesWithPrecision, Count } from "src/util/format";
 import { Link } from "react-router-dom";
 import React from "react";
 
@@ -224,7 +224,7 @@ export function makeSessionsColumns(
       name: "sessionTxnCount",
       title: statisticsTableTitles.sessionTxnCount(statType),
       className: cx("cl-table__col-session"),
-      cell: session => session.session?.num_txns_executed,
+      cell: session => Count(session.session?.num_txns_executed),
       sort: session => session.session?.num_txns_executed,
     },
     {

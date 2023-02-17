@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/base/serverident"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -43,7 +44,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -58,6 +61,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -360,14 +364,14 @@ func newRPCTestContext(ctx context.Context, ts *TestServer, cfg *base.Config) *r
 	var c base.NodeIDContainer
 	ctx = logtags.AddTag(ctx, "n", &c)
 	rpcContext := rpc.NewContext(ctx, rpc.ContextOptions{
-		TenantID:  roachpb.SystemTenantID,
-		NodeID:    &c,
-		Config:    cfg,
-		Clock:     ts.Clock().WallClock(),
-		MaxOffset: ts.Clock().MaxOffset(),
-		Stopper:   ts.Stopper(),
-		Settings:  ts.ClusterSettings(),
-		Knobs:     rpc.ContextTestingKnobs{NoLoopbackDialer: true},
+		TenantID:        roachpb.SystemTenantID,
+		NodeID:          &c,
+		Config:          cfg,
+		Clock:           ts.Clock().WallClock(),
+		ToleratedOffset: ts.Clock().ToleratedOffset(),
+		Stopper:         ts.Stopper(),
+		Settings:        ts.ClusterSettings(),
+		Knobs:           rpc.ContextTestingKnobs{NoLoopbackDialer: true},
 	})
 	// Ensure that the RPC client context validates the server cluster ID.
 	// This ensures that a test where the server is restarted will not let
@@ -655,6 +659,124 @@ func TestStatusLocalLogs(t *testing.T) {
 	}
 }
 
+// TestStatusLocalLogsTenantFilter checks to ensure that local/logfiles,
+// local/logfiles/{filename} and local/log function correctly filter
+// logs by tenant ID.
+func TestStatusLocalLogsTenantFilter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	if log.V(3) {
+		skip.IgnoreLint(t, "Test only works with low verbosity levels")
+	}
+
+	s := log.ScopeWithoutShowLogs(t)
+	defer s.Close(t)
+
+	// This test cares about the number of output files. Ensure
+	// there's just one.
+	defer s.SetupSingleFileLogging()()
+
+	ts := startServer(t)
+	defer ts.Stopper().Stop(context.Background())
+
+	ctxSysTenant := context.Background()
+	ctxSysTenant = context.WithValue(ctxSysTenant, serverident.ServerIdentificationContextKey{}, &idProvider{
+		tenantID:  roachpb.SystemTenantID,
+		clusterID: &base.ClusterIDContainer{},
+		serverID:  &base.NodeIDContainer{},
+	})
+	appTenantID := roachpb.MustMakeTenantID(uint64(2))
+	ctxAppTenant := context.Background()
+	ctxAppTenant = context.WithValue(ctxAppTenant, serverident.ServerIdentificationContextKey{}, &idProvider{
+		tenantID:  appTenantID,
+		clusterID: &base.ClusterIDContainer{},
+		serverID:  &base.NodeIDContainer{},
+	})
+
+	// Log an error of each main type which we expect to be able to retrieve.
+	// The resolution of our log timestamps is such that it's possible to get
+	// two subsequent log messages with the same timestamp. This test will fail
+	// when that occurs. By adding a small sleep in here after each timestamp to
+	// ensures this isn't the case and that the log filtering doesn't filter out
+	// the log entires we're looking for. The value of 20 μs was chosen because
+	// the log timestamps have a fidelity of 10 μs and thus doubling that should
+	// be a sufficient buffer.
+	// See util/log/clog.go formatHeader() for more details.
+	const sleepBuffer = time.Microsecond * 20
+	log.Errorf(ctxSysTenant, "system tenant msg 1")
+	time.Sleep(sleepBuffer)
+	log.Errorf(ctxAppTenant, "app tenant msg 1")
+	time.Sleep(sleepBuffer)
+	log.Warningf(ctxSysTenant, "system tenant msg 2")
+	time.Sleep(sleepBuffer)
+	log.Warningf(ctxAppTenant, "app tenant msg 2")
+	time.Sleep(sleepBuffer)
+	log.Infof(ctxSysTenant, "system tenant msg 3")
+	time.Sleep(sleepBuffer)
+	log.Infof(ctxAppTenant, "app tenant msg 3")
+	timestampEnd := timeutil.Now().UnixNano()
+
+	var listFilesResp serverpb.LogFilesListResponse
+	if err := getStatusJSONProto(ts, "logfiles/local", &listFilesResp); err != nil {
+		t.Fatal(err)
+	}
+	require.Lenf(t, listFilesResp.Files, 1, "expected 1 log files; got %d", len(listFilesResp.Files))
+
+	testCases := []struct {
+		name     string
+		tenantID roachpb.TenantID
+	}{
+		{
+			name:     "logs for system tenant does not apply filter",
+			tenantID: roachpb.SystemTenantID,
+		},
+		{
+			name:     "logs for app tenant applies tenant ID filter",
+			tenantID: appTenantID,
+		},
+	}
+
+	for _, testCase := range testCases {
+		// Non-system tenant servers filter to the tenant that they belong to.
+		// Set the server tenant ID for this test case.
+		ts.rpcContext.TenantID = testCase.tenantID
+
+		var logfilesResp serverpb.LogEntriesResponse
+		if err := getStatusJSONProto(ts, "logfiles/local/"+listFilesResp.Files[0].Name, &logfilesResp); err != nil {
+			t.Fatal(err)
+		}
+		var logsResp serverpb.LogEntriesResponse
+		if err := getStatusJSONProto(ts, fmt.Sprintf("logs/local?end_time=%d", timestampEnd), &logsResp); err != nil {
+			t.Fatal(err)
+		}
+
+		// Run the same set of assertions against both responses, as they are both expected
+		// to contain the log entries we're looking for.
+		for _, response := range []serverpb.LogEntriesResponse{logfilesResp, logsResp} {
+			sysTenantFound, appTenantFound := false, false
+			for _, logEntry := range response.Entries {
+				if !strings.HasSuffix(logEntry.File, "status_test.go") {
+					continue
+				}
+
+				if testCase.tenantID != roachpb.SystemTenantID {
+					require.Equal(t, logEntry.TenantID, testCase.tenantID.String())
+				} else {
+					// Logs use the literal system tenant ID when tagging.
+					if logEntry.TenantID == fmt.Sprintf("%d", roachpb.SystemTenantID.InternalValue) {
+						sysTenantFound = true
+					} else if logEntry.TenantID == appTenantID.String() {
+						appTenantFound = true
+					}
+				}
+			}
+			if testCase.tenantID == roachpb.SystemTenantID {
+				require.True(t, sysTenantFound)
+				require.True(t, appTenantFound)
+			}
+		}
+	}
+}
+
 // TestStatusLogRedaction checks that the log file retrieval RPCs
 // honor the redaction flags.
 func TestStatusLogRedaction(t *testing.T) {
@@ -935,6 +1057,18 @@ func TestHotRangesResponse(t *testing.T) {
 				if r.Desc.RangeID == 0 || (len(r.Desc.StartKey) == 0 && len(r.Desc.EndKey) == 0) {
 					t.Errorf("unexpected empty/unpopulated range descriptor: %+v", r.Desc)
 				}
+				if r.QueriesPerSecond > 0 {
+					if r.ReadsPerSecond == 0 && r.WritesPerSecond == 0 {
+						t.Errorf("qps %.2f > 0, expected either reads=%.2f or writes=%.2f to be non-zero",
+							r.QueriesPerSecond, r.ReadsPerSecond, r.WritesPerSecond)
+					}
+					// If the architecture doesn't support sampling CPU, it
+					// will also be zero.
+					if grunning.Supported() && r.CPUTimePerSecond == 0 {
+						t.Errorf("qps %.2f > 0, expected cpu=%.2f to be non-zero",
+							r.QueriesPerSecond, r.CPUTimePerSecond)
+					}
+				}
 				if r.QueriesPerSecond > lastQPS {
 					t.Errorf("unexpected increase in qps between ranges; prev=%.2f, current=%.2f, desc=%v",
 						lastQPS, r.QueriesPerSecond, r.Desc)
@@ -963,6 +1097,17 @@ func TestHotRanges2Response(t *testing.T) {
 	for _, r := range hotRangesResp.Ranges {
 		if r.RangeID == 0 {
 			t.Errorf("unexpected empty range id: %d", r.RangeID)
+		}
+		if r.QPS > 0 {
+			if r.ReadsPerSecond == 0 && r.WritesPerSecond == 0 {
+				t.Errorf("qps %.2f > 0, expected either reads=%.2f or writes=%.2f to be non-zero",
+					r.QPS, r.ReadsPerSecond, r.WritesPerSecond)
+			}
+			// If the architecture doesn't support sampling CPU, it
+			// will also be zero.
+			if grunning.Supported() && r.CPUTimePerSecond == 0 {
+				t.Errorf("qps %.2f > 0, expected cpu=%.2f to be non-zero", r.QPS, r.CPUTimePerSecond)
+			}
 		}
 		if r.QPS > lastQPS {
 			t.Errorf("unexpected increase in qps between ranges; prev=%.2f, current=%.2f", lastQPS, r.QPS)
@@ -1191,20 +1336,20 @@ func TestStatusVarsTxnMetrics(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Contains(body, []byte("sql_txn_begin_count 1")) {
-		t.Errorf("expected `sql_txn_begin_count 1`, got: %s", body)
+	if !bytes.Contains(body, []byte("sql_txn_begin_count{tenant=\"system\"} 1")) {
+		t.Errorf("expected `sql_txn_begin_count{tenant=\"system\"} 1`, got: %s", body)
 	}
-	if !bytes.Contains(body, []byte("sql_restart_savepoint_count 1")) {
-		t.Errorf("expected `sql_restart_savepoint_count 1`, got: %s", body)
+	if !bytes.Contains(body, []byte("sql_restart_savepoint_count{tenant=\"system\"} 1")) {
+		t.Errorf("expected `sql_restart_savepoint_count{tenant=\"system\"} 1`, got: %s", body)
 	}
-	if !bytes.Contains(body, []byte("sql_restart_savepoint_release_count 1")) {
-		t.Errorf("expected `sql_restart_savepoint_release_count 1`, got: %s", body)
+	if !bytes.Contains(body, []byte("sql_restart_savepoint_release_count{tenant=\"system\"} 1")) {
+		t.Errorf("expected `sql_restart_savepoint_release_count{tenant=\"system\"} 1`, got: %s", body)
 	}
-	if !bytes.Contains(body, []byte("sql_txn_commit_count 1")) {
-		t.Errorf("expected `sql_txn_commit_count 1`, got: %s", body)
+	if !bytes.Contains(body, []byte("sql_txn_commit_count{tenant=\"system\"} 1")) {
+		t.Errorf("expected `sql_txn_commit_count{tenant=\"system\"} 1`, got: %s", body)
 	}
-	if !bytes.Contains(body, []byte("sql_txn_rollback_count 0")) {
-		t.Errorf("expected `sql_txn_rollback_count 0`, got: %s", body)
+	if !bytes.Contains(body, []byte("sql_txn_rollback_count{tenant=\"system\"} 0")) {
+		t.Errorf("expected `sql_txn_rollback_count{tenant=\"system\"} 0`, got: %s", body)
 	}
 }
 
@@ -1219,8 +1364,8 @@ func TestSpanStatsResponse(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var response serverpb.SpanStatsResponse
-	request := serverpb.SpanStatsRequest{
+	var response roachpb.SpanStatsResponse
+	request := roachpb.SpanStatsRequest{
 		NodeID:   "1",
 		StartKey: []byte(roachpb.RKeyMin),
 		EndKey:   []byte(roachpb.RKeyMax),
@@ -1249,7 +1394,7 @@ func TestSpanStatsGRPCResponse(t *testing.T) {
 	rpcStopper := stop.NewStopper()
 	defer rpcStopper.Stop(ctx)
 	rpcContext := newRPCTestContext(ctx, ts, ts.RPCContext().Config)
-	request := serverpb.SpanStatsRequest{
+	request := roachpb.SpanStatsRequest{
 		NodeID:   "1",
 		StartKey: []byte(roachpb.RKeyMin),
 		EndKey:   []byte(roachpb.RKeyMax),
@@ -1500,7 +1645,7 @@ func TestStatusAPICombinedTransactions(t *testing.T) {
 	}
 
 	// Construct a map of all the statement fingerprint IDs.
-	statementFingerprintIDs := make(map[roachpb.StmtFingerprintID]bool, len(resp.Statements))
+	statementFingerprintIDs := make(map[appstatspb.StmtFingerprintID]bool, len(resp.Statements))
 	for _, respStatement := range resp.Statements {
 		statementFingerprintIDs[respStatement.ID] = true
 	}
@@ -1635,7 +1780,7 @@ func TestStatusAPITransactions(t *testing.T) {
 	}
 
 	// Construct a map of all the statement fingerprint IDs.
-	statementFingerprintIDs := make(map[roachpb.StmtFingerprintID]bool, len(resp.Statements))
+	statementFingerprintIDs := make(map[appstatspb.StmtFingerprintID]bool, len(resp.Statements))
 	for _, respStatement := range resp.Statements {
 		statementFingerprintIDs[respStatement.ID] = true
 	}
@@ -2024,7 +2169,7 @@ func TestStatusAPIStatementDetails(t *testing.T) {
 		thirdServerSQL.Exec(t, stmt)
 	}
 	query := `INSERT INTO posts VALUES (_, '_')`
-	fingerprintID := roachpb.ConstructStatementFingerprintID(query,
+	fingerprintID := appstatspb.ConstructStatementFingerprintID(query,
 		false, true, `roachblog`)
 	path := fmt.Sprintf(`stmtdetails/%v`, fingerprintID)
 
@@ -2218,7 +2363,7 @@ func TestStatusAPIStatementDetails(t *testing.T) {
 	}
 
 	selectQuery := "SELECT _, _, _, _"
-	fingerprintID = roachpb.ConstructStatementFingerprintID(selectQuery, false,
+	fingerprintID = appstatspb.ConstructStatementFingerprintID(selectQuery, false,
 		true, "defaultdb")
 
 	testPath(
@@ -3590,6 +3735,9 @@ func TestTransactionContentionEvents(t *testing.T) {
 				}
 
 				for _, event := range resp.Events {
+					require.NotEqual(t, event.WaitingStmtFingerprintID, 0)
+					require.NotEqual(t, event.WaitingStmtID.String(), clusterunique.ID{}.String())
+
 					require.Equal(t, tc.canViewContendingKey, len(event.BlockingEvent.Key) > 0,
 						"expected to %s, but the contending key has length of %d",
 						expectationStr,

@@ -14,10 +14,9 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -29,24 +28,24 @@ type ScheduledJobExecutor interface {
 	// Modifications to the ScheduledJob object will be persisted.
 	ExecuteJob(
 		ctx context.Context,
+		txn isql.Txn,
 		cfg *scheduledjobs.JobExecutionConfig,
 		env scheduledjobs.JobSchedulerEnv,
 		schedule *ScheduledJob,
-		txn *kv.Txn,
 	) error
 
-	// Notifies that the system.job started by the ScheduledJob completed.
-	// Implementation may use provided transaction to perform any additional mutations.
-	// Modifications to the ScheduledJob object will be persisted.
+	// NotifyJobTermination notifies that the system.job started by the
+	// ScheduledJob completed. Implementation may use provided transaction to
+	// perform any additional mutations. Modifications to the ScheduledJob
+	// object will be persisted.
 	NotifyJobTermination(
 		ctx context.Context,
+		txn isql.Txn,
 		jobID jobspb.JobID,
 		jobStatus Status,
 		details jobspb.Details,
 		env scheduledjobs.JobSchedulerEnv,
 		schedule *ScheduledJob,
-		ex sqlutil.InternalExecutor,
-		txn *kv.Txn,
 	) error
 
 	// Metrics returns optional metric.Struct object for this executor.
@@ -57,11 +56,9 @@ type ScheduledJobExecutor interface {
 	// the passed in `schedule`.
 	GetCreateScheduleStatement(
 		ctx context.Context,
+		txn isql.Txn,
 		env scheduledjobs.JobSchedulerEnv,
-		txn *kv.Txn,
-		descsCol *descs.Collection,
 		sj *ScheduledJob,
-		ex sqlutil.InternalExecutor,
 	) (string, error)
 }
 
@@ -76,7 +73,7 @@ type ScheduledJobController interface {
 		scheduleControllerEnv scheduledjobs.ScheduleControllerEnv,
 		env scheduledjobs.JobSchedulerEnv,
 		schedule *ScheduledJob,
-		txn *kv.Txn,
+		txn isql.Txn,
 		descsCol *descs.Collection,
 	) (int, error)
 }
@@ -178,19 +175,18 @@ func DefaultHandleFailedRun(schedule *ScheduledJob, fmtOrMsg string, args ...int
 // with the job status changes.
 func NotifyJobTermination(
 	ctx context.Context,
+	txn isql.Txn,
 	env scheduledjobs.JobSchedulerEnv,
 	jobID jobspb.JobID,
 	jobStatus Status,
 	jobDetails jobspb.Details,
 	scheduleID int64,
-	ex sqlutil.InternalExecutor,
-	txn *kv.Txn,
 ) error {
 	if env == nil {
 		env = scheduledjobs.ProdJobSchedulerEnv
 	}
-
-	schedule, err := LoadScheduledJob(ctx, env, scheduleID, ex, txn)
+	schedules := ScheduledJobTxn(txn)
+	schedule, err := schedules.Load(ctx, env, scheduleID)
 	if err != nil {
 		return err
 	}
@@ -200,11 +196,11 @@ func NotifyJobTermination(
 	}
 
 	// Delegate handling of the job termination to the executor.
-	err = executor.NotifyJobTermination(ctx, jobID, jobStatus, jobDetails, env, schedule, ex, txn)
+	err = executor.NotifyJobTermination(ctx, txn, jobID, jobStatus, jobDetails, env, schedule)
 	if err != nil {
 		return err
 	}
 
 	// Update this schedule in case executor made changes to it.
-	return schedule.Update(ctx, ex, txn)
+	return schedules.Update(ctx, schedule)
 }

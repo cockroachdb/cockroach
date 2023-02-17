@@ -51,7 +51,7 @@ func registerSnapshotOverload(r registry.Registry) {
 			crdbNodes := c.Spec().NodeCount - 1
 			workloadNode := crdbNodes + 1
 			for i := 1; i <= crdbNodes; i++ {
-				startOpts := option.DefaultStartOpts()
+				startOpts := option.DefaultStartOptsNoBackups()
 				startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, fmt.Sprintf("--attrs=n%d", i))
 				c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(i))
 			}

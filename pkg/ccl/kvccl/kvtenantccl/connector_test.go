@@ -205,9 +205,10 @@ func TestConnectorGossipSubscription(t *testing.T) {
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
-	s := rpc.NewServer(rpcContext)
+	s, err := rpc.NewServer(rpcContext)
+	require.NoError(t, err)
 
 	// Test setting the cluster ID by setting it to nil then ensuring it's later
 	// set to the original ID value.
@@ -357,9 +358,10 @@ func TestConnectorRangeLookup(t *testing.T) {
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
-	s := rpc.NewServer(rpcContext)
+	s, err := rpc.NewServer(rpcContext)
+	require.NoError(t, err)
 
 	rangeLookupRespC := make(chan *roachpb.RangeLookupResponse, 1)
 	rangeLookupFn := func(_ context.Context, req *roachpb.RangeLookupRequest) (*roachpb.RangeLookupResponse, error) {
@@ -442,9 +444,10 @@ func TestConnectorRetriesUnreachable(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
-	s := rpc.NewServer(rpcContext)
+	s, err := rpc.NewServer(rpcContext)
+	require.NoError(t, err)
 
 	node1 := &roachpb.NodeDescriptor{NodeID: 1, Address: util.MakeUnresolvedAddr("tcp", "1.1.1.1")}
 	node2 := &roachpb.NodeDescriptor{NodeID: 2, Address: util.MakeUnresolvedAddr("tcp", "2.2.2.2")}
@@ -528,7 +531,7 @@ func TestConnectorRetriesError(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 
 	// Function to create rpc server that would delegate to gossip and range lookup
@@ -539,7 +542,8 @@ func TestConnectorRetriesError(t *testing.T) {
 		gossipSubFn func(req *roachpb.GossipSubscriptionRequest, stream roachpb.Internal_GossipSubscriptionServer) error,
 		rangeLookupFn func(_ context.Context, req *roachpb.RangeLookupRequest) (*roachpb.RangeLookupResponse, error),
 	) string {
-		internalServer := rpc.NewServer(rpcContext)
+		internalServer, err := rpc.NewServer(rpcContext)
+		require.NoError(t, err)
 		roachpb.RegisterInternalServer(internalServer, &mockServer{rangeLookupFn: rangeLookupFn, gossipSubFn: gossipSubFn})
 		ln, err := net.Listen(util.TestAddr.Network(), util.TestAddr.String())
 		require.NoError(t, err)

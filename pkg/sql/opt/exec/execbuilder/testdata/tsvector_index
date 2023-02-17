@@ -1,0 +1,170 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE a (
+  a INT PRIMARY KEY,
+  b TSVECTOR,
+  c TSQUERY,
+  FAMILY (a,b,c),
+  INVERTED INDEX(b)
+)
+
+query T
+EXPLAIN SELECT * FROM a@a_b_idx WHERE b @@ 'foo'
+----
+distribution: local
+vectorized: true
+·
+• index join
+│ table: a@a_pkey
+│
+└── • scan
+      missing stats
+      table: a@a_b_idx
+      spans: 1 span
+
+query T
+EXPLAIN SELECT * FROM a@a_b_idx WHERE b @@ 'Foo'
+----
+distribution: local
+vectorized: true
+·
+• index join
+│ table: a@a_pkey
+│
+└── • scan
+      missing stats
+      table: a@a_b_idx
+      spans: 1 span
+
+query T
+EXPLAIN SELECT * FROM a@a_b_idx WHERE b @@ 'foo' OR b @@ 'bar'
+----
+distribution: local
+vectorized: true
+·
+• index join
+│ table: a@a_pkey
+│
+└── • inverted filter
+    │ inverted column: b_inverted_key
+    │ num spans: 2
+    │
+    └── • scan
+          missing stats
+          table: a@a_b_idx
+          spans: 2 spans
+
+query T
+EXPLAIN SELECT * FROM a@a_b_idx WHERE b @@ 'foo | bar'
+----
+distribution: local
+vectorized: true
+·
+• index join
+│ table: a@a_pkey
+│
+└── • inverted filter
+    │ inverted column: b_inverted_key
+    │ num spans: 2
+    │
+    └── • scan
+          missing stats
+          table: a@a_b_idx
+          spans: 2 spans
+
+query T
+EXPLAIN SELECT * FROM a@a_b_idx WHERE b @@ 'foo | bar' OR b @@ 'baz'
+----
+distribution: local
+vectorized: true
+·
+• index join
+│ table: a@a_pkey
+│
+└── • inverted filter
+    │ inverted column: b_inverted_key
+    │ num spans: 3
+    │
+    └── • scan
+          missing stats
+          table: a@a_b_idx
+          spans: 3 spans
+
+query T
+EXPLAIN SELECT * FROM a@a_b_idx WHERE b @@ 'foo & bar'
+----
+distribution: local
+vectorized: true
+·
+• lookup join
+│ table: a@a_pkey
+│ equality: (a) = (a)
+│ equality cols are key
+│
+└── • zigzag join
+      left table: a@a_b_idx
+      left columns: (a, b_inverted_key)
+      left fixed values: 1 column
+      right table: a@a_b_idx
+      right columns: (a, b_inverted_key)
+      right fixed values: 1 column
+
+query T
+EXPLAIN SELECT * FROM a@a_b_idx WHERE b @@ 'foo <-> bar'
+----
+distribution: local
+vectorized: true
+·
+• lookup join
+│ table: a@a_pkey
+│ equality: (a) = (a)
+│ equality cols are key
+│ pred: b @@ '''foo'' <-> ''bar'''
+│
+└── • zigzag join
+      left table: a@a_b_idx
+      left columns: (a, b_inverted_key)
+      left fixed values: 1 column
+      right table: a@a_b_idx
+      right columns: (a, b_inverted_key)
+      right fixed values: 1 column
+
+query T
+EXPLAIN SELECT * FROM a@a_b_idx WHERE b @@ 'foo & !bar'
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: b @@ '''foo'' & !''bar'''
+│
+└── • index join
+    │ table: a@a_pkey
+    │
+    └── • scan
+          missing stats
+          table: a@a_b_idx
+          spans: 1 span
+
+
+query T
+EXPLAIN SELECT a FROM a@a_b_idx WHERE b @@ 'ba:*'
+----
+distribution: local
+vectorized: true
+·
+• inverted filter
+│ inverted column: b_inverted_key
+│ num spans: 1
+│
+└── • scan
+      missing stats
+      table: a@a_b_idx
+      spans: 1 span
+
+
+# Test that tsvector indexes can't accelerate the @@ operator with no constant
+# columns.
+statement error index \"a_b_idx\" is inverted and cannot be used for this query
+EXPLAIN SELECT * FROM a@a_b_idx WHERE b @@ c

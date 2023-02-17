@@ -145,7 +145,7 @@ func (p *planner) canRemoveDependent(
 	ref descpb.TableDescriptor_Reference,
 	behavior tree.DropBehavior,
 ) error {
-	desc, err := p.Descriptors().GetMutableDescriptorByID(ctx, p.txn, ref.ID)
+	desc, err := p.Descriptors().MutableByID(p.txn).Desc(ctx, ref.ID)
 	if err != nil {
 		return err
 	}
@@ -239,7 +239,7 @@ func (p *planner) dropViewImpl(
 	// Remove back-references from the tables/views this view depends on.
 	dependedOn := append([]descpb.ID(nil), viewDesc.DependsOn...)
 	for _, depID := range dependedOn {
-		dependencyDesc, err := p.Descriptors().GetMutableTableVersionByID(ctx, depID, p.txn)
+		dependencyDesc, err := p.Descriptors().MutableByID(p.txn).Table(ctx, depID)
 		if err != nil {
 			return cascadeDroppedViews,
 				errors.Wrapf(err, "error resolving dependency relation ID %d", depID)
@@ -323,7 +323,7 @@ func (p *planner) getDescForCascade(
 	parentID, descID descpb.ID,
 	behavior tree.DropBehavior,
 ) (catalog.MutableDescriptor, error) {
-	desc, err := p.Descriptors().GetMutableDescriptorByID(ctx, p.txn, descID)
+	desc, err := p.Descriptors().MutableByID(p.txn).Desc(ctx, descID)
 	if err != nil {
 		log.Warningf(ctx, "unable to retrieve descriptor for %d: %v", descID, err)
 		return nil, errors.Wrapf(err, "error resolving dependent ID %d", descID)

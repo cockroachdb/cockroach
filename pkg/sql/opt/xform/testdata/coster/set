@@ -14,18 +14,18 @@ union
  ├── left columns: a.k:1 a.i:2
  ├── right columns: x:7 z:8
  ├── stats: [rows=2000, distinct(12,13)=2000, null(12,13)=0]
- ├── cost: 2199.76501
+ ├── cost: 2207.76501
  ├── key: (12,13)
  ├── scan a
  │    ├── columns: a.k:1!null a.i:2
  │    ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=0]
- │    ├── cost: 1084.62
+ │    ├── cost: 1088.62
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── scan b
       ├── columns: x:7 z:8!null
       ├── stats: [rows=1000, distinct(7,8)=1000, null(7,8)=0]
-      └── cost: 1074.52
+      └── cost: 1078.52
 
 opt
 SELECT k, i FROM a UNION ALL SELECT * FROM b
@@ -35,17 +35,17 @@ union-all
  ├── left columns: a.k:1 a.i:2
  ├── right columns: x:7 z:8
  ├── stats: [rows=2000]
- ├── cost: 2179.16
+ ├── cost: 2187.16
  ├── scan a
  │    ├── columns: a.k:1!null a.i:2
  │    ├── stats: [rows=1000]
- │    ├── cost: 1084.62
+ │    ├── cost: 1088.62
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── scan b
       ├── columns: x:7 z:8!null
       ├── stats: [rows=1000]
-      └── cost: 1074.52
+      └── cost: 1078.52
 
 opt
 SELECT k, i FROM a INTERSECT SELECT * FROM b
@@ -55,19 +55,19 @@ intersect-all
  ├── left columns: k:1 i:2
  ├── right columns: x:7 z:8
  ├── stats: [rows=1000]
- ├── cost: 2189.30625
+ ├── cost: 2197.30625
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── scan a
  │    ├── columns: k:1!null i:2
  │    ├── stats: [rows=1000]
- │    ├── cost: 1084.62
+ │    ├── cost: 1088.62
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── scan b
       ├── columns: x:7 z:8!null
       ├── stats: [rows=1000]
-      └── cost: 1074.52
+      └── cost: 1078.52
 
 opt
 SELECT k, i FROM a INTERSECT ALL SELECT * FROM b
@@ -77,19 +77,19 @@ intersect-all
  ├── left columns: k:1 i:2
  ├── right columns: x:7 z:8
  ├── stats: [rows=1000]
- ├── cost: 2189.30625
+ ├── cost: 2197.30625
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── scan a
  │    ├── columns: k:1!null i:2
  │    ├── stats: [rows=1000]
- │    ├── cost: 1084.62
+ │    ├── cost: 1088.62
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── scan b
       ├── columns: x:7 z:8!null
       ├── stats: [rows=1000]
-      └── cost: 1074.52
+      └── cost: 1078.52
 
 opt
 SELECT k, i FROM a EXCEPT SELECT * FROM b
@@ -99,19 +99,19 @@ except-all
  ├── left columns: k:1 i:2
  ├── right columns: x:7 z:8
  ├── stats: [rows=1000]
- ├── cost: 2189.30625
+ ├── cost: 2197.30625
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── scan a
  │    ├── columns: k:1!null i:2
  │    ├── stats: [rows=1000]
- │    ├── cost: 1084.62
+ │    ├── cost: 1088.62
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── scan b
       ├── columns: x:7 z:8!null
       ├── stats: [rows=1000]
-      └── cost: 1074.52
+      └── cost: 1078.52
 
 opt
 SELECT k, i FROM a EXCEPT ALL SELECT * FROM b
@@ -121,16 +121,16 @@ except-all
  ├── left columns: k:1 i:2
  ├── right columns: x:7 z:8
  ├── stats: [rows=1000]
- ├── cost: 2189.30625
+ ├── cost: 2197.30625
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── scan a
  │    ├── columns: k:1!null i:2
  │    ├── stats: [rows=1000]
- │    ├── cost: 1084.62
+ │    ├── cost: 1088.62
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── scan b
       ├── columns: x:7 z:8!null
       ├── stats: [rows=1000]
-      └── cost: 1074.52
+      └── cost: 1078.52

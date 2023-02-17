@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -166,7 +165,7 @@ func TestCmdClearRange(t *testing.T) {
 					EvalCtx: (&MockEvalCtx{
 						ClusterSettings: cluster.MakeTestingClusterSettings(),
 						Desc:            &desc,
-						Clock:           hlc.NewClockWithSystemTimeSource(time.Nanosecond),
+						Clock:           hlc.NewClockForTesting(nil),
 						Stats:           stats,
 					}).EvalContext(),
 					Header: roachpb.Header{
@@ -246,7 +245,7 @@ func TestCmdClearRangeDeadline(t *testing.T) {
 		RangeID: 99, StartKey: roachpb.RKey(startKey), EndKey: roachpb.RKey(endKey),
 	}
 
-	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 123)), time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(0, 123)))
 
 	args := roachpb.ClearRangeRequest{
 		RequestHeader: roachpb.RequestHeader{Key: startKey, EndKey: endKey},

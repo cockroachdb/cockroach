@@ -14,35 +14,15 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
-
-// fakeCatalog is a fake implementation of scexec.Catalog for testing makeState.
-type fakeCatalog struct {
-	descs map[descpb.ID]catalog.Descriptor
-	scexec.Catalog
-}
-
-func (fc fakeCatalog) MustReadImmutableDescriptors(
-	ctx context.Context, ids ...descpb.ID,
-) ([]catalog.Descriptor, error) {
-	ret := make([]catalog.Descriptor, len(ids))
-	for i, id := range ids {
-		d, ok := fc.descs[id]
-		if !ok {
-			panic("boom")
-		}
-		ret[i] = d
-	}
-	return ret, nil
-}
 
 // TestMakeState tests some validation checking in the makeState function.
 func TestMakeState(t *testing.T) {
@@ -53,7 +33,6 @@ func TestMakeState(t *testing.T) {
 	for _, tc := range []struct {
 		name        string
 		ids         []descpb.ID
-		rollback    bool
 		jobID       jobspb.JobID
 		descriptors []catalog.Descriptor
 		expErr      string
@@ -142,16 +121,8 @@ func TestMakeState(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			cat := fakeCatalog{
-				descs: map[descpb.ID]catalog.Descriptor{},
-			}
-			for _, d := range tc.descriptors {
-				cat.descs[d.GetID()] = d
-			}
-			_, err := makeState(ctx, 1, tc.ids, true, func(
-				ctx context.Context, f func(context.Context, scexec.Catalog) error) error {
-				return f(ctx, cat)
-			})
+			const jobID = 1
+			_, err := makeState(ctx, jobID, tc.ids, tc.descriptors, clusterversion.TestingClusterVersion)
 			if tc.expErr == "" {
 				require.NoError(t, err)
 			} else {

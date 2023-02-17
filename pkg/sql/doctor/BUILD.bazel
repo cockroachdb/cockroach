@@ -37,6 +37,7 @@ go_test(
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/security/username",
+        "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/catprivilege",
         "//pkg/sql/catalog/descpb",

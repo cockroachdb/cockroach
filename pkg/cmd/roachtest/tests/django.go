@@ -94,7 +94,7 @@ func registerDjango(r registry.Registry) {
 		}
 
 		if err := repeatRunE(
-			ctx, t, c, node, "create virtualenv", `virtualenv venv`,
+			ctx, t, c, node, "create virtualenv", `virtualenv --clear venv`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -215,7 +215,7 @@ func registerDjango(r registry.Registry) {
 
 	r.Add(registry.TestSpec{
 		Name:    "django",
-		Owner:   registry.OwnerSQLExperience,
+		Owner:   registry.OwnerSQLSessions,
 		Cluster: r.MakeClusterSpec(1, spec.CPU(16)),
 		Tags:    []string{`default`, `orm`},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

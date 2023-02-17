@@ -5,7 +5,7 @@ CREATE TABLE db.public.tbl (i INT PRIMARY KEY);
 /* test */
 EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT;
 ----
-• Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8; 
+• Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8;
 │
 ├── • StatementPhase
 │   │
@@ -16,7 +16,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT;
 │       │   ├── • Column:{DescID: 106, ColumnID: 2}
 │       │   │   │ ABSENT → DELETE_ONLY
 │       │   │   │
-│       │   │   └── • PreviousTransactionPrecedence dependency from ABSENT Column:{DescID: 106, ColumnID: 2}
+│       │   │   └── • PreviousStagePrecedence dependency from ABSENT Column:{DescID: 106, ColumnID: 2}
 │       │   │         rule: "Column transitions to PUBLIC uphold 2-version invariant: ABSENT->DELETE_ONLY"
 │       │   │
 │       │   ├── • ColumnName:{DescID: 106, Name: j, ColumnID: 2}
@@ -39,29 +39,13 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT;
 │       │       └── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
 │       │             rule: "column existence precedes column dependents"
 │       │
-│       └── • 5 Mutation operations
+│       └── • 4 Mutation operations
 │           │
 │           ├── • MakeAbsentColumnDeleteOnly
 │           │     Column:
 │           │       ColumnID: 2
 │           │       PgAttributeNum: 2
 │           │       TableID: 106
-│           │
-│           ├── • LogEvent
-│           │     Element:
-│           │       Column:
-│           │         columnId: 2
-│           │         pgAttributeNum: 2
-│           │         tableId: 106
-│           │     EventBase:
-│           │       Authorization:
-│           │         UserName: root
-│           │       Statement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8
-│           │       StatementTag: ALTER TABLE
-│           │       TargetMetadata:
-│           │         SourceElementID: 1
-│           │         SubWorkID: 1
-│           │     TargetStatus: 2
 │           │
 │           ├── • SetColumnName
 │           │     ColumnID: 2
@@ -71,6 +55,8 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT;
 │           ├── • SetAddedColumnType
 │           │     ColumnType:
 │           │       ColumnID: 2
+│           │       ElementCreationMetadata:
+│           │         in231OrLater: true
 │           │       IsNullable: true
 │           │       TableID: 106
 │           │       TypeT:
@@ -87,9 +73,88 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT;
 │
 ├── • PreCommitPhase
 │   │
-│   └── • Stage 1 of 1 in PreCommitPhase
+│   ├── • Stage 1 of 2 in PreCommitPhase
+│   │   │
+│   │   ├── • 4 elements transitioning toward PUBLIC
+│   │   │   │
+│   │   │   ├── • Column:{DescID: 106, ColumnID: 2}
+│   │   │   │     DELETE_ONLY → ABSENT
+│   │   │   │
+│   │   │   ├── • ColumnName:{DescID: 106, Name: j, ColumnID: 2}
+│   │   │   │     PUBLIC → ABSENT
+│   │   │   │
+│   │   │   ├── • ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
+│   │   │   │     PUBLIC → ABSENT
+│   │   │   │
+│   │   │   └── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 1}
+│   │   │         PUBLIC → ABSENT
+│   │   │
+│   │   └── • 1 Mutation operation
+│   │       │
+│   │       └── • UndoAllInTxnImmediateMutationOpSideEffects
+│   │             {}
+│   │
+│   └── • Stage 2 of 2 in PreCommitPhase
 │       │
-│       └── • 2 Mutation operations
+│       ├── • 4 elements transitioning toward PUBLIC
+│       │   │
+│       │   ├── • Column:{DescID: 106, ColumnID: 2}
+│       │   │   │ ABSENT → DELETE_ONLY
+│       │   │   │
+│       │   │   └── • PreviousStagePrecedence dependency from ABSENT Column:{DescID: 106, ColumnID: 2}
+│       │   │         rule: "Column transitions to PUBLIC uphold 2-version invariant: ABSENT->DELETE_ONLY"
+│       │   │
+│       │   ├── • ColumnName:{DescID: 106, Name: j, ColumnID: 2}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   └── • SameStagePrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │   │         rule: "column existence precedes column dependents"
+│       │   │         rule: "column name and type set right after column existence"
+│       │   │
+│       │   ├── • ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   └── • SameStagePrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │   │         rule: "column existence precedes column dependents"
+│       │   │         rule: "column name and type set right after column existence"
+│       │   │
+│       │   └── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 1}
+│       │       │ ABSENT → PUBLIC
+│       │       │
+│       │       └── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │             rule: "column existence precedes column dependents"
+│       │
+│       └── • 6 Mutation operations
+│           │
+│           ├── • MakeAbsentColumnDeleteOnly
+│           │     Column:
+│           │       ColumnID: 2
+│           │       PgAttributeNum: 2
+│           │       TableID: 106
+│           │
+│           ├── • SetColumnName
+│           │     ColumnID: 2
+│           │     Name: j
+│           │     TableID: 106
+│           │
+│           ├── • SetAddedColumnType
+│           │     ColumnType:
+│           │       ColumnID: 2
+│           │       ElementCreationMetadata:
+│           │         in231OrLater: true
+│           │       IsNullable: true
+│           │       TableID: 106
+│           │       TypeT:
+│           │         Type:
+│           │           family: IntFamily
+│           │           oid: 20
+│           │           width: 64
+│           │
+│           ├── • AddColumnToIndex
+│           │     ColumnID: 2
+│           │     IndexID: 1
+│           │     Kind: 2
+│           │     TableID: 106
 │           │
 │           ├── • SetJobStateOnDescriptor
 │           │     DescriptorID: 106
@@ -116,7 +181,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT;
 │       │   └── • Column:{DescID: 106, ColumnID: 2}
 │       │       │ DELETE_ONLY → WRITE_ONLY
 │       │       │
-│       │       └── • PreviousTransactionPrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │       └── • PreviousStagePrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
 │       │             rule: "Column transitions to PUBLIC uphold 2-version invariant: DELETE_ONLY->WRITE_ONLY"
 │       │
 │       └── • 3 Mutation operations
@@ -142,7 +207,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT;
         │   └── • Column:{DescID: 106, ColumnID: 2}
         │       │ WRITE_ONLY → PUBLIC
         │       │
-        │       ├── • PreviousTransactionPrecedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 2}
+        │       ├── • PreviousStagePrecedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 2}
         │       │     rule: "Column transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->PUBLIC"
         │       │
         │       ├── • Precedence dependency from PUBLIC ColumnName:{DescID: 106, Name: j, ColumnID: 2}
@@ -158,14 +223,6 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT;
             │
             ├── • MakeWriteOnlyColumnPublic
             │     ColumnID: 2
-            │     EventBase:
-            │       Authorization:
-            │         UserName: root
-            │       Statement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8
-            │       StatementTag: ALTER TABLE
-            │       TargetMetadata:
-            │         SourceElementID: 1
-            │         SubWorkID: 1
             │     TableID: 106
             │
             ├── • RefreshStats

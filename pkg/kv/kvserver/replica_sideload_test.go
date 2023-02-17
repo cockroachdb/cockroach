@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -178,11 +179,11 @@ func TestRaftSSTableSideloading(t *testing.T) {
 
 	rsl := logstore.NewStateLoader(tc.repl.RangeID)
 	lo := tc.repl.mu.state.TruncatedState.Index + 1
-	hi := tc.repl.mu.lastIndex + 1
+	hi := tc.repl.mu.lastIndexNotDurable + 1
 
 	tc.store.raftEntryCache.Clear(tc.repl.RangeID, hi)
 	ents, err := logstore.LoadEntries(
-		ctx, rsl, tc.store.Engine(), tc.repl.RangeID, tc.store.raftEntryCache,
+		ctx, rsl, tc.store.TODOEngine(), tc.repl.RangeID, tc.store.raftEntryCache,
 		tc.repl.raftMu.sideloaded, lo, hi, math.MaxUint64,
 	)
 	require.NoError(t, err)
@@ -198,7 +199,7 @@ func TestRaftSSTableSideloading(t *testing.T) {
 	var idx int
 	for idx = 0; idx < len(ents); idx++ {
 		// Get the SST back from the raft log.
-		if !logstore.SniffSideloadedRaftCommand(ents[idx].Data) {
+		if typ, _ := raftlog.EncodingOf(ents[idx]); !typ.IsSideloaded() {
 			continue
 		}
 		ent, err := logstore.MaybeInlineSideloadedRaftCommand(ctx, tc.repl.RangeID, ents[idx], tc.repl.raftMu.sideloaded, tc.store.raftEntryCache)
@@ -248,7 +249,7 @@ func TestRaftSSTableSideloadingTruncation(t *testing.T) {
 		fmtSideloaded := func() []string {
 			tc.repl.raftMu.Lock()
 			defer tc.repl.raftMu.Unlock()
-			fs, _ := tc.repl.Engine().List(tc.repl.raftMu.sideloaded.Dir())
+			fs, _ := tc.repl.store.TODOEngine().List(tc.repl.raftMu.sideloaded.Dir())
 			sort.Strings(fs)
 			return fs
 		}

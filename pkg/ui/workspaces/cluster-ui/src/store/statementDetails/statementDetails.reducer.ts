@@ -17,12 +17,14 @@ import {
   StatementDetailsResponseWithKey,
 } from "src/api/statementsApi";
 import { generateStmtDetailsToID } from "../../util";
+import moment from "moment";
 
 export type SQLDetailsStatsState = {
   data: StatementDetailsResponse;
   lastError: Error;
   valid: boolean;
   inFlight: boolean;
+  lastUpdated: moment.Moment | null;
 };
 
 export type SQLDetailsStatsReducerState = {
@@ -48,6 +50,7 @@ const sqlDetailsStatsSlice = createSlice({
         valid: true,
         lastError: null,
         inFlight: false,
+        lastUpdated: moment.utc(),
       };
     },
     failed: (state, action: PayloadAction<ErrorWithKey>) => {
@@ -56,6 +59,7 @@ const sqlDetailsStatsSlice = createSlice({
         valid: false,
         lastError: action.payload.err,
         inFlight: false,
+        lastUpdated: moment.utc(),
       };
     },
     invalidated: (state, action: PayloadAction<{ key: string }>) => {
@@ -81,6 +85,7 @@ const sqlDetailsStatsSlice = createSlice({
         valid: false,
         lastError: null,
         inFlight: true,
+        lastUpdated: null,
       };
     },
     request: (state, action: PayloadAction<StatementDetailsRequest>) => {
@@ -97,6 +102,7 @@ const sqlDetailsStatsSlice = createSlice({
         valid: false,
         lastError: null,
         inFlight: true,
+        lastUpdated: null,
       };
     },
   },

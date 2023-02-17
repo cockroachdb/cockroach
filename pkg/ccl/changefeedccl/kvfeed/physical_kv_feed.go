@@ -97,12 +97,19 @@ func (p *rangefeed) addEventsToBuffer(ctx context.Context) error {
 						return err
 					}
 				}
+				if p.knobs.ModifyTimestamps != nil {
+					e = kvcoord.RangeFeedMessage{RangeFeedEvent: e.ShallowCopy(), RegisteredSpan: e.RegisteredSpan}
+					p.knobs.ModifyTimestamps(&e.Val.Value.Timestamp)
+				}
 				if err := p.memBuf.Add(
 					ctx, kvevent.MakeKVEvent(e.RangeFeedEvent),
 				); err != nil {
 					return err
 				}
 			case *roachpb.RangeFeedCheckpoint:
+				if p.knobs.ModifyTimestamps != nil {
+					p.knobs.ModifyTimestamps(&t.ResolvedTS)
+				}
 				if !t.ResolvedTS.IsEmpty() && t.ResolvedTS.Less(p.cfg.Frontier) {
 					// RangeFeed happily forwards any closed timestamps it receives as
 					// soon as there are no outstanding intents under them.

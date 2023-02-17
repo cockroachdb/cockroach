@@ -1,4 +1,4 @@
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  i was created via the following code:
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1] i was created via the following code:
 func main() {
 	defer cleanup()
 	defer cleanup()

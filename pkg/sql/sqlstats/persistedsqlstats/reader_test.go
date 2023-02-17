@@ -19,8 +19,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -88,7 +88,7 @@ func TestPersistedSQLStatsRead(t *testing.T) {
 
 		foundQueries := make(map[string]struct{})
 		foundTxns := make(map[string]struct{})
-		stmtFingerprintIDToQueries := make(map[roachpb.StmtFingerprintID]string)
+		stmtFingerprintIDToQueries := make(map[appstatspb.StmtFingerprintID]string)
 
 		require.NoError(t,
 			sqlStats.IterateStatementStats(
@@ -97,7 +97,7 @@ func TestPersistedSQLStatsRead(t *testing.T) {
 					SortedKey:      true,
 					SortedAppNames: true,
 				},
-				func(ctx context.Context, statistics *roachpb.CollectedStatementStatistics) error {
+				func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
 					if expectedExecCount, ok := expectedStmtFingerprints[statistics.Key.Query]; ok {
 						_, ok = foundQueries[statistics.Key.Query]
 						require.False(
@@ -118,7 +118,7 @@ func TestPersistedSQLStatsRead(t *testing.T) {
 				&sqlstats.IteratorOptions{},
 				func(
 					ctx context.Context,
-					statistics *roachpb.CollectedTransactionStatistics,
+					statistics *appstatspb.CollectedTransactionStatistics,
 				) error {
 					if len(statistics.StatementFingerprintIDs) == 1 {
 						if query, ok := stmtFingerprintIDToQueries[statistics.StatementFingerprintIDs[0]]; ok {
@@ -211,12 +211,12 @@ func verifyStoredStmtFingerprints(
 ) {
 	foundQueries := make(map[string]struct{})
 	foundTxns := make(map[string]struct{})
-	stmtFingerprintIDToQueries := make(map[roachpb.StmtFingerprintID]string)
+	stmtFingerprintIDToQueries := make(map[appstatspb.StmtFingerprintID]string)
 	require.NoError(t,
 		sqlStats.IterateStatementStats(
 			context.Background(),
 			&sqlstats.IteratorOptions{},
-			func(ctx context.Context, statistics *roachpb.CollectedStatementStatistics) error {
+			func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
 				if expectedExecCount, ok := expectedStmtFingerprints[statistics.Key.Query]; ok {
 					foundQueries[statistics.Key.Query] = struct{}{}
 					stmtFingerprintIDToQueries[statistics.ID] = statistics.Key.Query
@@ -231,7 +231,7 @@ func verifyStoredStmtFingerprints(
 			&sqlstats.IteratorOptions{},
 			func(
 				ctx context.Context,
-				statistics *roachpb.CollectedTransactionStatistics,
+				statistics *appstatspb.CollectedTransactionStatistics,
 			) error {
 				if len(statistics.StatementFingerprintIDs) == 1 {
 					if query, ok := stmtFingerprintIDToQueries[statistics.StatementFingerprintIDs[0]]; ok {

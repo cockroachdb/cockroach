@@ -17,6 +17,7 @@ import { nodesSaga } from "./nodes";
 import { jobsSaga } from "./jobs";
 import { jobSaga } from "./jobDetails";
 import { livenessSaga } from "./liveness";
+import { databasesListSaga } from "./databasesList";
 import { sessionsSaga } from "./sessions";
 import { terminateSaga } from "./terminateQuery";
 import { notifificationsSaga } from "./notifications";
@@ -24,10 +25,12 @@ import { sqlStatsSaga } from "./sqlStats";
 import { sqlDetailsStatsSaga } from "./statementDetails";
 import { indexStatsSaga } from "./indexStats";
 import { clusterLocksSaga } from "./clusterLocks/clusterLocks.saga";
-import { transactionInsightsSaga } from "./insights/transactionInsights";
+import { transactionInsightsSaga } from "./insights/transactionInsights/transactionInsights.sagas";
 import { transactionInsightDetailsSaga } from "./insightDetails/transactionInsightDetails";
 import { statementInsightsSaga } from "./insights/statementInsights";
 import { schemaInsightsSaga } from "./schemaInsights";
+import { uiConfigSaga } from "./uiConfig";
+import { statementFingerprintInsightsSaga } from "./insights/statementFingerprintInsights";
 
 export function* sagas(cacheInvalidationPeriod?: number): SagaIterator {
   yield all([
@@ -40,6 +43,7 @@ export function* sagas(cacheInvalidationPeriod?: number): SagaIterator {
     fork(statementInsightsSaga),
     fork(jobsSaga),
     fork(jobSaga),
+    fork(databasesListSaga),
     fork(sessionsSaga),
     fork(terminateSaga),
     fork(notifificationsSaga),
@@ -48,5 +52,7 @@ export function* sagas(cacheInvalidationPeriod?: number): SagaIterator {
     fork(indexStatsSaga),
     fork(clusterLocksSaga),
     fork(schemaInsightsSaga),
+    fork(uiConfigSaga, cacheInvalidationPeriod),
+    fork(statementFingerprintInsightsSaga),
   ]);
 }

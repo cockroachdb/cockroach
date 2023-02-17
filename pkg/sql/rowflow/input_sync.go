@@ -379,6 +379,16 @@ type serialUnorderedSynchronizer struct {
 	serialSynchronizerBase
 
 	srcIndex int
+
+	// serialSrcIndexExclusiveUpperBound indicates the srcIndex to error out on
+	// should execution fail to halt prior to this input. This is only valid if
+	// non-zero.
+	serialSrcIndexExclusiveUpperBound uint32
+
+	// exceedsSrcIndexExclusiveUpperBoundErrorFunc produces the error to return to
+	// the receiver when srcIndex has incremented to match
+	// serialSrcIndexExclusiveUpperBound.
+	exceedsSrcIndexExclusiveUpperBoundErrorFunc func() error
 }
 
 var _ execinfra.RowSource = &serialUnorderedSynchronizer{}
@@ -395,6 +405,15 @@ func (u *serialUnorderedSynchronizer) Next() (rowenc.EncDatumRow, *execinfrapb.P
 		// If we see nil,nil go to next source.
 		if row == nil && metadata == nil {
 			u.srcIndex++
+			if u.serialSrcIndexExclusiveUpperBound > 0 && u.srcIndex >= int(u.serialSrcIndexExclusiveUpperBound) &&
+				(u.state == notInitialized || u.state == returningRows) {
+				// Do not return the error in the `draining` or `drainBuffered` states
+				// because we don't want to indicate that a drain operation has
+				// failed, and it is only necessary to return the error once.
+				meta := execinfrapb.GetProducerMeta()
+				meta.Err = u.exceedsSrcIndexExclusiveUpperBoundErrorFunc()
+				return nil, meta
+			}
 			continue
 		}
 
@@ -431,7 +450,11 @@ func (u *serialUnorderedSynchronizer) ConsumerClosed() {
 // sources should be consumed in index order (which is useful when you intend to
 // fuse the synchronizer and its inputs later; see FuseAggressively).
 func makeSerialSync(
-	ordering colinfo.ColumnOrdering, evalCtx *eval.Context, sources []execinfra.RowSource,
+	ordering colinfo.ColumnOrdering,
+	evalCtx *eval.Context,
+	sources []execinfra.RowSource,
+	serialSrcIndexExclusiveUpperBound uint32,
+	exceedsSrcIndexExclusiveUpperBoundErrorFunc func() error,
 ) (execinfra.RowSource, error) {
 	if len(sources) < 2 {
 		return nil, errors.Errorf("only %d sources for serial synchronizer", len(sources))
@@ -462,7 +485,9 @@ func makeSerialSync(
 		sync = os
 	} else {
 		sync = &serialUnorderedSynchronizer{
-			serialSynchronizerBase: base,
+			serialSynchronizerBase:                      base,
+			serialSrcIndexExclusiveUpperBound:           serialSrcIndexExclusiveUpperBound,
+			exceedsSrcIndexExclusiveUpperBoundErrorFunc: exceedsSrcIndexExclusiveUpperBoundErrorFunc,
 		}
 	}
 

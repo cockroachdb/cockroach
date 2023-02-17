@@ -10,7 +10,7 @@
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { fetchData } from "src/api";
-
+import Long from "long";
 export type ListTracingSnapshotsRequest =
   cockroach.server.serverpb.ListTracingSnapshotsRequest;
 export type ListTracingSnapshotsResponse =
@@ -29,8 +29,14 @@ export type GetTracingSnapshotResponse =
 export type Span = cockroach.server.serverpb.ITracingSpan;
 export type Snapshot = cockroach.server.serverpb.ITracingSnapshot;
 
-export type GetTraceRequest = cockroach.server.serverpb.GetTraceRequest;
+export const GetTraceRequest = cockroach.server.serverpb.GetTraceRequest;
 export type GetTraceResponse = cockroach.server.serverpb.GetTraceResponse;
+
+export const SetTraceRecordingTypeRequest =
+  cockroach.server.serverpb.SetTraceRecordingTypeRequest;
+export type SetTraceRecordingTypeResponse =
+  cockroach.server.serverpb.SetTraceRecordingTypeResponse;
+export type RecordingMode = cockroach.util.tracing.tracingpb.RecordingMode;
 
 const API_PREFIX = "_admin/v1";
 
@@ -58,6 +64,8 @@ export function takeTracingSnapshot(
   );
 }
 
+// This is getting plugged into our redux libraries, which want calls with a
+// single argument. So wrap the two arguments in a request object.
 export function getTracingSnapshot(req: {
   nodeID: string;
   snapshotID: number;
@@ -70,14 +78,39 @@ export function getTracingSnapshot(req: {
   );
 }
 
-export function getTraceForSnapshot(req: {
+// This is getting plugged into our redux libraries, which want calls with a
+// single argument. So wrap the two arguments in a request object.
+export function getRawTrace(req: {
   nodeID: string;
-  req: GetTraceRequest;
+  snapshotID: number;
+  traceID: Long;
 }): Promise<GetTraceResponse> {
+  const rpcReq = new GetTraceRequest({
+    snapshot_id: Long.fromNumber(req.snapshotID),
+    trace_id: req.traceID,
+  });
   return fetchData(
     cockroach.server.serverpb.GetTraceResponse,
     `${API_PREFIX}/traces?remote_node_id=${req.nodeID}`,
     cockroach.server.serverpb.GetTraceRequest,
-    req.req as any,
+    rpcReq as any,
+  );
+}
+
+export function setTraceRecordingType(
+  nodeID: string,
+  traceID: Long,
+  recordingMode: RecordingMode,
+): Promise<SetTraceRecordingTypeResponse> {
+  const req = new SetTraceRecordingTypeRequest({
+    trace_id: traceID,
+    recording_mode: recordingMode,
+  });
+  return fetchData(
+    cockroach.server.serverpb.SetTraceRecordingTypeResponse,
+    // TODO(davidh): Consider making this endpoint just POST to `/traces/{trace_ID}`
+    `${API_PREFIX}/settracerecordingtype?remote_node_id=${nodeID}`,
+    cockroach.server.serverpb.SetTraceRecordingTypeRequest,
+    req as any,
   );
 }

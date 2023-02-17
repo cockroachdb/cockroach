@@ -318,7 +318,7 @@ func TestReliableIntentCleanup(t *testing.T) {
 		// Split off 16 ranges by the first hex digit (4 bits) after prefix:
 		// key\x00\x00 key\x00\x10 key\x00\x20 key\x00\x30 ...
 		for i := 0; i < 16; i++ {
-			require.NoError(t, db.AdminSplit(ctx, append(prefix, byte(i<<4)), hlc.MaxTimestamp, roachpb.AdminSplitRequest_INGESTION))
+			require.NoError(t, db.AdminSplit(ctx, append(prefix, byte(i<<4)), hlc.MaxTimestamp))
 		}
 		require.NoError(t, tc.WaitForFullReplication())
 
@@ -356,7 +356,7 @@ func TestReliableIntentCleanup(t *testing.T) {
 				started            = timeutil.Now()
 			)
 			for {
-				result, err := storage.MVCCScan(ctx, store.Engine(), prefix, prefix.PrefixEnd(),
+				result, err := storage.MVCCScan(ctx, store.TODOEngine(), prefix, prefix.PrefixEnd(),
 					hlc.MaxTimestamp, storage.MVCCScanOptions{Inconsistent: true})
 				require.NoError(t, err)
 				intentCount := len(result.Intents)
@@ -389,7 +389,7 @@ func TestReliableIntentCleanup(t *testing.T) {
 			var txnEntry roachpb.Transaction
 			if !assert.Eventually(t, func() bool {
 				key := keys.TransactionKey(txnKey, txnID)
-				ok, err := storage.MVCCGetProto(ctx, store.Engine(), key, hlc.MaxTimestamp, &txnEntry,
+				ok, err := storage.MVCCGetProto(ctx, store.TODOEngine(), key, hlc.MaxTimestamp, &txnEntry,
 					storage.MVCCGetOptions{})
 				require.NoError(t, err)
 				return !ok

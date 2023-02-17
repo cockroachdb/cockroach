@@ -20,18 +20,19 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/multitenantcpu"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -46,7 +47,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -64,6 +64,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/lib/pq/oid"
 	"go.opentelemetry.io/otel/attribute"
 )
@@ -149,7 +150,7 @@ func (ex *connExecutor) execStmt(
 		// Cancel the session if the idle time exceeds the idle in session timeout.
 		ex.mu.IdleInSessionTimeout = timeout{time.AfterFunc(
 			ex.sessionData().IdleInSessionTimeout,
-			ex.cancelSession,
+			ex.CancelSession,
 		)}
 	}
 
@@ -162,7 +163,7 @@ func (ex *connExecutor) execStmt(
 			default:
 				ex.mu.IdleInTransactionSessionTimeout = timeout{time.AfterFunc(
 					ex.sessionData().IdleInTransactionSessionTimeout,
-					ex.cancelSession,
+					ex.CancelSession,
 				)}
 			}
 		}
@@ -398,7 +399,13 @@ func (ex *connExecutor) execStmtInOpenState(
 		switch e.Mode {
 		case tree.ExplainDebug:
 			telemetry.Inc(sqltelemetry.ExplainAnalyzeDebugUseCounter)
-			ih.SetOutputMode(explainAnalyzeDebugOutput, explain.Flags{})
+			flags := explain.MakeFlags(&e.ExplainOptions)
+			flags.Verbose = true
+			flags.ShowTypes = true
+			if ex.server.cfg.TestingKnobs.DeterministicExplain {
+				flags.Redact = explain.RedactAll
+			}
+			ih.SetOutputMode(explainAnalyzeDebugOutput, flags)
 
 		case tree.ExplainPlan:
 			telemetry.Inc(sqltelemetry.ExplainAnalyzeUseCounter)
@@ -483,6 +490,7 @@ func (ex *connExecutor) execStmtInOpenState(
 				ast,
 				sql,
 				res,
+				retPayload,
 				retErr,
 			)
 		}()
@@ -712,11 +720,10 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.stmt = stmt
 	p.cancelChecker.Reset(ctx)
 
-	// Auto-commit is disallowed during statement execution, if we previously executed any DDL.
-	// This is because may potentially create jobs and do other operations rather than
-	// a KV commit. Insteadand carry out any extra operations needed for DDL.he auto-connection executor will commit after this statement,
-	// in this scenario.
-	// This prevents commit during statement execution, but the connection executor,
+	// Auto-commit is disallowed during statement execution if we previously
+	// executed any DDL. This is because may potentially create jobs and do other
+	// operations rather than a KV commit.
+	// This prevents commit during statement execution, but the conn_executor
 	// will still commit this transaction after this statement executes.
 	p.autoCommit = canAutoCommit &&
 		!ex.server.cfg.TestingKnobs.DisableAutoCommitDuringExec && ex.extraTxnState.numDDL == 0
@@ -803,7 +810,10 @@ func (ex *connExecutor) handleAOST(ctx context.Context, stmt tree.Statement) err
 	if asOf == nil {
 		return nil
 	}
-	if ex.implicitTxn() {
+
+	// Implicit transactions can have multiple statements, so we need to check
+	// if one has already been executed.
+	if ex.implicitTxn() && !ex.extraTxnState.firstStmtExecuted {
 		if p.extendedEvalCtx.AsOfSystemTime == nil {
 			p.extendedEvalCtx.AsOfSystemTime = asOf
 			if !asOf.BoundedStaleness {
@@ -835,7 +845,7 @@ func (ex *connExecutor) handleAOST(ctx context.Context, stmt tree.Statement) err
 	}
 	// If we're in an explicit txn, we allow AOST but only if it matches with
 	// the transaction's timestamp. This is useful for running AOST statements
-	// using the InternalExecutor inside an external transaction; one might want
+	// using the Executor inside an external transaction; one might want
 	// to do that to force p.avoidLeasedDescriptors to be set below.
 	if asOf.BoundedStaleness {
 		return pgerror.Newf(
@@ -844,9 +854,11 @@ func (ex *connExecutor) handleAOST(ctx context.Context, stmt tree.Statement) err
 		)
 	}
 	if readTs := ex.state.getReadTimestamp(); asOf.Timestamp != readTs {
-		err = pgerror.Newf(pgcode.Syntax,
+		err = pgerror.Newf(pgcode.FeatureNotSupported,
 			"inconsistent AS OF SYSTEM TIME timestamp; expected: %s, got: %s", readTs, asOf.Timestamp)
-		err = errors.WithHint(err, "try SET TRANSACTION AS OF SYSTEM TIME")
+		if !ex.implicitTxn() {
+			err = errors.WithHint(err, "try SET TRANSACTION AS OF SYSTEM TIME")
+		}
 		return err
 	}
 	p.extendedEvalCtx.AsOfSystemTime = asOf
@@ -893,7 +905,7 @@ func (ex *connExecutor) checkDescriptorTwoVersionInvariant(ctx context.Context) 
 	return descs.CheckTwoVersionInvariant(
 		ctx,
 		ex.server.cfg.Clock,
-		ex.server.cfg.InternalExecutor,
+		ex.server.cfg.InternalDB.Executor(),
 		ex.extraTxnState.descCollection,
 		ex.state.mu.txn,
 		inRetryBackoff,
@@ -933,7 +945,7 @@ func (ex *connExecutor) commitSQLTransaction(
 			// Generating a forced retry error here, right after resetting the
 			// transaction is not exactly necessary, but it's a sound way to
 			// generate the only type of ClientVisibleRetryError we have.
-			err = ex.state.mu.txn.GenerateForcedRetryableError(ctx, err.Error())
+			err = ex.state.mu.txn.GenerateForcedRetryableError(ctx, redact.Sprint(err))
 		}
 		return ex.makeErrEvent(err, ast)
 	}
@@ -988,6 +1000,10 @@ func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) error 
 	ctx, sp := tracing.EnsureChildSpan(ctx, ex.server.cfg.AmbientCtx.Tracer, "commit sql txn")
 	defer sp.Finish()
 
+	if err := ex.extraTxnState.sqlCursors.closeAll(true /* errorOnWithHold */); err != nil {
+		return err
+	}
+
 	// We need to step the transaction before committing if it has stepping
 	// enabled. If it doesn't have stepping enabled, then we just set the
 	// stepping mode back to what it was.
@@ -1010,22 +1026,24 @@ func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) error 
 		}
 	}
 
-	if err := ex.extraTxnState.descCollection.ValidateUncommittedDescriptors(ctx, ex.state.mu.txn); err != nil {
-		return err
-	}
+	if ex.extraTxnState.descCollection.HasUncommittedDescriptors() {
+		if err := ex.extraTxnState.descCollection.ValidateUncommittedDescriptors(ctx, ex.state.mu.txn); err != nil {
+			return err
+		}
 
-	if err := descs.CheckSpanCountLimit(
-		ctx,
-		ex.extraTxnState.descCollection,
-		ex.server.cfg.SpanConfigSplitter,
-		ex.server.cfg.SpanConfigLimiter,
-		ex.state.mu.txn,
-	); err != nil {
-		return err
-	}
+		if err := descs.CheckSpanCountLimit(
+			ctx,
+			ex.extraTxnState.descCollection,
+			ex.server.cfg.SpanConfigSplitter,
+			ex.server.cfg.SpanConfigLimiter,
+			ex.state.mu.txn,
+		); err != nil {
+			return err
+		}
 
-	if err := ex.checkDescriptorTwoVersionInvariant(ctx); err != nil {
-		return err
+		if err := ex.checkDescriptorTwoVersionInvariant(ctx); err != nil {
+			return err
+		}
 	}
 
 	if err := ex.state.mu.txn.Commit(ctx); err != nil {
@@ -1046,22 +1064,23 @@ func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) error 
 // createJobs creates jobs for the records cached in schemaChangeJobRecords
 // during this transaction.
 func (ex *connExecutor) createJobs(ctx context.Context) error {
-	if len(ex.extraTxnState.schemaChangeJobRecords) == 0 {
+	if !ex.extraTxnState.jobs.hasAnyToCreate() {
 		return nil
 	}
 	var records []*jobs.Record
-	for _, record := range ex.extraTxnState.schemaChangeJobRecords {
-		records = append(records, record)
-	}
-	var jobIDs []jobspb.JobID
-	var err error
-	if err := ex.planner.WithInternalExecutor(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
-		jobIDs, err = ex.server.cfg.JobRegistry.CreateJobsWithTxn(ctx, ex.planner.Txn(), ie, records)
-		return err
+	if err := ex.extraTxnState.jobs.forEachToCreate(func(jobRecord *jobs.Record) error {
+		records = append(records, jobRecord)
+		return nil
 	}); err != nil {
 		return err
 	}
-	ex.planner.extendedEvalCtx.Jobs.add(jobIDs...)
+	jobIDs, err := ex.server.cfg.JobRegistry.CreateJobsWithTxn(
+		ctx, ex.planner.InternalSQLTxn(), records,
+	)
+	if err != nil {
+		return err
+	}
+	ex.planner.extendedEvalCtx.jobs.addCreatedJobID(jobIDs...)
 	return nil
 }
 
@@ -1070,6 +1089,9 @@ func (ex *connExecutor) createJobs(ctx context.Context) error {
 func (ex *connExecutor) rollbackSQLTransaction(
 	ctx context.Context, stmt tree.Statement,
 ) (fsm.Event, fsm.EventPayload) {
+	if err := ex.extraTxnState.sqlCursors.closeAll(false /* errorOnWithHold */); err != nil {
+		return ex.makeErrEvent(err, stmt)
+	}
 	if err := ex.state.mu.txn.Rollback(ctx); err != nil {
 		log.Warningf(ctx, "txn rollback failed: %s", err)
 	}
@@ -1139,23 +1161,19 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		res.DisableBuffering()
 	}
 
-	var stmtFingerprintID roachpb.StmtFingerprintID
+	var stmtFingerprintID appstatspb.StmtFingerprintID
 	var stats topLevelQueryStats
 	defer func() {
-		planner.maybeLogStatement(
-			ctx,
-			ex.executorType,
-			false, /* isCopy */
-			int(ex.state.mu.autoRetryCounter),
-			ex.extraTxnState.txnCounter,
-			res.RowsAffected(),
-			res.Err(),
-			ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived),
-			&ex.extraTxnState.hasAdminRoleCache,
-			ex.server.TelemetryLoggingMetrics,
-			stmtFingerprintID,
-			&stats,
-		)
+		var bulkJobId uint64
+		// Note that for bulk job query (IMPORT, BACKUP and RESTORE), we don't
+		// use this numRows entry. We emit the number of changed rows when the job
+		// completes. (see the usages of logutil.LogJobCompletion()).
+		nonBulkJobNumRows := res.RowsAffected()
+		switch planner.stmt.AST.(type) {
+		case *tree.Import, *tree.Restore, *tree.Backup:
+			bulkJobId = res.GetBulkJobId()
+		}
+		planner.maybeLogStatement(ctx, ex.executorType, false, int(ex.state.mu.autoRetryCounter), ex.extraTxnState.txnCounter, nonBulkJobNumRows, bulkJobId, res.Err(), ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived), &ex.extraTxnState.hasAdminRoleCache, ex.server.TelemetryLoggingMetrics, stmtFingerprintID, &stats)
 	}()
 
 	ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.PlannerEndLogicalPlan, timeutil.Now())
@@ -1178,7 +1196,8 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 
 	ex.sessionTracing.TracePlanCheckStart(ctx)
 	distributePlan := getPlanDistribution(
-		ctx, planner, planner.execCfg.NodeInfo.NodeID, ex.sessionData().DistSQLMode, planner.curPlan.main,
+		ctx, planner.Descriptors().HasUncommittedTypes(),
+		ex.sessionData().DistSQLMode, planner.curPlan.main,
 	)
 	ex.sessionTracing.TracePlanCheckEnd(ctx, nil, distributePlan.WillDistribute())
 
@@ -1565,6 +1584,13 @@ type topLevelQueryStats struct {
 	networkEgressEstimate int64
 }
 
+func (s *topLevelQueryStats) add(other *topLevelQueryStats) {
+	s.bytesRead += other.bytesRead
+	s.rowsRead += other.rowsRead
+	s.rowsWritten += other.rowsWritten
+	s.networkEgressEstimate += other.networkEgressEstimate
+}
+
 // execWithDistSQLEngine converts a plan to a distributed SQL physical plan and
 // runs it.
 // If an error is returned, the connection needs to stop processing queries.
@@ -1583,7 +1609,6 @@ func (ex *connExecutor) execWithDistSQLEngine(
 		planner.txn,
 		ex.server.cfg.Clock,
 		&ex.sessionTracing,
-		ex.server.cfg.ContentionRegistry,
 	)
 	recv.progressAtomic = progressAtomic
 	if ex.server.cfg.TestingKnobs.DistSQLReceiverPushCallbackFactory != nil {
@@ -1603,27 +1628,31 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	} else if planner.instrumentation.ShouldSaveFlows() {
 		planCtx.saveFlows = planCtx.getDefaultSaveFlowsFunc(ctx, planner, planComponentTypeMainQuery)
 	}
-	planCtx.traceMetadata = planner.instrumentation.traceMetadata
+	planCtx.associateNodeWithComponents = planner.instrumentation.getAssociateNodeWithComponentsFn()
 	planCtx.collectExecStats = planner.instrumentation.ShouldCollectExecStats()
 
-	var evalCtxFactory func() *extendedEvalContext
+	var evalCtxFactory func(usedConcurrently bool) *extendedEvalContext
 	if len(planner.curPlan.subqueryPlans) != 0 ||
 		len(planner.curPlan.cascades) != 0 ||
 		len(planner.curPlan.checkPlans) != 0 {
-		// The factory reuses the same object because the contexts are not used
-		// concurrently.
-		var factoryEvalCtx extendedEvalContext
-		ex.initEvalCtx(ctx, &factoryEvalCtx, planner)
-		evalCtxFactory = func() *extendedEvalContext {
-			ex.resetEvalCtx(&factoryEvalCtx, planner.txn, planner.ExtendedEvalContext().StmtTimestamp)
+		var serialEvalCtx extendedEvalContext
+		ex.initEvalCtx(ctx, &serialEvalCtx, planner)
+		evalCtxFactory = func(usedConcurrently bool) *extendedEvalContext {
+			// Reuse the same object if this factory is not used concurrently.
+			factoryEvalCtx := &serialEvalCtx
+			if usedConcurrently {
+				factoryEvalCtx = &extendedEvalContext{}
+				ex.initEvalCtx(ctx, factoryEvalCtx, planner)
+			}
+			ex.resetEvalCtx(factoryEvalCtx, planner.txn, planner.ExtendedEvalContext().StmtTimestamp)
 			factoryEvalCtx.Placeholders = &planner.semaCtx.Placeholders
 			factoryEvalCtx.Annotations = &planner.semaCtx.Annotations
 			factoryEvalCtx.SessionID = planner.ExtendedEvalContext().SessionID
-			return &factoryEvalCtx
+			return factoryEvalCtx
 		}
 	}
 	err := ex.server.cfg.DistSQLPlanner.PlanAndRunAll(ctx, evalCtx, planCtx, planner, recv, evalCtxFactory)
-	return *recv.stats, err
+	return recv.stats, err
 }
 
 // beginTransactionTimestampsAndReadMode computes the timestamps and
@@ -2016,7 +2045,6 @@ func (ex *connExecutor) runShowCompletions(
 ) error {
 	res.SetColumns(ctx, colinfo.ShowCompletionsColumns)
 	log.Warningf(ctx, "COMPLETION GENERATOR FOR: %+v", *n)
-	ie := ex.server.cfg.InternalExecutor
 	sd := ex.planner.SessionData()
 	override := sessiondata.InternalExecutorOverride{
 		SearchPath: &sd.SearchPath,
@@ -2028,12 +2056,12 @@ func (ex *connExecutor) runShowCompletions(
 	//
 	// TODO(janexing): better bind the internal executor with the txn.
 	var txn *kv.Txn
+	var ie isql.Executor
 	if _, ok := ex.machine.CurState().(stateOpen); ok {
-		txn = func() *kv.Txn {
-			ex.state.mu.RLock()
-			defer ex.state.mu.RUnlock()
-			return ex.state.mu.txn
-		}()
+		ie = ex.planner.InternalSQLTxn()
+		txn = ex.planner.Txn()
+	} else {
+		ie = ex.server.cfg.InternalDB.Executor()
 	}
 	queryIterFn := func(ctx context.Context, opName string, stmt string, args ...interface{}) (eval.InternalRows, error) {
 		return ie.QueryIteratorEx(ctx, opName, txn,
@@ -2281,7 +2309,7 @@ func (ex *connExecutor) onTxnFinish(ctx context.Context, ev txnEvent) {
 		implicit := ex.extraTxnState.txnFinishClosure.implicit
 		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionEndExecTransaction, timeutil.Now())
 		transactionFingerprintID :=
-			roachpb.TransactionFingerprintID(ex.extraTxnState.transactionStatementsHash.Sum())
+			appstatspb.TransactionFingerprintID(ex.extraTxnState.transactionStatementsHash.Sum())
 
 		err := ex.txnFingerprintIDCache.Add(transactionFingerprintID)
 		if err != nil {
@@ -2340,7 +2368,7 @@ func (ex *connExecutor) recordTransactionStart(txnID uuid.UUID) {
 	// execution.
 	ex.txnIDCacheWriter.Record(contentionpb.ResolvedTxnID{
 		TxnID:            txnID,
-		TxnFingerprintID: roachpb.InvalidTransactionFingerprintID,
+		TxnFingerprintID: appstatspb.InvalidTransactionFingerprintID,
 	})
 
 	ex.state.mu.RLock()
@@ -2382,7 +2410,7 @@ func (ex *connExecutor) recordTransactionStart(txnID uuid.UUID) {
 
 func (ex *connExecutor) recordTransactionFinish(
 	ctx context.Context,
-	transactionFingerprintID roachpb.TransactionFingerprintID,
+	transactionFingerprintID appstatspb.TransactionFingerprintID,
 	ev txnEvent,
 	implicit bool,
 	txnStart time.Time,

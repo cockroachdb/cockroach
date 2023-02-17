@@ -11,13 +11,16 @@
 package tabledesc
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -149,7 +152,7 @@ func (tdb *tableDescriptorBuilder) RunPostDeserializationChanges() (err error) {
 
 // RunRestoreChanges implements the catalog.DescriptorBuilder interface.
 func (tdb *tableDescriptorBuilder) RunRestoreChanges(
-	descLookupFn func(id descpb.ID) catalog.Descriptor,
+	version clusterversion.ClusterVersion, descLookupFn func(id descpb.ID) catalog.Descriptor,
 ) (err error) {
 	// Upgrade FK representation
 	upgradedFK, err := maybeUpgradeForeignKeyRepresentation(
@@ -171,6 +174,11 @@ func (tdb *tableDescriptorBuilder) RunRestoreChanges(
 	}
 	if upgradedSequenceReference {
 		tdb.changes.Add(catalog.UpgradedSequenceReference)
+	}
+
+	// Upgrade the declarative schema changer state
+	if scpb.MigrateDescriptorState(version, tdb.maybeModified.DeclarativeSchemaChangerState) {
+		tdb.changes.Add(catalog.UpgradedDeclarativeSchemaChangerState)
 	}
 
 	return err
@@ -421,7 +429,7 @@ func maybeUpgradeForeignKeyRepOnIndex(
 			return false, err
 		}
 		if tbl, ok := otherUnupgradedTables[ref.Table]; ok {
-			referencedIndex, err := tbl.FindIndexWithID(ref.Index)
+			referencedIndex, err := catalog.MustFindIndexByID(tbl, ref.Index)
 			if err != nil {
 				return false, err
 			}
@@ -451,7 +459,7 @@ func maybeUpgradeForeignKeyRepOnIndex(
 			return false, err
 		}
 		if otherTable, ok := otherUnupgradedTables[ref.Table]; ok {
-			originIndexI, err := otherTable.FindIndexWithID(ref.Index)
+			originIndexI, err := catalog.MustFindIndexByID(otherTable, ref.Index)
 			if err != nil {
 				return false, err
 			}
@@ -591,7 +599,7 @@ func upgradeToFamilyFormatVersion(desc *descpb.TableDescriptor) {
 // version PrimaryIndexWithStoredColumnsVersion whenever possible.
 func maybeUpgradePrimaryIndexFormatVersion(desc *descpb.TableDescriptor) (hasChanged bool) {
 	// Always set the correct encoding type for the primary index.
-	desc.PrimaryIndex.EncodingType = descpb.PrimaryIndexEncoding
+	desc.PrimaryIndex.EncodingType = catenumpb.PrimaryIndexEncoding
 	// Check if primary index needs updating.
 	switch desc.PrimaryIndex.Version {
 	case descpb.PrimaryIndexWithStoredColumnsVersion:
@@ -684,10 +692,10 @@ func maybeUpgradeNamespaceName(d *descpb.TableDescriptor) (hasChanged bool) {
 // maybeFixPrimaryIndexEncoding ensures that the index descriptor for a primary
 // index has the correct encoding type set.
 func maybeFixPrimaryIndexEncoding(idx *descpb.IndexDescriptor) (hasChanged bool) {
-	if idx.EncodingType == descpb.PrimaryIndexEncoding {
+	if idx.EncodingType == catenumpb.PrimaryIndexEncoding {
 		return false
 	}
-	idx.EncodingType = descpb.PrimaryIndexEncoding
+	idx.EncodingType = catenumpb.PrimaryIndexEncoding
 	return true
 }
 

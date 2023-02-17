@@ -62,6 +62,18 @@ type Flags struct {
 	// cases where we don't need them (like SHOW variants), to avoid polluting the
 	// stats cache.
 	NoTableStats bool
+
+	// IncludeOfflineTables considers offline tables (e.g. being imported). This is
+	// useful in cases where we are running a statement like `SHOW RANGES` for
+	// which we also want to show valid ranges when a table is being imported
+	// (offline).
+	IncludeOfflineTables bool
+
+	// IncludeNonActiveIndexes considers non-active indexes (e.g. being
+	// added). This is useful in cases where we are running a statement
+	// like `SHOW RANGES` for which we also want to show valid ranges
+	// when a table is being imported (offline).
+	IncludeNonActiveIndexes bool
 }
 
 // Catalog is an interface to a database catalog, exposing only the information
@@ -143,7 +155,7 @@ type Catalog interface {
 	) (*tree.ResolvedFunctionDefinition, error)
 
 	// ResolveFunctionByOID resolves a function overload by OID.
-	ResolveFunctionByOID(ctx context.Context, oid oid.Oid) (string, *tree.Overload, error)
+	ResolveFunctionByOID(ctx context.Context, oid oid.Oid) (*tree.FunctionName, *tree.Overload, error)
 
 	// CheckPrivilege verifies that the current user has the given privilege on
 	// the given catalog object. If not, then CheckPrivilege returns an error.

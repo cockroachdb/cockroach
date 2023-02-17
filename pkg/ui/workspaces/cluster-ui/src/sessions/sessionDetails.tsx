@@ -26,7 +26,7 @@ import { SummaryCard, SummaryCardItem } from "../summaryCard";
 import LoadingError from "../sqlActivity/errorComponent";
 
 import { DurationToMomentDuration, TimestampToMoment } from "src/util/convert";
-import { Bytes, DATE_FORMAT } from "src/util/format";
+import { Bytes, DATE_FORMAT, Count } from "src/util/format";
 import { Col, Row } from "antd";
 import "antd/lib/col/style";
 import "antd/lib/row/style";
@@ -100,10 +100,6 @@ export const MemoryUsageItem: React.FC<{
 export class SessionDetails extends React.Component<SessionDetailsProps> {
   terminateSessionRef: React.RefObject<TerminateSessionModalRef>;
   terminateQueryRef: React.RefObject<TerminateQueryModalRef>;
-  static defaultProps = {
-    uiConfig: { showGatewayNodeLink: true },
-    isTenant: false,
-  };
 
   componentDidMount(): void {
     this.props.refreshNodes();
@@ -386,7 +382,7 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
                 <SummaryCardItem
                   label={"Gateway Node"}
                   value={
-                    this.props.uiConfig.showGatewayNodeLink ? (
+                    this.props.uiConfig?.showGatewayNodeLink ? (
                       <div className={cx("session-details-link")}>
                         <NodeLink
                           nodeId={session.node_id.toString()}
@@ -429,7 +425,7 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
               <SummaryCardItem label={"User Name"} value={session.username} />
               <SummaryCardItem
                 label="Transaction Count"
-                value={session.num_txns_executed}
+                value={Count(session.num_txns_executed)}
               />
             </SummaryCard>
           </Col>

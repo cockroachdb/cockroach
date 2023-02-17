@@ -134,8 +134,8 @@ func (r *Replica) SendWithWriteBytes(
 
 	// Record the CPU time processing the request for this replica. This is
 	// recorded regardless of errors that are encountered.
-	defer r.MeasureReqCPUNanos(grunning.Time())
-
+	startCPU := grunning.Time()
+	defer r.MeasureReqCPUNanos(startCPU)
 	// Record summary throughput information about the batch request for
 	// accounting.
 	r.recordBatchRequestLoad(ctx, ba)
@@ -201,12 +201,14 @@ func (r *Replica) SendWithWriteBytes(
 		}
 	}
 
-	// Return range information if it was requested. Note that we don't return it
-	// on errors because the code doesn't currently support returning both a br
-	// and a pErr here. Also, some errors (e.g. NotLeaseholderError) have custom
-	// ways of returning range info.
 	if pErr == nil {
+		// Return range information if it was requested. Note that we don't return it
+		// on errors because the code doesn't currently support returning both a br
+		// and a pErr here. Also, some errors (e.g. NotLeaseholderError) have custom
+		// ways of returning range info.
 		r.maybeAddRangeInfoToResponse(ctx, ba, br)
+		// Handle load-based splitting, if necessary.
+		r.recordBatchForLoadBasedSplitting(ctx, ba, br, int(grunning.Difference(startCPU, grunning.Time())))
 	}
 
 	r.recordRequestWriteBytes(writeBytes)
@@ -405,17 +407,6 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 	var requestEvalKind concurrency.RequestEvalKind
 	var g *concurrency.Guard
 	defer func() {
-		// Handle load-based splitting, if necessary.
-		if pErr == nil && br != nil {
-			if len(ba.Requests) != len(br.Responses) {
-				log.KvDistribution.Errorf(ctx,
-					"Requests and responses should be equal lengths: # of requests = %d, # of responses = %d",
-					len(ba.Requests), len(br.Responses))
-			} else {
-				r.recordBatchForLoadBasedSplitting(ctx, ba, br)
-			}
-		}
-
 		// NB: wrapped to delay g evaluation to its value when returning.
 		if g != nil {
 			r.concMgr.FinishReq(g)
@@ -496,6 +487,8 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			// Propagate error.
 			return nil, nil, pErr
 		}
+
+		log.VErrEventf(ctx, 2, "concurrency retry error: %s", pErr)
 
 		// The batch execution func returned a server-side concurrency retry error.
 		// It may have either handed back ownership of the concurrency guard without
@@ -1005,8 +998,6 @@ func (r *Replica) executeAdminBatch(
 	return br, nil
 }
 
-// recordBatchRequestLoad records the load information about a batch request issued
-// against this replica.
 func (r *Replica) recordBatchRequestLoad(ctx context.Context, ba *roachpb.BatchRequest) {
 	if r.loadStats == nil {
 		log.VEventf(
@@ -1023,8 +1014,8 @@ func (r *Replica) recordBatchRequestLoad(ctx context.Context, ba *roachpb.BatchR
 	// calculation.
 	adjustedQPS := r.getBatchRequestQPS(ctx, ba)
 
-	r.loadStats.batchRequests.RecordCount(adjustedQPS, ba.Header.GatewayNodeID)
-	r.loadStats.requests.RecordCount(float64(len(ba.Requests)), ba.Header.GatewayNodeID)
+	r.loadStats.RecordBatchRequests(adjustedQPS, ba.Header.GatewayNodeID)
+	r.loadStats.RecordRequests(float64(len(ba.Requests)))
 }
 
 // getBatchRequestQPS calculates the cost estimation of a BatchRequest. The
@@ -1065,10 +1056,7 @@ func (r *Replica) recordRequestWriteBytes(writeBytes *kvadmission.StoreWriteByte
 	}
 	// TODO(kvoli): Consider recording the ingested bytes (AddSST) separately
 	// to the write bytes.
-	r.loadStats.writeBytes.RecordCount(
-		float64(writeBytes.WriteBytes+writeBytes.IngestedBytes),
-		0,
-	)
+	r.loadStats.RecordWriteBytes(float64(writeBytes.WriteBytes + writeBytes.IngestedBytes))
 }
 
 // checkBatchRequest verifies BatchRequest validity requirements. In particular,

@@ -75,6 +75,7 @@ func newPebbleTempEngine(
 	}
 
 	p, err := Open(ctx, loc,
+		tempStorage.Settings,
 		CacheSize(cacheSize),
 		func(cfg *engineConfig) error {
 			cfg.UseFileRegistry = storeSpec.UseFileRegistry
@@ -87,6 +88,7 @@ func newPebbleTempEngine(
 			cfg.Opts.Comparer = pebble.DefaultComparer
 			cfg.Opts.DisableWAL = true
 			cfg.Opts.Experimental.KeyValidationFunc = nil
+			cfg.Opts.BlockPropertyCollectors = nil
 			return nil
 		},
 	)

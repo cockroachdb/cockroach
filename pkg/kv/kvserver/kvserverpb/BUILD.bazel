@@ -34,6 +34,7 @@ proto_library(
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb:kvflowcontrolpb_proto",
         "//pkg/kv/kvserver/liveness/livenesspb:livenesspb_proto",
         "//pkg/kv/kvserver/readsummary/rspb:rspb_proto",
         "//pkg/roachpb:roachpb_proto",
@@ -55,6 +56,7 @@ go_proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvserver/closedts/ctpb",  # keep
+        "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb",
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/kv/kvserver/readsummary/rspb",
         "//pkg/roachpb",

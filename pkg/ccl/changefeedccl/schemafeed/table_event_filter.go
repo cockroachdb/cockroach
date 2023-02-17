@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
 
@@ -199,7 +199,7 @@ func droppedColumnIsWatched(e TableEvent, targets changefeedbase.Targets) (bool,
 		return true, nil
 	}
 
-	var watchedColumnIDs util.FastIntSet
+	var watchedColumnIDs intsets.Fast
 	if err := e.Before.ForeachFamily(func(family *descpb.ColumnFamilyDescriptor) error {
 		if _, ok := specifiedColumnFamiliesForTable[family.Name]; ok {
 			for _, columnID := range family.ColumnIDs {
@@ -235,11 +235,11 @@ func addedColumnIsWatched(e TableEvent, targets changefeedbase.Targets) (bool, e
 		return false, nil
 	}
 
-	var beforeCols util.FastIntSet
+	var beforeCols intsets.Fast
 	for _, col := range e.Before.VisibleColumns() {
 		beforeCols.Add(int(col.GetID()))
 	}
-	var addedCols util.FastIntSet
+	var addedCols intsets.Fast
 	for _, col := range e.After.VisibleColumns() {
 		colID := int(col.GetID())
 		if !beforeCols.Contains(colID) {
@@ -358,7 +358,7 @@ func hasNewPrimaryIndexWithNoVisibleColumnChanges(
 	) (cols catalog.TableColSet) {
 
 		// Generate a set of watched columns if the targets contains specific columns.
-		var targetedCols util.FastIntSet
+		var targetedCols intsets.Fast
 		if hasSpecificColumnTargets {
 			err := tab.ForeachFamily(func(fam *descpb.ColumnFamilyDescriptor) error {
 				if _, ok := targetFamilies[fam.Name]; ok {
@@ -375,7 +375,7 @@ func hasNewPrimaryIndexWithNoVisibleColumnChanges(
 
 		for i, n := 0, idx.NumPrimaryStoredColumns(); i < n; i++ {
 			colID := idx.GetStoredColumnID(i)
-			col, _ := tab.FindColumnWithID(colID)
+			col := catalog.FindColumnByID(tab, colID)
 
 			// If specific columns are targeted, then only consider the column if it is targeted.
 			if col.Public() && (!hasSpecificColumnTargets || targetedCols.Contains(int(col.GetID()))) {

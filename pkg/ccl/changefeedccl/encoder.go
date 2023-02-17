@@ -61,3 +61,10 @@ func getEncoder(
 		return nil, errors.AssertionFailedf(`unknown format: %s`, opts.Format)
 	}
 }
+
+// timestampToString converts an internal timestamp to the string form used in
+// all encoders. This could be made more efficient. And/or it could be configurable
+// to include the Synthetic flag when present, but that's unlikely to be needed.
+func timestampToString(t hlc.Timestamp) string {
+	return t.WithSynthetic(false).AsOfSystemTime()
+}

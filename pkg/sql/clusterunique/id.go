@@ -11,6 +11,8 @@
 package clusterunique
 
 import (
+	"encoding/json"
+
 	"github.com/biogo/store/llrb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -72,6 +74,27 @@ func (id *ID) Unmarshal(data []byte) error {
 		return errors.Errorf("input data %s for uint128 must be 16 bytes", data)
 	}
 	id.Uint128 = uint128.FromBytes(data)
+	return nil
+}
+
+// MarshalJSON returns the JSON encoding of u.
+func (id ID) MarshalJSON() ([]byte, error) {
+	return json.Marshal(id.String())
+}
+
+// UnmarshalJSON unmarshal the JSON encoded data into u.
+func (id *ID) UnmarshalJSON(data []byte) error {
+	var uint128String string
+	if err := json.Unmarshal(data, &uint128String); err != nil {
+		return err
+	}
+
+	uint128, err := uint128.FromString(uint128String)
+	if err != nil {
+		return err
+	}
+
+	id.Uint128 = uint128
 	return nil
 }
 

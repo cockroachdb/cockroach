@@ -103,7 +103,7 @@ func (ct *cdcTester) startStatsCollection() func() {
 	startTime := timeutil.Now()
 	return func() {
 		endTime := timeutil.Now()
-		err := statsCollector.Exporter().Export(ct.ctx, ct.cluster, ct.t,
+		_, err := statsCollector.Exporter().Export(ct.ctx, ct.cluster, ct.t, false, /* dryRun */
 			startTime,
 			endTime,
 			[]clusterstats.AggQuery{sqlServiceLatencyAgg, changefeedThroughputAgg, cpuUsageAgg},
@@ -504,9 +504,7 @@ func newCDCTester(ctx context.Context, t test.Test, c cluster.Cluster) cdcTester
 		t.L().Printf("failed to set cluster setting: %s", err)
 	}
 
-	if !t.SkipInit() {
-		tester.startGrafana()
-	}
+	tester.startGrafana()
 	return tester
 }
 
@@ -520,15 +518,19 @@ func (ct *cdcTester) startGrafana() {
 
 	ct.promCfg = cfg
 
-	err := ct.cluster.StartGrafana(ct.ctx, ct.t.L(), cfg)
-	if err != nil {
-		ct.t.Errorf("error starting prometheus/grafana: %s", err)
+	if !ct.t.SkipInit() {
+		err := ct.cluster.StartGrafana(ct.ctx, ct.t.L(), cfg)
+		if err != nil {
+			ct.t.Errorf("error starting prometheus/grafana: %s", err)
+		}
+		nodeURLs, err := ct.cluster.ExternalIP(ct.ctx, ct.t.L(), ct.workloadNode)
+		if err != nil {
+			ct.t.Errorf("error getting grafana node external ip: %s", err)
+		}
+		ct.t.Status(fmt.Sprintf("started grafana at http://%s:3000/d/928XNlN4k/basic?from=now-15m&to=now", nodeURLs[0]))
+	} else {
+		ct.t.Status("skipping grafana installation")
 	}
-	nodeURLs, err := ct.cluster.ExternalIP(ct.ctx, ct.t.L(), ct.workloadNode)
-	if err != nil {
-		ct.t.Errorf("error getting grafana node external ip: %s", err)
-	}
-	ct.t.Status(fmt.Sprintf("started grafana at http://%s:3000/d/928XNlN4k/basic?from=now-15m&to=now", nodeURLs[0]))
 }
 
 type latencyTargets struct {
@@ -905,7 +907,7 @@ func registerCDC(r registry.Registry) {
 
 			exportStatsFile := ct.startStatsCollection()
 			feed := ct.newChangefeed(feedArgs{
-				sinkType: kafkaSink,
+				sinkType: cloudStorageSink,
 				targets:  allTpccTargets,
 				opts:     map[string]string{"initial_scan": "'only'"},
 			})
@@ -1940,15 +1942,17 @@ type ledgerWorkload struct {
 }
 
 func (lw *ledgerWorkload) install(ctx context.Context, c cluster.Cluster) {
+	// TODO(#94136): remove --data-loader=INSERT
 	c.Run(ctx, lw.workloadNodes.RandNode(), fmt.Sprintf(
-		`./workload init ledger {pgurl%s}`,
+		`./workload init ledger --data-loader=INSERT {pgurl%s}`,
 		lw.sqlNodes.RandNode(),
 	))
 }
 
 func (lw *ledgerWorkload) run(ctx context.Context, c cluster.Cluster, workloadDuration string) {
+	// TODO(#94136): remove --data-loader=INSERT
 	c.Run(ctx, lw.workloadNodes, fmt.Sprintf(
-		`./workload run ledger --mix=balance=0,withdrawal=50,deposit=50,reversal=0 {pgurl%s} --duration=%s`,
+		`./workload run ledger --data-loader=INSERT --mix=balance=0,withdrawal=50,deposit=50,reversal=0 {pgurl%s} --duration=%s`,
 		lw.sqlNodes,
 		workloadDuration,
 	))

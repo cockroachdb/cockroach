@@ -15,11 +15,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/types"
@@ -41,10 +39,10 @@ const retryFailedJobAfter = time.Minute
 // ExecuteJob implements ScheduledJobExecutor interface.
 func (e *inlineScheduledJobExecutor) ExecuteJob(
 	ctx context.Context,
+	txn isql.Txn,
 	cfg *scheduledjobs.JobExecutionConfig,
-	_ scheduledjobs.JobSchedulerEnv,
+	env scheduledjobs.JobSchedulerEnv,
 	schedule *ScheduledJob,
-	txn *kv.Txn,
 ) error {
 	sqlArgs := &jobspb.SqlStatementExecutionArg{}
 
@@ -56,7 +54,7 @@ func (e *inlineScheduledJobExecutor) ExecuteJob(
 	// to capture execution traces, or some similar debug information and save that.
 	// Also, performing this under the same transaction as the scan loop is not ideal
 	// since a single failure would result in rollback for all of the changes.
-	_, err := cfg.InternalExecutor.ExecEx(ctx, "inline-exec", txn,
+	_, err := txn.ExecEx(ctx, "inline-exec", txn.KV(),
 		sessiondata.RootUserSessionDataOverride,
 		sqlArgs.Statement,
 	)
@@ -72,13 +70,12 @@ func (e *inlineScheduledJobExecutor) ExecuteJob(
 // NotifyJobTermination implements ScheduledJobExecutor interface.
 func (e *inlineScheduledJobExecutor) NotifyJobTermination(
 	ctx context.Context,
+	txn isql.Txn,
 	jobID jobspb.JobID,
 	jobStatus Status,
-	_ jobspb.Details,
+	details jobspb.Details,
 	env scheduledjobs.JobSchedulerEnv,
 	schedule *ScheduledJob,
-	ex sqlutil.InternalExecutor,
-	txn *kv.Txn,
 ) error {
 	// For now, only interested in failed status.
 	if jobStatus == StatusFailed {
@@ -93,12 +90,7 @@ func (e *inlineScheduledJobExecutor) Metrics() metric.Struct {
 }
 
 func (e *inlineScheduledJobExecutor) GetCreateScheduleStatement(
-	ctx context.Context,
-	env scheduledjobs.JobSchedulerEnv,
-	txn *kv.Txn,
-	descsCol *descs.Collection,
-	sj *ScheduledJob,
-	ex sqlutil.InternalExecutor,
+	ctx context.Context, txn isql.Txn, env scheduledjobs.JobSchedulerEnv, sj *ScheduledJob,
 ) (string, error) {
 	return "", errors.AssertionFailedf("unimplemented method: 'GetCreateScheduleStatement'")
 }

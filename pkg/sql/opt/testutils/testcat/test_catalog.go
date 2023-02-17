@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -695,6 +694,10 @@ type Table struct {
 	partitionBy *tree.PartitionBy
 
 	multiRegion bool
+
+	implicitRBRIndexElem *tree.IndexElem
+
+	homeRegion string
 }
 
 var _ cat.Table = &Table{}
@@ -854,12 +857,15 @@ func (tt *Table) Zone() cat.Zone {
 
 // IsPartitionAllBy is part of the cat.Table interface.
 func (tt *Table) IsPartitionAllBy() bool {
-	return false
+	return tt.implicitRBRIndexElem != nil
 }
 
 // HomeRegion is part of the cat.Table interface.
 func (tt *Table) HomeRegion() (region string, ok bool) {
-	return "", false
+	if tt.homeRegion == "" {
+		return "", false
+	}
+	return tt.homeRegion, true
 }
 
 // IsGlobalTable is part of the cat.Table interface.
@@ -869,7 +875,7 @@ func (tt *Table) IsGlobalTable() bool {
 
 // IsRegionalByRow is part of the cat.Table interface.
 func (tt *Table) IsRegionalByRow() bool {
-	return false
+	return tt.implicitRBRIndexElem != nil
 }
 
 // IsMultiregion is part of the cat.Table interface.
@@ -879,7 +885,10 @@ func (tt *Table) IsMultiregion() bool {
 
 // HomeRegionColName is part of the cat.Table interface.
 func (tt *Table) HomeRegionColName() (colName string, ok bool) {
-	return "", false
+	if !tt.IsRegionalByRow() {
+		return "", false
+	}
+	return string(tree.RegionalByRowRegionDefaultColName), true
 }
 
 // GetDatabaseID is part of the cat.Table interface.
@@ -939,11 +948,7 @@ func (tt *Table) CollectTypes(ord int) (descpb.IDs, error) {
 
 	ids := make(descpb.IDs, 0, len(visitor.OIDs))
 	for collectedOid := range visitor.OIDs {
-		id, err := typedesc.UserDefinedTypeOIDToID(collectedOid)
-		if err != nil {
-			return nil, err
-		}
-		ids = append(ids, id)
+		ids = append(ids, typedesc.UserDefinedTypeOIDToID(collectedOid))
 	}
 	return ids, nil
 }
@@ -1008,6 +1013,10 @@ type Index struct {
 
 	// version is the index descriptor version of the index.
 	version descpb.IndexDescriptorVersion
+
+	// numImplicitPartitioningColumns is the number of implicit partitioning
+	// columns defined in this index.
+	numImplicitPartitioningColumns int
 }
 
 // ID is part of the cat.Index interface.
@@ -1105,12 +1114,12 @@ func (ti *Index) Predicate() (string, bool) {
 
 // ImplicitColumnCount is part of the cat.Index interface.
 func (ti *Index) ImplicitColumnCount() int {
-	return 0
+	return ti.numImplicitPartitioningColumns
 }
 
 // ImplicitPartitioningColumnCount is part of the cat.Index interface.
 func (ti *Index) ImplicitPartitioningColumnCount() int {
-	return 0
+	return ti.numImplicitPartitioningColumns
 }
 
 // GeoConfig is part of the cat.Index interface.
@@ -1284,9 +1293,24 @@ func (ts *TableStat) HistogramType() *types.T {
 	return ts.histogramType
 }
 
+// IsPartial is part of the cat.TableStatistic interface.
+func (ts *TableStat) IsPartial() bool {
+	return ts.js.IsPartial()
+}
+
+// IsMerged is part of the cat.TableStatistic interface.
+func (ts *TableStat) IsMerged() bool {
+	return ts.js.IsMerged()
+}
+
 // IsForecast is part of the cat.TableStatistic interface.
 func (ts *TableStat) IsForecast() bool {
-	return ts.js.Name == jobspb.ForecastStatsName
+	return ts.js.IsForecast()
+}
+
+// IsAuto is part of the cat.TableStatistic interface.
+func (ts *TableStat) IsAuto() bool {
+	return ts.js.IsAuto()
 }
 
 // TableStats is a slice of TableStat pointers.

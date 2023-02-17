@@ -56,6 +56,9 @@ type DemoCluster interface {
 
 	// SetSimulatedLatency is used to enable or disable simulated latency.
 	SetSimulatedLatency(on bool)
+
+	// TenantName returns the tenant name that the default connection is for.
+	TenantName() string
 }
 
 // EnableEnterprise is not implemented here in order to keep OSS/BSL builds successful.

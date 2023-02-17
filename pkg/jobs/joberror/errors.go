@@ -57,9 +57,9 @@ func IsPermanentBulkJobError(err error) bool {
 	if err == nil {
 		return false
 	}
-
 	return !IsDistSQLRetryableError(err) &&
 		!grpcutil.IsClosedConnection(err) &&
+		!flowinfra.IsFlowRetryableError(err) &&
 		!flowinfra.IsNoInboundStreamConnectionError(err) &&
 		!kvcoord.IsSendError(err) &&
 		!isBreakerOpenError(err) &&

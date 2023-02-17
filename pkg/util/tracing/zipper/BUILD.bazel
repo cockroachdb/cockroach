@@ -7,8 +7,8 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/util/tracing/zipper",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/sql/isql",
         "//pkg/sql/sem/tree",
-        "//pkg/sql/sqlutil",
         "//pkg/util/log",
         "//pkg/util/memzipper",
         "//pkg/util/tracing/tracingpb",

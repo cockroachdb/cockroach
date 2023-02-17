@@ -23,9 +23,15 @@ import {
 } from "../util";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { IndexDetailsPageData } from "./indexDetailsPage";
-import { selectIsTenant } from "../store/uiConfig";
+import {
+  selectHasViewActivityRedactedRole,
+  selectHasAdminRole,
+  selectIsTenant,
+} from "../store/uiConfig";
 import { BreadcrumbItem } from "../breadcrumbs";
 import { RecommendationType as RecType } from "./indexDetailsPage";
+import { nodeRegionsByIDSelector } from "../store/nodes";
+import { selectTimeScale } from "src/store/utils/selectors";
 const { RecommendationType } = cockroach.sql.IndexRecommendation;
 
 export const selectIndexDetails = createSelector(
@@ -39,7 +45,22 @@ export const selectIndexDetails = createSelector(
     getMatchParamByName(props.match, indexNameAttr),
   (state: AppState) => state.adminUI.indexStats.cachedData,
   (state: AppState) => selectIsTenant(state),
-  (database, schema, table, index, indexStats): IndexDetailsPageData => {
+  (state: AppState) => selectHasViewActivityRedactedRole(state),
+  (state: AppState) => nodeRegionsByIDSelector(state),
+  (state: AppState) => selectHasAdminRole(state),
+  (state: AppState) => selectTimeScale(state),
+  (
+    database,
+    schema,
+    table,
+    index,
+    indexStats,
+    isTenant,
+    hasViewActivityRedactedRole,
+    nodeRegions,
+    hasAdminRole,
+    timeScale,
+  ): IndexDetailsPageData => {
     const stats = indexStats[generateTableID(database, table)];
     const details = stats?.data?.statistics.filter(
       stat => stat.index_name === index, // index names must be unique for a table
@@ -70,10 +91,17 @@ export const selectIndexDetails = createSelector(
         table,
         index,
       ),
+      isTenant: isTenant,
+      timeScale: timeScale,
+      hasViewActivityRedactedRole: hasViewActivityRedactedRole,
+      hasAdminRole: hasAdminRole,
+      nodeRegions: nodeRegions,
       details: {
         loading: !!stats?.inFlight,
         loaded: !!stats?.valid,
         createStatement: details?.create_statement || "",
+        tableID: details?.statistics.key.table_id.toString(),
+        indexID: details?.statistics.key.index_id.toString(),
         totalReads:
           longToInt(details?.statistics?.stats?.total_read_count) || 0,
         lastRead: TimestampToMoment(details?.statistics?.stats?.last_read),

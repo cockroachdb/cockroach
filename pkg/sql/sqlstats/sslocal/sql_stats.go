@@ -67,7 +67,8 @@ type SQLStats struct {
 
 	knobs *sqlstats.TestingKnobs
 
-	insights insights.WriterProvider
+	insights           insights.WriterProvider
+	latencyInformation insights.LatencyInformation
 }
 
 func newSQLStats(
@@ -75,11 +76,12 @@ func newSQLStats(
 	uniqueStmtFingerprintLimit *settings.IntSetting,
 	uniqueTxnFingerprintLimit *settings.IntSetting,
 	curMemBytesCount *metric.Gauge,
-	maxMemBytesHist *metric.Histogram,
+	maxMemBytesHist metric.IHistogram,
 	insightsWriter insights.WriterProvider,
 	parentMon *mon.BytesMonitor,
 	flushTarget Sink,
 	knobs *sqlstats.TestingKnobs,
+	latencyInformation insights.LatencyInformation,
 ) *SQLStats {
 	monitor := mon.NewMonitor(
 		"SQLStats",
@@ -97,6 +99,7 @@ func newSQLStats(
 		flushTarget:                flushTarget,
 		knobs:                      knobs,
 		insights:                   insightsWriter,
+		latencyInformation:         latencyInformation,
 	}
 	s.mu.apps = make(map[string]*ssmemstorage.Container)
 	s.mu.mon = monitor
@@ -105,7 +108,7 @@ func newSQLStats(
 }
 
 // GetTotalFingerprintCount returns total number of unique statement and
-// transaction fingerprints stored in the currnet SQLStats.
+// transaction fingerprints stored in the current SQLStats.
 func (s *SQLStats) GetTotalFingerprintCount() int64 {
 	return atomic.LoadInt64(&s.atomic.uniqueStmtFingerprintCount) + atomic.LoadInt64(&s.atomic.uniqueTxnFingerprintCount)
 }
@@ -135,6 +138,7 @@ func (s *SQLStats) getStatsForApplication(appName string) *ssmemstorage.Containe
 		appName,
 		s.knobs,
 		s.insights(false /* internal */),
+		s.latencyInformation,
 	)
 	s.mu.apps[appName] = a
 	return a
@@ -189,4 +193,8 @@ func (s *SQLStats) resetAndMaybeDumpStats(ctx context.Context, target Sink) (err
 	s.mu.lastReset = timeutil.Now()
 
 	return err
+}
+
+func (s *SQLStats) GetClusterSettings() *cluster.Settings {
+	return s.st
 }

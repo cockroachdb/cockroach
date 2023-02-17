@@ -23,6 +23,8 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
+	"github.com/cockroachdb/errors"
+	"github.com/google/go-cmp/cmp"
 )
 
 // ShowVar represents a SHOW statement.
@@ -94,12 +96,14 @@ const (
 // Path to Subdir and InCollection to Dest.
 
 // ShowBackup represents a SHOW BACKUP statement.
+//
+// TODO(msbutler): implement a walkableStmt for ShowBackup.
 type ShowBackup struct {
 	Path         Expr
 	InCollection StringOrPlaceholderOptList
 	From         bool
 	Details      ShowBackupDetails
-	Options      KVOptions
+	Options      ShowBackupOptions
 }
 
 // Format implements the NodeFormatter interface.
@@ -129,10 +133,177 @@ func (node *ShowBackup) Format(ctx *FmtCtx) {
 		ctx.WriteString(" IN ")
 		ctx.FormatNode(&node.InCollection)
 	}
-	if len(node.Options) > 0 {
+	if !node.Options.IsDefault() {
 		ctx.WriteString(" WITH ")
 		ctx.FormatNode(&node.Options)
 	}
+}
+
+type ShowBackupOptions struct {
+	AsJson               bool
+	CheckFiles           bool
+	DebugIDs             bool
+	IncrementalStorage   StringOrPlaceholderOptList
+	DecryptionKMSURI     StringOrPlaceholderOptList
+	EncryptionPassphrase Expr
+	Privileges           bool
+
+	// EncryptionInfoDir is a hidden option used when the user wants to run the deprecated
+	//
+	// SHOW BACKUP <incremental_dir>
+	//
+	// on an encrypted incremental backup will need to pass their full backup's
+	// directory to the encryption_info_dir parameter because the
+	// `ENCRYPTION-INFO` file necessary to decode the incremental backup lives in
+	// the full backup dir.
+	EncryptionInfoDir Expr
+	DebugMetadataSST  bool
+}
+
+var _ NodeFormatter = &ShowBackupOptions{}
+
+func (o *ShowBackupOptions) Format(ctx *FmtCtx) {
+	var addSep bool
+	maybeAddSep := func() {
+		if addSep {
+			ctx.WriteString(", ")
+		}
+		addSep = true
+	}
+	if o.AsJson {
+		ctx.WriteString("as_json")
+		addSep = true
+	}
+	if o.CheckFiles {
+		maybeAddSep()
+		ctx.WriteString("check_files")
+	}
+	if o.DebugIDs {
+		maybeAddSep()
+		ctx.WriteString("debug_ids")
+	}
+	if o.EncryptionPassphrase != nil {
+		maybeAddSep()
+		ctx.WriteString("encryption_passphrase = ")
+		if ctx.flags.HasFlags(FmtShowPasswords) {
+			ctx.FormatNode(o.EncryptionPassphrase)
+		} else {
+			ctx.WriteString(PasswordSubstitution)
+		}
+	}
+	if o.IncrementalStorage != nil {
+		maybeAddSep()
+		ctx.WriteString("incremental_location = ")
+		ctx.FormatNode(&o.IncrementalStorage)
+	}
+
+	if o.Privileges {
+		maybeAddSep()
+		ctx.WriteString("privileges")
+	}
+
+	if o.EncryptionInfoDir != nil {
+		maybeAddSep()
+		ctx.WriteString("encryption_info_dir = ")
+		ctx.FormatNode(o.EncryptionInfoDir)
+	}
+	if o.DecryptionKMSURI != nil {
+		maybeAddSep()
+		ctx.WriteString("kms = ")
+		ctx.FormatNode(&o.DecryptionKMSURI)
+	}
+	if o.DebugMetadataSST {
+		ctx.WriteString("debug_dump_metadata_sst")
+	}
+
+}
+
+func (o ShowBackupOptions) IsDefault() bool {
+	options := ShowBackupOptions{}
+	return o.AsJson == options.AsJson &&
+		o.CheckFiles == options.CheckFiles &&
+		o.DebugIDs == options.DebugIDs &&
+		cmp.Equal(o.IncrementalStorage, options.IncrementalStorage) &&
+		cmp.Equal(o.DecryptionKMSURI, options.DecryptionKMSURI) &&
+		o.EncryptionPassphrase == options.EncryptionPassphrase &&
+		o.Privileges == options.Privileges &&
+		o.DebugMetadataSST == options.DebugMetadataSST &&
+		o.EncryptionInfoDir == options.EncryptionInfoDir
+}
+
+func combineBools(v1 bool, v2 bool, label string) (bool, error) {
+	if v2 && v1 {
+		return false, errors.Newf("% option specified multiple times", label)
+	}
+	return v2 || v1, nil
+}
+func combineExpr(v1 Expr, v2 Expr, label string) (Expr, error) {
+	if v1 != nil {
+		if v2 != nil {
+			return v1, errors.Newf("% option specified multiple times", label)
+		}
+		return v1, nil
+	}
+	return v2, nil
+}
+func combineStringOrPlaceholderOptList(
+	v1 StringOrPlaceholderOptList, v2 StringOrPlaceholderOptList, label string,
+) (StringOrPlaceholderOptList, error) {
+	if v1 != nil {
+		if v2 != nil {
+			return v1, errors.Newf("% option specified multiple times", label)
+		}
+		return v1, nil
+	}
+	return v2, nil
+}
+
+// CombineWith merges other backup options into this backup options struct.
+// An error is returned if the same option merged multiple times.
+func (o *ShowBackupOptions) CombineWith(other *ShowBackupOptions) error {
+	var err error
+	o.AsJson, err = combineBools(o.AsJson, other.AsJson, "as_json")
+	if err != nil {
+		return err
+	}
+	o.CheckFiles, err = combineBools(o.CheckFiles, other.CheckFiles, "check_files")
+	if err != nil {
+		return err
+	}
+	o.DebugIDs, err = combineBools(o.DebugIDs, other.DebugIDs, "debug_ids")
+	if err != nil {
+		return err
+	}
+	o.EncryptionPassphrase, err = combineExpr(o.EncryptionPassphrase, other.EncryptionPassphrase,
+		"encryption_passphrase")
+	if err != nil {
+		return err
+	}
+	o.IncrementalStorage, err = combineStringOrPlaceholderOptList(o.IncrementalStorage,
+		other.IncrementalStorage, "incremental_location")
+	if err != nil {
+		return err
+	}
+	o.DecryptionKMSURI, err = combineStringOrPlaceholderOptList(o.DecryptionKMSURI,
+		other.DecryptionKMSURI, "kms")
+	if err != nil {
+		return err
+	}
+	o.Privileges, err = combineBools(o.Privileges, other.Privileges, "privileges")
+	if err != nil {
+		return err
+	}
+	o.DebugMetadataSST, err = combineBools(o.DebugMetadataSST, other.DebugMetadataSST,
+		"debug_dump_metadata_sst")
+	if err != nil {
+		return err
+	}
+	o.EncryptionInfoDir, err = combineExpr(o.EncryptionInfoDir, other.EncryptionInfoDir,
+		"encryption_info_dir")
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // ShowColumns represents a SHOW COLUMNS statement.
@@ -704,22 +875,107 @@ func (node *ShowRoles) Format(ctx *FmtCtx) {
 
 // ShowRanges represents a SHOW RANGES statement.
 type ShowRanges struct {
-	TableOrIndex TableIndexName
 	DatabaseName Name
+	TableOrIndex TableIndexName
+	Options      *ShowRangesOptions
+	Source       ShowRangesSource
 }
+
+// ShowRangesSource represents the source of a SHOW RANGES statement.
+type ShowRangesSource int8
+
+const (
+	// SHOW RANGES FROM CURRENT_CATALOG
+	ShowRangesCurrentDatabase ShowRangesSource = iota
+	// SHOW RANGES FROM DATABASE
+	ShowRangesDatabase
+	// SHOW RANGES FROM TABLE
+	ShowRangesTable
+	// SHOW RANGES FROM INDEX
+	ShowRangesIndex
+	// SHOW CLUSTER RANGES
+	ShowRangesCluster
+)
+
+// ShowRangesOptions represents the WITH clause in SHOW RANGES.
+type ShowRangesOptions struct {
+	Details bool
+	Explain bool
+	Keys    bool
+	Mode    ShowRangesMode
+}
+
+// ShowRangesMode represents the WITH clause in SHOW RANGES.
+type ShowRangesMode int8
+
+const (
+	// UniqueRanges tells to use just 1 row per range in the output.
+	//
+	// Note: The UniqueRanges constant must have value 0; otherwise,
+	// the parsing logic would become incorrect.
+	UniqueRanges ShowRangesMode = iota
+	// ExpandTables requests one row per table in the output.
+	ExpandTables
+	// ExpandIndexes requests one row per index in the output.
+	ExpandIndexes
+)
 
 // Format implements the NodeFormatter interface.
 func (node *ShowRanges) Format(ctx *FmtCtx) {
-	ctx.WriteString("SHOW RANGES FROM ")
-	if node.DatabaseName != "" {
-		ctx.WriteString("DATABASE ")
-		ctx.FormatNode(&node.DatabaseName)
-	} else if node.TableOrIndex.Index != "" {
-		ctx.WriteString("INDEX ")
-		ctx.FormatNode(&node.TableOrIndex)
-	} else {
-		ctx.WriteString("TABLE ")
-		ctx.FormatNode(&node.TableOrIndex)
+	ctx.WriteString("SHOW ")
+	if node.Source == ShowRangesCluster {
+		ctx.WriteString("CLUSTER ")
+	}
+	ctx.WriteString("RANGES")
+	if node.Source != ShowRangesCluster {
+		ctx.WriteString(" FROM ")
+		switch node.Source {
+		case ShowRangesCurrentDatabase:
+			ctx.WriteString("CURRENT_CATALOG")
+		case ShowRangesDatabase:
+			ctx.WriteString("DATABASE ")
+			ctx.FormatNode(&node.DatabaseName)
+		case ShowRangesIndex:
+			ctx.WriteString("INDEX ")
+			ctx.FormatNode(&node.TableOrIndex)
+		case ShowRangesTable:
+			ctx.WriteString("TABLE ")
+			ctx.FormatNode(&node.TableOrIndex)
+		}
+	}
+	ctx.FormatNode(node.Options)
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowRangesOptions) Format(ctx *FmtCtx) {
+	noOpts := ShowRangesOptions{}
+	if *node == noOpts {
+		return
+	}
+	ctx.WriteString(" WITH ")
+	comma := ""
+	if node.Details {
+		ctx.WriteString("DETAILS")
+		comma = ", "
+	}
+	if node.Keys {
+		ctx.WriteString(comma)
+		ctx.WriteString("KEYS")
+		comma = ", "
+	}
+	if node.Explain {
+		ctx.WriteString(comma)
+		ctx.WriteString("EXPLAIN")
+		comma = ", "
+	}
+	if node.Mode != UniqueRanges {
+		ctx.WriteString(comma)
+		switch node.Mode {
+		case ExpandTables:
+			ctx.WriteString("TABLES")
+		case ExpandIndexes:
+			ctx.WriteString("INDEXES")
+		}
 	}
 }
 
@@ -775,19 +1031,29 @@ func (node *ShowTableStats) Format(ctx *FmtCtx) {
 	}
 }
 
+// ShowTenantOptions represents the WITH clause in SHOW TENANT.
+type ShowTenantOptions struct {
+	WithReplication  bool
+	WithCapabilities bool
+}
+
 // ShowTenant represents a SHOW TENANT statement.
 type ShowTenant struct {
-	Name            Expr
-	WithReplication bool
+	TenantSpec *TenantSpec
+	ShowTenantOptions
 }
 
 // Format implements the NodeFormatter interface.
 func (node *ShowTenant) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW TENANT ")
-	ctx.FormatNode(node.Name)
+	ctx.FormatNode(node.TenantSpec)
 
 	if node.WithReplication {
 		ctx.WriteString(" WITH REPLICATION STATUS")
+	}
+
+	if node.WithCapabilities {
+		ctx.WriteString(" WITH CAPABILITIES")
 	}
 }
 
@@ -965,11 +1231,11 @@ func (n *ShowDefaultPrivileges) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW DEFAULT PRIVILEGES ")
 	if len(n.Roles) > 0 {
 		ctx.WriteString("FOR ROLE ")
-		for i, role := range n.Roles {
+		for i := range n.Roles {
 			if i > 0 {
 				ctx.WriteString(", ")
 			}
-			ctx.FormatNode(&role)
+			ctx.FormatNode(&n.Roles[i])
 		}
 		ctx.WriteString(" ")
 	} else if n.ForAllRoles {

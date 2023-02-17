@@ -14,8 +14,8 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -278,17 +278,17 @@ func (c foreignKeyConstraint) CollectReferencedColumnIDs() catalog.TableColSet {
 }
 
 // OnDelete implements the catalog.ForeignKeyConstraint interface.
-func (c foreignKeyConstraint) OnDelete() catpb.ForeignKeyAction {
+func (c foreignKeyConstraint) OnDelete() semenumpb.ForeignKeyAction {
 	return c.desc.OnDelete
 }
 
 // OnUpdate implements the catalog.ForeignKeyConstraint interface.
-func (c foreignKeyConstraint) OnUpdate() catpb.ForeignKeyAction {
+func (c foreignKeyConstraint) OnUpdate() semenumpb.ForeignKeyAction {
 	return c.desc.OnUpdate
 }
 
 // Match implements the catalog.ForeignKeyConstraint interface.
-func (c foreignKeyConstraint) Match() descpb.ForeignKeyReference_Match {
+func (c foreignKeyConstraint) Match() semenumpb.Match {
 	return c.desc.Match
 }
 
@@ -403,6 +403,11 @@ func newConstraintCache(
 			} else {
 				c.all = append(c.all, ck)
 				c.checks = append(c.checks, ck)
+				// TODO (xiang): If `m.WriteAndDeleteOnly()`, then `ck` is enforced and
+				// we need to add it to `c.allEnforced` and `c.checksEnforced`. We don't
+				// do it right now because it will break some existing unit test about
+				// legacy schema changer, due to different semantics of when a check
+				// is enforced.
 			}
 		}
 	}
@@ -430,6 +435,10 @@ func newConstraintCache(
 			} else {
 				c.all = append(c.all, fk)
 				c.fks = append(c.fks, fk)
+				if m.WriteAndDeleteOnly() {
+					c.allEnforced = append(c.allEnforced, fk)
+					c.fksEnforced = append(c.fksEnforced, fk)
+				}
 			}
 		}
 	}
@@ -457,6 +466,10 @@ func newConstraintCache(
 			} else {
 				c.all = append(c.all, uwoi)
 				c.uwois = append(c.uwois, uwoi)
+				if m.WriteAndDeleteOnly() {
+					c.allEnforced = append(c.allEnforced, uwoi)
+					c.uwoisEnforced = append(c.uwoisEnforced, uwoi)
+				}
 			}
 		}
 	}

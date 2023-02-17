@@ -16,6 +16,8 @@ import (
 	"regexp"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/base/serverident"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -36,6 +38,13 @@ var MinTenantID = MustMakeTenantID(2)
 // MaxTenantID is the maximum ID of a (non-system) tenant in a multi-tenant
 // cluster.
 var MaxTenantID = MustMakeTenantID(math.MaxUint64)
+
+func init() {
+	// Inject the string representation of SystemTenantID into the log package
+	// to avoid an import dependency cycle.
+	serverident.SetSystemTenantID(
+		strconv.FormatUint(SystemTenantID.ToUint64(), 10))
+}
 
 // MustMakeTenantID constructs a new TenantID from the provided uint64.
 // The function panics if an invalid tenant ID is given.
@@ -109,13 +118,42 @@ func IsSystemTenantID(id uint64) bool {
 
 type tenantKey struct{}
 
-// NewContextForTenant creates a new context with tenant information attached.
-func NewContextForTenant(ctx context.Context, tenID TenantID) context.Context {
+// ContextWithClientTenant creates a new context with information about the
+// tenant that's the client of an RPC. The tenant ID can be retrieved later with
+// ClientTenantFromContext. Use ContextWithoutClientTenant to clear the
+// tenant client information from the context.
+//
+// An empty tenID clears the respective key from the context.
+func ContextWithClientTenant(ctx context.Context, tenID TenantID) context.Context {
+	if !tenID.IsSet() {
+		panic("programming error: missing tenant ID")
+	}
+
+	ctxTenantID, _ := ClientTenantFromContext(ctx)
+	if tenID == ctxTenantID {
+		// The context already has the right tenant.
+		return ctx
+	}
+
 	return context.WithValue(ctx, tenantKey{}, tenID)
 }
 
-// TenantFromContext returns the tenant information in ctx if it exists.
-func TenantFromContext(ctx context.Context) (tenID TenantID, ok bool) {
+// ContextWithoutClientTenant removes the tenant information
+// from the context.
+func ContextWithoutClientTenant(ctx context.Context) context.Context {
+	_, ok := ClientTenantFromContext(ctx)
+	if !ok {
+		// The context already has no tenant.
+		return ctx
+	}
+
+	return context.WithValue(ctx, tenantKey{}, nil)
+}
+
+// ClientTenantFromContext returns the ID of the tenant that's the client of the
+// current RPC, if that infomation was put in the ctx by
+// ContextWithClientTenant.
+func ClientTenantFromContext(ctx context.Context) (tenID TenantID, ok bool) {
 	tenID, ok = ctx.Value(tenantKey{}).(TenantID)
 	return
 }
@@ -158,4 +196,31 @@ func (n TenantName) IsValid() error {
 			"Tenant names must start and end with a lowercase letter or digit, contain only lowercase letters, digits or hyphens, with a maximum of 100 characters.")
 	}
 	return nil
+}
+
+// TenantNameContainer is a shared object between the
+// server controller and the tenant server that holds
+// a reference to the current name of the tenant and
+// updates it if needed. This facilitates some
+// observability use cases where we need to tag data
+// by tenant name.
+type TenantNameContainer syncutil.AtomicString
+
+func NewTenantNameContainer(name TenantName) *TenantNameContainer {
+	t := &TenantNameContainer{}
+	t.Set(name)
+	return t
+}
+
+func (c *TenantNameContainer) Set(name TenantName) {
+	(*syncutil.AtomicString)(c).Set(string(name))
+}
+
+func (c *TenantNameContainer) Get() TenantName {
+	return TenantName(c.String())
+}
+
+// String implements the fmt.Stringer interface.
+func (c *TenantNameContainer) String() string {
+	return (*syncutil.AtomicString)(c).Get()
 }

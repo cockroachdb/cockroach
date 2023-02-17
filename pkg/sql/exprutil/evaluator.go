@@ -13,9 +13,11 @@ package exprutil
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/errors"
 )
 
@@ -60,6 +62,40 @@ func (e Evaluator) Bool(ctx context.Context, expr tree.Expr) (bool, error) {
 		return false, err
 	}
 	return bool(tree.MustBeDBool(d)), nil
+}
+
+// Duration evaluates expr to a duration.Duration.
+func (e Evaluator) Duration(ctx context.Context, expr tree.Expr) (duration.Duration, error) {
+	d, err := e.evalScalar(ctx, expr, types.Interval)
+	if err != nil {
+		return duration.Duration{}, err
+	}
+	return tree.MustBeDInterval(d).Duration, nil
+}
+
+// TenantSpec evaluates expr to a tenant specification.
+func (e Evaluator) TenantSpec(
+	ctx context.Context, ts *tree.TenantSpec,
+) (isName bool, tenantID uint64, tenantName string, err error) {
+	if ts.All {
+		return false, 0, "", errors.AssertionFailedf("programming error: cannot use ALL here")
+	}
+	if ts.IsName {
+		// If the expression is a simple identifier, handle
+		// that specially: we promote that identifier to a SQL string.
+		// This is alike what is done for CREATE USER.
+		expr := paramparse.UnresolvedNameToStrVal(ts.Expr)
+		d, err := e.evalScalar(ctx, expr, types.String)
+		if err != nil {
+			return true, 0, "", err
+		}
+		return true, 0, string(tree.MustBeDString(d)), nil
+	}
+	d, err := e.evalScalar(ctx, ts.Expr, types.Int)
+	if err != nil {
+		return false, 0, "", err
+	}
+	return false, uint64(tree.MustBeDInt(d)), "", nil
 }
 
 // KVOptions evaluates the provided expressions as a string map.

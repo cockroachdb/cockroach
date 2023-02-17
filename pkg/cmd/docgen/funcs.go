@@ -191,7 +191,7 @@ func generateFunctions(from []string, categorize bool) []byte {
 			}
 			// We generate docs for both aggregates and window functions in separate
 			// files, so we want to omit them when processing all builtins.
-			if categorize && (props.Class == tree.AggregateClass || props.Class == tree.WindowClass) {
+			if categorize && (fn.Class == tree.AggregateClass || fn.Class == tree.WindowClass) {
 				continue
 			}
 			args := fn.Types.String()

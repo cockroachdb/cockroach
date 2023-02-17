@@ -53,7 +53,7 @@ type planVisitor struct {
 
 // makePlanVisitor creates a planVisitor instance.
 // ctx will be stored in the planVisitor and used when visiting planNode's and
-// expressions..
+// expressions.
 func makePlanVisitor(ctx context.Context, observer planObserver) planVisitor {
 	return planVisitor{observer: observer, ctx: ctx}
 }
@@ -215,7 +215,9 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 			n.sourcePlan = v.visit(n.sourcePlan)
 		}
 
+	case *alterTenantCapabilityNode:
 	case *alterTenantSetClusterSettingNode:
+	case *alterTenantServiceNode:
 	case *createViewNode:
 	case *setVarNode:
 	case *setClusterSettingNode:
@@ -360,7 +362,9 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&alterTableOwnerNode{}):                     "alter table owner",
 	reflect.TypeOf(&alterTableSetLocalityNode{}):               "alter table set locality",
 	reflect.TypeOf(&alterTableSetSchemaNode{}):                 "alter table set schema",
+	reflect.TypeOf(&alterTenantCapabilityNode{}):               "alter tenant capability",
 	reflect.TypeOf(&alterTenantSetClusterSettingNode{}):        "alter tenant set cluster setting",
+	reflect.TypeOf(&alterTenantServiceNode{}):                  "alter tenant service",
 	reflect.TypeOf(&alterTypeNode{}):                           "alter type",
 	reflect.TypeOf(&alterRoleNode{}):                           "alter role",
 	reflect.TypeOf(&alterRoleSetNode{}):                        "alter role set var",
@@ -440,6 +444,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&renameDatabaseNode{}):                      "rename database",
 	reflect.TypeOf(&renameIndexNode{}):                         "rename index",
 	reflect.TypeOf(&renameTableNode{}):                         "rename table",
+	reflect.TypeOf(&renameTenantNode{}):                        "rename tenant",
 	reflect.TypeOf(&renderNode{}):                              "render",
 	reflect.TypeOf(&resetAllNode{}):                            "reset all",
 	reflect.TypeOf(&RevokeRoleNode{}):                          "revoke role",

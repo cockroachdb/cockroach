@@ -79,6 +79,37 @@ func FindCheckConstraint(b ElementStatusIterator) (current Status, target Target
 	return current, target, element
 }
 
+func (e CheckConstraintUnvalidated) element() {}
+
+// ForEachCheckConstraintUnvalidated iterates over elements of type CheckConstraintUnvalidated.
+func ForEachCheckConstraintUnvalidated(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *CheckConstraintUnvalidated),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*CheckConstraintUnvalidated); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindCheckConstraintUnvalidated finds the first element of type CheckConstraintUnvalidated.
+func FindCheckConstraintUnvalidated(b ElementStatusIterator) (current Status, target TargetStatus, element *CheckConstraintUnvalidated) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*CheckConstraintUnvalidated); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
 func (e Column) element() {}
 
 // ForEachColumn iterates over elements of type Column.
@@ -234,6 +265,37 @@ func FindColumnName(b ElementStatusIterator) (current Status, target TargetStatu
 	return current, target, element
 }
 
+func (e ColumnNotNull) element() {}
+
+// ForEachColumnNotNull iterates over elements of type ColumnNotNull.
+func ForEachColumnNotNull(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *ColumnNotNull),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*ColumnNotNull); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindColumnNotNull finds the first element of type ColumnNotNull.
+func FindColumnNotNull(b ElementStatusIterator) (current Status, target TargetStatus, element *ColumnNotNull) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*ColumnNotNull); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
 func (e ColumnOnUpdateExpression) element() {}
 
 // ForEachColumnOnUpdateExpression iterates over elements of type ColumnOnUpdateExpression.
@@ -288,6 +350,99 @@ func FindColumnType(b ElementStatusIterator) (current Status, target TargetStatu
   }
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*ColumnType); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
+func (e CompositeType) element() {}
+
+// ForEachCompositeType iterates over elements of type CompositeType.
+func ForEachCompositeType(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *CompositeType),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*CompositeType); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindCompositeType finds the first element of type CompositeType.
+func FindCompositeType(b ElementStatusIterator) (current Status, target TargetStatus, element *CompositeType) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*CompositeType); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
+func (e CompositeTypeAttrName) element() {}
+
+// ForEachCompositeTypeAttrName iterates over elements of type CompositeTypeAttrName.
+func ForEachCompositeTypeAttrName(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *CompositeTypeAttrName),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*CompositeTypeAttrName); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindCompositeTypeAttrName finds the first element of type CompositeTypeAttrName.
+func FindCompositeTypeAttrName(b ElementStatusIterator) (current Status, target TargetStatus, element *CompositeTypeAttrName) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*CompositeTypeAttrName); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
+func (e CompositeTypeAttrType) element() {}
+
+// ForEachCompositeTypeAttrType iterates over elements of type CompositeTypeAttrType.
+func ForEachCompositeTypeAttrType(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *CompositeTypeAttrType),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*CompositeTypeAttrType); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindCompositeTypeAttrType finds the first element of type CompositeTypeAttrType.
+func FindCompositeTypeAttrType(b ElementStatusIterator) (current Status, target TargetStatus, element *CompositeTypeAttrType) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*CompositeTypeAttrType); ok {
 			element = elt
 			current = c
 			target = t
@@ -598,6 +753,254 @@ func FindForeignKeyConstraint(b ElementStatusIterator) (current Status, target T
   }
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*ForeignKeyConstraint); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
+func (e ForeignKeyConstraintUnvalidated) element() {}
+
+// ForEachForeignKeyConstraintUnvalidated iterates over elements of type ForeignKeyConstraintUnvalidated.
+func ForEachForeignKeyConstraintUnvalidated(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *ForeignKeyConstraintUnvalidated),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*ForeignKeyConstraintUnvalidated); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindForeignKeyConstraintUnvalidated finds the first element of type ForeignKeyConstraintUnvalidated.
+func FindForeignKeyConstraintUnvalidated(b ElementStatusIterator) (current Status, target TargetStatus, element *ForeignKeyConstraintUnvalidated) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*ForeignKeyConstraintUnvalidated); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
+func (e Function) element() {}
+
+// ForEachFunction iterates over elements of type Function.
+func ForEachFunction(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *Function),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*Function); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindFunction finds the first element of type Function.
+func FindFunction(b ElementStatusIterator) (current Status, target TargetStatus, element *Function) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*Function); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
+func (e FunctionBody) element() {}
+
+// ForEachFunctionBody iterates over elements of type FunctionBody.
+func ForEachFunctionBody(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *FunctionBody),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*FunctionBody); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindFunctionBody finds the first element of type FunctionBody.
+func FindFunctionBody(b ElementStatusIterator) (current Status, target TargetStatus, element *FunctionBody) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*FunctionBody); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
+func (e FunctionLeakProof) element() {}
+
+// ForEachFunctionLeakProof iterates over elements of type FunctionLeakProof.
+func ForEachFunctionLeakProof(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *FunctionLeakProof),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*FunctionLeakProof); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindFunctionLeakProof finds the first element of type FunctionLeakProof.
+func FindFunctionLeakProof(b ElementStatusIterator) (current Status, target TargetStatus, element *FunctionLeakProof) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*FunctionLeakProof); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
+func (e FunctionName) element() {}
+
+// ForEachFunctionName iterates over elements of type FunctionName.
+func ForEachFunctionName(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *FunctionName),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*FunctionName); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindFunctionName finds the first element of type FunctionName.
+func FindFunctionName(b ElementStatusIterator) (current Status, target TargetStatus, element *FunctionName) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*FunctionName); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
+func (e FunctionNullInputBehavior) element() {}
+
+// ForEachFunctionNullInputBehavior iterates over elements of type FunctionNullInputBehavior.
+func ForEachFunctionNullInputBehavior(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *FunctionNullInputBehavior),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*FunctionNullInputBehavior); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindFunctionNullInputBehavior finds the first element of type FunctionNullInputBehavior.
+func FindFunctionNullInputBehavior(b ElementStatusIterator) (current Status, target TargetStatus, element *FunctionNullInputBehavior) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*FunctionNullInputBehavior); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
+func (e FunctionParamDefaultExpression) element() {}
+
+// ForEachFunctionParamDefaultExpression iterates over elements of type FunctionParamDefaultExpression.
+func ForEachFunctionParamDefaultExpression(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *FunctionParamDefaultExpression),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*FunctionParamDefaultExpression); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindFunctionParamDefaultExpression finds the first element of type FunctionParamDefaultExpression.
+func FindFunctionParamDefaultExpression(b ElementStatusIterator) (current Status, target TargetStatus, element *FunctionParamDefaultExpression) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*FunctionParamDefaultExpression); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
+func (e FunctionVolatility) element() {}
+
+// ForEachFunctionVolatility iterates over elements of type FunctionVolatility.
+func ForEachFunctionVolatility(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *FunctionVolatility),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*FunctionVolatility); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindFunctionVolatility finds the first element of type FunctionVolatility.
+func FindFunctionVolatility(b ElementStatusIterator) (current Status, target TargetStatus, element *FunctionVolatility) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*FunctionVolatility); ok {
 			element = elt
 			current = c
 			target = t
@@ -1466,6 +1869,37 @@ func FindUniqueWithoutIndexConstraint(b ElementStatusIterator) (current Status, 
   }
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*UniqueWithoutIndexConstraint); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
+func (e UniqueWithoutIndexConstraintUnvalidated) element() {}
+
+// ForEachUniqueWithoutIndexConstraintUnvalidated iterates over elements of type UniqueWithoutIndexConstraintUnvalidated.
+func ForEachUniqueWithoutIndexConstraintUnvalidated(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *UniqueWithoutIndexConstraintUnvalidated),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*UniqueWithoutIndexConstraintUnvalidated); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindUniqueWithoutIndexConstraintUnvalidated finds the first element of type UniqueWithoutIndexConstraintUnvalidated.
+func FindUniqueWithoutIndexConstraintUnvalidated(b ElementStatusIterator) (current Status, target TargetStatus, element *UniqueWithoutIndexConstraintUnvalidated) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*UniqueWithoutIndexConstraintUnvalidated); ok {
 			element = elt
 			current = c
 			target = t

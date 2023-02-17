@@ -32,6 +32,10 @@ type externalConnectionKafkaSink struct {
 	sink Sink
 }
 
+func (e *externalConnectionKafkaSink) getConcreteType() sinkType {
+	return sinkTypeKafka
+}
+
 // Dial implements the Sink interface.
 func (e *externalConnectionKafkaSink) Dial() error {
 	if _, ok := e.sink.(*kafkaSink); !ok {

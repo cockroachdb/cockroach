@@ -16,8 +16,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
@@ -158,14 +158,18 @@ func (p *planner) maybeLogStatement(
 	execType executorType,
 	isCopy bool,
 	numRetries, txnCounter, rows int,
+	bulkJobId uint64,
 	err error,
 	queryReceived time.Time,
 	hasAdminRoleCache *HasAdminRoleCache,
 	telemetryLoggingMetrics *TelemetryLoggingMetrics,
-	stmtFingerprintID roachpb.StmtFingerprintID,
+	stmtFingerprintID appstatspb.StmtFingerprintID,
 	queryStats *topLevelQueryStats,
 ) {
-	p.maybeLogStatementInternal(ctx, execType, isCopy, numRetries, txnCounter, rows, err, queryReceived, hasAdminRoleCache, telemetryLoggingMetrics, stmtFingerprintID, queryStats)
+	p.maybeLogStatementInternal(ctx, execType, isCopy, numRetries, txnCounter,
+		rows, bulkJobId, err, queryReceived, hasAdminRoleCache,
+		telemetryLoggingMetrics, stmtFingerprintID, queryStats,
+	)
 }
 
 var errTxnIsNotOpen = errors.New("txn is already committed or rolled back")
@@ -175,18 +179,18 @@ func (p *planner) maybeLogStatementInternal(
 	execType executorType,
 	isCopy bool,
 	numRetries, txnCounter, rows int,
+	bulkJobId uint64,
 	err error,
 	startTime time.Time,
 	hasAdminRoleCache *HasAdminRoleCache,
 	telemetryMetrics *TelemetryLoggingMetrics,
-	stmtFingerprintID roachpb.StmtFingerprintID,
+	stmtFingerprintID appstatspb.StmtFingerprintID,
 	queryStats *topLevelQueryStats,
 ) {
 	// Note: if you find the code below crashing because p.execCfg == nil,
 	// do not add a test "if p.execCfg == nil { do nothing }" !
 	// Instead, make the logger work. This is critical for auditing - we
 	// can't miss any statement.
-
 	logV := log.V(2)
 	logExecuteEnabled := logStatementsExecuteEnabled.Get(&p.execCfg.Settings.SV)
 	slowLogThreshold := slowQueryLogThreshold.Get(&p.execCfg.Settings.SV)
@@ -194,7 +198,7 @@ func (p *planner) maybeLogStatementInternal(
 	slowQueryLogEnabled := slowLogThreshold != 0
 	slowInternalQueryLogEnabled := slowInternalQueryLogEnabled.Get(&p.execCfg.Settings.SV)
 	auditEventsDetected := len(p.curPlan.auditEvents) != 0
-	maxEventFrequency := telemetryMaxEventFrequency.Get(&p.execCfg.Settings.SV)
+	maxEventFrequency := TelemetryMaxEventFrequency.Get(&p.execCfg.Settings.SV)
 
 	// We only consider non-internal SQL statements for telemetry logging.
 	telemetryLoggingEnabled := telemetryLoggingEnabled.Get(&p.execCfg.Settings.SV) && execType != executorTypeInternal
@@ -307,7 +311,6 @@ func (p *planner) maybeLogStatementInternal(
 		// Note: the current statement, application name, etc, are
 		// automatically populated by the shared logic in event_log.go.
 		ExecMode:      lbl,
-		NumRows:       uint64(rows),
 		SQLSTATE:      sqlErrState,
 		ErrorText:     execErrStr,
 		Age:           age,
@@ -315,6 +318,16 @@ func (p *planner) maybeLogStatementInternal(
 		FullTableScan: p.curPlan.flags.IsSet(planFlagContainsFullTableScan),
 		FullIndexScan: p.curPlan.flags.IsSet(planFlagContainsFullIndexScan),
 		TxnCounter:    uint32(txnCounter),
+	}
+
+	// Note that for bulk job query (IMPORT, BACKUP and RESTORE), we don't
+	// print out the number of changed rows along with the sampled query event.
+	// We emit it when the job succeeds in a recovery_event.
+	switch p.stmt.AST.(type) {
+	case *tree.Import, *tree.Restore, *tree.Backup:
+		execDetails.BulkJobId = bulkJobId
+	default:
+		execDetails.NumRows = int64(rows)
 	}
 
 	if auditEventsDetected {

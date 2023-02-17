@@ -109,16 +109,12 @@ func (d *delegator) delegateShowTenantClusterSettingList(
 	// cannot evaluate it in the go code.
 	return parse(`
 WITH
-  tenant_id AS (SELECT (` + stmt.TenantID.String() + `):::INT AS tenant_id),
+  tenant_id AS (SELECT id AS tenant_id FROM [SHOW TENANT ` + stmt.TenantSpec.String() + `]),
   isvalid AS (
     SELECT
       CASE
-       WHEN tenant_id=0 THEN
-         crdb_internal.force_error('22023', 'tenant ID must be non-zero')
        WHEN tenant_id=1 THEN
          crdb_internal.force_error('22023', 'use SHOW CLUSTER SETTINGS to display settings for the system tenant')
-       WHEN st.id IS NULL THEN
-         crdb_internal.force_error('22023', 'no tenant found with ID '||tenant_id)
        ELSE 0
       END AS ok
     FROM      tenant_id

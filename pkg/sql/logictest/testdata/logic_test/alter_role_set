@@ -73,7 +73,7 @@ statement ok
 ALTER ROLE test_set_role RESET application_name
 
 # Setting for a role that does not exist should error
-statement error fake_role does not exist
+statement error "fake_role" does not exist
 ALTER ROLE fake_role SET application_name = 'e';
 
 # Setting for a role that does not exist works with IF EXISTS,

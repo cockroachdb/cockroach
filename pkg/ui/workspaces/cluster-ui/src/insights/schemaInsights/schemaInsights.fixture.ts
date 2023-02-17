@@ -70,7 +70,9 @@ export const SchemaInsightsPropsFixture: SchemaInsightsViewProps = {
     database: "",
     schemaInsightType: "",
   },
+  hasAdminRole: true,
   refreshSchemaInsights: () => {},
   onSortChange: () => {},
   onFiltersChange: () => {},
+  refreshUserSQLRoles: () => {},
 };

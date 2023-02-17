@@ -14,6 +14,7 @@ import (
 	"context"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -295,6 +296,7 @@ func (b *Builder) buildStmt(
 	if b.insideFuncDef {
 		switch stmt := stmt.(type) {
 		case *tree.Select:
+		case tree.SelectStatement:
 		default:
 			panic(unimplemented.Newf("user-defined functions", "%s usage inside a function definition", stmt.StatementTag()))
 		}
@@ -478,13 +480,9 @@ func (b *Builder) maybeTrackRegclassDependenciesForViews(texpr tree.TypedExpr) {
 func (b *Builder) maybeTrackUserDefinedTypeDepsForViews(texpr tree.TypedExpr) {
 	if b.trackSchemaDeps {
 		if texpr.ResolvedType().UserDefined() {
-			children, err := typedesc.GetTypeDescriptorClosure(texpr.ResolvedType())
-			if err != nil {
-				panic(err)
-			}
-			for id := range children {
+			typedesc.GetTypeDescriptorClosure(texpr.ResolvedType()).ForEach(func(id descpb.ID) {
 				b.schemaTypeDeps.Add(int(id))
-			}
+			})
 		}
 	}
 }

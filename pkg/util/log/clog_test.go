@@ -26,6 +26,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base/serverident"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
@@ -774,11 +775,11 @@ func TestLogEntryPropagation(t *testing.T) {
 func BenchmarkLogEntry_String(b *testing.B) {
 	ctxtags := logtags.AddTag(context.Background(), "foo", "bar")
 	entry := &logEntry{
-		idPayload: idPayload{
-			clusterID:     "fooo",
-			nodeID:        "10",
-			tenantID:      "12",
-			sqlInstanceID: "9",
+		IDPayload: serverident.IDPayload{
+			ClusterID:        "fooo",
+			NodeID:           "10",
+			TenantIDInternal: "12",
+			SQLInstanceID:    "9",
 		},
 		ts:         timeutil.Now().UnixNano(),
 		header:     false,

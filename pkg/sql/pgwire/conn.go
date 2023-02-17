@@ -61,10 +61,13 @@ import (
 // the client through the sql.ClientComm interface, implemented by this conn
 // (code is in command_result.go).
 type conn struct {
+	// errWriter is used to send back error payloads to the client.
+	errWriter
+
 	conn net.Conn
 
 	sessionArgs sql.SessionArgs
-	metrics     *ServerMetrics
+	metrics     *tenantSpecificMetrics
 
 	// startTime is the time when the connection attempt was first received
 	// by the server.
@@ -164,7 +167,7 @@ func (s *Server) serveConn(
 		log.Infof(ctx, "new connection with options: %+v", sArgs)
 	}
 
-	c := newConn(netConn, sArgs, &s.metrics, connStart, &s.execCfg.Settings.SV)
+	c := newConn(netConn, sArgs, &s.tenantMetrics, connStart, &s.execCfg.Settings.SV)
 	c.alwaysLogAuthActivity = alwaysLogAuthActivity || atomic.LoadInt32(&s.testingAuthLogEnabled) > 0
 	if s.execCfg.PGWireTestingKnobs != nil {
 		c.afterReadMsgTestingKnob = s.execCfg.PGWireTestingKnobs.AfterReadMsgTestingKnob
@@ -184,7 +187,7 @@ var alwaysLogAuthActivity = envutil.EnvOrDefaultBool("COCKROACH_ALWAYS_LOG_AUTHN
 func newConn(
 	netConn net.Conn,
 	sArgs sql.SessionArgs,
-	metrics *ServerMetrics,
+	metrics *tenantSpecificMetrics,
 	connStart time.Time,
 	sv *settings.Values,
 ) *conn {
@@ -202,7 +205,8 @@ func newConn(
 	c.writerState.fi.buf = &c.writerState.buf
 	c.writerState.fi.lastFlushed = -1
 	c.msgBuilder.init(metrics.BytesOutCount)
-
+	c.errWriter.sv = sv
+	c.errWriter.msgBuilder = &c.msgBuilder
 	return c
 }
 
@@ -223,7 +227,7 @@ func (c *conn) sendError(ctx context.Context, execCfg *sql.ExecutorConfig, err e
 	// trying to send the client error. This is because clients that
 	// receive error payload are highly correlated with clients
 	// disconnecting abruptly.
-	_ /* err */ = writeErr(ctx, &execCfg.Settings.SV, err, &c.msgBuilder, c.conn)
+	_ /* err */ = c.writeErr(ctx, err, c.conn)
 	return err
 }
 
@@ -336,7 +340,11 @@ func (c *conn) serveImpl(
 	logAuthn := !inTestWithoutSQL && c.authLogEnabled()
 
 	// We'll build an authPipe to communicate with the authentication process.
-	authPipe := newAuthPipe(c, logAuthn, authOpt, c.sessionArgs.User)
+	systemIdentity := c.sessionArgs.SystemIdentity
+	if systemIdentity.Undefined() {
+		systemIdentity = c.sessionArgs.User
+	}
+	authPipe := newAuthPipe(c, logAuthn, authOpt, systemIdentity)
 	var authenticator authenticatorIO = authPipe
 
 	// procCh is the channel on which we'll receive the termination signal from
@@ -473,9 +481,7 @@ func (c *conn) serveImpl(
 			case pgwirebase.ClientMsgPassword:
 				// This messages are only acceptable during the auth phase, handled above.
 				err = pgwirebase.NewProtocolViolationErrorf("unexpected authentication data")
-				return true, isSimpleQuery, writeErr(
-					ctx, &sqlServer.GetExecutorConfig().Settings.SV, err,
-					&c.msgBuilder, &c.writerState.buf)
+				return true, isSimpleQuery, c.writeErr(ctx, err, &c.writerState.buf)
 			case pgwirebase.ClientMsgSimpleQuery:
 				if err = c.handleSimpleQuery(
 					ctx, &c.readBuf, timeReceived, parser.NakedIntTypeFromDefaultIntSize(atomic.LoadInt32(atomicUnqualifiedIntSize)),
@@ -597,8 +603,7 @@ func (c *conn) serveImpl(
 		// idea; see #22630. I think we should find a way to return the
 		// AdminShutdown error as the only result of the query.
 		log.Ops.Info(ctx, "closing existing connection while server is draining")
-		_ /* err */ = writeErr(ctx, &sqlServer.GetExecutorConfig().Settings.SV,
-			newAdminShutdownErr(ErrDrainingExistingConn), &c.msgBuilder, &c.writerState.buf)
+		_ /* err */ = c.writeErr(ctx, newAdminShutdownErr(ErrDrainingExistingConn), &c.writerState.buf)
 		_ /* n */, _ /* err */ = c.writerState.buf.WriteTo(c.conn)
 	}
 }
@@ -666,9 +671,7 @@ func (c *conn) processCommandsAsync(
 					retErr = pgerror.WithCandidateCode(retErr, pgcode.CrashShutdown)
 					// Add a prefix. This also adds a stack trace.
 					retErr = errors.Wrap(retErr, "caught fatal error")
-					_ = writeErr(
-						ctx, &sqlServer.GetExecutorConfig().Settings.SV, retErr,
-						&c.msgBuilder, &c.writerState.buf)
+					_ = c.writeErr(ctx, retErr, &c.writerState.buf)
 					_ /* n */, _ /* err */ = c.writerState.buf.WriteTo(c.conn)
 					c.stmtBuf.Close()
 					// Send a ready for query to make sure the client can react.
@@ -746,7 +749,7 @@ func (c *conn) bufferParamStatus(param, value string) error {
 
 func (c *conn) bufferNotice(ctx context.Context, noticeErr pgnotice.Notice) error {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgNoticeResponse)
-	return writeErrFields(ctx, c.sv, noticeErr, &c.msgBuilder, &c.writerState.buf)
+	return c.writeErrFields(ctx, noticeErr, &c.writerState.buf)
 }
 
 func (c *conn) sendInitialConnData(
@@ -761,8 +764,7 @@ func (c *conn) sendInitialConnData(
 		onDefaultIntSizeChange,
 	)
 	if err != nil {
-		_ /* err */ = writeErr(
-			ctx, &sqlServer.GetExecutorConfig().Settings.SV, err, &c.msgBuilder, c.conn)
+		_ /* err */ = c.writeErr(ctx, err, c.conn)
 		return sql.ConnectionHandler{}, err
 	}
 
@@ -877,6 +879,34 @@ func (c *conn) handleSimpleQuery(
 			copyDone.Wait()
 			return nil
 		}
+		if cp, ok := stmts[i].AST.(*tree.CopyTo); ok {
+			if len(stmts) != 1 {
+				// NOTE(andrei): I don't know if Postgres supports receiving a COPY
+				// together with other statements in the "simple" protocol, but I'd
+				// rather not worry about it since execution of COPY is special - it
+				// takes control over the connection.
+				return c.stmtBuf.Push(
+					ctx,
+					sql.SendError{
+						Err: pgwirebase.NewProtocolViolationErrorf(
+							"COPY together with other statements in a query string is not supported"),
+					})
+			}
+			if err := c.stmtBuf.Push(
+				ctx,
+				sql.CopyOut{
+					Conn:         c,
+					ParsedStmt:   stmts[i],
+					Stmt:         cp,
+					TimeReceived: timeReceived,
+					ParseStart:   startParse,
+					ParseEnd:     endParse,
+				},
+			); err != nil {
+				return err
+			}
+			return nil
+		}
 
 		// Determine whether there is only SHOW COMMIT TIMESTAMP after this
 		// statement in the batch. That case should be treated as though it
@@ -971,11 +1001,16 @@ func (c *conn) handleParse(
 				sqlTypeHints[i] = nil
 				continue
 			}
+			// This special case for json, json[] is here so we can support decoding
+			// parameters with oid=json/json[] without adding full support for these
+			// type.
+			// TODO(sql-exp): Remove this if we support JSON.
 			if t == oid.T_json {
-				// This special case is here so we can support decoding parameters
-				// with oid=json without adding full support for the JSON type.
-				// TODO(sql-exp): Remove this if we support JSON.
 				sqlTypeHints[i] = types.Json
+				continue
+			}
+			if t == oid.T__json {
+				sqlTypeHints[i] = types.JSONArrayForDecodingOnly
 				continue
 			}
 			v, ok := types.OidToType[t]
@@ -1224,6 +1259,34 @@ func (c *conn) BeginCopyIn(
 	return c.msgBuilder.finishMsg(c.conn)
 }
 
+// BeginCopyOut is part of the pgwirebase.Conn interface.
+func (c *conn) BeginCopyOut(
+	ctx context.Context, columns []colinfo.ResultColumn, format pgwirebase.FormatCode,
+) error {
+	c.msgBuilder.initMsg(pgwirebase.ServerMsgCopyOutResponse)
+	c.msgBuilder.writeByte(byte(format))
+	c.msgBuilder.putInt16(int16(len(columns)))
+	for range columns {
+		c.msgBuilder.putInt16(int16(format))
+	}
+	return c.msgBuilder.finishMsg(c.conn)
+}
+
+// SendCopyData is part of the pgwirebase.Conn interface.
+func (c *conn) SendCopyData(ctx context.Context, copyData []byte) error {
+	c.msgBuilder.initMsg(pgwirebase.ServerMsgCopyDataCommand)
+	if _, err := c.msgBuilder.Write(copyData); err != nil {
+		return err
+	}
+	return c.msgBuilder.finishMsg(c.conn)
+}
+
+// SendCopyDone is part of the pgwirebase.Conn interface.
+func (c *conn) SendCopyDone(ctx context.Context) error {
+	c.msgBuilder.initMsg(pgwirebase.ServerMsgCopyDoneCommand)
+	return c.msgBuilder.finishMsg(c.conn)
+}
+
 // SendCommandComplete is part of the pgwirebase.Conn interface.
 func (c *conn) SendCommandComplete(tag []byte) error {
 	c.bufferCommandComplete(tag)
@@ -1293,9 +1356,9 @@ func cookTag(
 			tag = strconv.AppendInt(tag, int64(rowsAffected), 10)
 		}
 
-	case tree.CopyIn:
+	case tree.CopyIn, tree.CopyOut:
 		// Nothing to do. The CommandComplete message has been sent elsewhere.
-		panic(errors.AssertionFailedf("CopyIn statements should have been handled elsewhere " +
+		panic(errors.AssertionFailedf("Copy statements should have been handled elsewhere " +
 			"and not produce results"))
 	default:
 		panic(errors.AssertionFailedf("unexpected result type %v", stmtType))
@@ -1435,7 +1498,7 @@ func (c *tenantEgressCounter) GetBatchNetworkEgress(
 			// Use the default values for the DataConversionConfig and location.
 			// See the comment in getRowNetworkEgress for why the writeText variant
 			// is used here instead of writeBinary.
-			c.buf.writeTextColumnarElement(ctx, &c.vecs, vecIdx, rowIdx, conv, nil /* sessionLoc */)
+			c.buf.writeTextColumnarElement(ctx, &c.vecs, vecIdx, rowIdx, conv, time.UTC)
 			egress += int64(c.buf.Len())
 			c.buf.reset()
 		}
@@ -1489,8 +1552,7 @@ func (c *conn) bufferPortalSuspended() {
 }
 
 func (c *conn) bufferErr(ctx context.Context, err error) {
-	if err := writeErr(ctx, c.sv,
-		err, &c.msgBuilder, &c.writerState.buf); err != nil {
+	if err := c.writeErr(ctx, err, &c.writerState.buf); err != nil {
 		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err from buffer"))
 	}
 }
@@ -1502,67 +1564,68 @@ func (c *conn) bufferEmptyQueryResponse() {
 	}
 }
 
-func writeErr(
-	ctx context.Context, sv *settings.Values, err error, msgBuilder *writeBuffer, w io.Writer,
-) error {
-	// Record telemetry for the error.
-	sqltelemetry.RecordError(ctx, err, sv)
-	msgBuilder.initMsg(pgwirebase.ServerMsgErrorResponse)
-	return writeErrFields(ctx, sv, err, msgBuilder, w)
+type errWriter struct {
+	sv         *settings.Values
+	msgBuilder *writeBuffer
 }
 
-func writeErrFields(
-	ctx context.Context, sv *settings.Values, err error, msgBuilder *writeBuffer, w io.Writer,
-) error {
+func (w *errWriter) writeErr(ctx context.Context, err error, out io.Writer) error {
+	// Record telemetry for the error.
+	sqltelemetry.RecordError(ctx, err, w.sv)
+	w.msgBuilder.initMsg(pgwirebase.ServerMsgErrorResponse)
+	return w.writeErrFields(ctx, err, out)
+}
+
+func (w *errWriter) writeErrFields(ctx context.Context, err error, out io.Writer) error {
 	pgErr := pgerror.Flatten(err)
 
-	msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldSeverity)
-	msgBuilder.writeTerminatedString(pgErr.Severity)
+	w.msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldSeverity)
+	w.msgBuilder.writeTerminatedString(pgErr.Severity)
 
-	msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldSeverityNonLocalized)
-	msgBuilder.writeTerminatedString(pgErr.Severity)
+	w.msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldSeverityNonLocalized)
+	w.msgBuilder.writeTerminatedString(pgErr.Severity)
 
-	msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldSQLState)
-	msgBuilder.writeTerminatedString(pgErr.Code)
+	w.msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldSQLState)
+	w.msgBuilder.writeTerminatedString(pgErr.Code)
 
 	if pgErr.Detail != "" {
-		msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldDetail)
-		msgBuilder.writeTerminatedString(pgErr.Detail)
+		w.msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldDetail)
+		w.msgBuilder.writeTerminatedString(pgErr.Detail)
 	}
 
 	if pgErr.Hint != "" {
-		msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldHint)
-		msgBuilder.writeTerminatedString(pgErr.Hint)
+		w.msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldHint)
+		w.msgBuilder.writeTerminatedString(pgErr.Hint)
 	}
 
 	if pgErr.ConstraintName != "" {
-		msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldConstraintName)
-		msgBuilder.writeTerminatedString(pgErr.ConstraintName)
+		w.msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldConstraintName)
+		w.msgBuilder.writeTerminatedString(pgErr.ConstraintName)
 	}
 
 	if pgErr.Source != nil {
 		errCtx := pgErr.Source
 		if errCtx.File != "" {
-			msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldSrcFile)
-			msgBuilder.writeTerminatedString(errCtx.File)
+			w.msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldSrcFile)
+			w.msgBuilder.writeTerminatedString(errCtx.File)
 		}
 
 		if errCtx.Line > 0 {
-			msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldSrcLine)
-			msgBuilder.writeTerminatedString(strconv.Itoa(int(errCtx.Line)))
+			w.msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldSrcLine)
+			w.msgBuilder.writeTerminatedString(strconv.Itoa(int(errCtx.Line)))
 		}
 
 		if errCtx.Function != "" {
-			msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldSrcFunction)
-			msgBuilder.writeTerminatedString(errCtx.Function)
+			w.msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldSrcFunction)
+			w.msgBuilder.writeTerminatedString(errCtx.Function)
 		}
 	}
 
-	msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldMsgPrimary)
-	msgBuilder.writeTerminatedString(pgErr.Message)
+	w.msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldMsgPrimary)
+	w.msgBuilder.writeTerminatedString(pgErr.Message)
 
-	msgBuilder.nullTerminate()
-	return msgBuilder.finishMsg(w)
+	w.msgBuilder.nullTerminate()
+	return w.msgBuilder.finishMsg(out)
 }
 
 func (c *conn) bufferParamDesc(types []oid.Oid) {
@@ -1784,6 +1847,11 @@ func (c *conn) CreateErrorResult(pos sql.CmdPos) sql.ErrorResult {
 
 // CreateCopyInResult is part of the sql.ClientComm interface.
 func (c *conn) CreateCopyInResult(pos sql.CmdPos) sql.CopyInResult {
+	return c.newMiscResult(pos, noCompletionMsg)
+}
+
+// CreateCopyOutResult is part of the sql.ClientComm interface.
+func (c *conn) CreateCopyOutResult(pos sql.CmdPos) sql.CopyOutResult {
 	return c.newMiscResult(pos, noCompletionMsg)
 }
 

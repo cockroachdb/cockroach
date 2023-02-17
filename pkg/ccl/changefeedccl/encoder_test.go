@@ -11,6 +11,7 @@ package changefeedccl
 import (
 	"context"
 	gosql "database/sql"
+	"encoding/base64"
 	"fmt"
 	"math/rand"
 	"net/url"
@@ -320,7 +321,6 @@ func TestAvroEncoder(t *testing.T) {
 func TestAvroEncoderWithTLS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
 	tableDesc, err := parseTableDesc(`CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 	require.NoError(t, err)
 	row := rowenc.EncDatumRow{
@@ -343,88 +343,96 @@ func TestAvroEncoderWithTLS(t *testing.T) {
 		resolved: `{"resolved":{"string":"1.0000000002"}}`,
 	}
 
-	t.Run("format=avro,envelope=key_only", func(t *testing.T) {
-		cert, certBase64, err := cdctest.NewCACertBase64Encoded()
-		require.NoError(t, err)
+	for _, setClientCert := range []bool{true, false} {
+		t.Run(fmt.Sprintf("setClientCert=%t", setClientCert), func(t *testing.T) {
+			cert, certBase64, err := cdctest.NewCACertBase64Encoded()
+			require.NoError(t, err)
 
-		var rowStringFn func([]byte, []byte) string
-		var resolvedStringFn func([]byte) string
-		reg, err := cdctest.StartTestSchemaRegistryWithTLS(cert)
-		require.NoError(t, err)
-		defer reg.Close()
+			var rowStringFn func([]byte, []byte) string
+			var resolvedStringFn func([]byte) string
+			reg, err := cdctest.StartTestSchemaRegistryWithTLS(cert, setClientCert)
+			require.NoError(t, err)
+			defer reg.Close()
 
-		params := url.Values{}
-		params.Add("ca_cert", certBase64)
-		regURL, err := url.Parse(reg.URL())
-		require.NoError(t, err)
-		regURL.RawQuery = params.Encode()
-		opts.SchemaRegistryURI = regURL.String()
+			params := url.Values{}
+			params.Add("ca_cert", certBase64)
+			if setClientCert {
+				clientCertPEM, clientKeyPEM, err := cdctest.GenerateClientCertAndKey(cert)
+				require.NoError(t, err)
+				params.Add("client_cert", base64.StdEncoding.EncodeToString(clientCertPEM))
+				params.Add("client_key", base64.StdEncoding.EncodeToString(clientKeyPEM))
+			}
+			regURL, err := url.Parse(reg.URL())
+			require.NoError(t, err)
+			regURL.RawQuery = params.Encode()
+			opts.SchemaRegistryURI = regURL.String()
 
-		rowStringFn = func(k, v []byte) string {
-			key, value := avroToJSON(t, reg, k), avroToJSON(t, reg, v)
-			return fmt.Sprintf(`%s->%s`, key, value)
-		}
-		resolvedStringFn = func(r []byte) string {
-			return string(avroToJSON(t, reg, r))
-		}
+			rowStringFn = func(k, v []byte) string {
+				key, value := avroToJSON(t, reg, k), avroToJSON(t, reg, v)
+				return fmt.Sprintf(`%s->%s`, key, value)
+			}
+			resolvedStringFn = func(r []byte) string {
+				return string(avroToJSON(t, reg, r))
+			}
 
-		targets := changefeedbase.Targets{}
-		targets.Add(changefeedbase.Target{
-			Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
-			TableID:           tableDesc.GetID(),
-			StatementTimeName: changefeedbase.StatementTimeName(tableDesc.GetName()),
+			targets := changefeedbase.Targets{}
+			targets.Add(changefeedbase.Target{
+				Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
+				TableID:           tableDesc.GetID(),
+				StatementTimeName: changefeedbase.StatementTimeName(tableDesc.GetName()),
+			})
+
+			e, err := getEncoder(opts, targets)
+			require.NoError(t, err)
+
+			rowInsert := cdcevent.TestingMakeEventRow(tableDesc, 0, row, false)
+			var prevRow cdcevent.Row
+			evCtx := eventContext{updated: ts}
+			keyInsert, err := e.EncodeKey(context.Background(), rowInsert)
+			require.NoError(t, err)
+			keyInsert = append([]byte(nil), keyInsert...)
+			valueInsert, err := e.EncodeValue(context.Background(), evCtx, rowInsert, prevRow)
+			require.NoError(t, err)
+			require.Equal(t, expected.insert, rowStringFn(keyInsert, valueInsert))
+
+			rowDelete := cdcevent.TestingMakeEventRow(tableDesc, 0, row, true)
+			prevRow = cdcevent.TestingMakeEventRow(tableDesc, 0, row, false)
+
+			keyDelete, err := e.EncodeKey(context.Background(), rowDelete)
+			require.NoError(t, err)
+			keyDelete = append([]byte(nil), keyDelete...)
+			valueDelete, err := e.EncodeValue(context.Background(), evCtx, rowDelete, prevRow)
+			require.NoError(t, err)
+			require.Equal(t, expected.delete, rowStringFn(keyDelete, valueDelete))
+
+			resolved, err := e.EncodeResolvedTimestamp(context.Background(), tableDesc.GetName(), ts)
+			require.NoError(t, err)
+			require.Equal(t, expected.resolved, resolvedStringFn(resolved))
+
+			noCertReg, err := cdctest.StartTestSchemaRegistryWithTLS(nil, false)
+			require.NoError(t, err)
+			defer noCertReg.Close()
+			opts.SchemaRegistryURI = noCertReg.URL()
+
+			enc, err := getEncoder(opts, targets)
+			require.NoError(t, err)
+			_, err = enc.EncodeKey(context.Background(), rowInsert)
+			require.Regexp(t, "x509", err)
+
+			wrongCert, _, err := cdctest.NewCACertBase64Encoded()
+			require.NoError(t, err)
+
+			wrongCertReg, err := cdctest.StartTestSchemaRegistryWithTLS(wrongCert, false)
+			require.NoError(t, err)
+			defer wrongCertReg.Close()
+			opts.SchemaRegistryURI = wrongCertReg.URL()
+
+			enc, err = getEncoder(opts, targets)
+			require.NoError(t, err)
+			_, err = enc.EncodeKey(context.Background(), rowInsert)
+			require.Regexp(t, `contacting confluent schema registry.*: x509`, err)
 		})
-
-		e, err := getEncoder(opts, targets)
-		require.NoError(t, err)
-
-		rowInsert := cdcevent.TestingMakeEventRow(tableDesc, 0, row, false)
-		var prevRow cdcevent.Row
-		evCtx := eventContext{updated: ts}
-		keyInsert, err := e.EncodeKey(context.Background(), rowInsert)
-		require.NoError(t, err)
-		keyInsert = append([]byte(nil), keyInsert...)
-		valueInsert, err := e.EncodeValue(context.Background(), evCtx, rowInsert, prevRow)
-		require.NoError(t, err)
-		require.Equal(t, expected.insert, rowStringFn(keyInsert, valueInsert))
-
-		rowDelete := cdcevent.TestingMakeEventRow(tableDesc, 0, row, true)
-		prevRow = cdcevent.TestingMakeEventRow(tableDesc, 0, row, false)
-
-		keyDelete, err := e.EncodeKey(context.Background(), rowDelete)
-		require.NoError(t, err)
-		keyDelete = append([]byte(nil), keyDelete...)
-		valueDelete, err := e.EncodeValue(context.Background(), evCtx, rowDelete, prevRow)
-		require.NoError(t, err)
-		require.Equal(t, expected.delete, rowStringFn(keyDelete, valueDelete))
-
-		resolved, err := e.EncodeResolvedTimestamp(context.Background(), tableDesc.GetName(), ts)
-		require.NoError(t, err)
-		require.Equal(t, expected.resolved, resolvedStringFn(resolved))
-
-		noCertReg, err := cdctest.StartTestSchemaRegistryWithTLS(nil)
-		require.NoError(t, err)
-		defer noCertReg.Close()
-		opts.SchemaRegistryURI = noCertReg.URL()
-
-		enc, err := getEncoder(opts, targets)
-		require.NoError(t, err)
-		_, err = enc.EncodeKey(context.Background(), rowInsert)
-		require.Regexp(t, "x509", err)
-
-		wrongCert, _, err := cdctest.NewCACertBase64Encoded()
-		require.NoError(t, err)
-
-		wrongCertReg, err := cdctest.StartTestSchemaRegistryWithTLS(wrongCert)
-		require.NoError(t, err)
-		defer wrongCertReg.Close()
-		opts.SchemaRegistryURI = wrongCertReg.URL()
-
-		enc, err = getEncoder(opts, targets)
-		require.NoError(t, err)
-		_, err = enc.EncodeKey(context.Background(), rowInsert)
-		require.Regexp(t, `contacting confluent schema registry.*: x509`, err)
-	})
+	}
 }
 
 func TestAvroArray(t *testing.T) {
@@ -824,6 +832,8 @@ func TestAvroLedger(t *testing.T) {
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		ctx := context.Background()
+		// assertions depend on this seed
+		ledger.RandomSeed.Set(1)
 		gen := ledger.FromFlags(`--customers=1`)
 		var l workloadsql.InsertsDataLoader
 		_, err := workloadsql.Setup(ctx, s.DB, gen, l)
@@ -835,14 +845,14 @@ func TestAvroLedger(t *testing.T) {
 
 		assertPayloads(t, ledger, []string{
 			`customer: {"id":{"long":0}}->{"after":{"customer":{"balance":{"bytes.decimal":"0"},"created":{"long.timestamp-micros":"2114-03-27T13:14:27.287114Z"},"credit_limit":null,"currency_code":{"string":"XVL"},"id":{"long":0},"identifier":{"string":"0"},"is_active":{"boolean":true},"is_system_customer":{"boolean":true},"name":null,"sequence_number":{"long":-1}}}}`,
-			`entry: {"id":{"long":1543039099823358511}}->{"after":{"entry":{"amount":{"bytes.decimal":"0"},"created_ts":{"long.timestamp-micros":"1990-12-09T23:47:23.811124Z"},"customer_id":{"long":0},"id":{"long":1543039099823358511},"money_type":{"string":"C"},"system_amount":{"bytes.decimal":"44061/500"},"transaction_id":{"string":"payment:a8c7f832-281a-39c5-8820-1fb960ff6465"}}}}`,
-			`entry: {"id":{"long":2244708090865615074}}->{"after":{"entry":{"amount":{"bytes.decimal":"1/50"},"created_ts":{"long.timestamp-micros":"2075-11-08T22:07:12.055686Z"},"customer_id":{"long":0},"id":{"long":2244708090865615074},"money_type":{"string":"C"},"system_amount":{"bytes.decimal":"44061/500"},"transaction_id":{"string":"payment:a8c7f832-281a-39c5-8820-1fb960ff6465"}}}}`,
-			`entry: {"id":{"long":3305628230121721621}}->{"after":{"entry":{"amount":{"bytes.decimal":"1/25"},"created_ts":{"long.timestamp-micros":"2185-01-30T21:38:15.06669Z"},"customer_id":{"long":0},"id":{"long":3305628230121721621},"money_type":{"string":"C"},"system_amount":{"bytes.decimal":"44061/500"},"transaction_id":{"string":"payment:e3757ca7-d646-66ea-2b8d-6116831cbb05"}}}}`,
-			`entry: {"id":{"long":4151935814835861840}}->{"after":{"entry":{"amount":{"bytes.decimal":"3/50"},"created_ts":{"long.timestamp-micros":"2269-04-26T17:26:14.504652Z"},"customer_id":{"long":0},"id":{"long":4151935814835861840},"money_type":{"string":"C"},"system_amount":{"bytes.decimal":"44061/500"},"transaction_id":{"string":"payment:e3757ca7-d646-66ea-2b8d-6116831cbb05"}}}}`,
-			`entry: {"id":{"long":5577006791947779410}}->{"after":{"entry":{"amount":{"bytes.decimal":"0"},"created_ts":{"long.timestamp-micros":"2185-11-07T09:42:42.666146Z"},"customer_id":{"long":0},"id":{"long":5577006791947779410},"money_type":{"string":"C"},"system_amount":{"bytes.decimal":"-88123/1000"},"transaction_id":{"string":"payment:a8c7f832-281a-39c5-8820-1fb960ff6465"}}}}`,
-			`entry: {"id":{"long":6640668014774057861}}->{"after":{"entry":{"amount":{"bytes.decimal":"-1/50"},"created_ts":{"long.timestamp-micros":"2274-12-08T13:04:19.854595Z"},"customer_id":{"long":0},"id":{"long":6640668014774057861},"money_type":{"string":"C"},"system_amount":{"bytes.decimal":"-88123/1000"},"transaction_id":{"string":"payment:a8c7f832-281a-39c5-8820-1fb960ff6465"}}}}`,
-			`entry: {"id":{"long":7414159922357799360}}->{"after":{"entry":{"amount":{"bytes.decimal":"-1/25"},"created_ts":{"long.timestamp-micros":"2290-08-26T02:12:41.861501Z"},"customer_id":{"long":0},"id":{"long":7414159922357799360},"money_type":{"string":"C"},"system_amount":{"bytes.decimal":"-88123/1000"},"transaction_id":{"string":"payment:e3757ca7-d646-66ea-2b8d-6116831cbb05"}}}}`,
-			`entry: {"id":{"long":8475284246537043955}}->{"after":{"entry":{"amount":{"bytes.decimal":"-3/50"},"created_ts":{"long.timestamp-micros":"2048-07-21T10:02:40.114474Z"},"customer_id":{"long":0},"id":{"long":8475284246537043955},"money_type":{"string":"C"},"system_amount":{"bytes.decimal":"-88123/1000"},"transaction_id":{"string":"payment:e3757ca7-d646-66ea-2b8d-6116831cbb05"}}}}`,
+			`entry: {"id":{"long":1543039099823358511}}->{"after":{"entry":{"amount":{"bytes.decimal":"0"},"created_ts":{"long.timestamp-micros":"1990-12-09T23:47:23.811124Z"},"customer_id":{"long":0},"id":{"long":1543039099823358511},"money_type":{"string":"C"},"system_amount":{"bytes.decimal":"88122259/1000000"},"transaction_id":{"string":"payment:a8c7f832-281a-39c5-8820-1fb960ff6465"}}}}`,
+			`entry: {"id":{"long":2244708090865615074}}->{"after":{"entry":{"amount":{"bytes.decimal":"1/50"},"created_ts":{"long.timestamp-micros":"2075-11-08T22:07:12.055686Z"},"customer_id":{"long":0},"id":{"long":2244708090865615074},"money_type":{"string":"C"},"system_amount":{"bytes.decimal":"88122259/1000000"},"transaction_id":{"string":"payment:a8c7f832-281a-39c5-8820-1fb960ff6465"}}}}`,
+			`entry: {"id":{"long":3305628230121721621}}->{"after":{"entry":{"amount":{"bytes.decimal":"1/25"},"created_ts":{"long.timestamp-micros":"2185-01-30T21:38:15.06669Z"},"customer_id":{"long":0},"id":{"long":3305628230121721621},"money_type":{"string":"C"},"system_amount":{"bytes.decimal":"88122259/1000000"},"transaction_id":{"string":"payment:e3757ca7-d646-66ea-2b8d-6116831cbb05"}}}}`,
+			`entry: {"id":{"long":4151935814835861840}}->{"after":{"entry":{"amount":{"bytes.decimal":"3/50"},"created_ts":{"long.timestamp-micros":"2269-04-26T17:26:14.504652Z"},"customer_id":{"long":0},"id":{"long":4151935814835861840},"money_type":{"string":"C"},"system_amount":{"bytes.decimal":"88122259/1000000"},"transaction_id":{"string":"payment:e3757ca7-d646-66ea-2b8d-6116831cbb05"}}}}`,
+			`entry: {"id":{"long":5577006791947779410}}->{"after":{"entry":{"amount":{"bytes.decimal":"0"},"created_ts":{"long.timestamp-micros":"2185-11-07T09:42:42.666146Z"},"customer_id":{"long":0},"id":{"long":5577006791947779410},"money_type":{"string":"C"},"system_amount":{"bytes.decimal":"-88122259/1000000"},"transaction_id":{"string":"payment:a8c7f832-281a-39c5-8820-1fb960ff6465"}}}}`,
+			`entry: {"id":{"long":6640668014774057861}}->{"after":{"entry":{"amount":{"bytes.decimal":"-1/50"},"created_ts":{"long.timestamp-micros":"2274-12-08T13:04:19.854595Z"},"customer_id":{"long":0},"id":{"long":6640668014774057861},"money_type":{"string":"C"},"system_amount":{"bytes.decimal":"-88122259/1000000"},"transaction_id":{"string":"payment:a8c7f832-281a-39c5-8820-1fb960ff6465"}}}}`,
+			`entry: {"id":{"long":7414159922357799360}}->{"after":{"entry":{"amount":{"bytes.decimal":"-1/25"},"created_ts":{"long.timestamp-micros":"2290-08-26T02:12:41.861501Z"},"customer_id":{"long":0},"id":{"long":7414159922357799360},"money_type":{"string":"C"},"system_amount":{"bytes.decimal":"-88122259/1000000"},"transaction_id":{"string":"payment:e3757ca7-d646-66ea-2b8d-6116831cbb05"}}}}`,
+			`entry: {"id":{"long":8475284246537043955}}->{"after":{"entry":{"amount":{"bytes.decimal":"-3/50"},"created_ts":{"long.timestamp-micros":"2048-07-21T10:02:40.114474Z"},"customer_id":{"long":0},"id":{"long":8475284246537043955},"money_type":{"string":"C"},"system_amount":{"bytes.decimal":"-88122259/1000000"},"transaction_id":{"string":"payment:e3757ca7-d646-66ea-2b8d-6116831cbb05"}}}}`,
 			`session: {"session_id":{"string":"pLnfgDsc3WD9F3qNfHK6a95jjJkwzDkh0h3fhfUVuS0jZ9uVbhV4vC6AWX40IV"}}->{"after":{"session":{"data":{"string":"SP3NcHciWvqZTa3N06RxRTZHWUsaD7HEdz1ThbXfQ7pYSQ4n378l2VQKGNbSuJE0fQbzONJAAwdCxmM9BIabKERsUhPNmMmdf3eSJyYtqwcFiUILzXv3fcNIrWO8sToFgoilA1U2WxNeW2gdgUVDsEWJ88aX8tLF"},"expiry_timestamp":{"long.timestamp-micros":"2052-05-14T04:02:49.264975Z"},"last_update":{"long.timestamp-micros":"2070-03-19T02:10:22.552438Z"},"session_id":{"string":"pLnfgDsc3WD9F3qNfHK6a95jjJkwzDkh0h3fhfUVuS0jZ9uVbhV4vC6AWX40IV"}}}}`,
 			`transaction: {"external_id":{"string":"payment:a8c7f832-281a-39c5-8820-1fb960ff6465"}}->{"after":{"transaction":{"context":{"string":"BpLnfgDsc3WD9F3qNfHK6a95jjJkwzDkh0h3fhfUVuS0jZ9uVbhV4vC6"},"created_ts":{"long.timestamp-micros":"2178-08-01T19:10:30.064819Z"},"external_id":{"string":"payment:a8c7f832-281a-39c5-8820-1fb960ff6465"},"response":{"bytes":"MDZSeFJUWkhXVXNhRDdIRWR6MVRoYlhmUTdwWVNRNG4zNzhsMlZRS0dOYlN1SkUwZlFiek9OSkFBd2RDeG1NOUJJYWJLRVJzVWhQTm1NbWRmM2VTSnlZdHF3Y0ZpVUlMelh2M2ZjTklyV084c1RvRmdvaWxBMVUyV3hOZVcyZ2RnVVZEc0VXSjg4YVg4dExGSjk1cVlVN1VyTjljdGVjd1p0NlM1empoRDF0WFJUbWtZS1FvTjAyRm1XblFTSzN3UkM2VUhLM0txQXR4alAzWm1EMmp0dDR6Z3I2TWVVam9BamNPMGF6TW10VTRZdHYxUDhPUG1tU05hOThkN3RzdGF4eTZuYWNuSkJTdUZwT2h5SVhFN1BKMURoVWtMWHFZWW5FTnVucWRzd3BUdzVVREdEUzM0bVNQWUs4dm11YjNYOXVYSXU3Rk5jSmpBUlFUM1JWaFZydDI0UDdpNnhDckw2RmM0R2N1SEMxNGthdW5BVFVQUkhqR211Vm14SHN5enpCYnlPb25xVlVTREsxVg=="},"reversed_by":null,"systimestamp":{"long.timestamp-micros":"2215-07-28T23:47:01.795499Z"},"tcomment":null,"transaction_type_reference":{"long":400},"username":{"string":"WX40IVUWSP3NcHciWvqZ"}}}}`,
 			`transaction: {"external_id":{"string":"payment:e3757ca7-d646-66ea-2b8d-6116831cbb05"}}->{"after":{"transaction":{"context":{"string":"KSiOW5eQ8sklpgstrQZtAcrsGvPnYSXMOpFIpPzS8iI5N2gN7lD1rYjT"},"created_ts":{"long.timestamp-micros":"2062-07-27T13:21:35.213969Z"},"external_id":{"string":"payment:e3757ca7-d646-66ea-2b8d-6116831cbb05"},"response":{"bytes":"bWdkbHVWOFVvcWpRM1JBTTRTWjNzT0M4ZnlzZXN5NnRYeVZ5WTBnWkE1aVNJUjM4MFVPVWFwQTlPRmpuRWtiaHF6MlRZSlZIWUFtTHI5R0kyMlo3NFVmNjhDMFRRb2RDdWF0NmhmWmZSYmFlV1pJSFExMGJsSjVqQUd2VVRpWWJOWHZPcWowYlRUM24xNmNqQVNEN29qN2RPbVlVbTFua3AybnVvWTZGZlgzcVFHY09SbHZ2UHdHaHNDZWlZTmpvTVRoUXBFc0ZrSVpZVUxxNFFORzc1M25mamJYdENaUm4xSmVZV1hpUW1IWjJZMWIxb1lZbUtBS05aQjF1MGt1TU5ZbEFISW5hY1JoTkFzakd6bnBKSXZZdmZqWXk3MXV4OVI5SkRNQUMxRUtOSGFZVWNlekk4OHRHYmdwbWFGaXdIV09sUFQ5RUJVcHh6MHlCSnZGM1BKcW5jejVwMnpnVVhDcm9kZTV6UG5pNjJQV1dtMk5pSWVkSUxFaExLVVNHVWRNU1R5N1pmcjRyY2RJTw=="},"reversed_by":null,"systimestamp":{"long.timestamp-micros":"2229-01-11T00:56:37.706179Z"},"tcomment":null,"transaction_type_reference":{"long":400},"username":{"string":"XJXORIpfMGxOaIIFFFts"}}}}`,

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -93,25 +94,38 @@ func runTestRoleMembersIDMigration(t *testing.T, numUsers int) {
 
 	// Create test users.
 	expectedNumRoleMembersRows := 1
+	tx, err := db.BeginTx(ctx, nil /* opts */)
+	require.NoError(t, err)
+	txRunner := sqlutils.MakeSQLRunner(tx)
 	for i := 0; i < numUsers; i++ {
-		tdb.Exec(t, fmt.Sprintf("CREATE USER testuser%d", i))
+		// Group statements into transactions of 100 users to speed up creation.
+		if i != 0 && i%100 == 0 {
+			err := tx.Commit()
+			require.NoError(t, err)
+			tx, err = db.BeginTx(ctx, nil /* opts */)
+			require.NoError(t, err)
+			txRunner = sqlutils.MakeSQLRunner(tx)
+		}
+		txRunner.Exec(t, fmt.Sprintf("CREATE USER testuser%d", i))
 		if i == 0 {
 			continue
 		}
-		// Randomly choose an earlier testuser to grant to the current testuser.
+		// Randomly choose an earlier test user to grant to the current test user.
 		grantStmt := fmt.Sprintf("GRANT testuser%d to testuser%d", rand.Intn(i), i)
 		if rand.Intn(2) == 1 {
 			grantStmt += " WITH ADMIN OPTION"
 		}
-		tdb.Exec(t, grantStmt)
+		txRunner.Exec(t, grantStmt)
 		expectedNumRoleMembersRows += 1
 	}
+	err = tx.Commit()
+	require.NoError(t, err)
 	tdb.CheckQueryResults(t, "SELECT count(*) FROM system.role_members", [][]string{
 		{fmt.Sprintf("%d", expectedNumRoleMembersRows)},
 	})
 
 	// Run migrations.
-	_, err := tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
+	_, err = tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
 		clusterversion.ByKey(clusterversion.V23_1RoleMembersTableHasIDColumns).String())
 	require.NoError(t, err)
 	_, err = tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
@@ -132,8 +146,8 @@ func runTestRoleMembersIDMigration(t *testing.T, numUsers int) {
 	"role" STRING NOT NULL,
 	member STRING NOT NULL,
 	"isAdmin" BOOL NOT NULL,
-	role_id OID NULL,
-	member_id OID NULL,
+	role_id OID NOT NULL,
+	member_id OID NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY ("role" ASC, member ASC),
 	INDEX role_members_role_idx ("role" ASC),
 	INDEX role_members_member_idx (member ASC),
@@ -185,7 +199,7 @@ func getTableDescForSystemRoleMembersTableBeforeIDCols() *descpb.TableDescriptor
 			ID:                  1,
 			Unique:              true,
 			KeyColumnNames:      []string{"role", "member"},
-			KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
+			KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
 			KeyColumnIDs:        []descpb.ColumnID{1, 2},
 		},
 		Indexes: []descpb.IndexDescriptor{
@@ -194,7 +208,7 @@ func getTableDescForSystemRoleMembersTableBeforeIDCols() *descpb.TableDescriptor
 				ID:                  2,
 				Unique:              false,
 				KeyColumnNames:      []string{"role"},
-				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{1},
 				KeySuffixColumnIDs:  []descpb.ColumnID{2},
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
@@ -204,7 +218,7 @@ func getTableDescForSystemRoleMembersTableBeforeIDCols() *descpb.TableDescriptor
 				ID:                  3,
 				Unique:              false,
 				KeyColumnNames:      []string{"member"},
-				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{2},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,

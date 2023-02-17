@@ -18,7 +18,7 @@ REVOKE CONNECT ON DATABASE a FROM admin
 statement ok
 CREATE USER readwrite
 
-statement error pq: user or role "test-user" does not exist
+statement error pq: role/user "test-user" does not exist
 GRANT ALL ON DATABASE a TO readwrite, "test-user"
 
 statement ok

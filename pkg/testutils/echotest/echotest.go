@@ -71,7 +71,7 @@ type Walker struct {
 //
 // Model usage:
 //
-//	   w := NewWalker(t, testutils.TestDataPath(t))
+//	   w := NewWalker(t, datapathutils.TestDataPath(t))
 //		 for _, test := range []struct{ name string }{
 //		    {name: "foo"},
 //		    {name: "bar"},
@@ -81,7 +81,7 @@ type Walker struct {
 //		    }))
 //		 }
 //
-// w := NewWalker(t, testutils.TestDataPath(t))
+// w := NewWalker(t, datapathutils.TestDataPath(t))
 //
 //	for _, test := range []struct{ name string }{
 //		{name: "foo"},
@@ -197,6 +197,7 @@ func (w *Walker) Check(t T) {
 	}
 	if len(w.missingFiles) > 0 {
 		mk := fmt.Sprintf(`mkdir -p %[1]q && cd %[1]q && echo 'echo'`, w.dir)
+		_ = os.MkdirAll(w.dir, 0755)
 		for _, f := range w.missingFiles {
 			if w.populate {
 				if err := os.WriteFile(filepath.Join(w.dir, f), []byte("echo\n"), 0644); err != nil {

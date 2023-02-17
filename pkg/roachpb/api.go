@@ -1470,6 +1470,7 @@ func BulkOpSummaryID(tableID, indexID uint64) uint64 {
 // Add combines the values from other, for use on an accumulator BulkOpSummary.
 func (b *BulkOpSummary) Add(other BulkOpSummary) {
 	b.DataSize += other.DataSize
+	b.SSTDataSize += other.SSTDataSize
 	b.DeprecatedRows += other.DeprecatedRows
 	b.DeprecatedIndexEntries += other.DeprecatedIndexEntries
 
@@ -1781,14 +1782,24 @@ func humanizePointCount(n uint64) redact.SafeString {
 func (s *ScanStats) SafeFormat(w redact.SafePrinter, _ rune) {
 	w.Printf("scan stats: stepped %d times (%d internal); seeked %d times (%d internal); "+
 		"block-bytes: (total %s, cached %s); "+
-		"points: (count %s, key-bytes %s, value-bytes %s, tombstoned: %s)",
+		"points: (count %s, key-bytes %s, value-bytes %s, tombstoned: %s) "+
+		"ranges: (count %s), (contained-points %s, skipped-points %s)",
 		s.NumInterfaceSteps, s.NumInternalSteps, s.NumInterfaceSeeks, s.NumInternalSeeks,
 		humanizeutil.IBytes(int64(s.BlockBytes)),
 		humanizeutil.IBytes(int64(s.BlockBytesInCache)),
 		humanizePointCount(s.PointCount),
 		humanizeutil.IBytes(int64(s.KeyBytes)),
 		humanizeutil.IBytes(int64(s.ValueBytes)),
-		humanizePointCount(s.PointsCoveredByRangeTombstones))
+		humanizePointCount(s.PointsCoveredByRangeTombstones),
+		humanizePointCount(s.RangeKeyCount),
+		humanizePointCount(s.RangeKeyContainedPoints),
+		humanizePointCount(s.RangeKeySkippedPoints))
+	if s.SeparatedPointCount != 0 {
+		w.Printf(" separated: (count: %s, bytes: %s, bytes-fetched: %s)",
+			humanizePointCount(s.SeparatedPointCount),
+			humanizeutil.IBytes(int64(s.SeparatedPointValueBytes)),
+			humanizeutil.IBytes(int64(s.SeparatedPointValueBytesFetched)))
+	}
 }
 
 // String implements fmt.Stringer.

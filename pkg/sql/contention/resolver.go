@@ -16,8 +16,8 @@ import (
 	"sort"
 	"strconv"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -233,12 +233,12 @@ func (q *resolverQueueImpl) resolveLocked(ctx context.Context) error {
 
 func maybeUpdateTxnFingerprintID(
 	txnID uuid.UUID,
-	existingTxnFingerprintID *roachpb.TransactionFingerprintID,
-	resolvedTxnIDs, inProgressTxnIDs map[uuid.UUID]roachpb.TransactionFingerprintID,
+	existingTxnFingerprintID *appstatspb.TransactionFingerprintID,
+	resolvedTxnIDs, inProgressTxnIDs map[uuid.UUID]appstatspb.TransactionFingerprintID,
 ) (needToRetry bool, initialRetryBudget uint32) {
 	// This means the txnID has already been resolved into transaction fingerprint
 	// ID.
-	if *existingTxnFingerprintID != roachpb.InvalidTransactionFingerprintID {
+	if *existingTxnFingerprintID != appstatspb.InvalidTransactionFingerprintID {
 		return false /* needToRetry */, 0 /* initialRetryBudget */
 	}
 
@@ -324,17 +324,17 @@ func readUntilNextCoordinatorID(
 
 func extractResolvedAndInProgressTxnIDs(
 	resp *serverpb.TxnIDResolutionResponse,
-) (resolvedTxnIDs, inProgressTxnIDs map[uuid.UUID]roachpb.TransactionFingerprintID) {
+) (resolvedTxnIDs, inProgressTxnIDs map[uuid.UUID]appstatspb.TransactionFingerprintID) {
 	if resp == nil {
 		return nil /* resolvedTxnID */, nil /* inProgressTxnIDs */
 	}
 
-	resolvedTxnIDs = make(map[uuid.UUID]roachpb.TransactionFingerprintID, len(resp.ResolvedTxnIDs))
-	inProgressTxnIDs = make(map[uuid.UUID]roachpb.TransactionFingerprintID, len(resp.ResolvedTxnIDs))
+	resolvedTxnIDs = make(map[uuid.UUID]appstatspb.TransactionFingerprintID, len(resp.ResolvedTxnIDs))
+	inProgressTxnIDs = make(map[uuid.UUID]appstatspb.TransactionFingerprintID, len(resp.ResolvedTxnIDs))
 
 	for _, event := range resp.ResolvedTxnIDs {
-		if event.TxnFingerprintID == roachpb.InvalidTransactionFingerprintID {
-			inProgressTxnIDs[event.TxnID] = roachpb.InvalidTransactionFingerprintID
+		if event.TxnFingerprintID == appstatspb.InvalidTransactionFingerprintID {
+			inProgressTxnIDs[event.TxnID] = appstatspb.InvalidTransactionFingerprintID
 		} else {
 			resolvedTxnIDs[event.TxnID] = event.TxnFingerprintID
 		}
@@ -360,10 +360,10 @@ func makeRPCRequestsFromBatch(
 	}
 
 	for i := range batch {
-		if batch[i].BlockingTxnFingerprintID == roachpb.InvalidTransactionFingerprintID {
+		if batch[i].BlockingTxnFingerprintID == appstatspb.InvalidTransactionFingerprintID {
 			blockingTxnIDReq.TxnIDs = append(blockingTxnIDReq.TxnIDs, batch[i].BlockingEvent.TxnMeta.ID)
 		}
-		if batch[i].WaitingTxnFingerprintID == roachpb.InvalidTransactionFingerprintID {
+		if batch[i].WaitingTxnFingerprintID == appstatspb.InvalidTransactionFingerprintID {
 			waitingTxnIDReq.TxnIDs = append(waitingTxnIDReq.TxnIDs, batch[i].WaitingTxnID)
 		}
 	}

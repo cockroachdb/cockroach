@@ -101,18 +101,8 @@ func getCertificatePrincipals(cert *x509.Certificate) []string {
 
 // GetCertificateUserScope extracts the certificate scopes from a client certificate.
 func GetCertificateUserScope(
-	tlsState *tls.ConnectionState,
+	peerCert *x509.Certificate,
 ) (userScopes []CertificateUserScope, _ error) {
-	if tlsState == nil {
-		return nil, errors.Errorf("request is not using TLS")
-	}
-	if len(tlsState.PeerCertificates) == 0 {
-		return nil, errors.Errorf("no client certificates in request")
-	}
-	// The go server handshake code verifies the first certificate, using
-	// any following certificates as intermediates. See:
-	// https://github.com/golang/go/blob/go1.8.1/src/crypto/tls/handshake_server.go#L723:L742
-	peerCert := tlsState.PeerCertificates[0]
 	for _, uri := range peerCert.URIs {
 		uriString := uri.String()
 		if URISANHasCRDBPrefix(uriString) {
@@ -157,8 +147,16 @@ func UserAuthCertHook(
 ) (UserAuthHook, error) {
 	var certUserScope []CertificateUserScope
 	if !insecureMode {
+		if tlsState == nil {
+			return nil, errors.Errorf("request is not using TLS")
+		}
+		if len(tlsState.PeerCertificates) == 0 {
+			return nil, errors.Errorf("no client certificates in request")
+		}
+		peerCert := tlsState.PeerCertificates[0]
+
 		var err error
-		certUserScope, err = GetCertificateUserScope(tlsState)
+		certUserScope, err = GetCertificateUserScope(peerCert)
 		if err != nil {
 			return nil, err
 		}
@@ -171,7 +169,7 @@ func UserAuthCertHook(
 		}
 
 		if !clientConnection && !systemIdentity.IsNodeUser() {
-			return errors.Errorf("user %s is not allowed", systemIdentity)
+			return errors.Errorf("user %q is not allowed", systemIdentity)
 		}
 
 		// If running in insecure mode, we have nothing to verify it against.
@@ -189,8 +187,26 @@ func UserAuthCertHook(
 		if ValidateUserScope(certUserScope, systemIdentity.Normalized(), tenantID) {
 			return nil
 		}
-		return errors.Errorf("requested user %s is not authorized for tenant %d", systemIdentity, tenantID)
+		return errors.WithDetailf(errors.Errorf("certificate authentication failed for user %q", systemIdentity),
+			"The client certificate is valid for %s.", FormatUserScopes(certUserScope))
 	}, nil
+}
+
+// FormatUserScopes formats a list of scopes in a human-readable way,
+// suitable for e.g. inclusion in error messages.
+func FormatUserScopes(certUserScope []CertificateUserScope) string {
+	var buf strings.Builder
+	comma := ""
+	for _, scope := range certUserScope {
+		fmt.Fprintf(&buf, "%s%q on ", comma, scope.Username)
+		if scope.Global {
+			buf.WriteString("all tenants")
+		} else {
+			fmt.Fprintf(&buf, "tenant %v", scope.TenantID)
+		}
+		comma = ", "
+	}
+	return buf.String()
 }
 
 // IsTenantCertificate returns true if the passed certificate indicates an

@@ -17,6 +17,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -24,8 +26,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
@@ -37,6 +41,25 @@ import (
 type decommissioningNodeMap struct {
 	syncutil.RWMutex
 	nodes map[roachpb.NodeID]interface{}
+}
+
+// decommissionRangeCheckResult is the result of evaluating the allocator action
+// and target for a single range that has an extant replica on a node targeted
+// for decommission.
+type decommissionRangeCheckResult struct {
+	desc         roachpb.RangeDescriptor
+	action       string
+	tracingSpans tracingpb.Recording
+	err          error
+}
+
+// decommissionPreCheckResult is the result of checking the readiness
+// of a node or set of nodes to be decommissioned.
+type decommissionPreCheckResult struct {
+	rangesChecked  int
+	replicasByNode map[roachpb.NodeID][]roachpb.ReplicaIdent
+	actionCounts   map[string]int
+	rangesNotReady []decommissionRangeCheckResult
 }
 
 // makeOnNodeDecommissioningCallback returns a callback that enqueues the
@@ -129,6 +152,185 @@ func getPingCheckDecommissionFn(
 		// The common case - target node is not decommissioned.
 		return nil
 	}
+}
+
+// DecommissionPreCheck is used to evaluate if nodes are ready for decommission,
+// prior to starting the Decommission(..) process. This is evaluated by checking
+// that any replicas on the given nodes are able to be replaced or removed,
+// following the current state of the cluster as well as the configuration.
+// If strictReadiness is true, all replicas are expected to need only replace
+// or remove actions. If maxErrors >0, range checks will stop once maxError is
+// reached.
+// The error returned is a gRPC error.
+func (s *Server) DecommissionPreCheck(
+	ctx context.Context,
+	nodeIDs []roachpb.NodeID,
+	strictReadiness bool,
+	collectTraces bool,
+	maxErrors int,
+) (decommissionPreCheckResult, error) {
+	// Ensure that if collectTraces is enabled, that a maxErrors >0 is set in
+	// order to avoid unlimited memory usage.
+	if collectTraces && maxErrors <= 0 {
+		return decommissionPreCheckResult{},
+			grpcstatus.Error(codes.InvalidArgument, "MaxErrors must be set to collect traces.")
+	}
+
+	var rangesChecked int
+	decommissionCheckNodeIDs := make(map[roachpb.NodeID]livenesspb.NodeLivenessStatus)
+	replicasByNode := make(map[roachpb.NodeID][]roachpb.ReplicaIdent)
+	actionCounts := make(map[string]int)
+	var rangeErrors []decommissionRangeCheckResult
+	const pageSize = 10000
+
+	for _, nodeID := range nodeIDs {
+		decommissionCheckNodeIDs[nodeID] = livenesspb.NodeLivenessStatus_DECOMMISSIONING
+	}
+
+	// Counters need to be reset on any transaction retries during the scan
+	// through range descriptors.
+	initCounters := func() {
+		rangesChecked = 0
+		for action := range actionCounts {
+			actionCounts[action] = 0
+		}
+		rangeErrors = rangeErrors[:0]
+		for nid := range replicasByNode {
+			replicasByNode[nid] = replicasByNode[nid][:0]
+		}
+	}
+
+	// Only check using the first store on this node, as they should all give
+	// identical results.
+	var evalStore *kvserver.Store
+	err := s.node.stores.VisitStores(func(s *kvserver.Store) error {
+		if evalStore == nil {
+			evalStore = s
+		}
+		return nil
+	})
+	if err == nil && evalStore == nil {
+		err = errors.Errorf("n%d has no initialized store", s.NodeID())
+	}
+	if err != nil {
+		return decommissionPreCheckResult{}, grpcstatus.Error(codes.NotFound, err.Error())
+	}
+
+	// Define our node liveness overrides to simulate that the nodeIDs for which
+	// we are checking decommission readiness are in the DECOMMISSIONING state.
+	// All other nodeIDs should use their actual liveness status.
+	existingStorePool := evalStore.GetStoreConfig().StorePool
+	overrideNodeLivenessFn := storepool.OverrideNodeLivenessFunc(
+		decommissionCheckNodeIDs, existingStorePool.NodeLivenessFn,
+	)
+	overrideNodeCount := storepool.OverrideNodeCountFunc(
+		decommissionCheckNodeIDs, evalStore.GetStoreConfig().NodeLiveness,
+	)
+	overrideStorePool := storepool.NewOverrideStorePool(
+		existingStorePool, overrideNodeLivenessFn, overrideNodeCount,
+	)
+
+	// Define our replica filter to only look at the replicas on the checked nodes.
+	predHasDecommissioningReplica := func(rDesc roachpb.ReplicaDescriptor) bool {
+		_, ok := decommissionCheckNodeIDs[rDesc.NodeID]
+		return ok
+	}
+
+	// Iterate through all range descriptors using the rangedesc.Scanner, which
+	// will perform the requisite meta1/meta2 lookups, including retries.
+	rangeDescScanner := rangedesc.NewScanner(s.db)
+	err = rangeDescScanner.Scan(ctx, pageSize, initCounters, keys.EverythingSpan, func(descriptors ...roachpb.RangeDescriptor) error {
+		for _, desc := range descriptors {
+			// Track replicas by node for recording purposes.
+			// Skip checks if this range doesn't exist on a potentially decommissioning node.
+			replicasToMove := desc.Replicas().FilterToDescriptors(predHasDecommissioningReplica)
+			if len(replicasToMove) == 0 {
+				continue
+			}
+			for _, rDesc := range replicasToMove {
+				rIdent := roachpb.ReplicaIdent{
+					RangeID: desc.RangeID,
+					Replica: rDesc,
+				}
+				replicasByNode[rDesc.NodeID] = append(replicasByNode[rDesc.NodeID], rIdent)
+			}
+
+			if maxErrors > 0 && len(rangeErrors) >= maxErrors {
+				// TODO(sarkesian): Consider adding a per-range descriptor iterator to
+				// rangedesc.Scanner, which will correctly stop iteration on the
+				// function returning iterutil.StopIteration().
+				continue
+			}
+
+			action, _, recording, rErr := evalStore.AllocatorCheckRange(ctx, &desc, collectTraces, overrideStorePool)
+			rangesChecked += 1
+			actionCounts[action.String()] += 1
+
+			if passed, checkResult := evaluateRangeCheckResult(strictReadiness, collectTraces,
+				&desc, action, recording, rErr,
+			); !passed {
+				rangeErrors = append(rangeErrors, checkResult)
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return decommissionPreCheckResult{}, grpcstatus.Errorf(codes.Internal, err.Error())
+	}
+
+	return decommissionPreCheckResult{
+		rangesChecked:  rangesChecked,
+		replicasByNode: replicasByNode,
+		actionCounts:   actionCounts,
+		rangesNotReady: rangeErrors,
+	}, nil
+}
+
+// evaluateRangeCheckResult returns true or false if the range has passed
+// decommissioning checks (based on if we are testing strict readiness or not),
+// as well as the encapsulated range check result with errors defined as needed.
+func evaluateRangeCheckResult(
+	strictReadiness bool,
+	collectTraces bool,
+	desc *roachpb.RangeDescriptor,
+	action allocatorimpl.AllocatorAction,
+	recording tracingpb.Recording,
+	rErr error,
+) (passed bool, _ decommissionRangeCheckResult) {
+	checkResult := decommissionRangeCheckResult{
+		desc:   *desc,
+		action: action.String(),
+		err:    rErr,
+	}
+
+	if collectTraces {
+		checkResult.tracingSpans = recording
+	}
+
+	if rErr != nil {
+		return false, checkResult
+	}
+
+	if action == allocatorimpl.AllocatorRangeUnavailable ||
+		action == allocatorimpl.AllocatorNoop ||
+		action == allocatorimpl.AllocatorConsiderRebalance {
+		checkResult.err = errors.Errorf("range r%d requires unexpected allocation action: %s",
+			desc.RangeID, action,
+		)
+		return false, checkResult
+	}
+
+	if strictReadiness && !(action.Replace() || action.Remove()) {
+		checkResult.err = errors.Errorf(
+			"range r%d needs repair beyond replacing/removing the decommissioning replica: %s",
+			desc.RangeID, action,
+		)
+		return false, checkResult
+	}
+
+	return true, checkResult
 }
 
 // Decommission idempotently sets the decommissioning flag for specified nodes.

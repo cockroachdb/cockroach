@@ -1,0 +1,129 @@
+# LogicTest: cockroach-go-testserver-22.2-master
+
+# Verify that all nodes are running 22.2 binaries.
+
+query T nodeidx=0
+SELECT crdb_internal.node_executable_version()
+----
+22.2
+
+query T nodeidx=1
+SELECT crdb_internal.node_executable_version()
+----
+22.2
+
+query T nodeidx=2
+SELECT crdb_internal.node_executable_version()
+----
+22.2
+
+# Create test users.
+
+statement ok
+CREATE USER testuser1
+
+statement ok
+CREATE USER testuser2
+
+statement ok
+CREATE USER testuser3
+
+query TO
+SELECT username, user_id FROM system.users
+----
+root       1
+admin      2
+testuser   100
+testuser1  101
+testuser2  102
+testuser3  103
+
+# Create a role membership that will be checked again later on 23.1.
+
+query TTB
+SELECT * FROM system.role_members
+----
+admin      root       true
+
+statement ok
+GRANT testuser1 TO testuser2
+
+query TTB
+SELECT * FROM system.role_members
+----
+admin      root       true
+testuser1  testuser2  false
+
+upgrade 1
+
+# Test that there are no problems creating role memberships on a mixed 22.2/23.1 cluster.
+
+query B nodeidx=1
+SELECT crdb_internal.node_executable_version() SIMILAR TO '1000022.2-%'
+----
+true
+
+user root nodeidx=1
+
+statement ok
+GRANT testuser1 TO testuser3
+
+user root nodeidx=0
+
+query TTB
+SELECT * FROM system.role_members
+----
+admin      root       true
+testuser1  testuser2  false
+testuser1  testuser3  false
+
+statement ok
+GRANT testuser2 TO testuser3
+
+query TTB
+SELECT * FROM system.role_members
+----
+admin      root       true
+testuser1  testuser2  false
+testuser1  testuser3  false
+testuser2  testuser3  false
+
+upgrade 0
+
+upgrade 2
+
+# Verify that all nodes are now running 23.1 binaries.
+
+query B nodeidx=0
+SELECT crdb_internal.node_executable_version() SIMILAR TO '1000022.2-%'
+----
+true
+
+query B nodeidx=1
+SELECT crdb_internal.node_executable_version() SIMILAR TO '1000022.2-%'
+----
+true
+
+query B nodeidx=2
+SELECT crdb_internal.node_executable_version() SIMILAR TO '1000022.2-%'
+----
+true
+
+# Wait for migrations to run.
+
+sleep 10s
+
+query B retry
+SELECT crdb_internal.is_at_least_version('1000022.2-14')
+----
+true
+
+# Verify that ID columns are now present.
+
+query TTBOO
+SELECT * FROM system.role_members
+----
+admin      root       true   2    1
+testuser1  testuser2  false  101  102
+testuser1  testuser3  false  101  103
+testuser2  testuser3  false  102  103

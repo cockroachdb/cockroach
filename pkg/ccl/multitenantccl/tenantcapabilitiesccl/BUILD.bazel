@@ -1,0 +1,39 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
+
+go_test(
+    name = "tenantcapabilitiesccl_test",
+    srcs = [
+        "capabilities_test.go",
+        "main_test.go",
+    ],
+    args = ["-test.timeout=295s"],
+    data = glob(["testdata/**"]),
+    deps = [
+        "//pkg/base",
+        "//pkg/ccl",
+        "//pkg/kv/kvclient/rangefeed/rangefeedcache",
+        "//pkg/multitenant/tenantcapabilities",
+        "//pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/security/username",
+        "//pkg/server",
+        "//pkg/settings/cluster",
+        "//pkg/sql",
+        "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/randutil",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+get_x_data(name = "get_x_data")

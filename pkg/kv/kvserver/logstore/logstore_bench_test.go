@@ -17,8 +17,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -36,6 +36,10 @@ func (b *discardBatch) Commit(bool) error {
 	return nil
 }
 
+type noopSyncCallback struct{}
+
+func (noopSyncCallback) OnLogSync(context.Context, []raftpb.Message) {}
+
 func BenchmarkLogStore_StoreEntries(b *testing.B) {
 	defer log.Scope(b).Close(b)
 	const kb = 1 << 10
@@ -48,23 +52,30 @@ func BenchmarkLogStore_StoreEntries(b *testing.B) {
 }
 
 func runBenchmarkLogStore_StoreEntries(b *testing.B, bytes int64) {
+	ctx := context.Background()
 	const tenMB = 10 * 1 << 20
 	ec := raftentry.NewCache(tenMB)
 	const rangeID = 1
 	eng := storage.NewDefaultInMemForTesting()
 	defer eng.Close()
+	st := cluster.MakeTestingClusterSettings()
+	enableNonBlockingRaftLogSync.Override(ctx, &st.SV, false)
 	s := LogStore{
 		RangeID:     rangeID,
 		Engine:      eng,
 		StateLoader: NewStateLoader(rangeID),
 		EntryCache:  ec,
-		Settings:    cluster.MakeTestingClusterSettings(),
+		Settings:    st,
 		Metrics: Metrics{
-			RaftLogCommitLatency: metric.NewHistogram(metric.Metadata{}, 10*time.Second, metric.IOLatencyBuckets),
+			RaftLogCommitLatency: metric.NewHistogram(metric.HistogramOptions{
+				Mode:     metric.HistogramModePrometheus,
+				Metadata: metric.Metadata{},
+				Duration: 10 * time.Second,
+				Buckets:  metric.IOLatencyBuckets,
+			}),
 		},
 	}
 
-	ctx := context.Background()
 	rs := RaftState{
 		LastTerm: 1,
 		ByteSize: 0,
@@ -76,7 +87,7 @@ func runBenchmarkLogStore_StoreEntries(b *testing.B, bytes int64) {
 		Term:  1,
 		Index: 1,
 		Type:  raftpb.EntryNormal,
-		Data:  kvserverbase.EncodeRaftCommand(kvserverbase.RaftVersionStandard, "deadbeef", data),
+		Data:  raftlog.EncodeRaftCommand(raftlog.EntryEncodingStandardWithoutAC, "deadbeef", data),
 	})
 	stats := &AppendStats{}
 
@@ -89,17 +100,13 @@ func runBenchmarkLogStore_StoreEntries(b *testing.B, bytes int64) {
 	batch := &discardBatch{}
 	for i := 0; i < b.N; i++ {
 		batch.Batch = newStoreEntriesBatch(eng)
-		rd := Ready{
-			HardState: raftpb.HardState{},
-			Entries:   ents,
-			MustSync:  true,
-		}
+		m := MsgStorageAppend{Entries: ents}
+		cb := noopSyncCallback{}
 		var err error
-		rs, err = s.storeEntriesAndCommitBatch(ctx, rs, rd, stats, batch)
+		rs, err = s.storeEntriesAndCommitBatch(ctx, rs, m, cb, stats, batch)
 		if err != nil {
 			b.Fatal(err)
 		}
-		batch.Batch.Close()
 		ents[0].Index++
 	}
 	require.EqualValues(b, b.N, rs.LastIndex)

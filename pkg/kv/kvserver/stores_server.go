@@ -104,7 +104,7 @@ func (is Server) WaitForApplication(
 				// everything up to this point to disk.
 				//
 				// https://github.com/cockroachdb/cockroach/issues/33120
-				return storage.WriteSyncNoop(s.engine)
+				return storage.WriteSyncNoop(s.TODOEngine())
 			}
 		}
 		if ctx.Err() == nil {
@@ -148,7 +148,7 @@ func (is Server) CompactEngineSpan(
 	resp := &CompactEngineSpanResponse{}
 	err := is.execStoreCommand(ctx, req.StoreRequestHeader,
 		func(ctx context.Context, s *Store) error {
-			return s.Engine().CompactRange(req.Span.Key, req.Span.EndKey)
+			return s.TODOEngine().CompactRange(req.Span.Key, req.Span.EndKey)
 		})
 	return resp, err
 }
@@ -164,11 +164,11 @@ func (is Server) SetCompactionConcurrency(
 	resp := &CompactionConcurrencyResponse{}
 	err := is.execStoreCommand(ctx, req.StoreRequestHeader,
 		func(ctx context.Context, s *Store) error {
-			prevConcurrency := s.Engine().SetCompactionConcurrency(req.CompactionConcurrency)
+			prevConcurrency := s.TODOEngine().SetCompactionConcurrency(req.CompactionConcurrency)
 
 			// Wait for cancellation, and once cancelled, reset the compaction concurrency.
 			<-ctx.Done()
-			s.Engine().SetCompactionConcurrency(prevConcurrency)
+			s.TODOEngine().SetCompactionConcurrency(prevConcurrency)
 			return nil
 		})
 	return resp, err

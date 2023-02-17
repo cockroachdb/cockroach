@@ -17,13 +17,17 @@ import (
 	"io"
 	"net/http"
 	"net/http/pprof"
+	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/base/serverident"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/debug/goroutineui"
 	"github.com/cockroachdb/cockroach/pkg/server/debug/pprofui"
+	"github.com/cockroachdb/cockroach/pkg/server/debug/replay"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -66,7 +70,7 @@ type Server struct {
 	spy        logSpy
 }
 
-type serverTickleFn = func(ctx context.Context, name string) error
+type serverTickleFn = func(ctx context.Context, name roachpb.TenantName) error
 
 // NewServer sets up a debug server.
 func NewServer(
@@ -127,11 +131,22 @@ func NewServer(
 	mux.HandleFunc("/debug/vmodule", vsrv.vmoduleHandleDebug)
 
 	// Set up the log spy, a tool that allows inspecting filtered logs at high
-	// verbosity.
+	// verbosity. We require the tenant ID from the ambientCtx to set the logSpy
+	// tenant filter.
 	spy := logSpy{
 		vsrv:         vsrv,
 		setIntercept: log.InterceptWith,
 	}
+	serverTenantID := ambientContext.ServerIDs.ServerIdentityString(serverident.IdentifyTenantID)
+	if serverTenantID == "" {
+		panic("programmer error: cannot instantiate a debug.Server with no tenantID in the ambientCtx")
+	}
+	parsed, err := strconv.ParseUint(serverTenantID, 10, 64)
+	if err != nil {
+		panic("programmer error: failed parsing ambientCtx tenantID during debug.Server initialization")
+	}
+	spy.tenantID = roachpb.MustMakeTenantID(parsed)
+
 	mux.HandleFunc("/debug/logspy", spy.handleDebugLogSpy)
 
 	ps := pprofui.NewServer(pprofui.NewMemStorage(pprofui.ProfileConcurrency, pprofui.ProfileExpiry), profiler)
@@ -182,6 +197,12 @@ func analyzeLSM(dir string, writer io.Writer) error {
 	return lsm.RunE(lsm, []string{db.ManifestFilename})
 }
 
+func (ds *Server) RegisterWorkloadCollector(stores *kvserver.Stores) error {
+	h := replay.HTTPHandler{Stores: stores}
+	ds.mux.HandleFunc("/debug/workload_capture", h.HandleRequest)
+	return nil
+}
+
 // RegisterEngines setups up debug engine endpoints for the known storage engines.
 func (ds *Server) RegisterEngines(specs []base.StoreSpec, engines []storage.Engine) error {
 	if len(specs) != len(engines) {
@@ -191,7 +212,7 @@ func (ds *Server) RegisterEngines(specs []base.StoreSpec, engines []storage.Engi
 
 	storeIDs := make([]roachpb.StoreIdent, len(engines))
 	for i := range engines {
-		id, err := kvserver.ReadStoreIdent(context.Background(), engines[i])
+		id, err := kvstorage.ReadStoreIdent(context.Background(), engines[i])
 		if err != nil {
 			return err
 		}
@@ -293,7 +314,7 @@ func (h handleTickle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	err := serverTickleFn(h)(ctx, name)
+	err := serverTickleFn(h)(ctx, roachpb.TenantName(name))
 	if err != nil {
 		fmt.Fprint(w, err)
 		return

@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -50,12 +51,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
+
+const importJobRecoveryEventType eventpb.RecoveryEventType = "import_job"
 
 type importTestingKnobs struct {
 	afterImport            func(summary roachpb.RowCount) error
@@ -116,7 +120,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		if !details.PrepareComplete {
 			var schemaMetadata *preparedSchemaMetadata
 			if err := sql.DescsTxn(ctx, p.ExecCfg(), func(
-				ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+				ctx context.Context, txn isql.Txn, descsCol *descs.Collection,
 			) error {
 				var preparedDetails jobspb.ImportDetails
 				schemaMetadata = &preparedSchemaMetadata{
@@ -134,14 +138,14 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 				}
 
 				// The public schema is expected to always be present in the database for 22.2+.
-				_, dbDesc, err := descsCol.GetImmutableDatabaseByID(ctx, txn, details.ParentID, tree.DatabaseLookupFlags{Required: true})
+				dbDesc, err := descsCol.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Database(ctx, details.ParentID)
 				if err != nil {
 					return err
 				}
 				schemaMetadata.oldSchemaIDToName[dbDesc.GetSchemaID(tree.PublicSchema)] = tree.PublicSchema
 				schemaMetadata.newSchemaIDToName[dbDesc.GetSchemaID(tree.PublicSchema)] = tree.PublicSchema
 
-				preparedDetails, err = r.prepareTablesForIngestion(ctx, p, curDetails, txn, descsCol,
+				preparedDetails, err = r.prepareTablesForIngestion(ctx, p, curDetails, txn.KV(), descsCol,
 					schemaMetadata)
 				if err != nil {
 					return err
@@ -149,8 +153,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 				// Telemetry for multi-region.
 				for _, table := range preparedDetails.Tables {
-					_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
-						ctx, txn, table.Desc.GetParentID(), tree.DatabaseLookupFlags{Required: true})
+					dbDesc, err := descsCol.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Database(ctx, table.Desc.GetParentID())
 					if err != nil {
 						return err
 					}
@@ -161,8 +164,8 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 				// Update the job details now that the schemas and table descs have
 				// been "prepared".
-				return r.job.Update(ctx, txn, func(
-					txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+				return r.job.WithTxn(txn).Update(ctx, func(
+					txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 				) error {
 					pl := md.Payload
 					*pl.GetImport() = preparedDetails
@@ -193,8 +196,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			// is in keeping with the semantics we use when creating a schema during
 			// sql execution. Namely, queue job in the txn which creates the schema
 			// desc and run once the txn has committed.
-			if err := p.ExecCfg().JobRegistry.Run(ctx, p.ExecCfg().InternalExecutor,
-				schemaMetadata.queuedSchemaJobs); err != nil {
+			if err := p.ExecCfg().JobRegistry.Run(ctx, schemaMetadata.queuedSchemaJobs); err != nil {
 				return err
 			}
 
@@ -265,7 +267,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 					return errors.Wrap(err, "checking if existing table is empty")
 				}
 				details.Tables[i].WasEmpty = len(res) == 0
-				if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V22_2Start) {
+				if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.TODODelete_V22_2Start) {
 					// Update the descriptor in the job record and in the database with the ImportStartTime
 					details.Tables[i].Desc.ImportStartWallTime = details.Walltime
 					err := bindImportStartTime(ctx, p, tblDesc.GetID(), details.Walltime)
@@ -276,7 +278,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			}
 		}
 
-		if err := r.job.SetDetails(ctx, nil /* txn */, details); err != nil {
+		if err := r.job.NoTxn().SetDetails(ctx, details); err != nil {
 			return err
 		}
 	}
@@ -307,6 +309,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			return err
 		}
 	}
+
 	if err := p.ExecCfg().JobRegistry.CheckPausepoint("import.after_ingest"); err != nil {
 		return err
 	}
@@ -337,12 +340,13 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	// IMPORT INTO was planned on the older node.
 	//
 	// TODO(adityamaru): Remove in 22.1.
-	if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		return r.releaseProtectedTimestamp(ctx, txn, p.ExecCfg().ProtectedTimestampProvider)
+	if err := p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		return r.releaseProtectedTimestamp(
+			ctx, p.ExecCfg().ProtectedTimestampProvider.WithTxn(txn),
+		)
 	}); err != nil {
 		log.Errorf(ctx, "failed to release protected timestamp: %v", err)
 	}
-
 	emitImportJobEvent(ctx, p, jobs.StatusSucceeded, r.job)
 
 	addToFileFormatTelemetry(details.Format.Format.String(), "succeeded")
@@ -362,6 +366,8 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	if sizeMb > 10 {
 		telemetry.CountBucketed("import.speed-mbps.over10mb", mbps)
 	}
+
+	logutil.LogJobCompletion(ctx, importJobRecoveryEventType, r.job.ID(), true, nil, r.res.Rows)
 
 	return nil
 }
@@ -473,7 +479,7 @@ func prepareExistingTablesForIngestion(
 	}
 
 	// Note that desc is just used to verify that the version matches.
-	importing, err := descsCol.GetMutableTableVersionByID(ctx, desc.ID, txn)
+	importing, err := descsCol.MutableByID(txn).Table(ctx, desc.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -613,7 +619,7 @@ func (r *importResumer) prepareSchemasForIngestion(
 	ctx context.Context,
 	p sql.JobExecContext,
 	details jobspb.ImportDetails,
-	txn *kv.Txn,
+	txn isql.Txn,
 	descsCol *descs.Collection,
 ) (*preparedSchemaMetadata, error) {
 	schemaMetadata := &preparedSchemaMetadata{
@@ -625,7 +631,7 @@ func (r *importResumer) prepareSchemasForIngestion(
 	schemaMetadata.schemaPreparedDetails.Schemas = make([]jobspb.ImportDetails_Schema,
 		len(details.Schemas))
 
-	desc, err := descsCol.GetMutableDescriptorByID(ctx, txn, details.ParentID)
+	desc, err := descsCol.MutableByID(txn.KV()).Desc(ctx, details.ParentID)
 	if err != nil {
 		return nil, err
 	}
@@ -683,7 +689,7 @@ func (r *importResumer) prepareSchemasForIngestion(
 				return nil, err
 			}
 		}
-		if err := txn.Run(ctx, b); err != nil {
+		if err := txn.KV().Run(ctx, b); err != nil {
 			return nil, err
 		}
 		schemaMetadata.schemaPreparedDetails.Schemas[i] = jobspb.ImportDetails_Schema{
@@ -699,9 +705,9 @@ func bindImportStartTime(
 	ctx context.Context, p sql.JobExecContext, id catid.DescID, startWallTime int64,
 ) error {
 	if err := sql.DescsTxn(ctx, p.ExecCfg(), func(
-		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+		ctx context.Context, txn isql.Txn, descsCol *descs.Collection,
 	) error {
-		mutableDesc, err := descsCol.GetMutableTableVersionByID(ctx, id, txn)
+		mutableDesc, err := descsCol.MutableByID(txn.KV()).Table(ctx, id)
 		if err != nil {
 			return err
 		}
@@ -709,7 +715,7 @@ func bindImportStartTime(
 			return err
 		}
 		if err := descsCol.WriteDesc(
-			ctx, false /* kvTrace */, mutableDesc, txn,
+			ctx, false /* kvTrace */, mutableDesc, txn.KV(),
 		); err != nil {
 			return err
 		}
@@ -742,7 +748,7 @@ func (r *importResumer) parseBundleSchemaIfNeeded(ctx context.Context, phs inter
 		ctx, span = tracing.ChildSpan(ctx, "import-parsing-bundle-schema")
 		defer span.Finish()
 
-		if err := r.job.RunningStatus(ctx, nil /* txn */, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
+		if err := r.job.NoTxn().RunningStatus(ctx, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
 			return runningStatusImportBundleParseSchema, nil
 		}); err != nil {
 			return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(r.job.ID()))
@@ -751,12 +757,9 @@ func (r *importResumer) parseBundleSchemaIfNeeded(ctx context.Context, phs inter
 		var dbDesc catalog.DatabaseDescriptor
 		{
 			if err := sql.DescsTxn(ctx, p.ExecCfg(), func(
-				ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+				ctx context.Context, txn isql.Txn, descriptors *descs.Collection,
 			) (err error) {
-				_, dbDesc, err = descriptors.GetImmutableDatabaseByID(ctx, txn, parentID, tree.DatabaseLookupFlags{
-					Required:    true,
-					AvoidLeased: true,
-				})
+				dbDesc, err = descriptors.ByID(txn.KV()).WithoutNonPublic().Get().Database(ctx, parentID)
 				if err != nil {
 					return err
 				}
@@ -806,7 +809,7 @@ func (r *importResumer) parseBundleSchemaIfNeeded(ctx context.Context, phs inter
 		// Prevent job from redoing schema parsing and table desc creation
 		// on subsequent resumptions.
 		details.ParseBundleSchema = false
-		if err := r.job.SetDetails(ctx, nil /* txn */, details); err != nil {
+		if err := r.job.NoTxn().SetDetails(ctx, details); err != nil {
 			return err
 		}
 	}
@@ -817,10 +820,10 @@ func getPublicSchemaDescForDatabase(
 	ctx context.Context, execCfg *sql.ExecutorConfig, db catalog.DatabaseDescriptor,
 ) (scDesc catalog.SchemaDescriptor, err error) {
 	if err := sql.DescsTxn(ctx, execCfg, func(
-		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		ctx context.Context, txn isql.Txn, descriptors *descs.Collection,
 	) error {
 		publicSchemaID := db.GetSchemaID(tree.PublicSchema)
-		scDesc, err = descriptors.GetImmutableSchemaByID(ctx, txn, publicSchemaID, tree.SchemaLookupFlags{Required: true})
+		scDesc, err = descriptors.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Schema(ctx, publicSchemaID)
 		return err
 	}); err != nil {
 		return nil, err
@@ -942,11 +945,11 @@ func (r *importResumer) publishTables(
 	log.Event(ctx, "making tables live")
 
 	err := sql.DescsTxn(ctx, execCfg, func(
-		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+		ctx context.Context, txn isql.Txn, descsCol *descs.Collection,
 	) error {
-		b := txn.NewBatch()
+		b := txn.KV().NewBatch()
 		for _, tbl := range details.Tables {
-			newTableDesc, err := descsCol.GetMutableTableVersionByID(ctx, tbl.Desc.ID, txn)
+			newTableDesc, err := descsCol.MutableByID(txn.KV()).Table(ctx, tbl.Desc.ID)
 			if err != nil {
 				return err
 			}
@@ -985,13 +988,13 @@ func (r *importResumer) publishTables(
 				return errors.Wrapf(err, "publishing table %d", newTableDesc.ID)
 			}
 		}
-		if err := txn.Run(ctx, b); err != nil {
+		if err := txn.KV().Run(ctx, b); err != nil {
 			return errors.Wrap(err, "publishing tables")
 		}
 
 		// Update job record to mark tables published state as complete.
 		details.TablesPublished = true
-		err := r.job.SetDetails(ctx, txn, details)
+		err := r.job.WithTxn(txn).SetDetails(ctx, details)
 		if err != nil {
 			return errors.Wrap(err, "updating job details after publishing tables")
 		}
@@ -1040,7 +1043,9 @@ func (r *importResumer) writeStubStatisticsForImportedTables(
 					statistic.AvgSize = avgRowSize
 				}
 				// TODO(michae2): parallelize insertion of statistics.
-				err = stats.InsertNewStats(ctx, execCfg.Settings, execCfg.InternalExecutor, nil /* txn */, statistics)
+				err = execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+					return stats.InsertNewStats(ctx, execCfg.Settings, txn, statistics)
+				})
 			}
 			if err != nil {
 				// Failure to create statistics should not fail the entire import.
@@ -1063,11 +1068,11 @@ func (r *importResumer) publishSchemas(ctx context.Context, execCfg *sql.Executo
 	log.Event(ctx, "making schemas live")
 
 	return sql.DescsTxn(ctx, execCfg, func(
-		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+		ctx context.Context, txn isql.Txn, descsCol *descs.Collection,
 	) error {
-		b := txn.NewBatch()
+		b := txn.KV().NewBatch()
 		for _, schema := range details.Schemas {
-			newDesc, err := descsCol.GetMutableDescriptorByID(ctx, txn, schema.Desc.GetID())
+			newDesc, err := descsCol.MutableByID(txn.KV()).Desc(ctx, schema.Desc.GetID())
 			if err != nil {
 				return err
 			}
@@ -1083,13 +1088,13 @@ func (r *importResumer) publishSchemas(ctx context.Context, execCfg *sql.Executo
 				return errors.Wrapf(err, "publishing schema %d", newSchemaDesc.ID)
 			}
 		}
-		if err := txn.Run(ctx, b); err != nil {
+		if err := txn.KV().Run(ctx, b); err != nil {
 			return errors.Wrap(err, "publishing schemas")
 		}
 
 		// Update job record to mark tables published state as complete.
 		details.SchemasPublished = true
-		err := r.job.SetDetails(ctx, txn, details)
+		err := r.job.WithTxn(txn).SetDetails(ctx, details)
 		if err != nil {
 			return errors.Wrap(err, "updating job details after publishing schemas")
 		}
@@ -1107,18 +1112,16 @@ func (r *importResumer) checkVirtualConstraints(
 		desc.SetPublic()
 
 		if sql.HasVirtualUniqueConstraints(desc) {
-			if err := job.RunningStatus(ctx, nil /* txn */, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
+			if err := job.NoTxn().RunningStatus(ctx, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
 				return jobs.RunningStatus(fmt.Sprintf("re-validating %s", desc.GetName())), nil
 			}); err != nil {
 				return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(job.ID()))
 			}
 		}
 
-		if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			ie := execCfg.InternalExecutorFactory.NewInternalExecutor(sql.NewFakeSessionData(execCfg.SV()))
-			return ie.WithSyntheticDescriptors([]catalog.Descriptor{desc}, func() error {
-				return sql.RevalidateUniqueConstraintsInTable(ctx, txn, user, ie, desc)
-			})
+		if err := execCfg.InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+			txn.Descriptors().AddSyntheticDescriptor(desc)
+			return sql.RevalidateUniqueConstraintsInTable(ctx, txn, user, desc)
 		}); err != nil {
 			return err
 		}
@@ -1179,13 +1182,7 @@ func (r *importResumer) checkForUDTModification(
 		ctx context.Context, txn *kv.Txn, col *descs.Collection,
 		savedTypeDesc *descpb.TypeDescriptor,
 	) error {
-		typeDesc, err := col.GetImmutableTypeByID(ctx, txn, savedTypeDesc.GetID(), tree.ObjectLookupFlags{
-			CommonLookupFlags: tree.CommonLookupFlags{
-				AvoidLeased:    true,
-				IncludeDropped: true,
-				IncludeOffline: true,
-			},
-		})
+		typeDesc, err := col.ByID(txn).Get().Type(ctx, savedTypeDesc.GetID())
 		if err != nil {
 			return errors.Wrap(err, "resolving type descriptor when checking version mismatch")
 		}
@@ -1212,11 +1209,11 @@ func (r *importResumer) checkForUDTModification(
 		)
 	}
 	checkTypesAreEquivalent := func(
-		ctx context.Context, txn *kv.Txn, col *descs.Collection,
+		ctx context.Context, txn isql.Txn, col *descs.Collection,
 	) error {
 		for _, savedTypeDesc := range details.Types {
 			if err := checkTypeIsEquivalent(
-				ctx, txn, col, savedTypeDesc.Desc,
+				ctx, txn.KV(), col, savedTypeDesc.Desc,
 			); err != nil {
 				return err
 			}
@@ -1275,19 +1272,26 @@ func ingestWithRetry(
 			return res, err
 		}
 
-		// Re-load the job in order to update our progress object, which may have
-		// been updated by the changeFrontier processor since the flow started.
+		// If we are draining, it is unlikely we can start a new DistSQL
+		// flow. Exit with a retryable error so that another node can
+		// pick up the job.
+		if execCtx.ExecCfg().JobRegistry.IsDraining() {
+			return res, jobs.MarkAsRetryJobError(errors.Wrapf(err, "job encountered retryable error on draining node"))
+		}
+
+		// Re-load the job in order to update our progress object, which
+		// may have been updated since the flow started.
 		reloadedJob, reloadErr := execCtx.ExecCfg().JobRegistry.LoadClaimedJob(ctx, job.ID())
 		if reloadErr != nil {
 			if ctx.Err() != nil {
 				return res, ctx.Err()
 			}
-			log.Warningf(ctx, `IMPORT job %d could not reload job progress when retrying: %+v`,
-				int64(job.ID()), reloadErr)
+			log.Warningf(ctx, "IMPORT job %d could not reload job progress when retrying: %+v",
+				job.ID(), reloadErr)
 		} else {
 			job = reloadedJob
 		}
-		log.Warningf(ctx, `encountered retryable error: %+v`, err)
+		log.Warningf(ctx, "encountered retryable error: %+v", err)
 	}
 
 	// We have exhausted retries, but we have not seen a "PermanentBulkJobError" so
@@ -1307,7 +1311,7 @@ func emitImportJobEvent(
 	ctx context.Context, p sql.JobExecContext, status jobs.Status, job *jobs.Job,
 ) {
 	var importEvent eventpb.Import
-	if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	if err := p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		return sql.LogEventForJobs(ctx, p.ExecCfg(), txn, &importEvent, int64(job.ID()),
 			job.Payload(), p.User(), status)
 	}); err != nil {
@@ -1333,7 +1337,7 @@ func constructSchemaAndTableKey(
 func writeNonDropDatabaseChange(
 	ctx context.Context,
 	desc *dbdesc.Mutable,
-	txn *kv.Txn,
+	txn isql.Txn,
 	descsCol *descs.Collection,
 	p sql.JobExecContext,
 	jobDesc string,
@@ -1345,7 +1349,7 @@ func writeNonDropDatabaseChange(
 	}
 
 	queuedJob := []jobspb.JobID{job.ID()}
-	b := txn.NewBatch()
+	b := txn.KV().NewBatch()
 	err = descsCol.WriteDescToBatch(
 		ctx,
 		p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
@@ -1355,7 +1359,7 @@ func writeNonDropDatabaseChange(
 	if err != nil {
 		return nil, err
 	}
-	return queuedJob, txn.Run(ctx, b)
+	return queuedJob, txn.KV().Run(ctx, b)
 }
 
 func createNonDropDatabaseChangeJob(
@@ -1364,7 +1368,7 @@ func createNonDropDatabaseChangeJob(
 	databaseID descpb.ID,
 	jobDesc string,
 	p sql.JobExecContext,
-	txn *kv.Txn,
+	txn isql.Txn,
 ) (*jobs.Job, error) {
 	jobRecord := jobs.Record{
 		Description: jobDesc,
@@ -1390,20 +1394,27 @@ func createNonDropDatabaseChangeJob(
 // been committed from a import that has failed or been canceled. It does this
 // by adding the table descriptors in DROP state, which causes the schema change
 // stuff to delete the keys in the background.
-func (r *importResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}, _ error) error {
+func (r *importResumer) OnFailOrCancel(
+	ctx context.Context, execCtx interface{}, jobErr error,
+) error {
 	p := execCtx.(sql.JobExecContext)
 
 	// Emit to the event log that the job has started reverting.
 	emitImportJobEvent(ctx, p, jobs.StatusReverting, r.job)
 
+	// TODO(sql-exp): increase telemetry count for import.total.failed and
+	// import.duration-sec.failed.
 	details := r.job.Details().(jobspb.ImportDetails)
+	logutil.LogJobCompletion(ctx, importJobRecoveryEventType, r.job.ID(), false, jobErr, r.res.Rows)
+
 	addToFileFormatTelemetry(details.Format.Format.String(), "failed")
 	cfg := execCtx.(sql.JobExecContext).ExecCfg()
 	var jobsToRunAfterTxnCommit []jobspb.JobID
 	if err := sql.DescsTxn(ctx, cfg, func(
-		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+		ctx context.Context, txn isql.Txn, descsCol *descs.Collection,
 	) error {
 		if err := r.dropTables(ctx, txn, descsCol, cfg); err != nil {
+			log.Errorf(ctx, "drop tables failed: %s", err.Error())
 			return err
 		}
 
@@ -1419,7 +1430,7 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, execCtx interface{},
 		}
 		// TODO(adityamaru): Remove in 22.1 since we do not write PTS records during
 		// IMPORT INTO from 21.2+.
-		return r.releaseProtectedTimestamp(ctx, txn, cfg.ProtectedTimestampProvider)
+		return r.releaseProtectedTimestamp(ctx, cfg.ProtectedTimestampProvider.WithTxn(txn))
 	}); err != nil {
 		return err
 	}
@@ -1428,8 +1439,7 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, execCtx interface{},
 	// This would be a job to drop all the schemas, and a job to update the parent
 	// database descriptor.
 	if len(jobsToRunAfterTxnCommit) != 0 {
-		if err := p.ExecCfg().JobRegistry.Run(ctx, p.ExecCfg().InternalExecutor,
-			jobsToRunAfterTxnCommit); err != nil {
+		if err := p.ExecCfg().JobRegistry.Run(ctx, jobsToRunAfterTxnCommit); err != nil {
 			return errors.Wrap(err, "failed to run jobs that drop the imported schemas")
 		}
 	}
@@ -1442,7 +1452,7 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, execCtx interface{},
 
 // dropTables implements the OnFailOrCancel logic.
 func (r *importResumer) dropTables(
-	ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, execCfg *sql.ExecutorConfig,
+	ctx context.Context, txn isql.Txn, descsCol *descs.Collection, execCfg *sql.ExecutorConfig,
 ) error {
 	details := r.job.Details().(jobspb.ImportDetails)
 
@@ -1459,7 +1469,7 @@ func (r *importResumer) dropTables(
 	var intoTable catalog.TableDescriptor
 	for _, tbl := range details.Tables {
 		if !tbl.IsNew {
-			desc, err := descsCol.GetMutableTableVersionByID(ctx, tbl.Desc.ID, txn)
+			desc, err := descsCol.MutableByID(txn.KV()).Table(ctx, tbl.Desc.ID)
 			if err != nil {
 				return err
 			}
@@ -1509,7 +1519,7 @@ func (r *importResumer) dropTables(
 			// writes, so even if GC has run it would not have GC'ed any keys to which
 			// we need to revert, so we can safely ignore the target-time GC check.
 			const ignoreGC = true
-			if err := sql.RevertTables(ctx, txn.DB(), execCfg, []catalog.TableDescriptor{intoTable}, ts, ignoreGC,
+			if err := sql.RevertTables(ctx, txn.KV().DB(), execCfg, []catalog.TableDescriptor{intoTable}, ts, ignoreGC,
 				sql.RevertTableDefaultBatchSize); err != nil {
 				return errors.Wrap(err, "rolling back partially completed IMPORT via RevertRange")
 			}
@@ -1535,8 +1545,8 @@ func (r *importResumer) dropTables(
 	}
 
 	// Bring the IMPORT INTO table back online
-	b := txn.NewBatch()
-	intoDesc, err := descsCol.GetMutableTableVersionByID(ctx, intoTable.GetID(), txn)
+	b := txn.KV().NewBatch()
+	intoDesc, err := descsCol.MutableByID(txn.KV()).Table(ctx, intoTable.GetID())
 	if err != nil {
 		return err
 	}
@@ -1546,22 +1556,22 @@ func (r *importResumer) dropTables(
 	if err := descsCol.WriteDescToBatch(ctx, kvTrace, intoDesc, b); err != nil {
 		return err
 	}
-	return errors.Wrap(txn.Run(ctx, b), "putting IMPORT INTO table back online")
+	return errors.Wrap(txn.KV().Run(ctx, b), "putting IMPORT INTO table back online")
 }
 
 // dropNewTables drops the tables that were created as part of an IMPORT and
 // queues a GC job to clean up the dropped descriptors.
 func (r *importResumer) dropNewTables(
-	ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, execCfg *sql.ExecutorConfig,
+	ctx context.Context, txn isql.Txn, descsCol *descs.Collection, execCfg *sql.ExecutorConfig,
 ) error {
 	details := r.job.Details().(jobspb.ImportDetails)
 	dropTime := int64(1)
 
-	b := txn.NewBatch()
+	b := txn.KV().NewBatch()
 	tablesToGC := make([]descpb.ID, 0, len(details.Tables))
 	toWrite := make([]*tabledesc.Mutable, 0, len(details.Tables))
 	for _, tbl := range details.Tables {
-		newTableDesc, err := descsCol.GetMutableTableVersionByID(ctx, tbl.Desc.ID, txn)
+		newTableDesc, err := descsCol.MutableByID(txn.KV()).Table(ctx, tbl.Desc.ID)
 		if err != nil {
 			return err
 		}
@@ -1610,12 +1620,12 @@ func (r *importResumer) dropNewTables(
 		ctx, gcJobRecord, execCfg.JobRegistry.MakeJobID(), txn); err != nil {
 		return err
 	}
-	return errors.Wrap(txn.Run(ctx, b), "rolling back IMPORT tables")
+	return errors.Wrap(txn.KV().Run(ctx, b), "rolling back IMPORT tables")
 }
 
 func (r *importResumer) dropSchemas(
 	ctx context.Context,
-	txn *kv.Txn,
+	txn isql.Txn,
 	descsCol *descs.Collection,
 	execCfg *sql.ExecutorConfig,
 	p sql.JobExecContext,
@@ -1630,7 +1640,7 @@ func (r *importResumer) dropSchemas(
 	}
 
 	// Resolve the database descriptor.
-	desc, err := descsCol.GetMutableDescriptorByID(ctx, txn, details.ParentID)
+	desc, err := descsCol.MutableByID(txn.KV()).Desc(ctx, details.ParentID)
 	if err != nil {
 		return nil, err
 	}
@@ -1643,7 +1653,7 @@ func (r *importResumer) dropSchemas(
 
 	droppedSchemaIDs := make([]descpb.ID, 0)
 	for _, schema := range details.Schemas {
-		desc, err := descsCol.GetMutableDescriptorByID(ctx, txn, schema.Desc.ID)
+		desc, err := descsCol.MutableByID(txn.KV()).Desc(ctx, schema.Desc.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -1658,7 +1668,7 @@ func (r *importResumer) dropSchemas(
 		schemaDesc.SetDropped()
 		droppedSchemaIDs = append(droppedSchemaIDs, schemaDesc.GetID())
 
-		b := txn.NewBatch()
+		b := txn.KV().NewBatch()
 		if dbDesc.Schemas != nil {
 			delete(dbDesc.Schemas, schemaDesc.GetName())
 		}
@@ -1672,7 +1682,7 @@ func (r *importResumer) dropSchemas(
 		); err != nil {
 			return nil, err
 		}
-		err = txn.Run(ctx, b)
+		err = txn.KV().Run(ctx, b)
 		if err != nil {
 			return nil, err
 		}
@@ -1709,7 +1719,7 @@ func (r *importResumer) dropSchemas(
 }
 
 func (r *importResumer) releaseProtectedTimestamp(
-	ctx context.Context, txn *kv.Txn, pts protectedts.Storage,
+	ctx context.Context, pts protectedts.Storage,
 ) error {
 	details := r.job.Details().(jobspb.ImportDetails)
 	ptsID := details.ProtectedTimestampRecord
@@ -1717,7 +1727,7 @@ func (r *importResumer) releaseProtectedTimestamp(
 	if ptsID == nil {
 		return nil
 	}
-	err := pts.Release(ctx, txn, *ptsID)
+	err := pts.Release(ctx, *ptsID)
 	if errors.Is(err, protectedts.ErrNotExists) {
 		// No reason to return an error which might cause problems if it doesn't
 		// seem to exist.

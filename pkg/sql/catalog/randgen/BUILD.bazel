@@ -1,0 +1,64 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "randgen",
+    srcs = [
+        "api.go",
+        "batch.go",
+        "databases.go",
+        "privs.go",
+        "randgen.go",
+        "recurse.go",
+        "schemas.go",
+        "tables.go",
+        "templates.go",
+        "util.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/randgen",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv",
+        "//pkg/security/username",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catenumpb",
+        "//pkg/sql/catalog/catpb",
+        "//pkg/sql/catalog/catprivilege",
+        "//pkg/sql/catalog/dbdesc",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/descs",
+        "//pkg/sql/catalog/nstree",
+        "//pkg/sql/catalog/randgen/randgencfg",
+        "//pkg/sql/catalog/schemadesc",
+        "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/parser",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/privilege",
+        "//pkg/sql/sem/catid",
+        "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
+        "//pkg/sql/types",
+        "//pkg/util/mon",
+        "//pkg/util/randident",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "randgen_test",
+    srcs = ["template_test.go"],
+    args = ["-test.timeout=295s"],
+    embed = [":randgen"],
+    deps = [
+        "//pkg/sql/catalog/desctestutils",
+        "//pkg/sql/catalog/tabledesc",
+        "@com_github_kr_pretty//:pretty",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+get_x_data(name = "get_x_data")

@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -28,7 +29,10 @@ func TestNewPebbleTempEngine(t *testing.T) {
 	tempDir, tempDirCleanup := testutils.TempDir(t)
 	defer tempDirCleanup()
 
-	db, fs, err := NewPebbleTempEngine(context.Background(), base.TempStorageConfig{Path: tempDir}, base.StoreSpec{Path: tempDir})
+	db, fs, err := NewPebbleTempEngine(context.Background(), base.TempStorageConfig{
+		Path:     tempDir,
+		Settings: cluster.MakeTestingClusterSettings(),
+	}, base.StoreSpec{Path: tempDir})
 	if err != nil {
 		t.Fatalf("error encountered when invoking NewRocksDBTempEngine: %+v", err)
 	}

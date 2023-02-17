@@ -98,6 +98,7 @@ go_test(
         "//pkg/sql/pgwire/pgwirebase",
         "//pkg/sql/tests",
         "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",

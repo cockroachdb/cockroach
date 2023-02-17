@@ -360,6 +360,35 @@ func (c CopyIn) String() string {
 
 var _ Command = CopyIn{}
 
+// CopyOut is the command for execution of the Copy-out pgwire subprotocol.
+type CopyOut struct {
+	ParsedStmt parser.Statement
+	Stmt       *tree.CopyTo
+	// Conn is the network connection. Execution of the CopyFrom statement takes
+	// control of the connection.
+	Conn pgwirebase.Conn
+	// TimeReceived is the time at which the message was received
+	// from the client. Used to compute the service latency.
+	TimeReceived time.Time
+	// ParseStart/ParseEnd are the timing info for parsing of the query. Used for
+	// stats reporting.
+	ParseStart time.Time
+	ParseEnd   time.Time
+}
+
+// command implements the Command interface.
+func (CopyOut) command() string { return "copy" }
+
+func (c CopyOut) String() string {
+	s := "(empty)"
+	if c.Stmt != nil {
+		s = c.Stmt.String()
+	}
+	return fmt.Sprintf("CopyOut: %s", s)
+}
+
+var _ Command = CopyOut{}
+
 // DrainRequest represents a notice that the server is draining and command
 // processing should stop soon.
 //
@@ -651,6 +680,8 @@ type ClientComm interface {
 	CreateEmptyQueryResult(pos CmdPos) EmptyQueryResult
 	// CreateCopyInResult creates a result for a Copy-in command.
 	CreateCopyInResult(pos CmdPos) CopyInResult
+	// CreateCopyOutResult creates a result for a Copy-out command.
+	CreateCopyOutResult(pos CmdPos) CopyOutResult
 	// CreateDrainResult creates a result for a Drain command.
 	CreateDrainResult(pos CmdPos) DrainResult
 
@@ -775,6 +806,10 @@ type RestrictedCommandResult interface {
 	// to this CommandResult, will be flushed immediately to the client.
 	// This is currently used for sinkless changefeeds.
 	DisableBuffering()
+
+	// GetBulkJobId returns the id of the job for the query, if the query is
+	// IMPORT, BACKUP or RESTORE.
+	GetBulkJobId() uint64
 }
 
 // DescribeResult represents the result of a Describe command (for either
@@ -843,6 +878,12 @@ type EmptyQueryResult interface {
 // CopyInResult represents the result of a CopyIn command. Closing this result
 // produces no output for the client.
 type CopyInResult interface {
+	ResultBase
+}
+
+// CopyOutResult represents the result of a CopyOut command. Closing this result
+// produces no output for the client.
+type CopyOutResult interface {
 	ResultBase
 }
 
@@ -935,12 +976,12 @@ func (r *streamingCommandResult) SetColumns(ctx context.Context, cols colinfo.Re
 
 // BufferParamStatusUpdate is part of the RestrictedCommandResult interface.
 func (r *streamingCommandResult) BufferParamStatusUpdate(key string, val string) {
-	panic("unimplemented")
+	// Unimplemented: the internal executor does not support status updated.
 }
 
 // BufferNotice is part of the RestrictedCommandResult interface.
 func (r *streamingCommandResult) BufferNotice(notice pgnotice.Notice) {
-	panic("unimplemented")
+	// Unimplemented: the internal executor does not support notices.
 }
 
 // ResetStmtType is part of the RestrictedCommandResult interface.
@@ -981,6 +1022,11 @@ func (r *streamingCommandResult) SetError(err error) {
 	// is present) since we might replace the error with another one later which
 	// is allowed by the interface. An example of this is queryDone() closure
 	// in execStmtInOpenState().
+}
+
+// GetEntryFromExtraInfo is part of the sql.RestrictedCommandResult interface.
+func (r *streamingCommandResult) GetBulkJobId() uint64 {
+	return 0
 }
 
 // Err is part of the RestrictedCommandResult interface.
@@ -1031,3 +1077,12 @@ func (r *streamingCommandResult) SetPortalOutput(
 	context.Context, colinfo.ResultColumns, []pgwirebase.FormatCode,
 ) {
 }
+
+// BulkJobInfoKey are for keys stored in pgwire.commandResult.bulkJobInfo.
+type BulkJobInfoKey string
+
+const (
+	// BulkJobIdColName is the key for the job id for bulk jobs.
+	BulkJobIdColName BulkJobInfoKey = "BulkJobId"
+	NumRows          BulkJobInfoKey = "NumRows"
+)

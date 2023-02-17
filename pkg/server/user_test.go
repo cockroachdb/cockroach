@@ -87,33 +87,36 @@ func TestSQLRolesAPI(t *testing.T) {
 	expRoles := []string{"ADMIN"}
 	err := getStatusJSONProtoWithAdminOption(s, "sqlroles", &res, true)
 	require.NoError(t, err)
-	require.Equal(t, expRoles, res.Roles)
+	require.ElementsMatch(t, expRoles, res.Roles)
 
 	// No roles added to a non-admin user.
 	expRoles = []string{}
 	err = getStatusJSONProtoWithAdminOption(s, "sqlroles", &res, false)
 	require.NoError(t, err)
-	require.Equal(t, expRoles, res.Roles)
+	require.ElementsMatch(t, expRoles, res.Roles)
 
-	// One role added to the non-admin user.
+	// Role option and global privilege added to the non-admin user.
 	db.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized()))
-	expRoles = []string{"VIEWACTIVITY"}
+	db.Exec(t, fmt.Sprintf("GRANT SYSTEM MODIFYCLUSTERSETTING TO %s", authenticatedUserNameNoAdmin().Normalized()))
+	expRoles = []string{"MODIFYCLUSTERSETTING", "VIEWACTIVITY"}
 	err = getStatusJSONProtoWithAdminOption(s, "sqlroles", &res, false)
 	require.NoError(t, err)
-	require.Equal(t, expRoles, res.Roles)
+	require.ElementsMatch(t, expRoles, res.Roles)
 
-	// Two roles added to the non-admin user.
+	// Two role options and two global privileges added to the non-admin user.
 	db.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITYREDACTED", authenticatedUserNameNoAdmin().Normalized()))
-	expRoles = []string{"VIEWACTIVITY", "VIEWACTIVITYREDACTED"}
+	db.Exec(t, fmt.Sprintf("GRANT SYSTEM CANCELQUERY TO %s", authenticatedUserNameNoAdmin().Normalized()))
+	expRoles = []string{"CANCELQUERY", "MODIFYCLUSTERSETTING", "VIEWACTIVITY", "VIEWACTIVITYREDACTED"}
 	err = getStatusJSONProtoWithAdminOption(s, "sqlroles", &res, false)
 	sort.Strings(res.Roles)
 	require.NoError(t, err)
-	require.Equal(t, expRoles, res.Roles)
+	require.ElementsMatch(t, expRoles, res.Roles)
 
-	// Remove one role from non-admin user.
+	// Remove one role option and one global privilege from non-admin user.
 	db.Exec(t, fmt.Sprintf("ALTER USER %s NOVIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized()))
-	expRoles = []string{"VIEWACTIVITYREDACTED"}
+	db.Exec(t, fmt.Sprintf("REVOKE SYSTEM MODIFYCLUSTERSETTING FROM %s", authenticatedUserNameNoAdmin().Normalized()))
+	expRoles = []string{"CANCELQUERY", "VIEWACTIVITYREDACTED"}
 	err = getStatusJSONProtoWithAdminOption(s, "sqlroles", &res, false)
 	require.NoError(t, err)
-	require.Equal(t, expRoles, res.Roles)
+	require.ElementsMatch(t, expRoles, res.Roles)
 }

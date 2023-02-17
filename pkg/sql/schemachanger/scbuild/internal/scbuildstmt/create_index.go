@@ -11,12 +11,16 @@
 package scbuildstmt
 
 import (
+	"fmt"
 	"sort"
+	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -27,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -148,7 +152,6 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 	}
 	if n.Unique {
 		idxSpec.secondary.IsUnique = true
-		idxSpec.secondary.ConstraintID = b.NextTableConstraintID(idxSpec.secondary.TableID)
 	}
 	// Resolve the index name and make sure it doesn't exist yet.
 	{
@@ -181,6 +184,11 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 	// Picks up any geoconfig parameters, hash sharded one are
 	// picked independently.
 	maybeApplyStorageParameters(b, n, &idxSpec)
+	// Assign the secondary constraint ID now, since we may have added a check
+	// constraint earlier.
+	if idxSpec.secondary.IsUnique {
+		idxSpec.secondary.ConstraintID = b.NextTableConstraintID(idxSpec.secondary.TableID)
+	}
 	keyIdx := 0
 	keySuffixIdx := 0
 	keyStoredIdx := 0
@@ -200,6 +208,7 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 	}
 	idxSpec.data = &scpb.IndexData{TableID: idxSpec.secondary.TableID, IndexID: idxSpec.secondary.IndexID}
 	idxSpec.apply(b.Add)
+	b.LogEventForExistingTarget(idxSpec.secondary)
 	// Apply the name once everything else has been created since we need
 	// elements to be added, so that getImplicitSecondaryIndexName can make
 	// an implicit name if one is required.
@@ -337,10 +346,10 @@ func processColNodeType(
 			// we're going to inverted index.
 			switch columnNode.OpClass {
 			case "gin_trgm_ops", "gist_trgm_ops":
-				if !b.EvalCtx().Settings.Version.IsActive(b, clusterversion.V22_2TrigramInvertedIndexes) {
+				if !b.EvalCtx().Settings.Version.IsActive(b, clusterversion.TODODelete_V22_2TrigramInvertedIndexes) {
 					panic(pgerror.Newf(pgcode.FeatureNotSupported,
 						"version %v must be finalized to create trigram inverted indexes",
-						clusterversion.ByKey(clusterversion.V22_2TrigramInvertedIndexes)))
+						clusterversion.ByKey(clusterversion.TODODelete_V22_2TrigramInvertedIndexes)))
 				}
 			case "":
 				panic(errors.WithHint(
@@ -422,6 +431,27 @@ func maybeAddPartitionDescriptorForIndex(b BuildCtx, n *tree.CreateIndex, idxSpe
 		})
 	}
 	if n.PartitionByIndex.ContainsPartitions() || idxSpec.partitioning != nil {
+		// Detect if the partitioning overlaps with any of the secondary index
+		// columns.
+		{
+			implicitColumns := make(map[catid.ColumnID]struct{})
+			_, _, primaryIdx := scpb.FindPrimaryIndex(relationElts)
+			scpb.ForEachIndexColumn(relationElts, func(current scpb.Status, target scpb.TargetStatus, e *scpb.IndexColumn) {
+				if e.IndexID == primaryIdx.IndexID {
+					if e.Implicit {
+						implicitColumns[e.ColumnID] = struct{}{}
+					}
+				}
+			})
+			for _, col := range idxSpec.columns {
+				if _, ok := implicitColumns[col.ColumnID]; !col.Implicit && ok {
+					panic(pgerror.New(
+						pgcode.FeatureNotSupported,
+						`hash sharded indexes cannot include implicit partitioning columns from "PARTITION ALL BY" or "LOCALITY REGIONAL BY ROW"`,
+					))
+				}
+			}
+		}
 		if idxSpec.partitioning == nil {
 			idxSpec.partitioning = &scpb.IndexPartitioning{
 				TableID: idxSpec.secondary.TableID,
@@ -446,7 +476,7 @@ func maybeAddPartitionDescriptorForIndex(b BuildCtx, n *tree.CreateIndex, idxSpe
 				TableID:   fieldColumn.TableID,
 				ColumnID:  fieldColumn.ColumnID,
 				Kind:      scpb.IndexColumn_KEY,
-				Direction: catpb.IndexColumn_ASC,
+				Direction: catenumpb.IndexColumn_ASC,
 				Implicit:  true,
 			}
 			// Check if the column is already a suffix, then we should
@@ -551,9 +581,9 @@ func addColumnsForSecondaryIndex(
 			checkColumnAccessibilityForIndex(string(colName), colElts, false)
 		}
 		keyColNames[i] = string(colName)
-		direction := catpb.IndexColumn_ASC
+		direction := catenumpb.IndexColumn_ASC
 		if columnNode.Direction == tree.Descending {
-			direction = catpb.IndexColumn_DESC
+			direction = catenumpb.IndexColumn_DESC
 		}
 		ic := &scpb.IndexColumn{
 			TableID:       idxSpec.secondary.TableID,
@@ -602,6 +632,7 @@ func addColumnsForSecondaryIndex(
 			OrdinalInKind: uint32(i),
 			Kind:          scpb.IndexColumn_KEY_SUFFIX,
 			Direction:     c.Direction,
+			Implicit:      c.Implicit,
 		}
 		idxSpec.columns = append(idxSpec.columns, ic)
 	}
@@ -646,7 +677,7 @@ func addColumnsForSecondaryIndex(
 			ColumnID:      column.ColumnID,
 			OrdinalInKind: 0,
 			Kind:          scpb.IndexColumn_KEY,
-			Direction:     catpb.IndexColumn_ASC,
+			Direction:     catenumpb.IndexColumn_ASC,
 		}
 		// Remove the sharded column if it's there in the primary
 		// index already, before adding it.
@@ -657,7 +688,6 @@ func addColumnsForSecondaryIndex(
 			}
 		}
 		idxSpec.columns = append([]*scpb.IndexColumn{indexColumn}, idxSpec.columns...)
-		panic(scerrors.NotImplementedErrorf(n.Sharded, "split and scatter support are missing"))
 	}
 }
 
@@ -709,16 +739,51 @@ func maybeCreateAndAddShardCol(
 			Name:     shardColName,
 		},
 		colType: &scpb.ColumnType{
-			TableID:     tbl.TableID,
-			ColumnID:    shardColID,
-			TypeT:       scpb.TypeT{Type: types.Int},
-			ComputeExpr: b.WrapExpression(tbl.TableID, parsedExpr),
-			IsVirtual:   true,
-			IsNullable:  false,
+			TableID:                 tbl.TableID,
+			ColumnID:                shardColID,
+			TypeT:                   scpb.TypeT{Type: types.Int},
+			ComputeExpr:             b.WrapExpression(tbl.TableID, parsedExpr),
+			IsVirtual:               true,
+			IsNullable:              false,
+			ElementCreationMetadata: scdecomp.NewElementCreationMetadata(b.EvalCtx().Settings.Version.ActiveVersion(b)),
 		},
-		//TODO(fqazi): Add a check constraint for the hash sharded column.
+		notNull: true,
 	}
 	addColumn(b, spec, n)
+	// Create a new check constraint for the hash sharded index column.
+	checkConstraintBucketValues := strings.Builder{}
+	checkConstraintBucketValues.WriteString(fmt.Sprintf("%q IN (", shardColName))
+	for bucket := 0; bucket < shardBuckets; bucket++ {
+		checkConstraintBucketValues.WriteString(strconv.Itoa(bucket))
+		if bucket != shardBuckets-1 {
+			checkConstraintBucketValues.WriteString(",")
+		}
+	}
+	checkConstraintBucketValues.WriteString(")")
+	chkConstraintExpr, err := parser.ParseExpr(checkConstraintBucketValues.String())
+	if err != nil {
+		panic(errors.WithSecondaryError(
+			errors.AssertionFailedf("check constraint expression: %q failed to parse",
+				checkConstraintBucketValues.String()),
+			err))
+	}
+	shardCheckConstraint := &scpb.CheckConstraint{
+		TableID:      tbl.TableID,
+		ConstraintID: b.NextTableConstraintID(tbl.TableID),
+		Expression: scpb.Expression{
+			Expr:                catpb.Expression(checkConstraintBucketValues.String()),
+			ReferencedColumnIDs: []catid.ColumnID{shardColID},
+		},
+		FromHashShardedColumn: true,
+	}
+	b.Add(shardCheckConstraint)
+	shardCheckConstraintName := &scpb.ConstraintWithoutIndexName{
+		TableID:      tbl.TableID,
+		ConstraintID: shardCheckConstraint.ConstraintID,
+		Name:         generateUniqueCheckConstraintName(b, tbl.TableID, chkConstraintExpr),
+	}
+	b.Add(shardCheckConstraintName)
+
 	return shardColName
 }
 
@@ -865,11 +930,7 @@ func maybeAddIndexPredicate(b BuildCtx, n *tree.CreateIndex, idxSpec *indexSpec)
 		return
 	}
 	expr := b.PartialIndexPredicateExpression(idxSpec.secondary.TableID, n.Predicate)
-	idxSpec.partial = &scpb.SecondaryIndexPartial{
-		TableID:    idxSpec.secondary.TableID,
-		IndexID:    idxSpec.secondary.IndexID,
-		Expression: *expr,
-	}
+	idxSpec.secondary.EmbeddedExpr = expr
 	b.IncrementSchemaChangeIndexCounter("partial")
 	if n.Inverted {
 		b.IncrementSchemaChangeIndexCounter("partial_inverted")

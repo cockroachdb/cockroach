@@ -1,4 +1,6 @@
-# LogicTest: local
+# LogicTest: local 3node-tenant
+# tenant-cluster-setting-override-opt: sql.split_at.allow_for_secondary_tenant.enabled=true
+# cluster-opt: can-admin-split
 
 # This test depends on table ID's being stable, so add new tests at the bottom
 # of the file.
@@ -10,10 +12,18 @@ ALTER TABLE t SPLIT AT VALUES (0)
 
 # Get the range that contains this table.
 let $rangeid
-SELECT range_id FROM crdb_internal.ranges WHERE table_name = 't'
+SELECT range_id FROM [SHOW RANGES FROM TABLE t] OFFSET 1 LIMIT 1
 
 let $tableid
 SELECT id FROM system.namespace WHERE name = 't'
+
+# wait until split happens on secondary tenant's end key or list_sql_keys_in_range will fail
+onlyif config 3node-tenant
+query TT
+SELECT start_key, end_key FROM [SHOW RANGES]
+----
+/Tenant/10                /Tenant/10/Table/106/1/0
+/Tenant/10/Table/106/1/0  /Tenant/11
 
 # Without any data in the table, there shouldn't be any keys in the range.
 query T
@@ -26,19 +36,35 @@ INSERT INTO t VALUES (1, 1), (2, 2)
 
 # List out all of the keys in this range. The values themselves are
 # different on each run of the test due to metadata stored in the value.
+onlyif config local
 query T
 SELECT key FROM crdb_internal.list_sql_keys_in_range($rangeid)
 ----
 /Table/106/1/1/0
 /Table/106/1/2/0
 
+onlyif config 3node-tenant
+query T
+SELECT key FROM crdb_internal.list_sql_keys_in_range($rangeid)
+----
+/Tenant/10/Table/106/1/1/0
+/Tenant/10/Table/106/1/2/0
+
 # List out all of the keys in this range. The values themselves are
 # different on each run of the test due to metadata stored in the value.
+onlyif config local
 query T
 SELECT crdb_internal.pretty_key(key, 0) FROM crdb_internal.scan(crdb_internal.table_span($tableid))
 ----
 /106/1/1/0
 /106/1/2/0
+
+onlyif config 3node-tenant
+query T
+SELECT crdb_internal.pretty_key(key, 0) FROM crdb_internal.scan(crdb_internal.table_span($tableid))
+----
+/10/Table/106/1/1/0
+/10/Table/106/1/2/0
 
 # An error should be returned when an invalid range ID is specified.
 statement error pq: range with ID 1000000 not found
@@ -52,7 +78,7 @@ INSERT INTO t2 (SELECT * FROM generate_series(1, 4096));
 ALTER TABLE t2 SPLIT AT VALUES (0)
 
 let $rangeid
-SELECT range_id FROM crdb_internal.ranges WHERE table_name = 't2'
+SELECT range_id FROM [SHOW RANGES FROM TABLE t2] OFFSET 1 LIMIT 1
 
 let $tableid
 SELECT id FROM system.namespace WHERE name = 't2'
@@ -69,5 +95,10 @@ SELECT count(key), count(DISTINCT key) FROM crdb_internal.scan(crdb_internal.tab
 
 # Regression test for not closing the generator builtin if it encounters an
 # error in Start() (#87248).
+onlyif config local
 statement error failed to verify keys for Scan
+SELECT crdb_internal.scan('\xff':::BYTES, '\x3f5918':::BYTES);
+
+onlyif config 3node-tenant
+statement error not fully contained in tenant keyspace
 SELECT crdb_internal.scan('\xff':::BYTES, '\x3f5918':::BYTES);

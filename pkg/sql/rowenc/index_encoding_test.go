@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/trigram"
@@ -74,14 +75,14 @@ func makeTableDescForTest(test indexKeyTest) (catalog.TableDescriptor, catalog.T
 		PrimaryIndex: descpb.IndexDescriptor{
 			ID:                  1,
 			KeyColumnIDs:        primaryColumnIDs,
-			KeyColumnDirections: make([]catpb.IndexColumn_Direction, len(primaryColumnIDs)),
+			KeyColumnDirections: make([]catenumpb.IndexColumn_Direction, len(primaryColumnIDs)),
 		},
 		Indexes: []descpb.IndexDescriptor{{
 			ID:                  2,
 			KeyColumnIDs:        secondaryColumnIDs,
 			KeySuffixColumnIDs:  primaryColumnIDs,
 			Unique:              true,
-			KeyColumnDirections: make([]catpb.IndexColumn_Direction, len(secondaryColumnIDs)),
+			KeyColumnDirections: make([]catenumpb.IndexColumn_Direction, len(secondaryColumnIDs)),
 			Type:                secondaryType,
 		}},
 	}
@@ -657,7 +658,7 @@ func ExtractIndexKey(
 		return entry.Key, nil
 	}
 
-	index, err := tableDesc.FindIndexWithID(indexID)
+	index, err := catalog.MustFindIndexByID(tableDesc, indexID)
 	if err != nil {
 		return nil, err
 	}
@@ -680,10 +681,10 @@ func ExtractIndexKey(
 		return nil, err
 	}
 	extraValues := make([]EncDatum, index.NumKeySuffixColumns())
-	dirs = make([]catpb.IndexColumn_Direction, index.NumKeySuffixColumns())
+	dirs = make([]catenumpb.IndexColumn_Direction, index.NumKeySuffixColumns())
 	for i := 0; i < index.NumKeySuffixColumns(); i++ {
 		// Implicit columns are always encoded Ascending.
-		dirs[i] = catpb.IndexColumn_ASC
+		dirs[i] = catenumpb.IndexColumn_ASC
 	}
 	extraKey := key
 	if index.IsUnique() {
@@ -1022,9 +1023,9 @@ func TestEncodeTrigramInvertedIndexSpans(t *testing.T) {
 
 		// Generate two random strings and evaluate left % right, left LIKE right,
 		// and left = right both via eval and via the span comparisons.
-		left := randgen.RandString(rng, 15, alphabet)
+		left := util.RandString(rng, 15, alphabet)
 		length := 3 + rng.Intn(5)
-		right := randgen.RandString(rng, length, alphabet+"%")
+		right := util.RandString(rng, length, alphabet+"%")
 
 		for _, searchType := range []trigramSearchType{like, eq, similar} {
 			expr := makeTrigramBinOp(t, left, right, searchType)

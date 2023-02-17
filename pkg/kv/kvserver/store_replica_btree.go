@@ -89,6 +89,22 @@ func (b *storeReplicaBTree) LookupPrecedingReplica(ctx context.Context, key roac
 	return repl
 }
 
+// LookupNextReplica returns the first / leftmost Replica (if any) whose start
+// key is greater or equal to the provided key. Placeholders are ignored.
+func (b *storeReplicaBTree) LookupNextReplica(ctx context.Context, key roachpb.RKey) *Replica {
+	var repl *Replica
+	if err := b.ascendRange(ctx, key, roachpb.RKeyMax, func(_ context.Context, it replicaOrPlaceholder) error {
+		if it.repl != nil {
+			repl = it.repl
+			return iterutil.StopIteration()
+		}
+		return nil
+	}); err != nil {
+		panic(err)
+	}
+	return repl
+}
+
 // VisitKeyRange invokes the visitor on all the replicas for ranges that
 // overlap [startKey, endKey), or until the visitor returns false, in the
 // specific order. (The items in the btree are non-overlapping).

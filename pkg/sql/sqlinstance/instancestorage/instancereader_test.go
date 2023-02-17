@@ -12,15 +12,15 @@ package instancestorage_test
 
 import (
 	"context"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
@@ -53,14 +53,12 @@ func TestReader(t *testing.T) {
 	) {
 		dbName := t.Name()
 		tDB.Exec(t, `CREATE DATABASE "`+dbName+`"`)
-		schema := strings.Replace(systemschema.SQLInstancesTableSchema,
-			`CREATE TABLE system.sql_instances`,
-			`CREATE TABLE "`+dbName+`".sql_instances`, 1)
+		schema := instancestorage.GetTableSQLForDatabase(dbName)
 		tDB.Exec(t, schema)
-		tableID := getTableID(t, tDB, dbName, "sql_instances")
+		table := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), dbName, "sql_instances")
 		slStorage := slstorage.NewFakeStorage()
-		storage := instancestorage.NewTestingStorage(s.DB(), keys.SystemSQLCodec, tableID, slStorage, s.ClusterSettings())
-		reader := instancestorage.NewTestingReader(storage, slStorage, s.RangeFeedFactory().(*rangefeed.Factory), keys.SystemSQLCodec, tableID, s.Clock(), s.Stopper())
+		storage := instancestorage.NewTestingStorage(s.DB(), keys.SystemSQLCodec, table, slStorage, s.ClusterSettings())
+		reader := instancestorage.NewTestingReader(storage, slStorage, s.RangeFeedFactory().(*rangefeed.Factory), keys.SystemSQLCodec, table, s.Clock(), s.Stopper())
 		return storage, slStorage, s.Clock(), reader
 	}
 
@@ -72,13 +70,14 @@ func TestReader(t *testing.T) {
 	t.Run("read-without-waiting", func(t *testing.T) {
 		storage, slStorage, clock, reader := setup(t)
 		sessionID := makeSession()
-		const addr = "addr"
+		const rpcAddr = "rpcAddr"
+		const sqlAddr = "sqlAddr"
 		locality := roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "test"}, {Key: "az", Value: "a"}}}
 		// Set a high enough expiration to ensure the session stays
 		// live through the test.
 		const expiration = 10 * time.Minute
 		sessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
-		instance, err := storage.CreateInstance(ctx, sessionID, sessionExpiry, addr, locality)
+		instance, err := storage.CreateInstance(ctx, sessionID, sessionExpiry, rpcAddr, sqlAddr, locality)
 		require.NoError(t, err)
 		err = slStorage.Insert(ctx, sessionID, sessionExpiry)
 		require.NoError(t, err)
@@ -87,7 +86,8 @@ func TestReader(t *testing.T) {
 		// Attempt to get instance without waiting.
 		instanceInfo, err := reader.GetInstance(ctx, instance.InstanceID)
 		require.NoError(t, err)
-		require.Equal(t, addr, instanceInfo.InstanceAddr)
+		require.Equal(t, rpcAddr, instanceInfo.InstanceRPCAddr)
+		require.Equal(t, sqlAddr, instanceInfo.InstanceSQLAddr)
 		require.Equal(t, locality, instanceInfo.Locality)
 	})
 	t.Run("basic-get-instance-data", func(t *testing.T) {
@@ -95,14 +95,15 @@ func TestReader(t *testing.T) {
 		reader.Start(ctx, sqlinstance.InstanceInfo{})
 		require.NoError(t, reader.WaitForStarted(ctx))
 		sessionID := makeSession()
-		const addr = "addr"
+		const rpcAddr = "rpcAddr"
+		const sqlAddr = "sqlAddr"
 		locality := roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "test"}, {Key: "az", Value: "a"}}}
 		// Set a high enough expiration to ensure the session stays
 		// live through the test.
 		const expiration = 10 * time.Minute
 		{
 			sessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
-			instance, err := storage.CreateInstance(ctx, sessionID, sessionExpiry, addr, locality)
+			instance, err := storage.CreateInstance(ctx, sessionID, sessionExpiry, rpcAddr, sqlAddr, locality)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -115,8 +116,11 @@ func TestReader(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				if addr != instanceInfo.InstanceAddr {
-					return errors.Newf("expected instance address %s != actual instance address %s", addr, instanceInfo.InstanceAddr)
+				if rpcAddr != instanceInfo.InstanceRPCAddr {
+					return errors.Newf("expected instance address %s != actual instance address %s", rpcAddr, instanceInfo.InstanceRPCAddr)
+				}
+				if sqlAddr != instanceInfo.InstanceSQLAddr {
+					return errors.Newf("expected instance sql address %s != actual sql instance address %s", sqlAddr, instanceInfo.InstanceSQLAddr)
 				}
 				if !locality.Equals(instanceInfo.Locality) {
 					return errors.Newf("expected instance locality %s != actual instance locality %s", locality, instanceInfo.Locality)
@@ -136,7 +140,8 @@ func TestReader(t *testing.T) {
 		// Set up expected test data.
 		region := enum.One
 		instanceIDs := []base.SQLInstanceID{1, 2, 3}
-		addresses := []string{"addr1", "addr2", "addr3"}
+		rpcAddresses := []string{"addr1", "addr2", "addr3"}
+		sqlAddresses := []string{"addr4", "addr5", "addr6"}
 		sessionIDs := []sqlliveness.SessionID{makeSession(), makeSession(), makeSession()}
 		localities := []roachpb.Locality{
 			{Tiers: []roachpb.Tier{{Key: "region", Value: "region1"}}},
@@ -144,31 +149,85 @@ func TestReader(t *testing.T) {
 			{Tiers: []roachpb.Tier{{Key: "region", Value: "region3"}}},
 		}
 
-		testOutputFn := func(expectedIDs []base.SQLInstanceID, expectedAddresses []string, expectedSessionIDs []sqlliveness.SessionID, expectedLocalities []roachpb.Locality, actualInstances []sqlinstance.InstanceInfo) error {
-			if len(expectedIDs) != len(actualInstances) {
-				return errors.Newf("expected %d instances, got %d instances", len(expectedIDs), len(actualInstances))
+		type expectations struct {
+			instanceIDs  []base.SQLInstanceID
+			rpcAddresses []string
+			sqlAddresses []string
+			sessionIDs   []sqlliveness.SessionID
+			localities   []roachpb.Locality
+		}
+
+		testOutputFn := func(exp expectations, actualInstances []sqlinstance.InstanceInfo) error {
+			if len(exp.instanceIDs) != len(actualInstances) {
+				return errors.Newf("expected %d instances, got %d instances", len(exp.instanceIDs), len(actualInstances))
 			}
 			for index, instance := range actualInstances {
-				if expectedIDs[index] != instance.InstanceID {
-					return errors.Newf("expected instance ID %d != actual instance ID %d", expectedIDs[index], instance.InstanceID)
+				if exp.instanceIDs[index] != instance.InstanceID {
+					return errors.Newf("expected instance ID %d != actual instance ID %d", exp.instanceIDs[index], instance.InstanceID)
 				}
-				if expectedAddresses[index] != instance.InstanceAddr {
-					return errors.Newf("expected instance address %s != actual instance address %s", expectedAddresses[index], instance.InstanceAddr)
+				if exp.rpcAddresses[index] != instance.InstanceRPCAddr {
+					return errors.Newf("expected instance address %s != actual instance address %s", exp.rpcAddresses[index], instance.InstanceRPCAddr)
 				}
-				if expectedSessionIDs[index] != instance.SessionID {
-					return errors.Newf("expected session ID %s != actual session ID %s", expectedSessionIDs[index], instance.SessionID)
+				if exp.sqlAddresses[index] != instance.InstanceSQLAddr {
+					return errors.Newf("expected instance address %s != actual instance address %s", exp.sqlAddresses[index], instance.InstanceSQLAddr)
 				}
-				if !expectedLocalities[index].Equals(instance.Locality) {
-					return errors.Newf("expected instance locality %s != actual instance locality %s", expectedLocalities[index], instance.Locality)
+
+				if exp.sessionIDs[index] != instance.SessionID {
+					return errors.Newf("expected session ID %s != actual session ID %s", exp.sessionIDs[index], instance.SessionID)
+				}
+				if !exp.localities[index].Equals(instance.Locality) {
+					return errors.Newf("expected instance locality %s != actual instance locality %s", exp.localities[index], instance.Locality)
 				}
 			}
 			return nil
 		}
+
+		getInstancesUsingTxn := func(t *testing.T) ([]sqlinstance.InstanceInfo, error) {
+			var instancesUsingTxn []sqlinstance.InstanceInfo
+			if err := s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				var err error
+				instancesUsingTxn, err = reader.GetAllInstancesUsingTxn(ctx, txn)
+				return err
+			}); err != nil {
+				return nil, err
+			}
+			return instancesUsingTxn, nil
+		}
+
+		verifyInstancesWithGetter := func(t *testing.T, name string, exp expectations, getInstances func() ([]sqlinstance.InstanceInfo, error)) error {
+			instances, err := getInstances()
+			if err != nil {
+				return errors.Wrapf(err, "%s", name)
+			}
+			sortInstances(instances)
+			return errors.Wrapf(testOutputFn(exp, instances), "%s", name)
+		}
+		verifyInstances := func(t *testing.T, exp expectations) error {
+			if err := verifyInstancesWithGetter(t, "reader", exp, func() ([]sqlinstance.InstanceInfo, error) {
+				return reader.GetAllInstances(ctx)
+			}); err != nil {
+				return err
+			}
+			return verifyInstancesWithGetter(t, "txn", exp, func() ([]sqlinstance.InstanceInfo, error) {
+				return getInstancesUsingTxn(t)
+			})
+		}
+
+		expectationsFromOffset := func(offset int) expectations {
+			return expectations{
+				instanceIDs:  instanceIDs[offset:],
+				rpcAddresses: rpcAddresses[offset:],
+				sqlAddresses: sqlAddresses[offset:],
+				sessionIDs:   sessionIDs[offset:],
+				localities:   localities[offset:],
+			}
+		}
+
 		{
 			// Set up mock data within instance and session storage.
-			for index, addr := range addresses {
+			for index, rpcAddr := range rpcAddresses {
 				sessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
-				_, err := storage.CreateInstance(ctx, sessionIDs[index], sessionExpiry, addr, localities[index])
+				_, err := storage.CreateInstance(ctx, sessionIDs[index], sessionExpiry, rpcAddr, sqlAddresses[index], localities[index])
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -179,12 +238,7 @@ func TestReader(t *testing.T) {
 			}
 			// Verify all instances are returned by GetAllInstances.
 			testutils.SucceedsSoon(t, func() error {
-				instances, err := reader.GetAllInstances(ctx)
-				if err != nil {
-					return err
-				}
-				sortInstances(instances)
-				return testOutputFn(instanceIDs, addresses, sessionIDs, localities, instances)
+				return verifyInstances(t, expectationsFromOffset(0))
 			})
 		}
 
@@ -195,12 +249,7 @@ func TestReader(t *testing.T) {
 				t.Fatal(err)
 			}
 			testutils.SucceedsSoon(t, func() error {
-				instances, err := reader.GetAllInstances(ctx)
-				if err != nil {
-					return err
-				}
-				sortInstances(instances)
-				return testOutputFn(instanceIDs[1:], addresses[1:], sessionIDs[1:], localities[1:], instances)
+				return verifyInstances(t, expectationsFromOffset(1))
 			})
 		}
 
@@ -211,12 +260,7 @@ func TestReader(t *testing.T) {
 				t.Fatal(err)
 			}
 			testutils.SucceedsSoon(t, func() error {
-				instances, err := reader.GetAllInstances(ctx)
-				if err != nil {
-					return err
-				}
-				sortInstances(instances)
-				return testOutputFn(instanceIDs[2:], addresses[2:], sessionIDs[2:], localities[2:], instances)
+				return verifyInstances(t, expectationsFromOffset(2))
 			})
 		}
 
@@ -227,7 +271,7 @@ func TestReader(t *testing.T) {
 			sessionID := makeSession()
 			locality := roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "region4"}}}
 			sessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
-			instance, err := storage.CreateInstance(ctx, sessionID, sessionExpiry, addresses[2], locality)
+			instance, err := storage.CreateInstance(ctx, sessionID, sessionExpiry, rpcAddresses[2], sqlAddresses[2], locality)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -236,18 +280,13 @@ func TestReader(t *testing.T) {
 				t.Fatal(err)
 			}
 			testutils.SucceedsSoon(t, func() error {
-				instances, err := reader.GetAllInstances(ctx)
-				if err != nil {
-					return err
-				}
-				sortInstances(instances)
-				return testOutputFn(
-					[]base.SQLInstanceID{instance.InstanceID},
-					[]string{addresses[2]},
-					[]sqlliveness.SessionID{sessionID},
-					[]roachpb.Locality{locality},
-					instances,
-				)
+				return verifyInstances(t, expectations{
+					[]base.SQLInstanceID{instance.InstanceID}, /* instanceIDs */
+					[]string{rpcAddresses[2]},                 /* rpcAddresses */
+					[]string{sqlAddresses[2]},                 /* sqlAddresses */
+					[]sqlliveness.SessionID{sessionID},        /* sessionIDs */
+					[]roachpb.Locality{locality},              /* localities */
+				})
 			})
 		}
 	})
@@ -261,7 +300,8 @@ func TestReader(t *testing.T) {
 		// Create three instances and release one.
 		region := enum.One
 		instanceIDs := [...]base.SQLInstanceID{1, 2, 3}
-		addresses := [...]string{"addr1", "addr2", "addr3"}
+		rpcAddresses := [...]string{"addr1", "addr2", "addr3"}
+		sqlAddresses := [...]string{"addr4", "addr5", "addr6"}
 		sessionIDs := [...]sqlliveness.SessionID{makeSession(), makeSession(), makeSession()}
 		localities := [...]roachpb.Locality{
 			{Tiers: []roachpb.Tier{{Key: "region", Value: "region1"}}},
@@ -270,9 +310,9 @@ func TestReader(t *testing.T) {
 		}
 		{
 			// Set up mock data within instance and session storage.
-			for index, addr := range addresses {
+			for index, rpcAddr := range rpcAddresses {
 				sessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
-				_, err := storage.CreateInstance(ctx, sessionIDs[index], sessionExpiry, addr, localities[index])
+				_, err := storage.CreateInstance(ctx, sessionIDs[index], sessionExpiry, rpcAddr, sqlAddresses[index], localities[index])
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -290,8 +330,11 @@ func TestReader(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				if addresses[0] != instanceInfo.InstanceAddr {
-					return errors.Newf("expected instance address %s != actual instance address %s", addresses[0], instanceInfo.InstanceAddr)
+				if rpcAddresses[0] != instanceInfo.InstanceRPCAddr {
+					return errors.Newf("expected instance address %s != actual instance address %s", rpcAddresses[0], instanceInfo.InstanceRPCAddr)
+				}
+				if sqlAddresses[0] != instanceInfo.InstanceSQLAddr {
+					return errors.Newf("expected instance address %s != actual instance address %s", sqlAddresses[0], instanceInfo.InstanceSQLAddr)
 				}
 				if !localities[0].Equals(instanceInfo.Locality) {
 					return errors.Newf("expected instance locality %s != actual instance locality %s", localities[0], instanceInfo.Locality)

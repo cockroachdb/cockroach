@@ -16,6 +16,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -24,11 +25,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/grunning"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -71,7 +79,7 @@ func TestOutputBuilder(t *testing.T) {
 		return ob
 	}
 
-	datadriven.RunTest(t, testutils.TestDataPath(t, "output"), func(t *testing.T, d *datadriven.TestData) string {
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "output"), func(t *testing.T, d *datadriven.TestData) string {
 		var flags explain.Flags
 		for _, arg := range d.CmdArgs {
 			switch arg.Key {
@@ -113,6 +121,9 @@ func TestEmptyOutputBuilder(t *testing.T) {
 }
 
 func TestMaxDiskSpillUsage(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	testClusterArgs := base.TestClusterArgs{
 		ReplicationMode: base.ReplicationAuto,
 	}
@@ -154,4 +165,83 @@ CREATE TABLE t (a PRIMARY KEY, b) AS SELECT i, i FROM generate_series(1, 10) AS 
 	assert.True(t, queryMatchRE(`EXPLAIN ANALYZE (VERBOSE, DISTSQL) select * from t join t AS x on t.b=x.a`, maxDiskUsageRE), "didn't find max sql temp disk usage: in explain")
 	assert.False(t, queryMatchRE(`EXPLAIN ANALYZE (VERBOSE, DISTSQL) select * from t `, maxDiskUsageRE), "found unexpected max sql temp disk usage: in explain")
 
+}
+
+func TestCPUTimeEndToEnd(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderStress(t, "multinode cluster setup times out under stress")
+	skip.UnderRace(t, "multinode cluster setup times out under race")
+
+	if !grunning.Supported() {
+		return
+	}
+
+	testClusterArgs := base.TestClusterArgs{
+		ReplicationMode: base.ReplicationAuto,
+	}
+	distSQLKnobs := &execinfra.TestingKnobs{}
+	distSQLKnobs.ForceDiskSpill = true
+	testClusterArgs.ServerArgs.Knobs.DistSQL = distSQLKnobs
+	testClusterArgs.ServerArgs.Insecure = true
+	const numNodes = 3
+
+	serverutils.InitTestServerFactory(server.TestServerFactory)
+	tc := testcluster.StartTestCluster(t, numNodes, testClusterArgs)
+	ctx := context.Background()
+	defer tc.Stopper().Stop(ctx)
+
+	db := sqlutils.MakeSQLRunner(tc.Conns[0])
+
+	runQuery := func(query string, hideCPU bool) {
+		rows := db.QueryStr(t, "EXPLAIN ANALYZE "+query)
+		var err error
+		var foundCPU bool
+		var cpuTime time.Duration
+		for _, row := range rows {
+			if len(row) != 1 {
+				t.Fatalf("expected one column")
+			}
+			if strings.Contains(row[0], "sql cpu time") {
+				foundCPU = true
+				cpuStr := strings.Split(row[0], " ")
+				require.Equal(t, len(cpuStr), 4)
+				cpuTime, err = time.ParseDuration(cpuStr[3])
+				require.NoError(t, err)
+				break
+			}
+		}
+		if hideCPU {
+			require.Falsef(t, foundCPU, "expected not to output CPU time for query: %s", query)
+		} else {
+			require.NotZerof(t, cpuTime, "expected nonzero CPU time for query: %s", query)
+		}
+	}
+
+	// Mutation queries shouldn't output CPU time.
+	runQuery("CREATE TABLE t (x INT PRIMARY KEY, y INT);", true /* hideCPU */)
+	runQuery("INSERT INTO t (SELECT t, t%127 FROM generate_series(1, 10000) g(t));", true /* hideCPU */)
+
+	// Split the table across the nodes in order to make the following test cases
+	// more interesting.
+	for _, stmt := range []string{
+		`ALTER TABLE t SPLIT AT VALUES (2500)`,
+		`ALTER TABLE t SPLIT AT VALUES (5000)`,
+		`ALTER TABLE t SPLIT AT VALUES (7500)`,
+		`ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 2500)`,
+		`ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 5000)`,
+		`ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[3], 7500)`,
+	} {
+		testutils.SucceedsSoon(t, func() error {
+			_, err := db.DB.ExecContext(ctx, stmt)
+			return err
+		})
+	}
+
+	runQuery("SELECT * FROM t;", false /* hideCPU */)
+	runQuery("SELECT count(*) FROM t;", false /* hideCPU */)
+	runQuery("SELECT * FROM (SELECT * FROM t WHERE x > 2000 AND x < 3000) s1 JOIN t ON s1.x = t.x", false /* hideCPU */)
+	runQuery("SELECT * FROM (VALUES (1), (2), (3)) v(a) INNER LOOKUP JOIN t ON a = x", false /* hideCPU */)
+	runQuery("SELECT count(*) FROM generate_series(1, 100000)", false /* hideCPU */)
 }

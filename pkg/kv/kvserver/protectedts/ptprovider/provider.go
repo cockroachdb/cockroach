@@ -15,14 +15,13 @@ package ptprovider
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptcache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
@@ -31,16 +30,15 @@ import (
 // Config configures the Provider.
 type Config struct {
 	Settings             *cluster.Settings
-	DB                   *kv.DB
+	DB                   isql.DB
 	Stores               *kvserver.Stores
 	ReconcileStatusFuncs ptreconcile.StatusFuncs
-	InternalExecutor     sqlutil.InternalExecutor
 	Knobs                *protectedts.TestingKnobs
 }
 
 // Provider is the concrete implementation of protectedts.Provider interface.
 type Provider struct {
-	protectedts.Storage
+	protectedts.Manager
 	protectedts.Cache
 	protectedts.Reconciler
 	metric.Struct
@@ -51,7 +49,7 @@ func New(cfg Config) (protectedts.Provider, error) {
 	if err := validateConfig(cfg); err != nil {
 		return nil, err
 	}
-	storage := ptstorage.New(cfg.Settings, cfg.InternalExecutor, cfg.Knobs)
+	storage := ptstorage.New(cfg.Settings, cfg.Knobs)
 	reconciler := ptreconcile.New(cfg.Settings, cfg.DB, storage, cfg.ReconcileStatusFuncs)
 	cache := ptcache.New(ptcache.Config{
 		DB:       cfg.DB,
@@ -60,7 +58,7 @@ func New(cfg Config) (protectedts.Provider, error) {
 	})
 
 	return &Provider{
-		Storage:    storage,
+		Manager:    storage,
 		Cache:      cache,
 		Reconciler: reconciler,
 		Struct:     reconciler.Metrics(),
@@ -73,8 +71,6 @@ func validateConfig(cfg Config) error {
 		return errors.Errorf("invalid nil Settings")
 	case cfg.DB == nil:
 		return errors.Errorf("invalid nil DB")
-	case cfg.InternalExecutor == nil:
-		return errors.Errorf("invalid nil InternalExecutor")
 	default:
 		return nil
 	}

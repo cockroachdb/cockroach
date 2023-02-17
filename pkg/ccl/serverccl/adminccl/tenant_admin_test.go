@@ -10,6 +10,7 @@ package adminccl
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 
@@ -17,9 +18,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -48,6 +52,59 @@ func TestTenantAdminAPI(t *testing.T) {
 	t.Run("tenant_unimplemented", func(t *testing.T) {
 		testUnimplementedRPCs(ctx, t, testHelper)
 	})
+
+	t.Run("tenant_metricmetadata", func(t *testing.T) {
+		testMetricMetadataRPC(ctx, t, testHelper)
+	})
+
+	t.Run("tenant_metrics_capability", func(t *testing.T) {
+		testTenantMetricsCapabilityRPC(ctx, t, testHelper)
+	})
+}
+
+func testTenantMetricsCapabilityRPC(
+	ctx context.Context, t *testing.T, helper serverccl.TenantTestHelper,
+) {
+	http := helper.TestCluster().TenantAdminHTTPClient(t, 1)
+	defer http.Close()
+
+	query := tspb.TimeSeriesQueryRequest{
+		StartNanos: 0,
+		EndNanos:   timeutil.Now().UnixNano(),
+		Queries: []tspb.Query{
+			{
+				Name: "cr.node.sql.select.count",
+			},
+		},
+		SampleNanos: 0,
+	}
+	queryResp := tspb.TimeSeriesQueryResponse{}
+	err := http.PostJSONChecked("/ts/query", &query, &queryResp)
+	require.Error(t, err)
+
+	db := helper.HostCluster().ServerConn(0)
+	_, err = db.Exec("ALTER TENANT [10] GRANT CAPABILITY can_view_tsdb_metrics=true\n")
+	require.NoError(t, err)
+
+	testutils.SucceedsSoon(t, func() error {
+		err := http.PostJSONChecked("/ts/query", &query, &queryResp)
+		if err != nil {
+			return err
+		}
+		if len(queryResp.Results) == 0 {
+			return errors.New("missing metrics data")
+		}
+		return nil
+	})
+}
+
+func testMetricMetadataRPC(ctx context.Context, t *testing.T, helper serverccl.TenantTestHelper) {
+	http := helper.TestCluster().TenantAdminHTTPClient(t, 1)
+	defer http.Close()
+
+	metricMetadataResp := serverpb.MetricMetadataResponse{}
+	http.GetJSON("/_admin/v1/metricmetadata", &metricMetadataResp)
+	require.NotEmpty(t, metricMetadataResp.Metadata)
 }
 
 func testUnimplementedRPCs(ctx context.Context, t *testing.T, helper serverccl.TenantTestHelper) {
@@ -57,12 +114,7 @@ func testUnimplementedRPCs(ctx context.Context, t *testing.T, helper serverccl.T
 	client := http.GetClient()
 	baseURL := http.GetBaseURL()
 
-	resp, err := client.Get(baseURL + "/_admin/v1/liveness")
-	require.NoError(t, err)
-	defer resp.Body.Close()
-	require.Equal(t, 501, resp.StatusCode)
-
-	resp, err = client.Post(baseURL+"/_admin/v1/enqueue_range", "application/json", nil)
+	resp, err := client.Post(baseURL+"/_admin/v1/enqueue_range", "application/json", nil)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	require.Equal(t, 501, resp.StatusCode)

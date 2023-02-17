@@ -368,7 +368,7 @@ var fractionRegex = regexp.MustCompile(`^([-]?([0-9]+\.[0-9]*|[0-9]*\.[0-9]+|[0-
 //   - provisioned-rate=disk-name=<disk-name>[:bandwidth=<bandwidth-bytes/s>] The
 //     provisioned-rate can be used for admission control for operations on the
 //     store. The bandwidth is optional, and if unspecified, a cluster setting
-//     (kv.store.admission.provisioned_bandwidth) will be used.
+//     (kvadmission.store.provisioned_bandwidth) will be used.
 //
 // Note that commas are forbidden within any field name or value.
 func NewStoreSpec(value string) (StoreSpec, error) {
@@ -406,11 +406,7 @@ func NewStoreSpec(value string) (StoreSpec, error) {
 
 		switch field {
 		case pathField:
-			var err error
-			ss.Path, err = GetAbsoluteStorePath(pathField, value)
-			if err != nil {
-				return StoreSpec{}, err
-			}
+			ss.Path = value
 		case "size":
 			var err error
 			var minBytesAllowed int64 = MinimumStoreSize

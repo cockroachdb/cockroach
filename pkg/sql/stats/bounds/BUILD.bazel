@@ -1,0 +1,22 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "bounds",
+    srcs = ["extremes.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/stats/bounds",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catenumpb",
+        "//pkg/sql/opt/cat",
+        "//pkg/sql/opt/constraint",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/tree/treecmp",
+    ],
+)
+
+get_x_data(name = "get_x_data")

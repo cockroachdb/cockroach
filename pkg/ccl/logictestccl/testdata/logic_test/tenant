@@ -53,3 +53,9 @@ SELECT * FROM crdb_internal.cluster_queries
 
 statement ok
 SELECT * FROM crdb_internal.cluster_contention_events
+
+subtest regression_95612
+
+statement ok
+PREPARE pstmt AS ALTER TENANT 'foo' COMPLETE REPLICATION TO LATEST
+

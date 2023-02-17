@@ -247,7 +247,7 @@ func setupRunnerTest(t *testing.T, r testRegistryImpl, testFilters []string) *ru
 
 	stopper := stop.NewStopper()
 	t.Cleanup(func() { stopper.Stop(ctx) })
-	runner := newTestRunner(cr, stopper, r.buildVersion)
+	runner := newUnitTestRunner(cr, stopper, r.buildVersion)
 
 	var stdout syncedBuffer
 	var stderr syncedBuffer
@@ -326,7 +326,7 @@ func TestRunnerTestTimeout(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	cr := newClusterRegistry()
-	runner := newTestRunner(cr, stopper, version.Version{})
+	runner := newUnitTestRunner(cr, stopper, version.Version{})
 
 	var buf syncedBuffer
 	lopt := loggingOpt{
@@ -424,7 +424,7 @@ func runExitCodeTest(t *testing.T, injectedError error) error {
 	cr := newClusterRegistry()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	runner := newTestRunner(cr, stopper, version.Version{})
+	runner := newUnitTestRunner(cr, stopper, version.Version{})
 	r := mkReg(t)
 	r.Add(registry.TestSpec{
 		Name:    "boom",

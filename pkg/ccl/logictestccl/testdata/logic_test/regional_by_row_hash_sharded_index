@@ -1,4 +1,5 @@
-# tenant-cluster-setting-override-opt: allow-multi-region-abstractions-for-secondary-tenants
+# tenant-cluster-setting-override-opt: sql.multi_region.allow_abstractions_for_secondary_tenants.enabled=true
+# cluster-opt: can-admin-split
 # LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-no-los
 
 statement ok
@@ -44,7 +45,7 @@ CREATE TABLE t_to_be_hashed (
 ) LOCALITY REGIONAL BY ROW;
 
 query T
-SELECT @2 FROM [SHOW CREATE TABLE t_to_be_hashed];
+SELECT create_statement FROM [SHOW CREATE TABLE t_to_be_hashed];
 ----
 CREATE TABLE public.t_to_be_hashed (
                             pk INT8 NOT NULL,
@@ -58,7 +59,7 @@ statement ok
 CREATE INDEX ON t_to_be_hashed (b) USING HASH;
 
 query T
-SELECT @2 FROM [SHOW CREATE TABLE t_to_be_hashed];
+SELECT create_statement FROM [SHOW CREATE TABLE t_to_be_hashed];
 ----
 CREATE TABLE public.t_to_be_hashed (
                             pk INT8 NOT NULL,
@@ -74,7 +75,7 @@ statement ok
 CREATE UNIQUE INDEX ON t_to_be_hashed (b) USING HASH;
 
 query T
-SELECT @2 FROM [SHOW CREATE TABLE t_to_be_hashed];
+SELECT create_statement FROM [SHOW CREATE TABLE t_to_be_hashed];
 ----
 CREATE TABLE public.t_to_be_hashed (
                             pk INT8 NOT NULL,
@@ -91,7 +92,7 @@ statement ok
 ALTER TABLE t_to_be_hashed ALTER PRIMARY KEY USING COLUMNS (pk) USING HASH;
 
 query T
-SELECT @2 FROM [SHOW CREATE TABLE t_to_be_hashed];
+SELECT create_statement FROM [SHOW CREATE TABLE t_to_be_hashed];
 ----
 CREATE TABLE public.t_to_be_hashed (
                             pk INT8 NOT NULL,
@@ -114,7 +115,7 @@ CREATE TABLE t_regional_pk_hashed_1 (
 ) LOCALITY REGIONAL BY ROW;
 
 query T
-SELECT @2 FROM [SHOW CREATE TABLE t_regional_pk_hashed_1];
+SELECT create_statement FROM [SHOW CREATE TABLE t_regional_pk_hashed_1];
 ----
 CREATE TABLE public.t_regional_pk_hashed_1 (
                             crdb_internal_pk_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(pk)), 16:::INT8)) VIRTUAL,
@@ -137,7 +138,7 @@ CREATE TABLE t_regional_pk_hashed_2 (
 ) LOCALITY REGIONAL BY ROW;
 
 query T
-SELECT @2 FROM [SHOW CREATE TABLE t_regional_pk_hashed_2];
+SELECT create_statement FROM [SHOW CREATE TABLE t_regional_pk_hashed_2];
 ----
 CREATE TABLE public.t_regional_pk_hashed_2 (
                             pk INT8 NOT NULL,

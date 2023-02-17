@@ -4,5 +4,5 @@ USE parent;
 CREATE DATABASE pgdatabase;
 USE test;
 
-statement error pq: cannot perform ALTER DATABASE CONVERT TO SCHEMA in version
+statement error pq: cannot perform ALTER DATABASE CONVERT TO SCHEMA
 ALTER DATABASE parent CONVERT TO SCHEMA WITH PARENT pgdatabase

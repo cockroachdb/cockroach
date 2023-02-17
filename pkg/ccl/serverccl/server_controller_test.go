@@ -22,11 +22,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -57,12 +59,21 @@ func TestServerControllerHTTP(t *testing.T) {
 	require.NoError(t, row.Scan(&id, &secret, &username, &created, &expires))
 
 	// Create our own test tenant with a known name.
-	_, err = db.Exec("SELECT crdb_internal.create_tenant(10, 'hello')")
+	_, _, err = s.(*server.TestServer).StartSharedProcessTenant(ctx,
+		base.TestSharedProcessTenantArgs{
+			TenantName: "hello",
+		})
 	require.NoError(t, err)
 
 	// Get a SQL connection to the test tenant.
-	sqlAddr := s.(*server.TestServer).TestingGetSQLAddrForTenant(ctx, "hello")
-	db2 := serverutils.OpenDBConn(t, sqlAddr, "defaultdb", false, s.Stopper())
+	sqlAddr := s.ServingSQLAddr()
+	db2, err := serverutils.OpenDBConnE(sqlAddr, "cluster:hello/defaultdb", false, s.Stopper())
+	// Expect no error yet: the connection is opened lazily; an
+	// error here means the parameters were incorrect.
+	require.NoError(t, err)
+
+	// This actually uses the connection.
+	require.NoError(t, db2.Ping())
 
 	// Instantiate the HTTP test username and privileges into the test tenant.
 	_, err = db2.Exec(fmt.Sprintf(`CREATE USER %s`, lexbase.EscapeSQLIdent(username)))
@@ -169,4 +180,136 @@ VALUES($1, $2, $3, $4, $5)`, id, secret, username, created, expires)
 	t.Logf("response 5:\n%#v", body)
 	require.Equal(t, len(body.Sessions), 1)
 	require.Equal(t, body.Sessions[0].ApplicationName, "hello system")
+}
+
+// TestServerControllerBadHTTPCookies tests the controller's proxy
+// layer for correct behavior under scenarios where the client has
+// stale or invalid cookies. This helps ensure that we continue to
+// serve static assets even when the browser is referencing an
+// unknown tenant, or bad sessions.
+func TestServerControllerBadHTTPCookies(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	client, err := s.GetUnauthenticatedHTTPClient()
+	require.NoError(t, err)
+
+	c := &http.Cookie{
+		Name:     server.TenantSelectCookieName,
+		Value:    "some-nonexistent-tenant",
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   true,
+	}
+
+	req, err := http.NewRequest("GET", s.AdminURL()+"/", nil)
+	require.NoError(t, err)
+	req.AddCookie(c)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, 200, resp.StatusCode)
+
+	req, err = http.NewRequest("GET", s.AdminURL()+"/bundle.js", nil)
+	require.NoError(t, err)
+	req.AddCookie(c)
+	resp, err = client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, 200, resp.StatusCode)
+}
+
+func TestServerControllerMultiNodeTenantStartup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	numNodes := 3
+	tc := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DisableDefaultTestTenant: true,
+		}})
+	defer tc.Stopper().Stop(ctx)
+
+	db := tc.ServerConn(0)
+	_, err := db.Exec("CREATE TENANT hello; ALTER TENANT hello START SERVICE SHARED")
+	require.NoError(t, err)
+
+	// Pick a random node, try to run some SQL inside that tenant.
+	rng, _ := randutil.NewTestRand()
+	sqlAddr := tc.Server(int(rng.Int31n(int32(numNodes)))).ServingSQLAddr()
+	testutils.SucceedsSoon(t, func() error {
+		tenantDB, err := serverutils.OpenDBConnE(sqlAddr, "cluster:hello", false, tc.Stopper())
+		if err != nil {
+			return err
+		}
+		defer tenantDB.Close()
+		if _, err := tenantDB.Exec("CREATE ROLE foo"); err != nil {
+			return err
+		}
+		if _, err := tenantDB.Exec("GRANT ADMIN TO foo"); err != nil {
+			return err
+		}
+		return nil
+	})
+}
+
+func TestServerStartStop(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DisableDefaultTestTenant: true,
+	})
+	defer s.Stopper().Stop(ctx)
+
+	sqlAddr := s.ServingSQLAddr()
+
+	// Create our own test tenant with a known name.
+	_, err := db.Exec("CREATE TENANT hello")
+	require.NoError(t, err)
+
+	// Make the service alive.
+	_, err = db.Exec("ALTER TENANT hello START SERVICE SHARED")
+	require.NoError(t, err)
+
+	// Check the liveness.
+	testutils.SucceedsSoon(t, func() error {
+		db2, err := serverutils.OpenDBConnE(sqlAddr, "cluster:hello/defaultdb", false, s.Stopper())
+		// Expect no error yet: the connection is opened lazily; an
+		// error here means the parameters were incorrect.
+		require.NoError(t, err)
+
+		defer db2.Close()
+		if err := db2.Ping(); err != nil {
+			return err
+		}
+		return nil
+	})
+
+	// Stop the service.     .
+	_, err = db.Exec("ALTER TENANT hello STOP SERVICE")
+	require.NoError(t, err)
+
+	// Verify that the service is indeed stopped.
+	testutils.SucceedsSoon(t, func() error {
+		db2, err := serverutils.OpenDBConnE(sqlAddr, "cluster:hello/defaultdb", false, s.Stopper())
+		// Expect no error yet: the connection is opened lazily; an
+		// error here means the parameters were incorrect.
+		require.NoError(t, err)
+		defer db2.Close()
+		if err := db2.Ping(); err != nil {
+			// Connection error: success.
+			return nil //nolint:returnerrcheck
+		}
+		return errors.New("server still alive")
+	})
 }

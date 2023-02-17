@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -38,7 +39,12 @@ type TestTenantInterface interface {
 	// SQLServer. Each tenant can have zero or more running SQLServer instances.
 	SQLInstanceID() base.SQLInstanceID
 
-	// SQLAddr returns the tenant's SQL address.
+	// SQLAddr returns the tenant's SQL address. Note that for "shared-process
+	// tenants" (i.e. tenants created with TestServer.StartSharedProcessTenant),
+	// simply connecting to this address connects to the system tenant, not to
+	// this tenant. In order to connect to this tenant,
+	// "cluster:<tenantName>/<databaseName>" needs to be added to the connection
+	// string as the database name.
 	SQLAddr() string
 
 	// HTTPAddr returns the tenant's http address.
@@ -46,6 +52,9 @@ type TestTenantInterface interface {
 
 	// RPCAddr returns the tenant's RPC address.
 	RPCAddr() string
+
+	// DB returns a handle to the cluster's KV interface.
+	DB() *kv.DB
 
 	// PGServer returns the tenant's *pgwire.Server as an interface{}.
 	PGServer() interface{}
@@ -161,8 +170,16 @@ type TestTenantInterface interface {
 	// as an interface{}.
 	RangeDescIteratorFactory() interface{}
 
-	//Tracer returns a reference to the tenant's Tracer.
+	// Tracer returns a reference to the tenant's Tracer.
 	Tracer() *tracing.Tracer
+
+	// WaitForTenantEndKeySplit blocks until the tenant's initial range is split
+	// at the end key. For example, this will wait until tenant 10 has a split at
+	// /Tenant/11.
+	//
+	// Tests that use crdb_internal.ranges, crdb_internal.ranges_no_leases, or
+	// SHOW RANGES from a secondary tenant should call this to avoid races.
+	WaitForTenantEndKeySplit(ctx context.Context) error
 
 	// TODO(irfansharif): We'd benefit from an API to construct a *gosql.DB, or
 	// better yet, a *sqlutils.SQLRunner. We use it all the time, constructing

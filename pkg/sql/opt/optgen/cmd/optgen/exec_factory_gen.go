@@ -29,6 +29,7 @@ func (g *execFactoryGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 	g.w.write("package exec\n\n")
 
 	g.w.nestIndent("import (\n")
+	g.w.writeIndent("\"context\"\n\n")
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb\"\n")
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo\"\n")
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/opt/cat\"\n")
@@ -84,6 +85,11 @@ func (g *execFactoryGen) genExecFactory() {
 	g.w.writeIndent("rootRowCount int64,\n")
 	g.w.unnest(") (Plan, error)\n")
 
+	g.w.write("\n")
+	g.w.nest("// Ctx returns the ctx of this execution.\n")
+	g.w.writeIndent("Ctx() context.Context\n")
+	g.w.unnest("\n")
+
 	for _, define := range g.compiled.Defines {
 		g.w.write("\n")
 		g.w.write("// Construct%s creates a node for a %s operation.\n", define.Name, define.Name)
@@ -117,6 +123,11 @@ func (g *execFactoryGen) genStubFactory() {
 	g.w.writeIndent("rootRowCount int64,\n")
 	g.w.unnest(") (Plan, error) {\n")
 	g.w.nestIndent("return struct{}{}, nil\n")
+	g.w.unnest("}\n")
+
+	g.w.write("\n")
+	g.w.nest("func (StubFactory) Ctx() context.Context {\n")
+	g.w.writeIndent("return context.Background()\n")
 	g.w.unnest("}\n")
 
 	for _, define := range g.compiled.Defines {

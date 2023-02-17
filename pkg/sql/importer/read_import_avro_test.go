@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -532,7 +532,7 @@ var _ importRowProducer = &limitAvroStream{}
 func BenchmarkOCFImport(b *testing.B) {
 	benchmarkAvroImport(b, roachpb.AvroOptions{
 		Format: roachpb.AvroOptions_OCF,
-	}, testutils.TestDataPath(b, "avro", "stock-10000.ocf"))
+	}, datapathutils.TestDataPath(b, "avro", "stock-10000.ocf"))
 }
 
 // goos: darwin
@@ -549,13 +549,13 @@ func BenchmarkOCFImport(b *testing.B) {
 // BenchmarkBinaryJSONImport-16    	  500000	      3215 ns/op	  37.32 MB/s
 // BenchmarkBinaryJSONImport-16    	  500000	      3235 ns/op	  37.09 MB/s
 func BenchmarkBinaryJSONImport(b *testing.B) {
-	schemaBytes, err := os.ReadFile(testutils.TestDataPath(b, "avro", "stock-schema.json"))
+	schemaBytes, err := os.ReadFile(datapathutils.TestDataPath(b, "avro", "stock-schema.json"))
 	require.NoError(b, err)
 
 	benchmarkAvroImport(b, roachpb.AvroOptions{
 		Format:     roachpb.AvroOptions_BIN_RECORDS,
 		SchemaJSON: string(schemaBytes),
-	}, testutils.TestDataPath(b, "avro", "stock-10000.bjson"))
+	}, datapathutils.TestDataPath(b, "avro", "stock-10000.bjson"))
 }
 
 func benchmarkAvroImport(b *testing.B, avroOpts roachpb.AvroOptions, testData string) {

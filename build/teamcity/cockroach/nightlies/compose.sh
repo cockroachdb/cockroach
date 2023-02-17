@@ -25,6 +25,7 @@ $BAZCI --artifacts_dir=$ARTIFACTS_DIR -- \
        "--sandbox_writable_path=$ARTIFACTS_DIR" \
        "--test_tmpdir=$ARTIFACTS_DIR" \
        --test_env=GO_TEST_WRAP_TESTV=1 \
+       --test_env=COCKROACH_DEV_LICENSE=$COCKROACH_DEV_LICENSE \
        --test_arg -cockroach --test_arg $COCKROACH \
        --test_arg -compare --test_arg $COMPAREBIN \
        --test_timeout=1800 || exit_status=$?

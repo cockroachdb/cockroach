@@ -16,6 +16,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -460,4 +461,11 @@ func (f *fakeGetMultiregionConfigPlanner) GetMultiregionConfig(
 // IsANSIDML is part of the eval.Planner interface.
 func (f *fakeGetMultiregionConfigPlanner) IsANSIDML() bool {
 	return false
+}
+
+// GetRangeDescByID is part of the eval.Planner interface.
+func (ep *fakeGetMultiregionConfigPlanner) GetRangeDescByID(
+	context.Context, roachpb.RangeID,
+) (rangeDesc roachpb.RangeDescriptor, err error) {
+	return
 }

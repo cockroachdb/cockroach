@@ -21,8 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/rowencpb"
@@ -31,12 +32,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/trigram"
+	"github.com/cockroachdb/cockroach/pkg/util/tsearch"
 	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/errors"
 )
@@ -82,7 +84,7 @@ func EncodeIndexKey(
 // given table, index, and values, with the same method as
 // EncodePartialIndexKey.
 func EncodePartialIndexSpan(
-	keyCols []descpb.IndexFetchSpec_KeyColumn,
+	keyCols []fetchpb.IndexFetchSpec_KeyColumn,
 	colMap catalog.TableColMap,
 	values []tree.Datum,
 	keyPrefix []byte,
@@ -99,7 +101,7 @@ func EncodePartialIndexSpan(
 // suffix) columns are encoded; these can be a prefix of the index key columns.
 // Does not directly append to keyPrefix.
 func EncodePartialIndexKey(
-	keyCols []descpb.IndexFetchSpec_KeyColumn,
+	keyCols []fetchpb.IndexFetchSpec_KeyColumn,
 	colMap catalog.TableColMap,
 	values []tree.Datum,
 	keyPrefix []byte,
@@ -129,7 +131,7 @@ func EncodePartialIndexKey(
 	return key, containsNull, nil
 }
 
-type directions []catpb.IndexColumn_Direction
+type directions []catenumpb.IndexColumn_Direction
 
 func (d directions) get(i int) (encoding.Direction, error) {
 	if i < len(d) {
@@ -147,7 +149,7 @@ func (d directions) get(i int) (encoding.Direction, error) {
 // specified in the same order as the index key columns and may be a prefix.
 func MakeSpanFromEncDatums(
 	values EncDatumRow,
-	keyCols []descpb.IndexFetchSpec_KeyColumn,
+	keyCols []fetchpb.IndexFetchSpec_KeyColumn,
 	alloc *tree.DatumAlloc,
 	keyPrefix []byte,
 ) (_ roachpb.Span, containsNull bool, _ error) {
@@ -162,7 +164,7 @@ func MakeSpanFromEncDatums(
 // retrieve neededCols for the specified table and index. The returned descpb.FamilyIDs
 // are in sorted order.
 func NeededColumnFamilyIDs(
-	neededColOrdinals util.FastIntSet, table catalog.TableDescriptor, index catalog.Index,
+	neededColOrdinals intsets.Fast, table catalog.TableDescriptor, index catalog.Index,
 ) []descpb.FamilyID {
 	if table.NumFamilies() == 1 {
 		return []descpb.FamilyID{table.GetFamilies()[0].ID}
@@ -171,9 +173,9 @@ func NeededColumnFamilyIDs(
 	// Build some necessary data structures for column metadata.
 	columns := table.DeletableColumns()
 	colIdxMap := catalog.ColumnIDToOrdinalMap(columns)
-	var indexedCols util.FastIntSet
-	var compositeCols util.FastIntSet
-	var extraCols util.FastIntSet
+	var indexedCols intsets.Fast
+	var compositeCols intsets.Fast
+	var extraCols intsets.Fast
 	for i := 0; i < index.NumKeyColumns(); i++ {
 		columnID := index.GetKeyColumnID(i)
 		columnOrdinal := colIdxMap.GetDefault(columnID)
@@ -197,7 +199,7 @@ func NeededColumnFamilyIDs(
 	// values here for composite and "extra" columns. ("Extra" means primary key
 	// columns which are not indexed.)
 	var family0 *descpb.ColumnFamilyDescriptor
-	hasSecondaryEncoding := index.GetEncodingType() == descpb.SecondaryIndexEncoding
+	hasSecondaryEncoding := index.GetEncodingType() == catenumpb.SecondaryIndexEncoding
 
 	// First iterate over the needed columns and look for a few special cases:
 	// * columns which can be decoded from the key and columns whose value is stored
@@ -343,7 +345,7 @@ func SplitRowKeyIntoFamilySpans(
 // encodings of the given EncDatum values.
 func MakeKeyFromEncDatums(
 	values EncDatumRow,
-	keyCols []descpb.IndexFetchSpec_KeyColumn,
+	keyCols []fetchpb.IndexFetchSpec_KeyColumn,
 	alloc *tree.DatumAlloc,
 	keyPrefix []byte,
 ) (_ roachpb.Key, containsNull bool, _ error) {
@@ -357,9 +359,9 @@ func MakeKeyFromEncDatums(
 	copy(key, keyPrefix)
 
 	for i, val := range values {
-		encoding := descpb.DatumEncoding_ASCENDING_KEY
-		if keyCols[i].Direction == catpb.IndexColumn_DESC {
-			encoding = descpb.DatumEncoding_DESCENDING_KEY
+		encoding := catenumpb.DatumEncoding_ASCENDING_KEY
+		if keyCols[i].Direction == catenumpb.IndexColumn_DESC {
+			encoding = catenumpb.DatumEncoding_DESCENDING_KEY
 		}
 		if val.IsNull() {
 			containsNull = true
@@ -427,7 +429,7 @@ func DecodeIndexKey(
 	codec keys.SQLCodec,
 	types []*types.T,
 	vals []EncDatum,
-	colDirs []catpb.IndexColumn_Direction,
+	colDirs []catenumpb.IndexColumn_Direction,
 	key []byte,
 ) (remainingKey []byte, foundNull bool, _ error) {
 	key, err := codec.StripTenantPrefix(key)
@@ -450,16 +452,16 @@ func DecodeIndexKey(
 // used will default to encoding.Ascending.
 // DecodeKeyVals returns whether or not NULL was encountered in the key.
 func DecodeKeyVals(
-	types []*types.T, vals []EncDatum, directions []catpb.IndexColumn_Direction, key []byte,
+	types []*types.T, vals []EncDatum, directions []catenumpb.IndexColumn_Direction, key []byte,
 ) (remainingKey []byte, foundNull bool, _ error) {
 	if directions != nil && len(directions) != len(vals) {
 		return nil, false, errors.Errorf("encoding directions doesn't parallel vals: %d vs %d.",
 			len(directions), len(vals))
 	}
 	for j := range vals {
-		enc := descpb.DatumEncoding_ASCENDING_KEY
-		if directions != nil && (directions[j] == catpb.IndexColumn_DESC) {
-			enc = descpb.DatumEncoding_DESCENDING_KEY
+		enc := catenumpb.DatumEncoding_ASCENDING_KEY
+		if directions != nil && (directions[j] == catenumpb.IndexColumn_DESC) {
+			enc = catenumpb.DatumEncoding_DESCENDING_KEY
 		}
 		var err error
 		vals[j], key, err = EncDatumFromBuffer(types[j], enc, key)
@@ -472,15 +474,15 @@ func DecodeKeyVals(
 }
 
 // DecodeKeyValsUsingSpec is a variant of DecodeKeyVals which uses
-// descpb.IndexFetchSpec_KeyColumn for column metadata.
+// fetchpb.IndexFetchSpec_KeyColumn for column metadata.
 func DecodeKeyValsUsingSpec(
-	keyCols []descpb.IndexFetchSpec_KeyColumn, key []byte, vals []EncDatum,
+	keyCols []fetchpb.IndexFetchSpec_KeyColumn, key []byte, vals []EncDatum,
 ) (remainingKey []byte, foundNull bool, _ error) {
 	for j := range vals {
 		c := keyCols[j]
-		enc := descpb.DatumEncoding_ASCENDING_KEY
-		if c.Direction == catpb.IndexColumn_DESC {
-			enc = descpb.DatumEncoding_DESCENDING_KEY
+		enc := catenumpb.DatumEncoding_ASCENDING_KEY
+		if c.Direction == catenumpb.IndexColumn_DESC {
+			enc = catenumpb.DatumEncoding_DESCENDING_KEY
 		}
 		var err error
 		vals[j], key, err = EncDatumFromBuffer(c.Type, enc, key)
@@ -604,6 +606,8 @@ func EncodeInvertedIndexTableKeys(
 		// val could be a DOidWrapper, so we need to use the unwrapped datum
 		// here.
 		return encodeTrigramInvertedIndexTableKeys(string(*datum.(*tree.DString)), inKey, version, true /* pad */)
+	case types.TSVectorFamily:
+		return tsearch.EncodeInvertedIndexKeys(inKey, val.(*tree.DTSVector).TSVector)
 	}
 	return nil, errors.AssertionFailedf("trying to apply inverted index to unsupported type %s", datum.ResolvedType())
 }
@@ -1079,7 +1083,7 @@ func EncodePrimaryIndex(
 			// We want to include this column if its value is non-null or
 			// we were requested to include all of the columns.
 			if datum != tree.DNull || includeEmpty {
-				col, err := tableDesc.FindColumnWithID(family.DefaultColumnID)
+				col, err := catalog.MustFindColumnByID(tableDesc, family.DefaultColumnID)
 				if err != nil {
 					return err
 				}
@@ -1198,7 +1202,7 @@ func EncodeSecondaryIndex(
 	secondaryIndexKeyPrefix := MakeIndexKeyPrefix(codec, tableDesc.GetID(), secondaryIndex.GetID())
 
 	// Use the primary key encoding for covering indexes.
-	if secondaryIndex.GetEncodingType() == descpb.PrimaryIndexEncoding {
+	if secondaryIndex.GetEncodingType() == catenumpb.PrimaryIndexEncoding {
 		return EncodePrimaryIndex(codec, tableDesc, secondaryIndex, colMap, values, includeEmpty)
 	}
 

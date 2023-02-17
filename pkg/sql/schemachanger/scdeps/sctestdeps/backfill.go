@@ -116,14 +116,3 @@ func (s *testBackfiller) MergeIndexes(
 	)
 	return nil
 }
-
-var _ scexec.IndexSpanSplitter = (*indexSpanSplitter)(nil)
-
-type indexSpanSplitter struct{}
-
-// MaybeSplitIndexSpans implements the scexec.IndexSpanSplitter interface.
-func (s *indexSpanSplitter) MaybeSplitIndexSpans(
-	_ context.Context, _ catalog.TableDescriptor, _ catalog.Index,
-) error {
-	return nil
-}

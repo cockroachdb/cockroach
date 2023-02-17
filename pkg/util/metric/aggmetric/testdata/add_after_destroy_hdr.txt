@@ -1,0 +1,26 @@
+echo
+----
+bar_gauge 4
+bar_gauge{tenant_id="2"} 2
+bar_gauge{tenant_id="3"} 0
+baz_gauge 4
+baz_gauge{tenant_id="2"} 1.5
+baz_gauge{tenant_id="3"} 0
+fob_counter 912546
+fob_counter{tenant_id="2"} 123456.5
+fob_counter{tenant_id="3"} 0
+foo_counter 6
+foo_counter{tenant_id="2"} 0
+foo_counter{tenant_id="3"} 4
+histo_gram_bucket{le="+Inf"} 2
+histo_gram_bucket{le="10"} 1
+histo_gram_bucket{le="91"} 2
+histo_gram_bucket{tenant_id="2",le="+Inf"} 1
+histo_gram_bucket{tenant_id="2",le="10"} 1
+histo_gram_bucket{tenant_id="3",le="+Inf"} 0
+histo_gram_count 2
+histo_gram_count{tenant_id="2"} 1
+histo_gram_count{tenant_id="3"} 0
+histo_gram_sum 101
+histo_gram_sum{tenant_id="2"} 10
+histo_gram_sum{tenant_id="3"} 0

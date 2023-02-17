@@ -21,7 +21,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/nilness"
 	"golang.org/x/tools/go/analysis/analysistest"
 )
@@ -33,7 +33,7 @@ func init() {
 }
 
 func Test(t *testing.T) {
-	testdata := testutils.TestDataPath(t)
+	testdata := datapathutils.TestDataPath(t)
 	analysistest.TestData = func() string { return testdata }
 	analysistest.Run(t, testdata, nilness.TestAnalyzer, "a")
 }

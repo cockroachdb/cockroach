@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptutil"
@@ -46,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
@@ -206,12 +208,12 @@ func TestLeaseholdersRejectClockUpdateWithJump(t *testing.T) {
 	if advance := ts3.GoTime().Sub(ts2.GoTime()); advance != 0 {
 		t.Fatalf("expected clock not to advance, but it advanced by %s", advance)
 	}
-	val, _, err := storage.MVCCGet(context.Background(), store.Engine(), key, ts3,
+	valRes, err := storage.MVCCGet(context.Background(), store.TODOEngine(), key, ts3,
 		storage.MVCCGetOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if a, e := mustGetInt(val), incArgs.Increment*numCmds; a != e {
+	if a, e := mustGetInt(valRes.Value), incArgs.Increment*numCmds; a != e {
 		t.Errorf("expected %d, got %d", e, a)
 	}
 }
@@ -737,7 +739,7 @@ func testTxnReadWithinUncertaintyIntervalAfterIntentResolution(
 		require.Equal(t, readerTxn.ReadTimestamp, rwuiErr.ReadTimestamp)
 		require.Equal(t, readerTxn.GlobalUncertaintyLimit, rwuiErr.GlobalUncertaintyLimit)
 		require.Equal(t, readerTxn.ObservedTimestamps, rwuiErr.ObservedTimestamps)
-		require.Equal(t, writerTxn.WriteTimestamp, rwuiErr.ExistingTimestamp)
+		require.Equal(t, writerTxn.WriteTimestamp, rwuiErr.ValueTimestamp)
 	}
 }
 
@@ -1017,7 +1019,7 @@ func TestTxnReadWithinUncertaintyIntervalAfterRangeMerge(t *testing.T) {
 		require.NoError(t, tc.Server(0).DB().AdminMerge(ctx, keyA))
 
 		if alsoSplit {
-			require.NoError(t, tc.Server(0).DB().AdminSplit(ctx, keyC, hlc.MaxTimestamp, roachpb.AdminSplitRequest_INGESTION))
+			require.NoError(t, tc.Server(0).DB().AdminSplit(ctx, keyC, hlc.MaxTimestamp))
 		}
 
 		// Try and read the transaction from the context of a new transaction. This
@@ -2701,7 +2703,7 @@ func TestSystemZoneConfigs(t *testing.T) {
 	waitForReplicas := func() error {
 		replicas := make(map[roachpb.RangeID]roachpb.RangeDescriptor)
 		for _, s := range tc.Servers {
-			if err := kvserver.IterateRangeDescriptorsFromDisk(ctx, s.Engines()[0], func(desc roachpb.RangeDescriptor) error {
+			if err := kvstorage.IterateRangeDescriptorsFromDisk(ctx, s.Engines()[0], func(desc roachpb.RangeDescriptor) error {
 				if len(desc.Replicas().LearnerDescriptors()) > 0 {
 					return fmt.Errorf("descriptor contains learners: %v", desc)
 				}
@@ -2795,7 +2797,7 @@ func TestClearRange(t *testing.T) {
 		t.Helper()
 		start := prefix
 		end := prefix.PrefixEnd()
-		kvs, err := storage.Scan(store.Engine(), start, end, 0 /* maxRows */)
+		kvs, err := storage.Scan(store.TODOEngine(), start, end, 0 /* maxRows */)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -3135,11 +3137,14 @@ func TestLeaseTransferRejectedIfTargetNeedsSnapshot(t *testing.T) {
 		// the lease transfer rejection came after the previous lease was revoked,
 		// then node 0 must have re-acquired the lease (with a new sequence number)
 		// in order to transfer it to node 2.
+		// NB: we use LessOrEqual and not Equal to avoid flakiness if the lease is
+		// lost and reacquired multiple times. This assertion is not the focus of
+		// the test.
 		expSeq := preLease.Sequence + 1
 		if rejectAfterRevoke {
 			expSeq++
 		}
-		require.Equal(t, expSeq, postLease.Sequence)
+		require.LessOrEqual(t, expSeq, postLease.Sequence)
 	})
 }
 
@@ -3367,7 +3372,7 @@ func TestReplicaTombstone(t *testing.T) {
 			unreliableRaftHandlerFuncs: funcs,
 		})
 		tc.RemoveVotersOrFatal(t, key, tc.Target(1))
-		tombstone := waitForTombstone(t, store.Engine(), rangeID)
+		tombstone := waitForTombstone(t, store.TODOEngine(), rangeID)
 		require.Equal(t, roachpb.ReplicaID(3), tombstone.NextReplicaID)
 	})
 	t.Run("(2) ReplicaTooOldError", func(t *testing.T) {
@@ -3435,7 +3440,7 @@ func TestReplicaTombstone(t *testing.T) {
 		// Wait until we're sure that the replica has seen ReplicaTooOld,
 		// then go look for the tombstone.
 		<-sawTooOld
-		tombstone := waitForTombstone(t, store.Engine(), rangeID)
+		tombstone := waitForTombstone(t, store.TODOEngine(), rangeID)
 		require.Equal(t, roachpb.ReplicaID(4), tombstone.NextReplicaID)
 	})
 	t.Run("(3) ReplicaGCQueue", func(t *testing.T) {
@@ -3471,7 +3476,7 @@ func TestReplicaTombstone(t *testing.T) {
 		repl, err := store.GetReplica(desc.RangeID)
 		require.NoError(t, err)
 		require.NoError(t, store.ManualReplicaGC(repl))
-		tombstone := waitForTombstone(t, store.Engine(), rangeID)
+		tombstone := waitForTombstone(t, store.TODOEngine(), rangeID)
 		require.Equal(t, roachpb.ReplicaID(4), tombstone.NextReplicaID)
 	})
 	// This case also detects the tombstone for nodes which processed the merge.
@@ -3518,11 +3523,11 @@ func TestReplicaTombstone(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, store.ManualReplicaGC(repl))
 		// Verify the tombstone generated from replica GC of a merged range.
-		tombstone := waitForTombstone(t, store.Engine(), rangeID)
+		tombstone := waitForTombstone(t, store.TODOEngine(), rangeID)
 		require.Equal(t, roachpb.ReplicaID(math.MaxInt32), tombstone.NextReplicaID)
 		// Verify the tombstone generated from processing a merge trigger.
 		store3, _ := getFirstStoreReplica(t, tc.Server(0), key)
-		tombstone = waitForTombstone(t, store3.Engine(), rangeID)
+		tombstone = waitForTombstone(t, store3.TODOEngine(), rangeID)
 		require.Equal(t, roachpb.ReplicaID(math.MaxInt32), tombstone.NextReplicaID)
 	})
 	t.Run("(4) (4.1) raft messages to newer replicaID ", func(t *testing.T) {
@@ -3618,7 +3623,7 @@ func TestReplicaTombstone(t *testing.T) {
 			ctx, key, tc.LookupRangeOrFatal(t, key), roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(2)),
 		)
 		require.Regexp(t, "boom", err)
-		tombstone := waitForTombstone(t, store.Engine(), rangeID)
+		tombstone := waitForTombstone(t, store.TODOEngine(), rangeID)
 		require.Equal(t, roachpb.ReplicaID(4), tombstone.NextReplicaID)
 		// Try adding it again and again block the snapshot until a heartbeat
 		// at a higher ID has been sent. This is case (4.1) where a raft message
@@ -3638,7 +3643,7 @@ func TestReplicaTombstone(t *testing.T) {
 		require.Regexp(t, "boom", err)
 		// We will start out reading the old tombstone so keep retrying.
 		testutils.SucceedsSoon(t, func() error {
-			tombstone = waitForTombstone(t, store.Engine(), rangeID)
+			tombstone = waitForTombstone(t, store.TODOEngine(), rangeID)
 			if tombstone.NextReplicaID != 5 {
 				return errors.Errorf("read tombstone with NextReplicaID %d, want %d",
 					tombstone.NextReplicaID, 5)
@@ -3725,7 +3730,7 @@ func TestReplicaTombstone(t *testing.T) {
 			}
 			tombstoneKey := keys.RangeTombstoneKey(rhsDesc.RangeID)
 			ok, err := storage.MVCCGetProto(
-				context.Background(), store.Engine(), tombstoneKey, hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
+				context.Background(), store.TODOEngine(), tombstoneKey, hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
 			)
 			require.NoError(t, err)
 			if !ok {
@@ -4004,7 +4009,7 @@ func TestChangeReplicasLeaveAtomicRacesWithMerge(t *testing.T) {
 		err = db.AdminMerge(ctx, lhs)
 		require.NoError(t, err)
 		if resplit {
-			require.NoError(t, db.AdminSplit(ctx, rhs, hlc.Timestamp{WallTime: math.MaxInt64}, roachpb.AdminSplitRequest_INGESTION))
+			require.NoError(t, db.AdminSplit(ctx, rhs, hlc.Timestamp{WallTime: math.MaxInt64}))
 			err = tc.WaitForSplitAndInitialization(rhs)
 			require.NoError(t, err)
 		}
@@ -4313,6 +4318,7 @@ func TestStrictGCEnforcement(t *testing.T) {
 				require.NoError(t, r.ReadProtectedTimestampsForTesting(ctx))
 			}
 		}
+		insqlDB = tc.Server(0).InternalDB().(isql.DB)
 	)
 
 	{
@@ -4447,12 +4453,12 @@ func TestStrictGCEnforcement(t *testing.T) {
 		// Create a protected timestamp, and make sure it's not respected since the
 		// KVSubscriber is blocked.
 		rec := mkRecord()
-		require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			return ptp.Protect(ctx, txn, &rec)
+		require.NoError(t, insqlDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			return ptp.WithTxn(txn).Protect(ctx, &rec)
 		}))
 		defer func() {
-			require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				return ptp.Release(ctx, txn, rec.ID.GetUUID())
+			require.NoError(t, insqlDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				return ptp.WithTxn(txn).Release(ctx, rec.ID.GetUUID())
 			}))
 		}()
 		assertScanRejected(t)
@@ -4981,7 +4987,7 @@ func TestRangeMigration(t *testing.T) {
 		}
 
 		sl := stateloader.Make(rangeID)
-		persistedV, err := sl.LoadVersion(ctx, store.Engine())
+		persistedV, err := sl.LoadVersion(ctx, store.TODOEngine())
 		if err != nil {
 			t.Fatal(err)
 		}

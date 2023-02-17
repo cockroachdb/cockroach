@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/normalize"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -192,7 +193,10 @@ func Eval(
 			return eval.AsOfSystemTime{}, newInvalidExprError()
 		}
 	}
-
+	var err error
+	if te, err = normalize.Expr(ctx, evalCtx, te); err != nil {
+		return eval.AsOfSystemTime{}, err
+	}
 	d, err := eval.Expr(ctx, evalCtx, te)
 	if err != nil {
 		return eval.AsOfSystemTime{}, err

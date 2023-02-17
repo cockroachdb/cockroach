@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -63,7 +64,6 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 		},
 	})
 	defer tc.Stopper().Stop(context.Background())
-	kvDB := tc.Server(0).DB()
 
 	st := cluster.MakeTestingClusterSettings()
 	JobCheckpointFrequency.Override(ctx, &st.SV, 200*time.Millisecond)
@@ -78,7 +78,7 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 	flowCtx := execinfra.FlowCtx{
 		Cfg: &execinfra.ServerConfig{
 			Settings:          st,
-			DB:                kvDB,
+			DB:                tc.Server(0).InternalDB().(descs.DB),
 			JobRegistry:       registry,
 			BulkSenderLimiter: limit.MakeConcurrentRequestLimiter("test", math.MaxInt),
 		},

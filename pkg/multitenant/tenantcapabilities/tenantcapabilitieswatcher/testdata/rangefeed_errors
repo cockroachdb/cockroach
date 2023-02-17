@@ -1,0 +1,105 @@
+# This test ensures the Watcher continues to serve some capability state
+# even in the face of errors. It also ensures that the Watcher is able to
+# transparently restart and update the global tenant capability state when
+# that happens.
+
+start
+----
+ok
+
+updates
+----
+
+upsert ten=10 can_admin_split=true
+----
+ok
+
+upsert ten=11 can_admin_split=false
+----
+ok
+
+upsert ten=12 can_admin_split=false
+----
+ok
+
+updates
+----
+Incremental Update
+update: ten=10 cap={CanAdminSplit:true CanViewNodeInfo:false CanViewTsdbMetrics:false}
+update: ten=11 cap={CanAdminSplit:false CanViewNodeInfo:false CanViewTsdbMetrics:false}
+update: ten=12 cap={CanAdminSplit:false CanViewNodeInfo:false CanViewTsdbMetrics:false}
+
+inject-error
+----
+big-yikes
+
+# Update some more state. However, because of the injected error, we shouldn't
+# observe any updates.
+
+upsert ten=12 can_admin_split=true
+----
+ok
+
+delete ten=10
+----
+ok
+
+upsert ten=50 can_admin_split=false
+----
+ok
+
+updates
+----
+
+# However, we should still be able to query the tenant capabilities that the
+# Watcher was serving before the error happened.
+
+flush-state
+----
+ten=10 cap={CanAdminSplit:true CanViewNodeInfo:false CanViewTsdbMetrics:false}
+ten=11 cap={CanAdminSplit:false CanViewNodeInfo:false CanViewTsdbMetrics:false}
+ten=12 cap={CanAdminSplit:false CanViewNodeInfo:false CanViewTsdbMetrics:false}
+
+get-capabilities ten=50
+----
+not-found
+
+get-capabilities ten=12
+----
+{CanAdminSplit:false CanViewNodeInfo:false CanViewTsdbMetrics:false}
+
+get-capabilities ten=10
+----
+{CanAdminSplit:true CanViewNodeInfo:false CanViewTsdbMetrics:false}
+
+# Let the Watcher attempt to restart.
+restart-after-injected-error
+----
+ok
+
+# We expect the Watcher to kickoff a full table scan (complete update) once the
+# it is able to restart.
+updates
+----
+Complete Update
+update: ten=11 cap={CanAdminSplit:false CanViewNodeInfo:false CanViewTsdbMetrics:false}
+update: ten=12 cap={CanAdminSplit:true CanViewNodeInfo:false CanViewTsdbMetrics:false}
+update: ten=50 cap={CanAdminSplit:false CanViewNodeInfo:false CanViewTsdbMetrics:false}
+
+flush-state
+----
+ten=11 cap={CanAdminSplit:false CanViewNodeInfo:false CanViewTsdbMetrics:false}
+ten=12 cap={CanAdminSplit:true CanViewNodeInfo:false CanViewTsdbMetrics:false}
+ten=50 cap={CanAdminSplit:false CanViewNodeInfo:false CanViewTsdbMetrics:false}
+
+get-capabilities ten=50
+----
+{CanAdminSplit:false CanViewNodeInfo:false CanViewTsdbMetrics:false}
+
+get-capabilities ten=12
+----
+{CanAdminSplit:true CanViewNodeInfo:false CanViewTsdbMetrics:false}
+
+get-capabilities ten=10
+----
+not-found

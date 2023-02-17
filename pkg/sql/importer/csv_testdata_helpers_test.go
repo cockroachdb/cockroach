@@ -20,7 +20,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/errors"
@@ -42,7 +42,7 @@ func makeShadowKeyTestFile(t testing.TB, numRowsImportedBefore int, suffix strin
 		t.Fatal(errors.Errorf("table has no existing rows to shadow"))
 	}
 	padding := 10
-	dir := testutils.TestDataPath(t, "csv")
+	dir := datapathutils.TestDataPath(t, "csv")
 	fileName := filepath.Join(dir, fmt.Sprintf("shadow-data%s", suffix))
 	f, err := os.Create(fileName)
 	if err != nil {
@@ -73,7 +73,7 @@ func makeShadowKeyTestFile(t testing.TB, numRowsImportedBefore int, suffix strin
 }
 
 func makeDupWithSameValueFile(t testing.TB, suffix string) {
-	dir := testutils.TestDataPath(t, "csv")
+	dir := datapathutils.TestDataPath(t, "csv")
 	fileName := filepath.Join(dir, fmt.Sprintf("dup-key-same-value%s", suffix))
 	f, err := os.Create(fileName)
 	if err != nil {
@@ -202,7 +202,7 @@ func makeCSVData(
 	t testing.TB, numFiles, rowsPerFile, numRaceFiles, rowsPerRaceFile int,
 ) csvTestFiles {
 	if rewriteCSVTestData {
-		dir := testutils.TestDataPath(t, "csv")
+		dir := datapathutils.TestDataPath(t, "csv")
 		if err := os.RemoveAll(dir); err != nil {
 			t.Fatal(err)
 		}

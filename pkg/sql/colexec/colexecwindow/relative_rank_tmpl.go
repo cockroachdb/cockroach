@@ -65,11 +65,12 @@ func NewRelativeRankOperator(
 			partitionColIdx: args.PartitionColIdx,
 			peersColIdx:     args.PeersColIdx,
 		},
-		memoryLimit:  args.MemoryLimit,
-		diskQueueCfg: args.QueueCfg,
-		fdSemaphore:  args.FdSemaphore,
-		inputTypes:   args.InputTypes,
-		diskAcc:      args.DiskAcc,
+		memoryLimit:     args.MemoryLimit,
+		diskQueueCfg:    args.QueueCfg,
+		fdSemaphore:     args.FdSemaphore,
+		inputTypes:      args.InputTypes,
+		diskAcc:         args.DiskAcc,
+		converterMemAcc: args.ConverterMemAcc,
 	}
 	switch windowFn {
 	case execinfrapb.WindowerSpec_PERCENT_RANK:
@@ -210,7 +211,8 @@ type relativeRankInitFields struct {
 	fdSemaphore  semaphore.Semaphore
 	inputTypes   []*types.T
 
-	diskAcc *mon.BoundAccount
+	diskAcc         *mon.BoundAccount
+	converterMemAcc *mon.BoundAccount
 }
 
 type relativeRankSizesState struct {
@@ -286,6 +288,7 @@ func (r *_RELATIVE_RANK_STRINGOp) Init(ctx context.Context) {
 			DiskQueueCfg:       r.diskQueueCfg,
 			FDSemaphore:        r.fdSemaphore,
 			DiskAcc:            r.diskAcc,
+			ConverterMemAcc:    r.converterMemAcc,
 		},
 	)
 	r.partitionsState.runningSizes = r.allocator.NewMemBatchWithFixedCapacity([]*types.T{types.Int}, coldata.BatchSize())
@@ -300,6 +303,7 @@ func (r *_RELATIVE_RANK_STRINGOp) Init(ctx context.Context) {
 			DiskQueueCfg:       r.diskQueueCfg,
 			FDSemaphore:        r.fdSemaphore,
 			DiskAcc:            r.diskAcc,
+			ConverterMemAcc:    r.converterMemAcc,
 		},
 	)
 	r.peerGroupsState.runningSizes = r.allocator.NewMemBatchWithFixedCapacity([]*types.T{types.Int}, coldata.BatchSize())
@@ -313,6 +317,7 @@ func (r *_RELATIVE_RANK_STRINGOp) Init(ctx context.Context) {
 			DiskQueueCfg:       r.diskQueueCfg,
 			FDSemaphore:        r.fdSemaphore,
 			DiskAcc:            r.diskAcc,
+			ConverterMemAcc:    r.converterMemAcc,
 		},
 	)
 	r.output = r.allocator.NewMemBatchWithFixedCapacity(append(r.inputTypes, types.Float), coldata.BatchSize())

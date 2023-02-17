@@ -17,7 +17,7 @@ import (
 	"math/rand"
 	"strings"
 
-	"github.com/cockroachdb/apd/v3"
+	apd "github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -27,6 +27,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/randident"
+	"github.com/cockroachdb/cockroach/pkg/util/randident/randidentcfg"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -53,7 +56,7 @@ func RandCreateType(rng *rand.Rand, name, alphabet string) tree.Statement {
 	labelsMap := make(map[string]struct{})
 	i := 0
 	for i < numLabels {
-		s := RandString(rng, rng.Intn(6)+1, alphabet)
+		s := util.RandString(rng, rng.Intn(6)+1, alphabet)
 		if _, ok := labelsMap[s]; !ok {
 			labels[i] = tree.EnumValue(s)
 			labelsMap[s] = struct{}{}
@@ -101,6 +104,12 @@ func RandCreateTable(
 		isMultiRegion, nil /* generateColumnIndexNumber */)
 }
 
+var nameGenCfg = func() randidentcfg.Config {
+	cfg := randident.DefaultNameGeneratorConfig()
+	cfg.Finalize()
+	return cfg
+}()
+
 // RandCreateTableWithColumnIndexNumberGenerator creates a random CreateTable definition
 // using the passed function to generate column index numbers for column names.
 func RandCreateTableWithColumnIndexNumberGenerator(
@@ -110,7 +119,8 @@ func RandCreateTableWithColumnIndexNumberGenerator(
 	isMultiRegion bool,
 	generateColumnIndexNumber func() int64,
 ) *tree.CreateTable {
-	tableName := fmt.Sprintf("%s%d", prefix, tableIdx)
+	g := randident.NewNameGenerator(&nameGenCfg, rng, prefix)
+	tableName := g.GenerateOne(tableIdx)
 	// columnDefs contains the list of Columns we'll add to our table.
 	nColumns := randutil.RandIntInRange(rng, 1, 20)
 	columnDefs := make([]*tree.ColumnTableDef, 0, nColumns)
@@ -282,7 +292,7 @@ func PopulateTableWithRandData(
 	rng *rand.Rand, db *gosql.DB, tableName string, numInserts int,
 ) (numRowsInserted int, err error) {
 	var createStmtSQL string
-	res := db.QueryRow(fmt.Sprintf("SELECT create_statement FROM [SHOW CREATE TABLE %s]", tableName))
+	res := db.QueryRow(fmt.Sprintf("SELECT create_statement FROM [SHOW CREATE TABLE %s]", tree.NameString(tableName)))
 	err = res.Scan(&createStmtSQL)
 	if err != nil {
 		return 0, errors.Wrapf(err, "table does not exist in db")
@@ -331,7 +341,10 @@ func PopulateTableWithRandData(
 				// them to the list of columns to insert data into.
 				continue
 			}
-			colTypes = append(colTypes, tree.MustBeStaticallyKnownType(col.Type.(*types.T)))
+			if _, ok := col.Type.(*types.T); !ok {
+				return 0, errors.Newf("No type for %v", col)
+			}
+			colTypes = append(colTypes, tree.MustBeStaticallyKnownType(col.Type))
 			nullable = append(nullable, col.Nullable.Nullability == tree.Null)
 
 			colNameBuilder.WriteString(comma)
@@ -343,7 +356,7 @@ func PopulateTableWithRandData(
 	for i := 0; i < numInserts; i++ {
 		insertVals := generateInsertStmtVals(rng, colTypes, nullable)
 		insertStmt := fmt.Sprintf("INSERT INTO %s (%s) VALUES %s;",
-			tableName,
+			tree.NameString(tableName),
 			colNameBuilder.String(),
 			insertVals)
 		_, err := db.Exec(insertStmt)
@@ -382,7 +395,7 @@ func GenerateRandInterestingTable(db *gosql.DB, dbName, tableName string) error 
 		comma = ", "
 	}
 
-	createStatement := fmt.Sprintf("CREATE TABLE %s.%s (%s)", dbName, tableName, columns.String())
+	createStatement := fmt.Sprintf("CREATE TABLE %s.%s (%s)", tree.NameString(dbName), tree.NameString(tableName), columns.String())
 	if _, err := db.Exec(createStatement); err != nil {
 		return err
 	}
@@ -406,7 +419,7 @@ func GenerateRandInterestingTable(db *gosql.DB, dbName, tableName string) error 
 			builder.WriteString(d)
 			comma = ", "
 		}
-		insertStmt := fmt.Sprintf("INSERT INTO %s.%s VALUES (%s)", dbName, tableName, builder.String())
+		insertStmt := fmt.Sprintf("INSERT INTO %s.%s VALUES (%s)", tree.NameString(dbName), tree.NameString(tableName), builder.String())
 		if _, err := db.Exec(insertStmt); err != nil {
 			return err
 		}
@@ -417,10 +430,12 @@ func GenerateRandInterestingTable(db *gosql.DB, dbName, tableName string) error 
 // randColumnTableDef produces a random ColumnTableDef for a non-computed
 // column, with a random type and nullability.
 func randColumnTableDef(rand *rand.Rand, tableIdx int, colIdx int) *tree.ColumnTableDef {
+	g := randident.NewNameGenerator(&nameGenCfg, rand, fmt.Sprintf("col%d_", tableIdx))
+	colName := g.GenerateOne(colIdx)
 	columnDef := &tree.ColumnTableDef{
 		// We make a unique name for all columns by prefixing them with the table
 		// index to make it easier to reference columns from different tables.
-		Name: tree.Name(fmt.Sprintf("col%d_%d", tableIdx, colIdx)),
+		Name: tree.Name(colName),
 		Type: RandColumnType(rand),
 	}
 	// Slightly prefer non-nullable columns
@@ -579,12 +594,13 @@ func randIndexTableDefFromCols(
 		prefixLen := 1 + rng.Intn(len(prefix))
 		def.PartitionByIndex.Fields = prefix[:prefixLen]
 
+		g := randident.NewNameGenerator(&nameGenCfg, rng, fmt.Sprintf("%s_part", tableName))
 		// Add up to 10 partitions.
 		numPartitions := rng.Intn(10) + 1
 		numExpressions := rng.Intn(10) + 1
 		for i := 0; i < numPartitions; i++ {
 			var partition tree.ListPartition
-			partition.Name = tree.UnrestrictedName(fmt.Sprintf("%s_part_%d", tableName, i))
+			partition.Name = tree.Name(g.GenerateOne(i))
 			// Add up to 10 expressions in each partition.
 			for j := 0; j < numExpressions; j++ {
 				// Use a tuple to contain the expressions in case there are multiple
@@ -729,7 +745,7 @@ func TestingMakePrimaryIndexKeyForTenant(
 		}
 		// Check that the value type matches.
 		colID := index.GetKeyColumnID(i)
-		col, _ := desc.FindColumnWithID(colID)
+		col := catalog.FindColumnByID(desc, colID)
 		if col != nil && col.Public() {
 			colTyp := datums[i].ResolvedType()
 			if t := colTyp.Family(); t != col.GetType().Family() {
@@ -785,7 +801,7 @@ func TestingMakeSecondaryIndexKey(
 		}
 		// Check that the value type matches.
 		colID := index.GetKeyColumnID(i)
-		col, _ := desc.FindColumnWithID(colID)
+		col := catalog.FindColumnByID(desc, colID)
 		if col != nil && col.Public() {
 			colTyp := datums[i].ResolvedType()
 			if t := colTyp.Family(); t != col.GetType().Family() {

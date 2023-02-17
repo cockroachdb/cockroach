@@ -259,7 +259,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 	if p.repl.requiresExpiringLeaseRLocked() ||
 		(transfer &&
 			transferExpirationLeasesFirstEnabled.Get(&p.repl.store.ClusterSettings().SV) &&
-			p.repl.store.ClusterSettings().Version.IsActive(ctx, clusterversion.V22_2EnableLeaseUpgrade)) {
+			p.repl.store.ClusterSettings().Version.IsActive(ctx, clusterversion.TODODelete_V22_2EnableLeaseUpgrade)) {
 		// In addition to ranges that unconditionally require expiration-based
 		// leases (node liveness and earlier), we also use them during lease
 		// transfers for all other ranges. After acquiring these expiration

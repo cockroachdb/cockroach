@@ -63,7 +63,7 @@ go_test(
         "//pkg/col/coldata",
         "//pkg/col/coldataext",
         "//pkg/settings/cluster",
-        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/colcontainer",
         "//pkg/sql/colexec/colbuilder",
         "//pkg/sql/colexec/colexecagg",

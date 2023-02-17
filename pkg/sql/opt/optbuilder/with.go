@@ -34,7 +34,7 @@ type cteSource struct {
 	ordering     opt.Ordering
 	originalExpr tree.Statement
 	expr         memo.RelExpr
-	mtr          tree.MaterializeClause
+	mtr          tree.CTEMaterializeClause
 	// If set, this function is called when a CTE is referenced. It can throw an
 	// error.
 	onRef func()
@@ -95,8 +95,7 @@ func (b *Builder) buildWiths(expr memo.RelExpr, ctes cteSources) memo.RelExpr {
 			OriginalExpr: ctes[i].originalExpr,
 		}
 		if len(ctes[i].ordering) > 0 {
-			private.Mtr.Set = true
-			private.Mtr.Materialize = true
+			private.Mtr = tree.CTEMaterializeAlways
 			private.BindingOrdering.FromOrdering(ctes[i].ordering)
 		}
 		expr = b.factory.ConstructWith(ctes[i].expr, expr, private)
@@ -333,7 +332,16 @@ func (b *Builder) buildCTE(
 	// query.
 	outTypes, leftCastsNeeded, rightCastsNeeded := b.typeCheckSetOp(initialScope, recursiveScope, "UNION")
 	if leftCastsNeeded {
-		initialScope = b.addCasts(initialScope, outTypes)
+		// We don't support casts on the initial expression; error out.
+		for i := range outTypes {
+			if !outTypes[i].Identical(initialScope.cols[i].typ) {
+				panic(pgerror.Newf(
+					pgcode.DatatypeMismatch,
+					`recursive query "%s" column %d has type %s in non-recursive term but type %s overall`,
+					cte.Name.Alias, i+1, initialScope.cols[i].typ, outTypes[i],
+				))
+			}
+		}
 	}
 	if rightCastsNeeded {
 		recursiveScope = b.addCasts(recursiveScope, outTypes)

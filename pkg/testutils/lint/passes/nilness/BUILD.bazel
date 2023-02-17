@@ -23,7 +23,7 @@ go_test(
     deps = [
         ":nilness",
         "//pkg/build/bazel",
-        "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "@org_golang_x_tools//go/analysis/analysistest",
     ],
 )

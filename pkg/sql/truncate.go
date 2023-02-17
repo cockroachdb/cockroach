@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/oppurpose"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -89,7 +88,7 @@ func (t *truncateNode) startExec(params runParams) error {
 			if _, ok := toTruncate[tableID]; ok {
 				return nil
 			}
-			other, err := p.Descriptors().GetMutableTableVersionByID(ctx, tableID, p.txn)
+			other, err := p.Descriptors().MutableByID(p.txn).Table(ctx, tableID)
 			if err != nil {
 				return err
 			}
@@ -163,7 +162,7 @@ var PreservedSplitCountMultiple = settings.RegisterIntSetting(
 func (p *planner) truncateTable(ctx context.Context, id descpb.ID, jobDesc string) error {
 	// Read the table descriptor because it might have changed
 	// while another table in the truncation list was truncated.
-	tableDesc, err := p.Descriptors().GetMutableTableVersionByID(ctx, id, p.txn)
+	tableDesc, err := p.Descriptors().MutableByID(p.txn).Table(ctx, id)
 	if err != nil {
 		return err
 	}
@@ -258,11 +257,12 @@ func (p *planner) truncateTable(ctx context.Context, id descpb.ID, jobDesc strin
 	record := CreateGCJobRecord(
 		jobDesc, p.User(), details,
 		!p.execCfg.Settings.Version.IsActive(
-			ctx, clusterversion.V22_2UseDelRangeInGCJob,
+			ctx, clusterversion.TODODelete_V22_2UseDelRangeInGCJob,
 		),
 	)
 	if _, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(
-		ctx, record, p.ExecCfg().JobRegistry.MakeJobID(), p.txn); err != nil {
+		ctx, record, p.ExecCfg().JobRegistry.MakeJobID(), p.InternalSQLTxn(),
+	); err != nil {
 		return err
 	}
 
@@ -292,7 +292,7 @@ func (p *planner) truncateTable(ctx context.Context, id descpb.ID, jobDesc strin
 		NewIndexes:        newIndexIDs[1:],
 	}
 	if err := maybeUpdateZoneConfigsForPKChange(
-		ctx, p.txn, p.ExecCfg(), p.ExtendedEvalContext().Tracing.KVTracingEnabled(), p.Descriptors(), tableDesc, swapInfo,
+		ctx, p.InternalSQLTxn(), p.ExecCfg(), p.ExtendedEvalContext().Tracing.KVTracingEnabled(), p.Descriptors(), tableDesc, swapInfo,
 	); err != nil {
 		return err
 	}
@@ -505,7 +505,6 @@ func (p *planner) copySplitPointsToNewIndexes(
 			},
 			SplitKey:       sp,
 			ExpirationTime: execCfg.Clock.Now().Add(expirationTime, 0),
-			Class:          oppurpose.SplitTruncate,
 		})
 	}
 
@@ -523,7 +522,6 @@ func (p *planner) copySplitPointsToNewIndexes(
 			EndKey: execCfg.Codec.IndexPrefix(uint32(tableID), uint32(newIndexIDs[len(newIndexIDs)-1])).PrefixEnd(),
 		},
 		RandomizeLeases: true,
-		Class:           oppurpose.ScatterTruncate,
 	})
 
 	return p.txn.DB().Run(ctx, &b)

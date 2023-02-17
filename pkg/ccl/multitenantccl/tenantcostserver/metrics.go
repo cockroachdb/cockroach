@@ -25,8 +25,8 @@ import (
 // aggregated value for a metric is not useful (it sums up the consumption for
 // each tenant, as last reported to this node).
 type Metrics struct {
-	TotalRU                     *aggmetric.AggGaugeFloat64
-	TotalKVRU                   *aggmetric.AggGaugeFloat64
+	TotalRU                     *aggmetric.AggCounterFloat64
+	TotalKVRU                   *aggmetric.AggCounterFloat64
 	TotalReadBatches            *aggmetric.AggGauge
 	TotalReadRequests           *aggmetric.AggGauge
 	TotalReadBytes              *aggmetric.AggGauge
@@ -130,8 +130,8 @@ var (
 func (m *Metrics) init() {
 	b := aggmetric.MakeBuilder(multitenant.TenantIDLabel)
 	*m = Metrics{
-		TotalRU:                     b.GaugeFloat64(metaTotalRU),
-		TotalKVRU:                   b.GaugeFloat64(metaTotalKVRU),
+		TotalRU:                     b.CounterFloat64(metaTotalRU),
+		TotalKVRU:                   b.CounterFloat64(metaTotalKVRU),
 		TotalReadBatches:            b.Gauge(metaTotalReadBatches),
 		TotalReadRequests:           b.Gauge(metaTotalReadRequests),
 		TotalReadBytes:              b.Gauge(metaTotalReadBytes),
@@ -148,8 +148,8 @@ func (m *Metrics) init() {
 
 // tenantMetrics represent metrics for an individual tenant.
 type tenantMetrics struct {
-	totalRU                     *aggmetric.GaugeFloat64
-	totalKVRU                   *aggmetric.GaugeFloat64
+	totalRU                     *aggmetric.CounterFloat64
+	totalKVRU                   *aggmetric.CounterFloat64
 	totalReadBatches            *aggmetric.Gauge
 	totalReadRequests           *aggmetric.Gauge
 	totalReadBytes              *aggmetric.Gauge

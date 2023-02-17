@@ -1028,6 +1028,53 @@ SELECT nextval('a')
 statement error cannot execute setval\(\) in a read-only transaction
 SELECT setval('a', 2)
 
+statement error cannot execute CREATE ROLE in a read-only transaction
+CREATE ROLE my_user
+
+statement error cannot execute ALTER ROLE in a read-only transaction
+ALTER ROLE testuser SET default_int_size = 4
+
+statement error cannot execute DROP ROLE in a read-only transaction
+DROP ROLE testuser
+
+statement error cannot execute SET CLUSTER SETTING in a read-only transaction
+SET CLUSTER SETTING sql.auth.change_own_password.enabled = true
+
+statement error cannot execute GRANT in a read-only transaction
+GRANT admin TO testuser
+
+statement error cannot execute REVOKE in a read-only transaction
+REVOKE admin FROM testuser
+
+statement error cannot execute GRANT in a read-only transaction
+GRANT CONNECT ON DATABASE test TO testuser
+
+statement error cannot execute create_tenant\(\) in a read-only transaction
+SELECT crdb_internal.create_tenant(3)
+
+# SET session variable should work in a read-only txn.
+statement ok
+SET intervalstyle = 'postgres'
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION PRIORITY NORMAL
+
+statement ok
+SET SESSION AUTHORIZATION DEFAULT
+
+statement ok
+BEGIN
+
+# DECLARE and FETCH CURSOR should work in a read-only txn.
+statement ok
+DECLARE foo CURSOR FOR SELECT 1
+
+statement ok
+FETCH 1 foo
+
+statement ok
+COMMIT
+
 query T
 SHOW TRANSACTION STATUS
 ----

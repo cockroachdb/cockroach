@@ -55,6 +55,7 @@ go_test(
     embed = [":rangefeed"],
     deps = [
         "//pkg/base",
+        "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
@@ -75,7 +76,6 @@ go_test(
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
-        "@com_github_cockroachdb_pebble//:pebble",
         "@com_github_cockroachdb_pebble//vfs",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",

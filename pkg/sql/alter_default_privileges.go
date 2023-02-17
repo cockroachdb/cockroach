@@ -58,8 +58,7 @@ func (p *planner) alterDefaultPrivileges(
 	if n.Database != nil {
 		database = n.Database.Normalize()
 	}
-	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, database,
-		tree.DatabaseLookupFlags{Required: true})
+	dbDesc, err := p.Descriptors().MutableByName(p.txn).Database(ctx, database)
 	if err != nil {
 		return nil, err
 	}
@@ -81,16 +80,14 @@ func (p *planner) alterDefaultPrivileges(
 
 	var schemaDescs []*schemadesc.Mutable
 	for _, sc := range n.Schemas {
-		immFlags := tree.SchemaLookupFlags{Required: true, AvoidLeased: true}
-		immSchema, err := p.Descriptors().GetImmutableSchemaByName(ctx, p.txn, dbDesc, sc.Schema(), immFlags)
+		immSchema, err := p.Descriptors().ByName(p.txn).Get().Schema(ctx, dbDesc, sc.Schema())
 		if err != nil {
 			return nil, err
 		}
 		if immSchema.SchemaKind() != catalog.SchemaUserDefined {
 			return nil, pgerror.Newf(pgcode.InvalidParameterValue, "%s is not a physical schema", immSchema.GetName())
 		}
-		mutFlags := tree.SchemaLookupFlags{Required: true}
-		mutableSchemaDesc, err := p.Descriptors().GetMutableSchemaByID(ctx, p.txn, immSchema.GetID(), mutFlags)
+		mutableSchemaDesc, err := p.Descriptors().MutableByID(p.txn).Schema(ctx, immSchema.GetID())
 		if err != nil {
 			return nil, err
 		}

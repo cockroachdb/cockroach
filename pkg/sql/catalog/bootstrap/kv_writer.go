@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -35,7 +35,7 @@ type KVWriter struct {
 	codec            keys.SQLCodec
 	tableDesc        catalog.TableDescriptor
 	colIDtoRowIndex  catalog.TableColMap
-	skippedFamilyIDs util.FastIntSet
+	skippedFamilyIDs intsets.Fast
 }
 
 // RecordToKeyValues transforms a table record into the corresponding key-value

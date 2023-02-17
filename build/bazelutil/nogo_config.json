@@ -736,12 +736,12 @@
             "pkg/sql/row/expr_walker_test.go$": "temporary exclusion until deprecatedContext is removed from eval.Context",
             "pkg/sql/schemachanger/scbuild/tree_context_builder.go$": "temporary exclusion until deprecatedContext is removed from eval.Context",
             "pkg/security/securityassets/security_assets.go$": "excluded until all uses of io/ioutil are replaced",
-            "pkg/roachprod/install/cluster_synced.go$": "excluded until all uses of io/ioutil are replaced",
             "pkg/security/securitytest/securitytest.go$": "excluded until all uses of io/ioutil are replaced",
             "pkg/server/dumpstore/dumpstore.go$": "excluded until all uses of io/ioutil are replaced",
             "pkg/server/dumpstore/dumpstore_test.go$": "excluded until all uses of io/ioutil are replaced",
             "pkg/server/heapprofiler/profilestore_test.go$": "excluded until all uses of io/ioutil are replaced",
-            "pkg/util/log/file_api.go$": "excluded until all uses of io/ioutil are replaced"
+            "pkg/util/log/file_api.go$": "excluded until all uses of io/ioutil are replaced",
+            "pkg/build/bazel/bazel\\.go$": "Runfile function deprecated"
         },
         "only_files": {
             "cockroach/pkg/.*$": "first-party code"
@@ -1546,7 +1546,8 @@
             "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "cockroach/pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code",
+            "cockroach/pkg/sql/schemachanger/scplan/internal/rules/.*/.*.go$":  "schema changer rules"
         },
         "only_files": {
             "cockroach/pkg/.*$": "first-party code"

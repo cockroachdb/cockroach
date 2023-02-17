@@ -10,6 +10,7 @@ go_library(
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/normalize",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/util/duration",

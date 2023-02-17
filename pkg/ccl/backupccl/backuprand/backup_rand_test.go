@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuptestutils"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -33,7 +34,9 @@ import (
 // randomly generated tables and verifies their data and schema are preserved.
 // It tests that full database backup as well as all subsets of per-table backup
 // roundtrip properly. 50% of the time, the test runs the restore with the
-// schema_only parameter, which does not restore any rows from user tables.
+// schema_only parameter, which does not restore any rows from user tables. The
+// test will also run with bulkio.restore.use_simple_import_spans set to true
+// 50% of the time.
 func TestBackupRestoreRandomDataRoundtrips(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -72,6 +75,10 @@ func TestBackupRestoreRandomDataRoundtrips(t *testing.T) {
 		runSchemaOnlyExtension = ", schema_only"
 	}
 
+	if rng.Intn(2) == 0 {
+		sqlDB.Exec(t, "SET CLUSTER SETTING bulkio.restore.use_simple_import_spans = true")
+	}
+
 	tables := sqlDB.Query(t, `SELECT name FROM crdb_internal.tables WHERE 
 database_name = 'rand' AND schema_name = 'public'`)
 	var tableNames []string
@@ -92,9 +99,10 @@ database_name = 'rand' AND schema_name = 'public'`)
 	expectedCreateTableStmt := make(map[string]string)
 	expectedData := make(map[string][][]string)
 	for _, tableName := range tableNames {
-		expectedCreateTableStmt[tableName] = sqlDB.QueryStr(t, fmt.Sprintf(`SELECT create_statement FROM [SHOW CREATE TABLE %s]`, tableName))[0][0]
+		expectedCreateTableStmt[tableName] = sqlDB.QueryStr(t,
+			fmt.Sprintf(`SELECT create_statement FROM [SHOW CREATE TABLE %s]`, tree.NameString(tableName)))[0][0]
 		if runSchemaOnlyExtension == "" {
-			expectedData[tableName] = sqlDB.QueryStr(t, fmt.Sprintf(`SELECT * FROM %s`, tableName))
+			expectedData[tableName] = sqlDB.QueryStr(t, fmt.Sprintf(`SELECT * FROM %s`, tree.NameString(tableName)))
 		}
 	}
 
@@ -120,8 +128,8 @@ database_name = 'rand' AND schema_name = 'public'`)
 	// generated tables.
 	verifyTables := func(t *testing.T, tableNames []string) {
 		for _, tableName := range tableNames {
-			t.Logf("Verifying table %s", tableName)
-			restoreTable := "restoredb." + tableName
+			t.Logf("Verifying table %q", tableName)
+			restoreTable := "restoredb." + tree.NameString(tableName)
 			createStmt := sqlDB.QueryStr(t,
 				fmt.Sprintf(`SELECT create_statement FROM [SHOW CREATE TABLE %s]`, restoreTable))[0][0]
 			assert.Equal(t, expectedCreateTableStmt[tableName], createStmt,
@@ -166,7 +174,14 @@ database_name = 'rand' AND schema_name = 'public'`)
 		if len(combo) == 0 {
 			continue
 		}
-		tables := strings.Join(combo, ", ")
+		var buf strings.Builder
+		comma := ""
+		for _, t := range combo {
+			buf.WriteString(comma)
+			buf.WriteString(tree.NameString(t))
+			comma = ", "
+		}
+		tables := buf.String()
 		t.Logf("Testing subset backup/restore %s", tables)
 		sqlDB.Exec(t, fmt.Sprintf(`BACKUP TABLE %s INTO $1`, tables), backupTarget)
 		_, err := tc.Conns[0].Exec(

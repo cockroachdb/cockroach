@@ -45,7 +45,7 @@ func loadExternalConnections(
 		}
 		rows = append(rows, tree.Datums{tree.NewDString(name)})
 	} else {
-		datums, _, err := params.ExecCfg().InternalExecutor.QueryBufferedExWithCols(
+		datums, _, err := params.p.InternalSQLTxn().QueryBufferedExWithCols(
 			params.ctx,
 			"load-external-connections",
 			params.p.Txn(), sessiondata.NodeUserSessionDataOverride,
@@ -58,8 +58,9 @@ func loadExternalConnections(
 
 	for _, row := range rows {
 		connectionName := tree.MustBeDString(row[0])
-		connection, err := externalconn.LoadExternalConnection(params.ctx, string(connectionName),
-			params.p.ExecCfg().InternalExecutor, params.p.Txn())
+		connection, err := externalconn.LoadExternalConnection(
+			params.ctx, string(connectionName), params.p.InternalSQLTxn(),
+		)
 		if err != nil {
 			return nil, err
 		}

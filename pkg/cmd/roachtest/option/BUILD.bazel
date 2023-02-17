@@ -4,6 +4,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "option",
     srcs = [
+        "connection_options.go",
         "node_list_option.go",
         "node_lister.go",
         "option_interface.go",

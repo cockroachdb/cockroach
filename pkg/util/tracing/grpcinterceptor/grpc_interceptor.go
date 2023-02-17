@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"google.golang.org/grpc"
@@ -29,7 +30,7 @@ import (
 func ExtractSpanMetaFromGRPCCtx(
 	ctx context.Context, tracer *tracing.Tracer,
 ) (tracing.SpanMeta, error) {
-	md, ok := metadata.FromIncomingContext(ctx)
+	md, ok := grpcutil.FastFromIncomingContext(ctx)
 	if !ok {
 		return tracing.SpanMeta{}, nil
 	}
@@ -90,7 +91,7 @@ func ServerInterceptor(tracer *tracing.Tracer) grpc.UnaryServerInterceptor {
 		req interface{},
 		info *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler,
-	) (resp interface{}, err error) {
+	) (interface{}, error) {
 		if methodExcludedFromTracing(info.FullMethod) {
 			return handler(ctx, req)
 		}
@@ -111,7 +112,7 @@ func ServerInterceptor(tracer *tracing.Tracer) grpc.UnaryServerInterceptor {
 		)
 		defer serverSpan.Finish()
 
-		resp, err = handler(ctx, req)
+		resp, err := handler(ctx, req)
 		if err != nil {
 			setGRPCErrorTag(serverSpan, err)
 			serverSpan.Recordf("error: %s", err)
@@ -221,7 +222,8 @@ func ClientInterceptor(
 	) error {
 		// Local RPCs don't need any special tracing, since the caller's context
 		// will be used on the "server".
-		if grpcutil.IsLocalRequestContext(ctx) {
+		_, localRequest := grpcutil.IsLocalRequestContext(ctx)
+		if localRequest {
 			return invoker(ctx, method, req, resp, cc, opts...)
 		}
 		parent := tracing.SpanFromContext(ctx)
@@ -242,15 +244,15 @@ func ClientInterceptor(
 		if !methodExcludedFromTracing(method) {
 			ctx = injectSpanMeta(ctx, tracer, clientSpan)
 		}
-		var err error
 		if invoker != nil {
-			err = invoker(ctx, method, req, resp, cc, opts...)
+			err := invoker(ctx, method, req, resp, cc, opts...)
+			if err != nil {
+				setGRPCErrorTag(clientSpan, err)
+				clientSpan.Recordf("error: %s", err)
+				return err
+			}
 		}
-		if err != nil {
-			setGRPCErrorTag(clientSpan, err)
-			clientSpan.Recordf("error: %s", err)
-		}
-		return err
+		return nil
 	}
 }
 
@@ -285,7 +287,8 @@ func StreamClientInterceptor(
 	) (grpc.ClientStream, error) {
 		// Local RPCs don't need any special tracing, since the caller's context
 		// will be used on the "server".
-		if grpcutil.IsLocalRequestContext(ctx) {
+		_, localRequest := grpcutil.IsLocalRequestContext(ctx)
+		if localRequest {
 			return streamer(ctx, desc, cc, method, opts...)
 		}
 		parent := tracing.SpanFromContext(ctx)
@@ -293,6 +296,7 @@ func StreamClientInterceptor(
 			return streamer(ctx, desc, cc, method, opts...)
 		}
 
+		// Create a span that will live for the life of the stream.
 		clientSpan := tracer.StartSpan(
 			method,
 			tracing.WithParent(parent),
@@ -303,6 +307,7 @@ func StreamClientInterceptor(
 		if !methodExcludedFromTracing(method) {
 			ctx = injectSpanMeta(ctx, tracer, clientSpan)
 		}
+
 		cs, err := streamer(ctx, desc, cc, method, opts...)
 		if err != nil {
 			clientSpan.Recordf("error: %s", err)
@@ -310,10 +315,15 @@ func StreamClientInterceptor(
 			clientSpan.Finish()
 			return cs, err
 		}
-		return newTracingClientStream(ctx, cs, desc, clientSpan), nil
+		return newTracingClientStream(
+			ctx, cs, desc,
+			// Pass ownership of clientSpan to the stream.
+			clientSpan), nil
 	}
 }
 
+// newTracingClientStream creates and implementation of grpc.ClientStream that
+// finishes `clientSpan` when the stream terminates.
 func newTracingClientStream(
 	ctx context.Context, cs grpc.ClientStream, desc *grpc.StreamDesc, clientSpan *tracing.Span,
 ) grpc.ClientStream {
@@ -368,7 +378,7 @@ func (cs *tracingClientStream) Header() (metadata.MD, error) {
 	if err != nil {
 		cs.finishFunc(err)
 	}
-	return md, err
+	return md, errors.Wrap(err, "header error")
 }
 
 func (cs *tracingClientStream) SendMsg(m interface{}) error {
@@ -376,22 +386,21 @@ func (cs *tracingClientStream) SendMsg(m interface{}) error {
 	if err != nil {
 		cs.finishFunc(err)
 	}
-	return err
+	return errors.Wrap(err, "send msg error")
 }
 
 func (cs *tracingClientStream) RecvMsg(m interface{}) error {
 	err := cs.ClientStream.RecvMsg(m)
 	if err == io.EOF {
 		cs.finishFunc(nil)
+		// Do not wrap EOF.
 		return err
 	} else if err != nil {
 		cs.finishFunc(err)
-		return err
-	}
-	if !cs.desc.ServerStreams {
+	} else if !cs.desc.ServerStreams {
 		cs.finishFunc(nil)
 	}
-	return err
+	return errors.Wrap(err, "recv msg error")
 }
 
 func (cs *tracingClientStream) CloseSend() error {
@@ -399,5 +408,5 @@ func (cs *tracingClientStream) CloseSend() error {
 	if err != nil {
 		cs.finishFunc(err)
 	}
-	return err
+	return errors.Wrap(err, "close send error")
 }

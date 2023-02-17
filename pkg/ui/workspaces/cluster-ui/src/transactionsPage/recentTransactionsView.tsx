@@ -32,6 +32,7 @@ import {
 import { getAppsFromRecentExecutions } from "../recentExecutions/recentStatementUtils";
 import { inactiveFiltersState } from "../queryFilter/filter";
 import { RecentTransactionsSection } from "src/recentExecutions/recentTransactionsSection";
+import { Pagination } from "src/pagination";
 
 import styles from "../statementsPage/statementsPage.module.scss";
 import { queryByName, syncHistory } from "src/util/query";
@@ -52,6 +53,7 @@ export type RecentTransactionsViewStateProps = {
   transactions: RecentTransaction[];
   sessionsError: Error | null;
   filters: RecentTransactionFilters;
+  executionStatus: string[];
   sortSetting: SortSetting;
   internalAppNamePrefix: string;
   isTenant?: boolean;
@@ -61,6 +63,7 @@ export type RecentTransactionsViewProps = RecentTransactionsViewStateProps &
   RecentTransactionsViewDispatchProps;
 
 const RECENT_TXN_SEARCH_PARAM = "q";
+const PAGE_SIZE = 20;
 
 export const RecentTransactionsView: React.FC<RecentTransactionsViewProps> = ({
   onColumnsSelect,
@@ -73,12 +76,14 @@ export const RecentTransactionsView: React.FC<RecentTransactionsViewProps> = ({
   transactions,
   sessionsError,
   filters,
+  executionStatus,
   internalAppNamePrefix,
 }: RecentTransactionsViewProps) => {
   const [pagination, setPagination] = useState<ISortedTablePagination>({
     current: 1,
-    pageSize: 20,
+    pageSize: PAGE_SIZE,
   });
+
   const history = useHistory();
   const [search, setSearch] = useState<string>(
     queryByName(history.location, RECENT_TXN_SEARCH_PARAM),
@@ -134,7 +139,7 @@ export const RecentTransactionsView: React.FC<RecentTransactionsViewProps> = ({
   const resetPagination = () => {
     setPagination({
       current: 1,
-      pageSize: 20,
+      pageSize: PAGE_SIZE,
     });
   };
 
@@ -155,7 +160,11 @@ export const RecentTransactionsView: React.FC<RecentTransactionsViewProps> = ({
   };
 
   const clearSearch = () => onSubmitSearch("");
-  const clearFilters = () => onSubmitFilters({ app: inactiveFiltersState.app });
+  const clearFilters = () =>
+    onSubmitFilters({
+      app: inactiveFiltersState.app,
+      executionStatus: inactiveFiltersState.executionStatus,
+    });
 
   const apps = getAppsFromRecentExecutions(transactions, internalAppNamePrefix);
   const countActiveFilters = calculateActiveFilters(filters);
@@ -166,6 +175,14 @@ export const RecentTransactionsView: React.FC<RecentTransactionsViewProps> = ({
     internalAppNamePrefix,
     search,
   );
+
+  const onChangePage = (page: number) => {
+    setPagination({
+      ...pagination,
+      current: page,
+    });
+  };
+
   return (
     <div className={cx("root")}>
       <PageConfig>
@@ -181,6 +198,8 @@ export const RecentTransactionsView: React.FC<RecentTransactionsViewProps> = ({
           <Filter
             activeFilters={countActiveFilters}
             onSubmitFilters={onSubmitFilters}
+            executionStatuses={executionStatus.sort()}
+            showExecutionStatus={true}
             appNames={apps}
             filters={filters}
           />
@@ -208,6 +227,12 @@ export const RecentTransactionsView: React.FC<RecentTransactionsViewProps> = ({
             onChangeSortSetting={onChangeSortSetting}
             onColumnsSelect={onColumnsSelect}
             isTenant={isTenant}
+          />
+          <Pagination
+            pageSize={pagination.pageSize}
+            current={pagination.current}
+            total={filteredTransactions?.length}
+            onChange={onChangePage}
           />
         </Loading>
       </div>

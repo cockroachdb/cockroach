@@ -13,23 +13,34 @@ import { localStorageSelector } from "src/store/utils/selectors";
 import { AppState } from "src/store/reducers";
 
 import {
-  selectFlattenedStmtInsightsCombiner,
   selectStatementInsightDetailsCombiner,
+  selectStatementInsightDetailsCombinerByFingerprint,
 } from "src/selectors/insightsCommon.selectors";
-import { selectID } from "src/selectors/common";
-export const selectStatementInsights = createSelector(
-  (state: AppState) => state.adminUI.executionInsights?.data,
-  selectFlattenedStmtInsightsCombiner,
-);
+import { selectStatementFingerprintID, selectID } from "src/selectors/common";
+import { InsightEnumToLabel, StmtInsightEvent } from "src/insights";
 
-export const selectStatementInsightsError = (state: AppState) =>
-  state.adminUI.executionInsights?.lastError;
+export const selectStmtInsights = (state: AppState): StmtInsightEvent[] =>
+  state.adminUI.stmtInsights?.data?.results;
 
-export const selectStatementInsightDetails = createSelector(
-  selectStatementInsights,
+export const selectStmtInsightsError = (state: AppState): Error | null =>
+  state.adminUI.stmtInsights?.lastError;
+
+export const selectStmtInsightsMaxApiReached = (state: AppState): boolean =>
+  state.adminUI.stmtInsights?.data?.maxSizeReached;
+
+export const selectStmtInsightDetails = createSelector(
+  selectStmtInsights,
   selectID,
   selectStatementInsightDetailsCombiner,
 );
+
+export const selectInsightTypes = (): string[] => {
+  const insights: string[] = [];
+  InsightEnumToLabel.forEach(insight => {
+    insights.push(insight);
+  });
+  return insights;
+};
 
 export const selectColumns = createSelector(
   localStorageSelector,
@@ -37,4 +48,16 @@ export const selectColumns = createSelector(
     localStorage["showColumns/StatementInsightsPage"]
       ? localStorage["showColumns/StatementInsightsPage"].split(",")
       : null,
+);
+
+// Show the data as 'Loading' when the request is in flight AND the
+// data is invalid or null.
+export const selectStmtInsightsLoading = (state: AppState): boolean =>
+  state.adminUI.stmtInsights?.inFlight &&
+  (!state.adminUI.stmtInsights?.valid || !state.adminUI.stmtInsights?.data);
+
+export const selectInsightsByFingerprint = createSelector(
+  selectStmtInsights,
+  selectStatementFingerprintID,
+  selectStatementInsightDetailsCombinerByFingerprint,
 );

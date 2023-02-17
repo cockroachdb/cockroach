@@ -267,8 +267,7 @@ func newIntentInterleavingIterator(reader Reader, opts IterOptions) MVCCIterator
 	if reader.ConsistentIterators() {
 		iter = maybeUnwrapUnsafeIter(reader.NewMVCCIterator(MVCCKeyIterKind, opts)).(*pebbleIterator)
 	} else {
-		iter = newPebbleIteratorByCloning(
-			intentIter.GetRawIter(), opts, StandardDurability, reader.SupportsRangeKeys())
+		iter = newPebbleIteratorByCloning(intentIter.GetRawIter(), opts, StandardDurability)
 	}
 
 	*iiIter = intentInterleavingIter{
@@ -955,11 +954,18 @@ func (i *intentInterleavingIter) UnsafeKey() MVCCKey {
 	return i.iterKey
 }
 
-func (i *intentInterleavingIter) UnsafeValue() []byte {
+func (i *intentInterleavingIter) UnsafeValue() ([]byte, error) {
 	if i.isCurAtIntentIter() {
 		return i.intentIter.UnsafeValue()
 	}
 	return i.iter.UnsafeValue()
+}
+
+func (i *intentInterleavingIter) UnsafeLazyValue() pebble.LazyValue {
+	if i.isCurAtIntentIter() {
+		return i.intentIter.UnsafeLazyValue()
+	}
+	return i.iter.UnsafeLazyValue()
 }
 
 func (i *intentInterleavingIter) MVCCValueLenAndIsTombstone() (int, bool, error) {
@@ -984,7 +990,7 @@ func (i *intentInterleavingIter) Key() MVCCKey {
 	return key
 }
 
-func (i *intentInterleavingIter) Value() []byte {
+func (i *intentInterleavingIter) Value() ([]byte, error) {
 	if i.isCurAtIntentIter() {
 		return i.intentIter.Value()
 	}
@@ -1297,7 +1303,10 @@ func (i *intentInterleavingIter) UnsafeRawMVCCKey() []byte {
 }
 
 func (i *intentInterleavingIter) ValueProto(msg protoutil.Message) error {
-	value := i.UnsafeValue()
+	value, err := i.UnsafeValue()
+	if err != nil {
+		return err
+	}
 	return protoutil.Unmarshal(value, msg)
 }
 

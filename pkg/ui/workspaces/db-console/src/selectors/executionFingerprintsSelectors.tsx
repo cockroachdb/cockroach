@@ -12,3 +12,6 @@ import { AdminUIState } from "../redux/state";
 
 export const selectStatementsLastUpdated = (state: AdminUIState) =>
   state.cachedData.statements?.setAt?.utc();
+
+export const selectStatementsDataValid = (state: AdminUIState) =>
+  state.cachedData.statements?.valid;

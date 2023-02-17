@@ -21,7 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -145,6 +145,8 @@ func TestRandStep(t *testing.T) {
 				client.DeleteRange++
 			case *DeleteRangeUsingTombstoneOperation:
 				client.DeleteRangeUsingTombstone++
+			case *AddSSTableOperation:
+				client.AddSSTable++
 			case *BatchOperation:
 				batch.Batch++
 				countClientOps(&batch.Ops, nil, o.Ops...)
@@ -164,7 +166,8 @@ func TestRandStep(t *testing.T) {
 			*BatchOperation,
 			*DeleteOperation,
 			*DeleteRangeOperation,
-			*DeleteRangeUsingTombstoneOperation:
+			*DeleteRangeUsingTombstoneOperation,
+			*AddSSTableOperation:
 			countClientOps(&counts.DB, &counts.Batch, step.Op)
 		case *ClosureTxnOperation:
 			countClientOps(&counts.ClosureTxn.TxnClientOps, &counts.ClosureTxn.TxnBatchOps, o.Ops...)
@@ -347,5 +350,5 @@ func TestRandDelRangeUsingTombstone(t *testing.T) {
 
 	fmt.Fprintf(&buf, "------------------\ntotal         %.3f", fracSingleRange+fracPoint+fracCrossRange)
 
-	echotest.Require(t, buf.String(), testutils.TestDataPath(t, t.Name()+".txt"))
+	echotest.Require(t, buf.String(), datapathutils.TestDataPath(t, t.Name()+".txt"))
 }

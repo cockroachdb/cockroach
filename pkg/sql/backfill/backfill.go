@@ -22,9 +22,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
@@ -146,7 +148,7 @@ func (cb *ColumnBackfiller) init(
 	}
 
 	cb.colIdxMap = catalog.ColumnIDToOrdinalMap(desc.PublicColumns())
-	var spec descpb.IndexFetchSpec
+	var spec fetchpb.IndexFetchSpec
 	if err := rowenc.InitIndexFetchSpec(&spec, evalCtx.Codec, desc, desc.GetPrimaryIndex(), cb.fetcherCols); err != nil {
 		return err
 	}
@@ -221,10 +223,10 @@ func (cb *ColumnBackfiller) InitForDistributedUse(
 	var defaultExprs, computedExprs []tree.TypedExpr
 	// Install type metadata in the target descriptors, as well as resolve any
 	// user defined types in the column expressions.
-	if err := flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		resolver := flowCtx.NewTypeResolver(txn)
+	if err := flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		resolver := flowCtx.NewTypeResolver(txn.KV())
 		// Hydrate all the types present in the table.
-		if err := typedesc.HydrateTypesInTableDescriptor(ctx, desc.TableDesc(), &resolver); err != nil {
+		if err := typedesc.HydrateTypesInDescriptor(ctx, desc, &resolver); err != nil {
 			return err
 		}
 		// Set up a SemaContext to type check the default and computed expressions.
@@ -602,9 +604,9 @@ func constructExprs(
 			if addedColSet.Contains(colID) {
 				continue
 			}
-			col, err := desc.FindColumnWithID(colID)
+			col, err := catalog.MustFindColumnByID(desc, colID)
 			if err != nil {
-				return errors.AssertionFailedf("column %d does not exist", colID)
+				return errors.HandleAsAssertionFailure(err)
 			}
 			if col.IsVirtual() {
 				continue
@@ -649,12 +651,10 @@ func (ib *IndexBackfiller) InitForDistributedUse(
 
 	// Install type metadata in the target descriptors, as well as resolve any
 	// user defined types in partial index predicate expressions.
-	if err := flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-		resolver := flowCtx.NewTypeResolver(txn)
+	if err := flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
+		resolver := flowCtx.NewTypeResolver(txn.KV())
 		// Hydrate all the types present in the table.
-		if err = typedesc.HydrateTypesInTableDescriptor(
-			ctx, desc.TableDesc(), &resolver,
-		); err != nil {
+		if err = typedesc.HydrateTypesInDescriptor(ctx, desc, &resolver); err != nil {
 			return err
 		}
 		// Set up a SemaContext to type check the default and computed expressions.
@@ -825,7 +825,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	// during the scan. Index entries in the new index are being
 	// populated and deleted by the OLTP commands but not otherwise
 	// read or used
-	var spec descpb.IndexFetchSpec
+	var spec fetchpb.IndexFetchSpec
 	if err := rowenc.InitIndexFetchSpec(
 		&spec, ib.evalCtx.Codec, tableDesc, tableDesc.GetPrimaryIndex(), fetcherCols,
 	); err != nil {

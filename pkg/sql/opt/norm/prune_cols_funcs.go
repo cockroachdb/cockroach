@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 )
 
 // NeededGroupingCols returns the columns needed by a grouping operator's
@@ -505,7 +505,7 @@ func (c *CustomFuncs) PruneWindows(needed opt.ColSet, windows memo.WindowsExpr) 
 // are randomly disabled for testing. It is used to prevent propagating the
 // PruneCols property when the corresponding column-pruning normalization rule
 // is disabled. This prevents rule cycles during testing.
-func DerivePruneCols(e memo.RelExpr, disabledRules util.FastIntSet) opt.ColSet {
+func DerivePruneCols(e memo.RelExpr, disabledRules intsets.Fast) opt.ColSet {
 	relProps := e.Relational()
 	if relProps.IsAvailable(props.PruneCols) {
 		return relProps.Rule.PruneCols
@@ -513,14 +513,28 @@ func DerivePruneCols(e memo.RelExpr, disabledRules util.FastIntSet) opt.ColSet {
 	relProps.SetAvailable(props.PruneCols)
 
 	switch e.Op() {
-	case opt.ScanOp, opt.ValuesOp, opt.WithScanOp:
-		if disabledRules.Contains(int(opt.PruneScanCols)) ||
-			disabledRules.Contains(int(opt.PruneValuesCols)) ||
-			disabledRules.Contains(int(opt.PruneWithScanCols)) {
+	case opt.ScanOp:
+		if disabledRules.Contains(int(opt.PruneScanCols)) {
 			// Avoid rule cycles.
 			break
 		}
-		// All columns can potentially be pruned from the Scan, Values, and WithScan
+		// All columns can potentially be pruned from the Scan
+		// operators.
+		relProps.Rule.PruneCols = relProps.OutputCols.Copy()
+	case opt.ValuesOp:
+		if disabledRules.Contains(int(opt.PruneValuesCols)) {
+			// Avoid rule cycles.
+			break
+		}
+		// All columns can potentially be pruned from the Values
+		// operators.
+		relProps.Rule.PruneCols = relProps.OutputCols.Copy()
+	case opt.WithScanOp:
+		if disabledRules.Contains(int(opt.PruneWithScanCols)) {
+			// Avoid rule cycles.
+			break
+		}
+		// All columns can potentially be pruned from the WithScan
 		// operators.
 		relProps.Rule.PruneCols = relProps.OutputCols.Copy()
 

@@ -1,0 +1,85 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+
+syntax = "proto3";
+package cockroach.keyvisualizer.keyvispb;
+option go_package = "keyvispb";
+
+import "roachpb/data.proto";
+import "gogoproto/gogo.proto";
+import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+
+message UpdateBoundariesRequest {
+  // Boundaries aren't required to be contiguous, but they must not overlap.
+  // Boundaries do not need to be sorted.
+  repeated roachpb.Span boundaries = 1 [(gogoproto.nullable) = false];
+  google.protobuf.Timestamp time = 2 [(gogoproto.nullable) = false,
+                                      (gogoproto.stdtime) = true];
+}
+
+message UpdateBoundariesResponse {}
+
+
+message GetSamplesRequest {
+  // A node_id of 0 indicates the server should issue a fan-out to all nodes.
+  int32 node_id = 1 [
+    (gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
+
+  google.protobuf.Timestamp collected_on_or_after = 2 [(gogoproto.nullable) = false,
+                                      (gogoproto.stdtime) = true];
+}
+
+// SpanStats is used by the SpanStatsCollector to count the requests to a
+// a specific roachpb.Span.
+message SpanStats {
+  roachpb.Span span = 1 [(gogoproto.nullable) = false];
+
+  // requests is the tally of successful roachpb.RequestUnion.Requests sent
+  // during a sample.
+  uint64 requests = 2;
+}
+
+// Sample is a sample collected by the SpanStatsCollector. An array of Samples
+// comprise a keyvispb.GetSamplesResponse.
+message Sample {
+  // TODO(zachlite): Add a sample_start time and sample_end time.
+  // This would enable consistency over periods of time where the key
+  // visualizer is disabled and we can't guarantee contiguous samples.
+
+  // sample_time is the time the sample ended.
+  google.protobuf.Timestamp sample_time = 1 [(gogoproto.nullable) = false,
+                                      (gogoproto.stdtime) = true];
+
+  // span_stats does not need to be sorted lexicographically.
+  repeated SpanStats span_stats = 2 [(gogoproto.nullable) = false];
+}
+
+message GetSamplesResponse {
+  repeated Sample samples = 1 [(gogoproto.nullable) = false];
+}
+
+// The KeyVisualizer Service defines the RPCs that cross the Tenant / KV
+// boundary. A keyvispb.Sample contains the statistics collected on
+// behalf of a tenant during a collection period.
+service KeyVisualizer {
+  // UpdateBoundaries tells KV which spans to collect statistics for.
+  rpc UpdateBoundaries(UpdateBoundariesRequest) returns (UpdateBoundariesResponse) {}
+
+  // GetSamples gets the collected samples from KV. It initiates a fan-out to all
+  // nodes when GetSamplesRequest.node_id is set to 0. Otherwise, it returns
+  // samples obtained from stores on the desired node.
+  rpc GetSamples(GetSamplesRequest) returns (GetSamplesResponse) {}
+
+}

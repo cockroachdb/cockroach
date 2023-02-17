@@ -23,6 +23,36 @@ type CopyFrom struct {
 	Options CopyOptions
 }
 
+// CopyTo represents a COPY TO statement.
+type CopyTo struct {
+	Table     TableName
+	Columns   NameList
+	Statement Statement
+	Options   CopyOptions
+}
+
+// Format implements the NodeFormatter interface.
+func (node *CopyTo) Format(ctx *FmtCtx) {
+	ctx.WriteString("COPY ")
+	if node.Statement != nil {
+		ctx.WriteString("(")
+		ctx.FormatNode(node.Statement)
+		ctx.WriteString(")")
+	} else {
+		ctx.FormatNode(&node.Table)
+		if len(node.Columns) > 0 {
+			ctx.WriteString(" (")
+			ctx.FormatNode(&node.Columns)
+			ctx.WriteString(")")
+		}
+	}
+	ctx.WriteString(" TO STDOUT")
+	if !node.Options.IsDefault() {
+		ctx.WriteString(" WITH ")
+		ctx.FormatNode(&node.Options)
+	}
+}
+
 // CopyOptions describes options for COPY execution.
 type CopyOptions struct {
 	Destination Expr
@@ -31,6 +61,7 @@ type CopyOptions struct {
 	Null        Expr
 	Escape      *StrVal
 	Header      bool
+	Quote       *StrVal
 }
 
 var _ NodeFormatter = &CopyOptions{}
@@ -102,6 +133,11 @@ func (o *CopyOptions) Format(ctx *FmtCtx) {
 		maybeAddSep()
 		ctx.WriteString("HEADER")
 	}
+	if o.Quote != nil {
+		maybeAddSep()
+		ctx.WriteString("QUOTE ")
+		ctx.FormatNode(o.Quote)
+	}
 }
 
 // IsDefault returns true if this struct has default value.
@@ -144,6 +180,12 @@ func (o *CopyOptions) CombineWith(other *CopyOptions) error {
 	}
 	if other.Header {
 		o.Header = true
+	}
+	if other.Quote != nil {
+		if o.Quote != nil {
+			return pgerror.Newf(pgcode.Syntax, "quote option specified multiple times")
+		}
+		o.Quote = other.Quote
 	}
 	return nil
 }

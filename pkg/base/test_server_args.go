@@ -59,6 +59,11 @@ type TestServerArgs struct {
 	// DisableTLSForHTTP if set, disables TLS for the HTTP interface.
 	DisableTLSForHTTP bool
 
+	// SecondaryTenantPortOffset if non-zero forces the network addresses
+	// generated for servers started by the serverController to be offset
+	// from the base addressed by the specified amount.
+	SecondaryTenantPortOffset int
+
 	// JoinAddr is the address of a node we are joining.
 	//
 	// If left empty and the TestServer is being added to a nonempty cluster, this
@@ -124,7 +129,7 @@ type TestServerArgs struct {
 
 	// If set, web session authentication will be disabled, even if the server
 	// is running in secure mode.
-	DisableWebSessionAuthentication bool
+	InsecureWebAccess bool
 
 	// IF set, the demo login endpoint will be enabled.
 	EnableDemoLoginEndpoint bool
@@ -159,6 +164,10 @@ type TestServerArgs struct {
 	// CockroachDB upgrades and periodically reports diagnostics to
 	// Cockroach Labs. Should remain disabled during unit testing.
 	StartDiagnosticsReporting bool
+
+	// ObsServiceAddr is the address to which events will be exported over OTLP.
+	// If empty, exporting events is inhibited.
+	ObsServiceAddr string
 }
 
 // TestClusterArgs contains the parameters one can set when creating a test
@@ -189,6 +198,13 @@ type TestClusterArgs struct {
 	// A copy of an entry from this map will be copied to each individual server
 	// and potentially adjusted according to ReplicationMode.
 	ServerArgsPerNode map[int]TestServerArgs
+
+	// If reusable listeners is true, then restart should keep listeners untouched
+	// so that servers are kept on the same ports. It is up to the test to set
+	// proxy listeners to TestServerArgs.Listener that would survive
+	// net.Listener.Close() and then allow restarted server to use them again.
+	// See testutils.ListenerRegistry.
+	ReusableListeners bool
 }
 
 var (
@@ -231,16 +247,28 @@ func DefaultTestTempStorageConfigWithSize(
 	}
 }
 
-// TestTenantArgs are the arguments used when creating a tenant from a
-// TestServer.
+// TestSharedProcessTenantArgs are the arguments to
+// TestServer.StartSharedProcessTenant.
+type TestSharedProcessTenantArgs struct {
+	// TenantName is the name of the tenant to be created. It must be set.
+	TenantName roachpb.TenantName
+	// TenantID is the ID of the tenant to be created. If not set, an ID is
+	// assigned automatically.
+	TenantID roachpb.TenantID
+
+	Knobs TestingKnobs
+
+	// If set, this will be appended to the Postgres URL by functions that
+	// automatically open a connection to the server. That's equivalent to running
+	// SET DATABASE=foo, which works even if the database doesn't (yet) exist.
+	UseDatabase string
+}
+
+// TestTenantArgs are the arguments to TestServer.StartTenant.
 type TestTenantArgs struct {
 	TenantName roachpb.TenantName
 
 	TenantID roachpb.TenantID
-
-	// Existing, if true, indicates an existing tenant, rather than a new tenant
-	// to be created by StartTenant.
-	Existing bool
 
 	// DisableCreateTenant disables the explicit creation of a tenant when
 	// StartTenant is attempted. It's used in cases where we want to validate
@@ -293,6 +321,13 @@ type TestTenantArgs struct {
 	// SSLCertsDir is a path to a custom certs dir. If empty, will use the default
 	// embedded certs.
 	SSLCertsDir string
+
+	// DisableTLSForHTTP, if set, disables TLS for the HTTP listener.
+	DisableTLSForHTTP bool
+
+	// EnableDemoLoginEndpoint enables the HTTP GET endpoint for user logins,
+	// which a feature unique to the demo shell.
+	EnableDemoLoginEndpoint bool
 
 	// StartingRPCAndSQLPort, if it is non-zero, is added to the tenant ID in order to
 	// determine the tenant's SQL+RPC port.

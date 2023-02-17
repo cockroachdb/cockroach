@@ -120,7 +120,7 @@ func TestSpillingBuffer(t *testing.T) {
 		// Create buffer.
 		buf := NewSpillingBuffer(
 			spillingQueueUnlimitedAllocator, memoryLimit, queueCfg,
-			colexecop.NewTestingSemaphore(2), typs, testDiskAcc, colsToStore...,
+			colexecop.NewTestingSemaphore(2), typs, testDiskAcc, testMemAcc, colsToStore...,
 		)
 		if setInMemTuplesLimit {
 			buf.testingKnobs.maxTuplesStoredInMemory = numBatches * inputBatchSize / 2

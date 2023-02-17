@@ -19,6 +19,7 @@ go_library(
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",
         "//pkg/util/fileutil",
+        "//pkg/util/grpcutil",
         "//pkg/util/ioctx",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
@@ -55,6 +56,7 @@ go_test(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
         "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
     ],
 )
 

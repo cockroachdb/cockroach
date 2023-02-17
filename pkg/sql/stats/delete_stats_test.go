@@ -20,11 +20,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -38,15 +37,13 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	ex := s.InternalExecutor().(sqlutil.InternalExecutor)
+	db := s.InternalDB().(descs.DB)
 	cache := NewTableStatisticsCache(
 		10, /* cacheSize */
-		db,
-		ex,
 		s.ClusterSettings(),
-		s.InternalExecutorFactory().(descs.TxnManager),
+		db,
 	)
 	require.NoError(t, cache.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
 
@@ -244,7 +241,7 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 
 	for i := range testData {
 		stat := &testData[i]
-		if err := insertTableStat(ctx, db, ex, stat); err != nil {
+		if err := insertTableStat(ctx, db.Executor(), stat); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -255,8 +252,8 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 	checkDelete := func(
 		tableID descpb.ID, columnIDs []descpb.ColumnID, expectDeleted map[uint64]struct{},
 	) error {
-		if err := s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			return DeleteOldStatsForColumns(ctx, ex, txn, tableID, columnIDs)
+		if err := s.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			return DeleteOldStatsForColumns(ctx, txn, tableID, columnIDs)
 		}); err != nil {
 			return err
 		}
@@ -335,15 +332,13 @@ func TestDeleteOldStatsForOtherColumns(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	ex := s.InternalExecutor().(sqlutil.InternalExecutor)
+	db := s.InternalDB().(isql.DB)
 	cache := NewTableStatisticsCache(
 		10, /* cacheSize */
-		db,
-		ex,
 		s.ClusterSettings(),
-		s.InternalExecutorFactory().(descs.TxnManager),
+		s.InternalDB().(descs.DB),
 	)
 	require.NoError(t, cache.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
 	testData := []TableStatisticProto{
@@ -538,7 +533,7 @@ func TestDeleteOldStatsForOtherColumns(t *testing.T) {
 
 	for i := range testData {
 		stat := &testData[i]
-		if err := insertTableStat(ctx, db, ex, stat); err != nil {
+		if err := insertTableStat(ctx, db.Executor(), stat); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -549,8 +544,8 @@ func TestDeleteOldStatsForOtherColumns(t *testing.T) {
 	checkDelete := func(
 		tableID descpb.ID, columnIDs [][]descpb.ColumnID, expectDeleted map[uint64]struct{},
 	) error {
-		if err := s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			return DeleteOldStatsForOtherColumns(ctx, ex, txn, tableID, columnIDs, defaultKeepTime)
+		if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			return DeleteOldStatsForOtherColumns(ctx, txn, tableID, columnIDs, defaultKeepTime)
 		}); err != nil {
 			return err
 		}

@@ -263,7 +263,9 @@ type DescIDGenerator interface {
 	GenerateUniqueDescID(ctx context.Context) (catid.DescID, error)
 
 	// IncrementDescID increments the descriptor ID counter by at least inc.
-	IncrementDescID(ctx context.Context, inc int64) error
+	// It returns the first ID in the incremented range:
+	// <val> .. <val> + inc  are all available to the caller.
+	IncrementDescID(ctx context.Context, inc int64) (catid.DescID, error)
 }
 
 // RangeStatsFetcher is used to fetch RangeStats.
@@ -273,7 +275,7 @@ type RangeStatsFetcher interface {
 	RangeStats(ctx context.Context, keys ...roachpb.Key) ([]*roachpb.RangeStatsResponse, error)
 }
 
-var _ tree.ParseTimeContext = &Context{}
+var _ tree.ParseContext = &Context{}
 
 // ConsistencyCheckRunner is an interface embedded in eval.Context used by
 // crdb_internal.check_consistency.
@@ -444,15 +446,17 @@ func (ec *Context) Stop(c context.Context) {
 
 // FmtCtx creates a FmtCtx with the given options as well as the EvalContext's session data.
 func (ec *Context) FmtCtx(f tree.FmtFlags, opts ...tree.FmtCtxOption) *tree.FmtCtx {
+	applyOpts := make([]tree.FmtCtxOption, 0, 2+len(opts))
+	applyOpts = append(applyOpts, tree.FmtLocation(ec.GetLocation()))
 	if ec.SessionData() != nil {
-		opts = append(
-			[]tree.FmtCtxOption{tree.FmtDataConversionConfig(ec.SessionData().DataConversionConfig)},
-			opts...,
+		applyOpts = append(
+			applyOpts,
+			tree.FmtDataConversionConfig(ec.SessionData().DataConversionConfig),
 		)
 	}
 	return tree.NewFmtCtx(
 		f,
-		opts...,
+		append(applyOpts, opts...)...,
 	)
 }
 
@@ -568,7 +572,7 @@ func TimestampToInexactDTimestamp(ts hlc.Timestamp) *tree.DTimestamp {
 	return tree.MustMakeDTimestamp(timeutil.Unix(0, ts.WallTime), time.Microsecond)
 }
 
-// GetRelativeParseTime implements ParseTimeContext.
+// GetRelativeParseTime implements ParseContext.
 func (ec *Context) GetRelativeParseTime() time.Time {
 	ret := ec.TxnTimestamp
 	if ret.IsZero() {
@@ -653,6 +657,11 @@ func (ec *Context) GetIntervalStyle() duration.IntervalStyle {
 		return duration.IntervalStyle_POSTGRES
 	}
 	return ec.SessionData().GetIntervalStyle()
+}
+
+// GetCollationEnv returns the collation env.
+func (ec *Context) GetCollationEnv() *tree.CollationEnvironment {
+	return &ec.CollationEnv
 }
 
 // GetDateStyle returns the session date style.
@@ -773,4 +782,9 @@ type StreamIngestManager interface {
 		streamIngestionDetails jobspb.StreamIngestionDetails,
 		jobProgress jobspb.Progress,
 	) (*streampb.StreamIngestionStats, error)
+
+	GetReplicationStatsAndStatus(
+		ctx context.Context,
+		ingestionJobID jobspb.JobID,
+	) (*streampb.StreamIngestionStats, string, error)
 }

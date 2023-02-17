@@ -251,8 +251,12 @@ func TestReplicaRangefeed(t *testing.T) {
 						break
 					}
 
-					expKey, expValue := expIter.UnsafeKey(), expIter.UnsafeValue()
-					sstKey, sstValue := sstIter.UnsafeKey(), sstIter.UnsafeValue()
+					checkValErr := func(v []byte, err error) []byte {
+						require.NoError(t, err)
+						return v
+					}
+					expKey, expValue := expIter.UnsafeKey(), checkValErr(expIter.UnsafeValue())
+					sstKey, sstValue := sstIter.UnsafeKey(), checkValErr(sstIter.UnsafeValue())
 					require.Equal(t, expKey.Key, sstKey.Key)
 					require.Equal(t, expValue, sstValue)
 					// We don't compare expKey.Timestamp and sstKey.Timestamp, because the
@@ -487,41 +491,6 @@ func TestReplicaRangefeed(t *testing.T) {
 		}
 		return nil
 	})
-}
-
-func TestReplicaRangefeedExpiringLeaseError(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	s := serv.(*server.TestServer)
-	defer s.Stopper().Stop(ctx)
-	store, err := s.Stores().GetStore(s.GetFirstStoreID())
-	require.NoError(t, err)
-
-	_, rdesc, err := s.ScratchRangeWithExpirationLeaseEx()
-	require.NoError(t, err)
-
-	// Establish a rangefeed on the replica we plan to remove.
-	stream := newTestStream()
-	req := roachpb.RangeFeedRequest{
-		Header: roachpb.Header{
-			RangeID: store.LookupReplica(rdesc.StartKey).RangeID,
-		},
-		Span: roachpb.Span{Key: rdesc.StartKey.AsRawKey(), EndKey: rdesc.EndKey.AsRawKey()},
-	}
-
-	// Cancel the stream's context so that RangeFeed would return
-	// immediately even if it didn't return the correct error.
-	stream.Cancel()
-
-	kvserver.RangefeedEnabled.Override(ctx, &store.ClusterSettings().SV, true)
-	pErr := store.RangeFeed(&req, stream)
-	const exp = "expiration-based leases are incompatible with rangefeeds"
-	if !testutils.IsPError(pErr, exp) {
-		t.Errorf("expected error %q, found %v", exp, pErr)
-	}
 }
 
 func TestReplicaRangefeedRetryErrors(t *testing.T) {

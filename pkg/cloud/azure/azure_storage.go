@@ -18,7 +18,13 @@ import (
 	"path"
 	"strings"
 
-	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"github.com/Azure/go-autorest/autorest/azure"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -41,13 +47,57 @@ var maxConcurrentUploadBuffers = settings.RegisterIntSetting(
 	1,
 ).WithPublic()
 
+// A note on Azure authentication:
+//
+// The standardized way to authenticate a third-party identity to the Azure
+// Cloud is via an "App Registration." This is the equivalent of an ID/Secret
+// pair on other providers, and uses the Azure-wide RBAC authentication
+// system.
+//
+// Azure RBAC is supported across all Azure products, but is often not the
+// only way to attach permissions. Individual Azure products often each
+// provide their _own_ permissions systems, likely for legacy reasons.
+//
+// In the case of Azure storage, one can also authenticate using a "key" tied
+// specifically to that storage account. (This key grants no other access,
+// and cannot be modified or restricted in scope.)
+//
+// Were we building Azure support in CRDB from scratch, we probably would not
+// support this access method. For backwards compatibility, however, we retain
+// support for these keys on Storage.
+//
+// So to authenticate manually to Azure Storage, a CRDB user must provide
+// EITHER:
+// 1. AZURE_ACCOUNT_KEY (legacy storage-key access), OR
+// 2. All three of AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID (RBAC
+// access).
+// Alternatively, a user may
+// 3. Use implicit authentication with a managed identity derived from the
+// environment on an Azure cluster host.
 const (
 	// AzureAccountNameParam is the query parameter for account_name in an azure URI.
+	// Specifically, this is one half of a "bucket" identifier. The other half is the
+	// Azure Container name, supplied in the host field of the storage URL.
+	// These two items together uniquely definte an Azure Blob.
 	AzureAccountNameParam = "AZURE_ACCOUNT_NAME"
-	// AzureAccountKeyParam is the query parameter for account_key in an azure URI.
-	AzureAccountKeyParam = "AZURE_ACCOUNT_KEY"
 	// AzureEnvironmentKeyParam is the query parameter for the environment name in an azure URI.
 	AzureEnvironmentKeyParam = "AZURE_ENVIRONMENT"
+
+	// Storage Key identifiers:
+
+	// AzureAccountKeyParam is the query parameter for account_key in an azure URI.
+	AzureAccountKeyParam = "AZURE_ACCOUNT_KEY"
+
+	// App Registration identifiers:
+
+	// AzureClientIDParam is the query parameter for client_id in an azure URI.
+	AzureClientIDParam = "AZURE_CLIENT_ID"
+	// AzureClientSecretParam is the query parameter for client_secret in an azure URI.
+	AzureClientSecretParam = "AZURE_CLIENT_SECRET"
+	// AzureTenantIDParam is the query parameter for tenant_id in an azure URI.
+	// Note that tenant ID here refers to the Azure Active Directory tenant,
+	// _not_ to any CRDB tenant.
+	AzureTenantIDParam = "AZURE_TENANT_ID"
 
 	scheme = "azure-blob"
 
@@ -55,18 +105,43 @@ const (
 	deprecatedExternalConnectionScheme = "azure-storage"
 )
 
+func azureAuthMethod(uri *url.URL, consumeURI *cloud.ConsumeURL) (cloudpb.AzureAuth, error) {
+	authParam := consumeURI.ConsumeParam(cloud.AuthParam)
+	switch authParam {
+	case "", cloud.AuthParamSpecified:
+		if uri.Query().Get(AzureAccountKeyParam) != "" {
+			return cloudpb.AzureAuth_LEGACY, nil
+		}
+		return cloudpb.AzureAuth_EXPLICIT, nil
+	case cloud.AuthParamImplicit:
+		return cloudpb.AzureAuth_IMPLICIT, nil
+	default:
+		return 0, errors.Errorf("unsupported value %s for %s",
+			authParam, cloud.AuthParam)
+	}
+
+}
+
 func parseAzureURL(
 	_ cloud.ExternalStorageURIContext, uri *url.URL,
 ) (cloudpb.ExternalStorage, error) {
 	azureURL := cloud.ConsumeURL{URL: uri}
 	conf := cloudpb.ExternalStorage{}
 	conf.Provider = cloudpb.ExternalStorageProvider_azure
+	auth, err := azureAuthMethod(uri, &azureURL)
+	if err != nil {
+		return conf, err
+	}
 	conf.AzureConfig = &cloudpb.ExternalStorage_Azure{
-		Container:   uri.Host,
-		Prefix:      uri.Path,
-		AccountName: azureURL.ConsumeParam(AzureAccountNameParam),
-		AccountKey:  azureURL.ConsumeParam(AzureAccountKeyParam),
-		Environment: azureURL.ConsumeParam(AzureEnvironmentKeyParam),
+		Container:    uri.Host,
+		Prefix:       uri.Path,
+		AccountName:  azureURL.ConsumeParam(AzureAccountNameParam),
+		AccountKey:   azureURL.ConsumeParam(AzureAccountKeyParam),
+		Environment:  azureURL.ConsumeParam(AzureEnvironmentKeyParam),
+		ClientID:     azureURL.ConsumeParam(AzureClientIDParam),
+		ClientSecret: azureURL.ConsumeParam(AzureClientSecretParam),
+		TenantID:     azureURL.ConsumeParam(AzureTenantIDParam),
+		Auth:         auth,
 	}
 
 	// Validate that all the passed in parameters are supported.
@@ -78,9 +153,45 @@ func parseAzureURL(
 	if conf.AzureConfig.AccountName == "" {
 		return conf, errors.Errorf("azure uri missing %q parameter", AzureAccountNameParam)
 	}
-	if conf.AzureConfig.AccountKey == "" {
-		return conf, errors.Errorf("azure uri missing %q parameter", AzureAccountKeyParam)
+
+	const explicitErrMsg = "explicit azure uri requires exactly one authentication method: %q OR all three of %q, %q, and %q"
+	// Validate the authentication parameters are set correctly.
+	switch conf.AzureConfig.Auth {
+	case cloudpb.AzureAuth_LEGACY:
+		hasKeyCred := conf.AzureConfig.AccountKey != ""
+		hasARoleCred := conf.AzureConfig.TenantID != "" || conf.AzureConfig.ClientID != "" || conf.AzureConfig.ClientSecret != ""
+		if !hasKeyCred || hasARoleCred {
+			// If the URI params are misconfigured we can't be certain Legacy Auth
+			// was intended, so print a broader error message.
+			return conf, errors.Errorf(explicitErrMsg, AzureAccountKeyParam, AzureTenantIDParam, AzureClientIDParam, AzureClientSecretParam)
+		}
+	case cloudpb.AzureAuth_EXPLICIT:
+		hasKeyCred := conf.AzureConfig.AccountKey != ""
+		hasAllRoleCreds := conf.AzureConfig.TenantID != "" && conf.AzureConfig.ClientID != "" && conf.AzureConfig.ClientSecret != ""
+		if hasKeyCred || !hasAllRoleCreds {
+			// If the URI params are misconfigured we can't be certain Explicit Auth
+			// was intended, so print a broader error message.
+			return conf, errors.Errorf(explicitErrMsg, AzureAccountKeyParam, AzureTenantIDParam, AzureClientIDParam, AzureClientSecretParam)
+		}
+	case cloudpb.AzureAuth_IMPLICIT:
+		unsupportedParams := make([]string, 0)
+		if conf.AzureConfig.AccountKey != "" {
+			unsupportedParams = append(unsupportedParams, AzureAccountKeyParam)
+		}
+		if conf.AzureConfig.TenantID != "" {
+			unsupportedParams = append(unsupportedParams, AzureTenantIDParam)
+		}
+		if conf.AzureConfig.ClientID != "" {
+			unsupportedParams = append(unsupportedParams, AzureClientIDParam)
+		}
+		if conf.AzureConfig.ClientSecret != "" {
+			unsupportedParams = append(unsupportedParams, AzureClientSecretParam)
+		}
+		if len(unsupportedParams) > 0 {
+			return conf, errors.Errorf("implicit azure auth does not support uri param %s", strings.Join(unsupportedParams, ", "))
+		}
 	}
+
 	if conf.AzureConfig.Environment == "" {
 		// Default to AzurePublicCloud if not specified for backwards compatibility
 		conf.AzureConfig.Environment = azure.PublicCloud.Name
@@ -92,7 +203,7 @@ func parseAzureURL(
 type azureStorage struct {
 	conf      *cloudpb.ExternalStorage_Azure
 	ioConf    base.ExternalIODirConfig
-	container azblob.ContainerURL
+	container *container.Client
 	prefix    string
 	settings  *cluster.Settings
 }
@@ -107,32 +218,68 @@ func makeAzureStorage(
 	if conf == nil {
 		return nil, errors.Errorf("azure upload requested but info missing")
 	}
-	credential, err := azblob.NewSharedKeyCredential(conf.AccountName, conf.AccountKey)
-	if err != nil {
-		return nil, errors.Wrap(err, "azure credential")
-	}
 	env, err := azure.EnvironmentFromName(conf.Environment)
 	if err != nil {
 		return nil, errors.Wrap(err, "azure environment")
 	}
-	p := azblob.NewPipeline(credential, azblob.PipelineOptions{})
 	u, err := url.Parse(fmt.Sprintf("https://%s.blob.%s", conf.AccountName, env.StorageEndpointSuffix))
 	if err != nil {
 		return nil, errors.Wrap(err, "azure: account name is not valid")
 	}
-	serviceURL := azblob.NewServiceURL(*u, p)
+
+	var azClient *service.Client
+	switch conf.Auth {
+	case cloudpb.AzureAuth_LEGACY:
+		credential, err := azblob.NewSharedKeyCredential(conf.AccountName, conf.AccountKey)
+		if err != nil {
+			return nil, errors.Wrap(err, "azure shared key credential")
+		}
+		azClient, err = service.NewClientWithSharedKeyCredential(u.String(), credential, nil)
+		if err != nil {
+			return nil, err
+		}
+	case cloudpb.AzureAuth_EXPLICIT:
+		credential, err := azidentity.NewClientSecretCredential(conf.TenantID, conf.ClientID, conf.ClientSecret, nil)
+		if err != nil {
+			return nil, errors.Wrap(err, "azure client secret credential")
+		}
+		azClient, err = service.NewClient(u.String(), credential, nil)
+		if err != nil {
+			return nil, err
+		}
+	case cloudpb.AzureAuth_IMPLICIT:
+		if args.IOConf.DisableImplicitCredentials {
+			return nil, errors.New(
+				"implicit credentials disallowed for azure due to --external-io-implicit-credentials flag")
+		}
+		// The Default credential supports env vars and managed identity magic.
+		// We rely on the former for testing and the latter in prod.
+		// https://learn.microsoft.com/en-us/dotnet/api/azure.identity.defaultazurecredential
+		credential, err := azidentity.NewDefaultAzureCredential(nil)
+		if err != nil {
+			return nil, errors.Wrap(err, "azure default credential")
+		}
+		azClient, err = service.NewClient(u.String(), credential, nil)
+		if err != nil {
+			return nil, err
+		}
+
+	default:
+		return nil, errors.Errorf("unsupported value %s for %s", conf.Auth, cloud.AuthParam)
+	}
+
 	return &azureStorage{
 		conf:      conf,
 		ioConf:    args.IOConf,
-		container: serviceURL.NewContainerURL(conf.Container),
+		container: azClient.NewContainerClient(conf.Container),
 		prefix:    conf.Prefix,
 		settings:  args.Settings,
 	}, nil
 }
 
-func (s *azureStorage) getBlob(basename string) azblob.BlockBlobURL {
+func (s *azureStorage) getBlob(basename string) *blockblob.Client {
 	name := path.Join(s.prefix, basename)
-	return s.container.NewBlockBlobURL(name)
+	return s.container.NewBlockBlobClient(name)
 }
 
 func (s *azureStorage) Conf() cloudpb.ExternalStorage {
@@ -158,12 +305,10 @@ func (s *azureStorage) Writer(ctx context.Context, basename string) (io.WriteClo
 	blob := s.getBlob(basename)
 	return cloud.BackgroundPipe(ctx, func(ctx context.Context, r io.Reader) error {
 		defer sp.Finish()
-		_, err := azblob.UploadStreamToBlockBlob(
-			ctx, r, blob, azblob.UploadStreamToBlockBlobOptions{
-				BufferSize: int(cloud.WriteChunkSize.Get(&s.settings.SV)),
-				MaxBuffers: int(maxConcurrentUploadBuffers.Get(&s.settings.SV)),
-			},
-		)
+		_, err := blob.UploadStream(ctx, r, &azblob.UploadStreamOptions{
+			BlockSize:   cloud.WriteChunkSize.Get(&s.settings.SV),
+			Concurrency: int(maxConcurrentUploadBuffers.Get(&s.settings.SV)),
+		})
 		return err
 	}), nil
 }
@@ -180,17 +325,11 @@ func (s *azureStorage) ReadFileAt(
 	ctx, sp := tracing.ChildSpan(ctx, "azure.ReadFileAt")
 	defer sp.Finish()
 	sp.SetTag("path", attribute.StringValue(path.Join(s.prefix, basename)))
-
-	// https://github.com/cockroachdb/cockroach/issues/23859
-	blob := s.getBlob(basename)
-	get, err := blob.Download(ctx, offset, azblob.CountToEnd, azblob.BlobAccessConditions{},
-		false /* rangeGetContentMD5 */, azblob.ClientProvidedKeyOptions{},
-	)
+	resp, err := s.getBlob(basename).DownloadStream(ctx, &azblob.DownloadStreamOptions{Range: azblob.
+		HTTPRange{Offset: offset}})
 	if err != nil {
-		if azerr := (azblob.StorageError)(nil); errors.As(err, &azerr) {
-			switch azerr.ServiceCode() {
-			// TODO(adityamaru): Investigate whether both these conditions are required.
-			case azblob.ServiceCodeBlobNotFound, azblob.ServiceCodeResourceNotFound:
+		if azerr := (*azcore.ResponseError)(nil); errors.As(err, &azerr) {
+			if azerr.ErrorCode == "BlobNotFound" {
 				// nolint:errwrap
 				return nil, 0, errors.Wrapf(
 					errors.Wrap(cloud.ErrFileDoesNotExist, "azure blob does not exist"),
@@ -199,19 +338,19 @@ func (s *azureStorage) ReadFileAt(
 				)
 			}
 		}
-		return nil, 0, errors.Wrap(err, "failed to create azure reader")
+		return nil, 0, errors.Wrapf(err, "failed to create azure reader")
 	}
+
 	var size int64
 	if offset == 0 {
-		size = get.ContentLength()
+		size = *resp.ContentLength
 	} else {
-		size, err = cloud.CheckHTTPContentRangeHeader(get.ContentRange(), offset)
+		size, err = cloud.CheckHTTPContentRangeHeader(*resp.ContentRange, offset)
 		if err != nil {
 			return nil, 0, err
 		}
 	}
-	reader := get.Body(azblob.RetryReaderOptions{MaxRetryRequests: 3})
-
+	reader := resp.NewRetryReader(ctx, &azblob.RetryReaderOptions{MaxRetries: 3})
 	return ioctx.ReadCloserAdapter(reader), size, nil
 }
 
@@ -222,25 +361,23 @@ func (s *azureStorage) List(ctx context.Context, prefix, delim string, fn cloud.
 	dest := cloud.JoinPathPreservingTrailingSlash(s.prefix, prefix)
 	sp.SetTag("path", attribute.StringValue(dest))
 
-	var marker azblob.Marker
-	for marker.NotDone() {
-		response, err := s.container.ListBlobsHierarchySegment(
-			ctx, marker, delim, azblob.ListBlobsSegmentOptions{Prefix: dest},
-		)
+	pager := s.container.NewListBlobsHierarchyPager(delim, &container.ListBlobsHierarchyOptions{Prefix: &dest})
+	for pager.More() {
+		response, err := pager.NextPage(ctx)
+
 		if err != nil {
 			return errors.Wrap(err, "unable to list files for specified blob")
 		}
 		for _, blob := range response.Segment.BlobPrefixes {
-			if err := fn(strings.TrimPrefix(blob.Name, dest)); err != nil {
+			if err := fn(strings.TrimPrefix(*blob.Name, dest)); err != nil {
 				return err
 			}
 		}
 		for _, blob := range response.Segment.BlobItems {
-			if err := fn(strings.TrimPrefix(blob.Name, dest)); err != nil {
+			if err := fn(strings.TrimPrefix(*blob.Name, dest)); err != nil {
 				return err
 			}
 		}
-		marker = response.NextMarker
 	}
 	return nil
 }
@@ -248,26 +385,24 @@ func (s *azureStorage) List(ctx context.Context, prefix, delim string, fn cloud.
 func (s *azureStorage) Delete(ctx context.Context, basename string) error {
 	err := contextutil.RunWithTimeout(ctx, "delete azure file", cloud.Timeout.Get(&s.settings.SV),
 		func(ctx context.Context) error {
-			blob := s.getBlob(basename)
-			_, err := blob.Delete(ctx, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
+			_, err := s.getBlob(basename).Delete(ctx, nil)
 			return err
 		})
 	return errors.Wrap(err, "delete file")
 }
 
 func (s *azureStorage) Size(ctx context.Context, basename string) (int64, error) {
-	var props *azblob.BlobGetPropertiesResponse
+	var props blob.GetPropertiesResponse
 	err := contextutil.RunWithTimeout(ctx, "size azure file", cloud.Timeout.Get(&s.settings.SV),
 		func(ctx context.Context) error {
-			blob := s.getBlob(basename)
 			var err error
-			props, err = blob.GetProperties(ctx, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
+			props, err = s.getBlob(basename).GetProperties(ctx, nil)
 			return err
 		})
 	if err != nil {
 		return 0, errors.Wrap(err, "get file properties")
 	}
-	return props.ContentLength(), nil
+	return *props.ContentLength, nil
 }
 
 // Close is part of the cloud.ExternalStorage interface.

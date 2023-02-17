@@ -25,18 +25,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydrateddesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydrateddesccache"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -48,6 +48,9 @@ import (
 // collection is cleared using ReleaseAll() which is called at the
 // end of each transaction on the session, or on hitting conditions such
 // as errors, or retries that result in transaction timestamp changes.
+//
+// TODO(ajwerner): Remove the txn argument from the Collection by more tightly
+// binding a collection to a *kv.Txn.
 type Collection struct {
 
 	// settings dictate whether we validate descriptors on write.
@@ -115,7 +118,7 @@ type Collection struct {
 
 	// hydrated is node-level cache of table descriptors which utilize
 	// user-defined types.
-	hydrated *hydrateddesc.Cache
+	hydrated *hydrateddesccache.Cache
 
 	// skipValidationOnWrite should only be set to true during forced descriptor
 	// repairs.
@@ -134,6 +137,15 @@ type Collection struct {
 	// It must be set in the multi-tenant environment for ephemeral
 	// SQL pods. It should not be set otherwise.
 	sqlLivenessSession sqlliveness.Session
+}
+
+// FromTxn is a convenience function to extract a descs.Collection which is
+// being interface-smuggled through an isql.Txn. It may return nil.
+func FromTxn(txn isql.Txn) *Collection {
+	if g, ok := txn.(Txn); ok {
+		return g.Descriptors()
+	}
+	return nil
 }
 
 // GetDeletedDescs returns the deleted descriptors of the collection.
@@ -156,6 +168,11 @@ func (tc *Collection) SetMaxTimestampBound(maxTimestampBound hlc.Timestamp) {
 // ResetMaxTimestampBound resets the maximum timestamp to read schemas at.
 func (tc *Collection) ResetMaxTimestampBound() {
 	tc.maxTimestampBoundDeadlineHolder.maxTimestampBound = hlc.Timestamp{}
+}
+
+// GetMaxTimestampBound returns the maximum timestamp to read schemas at.
+func (tc *Collection) GetMaxTimestampBound() hlc.Timestamp {
+	return tc.maxTimestampBoundDeadlineHolder.maxTimestampBound
 }
 
 // SkipValidationOnWrite avoids validating stored descriptors prior to
@@ -181,14 +198,8 @@ func (tc *Collection) ReleaseLeases(ctx context.Context) {
 // ReleaseAll calls ReleaseLeases.
 func (tc *Collection) ReleaseAll(ctx context.Context) {
 	tc.ReleaseLeases(ctx)
-	tc.uncommitted.reset(ctx)
-	tc.uncommittedComments.reset()
-	tc.uncommittedZoneConfigs.reset()
+	tc.ResetUncommitted(ctx)
 	tc.cr.Reset(ctx)
-	tc.shadowedNames = nil
-	tc.validationLevels = nil
-	tc.ResetSyntheticDescriptors()
-	tc.deletedDescs = catalog.DescriptorIDSet{}
 	tc.skipValidationOnWrite = false
 }
 
@@ -202,6 +213,12 @@ func (tc *Collection) HasUncommittedTables() (has bool) {
 		return nil
 	})
 	return has
+}
+
+// HasUncommittedDescriptors returns true if the collection contains any
+// uncommitted descriptors.
+func (tc *Collection) HasUncommittedDescriptors() bool {
+	return tc.uncommitted.uncommitted.Len() > 0
 }
 
 // HasUncommittedTypes returns true if the Collection contains uncommitted
@@ -585,12 +602,9 @@ func (tc *Collection) lookupDescriptorID(
 	// First look up in-memory descriptors in collection,
 	// except for leased descriptors.
 	objInMemory, err := func() (catalog.Descriptor, error) {
-		flags := tree.CommonLookupFlags{
-			Required:       true,
-			AvoidLeased:    true,
-			AvoidStorage:   true,
-			IncludeOffline: true,
-		}
+		flags := defaultUnleasedFlags()
+		flags.layerFilters.withoutStorage = true
+		flags.descFilters.withoutDropped = true
 		var db catalog.DatabaseDescriptor
 		var sc catalog.SchemaDescriptor
 		expectedType := catalog.Database
@@ -618,13 +632,9 @@ func (tc *Collection) lookupDescriptorID(
 				}
 			}
 		}
-		return tc.getDescriptorByName(ctx, txn, db, sc, key.Name, flags, expectedType)
+		return getDescriptorByName(ctx, txn, tc, db, sc, key.Name, flags, expectedType)
 	}()
-	if errors.IsAny(err, catalog.ErrDescriptorNotFound, catalog.ErrDescriptorDropped) {
-		// Swallow these errors to fall back to storage lookup.
-		err = nil
-	}
-	if err != nil {
+	if err != nil && !errors.Is(err, catalog.ErrDescriptorNotFound) {
 		return descpb.InvalidID, err
 	}
 	if objInMemory != nil {
@@ -808,6 +818,7 @@ func (tc *Collection) GetAllObjectsInSchema(
 
 // GetAllInDatabase is like the union of GetAllSchemasInDatabase and
 // GetAllObjectsInSchema applied to each of those schemas.
+// Includes virtual objects. Does not include dropped objects.
 func (tc *Collection) GetAllInDatabase(
 	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor,
 ) (nstree.Catalog, error) {
@@ -849,6 +860,7 @@ func (tc *Collection) GetAllInDatabase(
 }
 
 // GetAllTablesInDatabase is like GetAllInDatabase but filtered to tables.
+// Includes virtual objects. Does not include dropped objects.
 func (tc *Collection) GetAllTablesInDatabase(
 	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor,
 ) (nstree.Catalog, error) {
@@ -894,8 +906,8 @@ func (tc *Collection) aggregateAllLayers(
 			// This is needed at least for the temp system db during restores.
 			descIDs.Add(sc.GetID())
 		}
-		_ = sc.ForEachFunctionOverload(func(overload descpb.SchemaDescriptor_FunctionOverload) error {
-			descIDs.Add(overload.ID)
+		_ = sc.ForEachFunctionSignature(func(sig descpb.SchemaDescriptor_FunctionSignature) error {
+			descIDs.Add(sig.ID)
 			return nil
 		})
 	}
@@ -903,8 +915,8 @@ func (tc *Collection) aggregateAllLayers(
 	_ = stored.ForEachDescriptor(func(desc catalog.Descriptor) error {
 		descIDs.Add(desc.GetID())
 		if sc, ok := desc.(catalog.SchemaDescriptor); ok {
-			_ = sc.ForEachFunctionOverload(func(overload descpb.SchemaDescriptor_FunctionOverload) error {
-				descIDs.Add(overload.ID)
+			_ = sc.ForEachFunctionSignature(func(sig descpb.SchemaDescriptor_FunctionSignature) error {
+				descIDs.Add(sig.ID)
 				return nil
 			})
 		}
@@ -949,8 +961,8 @@ func (tc *Collection) aggregateAllLayers(
 		_ = iterator(func(desc catalog.Descriptor) error {
 			descIDs.Add(desc.GetID())
 			if sc, ok := desc.(catalog.SchemaDescriptor); ok {
-				_ = sc.ForEachFunctionOverload(func(overload descpb.SchemaDescriptor_FunctionOverload) error {
-					descIDs.Add(overload.ID)
+				_ = sc.ForEachFunctionSignature(func(sig descpb.SchemaDescriptor_FunctionSignature) error {
+					descIDs.Add(sig.ID)
 					return nil
 				})
 			}
@@ -976,13 +988,10 @@ func (tc *Collection) aggregateAllLayers(
 	tc.uncommittedZoneConfigs.addAllToCatalog(ret)
 	// Remove deleted descriptors from consideration, re-read and add the rest.
 	tc.deletedDescs.ForEach(descIDs.Remove)
-	flags := tree.CommonLookupFlags{
-		AvoidLeased:    true,
-		IncludeOffline: true,
-		IncludeDropped: true,
-	}
-	allDescs, err := tc.getDescriptorsByID(ctx, txn, flags, descIDs.Ordered()...)
-	if err != nil {
+	allDescs := make([]catalog.Descriptor, descIDs.Len())
+	if err := getDescriptorsByID(
+		ctx, tc, txn, defaultUnleasedFlags(), allDescs, descIDs.Ordered()...,
+	); err != nil {
 		return nstree.MutableCatalog{}, err
 	}
 	for _, desc := range allDescs {
@@ -1000,15 +1009,12 @@ func (tc *Collection) GetAllDescriptorsForDatabase(
 	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor,
 ) (nstree.Catalog, error) {
 	// Re-read database descriptor to have the freshest version.
-	flags := tree.CommonLookupFlags{
-		AvoidLeased:    true,
-		IncludeDropped: true,
-		IncludeOffline: true,
-	}
-	var err error
-	_, db, err = tc.GetImmutableDatabaseByID(ctx, txn, db.GetID(), flags)
-	if err != nil {
-		return nstree.Catalog{}, err
+	{
+		var err error
+		db, err = ByIDGetter(makeGetterBase(txn, tc, defaultUnleasedFlags())).Database(ctx, db.GetID())
+		if err != nil {
+			return nstree.Catalog{}, err
+		}
 	}
 	c, err := tc.GetAllInDatabase(ctx, txn, db)
 	if err != nil {
@@ -1072,29 +1078,6 @@ func (tc *Collection) GetAllDatabaseDescriptors(
 	return ret, nil
 }
 
-// GetAllTableDescriptorsInDatabase returns all the table descriptors visible to
-// the transaction under the database with the given ID.
-// Deprecated: prefer GetAllTablesInDatabase.
-func (tc *Collection) GetAllTableDescriptorsInDatabase(
-	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor,
-) (ret []catalog.TableDescriptor, _ error) {
-	c, err := tc.GetAllTablesInDatabase(ctx, txn, db)
-	if err != nil {
-		return nil, err
-	}
-	if err := c.ForEachDescriptor(func(desc catalog.Descriptor) error {
-		if desc.GetParentID() != db.GetID() {
-			return nil
-		}
-		tbl, err := catalog.AsTableDescriptor(desc)
-		ret = append(ret, tbl)
-		return err
-	}); err != nil {
-		return nil, err
-	}
-	return ret, nil
-}
-
 // GetSchemasForDatabase returns the schemas for a given database
 // visible by the transaction.
 // Deprecated: prefer GetAllSchemasInDatabase.
@@ -1136,6 +1119,17 @@ func (tc *Collection) SetSyntheticDescriptors(descs []catalog.Descriptor) {
 // Collection.
 func (tc *Collection) ResetSyntheticDescriptors() {
 	tc.synthetic.reset()
+}
+
+// ResetUncommitted resets all uncommitted state in the Collection.
+func (tc *Collection) ResetUncommitted(ctx context.Context) {
+	tc.uncommitted.reset(ctx)
+	tc.uncommittedComments.reset()
+	tc.uncommittedZoneConfigs.reset()
+	tc.shadowedNames = nil
+	tc.validationLevels = nil
+	tc.ResetSyntheticDescriptors()
+	tc.deletedDescs = catalog.DescriptorIDSet{}
 }
 
 // AddSyntheticDescriptor injects a synthetic descriptor into the Collection.
@@ -1217,14 +1211,14 @@ func MakeTestCollection(ctx context.Context, leaseManager *lease.Manager) Collec
 }
 
 // InternalExecFn is the type of functions that operates using an internalExecutor.
-type InternalExecFn func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, descriptors *Collection) error
+type InternalExecFn func(ctx context.Context, txn Txn) error
 
 // HistoricalInternalExecTxnRunnerFn callback for executing with the internal executor
 // at a fixed timestamp.
 type HistoricalInternalExecTxnRunnerFn = func(ctx context.Context, fn InternalExecFn) error
 
 // HistoricalInternalExecTxnRunner is like historicalTxnRunner except it only
-// passes the fn the exported InternalExecutor instead of the whole unexported
+// passes the fn the exported Executor instead of the whole unexported
 // extendedEvalContext, so it can be implemented outside pkg/sql.
 type HistoricalInternalExecTxnRunner interface {
 	// Exec executes the callback at a given timestamp.

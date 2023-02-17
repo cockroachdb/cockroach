@@ -115,16 +115,16 @@ AND a.attnum > 0 AND NOT a.attisdropped
 ORDER BY a.attnum
 ----
 sort
- ├── columns: attname:2!null format_type:75 pg_get_expr:76 attnotnull:13!null atttypid:3!null atttypmod:9!null collname:77 comment:78  [hidden: attnum:6!null]
+ ├── columns: attname:2!null format_type:75 pg_get_expr:76 attnotnull:13!null atttypid:3!null atttypmod:9!null collname:77 comment:85  [hidden: attnum:6!null]
  ├── stable
  ├── key: (6)
- ├── fd: (6)-->(2,3,9,13,75-78), (2)-->(3,6,9,13,75-78), (3,9)-->(75)
+ ├── fd: (6)-->(2,3,9,13,75-77,85), (2)-->(3,6,9,13,75-77), (3,9)-->(75)
  ├── ordering: +6
  └── project
-      ├── columns: format_type:75 pg_get_expr:76 collname:77 comment:78 attname:2!null atttypid:3!null attnum:6!null atttypmod:9!null attnotnull:13!null
+      ├── columns: format_type:75 pg_get_expr:76 collname:77 comment:85 attname:2!null atttypid:3!null attnum:6!null atttypmod:9!null attnotnull:13!null
       ├── stable
       ├── key: (6)
-      ├── fd: (6)-->(2,3,9,13,75-78), (2)-->(3,6,9,13,75-78), (3,9)-->(75)
+      ├── fd: (6)-->(2,3,9,13,75-77,85), (2)-->(3,6,9,13,75-77), (3,9)-->(75)
       ├── right-join (hash)
       │    ├── columns: attrelid:1!null attname:2!null atttypid:3!null attnum:6!null atttypmod:9!null attnotnull:13!null attisdropped:17!null attcollation:20!null adrelid:27 adnum:28 adbin:29 c.oid:33 c.collname:34 t.oid:42 typcollation:69
       │    ├── key: (6)
@@ -177,4 +177,39 @@ sort
            ├── format_type(atttypid:3, atttypmod:9) [as=format_type:75, outer=(3,9), stable]
            ├── pg_get_expr(adbin:29, adrelid:27) [as=pg_get_expr:76, outer=(27,29), stable]
            ├── c.collname:34 [as=collname:77, outer=(34)]
-           └── col_description(attrelid:1, attnum:6) [as=comment:78, outer=(1,6), stable]
+           └── case [as=comment:85, outer=(1,6), immutable, correlated-subquery]
+                ├── true
+                ├── when
+                │    ├── (attnum:6 IS NULL) OR (attrelid:1 IS NULL)
+                │    └── CAST(NULL AS STRING)
+                └── subquery
+                     └── project
+                          ├── columns: c.comment:84!null
+                          ├── outer: (1,6)
+                          ├── cardinality: [0 - 1]
+                          ├── immutable
+                          ├── key: ()
+                          ├── fd: ()-->(84)
+                          └── limit
+                               ├── columns: type:81!null object_id:82!null sub_id:83!null c.comment:84!null
+                               ├── outer: (1,6)
+                               ├── cardinality: [0 - 1]
+                               ├── immutable
+                               ├── key: ()
+                               ├── fd: ()-->(81-84)
+                               ├── select
+                               │    ├── columns: type:81!null object_id:82!null sub_id:83!null c.comment:84!null
+                               │    ├── outer: (1,6)
+                               │    ├── immutable
+                               │    ├── fd: ()-->(81-83)
+                               │    ├── limit hint: 1.00
+                               │    ├── scan comments [as=c]
+                               │    │    ├── columns: type:81!null object_id:82!null sub_id:83!null c.comment:84!null
+                               │    │    └── limit hint: 300.00
+                               │    └── filters
+                               │         ├── type:81 = 2 [outer=(81), constraints=(/81: [/2 - /2]; tight), fd=()-->(81)]
+                               │         ├── object_id:82 = attrelid:1::INT8 [outer=(1,82), immutable, constraints=(/82: (/NULL - ]), fd=(1)-->(82)]
+                               │         ├── sub_id:83 = attnum:6 [outer=(6,83), constraints=(/6: (/NULL - ]; /83: (/NULL - ]), fd=(6)==(83), (83)==(6)]
+                               │         ├── attrelid:1 < 4294966993 [outer=(1), constraints=(/1: (/NULL - /4294966992]; tight)]
+                               │         └── attnum:6 != 0 [outer=(6), constraints=(/6: (/NULL - /-1] [/1 - ]; tight)]
+                               └── 1

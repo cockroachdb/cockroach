@@ -50,7 +50,7 @@ type Metadata struct {
 // Decoder is an interface for decoding KVs into cdc event row.
 type Decoder interface {
 	// DecodeKV decodes specified key value to Row.
-	DecodeKV(ctx context.Context, kv roachpb.KeyValue, schemaTS hlc.Timestamp, keyOnly bool) (Row, error)
+	DecodeKV(ctx context.Context, kv roachpb.KeyValue, rt RowType, schemaTS hlc.Timestamp, keyOnly bool) (Row, error)
 }
 
 // Row holds a row corresponding to an event.
@@ -124,23 +124,6 @@ func (r Row) DatumAt(at int) (tree.Datum, error) {
 		return nil, errors.Wrapf(err, "error decoding column %q as type %s", col.Name, col.Typ.String())
 	}
 	return encDatum.Datum, nil
-}
-
-// CopyInto decodes and copies encdatums to specified tuple.
-func (r Row) CopyInto(tuple *tree.DTuple) error {
-	tupleTypes := tuple.ResolvedType().InternalType.TupleContents
-	if len(tupleTypes) != len(r.datums) {
-		return errors.AssertionFailedf("cannot copy row with %d datums into tuple with %d",
-			len(r.datums), len(tupleTypes))
-	}
-
-	for i, typ := range tupleTypes {
-		if err := r.datums[i].EnsureDecoded(typ, r.alloc); err != nil {
-			return errors.Wrapf(err, "error decoding column [%d] as type %s", i, typ)
-		}
-		tuple.D[i] = r.datums[i].Datum
-	}
-	return nil
 }
 
 // IsDeleted returns true if event corresponds to a deletion event.
@@ -424,7 +407,7 @@ type eventDecoder struct {
 	alloc tree.DatumAlloc
 
 	// State pertaining for decoding of a single key.
-	fetcher  *row.Fetcher                   // Fetcher to decode KV
+	fetcher  fetcher                        // Fetcher to decode KV
 	desc     catalog.TableDescriptor        // Current descriptor
 	family   *descpb.ColumnFamilyDescriptor // Current family
 	schemaTS hlc.Timestamp                  // Schema timestamp.
@@ -490,9 +473,17 @@ func NewEventDecoder(
 	}, nil
 }
 
+// RowType is the type of the row being decoded.
+type RowType int
+
+const (
+	CurrentRow RowType = iota
+	PrevRow
+)
+
 // DecodeKV decodes key value at specified schema timestamp.
 func (d *eventDecoder) DecodeKV(
-	ctx context.Context, kv roachpb.KeyValue, schemaTS hlc.Timestamp, keyOnly bool,
+	ctx context.Context, kv roachpb.KeyValue, rt RowType, schemaTS hlc.Timestamp, keyOnly bool,
 ) (Row, error) {
 	if err := d.initForKey(ctx, kv.Key, schemaTS, keyOnly); err != nil {
 		return Row{}, err
@@ -504,7 +495,7 @@ func (d *eventDecoder) DecodeKV(
 		return Row{}, err
 	}
 
-	datums, isDeleted, err := d.nextRow(ctx)
+	datums, isDeleted, err := d.nextRow(ctx, rt == PrevRow)
 	if err != nil {
 		return Row{}, err
 	}
@@ -533,7 +524,7 @@ func (d *eventDecoder) initForKey(
 		return err
 	}
 
-	fetcher, family, err := d.rfCache.RowFetcherForColumnFamily(desc, familyID, keyOnly)
+	fetcher, family, err := d.rfCache.RowFetcherForColumnFamily(desc, familyID, systemColumns, keyOnly)
 	if err != nil {
 		return err
 	}
@@ -541,13 +532,39 @@ func (d *eventDecoder) initForKey(
 	d.schemaTS = schemaTS
 	d.desc = desc
 	d.family = family
-	d.fetcher = fetcher
+	d.fetcher.Fetcher = fetcher
 	return nil
 }
 
+// systemColumns is a list of system columns we add to the fetcher spec.
+// It's just an alias for the colinfo.AllSystemColumns, but written out explicitly
+// to make the order of system columns clear and explicit.
+// In particular, when decoding previous row, we strip table OID column
+// since it makes little sense to include it in the previous row value.
+var systemColumns = []descpb.ColumnDescriptor{
+	colinfo.MVCCTimestampColumnDesc, colinfo.TableOIDColumnDesc,
+}
+
+type fetcher struct {
+	*row.Fetcher
+}
+
+// nextRow returns the next row from the fetcher, but stips out
+// tableoid system column if the row is the "previous" row.
+func (f *fetcher) nextRow(ctx context.Context, isPrev bool) (rowenc.EncDatumRow, error) {
+	r, _, err := f.Fetcher.NextRow(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if isPrev {
+		r = r[:len(r)-1]
+	}
+	return r, nil
+}
+
 // nextRow returns next encoded row, and a flag indicating if a row was deleted.
-func (d *eventDecoder) nextRow(ctx context.Context) (rowenc.EncDatumRow, bool, error) {
-	datums, _, err := d.fetcher.NextRow(ctx)
+func (d *eventDecoder) nextRow(ctx context.Context, isPrev bool) (rowenc.EncDatumRow, bool, error) {
+	datums, err := d.fetcher.nextRow(ctx, isPrev)
 	if err != nil {
 		return nil, false, err
 	}
@@ -594,7 +611,7 @@ func (it iter) Col(fn ColumnFn) error {
 func TestingMakeEventRow(
 	desc catalog.TableDescriptor, familyID descpb.FamilyID, encRow rowenc.EncDatumRow, deleted bool,
 ) Row {
-	family, err := desc.FindFamilyByID(familyID)
+	family, err := catalog.MustFindFamilyByID(desc, familyID)
 	if err != nil {
 		panic(err) // primary column family always exists.
 	}

@@ -32,12 +32,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/keysutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -556,7 +557,7 @@ func (idx index) toIndexDescriptor(id int) descpb.IndexDescriptor {
 		for i := 0; i < neededCols; i++ {
 			idxDesc.KeyColumnIDs = append(idxDesc.KeyColumnIDs, descpb.ColumnID(i))
 			idxDesc.KeyColumnNames = append(idxDesc.KeyColumnNames, fmt.Sprintf("col%d", i))
-			idxDesc.KeyColumnDirections = append(idxDesc.KeyColumnDirections, catpb.IndexColumn_ASC)
+			idxDesc.KeyColumnDirections = append(idxDesc.KeyColumnDirections, catenumpb.IndexColumn_ASC)
 		}
 		idxDesc.Partitioning.NumColumns = uint32(len(idx.partitions[0].start))
 		for _, p := range idx.partitions {
@@ -729,7 +730,7 @@ func TestConstraintReport(t *testing.T) {
 	// doesn't interfere with the test.
 	ReporterInterval.Override(ctx, &st.SV, 0)
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{Settings: st})
-	con := s.InternalExecutor().(sqlutil.InternalExecutor)
+	con := s.InternalExecutor().(isql.Executor)
 	defer s.Stopper().Stop(ctx)
 
 	// Verify that tables are empty.
@@ -756,15 +757,15 @@ func TestConstraintReport(t *testing.T) {
 
 	require.ElementsMatch(t, TableData(ctx, "system.replication_constraint_stats", con), [][]string{
 		{"1", "3", "'constraint'", "'+country=CH'", "1", "NULL", "0"},
-		{"2", "3", "'constraint'", "'+country=CH'", "1", "'2001-01-01 10:00:00+00:00'", "1"},
-		{"5", "6", "'constraint'", "'+ssd'", "1", "'2001-01-01 10:00:00+00:00'", "2"},
-		{"7", "8", "'constraint'", "'+dc=west'", "1", "'2001-01-01 10:00:00+00:00'", "1"},
+		{"2", "3", "'constraint'", "'+country=CH'", "1", "'2001-01-01 10:00:00+00'", "1"},
+		{"5", "6", "'constraint'", "'+ssd'", "1", "'2001-01-01 10:00:00+00'", "2"},
+		{"7", "8", "'constraint'", "'+dc=west'", "1", "'2001-01-01 10:00:00+00'", "1"},
 		{"7", "8", "'constraint'", "'+dc=east'", "1", "NULL", "0"},
-		{"8", "9", "'constraint'", "'+dc=west'", "1", "'2001-01-01 10:00:00+00:00'", "1"},
+		{"8", "9", "'constraint'", "'+dc=west'", "1", "'2001-01-01 10:00:00+00'", "1"},
 		{"8", "9", "'constraint'", "'+dc=east'", "1", "NULL", "0"},
 	})
 	require.ElementsMatch(t, TableData(ctx, "system.reports_meta", con), [][]string{
-		{"1", "'2001-01-01 10:00:00+00:00'"},
+		{"1", "'2001-01-01 10:00:00+00'"},
 	})
 	require.Equal(t, 7, r.LastUpdatedRowCount())
 
@@ -784,22 +785,22 @@ func TestConstraintReport(t *testing.T) {
 
 	require.ElementsMatch(t, TableData(ctx, "system.replication_constraint_stats", con), [][]string{
 		// Wasn't violated before - is violated now.
-		{"1", "3", "'constraint'", "'+country=CH'", "1", "'2001-01-01 11:00:00+00:00'", "1"},
+		{"1", "3", "'constraint'", "'+country=CH'", "1", "'2001-01-01 11:00:00+00'", "1"},
 		// Was violated before - isn't violated now.
 		{"5", "6", "'constraint'", "'+ssd'", "1", "NULL", "0"},
 		// Didn't exist before - new for this run and violated.
-		{"6", "8", "'constraint'", "'+dc=east'", "1", "'2001-01-01 11:00:00+00:00'", "1"},
+		{"6", "8", "'constraint'", "'+dc=east'", "1", "'2001-01-01 11:00:00+00'", "1"},
 		// Didn't exist before - new for this run and not violated.
 		{"6", "8", "'constraint'", "'+dc=west'", "1", "NULL", "0"},
 		// Was violated before - and it still is but the range count changed.
-		{"7", "8", "'constraint'", "'+dc=west'", "1", "'2001-01-01 10:00:00+00:00'", "2"},
+		{"7", "8", "'constraint'", "'+dc=west'", "1", "'2001-01-01 10:00:00+00'", "2"},
 		// Was violated before - and it still is but the range count didn't change.
-		{"8", "9", "'constraint'", "'+dc=west'", "1", "'2001-01-01 10:00:00+00:00'", "1"},
+		{"8", "9", "'constraint'", "'+dc=west'", "1", "'2001-01-01 10:00:00+00'", "1"},
 		// Wasn't violated before - and is still not violated.
 		{"8", "9", "'constraint'", "'+dc=east'", "1", "NULL", "0"},
 	})
 	require.ElementsMatch(t, TableData(ctx, "system.reports_meta", con), [][]string{
-		{"1", "'2001-01-01 11:00:00+00:00'"},
+		{"1", "'2001-01-01 11:00:00+00'"},
 	})
 	require.Equal(t, 7, r.LastUpdatedRowCount())
 
@@ -836,16 +837,16 @@ func TestConstraintReport(t *testing.T) {
 	report = make(ConstraintReport)
 
 	require.ElementsMatch(t, TableData(ctx, "system.replication_constraint_stats", con), [][]string{
-		{"1", "3", "'constraint'", "'+country=CH'", "1", "'2001-01-01 12:00:00+00:00'", "1"},
+		{"1", "3", "'constraint'", "'+country=CH'", "1", "'2001-01-01 12:00:00+00'", "1"},
 		{"5", "6", "'constraint'", "'+ssd'", "1", "NULL", "0"},
-		{"6", "8", "'constraint'", "'+dc=east'", "1", "'2001-01-01 11:00:00+00:00'", "1"},
+		{"6", "8", "'constraint'", "'+dc=east'", "1", "'2001-01-01 11:00:00+00'", "1"},
 		{"6", "8", "'constraint'", "'+dc=west'", "1", "NULL", "0"},
-		{"7", "8", "'constraint'", "'+dc=west'", "1", "'2001-01-01 12:00:00+00:00'", "2"},
-		{"8", "9", "'constraint'", "'+dc=west'", "1", "'2001-01-01 10:00:00+00:00'", "1"},
+		{"7", "8", "'constraint'", "'+dc=west'", "1", "'2001-01-01 12:00:00+00'", "2"},
+		{"8", "9", "'constraint'", "'+dc=west'", "1", "'2001-01-01 10:00:00+00'", "1"},
 		{"8", "9", "'constraint'", "'+dc=east'", "1", "NULL", "0"},
 	})
 	require.ElementsMatch(t, TableData(ctx, "system.reports_meta", con), [][]string{
-		{"1", "'2001-01-01 12:00:00+00:00'"},
+		{"1", "'2001-01-01 12:00:00+00'"},
 	})
 	require.Equal(t, 3, r.LastUpdatedRowCount())
 
@@ -858,10 +859,10 @@ func TestConstraintReport(t *testing.T) {
 	require.NoError(t, r.Save(ctx, report, time5, db, con))
 
 	require.ElementsMatch(t, TableData(ctx, "system.replication_constraint_stats", con), [][]string{
-		{"1", "3", "'constraint'", "'+country=CH'", "1", "'2001-01-01 12:00:00+00:00'", "1"},
+		{"1", "3", "'constraint'", "'+country=CH'", "1", "'2001-01-01 12:00:00+00'", "1"},
 	})
 	require.ElementsMatch(t, TableData(ctx, "system.reports_meta", con), [][]string{
-		{"1", "'2001-01-01 12:30:00+00:00'"},
+		{"1", "'2001-01-01 12:30:00+00'"},
 	})
 	require.Equal(t, 6, r.LastUpdatedRowCount())
 }

@@ -107,10 +107,34 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 			// new one. This is important for pipelined writes, since they don't
 			// have a client watching to retry, so a failure to eventually apply
 			// the proposal would be a user-visible error.
-			pErr = r.tryReproposeWithNewLeaseIndex(ctx, cmd)
+			pErr = tryReproposeWithNewLeaseIndex(ctx, cmd, (*replicaReproposer)(r))
+
 			if pErr != nil {
+				// An error from tryReproposeWithNewLeaseIndex implies that the current
+				// entry is not superseded (i.e. we don't have a reproposal at a higher
+				// MaxLeaseIndex in the log).
+				//
+				// This implies that any additional copies of the command (which may be present
+				// in the log ahead of the current entry) will also fail.
+				//
+				// It is thus safe to signal the error back to the client, which is also
+				// the only sensible choice at this point.
+				//
+				// We also know that the proposal is not in the proposals map, since the
+				// command is local and wasn't superseded, which is the condition in
+				// retrieveLocalProposals for removing from the map. So we're not leaking
+				// a map entry here, which we assert against below (and which has coverage,
+				// at time of writing, through TestReplicaReproposalWithNewLeaseIndexError).
 				log.Warningf(ctx, "failed to repropose with new lease index: %s", pErr)
 				cmd.response.Err = pErr
+
+				r.mu.RLock()
+				_, inMap := r.mu.proposals[cmd.ID]
+				r.mu.RUnlock()
+
+				if inMap {
+					log.Fatalf(ctx, "failed reproposal unexpectedly in proposals map: %+v", cmd)
+				}
 			} else {
 				// Unbind the entry's local proposal because we just succeeded
 				// in reproposing it and we don't want to acknowledge the client
@@ -135,36 +159,77 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 	}
 }
 
+// reproposer is used by tryReproposeWithNewLeaseIndex.
+type reproposer interface {
+	trackEvaluatingRequest(context.Context, hlc.Timestamp) (hlc.Timestamp, TrackedRequestToken)
+	propose(context.Context, *ProposalData, TrackedRequestToken) *roachpb.Error
+	newNotLeaseHolderError(string) *roachpb.NotLeaseHolderError
+}
+
+type replicaReproposer Replica
+
+var _ reproposer = (*replicaReproposer)(nil)
+
+func (r *replicaReproposer) trackEvaluatingRequest(
+	ctx context.Context, wts hlc.Timestamp,
+) (hlc.Timestamp, TrackedRequestToken) {
+	// NB: must not hold r.mu here, the propBuf acquires it itself.
+	return r.mu.proposalBuf.TrackEvaluatingRequest(ctx, wts)
+}
+
+func (r *replicaReproposer) propose(
+	ctx context.Context, p *ProposalData, tok TrackedRequestToken,
+) *roachpb.Error {
+	return (*Replica)(r).propose(ctx, p, tok)
+}
+
+func (r *replicaReproposer) newNotLeaseHolderError(msg string) *roachpb.NotLeaseHolderError {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return roachpb.NewNotLeaseHolderError(
+		*r.mu.state.Lease,
+		r.store.StoreID(),
+		r.mu.state.Desc,
+		msg,
+	)
+}
+
 // tryReproposeWithNewLeaseIndex is used by prepareLocalResult to repropose
 // commands that have gotten an illegal lease index error, and that we know
 // could not have applied while their lease index was valid (that is, we
 // observed all applied entries between proposal and the lease index becoming
 // invalid, as opposed to skipping some of them by applying a snapshot).
 //
-// It is not intended for use elsewhere and is only a top-level function so that
-// it can avoid the below_raft_protos check. Returns a nil error if the command
-// has already been successfully applied or has been reproposed here or by a
-// different entry for the same proposal that hit an illegal lease index error.
-func (r *Replica) tryReproposeWithNewLeaseIndex(
-	ctx context.Context, cmd *replicatedCmd,
+// Returns a nil error if the command has already been successfully applied or
+// has been reproposed here or by a different entry for the same proposal that
+// hit an illegal lease index error.
+//
+// If this returns a nil error once, it will return a nil error for future calls
+// as well, assuming that trackEvaluatingRequest returns monotonically increasing
+// timestamps across subsequent calls.
+func tryReproposeWithNewLeaseIndex(
+	ctx context.Context, cmd *replicatedCmd, r reproposer,
 ) *roachpb.Error {
 	// Note that we don't need to validate anything about the proposal's
 	// lease here - if we got this far, we know that everything but the
 	// index is valid at this point in the log.
 	p := cmd.proposal
-	if p.applied || cmd.Cmd.MaxLeaseIndex != p.command.MaxLeaseIndex {
-		// If the command associated with this rejected raft entry already
-		// applied then we don't want to repropose it. Doing so could lead
-		// to duplicate application of the same proposal.
+	if p.applied || p.Supersedes(cmd.Cmd.MaxLeaseIndex) {
+		// If the command associated with this rejected raft entry already applied
+		// then we don't want to repropose it. Doing so could lead to duplicate
+		// application of the same proposal. (We can see hit this case if an application
+		// batch contains multiple copies of the same proposal, in which case they are
+		// all marked as local, the first one will apply (and set p.applied) and the
+		// remaining copies will hit this branch).
 		//
-		// Similarly, if the command associated with this rejected raft
-		// entry has a different (larger) MaxLeaseIndex than the one we
-		// decoded from the entry itself, the command must have already
-		// been reproposed (this can happen if there are multiple copies
-		// of the command in the logs; see TestReplicaRefreshMultiple).
-		// We must not create multiple copies with multiple lease indexes,
-		// so don't repropose it again. This ensures that at any time,
-		// there is only up to a single lease index that has a chance of
+		// Similarly, if the proposal associated with this rejected raft entry is
+		// superseded by a different (larger) MaxLeaseIndex than the one we decoded
+		// from the entry itself, the command must have already passed through
+		// tryReproposeWithNewLeaseIndex previously (this can happen if there are
+		// multiple copies of the command in the logs; see
+		// TestReplicaRefreshMultiple). We must not create multiple copies with
+		// multiple lease indexes, so don't repropose it again. This ensures that at
+		// any time, there is only up to a single lease index that has a chance of
 		// succeeding in the Raft log for a given command.
 		return nil
 	}
@@ -173,27 +238,31 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(
 	// it gets reproposed.
 	// TODO(andrei): Only track if the request consults the ts cache. Some
 	// requests (e.g. EndTxn) don't care about closed timestamps.
-	minTS, tok := r.mu.proposalBuf.TrackEvaluatingRequest(ctx, p.Request.WriteTimestamp())
+	minTS, tok := r.trackEvaluatingRequest(ctx, p.Request.WriteTimestamp())
 	defer tok.DoneIfNotMoved(ctx)
 
 	// NB: p.Request.Timestamp reflects the action of ba.SetActiveTimestamp.
 	if p.Request.AppliesTimestampCache() && p.Request.WriteTimestamp().LessEq(minTS) {
 		// The tracker wants us to forward the request timestamp, but we can't
 		// do that without re-evaluating, so give up. The error returned here
-		// will go to back to DistSender, so send something it can digest.
-		err := roachpb.NewNotLeaseHolderError(
-			*r.mu.state.Lease,
-			r.store.StoreID(),
-			r.mu.state.Desc,
-			"reproposal failed due to closed timestamp",
-		)
-		return roachpb.NewError(err)
+		// will go back to DistSender, so send something it can digest.
+		return roachpb.NewError(r.newNotLeaseHolderError("reproposal failed due to closed timestamp"))
 	}
 	// Some tests check for this log message in the trace.
 	log.VEventf(ctx, 2, "retry: proposalIllegalLeaseIndex")
 
+	// Reset the command for reproposal.
+	prevMaxLeaseIndex := p.command.MaxLeaseIndex
+	prevEncodedCommand := p.encodedCommand
+	p.command.MaxLeaseIndex = 0
+	p.encodedCommand = nil
 	pErr := r.propose(ctx, p, tok.Move(ctx))
 	if pErr != nil {
+		// On error, reset the fields we zeroed out to their old value.
+		// This ensures that the proposal doesn't count as Superseded
+		// now.
+		p.command.MaxLeaseIndex = prevMaxLeaseIndex
+		p.encodedCommand = prevEncodedCommand
 		return pErr
 	}
 	log.VEventf(ctx, 2, "reproposed command %x", cmd.ID)

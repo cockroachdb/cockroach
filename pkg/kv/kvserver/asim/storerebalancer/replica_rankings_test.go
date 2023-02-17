@@ -14,12 +14,15 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/stretchr/testify/require"
 )
 
 func TestHottestRanges(t *testing.T) {
-	s := state.NewTestStateReplCounts(map[state.StoreID]int{1: 6, 2: 6, 3: 6}, 3, 1000 /* keyspace */)
+	settings := config.DefaultSimulationSettings()
+	s := state.NewStateWithReplCounts(map[state.StoreID]int{1: 7, 2: 7, 3: 7}, 3, 1000 /* keyspace */, settings)
 	// Set the QPS to be a testing rate to be rangeID * 100 for each range.
 	// NB: Normally the subsequent lease transfer would erase the QPS, however
 	// here the testing rate remains constants despite resets of actual counts.
@@ -36,7 +39,7 @@ func TestHottestRanges(t *testing.T) {
 	}
 
 	qpsF := func(c kvserver.CandidateReplica) int {
-		return int(c.QPS())
+		return int(c.RangeUsageInfo().QueriesPerSecond)
 	}
 	ridF := func(c kvserver.CandidateReplica) int {
 		return int(c.GetRangeID())
@@ -50,9 +53,9 @@ func TestHottestRanges(t *testing.T) {
 	s.TransferLease(6, 3)
 	s.TransferLease(7, 3)
 
-	hot1 := hottestRanges(s, 1)
-	hot2 := hottestRanges(s, 2)
-	hot3 := hottestRanges(s, 3)
+	hot1 := hottestRanges(s, 1, load.Queries)
+	hot2 := hottestRanges(s, 2, load.Queries)
+	hot3 := hottestRanges(s, 3, load.Queries)
 
 	// NB: We only assert on the ranges where the store holds a lease. The
 	// other replicas will be included, however will have a QPS of zero and be

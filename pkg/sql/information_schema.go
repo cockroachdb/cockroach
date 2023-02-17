@@ -20,29 +20,29 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/docs"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vtable"
+	"github.com/cockroachdb/cockroach/pkg/util/collatedstring"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
-	"golang.org/x/text/collate"
 )
 
 const (
@@ -251,25 +251,25 @@ func populateRoleHierarchy(
 	if err != nil {
 		return err
 	}
-	return forEachRoleMembership(
-		ctx, p.ExecCfg().InternalExecutor, p.Txn(),
-		func(role, member username.SQLUsername, isAdmin bool) error {
-			// The ADMIN OPTION is inherited through the role hierarchy, and grantee
-			// is supposed to be the role that has the ADMIN OPTION. The current user
-			// inherits all the ADMIN OPTIONs of its ancestors.
-			isRole := member == p.User()
-			_, hasRole := allRoles[member]
-			if (hasRole || isRole) && (!onlyIsAdmin || isAdmin) {
-				if err := addRow(
-					tree.NewDString(member.Normalized()), // grantee
-					tree.NewDString(role.Normalized()),   // role_name
-					yesOrNoDatum(isAdmin),                // is_grantable
-				); err != nil {
-					return err
-				}
+	return forEachRoleMembership(ctx, p.InternalSQLTxn(), func(
+		role, member username.SQLUsername, isAdmin bool,
+	) error {
+		// The ADMIN OPTION is inherited through the role hierarchy, and grantee
+		// is supposed to be the role that has the ADMIN OPTION. The current user
+		// inherits all the ADMIN OPTIONs of its ancestors.
+		isRole := member == p.User()
+		_, hasRole := allRoles[member]
+		if (hasRole || isRole) && (!onlyIsAdmin || isAdmin) {
+			if err := addRow(
+				tree.NewDString(member.Normalized()), // grantee
+				tree.NewDString(role.Normalized()),   // role_name
+				yesOrNoDatum(isAdmin),                // is_grantable
+			); err != nil {
+				return err
 			}
-			return nil
-		},
+		}
+		return nil
+	},
 	)
 }
 
@@ -441,7 +441,7 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 				colDefault := tree.DNull
 				if column.HasDefault() {
 					colExpr, err := schemaexpr.FormatExprForDisplay(
-						ctx, table, column.GetDefaultExpr(), &p.semaCtx, p.SessionData(), tree.FmtParsable,
+						ctx, table, column.GetDefaultExpr(), &p.semaCtx, p.SessionData(), tree.FmtParsableNumerics,
 					)
 					if err != nil {
 						return err
@@ -868,10 +868,10 @@ var (
 	matchOptionPartial = tree.NewDString("PARTIAL")
 	matchOptionNone    = tree.NewDString("NONE")
 
-	matchOptionMap = map[descpb.ForeignKeyReference_Match]tree.Datum{
-		descpb.ForeignKeyReference_SIMPLE:  matchOptionNone,
-		descpb.ForeignKeyReference_FULL:    matchOptionFull,
-		descpb.ForeignKeyReference_PARTIAL: matchOptionPartial,
+	matchOptionMap = map[semenumpb.Match]tree.Datum{
+		semenumpb.Match_SIMPLE:  matchOptionNone,
+		semenumpb.Match_FULL:    matchOptionFull,
+		semenumpb.Match_PARTIAL: matchOptionPartial,
 	}
 
 	refConstraintRuleNoAction   = tree.NewDString("NO ACTION")
@@ -881,17 +881,17 @@ var (
 	refConstraintRuleCascade    = tree.NewDString("CASCADE")
 )
 
-func dStringForFKAction(action catpb.ForeignKeyAction) tree.Datum {
+func dStringForFKAction(action semenumpb.ForeignKeyAction) tree.Datum {
 	switch action {
-	case catpb.ForeignKeyAction_NO_ACTION:
+	case semenumpb.ForeignKeyAction_NO_ACTION:
 		return refConstraintRuleNoAction
-	case catpb.ForeignKeyAction_RESTRICT:
+	case semenumpb.ForeignKeyAction_RESTRICT:
 		return refConstraintRuleRestrict
-	case catpb.ForeignKeyAction_SET_NULL:
+	case semenumpb.ForeignKeyAction_SET_NULL:
 		return refConstraintRuleSetNull
-	case catpb.ForeignKeyAction_SET_DEFAULT:
+	case semenumpb.ForeignKeyAction_SET_DEFAULT:
 		return refConstraintRuleSetDefault
-	case catpb.ForeignKeyAction_CASCADE:
+	case semenumpb.ForeignKeyAction_CASCADE:
 		return refConstraintRuleCascade
 	}
 	panic(errors.Errorf("unexpected ForeignKeyReference_Action: %v", action))
@@ -922,7 +922,7 @@ https://www.postgresql.org/docs/9.5/infoschema-referential-constraints.html`,
 				if r, ok := matchOptionMap[fk.Match()]; ok {
 					matchType = r
 				}
-				refConstraint, err := tabledesc.FindFKReferencedUniqueConstraint(refTable, fk)
+				refConstraint, err := catalog.FindFKReferencedUniqueConstraint(refTable, fk)
 				if err != nil {
 					return err
 				}
@@ -1111,15 +1111,15 @@ var informationSchemaSchemataTablePrivileges = virtualSchemaTable{
 
 var (
 	indexDirectionNA   = tree.NewDString("N/A")
-	indexDirectionAsc  = tree.NewDString(catpb.IndexColumn_ASC.String())
-	indexDirectionDesc = tree.NewDString(catpb.IndexColumn_DESC.String())
+	indexDirectionAsc  = tree.NewDString(catenumpb.IndexColumn_ASC.String())
+	indexDirectionDesc = tree.NewDString(catenumpb.IndexColumn_DESC.String())
 )
 
-func dStringForIndexDirection(dir catpb.IndexColumn_Direction) tree.Datum {
+func dStringForIndexDirection(dir catenumpb.IndexColumn_Direction) tree.Datum {
 	switch dir {
-	case catpb.IndexColumn_ASC:
+	case catenumpb.IndexColumn_ASC:
 		return indexDirectionAsc
-	case catpb.IndexColumn_DESC:
+	case catenumpb.IndexColumn_DESC:
 		return indexDirectionDesc
 	}
 	panic("unreachable")
@@ -1281,13 +1281,13 @@ https://www.postgresql.org/docs/9.5/infoschema-table-constraints.html`,
 				tbNameStr := tree.NewDString(table.GetName())
 
 				for _, c := range table.AllConstraints() {
-					kind := descpb.ConstraintTypeUnique
+					kind := catconstants.ConstraintTypeUnique
 					if c.AsCheck() != nil {
-						kind = descpb.ConstraintTypeCheck
+						kind = catconstants.ConstraintTypeCheck
 					} else if c.AsForeignKey() != nil {
-						kind = descpb.ConstraintTypeFK
+						kind = catconstants.ConstraintTypeFK
 					} else if u := c.AsUniqueWithIndex(); u != nil && u.Primary() {
-						kind = descpb.ConstraintTypePK
+						kind = catconstants.ConstraintTypePK
 					}
 					if err := addRow(
 						dbNameStr,                     // constraint_catalog
@@ -1532,12 +1532,8 @@ https://www.postgresql.org/docs/current/infoschema-collations.html`,
 				tree.NewDString("NO PAD"),
 			)
 		}
-		if err := add(tree.DefaultCollationTag); err != nil {
-			return err
-		}
-		for _, tag := range collate.Supported() {
-			collName := tag.String()
-			if err := add(collName); err != nil {
+		for _, tag := range collatedstring.Supported() {
+			if err := add(tag); err != nil {
 				return err
 			}
 		}
@@ -1565,12 +1561,8 @@ https://www.postgresql.org/docs/current/infoschema-collation-character-set-appli
 				tree.NewDString("UTF8"),   // character_set_name: UTF8 is the only available encoding
 			)
 		}
-		if err := add(tree.DefaultCollationTag); err != nil {
-			return err
-		}
-		for _, tag := range collate.Supported() {
-			collName := tag.String()
-			if err := add(collName); err != nil {
+		for _, tag := range collatedstring.Supported() {
+			if err := add(tag); err != nil {
 				return err
 			}
 		}
@@ -1672,12 +1664,12 @@ var informationSchemaRoleRoutineGrantsTable = virtualSchemaTable{
 			}
 
 			err := db.ForEachSchema(func(id descpb.ID, name string) error {
-				sc, err := p.Descriptors().GetImmutableSchemaByID(ctx, p.txn, id, tree.SchemaLookupFlags{Required: true})
+				sc, err := p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Schema(ctx, id)
 				if err != nil {
 					return err
 				}
-				return sc.ForEachFunctionOverload(func(overload descpb.SchemaDescriptor_FunctionOverload) error {
-					fn, err := p.Descriptors().GetMutableFunctionByID(ctx, p.txn, overload.ID, tree.ObjectLookupFlagsWithRequired())
+				return sc.ForEachFunctionSignature(func(sig descpb.SchemaDescriptor_FunctionSignature) error {
+					fn, err := p.Descriptors().MutableByID(p.txn).Function(ctx, sig.ID)
 					if err != nil {
 						return err
 					}
@@ -2720,8 +2712,10 @@ func forEachRole(
 	// logic test fail in 3node-tenant config with 'txn already encountered an
 	// error' (because of the context cancellation), so we buffer all roles
 	// first.
-	rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryBuffered(
-		ctx, "read-roles", p.txn, query,
+	rows, err := p.InternalSQLTxn().QueryBufferedEx(
+		ctx, "read-roles", p.txn,
+		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
+		query,
 	)
 	if err != nil {
 		return err
@@ -2752,13 +2746,12 @@ func forEachRole(
 }
 
 func forEachRoleMembership(
-	ctx context.Context,
-	ie sqlutil.InternalExecutor,
-	txn *kv.Txn,
-	fn func(role, member username.SQLUsername, isAdmin bool) error,
+	ctx context.Context, txn isql.Txn, fn func(role, member username.SQLUsername, isAdmin bool) error,
 ) (retErr error) {
 	const query = `SELECT "role", "member", "isAdmin" FROM system.role_members`
-	it, err := ie.QueryIterator(ctx, "read-members", txn, query)
+	it, err := txn.QueryIteratorEx(ctx, "read-members", txn.KV(), sessiondata.InternalExecutorOverride{
+		User: username.NodeUserName(),
+	}, query)
 	if err != nil {
 		return err
 	}
@@ -2794,10 +2787,21 @@ func userCanSeeDescriptor(
 	// TODO(richardjcai): We may possibly want to remove the ability to view
 	// the descriptor if they have any privilege on the descriptor and only
 	// allow the descriptor to be viewed if they have CONNECT on the DB. #59827.
-	canSeeDescriptor := p.CheckAnyPrivilege(ctx, desc) == nil
+	canSeeDescriptor := false
+	if ok, err := p.HasAnyPrivilege(ctx, desc); err != nil {
+		return false, err
+	} else {
+		canSeeDescriptor = ok
+	}
 	// Users can see objects in the database if they have connect privilege.
 	if parentDBDesc != nil {
-		canSeeDescriptor = canSeeDescriptor || p.CheckPrivilege(ctx, parentDBDesc, privilege.CONNECT) == nil
+		if !canSeeDescriptor {
+			if ok, err := p.HasPrivilege(ctx, parentDBDesc, privilege.CONNECT, p.User()); err != nil {
+				return false, err
+			} else {
+				canSeeDescriptor = ok
+			}
+		}
 	}
 	return canSeeDescriptor, nil
 }

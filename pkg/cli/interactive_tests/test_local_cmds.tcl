@@ -54,6 +54,14 @@ spawn $argv sql --no-line-editor --format=tsv
 eexpect root@
 end_test
 
+start_test "Check that the conn details can be printed."
+send "\\info\r"
+eexpect "Server version:"
+eexpect "Cluster ID:"
+eexpect "Connection string:"
+eexpect "You are connected"
+end_test
+
 start_test "Check that \\| reads statements."
 send "\\| echo 'select '; echo '38 + 4;'\r"
 eexpect 42

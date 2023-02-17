@@ -20,6 +20,7 @@ import {
 import {
   selectRecentStatements,
   selectAppName,
+  selectExecutionStatus,
 } from "src/selectors/recentExecutions.selectors";
 import { actions as localStorageActions } from "src/store/localStorage";
 import { actions as sessionsActions } from "src/store/sessions";
@@ -54,6 +55,7 @@ export const mapStateToRecentStatementsPageProps = (
   selectedColumns: selectColumns(state),
   sortSetting: selectSortSetting(state),
   filters: selectFilters(state),
+  executionStatus: selectExecutionStatus(),
   internalAppNamePrefix: selectAppName(state),
   isTenant: selectIsTenant(state),
 });

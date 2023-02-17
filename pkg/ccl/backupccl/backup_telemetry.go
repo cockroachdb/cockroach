@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupdest"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs/schedulebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -27,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 )
 
 type targetScope int
@@ -434,38 +432,6 @@ func logRestoreTelemetry(
 		event.DestinationStorageTypes = append(event.DestinationStorageTypes, typ)
 	}
 	sort.Strings(event.DestinationStorageTypes)
-
-	log.StructuredEvent(ctx, event)
-}
-
-// logJobCompletion publishes an eventpb.RecoveryEvent about a successful or
-// failed backup or restore job.
-func logJobCompletion(
-	ctx context.Context,
-	eventType eventpb.RecoveryEventType,
-	jobID jobspb.JobID,
-	success bool,
-	jobErr error,
-) {
-	var redactedErr redact.RedactableString
-	if jobErr != nil {
-		redactedErr = redact.Sprint(jobErr)
-	}
-	status := jobs.StatusSucceeded
-	if !success {
-		if jobs.HasErrJobCanceled(jobErr) {
-			status = jobs.StatusCanceled
-		} else {
-			status = jobs.StatusFailed
-		}
-	}
-
-	event := &eventpb.RecoveryEvent{
-		RecoveryType: eventType,
-		JobID:        uint64(jobID),
-		ResultStatus: string(status),
-		ErrorText:    redactedErr,
-	}
 
 	log.StructuredEvent(ctx, event)
 }

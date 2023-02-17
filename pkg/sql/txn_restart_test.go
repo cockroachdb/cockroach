@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
@@ -1182,7 +1183,7 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 						txn.ResetObservedTimestamps()
 						now := s.Clock().NowAsClockTimestamp()
 						txn.UpdateObservedTimestamp(s.(*server.TestServer).Gossip().NodeID.Get(), now)
-						return roachpb.NewErrorWithTxn(roachpb.NewReadWithinUncertaintyIntervalError(now.ToTimestamp(), now.ToTimestamp(), now.ToTimestamp(), txn), txn)
+						return roachpb.NewErrorWithTxn(roachpb.NewReadWithinUncertaintyIntervalError(now.ToTimestamp(), now, txn, now.ToTimestamp(), now), txn)
 					}
 				}
 			}
@@ -1266,7 +1267,7 @@ func TestFlushUncommitedDescriptorCacheOnRestart(t *testing.T) {
 					txn.ResetObservedTimestamps()
 					now := s.Clock().NowAsClockTimestamp()
 					txn.UpdateObservedTimestamp(s.(*server.TestServer).Gossip().NodeID.Get(), now)
-					return roachpb.NewErrorWithTxn(roachpb.NewReadWithinUncertaintyIntervalError(now.ToTimestamp(), now.ToTimestamp(), now.ToTimestamp(), txn), txn)
+					return roachpb.NewErrorWithTxn(roachpb.NewReadWithinUncertaintyIntervalError(now.ToTimestamp(), now, txn, now.ToTimestamp(), now), txn)
 				}
 			}
 			return nil
@@ -1351,9 +1352,10 @@ func TestDistSQLRetryableError(t *testing.T) {
 									restarted = true
 									err := roachpb.NewReadWithinUncertaintyIntervalError(
 										fArgs.Hdr.Timestamp, /* readTS */
+										hlc.ClockTimestamp{},
+										nil,
 										hlc.Timestamp{},
-										hlc.Timestamp{},
-										nil)
+										hlc.ClockTimestamp{})
 									errTxn := fArgs.Hdr.Txn.Clone()
 									errTxn.UpdateObservedTimestamp(roachpb.NodeID(2), hlc.ClockTimestamp{})
 									pErr := roachpb.NewErrorWithTxn(err, errTxn)
@@ -1639,7 +1641,7 @@ func TestTxnAutoRetryReasonAvailable(t *testing.T) {
 			if req, ok := args.Req.(*roachpb.GetRequest); ok {
 				if bytes.Contains(req.Key, retriedStmtKey) && retryCount < numRetries {
 					return roachpb.NewErrorWithTxn(roachpb.NewTransactionRetryError(roachpb.RETRY_REASON_UNKNOWN,
-						fmt.Sprintf("injected err %d", retryCount+1)), args.Hdr.Txn)
+						redact.Sprintf("injected err %d", retryCount+1)), args.Hdr.Txn)
 				}
 			}
 			return nil

@@ -60,8 +60,21 @@ var showTableStatsJSONColumns = colinfo.ResultColumns{
 
 const showTableStatsOptForecast = "forecast"
 
+const showTableStatsOptMerge = "merge"
+
 var showTableStatsOptValidate = map[string]exprutil.KVStringOptValidate{
 	showTableStatsOptForecast: exprutil.KVStringOptRequireNoValue,
+	showTableStatsOptMerge:    exprutil.KVStringOptRequireNoValue,
+}
+
+func containsDroppedColumn(colIDs tree.Datums, desc catalog.TableDescriptor) bool {
+	for _, colID := range colIDs {
+		cid := descpb.ColumnID(*colID.(*tree.DInt))
+		if catalog.FindColumnByID(desc, cid) == nil {
+			return true
+		}
+	}
+	return false
 }
 
 // ShowTableStats returns a SHOW STATISTICS statement for the specified table.
@@ -127,7 +140,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 						FROM system.table_statistics
 						WHERE "tableID" = $1
 						ORDER BY "createdAt", "columnIDs", "statisticID"`, partialPredicateCol, fullStatisticIDCol)
-			rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryBuffered(
+			rows, err := p.InternalSQLTxn().QueryBuffered(
 				ctx,
 				"read-table-stats",
 				p.txn,
@@ -178,23 +191,14 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 				}
 			}()
 
-			if _, withForecast := opts[showTableStatsOptForecast]; withForecast {
-				observed := make([]*stats.TableStatistic, 0, len(rows))
+			_, withMerge := opts[showTableStatsOptMerge]
+			_, withForecast := opts[showTableStatsOptForecast]
+			if withMerge || withForecast {
+				statsList := make([]*stats.TableStatistic, 0, len(rows))
 				for _, row := range rows {
 					// Skip stats on dropped columns.
 					colIDs := row[columnIDsIdx].(*tree.DArray).Array
-					ignoreStatsRowWithDroppedColumn := false
-					for _, colID := range colIDs {
-						cid := descpb.ColumnID(*colID.(*tree.DInt))
-						if _, err := desc.FindColumnWithID(cid); err != nil {
-							if sqlerrors.IsUndefinedColumnError(err) {
-								ignoreStatsRowWithDroppedColumn = true
-								break
-							} else {
-								return nil, err
-							}
-						}
-					}
+					ignoreStatsRowWithDroppedColumn := containsDroppedColumn(colIDs, desc)
 					if ignoreStatsRowWithDroppedColumn {
 						continue
 					}
@@ -208,24 +212,38 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 							return nil, err
 						}
 					}
-					observed = append(observed, obs)
+					statsList = append(statsList, obs)
 				}
 
 				// Reverse the list to sort by CreatedAt descending.
-				for i := 0; i < len(observed)/2; i++ {
-					j := len(observed) - i - 1
-					observed[i], observed[j] = observed[j], observed[i]
+				for i := 0; i < len(statsList)/2; i++ {
+					j := len(statsList) - i - 1
+					statsList[i], statsList[j] = statsList[j], statsList[i]
 				}
 
-				forecasts := stats.ForecastTableStatistics(ctx, observed)
-
-				// Iterate in reverse order to match the ORDER BY "columnIDs".
-				for i := len(forecasts) - 1; i >= 0; i-- {
-					forecastRow, err := tableStatisticProtoToRow(&forecasts[i].TableStatisticProto, partialStatsVerActive)
-					if err != nil {
-						return nil, err
+				if withMerge {
+					merged := stats.MergedStatistics(ctx, statsList)
+					statsList = append(merged, statsList...)
+					// Iterate in reverse order to match the ORDER BY "columnIDs".
+					for i := len(merged) - 1; i >= 0; i-- {
+						mergedRow, err := tableStatisticProtoToRow(&merged[i].TableStatisticProto, partialStatsVerActive)
+						if err != nil {
+							return nil, err
+						}
+						rows = append(rows, mergedRow)
 					}
-					rows = append(rows, forecastRow)
+				}
+
+				if withForecast {
+					forecasts := stats.ForecastTableStatistics(ctx, statsList)
+					// Iterate in reverse order to match the ORDER BY "columnIDs".
+					for i := len(forecasts) - 1; i >= 0; i-- {
+						forecastRow, err := tableStatisticProtoToRow(&forecasts[i].TableStatisticProto, partialStatsVerActive)
+						if err != nil {
+							return nil, err
+						}
+						rows = append(rows, forecastRow)
+					}
 				}
 			}
 
@@ -275,6 +293,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 					v.Close(ctx)
 					return nil, err
 				}
+
 				if _, err := v.rows.AddRow(ctx, tree.Datums{tree.NewDJSON(jsonResult)}); err != nil {
 					v.Close(ctx)
 					return nil, err
@@ -349,7 +368,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 
 func statColumnString(desc catalog.TableDescriptor, colID tree.Datum) (colName string, err error) {
 	id := descpb.ColumnID(*colID.(*tree.DInt))
-	colDesc, err := desc.FindColumnWithID(id)
+	colDesc, err := catalog.MustFindColumnByID(desc, id)
 	if err != nil {
 		// This can happen if a column was removed.
 		return "<unknown>", err

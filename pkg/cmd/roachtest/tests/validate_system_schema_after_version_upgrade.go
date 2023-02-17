@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/pmezard/go-difflib/difflib"
@@ -34,11 +35,10 @@ func registerValidateSystemSchemaAfterVersionUpgrade(r registry.Registry) {
 		Owner:   registry.OwnerSQLSchema,
 		Cluster: r.MakeClusterSpec(1),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if runtime.GOARCH == "arm64" {
+			if c.IsLocal() && runtime.GOARCH == "arm64" {
 				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
 			}
-			const mainVersion = ""
-			predecessorVersion, err := PredecessorVersion(*t.BuildVersion())
+			predecessorVersion, err := clusterupgrade.PredecessorVersion(*t.BuildVersion())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -105,7 +105,7 @@ func registerValidateSystemSchemaAfterVersionUpgrade(r registry.Registry) {
 
 			u := newVersionUpgradeTest(c,
 				// Start the node with the latest binary version.
-				uploadAndStart(c.Node(1), mainVersion),
+				uploadAndStart(c.Node(1), clusterupgrade.MainVersion),
 
 				// Obtain expected output from the node.
 				obtainSystemSchemaStep(1, &expected),
@@ -117,7 +117,7 @@ func registerValidateSystemSchemaAfterVersionUpgrade(r registry.Registry) {
 				uploadAndStart(c.Node(1), predecessorVersion),
 
 				// Upgrade the node version.
-				binaryUpgradeStep(c.Node(1), mainVersion),
+				binaryUpgradeStep(c.Node(1), clusterupgrade.MainVersion),
 
 				// Wait for the cluster version to also bump up to make sure the migration logic is run.
 				waitForUpgradeStep(c.Node(1)),

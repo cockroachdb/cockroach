@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // runInitialScan will attempt to perform an initial data scan.
@@ -102,7 +101,6 @@ func (f *RangeFeed) getSpansToScan(ctx context.Context) func() []roachpb.Span {
 		return retryAll
 	}
 
-	var fm syncutil.Mutex
 	userSpanDoneCallback := f.onSpanDone
 	f.onSpanDone = func(ctx context.Context, sp roachpb.Span) error {
 		if userSpanDoneCallback != nil {
@@ -110,8 +108,6 @@ func (f *RangeFeed) getSpansToScan(ctx context.Context) func() []roachpb.Span {
 				return err
 			}
 		}
-		fm.Lock()
-		defer fm.Unlock()
 		_, err := frontier.Forward(sp, f.initialTimestamp)
 		return err
 	}
@@ -133,5 +129,4 @@ func (f *RangeFeed) getSpansToScan(ctx context.Context) func() []roachpb.Span {
 		})
 		return retrySpans
 	}
-
 }

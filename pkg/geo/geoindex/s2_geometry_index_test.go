@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
@@ -31,7 +31,7 @@ func TestS2GeometryIndexBasic(t *testing.T) {
 	ctx := context.Background()
 	var index GeometryIndex
 	shapes := make(map[string]geo.Geometry)
-	datadriven.RunTest(t, testutils.TestDataPath(t, "s2_geometry"), func(t *testing.T, d *datadriven.TestData) string {
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "s2_geometry"), func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
 		case "init":
 			cfg := s2Config(t, d)
@@ -84,7 +84,7 @@ func TestClipByRect(t *testing.T) {
 
 	var g geo.Geometry
 	var err error
-	datadriven.RunTest(t, testutils.TestDataPath(t, "clip"), func(t *testing.T, d *datadriven.TestData) string {
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "clip"), func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
 		case "geometry":
 			g, err = geo.ParseGeometry(d.Input)

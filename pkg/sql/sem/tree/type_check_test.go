@@ -294,7 +294,7 @@ func TestTypeCheckError(t *testing.T) {
 		{`3:::int[]`, `incompatible type annotation for 3 as int[], found type: int`},
 		{`B'1001'::decimal`, `invalid cast: varbit -> decimal`},
 		{`101.3::bit`, `invalid cast: decimal -> bit`},
-		{`ARRAY[1] = ARRAY['foo']`, `could not parse "foo" as type int`},
+		{`ARRAY[1] = ARRAY['foo']`, `unsupported comparison operator: <int[]> = <string[]>`},
 		{`ARRAY[1]::int[] = ARRAY[1.0]::decimal[]`, `unsupported comparison operator: <int[]> = <decimal[]>`},
 		{`ARRAY[1] @> ARRAY['foo']`, `unsupported comparison operator: <int[]> @> <string[]>`},
 		{`ARRAY[1]::int[] @> ARRAY[1.0]::decimal[]`, `unsupported comparison operator: <int[]> @> <decimal[]>`},
@@ -516,4 +516,31 @@ func TestTypeCheckCaseExprWithConstantsAndUnresolvedPlaceholders(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, types.Int4, pTyp)
 	}
+}
+
+// Regression test for https://github.com/cockroachdb/cockroach/issues/94192.
+// If an array has only nulls and placeholders, then the type-checker should
+// still infer the types using the placeholder hints.
+func TestTypeCheckArrayWithNullAndPlaceholder(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Typecheck without any restrictions.
+	ctx := context.Background()
+	semaCtx := tree.MakeSemaContext()
+	semaCtx.Properties.Require("", 0 /* flags */)
+
+	placeholderTypes := []*types.T{types.Int}
+	err := semaCtx.Placeholders.Init(len(placeholderTypes), placeholderTypes)
+	require.NoError(t, err)
+
+	expr, err := parser.ParseExpr("array[null, $1]::int[]")
+	require.NoError(t, err)
+	typed, err := tree.TypeCheck(ctx, expr, &semaCtx, types.Any)
+	require.NoError(t, err)
+	require.Equal(t, types.IntArray, typed.ResolvedType())
+
+	pTyp, _, err := semaCtx.Placeholders.Type(tree.PlaceholderIdx(0))
+	require.NoError(t, err)
+	require.Equal(t, types.Int, pTyp)
 }

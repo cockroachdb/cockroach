@@ -17,7 +17,7 @@ go_library(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/schemachanger/screl",
-        "//pkg/util",
+        "//pkg/util/intsets",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
     ],

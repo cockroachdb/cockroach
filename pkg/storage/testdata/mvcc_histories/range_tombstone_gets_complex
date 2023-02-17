@@ -26,10 +26,10 @@ put k=d ts=4 v=d4
 put k=e ts=3 v=e3
 put k=f ts=2 v=f2
 put k=g ts=2 v=g2
-del_range_ts k=f end=h ts=3 localTs=4
+del_range_ts k=f end=h ts=3 localTs=2
 put k=f ts=4 v=f4
 put k=g ts=4 v=g4
-del_range_ts k=c end=h ts=5
+del_range_ts k=c end=h ts=5 localTs=6
 put k=f ts=6 v=f6
 put k=h ts=3 v=h3
 put k=k ts=5 v=k5
@@ -67,13 +67,13 @@ stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_b
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
 >> put k=g ts=2 v=g2
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
->> del_range_ts k=f end=h ts=3 localTs=4
-stats: range_key_count=+1 range_key_bytes=+13 range_val_count=+1 live_count=-2 live_bytes=-42 gc_bytes_age=+5335
+>> del_range_ts k=f end=h ts=3 localTs=2
+stats: range_key_count=+1 range_key_bytes=+13 range_val_count=+1 range_val_bytes=+13 live_count=-2 live_bytes=-42 gc_bytes_age=+6596
 >> put k=f ts=4 v=f4
 stats: key_bytes=+12 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21 gc_bytes_age=-194
 >> put k=g ts=4 v=g4
 stats: key_bytes=+12 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21 gc_bytes_age=-194
->> del_range_ts k=c end=h ts=5
+>> del_range_ts k=c end=h ts=5 localTs=6
 stats: range_key_count=+1 range_key_bytes=+49 range_val_count=+5 live_count=-4 live_bytes=-84 gc_bytes_age=+12665
 >> put k=f ts=6 v=f6
 stats: key_bytes=+12 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21 gc_bytes_age=-190
@@ -93,7 +93,7 @@ rangekey: {a-b}/[1.000000000,0=/<empty>]
 rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 rangekey: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 rangekey: {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
-rangekey: {f-h}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: {f-h}/[5.000000000,0=/<empty> 3.000000000,0={localTs=2.000000000,0}/<empty>]
 rangekey: {h-k}/[1.000000000,0=/<empty>]
 rangekey: {l-n}/[5.000000000,0=/<empty>]
 rangekey: {n-o}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
@@ -116,7 +116,7 @@ data: "h"/3.000000000,0 -> /BYTES/h3
 meta: "j"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "j"/7.000000000,0 -> /BYTES/j7
 data: "k"/5.000000000,0 -> /BYTES/k5
-stats: key_count=9 key_bytes=210 val_count=16 val_bytes=242 range_key_count=8 range_key_bytes=158 range_val_count=14 live_count=5 live_bytes=249 gc_bytes_age=34691 intent_count=3 intent_bytes=57 separated_intent_count=3 intent_age=279
+stats: key_count=9 key_bytes=210 val_count=16 val_bytes=242 range_key_count=8 range_key_bytes=158 range_val_count=14 range_val_bytes=13 live_count=5 live_bytes=249 gc_bytes_age=35952 intent_count=3 intent_bytes=57 separated_intent_count=3 intent_age=279
 
 # Run gets for all keys at all timestamps, with tombstones and intents.
 run ok

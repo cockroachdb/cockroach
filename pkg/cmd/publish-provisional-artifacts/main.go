@@ -25,29 +25,26 @@ import (
 )
 
 const (
-	awsAccessKeyIDKey      = "AWS_ACCESS_KEY_ID"
-	awsSecretAccessKeyKey  = "AWS_SECRET_ACCESS_KEY"
 	teamcityBuildBranchKey = "TC_BUILD_BRANCH"
 )
 
 var provisionalReleasePrefixRE = regexp.MustCompile(`^provisional_[0-9]{12}_`)
 
 func main() {
-	var s3Bucket string
 	var gcsBucket string
+	var outputDirectory string
 	var doProvisional bool
 	var isRelease bool
 	var doBless bool
 	flag.BoolVar(&isRelease, "release", false, "build in release mode instead of bleeding-edge mode")
-	flag.StringVar(&s3Bucket, "bucket", "", "S3 bucket")
 	flag.StringVar(&gcsBucket, "gcs-bucket", "", "GCS bucket")
+	flag.StringVar(&outputDirectory, "output-directory", "",
+		"Save local copies of uploaded release archives in this directory")
 	flag.BoolVar(&doProvisional, "provisional", false, "publish provisional binaries")
 	flag.BoolVar(&doBless, "bless", false, "bless provisional binaries")
 
 	flag.Parse()
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
-
-	var providers []release.ObjectPutGetter
 
 	// GCS bucket is required now
 	if gcsBucket == "" {
@@ -60,24 +57,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Creating GCS session: %s", err)
 	}
-	providers = append(providers, gcs)
-
-	if s3Bucket != "" {
-		log.Printf("Using S3 bucket: %s", s3Bucket)
-		if _, ok := os.LookupEnv(awsAccessKeyIDKey); !ok {
-			log.Fatalf("AWS access key ID environment variable %s is not set", awsAccessKeyIDKey)
-		}
-		if _, ok := os.LookupEnv(awsSecretAccessKeyKey); !ok {
-			log.Fatalf("AWS secret access key environment variable %s is not set", awsSecretAccessKeyKey)
-		}
-		s3, err := release.NewS3("us-east-1", s3Bucket)
-		if err != nil {
-			log.Fatalf("Creating AWS S3 session: %s", err)
-		}
-		providers = append(providers, s3)
-	} else {
-		log.Println("WARN: no S3 bucket defined, skipping...")
-	}
+	providers := []release.ObjectPutGetter{gcs}
 
 	branch, ok := os.LookupEnv(teamcityBuildBranchKey)
 	if !ok {
@@ -102,22 +82,24 @@ func main() {
 	}
 
 	run(providers, runFlags{
-		doProvisional: doProvisional,
-		doBless:       doBless,
-		isRelease:     isRelease,
-		branch:        branch,
-		pkgDir:        pkg,
-		sha:           string(bytes.TrimSpace(shaOut)),
+		doProvisional:   doProvisional,
+		doBless:         doBless,
+		isRelease:       isRelease,
+		branch:          branch,
+		pkgDir:          pkg,
+		sha:             string(bytes.TrimSpace(shaOut)),
+		outputDirectory: outputDirectory,
 	}, release.ExecFn{})
 }
 
 type runFlags struct {
-	doProvisional bool
-	doBless       bool
-	isRelease     bool
-	branch        string
-	sha           string
-	pkgDir        string
+	doProvisional   bool
+	doBless         bool
+	isRelease       bool
+	branch          string
+	sha             string
+	pkgDir          string
+	outputDirectory string
 }
 
 func run(providers []release.ObjectPutGetter, flags runFlags, execFn release.ExecFn) {
@@ -214,16 +196,18 @@ func run(providers []release.ObjectPutGetter, flags runFlags, execFn release.Exe
 						log.Fatalf("cannot create sql release archive %s", err)
 					}
 					release.PutRelease(provider, release.PutReleaseOptions{
-						NoCache:       false,
-						Platform:      o.Platform,
-						VersionStr:    o.VersionStr,
-						ArchivePrefix: "cockroach",
+						NoCache:         false,
+						Platform:        o.Platform,
+						VersionStr:      o.VersionStr,
+						ArchivePrefix:   "cockroach",
+						OutputDirectory: flags.outputDirectory,
 					}, crdbBody)
 					release.PutRelease(provider, release.PutReleaseOptions{
-						NoCache:       false,
-						Platform:      o.Platform,
-						VersionStr:    o.VersionStr,
-						ArchivePrefix: "cockroach-sql",
+						NoCache:         false,
+						Platform:        o.Platform,
+						VersionStr:      o.VersionStr,
+						ArchivePrefix:   "cockroach-sql",
+						OutputDirectory: flags.outputDirectory,
 					}, sqlBody)
 				}
 			}

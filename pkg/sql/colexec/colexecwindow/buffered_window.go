@@ -41,14 +41,15 @@ func newBufferedWindowOperator(
 	queueCfg.SetCacheMode(colcontainer.DiskQueueCacheModeIntertwinedCalls)
 	return &bufferedWindowOp{
 		windowInitFields: windowInitFields{
-			OneInputNode: colexecop.NewOneInputNode(input),
-			allocator:    args.MainAllocator,
-			memoryLimit:  memoryLimit,
-			diskQueueCfg: queueCfg,
-			fdSemaphore:  args.FdSemaphore,
-			outputTypes:  outputTypes,
-			diskAcc:      args.DiskAcc,
-			outputColIdx: args.OutputColIdx,
+			OneInputNode:    colexecop.NewOneInputNode(input),
+			allocator:       args.MainAllocator,
+			memoryLimit:     memoryLimit,
+			diskQueueCfg:    queueCfg,
+			fdSemaphore:     args.FdSemaphore,
+			outputTypes:     outputTypes,
+			diskAcc:         args.DiskAcc,
+			converterMemAcc: args.ConverterMemAcc,
+			outputColIdx:    args.OutputColIdx,
 		},
 		windower: windower,
 	}
@@ -143,13 +144,14 @@ type windowInitFields struct {
 	colexecop.OneInputNode
 	colexecop.InitHelper
 
-	allocator    *colmem.Allocator
-	memoryLimit  int64
-	diskQueueCfg colcontainer.DiskQueueCfg
-	fdSemaphore  semaphore.Semaphore
-	outputTypes  []*types.T
-	diskAcc      *mon.BoundAccount
-	outputColIdx int
+	allocator       *colmem.Allocator
+	memoryLimit     int64
+	diskQueueCfg    colcontainer.DiskQueueCfg
+	fdSemaphore     semaphore.Semaphore
+	outputTypes     []*types.T
+	diskAcc         *mon.BoundAccount
+	converterMemAcc *mon.BoundAccount
+	outputColIdx    int
 }
 
 // bufferedWindowOp extracts common fields for the various window operators
@@ -207,6 +209,7 @@ func (b *bufferedWindowOp) Init(ctx context.Context) {
 			DiskQueueCfg:       b.diskQueueCfg,
 			FDSemaphore:        b.fdSemaphore,
 			DiskAcc:            b.diskAcc,
+			ConverterMemAcc:    b.converterMemAcc,
 		},
 	)
 	b.windower.startNewPartition()

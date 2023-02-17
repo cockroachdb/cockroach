@@ -9,7 +9,12 @@
 // licenses/APL.txt.
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
-import { JobRequest, JobResponse } from "src/api/jobsApi";
+import {
+  ErrorWithKey,
+  JobRequest,
+  JobResponse,
+  JobResponseWithKey,
+} from "src/api/jobsApi";
 import { DOMAIN_NAME } from "../utils";
 
 export type JobState = {
@@ -19,33 +24,46 @@ export type JobState = {
   inFlight: boolean;
 };
 
-const initialState: JobState = {
-  data: null,
-  lastError: null,
-  valid: true,
-  inFlight: false,
+export type JobDetailsReducerState = {
+  cachedData: {
+    [id: string]: JobState;
+  };
+};
+
+const initialState: JobDetailsReducerState = {
+  cachedData: {},
 };
 
 const JobSlice = createSlice({
   name: `${DOMAIN_NAME}/job`,
   initialState,
   reducers: {
-    received: (state, action: PayloadAction<JobResponse>) => {
-      state.data = action.payload;
-      state.valid = true;
-      state.lastError = null;
-      state.inFlight = false;
+    received: (state, action: PayloadAction<JobResponseWithKey>) => {
+      state.cachedData[action.payload.key] = {
+        data: action.payload.jobResponse,
+        valid: true,
+        lastError: null,
+        inFlight: false,
+      };
     },
-    failed: (state, action: PayloadAction<Error>) => {
-      state.valid = false;
-      state.lastError = action.payload;
+    failed: (state, action: PayloadAction<ErrorWithKey>) => {
+      state.cachedData[action.payload.key] = {
+        data: null,
+        valid: false,
+        lastError: action.payload.err,
+        inFlight: false,
+      };
     },
-    invalidated: state => {
-      state.valid = false;
+    invalidated: (state, action: PayloadAction<{ key: string }>) => {
+      state.cachedData[action.payload.key] = {
+        data: null,
+        valid: false,
+        lastError: null,
+        inFlight: false,
+      };
     },
-    refresh: (_, action: PayloadAction<JobRequest>) => {},
-    request: (_, action: PayloadAction<JobRequest>) => {},
-    reset: (_, action: PayloadAction<JobRequest>) => {},
+    refresh: (_, _action: PayloadAction<JobRequest>) => {},
+    request: (_, _action: PayloadAction<JobRequest>) => {},
   },
 });
 

@@ -27,8 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/oppurpose"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -134,15 +133,8 @@ func deleteTableData(
 	}
 	for _, droppedTable := range progress.Tables {
 		var table catalog.TableDescriptor
-		if err := sql.DescsTxn(ctx, cfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
-			flags := tree.ObjectLookupFlags{
-				CommonLookupFlags: tree.CommonLookupFlags{
-					AvoidLeased:    true,
-					IncludeDropped: true,
-					IncludeOffline: true,
-				},
-			}
-			table, err = col.GetImmutableTableByID(ctx, txn, droppedTable.ID, flags)
+		if err := sql.DescsTxn(ctx, cfg, func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
+			table, err = col.ByID(txn.KV()).Get().Table(ctx, droppedTable.ID)
 			return err
 		}); err != nil {
 			if errors.Is(err, catalog.ErrDescriptorNotFound) {
@@ -193,7 +185,7 @@ func unsplitRangesInSpan(ctx context.Context, kvDB *kv.DB, span roachpb.Span) er
 			// Swallow "key is not the start of a range" errors because it would mean
 			// that the sticky bit was removed and merged concurrently. DROP TABLE
 			// should not fail because of this.
-			if err := kvDB.AdminUnsplit(ctx, desc.StartKey, oppurpose.UnsplitGC); err != nil &&
+			if err := kvDB.AdminUnsplit(ctx, desc.StartKey); err != nil &&
 				!strings.Contains(err.Error(), "is not the start of a range") {
 				return err
 			}
@@ -515,7 +507,7 @@ func shouldUseDelRange(
 ) bool {
 	// TODO(ajwerner): Adopt the DeleteRange protocol for tenant GC.
 	return details.Tenant == nil &&
-		s.Version.IsActive(ctx, clusterversion.V22_2UseDelRangeInGCJob) &&
+		s.Version.IsActive(ctx, clusterversion.TODODelete_V22_2UseDelRangeInGCJob) &&
 		(storage.CanUseMVCCRangeTombstones(ctx, s) ||
 			// Allow this testing knob to override the storage setting, for convenience.
 			knobs.SkipWaitingForMVCCGC)

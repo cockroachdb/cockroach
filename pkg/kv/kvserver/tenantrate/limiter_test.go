@@ -13,6 +13,7 @@ package tenantrate_test
 import (
 	"context"
 	"fmt"
+	"math"
 	"regexp"
 	"runtime"
 	"sort"
@@ -25,13 +26,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/metrictestutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/dustin/go-humanize"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v2"
 )
@@ -49,9 +53,9 @@ func TestCloser(t *testing.T) {
 	ctx := context.Background()
 	limiter := factory.GetTenant(ctx, tenant, closer)
 	// First Wait call will not block.
-	require.NoError(t, limiter.Wait(ctx, tenantcostmodel.TestingRequestInfo(1, 1, 1)))
+	require.NoError(t, limiter.Wait(ctx, tenantcostmodel.TestingRequestInfo(1, 1, 1, 1)))
 	errCh := make(chan error, 1)
-	go func() { errCh <- limiter.Wait(ctx, tenantcostmodel.TestingRequestInfo(1, 1, 1<<31)) }()
+	go func() { errCh <- limiter.Wait(ctx, tenantcostmodel.TestingRequestInfo(1, 1, 1<<33, 1)) }()
 	testutils.SucceedsSoon(t, func() error {
 		if timers := timeSource.Timers(); len(timers) != 1 {
 			return errors.Errorf("expected 1 timer, found %d", len(timers))
@@ -62,9 +66,71 @@ func TestCloser(t *testing.T) {
 	require.Regexp(t, "closer", <-errCh)
 }
 
+func TestUseAfterRelease(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cs := cluster.MakeTestingClusterSettings()
+
+	factory := tenantrate.NewLimiterFactory(&cs.SV, nil)
+	s := stop.NewStopper()
+	defer s.Stop(ctx)
+	ctx, cancel2 := s.WithCancelOnQuiesce(ctx)
+	defer cancel2()
+
+	lim := factory.GetTenant(ctx, roachpb.MinTenantID, s.ShouldQuiesce())
+
+	// Pick a large acquisition size which will cause the quota acquisition to
+	// block ~forever. We scale it a bit to stay away from overflow.
+	const n = math.MaxInt64 / 50
+
+	rq := tenantcostmodel.TestingRequestInfo(
+		2 /* writeReplicas */, n /* writeCount */, n /* writeBytes */, 1 /* *writeMultiplier */)
+	rs := tenantcostmodel.TestingResponseInfo(
+		true /* isRead */, n /* readCount */, n /* readBytes */, 1 /* readMultiplier */)
+
+	// Acquire once to exhaust the burst. The bucket is now deeply in the red.
+	require.NoError(t, lim.Wait(ctx, rq))
+
+	waitErr := make(chan error, 1)
+	_ = s.RunAsyncTask(ctx, "wait", func(ctx context.Context) {
+		waitErr <- lim.Wait(ctx, rq)
+	})
+
+	_ = s.RunAsyncTask(ctx, "release", func(ctx context.Context) {
+		require.Eventually(t, func() bool {
+			return factory.Metrics().CurrentBlocked.Value() == 1
+		}, 10*time.Second, time.Nanosecond)
+		factory.Release(lim)
+	})
+
+	select {
+	case <-time.After(10 * time.Second):
+		t.Errorf("releasing limiter did not unblock acquisition")
+	case err := <-waitErr:
+		t.Logf("waiting returned: %s", err)
+		assert.Error(t, err)
+	}
+
+	lim.RecordRead(ctx, rs)
+
+	// The read bytes are still recorded to the parent, even though the limiter
+	// was already released at that point. This isn't required behavior, what's
+	// more important is that we don't crash.
+	require.Equal(t, rs.ReadBytes(), factory.Metrics().ReadBytesAdmitted.Count())
+	// Write bytes got admitted only once because second attempt got aborted
+	// during Wait().
+	require.Equal(t, rq.WriteBytes(), factory.Metrics().WriteBytesAdmitted.Count())
+	// This is a Gauge and we want to make sure that we don't leak an increment to
+	// it, i.e. the Wait call both added and removed despite interleaving with the
+	// gauge being unlinked from the aggregating parent.
+	require.Zero(t, factory.Metrics().CurrentBlocked.Value())
+	require.NoError(t, ctx.Err()) // didn't time out
+}
+
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	datadriven.Walk(t, testutils.TestDataPath(t), func(t *testing.T, path string) {
+	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 		defer leaktest.AfterTest(t)()
 		datadriven.RunTest(t, path, new(testState).run)
 	})
@@ -226,10 +292,10 @@ func (ts *testState) launch(t *testing.T, d *datadriven.TestData) string {
 		}
 		go func() {
 			// We'll not worry about ever releasing tenant Limiters.
-			reqInfo := tenantcostmodel.TestingRequestInfo(1, s.writeRequests, s.writeBytes)
+			reqInfo := tenantcostmodel.TestingRequestInfo(1, s.writeRequests, s.writeBytes, 1)
 			if s.writeRequests == 0 {
 				// Read-only request.
-				reqInfo = tenantcostmodel.TestingRequestInfo(0, 0, 0)
+				reqInfo = tenantcostmodel.TestingRequestInfo(0, 0, 0, 0)
 			}
 			s.reserveCh <- lims[0].Wait(s.ctx, reqInfo)
 		}()
@@ -326,7 +392,7 @@ func (ts *testState) recordRead(t *testing.T, d *datadriven.TestData) string {
 			d.Fatalf(t, "no outstanding limiters for %v", tid)
 		}
 		lims[0].RecordRead(
-			context.Background(), tenantcostmodel.TestingResponseInfo(true, r.ReadRequests, r.ReadBytes))
+			context.Background(), tenantcostmodel.TestingResponseInfo(true, r.ReadRequests, r.ReadBytes, 1))
 	}
 	return ts.FormatRunning()
 }

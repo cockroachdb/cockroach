@@ -4191,7 +4191,7 @@ type loggerSensitiveAccess struct{}
 // data access to sensitive data:
 //
 //   - Data access audit events (when table audit is enabled via
-//     [EXPERIMENTAL_AUDIT](experimental-audit.html))
+//     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4214,7 +4214,7 @@ var _ ChannelLogger = SensitiveAccess
 // data access to sensitive data:
 //
 //   - Data access audit events (when table audit is enabled via
-//     [EXPERIMENTAL_AUDIT](experimental-audit.html))
+//     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4237,7 +4237,7 @@ func (loggerSensitiveAccess) Infof(ctx context.Context, format string, args ...i
 // data access to sensitive data:
 //
 //   - Data access audit events (when table audit is enabled via
-//     [EXPERIMENTAL_AUDIT](experimental-audit.html))
+//     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4260,7 +4260,7 @@ func (loggerSensitiveAccess) VInfof(ctx context.Context, level Level, format str
 // data access to sensitive data:
 //
 //   - Data access audit events (when table audit is enabled via
-//     [EXPERIMENTAL_AUDIT](experimental-audit.html))
+//     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4282,7 +4282,7 @@ func (loggerSensitiveAccess) Info(ctx context.Context, msg string) {
 // data access to sensitive data:
 //
 //   - Data access audit events (when table audit is enabled via
-//     [EXPERIMENTAL_AUDIT](experimental-audit.html))
+//     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4303,7 +4303,7 @@ func (loggerSensitiveAccess) InfofDepth(ctx context.Context, depth int, format s
 // data access to sensitive data:
 //
 //   - Data access audit events (when table audit is enabled via
-//     [EXPERIMENTAL_AUDIT](experimental-audit.html))
+//     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4326,7 +4326,7 @@ func (loggerSensitiveAccess) Warningf(ctx context.Context, format string, args .
 // data access to sensitive data:
 //
 //   - Data access audit events (when table audit is enabled via
-//     [EXPERIMENTAL_AUDIT](experimental-audit.html))
+//     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4349,7 +4349,7 @@ func (loggerSensitiveAccess) VWarningf(ctx context.Context, level Level, format 
 // data access to sensitive data:
 //
 //   - Data access audit events (when table audit is enabled via
-//     [EXPERIMENTAL_AUDIT](experimental-audit.html))
+//     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4371,7 +4371,7 @@ func (loggerSensitiveAccess) Warning(ctx context.Context, msg string) {
 // data access to sensitive data:
 //
 //   - Data access audit events (when table audit is enabled via
-//     [EXPERIMENTAL_AUDIT](experimental-audit.html))
+//     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4392,7 +4392,7 @@ func (loggerSensitiveAccess) WarningfDepth(ctx context.Context, depth int, forma
 // data access to sensitive data:
 //
 //   - Data access audit events (when table audit is enabled via
-//     [EXPERIMENTAL_AUDIT](experimental-audit.html))
+//     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4416,7 +4416,7 @@ func (loggerSensitiveAccess) Errorf(ctx context.Context, format string, args ...
 // data access to sensitive data:
 //
 //   - Data access audit events (when table audit is enabled via
-//     [EXPERIMENTAL_AUDIT](experimental-audit.html))
+//     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4440,7 +4440,7 @@ func (loggerSensitiveAccess) VErrorf(ctx context.Context, level Level, format st
 // data access to sensitive data:
 //
 //   - Data access audit events (when table audit is enabled via
-//     [EXPERIMENTAL_AUDIT](experimental-audit.html))
+//     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4463,7 +4463,7 @@ func (loggerSensitiveAccess) Error(ctx context.Context, msg string) {
 // data access to sensitive data:
 //
 //   - Data access audit events (when table audit is enabled via
-//     [EXPERIMENTAL_AUDIT](experimental-audit.html))
+//     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4485,7 +4485,7 @@ func (loggerSensitiveAccess) ErrorfDepth(ctx context.Context, depth int, format 
 // data access to sensitive data:
 //
 //   - Data access audit events (when table audit is enabled via
-//     [EXPERIMENTAL_AUDIT](experimental-audit.html))
+//     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4509,7 +4509,7 @@ func (loggerSensitiveAccess) Fatalf(ctx context.Context, format string, args ...
 // data access to sensitive data:
 //
 //   - Data access audit events (when table audit is enabled via
-//     [EXPERIMENTAL_AUDIT](experimental-audit.html))
+//     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4533,7 +4533,7 @@ func (loggerSensitiveAccess) VFatalf(ctx context.Context, level Level, format st
 // data access to sensitive data:
 //
 //   - Data access audit events (when table audit is enabled via
-//     [EXPERIMENTAL_AUDIT](experimental-audit.html))
+//     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4556,7 +4556,7 @@ func (loggerSensitiveAccess) Fatal(ctx context.Context, msg string) {
 // data access to sensitive data:
 //
 //   - Data access audit events (when table audit is enabled via
-//     [EXPERIMENTAL_AUDIT](experimental-audit.html))
+//     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4577,7 +4577,7 @@ func (loggerSensitiveAccess) FatalfDepth(ctx context.Context, depth int, format 
 // data access to sensitive data:
 //
 //   - Data access audit events (when table audit is enabled via
-//     [EXPERIMENTAL_AUDIT](experimental-audit.html))
+//     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4595,7 +4595,7 @@ func (loggerSensitiveAccess) Shout(ctx context.Context, sev Severity, msg string
 // data access to sensitive data:
 //
 //   - Data access audit events (when table audit is enabled via
-//     [EXPERIMENTAL_AUDIT](experimental-audit.html))
+//     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4612,7 +4612,7 @@ func (loggerSensitiveAccess) Shoutf(ctx context.Context, sev Severity, format st
 // data access to sensitive data:
 //
 //   - Data access audit events (when table audit is enabled via
-//     [EXPERIMENTAL_AUDIT](experimental-audit.html))
+//     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4629,7 +4629,7 @@ func (loggerSensitiveAccess) VEvent(ctx context.Context, level Level, msg string
 // data access to sensitive data:
 //
 //   - Data access audit events (when table audit is enabled via
-//     [EXPERIMENTAL_AUDIT](experimental-audit.html))
+//     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4645,7 +4645,7 @@ func (loggerSensitiveAccess) VEventf(ctx context.Context, level Level, format st
 // data access to sensitive data:
 //
 //   - Data access audit events (when table audit is enabled via
-//     [EXPERIMENTAL_AUDIT](experimental-audit.html))
+//     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //

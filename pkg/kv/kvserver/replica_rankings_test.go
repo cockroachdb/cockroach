@@ -18,6 +18,9 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
+	aload "github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -47,7 +50,7 @@ func TestReplicaRankings(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		acc := rr.NewAccumulator()
+		acc := NewReplicaAccumulator(aload.Queries)
 
 		// Randomize the order of the inputs each time the test is run.
 		want := make([]float64, len(tc.replicasByQPS))
@@ -59,24 +62,24 @@ func TestReplicaRankings(t *testing.T) {
 		for i, replQPS := range tc.replicasByQPS {
 			acc.AddReplica(candidateReplica{
 				Replica: &Replica{RangeID: roachpb.RangeID(i)},
-				qps:     replQPS,
+				usage:   allocator.RangeUsageInfo{QueriesPerSecond: replQPS},
 			})
 		}
 		rr.Update(acc)
 
 		// Make sure we can read off all expected replicas in the correct order.
-		repls := rr.TopQPS()
+		repls := rr.TopLoad()
 		if len(repls) != len(want) {
 			t.Errorf("wrong number of replicas in output; got: %v; want: %v", repls, tc.replicasByQPS)
 			continue
 		}
 		for i := range want {
-			if repls[i].QPS() != want[i] {
-				t.Errorf("got %f for %d'th element; want %f (input: %v)", repls[i].QPS(), i, want, tc.replicasByQPS)
+			if repls[i].RangeUsageInfo().QueriesPerSecond != want[i] {
+				t.Errorf("got %f for %d'th element; want %f (input: %v)", repls[i].RangeUsageInfo().QueriesPerSecond, i, want, tc.replicasByQPS)
 				break
 			}
 		}
-		replsCopy := rr.TopQPS()
+		replsCopy := rr.TopLoad()
 		if !reflect.DeepEqual(repls, replsCopy) {
 			t.Errorf("got different replicas on second call to topQPS; first call: %v, second call: %v", repls, replsCopy)
 		}
@@ -162,15 +165,12 @@ func TestAddSSTQPSStat(t *testing.T) {
 		sqlDB.Exec(t, fmt.Sprintf(`SET CLUSTER setting kv.replica_stats.addsst_request_size_factor = %d`, testCase.addsstRequestFactor))
 
 		// Reset the request counts to 0 before sending to clear previous requests.
-		repl.loadStats.reset()
+		repl.loadStats.Reset()
 
 		_, pErr = db.NonTransactionalSender().Send(ctx, testCase.ba)
 		require.Nil(t, pErr)
 
-		repl.loadStats.batchRequests.Mu.Lock()
-		queriesAfter, _ := repl.loadStats.batchRequests.SumLocked()
-		repl.loadStats.batchRequests.Mu.Unlock()
-
+		queriesAfter := repl.loadStats.TestingGetSum(load.Queries)
 		// If queries are correctly recorded, we should see increase in query
 		// count by the expected QPS. However, it is possible to to get a
 		// slightly higher number due to interleaving requests. To avoid a
@@ -194,11 +194,6 @@ func genVariableRead(ctx context.Context, start, end roachpb.Key) *roachpb.Batch
 func assertGreaterThanInDelta(t *testing.T, expected float64, actual float64, delta float64) {
 	require.GreaterOrEqual(t, actual, expected)
 	require.InDelta(t, expected, actual, delta)
-}
-
-func headVal(f func() (float64, int)) float64 {
-	ret, _ := f()
-	return ret
 }
 
 func TestWriteLoadStatsAccounting(t *testing.T) {
@@ -257,27 +252,13 @@ func TestWriteLoadStatsAccounting(t *testing.T) {
 		// should succeed soon, if it fails on the first.
 		testutils.SucceedsSoon(t, func() error {
 			// Reset the request counts to 0 before sending to clear previous requests.
-			repl.loadStats.reset()
+			repl.loadStats.Reset()
 
-			repl.loadStats.requests.Mu.Lock()
-			repl.loadStats.writeKeys.Mu.Lock()
-			repl.loadStats.readKeys.Mu.Lock()
-			repl.loadStats.writeBytes.Mu.Lock()
-			repl.loadStats.readBytes.Mu.Lock()
-			repl.loadStats.batchRequests.Mu.Lock()
-
-			requestsBefore := headVal(repl.loadStats.requests.SumLocked)
-			writesBefore := headVal(repl.loadStats.writeKeys.SumLocked)
-			readsBefore := headVal(repl.loadStats.readKeys.SumLocked)
-			readBytesBefore := headVal(repl.loadStats.readBytes.SumLocked)
-			writeBytesBefore := headVal(repl.loadStats.writeBytes.SumLocked)
-
-			repl.loadStats.requests.Mu.Unlock()
-			repl.loadStats.writeKeys.Mu.Unlock()
-			repl.loadStats.readKeys.Mu.Unlock()
-			repl.loadStats.writeBytes.Mu.Unlock()
-			repl.loadStats.readBytes.Mu.Unlock()
-			repl.loadStats.batchRequests.Mu.Unlock()
+			requestsBefore := repl.loadStats.TestingGetSum(load.Requests)
+			writesBefore := repl.loadStats.TestingGetSum(load.WriteKeys)
+			readsBefore := repl.loadStats.TestingGetSum(load.ReadKeys)
+			readBytesBefore := repl.loadStats.TestingGetSum(load.ReadBytes)
+			writeBytesBefore := repl.loadStats.TestingGetSum(load.WriteBytes)
 
 			for i := 0; i < testCase.writes; i++ {
 				_, pErr := db.Inc(ctx, scratchKey, 1)
@@ -289,25 +270,11 @@ func TestWriteLoadStatsAccounting(t *testing.T) {
 			require.Equal(t, 0.0, writeBytesBefore)
 			require.Equal(t, 0.0, readBytesBefore)
 
-			repl.loadStats.requests.Mu.Lock()
-			repl.loadStats.writeKeys.Mu.Lock()
-			repl.loadStats.readKeys.Mu.Lock()
-			repl.loadStats.writeBytes.Mu.Lock()
-			repl.loadStats.readBytes.Mu.Lock()
-			repl.loadStats.batchRequests.Mu.Lock()
-
-			requestsAfter := headVal(repl.loadStats.requests.SumLocked)
-			writesAfter := headVal(repl.loadStats.writeKeys.SumLocked)
-			readsAfter := headVal(repl.loadStats.readKeys.SumLocked)
-			readBytesAfter := headVal(repl.loadStats.readBytes.SumLocked)
-			writeBytesAfter := headVal(repl.loadStats.writeBytes.SumLocked)
-
-			repl.loadStats.requests.Mu.Unlock()
-			repl.loadStats.writeKeys.Mu.Unlock()
-			repl.loadStats.readKeys.Mu.Unlock()
-			repl.loadStats.writeBytes.Mu.Unlock()
-			repl.loadStats.readBytes.Mu.Unlock()
-			repl.loadStats.batchRequests.Mu.Unlock()
+			requestsAfter := repl.loadStats.TestingGetSum(load.Requests)
+			writesAfter := repl.loadStats.TestingGetSum(load.WriteKeys)
+			readsAfter := repl.loadStats.TestingGetSum(load.ReadKeys)
+			readBytesAfter := repl.loadStats.TestingGetSum(load.ReadBytes)
+			writeBytesAfter := repl.loadStats.TestingGetSum(load.WriteBytes)
 
 			assertGreaterThanInDelta(t, testCase.expectedRQPS, requestsAfter, epsilonAllowed)
 			assertGreaterThanInDelta(t, testCase.expectedWPS, writesAfter, epsilonAllowed)
@@ -417,27 +384,13 @@ func TestReadLoadMetricAccounting(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
 			// Reset the request counts to 0 before sending to clear previous requests.
 			// Reset the request counts to 0 before sending to clear previous requests.
-			repl.loadStats.reset()
+			repl.loadStats.Reset()
 
-			repl.loadStats.requests.Mu.Lock()
-			repl.loadStats.writeKeys.Mu.Lock()
-			repl.loadStats.readKeys.Mu.Lock()
-			repl.loadStats.writeBytes.Mu.Lock()
-			repl.loadStats.readBytes.Mu.Lock()
-			repl.loadStats.batchRequests.Mu.Lock()
-
-			requestsBefore := headVal(repl.loadStats.requests.SumLocked)
-			writesBefore := headVal(repl.loadStats.writeKeys.SumLocked)
-			readsBefore := headVal(repl.loadStats.readKeys.SumLocked)
-			readBytesBefore := headVal(repl.loadStats.readBytes.SumLocked)
-			writeBytesBefore := headVal(repl.loadStats.writeBytes.SumLocked)
-
-			repl.loadStats.requests.Mu.Unlock()
-			repl.loadStats.writeKeys.Mu.Unlock()
-			repl.loadStats.readKeys.Mu.Unlock()
-			repl.loadStats.writeBytes.Mu.Unlock()
-			repl.loadStats.readBytes.Mu.Unlock()
-			repl.loadStats.batchRequests.Mu.Unlock()
+			requestsBefore := repl.loadStats.TestingGetSum(load.Requests)
+			writesBefore := repl.loadStats.TestingGetSum(load.WriteKeys)
+			readsBefore := repl.loadStats.TestingGetSum(load.ReadKeys)
+			readBytesBefore := repl.loadStats.TestingGetSum(load.ReadBytes)
+			writeBytesBefore := repl.loadStats.TestingGetSum(load.WriteBytes)
 
 			_, pErr = db.NonTransactionalSender().Send(ctx, testCase.ba)
 			require.Nil(t, pErr)
@@ -448,25 +401,11 @@ func TestReadLoadMetricAccounting(t *testing.T) {
 			require.Equal(t, 0.0, writeBytesBefore)
 			require.Equal(t, 0.0, readBytesBefore)
 
-			repl.loadStats.requests.Mu.Lock()
-			repl.loadStats.writeKeys.Mu.Lock()
-			repl.loadStats.readKeys.Mu.Lock()
-			repl.loadStats.writeBytes.Mu.Lock()
-			repl.loadStats.readBytes.Mu.Lock()
-			repl.loadStats.batchRequests.Mu.Lock()
-
-			requestsAfter := headVal(repl.loadStats.requests.SumLocked)
-			writesAfter := headVal(repl.loadStats.writeKeys.SumLocked)
-			readsAfter := headVal(repl.loadStats.readKeys.SumLocked)
-			readBytesAfter := headVal(repl.loadStats.readBytes.SumLocked)
-			writeBytesAfter := headVal(repl.loadStats.writeBytes.SumLocked)
-
-			repl.loadStats.requests.Mu.Unlock()
-			repl.loadStats.writeKeys.Mu.Unlock()
-			repl.loadStats.readKeys.Mu.Unlock()
-			repl.loadStats.writeBytes.Mu.Unlock()
-			repl.loadStats.readBytes.Mu.Unlock()
-			repl.loadStats.batchRequests.Mu.Unlock()
+			requestsAfter := repl.loadStats.TestingGetSum(load.Requests)
+			writesAfter := repl.loadStats.TestingGetSum(load.WriteKeys)
+			readsAfter := repl.loadStats.TestingGetSum(load.ReadKeys)
+			readBytesAfter := repl.loadStats.TestingGetSum(load.ReadBytes)
+			writeBytesAfter := repl.loadStats.TestingGetSum(load.WriteBytes)
 
 			assertGreaterThanInDelta(t, testCase.expectedRQPS, requestsAfter, epsilonAllowed)
 			assertGreaterThanInDelta(t, testCase.expectedWPS, writesAfter, epsilonAllowed)
@@ -506,7 +445,7 @@ func TestNewReplicaRankingsMap(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		acc := rr.NewAccumulator()
+		acc := NewTenantReplicaAccumulator()
 
 		// Randomize the order of the inputs each time the test is run.
 		rand.Shuffle(len(tc), func(i, j int) {
@@ -518,7 +457,7 @@ func TestNewReplicaRankingsMap(t *testing.T) {
 		for i, c := range tc {
 			cr := candidateReplica{
 				Replica: &Replica{RangeID: roachpb.RangeID(i)},
-				qps:     c.qps,
+				usage:   allocator.RangeUsageInfo{QueriesPerSecond: c.qps},
 			}
 			cr.mu.tenantID = roachpb.MustMakeTenantID(c.tenantID)
 			acc.AddReplica(cr)
@@ -542,8 +481,8 @@ func TestNewReplicaRankingsMap(t *testing.T) {
 				continue
 			}
 			for i := 0; i < len(repls)-1; i++ {
-				if repls[i].QPS() < repls[i+1].QPS() {
-					t.Errorf("got %f for %d'th element; it's smaller than QPS of the next element %f", repls[i].QPS(), i, repls[i+1].QPS())
+				if repls[i].RangeUsageInfo().QueriesPerSecond < repls[i+1].RangeUsageInfo().QueriesPerSecond {
+					t.Errorf("got %f for %d'th element; it's smaller than QPS of the next element %f", repls[i].RangeUsageInfo().QueriesPerSecond, i, repls[i+1].RangeUsageInfo().QueriesPerSecond)
 					break
 				}
 			}

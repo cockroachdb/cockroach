@@ -30,9 +30,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -48,7 +48,7 @@ func TestMaybeRefreshStats(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer sqlDB.Close()
 	defer s.Stopper().Stop(ctx)
 
@@ -66,14 +66,12 @@ func TestMaybeRefreshStats(t *testing.T) {
 		INSERT INTO t.a VALUES (1);
 		CREATE VIEW t.vw AS SELECT k, k+1 FROM t.a;`)
 
-	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
+	executor := s.InternalExecutor().(isql.Executor)
 	descA := desctestutils.TestingGetPublicTableDescriptor(s.DB(), keys.SystemSQLCodec, "t", "a")
 	cache := NewTableStatisticsCache(
 		10, /* cacheSize */
-		kvDB,
-		executor,
 		s.ClusterSettings(),
-		s.InternalExecutorFactory().(descs.TxnManager),
+		s.InternalDB().(descs.DB),
 	)
 	require.NoError(t, cache.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
 	refresher := MakeRefresher(s.AmbientCtx(), st, executor, cache, time.Microsecond /* asOfTime */)
@@ -181,7 +179,7 @@ func TestEnsureAllTablesQueries(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer sqlDB.Close()
 	defer s.Stopper().Stop(ctx)
 
@@ -194,13 +192,11 @@ func TestEnsureAllTablesQueries(t *testing.T) {
 
 	sqlRun.Exec(t, `CREATE TABLE t.b (k INT PRIMARY KEY);`)
 
-	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
+	executor := s.InternalExecutor().(isql.Executor)
 	cache := NewTableStatisticsCache(
 		10, /* cacheSize */
-		kvDB,
-		executor,
 		s.ClusterSettings(),
-		s.InternalExecutorFactory().(descs.TxnManager),
+		s.InternalDB().(descs.DB),
 	)
 	require.NoError(t, cache.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
 	r := MakeRefresher(s.AmbientCtx(), st, executor, cache, time.Microsecond /* asOfTime */)
@@ -283,7 +279,7 @@ func TestAverageRefreshTime(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer sqlDB.Close()
 	defer s.Stopper().Stop(ctx)
 
@@ -299,14 +295,12 @@ func TestAverageRefreshTime(t *testing.T) {
 		CREATE TABLE t.a (k INT PRIMARY KEY);
 		INSERT INTO t.a VALUES (1);`)
 
-	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
+	executor := s.InternalExecutor().(isql.Executor)
 	table := desctestutils.TestingGetPublicTableDescriptor(s.DB(), keys.SystemSQLCodec, "t", "a")
 	cache := NewTableStatisticsCache(
 		10, /* cacheSize */
-		kvDB,
-		executor,
 		s.ClusterSettings(),
-		s.InternalExecutorFactory().(descs.TxnManager),
+		s.InternalDB().(descs.DB),
 	)
 	require.NoError(t, cache.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
 	refresher := MakeRefresher(s.AmbientCtx(), st, executor, cache, time.Microsecond /* asOfTime */)
@@ -322,8 +316,8 @@ func TestAverageRefreshTime(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			if actual := avgRefreshTime(stats).Round(time.Minute); actual != expected {
-				return fmt.Errorf("expected avgRefreshTime %s but found %s",
+			if actual := avgFullRefreshTime(stats).Round(time.Minute); actual != expected {
+				return fmt.Errorf("expected avgFullRefreshTime %s but found %s",
 					expected.String(), actual.String())
 			}
 			return nil
@@ -356,7 +350,7 @@ func TestAverageRefreshTime(t *testing.T) {
 		})
 	}
 
-	// Since there are no stats yet, avgRefreshTime should return the default
+	// Since there are no stats yet, avgFullRefreshTime should return the default
 	// value.
 	if err := checkAverageRefreshTime(defaultAverageTimeBetweenRefreshes); err != nil {
 		t.Fatal(err)
@@ -416,7 +410,7 @@ func TestAverageRefreshTime(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// None of the stats have the name AutoStatsName, so avgRefreshTime
+	// None of the stats have the name AutoStatsName, so avgFullRefreshTime
 	// should still return the default value.
 	if err := checkAverageRefreshTime(defaultAverageTimeBetweenRefreshes); err != nil {
 		t.Fatal(err)
@@ -529,7 +523,7 @@ func TestAutoStatsReadOnlyTables(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer sqlDB.Close()
 	defer s.Stopper().Stop(ctx)
 
@@ -548,13 +542,11 @@ func TestAutoStatsReadOnlyTables(t *testing.T) {
 		`CREATE SCHEMA my_schema;
 		CREATE TABLE my_schema.b (j INT PRIMARY KEY);`)
 
-	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
+	executor := s.InternalExecutor().(isql.Executor)
 	cache := NewTableStatisticsCache(
 		10, /* cacheSize */
-		kvDB,
-		executor,
 		s.ClusterSettings(),
-		s.InternalExecutorFactory().(descs.TxnManager),
+		s.InternalDB().(descs.DB),
 	)
 	require.NoError(t, cache.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
 	refresher := MakeRefresher(s.AmbientCtx(), st, executor, cache, time.Microsecond /* asOfTime */)
@@ -587,7 +579,7 @@ func TestAutoStatsOnStartupClusterSettingOff(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer sqlDB.Close()
 	defer s.Stopper().Stop(ctx)
 
@@ -605,13 +597,11 @@ func TestAutoStatsOnStartupClusterSettingOff(t *testing.T) {
 		ALTER TABLE t.b SET (sql_stats_automatic_collection_enabled = false);
 		CREATE TABLE t.c (k INT PRIMARY KEY);`)
 
-	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
+	executor := s.InternalExecutor().(isql.Executor)
 	cache := NewTableStatisticsCache(
 		10, /* cacheSize */
-		kvDB,
-		executor,
 		s.ClusterSettings(),
-		s.InternalExecutorFactory().(descs.TxnManager),
+		s.InternalDB().(descs.DB),
 	)
 	require.NoError(t, cache.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
 	refresher := MakeRefresher(s.AmbientCtx(), st, executor, cache, time.Microsecond /* asOfTime */)
@@ -646,20 +636,18 @@ func TestNoRetryOnFailure(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.NewTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
-	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
+	executor := s.InternalExecutor().(isql.Executor)
 	cache := NewTableStatisticsCache(
 		10, /* cacheSize */
-		kvDB,
-		executor,
 		s.ClusterSettings(),
-		s.InternalExecutorFactory().(descs.TxnManager),
+		s.InternalDB().(descs.DB),
 	)
 	require.NoError(t, cache.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
 	r := MakeRefresher(s.AmbientCtx(), st, executor, cache, time.Microsecond /* asOfTime */)
@@ -763,20 +751,18 @@ func TestAnalyzeSystemTables(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
 	st := cluster.MakeTestingClusterSettings()
 	AutomaticStatisticsClusterMode.Override(ctx, &st.SV, false)
 	evalCtx := eval.NewTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
-	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
+	executor := s.InternalExecutor().(isql.Executor)
 	cache := NewTableStatisticsCache(
 		10, /* cacheSize */
-		kvDB,
-		executor,
 		s.ClusterSettings(),
-		s.InternalExecutorFactory().(descs.TxnManager),
+		s.InternalDB().(descs.DB),
 	)
 	require.NoError(t, cache.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
 	var tableNames []string

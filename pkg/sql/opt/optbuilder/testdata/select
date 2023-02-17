@@ -1029,6 +1029,11 @@ project
 build
 SELECT @1 AS r, @2 AS s FROM a
 ----
+error (01P01): invalid syntax @1
+
+build set=allow_ordinal_column_references=true
+SELECT @1 AS r, @2 AS s FROM a
+----
 project
  ├── columns: r:5!null s:6
  ├── scan a

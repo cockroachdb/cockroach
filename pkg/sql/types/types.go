@@ -650,9 +650,15 @@ var (
 	AnyEnumArray = &T{InternalType: InternalType{
 		Family: ArrayFamily, ArrayContents: AnyEnum, Oid: oid.T_anyarray, Locale: &emptyLocale}}
 
-	// JSONArray is the type of an array value having JSON-typed elements.
-	JSONArray = &T{InternalType: InternalType{
+	// JSONBArray is the type of an array value having JSONB-typed elements.
+	JSONBArray = &T{InternalType: InternalType{
 		Family: ArrayFamily, ArrayContents: Jsonb, Oid: oid.T__jsonb, Locale: &emptyLocale}}
+
+	// JSONArrayForDecodingOnly is the type of an array value having JSON-typed elements.
+	// Note that this struct can only used for decoding an input as we don't fully
+	// support the json array yet.
+	JSONArrayForDecodingOnly = &T{InternalType: InternalType{
+		Family: ArrayFamily, ArrayContents: Json, Oid: oid.T__json, Locale: &emptyLocale}}
 
 	// Int2Vector is a type-alias for an array of Int2 values with a different
 	// OID (T_int2vector instead of T__int2). It is a special VECTOR type used
@@ -1179,9 +1185,9 @@ func MakeLabeledTuple(contents []*T, labels []string) *T {
 	}}
 }
 
-// MakeCompositeType constructs a new instance of a TupleFamily type with the
+// NewCompositeType constructs a new instance of a TupleFamily type with the
 // given field types and labels, and the given user-defined type OIDs.
-func MakeCompositeType(typeOID, arrayTypeOID oid.Oid, contents []*T, labels []string) *T {
+func NewCompositeType(typeOID, arrayTypeOID oid.Oid, contents []*T, labels []string) *T {
 	if len(contents) != len(labels) && labels != nil {
 		panic(errors.AssertionFailedf(
 			"tuple contents and labels must be of same length: %v, %v", contents, labels))
@@ -1366,11 +1372,15 @@ func (t *T) WithoutTypeModifiers() *T {
 
 	typ, ok := OidToType[t.Oid()]
 	if !ok {
+		// These special cases for json, json[] is here so we can
+		// support decoding parameters with oid=json/json[] without
+		// adding full support for these type.
+		// TODO(sql-exp): Remove this if we support JSON.
 		if t.Oid() == oid.T_json {
-			// This special case is here so we can support decoding parameters
-			// with oid=json without adding full support for the JSON type.
-			// TODO(sql-exp): Remove this if we support JSON.
 			return Jsonb
+		}
+		if t.Oid() == oid.T__json {
+			return JSONArrayForDecodingOnly
 		}
 		panic(errors.AssertionFailedf("unexpected OID: %d", t.Oid()))
 	}

@@ -328,7 +328,16 @@ func (f *rowBasedFlow) setupInputSyncs(
 				if is.Type == execinfrapb.InputSyncSpec_ORDERED {
 					ordering = execinfrapb.ConvertToColumnOrdering(is.Ordering)
 				}
-				sync, err = makeSerialSync(ordering, f.EvalCtx, streams)
+				var returnErrorFunc func() error
+				if is.EnforceHomeRegionError != nil {
+					returnErrorFunc = func() error {
+						return is.EnforceHomeRegionError.ErrorDetail(ctx)
+					}
+				}
+				sync, err = makeSerialSync(ordering, f.EvalCtx, streams,
+					is.EnforceHomeRegionStreamExclusiveUpperBound,
+					returnErrorFunc,
+				)
 				if err != nil {
 					return nil, err
 				}
@@ -439,6 +448,9 @@ func (f *rowBasedFlow) Release() {
 
 // Cleanup is part of the flowinfra.Flow interface.
 func (f *rowBasedFlow) Cleanup(ctx context.Context) {
+	startCleanup, endCleanup := f.FlowBase.GetOnCleanupFns()
+	startCleanup()
+	defer endCleanup()
 	f.FlowBase.Cleanup(ctx)
 	f.Release()
 }

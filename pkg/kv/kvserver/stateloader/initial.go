@@ -47,7 +47,6 @@ func WriteInitialReplicaState(
 	gcThreshold hlc.Timestamp,
 	gcHint roachpb.GCHint,
 	replicaVersion roachpb.Version,
-	gcHintsAllowed bool,
 ) (enginepb.MVCCStats, error) {
 	rsl := Make(desc.RangeID)
 	var s kvserverpb.ReplicaState
@@ -92,7 +91,7 @@ func WriteInitialReplicaState(
 		log.Fatalf(ctx, "expected trivial version, but found %+v", existingVersion)
 	}
 
-	newMS, err := rsl.Save(ctx, readWriter, s, gcHintsAllowed)
+	newMS, err := rsl.Save(ctx, readWriter, s)
 	if err != nil {
 		return enginepb.MVCCStats{}, err
 	}
@@ -116,7 +115,7 @@ func WriteInitialRangeState(
 
 	if _, err := WriteInitialReplicaState(
 		ctx, readWriter, initialMS, desc, initialLease, initialGCThreshold, initialGCHint,
-		replicaVersion, true, /* 22.2: GCHintInReplicaState */
+		replicaVersion,
 	); err != nil {
 		return err
 	}

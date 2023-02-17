@@ -44,8 +44,11 @@ func CheckDestinationPrivileges(ctx context.Context, p sql.PlanHookState, to []s
 		// Check if the destination requires the user to be an admin or have the
 		// `EXTERNALIOIMPLICITACCESS` privilege.
 		requiresImplicitAccess := !conf.AccessIsWithExplicitAuth()
-		hasImplicitAccessPrivilege :=
-			p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.EXTERNALIOIMPLICITACCESS) == nil
+		hasImplicitAccessPrivilege, privErr :=
+			p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.EXTERNALIOIMPLICITACCESS, p.User())
+		if privErr != nil {
+			return privErr
+		}
 		if requiresImplicitAccess && !(p.ExecCfg().ExternalIODirConfig.EnableNonAdminImplicitAndArbitraryOutbound || hasImplicitAccessPrivilege) {
 			return pgerror.Newf(
 				pgcode.InsufficientPrivilege,
@@ -56,10 +59,10 @@ func CheckDestinationPrivileges(ctx context.Context, p sql.PlanHookState, to []s
 		// If the resource being used is an External Connection, check that the user
 		// has adequate privileges.
 		if conf.Provider == cloudpb.ExternalStorageProvider_external {
-			if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V22_2SystemExternalConnectionsTable) {
+			if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.TODODelete_V22_2SystemExternalConnectionsTable) {
 				return pgerror.Newf(pgcode.FeatureNotSupported,
 					"version %v must be finalized to backup to an External Connection",
-					clusterversion.ByKey(clusterversion.V22_2SystemExternalConnectionsTable))
+					clusterversion.ByKey(clusterversion.TODODelete_V22_2SystemExternalConnectionsTable))
 			}
 			ecPrivilege := &syntheticprivilege.ExternalConnectionPrivilege{
 				ConnectionName: conf.ExternalConnectionConfig.Name,

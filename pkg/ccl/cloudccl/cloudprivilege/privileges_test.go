@@ -113,9 +113,19 @@ func TestURIRequiresAdminOrPrivilege(t *testing.T) {
 			isAPrivilegedOperation: false,
 		},
 		{
-			name:                   "azure",
+			name:                   "azure-legacy",
 			uri:                    "azure://foo/bar?AZURE_ACCOUNT_NAME=random&AZURE_ACCOUNT_KEY=random",
 			isAPrivilegedOperation: false,
+		},
+		{
+			name:                   "azure-specified",
+			uri:                    "azure://foo/bar?AUTH=specified&AZURE_ACCOUNT_NAME=random&AZURE_CLIENT_ID=id&AZURE_CLIENT_SECRET=sec&AZURE_TENANT_ID=ten",
+			isAPrivilegedOperation: false,
+		},
+		{
+			name:                   "azure-implicit",
+			uri:                    "azure://foo/bar?AUTH=implicit&AZURE_ACCOUNT_NAME=random",
+			isAPrivilegedOperation: true,
 		},
 	} {
 		t.Run(tc.name+"-via-import", func(t *testing.T) {

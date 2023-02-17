@@ -88,6 +88,10 @@ const (
 	SystemExternalConnectionsTableName     SystemTableName = "external_connections"
 	RoleIDSequenceName                     SystemTableName = "role_id_seq"
 	SystemJobInfoTableName                 SystemTableName = "job_info"
+	SpanStatsUniqueKeys                    SystemTableName = "span_stats_unique_keys"
+	SpanStatsBuckets                       SystemTableName = "span_stats_buckets"
+	SpanStatsSamples                       SystemTableName = "span_stats_samples"
+	SpanStatsTenantBoundaries              SystemTableName = "span_stats_tenant_boundaries"
 )
 
 // Oid for virtual database and table.
@@ -106,6 +110,8 @@ const (
 	CrdbInternalClusterContentionEventsTableID
 	CrdbInternalClusterDistSQLFlowsTableID
 	CrdbInternalClusterExecutionInsightsTableID
+	CrdbInternalClusterTxnExecutionInsightsTableID
+	CrdbInternalNodeTxnExecutionInsightsTableID
 	CrdbInternalClusterLocksTableID
 	CrdbInternalClusterQueriesTableID
 	CrdbInternalClusterTransactionsTableID
@@ -127,9 +133,11 @@ const (
 	CrdbInternalGossipNetworkTableID
 	CrdbInternalTransactionContentionEvents
 	CrdbInternalIndexColumnsTableID
+	CrdbInternalIndexSpansTableID
 	CrdbInternalIndexUsageStatisticsTableID
 	CrdbInternalInflightTraceSpanTableID
 	CrdbInternalJobsTableID
+	CrdbInternalSystemJobsTableID
 	CrdbInternalKVNodeStatusTableID
 	CrdbInternalKVStoreStatusTableID
 	CrdbInternalLeasesTableID
@@ -152,6 +160,7 @@ const (
 	CrdbInternalStmtStatsTableID
 	CrdbInternalTableColumnsTableID
 	CrdbInternalTableIndexesTableID
+	CrdbInternalTableSpansTableID
 	CrdbInternalTablesTableID
 	CrdbInternalTablesTableLastStatsID
 	CrdbInternalTransactionStatsTableID
@@ -168,6 +177,7 @@ const (
 	CrdbInternalTenantUsageDetailsViewID
 	CrdbInternalPgCatalogTableIsImplementedTableID
 	CrdbInternalSuperRegions
+	CrdbInternalDroppedRelationsViewID
 	InformationSchemaID
 	InformationSchemaAdministrableRoleAuthorizationsID
 	InformationSchemaApplicableRolesID
@@ -391,3 +401,22 @@ const (
 	PgExtensionSpatialRefSysTableID
 	MinVirtualID = PgExtensionSpatialRefSysTableID
 )
+
+// ConstraintType is used to identify the type of a constraint.
+type ConstraintType string
+
+const (
+	// ConstraintTypePK identifies a PRIMARY KEY constraint.
+	ConstraintTypePK ConstraintType = "PRIMARY KEY"
+	// ConstraintTypeFK identifies a FOREIGN KEY constraint.
+	ConstraintTypeFK ConstraintType = "FOREIGN KEY"
+	// ConstraintTypeUnique identifies a UNIQUE constraint.
+	ConstraintTypeUnique ConstraintType = "UNIQUE"
+	// ConstraintTypeCheck identifies a CHECK constraint.
+	ConstraintTypeCheck ConstraintType = "CHECK"
+	// ConstraintTypeUniqueWithoutIndex identifies a UNIQUE_WITHOUT_INDEX constraint.
+	ConstraintTypeUniqueWithoutIndex ConstraintType = "UNIQUE WITHOUT INDEX"
+)
+
+// SafeValue implements the redact.SafeValue interface.
+func (ConstraintType) SafeValue() {}

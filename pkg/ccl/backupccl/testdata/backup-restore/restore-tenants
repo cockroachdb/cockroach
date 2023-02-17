@@ -15,15 +15,15 @@ SELECT crdb_internal.create_tenant(6);
 
 # Drop one of them.
 exec-sql
-SELECT crdb_internal.destroy_tenant(5);
+ALTER TENANT [5] STOP SERVICE; DROP TENANT [5]
 ----
 
 query-sql
-SELECT id,active,crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) FROM system.tenants;
+SELECT id,name,data_state,service_mode,active,crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true) FROM system.tenants;
 ----
-1 true {"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-5 false {"droppedName": "", "id": "5", "name": "", "state": "DROP", "tenantReplicationJobId": "0"}
-6 true {"droppedName": "", "id": "6", "name": "", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+1 system 1 2 true {"capabilities": {"canAdminSplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false}, "deprecatedDataState": "READY", "deprecatedId": "1", "droppedName": "", "tenantReplicationJobId": "0"}
+5 <nil> 2 0 false {"capabilities": {"canAdminSplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false}, "deprecatedDataState": "DROP", "deprecatedId": "5", "droppedName": "tenant-5", "tenantReplicationJobId": "0"}
+6 tenant-6 1 1 true {"capabilities": {"canAdminSplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false}, "deprecatedDataState": "READY", "deprecatedId": "6", "droppedName": "", "tenantReplicationJobId": "0"}
 
 exec-sql
 BACKUP INTO 'nodelocal://1/cluster'
@@ -42,25 +42,92 @@ new-cluster name=s2 share-io-dir=s1 disable-tenant
 ----
 
 exec-sql
+USE system;
+----
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.before_flow'
+----
+
+restore expect-pausepoint tag=a
 RESTORE FROM LATEST IN 'nodelocal://1/cluster'
+----
+job paused at pausepoint
+
+# Application tenants backed up in an ACTIVE state should be moved to an ADD
+# state during restore.
+query-sql
+SELECT id,active,crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true) FROM system.tenants;
+----
+1 true {"capabilities": {"canAdminSplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false}, "deprecatedDataState": "READY", "deprecatedId": "1", "droppedName": "", "tenantReplicationJobId": "0"}
+6 false {"capabilities": {"canAdminSplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false}, "deprecatedDataState": "ADD", "deprecatedId": "6", "droppedName": "", "tenantReplicationJobId": "0"}
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = ''
+----
+
+job resume=a
+----
+
+job tag=a wait-for-state=succeeded
+----
+
+exec-sql
+USE defaultdb;
 ----
 
 # A dropped tenant should be restored as an inactive tenant.
 query-sql
-SELECT id,active,crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) FROM system.tenants;
+SELECT id,name,data_state,service_mode,active,crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true) FROM system.tenants;
 ----
-1 true {"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-5 false {"droppedName": "", "id": "5", "name": "", "state": "DROP", "tenantReplicationJobId": "0"}
-6 true {"droppedName": "", "id": "6", "name": "", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+1 system 1 2 true {"capabilities": {"canAdminSplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false}, "deprecatedDataState": "READY", "deprecatedId": "1", "droppedName": "", "tenantReplicationJobId": "0"}
+6 tenant-6 1 1 true {"capabilities": {"canAdminSplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false}, "deprecatedDataState": "READY", "deprecatedId": "6", "droppedName": "", "tenantReplicationJobId": "0"}
+
+exec-sql expect-error-regex=(tenant 6 already exists)
+RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/tenant6';
+----
+regex matches error
+
+exec-sql expect-error-regex=(invalid tenant name)
+RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/tenant6' WITH tenant_name = 'invalid_name';
+----
+regex matches error
+
+exec-sql expect-error-regex=(tenant with name "tenant-6" already exists)
+RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/tenant6' WITH tenant_name = 'tenant-6';
+----
+regex matches error
 
 exec-sql
-RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/tenant6' WITH tenant = '7';
+RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/tenant6' WITH tenant_name = 'newname';
 ----
 
 query-sql
-SELECT id,active,crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) FROM system.tenants;
+SELECT id,name,data_state,service_mode,active,crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true) FROM system.tenants;
 ----
-1 true {"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-5 false {"droppedName": "", "id": "5", "name": "", "state": "DROP", "tenantReplicationJobId": "0"}
-6 true {"droppedName": "", "id": "6", "name": "", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-7 true {"droppedName": "", "id": "7", "name": "", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+1 system 1 2 true {"capabilities": {"canAdminSplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false}, "deprecatedDataState": "READY", "deprecatedId": "1", "droppedName": "", "tenantReplicationJobId": "0"}
+2 newname 1 1 true {"capabilities": {"canAdminSplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false}, "deprecatedDataState": "READY", "deprecatedId": "2", "droppedName": "", "tenantReplicationJobId": "0"}
+6 tenant-6 1 1 true {"capabilities": {"canAdminSplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false}, "deprecatedDataState": "READY", "deprecatedId": "6", "droppedName": "", "tenantReplicationJobId": "0"}
+
+# Check that another service mode is also preserved.
+exec-sql
+ALTER TENANT newname STOP SERVICE; ALTER TENANT newname START SERVICE SHARED
+----
+
+query-sql
+SELECT id,name,service_mode FROM system.tenants WHERE name = 'newname';
+----
+2 newname 2
+
+exec-sql
+BACKUP TENANT 2 INTO 'nodelocal://1/tenant2'
+----
+
+exec-sql
+RESTORE TENANT 2 FROM LATEST IN 'nodelocal://1/tenant2' WITH tenant_name = 'another-name';
+----
+
+query-sql
+SELECT id,name,service_mode FROM system.tenants WHERE name = 'another-name';
+----
+3 another-name 2

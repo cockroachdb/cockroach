@@ -105,3 +105,46 @@ message CertsReload {
   // If an error was encountered, the text of the error.
   string error_message = 3 [(gogoproto.jsontag) = ",omitempty"];
 }
+
+// CommonSharedServiceEventDetails contains the fields common to all
+// tenant shared server events.
+//
+// Notes to CockroachDB maintainers: refer to doc.go at the package
+// level for more details. Beware that JSON compatibility rules apply
+// here, not protobuf.
+// *Really look at doc.go before modifying this.*
+message CommonSharedServiceEventDetails {
+  // The node ID where the event was originated.
+  int32 node_id = 1 [(gogoproto.customname) = "NodeID", (gogoproto.jsontag) = ",omitempty"];
+
+  // The ID of the tenant owning the service.
+  uint64 tenant_id = 2 [(gogoproto.customname) = "TenantID", (gogoproto.jsontag) = ",omitempty"];
+
+  // The ID of the server instance.
+  int32 instance_id = 3 [(gogoproto.customname) = "InstanceID", (gogoproto.jsontag) = ",omitempty"];
+
+  // The name of the tenant at the time the event was emitted.
+  string tenant_name = 4 [(gogoproto.jsontag) = ",omitempty"];
+}
+
+// TenantSharedServiceStart is recorded when a tenant server
+// is started inside the same process as the KV layer.
+message TenantSharedServiceStart {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+
+  CommonSharedServiceEventDetails shared = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+
+  // Whether the startup was successful.
+  bool ok = 3 [(gogoproto.customname) = "OK", (gogoproto.jsontag) = ",omitempty"];
+
+  // If the startup failed, the text of the error.
+  string error_text = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString", (gogoproto.nullable) = false, (gogoproto.moretags) = "redact:\"mixed\""];  
+}
+
+// TenantSharedServiceStop is recorded when a tenant server
+// is shut down inside the same process as the KV layer.
+message TenantSharedServiceStop {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+
+  CommonSharedServiceEventDetails shared = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}

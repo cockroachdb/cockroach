@@ -17,14 +17,13 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -90,12 +89,12 @@ func (e *externalConnectionNotFoundError) Error() string {
 // `system.external_connections` table and returns the read-only interface for
 // interacting with it.
 func LoadExternalConnection(
-	ctx context.Context, name string, ex sqlutil.InternalExecutor, txn *kv.Txn,
+	ctx context.Context, name string, txn isql.Txn,
 ) (ExternalConnection, error) {
 	// Loading an External Connection is only allowed for users with the `USAGE`
 	// privilege. We run the query as `node` since the user might not have
 	// `SELECT` on the system table.
-	row, cols, err := ex.QueryRowExWithCols(ctx, "lookup-schedule", txn,
+	row, cols, err := txn.QueryRowExWithCols(ctx, "lookup-schedule", txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
 		fmt.Sprintf("SELECT * FROM system.external_connections WHERE connection_name = '%s'", name))
 
@@ -280,7 +279,7 @@ func generatePlaceholders(n int) string {
 // table. If an error is returned, it is callers responsibility to handle it
 // (e.g. rollback transaction).
 func (e *MutableExternalConnection) Create(
-	ctx context.Context, ex sqlutil.InternalExecutor, user username.SQLUsername, txn *kv.Txn,
+	ctx context.Context, txn isql.Txn, user username.SQLUsername,
 ) error {
 	cols, qargs, err := e.marshalChanges()
 	if err != nil {
@@ -291,7 +290,7 @@ func (e *MutableExternalConnection) Create(
 	// `EXTERNALCONNECTION` system privilege. We run the query as `node`
 	// since the user might not have `INSERT` on the system table.
 	createQuery := "INSERT INTO system.external_connections (%s) VALUES (%s) RETURNING connection_name"
-	row, retCols, err := ex.QueryRowExWithCols(ctx, "ExternalConnection.Create", txn,
+	row, retCols, err := txn.QueryRowExWithCols(ctx, "ExternalConnection.Create", txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
 		fmt.Sprintf(createQuery, strings.Join(cols, ","), generatePlaceholders(len(qargs))),
 		qargs...,

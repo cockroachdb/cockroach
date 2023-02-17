@@ -27,6 +27,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// we need to hardcode the random seed when loading fixtures since
+// that references a static bucket in GCS
+const fixturesRandomSeed = 1
+
 func registerCopy(r registry.Registry) {
 	// This test imports a fully-populated Bank table. It then creates an empty
 	// Bank schema. Finally, it performs a series of `INSERT ... SELECT ...`
@@ -60,8 +64,8 @@ func registerCopy(r registry.Registry) {
 
 			t.Status("importing Bank fixture")
 			c.Run(ctx, c.Node(1), fmt.Sprintf(
-				"./workload fixtures load bank --rows=%d --payload-bytes=%d {pgurl:1}",
-				rows, payload))
+				"./workload fixtures load bank --rows=%d --payload-bytes=%d --seed %d {pgurl:1}",
+				rows, payload, fixturesRandomSeed))
 			if _, err := db.Exec("ALTER TABLE bank.bank RENAME TO bank.bank_orig"); err != nil {
 				t.Fatalf("failed to rename table: %v", err)
 			}
@@ -71,7 +75,7 @@ func registerCopy(r registry.Registry) {
 
 			rangeCount := func() int {
 				var count int
-				const q = "SELECT count(*) FROM [SHOW RANGES FROM TABLE bank.bank]"
+				const q = "SELECT count(*) FROM [SHOW RANGES FROM INDEX bank.bank@primary]"
 				if err := db.QueryRow(q).Scan(&count); err != nil {
 					t.Fatalf("failed to get range count: %v", err)
 				}

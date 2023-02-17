@@ -198,7 +198,7 @@ func initColsForScan(
 
 	cols = make([]catalog.Column, len(colCfg.wantedColumns))
 	for i, colID := range colCfg.wantedColumns {
-		col, err := desc.FindColumnWithID(colID)
+		col, err := catalog.MustFindColumnByID(desc, colID)
 		if err != nil {
 			return cols, err
 		}

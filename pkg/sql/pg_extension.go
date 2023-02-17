@@ -50,7 +50,9 @@ func postgisColumnsTablePopulator(
 				if !table.IsPhysicalTable() {
 					return nil
 				}
-				if p.CheckAnyPrivilege(ctx, table) != nil {
+				if ok, err := p.HasAnyPrivilege(ctx, table); err != nil {
+					return err
+				} else if !ok {
 					return nil
 				}
 				for _, col := range table.PublicColumns() {

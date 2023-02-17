@@ -16,7 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -124,7 +124,7 @@ func GenerateValuesSpec(
 	spec.Columns = make([]execinfrapb.DatumInfo, len(colTypes))
 	for i := range spec.Columns {
 		spec.Columns[i].Type = colTypes[i]
-		spec.Columns[i].Encoding = descpb.DatumEncoding_VALUE
+		spec.Columns[i].Encoding = catenumpb.DatumEncoding_VALUE
 	}
 
 	spec.NumRows = uint64(len(rows))

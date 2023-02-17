@@ -11,6 +11,7 @@ proto_library(
     deps = [
         "//pkg/build:build_proto",
         "//pkg/cloud/cloudpb:cloudpb_proto",
+        "//pkg/multitenant/mtinfopb:mtinfopb_proto",
         "//pkg/roachpb:roachpb_proto",
         "//pkg/sql/catalog/descpb:descpb_proto",
         "//pkg/sql/stats:stats_proto",
@@ -28,6 +29,7 @@ go_proto_library(
     deps = [
         "//pkg/build",
         "//pkg/cloud/cloudpb",
+        "//pkg/multitenant/mtinfopb",
         "//pkg/roachpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/stats",
@@ -44,11 +46,12 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/cloud",
-        "//pkg/sql/catalog/descpb",
+        "//pkg/multitenant/mtinfopb",
         "//pkg/sql/parser",
         "//pkg/sql/protoreflect",
         "//pkg/sql/sem/tree",
         "//pkg/util/bulk",
+        "//pkg/util/hlc",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_gogo_protobuf//jsonpb",

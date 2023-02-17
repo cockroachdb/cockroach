@@ -12,10 +12,12 @@ package storepool
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -37,14 +39,47 @@ type OverrideStorePool struct {
 	sp *StorePool
 
 	overrideNodeLivenessFn NodeLivenessFunc
+	overrideNodeCountFn    NodeCountFunc
 }
 
 var _ AllocatorStorePool = &OverrideStorePool{}
 
-func NewOverrideStorePool(storePool *StorePool, nl NodeLivenessFunc) *OverrideStorePool {
+// OverrideNodeLivenessFunc constructs a NodeLivenessFunc based on a set of
+// predefined overrides. If any nodeID does not have an override, the liveness
+// status is looked up using the passed-in real node liveness function.
+func OverrideNodeLivenessFunc(
+	overrides map[roachpb.NodeID]livenesspb.NodeLivenessStatus, realNodeLivenessFunc NodeLivenessFunc,
+) NodeLivenessFunc {
+	return func(nid roachpb.NodeID, now time.Time, timeUntilStoreDead time.Duration) livenesspb.NodeLivenessStatus {
+		if override, ok := overrides[nid]; ok {
+			return override
+		}
+
+		return realNodeLivenessFunc(nid, now, timeUntilStoreDead)
+	}
+}
+
+// OverrideNodeCountFunc constructs a NodeCountFunc based on a set of predefined
+// overrides. If any nodeID does not have an override, the real liveness is used
+// for the count for the number of nodes not decommissioning or decommissioned.
+func OverrideNodeCountFunc(
+	overrides map[roachpb.NodeID]livenesspb.NodeLivenessStatus, nodeLiveness *liveness.NodeLiveness,
+) NodeCountFunc {
+	return func() int {
+		return nodeLiveness.GetNodeCountWithOverrides(overrides)
+	}
+}
+
+// NewOverrideStorePool constructs an OverrideStorePool that can use its own
+// view of node liveness while falling through to an underlying store pool for
+// the state of peer stores.
+func NewOverrideStorePool(
+	storePool *StorePool, nl NodeLivenessFunc, nc NodeCountFunc,
+) *OverrideStorePool {
 	return &OverrideStorePool{
 		sp:                     storePool,
 		overrideNodeLivenessFn: nl,
+		overrideNodeCountFn:    nc,
 	}
 }
 
@@ -89,6 +124,21 @@ func (o *OverrideStorePool) GetStoreListFromIDs(
 	return o.sp.getStoreListFromIDsLocked(storeIDs, o.overrideNodeLivenessFn, filter)
 }
 
+// GetStoreListForTargets implements the AllocatorStorePool interface.
+func (o *OverrideStorePool) GetStoreListForTargets(
+	candidates []roachpb.ReplicationTarget, filter StoreFilter,
+) (StoreList, int, ThrottledStoreReasons) {
+	o.sp.DetailsMu.Lock()
+	defer o.sp.DetailsMu.Unlock()
+
+	storeIDs := make(roachpb.StoreIDSlice, 0, len(candidates))
+	for _, tgt := range candidates {
+		storeIDs = append(storeIDs, tgt.StoreID)
+	}
+
+	return o.sp.getStoreListFromIDsLocked(storeIDs, o.overrideNodeLivenessFn, filter)
+}
+
 // LiveAndDeadReplicas implements the AllocatorStorePool interface.
 func (o *OverrideStorePool) LiveAndDeadReplicas(
 	repls []roachpb.ReplicaDescriptor, includeSuspectAndDrainingStores bool,
@@ -98,7 +148,7 @@ func (o *OverrideStorePool) LiveAndDeadReplicas(
 
 // ClusterNodeCount implements the AllocatorStorePool interface.
 func (o *OverrideStorePool) ClusterNodeCount() int {
-	return o.sp.ClusterNodeCount()
+	return o.overrideNodeCountFn()
 }
 
 // IsDeterministic implements the AllocatorStorePool interface.
@@ -137,13 +187,6 @@ func (o *OverrideStorePool) GetStoreDescriptor(
 	return o.sp.GetStoreDescriptor(storeID)
 }
 
-// GossipNodeIDAddress implements the AllocatorStorePool interface.
-func (o *OverrideStorePool) GossipNodeIDAddress(
-	nodeID roachpb.NodeID,
-) (*util.UnresolvedAddr, error) {
-	return o.sp.GossipNodeIDAddress(nodeID)
-}
-
 // UpdateLocalStoreAfterRebalance implements the AllocatorStorePool interface.
 // This override method is a no-op, as
 // StorePool.UpdateLocalStoreAfterRebalance(..) is not a read-only method and
@@ -158,7 +201,7 @@ func (o *OverrideStorePool) UpdateLocalStoreAfterRebalance(
 // StorePool.UpdateLocalStoresAfterLeaseTransfer(..) is not a read-only method and
 // mutates the state of the held store details.
 func (o *OverrideStorePool) UpdateLocalStoresAfterLeaseTransfer(
-	_ roachpb.StoreID, _ roachpb.StoreID, _ float64,
+	_ roachpb.StoreID, _ roachpb.StoreID, _ allocator.RangeUsageInfo,
 ) {
 }
 
@@ -167,6 +210,16 @@ func (o *OverrideStorePool) UpdateLocalStoresAfterLeaseTransfer(
 // StorePool.UpdateLocalStoreAfterRelocate(..) is not a read-only method and
 // mutates the state of the held store details.
 func (o *OverrideStorePool) UpdateLocalStoreAfterRelocate(
-	_, _ []roachpb.ReplicationTarget, _, _ []roachpb.ReplicaDescriptor, _ roachpb.StoreID, _ float64,
+	_, _ []roachpb.ReplicationTarget,
+	_, _ []roachpb.ReplicaDescriptor,
+	_ roachpb.StoreID,
+	_ allocator.RangeUsageInfo,
 ) {
+}
+
+// SetOnCapacityChange installs a callback to be called when any store
+// capacity changes in the storepool. This currently doesn't consider local
+// updates (UpdateLocalStoreAfterRelocate, UpdateLocalStoreAfterRebalance,
+// UpdateLocalStoresAfterLeaseTransfer) as capacity changes.
+func (o *OverrideStorePool) SetOnCapacityChange(fn CapacityChangeFn) {
 }

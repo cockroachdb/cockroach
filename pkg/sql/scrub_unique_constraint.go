@@ -107,7 +107,7 @@ func (o *sqlUniqueConstraintCheckOperation) Start(params runParams) error {
 	keyCols := make([]string, len(o.cols))
 	matchers := make([]string, len(o.cols))
 	for i := 0; i < len(o.cols); i++ {
-		col, err := o.tableDesc.FindColumnWithID(o.cols[i])
+		col, err := catalog.MustFindColumnByID(o.tableDesc, o.cols[i])
 		if err != nil {
 			return err
 		}
@@ -121,11 +121,11 @@ func (o *sqlUniqueConstraintCheckOperation) Start(params runParams) error {
 	}
 	asOf := ""
 	if o.asOf != hlc.MaxTimestamp {
-		asOf = fmt.Sprintf("AS OF SYSTEM TIME %[1]d",
-			o.asOf.WallTime)
+		asOf = fmt.Sprintf("AS OF SYSTEM TIME '%s'", o.asOf.AsOfSystemTime())
 	}
 	tableName := fmt.Sprintf("%s.%s", o.tableName.Catalog(), o.tableName.Table())
-	dup, _, err := duplicateRowQuery(o.tableDesc, o.cols, o.predicate, false /* limitResults */)
+	dup, _, err := duplicateRowQuery(o.tableDesc, o.cols, o.predicate,
+		0 /* indexIDForValidation */, false /* limitResults */)
 	if err != nil {
 		return err
 	}
@@ -142,7 +142,7 @@ ON %[4]s
 		asOf,                            // 5
 	)
 
-	rows, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryBuffered(
+	rows, err := params.p.InternalSQLTxn().QueryBuffered(
 		ctx, "scrub-unique", params.p.txn, sel,
 	)
 	if err != nil {

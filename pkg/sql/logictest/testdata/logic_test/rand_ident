@@ -1,0 +1,167 @@
+# LogicTest: local
+
+query I
+SELECT count(*) FROM crdb_internal.gen_rand_ident('hello', 10)
+----
+10
+
+# The following tests override the parameter default to fix the random seed,
+# to ensure that the results remain stable.
+
+query T
+SELECT crdb_internal.gen_rand_ident('helloworld', 10, '{"seed":123}')
+----
+helloworld1
+heLlowor%pld   2
+hell😆oworld3
+helloworld4
+helloworld5
+helloworld6
+helloWorld7
+helloworld8
+h%velloworld9
+hellowo        rld10
+
+query T
+SELECT crdb_internal.gen_rand_ident('helloworld', 10, '{"seed":123,"number":false}')
+----
+helloworld
+heLlowor%pld
+hell😆oworld
+helloworld
+helloworld
+helloworld
+helloWorld
+helloworld
+h%velloworld
+hellowo       rld
+
+# All types of noise enabled except for one: set prob to -1.
+query T
+SELECT crdb_internal.gen_rand_ident('helloworld', 10, '{"seed":123,"noise":true,"emote":-1}')
+----
+helloworld1
+hell\roworld%562
+he"llowo rld3
+helloworld4
+helloworld5
+helloworld6
+helloworld7
+helloworld8
+helloworld9
+h elloworld10
+
+query T
+SELECT crdb_internal.gen_rand_ident('helloworld', 10, '{"seed":123,"noise":false}')
+----
+helloworld1
+helloworld2
+helloworld3
+helloworld4
+helloworld5
+helloworld6
+helloworld7
+helloworld8
+helloworld9
+helloworld10
+
+query T
+SELECT crdb_internal.gen_rand_ident('helloworld', 10, '{"seed":123,"noise":false,"punctuate":1}')
+----
+h*ello}world&1
+helloworld2
+helloworld3
+hell(oworld-4
+hellowo/rld5
+helloworld6
+hell.ow!orld7
+helloworld8
+he}lloworld9
+h%elloworld10
+
+query T
+SELECT crdb_internal.gen_rand_ident('helloworld', 10, '{"seed":123,"noise":false,"quote":1}')
+----
+h"ello"world"1
+helloworld2
+helloworld3
+hell'oworld"4
+hellowo'rld5
+helloworld6
+hell"ow'orld7
+helloworld8
+he'lloworld9
+h'elloworld10
+
+query T
+SELECT crdb_internal.gen_rand_ident('helloworld', 10, '{"seed":123,"noise":false,"space":1}')
+----
+h ellow orld1
+h elloworld2
+helloworld3
+hellowo rld4
+hel loworld5
+h e lloworld6
+helloworld 7
+he lloworld8
+helloworld 9
+helloworld 10
+
+query T
+SELECT quote_ident(crdb_internal.gen_rand_ident('helloworld', 10, '{"seed":123,"noise":false,"whitespace":1}'))
+----
+"h  ello  world  1"
+helloworld2
+helloworld3
+"hell
+oworld           4"
+"hellowo
+rld5"
+helloworld6
+"hellow orld7"
+helloworld8
+"he
+lloworld9"
+"h elloworld10"
+
+query T
+SELECT crdb_internal.gen_rand_ident('helloworld', 10, '{"seed":123,"noise":false,"emote":1}')
+----
+h😟ello😺world😋1
+helloworld2
+helloworld3
+hell😅oworld😵4
+hellowo😓rld5
+helloworld6
+hell😉ow😉orld7
+helloworld8
+he😙lloworld9
+h😞elloworld10
+
+query T
+SELECT crdb_internal.gen_rand_ident('aeaeiao', 10, '{"seed":123,"noise":false,"diacritics":3,"diacritic_depth":4}')
+----
+aẹͫae̩͇iao̅͘1
+ā̞e͠a̶̓eia̲o2
+a̲̾e̙̺ae̴ͥia͍͟o3
+aea͎ḙͭi͖͞aͪo4
+ae͌aei̷͓a̺o5
+a͔ͪeaeiaͧo̦6
+aeͨä̯́ei̒a̸o7
+aeaeͮi̪ͅa͚̓o8
+aeaeǐ̉aͭ͜o̩̚9
+aeaeĩ͊ã̓o10
+
+query T
+SELECT crdb_internal.gen_rand_ident('aeaeiao', 10, '{"seed":123,"noise":false,"zalgo":true}')
+----
+a̫̣̳̟̩͇̻͎ͫ̇e̶͍̞̝̅̄̊ͦ́͘͟͠ă̢͔̲͙̲͙̙̺̼̍̾̃͑͢è̴̸̛͍̠̥͎̰̭ͣͥͭ̚͟͠i͖͇̦͑ͪͪ͋͌͜͞ȁ̷͓̗̺̻̣̽ͪ͛ő̳̭ͯͬ̐ͧͤ͌1
+a̠̯̿ͨ̐ͧ̈́ͬ́̔̒ě̸̛ͮ̚͟͢a̷e̵͚̰̖ͭ̓̑̃̓̏̌̕i̴̱̩̹̇ͭͨͮ͐̍̃̚͘͜ã̡̡̼̓͂̉͟ͅͅo̡̖̹̓͞2
+a̵̦͋̈́͒ͦ̽̇͌e̡ͧ̊a̷̢̢̟̯͕͒̓͋̃̋͊ͨ͟e̸̡͎̥̺͙̓̂̚i̍ͦ͊͏̴̷ͩ̄̆̽̃ͥ͜͡ͅͅͅḁ̖̭͚̘̗̠͈̬̔̿̐o̧̪̬̗̳͑ͮͩ̂͘3
+á̢̌e͓͒̒ͥ͠͏̝̳̈́̀̕ã̸̱̻̥̻̩̒ͧͨͨ̔͆̀̊ͦ͊͝ẽi̶̢̛̠̜̣̘̋̽́͑̅̏̇̋̈́͡ȧ̻ǫ̬̩̳͈̍̌̈̈́͞͞4
+a̸̛̦̝̰̠̖̺ͫ̍͑͂̀̊̽͠e͏̰̘͚͙̙̣͕͔̝̋ͨ͋̀̓̏͘͜a̯̭̯͕̲ͣ̓̈́ͥ͌ͧͬ̚͝e̢̖̫̯͔̽ͯ̐͐̇̊̾͂ͬi̙͗͋̄̇͝͞͡͏̼̗̱̃́a̙̩̔͏͈̫̣̍́ỡ̱̞̒͆́ͯͦ͑͠5
+a̷̫̥̣̦̦̭͗͆̅͐ͬ̓ͥ̚ḙ̶̛̲̳̻̯̙̺̅ͪͦ̎͌͟ạ̷̢̤̤͗͊ͧͩ̑͋͡e̘͉̜̮͍̰͔̊ͨ̆̄̅i̙͚͇̳͕̺̰ͮ̃̋͂̂ͮͣậ̫̞̜̱̌ͭ̋ͬ̎͛͠ȯ̞̻̘̐̌6
+áe̷̷̙̟̜̮͕̋͘͝a͓͖ẹ͉͈̦͛ͩ̔͋ͫ̽̊i̻̫̋̍ͬ͆̒̌a̮̬̼̳͉ͦͩ͋ͣͥͧ̐͂ͩ̓ͭ̕o̯͛͢͏̝̬͎̬̘̥͈̯ͫ̅̆͛̚͡7
+ǎ͎͎͙̬͓̫̮͙ͮ̈ͣeͩ͜ȃ̢̧͓̣͕̭ͤe̦̝̤̲̭ͬ̒͊̊͆͜͏̚͞i͉͈͍͚̿̊ͬ̑̚ā̵̜̪͕͕̼̘͂̿́̀͠͝ớ͖͓̳̯̍ͮ͒͑̔ͩ̋̒͡8
+ȧ̢̙̝͕͕̘̦́̋ͫ̀̔͘̚͢͞͠è̵̫̰̾̔͌͂͘͜͝a̸̳̦͂̒ͥ͗e̴̢͕̋̑̄ͪ̊͋́̕i͖̹̟͘͞ą̙͋͊̀ͬọ̬̩͗̈́9
+ȃ̒̉̃͢͝ͅe͡a͖͖̩̦͆̇̽̅͌̃͡e̶̸͙͚̣̩̓͂̿̈̀ͬͤ̌̐̚i̬̲̩͊́̐̀̚a̧͍̞̜̓͒́̅o̯͕̗̹͔̘ͫ̅ͯ̒ͭ͒̐̀̔̿͢͞10

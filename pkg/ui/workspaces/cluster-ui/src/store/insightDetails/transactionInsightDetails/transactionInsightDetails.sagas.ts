@@ -8,36 +8,33 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { all, call, put, takeLatest } from "redux-saga/effects";
+import { all, call, put, takeLatest, takeEvery } from "redux-saga/effects";
 
 import { actions } from "./transactionInsightDetails.reducer";
 import {
-  getTransactionInsightEventDetailsState,
-  TxnContentionInsightDetailsRequest,
-} from "src/api/insightsApi";
-import { TxnContentionInsightDetails } from "src/insights";
+  getTxnInsightDetailsApi,
+  TxnInsightDetailsRequest,
+  TxnInsightDetailsResponse,
+} from "src/api/txnInsightsApi";
 import { PayloadAction } from "@reduxjs/toolkit";
 import { ErrorWithKey } from "src/api";
 
 export function* refreshTransactionInsightDetailsSaga(
-  action: PayloadAction<TxnContentionInsightDetailsRequest>,
+  action: PayloadAction<TxnInsightDetailsRequest>,
 ) {
   yield put(actions.request(action.payload));
 }
 
 export function* requestTransactionInsightDetailsSaga(
-  action: PayloadAction<TxnContentionInsightDetailsRequest>,
+  action: PayloadAction<TxnInsightDetailsRequest>,
 ): any {
   try {
-    const result = yield call(
-      getTransactionInsightEventDetailsState,
-      action.payload,
-    );
+    const result = yield call(getTxnInsightDetailsApi, action.payload);
     yield put(actions.received(result));
   } catch (e) {
     const err: ErrorWithKey = {
       err: e,
-      key: action.payload.id,
+      key: action.payload.txnExecutionID,
     };
     yield put(actions.failed(err));
   }
@@ -48,9 +45,9 @@ const CACHE_INVALIDATION_PERIOD = 5 * 60 * 1000; // 5 minutes in ms
 const timeoutsByExecID = new Map<string, NodeJS.Timeout>();
 
 export function receivedTxnInsightsDetailsSaga(
-  action: PayloadAction<TxnContentionInsightDetails>,
+  action: PayloadAction<TxnInsightDetailsResponse>,
 ) {
-  const execID = action.payload.transactionExecutionID;
+  const execID = action.payload.txnExecutionID;
   clearTimeout(timeoutsByExecID.get(execID));
   const id = setTimeout(() => {
     actions.invalidated({ key: execID });
@@ -61,7 +58,7 @@ export function receivedTxnInsightsDetailsSaga(
 
 export function* transactionInsightDetailsSaga() {
   yield all([
-    takeLatest(actions.refresh, refreshTransactionInsightDetailsSaga),
+    takeEvery(actions.refresh, refreshTransactionInsightDetailsSaga),
     takeLatest(actions.request, requestTransactionInsightDetailsSaga),
     takeLatest(actions.received, receivedTxnInsightsDetailsSaga),
   ]);

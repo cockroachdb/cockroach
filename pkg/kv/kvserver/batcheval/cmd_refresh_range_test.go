@@ -173,7 +173,7 @@ func TestRefreshRangeTimeBoundIterator(t *testing.T) {
 	// would not have any timestamp bounds and would be selected for every read.
 	intent := roachpb.MakeLockUpdate(txn, roachpb.Span{Key: k})
 	intent.Status = roachpb.COMMITTED
-	if _, err := storage.MVCCResolveWriteIntent(ctx, db, nil, intent); err != nil {
+	if _, _, _, err := storage.MVCCResolveWriteIntent(ctx, db, nil, intent, storage.MVCCResolveWriteIntentOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := storage.MVCCPut(ctx, db, nil, roachpb.Key("unused2"), ts1, hlc.ClockTimestamp{}, v, nil); err != nil {
@@ -188,12 +188,12 @@ func TestRefreshRangeTimeBoundIterator(t *testing.T) {
 	// have previously performed a consistent read at the lower time-bound to
 	// prove that there are no intents present that would be missed by the time-
 	// bound iterator.
-	if val, intent, err := storage.MVCCGet(ctx, db, k, ts1, storage.MVCCGetOptions{}); err != nil {
+	if res, err := storage.MVCCGet(ctx, db, k, ts1, storage.MVCCGetOptions{}); err != nil {
 		t.Fatal(err)
-	} else if intent != nil {
+	} else if res.Intent != nil {
 		t.Fatalf("got unexpected intent: %v", intent)
-	} else if !val.EqualTagAndData(v) {
-		t.Fatalf("expected %v, got %v", v, val)
+	} else if !res.Value.EqualTagAndData(v) {
+		t.Fatalf("expected %v, got %v", v, res.Value)
 	}
 
 	// Now the real test: a transaction at ts2 has been pushed to ts3
@@ -272,7 +272,7 @@ func TestRefreshRangeError(t *testing.T) {
 		if resolveIntent {
 			intent := roachpb.MakeLockUpdate(txn, roachpb.Span{Key: k})
 			intent.Status = roachpb.COMMITTED
-			if _, err := storage.MVCCResolveWriteIntent(ctx, db, nil, intent); err != nil {
+			if _, _, _, err := storage.MVCCResolveWriteIntent(ctx, db, nil, intent, storage.MVCCResolveWriteIntentOptions{}); err != nil {
 				t.Fatal(err)
 			}
 		}

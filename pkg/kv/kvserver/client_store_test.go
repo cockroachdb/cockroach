@@ -91,8 +91,7 @@ func TestStoreRaftReplicaID(t *testing.T) {
 	require.NoError(t, err)
 	repl, err := store.GetReplica(desc.RangeID)
 	require.NoError(t, err)
-	replicaID, found, err := stateloader.Make(desc.RangeID).LoadRaftReplicaID(ctx, store.Engine())
-	require.True(t, found)
+	replicaID, err := stateloader.Make(desc.RangeID).LoadRaftReplicaID(ctx, store.TODOEngine())
 	require.NoError(t, err)
 	require.Equal(t, repl.ReplicaID(), replicaID.ReplicaID)
 
@@ -102,9 +101,8 @@ func TestStoreRaftReplicaID(t *testing.T) {
 	require.NoError(t, err)
 	rhsRepl, err := store.GetReplica(rhsDesc.RangeID)
 	require.NoError(t, err)
-	rhsReplicaID, found, err :=
-		stateloader.Make(rhsDesc.RangeID).LoadRaftReplicaID(ctx, store.Engine())
-	require.True(t, found)
+	rhsReplicaID, err :=
+		stateloader.Make(rhsDesc.RangeID).LoadRaftReplicaID(ctx, store.TODOEngine())
 	require.NoError(t, err)
 	require.Equal(t, rhsRepl.ReplicaID(), rhsReplicaID.ReplicaID)
 }

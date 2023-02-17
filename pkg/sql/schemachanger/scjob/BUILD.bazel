@@ -19,6 +19,7 @@ go_library(
         "//pkg/sql",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/descmetadata",
+        "//pkg/sql/isql",
         "//pkg/sql/schemachanger/scdeps",
         "//pkg/sql/schemachanger/scexec",
         "//pkg/sql/schemachanger/scexec/backfiller",

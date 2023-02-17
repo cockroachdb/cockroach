@@ -167,7 +167,6 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 		ctx,
 		splitKey,
 		hlc.MaxTimestamp, /* expirationTime */
-		roachpb.AdminSplitRequest_INGESTION,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -311,7 +310,6 @@ func TestDB_PrepareForRetryAfterHeartbeatFailure(t *testing.T) {
 		ctx,
 		splitKey,
 		hlc.MaxTimestamp, /* expirationTime */
-		roachpb.AdminSplitRequest_INGESTION,
 	))
 	require.NoError(t, txn.Put(ctx, keyA, "1"))
 
@@ -378,12 +376,12 @@ func verifyCleanup(
 				return fmt.Errorf("expected no heartbeat")
 			}
 		}
-		_, intent, err := storage.MVCCGet(ctx, eng, key, hlc.MaxTimestamp, storage.MVCCGetOptions{
+		intentRes, err := storage.MVCCGet(ctx, eng, key, hlc.MaxTimestamp, storage.MVCCGetOptions{
 			Inconsistent: true,
 		})
 		require.NoError(t, err)
-		if intent != nil {
-			return fmt.Errorf("found unexpected write intent: %s", intent)
+		if intentRes.Intent != nil {
+			return fmt.Errorf("found unexpected write intent: %s", intentRes.Intent)
 		}
 		return nil
 	})
@@ -759,10 +757,11 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			pErrGen: func(txn *roachpb.Transaction) *roachpb.Error {
 				pErr := roachpb.NewErrorWithTxn(
 					roachpb.NewReadWithinUncertaintyIntervalError(
-						origTS,          // readTS
-						plus10,          // existingTS
-						hlc.Timestamp{}, // localUncertaintyLimit
-						txn,
+						origTS,               // readTS
+						hlc.ClockTimestamp{}, // localUncertaintyLimit
+						txn,                  // txn
+						plus10,               // valueTS
+						hlc.ClockTimestamp{}, // localTS
 					),
 					txn)
 				return pErr
@@ -779,10 +778,11 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			pErrGen: func(txn *roachpb.Transaction) *roachpb.Error {
 				pErr := roachpb.NewErrorWithTxn(
 					roachpb.NewReadWithinUncertaintyIntervalError(
-						origTS, // readTS
-						plus10, // existingTS
-						plus20, // localUncertaintyLimit
-						txn,
+						origTS,                     // readTS
+						hlc.ClockTimestamp(plus20), // localUncertaintyLimit
+						txn,                        // txn
+						plus10,                     // valueTS
+						hlc.ClockTimestamp{},       // localTS
 					),
 					txn)
 				return pErr
@@ -856,7 +856,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			stopper := stop.NewStopper()
 
 			manual := timeutil.NewManualTime(origTS.GoTime())
-			clock := hlc.NewClock(manual, 20*time.Nanosecond /* maxOffset */)
+			clock := hlc.NewClockForTesting(manual)
 
 			var senderFn kv.SenderFunc = func(
 				_ context.Context, ba *roachpb.BatchRequest,
@@ -959,7 +959,6 @@ func TestWTOBitTerminatedOnErrorResponses(t *testing.T) {
 		ctx,
 		keyB,             /* splitKey */
 		hlc.MaxTimestamp, /* expirationTime */
-		roachpb.AdminSplitRequest_INGESTION,
 	))
 
 	// Write a key that the txn-al CPut below doesn't expect, failing the batch
@@ -1055,7 +1054,7 @@ func TestTxnCoordSenderNoDuplicateLockSpans(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	stopper := stop.NewStopper()
-	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 123)), time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(0, 123)))
 
 	var expectedLockSpans []roachpb.Span
 
@@ -1567,7 +1566,7 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 
 	testCases := []struct {
 		err        error
@@ -1582,7 +1581,7 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 				txn.UpdateObservedTimestamp(nodeID, makeTS(123, 0).UnsafeToClockTimestamp())
 				return roachpb.NewErrorWithTxn(
 					roachpb.NewReadWithinUncertaintyIntervalError(
-						hlc.Timestamp{}, hlc.Timestamp{}, hlc.Timestamp{}, nil),
+						hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, hlc.Timestamp{}, hlc.ClockTimestamp{}),
 					&txn)
 			},
 			asyncAbort: false},
@@ -1695,7 +1694,7 @@ func TestRollbackErrorStopsHeartbeat(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	ambient := log.MakeTestingAmbientCtxWithNewTracer()
 	sender := &mockSender{}
 	stopper := stop.NewStopper()
@@ -1763,7 +1762,7 @@ func TestOnePCErrorTracking(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	ambient := log.MakeTestingAmbientCtxWithNewTracer()
 	sender := &mockSender{}
 	stopper := stop.NewStopper()
@@ -1848,7 +1847,7 @@ func TestCommitReadOnlyTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	ambient := log.MakeTestingAmbientCtxWithNewTracer()
 	sender := &mockSender{}
 	stopper := stop.NewStopper()
@@ -1903,7 +1902,7 @@ func TestCommitMutatingTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	ambient := log.MakeTestingAmbientCtxWithNewTracer()
 	sender := &mockSender{}
 	stopper := stop.NewStopper()
@@ -2006,7 +2005,7 @@ func TestAbortReadOnlyTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	ambient := log.MakeTestingAmbientCtxWithNewTracer()
 	sender := &mockSender{}
 	stopper := stop.NewStopper()
@@ -2047,7 +2046,7 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	ambient := log.MakeTestingAmbientCtxWithNewTracer()
 	sender := &mockSender{}
 	stopper := stop.NewStopper()
@@ -2131,7 +2130,7 @@ func TestTransactionKeyNotChangedInRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	ambient := log.MakeTestingAmbientCtxWithNewTracer()
 	sender := &mockSender{}
 	stopper := stop.NewStopper()
@@ -2198,7 +2197,7 @@ func TestSequenceNumbers(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	ambient := log.MakeTestingAmbientCtxWithNewTracer()
 	sender := &mockSender{}
 	stopper := stop.NewStopper()
@@ -2252,7 +2251,7 @@ func TestConcurrentTxnRequestsProhibited(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	ambient := log.MakeTestingAmbientCtxWithNewTracer()
 	sender := &mockSender{}
 	stopper := stop.NewStopper()
@@ -2309,7 +2308,7 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	manual := timeutil.NewManualTime(timeutil.Unix(0, 1))
-	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(manual)
 	ambient := log.MakeTestingAmbientCtxWithNewTracer()
 	sender := &mockSender{}
 	stopper := stop.NewStopper()
@@ -2375,7 +2374,7 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
-	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(manual)
 	ambient := log.MakeTestingAmbientCtxWithNewTracer()
 	sender := &mockSender{}
 	stopper := stop.NewStopper()
@@ -2518,7 +2517,7 @@ func TestAnchorKey(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 123)), time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(0, 123)))
 	ambient := log.MakeTestingAmbientCtxWithNewTracer()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
@@ -2694,7 +2693,6 @@ func TestPutsInStagingTxn(t *testing.T) {
 		ctx,
 		keyB,             /* splitKey */
 		hlc.MaxTimestamp, /* expirationTime */
-		roachpb.AdminSplitRequest_INGESTION,
 	))
 
 	txn := db.NewTxn(ctx, "test")
@@ -2887,7 +2885,7 @@ func TestTxnManualRefresh(t *testing.T) {
 	run := func(t *testing.T, tc testCase) {
 		stopper := stop.NewStopper()
 		manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
-		clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
+		clock := hlc.NewClockForTesting(manual)
 		ctx := context.Background()
 		defer stopper.Stop(ctx)
 

@@ -13,6 +13,7 @@ go_library(
     deps = [
         "//pkg/roachpb",
         "//pkg/settings",
+        "//pkg/sql/appstatspb",
         "//pkg/sql/clusterunique",
         "//pkg/sql/execstats",
         "//pkg/sql/sem/tree",

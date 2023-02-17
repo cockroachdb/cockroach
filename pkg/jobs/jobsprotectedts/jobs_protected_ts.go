@@ -16,12 +16,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -52,12 +51,10 @@ func GetMetaType(metaType MetaType) string {
 
 // MakeStatusFunc returns a function which determines whether the job or
 // schedule implied with this value of meta should be removed by the reconciler.
-func MakeStatusFunc(
-	jr *jobs.Registry, ie sqlutil.InternalExecutor, metaType MetaType,
-) ptreconcile.StatusFunc {
+func MakeStatusFunc(jr *jobs.Registry, metaType MetaType) ptreconcile.StatusFunc {
 	switch metaType {
 	case Jobs:
-		return func(ctx context.Context, txn *kv.Txn, meta []byte) (shouldRemove bool, _ error) {
+		return func(ctx context.Context, txn isql.Txn, meta []byte) (shouldRemove bool, _ error) {
 			jobID, err := decodeID(meta)
 			if err != nil {
 				return false, err
@@ -69,16 +66,17 @@ func MakeStatusFunc(
 			if err != nil {
 				return false, err
 			}
-			isTerminal := j.CheckTerminalStatus(ctx, txn)
+			isTerminal := j.WithTxn(txn).CheckTerminalStatus(ctx)
 			return isTerminal, nil
 		}
 	case Schedules:
-		return func(ctx context.Context, txn *kv.Txn, meta []byte) (shouldRemove bool, _ error) {
+		return func(ctx context.Context, txn isql.Txn, meta []byte) (shouldRemove bool, _ error) {
 			scheduleID, err := decodeID(meta)
 			if err != nil {
 				return false, err
 			}
-			_, err = jobs.LoadScheduledJob(ctx, scheduledjobs.ProdJobSchedulerEnv, scheduleID, ie, txn)
+			_, err = jobs.ScheduledJobTxn(txn).
+				Load(ctx, scheduledjobs.ProdJobSchedulerEnv, scheduleID)
 			if jobs.HasScheduledJobNotFoundError(err) {
 				return true, nil
 			}

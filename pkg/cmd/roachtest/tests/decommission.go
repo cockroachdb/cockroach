@@ -98,7 +98,7 @@ func registerDecommission(r registry.Registry) {
 			Owner:   registry.OwnerKV,
 			Cluster: r.MakeClusterSpec(numNodes),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				if runtime.GOARCH == "arm64" {
+				if c.IsLocal() && runtime.GOARCH == "arm64" {
 					t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
 				}
 				runDecommissionMixedVersions(ctx, t, c, *t.BuildVersion())
@@ -342,8 +342,12 @@ func runDecommission(
 			if err != nil {
 				return err
 			}
-			startOpts := option.DefaultStartOpts()
-			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, fmt.Sprintf("--join %s --attrs=node%d", internalAddrs[0], node))
+			startOpts := option.DefaultStartSingleNodeOpts()
+			extraArgs := []string{
+				"--join", internalAddrs[0],
+				fmt.Sprintf("--attrs=node%d", node),
+			}
+			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, extraArgs...)
 			if err := c.StartE(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(node)); err != nil {
 				return err
 			}
@@ -703,7 +707,8 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 			t.L().Printf("expected to fail: restarting [n%d,n%d] and attempting to recommission through n%d\n",
 				targetNodeA, targetNodeB, runNode)
 			c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Nodes(targetNodeA, targetNodeB))
-			c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.Nodes(targetNodeA, targetNodeB))
+			// The node is in a decomissioned state, so don't attempt to run scheduled backups.
+			c.Start(ctx, t.L(), option.DefaultStartSingleNodeOpts(), settings, c.Nodes(targetNodeA, targetNodeB))
 
 			if _, err := h.recommission(ctx, c.Nodes(targetNodeA, targetNodeB), runNode); err == nil {
 				t.Fatalf("expected recommission to fail")
@@ -765,7 +770,7 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 
 			// Bring targetNode it back up to verify that its replicas still get
 			// removed.
-			c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.Node(targetNode))
+			c.Start(ctx, t.L(), option.DefaultStartSingleNodeOpts(), settings, c.Node(targetNode))
 		}
 
 		// Run decommission a second time to wait until the replicas have
@@ -841,8 +846,11 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 				t.Fatal(err)
 			}
 			joinAddr := internalAddrs[0]
-			startOpts := option.DefaultStartOpts()
-			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, fmt.Sprintf("--join %s", joinAddr))
+			startOpts := option.DefaultStartSingleNodeOpts()
+			startOpts.RoachprodOpts.ExtraArgs = append(
+				startOpts.RoachprodOpts.ExtraArgs,
+				[]string{"--join", joinAddr}...,
+			)
 			c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(targetNode))
 		}
 
@@ -1295,10 +1303,11 @@ func (h *decommTestHelper) waitUpReplicated(
 		// Check to see that there are no ranges where the target node is
 		// not part of the replica set.
 		stmtReplicaCount := fmt.Sprintf(
-			"SELECT count(*) FROM crdb_internal.ranges "+
-				"WHERE array_position(replicas, %d) IS NULL and database_name = '%s';",
-			targetLogicalNodeID, database,
-		)
+			`SELECT count(*) FROM [ SHOW RANGES FROM DATABASE %s ] WHERE
+array_position(voting_replicas, %[2]d) IS NULL AND
+array_position(non_voting_replicas, %[2]d) IS NULL AND
+array_position(learner_replicas, %[2]d) IS NULL
+`, database, targetLogicalNodeID)
 		if err := db.QueryRow(stmtReplicaCount).Scan(&count); err != nil {
 			return err
 		}

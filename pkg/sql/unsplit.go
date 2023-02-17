@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/oppurpose"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/errors"
@@ -35,7 +34,7 @@ type unsplitRun struct {
 	lastUnsplitKey []byte
 }
 
-func (n *unsplitNode) startExec(params runParams) error {
+func (n *unsplitNode) startExec(runParams) error {
 	return nil
 }
 
@@ -50,7 +49,7 @@ func (n *unsplitNode) Next(params runParams) (bool, error) {
 		return false, err
 	}
 
-	if err := params.extendedEvalCtx.ExecCfg.DB.AdminUnsplit(params.ctx, rowKey, oppurpose.UnsplitManual); err != nil {
+	if err := params.extendedEvalCtx.ExecCfg.DB.AdminUnsplit(params.ctx, rowKey); err != nil {
 		ctx := params.p.EvalContext().FmtCtx(tree.FmtSimple)
 		row.Format(ctx)
 		return false, errors.Wrapf(err, "could not UNSPLIT AT %s", ctx)
@@ -88,31 +87,21 @@ type unsplitAllRun struct {
 
 func (n *unsplitAllNode) startExec(params runParams) error {
 	// Use the internal executor to retrieve the split keys.
-	statement := `
-		SELECT
-			start_key
-		FROM
-			crdb_internal.ranges_no_leases
-		WHERE
-			database_name=$1 AND table_name=$2 AND index_name=$3 AND split_enforced_until IS NOT NULL
-	`
-	_, dbDesc, err := params.p.Descriptors().GetImmutableDatabaseByID(
-		params.ctx, params.p.txn, n.tableDesc.GetParentID(), tree.DatabaseLookupFlags{AvoidLeased: true},
-	)
-	if err != nil {
-		return err
-	}
-	indexName := ""
-	if n.index.GetID() != n.tableDesc.GetPrimaryIndexID() {
-		indexName = n.index.GetName()
-	}
-	ie := params.p.ExecCfg().InternalExecutorFactory.NewInternalExecutor(params.SessionData())
+	const statement = `SELECT r.start_key
+FROM crdb_internal.ranges_no_leases r,
+     crdb_internal.index_spans s
+WHERE s.descriptor_id = $1
+  AND s.index_id = $2
+  AND s.start_key < r.end_key
+  AND s.end_key > r.start_key
+  AND r.start_key >= s.start_key -- only consider split points inside the table keyspace.
+  AND split_enforced_until IS NOT NULL`
+	ie := params.p.ExecCfg().InternalDB.NewInternalExecutor(params.SessionData())
 	it, err := ie.QueryIteratorEx(
 		params.ctx, "split points query", params.p.txn, sessiondata.NoSessionDataOverride,
 		statement,
-		dbDesc.GetName(),
-		n.tableDesc.GetName(),
-		indexName,
+		n.tableDesc.GetID(),
+		n.index.GetID(),
 	)
 	if err != nil {
 		return err
@@ -131,7 +120,7 @@ func (n *unsplitAllNode) Next(params runParams) (bool, error) {
 	rowKey := n.run.keys[0]
 	n.run.keys = n.run.keys[1:]
 
-	if err := params.extendedEvalCtx.ExecCfg.DB.AdminUnsplit(params.ctx, rowKey, oppurpose.UnsplitManual); err != nil {
+	if err := params.extendedEvalCtx.ExecCfg.DB.AdminUnsplit(params.ctx, rowKey); err != nil {
 		return false, errors.Wrapf(err, "could not UNSPLIT AT %s", keys.PrettyPrint(nil /* valDirs */, rowKey))
 	}
 

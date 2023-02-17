@@ -24,11 +24,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -176,7 +176,7 @@ func TestStreamIngestionProcessor(t *testing.T) {
 
 	tc := testcluster.StartTestCluster(t, 3 /* nodes */, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
-	kvDB := tc.Server(0).DB()
+	db := tc.Server(0).InternalDB().(descs.DB)
 	registry := tc.Server(0).JobRegistry().(*jobs.Registry)
 	const tenantID = 20
 	tenantRekey := execinfrapb.TenantRekey{
@@ -247,7 +247,7 @@ func TestStreamIngestionProcessor(t *testing.T) {
 		topology := streamclient.Topology{
 			Partitions: partitions,
 		}
-		out, err := runStreamIngestionProcessor(ctx, t, registry, kvDB,
+		out, err := runStreamIngestionProcessor(ctx, t, registry, db,
 			topology, initialScanTimestamp, []jobspb.ResolvedSpan{}, tenantRekey,
 			mockClient, nil /* cutoverProvider */, nil /* streamingTestingKnobs */)
 		require.NoError(t, err)
@@ -294,7 +294,7 @@ func TestStreamIngestionProcessor(t *testing.T) {
 		streamingTestingKnobs := &sql.StreamingTestingKnobs{BeforeClientSubscribe: func(addr string, token string, clientStartTime hlc.Timestamp) {
 			lastClientStart[token] = clientStartTime
 		}}
-		out, err := runStreamIngestionProcessor(ctx, t, registry, kvDB,
+		out, err := runStreamIngestionProcessor(ctx, t, registry, db,
 			topology, initialScanTimestamp, checkpoint, tenantRekey, mockClient,
 			nil /* cutoverProvider */, streamingTestingKnobs)
 		require.NoError(t, err)
@@ -321,7 +321,7 @@ func TestStreamIngestionProcessor(t *testing.T) {
 		topology := streamclient.Topology{
 			Partitions: partitions,
 		}
-		out, err := runStreamIngestionProcessor(ctx, t, registry, kvDB,
+		out, err := runStreamIngestionProcessor(ctx, t, registry, db,
 			topology, initialScanTimestamp, []jobspb.ResolvedSpan{}, tenantRekey, &errorStreamClient{},
 			nil /* cutoverProvider */, nil /* streamingTestingKnobs */)
 		require.NoError(t, err)
@@ -366,7 +366,7 @@ func assertEqualKVs(
 
 	// Iterate over the store.
 	store := tc.GetFirstStoreFromServer(t, 0)
-	it := store.Engine().NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+	it := store.TODOEngine().NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 		LowerBound: key,
 		UpperBound: key.PrefixEnd(),
 	})
@@ -404,10 +404,12 @@ func assertEqualKVs(
 		// Since the iterator goes from latest to older versions, we compare
 		// starting from the end of the slice that is sorted by timestamp.
 		latestVersionInChain := valueTimestampTuples[len(valueTimestampTuples)-1]
+		v, err := it.Value()
+		require.NoError(t, err)
 		require.Equal(t, roachpb.KeyValue{
 			Key: it.Key().Key,
 			Value: roachpb.Value{
-				RawBytes:  it.Value(),
+				RawBytes:  v,
 				Timestamp: it.Key().Timestamp,
 			},
 		}, latestVersionInChain)
@@ -448,7 +450,7 @@ func TestRandomClientGeneration(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 3 /* nodes */, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 	registry := tc.Server(0).JobRegistry().(*jobs.Registry)
-	kvDB := tc.Server(0).DB()
+	db := tc.Server(0).InternalDB().(descs.DB)
 
 	// TODO: Consider testing variations on these parameters.
 	tenantID := roachpb.MustMakeTenantID(20)
@@ -456,7 +458,7 @@ func TestRandomClientGeneration(t *testing.T) {
 	streamAddr := getTestRandomClientURI(tenantID, tenantName)
 
 	// The random client returns system and table data partitions.
-	streamClient, err := streamclient.NewStreamClient(ctx, streamingccl.StreamAddress(streamAddr))
+	streamClient, err := streamclient.NewStreamClient(ctx, streamingccl.StreamAddress(streamAddr), nil)
 	require.NoError(t, err)
 
 	randomStreamClient, ok := streamClient.(*streamclient.RandomStreamClient)
@@ -491,7 +493,7 @@ func TestRandomClientGeneration(t *testing.T) {
 	randomStreamClient.RegisterInterception(cancelAfterCheckpoints)
 	randomStreamClient.RegisterInterception(validateFnWithValidator(t, streamValidator))
 
-	out, err := runStreamIngestionProcessor(ctx, t, registry, kvDB,
+	out, err := runStreamIngestionProcessor(ctx, t, registry, db,
 		topo, initialScanTimestamp, []jobspb.ResolvedSpan{}, tenantRekey,
 		randomStreamClient, noCutover{}, nil /* streamingTestingKnobs*/)
 	require.NoError(t, err)
@@ -555,7 +557,7 @@ func runStreamIngestionProcessor(
 	ctx context.Context,
 	t *testing.T,
 	registry *jobs.Registry,
-	kvDB *kv.DB,
+	db descs.DB,
 	partitions streamclient.Topology,
 	initialScanTimestamp hlc.Timestamp,
 	checkpoint []jobspb.ResolvedSpan,
@@ -564,7 +566,7 @@ func runStreamIngestionProcessor(
 	cutoverProvider cutoverProvider,
 	streamingTestingKnobs *sql.StreamingTestingKnobs,
 ) (*distsqlutils.RowBuffer, error) {
-	sip, out, err := getStreamIngestionProcessor(ctx, t, registry, kvDB,
+	sip, out, err := getStreamIngestionProcessor(ctx, t, registry, db,
 		partitions, initialScanTimestamp, checkpoint, tenantRekey, mockClient, cutoverProvider, streamingTestingKnobs)
 	require.NoError(t, err)
 
@@ -584,7 +586,7 @@ func getStreamIngestionProcessor(
 	ctx context.Context,
 	t *testing.T,
 	registry *jobs.Registry,
-	kvDB *kv.DB,
+	db descs.DB,
 	partitions streamclient.Topology,
 	initialScanTimestamp hlc.Timestamp,
 	checkpoint []jobspb.ResolvedSpan,
@@ -605,7 +607,7 @@ func getStreamIngestionProcessor(
 	flowCtx := execinfra.FlowCtx{
 		Cfg: &execinfra.ServerConfig{
 			Settings:          st,
-			DB:                kvDB,
+			DB:                db,
 			JobRegistry:       registry,
 			TestingKnobs:      execinfra.TestingKnobs{StreamingTestingKnobs: streamingTestingKnobs},
 			BulkSenderLimiter: limit.MakeConcurrentRequestLimiter("test", math.MaxInt),

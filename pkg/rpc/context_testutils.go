@@ -36,6 +36,10 @@ type ContextTestingKnobs struct {
 	// internalClientAdapter - i.e. KV RPCs done against the local server.
 	StreamClientInterceptor func(target string, class ConnectionClass) grpc.StreamClientInterceptor
 
+	// UnaryClientInterceptor, if non-nil, will be called when invoking any
+	// unary RPC.
+	UnaryClientInterceptor func(target string, class ConnectionClass) grpc.UnaryClientInterceptor
+
 	// InjectedLatencyOracle if non-nil contains a map from target address
 	// (server.RPCServingAddr() of a remote node) to artificial latency in
 	// milliseconds to inject. Setting this will cause the server to pause for
@@ -90,12 +94,12 @@ func NewInsecureTestingContextWithKnobs(
 ) *Context {
 	return NewContext(ctx,
 		ContextOptions{
-			TenantID:  roachpb.SystemTenantID,
-			Config:    &base.Config{Insecure: true},
-			Clock:     clock.WallClock(),
-			MaxOffset: clock.MaxOffset(),
-			Stopper:   stopper,
-			Settings:  cluster.MakeTestingClusterSettings(),
-			Knobs:     knobs,
+			TenantID:        roachpb.SystemTenantID,
+			Config:          &base.Config{Insecure: true},
+			Clock:           clock.WallClock(),
+			ToleratedOffset: clock.ToleratedOffset(),
+			Stopper:         stopper,
+			Settings:        cluster.MakeTestingClusterSettings(),
+			Knobs:           knobs,
 		})
 }

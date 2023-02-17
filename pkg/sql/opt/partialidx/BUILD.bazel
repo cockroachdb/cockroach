@@ -12,7 +12,7 @@ go_library(
         "//pkg/sql/opt/memo",
         "//pkg/sql/opt/norm",
         "//pkg/sql/sem/eval",
-        "//pkg/util",
+        "//pkg/util/intsets",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
@@ -36,7 +36,7 @@ go_test(
         "//pkg/sql/parser",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
-        "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/util/leaktest",
         "@com_github_cockroachdb_datadriven//:datadriven",
     ],

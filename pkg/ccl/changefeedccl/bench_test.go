@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -108,7 +107,7 @@ func BenchmarkChangefeedTicks(b *testing.B) {
 		// data every time it's called, but that's a little unsatisfying. Instead,
 		// wait for each batch to come out of the feed before advancing the
 		// timestamp.
-		feedClock := hlc.NewClock(&mockClock{ts: timestamps}, time.Nanosecond /* maxOffset */)
+		feedClock := hlc.NewClockForTesting(&mockClock{ts: timestamps})
 		runBench(b, feedClock)
 	})
 }
@@ -130,6 +129,7 @@ func (m *mockClock) Now() time.Time {
 }
 
 type benchSink struct {
+	testSink
 	syncutil.Mutex
 	cond      *sync.Cond
 	emits     int
@@ -250,8 +250,8 @@ func createBenchmarkChangefeed(
 	}
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	eventConsumer, err := newKVEventToRowConsumer(ctx, &execCfg, sf, initialHighWater,
-		sink, encoder, makeChangefeedConfigFromJobDetails(details),
-		execinfrapb.Expression{}, username.PublicRoleName(), TestingKnobs{}, nil, nil)
+		sink, encoder, makeChangefeedConfigFromJobDetails(details), execinfrapb.ChangeAggregatorSpec{},
+		TestingKnobs{}, nil, nil, nil)
 
 	if err != nil {
 		return nil, nil, err

@@ -2085,6 +2085,10 @@ CREATE SEQUENCE seqas_error
 
 subtest sequence_in_transaction
 
+# We're using explicit transactions, so we might hit retries.
+
+skip_on_retry
+
 # create a sequence and nextval in the same transaction
 statement ok
 BEGIN

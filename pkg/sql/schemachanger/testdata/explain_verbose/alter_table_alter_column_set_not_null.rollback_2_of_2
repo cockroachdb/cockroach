@@ -1,0 +1,37 @@
+/* setup */
+CREATE TABLE t (i INT PRIMARY KEY, j INT);
+
+/* test */
+ALTER TABLE t ALTER COLUMN j SET NOT NULL;
+EXPLAIN (ddl, verbose) rollback at post-commit stage 2 of 2;
+----
+• Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› ALTER COLUMN ‹j› SET NOT NULL;
+│
+└── • PostCommitNonRevertiblePhase
+    │
+    └── • Stage 1 of 1 in PostCommitNonRevertiblePhase
+        │
+        ├── • 1 element transitioning toward ABSENT
+        │   │
+        │   └── • ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}
+        │       │ WRITE_ONLY → ABSENT
+        │       │
+        │       └── • PreviousStagePrecedence dependency from WRITE_ONLY ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}
+        │             rule: "ColumnNotNull transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->VALIDATED"
+        │
+        └── • 3 Mutation operations
+            │
+            ├── • RemoveColumnNotNull
+            │     ColumnID: 2
+            │     TableID: 104
+            │
+            ├── • RemoveJobStateFromDescriptor
+            │     DescriptorID: 104
+            │     JobID: 1
+            │
+            └── • UpdateSchemaChangerJob
+                  DescriptorIDsToRemove:
+                  - 104
+                  IsNonCancelable: true
+                  JobID: 1
+                  RunningStatus: all stages completed

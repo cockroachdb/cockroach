@@ -261,6 +261,13 @@ func TestLogic_as_of(
 	runLogicTest(t, "as_of")
 }
 
+func TestLogic_asyncpg(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "asyncpg")
+}
+
 func TestLogic_auto_span_config_reconciliation_job(
 	t *testing.T,
 ) {
@@ -833,6 +840,13 @@ func TestLogic_gc_job_mixed(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "gc_job_mixed")
+}
+
+func TestLogic_gen_test_objects(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "gen_test_objects")
 }
 
 func TestLogic_generator_probe_ranges(
@@ -1465,6 +1479,13 @@ func TestLogic_propagate_input_ordering(
 	runLogicTest(t, "propagate_input_ordering")
 }
 
+func TestLogic_rand_ident(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "rand_ident")
+}
+
 func TestLogic_reassign_owned_by(
 	t *testing.T,
 ) {
@@ -1547,6 +1568,13 @@ func TestLogic_reset(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "reset")
+}
+
+func TestLogic_retry(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "retry")
 }
 
 func TestLogic_returning(
@@ -1857,6 +1885,13 @@ func TestLogic_show_indexes(
 	runLogicTest(t, "show_indexes")
 }
 
+func TestLogic_show_ranges(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "show_ranges")
+}
+
 func TestLogic_show_source(
 	t *testing.T,
 ) {
@@ -1939,6 +1974,13 @@ func TestLogic_statement_statistics(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "statement_statistics")
+}
+
+func TestLogic_statement_statistics_errors(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "statement_statistics_errors")
 }
 
 func TestLogic_stats(
@@ -2109,6 +2151,13 @@ func TestLogic_tuple(
 	runLogicTest(t, "tuple")
 }
 
+func TestLogic_tuple_local(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "tuple_local")
+}
+
 func TestLogic_txn(
 	t *testing.T,
 ) {
@@ -2156,6 +2205,34 @@ func TestLogic_udf(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf")
+}
+
+func TestLogic_udf_oid_ref(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_oid_ref")
+}
+
+func TestLogic_udf_setof(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_setof")
+}
+
+func TestLogic_udf_star(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_star")
+}
+
+func TestLogic_udf_volatility_check(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_volatility_check")
 }
 
 func TestLogic_union(

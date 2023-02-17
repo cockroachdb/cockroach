@@ -16,11 +16,11 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -56,15 +56,15 @@ CREATE SEQUENCE sq1;
 CREATE TABLE t2(a INT PRIMARY KEY);
 CREATE VIEW v AS SELECT a FROM t2;
 CREATE TYPE notmyworkday AS ENUM ('Monday', 'Tuesday');
-CREATE FUNCTION f(a notmyworkday) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+CREATE FUNCTION f(a notmyworkday) RETURNS INT VOLATILE LANGUAGE SQL AS $$
   SELECT a FROM t;
   SELECT b FROM t@t_idx_b;
   SELECT c FROM t@t_idx_c;
   SELECT a FROM v;
   SELECT nextval('sq1');
 $$;
-CREATE FUNCTION f() RETURNS VOID IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$;
-CREATE FUNCTION f(INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT a FROM t $$;
+CREATE FUNCTION f() RETURNS VOID VOLATILE LANGUAGE SQL AS $$ SELECT 1 $$;
+CREATE FUNCTION f(INT) RETURNS INT VOLATILE LANGUAGE SQL AS $$ SELECT a FROM t $$;
 `)
 
 	var sessionData sessiondatapb.SessionData
@@ -74,10 +74,10 @@ CREATE FUNCTION f(INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT a FROM t 
 		require.NoError(t, protoutil.Unmarshal(sessionSerialized, &sessionData))
 	}
 
-	err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+	err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 		execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 		planner, cleanup := sql.NewInternalPlanner(
-			"resolve-index", txn, username.RootUserName(), &sql.MemoryMetrics{}, &execCfg, sessionData,
+			"resolve-index", txn.KV(), username.RootUserName(), &sql.MemoryMetrics{}, &execCfg, sessionData,
 		)
 		defer cleanup()
 		ec := planner.(interface{ EvalContext() *eval.Context }).EvalContext()
@@ -166,9 +166,9 @@ func TestResolveFunctionRespectSearchPath(t *testing.T) {
 	tDB.Exec(t, `
 CREATE SCHEMA sc1;
 CREATE SCHEMA sc2;
-CREATE FUNCTION sc1.f() RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$;
-CREATE FUNCTION sc2.f() RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 2 $$;
-CREATE FUNCTION sc1.lower() RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 3 $$;
+CREATE FUNCTION sc1.f() RETURNS INT VOLATILE LANGUAGE SQL AS $$ SELECT 1 $$;
+CREATE FUNCTION sc2.f() RETURNS INT VOLATILE LANGUAGE SQL AS $$ SELECT 2 $$;
+CREATE FUNCTION sc1.lower() RETURNS INT VOLATILE LANGUAGE SQL AS $$ SELECT 3 $$;
 `,
 	)
 
@@ -250,10 +250,10 @@ CREATE FUNCTION sc1.lower() RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 3 $$
 		require.NoError(t, protoutil.Unmarshal(sessionSerialized, &sessionData))
 	}
 
-	err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+	err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 		execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 		planner, cleanup := sql.NewInternalPlanner(
-			"resolve-index", txn, username.RootUserName(), &sql.MemoryMetrics{}, &execCfg, sessionData,
+			"resolve-index", txn.KV(), username.RootUserName(), &sql.MemoryMetrics{}, &execCfg, sessionData,
 		)
 		defer cleanup()
 		ec := planner.(interface{ EvalContext() *eval.Context }).EvalContext()
@@ -306,10 +306,10 @@ func TestFuncExprTypeCheck(t *testing.T) {
 	tDB.Exec(t, `
 CREATE SCHEMA sc1;
 CREATE SCHEMA sc2;
-CREATE FUNCTION sc1.f(a INT, b INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$;
-CREATE FUNCTION sc1.f(a INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 2 $$;
-CREATE FUNCTION sc2.f(a INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 3 $$;
-CREATE FUNCTION sc1.lower(a STRING) RETURNS STRING IMMUTABLE LANGUAGE SQL AS $$ SELECT lower('HI') $$;
+CREATE FUNCTION sc1.f(a INT, b INT) RETURNS INT VOLATILE LANGUAGE SQL AS $$ SELECT 1 $$;
+CREATE FUNCTION sc1.f(a INT) RETURNS INT VOLATILE LANGUAGE SQL AS $$ SELECT 2 $$;
+CREATE FUNCTION sc2.f(a INT) RETURNS INT VOLATILE LANGUAGE SQL AS $$ SELECT 3 $$;
+CREATE FUNCTION sc1.lower(a STRING) RETURNS STRING VOLATILE LANGUAGE SQL AS $$ SELECT lower('HI') $$;
 `,
 	)
 
@@ -387,10 +387,10 @@ CREATE FUNCTION sc1.lower(a STRING) RETURNS STRING IMMUTABLE LANGUAGE SQL AS $$ 
 		require.NoError(t, protoutil.Unmarshal(sessionSerialized, &sessionData))
 	}
 
-	err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+	err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 		execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 		planner, cleanup := sql.NewInternalPlanner(
-			"resolve-index", txn, username.RootUserName(), &sql.MemoryMetrics{}, &execCfg, sessionData,
+			"resolve-index", txn.KV(), username.RootUserName(), &sql.MemoryMetrics{}, &execCfg, sessionData,
 		)
 		defer cleanup()
 		ec := planner.(interface{ EvalContext() *eval.Context }).EvalContext()

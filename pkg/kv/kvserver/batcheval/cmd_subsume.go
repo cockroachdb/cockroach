@@ -100,17 +100,17 @@ func Subsume(
 	// the maximum timestamp to ensure that we see an intent if one exists,
 	// regardless of what timestamp it is written at.
 	descKey := keys.RangeDescriptorKey(desc.StartKey)
-	_, intent, err := storage.MVCCGet(ctx, readWriter, descKey, hlc.MaxTimestamp,
+	intentRes, err := storage.MVCCGet(ctx, readWriter, descKey, hlc.MaxTimestamp,
 		storage.MVCCGetOptions{Inconsistent: true})
 	if err != nil {
 		return result.Result{}, errors.Wrap(err, "fetching local range descriptor")
-	} else if intent == nil {
+	} else if intentRes.Intent == nil {
 		return result.Result{}, errors.Errorf("range missing intent on its local descriptor")
 	}
-	val, _, err := storage.MVCCGetAsTxn(ctx, readWriter, descKey, intent.Txn.WriteTimestamp, intent.Txn)
+	valRes, err := storage.MVCCGetAsTxn(ctx, readWriter, descKey, intentRes.Intent.Txn.WriteTimestamp, intentRes.Intent.Txn)
 	if err != nil {
 		return result.Result{}, errors.Wrap(err, "fetching local range descriptor as txn")
-	} else if val != nil {
+	} else if valRes.Value != nil {
 		return result.Result{}, errors.Errorf("non-deletion intent on local range descriptor")
 	}
 

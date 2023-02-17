@@ -28,7 +28,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":github-pull-request-make_lib"],
     deps = [
-        "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/testutils/skip",
         "@com_github_kr_pretty//:pretty",
     ],

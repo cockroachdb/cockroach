@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scstage"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -48,7 +48,7 @@ func TestPlanDataDriven(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	datadriven.Walk(t, testutils.TestDataPath(t), func(t *testing.T, path string) {
+	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 		s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 		defer s.Stopper().Stop(ctx)
 
@@ -124,6 +124,11 @@ func TestPlanDataDriven(t *testing.T) {
 func validatePlan(t *testing.T, plan *scplan.Plan) {
 	stages := plan.Stages
 	for i, stage := range stages {
+		if stage.IsResetPreCommitStage() {
+			// Skip the reset stage. Otherwise, the re-planned plan will also have
+			// a reset stage and the assertions won't be verified.
+			continue
+		}
 		expected := make([]scstage.Stage, len(stages[i:]))
 		for j, s := range stages[i:] {
 			if s.Phase == stage.Phase {
@@ -134,10 +139,7 @@ func validatePlan(t *testing.T, plan *scplan.Plan) {
 			expected[j] = s
 		}
 		e := marshalOps(t, plan.TargetState, expected)
-		cs := scpb.CurrentState{
-			TargetState: plan.TargetState,
-			Current:     stage.Before,
-		}
+		cs := plan.CurrentState.WithCurrentStatuses(stage.Before)
 		truncatedPlan := sctestutils.MakePlan(t, cs, stage.Phase)
 		sctestutils.TruncateJobOps(&truncatedPlan)
 		a := marshalOps(t, plan.TargetState, truncatedPlan.Stages)

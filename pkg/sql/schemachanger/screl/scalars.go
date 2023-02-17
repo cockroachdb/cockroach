@@ -97,9 +97,9 @@ func ContainsDescID(haystack scpb.Element, needle catid.DescID) (contains bool) 
 	return contains
 }
 
-// MinVersion returns the minimum cluster version at which an element may
+// MinElementVersion returns the minimum cluster version at which an element may
 // be used.
-func MinVersion(el scpb.Element) clusterversion.Key {
+func MinElementVersion(el scpb.Element) clusterversion.Key {
 	switch el.(type) {
 	case *scpb.Database, *scpb.Schema, *scpb.View, *scpb.Sequence, *scpb.Table,
 		*scpb.AliasType, *scpb.ColumnFamily, *scpb.Column, *scpb.PrimaryIndex,
@@ -115,12 +115,31 @@ func MinVersion(el scpb.Element) clusterversion.Key {
 		*scpb.Namespace, *scpb.Owner, *scpb.UserPrivileges,
 		*scpb.DatabaseRegionConfig, *scpb.DatabaseRoleSetting, *scpb.DatabaseComment,
 		*scpb.SchemaParent, *scpb.SchemaComment, *scpb.ObjectParent:
-		return clusterversion.V22_1
+		return clusterversion.TODODelete_V22_1
+	case *scpb.CompositeType, *scpb.CompositeTypeAttrType, *scpb.CompositeTypeAttrName:
+		return clusterversion.V23_1
 	case *scpb.IndexColumn, *scpb.EnumTypeValue, *scpb.TableZoneConfig:
-		return clusterversion.V22_2UseDelRangeInGCJob
-	case *scpb.DatabaseData, *scpb.TableData, *scpb.IndexData, *scpb.TablePartitioning:
+		return clusterversion.TODODelete_V22_2UseDelRangeInGCJob
+	case *scpb.DatabaseData, *scpb.TableData, *scpb.IndexData, *scpb.TablePartitioning,
+		*scpb.Function, *scpb.FunctionName, *scpb.FunctionVolatility, *scpb.FunctionLeakProof,
+		*scpb.FunctionNullInputBehavior, *scpb.FunctionBody, *scpb.FunctionParamDefaultExpression:
+		return clusterversion.V23_1
+	case *scpb.ColumnNotNull, *scpb.CheckConstraintUnvalidated,
+		*scpb.UniqueWithoutIndexConstraintUnvalidated, *scpb.ForeignKeyConstraintUnvalidated:
 		return clusterversion.V23_1
 	default:
 		panic(errors.AssertionFailedf("unknown element %T", el))
 	}
+}
+
+// MaxElementVersion returns the minimum cluster version at which an element may
+// be used.
+func MaxElementVersion(el scpb.Element) (version *clusterversion.Key) {
+	var v clusterversion.Key
+	switch el.(type) {
+	case *scpb.SecondaryIndexPartial:
+		v = clusterversion.V23_1_SchemaChangerDeprecatedIndexPredicates
+		return &v
+	}
+	return nil
 }

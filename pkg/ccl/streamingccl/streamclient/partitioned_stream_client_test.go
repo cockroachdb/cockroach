@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package streamclient
+package streamclient_test
 
 import (
 	"context"
@@ -20,8 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl" // Ensure we can start tenant.
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
-	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamingtest"
-	_ "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamproducer" // Ensure we can start replication stream.
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationtestutils"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -43,10 +43,10 @@ import (
 )
 
 type subscriptionFeedSource struct {
-	sub Subscription
+	sub streamclient.Subscription
 }
 
-var _ streamingtest.FeedSource = (*subscriptionFeedSource)(nil)
+var _ replicationtestutils.FeedSource = (*subscriptionFeedSource)(nil)
 
 // Next implements the streamingtest.FeedSource interface.
 func (f *subscriptionFeedSource) Next() (streamingccl.Event, bool) {
@@ -66,7 +66,7 @@ func TestPartitionedStreamReplicationClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	h, cleanup := streamingtest.NewReplicationHelper(t,
+	h, cleanup := replicationtestutils.NewReplicationHelper(t,
 		base.TestServerArgs{
 			// Need to disable the test tenant until tenant-level restore is
 			// supported. Tracked with #76378.
@@ -118,7 +118,7 @@ INSERT INTO d.t2 VALUES (2);
 	}
 
 	maybeInlineURL := maybeGenerateInlineURL(&h.PGUrl)
-	client, err := newPartitionedStreamClient(ctx, maybeInlineURL)
+	client, err := streamclient.NewPartitionedStreamClient(ctx, maybeInlineURL)
 	defer func() {
 		require.NoError(t, client.Close(ctx))
 	}()
@@ -198,7 +198,7 @@ INSERT INTO d.t2 VALUES (2);
 	url, err := streamingccl.StreamAddress(top.Partitions[0].SrcAddr).URL()
 	require.NoError(t, err)
 	// Create a new stream client with the given partition address.
-	subClient, err := newPartitionedStreamClient(ctx, url)
+	subClient, err := streamclient.NewPartitionedStreamClient(ctx, url)
 	defer func() {
 		require.NoError(t, subClient.Close(ctx))
 	}()
@@ -207,21 +207,21 @@ INSERT INTO d.t2 VALUES (2);
 		initialScanTimestamp, hlc.Timestamp{})
 	require.NoError(t, err)
 
-	rf := streamingtest.MakeReplicationFeed(t, &subscriptionFeedSource{sub: sub})
+	rf := replicationtestutils.MakeReplicationFeed(t, &subscriptionFeedSource{sub: sub})
 	t1Descr := desctestutils.TestingGetPublicTableDescriptor(h.SysServer.DB(), tenant.Codec, "d", "t1")
 
 	ctxWithCancel, cancelFn := context.WithCancel(ctx)
 	cg := ctxgroup.WithContext(ctxWithCancel)
 	cg.GoCtx(sub.Subscribe)
 	// Observe the existing single row in t1.
-	expected := streamingtest.EncodeKV(t, tenant.Codec, t1Descr, 42)
+	expected := replicationtestutils.EncodeKV(t, tenant.Codec, t1Descr, 42)
 	firstObserved := rf.ObserveKey(ctx, expected.Key)
 	require.Equal(t, expected.Value.RawBytes, firstObserved.Value.RawBytes)
 	rf.ObserveResolved(ctx, firstObserved.Value.Timestamp)
 
 	// Updates the existing row.
 	tenant.SQL.Exec(t, `UPDATE d.t1 SET b = 'world' WHERE i = 42`)
-	expected = streamingtest.EncodeKV(t, tenant.Codec, t1Descr, 42, nil, "world")
+	expected = replicationtestutils.EncodeKV(t, tenant.Codec, t1Descr, 42, nil, "world")
 
 	// Observe its changes.
 	secondObserved := rf.ObserveKey(ctx, expected.Key)
@@ -243,7 +243,7 @@ INSERT INTO d.t2 VALUES (2);
 
 	// Testing client.Complete()
 	err = client.Complete(ctx, streampb.StreamID(999), true)
-	require.True(t, testutils.IsError(err, fmt.Sprintf("job %d: not found in system.jobs table", 999)), err)
+	require.True(t, testutils.IsError(err, "job with ID 999 does not exist"), err)
 
 	// Makes producer job exit quickly.
 	h.SysSQL.Exec(t, `

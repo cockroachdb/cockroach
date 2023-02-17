@@ -63,13 +63,13 @@ exec-sql user=testuser
 BACKUP DATABASE d INTO 'userfile:///test-nonroot-db';
 ----
 pq: user testuser does not have SELECT privilege on relation t
-HINT: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here <link>. In a future release, to run BACKUP DATABASE, user testuser will exclusively require the BACKUP privilege on database d.
+HINT: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here https://www.cockroachlabs.com/docs/stable/backup.html#required-privileges. In a future release, to run BACKUP DATABASE, user testuser will exclusively require the BACKUP privilege on database d.
 
 exec-sql user=testuser
 BACKUP TABLE d.t INTO 'userfile:///test-nonroot-table';
 ----
 pq: user testuser does not have SELECT privilege on relation t
-HINT: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here <link>. In a future release, to run BACKUP TABLE, user testuser will exclusively require the BACKUP privilege on tables: t.
+HINT: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here https://www.cockroachlabs.com/docs/stable/backup.html#required-privileges. In a future release, to run BACKUP TABLE, user testuser will exclusively require the BACKUP privilege on tables: t.
 
 exec-sql
 REVOKE SYSTEM BACKUP FROM testuser;
@@ -87,7 +87,7 @@ exec-sql user=testuser
 BACKUP DATABASE d INTO 'userfile:///test-nonroot-db'
 ----
 pq: user testuser does not have SELECT privilege on relation t
-HINT: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here <link>. In a future release, to run BACKUP DATABASE, user testuser will exclusively require the BACKUP privilege on database d.
+HINT: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here https://www.cockroachlabs.com/docs/stable/backup.html#required-privileges. In a future release, to run BACKUP DATABASE, user testuser will exclusively require the BACKUP privilege on database d.
 
 # Grant the user `BACKUP` on the database.
 exec-sql
@@ -111,7 +111,7 @@ exec-sql user=testuser
 BACKUP TABLE d.t INTO 'userfile:///test-nonroot-table'
 ----
 pq: user testuser does not have SELECT privilege on relation t
-HINT: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here <link>. In a future release, to run BACKUP TABLE, user testuser will exclusively require the BACKUP privilege on tables: t.
+HINT: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here https://www.cockroachlabs.com/docs/stable/backup.html#required-privileges. In a future release, to run BACKUP TABLE, user testuser will exclusively require the BACKUP privilege on tables: t.
 
 # Set the default privileges on the database and create a new table.
 exec-sql
@@ -160,19 +160,19 @@ exec-sql user=testuser
 BACKUP TABLE d.t INTO 'userfile:///test-nonroot-table'
 ----
 pq: user testuser does not have SELECT privilege on relation t
-HINT: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here <link>. In a future release, to run BACKUP TABLE, user testuser will exclusively require the BACKUP privilege on tables: t.
+HINT: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here https://www.cockroachlabs.com/docs/stable/backup.html#required-privileges. In a future release, to run BACKUP TABLE, user testuser will exclusively require the BACKUP privilege on tables: t.
 
 exec-sql user=testuser
 BACKUP TABLE d.t2 INTO 'userfile:///test-nonroot-table'
 ----
 pq: user testuser does not have SELECT privilege on relation t2
-HINT: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here <link>. In a future release, to run BACKUP TABLE, user testuser will exclusively require the BACKUP privilege on tables: t2.
+HINT: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here https://www.cockroachlabs.com/docs/stable/backup.html#required-privileges. In a future release, to run BACKUP TABLE, user testuser will exclusively require the BACKUP privilege on tables: t2.
 
 exec-sql user=testuser
 BACKUP TABLE d.t3 INTO 'userfile:///test-nonroot-table'
 ----
 pq: user testuser does not have SELECT privilege on relation t3
-HINT: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here <link>. In a future release, to run BACKUP TABLE, user testuser will exclusively require the BACKUP privilege on tables: t3.
+HINT: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here https://www.cockroachlabs.com/docs/stable/backup.html#required-privileges. In a future release, to run BACKUP TABLE, user testuser will exclusively require the BACKUP privilege on tables: t3.
 
 exec-sql
 GRANT BACKUP ON TABLE d.t,d.t2,d.t3 TO testuser;
@@ -200,7 +200,7 @@ exec-sql user=testuser
 BACKUP TABLE d.foo.t1 INTO 'userfile:///test-nonroot-table'
 ----
 pq: user testuser does not have USAGE privilege on schema foo
-HINT: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here <link>. In a future release, to run BACKUP TABLE, user testuser will exclusively require the BACKUP privilege on tables: t1.
+HINT: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here https://www.cockroachlabs.com/docs/stable/backup.html#required-privileges. In a future release, to run BACKUP TABLE, user testuser will exclusively require the BACKUP privilege on tables: t1.
 
 exec-sql
 GRANT BACKUP ON TABLE foo.t1 TO testuser;
@@ -296,7 +296,7 @@ exec-sql user=testuser
 BACKUP DATABASE d_test_fn INTO 'userfile:///test-nonroot-db';
 ----
 pq: user testuser does not have EXECUTE privilege on function f
-HINT: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here <link>. In a future release, to run BACKUP DATABASE, user testuser will exclusively require the BACKUP privilege on database d_test_fn.
+HINT: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here https://www.cockroachlabs.com/docs/stable/backup.html#required-privileges. In a future release, to run BACKUP DATABASE, user testuser will exclusively require the BACKUP privilege on database d_test_fn.
 
 exec-sql
 REVOKE SYSTEM BACKUP FROM testuser;

@@ -23,6 +23,6 @@ func systemJobInfoTableMigration(
 	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {
 	return createSystemTable(
-		ctx, d.DB, d.Settings, d.Codec, systemschema.SystemJobInfoTable,
+		ctx, d.DB.KV(), d.Settings, d.Codec, systemschema.SystemJobInfoTable,
 	)
 }

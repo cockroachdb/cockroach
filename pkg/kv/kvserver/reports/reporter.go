@@ -31,9 +31,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -74,7 +74,7 @@ type Reporter struct {
 	liveness  *liveness.NodeLiveness
 	settings  *cluster.Settings
 	storePool *storepool.StorePool
-	executor  sqlutil.InternalExecutor
+	executor  isql.Executor
 	cfgs      config.SystemConfigProvider
 
 	frequencyMu struct {
@@ -91,7 +91,7 @@ func NewReporter(
 	storePool *storepool.StorePool,
 	st *cluster.Settings,
 	liveness *liveness.NodeLiveness,
-	executor sqlutil.InternalExecutor,
+	executor isql.Executor,
 	provider config.SystemConfigProvider,
 ) *Reporter {
 	r := Reporter{
@@ -796,7 +796,7 @@ type reportID int
 // getReportGenerationTime returns the time at a particular report was last
 // generated. Returns time.Time{} if the report is not found.
 func getReportGenerationTime(
-	ctx context.Context, rid reportID, ex sqlutil.InternalExecutor, txn *kv.Txn,
+	ctx context.Context, rid reportID, ex isql.Executor, txn *kv.Txn,
 ) (time.Time, error) {
 	row, err := ex.QueryRowEx(
 		ctx,

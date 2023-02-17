@@ -35,6 +35,7 @@ func TestMVCCScanWithManyVersionsAndSeparatedIntents(t *testing.T) {
 
 	// We default to separated intents enabled.
 	eng, err := Open(context.Background(), InMemory(),
+		cluster.MakeClusterSettings(),
 		CacheSize(1<<20))
 	require.NoError(t, err)
 	defer eng.Close()
@@ -93,12 +94,13 @@ func TestMVCCScanWithManyVersionsAndSeparatedIntents(t *testing.T) {
 		tombstones:       false,
 		failOnMoreRecent: false,
 	}
-	mvccScanner.init(nil /* txn */, uncertainty.Interval{}, 0 /* trackLastOffsets */)
+	var results pebbleResults
+	mvccScanner.init(nil /* txn */, uncertainty.Interval{}, &results)
 	_, _, _, err = mvccScanner.scan(context.Background())
 	require.NoError(t, err)
 
-	kvData := mvccScanner.results.finish()
-	numKeys := mvccScanner.results.count
+	kvData := results.finish()
+	numKeys := results.count
 	require.Equal(t, 3, int(numKeys))
 	type kv struct {
 		k MVCCKey
@@ -152,12 +154,13 @@ func TestMVCCScanWithLargeKeyValue(t *testing.T) {
 		end:     roachpb.Key("e"),
 		ts:      ts,
 	}
-	mvccScanner.init(nil /* txn */, uncertainty.Interval{}, 0 /* trackLastOffsets */)
+	var results pebbleResults
+	mvccScanner.init(nil /* txn */, uncertainty.Interval{}, &results)
 	_, _, _, err := mvccScanner.scan(context.Background())
 	require.NoError(t, err)
 
-	kvData := mvccScanner.results.finish()
-	numKeys := mvccScanner.results.count
+	kvData := results.finish()
+	numKeys := results.count
 	require.Equal(t, 4, int(numKeys))
 	require.Equal(t, 4, len(kvData))
 	require.Equal(t, 25, len(kvData[0]))
@@ -229,7 +232,7 @@ func TestMVCCScanWithMemoryAccounting(t *testing.T) {
 		end:    makeKey(nil, 11),
 		ts:     hlc.Timestamp{WallTime: 50},
 	}
-	scanner.init(&txn1, ui1, 0 /* trackLastOffsets */)
+	scanner.init(&txn1, ui1, &pebbleResults{})
 	cleanup := scannerWithAccount(ctx, st, scanner, 6000)
 	resumeSpan, resumeReason, resumeNextBytes, err := scanner.scan(ctx)
 	require.Nil(t, resumeSpan)
@@ -245,7 +248,7 @@ func TestMVCCScanWithMemoryAccounting(t *testing.T) {
 		end:    makeKey(nil, 11),
 		ts:     hlc.Timestamp{WallTime: 50},
 	}
-	scanner.init(&txn1, ui1, 0 /* trackLastOffsets */)
+	scanner.init(&txn1, ui1, &pebbleResults{})
 	cleanup = scannerWithAccount(ctx, st, scanner, 6000)
 	resumeSpan, resumeReason, resumeNextBytes, err = scanner.scan(ctx)
 	require.Nil(t, resumeSpan)
@@ -265,7 +268,7 @@ func TestMVCCScanWithMemoryAccounting(t *testing.T) {
 			ts:           hlc.Timestamp{WallTime: 50},
 			inconsistent: inconsistent,
 		}
-		scanner.init(nil, uncertainty.Interval{}, 0 /* trackLastOffsets */)
+		scanner.init(nil, uncertainty.Interval{}, &pebbleResults{})
 		cleanup = scannerWithAccount(ctx, st, scanner, 100)
 		resumeSpan, resumeReason, resumeNextBytes, err = scanner.scan(ctx)
 		require.Nil(t, resumeSpan)

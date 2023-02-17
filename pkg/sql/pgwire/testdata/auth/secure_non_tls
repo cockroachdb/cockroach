@@ -52,6 +52,7 @@ local     all all      password
 ----
 # Active authentication configuration on this node:
 # Original configuration:
+# loopback all all all trust       # built-in CockroachDB default
 # host  all root all cert-password # CockroachDB mandatory rule
 # hostnossl all all  all reject
 # host      all all  all cert-password
@@ -59,6 +60,7 @@ local     all all      password
 #
 # Interpreted configuration:
 # TYPE    DATABASE USER ADDRESS METHOD        OPTIONS
+loopback  all      all  all     trust
 host      all      root all     cert-password
 hostnossl all      all  all     reject
 host      all      all  all     cert-password

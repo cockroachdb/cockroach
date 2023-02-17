@@ -134,7 +134,7 @@ func registerGORM(r registry.Registry) {
 
 	r.Add(registry.TestSpec{
 		Name:    "gorm",
-		Owner:   registry.OwnerSQLExperience,
+		Owner:   registry.OwnerSQLSessions,
 		Cluster: r.MakeClusterSpec(1),
 		Tags:    []string{`default`, `orm`},
 		Run:     runGORM,

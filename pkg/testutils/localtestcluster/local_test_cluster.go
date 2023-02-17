@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -113,7 +114,8 @@ func (ltc *LocalTestCluster) Stopper() *stop.Stopper {
 // to shutdown the server after the test completes.
 func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFactory InitFactoryFn) {
 	manualClock := timeutil.NewManualTime(timeutil.Unix(0, 123))
-	clock := hlc.NewClock(manualClock, 50*time.Millisecond /* maxOffset */)
+	clock := hlc.NewClock(manualClock,
+		50*time.Millisecond /* maxOffset */, 50*time.Millisecond /* toleratedOffset */)
 	cfg := kvserver.TestStoreConfig(clock)
 	tr := cfg.AmbientCtx.Tracer
 	ltc.stopper = stop.NewStopper(stop.WithTracer(tr))
@@ -134,22 +136,22 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 
 	ltc.tester = t
 	cfg.RPCContext = rpc.NewContext(ctx, rpc.ContextOptions{
-		TenantID:  roachpb.SystemTenantID,
-		Config:    baseCtx,
-		Clock:     ltc.Clock.WallClock(),
-		MaxOffset: ltc.Clock.MaxOffset(),
-		Stopper:   ltc.stopper,
-		Settings:  cfg.Settings,
-		NodeID:    nc,
+		TenantID:        roachpb.SystemTenantID,
+		Config:          baseCtx,
+		Clock:           ltc.Clock.WallClock(),
+		ToleratedOffset: ltc.Clock.ToleratedOffset(),
+		Stopper:         ltc.stopper,
+		Settings:        cfg.Settings,
+		NodeID:          nc,
 	})
 	cfg.RPCContext.NodeID.Set(ctx, nodeID)
 	clusterID := cfg.RPCContext.StorageClusterID
-	server := rpc.NewServer(cfg.RPCContext) // never started
-	ltc.Gossip = gossip.New(ambient, clusterID, nc, cfg.RPCContext, server, ltc.stopper, metric.NewRegistry(), roachpb.Locality{}, zonepb.DefaultZoneConfigRef())
+	ltc.Gossip = gossip.New(ambient, clusterID, nc, ltc.stopper, metric.NewRegistry(), roachpb.Locality{}, zonepb.DefaultZoneConfigRef())
 	var err error
 	ltc.Eng, err = storage.Open(
 		ctx,
 		storage.InMemory(),
+		cfg.Settings,
 		storage.CacheSize(0),
 		storage.MaxSize(50<<20 /* 50 MiB */),
 	)
@@ -208,10 +210,10 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	cfg.Transport = transport
 	cfg.ClosedTimestampReceiver = sidetransport.NewReceiver(nc, ltc.stopper, ltc.Stores, nil /* testingKnobs */)
 
-	if err := kvserver.WriteClusterVersion(ctx, ltc.Eng, clusterversion.TestingClusterVersion); err != nil {
+	if err := kvstorage.WriteClusterVersion(ctx, ltc.Eng, clusterversion.TestingClusterVersion); err != nil {
 		t.Fatalf("unable to write cluster version: %s", err)
 	}
-	if err := kvserver.InitEngine(
+	if err := kvstorage.InitEngine(
 		ctx, ltc.Eng, roachpb.StoreIdent{NodeID: nodeID, StoreID: 1},
 	); err != nil {
 		t.Fatalf("unable to start local test cluster: %s", err)

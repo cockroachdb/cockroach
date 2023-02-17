@@ -39,8 +39,10 @@ enum Status {
   TRANSIENT_ABSENT = 3;
 
   // Intermediate states on the descriptor dropping path.
-  TXN_DROPPED = 4;
   DROPPED = 5;
+  // TXN_DROPPED only exists to service the 22.2 rule set.
+  // Deprecated.
+  TXN_DROPPED = 4 [deprecated = true];
 
   // Intermediate states on the column and index dropping and adding paths.
   // WRITE_ONLY is also used on constraint adding and dropping paths.
@@ -65,6 +67,10 @@ enum Status {
   TRANSIENT_VALIDATED = 20;
   TRANSIENT_PUBLIC = 21;
   TRANSIENT_DROPPED = 22;
+
+  // When a basic descriptor (the object element) is first created before all
+  // the other dependent elements become public.
+  DESCRIPTOR_ADDED = 23;
 }
 
 // TargetMetadata refers to the metadata for individual elements, where

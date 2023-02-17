@@ -19,7 +19,7 @@ interface AggregateStatistics {
   stats: StatementStatistics;
 }
 
-const execStats: Required<ExecStats> = {
+const execStats: ExecStats = {
   count: Long.fromNumber(1),
   network_bytes: {
     mean: 4160407,
@@ -38,6 +38,10 @@ const execStats: Required<ExecStats> = {
     squared_diffs: 47880000000000,
   },
   max_disk_usage: {
+    mean: 4160407,
+    squared_diffs: 47880000000000,
+  },
+  cpu_sql_nanos: {
     mean: 4160407,
     squared_diffs: 47880000000000,
   },

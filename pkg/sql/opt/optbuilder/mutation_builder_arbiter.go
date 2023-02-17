@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
 
@@ -92,7 +92,7 @@ func (mb *mutationBuilder) findArbiters(onConflict *tree.OnConflict) arbiterSet 
 		))
 	}
 	// We have to infer an arbiter set.
-	var ords util.FastIntSet
+	var ords intsets.Fast
 	for _, name := range onConflict.Columns {
 		found := false
 		for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
@@ -151,7 +151,7 @@ func partialIndexArbiterError(onConflict *tree.OnConflict, tableName tree.Name) 
 //     found.
 //  3. Otherwise, returns all partial arbiter indexes and constraints.
 func (mb *mutationBuilder) inferArbitersFromConflictOrds(
-	conflictOrds util.FastIntSet, arbiterPredicate tree.Expr,
+	conflictOrds intsets.Fast, arbiterPredicate tree.Expr,
 ) arbiterSet {
 	// If conflictOrds is empty, then all unique indexes and unique without
 	// index constraints are arbiters.
@@ -277,7 +277,7 @@ func (mb *mutationBuilder) inferArbitersFromConflictOrds(
 //   - pred is the partial index or constraint predicate. If the arbiter is
 //     not a partial index or constraint, pred is nil.
 func (mb *mutationBuilder) buildAntiJoinForDoNothingArbiter(
-	inScope *scope, conflictOrds util.FastIntSet, pred tree.Expr,
+	inScope *scope, conflictOrds intsets.Fast, pred tree.Expr,
 ) {
 	// Build the right side of the anti-join. Use a new metadata instance
 	// of the mutation table so that a different set of column IDs are used for
@@ -359,7 +359,7 @@ func (mb *mutationBuilder) buildAntiJoinForDoNothingArbiter(
 //     only de-duplicate insert rows that satisfy the partial index predicate.
 //     If the arbiter is not a partial index, partialIndexDistinctCol is nil.
 func (mb *mutationBuilder) buildLeftJoinForUpsertArbiter(
-	inScope *scope, conflictOrds util.FastIntSet, pred tree.Expr,
+	inScope *scope, conflictOrds intsets.Fast, pred tree.Expr,
 ) {
 	// Build the right side of the left outer join. Use a different instance of
 	// table metadata so that col IDs do not overlap.
@@ -450,7 +450,7 @@ func (mb *mutationBuilder) buildLeftJoinForUpsertArbiter(
 //     should trigger an error. If empty, no error is triggered.
 func (mb *mutationBuilder) buildDistinctOnForArbiter(
 	insertColScope *scope,
-	conflictOrds util.FastIntSet,
+	conflictOrds intsets.Fast,
 	partialArbiterDistinctCol *scopeColumn,
 	errorOnDup string,
 ) {

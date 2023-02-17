@@ -40,7 +40,7 @@ func DecomposeToElements(t *testing.T, dir string, newCluster NewClusterFunc) {
 	ctx := context.Background()
 	datadriven.Walk(t, dir, func(t *testing.T, path string) {
 		// Create a test cluster.
-		db, cleanup := newCluster(t, nil /* knobs */)
+		_, db, cleanup := newCluster(t, nil /* knobs */)
 		tdb := sqlutils.MakeSQLRunner(db)
 		defer cleanup()
 		// We need to disable the declarative schema changer so that we don't end
@@ -86,7 +86,8 @@ func runDecomposeTest(
 		testDeps := sctestdeps.NewTestDependencies(
 			sctestdeps.WithComments(sctestdeps.ReadCommentsFromDB(t, tdb)),
 			sctestdeps.WithZoneConfigs(sctestdeps.ReadZoneConfigsFromDB(t, tdb, allDescs.Catalog)))
-		backRefs := scdecomp.WalkDescriptor(ctx, desc, allDescs.LookupDescriptor, visitor, testDeps, testDeps)
+		backRefs := scdecomp.WalkDescriptor(ctx, desc, allDescs.LookupDescriptor, visitor,
+			testDeps, testDeps, testDeps.ClusterSettings().Version.ActiveVersion(ctx))
 		return marshalResult(t, m, backRefs)
 
 	default:

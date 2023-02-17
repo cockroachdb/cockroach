@@ -645,7 +645,7 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *eval.Con
 		} else if !ok {
 			break
 		}
-		row, err := i.Row()
+		row, err := i.EncRow()
 		if err != nil {
 			return err
 		}
@@ -722,7 +722,7 @@ func (w *windower) populateNextOutputRow() (bool, error) {
 		} else if !ok {
 			return false, nil
 		}
-		inputRow, err := w.allRowsIterator.Row()
+		inputRow, err := w.allRowsIterator.EncRow()
 		w.allRowsIterator.Next()
 		if err != nil {
 			return false, err
@@ -792,7 +792,10 @@ func (n *partitionPeerGrouper) InSameGroup(i, j int) (bool, error) {
 			n.err = err
 			return false, n.err
 		}
-		if c := da.Compare(n.evalCtx, db); c != 0 {
+		if c, err := da.CompareError(n.evalCtx, db); err != nil {
+			n.err = err
+			return false, n.err
+		} else if c != 0 {
 			if o.Direction != execinfrapb.Ordering_Column_ASC {
 				return false, nil
 			}

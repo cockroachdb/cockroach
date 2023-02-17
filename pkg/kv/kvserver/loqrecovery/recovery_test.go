@@ -12,11 +12,13 @@ package loqrecovery
 
 import (
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
@@ -24,8 +26,12 @@ import (
 func TestQuorumRecovery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	datadriven.Walk(t, testutils.TestDataPath(t), func(t *testing.T, path string) {
-		env := quorumRecoveryEnv{}
+	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
+		testTime, _ := time.Parse(time.RFC3339, "2022-02-24T01:40:00Z")
+		env := quorumRecoveryEnv{
+			uuidGen: NewSeqGen(1),
+			clock:   timeutil.NewManualTime(testTime),
+		}
 		defer env.cleanupStores()
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			return env.Handle(t, *d)
@@ -67,9 +73,24 @@ func TestValidatePlanReplicaSet(t *testing.T) {
 		return result
 	}
 
+	locations := func(nodeIDs ...int) locationsMap {
+		result := make(locationsMap)
+		for _, id := range nodeIDs {
+			result[roachpb.NodeID(id)] = storeSet(id)
+		}
+		return result
+	}
+
 	stores := func(storeIDs ...int) (result []roachpb.StoreID) {
 		for _, storeID := range storeIDs {
 			result = append(result, roachpb.StoreID(storeID))
+		}
+		return
+	}
+
+	nodes := func(nodeIDs ...int) (result []roachpb.NodeID) {
+		for _, nodeID := range nodeIDs {
+			result = append(result, roachpb.NodeID(nodeID))
 		}
 		return
 	}
@@ -79,19 +100,23 @@ func TestValidatePlanReplicaSet(t *testing.T) {
 		// Test data.
 		replicas   []loqrecoverypb.ReplicaInfo
 		deadStores []roachpb.StoreID
+		deadNodes  []roachpb.NodeID
 		// Outcomes.
 		liveStores      storeIDSet
-		missingStoreIDs storeIDSet
+		missingStoreIDs locationsMap
 		err             bool
 	}{
-		{name: "no dead stores", replicas: cluster(node1, node2, node3), deadStores: nil, liveStores: storeSet(1, 2, 3), missingStoreIDs: storeSet()},
-		{name: "no explicit dead stores", replicas: cluster(node1, node2), deadStores: nil, liveStores: storeSet(1, 2), missingStoreIDs: storeSet(3)},
-		{name: "explicit dead stores match replicas", replicas: cluster(node2, node3), deadStores: stores(1), liveStores: storeSet(2, 3), missingStoreIDs: storeSet(1)},
+		{name: "no dead stores", replicas: cluster(node1, node2, node3), deadStores: nil, liveStores: storeSet(1, 2, 3), missingStoreIDs: locations()},
+		{name: "no explicit dead stores", replicas: cluster(node1, node2), deadStores: nil, liveStores: storeSet(1, 2), missingStoreIDs: locations(3)},
+		{name: "explicit dead stores match replicas", replicas: cluster(node2, node3), deadStores: stores(1), liveStores: storeSet(2, 3), missingStoreIDs: locations(1)},
 		{name: "explicit dead stores with replica info", replicas: cluster(node1, node2), deadStores: stores(1), err: true},
 		{name: "explicit dead stores mismatch", replicas: cluster(node1), deadStores: stores(2), err: true},
+		{name: "explicit dead nodes match replicas", replicas: cluster(node2, node3), deadNodes: nodes(1), liveStores: storeSet(2, 3), missingStoreIDs: locations(1)},
+		{name: "explicit dead nodes with replica info", replicas: cluster(node1, node2), deadNodes: nodes(1), err: true},
+		{name: "explicit dead nodes mismatch", replicas: cluster(node1), deadNodes: nodes(2), err: true},
 	} {
 		t.Run(td.name, func(t *testing.T) {
-			liveStoreIDs, missingStoreIDs, err := validateReplicaSets(td.replicas, td.deadStores)
+			liveStoreIDs, missingStoreIDs, err := validateReplicaSets(td.replicas, td.deadStores, td.deadNodes)
 			if td.err {
 				require.Error(t, err)
 			} else {

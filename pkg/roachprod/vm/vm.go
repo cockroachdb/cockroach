@@ -89,6 +89,9 @@ type VM struct {
 
 	// LocalClusterName is only set for VMs in a local cluster.
 	LocalClusterName string `json:"local_cluster_name,omitempty"`
+
+	// NonBootAttachedVolumes are the non-bootable volumes attached to the VM.
+	NonBootAttachedVolumes []Volume `json:"non_bootable_volumes"`
 }
 
 // Name generates the name for the i'th node in a cluster.
@@ -125,7 +128,7 @@ func (vm *VM) Locality() (string, error) {
 }
 
 // ZoneEntry returns a line representing the VMs DNS zone entry
-func (vm VM) ZoneEntry() (string, error) {
+func (vm *VM) ZoneEntry() (string, error) {
 	if len(vm.Name) >= 60 {
 		return "", errors.Errorf("Name too long: %s", vm.Name)
 	}
@@ -135,6 +138,15 @@ func (vm VM) ZoneEntry() (string, error) {
 	// TODO(rail): We should probably skip local VMs too. They add a bunch of
 	// entries for localhost.roachprod.crdb.io pointing to 127.0.0.1.
 	return fmt.Sprintf("%s 60 IN A %s\n", vm.Name, vm.PublicIP), nil
+}
+
+func (vm *VM) AttachVolume(v Volume) (deviceName string, err error) {
+	vm.NonBootAttachedVolumes = append(vm.NonBootAttachedVolumes, v)
+	err = ForProvider(vm.Provider, func(provider Provider) error {
+		deviceName, err = provider.AttachVolumeToVM(v, vm)
+		return err
+	})
+	return deviceName, err
 }
 
 // List represents a list of VMs.
@@ -224,11 +236,40 @@ const (
 // additional provider- specific flags, add a similarly-named method
 // `ConfigureEnlargeFlags` to mix in the additional flags.
 type ProviderOpts interface {
-	// Configures a FlagSet with any options relevant to the `create` command.
+	// ConfigureCreateFlags configures a FlagSet with any options relevant to the
+	// `create` command.
 	ConfigureCreateFlags(*pflag.FlagSet)
-	// Configures a FlagSet with any options relevant to cluster manipulation
-	// commands (`create`, `destroy`, `list`, `sync` and `gc`).
+	// ConfigureClusterFlags configures a FlagSet with any options relevant to
+	// cluster manipulation commands (`create`, `destroy`, `list`, `sync` and
+	// `gc`).
 	ConfigureClusterFlags(*pflag.FlagSet, MultipleProjectsOption)
+}
+
+type Volume struct {
+	ProviderResourceID string
+	ProviderVolumeType string
+	Zone               string
+	Encrypted          bool
+	Name               string
+	Labels             map[string]string
+	Size               int
+}
+
+type VolumeCreateOpts struct {
+	Name string
+	// N.B. Customer managed encryption is not supported at this time
+	Encrypted        bool
+	Architecture     string
+	IOPS             int
+	Size             int
+	Type             string
+	SourceSnapshotID string
+	Zone             string
+	Labels           map[string]string
+}
+
+type ListOptions struct {
+	IncludeVolumes bool
 }
 
 // A Provider is a source of virtual machines running on some hosting platform.
@@ -245,7 +286,7 @@ type Provider interface {
 	Extend(vms List, lifetime time.Duration) error
 	// Return the account name associated with the provider
 	FindActiveAccount() (string, error)
-	List(l *logger.Logger) (List, error)
+	List(l *logger.Logger, opts ListOptions) (List, error)
 	// The name of the Provider, which will also surface in the top-level Providers map.
 	Name() string
 
@@ -260,6 +301,10 @@ type Provider interface {
 	// ProjectActive returns true if the given project is currently active in the
 	// provider.
 	ProjectActive(project string) bool
+
+	CreateVolume(vco VolumeCreateOpts) (Volume, error)
+	AttachVolumeToVM(volume Volume, vm *VM) (string, error)
+	SnapshotVolume(volume Volume, name, description string, labels map[string]string) (string, error)
 }
 
 // DeleteCluster is an optional capability for a Provider which can

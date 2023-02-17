@@ -31,18 +31,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -241,6 +242,7 @@ func TestImportIgnoresProcessedFiles(t *testing.T) {
 		Cfg: &execinfra.ServerConfig{
 			Settings:        &cluster.Settings{},
 			ExternalStorage: externalStorageFactory,
+			DB:              fakeDB{},
 			BulkAdder: func(
 				_ context.Context, _ *kv.DB, _ hlc.Timestamp,
 				_ kvserverbase.BulkAdderOptions) (kvserverbase.BulkAdder, error) {
@@ -325,6 +327,28 @@ type observedKeys struct {
 	keys []roachpb.Key
 }
 
+// fakeDB implements descs.DB but will panic on all method calls and will
+// return a nil kv.DB.
+type fakeDB struct{}
+
+func (fakeDB) KV() *kv.DB { return nil }
+
+func (fakeDB) Txn(
+	ctx context.Context, f2 func(context.Context, isql.Txn) error, option ...isql.TxnOption,
+) error {
+	panic("unimplemented")
+}
+
+func (fakeDB) Executor(option ...isql.ExecutorOption) isql.Executor {
+	panic("unimplemented")
+}
+
+func (fakeDB) DescsTxn(
+	ctx context.Context, f func(context.Context, descs.Txn) error, opts ...isql.TxnOption,
+) error {
+	panic("unimplemented")
+}
+
 func TestImportHonorsResumePosition(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -342,6 +366,7 @@ func TestImportHonorsResumePosition(t *testing.T) {
 		Cfg: &execinfra.ServerConfig{
 			Settings:        &cluster.Settings{},
 			ExternalStorage: externalStorageFactory,
+			DB:              fakeDB{},
 			BulkAdder: func(
 				_ context.Context, _ *kv.DB, _ hlc.Timestamp,
 				opts kvserverbase.BulkAdderOptions) (kvserverbase.BulkAdder, error) {
@@ -470,6 +495,7 @@ func TestImportHandlesDuplicateKVs(t *testing.T) {
 		Cfg: &execinfra.ServerConfig{
 			Settings:        &cluster.Settings{},
 			ExternalStorage: externalStorageFactory,
+			DB:              fakeDB{},
 			BulkAdder: func(
 				_ context.Context, _ *kv.DB, _ hlc.Timestamp,
 				opts kvserverbase.BulkAdderOptions) (kvserverbase.BulkAdder, error) {
@@ -649,9 +675,6 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Flaky test.
-	skip.WithIssue(t, 91828)
-
 	defer setImportReaderParallelism(1)()
 	const batchSize = 5
 	defer TestingSetParallelImporterReaderBatchSize(batchSize)()
@@ -674,6 +697,7 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
+	setSmallIngestBufferSizes(t, sqlDB)
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 	sqlDB.Exec(t, "CREATE TABLE t (id INT, data STRING)")
 	defer sqlDB.Exec(t, `DROP TABLE t`)
@@ -885,9 +909,7 @@ func externalStorageFactory(
 	}
 	return cloud.MakeExternalStorage(ctx, dest, base.ExternalIODirConfig{},
 		nil, blobs.TestBlobServiceClient(workdir),
-		nil, /* ie */
-		nil, /* ief */
-		nil, /* kvDB */
+		nil, /* db */
 		nil, /* limiters */
 		cloud.NilMetrics,
 	)
@@ -1001,7 +1023,7 @@ func avroFormat(t *testing.T, format roachpb.AvroOptions_Format) roachpb.IOFileF
 
 	if format != roachpb.AvroOptions_OCF {
 		// Need to load schema for record specific inputs.
-		bytes, err := os.ReadFile(testutils.TestDataPath(t, "avro", "simple-schema.json"))
+		bytes, err := os.ReadFile(datapathutils.TestDataPath(t, "avro", "simple-schema.json"))
 		require.NoError(t, err)
 		avro.SchemaJSON = string(bytes)
 		avro.RecordSeparator = '\n'

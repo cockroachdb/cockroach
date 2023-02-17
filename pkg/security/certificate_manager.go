@@ -13,7 +13,6 @@ package security
 import (
 	"context"
 	"crypto/tls"
-	"fmt"
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/security/certnames"
@@ -232,9 +231,10 @@ func (cm *CertificateManager) Metrics() CertificateMetrics {
 
 // RegisterSignalHandler registers a signal handler for SIGHUP, triggering a
 // refresh of the certificates directory on notification.
-func (cm *CertificateManager) RegisterSignalHandler(stopper *stop.Stopper) {
-	ctx := context.Background()
-	go func() {
+func (cm *CertificateManager) RegisterSignalHandler(
+	ctx context.Context, stopper *stop.Stopper,
+) error {
+	return stopper.RunAsyncTask(ctx, "refresh-certs", func(ctx context.Context) {
 		ch := sysutil.RefreshSignaledChan()
 		for {
 			select {
@@ -250,7 +250,7 @@ func (cm *CertificateManager) RegisterSignalHandler(stopper *stop.Stopper) {
 				}
 			}
 		}
-	}()
+	})
 }
 
 // CACert returns the CA cert. May be nil.
@@ -309,28 +309,18 @@ func (cm *CertificateManager) ClientCerts() map[username.SQLUsername]*CertInfo {
 	return cm.clientCerts
 }
 
-// Error is the error type for this package.
-// TODO(knz): make this an error wrapper.
-type Error struct {
-	Message string
-	Err     error
-}
+// ErrCertManagement is a marker error for errors produced in this package that
+// can be identified with errors.Is().
+var ErrCertManagement error = errCertManagement{}
 
-// Error implements the error interface.
-func (e *Error) Error() string {
-	return fmt.Sprintf("%s: %v", e.Message, e.Err)
-}
+type errCertManagement struct{}
+
+func (errCertManagement) Error() string { return "error " }
 
 // makeErrorf constructs an Error and returns it.
-func makeErrorf(err error, format string, args ...interface{}) *Error {
-	return &Error{
-		Message: fmt.Sprintf(format, args...),
-		Err:     err,
-	}
+func makeErrorf(err error, format string, args ...interface{}) error {
+	return errors.Mark(errors.Wrapf(err, format, args...), ErrCertManagement)
 }
-
-// makeError constructs an Error with just a string.
-func makeError(err error, s string) *Error { return makeErrorf(err, "%s", s) }
 
 // LoadCertificates creates a CertificateLoader to load all certs and keys.
 // Upon success, it swaps the existing certificates for the new ones.
@@ -395,29 +385,29 @@ func (cm *CertificateManager) LoadCertificates() error {
 	if cm.initialized {
 		// If we ran before, make sure we don't reload with missing/bad certificates.
 		if err := checkCertIsValid(caCert); checkCertIsValid(cm.caCert) == nil && err != nil {
-			return makeError(err, "reload would lose valid CA cert")
+			return makeErrorf(err, "reload would lose valid CA cert")
 		}
 		if err := checkCertIsValid(nodeCert); checkCertIsValid(cm.nodeCert) == nil && err != nil {
-			return makeError(err, "reload would lose valid node cert")
+			return makeErrorf(err, "reload would lose valid node cert")
 		}
 		if err := checkCertIsValid(nodeClientCert); checkCertIsValid(cm.nodeClientCert) == nil && err != nil {
 			return makeErrorf(err, "reload would lose valid client cert for '%s'", username.NodeUser)
 		}
 		if err := checkCertIsValid(clientCACert); checkCertIsValid(cm.clientCACert) == nil && err != nil {
-			return makeError(err, "reload would lose valid CA certificate for client verification")
+			return makeErrorf(err, "reload would lose valid CA certificate for client verification")
 		}
 		if err := checkCertIsValid(uiCACert); checkCertIsValid(cm.uiCACert) == nil && err != nil {
-			return makeError(err, "reload would lose valid CA certificate for UI")
+			return makeErrorf(err, "reload would lose valid CA certificate for UI")
 		}
 		if err := checkCertIsValid(uiCert); checkCertIsValid(cm.uiCert) == nil && err != nil {
-			return makeError(err, "reload would lose valid UI certificate")
+			return makeErrorf(err, "reload would lose valid UI certificate")
 		}
 
 		if err := checkCertIsValid(tenantCACert); checkCertIsValid(cm.tenantCACert) == nil && err != nil {
-			return makeError(err, "reload would lose valid tenant client CA certificate")
+			return makeErrorf(err, "reload would lose valid tenant client CA certificate")
 		}
 		if err := checkCertIsValid(tenantCert); checkCertIsValid(cm.tenantCert) == nil && err != nil {
-			return makeError(err, "reload would lose valid tenant client certificate")
+			return makeErrorf(err, "reload would lose valid tenant client certificate")
 		}
 	}
 
@@ -429,7 +419,7 @@ func (cm *CertificateManager) LoadCertificates() error {
 		// No client certificate for node, but we have a node certificate. Check that
 		// it contains the required client fields.
 		if err := validateDualPurposeNodeCert(nodeCert); err != nil {
-			return err
+			return makeErrorf(err, "validating node cert")
 		}
 	}
 
@@ -578,6 +568,41 @@ func (cm *CertificateManager) getEmbeddedServerTLSConfig(
 	return cfg, nil
 }
 
+// GetNodeClientTLSConfig returns a client TLS config suitable for
+// dialing other KV nodes.
+func (cm *CertificateManager) GetNodeClientTLSConfig() (*tls.Config, error) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	// Return the cached config if we have one.
+	if cm.clientConfig != nil {
+		return cm.clientConfig, nil
+	}
+
+	ca, err := cm.getCACertLocked()
+	if err != nil {
+		return nil, err
+	}
+
+	clientCert, err := cm.getNodeClientCertLocked()
+	if err != nil {
+		return nil, err
+	}
+
+	cfg, err := newClientTLSConfig(
+		cm.tlsSettings,
+		clientCert.FileContents,
+		clientCert.KeyFileContents,
+		ca.FileContents)
+	if err != nil {
+		return nil, err
+	}
+
+	// Cache the config.
+	cm.clientConfig = cfg
+	return cfg, nil
+}
+
 // GetUIServerTLSConfig returns a server TLS config for the Admin UI with a
 // callback to fetch the latest TLS config. We still attempt to get the config to make sure
 // the initial call has a valid config loaded.
@@ -624,7 +649,7 @@ func (cm *CertificateManager) getEmbeddedUIServerTLSConfig(
 // cm.mu must be held.
 func (cm *CertificateManager) getCACertLocked() (*CertInfo, error) {
 	if err := checkCertIsValid(cm.caCert); err != nil {
-		return nil, makeError(err, "problem with CA certificate")
+		return nil, makeErrorf(err, "problem with CA certificate")
 	}
 	return cm.caCert, nil
 }
@@ -639,7 +664,7 @@ func (cm *CertificateManager) getClientCACertLocked() (*CertInfo, error) {
 	}
 
 	if err := checkCertIsValid(cm.clientCACert); err != nil {
-		return nil, makeError(err, "problem with client CA certificate")
+		return nil, makeErrorf(err, "problem with client CA certificate")
 	}
 	return cm.clientCACert, nil
 }
@@ -654,7 +679,7 @@ func (cm *CertificateManager) getUICACertLocked() (*CertInfo, error) {
 	}
 
 	if err := checkCertIsValid(cm.uiCACert); err != nil {
-		return nil, makeError(err, "problem with UI CA certificate")
+		return nil, makeErrorf(err, "problem with UI CA certificate")
 	}
 	return cm.uiCACert, nil
 }
@@ -663,7 +688,7 @@ func (cm *CertificateManager) getUICACertLocked() (*CertInfo, error) {
 // cm.mu must be held.
 func (cm *CertificateManager) getNodeCertLocked() (*CertInfo, error) {
 	if err := checkCertIsValid(cm.nodeCert); err != nil {
-		return nil, makeError(err, "problem with node certificate")
+		return nil, makeErrorf(err, "problem with node certificate")
 	}
 	return cm.nodeCert, nil
 }
@@ -682,7 +707,7 @@ func (cm *CertificateManager) getUICertLocked() (*CertInfo, error) {
 		return cm.getTenantCertLocked()
 	}
 	if err := checkCertIsValid(cm.uiCert); err != nil {
-		return nil, makeError(err, "problem with UI certificate")
+		return nil, makeErrorf(err, "problem with UI certificate")
 	}
 	return cm.uiCert, nil
 }
@@ -708,16 +733,11 @@ func (cm *CertificateManager) getClientCertLocked(user username.SQLUsername) (*C
 // cm.mu must be held.
 func (cm *CertificateManager) getNodeClientCertLocked() (*CertInfo, error) {
 	if cm.nodeClientCert == nil {
-		// No specific client cert for 'node': use multi-purpose node cert,
-		// but only if we are in the host cluster.
-		if cm.IsForTenant() {
-			return nil, errors.New("no node client cert for a SQL server")
-		}
 		return cm.getNodeCertLocked()
 	}
 
 	if err := checkCertIsValid(cm.nodeClientCert); err != nil {
-		return nil, makeError(err, "problem with node client certificate")
+		return nil, makeErrorf(err, "problem with node client certificate")
 	}
 	return cm.nodeClientCert, nil
 }
@@ -731,7 +751,7 @@ func (cm *CertificateManager) getTenantCACertLocked() (*CertInfo, error) {
 	}
 	c := cm.tenantCACert
 	if err := checkCertIsValid(c); err != nil {
-		return nil, makeError(err, "problem with tenant client CA certificate")
+		return nil, makeErrorf(err, "problem with tenant client CA certificate")
 	}
 	return c, nil
 }
@@ -741,7 +761,7 @@ func (cm *CertificateManager) getTenantCACertLocked() (*CertInfo, error) {
 func (cm *CertificateManager) getTenantCertLocked() (*CertInfo, error) {
 	c := cm.tenantCert
 	if err := checkCertIsValid(c); err != nil {
-		return nil, makeError(err, "problem with tenant client certificate")
+		return nil, makeErrorf(err, "problem with tenant client certificate")
 	}
 	return c, nil
 }
@@ -798,7 +818,7 @@ func (cm *CertificateManager) GetTenantSigningCert() (*CertInfo, error) {
 
 	c := cm.tenantSigningCert
 	if err := checkCertIsValid(c); err != nil {
-		return nil, makeError(err, "problem with tenant signing certificate")
+		return nil, makeErrorf(err, "problem with tenant signing certificate")
 	}
 	return c, nil
 }
@@ -807,51 +827,37 @@ func (cm *CertificateManager) GetTenantSigningCert() (*CertInfo, error) {
 // Returns the dual-purpose node certs if user == NodeUser and there is no
 // separate client cert for 'node'.
 func (cm *CertificateManager) GetClientTLSConfig(user username.SQLUsername) (*tls.Config, error) {
+	if user.IsNodeUser() {
+		return cm.GetNodeClientTLSConfig()
+	}
+
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
-	// We always need the CA cert.
-	var ca *CertInfo
-	var err error
-	if !cm.IsForTenant() {
-		// Host cluster.
-		ca, err = cm.getCACertLocked()
+	// The client could be connecting to a KV node or a tenant server.
+	// We need at least one of the two CAs. If none is available, we
+	// won't be able to verify the server's identity.
+	if cm.caCert == nil && cm.tenantCACert == nil {
+		return nil, makeErrorf(errors.New("no CA certificate found, cannot authenticate remote server"),
+			"problem loading CA certificate")
+	}
+	var caBlob []byte
+	if cm.caCert != nil {
+		ca, err := cm.getCACertLocked()
 		if err != nil {
 			return nil, err
 		}
-	} else {
-		// Tenant server.
-		ca, err = cm.getTenantCACertLocked()
+		caBlob = AppendCertificatesToBlob(caBlob, ca.FileContents)
+	}
+	if cm.tenantCACert != nil {
+		ca, err := cm.getTenantCACertLocked()
 		if err != nil {
 			return nil, err
 		}
+		caBlob = AppendCertificatesToBlob(caBlob, ca.FileContents)
 	}
 
-	if !user.IsNodeUser() {
-		clientCert, err := cm.getClientCertLocked(user)
-		if err != nil {
-			return nil, err
-		}
-
-		cfg, err := newClientTLSConfig(
-			cm.tlsSettings,
-			clientCert.FileContents,
-			clientCert.KeyFileContents,
-			ca.FileContents)
-		if err != nil {
-			return nil, err
-		}
-
-		return cfg, nil
-	}
-
-	// We're the node user.
-	// Return the cached config if we have one.
-	if cm.clientConfig != nil {
-		return cm.clientConfig, nil
-	}
-
-	clientCert, err := cm.getNodeClientCertLocked()
+	clientCert, err := cm.getClientCertLocked(user)
 	if err != nil {
 		return nil, err
 	}
@@ -860,13 +866,11 @@ func (cm *CertificateManager) GetClientTLSConfig(user username.SQLUsername) (*tl
 		cm.tlsSettings,
 		clientCert.FileContents,
 		clientCert.KeyFileContents,
-		ca.FileContents)
+		caBlob)
 	if err != nil {
 		return nil, err
 	}
 
-	// Cache the config.
-	cm.clientConfig = cfg
 	return cfg, nil
 }
 
@@ -906,7 +910,7 @@ func (cm *CertificateManager) ListCertificates() ([]*CertInfo, error) {
 	defer cm.mu.RUnlock()
 
 	if !cm.initialized {
-		return nil, errors.New("certificate manager has not been initialized")
+		return nil, errors.AssertionFailedf("certificate manager has not been initialized")
 	}
 
 	ret := make([]*CertInfo, 0, 2+len(cm.clientCerts))

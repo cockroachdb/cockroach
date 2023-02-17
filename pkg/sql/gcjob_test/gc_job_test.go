@@ -19,17 +19,14 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
@@ -38,10 +35,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
-	"github.com/cockroachdb/cockroach/pkg/sql/gcjob/gcjobnotifier"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -51,10 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -109,25 +101,13 @@ func TestSchemaChangeGCJob(t *testing.T) {
 
 			var myTableDesc *tabledesc.Mutable
 			var myOtherTableDesc *tabledesc.Mutable
-			if err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-				myImm, err := col.GetImmutableTableByID(ctx, txn, myTableID, tree.ObjectLookupFlags{
-					CommonLookupFlags: tree.CommonLookupFlags{
-						AvoidLeased:    true,
-						IncludeDropped: true,
-						IncludeOffline: true,
-					},
-				})
+			if err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+				myImm, err := col.ByID(txn.KV()).Get().Table(ctx, myTableID)
 				if err != nil {
 					return err
 				}
 				myTableDesc = tabledesc.NewBuilder(myImm.TableDesc()).BuildExistingMutableTable()
-				myOtherImm, err := col.GetImmutableTableByID(ctx, txn, myOtherTableID, tree.ObjectLookupFlags{
-					CommonLookupFlags: tree.CommonLookupFlags{
-						AvoidLeased:    true,
-						IncludeDropped: true,
-						IncludeOffline: true,
-					},
-				})
+				myOtherImm, err := col.ByID(txn.KV()).Get().Table(ctx, myOtherTableID)
 				if err != nil {
 					return err
 				}
@@ -221,7 +201,7 @@ func TestSchemaChangeGCJob(t *testing.T) {
 				Details:       details,
 			}
 
-			job, err := jobs.TestingCreateAndStartJob(ctx, jobRegistry, kvDB, jobRecord)
+			job, err := jobs.TestingCreateAndStartJob(ctx, jobRegistry, s.InternalDB().(isql.DB), jobRecord)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -250,14 +230,8 @@ func TestSchemaChangeGCJob(t *testing.T) {
 				}
 			}
 
-			if err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-				myImm, err := col.GetImmutableTableByID(ctx, txn, myTableID, tree.ObjectLookupFlags{
-					CommonLookupFlags: tree.CommonLookupFlags{
-						AvoidLeased:    true,
-						IncludeDropped: true,
-						IncludeOffline: true,
-					},
-				})
+			if err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+				myImm, err := col.ByID(txn.KV()).Get().Table(ctx, myTableID)
 				if err != nil {
 					return err
 				}
@@ -267,13 +241,7 @@ func TestSchemaChangeGCJob(t *testing.T) {
 					return nil
 				}
 				myTableDesc = tabledesc.NewBuilder(myImm.TableDesc()).BuildExistingMutableTable()
-				myOtherImm, err := col.GetImmutableTableByID(ctx, txn, myOtherTableID, tree.ObjectLookupFlags{
-					CommonLookupFlags: tree.CommonLookupFlags{
-						AvoidLeased:    true,
-						IncludeDropped: true,
-						IncludeOffline: true,
-					},
-				})
+				myOtherImm, err := col.ByID(txn.KV()).Get().Table(ctx, myOtherTableID)
 				if err != nil {
 					return err
 				}
@@ -349,7 +317,7 @@ func TestGCResumer(t *testing.T) {
 
 	ctx := context.Background()
 	args := base.TestServerArgs{Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}}
-	srv, sqlDB, kvDB := serverutils.StartServer(t, args)
+	srv, sqlDB, _ := serverutils.StartServer(t, args)
 	execCfg := srv.ExecutorConfig().(sql.ExecutorConfig)
 	jobRegistry := execCfg.JobRegistry
 	defer srv.Stopper().Stop(ctx)
@@ -364,15 +332,20 @@ func TestGCResumer(t *testing.T) {
 				},
 			},
 			Progress: jobspb.SchemaChangeGCProgress{},
+			Username: username.TestUserName(),
 		}
 
-		sj, err := jobs.TestingCreateAndStartJob(ctx, jobRegistry, kvDB, record)
+		sj, err := jobs.TestingCreateAndStartJob(ctx, jobRegistry, execCfg.InternalDB, record)
 		require.NoError(t, err)
 		require.NoError(t, sj.AwaitCompletion(ctx))
 		job, err := jobRegistry.LoadJob(ctx, sj.ID())
 		require.NoError(t, err)
 		require.Equal(t, jobs.StatusSucceeded, job.Status())
-		_, err = sql.GetTenantRecordByID(ctx, &execCfg, nil /* txn */, roachpb.MustMakeTenantID(tenID))
+		err = execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			_, err := sql.GetTenantRecordByID(ctx, txn, roachpb.MustMakeTenantID(tenID), execCfg.Settings)
+			return err
+		})
+
 		require.EqualError(t, err, `tenant "10" does not exist`)
 		progress := job.Progress()
 		require.Equal(t, jobspb.SchemaChangeGCProgress_CLEARED, progress.GetSchemaChangeGC().Tenant.Status)
@@ -388,9 +361,10 @@ func TestGCResumer(t *testing.T) {
 				},
 			},
 			Progress: jobspb.SchemaChangeGCProgress{},
+			Username: username.TestUserName(),
 		}
 
-		sj, err := jobs.TestingCreateAndStartJob(ctx, jobRegistry, kvDB, record)
+		sj, err := jobs.TestingCreateAndStartJob(ctx, jobRegistry, execCfg.InternalDB, record)
 		require.NoError(t, err)
 
 		_, err = sqlDB.Exec("ALTER RANGE tenants CONFIGURE ZONE USING gc.ttlseconds = 1;")
@@ -400,7 +374,10 @@ func TestGCResumer(t *testing.T) {
 		job, err := jobRegistry.LoadJob(ctx, sj.ID())
 		require.NoError(t, err)
 		require.Equal(t, jobs.StatusSucceeded, job.Status())
-		_, err = sql.GetTenantRecordByID(ctx, &execCfg, nil /* txn */, roachpb.MustMakeTenantID(tenID))
+		err = execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			_, err := sql.GetTenantRecordByID(ctx, txn, roachpb.MustMakeTenantID(tenID), execCfg.Settings)
+			return err
+		})
 		require.EqualError(t, err, `tenant "10" does not exist`)
 		progress := job.Progress()
 		require.Equal(t, jobspb.SchemaChangeGCProgress_CLEARED, progress.GetSchemaChangeGC().Tenant.Status)
@@ -420,9 +397,10 @@ func TestGCResumer(t *testing.T) {
 		record := jobs.Record{
 			Details:  gcDetails,
 			Progress: jobspb.SchemaChangeGCProgress{},
+			Username: username.TestUserName(),
 		}
 
-		sj, err := jobs.TestingCreateAndStartJob(ctx, jobRegistry, kvDB, record)
+		sj, err := jobs.TestingCreateAndStartJob(ctx, jobRegistry, execCfg.InternalDB, record)
 		require.NoError(t, err)
 		require.Error(t, sj.AwaitCompletion(ctx))
 	})
@@ -449,14 +427,34 @@ func TestGCTenant(t *testing.T) {
 		dropTenID        = 11
 		nonexistentTenID = 12
 	)
-	_, err := sql.CreateTenantRecord(ctx, &execCfg, nil, &descpb.TenantInfoWithUsage{
-		TenantInfo: descpb.TenantInfo{ID: activeTenID},
-	}, execCfg.DefaultZoneConfig)
-	require.NoError(t, err)
-	_, err = sql.CreateTenantRecord(ctx, &execCfg, nil, &descpb.TenantInfoWithUsage{
-		TenantInfo: descpb.TenantInfo{ID: dropTenID, State: descpb.TenantInfo_DROP},
-	}, execCfg.DefaultZoneConfig)
-	require.NoError(t, err)
+	require.NoError(t, execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		_, err := sql.CreateTenantRecord(
+			ctx, execCfg.Codec, execCfg.Settings,
+			txn,
+			execCfg.SpanConfigKVAccessor.WithTxn(ctx, txn.KV()),
+			&mtinfopb.TenantInfoWithUsage{
+				SQLInfo: mtinfopb.SQLInfo{ID: activeTenID},
+			},
+			execCfg.DefaultZoneConfig,
+		)
+		return err
+	}))
+
+	require.NoError(t, execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		_, err := sql.CreateTenantRecord(
+			ctx, execCfg.Codec, execCfg.Settings,
+			txn,
+			execCfg.SpanConfigKVAccessor.WithTxn(ctx, txn.KV()),
+			&mtinfopb.TenantInfoWithUsage{
+				SQLInfo: mtinfopb.SQLInfo{
+					ID:        dropTenID,
+					DataState: mtinfopb.DataStateDrop,
+				},
+			},
+			execCfg.DefaultZoneConfig,
+		)
+		return err
+	}))
 
 	t.Run("unexpected progress state", func(t *testing.T) {
 		progress := &jobspb.SchemaChangeGCProgress{
@@ -467,7 +465,7 @@ func TestGCTenant(t *testing.T) {
 		require.EqualError(
 			t,
 			gcClosure(10, progress),
-			"Tenant id 10 is expired and should not be in state WAITING_FOR_CLEAR",
+			"tenant ID 10 is expired and should not be in state WAITING_FOR_CLEAR",
 		)
 		require.Equal(t, jobspb.SchemaChangeGCProgress_WAITING_FOR_CLEAR, progress.Tenant.Status)
 	})
@@ -491,7 +489,10 @@ func TestGCTenant(t *testing.T) {
 		require.EqualError(
 			t,
 			gcClosure(dropTenID, progress),
-			`GC state for tenant id:11 state:DROP name:"" dropped_name:"" tenant_replication_job_id:0 is DELETED yet the tenant row still exists`,
+			`GC state for tenant is DELETED yet the tenant row still exists: `+
+				`{ProtoInfo:{DeprecatedID:11 DeprecatedDataState:DROP DroppedName: TenantReplicationJobID:0 `+
+				`Capabilities:{CanAdminSplit:false CanViewNodeInfo:false CanViewTsdbMetrics:false}} `+
+				`SQLInfo:{ID:11 Name:tenant-11 DataState:drop ServiceMode:none}}`,
 		)
 	})
 
@@ -528,7 +529,10 @@ func TestGCTenant(t *testing.T) {
 
 		require.NoError(t, gcClosure(dropTenID, progress))
 		require.Equal(t, jobspb.SchemaChangeGCProgress_CLEARED, progress.Tenant.Status)
-		_, err = sql.GetTenantRecordByID(ctx, &execCfg, nil /* txn */, roachpb.MustMakeTenantID(dropTenID))
+		err = execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			_, err := sql.GetTenantRecordByID(ctx, txn, roachpb.MustMakeTenantID(dropTenID), execCfg.Settings)
+			return err
+		})
 		require.EqualError(t, err, `tenant "11" does not exist`)
 		require.NoError(t, gcClosure(dropTenID, progress))
 
@@ -648,154 +652,7 @@ SELECT descriptor_id, index_id
 			close(ch)
 		}
 		// Ensure that the job completes successfully in either case.
-		require.NoError(t, s.JobRegistry().(*jobs.Registry).WaitForJobs(
-			ctx, s.InternalExecutor().(sqlutil.InternalExecutor), []jobspb.JobID{jobID},
-		))
+		jr := s.JobRegistry().(*jobs.Registry)
+		require.NoError(t, jr.WaitForJobs(ctx, []jobspb.JobID{jobID}))
 	})
 }
-
-// TestGCJobNoSystemConfig tests that the GC job is robust to running with
-// no system config provided by the SystemConfigProvider. It is a regression
-// test for a panic which could occur due to a slow systemconfigwatcher
-// initialization.
-//
-// TODO(ajwerner): Remove this test in 23.1.
-func TestGCJobNoSystemConfig(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	provider := fakeSystemConfigProvider{}
-	var (
-		v0 = clusterversion.ByKey(clusterversion.V22_2UseDelRangeInGCJob - 1)
-		v1 = clusterversion.ByKey(clusterversion.V22_2UseDelRangeInGCJob)
-	)
-	settings := cluster.MakeTestingClusterSettingsWithVersions(v1, v0, false /* initializeVersion */)
-	ctx := context.Background()
-	require.NoError(t, clusterversion.Initialize(ctx, v0, &settings.SV))
-	stopper := stop.NewStopper()
-	gcKnobs := &sql.GCJobTestingKnobs{}
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
-		Settings: settings,
-		Stopper:  stopper,
-		Knobs: base.TestingKnobs{
-			GCJob: gcKnobs,
-			Server: &server.TestingKnobs{
-				DisableAutomaticVersionUpgrade: make(chan struct{}),
-				BinaryVersionOverride:          v0,
-			},
-		},
-	})
-	defer stopper.Stop(ctx)
-	codec := s.ExecutorConfig().(sql.ExecutorConfig).Codec
-	n := gcjobnotifier.New(settings, &provider, codec, stopper)
-	n.Start(ctx)
-	gcKnobs.Notifier = n
-
-	tdb := sqlutils.MakeSQLRunner(sqlDB)
-	tdb.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY)")
-	tdb.Exec(t, "SET CLUSTER SETTING kv.protectedts.poll_interval = '10ms'")
-	var id uint32
-	tdb.QueryRow(t, "SELECT 'foo'::regclass::int").Scan(&id)
-	tdb.Exec(t, "DROP TABLE foo")
-	// We want to make sure there's a notifyee and that the job attempted
-	// to read the status twice. We expect it once for the notifier and
-	// once for the job itself.
-	testutils.SucceedsSoon(t, func() error {
-		if n := provider.numNotifyees(); n == 0 {
-			return errors.Errorf("expected 1 notifyee, got %d", n)
-		}
-		if n := provider.numCalls(); n < 2 {
-			return errors.Errorf("expected at least 2 calls, got %d", n)
-		}
-		return nil
-	})
-	cfgProto := &zonepb.ZoneConfig{
-		GC: &zonepb.GCPolicy{TTLSeconds: 0},
-	}
-	cfg := config.NewSystemConfig(cfgProto)
-	descKV, err := kvDB.Get(ctx, codec.DescMetadataKey(id))
-	require.NoError(t, err)
-	var zoneKV roachpb.KeyValue
-	zoneKV.Key = config.MakeZoneKey(codec, descpb.ID(id))
-	require.NoError(t, zoneKV.Value.SetProto(cfgProto))
-	defaultKV := zoneKV
-	defaultKV.Key = config.MakeZoneKey(codec, 0)
-	// We need to put in an entry for the descriptor both so that the notifier
-	// fires and so that we don't think the descriptor is missing. We also
-	// need a zone config KV to make the delta filter happy.
-	cfg.Values = []roachpb.KeyValue{
-		{Key: descKV.Key, Value: *descKV.Value},
-		defaultKV,
-		zoneKV,
-	}
-
-	provider.setConfig(cfg)
-	tdb.CheckQueryResultsRetry(t, `
-SELECT status
-  FROM crdb_internal.jobs
- WHERE description = 'GC for DROP TABLE defaultdb.public.foo'`,
-		[][]string{{"succeeded"}})
-}
-
-type fakeSystemConfigProvider struct {
-	mu struct {
-		syncutil.Mutex
-
-		calls     int
-		n         int
-		config    *config.SystemConfig
-		notifyees map[int]chan struct{}
-	}
-}
-
-func (f *fakeSystemConfigProvider) GetSystemConfig() *config.SystemConfig {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.mu.calls++
-	return f.mu.config
-}
-
-func (f *fakeSystemConfigProvider) RegisterSystemConfigChannel() (
-	_ <-chan struct{},
-	unregister func(),
-) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	ch := make(chan struct{}, 1)
-	n := f.mu.n
-	f.mu.n++
-	if f.mu.notifyees == nil {
-		f.mu.notifyees = map[int]chan struct{}{}
-	}
-	f.mu.notifyees[n] = ch
-	return ch, func() {
-		f.mu.Lock()
-		defer f.mu.Unlock()
-		delete(f.mu.notifyees, n)
-	}
-}
-
-func (f *fakeSystemConfigProvider) setConfig(c *config.SystemConfig) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.mu.config = c
-	for _, ch := range f.mu.notifyees {
-		select {
-		case ch <- struct{}{}:
-		default:
-		}
-	}
-}
-
-func (f *fakeSystemConfigProvider) numNotifyees() int {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return len(f.mu.notifyees)
-}
-
-func (f *fakeSystemConfigProvider) numCalls() int {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.mu.calls
-}
-
-var _ config.SystemConfigProvider = (*fakeSystemConfigProvider)(nil)

@@ -278,7 +278,7 @@ func TestDeterministicInitialData(t *testing.T) {
 		`sqlsmith`:   0xcbf29ce484222325,
 		`startrek`:   0xa0249fbdf612734c,
 		`tpcc`:       0xab32e4f5e899eb2f,
-		`tpch`:       0xe013881749bb67e8,
+		`tpch`:       0xe4fd28db230b9149,
 		`ycsb`:       0x1244ea1c29ef67f6,
 	}
 
@@ -293,6 +293,14 @@ func TestDeterministicInitialData(t *testing.T) {
 			continue
 		}
 		t.Run(meta.Name, func(t *testing.T) {
+			// assertions depend on this seed
+			switch rs := meta.RandomSeed.(type) {
+			case *workload.Int64RandomSeed:
+				rs.Set(1)
+			case *workload.Uint64RandomSeed:
+				rs.Set(1)
+			}
+
 			if bigInitialData(meta) {
 				skip.UnderShort(t, fmt.Sprintf(`%s involves a lot of data`, meta.Name))
 			}

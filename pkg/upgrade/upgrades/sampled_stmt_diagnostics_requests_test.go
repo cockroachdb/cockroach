@@ -19,12 +19,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -35,12 +37,14 @@ func TestSampledStmtDiagReqsMigration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.WithIssue(t, 95530, "bump minBinary to 22.2. Skip 22.2 mixed-version tests for future cleanup")
+
 	clusterArgs := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
-					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.V22_2SampledStmtDiagReqs - 1),
+					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.TODODelete_V22_2SampledStmtDiagReqs - 1),
 				},
 			},
 		},
@@ -89,7 +93,7 @@ func TestSampledStmtDiagReqsMigration(t *testing.T) {
 	upgrades.Upgrade(
 		t,
 		sqlDB,
-		clusterversion.V22_2SampledStmtDiagReqs,
+		clusterversion.TODODelete_V22_2SampledStmtDiagReqs,
 		nil,   /* done */
 		false, /* expectError */
 	)
@@ -133,7 +137,7 @@ func getV2StmtDiagReqsDescriptor() *descpb.TableDescriptor {
 			ID:                  1,
 			Unique:              true,
 			KeyColumnNames:      []string{"id"},
-			KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
+			KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
 			KeyColumnIDs:        []descpb.ColumnID{1},
 		},
 		Indexes: []descpb.IndexDescriptor{
@@ -144,7 +148,7 @@ func getV2StmtDiagReqsDescriptor() *descpb.TableDescriptor {
 				KeyColumnNames:      []string{"completed", "id"},
 				StoreColumnNames:    []string{"statement_fingerprint", "min_execution_latency", "expires_at"},
 				KeyColumnIDs:        []descpb.ColumnID{2, 1},
-				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
 				StoreColumnIDs:      []descpb.ColumnID{3, 6, 7},
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 			},

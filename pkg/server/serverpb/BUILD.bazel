@@ -29,6 +29,7 @@ proto_library(
         "//pkg/roachpb:roachpb_proto",
         "//pkg/server/diagnostics/diagnosticspb:diagnosticspb_proto",
         "//pkg/server/status/statuspb:statuspb_proto",
+        "//pkg/sql/appstatspb:appstatspb_proto",
         "//pkg/sql/contentionpb:contentionpb_proto",
         "//pkg/sql/sqlstats/insights:insights_proto",
         "//pkg/storage/enginepb:enginepb_proto",
@@ -68,6 +69,7 @@ go_proto_library(
         "//pkg/roachpb",
         "//pkg/server/diagnostics/diagnosticspb",
         "//pkg/server/status/statuspb",
+        "//pkg/sql/appstatspb",
         "//pkg/sql/catalog/descpb",  # keep
         "//pkg/sql/contentionpb",
         "//pkg/sql/execinfrapb",  # keep
@@ -99,7 +101,10 @@ go_library(
     embed = [":serverpb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/server/serverpb",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/util/errorutil"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/util/errorutil",
+    ],
 )
 
 go_test(

@@ -62,6 +62,7 @@ go_test(
         "//pkg/ccl/storageccl/engineccl",
         "//pkg/cli",
         "//pkg/server",
+        "//pkg/settings/cluster",
         "//pkg/storage",
         "//pkg/testutils/serverutils",
         "//pkg/util/envutil",

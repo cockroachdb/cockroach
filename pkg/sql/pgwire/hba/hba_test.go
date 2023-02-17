@@ -15,13 +15,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/datadriven"
 	"github.com/kr/pretty"
 )
 
 func TestParse(t *testing.T) {
-	datadriven.RunTest(t, testutils.TestDataPath(t, "parse"),
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "parse"),
 		func(t *testing.T, td *datadriven.TestData) string {
 			switch td.Cmd {
 			case "multiline":
@@ -56,7 +56,7 @@ func TestParse(t *testing.T) {
 }
 
 func TestParseAndNormalizeAuthConfig(t *testing.T) {
-	datadriven.RunTest(t, testutils.TestDataPath(t, "normalization"),
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "normalization"),
 		func(t *testing.T, td *datadriven.TestData) string {
 			switch td.Cmd {
 			case "hba":

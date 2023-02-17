@@ -17,11 +17,12 @@ import (
 
 	"github.com/axiomhq/hyperloglog"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -134,7 +136,7 @@ func newSampleAggregator(
 		invSketch:    make(map[uint32]*sketchInfo, len(spec.InvertedSketches)),
 	}
 
-	var sampleCols util.FastIntSet
+	var sampleCols intsets.Fast
 	for i := range spec.Sketches {
 		s.sketches[i] = sketchInfo{
 			spec:     spec.Sketches[i],
@@ -156,7 +158,7 @@ func newSampleAggregator(
 		// The datums are converted to their inverted index bytes and sent as a
 		// single DBytes column. We do not use DEncodedKey here because it would
 		// introduce backward compatibility complications.
-		var srCols util.FastIntSet
+		var srCols intsets.Fast
 		srCols.Add(0)
 		sr.Init(int(spec.SampleSize), int(spec.MinSampleSize), bytesRowType, &s.memAcc, srCols)
 		col := spec.InvertedSketches[i].Columns[0]
@@ -231,10 +233,10 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, err er
 		// If it changed by less than 1%, just check for cancellation (which is more
 		// efficient).
 		if fractionCompleted < 1.0 && fractionCompleted < lastReportedFractionCompleted+0.01 {
-			return job.CheckStatus(ctx, nil /* txn */)
+			return job.NoTxn().CheckStatus(ctx)
 		}
 		lastReportedFractionCompleted = fractionCompleted
-		return job.FractionProgressed(ctx, nil /* txn */, jobs.FractionUpdater(fractionCompleted))
+		return job.NoTxn().FractionProgressed(ctx, jobs.FractionUpdater(fractionCompleted))
 	}
 
 	var rowsProcessed uint64
@@ -433,12 +435,28 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 	// internal executor instead of doing this weird thing where it uses the
 	// internal executor to execute one statement at a time inside a db.Txn()
 	// closure.
-	if err := s.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	if err := s.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		for _, si := range s.sketches {
 			var histogram *stats.HistogramData
 			if si.spec.GenerateHistogram {
 				colIdx := int(si.spec.Columns[0])
 				typ := s.inTypes[colIdx]
+
+				var lowerBound tree.Datum
+				if si.spec.PrevLowerBound != "" {
+					lbExpr, err := parser.ParseExpr(si.spec.PrevLowerBound)
+					if err != nil {
+						return err
+					}
+					lbTypedExpr, err := lbExpr.TypeCheck(ctx, &s.SemaCtx, typ)
+					if err != nil {
+						return err
+					}
+					lowerBound, err = eval.Expr(ctx, s.EvalCtx, lbTypedExpr)
+					if err != nil {
+						return err
+					}
+				}
 
 				h, err := s.generateHistogram(
 					ctx,
@@ -449,6 +467,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 					si.numRows-si.numNulls,
 					s.getDistinctCount(&si, false /* includeNulls */),
 					int(si.spec.HistogramMaxBuckets),
+					lowerBound,
 				)
 				if err != nil {
 					return err
@@ -479,6 +498,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 					invSketch.numRows-invSketch.numNulls,
 					invDistinctCount,
 					int(invSketch.spec.HistogramMaxBuckets),
+					nil,
 				)
 				if err != nil {
 					return err
@@ -496,7 +516,6 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 			if si.spec.PartialPredicate == "" {
 				if err := stats.DeleteOldStatsForColumns(
 					ctx,
-					s.FlowCtx.Cfg.Executor,
 					txn,
 					s.tableID,
 					columnIDs,
@@ -509,7 +528,6 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 			if err := stats.InsertNewStat(
 				ctx,
 				s.FlowCtx.Cfg.Settings,
-				s.FlowCtx.Cfg.Executor,
 				txn,
 				s.tableID,
 				si.spec.StatName,
@@ -544,13 +562,12 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 			columnsUsed[i] = columnIDs
 		}
 		keepTime := stats.TableStatisticsRetentionPeriod.Get(&s.FlowCtx.Cfg.Settings.SV)
-		if err := s.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		if err := s.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			// Delete old stats from columns that were not collected. This is
 			// important to prevent single-column stats from deleted columns or
 			// multi-column stats from deleted indexes from persisting indefinitely.
 			return stats.DeleteOldStatsForOtherColumns(
 				ctx,
-				s.FlowCtx.Cfg.Executor,
 				txn,
 				s.tableID,
 				columnsUsed,
@@ -610,18 +627,27 @@ func (s *sampleAggregator) generateHistogram(
 	numRows int64,
 	distinctCount int64,
 	maxBuckets int,
+	lowerBound tree.Datum,
 ) (stats.HistogramData, error) {
 	prevCapacity := sr.Cap()
 	values, err := sr.GetNonNullDatums(ctx, &s.tempMemAcc, colIdx)
 	if err != nil {
 		return stats.HistogramData{}, err
 	}
+
 	if sr.Cap() != prevCapacity {
 		log.Infof(
 			ctx, "histogram samples reduced from %d to %d due to excessive memory utilization",
 			prevCapacity, sr.Cap(),
 		)
 	}
+
+	if lowerBound != nil {
+		h, buckets, err := stats.ConstructExtremesHistogram(evalCtx, colType, values, numRows, distinctCount, maxBuckets, lowerBound)
+		_ = buckets
+		return h, err
+	}
+
 	// TODO(michae2): Instead of using the flowCtx's evalCtx, investigate
 	// whether this can use a nil *eval.Context.
 	h, _, err := stats.EquiDepthHistogram(evalCtx, colType, values, numRows, distinctCount, maxBuckets)

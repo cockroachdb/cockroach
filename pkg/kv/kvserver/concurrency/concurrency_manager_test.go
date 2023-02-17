@@ -35,6 +35,7 @@ import (
 	clustersettings "github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -90,7 +91,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	datadriven.Walk(t, testutils.TestDataPath(t, "concurrency_manager"), func(t *testing.T, path string) {
+	datadriven.Walk(t, datapathutils.TestDataPath(t, "concurrency_manager"), func(t *testing.T, path string) {
 		c := newCluster()
 		c.enableTxnPushes()
 		m := concurrency.NewManager(c.makeConfig())
@@ -362,7 +363,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				}
 				var key string
 				d.ScanArgs(t, "key", &key)
-				strength := scanLockStrength(t, d)
+				strength := concurrency.ScanLockStrength(t, d)
 				if ok, txn := g.IsKeyLockedByConflictingTxn(roachpb.Key(key), strength); ok {
 					holder := "<nil>"
 					if txn != nil {
@@ -659,7 +660,7 @@ func newCluster() *cluster {
 		rangeDesc: &roachpb.RangeDescriptor{RangeID: 1},
 		st:        clustersettings.MakeTestingClusterSettings(),
 		manual:    manual,
-		clock:     hlc.NewClock(manual, time.Nanosecond /* maxOffset */),
+		clock:     hlc.NewClockForTesting(manual),
 
 		txnsByName:      make(map[string]*roachpb.Transaction),
 		requestsByName:  make(map[string]concurrency.Request),

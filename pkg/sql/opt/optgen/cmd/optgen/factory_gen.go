@@ -135,6 +135,13 @@ func (g *factoryGen) genConstructFuncs() {
 
 			g.w.writeIndent("SKIP_RULES:\n")
 
+			if define.Name == "Scan" {
+				// The name of the scanPrivate element
+				spName := unTitle(g.md.fieldName(fields[0]))
+				g.w.write("_tabMeta := _f.Memo().Metadata().TableMeta(%s.Table)\n", spName)
+				g.w.write("%s.Distribution.FromIndexScan(_f.ctx, _f.evalCtx, _tabMeta, %s.Index, %s.Constraint)\n",
+					spName, spName, spName)
+			}
 			g.w.writeIndent("e := _f.mem.Memoize%s(", define.Name)
 			for i, field := range fields {
 				if i != 0 {

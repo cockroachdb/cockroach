@@ -209,7 +209,7 @@ ok
 
 make-plan
 ----
-[]
+ok
 
 
 # Check that if non survivor replica has pending changes, it doesn't prevent recovery from
@@ -257,6 +257,7 @@ ok
 
 make-plan
 ----
+Replica updates:
 - RangeID: 1
   StartKey: /Min
   OldReplicaID: 1
@@ -265,3 +266,5 @@ make-plan
     StoreID: 1
     ReplicaID: 17
   NextReplicaID: 18
+Decommissioned nodes:
+[n3, n4, n5, n6]

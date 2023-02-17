@@ -256,7 +256,7 @@ func (a *applyJoinNode) runNextRightSideIteration(params runParams, leftRow tree
 	if err := runPlanInsidePlan(ctx, params, plan, rowResultWriter); err != nil {
 		return err
 	}
-	a.run.rightRowsIterator = newRowContainerIterator(ctx, a.run.rightRows, a.rightTypes)
+	a.run.rightRowsIterator = newRowContainerIterator(ctx, a.run.rightRows)
 	return nil
 }
 
@@ -272,7 +272,6 @@ func runPlanInsidePlan(
 		params.p.Txn(),
 		params.ExecCfg().Clock,
 		params.p.extendedEvalCtx.Tracing,
-		params.p.ExecCfg().ContentionRegistry,
 	)
 	defer recv.Release()
 
@@ -280,8 +279,9 @@ func runPlanInsidePlan(
 		// We currently don't support cases when both the "inner" and the
 		// "outer" plans have subqueries due to limitations of how we're
 		// propagating the results of the subqueries.
-		// TODO(mgartner): Fix error message for routines so that it doesn't say
-		// "apply joins".
+		// TODO(mgartner): We should be able to lift this restriction for
+		// apply-joins, similarly to how subqueries within UDFs are planned - as
+		// routines instead of subqueries.
 		if len(params.p.curPlan.subqueryPlans) != 0 {
 			return unimplemented.NewWithIssue(66447, `apply joins with subqueries in the "inner" and "outer" contexts are not supported`)
 		}
@@ -318,7 +318,8 @@ func runPlanInsidePlan(
 	evalCtx := params.p.ExtendedEvalContextCopy()
 	plannerCopy := *params.p
 	distributePlan := getPlanDistribution(
-		ctx, &plannerCopy, plannerCopy.execCfg.NodeInfo.NodeID, plannerCopy.SessionData().DistSQLMode, plan.main,
+		ctx, plannerCopy.Descriptors().HasUncommittedTypes(),
+		plannerCopy.SessionData().DistSQLMode, plan.main,
 	)
 	distributeType := DistributionType(DistributionTypeNone)
 	if distributePlan.WillDistribute() {
@@ -332,7 +333,7 @@ func runPlanInsidePlan(
 	planCtx.stmtType = recv.stmtType
 
 	params.p.extendedEvalCtx.ExecCfg.DistSQLPlanner.PlanAndRun(
-		ctx, evalCtx, planCtx, params.p.Txn(), plan.main, recv,
+		ctx, evalCtx, planCtx, params.p.Txn(), plan.main, recv, nil, /* finishedSetupFn */
 	)
 	return resultWriter.Err()
 }

@@ -96,6 +96,21 @@ type Conn interface {
 
 	// Cancel sends a query cancellation request to the server.
 	Cancel(ctx context.Context) error
+
+	// GetServerInfo retrieves details about the remote server. Some of
+	// the fields may be empty if there were errors while retrieving
+	// them when the connection was established.
+	GetServerInfo() ServerInfo
+}
+
+// ServerInfo describes the remote server.
+type ServerInfo struct {
+	// ServerExecutableVersion is the build version string of the remote server.
+	ServerExecutableVersion string
+	// ClusterID is the ID of the cluste the remote server is a part of.
+	ClusterID string
+	// Organization is the cluster organization of the remote server.
+	Organization string
 }
 
 // Rows describes a result set.
@@ -181,6 +196,7 @@ type DriverConn interface {
 	Query(ctx context.Context, query string, args ...interface{}) (driver.Rows, error)
 	Exec(ctx context.Context, query string, args ...interface{}) error
 	CopyFrom(ctx context.Context, reader io.Reader, query string) (int64, error)
+	CopyTo(ctx context.Context, w io.Writer, query string) error
 }
 
 type driverConnAdapter struct {
@@ -208,4 +224,9 @@ func (d *driverConnAdapter) CopyFrom(
 		return -1, err
 	}
 	return cmdTag.RowsAffected(), nil
+}
+
+func (d *driverConnAdapter) CopyTo(ctx context.Context, w io.Writer, query string) error {
+	_, err := d.c.conn.PgConn().CopyTo(ctx, w, query)
+	return err
 }

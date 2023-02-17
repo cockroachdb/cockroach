@@ -1,0 +1,2 @@
+alter_database_set_stmt ::=
+	'ALTER' 'DATABASE' database_name set_or_reset_clause

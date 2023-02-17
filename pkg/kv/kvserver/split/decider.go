@@ -14,6 +14,8 @@ package split
 
 import (
 	"context"
+	"fmt"
+	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -25,7 +27,73 @@ import (
 
 const minSplitSuggestionInterval = time.Minute
 const minNoSplitKeyLoggingMetricsInterval = time.Minute
-const minQueriesPerSecondSampleDuration = time.Second
+const minPerSecondSampleDuration = time.Second
+
+type LoadBasedSplitter interface {
+	// Record informs the LoadBasedSplitter about where the span lies with regard
+	// to the keys in the samples.
+	Record(span roachpb.Span, weight float64)
+
+	// Key finds an appropriate split point from the sampled candidate split
+	// keys. Returns a nil key if no appropriate key was found.
+	Key() roachpb.Key
+
+	// Ready checks if the LoadBasedSplitter has been initialized with a
+	// sufficient sample duration.
+	Ready(nowTime time.Time) bool
+
+	// NoSplitKeyCauseLogMsg returns a log message containing information on the
+	// number of samples that don't pass each split key requirement if not all
+	// samples are invalid due to insufficient counters, otherwise returns an
+	// empty string.
+	NoSplitKeyCauseLogMsg() string
+
+	// PopularKeyFrequency returns the percentage that the most popular key
+	// appears in the sampled candidate split keys.
+	PopularKeyFrequency() float64
+}
+
+type LoadSplitConfig interface {
+	// NewLoadBasedSplitter returns a new LoadBasedSplitter that may be used to
+	// find the midpoint based on recorded load.
+	NewLoadBasedSplitter(time.Time) LoadBasedSplitter
+	// StatRetention returns the duration that recorded load is to be retained.
+	StatRetention() time.Duration
+	// StatThreshold returns the threshold for load above which the range
+	// should be considered split.
+	StatThreshold() float64
+}
+
+type RandSource interface {
+	// Float64 returns, as a float64, a pseudo-random number in the half-open
+	// interval [0.0,1.0) from the RandSource.
+	Float64() float64
+
+	// Intn returns, as an int, a non-negative pseudo-random number in the
+	// half-open interval [0,n).
+	Intn(n int) int
+}
+
+// globalRandSource implements the RandSource interface.
+type globalRandSource struct{}
+
+// Float64 returns, as a float64, a pseudo-random number in the half-open
+// interval [0.0,1.0) from the RandSource.
+func (g globalRandSource) Float64() float64 {
+	return rand.Float64()
+}
+
+// Intn returns, as an int, a non-negative pseudo-random number in the
+// half-open interval [0,n).
+func (g globalRandSource) Intn(n int) int {
+	return rand.Intn(n)
+}
+
+// GlobalRandSource returns an implementation of the RandSource interface that
+// redirects calls to the global rand.
+func GlobalRandSource() RandSource {
+	return globalRandSource{}
+}
 
 // A Decider collects measurements about the activity (measured in qps) on a
 // Replica and, assuming that qps thresholds are exceeded, tries to determine a
@@ -63,25 +131,23 @@ type LoadSplitterMetrics struct {
 // incoming requests to find potential split keys and checks if sampled
 // candidate split keys satisfy certain requirements.
 type Decider struct {
-	intn                func(n int) int      // supplied to Init
-	qpsThreshold        func() float64       // supplied to Init
-	qpsRetention        func() time.Duration // supplied to Init
+	config              LoadSplitConfig      // supplied to Init
 	loadSplitterMetrics *LoadSplitterMetrics // supplied to Init
 
 	mu struct {
 		syncutil.Mutex
 
 		// Fields tracking the current qps sample.
-		lastQPSRollover time.Time // most recent time recorded by requests.
-		lastQPS         float64   // last reqs/s rate as of lastQPSRollover
-		count           int64     // number of requests recorded since last rollover
+		lastStatRollover time.Time // most recent time recorded by requests.
+		lastStatVal      float64   // last reqs/s rate as of lastStatRollover
+		count            int64     // number of requests recorded since last rollover
 
 		// Fields tracking historical qps samples.
-		maxQPS maxQPSTracker
+		maxStat maxStatTracker
 
 		// Fields tracking split key suggestions.
-		splitFinder         *Finder   // populated when engaged or decided
-		lastSplitSuggestion time.Time // last stipulation to client to carry out split
+		splitFinder         LoadBasedSplitter // populated when engaged or decided
+		lastSplitSuggestion time.Time         // last stipulation to client to carry out split
 
 		// Fields tracking logging / metrics around load-based splitter split key.
 		lastNoSplitKeyLoggingMetrics time.Time
@@ -92,17 +158,9 @@ type Decider struct {
 // embedding the Decider into a larger struct outside of the scope of this package
 // without incurring a pointer reference. This is relevant since many Deciders
 // may exist in the system at any given point in time.
-func Init(
-	lbs *Decider,
-	intn func(n int) int,
-	qpsThreshold func() float64,
-	qpsRetention func() time.Duration,
-	loadSplitterMetrics *LoadSplitterMetrics,
-) {
-	lbs.intn = intn
-	lbs.qpsThreshold = qpsThreshold
-	lbs.qpsRetention = qpsRetention
+func Init(lbs *Decider, config LoadSplitConfig, loadSplitterMetrics *LoadSplitterMetrics) {
 	lbs.loadSplitterMetrics = loadSplitterMetrics
+	lbs.config = config
 }
 
 // Record notifies the Decider that 'n' operations are being carried out which
@@ -126,28 +184,28 @@ func (d *Decider) recordLocked(
 	d.mu.count += int64(n)
 
 	// First compute requests per second since the last check.
-	if d.mu.lastQPSRollover.IsZero() {
-		d.mu.lastQPSRollover = now
+	if d.mu.lastStatRollover.IsZero() {
+		d.mu.lastStatRollover = now
 	}
-	elapsedSinceLastQPS := now.Sub(d.mu.lastQPSRollover)
-	if elapsedSinceLastQPS >= minQueriesPerSecondSampleDuration {
-		// Update the latest QPS and reset the time and request counter.
-		d.mu.lastQPS = (float64(d.mu.count) / float64(elapsedSinceLastQPS)) * 1e9
-		d.mu.lastQPSRollover = now
+	elapsedSinceLastSample := now.Sub(d.mu.lastStatRollover)
+	if elapsedSinceLastSample >= minPerSecondSampleDuration {
+		// Update the latest stat value and reset the time and request counter.
+		d.mu.lastStatVal = (float64(d.mu.count) / float64(elapsedSinceLastSample)) * 1e9
+		d.mu.lastStatRollover = now
 		d.mu.count = 0
 
-		// Record the latest QPS sample in the historical tracker.
-		d.mu.maxQPS.record(now, d.qpsRetention(), d.mu.lastQPS)
+		// Record the latest stat sample in the historical tracker.
+		d.mu.maxStat.record(now, d.config.StatRetention(), d.mu.lastStatVal)
 
-		// If the QPS for the range exceeds the threshold, start actively
+		// If the stat for the range exceeds the threshold, start actively
 		// tracking potential for splitting this range based on load.
 		// This tracking will begin by initiating a splitFinder so it can
 		// begin to Record requests so it can find a split point. If a
 		// splitFinder already exists, we check if a split point is ready
 		// to be used.
-		if d.mu.lastQPS >= d.qpsThreshold() {
+		if d.mu.lastStatVal >= d.config.StatThreshold() {
 			if d.mu.splitFinder == nil {
-				d.mu.splitFinder = NewFinder(now)
+				d.mu.splitFinder = d.config.NewLoadBasedSplitter(now)
 			}
 		} else {
 			d.mu.splitFinder = nil
@@ -157,7 +215,7 @@ func (d *Decider) recordLocked(
 	if d.mu.splitFinder != nil && n != 0 {
 		s := span()
 		if s.Key != nil {
-			d.mu.splitFinder.Record(span(), d.intn)
+			d.mu.splitFinder.Record(span(), 1)
 		}
 		if d.mu.splitFinder.Ready(now) {
 			if d.mu.splitFinder.Key() != nil {
@@ -168,16 +226,15 @@ func (d *Decider) recordLocked(
 			} else {
 				if now.Sub(d.mu.lastNoSplitKeyLoggingMetrics) > minNoSplitKeyLoggingMetricsInterval {
 					d.mu.lastNoSplitKeyLoggingMetrics = now
-					insufficientCounters, imbalance, tooManyContained, imbalanceAndTooManyContained := d.mu.splitFinder.NoSplitKeyCause()
-					if insufficientCounters < splitKeySampleSize {
+					noSplitKeyCauseLogMsg := d.mu.splitFinder.NoSplitKeyCauseLogMsg()
+					if noSplitKeyCauseLogMsg != "" {
 						popularKeyFrequency := d.mu.splitFinder.PopularKeyFrequency()
+						noSplitKeyCauseLogMsg += fmt.Sprintf(", most popular key occurs in %d%% of samples", int(popularKeyFrequency*100))
+						log.KvDistribution.Infof(ctx, "%s", noSplitKeyCauseLogMsg)
 						if popularKeyFrequency >= splitKeyThreshold {
 							d.loadSplitterMetrics.PopularKeyCount.Inc(1)
 						}
 						d.loadSplitterMetrics.NoSplitKeyCount.Inc(1)
-						log.KvDistribution.Infof(ctx,
-							"No split key found: insufficient counters = %d, imbalance = %d, too many contained = %d, imbalance and too many contained = %d, most popular key occurs in %d%% of samples",
-							insufficientCounters, imbalance, tooManyContained, imbalanceAndTooManyContained, int(popularKeyFrequency*100))
 					}
 				}
 			}
@@ -186,34 +243,34 @@ func (d *Decider) recordLocked(
 	return false
 }
 
-// RecordMax adds a QPS measurement directly into the Decider's historical QPS
-// tracker. The QPS sample is considered to have been captured at the provided
-// time.
+// RecordMax adds a stat measurement directly into the Decider's historical
+// stat value tracker. The stat sample is considered to have been captured at
+// the provided time.
 func (d *Decider) RecordMax(now time.Time, qps float64) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	d.mu.maxQPS.record(now, d.qpsRetention(), qps)
+	d.mu.maxStat.record(now, d.config.StatRetention(), qps)
 }
 
-// LastQPS returns the most recent QPS measurement.
-func (d *Decider) LastQPS(ctx context.Context, now time.Time) float64 {
+// LastStat returns the most recent stat measurement.
+func (d *Decider) LastStat(ctx context.Context, now time.Time) float64 {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	d.recordLocked(ctx, now, 0, nil) // force QPS computation
-	return d.mu.lastQPS
+	d.recordLocked(ctx, now, 0, nil) // force stat computation
+	return d.mu.lastStatVal
 }
 
-// MaxQPS returns the maximum QPS measurement recorded over the retention
+// MaxStat returns the maximum stat measurement recorded over the retention
 // period. If the Decider has not been recording for a full retention period,
 // the method returns false.
-func (d *Decider) MaxQPS(ctx context.Context, now time.Time) (float64, bool) {
+func (d *Decider) MaxStat(ctx context.Context, now time.Time) (float64, bool) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	d.recordLocked(ctx, now, 0, nil) // force QPS computation
-	return d.mu.maxQPS.maxQPS(now, d.qpsRetention())
+	d.recordLocked(ctx, now, 0, nil) // force stat computation
+	return d.mu.maxStat.max(now, d.config.StatRetention())
 }
 
 // MaybeSplitKey returns a key to perform a split at. The return value will be
@@ -270,21 +327,21 @@ func (d *Decider) MaybeSplitKey(ctx context.Context, now time.Time) roachpb.Key 
 }
 
 // Reset deactivates any current attempt at determining a split key. The method
-// also discards any historical QPS tracking information.
+// also discards any historical stat tracking information.
 func (d *Decider) Reset(now time.Time) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	d.mu.lastQPSRollover = time.Time{}
-	d.mu.lastQPS = 0
+	d.mu.lastStatRollover = time.Time{}
+	d.mu.lastStatVal = 0
 	d.mu.count = 0
-	d.mu.maxQPS.reset(now, d.qpsRetention())
+	d.mu.maxStat.reset(now, d.config.StatRetention())
 	d.mu.splitFinder = nil
 	d.mu.lastSplitSuggestion = time.Time{}
 	d.mu.lastNoSplitKeyLoggingMetrics = time.Time{}
 }
 
-// maxQPSTracker collects a series of queries-per-second measurement samples and
+// maxStatTracker collects a series of stat per-second measurement samples and
 // tracks the maximum observed over a period of time.
 //
 // The tracker internally uses a set of time windows in order to age out old
@@ -292,13 +349,13 @@ func (d *Decider) Reset(now time.Time) {
 // a circular buffer of the last N windows of stats. We rotate through the
 // circular buffer every so often as determined by `minRetention`.
 //
-// The tracker can be queried through its `maxQPS` method, which returns the
+// The tracker can be queried through its `max` method, which returns the
 // maximum of all queries-per-second samples recorded over the retention period.
 // If the tracker has not been recording for a full retention period, then the
 // method returns false.
 //
-// The zero-value of a maxQPSTracker can be used immediately.
-type maxQPSTracker struct {
+// The zero-value of a maxStatTracker can be used immediately.
+type maxStatTracker struct {
 	windows      [6]float64
 	curIdx       int
 	curStart     time.Time
@@ -307,15 +364,15 @@ type maxQPSTracker struct {
 }
 
 // record adds the qps sample to the tracker.
-func (t *maxQPSTracker) record(now time.Time, minRetention time.Duration, qps float64) {
+func (t *maxStatTracker) record(now time.Time, minRetention time.Duration, qps float64) {
 	t.maybeReset(now, minRetention)
 	t.maybeRotate(now)
 	t.windows[t.curIdx] = max(t.windows[t.curIdx], qps)
 }
 
-// reset clears the tracker. maxQPS will begin returning false until a full
+// reset clears the tracker. maxStatTracker will begin returning false until a full
 // minRetention period has elapsed.
-func (t *maxQPSTracker) reset(now time.Time, minRetention time.Duration) {
+func (t *maxStatTracker) reset(now time.Time, minRetention time.Duration) {
 	if minRetention <= 0 {
 		panic("minRetention must be positive")
 	}
@@ -326,18 +383,18 @@ func (t *maxQPSTracker) reset(now time.Time, minRetention time.Duration) {
 	t.minRetention = minRetention
 }
 
-func (t *maxQPSTracker) maybeReset(now time.Time, minRetention time.Duration) {
+func (t *maxStatTracker) maybeReset(now time.Time, minRetention time.Duration) {
 	// If the retention period changes, simply reset the entire tracker. Merging
 	// or splitting windows would be a difficult task and could lead to samples
 	// either not being retained for long-enough, or being retained for too long.
-	// Resetting indicates to maxQPS that a new retention period needs to be
+	// Resetting indicates to max that a new retention period needs to be
 	// measured before accurate results can be returned.
 	if minRetention != t.minRetention {
 		t.reset(now, minRetention)
 	}
 }
 
-func (t *maxQPSTracker) maybeRotate(now time.Time) {
+func (t *maxStatTracker) maybeRotate(now time.Time) {
 	sinceLastRotate := now.Sub(t.curStart)
 	windowWidth := t.windowWidth()
 	if sinceLastRotate < windowWidth {
@@ -360,10 +417,10 @@ func (t *maxQPSTracker) maybeRotate(now time.Time) {
 	}
 }
 
-// maxQPS returns the maximum queries-per-second samples recorded over the last
+// max returns the maximum queries-per-second samples recorded over the last
 // retention period. If the tracker has not been recording for a full retention
 // period, then the method returns false.
-func (t *maxQPSTracker) maxQPS(now time.Time, minRetention time.Duration) (float64, bool) {
+func (t *maxStatTracker) max(now time.Time, minRetention time.Duration) (float64, bool) {
 	t.record(now, minRetention, 0) // expire samples, if necessary
 
 	if now.Sub(t.lastReset) < t.minRetention {
@@ -378,7 +435,7 @@ func (t *maxQPSTracker) maxQPS(now time.Time, minRetention time.Duration) (float
 	return qps, true
 }
 
-func (t *maxQPSTracker) windowWidth() time.Duration {
+func (t *maxStatTracker) windowWidth() time.Duration {
 	// NB: -1 because during a rotation, only len(t.windows)-1 windows survive.
 	return t.minRetention / time.Duration(len(t.windows)-1)
 }

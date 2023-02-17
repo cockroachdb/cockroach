@@ -17,22 +17,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 )
-
-// TxnWithExecutorFunc is used to run a transaction in the context of a
-// Collection and an InternalExecutor.
-type TxnWithExecutorFunc = func(
-	ctx context.Context,
-	txn *kv.Txn,
-	descriptors *Collection,
-	ie sqlutil.InternalExecutor,
-) error
 
 // CheckTwoVersionInvariant checks whether any new schema being modified written
 // at a version V has only valid leases at version = V - 1. A transaction retry
@@ -62,7 +53,7 @@ type TxnWithExecutorFunc = func(
 func CheckTwoVersionInvariant(
 	ctx context.Context,
 	clock *hlc.Clock,
-	ie sqlutil.InternalExecutor,
+	noTxnExec isql.Executor,
 	descsCol *Collection,
 	txn *kv.Txn,
 	onRetryBackoff func(),
@@ -97,7 +88,7 @@ func CheckTwoVersionInvariant(
 	// transaction ends up committing then there won't have been any created
 	// in the meantime.
 	count, err := lease.CountLeases(
-		ctx, ie, withNewVersion, txn.ProvisionalCommitTimestamp(),
+		ctx, noTxnExec, withNewVersion, txn.ProvisionalCommitTimestamp(),
 	)
 	if err != nil {
 		return err
@@ -124,7 +115,7 @@ func CheckTwoVersionInvariant(
 	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
 		// Use the current clock time.
 		now := clock.Now()
-		count, err := lease.CountLeases(ctx, ie, withNewVersion, now)
+		count, err := lease.CountLeases(ctx, noTxnExec, withNewVersion, now)
 		if err != nil {
 			return err
 		}

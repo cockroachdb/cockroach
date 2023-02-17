@@ -24,7 +24,7 @@ import IExplainTreePlanNode = protos.cockroach.sql.IExplainTreePlanNode;
 import ISensitiveInfo = protos.cockroach.sql.ISensitiveInfo;
 
 // record is implemented here so we can write the below test as a direct
-// analog of the one in pkg/roachpb/app_stats_test.go.  It's here rather
+// analog of the one in pkg/sql/appstatspb/app_stats_test.go.  It's here rather
 // than in the main source file because we don't actually need it for the
 // application to use.
 function record(l: NumericStat, count: number, val: number) {
@@ -229,7 +229,7 @@ function randomStat(scale = 1): NumericStat {
   };
 }
 
-function randomExecStats(count = 10): Required<ExecStats> {
+function randomExecStats(count = 10): ExecStats {
   return {
     count: Long.fromNumber(randomInt(count)),
     network_bytes: randomStat(),
@@ -237,6 +237,7 @@ function randomExecStats(count = 10): Required<ExecStats> {
     contention_time: randomStat(),
     network_messages: randomStat(),
     max_disk_usage: randomStat(),
+    cpu_sql_nanos: randomStat(),
   };
 }
 
@@ -276,6 +277,14 @@ function randomStats(
     plan_gists: ["Ais="],
     index_recommendations: [""],
     indexes: ["123@456"],
+    latency_info: {
+      min: 0.01,
+      max: 1.2,
+      p50: 0.4,
+      p90: 0.7,
+      p99: 1.1,
+    },
+    last_error_code: "",
   };
 }
 

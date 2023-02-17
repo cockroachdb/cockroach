@@ -13,13 +13,13 @@ package forbiddenmethod_test
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/forbiddenmethod"
 	"golang.org/x/tools/go/analysis/analysistest"
 )
 
 func TestNakedGo(t *testing.T) {
-	testdata := testutils.TestDataPath(t)
+	testdata := datapathutils.TestDataPath(t)
 	analysistest.TestData = func() string { return testdata }
 	analysistest.Run(t, testdata, forbiddenmethod.NakedGoAnalyzer, "nakedgotest")
 }

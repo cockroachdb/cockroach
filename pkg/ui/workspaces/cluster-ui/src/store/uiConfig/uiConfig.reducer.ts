@@ -10,9 +10,7 @@
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { merge } from "lodash";
-import { DOMAIN_NAME } from "../utils";
-import { createSelector } from "reselect";
-import { AppState } from "../reducers";
+import { DOMAIN_NAME, noopReducer } from "../utils";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 export type UserSQLRolesRequest = cockroach.server.serverpb.UserSQLRolesRequest;
 
@@ -20,6 +18,7 @@ export type UIConfigState = {
   isTenant: boolean;
   userSQLRoles: string[];
   hasViewActivityRedactedRole: boolean;
+  hasAdminRole: boolean;
   pages: {
     statementDetails: {
       showStatementDiagnosticsLink: boolean;
@@ -34,6 +33,7 @@ const initialState: UIConfigState = {
   isTenant: false,
   userSQLRoles: [],
   hasViewActivityRedactedRole: false,
+  hasAdminRole: false,
   pages: {
     statementDetails: {
       showStatementDiagnosticsLink: true,
@@ -57,23 +57,18 @@ const uiConfigSlice = createSlice({
     update: (state, action: PayloadAction<Partial<UIConfigState>>) => {
       merge(state, action.payload);
     },
-    refreshUserSQLRoles: (_, action?: PayloadAction<UserSQLRolesRequest>) => {},
+    receivedUserSQLRoles: (state, action: PayloadAction<string[]>) => {
+      if (action?.payload) {
+        state.userSQLRoles = action.payload;
+      }
+    },
+    invalidatedUserSQLRoles: state => {
+      state.userSQLRoles = [];
+    },
+    // Define actions that don't change state
+    refreshUserSQLRoles: noopReducer,
+    requestUserSQLRoles: noopReducer,
   },
 });
-
-export const selectUIConfig = createSelector(
-  (state: AppState) => state.adminUI.uiConfig,
-  uiConfig => uiConfig,
-);
-
-export const selectIsTenant = createSelector(
-  selectUIConfig,
-  uiConfig => uiConfig.isTenant,
-);
-
-export const selectHasViewActivityRedactedRole = createSelector(
-  selectUIConfig,
-  uiConfig => uiConfig.userSQLRoles.includes("VIEWACTIVITYREDACTED"),
-);
 
 export const { actions, reducer } = uiConfigSlice;

@@ -35,13 +35,13 @@ func newInsecureRPCContext(ctx context.Context, stopper *stop.Stopper) *rpc.Cont
 	ctx = logtags.AddTag(ctx, "n", nc)
 	return rpc.NewContext(ctx,
 		rpc.ContextOptions{
-			TenantID:  roachpb.SystemTenantID,
-			NodeID:    nc,
-			Config:    &base.Config{Insecure: true},
-			Clock:     &timeutil.DefaultTimeSource{},
-			MaxOffset: time.Nanosecond,
-			Stopper:   stopper,
-			Settings:  cluster.MakeTestingClusterSettings(),
+			TenantID:        roachpb.SystemTenantID,
+			NodeID:          nc,
+			Config:          &base.Config{Insecure: true},
+			Clock:           &timeutil.DefaultTimeSource{},
+			ToleratedOffset: time.Nanosecond,
+			Stopper:         stopper,
+			Settings:        cluster.MakeTestingClusterSettings(),
 		})
 }
 
@@ -53,7 +53,10 @@ func StartMockDistSQLServer(
 ) (uuid.UUID, *MockDistSQLServer, net.Addr, error) {
 	rpcContext := newInsecureRPCContext(ctx, stopper)
 	rpcContext.NodeID.Set(context.TODO(), roachpb.NodeID(sqlInstanceID))
-	server := rpc.NewServer(rpcContext)
+	server, err := rpc.NewServer(rpcContext)
+	if err != nil {
+		return uuid.Nil, nil, nil, err
+	}
 	mock := newMockDistSQLServer()
 	RegisterDistSQLServer(server, mock)
 	ln, err := netutil.ListenAndServeGRPC(stopper, server, util.IsolatedTestAddr)

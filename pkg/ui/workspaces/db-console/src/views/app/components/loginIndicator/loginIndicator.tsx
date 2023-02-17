@@ -69,7 +69,7 @@ class LoginIndicator extends React.Component<
 
     const user = loginState.loggedInUser();
 
-    if (user == null) {
+    if (typeof user == "undefined" || user == null) {
       return null;
     }
 

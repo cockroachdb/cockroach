@@ -46,7 +46,8 @@ type Graph struct {
 
 	// opEdgesFrom maps a Node to an opEdge that proceeds
 	// from it. A Node may have at most one opEdge from it.
-	opEdgesFrom map[*screl.Node]*OpEdge
+	// opEdgesTo is the same but s/from/to/.
+	opEdgesFrom, opEdgesTo map[*screl.Node]*OpEdge
 
 	// opToOpEdge maps from an operation back to the
 	// opEdge that generated it as an index.
@@ -115,6 +116,7 @@ func New(cs scpb.CurrentState) (*Graph, error) {
 	g := Graph{
 		targetIdxMap: map[*scpb.Target]targetIdx{},
 		opEdgesFrom:  map[*screl.Node]*OpEdge{},
+		opEdgesTo:    map[*screl.Node]*OpEdge{},
 		noOpOpEdges:  map[*OpEdge]map[RuleName]struct{}{},
 		opToOpEdge:   map[scop.Op]*OpEdge{},
 		entities:     db,
@@ -122,7 +124,7 @@ func New(cs scpb.CurrentState) (*Graph, error) {
 	g.depEdges = makeDepEdges(func(n *screl.Node) targetIdx {
 		return g.targetIdxMap[n.Target]
 	})
-	for i, status := range cs.Current {
+	for i, status := range cs.Initial {
 		t := &cs.Targets[i]
 		if existing, ok := g.targetIdxMap[t]; ok {
 			return nil, errors.Errorf("invalid initial state contains duplicate target: %v and %v", *t, cs.Targets[existing])
@@ -148,6 +150,7 @@ func (g *Graph) ShallowClone() *Graph {
 		targetNodes:  g.targetNodes,
 		targetIdxMap: g.targetIdxMap,
 		opEdgesFrom:  g.opEdgesFrom,
+		opEdgesTo:    g.opEdgesTo,
 		depEdges:     g.depEdges,
 		opEdges:      g.opEdges,
 		opToOpEdge:   g.opToOpEdge,
@@ -210,6 +213,13 @@ func (g *Graph) GetOpEdgeFrom(n *screl.Node) (*OpEdge, bool) {
 	return oe, ok
 }
 
+// GetOpEdgeTo returns the unique incoming op edge to the specified node,
+// if one exists.
+func (g *Graph) GetOpEdgeTo(n *screl.Node) (*OpEdge, bool) {
+	oe, ok := g.opEdgesTo[n]
+	return oe, ok
+}
+
 // AddOpEdges adds an op edges connecting the nodes for two statuses of a target.
 func (g *Graph) AddOpEdges(
 	t *scpb.Target, from, to scpb.Status, revertible, canFail bool, ops ...scop.Op,
@@ -229,6 +239,10 @@ func (g *Graph) AddOpEdges(
 		return errors.Errorf("duplicate outbound op edge %v and %v",
 			oe, existing)
 	}
+	if existing, exists := g.opEdgesTo[oe.to]; exists {
+		return errors.Errorf("duplicate outbound op edge %v and %v",
+			oe, existing)
+	}
 	g.opEdges = append(g.opEdges, oe)
 	typ := scop.MutationType
 	for i, op := range ops {
@@ -241,6 +255,7 @@ func (g *Graph) AddOpEdges(
 	}
 	oe.typ = typ
 	g.opEdgesFrom[oe.from] = oe
+	g.opEdgesTo[oe.to] = oe
 	// Store mapping from op to Edge
 	for _, op := range ops {
 		g.opToOpEdge[op] = oe

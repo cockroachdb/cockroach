@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -76,9 +77,27 @@ func (desc *immutable) GetRawBytesInStorage() []byte {
 	return desc.rawBytesInStorage
 }
 
-// GetRawBytesInStorage implements the catalog.Descriptor interface.
-func (desc *Mutable) GetRawBytesInStorage() []byte {
-	return desc.rawBytesInStorage
+// ForEachUDTDependentForHydration implements the catalog.Descriptor interface.
+func (desc *immutable) ForEachUDTDependentForHydration(fn func(t *types.T) error) error {
+	for _, f := range desc.Functions {
+		for _, sig := range f.Signatures {
+			for _, typ := range sig.ArgTypes {
+				if !catid.IsOIDUserDefined(typ.Oid()) {
+					continue
+				}
+				if err := fn(typ); err != nil {
+					return iterutil.Map(err)
+				}
+			}
+			if !catid.IsOIDUserDefined(sig.ReturnType.Oid()) {
+				continue
+			}
+			if err := fn(sig.ReturnType); err != nil {
+				return iterutil.Map(err)
+			}
+		}
+	}
+	return nil
 }
 
 // SafeMessage makes Mutable a SafeMessager.
@@ -98,7 +117,7 @@ func formatSafeMessage(typeName string, desc catalog.SchemaDescriptor) string {
 //
 // Note: Today this isn't actually ever mutated but rather exists for a future
 // where we anticipate having a mutable copy of Schema descriptors. There's a
-// large amount of space to question this `Mutable|ImmutableCopy` version of each
+// large amount of space to question this version of each
 // descriptor type. Maybe it makes no sense but we're running with it for the
 // moment. This is an intermediate state on the road to descriptors being
 // handled outside of the catalog entirely as interfaces.
@@ -213,9 +232,9 @@ func (desc *immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	}
 
 	for _, f := range desc.Functions {
-		for _, o := range f.Overloads {
-			if o.ID == descpb.InvalidID {
-				vea.Report(fmt.Errorf("invalid function ID %d", o.ID))
+		for _, sig := range f.Signatures {
+			if sig.ID == descpb.InvalidID {
+				vea.Report(fmt.Errorf("invalid function ID %d", sig.ID))
 			}
 		}
 	}
@@ -226,8 +245,8 @@ func (desc *immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 func (desc *immutable) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
 	ret := catalog.MakeDescriptorIDSet(desc.GetID(), desc.GetParentID())
 	for _, f := range desc.Functions {
-		for _, o := range f.Overloads {
-			ret.Add(o.ID)
+		for _, sig := range f.Signatures {
+			ret.Add(sig.ID)
 		}
 	}
 	return ret, nil
@@ -280,11 +299,11 @@ func (desc *immutable) ValidateBackReferences(
 
 	// Check that all functions exist.
 	for _, function := range desc.Functions {
-		for _, overload := range function.Overloads {
-			_, err := vdg.GetFunctionDescriptor(overload.ID)
+		for _, sig := range function.Signatures {
+			_, err := vdg.GetFunctionDescriptor(sig.ID)
 			if err != nil {
 				vea.Report(errors.AssertionFailedf("invalid function %d in schema %q (%d)",
-					overload.ID, desc.GetName(), desc.GetID()))
+					sig.ID, desc.GetName(), desc.GetID()))
 			}
 		}
 	}
@@ -424,25 +443,25 @@ func (desc *Mutable) SetDeclarativeSchemaChangerState(state *scpb.DescriptorStat
 }
 
 // AddFunction adds a UDF overload signature to the schema descriptor.
-func (desc *Mutable) AddFunction(name string, f descpb.SchemaDescriptor_FunctionOverload) {
+func (desc *Mutable) AddFunction(name string, f descpb.SchemaDescriptor_FunctionSignature) {
 	if desc.Functions == nil {
 		desc.Functions = make(map[string]descpb.SchemaDescriptor_Function)
 	}
 	if overloads, ok := desc.Functions[name]; !ok {
-		desc.Functions[name] = descpb.SchemaDescriptor_Function{Overloads: []descpb.SchemaDescriptor_FunctionOverload{f}}
+		desc.Functions[name] = descpb.SchemaDescriptor_Function{Signatures: []descpb.SchemaDescriptor_FunctionSignature{f}}
 	} else {
-		newOverloads := append(overloads.Overloads, f)
-		desc.Functions[name] = descpb.SchemaDescriptor_Function{Overloads: newOverloads}
+		newSigs := append(overloads.Signatures, f)
+		desc.Functions[name] = descpb.SchemaDescriptor_Function{Signatures: newSigs}
 	}
 }
 
 // RemoveFunction removes a UDF overload signature from the schema descriptor.
 func (desc *Mutable) RemoveFunction(name string, id descpb.ID) {
 	if fn, ok := desc.Functions[name]; ok {
-		updated := fn.Overloads[:0]
-		for _, ol := range fn.Overloads {
-			if ol.ID != id {
-				updated = append(updated, ol)
+		var updated []descpb.SchemaDescriptor_FunctionSignature
+		for _, sig := range fn.Signatures {
+			if sig.ID != id {
+				updated = append(updated, sig)
 			}
 		}
 		if len(updated) == 0 {
@@ -450,8 +469,8 @@ func (desc *Mutable) RemoveFunction(name string, id descpb.ID) {
 			return
 		}
 		desc.Functions[name] = descpb.SchemaDescriptor_Function{
-			Name:      name,
-			Overloads: updated,
+			Name:       name,
+			Signatures: updated,
 		}
 	}
 }
@@ -461,24 +480,9 @@ func (desc *immutable) GetObjectType() privilege.ObjectType {
 	return privilege.Schema
 }
 
-// ContainsUserDefinedTypes implements the HydratableDescriptor interface.
-func (desc *immutable) ContainsUserDefinedTypes() bool {
-	for _, fn := range desc.Functions {
-		for i := range fn.Overloads {
-			for _, t := range fn.Overloads[i].ArgTypes {
-				if t.UserDefined() {
-					return true
-				}
-			}
-			if fn.Overloads[i].ReturnType.UserDefined() {
-				return true
-			}
-		}
-	}
-	return false
-}
-
 // GetResolvedFuncDefinition implements the SchemaDescriptor interface.
+// TODO(mgartner): This should not create tree.Overloads because it cannot fully
+// populated them.
 func (desc *immutable) GetResolvedFuncDefinition(
 	name string,
 ) (*tree.ResolvedFunctionDefinition, bool) {
@@ -488,20 +492,24 @@ func (desc *immutable) GetResolvedFuncDefinition(
 	}
 	funcDef := &tree.ResolvedFunctionDefinition{
 		Name:      name,
-		Overloads: make([]tree.QualifiedOverload, 0, len(funcDescPb.Overloads)),
+		Overloads: make([]tree.QualifiedOverload, 0, len(funcDescPb.Signatures)),
 	}
-	for i := range funcDescPb.Overloads {
-		retType := funcDescPb.Overloads[i].ReturnType
+	for i := range funcDescPb.Signatures {
+		sig := &funcDescPb.Signatures[i]
+		retType := sig.ReturnType
 		overload := &tree.Overload{
-			Oid: catid.FuncIDToOID(funcDescPb.Overloads[i].ID),
+			Oid: catid.FuncIDToOID(sig.ID),
 			ReturnType: func(args []tree.TypedExpr) *types.T {
 				return retType
 			},
 			IsUDF:                    true,
 			UDFContainsOnlySignature: true,
 		}
-		paramTypes := make(tree.ParamTypes, 0, len(funcDescPb.Overloads[i].ArgTypes))
-		for _, paramType := range funcDescPb.Overloads[i].ArgTypes {
+		if funcDescPb.Signatures[i].ReturnSet {
+			overload.Class = tree.GeneratorClass
+		}
+		paramTypes := make(tree.ParamTypes, 0, len(sig.ArgTypes))
+		for _, paramType := range sig.ArgTypes {
 			paramTypes = append(
 				paramTypes,
 				tree.ParamType{Typ: paramType},
@@ -515,13 +523,13 @@ func (desc *immutable) GetResolvedFuncDefinition(
 	return funcDef, true
 }
 
-// ForEachFunctionOverload implements the SchemaDescriptor interface.
-func (desc *immutable) ForEachFunctionOverload(
-	fn func(overload descpb.SchemaDescriptor_FunctionOverload) error,
+// ForEachFunctionSignature implements the SchemaDescriptor interface.
+func (desc *immutable) ForEachFunctionSignature(
+	fn func(sig descpb.SchemaDescriptor_FunctionSignature) error,
 ) error {
 	for _, function := range desc.Functions {
-		for i := range function.Overloads {
-			if err := fn(function.Overloads[i]); err != nil {
+		for i := range function.Signatures {
+			if err := fn(function.Signatures[i]); err != nil {
 				return err
 			}
 		}

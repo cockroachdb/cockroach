@@ -14,7 +14,6 @@ import (
 	"context"
 	"regexp"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
@@ -93,8 +92,9 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 	testCases := []struct {
 		name string
 		// Replica state.
-		existingTxn  *roachpb.TransactionRecord
-		canCreateTxn func() (can bool, minTS hlc.Timestamp)
+		existingTxn    *roachpb.TransactionRecord
+		canCreateTxn   bool
+		minTxnCommitTS hlc.Timestamp
 		// Request state.
 		headerTxn      *roachpb.Transaction
 		commit         bool
@@ -110,8 +110,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			// there are intents to clean up.
 			name: "record missing, try rollback",
 			// Replica state.
-			existingTxn:  nil,
-			canCreateTxn: nil, // not needed
+			existingTxn: nil,
 			// Request state.
 			headerTxn: headerTxn,
 			commit:    false,
@@ -125,8 +124,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			// when all intents are on the transaction record's range.
 			name: "record missing, try rollback without intents",
 			// Replica state.
-			existingTxn:  nil,
-			canCreateTxn: nil, // not needed
+			existingTxn: nil,
 			// Request state.
 			headerTxn:   headerTxn,
 			commit:      false,
@@ -143,7 +141,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			name: "record missing, can't create, try stage",
 			// Replica state.
 			existingTxn:  nil,
-			canCreateTxn: func() (bool, hlc.Timestamp) { return false, hlc.Timestamp{} },
+			canCreateTxn: false,
 			// Request state.
 			headerTxn:      headerTxn,
 			commit:         true,
@@ -158,7 +156,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			name: "record missing, can't create, try commit",
 			// Replica state.
 			existingTxn:  nil,
-			canCreateTxn: func() (bool, hlc.Timestamp) { return false, hlc.Timestamp{} },
+			canCreateTxn: false,
 			// Request state.
 			headerTxn: headerTxn,
 			commit:    true,
@@ -171,7 +169,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			name: "record missing, can create, try stage",
 			// Replica state.
 			existingTxn:  nil,
-			canCreateTxn: func() (bool, hlc.Timestamp) { return true, hlc.Timestamp{} },
+			canCreateTxn: true,
 			// Request state.
 			headerTxn:      headerTxn,
 			commit:         true,
@@ -185,7 +183,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			name: "record missing, can create, try commit",
 			// Replica state.
 			existingTxn:  nil,
-			canCreateTxn: func() (bool, hlc.Timestamp) { return true, hlc.Timestamp{} },
+			canCreateTxn: true,
 			// Request state.
 			headerTxn: headerTxn,
 			commit:    true,
@@ -198,7 +196,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			name: "record missing, can create, try stage without intents",
 			// Replica state.
 			existingTxn:  nil,
-			canCreateTxn: func() (bool, hlc.Timestamp) { return true, hlc.Timestamp{} },
+			canCreateTxn: true,
 			// Request state.
 			headerTxn:      headerTxn,
 			commit:         true,
@@ -219,7 +217,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			name: "record missing, can create, try commit without intents",
 			// Replica state.
 			existingTxn:  nil,
-			canCreateTxn: func() (bool, hlc.Timestamp) { return true, hlc.Timestamp{} },
+			canCreateTxn: true,
 			// Request state.
 			headerTxn:   headerTxn,
 			commit:      true,
@@ -236,7 +234,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			name: "record missing, can create, try stage at pushed timestamp",
 			// Replica state.
 			existingTxn:  nil,
-			canCreateTxn: func() (bool, hlc.Timestamp) { return true, hlc.Timestamp{} },
+			canCreateTxn: true,
 			// Request state.
 			headerTxn:      pushedHeaderTxn,
 			commit:         true,
@@ -251,7 +249,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			name: "record missing, can create, try commit at pushed timestamp",
 			// Replica state.
 			existingTxn:  nil,
-			canCreateTxn: func() (bool, hlc.Timestamp) { return true, hlc.Timestamp{} },
+			canCreateTxn: true,
 			// Request state.
 			headerTxn: pushedHeaderTxn,
 			commit:    true,
@@ -265,7 +263,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			name: "record missing, can create, try stage at pushed timestamp after refresh",
 			// Replica state.
 			existingTxn:  nil,
-			canCreateTxn: func() (bool, hlc.Timestamp) { return true, hlc.Timestamp{} },
+			canCreateTxn: true,
 			// Request state.
 			headerTxn:      refreshedHeaderTxn,
 			commit:         true,
@@ -284,7 +282,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			name: "record missing, can create, try commit at pushed timestamp after refresh",
 			// Replica state.
 			existingTxn:  nil,
-			canCreateTxn: func() (bool, hlc.Timestamp) { return true, hlc.Timestamp{} },
+			canCreateTxn: true,
 			// Request state.
 			headerTxn: refreshedHeaderTxn,
 			commit:    true,
@@ -297,11 +295,12 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 		},
 		{
 			// A PushTxn(TIMESTAMP) request bumped the minimum timestamp that the
-			// transaction can be created with. This will trigger a retry error.
-			name: "record missing, can create with min timestamp, try stage",
+			// transaction can be committed with. This will trigger a retry error.
+			name: "record missing, can commit with min timestamp, try stage",
 			// Replica state.
-			existingTxn:  nil,
-			canCreateTxn: func() (bool, hlc.Timestamp) { return true, ts2 },
+			existingTxn:    nil,
+			canCreateTxn:   true,
+			minTxnCommitTS: ts2,
 			// Request state.
 			headerTxn:      headerTxn,
 			commit:         true,
@@ -311,11 +310,12 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 		},
 		{
 			// A PushTxn(TIMESTAMP) request bumped the minimum timestamp that the
-			// transaction can be created with. This will trigger a retry error.
-			name: "record missing, can create with min timestamp, try commit",
+			// transaction can be committed with. This will trigger a retry error.
+			name: "record missing, can commit with min timestamp, try commit",
 			// Replica state.
-			existingTxn:  nil,
-			canCreateTxn: func() (bool, hlc.Timestamp) { return true, ts2 },
+			existingTxn:    nil,
+			canCreateTxn:   true,
+			minTxnCommitTS: ts2,
 			// Request state.
 			headerTxn: headerTxn,
 			commit:    true,
@@ -324,12 +324,13 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 		},
 		{
 			// A PushTxn(TIMESTAMP) request bumped the minimum timestamp that
-			// the transaction can be created with. Luckily, the transaction has
+			// the transaction can be committed with. Luckily, the transaction has
 			// already refreshed above this time, so it can avoid a retry error.
-			name: "record missing, can create with min timestamp, try stage at pushed timestamp after refresh",
+			name: "record missing, can commit with min timestamp, try stage at pushed timestamp after refresh",
 			// Replica state.
-			existingTxn:  nil,
-			canCreateTxn: func() (bool, hlc.Timestamp) { return true, ts2 },
+			existingTxn:    nil,
+			canCreateTxn:   true,
+			minTxnCommitTS: ts2,
 			// Request state.
 			headerTxn:      refreshedHeaderTxn,
 			commit:         true,
@@ -343,12 +344,13 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 		},
 		{
 			// A PushTxn(TIMESTAMP) request bumped the minimum timestamp that
-			// the transaction can be created with. Luckily, the transaction has
+			// the transaction can be committed with. Luckily, the transaction has
 			// already refreshed above this time, so it can avoid a retry error.
-			name: "record missing, can create with min timestamp, try commit at pushed timestamp after refresh",
+			name: "record missing, can commit with min timestamp, try commit at pushed timestamp after refresh",
 			// Replica state.
-			existingTxn:  nil,
-			canCreateTxn: func() (bool, hlc.Timestamp) { return true, ts2 },
+			existingTxn:    nil,
+			canCreateTxn:   true,
+			minTxnCommitTS: ts2,
 			// Request state.
 			headerTxn: refreshedHeaderTxn,
 			commit:    true,
@@ -365,7 +367,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			name: "record missing, can create, try stage after write too old",
 			// Replica state.
 			existingTxn:  nil,
-			canCreateTxn: func() (bool, hlc.Timestamp) { return true, hlc.Timestamp{} },
+			canCreateTxn: true,
 			// Request state.
 			headerTxn: func() *roachpb.Transaction {
 				clone := txn.Clone()
@@ -383,7 +385,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			name: "record missing, can create, try commit after write too old",
 			// Replica state.
 			existingTxn:  nil,
-			canCreateTxn: func() (bool, hlc.Timestamp) { return true, hlc.Timestamp{} },
+			canCreateTxn: true,
 			// Request state.
 			headerTxn: func() *roachpb.Transaction {
 				clone := txn.Clone()
@@ -407,9 +409,8 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			expTxn: abortedRecord,
 		},
 		{
-			// Standard case where a transaction record is created during a
-			// parallel commit. The record already exists because it has been
-			// heartbeated.
+			// Standard case where a transaction record is staged by a parallel
+			// commit. The record already exists because it has been heartbeated.
 			name: "record pending, try stage",
 			// Replica state.
 			existingTxn: pendingRecord,
@@ -421,9 +422,9 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			expTxn: stagingRecord,
 		},
 		{
-			// Standard case where a transaction record is created during a
-			// non-parallel commit. The record already exists because it has
-			// been heartbeated.
+			// Standard case where a transaction record is committed during a
+			// non-parallel commit. The record already exists because it has been
+			// heartbeated.
 			name: "record pending, try commit",
 			// Replica state.
 			existingTxn: pendingRecord,
@@ -496,6 +497,74 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			}(),
 		},
 		{
+			// A PushTxn(TIMESTAMP) request bumped the minimum timestamp that the
+			// transaction can be committed with. The record already exists because
+			// it has been heartbeated. This will trigger a retry error.
+			name: "record pending, can commit with min timestamp, try stage",
+			// Replica state.
+			existingTxn:    pendingRecord,
+			minTxnCommitTS: ts2,
+			// Request state.
+			headerTxn:      headerTxn,
+			commit:         true,
+			inFlightWrites: writes,
+			// Expected result.
+			expError: "TransactionRetryError: retry txn (RETRY_SERIALIZABLE)",
+		},
+		{
+			// A PushTxn(TIMESTAMP) request bumped the minimum timestamp that the
+			// transaction can be committed with. The record already exists because
+			// it has been heartbeated. This will trigger a retry error.
+			name: "record pending, can commit with min timestamp, try commit",
+			// Replica state.
+			existingTxn:    pendingRecord,
+			minTxnCommitTS: ts2,
+			// Request state.
+			headerTxn: headerTxn,
+			commit:    true,
+			// Expected result.
+			expError: "TransactionRetryError: retry txn (RETRY_SERIALIZABLE)",
+		},
+		{
+			// A PushTxn(TIMESTAMP) request bumped the minimum timestamp that
+			// the transaction can be committed with. The record already exists
+			// because it has been heartbeated. Luckily, the transaction has
+			// already refreshed above this time, so it can avoid a retry error.
+			name: "record pending, can commit with min timestamp, try stage at pushed timestamp after refresh",
+			// Replica state.
+			existingTxn:    pendingRecord,
+			minTxnCommitTS: ts2,
+			// Request state.
+			headerTxn:      refreshedHeaderTxn,
+			commit:         true,
+			inFlightWrites: writes,
+			// Expected result.
+			expTxn: func() *roachpb.TransactionRecord {
+				record := *stagingRecord
+				record.WriteTimestamp.Forward(ts2)
+				return &record
+			}(),
+		},
+		{
+			// A PushTxn(TIMESTAMP) request bumped the minimum timestamp that
+			// the transaction can be committed with. The record already exists
+			// because it has been heartbeated. Luckily, the transaction has
+			// already refreshed above this time, so it can avoid a retry error.
+			name: "record pending, can commit with min timestamp, try commit at pushed timestamp after refresh",
+			// Replica state.
+			existingTxn:    pendingRecord,
+			minTxnCommitTS: ts2,
+			// Request state.
+			headerTxn: refreshedHeaderTxn,
+			commit:    true,
+			// Expected result.
+			expTxn: func() *roachpb.TransactionRecord {
+				record := *committedRecord
+				record.WriteTimestamp.Forward(ts2)
+				return &record
+			}(),
+		},
+		{
 			// The transaction has run into a WriteTooOld error during its
 			// lifetime. The stage will be rejected.
 			name: "record pending, try stage after write too old",
@@ -547,7 +616,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			}(),
 		},
 		{
-			// Standard case where a transaction record is created during a
+			// Standard case where a transaction record is staged during a
 			// parallel commit after it has written a record at a lower epoch.
 			// The existing record is upgraded.
 			name: "record pending, try stage at higher epoch",
@@ -566,7 +635,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			}(),
 		},
 		{
-			// Standard case where a transaction record is created during a
+			// Standard case where a transaction record is committed during a
 			// non-parallel commit after it has written a record at a lower
 			// epoch. The existing record is upgraded.
 			name: "record pending, try commit at higher epoch",
@@ -628,7 +697,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			expError: "found txn in indeterminate STAGING state",
 		},
 		{
-			// Standard case where a transaction record is created during a
+			// Standard case where a transaction record is re-staged during a
 			// parallel commit. The record already exists because of a failed
 			// parallel commit attempt.
 			name: "record staging, try re-stage",
@@ -642,9 +711,9 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			expTxn: stagingRecord,
 		},
 		{
-			// Standard case where a transaction record is created during a
-			// non-parallel commit. The record already exists because of a
-			// failed parallel commit attempt.
+			// Standard case where a transaction record is explicitly committed.
+			// The record already exists and is staging because it was previously
+			// implicitly committed.
 			name: "record staging, try commit",
 			// Replica state.
 			existingTxn: stagingRecord,
@@ -655,8 +724,39 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			expTxn: committedRecord,
 		},
 		{
-			// Non-standard case where a transaction record is created during a
+			// Standard case where a transaction record is re-staged during a
 			// parallel commit. The record already exists because of a failed
+			// parallel commit attempt. The timestamp cache's minimum commit
+			// timestamp is ignored when the transaction record is staging.
+			name: "record staging, can commit with min timestamp, try re-stage",
+			// Replica state.
+			existingTxn: stagingRecord,
+			// Request state.
+			headerTxn:      headerTxn,
+			minTxnCommitTS: ts2,
+			commit:         true,
+			inFlightWrites: writes,
+			// Expected result.
+			expTxn: stagingRecord,
+		},
+		{
+			// Non-standard case where a transaction record is explicitly committed.
+			// The record already exists and is staging because it was previously
+			// implicitly committed. The timestamp cache's minimum commit timestamp is
+			// ignored when the transaction record is staging.
+			name: "record staging, can commit with min timestamp, try commit",
+			// Replica state.
+			existingTxn:    stagingRecord,
+			minTxnCommitTS: ts2,
+			// Request state.
+			headerTxn: headerTxn,
+			commit:    true,
+			// Expected result.
+			expTxn: committedRecord,
+		},
+		{
+			// Non-standard case where a transaction record is re-staged during
+			// a parallel commit. The record already exists because of a failed
 			// parallel commit attempt. The re-stage will fail because of the
 			// pushed timestamp.
 			name: "record staging, try re-stage at pushed timestamp",
@@ -670,7 +770,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			expError: "TransactionRetryError: retry txn (RETRY_SERIALIZABLE)",
 		},
 		{
-			// Non-standard case where a transaction record is created during
+			// Non-standard case where a transaction record is committed during
 			// a non-parallel commit. The record already exists because of a
 			// failed parallel commit attempt. The commit will fail because of
 			// the pushed timestamp.
@@ -702,8 +802,8 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			}(),
 		},
 		{
-			// Non-standard case where a transaction record is created during a
-			// parallel commit. The record already exists because of a failed
+			// Non-standard case where a transaction record is re-staged during
+			// a parallel commit. The record already exists because of a failed
 			// parallel commit attempt in a prior epoch.
 			name: "record staging, try re-stage at higher epoch",
 			// Replica state.
@@ -721,7 +821,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			}(),
 		},
 		{
-			// Non-standard case where a transaction record is created during
+			// Non-standard case where a transaction record is committed during
 			// a non-parallel commit. The record already exists because of a
 			// failed parallel commit attempt in a prior epoch.
 			name: "record staging, try commit at higher epoch",
@@ -739,8 +839,8 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			}(),
 		},
 		{
-			// Non-standard case where a transaction record is created during a
-			// parallel commit. The record already exists because of a failed
+			// Non-standard case where a transaction record is re-staged during
+			// a parallel commit. The record already exists because of a failed
 			// parallel commit attempt in a prior epoch. The re-stage will fail
 			// because of the pushed timestamp.
 			name: "record staging, try re-stage at higher epoch and pushed timestamp",
@@ -754,8 +854,8 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			expError: "TransactionRetryError: retry txn (RETRY_SERIALIZABLE)",
 		},
 		{
-			// Non-standard case where a transaction record is created during a
-			// non-parallel commit. The record already exists because of a
+			// Non-standard case where a transaction record is committed during
+			// a non-parallel commit. The record already exists because of a
 			// failed parallel commit attempt in a prior epoch. The commit will
 			// fail because of the pushed timestamp.
 			name: "record staging, try commit at higher epoch and pushed timestamp",
@@ -936,12 +1036,14 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 				EvalCtx: (&MockEvalCtx{
 					Desc:      &desc,
 					AbortSpan: as,
-					CanCreateTxn: func() (bool, hlc.Timestamp, roachpb.TransactionAbortedReason) {
-						require.NotNil(t, c.canCreateTxn, "CanCreateTxnRecord unexpectedly called")
-						if can, minTS := c.canCreateTxn(); can {
-							return true, minTS, 0
+					CanCreateTxnRecordFn: func() (bool, roachpb.TransactionAbortedReason) {
+						if c.canCreateTxn {
+							return true, 0
 						}
-						return false, hlc.Timestamp{}, roachpb.ABORT_REASON_ABORTED_RECORD_FOUND
+						return false, roachpb.ABORT_REASON_ABORTED_RECORD_FOUND
+					},
+					MinTxnCommitTSFn: func() hlc.Timestamp {
+						return c.minTxnCommitTS
 					},
 				}).EvalContext(),
 				Args: &req,
@@ -1047,9 +1149,6 @@ func TestPartialRollbackOnEndTransaction(t *testing.T) {
 		if _, err := EndTxn(ctx, batch, CommandArgs{
 			EvalCtx: (&MockEvalCtx{
 				Desc: &desc,
-				CanCreateTxn: func() (bool, hlc.Timestamp, roachpb.TransactionAbortedReason) {
-					return true, ts, 0
-				},
 			}).EvalContext(),
 			Args: &req,
 			Header: roachpb.Header{
@@ -1062,17 +1161,17 @@ func TestPartialRollbackOnEndTransaction(t *testing.T) {
 
 		// The second write has been rolled back; verify that the remaining
 		// value is from the first write.
-		res, i, err := storage.MVCCGet(ctx, batch, k, ts2, storage.MVCCGetOptions{})
+		res, err := storage.MVCCGet(ctx, batch, k, ts2, storage.MVCCGetOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
-		if i != nil {
-			t.Errorf("found intent, expected none: %+v", i)
+		if res.Intent != nil {
+			t.Errorf("found intent, expected none: %+v", res.Intent)
 		}
-		if res == nil {
+		if res.Value == nil {
 			t.Errorf("no value found, expected one")
 		} else {
-			s, err := res.GetBytes()
+			s, err := res.Value.GetBytes()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1134,7 +1233,7 @@ func TestCommitWaitBeforeIntentResolutionIfCommitTrigger(t *testing.T) {
 				batch := db.NewBatch()
 				defer batch.Close()
 
-				clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 123)), time.Nanosecond /* maxOffset */)
+				clock := hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(0, 123)))
 				desc := roachpb.RangeDescriptor{
 					RangeID:  99,
 					StartKey: roachpb.RKey("a"),
@@ -1162,9 +1261,6 @@ func TestCommitWaitBeforeIntentResolutionIfCommitTrigger(t *testing.T) {
 					EvalCtx: (&MockEvalCtx{
 						Desc:  &desc,
 						Clock: clock,
-						CanCreateTxn: func() (bool, hlc.Timestamp, roachpb.TransactionAbortedReason) {
-							return true, hlc.Timestamp{}, 0
-						},
 					}).EvalContext(),
 					Args: &req,
 					Header: roachpb.Header{

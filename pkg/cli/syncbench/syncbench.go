@@ -141,8 +141,8 @@ func Run(opts Options) error {
 	db, err := storage.Open(
 		context.Background(),
 		storage.Filesystem(opts.Dir),
-		storage.CacheSize(0),
-		storage.Settings(cluster.MakeTestingClusterSettings()))
+		cluster.MakeTestingClusterSettings(),
+		storage.CacheSize(0))
 	if err != nil {
 		return err
 	}

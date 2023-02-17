@@ -14,12 +14,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -101,19 +101,11 @@ func GetHydratedTableDescriptor(
 	}()
 
 	execCfg := execCfgI.(sql.ExecutorConfig)
-	var found bool
 	require.NoError(t, sql.DescsTxn(context.Background(), &execCfg,
-		func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
-			found, td, err = col.GetImmutableTableByName(ctx, txn,
-				tree.NewTableNameWithSchema(dbName, scName, tableName),
-				tree.ObjectLookupFlags{
-					CommonLookupFlags: tree.CommonLookupFlags{
-						Required:    true,
-						AvoidLeased: true,
-					},
-				})
+		func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
+			_, td, err = descs.PrefixAndTable(ctx, col.ByName(txn.KV()).Get(), tree.NewTableNameWithSchema(dbName, scName, tableName))
 			return err
 		}))
-	require.True(t, found)
+	require.NotNil(t, td)
 	return td
 }

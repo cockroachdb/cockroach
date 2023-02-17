@@ -12,6 +12,8 @@ package cli
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -74,6 +76,57 @@ func TestInitInsecure(t *testing.T) {
 	}
 }
 
+func TestExternalIODirSpec(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Avoid leaking configuration changes after the tests end.
+	// In addition to the usual initCLIDefaults, we need to reset
+	// the serverCfg because --store modifies it in a way that
+	// initCLIDefaults does not restore.
+	defer func(save server.Config) { serverCfg = save }(serverCfg)
+	defer initCLIDefaults()
+
+	f := startCmd.Flags()
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	j := filepath.Join
+	defaultStoreDir := j(cwd, "cockroach-data")
+
+	testCases := []struct {
+		args     []string
+		expected string
+	}{
+		{[]string{}, j(defaultStoreDir, "extern")},
+		{[]string{`--store=type=mem,size=1G`}, ``},
+		{[]string{`--store=type=mem,size=1G`, `--store=path=foo`}, j(j(cwd, "foo"), "extern")},
+		{[]string{`--store=path=foo`, `--store=type=mem,size=1G`}, j(j(cwd, "foo"), "extern")},
+		{[]string{`--store=path=foo`, `--store=path=bar`}, j(j(cwd, "foo"), "extern")},
+		{[]string{`--external-io-dir=`}, ``},
+		{[]string{`--external-io-dir=foo`}, j(cwd, "foo")},
+		{[]string{`--external-io-dir=disabled`}, j(cwd, "disabled")},
+		{[]string{`--external-io-dir=`, `--store=path=foo`}, ``},
+	}
+	for i, c := range testCases {
+		// Reset the context and insecure flag for every test case.
+		initCLIDefaults()
+		if err := f.Parse(c.args); err != nil {
+			t.Error(err)
+			continue
+		}
+		if err := extraStoreFlagInit(startCmd); err != nil {
+			t.Error(err)
+			continue
+		}
+		if startCtx.externalIODir != c.expected {
+			t.Errorf("%d: expected:\n%q\ngot:\n%s", i, c.expected, startCtx.externalIODir)
+		}
+	}
+}
+
 func TestStartArgChecking(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -127,9 +180,14 @@ func TestStartArgChecking(t *testing.T) {
 	}
 	for i, c := range testCases {
 		// Reset the context and insecure flag for every test case.
+		initCLIDefaults()
 		err := f.Parse(c.args)
-		if !testutils.IsError(err, c.expected) {
-			t.Errorf("%d: expected %q, but found %v", i, c.expected, err)
+		var err2 error
+		if err == nil {
+			err2 = extraStoreFlagInit(startCmd)
+		}
+		if !testutils.IsError(err, c.expected) && !testutils.IsError(err2, c.expected) {
+			t.Errorf("%d: expected %q, but found %v / %v", i, c.expected, err, err2)
 		}
 	}
 }

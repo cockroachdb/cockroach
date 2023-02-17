@@ -23,13 +23,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/metrictestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -42,7 +42,7 @@ import (
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	datadriven.Walk(t, testutils.TestDataPath(t), func(t *testing.T, path string) {
+	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 		defer leaktest.AfterTest(t)()
 		defer log.Scope(t).Close(t)
 
@@ -84,7 +84,7 @@ func (ts *testState) start(t *testing.T) {
 	ts.tenantUsage = tenantcostserver.NewInstance(
 		ts.s.ClusterSettings(),
 		ts.kvDB,
-		ts.s.InternalExecutorFactory().(sqlutil.InternalExecutorFactory),
+		ts.s.InternalDB().(isql.DB),
 		ts.clock,
 	)
 	ts.metricsReg = metric.NewRegistry()
@@ -243,14 +243,13 @@ func (ts *testState) configure(t *testing.T, d *datadriven.TestData) string {
 	if err := yaml.UnmarshalStrict([]byte(d.Input), &args); err != nil {
 		d.Fatalf(t, "failed to parse request yaml: %v", err)
 	}
-	ief := ts.s.InternalExecutorFactory().(sqlutil.InternalExecutorFactory)
-	if err := ief.TxnWithExecutor(context.Background(), ts.kvDB, nil /* sessionData */, func(
-		ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor,
+	db := ts.s.InternalDB().(isql.DB)
+	if err := db.Txn(context.Background(), func(
+		ctx context.Context, txn isql.Txn,
 	) error {
 		return ts.tenantUsage.ReconfigureTokenBucket(
 			ctx,
 			txn,
-			ie,
 			roachpb.MustMakeTenantID(tenantID),
 			args.AvailableRU,
 			args.RefillRate,
@@ -266,16 +265,19 @@ func (ts *testState) configure(t *testing.T, d *datadriven.TestData) string {
 
 // inspect shows all the metadata for a tenant (specified in a tenant=X
 // argument), in a user-friendly format.
-func (ts *testState) inspect(t *testing.T, d *datadriven.TestData) string {
+func (ts *testState) inspect(t *testing.T, d *datadriven.TestData) (res string) {
 	tenantID := ts.tenantID(t, d)
-	res, err := tenantcostserver.InspectTenantMetadata(
-		context.Background(),
-		ts.s.InternalExecutor().(*sql.InternalExecutor),
-		nil, /* txn */
-		roachpb.MustMakeTenantID(tenantID),
-		timeFormat,
-	)
-	if err != nil {
+	if err := ts.s.InternalDB().(isql.DB).Txn(context.Background(), func(
+		ctx context.Context, txn isql.Txn,
+	) (err error) {
+		res, err = tenantcostserver.InspectTenantMetadata(
+			context.Background(),
+			txn,
+			roachpb.MustMakeTenantID(tenantID),
+			timeFormat,
+		)
+		return err
+	}); err != nil {
 		d.Fatalf(t, "error inspecting tenant state: %v", err)
 	}
 	return res
@@ -327,7 +329,7 @@ func TestInstanceCleanup(t *testing.T) {
 
 	// Note: this number needs to be at most maxInstancesCleanup.
 	const maxInstances = 10
-	var liveset, prev util.FastIntSet
+	var liveset, prev intsets.Fast
 
 	for steps := 0; steps < 100; steps++ {
 		// Keep the previous set for debugging.
@@ -370,7 +372,7 @@ func TestInstanceCleanup(t *testing.T) {
 		rows := ts.r.Query(t,
 			"SELECT instance_id FROM system.tenant_usage WHERE tenant_id = 5 AND instance_id > 0",
 		)
-		var serverSet util.FastIntSet
+		var serverSet intsets.Fast
 		for rows.Next() {
 			var id int
 			if err := rows.Scan(&id); err != nil {

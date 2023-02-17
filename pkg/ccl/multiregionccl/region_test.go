@@ -57,7 +57,7 @@ func TestMultiRegionDatabaseStats(t *testing.T) {
 
 	_, err := db.ExecContext(ctx,
 		`CREATE DATABASE test PRIMARY REGION "us-west";
-    use test;
+    USE test;
     CREATE TABLE a(id uuid primary key);`)
 	require.NoError(t, err)
 
@@ -66,8 +66,8 @@ func TestMultiRegionDatabaseStats(t *testing.T) {
 	testutils.SucceedsWithin(t, func() error {
 		// Get the list of nodes from ranges table
 		row := db.QueryRowContext(ctx,
-			`use test;
-    with x as (show ranges from table a) select replicas from x;`)
+			`USE test;
+    WITH x AS (SHOW RANGES FROM TABLE a) SELECT replicas FROM x;`)
 		var nodesStr string
 		err = row.Scan(&nodesStr)
 		if err != nil {
@@ -424,7 +424,7 @@ func TestSettingPlacementAmidstAddDrop(t *testing.T) {
 ALTER TABLE db.public.global CONFIGURE ZONE USING
 	range_min_bytes = 134217728,
 	range_max_bytes = 536870912,
-	gc.ttlseconds = 90000,
+	gc.ttlseconds = 14400,
 	global_reads = true,
 	num_replicas = 5,
 	num_voters = 3,
@@ -440,7 +440,7 @@ ALTER TABLE db.public.global CONFIGURE ZONE USING
 ALTER TABLE db.public.global CONFIGURE ZONE USING
 	range_min_bytes = 134217728,
 	range_max_bytes = 536870912,
-	gc.ttlseconds = 90000,
+	gc.ttlseconds = 14400,
 	global_reads = true,
 	num_replicas = 3,
 	num_voters = 3,

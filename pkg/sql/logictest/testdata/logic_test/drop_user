@@ -44,10 +44,10 @@ admin     ·        {}
 root      ·        {admin}
 testuser  ·        {}
 
-statement error user user1 does not exist
+statement error user "user1" does not exist
 DROP USER user1
 
-statement error user user1 does not exist
+statement error user "user1" does not exist
 DROP USER usER1
 
 statement ok
@@ -108,7 +108,7 @@ testuser  ·        {}
 user3     ·        {}
 user4     ·        {}
 
-statement error user user1 does not exist
+statement error user "user1" does not exist
 DROP USER user1,user3
 
 query TTT colnames

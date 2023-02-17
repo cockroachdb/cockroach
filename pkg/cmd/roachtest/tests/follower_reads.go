@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -100,7 +101,7 @@ func registerFollowerReads(r registry.Registry) {
 			spec.CPU(2),
 		),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if runtime.GOARCH == "arm64" {
+			if c.IsLocal() && runtime.GOARCH == "arm64" {
 				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
 			}
 			runFollowerReadsMixedVersionSingleRegionTest(ctx, t, c, *t.BuildVersion())
@@ -477,10 +478,7 @@ func initFollowerReadsDB(
 		q1 := fmt.Sprintf(`
 			SELECT
 				%s, %s
-			FROM
-				crdb_internal.ranges_no_leases
-			WHERE
-				table_name = 'test'`, votersCol, nonVotersCol)
+			FROM [SHOW RANGES FROM TABLE test.test]`, votersCol, nonVotersCol)
 
 		var voters, nonVoters int
 		err := db.QueryRowContext(ctx, q1).Scan(&voters, &nonVoters)
@@ -515,10 +513,7 @@ func initFollowerReadsDB(
 			const q2 = `
 			SELECT
 				count(distinct substring(unnest(replica_localities), 'region=([^,]*)'))
-			FROM
-				crdb_internal.ranges_no_leases
-			WHERE
-				table_name = 'test'`
+			FROM [SHOW RANGES FROM TABLE test.test]`
 
 			var distinctRegions int
 			require.NoError(t, db.QueryRowContext(ctx, q2).Scan(&distinctRegions))
@@ -872,11 +867,8 @@ func parsePrometheusMetric(s string) (*prometheusMetric, bool) {
 func runFollowerReadsMixedVersionSingleRegionTest(
 	ctx context.Context, t test.Test, c cluster.Cluster, buildVersion version.Version,
 ) {
-	predecessorVersion, err := PredecessorVersion(buildVersion)
+	predecessorVersion, err := clusterupgrade.PredecessorVersion(buildVersion)
 	require.NoError(t, err)
-	// An empty string means that the cockroach binary specified by flag
-	// `cockroach` will be used.
-	const curVersion = ""
 
 	// Start the cluster at the old version.
 	settings := install.MakeClusterSettings()
@@ -890,7 +882,7 @@ func runFollowerReadsMixedVersionSingleRegionTest(
 	randNode := 1 + rand.Intn(c.Spec().NodeCount)
 	t.L().Printf("upgrading n%d to current version", randNode)
 	nodeToUpgrade := c.Node(randNode)
-	upgradeNodes(ctx, nodeToUpgrade, startOpts, curVersion, t, c)
+	upgradeNodes(ctx, t, c, nodeToUpgrade, startOpts, clusterupgrade.MainVersion)
 	runFollowerReadsTest(ctx, t, c, topologySpec{multiRegion: false}, exactStaleness, data)
 
 	// Upgrade the remaining nodes to the new version and run the test.
@@ -902,6 +894,6 @@ func runFollowerReadsMixedVersionSingleRegionTest(
 		remainingNodes = remainingNodes.Merge(c.Node(i + 1))
 	}
 	t.L().Printf("upgrading nodes %s to current version", remainingNodes)
-	upgradeNodes(ctx, remainingNodes, startOpts, curVersion, t, c)
+	upgradeNodes(ctx, t, c, remainingNodes, startOpts, clusterupgrade.MainVersion)
 	runFollowerReadsTest(ctx, t, c, topologySpec{multiRegion: false}, exactStaleness, data)
 }

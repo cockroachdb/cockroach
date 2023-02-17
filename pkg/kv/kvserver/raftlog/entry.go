@@ -28,8 +28,48 @@ import (
 	"go.etcd.io/raft/v3/raftpb"
 )
 
+// EncodingOf determines the EntryEncoding for a given Entry.
+func EncodingOf(ent raftpb.Entry) (EntryEncoding, error) {
+	if len(ent.Data) == 0 {
+		// An empty command.
+		return EntryEncodingEmpty, nil
+	}
+
+	switch ent.Type {
+	case raftpb.EntryConfChange:
+		return EntryEncodingRaftConfChange, nil
+	case raftpb.EntryConfChangeV2:
+		return EntryEncodingRaftConfChangeV2, nil
+	case raftpb.EntryNormal:
+	default:
+		return 0, errors.AssertionFailedf("unknown EntryType %d", ent.Type)
+	}
+
+	switch ent.Data[0] {
+	case entryEncodingStandardWithACPrefixByte:
+		return EntryEncodingStandardWithAC, nil
+	case entryEncodingSideloadedWithACPrefixByte:
+		return EntryEncodingSideloadedWithAC, nil
+	case entryEncodingStandardWithoutACPrefixByte:
+		return EntryEncodingStandardWithoutAC, nil
+	case entryEncodingSideloadedWithoutACPrefixByte:
+		return EntryEncodingSideloadedWithoutAC, nil
+	default:
+		return 0, errors.AssertionFailedf("unknown command encoding version %d", ent.Data[0])
+	}
+}
+
+// DecomposeRaftEncodingStandardOrSideloaded extracts the CmdIDKey and the
+// marshaled kvserverpb.RaftCommand from a raftpb.Entry slice known to have
+// Entry with type EntryEncoding{Standard,Sideloaded}With{,out}AC.
+// All these variants, mod the prefix byte, share an encoding.
+func DecomposeRaftEncodingStandardOrSideloaded(data []byte) (kvserverbase.CmdIDKey, []byte) {
+	return kvserverbase.CmdIDKey(data[1 : 1+RaftCommandIDLen]), data[1+RaftCommandIDLen:]
+}
+
 // Entry contains data related to a raft log entry. This is the raftpb.Entry
-// itself but also all encapsulated data relevant for command application.
+// itself but also all encapsulated data relevant for command application and
+// admission control.
 type Entry struct {
 	raftpb.Entry
 	ID                kvserverbase.CmdIDKey // may be empty for zero Entry
@@ -37,6 +77,10 @@ type Entry struct {
 	ConfChangeV1      *raftpb.ConfChange            // only set for config change
 	ConfChangeV2      *raftpb.ConfChangeV2          // only set for config change
 	ConfChangeContext *kvserverpb.ConfChangeContext // only set for config change
+	// ApplyAdmissionControl determines whether this entry is subject to
+	// replication admission control. Only applies for entries with encoding
+	// EntryEncoding{Standard,Sideloaded}WithAC.
+	ApplyAdmissionControl bool
 }
 
 var entryPool = sync.Pool{
@@ -93,44 +137,57 @@ func raftEntryFromRawValue(b []byte) (raftpb.Entry, error) {
 }
 
 func (e *Entry) load() error {
-	if len(e.Data) == 0 {
-		// Raft-proposed empty entry.
-		return nil
+	typ, err := EncodingOf(e.Entry)
+	if err != nil {
+		return err
 	}
 
-	var payload []byte
-	switch e.Type {
-	case raftpb.EntryNormal:
-		e.ID, payload = kvserverbase.DecodeRaftCommand(e.Data)
-	case raftpb.EntryConfChange:
+	// We're trying to arrive at the marshaled representation of
+	// kvserverpb.RaftCommand.
+	var raftCmdBytes []byte
+	// Set if this entry represents a raft configuration change, in which case
+	// ccTarget will be set to either a raftpb.ConfChange or raftpb.ConfChangeV2
+	// and unmarshaled into, to further unwrap towards the kvserverpb.RaftCommand.
+	var ccTarget interface {
+		protoutil.Message
+		AsV2() raftpb.ConfChangeV2
+	}
+	switch typ {
+	case EntryEncodingStandardWithAC, EntryEncodingSideloadedWithAC:
+		e.ID, raftCmdBytes = DecomposeRaftEncodingStandardOrSideloaded(e.Entry.Data)
+		e.ApplyAdmissionControl = true
+	case EntryEncodingStandardWithoutAC, EntryEncodingSideloadedWithoutAC:
+		e.ID, raftCmdBytes = DecomposeRaftEncodingStandardOrSideloaded(e.Entry.Data)
+	case EntryEncodingEmpty:
+		// Nothing to load, the empty raftpb.Entry is represented by a trivial
+		// Entry.
+		return nil
+	case EntryEncodingRaftConfChange:
 		e.ConfChangeV1 = &raftpb.ConfChange{}
-		if err := protoutil.Unmarshal(e.Data, e.ConfChangeV1); err != nil {
-			return errors.Wrap(err, "unmarshalling ConfChange")
-		}
-		e.ConfChangeContext = &kvserverpb.ConfChangeContext{}
-		if err := protoutil.Unmarshal(e.ConfChangeV1.Context, e.ConfChangeContext); err != nil {
-			return errors.Wrap(err, "unmarshalling ConfChangeContext")
-		}
-		payload = e.ConfChangeContext.Payload
-		e.ID = kvserverbase.CmdIDKey(e.ConfChangeContext.CommandID)
-	case raftpb.EntryConfChangeV2:
+		ccTarget = e.ConfChangeV1
+	case EntryEncodingRaftConfChangeV2:
 		e.ConfChangeV2 = &raftpb.ConfChangeV2{}
-		if err := protoutil.Unmarshal(e.Data, e.ConfChangeV2); err != nil {
-			return errors.Wrap(err, "unmarshalling ConfChangeV2")
-		}
-		e.ConfChangeContext = &kvserverpb.ConfChangeContext{}
-		if err := protoutil.Unmarshal(e.ConfChangeV2.Context, e.ConfChangeContext); err != nil {
-			return errors.Wrap(err, "unmarshalling ConfChangeContext")
-		}
-		payload = e.ConfChangeContext.Payload
-		e.ID = kvserverbase.CmdIDKey(e.ConfChangeContext.CommandID)
+		ccTarget = e.ConfChangeV2
 	default:
 		return errors.AssertionFailedf("unknown entry type %d", e.Type)
 	}
 
+	if ccTarget != nil {
+		// Conf change - more unmarshaling to do.
+		if err := protoutil.Unmarshal(e.Entry.Data, ccTarget); err != nil {
+			return errors.Wrap(err, "unmarshalling ConfChange")
+		}
+		e.ConfChangeContext = &kvserverpb.ConfChangeContext{}
+		if err := protoutil.Unmarshal(ccTarget.AsV2().Context, e.ConfChangeContext); err != nil {
+			return errors.Wrap(err, "unmarshalling ConfChangeContext")
+		}
+		e.ID = kvserverbase.CmdIDKey(e.ConfChangeContext.CommandID)
+		raftCmdBytes = e.ConfChangeContext.Payload
+	}
+
 	// TODO(tbg): can len(payload)==0 if we propose an empty command to wake up leader?
 	// If so, is that a problem here?
-	return errors.Wrap(protoutil.Unmarshal(payload, &e.Cmd), "unmarshalling RaftCommand")
+	return errors.Wrap(protoutil.Unmarshal(raftCmdBytes, &e.Cmd), "unmarshalling RaftCommand")
 }
 
 // ConfChange returns ConfChangeV1 or ConfChangeV2 as an interface, if set.

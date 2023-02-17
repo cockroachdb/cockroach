@@ -15,6 +15,7 @@ go_library(
         "pem.go",
         "permission_check.go",
         "tls.go",
+        "tls_ciphersuites.go",
         "tls_settings.go",
         "utils.go",
         "x509.go",
@@ -73,6 +74,7 @@ go_test(
     embed = [":security"],
     deps = [
         "//pkg/base",
+        "//pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/security/certnames",

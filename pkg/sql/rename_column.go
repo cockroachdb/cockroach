@@ -96,7 +96,7 @@ func (p *planner) findColumnToRename(
 		return nil, errEmptyColumnName
 	}
 
-	col, err := tableDesc.FindColumnWithName(oldName)
+	col, err := catalog.MustFindColumnByTreeName(tableDesc, oldName)
 	if err != nil {
 		return nil, err
 	}

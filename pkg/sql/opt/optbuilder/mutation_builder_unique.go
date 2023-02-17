@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 )
 
 // UniquenessChecksForGenRandomUUIDClusterMode controls the cluster setting for
@@ -195,11 +195,11 @@ type uniqueCheckHelper struct {
 	// uniqueOrdinals are the table ordinals of the unique columns in the table
 	// that is being mutated. They correspond 1-to-1 to the columns in the
 	// UniqueConstraint.
-	uniqueOrdinals util.FastIntSet
+	uniqueOrdinals intsets.Fast
 
 	// primaryKeyOrdinals includes the ordinals from any primary key columns
 	// that are not included in uniqueOrdinals.
-	primaryKeyOrdinals util.FastIntSet
+	primaryKeyOrdinals intsets.Fast
 
 	// The scope and column ordinals of the scan that will serve as the right
 	// side of the semi join for the uniqueness checks.
@@ -220,7 +220,7 @@ func (h *uniqueCheckHelper) init(mb *mutationBuilder, uniqueOrdinal int) bool {
 		uniqueOrdinal: uniqueOrdinal,
 	}
 
-	var uniqueOrds util.FastIntSet
+	var uniqueOrds intsets.Fast
 	for i, n := 0, h.unique.ColumnCount(); i < n; i++ {
 		uniqueOrds.Add(h.unique.ColumnOrdinal(mb.tab, i))
 	}

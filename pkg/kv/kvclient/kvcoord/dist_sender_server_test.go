@@ -125,7 +125,6 @@ func setupMultipleRanges(ctx context.Context, db *kv.DB, splitAt ...string) erro
 			ctx,
 			splitKey,
 			hlc.MaxTimestamp, /* expirationTime */
-			roachpb.AdminSplitRequest_INGESTION,
 		); err != nil {
 			return err
 		}
@@ -1132,7 +1131,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 				roachpb.NewScan(roachpb.Key("a"), roachpb.Key("c"), false),
 				roachpb.NewReverseScan(roachpb.Key("a"), roachpb.Key("c"), false),
 			} {
-				clock := hlc.NewClock(timeutil.NewManualTime(ts[0].GoTime().Add(1)), time.Nanosecond /* maxOffset */)
+				clock := hlc.NewClockForTesting(timeutil.NewManualTime(ts[0].GoTime().Add(1)))
 				ds := kvcoord.NewDistSender(kvcoord.DistSenderConfig{
 					AmbientCtx:         s.AmbientCtx(),
 					Settings:           cluster.MakeTestingClusterSettings(),
@@ -1186,7 +1185,6 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		ctx,
 		"m",              /* splitKey */
 		hlc.MaxTimestamp, /* expirationTime */
-		roachpb.AdminSplitRequest_INGESTION,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -1344,7 +1342,6 @@ func TestMultiRangeScanWithPagination(t *testing.T) {
 					ctx,
 					splitKey,
 					hlc.MaxTimestamp, /* expirationTime */
-					roachpb.AdminSplitRequest_INGESTION,
 				); err != nil {
 					t.Fatal(err)
 				}
@@ -1496,7 +1493,6 @@ func TestParallelSender(t *testing.T) {
 			context.Background(),
 			splitKey,
 			hlc.MaxTimestamp, /* expirationTime */
-			roachpb.AdminSplitRequest_INGESTION,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -1546,7 +1542,6 @@ func initReverseScanTestEnv(s serverutils.TestServerInterface, t *testing.T) *kv
 			context.Background(),
 			splitKey,
 			hlc.MaxTimestamp, /* expirationTime */
-			roachpb.AdminSplitRequest_INGESTION,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -1652,7 +1647,6 @@ func TestBatchPutWithConcurrentSplit(t *testing.T) {
 			context.Background(),
 			splitKey,
 			hlc.MaxTimestamp, /* expirationTime */
-			roachpb.AdminSplitRequest_INGESTION,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -1714,7 +1708,6 @@ func TestReverseScanWithSplitAndMerge(t *testing.T) {
 		context.Background(),
 		"c",              /* splitKey */
 		hlc.MaxTimestamp, /* expirationTime */
-		roachpb.AdminSplitRequest_INGESTION,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -1818,7 +1811,8 @@ func TestPropagateTxnOnError(t *testing.T) {
 			case *roachpb.ConditionalPutRequest:
 				if k.Equal(keyB) {
 					if atomic.AddInt32(&numCPuts, 1) == 1 {
-						pErr := roachpb.NewReadWithinUncertaintyIntervalError(hlc.Timestamp{}, hlc.Timestamp{}, hlc.Timestamp{}, nil)
+						pErr := roachpb.NewReadWithinUncertaintyIntervalError(
+							hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, hlc.Timestamp{}, hlc.ClockTimestamp{})
 						return roachpb.NewErrorWithTxn(pErr, fArgs.Hdr.Txn)
 					}
 				}
@@ -2053,7 +2047,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 					return nil
 				}
 				err := roachpb.NewReadWithinUncertaintyIntervalError(
-					fArgs.Hdr.Timestamp, s.Clock().Now(), hlc.Timestamp{}, fArgs.Hdr.Txn)
+					fArgs.Hdr.Timestamp, hlc.ClockTimestamp{}, fArgs.Hdr.Txn, s.Clock().Now(), hlc.ClockTimestamp{})
 				return roachpb.NewErrorWithTxn(err, fArgs.Hdr.Txn)
 			}
 			return nil
@@ -3581,7 +3575,6 @@ func BenchmarkReturnOnRangeBoundary(b *testing.B) {
 			ctx,
 			rangeKey,
 			hlc.MaxTimestamp, /* expirationTime */
-			roachpb.AdminSplitRequest_INGESTION,
 		))
 
 		for k := 0; k < KeysPerRange; k++ {

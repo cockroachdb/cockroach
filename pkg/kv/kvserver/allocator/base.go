@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -36,10 +37,41 @@ const (
 	// lightly loaded clusters.
 	MinQPSThresholdDifference = 100
 
+	// MinCPUThresholdDifference is the minimum CPU difference from the cluster
+	// mean that this system should care about. The system won't attempt to
+	// take action if a store's CPU differs from the mean by less than this
+	// amount even if it is greater than the percentage threshold. This
+	// prevents too many lease transfers or range rebalances in lightly loaded
+	// clusters.
+	//
+	// NB: This represents 5% (1/20) utilization of 1 cpu on average.  This
+	// number was arrived at from testing to minimize thrashing. This number is
+	// set independent of processor speed and assumes identical value of cpu
+	// time across all stores. i.e. all cpu's are identical.
+	MinCPUThresholdDifference = float64(50 * time.Millisecond)
+
+	// MinCPUDifferenceForTransfers is the minimum CPU difference that a
+	// store rebalncer would care about to reconcile (via lease or replica
+	// rebalancing) between any two stores.
+	//
+	// NB: This is set to be two times the minimum threshold that a store needs
+	// to be above or below the mean to be considered overfull or underfull
+	// respectively. This is to make lease transfers and replica rebalances
+	// less sensistive to jitters in any given workload by introducing
+	// additional friction before taking these actions.
+	MinCPUDifferenceForTransfers = 2 * MinCPUThresholdDifference
+
 	// defaultLoadBasedRebalancingInterval is how frequently to check the store-level
 	// balance of the cluster.
 	defaultLoadBasedRebalancingInterval = time.Minute
 )
+
+// AllocationError is a simple interface used to indicate a replica processing
+// error originating from the allocator.
+type AllocationError interface {
+	error
+	AllocationErrorMarker() // dummy method for unique interface
+}
 
 // MaxCapacityCheck returns true if the store has room for a new replica.
 func MaxCapacityCheck(store roachpb.StoreDescriptor) bool {
@@ -91,6 +123,27 @@ var QPSRebalanceThreshold = func() *settings.FloatSetting {
 		func(f float64) error {
 			if f < 0.01 {
 				return errors.Errorf("cannot set kv.allocator.qps_rebalance_threshold to less than 0.01")
+			}
+			return nil
+		},
+	)
+	s.SetVisibility(settings.Public)
+	return s
+}()
+
+// CPURebalanceThreshold is the minimum ratio of a store's cpu time to the mean
+// cpu time at which that store is considered overfull or underfull of cpu
+// usage.
+var CPURebalanceThreshold = func() *settings.FloatSetting {
+	s := settings.RegisterFloatSetting(
+		settings.SystemOnly,
+		"kv.allocator.store_cpu_rebalance_threshold",
+		"minimum fraction away from the mean a store's cpu usage can be before it is considered overfull or underfull",
+		0.10,
+		settings.NonNegativeFloat,
+		func(f float64) error {
+			if f < 0.01 {
+				return errors.Errorf("cannot set kv.allocator.store_cpu_rebalance_threshold to less than 0.01")
 			}
 			return nil
 		},
@@ -152,8 +205,8 @@ const (
 	// LeaseCountConvergence transfers leases such that lease counts converge
 	// across stores.
 	LeaseCountConvergence
-	// QPSConvergence transfers leases such that QPS converges across stores.
-	QPSConvergence
+	// LoadConvergence transfers leases such that load converges across stores.
+	LoadConvergence
 )
 
 // TransferLeaseOptions is the set of options needed to evaluate a lease
@@ -170,6 +223,9 @@ type TransferLeaseOptions struct {
 	// AllowUninitializedCandidates allows a lease transfer target to include
 	// replicas which are not in the existing replica set.
 	AllowUninitializedCandidates bool
+	// LoadDimensions declares the load dimensions to use when the Goal is
+	// LoadConvergence.
+	LoadDimensions []load.Dimension
 }
 
 // LeaseTransferOutcome represents the result of shedLease().

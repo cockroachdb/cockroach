@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -53,10 +54,10 @@ type comment struct {
 // An alternative approach would be to leverage a virtual table which internally
 // uses the collection.
 func selectComment(ctx context.Context, p PlanHookState, tableID descpb.ID) (tc *tableComments) {
-	query := fmt.Sprintf("SELECT type, object_id, sub_id, comment FROM system.comments WHERE object_id = %d", tableID)
+	query := fmt.Sprintf("SELECT type, object_id, sub_id, comment FROM system.comments WHERE object_id = %d ORDER BY type, sub_id", tableID)
 
 	txn := p.Txn()
-	it, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIterator(
+	it, err := p.InternalSQLTxn().QueryIterator(
 		ctx, "show-tables-with-comment", txn, query)
 	if err != nil {
 		log.VEventf(ctx, 1, "%q", err)
@@ -376,7 +377,7 @@ func showComments(
 	}
 
 	for _, columnComment := range tc.columns {
-		col, err := table.FindColumnWithPGAttributeNum(descpb.PGAttributeNum(columnComment.subID))
+		col, err := catalog.MustFindColumnByPGAttributeNum(table, descpb.PGAttributeNum(columnComment.subID))
 		if err != nil {
 			return err
 		}
@@ -392,7 +393,7 @@ func showComments(
 	}
 
 	for _, indexComment := range tc.indexes {
-		idx, err := table.FindIndexWithID(descpb.IndexID(indexComment.subID))
+		idx, err := catalog.MustFindIndexByID(table, descpb.IndexID(indexComment.subID))
 		if err != nil {
 			return err
 		}
@@ -409,7 +410,7 @@ func showComments(
 
 	for _, constraintComment := range tc.constraints {
 		f.WriteString(";\n")
-		c, err := table.FindConstraintWithID(descpb.ConstraintID(constraintComment.subID))
+		c, err := catalog.MustFindConstraintByID(table, descpb.ConstraintID(constraintComment.subID))
 		if err != nil {
 			return err
 		}
@@ -448,11 +449,11 @@ func showForeignKeyConstraint(
 			return err
 		}
 		fkTableName.ExplicitSchema = !searchPath.Contains(fkTableName.SchemaName.String(), false /* includeImplicit */)
-		refNames, err = fkTable.NamesForColumnIDs(fk.ReferencedColumnIDs)
+		refNames, err = catalog.ColumnNamesForIDs(fkTable, fk.ReferencedColumnIDs)
 		if err != nil {
 			return err
 		}
-		originNames, err = originTable.NamesForColumnIDs(fk.OriginColumnIDs)
+		originNames, err = catalog.ColumnNamesForIDs(originTable, fk.OriginColumnIDs)
 		if err != nil {
 			return err
 		}
@@ -472,17 +473,17 @@ func showForeignKeyConstraint(
 	formatQuoteNames(buf, refNames...)
 	buf.WriteByte(')')
 	// We omit MATCH SIMPLE because it is the default.
-	if fk.Match != descpb.ForeignKeyReference_SIMPLE {
+	if fk.Match != semenumpb.Match_SIMPLE {
 		buf.WriteByte(' ')
-		buf.WriteString(fk.Match.String())
+		buf.WriteString(tree.CompositeKeyMatchMethodType[fk.Match].String())
 	}
-	if fk.OnDelete != catpb.ForeignKeyAction_NO_ACTION {
+	if fk.OnDelete != semenumpb.ForeignKeyAction_NO_ACTION {
 		buf.WriteString(" ON DELETE ")
-		buf.WriteString(fk.OnDelete.String())
+		buf.WriteString(tree.ForeignKeyReferenceActionType[fk.OnDelete].String())
 	}
-	if fk.OnUpdate != catpb.ForeignKeyAction_NO_ACTION {
+	if fk.OnUpdate != semenumpb.ForeignKeyAction_NO_ACTION {
 		buf.WriteString(" ON UPDATE ")
-		buf.WriteString(fk.OnUpdate.String())
+		buf.WriteString(tree.ForeignKeyReferenceActionType[fk.OnUpdate].String())
 	}
 	if fk.Validity != descpb.ConstraintValidity_Validated {
 		buf.WriteString(" NOT VALID")
@@ -531,7 +532,7 @@ func showFamilyClause(desc catalog.TableDescriptor, f *tree.FmtCtx) {
 	for _, fam := range families {
 		activeColumnNames := make([]string, 0, len(fam.ColumnNames))
 		for i, colID := range fam.ColumnIDs {
-			if col, _ := desc.FindColumnWithID(colID); col != nil && col.Public() {
+			if col := catalog.FindColumnByID(desc, colID); col != nil && col.Public() {
 				activeColumnNames = append(activeColumnNames, fam.ColumnNames[i])
 			}
 		}
@@ -616,7 +617,7 @@ func ShowCreatePartitioning(
 		if i != 0 {
 			buf.WriteString(", ")
 		}
-		buf.WriteString(idx.GetKeyColumnName(colOffset + i))
+		buf.WriteString(tree.NameString(idx.GetKeyColumnName(colOffset + i)))
 	}
 	buf.WriteString(`) (`)
 	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
@@ -629,7 +630,7 @@ func ShowCreatePartitioning(
 		buf.WriteString("\n")
 		buf.WriteString(indentStr)
 		buf.WriteString("\tPARTITION ")
-		fmtCtx.FormatNameP(&name)
+		fmtCtx.FormatName(name)
 		_, _ = fmtCtx.Buffer.WriteTo(buf)
 		buf.WriteString(` VALUES IN (`)
 		for j, values := range values {
@@ -660,7 +661,7 @@ func ShowCreatePartitioning(
 		buf.WriteString("\n")
 		buf.WriteString(indentStr)
 		buf.WriteString("\tPARTITION ")
-		buf.WriteString(name)
+		buf.WriteString(tree.NameString(name))
 		buf.WriteString(" VALUES FROM ")
 		fromTuple, _, err := rowenc.DecodePartitionTuple(
 			a, codec, tableDesc, idx, part, from, fakePrefixDatums)
@@ -724,7 +725,7 @@ func showConstraintClause(
 			f.WriteString(" ")
 		}
 		f.WriteString("UNIQUE WITHOUT INDEX (")
-		colNames, err := desc.NamesForColumnIDs(c.CollectKeyColumnIDs().Ordered())
+		colNames, err := catalog.ColumnNamesForIDs(desc, c.CollectKeyColumnIDs().Ordered())
 		if err != nil {
 			return err
 		}

@@ -13,6 +13,7 @@ package rpc
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"google.golang.org/grpc"
 )
@@ -36,14 +37,32 @@ func TestingNewWrappedServerStream(
 
 // TestingAuthenticateTenant performs authentication of a tenant from a context
 // for testing.
-func TestingAuthenticateTenant(ctx context.Context) (roachpb.TenantID, error) {
-	return kvAuth{tenant: tenantAuthorizer{tenantID: roachpb.SystemTenantID}}.authenticate(ctx)
+func TestingAuthenticateTenant(
+	ctx context.Context, serverTenantID roachpb.TenantID,
+) (roachpb.TenantID, error) {
+	_, authz, err := kvAuth{tenant: tenantAuthorizer{tenantID: serverTenantID}}.authenticateAndSelectAuthzRule(ctx)
+	if err != nil {
+		return roachpb.TenantID{}, err
+	}
+	switch z := authz.(type) {
+	case authzTenantServerToKVServer:
+		return roachpb.TenantID(z), nil
+	default:
+		return roachpb.TenantID{}, nil
+	}
 }
 
 // TestingAuthorizeTenantRequest performs authorization of a tenant request
 // for testing.
 func TestingAuthorizeTenantRequest(
-	tenID roachpb.TenantID, method string, request interface{},
+	ctx context.Context,
+	tenID roachpb.TenantID,
+	method string,
+	request interface{},
+	authorizer tenantcapabilities.Authorizer,
 ) error {
-	return tenantAuthorizer{}.authorize(tenID, method, request)
+	return tenantAuthorizer{
+		tenantID:               tenID,
+		capabilitiesAuthorizer: authorizer,
+	}.authorize(ctx, tenID, method, request)
 }

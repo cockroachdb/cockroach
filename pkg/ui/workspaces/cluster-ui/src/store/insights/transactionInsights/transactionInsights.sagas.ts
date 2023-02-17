@@ -8,29 +8,32 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { all, call, put, takeEvery } from "redux-saga/effects";
+import { all, call, put, takeLatest } from "redux-saga/effects";
 
-import { actions } from "./transactionInsights.reducer";
-import { actions as stmtActions } from "../statementInsights/statementInsights.reducer";
-import { getTxnInsightEvents } from "src/api/insightsApi";
+import { actions as txnActions } from "../transactionInsights/transactionInsights.reducer";
+import { getTxnInsightsApi, TxnInsightsRequest } from "src/api/txnInsightsApi";
+import { PayloadAction } from "@reduxjs/toolkit";
 
-export function* refreshTransactionInsightsSaga() {
-  yield put(actions.request());
-  yield put(stmtActions.request());
+export function* refreshTransactionInsightsSaga(
+  action?: PayloadAction<TxnInsightsRequest>,
+) {
+  yield put(txnActions.request(action?.payload));
 }
 
-export function* requestTransactionInsightsSaga(): any {
+export function* requestTransactionInsightsSaga(
+  action?: PayloadAction<TxnInsightsRequest>,
+): any {
   try {
-    const result = yield call(getTxnInsightEvents);
-    yield put(actions.received(result));
+    const result = yield call(getTxnInsightsApi, action?.payload);
+    yield put(txnActions.received(result));
   } catch (e) {
-    yield put(actions.failed(e));
+    yield put(txnActions.failed(e));
   }
 }
 
 export function* transactionInsightsSaga() {
   yield all([
-    takeEvery(actions.refresh, refreshTransactionInsightsSaga),
-    takeEvery(actions.request, requestTransactionInsightsSaga),
+    takeLatest(txnActions.refresh, refreshTransactionInsightsSaga),
+    takeLatest(txnActions.request, requestTransactionInsightsSaga),
   ]);
 }

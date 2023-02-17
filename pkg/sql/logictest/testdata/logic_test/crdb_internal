@@ -32,6 +32,7 @@ crdb_internal  cluster_settings                 table  admin  NULL  NULL
 crdb_internal  cluster_statement_statistics     table  admin  NULL  NULL
 crdb_internal  cluster_transaction_statistics   table  admin  NULL  NULL
 crdb_internal  cluster_transactions             table  admin  NULL  NULL
+crdb_internal  cluster_txn_execution_insights   table  admin  NULL  NULL
 crdb_internal  create_function_statements       table  admin  NULL  NULL
 crdb_internal  create_schema_statements         table  admin  NULL  NULL
 crdb_internal  create_statements                table  admin  NULL  NULL
@@ -46,6 +47,7 @@ crdb_internal  gossip_liveness                  table  admin  NULL  NULL
 crdb_internal  gossip_network                   table  admin  NULL  NULL
 crdb_internal  gossip_nodes                     table  admin  NULL  NULL
 crdb_internal  index_columns                    table  admin  NULL  NULL
+crdb_internal  index_spans                      table  admin  NULL  NULL
 crdb_internal  index_usage_statistics           table  admin  NULL  NULL
 crdb_internal  invalid_objects                  table  admin  NULL  NULL
 crdb_internal  jobs                             table  admin  NULL  NULL
@@ -53,6 +55,7 @@ crdb_internal  kv_catalog_comments              table  admin  NULL  NULL
 crdb_internal  kv_catalog_descriptor            table  admin  NULL  NULL
 crdb_internal  kv_catalog_namespace             table  admin  NULL  NULL
 crdb_internal  kv_catalog_zones                 table  admin  NULL  NULL
+crdb_internal  kv_dropped_relations             view   admin  NULL  NULL
 crdb_internal  kv_node_liveness                 table  admin  NULL  NULL
 crdb_internal  kv_node_status                   table  admin  NULL  NULL
 crdb_internal  kv_store_status                  table  admin  NULL  NULL
@@ -70,6 +73,7 @@ crdb_internal  node_sessions                    table  admin  NULL  NULL
 crdb_internal  node_statement_statistics        table  admin  NULL  NULL
 crdb_internal  node_transaction_statistics      table  admin  NULL  NULL
 crdb_internal  node_transactions                table  admin  NULL  NULL
+crdb_internal  node_txn_execution_insights      table  admin  NULL  NULL
 crdb_internal  node_txn_stats                   table  admin  NULL  NULL
 crdb_internal  partitions                       table  admin  NULL  NULL
 crdb_internal  pg_catalog_table_is_implemented  table  admin  NULL  NULL
@@ -81,9 +85,11 @@ crdb_internal  session_trace                    table  admin  NULL  NULL
 crdb_internal  session_variables                table  admin  NULL  NULL
 crdb_internal  statement_statistics             view   admin  NULL  NULL
 crdb_internal  super_regions                    table  admin  NULL  NULL
+crdb_internal  system_jobs                      table  admin  NULL  NULL
 crdb_internal  table_columns                    table  admin  NULL  NULL
 crdb_internal  table_indexes                    table  admin  NULL  NULL
 crdb_internal  table_row_statistics             table  admin  NULL  NULL
+crdb_internal  table_spans                      table  admin  NULL  NULL
 crdb_internal  tables                           table  admin  NULL  NULL
 crdb_internal  tenant_usage_details             view   admin  NULL  NULL
 crdb_internal  transaction_contention_events    table  admin  NULL  NULL
@@ -262,7 +268,7 @@ pg_subscription_rel              true
 pg_tables                        false
 pg_tablespace                    false
 pg_timezone_abbrevs              true
-pg_timezone_names                true
+pg_timezone_names                false
 pg_transform                     true
 pg_trigger                       true
 pg_ts_config                     true
@@ -320,15 +326,15 @@ SELECT * FROM crdb_internal.leases WHERE node_id < 0
 ----
 node_id  table_id  name  parent_id  expiration  deleted
 
-query ITTTTTIIITRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRBBTTTTT colnames
+query ITTTTTIIITTRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRBBTTTTTRRRRR colnames
 SELECT * FROM crdb_internal.node_statement_statistics WHERE node_id < 0
 ----
-node_id  application_name  flags  statement_id  key  anonymized  count  first_attempt_count  max_retries  last_error  rows_avg  rows_var  idle_lat_avg  idle_lat_var  parse_lat_avg  parse_lat_var  plan_lat_avg  plan_lat_var  run_lat_avg  run_lat_var  service_lat_avg  service_lat_var  overhead_lat_avg  overhead_lat_var  bytes_read_avg  bytes_read_var  rows_read_avg  rows_read_var  rows_written_avg  rows_written_var  network_bytes_avg  network_bytes_var  network_msgs_avg  network_msgs_var  max_mem_usage_avg  max_mem_usage_var  max_disk_usage_avg  max_disk_usage_var  contention_time_avg  contention_time_var  implicit_txn  full_scan  sample_plan  database_name  exec_node_ids  txn_fingerprint_id index_recommendations
+node_id  application_name  flags  statement_id  key  anonymized  count  first_attempt_count  max_retries  last_error  last_error_code  rows_avg  rows_var  idle_lat_avg  idle_lat_var  parse_lat_avg  parse_lat_var  plan_lat_avg  plan_lat_var  run_lat_avg  run_lat_var  service_lat_avg  service_lat_var  overhead_lat_avg  overhead_lat_var  bytes_read_avg  bytes_read_var  rows_read_avg  rows_read_var  rows_written_avg  rows_written_var  network_bytes_avg  network_bytes_var  network_msgs_avg  network_msgs_var  max_mem_usage_avg  max_mem_usage_var  max_disk_usage_avg  max_disk_usage_var  contention_time_avg  contention_time_var  cpu_sql_nanos_avg  cpu_sql_nanos_var  mvcc_step_avg  mvcc_step_var  mvcc_step_internal_avg  mvcc_step_internal_var  mvcc_seek_avg  mvcc_seek_var  mvcc_seek_internal_avg  mvcc_seek_internal_var  mvcc_block_bytes_avg  mvcc_block_bytes_var  mvcc_block_bytes_in_cache_avg  mvcc_block_bytes_in_cache_var  mvcc_key_bytes_avg  mvcc_key_bytes_var  mvcc_value_bytes_avg  mvcc_value_bytes_var  mvcc_point_count_avg  mvcc_point_count_var  mvcc_points_covered_by_range_tombstones_avg  mvcc_points_covered_by_range_tombstones_var  mvcc_range_key_count_avg  mvcc_range_key_count_var  mvcc_range_key_contained_points_avg  mvcc_range_key_contained_points_var  mvcc_range_key_skipped_points_avg  mvcc_range_key_skipped_points_var  implicit_txn  full_scan  sample_plan  database_name  exec_node_ids  txn_fingerprint_id  index_recommendations  latency_seconds_min  latency_seconds_max  latency_seconds_p50  latency_seconds_p90  latency_seconds_p99
 
-query ITTTIIRRRRRRRRRRRRRRRRRRRR colnames
+query ITTTIIRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR colnames
 SELECT * FROM crdb_internal.node_transaction_statistics WHERE node_id < 0
 ----
-node_id  application_name  key  statement_ids  count  max_retries  service_lat_avg  service_lat_var  retry_lat_avg  retry_lat_var  commit_lat_avg  commit_lat_var  idle_lat_avg  idle_lat_var  rows_read_avg  rows_read_var  network_bytes_avg  network_bytes_var  network_msgs_avg  network_msgs_var  max_mem_usage_avg  max_mem_usage_var  max_disk_usage_avg  max_disk_usage_var  contention_time_avg  contention_time_var
+node_id  application_name  key  statement_ids  count  max_retries  service_lat_avg  service_lat_var  retry_lat_avg  retry_lat_var  commit_lat_avg  commit_lat_var  idle_lat_avg  idle_lat_var  rows_read_avg  rows_read_var  network_bytes_avg  network_bytes_var  network_msgs_avg  network_msgs_var  max_mem_usage_avg  max_mem_usage_var  max_disk_usage_avg  max_disk_usage_var  contention_time_avg  contention_time_var  cpu_sql_nanos_avg  cpu_sql_nanos_var  mvcc_step_avg  mvcc_step_var  mvcc_step_internal_avg  mvcc_step_internal_var  mvcc_seek_avg  mvcc_seek_var  mvcc_seek_internal_avg  mvcc_seek_internal_var  mvcc_block_bytes_avg  mvcc_block_bytes_var  mvcc_block_bytes_in_cache_avg  mvcc_block_bytes_in_cache_var  mvcc_key_bytes_avg  mvcc_key_bytes_var  mvcc_value_bytes_avg  mvcc_value_bytes_var  mvcc_point_count_avg  mvcc_point_count_var  mvcc_points_covered_by_range_tombstones_avg  mvcc_points_covered_by_range_tombstones_var  mvcc_range_key_count_avg  mvcc_range_key_count_var  mvcc_range_key_contained_points_avg  mvcc_range_key_contained_points_var  mvcc_range_key_skipped_points_avg  mvcc_range_key_skipped_points_var
 
 query IITTTTTTT colnames
 SELECT * FROM crdb_internal.session_trace WHERE span_idx < 0
@@ -390,10 +396,10 @@ SELECT * FROM crdb_internal.cluster_contention_events WHERE table_id < 0
 ----
 table_id  index_id  num_contention_events  cumulative_contention_time  key  txn_id  count
 
-query TTTT colnames
+query TTTTT colnames
 SELECT * FROM crdb_internal.builtin_functions WHERE function = ''
 ----
-function  signature  category  details
+function  signature  category  details  schema
 
 query ITTITTTTTTTBBBB colnames
 SELECT * FROM crdb_internal.create_statements WHERE database_name = ''
@@ -445,15 +451,27 @@ SELECT * FROM crdb_internal.node_inflight_trace_spans WHERE span_id < 0
 ----
 trace_id  parent_span_id  span_id  goroutine_id  finished  start_time  duration  operation
 
-query ITTTTITTTTTTTTTTTI colnames
+query ITTTTITTTTTTI colnames
 SELECT * FROM crdb_internal.ranges WHERE range_id < 0
 ----
-range_id  start_key  start_pretty  end_key  end_pretty  table_id  database_name  schema_name  table_name  index_name  replicas  replica_localities voting_replicas non_voting_replicas  learner_replicas  split_enforced_until  lease_holder range_size
+range_id  start_key  start_pretty  end_key  end_pretty  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  lease_holder  range_size
 
-query ITTTTITTTTTTTTTT colnames
+query ITTTTTTTTTT colnames
 SELECT * FROM crdb_internal.ranges_no_leases WHERE range_id < 0
 ----
-range_id  start_key  start_pretty  end_key  end_pretty  table_id  database_name  schema_name  table_name  index_name  replicas  replica_localities voting_replicas non_voting_replicas learner_replicas  split_enforced_until
+range_id  start_key  start_pretty  end_key  end_pretty  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until
+
+query TTTBTTTTTIITITTTTTI colnames
+SELECT * FROM crdb_internal.cluster_txn_execution_insights WHERE query = ''
+----
+txn_id  txn_fingerprint_id  query  implicit_txn  session_id  start_time  end_time  user_name  app_name  rows_read  rows_written  priority  retries  last_retry_reason  contention  problems  causes  stmt_execution_ids cpu_sql_nanos
+
+
+query TTTBTTTTTIITITTTTTI colnames
+SELECT * FROM crdb_internal.node_txn_execution_insights WHERE query = ''
+----
+txn_id  txn_fingerprint_id  query  implicit_txn  session_id  start_time  end_time  user_name  app_name  rows_read  rows_written  priority  retries  last_retry_reason  contention  problems  causes  stmt_execution_ids cpu_sql_nanos
+
 
 statement ok
 CREATE SCHEMA schema; CREATE TABLE schema.bar (y INT PRIMARY KEY)
@@ -480,6 +498,7 @@ SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
 25   TABLE system.public.replication_constraint_stats
 27   TABLE system.public.replication_stats
 45   TABLE system.public.tenant_usage
+57   TABLE system.public.span_stats_tenant_boundaries
 106  DATABASE testdb
 108  TABLE testdb.public.foo
 111  TABLE test.schema.bar
@@ -487,7 +506,7 @@ SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
 query T
 SELECT quote_literal(raw_config_yaml) FROM crdb_internal.zones WHERE zone_id = 0
 ----
-e'range_min_bytes: 134217728\nrange_max_bytes: 536870912\ngc:\n  ttlseconds: 90000\nglobal_reads: null\nnum_replicas: 3\nnum_voters: null\nconstraints: []\nvoter_constraints: []\nlease_preferences: []\n'
+e'range_min_bytes: 134217728\nrange_max_bytes: 536870912\ngc:\n  ttlseconds: 14400\nglobal_reads: null\nnum_replicas: 3\nnum_voters: null\nconstraints: []\nvoter_constraints: []\nlease_preferences: []\n'
 
 query T
 SELECT raw_config_sql FROM crdb_internal.zones WHERE zone_id = 0
@@ -495,7 +514,7 @@ SELECT raw_config_sql FROM crdb_internal.zones WHERE zone_id = 0
 ALTER RANGE default CONFIGURE ZONE USING
   range_min_bytes = 134217728,
   range_max_bytes = 536870912,
-  gc.ttlseconds = 90000,
+  gc.ttlseconds = 14400,
   num_replicas = 3,
   constraints = '[]',
   lease_preferences = '[]'
@@ -595,38 +614,27 @@ start_pretty    end_pretty  split_enforced_until
 /Table/112/1/2  /Max        2262-04-11 23:47:16.854776 +0000 +0000
 
 query TTT colnames
-SELECT start_pretty, end_pretty, split_enforced_until FROM crdb_internal.ranges_no_leases WHERE split_enforced_until IS NOT NULL AND table_name = 'foo'
+SELECT start_key, end_key, split_enforced_until FROM [SHOW RANGES FROM TABLE foo] WHERE split_enforced_until IS NOT NULL
 ----
-start_pretty    end_pretty  split_enforced_until
-/Table/112/1/2  /Max        2262-04-11 23:47:16.854776 +0000 +0000
+start_key  end_key       split_enforced_until
+…/1/2      <after:/Max>  2262-04-11 23:47:16.854776 +0000 +0000
 
 statement ok
 ALTER TABLE foo UNSPLIT AT VALUES(2)
 
 query TT colnames
-SELECT start_pretty, end_pretty FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL AND table_name = 'foo'
+SELECT start_key, end_key FROM [SHOW RANGES FROM TABLE foo] WHERE split_enforced_until IS NOT NULL
 ----
-start_pretty  end_pretty
-
-query TT colnames
-SELECT start_pretty, end_pretty FROM crdb_internal.ranges_no_leases WHERE split_enforced_until IS NOT NULL AND table_name = 'foo'
-----
-start_pretty  end_pretty
+start_key  end_key
 
 statement ok
 ALTER TABLE foo SPLIT AT VALUES(2) WITH EXPIRATION '2200-01-01 00:00:00.0'
 
 query TTT colnames
-SELECT start_pretty, end_pretty, split_enforced_until FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL AND table_name = 'foo'
+SELECT start_key, end_key, split_enforced_until FROM [SHOW RANGES FROM TABLE foo] WHERE split_enforced_until IS NOT NULL
 ----
-start_pretty    end_pretty  split_enforced_until
-/Table/112/1/2  /Max        2200-01-01 00:00:00 +0000 +0000
-
-query TTT colnames
-SELECT start_pretty, end_pretty, split_enforced_until FROM crdb_internal.ranges_no_leases WHERE split_enforced_until IS NOT NULL AND table_name = 'foo'
-----
-start_pretty    end_pretty  split_enforced_until
-/Table/112/1/2  /Max        2200-01-01 00:00:00 +0000 +0000
+start_key  end_key       split_enforced_until
+…/1/2      <after:/Max>  2200-01-01 00:00:00 +0000 +0000
 
 statement ok
 ALTER TABLE foo SPLIT AT VALUES (1), (2), (3)
@@ -637,12 +645,12 @@ ALTER TABLE foo UNSPLIT ALL
 query TT colnames
 SELECT start_pretty, end_pretty FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL
 ----
-start_pretty   end_pretty
+start_pretty  end_pretty
 
 query TT colnames
 SELECT start_pretty, end_pretty FROM crdb_internal.ranges_no_leases WHERE split_enforced_until IS NOT NULL
 ----
-start_pretty   end_pretty
+start_pretty  end_pretty
 
 # Make sure that the cluster id isn't unset.
 query B
@@ -671,6 +679,9 @@ select * from crdb_internal.node_runtime_info
 query error pq: only users with the ZONECONFIG privilege or the admin role can read crdb_internal.ranges_no_leases
 select * from crdb_internal.ranges
 
+query error pq: only users with the ZONECONFIG privilege or the admin role can read crdb_internal.ranges_no_leases
+SHOW RANGES FROM TABLE foo
+
 query error pq: only users with the admin role are allowed to read crdb_internal.gossip_nodes
 select * from crdb_internal.gossip_nodes
 
@@ -691,6 +702,9 @@ select * from crdb_internal.gossip_alerts
 
 query error pq: only users with the admin role are allowed to read crdb_internal.node_inflight_trace_spans
 select * from crdb_internal.node_inflight_trace_spans
+
+query error pq: crdb_internal.check_consistency requires admin privileges
+SELECT * FROM crdb_internal.check_consistency(true, b'\x02', b'\x04')
 
 # Anyone can see the executable version.
 query T
@@ -882,8 +896,9 @@ node_id  store_id
 
 # Do the compaction.
 query B colnames
-SELECT crdb_internal.compact_engine_span(1, 1, start_key, end_key)
-FROM crdb_internal.ranges_no_leases WHERE table_name = 'foo' LIMIT 1
+SELECT crdb_internal.compact_engine_span(1, 1, raw_start_key, raw_end_key)
+FROM [SHOW RANGES FROM TABLE foo WITH KEYS]
+LIMIT 1
 ----
 crdb_internal.compact_engine_span
 true
@@ -1025,10 +1040,10 @@ query ITTTT colnames
 SELECT * FROM "".crdb_internal.invalid_objects
 ----
 id   database_name  schema_name  obj_name  error
-500  baddb          ·            ·         descriptor not found
-501  system         badschema    ·         descriptor not found
-502  system         public       badobj    descriptor not found
-503  system         [404]        badobj    descriptor not found
+500  baddb          ·            ·         referenced descriptor not found
+501  system         badschema    ·         referenced descriptor not found
+502  system         public       badobj    referenced descriptor not found
+503  system         [404]        badobj    referenced descriptor not found
 
 statement ok
 SELECT crdb_internal.unsafe_delete_namespace_entry(0, 0, 'baddb', 500, true);
@@ -1146,9 +1161,14 @@ statement ok
 SELECT crdb_internal.probe_ranges(INTERVAL '1000ms', 'write')
 
 # Regression test for not handling NULL values correctly by an internal builtin
-# (#82056).
+# (#82056 and #95671).
 query I
 SELECT crdb_internal.num_inverted_index_entries(NULL::STRING, 0)
+----
+0
+
+query I
+SELECT crdb_internal.num_inverted_index_entries(NULL::TSVECTOR, NULL::INT8)
 ----
 0
 

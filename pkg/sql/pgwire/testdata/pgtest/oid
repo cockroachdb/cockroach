@@ -1,0 +1,35 @@
+# [2205, 4089, 24, 2206, 26] are the OIDs for regclass, regnamespace, regproc, regtype, and oid.
+send
+Parse {"Query": "SELECT $1, $2, $3, $4, $5", "ParameterOIDs": [2205,4089,24,2206,26]}
+Describe {"ObjectType": "S"}
+Bind {"ParameterFormatCodes": [1,1,1,1,1], "Parameters": [{"binary":"01000029"},{"binary":"0100002a"},{"binary":"0100002b"},{"binary":"0100002c"},{"binary":"ffffffff"}]}
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[2205,4089,24,2206,26]}
+{"Type":"RowDescription","Fields":[{"Name":"?column?","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":2205,"DataTypeSize":4,"TypeModifier":-1,"Format":0},{"Name":"?column?","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":4089,"DataTypeSize":4,"TypeModifier":-1,"Format":0},{"Name":"?column?","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":24,"DataTypeSize":4,"TypeModifier":-1,"Format":0},{"Name":"?column?","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":2206,"DataTypeSize":4,"TypeModifier":-1,"Format":0},{"Name":"?column?","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":26,"DataTypeSize":4,"TypeModifier":-1,"Format":0}]}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"16777257"},{"text":"16777258"},{"text":"16777259"},{"text":"16777260"},{"text":"4294967295"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# [2205] is the OID for regclass.
+send
+Parse {"Query": "SELECT $1", "ParameterOIDs": [2205]}
+Bind {"ParameterFormatCodes": [1], "Parameters": [{"binary":"0029"}]}
+Execute
+Sync
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ErrorResponse","Code":"08P01"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

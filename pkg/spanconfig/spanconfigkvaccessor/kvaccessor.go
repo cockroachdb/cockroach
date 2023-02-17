@@ -22,10 +22,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -46,7 +46,7 @@ var batchSizeSetting = settings.RegisterIntSetting(
 // CRDB cluster. It's a concrete implementation of the KVAccessor interface.
 type KVAccessor struct {
 	db *kv.DB
-	ie sqlutil.InternalExecutor
+	ie isql.Executor
 	// optionalTxn captures the transaction we're scoped to; it's allowed to be
 	// nil. If nil, it's unsafe to use multiple times as part of the same
 	// request with any expectation of transactionality -- we're responsible for
@@ -67,7 +67,7 @@ var _ spanconfig.KVAccessor = &KVAccessor{}
 // New constructs a new KVAccessor.
 func New(
 	db *kv.DB,
-	ie sqlutil.InternalExecutor,
+	ie isql.Executor,
 	settings *cluster.Settings,
 	clock *hlc.Clock,
 	configurationsTableFQN string,
@@ -181,7 +181,7 @@ func (k *KVAccessor) UpdateSpanConfigRecords(
 
 func newKVAccessor(
 	db *kv.DB,
-	ie sqlutil.InternalExecutor,
+	ie isql.Executor,
 	settings *cluster.Settings,
 	clock *hlc.Clock,
 	configurationsTableFQN string,

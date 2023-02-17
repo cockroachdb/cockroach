@@ -22,19 +22,19 @@ type errorSourceConn struct {
 	writeErrMarker error
 }
 
-// errClientWrite indicates the error occured when attempting to write to the
+// errClientWrite indicates the error occurred when attempting to write to the
 // client connection.
 var errClientWrite = errors.New("client write error")
 
-// errClientRead indicates the error occured when attempting to read from the
+// errClientRead indicates the error occurred when attempting to read from the
 // client connection.
 var errClientRead = errors.New("client read error")
 
-// errServerWrite indicates the error occured when attempting to write to the
+// errServerWrite indicates the error occurred when attempting to write to the
 // sql server.
 var errServerWrite = errors.New("server write error")
 
-// errServerRead indicates the error occured when attempting to read from the
+// errServerRead indicates the error occurred when attempting to read from the
 // sql server.
 var errServerRead = errors.New("server read error")
 
@@ -44,13 +44,13 @@ var errServerRead = errors.New("server read error")
 func wrapConnectionError(err error) error {
 	switch {
 	case errors.Is(err, errClientRead):
-		return newErrorf(codeClientReadFailed, "unable to read from client: %s", err)
+		return withCode(errors.Wrap(err, "unable to read from client"), codeClientReadFailed)
 	case errors.Is(err, errClientWrite):
-		return newErrorf(codeClientWriteFailed, "unable to write to client: %s", err)
+		return withCode(errors.Wrap(err, "unable to write to client"), codeClientWriteFailed)
 	case errors.Is(err, errServerRead):
-		return newErrorf(codeBackendReadFailed, "unable to read from sql server: %s", err)
+		return withCode(errors.Wrap(err, "unable to read from sql server"), codeBackendReadFailed)
 	case errors.Is(err, errServerWrite):
-		return newErrorf(codeBackendWriteFailed, "unable to write to sql server: %s", err)
+		return withCode(errors.Wrap(err, "unable to write to sql server"), codeBackendWriteFailed)
 	}
 	return nil
 }

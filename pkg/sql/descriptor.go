@@ -70,12 +70,7 @@ func (p *planner) createDatabase(
 	if dbID, err := p.Descriptors().LookupDatabaseID(ctx, p.txn, dbName); err == nil && dbID != descpb.InvalidID {
 		if database.IfNotExists {
 			// Check if the database is in a dropping state
-			flags := tree.DatabaseLookupFlags{
-				AvoidLeased:    true,
-				IncludeDropped: true,
-				IncludeOffline: true,
-			}
-			_, desc, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.txn, dbID, flags)
+			desc, err := p.Descriptors().ByID(p.txn).Get().Database(ctx, dbID)
 			if err != nil {
 				return nil, false, err
 			}
@@ -175,6 +170,33 @@ func (p *planner) createDatabase(
 
 	if err := p.maybeInitializeMultiRegionDatabase(ctx, db, regionConfig); err != nil {
 		return nil, true, err
+	}
+
+	if database.SuperRegion.Name != "" {
+		if err := p.isSuperRegionEnabled(); err != nil {
+			return nil, false, err
+		}
+
+		typeID, err := db.MultiRegionEnumID()
+		if err != nil {
+			return nil, false, err
+		}
+		typeDesc, err := p.Descriptors().MutableByID(p.txn).Type(ctx, typeID)
+		if err != nil {
+			return nil, false, err
+		}
+
+		if err = p.addSuperRegion(
+			ctx,
+			db,
+			typeDesc,
+			database.SuperRegion.Regions,
+			database.SuperRegion.Name,
+			tree.AsStringWithFQNames(database, p.Ann()),
+		); err != nil {
+			return nil, false, err
+		}
+
 	}
 
 	return db, true, nil
@@ -368,12 +390,7 @@ func (p *planner) maybeInitializeMultiRegionMetadata(
 
 // GetImmutableTableInterfaceByID is part of the EvalPlanner interface.
 func (p *planner) GetImmutableTableInterfaceByID(ctx context.Context, id int) (interface{}, error) {
-	desc, err := p.Descriptors().GetImmutableTableByID(
-		ctx,
-		p.txn,
-		descpb.ID(id),
-		tree.ObjectLookupFlagsWithRequired(),
-	)
+	desc, err := p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Table(ctx, descpb.ID(id))
 	if err != nil {
 		return nil, err
 	}

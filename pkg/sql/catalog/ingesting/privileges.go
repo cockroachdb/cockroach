@@ -104,22 +104,27 @@ func getIngestingPrivilegesForTableOrSchema(
 	descCoverage tree.DescriptorCoverage,
 	privilegeType privilege.ObjectType,
 ) (updatedPrivileges *catpb.PrivilegeDescriptor, err error) {
-	if wrote, ok := wroteDBs[desc.GetParentID()]; ok {
-		// If we're creating a new database in this ingestion, the privileges of the
-		// table and schema should be that of the parent DB.
-		//
-		// Leave the privileges of the temp system tables as the default too.
-		updatedPrivileges = wrote.GetPrivileges()
-		for i, u := range updatedPrivileges.Users {
-			updatedPrivileges.Users[i].Privileges =
-				privilege.ListFromBitField(u.Privileges, privilegeType).ToBitField()
+	if _, ok := wroteDBs[desc.GetParentID()]; ok {
+		// If we're creating a new database in this ingestion, the tables and
+		// schemas in the database should be assigned the default privileges that
+		// are granted on object creation.
+		switch privilegeType {
+		case privilege.Schema:
+			if desc.GetName() == tree.PublicSchema {
+				updatedPrivileges = catpb.NewPublicSchemaPrivilegeDescriptor()
+			} else {
+				updatedPrivileges = catpb.NewBasePrivilegeDescriptor(user)
+			}
+		case privilege.Table:
+			updatedPrivileges = catpb.NewBasePrivilegeDescriptor(user)
+		default:
+			return nil, errors.Newf("unexpected privilege type %T", privilegeType)
 		}
 	} else if descCoverage == tree.RequestedDescriptors {
-		_, parentDB, err := descsCol.GetImmutableDatabaseByID(ctx, txn, desc.GetParentID(), tree.DatabaseLookupFlags{
-			AvoidLeased:    true,
-			IncludeDropped: true,
-			IncludeOffline: true,
-		})
+		// If we are not creating the database as part of this ingestion, the
+		// schemas and tables in the database should be given privileges based on
+		// the parent database's default privileges.
+		parentDB, err := descsCol.ByID(txn).Get().Database(ctx, desc.GetParentID())
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to lookup parent DB %d", errors.Safe(desc.GetParentID()))
 		}
@@ -145,11 +150,7 @@ func getIngestingPrivilegesForTableOrSchema(
 			} else {
 				// If we are restoring into an existing schema, resolve it, and fetch
 				// its default privileges.
-				parentSchema, err := descsCol.GetImmutableSchemaByID(ctx, txn, desc.GetParentSchemaID(), tree.SchemaLookupFlags{
-					AvoidLeased:    true,
-					IncludeDropped: true,
-					IncludeOffline: true,
-				})
+				parentSchema, err := descsCol.ByID(txn).Get().Schema(ctx, desc.GetParentSchemaID())
 				if err != nil {
 					return nil,
 						errors.Wrapf(err, "failed to lookup parent schema %d", errors.Safe(desc.GetParentSchemaID()))

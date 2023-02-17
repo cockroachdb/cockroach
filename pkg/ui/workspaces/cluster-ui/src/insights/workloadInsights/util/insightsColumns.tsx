@@ -18,6 +18,8 @@ import { contentionTime, readFromDisk, writtenToDisk } from "../../../util";
 export const insightsColumnLabels = {
   executionID: "Execution ID",
   latestExecutionID: "Latest Execution ID",
+  waitingID: "Waiting Execution ID",
+  waitingFingerprintID: "Waiting Fingerprint ID",
   query: "Execution",
   insights: "Insights",
   startTime: "Start Time (UTC)",
@@ -34,6 +36,7 @@ export const insightsColumnLabels = {
   databaseName: "Database Name",
   tableName: "Table Name",
   indexName: "Index Name",
+  cpu: "CPU Time",
 };
 
 export type InsightsTableColumnKeys = keyof typeof insightsColumnLabels;
@@ -86,6 +89,20 @@ export const insightsTableTitles: InsightsTableTitleType = {
     return makeToolTip(
       <p>The ID of the execution with the {execType} fingerprint.</p>,
       "executionID",
+      execType,
+    );
+  },
+  waitingFingerprintID: (execType: InsightExecEnum) => {
+    return makeToolTip(
+      <p>The {execType} fingerprint ID.</p>,
+      "waitingFingerprintID",
+      execType,
+    );
+  },
+  waitingID: (execType: InsightExecEnum) => {
+    return makeToolTip(
+      <p>The ID of the waiting {execType}.</p>,
+      "waitingID",
       execType,
     );
   },
@@ -204,6 +221,12 @@ export const insightsTableTitles: InsightsTableTitleType = {
         {` to disk per execution for ${execType} within the specified time interval.`}
       </p>,
       "rowsProcessed",
+    );
+  },
+  cpu: (_: InsightExecEnum) => {
+    return makeToolTip(
+      <p>{`CPU Time spent executing within the specified time interval.`}</p>,
+      "cpu",
     );
   },
 };

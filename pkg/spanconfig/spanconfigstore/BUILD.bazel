@@ -45,7 +45,7 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
         "//pkg/spanconfig/spanconfigtestutils",
-        "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/randutil",

@@ -1,0 +1,87 @@
+# tenant-cluster-setting-override-opt: sql.multi_region.allow_abstractions_for_secondary_tenants.enabled=true
+# LogicTest: multiregion-9node-3region-3azs
+
+# This file contains a regression test for ALTER TABLE ... REGIONAL BY ROW
+# that exercises writes which are concurrent with the index backfill of the
+# new primary index.
+
+statement ok
+CREATE DATABASE region_test_db PRIMARY REGION "ap-southeast-2" SURVIVE ZONE FAILURE;
+
+statement ok
+USE region_test_db;
+
+statement ok
+CREATE TABLE t (i INT8 NULL, INDEX (i));
+
+statement ok
+INSERT INTO t VALUES (1);
+
+# Shorten the job registry intervals to speed up the test.
+statement ok
+SET CLUSTER SETTING jobs.registry.interval.base = 0.01;
+
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints = 'indexbackfill.before_flow';
+
+statement error job \d+ was paused before it completed with reason: pause point "indexbackfill.before_flow" hit
+ALTER TABLE t SET LOCALITY REGIONAL BY ROW
+
+statement ok
+INSERT INTO t VALUES (2);
+
+let $job_id
+SELECT job_id
+  FROM crdb_internal.jobs
+ WHERE DESCRIPTION LIKE '%SET LOCALITY REGIONAL BY ROW%'
+
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints = DEFAULT;
+
+statement ok
+RESUME JOB $job_id
+
+query TT
+SELECT status, error FROM [SHOW JOB WHEN COMPLETE $job_id]
+----
+succeeded  ·
+
+query TI
+SELECT crdb_region, * FROM t
+----
+ap-southeast-2  1
+ap-southeast-2  2
+
+# Go the other way and make sure that that works.
+
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints = 'indexbackfill.before_flow';
+
+statement error job \d+ was paused before it completed with reason: pause point "indexbackfill.before_flow" hit
+ALTER TABLE t SET LOCALITY REGIONAL BY TABLE
+
+statement ok
+INSERT INTO t VALUES (3);
+
+let $job_id
+SELECT job_id
+  FROM crdb_internal.jobs
+ WHERE DESCRIPTION LIKE '%SET LOCALITY REGIONAL BY TABLE%'
+
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints = DEFAULT;
+
+statement ok
+RESUME JOB $job_id
+
+query TT
+SELECT status, error FROM [SHOW JOB WHEN COMPLETE $job_id]
+----
+succeeded  ·
+
+query I
+SELECT * FROM t
+----
+1
+2
+3

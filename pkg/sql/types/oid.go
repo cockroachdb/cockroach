@@ -238,7 +238,11 @@ func CalcArrayOid(elemTyp *T) oid.Oid {
 	// Map the OID of the array element type to the corresponding array OID.
 	// This should always be possible for all other OIDs (checked in oid.go
 	// init method).
-	o = oidToArrayOid[o]
+	if o == oid.T_json {
+		o = oid.T__json
+	} else {
+		o = oidToArrayOid[o]
+	}
 	if o == 0 {
 		panic(errors.AssertionFailedf("oid %d couldn't be mapped to array oid", o))
 	}

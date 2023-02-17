@@ -10,6 +10,8 @@
 
 package serverpb
 
+import context "context"
+
 // Add adds values from ots to ts.
 func (ts *TableStatsResponse) Add(ots *TableStatsResponse) {
 	ts.RangeCount += ots.RangeCount
@@ -35,4 +37,14 @@ func (ts *TableStatsResponse) Add(ots *TableStatsResponse) {
 			ts.NodeCount--
 		}
 	}
+}
+
+type TenantAdminServer interface {
+	Liveness(context.Context, *LivenessRequest) (*LivenessResponse, error)
+}
+
+// Empty is true if there are no unavailable ranges and no error performing
+// healthcheck.
+func (r *RecoveryVerifyResponse_UnavailableRanges) Empty() bool {
+	return len(r.Ranges) == 0 && len(r.Error) == 0
 }

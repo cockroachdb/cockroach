@@ -1,0 +1,115 @@
+# Test that tenant creation does not overwrite span config state for another
+# tenant.
+
+reconcile
+----
+
+mutations discard
+----
+
+# Initialize a new tenant, tenant=11, that DOES NOT have a pre-existing tenant,
+# tenant=12, next to it.
+initialize tenant=11
+----
+
+# A record IS written for a key that logically belongs to the next tenant,
+# tenant=12, because tenant=12 DOES NOT exist.
+state offset=57 limit=3
+----
+...
+/Tenant/11{-\x00}                          database system (tenant)
+/Tenant/12{-\x00}                          database system (tenant)
+
+# Start the reconciliation loop for the tenant=11. It'll first clear out its own
+# first-key record and install span configs for its SQL state. It won't touch
+# the record we created at in the tenant=12 keyspace because it's not taught to
+# look there, and neither should it. The keyspace it's responsible for is its
+# own.
+reconcile tenant=11
+----
+
+# Peek near the start of the span_configurations table where tenant=11's records
+# are stored. The first one is from the start of its keyspace to start of
+# table with ID=4: /Tenant/11{-/Table/4}.
+state offset=56 limit=3
+----
+...
+/Table/5{7-8}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
+/Tenant/11{-/Table/4}                      database system (tenant)
+/Tenant/11/Table/{4-5}                     database system (tenant)
+...
+
+# Peek near the end of the span_configurations table where tenant=11's records
+# are stored. The last one is for its last system table:
+# /Tenant/11/Table/5{7-8}. Right now the split is at /Tenant/12. Which is fine.
+state offset=99 limit=3
+----
+...
+/Tenant/11/Table/5{7-8}                    database system (tenant)
+/Tenant/12{-\x00}                          database system (tenant)
+
+# Just another view of what the tenant's reconciler actually did. It got rid of
+# the original, single-key /Tenant/11{-\x00} record, and replaced it with
+# /Tenant/11{-/Table/4}, just like the comment above said. The remaining upserts
+# are for its SQL state.
+mutations tenant=11 limit=2
+----
+delete /Tenant/11{-\x00}
+upsert /Tenant/11{-/Table/4}               database system (tenant)
+upsert /Tenant/11/Table/{4-5}              database system (tenant)
+upsert /Tenant/11/Table/{5-6}              database system (tenant)
+upsert /Tenant/11/Table/{6-7}              database system (tenant)
+upsert /Tenant/11/Table/{7-8}              database system (tenant)
+upsert /Tenant/11/Table/1{1-2}             database system (tenant)
+upsert /Tenant/11/Table/1{2-3}             database system (tenant)
+upsert /Tenant/11/Table/1{3-4}             database system (tenant)
+upsert /Tenant/11/Table/1{4-5}             database system (tenant)
+upsert /Tenant/11/Table/1{5-6}             database system (tenant)
+upsert /Tenant/11/Table/{19-20}            database system (tenant)
+upsert /Tenant/11/Table/2{0-1}             database system (tenant)
+upsert /Tenant/11/Table/2{1-2}             database system (tenant)
+upsert /Tenant/11/Table/2{3-4}             database system (tenant)
+upsert /Tenant/11/Table/2{4-5}             database system (tenant)
+upsert /Tenant/11/Table/2{5-6}             database system (tenant)
+upsert /Tenant/11/Table/2{6-7}             database system (tenant)
+upsert /Tenant/11/Table/2{7-8}             database system (tenant)
+upsert /Tenant/11/Table/2{8-9}             database system (tenant)
+upsert /Tenant/11/NamespaceTable/{30-Max}  database system (tenant)
+upsert /Tenant/11/{NamespaceTable/Max-Table/32} database system (tenant)
+upsert /Tenant/11/Table/3{2-3}             database system (tenant)
+upsert /Tenant/11/Table/3{3-4}             database system (tenant)
+upsert /Tenant/11/Table/3{4-5}             database system (tenant)
+upsert /Tenant/11/Table/3{5-6}             database system (tenant)
+upsert /Tenant/11/Table/3{6-7}             database system (tenant)
+upsert /Tenant/11/Table/3{7-8}             database system (tenant)
+upsert /Tenant/11/Table/{39-40}            database system (tenant)
+upsert /Tenant/11/Table/4{0-1}             database system (tenant)
+upsert /Tenant/11/Table/4{1-2}             database system (tenant)
+upsert /Tenant/11/Table/4{2-3}             database system (tenant)
+upsert /Tenant/11/Table/4{3-4}             database system (tenant)
+upsert /Tenant/11/Table/4{4-5}             database system (tenant)
+upsert /Tenant/11/Table/4{6-7}             database system (tenant)
+upsert /Tenant/11/Table/4{8-9}             database system (tenant)
+upsert /Tenant/11/Table/5{0-1}             database system (tenant)
+upsert /Tenant/11/Table/5{1-2}             database system (tenant)
+upsert /Tenant/11/Table/5{2-3}             database system (tenant)
+upsert /Tenant/11/Table/5{3-4}             database system (tenant)
+upsert /Tenant/11/Table/5{4-5}             database system (tenant)
+upsert /Tenant/11/Table/5{5-6}             database system (tenant)
+upsert /Tenant/11/Table/5{6-7}             database system (tenant)
+upsert /Tenant/11/Table/5{7-8}             database system (tenant)
+
+# Initialize a new tenant, tenant=10, that DOES have a pre-existing tenant,
+# tenant=11, next to it.
+initialize tenant=10
+----
+
+# A record IS NOT written for a key that logically belongs to the next tenant,
+# tenant=11, because tenant=11 DOES exist.
+state offset=57 limit=3
+----
+...
+/Tenant/10{-\x00}                          database system (tenant)
+/Tenant/11{-/Table/4}                      database system (tenant)
+/Tenant/11/Table/{4-5}                     database system (tenant)
+...

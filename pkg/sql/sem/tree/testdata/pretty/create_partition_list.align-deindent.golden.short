@@ -20,7 +20,7 @@ CREATE TABLE students_by_list (
 										'AU',
 										'NZ'
 									),
-								PARTITION default
+								PARTITION "default"
 									VALUES IN (
 										DEFAULT
 									)

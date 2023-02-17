@@ -69,7 +69,7 @@ rm -f /tmp/cmake.tar.gz
 if [ $ARCH = x86_64 ]; then
     curl -fsSL https://dl.google.com/go/go1.19.4.linux-amd64.tar.gz > /tmp/go.tgz
     sha256sum -c - <<EOF
-3ca65ff0606054b076c009d3bb3b8aba0032b75ac690de716be5c44ce57da052  /tmp/go.tgz
+c9c08f783325c4cf840a94333159cc937f05f75d36a8b307951d5bd959cf2ab8  /tmp/go.tgz
 EOF
     tar -C /usr/local -zxf /tmp/go.tgz && rm /tmp/go.tgz
 
@@ -171,17 +171,9 @@ if [ $ARCH = x86_64 ]; then
     git submodule update --init --recursive
     for branch in $(git branch --all --list --sort=-committerdate 'origin/release-*' | head -n1) master
     do
-        # Clean out all non-checked-in files. This is because of the check-in of
-        # the generated execgen files. Once we are no longer building 20.1 builds,
-        # the `git clean -dxf` line can be removed.
-        git clean -dxf
-
         git checkout "$branch"
-        # Stupid submodules.
-        rm -rf vendor; git checkout vendor; git submodule update --init --recursive
-        COCKROACH_BUILDER_CCACHE=1 build/builder.sh make test testrace TESTTIMEOUT=45m TESTS=-
         # TODO(benesch): store the acceptanceversion somewhere more accessible.
-       docker pull $(git grep cockroachdb/acceptance -- '*.go' | sed -E 's/.*"([^"]*).*"/\1/') || true
+        docker pull $(git grep cockroachdb/acceptance -- '*.go' | sed -E 's/.*"([^"]*).*"/\1/') || true
     done
     cd -
 fi

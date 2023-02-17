@@ -131,13 +131,13 @@ func TestQueryBasic(t *testing.T) {
 					exp: []string{`
 [[Table:{DescID: 2}, PUBLIC], ABSENT]
 [[Sequence:{DescID: 1}, PUBLIC], ABSENT]
-[[ForeignKeyConstraint:{DescID: 2, ConstraintID: 0, ReferencedDescID: 1}, PUBLIC], ABSENT]`, `
+[[ForeignKeyConstraint:{DescID: 2, IndexID: 0, ConstraintID: 0, ReferencedDescID: 1}, PUBLIC], ABSENT]`, `
 [[Table:{DescID: 2}, PUBLIC], PUBLIC]
 [[Sequence:{DescID: 1}, PUBLIC], PUBLIC]
-[[ForeignKeyConstraint:{DescID: 2, ConstraintID: 0, ReferencedDescID: 1}, PUBLIC], PUBLIC]`, `
+[[ForeignKeyConstraint:{DescID: 2, IndexID: 0, ConstraintID: 0, ReferencedDescID: 1}, PUBLIC], PUBLIC]`, `
 [[Table:{DescID: 4}, PUBLIC], ABSENT]
 [[Sequence:{DescID: 3}, PUBLIC], ABSENT]
-[[ForeignKeyConstraint:{DescID: 4, ConstraintID: 0, ReferencedDescID: 3}, PUBLIC], ABSENT]`,
+[[ForeignKeyConstraint:{DescID: 4, IndexID: 0, ConstraintID: 0, ReferencedDescID: 3}, PUBLIC], ABSENT]`,
 					},
 				},
 			},

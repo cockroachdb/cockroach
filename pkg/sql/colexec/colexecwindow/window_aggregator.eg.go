@@ -64,8 +64,9 @@ func NewWindowAggregatorOperator(
 	framer := newWindowFramer(args.EvalCtx, frame, ordering, args.InputTypes, args.PeersColIdx)
 	colsToStore := framer.getColsToStore(append([]int{}, argIdxs...))
 	buffer := colexecutils.NewSpillingBuffer(
-		args.BufferAllocator, bufferMemLimit, args.QueueCfg,
-		args.FdSemaphore, args.InputTypes, args.DiskAcc, colsToStore...)
+		args.BufferAllocator, bufferMemLimit, args.QueueCfg, args.FdSemaphore,
+		args.InputTypes, args.DiskAcc, args.ConverterMemAcc, colsToStore...,
+	)
 	inputIdxs := make([]uint32, len(argIdxs))
 	for i := range inputIdxs {
 		// We will always store the arg columns first in the buffer.

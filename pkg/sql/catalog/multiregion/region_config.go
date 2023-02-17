@@ -67,6 +67,14 @@ func (r *RegionConfig) WithRegions(regions catpb.RegionNames) RegionConfig {
 	return cpy
 }
 
+// WithPrimaryRegion returns a copy of the RegionConfig with the provided
+// primary region.
+func (r *RegionConfig) WithPrimaryRegion(primaryRegion catpb.RegionName) RegionConfig {
+	cpy := *r
+	cpy.primaryRegion = primaryRegion
+	return cpy
+}
+
 // IsMemberOfExplicitSuperRegion returns whether t the region is an explicit
 // member of a super region.
 func (r *RegionConfig) IsMemberOfExplicitSuperRegion(region catpb.RegionName) bool {

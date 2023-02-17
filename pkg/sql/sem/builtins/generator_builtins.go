@@ -13,6 +13,8 @@ package builtins
 import (
 	"bytes"
 	"context"
+	gojson "encoding/json"
+	"math/rand"
 	"strings"
 	"time"
 
@@ -35,6 +37,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/randident"
+	"github.com/cockroachdb/cockroach/pkg/util/randident/randidentcfg"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -50,9 +55,11 @@ var _ eval.ValueGenerator = &arrayValueGenerator{}
 func init() {
 	// Add all windows to the builtins map after a few sanity checks.
 	for k, v := range generators {
-		if v.props.Class != tree.GeneratorClass {
-			panic(errors.AssertionFailedf("generator functions should be marked with the tree.GeneratorClass "+
-				"function class, found %v", v))
+		for _, g := range v.overloads {
+			if g.Class != tree.GeneratorClass {
+				panic(errors.AssertionFailedf("generator functions should be marked with the tree.GeneratorClass "+
+					"function class, found %v", v))
+			}
 		}
 		registerBuiltin(k, v)
 	}
@@ -60,14 +67,12 @@ func init() {
 
 func genProps() tree.FunctionProperties {
 	return tree.FunctionProperties{
-		Class:    tree.GeneratorClass,
 		Category: builtinconstants.CategoryGenerator,
 	}
 }
 
 func jsonGenPropsWithLabels(returnLabels []string) tree.FunctionProperties {
 	return tree.FunctionProperties{
-		Class:        tree.GeneratorClass,
 		Category:     builtinconstants.CategoryJSON,
 		ReturnLabels: returnLabels,
 	}
@@ -75,7 +80,6 @@ func jsonGenPropsWithLabels(returnLabels []string) tree.FunctionProperties {
 
 func recordGenProps() tree.FunctionProperties {
 	return tree.FunctionProperties{
-		Class:             tree.GeneratorClass,
 		Category:          builtinconstants.CategoryGenerator,
 		ReturnsRecordType: true,
 	}
@@ -394,7 +398,6 @@ var generators = map[string]builtinDefinition{
 
 	"crdb_internal.check_consistency": makeBuiltin(
 		tree.FunctionProperties{
-			Class:            tree.GeneratorClass,
 			Category:         builtinconstants.CategorySystemInfo,
 			DistsqlBlocklist: true, // see #88222
 		},
@@ -420,7 +423,6 @@ var generators = map[string]builtinDefinition{
 
 	"crdb_internal.list_sql_keys_in_range": makeBuiltin(
 		tree.FunctionProperties{
-			Class:    tree.GeneratorClass,
 			Category: builtinconstants.CategorySystemInfo,
 		},
 		makeGeneratorOverload(
@@ -436,7 +438,6 @@ var generators = map[string]builtinDefinition{
 
 	"crdb_internal.payloads_for_span": makeBuiltin(
 		tree.FunctionProperties{
-			Class:    tree.GeneratorClass,
 			Category: builtinconstants.CategorySystemInfo,
 		},
 		makeGeneratorOverload(
@@ -451,7 +452,6 @@ var generators = map[string]builtinDefinition{
 	),
 	"crdb_internal.payloads_for_trace": makeBuiltin(
 		tree.FunctionProperties{
-			Class:    tree.GeneratorClass,
 			Category: builtinconstants.CategorySystemInfo,
 		},
 		makeGeneratorOverload(
@@ -465,9 +465,7 @@ var generators = map[string]builtinDefinition{
 		),
 	),
 	"crdb_internal.show_create_all_schemas": makeBuiltin(
-		tree.FunctionProperties{
-			Class: tree.GeneratorClass,
-		},
+		tree.FunctionProperties{},
 		makeGeneratorOverload(
 			tree.ParamTypes{
 				{Name: "database_name", Typ: types.String},
@@ -481,9 +479,7 @@ The output can be used to recreate a database.'
 		),
 	),
 	"crdb_internal.show_create_all_tables": makeBuiltin(
-		tree.FunctionProperties{
-			Class: tree.GeneratorClass,
-		},
+		tree.FunctionProperties{},
 		makeGeneratorOverload(
 			tree.ParamTypes{
 				{Name: "database_name", Typ: types.String},
@@ -502,9 +498,7 @@ The output can be used to recreate a database.'
 		),
 	),
 	"crdb_internal.show_create_all_types": makeBuiltin(
-		tree.FunctionProperties{
-			Class: tree.GeneratorClass,
-		},
+		tree.FunctionProperties{},
 		makeGeneratorOverload(
 			tree.ParamTypes{
 				{Name: "database_name", Typ: types.String},
@@ -518,9 +512,7 @@ The output can be used to recreate a database.'
 		),
 	),
 	"crdb_internal.decode_plan_gist": makeBuiltin(
-		tree.FunctionProperties{
-			Class: tree.GeneratorClass,
-		},
+		tree.FunctionProperties{},
 		makeGeneratorOverload(
 			tree.ParamTypes{
 				{Name: "gist", Typ: types.String},
@@ -533,9 +525,7 @@ The output can be used to recreate a database.'
 		),
 	),
 	"crdb_internal.decode_external_plan_gist": makeBuiltin(
-		tree.FunctionProperties{
-			Class: tree.GeneratorClass,
-		},
+		tree.FunctionProperties{},
 		makeGeneratorOverload(
 			tree.ParamTypes{
 				{Name: "gist", Typ: types.String},
@@ -544,6 +534,44 @@ The output can be used to recreate a database.'
 			makeDecodeExternalPlanGistGenerator,
 			`Returns rows of output similar to EXPLAIN from a gist such as those found in planGists element of the statistics column of the statement_statistics table without attempting to resolve tables or indexes.
 			`,
+			volatility.Volatile,
+		),
+	),
+	"crdb_internal.gen_rand_ident": makeBuiltin(
+		tree.FunctionProperties{},
+		makeGeneratorOverload(
+			tree.ParamTypes{
+				{Name: "name_pattern", Typ: types.String},
+				{Name: "count", Typ: types.Int},
+			},
+			types.String,
+			func(ctx context.Context, evalCtx *eval.Context, args tree.Datums,
+			) (eval.ValueGenerator, error) {
+				return makeIdentGenerator(ctx, evalCtx, args[0], args[1], nil)
+			},
+			`Returns random SQL identifiers.
+
+gen_rand_ident(pattern, count) is an alias for gen_rand_ident(pattern, count, '').
+See the documentation of the other gen_rand_ident overload for details.
+`,
+			volatility.Volatile,
+		),
+		makeGeneratorOverload(
+			tree.ParamTypes{
+				{Name: "name_pattern", Typ: types.String},
+				{Name: "count", Typ: types.Int},
+				{Name: "parameters", Typ: types.Jsonb},
+			},
+			types.String,
+			func(ctx context.Context, evalCtx *eval.Context, args tree.Datums,
+			) (eval.ValueGenerator, error) {
+				return makeIdentGenerator(ctx, evalCtx, args[0], args[1], args[2])
+			},
+			`Returns count random SQL identifiers that resemble the name_pattern.
+
+The last argument is a JSONB object containing the following optional fields:
+- "seed": the seed to use for the pseudo-random generator (default: random).`+
+				randidentcfg.ConfigDoc,
 			volatility.Volatile,
 		),
 	),
@@ -628,6 +656,7 @@ func makeGeneratorOverloadWithReturnType(
 		Types:      in,
 		ReturnType: retType,
 		Generator:  g,
+		Class:      tree.GeneratorClass,
 		Info:       info,
 		Volatility: volatility,
 	}
@@ -1534,7 +1563,6 @@ func (g *jsonEachGenerator) Values() (tree.Datums, error) {
 }
 
 var jsonPopulateProps = tree.FunctionProperties{
-	Class:    tree.GeneratorClass,
 	Category: builtinconstants.CategoryJSON,
 }
 
@@ -1558,6 +1586,7 @@ func makeJSONPopulateImpl(gen eval.GeneratorWithExprsOverload, info string) tree
 		Types:              tree.ParamTypes{{Name: "base", Typ: types.Any}, {Name: "from_json", Typ: types.Jsonb}},
 		ReturnType:         tree.IdentityReturnType(0),
 		GeneratorWithExprs: gen,
+		Class:              tree.GeneratorClass,
 		Info:               info,
 		Volatility:         volatility.Stable,
 		// The typical way to call json_populate_record is to send NULL::atype
@@ -1900,6 +1929,14 @@ func makeCheckConsistencyGenerator(
 			errorutil.FeatureNotAvailableToNonSystemTenantsIssue)
 	}
 
+	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !isAdmin {
+		return nil, pgerror.New(pgcode.InsufficientPrivilege, "crdb_internal.check_consistency requires admin privileges")
+	}
+
 	keyFrom := roachpb.Key(*args[1].(*tree.DBytes))
 	keyTo := roachpb.Key(*args[2].(*tree.DBytes))
 
@@ -2185,6 +2222,7 @@ type rangeKeyIterator struct {
 	// by the constructor of the rangeKeyIterator.
 	rangeID roachpb.RangeID
 	spanKeyIterator
+	planner eval.Planner
 }
 
 var _ eval.ValueGenerator = &rangeKeyIterator{}
@@ -2201,12 +2239,14 @@ func makeRangeKeyIterator(
 	if !isAdmin {
 		return nil, pgerror.Newf(pgcode.InsufficientPrivilege, "user needs the admin role to view range data")
 	}
+	planner := evalCtx.Planner
 	rangeID := roachpb.RangeID(tree.MustBeDInt(args[0]))
 	return &rangeKeyIterator{
 		spanKeyIterator: spanKeyIterator{
-			acc: evalCtx.Planner.Mon().MakeBoundAccount(),
+			acc: planner.Mon().MakeBoundAccount(),
 		},
 		rangeID: rangeID,
+		planner: planner,
 	}, nil
 }
 
@@ -2216,17 +2256,14 @@ func (rk *rangeKeyIterator) ResolvedType() *types.T {
 }
 
 // Start implements the tree.ValueGenerator interface.
-func (rk *rangeKeyIterator) Start(ctx context.Context, txn *kv.Txn) error {
+func (rk *rangeKeyIterator) Start(ctx context.Context, txn *kv.Txn) (err error) {
 	// Scan the range meta K/V's to find the target range. We do this in a
 	// chunk-wise fashion to avoid loading all ranges into memory.
-	rangeDesc, err := kvclient.GetRangeWithID(ctx, txn, rk.rangeID)
+	rangeDesc, err := rk.planner.GetRangeDescByID(ctx, rk.rangeID)
 	if err != nil {
 		return err
 	}
-	if rangeDesc == nil {
-		return errors.Newf("range with ID %d not found", rk.rangeID)
-	}
-	rk.spanKeyIterator.span = roachpb.Span{Key: rangeDesc.StartKey.AsRawKey(), EndKey: rangeDesc.EndKey.AsRawKey()}
+	rk.span = rangeDesc.KeySpan().AsRawSpanWithNoLocals()
 	return rk.spanKeyIterator.Start(ctx, txn)
 }
 
@@ -2765,5 +2802,95 @@ func makeShowCreateAllTypesGenerator(
 		evalPlanner: evalCtx.Planner,
 		dbName:      dbName,
 		acc:         evalCtx.Planner.Mon().MakeBoundAccount(),
+	}, nil
+}
+
+// identGenerator supports the execution of
+// crdb_internal.gen_rand_ident().
+type identGenerator struct {
+	gen randident.NameGenerator
+	acc mon.BoundAccount
+
+	// The following variables are updated during
+	// calls to Next() and change throughout the lifecycle of
+	// identGenerator.
+	curr  tree.Datum
+	idx   int
+	count int
+}
+
+// ResolvedType implements the tree.ValueGenerator interface.
+func (s *identGenerator) ResolvedType() *types.T {
+	return types.String
+}
+
+// Start implements the tree.ValueGenerator interface.
+func (s *identGenerator) Start(ctx context.Context, txn *kv.Txn) error {
+	return nil
+}
+
+func (s *identGenerator) Next(ctx context.Context) (bool, error) {
+	s.idx++
+	if s.idx > s.count {
+		return false, nil
+	}
+
+	name := s.gen.GenerateOne(s.idx)
+	if err := s.acc.Grow(ctx, int64(len(name))); err != nil {
+		return false, err
+	}
+	s.curr = tree.NewDString(name)
+
+	return true, nil
+}
+
+// Values implements the tree.ValueGenerator interface.
+func (s *identGenerator) Values() (tree.Datums, error) {
+	return tree.Datums{s.curr}, nil
+}
+
+// Close implements the tree.ValueGenerator interface.
+func (s *identGenerator) Close(ctx context.Context) {
+	s.acc.Close(ctx)
+}
+
+// makeIdentGenerator creates a generator to support the
+// crdb_internal.gen_rand_ident() builtin.
+func makeIdentGenerator(
+	ctx context.Context, evalCtx *eval.Context, namePatDatum, countDatum, cfgDatum tree.Datum,
+) (eval.ValueGenerator, error) {
+	pattern := string(tree.MustBeDString(namePatDatum))
+	count := int(tree.MustBeDInt(countDatum))
+	cfg := randident.DefaultNameGeneratorConfig()
+	seed := randutil.NewPseudoSeed()
+	if cfgDatum != nil {
+		customCfg := struct {
+			// Seed is the random seed to use. We expose this so that tests
+			// can use this function and obtain deterministic output.
+			Seed *int64
+
+			// The other name config parameters.
+			randidentcfg.Config `json:",inline"`
+		}{
+			Seed:   nil,
+			Config: cfg,
+		}
+		userInputCfg := cfgDatum.(*tree.DJSON).JSON.String()
+		d := gojson.NewDecoder(strings.NewReader(userInputCfg))
+		d.DisallowUnknownFields()
+		if err := d.Decode(&customCfg); err != nil {
+			return nil, pgerror.WithCandidateCode(err, pgcode.Syntax)
+		}
+		if customCfg.Seed != nil {
+			seed = *customCfg.Seed
+		}
+		cfg = customCfg.Config
+	}
+	cfg.Finalize()
+	rand := rand.New(rand.NewSource(seed))
+	return &identGenerator{
+		gen:   randident.NewNameGenerator(&cfg, rand, pattern),
+		acc:   evalCtx.Planner.Mon().MakeBoundAccount(),
+		count: count,
 	}, nil
 }

@@ -22,6 +22,8 @@ define Values {
 package exec
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
@@ -71,6 +73,9 @@ type Factory interface {
 		rootRowCount int64,
 	) (Plan, error)
 
+	// Ctx returns the ctx of this execution.
+	Ctx() context.Context
+
 	// ConstructScan creates a node for a Scan operation.
 	//
 	// Scan runs a scan of a specified index of a table, possibly with an index
@@ -105,6 +110,10 @@ func (StubFactory) ConstructPlan(
 	rootRowCount int64,
 ) (Plan, error) {
 	return struct{}{}, nil
+}
+
+func (StubFactory) Ctx() context.Context {
+	return context.Background()
 }
 
 func (StubFactory) ConstructScan(

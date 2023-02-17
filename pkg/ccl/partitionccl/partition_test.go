@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
@@ -204,7 +205,7 @@ func (pt *partitioningTest) parse() error {
 		if !strings.HasPrefix(indexName, "@") {
 			panic(errors.Errorf("unsupported config: %s", c))
 		}
-		idx, err := pt.parsed.tableDesc.FindIndexWithName(indexName[1:])
+		idx, err := catalog.MustFindIndexByName(pt.parsed.tableDesc, indexName[1:])
 		if err != nil {
 			return errors.Wrapf(err, "could not find index %s", indexName)
 		}
@@ -1280,7 +1281,7 @@ func TestRepartitioning(t *testing.T) {
 				}
 				sqlDB.Exec(t, fmt.Sprintf("ALTER TABLE %s RENAME TO %s", test.old.parsed.tableName, test.new.parsed.tableName))
 
-				testIndex, err := test.new.parsed.tableDesc.FindIndexWithName(test.index)
+				testIndex, err := catalog.MustFindIndexByName(test.new.parsed.tableDesc, test.index)
 				if err != nil {
 					t.Fatalf("%+v", err)
 				}

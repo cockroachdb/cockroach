@@ -14,28 +14,25 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 )
 
 // systemTableIDResolver is the implementation for catalog.SystemTableIDResolver.
 type systemTableIDResolver struct {
-	collectionFactory       *CollectionFactory
-	internalExecutorFactory TxnManager
-	db                      *kv.DB
+	collectionFactory *CollectionFactory
+	db                DB
 }
 
 var _ catalog.SystemTableIDResolver = (*systemTableIDResolver)(nil)
 
 // MakeSystemTableIDResolver creates an object that implements catalog.SystemTableIDResolver.
 func MakeSystemTableIDResolver(
-	collectionFactory *CollectionFactory, internalExecutorFactory TxnManager, db *kv.DB,
+	collectionFactory *CollectionFactory, db DB,
 ) catalog.SystemTableIDResolver {
 	return &systemTableIDResolver{
-		collectionFactory:       collectionFactory,
-		internalExecutorFactory: internalExecutorFactory,
-		db:                      db,
+		collectionFactory: collectionFactory,
+		db:                db,
 	}
 }
 
@@ -45,15 +42,17 @@ func (r *systemTableIDResolver) LookupSystemTableID(
 ) (descpb.ID, error) {
 
 	var id descpb.ID
-	if err := r.internalExecutorFactory.DescsTxn(ctx, r.db, func(
-		ctx context.Context, txn *kv.Txn, descriptors *Collection,
+	if err := r.db.DescsTxn(ctx, func(
+		ctx context.Context, txn Txn,
 	) (err error) {
 		ni := descpb.NameInfo{
 			ParentID:       keys.SystemDatabaseID,
 			ParentSchemaID: keys.SystemPublicSchemaID,
 			Name:           tableName,
 		}
-		read, err := descriptors.cr.GetByNames(ctx, txn, []descpb.NameInfo{ni})
+		read, err := txn.Descriptors().cr.GetByNames(
+			ctx, txn.KV(), []descpb.NameInfo{ni},
+		)
 		if err != nil {
 			return err
 		}

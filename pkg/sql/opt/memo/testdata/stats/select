@@ -883,10 +883,9 @@ inner-join (lookup t_json_arr)
  │    ├── eq columns: [1] = [1]
  │    ├── left fixed columns: [7] = ['\x3761000112620001']
  │    ├── right fixed columns: [7] = ['\x3763000112640001']
- │    ├── stats: [rows=61.7284, distinct(1)=61.7284, null(1)=0]
+ │    ├── stats: [rows=61.7284]
  │    └── filters (true)
- └── filters
-      └── b:2 @> '{"a": "b", "c": "d"}' [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
+ └── filters (true)
 
 # Should generate a select on the table with a JSON filter, since c does not
 # have an inverted index.
@@ -1301,7 +1300,7 @@ project
 
 # Sample testcase using exprgen.
 expr colstat=1 colstat=2
-(Select 
+(Select
   (FakeRel
     [
       (OutputCols [ (NewColumn "a" "int") (NewColumn "b" "int") (NewColumn "c" "int")] )
@@ -1310,15 +1309,15 @@ expr colstat=1 colstat=2
         {
           "columns": ["a"],
           "distinct_count": 100,
-          "null_count": 0, 
-          "row_count": 100, 
+          "null_count": 0,
+          "row_count": 100,
           "created_at": "2018-01-01 1:00:00.00000+00:00"
         },
         {
           "columns": ["b"],
           "distinct_count": 20,
-          "null_count": 5, 
-          "row_count": 100, 
+          "null_count": 5,
+          "row_count": 100,
           "created_at": "2018-01-01 1:00:00.00000+00:00"
         }
       ]`)
@@ -1968,18 +1967,18 @@ SELECT * FROM data WHERE created = '2020-04-11 06:25:41+00:00'
 select
  ├── columns: user_id:1(uuid!null) name:2(varchar) created:3(timestamptz!null)
  ├── stats: [rows=1.000001, distinct(3)=1, null(3)=0]
- │   histogram(3)=  0               1
- │                <--- '2020-04-11 06:25:41+00:00'
+ │   histogram(3)=  0             1
+ │                <--- '2020-04-11 06:25:41+00'
  ├── fd: ()-->(3)
  ├── scan data
  │    ├── columns: user_id:1(uuid!null) name:2(varchar) created:3(timestamptz)
  │    └── stats: [rows=10000, distinct(1)=1000, null(1)=0, distinct(3)=10000, null(3)=0]
  │        histogram(1)=  0                    1                     4998                    1                     4999                    1
  │                     <--- '3b57b3e4-a68a-9b47-2752-e365d7d8954e' ------ '6b49a786-387b-d5a2-6582-4e963eb4d537' ------ 'd9739a48-d5be-9a62-e752-34d877e56ba5'
- │        histogram(3)=  0               1               4998               1               4999               1
- │                     <--- '2020-02-11 07:25:00+00:00' ------ '2020-03-21 06:45:41+00:00' ------ '2020-04-21 06:25:41+00:00'
+ │        histogram(3)=  0             1              4998             1              4999             1
+ │                     <--- '2020-02-11 07:25:00+00' ------ '2020-03-21 06:45:41+00' ------ '2020-04-21 06:25:41+00'
  └── filters
-      └── created:3 = '2020-04-11 06:25:41+00:00' [type=bool, outer=(3), constraints=(/3: [/'2020-04-11 06:25:41+00:00' - /'2020-04-11 06:25:41+00:00']; tight), fd=()-->(3)]
+      └── created:3 = '2020-04-11 06:25:41+00' [type=bool, outer=(3), constraints=(/3: [/'2020-04-11 06:25:41+00' - /'2020-04-11 06:25:41+00']; tight), fd=()-->(3)]
 
 # Make sure that using a histogram produces correct stats with range
 # calculations for non-numeric types.
@@ -3762,6 +3761,27 @@ project
  └── select
       ├── columns: c0:1(int) c1:2(int)
       ├── stats: [rows=1.9]
+      ├── scan t00
+      │    ├── columns: c0:1(int) c1:2(int)
+      │    └── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(2)=10, null(2)=0]
+      │        histogram(1)=  0  0  9  1
+      │                     <--- 0 --- 10
+      │        histogram(2)=  0  0  9  1
+      │                     <--- 0 --- 10
+      └── filters
+           └── (c0:1 = 1) OR (c1:2 = 3) [type=bool, outer=(1,2)]
+
+# The row counts are slightly different when using legacy disjunction stats
+# calculation.
+opt set=optimizer_use_improved_disjunction_stats=false
+SELECT c0 FROM t00 WHERE (c0 = 1) OR (c1 = 3)
+----
+project
+ ├── columns: c0:1(int)
+ ├── stats: [rows=2]
+ └── select
+      ├── columns: c0:1(int) c1:2(int)
+      ├── stats: [rows=2]
       ├── scan t00
       │    ├── columns: c0:1(int) c1:2(int)
       │    └── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(2)=10, null(2)=0]

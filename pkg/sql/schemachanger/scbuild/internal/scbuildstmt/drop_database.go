@@ -36,10 +36,12 @@ func DropDatabase(b BuildCtx, n *tree.DropDatabase) {
 	// Perform explicit or implicit DROP DATABASE CASCADE.
 	if n.DropBehavior == tree.DropCascade || (n.DropBehavior == tree.DropDefault && !b.SessionData().SafeUpdates) {
 		dropCascadeDescriptor(b, db.DatabaseID)
+		b.LogEventForExistingTarget(db)
 		return
 	}
 	// Otherwise, perform DROP DATABASE RESTRICT.
 	if !dropRestrictDescriptor(b, db.DatabaseID) {
+		b.LogEventForExistingTarget(db)
 		return
 	}
 	// Implicitly DROP RESTRICT the public schema as well.

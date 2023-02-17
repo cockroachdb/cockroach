@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"google.golang.org/grpc/codes"
@@ -32,7 +33,7 @@ func (s *statusServer) Statements(
 		return s.CombinedStatementStats(ctx, &combinedRequest)
 	}
 
-	ctx = propagateGatewayMetadata(ctx)
+	ctx = forwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
 	if err := s.privilegeChecker.requireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
@@ -109,8 +110,8 @@ func statementsLocal(
 	sqlServer *SQLServer,
 	fetchMode serverpb.StatementsRequest_FetchMode,
 ) (*serverpb.StatementsResponse, error) {
-	var stmtStats []roachpb.CollectedStatementStatistics
-	var txnStats []roachpb.CollectedTransactionStatistics
+	var stmtStats []appstatspb.CollectedStatementStatistics
+	var txnStats []appstatspb.CollectedTransactionStatistics
 	var err error
 
 	if fetchMode != serverpb.StatementsRequest_TxnStatsOnly {

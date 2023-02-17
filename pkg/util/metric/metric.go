@@ -17,6 +17,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/gogo/protobuf/proto"
@@ -25,11 +27,9 @@ import (
 	"github.com/rcrowley/go-metrics"
 )
 
-const (
-	// TestSampleInterval is passed to histograms during tests which don't
-	// want to concern themselves with supplying a "correct" interval.
-	TestSampleInterval = time.Duration(math.MaxInt64)
-)
+// TestSampleInterval is passed to histograms during tests which don't
+// want to concern themselves with supplying a "correct" interval.
+const TestSampleInterval = time.Duration(math.MaxInt64)
 
 // Iterable provides a method for synchronized access to interior objects.
 type Iterable interface {
@@ -176,10 +176,81 @@ func maybeTick(m periodic) {
 	}
 }
 
+// useHdrHistogramsEnvVar can be used to switch all histograms to use the
+// legacy HDR histograms (except for those that explicitly force the use
+// of the newer Prometheus via HistogramModePrometheus). HDR Histograms
+// dynamically generate bucket boundaries, which can lead to hundreds of
+// buckets. This can cause performance issues with timeseries databases
+// like Prometheus.
+const useHdrHistogramsEnvVar = "COCKROACH_ENABLE_HDR_HISTOGRAMS"
+
+var hdrEnabled = util.ConstantWithMetamorphicTestBool(useHdrHistogramsEnvVar, envutil.EnvOrDefaultBool(useHdrHistogramsEnvVar, false))
+
+// HdrEnabled returns whether or not the HdrHistogram model is enabled
+// in the metric package. Primarily useful in tests where we want to validate
+// different outputs depending on whether or not HDR is enabled.
+func HdrEnabled() bool {
+	return hdrEnabled
+}
+
+type HistogramMode byte
+
+const (
+	// HistogramModePrometheus will force the constructed histogram to use
+	// the Prometheus histogram model, regardless of the value of
+	// useHdrHistogramsEnvVar. This option should be used for all
+	// newly defined histograms moving forward.
+	//
+	// NB: If neither this mode nor the HistogramModePreferHdrLatency mode
+	// is set, MaxVal and SigFigs must be defined to maintain backwards
+	// compatibility with the legacy HdrHistogram model.
+	HistogramModePrometheus HistogramMode = iota + 1
+	// HistogramModePreferHdrLatency will cause the returned histogram to
+	// use the HdrHistgoram model and be configured with suitable defaults
+	// for latency tracking iff useHdrHistogramsEnvVar is enabled.
+	//
+	// NB: If this option is set, no MaxVal or SigFigs are required in the
+	// HistogramOptions to maintain backwards compatibility with the legacy
+	// HdrHistogram model, since suitable defaults are used for both.
+	HistogramModePreferHdrLatency
+)
+
+type HistogramOptions struct {
+	// Metadata is the metric Metadata associated with the histogram.
+	Metadata Metadata
+	// Duration is the histogram's window duration.
+	Duration time.Duration
+	// MaxVal is only relevant to the HdrHistogram, and represents the
+	// highest trackable value in the resulting histogram buckets.
+	MaxVal int64
+	// SigFigs is only relevant to the HdrHistogram, and represents
+	// the number of significant figures to be used to determine the
+	// degree of accuracy used in measurements.
+	SigFigs int
+	// Buckets are only relevant to Prometheus histograms, and represent
+	// the pre-defined histogram bucket boundaries to be used.
+	Buckets []float64
+	// Mode defines the type of histogram to be used. See individual
+	// comments on each HistogramMode value for details.
+	Mode HistogramMode
+}
+
+func NewHistogram(opt HistogramOptions) IHistogram {
+	if hdrEnabled && opt.Mode != HistogramModePrometheus {
+		if opt.Mode == HistogramModePreferHdrLatency {
+			return NewHdrLatency(opt.Metadata, opt.Duration)
+		} else {
+			return NewHdrHistogram(opt.Metadata, opt.Duration, opt.MaxVal, opt.SigFigs)
+		}
+	} else {
+		return newHistogram(opt.Metadata, opt.Duration, opt.Buckets)
+	}
+}
+
 // NewHistogram is a prometheus-backed histogram. Depending on the value of
 // opts.Buckets, this is suitable for recording any kind of quantity. Common
 // sensible choices are {IO,Network}LatencyBuckets.
-func NewHistogram(meta Metadata, windowDuration time.Duration, buckets []float64) *Histogram {
+func newHistogram(meta Metadata, windowDuration time.Duration, buckets []float64) *Histogram {
 	// TODO(obs-inf): prometheus supports labeled histograms but they require more
 	// plumbing and don't fit into the PrometheusObservable interface any more.
 	opts := prometheus.HistogramOpts{
@@ -235,6 +306,21 @@ type Histogram struct {
 		prev, cur prometheus.Histogram
 	}
 }
+
+type IHistogram interface {
+	Iterable
+	PrometheusExportable
+	WindowedHistogram
+
+	RecordValue(n int64)
+	TotalCount() int64
+	TotalSum() float64
+	TotalCountWindowed() int64
+	TotalSumWindowed() float64
+	Mean() float64
+}
+
+var _ IHistogram = &Histogram{}
 
 func (h *Histogram) nextTick() time.Time {
 	h.windowed.RLock()
@@ -326,7 +412,8 @@ func (h *Histogram) TotalSumWindowed() float64 {
 
 // Mean returns the (cumulative) mean of samples.
 func (h *Histogram) Mean() float64 {
-	return h.TotalSum() / float64(h.TotalCount())
+	pm := h.ToPrometheusMetric()
+	return pm.Histogram.GetSampleSum() / float64(pm.Histogram.GetSampleCount())
 }
 
 // ValueAtQuantileWindowed implements the WindowedHistogram interface.
@@ -489,6 +576,63 @@ func (c *Counter) GetMetadata() Metadata {
 	baseMetadata := c.Metadata
 	baseMetadata.MetricType = prometheusgo.MetricType_COUNTER
 	return baseMetadata
+}
+
+type CounterFloat64 struct {
+	Metadata
+	count syncutil.AtomicFloat64
+}
+
+// GetMetadata returns the metric's metadata including the Prometheus
+// MetricType.
+func (c *CounterFloat64) GetMetadata() Metadata {
+	baseMetadata := c.Metadata
+	baseMetadata.MetricType = prometheusgo.MetricType_COUNTER
+	return baseMetadata
+}
+
+func (c *CounterFloat64) Clear() {
+	syncutil.StoreFloat64(&c.count, 0)
+}
+
+func (c *CounterFloat64) Count() float64 {
+	return syncutil.LoadFloat64(&c.count)
+}
+
+func (c *CounterFloat64) Inc(i float64) {
+	syncutil.AddFloat64(&c.count, i)
+}
+
+func (c *CounterFloat64) UpdateIfHigher(i float64) {
+	syncutil.StoreFloat64IfHigher(&c.count, i)
+}
+
+func (c *CounterFloat64) Snapshot() *CounterFloat64 {
+	newCounter := NewCounterFloat64(c.Metadata)
+	syncutil.StoreFloat64(&newCounter.count, c.Count())
+	return newCounter
+}
+
+// GetType returns the prometheus type enum for this metric.
+func (c *CounterFloat64) GetType() *prometheusgo.MetricType {
+	return prometheusgo.MetricType_COUNTER.Enum()
+}
+
+// ToPrometheusMetric returns a filled-in prometheus metric of the right type.
+func (c *CounterFloat64) ToPrometheusMetric() *prometheusgo.Metric {
+	return &prometheusgo.Metric{
+		Counter: &prometheusgo.Counter{Value: proto.Float64(c.Count())},
+	}
+}
+
+// MarshalJSON marshals to JSON.
+func (c *CounterFloat64) MarshalJSON() ([]byte, error) {
+	return json.Marshal(c.Count())
+}
+
+// NewCounterFloat64 creates a counter.
+func NewCounterFloat64(metadata Metadata) *CounterFloat64 {
+	return &CounterFloat64{Metadata: metadata}
 }
 
 // A Gauge atomically stores a single integer value.

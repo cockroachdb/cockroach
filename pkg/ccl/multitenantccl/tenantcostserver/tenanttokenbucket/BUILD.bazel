@@ -20,7 +20,7 @@ go_test(
     embed = [":tenanttokenbucket"],
     deps = [
         "//pkg/roachpb",
-        "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/util/leaktest",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@in_gopkg_yaml_v2//:yaml_v2",

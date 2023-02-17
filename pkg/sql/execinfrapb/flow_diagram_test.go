@@ -18,7 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
@@ -49,10 +49,10 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 	flows := make(map[base.SQLInstanceID]*FlowSpec)
 
 	tr := TableReaderSpec{
-		FetchSpec: descpb.IndexFetchSpec{
+		FetchSpec: fetchpb.IndexFetchSpec{
 			TableName: "Table",
 			IndexName: "SomeIndex",
-			FetchedColumns: []descpb.IndexFetchSpec_Column{
+			FetchedColumns: []fetchpb.IndexFetchSpec_Column{
 				{Name: "a"},
 				{Name: "b"},
 			},
@@ -113,10 +113,10 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 					},
 				}},
 				Core: ProcessorCoreUnion{JoinReader: &JoinReaderSpec{
-					FetchSpec: descpb.IndexFetchSpec{
+					FetchSpec: fetchpb.IndexFetchSpec{
 						TableName: "Table",
 						IndexName: "primary",
-						FetchedColumns: []descpb.IndexFetchSpec_Column{
+						FetchedColumns: []fetchpb.IndexFetchSpec_Column{
 							{Name: "x"},
 							{Name: "y"},
 						},
@@ -178,10 +178,10 @@ func TestPlanDiagramJoin(t *testing.T) {
 	flows := make(map[base.SQLInstanceID]*FlowSpec)
 
 	trA := TableReaderSpec{
-		FetchSpec: descpb.IndexFetchSpec{
+		FetchSpec: fetchpb.IndexFetchSpec{
 			TableName: "TableA",
 			IndexName: "primary",
-			FetchedColumns: []descpb.IndexFetchSpec_Column{
+			FetchedColumns: []fetchpb.IndexFetchSpec_Column{
 				{Name: "a"},
 				{Name: "b"},
 				{Name: "d"},
@@ -190,10 +190,10 @@ func TestPlanDiagramJoin(t *testing.T) {
 	}
 
 	trB := TableReaderSpec{
-		FetchSpec: descpb.IndexFetchSpec{
+		FetchSpec: fetchpb.IndexFetchSpec{
 			TableName: "TableB",
 			IndexName: "primary",
-			FetchedColumns: []descpb.IndexFetchSpec_Column{
+			FetchedColumns: []fetchpb.IndexFetchSpec_Column{
 				{Name: "b"},
 				{Name: "c"},
 				{Name: "e"},

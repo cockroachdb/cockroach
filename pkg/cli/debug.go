@@ -170,11 +170,12 @@ func OpenEngine(
 	if err != nil {
 		return nil, err
 	}
-	db, err := storage.Open(context.Background(),
+	db, err := storage.Open(
+		context.Background(),
 		storage.Filesystem(dir),
+		serverCfg.Settings,
 		storage.MaxOpenFiles(int(maxOpenFiles)),
 		storage.CacheSize(server.DefaultCacheSize),
-		storage.Settings(serverCfg.Settings),
 		storage.Hook(PopulateStorageConfigHook),
 		storage.CombineOptions(opts...))
 	if err != nil {
@@ -476,7 +477,11 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 					if err != nil {
 						return err
 					}
-					kvserver.PrintEngineKeyValue(key, iter.UnsafeValue())
+					v, err := iter.UnsafeValue()
+					if err != nil {
+						return err
+					}
+					kvserver.PrintEngineKeyValue(key, v)
 					results++
 					if results == debugCtx.maxResults {
 						return iterutil.StopIteration()
@@ -1069,8 +1074,6 @@ func parseGossipValues(gossipInfo *gossip.InfoStatus) (string, error) {
 				return "", errors.Wrapf(err, "failed to parse value for key %q", key)
 			}
 			output = append(output, fmt.Sprintf("%q: %+v", key, drainingInfo))
-		} else if strings.HasPrefix(key, gossip.KeyGossipClientsPrefix) {
-			output = append(output, fmt.Sprintf("%q: %v", key, string(bytes)))
 		}
 	}
 
@@ -1126,16 +1129,17 @@ const logFilePattern = "^(?:(?P<fpath>.*)/)?" + log.FileNamePattern + "$"
 // TODO(knz): this struct belongs elsewhere.
 // See: https://github.com/cockroachdb/cockroach/issues/49509
 var debugMergeLogsOpts = struct {
-	from           time.Time
-	to             time.Time
-	filter         *regexp.Regexp
-	program        *regexp.Regexp
-	file           *regexp.Regexp
-	keepRedactable bool
-	prefix         string
-	redactInput    bool
-	format         string
-	useColor       forceColor
+	from            time.Time
+	to              time.Time
+	filter          *regexp.Regexp
+	program         *regexp.Regexp
+	file            *regexp.Regexp
+	keepRedactable  bool
+	prefix          string
+	redactInput     bool
+	format          string
+	useColor        forceColor
+	tenantIDsFilter []string
 }{
 	program:        nil, // match everything
 	file:           regexp.MustCompile(logFilePattern),
@@ -1188,7 +1192,23 @@ func runDebugMergeLogs(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	return writeLogStream(s, outStream, o.filter, o.keepRedactable, cp)
+	// Validate tenantIDsFilter
+	if len(o.tenantIDsFilter) != 0 {
+		for _, tID := range o.tenantIDsFilter {
+			number, err := strconv.ParseUint(tID, 10, 64)
+			if err != nil {
+				return errors.Wrapf(err,
+					"invalid tenant ID provided in filter: %s. Tenant IDs must be integers >= 0", tID)
+			}
+			_, err = roachpb.MakeTenantID(number)
+			if err != nil {
+				return errors.Wrapf(err,
+					"invalid tenant ID provided in filter: %s. Unable to parse into roachpb.TenantID", tID)
+			}
+		}
+	}
+
+	return writeLogStream(s, outStream, o.filter, o.keepRedactable, cp, o.tenantIDsFilter)
 }
 
 var debugIntentCount = &cobra.Command{
@@ -1413,7 +1433,9 @@ func init() {
 	f.StringVarP(&debugRecoverPlanOpts.outputFileName, "plan", "o", "",
 		"filename to write plan to")
 	f.IntSliceVar(&debugRecoverPlanOpts.deadStoreIDs, "dead-store-ids", nil,
-		"list of dead store IDs")
+		"list of dead store IDs (can't be used together with dead-node-ids)")
+	f.IntSliceVar(&debugRecoverPlanOpts.deadNodeIDs, "dead-node-ids", nil,
+		"list of dead node IDs (can't be used together with dead-store-ids)")
 	f.VarP(&debugRecoverPlanOpts.confirmAction, cliflags.ConfirmActions.Name, cliflags.ConfirmActions.Shorthand,
 		cliflags.ConfirmActions.Usage())
 	f.BoolVar(&debugRecoverPlanOpts.force, "force", false,
@@ -1448,6 +1470,8 @@ func init() {
 		"log format of the input files")
 	f.Var(&debugMergeLogsOpts.useColor, "color",
 		"force use of TTY escape codes to colorize the output")
+	f.StringSliceVar(&debugMergeLogsOpts.tenantIDsFilter, "tenant-ids", nil,
+		"tenant IDs to filter logs by")
 
 	f = debugDecodeKeyCmd.Flags()
 	f.Var(&decodeKeyOptions.encoding, "encoding", "key argument encoding")
@@ -1508,17 +1532,14 @@ func pebbleCryptoInitializer() error {
 		}
 	}
 
-	cfg := storage.PebbleConfig{
-		StorageConfig: storageConfig,
-		Opts:          storage.DefaultPebbleOptions(),
-	}
-
-	// This has the side effect of storing the encrypted FS into cfg.Opts.FS.
-	_, _, err := storage.ResolveEncryptedEnvOptions(&cfg)
+	_, encryptedEnv, err := storage.ResolveEncryptedEnvOptions(&storageConfig, vfs.Default, false /* readOnly */)
 	if err != nil {
 		return err
 	}
-
-	pebbleToolFS.set(cfg.Opts.FS)
+	if encryptedEnv != nil {
+		pebbleToolFS.set(encryptedEnv.FS)
+	} else {
+		pebbleToolFS.set(vfs.Default)
+	}
 	return nil
 }

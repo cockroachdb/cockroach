@@ -123,7 +123,7 @@ func setupLockTableWaiterTest() (
 	w := &lockTableWaiterImpl{
 		nodeDesc: &roachpb.NodeDescriptor{NodeID: 1},
 		st:       st,
-		clock:    hlc.NewClock(manual, time.Nanosecond /* maxOffset */),
+		clock:    hlc.NewClockForTesting(manual),
 		stopper:  stop.NewStopper(),
 		ir:       ir,
 		lt:       &mockLockTable{},
@@ -941,7 +941,7 @@ func TestContentionEventTracer(t *testing.T) {
 	tr := tracing.NewTracer()
 	ctx, sp := tr.StartSpanCtx(context.Background(), "foo", tracing.WithRecording(tracingpb.RecordingVerbose))
 	defer sp.Finish()
-	clock := hlc.NewClockWithSystemTimeSource(0 /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 
 	var events []*roachpb.ContentionEvent
 

@@ -51,10 +51,11 @@ func TestRandRun(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: dbName})
 	defer s.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(db)
-	sqlDB.Exec(t, "CREATE DATABASE "+dbName)
+	sqlDB.Exec(t, "CREATE DATABASE "+tree.NameString(dbName))
 
 	rng, seed := randutil.NewTestRand()
 	t.Logf("rand workload random seed: %v", seed)
+	RandomSeed.Set(seed)
 	tblName := "datum_to_go_sql_test"
 	colName := "c1"
 
@@ -70,12 +71,13 @@ func TestRandRun(t *testing.T) {
 		unwrapped := tree.UnwrapDOidWrapper(datum)
 
 		t.Run(fmt.Sprintf("%s-%T", sqlName, unwrapped), func(t *testing.T) {
-			sqlDB.Exec(t, fmt.Sprintf("DROP TABLE IF EXISTS %s.%s", dbName, tblName))
+			sqlDB.Exec(t, fmt.Sprintf("DROP TABLE IF EXISTS %s.%s", tree.NameString(dbName), tree.NameString(tblName)))
 			createTableStmt := fmt.Sprintf("CREATE TABLE %s.%s (%s %s)",
-				dbName, tblName, colName, sqlName)
+				tree.NameString(dbName), tree.NameString(tblName), tree.NameString(colName), sqlName)
 			sqlDB.Exec(t, createTableStmt)
 
-			stmt := fmt.Sprintf("INSERT INTO %s.%s (%s) VALUES ($1)", dbName, tblName, colName)
+			stmt := fmt.Sprintf("INSERT INTO %s.%s (%s) VALUES ($1)",
+				tree.NameString(dbName), tree.NameString(tblName), tree.NameString(colName))
 			writeStmt, err := db.Prepare(stmt)
 			require.NoError(t, err)
 
@@ -83,7 +85,7 @@ func TestRandRun(t *testing.T) {
 			require.NoError(t, err)
 			cols := []col{{name: colName, dataType: dataType}}
 			op := randOp{
-				config:    &random{batchSize: 1, seed: seed},
+				config:    &random{batchSize: 1},
 				db:        db,
 				cols:      cols,
 				rng:       rng,

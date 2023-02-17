@@ -19,12 +19,14 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors/oserror"
+	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
 )
@@ -37,7 +39,7 @@ type initialState interface {
 	Base() initialState
 
 	// Key returns a unique sequence of strings that uniquely identifies the
-	// represented initial condtions. Key is used as the cache key for reusing
+	// represented initial conditions. Key is used as the cache key for reusing
 	// databases computed by previous runs, so all configuration must be fully
 	// represented in Key's return value.
 	Key() []string
@@ -55,6 +57,14 @@ type initialState interface {
 type engineWithLocation struct {
 	Engine
 	Location
+}
+
+// TODO(jackson): Tie this to the mapping in SetMinVersion.
+var latestReleaseFormatMajorVersion = pebble.FormatPrePebblev1Marked // v22.2
+
+var latestReleaseFormatMajorVersionOpt ConfigOption = func(cfg *engineConfig) error {
+	cfg.PebbleConfig.Opts.FormatMajorVersion = latestReleaseFormatMajorVersion
+	return nil
 }
 
 // getInitialStateEngine constructs an Engine with an initial database
@@ -88,7 +98,7 @@ func getInitialStateEngine(
 
 	opts := append([]ConfigOption{
 		MustExist,
-		LatestReleaseFormatMajorVersion,
+		latestReleaseFormatMajorVersionOpt,
 	}, initial.ConfigOptions()...)
 
 	if !inMemory {
@@ -103,7 +113,7 @@ func getInitialStateEngine(
 		testutils.ReadAllFiles(filepath.Join(testRunDir, "*"))
 
 		loc := Filesystem(testRunDir)
-		e, err := Open(ctx, loc, opts...)
+		e, err := Open(ctx, loc, cluster.MakeClusterSettings(), opts...)
 		require.NoError(b, err)
 		return engineWithLocation{Engine: e, Location: loc}
 	}
@@ -124,7 +134,7 @@ func getInitialStateEngine(
 	}
 
 	loc := Location{fs: fs}
-	e, err := Open(ctx, loc, opts...)
+	e, err := Open(ctx, loc, cluster.MakeClusterSettings(), opts...)
 	require.NoError(b, err)
 	return engineWithLocation{Engine: e, Location: loc}
 }
@@ -148,7 +158,7 @@ func buildInitialState(
 		e.Close()
 		buildFS = e.Location.fs
 	} else {
-		opts := append([]ConfigOption{LatestReleaseFormatMajorVersion}, initial.ConfigOptions()...)
+		opts := append([]ConfigOption{latestReleaseFormatMajorVersionOpt}, initial.ConfigOptions()...)
 
 		// Regardless of whether the initial conditions specify an in-memory engine
 		// or not, we build the conditions using an in-memory engine for
@@ -156,7 +166,8 @@ func buildInitialState(
 		buildFS = vfs.NewMem()
 
 		var err error
-		e, err := Open(ctx, Location{fs: buildFS}, opts...)
+		e, err := Open(ctx, Location{fs: buildFS}, cluster.MakeClusterSettings(), opts...)
+
 		require.NoError(b, err)
 
 		require.NoError(b, initial.Build(ctx, b, e))
@@ -238,6 +249,7 @@ var _ initialState = mvccBenchData{}
 func (d mvccBenchData) Key() []string {
 	key := []string{
 		"mvcc",
+		fmt.Sprintf("fmtver_%d", latestReleaseFormatMajorVersion),
 		fmt.Sprintf("numKeys_%d", d.numKeys),
 		fmt.Sprintf("numVersions_%d", d.numVersions),
 		fmt.Sprintf("valueBytes_%d", d.valueBytes),
@@ -353,11 +365,11 @@ func (d mvccBenchData) Build(ctx context.Context, b *testing.B, eng Engine) erro
 		key := keySlice[idx]
 		txnMeta := txn.TxnMeta
 		txnMeta.WriteTimestamp = hlc.Timestamp{WallTime: int64(counts[idx]) * 5}
-		if _, err := MVCCResolveWriteIntent(ctx, batch, nil /* ms */, roachpb.LockUpdate{
+		if _, _, _, err := MVCCResolveWriteIntent(ctx, batch, nil /* ms */, roachpb.LockUpdate{
 			Span:   roachpb.Span{Key: key},
 			Status: roachpb.COMMITTED,
 			Txn:    txnMeta,
-		}); err != nil {
+		}, MVCCResolveWriteIntentOptions{}); err != nil {
 			b.Fatal(err)
 		}
 	}

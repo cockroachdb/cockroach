@@ -93,3 +93,19 @@ export function generateContentionTimeseries(
 
   return [ts, count];
 }
+
+export function generateCPUTimeseries(
+  stats: statementStatisticsPerAggregatedTs[],
+): AlignedData {
+  const ts: Array<number> = [];
+  const count: Array<number> = [];
+
+  stats.forEach(function (stat: statementStatisticsPerAggregatedTs) {
+    if (stat.stats.exec_stats.cpu_sql_nanos) {
+      ts.push(TimestampToNumber(stat.aggregated_ts) * 1e3);
+      count.push(stat.stats.exec_stats.cpu_sql_nanos.mean);
+    }
+  });
+
+  return [ts, count];
+}

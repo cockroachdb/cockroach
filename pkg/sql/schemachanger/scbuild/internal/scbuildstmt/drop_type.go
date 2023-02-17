@@ -30,12 +30,20 @@ func DropType(b BuildCtx, n *tree.DropType) {
 	var toCheckBackrefs []catid.DescID
 	arrayTypesToAlsoCheck := make(map[catid.DescID]catid.DescID)
 	for _, name := range n.Names {
-		elts := b.ResolveEnumType(name, ResolveParams{
+		elts := b.ResolveUserDefinedTypeType(name, ResolveParams{
 			IsExistenceOptional: n.IfExists,
 			RequiredPrivilege:   privilege.DROP,
 		})
-		_, _, typ := scpb.FindEnumType(elts)
-		if typ == nil {
+		var typ scpb.Element
+		var typeID, arrayTypeID catid.DescID
+		if _, _, enum := scpb.FindEnumType(elts); enum != nil {
+			b.IncrementEnumCounter(sqltelemetry.EnumDrop)
+			typeID, arrayTypeID = enum.TypeID, enum.ArrayTypeID
+			typ = enum
+		} else if _, _, composite := scpb.FindCompositeType(elts); composite != nil {
+			typeID, arrayTypeID = composite.TypeID, composite.ArrayTypeID
+			typ = composite
+		} else {
 			continue
 		}
 		prefix := b.NamePrefix(typ)
@@ -45,18 +53,18 @@ func DropType(b BuildCtx, n *tree.DropType) {
 		b.SetUnresolvedNameAnnotation(name, &tn)
 		// Drop the type.
 		if n.DropBehavior == tree.DropCascade {
-			dropCascadeDescriptor(b, typ.TypeID)
+			dropCascadeDescriptor(b, typeID)
 		} else {
-			if dropRestrictDescriptor(b, typ.TypeID) {
-				toCheckBackrefs = append(toCheckBackrefs, typ.TypeID)
+			if dropRestrictDescriptor(b, typeID) {
+				toCheckBackrefs = append(toCheckBackrefs, typeID)
 			}
 			b.IncrementSubWorkID()
-			if dropRestrictDescriptor(b.WithNewSourceElementID(), typ.ArrayTypeID) {
-				arrayTypesToAlsoCheck[typ.TypeID] = typ.ArrayTypeID
+			if dropRestrictDescriptor(b.WithNewSourceElementID(), arrayTypeID) {
+				arrayTypesToAlsoCheck[typeID] = arrayTypeID
 			}
 		}
+		b.LogEventForExistingTarget(typ)
 		b.IncrementSubWorkID()
-		b.IncrementEnumCounter(sqltelemetry.EnumDrop)
 	}
 	// Check if there are any back-references which would prevent a DROP RESTRICT.
 	for _, typeID := range toCheckBackrefs {

@@ -9,44 +9,53 @@
 // licenses/APL.txt.
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
-import { DOMAIN_NAME, noopReducer } from "src/store/utils";
+import { DOMAIN_NAME } from "../../utils";
+import { TxnInsightEvent } from "src/insights";
 import moment, { Moment } from "moment";
-import { TxnContentionInsightEvent } from "src/insights";
+import { TxnInsightsRequest } from "src/api";
 
-export type TransactionInsightsState = {
-  data: TxnContentionInsightEvent[];
-  lastUpdated: Moment;
+export type TxnInsightsState = {
+  data: TxnInsightEvent[];
   lastError: Error;
   valid: boolean;
+  inFlight: boolean;
+  lastUpdated: Moment | null;
 };
 
-const initialState: TransactionInsightsState = {
+const initialState: TxnInsightsState = {
   data: null,
-  lastUpdated: null,
   lastError: null,
-  valid: true,
+  valid: false,
+  inFlight: false,
+  lastUpdated: null,
 };
 
-const transactionInsightsSlice = createSlice({
-  name: `${DOMAIN_NAME}/transactionInsightsSlice`,
+const txnInsightsSlice = createSlice({
+  name: `${DOMAIN_NAME}/txnInsightsSlice`,
   initialState,
   reducers: {
-    received: (state, action: PayloadAction<TxnContentionInsightEvent[]>) => {
+    received: (state, action: PayloadAction<TxnInsightEvent[]>) => {
       state.data = action.payload;
       state.valid = true;
       state.lastError = null;
+      state.inFlight = false;
       state.lastUpdated = moment.utc();
     },
     failed: (state, action: PayloadAction<Error>) => {
       state.valid = false;
       state.lastError = action.payload;
+      state.inFlight = false;
     },
     invalidated: state => {
       state.valid = false;
     },
-    refresh: noopReducer,
-    request: noopReducer,
+    refresh: (state, _action: PayloadAction<TxnInsightsRequest>) => {
+      state.inFlight = true;
+    },
+    request: (state, _action: PayloadAction<TxnInsightsRequest>) => {
+      state.inFlight = true;
+    },
   },
 });
 
-export const { reducer, actions } = transactionInsightsSlice;
+export const { reducer, actions } = txnInsightsSlice;

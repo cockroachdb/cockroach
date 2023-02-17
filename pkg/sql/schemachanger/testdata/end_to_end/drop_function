@@ -1,0 +1,382 @@
+setup
+CREATE TABLE t(
+  a INT PRIMARY KEY,
+  b INT,
+  C INT,
+  INDEX t_idx_b(b),
+  INDEX t_idx_c(c)
+);
+CREATE SEQUENCE sq1;
+CREATE VIEW v AS SELECT a FROM t;
+CREATE TYPE notmyworkday AS ENUM ('Monday', 'Tuesday');
+CREATE FUNCTION f(a notmyworkday) RETURNS INT VOLATILE LANGUAGE SQL AS $$
+  SELECT a FROM t;
+  SELECT b FROM t@t_idx_b;
+  SELECT c FROM t@t_idx_c;
+  SELECT a FROM v;
+  SELECT nextval('sq1');
+$$;
+CREATE TABLE t2(a notmyworkday);
+----
+...
++object {100 101 t} -> 104
++object {100 101 sq1} -> 105
++object {100 101 v} -> 106
++object {100 101 notmyworkday} -> 107
++object {100 101 _notmyworkday} -> 108
++object {100 101 t2} -> 110
+
+test
+DROP FUNCTION f;
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: DROP FUNCTION
+increment telemetry for sql.schema.drop_function
+## StatementPhase stage 1 of 1 with 11 MutationType ops
+upsert descriptor #101
+   schema:
+  -  functions:
+  -    f:
+  -      signatures:
+  -      - argTypes:
+  -        - family: EnumFamily
+  -          oid: 100107
+  -          udtMetadata:
+  -            arrayTypeOid: 100108
+  -        id: 109
+  -        returnType:
+  -          family: IntFamily
+  -          oid: 20
+  -          width: 64
+     id: 101
+     modificationTime: {}
+  ...
+         withGrantOption: "2"
+       version: 2
+  -  version: "2"
+  +  version: "3"
+upsert descriptor #104
+  ...
+       - 1
+       id: 106
+  -  - columnIds:
+  -    - 1
+  -    id: 109
+  -  - columnIds:
+  -    - 2
+  -    id: 109
+  -    indexId: 2
+  -  - columnIds:
+  -    - 3
+  -    id: 109
+  -    indexId: 3
+     families:
+     - columnIds:
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "3"
+  +  version: "4"
+upsert descriptor #105
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  dependedOnBy:
+  -  - byId: true
+  -    id: 109
+     families:
+     - columnIds:
+  ...
+       start: "1"
+     unexposedParentSchemaId: 101
+  -  version: "2"
+  +  version: "3"
+upsert descriptor #106
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  dependedOnBy:
+  -  - columnIds:
+  -    - 1
+  -    id: 109
+     dependsOn:
+     - 104
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "2"
+  +  version: "3"
+     viewQuery: SELECT a FROM defaultdb.public.t
+upsert descriptor #107
+  ...
+       version: 2
+     referencingDescriptorIds:
+  -  - 109
+     - 110
+  -  version: "3"
+  +  version: "4"
+upsert descriptor #108
+  ...
+       version: 2
+     referencingDescriptorIds:
+  -  - 109
+     - 110
+  -  version: "3"
+  +  version: "4"
+upsert descriptor #109
+  ...
+         oid: 20
+         width: 64
+  -  version: "1"
+  +  state: DROP
+  +  version: "2"
+     volatility: VOLATILE
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 18 MutationType ops
+upsert descriptor #101
+   schema:
+  -  functions:
+  -    f:
+  -      signatures:
+  -      - argTypes:
+  -        - family: EnumFamily
+  -          oid: 100107
+  -          udtMetadata:
+  -            arrayTypeOid: 100108
+  -        id: 109
+  -        returnType:
+  -          family: IntFamily
+  -          oid: 20
+  -          width: 64
+     id: 101
+     modificationTime: {}
+  ...
+         withGrantOption: "2"
+       version: 2
+  -  version: "2"
+  +  version: "3"
+upsert descriptor #104
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    jobId: "1"
+     dependedOnBy:
+     - columnIds:
+       - 1
+       id: 106
+  -  - columnIds:
+  -    - 1
+  -    id: 109
+  -  - columnIds:
+  -    - 2
+  -    id: 109
+  -    indexId: 2
+  -  - columnIds:
+  -    - 3
+  -    id: 109
+  -    indexId: 3
+     families:
+     - columnIds:
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "3"
+  +  version: "4"
+upsert descriptor #105
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  dependedOnBy:
+  -  - byId: true
+  -    id: 109
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    jobId: "1"
+     families:
+     - columnIds:
+  ...
+       start: "1"
+     unexposedParentSchemaId: 101
+  -  version: "2"
+  +  version: "3"
+upsert descriptor #106
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  dependedOnBy:
+  -  - columnIds:
+  -    - 1
+  -    id: 109
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    jobId: "1"
+     dependsOn:
+     - 104
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "2"
+  +  version: "3"
+     viewQuery: SELECT a FROM defaultdb.public.t
+upsert descriptor #107
+   type:
+     arrayTypeId: 108
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    jobId: "1"
+     enumMembers:
+     - logicalRepresentation: Monday
+  ...
+       version: 2
+     referencingDescriptorIds:
+  -  - 109
+     - 110
+  -  version: "3"
+  +  version: "4"
+upsert descriptor #108
+  ...
+       family: ArrayFamily
+       oid: 100108
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    jobId: "1"
+     id: 108
+     kind: ALIAS
+  ...
+       version: 2
+     referencingDescriptorIds:
+  -  - 109
+     - 110
+  -  version: "3"
+  +  version: "4"
+upsert descriptor #109
+   function:
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses: <redacted>
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP FUNCTION ‹""›.‹""›.‹f›
+  +        statement: DROP FUNCTION f
+  +        statementTag: DROP FUNCTION
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
+     dependsOn:
+     - 104
+  ...
+         oid: 20
+         width: 64
+  -  version: "1"
+  +  state: DROP
+  +  version: "2"
+     volatility: VOLATILE
+persist all catalog changes to storage
+create job #1 (non-cancelable: true): "DROP FUNCTION \"\".\"\".f"
+  descriptor IDs: [104 105 106 107 108 109]
+# end PreCommitPhase
+commit transaction #1
+notified job registry to adopt jobs: [1]
+# begin PostCommitPhase
+begin transaction #2
+commit transaction #2
+begin transaction #3
+## PostCommitNonRevertiblePhase stage 1 of 1 with 8 MutationType ops
+upsert descriptor #104
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    jobId: "1"
+     dependedOnBy:
+     - columnIds:
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "4"
+  +  version: "5"
+upsert descriptor #105
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    jobId: "1"
+     families:
+     - columnIds:
+  ...
+       start: "1"
+     unexposedParentSchemaId: 101
+  -  version: "3"
+  +  version: "4"
+upsert descriptor #106
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    jobId: "1"
+     dependsOn:
+     - 104
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "3"
+  +  version: "4"
+     viewQuery: SELECT a FROM defaultdb.public.t
+upsert descriptor #107
+   type:
+     arrayTypeId: 108
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    jobId: "1"
+     enumMembers:
+     - logicalRepresentation: Monday
+  ...
+     referencingDescriptorIds:
+     - 110
+  -  version: "4"
+  +  version: "5"
+upsert descriptor #108
+  ...
+       family: ArrayFamily
+       oid: 100108
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    jobId: "1"
+     id: 108
+     kind: ALIAS
+  ...
+     referencingDescriptorIds:
+     - 110
+  -  version: "4"
+  +  version: "5"
+delete descriptor #109
+persist all catalog changes to storage
+update progress of schema change job #1: "all stages completed"
+set schema change job #1 to non-cancellable
+updated schema change job #1 descriptor IDs to []
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 109
+commit transaction #3
+# end PostCommitPhase

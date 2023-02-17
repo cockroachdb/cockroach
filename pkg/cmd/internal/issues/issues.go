@@ -19,6 +19,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 	"github.com/google/go-github/github"
@@ -112,6 +113,8 @@ func (p *poster) getProbableMilestone(ctx *postCtx) *int {
 type poster struct {
 	*Options
 
+	l *logger.Logger
+
 	createIssue func(ctx context.Context, owner string, repo string,
 		issue *github.IssueRequest) (*github.Issue, *github.Response, error)
 	searchIssues func(ctx context.Context, query string,
@@ -126,9 +129,10 @@ type poster struct {
 		opt *github.ProjectCardOptions) (*github.ProjectCard, *github.Response, error)
 }
 
-func newPoster(client *github.Client, opts *Options) *poster {
+func newPoster(l *logger.Logger, client *github.Client, opts *Options) *poster {
 	return &poster{
 		Options:           opts,
+		l:                 l,
 		createIssue:       client.Issues.Create,
 		searchIssues:      client.Search.Issues,
 		createComment:     client.Issues.CreateComment,
@@ -306,15 +310,13 @@ func (p *poster) post(origCtx context.Context, formatter IssueFormatter, req Pos
 
 	rExisting, _, err := p.searchIssues(ctx, qExisting, &github.SearchOptions{
 		ListOptions: github.ListOptions{
-			PerPage: 1,
+			PerPage: 10,
 		},
 	})
 	if err != nil {
 		// Tough luck, keep going even if that means we're going to add a duplicate
 		// issue.
-		//
-		// TODO(tbg): surface this error.
-		_ = err
+		p.l.Printf("error trying to find existing GitHub issues: %v", err)
 		rExisting = &github.IssuesSearchResult{}
 	}
 
@@ -325,22 +327,22 @@ func (p *poster) post(origCtx context.Context, formatter IssueFormatter, req Pos
 	})
 	if err != nil {
 		// This is no reason to throw the towel, keep going.
-		//
-		// TODO(tbg): surface this error.
-		_ = err
+		p.l.Printf("error trying to find related GitHub issues: %v", err)
 		rRelated = &github.IssuesSearchResult{}
 	}
 
+	existingIssues := filterByExactTitleMatch(rExisting, title)
 	var foundIssue *int
-	if len(rExisting.Issues) > 0 {
+	if len(existingIssues) > 0 {
 		// We found an existing issue to post a comment into.
-		foundIssue = rExisting.Issues[0].Number
+		foundIssue = existingIssues[0].Number
+		p.l.Printf("found existing GitHub issue: #%d", *foundIssue)
 		// We are not going to create an issue, so don't show
 		// MentionOnCreate to the formatter.Body call below.
 		data.MentionOnCreate = nil
 	}
 
-	data.RelatedIssues = rRelated.Issues
+	data.RelatedIssues = filterByExactTitleMatch(rRelated, title)
 	data.InternalLog = ctx.Builder.String()
 	r := &Renderer{}
 	if err := formatter.Body(r, data); err != nil {
@@ -366,6 +368,7 @@ func (p *poster) post(origCtx context.Context, formatter IssueFormatter, req Pos
 				github.Stringify(issueRequest))
 		}
 
+		p.l.Printf("created GitHub issue #%d", *issue.Number)
 		if req.ProjectColumnID != 0 {
 			_, _, err := p.createProjectCard(ctx, int64(req.ProjectColumnID), &github.ProjectCardOptions{
 				ContentID:   *issue.ID,
@@ -376,7 +379,7 @@ func (p *poster) post(origCtx context.Context, formatter IssueFormatter, req Pos
 				//
 				// TODO(tbg): retrieve the project column ID before posting, so that if
 				// it can't be found we can mention that in the issue we'll file anyway.
-				_ = err
+				p.l.Printf("could not create GitHub project card: %v", err)
 			}
 		}
 	} else {
@@ -385,6 +388,8 @@ func (p *poster) post(origCtx context.Context, formatter IssueFormatter, req Pos
 			ctx, p.Org, p.Repo, *foundIssue, &comment); err != nil {
 			return errors.Wrapf(err, "failed to update issue #%d with %s",
 				*foundIssue, github.Stringify(comment))
+		} else {
+			p.l.Printf("created comment on existing GitHub issue (#%d)", *foundIssue)
 		}
 	}
 
@@ -450,7 +455,7 @@ type PostRequest struct {
 // existing open issue. GITHUB_API_TOKEN must be set to a valid GitHub token
 // that has permissions to search and create issues and comments or an error
 // will be returned.
-func Post(ctx context.Context, formatter IssueFormatter, req PostRequest) error {
+func Post(ctx context.Context, l *logger.Logger, formatter IssueFormatter, req PostRequest) error {
 	opts := DefaultOptionsFromEnv()
 	if !opts.CanPost() {
 		return errors.Newf("GITHUB_API_TOKEN env variable is not set; cannot post issue")
@@ -459,7 +464,7 @@ func Post(ctx context.Context, formatter IssueFormatter, req PostRequest) error 
 	client := github.NewClient(oauth2.NewClient(ctx, oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: opts.Token},
 	)))
-	return newPoster(client, opts).post(ctx, formatter, req)
+	return newPoster(l, client, opts).post(ctx, formatter, req)
 }
 
 // ReproductionCommandFromString returns a value for the
@@ -485,4 +490,23 @@ func HelpCommandAsLink(title, href string) func(r *Renderer) {
 		r.A(title, href)
 		r.Escaped("\n\n")
 	}
+}
+
+// filterByExactTitleMatch filters the search result passed and
+// removes any issues where the title does not match the expected
+// title exactly. This is done because the GitHub API does not support
+// searching by exact title; as a consequence, without this function,
+// there is a chance we would group together test failures for two
+// similarly named tests. That is confusing and undesirable behavior.
+func filterByExactTitleMatch(
+	result *github.IssuesSearchResult, expectedTitle string,
+) []github.Issue {
+	var issues []github.Issue
+	for _, issue := range result.Issues {
+		if title := issue.Title; title != nil && *title == expectedTitle {
+			issues = append(issues, issue)
+		}
+	}
+
+	return issues
 }

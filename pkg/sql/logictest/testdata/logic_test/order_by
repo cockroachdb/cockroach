@@ -348,7 +348,7 @@ SELECT * FROM kv AS a, kv AS b ORDER BY PRIMARY KEY kv
 # is a real table, not an alias.
 #
 statement error no data source matches prefix: test.public.kv
-SELECT k FROM (SELECT @1, @1 FROM generate_series(1,10)) AS kv(k,v) ORDER BY PRIMARY KEY kv
+SELECT k FROM (SELECT i, i FROM generate_series(1,10) g(i)) AS kv(k,v) ORDER BY PRIMARY KEY kv
 
 statement error no data source matches prefix: test.public.kv
 CREATE TABLE unrelated(x INT); SELECT * FROM unrelated ORDER BY PRIMARY KEY kv

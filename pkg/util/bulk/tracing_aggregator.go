@@ -32,8 +32,8 @@ type TracingAggregatorEvent interface {
 	Tag() string
 }
 
-// An TracingAggregator can be used to aggregate and render AggregatorEvents that are
-// emitted as part of its tracing spans' recording.
+// A TracingAggregator can be used to aggregate and render AggregatorEvents that
+// are emitted as part of its tracing spans' recording.
 type TracingAggregator struct {
 	mu struct {
 		syncutil.Mutex

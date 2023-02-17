@@ -15,7 +15,7 @@ import {
   InlineAlert,
   InlineAlertProps,
   Spinner,
-  IconIntent,
+  InlineAlertIntent,
 } from "@cockroachlabs/ui-components";
 import { adminUIAccess, isForbiddenRequestError } from "src/util";
 import styles from "./loading.module.scss";
@@ -95,7 +95,7 @@ export const Loading: React.FC<LoadingProps> = props => {
         }
       })
       .groupBy(alert => alert.intent)
-      .map((alerts, intent: IconIntent) => {
+      .map((alerts, intent: InlineAlertIntent) => {
         if (alerts.length === 1) {
           return <InlineAlert intent={intent} title={alerts[0].description} />;
         } else {

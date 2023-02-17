@@ -13,7 +13,6 @@ package cockroach.sql.contentionpb;
 option go_package = "contentionpb";
 
 import "roachpb/api.proto";
-
 import "gogoproto/gogo.proto";
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
@@ -141,9 +140,9 @@ message ResolvedTxnID {
   // txnFingerprintID is the corresponding transaction fingerprint ID of the
   // txnID. However, if the transaction fingerprint ID of the txnID is not yet
   // known, (i.e. when the transaction is still executing), this value is filled
-  // with roachpb.InvalidTransactionFingerprintID.
+  // with appstatspb.InvalidTransactionFingerprintID.
   uint64 txnFingerprintID = 2 [(gogoproto.customname) = "TxnFingerprintID",
-    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/roachpb.TransactionFingerprintID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/sql/appstatspb.TransactionFingerprintID",
     (gogoproto.nullable) = false];
 }
 
@@ -154,7 +153,7 @@ message ExtendedContentionEvent {
   ];
   uint64 blocking_txn_fingerprint_id = 2 [
     (gogoproto.customname) = "BlockingTxnFingerprintID",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.TransactionFingerprintID"
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/appstatspb.TransactionFingerprintID"
   ];
 
   bytes waiting_txn_id = 3 [
@@ -164,11 +163,20 @@ message ExtendedContentionEvent {
   ];
   uint64 waiting_txn_fingerprint_id = 4 [
     (gogoproto.customname) = "WaitingTxnFingerprintID",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.TransactionFingerprintID"
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/appstatspb.TransactionFingerprintID"
   ];
 
-   google.protobuf.Timestamp collection_ts = 5 [
-     (gogoproto.nullable) = false,
-     (gogoproto.stdtime) = true
-   ];
+  google.protobuf.Timestamp collection_ts = 5 [
+    (gogoproto.nullable) = false,
+    (gogoproto.stdtime) = true
+  ];
+
+  uint64 waiting_stmt_fingerprint_id = 6 [
+    (gogoproto.customname) = "WaitingStmtFingerprintID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/appstatspb.StmtFingerprintID"
+  ];
+
+  bytes waiting_stmt_id = 7 [(gogoproto.customname) = "WaitingStmtID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/sql/clusterunique.ID",
+    (gogoproto.nullable) = false];
 }

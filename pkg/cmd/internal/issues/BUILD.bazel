@@ -12,6 +12,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/internal/issues",
     visibility = ["//pkg/cmd:__subpackages__"],
     deps = [
+        "//pkg/roachprod/logger",
         "//pkg/util/version",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_google_go_github//github",
@@ -31,7 +32,8 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":issues"],
     deps = [
-        "//pkg/testutils",
+        "//pkg/roachprod/logger",
+        "//pkg/testutils/datapathutils",
         "//pkg/testutils/skip",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_google_go_github//github",

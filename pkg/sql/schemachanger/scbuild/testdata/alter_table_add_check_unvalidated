@@ -1,0 +1,11 @@
+setup
+CREATE TABLE t (i INT PRIMARY KEY)
+----
+
+build
+ALTER TABLE t ADD CHECK (i > 0) NOT VALID
+----
+- [[CheckConstraintUnvalidated:{DescID: 104, ConstraintID: 2}, PUBLIC], ABSENT]
+  {columnIds: [1], constraintId: 2, expr: 'i > 0:::INT8', referencedColumnIds: [1], tableId: 104}
+- [[ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}, PUBLIC], ABSENT]
+  {constraintId: 2, name: check_i, tableId: 104}

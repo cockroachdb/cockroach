@@ -33,7 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -188,20 +188,6 @@ func initTraceDir(ctx context.Context, dir string) {
 	}
 }
 
-func initExternalIODir(ctx context.Context, firstStore base.StoreSpec) (string, error) {
-	externalIODir := startCtx.externalIODir
-	if externalIODir == "" && !firstStore.InMemory {
-		externalIODir = filepath.Join(firstStore.Path, "extern")
-	}
-	if externalIODir == "" || externalIODir == "disabled" {
-		return "", nil
-	}
-	if !filepath.IsAbs(externalIODir) {
-		return "", errors.Errorf("%s path must be absolute", cliflags.ExternalIODir.Name)
-	}
-	return externalIODir, nil
-}
-
 func initTempStorageConfig(
 	ctx context.Context, st *cluster.Settings, stopper *stop.Stopper, stores base.StoreSpecList,
 ) (base.TempStorageConfig, error) {
@@ -214,16 +200,20 @@ func initTempStorageConfig(
 	// While we look, we also clean up any abandoned temporary directories. We
 	// don't know which store spec was used previously—and it may change if
 	// encryption gets enabled after the fact—so we check each store.
-	var specIdx = 0
+	specIdxDisk := -1
+	specIdxEncrypted := -1
 	for i, spec := range stores.Specs {
-		if spec.IsEncrypted() {
+		if spec.InMemory {
+			continue
+		}
+		if spec.IsEncrypted() && specIdxEncrypted == -1 {
 			// TODO(jackson): One store's EncryptionOptions may say to encrypt
 			// with a real key, while another store's say to use key=plain.
 			// This provides no guarantee that we'll use the encrypted one's.
-			specIdx = i
+			specIdxEncrypted = i
 		}
-		if spec.InMemory {
-			continue
+		if specIdxDisk == -1 {
+			specIdxDisk = i
 		}
 		recordPath := filepath.Join(spec.Path, server.TempDirsRecordFilename)
 		if err := fs.CleanupTempDirs(recordPath); err != nil {
@@ -232,6 +222,15 @@ func initTempStorageConfig(
 		}
 	}
 
+	// Use first store by default. This might be an in-memory store.
+	specIdx := 0
+	if specIdxEncrypted >= 0 {
+		// Prefer an encrypted store.
+		specIdx = specIdxEncrypted
+	} else if specIdxDisk >= 0 {
+		// Prefer a non-encrypted on-disk store.
+		specIdx = specIdxDisk
+	}
 	useStore := stores.Specs[specIdx]
 
 	var recordPath string
@@ -334,6 +333,9 @@ type serverStartupInterface interface {
 
 	// AcceptClients starts listening for incoming SQL clients over the network.
 	AcceptClients(ctx context.Context) error
+	// AcceptInternalClients starts listening for incoming internal SQL clients over the
+	// loopback interface.
+	AcceptInternalClients(ctx context.Context) error
 
 	// InitialStart returns whether this node is starting for the first time.
 	// This is (currently) used when displaying the server status report
@@ -466,6 +468,11 @@ func runStartInternal(
 		return clierror.NewError(err, exit.FatalError())
 	}
 
+	// Set a MakeProcessUnavailableFunc that will close all sockets. This guards
+	// against a persistent disk stall that prevents the process from exiting or
+	// making progress.
+	log.SetMakeProcessUnavailableFunc(closeAllSockets)
+
 	// Set up a cancellable context for the entire start command.
 	// The context will be canceled at the end.
 	ctx, cancel := context.WithCancel(context.Background())
@@ -540,9 +547,7 @@ func runStartInternal(
 	st := serverCfg.BaseConfig.Settings
 
 	// Derive temporary/auxiliary directory specifications.
-	if st.ExternalIODir, err = initExternalIODir(ctx, serverCfg.Stores.Specs[0]); err != nil {
-		return err
-	}
+	st.ExternalIODir = startCtx.externalIODir
 
 	if serverCfg.SQLConfig.TempStorageConfig, err = initTempStorageConfig(
 		ctx, st, stopper, serverCfg.Stores,
@@ -705,6 +710,11 @@ func createAndStartServerAsync(
 			// be called by the shutdown goroutine, which in turn will cause
 			// all these startup steps to fail. So we do not need to look at
 			// the "shutdown status" in serverStatusMu any more.
+
+			// Accept internal clients early, as RunInitialSQL might need it.
+			if err := s.AcceptInternalClients(ctx); err != nil {
+				return err
+			}
 
 			// Run one-off cluster initialization.
 			if err := s.RunInitialSQL(ctx, startSingleNode, "" /* adminUser */, "" /* adminPassword */); err != nil {
@@ -1109,7 +1119,7 @@ func reportServerInfo(
 	nodeID := serverCfg.BaseConfig.IDContainer.Get()
 	if serverCfg.SQLConfig.TenantID.IsSystem() {
 		if initialStart {
-			if nodeID == kvserver.FirstNodeID {
+			if nodeID == kvstorage.FirstNodeID {
 				buf.Printf("status:\tinitialized new cluster\n")
 			} else {
 				buf.Printf("status:\tinitialized new node, joined pre-existing cluster\n")

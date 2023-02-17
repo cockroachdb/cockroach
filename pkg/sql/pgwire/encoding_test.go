@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -48,7 +48,7 @@ type encodingTest struct {
 
 func readEncodingTests(t testing.TB) []*encodingTest {
 	var tests []*encodingTest
-	f, err := os.Open(testutils.TestDataPath(t, "encodings.json"))
+	f, err := os.Open(datapathutils.TestDataPath(t, "encodings.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,0 +1,99 @@
+# Test verifies that if replica view is inconsistent between nodes
+# but ranges didn't lose quorum according to meta descriptors,
+# planing could proceed without any errors.
+# We test a situation where all replicas moved to another set of stores
+# while collection was going on and we miss them completely.
+
+replication-data
+- StoreID: 1
+  RangeID: 1
+  StartKey: /Min
+  EndKey: /Table/1
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  RangeAppliedIndex: 11
+  RaftCommittedIndex: 13
+- StoreID: 1
+  RangeID: 2
+  StartKey: /Table/5
+  EndKey: /Max
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  RangeAppliedIndex: 11
+  RaftCommittedIndex: 13
+- StoreID: 2
+  RangeID: 1
+  StartKey: /Min
+  EndKey: /Table/1
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  RangeAppliedIndex: 11
+  RaftCommittedIndex: 13
+- StoreID: 2
+  RangeID: 2
+  StartKey: /Table/5
+  EndKey: /Max
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  RangeAppliedIndex: 11
+  RaftCommittedIndex: 13
+- StoreID: 3
+  RangeID: 1
+  StartKey: /Min
+  EndKey: /Table/1
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  RangeAppliedIndex: 11
+  RaftCommittedIndex: 13
+- StoreID: 3
+  RangeID: 2
+  StartKey: /Table/5
+  EndKey: /Max
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  RangeAppliedIndex: 11
+  RaftCommittedIndex: 13
+----
+ok
+
+descriptor-data
+- RangeID: 1
+  StartKey: /Min
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+- RangeID: 5
+  StartKey: /Table/1
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+- RangeID: 2
+  StartKey: /Table/5
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+----
+ok
+
+collect-replica-info stores=(1,2,3)
+----
+ok
+
+make-plan
+----
+ok

@@ -1,4 +1,4 @@
-# tenant-cluster-setting-override-opt: allow-multi-region-abstractions-for-secondary-tenants
+# tenant-cluster-setting-override-opt: sql.multi_region.allow_abstractions_for_secondary_tenants.enabled=true
 # LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-vec-off multiregion-9node-3region-3azs-no-los
 
 statement ok
@@ -17,15 +17,15 @@ query TT
 SHOW ZONE CONFIGURATION FOR TABLE test
 ----
 TABLE test  ALTER TABLE test CONFIGURE ZONE USING
-            range_min_bytes = 134217728,
-            range_max_bytes = 536870912,
-            gc.ttlseconds = 90000,
-            global_reads = true,
-            num_replicas = 5,
-            num_voters = 3,
-            constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
-            voter_constraints = '[+region=ca-central-1]',
-            lease_preferences = '[[+region=ca-central-1]]'
+              range_min_bytes = 134217728,
+              range_max_bytes = 536870912,
+              gc.ttlseconds = 14400,
+              global_reads = true,
+              num_replicas = 5,
+              num_voters = 3,
+              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+              voter_constraints = '[+region=ca-central-1]',
+              lease_preferences = '[[+region=ca-central-1]]'
 
 # Alter to RESTRICTED and see that our non-voter constraints remain.
 statement ok
@@ -35,15 +35,15 @@ query TT
 SHOW ZONE CONFIGURATION FOR TABLE test
 ----
 TABLE test  ALTER TABLE test CONFIGURE ZONE USING
-            range_min_bytes = 134217728,
-            range_max_bytes = 536870912,
-            gc.ttlseconds = 90000,
-            global_reads = true,
-            num_replicas = 5,
-            num_voters = 3,
-            constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
-            voter_constraints = '[+region=ca-central-1]',
-            lease_preferences = '[[+region=ca-central-1]]'
+              range_min_bytes = 134217728,
+              range_max_bytes = 536870912,
+              gc.ttlseconds = 14400,
+              global_reads = true,
+              num_replicas = 5,
+              num_voters = 3,
+              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+              voter_constraints = '[+region=ca-central-1]',
+              lease_preferences = '[[+region=ca-central-1]]'
 
 # Make sure placement restricted doesn't invalidate zone configs.
 statement ok
@@ -56,15 +56,15 @@ query TT
 SHOW ZONE CONFIGURATION FOR TABLE test
 ----
 TABLE test  ALTER TABLE test CONFIGURE ZONE USING
-            range_min_bytes = 134217728,
-            range_max_bytes = 536870912,
-            gc.ttlseconds = 90000,
-            global_reads = true,
-            num_replicas = 4,
-            num_voters = 3,
-            constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1}',
-            voter_constraints = '[+region=ca-central-1]',
-            lease_preferences = '[[+region=ca-central-1]]'
+              range_min_bytes = 134217728,
+              range_max_bytes = 536870912,
+              gc.ttlseconds = 14400,
+              global_reads = true,
+              num_replicas = 4,
+              num_voters = 3,
+              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1}',
+              voter_constraints = '[+region=ca-central-1]',
+              lease_preferences = '[[+region=ca-central-1]]'
 
 statement ok
 ALTER DATABASE testdb ADD REGION "us-east-1"
@@ -73,15 +73,15 @@ query TT
 SHOW ZONE CONFIGURATION FOR TABLE test
 ----
 TABLE test  ALTER TABLE test CONFIGURE ZONE USING
-            range_min_bytes = 134217728,
-            range_max_bytes = 536870912,
-            gc.ttlseconds = 90000,
-            global_reads = true,
-            num_replicas = 5,
-            num_voters = 3,
-            constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
-            voter_constraints = '[+region=ca-central-1]',
-            lease_preferences = '[[+region=ca-central-1]]'
+              range_min_bytes = 134217728,
+              range_max_bytes = 536870912,
+              gc.ttlseconds = 14400,
+              global_reads = true,
+              num_replicas = 5,
+              num_voters = 3,
+              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+              voter_constraints = '[+region=ca-central-1]',
+              lease_preferences = '[[+region=ca-central-1]]'
 
 # Change primary region to ensure zone config is rebuilt on table changes.
 statement ok
@@ -91,15 +91,15 @@ query TT
 SHOW ZONE CONFIGURATION FOR TABLE test
 ----
 TABLE test  ALTER TABLE test CONFIGURE ZONE USING
-            range_min_bytes = 134217728,
-            range_max_bytes = 536870912,
-            gc.ttlseconds = 90000,
-            global_reads = true,
-            num_replicas = 5,
-            num_voters = 3,
-            constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
-            voter_constraints = '[+region=ap-southeast-2]',
-            lease_preferences = '[[+region=ap-southeast-2]]'
+              range_min_bytes = 134217728,
+              range_max_bytes = 536870912,
+              gc.ttlseconds = 14400,
+              global_reads = true,
+              num_replicas = 5,
+              num_voters = 3,
+              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+              voter_constraints = '[+region=ap-southeast-2]',
+              lease_preferences = '[[+region=ap-southeast-2]]'
 
 # Alter to DEFAULT and see that our zone config is unchanged.
 statement ok
@@ -109,15 +109,15 @@ query TT
 SHOW ZONE CONFIGURATION FOR TABLE test
 ----
 TABLE test  ALTER TABLE test CONFIGURE ZONE USING
-            range_min_bytes = 134217728,
-            range_max_bytes = 536870912,
-            gc.ttlseconds = 90000,
-            global_reads = true,
-            num_replicas = 5,
-            num_voters = 3,
-            constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
-            voter_constraints = '[+region=ap-southeast-2]',
-            lease_preferences = '[[+region=ap-southeast-2]]'
+              range_min_bytes = 134217728,
+              range_max_bytes = 536870912,
+              gc.ttlseconds = 14400,
+              global_reads = true,
+              num_replicas = 5,
+              num_voters = 3,
+              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+              voter_constraints = '[+region=ap-southeast-2]',
+              lease_preferences = '[[+region=ap-southeast-2]]'
 
 # Check that coming back from placement restricted results in a valid zone
 # config.

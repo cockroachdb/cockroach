@@ -165,6 +165,7 @@ type testProcessor struct {
 		raftReady   map[roachpb.RangeID]int
 		raftRequest map[roachpb.RangeID]int
 		raftTick    map[roachpb.RangeID]int
+		ready       func()
 	}
 }
 
@@ -176,9 +177,19 @@ func newTestProcessor() *testProcessor {
 	return p
 }
 
+func (p *testProcessor) onReady(f func()) {
+	p.mu.Lock()
+	p.mu.ready = f
+	p.mu.Unlock()
+}
+
 func (p *testProcessor) processReady(rangeID roachpb.RangeID) {
 	p.mu.Lock()
 	p.mu.raftReady[rangeID]++
+	if p.mu.ready != nil {
+		p.mu.ready()
+		p.mu.ready = nil
+	}
 	p.mu.Unlock()
 }
 
@@ -271,6 +282,7 @@ func TestSchedulerBuffering(t *testing.T) {
 
 	testCases := []struct {
 		flag  raftScheduleFlags
+		slow  bool // true if Ready processing is slow
 		ticks int
 		want  string
 	}{
@@ -280,18 +292,43 @@ func TestSchedulerBuffering(t *testing.T) {
 		{flag: stateRaftReady | stateRaftRequest | stateRaftTick,
 			want: "ready=[1:2] request=[1:2] tick=[1:10]"},
 		{flag: stateRaftTick, want: "ready=[1:2] request=[1:2] tick=[1:15]"},
-
-		// Only 5/10 ticks are buffered.
-		{flag: 0, ticks: 10, want: "ready=[1:2] request=[1:2] tick=[1:20]"},
+		// All 4 ticks are processed.
+		{flag: 0, ticks: 4, want: "ready=[1:2] request=[1:2] tick=[1:19]"},
+		// Only 5/10 ticks are buffered while Raft processing is slow.
+		{flag: stateRaftReady, slow: true, ticks: 10, want: "ready=[1:3] request=[1:2] tick=[1:24]"},
+		// All 3 ticks are processed even if processing is slow.
+		{flag: stateRaftReady, slow: true, ticks: 3, want: "ready=[1:4] request=[1:2] tick=[1:27]"},
 	}
 
 	for _, c := range testCases {
+		var started, done chan struct{}
+		if c.slow {
+			started, done = make(chan struct{}), make(chan struct{})
+			p.onReady(func() {
+				close(started)
+				<-done
+			})
+		}
+
 		const id = roachpb.RangeID(1)
-		cnt := s.enqueueN(c.flag, id, id, id, id, id)
+		if c.flag != 0 {
+			s.signal(s.enqueueN(c.flag, id, id, id, id, id))
+			if started != nil {
+				<-started // wait until slow Ready processing has started
+				// NB: this is necessary to work around the race between the subsequent
+				// event enqueue calls and the scheduler loop which may process events
+				// before we've added them. This makes the test deterministic.
+			}
+		}
+
+		cnt := 0
 		for t := c.ticks; t > 0; t-- {
 			cnt += s.enqueue1(stateRaftTick, id)
 		}
 		s.signal(cnt)
+		if done != nil {
+			close(done) // finish slow Ready processing to unblock progress
+		}
 
 		testutils.SucceedsSoon(t, func() error {
 			if s := p.String(); c.want != s {

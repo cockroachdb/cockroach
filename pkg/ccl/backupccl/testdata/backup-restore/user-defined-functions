@@ -50,7 +50,7 @@ db1 sc2 tbl2 table false
 db1 sc2 f2 function false
 
 query-sql
-SELECT @2 FROM [SHOW CREATE FUNCTION sc1.f1]
+SELECT create_statement FROM [SHOW CREATE FUNCTION sc1.f1]
 ----
 CREATE FUNCTION sc1.f1(IN a db1.sc1.enum1)
 	RETURNS INT8
@@ -85,7 +85,7 @@ USE db1_new
 # 2. db name in qualified name is rewritten.
 # 3. sequence id is rewritten so that sequence name is deserialized correctly.
 query-sql
-SELECT @2 FROM [SHOW CREATE FUNCTION sc1.f1]
+SELECT create_statement FROM [SHOW CREATE FUNCTION sc1.f1]
 ----
 CREATE FUNCTION sc1.f1(IN a db1_new.sc1.enum1)
 	RETURNS INT8
@@ -123,8 +123,7 @@ pq: cannot drop sequence sq1 because other objects depend on it
 exec-sql
 DROP TABLE sc1.tbl1
 ----
-pq: cannot drop relation "tbl1" because function "f1" depends on it
-HINT: you can drop f1 instead.
+pq: cannot drop table tbl1 because other objects depend on it
 
 exec-sql
 ALTER TABLE sc1.tbl1 RENAME TO tbl1_new
@@ -200,7 +199,7 @@ db1 sc2 tbl2 table true
 db1 sc2 f2 function true
 
 query-sql
-SELECT @2 FROM [SHOW CREATE FUNCTION sc1.f1]
+SELECT create_statement FROM [SHOW CREATE FUNCTION sc1.f1]
 ----
 CREATE FUNCTION sc1.f1(IN a db1.sc1.enum1)
 	RETURNS INT8
@@ -236,7 +235,7 @@ USE db1
 # 2. db name in qualified name is rewritten.
 # 3. sequence id is rewritten so that sequence name is deserialized correctly.
 query-sql
-SELECT @2 FROM [SHOW CREATE FUNCTION sc1.f1]
+SELECT create_statement FROM [SHOW CREATE FUNCTION sc1.f1]
 ----
 CREATE FUNCTION sc1.f1(IN a db1.sc1.enum1)
 	RETURNS INT8
@@ -274,8 +273,7 @@ pq: cannot drop sequence sq1 because other objects depend on it
 exec-sql
 DROP TABLE sc1.tbl1
 ----
-pq: cannot drop relation "tbl1" because function "f1" depends on it
-HINT: you can drop f1 instead.
+pq: cannot drop table tbl1 because other objects depend on it
 
 exec-sql
 ALTER TABLE sc1.tbl1 RENAME TO tbl1_new
@@ -293,3 +291,97 @@ exec-sql
 DROP TYPE sc1.enum1
 ----
 pq: cannot drop type "enum1" because other objects ([db1.sc1.f1]) still depend on it
+
+# Make sure that backup and restore individual tables from schema with UDF does
+# not crash.
+new-cluster name=s3
+----
+
+exec-sql cluster=s3
+CREATE DATABASE db1;
+CREATE SCHEMA sc1;
+CREATE TABLE sc1.t(a INT PRIMARY KEY);
+CREATE FUNCTION sc1.f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+----
+
+# Make sure the original schema has function signatures
+query-sql
+WITH db_id AS (
+  SELECT id FROM system.namespace WHERE name = 'defaultdb'
+),
+schema_id AS (
+  SELECT ns.id
+  FROM system.namespace AS ns
+  JOIN db_id ON ns."parentID" = db_id.id
+  WHERE ns.name = 'sc1'
+)
+SELECT id FROM schema_id;
+----
+109
+
+query-sql
+WITH to_json AS (
+    SELECT
+      id,
+      crdb_internal.pb_to_json(
+        'cockroach.sql.sqlbase.Descriptor',
+        descriptor,
+        false
+      ) AS d
+    FROM
+      system.descriptor
+    WHERE id = 109
+)
+SELECT d->'schema'->>'functions'::string FROM to_json;
+----
+{"f": {"signatures": [{"id": 111, "returnType": {"family": "IntFamily", "oid": 20, "width": 64}}]}}
+
+exec-sql
+BACKUP TABLE sc1.t INTO 'nodelocal://0/test/'
+----
+
+exec-sql
+RESTORE TABLE sc1.t FROM LATEST IN 'nodelocal://0/test/' WITH into_db = 'db1';
+----
+
+exec-sql
+USE db1;
+----
+
+query-sql
+WITH db_id AS (
+  SELECT id FROM system.namespace WHERE name = 'db1'
+),
+schema_id AS (
+  SELECT ns.id
+  FROM system.namespace AS ns
+  JOIN db_id ON ns."parentID" = db_id.id
+  WHERE ns.name = 'sc1'
+)
+SELECT id FROM schema_id;
+----
+112
+
+query-sql
+WITH to_json AS (
+    SELECT
+      id,
+      crdb_internal.pb_to_json(
+        'cockroach.sql.sqlbase.Descriptor',
+        descriptor,
+        false
+      ) AS d
+    FROM
+      system.descriptor
+    WHERE id = 112
+)
+SELECT d->'schema'->>'functions'::string FROM to_json;
+----
+<nil>
+
+# Make sure proper error message is returned when trying to resolve the
+# function from the restore target db.
+query-sql
+SELECT f()
+----
+pq: unknown function: f(): function undefined

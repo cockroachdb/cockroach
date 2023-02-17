@@ -35,6 +35,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/util",
+        "//pkg/util/intsets",
         "//pkg/util/iterutil",
         "//pkg/util/syncutil",
         "//pkg/util/uuid",

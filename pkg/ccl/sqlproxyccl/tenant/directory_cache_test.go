@@ -405,14 +405,19 @@ func createTenant(tc serverutils.TestClusterInterface, id roachpb.TenantID) erro
 func destroyTenant(tc serverutils.TestClusterInterface, id roachpb.TenantID) error {
 	srv := tc.Server(0)
 	conn := srv.InternalExecutor().(*sql.InternalExecutor)
-	if _, err := conn.Exec(
-		context.Background(),
-		"testserver-destroy-tenant",
-		nil, /* txn */
-		"SELECT crdb_internal.destroy_tenant($1)",
-		id.ToUint64(),
-	); err != nil {
-		return err
+	for _, stmt := range []string{
+		`ALTER TENANT [$1] STOP SERVICE`,
+		`DROP TENANT [$1] IMMEDIATE`,
+	} {
+		if _, err := conn.Exec(
+			context.Background(),
+			"testserver-destroy-tenant",
+			nil, /* txn */
+			stmt,
+			id.ToUint64(),
+		); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -433,7 +438,7 @@ func startTenant(
 		})
 	if err != nil {
 		// Remap tenant "not found" error to GRPC NotFound error.
-		if err.Error() == "not found" {
+		if testutils.IsError(err, "not found|no tenant found") {
 			return nil, status.Errorf(codes.NotFound, "tenant %d not found", id)
 		}
 		return nil, err

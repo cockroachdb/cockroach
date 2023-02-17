@@ -18,7 +18,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs/blobspb"
@@ -33,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 func createTestResources(t testing.TB) (string, string, *stop.Stopper, func()) {
@@ -55,27 +55,24 @@ func setUpService(
 	localExternalDir string,
 	remoteExternalDir string,
 ) BlobClientFactory {
-	s := rpc.NewServer(rpcContext)
+	s, err := rpc.NewServer(rpcContext)
+	require.NoError(t, err)
+
 	remoteBlobServer, err := NewBlobService(remoteExternalDir)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+
 	blobspb.RegisterBlobServer(s, remoteBlobServer)
 	ln, err := netutil.ListenAndServeGRPC(rpcContext.Stopper, s, util.TestAddr)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
-	s2 := rpc.NewServer(rpcContext)
+	s2, err := rpc.NewServer(rpcContext)
+	require.NoError(t, err)
 	localBlobServer, err := NewBlobService(localExternalDir)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+
 	blobspb.RegisterBlobServer(s2, localBlobServer)
 	ln2, err := netutil.ListenAndServeGRPC(rpcContext.Stopper, s2, util.TestAddr)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	localDialer := nodedialer.New(rpcContext,
 		func(nodeID roachpb.NodeID) (net.Addr, error) {
@@ -114,7 +111,7 @@ func TestBlobClientReadFile(t *testing.T) {
 	defer cleanUpFn()
 
 	ctx := context.Background()
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 	rpcContext.TestingAllowNamedRPCToAnonymousServer = true
 
@@ -208,7 +205,7 @@ func TestBlobClientWriteFile(t *testing.T) {
 	defer cleanUpFn()
 
 	ctx := context.Background()
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 	rpcContext.TestingAllowNamedRPCToAnonymousServer = true
 
@@ -290,7 +287,7 @@ func TestBlobClientList(t *testing.T) {
 	defer cleanUpFn()
 
 	ctx := context.Background()
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 	rpcContext.TestingAllowNamedRPCToAnonymousServer = true
 
@@ -405,7 +402,7 @@ func TestBlobClientDeleteFrom(t *testing.T) {
 	defer cleanUpFn()
 
 	ctx := context.Background()
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 	rpcContext.TestingAllowNamedRPCToAnonymousServer = true
 
@@ -483,7 +480,7 @@ func TestBlobClientStat(t *testing.T) {
 	defer cleanUpFn()
 
 	ctx := context.Background()
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 	rpcContext.TestingAllowNamedRPCToAnonymousServer = true
 

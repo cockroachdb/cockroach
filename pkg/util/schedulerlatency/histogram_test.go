@@ -19,7 +19,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
@@ -40,7 +40,7 @@ import (
 //     and [.., +Inf) buckets.
 func TestHistogramBuckets(t *testing.T) {
 	buckets := sample().Buckets
-	datadriven.RunTest(t, testutils.TestDataPath(t, "histogram_buckets"),
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "histogram_buckets"),
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "buckets":
@@ -77,7 +77,7 @@ func TestHistogramBuckets(t *testing.T) {
 // NB: <float> is also allowed to be "-inf" or "+inf".
 func TestRuntimeHistogram(t *testing.T) {
 	var rh *runtimeHistogram
-	datadriven.RunTest(t, testutils.TestDataPath(t, "runtime_histogram"),
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "runtime_histogram"),
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "init":

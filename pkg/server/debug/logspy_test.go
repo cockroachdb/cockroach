@@ -23,12 +23,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDebugLogSpyOptions(t *testing.T) {
@@ -143,6 +145,7 @@ func TestDebugLogSpyRun(t *testing.T) {
 			send <- f
 			return func() {}
 		},
+		tenantID: roachpb.SystemTenantID,
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -166,19 +169,22 @@ func TestDebugLogSpyRun(t *testing.T) {
 	t.Logf("got interceptor, sending some events")
 
 	f.Intercept(toJSON(t, logpb.Entry{
-		File:    "first.go",
-		Line:    1,
-		Message: "#1",
+		File:     "first.go",
+		Line:     1,
+		Message:  "#1",
+		TenantID: "1",
 	}))
 	f.Intercept(toJSON(t, logpb.Entry{
-		File:    "nonmatching.go",
-		Line:    12345,
-		Message: "ignored because neither message nor file match",
+		File:     "nonmatching.go",
+		Line:     12345,
+		Message:  "ignored because neither message nor file match",
+		TenantID: "1",
 	}))
 	f.Intercept(toJSON(t, logpb.Entry{
-		File:    "second.go",
-		Line:    2,
-		Message: "#2",
+		File:     "second.go",
+		Line:     2,
+		Message:  "#2",
+		TenantID: "2",
 	}))
 	if undoF := <-send; undoF != nil {
 		t.Fatal("interceptor closed with non-nil function")
@@ -196,8 +202,96 @@ func TestDebugLogSpyRun(t *testing.T) {
 	t.Logf("check results")
 
 	body := buf.String()
-	const expected = `{"file":"first.go","line":1,"message":"#1"}
-{"file":"second.go","line":2,"message":"#2"}
+	const expected = `{"file":"first.go","line":1,"message":"#1","tenant_id":"1"}
+{"file":"second.go","line":2,"message":"#2","tenant_id":"2"}
+`
+	if expected != body {
+		t.Fatalf("expected:\n%q\ngot:\n%q", expected, body)
+	}
+}
+
+func TestDebugLogSpyTenantFilter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	tID, err := roachpb.MakeTenantID(uint64(2))
+	require.NoError(t, err)
+	otherTenantID, err := roachpb.MakeTenantID(uint64(3))
+	require.NoError(t, err)
+	// Logs for now use the integer representation for
+	// all tenant IDs, so use `1` instead of `system`.
+	sysTenantIDStr := "1"
+
+	send := make(chan log.Interceptor, 1)
+	spy := logSpy{
+		setIntercept: func(ctx context.Context, f log.Interceptor) func() {
+			send <- f
+			return func() {}
+		},
+		tenantID: tID,
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var buf bytes.Buffer
+	go func() {
+		defer func() {
+			close(send)
+		}()
+		if err := spy.run(ctx, &buf, logSpyOptions{
+			vmoduleOptions: vmoduleOptions{Duration: durationAsString(5 * time.Second)},
+			Count:          2,
+			tenantIDFilter: tID.String(),
+		}); err != nil {
+			panic(err)
+		}
+	}()
+
+	t.Logf("waiting for interceptor")
+	f := <-send
+	t.Logf("got interceptor, sending some events")
+
+	f.Intercept(toJSON(t, logpb.Entry{
+		File:     "first.go",
+		Line:     1,
+		Message:  "#1",
+		TenantID: tID.String(),
+	}))
+	f.Intercept(toJSON(t, logpb.Entry{
+		File:     "second.go",
+		Line:     12345,
+		Message:  "ignored because tenant ID does not match filter",
+		TenantID: otherTenantID.String(),
+	}))
+	f.Intercept(toJSON(t, logpb.Entry{
+		File:     "third.go",
+		Line:     12345,
+		Message:  "also ignored because tenant ID does not match filter",
+		TenantID: sysTenantIDStr,
+	}))
+	f.Intercept(toJSON(t, logpb.Entry{
+		File:     "fourth.go",
+		Line:     2,
+		Message:  "#2",
+		TenantID: tID.String(),
+	}))
+	if undoF := <-send; undoF != nil {
+		t.Fatal("interceptor closed with non-nil function")
+	}
+
+	t.Logf("fill in the channel")
+
+	for i := 0; i < 10000; i++ {
+		// f could be invoked arbitrarily after the operation finishes (though
+		// in reality the duration would be limited to the blink of an eye). It
+		// must not fill up a channel and block, or panic.
+		f.Intercept(toJSON(t, logpb.Entry{}))
+	}
+
+	t.Logf("check results")
+
+	body := buf.String()
+	const expected = `{"file":"first.go","line":1,"message":"#1","tenant_id":"2"}
+{"file":"fourth.go","line":2,"message":"#2","tenant_id":"2"}
 `
 	if expected != body {
 		t.Fatalf("expected:\n%q\ngot:\n%q", expected, body)

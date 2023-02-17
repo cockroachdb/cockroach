@@ -12,6 +12,7 @@ package registry
 
 import (
 	"context"
+	"regexp"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -21,6 +22,10 @@ import (
 
 // LibGEOS is a list of native libraries for libgeos.
 var LibGEOS = []string{"libgeos", "libgeos_c"}
+
+// PrometheusNameSpace is the namespace which all metrics exposed on the roachtest
+// endpoint should use.
+var PrometheusNameSpace = "roachtest"
 
 // TestSpec is a spec for a roachtest.
 type TestSpec struct {
@@ -115,4 +120,12 @@ func (t *TestSpec) Match(filter *TestFilter) MatchType {
 		}
 	}
 	return FailedTags
+}
+
+// PromSub replaces all non prometheus friendly chars with "_". Note,
+// before creating a metric, read up on prom metric naming conventions:
+// https://prometheus.io/docs/practices/naming/
+func PromSub(raw string) string {
+	invalidPromRE := regexp.MustCompile("[^a-zA-Z0-9_]")
+	return invalidPromRE.ReplaceAllLiteralString(raw, "_")
 }

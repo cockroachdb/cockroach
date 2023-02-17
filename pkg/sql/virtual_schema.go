@@ -132,12 +132,19 @@ type virtualSchemaTable struct {
 	// will be queryable but return no rows. Otherwise querying the table will
 	// return an unimplemented error.
 	unimplemented bool
+
+	// resultColumns is optional; if present, it will be checked for coherency
+	// with schema.
+	resultColumns colinfo.ResultColumns
 }
 
 // virtualSchemaView represents a view within a virtualSchema
 type virtualSchemaView struct {
 	schema        string
 	resultColumns colinfo.ResultColumns
+
+	// comment represents comment of virtual schema view.
+	comment string
 }
 
 // getSchema is part of the virtualSchemaDef interface.
@@ -210,6 +217,25 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 	if err != nil {
 		err = errors.Wrapf(err, "initVirtualDesc problem with schema: \n%s", t.schema)
 		return descpb.TableDescriptor{}, err
+	}
+
+	if t.resultColumns != nil {
+		if len(mutDesc.Columns) != len(t.resultColumns) {
+			return descpb.TableDescriptor{}, errors.AssertionFailedf(
+				"virtual table %s.%s declares incorrect number of columns: %d vs %d",
+				sc.GetName(), mutDesc.GetName(),
+				len(mutDesc.Columns), len(t.resultColumns))
+		}
+		for i := range mutDesc.Columns {
+			if mutDesc.Columns[i].Name != t.resultColumns[i].Name ||
+				mutDesc.Columns[i].Hidden != t.resultColumns[i].Hidden ||
+				mutDesc.Columns[i].Type.String() != t.resultColumns[i].Typ.String() {
+				return descpb.TableDescriptor{}, errors.AssertionFailedf(
+					"virtual table %s.%s declares incorrect column metadata: %#v vs %#v",
+					sc.GetName(), mutDesc.GetName(),
+					mutDesc.Columns[i], t.resultColumns[i])
+			}
+		}
 	}
 
 	if t.generator != nil {
@@ -343,7 +369,7 @@ func (v virtualSchemaView) initVirtualTableDesc(
 
 // getComment is part of the virtualSchemaDef interface.
 func (v virtualSchemaView) getComment() string {
-	return ""
+	return v.comment
 }
 
 // isUnimplemented is part of the virtualSchemaDef interface.
@@ -446,9 +472,9 @@ func (v *virtualSchemaEntry) VisitTables(f func(object catalog.VirtualObject)) {
 }
 
 func (v *virtualSchemaEntry) GetObjectByName(
-	name string, flags tree.ObjectLookupFlags,
+	name string, kind tree.DesiredObjectKind,
 ) (catalog.VirtualObject, error) {
-	switch flags.DesiredObjectKind {
+	switch kind {
 	case tree.TypeObject:
 		// Currently, we don't allow creation of types in virtual schemas, so
 		// the only types present in the virtual schemas that have types (i.e.
@@ -469,8 +495,7 @@ func (v *virtualSchemaEntry) GetObjectByName(
 			typ, ok := tree.GetStaticallyKnownType(typRef)
 			if ok {
 				return &virtualTypeEntry{
-					desc:    typedesc.MakeSimpleAlias(typ, catconstants.PgCatalogID),
-					mutable: flags.RequireMutable,
+					desc: typedesc.MakeSimpleAlias(typ, catconstants.PgCatalogID),
 				}, nil
 			}
 		}
@@ -479,20 +504,13 @@ func (v *virtualSchemaEntry) GetObjectByName(
 		fallthrough
 	case tree.TableObject:
 		if def, ok := v.defs[name]; ok {
-			if flags.RequireMutable {
-				return &mutableVirtualDefEntry{
-					desc: tabledesc.NewBuilder(def.desc.TableDesc()).BuildExistingMutableTable(),
-				}, nil
-			}
 			return def, nil
 		}
 		if _, ok := v.undefinedTables[name]; ok {
 			return nil, newUnimplementedVirtualTableError(v.desc.GetName(), name)
 		}
-		return nil, nil
-	default:
-		return nil, errors.AssertionFailedf("unknown desired object kind %d", flags.DesiredObjectKind)
 	}
+	return nil, nil
 }
 
 type virtualDefEntry struct {
@@ -514,22 +532,11 @@ func canQueryVirtualTable(evalCtx *eval.Context, e *virtualDefEntry) bool {
 		evalCtx.SessionData().StubCatalogTablesEnabled
 }
 
-type mutableVirtualDefEntry struct {
-	desc *tabledesc.Mutable
-}
-
-func (e *mutableVirtualDefEntry) Desc() catalog.Descriptor {
-	return e.desc
-}
-
 type virtualTypeEntry struct {
-	desc    catalog.TypeDescriptor
-	mutable bool
+	desc catalog.TypeDescriptor
 }
 
 func (e *virtualTypeEntry) Desc() catalog.Descriptor {
-	// TODO(ajwerner): Should this be allowed? I think no. Let's just store an
-	// ImmutableTypeDesc off of this thing.
 	return e.desc
 }
 
@@ -592,10 +599,7 @@ func (e *virtualDefEntry) getPlanInfo(
 		var dbDesc catalog.DatabaseDescriptor
 		var err error
 		if dbName != "" {
-			dbDesc, err = p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn,
-				dbName, tree.DatabaseLookupFlags{
-					Required: true, AvoidLeased: p.skipDescriptorCache,
-				})
+			dbDesc, err = p.byNameGetterBuilder().Get().Database(ctx, dbName)
 			if err != nil {
 				return nil, err
 			}

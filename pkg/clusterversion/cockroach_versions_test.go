@@ -90,7 +90,7 @@ func TestClusterVersionPrettyPrint(t *testing.T) {
 		}
 	}
 
-	var tests = []struct {
+	tests := []struct {
 		cv  ClusterVersion
 		exp string
 	}{
@@ -130,7 +130,7 @@ func TestGetVersionsBetween(t *testing.T) {
 		return cvs
 	}
 
-	var tests = []struct {
+	tests := []struct {
 		from, to roachpb.Version
 		exp      []roachpb.Version
 	}{
@@ -154,4 +154,16 @@ func TestGetVersionsBetween(t *testing.T) {
 			}
 		}
 	}
+}
+
+// TestEnsureConsistentBinaryVersion ensures that BinaryVersionKey maps to a
+// version equal to binaryVersion.
+func TestEnsureConsistentBinaryVersion(t *testing.T) {
+	require.Equal(t, ByKey(BinaryVersionKey), binaryVersion)
+}
+
+// TestEnsureConsistentMinBinaryVersion ensures that BinaryMinSupportedVersionKey
+// maps to a version equal to binaryMinSupportedVersion.
+func TestEnsureConsistentMinBinaryVersion(t *testing.T) {
+	require.Equal(t, ByKey(BinaryMinSupportedVersionKey), binaryMinSupportedVersion)
 }

@@ -14,9 +14,11 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -295,20 +297,20 @@ type columnCache struct {
 	readable             []catalog.Column
 	withUDTs             []catalog.Column
 	system               []catalog.Column
-	familyDefaultColumns []descpb.IndexFetchSpec_FamilyDefaultColumn
+	familyDefaultColumns []fetchpb.IndexFetchSpec_FamilyDefaultColumn
 	index                []indexColumnCache
 }
 
 type indexColumnCache struct {
 	all          []catalog.Column
-	allDirs      []catpb.IndexColumn_Direction
+	allDirs      []catenumpb.IndexColumn_Direction
 	key          []catalog.Column
-	keyDirs      []catpb.IndexColumn_Direction
+	keyDirs      []catenumpb.IndexColumn_Direction
 	stored       []catalog.Column
 	keySuffix    []catalog.Column
 	full         []catalog.Column
-	fullDirs     []catpb.IndexColumn_Direction
-	keyAndSuffix []descpb.IndexFetchSpec_KeyColumn
+	fullDirs     []catenumpb.IndexColumn_Direction
+	keyAndSuffix []fetchpb.IndexFetchSpec_KeyColumn
 }
 
 // newColumnCache returns a fresh fully-populated columnCache struct for the
@@ -377,9 +379,9 @@ func newColumnCache(desc *descpb.TableDescriptor, mutations *mutationCache) *col
 	for i := range desc.Families {
 		if f := &desc.Families[i]; f.DefaultColumnID != 0 {
 			if c.familyDefaultColumns == nil {
-				c.familyDefaultColumns = make([]descpb.IndexFetchSpec_FamilyDefaultColumn, 0, len(desc.Families)-i)
+				c.familyDefaultColumns = make([]fetchpb.IndexFetchSpec_FamilyDefaultColumn, 0, len(desc.Families)-i)
 			}
-			c.familyDefaultColumns = append(c.familyDefaultColumns, descpb.IndexFetchSpec_FamilyDefaultColumn{
+			c.familyDefaultColumns = append(c.familyDefaultColumns, fetchpb.IndexFetchSpec_FamilyDefaultColumn{
 				FamilyID:        f.ID,
 				DefaultColumnID: f.DefaultColumnID,
 			})
@@ -405,7 +407,7 @@ func makeIndexColumnCache(idx *descpb.IndexDescriptor, all []catalog.Column) (ic
 	nKeySuffix := len(idx.KeySuffixColumnIDs)
 	nStored := len(idx.StoreColumnIDs)
 	nAll := nKey + nKeySuffix + nStored
-	ic.allDirs = make([]catpb.IndexColumn_Direction, nAll)
+	ic.allDirs = make([]catenumpb.IndexColumn_Direction, nAll)
 	// Only copy key column directions, others will remain at ASC (default value).
 	copy(ic.allDirs, idx.KeyColumnDirections)
 	ic.all = make([]catalog.Column, 0, nAll)
@@ -435,7 +437,7 @@ func makeIndexColumnCache(idx *descpb.IndexDescriptor, all []catalog.Column) (ic
 	for _, colID := range idx.CompositeColumnIDs {
 		compositeIDs.Add(colID)
 	}
-	ic.keyAndSuffix = make([]descpb.IndexFetchSpec_KeyColumn, nKey+nKeySuffix)
+	ic.keyAndSuffix = make([]fetchpb.IndexFetchSpec_KeyColumn, nKey+nKeySuffix)
 	for i := range ic.keyAndSuffix {
 		col := ic.all[i]
 		if col == nil {
@@ -447,8 +449,8 @@ func makeIndexColumnCache(idx *descpb.IndexDescriptor, all []catalog.Column) (ic
 		if colID != 0 && colID == invertedColumnID {
 			typ = idx.InvertedColumnKeyType()
 		}
-		ic.keyAndSuffix[i] = descpb.IndexFetchSpec_KeyColumn{
-			IndexFetchSpec_Column: descpb.IndexFetchSpec_Column{
+		ic.keyAndSuffix[i] = fetchpb.IndexFetchSpec_KeyColumn{
+			IndexFetchSpec_Column: fetchpb.IndexFetchSpec_Column{
 				Name:          col.GetName(),
 				ColumnID:      colID,
 				Type:          typ,

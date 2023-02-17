@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/pretty"
 	"github.com/cockroachdb/errors"
 )
@@ -68,8 +69,7 @@ const (
 	// EXPLAIN ANALYZE.
 	ExplainDebug
 
-	// ExplainDDL generates a DDL plan diagram for the statement. Not allowed with
-	//
+	// ExplainDDL generates a DDL plan diagram for the statement.
 	ExplainDDL
 
 	// ExplainGist generates a plan "gist".
@@ -116,6 +116,7 @@ const (
 	ExplainFlagMemo
 	ExplainFlagShape
 	ExplainFlagViz
+	ExplainFlagRedact
 	numExplainFlags = iota
 )
 
@@ -128,6 +129,7 @@ var explainFlagStrings = [...]string{
 	ExplainFlagMemo:    "MEMO",
 	ExplainFlagShape:   "SHAPE",
 	ExplainFlagViz:     "VIZ",
+	ExplainFlagRedact:  "REDACT",
 }
 
 var explainFlagStringMap = func() map[string]ExplainFlag {
@@ -258,6 +260,15 @@ func MakeExplain(options []string, stmt Statement) (Statement, error) {
 		}
 		if analyze {
 			return nil, pgerror.Newf(pgcode.Syntax, "the JSON flag cannot be used with ANALYZE")
+		}
+	}
+
+	if opts.Flags[ExplainFlagRedact] {
+		// TODO(michae2): Support redaction of other EXPLAIN variants.
+		if !analyze || opts.Mode != ExplainDebug {
+			return nil, unimplemented.New(
+				"EXPLAIN (REDACT)", "the REDACT flag can only be used with EXPLAIN ANALYZE (DEBUG)",
+			)
 		}
 	}
 

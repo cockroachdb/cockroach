@@ -13,10 +13,13 @@ package catalog
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -24,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -87,7 +91,7 @@ type DescriptorBuilder interface {
 	// built from a deserialized protobuf obtained by restoring a backup.
 	// This is to compensate for the fact that these are not subject to cluster
 	// upgrade migrations
-	RunRestoreChanges(descLookupFn func(id descpb.ID) Descriptor) error
+	RunRestoreChanges(version clusterversion.ClusterVersion, descLookupFn func(id descpb.ID) Descriptor) error
 
 	// SetRawBytesInStorage sets `rawBytesInStorage` field by deep-copying `rawBytes`.
 	SetRawBytesInStorage(rawBytes []byte)
@@ -233,17 +237,11 @@ type Descriptor interface {
 	// GetRawBytesInStorage returns the raw bytes (tag + data) of the descriptor in storage.
 	// It is exclusively used in the CPut when persisting an updated descriptor to storage.
 	GetRawBytesInStorage() []byte
-}
 
-// HydratableDescriptor represent a Descriptor which needs user-define type
-// hydration if it contains any UDT.
-type HydratableDescriptor interface {
-	Descriptor
-
-	// ContainsUserDefinedTypes returns whether or not this descriptor uses any
-	// user defined types. For example, a table column table can use user defined
-	// type and a function can use user defined type as an argument type.
-	ContainsUserDefinedTypes() bool
+	// ForEachUDTDependentForHydration iterates over all the user-defined types.T
+	// referenced by this descriptor which must be hydrated prior to using it.
+	// iterutil.StopIteration is supported.
+	ForEachUDTDependentForHydration(func(t *types.T) error) error
 }
 
 // DatabaseDescriptor encapsulates the concept of a database.
@@ -282,7 +280,7 @@ type DatabaseDescriptor interface {
 
 // TableDescriptor is an interface around the table descriptor types.
 type TableDescriptor interface {
-	HydratableDescriptor
+	Descriptor
 
 	// TableDesc returns the backing protobuf for this database.
 	TableDesc() *descpb.TableDescriptor
@@ -432,23 +430,6 @@ type TableDescriptor interface {
 	// state.
 	DeleteOnlyNonPrimaryIndexes() []Index
 
-	// FindIndexWithID returns the first catalog.Index that matches the id
-	// in the set of all indexes, or an error if none was found. The order of
-	// traversal is the canonical order, see Index.Ordinal().
-	FindIndexWithID(id descpb.IndexID) (Index, error)
-
-	// FindIndexWithName returns the first catalog.Index that matches the name in
-	// the set of all indexes, excluding the primary index of non-physical
-	// tables, or an error if none was found. The order of traversal is the
-	// canonical order, see Index.Ordinal().
-	FindIndexWithName(name string) (Index, error)
-
-	// FindNonDropIndexWithName returns the first catalog.Index that matches the name in
-	// the set of all non-drp[ indexes, excluding the primary index of non-physical
-	// tables, or an error if none was found. The order of traversal is the
-	// canonical order, see catalog.Index.Ordinal().
-	FindNonDropIndexWithName(name string) (Index, error)
-
 	// GetNextIndexID returns the next unused index ID for the table. Index IDs
 	// are unique within a table, but not globally.
 	GetNextIndexID() descpb.IndexID
@@ -515,7 +496,7 @@ type TableDescriptor interface {
 	IndexKeyColumns(idx Index) []Column
 	// IndexKeyColumnDirections returns a slice of column directions for all
 	// key columns in the specified Index.
-	IndexKeyColumnDirections(idx Index) []catpb.IndexColumn_Direction
+	IndexKeyColumnDirections(idx Index) []catenumpb.IndexColumn_Direction
 	// IndexKeySuffixColumns returns a slice of Column interfaces containing all
 	// key suffix columns in the specified Index.
 	IndexKeySuffixColumns(idx Index) []Column
@@ -526,7 +507,7 @@ type TableDescriptor interface {
 	// IndexFullColumnDirections returns a slice of column directions for all
 	// key columns in the specified Index, plus all key suffix columns if that
 	// index is not a unique index.
-	IndexFullColumnDirections(idx Index) []catpb.IndexColumn_Direction
+	IndexFullColumnDirections(idx Index) []catenumpb.IndexColumn_Direction
 	// IndexStoredColumns returns a slice of Column interfaces containing all
 	// stored columns in the specified Index.
 	IndexStoredColumns(idx Index) []Column
@@ -538,37 +519,15 @@ type TableDescriptor interface {
 	IndexKeysPerRow(idx Index) int
 
 	// IndexFetchSpecKeyAndSuffixColumns returns information about the key and
-	// suffix columns, suitable for populating a descpb.IndexFetchSpec.
-	IndexFetchSpecKeyAndSuffixColumns(idx Index) []descpb.IndexFetchSpec_KeyColumn
+	// suffix columns, suitable for populating a fetchpb.IndexFetchSpec.
+	IndexFetchSpecKeyAndSuffixColumns(idx Index) []fetchpb.IndexFetchSpec_KeyColumn
 
-	// FindColumnWithID returns the first column found whose ID matches the
-	// provided target ID, in the canonical order.
-	// If no column is found then an error is also returned.
-	FindColumnWithID(id descpb.ColumnID) (Column, error)
-
-	// FindColumnWithPGAttributeNum returns the first column found whose
-	// PGAttributeNum (if set, otherwise ID) matches the provider id.
-	// Error is returned if no column is found.
-	FindColumnWithPGAttributeNum(id descpb.PGAttributeNum) (Column, error)
-
-	// FindColumnWithName returns the first column found whose name matches the
-	// provided target name, in the canonical order.
-	// If no column is found then an error is also returned.
-	FindColumnWithName(name tree.Name) (Column, error)
-
-	// NamesForColumnIDs returns the names for the given column ids, or an error
-	// if one or more column ids was missing. Note - this allocates! It's not for
-	// hot path code.
-	NamesForColumnIDs(ids descpb.ColumnIDs) ([]string, error)
 	// GetNextColumnID returns the next unused column ID for this table. Column
 	// IDs are unique per table, but not unique globally.
 	GetNextColumnID() descpb.ColumnID
 	// GetNextConstraintID returns the next unused constraint ID for this table.
 	// Constraint IDs are unique per table, but not unique globally.
 	GetNextConstraintID() descpb.ConstraintID
-	// CheckConstraintUsesColumn returns whether the check constraint uses the
-	// specified column.
-	CheckConstraintUsesColumn(cc *descpb.TableDescriptor_CheckConstraint, colID descpb.ColumnID) (bool, error)
 	// IsShardColumn returns true if col corresponds to a non-dropped hash sharded
 	// index. This method assumes that col is currently a member of desc.
 	IsShardColumn(col Column) bool
@@ -578,8 +537,6 @@ type TableDescriptor interface {
 	GetFamilies() []descpb.ColumnFamilyDescriptor
 	// NumFamilies returns the number of column families in the descriptor.
 	NumFamilies() int
-	// FindFamilyByID finds the family with specified ID.
-	FindFamilyByID(id descpb.FamilyID) (*descpb.ColumnFamilyDescriptor, error)
 	// ForeachFamily calls f for every column family key in desc until an
 	// error is returned.
 	ForeachFamily(f func(family *descpb.ColumnFamilyDescriptor) error) error
@@ -589,18 +546,18 @@ type TableDescriptor interface {
 
 	// FamilyDefaultColumns returns the default column IDs for families with a
 	// default column. See IndexFetchSpec.FamilyDefaultColumns.
-	FamilyDefaultColumns() []descpb.IndexFetchSpec_FamilyDefaultColumn
+	FamilyDefaultColumns() []fetchpb.IndexFetchSpec_FamilyDefaultColumn
 
 	// HasColumnBackfillMutation returns whether the table has any queued column
 	// mutations that require a backfill.
 	HasColumnBackfillMutation() bool
-	// MakeFirstMutationPublic creates a Mutable from the
-	// immutable by making the first mutation public.
+	// MakeFirstMutationPublic creates a descriptor by making the first
+	// mutation public.
 	// This is super valuable when trying to run SQL over data associated
 	// with a schema mutation that is still not yet public: Data validation,
 	// error reporting.
 	MakeFirstMutationPublic(...MutationPublicationFilter) (TableDescriptor, error)
-	// MakePublic creates a Mutable from the immutable by making the it public.
+	// MakePublic creates a descriptor by making the state public.
 	MakePublic() TableDescriptor
 	// AllMutations returns all of the table descriptor's mutations.
 	AllMutations() []Mutation
@@ -683,13 +640,6 @@ type TableDescriptor interface {
 	// in the same order.
 	EnforcedUniqueConstraintsWithoutIndex() []UniqueWithoutIndexConstraint
 
-	// FindConstraintWithID traverses the slice returned by AllConstraints and
-	// returns the first catalog.Constraint that matches the desired ID, or an
-	// error if none was found.
-	FindConstraintWithID(id descpb.ConstraintID) (Constraint, error)
-	// FindConstraintWithName is like FindConstraintWithID but for names.
-	FindConstraintWithName(name string) (Constraint, error)
-
 	// CheckConstraintColumns returns the slice of columns referenced by a check
 	// constraint.
 	CheckConstraintColumns(ck CheckConstraint) []Column
@@ -751,12 +701,6 @@ type TableDescriptor interface {
 	// enabled or disabled for this table. If ok is true, then the enabled value
 	// is valid, otherwise this has not been set at the table level.
 	ForecastStatsEnabled() (enabled bool, ok bool)
-	// GetIndexNameByID returns the name of an index based on an ID, taking into
-	// account any ongoing declarative schema changes. Declarative schema changes
-	// do not propagate the index name into the mutations until changes are fully
-	// validated and swap operations are complete (to avoid having two constraints
-	// with the same name).
-	GetIndexNameByID(indexID descpb.IndexID) (name string, err error)
 	// IsRefreshViewRequired indicates if a REFRESH VIEW operation needs to be called
 	// on a materialized view.
 	IsRefreshViewRequired() bool
@@ -771,69 +715,76 @@ type MutableTableDescriptor interface {
 	MutableDescriptor
 }
 
-// TypeDescriptor will eventually be called typedesc.Descriptor.
-// It is implemented by (Imm|M)utableTypeDescriptor.
+// TypeDescriptor is an interface around the type descriptor types.
 type TypeDescriptor interface {
 	Descriptor
 	// TypeDesc returns the backing descriptor for this type, if one exists.
 	TypeDesc() *descpb.TypeDescriptor
-	// HydrateTypeInfoWithName fills in user defined type metadata for
-	// a type and also sets the name in the metadata to the passed in name.
-	// This is used when hydrating a type with a known qualified name.
-	//
-	// Note that if the passed type is already hydrated, regardless of the version
-	// with which it has been hydrated, this is a no-op.
-	HydrateTypeInfoWithName(ctx context.Context, typ *types.T, name *tree.TypeName, res TypeDescriptorResolver) error
-	// MakeTypesT creates a types.T from the input type descriptor.
-	MakeTypesT(ctx context.Context, name *tree.TypeName, res TypeDescriptorResolver) (*types.T, error)
 	// HasPendingSchemaChanges returns whether or not this descriptor has schema
 	// changes that need to be completed.
 	HasPendingSchemaChanges() bool
 	// GetIDClosure returns all type descriptor IDs that are referenced by this
 	// type descriptor.
-	GetIDClosure() (map[descpb.ID]struct{}, error)
+	GetIDClosure() DescriptorIDSet
 	// IsCompatibleWith returns whether the type "desc" is compatible with "other".
 	// As of now "compatibility" entails that disk encoded data of "desc" can be
 	// interpreted and used by "other".
 	IsCompatibleWith(other TypeDescriptor) error
-	// GetArrayTypeID returns the globally unique ID for the implicitly created
-	// array type for this type. It is only set when the type descriptor points to
-	// a non-array type.
-	GetArrayTypeID() descpb.ID
-
+	// AsTypesT returns a reference to a types.T corresponding to this type
+	// descriptor. No guarantees are provided as to whether this object is a
+	// singleton or not, or whether it's hydrated or not.
+	AsTypesT() *types.T
 	// GetKind returns the kind of this type.
 	GetKind() descpb.TypeDescriptor_Kind
 
-	// The following fields are only valid for multi-region enum types.
+	// NumReferencingDescriptors returns the number of descriptors referencing this
+	// type, directly or indirectly.
+	NumReferencingDescriptors() int
+	// GetReferencingDescriptorID returns the ID of the referencing descriptor at
+	// ordinal refOrdinal.
+	GetReferencingDescriptorID(refOrdinal int) descpb.ID
+	// GetReferencingDescriptorIDs returns IDs of descriptors referencing this
+	// type.
+	GetReferencingDescriptorIDs() []descpb.ID
 
-	// PrimaryRegionName returns the primary region for a multi-region enum.
-	PrimaryRegionName() (catpb.RegionName, error)
-	// RegionNames returns all `PUBLIC` regions on the multi-region enum. Regions
-	// that are in the process of being added/removed (`READ_ONLY`) are omitted.
-	RegionNames() (catpb.RegionNames, error)
-	// RegionNamesIncludingTransitioning returns all the regions on a multi-region
-	// enum, including `READ ONLY` regions which are in the process of transitioning.
-	RegionNamesIncludingTransitioning() (catpb.RegionNames, error)
-	// RegionNamesForValidation returns all regions on the multi-region
-	// enum to make validation with the public zone configs and partitons
-	// possible.
-	// Since the partitions and zone configs are only updated when a transaction
-	// commits, this must ignore all regions being added (since they will not be
-	// reflected in the zone configuration yet), but it must include all region
-	// being dropped (since they will not be dropped from the zone configuration
-	// until they are fully removed from the type descriptor, again, at the end
-	// of the transaction).
-	RegionNamesForValidation() (catpb.RegionNames, error)
-	// TransitioningRegionNames returns regions which are transitioning to PUBLIC
-	// or are being removed.
-	TransitioningRegionNames() (catpb.RegionNames, error)
-	// SuperRegions returns the list of super regions.
-	SuperRegions() ([]descpb.SuperRegion, error)
-	// ZoneConfigExtensions returns the zone configuration extensions on the
-	// multi-region enum.
-	ZoneConfigExtensions() (descpb.ZoneConfigExtensions, error)
+	// AsEnumTypeDescriptor returns this instance cast to EnumTypeDescriptor
+	// if this type is an enum type, nil otherwise.
+	AsEnumTypeDescriptor() EnumTypeDescriptor
 
-	// The following fields are set if the type is an enum or a multi-region enum.
+	// AsRegionEnumTypeDescriptor returns this instance cast to
+	// RegionEnumTypeDescriptor if this type is a multi-region enum type,
+	// nil otherwise.
+	AsRegionEnumTypeDescriptor() RegionEnumTypeDescriptor
+
+	// AsAliasTypeDescriptor returns this instance cast to
+	// AliasTypeDescriptor if this type is an alias type,
+	// nil otherwise.
+	AsAliasTypeDescriptor() AliasTypeDescriptor
+
+	// AsCompositeTypeDescriptor returns this instance cast to
+	// CompositeTypeDescriptor if this type is a composite type,
+	// nil otherwise.
+	AsCompositeTypeDescriptor() CompositeTypeDescriptor
+
+	// AsTableImplicitRecordTypeDescriptor returns this instance cast to
+	// TableImplicitRecordTypeDescriptor if this type is an implicit table record
+	// type, nil otherwise.
+	AsTableImplicitRecordTypeDescriptor() TableImplicitRecordTypeDescriptor
+}
+
+// NonAliasTypeDescriptor is the TypeDescriptor subtype for concrete user-defined
+// types.
+type NonAliasTypeDescriptor interface {
+	TypeDescriptor
+
+	// GetArrayTypeID returns the globally unique ID for the implicitly created
+	// array type for this type.
+	GetArrayTypeID() descpb.ID
+}
+
+// EnumTypeDescriptor is the TypeDescriptor subtype for enums (incl. regions).
+type EnumTypeDescriptor interface {
+	NonAliasTypeDescriptor
 
 	// NumEnumMembers returns the number of enum members if the type is an
 	// enumeration type, 0 otherwise.
@@ -847,16 +798,69 @@ type TypeDescriptor interface {
 	// IsMemberReadOnly returns true iff the enum member at ordinal
 	// enumMemberOrdinal is read-only.
 	IsMemberReadOnly(enumMemberOrdinal int) bool
+}
 
-	// NumReferencingDescriptors returns the number of descriptors referencing this
-	// type, directly or indirectly.
-	NumReferencingDescriptors() int
-	// GetReferencingDescriptorID returns the ID of the referencing descriptor at
-	// ordinal refOrdinal.
-	GetReferencingDescriptorID(refOrdinal int) descpb.ID
-	// GetReferencingDescriptorIDs returns IDs of descriptors referencing this
-	// type.
-	GetReferencingDescriptorIDs() []descpb.ID
+// RegionEnumTypeDescriptor is the TypeDescriptor subtype for multi-region enums.
+type RegionEnumTypeDescriptor interface {
+	EnumTypeDescriptor
+
+	// PrimaryRegion returns the primary region name.
+	PrimaryRegion() catpb.RegionName
+
+	// ForEachPublicRegion is like ForEachRegion but limited to regions
+	// which are public, i.e. not in the process of being added or removed.
+	ForEachPublicRegion(f func(regionName catpb.RegionName) error) error
+
+	// ForEachRegion applies f on each region name,
+	// Supports iterutil.StopIteration().
+	ForEachRegion(f func(regionName catpb.RegionName, transition descpb.TypeDescriptor_EnumMember_Direction) error) error
+
+	// ForEachSuperRegion applies f on each super-region name.
+	// Supports iterutil.StopIteration().
+	ForEachSuperRegion(f func(superRegionName string) error) error
+
+	// ForEachRegionInSuperRegion applies f on each region in the super region.
+	// Supports iterutil.StopIteration().
+	ForEachRegionInSuperRegion(
+		superRegion string,
+		f func(region catpb.RegionName) error,
+	) error
+}
+
+// AliasTypeDescriptor is the TypeDescriptor subtype for alias types.
+// This is used for array subtypes.
+type AliasTypeDescriptor interface {
+	TypeDescriptor
+
+	// Aliased returns the types.T which is being aliased.
+	Aliased() *types.T
+}
+
+// CompositeTypeDescriptor is the TypeDescriptor subtype for composite types,
+// which are union types.
+type CompositeTypeDescriptor interface {
+	NonAliasTypeDescriptor
+
+	// NumElements returns the number of elements forming the composite type.
+	NumElements() int
+
+	// GetElementLabel returns the label of the composite type element at the
+	// given ordinal.
+	GetElementLabel(ordinal int) string
+
+	// GetElementType returns the type of the composite type element at the
+	// given ordinal.
+	GetElementType(ordinal int) *types.T
+}
+
+// TableImplicitRecordTypeDescriptor is the TypeDescriptor subtype for the
+// record type implicitly defined by a table.
+type TableImplicitRecordTypeDescriptor interface {
+	NonAliasTypeDescriptor
+
+	// UnderlyingTableDescriptor returns the table descriptor underlying this
+	// implicit type.
+	UnderlyingTableDescriptor() TableDescriptor
 }
 
 // TypeDescriptorResolver is an interface used during hydration of type
@@ -882,7 +886,7 @@ type DefaultPrivilegeDescriptor interface {
 
 // FunctionDescriptor is an interface around the function descriptor types.
 type FunctionDescriptor interface {
-	HydratableDescriptor
+	Descriptor
 
 	// GetReturnType returns the function's return type.
 	GetReturnType() descpb.FunctionDescriptor_ReturnType
@@ -926,46 +930,33 @@ type FunctionDescriptor interface {
 	ToCreateExpr() (*tree.CreateFunction, error)
 }
 
-// FilterDescriptorState inspects the state of a given descriptor and returns an
-// error if the state is anything but public. The error describes the state of
-// the descriptor.
-func FilterDescriptorState(desc Descriptor, flags tree.CommonLookupFlags) error {
-	if flags.ParentID != 0 {
-		parent := desc.GetParentID()
-		if parent != 0 && parent != flags.ParentID {
-			return ErrDescriptorNotFound
-		}
-	}
+// FilterDroppedDescriptor returns an error if the descriptor state is DROP.
+func FilterDroppedDescriptor(desc Descriptor) error {
+	if !desc.Dropped() {
+		return nil
 
-	switch {
-	case desc.Dropped() && !flags.IncludeDropped:
-		return NewInactiveDescriptorError(ErrDescriptorDropped)
-	case desc.Offline() && !flags.IncludeOffline:
-		err := errors.Errorf("%s %q is offline", desc.DescriptorType(), desc.GetName())
-		if desc.GetOfflineReason() != "" {
-			err = errors.Errorf("%s %q is offline: %s", desc.DescriptorType(), desc.GetName(), desc.GetOfflineReason())
-		}
-		return NewInactiveDescriptorError(err)
-	case desc.Adding() &&
-		// The ADD state is special.
-		// We don't want adding descriptors to be visible to DML queries, but we
-		// want them to be visible to schema changes:
-		//   - when uncommitted we want them to be accessible by name for other
-		//     schema changes, e.g.
-		//       BEGIN; CREATE TABLE t ... ; ALTER TABLE t RENAME TO ...;
-		//     should be possible.
-		//   - when committed we want them to be accessible to their own schema
-		//     change job, where they're referenced by ID.
-		//
-		// The AvoidCommittedAdding is set if and only if the lookup is by-name
-		// and prevents them from seeing committed adding descriptors.
-		!(flags.AvoidCommittedAdding && desc.IsUncommittedVersion() && (flags.AvoidLeased || flags.RequireMutable)) &&
-		!(!flags.AvoidCommittedAdding && (desc.IsUncommittedVersion() || flags.AvoidLeased || flags.RequireMutable)):
-		// For the time being, only table descriptors can be in the adding state.
-		return pgerror.WithCandidateCode(newAddingTableError(desc.(TableDescriptor)),
-			pgcode.ObjectNotInPrerequisiteState)
 	}
-	return nil
+	return NewInactiveDescriptorError(ErrDescriptorDropped)
+}
+
+// FilterOfflineDescriptor returns an error if the descriptor state is OFFLINE.
+func FilterOfflineDescriptor(desc Descriptor) error {
+	if !desc.Offline() {
+		return nil
+	}
+	err := errors.Errorf("%s %q is offline", desc.DescriptorType(), desc.GetName())
+	if desc.GetOfflineReason() != "" {
+		err = errors.Errorf("%s %q is offline: %s", desc.DescriptorType(), desc.GetName(), desc.GetOfflineReason())
+	}
+	return NewInactiveDescriptorError(err)
+}
+
+// FilterAddingDescriptor returns an error if the descriptor state is ADD.
+func FilterAddingDescriptor(desc Descriptor) error {
+	if !desc.Adding() {
+		return nil
+	}
+	return pgerror.WithCandidateCode(newAddingDescriptorError(desc), pgcode.ObjectNotInPrerequisiteState)
 }
 
 // TableLookupFn is used to resolve a table from an ID, particularly when
@@ -1038,4 +1029,14 @@ func IsSystemDescriptor(desc Descriptor) bool {
 // for the legacy schema changer).
 func HasConcurrentDeclarativeSchemaChange(desc Descriptor) bool {
 	return desc.GetDeclarativeSchemaChangerState() != nil
+}
+
+// MaybeRequiresHydration returns false if the descriptor definitely does not
+// depend on any types.T being hydrated.
+func MaybeRequiresHydration(desc Descriptor) (ret bool) {
+	_ = desc.ForEachUDTDependentForHydration(func(t *types.T) error {
+		ret = true
+		return iterutil.StopIteration()
+	})
+	return ret
 }

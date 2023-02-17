@@ -263,7 +263,7 @@ func startConnExecutor(
 ) (*StmtBuf, <-chan []resWithPos, <-chan error, *stop.Stopper, ieResultReader, error) {
 	// A lot of boilerplate for creating a connExecutor.
 	stopper := stop.NewStopper()
-	clock := hlc.NewClockWithSystemTimeSource(0 /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	factory := kv.MakeMockTxnSenderFactory(
 		func(context.Context, *roachpb.Transaction, *roachpb.BatchRequest,
 		) (*roachpb.BatchResponse, *roachpb.Error) {
@@ -330,7 +330,7 @@ func startConnExecutor(
 		),
 		QueryCache:              querycache.New(0),
 		TestingKnobs:            ExecutorTestingKnobs{},
-		StmtDiagnosticsRecorder: stmtdiagnostics.NewRegistry(nil, nil, st),
+		StmtDiagnosticsRecorder: stmtdiagnostics.NewRegistry(nil, st),
 		HistogramWindowInterval: base.DefaultHistogramWindowInterval(),
 		CollectionFactory:       descs.NewBareBonesCollectionFactory(st, keys.SystemSQLCodec),
 	}

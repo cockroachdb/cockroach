@@ -101,6 +101,10 @@ func InjectDescriptors(
 		}
 		// Inject the namespace entries.
 		for _, d := range others {
+			if d.GetFunction() != nil {
+				// Functions doesn't have namespace entry.
+				continue
+			}
 			id, _, name, _, err := descpb.GetDescriptorMetadata(d)
 			if err != nil {
 				return err
@@ -145,5 +149,7 @@ func resetVersionAndModificationTime(d *descpb.Descriptor) {
 		d.Type.Version = 1
 	case *descpb.Descriptor_Table:
 		d.Table.Version = 1
+	case *descpb.Descriptor_Function:
+		d.Function.Version = 1
 	}
 }

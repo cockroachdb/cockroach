@@ -162,3 +162,8 @@ export function makeTimestamp(unixTs: number): Timestamp {
     seconds: fromNumber(unixTs),
   });
 }
+
+export function stringToTimestamp(t: string): Timestamp {
+  const unix = new Date(t).getTime() / 1000;
+  return makeTimestamp(unix);
+}

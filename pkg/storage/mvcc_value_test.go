@@ -18,7 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -131,7 +131,7 @@ func TestEncodeDecodeMVCCValue(t *testing.T) {
 		"header+bytes":     {val: MVCCValue{MVCCValueHeader: valHeader, Value: strVal}},
 		"header+int":       {val: MVCCValue{MVCCValueHeader: valHeader, Value: intVal}},
 	}
-	w := echotest.NewWalker(t, testutils.TestDataPath(t, t.Name()))
+	w := echotest.NewWalker(t, datapathutils.TestDataPath(t, t.Name()))
 	for name, tc := range testcases {
 		t.Run(name, w.Run(t, name, func(t *testing.T) string {
 			var buf strings.Builder

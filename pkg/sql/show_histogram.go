@@ -14,8 +14,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -43,7 +43,7 @@ func (p *planner) ShowHistogram(ctx context.Context, n *tree.ShowHistogram) (pla
 		columns: showHistogramColumns,
 
 		constructor: func(ctx context.Context, p *planner) (planNode, error) {
-			row, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRowEx(
+			row, err := p.InternalSQLTxn().QueryRowEx(
 				ctx,
 				"read-histogram",
 				p.txn,
@@ -76,7 +76,7 @@ func (p *planner) ShowHistogram(ctx context.Context, n *tree.ShowHistogram) (pla
 			v := p.newContainerValuesNode(showHistogramColumns, 0)
 			for _, b := range histogram.Buckets {
 				ed, _, err := rowenc.EncDatumFromBuffer(
-					histogram.ColumnType, descpb.DatumEncoding_ASCENDING_KEY, b.UpperBound,
+					histogram.ColumnType, catenumpb.DatumEncoding_ASCENDING_KEY, b.UpperBound,
 				)
 				if err != nil {
 					v.Close(ctx)

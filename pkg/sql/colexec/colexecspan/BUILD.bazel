@@ -18,8 +18,9 @@ go_library(
         "//pkg/keys",  # keep
         "//pkg/roachpb",  # keep
         "//pkg/sql/catalog",  # keep
-        "//pkg/sql/catalog/catpb",
+        "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/catalog/descpb",  # keep
+        "//pkg/sql/catalog/fetchpb",
         "//pkg/sql/colexecerror",  # keep
         "//pkg/sql/colmem",  # keep
         "//pkg/sql/execinfra/execreleasable",
@@ -54,8 +55,10 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/bootstrap",
+        "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/fetchpb",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/colconv",
         "//pkg/sql/colexec/colexectestutils",
@@ -67,7 +70,7 @@ go_test(
         "//pkg/sql/span",
         "//pkg/sql/types",
         "//pkg/testutils/skip",
-        "//pkg/util",
+        "//pkg/util/intsets",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/randutil",

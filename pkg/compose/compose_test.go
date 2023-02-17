@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 )
 
 var (
@@ -113,6 +114,7 @@ func TestComposeCompare(t *testing.T) {
 		fmt.Sprintf("COCKROACH_PATH=%s", cockroachBin),
 		fmt.Sprintf("COMPARE_DIR_PATH=%s", compareDir),
 		fmt.Sprintf("ARTIFACTS=%s", *flagArtifacts),
+		fmt.Sprintf("COCKROACH_DEV_LICENSE=%s", envutil.EnvOrDefaultString("COCKROACH_DEV_LICENSE", "")),
 	}
 	out, err := cmd.CombinedOutput()
 	if err != nil {

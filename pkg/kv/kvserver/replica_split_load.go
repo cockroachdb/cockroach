@@ -12,10 +12,18 @@ package kvserver
 
 import (
 	"context"
+	"fmt"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 // SplitByLoadEnabled wraps "kv.range_split.by_load_enabled".
@@ -34,9 +42,129 @@ var SplitByLoadQPSThreshold = settings.RegisterIntSetting(
 	2500, // 2500 req/s
 ).WithPublic()
 
-// SplitByLoadQPSThreshold returns the QPS request rate for a given replica.
-func (r *Replica) SplitByLoadQPSThreshold() float64 {
-	return float64(SplitByLoadQPSThreshold.Get(&r.store.cfg.Settings.SV))
+// SplitByLoadCPUThreshold wraps "kv.range_split.load_cpu_threshold". The
+// default threshold of 250ms translates to a replica utilizing 25% of a CPU
+// core processing requests. In practice, the "real" CPU usage of a replica all
+// things considered (sql,compactions, gc) tends to be around 3x the attributed
+// usage which this threshold is checked against. This means that in a static
+// state we would expect no more than (number of cores) / 0.75 load based
+// splits. In practice however, workload patterns change.
+// TODO(kvoli): Benchmark ycsb, kv0, kv95 on three nodes and bisect a value
+// that achieves the highest throughput. The current value was selected by
+// observing the performance of the cluster from a rebalancing perspective. The
+// specific criteria was to constrain the occurrences of a store being overfull
+// relative to the mean but not having any actions available to resolve being
+// overfull. When running TPCE (50k), CPU splitting with a 250ms threshold
+// performed 1 load based split whilst QPS splitting (2500) performed 12.5.
+// When running the allocbench/*/kv roachtest suite, CPU splitting (250ms)
+// tended to make between 33-100% more load based splits than QPS splitting
+// (2500) on workloads involving reads (usually large scans), whilst on the
+// write heavy workloads the number of load based splits was identically low.
+// This is tracked in #96869.
+var SplitByLoadCPUThreshold = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"kv.range_split.load_cpu_threshold",
+	"the CPU use per second over which, the range becomes a candidate for load based splitting",
+	250*time.Millisecond,
+).WithPublic()
+
+// SplitObjective is a type that specifies a load based splitting objective.
+type SplitObjective int
+
+const (
+	// SplitQPS will track and split QPS (queries-per-second) over a range.
+	SplitQPS SplitObjective = iota
+	// SplitCPU will track and split CPU (cpu-per-second) over a range.
+	SplitCPU
+)
+
+// String returns a human readable string representation of the dimension.
+func (d SplitObjective) String() string {
+	switch d {
+	case SplitQPS:
+		return "qps"
+	case SplitCPU:
+		return "cpu"
+	default:
+		panic(fmt.Sprintf("cannot name: unknown objective with ordinal %d", d))
+	}
+}
+
+// Format returns a formatted string for a value.
+func (d SplitObjective) Format(value float64) string {
+	switch d {
+	case SplitQPS:
+		return fmt.Sprintf("%.1f", value)
+	case SplitCPU:
+		return string(humanizeutil.Duration(time.Duration(int64(value))))
+	default:
+		panic(fmt.Sprintf("cannot format value: unknown objective with ordinal %d", d))
+	}
+}
+
+// replicaSplitConfig implements the split.SplitConfig interface.
+type replicaSplitConfig struct {
+	randSource                 split.RandSource
+	rebalanceObjectiveProvider RebalanceObjectiveProvider
+	st                         *cluster.Settings
+}
+
+func newReplicaSplitConfig(
+	st *cluster.Settings, rebalanceObjectiveProvider RebalanceObjectiveProvider,
+) *replicaSplitConfig {
+	return &replicaSplitConfig{
+		randSource:                 split.GlobalRandSource(),
+		rebalanceObjectiveProvider: rebalanceObjectiveProvider,
+		st:                         st,
+	}
+}
+
+// SplitObjective returns the current split objective. Currently this tracks
+// 1:1 to the rebalance objective e.g. balancing QPS means also load based
+// splitting on QPS.
+func (c *replicaSplitConfig) SplitObjective() SplitObjective {
+	obj := c.rebalanceObjectiveProvider.Objective()
+	switch obj {
+	case LBRebalancingQueries:
+		return SplitQPS
+	case LBRebalancingCPU:
+		return SplitCPU
+	default:
+		panic(errors.AssertionFailedf("Unkown split objective %d", obj))
+	}
+}
+
+// NewLoadBasedSplitter returns a new LoadBasedSplitter that may be used to
+// find the midpoint based on recorded load.
+func (c *replicaSplitConfig) NewLoadBasedSplitter(startTime time.Time) split.LoadBasedSplitter {
+	obj := c.SplitObjective()
+	switch obj {
+	case SplitQPS:
+		return split.NewUnweightedFinder(startTime, c.randSource)
+	case SplitCPU:
+		return split.NewWeightedFinder(startTime, c.randSource)
+	default:
+		panic(errors.AssertionFailedf("Unkown rebalance objective %d", obj))
+	}
+}
+
+// StatRetention returns the duration that recorded load is to be retained.
+func (c *replicaSplitConfig) StatRetention() time.Duration {
+	return kvserverbase.SplitByLoadMergeDelay.Get(&c.st.SV)
+}
+
+// StatThreshold returns the threshold for load above which the range should be
+// considered split.
+func (c *replicaSplitConfig) StatThreshold() float64 {
+	obj := c.SplitObjective()
+	switch obj {
+	case SplitQPS:
+		return float64(SplitByLoadQPSThreshold.Get(&c.st.SV))
+	case SplitCPU:
+		return float64(SplitByLoadCPUThreshold.Get(&c.st.SV))
+	default:
+		panic(errors.AssertionFailedf("Unkown rebalance objective %d", obj))
+	}
 }
 
 // SplitByLoadEnabled returns whether load based splitting is enabled.
@@ -45,6 +173,22 @@ func (r *Replica) SplitByLoadQPSThreshold() float64 {
 func (r *Replica) SplitByLoadEnabled() bool {
 	return SplitByLoadEnabled.Get(&r.store.cfg.Settings.SV) &&
 		!r.store.TestingKnobs().DisableLoadBasedSplitting
+}
+
+type loadSplitStat struct {
+	max float64
+	ok  bool
+	typ SplitObjective
+}
+
+func (r *Replica) loadSplitStat(ctx context.Context) loadSplitStat {
+	max, ok := r.loadBasedSplitter.MaxStat(ctx, r.Clock().PhysicalTime())
+	lss := loadSplitStat{
+		max: max,
+		ok:  ok,
+		typ: r.store.splitConfig.SplitObjective(),
+	}
+	return lss
 }
 
 // getResponseBoundarySpan computes the union span of the true spans that were
@@ -123,12 +267,31 @@ func getResponseBoundarySpan(
 // recordBatchForLoadBasedSplitting records the batch's spans to be considered
 // for load based splitting.
 func (r *Replica) recordBatchForLoadBasedSplitting(
-	ctx context.Context, ba *roachpb.BatchRequest, br *roachpb.BatchResponse,
+	ctx context.Context, ba *roachpb.BatchRequest, br *roachpb.BatchResponse, stat int,
 ) {
 	if !r.SplitByLoadEnabled() {
 		return
 	}
-	shouldInitSplit := r.loadBasedSplitter.Record(ctx, timeutil.Now(), len(ba.Requests), func() roachpb.Span {
+
+	// There is nothing to do when either the batch request or batch response
+	// are nil as we cannot record the load to a keyspan.
+	if ba == nil || br == nil {
+		return
+	}
+
+	if len(ba.Requests) != len(br.Responses) {
+		log.KvDistribution.Errorf(ctx,
+			"Requests and responses should be equal lengths: # of requests = %d, # of responses = %d",
+			len(ba.Requests), len(br.Responses))
+	}
+
+	// When QPS splitting is enabled, use the number of requests rather than
+	// the given stat for recording load.
+	if r.store.splitConfig.SplitObjective() == SplitQPS {
+		stat = len(ba.Requests)
+	}
+
+	shouldInitSplit := r.loadBasedSplitter.Record(ctx, timeutil.Now(), stat, func() roachpb.Span {
 		return getResponseBoundarySpan(ba, br)
 	})
 	if shouldInitSplit {

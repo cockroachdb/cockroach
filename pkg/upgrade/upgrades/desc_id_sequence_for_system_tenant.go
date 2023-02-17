@@ -26,7 +26,7 @@ func descIDSequenceForSystemTenant(
 	if !d.Codec.ForSystemTenant() {
 		return nil
 	}
-	return d.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	return d.DB.KV().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		oldEntry, err := txn.GetForUpdate(ctx, keys.LegacyDescIDGenerator)
 		if err != nil {
 			return err

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/importer"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -77,7 +78,7 @@ type parquetTest struct {
 // validateParquetFile reads the parquet file and validates various aspects of
 // the parquet file.
 func validateParquetFile(
-	t *testing.T, ctx context.Context, ie *sql.InternalExecutor, test parquetTest,
+	t *testing.T, ctx context.Context, ie isql.Executor, test parquetTest,
 ) error {
 	paths, err := filepath.Glob(filepath.Join(test.dir, test.filePrefix, parquetExportFilePattern+test.fileSuffix))
 	require.NoError(t, err)
@@ -211,7 +212,7 @@ func TestRandomParquetExports(t *testing.T) {
 	sqlDB.Exec(t, fmt.Sprintf("CREATE DATABASE %s", dbName))
 
 	var tableName string
-	ie := srv.ExecutorConfig().(sql.ExecutorConfig).InternalExecutor
+	idb := srv.ExecutorConfig().(sql.ExecutorConfig).InternalDB
 	// Try at most 10 times to populate a random table with at least 10 rows.
 	{
 		var (
@@ -234,28 +235,28 @@ func TestRandomParquetExports(t *testing.T) {
 		}
 		sqlDB.Exec(t, sb.String())
 
-		for i = 1; i < numTables; i++ {
-			tableName = tablePrefix + fmt.Sprint(i)
+		for i = 0; i < numTables; i++ {
+			tableName = string(stmts[i].(*tree.CreateTable).Table.ObjectName)
 			numRows, err := randgen.PopulateTableWithRandData(rng, db, tableName, 20)
 			require.NoError(t, err)
 			if numRows > 5 {
 				// Ensure the table only contains columns supported by EXPORT Parquet. If an
 				// unsupported column cannot be dropped, try populating another table
 				if err := func() error {
-					_, cols, err := ie.QueryRowExWithCols(
+					_, cols, err := idb.Executor().QueryRowExWithCols(
 						ctx,
 						"",
 						nil,
 						sessiondata.InternalExecutorOverride{
 							User:     username.RootUserName(),
 							Database: dbName},
-						fmt.Sprintf("SELECT * FROM %s LIMIT 1", tableName))
+						fmt.Sprintf("SELECT * FROM %s LIMIT 1", tree.NameString(tableName)))
 					require.NoError(t, err)
 
 					for _, col := range cols {
 						_, err := importer.NewParquetColumn(col.Typ, "", false)
 						if err != nil {
-							_, err = sqlDB.DB.ExecContext(ctx, fmt.Sprintf(`ALTER TABLE %s DROP COLUMN %s`, tableName, col.Name))
+							_, err = sqlDB.DB.ExecContext(ctx, fmt.Sprintf(`ALTER TABLE %s DROP COLUMN %s`, tree.NameString(tableName), tree.NameString(col.Name)))
 							if err != nil {
 								return err
 							}
@@ -271,17 +272,17 @@ func TestRandomParquetExports(t *testing.T) {
 		}
 		require.Equal(t, true, success, "test flake: failed to create a random table")
 	}
-	t.Logf("exporting as parquet from random table with schema: \n %s", sqlDB.QueryStr(t, `SHOW CREATE TABLE `+tableName))
+	t.Logf("exporting as parquet from random table with schema: \n %s", sqlDB.QueryStr(t, `SHOW CREATE TABLE `+tree.NameString(tableName)))
 	// TODO (msbutler): iterate over random select statements
 	test := parquetTest{
-		filePrefix: tableName,
+		filePrefix: "outputfile",
 		dbName:     dbName,
 		dir:        dir,
-		stmt: fmt.Sprintf("EXPORT INTO PARQUET 'nodelocal://0/%s' FROM SELECT * FROM %s",
-			tableName, tableName),
+		stmt: fmt.Sprintf("EXPORT INTO PARQUET 'nodelocal://0/outputfile' FROM SELECT * FROM %s",
+			tree.NameString(tableName)),
 	}
 	sqlDB.Exec(t, test.stmt)
-	err := validateParquetFile(t, ctx, ie, test)
+	err := validateParquetFile(t, ctx, idb.Executor(), test)
 	require.NoError(t, err, "failed to validate parquet file")
 }
 
@@ -308,7 +309,7 @@ func TestBasicParquetTypes(t *testing.T) {
 	sqlDB.Exec(t, fmt.Sprintf("CREATE DATABASE %s", dbName))
 
 	// instantiating an internal executor to easily get datums from the table
-	ie := srv.ExecutorConfig().(sql.ExecutorConfig).InternalExecutor
+	ie := srv.ExecutorConfig().(sql.ExecutorConfig).InternalDB.Executor()
 
 	sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY, x STRING, y INT, z FLOAT NOT NULL, a BOOL, 
 INDEX (y))`)

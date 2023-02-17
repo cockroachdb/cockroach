@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/dumpstore"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/zipper"
@@ -76,9 +76,7 @@ var _ dumpstore.Dumper = &TraceDumper{}
 // with traceID, to the configured dir.
 // The file names are prefixed with the timestamp of when it was written, to
 // facilitate GC of older trace zips.
-func (t *TraceDumper) Dump(
-	ctx context.Context, name string, traceID int64, ie sqlutil.InternalExecutor,
-) {
+func (t *TraceDumper) Dump(ctx context.Context, name string, traceID int64, ie isql.Executor) {
 	err := func() error {
 		now := t.currentTime()
 		traceZipFile := fmt.Sprintf(

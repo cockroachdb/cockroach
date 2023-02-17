@@ -70,7 +70,7 @@ func TestBaseQueueConcurrent(t *testing.T) {
 	// replicaInQueue, but this isn't an ideal world. Deal with it.
 	store := &Store{
 		cfg: StoreConfig{
-			Clock:             hlc.NewClockWithSystemTimeSource(time.Second /* maxOffset */),
+			Clock:             hlc.NewClockForTesting(nil),
 			AmbientCtx:        log.MakeTestingAmbientContext(tr),
 			DefaultSpanConfig: roachpb.TestingDefaultSpanConfig(),
 		},

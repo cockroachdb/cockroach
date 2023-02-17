@@ -1,7 +1,7 @@
 load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "jobspb",
@@ -29,8 +29,10 @@ proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/clusterversion:clusterversion_proto",
+        "//pkg/multitenant/mtinfopb:mtinfopb_proto",
         "//pkg/roachpb:roachpb_proto",
         "//pkg/sql/catalog/descpb:descpb_proto",
+        "//pkg/sql/sessiondatapb:sessiondatapb_proto",
         "//pkg/util/hlc:hlc_proto",
         "@com_github_cockroachdb_errors//errorspb:errorspb_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
@@ -47,16 +49,28 @@ go_proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/clusterversion",
+        "//pkg/multitenant/mtinfopb",
         "//pkg/roachpb",
         "//pkg/security/username",  # keep
         "//pkg/sql/catalog/catpb",  # keep
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/sem/tree",  # keep
+        "//pkg/sql/sessiondatapb",
         "//pkg/util/hlc",
         "//pkg/util/tracing/tracingpb",  # keep
         "//pkg/util/uuid",  # keep
         "@com_github_cockroachdb_errors//errorspb",
         "@com_github_gogo_protobuf//gogoproto",
+    ],
+)
+
+go_test(
+    name = "jobspb_test",
+    srcs = ["wrap_test.go"],
+    args = ["-test.timeout=295s"],
+    deps = [
+        ":jobspb",
+        "@com_github_stretchr_testify//assert",
     ],
 )
 

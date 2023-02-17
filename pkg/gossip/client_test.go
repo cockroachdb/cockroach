@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 )
 
@@ -41,7 +42,7 @@ func startGossip(
 	stopper *stop.Stopper,
 	t *testing.T,
 	registry *metric.Registry,
-) *Gossip {
+) (*Gossip, *rpc.Context) {
 	return startGossipAtAddr(clusterID, nodeID, util.IsolatedTestAddr, stopper, t, registry)
 }
 
@@ -52,28 +53,26 @@ func startGossipAtAddr(
 	stopper *stop.Stopper,
 	t *testing.T,
 	registry *metric.Registry,
-) *Gossip {
+) (*Gossip, *rpc.Context) {
 	ctx := context.Background()
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	rpcContext := rpc.NewInsecureTestingContextWithClusterID(ctx, clock, stopper, clusterID)
 	rpcContext.NodeID.Set(ctx, nodeID)
 
-	server := rpc.NewServer(rpcContext)
-	g := NewTest(nodeID, rpcContext, server, stopper, registry, zonepb.DefaultZoneConfigRef())
+	server, err := rpc.NewServer(rpcContext)
+	require.NoError(t, err)
+	g := NewTest(nodeID, stopper, registry, zonepb.DefaultZoneConfigRef())
+	RegisterGossipServer(server, g)
 	ln, err := netutil.ListenAndServeGRPC(stopper, server, addr)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	addr = ln.Addr()
-	if err := g.SetNodeDescriptor(&roachpb.NodeDescriptor{
+	require.NoError(t, g.SetNodeDescriptor(&roachpb.NodeDescriptor{
 		NodeID:  nodeID,
 		Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),
-	}); err != nil {
-		t.Fatal(err)
-	}
+	}))
 	g.start(addr)
 	time.Sleep(time.Millisecond)
-	return g
+	return g, rpcContext
 }
 
 type fakeGossipServer struct {
@@ -117,24 +116,23 @@ func startFakeServerGossips(
 	t *testing.T, clusterID uuid.UUID, localNodeID roachpb.NodeID, stopper *stop.Stopper,
 ) (*Gossip, *fakeGossipServer) {
 	ctx := context.Background()
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	lRPCContext := rpc.NewInsecureTestingContextWithClusterID(ctx, clock, stopper, clusterID)
 
-	lserver := rpc.NewServer(lRPCContext)
-	local := NewTest(localNodeID, lRPCContext, lserver, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
+	lserver, err := rpc.NewServer(lRPCContext)
+	require.NoError(t, err)
+	local := NewTest(localNodeID, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
+	RegisterGossipServer(lserver, local)
 	lln, err := netutil.ListenAndServeGRPC(stopper, lserver, util.IsolatedTestAddr)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	local.start(lln.Addr())
 
 	rRPCContext := rpc.NewInsecureTestingContextWithClusterID(ctx, clock, stopper, clusterID)
-	rserver := rpc.NewServer(rRPCContext)
+	rserver, err := rpc.NewServer(rRPCContext)
+	require.NoError(t, err)
 	remote := newFakeGossipServer(rserver, stopper)
 	rln, err := netutil.ListenAndServeGRPC(stopper, rserver, util.IsolatedTestAddr)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	addr := rln.Addr()
 	remote.nodeAddr = util.MakeUnresolvedAddr(addr.Network(), addr.String())
 
@@ -150,7 +148,7 @@ func gossipSucceedsSoon(
 	f func() error,
 ) {
 	ctx := context.Background()
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	// Use an insecure context since we don't need a valid cert.
 	rpcContext := rpc.NewInsecureTestingContextWithClusterID(ctx, clock, stopper, clusterID)
 
@@ -184,8 +182,8 @@ func TestClientGossip(t *testing.T) {
 
 	ctx := context.Background()
 
-	local := startGossip(clusterID, 1, stopper, t, metric.NewRegistry())
-	remote := startGossip(clusterID, 2, stopper, t, metric.NewRegistry())
+	local, _ := startGossip(clusterID, 1, stopper, t, metric.NewRegistry())
+	remote, _ := startGossip(clusterID, 2, stopper, t, metric.NewRegistry())
 	disconnected := make(chan *client, 1)
 	c := newClient(log.MakeTestingAmbientCtxWithNewTracer(), remote.GetNodeAddr(), makeMetrics())
 
@@ -226,8 +224,8 @@ func TestClientGossipMetrics(t *testing.T) {
 	// don't talk to servers from unrelated tests by accident).
 	clusterID := uuid.MakeV4()
 
-	local := startGossip(clusterID, 1, stopper, t, metric.NewRegistry())
-	remote := startGossip(clusterID, 2, stopper, t, metric.NewRegistry())
+	local, _ := startGossip(clusterID, 1, stopper, t, metric.NewRegistry())
+	remote, _ := startGossip(clusterID, 2, stopper, t, metric.NewRegistry())
 
 	if err := local.AddInfo("local-key", nil, time.Hour); err != nil {
 		t.Fatal(err)
@@ -293,7 +291,7 @@ func TestClientNodeID(t *testing.T) {
 	localNodeID := roachpb.NodeID(1)
 	local, remote := startFakeServerGossips(t, clusterID, localNodeID, stopper)
 
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	// Use an insecure context. We're talking to tcp socket which are not in the certs.
 	rpcContext := rpc.NewInsecureTestingContextWithClusterID(ctx, clock, stopper, clusterID)
 
@@ -341,12 +339,12 @@ func TestClientDisconnectLoopback(t *testing.T) {
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	local := startGossip(uuid.Nil, 1, stopper, t, metric.NewRegistry())
+	local, localCtx := startGossip(uuid.Nil, 1, stopper, t, metric.NewRegistry())
 	local.mu.Lock()
 	lAddr := local.mu.is.NodeAddr
-	local.startClientLocked(lAddr)
+	local.startClientLocked(lAddr, localCtx)
 	local.mu.Unlock()
-	local.manage()
+	local.manage(localCtx)
 	testutils.SucceedsSoon(t, func() error {
 		ok := local.findClient(func(c *client) bool { return c.addr.String() == lAddr.String() }) != nil
 		if !ok && verifyServerMaps(local, 0) {
@@ -368,16 +366,16 @@ func TestClientDisconnectRedundant(t *testing.T) {
 	// don't talk to servers from unrelated tests by accident).
 	clusterID := uuid.MakeV4()
 
-	local := startGossip(clusterID, 1, stopper, t, metric.NewRegistry())
-	remote := startGossip(clusterID, 2, stopper, t, metric.NewRegistry())
+	local, localCtx := startGossip(clusterID, 1, stopper, t, metric.NewRegistry())
+	remote, remoteCtx := startGossip(clusterID, 2, stopper, t, metric.NewRegistry())
 	local.mu.Lock()
 	remote.mu.Lock()
 	rAddr := remote.mu.is.NodeAddr
 	lAddr := local.mu.is.NodeAddr
 	local.mu.Unlock()
 	remote.mu.Unlock()
-	local.manage()
-	remote.manage()
+	local.manage(localCtx)
+	remote.manage(remoteCtx)
 
 	// Gossip a key on local and wait for it to show up on remote. This
 	// guarantees we have an active local to remote client connection.
@@ -390,7 +388,7 @@ func TestClientDisconnectRedundant(t *testing.T) {
 			// Restart the client connection in the loop. It might have failed due to
 			// a heartbeat time.
 			local.mu.Lock()
-			local.startClientLocked(rAddr)
+			local.startClientLocked(rAddr, localCtx)
 			local.mu.Unlock()
 			return fmt.Errorf("unable to find local to remote client")
 		}
@@ -401,7 +399,7 @@ func TestClientDisconnectRedundant(t *testing.T) {
 	// Start a remote to local client. This client will get removed as being
 	// redundant as there is already a connection between the two nodes.
 	remote.mu.Lock()
-	remote.startClientLocked(lAddr)
+	remote.startClientLocked(lAddr, remoteCtx)
 	remote.mu.Unlock()
 
 	testutils.SucceedsSoon(t, func() error {
@@ -427,8 +425,8 @@ func TestClientDisallowMultipleConns(t *testing.T) {
 	// don't talk to servers from unrelated tests by accident).
 	clusterID := uuid.MakeV4()
 
-	local := startGossip(clusterID, 1, stopper, t, metric.NewRegistry())
-	remote := startGossip(clusterID, 2, stopper, t, metric.NewRegistry())
+	local, localCtx := startGossip(clusterID, 1, stopper, t, metric.NewRegistry())
+	remote, remoteCtx := startGossip(clusterID, 2, stopper, t, metric.NewRegistry())
 
 	local.mu.Lock()
 	remote.mu.Lock()
@@ -436,12 +434,12 @@ func TestClientDisallowMultipleConns(t *testing.T) {
 	// Start two clients from local to remote. RPC client cache is
 	// disabled via the context, so we'll start two different outgoing
 	// connections.
-	local.startClientLocked(rAddr)
-	local.startClientLocked(rAddr)
+	local.startClientLocked(rAddr, localCtx)
+	local.startClientLocked(rAddr, localCtx)
 	local.mu.Unlock()
 	remote.mu.Unlock()
-	local.manage()
-	remote.manage()
+	local.manage(localCtx)
+	remote.manage(remoteCtx)
 	testutils.SucceedsSoon(t, func() error {
 		// Verify that the remote server has only a single incoming
 		// connection and the local server has only a single outgoing
@@ -465,7 +463,7 @@ func TestClientRegisterWithInitNodeID(t *testing.T) {
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 
 	// Shared cluster ID by all gossipers (this ensures that the gossipers
 	// don't talk to servers from unrelated tests by accident).
@@ -478,17 +476,15 @@ func TestClientRegisterWithInitNodeID(t *testing.T) {
 		nodeID := roachpb.NodeID(i + 1)
 
 		rpcContext := rpc.NewInsecureTestingContextWithClusterID(ctx, clock, stopper, clusterID)
-		server := rpc.NewServer(rpcContext)
+		server, err := rpc.NewServer(rpcContext)
+		require.NoError(t, err)
 		// node ID must be non-zero
-		gnode := NewTest(
-			nodeID, rpcContext, server, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef(),
-		)
+		gnode := NewTest(nodeID, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
+		RegisterGossipServer(server, gnode)
 		g = append(g, gnode)
 
 		ln, err := netutil.ListenAndServeGRPC(stopper, server, util.IsolatedTestAddr)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 
 		// Connect to the first gossip node.
 		if gossipAddr == "" {
@@ -496,7 +492,7 @@ func TestClientRegisterWithInitNodeID(t *testing.T) {
 		}
 
 		addresses := []util.UnresolvedAddr{util.MakeUnresolvedAddr("tcp", gossipAddr)}
-		gnode.Start(ln.Addr(), addresses)
+		gnode.Start(ln.Addr(), addresses, rpcContext)
 	}
 
 	testutils.SucceedsSoon(t, func() error {
@@ -518,7 +514,7 @@ func TestClientForwardUnresolved(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 	const nodeID = 1
-	local := startGossip(uuid.Nil, nodeID, stopper, t, metric.NewRegistry())
+	local, _ := startGossip(uuid.Nil, nodeID, stopper, t, metric.NewRegistry())
 	addr := local.GetNodeAddr()
 
 	client := newClient(log.MakeTestingAmbientCtxWithNewTracer(), addr, makeMetrics()) // never started

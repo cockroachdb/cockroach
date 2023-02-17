@@ -12,11 +12,12 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssmemstorage",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachpb",
         "//pkg/server/serverpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/sql/appstatspb",
         "//pkg/sql/execstats",
+        "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sqlstats",
         "//pkg/sql/sqlstats/insights",
         "//pkg/util",

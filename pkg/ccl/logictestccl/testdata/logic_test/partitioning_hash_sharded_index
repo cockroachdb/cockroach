@@ -102,7 +102,7 @@ CREATE TABLE t_to_be_hashed (
 );
 
 query T
-SELECT @2 FROM [SHOW CREATE TABLE t_to_be_hashed];
+SELECT create_statement FROM [SHOW CREATE TABLE t_to_be_hashed];
 ----
 CREATE TABLE public.t_to_be_hashed (
   a INT8 NOT NULL,
@@ -120,7 +120,7 @@ statement ok
 CREATE INDEX ON t_to_be_hashed (c) USING HASH;
 
 query T
-SELECT @2 FROM [SHOW CREATE TABLE t_to_be_hashed];
+SELECT create_statement FROM [SHOW CREATE TABLE t_to_be_hashed];
 ----
 CREATE TABLE public.t_to_be_hashed (
   a INT8 NOT NULL,
@@ -140,7 +140,7 @@ statement ok
 CREATE UNIQUE INDEX ON t_to_be_hashed (c) USING HASH;
 
 query T
-SELECT @2 FROM [SHOW CREATE TABLE t_to_be_hashed];
+SELECT create_statement FROM [SHOW CREATE TABLE t_to_be_hashed];
 ----
 CREATE TABLE public.t_to_be_hashed (
   a INT8 NOT NULL,
@@ -161,7 +161,7 @@ statement ok
 ALTER TABLE t_to_be_hashed ALTER PRIMARY KEY USING COLUMNS (a) USING HASH;
 
 query T
-SELECT @2 FROM [SHOW CREATE TABLE t_to_be_hashed];
+SELECT create_statement FROM [SHOW CREATE TABLE t_to_be_hashed];
 ----
 CREATE TABLE public.t_to_be_hashed (
   a INT8 NOT NULL,
@@ -192,7 +192,7 @@ CREATE TABLE t_idx_pk_hashed_1 (
 );
 
 query T
-SELECT @2 FROM [SHOW CREATE TABLE t_idx_pk_hashed_1];
+SELECT create_statement FROM [SHOW CREATE TABLE t_idx_pk_hashed_1];
 ----
 CREATE TABLE public.t_idx_pk_hashed_1 (
   crdb_internal_a_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 16:::INT8)) VIRTUAL,
@@ -223,7 +223,7 @@ CREATE TABLE t_idx_pk_hashed_2 (
 );
 
 query T
-SELECT @2 FROM [SHOW CREATE TABLE t_idx_pk_hashed_2];
+SELECT create_statement FROM [SHOW CREATE TABLE t_idx_pk_hashed_2];
 ----
 CREATE TABLE public.t_idx_pk_hashed_2 (
   a INT8 NOT NULL,
@@ -257,28 +257,27 @@ CREATE INDEX t_presplit_idx_member_id ON t_presplit (member_id) USING HASH WITH 
 
 skipif config 3node-tenant
 query TITTT colnames,retry
-SELECT t.name, r.table_id, r.index_name, r.start_pretty, r.end_pretty
-FROM crdb_internal.tables t
-JOIN crdb_internal.ranges r ON t.table_id = r.table_id
-WHERE t.name = 't_presplit'
-AND t.state = 'PUBLIC'
-AND r.split_enforced_until IS NOT NULL;
+SELECT table_name, table_id, index_name, start_key, end_key
+  FROM [SHOW RANGES FROM DATABASE test WITH INDEXES]
+ WHERE table_name = 't_presplit'
+ORDER BY start_key
 ----
-name        table_id  index_name                start_pretty               end_pretty
-t_presplit  112       t_presplit_idx_member_id  /Table/112/2               /Table/112/2/"new york"/0
-t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"new york"/0  /Table/112/2/"new york"/1
-t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"new york"/1  /Table/112/2/"new york"/2
-t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"new york"/2  /Table/112/2/"new york"/3
-t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"new york"/3  /Table/112/2/"new york"/4
-t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"new york"/4  /Table/112/2/"new york"/5
-t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"new york"/5  /Table/112/2/"new york"/6
-t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"new york"/6  /Table/112/2/"new york"/7
-t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"new york"/7  /Table/112/2/"seattle"/0
-t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"seattle"/0   /Table/112/2/"seattle"/1
-t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"seattle"/1   /Table/112/2/"seattle"/2
-t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"seattle"/2   /Table/112/2/"seattle"/3
-t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"seattle"/3   /Table/112/2/"seattle"/4
-t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"seattle"/4   /Table/112/2/"seattle"/5
-t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"seattle"/5   /Table/112/2/"seattle"/6
-t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"seattle"/6   /Table/112/2/"seattle"/7
-t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"seattle"/7   /Table/112/3/"new york"/0
+table_name  table_id  index_name                start_key                   end_key
+t_presplit  112       t_presplit_pkey           /Table/109/11/"seattle"/15  /Table/112/2
+t_presplit  112       t_presplit_idx_member_id  /Table/112/2                /Table/112/2/"new york"/0
+t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"new york"/0   /Table/112/2/"new york"/1
+t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"new york"/1   /Table/112/2/"new york"/2
+t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"new york"/2   /Table/112/2/"new york"/3
+t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"new york"/3   /Table/112/2/"new york"/4
+t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"new york"/4   /Table/112/2/"new york"/5
+t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"new york"/5   /Table/112/2/"new york"/6
+t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"new york"/6   /Table/112/2/"new york"/7
+t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"new york"/7   /Table/112/2/"seattle"/0
+t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"seattle"/0    /Table/112/2/"seattle"/1
+t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"seattle"/1    /Table/112/2/"seattle"/2
+t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"seattle"/2    /Table/112/2/"seattle"/3
+t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"seattle"/3    /Table/112/2/"seattle"/4
+t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"seattle"/4    /Table/112/2/"seattle"/5
+t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"seattle"/5    /Table/112/2/"seattle"/6
+t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"seattle"/6    /Table/112/2/"seattle"/7
+t_presplit  112       t_presplit_idx_member_id  /Table/112/2/"seattle"/7    /Table/112/3/"new york"/0

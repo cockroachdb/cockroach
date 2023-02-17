@@ -120,7 +120,7 @@ func MaybeDecorateError(
 			return connInsecureHint()
 		}
 
-		if wErr := (*security.Error)(nil); errors.As(err, &wErr) {
+		if errors.Is(err, security.ErrCertManagement) {
 			// Avoid errors.Wrapf here so that we have more control over the
 			// formatting of the message with error text.
 			const format = "cannot load certificates.\n" +

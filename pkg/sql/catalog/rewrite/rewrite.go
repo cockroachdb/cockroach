@@ -99,7 +99,7 @@ func TableDescs(
 			table.ViewQuery = viewQuery
 		}
 
-		// TODO(lucy): deal with outbound foreign key mutations here as well.
+		// Rewrite outbound FKs in both `OutboundFKs` and `Mutations` slice.
 		origFKs := table.OutboundFKs
 		table.OutboundFKs = nil
 		for i := range origFKs {
@@ -119,6 +119,16 @@ func TableDescs(
 			// a db and name matching the one the FK pointed to at backup, should
 			// we update the FK to point to it?
 			table.OutboundFKs = append(table.OutboundFKs, *fk)
+		}
+		for idx := range table.Mutations {
+			if c := table.Mutations[idx].GetConstraint(); c != nil &&
+				c.ConstraintType == descpb.ConstraintToUpdate_FOREIGN_KEY {
+				fk := &c.ForeignKey
+				if rewriteOfReferencedTable, ok := descriptorRewrites[fk.ReferencedTableID]; ok {
+					fk.ReferencedTableID = rewriteOfReferencedTable.ID
+					fk.OriginTableID = tableRewrite.ID
+				}
+			}
 		}
 
 		origInboundFks := table.InboundFKs
@@ -163,6 +173,8 @@ func TableDescs(
 			}
 		}
 
+		// Rewrite unique_without_index in both `UniqueWithoutIndexConstraints`
+		// and `Mutations` slice.
 		origUniqueWithoutIndexConstraints := table.UniqueWithoutIndexConstraints
 		table.UniqueWithoutIndexConstraints = nil
 		for _, unique := range origUniqueWithoutIndexConstraints {
@@ -174,6 +186,18 @@ func TableDescs(
 				// we should always find a rewrite for the table being restored.
 				return errors.AssertionFailedf("cannot restore %q because referenced table ID in "+
 					"UniqueWithoutIndexConstraint %d was not found", table.Name, unique.TableID)
+			}
+		}
+		for idx := range table.Mutations {
+			if c := table.Mutations[idx].GetConstraint(); c != nil &&
+				c.ConstraintType == descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX {
+				uwi := &c.UniqueWithoutIndexConstraint
+				if rewrite, ok := descriptorRewrites[uwi.TableID]; ok {
+					uwi.TableID = rewrite.ID
+				} else {
+					return errors.AssertionFailedf("cannot restore %q because referenced table ID in "+
+						"UniqueWithoutIndexConstraint %d was not found", table.Name, uwi.TableID)
+				}
 			}
 		}
 
@@ -310,11 +334,7 @@ func rewriteTypesInExpr(expr string, rewrites jobspb.DescRewriteMap) (string, er
 		tree.FmtSerializable,
 		tree.FmtIndexedTypeFormat(func(ctx *tree.FmtCtx, ref *tree.OIDTypeReference) {
 			newRef := ref
-			var id descpb.ID
-			id, err = typedesc.UserDefinedTypeOIDToID(ref.OID)
-			if err != nil {
-				return
-			}
+			id := typedesc.UserDefinedTypeOIDToID(ref.OID)
 			if rw, ok := rewrites[id]; ok {
 				newRef = &tree.OIDTypeReference{OID: catid.TypeIDToOID(rw.ID)}
 			}
@@ -322,9 +342,6 @@ func rewriteTypesInExpr(expr string, rewrites jobspb.DescRewriteMap) (string, er
 		}),
 	)
 	ctx.FormatNode(parsed)
-	if err != nil {
-		return "", err
-	}
 	return ctx.CloseAndGetString(), nil
 }
 
@@ -409,20 +426,14 @@ func rewriteIDsInTypesT(typ *types.T, descriptorRewrites jobspb.DescRewriteMap) 
 	if !typ.UserDefined() {
 		return nil
 	}
-	tid, err := typedesc.GetUserDefinedTypeDescID(typ)
-	if err != nil {
-		return err
-	}
+	tid := typedesc.GetUserDefinedTypeDescID(typ)
 	// Collect potential new OID values.
 	var newOID, newArrayOID oid.Oid
 	if rw, ok := descriptorRewrites[tid]; ok {
 		newOID = catid.TypeIDToOID(rw.ID)
 	}
 	if typ.Family() != types.ArrayFamily {
-		tid, err = typedesc.GetUserDefinedArrayTypeDescID(typ)
-		if err != nil {
-			return err
-		}
+		tid = typedesc.GetUserDefinedArrayTypeDescID(typ)
 		if rw, ok := descriptorRewrites[tid]; ok {
 			newArrayOID = catid.TypeIDToOID(rw.ID)
 		}
@@ -525,20 +536,37 @@ func SchemaDescs(schemas []*schemadesc.Mutable, descriptorRewrites jobspb.DescRe
 		sc.ParentID = rewrite.ParentID
 
 		// Rewrite function ID and types ID in function signatures.
-		for _, fn := range sc.GetFunctions() {
-			for i := range fn.Overloads {
-				overload := &fn.Overloads[i]
-				overload.ID = descriptorRewrites[overload.ID].ID
-				for _, typ := range overload.ArgTypes {
+		newFns := make(map[string]descpb.SchemaDescriptor_Function)
+		for fnName, fn := range sc.GetFunctions() {
+			newSigs := make([]descpb.SchemaDescriptor_FunctionSignature, 0, len(fn.Signatures))
+			for i := range fn.Signatures {
+				sig := &fn.Signatures[i]
+				// If the function is not found in the backup, we just skip. This only
+				// happens when restoring from a backup with `BACKUP TABLE` where the
+				// function descriptors are not backup.
+				fnDesc, ok := descriptorRewrites[sig.ID]
+				if !ok {
+					continue
+				}
+				sig.ID = fnDesc.ID
+				for _, typ := range sig.ArgTypes {
 					if err := rewriteIDsInTypesT(typ, descriptorRewrites); err != nil {
 						return err
 					}
 				}
-				if err := rewriteIDsInTypesT(overload.ReturnType, descriptorRewrites); err != nil {
+				if err := rewriteIDsInTypesT(sig.ReturnType, descriptorRewrites); err != nil {
 					return err
+				}
+				newSigs = append(newSigs, *sig)
+			}
+			if len(newSigs) > 0 {
+				newFns[fnName] = descpb.SchemaDescriptor_Function{
+					Name:       fnName,
+					Signatures: newSigs,
 				}
 			}
 		}
+		sc.Functions = newFns
 
 		if err := rewriteSchemaChangerState(sc, descriptorRewrites); err != nil {
 			return err

@@ -24,23 +24,23 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// tenantCoalesceAdjacentSetting is a hidden cluster setting that controls
-// whether we coalesce adjacent ranges in the tenant keyspace if they have the
-// same span config.
+// tenantCoalesceAdjacentSetting is a hidden cluster setting that
+// controls whether we coalesce adjacent ranges across all secondary
+// tenant keyspaces if they have the same span config.
 var tenantCoalesceAdjacentSetting = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"spanconfig.tenant_coalesce_adjacent.enabled",
-	`collapse adjacent ranges with the same span configs`,
+	`collapse adjacent ranges with the same span configs across all secondary tenant keyspaces`,
 	true,
 )
 
-// hostCoalesceAdjacentSetting is a hidden cluster setting that controls
-// whether we coalesce adjacent ranges in the host tenant keyspace if they have
-// the same span config.
-var hostCoalesceAdjacentSetting = settings.RegisterBoolSetting(
+// storageCoalesceAdjacentSetting is a hidden cluster setting that
+// controls whether we coalesce adjacent ranges outside of the
+// secondary tenant keyspaces if they have the same span config.
+var storageCoalesceAdjacentSetting = settings.RegisterBoolSetting(
 	settings.SystemOnly,
-	"spanconfig.host_coalesce_adjacent.enabled",
-	`collapse adjacent ranges with the same span configs`,
+	"spanconfig.storage_coalesce_adjacent.enabled",
+	`collapse adjacent ranges with the same span configs for the ranges specific to the system tenant`,
 	false,
 )
 
@@ -152,7 +152,7 @@ func (s *spanConfigStore) computeSplitKey(start, end roachpb.RKey) (roachpb.RKey
 			// ranges.
 			systemTableUpperBound := keys.SystemSQLCodec.TablePrefix(keys.MaxReservedDescID + 1)
 			if roachpb.Key(rem).Compare(systemTableUpperBound) < 0 ||
-				!hostCoalesceAdjacentSetting.Get(&s.settings.SV) {
+				!storageCoalesceAdjacentSetting.Get(&s.settings.SV) {
 				return roachpb.RKey(match.span.Key), nil
 			}
 		} else {

@@ -9,6 +9,7 @@
 package statusccl
 
 import (
+	"bytes"
 	"context"
 	gosql "database/sql"
 	"encoding/hex"
@@ -24,10 +25,13 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/serverccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -47,7 +51,9 @@ import (
 
 func TestTenantStatusAPI(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
+	s := log.ScopeWithoutShowLogs(t)
+	defer s.Close(t)
+	defer s.SetupSingleFileLogging()()
 
 	// The liveness session might expire before the stress race can finish.
 	skip.UnderStressRace(t, "expensive tests")
@@ -76,6 +82,12 @@ func TestTenantStatusAPI(t *testing.T) {
 	)
 
 	defer testHelper.Cleanup(ctx, t)
+
+	// Speed up propagation of tenant capability changes.
+	db := testHelper.HostCluster().ServerConn(0)
+	tdb := sqlutils.MakeSQLRunner(db)
+	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms'")
+	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10 ms'")
 
 	t.Run("reset_sql_stats", func(t *testing.T) {
 		testResetSQLStatsRPCForTenant(ctx, t, testHelper)
@@ -132,6 +144,108 @@ func TestTenantStatusAPI(t *testing.T) {
 	t.Run("tenant_nodes", func(t *testing.T) {
 		testTenantNodes(ctx, t, testHelper, tenantLocalities)
 	})
+
+	t.Run("tenant_hot_ranges", func(t *testing.T) {
+		testTenantHotRanges(ctx, t, testHelper)
+	})
+
+	t.Run("tenant_span_stats", func(t *testing.T) {
+		testTenantSpanStats(ctx, t, testHelper)
+	})
+
+	t.Run("tenant_nodes_capability", func(t *testing.T) {
+		testTenantNodesCapability(ctx, t, testHelper)
+	})
+}
+
+func testTenantSpanStats(ctx context.Context, t *testing.T, helper serverccl.TenantTestHelper) {
+	tenantA := helper.TestCluster().Tenant(0)
+	tenantB := helper.ControlCluster().Tenant(0)
+
+	aSpan := tenantA.GetTenant().Codec().TenantSpan()
+	bSpan := tenantB.GetTenant().Codec().TenantSpan()
+
+	t.Run("test tenant isolation", func(t *testing.T) {
+		_, err := tenantA.TenantStatusSrv().(serverpb.TenantStatusServer).SpanStats(ctx,
+			&roachpb.SpanStatsRequest{
+				NodeID:   "0", // 0 indicates we want stats from all nodes.
+				StartKey: roachpb.RKey(bSpan.Key),
+				EndKey:   roachpb.RKey(bSpan.EndKey),
+			})
+		require.Error(t, err)
+	})
+
+	t.Run("test KV node fan-out", func(t *testing.T) {
+		_, tID, err := keys.DecodeTenantPrefix(aSpan.Key)
+		require.NoError(t, err)
+		tPrefix := keys.MakeTenantPrefix(tID)
+
+		makeKey := func(keys ...[]byte) roachpb.Key {
+			return bytes.Join(keys, nil)
+		}
+
+		controlStats, err := tenantA.TenantStatusSrv().(serverpb.TenantStatusServer).SpanStats(ctx,
+			&roachpb.SpanStatsRequest{
+				NodeID:   "0", // 0 indicates we want stats from all nodes.
+				StartKey: roachpb.RKey(aSpan.Key),
+				EndKey:   roachpb.RKey(aSpan.EndKey),
+			})
+		require.NoError(t, err)
+
+		// Create a new range in this tenant.
+		_, _, err = helper.HostCluster().Server(0).SplitRange(makeKey(tPrefix, roachpb.Key("c")))
+		require.NoError(t, err)
+
+		// Wait for the split to finish and propagate.
+		err = helper.HostCluster().WaitForFullReplication()
+		require.NoError(t, err)
+
+		// Create 6 new keys across the tenant's ranges.
+		incKeys := []string{"a", "b", "bb", "d", "e", "f"}
+		for _, incKey := range incKeys {
+			// Prefix each key appropriately for this tenant.
+			k := makeKey(keys.MakeTenantPrefix(tID), []byte(incKey))
+			if _, err := helper.HostCluster().Server(0).DB().Inc(ctx, k, 5); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		stats, err := tenantA.TenantStatusSrv().(serverpb.TenantStatusServer).SpanStats(ctx,
+			&roachpb.SpanStatsRequest{
+				NodeID:   "0", // 0 indicates we want stats from all nodes.
+				StartKey: roachpb.RKey(aSpan.Key),
+				EndKey:   roachpb.RKey(aSpan.EndKey),
+			})
+
+		require.NoError(t, err)
+		require.Equal(t, controlStats.RangeCount+1, stats.RangeCount)
+		require.Equal(t, controlStats.TotalStats.LiveCount+int64(len(incKeys)), stats.TotalStats.LiveCount)
+	})
+
+}
+
+func testTenantNodesCapability(
+	ctx context.Context, t *testing.T, helper serverccl.TenantTestHelper,
+) {
+	tenant := helper.TestCluster().TenantStatusSrv(0)
+
+	_, err := tenant.NodesUI(ctx, &serverpb.NodesRequest{})
+	require.Error(t, err)
+
+	db := helper.HostCluster().ServerConn(0)
+	_, err = db.Exec("ALTER TENANT [10] GRANT CAPABILITY can_view_node_info=true\n")
+	require.NoError(t, err)
+
+	testutils.SucceedsSoon(t, func() error {
+		resp, err := tenant.NodesUI(ctx, &serverpb.NodesRequest{})
+		if err != nil {
+			return err
+		}
+		if len(resp.Nodes) == 0 || len(resp.LivenessByNodeID) == 0 {
+			return errors.New("missing nodes or liveness data")
+		}
+		return nil
+	})
 }
 
 func testTenantLogs(ctx context.Context, t *testing.T, helper serverccl.TenantTestHelper) {
@@ -156,6 +270,14 @@ func testTenantLogs(ctx context.Context, t *testing.T, helper serverccl.TenantTe
 	})
 	require.NoError(t, err)
 	require.NotEmpty(t, logsFileResp.Entries)
+	systemTenantIDStr := fmt.Sprintf("%d", roachpb.SystemTenantID.InternalValue)
+	for _, resp := range []*serverpb.LogEntriesResponse{logsResp, logsFileResp} {
+		for _, entry := range resp.Entries {
+			// Logs belonging to the system tenant ID should never show up in a response
+			// provided by an app tenant server. Verify this filtering.
+			require.NotEqual(t, entry.TenantID, systemTenantIDStr)
+		}
+	}
 }
 
 func TestTenantCannotSeeNonTenantStats(t *testing.T) {
@@ -927,30 +1049,22 @@ func testTenantStatusCancelSessionErrorMessages(t *testing.T, helper serverccl.T
 	testCases := []struct {
 		sessionID     string
 		expectedError string
-
-		// This is a temporary assertion. We should always show the following "not found" error messages,
-		// regardless of admin status, but our current behavior is slightly broken and will be fixed in #77676.
-		nonAdminSeesError bool
 	}{
 		{
-			sessionID:         "",
-			expectedError:     "session ID 00000000000000000000000000000000 not found",
-			nonAdminSeesError: true,
+			sessionID:     "",
+			expectedError: "session ID 00000000000000000000000000000000 not found",
 		},
 		{
-			sessionID:         "01", // This query ID claims to have SQL instance ID 1, different from the one we're talking to.
-			expectedError:     "session ID 00000000000000000000000000000001 not found",
-			nonAdminSeesError: false,
+			sessionID:     "01", // This query ID claims to have SQL instance ID 1, different from the one we're talking to.
+			expectedError: "session ID 00000000000000000000000000000001 not found",
 		},
 		{
-			sessionID:         "02", // This query ID claims to have SQL instance ID 2, the instance we're talking to.
-			expectedError:     "session ID 00000000000000000000000000000002 not found",
-			nonAdminSeesError: false,
+			sessionID:     "02", // This query ID claims to have SQL instance ID 2, the instance we're talking to.
+			expectedError: "session ID 00000000000000000000000000000002 not found",
 		},
 		{
-			sessionID:         "42", // This query ID claims to have SQL instance ID 42, which does not exist.
-			expectedError:     "session ID 00000000000000000000000000000042 not found",
-			nonAdminSeesError: true,
+			sessionID:     "42", // This query ID claims to have SQL instance ID 42, which does not exist.
+			expectedError: "session ID 00000000000000000000000000000042 not found",
 		},
 	}
 
@@ -966,12 +1080,8 @@ func testTenantStatusCancelSessionErrorMessages(t *testing.T, helper serverccl.T
 				err = client.PostJSONChecked("/_status/cancel_session/0", &serverpb.CancelSessionRequest{
 					SessionID: sessionID.GetBytes(),
 				}, &resp)
-				if isAdmin || testCase.nonAdminSeesError {
-					require.NoError(t, err)
-					require.Equal(t, testCase.expectedError, resp.Error)
-				} else {
-					require.Error(t, err)
-				}
+				require.NoError(t, err)
+				require.Equal(t, testCase.expectedError, resp.Error)
 			})
 		}
 	})
@@ -1056,36 +1166,27 @@ func testTenantStatusCancelQueryErrorMessages(t *testing.T, helper serverccl.Ten
 	testCases := []struct {
 		queryID       string
 		expectedError string
-
-		// This is a temporary assertion. We should always show the following "not found" error messages,
-		// regardless of admin status, but our current behavior is slightly broken and will be fixed in #77676.
-		nonAdminSeesError bool
 	}{
 		{
 			queryID: "BOGUS_QUERY_ID",
 			expectedError: "query ID 00000000000000000000000000000000 malformed: " +
 				"could not decode BOGUS_QUERY_ID as hex: encoding/hex: invalid byte: U+004F 'O'",
-			nonAdminSeesError: true,
 		},
 		{
-			queryID:           "",
-			expectedError:     "query ID 00000000000000000000000000000000 not found",
-			nonAdminSeesError: true,
+			queryID:       "",
+			expectedError: "query ID 00000000000000000000000000000000 not found",
 		},
 		{
-			queryID:           "01", // This query ID claims to have SQL instance ID 1, different from the one we're talking to.
-			expectedError:     "query ID 00000000000000000000000000000001 not found",
-			nonAdminSeesError: false,
+			queryID:       "01", // This query ID claims to have SQL instance ID 1, different from the one we're talking to.
+			expectedError: "query ID 00000000000000000000000000000001 not found",
 		},
 		{
-			queryID:           "02", // This query ID claims to have SQL instance ID 2, the instance we're talking to.
-			expectedError:     "query ID 00000000000000000000000000000002 not found",
-			nonAdminSeesError: false,
+			queryID:       "02", // This query ID claims to have SQL instance ID 2, the instance we're talking to.
+			expectedError: "query ID 00000000000000000000000000000002 not found",
 		},
 		{
-			queryID:           "42", // This query ID claims to have SQL instance ID 42, which does not exist.
-			expectedError:     "query ID 00000000000000000000000000000042 not found",
-			nonAdminSeesError: true,
+			queryID:       "42", // This query ID claims to have SQL instance ID 42, which does not exist.
+			expectedError: "query ID 00000000000000000000000000000042 not found",
 		},
 	}
 
@@ -1099,12 +1200,8 @@ func testTenantStatusCancelQueryErrorMessages(t *testing.T, helper serverccl.Ten
 				err := client.PostJSONChecked("/_status/cancel_query/0", &serverpb.CancelQueryRequest{
 					QueryID: testCase.queryID,
 				}, &resp)
-				if isAdmin || testCase.nonAdminSeesError {
-					require.NoError(t, err)
-					require.Equal(t, testCase.expectedError, resp.Error)
-				} else {
-					require.Error(t, err)
-				}
+				require.NoError(t, err)
+				require.Equal(t, testCase.expectedError, resp.Error)
 			})
 		}
 	})
@@ -1145,7 +1242,7 @@ func testTxnIDResolutionRPC(ctx context.Context, t *testing.T, helper serverccl.
 			require.Equal(t, txnID, resp.ResolvedTxnIDs[0].TxnID,
 				"expected to find txn %s on coordinator node %d, but it "+
 					"was not", txnID.String(), coordinatorNodeID)
-			require.NotEqual(t, roachpb.InvalidTransactionFingerprintID, resp.ResolvedTxnIDs[0].TxnFingerprintID)
+			require.NotEqual(t, appstatspb.InvalidTransactionFingerprintID, resp.ResolvedTxnIDs[0].TxnFingerprintID)
 			return nil
 		})
 	}
@@ -1311,4 +1408,79 @@ func assertEndKeyInRange(
 			endKey == "/Max",
 		fmt.Sprintf("end key %s is outside of the tenant's keyspace (prefix: %v, prefixEnd: %v)",
 			endKey, tenantPrefix.String(), tenantPrefixEnd.String()))
+}
+
+func testTenantHotRanges(_ context.Context, t *testing.T, helper serverccl.TenantTestHelper) {
+	tenantA := helper.TestCluster().TenantStatusSrv(0).(serverpb.TenantStatusServer)
+	tenantB := helper.ControlCluster().TenantStatusSrv(0).(serverpb.TenantStatusServer)
+
+	tIDa := security.EmbeddedTenantIDs()[0]
+	tIDb := security.EmbeddedTenantIDs()[1]
+
+	testutils.SucceedsSoon(t, func() error {
+		resp, err := tenantA.HotRangesV2(context.Background(), &serverpb.HotRangesRequest{})
+		if err != nil {
+			return err
+		}
+		if len(resp.Ranges) > 1 {
+			return nil
+		}
+		return errors.New("waiting for hot ranges")
+	})
+
+	rangeIDs := make(map[roachpb.RangeID]roachpb.TenantID)
+	stores := helper.HostCluster().Server(0).GetStores().(*kvserver.Stores)
+	_ = stores.VisitStores(func(s *kvserver.Store) error {
+		_, _ = s.Capacity(context.Background(), false)
+		s.VisitReplicas(func(replica *kvserver.Replica) (wantMore bool) {
+			rangeIDs[replica.RangeID], _ = replica.TenantID()
+			return true
+		})
+		return nil
+	})
+
+	t.Run("test http request for hot ranges", func(t *testing.T) {
+		client := helper.TestCluster().TenantHTTPClient(t, 1, false)
+		defer client.Close()
+		grantStmt := `GRANT SYSTEM VIEWCLUSTERMETADATA TO authentic_user_noadmin;`
+		helper.TestCluster().TenantConn(0).Exec(t, grantStmt)
+		req := serverpb.HotRangesRequest{}
+		resp := serverpb.HotRangesResponseV2{}
+		client.PostJSON("/_status/v2/hotranges", &req, &resp)
+		require.NotEmpty(t, resp.Ranges)
+	})
+
+	t.Run("test tenant hot ranges respects tenant isolation", func(t *testing.T) {
+		resp, err := tenantA.HotRangesV2(context.Background(), &serverpb.HotRangesRequest{})
+		require.NoError(t, err)
+		require.NotEmpty(t, resp.Ranges)
+
+		for _, r := range resp.Ranges {
+			if tID, ok := rangeIDs[r.RangeID]; ok {
+				if tID.ToUint64() != tIDa {
+					require.Equal(t, tIDa, tID)
+				}
+			}
+		}
+
+		resp, err = tenantB.HotRangesV2(context.Background(), &serverpb.HotRangesRequest{})
+		require.NoError(t, err)
+		require.NotEmpty(t, resp.Ranges)
+		for _, r := range resp.Ranges {
+			if tID, ok := rangeIDs[r.RangeID]; ok {
+				if tID.ToUint64() != tIDb {
+					require.Equal(t, tIDb, tID)
+				}
+			}
+		}
+	})
+
+	t.Run("forbids requesting hot ranges for another tenant", func(t *testing.T) {
+		// TenantA requests hot ranges for Tenant B.
+		resp, err := tenantA.HotRangesV2(context.Background(), &serverpb.HotRangesRequest{
+			TenantID: roachpb.MustMakeTenantID(tIDb).String(),
+		})
+		require.Error(t, err)
+		require.Nil(t, resp)
+	})
 }

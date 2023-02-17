@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -27,10 +26,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -115,7 +116,7 @@ func TestMultiRegionDataDriven(t *testing.T) {
 	skip.UnderRace(t, "flaky test")
 
 	ctx := context.Background()
-	datadriven.Walk(t, testutils.TestDataPath(t), func(t *testing.T, path string) {
+	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 		ds := datadrivenTestState{}
 		defer ds.cleanup(ctx)
 		var mu syncutil.Mutex
@@ -795,10 +796,8 @@ func lookupTable(ec *sql.ExecutorConfig, database, table string) (catalog.TableD
 	err = sql.DescsTxn(
 		context.Background(),
 		ec,
-		func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-			_, desc, err := col.GetImmutableTableByName(ctx, txn, tbName, tree.ObjectLookupFlags{
-				DesiredObjectKind: tree.TableObject,
-			})
+		func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+			_, desc, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).MaybeGet(), tbName)
 			if err != nil {
 				return err
 			}

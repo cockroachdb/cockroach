@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -212,7 +213,7 @@ CREATE TABLE data2.foo (a int);
 		store := tcRestore.GetFirstStoreFromServer(t, 0)
 		startKey := keys.SystemSQLCodec.TablePrefix(uint32(id))
 		endKey := startKey.PrefixEnd()
-		it := store.Engine().NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+		it := store.TODOEngine().NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 			UpperBound: endKey,
 		})
 		defer it.Close()
@@ -629,7 +630,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if info.Name() == backupbase.BackupManifestName || !strings.HasSuffix(path, ".sst") {
+		if info.Name() == backupbase.BackupManifestName || !strings.HasSuffix(path, ".sst") || info.Name() == backupinfo.BackupMetadataDescriptorsListPath || info.Name() == backupinfo.BackupMetadataFilesListPath {
 			return nil
 		}
 		return os.Remove(path)

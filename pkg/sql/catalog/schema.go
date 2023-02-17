@@ -17,7 +17,7 @@ import (
 
 // SchemaDescriptor encapsulates the basic
 type SchemaDescriptor interface {
-	HydratableDescriptor
+	Descriptor
 
 	// SchemaKind indicates whether this descriptor
 	SchemaKind() ResolvedSchemaKind
@@ -42,9 +42,9 @@ type SchemaDescriptor interface {
 	// overload is prefixed with the same schema name.
 	GetResolvedFuncDefinition(name string) (*tree.ResolvedFunctionDefinition, bool)
 
-	// ForEachFunctionOverload iterates through all function overloads within the
-	// schema and calls fn on each overload.
-	ForEachFunctionOverload(fn func(overload descpb.SchemaDescriptor_FunctionOverload) error) error
+	// ForEachFunctionSignature iterates through all function signatures within
+	// the schema and calls fn on each signature.
+	ForEachFunctionSignature(fn func(sig descpb.SchemaDescriptor_FunctionSignature) error) error
 }
 
 // ResolvedSchemaKind is an enum that represents what kind of schema

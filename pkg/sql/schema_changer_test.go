@@ -44,8 +44,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -99,9 +99,8 @@ func TestSchemaChangeProcess(t *testing.T) {
 	leaseMgr := lease.NewLeaseManager(
 		s.AmbientCtx(),
 		execCfg.NodeInfo.NodeID,
-		execCfg.DB,
+		s.InternalDB().(isql.DB),
 		execCfg.Clock,
-		execCfg.InternalExecutor,
 		execCfg.Settings,
 		execCfg.Codec,
 		lease.ManagerTestingKnobs{},
@@ -122,7 +121,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	tableID := descpb.ID(sqlutils.QueryTableID(t, sqlDB, "t", "public", "test"))
 
 	changer := sql.NewSchemaChangerForTesting(
-		tableID, 0, instance, kvDB, leaseMgr, jobRegistry, &execCfg, cluster.MakeTestingClusterSettings())
+		tableID, 0, instance, execCfg.InternalDB, leaseMgr, jobRegistry, &execCfg, cluster.MakeTestingClusterSettings())
 
 	// Read table descriptor for version.
 	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
@@ -149,7 +148,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	index.ID = tableDesc.NextIndexID
 	tableDesc.NextIndexID++
 	changer = sql.NewSchemaChangerForTesting(
-		tableID, tableDesc.NextMutationID, instance, kvDB, leaseMgr, jobRegistry,
+		tableID, tableDesc.NextMutationID, instance, execCfg.InternalDB, leaseMgr, jobRegistry,
 		&execCfg, cluster.MakeTestingClusterSettings(),
 	)
 	tableDesc.TableDesc().Mutations = append(tableDesc.TableDesc().Mutations, descpb.DescriptorMutation{
@@ -1503,18 +1502,13 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		// just waiting for the lease to expire.
 		timeoutCtx, cancel := context.WithTimeout(ctx, base.DefaultDescriptorLeaseDuration/2)
 		defer cancel()
-		if err := sql.TestingDescsTxn(timeoutCtx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-			flags := tree.ObjectLookupFlags{
-				CommonLookupFlags: tree.CommonLookupFlags{
-					Required: true, AvoidLeased: true,
-				},
-			}
-			tbl, err := col.GetMutableTableByID(ctx, txn, tableDesc.GetID(), flags)
+		if err := sql.TestingDescsTxn(timeoutCtx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+			tbl, err := col.MutableByID(txn.KV()).Table(ctx, tableDesc.GetID())
 			if err != nil {
 				return err
 			}
 			tbl.Version++
-			ba := txn.NewBatch()
+			ba := txn.KV().NewBatch()
 			if err := col.WriteDescToBatch(ctx, false /* kvTrace */, tbl, ba); err != nil {
 				return err
 			}
@@ -1528,7 +1522,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 			// to exist on the object passed to descs.Txn, but, we have it, and it's
 			// effective, so, let's use it.
 			defer col.ReleaseAll(ctx)
-			return txn.Run(ctx, ba)
+			return txn.KV().Run(ctx, ba)
 		}); err != nil {
 			t.Error(err)
 		}
@@ -5550,6 +5544,7 @@ func TestTableValidityWhileAddingFK(t *testing.T) {
 CREATE DATABASE t;
 CREATE TABLE t.child (a INT PRIMARY KEY, b INT, INDEX (b));
 CREATE TABLE t.parent (a INT PRIMARY KEY);
+SET use_declarative_schema_changer = off;
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -5632,6 +5627,7 @@ func TestTableValidityWhileAddingUniqueConstraint(t *testing.T) {
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
 CREATE TABLE t.tab (a INT PRIMARY KEY, b INT, c INT);
+SET use_declarative_schema_changer = off;
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -6482,7 +6478,7 @@ CREATE INDEX i ON t.test (a) WHERE b > 2
 	}
 
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-	index, err := tableDesc.FindIndexWithName("i")
+	index, err := catalog.MustFindIndexByName(tableDesc, "i")
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -6769,6 +6765,7 @@ func TestRollbackForeignKeyAddition(t *testing.T) {
 	tdb.Exec(t, `CREATE DATABASE db`)
 	tdb.Exec(t, `CREATE TABLE db.t (a INT PRIMARY KEY)`)
 	tdb.Exec(t, `CREATE TABLE db.t2 (a INT)`)
+	tdb.Exec(t, `SET use_declarative_schema_changer = off`)
 
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(func(ctx context.Context) error {

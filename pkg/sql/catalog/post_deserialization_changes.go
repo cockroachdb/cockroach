@@ -10,7 +10,7 @@
 
 package catalog
 
-import "github.com/cockroachdb/cockroach/pkg/util"
+import "github.com/cockroachdb/cockroach/pkg/util/intsets"
 
 // PostDeserializationChangeType is used to indicate the type of
 // PostDeserializationChange which occurred for a descriptor.
@@ -19,7 +19,7 @@ type PostDeserializationChangeType int
 // PostDeserializationChanges are a set of booleans to indicate which types of
 // upgrades or fixes occurred when filling in the descriptor after
 // deserialization.
-type PostDeserializationChanges struct{ s util.FastIntSet }
+type PostDeserializationChanges struct{ s intsets.Fast }
 
 // HasChanges returns true if the set of changes is non-empty.
 func (c PostDeserializationChanges) HasChanges() bool {
@@ -106,4 +106,8 @@ const (
 	// SetCheckConstraintColumnIDs indicates that a table's check constraint's
 	// ColumnIDs slice hadn't been set yet, and was set to a non-empty slice.
 	SetCheckConstraintColumnIDs
+
+	// UpgradedDeclarativeSchemaChangerState indicates the declarative schema changer
+	// state was modified.
+	UpgradedDeclarativeSchemaChangerState = 15
 )

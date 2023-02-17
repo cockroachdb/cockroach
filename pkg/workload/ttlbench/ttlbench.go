@@ -52,8 +52,11 @@ type ttlBench struct {
 }
 
 var ttlBenchMeta = workload.Meta{
-	Name: "ttlbench",
-	Description: `Measures how long it takes for the row-level TTL job to run on a table:
+	Name:        "ttlbench",
+	Description: `Measures how long it takes for the row-level TTL job to run on a table.`,
+	Details: `
+
+The workload works as follows:
 1) Drop TTL table IF EXISTS.
 2) Create a table without TTL.
 3) Insert initialRowCount number of rows.
@@ -63,19 +66,18 @@ var ttlBenchMeta = workload.Meta{
 7) Poll table until TTL job is complete.
 Note: Ops is a no-op and no histograms are used. Benchmarking is done inside Hooks and details are logged.
 `,
-	Version:      "0.0.1",
-	PublicFacing: false,
+	Version: "0.0.1",
 	New: func() workload.Generator {
 		g := &ttlBench{}
 		flags := &g.flags
 		flags.FlagSet = pflag.NewFlagSet(`ttlbench`, pflag.ContinueOnError)
-		flags.Int64Var(&g.seed, `seed`, 1, `seed for randomization operations`)
-		flags.IntVar(&g.initialRowCount, `initial-row-count`, 0, `initial rows in table`)
-		flags.IntVar(&g.rowMessageLength, `row-message-length`, 128, `length of row message`)
-		flags.IntVar(&g.expiredRowPercentage, `expired-row-percentage`, 50, `percentage of rows that are expired`)
-		flags.IntVar(&g.ttlBatchSize, `ttl-batch-size`, 500, `size of TTL SELECT and DELETE batches`)
-		flags.IntVar(&g.rangeMinBytes, `range-min-bytes`, 134217728, `minimum number of bytes in range before merging`)
-		flags.IntVar(&g.rangeMaxBytes, `range-max-bytes`, 536870912, `maximum number of bytes in range before splitting`)
+		flags.Int64Var(&g.seed, `seed`, 1, `Seed for randomization operations.`)
+		flags.IntVar(&g.initialRowCount, `initial-row-count`, 0, `Initial rows in table.`)
+		flags.IntVar(&g.rowMessageLength, `row-message-length`, 128, `Length of row message.`)
+		flags.IntVar(&g.expiredRowPercentage, `expired-row-percentage`, 50, `Percentage of rows that are expired.`)
+		flags.IntVar(&g.ttlBatchSize, `ttl-batch-size`, 500, `Size of TTL SELECT and DELETE batches.`)
+		flags.IntVar(&g.rangeMinBytes, `range-min-bytes`, 134217728, `Minimum number of bytes in range before merging.`)
+		flags.IntVar(&g.rangeMaxBytes, `range-max-bytes`, 536870912, `Maximum number of bytes in range before splitting.`)
 		g.connFlags = workload.NewConnFlags(flags)
 		return g
 	},

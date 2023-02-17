@@ -59,7 +59,7 @@ func TestScatterRandomizeLeases(t *testing.T) {
 	r.Exec(t, "ALTER TABLE test.t SPLIT AT (SELECT i*10 FROM generate_series(1, 99) AS g(i))")
 
 	getLeaseholders := func() (map[int]int, error) {
-		rows := r.Query(t, `SELECT range_id, lease_holder FROM [SHOW RANGES FROM TABLE test.t]`)
+		rows := r.Query(t, `SELECT range_id, lease_holder FROM [SHOW RANGES FROM TABLE test.t WITH DETAILS]`)
 		leaseholders := make(map[int]int)
 		numRows := 0
 		for ; rows.Next(); numRows++ {
@@ -132,8 +132,7 @@ func TestScatterResponse(t *testing.T) {
 	// the actual split boundaries. Wait until the table itself is split off
 	// into its own range.
 	testutils.SucceedsSoon(t, func() error {
-		row := r.QueryRow(t, `SELECT count(*) FROM crdb_internal.ranges_no_leases WHERE table_id = $1`,
-			tableDesc.GetID())
+		row := r.QueryRow(t, `SELECT count(*) FROM [SHOW RANGES FROM TABLE test.t] WHERE start_key LIKE '%TableMin%'`)
 		var nRanges int
 		row.Scan(&nRanges)
 		if nRanges != 1 {

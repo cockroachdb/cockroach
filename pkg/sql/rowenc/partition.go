@@ -121,7 +121,7 @@ func DecodePartitionTuple(
 
 	for i := len(prefixDatums); i < index.NumKeyColumns() && i < len(prefixDatums)+part.NumColumns(); i++ {
 		colID := index.GetKeyColumnID(i)
-		col, err := tableDesc.FindColumnWithID(colID)
+		col, err := catalog.MustFindColumnByID(tableDesc, colID)
 		if err != nil {
 			return nil, nil, err
 		}

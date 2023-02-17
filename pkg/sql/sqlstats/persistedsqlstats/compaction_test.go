@@ -27,10 +27,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -52,8 +52,7 @@ func TestSQLStatsCompactorNilTestingKnobCheck(t *testing.T) {
 
 	statsCompactor := persistedsqlstats.NewStatsCompactor(
 		server.ClusterSettings(),
-		server.InternalExecutor().(sqlutil.InternalExecutor),
-		server.DB(),
+		server.InternalDB().(isql.DB),
 		metric.NewCounter(metric.Metadata{}),
 		nil, /* knobs */
 	)
@@ -140,7 +139,7 @@ func TestSQLStatsCompactor(t *testing.T) {
 	defer server.Stopper().Stop(ctx)
 
 	sqlConn := sqlutils.MakeSQLRunner(conn)
-	internalExecutor := server.InternalExecutor().(sqlutil.InternalExecutor)
+	internalExecutor := server.InternalExecutor().(isql.Executor)
 
 	// Disable automatic flush since the test will handle the flush manually.
 	sqlConn.Exec(t, "SET CLUSTER SETTING sql.stats.flush.interval = '24h'")
@@ -188,8 +187,7 @@ func TestSQLStatsCompactor(t *testing.T) {
 
 			statsCompactor := persistedsqlstats.NewStatsCompactor(
 				server.ClusterSettings(),
-				server.InternalExecutor().(sqlutil.InternalExecutor),
-				server.DB(),
+				server.InternalDB().(isql.DB),
 				metric.NewCounter(metric.Metadata{}),
 				&sqlstats.TestingKnobs{
 					AOSTClause:             "AS OF SYSTEM TIME '-1us'",
@@ -269,7 +267,7 @@ func TestSQLStatsCompactor(t *testing.T) {
 // SQL Stats cleanup job. We test this behavior by generating some rows in the
 // stats system table that are in the current aggregation window and previous
 // aggregation window. Before running the SQL Stats compaction, we lower the
-// row limit in the stats table so that all thw rows will be deleted by the
+// row limit in the stats table so that all the rows will be deleted by the
 // StatsCompactor, if all the generated rows live outside the current
 // aggregation window. This test asserts that, since some of generated rows live
 // in the current aggregation interval, those rows will not be deleted by the
@@ -295,7 +293,7 @@ func TestSQLStatsForegroundInterference(t *testing.T) {
 			GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
 
 	sqlConn := sqlutils.MakeSQLRunner(conn)
-	sqlConn.Exec(t, "SET CLUSTER SETTING sql.stats.persisted_rows.max = 1")
+	sqlConn.Exec(t, "SET CLUSTER SETTING sql.stats.persisted_rows.max = 10")
 
 	// Generate some data that are older than the current aggregation window,
 	// and then generate some that are within the current aggregation window.
@@ -308,8 +306,7 @@ func TestSQLStatsForegroundInterference(t *testing.T) {
 
 	statsCompactor := persistedsqlstats.NewStatsCompactor(
 		s.ClusterSettings(),
-		s.InternalExecutor().(sqlutil.InternalExecutor),
-		s.DB(),
+		s.InternalDB().(isql.DB),
 		metric.NewCounter(metric.Metadata{}),
 		params.Knobs.SQLStatsKnobs.(*sqlstats.TestingKnobs),
 	)

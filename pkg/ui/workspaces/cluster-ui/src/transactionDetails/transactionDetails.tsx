@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
+import React, { useContext, useMemo } from "react";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import classNames from "classnames/bind";
 import _ from "lodash";
@@ -61,20 +61,38 @@ import {
 } from "src/statementsTable/statementsTable";
 import { Transaction } from "src/transactionsTable";
 import Long from "long";
-import { StatementsRequest } from "../api";
+import {
+  InsightRecommendation,
+  StatementsRequest,
+  TxnInsightsRequest,
+} from "../api";
+import {
+  getTxnInsightRecommendations,
+  InsightType,
+  TxnInsightEvent,
+} from "../insights";
 import {
   getValidOption,
   TimeScale,
   timeScale1hMinOptions,
   TimeScaleDropdown,
+  timeScaleRangeToObj,
   timeScaleToString,
   toRoundedDateRange,
 } from "../timeScaleDropdown";
-import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
+import moment from "moment";
 
+import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
+import insightTableStyles from "../insightsTable/insightsTable.module.scss";
+import {
+  InsightsSortedTable,
+  makeInsightsColumns,
+} from "../insightsTable/insightsTable";
+import { CockroachCloudContext } from "../contexts";
 const { containerClass } = tableClasses;
 const cx = classNames.bind(statementsStyles);
 const timeScaleStylesCx = classNames.bind(timeScaleStyles);
+const insightsTableCx = classNames.bind(insightTableStyles);
 
 type Statement =
   protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
@@ -92,12 +110,16 @@ export interface TransactionDetailsStateProps {
   transaction: Transaction;
   transactionFingerprintId: string;
   isLoading: boolean;
+  lastUpdated: moment.Moment | null;
+  transactionInsights: TxnInsightEvent[];
+  hasAdminRole?: UIConfigState["hasAdminRole"];
 }
 
 export interface TransactionDetailsDispatchProps {
   refreshData: (req?: StatementsRequest) => void;
   refreshNodes: () => void;
   refreshUserSQLRoles: () => void;
+  refreshTransactionInsights: (req: TxnInsightsRequest) => void;
   onTimeScaleChange: (ts: TimeScale) => void;
 }
 
@@ -126,6 +148,8 @@ export class TransactionDetails extends React.Component<
   TransactionDetailsProps,
   TState
 > {
+  refreshDataTimeout: NodeJS.Timeout;
+
   constructor(props: TransactionDetailsProps) {
     super(props);
     this.state = {
@@ -146,14 +170,9 @@ export class TransactionDetails extends React.Component<
     // where the value 10/30 min is selected on the Metrics page.
     const ts = getValidOption(this.props.timeScale, timeScale1hMinOptions);
     if (ts !== this.props.timeScale) {
-      this.props.onTimeScaleChange(ts);
+      this.changeTimeScale(ts);
     }
   }
-
-  static defaultProps: Partial<TransactionDetailsProps> = {
-    isTenant: false,
-    hasViewActivityRedactedRole: false,
-  };
 
   getTransactionStateInfo = (prevTransactionFingerprintId: string): void => {
     const { transaction, transactionFingerprintId } = this.props;
@@ -188,16 +207,64 @@ export class TransactionDetails extends React.Component<
     }
   };
 
+  changeTimeScale = (ts: TimeScale): void => {
+    if (this.props.onTimeScaleChange) {
+      this.props.onTimeScaleChange(ts);
+    }
+    this.resetPolling(ts.key);
+  };
+
+  clearRefreshDataTimeout() {
+    if (this.refreshDataTimeout != null) {
+      clearTimeout(this.refreshDataTimeout);
+    }
+  }
+
+  // Schedule the next data request depending on the time
+  // range key.
+  resetPolling(key: string) {
+    this.clearRefreshDataTimeout();
+    if (key !== "Custom") {
+      this.refreshDataTimeout = setTimeout(
+        this.refreshData,
+        300000, // 5 minutes
+      );
+    }
+  }
+
   refreshData = (prevTransactionFingerprintId: string): void => {
+    const insightsReq = timeScaleRangeToObj(this.props.timeScale);
+    this.props.refreshTransactionInsights(insightsReq);
     const req = statementsRequestFromProps(this.props);
     this.props.refreshData(req);
     this.getTransactionStateInfo(prevTransactionFingerprintId);
+    this.resetPolling(this.props.timeScale.key);
   };
 
   componentDidMount(): void {
     this.refreshData("");
+    // For the first data fetch for this page, we refresh if there are:
+    // - Last updated is null (no statements fetched previously)
+    // - The time interval is not custom, i.e. we have a moving window
+    // in which case we poll every 5 minutes. For the first fetch we will
+    // calculate the next time to refresh based on when the data was last
+    // updated.
+    if (this.props.timeScale.key !== "Custom" || !this.props.lastUpdated) {
+      const now = moment();
+      const nextRefresh =
+        this.props.lastUpdated?.clone().add(5, "minutes") || now;
+      setTimeout(
+        this.refreshData,
+        Math.max(0, nextRefresh.diff(now, "milliseconds")),
+        this.props.transactionFingerprintId,
+      );
+    }
     this.props.refreshUserSQLRoles();
     this.props.refreshNodes();
+  }
+
+  componentWillUnmount(): void {
+    this.clearRefreshDataTimeout();
   }
 
   componentDidUpdate(prevProps: TransactionDetailsProps): void {
@@ -270,7 +337,7 @@ export class TransactionDetails extends React.Component<
             <TimeScaleDropdown
               options={timeScale1hMinOptions}
               currentScale={this.props.timeScale}
-              setTimeScale={this.props.onTimeScaleChange}
+              setTimeScale={this.changeTimeScale}
             />
           </PageConfigItem>
         </PageConfig>
@@ -309,7 +376,11 @@ export class TransactionDetails extends React.Component<
               );
             }
 
-            const { isTenant, hasViewActivityRedactedRole } = this.props;
+            const {
+              isTenant,
+              hasViewActivityRedactedRole,
+              transactionInsights,
+            } = this.props;
             const { sortSetting, pagination } = this.state;
 
             const aggregatedStatements = aggregateStatements(
@@ -380,6 +451,26 @@ export class TransactionDetails extends React.Component<
             ) : (
               unavailableTooltip
             );
+
+            const isCockroachCloud = useContext(CockroachCloudContext);
+            const insightsColumns = makeInsightsColumns(
+              isCockroachCloud,
+              this.props.hasAdminRole,
+              false,
+            );
+            const tableData: InsightRecommendation[] = [];
+            if (transactionInsights) {
+              const tableDataTypes = new Set<InsightType>();
+              transactionInsights.forEach(transaction => {
+                const rec = getTxnInsightRecommendations(transaction);
+                rec.forEach(entry => {
+                  if (!tableDataTypes.has(entry.type)) {
+                    tableData.push(entry);
+                    tableDataTypes.add(entry.type);
+                  }
+                });
+              });
+            }
 
             return (
               <React.Fragment>
@@ -463,6 +554,31 @@ export class TransactionDetails extends React.Component<
                       </SummaryCard>
                     </Col>
                   </Row>
+                  {tableData?.length && (
+                    <>
+                      <p
+                        className={summaryCardStylesCx(
+                          "summary--card__divider--large",
+                        )}
+                      />
+                      <Row gutter={24}>
+                        <Col className="gutter-row" span={24}>
+                          <InsightsSortedTable
+                            columns={insightsColumns}
+                            data={tableData}
+                            tableWrapperClassName={insightsTableCx(
+                              "sorted-table",
+                            )}
+                          />
+                        </Col>
+                      </Row>
+                    </>
+                  )}
+                  <p
+                    className={summaryCardStylesCx(
+                      "summary--card__divider--large",
+                    )}
+                  />
                   <TableStatistics
                     pagination={pagination}
                     totalCount={aggregatedStatements.length}
@@ -485,6 +601,7 @@ export class TransactionDetails extends React.Component<
                       className={cx("statements-table")}
                       sortSetting={sortSetting}
                       onChangeSortSetting={this.onChangeSortSetting}
+                      pagination={pagination}
                     />
                   </div>
                 </section>

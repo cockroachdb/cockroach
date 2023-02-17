@@ -52,12 +52,12 @@ func TestOIDCBadRequestIfDisabled(t *testing.T) {
 	newRPCContext := func(cfg *base.Config) *rpc.Context {
 		return rpc.NewContext(ctx,
 			rpc.ContextOptions{
-				TenantID:  roachpb.SystemTenantID,
-				Config:    cfg,
-				Clock:     &timeutil.DefaultTimeSource{},
-				MaxOffset: 1,
-				Stopper:   s.Stopper(),
-				Settings:  s.ClusterSettings(),
+				TenantID:        roachpb.SystemTenantID,
+				Config:          cfg,
+				Clock:           &timeutil.DefaultTimeSource{},
+				ToleratedOffset: 1,
+				Stopper:         s.Stopper(),
+				Settings:        s.ClusterSettings(),
 
 				ClientOnly: true,
 			})
@@ -90,12 +90,12 @@ func TestOIDCEnabled(t *testing.T) {
 
 	newRPCContext := func(cfg *base.Config) *rpc.Context {
 		return rpc.NewContext(ctx, rpc.ContextOptions{
-			TenantID:  roachpb.SystemTenantID,
-			Config:    cfg,
-			Clock:     &timeutil.DefaultTimeSource{},
-			MaxOffset: 1,
-			Stopper:   s.Stopper(),
-			Settings:  s.ClusterSettings(),
+			TenantID:        roachpb.SystemTenantID,
+			Config:          cfg,
+			Clock:           &timeutil.DefaultTimeSource{},
+			ToleratedOffset: 1,
+			Stopper:         s.Stopper(),
+			Settings:        s.ClusterSettings(),
 
 			ClientOnly: true,
 		})

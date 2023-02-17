@@ -98,8 +98,7 @@ func registerNIndexes(r registry.Registry, secondaryIndexes int) {
 						var ok bool
 						if err := conn.QueryRowContext(ctx, `
 							SELECT lease_holder <= $1
-							FROM crdb_internal.ranges
-							WHERE table_name = 'indexes'`,
+							FROM [SHOW RANGES FROM TABLE indexes.indexes WITH DETAILS]`,
 							nodes/3,
 						).Scan(&ok); err != nil {
 							return err

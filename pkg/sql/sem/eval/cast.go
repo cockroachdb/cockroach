@@ -149,10 +149,12 @@ func performCastWithoutPrecisionTruncation(
 			}
 			ba = &tree.DBitArray{BitArray: res}
 		}
-		if truncateWidth {
-			ba = tree.FormatBitArrayToType(ba, t)
+		if ba != nil {
+			if truncateWidth {
+				ba = tree.FormatBitArrayToType(ba, t)
+			}
+			return ba, nil
 		}
-		return ba, nil
 
 	case types.BoolFamily:
 		switch v := d.(type) {
@@ -443,12 +445,14 @@ func performCastWithoutPrecisionTruncation(
 				d,
 				tree.FmtPgwireText,
 				tree.FmtDataConversionConfig(evalCtx.SessionData().DataConversionConfig),
+				tree.FmtLocation(evalCtx.GetLocation()),
 			)
 		case *tree.DArray:
 			s = tree.AsStringWithFlags(
 				d,
 				tree.FmtPgwireText,
 				tree.FmtDataConversionConfig(evalCtx.SessionData().DataConversionConfig),
+				tree.FmtLocation(evalCtx.GetLocation()),
 			)
 		case *tree.DInterval:
 			// When converting an interval to string, we need a string representation
@@ -996,7 +1000,7 @@ func performIntToOidCast(
 			}
 			return nil, err
 		}
-		return tree.NewDOidWithTypeAndName(o, t, name), nil
+		return tree.NewDOidWithTypeAndName(o, t, name.Object()), nil
 
 	default:
 		if v == 0 {

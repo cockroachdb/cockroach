@@ -8,22 +8,22 @@ CREATE TABLE t (
   UNIQUE INDEX c_idx (c) STORING (b, d)
 )
 
-query TTBITTBBB colnames
+query TTBITTTBBB colnames
 SHOW INDEXES FROM t
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit  visible
-t           b_idx       true        1             b            ASC        false    false     true
-t           b_idx       true        2             c            N/A        true     false     true
-t           b_idx       true        3             d            N/A        true     false     true
-t           b_idx       true        4             a            ASC        false    true      true
-t           c_idx       false       1             c            ASC        false    false     true
-t           c_idx       false       2             b            N/A        true     false     true
-t           c_idx       false       3             d            N/A        true     false     true
-t           c_idx       false       4             a            ASC        true     true      true
-t           t_pkey      false       1             a            ASC        false    false     true
-t           t_pkey      false       2             b            N/A        true     false     true
-t           t_pkey      false       3             c            N/A        true     false     true
-t           t_pkey      false       4             d            N/A        true     false     true
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible
+t           b_idx       true        1             b            b           ASC        false    false     true
+t           b_idx       true        2             c            c           N/A        true     false     true
+t           b_idx       true        3             d            d           N/A        true     false     true
+t           b_idx       true        4             a            a           ASC        false    true      true
+t           c_idx       false       1             c            c           ASC        false    false     true
+t           c_idx       false       2             b            b           N/A        true     false     true
+t           c_idx       false       3             d            d           N/A        true     false     true
+t           c_idx       false       4             a            a           ASC        true     true      true
+t           t_pkey      false       1             a            a           ASC        false    false     true
+t           t_pkey      false       2             b            b           N/A        true     false     true
+t           t_pkey      false       3             c            c           N/A        true     false     true
+t           t_pkey      false       4             d            d           N/A        true     false     true
 
 statement ok
 INSERT INTO t VALUES (1, 2, 3, 4)

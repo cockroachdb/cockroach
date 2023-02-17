@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	tu "github.com/cockroachdb/cockroach/pkg/testutils"
+	tu "github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/datadriven"
 )
@@ -167,13 +167,13 @@ func BenchmarkImplicator(b *testing.B) {
 		{
 			name:    "single-exact-match-extra-filters",
 			vars:    "a int, b int, c int, d int, e int",
-			filters: "a < 0 AND b > 0 AND c >= 10 AND d = 4 AND @5 = 5",
+			filters: "a < 0 AND b > 0 AND c >= 10 AND d = 4 AND e = 5",
 			pred:    "c >= 10",
 		},
 		{
 			name:    "single-inexact-match-extra-filters",
 			vars:    "a int, b int, c int, d int, e int",
-			filters: "a < 0 AND b > 0 AND c >= 10 AND d = 4 AND @5 = 5",
+			filters: "a < 0 AND b > 0 AND c >= 10 AND d = 4 AND e = 5",
 			pred:    "c > 0",
 		},
 		{

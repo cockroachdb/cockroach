@@ -32,6 +32,8 @@ const (
 
 // numBuffersForType returns how many buffers are used to represent an array of
 // the given type.
+//
+//gcassert:inline
 func numBuffersForType(t *types.T) int {
 	// Most types are represented by 3 memory.Buffers (because most types are
 	// serialized into flat bytes representation). One buffer for the null
@@ -63,7 +65,9 @@ type RecordBatchSerializer struct {
 	scratch struct {
 		bufferLens     []int
 		metadataLength [metadataLengthNumBytes]byte
-		padding        []byte
+		// padding is used to align metadata to an 8 byte boundary, so doesn't
+		// need to be larger than 7 bytes.
+		padding [7]byte
 	}
 }
 
@@ -78,9 +82,6 @@ func NewRecordBatchSerializer(typs []*types.T) (*RecordBatchSerializer, error) {
 	for i, t := range typs {
 		s.numBuffers[i] = numBuffersForType(t)
 	}
-	// s.scratch.padding is used to align metadata to an 8 byte boundary, so
-	// doesn't need to be larger than 7 bytes.
-	s.scratch.padding = make([]byte, 7)
 	return s, nil
 }
 
@@ -97,7 +98,7 @@ func calculatePadding(numBytes int) int {
 // so users who wish to retain references to individual array.Data elements must
 // do so by making a copy elsewhere.
 func (s *RecordBatchSerializer) Serialize(
-	w io.Writer, data []*array.Data, headerLength int,
+	w io.Writer, data []array.Data, headerLength int,
 ) (metadataLen uint32, dataLen uint64, _ error) {
 	if len(data) != len(s.numBuffers) {
 		return 0, 0, errors.Errorf("mismatched schema length and number of columns: %d != %d", len(s.numBuffers), len(data))
@@ -181,10 +182,10 @@ func (s *RecordBatchSerializer) Serialize(
 	metadataBytes := s.builder.FinishedBytes()
 
 	// Use s.scratch.padding to align metadata to 8-byte boundary.
-	s.scratch.padding = s.scratch.padding[:calculatePadding(metadataLengthNumBytes+len(metadataBytes))]
+	padding := s.scratch.padding[:calculatePadding(metadataLengthNumBytes+len(metadataBytes))]
 
 	// Write metadata + padding length as the first metadataLengthNumBytes.
-	metadataLength := uint32(len(metadataBytes) + len(s.scratch.padding))
+	metadataLength := uint32(len(metadataBytes) + len(padding))
 	binary.LittleEndian.PutUint32(s.scratch.metadataLength[:], metadataLength)
 	if _, err := w.Write(s.scratch.metadataLength[:]); err != nil {
 		return 0, 0, err
@@ -196,7 +197,7 @@ func (s *RecordBatchSerializer) Serialize(
 	}
 
 	// Add metadata padding.
-	if _, err := w.Write(s.scratch.padding); err != nil {
+	if _, err := w.Write(padding); err != nil {
 		return 0, 0, err
 	}
 
@@ -217,13 +218,13 @@ func (s *RecordBatchSerializer) Serialize(
 			}
 		}
 		// Eagerly discard the buffer; we have no use for it any longer.
-		data[i] = nil
+		data[i] = array.Data{}
 	}
 
 	// Add body padding. The body also needs to be a multiple of 8 bytes.
-	s.scratch.padding = s.scratch.padding[:calculatePadding(bodyLength)]
-	_, err := w.Write(s.scratch.padding)
-	bodyLength += len(s.scratch.padding)
+	padding = s.scratch.padding[:calculatePadding(bodyLength)]
+	_, err := w.Write(padding)
+	bodyLength += len(padding)
 	return metadataLength, uint64(bodyLength), err
 }
 
@@ -231,7 +232,7 @@ func (s *RecordBatchSerializer) Serialize(
 // into data and returns the length of the batch. Deserializing a schema that
 // does not match the schema given in NewRecordBatchSerializer results in
 // undefined behavior.
-func (s *RecordBatchSerializer) Deserialize(data *[]*array.Data, bytes []byte) (int, error) {
+func (s *RecordBatchSerializer) Deserialize(data *[]array.Data, bytes []byte) (int, error) {
 	// Read the metadata by first reading its length.
 	metadataLen := int(binary.LittleEndian.Uint32(bytes[:metadataLengthNumBytes]))
 	metadata := arrowserde.GetRootAsMessage(
@@ -286,6 +287,7 @@ func (s *RecordBatchSerializer) Deserialize(data *[]*array.Data, bytes []byte) (
 
 		// Decode the message body by using the offset and length information in the
 		// message header.
+		// TODO(yuzefovich): reuse these buffers across Deserialize calls.
 		buffers := make([]*memory.Buffer, s.numBuffers[fieldIdx])
 		for i := 0; i < s.numBuffers[fieldIdx]; i++ {
 			header.Buffers(&buf, bufferIdx)
@@ -302,7 +304,7 @@ func (s *RecordBatchSerializer) Deserialize(data *[]*array.Data, bytes []byte) (
 
 		*data = append(
 			*data,
-			array.NewData(
+			*array.NewData(
 				nil, /* dType */
 				int(header.Length()),
 				buffers,

@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -47,23 +48,32 @@ type Controller interface {
 type controller struct {
 	changer   state.Changer
 	allocator allocatorimpl.Allocator
+	storePool storepool.AllocatorStorePool
 	settings  *config.SimulationSettings
 
 	pending   *priorityQueue
 	ticketGen DispatchedTicket
 	tickets   map[DispatchedTicket]ControlledOperation
+
+	storeID state.StoreID
 }
 
 // NewController returns a new Controller implementation.
 func NewController(
-	changer state.Changer, allocator allocatorimpl.Allocator, settings *config.SimulationSettings,
+	changer state.Changer,
+	allocator allocatorimpl.Allocator,
+	storePool storepool.AllocatorStorePool,
+	settings *config.SimulationSettings,
+	storeID state.StoreID,
 ) Controller {
 	return &controller{
 		changer:   changer,
 		allocator: allocator,
+		storePool: storePool,
 		settings:  settings,
 		pending:   &priorityQueue{items: []*queuedOp{}},
 		tickets:   make(map[DispatchedTicket]ControlledOperation),
+		storeID:   storeID,
 	}
 }
 
@@ -142,7 +152,7 @@ func (c *controller) processRelocateRange(
 	ctx context.Context, tick time.Time, s state.State, ro *RelocateRangeOp,
 ) error {
 	rng := s.RangeFor(ro.key)
-	options := SimRelocateOneOptions{allocator: c.allocator, state: s}
+	options := SimRelocateOneOptions{allocator: c.allocator, storePool: c.storePool, state: s}
 	ops, leaseTarget, err := kvserver.RelocateOne(
 		ctx,
 		rng.Descriptor(),
@@ -180,6 +190,7 @@ func (c *controller) processRelocateRange(
 
 	change := state.ReplicaChange{
 		RangeID: rng.RangeID(),
+		Author:  c.storeID,
 	}
 
 	// The replica changer currently only supports at most two operations
@@ -237,6 +248,7 @@ func (c *controller) processTransferLease(
 		RangeID:        ro.rangeID,
 		TransferTarget: ro.target,
 		Wait:           c.settings.ReplicaChangeBaseDelay,
+		Author:         c.storeID,
 	}); !ok {
 		return errors.Errorf(
 			"unable to transfer lease for r%d to store %d, application failed.",

@@ -37,7 +37,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":execgen"],
     deps = [
-        "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_dave_dst//:dst",
         "@com_github_dave_dst//decorator",

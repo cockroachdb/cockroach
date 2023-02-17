@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/partition"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -52,7 +51,7 @@ func (b *Builder) buildDataSource(
 	}(inScope.atRoot)
 	inScope.atRoot = false
 	// NB: The case statements are sorted lexicographically.
-	switch source := texpr.(type) {
+	switch source := (texpr).(type) {
 	case *tree.AliasedTableExpr:
 		if source.IndexFlags != nil {
 			telemetry.Inc(sqltelemetry.IndexHintUseCounter)
@@ -63,6 +62,12 @@ func (b *Builder) buildDataSource(
 			inScope = inScope.push()
 			inScope.alias = &source.As
 			locking = locking.filter(source.As.Alias)
+		} else if b.insideFuncDef {
+			// TODO(96375): Allow non-aliased subexpressions in UDFs after ambiguous
+			// columns can be correctly identified.
+			if _, ok := source.Expr.(*tree.Subquery); ok {
+				panic(unimplemented.New("user-defined functions", "unaliased subquery inside a function definition"))
+			}
 		}
 
 		outScope = b.buildDataSource(source.Expr, indexFlags, locking, inScope)
@@ -99,19 +104,18 @@ func (b *Builder) buildDataSource(
 			}
 
 			outScope.expr = b.factory.ConstructWithScan(&memo.WithScanPrivate{
-				With:             cte.id,
-				Name:             string(cte.name.Alias),
-				InCols:           inCols,
-				OutCols:          outCols,
-				ID:               b.factory.Metadata().NextUniqueID(),
-				CanInlineInPlace: !cte.mtr.Set || !cte.mtr.Materialize,
+				With:    cte.id,
+				Name:    string(cte.name.Alias),
+				InCols:  inCols,
+				OutCols: outCols,
+				ID:      b.factory.Metadata().NextUniqueID(),
+				Mtr:     cte.mtr,
 			})
 
 			return outScope
 		}
 
 		ds, depName, resName := b.resolveDataSource(tn, privilege.SELECT)
-
 		locking = locking.filter(tn.ObjectName)
 		if locking.isSet() {
 			// SELECT ... FOR [KEY] UPDATE/SHARE also requires UPDATE privileges.
@@ -169,6 +173,11 @@ func (b *Builder) buildDataSource(
 		// This is the special '[ ... ]' syntax. We treat this as syntactic sugar
 		// for a top-level CTE, so it cannot refer to anything in the input scope.
 		// See #41078.
+		if b.insideFuncDef {
+			panic(unimplemented.NewWithIssue(
+				92961, "statement source (square bracket syntax) within user-defined function",
+			))
+		}
 		emptyScope := b.allocScope()
 		innerScope := b.buildStmt(source.Statement, nil /* desiredTypes */, emptyScope)
 		if len(innerScope.cols) == 0 {
@@ -206,12 +215,12 @@ func (b *Builder) buildDataSource(
 		}
 
 		outScope.expr = b.factory.ConstructWithScan(&memo.WithScanPrivate{
-			With:             cte.id,
-			Name:             string(cte.name.Alias),
-			InCols:           inCols,
-			OutCols:          outCols,
-			ID:               b.factory.Metadata().NextUniqueID(),
-			CanInlineInPlace: !cte.mtr.Set || !cte.mtr.Materialize,
+			With:    cte.id,
+			Name:    string(cte.name.Alias),
+			InCols:  inCols,
+			OutCols: outCols,
+			ID:      b.factory.Metadata().NextUniqueID(),
+			Mtr:     cte.mtr,
 		})
 
 		return outScope
@@ -647,7 +656,7 @@ func (b *Builder) buildScan(
 
 	b.addCheckConstraintsForTable(tabMeta)
 	b.addComputedColsForTable(tabMeta)
-	b.addIndexPartitionLocalitiesForTable(tabMeta)
+	tabMeta.CacheIndexPartitionLocalities(b.evalCtx)
 
 	outScope.expr = b.factory.ConstructScan(&private)
 
@@ -820,19 +829,6 @@ func (b *Builder) addComputedColsForTable(tabMeta *opt.TableMeta) {
 			if !sharedProps.VolatilitySet.HasStable() && !sharedProps.VolatilitySet.HasVolatile() {
 				tabMeta.AddComputedCol(colID, scalar)
 			}
-		}
-	}
-}
-
-// addIndexPartitionLocalitiesForTable caches locality prefix sorters in the
-// table metadata for indexes that have a mix of local and remote partitions.
-func (b *Builder) addIndexPartitionLocalitiesForTable(tabMeta *opt.TableMeta) {
-	tab := tabMeta.Table
-	for indexOrd, n := 0, tab.IndexCount(); indexOrd < n; indexOrd++ {
-		index := tab.Index(indexOrd)
-		if localPartitions, ok := partition.HasMixOfLocalAndRemotePartitions(b.evalCtx, index); ok {
-			ps := partition.GetSortedPrefixes(index, localPartitions, b.evalCtx)
-			tabMeta.AddIndexPartitionLocality(indexOrd, ps)
 		}
 	}
 }
@@ -1066,7 +1062,7 @@ func (b *Builder) buildSelectClause(
 	// function that refers to variables in fromScope or an ancestor scope,
 	// buildAggregateFunction is called which adds columns to the appropriate
 	// aggInScope and aggOutScope.
-	b.analyzeProjectionList(sel.Exprs, desiredTypes, fromScope, projectionsScope)
+	b.analyzeProjectionList(&sel.Exprs, desiredTypes, fromScope, projectionsScope)
 
 	// Any aggregates in the HAVING, ORDER BY and DISTINCT ON clauses (if they
 	// exist) will be added here.

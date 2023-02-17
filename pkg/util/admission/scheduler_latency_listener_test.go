@@ -20,7 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
 	"github.com/guptarohit/asciigraph"
@@ -73,7 +73,7 @@ func TestSchedulerLatencyListener(t *testing.T) {
 	ambientCtx := log.MakeTestingAmbientCtxWithNewTracer()
 	st := cluster.MakeTestingClusterSettings()
 	metrics := makeSchedulerLatencyListenerMetrics()
-	dir := testutils.TestDataPath(t, "scheduler_latency_listener")
+	dir := datapathutils.TestDataPath(t, "scheduler_latency_listener")
 	const period = time.Second
 	datadriven.Walk(t, dir, func(t *testing.T, path string) {
 		var (

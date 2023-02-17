@@ -20,20 +20,18 @@ import {
   cancelStatementDiagnosticsReportCompleteAction,
   cancelStatementDiagnosticsReportFailedAction,
 } from "./statementsActions";
-import { cockroach } from "src/js/protos";
-import CombinedStatementsRequest = cockroach.server.serverpb.StatementsRequest;
 import {
   invalidateStatementDiagnosticsRequests,
   refreshStatementDiagnosticsRequests,
   invalidateStatements,
-  refreshStatements,
+  invalidateExecutionInsights,
+  invalidateTxnInsights,
 } from "src/redux/apiReducers";
 import {
   createStatementDiagnosticsAlertLocalSetting,
   cancelStatementDiagnosticsAlertLocalSetting,
 } from "src/redux/alerts";
-import { TimeScale, toRoundedDateRange } from "@cockroachlabs/cluster-ui";
-import Long from "long";
+import { TimeScale } from "@cockroachlabs/cluster-ui";
 import { setTimeScale } from "src/redux/timeScale";
 import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
 
@@ -126,14 +124,9 @@ export function* setCombinedStatementsTimeScaleSaga(
   const ts = action.payload;
 
   yield put(setTimeScale(ts));
-  const [start, end] = toRoundedDateRange(ts);
-  const req = new CombinedStatementsRequest({
-    combined: true,
-    start: Long.fromNumber(start.unix()),
-    end: Long.fromNumber(end.unix()),
-  });
   yield put(invalidateStatements());
-  yield put(refreshStatements(req) as any);
+  yield put(invalidateExecutionInsights());
+  yield put(invalidateTxnInsights());
 }
 
 export function* statementsSaga() {

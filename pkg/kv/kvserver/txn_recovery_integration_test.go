@@ -15,7 +15,6 @@ import (
 	"context"
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -85,7 +84,7 @@ func TestTxnRecoveryFromStaging(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			stopper := stop.NewStopper()
 			defer stopper.Stop(ctx)
-			cfg := TestStoreConfig(hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 123)), time.Nanosecond) /* maxOffset */)
+			cfg := TestStoreConfig(hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(0, 123))))
 			// Set the RecoverIndeterminateCommitsOnFailedPushes flag to true so
 			// that a push on a STAGING transaction record immediately launches
 			// the transaction recovery process.
@@ -225,7 +224,7 @@ func TestTxnRecoveryFromStagingWithHighPriority(t *testing.T) {
 		stopper := stop.NewStopper()
 		defer stopper.Stop(ctx)
 		manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
-		cfg := TestStoreConfig(hlc.NewClock(manual, time.Nanosecond) /* maxOffset */)
+		cfg := TestStoreConfig(hlc.NewClockForTesting(manual))
 		store := createTestStoreWithConfig(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 
 		// Create a transaction that will get stuck performing a parallel
@@ -296,23 +295,9 @@ func TestTxnRecoveryFromStagingWithHighPriority(t *testing.T) {
 			require.Equal(t, roachpb.COMMITTED, qtTxn.Status)
 			require.Equal(t, txn.Epoch, qtTxn.Epoch)
 			require.Equal(t, txn.WriteTimestamp, qtTxn.WriteTimestamp)
-		} else if newEpoch {
-			// The transaction is aborted if that's what the high-priority
-			// request wants. Otherwise, the transaction's record is bumped to
-			// the new epoch pulled from its intent and pushed above the
-			// high-priority request's timestamp.
-			if pushAbort {
-				require.Equal(t, roachpb.ABORTED, qtTxn.Status)
-			} else /* pushTimestamp */ {
-				require.Equal(t, roachpb.PENDING, qtTxn.Status)
-				require.Equal(t, txn.Epoch+1, qtTxn.Epoch)
-				require.Equal(t, conflictH.Timestamp.Next(), qtTxn.WriteTimestamp)
-			}
-		} else /* if newTimestamp */ {
-			// The transaction is aborted, even if the high-priority request
-			// only needed it to be pushed to a higher timestamp. This is
-			// because we don't allow a STAGING transaction record to move back
-			// to PENDING in the same epoch.
+		} else {
+			// The pusher knows that the transaction is not implicitly committed, so
+			// it is aborted.
 			require.Equal(t, roachpb.ABORTED, qtTxn.Status)
 		}
 	}

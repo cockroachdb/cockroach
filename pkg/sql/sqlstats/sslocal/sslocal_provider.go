@@ -15,14 +15,12 @@ import (
 	"sort"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssmemstorage"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -37,24 +35,32 @@ func New(
 	maxStmtFingerprints *settings.IntSetting,
 	maxTxnFingerprints *settings.IntSetting,
 	curMemoryBytesCount *metric.Gauge,
-	maxMemoryBytesHist *metric.Histogram,
+	maxMemoryBytesHist metric.IHistogram,
 	insightsWriter insights.WriterProvider,
 	pool *mon.BytesMonitor,
 	reportingSink Sink,
 	knobs *sqlstats.TestingKnobs,
+	latencyInformation insights.LatencyInformation,
 ) *SQLStats {
-	return newSQLStats(settings, maxStmtFingerprints, maxTxnFingerprints,
-		curMemoryBytesCount, maxMemoryBytesHist, insightsWriter, pool,
-		reportingSink, knobs)
+	return newSQLStats(
+		settings,
+		maxStmtFingerprints,
+		maxTxnFingerprints,
+		curMemoryBytesCount,
+		maxMemoryBytesHist,
+		insightsWriter,
+		pool,
+		reportingSink,
+		knobs,
+		latencyInformation,
+	)
 }
 
 var _ sqlstats.Provider = &SQLStats{}
 
 // GetController returns a sqlstats.Controller responsible for the current
 // SQLStats.
-func (s *SQLStats) GetController(
-	server serverpb.SQLStatusServer, db *kv.DB, ie sqlutil.InternalExecutor,
-) *Controller {
+func (s *SQLStats) GetController(server serverpb.SQLStatusServer) *Controller {
 	return NewController(s, server)
 }
 
@@ -109,6 +115,7 @@ func (s *SQLStats) GetApplicationStats(appName string, internal bool) sqlstats.A
 		appName,
 		s.knobs,
 		s.insights(internal),
+		s.latencyInformation,
 	)
 	s.mu.apps[appName] = a
 	return a

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils/spanconfigtestcluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -55,7 +56,7 @@ func TestDataDriven(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	datadriven.Walk(t, testutils.TestDataPath(t), func(t *testing.T, path string) {
+	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 		// TODO(irfansharif): This is a stop-gap for tenant read-only cluster
 		// settings. See https://github.com/cockroachdb/cockroach/pull/76929. Once
 		// that's done, this test should be updated to use:

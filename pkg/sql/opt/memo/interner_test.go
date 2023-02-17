@@ -27,10 +27,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
-	"golang.org/x/tools/container/intsets"
 )
 
 func TestInterner(t *testing.T) {
@@ -379,7 +378,7 @@ func TestInterner(t *testing.T) {
 		{hashFn: in.hasher.HashScanFlags, eqFn: in.hasher.IsScanFlagsEqual, variations: []testVariation{
 			// Use unnamed fields so that compilation fails if a new field is
 			// added to ScanFlags.
-			{val1: ScanFlags{false, false, false, false, false, 0, 0, false, util.FastIntSet{}}, val2: ScanFlags{}, equal: true},
+			{val1: ScanFlags{false, false, false, false, false, 0, 0, false, intsets.Fast{}}, val2: ScanFlags{}, equal: true},
 			{val1: ScanFlags{}, val2: ScanFlags{}, equal: true},
 			{val1: ScanFlags{NoIndexJoin: false}, val2: ScanFlags{NoIndexJoin: true}, equal: false},
 			{val1: ScanFlags{NoIndexJoin: true}, val2: ScanFlags{NoIndexJoin: true}, equal: true},
@@ -463,9 +462,9 @@ func TestInterner(t *testing.T) {
 		}},
 
 		{hashFn: in.hasher.HashSchemaTypeDeps, eqFn: in.hasher.IsSchemaTypeDepsEqual, variations: []testVariation{
-			{val1: util.MakeFastIntSet(), val2: util.MakeFastIntSet(), equal: true},
-			{val1: util.MakeFastIntSet(1, 2, 3), val2: util.MakeFastIntSet(3, 2, 1), equal: true},
-			{val1: util.MakeFastIntSet(1, 2, 3), val2: util.MakeFastIntSet(1, 2), equal: false},
+			{val1: intsets.MakeFast(), val2: intsets.MakeFast(), equal: true},
+			{val1: intsets.MakeFast(1, 2, 3), val2: intsets.MakeFast(3, 2, 1), equal: true},
+			{val1: intsets.MakeFast(1, 2, 3), val2: intsets.MakeFast(1, 2), equal: false},
 		}},
 
 		{hashFn: in.hasher.HashWindowFrame, eqFn: in.hasher.IsWindowFrameEqual, variations: []testVariation{
@@ -601,20 +600,20 @@ func TestInterner(t *testing.T) {
 			},
 		}},
 
-		{hashFn: in.hasher.HashMaterializeClause, eqFn: in.hasher.IsMaterializeClauseEqual, variations: []testVariation{
+		{hashFn: in.hasher.HashCTEMaterializeClause, eqFn: in.hasher.IsCTEMaterializeClauseEqual, variations: []testVariation{
 			{
-				val1:  tree.MaterializeClause{Set: true, Materialize: true},
-				val2:  tree.MaterializeClause{Set: true, Materialize: true},
+				val1:  tree.CTEMaterializeAlways,
+				val2:  tree.CTEMaterializeAlways,
 				equal: true,
 			},
 			{
-				val1:  tree.MaterializeClause{Set: true, Materialize: false},
-				val2:  tree.MaterializeClause{Set: true, Materialize: false},
+				val1:  tree.CTEMaterializeNever,
+				val2:  tree.CTEMaterializeNever,
 				equal: true,
 			},
 			{
-				val1:  tree.MaterializeClause{Set: true, Materialize: false},
-				val2:  tree.MaterializeClause{Set: false, Materialize: true},
+				val1:  tree.CTEMaterializeNever,
+				val2:  tree.CTEMaterializeDefault,
 				equal: false,
 			},
 		}},

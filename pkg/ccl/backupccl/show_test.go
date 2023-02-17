@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -522,7 +523,7 @@ func TestShowBackups(t *testing.T) {
 
 	// check that full and remote incremental backups appear
 	b3 := sqlDBRestore.QueryStr(t,
-		`SELECT * FROM [SHOW BACKUP LATEST IN $1 WITH incremental_location= 'nodelocal://0/foo/inc'] WHERE object_type='table'`, full)
+		`SELECT * FROM [SHOW BACKUP LATEST IN $1 WITH incremental_location = $2 ] WHERE object_type ='table'`, full, remoteInc)
 	require.Equal(t, 3, len(b3))
 
 }
@@ -718,7 +719,7 @@ func TestShowUpgradedForeignKeys(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	var (
-		testdataBase = testutils.TestDataPath(t, "restore_old_versions")
+		testdataBase = datapathutils.TestDataPath(t, "restore_old_versions")
 		fkRevDirs    = testdataBase + "/fk-rev-history"
 	)
 

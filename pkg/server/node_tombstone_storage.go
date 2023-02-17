@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -59,16 +59,16 @@ func (s *nodeTombstoneStorage) IsDecommissioned(
 	// No cache hit.
 	k := s.key(nodeID)
 	for _, eng := range s.engs {
-		v, _, err := storage.MVCCGet(ctx, eng, k, hlc.Timestamp{}, storage.MVCCGetOptions{})
+		valRes, err := storage.MVCCGet(ctx, eng, k, hlc.Timestamp{}, storage.MVCCGetOptions{})
 		if err != nil {
 			return time.Time{}, err
 		}
-		if v == nil {
+		if valRes.Value == nil {
 			// Not found.
 			continue
 		}
 		var tsp hlc.Timestamp
-		if err := v.GetProto(&tsp); err != nil {
+		if err := valRes.Value.GetProto(&tsp); err != nil {
 			return time.Time{}, err
 		}
 		// Found, offer to cache and return.
@@ -124,8 +124,8 @@ func (s *nodeTombstoneStorage) SetDecommissioned(
 		//
 		// One initialized engine is always available when this method
 		// is called, so we're still persisting on at least one engine.
-		if _, err := kvserver.ReadStoreIdent(ctx, eng); err != nil {
-			if errors.Is(err, &kvserver.NotBootstrappedError{}) {
+		if _, err := kvstorage.ReadStoreIdent(ctx, eng); err != nil {
+			if errors.Is(err, &kvstorage.NotBootstrappedError{}) {
 				continue
 			}
 			return err

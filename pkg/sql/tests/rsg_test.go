@@ -36,7 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -781,7 +781,13 @@ func testRandomSyntax(
 	err := db.exec(t, ctx, "SET CLUSTER SETTING schemachanger.job.max_retry_backoff='1s'")
 	require.NoError(t, err)
 
-	yBytes, err := os.ReadFile(testutils.TestDataPath(t, "rsg", "sql.y"))
+	// Disable the test object generator. This merely causes the built-in function to report
+	// an error when called. This is OK -- we are testing syntax, so this will still ensure
+	// the function syntax is exercised.
+	err = db.exec(t, ctx, "SET CLUSTER SETTING sql.schema.test_object_generator.enabled = false")
+	require.NoError(t, err)
+
+	yBytes, err := os.ReadFile(datapathutils.TestDataPath(t, "rsg", "sql.y"))
 	if err != nil {
 		t.Fatal(err)
 	}

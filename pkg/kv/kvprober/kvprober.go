@@ -140,10 +140,10 @@ var (
 type Metrics struct {
 	ReadProbeAttempts                  *metric.Counter
 	ReadProbeFailures                  *metric.Counter
-	ReadProbeLatency                   *metric.Histogram
+	ReadProbeLatency                   metric.IHistogram
 	WriteProbeAttempts                 *metric.Counter
 	WriteProbeFailures                 *metric.Counter
-	WriteProbeLatency                  *metric.Histogram
+	WriteProbeLatency                  metric.IHistogram
 	WriteProbeQuarantineOldestDuration *metric.Gauge
 	ProbePlanAttempts                  *metric.Counter
 	ProbePlanFailures                  *metric.Counter
@@ -229,14 +229,20 @@ func NewProber(opts Opts) *Prober {
 		metrics: Metrics{
 			ReadProbeAttempts: metric.NewCounter(metaReadProbeAttempts),
 			ReadProbeFailures: metric.NewCounter(metaReadProbeFailures),
-			ReadProbeLatency: metric.NewHistogram(
-				metaReadProbeLatency, opts.HistogramWindowInterval, metric.NetworkLatencyBuckets,
-			),
+			ReadProbeLatency: metric.NewHistogram(metric.HistogramOptions{
+				Mode:     metric.HistogramModePreferHdrLatency,
+				Metadata: metaReadProbeLatency,
+				Duration: opts.HistogramWindowInterval,
+				Buckets:  metric.NetworkLatencyBuckets,
+			}),
 			WriteProbeAttempts: metric.NewCounter(metaWriteProbeAttempts),
 			WriteProbeFailures: metric.NewCounter(metaWriteProbeFailures),
-			WriteProbeLatency: metric.NewHistogram(
-				metaWriteProbeLatency, opts.HistogramWindowInterval, metric.NetworkLatencyBuckets,
-			),
+			WriteProbeLatency: metric.NewHistogram(metric.HistogramOptions{
+				Mode:     metric.HistogramModePreferHdrLatency,
+				Metadata: metaWriteProbeLatency,
+				Duration: opts.HistogramWindowInterval,
+				Buckets:  metric.NetworkLatencyBuckets,
+			}),
 			WriteProbeQuarantineOldestDuration: metric.NewFunctionalGauge(
 				metaWriteProbeQuarantineOldestDuration,
 				func() int64 { return qPool.oldestDuration().Nanoseconds() },

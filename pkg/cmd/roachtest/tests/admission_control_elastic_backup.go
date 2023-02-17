@@ -73,13 +73,14 @@ func registerElasticControlForBackups(r registry.Registry) {
 			}
 
 			runTPCC(ctx, t, c, tpccOptions{
-				Warehouses:         numWarehouses,
-				Duration:           workloadDuration,
-				SetupType:          usingImport,
-				EstimatedSetupTime: estimatedSetupTime,
-				SkipPostRunCheck:   true,
-				ExtraSetupArgs:     "--checks=false",
-				PrometheusConfig:   promCfg,
+				Warehouses:                    numWarehouses,
+				Duration:                      workloadDuration,
+				SetupType:                     usingImport,
+				EstimatedSetupTime:            estimatedSetupTime,
+				SkipPostRunCheck:              true,
+				ExtraSetupArgs:                "--checks=false",
+				PrometheusConfig:              promCfg,
+				DisableDefaultScheduledBackup: true,
 				During: func(ctx context.Context) error {
 					db := c.Conn(ctx, t.L(), crdbNodes)
 					defer db.Close()

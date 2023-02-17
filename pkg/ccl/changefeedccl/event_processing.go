@@ -19,11 +19,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
@@ -70,6 +72,8 @@ type kvEventToRowConsumer struct {
 	topicDescriptorCache map[TopicIdentifier]TopicDescriptor
 	topicNamer           *TopicNamer
 
+	metrics *sliMetrics
+
 	// This pacer is used to incorporate event consumption to elastic CPU
 	// control. This helps ensure that event encoding/decoding does not throttle
 	// foreground SQL traffic.
@@ -91,6 +95,7 @@ func newEventConsumer(
 	cursor hlc.Timestamp,
 	sink EventSink,
 	metrics *Metrics,
+	sliMetrics *sliMetrics,
 	knobs TestingKnobs,
 ) (eventConsumer, EventSink, error) {
 	encodingOpts, err := feed.Opts.GetEncodingOptions()
@@ -120,7 +125,7 @@ func newEventConsumer(
 		// CPU control is disabled.
 		var pacer *admission.Pacer = nil
 		if enablePacer {
-			tenantID, ok := roachpb.TenantFromContext(ctx)
+			tenantID, ok := roachpb.ClientTenantFromContext(ctx)
 			if !ok {
 				tenantID = roachpb.SystemTenantID
 			}
@@ -138,7 +143,7 @@ func newEventConsumer(
 
 		execCfg := cfg.ExecutorConfig.(*sql.ExecutorConfig)
 		return newKVEventToRowConsumer(ctx, execCfg, frontier, cursor, s,
-			encoder, feed, spec.Select, spec.User(), knobs, topicNamer, pacer)
+			encoder, feed, spec, knobs, topicNamer, sliMetrics, pacer)
 	}
 
 	numWorkers := changefeedbase.EventConsumerWorkers.Get(&cfg.Settings.SV)
@@ -211,10 +216,10 @@ func newKVEventToRowConsumer(
 	sink EventSink,
 	encoder Encoder,
 	details ChangefeedConfig,
-	expr execinfrapb.Expression,
-	userName username.SQLUsername,
+	spec execinfrapb.ChangeAggregatorSpec,
 	knobs TestingKnobs,
 	topicNamer *TopicNamer,
+	metrics *sliMetrics,
 	pacer *admission.Pacer,
 ) (_ *kvEventToRowConsumer, err error) {
 	includeVirtual := details.Opts.IncludeVirtual()
@@ -225,8 +230,8 @@ func newKVEventToRowConsumer(
 	}
 
 	var evaluator *cdceval.Evaluator
-	if expr.Expr != "" {
-		evaluator, err = newEvaluator(cfg, userName, expr)
+	if spec.Select.Expr != "" {
+		evaluator, err = newEvaluator(ctx, cfg, spec, details.Opts.GetFilters().WithDiff)
 		if err != nil {
 			return nil, err
 		}
@@ -249,19 +254,46 @@ func newKVEventToRowConsumer(
 		topicNamer:           topicNamer,
 		evaluator:            evaluator,
 		encodingFormat:       encodingOpts.Format,
+		metrics:              metrics,
 		pacer:                pacer,
 	}, nil
 }
 
 func newEvaluator(
-	cfg *sql.ExecutorConfig, user username.SQLUsername, expr execinfrapb.Expression,
+	ctx context.Context,
+	cfg *sql.ExecutorConfig,
+	spec execinfrapb.ChangeAggregatorSpec,
+	withDiff bool,
 ) (*cdceval.Evaluator, error) {
-	sc, err := cdceval.ParseChangefeedExpression(expr.Expr)
+	sc, err := cdceval.ParseChangefeedExpression(spec.Select.Expr)
 	if err != nil {
 		return nil, err
 	}
 
-	return cdceval.NewEvaluator(sc, cfg, user)
+	var sd sessiondatapb.SessionData
+	if spec.Feed.SessionData == nil {
+		// This changefeed was created prior to
+		// clusterversion.V23_1_ChangefeedExpressionProductionReady; thus we must
+		// rewrite expression to comply with current cluster version.
+		newExpr, err := cdceval.RewritePreviewExpression(sc)
+		if err != nil {
+			// This is very surprising and fatal.
+			return nil, changefeedbase.WithTerminalError(errors.WithHint(err,
+				"error upgrading changefeed expression.  Please recreate changefeed manually"))
+		}
+		if newExpr != sc {
+			log.Warningf(ctx,
+				"changefeed expression %s (job %d) created prior to %s rewritten as %s",
+				tree.AsString(sc), spec.JobID,
+				clusterversion.V23_1_ChangefeedExpressionProductionReady.String(),
+				tree.AsString(newExpr))
+			sc = newExpr
+		}
+	} else {
+		sd = *spec.Feed.SessionData
+	}
+
+	return cdceval.NewEvaluator(sc, cfg, spec.User(), sd, spec.Feed.StatementTime, withDiff), nil
 }
 
 func (c *kvEventToRowConsumer) topicForEvent(eventMeta cdcevent.Metadata) (TopicDescriptor, error) {
@@ -307,7 +339,7 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 		prevSchemaTimestamp = schemaTimestamp.Prev()
 	}
 
-	updatedRow, err := c.decoder.DecodeKV(ctx, ev.KV(), schemaTimestamp, keyOnly)
+	updatedRow, err := c.decoder.DecodeKV(ctx, ev.KV(), cdcevent.CurrentRow, schemaTimestamp, keyOnly)
 	if err != nil {
 		// Column families are stored contiguously, so we'll get
 		// events for each one even if we're not watching them all.
@@ -322,7 +354,7 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 		if !c.details.Opts.GetFilters().WithDiff {
 			return cdcevent.Row{}, nil
 		}
-		return c.decoder.DecodeKV(ctx, ev.PrevKeyValue(), prevSchemaTimestamp, keyOnly)
+		return c.decoder.DecodeKV(ctx, ev.PrevKeyValue(), cdcevent.PrevRow, prevSchemaTimestamp, keyOnly)
 	}()
 	if err != nil {
 		// Column families are stored contiguously, so we'll get
@@ -341,7 +373,7 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 
 		if !projection.IsInitialized() {
 			// Filter did not match.
-			// TODO(yevgeniy): Add metrics.
+			c.metrics.FilteredMessages.Inc(1)
 			a := ev.DetachAlloc()
 			a.Release(ctx)
 			return nil

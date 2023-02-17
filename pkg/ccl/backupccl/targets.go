@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -285,7 +287,7 @@ func fullClusterTargetsRestore(
 	[]catalog.Descriptor,
 	[]catalog.DatabaseDescriptor,
 	map[tree.TablePattern]catalog.Descriptor,
-	[]descpb.TenantInfoWithUsage,
+	[]mtinfopb.TenantInfoWithUsage,
 	error,
 ) {
 	ctx, span := tracing.ChildSpan(ctx, "backupccl.fullClusterTargetsRestore")
@@ -348,8 +350,10 @@ func fullClusterTargetsBackup(
 // mainBackupManifests are sorted by Endtime and this check only applies to
 // backups with a start time that is less than the restore AOST.
 func checkMissingIntroducedSpans(
+	ctx context.Context,
 	restoringDescs []catalog.Descriptor,
 	mainBackupManifests []backuppb.BackupManifest,
+	layerToIterFactory backupinfo.LayerToBackupManifestFileIterFactory,
 	endTime hlc.Timestamp,
 	codec keys.SQLCodec,
 ) error {
@@ -374,10 +378,29 @@ func checkMissingIntroducedSpans(
 
 		// Gather the _online_ tables included in the previous backup.
 		prevOnlineTables := make(map[descpb.ID]struct{})
-		for _, desc := range mainBackupManifests[i-1].Descriptors {
-			if table, _, _, _, _ := descpb.GetDescriptors(&desc); table != nil && table.Public() {
+		prevDescIt := layerToIterFactory[i-1].NewDescIter(ctx)
+		defer prevDescIt.Close()
+		for ; ; prevDescIt.Next() {
+			if ok, err := prevDescIt.Valid(); err != nil {
+				return err
+			} else if !ok {
+				break
+			}
+
+			if table, _, _, _, _ := descpb.GetDescriptors(prevDescIt.Value()); table != nil && table.Public() {
 				prevOnlineTables[table.GetID()] = struct{}{}
 			}
+		}
+
+		prevDescRevIt := layerToIterFactory[i-1].NewDescriptorChangesIter(ctx)
+		defer prevDescRevIt.Close()
+		for ; ; prevDescRevIt.Next() {
+			if ok, err := prevDescRevIt.Valid(); err != nil {
+				return err
+			} else if !ok {
+				break
+			}
+
 		}
 
 		// Gather the tables that were reintroduced in the current backup (i.e.
@@ -425,15 +448,24 @@ func checkMissingIntroducedSpans(
 				table.Name, mainBackupManifests[i].StartTime.GoTime().String(), table.Name)
 			return errors.WithIssueLink(tableError, errors.IssueLink{
 				IssueURL: "https://www.cockroachlabs.com/docs/advisories/a88042",
-				Detail: `An incremental database backup with revision history can incorrectly backup data for a table 
+				Detail: `An incremental database backup with revision history can incorrectly backup data for a table
 that was running an IMPORT at the time of the previous incremental in this chain of backups.`,
 			})
 		}
 
-		for _, desc := range mainBackupManifests[i].Descriptors {
+		descIt := layerToIterFactory[i].NewDescIter(ctx)
+		defer descIt.Close()
+
+		for ; ; descIt.Next() {
+			if ok, err := descIt.Valid(); err != nil {
+				return err
+			} else if !ok {
+				break
+			}
+
 			// Check that all online tables at backup time were either introduced or
 			// in the previous backup.
-			if table, _, _, _, _ := descpb.GetDescriptors(&desc); table != nil && table.Public() {
+			if table, _, _, _, _ := descpb.GetDescriptors(descIt.Value()); table != nil && table.Public() {
 				if err := requiredIntroduction(table); err != nil {
 					return err
 				}
@@ -444,8 +476,17 @@ that was running an IMPORT at the time of the previous incremental in this chain
 		// where a descriptor may appear in manifest.DescriptorChanges but not
 		// manifest.Descriptors. If a descriptor switched from offline to online at
 		// any moment during the backup interval, it needs to be reintroduced.
-		for _, desc := range mainBackupManifests[i].DescriptorChanges {
-			if table, _, _, _, _ := descpb.GetDescriptors(desc.Desc); table != nil && table.Public() {
+		descRevIt := layerToIterFactory[i].NewDescriptorChangesIter(ctx)
+		defer descRevIt.Close()
+
+		for ; ; descRevIt.Next() {
+			if ok, err := descRevIt.Valid(); err != nil {
+				return err
+			} else if !ok {
+				break
+			}
+
+			if table, _, _, _, _ := descpb.GetDescriptors(descRevIt.Value().Desc); table != nil && table.Public() {
 				if err := requiredIntroduction(table); err != nil {
 					return err
 				}
@@ -470,6 +511,7 @@ func selectTargets(
 	ctx context.Context,
 	p sql.PlanHookState,
 	backupManifests []backuppb.BackupManifest,
+	layerToIterFactory backupinfo.LayerToBackupManifestFileIterFactory,
 	targets tree.BackupTargetList,
 	descriptorCoverage tree.DescriptorCoverage,
 	asOf hlc.Timestamp,
@@ -477,12 +519,12 @@ func selectTargets(
 	[]catalog.Descriptor,
 	[]catalog.DatabaseDescriptor,
 	map[tree.TablePattern]catalog.Descriptor,
-	[]descpb.TenantInfoWithUsage,
+	[]mtinfopb.TenantInfoWithUsage,
 	error,
 ) {
 	ctx, span := tracing.ChildSpan(ctx, "backupccl.selectTargets")
 	defer span.Finish()
-	allDescs, lastBackupManifest, err := backupinfo.LoadSQLDescsFromBackupsAtTime(backupManifests, asOf)
+	allDescs, lastBackupManifest, err := backupinfo.LoadSQLDescsFromBackupsAtTime(ctx, backupManifests, layerToIterFactory, asOf)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
@@ -502,7 +544,8 @@ func selectTargets(
 					systemTables = append(systemTables, desc)
 				case systemschema.RoleMembersTable.GetName():
 					systemTables = append(systemTables, desc)
-					// TODO(casper): should we handle role_options table?
+				case systemschema.RoleOptionsTable.GetName():
+					systemTables = append(systemTables, desc)
 				}
 			}
 		}
@@ -517,7 +560,7 @@ func selectTargets(
 			// TODO(dt): for now it is zero-or-one but when that changes, we should
 			// either keep it sorted or build a set here.
 			if tenant.ID == targets.TenantID.ID {
-				return nil, nil, nil, []descpb.TenantInfoWithUsage{tenant}, nil
+				return nil, nil, nil, []mtinfopb.TenantInfoWithUsage{tenant}, nil
 			}
 		}
 		return nil, nil, nil, nil, errors.Errorf("tenant %d not in backup", targets.TenantID.ID)
@@ -594,28 +637,28 @@ func checkMultiRegionCompatible(
 		// For REGION BY TABLE IN <region> tables, allow the restore if the
 		// database has the region.
 		regionEnumID := database.GetRegionConfig().RegionEnumID
-		regionEnum, err := col.GetImmutableTypeByID(ctx, txn, regionEnumID, tree.ObjectLookupFlags{
-			CommonLookupFlags: tree.CommonLookupFlags{
-				AvoidLeased:    true,
-				IncludeDropped: true,
-				IncludeOffline: true,
-			},
-		})
+		typeDesc, err := col.ByID(txn).Get().Type(ctx, regionEnumID)
 		if err != nil {
 			return err
 		}
-		dbRegionNames, err := regionEnum.RegionNames()
-		if err != nil {
-			return err
+		regionEnum := typeDesc.AsRegionEnumTypeDescriptor()
+		if regionEnum == nil {
+			return errors.AssertionFailedf("expected region enum type, not %s for type %q (%d)",
+				typeDesc.GetKind(), typeDesc.GetName(), typeDesc.GetID())
 		}
-		existingRegions := make([]string, len(dbRegionNames))
-		for i, dbRegionName := range dbRegionNames {
+		var existingRegions []string
+		var found bool
+		_ = regionEnum.ForEachPublicRegion(func(dbRegionName catpb.RegionName) error {
 			if dbRegionName == regionName {
-				return nil
+				found = true
+				return iterutil.StopIteration()
 			}
-			existingRegions[i] = fmt.Sprintf("%q", dbRegionName)
+			existingRegions = append(existingRegions, fmt.Sprintf("%q", dbRegionName))
+			return nil
+		})
+		if found {
+			return nil
 		}
-
 		return errors.Newf(
 			"cannot restore REGIONAL BY TABLE %s IN REGION %q (table ID: %d) into database %q; region %q not found in database regions %s",
 			table.GetName(), regionName, table.GetID(),

@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/oppurpose"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -41,9 +41,9 @@ import (
 // job registry. Outside of tests this should always be backed by *job.Registry.
 type JobRegistry interface {
 	MakeJobID() jobspb.JobID
-	CreateJobWithTxn(ctx context.Context, record jobs.Record, jobID jobspb.JobID, txn *kv.Txn) (*jobs.Job, error)
+	CreateJobWithTxn(ctx context.Context, record jobs.Record, jobID jobspb.JobID, txn isql.Txn) (*jobs.Job, error)
 	UpdateJobWithTxn(
-		ctx context.Context, jobID jobspb.JobID, txn *kv.Txn, useReadLock bool, updateFunc jobs.UpdateFn,
+		ctx context.Context, jobID jobspb.JobID, txn isql.Txn, useReadLock bool, updateFunc jobs.UpdateFn,
 	) error
 	CheckPausepoint(name string) error
 }
@@ -54,18 +54,18 @@ func NewExecutorDependencies(
 	settings *cluster.Settings,
 	codec keys.SQLCodec,
 	sessionData *sessiondata.SessionData,
-	txn *kv.Txn,
+	txn isql.Txn,
 	user username.SQLUsername,
 	descsCollection *descs.Collection,
 	jobRegistry JobRegistry,
 	backfiller scexec.Backfiller,
+	spanSplitter scexec.IndexSpanSplitter,
 	merger scexec.Merger,
 	backfillTracker scexec.BackfillerTracker,
 	backfillFlusher scexec.PeriodicProgressFlusher,
 	validator scexec.Validator,
 	clock scmutationexec.Clock,
 	metadataUpdater scexec.DescriptorMetadataUpdater,
-	eventLogger scexec.EventLogger,
 	statsRefresher scexec.StatsRefresher,
 	testingKnobs *scexec.TestingKnobs,
 	kvTrace bool,
@@ -79,7 +79,6 @@ func NewExecutorDependencies(
 			descsCollection:    descsCollection,
 			jobRegistry:        jobRegistry,
 			validator:          validator,
-			eventLogger:        eventLogger,
 			statsRefresher:     statsRefresher,
 			schemaChangerJobID: schemaChangerJobID,
 			schemaChangerJob:   nil,
@@ -87,6 +86,7 @@ func NewExecutorDependencies(
 			settings:           settings,
 		},
 		backfiller:              backfiller,
+		spanSplitter:            spanSplitter,
 		merger:                  merger,
 		backfillerTracker:       backfillTracker,
 		metadataUpdater:         metadataUpdater,
@@ -100,7 +100,7 @@ func NewExecutorDependencies(
 }
 
 type txnDeps struct {
-	txn                 *kv.Txn
+	txn                 isql.Txn
 	codec               keys.SQLCodec
 	descsCollection     *descs.Collection
 	jobRegistry         JobRegistry
@@ -108,9 +108,9 @@ type txnDeps struct {
 	validator           scexec.Validator
 	statsRefresher      scexec.StatsRefresher
 	tableStatsToRefresh []descpb.ID
-	eventLogger         scexec.EventLogger
 	schemaChangerJobID  jobspb.JobID
 	schemaChangerJob    *jobs.Job
+	batch               *kv.Batch
 	kvTrace             bool
 	settings            *cluster.Settings
 }
@@ -120,7 +120,7 @@ func (d *txnDeps) UpdateSchemaChangeJob(
 ) error {
 	const useReadLock = false
 	return d.jobRegistry.UpdateJobWithTxn(ctx, id, d.txn, useReadLock, func(
-		txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+		txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 	) error {
 		return callback(md, ju.UpdateProgress, ju.UpdatePayload)
 	})
@@ -128,33 +128,17 @@ func (d *txnDeps) UpdateSchemaChangeJob(
 
 var _ scexec.Catalog = (*txnDeps)(nil)
 
-// MustReadImmutableDescriptors implements the scmutationexec.CatalogReader interface.
+// MustReadImmutableDescriptors implements the scexec.Catalog interface.
 func (d *txnDeps) MustReadImmutableDescriptors(
 	ctx context.Context, ids ...descpb.ID,
 ) ([]catalog.Descriptor, error) {
-	flags := tree.CommonLookupFlags{
-		Required:       true,
-		RequireMutable: false,
-		AvoidLeased:    true,
-		IncludeOffline: true,
-		IncludeDropped: true,
-		AvoidSynthetic: true,
-	}
-	return d.descsCollection.GetImmutableDescriptorsByID(ctx, d.txn, flags, ids...)
+	return d.descsCollection.ByID(d.txn.KV()).WithoutSynthetic().Get().Descs(ctx, ids)
 }
 
 // GetFullyQualifiedName implements the scmutationexec.CatalogReader interface
 func (d *txnDeps) GetFullyQualifiedName(ctx context.Context, id descpb.ID) (string, error) {
-	flags := tree.CommonLookupFlags{
-		Required:       true,
-		IncludeOffline: true,
-		IncludeDropped: true,
-		AvoidLeased:    true,
-		AvoidSynthetic: true,
-	}
-	objectDesc, err := d.descsCollection.GetImmutableDescriptorByID(
-		ctx, d.txn, id, flags,
-	)
+	g := d.descsCollection.ByID(d.txn.KV()).WithoutSynthetic().Get()
+	objectDesc, err := g.Desc(ctx, id)
 	if err != nil {
 		return "", err
 	}
@@ -162,15 +146,11 @@ func (d *txnDeps) GetFullyQualifiedName(ctx context.Context, id descpb.ID) (stri
 	// we can fetch the fully qualified names.
 	if objectDesc.DescriptorType() != catalog.Database &&
 		objectDesc.DescriptorType() != catalog.Schema {
-		_, databaseDesc, err := d.descsCollection.GetImmutableDatabaseByID(
-			ctx, d.txn, objectDesc.GetParentID(), flags,
-		)
+		databaseDesc, err := g.Database(ctx, objectDesc.GetParentID())
 		if err != nil {
 			return "", err
 		}
-		schemaDesc, err := d.descsCollection.GetImmutableSchemaByID(
-			ctx, d.txn, objectDesc.GetParentSchemaID(), flags,
-		)
+		schemaDesc, err := g.Schema(ctx, objectDesc.GetParentSchemaID())
 		if err != nil {
 			return "", err
 		}
@@ -183,9 +163,7 @@ func (d *txnDeps) GetFullyQualifiedName(ctx context.Context, id descpb.ID) (stri
 	} else if objectDesc.DescriptorType() == catalog.Database {
 		return objectDesc.GetName(), nil
 	} else if objectDesc.DescriptorType() == catalog.Schema {
-		_, databaseDesc, err := d.descsCollection.GetImmutableDatabaseByID(ctx,
-			d.txn, objectDesc.GetParentID(), flags,
-		)
+		databaseDesc, err := g.Database(ctx, objectDesc.GetParentID())
 		if err != nil {
 			return "", err
 		}
@@ -198,82 +176,70 @@ func (d *txnDeps) GetFullyQualifiedName(ctx context.Context, id descpb.ID) (stri
 func (d *txnDeps) MustReadMutableDescriptor(
 	ctx context.Context, id descpb.ID,
 ) (catalog.MutableDescriptor, error) {
-	return d.descsCollection.GetMutableDescriptorByID(ctx, d.txn, id)
+	return d.descsCollection.MutableByID(d.txn.KV()).Desc(ctx, id)
 }
 
-// AddSyntheticDescriptor is part of the
-// scmutationexec.SyntheticDescriptorStateUpdater interface.
-func (d *txnDeps) AddSyntheticDescriptor(desc catalog.Descriptor) {
-	d.descsCollection.AddSyntheticDescriptor(desc)
-}
-
-// NewCatalogChangeBatcher implements the scexec.Catalog interface.
-func (d *txnDeps) NewCatalogChangeBatcher() scexec.CatalogChangeBatcher {
-	return &catalogChangeBatcher{
-		txnDeps: d,
-		batch:   d.txn.NewBatch(),
-	}
-}
-
-type catalogChangeBatcher struct {
-	*txnDeps
-	batch *kv.Batch
-}
-
-var _ scexec.CatalogChangeBatcher = (*catalogChangeBatcher)(nil)
-
-// CreateOrUpdateDescriptor implements the scexec.CatalogWriter interface.
-func (b *catalogChangeBatcher) CreateOrUpdateDescriptor(
+// CreateOrUpdateDescriptor implements the scexec.Catalog interface.
+func (d *txnDeps) CreateOrUpdateDescriptor(
 	ctx context.Context, desc catalog.MutableDescriptor,
 ) error {
-	return b.descsCollection.WriteDescToBatch(ctx, b.kvTrace, desc, b.batch)
+	return d.descsCollection.WriteDescToBatch(ctx, d.kvTrace, desc, d.getOrCreateBatch())
 }
 
-// DeleteName implements the scexec.CatalogWriter interface.
-func (b *catalogChangeBatcher) DeleteName(
-	ctx context.Context, nameInfo descpb.NameInfo, id descpb.ID,
-) error {
-	return b.descsCollection.DeleteNamespaceEntryToBatch(ctx, b.kvTrace, &nameInfo, b.batch)
+// DeleteName implements the scexec.Catalog interface.
+func (d *txnDeps) DeleteName(ctx context.Context, nameInfo descpb.NameInfo, id descpb.ID) error {
+	return d.descsCollection.DeleteNamespaceEntryToBatch(ctx, d.kvTrace, &nameInfo, d.getOrCreateBatch())
 }
 
-// DeleteDescriptor implements the scexec.CatalogChangeBatcher interface.
-func (b *catalogChangeBatcher) DeleteDescriptor(ctx context.Context, id descpb.ID) error {
-	return b.descsCollection.DeleteDescToBatch(ctx, b.kvTrace, id, b.batch)
+// DeleteDescriptor implements the scexec.Catalog interface.
+func (d *txnDeps) DeleteDescriptor(ctx context.Context, id descpb.ID) error {
+	return d.descsCollection.DeleteDescToBatch(ctx, d.kvTrace, id, d.getOrCreateBatch())
 }
 
-// DeleteZoneConfig implements the scexec.CatalogChangeBatcher interface.
-func (b *catalogChangeBatcher) DeleteZoneConfig(ctx context.Context, id descpb.ID) error {
-	return b.descsCollection.DeleteZoneConfigInBatch(ctx, b.kvTrace, b.batch, id)
+// DeleteZoneConfig implements the scexec.Catalog interface.
+func (d *txnDeps) DeleteZoneConfig(ctx context.Context, id descpb.ID) error {
+	return d.descsCollection.DeleteZoneConfigInBatch(ctx, d.kvTrace, d.getOrCreateBatch(), id)
 }
 
-// ValidateAndRun implements the scexec.CatalogChangeBatcher interface.
-func (b *catalogChangeBatcher) ValidateAndRun(ctx context.Context) error {
-	if err := b.descsCollection.ValidateUncommittedDescriptors(ctx, b.txn); err != nil {
-		return err
+// Validate implements the scexec.Catalog interface.
+func (d *txnDeps) Validate(ctx context.Context) error {
+	return d.descsCollection.ValidateUncommittedDescriptors(ctx, d.txn.KV())
+}
+
+// Run implements the scexec.Catalog interface.
+func (d *txnDeps) Run(ctx context.Context) error {
+	if d.batch == nil {
+		return nil
 	}
-	if err := b.txn.Run(ctx, b.batch); err != nil {
-		return errors.Wrap(err, "writing descriptors")
+	if err := d.txn.KV().Run(ctx, d.batch); err != nil {
+		return errors.Wrap(err, "persisting catalog mutations")
 	}
+	d.batch = nil
 	return nil
 }
 
-// UpdateComment implements the scexec.CatalogChangeBatcher interface.
-func (b *catalogChangeBatcher) UpdateComment(
-	ctx context.Context, key catalogkeys.CommentKey, cmt string,
-) error {
-	return b.descsCollection.WriteCommentToBatch(ctx, b.kvTrace, b.batch, key, cmt)
+// Reset implements the scexec.Catalog interface.
+func (d *txnDeps) Reset(ctx context.Context) error {
+	d.descsCollection.ResetUncommitted(ctx)
+	d.batch = nil
+	return nil
 }
 
-// DeleteComment implements the scexec.CatalogChangeBatcher interface.
-func (b *catalogChangeBatcher) DeleteComment(
-	ctx context.Context, key catalogkeys.CommentKey,
-) error {
-	return b.descsCollection.DeleteCommentInBatch(ctx, b.kvTrace, b.batch, key)
+func (d *txnDeps) getOrCreateBatch() *kv.Batch {
+	if d.batch == nil {
+		d.batch = d.txn.KV().NewBatch()
+	}
+	return d.batch
 }
 
-// DeleteTableComments implements the scexec.CatalogChangeBatcher interface.
-func (b *catalogChangeBatcher) DeleteTableComments(ctx context.Context, tblID descpb.ID) error {
-	return b.descsCollection.DeleteTableComments(ctx, b.kvTrace, b.batch, tblID)
+// UpdateComment implements the scexec.Catalog interface.
+func (d *txnDeps) UpdateComment(ctx context.Context, key catalogkeys.CommentKey, cmt string) error {
+	return d.descsCollection.WriteCommentToBatch(ctx, d.kvTrace, d.getOrCreateBatch(), key, cmt)
+}
+
+// DeleteComment implements the scexec.Catalog interface.
+func (d *txnDeps) DeleteComment(ctx context.Context, key catalogkeys.CommentKey) error {
+	return d.descsCollection.DeleteCommentInBatch(ctx, d.kvTrace, d.getOrCreateBatch(), key)
 }
 
 var _ scexec.TransactionalJobRegistry = (*txnDeps)(nil)
@@ -287,7 +253,7 @@ func (d *txnDeps) CheckPausepoint(name string) error {
 }
 
 func (d *txnDeps) UseLegacyGCJob(ctx context.Context) bool {
-	return !d.settings.Version.IsActive(ctx, clusterversion.V22_2UseDelRangeInGCJob)
+	return !d.settings.Version.IsActive(ctx, clusterversion.TODODelete_V22_2UseDelRangeInGCJob)
 }
 
 func (d *txnDeps) SchemaChangerJobID() jobspb.JobID {
@@ -315,34 +281,11 @@ func (d *txnDeps) CreatedJobs() []jobspb.JobID {
 	return d.createdJobs
 }
 
-var _ scexec.IndexSpanSplitter = (*txnDeps)(nil)
-
-// MaybeSplitIndexSpans implements the scexec.IndexSpanSplitter interface.
-func (d *txnDeps) MaybeSplitIndexSpans(
-	ctx context.Context, table catalog.TableDescriptor, indexToBackfill catalog.Index,
-) error {
-	// Only perform splits on the system tenant.
-	if !d.codec.ForSystemTenant() {
-		return nil
-	}
-
-	span := table.IndexSpan(d.codec, indexToBackfill.GetID())
-	const backfillSplitExpiration = time.Hour
-	expirationTime := d.txn.DB().Clock().Now().Add(backfillSplitExpiration.Nanoseconds(), 0)
-	return d.txn.DB().AdminSplit(ctx, span.Key, expirationTime, oppurpose.SplitSchema)
-}
-
 // GetResumeSpans implements the scexec.BackfillerTracker interface.
 func (d *txnDeps) GetResumeSpans(
 	ctx context.Context, tableID descpb.ID, indexID descpb.IndexID,
 ) ([]roachpb.Span, error) {
-	table, err := d.descsCollection.GetImmutableTableByID(ctx, d.txn, tableID, tree.ObjectLookupFlags{
-		CommonLookupFlags: tree.CommonLookupFlags{
-			Required:       true,
-			AvoidLeased:    true,
-			AvoidSynthetic: true,
-		},
-	})
+	table, err := d.descsCollection.ByID(d.txn.KV()).WithoutNonPublic().WithoutSynthetic().Get().Table(ctx, tableID)
 	if err != nil {
 		return nil, err
 	}
@@ -361,6 +304,7 @@ type execDeps struct {
 	clock                   scmutationexec.Clock
 	metadataUpdater         scexec.DescriptorMetadataUpdater
 	backfiller              scexec.Backfiller
+	spanSplitter            scexec.IndexSpanSplitter
 	merger                  scexec.Merger
 	backfillerTracker       scexec.BackfillerTracker
 	periodicProgressFlusher scexec.PeriodicProgressFlusher
@@ -407,10 +351,10 @@ func (d *execDeps) Validator() scexec.Validator {
 
 // IndexSpanSplitter implements the scexec.Dependencies interface.
 func (d *execDeps) IndexSpanSplitter() scexec.IndexSpanSplitter {
-	return d
+	return d.spanSplitter
 }
 
-// TransactionalJobCreator implements the scexec.Dependencies interface.
+// TransactionalJobRegistry implements the scexec.Dependencies interface.
 func (d *execDeps) TransactionalJobRegistry() scexec.TransactionalJobRegistry {
 	return d
 }
@@ -435,16 +379,8 @@ func (d *execDeps) DescriptorMetadataUpdater(ctx context.Context) scexec.Descrip
 	return d.metadataUpdater
 }
 
-// EventLoggerFactory constructs a new event logger with a txn.
-type EventLoggerFactory = func(*kv.Txn) scexec.EventLogger
-
 // MetadataUpdaterFactory constructs a new metadata updater with a txn.
-type MetadataUpdaterFactory = func(ctx context.Context, descriptors *descs.Collection, txn *kv.Txn) scexec.DescriptorMetadataUpdater
-
-// EventLogger implements scexec.Dependencies
-func (d *execDeps) EventLogger() scexec.EventLogger {
-	return d.eventLogger
-}
+type MetadataUpdaterFactory = func(ctx context.Context, descriptors *descs.Collection, txn isql.Txn) scexec.DescriptorMetadataUpdater
 
 // GetTestingKnobs implements scexec.Dependencies
 func (d *execDeps) GetTestingKnobs() *scexec.TestingKnobs {
@@ -455,11 +391,6 @@ func (d *execDeps) GetTestingKnobs() *scexec.TestingKnobs {
 // executing the current transaction.
 func (d *execDeps) AddTableForStatsRefresh(id descpb.ID) {
 	d.tableStatsToRefresh = append(d.tableStatsToRefresh, id)
-}
-
-// getTablesForStatsRefresh gets tables that need refresh for stats.
-func (d *execDeps) getTablesForStatsRefresh() []descpb.ID {
-	return d.tableStatsToRefresh
 }
 
 // StatsRefresher implements scexec.Dependencies

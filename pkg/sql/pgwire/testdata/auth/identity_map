@@ -10,36 +10,40 @@ host  all all  all cert-password map=testing
 ----
 # Active authentication configuration on this node:
 # Original configuration:
+# loopback all all all trust       # built-in CockroachDB default
 # host  all root all cert-password # CockroachDB mandatory rule
 # host  all all  all cert-password map=testing
 #
 # Interpreted configuration:
-# TYPE DATABASE USER ADDRESS METHOD        OPTIONS
-host   all      root all     cert-password
-host   all      all  all     cert-password map=testing
+# TYPE   DATABASE USER ADDRESS METHOD        OPTIONS
+loopback all      all  all     trust
+host     all      root all     cert-password
+host     all      all  all     cert-password map=testing
 
 set_identity_map
 testing testuser carl               # Exact remapping
 testing /(.*)@cockroachlabs.com \1  # Generalized domain mapping
-testing testuser another_carl       # Verify first-one-wins
+testing testuser another_carl       # Another candidate mapping
 testing will_be_carl carl           # Another user for password testing
 testing testuser2 carl              # Cert that doesn't correspond to a db user
 testing testuser@example.com carl   # Cert with a non-SQL principal baked in
 ----
 # Active authentication configuration on this node:
 # Original configuration:
+# loopback all all all trust       # built-in CockroachDB default
 # host  all root all cert-password # CockroachDB mandatory rule
 # host  all all  all cert-password map=testing
 #
 # Interpreted configuration:
-# TYPE DATABASE USER ADDRESS METHOD        OPTIONS
-host   all      root all     cert-password
-host   all      all  all     cert-password map=testing
+# TYPE   DATABASE USER ADDRESS METHOD        OPTIONS
+loopback all      all  all     trust
+host     all      root all     cert-password
+host     all      all  all     cert-password map=testing
 # Active identity mapping on this node:
 # Original configuration:
 # testing testuser carl               # Exact remapping
 # testing /(.*)@cockroachlabs.com \1  # Generalized domain mapping
-# testing testuser another_carl       # Verify first-one-wins
+# testing testuser another_carl       # Another candidate mapping
 # testing will_be_carl carl           # Another user for password testing
 # testing testuser2 carl              # Cert that doesn't correspond to a db user
 # testing testuser@example.com carl   # Cert with a non-SQL principal baked in
@@ -127,7 +131,7 @@ subtest end
 # Connect as the magic "testuser" since that comes pre-equipped with a cert.
 subtest certificate_good
 
-connect user=testuser database=mydb
+connect user=carl database=mydb system_identity=testuser
 ----
 ok mydb
 
@@ -149,7 +153,7 @@ subtest end
 # database username.
 subtest cert_with_principal_not_in_users
 
-connect user=testuser2 database=mydb force_certs show_system_identity
+connect system_identity=testuser2 user=carl database=mydb force_certs show_system_identity
 ----
 ok mydb testuser2
 
@@ -190,13 +194,15 @@ testing testuser root               # Exact remapping
 ----
 # Active authentication configuration on this node:
 # Original configuration:
+# loopback all all all trust       # built-in CockroachDB default
 # host  all root all cert-password # CockroachDB mandatory rule
 # host  all all  all cert-password map=testing
 #
 # Interpreted configuration:
-# TYPE DATABASE USER ADDRESS METHOD        OPTIONS
-host   all      root all     cert-password
-host   all      all  all     cert-password map=testing
+# TYPE   DATABASE USER ADDRESS METHOD        OPTIONS
+loopback all      all  all     trust
+host     all      root all     cert-password
+host     all      all  all     cert-password map=testing
 # Active identity mapping on this node:
 # Original configuration:
 # testing testuser root               # Exact remapping
@@ -217,13 +223,15 @@ testing testuser node               # Exact remapping
 ----
 # Active authentication configuration on this node:
 # Original configuration:
+# loopback all all all trust       # built-in CockroachDB default
 # host  all root all cert-password # CockroachDB mandatory rule
 # host  all all  all cert-password map=testing
 #
 # Interpreted configuration:
-# TYPE DATABASE USER ADDRESS METHOD        OPTIONS
-host   all      root all     cert-password
-host   all      all  all     cert-password map=testing
+# TYPE   DATABASE USER ADDRESS METHOD        OPTIONS
+loopback all      all  all     trust
+host     all      root all     cert-password
+host     all      all  all     cert-password map=testing
 # Active identity mapping on this node:
 # Original configuration:
 # testing testuser node               # Exact remapping
@@ -244,24 +252,28 @@ set_identity_map
 ----
 # Active authentication configuration on this node:
 # Original configuration:
+# loopback all all all trust       # built-in CockroachDB default
 # host  all root all cert-password # CockroachDB mandatory rule
 # host  all all  all cert-password map=testing
 #
 # Interpreted configuration:
-# TYPE DATABASE USER ADDRESS METHOD        OPTIONS
-host   all      root all     cert-password
-host   all      all  all     cert-password map=testing
+# TYPE   DATABASE USER ADDRESS METHOD        OPTIONS
+loopback all      all  all     trust
+host     all      root all     cert-password
+host     all      all  all     cert-password map=testing
 
 set_hba
 ----
 # Active authentication configuration on this node:
 # Original configuration:
 # host  all root all cert-password # CockroachDB mandatory rule
-# host  all all  all cert-password # built-in CockroachDB default
-# local all all      password      # built-in CockroachDB default
+# loopback all all all trust       # built-in CockroachDB default
+# host     all all all cert-password # built-in CockroachDB default
+# local    all all     password      # built-in CockroachDB default
 #
 # Interpreted configuration:
-# TYPE DATABASE USER ADDRESS METHOD        OPTIONS
-host   all      root all     cert-password
-host   all      all  all     cert-password
-local  all      all          password
+# TYPE   DATABASE USER ADDRESS METHOD        OPTIONS
+host     all      root all     cert-password
+loopback all      all  all     trust
+host     all      all  all     cert-password
+local    all      all          password

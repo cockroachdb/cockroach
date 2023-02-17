@@ -1,14 +1,14 @@
 init-grant-coordinator min-cpu=1 max-cpu=3 sql-kv-tokens=2 sql-sql-tokens=1 sql-leaf=2 sql-root=1
 ----
 GrantCoordinator:
-(chain: id: 1 active: false index: 0) kv: used: 0, high(moderate)-total: 1(1) moderate-clamp: 3 sql-kv-response: avail: 2
+(chain: id: 1 active: false index: 0) kv: used: 0, total: 1 sql-kv-response: avail: 2
 sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
 
 try-get work=kv
 ----
 kv: tryGet(1) returned true
 GrantCoordinator:
-(chain: id: 1 active: false index: 0) kv: used: 1, high(moderate)-total: 1(1) moderate-clamp: 3 sql-kv-response: avail: 2
+(chain: id: 1 active: false index: 0) kv: used: 1, total: 1 sql-kv-response: avail: 2
 sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
 
 # No more slots.
@@ -16,13 +16,13 @@ try-get work=kv
 ----
 kv: tryGet(1) returned false
 GrantCoordinator:
-(chain: id: 1 active: false index: 0) kv: used: 1, high(moderate)-total: 1(1) moderate-clamp: 3 sql-kv-response: avail: 2
+(chain: id: 1 active: false index: 0) kv: used: 1, total: 1 sql-kv-response: avail: 2
 sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
 
 set-has-waiting-requests work=kv v=true
 ----
 GrantCoordinator:
-(chain: id: 1 active: false index: 0) kv: used: 1, high(moderate)-total: 1(1) moderate-clamp: 3 sql-kv-response: avail: 2
+(chain: id: 1 active: false index: 0) kv: used: 1, total: 1 sql-kv-response: avail: 2
 sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
 
 # Since no more KV slots, couldn't get.
@@ -30,13 +30,13 @@ try-get work=sql-kv-response
 ----
 sql-kv-response: tryGet(1) returned false
 GrantCoordinator:
-(chain: id: 1 active: false index: 0) kv: used: 1, high(moderate)-total: 1(1) moderate-clamp: 3 sql-kv-response: avail: 2
+(chain: id: 1 active: false index: 0) kv: used: 1, total: 1 sql-kv-response: avail: 2
 sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
 
 set-has-waiting-requests work=sql-kv-response v=true
 ----
 GrantCoordinator:
-(chain: id: 1 active: false index: 0) kv: used: 1, high(moderate)-total: 1(1) moderate-clamp: 3 sql-kv-response: avail: 2
+(chain: id: 1 active: false index: 0) kv: used: 1, total: 1 sql-kv-response: avail: 2
 sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
 
 # Since no more KV slots, couldn't get.
@@ -44,13 +44,13 @@ try-get work=sql-leaf-start
 ----
 sql-leaf-start: tryGet(1) returned false
 GrantCoordinator:
-(chain: id: 1 active: false index: 0) kv: used: 1, high(moderate)-total: 1(1) moderate-clamp: 3 sql-kv-response: avail: 2
+(chain: id: 1 active: false index: 0) kv: used: 1, total: 1 sql-kv-response: avail: 2
 sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
 
 set-has-waiting-requests work=sql-leaf-start v=true
 ----
 GrantCoordinator:
-(chain: id: 1 active: false index: 0) kv: used: 1, high(moderate)-total: 1(1) moderate-clamp: 3 sql-kv-response: avail: 2
+(chain: id: 1 active: false index: 0) kv: used: 1, total: 1 sql-kv-response: avail: 2
 sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
 
 # Since no more KV slots, couldn't get.
@@ -58,13 +58,13 @@ try-get work=sql-root-start
 ----
 sql-root-start: tryGet(1) returned false
 GrantCoordinator:
-(chain: id: 1 active: false index: 0) kv: used: 1, high(moderate)-total: 1(1) moderate-clamp: 3 sql-kv-response: avail: 2
+(chain: id: 1 active: false index: 0) kv: used: 1, total: 1 sql-kv-response: avail: 2
 sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
 
 set-has-waiting-requests work=sql-root-start v=true
 ----
 GrantCoordinator:
-(chain: id: 1 active: false index: 0) kv: used: 1, high(moderate)-total: 1(1) moderate-clamp: 3 sql-kv-response: avail: 2
+(chain: id: 1 active: false index: 0) kv: used: 1, total: 1 sql-kv-response: avail: 2
 sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
 
 return-grant work=kv
@@ -72,19 +72,19 @@ return-grant work=kv
 kv: returnGrant(1)
 kv: granted in chain 1, and returning 1
 GrantCoordinator:
-(chain: id: 1 active: true index: 0) kv: used: 1, high(moderate)-total: 1(1) moderate-clamp: 3 sql-kv-response: avail: 2
+(chain: id: 1 active: true index: 0) kv: used: 1, total: 1 sql-kv-response: avail: 2
 sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
 
 set-has-waiting-requests work=kv v=false
 ----
 GrantCoordinator:
-(chain: id: 1 active: true index: 0) kv: used: 1, high(moderate)-total: 1(1) moderate-clamp: 3 sql-kv-response: avail: 2
+(chain: id: 1 active: true index: 0) kv: used: 1, total: 1 sql-kv-response: avail: 2
 sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
 
 set-return-value-from-granted work=kv v=0
 ----
 GrantCoordinator:
-(chain: id: 1 active: true index: 0) kv: used: 1, high(moderate)-total: 1(1) moderate-clamp: 3 sql-kv-response: avail: 2
+(chain: id: 1 active: true index: 0) kv: used: 1, total: 1 sql-kv-response: avail: 2
 sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
 
 # The grant chain dies out since kv slots are fully used.
@@ -92,7 +92,7 @@ continue-grant-chain work=kv
 ----
 kv: continueGrantChain
 GrantCoordinator:
-(chain: id: 2 active: false index: 1) kv: used: 1, high(moderate)-total: 1(1) moderate-clamp: 3 sql-kv-response: avail: 2
+(chain: id: 2 active: false index: 1) kv: used: 1, total: 1 sql-kv-response: avail: 2
 sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
 
 # Grant to sql-kv-response consumes a token.
@@ -101,7 +101,7 @@ return-grant work=kv
 kv: returnGrant(1)
 sql-kv-response: granted in chain 2, and returning 1
 GrantCoordinator:
-(chain: id: 2 active: true index: 1) kv: used: 0, high(moderate)-total: 1(1) moderate-clamp: 3 sql-kv-response: avail: 1
+(chain: id: 2 active: true index: 1) kv: used: 0, total: 1 sql-kv-response: avail: 1
 sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
 
 # Grant to sql-kv-response consumes another token. None left.
@@ -110,7 +110,7 @@ continue-grant-chain work=sql-kv-response
 sql-kv-response: continueGrantChain
 sql-kv-response: granted in chain 2, and returning 1
 GrantCoordinator:
-(chain: id: 2 active: true index: 1) kv: used: 0, high(moderate)-total: 1(1) moderate-clamp: 3 sql-kv-response: avail: 0
+(chain: id: 2 active: true index: 1) kv: used: 0, total: 1 sql-kv-response: avail: 0
 sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
 
 # Even though there are still waiting requests for sql-kv-response, no more
@@ -120,7 +120,7 @@ continue-grant-chain work=sql-kv-response
 sql-kv-response: continueGrantChain
 sql-leaf-start: granted in chain 2, and returning 1
 GrantCoordinator:
-(chain: id: 2 active: true index: 3) kv: used: 0, high(moderate)-total: 1(1) moderate-clamp: 3 sql-kv-response: avail: 0
+(chain: id: 2 active: true index: 3) kv: used: 0, total: 1 sql-kv-response: avail: 0
 sql-sql-response: avail: 1 sql-leaf-start: used: 1, total: 2 sql-root-start: used: 0, total: 1
 
 continue-grant-chain work=sql-leaf-start
@@ -128,7 +128,7 @@ continue-grant-chain work=sql-leaf-start
 sql-leaf-start: continueGrantChain
 sql-leaf-start: granted in chain 2, and returning 1
 GrantCoordinator:
-(chain: id: 2 active: true index: 3) kv: used: 0, high(moderate)-total: 1(1) moderate-clamp: 3 sql-kv-response: avail: 0
+(chain: id: 2 active: true index: 3) kv: used: 0, total: 1 sql-kv-response: avail: 0
 sql-sql-response: avail: 1 sql-leaf-start: used: 2, total: 2 sql-root-start: used: 0, total: 1
 
 # Even though there are still waiting requests for sql-leaf-start, no more
@@ -138,7 +138,7 @@ continue-grant-chain work=sql-leaf-start
 sql-leaf-start: continueGrantChain
 sql-root-start: granted in chain 2, and returning 1
 GrantCoordinator:
-(chain: id: 2 active: true index: 4) kv: used: 0, high(moderate)-total: 1(1) moderate-clamp: 3 sql-kv-response: avail: 0
+(chain: id: 2 active: true index: 4) kv: used: 0, total: 1 sql-kv-response: avail: 0
 sql-sql-response: avail: 1 sql-leaf-start: used: 2, total: 2 sql-root-start: used: 1, total: 1
 
 # sql-root-start ran out of tokens. Grant chain dies out.
@@ -146,7 +146,7 @@ continue-grant-chain work=sql-root-start
 ----
 sql-root-start: continueGrantChain
 GrantCoordinator:
-(chain: id: 3 active: false index: 5) kv: used: 0, high(moderate)-total: 1(1) moderate-clamp: 3 sql-kv-response: avail: 0
+(chain: id: 3 active: false index: 5) kv: used: 0, total: 1 sql-kv-response: avail: 0
 sql-sql-response: avail: 1 sql-leaf-start: used: 2, total: 2 sql-root-start: used: 1, total: 1
 
 # Return sql-leaf-start slot. This will cause another grant chain to start
@@ -156,7 +156,7 @@ return-grant work=sql-leaf-start
 sql-leaf-start: returnGrant(1)
 sql-leaf-start: granted in chain 3, and returning 1
 GrantCoordinator:
-(chain: id: 3 active: true index: 3) kv: used: 0, high(moderate)-total: 1(1) moderate-clamp: 3 sql-kv-response: avail: 0
+(chain: id: 3 active: true index: 3) kv: used: 0, total: 1 sql-kv-response: avail: 0
 sql-sql-response: avail: 1 sql-leaf-start: used: 2, total: 2 sql-root-start: used: 1, total: 1
 
 # Return another sql-leaf-start slot. The grant chain is already active and
@@ -165,7 +165,7 @@ return-grant work=sql-leaf-start
 ----
 sql-leaf-start: returnGrant(1)
 GrantCoordinator:
-(chain: id: 3 active: true index: 3) kv: used: 0, high(moderate)-total: 1(1) moderate-clamp: 3 sql-kv-response: avail: 0
+(chain: id: 3 active: true index: 3) kv: used: 0, total: 1 sql-kv-response: avail: 0
 sql-sql-response: avail: 1 sql-leaf-start: used: 1, total: 2 sql-root-start: used: 1, total: 1
 
 # The kv slots are fully used after this tryGet, which succeeds.
@@ -173,7 +173,7 @@ try-get work=kv
 ----
 kv: tryGet(1) returned true
 GrantCoordinator:
-(chain: id: 3 active: true index: 3) kv: used: 1, high(moderate)-total: 1(1) moderate-clamp: 3 sql-kv-response: avail: 0
+(chain: id: 3 active: true index: 3) kv: used: 1, total: 1 sql-kv-response: avail: 0
 sql-sql-response: avail: 1 sql-leaf-start: used: 1, total: 2 sql-root-start: used: 1, total: 1
 
 # This tryGet for kv fails and forces termination of the grant chain.
@@ -181,13 +181,13 @@ try-get work=kv
 ----
 kv: tryGet(1) returned false
 GrantCoordinator:
-(chain: id: 4 active: false index: 3) kv: used: 1, high(moderate)-total: 1(1) moderate-clamp: 3 sql-kv-response: avail: 0
+(chain: id: 4 active: false index: 3) kv: used: 1, total: 1 sql-kv-response: avail: 0
 sql-sql-response: avail: 1 sql-leaf-start: used: 1, total: 2 sql-root-start: used: 1, total: 1
 
 set-has-waiting-requests work=kv v=true
 ----
 GrantCoordinator:
-(chain: id: 4 active: false index: 3) kv: used: 1, high(moderate)-total: 1(1) moderate-clamp: 3 sql-kv-response: avail: 0
+(chain: id: 4 active: false index: 3) kv: used: 1, total: 1 sql-kv-response: avail: 0
 sql-sql-response: avail: 1 sql-leaf-start: used: 1, total: 2 sql-root-start: used: 1, total: 1
 
 # The grant chain cannot continue since it was force terminated, and a new one
@@ -196,14 +196,14 @@ continue-grant-chain work=sql-leaf-start
 ----
 sql-leaf-start: continueGrantChain
 GrantCoordinator:
-(chain: id: 4 active: false index: 3) kv: used: 1, high(moderate)-total: 1(1) moderate-clamp: 3 sql-kv-response: avail: 0
+(chain: id: 4 active: false index: 3) kv: used: 1, total: 1 sql-kv-response: avail: 0
 sql-sql-response: avail: 1 sql-leaf-start: used: 1, total: 2 sql-root-start: used: 1, total: 1
 
 # Pretend that the kv work that was waiting is gone.
 set-has-waiting-requests work=kv v=false
 ----
 GrantCoordinator:
-(chain: id: 4 active: false index: 3) kv: used: 1, high(moderate)-total: 1(1) moderate-clamp: 3 sql-kv-response: avail: 0
+(chain: id: 4 active: false index: 3) kv: used: 1, total: 1 sql-kv-response: avail: 0
 sql-sql-response: avail: 1 sql-leaf-start: used: 1, total: 2 sql-root-start: used: 1, total: 1
 
 # Some other kv work takes without permission.
@@ -211,15 +211,16 @@ took-without-permission work=kv
 ----
 kv: tookWithoutPermission(1)
 GrantCoordinator:
-(chain: id: 4 active: false index: 3) kv: used: 2, high(moderate)-total: 1(1) moderate-clamp: 3 sql-kv-response: avail: 0
+(chain: id: 4 active: false index: 3) kv: used: 2, total: 1 sql-kv-response: avail: 0
 sql-sql-response: avail: 1 sql-leaf-start: used: 1, total: 2 sql-root-start: used: 1, total: 1
 
 # Refill the tokens and increase the kv slots to 2.
 cpu-load runnable=0 procs=1
 ----
 GrantCoordinator:
-(chain: id: 4 active: false index: 1) kv: used: 2, high(moderate)-total: 2(0) moderate-clamp: 0 sql-kv-response: avail: 2
+(chain: id: 4 active: false index: 1) kv: used: 2, total: 2 sql-kv-response: avail: 2
 sql-sql-response: avail: 1 sql-leaf-start: used: 1, total: 2 sql-root-start: used: 1, total: 1
+SlotAdjuster metrics: slots: 2, duration (short, long) millis: (1, 0), inc: 1, dec: 0
 
 # Tokens don't get overfull. And kv slots increased to 3. This causes a grant
 # to sql-kv-response and the grant chain is again active.
@@ -227,22 +228,24 @@ cpu-load runnable=0 procs=1
 ----
 sql-kv-response: granted in chain 4, and returning 1
 GrantCoordinator:
-(chain: id: 4 active: true index: 1) kv: used: 2, high(moderate)-total: 3(0) moderate-clamp: 0 sql-kv-response: avail: 1
+(chain: id: 4 active: true index: 1) kv: used: 2, total: 3 sql-kv-response: avail: 1
 sql-sql-response: avail: 1 sql-leaf-start: used: 1, total: 2 sql-root-start: used: 1, total: 1
+SlotAdjuster metrics: slots: 3, duration (short, long) millis: (2, 0), inc: 2, dec: 0
 
 # Overload and kv slots decreased. Forces termination of grant chain 4.
 cpu-load runnable=2 procs=1
 ----
 GrantCoordinator:
-(chain: id: 5 active: false index: 1) kv: used: 2, high(moderate)-total: 2(0) moderate-clamp: -1 sql-kv-response: avail: 2
+(chain: id: 5 active: false index: 1) kv: used: 2, total: 2 sql-kv-response: avail: 2
 sql-sql-response: avail: 1 sql-leaf-start: used: 1, total: 2 sql-root-start: used: 1, total: 1
+SlotAdjuster metrics: slots: 2, duration (short, long) millis: (3, 0), inc: 2, dec: 1
 
 # Grant chain 4 terminates.
 continue-grant-chain work=sql-kv-response
 ----
 sql-kv-response: continueGrantChain
 GrantCoordinator:
-(chain: id: 5 active: false index: 1) kv: used: 2, high(moderate)-total: 2(0) moderate-clamp: -1 sql-kv-response: avail: 2
+(chain: id: 5 active: false index: 1) kv: used: 2, total: 2 sql-kv-response: avail: 2
 sql-sql-response: avail: 1 sql-leaf-start: used: 1, total: 2 sql-root-start: used: 1, total: 1
 
 # Return a slot for sql-leaf-start. Grant chain cannot start since KV slots
@@ -251,7 +254,7 @@ return-grant work=sql-leaf-start
 ----
 sql-leaf-start: returnGrant(1)
 GrantCoordinator:
-(chain: id: 5 active: false index: 1) kv: used: 2, high(moderate)-total: 2(0) moderate-clamp: -1 sql-kv-response: avail: 2
+(chain: id: 5 active: false index: 1) kv: used: 2, total: 2 sql-kv-response: avail: 2
 sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 1, total: 1
 
 # Underload and kv slots increased. The number of procs=4, so can grant 4 at
@@ -264,15 +267,16 @@ sql-kv-response: granted in chain 0, and returning 1
 sql-leaf-start: granted in chain 0, and returning 1
 sql-leaf-start: granted in chain 5, and returning 1
 GrantCoordinator:
-(chain: id: 5 active: true index: 3) kv: used: 2, high(moderate)-total: 3(0) moderate-clamp: 0 sql-kv-response: avail: 0
+(chain: id: 5 active: true index: 3) kv: used: 2, total: 3 sql-kv-response: avail: 0
 sql-sql-response: avail: 1 sql-leaf-start: used: 2, total: 2 sql-root-start: used: 1, total: 1
+SlotAdjuster metrics: slots: 3, duration (short, long) millis: (4, 0), inc: 3, dec: 1
 
 # There is now a free sql-root-start slot, which the grant chain will get to.
 return-grant work=sql-root-start
 ----
 sql-root-start: returnGrant(1)
 GrantCoordinator:
-(chain: id: 5 active: true index: 3) kv: used: 2, high(moderate)-total: 3(0) moderate-clamp: 0 sql-kv-response: avail: 0
+(chain: id: 5 active: true index: 3) kv: used: 2, total: 3 sql-kv-response: avail: 0
 sql-sql-response: avail: 1 sql-leaf-start: used: 2, total: 2 sql-root-start: used: 0, total: 1
 
 # Continuing with chain-id=0 has no effect.
@@ -280,7 +284,7 @@ continue-grant-chain work=sql-kv-response
 ----
 sql-kv-response: continueGrantChain
 GrantCoordinator:
-(chain: id: 5 active: true index: 3) kv: used: 2, high(moderate)-total: 3(0) moderate-clamp: 0 sql-kv-response: avail: 0
+(chain: id: 5 active: true index: 3) kv: used: 2, total: 3 sql-kv-response: avail: 0
 sql-sql-response: avail: 1 sql-leaf-start: used: 2, total: 2 sql-root-start: used: 0, total: 1
 
 # Continuing chain-id=5 causes a grant to sql-root-start and the chain dies
@@ -290,7 +294,7 @@ continue-grant-chain work=sql-leaf-start
 sql-leaf-start: continueGrantChain
 sql-root-start: granted in chain 0, and returning 1
 GrantCoordinator:
-(chain: id: 6 active: false index: 5) kv: used: 2, high(moderate)-total: 3(0) moderate-clamp: 0 sql-kv-response: avail: 0
+(chain: id: 6 active: false index: 5) kv: used: 2, total: 3 sql-kv-response: avail: 0
 sql-sql-response: avail: 1 sql-leaf-start: used: 2, total: 2 sql-root-start: used: 1, total: 1
 
 #####################################################################
@@ -298,7 +302,7 @@ sql-sql-response: avail: 1 sql-leaf-start: used: 2, total: 2 sql-root-start: use
 init-grant-coordinator min-cpu=1 max-cpu=3 sql-kv-tokens=1 sql-sql-tokens=1 sql-leaf=2 sql-root=2
 ----
 GrantCoordinator:
-(chain: id: 1 active: false index: 0) kv: used: 0, high(moderate)-total: 1(1) moderate-clamp: 3 sql-kv-response: avail: 1
+(chain: id: 1 active: false index: 0) kv: used: 0, total: 1 sql-kv-response: avail: 1
 sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 2
 
 # No more slots after this slot is granted.
@@ -306,7 +310,7 @@ try-get work=kv
 ----
 kv: tryGet(1) returned true
 GrantCoordinator:
-(chain: id: 1 active: false index: 0) kv: used: 1, high(moderate)-total: 1(1) moderate-clamp: 3 sql-kv-response: avail: 1
+(chain: id: 1 active: false index: 0) kv: used: 1, total: 1 sql-kv-response: avail: 1
 sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 2
 
 # Since no more KV slots, cannot grant token to sql-kv-response.
@@ -314,7 +318,7 @@ try-get work=sql-kv-response
 ----
 sql-kv-response: tryGet(1) returned false
 GrantCoordinator:
-(chain: id: 1 active: false index: 0) kv: used: 1, high(moderate)-total: 1(1) moderate-clamp: 3 sql-kv-response: avail: 1
+(chain: id: 1 active: false index: 0) kv: used: 1, total: 1 sql-kv-response: avail: 1
 sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 2
 
 # Since no more KV slots, cannot grant token to sql-sql-response.
@@ -322,7 +326,7 @@ try-get work=sql-sql-response
 ----
 sql-sql-response: tryGet(1) returned false
 GrantCoordinator:
-(chain: id: 1 active: false index: 0) kv: used: 1, high(moderate)-total: 1(1) moderate-clamp: 3 sql-kv-response: avail: 1
+(chain: id: 1 active: false index: 0) kv: used: 1, total: 1 sql-kv-response: avail: 1
 sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 2
 
 # CPULoad shows overload, so cannot increase KV slots, but since it is
@@ -330,15 +334,16 @@ sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: use
 cpu-load runnable=20 procs=1 infrequent=true
 ----
 GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 1, high(moderate)-total: 1(0) moderate-clamp: -19 sql-kv-response: avail: 1
+(chain: id: 1 active: false index: 5) kv: used: 1, total: 1 sql-kv-response: avail: 1
 sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 2
+SlotAdjuster metrics: slots: 1, duration (short, long) millis: (0, 250), inc: 0, dec: 0
 
 # sql-kv-response can get a token.
 try-get work=sql-kv-response
 ----
 sql-kv-response: tryGet(1) returned true
 GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 1, high(moderate)-total: 1(0) moderate-clamp: -19 sql-kv-response: avail: 0
+(chain: id: 1 active: false index: 5) kv: used: 1, total: 1 sql-kv-response: avail: 0
 sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 2
 
 # sql-kv-response can get another token, even though tokens are exhausted.
@@ -346,7 +351,7 @@ try-get work=sql-kv-response
 ----
 sql-kv-response: tryGet(1) returned true
 GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 1, high(moderate)-total: 1(0) moderate-clamp: -19 sql-kv-response: avail: -1
+(chain: id: 1 active: false index: 5) kv: used: 1, total: 1 sql-kv-response: avail: -1
 sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 2
 
 # sql-sql-response can get a token.
@@ -354,7 +359,7 @@ try-get work=sql-sql-response
 ----
 sql-sql-response: tryGet(1) returned true
 GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 1, high(moderate)-total: 1(0) moderate-clamp: -19 sql-kv-response: avail: -1
+(chain: id: 1 active: false index: 5) kv: used: 1, total: 1 sql-kv-response: avail: -1
 sql-sql-response: avail: 0 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 2
 
 # sql-sql-response can get another token, even though tokens are exhausted.
@@ -362,7 +367,7 @@ try-get work=sql-sql-response
 ----
 sql-sql-response: tryGet(1) returned true
 GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 1, high(moderate)-total: 1(0) moderate-clamp: -19 sql-kv-response: avail: -1
+(chain: id: 1 active: false index: 5) kv: used: 1, total: 1 sql-kv-response: avail: -1
 sql-sql-response: avail: -1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 2
 
 # KV can get another slot even though slots are exhausted.
@@ -370,7 +375,7 @@ try-get work=kv
 ----
 kv: tryGet(1) returned true
 GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 2, high(moderate)-total: 1(0) moderate-clamp: -19 sql-kv-response: avail: -1
+(chain: id: 1 active: false index: 5) kv: used: 2, total: 1 sql-kv-response: avail: -1
 sql-sql-response: avail: -1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 2
 
 #####################################################################
@@ -584,334 +589,3 @@ store-write-done work=kv-elastic orig-tokens=400 write-bytes=40
 ----
 GrantCoordinator:
 (chain: id: 0 active: false index: 5) io-avail: 650, elastic-disk-bw-tokens-avail: -10
-
-
-#####################################################################
-# Test soft slots
-init-grant-coordinator min-cpu=1 max-cpu=6 sql-kv-tokens=2 sql-sql-tokens=1 sql-leaf=2 sql-root=1
-----
-GrantCoordinator:
-(chain: id: 1 active: false index: 0) kv: used: 0, high(moderate)-total: 1(1) moderate-clamp: 6 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-try-get-soft-slots slots=2
-----
-requested: 2, granted: 1
-GrantCoordinator:
-(chain: id: 1 active: false index: 0) kv: used: 0, high(moderate)-total: 1(1) moderate-clamp: 6 used-soft: 1 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-try-get-soft-slots slots=2
-----
-requested: 2, granted: 0
-GrantCoordinator:
-(chain: id: 1 active: false index: 0) kv: used: 0, high(moderate)-total: 1(1) moderate-clamp: 6 used-soft: 1 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-return-soft-slots slots=1
-----
-GrantCoordinator:
-(chain: id: 1 active: false index: 0) kv: used: 0, high(moderate)-total: 1(1) moderate-clamp: 6 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-try-get-soft-slots slots=2
-----
-requested: 2, granted: 1
-GrantCoordinator:
-(chain: id: 1 active: false index: 0) kv: used: 0, high(moderate)-total: 1(1) moderate-clamp: 6 used-soft: 1 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-cpu-load runnable=0 procs=4 clamp=100
-----
-GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 0, high(moderate)-total: 2(2) moderate-clamp: 100 used-soft: 1 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-try-get-soft-slots slots=2
-----
-requested: 2, granted: 1
-GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 0, high(moderate)-total: 2(2) moderate-clamp: 100 used-soft: 2 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-# Over-commitment.
-try-get work=kv
-----
-kv: tryGet(1) returned true
-GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 1, high(moderate)-total: 2(2) moderate-clamp: 100 used-soft: 2 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-# Over-commitment.
-try-get work=kv
-----
-kv: tryGet(1) returned true
-GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 2, high(moderate)-total: 2(2) moderate-clamp: 100 used-soft: 2 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-try-get work=kv
-----
-kv: tryGet(1) returned false
-GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 2, high(moderate)-total: 2(2) moderate-clamp: 100 used-soft: 2 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-# No longer over-committed.
-return-soft-slots slots=2
-----
-GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 2, high(moderate)-total: 2(2) moderate-clamp: 100 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-try-get-soft-slots slots=2
-----
-requested: 2, granted: 0
-GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 2, high(moderate)-total: 2(2) moderate-clamp: 100 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-cpu-load runnable=4 procs=8 clamp=100
-----
-GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 2, high(moderate)-total: 3(2) moderate-clamp: 100 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-try-get-soft-slots slots=2
-----
-requested: 2, granted: 0
-GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 2, high(moderate)-total: 3(2) moderate-clamp: 100 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-cpu-load runnable=1 procs=8 clamp=100
-----
-GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 2, high(moderate)-total: 3(3) moderate-clamp: 100 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-try-get-soft-slots slots=2
-----
-requested: 2, granted: 1
-GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 2, high(moderate)-total: 3(3) moderate-clamp: 100 used-soft: 1 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-cpu-load runnable=3 procs=8 clamp=100
-----
-GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 2, high(moderate)-total: 4(3) moderate-clamp: 100 used-soft: 1 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-return-grant work=kv
-----
-kv: returnGrant(1)
-GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 1, high(moderate)-total: 4(3) moderate-clamp: 100 used-soft: 1 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-try-get-soft-slots slots=2
-----
-requested: 2, granted: 1
-GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 1, high(moderate)-total: 4(3) moderate-clamp: 100 used-soft: 2 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-cpu-load runnable=2 procs=8 clamp=100
-----
-GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 1, high(moderate)-total: 4(4) moderate-clamp: 100 used-soft: 2 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-cpu-load runnable=2 procs=8 clamp=100
-----
-GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 1, high(moderate)-total: 4(4) moderate-clamp: 100 used-soft: 2 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-try-get-soft-slots slots=2
-----
-requested: 2, granted: 1
-GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 1, high(moderate)-total: 4(4) moderate-clamp: 100 used-soft: 3 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-cpu-load runnable=2 procs=8 clamp=100
-----
-GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 1, high(moderate)-total: 5(5) moderate-clamp: 100 used-soft: 3 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-cpu-load runnable=6 procs=8 clamp=100
-----
-GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 1, high(moderate)-total: 5(4) moderate-clamp: 100 used-soft: 3 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-cpu-load runnable=6 procs=8 clamp=100
-----
-GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 1, high(moderate)-total: 5(3) moderate-clamp: 100 used-soft: 3 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-cpu-load runnable=6 procs=8 clamp=100
-----
-GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 1, high(moderate)-total: 5(3) moderate-clamp: 100 used-soft: 3 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-#####################################################################
-# Test soft slots is not higher than regular slots.
-init-grant-coordinator min-cpu=1 max-cpu=6 sql-kv-tokens=2 sql-sql-tokens=1 sql-leaf=2 sql-root=1
-----
-GrantCoordinator:
-(chain: id: 1 active: false index: 0) kv: used: 0, high(moderate)-total: 1(1) moderate-clamp: 6 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-try-get-soft-slots slots=1
-----
-requested: 1, granted: 1
-GrantCoordinator:
-(chain: id: 1 active: false index: 0) kv: used: 0, high(moderate)-total: 1(1) moderate-clamp: 6 used-soft: 1 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-cpu-load runnable=2 procs=8 clamp=100
-----
-GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 0, high(moderate)-total: 2(2) moderate-clamp: 100 used-soft: 1 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-try-get-soft-slots slots=1
-----
-requested: 1, granted: 1
-GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 0, high(moderate)-total: 2(2) moderate-clamp: 100 used-soft: 2 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-cpu-load runnable=2 procs=8 clamp=100
-----
-GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 0, high(moderate)-total: 3(3) moderate-clamp: 100 used-soft: 2 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-return-soft-slots slots=2
-----
-GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 0, high(moderate)-total: 3(3) moderate-clamp: 100 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-cpu-load runnable=10 procs=8 clamp=100
-----
-GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 0, high(moderate)-total: 3(3) moderate-clamp: 100 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-try-get work=kv
-----
-kv: tryGet(1) returned true
-GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 1, high(moderate)-total: 3(3) moderate-clamp: 100 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-try-get work=kv
-----
-kv: tryGet(1) returned true
-GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 2, high(moderate)-total: 3(3) moderate-clamp: 100 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-try-get work=kv
-----
-kv: tryGet(1) returned true
-GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 3, high(moderate)-total: 3(3) moderate-clamp: 100 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-cpu-load runnable=10 procs=8 clamp=100
-----
-GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 3, high(moderate)-total: 2(2) moderate-clamp: 100 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-#####################################################################
-# Test clamping down on total moderate slots.
-init-grant-coordinator min-cpu=1 max-cpu=100 sql-kv-tokens=2 sql-sql-tokens=1 sql-leaf=2 sql-root=1
-----
-GrantCoordinator:
-(chain: id: 1 active: false index: 0) kv: used: 0, high(moderate)-total: 1(1) moderate-clamp: 100 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-try-get-soft-slots slots=1
-----
-requested: 1, granted: 1
-GrantCoordinator:
-(chain: id: 1 active: false index: 0) kv: used: 0, high(moderate)-total: 1(1) moderate-clamp: 100 used-soft: 1 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-cpu-load runnable=0 procs=8
-----
-GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 0, high(moderate)-total: 2(2) moderate-clamp: 4 used-soft: 1 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-try-get-soft-slots slots=1
-----
-requested: 1, granted: 1
-GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 0, high(moderate)-total: 2(2) moderate-clamp: 4 used-soft: 2 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-cpu-load runnable=0 procs=2
-----
-GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 0, high(moderate)-total: 3(1) moderate-clamp: 1 used-soft: 2 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-# The moderate slots clamp is set to -1, because 10/2-6=-1.
-cpu-load runnable=6 procs=10
-----
-GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 0, high(moderate)-total: 3(0) moderate-clamp: -1 used-soft: 2 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-# Making sure total moderate slots is set to 0, and not a negative value.
-cpu-load runnable=6 procs=10
-----
-GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 0, high(moderate)-total: 3(0) moderate-clamp: -1 used-soft: 2 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-#####################################################################
-# Make sure the moderate slots clamp has no effect when it is higher than the total moderate slots.
-init-grant-coordinator min-cpu=1 max-cpu=3 sql-kv-tokens=2 sql-sql-tokens=1 sql-leaf=2 sql-root=1
-----
-GrantCoordinator:
-(chain: id: 1 active: false index: 0) kv: used: 0, high(moderate)-total: 1(1) moderate-clamp: 3 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-try-get-soft-slots slots=1
-----
-requested: 1, granted: 1
-GrantCoordinator:
-(chain: id: 1 active: false index: 0) kv: used: 0, high(moderate)-total: 1(1) moderate-clamp: 3 used-soft: 1 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-# Should increase total moderate slots to 2, since the moderate clamp was 3 which is higher.
-cpu-load runnable=0 procs=2 clamp=3
-----
-GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 0, high(moderate)-total: 2(2) moderate-clamp: 3 used-soft: 1 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-init-grant-coordinator min-cpu=1 max-cpu=3 sql-kv-tokens=2 sql-sql-tokens=1 sql-leaf=2 sql-root=1 enabled-soft-slot-granting=false
-----
-GrantCoordinator:
-(chain: id: 1 active: false index: 0) kv: used: 0, high(moderate)-total: 1(1) moderate-clamp: 3 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-try-get-soft-slots slots=1
-----
-requested: 1, granted: 0
-GrantCoordinator:
-(chain: id: 1 active: false index: 0) kv: used: 0, high(moderate)-total: 1(1) moderate-clamp: 3 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1

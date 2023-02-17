@@ -64,15 +64,19 @@ func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 	execCtx := execCtxI.(sql.JobExecContext)
 	pl := r.j.Payload()
 	v := pl.GetMigration().ClusterVersion.Version
-	ie := execCtx.ExecCfg().InternalExecutor
-
+	db := execCtx.ExecCfg().InternalDB
+	ex := db.Executor()
 	enterpriseEnabled := base.CCLDistributionAndEnterpriseEnabled(
 		execCtx.ExecCfg().Settings, execCtx.ExecCfg().NodeInfo.LogicalClusterID())
 	alreadyCompleted, err := migrationstable.CheckIfMigrationCompleted(
-		ctx, v, nil /* txn */, ie, enterpriseEnabled, migrationstable.ConsistentRead,
+		ctx, v, nil /* txn */, ex,
+		enterpriseEnabled, migrationstable.ConsistentRead,
 	)
 	if alreadyCompleted || err != nil {
 		return errors.Wrapf(err, "checking migration completion for %v", v)
+	}
+	if alreadyCompleted {
+		return nil
 	}
 	mc := execCtx.MigrationJobDeps()
 	m, ok := mc.GetUpgrade(v)
@@ -84,15 +88,14 @@ func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 		err = m.Run(ctx, v, mc.SystemDeps())
 	case *upgrade.TenantUpgrade:
 		tenantDeps := upgrade.TenantDeps{
-			DB:                      execCtx.ExecCfg().DB,
-			Codec:                   execCtx.ExecCfg().Codec,
-			Settings:                execCtx.ExecCfg().Settings,
-			InternalExecutorFactory: execCtx.ExecCfg().InternalExecutorFactory,
-			LeaseManager:            execCtx.ExecCfg().LeaseManager,
-			InternalExecutor:        execCtx.ExecCfg().InternalExecutor,
-			JobRegistry:             execCtx.ExecCfg().JobRegistry,
-			TestingKnobs:            execCtx.ExecCfg().UpgradeTestingKnobs,
-			SessionData:             execCtx.SessionData(),
+			Codec:            execCtx.ExecCfg().Codec,
+			Settings:         execCtx.ExecCfg().Settings,
+			DB:               execCtx.ExecCfg().InternalDB,
+			LeaseManager:     execCtx.ExecCfg().LeaseManager,
+			InternalExecutor: ex,
+			JobRegistry:      execCtx.ExecCfg().JobRegistry,
+			TestingKnobs:     execCtx.ExecCfg().UpgradeTestingKnobs,
+			SessionData:      execCtx.SessionData(),
 		}
 		tenantDeps.SpanConfig.KVAccessor = execCtx.ExecCfg().SpanConfigKVAccessor
 		tenantDeps.SpanConfig.Splitter = execCtx.ExecCfg().SpanConfigSplitter
@@ -127,7 +130,7 @@ func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 
 	// Mark the upgrade as having been completed so that subsequent iterations
 	// no-op and new jobs are not created.
-	if err := migrationstable.MarkMigrationCompleted(ctx, ie, v); err != nil {
+	if err := migrationstable.MarkMigrationCompleted(ctx, ex, v); err != nil {
 		return errors.Wrapf(err, "marking migration complete for %v", v)
 	}
 	return nil

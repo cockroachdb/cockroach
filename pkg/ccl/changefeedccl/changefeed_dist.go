@@ -25,12 +25,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -138,19 +140,17 @@ func fetchTableDescriptors(
 	var targetDescs []catalog.TableDescriptor
 
 	fetchSpans := func(
-		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		ctx context.Context, txn isql.Txn, descriptors *descs.Collection,
 	) error {
 		targetDescs = make([]catalog.TableDescriptor, 0, targets.NumUniqueTables())
-		if err := txn.SetFixedTimestamp(ctx, ts); err != nil {
+		if err := txn.KV().SetFixedTimestamp(ctx, ts); err != nil {
 			return err
 		}
 		// Note that all targets are currently guaranteed to have a Table ID
 		// and lie within the primary index span. Deduplication is important
 		// here as requesting the same span twice will deadlock.
 		return targets.EachTableID(func(id catid.DescID) error {
-			flags := tree.ObjectLookupFlagsWithRequired()
-			flags.AvoidLeased = true
-			tableDesc, err := descriptors.GetImmutableTableByID(ctx, txn, id, flags)
+			tableDesc, err := descriptors.ByID(txn.KV()).WithoutNonPublic().Get().Table(ctx, id)
 			if err != nil {
 				return err
 			}
@@ -202,9 +202,15 @@ func fetchSpansForTables(
 		return nil, pgerror.Wrap(err, pgcode.InvalidParameterValue,
 			"could not parse changefeed expression")
 	}
-	return cdceval.SpansForExpression(
-		ctx, execCtx.ExecCfg(), execCtx.User(), execCtx.SessionData().SessionData,
-		tableDescs[0], initialHighwater, target, sc)
+
+	// SessionData is nil if the changefeed was created prior to
+	// clusterversion.V23_1_ChangefeedExpressionProductionReady
+	var sd sessiondatapb.SessionData
+	if details.SessionData != nil {
+		sd = *details.SessionData
+	}
+	return cdceval.SpansForExpression(ctx, execCtx.ExecCfg(), execCtx.User(),
+		sd, tableDescs[0], initialHighwater, target, sc)
 }
 
 var replanChangefeedThreshold = settings.RegisterFloatSetting(
@@ -292,7 +298,6 @@ func startDistChangefeed(
 			noTxn,
 			nil, /* clockUpdater */
 			evalCtx.Tracing,
-			execCtx.ExecCfg().ContentionRegistry,
 		)
 		defer recv.Release()
 
@@ -435,6 +440,7 @@ func makePlan(
 		p := planCtx.NewPhysicalPlan()
 		p.AddNoInputStage(aggregatorCorePlacement, execinfrapb.PostProcessSpec{}, changefeedResultTypes, execinfrapb.Ordering{})
 		p.AddSingleGroupStage(
+			ctx,
 			dsp.GatewayID(),
 			execinfrapb.ProcessorCoreUnion{ChangeFrontier: &changeFrontierSpec},
 			execinfrapb.PostProcessSpec{},
@@ -442,7 +448,7 @@ func makePlan(
 		)
 
 		p.PlanToStreamColMap = []int{1, 2, 3}
-		dsp.FinalizePlan(planCtx, p)
+		sql.FinalizePlan(ctx, planCtx, p)
 
 		return p, planCtx, nil
 	}

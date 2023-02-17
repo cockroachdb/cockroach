@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
 
@@ -205,7 +206,7 @@ type DatumRowConverter struct {
 	// Tracks which column indices in the set of visible columns are part of the
 	// user specified target columns. This can be used before populating Datums
 	// to filter out unwanted column data.
-	TargetColOrds util.FastIntSet
+	TargetColOrds intsets.Fast
 
 	// The rest of these are derived from tableDesc, just cached here.
 	ri                        Inserter
@@ -276,12 +277,7 @@ func (c *DatumRowConverter) getSequenceAnnotation(
 		if err := txn.SetFixedTimestamp(ctx, hlc.Timestamp{WallTime: evalCtx.TxnTimestamp.UnixNano()}); err != nil {
 			return err
 		}
-		flags := tree.CommonLookupFlags{
-			AvoidLeased:    true,
-			IncludeOffline: true,
-			IncludeDropped: true,
-		}
-		seqs, err := descsCol.GetImmutableDescriptorsByID(ctx, txn, flags, sequenceIDs.Ordered()...)
+		seqs, err := descsCol.ByID(txn).Get().Descs(ctx, sequenceIDs.Ordered())
 		if err != nil {
 			return err
 		}

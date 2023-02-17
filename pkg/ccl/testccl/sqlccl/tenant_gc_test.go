@@ -20,14 +20,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -113,10 +116,20 @@ func TestGCTenantRemovesSpanConfigs(t *testing.T) {
 	beforeDelete := len(records)
 
 	// Mark the tenant as dropped by updating its record.
-	require.NoError(t, sql.TestingUpdateTenantRecord(
-		ctx, &execCfg, nil, /* txn */
-		&descpb.TenantInfo{ID: tenantID.ToUint64(), State: descpb.TenantInfo_DROP},
-	))
+
+	require.NoError(t, ts.InternalDB().(isql.DB).Txn(ctx, func(
+		ctx context.Context, txn isql.Txn,
+	) error {
+		return sql.TestingUpdateTenantRecord(
+			ctx, ts.ClusterSettings(), txn,
+			&mtinfopb.TenantInfo{
+				SQLInfo: mtinfopb.SQLInfo{
+					ID:          tenantID.ToUint64(),
+					ServiceMode: mtinfopb.ServiceModeNone,
+					DataState:   mtinfopb.DataStateDrop,
+				}},
+		)
+	}))
 
 	// Run GC on the tenant.
 	progress := &jobspb.SchemaChangeGCProgress{
@@ -225,6 +238,7 @@ func TestGCTableOrIndexWaitsForProtectedTimestamps(t *testing.T) {
 				ParentID: parentID,
 			},
 			Progress: jobspb.SchemaChangeGCProgress{},
+			Username: username.TestUserName(),
 		}
 	}
 	makeTableGCJobRecord := func(dropTime int64, id descpb.ID) jobs.Record {
@@ -238,6 +252,7 @@ func TestGCTableOrIndexWaitsForProtectedTimestamps(t *testing.T) {
 				},
 			},
 			Progress: jobspb.SchemaChangeGCProgress{},
+			Username: username.TestUserName(),
 		}
 	}
 
@@ -317,7 +332,7 @@ func TestGCTableOrIndexWaitsForProtectedTimestamps(t *testing.T) {
 
 			tableDesc := desctestutils.TestingGetTableDescriptor(execCfg.DB, execCfg.Codec, "db", "public", "t")
 			tableID := tableDesc.GetID()
-			idx, err := tableDesc.FindIndexWithName("t_idx")
+			idx, err := catalog.MustFindIndexByName(tableDesc, "t_idx")
 			require.NoError(t, err)
 			indexID := idx.GetID()
 
@@ -393,7 +408,9 @@ func TestGCTableOrIndexWaitsForProtectedTimestamps(t *testing.T) {
 			mu.Lock()
 			mu.jobID = jobID
 			mu.Unlock()
-			sj, err := jobs.TestingCreateAndStartJob(ctx, registry, execCfg.DB, record, jobs.WithJobID(jobID))
+			sj, err := jobs.TestingCreateAndStartJob(
+				ctx, registry, execCfg.InternalDB, record, jobs.WithJobID(jobID),
+			)
 			require.NoError(t, err)
 
 			ensureGCBlockedByPTS(t, registry, sj)
@@ -460,7 +477,7 @@ func TestGCTenantJobWaitsForProtectedTimestamps(t *testing.T) {
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		},
 	}
-	srv, sqlDBRaw, kvDB := serverutils.StartServer(t, args)
+	srv, sqlDBRaw, _ := serverutils.StartServer(t, args)
 	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
 
 	sqlDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'")
@@ -469,13 +486,14 @@ func TestGCTenantJobWaitsForProtectedTimestamps(t *testing.T) {
 	jobRegistry := execCfg.JobRegistry
 	defer srv.Stopper().Stop(ctx)
 
+	insqlDB := execCfg.InternalDB
 	ptp := execCfg.ProtectedTimestampProvider
 	mkRecordAndProtect := func(ts hlc.Timestamp, target *ptpb.Target) *ptpb.Record {
 		recordID := uuid.MakeV4()
 		rec := jobsprotectedts.MakeRecord(recordID, int64(1), ts, nil, /* deprecatedSpans */
 			jobsprotectedts.Jobs, target)
-		require.NoError(t, execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			return ptp.Protect(ctx, txn, rec)
+		require.NoError(t, insqlDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			return ptp.WithTxn(txn).Protect(ctx, rec)
 		}))
 		return rec
 	}
@@ -512,7 +530,10 @@ func TestGCTenantJobWaitsForProtectedTimestamps(t *testing.T) {
 		job, err := jobRegistry.LoadJob(ctx, sj.ID())
 		require.NoError(t, err)
 		require.Equal(t, jobs.StatusSucceeded, job.Status())
-		_, err = sql.GetTenantRecordByID(ctx, &execCfg, nil /* txn */, tenID)
+		err = insqlDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			_, err = sql.GetTenantRecordByID(ctx, txn, tenID, srv.ClusterSettings())
+			return err
+		})
 		require.EqualError(t, err, fmt.Sprintf(`tenant "%d" does not exist`, tenID.ToUint64()))
 		progress := job.Progress()
 		require.Equal(t, jobspb.SchemaChangeGCProgress_CLEARED, progress.GetSchemaChangeGC().Tenant.Status)
@@ -530,18 +551,19 @@ func TestGCTenantJobWaitsForProtectedTimestamps(t *testing.T) {
 				},
 			},
 			Progress: jobspb.SchemaChangeGCProgress{},
+			Username: username.RootUserName(),
 		}
 
 		tenantTarget := ptpb.MakeTenantsTarget([]roachpb.TenantID{roachpb.MustMakeTenantID(tenID)})
 		rec := mkRecordAndProtect(hlc.Timestamp{WallTime: int64(dropTime - 1)}, tenantTarget)
-		sj, err := jobs.TestingCreateAndStartJob(ctx, jobRegistry, kvDB, record)
+		sj, err := jobs.TestingCreateAndStartJob(ctx, jobRegistry, insqlDB, record)
 		require.NoError(t, err)
 
 		checkGCBlockedByPTS(t, sj, tenID)
 
 		// Release the record.
-		require.NoError(t, execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			require.NoError(t, ptp.Release(ctx, txn, rec.ID.GetUUID()))
+		require.NoError(t, insqlDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			require.NoError(t, ptp.WithTxn(txn).Release(ctx, rec.ID.GetUUID()))
 			return nil
 		}))
 
@@ -559,6 +581,7 @@ func TestGCTenantJobWaitsForProtectedTimestamps(t *testing.T) {
 				},
 			},
 			Progress: jobspb.SchemaChangeGCProgress{},
+			Username: username.RootUserName(),
 		}
 
 		// Protect after drop time, so it should not block GC.
@@ -569,15 +592,16 @@ func TestGCTenantJobWaitsForProtectedTimestamps(t *testing.T) {
 		tenantTarget := ptpb.MakeTenantsTarget([]roachpb.TenantID{roachpb.MustMakeTenantID(tenID)})
 		tenantRec := mkRecordAndProtect(hlc.Timestamp{WallTime: int64(dropTime)}, tenantTarget)
 
-		sj, err := jobs.TestingCreateAndStartJob(ctx, jobRegistry, kvDB, record)
+		sj, err := jobs.TestingCreateAndStartJob(ctx, jobRegistry, insqlDB, record)
 		require.NoError(t, err)
 
 		checkTenantGCed(t, sj, roachpb.MustMakeTenantID(tenID))
 
 		// Cleanup.
-		require.NoError(t, execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			require.NoError(t, ptp.Release(ctx, txn, clusterRec.ID.GetUUID()))
-			require.NoError(t, ptp.Release(ctx, txn, tenantRec.ID.GetUUID()))
+		require.NoError(t, insqlDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			ptps := ptp.WithTxn(txn)
+			require.NoError(t, ptps.Release(ctx, clusterRec.ID.GetUUID()))
+			require.NoError(t, ptps.Release(ctx, tenantRec.ID.GetUUID()))
 			return nil
 		}))
 	})
@@ -597,19 +621,22 @@ func TestGCTenantJobWaitsForProtectedTimestamps(t *testing.T) {
 		rec := jobsprotectedts.MakeRecord(recordID, int64(1),
 			hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}, nil, /* deprecatedSpans */
 			jobsprotectedts.Jobs, clusterTarget)
-		require.NoError(t, execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			return tenPtp.Protect(ctx, txn, rec)
+		tenInsqlDB := ten.ExecutorConfig().(sql.ExecutorConfig).InternalDB
+		require.NoError(t, tenInsqlDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			return tenPtp.WithTxn(txn).Protect(ctx, rec)
 		}))
 
-		sqlDB.Exec(t, fmt.Sprintf(`SELECT crdb_internal.destroy_tenant(%d)`,
-			tenID.ToUint64()))
+		sqlDB.Exec(t, `DROP TENANT [$1]`, tenID.ToUint64())
 
 		sqlDB.CheckQueryResultsRetry(
 			t,
 			"SELECT status FROM [SHOW JOBS] WHERE description = 'GC for tenant 10'",
 			[][]string{{"succeeded"}},
 		)
-		_, err := sql.GetTenantRecordByID(ctx, &execCfg, nil /* txn */, tenID)
+		err := insqlDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			_, err := sql.GetTenantRecordByID(ctx, txn, tenID, execCfg.Settings)
+			return err
+		})
 		require.EqualError(t, err, `tenant "10" does not exist`)
 
 		// PTS record protecting system tenant cluster should block tenant GC.
@@ -624,18 +651,19 @@ func TestGCTenantJobWaitsForProtectedTimestamps(t *testing.T) {
 					},
 				},
 				Progress: jobspb.SchemaChangeGCProgress{},
+				Username: username.RootUserName(),
 			}
 
 			clusterTarget := ptpb.MakeClusterTarget()
 			rec := mkRecordAndProtect(hlc.Timestamp{WallTime: int64(dropTime - 1)}, clusterTarget)
-			sj, err := jobs.TestingCreateAndStartJob(ctx, jobRegistry, kvDB, record)
+			sj, err := jobs.TestingCreateAndStartJob(ctx, jobRegistry, insqlDB, record)
 			require.NoError(t, err)
 
 			checkGCBlockedByPTS(t, sj, tenID)
 
 			// Release the record.
-			require.NoError(t, execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				require.NoError(t, ptp.Release(ctx, txn, rec.ID.GetUUID()))
+			require.NoError(t, insqlDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				require.NoError(t, ptp.WithTxn(txn).Release(ctx, rec.ID.GetUUID()))
 				return nil
 			}))
 

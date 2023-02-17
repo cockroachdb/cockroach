@@ -11,6 +11,7 @@
 package sql
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -65,6 +66,10 @@ func (e *plannerJobExecContext) SpanConfigReconciler() spanconfig.Reconciler {
 	return e.p.SpanConfigReconciler()
 }
 
+func (e *plannerJobExecContext) SpanStatsConsumer() keyvisualizer.SpanStatsConsumer {
+	return e.p.SpanStatsConsumer()
+}
+
 // JobExecContext provides the execution environment for a job. It is what is
 // passed to the Resume/OnFailOrCancel/OnPauseRequested methods of a jobs's
 // Resumer to give that resumer access to things like ExecutorCfg, LeaseMgr,
@@ -85,4 +90,5 @@ type JobExecContext interface {
 	User() username.SQLUsername
 	MigrationJobDeps() upgrade.JobDeps
 	SpanConfigReconciler() spanconfig.Reconciler
+	SpanStatsConsumer() keyvisualizer.SpanStatsConsumer
 }

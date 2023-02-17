@@ -17,10 +17,13 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -34,7 +37,7 @@ func registerMultiTenantUpgrade(r registry.Registry) {
 		Owner:             registry.OwnerMultiTenant,
 		NonReleaseBlocker: false,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if runtime.GOARCH == "arm64" {
+			if c.IsLocal() && runtime.GOARCH == "arm64" {
 				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
 			}
 			runMultiTenantUpgrade(ctx, t, c, *t.BuildVersion())
@@ -42,24 +45,24 @@ func registerMultiTenantUpgrade(r registry.Registry) {
 	})
 }
 
-// runMultiTenantUpgrade exercises upgrading tenants and their host cluster.
+// runMultiTenantUpgrade exercises upgrading tenants and their storage cluster.
 //
 // Sketch of the test:
 //
-//   - Host{Binary: Prev, Cluster: Prev}: Start host cluster.
-//   - Host{Binary: Prev, Cluster: Prev}: Run create_tenant(11) and create_tenant(12).
+//   - Storage{Binary: Prev, Cluster: Prev}: Start storage cluster.
+//   - Storage{Binary: Prev, Cluster: Prev}: Run create_tenant(11) and create_tenant(12).
 //   - Tenant11{Binary: Prev, Cluster: Prev}: Start tenant 11 and verify it works.
-//   - Host{Binary: Cur, Cluster: Prev}: Upgrade host cluster (don't finalize).
+//   - Storage{Binary: Cur, Cluster: Prev}: Upgrade storage cluster (don't finalize).
 //   - Tenant11{Binary: Prev, Cluster: Prev}: Verify tenant 11 still works.
 //   - Tenant12{Binary: Prev, Cluster: Prev}: Start tenant 12 and verify it works.
-//   - Host{Binary: Cur, Cluster: Prev}: Run create_tenant(13).
+//   - Storage{Binary: Cur, Cluster: Prev}: Run create_tenant(13).
 //   - Tenant13{Binary: Cur, Cluster: Prev}: Create tenant 13 and verify it works.
 //   - Tenant11{Binary: Cur, Cluster: Prev}: Upgrade tenant 11 binary and verify it works.
 //   - Tenant11{Binary: Cur, Cluster: Cur}: Run the version upgrade for the tenant 11.
 //   - This is supported but not necessarily desirable. Exercise it just to
 //     show that it doesn't explode. This will verify new guard-rails when
 //     and if they are added.
-//   - Host{Binary: Cur, Cluster: Cur}: Finalize the upgrade on the host.
+//   - Storage{Binary: Cur, Cluster: Cur}: Finalize the upgrade on the Storage.
 //   - Tenant12{Binary: Cur, Cluster: Prev}: Upgrade the tenant 12 binary.
 //   - Tenant12{Binary: Cur, Cluster: Cur}: Run the version upgrade for tenant 12.
 //   - Tenant12{Binary: Cur, Cluster: Cur}: Restart tenant 12 and make sure it still works.
@@ -68,10 +71,10 @@ func registerMultiTenantUpgrade(r registry.Registry) {
 //   - Tenant14{Binary: Cur, Cluster: Cur}: Create tenant 14 and verify it works.
 //   - Tenant12{Binary: Cur, Cluster: Cur}: Restart tenant 14 and make sure it still works.
 func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, v version.Version) {
-	predecessor, err := PredecessorVersion(v)
+	predecessor, err := clusterupgrade.PredecessorVersion(v)
 	require.NoError(t, err)
 
-	currentBinary := uploadVersion(ctx, t, c, c.All(), "")
+	currentBinary := uploadVersion(ctx, t, c, c.All(), clusterupgrade.MainVersion)
 	predecessorBinary := uploadVersion(ctx, t, c, c.All(), predecessor)
 
 	kvNodes := c.Node(1)
@@ -83,7 +86,7 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 	const tenant11HTTPPort, tenant11SQLPort = 8011, 20011
 	const tenant11ID = 11
 	runner := sqlutils.MakeSQLRunner(c.Conn(ctx, t.L(), 1))
-	// We'll sometimes have to wait out the backoff of the host cluster
+	// We'll sometimes have to wait out the backoff of the storage cluster
 	// auto-update loop (at the time of writing 30s), plus some migrations may be
 	// genuinely long-running.
 	runner.SucceedsSoonDuration = 5 * time.Minute
@@ -106,7 +109,8 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 
 	verifySQL(t, tenant11.pgURL,
 		mkStmt("SHOW CLUSTER SETTING version").
-			withResults([][]string{{initialVersion}}),
+			withResults([][]string{{initialVersion}}).
+			withCustomResultsEqualFn(requireEqualVersionsIgnoreDevOffset),
 	)
 
 	t.Status("preserving downgrade option on system tenant")
@@ -148,7 +152,8 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 		mkStmt(`SELECT * FROM foo LIMIT 1`).
 			withResults([][]string{{"1", "bar"}}),
 		mkStmt("SHOW CLUSTER SETTING version").
-			withResults([][]string{{initialVersion}}),
+			withResults([][]string{{initialVersion}}).
+			withCustomResultsEqualFn(requireEqualVersionsIgnoreDevOffset),
 	)
 
 	t.Status("creating a new tenant 13")
@@ -170,7 +175,8 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 		mkStmt(`SELECT * FROM foo LIMIT 1`).
 			withResults([][]string{{"1", "bar"}}),
 		mkStmt("SHOW CLUSTER SETTING version").
-			withResults([][]string{{initialVersion}}),
+			withResults([][]string{{initialVersion}}).
+			withCustomResultsEqualFn(requireEqualVersionsIgnoreDevOffset),
 	)
 
 	t.Status("stopping the tenant 11 server ahead of upgrading")
@@ -185,12 +191,14 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 			mkStmt(`SELECT * FROM foo LIMIT 1`).
 				withResults([][]string{{"1", "bar"}}),
 			mkStmt("SHOW CLUSTER SETTING version").
-				withResults([][]string{{initialVersion}}))
+				withResults([][]string{{initialVersion}}).
+				withCustomResultsEqualFn(requireEqualVersionsIgnoreDevOffset),
+		)
 	}
 
-	t.Status("attempting to upgrade tenant 11 before host cluster is finalized and expecting a failure")
+	t.Status("attempting to upgrade tenant 11 before storage cluster is finalized and expecting a failure")
 	expectErr(t, tenant11.pgURL,
-		fmt.Sprintf("pq: preventing tenant upgrade from running as the host cluster has not yet been upgraded: host cluster version = %s, tenant cluster version = %s", initialVersion, initialVersion),
+		fmt.Sprintf("pq: preventing tenant upgrade from running as the storage cluster has not yet been upgraded: storage cluster version = %s, tenant cluster version = %s", initialVersion, initialVersion),
 		"SET CLUSTER SETTING version = crdb_internal.node_executable_version()")
 
 	t.Status("finalizing the system tenant upgrade")
@@ -205,7 +213,8 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 		mkStmt(`SELECT * FROM foo LIMIT 1`).
 			withResults([][]string{{"1", "bar"}}),
 		mkStmt("SHOW CLUSTER SETTING version").
-			withResults([][]string{{initialVersion}}),
+			withResults([][]string{{initialVersion}}).
+			withCustomResultsEqualFn(requireEqualVersionsIgnoreDevOffset),
 		mkStmt("SET CLUSTER SETTING version = crdb_internal.node_executable_version()"),
 		mkStmt("SELECT version = crdb_internal.node_executable_version() FROM [SHOW CLUSTER SETTING version]").
 			withResults([][]string{{"true"}}),
@@ -222,7 +231,9 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 		mkStmt(`SELECT * FROM foo LIMIT 1`).
 			withResults([][]string{{"1", "bar"}}),
 		mkStmt("SHOW CLUSTER SETTING version").
-			withResults([][]string{{initialVersion}}))
+			withResults([][]string{{initialVersion}}).
+			withCustomResultsEqualFn(requireEqualVersionsIgnoreDevOffset),
+	)
 
 	// Upgrade the tenant created in the mixed version state to the final version.
 	t.Status("migrating tenant 12 to the current version")
@@ -294,10 +305,31 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 			withResults([][]string{{"true"}}))
 }
 
+// EqualFn is implemented by both `require.Equal` and `requireEqualVersionsIgnoreDevOffset`.
+type EqualFn = func(t require.TestingT, expected interface{}, actual interface{}, msgAndArgs ...interface{})
+
+// TODO: replace this with require.Equal once #92608 is closed because
+// asserting on specific cluster versions makes for a stronger
+// test (and having or not having the version offset is part of that).
+func requireEqualVersionsIgnoreDevOffset(
+	t require.TestingT, expected interface{}, actual interface{}, msgAndArgs ...interface{},
+) {
+	normalizeVersion := func(v roachpb.Version) roachpb.Version {
+		if v.Major > clusterversion.DevOffset {
+			v.Major -= clusterversion.DevOffset
+		}
+		return v
+	}
+	normalizedExpectedVersion := normalizeVersion(roachpb.MustParseVersion(expected.([][]string)[0][0]))
+	normalizedActualVersion := normalizeVersion(roachpb.MustParseVersion(actual.([][]string)[0][0]))
+	require.Equal(t, normalizedExpectedVersion, normalizedActualVersion, msgAndArgs...)
+}
+
 type sqlVerificationStmt struct {
-	stmt            string
-	args            []interface{}
-	optionalResults [][]string
+	stmt                   string
+	args                   []interface{}
+	optionalResults        [][]string
+	optionalResultsEqualFn EqualFn
 }
 
 func (s sqlVerificationStmt) withResults(res [][]string) sqlVerificationStmt {
@@ -305,8 +337,13 @@ func (s sqlVerificationStmt) withResults(res [][]string) sqlVerificationStmt {
 	return s
 }
 
+func (s sqlVerificationStmt) withCustomResultsEqualFn(fn EqualFn) sqlVerificationStmt {
+	s.optionalResultsEqualFn = fn
+	return s
+}
+
 func mkStmt(stmt string, args ...interface{}) sqlVerificationStmt {
-	return sqlVerificationStmt{stmt: stmt, args: args}
+	return sqlVerificationStmt{stmt: stmt, args: args, optionalResultsEqualFn: require.Equal}
 }
 
 func openDBAndMakeSQLRunner(t test.Test, url string) (*sqlutils.SQLRunner, func()) {
@@ -327,7 +364,7 @@ func verifySQL(t test.Test, url string, stmts ...sqlVerificationStmt) {
 			tdb.Exec(t, stmt.stmt, stmt.args...)
 		} else {
 			res := tdb.QueryStr(t, stmt.stmt, stmt.args...)
-			require.Equal(t, stmt.optionalResults, res)
+			stmt.optionalResultsEqualFn(t, stmt.optionalResults, res)
 		}
 	}
 }

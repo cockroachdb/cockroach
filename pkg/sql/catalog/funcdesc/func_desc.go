@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -112,7 +113,7 @@ func (desc *immutable) Public() bool {
 
 // Adding implements the catalog.Descriptor interface.
 func (desc *immutable) Adding() bool {
-	return false
+	return desc.State == descpb.DescriptorState_ADD
 }
 
 // Dropped implements the catalog.Descriptor interface.
@@ -288,14 +289,14 @@ func (desc *immutable) validateFuncExistsInSchema(scDesc catalog.SchemaDescripto
 	}
 
 	function, _ := scDesc.GetFunction(desc.GetName())
-	for _, overload := range function.Overloads {
+	for _, sig := range function.Signatures {
 		// TODO (Chengxiong) maybe a overkill, but we could also validate function
 		// signature matches.
-		if overload.ID == desc.GetID() {
+		if sig.ID == desc.GetID() {
 			return nil
 		}
 	}
-	return errors.AssertionFailedf("function overload %q (%d) cannot be found in schema %q (%d)",
+	return errors.AssertionFailedf("function sig %q (%d) cannot be found in schema %q (%d)",
 		desc.GetName(), desc.GetID(), scDesc.GetName(), scDesc.GetID())
 }
 
@@ -312,24 +313,21 @@ func (desc *immutable) validateInboundTableRef(
 	}
 
 	for _, colID := range by.ColumnIDs {
-		_, err := backRefTbl.FindColumnWithID(colID)
-		if err != nil {
+		if catalog.FindColumnByID(backRefTbl, colID) == nil {
 			return errors.AssertionFailedf("depended-on-by relation %q (%d) does not have a column with ID %d",
 				backRefTbl.GetName(), by.ID, colID)
 		}
 	}
 
 	for _, idxID := range by.IndexIDs {
-		_, err := backRefTbl.FindIndexWithID(idxID)
-		if err != nil {
+		if catalog.FindIndexByID(backRefTbl, idxID) == nil {
 			return errors.AssertionFailedf("depended-on-by relation %q (%d) does not have an index with ID %d",
 				backRefTbl.GetName(), by.ID, idxID)
 		}
 	}
 
 	for _, cstID := range by.ConstraintIDs {
-		_, err := backRefTbl.FindConstraintWithID(cstID)
-		if err != nil {
+		if catalog.FindConstraintByID(backRefTbl, cstID) == nil {
 			return errors.AssertionFailedf("depended-on-by relation %q (%d) does not have a constraint with ID %d",
 				backRefTbl.GetName(), by.ID, cstID)
 		}
@@ -372,9 +370,20 @@ func (desc *immutable) GetRawBytesInStorage() []byte {
 	return desc.rawBytesInStorage
 }
 
-// GetRawBytesInStorage implements the catalog.Descriptor interface.
-func (desc *Mutable) GetRawBytesInStorage() []byte {
-	return desc.rawBytesInStorage
+// ForEachUDTDependentForHydration implements the catalog.Descriptor interface.
+func (desc *immutable) ForEachUDTDependentForHydration(fn func(t *types.T) error) error {
+	for _, p := range desc.Params {
+		if !catid.IsOIDUserDefined(p.Type.Oid()) {
+			continue
+		}
+		if err := fn(p.Type); err != nil {
+			return iterutil.Map(err)
+		}
+	}
+	if !catid.IsOIDUserDefined(desc.ReturnType.Type.Oid()) {
+		return nil
+	}
+	return iterutil.Map(fn(desc.ReturnType.Type))
 }
 
 // IsUncommittedVersion implements the catalog.LeasableDescriptor interface.
@@ -495,8 +504,8 @@ func (desc *Mutable) SetParentSchemaID(id descpb.ID) {
 }
 
 // ToFuncObj converts the descriptor to a tree.FuncObj.
-func (desc *immutable) ToFuncObj() tree.FuncObj {
-	ret := tree.FuncObj{
+func (desc *immutable) ToFuncObj() *tree.FuncObj {
+	ret := &tree.FuncObj{
 		FuncName: tree.MakeFunctionNameFromPrefix(tree.ObjectNamePrefix{}, tree.Name(desc.Name)),
 		Params:   make(tree.FuncParams, len(desc.Params)),
 	}
@@ -523,16 +532,6 @@ func (desc *immutable) GetLanguage() catpb.Function_Language {
 	return desc.Lang
 }
 
-// ContainsUserDefinedTypes implements the catalog.HydratableDescriptor interface.
-func (desc *immutable) ContainsUserDefinedTypes() bool {
-	for i := range desc.Params {
-		if desc.Params[i].Type.UserDefined() {
-			return true
-		}
-	}
-	return desc.ReturnType.Type.UserDefined()
-}
-
 func (desc *immutable) ToOverload() (ret *tree.Overload, err error) {
 	ret = &tree.Overload{
 		Oid:        catid.FuncIDToOID(desc.ID),
@@ -557,6 +556,9 @@ func (desc *immutable) ToOverload() (ret *tree.Overload, err error) {
 	ret.CalledOnNullInput, err = desc.calledOnNullInput()
 	if err != nil {
 		return nil, err
+	}
+	if desc.ReturnType.ReturnSet {
+		ret.Class = tree.GeneratorClass
 	}
 
 	return ret, nil
@@ -636,7 +638,7 @@ func (desc *immutable) getCreateExprLang() tree.FunctionLanguage {
 	case catpb.Function_SQL:
 		return tree.FunctionLangSQL
 	}
-	return 0
+	return tree.FunctionLangUnknown
 }
 
 func (desc *immutable) getCreateExprVolatility() tree.FunctionVolatility {
@@ -677,10 +679,9 @@ func toTreeNodeParamClass(class catpb.Function_Param_Class) tree.FuncParamClass 
 	return 0
 }
 
-// UserDefinedFunctionOIDToID converts a UDF OID into a descriptor ID. OID of a
-// UDF must be greater CockroachPredefinedOIDMax. The function returns an error
-// if the given OID is less than or equal to CockroachPredefinedOIDMax.
-func UserDefinedFunctionOIDToID(oid oid.Oid) (descpb.ID, error) {
+// UserDefinedFunctionOIDToID converts a UDF OID into a descriptor ID.
+// Returns zero if the OID is not for something user-defined.
+func UserDefinedFunctionOIDToID(oid oid.Oid) descpb.ID {
 	return catid.UserDefinedOIDToID(oid)
 }
 

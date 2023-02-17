@@ -20,9 +20,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedidx"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/partition"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 )
 
 // IsLocking returns true if the ScanPrivate is configured to use a row-level
@@ -97,7 +98,10 @@ var _ = (*CustomFuncs).IsLocking
 //	  $outerFilter
 //	)
 func (c *CustomFuncs) GeneratePartialIndexScans(
-	grp memo.RelExpr, scanPrivate *memo.ScanPrivate, filters memo.FiltersExpr,
+	grp memo.RelExpr,
+	required *physical.Required,
+	scanPrivate *memo.ScanPrivate,
+	filters memo.FiltersExpr,
 ) {
 	// Iterate over all partial indexes.
 	var pkCols opt.ColSet
@@ -107,6 +111,7 @@ func (c *CustomFuncs) GeneratePartialIndexScans(
 		var sb indexScanBuilder
 		sb.Init(c, scanPrivate.Table)
 		newScanPrivate := *scanPrivate
+		newScanPrivate.Distribution.Regions = nil
 		newScanPrivate.Index = index.Ordinal()
 		newScanPrivate.Cols = indexCols.Intersection(scanPrivate.Cols)
 
@@ -411,7 +416,10 @@ func (c *CustomFuncs) GetOptionalFiltersAndFilterColumns(
 // comments above checkColumnFilters, computedColFilters, and
 // partitionValuesFilters for more detail.
 func (c *CustomFuncs) GenerateConstrainedScans(
-	grp memo.RelExpr, scanPrivate *memo.ScanPrivate, explicitFilters memo.FiltersExpr,
+	grp memo.RelExpr,
+	required *physical.Required,
+	scanPrivate *memo.ScanPrivate,
+	explicitFilters memo.FiltersExpr,
 ) {
 	var pkCols opt.ColSet
 	var sb indexScanBuilder
@@ -447,6 +455,7 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 
 		// Construct new constrained ScanPrivate.
 		newScanPrivate := *scanPrivate
+		newScanPrivate.Distribution.Regions = nil
 		newScanPrivate.Index = index.Ordinal()
 		newScanPrivate.Cols = indexCols.Intersection(scanPrivate.Cols)
 		newScanPrivate.SetConstraint(c.e.evalCtx, combinedConstraint)
@@ -854,7 +863,10 @@ func (c *CustomFuncs) partitionValuesFilters(
 // constrained is that we cannot treat an inverted index in the same way as a
 // regular index, since it does not actually contain the indexed column.
 func (c *CustomFuncs) GenerateInvertedIndexScans(
-	grp memo.RelExpr, scanPrivate *memo.ScanPrivate, filters memo.FiltersExpr,
+	grp memo.RelExpr,
+	required *physical.Required,
+	scanPrivate *memo.ScanPrivate,
+	filters memo.FiltersExpr,
 ) {
 	var pkCols opt.ColSet
 	var sb indexScanBuilder
@@ -903,6 +915,7 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 
 		// Construct new ScanOpDef with the new index and constraint.
 		newScanPrivate := *scanPrivate
+		newScanPrivate.Distribution.Regions = nil
 		newScanPrivate.Index = index.Ordinal()
 		newScanPrivate.SetConstraint(c.e.evalCtx, constraint)
 		newScanPrivate.InvertedConstraint = spansToRead
@@ -920,6 +933,10 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 		// produce duplicate primary keys or requires at least one UNION or
 		// INTERSECTION. In this case, we must scan both the primary key columns
 		// and the inverted key column.
+		// The reason we also check !spanExpr.Unique here is that sometimes we
+		// eliminate the UNION operator in the tree, replacing it with a non-nil
+		// FactoredUnionSpans in the SpanExpression, and that case needs to be
+		// noticed and filtered.
 		needInvertedFilter := !spanExpr.Unique || spanExpr.Operator != inverted.None
 		newScanPrivate.Cols = pkCols.Copy()
 		var invertedCol opt.ColumnID
@@ -1036,7 +1053,10 @@ func (c *CustomFuncs) canMaybeConstrainNonInvertedIndex(
 // The index join is implemented with a lookup join since the index join does
 // not support arbitrary input sources that are not plain index scans.
 func (c *CustomFuncs) GenerateZigzagJoins(
-	grp memo.RelExpr, scanPrivate *memo.ScanPrivate, filters memo.FiltersExpr,
+	grp memo.RelExpr,
+	required *physical.Required,
+	scanPrivate *memo.ScanPrivate,
+	filters memo.FiltersExpr,
 ) {
 	// Short circuit unless zigzag joins are explicitly enabled.
 	if !c.e.evalCtx.SessionData().ZigzagJoinEnabled || scanPrivate.Flags.NoZigzagJoin {
@@ -1107,7 +1127,7 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 		iter2.ForEachStartingAfter(leftIndex.Ordinal(), func(rightIndex cat.Index, innerFilters memo.FiltersExpr, rightCols opt.ColSet, _ bool, _ memo.ProjectionsExpr) {
 			// Check if we have zigzag hints.
 			if scanPrivate.Flags.ForceZigzag {
-				indexes := util.MakeFastIntSet(leftIndex.Ordinal(), rightIndex.Ordinal())
+				indexes := intsets.MakeFast(leftIndex.Ordinal(), rightIndex.Ordinal())
 				forceIndexes := scanPrivate.Flags.ZigzagIndexes
 				if !forceIndexes.SubsetOf(indexes) {
 					return
@@ -1410,7 +1430,10 @@ func (c *CustomFuncs) indexConstrainedCols(
 // two constraints, and it produces zigzag joins with the same index on both
 // sides of the zigzag join for those cases, fixed on different constant values.
 func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
-	grp memo.RelExpr, scanPrivate *memo.ScanPrivate, filters memo.FiltersExpr,
+	grp memo.RelExpr,
+	required *physical.Required,
+	scanPrivate *memo.ScanPrivate,
+	filters memo.FiltersExpr,
 ) {
 	// Short circuit unless zigzag joins are explicitly enabled.
 	if !c.e.evalCtx.SessionData().ZigzagJoinEnabled || scanPrivate.Flags.NoZigzagJoin {
@@ -1440,7 +1463,7 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 		// TODO(mgartner): Once we support multi-column inverted indexes, pass
 		// optional filters generated from CHECK constraints and computed column
 		// expressions to help constrain non-inverted prefix columns.
-		spanExpr, _, _, _, ok := invertedidx.TryFilterInvertedIndex(
+		spanExpr, _, remainingFilters, _, ok := invertedidx.TryFilterInvertedIndex(
 			c.e.ctx,
 			c.e.evalCtx,
 			c.e.f, filters,
@@ -1457,15 +1480,19 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 		//
 		// We'll store at most two values in vals, so initialize the slice with
 		// sufficient capacity.
+		//
+		// Also, keep track of whether the zigzag join exactly represents the
+		// spanExpr or will return some false positives (in which case tight=false,
+		// and we will need to re-apply the filters).
 		vals := make([]inverted.EncVal, 0, 2)
-		var getVals func(invertedExpr inverted.Expression)
-		getVals = func(invertedExpr inverted.Expression) {
+		var getVals func(invertedExpr inverted.Expression) (tight bool)
+		getVals = func(invertedExpr inverted.Expression) (tight bool) {
 			if len(vals) >= 2 {
 				// We only need two constraints to plan a zigzag join, so don't bother
 				// exploring further.
 				// TODO(rytaft): use stats here to choose the two most selective
 				// constraints instead of the first two.
-				return
+				return false
 			}
 			spanExprLocal, ok := invertedExpr.(*inverted.SpanExpression)
 			if !ok {
@@ -1473,35 +1500,43 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 				// to constrain the index. (This shouldn't ever happen, since
 				// TryFilterInvertedIndex should have returned ok=false in this case,
 				// but we don't want to panic if it does happen.)
-				return
+				return false
 			}
 			switch spanExprLocal.Operator {
-			case inverted.SetIntersection:
-				if len(spanExprLocal.FactoredUnionSpans) > 0 {
-					// This is equivalent to a UNION between the FactoredUnionSpans and
-					// the intersected children, so we can't build a zigzag join with
-					// this subtree.
-					return
+			case inverted.None:
+				// Check that this span expression represents a single-key span that is
+				// guaranteed not to produce duplicate primary keys.
+				if spanExprLocal.Unique && len(spanExprLocal.SpansToRead) == 1 &&
+					spanExprLocal.SpansToRead[0].IsSingleVal() {
+					vals = append(vals, spanExprLocal.SpansToRead[0].Start)
+					return true
 				}
-				getVals(spanExprLocal.Left)
-				getVals(spanExprLocal.Right)
-				return
+
+			case inverted.SetIntersection:
+				// Check that FactoredUnionSpans is empty. A span expression with
+				// non-empty FactoredUnionSpans is equivalent to a UNION between the
+				// FactoredUnionSpans and the intersected children, so we can't build a
+				// zigzag join with the subtree.
+				if len(spanExprLocal.FactoredUnionSpans) == 0 {
+					leftTight := getVals(spanExprLocal.Left)
+					rightTight := getVals(spanExprLocal.Right)
+					return leftTight && rightTight
+				}
+
 			case inverted.SetUnion:
 				// Don't recurse into UNIONs. We can't build a zigzag join with this
 				// subtree.
-				return
 			}
 
-			// Check that this span expression represents a single-key span that is
-			// guaranteed not to produce duplicate primary keys.
-			if spanExprLocal.Unique && len(spanExprLocal.SpansToRead) == 1 &&
-				spanExprLocal.SpansToRead[0].IsSingleVal() {
-				vals = append(vals, spanExprLocal.SpansToRead[0].Start)
-			}
+			return false
 		}
-		getVals(spanExpr)
+		tight := getVals(spanExpr)
 		if len(vals) < 2 {
 			return
+		}
+
+		if !tight {
+			remainingFilters = filters
 		}
 
 		// We treat the fixed values for JSON and Array as DEncodedKey.
@@ -1509,7 +1544,7 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 		rightVal := tree.DEncodedKey(vals[1])
 
 		zigzagJoin := memo.ZigzagJoinExpr{
-			On: filters,
+			On: remainingFilters,
 			ZigzagJoinPrivate: memo.ZigzagJoinPrivate{
 				LeftTable:    scanPrivate.Table,
 				LeftIndex:    index.Ordinal(),
@@ -1563,7 +1598,6 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 			zigzagJoin.LeftEqCols[i-fixedColsCount] = colID
 			zigzagJoin.RightEqCols[i-fixedColsCount] = colID
 		}
-		zigzagJoin.On = filters
 
 		// Don't output the first column (i.e. the inverted index's JSON key
 		// col) from the zigzag join. It could contain partial values, so

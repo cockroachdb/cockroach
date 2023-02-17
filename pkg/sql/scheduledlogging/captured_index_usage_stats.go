@@ -14,14 +14,13 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
@@ -82,9 +81,8 @@ func (*CaptureIndexUsageStatsTestingKnobs) ModuleTestingKnobs() {}
 // CaptureIndexUsageStatsLoggingScheduler is responsible for logging index usage stats
 // on a scheduled interval.
 type CaptureIndexUsageStatsLoggingScheduler struct {
-	db                      *kv.DB
+	db                      isql.DB
 	st                      *cluster.Settings
-	ie                      sqlutil.InternalExecutor
 	knobs                   *CaptureIndexUsageStatsTestingKnobs
 	currentCaptureStartTime time.Time
 }
@@ -120,15 +118,13 @@ func (s *CaptureIndexUsageStatsLoggingScheduler) durationUntilNextInterval() tim
 func Start(
 	ctx context.Context,
 	stopper *stop.Stopper,
-	db *kv.DB,
+	db isql.DB,
 	cs *cluster.Settings,
-	ie sqlutil.InternalExecutor,
 	knobs *CaptureIndexUsageStatsTestingKnobs,
 ) {
 	scheduler := CaptureIndexUsageStatsLoggingScheduler{
 		db:    db,
 		st:    cs,
-		ie:    ie,
 		knobs: knobs,
 	}
 	scheduler.start(ctx, stopper)
@@ -139,7 +135,7 @@ func (s *CaptureIndexUsageStatsLoggingScheduler) start(ctx context.Context, stop
 		// Start the scheduler immediately.
 		timer := time.NewTimer(0 * time.Second)
 		defer timer.Stop()
-
+		ie := s.db.Executor()
 		for {
 			select {
 			case <-stopper.ShouldQuiesce():
@@ -150,7 +146,7 @@ func (s *CaptureIndexUsageStatsLoggingScheduler) start(ctx context.Context, stop
 					continue
 				}
 				s.currentCaptureStartTime = timeutil.Now()
-				err := captureIndexUsageStats(ctx, s.ie, stopper, telemetryCaptureIndexUsageStatsLoggingDelay.Get(&s.st.SV))
+				err := captureIndexUsageStats(ctx, ie, stopper, telemetryCaptureIndexUsageStatsLoggingDelay.Get(&s.st.SV))
 				if err != nil {
 					log.Warningf(ctx, "error capturing index usage stats: %+v", err)
 				}
@@ -170,10 +166,7 @@ func (s *CaptureIndexUsageStatsLoggingScheduler) start(ctx context.Context, stop
 }
 
 func captureIndexUsageStats(
-	ctx context.Context,
-	ie sqlutil.InternalExecutor,
-	stopper *stop.Stopper,
-	loggingDelay time.Duration,
+	ctx context.Context, ie isql.Executor, stopper *stop.Stopper, loggingDelay time.Duration,
 ) error {
 	allDatabaseNames, err := getAllDatabaseNames(ctx, ie)
 	if err != nil {
@@ -305,7 +298,7 @@ func logIndexUsageStatsWithDelay(
 	}
 }
 
-func getAllDatabaseNames(ctx context.Context, ie sqlutil.InternalExecutor) (tree.NameList, error) {
+func getAllDatabaseNames(ctx context.Context, ie isql.Executor) (tree.NameList, error) {
 	var allDatabaseNames tree.NameList
 	var ok bool
 	var expectedNumDatums = 1

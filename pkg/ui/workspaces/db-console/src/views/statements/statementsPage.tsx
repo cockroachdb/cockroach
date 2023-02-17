@@ -15,6 +15,7 @@ import { RouteComponentProps, withRouter } from "react-router-dom";
 import * as protos from "src/js/protos";
 import {
   refreshNodes,
+  refreshDatabases,
   refreshStatementDiagnosticsRequests,
   refreshStatements,
   refreshUserSQLRoles,
@@ -29,7 +30,10 @@ import {
   createStatementDiagnosticsAlertLocalSetting,
   cancelStatementDiagnosticsAlertLocalSetting,
 } from "src/redux/alerts";
-import { selectHasViewActivityRedactedRole } from "src/redux/user";
+import {
+  selectHasViewActivityRedactedRole,
+  selectHasAdminRole,
+} from "src/redux/user";
 import { queryByName } from "src/util/query";
 
 import {
@@ -63,7 +67,10 @@ import {
   mapStateToRecentStatementViewProps,
 } from "./recentStatementsSelectors";
 import { selectTimeScale } from "src/redux/timeScale";
-import { selectStatementsLastUpdated } from "src/selectors/executionFingerprintsSelectors";
+import {
+  selectStatementsLastUpdated,
+  selectStatementsDataValid,
+} from "src/selectors/executionFingerprintsSelectors";
 import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
 
 type ICollectedStatementStatistics =
@@ -217,21 +224,15 @@ export const selectApps = createSelector(
   },
 );
 
-// selectDatabases returns the array of all databases with statement statistics present
-// in the data.
+// selectDatabases returns the array of all databases in the cluster.
 export const selectDatabases = createSelector(
-  (state: AdminUIState) => state.cachedData.statements,
-  (state: CachedDataReducerState<StatementsResponseMessage>) => {
+  (state: AdminUIState) => state.cachedData.databases,
+  (state: CachedDataReducerState<clusterUiApi.DatabasesListResponse>) => {
     if (!state.data) {
       return [];
     }
-    return Array.from(
-      new Set(
-        state.data.statements.map(s =>
-          s.key.key_data.database ? s.key.key_data.database : unset,
-        ),
-      ),
-    )
+
+    return state.data.databases
       .filter((dbName: string) => dbName !== null && dbName.length > 0)
       .sort();
   },
@@ -287,7 +288,8 @@ export const searchLocalSetting = new LocalSetting(
 );
 
 const fingerprintsPageActions = {
-  refreshStatements,
+  refreshStatements: refreshStatements,
+  refreshDatabases: refreshDatabases,
   onTimeScaleChange: setGlobalTimeScaleAction,
   refreshStatementDiagnosticsRequests,
   refreshNodes,
@@ -380,14 +382,16 @@ export default withRouter(
         search: searchLocalSetting.selector(state),
         sortSetting: sortSettingLocalSetting.selector(state),
         statements: selectStatements(state, props),
+        isDataValid: selectStatementsDataValid(state),
         lastUpdated: selectStatementsLastUpdated(state),
         statementsError: state.cachedData.statements.lastError,
         totalFingerprints: selectTotalFingerprints(state),
         hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),
+        hasAdminRole: selectHasAdminRole(state),
       },
       activePageProps: mapStateToRecentStatementViewProps(state),
     }),
-    dispatch => ({
+    (dispatch: AppDispatch): DispatchProps => ({
       fingerprintsPageProps: bindActionCreators(
         fingerprintsPageActions,
         dispatch,

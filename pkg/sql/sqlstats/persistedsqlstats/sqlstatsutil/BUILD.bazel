@@ -13,7 +13,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachpb",
+        "//pkg/sql/appstatspb",
         "//pkg/sql/sem/tree",
         "//pkg/util/encoding",
         "//pkg/util/json",
@@ -32,7 +32,7 @@ go_test(
     args = ["-test.timeout=295s"],
     embed = [":sqlstatsutil"],
     deps = [
-        "//pkg/roachpb",
+        "//pkg/sql/appstatspb",
         "//pkg/util/json",
         "//pkg/util/leaktest",
         "//pkg/util/log",

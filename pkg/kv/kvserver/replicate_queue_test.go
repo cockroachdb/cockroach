@@ -17,6 +17,8 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -189,24 +191,48 @@ func TestReplicateQueueRebalanceMultiStore(t *testing.T) {
 	allocatorimpl.LeaseRebalanceThreshold = 0.01
 	allocatorimpl.LeaseRebalanceThresholdMin = 0.0
 
+	const useDisk = false // for debugging purposes
+	spec := func(node int, store int) base.StoreSpec {
+		return base.DefaultTestStoreSpec
+	}
+	if useDisk {
+		td, err := os.MkdirTemp("", "test")
+		require.NoError(t, err)
+		t.Logf("store dirs in %s", td)
+		spec = func(node int, store int) base.StoreSpec {
+			return base.StoreSpec{
+				Path: filepath.Join(td, fmt.Sprintf("n%ds%d", node, store)),
+				Size: base.SizeSpec{},
+			}
+		}
+		t.Cleanup(func() {
+			if t.Failed() {
+				return
+			}
+			_ = os.RemoveAll(td)
+		})
+	}
 	for _, testCase := range testCases {
+
 		t.Run(testCase.name, func(t *testing.T) {
 			// Set up a test cluster with multiple stores per node if needed.
-			serverArgs := base.TestServerArgs{
-				ScanMinIdleTime: time.Millisecond,
-				ScanMaxIdleTime: time.Millisecond,
+			args := base.TestClusterArgs{
+				ReplicationMode:   base.ReplicationAuto,
+				ServerArgsPerNode: map[int]base.TestServerArgs{},
 			}
-			if testCase.storesPerNode > 1 {
-				serverArgs.StoreSpecs = make([]base.StoreSpec, testCase.storesPerNode)
-				for i := range serverArgs.StoreSpecs {
-					serverArgs.StoreSpecs[i] = base.DefaultTestStoreSpec
+			for i := 0; i < testCase.nodes; i++ {
+				perNode := base.TestServerArgs{
+					ScanMinIdleTime: time.Millisecond,
+					ScanMaxIdleTime: time.Millisecond,
 				}
+				perNode.StoreSpecs = make([]base.StoreSpec, testCase.storesPerNode)
+				for idx := range perNode.StoreSpecs {
+					perNode.StoreSpecs[idx] = spec(i+1, idx+1)
+				}
+				args.ServerArgsPerNode[i] = perNode
 			}
 			tc := testcluster.StartTestCluster(t, testCase.nodes,
-				base.TestClusterArgs{
-					ReplicationMode: base.ReplicationAuto,
-					ServerArgs:      serverArgs,
-				})
+				args)
 			defer tc.Stopper().Stop(context.Background())
 			ctx := context.Background()
 			for _, server := range tc.Servers {
@@ -274,8 +300,6 @@ func TestReplicateQueueRebalanceMultiStore(t *testing.T) {
 				}
 				return total, perStore
 			}
-			totalReplicas, _ := countReplicas()
-			totalLeases, _ := countLeases()
 
 			// The requirement for minimum leases is low because of the following: in
 			// the case of 8 stores we create 8*2=16 ranges, we also have another 52
@@ -292,10 +316,9 @@ func TestReplicateQueueRebalanceMultiStore(t *testing.T) {
 			// within a minute normally.
 			const replicasThreshold = 0.9
 			const leasesThreshold = 0.7
-			minReplicas := int(math.Floor(replicasThreshold * (float64(totalReplicas) / float64(numStores))))
-			minLeases := int(math.Floor(leasesThreshold * (float64(totalLeases) / float64(numStores))))
 			testutils.SucceedsWithin(t, func() error {
-				_, replicasPerStore := countReplicas()
+				totalReplicas, replicasPerStore := countReplicas()
+				minReplicas := int(math.Floor(replicasThreshold * (float64(totalReplicas) / float64(numStores))))
 				t.Logf("current replica state (want at least %d replicas on all stores): %d", minReplicas, replicasPerStore)
 				for _, c := range replicasPerStore {
 					if c < minReplicas {
@@ -305,7 +328,8 @@ func TestReplicateQueueRebalanceMultiStore(t *testing.T) {
 						return err
 					}
 				}
-				_, leasesPerStore := countLeases()
+				totalLeases, leasesPerStore := countLeases()
+				minLeases := int(math.Floor(leasesThreshold * (float64(totalLeases) / float64(numStores))))
 				t.Logf("current lease state (want at least %d leases on all stores): %d", minLeases, leasesPerStore)
 				for _, c := range leasesPerStore {
 					if c < minLeases {
@@ -594,6 +618,7 @@ func TestReplicateQueueDecommissioningNonVoters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	skip.UnderRace(t, "takes a long time or times out under race")
+	skip.UnderDeadlockWithIssue(t, 94383)
 
 	ctx := context.Background()
 
@@ -1781,9 +1806,9 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 	for i := 0; i < 1.5*rangeMaxSize; i++ {
 		sb.WriteRune('a')
 	}
-	_, err = db.Exec("insert into t(i,s) values (1, $1)", sb.String())
+	_, err = db.Exec("INSERT INTO t(i,s) VALUES (1, $1)", sb.String())
 	require.NoError(t, err)
-	_, err = db.Exec("insert into t(i,s) values (2, 'b')")
+	_, err = db.Exec("INSERT INTO t(i,s) VALUES (2, 'b')")
 	require.NoError(t, err)
 
 	// Now ask everybody to up-replicate.
@@ -1804,11 +1829,12 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		forceProcess()
 		r := db.QueryRow(
-			"select replicas from [show ranges from table t] where start_key='/2'")
+			"SELECT replicas FROM [SHOW RANGES FROM TABLE t] WHERE start_key LIKE '%/2'")
 		var repl string
 		if err := r.Scan(&repl); err != nil {
 			return err
 		}
+		t.Logf("replicas: %v", repl)
 		if repl != "{1,2,3,4,5}" {
 			return fmt.Errorf("not up-replicated yet. replicas: %s", repl)
 		}
@@ -1819,7 +1845,7 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		forceProcess()
 		r := db.QueryRow(
-			"select replicas from [show ranges from table t] where start_key is null")
+			"SELECT replicas FROM [SHOW RANGES FROM TABLE t] WHERE start_key LIKE '%TableMin%'")
 		var repl string
 		if err := r.Scan(&repl); err != nil {
 			return err
@@ -1902,10 +1928,10 @@ func TestTransferLeaseToLaggingNode(t *testing.T) {
 	var rangeID roachpb.RangeID
 	var leaseHolderNodeID uint64
 	s := sqlutils.MakeSQLRunner(tc.Conns[0])
-	s.Exec(t, "insert into system.comments values(0,0,0,'abc')")
+	s.Exec(t, "INSERT INTO system.comments VALUES(0,0,0,'abc')")
 	s.QueryRow(t,
-		"select range_id, lease_holder from "+
-			"[show ranges from table system.comments] limit 1",
+		"SELECT range_id, lease_holder FROM "+
+			"[SHOW RANGES FROM TABLE system.comments WITH DETAILS] LIMIT 1",
 	).Scan(&rangeID, &leaseHolderNodeID)
 	remoteNodeID := uint64(1)
 	if leaseHolderNodeID == 1 {
@@ -2250,7 +2276,7 @@ func TestPromoteNonVoterInAddVoter(t *testing.T) {
 		}
 
 		var rangeID roachpb.RangeID
-		if err := db.QueryRow("select range_id from [show ranges from table t] limit 1").Scan(&rangeID); err != nil {
+		if err := db.QueryRow("SELECT range_id FROM [SHOW RANGES FROM TABLE t] LIMIT 1").Scan(&rangeID); err != nil {
 			return 0, 0, err
 		}
 		iterateOverAllStores(t, tc, func(s *kvserver.Store) error {
@@ -2297,7 +2323,7 @@ func TestPromoteNonVoterInAddVoter(t *testing.T) {
 
 	// Retrieve the add voter events from the range log.
 	var rangeID roachpb.RangeID
-	err = db.QueryRow("select range_id from [show ranges from table t] limit 1").Scan(&rangeID)
+	err = db.QueryRow("SELECT range_id FROM [SHOW RANGES FROM TABLE t] LIMIT 1").Scan(&rangeID)
 	require.NoError(t, err)
 	addVoterEvents, err := filterRangeLog(tc.Conns[0], rangeID, kvserverpb.RangeLogEventType_add_voter, kvserverpb.ReasonRangeUnderReplicated)
 	require.NoError(t, err)

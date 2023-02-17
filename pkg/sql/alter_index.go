@@ -125,7 +125,7 @@ func (n *alterIndexNode) startExec(params runParams) error {
 				descriptorChanged = true
 				if err := deleteRemovedPartitionZoneConfigs(
 					params.ctx,
-					params.p.txn,
+					params.p.InternalSQLTxn(),
 					n.tableDesc,
 					params.p.Descriptors(),
 					n.index.GetID(),

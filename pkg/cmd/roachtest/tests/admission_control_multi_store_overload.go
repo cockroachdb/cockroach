@@ -28,7 +28,7 @@ func registerMultiStoreOverload(r registry.Registry) {
 		nodes := c.Spec().NodeCount - 1
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
-		startOpts := option.DefaultStartOpts()
+		startOpts := option.DefaultStartOptsNoBackups()
 		startOpts.RoachprodOpts.StoreCount = 2
 		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Range(1, nodes))
 

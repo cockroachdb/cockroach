@@ -15,8 +15,8 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -25,7 +25,7 @@ import (
 // from. Note that only columns that need to be fetched (i.e. requested by the
 // caller) are included in the internal state.
 type cFetcherTableArgs struct {
-	spec descpb.IndexFetchSpec
+	spec fetchpb.IndexFetchSpec
 	// ColIdxMap is a mapping from ColumnID to the ordinal of the corresponding
 	// column within spec.FetchedColumns.
 	ColIdxMap catalog.TableColMap
@@ -48,7 +48,7 @@ func (a *cFetcherTableArgs) Release() {
 	cFetcherTableArgsPool.Put(a)
 }
 
-func (a *cFetcherTableArgs) populateTypes(cols []descpb.IndexFetchSpec_Column) {
+func (a *cFetcherTableArgs) populateTypes(cols []fetchpb.IndexFetchSpec_Column) {
 	if cap(a.typs) < len(cols) {
 		a.typs = make([]*types.T, len(cols))
 	} else {
@@ -60,8 +60,14 @@ func (a *cFetcherTableArgs) populateTypes(cols []descpb.IndexFetchSpec_Column) {
 }
 
 // populateTableArgs fills in cFetcherTableArgs.
+//   - allowUnhydratedEnums, if set, indicates that the type hydration of enums
+//     should be skipped. This should only be used when the enums will be
+//     serialized and won't be accessed directly.
 func populateTableArgs(
-	ctx context.Context, fetchSpec *descpb.IndexFetchSpec, typeResolver *descs.DistSQLTypeResolver,
+	ctx context.Context,
+	fetchSpec *fetchpb.IndexFetchSpec,
+	typeResolver *descs.DistSQLTypeResolver,
+	allowUnhydratedEnums bool,
 ) (_ *cFetcherTableArgs, _ error) {
 	args := cFetcherTableArgsPool.Get().(*cFetcherTableArgs)
 
@@ -73,13 +79,21 @@ func populateTableArgs(
 	// they are hydrated. In row execution engine it is done during the processor
 	// initialization, but neither ColBatchScan nor cFetcher are processors, so we
 	// need to do the hydration ourselves.
-	for i := range args.spec.FetchedColumns {
-		if err := typedesc.EnsureTypeIsHydrated(ctx, args.spec.FetchedColumns[i].Type, typeResolver); err != nil {
+	for _, c := range args.spec.FetchedColumns {
+		t := c.Type
+		if allowUnhydratedEnums && t.Family() == types.EnumFamily {
+			continue
+		}
+		if err := typedesc.EnsureTypeIsHydrated(ctx, t, typeResolver); err != nil {
 			return nil, err
 		}
 	}
-	for i := range args.spec.KeyAndSuffixColumns {
-		if err := typedesc.EnsureTypeIsHydrated(ctx, args.spec.KeyAndSuffixColumns[i].Type, typeResolver); err != nil {
+	for _, c := range args.spec.KeyAndSuffixColumns {
+		t := c.Type
+		if allowUnhydratedEnums && t.Family() == types.EnumFamily {
+			continue
+		}
+		if err := typedesc.EnsureTypeIsHydrated(ctx, t, typeResolver); err != nil {
 			return nil, err
 		}
 	}

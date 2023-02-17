@@ -22,18 +22,10 @@ import (
 )
 
 // ReplicaInfo extends the Replica structure with the associated node
-// descriptor.
+// Locality information.
 type ReplicaInfo struct {
 	roachpb.ReplicaDescriptor
-	NodeDesc *roachpb.NodeDescriptor
-}
-
-func (i ReplicaInfo) locality() []roachpb.Tier {
-	return i.NodeDesc.Locality.Tiers
-}
-
-func (i ReplicaInfo) addr() string {
-	return i.NodeDesc.Address.String()
+	Tiers []roachpb.Tier
 }
 
 // A ReplicaSlice is a slice of ReplicaInfo.
@@ -52,19 +44,23 @@ const (
 	// replicas that are not LEARNERs, VOTER_OUTGOING, or
 	// VOTER_DEMOTING_{LEARNER/NON_VOTER}.
 	AllExtantReplicas
+	// AllReplicas prescribes that the ReplicaSlice should include all replicas.
+	AllReplicas
 )
 
 // NewReplicaSlice creates a ReplicaSlice from the replicas listed in the range
 // descriptor and using gossip to lookup node descriptors. Replicas on nodes
 // that are not gossiped are omitted from the result.
 //
-// Generally, learners are not returned. However, if a non-nil leaseholder is
-// passed in, it will be included in the result even if the descriptor has it as
-// a learner (we assert that the leaseholder is part of the descriptor). The
-// idea is that the descriptor might be stale and list the leaseholder as a
-// learner erroneously, and lease info is a strong signal in that direction.
-// Note that the returned ReplicaSlice might still not include the leaseholder
-// if info for the respective node is missing from the NodeDescStore.
+// Generally, learners are not returned, unless AllReplicas was passed in as a
+// filter, which in that case, everything will be returned. However, if a
+// non-nil leaseholder is passed in, it will be included in the result even if
+// the descriptor has it as a learner (we assert that the leaseholder is part
+// of the descriptor). The idea is that the descriptor might be stale and list
+// the leaseholder as a learner erroneously, and lease info is a strong signal
+// in that direction. Note that the returned ReplicaSlice might still not
+// include the leaseholder if info for the respective node is missing from the
+// NodeDescStore.
 //
 // If there's no info in gossip for any of the nodes in the descriptor, a
 // sendError is returned.
@@ -103,6 +99,8 @@ func NewReplicaSlice(
 		replicas = desc.Replicas().Filter(canReceiveLease).Descriptors()
 	case AllExtantReplicas:
 		replicas = desc.Replicas().VoterAndNonVoterDescriptors()
+	case AllReplicas:
+		replicas = desc.Replicas().Descriptors()
 	default:
 		log.Fatalf(ctx, "unknown ReplicaSliceFilter %v", filter)
 	}
@@ -131,12 +129,12 @@ func NewReplicaSlice(
 		}
 		rs = append(rs, ReplicaInfo{
 			ReplicaDescriptor: r,
-			NodeDesc:          nd,
+			Tiers:             nd.Locality.Tiers,
 		})
 	}
 	if len(rs) == 0 {
 		return nil, newSendError(
-			fmt.Sprintf("no replica node addresses available via gossip for r%d", desc.RangeID))
+			fmt.Sprintf("no replica node information available via gossip for r%d", desc.RangeID))
 	}
 	return rs, nil
 }
@@ -188,8 +186,8 @@ func localityMatch(a, b []roachpb.Tier) int {
 }
 
 // A LatencyFunc returns the latency from this node to a remote
-// address and a bool indicating whether the latency is valid.
-type LatencyFunc func(string) (time.Duration, bool)
+// node and a bool indicating whether the latency is valid.
+type LatencyFunc func(roachpb.NodeID) (time.Duration, bool)
 
 // OptimizeReplicaOrder sorts the replicas in the order in which
 // they're to be used for sending RPCs (meaning in the order in which
@@ -231,14 +229,14 @@ func (rs ReplicaSlice) OptimizeReplicaOrder(
 		}
 
 		if latencyFn != nil {
-			latencyI, okI := latencyFn(rs[i].addr())
-			latencyJ, okJ := latencyFn(rs[j].addr())
+			latencyI, okI := latencyFn(rs[i].NodeID)
+			latencyJ, okJ := latencyFn(rs[j].NodeID)
 			if okI && okJ {
 				return latencyI < latencyJ
 			}
 		}
-		attrMatchI := localityMatch(locality.Tiers, rs[i].locality())
-		attrMatchJ := localityMatch(locality.Tiers, rs[j].locality())
+		attrMatchI := localityMatch(locality.Tiers, rs[i].Tiers)
+		attrMatchJ := localityMatch(locality.Tiers, rs[j].Tiers)
 		// Longer locality matches sort first (the assumption is that
 		// they'll have better latencies).
 		return attrMatchI > attrMatchJ
@@ -252,4 +250,15 @@ func (rs ReplicaSlice) Descriptors() []roachpb.ReplicaDescriptor {
 		reps[i] = rs[i].ReplicaDescriptor
 	}
 	return reps
+}
+
+// LocalityValue returns the value of the locality tier associated with the
+// given key.
+func (ri *ReplicaInfo) LocalityValue(key string) string {
+	for _, tier := range ri.Tiers {
+		if tier.Key == key {
+			return tier.Value
+		}
+	}
+	return ""
 }

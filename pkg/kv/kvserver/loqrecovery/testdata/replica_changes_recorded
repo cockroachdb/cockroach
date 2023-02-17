@@ -43,6 +43,7 @@ ok
 
 make-plan
 ----
+Replica updates:
 - RangeID: 1
   StartKey: /Min
   OldReplicaID: 1
@@ -67,6 +68,8 @@ make-plan
     StoreID: 2
     ReplicaID: 16
   NextReplicaID: 17
+Decommissioned nodes:
+[n4, n5]
 
 apply-plan stores=(1,2)
 ----
@@ -74,9 +77,10 @@ ok
 
 dump-events stores=(1,2) remove=true
 ----
-Updated range r1, Key:/Min, Store:s1 ReplicaID:16
-Updated range r2, Key:/Table/1, Store:s1 ReplicaID:16
-Updated range r3, Key:/Table/5, Store:s2 ReplicaID:16
+Events:
+updated range r1, Key:/Min, Store:s1 ReplicaID:16
+updated range r2, Key:/Table/1, Store:s1 ReplicaID:16
+updated range r3, Key:/Table/5, Store:s2 ReplicaID:16
 
 # We now try to dump stores once again to verify that record
 # consumer cleans up events if it passed them on successfully.

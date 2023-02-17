@@ -15,10 +15,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -32,11 +30,11 @@ type statusTrackingExecutor struct {
 }
 
 func (s *statusTrackingExecutor) ExecuteJob(
-	_ context.Context,
-	_ *scheduledjobs.JobExecutionConfig,
-	_ scheduledjobs.JobSchedulerEnv,
-	_ *ScheduledJob,
-	_ *kv.Txn,
+	ctx context.Context,
+	txn isql.Txn,
+	cfg *scheduledjobs.JobExecutionConfig,
+	env scheduledjobs.JobSchedulerEnv,
+	schedule *ScheduledJob,
 ) error {
 	s.numExec++
 	return nil
@@ -44,13 +42,12 @@ func (s *statusTrackingExecutor) ExecuteJob(
 
 func (s *statusTrackingExecutor) NotifyJobTermination(
 	ctx context.Context,
+	txn isql.Txn,
 	jobID jobspb.JobID,
 	jobStatus Status,
-	_ jobspb.Details,
+	details jobspb.Details,
 	env scheduledjobs.JobSchedulerEnv,
 	schedule *ScheduledJob,
-	ex sqlutil.InternalExecutor,
-	txn *kv.Txn,
 ) error {
 	s.counts[jobStatus]++
 	return nil
@@ -61,12 +58,7 @@ func (s *statusTrackingExecutor) Metrics() metric.Struct {
 }
 
 func (s *statusTrackingExecutor) GetCreateScheduleStatement(
-	ctx context.Context,
-	env scheduledjobs.JobSchedulerEnv,
-	txn *kv.Txn,
-	descsCol *descs.Collection,
-	sj *ScheduledJob,
-	ex sqlutil.InternalExecutor,
+	ctx context.Context, txn isql.Txn, env scheduledjobs.JobSchedulerEnv, sj *ScheduledJob,
 ) (string, error) {
 	return "", errors.AssertionFailedf("unimplemented method: 'GetCreateScheduleStatement'")
 }
@@ -103,12 +95,16 @@ func TestJobTerminationNotification(t *testing.T) {
 	// Create a single job.
 	schedule := h.newScheduledJobForExecutor("test_job", executorName, nil)
 	ctx := context.Background()
-	require.NoError(t, schedule.Create(ctx, h.cfg.InternalExecutor, nil))
+	schedules := ScheduledJobDB(h.cfg.DB)
+	require.NoError(t, schedules.Create(ctx, schedule))
 
 	// Pretend it completes multiple runs with terminal statuses.
 	for _, s := range []Status{StatusCanceled, StatusFailed, StatusSucceeded} {
-		require.NoError(t, NotifyJobTermination(
-			ctx, h.env, 123, s, nil, schedule.ScheduleID(), h.cfg.InternalExecutor, nil))
+		require.NoError(t, h.cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			return NotifyJobTermination(
+				ctx, txn, h.env, 123, s, nil, schedule.ScheduleID(),
+			)
+		}))
 	}
 
 	// Verify counts.

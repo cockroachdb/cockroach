@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
@@ -119,6 +119,20 @@ type Provider struct {
 	storage VMStorage
 }
 
+func (p *Provider) SnapshotVolume(
+	volume vm.Volume, name, description string, labels map[string]string,
+) (string, error) {
+	return "", nil
+}
+
+func (p *Provider) CreateVolume(vm.VolumeCreateOpts) (vm.Volume, error) {
+	return vm.Volume{}, nil
+}
+
+func (p *Provider) AttachVolumeToVM(vm.Volume, *vm.VM) (string, error) {
+	return "", nil
+}
+
 // No-op implementation of vm.ProviderOpts
 type providerOpts struct{}
 
@@ -158,7 +172,7 @@ func (p *Provider) Create(
 
 	// We will need to assign ports to the nodes, and they must not conflict with
 	// any other local clusters.
-	var portsTaken util.FastIntSet
+	var portsTaken intsets.Fast
 	for _, c := range p.clusters {
 		for i := range c.VMs {
 			portsTaken.Add(c.VMs[i].SQLPort)
@@ -236,7 +250,7 @@ func (p *Provider) CreateProviderOpts() vm.ProviderOpts {
 }
 
 // List reports all the local cluster "VM" instances.
-func (p *Provider) List(l *logger.Logger) (vm.List, error) {
+func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) {
 	var result vm.List
 	for _, clusterName := range p.clusters.Names() {
 		c := p.clusters[clusterName]

@@ -28,11 +28,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/migrationstable"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
@@ -50,8 +49,7 @@ import (
 type Manager struct {
 	deps      upgrade.SystemDeps
 	lm        *lease.Manager
-	ie        sqlutil.InternalExecutor
-	ief       descs.TxnManager
+	ie        isql.Executor
 	jr        *jobs.Registry
 	codec     keys.SQLCodec
 	settings  *cluster.Settings
@@ -77,11 +75,12 @@ func (m *Manager) SystemDeps() upgrade.SystemDeps {
 
 // NewManager constructs a new Manager. The SystemDeps parameter may be zero in
 // secondary tenants. The testingKnobs parameter may be nil.
+//
+// TODO(ajwerner): Remove the ie argument given the isql.DB in deps.
 func NewManager(
 	deps upgrade.SystemDeps,
 	lm *lease.Manager,
-	ie sqlutil.InternalExecutor,
-	ief descs.TxnManager,
+	ie isql.Executor,
 	jr *jobs.Registry,
 	codec keys.SQLCodec,
 	settings *cluster.Settings,
@@ -96,7 +95,6 @@ func NewManager(
 		deps:      deps,
 		lm:        lm,
 		ie:        ie,
-		ief:       ief,
 		jr:        jr,
 		codec:     codec,
 		settings:  settings,
@@ -109,7 +107,7 @@ var _ upgrade.JobDeps = (*Manager)(nil)
 
 // safeToUpgradeTenant ensures that we don't allow for tenant upgrade if it's
 // not safe to do so. Safety is defined as preventing a secondary tenant's
-// cluster version from ever exceeding the host cluster version. It is always
+// cluster version from ever exceeding the storage cluster version. It is always
 // safe to upgrade the system tenant.
 func safeToUpgradeTenant(
 	ctx context.Context,
@@ -125,33 +123,33 @@ func safeToUpgradeTenant(
 	if overrides == nil {
 		return false, errors.AssertionFailedf("overrides informer is nil in secondary tenant")
 	}
-	hostClusterVersion := overrides.(*settingswatcher.SettingsWatcher).GetStorageClusterVersion()
-	if hostClusterVersion.Less(tenantClusterVersion.Version) {
+	storageClusterVersion := overrides.(*settingswatcher.SettingsWatcher).GetStorageClusterVersion()
+	if storageClusterVersion.Less(tenantClusterVersion.Version) {
 		// We assert here if we find a tenant with a higher cluster version than
-		// the host cluster. It's dangerous to run in this mode because the
-		// tenant may expect upgrades to be present on the host cluster which
+		// the storage cluster. It's dangerous to run in this mode because the
+		// tenant may expect upgrades to be present on the storage cluster which
 		// haven't yet been run. It's also not clear how we could get into this
 		// state, since a tenant can't be created at a higher level
-		// than the host cluster, and will be prevented from upgrading beyond
-		// the host cluster version by the code below.
+		// than the storage cluster, and will be prevented from upgrading beyond
+		// the storage cluster version by the code below.
 		return false, errors.AssertionFailedf("tenant found at higher cluster version "+
-			"than host cluster: host cluster at version %v, tenant at version"+
-			" %v.", hostClusterVersion, tenantClusterVersion)
+			"than storage cluster: storage cluster at version %v, tenant at version"+
+			" %v.", storageClusterVersion, tenantClusterVersion)
 	}
-	if tenantClusterVersion == hostClusterVersion {
+	if tenantClusterVersion == storageClusterVersion {
 		// The cluster version of the tenant is equal to the cluster version of
-		// the host cluster. If we allow the upgrade it will push the tenant
-		// to a higher cluster version than the host cluster. Block the upgrade.
+		// the storage cluster. If we allow the upgrade it will push the tenant
+		// to a higher cluster version than the storage cluster. Block the upgrade.
 		return false, errors.Newf("preventing tenant upgrade from running "+
-			"as the host cluster has not yet been upgraded: "+
-			"host cluster version = %v, tenant cluster version = %v",
-			hostClusterVersion, tenantClusterVersion)
+			"as the storage cluster has not yet been upgraded: "+
+			"storage cluster version = %v, tenant cluster version = %v",
+			storageClusterVersion, tenantClusterVersion)
 	}
 
-	// The cluster version of the tenant is less than that of the host
+	// The cluster version of the tenant is less than that of the storage
 	// cluster. It's safe to run the upgrade.
-	log.Infof(ctx, "safe to upgrade tenant: host cluster at version %v, tenant at version"+
-		" %v", hostClusterVersion, tenantClusterVersion)
+	log.Infof(ctx, "safe to upgrade tenant: storage cluster at version %v, tenant at version"+
+		" %v", storageClusterVersion, tenantClusterVersion)
 	return true, nil
 }
 
@@ -174,11 +172,15 @@ func (m *Manager) RunPermanentUpgrades(ctx context.Context, upToVersion roachpb.
 	vers := m.listBetween(roachpb.Version{}, upToVersion)
 	var permanentUpgrades []upgradebase.Upgrade
 	for _, v := range vers {
-		upgrade, exists := m.GetUpgrade(v)
-		if !exists || !upgrade.Permanent() {
+		u, exists := m.GetUpgrade(v)
+		if !exists || !u.Permanent() {
 			continue
 		}
-		permanentUpgrades = append(permanentUpgrades, upgrade)
+		_, isSystemUpgrade := u.(*upgrade.SystemUpgrade)
+		if isSystemUpgrade && !m.codec.ForSystemTenant() {
+			continue
+		}
+		permanentUpgrades = append(permanentUpgrades, u)
 	}
 
 	user := username.RootUserName()
@@ -246,7 +248,7 @@ func (m *Manager) RunPermanentUpgrades(ctx context.Context, upToVersion roachpb.
 		//
 		// TODO(andrei): Get rid of this once compatibility with 22.2 is not necessary.
 		startupMigrationAlreadyRan, err := checkOldStartupMigrationRan(
-			ctx, u.V22_2StartupMigrationName(), m.deps.DB, m.codec)
+			ctx, u.V22_2StartupMigrationName(), m.deps.DB.KV(), m.codec)
 		if err != nil {
 			return err
 		}
@@ -548,13 +550,13 @@ func (m *Manager) runMigration(
 			// The TenantDeps used here are incomplete, but enough for the "permanent
 			// upgrades" that run under this testing knob.
 			if err := upg.Run(ctx, mig.Version(), upgrade.TenantDeps{
-				DB:                      m.deps.DB,
-				Codec:                   m.codec,
-				Settings:                m.settings,
-				LeaseManager:            m.lm,
-				InternalExecutor:        m.ie,
-				InternalExecutorFactory: m.ief,
-				JobRegistry:             m.jr,
+				DB:               m.deps.DB,
+				Codec:            m.codec,
+				Settings:         m.settings,
+				LeaseManager:     m.lm,
+				InternalExecutor: m.ie,
+				JobRegistry:      m.jr,
+				TestingKnobs:     &m.knobs,
 			}); err != nil {
 				return err
 			}
@@ -577,10 +579,10 @@ func (m *Manager) runMigration(
 		}
 		if alreadyExisting {
 			log.Infof(ctx, "waiting for %s", mig.Name())
-			return m.jr.WaitForJobs(ctx, m.ie, []jobspb.JobID{id})
+			return m.jr.WaitForJobs(ctx, []jobspb.JobID{id})
 		} else {
 			log.Infof(ctx, "running %s", mig.Name())
-			return m.jr.Run(ctx, m.ie, []jobspb.JobID{id})
+			return m.jr.Run(ctx, []jobspb.JobID{id})
 		}
 	}
 }
@@ -589,10 +591,10 @@ func (m *Manager) getOrCreateMigrationJob(
 	ctx context.Context, user username.SQLUsername, version roachpb.Version, name string,
 ) (alreadyCompleted, alreadyExisting bool, jobID jobspb.JobID, _ error) {
 	newJobID := m.jr.MakeJobID()
-	if err := m.deps.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+	if err := m.deps.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
 		enterpriseEnabled := base.CCLDistributionAndEnterpriseEnabled(m.settings, m.clusterID)
 		alreadyCompleted, err = migrationstable.CheckIfMigrationCompleted(
-			ctx, version, txn, m.ie, enterpriseEnabled, migrationstable.ConsistentRead,
+			ctx, version, txn.KV(), txn, enterpriseEnabled, migrationstable.ConsistentRead,
 		)
 		if err != nil && ctx.Err() == nil {
 			log.Warningf(ctx, "failed to check if migration already completed: %v", err)
@@ -615,7 +617,7 @@ func (m *Manager) getOrCreateMigrationJob(
 }
 
 func (m *Manager) getRunningMigrationJob(
-	ctx context.Context, txn *kv.Txn, version roachpb.Version,
+	ctx context.Context, txn isql.Txn, version roachpb.Version,
 ) (found bool, jobID jobspb.JobID, _ error) {
 	// Wrap the version into a ClusterVersion so that the JSON looks like what the
 	// Payload proto has inside.
@@ -638,7 +640,7 @@ SELECT id, status
 	if err != nil {
 		return false, 0, errors.Wrap(err, "failed to marshal version to JSON")
 	}
-	rows, err := m.ie.QueryBuffered(ctx, "migration-manager-find-jobs", txn, query, jsonMsg.String())
+	rows, err := txn.QueryBuffered(ctx, "migration-manager-find-jobs", txn.KV(), query, jsonMsg.String())
 	if err != nil {
 		return false, 0, err
 	}
@@ -688,13 +690,12 @@ func (m *Manager) checkPreconditions(ctx context.Context, versions []roachpb.Ver
 			continue
 		}
 		if err := tm.Precondition(ctx, clusterversion.ClusterVersion{Version: v}, upgrade.TenantDeps{
-			DB:                      m.deps.DB,
-			Codec:                   m.codec,
-			Settings:                m.settings,
-			LeaseManager:            m.lm,
-			InternalExecutor:        m.ie,
-			InternalExecutorFactory: m.ief,
-			JobRegistry:             m.jr,
+			DB:               m.deps.DB,
+			Codec:            m.codec,
+			Settings:         m.settings,
+			LeaseManager:     m.lm,
+			InternalExecutor: m.ie,
+			JobRegistry:      m.jr,
 		}); err != nil {
 			return errors.Wrapf(
 				err,

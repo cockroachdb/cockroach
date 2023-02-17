@@ -229,20 +229,20 @@ limit
 memo
 SELECT s FROM a WHERE s='foo' LIMIT 1
 ----
-memo (optimized, ~8KB, required=[presentation: s:4])
+memo (optimized, ~9KB, required=[presentation: s:4])
  ├── G1: (limit G2 G3) (scan a@s_idx,cols=(4),constrained,lim=1) (scan a@si_idx,cols=(4),constrained,lim=1)
  │    └── [presentation: s:4]
  │         ├── best: (scan a@s_idx,cols=(4),constrained,lim=1)
- │         └── cost: 5.06
+ │         └── cost: 9.06
  ├── G2: (select G4 G5) (scan a@s_idx,cols=(4),constrained) (scan a@si_idx,cols=(4),constrained)
  │    └── [limit hint: 1.00]
  │         ├── best: (scan a@s_idx,cols=(4),constrained)
- │         └── cost: 15.07
+ │         └── cost: 19.07
  ├── G3: (const 1)
  ├── G4: (scan a,cols=(4)) (scan a@s_idx,cols=(4)) (scan a@si_idx,cols=(4))
  │    └── [limit hint: 100.00]
  │         ├── best: (scan a@s_idx,cols=(4))
- │         └── cost: 119.02
+ │         └── cost: 123.02
  ├── G5: (filters G6)
  ├── G6: (eq G7 G8)
  ├── G7: (variable s)
@@ -652,7 +652,7 @@ EliminateProject
               └── 5
 ================================================================================
 GenerateIndexScans
-  Cost: 3571.71
+  Cost: 3575.71
 ================================================================================
    explain
     ├── columns: info:7
@@ -780,7 +780,7 @@ GeneratePartialOrderTopK (no changes)
 --------------------------------------------------------------------------------
 ================================================================================
 Final best expression
-  Cost: 3571.71
+  Cost: 3575.71
 ================================================================================
   explain
    ├── columns: info:7
@@ -1694,14 +1694,14 @@ memo (optimized, ~4KB, required=[presentation: k:1,i:2,f:3,s:4,j:5])
  ├── G1: (limit G2 G3 ordering=+1) (scan a,cols=(1-5),lim=1) (top-k G2 &{1 +1 })
  │    └── [presentation: k:1,i:2,f:3,s:4,j:5]
  │         ├── best: (scan a,cols=(1-5),lim=1)
- │         └── cost: 5.11
+ │         └── cost: 9.11
  ├── G2: (scan a,cols=(1-5))
  │    ├── [ordering: +1] [limit hint: 1.00]
  │    │    ├── best: (scan a,cols=(1-5))
- │    │    └── cost: 15.12
+ │    │    └── cost: 19.12
  │    └── []
  │         ├── best: (scan a,cols=(1-5))
- │         └── cost: 1125.02
+ │         └── cost: 1129.02
  └── G3: (const 1)
 
 # GenerateTopK is not triggered when the limit is not constant
@@ -1844,84 +1844,84 @@ memo (optimized, ~14KB, required=[presentation: d:1,e:2] [ordering: +1,+2])
  ├── G1: (limit G2 G3 ordering=+1,+2) (top-k G2 &{10 +1,+2 }) (top-k G4 &{10 +1,+2 }) (top-k G5 &{10 +1,+2 }) (top-k G6 &{10 +1,+2 }) (top-k G2 &{10 +1,+2 +1}) (top-k G4 &{10 +1,+2 +1}) (top-k G5 &{10 +1,+2 +1}) (top-k G6 &{10 +1,+2 +1})
  │    ├── [presentation: d:1,e:2] [ordering: +1,+2]
  │    │    ├── best: (top-k G2 &{10 +1,+2 })
- │    │    └── cost: 1185.69
+ │    │    └── cost: 1189.69
  │    └── []
  │         ├── best: (top-k G2 &{10 +1,+2 })
- │         └── cost: 1185.69
+ │         └── cost: 1189.69
  ├── G2: (scan defg,cols=(1,2))
  │    ├── [ordering: +1,+2] [limit hint: 10.00]
  │    │    ├── best: (sort G2)
- │    │    └── cost: 1345.17
+ │    │    └── cost: 1349.17
  │    ├── [ordering: +1]
  │    │    ├── best: (sort G2)
- │    │    └── cost: 1334.20
+ │    │    └── cost: 1338.20
  │    ├── [ordering: +1] [limit hint: 104.58]
  │    │    ├── best: (sort G2)
- │    │    └── cost: 1334.20
+ │    │    └── cost: 1338.20
  │    └── []
  │         ├── best: (scan defg,cols=(1,2))
- │         └── cost: 1094.72
+ │         └── cost: 1098.72
  ├── G3: (const 10)
  ├── G4: (index-join G7 defg,cols=(1,2))
  │    ├── [ordering: +1]
  │    │    ├── best: (index-join G7="[ordering: +1]" defg,cols=(1,2))
- │    │    └── cost: 7134.44
+ │    │    └── cost: 7138.44
  │    ├── [ordering: +1] [limit hint: 104.58]
  │    │    ├── best: (index-join G7="[ordering: +1] [limit hint: 104.58]" defg,cols=(1,2))
- │    │    └── cost: 1336.81
+ │    │    └── cost: 1340.81
  │    └── []
  │         ├── best: (index-join G7 defg,cols=(1,2))
- │         └── cost: 7134.44
+ │         └── cost: 7138.44
  ├── G5: (index-join G8 defg,cols=(1,2))
  │    ├── [ordering: +1]
  │    │    ├── best: (index-join G8="[ordering: +1]" defg,cols=(1,2))
- │    │    └── cost: 7154.64
+ │    │    └── cost: 7158.64
  │    ├── [ordering: +1] [limit hint: 104.58]
  │    │    ├── best: (index-join G8="[ordering: +1] [limit hint: 104.58]" defg,cols=(1,2))
- │    │    └── cost: 1338.90
+ │    │    └── cost: 1342.90
  │    └── []
  │         ├── best: (index-join G8 defg,cols=(1,2))
- │         └── cost: 7154.64
+ │         └── cost: 7158.64
  ├── G6: (index-join G9 defg,cols=(1,2))
  │    ├── [ordering: +1]
  │    │    ├── best: (index-join G9="[ordering: +1]" defg,cols=(1,2))
- │    │    └── cost: 7144.54
+ │    │    └── cost: 7148.54
  │    ├── [ordering: +1] [limit hint: 104.58]
  │    │    ├── best: (index-join G9="[ordering: +1] [limit hint: 104.58]" defg,cols=(1,2))
- │    │    └── cost: 1337.85
+ │    │    └── cost: 1341.85
  │    └── []
  │         ├── best: (index-join G9 defg,cols=(1,2))
- │         └── cost: 7144.54
+ │         └── cost: 7148.54
  ├── G7: (scan defg@dd,cols=(1,5))
  │    ├── [ordering: +1]
  │    │    ├── best: (scan defg@dd,cols=(1,5))
- │    │    └── cost: 1064.42
+ │    │    └── cost: 1068.42
  │    ├── [ordering: +1] [limit hint: 104.58]
  │    │    ├── best: (scan defg@dd,cols=(1,5))
- │    │    └── cost: 122.79
+ │    │    └── cost: 126.79
  │    └── []
  │         ├── best: (scan defg@dd,cols=(1,5))
- │         └── cost: 1064.42
+ │         └── cost: 1068.42
  ├── G8: (scan defg@dfg,cols=(1,5))
  │    ├── [ordering: +1]
  │    │    ├── best: (scan defg@dfg,cols=(1,5))
- │    │    └── cost: 1084.62
+ │    │    └── cost: 1088.62
  │    ├── [ordering: +1] [limit hint: 104.58]
  │    │    ├── best: (scan defg@dfg,cols=(1,5))
- │    │    └── cost: 124.88
+ │    │    └── cost: 128.88
  │    └── []
  │         ├── best: (scan defg@dfg,cols=(1,5))
- │         └── cost: 1084.62
+ │         └── cost: 1088.62
  └── G9: (scan defg@df,cols=(1,5))
       ├── [ordering: +1]
       │    ├── best: (scan defg@df,cols=(1,5))
-      │    └── cost: 1074.52
+      │    └── cost: 1078.52
       ├── [ordering: +1] [limit hint: 104.58]
       │    ├── best: (scan defg@df,cols=(1,5))
-      │    └── cost: 123.83
+      │    └── cost: 127.83
       └── []
            ├── best: (scan defg@df,cols=(1,5))
-           └── cost: 1074.52
+           └── cost: 1078.52
 
 # Generates an index scan on df and an index join to get all columns.
 opt expect=GenerateLimitedTopKScans
@@ -1975,23 +1975,23 @@ memo (optimized, ~4KB, required=[presentation: d:1,f:3,e:2] [ordering: +1,+3,+2]
  ├── G1: (limit G2 G3 ordering=+1,+3,+2) (top-k G2 &{10 +1,+3,+2 }) (top-k G2 &{10 +1,+3,+2 +1,+3})
  │    ├── [presentation: d:1,f:3,e:2] [ordering: +1,+3,+2]
  │    │    ├── best: (top-k G2 &{10 +1,+3,+2 })
- │    │    └── cost: 1196.32
+ │    │    └── cost: 1200.32
  │    └── []
  │         ├── best: (top-k G2 &{10 +1,+3,+2 })
- │         └── cost: 1196.32
+ │         └── cost: 1200.32
  ├── G2: (scan defg,cols=(1-3))
  │    ├── [ordering: +1,+3,+2] [limit hint: 10.00]
  │    │    ├── best: (sort G2)
- │    │    └── cost: 1366.36
+ │    │    └── cost: 1370.36
  │    ├── [ordering: +1,+3]
  │    │    ├── best: (sort G2)
- │    │    └── cost: 1365.27
+ │    │    └── cost: 1369.27
  │    ├── [ordering: +1,+3] [limit hint: 100.00]
  │    │    ├── best: (sort G2)
- │    │    └── cost: 1365.27
+ │    │    └── cost: 1369.27
  │    └── []
  │         ├── best: (scan defg,cols=(1-3))
- │         └── cost: 1104.82
+ │         └── cost: 1108.82
  └── G3: (const 10)
 
 # ---------------------------------------------------
@@ -2006,90 +2006,90 @@ memo (optimized, ~14KB, required=[presentation: d:1,e:2,f:3,g:4] [ordering: +1,+
  ├── G1: (limit G2 G3 ordering=+1,+3,+2) (top-k G2 &{10 +1,+3,+2 }) (top-k G4 &{10 +1,+3,+2 }) (top-k G5 &{10 +1,+3,+2 }) (top-k G6 &{10 +1,+3,+2 }) (top-k G2 &{10 +1,+3,+2 +1,+3}) (top-k G4 &{10 +1,+3,+2 +1}) (top-k G5 &{10 +1,+3,+2 +1,+3}) (top-k G6 &{10 +1,+3,+2 +1,+3}) (top-k G4 &{10 +1,+3,+2 +1,+3})
  │    ├── [presentation: d:1,e:2,f:3,g:4] [ordering: +1,+3,+2]
  │    │    ├── best: (top-k G6="[ordering: +1,+3] [limit hint: 100.00]" &{10 +1,+3,+2 +1,+3})
- │    │    └── cost: 737.57
+ │    │    └── cost: 741.57
  │    └── []
  │         ├── best: (top-k G2 &{10 +1,+3,+2 })
- │         └── cost: 1206.52
+ │         └── cost: 1210.52
  ├── G2: (scan defg,cols=(1-4))
  │    ├── [ordering: +1,+3,+2] [limit hint: 10.00]
  │    │    ├── best: (sort G2)
- │    │    └── cost: 1386.46
+ │    │    └── cost: 1390.46
  │    ├── [ordering: +1,+3]
  │    │    ├── best: (sort G2)
- │    │    └── cost: 1385.37
+ │    │    └── cost: 1389.37
  │    ├── [ordering: +1,+3] [limit hint: 100.00]
  │    │    ├── best: (sort G2)
- │    │    └── cost: 1385.37
+ │    │    └── cost: 1389.37
  │    └── []
  │         ├── best: (scan defg,cols=(1-4))
- │         └── cost: 1114.92
+ │         └── cost: 1118.92
  ├── G3: (const 10)
  ├── G4: (index-join G7 defg,cols=(1-4))
  │    ├── [ordering: +1,+3]
  │    │    ├── best: (sort G4="[ordering: +1]")
- │    │    └── cost: 7290.90
+ │    │    └── cost: 7294.90
  │    ├── [ordering: +1,+3] [limit hint: 100.00]
  │    │    ├── best: (sort G4="[ordering: +1]")
- │    │    └── cost: 7290.90
+ │    │    └── cost: 7294.90
  │    ├── [ordering: +1]
  │    │    ├── best: (index-join G7="[ordering: +1]" defg,cols=(1-4))
- │    │    └── cost: 7154.44
+ │    │    └── cost: 7158.44
  │    ├── [ordering: +1] [limit hint: 104.58]
  │    │    ├── best: (index-join G7="[ordering: +1] [limit hint: 104.58]" defg,cols=(1-4))
- │    │    └── cost: 1340.81
+ │    │    └── cost: 1344.81
  │    └── []
  │         ├── best: (index-join G7 defg,cols=(1-4))
- │         └── cost: 7154.44
+ │         └── cost: 7158.44
  ├── G5: (index-join G8 defg,cols=(1-4))
  │    ├── [ordering: +1,+3]
  │    │    ├── best: (index-join G8="[ordering: +1,+3]" defg,cols=(1-4))
- │    │    └── cost: 7174.84
+ │    │    └── cost: 7178.84
  │    ├── [ordering: +1,+3] [limit hint: 100.00]
  │    │    ├── best: (index-join G8="[ordering: +1,+3] [limit hint: 100.00]" defg,cols=(1-4))
- │    │    └── cost: 729.04
+ │    │    └── cost: 733.04
  │    └── []
  │         ├── best: (index-join G8 defg,cols=(1-4))
- │         └── cost: 7174.84
+ │         └── cost: 7178.84
  ├── G6: (index-join G9 defg,cols=(1-4))
  │    ├── [ordering: +1,+3]
  │    │    ├── best: (index-join G9="[ordering: +1,+3]" defg,cols=(1-4))
- │    │    └── cost: 7164.64
+ │    │    └── cost: 7168.64
  │    ├── [ordering: +1,+3] [limit hint: 100.00]
  │    │    ├── best: (index-join G9="[ordering: +1,+3] [limit hint: 100.00]" defg,cols=(1-4))
- │    │    └── cost: 728.04
+ │    │    └── cost: 732.04
  │    └── []
  │         ├── best: (index-join G9 defg,cols=(1-4))
- │         └── cost: 7164.64
+ │         └── cost: 7168.64
  ├── G7: (scan defg@dd,cols=(1,5))
  │    ├── [ordering: +1]
  │    │    ├── best: (scan defg@dd,cols=(1,5))
- │    │    └── cost: 1064.42
+ │    │    └── cost: 1068.42
  │    ├── [ordering: +1] [limit hint: 104.58]
  │    │    ├── best: (scan defg@dd,cols=(1,5))
- │    │    └── cost: 122.79
+ │    │    └── cost: 126.79
  │    └── []
  │         ├── best: (scan defg@dd,cols=(1,5))
- │         └── cost: 1064.42
+ │         └── cost: 1068.42
  ├── G8: (scan defg@dfg,cols=(1,3-5))
  │    ├── [ordering: +1,+3]
  │    │    ├── best: (scan defg@dfg,cols=(1,3-5))
- │    │    └── cost: 1104.82
+ │    │    └── cost: 1108.82
  │    ├── [ordering: +1,+3] [limit hint: 100.00]
  │    │    ├── best: (scan defg@dfg,cols=(1,3-5))
- │    │    └── cost: 122.02
+ │    │    └── cost: 126.02
  │    └── []
  │         ├── best: (scan defg@dfg,cols=(1,3-5))
- │         └── cost: 1104.82
+ │         └── cost: 1108.82
  └── G9: (scan defg@df,cols=(1,3,5))
       ├── [ordering: +1,+3]
       │    ├── best: (scan defg@df,cols=(1,3,5))
-      │    └── cost: 1084.62
+      │    └── cost: 1088.62
       ├── [ordering: +1,+3] [limit hint: 100.00]
       │    ├── best: (scan defg@df,cols=(1,3,5))
-      │    └── cost: 120.02
+      │    └── cost: 124.02
       └── []
            ├── best: (scan defg@df,cols=(1,3,5))
-           └── cost: 1084.62
+           └── cost: 1088.62
 
 # Only index ordering dfg can be used for the topk.
 memo expect=GeneratePartialOrderTopK disable=GenerateLimitedTopKScans
@@ -2099,23 +2099,23 @@ memo (optimized, ~5KB, required=[presentation: d:1,f:3,g:4] [ordering: +1,+4])
  ├── G1: (limit G2 G3 ordering=+1,+4) (top-k G2 &{10 +1,+4 }) (top-k G2 &{10 +1,+4 +1})
  │    ├── [presentation: d:1,f:3,g:4] [ordering: +1,+4]
  │    │    ├── best: (top-k G2="[ordering: +1] [limit hint: 104.58]" &{10 +1,+4 +1})
- │    │    └── cost: 135.73
+ │    │    └── cost: 139.73
  │    └── []
  │         ├── best: (top-k G2 &{10 +1,+4 })
- │         └── cost: 1185.79
+ │         └── cost: 1189.79
  ├── G2: (scan defg,cols=(1,3,4)) (scan defg@dfg,cols=(1,3,4))
  │    ├── [ordering: +1,+4] [limit hint: 10.00]
  │    │    ├── best: (sort G2="[ordering: +1]")
- │    │    └── cost: 1221.18
+ │    │    └── cost: 1225.18
  │    ├── [ordering: +1]
  │    │    ├── best: (scan defg@dfg,cols=(1,3,4))
- │    │    └── cost: 1094.72
+ │    │    └── cost: 1098.72
  │    ├── [ordering: +1] [limit hint: 104.58]
  │    │    ├── best: (scan defg@dfg,cols=(1,3,4))
- │    │    └── cost: 125.92
+ │    │    └── cost: 129.92
  │    └── []
  │         ├── best: (scan defg@dfg,cols=(1,3,4))
- │         └── cost: 1094.72
+ │         └── cost: 1098.72
  └── G3: (const 10)
 
 # Ensure that we don't incorrectly use orderings that don't match the direction.
@@ -2126,17 +2126,17 @@ memo (optimized, ~4KB, required=[presentation: d:1,e:2,f:3,g:4] [ordering: -4])
  ├── G1: (limit G2 G3 ordering=-4) (top-k G2 &{10 -4 })
  │    ├── [presentation: d:1,e:2,f:3,g:4] [ordering: -4]
  │    │    ├── best: (top-k G2 &{10 -4 })
- │    │    └── cost: 1201.77
+ │    │    └── cost: 1205.77
  │    └── []
  │         ├── best: (top-k G2 &{10 -4 })
- │         └── cost: 1201.77
+ │         └── cost: 1205.77
  ├── G2: (scan defg,cols=(1-4))
  │    ├── [ordering: -4] [limit hint: 10.00]
  │    │    ├── best: (sort G2)
- │    │    └── cost: 1374.40
+ │    │    └── cost: 1378.40
  │    └── []
  │         ├── best: (scan defg,cols=(1-4))
- │         └── cost: 1114.92
+ │         └── cost: 1118.92
  └── G3: (const 10)
 
 # No index matches.
@@ -2532,49 +2532,608 @@ scalar-group-by
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(1-3)
- │    ├── union-all
+ │    ├── sort
  │    │    ├── columns: a:1!null b:2!null c:3!null
- │    │    ├── left columns: a:8 b:9 c:10
- │    │    ├── right columns: a:14 b:15 c:16
  │    │    ├── ordering: +1
  │    │    ├── limit hint: 1.00
- │    │    ├── limit
- │    │    │    ├── columns: a:8!null b:9!null c:10!null
- │    │    │    ├── internal-ordering: +8 opt(9,10)
- │    │    │    ├── cardinality: [0 - 1]
- │    │    │    ├── key: ()
- │    │    │    ├── fd: ()-->(8-10)
- │    │    │    ├── limit hint: 1.00
- │    │    │    ├── select
- │    │    │    │    ├── columns: a:8!null b:9!null c:10!null
- │    │    │    │    ├── fd: ()-->(9,10)
- │    │    │    │    ├── ordering: +8 opt(9,10) [actual: +8]
- │    │    │    │    ├── limit hint: 1.00
- │    │    │    │    ├── scan t88993@bca_idx
- │    │    │    │    │    ├── columns: a:8!null b:9!null c:10!null
- │    │    │    │    │    ├── constraint: /9/10/8/11: (/11/50/NULL - /11/50]
- │    │    │    │    │    ├── flags: force-index=bca_idx
- │    │    │    │    │    ├── fd: ()-->(9,10)
- │    │    │    │    │    └── ordering: +8 opt(9,10) [actual: +8]
- │    │    │    │    └── filters
- │    │    │    │         └── (((b:9 <= 11) AND (c:10 < 50)) OR ((b:9 = 11) AND (c:10 = 50))) OR ((b:9 >= 11) AND (c:10 > 50)) [outer=(9,10), constraints=(/9: (/NULL - ]; /10: (/NULL - /49] [/50 - /50] [/51 - ])]
- │    │    │    └── 1
- │    │    └── sort
- │    │         ├── columns: a:14!null b:15!null c:16!null
- │    │         ├── ordering: +14
- │    │         ├── limit hint: 1.00
- │    │         └── select
- │    │              ├── columns: a:14!null b:15!null c:16!null
- │    │              ├── scan t88993@bca_idx
- │    │              │    ├── columns: a:14 b:15!null c:16
- │    │              │    ├── constraint: /15/16/14/17
- │    │              │    │    ├── (/NULL - /11/49]
- │    │              │    │    └── (/11/51/NULL - ]
- │    │              │    └── flags: force-index=bca_idx
- │    │              └── filters
- │    │                   ├── (((b:15 <= 11) AND (c:16 < 50)) OR ((b:15 = 11) AND (c:16 = 50))) OR ((b:15 >= 11) AND (c:16 > 50)) [outer=(15,16), constraints=(/15: (/NULL - ]; /16: (/NULL - /49] [/50 - /50] [/51 - ])]
- │    │                   └── a:14 IS NOT NULL [outer=(14), constraints=(/14: (/NULL - ]; tight)]
+ │    │    └── select
+ │    │         ├── columns: a:1!null b:2!null c:3!null
+ │    │         ├── scan t88993@bca_idx
+ │    │         │    ├── columns: a:1 b:2!null c:3
+ │    │         │    ├── constraint: /2/3/1/4
+ │    │         │    │    ├── (/NULL - /11/49]
+ │    │         │    │    ├── (/11/50/NULL - /11/50]
+ │    │         │    │    └── (/11/51/NULL - ]
+ │    │         │    └── flags: force-index=bca_idx
+ │    │         └── filters
+ │    │              ├── (((b:2 <= 11) AND (c:3 < 50)) OR ((b:2 = 11) AND (c:3 = 50))) OR ((b:2 >= 11) AND (c:3 > 50)) [outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - /49] [/50 - /50] [/51 - ])]
+ │    │              └── a:1 IS NOT NULL [outer=(1), constraints=(/1: (/NULL - ]; tight)]
  │    └── 1
  └── aggregations
       └── const-agg [as=min:7, outer=(1)]
            └── a:1
+
+# Regression Test for #93410
+exec-ddl
+CREATE TABLE t93410 (
+        col1 INT NOT NULL,
+        col2 INT NOT NULL,
+        col3 INT NOT NULL,
+        col4 INT NOT NULL,
+        col5 INT NOT NULL,
+        col6 INT NOT NULL,
+        col7 INT NOT NULL,
+        col8 INT NOT NULL,
+        col9 INT NOT NULL,
+        col10 INT NOT NULL,
+        col11 INT NOT NULL,
+        col12 INT NULL,
+        col13 INT NULL,
+        col14 INT NOT NULL,
+        col15 INT NULL,
+        col16 INT,
+        CONSTRAINT "primary" PRIMARY KEY (col1 ASC, col2 ASC, col3 ASC, col4 ASC, col5 ASC),
+        CONSTRAINT fk_col1_ref_t93410 FOREIGN KEY (col1, col2, col3, col4, col12) REFERENCES t93410(col1, col2, col3, col4, col5) ON DELETE CASCADE,
+        UNIQUE INDEX t93410_col1_col2_col3_col5_key (col1 ASC, col2 ASC, col3 ASC, col5 ASC),
+        INDEX t93410_col13_idx (col13 ASC),
+        INDEX t93410_col1_col2_col13_col15_idx (col1 ASC, col2 ASC, col13 ASC, col15 ASC),
+        UNIQUE INDEX t93410_col1_col2_col5_col9_key (col1 ASC, col2 ASC, col5 ASC, col9 ASC),
+        UNIQUE INDEX t93410_col1_col2_col5_key (col1 ASC, col2 ASC, col5 ASC)
+)
+----
+
+exec-ddl
+CREATE TABLE t93410_2 (
+        col1 INT NOT NULL,
+        col2 INT NOT NULL,
+        col3 INT NOT NULL,
+        col4 INT NOT NULL,
+        col5 INT NOT NULL,
+        col6 INT NOT NULL,
+        CONSTRAINT "primary" PRIMARY KEY (col1 ASC, col2 ASC, col3 ASC, col5 ASC, col6 ASC),
+        CONSTRAINT fk_col1_ref_t93410 FOREIGN KEY (col1, col2, col3, col4, col5) REFERENCES t93410(col1, col2, col3, col4, col5) ON DELETE CASCADE,
+        INDEX t93410_2_col1_col2_col3_col4_col5_idx (col1 ASC, col2 ASC, col3 ASC, col4 ASC, col5 ASC)
+)
+----
+
+exec-ddl
+ALTER TABLE t93410 INJECT STATISTICS '[
+    {
+        "avg_size": 2,
+        "columns": [
+            "col1"
+        ],
+        "created_at": "2022-12-15 19:58:40.9211",
+        "distinct_count": 100000,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 300002,
+                "num_range": 0,
+                "upper_bound": "1"
+            },
+            {
+                "distinct_range": 100000,
+                "num_eq": 0,
+                "num_range": 100000,
+                "upper_bound": "100000"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "histo_version": 2,
+        "null_count": 0,
+        "row_count": 400001
+    },
+    {
+        "avg_size": 2,
+        "columns": [
+            "col2"
+        ],
+        "created_at": "2022-12-15 19:58:40.9211",
+        "distinct_count": 100000,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 300002,
+                "num_range": 0,
+                "upper_bound": "1"
+            },
+            {
+                "distinct_range": 100000,
+                "num_eq": 0,
+                "num_range": 100000,
+                "upper_bound": "100000"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "histo_version": 2,
+        "null_count": 0,
+        "row_count": 400001
+    }
+]';
+----
+
+exec-ddl
+ALTER TABLE t93410_2 INJECT STATISTICS '[
+    {
+        "avg_size": 2,
+        "columns": [
+            "col1"
+        ],
+        "created_at": "2022-12-15 19:58:40.9211",
+        "distinct_count": 100000,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 300002,
+                "num_range": 0,
+                "upper_bound": "1"
+            },
+            {
+                "distinct_range": 100000,
+                "num_eq": 0,
+                "num_range": 100000,
+                "upper_bound": "100000"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "histo_version": 2,
+        "null_count": 0,
+        "row_count": 400001
+    },
+    {
+        "avg_size": 2,
+        "columns": [
+            "col2"
+        ],
+        "created_at": "2022-12-15 19:58:40.9211",
+        "distinct_count": 100000,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 300002,
+                "num_range": 0,
+                "upper_bound": "1"
+            },
+            {
+                "distinct_range": 100000,
+                "num_eq": 0,
+                "num_range": 100000,
+                "upper_bound": "100000"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "histo_version": 2,
+        "null_count": 0,
+        "row_count": 400001
+    }
+]';
+----
+
+# A streaming group-by with no TopK operation should be generated.
+opt expect=GenerateStreamingGroupByLimitOrderingHint
+SELECT
+  DISTINCT
+  t1.col1,
+  t1.col2,
+  t1.col3,
+  t1.col4,
+  t1.col5,
+  t1.col6,
+  t1.col7,
+  t1.col8,
+  t1.col9,
+  t1.col10,
+  t1.col11,
+  t1.col12,
+  t1.col13,
+  t1.col14,
+  t1.col15,
+  t1.col16,
+  array_remove(array_agg(t2.col6), NULL) AS col6s
+FROM
+  t93410 AS t1
+  LEFT OUTER JOIN t93410_2
+      AS t2 USING (col1, col2, col3, col4, col5)
+WHERE
+  t1.col2 = 1
+  AND t1.col1 = 1
+GROUP BY
+  t1.col1,
+  t1.col2,
+  t1.col3,
+  t1.col4,
+  t1.col5
+ORDER BY
+  col9 DESC, t1.col5 DESC
+LIMIT 20
+----
+project
+ ├── columns: col1:1!null col2:2!null col3:3!null col4:4!null col5:5!null col6:6!null col7:7!null col8:8!null col9:9!null col10:10!null col11:11!null col12:12 col13:13 col14:14!null col15:15 col16:16 col6s:28
+ ├── cardinality: [0 - 20]
+ ├── immutable
+ ├── key: (5)
+ ├── fd: ()-->(1,2), (5)-->(3,4,6-16,28)
+ ├── ordering: -9,-5 opt(1,2) [actual: -9,-5]
+ ├── limit
+ │    ├── columns: t1.col1:1!null t1.col2:2!null t1.col3:3!null t1.col4:4!null t1.col5:5!null t1.col6:6!null col7:7!null col8:8!null col9:9!null col10:10!null col11:11!null col12:12 col13:13 col14:14!null col15:15 col16:16 array_agg:27
+ │    ├── internal-ordering: -9,-5 opt(1,2)
+ │    ├── cardinality: [0 - 20]
+ │    ├── key: (5)
+ │    ├── fd: ()-->(1,2), (5)-->(1-4,6-16,27)
+ │    ├── ordering: -9,-5 opt(1,2) [actual: -9,-5]
+ │    ├── group-by (streaming)
+ │    │    ├── columns: t1.col1:1!null t1.col2:2!null t1.col3:3!null t1.col4:4!null t1.col5:5!null t1.col6:6!null col7:7!null col8:8!null col9:9!null col10:10!null col11:11!null col12:12 col13:13 col14:14!null col15:15 col16:16 array_agg:27
+ │    │    ├── grouping columns: t1.col5:5!null col9:9!null
+ │    │    ├── internal-ordering: -9,-5 opt(1,2)
+ │    │    ├── key: (5)
+ │    │    ├── fd: ()-->(1,2), (5)-->(1-4,6-16,27)
+ │    │    ├── ordering: -9,-5 opt(1,2) [actual: -9,-5]
+ │    │    ├── limit hint: 20.00
+ │    │    ├── left-join (lookup t93410_2@t93410_2_col1_col2_col3_col4_col5_idx [as=t2])
+ │    │    │    ├── columns: t1.col1:1!null t1.col2:2!null t1.col3:3!null t1.col4:4!null t1.col5:5!null t1.col6:6!null col7:7!null col8:8!null col9:9!null col10:10!null col11:11!null col12:12 col13:13 col14:14!null col15:15 col16:16 t2.col1:19 t2.col2:20 t2.col3:21 t2.col4:22 t2.col5:23 t2.col6:24
+ │    │    │    ├── key columns: [1 2 3 4 5] = [19 20 21 22 23]
+ │    │    │    ├── key: (5,21,23,24)
+ │    │    │    ├── fd: ()-->(1,2), (5)-->(3,4,6-16), (21,23,24)-->(22), (5,21,23,24)-->(19,20)
+ │    │    │    ├── ordering: -9,-5 opt(1,2) [actual: -9,-5]
+ │    │    │    ├── limit hint: 20.00
+ │    │    │    ├── index-join t93410
+ │    │    │    │    ├── columns: t1.col1:1!null t1.col2:2!null t1.col3:3!null t1.col4:4!null t1.col5:5!null t1.col6:6!null col7:7!null col8:8!null col9:9!null col10:10!null col11:11!null col12:12 col13:13 col14:14!null col15:15 col16:16
+ │    │    │    │    ├── key: (5)
+ │    │    │    │    ├── fd: ()-->(1,2), (5)-->(3,4,6-16)
+ │    │    │    │    ├── ordering: -9,-5 opt(1,2) [actual: -9,-5]
+ │    │    │    │    ├── limit hint: 100.00
+ │    │    │    │    └── sort
+ │    │    │    │         ├── columns: t1.col1:1!null t1.col2:2!null t1.col3:3!null t1.col4:4!null t1.col5:5!null col9:9!null
+ │    │    │    │         ├── key: (5)
+ │    │    │    │         ├── fd: ()-->(1,2), (5)-->(3,4,9)
+ │    │    │    │         ├── ordering: -9,-5 opt(1,2) [actual: -9,-5]
+ │    │    │    │         ├── limit hint: 100.00
+ │    │    │    │         └── scan t93410@t93410_col1_col2_col5_col9_key [as=t1]
+ │    │    │    │              ├── columns: t1.col1:1!null t1.col2:2!null t1.col3:3!null t1.col4:4!null t1.col5:5!null col9:9!null
+ │    │    │    │              ├── constraint: /1/2/5/9: [/1/1 - /1/1]
+ │    │    │    │              ├── key: (5)
+ │    │    │    │              └── fd: ()-->(1,2), (5)-->(3,4,9)
+ │    │    │    └── filters
+ │    │    │         ├── t2.col2:20 = 1 [outer=(20), constraints=(/20: [/1 - /1]; tight), fd=()-->(20)]
+ │    │    │         ├── t2.col1:19 = 1 [outer=(19), constraints=(/19: [/1 - /1]; tight), fd=()-->(19)]
+ │    │    │         ├── t2.col3:21 = t1.col3:3 [outer=(3,21), constraints=(/3: (/NULL - ]; /21: (/NULL - ]), fd=(3)==(21), (21)==(3)]
+ │    │    │         └── t2.col4:22 = t1.col4:4 [outer=(4,22), constraints=(/4: (/NULL - ]; /22: (/NULL - ]), fd=(4)==(22), (22)==(4)]
+ │    │    └── aggregations
+ │    │         ├── array-agg [as=array_agg:27, outer=(24)]
+ │    │         │    └── t2.col6:24
+ │    │         ├── const-agg [as=t1.col1:1, outer=(1)]
+ │    │         │    └── t1.col1:1
+ │    │         ├── const-agg [as=t1.col2:2, outer=(2)]
+ │    │         │    └── t1.col2:2
+ │    │         ├── const-agg [as=t1.col3:3, outer=(3)]
+ │    │         │    └── t1.col3:3
+ │    │         ├── const-agg [as=t1.col4:4, outer=(4)]
+ │    │         │    └── t1.col4:4
+ │    │         ├── const-agg [as=t1.col6:6, outer=(6)]
+ │    │         │    └── t1.col6:6
+ │    │         ├── const-agg [as=col7:7, outer=(7)]
+ │    │         │    └── col7:7
+ │    │         ├── const-agg [as=col8:8, outer=(8)]
+ │    │         │    └── col8:8
+ │    │         ├── const-agg [as=col10:10, outer=(10)]
+ │    │         │    └── col10:10
+ │    │         ├── const-agg [as=col11:11, outer=(11)]
+ │    │         │    └── col11:11
+ │    │         ├── const-agg [as=col12:12, outer=(12)]
+ │    │         │    └── col12:12
+ │    │         ├── const-agg [as=col13:13, outer=(13)]
+ │    │         │    └── col13:13
+ │    │         ├── const-agg [as=col14:14, outer=(14)]
+ │    │         │    └── col14:14
+ │    │         ├── const-agg [as=col15:15, outer=(15)]
+ │    │         │    └── col15:15
+ │    │         └── const-agg [as=col16:16, outer=(16)]
+ │    │              └── col16:16
+ │    └── 20
+ └── projections
+      └── array_remove(array_agg:27, NULL) [as=col6s:28, outer=(27), immutable]
+
+# GenerateStreamingGroupByLimitOrderingHint should not fire if there is no
+# overlap between the grouping columns and order-by columns.
+opt expect-not=GenerateStreamingGroupByLimitOrderingHint
+SELECT
+  DISTINCT
+  t2.col1,
+  t2.col2,
+  t2.col3,
+  t2.col4,
+  t2.col5,
+  array_remove(array_agg(t1.col6), NULL) AS col6s
+FROM
+  t93410 AS t1
+  LEFT OUTER JOIN t93410_2
+      AS t2 USING (col1, col2, col3, col4, col5)
+WHERE
+  t1.col2 = 1
+  AND t1.col1 = 1
+GROUP BY
+  t2.col1,
+  t2.col2,
+  t2.col3,
+  t2.col4,
+  t2.col5
+ORDER BY
+  col6s DESC
+LIMIT 20
+----
+top-k
+ ├── columns: col1:19 col2:20 col3:21 col4:22 col5:23 col6s:28
+ ├── internal-ordering: -28
+ ├── k: 20
+ ├── cardinality: [0 - 20]
+ ├── immutable
+ ├── key: (19-23)
+ ├── fd: (19-23)-->(28)
+ ├── ordering: -28
+ └── project
+      ├── columns: col6s:28 t2.col1:19 t2.col2:20 t2.col3:21 t2.col4:22 t2.col5:23
+      ├── immutable
+      ├── key: (19-23)
+      ├── fd: (19-23)-->(28)
+      ├── group-by (hash)
+      │    ├── columns: t2.col1:19 t2.col2:20 t2.col3:21 t2.col4:22 t2.col5:23 array_agg:27!null
+      │    ├── grouping columns: t2.col1:19 t2.col2:20 t2.col3:21 t2.col4:22 t2.col5:23
+      │    ├── key: (19-23)
+      │    ├── fd: (19-23)-->(27)
+      │    ├── left-join (merge)
+      │    │    ├── columns: t1.col1:1!null t1.col2:2!null t1.col3:3!null t1.col4:4!null t1.col5:5!null t1.col6:6!null t2.col1:19 t2.col2:20 t2.col3:21 t2.col4:22 t2.col5:23
+      │    │    ├── left ordering: +3,+4,+5,+1,+2
+      │    │    ├── right ordering: +21,+22,+23,+19,+20
+      │    │    ├── fd: ()-->(1,2), (5)-->(3,4,6)
+      │    │    ├── scan t93410 [as=t1]
+      │    │    │    ├── columns: t1.col1:1!null t1.col2:2!null t1.col3:3!null t1.col4:4!null t1.col5:5!null t1.col6:6!null
+      │    │    │    ├── constraint: /1/2/3/4/5: [/1/1 - /1/1]
+      │    │    │    ├── key: (5)
+      │    │    │    ├── fd: ()-->(1,2), (5)-->(3,4,6)
+      │    │    │    └── ordering: +3,+4,+5 opt(1,2) [actual: +3,+4,+5]
+      │    │    ├── scan t93410_2@t93410_2_col1_col2_col3_col4_col5_idx [as=t2]
+      │    │    │    ├── columns: t2.col1:19!null t2.col2:20!null t2.col3:21!null t2.col4:22!null t2.col5:23!null
+      │    │    │    ├── constraint: /19/20/21/22/23/24: [/1/1 - /1/1]
+      │    │    │    ├── fd: ()-->(19,20)
+      │    │    │    └── ordering: +21,+22,+23 opt(19,20) [actual: +21,+22,+23]
+      │    │    └── filters (true)
+      │    └── aggregations
+      │         └── array-agg [as=array_agg:27, outer=(6)]
+      │              └── t1.col6:6
+      └── projections
+           └── array_remove(array_agg:27, NULL) [as=col6s:28, outer=(27), immutable]
+
+# A distinct-on which satisfies the required ordering should be used.
+opt expect=GenerateStreamingGroupByLimitOrderingHint
+SELECT
+  DISTINCT ON (t1.col5, t1.col9) t2.col2
+FROM
+  t93410 AS t1
+  LEFT OUTER JOIN t93410_2
+      AS t2 USING (col1, col2, col3, col4, col5)
+WHERE
+  t1.col2 = 1
+  AND t1.col1 = 1
+ORDER BY
+  col9 ASC, t1.col5 DESC
+LIMIT 20
+----
+limit
+ ├── columns: col2:20  [hidden: t1.col5:5!null col9:9!null]
+ ├── internal-ordering: +9,-5
+ ├── cardinality: [0 - 20]
+ ├── key: (5)
+ ├── fd: (5)-->(9,20)
+ ├── ordering: +9,-5
+ ├── distinct-on
+ │    ├── columns: t1.col5:5!null col9:9!null t2.col2:20
+ │    ├── grouping columns: t1.col5:5!null col9:9!null
+ │    ├── internal-ordering: +9,-5 opt(1,2)
+ │    ├── key: (5)
+ │    ├── fd: (5)-->(9,20)
+ │    ├── ordering: +9,-5
+ │    ├── limit hint: 20.00
+ │    ├── left-join (lookup t93410_2@t93410_2_col1_col2_col3_col4_col5_idx [as=t2])
+ │    │    ├── columns: t1.col1:1!null t1.col2:2!null t1.col3:3!null t1.col4:4!null t1.col5:5!null col9:9!null t2.col1:19 t2.col2:20 t2.col3:21 t2.col4:22 t2.col5:23
+ │    │    ├── key columns: [1 2 3 4 5] = [19 20 21 22 23]
+ │    │    ├── fd: ()-->(1,2), (5)-->(3,4,9)
+ │    │    ├── ordering: +9,-5 opt(1,2) [actual: +9,-5]
+ │    │    ├── limit hint: 24.00
+ │    │    ├── sort
+ │    │    │    ├── columns: t1.col1:1!null t1.col2:2!null t1.col3:3!null t1.col4:4!null t1.col5:5!null col9:9!null
+ │    │    │    ├── key: (5)
+ │    │    │    ├── fd: ()-->(1,2), (5)-->(3,4,9)
+ │    │    │    ├── ordering: +9,-5 opt(1,2) [actual: +9,-5]
+ │    │    │    ├── limit hint: 100.00
+ │    │    │    └── scan t93410@t93410_col1_col2_col5_col9_key [as=t1]
+ │    │    │         ├── columns: t1.col1:1!null t1.col2:2!null t1.col3:3!null t1.col4:4!null t1.col5:5!null col9:9!null
+ │    │    │         ├── constraint: /1/2/5/9: [/1/1 - /1/1]
+ │    │    │         ├── key: (5)
+ │    │    │         └── fd: ()-->(1,2), (5)-->(3,4,9)
+ │    │    └── filters
+ │    │         ├── t2.col2:20 = 1 [outer=(20), constraints=(/20: [/1 - /1]; tight), fd=()-->(20)]
+ │    │         ├── t2.col1:19 = 1 [outer=(19), constraints=(/19: [/1 - /1]; tight), fd=()-->(19)]
+ │    │         ├── t2.col3:21 = t1.col3:3 [outer=(3,21), constraints=(/3: (/NULL - ]; /21: (/NULL - ]), fd=(3)==(21), (21)==(3)]
+ │    │         └── t2.col4:22 = t1.col4:4 [outer=(4,22), constraints=(/4: (/NULL - ]; /22: (/NULL - ]), fd=(4)==(22), (22)==(4)]
+ │    └── aggregations
+ │         └── first-agg [as=t2.col2:20, outer=(20)]
+ │              └── t2.col2:20
+ └── 20
+
+# This should generate a partial streaming aggregation.
+opt expect=GenerateStreamingGroupByLimitOrderingHint
+SELECT
+  count(*)
+FROM
+  t93410 AS t1
+  LEFT OUTER JOIN t93410_2
+      AS t2 USING (col1, col2, col3, col4)
+WHERE
+  t1.col2 = 1
+GROUP BY
+  t1.col2,
+  t1.col3,
+  t1.col4
+ORDER BY
+  t1.col4 DESC
+LIMIT 20
+----
+project
+ ├── columns: count:27!null  [hidden: t1.col4:4!null]
+ ├── cardinality: [0 - 20]
+ ├── ordering: -4
+ └── limit
+      ├── columns: t1.col3:3!null t1.col4:4!null count_rows:27!null
+      ├── internal-ordering: -4
+      ├── cardinality: [0 - 20]
+      ├── key: (3,4)
+      ├── fd: (3,4)-->(27)
+      ├── ordering: -4
+      ├── group-by (partial streaming)
+      │    ├── columns: t1.col3:3!null t1.col4:4!null count_rows:27!null
+      │    ├── grouping columns: t1.col3:3!null t1.col4:4!null
+      │    ├── key: (3,4)
+      │    ├── fd: (3,4)-->(27)
+      │    ├── ordering: -4
+      │    ├── limit hint: 20.00
+      │    ├── left-join (lookup t93410_2@t93410_2_col1_col2_col3_col4_col5_idx [as=t2])
+      │    │    ├── columns: t1.col1:1!null t1.col2:2!null t1.col3:3!null t1.col4:4!null t2.col1:19 t2.col2:20 t2.col3:21 t2.col4:22
+      │    │    ├── key columns: [1 2 3 4] = [19 20 21 22]
+      │    │    ├── fd: ()-->(2)
+      │    │    ├── ordering: -4 opt(2) [actual: -4]
+      │    │    ├── limit hint: 20.00
+      │    │    ├── sort
+      │    │    │    ├── columns: t1.col1:1!null t1.col2:2!null t1.col3:3!null t1.col4:4!null
+      │    │    │    ├── fd: ()-->(2)
+      │    │    │    ├── ordering: -4 opt(2) [actual: -4]
+      │    │    │    ├── limit hint: 100.00
+      │    │    │    └── select
+      │    │    │         ├── columns: t1.col1:1!null t1.col2:2!null t1.col3:3!null t1.col4:4!null
+      │    │    │         ├── fd: ()-->(2)
+      │    │    │         ├── scan t93410@t93410_col1_col2_col3_col5_key [as=t1]
+      │    │    │         │    └── columns: t1.col1:1!null t1.col2:2!null t1.col3:3!null t1.col4:4!null
+      │    │    │         └── filters
+      │    │    │              └── t1.col2:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+      │    │    └── filters
+      │    │         └── t2.col2:20 = 1 [outer=(20), constraints=(/20: [/1 - /1]; tight), fd=()-->(20)]
+      │    └── aggregations
+      │         └── count-rows [as=count_rows:27]
+      └── 20
+
+# A query which normally would produce a streaming group-by with no TopK
+# operation produces a TopK if the GenerateStreamingGroupByLimitOrderingHint
+# rule is disabled.
+opt expect-not=GenerateStreamingGroupByLimitOrderingHint set=optimizer_use_limit_ordering_for_streaming_group_by=false
+SELECT
+  DISTINCT
+  t1.col1,
+  t1.col2,
+  t1.col3,
+  t1.col4,
+  t1.col5,
+  t1.col6,
+  t1.col7,
+  t1.col8,
+  t1.col9,
+  t1.col10,
+  t1.col11,
+  t1.col12,
+  t1.col13,
+  t1.col14,
+  t1.col15,
+  t1.col16,
+  array_remove(array_agg(t2.col6), NULL) AS col6s
+FROM
+  t93410 AS t1
+  LEFT OUTER JOIN t93410_2
+      AS t2 USING (col1, col2, col3, col4, col5)
+WHERE
+  t1.col2 = 1
+  AND t1.col1 = 1
+GROUP BY
+  t1.col1,
+  t1.col2,
+  t1.col3,
+  t1.col4,
+  t1.col5
+ORDER BY
+  col9 DESC, t1.col5 DESC
+LIMIT 20
+----
+project
+ ├── columns: col1:1!null col2:2!null col3:3!null col4:4!null col5:5!null col6:6!null col7:7!null col8:8!null col9:9!null col10:10!null col11:11!null col12:12 col13:13 col14:14!null col15:15 col16:16 col6s:28
+ ├── cardinality: [0 - 20]
+ ├── immutable
+ ├── key: (5)
+ ├── fd: ()-->(1,2), (5)-->(3,4,6-16,28)
+ ├── ordering: -9,-5 opt(1,2) [actual: -9,-5]
+ ├── top-k
+ │    ├── columns: t1.col1:1!null t1.col2:2!null t1.col3:3!null t1.col4:4!null t1.col5:5!null t1.col6:6!null col7:7!null col8:8!null col9:9!null col10:10!null col11:11!null col12:12 col13:13 col14:14!null col15:15 col16:16 array_agg:27
+ │    ├── internal-ordering: -9,-5 opt(1,2)
+ │    ├── k: 20
+ │    ├── cardinality: [0 - 20]
+ │    ├── key: (5)
+ │    ├── fd: ()-->(1,2), (5)-->(1-4,6-16,27)
+ │    ├── ordering: -9,-5 opt(1,2) [actual: -9,-5]
+ │    └── group-by (hash)
+ │         ├── columns: t1.col1:1!null t1.col2:2!null t1.col3:3!null t1.col4:4!null t1.col5:5!null t1.col6:6!null col7:7!null col8:8!null col9:9!null col10:10!null col11:11!null col12:12 col13:13 col14:14!null col15:15 col16:16 array_agg:27
+ │         ├── grouping columns: t1.col5:5!null
+ │         ├── key: (5)
+ │         ├── fd: ()-->(1,2), (5)-->(1-4,6-16,27)
+ │         ├── left-join (merge)
+ │         │    ├── columns: t1.col1:1!null t1.col2:2!null t1.col3:3!null t1.col4:4!null t1.col5:5!null t1.col6:6!null col7:7!null col8:8!null col9:9!null col10:10!null col11:11!null col12:12 col13:13 col14:14!null col15:15 col16:16 t2.col1:19 t2.col2:20 t2.col3:21 t2.col4:22 t2.col5:23 t2.col6:24
+ │         │    ├── left ordering: +3,+4,+5,+1,+2
+ │         │    ├── right ordering: +21,+22,+23,+19,+20
+ │         │    ├── key: (5,21,23,24)
+ │         │    ├── fd: ()-->(1,2), (5)-->(3,4,6-16), (21,23,24)-->(22), (5,21,23,24)-->(19,20)
+ │         │    ├── scan t93410 [as=t1]
+ │         │    │    ├── columns: t1.col1:1!null t1.col2:2!null t1.col3:3!null t1.col4:4!null t1.col5:5!null t1.col6:6!null col7:7!null col8:8!null col9:9!null col10:10!null col11:11!null col12:12 col13:13 col14:14!null col15:15 col16:16
+ │         │    │    ├── constraint: /1/2/3/4/5: [/1/1 - /1/1]
+ │         │    │    ├── key: (5)
+ │         │    │    ├── fd: ()-->(1,2), (5)-->(3,4,6-16)
+ │         │    │    └── ordering: +3,+4,+5 opt(1,2) [actual: +3,+4,+5]
+ │         │    ├── scan t93410_2@t93410_2_col1_col2_col3_col4_col5_idx [as=t2]
+ │         │    │    ├── columns: t2.col1:19!null t2.col2:20!null t2.col3:21!null t2.col4:22!null t2.col5:23!null t2.col6:24!null
+ │         │    │    ├── constraint: /19/20/21/22/23/24: [/1/1 - /1/1]
+ │         │    │    ├── key: (21,23,24)
+ │         │    │    ├── fd: ()-->(19,20), (21,23,24)-->(22)
+ │         │    │    └── ordering: +21,+22,+23 opt(19,20) [actual: +21,+22,+23]
+ │         │    └── filters (true)
+ │         └── aggregations
+ │              ├── array-agg [as=array_agg:27, outer=(24)]
+ │              │    └── t2.col6:24
+ │              ├── const-agg [as=t1.col1:1, outer=(1)]
+ │              │    └── t1.col1:1
+ │              ├── const-agg [as=t1.col2:2, outer=(2)]
+ │              │    └── t1.col2:2
+ │              ├── const-agg [as=t1.col3:3, outer=(3)]
+ │              │    └── t1.col3:3
+ │              ├── const-agg [as=t1.col4:4, outer=(4)]
+ │              │    └── t1.col4:4
+ │              ├── const-agg [as=t1.col6:6, outer=(6)]
+ │              │    └── t1.col6:6
+ │              ├── const-agg [as=col7:7, outer=(7)]
+ │              │    └── col7:7
+ │              ├── const-agg [as=col8:8, outer=(8)]
+ │              │    └── col8:8
+ │              ├── const-agg [as=col9:9, outer=(9)]
+ │              │    └── col9:9
+ │              ├── const-agg [as=col10:10, outer=(10)]
+ │              │    └── col10:10
+ │              ├── const-agg [as=col11:11, outer=(11)]
+ │              │    └── col11:11
+ │              ├── const-agg [as=col12:12, outer=(12)]
+ │              │    └── col12:12
+ │              ├── const-agg [as=col13:13, outer=(13)]
+ │              │    └── col13:13
+ │              ├── const-agg [as=col14:14, outer=(14)]
+ │              │    └── col14:14
+ │              ├── const-agg [as=col15:15, outer=(15)]
+ │              │    └── col15:15
+ │              └── const-agg [as=col16:16, outer=(16)]
+ │                   └── col16:16
+ └── projections
+      └── array_remove(array_agg:27, NULL) [as=col6s:28, outer=(27), immutable]
+
+# End Regression Test for #93410

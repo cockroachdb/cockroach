@@ -22,7 +22,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"     // Ensure changefeed init hooks run.
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl" // Ensure we can start tenant.
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
-	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamingtest"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationtestutils"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -61,7 +62,7 @@ type pgConnReplicationFeedSource struct {
 	}
 }
 
-var _ streamingtest.FeedSource = (*pgConnReplicationFeedSource)(nil)
+var _ replicationtestutils.FeedSource = (*pgConnReplicationFeedSource)(nil)
 
 type pgConnEventDecoder interface {
 	decode()
@@ -158,11 +159,11 @@ func (f *pgConnReplicationFeedSource) Error() error {
 // startReplication starts replication stream, specified as query and its args.
 func startReplication(
 	t *testing.T,
-	r *streamingtest.ReplicationHelper,
+	r *replicationtestutils.ReplicationHelper,
 	codecFactory eventDecoderFactory,
 	create string,
 	args ...interface{},
-) (*pgConnReplicationFeedSource, *streamingtest.ReplicationFeed) {
+) (*pgConnReplicationFeedSource, *replicationtestutils.ReplicationFeed) {
 	sink := r.PGUrl
 	sink.RawQuery = r.PGUrl.Query().Encode()
 
@@ -175,7 +176,7 @@ func startReplication(
 	conn, err := pgx.ConnectConfig(queryCtx, pgxConfig)
 	require.NoError(t, err)
 
-	rows, err := conn.Query(queryCtx, `SET enable_experimental_stream_replication = true`)
+	rows, err := conn.Query(queryCtx, `SET CLUSTER SETTING cross_cluster_replication.enabled = true;`)
 	require.NoError(t, err)
 	rows.Close()
 
@@ -191,7 +192,7 @@ func startReplication(
 	}
 	feedSource.mu.rows = rows
 	feedSource.mu.codec = codecFactory(t, rows)
-	return feedSource, streamingtest.MakeReplicationFeed(t, feedSource)
+	return feedSource, replicationtestutils.MakeReplicationFeed(t, feedSource)
 }
 
 func testStreamReplicationStatus(
@@ -239,7 +240,7 @@ func TestReplicationStreamInitialization(t *testing.T) {
 		},
 	}
 
-	h, cleanup := streamingtest.NewReplicationHelper(t, serverArgs)
+	h, cleanup := replicationtestutils.NewReplicationHelper(t, serverArgs)
 	defer cleanup()
 	testTenantName := roachpb.TenantName("test-tenant")
 	srcTenant, cleanupTenant := h.CreateTenant(t, serverutils.TestTenantID(), testTenantName)
@@ -295,8 +296,8 @@ func TestReplicationStreamInitialization(t *testing.T) {
 
 func encodeSpec(
 	t *testing.T,
-	h *streamingtest.ReplicationHelper,
-	srcTenant streamingtest.TenantState,
+	h *replicationtestutils.ReplicationHelper,
+	srcTenant replicationtestutils.TenantState,
 	initialScanTime hlc.Timestamp,
 	previousHighWater hlc.Timestamp,
 	tables ...string,
@@ -325,7 +326,7 @@ func encodeSpec(
 func TestStreamPartition(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	h, cleanup := streamingtest.NewReplicationHelper(t,
+	h, cleanup := replicationtestutils.NewReplicationHelper(t,
 		base.TestServerArgs{
 			// Test fails within a test tenant. More investigation is required.
 			// Tracked with #76378.
@@ -371,7 +372,7 @@ USE d;
 		})
 		require.Nil(t, err)
 
-		expected := streamingtest.EncodeKV(t, srcTenant.Codec, t2Descr, 42)
+		expected := replicationtestutils.EncodeKV(t, srcTenant.Codec, t2Descr, 42)
 		feed.ObserveKey(ctx, expected.Key)
 		feed.ObserveError(ctx, func(err error) bool {
 			return strings.Contains(err.Error(), "unexpected MVCC history mutation") ||
@@ -387,7 +388,7 @@ USE d;
 				hlc.Timestamp{}, "t1"))
 		defer feed.Close(ctx)
 
-		expected := streamingtest.EncodeKV(t, srcTenant.Codec, t1Descr, 42)
+		expected := replicationtestutils.EncodeKV(t, srcTenant.Codec, t1Descr, 42)
 		firstObserved := feed.ObserveKey(ctx, expected.Key)
 
 		require.Equal(t, expected.Value.RawBytes, firstObserved.Value.RawBytes)
@@ -398,7 +399,7 @@ USE d;
 
 		// Update our row.
 		srcTenant.SQL.Exec(t, `UPDATE d.t1 SET b = 'world' WHERE i = 42`)
-		expected = streamingtest.EncodeKV(t, srcTenant.Codec, t1Descr, 42, nil, "world")
+		expected = replicationtestutils.EncodeKV(t, srcTenant.Codec, t1Descr, 42, nil, "world")
 
 		// Observe its changes.
 		secondObserved := feed.ObserveKey(ctx, expected.Key)
@@ -419,11 +420,11 @@ USE d;
 
 		// We should observe 2 versions of this key: one with ("привет", "world"), and a later
 		// version ("привет", "мир")
-		expected := streamingtest.EncodeKV(t, srcTenant.Codec, t1Descr, 42, "привет", "world")
+		expected := replicationtestutils.EncodeKV(t, srcTenant.Codec, t1Descr, 42, "привет", "world")
 		firstObserved := feed.ObserveKey(ctx, expected.Key)
 		require.Equal(t, expected.Value.RawBytes, firstObserved.Value.RawBytes)
 
-		expected = streamingtest.EncodeKV(t, srcTenant.Codec, t1Descr, 42, "привет", "мир")
+		expected = replicationtestutils.EncodeKV(t, srcTenant.Codec, t1Descr, 42, "привет", "мир")
 		secondObserved := feed.ObserveKey(ctx, expected.Key)
 		require.Equal(t, expected.Value.RawBytes, secondObserved.Value.RawBytes)
 	})
@@ -476,7 +477,7 @@ CREATE TABLE t3(
 func TestStreamAddSSTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	h, cleanup := streamingtest.NewReplicationHelper(t, base.TestServerArgs{
+	h, cleanup := replicationtestutils.NewReplicationHelper(t, base.TestServerArgs{
 		// Test hangs when run within the default test tenant. Tracked with
 		// #76378.
 		DisableDefaultTestTenant: true,
@@ -564,7 +565,7 @@ func TestCompleteStreamReplication(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	h, cleanup := streamingtest.NewReplicationHelper(t,
+	h, cleanup := replicationtestutils.NewReplicationHelper(t,
 		base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
@@ -610,9 +611,9 @@ func TestCompleteStreamReplication(t *testing.T) {
 		pj, err := jr.LoadJob(ctx, jobspb.JobID(streamID))
 		require.NoError(t, err)
 		payload := pj.Payload()
-		require.ErrorIs(t, h.SysServer.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			ptp := h.SysServer.DistSQLServer().(*distsql.ServerImpl).ServerConfig.ProtectedTimestampProvider
-			_, err = ptp.GetRecord(ctx, txn, payload.GetStreamReplication().ProtectedTimestampRecordID)
+		ptp := h.SysServer.DistSQLServer().(*distsql.ServerImpl).ServerConfig.ProtectedTimestampProvider
+		require.ErrorIs(t, h.SysServer.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			_, err = ptp.WithTxn(txn).GetRecord(ctx, payload.GetStreamReplication().ProtectedTimestampRecordID)
 			return err
 		}), protectedts.ErrNotExists)
 	}
@@ -649,7 +650,7 @@ func TestStreamDeleteRange(t *testing.T) {
 	skip.WithIssue(t, 93568)
 	skip.UnderStressRace(t, "disabled under stress and race")
 
-	h, cleanup := streamingtest.NewReplicationHelper(t, base.TestServerArgs{
+	h, cleanup := replicationtestutils.NewReplicationHelper(t, base.TestServerArgs{
 		// Test hangs when run within the default test tenant. Tracked with
 		// #76378.
 		DisableDefaultTestTenant: true,

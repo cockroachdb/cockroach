@@ -129,27 +129,24 @@ func TestSendToOneClient(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 	// This test uses the testing function sendBatch() which does not
 	// support setting the node ID on GRPCDialNode(). Disable Node ID
 	// checks to avoid log.Fatal.
 	rpcContext.TestingAllowNamedRPCToAnonymousServer = true
 
-	s := rpc.NewServer(rpcContext)
+	s, err := rpc.NewServer(rpcContext)
+	require.NoError(t, err)
 	roachpb.RegisterInternalServer(s, Node(0))
 	ln, err := netutil.ListenAndServeGRPC(rpcContext.Stopper, s, util.TestAddr)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	nodeDialer := nodedialer.New(rpcContext, func(roachpb.NodeID) (net.Addr, error) {
 		return ln.Addr(), nil
 	})
 
 	reply, err := sendBatch(ctx, t, nil, []net.Addr{ln.Addr()}, rpcContext, nodeDialer)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	if reply == nil {
 		t.Errorf("expected reply")
 	}
@@ -208,7 +205,7 @@ func TestComplexScenarios(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 	// We're going to serve multiple node IDs with that one
 	// context. Disable node ID checks.

@@ -15,12 +15,12 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -203,7 +203,7 @@ func (p *planner) canDropTable(
 func (p *planner) canRemoveFKBackreference(
 	ctx context.Context, from string, ref catalog.ForeignKeyConstraint, behavior tree.DropBehavior,
 ) error {
-	table, err := p.Descriptors().GetMutableTableVersionByID(ctx, ref.GetOriginTableID(), p.txn)
+	table, err := p.Descriptors().MutableByID(p.txn).Table(ctx, ref.GetOriginTableID())
 	if err != nil {
 		return err
 	}
@@ -415,11 +415,11 @@ func (p *planner) markTableMutationJobsSuccessful(
 		// in a batch only when the transaction commits. So, if a job's record exists
 		// in the cache, we can simply delete that record from cache because the
 		// job is not created yet.
-		if record, exists := p.ExtendedEvalContext().SchemaChangeJobRecords[tableDesc.ID]; exists && record.JobID == jobID {
-			delete(p.ExtendedEvalContext().SchemaChangeJobRecords, tableDesc.ID)
+		if record, exists := p.ExtendedEvalContext().jobs.uniqueToCreate[tableDesc.ID]; exists && record.JobID == jobID {
+			delete(p.ExtendedEvalContext().jobs.uniqueToCreate, tableDesc.ID)
 			continue
 		}
-		mutationJob, err := p.execCfg.JobRegistry.LoadJobWithTxn(ctx, jobID, p.txn)
+		mutationJob, err := p.execCfg.JobRegistry.LoadJobWithTxn(ctx, jobID, p.InternalSQLTxn())
 		if err != nil {
 			if jobs.HasJobNotFoundError(err) {
 				log.Warningf(ctx, "mutation job %d not found", jobID)
@@ -427,24 +427,25 @@ func (p *planner) markTableMutationJobsSuccessful(
 			}
 			return err
 		}
-		if err := mutationJob.Update(
-			ctx, p.txn, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-				status := md.Status
-				switch status {
-				case jobs.StatusSucceeded, jobs.StatusCanceled, jobs.StatusFailed, jobs.StatusRevertFailed:
-					log.Warningf(ctx, "mutation job %d in unexpected state %s", jobID, status)
-					return nil
-				case jobs.StatusRunning, jobs.StatusPending:
-					status = jobs.StatusSucceeded
-				default:
-					// We shouldn't mark jobs as succeeded if they're not in a state where
-					// they're eligible to ever succeed, so mark them as failed.
-					status = jobs.StatusFailed
-				}
-				log.Infof(ctx, "marking mutation job %d for dropped table as %s", jobID, status)
-				ju.UpdateStatus(status)
+		if err := mutationJob.WithTxn(p.InternalSQLTxn()).Update(ctx, func(
+			txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+		) error {
+			status := md.Status
+			switch status {
+			case jobs.StatusSucceeded, jobs.StatusCanceled, jobs.StatusFailed, jobs.StatusRevertFailed:
+				log.Warningf(ctx, "mutation job %d in unexpected state %s", jobID, status)
 				return nil
-			}); err != nil {
+			case jobs.StatusRunning, jobs.StatusPending:
+				status = jobs.StatusSucceeded
+			default:
+				// We shouldn't mark jobs as succeeded if they're not in a state where
+				// they're eligible to ever succeed, so mark them as failed.
+				status = jobs.StatusFailed
+			}
+			log.Infof(ctx, "marking mutation job %d for dropped table as %s", jobID, status)
+			ju.UpdateStatus(status)
+			return nil
+		}); err != nil {
 			return errors.Wrap(err, "updating mutation job for dropped table")
 		}
 	}
@@ -459,7 +460,7 @@ func (p *planner) removeFKForBackReference(
 	if tableDesc.ID == ref.GetOriginTableID() {
 		originTableDesc = tableDesc
 	} else {
-		lookup, err := p.Descriptors().GetMutableTableVersionByID(ctx, ref.GetOriginTableID(), p.txn)
+		lookup, err := p.Descriptors().MutableByID(p.txn).Table(ctx, ref.GetOriginTableID())
 		if err != nil {
 			return errors.Wrapf(err, "error resolving origin table ID %d", ref.GetOriginTableID())
 		}
@@ -523,7 +524,7 @@ func (p *planner) removeFKBackReference(
 	if tableDesc.ID == ref.ReferencedTableID {
 		referencedTableDesc = tableDesc
 	} else {
-		lookup, err := p.Descriptors().GetMutableTableVersionByID(ctx, ref.ReferencedTableID, p.txn)
+		lookup, err := p.Descriptors().MutableByID(p.txn).Table(ctx, ref.ReferencedTableID)
 		if err != nil {
 			return errors.Wrapf(err, "error resolving referenced table ID %d", ref.ReferencedTableID)
 		}

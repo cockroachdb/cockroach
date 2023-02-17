@@ -55,6 +55,12 @@ eexpect root@
 send "COPY t FROM STDIN CSV;SELECT 1;\r"
 eexpect "COPY together with other statements in a query string is not supported"
 eexpect root@
+send "COPY t TO STDOUT CSV;SELECT 1;\r"
+eexpect "COPY together with other statements in a query string is not supported"
+eexpect root@
+send "SELECT 1;COPY t TO STDOUT CSV;\r"
+eexpect "COPY together with other statements in a query string is not supported"
+eexpect root@
 end_test
 
 start_test "Copy in transaction"
@@ -77,8 +83,11 @@ start_test "Check EOF and \. works as appropriate during COPY"
 send "COPY t FROM STDIN CSV;\r"
 eexpect ">>"
 send "1,text with semicolon;\r"
+eexpect ">>"
 send "2,beat chef@;\r"
+eexpect ">>"
 send "3,more&text\r"
+eexpect ">>"
 send "\\.\r"
 
 eexpect "COPY 3"
@@ -97,16 +106,14 @@ send_eof
 eexpect "COPY 1"
 eexpect root@
 
-send "SELECT * FROM t ORDER BY id ASC;\r"
+send "COPY t TO STDOUT;\r"
 
-eexpect "1 | text with semicolon;"
-eexpect "2 | beat chef@;"
-eexpect "3 | more&text"
-eexpect "4 | epa! epa!"
-eexpect "11 | cat"
-eexpect "12 | dog"
-
-eexpect "(6 rows)"
+eexpect "1\ttext with semicolon;"
+eexpect "2\tbeat chef@;"
+eexpect "3\tmore&text"
+eexpect "4\tepa! epa!"
+eexpect "11\tcat"
+eexpect "12\tdog"
 
 eexpect root@
 
@@ -145,7 +152,6 @@ eexpect root@
 send_eof
 eexpect eof
 
-
 spawn /bin/bash
 send "PS1=':''/# '\r"
 eexpect ":/# "
@@ -179,10 +185,9 @@ send "echo -e '2\\tb' >> /tmp/test_copy.sql\r"
 eexpect ":/# "
 send "$argv sql --insecure -f /tmp/test_copy.sql\r"
 eexpect ":/# "
-send "$argv sql --insecure -e 'SELECT * FROM t ORDER BY id'\r"
-eexpect "1 | a"
-eexpect "2 | b"
-eexpect "(2 rows)"
+send "$argv sql --insecure -e 'COPY t TO STDOUT'\r"
+eexpect "1\ta"
+eexpect "2\tb"
 eexpect ":/# "
 
 send "$argv sql --insecure -e 'TRUNCATE TABLE t'\r"

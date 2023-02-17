@@ -18,9 +18,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -136,6 +137,8 @@ func TestValidate(t *testing.T) {
 		t5
 	)
 
+	ctx := context.Background()
+
 	vi := func(s kvnemesisutil.Seq) string {
 		return PutOperation{Seq: s}.Value()
 	}
@@ -185,6 +188,43 @@ func TestValidate(t *testing.T) {
 			Key:   []byte(key),
 			Value: roachpb.MakeValueFromString(value).RawBytes,
 		}
+	}
+
+	type sstKV struct {
+		key       string
+		tombstone bool
+	}
+
+	makeAddSSTable := func(seq kvnemesisutil.Seq, kvs []sstKV) Operation {
+		f := &storage.MemFile{}
+		st := cluster.MakeTestingClusterSettings()
+		storage.ValueBlocksEnabled.Override(ctx, &st.SV, true)
+		w := storage.MakeIngestionSSTWriter(ctx, st, f)
+		defer w.Close()
+
+		var span roachpb.Span
+		var vh enginepb.MVCCValueHeader
+		vh.KVNemesisSeq.Set(seq)
+		ts := hlc.Timestamp{WallTime: 1}
+
+		for _, kv := range kvs {
+			key := roachpb.Key(kv.key)
+			value := storage.MVCCValue{MVCCValueHeader: vh}
+			if !kv.tombstone {
+				value.Value = roachpb.MakeValueFromString(sv(seq))
+			}
+			require.NoError(t, w.PutMVCC(storage.MVCCKey{Key: key, Timestamp: ts}, value))
+
+			if len(span.Key) == 0 || key.Compare(span.Key) < 0 {
+				span.Key = key.Clone()
+			}
+			if ek := roachpb.Key(tk(fk(kv.key) + 1)); ek.Compare(span.EndKey) > 0 {
+				span.EndKey = ek.Clone()
+			}
+		}
+		require.NoError(t, w.Finish())
+
+		return addSSTable(f.Data(), span, ts, seq, false /* asWrites */)
 	}
 
 	tests := []struct {
@@ -1807,9 +1847,40 @@ func TestValidate(t *testing.T) {
 				rd(k1, k2, t2, s2),
 			),
 		},
+		{
+			name: "addsstable ingestion",
+			steps: []Step{
+				step(withResultTS(makeAddSSTable(s1, []sstKV{
+					{key: k1, tombstone: false},
+					{key: k2, tombstone: true},
+				}), t1)),
+			},
+			kvs: kvs(
+				kv(k1, t1, s1),
+				tombstone(k2, t1, s1),
+			),
+		},
+		{
+			name: "addsstable ingestion shadowing scan",
+			steps: []Step{
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k2, s1), t1)),
+				step(withResultTS(makeAddSSTable(s2, []sstKV{
+					{key: k1, tombstone: false},
+					{key: k2, tombstone: true},
+				}), t2)),
+				step(withScanResultTS(scan(k1, k3), t3, scanKV(k1, v2))),
+			},
+			kvs: kvs(
+				kv(k1, t1, s1),
+				kv(k1, t2, s2),
+				kv(k2, t1, s1),
+				tombstone(k2, t2, s2),
+			),
+		},
 	}
 
-	w := echotest.NewWalker(t, testutils.TestDataPath(t, t.Name()))
+	w := echotest.NewWalker(t, datapathutils.TestDataPath(t, t.Name()))
 	for _, test := range tests {
 		t.Run(test.name, w.Run(t, test.name, func(t *testing.T) string {
 			e, err := MakeEngine()

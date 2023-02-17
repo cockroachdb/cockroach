@@ -17,19 +17,22 @@ import {
   insightType,
   SchemaInsightEventFilters,
   SortSetting,
-  selectFlattenedStmtInsightsCombiner,
   selectID,
+  selectTransactionFingerprintID,
   selectStatementInsightDetailsCombiner,
-  selectTxnInsightsCombiner,
-  TxnContentionInsightDetails,
   selectTxnInsightDetailsCombiner,
+  InsightEnumToLabel,
+  TxnInsightDetails,
+  api,
+  util,
 } from "@cockroachlabs/cluster-ui";
 
 export const filtersLocalSetting = new LocalSetting<
   AdminUIState,
   WorkloadInsightEventFilters
 >("filters/InsightsPage", (state: AdminUIState) => state.localSettings, {
-  app: "",
+  app: defaultFilters.app,
+  workloadInsightType: defaultFilters.workloadInsightType,
 });
 
 export const sortSettingLocalSetting = new LocalSetting<
@@ -40,57 +43,104 @@ export const sortSettingLocalSetting = new LocalSetting<
   columnTitle: "startTime",
 });
 
-export const selectTransactionInsights = createSelector(
-  (state: AdminUIState) => state.cachedData.executionInsights?.data,
-  (state: AdminUIState) => state.cachedData.transactionInsights?.data,
-  selectTxnInsightsCombiner,
-);
+export const selectTransactionInsightsLoading = (state: AdminUIState) =>
+  state.cachedData.txnInsights?.inFlight &&
+  (!state.cachedData.txnInsights?.valid || !state.cachedData.txnInsights?.data);
 
-const selectTxnContentionInsightDetails = createSelector(
-  [
-    (state: AdminUIState) => state.cachedData.transactionInsightDetails,
-    selectID,
-  ],
-  (insight, insightId): TxnContentionInsightDetails => {
+export const selectTransactionInsights = (state: AdminUIState) =>
+  state.cachedData.txnInsights?.valid
+    ? state.cachedData.txnInsights?.data
+    : null;
+
+const selectCachedTxnInsightDetails = createSelector(
+  [(state: AdminUIState) => state.cachedData.txnInsightDetails, selectID],
+  (insight, insightId): TxnInsightDetails => {
     if (!insight) {
       return null;
     }
-    return insight[insightId]?.data;
+    return insight[insightId]?.data?.result;
   },
 );
 
-const selectTxnInsightFromExecInsight = createSelector(
-  (state: AdminUIState) => state.cachedData.executionInsights?.data,
+const selectTxnInsight = createSelector(
+  (state: AdminUIState) => state.cachedData.txnInsights?.data,
   selectID,
-  (execInsights, execID) => {
-    return execInsights?.find(txn => txn.transactionExecutionID === execID);
+  (insights, execID) => {
+    return insights?.find(txn => txn.transactionExecutionID === execID);
   },
 );
+
+export const selectStmtInsights = (state: AdminUIState) => {
+  return state.cachedData.stmtInsights?.data
+    ? state.cachedData.stmtInsights.data["results"]
+    : null;
+};
+
+export const selectStmtInsightsMaxApiReached = (
+  state: AdminUIState,
+): boolean => {
+  return state.cachedData.stmtInsights?.data
+    ? state.cachedData.stmtInsights?.data["maxSizeReached"]
+    : false;
+};
 
 export const selectTxnInsightDetails = createSelector(
-  selectTxnInsightFromExecInsight,
-  selectTxnContentionInsightDetails,
+  selectTxnInsight,
+  selectCachedTxnInsightDetails,
+  selectStmtInsights,
   selectTxnInsightDetailsCombiner,
 );
 
 export const selectTransactionInsightDetailsError = createSelector(
-  (state: AdminUIState) => state.cachedData.transactionInsightDetails,
+  (state: AdminUIState) => state.cachedData.txnInsightDetails,
   selectID,
-  (insight, insightId): Error | null => {
-    if (!insight) {
+  (insights, insightId: string): api.TxnInsightDetailsReqErrs | null => {
+    if (!insights) {
       return null;
     }
-    return insight[insightId]?.lastError;
+    const reqErrors = insights[insightId]?.data?.errors;
+    if (insights[insightId]?.lastError) {
+      Object.keys(reqErrors).forEach(
+        (key: keyof api.TxnInsightDetailsReqErrs) => {
+          reqErrors[key] = insights[insightId].lastError;
+        },
+      );
+    }
+
+    return insights[insightId]?.data?.errors;
   },
 );
 
-export const selectStatementInsights = createSelector(
-  (state: AdminUIState) => state.cachedData.executionInsights?.data,
-  selectFlattenedStmtInsightsCombiner,
+// Data is showed as loading when the request is in flight AND we have
+// no data, (i.e. first request), or the current loaded data is
+// invalid (e.g. time range changed)
+export const selectStmtInsightsLoading = (state: AdminUIState) =>
+  state.cachedData.stmtInsights?.inFlight &&
+  (!state.cachedData.stmtInsights?.data ||
+    !state.cachedData.stmtInsights.valid);
+
+export const selectTxnInsightsByFingerprint = createSelector(
+  selectTransactionInsights,
+  selectTransactionFingerprintID,
+  (execInsights, fingerprintID) => {
+    if (fingerprintID == null) {
+      return null;
+    }
+    const id = util.FixFingerprintHexValue(BigInt(fingerprintID).toString(16));
+    return execInsights?.filter(txn => txn.transactionFingerprintID === id);
+  },
 );
 
+export const selectInsightTypes = () => {
+  const insights: string[] = [];
+  InsightEnumToLabel.forEach(insight => {
+    insights.push(insight);
+  });
+  return insights;
+};
+
 export const selectStatementInsightDetails = createSelector(
-  selectStatementInsights,
+  selectStmtInsights,
   selectID,
   selectStatementInsightDetailsCombiner,
 );

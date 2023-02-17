@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -44,7 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -82,8 +82,7 @@ func (n *createTableNode) ReadingOwnWrites() {}
 func (p *planner) getNonTemporarySchemaForCreate(
 	ctx context.Context, db catalog.DatabaseDescriptor, scName string,
 ) (catalog.SchemaDescriptor, error) {
-	flags := tree.SchemaLookupFlags{Required: true, AvoidLeased: true}
-	sc, err := p.Descriptors().GetImmutableSchemaByName(ctx, p.txn, db, scName, flags)
+	sc, err := p.Descriptors().ByName(p.txn).Get().Schema(ctx, db, scName)
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +90,7 @@ func (p *planner) getNonTemporarySchemaForCreate(
 	case catalog.SchemaPublic:
 		return sc, nil
 	case catalog.SchemaUserDefined:
-		return p.Descriptors().GetMutableSchemaByID(ctx, p.txn, sc.GetID(), flags)
+		return p.Descriptors().MutableByID(p.txn).Schema(ctx, sc.GetID())
 	case catalog.SchemaVirtual:
 		return nil, pgerror.Newf(pgcode.InsufficientPrivilege, "schema cannot be modified: %q", scName)
 	default:
@@ -444,15 +443,7 @@ func (n *createTableNode) startExec(params runParams) error {
 	}
 
 	if desc.LocalityConfig != nil {
-		_, dbDesc, err := params.p.Descriptors().GetImmutableDatabaseByID(
-			params.ctx,
-			params.p.txn,
-			desc.ParentID,
-			tree.DatabaseLookupFlags{
-				Required:    true,
-				AvoidLeased: true,
-			},
-		)
+		dbDesc, err := params.p.Descriptors().ByID(params.p.txn).WithoutNonPublic().Get().Database(params.ctx, desc.ParentID)
 		if err != nil {
 			return errors.Wrap(err, "error resolving database for multi-region")
 		}
@@ -464,7 +455,7 @@ func (n *createTableNode) startExec(params runParams) error {
 
 		if err := ApplyZoneConfigForMultiRegionTable(
 			params.ctx,
-			params.p.txn,
+			params.p.Txn(),
 			params.p.ExecCfg(),
 			params.p.extendedEvalCtx.Tracing.KVTracingEnabled(),
 			params.p.Descriptors(),
@@ -481,11 +472,7 @@ func (n *createTableNode) startExec(params runParams) error {
 			if err != nil {
 				return err
 			}
-			typeDesc, err := params.p.Descriptors().GetMutableTypeVersionByID(
-				params.ctx,
-				params.p.txn,
-				regionEnumID,
-			)
+			typeDesc, err := params.p.Descriptors().MutableByID(params.p.txn).Type(params.ctx, regionEnumID)
 			if err != nil {
 				return errors.Wrap(err, "error resolving multi-region enum")
 			}
@@ -769,12 +756,11 @@ func ResolveUniqueWithoutIndexConstraint(
 		constraintName = tabledesc.GenerateUniqueName(
 			fmt.Sprintf("unique_%s", strings.Join(colNames, "_")),
 			func(p string) bool {
-				c, _ := tbl.FindConstraintWithName(p)
-				return c != nil
+				return catalog.FindConstraintByName(tbl, p) != nil
 			},
 		)
 	} else {
-		if c, _ := tbl.FindConstraintWithName(constraintName); c != nil {
+		if c := catalog.FindConstraintByName(tbl, constraintName); c != nil {
 			return pgerror.Newf(pgcode.DuplicateObject, "duplicate constraint name: %q", constraintName)
 		}
 	}
@@ -933,7 +919,7 @@ func ResolveFK(
 		}
 	}
 
-	referencedCols, err := tabledesc.FindPublicColumnsWithNames(target, referencedColNames)
+	referencedCols, err := catalog.MustFindPublicColumnsByNameList(target, referencedColNames)
 	if err != nil {
 		return err
 	}
@@ -976,12 +962,11 @@ func ResolveFK(
 		constraintName = tabledesc.GenerateUniqueName(
 			tabledesc.ForeignKeyConstraintName(tbl.GetName(), d.FromCols.ToStrings()),
 			func(p string) bool {
-				c, _ := tbl.FindConstraintWithName(p)
-				return c != nil
+				return catalog.FindConstraintByName(tbl, p) != nil
 			},
 		)
 	} else {
-		if c, _ := tbl.FindConstraintWithName(constraintName); c != nil {
+		if c := catalog.FindConstraintByName(tbl, constraintName); c != nil {
 			return pgerror.Newf(pgcode.DuplicateObject, "duplicate constraint name: %q", constraintName)
 		}
 	}
@@ -1041,9 +1026,9 @@ func ResolveFK(
 		ReferencedTableID:   target.ID,
 		Name:                constraintName,
 		Validity:            validity,
-		OnDelete:            descpb.ForeignKeyReferenceActionValue[d.Actions.Delete],
-		OnUpdate:            descpb.ForeignKeyReferenceActionValue[d.Actions.Update],
-		Match:               descpb.CompositeKeyMatchMethodValue[d.Match],
+		OnDelete:            tree.ForeignKeyReferenceActionValue[d.Actions.Delete],
+		OnUpdate:            tree.ForeignKeyReferenceActionValue[d.Actions.Update],
+		Match:               tree.CompositeKeyMatchMethodValue[d.Match],
 		ConstraintID:        tbl.NextConstraintID,
 	}
 	tbl.NextConstraintID++
@@ -1054,12 +1039,12 @@ func ResolveFK(
 		tbl.AddForeignKeyMutation(&ref, descpb.DescriptorMutation_ADD)
 	}
 
-	c, err := tbl.FindConstraintWithID(ref.ConstraintID)
+	c, err := catalog.MustFindConstraintByID(tbl, ref.ConstraintID)
 	if err != nil {
 		return errors.HandleAsAssertionFailure(err)
 	}
 	// Ensure that there is a unique constraint on the referenced side to use.
-	_, err = tabledesc.FindFKReferencedUniqueConstraint(target, c.(catalog.ForeignKeyConstraint))
+	_, err = catalog.FindFKReferencedUniqueConstraint(target, c.(catalog.ForeignKeyConstraint))
 	return err
 }
 
@@ -1091,7 +1076,9 @@ func CreatePartitioning(
 		ctx,
 		st,
 		evalCtx,
-		tableDesc.FindColumnWithName,
+		func(name tree.Name) (catalog.Column, error) {
+			return catalog.MustFindColumnByTreeName(tableDesc, name)
+		},
 		int(indexDesc.Partitioning.NumImplicitColumns),
 		indexDesc.KeyColumnNames,
 		partBy,
@@ -1439,10 +1426,10 @@ func NewTableDesc(
 			oid := catid.TypeIDToOID(regionConfig.RegionEnumID())
 			n.Defs = append(
 				n.Defs,
-				regionalByRowDefaultColDef(
+				multiregion.RegionalByRowDefaultColDef(
 					oid,
-					regionalByRowGatewayRegionDefaultExpr(oid),
-					maybeRegionalByRowOnUpdateExpr(evalCtx, oid),
+					multiregion.RegionalByRowGatewayRegionDefaultExpr(oid),
+					multiregion.MaybeRegionalByRowOnUpdateExpr(evalCtx, oid),
 				),
 			)
 			cdd = append(cdd, nil)
@@ -1450,7 +1437,7 @@ func NewTableDesc(
 
 		// Construct the partitioning for the PARTITION ALL BY.
 		desc.PartitionAllBy = true
-		partitionAllBy = partitionByForRegionalByRow(
+		partitionAllBy = multiregion.PartitionByForRegionalByRow(
 			*regionConfig,
 			regionalByRowCol,
 		)
@@ -1741,7 +1728,7 @@ func NewTableDesc(
 				if err != nil {
 					return nil, err
 				}
-				col, err := desc.FindColumnWithName(d.Name)
+				col, err := catalog.MustFindColumnByTreeName(&desc, d.Name)
 				if err != nil {
 					return nil, err
 				}
@@ -1760,7 +1747,7 @@ func NewTableDesc(
 			// indexes will be given a unique auto-generated name later on when
 			// AllocateIDs is called.
 			if d.Name != "" {
-				if idx, _ := desc.FindIndexWithName(d.Name.String()); idx != nil {
+				if idx := catalog.FindIndexByName(&desc, d.Name.String()); idx != nil {
 					return nil, pgerror.Newf(pgcode.DuplicateRelation, "duplicate index name: %q", d.Name)
 				}
 			}
@@ -1802,7 +1789,7 @@ func NewTableDesc(
 				return nil, err
 			}
 			if d.Inverted {
-				column, err := desc.FindColumnWithName(tree.Name(idx.InvertedColumnName()))
+				column, err := catalog.MustFindColumnByName(&desc, idx.InvertedColumnName())
 				if err != nil {
 					return nil, err
 				}
@@ -1873,7 +1860,7 @@ func NewTableDesc(
 			// indexes will be given a unique auto-generated name later on when
 			// AllocateIDs is called.
 			if d.Name != "" {
-				if idx, _ := desc.FindIndexWithName(d.Name.String()); idx != nil {
+				if idx := catalog.FindIndexByName(&desc, d.Name.String()); idx != nil {
 					return nil, pgerror.Newf(pgcode.DuplicateRelation, "duplicate index name: %q", d.Name)
 				}
 			}
@@ -2055,7 +2042,7 @@ func NewTableDesc(
 				// partitioned column.
 				if numImplicitCols := newPrimaryIndex.Partitioning.NumImplicitColumns; numImplicitCols > 0 {
 					for _, idx := range desc.PublicNonPrimaryIndexes() {
-						if idx.GetEncodingType() != descpb.SecondaryIndexEncoding {
+						if idx.GetEncodingType() != catenumpb.SecondaryIndexEncoding {
 							continue
 						}
 						colIDs := idx.CollectKeyColumnIDs()
@@ -2352,10 +2339,11 @@ func newTableDesc(
 			return nil, err
 		}
 
+		params.p.Txn()
 		j, err := CreateRowLevelTTLScheduledJob(
 			params.ctx,
-			params.ExecCfg(),
-			params.p.txn,
+			params.ExecCfg().JobsKnobs(),
+			jobs.ScheduledJobTxn(params.p.InternalSQLTxn()),
 			params.p.User(),
 			ret.GetID(),
 			ttl,
@@ -2405,19 +2393,19 @@ func newRowLevelTTLScheduledJob(
 // CreateRowLevelTTLScheduledJob creates a new row-level TTL schedule.
 func CreateRowLevelTTLScheduledJob(
 	ctx context.Context,
-	execCfg *ExecutorConfig,
-	txn *kv.Txn,
+	knobs *jobs.TestingKnobs,
+	s jobs.ScheduledJobStorage,
 	owner username.SQLUsername,
 	tblID descpb.ID,
 	ttl *catpb.RowLevelTTL,
 ) (*jobs.ScheduledJob, error) {
 	telemetry.Inc(sqltelemetry.RowLevelTTLCreated)
-	env := JobSchedulerEnv(execCfg)
+	env := JobSchedulerEnv(knobs)
 	j, err := newRowLevelTTLScheduledJob(env, owner, tblID, ttl)
 	if err != nil {
 		return nil, err
 	}
-	if err := j.Create(ctx, execCfg.InternalExecutor, txn); err != nil {
+	if err := s.Create(ctx, j); err != nil {
 		return nil, err
 	}
 	return j, nil
@@ -2569,7 +2557,7 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 					},
 					WithoutIndex: true,
 				}
-				colNames, err := td.NamesForColumnIDs(c.ColumnIDs)
+				colNames, err := catalog.ColumnNamesForIDs(td, c.ColumnIDs)
 				if err != nil {
 					return nil, err
 				}
@@ -2615,7 +2603,7 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 						Column:    tree.Name(name),
 						Direction: tree.Ascending,
 					}
-					col, err := td.FindColumnWithID(idx.GetKeyColumnID(j))
+					col, err := catalog.MustFindColumnByID(td, idx.GetKeyColumnID(j))
 					if err != nil {
 						return nil, err
 					}
@@ -2626,7 +2614,7 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 							return nil, err
 						}
 					}
-					if idx.GetKeyColumnDirection(j) == catpb.IndexColumn_DESC {
+					if idx.GetKeyColumnDirection(j) == catenumpb.IndexColumn_DESC {
 						elem.Direction = tree.Descending
 					}
 					indexDef.Columns = append(indexDef.Columns, elem)
@@ -2737,51 +2725,6 @@ func regionalByRowRegionDefaultExpr(oid oid.Oid, region tree.Name) tree.Expr {
 	}
 }
 
-func regionalByRowGatewayRegionDefaultExpr(oid oid.Oid) tree.Expr {
-	return &tree.CastExpr{
-		Expr: &tree.FuncExpr{
-			Func: tree.WrapFunction(builtinconstants.DefaultToDatabasePrimaryRegionBuiltinName),
-			Exprs: []tree.Expr{
-				&tree.FuncExpr{
-					Func: tree.WrapFunction(builtinconstants.GatewayRegionBuiltinName),
-				},
-			},
-		},
-		Type:       &tree.OIDTypeReference{OID: oid},
-		SyntaxMode: tree.CastShort,
-	}
-}
-
-// maybeRegionalByRowOnUpdateExpr returns a gateway region default statement if
-// the auto rehoming session setting is enabled, nil otherwise.
-func maybeRegionalByRowOnUpdateExpr(evalCtx *eval.Context, enumOid oid.Oid) tree.Expr {
-	if evalCtx.SessionData().AutoRehomingEnabled {
-		return &tree.CastExpr{
-			Expr: &tree.FuncExpr{
-				Func: tree.WrapFunction(builtinconstants.RehomeRowBuiltinName),
-			},
-			Type:       &tree.OIDTypeReference{OID: enumOid},
-			SyntaxMode: tree.CastShort,
-		}
-	}
-	return nil
-}
-
-func regionalByRowDefaultColDef(
-	oid oid.Oid, defaultExpr tree.Expr, onUpdateExpr tree.Expr,
-) *tree.ColumnTableDef {
-	c := &tree.ColumnTableDef{
-		Name:   tree.RegionalByRowRegionDefaultColName,
-		Type:   &tree.OIDTypeReference{OID: oid},
-		Hidden: true,
-	}
-	c.Nullable.Nullability = tree.NotNull
-	c.DefaultExpr.Expr = defaultExpr
-	c.OnUpdateExpr.Expr = onUpdateExpr
-
-	return c
-}
-
 // setSequenceOwner adds sequence id to the sequence id list owned by a column
 // and set ownership values of sequence options.
 func setSequenceOwner(
@@ -2791,7 +2734,7 @@ func setSequenceOwner(
 		return errors.Errorf("%s is not a sequence", seqDesc.Name)
 	}
 
-	col, err := table.FindColumnWithName(colName)
+	col, err := catalog.MustFindColumnByTreeName(table, colName)
 	if err != nil {
 		return err
 	}
@@ -2874,7 +2817,7 @@ func isImplicitlyCreatedBySystem(td *tabledesc.Mutable, c *descpb.ColumnDescript
 	if td.IsPrimaryIndexDefaultRowID() && c.ID == td.GetPrimaryIndex().GetKeyColumnID(0) {
 		return true, nil
 	}
-	col, err := td.FindColumnWithID(c.ID)
+	col, err := catalog.MustFindColumnByID(td, c.ID)
 	if err != nil {
 		return false, err
 	}

@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -211,7 +212,7 @@ func TestBreaker(t *testing.T) {
 	}
 
 	datadriven.RunTest(t,
-		testutils.TestDataPath(t, t.Name()+".txt"),
+		datapathutils.TestDataPath(t, t.Name()+".txt"),
 		func(t *testing.T, d *datadriven.TestData) string {
 			return allBuf.String()
 		})
@@ -266,7 +267,7 @@ func TestBreakerProbeIsReactive(t *testing.T) {
 	requireNumProbes(t, 2)
 
 	datadriven.RunTest(t,
-		testutils.TestDataPath(t, t.Name()+".txt"),
+		datapathutils.TestDataPath(t, t.Name()+".txt"),
 		func(t *testing.T, d *datadriven.TestData) string {
 			return allBuf.String()
 		})

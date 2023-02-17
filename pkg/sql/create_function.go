@@ -46,7 +46,7 @@ func (n *createFunctionNode) ReadingOwnWrites() {}
 func (n *createFunctionNode) startExec(params runParams) error {
 	if !params.EvalContext().Settings.Version.IsActive(
 		params.ctx,
-		clusterversion.V22_2SchemaChangeSupportsCreateFunction,
+		clusterversion.TODODelete_V22_2SchemaChangeSupportsCreateFunction,
 	) {
 		// TODO(chengxiong): remove this version gate in 23.1.
 		return pgerror.Newf(
@@ -71,10 +71,7 @@ func (n *createFunctionNode) startExec(params runParams) error {
 		}
 	}
 
-	mutFlags := tree.SchemaLookupFlags{Required: true, RequireMutable: true}
-	mutScDesc, err := params.p.descCollection.GetMutableSchemaByName(
-		params.ctx, params.p.Txn(), n.dbDesc, n.scDesc.GetName(), mutFlags,
-	)
+	mutScDesc, err := params.p.descCollection.MutableByName(params.p.Txn()).Schema(params.ctx, n.dbDesc, n.scDesc.GetName())
 	if err != nil {
 		return err
 	}
@@ -147,7 +144,7 @@ func (n *createFunctionNode) createNewFunction(
 	}
 	scDesc.AddFunction(
 		udfDesc.GetName(),
-		descpb.SchemaDescriptor_FunctionOverload{
+		descpb.SchemaDescriptor_FunctionSignature{
 			ID:         udfDesc.GetID(),
 			ArgTypes:   paramTypes,
 			ReturnType: returnType,
@@ -197,9 +194,7 @@ func (n *createFunctionNode) replaceFunction(udfDesc *funcdesc.Mutable, params r
 
 	// Removing all existing references before adding new references.
 	for _, id := range udfDesc.DependsOn {
-		backRefMutable, err := params.p.Descriptors().GetMutableTableByID(
-			params.ctx, params.p.txn, id, tree.ObjectLookupFlagsWithRequired(),
-		)
+		backRefMutable, err := params.p.Descriptors().MutableByID(params.p.txn).Table(params.ctx, id)
 		if err != nil {
 			return err
 		}
@@ -268,10 +263,7 @@ func (n *createFunctionNode) getMutableFuncDesc(
 				n.cf.FuncName.Object(),
 			)
 		}
-		fnID, err := funcdesc.UserDefinedFunctionOIDToID(existing.Oid)
-		if err != nil {
-			return nil, false, err
-		}
+		fnID := funcdesc.UserDefinedFunctionOIDToID(existing.Oid)
 		fnDesc, err = params.p.checkPrivilegesForDropFunction(params.ctx, fnID)
 		if err != nil {
 			return nil, false, err
@@ -331,9 +323,7 @@ func (n *createFunctionNode) addUDFReferences(udfDesc *funcdesc.Mutable, params 
 	// Read all referenced tables and update their dependencies.
 	backRefMutables := make(map[descpb.ID]*tabledesc.Mutable)
 	for _, id := range backrefTblIDs.Ordered() {
-		backRefMutable, err := params.p.Descriptors().GetMutableTableByID(
-			params.ctx, params.p.txn, id, tree.ObjectLookupFlagsWithRequired(),
-		)
+		backRefMutable, err := params.p.Descriptors().MutableByID(params.p.txn).Table(params.ctx, id)
 		if err != nil {
 			return err
 		}
@@ -474,9 +464,7 @@ func makeFunctionParam(
 }
 
 func (p *planner) descIsTable(ctx context.Context, id descpb.ID) (bool, error) {
-	desc, err := p.Descriptors().GetImmutableDescriptorByID(
-		ctx, p.Txn(), id, tree.ObjectLookupFlagsWithRequired().CommonLookupFlags,
-	)
+	desc, err := p.Descriptors().ByIDWithLeased(p.Txn()).WithoutNonPublic().Get().Desc(ctx, id)
 	if err != nil {
 		return false, err
 	}

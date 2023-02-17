@@ -41,10 +41,10 @@ func (c *dropExternalConnectionNode) startExec(params runParams) error {
 }
 
 func (p *planner) dropExternalConnection(params runParams, n *tree.DropExternalConnection) error {
-	if !p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.V22_2SystemExternalConnectionsTable) {
+	if !p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.TODODelete_V22_2SystemExternalConnectionsTable) {
 		return pgerror.Newf(pgcode.FeatureNotSupported,
 			"External Connections are not supported until upgrade to version %v is finalized",
-			clusterversion.ByKey(clusterversion.V22_2SystemExternalConnectionsTable))
+			clusterversion.ByKey(clusterversion.TODODelete_V22_2SystemExternalConnectionsTable))
 	}
 
 	// TODO(adityamaru): Add some metrics to track DROP EXTERNAL CONNECTION
@@ -68,7 +68,7 @@ func (p *planner) dropExternalConnection(params runParams, n *tree.DropExternalC
 	// DROP EXTERNAL CONNECTION is only allowed for users with the `DROP`
 	// privilege on this object. We run the query as `node` since the user might
 	// not have `SELECT` on the system table.
-	if _ /* rows */, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+	if _ /* rows */, err = params.p.InternalSQLTxn().ExecEx(
 		params.ctx,
 		dropExternalConnectionOp,
 		params.p.Txn(),
@@ -80,7 +80,7 @@ func (p *planner) dropExternalConnection(params runParams, n *tree.DropExternalC
 
 	// We must also DELETE all rows from system.privileges that refer to
 	// external connection.
-	if _, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+	if _, err = params.p.InternalSQLTxn().ExecEx(
 		params.ctx,
 		dropExternalConnectionOp,
 		params.p.Txn(),

@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/stretchr/testify/require"
 )
 
@@ -91,11 +91,11 @@ func runMultiTenantDistSQL(
 	instance1.start(ctx, t, c, "./cockroach")
 
 	// Open things up so we can configure range sizes below.
-	_, err = storConn.Exec(`ALTER TENANT $1 SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true`, tenantID)
+	_, err = storConn.Exec(`ALTER TENANT [$1] SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true`, tenantID)
 	require.NoError(t, err)
 
 	// Create numInstances sql pods and spread them evenly across the machines.
-	var nodes util.FastIntSet
+	var nodes intsets.Fast
 	nodes.Add(1)
 	for i := 1; i < numInstances; i++ {
 		node := ((i + 1) % c.Spec().NodeCount) + 1
@@ -139,7 +139,7 @@ func runMultiTenantDistSQL(
 				default:
 					// procede to report error
 				}
-				require.NoError(t, err, li, iter)
+				require.NoError(t, err, "instance idx = %d, iter = %d", li, iter)
 				iter++
 			}
 		})
@@ -156,7 +156,7 @@ func runMultiTenantDistSQL(
 			continue
 		}
 
-		var nodesInPlan util.FastIntSet
+		var nodesInPlan intsets.Fast
 		for res.Next() {
 			str := ""
 			err = res.Scan(&str)

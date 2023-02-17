@@ -24,8 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/logtags"
 )
@@ -33,14 +33,16 @@ import (
 // TenantDeps are the dependencies of upgrades which perform actions at the
 // SQL layer.
 type TenantDeps struct {
-	DB                      *kv.DB
-	Codec                   keys.SQLCodec
-	Settings                *cluster.Settings
-	InternalExecutorFactory descs.TxnManager
-	LeaseManager            *lease.Manager
-	JobRegistry             *jobs.Registry
-	InternalExecutor        sqlutil.InternalExecutor
-	SessionData             *sessiondata.SessionData
+	KVDB         *kv.DB
+	Codec        keys.SQLCodec
+	Settings     *cluster.Settings
+	DB           descs.DB
+	LeaseManager *lease.Manager
+	JobRegistry  *jobs.Registry
+	SessionData  *sessiondata.SessionData
+
+	// TODO(ajwerner): Remove this in favor of the descs.DB above.
+	InternalExecutor isql.Executor
 
 	SpanConfig struct { // deps for span config upgrades; can be removed accordingly
 		spanconfig.KVAccessor

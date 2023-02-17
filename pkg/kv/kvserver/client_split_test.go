@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -224,7 +225,7 @@ func TestStoreSplitAbortSpan(t *testing.T) {
 
 	collect := func(as *abortspan.AbortSpan) []roachpb.AbortSpanEntry {
 		var results []roachpb.AbortSpanEntry
-		if err := as.Iterate(ctx, store.Engine(), func(_ roachpb.Key, entry roachpb.AbortSpanEntry) error {
+		if err := as.Iterate(ctx, store.TODOEngine(), func(_ roachpb.Key, entry roachpb.AbortSpanEntry) error {
 			entry.Priority = 0 // don't care about that
 			results = append(results, entry)
 			return nil
@@ -364,8 +365,8 @@ func TestStoreRangeSplitIntents(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, key := range []roachpb.Key{keys.RangeDescriptorKey(roachpb.RKeyMin), keys.RangeDescriptorKey(splitKeyAddr)} {
-		if _, _, err := storage.MVCCGet(
-			ctx, store.Engine(), key, store.Clock().Now(), storage.MVCCGetOptions{},
+		if _, err := storage.MVCCGet(
+			ctx, store.TODOEngine(), key, store.Clock().Now(), storage.MVCCGetOptions{},
 		); err != nil {
 			t.Errorf("failed to read consistent range descriptor for key %s: %+v", key, err)
 		}
@@ -381,7 +382,7 @@ func TestStoreRangeSplitIntents(t *testing.T) {
 	// Verify the transaction record is gone.
 	start := storage.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(roachpb.RKeyMin))
 	end := storage.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(roachpb.RKeyMax))
-	iter := store.Engine().NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: end.Key})
+	iter := store.TODOEngine().NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: end.Key})
 
 	defer iter.Close()
 	for iter.SeekGE(start); ; iter.Next() {
@@ -649,7 +650,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 	originalRepl := store.LookupReplica(roachpb.RKey(splitKey))
 	require.NotNil(t, originalRepl)
 	// Get the original stats for key and value bytes.
-	ms, err := stateloader.Make(originalRepl.RangeID).LoadMVCCStats(ctx, store.Engine())
+	ms, err := stateloader.Make(originalRepl.RangeID).LoadMVCCStats(ctx, store.TODOEngine())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -667,8 +668,8 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, key := range []roachpb.Key{keys.RangeDescriptorKey(roachpb.RKeyMin), keys.RangeDescriptorKey(splitKeyAddr)} {
-		if _, _, err := storage.MVCCGet(
-			context.Background(), store.Engine(), key, store.Clock().Now(), storage.MVCCGetOptions{},
+		if _, err := storage.MVCCGet(
+			context.Background(), store.TODOEngine(), key, store.Clock().Now(), storage.MVCCGetOptions{},
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -722,12 +723,12 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 
 	// Compare stats of split ranges to ensure they are non zero and
 	// exceed the original range when summed.
-	left, err := stateloader.Make(originalRepl.RangeID).LoadMVCCStats(ctx, store.Engine())
+	left, err := stateloader.Make(originalRepl.RangeID).LoadMVCCStats(ctx, store.TODOEngine())
 	if err != nil {
 		t.Fatal(err)
 	}
 	lKeyBytes, lValBytes := left.KeyBytes, left.ValBytes
-	right, err := stateloader.Make(newRng.RangeID).LoadMVCCStats(ctx, store.Engine())
+	right, err := stateloader.Make(newRng.RangeID).LoadMVCCStats(ctx, store.TODOEngine())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -780,7 +781,7 @@ func TestStoreRangeSplitMergeStats(t *testing.T) {
 
 	// Verify empty range has empty stats.
 	repl := store.LookupReplica(roachpb.RKey(keyPrefix))
-	assertRangeStats(t, "empty stats", store.Engine(), repl.RangeID, enginepb.MVCCStats{})
+	assertRangeStats(t, "empty stats", store.TODOEngine(), repl.RangeID, enginepb.MVCCStats{})
 
 	// Write random data.
 	splitKey := kvserver.WriteRandomDataToRange(t, store, repl.RangeID, keyPrefix)
@@ -788,7 +789,7 @@ func TestStoreRangeSplitMergeStats(t *testing.T) {
 	start := s.Clock().Now()
 
 	// Get the range stats now that we have data.
-	snap := store.Engine().NewSnapshot()
+	snap := store.TODOEngine().NewSnapshot()
 	defer snap.Close()
 	ms, err := stateloader.Make(repl.RangeID).LoadMVCCStats(ctx, snap)
 	require.NoError(t, err)
@@ -799,7 +800,7 @@ func TestStoreRangeSplitMergeStats(t *testing.T) {
 	_, pErr = kv.SendWrapped(ctx, store.TestSender(), adminSplitArgs(splitKey))
 	require.NoError(t, pErr.GoError())
 
-	snap = store.Engine().NewSnapshot()
+	snap = store.TODOEngine().NewSnapshot()
 	defer snap.Close()
 	msLeft, err := stateloader.Make(repl.RangeID).LoadMVCCStats(ctx, snap)
 	require.NoError(t, err)
@@ -850,7 +851,7 @@ func TestStoreRangeSplitMergeStats(t *testing.T) {
 	require.NoError(t, pErr.GoError())
 
 	repl = store.LookupReplica(roachpb.RKey(keyPrefix))
-	snap = store.Engine().NewSnapshot()
+	snap = store.TODOEngine().NewSnapshot()
 	defer snap.Close()
 
 	msMerged, err := stateloader.Make(repl.RangeID).LoadMVCCStats(ctx, snap)
@@ -990,7 +991,7 @@ func TestStoreRangeSplitStatsWithMerges(t *testing.T) {
 	// NOTE that this value is expected to change over time, depending on what
 	// we store in the sys-local keyspace. Update it accordingly for this test.
 	empty := enginepb.MVCCStats{LastUpdateNanos: start.WallTime}
-	assertRangeStats(t, "empty stats", store.Engine(), repl.RangeID, empty)
+	assertRangeStats(t, "empty stats", store.TODOEngine(), repl.RangeID, empty)
 
 	// Write random TimeSeries data.
 	midKey := writeRandomTimeSeriesDataToRange(t, store, repl.RangeID, keyPrefix)
@@ -1002,7 +1003,7 @@ func TestStoreRangeSplitStatsWithMerges(t *testing.T) {
 	}, args)
 	require.NoError(t, pErr.GoError())
 
-	snap := store.Engine().NewSnapshot()
+	snap := store.TODOEngine().NewSnapshot()
 	defer snap.Close()
 	msLeft, err := stateloader.Make(repl.RangeID).LoadMVCCStats(ctx, snap)
 	require.NoError(t, err)
@@ -1032,7 +1033,7 @@ func fillRange(
 	src := rand.New(rand.NewSource(0))
 	var key []byte
 	for {
-		ms, err := stateloader.Make(rangeID).LoadMVCCStats(context.Background(), store.Engine())
+		ms, err := stateloader.Make(rangeID).LoadMVCCStats(context.Background(), store.TODOEngine())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1952,7 +1953,7 @@ func TestStoreSplitGCThreshold(t *testing.T) {
 		t.Fatalf("expected RHS's GCThreshold is equal to %v, but got %v", specifiedGCThreshold, gcThreshold)
 	}
 
-	repl.AssertState(ctx, store.Engine())
+	repl.AssertState(ctx, store.TODOEngine())
 }
 
 func TestStoreSplitGCHint(t *testing.T) {
@@ -2014,7 +2015,7 @@ func TestStoreSplitGCHint(t *testing.T) {
 	gcHint = repl.GetGCHint()
 	require.False(t, gcHint.IsEmpty(), "GC hint is empty after range delete")
 
-	repl.AssertState(ctx, store.Engine())
+	repl.AssertState(ctx, store.TODOEngine())
 }
 
 // TestStoreRangeSplitRaceUninitializedRHS reproduces #7600 (before it was
@@ -2061,7 +2062,7 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 			}
 			return roachpb.NewError(
 				roachpb.NewReadWithinUncertaintyIntervalError(
-					args.Hdr.Timestamp, args.Hdr.Timestamp, hlc.Timestamp{}, nil,
+					args.Hdr.Timestamp, hlc.ClockTimestamp{}, nil, args.Hdr.Timestamp, hlc.ClockTimestamp{},
 				))
 		}
 		return nil
@@ -2308,18 +2309,23 @@ func TestStoreRangeGossipOnSplits(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// 50% for testing We can't properly test how frequently changes in the
+	// number of ranges trigger the store to gossip its capacities if we have
+	// to worry about changes in the number of leases also triggering store
+	// gossip.
+	overrideCapacityFraction := 0.5
+
 	ctx := context.Background()
 	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
-				DisableMergeQueue:                      true,
-				DisableSplitQueue:                      true,
-				DisableScanner:                         true,
-				GossipWhenCapacityDeltaExceedsFraction: 0.5, // 50% for testing
-				// We can't properly test how frequently changes in the number of ranges
-				// trigger the store to gossip its capacities if we have to worry about
-				// changes in the number of leases also triggering store gossip.
-				DisableLeaseCapacityGossip: true,
+				DisableMergeQueue: true,
+				DisableSplitQueue: true,
+				DisableScanner:    true,
+				GossipTestingKnobs: kvserver.StoreGossipTestingKnobs{
+					OverrideGossipWhenCapacityDeltaExceedsFraction: overrideCapacityFraction,
+					DisableLeaseCapacityGossip:                     true,
+				},
 			},
 		},
 	})
@@ -2383,7 +2389,10 @@ func TestStoreRangeGossipOnSplits(t *testing.T) {
 		}
 		select {
 		case rangeCount = <-rangeCountCh:
-			changeCount := int32(math.Ceil(math.Max(float64(lastRangeCount)*0.5, 10)))
+			changeCount := int32(math.Ceil(math.Max(
+				float64(lastRangeCount)*overrideCapacityFraction,
+				kvserver.GossipWhenRangeCountDeltaExceeds,
+			)))
 			diff := rangeCount - (lastRangeCount + changeCount)
 			if diff < -1 || diff > 1 {
 				t.Errorf("gossiped range count %d more than 1 away from expected %d", rangeCount, lastRangeCount+changeCount)
@@ -2574,6 +2583,7 @@ func TestUnsplittableRange(t *testing.T) {
 			SpanConfig: &spanconfig.TestingKnobs{
 				ProtectedTSReaderOverrideFn: spanconfig.EmptyProtectedTSReader,
 			},
+			KeyVisualizer: &keyvisualizer.TestingKnobs{SkipZoneConfigBootstrap: true},
 		},
 	})
 	s := serv.(*server.TestServer)
@@ -2765,7 +2775,7 @@ func TestTxnWaitQueueDependencyCycleWithRangeSplit(t *testing.T) {
 func TestStoreCapacityAfterSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
+	skip.WithIssue(t, 92677)
 	ctx := context.Background()
 	manualClock := hlc.NewHybridManualClock()
 	tc := testcluster.StartTestCluster(t, 2,

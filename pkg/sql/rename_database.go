@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -54,8 +55,7 @@ func (p *planner) RenameDatabase(ctx context.Context, n *tree.RenameDatabase) (p
 		return nil, pgerror.DangerousStatementf("RENAME DATABASE on current database")
 	}
 
-	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
-		tree.DatabaseLookupFlags{Required: true})
+	dbDesc, err := p.Descriptors().MutableByName(p.txn).Database(ctx, string(n.Name))
 	if err != nil {
 		return nil, err
 	}
@@ -119,19 +119,16 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 	// Rather than trying to rewrite them with the changed DB name, we
 	// simply disallow such renames for now.
 	// See #34416.
-	lookupFlags := p.CommonLookupFlagsRequired()
-	// DDL statements bypass the cache.
-	lookupFlags.AvoidLeased = true
 	schemas, err := p.Descriptors().GetSchemasForDatabase(ctx, p.txn, dbDesc)
 	if err != nil {
 		return err
 	}
 	for _, schema := range schemas {
-		sc, err := p.Descriptors().GetImmutableSchemaByName(ctx, p.txn, dbDesc, schema, lookupFlags)
+		sc, err := p.Descriptors().ByName(p.txn).Get().Schema(ctx, dbDesc, schema)
 		if err != nil {
 			return err
 		}
-		if err := maybeFailOnDependentDescInRename(ctx, p, dbDesc, sc, lookupFlags, catalog.Database); err != nil {
+		if err := maybeFailOnDependentDescInRename(ctx, p, dbDesc, sc, !p.skipDescriptorCache, catalog.Database); err != nil {
 			return err
 		}
 	}
@@ -203,14 +200,20 @@ func maybeFailOnDependentDescInRename(
 	p *planner,
 	db catalog.DatabaseDescriptor,
 	sc catalog.SchemaDescriptor,
-	lookupFlags tree.CommonLookupFlags,
+	withLeased bool,
 	renameDescType catalog.DescriptorType,
 ) error {
 	_, ids, err := p.GetObjectNamesAndIDs(ctx, db, sc)
 	if err != nil {
 		return err
 	}
-	descs, err := p.Descriptors().GetImmutableDescriptorsByID(ctx, p.txn, lookupFlags, ids...)
+	var b descs.ByIDGetterBuilder
+	if withLeased {
+		b = p.Descriptors().ByIDWithLeased(p.txn)
+	} else {
+		b = p.Descriptors().ByID(p.txn)
+	}
+	descs, err := b.WithoutNonPublic().Get().Descs(ctx, ids)
 	if err != nil {
 		return err
 	}
@@ -228,7 +231,7 @@ func maybeFailOnDependentDescInRename(
 		}
 
 		if err := tbDesc.ForeachDependedOnBy(func(dependedOn *descpb.TableDescriptor_Reference) error {
-			dependentDesc, err := p.Descriptors().GetMutableDescriptorByID(ctx, p.txn, dependedOn.ID)
+			dependentDesc, err := p.Descriptors().MutableByID(p.txn).Desc(ctx, dependedOn.ID)
 			if err != nil {
 				return err
 			}

@@ -40,8 +40,8 @@ func TestPreconditionBeforeStartingAnUpgrade(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	var (
-		v0 = clusterversion.ByKey(clusterversion.V22_2Start - 1)
-		v1 = clusterversion.ByKey(clusterversion.V22_2Start)
+		v0 = clusterversion.ByKey(clusterversion.TODODelete_V22_2Start - 1)
+		v1 = clusterversion.ByKey(clusterversion.TODODelete_V22_2Start)
 	)
 
 	ctx := context.Background()
@@ -119,7 +119,7 @@ func TestPreconditionBeforeStartingAnUpgrade(t *testing.T) {
 		require.Error(t, err, "upgrade should be refused because precondition is violated.")
 		require.Equal(t, "pq: verifying precondition for version 22.1-2: "+
 			"there exists invalid descriptors as listed below; fix these descriptors before attempting to upgrade again:\n"+
-			"invalid descriptor: defaultdb.public.temp_tbl (104) because 'no matching name info found in non-dropped relation \"t\"'",
+			"invalid descriptor: defaultdb.public.temp_tbl (104) because 'mismatched name \"t\" in relation descriptor'",
 			strings.ReplaceAll(err.Error(), "1000022", "22"))
 		// The cluster version should remain at `v0`.
 		ts.tdb.CheckQueryResults(t, "SHOW CLUSTER SETTING version", [][]string{{v0.String()}})

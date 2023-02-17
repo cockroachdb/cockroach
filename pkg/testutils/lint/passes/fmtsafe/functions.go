@@ -96,6 +96,9 @@ var requireConstFmt = map[string]bool{
 	"(*github.com/cockroachdb/cockroach/pkg/cmd/roachtest.testImpl).addFailure": true,
 	"(*main.testImpl).addFailure": true,
 
+	"(*github.com/cockroachdb/cockroach/pkg/cmd/roachtest.testImpl).addFailureAndCancel": true,
+	"(*main.testImpl).addFailureAndCancel":                                               true,
+
 	"(*main.testImpl).Fatalf": true,
 	"(*github.com/cockroachdb/cockroach/pkg/cmd/roachtest.testImpl).Fatalf": true,
 
@@ -153,6 +156,8 @@ var requireConstFmt = map[string]bool{
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis.l":                 true,
 	"(*github.com/cockroachdb/cockroach/pkg/kv/kvnemesis.logLogger).Logf": true,
+
+	"(github.com/cockroachdb/cockroach/pkg/roachpb.TestPrinter).Printf": true,
 
 	// Error things are populated in the init() message.
 }

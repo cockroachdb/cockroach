@@ -12,6 +12,7 @@ package loqrecovery
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"sort"
 	"strconv"
@@ -20,24 +21,83 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/keysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/strutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble/vfs"
 	"go.etcd.io/raft/v3/raftpb"
 	"gopkg.in/yaml.v2"
 )
+
+/*
+quorumRecoveryEnv provides an environment to run data driven tests for loss of
+quorum recovery. Provided commands cover replica info collection, change
+planning, plan application and checking or generated recovery reports.
+It doesn't cover plan and replica info serialization and actual cli commands and
+interaction with user.
+
+Supported commands:
+replication-data
+
+  Loads following data into stores. All previously existing data is wiped. Only
+  range local information about replicas in populated together with optional
+  raft log entries. Data is created using proxy structs to avoid the need to
+  populate unnecessary fields.
+
+descriptor-data
+
+  Initializes optional "meta range" info with provided descriptor data.
+
+collect-replica-info [stores=(1,2,3)]
+
+  Collects replica info and saves into env. stores argument provides ids of
+  stores test wants to analyze. This allows test not to collect all replicas if
+  needed. If omitted, then all stores are collected.
+
+make-plan [stores=(1,2,3)|nodes=(1,2,3)] [force=<bool>]
+
+  Creates a recovery plan based on replica info saved to env by
+  collect-replica-info command and optional descriptors. Stores or nodes args
+  provide optional list of dead nodes or dead stores which reflect cli command
+  line flags. force flag forces plan creation in presence of range
+  inconsistencies.
+  Resulting plan is saved into the environment.
+
+dump-store [stores=(1,2,3)]
+
+  Prints content of the replica states in the store. If no stores are provided,
+  uses all populated stores.
+
+apply-plan [stores=(1,2,3)] [restart=<bool>]
+
+  Applies recovery plan on specified stores. If no stores are provided, uses all
+  populated stores. If restart = false, simulates cli version of command where
+  application could fail and roll back with an error. If restart = true,
+  simulates half online approach where unattended operation succeeds but writes
+  potential error into store.
+
+dump-events [remove=<bool>] [status=<bool>]
+
+  Dumps events about replica recovery found in stores.
+  If remove=true then corresponding method is told to remove events after
+  dumping in a way range log population does when consuming those events.
+  If status=true, half-online approach recovery report is dumped for each store.
+*/
 
 // Range info used for test data to avoid providing unnecessary fields that are
 // not used in replica removal.
@@ -109,6 +169,7 @@ type replicaDescriptorView struct {
 	StoreID     roachpb.StoreID     `yaml:"StoreID"`
 	ReplicaID   roachpb.ReplicaID   `yaml:"ReplicaID"`
 	ReplicaType roachpb.ReplicaType `yaml:"ReplicaType,omitempty"`
+	Leaseholder bool                `yaml:"Leaseholder,omitempty"`
 }
 
 func (r replicaDescriptorView) asReplicaDescriptor() roachpb.ReplicaDescriptor {
@@ -126,6 +187,50 @@ type localDataView struct {
 	RaftReplicaID int             `yaml:"RaftReplicaID"`
 }
 
+// testDescriptorData yaml optimized representation of RangeDescriptor
+type testDescriptorData struct {
+	RangeID    roachpb.RangeID         `yaml:"RangeID"`
+	StartKey   string                  `yaml:"StartKey"`
+	Replicas   []replicaDescriptorView `yaml:"Replicas,flow"`
+	Generation roachpb.RangeGeneration `yaml:"Generation,omitempty"`
+}
+
+type seqUUIDGen struct {
+	seq uint32
+}
+
+func NewSeqGen(val uint32) uuid.Generator {
+	return &seqUUIDGen{seq: val}
+}
+
+func (g *seqUUIDGen) NewV1() (uuid.UUID, error) {
+	nextV1 := g.next()
+	nextV1.SetVersion(uuid.V1)
+	return nextV1, nil
+}
+
+func (*seqUUIDGen) NewV3(uuid.UUID, string) uuid.UUID {
+	panic("not implemented")
+}
+
+func (g *seqUUIDGen) NewV4() (uuid.UUID, error) {
+	nextV4 := g.next()
+	nextV4.SetVersion(uuid.V4)
+	return nextV4, nil
+}
+
+func (*seqUUIDGen) NewV5(uuid.UUID, string) uuid.UUID {
+	panic("not implemented")
+}
+
+func (g *seqUUIDGen) next() uuid.UUID {
+	next := uuid.UUID{}
+	binary.BigEndian.PutUint32(next[:], g.seq)
+	next.SetVariant(uuid.VariantRFC4122)
+	g.seq++
+	return next
+}
+
 // Store with its owning NodeID for easier grouping by owning nodes.
 type wrappedStore struct {
 	engine storage.Engine
@@ -133,14 +238,21 @@ type wrappedStore struct {
 }
 
 type quorumRecoveryEnv struct {
-	// Stores with data
-	stores map[roachpb.StoreID]wrappedStore
+	// Stores with data.
+	clusterID uuid.UUID
+	stores    map[roachpb.StoreID]wrappedStore
+	// Optional mata ranges content.
+	meta []roachpb.RangeDescriptor
 
-	// Collected info from nodes
-	replicas []loqrecoverypb.NodeReplicaInfo
+	// Collected info from nodes.
+	replicas loqrecoverypb.ClusterReplicaInfo
 
-	// plan to update replicas
+	// plan to update replicas.
 	plan loqrecoverypb.ReplicaUpdatePlan
+
+	// Helper resources to make time and identifiers predictable.
+	uuidGen uuid.Generator
+	clock   timeutil.TimeSource
 }
 
 func (e *quorumRecoveryEnv) Handle(t *testing.T, d datadriven.TestData) string {
@@ -150,6 +262,9 @@ func (e *quorumRecoveryEnv) Handle(t *testing.T, d datadriven.TestData) string {
 	case "replication-data":
 		// Populate in-mem engines with data.
 		out = e.handleReplicationData(t, d)
+	case "descriptor-data":
+		// Populate optional descriptor data.
+		out = e.handleDescriptorData(t, d)
 	case "collect-replica-info":
 		// Collect one or more range info "files" from stores.
 		out, err = e.handleCollectReplicas(t, d)
@@ -184,11 +299,12 @@ func (e *quorumRecoveryEnv) Handle(t *testing.T, d datadriven.TestData) string {
 
 func (e *quorumRecoveryEnv) handleReplicationData(t *testing.T, d datadriven.TestData) string {
 	ctx := context.Background()
-	clock := hlc.NewClockWithSystemTimeSource(time.Millisecond * 100 /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 
 	// Close existing stores in case we have multiple use cases within a data file.
 	e.cleanupStores()
 	e.stores = make(map[roachpb.StoreID]wrappedStore)
+	e.clusterID = uuid.MakeV4()
 
 	// Load yaml from data into local range info.
 	var replicaData []testReplicaInfo
@@ -213,7 +329,7 @@ func (e *quorumRecoveryEnv) handleReplicationData(t *testing.T, d datadriven.Tes
 		}
 
 		sl := stateloader.Make(replica.RangeID)
-		if _, err := sl.Save(ctx, eng, replicaState, true /* gcHintsEnabled */); err != nil {
+		if _, err := sl.Save(ctx, eng, replicaState); err != nil {
 			t.Fatalf("failed to save raft replica state into store: %v", err)
 		}
 		if err := sl.SetHardState(ctx, eng, hardState); err != nil {
@@ -246,7 +362,7 @@ func buildReplicaDescriptorFromTestData(
 	raftpb.HardState,
 	[]enginepb.MVCCMetadata,
 ) {
-	clock := hlc.NewClockWithSystemTimeSource(time.Millisecond * 100 /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 
 	startKey := parsePrettyKey(t, replica.StartKey)
 	endKey := parsePrettyKey(t, replica.EndKey)
@@ -254,13 +370,17 @@ func buildReplicaDescriptorFromTestData(
 	var replicas []roachpb.ReplicaDescriptor
 	var replicaID roachpb.ReplicaID
 	maxReplicaID := replica.Replicas[0].ReplicaID
-	for _, r := range replica.Replicas {
+	var lhIndex int
+	for i, r := range replica.Replicas {
 		if r.ReplicaID > maxReplicaID {
 			maxReplicaID = r.ReplicaID
 		}
 		replicas = append(replicas, r.asReplicaDescriptor())
 		if r.NodeID == replica.NodeID && r.StoreID == replica.StoreID {
 			replicaID = r.ReplicaID
+		}
+		if r.Leaseholder {
+			lhIndex = i
 		}
 	}
 	if replica.Generation == 0 {
@@ -277,7 +397,7 @@ func buildReplicaDescriptorFromTestData(
 	lease := roachpb.Lease{
 		Start:           clock.Now().Add(5*time.Minute.Nanoseconds(), 0).UnsafeToClockTimestamp(),
 		Expiration:      nil,
-		Replica:         desc.InternalReplicas[0],
+		Replica:         desc.InternalReplicas[lhIndex],
 		ProposedTS:      nil,
 		Epoch:           0,
 		Sequence:        0,
@@ -363,8 +483,8 @@ func raftLogFromPendingDescriptorUpdate(
 	if err != nil {
 		t.Fatalf("failed to serialize raftCommand: %v", err)
 	}
-	data := kvserverbase.EncodeRaftCommand(
-		kvserverbase.RaftVersionStandard, kvserverbase.CmdIDKey(fmt.Sprintf("%08d", entryIndex)), out)
+	data := raftlog.EncodeRaftCommand(
+		raftlog.EntryEncodingStandardWithoutAC, kvserverbase.CmdIDKey(fmt.Sprintf("%08d", entryIndex)), out)
 	ent := raftpb.Entry{
 		Term:  1,
 		Index: replica.RaftCommittedIndex + entryIndex,
@@ -387,9 +507,62 @@ func parsePrettyKey(t *testing.T, pretty string) roachpb.RKey {
 	return roachpb.RKey(key)
 }
 
+func (e *quorumRecoveryEnv) handleDescriptorData(t *testing.T, d datadriven.TestData) string {
+	var descriptors []testDescriptorData
+	err := yaml.UnmarshalStrict([]byte(d.Input), &descriptors)
+	if err != nil {
+		t.Fatalf("failed to unmarshal test range descriptor data: %v", err)
+	}
+	e.meta = nil
+	if len(descriptors) == 0 {
+		return "ok"
+	}
+
+	var testDesc testDescriptorData
+
+	makeLastDescriptor := func(nextStartKey string) roachpb.RangeDescriptor {
+		var replicas []roachpb.ReplicaDescriptor
+		var maxReplicaID roachpb.ReplicaID
+		for _, r := range testDesc.Replicas {
+			replicas = append(replicas, r.asReplicaDescriptor())
+			if r.ReplicaID > maxReplicaID {
+				maxReplicaID = r.ReplicaID
+			}
+		}
+		gen := testDesc.Generation
+		if gen == 0 {
+			gen = roachpb.RangeGeneration(maxReplicaID)
+		}
+		return roachpb.RangeDescriptor{
+			RangeID:          testDesc.RangeID,
+			StartKey:         parsePrettyKey(t, testDesc.StartKey),
+			EndKey:           parsePrettyKey(t, nextStartKey),
+			InternalReplicas: replicas,
+			Generation:       gen,
+			NextReplicaID:    maxReplicaID + 1,
+		}
+	}
+
+	for _, d := range descriptors {
+		if testDesc.RangeID != 0 {
+			e.meta = append(e.meta, makeLastDescriptor(d.StartKey))
+		}
+		if d.RangeID == 0 {
+			t.Fatal("RangeID in the test range descriptor can't be 0")
+		}
+		testDesc = d
+	}
+	e.meta = append(e.meta, makeLastDescriptor("/Max"))
+	return "ok"
+}
+
 func (e *quorumRecoveryEnv) handleMakePlan(t *testing.T, d datadriven.TestData) (string, error) {
 	stores := e.parseStoresArg(t, d, false /* defaultToAll */)
-	plan, report, err := PlanReplicas(context.Background(), e.replicas, stores)
+	nodes := e.parseNodesArg(t, d)
+	plan, report, err := PlanReplicas(context.Background(), loqrecoverypb.ClusterReplicaInfo{
+		Descriptors: e.replicas.Descriptors,
+		LocalInfo:   e.replicas.LocalInfo,
+	}, stores, nodes, e.uuidGen)
 	if err != nil {
 		return "", err
 	}
@@ -402,12 +575,26 @@ func (e *quorumRecoveryEnv) handleMakePlan(t *testing.T, d datadriven.TestData) 
 		return "", err
 	}
 	e.plan = plan
+	if len(e.plan.Updates) == 0 {
+		return "", nil
+	}
 	// We only marshal actual data without container to reduce clutter.
 	out, err := yaml.Marshal(e.plan.Updates)
 	if err != nil {
 		t.Fatalf("failed to marshal plan into yaml for verification: %v", err)
 	}
-	return string(out), nil
+	var b strings.Builder
+	b.WriteString("Replica updates:\n")
+	b.WriteString(string(out))
+	if len(e.plan.DecommissionedNodeIDs) > 0 {
+		b.WriteString(fmt.Sprintf("Decommissioned nodes:\n[%s]\n",
+			strutil.JoinIDs("n", e.plan.DecommissionedNodeIDs)))
+	}
+	if len(e.plan.StaleLeaseholderNodeIDs) > 0 {
+		b.WriteString(fmt.Sprintf("Nodes to restart:\n[%s]\n",
+			strutil.JoinIDs("n", e.plan.StaleLeaseholderNodeIDs)))
+	}
+	return b.String(), nil
 }
 
 func (e *quorumRecoveryEnv) getOrCreateStore(
@@ -418,12 +605,13 @@ func (e *quorumRecoveryEnv) getOrCreateStore(
 		var err error
 		eng, err := storage.Open(ctx,
 			storage.InMemory(),
+			cluster.MakeClusterSettings(),
 			storage.CacheSize(1<<20 /* 1 MiB */))
 		if err != nil {
 			t.Fatalf("failed to crate in mem store: %v", err)
 		}
 		sIdent := roachpb.StoreIdent{
-			ClusterID: uuid.MakeV4(),
+			ClusterID: e.clusterID,
 			NodeID:    nodeID,
 			StoreID:   storeID,
 		}
@@ -446,14 +634,17 @@ func (e *quorumRecoveryEnv) handleCollectReplicas(
 	stores := e.parseStoresArg(t, d, true /* defaultToAll */)
 	nodes := e.groupStoresByNode(t, stores)
 	// save collected results into environment
-	e.replicas = nil
+	e.replicas = loqrecoverypb.ClusterReplicaInfo{}
 	for _, nodeStores := range nodes {
-		info, err := CollectReplicaInfo(ctx, nodeStores)
+		info, _, err := CollectStoresReplicaInfo(ctx, nodeStores)
 		if err != nil {
 			return "", err
 		}
-		e.replicas = append(e.replicas, info)
+		if err = e.replicas.Merge(info); err != nil {
+			return "", err
+		}
 	}
+	e.replicas.Descriptors = e.meta
 	return "ok", nil
 }
 
@@ -493,7 +684,7 @@ func iterateSelectedStores(
 	for _, id := range storeIDs {
 		wrappedStore, ok := stores[id]
 		if !ok {
-			t.Fatalf("replica info requested from store that was not populated: %d", id)
+			t.Fatalf("attempt to get store that was not populated: %d", id)
 		}
 		f(wrappedStore.engine, wrappedStore.nodeID, id)
 	}
@@ -528,8 +719,31 @@ func (e *quorumRecoveryEnv) parseStoresArg(
 			stores = []roachpb.StoreID{}
 		}
 	}
-	sort.Slice(stores, func(i, j int) bool { return i < j })
+	sort.Sort(roachpb.StoreIDSlice(stores))
 	return stores
+}
+
+// parseNodesArg parses NodeIDs from nodes arg if available.
+// Results are returned in sorted order to allow consistent output.
+func (e *quorumRecoveryEnv) parseNodesArg(t *testing.T, d datadriven.TestData) []roachpb.NodeID {
+	var nodes []roachpb.NodeID
+	if d.HasArg("nodes") {
+		for _, arg := range d.CmdArgs {
+			if arg.Key == "nodes" {
+				for _, id := range arg.Vals {
+					id, err := strconv.ParseInt(id, 10, 32)
+					if err != nil {
+						t.Fatalf("failed to parse node id: %v", err)
+					}
+					nodes = append(nodes, roachpb.NodeID(id))
+				}
+			}
+		}
+	}
+	if len(nodes) > 0 {
+		sort.Sort(roachpb.NodeIDSlice(nodes))
+	}
+	return nodes
 }
 
 func (e *quorumRecoveryEnv) handleDumpStore(t *testing.T, d datadriven.TestData) string {
@@ -540,12 +754,12 @@ func (e *quorumRecoveryEnv) handleDumpStore(t *testing.T, d datadriven.TestData)
 		var descriptorViews []storeDescriptorView
 		var localDataViews []localDataView
 		store := e.stores[storeID]
-		err := kvserver.IterateRangeDescriptorsFromDisk(ctx, store.engine,
+		err := kvstorage.IterateRangeDescriptorsFromDisk(ctx, store.engine,
 			func(desc roachpb.RangeDescriptor) error {
 				descriptorViews = append(descriptorViews, descriptorView(desc))
 
 				sl := stateloader.Make(desc.RangeID)
-				raftReplicaID, _, err := sl.LoadRaftReplicaID(ctx, store.engine)
+				raftReplicaID, err := sl.LoadRaftReplicaID(ctx, store.engine)
 				if err != nil {
 					t.Fatalf("failed to load Raft replica ID: %v", err)
 				}
@@ -575,24 +789,50 @@ func (e *quorumRecoveryEnv) handleDumpStore(t *testing.T, d datadriven.TestData)
 func (e *quorumRecoveryEnv) handleApplyPlan(t *testing.T, d datadriven.TestData) (string, error) {
 	ctx := context.Background()
 	stores := e.parseStoresArg(t, d, true /* defaultToAll */)
-	nodes := e.groupStoresByNodeStore(t, stores)
-	defer func() {
-		for _, storeBatches := range nodes {
-			for _, b := range storeBatches {
-				b.Close()
+	var restart bool
+	if d.HasArg("restart") {
+		d.ScanArgs(t, "restart", &restart)
+	}
+
+	if !restart {
+		nodes := e.groupStoresByNodeStore(t, stores)
+		defer func() {
+			for _, storeBatches := range nodes {
+				for _, b := range storeBatches {
+					b.Close()
+				}
+			}
+		}()
+		updateTime := timeutil.Now()
+		for nodeID, stores := range nodes {
+			_, err := PrepareUpdateReplicas(ctx, e.plan, e.uuidGen, updateTime, nodeID,
+				stores)
+			if err != nil {
+				return "", err
+			}
+			if _, err = CommitReplicaChanges(stores); err != nil {
+				return "", err
 			}
 		}
-	}()
-	updateTime := timeutil.Now()
-	for nodeID, stores := range nodes {
-		_, err := PrepareUpdateReplicas(ctx, e.plan, uuid.DefaultGenerator, updateTime, nodeID, stores)
+		return "ok", nil
+	}
+
+	nodes := e.groupStoresByNode(t, stores)
+	for _, stores := range nodes {
+		ps := PlanStore{
+			path: "",
+			fs:   vfs.NewMem(),
+		}
+		if err := ps.SavePlan(e.plan); err != nil {
+			t.Fatal("failed to save plan to plan store", err)
+		}
+
+		err := MaybeApplyPendingRecoveryPlan(ctx, ps, stores, e.clock)
 		if err != nil {
 			return "", err
 		}
-		if _, err := CommitReplicaChanges(stores); err != nil {
-			return "", err
-		}
 	}
+
 	return "ok", nil
 }
 
@@ -612,22 +852,51 @@ func (e *quorumRecoveryEnv) dumpRecoveryEvents(
 	if d.HasArg("remove") {
 		d.ScanArgs(t, "remove", &removeEvents)
 	}
+	dumpStatus := false
+	if d.HasArg("status") {
+		d.ScanArgs(t, "status", &dumpStatus)
+	}
 
 	var events []string
 	logEvents := func(ctx context.Context, record loqrecoverypb.ReplicaRecoveryRecord) (bool, error) {
 		event := record.AsStructuredLog()
-		events = append(events, fmt.Sprintf("Updated range r%d, Key:%s, Store:s%d ReplicaID:%d",
+		events = append(events, fmt.Sprintf("updated range r%d, Key:%s, Store:s%d ReplicaID:%d",
 			event.RangeID, event.StartKey, event.StoreID, event.UpdatedReplicaID))
 		return removeEvents, nil
 	}
 
+	var statuses []string
 	stores := e.parseStoresArg(t, d, true /* defaultToAll */)
-	for _, store := range stores {
-		if _, err := RegisterOfflineRecoveryEvents(ctx, e.stores[store].engine, logEvents); err != nil {
+	for _, storeID := range stores {
+		store, ok := e.stores[storeID]
+		if !ok {
+			t.Fatalf("store s%d doesn't exist, but event dump is requested for it", store)
+		}
+		if _, err := RegisterOfflineRecoveryEvents(ctx, store.engine, logEvents); err != nil {
 			return "", err
 		}
+		status, ok, err := readNodeRecoveryStatusInfo(ctx, store.engine)
+		if err != nil {
+			return "", err
+		}
+		if ok {
+			statuses = append(statuses,
+				fmt.Sprintf("node n%d applied plan %s at %s:%s", store.nodeID, status.AppliedPlanID, status.ApplyTimestamp,
+					status.Error))
+		}
 	}
-	return strings.Join(events, "\n"), nil
+
+	var sb strings.Builder
+	if len(events) > 0 {
+		sb.WriteString(fmt.Sprintf("Events:\n%s\n", strings.Join(events, "\n")))
+	}
+	if dumpStatus && len(statuses) > 0 {
+		sb.WriteString(fmt.Sprintf("Statuses:\n%s", strings.Join(statuses, "\n")))
+	}
+	if sb.Len() > 0 {
+		return sb.String(), nil
+	}
+	return "ok", nil
 }
 
 func descriptorView(desc roachpb.RangeDescriptor) storeDescriptorView {

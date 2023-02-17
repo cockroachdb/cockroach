@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -43,13 +44,11 @@ import (
 //
 // TODO(ajwerner): add metrics to go with these stats.
 type applyCommittedEntriesStats struct {
-	batchesProcessed        int
-	entriesProcessed        int
-	entriesProcessedBytes   int64
-	stateAssertions         int
-	numEmptyEntries         int
-	numConfChangeEntries    int
+	appBatchStats
 	followerStoreWriteBytes kvadmission.FollowerStoreWriteBytes
+	numBatchesProcessed     int // TODO(sep-raft-log): numBatches
+	stateAssertions         int
+	numConfChangeEntries    int
 }
 
 // replicaStateMachine implements the apply.StateMachine interface.
@@ -68,7 +67,14 @@ type replicaStateMachine struct {
 	// ephemeralBatch is returned from NewEphemeralBatch.
 	ephemeralBatch ephemeralReplicaAppBatch
 	// stats are updated during command application and reset by moveStats.
-	stats applyCommittedEntriesStats
+	applyStats applyCommittedEntriesStats
+
+	// stats backs the currently open replicaAppBatch's view of the State field of
+	// kvserverpb.ReplicaState (which is otherwise backed directly by the
+	// Replica's in-memory state). This avoids an allocation per Stage() call as
+	// Stage() is now alloed to update this memory directly, whereas all other
+	// mutations need to copy-on-write.
+	stats enginepb.MVCCStats
 }
 
 // getStateMachine returns the Replica's apply.StateMachine. The Replica's
@@ -131,11 +137,11 @@ func (sm *replicaStateMachine) NewBatch() apply.Batch {
 	r := sm.r
 	b := &sm.batch
 	b.r = r
-	b.sm = sm
-	b.batch = r.store.engine.NewBatch()
+	b.applyStats = &sm.applyStats
+	b.batch = r.store.TODOEngine().NewBatch()
 	r.mu.RLock()
 	b.state = r.mu.state
-	b.state.Stats = &b.stats
+	b.state.Stats = &sm.stats
 	*b.state.Stats = *r.mu.state.Stats
 	b.closedTimestampSetter = r.mu.closedTimestampSetter
 	r.mu.RUnlock()
@@ -191,9 +197,11 @@ func (sm *replicaStateMachine) ApplySideEffects(
 			// Assert that the on-disk state doesn't diverge from the in-memory
 			// state as a result of the side effects.
 			sm.r.mu.RLock()
-			sm.r.assertStateRaftMuLockedReplicaMuRLocked(ctx, sm.r.store.Engine())
+			// TODO(sep-raft-log): either check only statemachine invariants or
+			// pass both engines in.
+			sm.r.assertStateRaftMuLockedReplicaMuRLocked(ctx, sm.r.store.TODOEngine())
 			sm.r.mu.RUnlock()
-			sm.stats.stateAssertions++
+			sm.applyStats.stateAssertions++
 		}
 	} else if res := cmd.ReplicatedResult(); !res.IsZero() {
 		log.Fatalf(ctx, "failed to handle all side-effects of ReplicatedEvalResult: %v", res)
@@ -214,30 +222,30 @@ func (sm *replicaStateMachine) ApplySideEffects(
 			sm.r.handleReadWriteLocalEvalResult(ctx, *cmd.localResult)
 		}
 
-		rejected := cmd.Rejected()
-		higherReproposalsExist := cmd.Cmd.MaxLeaseIndex != cmd.proposal.command.MaxLeaseIndex
-		if !rejected && higherReproposalsExist {
-			log.Fatalf(ctx, "finishing proposal with outstanding reproposal at a higher max lease index")
+		if higherReproposalsExist := cmd.proposal.Supersedes(cmd.Cmd.MaxLeaseIndex); higherReproposalsExist {
+			// If the command wasn't rejected, we just applied it and no higher
+			// reproposal must exist (since that one may also apply).
+			//
+			// If the command was rejected with ProposalRejectionPermanent, no higher
+			// reproposal should exist (after all, whoever made that reproposal should
+			// also have seen a permanent rejection).
+			//
+			// If it was rejected with ProposalRejectionIllegalLeaseIndex, then the
+			// subsequent call to tryReproposeWithNewLeaseIndex[^1] must have returned an
+			// error (or the proposal would not be IsLocal() now). But that call
+			// cannot return an error for a proposal that is already superseded
+			// initially.
+			//
+			// [^1]: see (*replicaDecoder).retrieveLocalProposals()
+			log.Fatalf(ctx, "finishing proposal with outstanding reproposal at a higher max lease index: %+v", cmd)
 		}
-		if !rejected && cmd.proposal.applied {
+		if !cmd.Rejected() && cmd.proposal.applied {
 			// If the command already applied then we shouldn't be "finishing" its
 			// application again because it should only be able to apply successfully
 			// once. We expect that when any reproposal for the same command attempts
 			// to apply it will be rejected by the below raft lease sequence or lease
 			// index check in checkForcedErr.
 			log.Fatalf(ctx, "command already applied: %+v; unexpected successful result", cmd)
-		}
-		// If any reproposals at a higher MaxLeaseIndex exist we know that they will
-		// never successfully apply, remove them from the map to avoid future
-		// reproposals. If there is no command referencing this proposal at a higher
-		// MaxLeaseIndex then it will already have been removed (see
-		// shouldRemove in replicaDecoder.retrieveLocalProposals()). It is possible
-		// that a later command in this batch referred to this proposal but it must
-		// have failed because it carried the same MaxLeaseIndex.
-		if higherReproposalsExist {
-			sm.r.mu.Lock()
-			delete(sm.r.mu.proposals, cmd.ID)
-			sm.r.mu.Unlock()
 		}
 		cmd.proposal.applied = true
 	}
@@ -280,6 +288,12 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 			sm.r.handleVersionResult(ctx, newVersion)
 			rResult.State.Version = nil
 		}
+
+		if rResult.State.GCHint != nil {
+			sm.r.handleGCHintResult(ctx, rResult.State.GCHint)
+			rResult.State.GCHint = nil
+		}
+
 		if (*rResult.State == kvserverpb.ReplicaState{}) {
 			rResult.State = nil
 		}
@@ -346,7 +360,7 @@ func (sm *replicaStateMachine) maybeApplyConfChange(ctx context.Context, cmd *re
 	if cc == nil {
 		return nil
 	}
-	sm.stats.numConfChangeEntries++
+	sm.applyStats.numConfChangeEntries++
 	if cmd.Rejected() {
 		// The command was rejected. There is no need to report a ConfChange
 		// to raft.
@@ -413,8 +427,8 @@ func (sm *replicaStateMachine) maybeApplyConfChange(ctx context.Context, cmd *re
 }
 
 func (sm *replicaStateMachine) moveStats() applyCommittedEntriesStats {
-	stats := sm.stats
-	sm.stats = applyCommittedEntriesStats{}
+	stats := sm.applyStats
+	sm.applyStats = applyCommittedEntriesStats{}
 	return stats
 }
 

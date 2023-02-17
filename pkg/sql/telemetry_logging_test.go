@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/stretchr/testify/require"
 )
 
 // TestTelemetryLogging verifies that telemetry events are logged to the telemetry log
@@ -112,6 +113,7 @@ func TestTelemetryLogging(t *testing.T) {
 		expectedErr             string // Empty string means no error is expected.
 		queryLevelStats         execstats.QueryLevelStats
 		enableTracing           bool
+		enableInjectTxErrors    bool
 	}{
 		{
 			// Test case with statement that is not of type DML.
@@ -320,10 +322,33 @@ func TestTelemetryLogging(t *testing.T) {
 			},
 			enableTracing: true,
 		},
+		{
+			name:                    "sql-transaction-error",
+			query:                   "SELECT * FROM u WHERE x > 10 LIMIT 3;",
+			queryNoConstants:        "SELECT * FROM u WHERE x > _ LIMIT _",
+			execTimestampsSeconds:   []float64{11, 11.01, 11.02, 11.03, 11.04, 11.05},
+			expectedLogStatement:    `SELECT * FROM \"\".\"\".u WHERE x > ‹10› LIMIT ‹3›`,
+			stubMaxEventFrequency:   10,
+			expectedSkipped:         []int{0},
+			expectedUnredactedTags:  []string{"client"},
+			expectedApplicationName: "telemetry-logging-test",
+			expectedFullScan:        true,
+			expectedStatsAvailable:  true,
+			expectedRead:            true,
+			expectedWrite:           false,
+			expectedIndexes:         false,
+			expectedErr:             "TransactionRetryWithProtoRefreshError: injected by `inject_retry_errors_enabled` session variable",
+			enableTracing:           false,
+			enableInjectTxErrors:    true,
+		},
 	}
 
 	for _, tc := range testData {
-		telemetryMaxEventFrequency.Override(context.Background(), &s.ClusterSettings().SV, tc.stubMaxEventFrequency)
+		TelemetryMaxEventFrequency.Override(context.Background(), &s.ClusterSettings().SV, tc.stubMaxEventFrequency)
+		if tc.enableInjectTxErrors {
+			_, err := db.DB.ExecContext(context.Background(), "SET inject_retry_errors_enabled = 'true'")
+			require.NoError(t, err)
+		}
 		for _, execTimestamp := range tc.execTimestampsSeconds {
 			stubTime := timeutil.FromUnixMicros(int64(execTimestamp * 1e6))
 			st.SetTime(stubTime)
@@ -333,6 +358,10 @@ func TestTelemetryLogging(t *testing.T) {
 			if err != nil && tc.expectedErr == "" {
 				t.Errorf("unexpected error executing query `%s`: %v", tc.query, err)
 			}
+		}
+		if tc.enableInjectTxErrors {
+			_, err := db.DB.ExecContext(context.Background(), "SET inject_retry_errors_enabled = 'false'")
+			require.NoError(t, err)
 		}
 	}
 
@@ -423,7 +452,7 @@ func TestTelemetryLogging(t *testing.T) {
 					if !strings.Contains(e.Message, "\"Database\":\""+databaseName+"\"") {
 						t.Errorf("expected to find Database: %s", databaseName)
 					}
-					stmtFingerprintID := roachpb.ConstructStatementFingerprintID(tc.queryNoConstants, tc.expectedErr != "", true, databaseName)
+					stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(tc.queryNoConstants, tc.expectedErr != "", true, databaseName)
 					if !strings.Contains(e.Message, "\"StatementFingerprintID\":"+strconv.FormatUint(uint64(stmtFingerprintID), 10)) {
 						t.Errorf("expected to find StatementFingerprintID: %v", stmtFingerprintID)
 					}
@@ -594,7 +623,7 @@ func TestNoTelemetryLogOnTroubleshootMode(t *testing.T) {
 	db.Exec(t, "CREATE TABLE t();")
 
 	stubMaxEventFrequency := int64(1)
-	telemetryMaxEventFrequency.Override(context.Background(), &s.ClusterSettings().SV, stubMaxEventFrequency)
+	TelemetryMaxEventFrequency.Override(context.Background(), &s.ClusterSettings().SV, stubMaxEventFrequency)
 
 	/*
 		Testing Cases:
@@ -710,7 +739,7 @@ func TestTelemetryLogJoinTypesAndAlgorithms(t *testing.T) {
 		");")
 
 	stubMaxEventFrequency := int64(1000000)
-	telemetryMaxEventFrequency.Override(context.Background(), &s.ClusterSettings().SV, stubMaxEventFrequency)
+	TelemetryMaxEventFrequency.Override(context.Background(), &s.ClusterSettings().SV, stubMaxEventFrequency)
 
 	testData := []struct {
 		name                   string
@@ -1185,5 +1214,63 @@ cases:
 			}
 		}
 		t.Errorf("couldn't find log entry containing `%s`", tc.logStmt)
+	}
+}
+
+func TestFunctionBodyRedacted(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	sc := log.ScopeWithoutShowLogs(t)
+	defer sc.Close(t)
+
+	cleanup := logtestutils.InstallTelemetryLogFileSink(sc, t)
+	defer cleanup()
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	db := sqlutils.MakeSQLRunner(sqlDB)
+	defer s.Stopper().Stop(context.Background())
+
+	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;`)
+	db.Exec(t, `CREATE TABLE kv (k STRING, v INT)`)
+	stubMaxEventFrequency := int64(1000000)
+	TelemetryMaxEventFrequency.Override(context.Background(), &s.ClusterSettings().SV, stubMaxEventFrequency)
+
+	stmt := `CREATE FUNCTION f() RETURNS INT 
+LANGUAGE SQL 
+AS $$ 
+SELECT k FROM kv WHERE v = 1;
+SELECT v FROM kv WHERE k = 'Foo';
+$$`
+
+	expectedLogStmt := `CREATE FUNCTION defaultdb.public.f()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$SELECT k FROM defaultdb.public.kv WHERE v = ‹1›; SELECT v FROM defaultdb.public.kv WHERE k = ‹'Foo'›;$$`
+
+	db.Exec(t, stmt)
+
+	log.Flush()
+
+	entries, err := log.FetchEntriesFromFiles(
+		0,
+		math.MaxInt64,
+		10000,
+		regexp.MustCompile(`"EventType":"sampled_query"`),
+		log.WithMarkedSensitiveData,
+	)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(entries) == 0 {
+		t.Fatal(errors.Newf("no entries found"))
+	}
+
+	numLogsFound := 0
+	for i := len(entries) - 1; i >= 0; i-- {
+		e := entries[i]
+		if strings.Contains(e.Message, expectedLogStmt) {
+			numLogsFound++
+		}
+	}
+	if numLogsFound != 1 {
+		t.Errorf("expected 1 log entries, found %d", numLogsFound)
 	}
 }

@@ -104,8 +104,11 @@ func awsMachineSupportsSSD(machineType string) bool {
 	return false
 }
 
-func getAWSOpts(machineType string, zones []string, localSSD bool) vm.ProviderOpts {
+func getAWSOpts(machineType string, zones []string, volumeSize int, localSSD bool) vm.ProviderOpts {
 	opts := aws.DefaultProviderOpts()
+	if volumeSize != 0 {
+		opts.DefaultEBSVolume.Disk.VolumeSize = volumeSize
+	}
 	if localSSD {
 		opts.SSDMachineType = machineType
 	} else {
@@ -177,10 +180,12 @@ func (s *ClusterSpec) RoachprodOpts(
 		return vm.CreateOpts{}, nil, errors.Errorf("unsupported cloud %v", s.Cloud)
 	}
 
-	if s.Cloud != GCE {
+	if s.Cloud != GCE && s.Cloud != AWS {
 		if s.VolumeSize != 0 {
 			return vm.CreateOpts{}, nil, errors.Errorf("specifying volume size is not yet supported on %s", s.Cloud)
 		}
+	}
+	if s.Cloud != GCE {
 		if s.SSDs != 0 {
 			return vm.CreateOpts{}, nil, errors.Errorf("specifying SSD count is not yet supported on %s", s.Cloud)
 		}
@@ -245,7 +250,7 @@ func (s *ClusterSpec) RoachprodOpts(
 	var providerOpts vm.ProviderOpts
 	switch s.Cloud {
 	case AWS:
-		providerOpts = getAWSOpts(machineType, zones, createVMOpts.SSDOpts.UseLocalSSD)
+		providerOpts = getAWSOpts(machineType, zones, s.VolumeSize, createVMOpts.SSDOpts.UseLocalSSD)
 	case GCE:
 		providerOpts = getGCEOpts(machineType, zones, s.VolumeSize, ssdCount,
 			createVMOpts.SSDOpts.UseLocalSSD, s.RAID0, s.TerminateOnMigration)

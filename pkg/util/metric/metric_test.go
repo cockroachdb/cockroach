@@ -95,6 +95,34 @@ func TestCounter(t *testing.T) {
 	testMarshal(t, c, "90")
 }
 
+func TestCounterFloat64(t *testing.T) {
+	g := NewCounterFloat64(emptyMetadata)
+	g.UpdateIfHigher(10)
+	if v := g.Count(); v != 10 {
+		t.Fatalf("unexpected value: %f", v)
+	}
+	testMarshal(t, g, "10")
+
+	var wg sync.WaitGroup
+	for i := int64(0); i < 10; i++ {
+		wg.Add(1)
+		go func(i int64) { g.Inc(float64(i)); wg.Done() }(i)
+	}
+	wg.Wait()
+	if v := g.Count(); math.Abs(v-55.0) > 0.001 {
+		t.Fatalf("unexpected value: %g", v)
+	}
+
+	for i := int64(55); i < 65; i++ {
+		wg.Add(1)
+		go func(i int64) { g.UpdateIfHigher(float64(i)); wg.Done() }(i)
+	}
+	wg.Wait()
+	if v := g.Count(); math.Abs(v-64.0) > 0.001 {
+		t.Fatalf("unexpected value: %g", v)
+	}
+}
+
 func setNow(d time.Duration) {
 	now = func() time.Time {
 		return time.Time{}.Add(d)
@@ -112,17 +140,18 @@ func TestHistogram(t *testing.T) {
 		return &n
 	}
 
-	h := NewHistogram(
-		Metadata{},
-		time.Hour,
-		[]float64{
+	h := NewHistogram(HistogramOptions{
+		Mode:     HistogramModePrometheus,
+		Metadata: Metadata{},
+		Duration: time.Hour,
+		Buckets: []float64{
 			1.0,
 			5.0,
 			10.0,
 			25.0,
 			100.0,
 		},
-	)
+	})
 
 	// should return 0 if no observations are made
 	require.Equal(t, 0.0, h.ValueAtQuantileWindowed(0))
@@ -236,23 +265,24 @@ func TestNewHistogramRotate(t *testing.T) {
 	defer TestingSetNow(nil)()
 	setNow(0)
 
-	h := NewHistogram(emptyMetadata, 10*time.Second, nil)
+	h := NewHistogram(HistogramOptions{
+		Mode:     HistogramModePrometheus,
+		Metadata: emptyMetadata,
+		Duration: 10 * time.Second,
+		Buckets:  nil,
+	})
 	for i := 0; i < 4; i++ {
 		// Windowed histogram is initially empty.
 		h.Inspect(func(interface{}) {}) // triggers ticking
-		var m prometheusgo.Metric
-		require.NoError(t, h.Windowed().Write(&m))
-		require.Zero(t, *m.Histogram.SampleSum)
+		require.Zero(t, h.TotalSumWindowed())
 		// But cumulative histogram has history (if i > 0).
-		require.EqualValues(t, i, *h.ToPrometheusMetric().Histogram.SampleCount)
+		require.EqualValues(t, i, h.TotalCount())
 
 		// Add a measurement and verify it's there.
 		{
 			h.RecordValue(12345)
 			f := float64(12345)
-			var m prometheusgo.Metric
-			require.NoError(t, h.Windowed().Write(&m))
-			require.Equal(t, *m.Histogram.SampleSum, f)
+			require.Equal(t, h.TotalSumWindowed(), f)
 		}
 		// Tick. This rotates the histogram.
 		setNow(time.Duration(i+1) * 10 * time.Second)

@@ -16,7 +16,7 @@ import {
   SortSetting,
 } from "src/sortedtable";
 import { DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT, Duration } from "src/util";
-import { InsightExecEnum, MergedTxnInsightEvent } from "src/insights";
+import { InsightExecEnum, TxnInsightEvent } from "src/insights";
 import {
   InsightCell,
   insightsTableTitles,
@@ -27,7 +27,7 @@ import { Link } from "react-router-dom";
 import { TimeScale } from "../../../timeScaleDropdown";
 
 interface TransactionInsightsTable {
-  data: MergedTxnInsightEvent[];
+  data: TxnInsightEvent[];
   sortSetting: SortSetting;
   onChangeSortSetting: (ss: SortSetting) => void;
   pagination: ISortedTablePagination;
@@ -37,7 +37,7 @@ interface TransactionInsightsTable {
 
 export function makeTransactionInsightsColumns(
   setTimeScale: (ts: TimeScale) => void,
-): ColumnDescriptor<MergedTxnInsightEvent>[] {
+): ColumnDescriptor<TxnInsightEvent>[] {
   const execType = InsightExecEnum.TRANSACTION;
   return [
     {
@@ -64,8 +64,8 @@ export function makeTransactionInsightsColumns(
     {
       name: "query",
       title: insightsTableTitles.query(execType),
-      cell: item => QueriesCell(item.queries, 50),
-      sort: item => (item.queries?.length ? item.queries[0] : ""),
+      cell: item => QueriesCell([item.query], 50),
+      sort: item => item.query,
     },
     {
       name: "insights",
@@ -87,8 +87,16 @@ export function makeTransactionInsightsColumns(
     {
       name: "contention",
       title: insightsTableTitles.contention(execType),
-      cell: item => Duration((item.contention?.asMilliseconds() ?? 0) * 1e6),
-      sort: item => item.contention?.asMilliseconds() ?? 0,
+      cell: item =>
+        Duration((item.contentionTime?.asMilliseconds() ?? 0) * 1e6),
+      sort: item => item.contentionTime?.asMilliseconds() ?? 0,
+    },
+    {
+      name: "cpu",
+      title: insightsTableTitles.cpu(execType),
+      cell: item => Duration(item.cpuSQLNanos),
+      sort: item => item.cpuSQLNanos,
+      showByDefault: false,
     },
     {
       name: "applicationName",

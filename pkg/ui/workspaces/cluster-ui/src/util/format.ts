@@ -156,6 +156,19 @@ export function Duration(nanoseconds: number): string {
 }
 
 /**
+ * Duration creates a string representation for a duration. The expectation is
+ * that units are passed in nanoseconds; for larger durations, the value will
+ * be converted into larger units.
+ * If the value is 0, return "no samples".
+ */
+export function DurationCheckSample(nanoseconds: number): string {
+  if (nanoseconds == 0) {
+    return "no samples";
+  }
+  return Duration(nanoseconds);
+}
+
+/**
  * Cast nanoseconds to provided scale units
  */
 // tslint:disable-next-line: variable-name
@@ -289,4 +302,41 @@ export function FixFingerprintHexValue(s: string): string {
 export function capitalize(str: string): string {
   if (!str) return str;
   return str[0].toUpperCase() + str.substring(1);
+}
+
+export function EncodeUriName(name: string) {
+  return encodeURIComponent(name);
+}
+
+export function EncodeDatabasesUri(db: string) {
+  return `/databases/${EncodeUriName(db)}`;
+}
+
+export function EncodeDatabasesToIndexUri(
+  db: string,
+  schema: string,
+  table: string,
+  indexName: string,
+) {
+  return `${EncodeDatabasesUri(db)}/${EncodeUriName(schema)}/${EncodeUriName(
+    table,
+  )}/${EncodeUriName(indexName)}`;
+}
+
+export function EncodeDatabaseTableUri(db: string, table: string) {
+  return `${EncodeDatabaseUri(db)}/table/${EncodeUriName(table)}`;
+}
+
+export function EncodeDatabaseTableIndexUri(
+  db: string,
+  table: string,
+  indexName: string,
+) {
+  return `${EncodeDatabaseTableUri(db, table)}/index/${EncodeUriName(
+    indexName,
+  )}`;
+}
+
+export function EncodeDatabaseUri(db: string) {
+  return `/database/${EncodeUriName(db)}`;
 }

@@ -287,7 +287,7 @@ func TestImportAvroLogicalTypes(t *testing.T) {
 	}
 	require.Equal(t, true, success, "failed to generate random data after 5 attempts")
 
-	ie := srv.ExecutorConfig().(sql.ExecutorConfig).InternalExecutor
+	ie := srv.ExecutorConfig().(sql.ExecutorConfig).InternalDB.Executor()
 	datums, _, err := ie.QueryBufferedExWithCols(
 		ctx,
 		"",

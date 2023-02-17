@@ -153,6 +153,12 @@ func IsLegalColumnType(typ *types.T) bool {
 		// OIDVECTOR and INT2VECTOR are not valid column types for
 		// user-created tables.
 		return false
+	case oid.T_regproc, oid.T_regprocedure:
+		// REGPROC and REGPROCEDURE columns hit an edge case. Customers are very
+		// unlikely to use these types of columns, so disabling their generation
+		// is low risk.
+		// TODO(#95641): Remove this once we correctly handle this edge case.
+		return false
 	}
 	ctx := context.Background()
 	version := clustersettings.MakeTestingClusterSettings().Version

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -99,7 +100,8 @@ type tpccOptions struct {
 	// TODO(tbg): remove this once https://github.com/cockroachdb/cockroach/issues/74705 is completed.
 	EnableCircuitBreakers bool
 	// SkipPostRunCheck, if set, skips post TPC-C run checks.
-	SkipPostRunCheck bool
+	SkipPostRunCheck              bool
+	DisableDefaultScheduledBackup bool
 }
 
 type workloadInstance struct {
@@ -154,7 +156,9 @@ func setupTPCC(
 				settings.Env = append(settings.Env, "COCKROACH_SCAN_INTERVAL=200ms")
 				settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
 			}
-			c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, crdbNodes)
+			startOpts := option.DefaultStartOpts()
+			startOpts.RoachprodOpts.ScheduleBackups = !opts.DisableDefaultScheduledBackup
+			c.Start(ctx, t.L(), startOpts, settings, crdbNodes)
 		}
 	}
 
@@ -298,7 +302,7 @@ func runTPCC(ctx context.Context, t test.Test, c cluster.Cluster, opts tpccOptio
 	// Check no errors from metrics.
 	if ep != nil {
 		if err := ep.err(); err != nil {
-			t.Fatal(err)
+			t.Fatal(errors.Wrap(err, "error detected during DRT"))
 		}
 	}
 }
@@ -363,7 +367,7 @@ func maxSupportedTPCCWarehouses(
 func runTPCCMixedHeadroom(
 	ctx context.Context, t test.Test, c cluster.Cluster, cloud string, versionsToUpgrade int,
 ) {
-	if runtime.GOARCH == "arm64" {
+	if c.IsLocal() && runtime.GOARCH == "arm64" {
 		t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
 	}
 	crdbNodes := c.Range(1, c.Spec().NodeCount-1)
@@ -405,7 +409,7 @@ func runTPCCMixedHeadroom(
 		bankRows = 1000
 	}
 
-	history, err := PredecessorHistory(*t.BuildVersion(), versionsToUpgrade)
+	history, err := clusterupgrade.PredecessorHistory(*t.BuildVersion(), versionsToUpgrade)
 	if err != nil {
 		t.Fatal(err)
 	}

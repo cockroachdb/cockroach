@@ -20,7 +20,7 @@ import (
 	"github.com/alessio/shellescape"
 	"github.com/cockroachdb/cockroach/pkg/cmd/dev/io/exec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/dev/io/os"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/datadriven"
 	"github.com/google/shlex"
 	"github.com/stretchr/testify/require"
@@ -49,7 +49,7 @@ const (
 // sandbox and copying them over one-by-one).
 func TestDataDriven(t *testing.T) {
 	verbose := testing.Verbose()
-	testdata := testutils.TestDataPath(t, "datadriven")
+	testdata := datapathutils.TestDataPath(t, "datadriven")
 	datadriven.Walk(t, testdata, func(t *testing.T, path string) {
 		// We'll match against printed logs for datadriven.
 		var logger io.ReadWriter = bytes.NewBufferString("")

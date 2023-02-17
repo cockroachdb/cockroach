@@ -164,9 +164,10 @@ func init() {
 		md *opt.Metadata, s *memo.ScanPrivate, required *props.OrderingChoice,
 	) bool {
 		ok, reverse := ScanPrivateCanProvide(md, s, required)
-		if !ok {
-			panic(errors.AssertionFailedf("scan can't provide required ordering"))
-		}
-		return reverse
+		// If the scan cannot provide the ordering, then the scan direction
+		// cannot be determined. We return false in that case, even though it is
+		// not confirmed that the scan is not in reverse. This is possible when
+		// a memo is not fully optimized.
+		return ok && reverse
 	}
 }

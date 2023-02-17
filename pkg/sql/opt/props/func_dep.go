@@ -710,7 +710,7 @@ func (f *FuncDepSet) ComputeEquivClosure(cols opt.ColSet) opt.ColSet {
 // ComputeEquivClosureNoCopy is similar to ComputeEquivClosure, but computes the
 // closure in-place (e.g. the argument ColSet will be mutated). It should only
 // be used when it is ok to mutate the argument. This avoids allocations when
-// columns overflow the small set of util.FastIntSet.
+// columns overflow the small set of intsets.Fast.
 func (f *FuncDepSet) ComputeEquivClosureNoCopy(cols opt.ColSet) opt.ColSet {
 	// Don't need to get transitive closure, because equivalence closures are
 	// already maintained for every column.

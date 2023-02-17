@@ -54,8 +54,10 @@ type State interface {
 	// runtime in profiling. We should investigate optimizing it, by way of
 	// incremental descriptor computation, when replicas, leases or load is
 	// changed.
-	// StoreDescriptors returns the descriptors for the StoreIDs given.
-	StoreDescriptors() []roachpb.StoreDescriptor
+	// StoreDescriptors returns the descriptors for the StoreIDs given. If the
+	// first flag is false, then the capacity is generated from scratch,
+	// otherwise the last calculated capacity values are used for each store.
+	StoreDescriptors(bool, ...StoreID) []roachpb.StoreDescriptor
 	// Nodes returns all nodes that exist in this state.
 	Nodes() []Node
 	// RangeFor returns the range containing Key in [StartKey, EndKey). This
@@ -152,11 +154,21 @@ type State interface {
 	// the allocator and storepool should both be separated out of this
 	// interface, instead using it to populate themselves.
 	MakeAllocator(StoreID) allocatorimpl.Allocator
+	// StorePool returns the store pool for the given storeID.
+	StorePool(StoreID) storepool.AllocatorStorePool
 	// LoadSplitterFor returns the load splitter for the Store with ID StoreID.
 	LoadSplitterFor(StoreID) LoadSplitter
 	// RaftStatus returns the current raft status for the replica of the Range
 	// with ID RangeID, on the store with ID StoreID.
 	RaftStatus(RangeID, StoreID) *raft.Status
+	// RegisterCapacityChangeListener registers a listener which will be
+	// notified on events where there is a lease or replica addition or
+	// removal, for a specific store.
+	RegisterCapacityChangeListener(CapacityChangeListener)
+	// RegisterCapacityListener registers a listener which will be called when
+	// a new store capacity has been generated from scratch, for a specific
+	// store.
+	RegisterCapacityListener(NewCapacityListener)
 }
 
 // Node is a container for stores and is part of a cluster.
@@ -259,7 +271,7 @@ func (m *ManualSimClock) Set(tsNanos int64) {
 type Key int64
 
 // MinKey is the minimum key in the keyspace.
-const MinKey Key = -1
+const MinKey Key = 0
 
 // MaxKey is the maximum key in the keyspace.
 const MaxKey Key = 9999999999

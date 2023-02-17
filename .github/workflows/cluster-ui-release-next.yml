@@ -1,5 +1,6 @@
 name: Publish Cluster UI Pre-release
 on:
+  workflow_dispatch:
   push:
     branches:
       - master
@@ -31,10 +32,12 @@ jobs:
       uses: actions/setup-node@v3
       with:
         node-version: 16
+        registry-url: 'https://registry.npmjs.org'
+        always-auth: true
         cache: 'yarn'
         cache-dependency-path: pkg/ui/workspaces/cluster-ui/yarn.lock
       env:
-        NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
     - name: Check if version is published
       id: version-check
@@ -49,13 +52,27 @@ jobs:
           echo "to npm. Publishing step should be skipped. 🛑"
         else
           echo "published=no" >> $GITHUB_OUTPUT
+          echo
+          echo "✅ Cluster UI package version $PACKAGE_VERSION should be published. ✅"
         fi
 
     - name: Build Cluster UI
+      if: steps.version-check.outputs.published == 'no'
       run: |
         yarn install --frozen-lockfile
-        bazel build //pkg/ui/workspaces/cluster-ui:cluster-ui
+        bazel build //pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client
+        cp ../../../../_bazel/bin/pkg/ui/workspaces/db-console/src/js/protos.* ../db-console/src/js/
+        yarn build
+
+    - name: Create version tag and push
+      if: steps.version-check.outputs.published == 'no'
+      run: |
+        TAGNAME="@cockroachlabs/cluster-ui@$(jq -r '.version' ./package.json)"
+        if ! [ $(git tag -l "$TAGNAME") ]; then
+          git tag $TAGNAME
+          git push origin $TAGNAME
+        fi
 
     - name: Publish prerelease version
       if: steps.version-check.outputs.published == 'no'
-      run: npm publish --access public --tag next --dry-run
+      run: npm publish --access public --tag next --ignore-scripts

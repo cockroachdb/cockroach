@@ -32,7 +32,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":hba"],
     deps = [
-        "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_kr_pretty//:pretty",
     ],

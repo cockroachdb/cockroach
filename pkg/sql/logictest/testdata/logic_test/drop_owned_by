@@ -633,3 +633,20 @@ GRANT SYSTEM MODIFYCLUSTERSETTING TO testuser
 
 statement error pq: cannot perform drop owned by if role has synthetic privileges; testuser has entries in system.privileges
 DROP OWNED BY testuser
+
+subtest drop_function
+
+statement ok
+CREATE USER u_drop_udf;
+
+statement ok
+CREATE FUNCTION f_drop_udf() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement ok
+ALTER FUNCTION f_drop_udf OWNER TO u_drop_udf;
+
+statement ok
+DROP OWNED BY u_drop_udf;
+
+statement error pq: unknown function: f_drop_udf\(\): function undefined
+SHOW CREATE FUNCTION f_drop_udf;

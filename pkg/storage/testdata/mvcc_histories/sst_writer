@@ -1,5 +1,4 @@
-# Writing keys out of order fails, except for overlapping range keys by
-# timestamp which succeeds.
+# Writing keys out of order fails.
 run error
 sst_put k=b ts=1 v=b1
 sst_put k=a ts=1 v=a1
@@ -24,15 +23,15 @@ sst_put_rangekey k=a end=c ts=1
 <no data>
 error: (*withstack.withStack:) pebble: spans must be added in order: "d"/0,0 > "a"/0,0
 
-run ok
-sst_put_rangekey k=a end=c ts=1
-sst_put_rangekey k=a end=c ts=2
-----
->> at end:
-<no data>
->> sst-0:
-rangekeyset: {a-c}/2.000000000,0 -> /<empty>
-rangekeyset: {a-c}/1.000000000,0 -> /<empty>
+# TODO(jackson): This test doesn't pass yet. The SST writer does not enforce the
+# ordering among range key timestamps.
+#run ok
+#sst_put_rangekey k=a end=c ts=1
+#sst_put_rangekey k=a end=c ts=2
+#----
+#>> at end:
+#<no data>
+#error: (*withstack.withStack:) pebble: suffixes must be added in order: /1.000000000,0 > /2.000000000,0
 
 # Writing invalid range keys fails.
 run error
@@ -48,9 +47,9 @@ error: (*withstack.withStack:) invalid range key {f-c}/1.000000000,0: start key 
 run ok
 sst_put k=a ts=1 v=a1
 sst_put_rangekey k=a end=c ts=3 localTs=2
-sst_put_rangekey k=a end=c ts=3 localTs=1
 sst_finish
 sst_put k=a ts=1 v=again
+sst_put_rangekey k=a end=c ts=3 localTs=1
 ----
 >> at end:
 <no data>
@@ -59,15 +58,16 @@ set: "a"/1.000000000,0 -> /BYTES/a1
 rangekeyset: {a-c}/3.000000000,0 -> {localTs=2.000000000,0}/<empty>
 >> sst-1:
 set: "a"/1.000000000,0 -> /BYTES/again
+rangekeyset: {a-c}/3.000000000,0 -> {localTs=1.000000000,0}/<empty>
 
 run ok
 sst_iter_new
 iter_seek_ge k=a
 iter_scan
 ----
-iter_seek_ge: {a-c}/[3.000000000,0={localTs=2.000000000,0}/<empty>] !
-iter_scan: {a-c}/[3.000000000,0={localTs=2.000000000,0}/<empty>] !
-iter_scan: "a"/1.000000000,0=/BYTES/again {a-c}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_seek_ge: {a-c}/[3.000000000,0={localTs=1.000000000,0}/<empty>] !
+iter_scan: {a-c}/[3.000000000,0={localTs=1.000000000,0}/<empty>] !
+iter_scan: "a"/1.000000000,0=/BYTES/again {a-c}/[3.000000000,0={localTs=1.000000000,0}/<empty>]
 iter_scan: .
 
 # Writing abutting range keys. Iteration defragments them, unless the value

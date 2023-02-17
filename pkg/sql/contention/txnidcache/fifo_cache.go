@@ -14,7 +14,7 @@ import (
 	"sync"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention/contentionutils"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -32,7 +32,7 @@ type fifoCache struct {
 	mu struct {
 		syncutil.RWMutex
 
-		data map[uuid.UUID]roachpb.TransactionFingerprintID
+		data map[uuid.UUID]appstatspb.TransactionFingerprintID
 
 		eviction blockList
 	}
@@ -57,7 +57,7 @@ func newFIFOCache(capacity contentionutils.CapacityLimiter) *fifoCache {
 		capacity: capacity,
 	}
 
-	c.mu.data = make(map[uuid.UUID]roachpb.TransactionFingerprintID)
+	c.mu.data = make(map[uuid.UUID]appstatspb.TransactionFingerprintID)
 	c.mu.eviction = blockList{}
 	return c
 }
@@ -79,7 +79,7 @@ func (c *fifoCache) add(b *block) {
 	c.maybeEvictLocked()
 }
 
-func (c *fifoCache) get(txnID uuid.UUID) (roachpb.TransactionFingerprintID, bool) {
+func (c *fifoCache) get(txnID uuid.UUID) (appstatspb.TransactionFingerprintID, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 

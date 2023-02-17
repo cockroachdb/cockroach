@@ -22,7 +22,7 @@ import (
 func OperatorIsImmutable(expr Expr) bool {
 	switch t := expr.(type) {
 	case *FuncExpr:
-		return t.fnProps.Class == NormalClass && t.fn.Volatility <= volatility.Immutable
+		return t.ResolvedOverload().Class == NormalClass && t.fn.Volatility <= volatility.Immutable
 
 	case *CastExpr:
 		v, ok := cast.LookupCastVolatility(t.Expr.(TypedExpr).ResolvedType(), t.typ)

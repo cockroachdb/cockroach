@@ -13,6 +13,7 @@ package sqlerrors
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -136,19 +137,6 @@ func NewInvalidWildcardError(name string) error {
 	return pgerror.Newf(
 		pgcode.InvalidCatalogName,
 		"%q does not match any valid database or schema", name)
-}
-
-// NewUndefinedObjectError returns the correct undefined object error based on
-// the kind of object that was requested.
-func NewUndefinedObjectError(name tree.NodeFormatter, kind tree.DesiredObjectKind) error {
-	switch kind {
-	case tree.TableObject:
-		return NewUndefinedRelationError(name)
-	case tree.TypeObject:
-		return NewUndefinedTypeError(name)
-	default:
-		return errors.AssertionFailedf("unknown object kind %d", kind)
-	}
 }
 
 // NewUndefinedTypeError creates an error that represents a missing type.
@@ -275,6 +263,17 @@ func NewUniqueConstraintReferencedByForeignKeyError(
 		"%q is referenced by foreign key from table %q",
 		uniqueConstraintOrIndexToDrop, tableName,
 	)
+}
+
+// NewUndefinedUserError returns an undefined user error.
+func NewUndefinedUserError(user username.SQLUsername) error {
+	return pgerror.Newf(pgcode.UndefinedObject, "role/user %q does not exist", user)
+}
+
+// NewUndefinedConstraintError returns a missing constraint error.
+func NewUndefinedConstraintError(constraintName, tableName string) error {
+	return pgerror.Newf(pgcode.UndefinedObject,
+		"constraint %q of relation %q does not exist", constraintName, tableName)
 }
 
 // NewRangeUnavailableError creates an unavailable range error.

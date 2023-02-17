@@ -1,3 +1,5 @@
+# cluster-opt: can-admin-split
+
 statement ok
 CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL, z INT NOT NULL, w INT, INDEX i (x), INDEX i2 (z))
 
@@ -1394,7 +1396,7 @@ statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
 
 query T
-SELECT @2 FROM [SHOW CREATE TABLE t];
+SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
 CREATE TABLE public.t (
   a INT8 NOT NULL,
@@ -1430,7 +1432,7 @@ statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (b, k);
 
 query T
-SELECT @2 FROM [SHOW CREATE TABLE t];
+SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
 CREATE TABLE public.t (
   a INT8 NOT NULL,
@@ -1474,7 +1476,7 @@ statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
 
 query T
-SELECT @2 FROM [SHOW CREATE TABLE t];
+SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
 CREATE TABLE public.t (
   a INT8 NOT NULL,
@@ -1548,7 +1550,7 @@ statement ok
 ALTER TABLE t_test_param ALTER PRIMARY KEY USING COLUMNS (b) USING HASH WITH BUCKET_COUNT = 5;
 
 query T
-SELECT @2 FROM [SHOW CREATE TABLE t_test_param]
+SELECT create_statement FROM [SHOW CREATE TABLE t_test_param]
 ----
 CREATE TABLE public.t_test_param (
   a INT8 NOT NULL,
@@ -1578,7 +1580,7 @@ COMMENT ON CONSTRAINT i2 ON pkey_comment IS 'idx3';
 
 # Comment should exist inside the create statement, so filter it out
 query T
-SELECT substring(@2, strpos(@2, 'COMMENT')) FROM [SHOW CREATE pkey_comment];
+SELECT substring(create_statement, strpos(create_statement, 'COMMENT')) FROM [SHOW CREATE pkey_comment];
 ----
 COMMENT ON INDEX public.pkey_comment@pkey IS 'idx';
 COMMENT ON INDEX public.pkey_comment@i2 IS 'idx2';
@@ -1592,7 +1594,7 @@ ALTER TABLE pkey_comment ALTER PRIMARY KEY USING COLUMNS (b);
 # No comment exists inside the CREATE statement
 skipif config local-legacy-schema-changer
 query T
-SELECT substring(@2, strpos(@2, 'COMMENT')) FROM [SHOW CREATE pkey_comment];
+SELECT substring(create_statement, strpos(create_statement, 'COMMENT')) FROM [SHOW CREATE pkey_comment];
 ----
 COMMENT ON INDEX public.pkey_comment@pkey IS 'idx';
 COMMENT ON INDEX public.pkey_comment@i2 IS 'idx2';
@@ -1613,13 +1615,13 @@ CREATE TABLE t (a INT PRIMARY KEY, b INT NOT NULL, UNIQUE INDEX t_a_key (a));
 statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (b);
 
-query TTT
+query TTT rowsort
 SELECT index_name, column_name, direction FROM [SHOW INDEXES FROM t]
 ----
 t_pkey   b  ASC
-t_pkey   a  N/A
-t_a_key  a  ASC
 t_a_key  b  ASC
+t_a_key  a  ASC
+t_pkey   a  N/A
 
 # But if the existing index is not strictly equal to the (old) primary key
 # (even if, for example, the (old) primary key is a strict prefix of an

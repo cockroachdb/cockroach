@@ -37,8 +37,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/indexstorageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -6262,7 +6262,6 @@ The parent_only boolean is always ignored.`,
 
 	"addgeometrycolumn": makeBuiltin(
 		tree.FunctionProperties{
-			Class:    tree.SQLClass,
 			Category: builtinconstants.CategorySpatial,
 		},
 		tree.Overload{
@@ -6301,6 +6300,7 @@ The parent_only boolean is always ignored.`,
 					bool(tree.MustBeDBool(args[5])),
 				)
 			},
+			Class: tree.SQLClass,
 			Info: infoBuilder{
 				info: `Adds a new geometry column to an existing table and returns metadata about the column created.`,
 			}.String(),
@@ -6343,6 +6343,7 @@ The parent_only boolean is always ignored.`,
 					bool(tree.MustBeDBool(args[6])),
 				)
 			},
+			Class: tree.SQLClass,
 			Info: infoBuilder{
 				info: `Adds a new geometry column to an existing table and returns metadata about the column created.`,
 			}.String(),
@@ -6386,6 +6387,7 @@ The parent_only boolean is always ignored.`,
 					bool(tree.MustBeDBool(args[7])),
 				)
 			},
+			Class: tree.SQLClass,
 			Info: infoBuilder{
 				info: `Adds a new geometry column to an existing table and returns metadata about the column created.`,
 			}.String(),
@@ -6426,6 +6428,7 @@ The parent_only boolean is always ignored.`,
 					true, /* useTypmod */
 				)
 			},
+			Class: tree.SQLClass,
 			Info: infoBuilder{
 				info: `Adds a new geometry column to an existing table and returns metadata about the column created.`,
 			}.String(),
@@ -6467,6 +6470,7 @@ The parent_only boolean is always ignored.`,
 					true, /* useTypmod */
 				)
 			},
+			Class: tree.SQLClass,
 			Info: infoBuilder{
 				info: `Adds a new geometry column to an existing table and returns metadata about the column created.`,
 			}.String(),
@@ -6509,6 +6513,7 @@ The parent_only boolean is always ignored.`,
 					true, /* useTypmod */
 				)
 			},
+			Class: tree.SQLClass,
 			Info: infoBuilder{
 				info: `Adds a new geometry column to an existing table and returns metadata about the column created.`,
 			}.String(),
@@ -6644,6 +6649,7 @@ The parent_only boolean is always ignored.`,
 			Types:      tree.ParamTypes{{Name: "geometry", Typ: types.Geometry}},
 			ReturnType: tree.FixedReturnType(minimumBoundingRadiusReturnType),
 			Generator:  eval.GeneratorOverload(makeMinimumBoundGenerator),
+			Class:      tree.GeneratorClass,
 			Info:       "Returns a record containing the center point and radius of the smallest circle that can fully contains the given geometry.",
 			Volatility: volatility.Immutable,
 		}),
@@ -7416,7 +7422,7 @@ func appendStrArgOverloadForGeometryArgOverloads(def builtinDefinition) builtinD
 	copy(newOverloads, def.overloads)
 
 	for i := range def.overloads {
-		// Define independntly as it is used by a closure below.
+		// Define independently as it is used by a closure below.
 		ov := def.overloads[i]
 
 		paramTypes, ok := ov.Types.(tree.ParamTypes)
@@ -7425,7 +7431,7 @@ func appendStrArgOverloadForGeometryArgOverloads(def builtinDefinition) builtinD
 		}
 
 		// Find all argument indexes that have the Geometry type.
-		var argsToCast util.FastIntSet
+		var argsToCast intsets.Fast
 		for i, paramType := range paramTypes {
 			if paramType.Typ.Equal(types.Geometry) {
 				argsToCast.Add(i)

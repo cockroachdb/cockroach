@@ -15,6 +15,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgproto3/v2"
 )
 
@@ -35,7 +36,9 @@ var BackendDial = func(
 	// speculative retries.
 	conn, err := net.DialTimeout("tcp", serverAddress, time.Second*5)
 	if err != nil {
-		return nil, newErrorf(codeBackendDown, "unable to reach backend SQL server: %v", err)
+		return nil, withCode(
+			errors.Wrap(err, "unable to reach backend SQL server"),
+			codeBackendDown)
 	}
 
 	// Ensure that conn is closed whenever BackendDial returns an error.
@@ -49,22 +52,29 @@ var BackendDial = func(
 	if tlsConfig != nil {
 		// Send SSLRequest.
 		if err := binary.Write(conn, binary.BigEndian, pgSSLRequest); err != nil {
-			return nil, newErrorf(codeBackendDown, "sending SSLRequest to target server: %v", err)
+			return nil, withCode(
+				errors.Wrap(err, "sending SSLRequest to target server"),
+				codeBackendDown)
 		}
 		response := make([]byte, 1)
 		if _, err = io.ReadFull(conn, response); err != nil {
-			return nil, newErrorf(codeBackendDown, "reading response to SSLRequest")
+			return nil, withCode(
+				errors.New("reading response to SSLRequest"),
+				codeBackendDown)
 		}
 		if response[0] != pgAcceptSSLRequest {
-			return nil, newErrorf(codeBackendRefusedTLS, "target server refused TLS connection")
+			return nil, withCode(
+				errors.New("target server refused TLS connection"),
+				codeBackendRefusedTLS)
 		}
 		conn = tls.Client(conn, tlsConfig.Clone())
 	}
 
 	// Forward startup message to the backend connection.
 	if _, err := conn.Write(msg.Encode(nil)); err != nil {
-		return nil, newErrorf(codeBackendDown,
-			"relaying StartupMessage to target server %v: %v", serverAddress, err)
+		return nil, withCode(
+			errors.Wrapf(err, "relaying StartupMessage to target server %v", serverAddress),
+			codeBackendDown)
 	}
 	return conn, nil
 }

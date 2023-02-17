@@ -19,15 +19,16 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -220,8 +221,8 @@ func TestMakeTableDescIndexes(t *testing.T) {
 				Unique:              true,
 				KeyColumnNames:      []string{"a"},
 				KeyColumnIDs:        []descpb.ColumnID{1},
-				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
-				EncodingType:        descpb.PrimaryIndexEncoding,
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
+				EncodingType:        catenumpb.PrimaryIndexEncoding,
 				Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
 				ConstraintID:        1,
 			},
@@ -235,10 +236,10 @@ func TestMakeTableDescIndexes(t *testing.T) {
 				Unique:              true,
 				KeyColumnNames:      []string{"b"},
 				KeyColumnIDs:        []descpb.ColumnID{2},
-				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
 				StoreColumnNames:    []string{"a"},
 				StoreColumnIDs:      []descpb.ColumnID{1},
-				EncodingType:        descpb.PrimaryIndexEncoding,
+				EncodingType:        catenumpb.PrimaryIndexEncoding,
 				Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
 				ConstraintID:        2,
 			},
@@ -250,7 +251,7 @@ func TestMakeTableDescIndexes(t *testing.T) {
 					KeyColumnNames:      []string{"a"},
 					KeyColumnIDs:        []descpb.ColumnID{1},
 					KeySuffixColumnIDs:  []descpb.ColumnID{2},
-					KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
+					KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
 					Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 					ConstraintID:        1,
 				},
@@ -264,8 +265,8 @@ func TestMakeTableDescIndexes(t *testing.T) {
 				Unique:              true,
 				KeyColumnNames:      []string{"a", "b"},
 				KeyColumnIDs:        []descpb.ColumnID{1, 2},
-				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
-				EncodingType:        descpb.PrimaryIndexEncoding,
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
+				EncodingType:        catenumpb.PrimaryIndexEncoding,
 				Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
 				ConstraintID:        1,
 			},
@@ -279,8 +280,8 @@ func TestMakeTableDescIndexes(t *testing.T) {
 				Unique:              true,
 				KeyColumnNames:      []string{"a", "b"},
 				KeyColumnIDs:        []descpb.ColumnID{1, 2},
-				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
-				EncodingType:        descpb.PrimaryIndexEncoding,
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
+				EncodingType:        catenumpb.PrimaryIndexEncoding,
 				Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
 				ConstraintID:        2,
 			},
@@ -292,7 +293,7 @@ func TestMakeTableDescIndexes(t *testing.T) {
 					KeyColumnNames:      []string{"b"},
 					KeyColumnIDs:        []descpb.ColumnID{2},
 					KeySuffixColumnIDs:  []descpb.ColumnID{1},
-					KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
+					KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
 					Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 					ConstraintID:        1,
 				},
@@ -306,8 +307,8 @@ func TestMakeTableDescIndexes(t *testing.T) {
 				Unique:              true,
 				KeyColumnNames:      []string{"a", "b"},
 				KeyColumnIDs:        []descpb.ColumnID{1, 2},
-				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
-				EncodingType:        descpb.PrimaryIndexEncoding,
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
+				EncodingType:        catenumpb.PrimaryIndexEncoding,
 				Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
 				ConstraintID:        1,
 			},
@@ -440,21 +441,15 @@ CREATE TABLE test.tt (x test.t);
 	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "tt")
 	typLookup := func(ctx context.Context, id descpb.ID) (tree.TypeName, catalog.TypeDescriptor, error) {
 		var typeDesc catalog.TypeDescriptor
-		if err := TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
-			typeDesc, err = col.GetImmutableTypeByID(ctx, txn, id, tree.ObjectLookupFlags{
-				CommonLookupFlags: tree.CommonLookupFlags{
-					AvoidLeased:    true,
-					IncludeDropped: true,
-					IncludeOffline: true,
-				},
-			})
+		if err := TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
+			typeDesc, err = col.ByID(txn.KV()).Get().Type(ctx, id)
 			return err
 		}); err != nil {
 			return tree.TypeName{}, nil, err
 		}
 		return tree.TypeName{}, typeDesc, nil
 	}
-	if err := typedesc.HydrateTypesInTableDescriptor(ctx, desc.TableDesc(), typedesc.TypeLookupFunc(typLookup)); err != nil {
+	if err := typedesc.HydrateTypesInDescriptor(ctx, desc, typedesc.TypeLookupFunc(typLookup)); err != nil {
 		t.Fatal(err)
 	}
 	// Ensure that we can clone this table.

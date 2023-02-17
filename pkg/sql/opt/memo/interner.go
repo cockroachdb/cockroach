@@ -631,7 +631,11 @@ func (h *hasher) HashPhysProps(val *physical.Required) {
 	}
 	h.HashOrderingChoice(val.Ordering)
 	h.HashFloat64(val.LimitHint)
-	for _, region := range val.Distribution.Regions {
+	h.HashDistribution(val.Distribution)
+}
+
+func (h *hasher) HashDistribution(val physical.Distribution) {
+	for _, region := range val.Regions {
 		h.HashString(region)
 	}
 }
@@ -744,9 +748,8 @@ func (h *hasher) HashPointer(val unsafe.Pointer) {
 	h.HashUint64(uint64(uintptr(val)))
 }
 
-func (h *hasher) HashMaterializeClause(val tree.MaterializeClause) {
-	h.HashBool(val.Set)
-	h.HashBool(val.Materialize)
+func (h *hasher) HashCTEMaterializeClause(val tree.CTEMaterializeClause) {
+	h.HashInt(int(val))
 }
 
 func (h *hasher) HashPersistence(val tree.Persistence) {
@@ -1053,6 +1056,10 @@ func (h *hasher) IsPhysPropsEqual(l, r *physical.Required) bool {
 	return l.Equals(r)
 }
 
+func (h *hasher) IsDistributionEqual(l, r physical.Distribution) bool {
+	return l.Equals(r)
+}
+
 func (h *hasher) IsLockingEqual(l, r opt.Locking) bool {
 	return l == r
 }
@@ -1212,8 +1219,8 @@ func (h *hasher) IsOpaqueMetadataEqual(l, r opt.OpaqueMetadata) bool {
 	return l == r
 }
 
-func (h *hasher) IsMaterializeClauseEqual(l, r tree.MaterializeClause) bool {
-	return l.Set == r.Set && l.Materialize == r.Materialize
+func (h *hasher) IsCTEMaterializeClauseEqual(l, r tree.CTEMaterializeClause) bool {
+	return l == r
 }
 
 func (h *hasher) IsPersistenceEqual(l, r tree.Persistence) bool {

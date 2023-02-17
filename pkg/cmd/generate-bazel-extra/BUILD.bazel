@@ -23,7 +23,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":generate-bazel-extra_lib"],
     deps = [
-        "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "@com_github_stretchr_testify//require",
     ],
 )

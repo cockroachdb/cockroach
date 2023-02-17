@@ -32,7 +32,7 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/sql/tests",
-        "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",

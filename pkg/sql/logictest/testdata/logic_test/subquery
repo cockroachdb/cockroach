@@ -444,6 +444,211 @@ query I
 SELECT col0 FROM tab4 WHERE (col0 <= 0 AND col4 <= 5.38) OR (col4 IN (SELECT col1 FROM tab4 WHERE col1 > 8.27)) AND (col3 <= 5 AND (col3 BETWEEN 7 AND 9))
 ----
 
+subtest correlated
+
+statement ok
+CREATE TABLE corr (
+  k INT PRIMARY KEY,
+  i INT
+)
+
+statement ok
+INSERT INTO corr VALUES (1, 10), (2, 22), (3, 30), (4, 40), (5, 50)
+
+query II rowsort
+SELECT * FROM corr
+WHERE CASE WHEN k < 5 THEN k*10 = (SELECT i FROM corr tmp WHERE k = corr.k) END
+----
+1  10
+3  30
+4  40
+
+query III colnames,rowsort
+SELECT k, i, CASE WHEN k > 1 THEN (SELECT i FROM corr tmp WHERE k = corr.k-1) END AS prev_i
+FROM corr
+----
+k  i   prev_i
+1  10  NULL
+2  22  10
+3  30  22
+4  40  30
+5  50  40
+
+# A test similar to the previous showing that the physical ordering requested by
+# the ORDER BY is respected when re-optimizing the subquery.
+query IIR colnames,rowsort
+SELECT k, i,
+  CASE WHEN k > 1 THEN (SELECT i/1 FROM corr tmp WHERE i < corr.i ORDER BY i DESC LIMIT 1) END prev_i
+FROM corr
+----
+k  i   prev_i
+1  10  NULL
+2  22  10
+3  30  22
+4  40  30
+5  50  40
+
+# The same query as above, but as a prepared statement with placeholders in the
+# subquery.
+statement ok
+PREPARE corr_s1(INT) AS
+SELECT k, i,
+  CASE WHEN k > 1 THEN (SELECT i/$1 FROM corr tmp WHERE i < corr.i ORDER BY i DESC LIMIT $1) END prev_i
+FROM corr
+
+query IIR colnames,rowsort
+EXECUTE corr_s1(1)
+----
+k  i   prev_i
+1  10  NULL
+2  22  10
+3  30  22
+4  40  30
+5  50  40
+
+# A subquery with a star-expansion.
+query IIR colnames,rowsort
+SELECT k, i,
+  CASE WHEN k > 1 THEN (
+    SELECT * FROM (VALUES (33::DECIMAL)) v(i)
+    UNION ALL
+    SELECT i/1 FROM corr tmp WHERE i < corr.i
+    ORDER BY i DESC LIMIT 1
+  ) END prev_i
+FROM corr
+----
+k  i   prev_i
+1  10  NULL
+2  22  33
+3  30  33
+4  40  33
+5  50  40
+
+query II
+SELECT * FROM corr
+WHERE CASE WHEN k < 5 THEN EXISTS (SELECT i FROM corr tmp WHERE i = corr.k*10) END
+----
+1  10
+3  30
+4  40
+
+query IIB
+SELECT *,
+  CASE WHEN k < 5 THEN EXISTS (SELECT i FROM corr tmp WHERE i = corr.k*10) END
+FROM corr
+----
+1  10  true
+2  22  false
+3  30  true
+4  40  true
+5  50  NULL
+
+# TODO(mgartner): Execute correlated <op> ANY subqueries.
+statement error could not decorrelate subquery
+SELECT * FROM corr
+WHERE CASE WHEN k < 5 THEN k*10 = ANY (SELECT i FROM corr tmp WHERE k <= corr.k) END
+
+# Correlated subqueries can reference outer with expressions.
+query III colnames,rowsort
+WITH w AS MATERIALIZED (
+  (VALUES (1))
+)
+SELECT k, i,
+  CASE WHEN k > 0 THEN (SELECT i+corr.i FROM corr tmp UNION ALL SELECT * FROM w LIMIT 1) END i_plus_first_i
+FROM corr
+----
+k  i   i_plus_first_i
+1  10  20
+2  22  32
+3  30  40
+4  40  50
+5  50  60
+
+# Uncorrelated subqueries within correlated subqueries can reference outer with
+# expressions.
+query III colnames,rowsort
+WITH w AS MATERIALIZED (
+  (VALUES (1))
+)
+SELECT k, i,
+  CASE WHEN k > 0 THEN (SELECT i+corr.i FROM corr tmp WHERE k = (SELECT * FROM w)) END i_plus_first_i
+FROM corr
+----
+k  i   i_plus_first_i
+1  10  20
+2  22  32
+3  30  40
+4  40  50
+5  50  60
+
+# WITH within subquery that is shadowing outer WITH.
+query III colnames,rowsort
+WITH w(i) AS MATERIALIZED (
+  (VALUES (1))
+)
+SELECT k, i,
+  CASE WHEN k > 0 THEN (
+    WITH w(i) AS MATERIALIZED (
+      (VALUES (2))
+    )
+    SELECT * FROM w UNION ALL SELECT i+corr.i FROM corr tmp LIMIT 1
+  ) END w
+FROM corr
+UNION ALL
+SELECT NULL, NULL, i FROM w
+----
+k     i     w
+1     10    2
+2     22    2
+3     30    2
+4     40    2
+5     50    2
+NULL  NULL  1
+
+statement ok
+CREATE TABLE corr2 (i INT);
+
+# A NOT MATERIALIZED CTE with a mutation.
+statement ok
+WITH tmp AS NOT MATERIALIZED (INSERT INTO corr2 VALUES (1) RETURNING i)
+SELECT * FROM corr
+WHERE CASE WHEN k < 5 THEN k+1 = (SELECT i FROM tmp WHERE i = corr.k) END
+
+# The statement above should perform the INSERT only once.
+query I
+SELECT count(*) FROM corr2
+----
+1
+
+# Uncorrelated EXISTS subqueries within correlated subqueries can be executed.
+query I
+SELECT i FROM (VALUES (1), (2)) v(i)
+WHERE CASE
+  WHEN i < 3 THEN (SELECT 1/i = 1 FROM (VALUES (1)) WHERE EXISTS (SELECT * FROM corr))
+  ELSE false
+END
+----
+1
+
+# Correlated EXISTS subqueries within correlated subqueries can be executed.
+query I
+SELECT i FROM (VALUES (1), (10)) v(i)
+WHERE CASE
+  WHEN i > 0 THEN (
+    SELECT i/1 = j FROM (VALUES (1), (10)) w(j)
+    WHERE CASE
+      WHEN j > 0 THEN EXISTS (SELECT * FROM corr WHERE k/1 = j)
+      ELSE false
+    END
+  )
+  ELSE false
+END
+----
+1
+
+
+subtest regressions
+
 statement ok
 CREATE TABLE z (z INT PRIMARY KEY)
 

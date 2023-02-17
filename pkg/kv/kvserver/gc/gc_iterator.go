@@ -153,7 +153,12 @@ func (it *gcIterator) fillTo(targetLen int) (ok bool) {
 					return false
 				}
 			} else {
-				metaValue = it.it.UnsafeValue()
+				var err error
+				metaValue, err = it.it.UnsafeValue()
+				if err != nil {
+					it.err = err
+					return false
+				}
 			}
 			it.buf.pushBack(key, mvccValueLen, mvccValueIsTombstone, metaValue, ts)
 		}

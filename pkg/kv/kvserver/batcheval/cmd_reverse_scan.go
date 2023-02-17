@@ -63,6 +63,15 @@ func ReverseScan(
 			return result.Result{}, err
 		}
 		reply.BatchResponses = scanRes.KVData
+	case roachpb.COL_BATCH_RESPONSE:
+		scanRes, err = storage.MVCCScanToCols(
+			ctx, reader, cArgs.Header.IndexFetchSpec, args.Key, args.EndKey,
+			h.Timestamp, opts, cArgs.EvalCtx.ClusterSettings(),
+		)
+		if err != nil {
+			return result.Result{}, err
+		}
+		reply.BatchResponses = scanRes.KVData
 	case roachpb.KEY_VALUES:
 		scanRes, err = storage.MVCCScan(
 			ctx, reader, args.Key, args.EndKey, h.Timestamp, opts)

@@ -19,7 +19,6 @@ import (
 	"sort"
 	"strconv"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -98,7 +97,9 @@ func TestExportCmd(t *testing.T) {
 				newKv := storage.MVCCKeyValue{}
 				newKv.Key.Key = append(newKv.Key.Key, sst.UnsafeKey().Key...)
 				newKv.Key.Timestamp = sst.UnsafeKey().Timestamp
-				newKv.Value = append(newKv.Value, sst.UnsafeValue()...)
+				v, err := sst.UnsafeValue()
+				require.NoError(t, err)
+				newKv.Value = append(newKv.Value, v...)
 				kvs = append(kvs, newKv)
 				sst.Next()
 			}
@@ -118,7 +119,7 @@ func TestExportCmd(t *testing.T) {
 	exportAndSlurp := func(t *testing.T, start hlc.Timestamp,
 		maxResponseSSTBytes int64) ExportAndSlurpResult {
 		var ret ExportAndSlurpResult
-		ret.end = hlc.NewClockWithSystemTimeSource(time.Nanosecond).Now( /* maxOffset */ )
+		ret.end = hlc.NewClockForTesting(nil).Now()
 		ret.mvccLatestFiles, ret.mvccLatestKVs, ret.mvccLatestResponseHeader = exportAndSlurpOne(t,
 			start, roachpb.MVCCFilter_Latest, maxResponseSSTBytes)
 		ret.mvccAllFiles, ret.mvccAllKVs, ret.mvccAllResponseHeader = exportAndSlurpOne(t, start,
@@ -478,11 +479,15 @@ func exportUsingGoIterator(
 
 		// Skip tombstone (len=0) records when startTime is zero
 		// (non-incremental) and we're not exporting all versions.
-		if skipTombstones && startTime.IsEmpty() && len(iter.UnsafeValue()) == 0 {
+		v, err := iter.UnsafeValue()
+		if err != nil {
+			return nil, err
+		}
+		if skipTombstones && startTime.IsEmpty() && len(v) == 0 {
 			continue
 		}
 
-		if err := sst.Put(iter.UnsafeKey(), iter.UnsafeValue()); err != nil {
+		if err := sst.Put(iter.UnsafeKey(), v); err != nil {
 			return nil, err
 		}
 	}
@@ -530,7 +535,11 @@ func loadSST(t *testing.T, data []byte, start, end roachpb.Key) []storage.MVCCKe
 		newKv := storage.MVCCKeyValue{}
 		newKv.Key.Key = append(newKv.Key.Key, sst.UnsafeKey().Key...)
 		newKv.Key.Timestamp = sst.UnsafeKey().Timestamp
-		newKv.Value = append(newKv.Value, sst.UnsafeValue()...)
+		v, err := sst.UnsafeValue()
+		if err != nil {
+			t.Fatal(err)
+		}
+		newKv.Value = append(newKv.Value, v...)
 		kvs = append(kvs, newKv)
 		sst.Next()
 	}
@@ -676,7 +685,7 @@ func TestRandomKeyAndTimestampExport(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	mkEngine := func(t *testing.T) (e storage.Engine, cleanup func()) {
 		dir, cleanupDir := testutils.TempDir(t)
-		e, err := storage.Open(ctx, storage.Filesystem(dir), storage.CacheSize(0), storage.Settings(st))
+		e, err := storage.Open(ctx, storage.Filesystem(dir), st, storage.CacheSize(0))
 		if err != nil {
 			t.Fatal(err)
 		}

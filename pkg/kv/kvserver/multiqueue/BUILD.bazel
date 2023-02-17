@@ -8,14 +8,16 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
     ],
 )
 
 go_test(
     name = "multiqueue_test",
+    size = "small",
     srcs = ["multi_queue_test.go"],
-    args = ["-test.timeout=295s"],
+    args = ["-test.timeout=55s"],
     embed = [":multiqueue"],
     deps = [
         "//pkg/testutils",

@@ -566,7 +566,7 @@ func newClient(
 	}
 
 	if conf.assumeRoleProvider.roleARN != "" {
-		if !settings.Version.IsActive(ctx, clusterversion.V22_2SupportAssumeRoleAuth) {
+		if !settings.Version.IsActive(ctx, clusterversion.TODODelete_V22_2SupportAssumeRoleAuth) {
 			return s3Client{}, "", errors.New("cannot authenticate to cloud storage via assume role until cluster has fully upgraded to 22.2")
 		}
 

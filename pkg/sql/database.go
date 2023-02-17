@@ -73,9 +73,7 @@ func (p *planner) renameDatabase(
 func (p *planner) writeNonDropDatabaseChange(
 	ctx context.Context, desc *dbdesc.Mutable, jobDesc string,
 ) error {
-	if err := p.createNonDropDatabaseChangeJob(ctx, desc.ID, jobDesc); err != nil {
-		return err
-	}
+	p.createNonDropDatabaseChangeJob(ctx, desc.ID, jobDesc)
 	b := p.Txn().NewBatch()
 	if err := p.writeDatabaseChangeToBatch(ctx, desc, b); err != nil {
 		return err
@@ -120,7 +118,7 @@ func (p *planner) forEachMutableTableInDatabase(
 		}
 		droppedRemoved = append(droppedRemoved, tbID)
 	}
-	descs, err := p.Descriptors().GetMutableDescriptorsByID(ctx, p.Txn(), droppedRemoved...)
+	descs, err := p.Descriptors().MutableByID(p.Txn()).Descs(ctx, droppedRemoved)
 	if err != nil {
 		return err
 	}

@@ -25,12 +25,14 @@ import (
 
 func TestIngester(t *testing.T) {
 	testCases := []struct {
-		name         string
-		observations []testEvent
-		insights     []testEvent
+		name             string
+		totalTxnInsights int
+		observations     []testEvent
+		insights         []testEvent
 	}{
 		{
-			name: "One Session",
+			name:             "One Session",
+			totalTxnInsights: 1,
 			observations: []testEvent{
 				{sessionID: 1, statementID: 10},
 				{sessionID: 1, transactionID: 100},
@@ -40,7 +42,8 @@ func TestIngester(t *testing.T) {
 			},
 		},
 		{
-			name: "Interleaved Sessions",
+			name:             "Interleaved Sessions",
+			totalTxnInsights: 2,
 			observations: []testEvent{
 				{sessionID: 1, statementID: 10},
 				{sessionID: 2, statementID: 20},
@@ -91,7 +94,7 @@ func TestIngester(t *testing.T) {
 				store.IterateInsights(ctx, func(context.Context, *Insight) {
 					numInsights++
 				})
-				return numInsights == len(tc.insights)
+				return numInsights == tc.totalTxnInsights
 			}, 1*time.Second, 50*time.Millisecond)
 
 			// See that the insights we were expecting are the ones that
@@ -100,11 +103,13 @@ func TestIngester(t *testing.T) {
 			// transactions.
 			var actual []testEvent
 			store.IterateInsights(ctx, func(ctx context.Context, insight *Insight) {
-				actual = append(actual, testEvent{
-					sessionID:     insight.Session.ID.Lo,
-					transactionID: insight.Transaction.ID.ToUint128().Lo,
-					statementID:   insight.Statement.ID.Lo,
-				})
+				for _, s := range insight.Statements {
+					actual = append(actual, testEvent{
+						sessionID:     insight.Session.ID.Lo,
+						transactionID: insight.Transaction.ID.ToUint128().Lo,
+						statementID:   s.ID.Lo,
+					})
+				}
 			})
 
 			require.ElementsMatch(t, tc.insights, actual)

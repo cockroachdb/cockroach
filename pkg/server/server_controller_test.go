@@ -34,20 +34,20 @@ func TestServerController(t *testing.T) {
 
 	ts := s.(*TestServer)
 
-	d, err := ts.serverController.getOrCreateServer(ctx, "system")
+	d, err := ts.serverController.getServer(ctx, "system")
 	require.NoError(t, err)
 	if d.(*systemServerWrapper).server != ts.Server {
 		t.Fatal("expected wrapped system server")
 	}
 
-	d, err = ts.serverController.getOrCreateServer(ctx, "somename")
+	d, err = ts.serverController.getServer(ctx, "somename")
 	require.Nil(t, d)
 	require.Error(t, err, `no tenant found with name "somename"`)
 
-	_, err = db.Exec("SELECT crdb_internal.create_tenant(123, 'hello')")
+	_, err = db.Exec("CREATE TENANT hello; ALTER TENANT hello START SERVICE SHARED")
 	require.NoError(t, err)
 
-	_, err = ts.serverController.getOrCreateServer(ctx, "hello")
+	_, err = ts.serverController.getServer(ctx, "hello")
 	// TODO(knz): We're not really expecting an error here.
 	// The actual error seen will exist as long as in-memory
 	// servers use the standard KV connector.
@@ -61,4 +61,25 @@ func TestServerController(t *testing.T) {
 	// tenant constructor was called.
 	require.Error(t, err, "tenant connector requires a CCL binary")
 	// TODO(knz): test something about d
+}
+
+func TestSQLErrorUponInvalidTenant(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DisableDefaultTestTenant: true,
+	})
+	defer s.Stopper().Stop(ctx)
+
+	sqlAddr := s.ServingSQLAddr()
+	db, err := serverutils.OpenDBConnE(sqlAddr, "cluster:nonexistent", false, s.Stopper())
+	// Expect no error yet: the connection is opened lazily; an
+	// error here means the parameters were incorrect.
+	require.NoError(t, err)
+
+	err = db.Ping()
+	require.Regexp(t, `service unavailable for target tenant \(nonexistent\)`, err.Error())
 }

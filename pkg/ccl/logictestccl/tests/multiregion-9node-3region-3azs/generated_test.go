@@ -93,6 +93,13 @@ func TestCCLLogic_multi_region(
 	runCCLLogicTest(t, "multi_region")
 }
 
+func TestCCLLogic_multi_region_alter_table_regional_by_row(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "multi_region_alter_table_regional_by_row")
+}
+
 func TestCCLLogic_multi_region_backup(
 	t *testing.T,
 ) {
@@ -175,6 +182,13 @@ func TestCCLLogic_multi_region_zone_configs(
 ) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "multi_region_zone_configs")
+}
+
+func TestCCLLogic_partitioning_hash_sharded_index_mr(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "partitioning_hash_sharded_index_mr")
 }
 
 func TestCCLLogic_placement(

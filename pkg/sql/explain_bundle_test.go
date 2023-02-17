@@ -98,7 +98,7 @@ CREATE TABLE s.a (a INT PRIMARY KEY);`)
 		// The bundle url is inside the error detail.
 		var pqErr *pq.Error
 		_ = errors.As(err, &pqErr)
-		checkBundle(t, fmt.Sprintf("%+v", pqErr.Detail), "", nil, base, plans, "distsql.html")
+		checkBundle(t, fmt.Sprintf("%+v", pqErr.Detail), "", nil, base, plans, "distsql.html errors.txt")
 	})
 
 	// #92920 Make sure schema and opt files are created.
@@ -280,6 +280,27 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 			},
 			base, plans, "stats-defaultdb.public.parent.sql", "stats-defaultdb.public.child.sql",
 			"distsql.html vec.txt vec-v.txt",
+		)
+	})
+
+	t.Run("redact", func(t *testing.T) {
+		r.Exec(t, "CREATE TABLE pterosaur (cardholder STRING PRIMARY KEY, cardno INT, INDEX (cardno));")
+		r.Exec(t, "INSERT INTO pterosaur VALUES ('pterodactyl', 5555555555554444);")
+		r.Exec(t, "CREATE STATISTICS jurassic FROM pterosaur;")
+		rows := r.QueryStr(t,
+			"EXPLAIN ANALYZE (DEBUG, REDACT) SELECT max(cardno) FROM pterosaur WHERE cardholder = 'pterodactyl'",
+		)
+		verboten := []string{"pterodactyl", "5555555555554444", fmt.Sprintf("%x", 5555555555554444)}
+		checkBundle(
+			t, fmt.Sprint(rows), "", func(name, contents string) error {
+				lowerContents := strings.ToLower(contents)
+				for _, pii := range verboten {
+					if strings.Contains(lowerContents, pii) {
+						return errors.Newf("file %s contained %q:\n%s\n", name, pii, contents)
+					}
+				}
+				return nil
+			}, "env.sql schema.sql statement.sql vec.txt vec-v.txt",
 		)
 	})
 }

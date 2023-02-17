@@ -82,7 +82,6 @@ ORDER BY id`)
 		switch t := desc.(type) {
 		case *dbdesc.Mutable:
 			t.ModificationTime = hlc.Timestamp{}
-			t.DefaultPrivileges = nil
 		case *schemadesc.Mutable:
 			t.ModificationTime = hlc.Timestamp{}
 		case *tabledesc.Mutable:

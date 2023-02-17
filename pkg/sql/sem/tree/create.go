@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/collatedstring"
 	"github.com/cockroachdb/cockroach/pkg/util/pretty"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/text/language"
@@ -48,6 +49,7 @@ type CreateDatabase struct {
 	SurvivalGoal    SurvivalGoal
 	Placement       DataPlacement
 	Owner           RoleSpec
+	SuperRegion     SuperRegion
 	SecondaryRegion Name
 }
 
@@ -119,6 +121,10 @@ func (node *CreateDatabase) Format(ctx *FmtCtx) {
 	if node.Owner.Name != "" {
 		ctx.WriteString(" OWNER = ")
 		ctx.FormatNode(&node.Owner)
+	}
+
+	if node.SuperRegion.Name != "" {
+		ctx.FormatNode(&node.SuperRegion)
 	}
 
 	if node.SecondaryRegion != "" {
@@ -376,7 +382,8 @@ func (node *CreateType) Format(ctx *FmtCtx) {
 		ctx.WriteString(")")
 	case Composite:
 		ctx.WriteString("AS (")
-		for i, elem := range node.CompositeTypeList {
+		for i := range node.CompositeTypeList {
+			elem := &node.CompositeTypeList[i]
 			if i != 0 {
 				ctx.WriteString(", ")
 			}
@@ -564,7 +571,7 @@ func NewColumnTableDef(
 			// In CRDB, collated strings are treated separately to string family types.
 			// To most behave like postgres, set the CollatedString type if a non-"default"
 			// collation is used.
-			if locale != DefaultCollationTag {
+			if locale != collatedstring.DefaultCollationTag {
 				_, err := language.Parse(locale)
 				if err != nil {
 					return nil, pgerror.Wrapf(err, pgcode.Syntax, "invalid locale %s", locale)
@@ -1128,73 +1135,6 @@ func (node *UniqueConstraintTableDef) Format(ctx *FmtCtx) {
 	}
 }
 
-// ReferenceAction is the method used to maintain referential integrity through
-// foreign keys.
-type ReferenceAction int
-
-// The values for ReferenceAction.
-const (
-	NoAction ReferenceAction = iota
-	Restrict
-	SetNull
-	SetDefault
-	Cascade
-)
-
-var referenceActionName = [...]string{
-	NoAction:   "NO ACTION",
-	Restrict:   "RESTRICT",
-	SetNull:    "SET NULL",
-	SetDefault: "SET DEFAULT",
-	Cascade:    "CASCADE",
-}
-
-func (ra ReferenceAction) String() string {
-	return referenceActionName[ra]
-}
-
-// ReferenceActions contains the actions specified to maintain referential
-// integrity through foreign keys for different operations.
-type ReferenceActions struct {
-	Delete ReferenceAction
-	Update ReferenceAction
-}
-
-// Format implements the NodeFormatter interface.
-func (node *ReferenceActions) Format(ctx *FmtCtx) {
-	if node.Delete != NoAction {
-		ctx.WriteString(" ON DELETE ")
-		ctx.WriteString(node.Delete.String())
-	}
-	if node.Update != NoAction {
-		ctx.WriteString(" ON UPDATE ")
-		ctx.WriteString(node.Update.String())
-	}
-}
-
-// CompositeKeyMatchMethod is the algorithm use when matching composite keys.
-// See https://github.com/cockroachdb/cockroach/issues/20305 or
-// https://www.postgresql.org/docs/11/sql-createtable.html for details on the
-// different composite foreign key matching methods.
-type CompositeKeyMatchMethod int
-
-// The values for CompositeKeyMatchMethod.
-const (
-	MatchSimple CompositeKeyMatchMethod = iota
-	MatchFull
-	MatchPartial // Note: PARTIAL not actually supported at this point.
-)
-
-var compositeKeyMatchMethodName = [...]string{
-	MatchSimple:  "MATCH SIMPLE",
-	MatchFull:    "MATCH FULL",
-	MatchPartial: "MATCH PARTIAL",
-}
-
-func (c CompositeKeyMatchMethod) String() string {
-	return compositeKeyMatchMethodName[c]
-}
-
 // ForeignKeyConstraintTableDef represents a FOREIGN KEY constraint in the AST.
 type ForeignKeyConstraintTableDef struct {
 	Name        Name
@@ -1424,7 +1364,7 @@ func (node *PartitionBy) formatListOrRange(ctx *FmtCtx) {
 
 // ListPartition represents a PARTITION definition within a PARTITION BY LIST.
 type ListPartition struct {
-	Name         UnrestrictedName
+	Name         Name
 	Exprs        Exprs
 	Subpartition *PartitionBy
 }
@@ -1443,7 +1383,7 @@ func (node *ListPartition) Format(ctx *FmtCtx) {
 
 // RangePartition represents a PARTITION definition within a PARTITION BY RANGE.
 type RangePartition struct {
-	Name         UnrestrictedName
+	Name         Name
 	From         Exprs
 	To           Exprs
 	Subpartition *PartitionBy
@@ -2200,39 +2140,100 @@ func (node *CreateExternalConnection) Format(ctx *FmtCtx) {
 
 // CreateTenant represents a CREATE TENANT statement.
 type CreateTenant struct {
-	Name Name
+	TenantSpec *TenantSpec
 }
 
 // Format implements the NodeFormatter interface.
 func (node *CreateTenant) Format(ctx *FmtCtx) {
 	ctx.WriteString("CREATE TENANT ")
-	ctx.FormatNode(&node.Name)
+	ctx.FormatNode(node.TenantSpec)
 }
 
 // CreateTenantFromReplication represents a CREATE TENANT...FROM REPLICATION
 // statement.
 type CreateTenantFromReplication struct {
-	Name Name
+	TenantSpec *TenantSpec
 
-	// ReplicationSourceTenantName is the name of the tenant that we are
-	// replicating into the newly created tenant.
-	ReplicationSourceTenantName Name
+	// ReplicationSourceTenantName is the name of the tenant that
+	// we are replicating into the newly created tenant.
+	// Note: even though this field can only be a name
+	// (this is guaranteed during parsing), we still want
+	// to use the TenantSpec type. This supports the auto-promotion
+	// of simple identifiers to strings.
+	ReplicationSourceTenantName *TenantSpec
 	// ReplicationSourceAddress is the address of the source cluster that we are
 	// replicating data from.
 	ReplicationSourceAddress Expr
+
+	Options TenantReplicationOptions
 }
+
+// TenantReplicationOptions  options for the CREATE TENANT FROM REPLICATION command.
+type TenantReplicationOptions struct {
+	Retention Expr
+}
+
+var _ NodeFormatter = &TenantReplicationOptions{}
 
 // Format implements the NodeFormatter interface.
 func (node *CreateTenantFromReplication) Format(ctx *FmtCtx) {
 	ctx.WriteString("CREATE TENANT ")
 	// NB: we do not anonymize the tenant name because we assume that tenant names
 	// do not contain sensitive information.
-	ctx.FormatNode(&node.Name)
+	ctx.FormatNode(node.TenantSpec)
 
 	if node.ReplicationSourceAddress != nil {
 		ctx.WriteString(" FROM REPLICATION OF ")
-		ctx.FormatNode(&node.ReplicationSourceTenantName)
+		ctx.FormatNode(node.ReplicationSourceTenantName)
 		ctx.WriteString(" ON ")
 		ctx.FormatNode(node.ReplicationSourceAddress)
+	}
+	if !node.Options.IsDefault() {
+		ctx.WriteString(" WITH ")
+		ctx.FormatNode(&node.Options)
+	}
+}
+
+// Format implements the NodeFormatter interface
+func (o *TenantReplicationOptions) Format(ctx *FmtCtx) {
+	if o.Retention != nil {
+		ctx.WriteString("RETENTION = ")
+		ctx.FormatNode(o.Retention)
+	}
+}
+
+// CombineWith merges other TenantReplicationOptions into this struct.
+// An error is returned if the same option merged multiple times.
+func (o *TenantReplicationOptions) CombineWith(other *TenantReplicationOptions) error {
+	if o.Retention != nil {
+		if other.Retention != nil {
+			return errors.New("RETENTION option specified multiple times")
+		}
+	} else {
+		o.Retention = other.Retention
+	}
+	return nil
+}
+
+// IsDefault returns true if this backup options struct has default value.
+func (o TenantReplicationOptions) IsDefault() bool {
+	options := TenantReplicationOptions{}
+	return o.Retention == options.Retention
+}
+
+type SuperRegion struct {
+	Name    Name
+	Regions NameList
+}
+
+func (node *SuperRegion) Format(ctx *FmtCtx) {
+	ctx.WriteString(" SUPER REGION ")
+	ctx.FormatNode(&node.Name)
+	ctx.WriteString(" VALUES ")
+	for i := range node.Regions {
+		if i != 0 {
+			ctx.WriteString(",")
+		}
+		ctx.FormatNode(&node.Regions[i])
 	}
 }

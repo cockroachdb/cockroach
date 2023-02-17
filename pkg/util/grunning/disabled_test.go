@@ -10,8 +10,8 @@
 
 // See grunning.Supported() for an explanation behind this build tag.
 //
-//go:build (darwin && arm64) || freebsd || !bazel
-// +build darwin,arm64 freebsd !bazel
+//go:build (darwin && arm64) || freebsd || (linux && s390x) || !bazel
+// +build darwin,arm64 freebsd linux,s390x !bazel
 
 package grunning_test
 
@@ -26,4 +26,5 @@ func TestDisabled(t *testing.T) {
 	require.False(t, grunning.Supported())
 	require.Zero(t, grunning.Time())
 	require.Zero(t, grunning.Difference(grunning.Time(), grunning.Time()))
+	require.Zero(t, grunning.Elapsed(grunning.Time(), grunning.Time()))
 }

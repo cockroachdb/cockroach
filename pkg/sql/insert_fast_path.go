@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -106,7 +106,7 @@ func (c *insertFastPathFKCheck) init(params runParams) error {
 	codec := params.ExecCfg().Codec
 	c.keyPrefix = rowenc.MakeIndexKeyPrefix(codec, c.tabDesc.GetID(), c.idx.GetID())
 	c.spanBuilder.Init(params.EvalContext(), codec, c.tabDesc, c.idx)
-	c.spanSplitter = span.MakeSplitter(c.tabDesc, c.idx, util.FastIntSet{} /* neededColOrdinals */)
+	c.spanSplitter = span.MakeSplitter(c.tabDesc, c.idx, intsets.Fast{} /* neededColOrdinals */)
 
 	if len(c.InsertCols) > idx.numLaxKeyCols {
 		return errors.AssertionFailedf(

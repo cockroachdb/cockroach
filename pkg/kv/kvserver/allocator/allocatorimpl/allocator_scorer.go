@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -396,15 +397,24 @@ func (o *RangeCountScorerOptions) removalMaximallyConvergesScore(
 	return 0
 }
 
-// QPSScorerOptions is used by the StoreRebalancer to tell the Allocator's
+// LoadScorerOptions is used by the StoreRebalancer to tell the Allocator's
 // rebalancing machinery to base its balance/convergence scores on
 // queries-per-second. This means that the resulting rebalancing decisions will
 // further the goal of converging QPS across stores in the cluster.
-type QPSScorerOptions struct {
+type LoadScorerOptions struct {
 	StoreHealthOptions StoreHealthOptions
 	Deterministic      bool
+	LoadDims           []load.Dimension
 
-	QPSRebalanceThreshold, MinRequiredQPSDiff float64
+	// LoadThreshold and MinLoadThreshold track the threshold beyond which a
+	// store should be considered under/overfull and the minimum absolute
+	// difference required, which is used to cover corner cases where the
+	// values dealt with are relatively low.
+	LoadThreshold, MinLoadThreshold load.Load
+
+	// MinRequiredRebalanceLoadDiff declares the minimum load difference
+	// between stores required before recommending an action to rebalance.
+	MinRequiredRebalanceLoadDiff load.Load
 
 	// QPS-based rebalancing assumes that:
 	// 1. Every replica of a range currently receives the same level of traffic.
@@ -418,30 +428,35 @@ type QPSScorerOptions struct {
 	// track it separately yet. See
 	// https://github.com/cockroachdb/cockroach/issues/75630.
 
-	// QPSPerReplica states the level of traffic being served by each replica in a
-	// range.
-	QPSPerReplica float64
+	// RebalanceImpact states the impact of moving a replica or a range lease
+	// would be expected to have. More generally it represents the weight of an
+	// action.
+	//
+	// TODO(kvoli): This value should differ depending on whether it is a
+	// rebalance or transfer. These shoulld more generally use two different
+	// methods when estimating an impact.
+	RebalanceImpact load.Load
 }
 
-func (o *QPSScorerOptions) getStoreHealthOptions() StoreHealthOptions {
+func (o *LoadScorerOptions) getStoreHealthOptions() StoreHealthOptions {
 	return o.StoreHealthOptions
 }
 
-func (o *QPSScorerOptions) maybeJitterStoreStats(
+func (o *LoadScorerOptions) maybeJitterStoreStats(
 	sl storepool.StoreList, _ allocatorRand,
 ) storepool.StoreList {
 	return sl
 }
 
-func (o *QPSScorerOptions) deterministicForTesting() bool {
+func (o *LoadScorerOptions) deterministicForTesting() bool {
 	return o.Deterministic
 }
 
 // shouldRebalanceBasedOnThresholds tries to determine if, within the given
 // equivalenceClass `eqClass`, rebalancing a replica from one of the existing
-// stores to one of the candidate stores will lead to QPS convergence among the
+// stores to one of the candidate stores will lead to load convergence among the
 // stores in the equivalence class.
-func (o QPSScorerOptions) shouldRebalanceBasedOnThresholds(
+func (o LoadScorerOptions) shouldRebalanceBasedOnThresholds(
 	ctx context.Context, eqClass equivalenceClass, metrics AllocatorMetrics,
 ) bool {
 	if len(eqClass.candidateSL.Stores) == 0 {
@@ -467,21 +482,21 @@ func (o QPSScorerOptions) shouldRebalanceBasedOnThresholds(
 		)
 	case missingStatsForExistingStore:
 		metrics.LoadBasedReplicaRebalanceMetrics.MissingStatsForExistingStore.Inc(1)
-		log.KvDistribution.VEventf(ctx, 4, "missing QPS stats for s%d", eqClass.existing.StoreID)
+		log.KvDistribution.VEventf(ctx, 4, "missing load stats for s%d", eqClass.existing.StoreID)
 	case shouldRebalance:
 		metrics.LoadBasedReplicaRebalanceMetrics.ShouldRebalance.Inc(1)
-		var bestStoreQPS float64
+		var bestStoreLoad load.Load
 		for _, store := range eqClass.candidateSL.Stores {
 			if bestStore == store.StoreID {
-				bestStoreQPS = store.Capacity.QueriesPerSecond
+				bestStoreLoad = store.Capacity.Load()
 			}
 		}
 		log.KvDistribution.VEventf(
 			ctx, 4,
-			"should rebalance replica with %0.2f qps from s%d (qps=%0.2f) to s%d (qps=%0.2f)",
-			o.QPSPerReplica, eqClass.existing.StoreID,
-			eqClass.existing.Capacity.QueriesPerSecond,
-			bestStore, bestStoreQPS,
+			"should rebalance replica with %s load from s%d load=%s to s%d load=%s",
+			o.RebalanceImpact, eqClass.existing.StoreID,
+			eqClass.existing.Capacity.Load(),
+			bestStore, bestStoreLoad,
 		)
 	default:
 		log.KvDistribution.Fatalf(ctx, "unknown reason to decline rebalance: %v", declineReason)
@@ -490,24 +505,26 @@ func (o QPSScorerOptions) shouldRebalanceBasedOnThresholds(
 	return declineReason == shouldRebalance
 }
 
-func (o *QPSScorerOptions) balanceScore(
+func (o *LoadScorerOptions) balanceScore(
 	sl storepool.StoreList, sc roachpb.StoreCapacity,
 ) balanceStatus {
-	maxQPS := OverfullQPSThreshold(o, sl.CandidateQueriesPerSecond.Mean)
-	minQPS := UnderfullQPSThreshold(o, sl.CandidateQueriesPerSecond.Mean)
-	curQPS := sc.QueriesPerSecond
-	if curQPS < minQPS {
+	// balanceScore returns
+	maxLoad := OverfullLoadThresholds(sl.LoadMeans(), o.LoadThreshold, o.MinLoadThreshold)
+	minLoad := UnderfullLoadThresholds(sl.LoadMeans(), o.LoadThreshold, o.MinLoadThreshold)
+	curLoad := sc.Load()
+	if load.Less(curLoad, minLoad, o.LoadDims...) {
 		return underfull
-	} else if curQPS >= maxQPS {
+	} else if !load.Less(curLoad, maxLoad, o.LoadDims...) {
 		return overfull
+	} else {
+		return aroundTheMean
 	}
-	return aroundTheMean
 }
 
 // rebalanceFromConvergesScore returns a score of -1 if the existing store in
 // eqClass needs to be rebalanced away in order to minimize the QPS delta
 // between the stores in the equivalence class `eqClass`.
-func (o *QPSScorerOptions) rebalanceFromConvergesScore(eqClass equivalenceClass) int {
+func (o *LoadScorerOptions) rebalanceFromConvergesScore(eqClass equivalenceClass) int {
 	_, declineReason := o.getRebalanceTargetToMinimizeDelta(eqClass)
 	// If there are any rebalance opportunities that minimize the QPS delta in
 	// this equivalence class, we return a score of -1 to make the existing store
@@ -521,7 +538,7 @@ func (o *QPSScorerOptions) rebalanceFromConvergesScore(eqClass equivalenceClass)
 // rebalanceToConvergesScore returns a score of 1 if `candidate` needs to be
 // rebalanced to in order to minimize the QPS delta between the stores in the
 // equivalence class `eqClass`
-func (o *QPSScorerOptions) rebalanceToConvergesScore(
+func (o *LoadScorerOptions) rebalanceToConvergesScore(
 	eqClass equivalenceClass, candidate roachpb.StoreDescriptor,
 ) int {
 	bestTarget, declineReason := o.getRebalanceTargetToMinimizeDelta(eqClass)
@@ -534,7 +551,7 @@ func (o *QPSScorerOptions) rebalanceToConvergesScore(
 // removalMaximallyConvergesScore returns a score of -1 `existing` is the
 // hottest store (based on QPS) among the stores inside
 // `removalCandidateStores`.
-func (o *QPSScorerOptions) removalMaximallyConvergesScore(
+func (o *LoadScorerOptions) removalMaximallyConvergesScore(
 	removalCandStoreList storepool.StoreList, existing roachpb.StoreDescriptor,
 ) int {
 	maxQPS := float64(-1)
@@ -958,6 +975,15 @@ func rankedCandidateListForAllocation(
 		}
 		constraintsOK, necessary := constraintsCheck(s)
 		if !constraintsOK {
+			if necessary {
+				log.KvDistribution.VEventf(
+					ctx,
+					3,
+					"cannot allocate necessary %s on s%d",
+					targetType,
+					s.StoreID,
+				)
+			}
 			continue
 		}
 
@@ -970,7 +996,6 @@ func rankedCandidateListForAllocation(
 		}
 		diversityScore := diversityAllocateScore(s, existingStoreLocalities)
 		balanceScore := options.balanceScore(candidateStores, s.Capacity)
-
 		var hasNonVoter bool
 		if targetType == VoterTarget {
 			if nonVoterReplTargets == nil {
@@ -1139,7 +1164,7 @@ type equivalenceClass struct {
 }
 
 // declineReason enumerates the various results of a call into
-// `bestStoreToMinimizeQPSDelta`. The result may be that we have a good
+// `bestStoreToMinimizeLoadDelta`. The result may be that we have a good
 // candidate to rebalance to (indicated by `shouldRebalance`) or it might be
 // rejected due to a number of reasons (see below).
 type declineReason int
@@ -1167,31 +1192,41 @@ const (
 	missingStatsForExistingStore
 )
 
-// bestStoreToMinimizeQPSDelta computes a rebalance (or lease transfer) target
+// bestStoreToMinimizeLoadDelta computes a rebalance (or lease transfer) target
 // for the existing store such that executing the rebalance (or lease transfer)
 // decision would minimize the QPS range between the existing store and the
 // coldest store in the equivalence class.
-func bestStoreToMinimizeQPSDelta(
-	replQPS float64,
+func bestStoreToMinimizeLoadDelta(
+	replLoadValue load.Load,
 	existing roachpb.StoreID,
 	candidates []roachpb.StoreID,
 	storeDescMap map[roachpb.StoreID]*roachpb.StoreDescriptor,
-	options *QPSScorerOptions,
+	options *LoadScorerOptions,
 ) (bestCandidate roachpb.StoreID, reason declineReason) {
-	storeQPSMap := make(map[roachpb.StoreID]float64, len(candidates)+1)
+	// This function is only intended to be called with the purpose one load
+	// dimension. Panic if not.
+	if len(options.LoadDims) != 1 {
+		panic(fmt.Sprintf(
+			"bestStoreToMinimizeLoadDelta only supports one minimizing the "+
+				"delta over 1-dimension, %d dimensions given",
+			len(options.LoadDims)))
+	}
+	dimension := options.LoadDims[0]
+
+	storeLoadMap := make(map[roachpb.StoreID]load.Load, len(candidates)+1)
 	for _, store := range candidates {
 		if desc, ok := storeDescMap[store]; ok {
-			storeQPSMap[store] = desc.Capacity.QueriesPerSecond
+			storeLoadMap[store] = desc.Capacity.Load()
 		}
 	}
 	desc, ok := storeDescMap[existing]
 	if !ok {
 		return 0, missingStatsForExistingStore
 	}
-	storeQPSMap[existing] = desc.Capacity.QueriesPerSecond
+	storeLoadMap[existing] = desc.Capacity.Load()
 
 	// domain defines the domain over which this function tries to minimize the
-	// QPS delta.
+	// load delta.
 	domain := append(candidates, existing)
 	storeDescs := make([]roachpb.StoreDescriptor, 0, len(domain))
 	for _, desc := range storeDescMap {
@@ -1199,52 +1234,57 @@ func bestStoreToMinimizeQPSDelta(
 	}
 	domainStoreList := storepool.MakeStoreList(storeDescs)
 
-	bestCandidate = getCandidateWithMinQPS(storeQPSMap, candidates)
+	bestCandidate = getCandidateWithMinLoad(storeLoadMap, candidates, dimension)
 	if bestCandidate == 0 {
 		return 0, noBetterCandidate
 	}
 
-	bestCandQPS := storeQPSMap[bestCandidate]
-	existingQPS := storeQPSMap[existing]
-	if bestCandQPS > existingQPS {
+	bestCandLoad := storeLoadMap[bestCandidate]
+	existingLoad := storeLoadMap[existing]
+	if load.Greater(bestCandLoad, existingLoad, dimension) {
 		return 0, noBetterCandidate
 	}
 
-	// NB: The store's QPS and the replica's QPS aren't captured at the same
+	// NB: The store's load and the replica's QPS aren't captured at the same
 	// time, so they may be mutually inconsistent. Thus, it is possible for
-	// the store's QPS captured here to be lower than the replica's QPS. So we
+	// the store's load captured here to be lower than the replica's load. So we
 	// defensively use the `math.Max` here.
-	existingQPSIgnoringRepl := math.Max(existingQPS-replQPS, 0)
+	existingLoadIgnoringRepl := load.Max(load.Sub(existingLoad, replLoadValue), load.Vector{})
 
 	// Only proceed if the QPS difference between `existing` and
 	// `bestCandidate` (not accounting for the replica under consideration) is
 	// higher than `minQPSDifferenceForTransfers`.
-	diffIgnoringRepl := existingQPSIgnoringRepl - bestCandQPS
-	if diffIgnoringRepl < options.MinRequiredQPSDiff {
+	diffIgnoringRepl := load.Sub(existingLoadIgnoringRepl, bestCandLoad)
+
+	if load.Greater(options.MinRequiredRebalanceLoadDiff, diffIgnoringRepl, dimension) {
 		return 0, deltaNotSignificant
 	}
 
 	// Only proceed with rebalancing iff `existingStore` is overfull relative to
 	// the equivalence class.
-	mean := domainStoreList.CandidateQueriesPerSecond.Mean
-	overfullThreshold := OverfullQPSThreshold(
-		options,
-		mean,
+	overfullThreshold := OverfullLoadThresholds(
+		domainStoreList.LoadMeans(),
+		options.LoadThreshold,
+		options.MinLoadThreshold,
 	)
-	if existingQPS < overfullThreshold {
+
+	// The existing load does not exceed the overfull threshold so it is not
+	// worthwhile rebalancing.
+	if !load.Greater(existingLoad, overfullThreshold, dimension) {
 		return 0, existingNotOverfull
 	}
 
-	currentQPSDelta := getQPSDelta(storeQPSMap, domain)
+	// converge values
+	currentLoadDelta := getLoadDelta(storeLoadMap, domain, dimension)
 	// Simulate the coldest candidate's QPS after it receives a lease/replica for
 	// the range.
-	storeQPSMap[bestCandidate] += replQPS
+	storeLoadMap[bestCandidate] = load.Add(storeLoadMap[bestCandidate], replLoadValue)
 	// Simulate the hottest existing store's QPS after it sheds the lease/replica
 	// away.
-	storeQPSMap[existing] = existingQPSIgnoringRepl
+	storeLoadMap[existing] = existingLoadIgnoringRepl
 
 	// NB: We proceed with a lease transfer / rebalance even if `currentQPSDelta`
-	// is exactly equal to `newQPSDelta`. Consider the following example:
+	// is exactly equal to `newLoadDelta`. Consider the following example:
 	// perReplicaQPS: 10qps
 	// existingQPS: 100qps
 	// candidates: [100qps, 0qps, 0qps]
@@ -1252,14 +1292,14 @@ func bestStoreToMinimizeQPSDelta(
 	// In such (perhaps unrealistic) scenarios, rebalancing from the existing
 	// store to the coldest store is not going to reduce the delta between all
 	// these stores, but it is still a desirable action to take.
-
-	newQPSDelta := getQPSDelta(storeQPSMap, domain)
-	if currentQPSDelta < newQPSDelta {
+	newLoadDelta := getLoadDelta(storeLoadMap, domain, dimension)
+	if currentLoadDelta < newLoadDelta {
 		panic(
 			fmt.Sprintf(
-				"programming error: projected QPS delta higher than current delta;"+
-					" existing: %0.2f qps, coldest candidate: %0.2f qps, replica/lease: %0.2f qps",
-				existingQPS, bestCandQPS, replQPS,
+				"programming error: projected load delta %f higher than current delta %f;"+
+					" existing: %s, coldest candidate: %s, replica/lease: %s, dimension %s",
+				newLoadDelta, currentLoadDelta, existingLoad, bestCandLoad, replLoadValue,
+				dimension.String(),
 			),
 		)
 	}
@@ -1271,7 +1311,7 @@ func bestStoreToMinimizeQPSDelta(
 // candidates in the equivalence class) such that rebalancing to this store
 // would minimize the delta between the existing store and the coldest store in
 // the equivalence class.
-func (o *QPSScorerOptions) getRebalanceTargetToMinimizeDelta(
+func (o *LoadScorerOptions) getRebalanceTargetToMinimizeDelta(
 	eqClass equivalenceClass,
 ) (bestStore roachpb.StoreID, declineReason declineReason) {
 	domainStoreList := storepool.MakeStoreList(append(eqClass.candidateSL.Stores, eqClass.existing))
@@ -1279,8 +1319,8 @@ func (o *QPSScorerOptions) getRebalanceTargetToMinimizeDelta(
 	for _, store := range eqClass.candidateSL.Stores {
 		candidates = append(candidates, store.StoreID)
 	}
-	return bestStoreToMinimizeQPSDelta(
-		o.QPSPerReplica,
+	return bestStoreToMinimizeLoadDelta(
+		o.RebalanceImpact,
 		eqClass.existing.StoreID,
 		candidates,
 		domainStoreList.ToMap(),
@@ -1758,15 +1798,42 @@ func nonVoterConstraintsCheckerForRebalance(
 	}
 }
 
+// voterConstraintsCheckerForReplace returns a constraintsCheckFn
+// that determines whether a given store is a valid and/or necessary replacement
+// candidate for the given store of an existing voting replica.
+func voterConstraintsCheckerForReplace(
+	overallConstraints, voterConstraints constraint.AnalyzedConstraints,
+	existingStore roachpb.StoreDescriptor,
+) constraintsCheckFn {
+	return func(s roachpb.StoreDescriptor) (valid, necessary bool) {
+		overallConstraintsOK, necessaryOverall := replaceConstraintsCheck(s, existingStore, overallConstraints)
+		voterConstraintsOK, necessaryForVoters := replaceConstraintsCheck(s, existingStore, voterConstraints)
+
+		return overallConstraintsOK && voterConstraintsOK, necessaryOverall || necessaryForVoters
+	}
+}
+
+// nonVoterConstraintsCheckerForReplace returns a constraintsCheckFn
+// that determines whether a given store is a valid and/or necessary replacement
+// candidate for the given store of an existing non-voting replica.
+func nonVoterConstraintsCheckerForReplace(
+	overallConstraints constraint.AnalyzedConstraints, existingStore roachpb.StoreDescriptor,
+) constraintsCheckFn {
+	return func(s roachpb.StoreDescriptor) (valid, necessary bool) {
+		return replaceConstraintsCheck(s, existingStore, overallConstraints)
+	}
+}
+
 // allocateConstraintsCheck checks the potential allocation target store
 // against all the constraints. If it matches a constraint at all, it's valid.
 // If it matches a constraint that is not already fully satisfied by existing
 // replicas, then it's necessary.
 //
-// NB: This assumes that the sum of all constraints.NumReplicas is equal to
-// configured number of replicas for the range, or that there's just one set of
-// constraints with NumReplicas set to 0. This is meant to be enforced in the
-// config package.
+// NB: Formerly there was an assumption that the sum of all
+// constraints.NumReplicas was equal to the configured number of replicas for
+// the range, or that there was just one set of constraints with NumReplicas
+// set to 0, however this is not enforced by the config package and this
+// no longer holds, as we may have unconstrained replicas.
 func allocateConstraintsCheck(
 	store roachpb.StoreDescriptor, analyzed constraint.AnalyzedConstraints,
 ) (valid bool, necessary bool) {
@@ -1795,6 +1862,57 @@ func allocateConstraintsCheck(
 	}
 
 	return valid, false
+}
+
+// replaceConstraintsCheck checks the potential allocation target store
+// for a replacement operation against all the constraints, including checking
+// that the candidate store matches a constraint satisfied by the existing
+// store. If it matches a constraint, it's valid. If it matches a constraint
+// that is not already overly satisfied by existing replicas (other than the
+// replacement), then it's necessary. If there are any necessary constraints
+// that are not satisfied by the candidate when the existing store did satisfy
+// that constraint, then the candidate is considered invalid entirely.
+func replaceConstraintsCheck(
+	store, existingStore roachpb.StoreDescriptor, analyzed constraint.AnalyzedConstraints,
+) (valid bool, necessary bool) {
+	// All stores are valid when there are no constraints.
+	if len(analyzed.Constraints) == 0 {
+		return true, false
+	}
+
+	for i, constraints := range analyzed.Constraints {
+		matchingStores := analyzed.SatisfiedBy[i]
+		satisfiedByExistingStore := containsStore(matchingStores, existingStore.StoreID)
+		satisfiedByCandidateStore := constraint.ConjunctionsCheck(
+			store, constraints.Constraints,
+		)
+		if satisfiedByCandidateStore {
+			valid = true
+		}
+
+		// If the constraint is not already satisfied, it's necessary.
+		// Additionally, if the constraint is only just satisfied by the existing
+		// store being replaced, since that store is going away, the constraint is
+		// also marked as necessary.
+		if len(matchingStores) < int(constraints.NumReplicas) ||
+			(len(matchingStores) == int(constraints.NumReplicas) &&
+				satisfiedByExistingStore) {
+			necessary = true
+		}
+
+		// Check if existing store matches a constraint that isn't overly satisfied.
+		// If so, then only replacing it with a satisfying store is valid to ensure
+		// that the constraint stays fully satisfied.
+		if necessary && satisfiedByExistingStore && !satisfiedByCandidateStore {
+			return false, necessary
+		}
+	}
+
+	if analyzed.UnconstrainedReplicas {
+		valid = true
+	}
+
+	return valid, necessary
 }
 
 // removeConstraintsCheck checks the existing store against the analyzed
@@ -1836,6 +1954,19 @@ func removeConstraintsCheck(
 // against the analyzed constraints, determining whether it's valid whether it
 // will be necessary if fromStoreID (an existing replica) is removed from the
 // range.
+//
+// NB: Formerly there was an assumption that the sum of all
+// constraints.NumReplicas was equal to the configured number of replicas for
+// the range, or that there was just one set of constraints with NumReplicas
+// set to 0, however this is not enforced by the config package and this
+// no longer holds, as we may have unconstrained replicas.
+//
+// Note that rebalance, while seemingly similar to replacement, is distinct
+// because leaving the replica on the existing store is a valid option.
+// Hence, when leaving the existing store (and using it to satisfy a particular
+// constraint) is not a possibility such as in the case of a decommissioning or
+// dead node, the specialized replacement check is required.
+// See replaceConstraintsCheck(..).
 func rebalanceFromConstraintsCheck(
 	store, fromStoreID roachpb.StoreDescriptor, analyzed constraint.AnalyzedConstraints,
 ) (valid bool, necessary bool) {
@@ -1848,11 +1979,6 @@ func rebalanceFromConstraintsCheck(
 	// all, it's valid. If it matches a constraint that is not already fully
 	// satisfied by existing replicas or that is only fully satisfied because of
 	// fromStoreID, then it's necessary.
-	//
-	// NB: This assumes that the sum of all constraints.NumReplicas is equal to
-	// configured number of replicas for the range, or that there's just one set
-	// of constraints with NumReplicas set to 0. This is meant to be enforced in
-	// the config package.
 	for i, constraints := range analyzed.Constraints {
 		if constraintsOK := constraint.ConjunctionsCheck(
 			store, constraints.Constraints,
@@ -2020,12 +2146,25 @@ func diversityRebalanceFromScore(
 	return sumScore / float64(numSamples)
 }
 
+// balanceStatus represents a ternary classification of a candidate based on
+// the candidate's load, the mean among compared candidates and the threshold
+// applied to the mean in order to generate a bounds.The balance score follows
+// the rule below:
+// candidate in [overfull,+inf)      -> overfull
+// candidate in (-inf,underfull)     -> underfull
+// candidate in [underfull,overfull) -> aroundTheMean
 type balanceStatus int
 
 const (
-	overfull      balanceStatus = -1
+	// overfull indicates that the candidate's load is at least as large as the
+	// overfull threshold.
+	overfull balanceStatus = -1
+	// aroundTheMean indicates that the candidate's load is less than the
+	// overfull threshold and at least as large as the underfull threshold.
 	aroundTheMean balanceStatus = 0
-	underfull     balanceStatus = 1
+	// underfull indicates that the candidate's load is strictly less than the
+	// underfull threshold.
+	underfull balanceStatus = 1
 )
 
 func overfullRangeThreshold(options *RangeCountScorerOptions, mean float64) float64 {
@@ -2034,16 +2173,6 @@ func overfullRangeThreshold(options *RangeCountScorerOptions, mean float64) floa
 
 func underfullRangeThreshold(options *RangeCountScorerOptions, mean float64) float64 {
 	return mean - math.Max(mean*options.rangeRebalanceThreshold, minRangeRebalanceThreshold)
-}
-
-// OverfullQPSThreshold computes the overfull QPS threshold.
-func OverfullQPSThreshold(options *QPSScorerOptions, mean float64) float64 {
-	return mean + math.Max(mean*options.QPSRebalanceThreshold, allocator.MinQPSThresholdDifference)
-}
-
-// UnderfullQPSThreshold computes the underfull QPS threshold.
-func UnderfullQPSThreshold(options *QPSScorerOptions, mean float64) float64 {
-	return mean - math.Max(mean*options.QPSRebalanceThreshold, allocator.MinQPSThresholdDifference)
 }
 
 func rebalanceConvergesRangeCountOnMean(

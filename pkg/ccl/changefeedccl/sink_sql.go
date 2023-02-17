@@ -64,6 +64,10 @@ type sqlSink struct {
 	metrics metricsRecorder
 }
 
+func (s *sqlSink) getConcreteType() sinkType {
+	return sinkTypeSQL
+}
+
 // TODO(dan): Make tableName configurable or based on the job ID or
 // something.
 const sqlSinkTableName = `sqlsink`
@@ -220,5 +224,8 @@ func (s *sqlSink) Flush(ctx context.Context) error {
 
 // Close implements the Sink interface.
 func (s *sqlSink) Close() error {
+	if s.db == nil {
+		return nil
+	}
 	return s.db.Close()
 }

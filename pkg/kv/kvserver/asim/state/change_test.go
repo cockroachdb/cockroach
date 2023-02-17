@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -28,6 +29,7 @@ func testMakeReplicaChange(add, remove StoreID, rangeKey Key) func(s State) Chan
 		change.Add = add
 		change.Remove = remove
 		change.RangeID = rng.RangeID()
+		change.Author = 1
 		return &change
 	}
 }
@@ -39,6 +41,7 @@ func testMakeRangeSplitChange(splitKey Key) func(s State) Change {
 		change.Wait = testingDelay
 		change.RangeID = rng.RangeID()
 		change.SplitKey = splitKey
+		change.Author = 1
 		return &change
 	}
 }
@@ -54,12 +57,13 @@ func testMakeLeaseTransferChange(rangeKey Key, target StoreID) func(s State) Cha
 }
 
 func testMakeReplicaState(replCounts map[StoreID]int) (State, Range) {
+	settings := config.DefaultSimulationSettings()
 	numReplicas := 0
 	for _, count := range replCounts {
 		numReplicas += count
 	}
-	state := NewTestStateReplCounts(replCounts, numReplicas, 50 /* keyspace */)
-	rng, _ := state.Range(RangeID(2))
+	state := NewStateWithReplCounts(replCounts, numReplicas, 50 /* keyspace */, settings)
+	rng, _ := state.Range(RangeID(1))
 	return state, rng
 }
 
@@ -485,10 +489,10 @@ func TestReplicaStateChanger(t *testing.T) {
 						tsResults = append(tsResults, ReverseOffsetTick(start, ts))
 					}
 				}
-				rmapView, storeView := testGetAllReplLocations(state, map[RangeID]bool{1: true})
+				rmapView, storeView := testGetAllReplLocations(state, map[RangeID]bool{})
 				require.Equal(t, rmapView, storeView, "RangeMap state and the Store state have different values")
 				results[tick] = rmapView
-				resultLeaseholders[tick] = testGetLHLocations(state, map[RangeID]bool{1: true})
+				resultLeaseholders[tick] = testGetLHLocations(state, map[RangeID]bool{})
 			}
 
 			require.Equal(t, tc.expected, results)

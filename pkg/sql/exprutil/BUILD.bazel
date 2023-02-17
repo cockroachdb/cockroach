@@ -26,9 +26,11 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/exprutil",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/sql/paramparse",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
+        "//pkg/util/duration",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
@@ -37,8 +39,8 @@ go_test(
     name = "exprutil_test",
     srcs = ["evaluator_test.go"],
     args = ["-test.timeout=295s"],
-    embed = [":exprutil"],
     deps = [
+        ":exprutil",
         "//pkg/settings/cluster",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",

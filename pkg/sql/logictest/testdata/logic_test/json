@@ -209,7 +209,7 @@ SELECT * from foo where bar->'x' = '{}'
 query T
 SELECT array_agg(bar ORDER BY pk) FROM foo
 ----
-{"'{\"a\": \"b\"}'","'[1, 2, 3]'","\"hello\"",1.000,true,false,NULL,"'{\"x\": [1, 2, 3]}'","'{\"x\": {\"y\": \"z\"}}'"}
+{"{\"a\": \"b\"}","[1, 2, 3]","\"hello\"",1.000,true,false,NULL,"{\"x\": [1, 2, 3]}","{\"x\": {\"y\": \"z\"}}"}
 
 statement ok
 DELETE FROM foo

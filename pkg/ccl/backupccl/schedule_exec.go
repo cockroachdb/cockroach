@@ -15,14 +15,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs/schedulebase"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -50,12 +49,12 @@ var _ jobs.ScheduledJobExecutor = &scheduledBackupExecutor{}
 // ExecuteJob implements jobs.ScheduledJobExecutor interface.
 func (e *scheduledBackupExecutor) ExecuteJob(
 	ctx context.Context,
+	txn isql.Txn,
 	cfg *scheduledjobs.JobExecutionConfig,
 	env scheduledjobs.JobSchedulerEnv,
-	sj *jobs.ScheduledJob,
-	txn *kv.Txn,
+	schedule *jobs.ScheduledJob,
 ) error {
-	if err := e.executeBackup(ctx, cfg, sj, txn); err != nil {
+	if err := e.executeBackup(ctx, cfg, schedule, txn); err != nil {
 		e.metrics.NumFailed.Inc(1)
 		return err
 	}
@@ -64,7 +63,7 @@ func (e *scheduledBackupExecutor) ExecuteJob(
 }
 
 func (e *scheduledBackupExecutor) executeBackup(
-	ctx context.Context, cfg *scheduledjobs.JobExecutionConfig, sj *jobs.ScheduledJob, txn *kv.Txn,
+	ctx context.Context, cfg *scheduledjobs.JobExecutionConfig, sj *jobs.ScheduledJob, txn isql.Txn,
 ) error {
 	backupStmt, err := extractBackupStatement(sj)
 	if err != nil {
@@ -96,7 +95,7 @@ func (e *scheduledBackupExecutor) executeBackup(
 		sj.ScheduleID(), tree.AsString(backupStmt))
 
 	// Invoke backup plan hook.
-	hook, cleanup := cfg.PlanHookMaker("exec-backup", txn, sj.Owner())
+	hook, cleanup := cfg.PlanHookMaker("exec-backup", txn.KV(), sj.Owner())
 	defer cleanup()
 
 	if knobs, ok := cfg.TestingKnobs.(*jobs.TestingKnobs); ok {
@@ -114,7 +113,7 @@ func (e *scheduledBackupExecutor) executeBackup(
 }
 
 func invokeBackup(
-	ctx context.Context, backupFn sql.PlanHookRowFn, registry *jobs.Registry, txn *kv.Txn,
+	ctx context.Context, backupFn sql.PlanHookRowFn, registry *jobs.Registry, txn isql.Txn,
 ) (eventpb.RecoveryEvent, error) {
 	resultCh := make(chan tree.Datums) // No need to close
 	g := ctxgroup.WithContext(ctx)
@@ -157,18 +156,17 @@ func planBackup(
 // NotifyJobTermination implements jobs.ScheduledJobExecutor interface.
 func (e *scheduledBackupExecutor) NotifyJobTermination(
 	ctx context.Context,
+	txn isql.Txn,
 	jobID jobspb.JobID,
 	jobStatus jobs.Status,
 	details jobspb.Details,
 	env scheduledjobs.JobSchedulerEnv,
 	schedule *jobs.ScheduledJob,
-	ex sqlutil.InternalExecutor,
-	txn *kv.Txn,
 ) error {
 	if jobStatus == jobs.StatusSucceeded {
 		e.metrics.NumSucceeded.Inc(1)
 		log.Infof(ctx, "backup job %d scheduled by %d succeeded", jobID, schedule.ScheduleID())
-		return e.backupSucceeded(ctx, schedule, details, env, ex, txn)
+		return e.backupSucceeded(ctx, jobs.ScheduledJobTxn(txn), schedule, details, env)
 	}
 
 	e.metrics.NumFailed.Inc(1)
@@ -181,12 +179,7 @@ func (e *scheduledBackupExecutor) NotifyJobTermination(
 }
 
 func (e *scheduledBackupExecutor) GetCreateScheduleStatement(
-	ctx context.Context,
-	env scheduledjobs.JobSchedulerEnv,
-	txn *kv.Txn,
-	descsCol *descs.Collection,
-	sj *jobs.ScheduledJob,
-	ex sqlutil.InternalExecutor,
+	ctx context.Context, txn isql.Txn, env scheduledjobs.JobSchedulerEnv, sj *jobs.ScheduledJob,
 ) (string, error) {
 	backupNode, err := extractBackupStatement(sj)
 	if err != nil {
@@ -204,7 +197,8 @@ func (e *scheduledBackupExecutor) GetCreateScheduleStatement(
 	// Check if sj has a dependent full or incremental schedule associated with it.
 	var dependentSchedule *jobs.ScheduledJob
 	if args.DependentScheduleID != 0 {
-		dependentSchedule, err = jobs.LoadScheduledJob(ctx, env, args.DependentScheduleID, ex, txn)
+		dependentSchedule, err = jobs.ScheduledJobTxn(txn).
+			Load(ctx, env, args.DependentScheduleID)
 		if err != nil {
 			return "", err
 		}
@@ -331,11 +325,10 @@ func (e *scheduledBackupExecutor) GetCreateScheduleStatement(
 
 func (e *scheduledBackupExecutor) backupSucceeded(
 	ctx context.Context,
+	txn jobs.ScheduledJobStorage,
 	schedule *jobs.ScheduledJob,
 	details jobspb.Details,
 	env scheduledjobs.JobSchedulerEnv,
-	ex sqlutil.InternalExecutor,
-	txn *kv.Txn,
 ) error {
 	args := &backuppb.ScheduledBackupExecutionArgs{}
 	if err := pbtypes.UnmarshalAny(schedule.ExecutionArgs().Args, args); err != nil {
@@ -352,7 +345,7 @@ func (e *scheduledBackupExecutor) backupSucceeded(
 		return nil
 	}
 
-	s, err := jobs.LoadScheduledJob(ctx, env, args.UnpauseOnSuccess, ex, txn)
+	s, err := txn.Load(ctx, env, args.UnpauseOnSuccess)
 	if err != nil {
 		if jobs.HasScheduledJobNotFoundError(err) {
 			log.Warningf(ctx, "cannot find schedule %d to unpause; it may have been dropped",
@@ -367,7 +360,7 @@ func (e *scheduledBackupExecutor) backupSucceeded(
 			return err
 		}
 	}
-	if err := s.Update(ctx, ex, txn); err != nil {
+	if err := txn.Update(ctx, s); err != nil {
 		return err
 	}
 
@@ -427,7 +420,7 @@ func unlinkOrDropDependentSchedule(
 	ctx context.Context,
 	scheduleControllerEnv scheduledjobs.ScheduleControllerEnv,
 	env scheduledjobs.JobSchedulerEnv,
-	txn *kv.Txn,
+	txn isql.Txn,
 	args *backuppb.ScheduledBackupExecutionArgs,
 ) (int, error) {
 	if args.DependentScheduleID == 0 {
@@ -435,8 +428,9 @@ func unlinkOrDropDependentSchedule(
 	}
 
 	// Load the dependent schedule.
-	dependentSj, dependentArgs, err := getScheduledBackupExecutionArgsFromSchedule(ctx, env, txn,
-		scheduleControllerEnv.InternalExecutor().(*sql.InternalExecutor), args.DependentScheduleID)
+	dependentSj, dependentArgs, err := getScheduledBackupExecutionArgsFromSchedule(
+		ctx, env, jobs.ScheduledJobTxn(txn), args.DependentScheduleID,
+	)
 	if err != nil {
 		if jobs.HasScheduledJobNotFoundError(err) {
 			log.Warningf(ctx, "failed to resolve dependent schedule %d", args.DependentScheduleID)
@@ -452,12 +446,12 @@ func unlinkOrDropDependentSchedule(
 			return 0, err
 		}
 		dependentSj.SetExecutionDetails(dependentSj.ExecutorType(), jobspb.ExecutionArguments{Args: any})
-		if err := dependentSj.Delete(ctx, scheduleControllerEnv.InternalExecutor(), txn); err != nil {
+
+		if err := jobs.ScheduledJobTxn(txn).Delete(ctx, dependentSj); err != nil {
 			return 0, err
 		}
 
-		return 1, releaseProtectedTimestamp(ctx, txn, scheduleControllerEnv.PTSProvider(),
-			dependentArgs.ProtectedTimestampRecord)
+		return 1, releaseProtectedTimestamp(ctx, scheduleControllerEnv.PTSProvider(), dependentArgs.ProtectedTimestampRecord)
 	}
 
 	// Clear the DependentID field since we are dropping the record associated
@@ -468,8 +462,11 @@ func unlinkOrDropDependentSchedule(
 	if err != nil {
 		return 0, err
 	}
-	dependentSj.SetExecutionDetails(dependentSj.ExecutorType(), jobspb.ExecutionArguments{Args: any})
-	return 0, dependentSj.Update(ctx, scheduleControllerEnv.InternalExecutor(), txn)
+	dependentSj.SetExecutionDetails(
+		dependentSj.ExecutorType(), jobspb.ExecutionArguments{Args: any},
+	)
+
+	return 0, jobs.ScheduledJobTxn(txn).Update(ctx, dependentSj)
 }
 
 // OnDrop implements the ScheduledJobController interface.
@@ -482,7 +479,7 @@ func (e *scheduledBackupExecutor) OnDrop(
 	scheduleControllerEnv scheduledjobs.ScheduleControllerEnv,
 	env scheduledjobs.JobSchedulerEnv,
 	sj *jobs.ScheduledJob,
-	txn *kv.Txn,
+	txn isql.Txn,
 	descsCol *descs.Collection,
 ) (int, error) {
 	args := &backuppb.ScheduledBackupExecutionArgs{}
@@ -496,14 +493,14 @@ func (e *scheduledBackupExecutor) OnDrop(
 		return dependentRowsDropped, errors.Wrap(err, "failed to unlink dependent schedule")
 	}
 
-	return dependentRowsDropped, releaseProtectedTimestamp(ctx, txn, scheduleControllerEnv.PTSProvider(),
-		args.ProtectedTimestampRecord)
+	pts := scheduleControllerEnv.PTSProvider()
+	return dependentRowsDropped, releaseProtectedTimestamp(ctx, pts, args.ProtectedTimestampRecord)
 }
 
 // getBackupFnTelemetry collects the telemetry from the dry-run backup
 // corresponding to backupFnResult.
 func getBackupFnTelemetry(
-	ctx context.Context, registry *jobs.Registry, txn *kv.Txn, backupFnResult tree.Datums,
+	ctx context.Context, registry *jobs.Registry, txn isql.Txn, backupFnResult tree.Datums,
 ) eventpb.RecoveryEvent {
 	if registry == nil {
 		return eventpb.RecoveryEvent{}

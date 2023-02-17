@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -171,6 +172,7 @@ func alterPrimaryKey(b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t alterPri
 		newPrimaryIndexElem = in.primary
 		sourcePrimaryIndexElem = union.primary
 	}
+	b.LogEventForExistingTarget(newPrimaryIndexElem)
 
 	// Recreate all secondary indexes.
 	recreateAllSecondaryIndexes(b, tbl, newPrimaryIndexElem, sourcePrimaryIndexElem)
@@ -231,12 +233,16 @@ func checkForEarlyExit(b BuildCtx, tbl *scpb.Table, t alterPrimaryKeySpec) {
 			RequiredPrivilege:   privilege.CREATE,
 		})
 
-		colCurrentStatus, _, colElem := scpb.FindColumn(colElems)
+		colCurrentStatus, colTargetStatus, colElem := scpb.FindColumn(colElems)
 		if colElem == nil {
 			panic(errors.AssertionFailedf("programming error: resolving column %v does not give a "+
 				"Column element.", col.Column))
 		}
 		if colCurrentStatus == scpb.Status_DROPPED || colCurrentStatus == scpb.Status_ABSENT {
+			if colTargetStatus == scpb.ToPublic {
+				panic(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+					"column %q is being added", col.Column))
+			}
 			panic(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 				"column %q is being dropped", col.Column))
 		}
@@ -244,12 +250,7 @@ func checkForEarlyExit(b BuildCtx, tbl *scpb.Table, t alterPrimaryKeySpec) {
 			panic(pgerror.Newf(pgcode.InvalidSchemaDefinition, "cannot use inaccessible "+
 				"column %q in primary key", col.Column))
 		}
-		_, _, colTypeElem := scpb.FindColumnType(colElems)
-		if colTypeElem == nil {
-			panic(errors.AssertionFailedf("programming error: resolving column %v does not give a "+
-				"ColumnType element.", col.Column))
-		}
-		if colTypeElem.IsNullable {
+		if !isColNotNull(b, tbl.TableID, colElem.ColumnID) {
 			panic(pgerror.Newf(pgcode.InvalidSchemaDefinition, "cannot use nullable column "+
 				"%q in primary key", col.Column))
 		}
@@ -385,7 +386,7 @@ func fallBackIfDescColInRowLevelTTLTables(b BuildCtx, tableID catid.DescID, t al
 	// It's a row-level-ttl table. Ensure it has no non-descending
 	// key columns, and there is no inbound/outbound foreign keys.
 	for _, col := range t.Columns {
-		if indexColumnDirection(col.Direction) != catpb.IndexColumn_ASC {
+		if indexColumnDirection(col.Direction) != catenumpb.IndexColumn_ASC {
 			panic(scerrors.NotImplementedErrorf(t.n, "non-ascending ordering on PRIMARY KEYs are not supported"))
 		}
 	}
@@ -745,7 +746,7 @@ func addIndexColumnsForNewUniqueSecondaryIndexAndTempIndex(
 	// SUFFIX_KEY columns = new primary index columns - old primary key columns
 	// First find column IDs and dirs by their names, as specified in t.Columns.
 	newPrimaryIndexKeyColumnIDs := make([]catid.ColumnID, len(t.Columns))
-	newPrimaryIndexKeyColumnDirs := make([]catpb.IndexColumn_Direction, len(t.Columns))
+	newPrimaryIndexKeyColumnDirs := make([]catenumpb.IndexColumn_Direction, len(t.Columns))
 	allColumnsNameToIDMapping := getAllColumnsNameToIDMapping(b, tbl.TableID)
 	for i, col := range t.Columns {
 		if colID, exist := allColumnsNameToIDMapping[string(col.Column)]; !exist {
@@ -813,7 +814,7 @@ func shouldCreateUniqueIndexOnOldPrimaryKeyColumns(
 		b BuildCtx, tableID catid.DescID, indexID catid.IndexID, excludeShardedCol bool,
 	) (
 		columnIDs descpb.ColumnIDs,
-		columnDirs []catpb.IndexColumn_Direction,
+		columnDirs []catenumpb.IndexColumn_Direction,
 	) {
 		sharding := mustRetrieveIndexElement(b, tableID, indexID).Sharding
 		allKeyIndexColumns := mustRetrieveKeyIndexColumns(b, tableID, indexID)

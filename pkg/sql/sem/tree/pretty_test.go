@@ -25,7 +25,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -50,7 +50,7 @@ var (
 func TestPrettyDataShort(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	matches, err := filepath.Glob(testutils.TestDataPath(t, "pretty", "*.sql"))
+	matches, err := filepath.Glob(datapathutils.TestDataPath(t, "pretty", "*.sql"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -187,7 +187,7 @@ func TestPrettyVerify(t *testing.T) {
 }
 
 func BenchmarkPrettyData(b *testing.B) {
-	matches, err := filepath.Glob(testutils.TestDataPath(b, "pretty", "*.sql"))
+	matches, err := filepath.Glob(datapathutils.TestDataPath(b, "pretty", "*.sql"))
 	if err != nil {
 		b.Fatal(err)
 	}

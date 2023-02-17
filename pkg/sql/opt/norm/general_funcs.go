@@ -299,6 +299,11 @@ func (c *CustomFuncs) DuplicateColumnIDs(
 	return newTableID, newColIDs
 }
 
+// MakeBoolCol creates a new column of type Bool and returns its ID.
+func (c *CustomFuncs) MakeBoolCol() opt.ColumnID {
+	return c.mem.Metadata().AddColumn("", types.Bool)
+}
+
 // ----------------------------------------------------------------------
 //
 // Outer column functions

@@ -15,14 +15,14 @@ top-k
  ├── k: 10
  ├── cardinality: [0 - 10]
  ├── stats: [rows=10]
- ├── cost: 1171.36856
+ ├── cost: 1175.36856
  ├── key: (1)
  ├── fd: (1)-->(2,3)
  ├── ordering: +2
  └── scan a
       ├── columns: k:1!null i:2 j:3
       ├── stats: [rows=1000]
-      ├── cost: 1084.62
+      ├── cost: 1088.62
       ├── key: (1)
       └── fd: (1)-->(2,3)
 
@@ -35,7 +35,7 @@ scalar-group-by
  ├── cardinality: [1 - 1]
  ├── immutable
  ├── stats: [rows=1]
- ├── cost: 1077.76333
+ ├── cost: 1081.76333
  ├── key: ()
  ├── fd: ()-->(7)
  ├── top-k
@@ -45,23 +45,23 @@ scalar-group-by
  │    ├── cardinality: [0 - 1]
  │    ├── immutable
  │    ├── stats: [rows=1]
- │    ├── cost: 1077.72333
+ │    ├── cost: 1081.72333
  │    ├── key: ()
  │    ├── fd: ()-->(6)
  │    └── project
  │         ├── columns: column6:6
  │         ├── immutable
  │         ├── stats: [rows=333.3333]
- │         ├── cost: 1071.03667
+ │         ├── cost: 1075.03667
  │         ├── select
  │         │    ├── columns: j:3
  │         │    ├── immutable
  │         │    ├── stats: [rows=333.3333]
- │         │    ├── cost: 1064.35
+ │         │    ├── cost: 1068.35
  │         │    ├── scan a@j
  │         │    │    ├── columns: j:3
  │         │    │    ├── stats: [rows=1000]
- │         │    │    └── cost: 1054.32
+ │         │    │    └── cost: 1058.32
  │         │    └── filters
  │         │         └── (j:3 + 1) IS NOT NULL [outer=(3), immutable]
  │         └── projections
@@ -79,18 +79,18 @@ scalar-group-by
  ├── cardinality: [1 - 1]
  ├── immutable
  ├── stats: [rows=1]
- ├── cost: 1084.37
+ ├── cost: 1088.37
  ├── key: ()
  ├── fd: ()-->(7)
  ├── project
  │    ├── columns: column6:6!null
  │    ├── immutable
  │    ├── stats: [rows=1000]
- │    ├── cost: 1074.34
+ │    ├── cost: 1078.34
  │    ├── scan b@j
  │    │    ├── columns: j:3!null
  │    │    ├── stats: [rows=1000]
- │    │    └── cost: 1054.32
+ │    │    └── cost: 1058.32
  │    └── projections
  │         └── j:3 + 1 [as=column6:6, outer=(3), immutable]
  └── aggregations
@@ -118,14 +118,14 @@ top-k
  ├── k: 10
  ├── cardinality: [0 - 10]
  ├── stats: [rows=10, distinct(3)=9.95512, null(3)=0]
- ├── cost: 7805.20825
+ ├── cost: 7809.20825
  ├── key: (1)
  ├── fd: (1)-->(2,3)
  ├── ordering: +3,+2
  └── index-join a
       ├── columns: k:1!null i:2 j:3
       ├── stats: [rows=10000]
-      ├── cost: 7713.72858
+      ├── cost: 7717.72858
       ├── key: (1)
       ├── fd: (1)-->(2,3)
       ├── ordering: +3
@@ -133,7 +133,7 @@ top-k
       └── scan a@j
            ├── columns: k:1!null j:3
            ├── stats: [rows=10000]
-           ├── cost: 1058.70858
+           ├── cost: 1062.70858
            ├── key: (1)
            ├── fd: (1)-->(3)
            ├── ordering: +3
@@ -217,7 +217,7 @@ top-k
  ├── k: 1
  ├── cardinality: [0 - 1]
  ├── stats: [rows=2e-10]
- ├── cost: 14.03
+ ├── cost: 18.03
  ├── key: ()
  ├── fd: ()-->(1-3)
  └── scan a
@@ -225,6 +225,6 @@ top-k
       ├── constraint: /1: [/11 - ]
       ├── stats: [rows=2e-10, distinct(1)=2e-10, null(1)=0]
       │   histogram(1)=
-      ├── cost: 14.02
+      ├── cost: 18.02
       ├── key: (1)
       └── fd: (1)-->(2,3)

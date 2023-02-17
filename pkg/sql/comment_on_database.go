@@ -40,8 +40,7 @@ func (p *planner) CommentOnDatabase(
 		return nil, err
 	}
 
-	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn,
-		string(n.Name), tree.DatabaseLookupFlags{Required: true})
+	dbDesc, err := p.Descriptors().MutableByName(p.txn).Database(ctx, string(n.Name))
 	if err != nil {
 		return nil, err
 	}

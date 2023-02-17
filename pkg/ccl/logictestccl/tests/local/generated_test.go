@@ -184,6 +184,13 @@ func TestCCLLogic_show_create(
 	runCCLLogicTest(t, "show_create")
 }
 
+func TestCCLLogic_tenant_capability(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "tenant_capability")
+}
+
 func TestCCLLogic_tenant_usage(
 	t *testing.T,
 ) {

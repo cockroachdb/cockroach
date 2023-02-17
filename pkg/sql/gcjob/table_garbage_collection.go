@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -49,15 +49,8 @@ func gcTables(
 		}
 
 		var table catalog.TableDescriptor
-		if err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
-			flags := tree.ObjectLookupFlags{
-				CommonLookupFlags: tree.CommonLookupFlags{
-					AvoidLeased:    true,
-					IncludeDropped: true,
-					IncludeOffline: true,
-				},
-			}
-			table, err = col.GetImmutableTableByID(ctx, txn, droppedTable.ID, flags)
+		if err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
+			table, err = col.ByID(txn.KV()).Get().Table(ctx, droppedTable.ID)
 			return err
 		}); err != nil {
 			if errors.Is(err, catalog.ErrDescriptorNotFound) {
@@ -266,6 +259,7 @@ func deleteAllSpanData(
 			})
 			log.VEventf(ctx, 2, "delete range %s - %s", lastKey, endKey)
 			if err := db.Run(ctx, &b); err != nil {
+				log.Errorf(ctx, "delete range %s - %s failed: %s", span.Key, span.EndKey, err.Error())
 				return errors.Wrapf(err, "delete range %s - %s", lastKey, endKey)
 			}
 			n = 0
@@ -294,15 +288,8 @@ func deleteTableDescriptorsAfterGC(
 		}
 
 		var table catalog.TableDescriptor
-		if err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
-			flags := tree.ObjectLookupFlags{
-				CommonLookupFlags: tree.CommonLookupFlags{
-					AvoidLeased:    true,
-					IncludeDropped: true,
-					IncludeOffline: true,
-				},
-			}
-			table, err = col.GetImmutableTableByID(ctx, txn, droppedTable.ID, flags)
+		if err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
+			table, err = col.ByID(txn.KV()).Get().Table(ctx, droppedTable.ID)
 			return err
 		}); err != nil {
 			if errors.Is(err, catalog.ErrDescriptorNotFound) {

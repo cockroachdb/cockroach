@@ -18,8 +18,9 @@ import (
 )
 
 type defaultProvider struct {
-	store    *lockingStore
-	ingester *concurrentBufferIngester
+	store           *lockingStore
+	ingester        *concurrentBufferIngester
+	anomalyDetector *anomalyDetector
 }
 
 var _ Provider = &defaultProvider{}
@@ -38,6 +39,10 @@ func (p *defaultProvider) Writer(internal bool) Writer {
 
 func (p *defaultProvider) Reader() Reader {
 	return p.store
+}
+
+func (p *defaultProvider) LatencyInformation() LatencyInformation {
+	return p.anomalyDetector
 }
 
 type nullWriter struct{}

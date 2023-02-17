@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/pebble"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -250,15 +249,20 @@ func assertExportedKVs(
 	defer sst.Close()
 
 	sst.SeekGE(MVCCKey{})
+	checkValErr := func(v []byte, err error) []byte {
+		require.NoError(t, err)
+		return v
+	}
 	for i := range expected {
 		ok, err := sst.Valid()
 		require.NoError(t, err)
 		require.Truef(t, ok, "iteration produced %d keys, expected %d", i, len(expected))
 		assert.Equalf(t, expected[i].Key, sst.UnsafeKey(), "key %d", i)
 		if expected[i].Value == nil {
-			assert.Equalf(t, []byte{}, sst.UnsafeValue(), "key %d %q", i, sst.UnsafeKey())
+			assert.Equalf(t, []byte{}, checkValErr(sst.UnsafeValue()), "key %d %q", i, sst.UnsafeKey())
 		} else {
-			assert.Equalf(t, expected[i].Value, sst.UnsafeValue(), "key %d %q", i, sst.UnsafeKey())
+			assert.Equalf(
+				t, expected[i].Value, checkValErr(sst.UnsafeValue()), "key %d %q", i, sst.UnsafeKey())
 		}
 		sst.Next()
 	}
@@ -326,8 +330,12 @@ func assertIgnoreTimeIteratedKVs(
 		} else if !ok || iter.UnsafeKey().Key.Compare(endKey) >= 0 {
 			break
 		}
+		v, err := iter.UnsafeValue()
+		if err != nil {
+			t.Fatalf("unexpected error: %+v", err)
+		}
 		kvs = append(kvs, MVCCKeyValue{
-			Key: iter.UnsafeKey().Clone(), Value: append([]byte{}, iter.UnsafeValue()...)})
+			Key: iter.UnsafeKey().Clone(), Value: append([]byte{}, v...)})
 	}
 
 	if len(kvs) != len(expected) {
@@ -374,8 +382,12 @@ func assertIteratedKVs(
 		if iter.NumCollectedIntents() > 0 {
 			t.Fatal("got unexpected intent error")
 		}
+		v, err := iter.UnsafeValue()
+		if err != nil {
+			t.Fatalf("unexpected error: %+v", err)
+		}
 		kvs = append(kvs, MVCCKeyValue{
-			Key: iter.UnsafeKey().Clone(), Value: append([]byte{}, iter.UnsafeValue()...)})
+			Key: iter.UnsafeKey().Clone(), Value: append([]byte{}, v...)})
 	}
 
 	if len(kvs) != len(expected) {
@@ -876,7 +888,8 @@ func expectKeyValue(t *testing.T, iter SimpleMVCCIterator, kv MVCCKeyValue) {
 	assert.NoError(t, err)
 
 	unsafeKey := iter.UnsafeKey()
-	unsafeVal := iter.UnsafeValue()
+	unsafeVal, err := iter.UnsafeValue()
+	require.NoError(t, err)
 
 	assert.True(t, unsafeKey.Key.Equal(kv.Key.Key), "keys not equal")
 	assert.Equal(t, kv.Key.Timestamp, unsafeKey.Timestamp)
@@ -890,7 +903,8 @@ func expectIntent(t *testing.T, iter SimpleMVCCIterator, intent roachpb.Intent) 
 	assert.NoError(t, err)
 
 	unsafeKey := iter.UnsafeKey()
-	unsafeVal := iter.UnsafeValue()
+	unsafeVal, err := iter.UnsafeValue()
+	require.NoError(t, err)
 
 	var meta enginepb.MVCCMetadata
 	err = protoutil.Unmarshal(unsafeVal, &meta)
@@ -991,12 +1005,12 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 
 		intent1 := roachpb.MakeLockUpdate(&txn1, roachpb.Span{Key: testKey1})
 		intent1.Status = roachpb.COMMITTED
-		if _, err := MVCCResolveWriteIntent(ctx, e, nil, intent1); err != nil {
+		if _, _, _, err := MVCCResolveWriteIntent(ctx, e, nil, intent1, MVCCResolveWriteIntentOptions{}); err != nil {
 			t.Fatal(err)
 		}
 		intent2 := roachpb.MakeLockUpdate(&txn2, roachpb.Span{Key: testKey2})
 		intent2.Status = roachpb.ABORTED
-		if _, err := MVCCResolveWriteIntent(ctx, e, nil, intent2); err != nil {
+		if _, _, _, err := MVCCResolveWriteIntent(ctx, e, nil, intent2, MVCCResolveWriteIntentOptions{}); err != nil {
 			t.Fatal(err)
 		}
 		t.Run("intents-resolved", assertEqualKVs(e, localMax, keyMax, tsMin, tsMax, latest, kvs(kv1_4_4, kv2_2_2)))
@@ -1058,12 +1072,12 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 
 		intent1 := roachpb.MakeLockUpdate(&txn1, roachpb.Span{Key: testKey1})
 		intent1.Status = roachpb.COMMITTED
-		if _, err := MVCCResolveWriteIntent(ctx, e, nil, intent1); err != nil {
+		if _, _, _, err := MVCCResolveWriteIntent(ctx, e, nil, intent1, MVCCResolveWriteIntentOptions{}); err != nil {
 			t.Fatal(err)
 		}
 		intent2 := roachpb.MakeLockUpdate(&txn2, roachpb.Span{Key: testKey2})
 		intent2.Status = roachpb.ABORTED
-		if _, err := MVCCResolveWriteIntent(ctx, e, nil, intent2); err != nil {
+		if _, _, _, err := MVCCResolveWriteIntent(ctx, e, nil, intent2, MVCCResolveWriteIntentOptions{}); err != nil {
 			t.Fatal(err)
 		}
 		t.Run("intents-resolved", assertEqualKVs(e, localMax, keyMax, tsMin, tsMax, all, kvs(kv1_4_4, kv1Deleted3, kv1_2_2, kv1_1_1, kv2_2_2)))
@@ -1087,8 +1101,12 @@ func slurpKVsInTimeRange(
 		} else if !ok || iter.UnsafeKey().Key.Compare(endKey) >= 0 {
 			break
 		}
+		v, err := iter.UnsafeValue()
+		if err != nil {
+			return nil, err
+		}
 		kvs = append(kvs, MVCCKeyValue{
-			Key: iter.UnsafeKey().Clone(), Value: append([]byte{}, iter.UnsafeValue()...)})
+			Key: iter.UnsafeKey().Clone(), Value: append([]byte{}, v...)})
 	}
 	return kvs, nil
 }
@@ -1242,9 +1260,9 @@ func TestMVCCIncrementalIteratorIntentDeletion(t *testing.T) {
 	require.NoError(t, MVCCPut(ctx, db, nil, kC, txnC1.ReadTimestamp, hlc.ClockTimestamp{}, vC1, txnC1))
 	require.NoError(t, db.Flush())
 	require.NoError(t, db.Compact())
-	_, err := MVCCResolveWriteIntent(ctx, db, nil, intent(txnA1))
+	_, _, _, err := MVCCResolveWriteIntent(ctx, db, nil, intent(txnA1), MVCCResolveWriteIntentOptions{})
 	require.NoError(t, err)
-	_, err = MVCCResolveWriteIntent(ctx, db, nil, intent(txnB1))
+	_, _, _, err = MVCCResolveWriteIntent(ctx, db, nil, intent(txnB1), MVCCResolveWriteIntentOptions{})
 	require.NoError(t, err)
 	require.NoError(t, MVCCPut(ctx, db, nil, kA, ts2, hlc.ClockTimestamp{}, vA2, nil))
 	require.NoError(t, MVCCPut(ctx, db, nil, kA, txnA3.WriteTimestamp, hlc.ClockTimestamp{}, vA3, txnA3))
@@ -1290,7 +1308,7 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 	// regular MVCCPut operation to generate these keys, which we'll later be
 	// copying into manually created sstables.
 	ctx := context.Background()
-	db1, err := Open(ctx, InMemory(), ForTesting)
+	db1, err := Open(ctx, InMemory(), cluster.MakeClusterSettings(), ForTesting)
 	require.NoError(t, err)
 	defer db1.Close()
 
@@ -1323,7 +1341,7 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 	//   SSTable 2:
 	//     a@2
 	//     b@1
-	db2, err := Open(ctx, InMemory(), ForTesting)
+	db2, err := Open(ctx, InMemory(), cluster.MakeTestingClusterSettings(), ForTesting)
 	require.NoError(t, err)
 	defer db2.Close()
 
@@ -1338,7 +1356,9 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 			ek, err := it.EngineKey()
 			require.NoError(t, err)
 			require.NoError(t, err)
-			if err := sst.PutEngineKey(ek, it.Value()); err != nil {
+			v, err := it.Value()
+			require.NoError(t, err)
+			if err := sst.PutEngineKey(ek, v); err != nil {
 				t.Fatal(err)
 			}
 			valid, err = it.NextEngineKey()
@@ -1464,7 +1484,11 @@ func collectMatchingWithMVCCIterator(
 		}
 		ts := iter.Key().Timestamp
 		if (ts.Less(end) || end == ts) && start.Less(ts) {
-			expectedKVs = append(expectedKVs, MVCCKeyValue{Key: iter.Key(), Value: iter.Value()})
+			v, err := iter.Value()
+			if err != nil {
+				t.Fatal(err)
+			}
+			expectedKVs = append(expectedKVs, MVCCKeyValue{Key: iter.Key(), Value: v})
 		}
 		iter.Next()
 	}
@@ -1543,18 +1567,16 @@ func BenchmarkMVCCIncrementalIteratorForOldData(b *testing.B) {
 	// day of keys. The old keys are uniformly distributed in the key space,
 	// which is the worst case for block property filters.
 	keyAgeInterval := 400
-	setupMVCCPebbleWithBlockProperties := func(b *testing.B) Engine {
+	setupMVCCPebble := func(b *testing.B) Engine {
 		eng, err := Open(
 			context.Background(),
 			InMemory(),
+			cluster.MakeClusterSettings(),
 			// Use a small cache size. Scanning large tables with mostly cold data
 			// will mostly miss the cache (especially since the block cache is meant
 			// to be scan resistant).
 			CacheSize(1<<10),
-			func(cfg *engineConfig) error {
-				cfg.Opts.FormatMajorVersion = pebble.FormatBlockPropertyCollector
-				return nil
-			})
+		)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -1592,7 +1614,7 @@ func BenchmarkMVCCIncrementalIteratorForOldData(b *testing.B) {
 	}
 
 	for _, valueSize := range []int{100, 500, 1000, 2000} {
-		eng := setupMVCCPebbleWithBlockProperties(b)
+		eng := setupMVCCPebble(b)
 		setupData(b, eng, valueSize)
 		b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
 			startKey := roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(0)))

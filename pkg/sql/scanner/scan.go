@@ -880,11 +880,12 @@ outer:
 			if !ok {
 				return false
 			}
-			// SQL allows joining adjacent strings separated by whitespace
-			// as long as that whitespace contains at least one
-			// newline. Kind of strange to require the newline, but that
-			// is the standard.
-			if s.peek() == ch && newline {
+
+			// SQL allows joining adjacent single-quoted strings separated by
+			// whitespace as long as that whitespace contains at least one
+			// newline. Kind of strange to require the newline, but that is the
+			// standard.
+			if ch == singleQuote && s.peek() == singleQuote && newline {
 				s.pos++
 				start = s.pos
 				continue

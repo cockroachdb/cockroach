@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
@@ -26,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -40,7 +40,7 @@ import (
 // resume is the left over work from origSpan.
 func TestingWriteResumeSpan(
 	ctx context.Context,
-	txn *kv.Txn,
+	txn isql.Txn,
 	codec keys.SQLCodec,
 	col *descs.Collection,
 	id descpb.ID,
@@ -130,13 +130,14 @@ func TestWriteResumeSpan(t *testing.T) {
 		t.Fatal(errors.Wrapf(err, "can't find job %d", jobID))
 	}
 
-	require.NoError(t, job.Update(ctx, nil, /* txn */
-		func(_ *kv.Txn, _ jobs.JobMetadata, ju *jobs.JobUpdater) error {
-			ju.UpdateStatus(jobs.StatusRunning)
-			return nil
-		}))
+	require.NoError(t, job.NoTxn().Update(ctx, func(
+		_ isql.Txn, _ jobs.JobMetadata, ju *jobs.JobUpdater,
+	) error {
+		ju.UpdateStatus(jobs.StatusRunning)
+		return nil
+	}))
 
-	err = job.SetDetails(ctx, nil /* txn */, details)
+	err = job.NoTxn().SetDetails(ctx, details)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +176,7 @@ func TestWriteResumeSpan(t *testing.T) {
 		if test.resume.Key != nil {
 			finished.EndKey = test.resume.Key
 		}
-		if err := sql.TestingDescsTxn(ctx, server, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+		if err := sql.TestingDescsTxn(ctx, server, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 			return TestingWriteResumeSpan(
 				ctx,
 				txn,
@@ -215,7 +216,7 @@ func TestWriteResumeSpan(t *testing.T) {
 	}
 
 	var got []roachpb.Span
-	if err := sql.TestingDescsTxn(ctx, server, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
+	if err := sql.TestingDescsTxn(ctx, server, func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
 		got, _, _, err = rowexec.GetResumeSpans(
 			ctx, registry, txn, keys.SystemSQLCodec, col, tableDesc.ID, mutationID, backfill.IndexMutationFilter)
 		return err

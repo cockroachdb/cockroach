@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -62,7 +63,7 @@ func ConvertBatchError(ctx context.Context, tableDesc catalog.TableDescriptor, b
 			if err != nil {
 				return "", "", nil, nil, err
 			}
-			var spec descpb.IndexFetchSpec
+			var spec fetchpb.IndexFetchSpec
 			if err := rowenc.InitIndexFetchSpec(&spec, codec, tableDesc, index, nil /* fetchColumnIDs */); err != nil {
 				return "", "", nil, nil, err
 			}
@@ -77,7 +78,7 @@ func ConvertBatchError(ctx context.Context, tableDesc catalog.TableDescriptor, b
 
 // ConvertFetchError attempts to map a key-value error generated during a
 // key-value fetch to a user friendly SQL error.
-func ConvertFetchError(spec *descpb.IndexFetchSpec, err error) error {
+func ConvertFetchError(spec *fetchpb.IndexFetchSpec, err error) error {
 	var errs struct {
 		wi *roachpb.WriteIntentError
 		bs *roachpb.MinTimestampBoundUnsatisfiableError
@@ -111,7 +112,7 @@ func NewUniquenessConstraintViolationError(
 			"duplicate key value got decoding error")
 	}
 	// Resolve the table index descriptor name.
-	indexName, err := tableDesc.GetIndexNameByID(index.GetID())
+	indexName, err := catalog.FindTargetIndexNameByID(tableDesc, index.GetID())
 	if err != nil {
 		log.Warningf(ctx,
 			"unable to find index by ID for NewUniquenessConstraintViolationError: %d",
@@ -136,7 +137,7 @@ func NewUniquenessConstraintViolationError(
 // decodeKeyValsUsingSpec decodes an index key and returns the key column names
 // and values.
 func decodeKeyValsUsingSpec(
-	spec *descpb.IndexFetchSpec, key roachpb.Key,
+	spec *fetchpb.IndexFetchSpec, key roachpb.Key,
 ) (colNames []string, values []string, err error) {
 	// We want the key columns without the suffix columns.
 	keyCols := spec.KeyColumns()
@@ -195,7 +196,7 @@ func decodeKeyCodecAndIndex(
 	if err != nil {
 		return keys.SQLCodec{}, nil, err
 	}
-	index, err := tableDesc.FindIndexWithID(indexID)
+	index, err := catalog.MustFindIndexByID(tableDesc, indexID)
 	if err != nil {
 		return keys.SQLCodec{}, nil, err
 	}
@@ -246,13 +247,13 @@ func DecodeRowInfo(
 	}
 	cols := make([]catalog.Column, len(colIDs))
 	for i, colID := range colIDs {
-		col, err := tableDesc.FindColumnWithID(colID)
+		col, err := catalog.MustFindColumnByID(tableDesc, colID)
 		if err != nil {
 			return nil, nil, nil, err
 		}
 		cols[i] = col
 	}
-	var spec descpb.IndexFetchSpec
+	var spec fetchpb.IndexFetchSpec
 	if err := rowenc.InitIndexFetchSpec(&spec, codec, tableDesc, index, colIDs); err != nil {
 		return nil, nil, nil, err
 	}

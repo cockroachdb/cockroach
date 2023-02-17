@@ -64,6 +64,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptutil"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -80,11 +82,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -170,7 +172,7 @@ func TestBackupRestoreSingleUserfile(t *testing.T) {
 	tc, _, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 
-	backupAndRestore(ctx, t, tc, []string{"userfile:///a"}, []string{"userfile:///a"}, numAccounts)
+	backupAndRestore(ctx, t, tc, []string{"userfile:///a"}, []string{"userfile:///a"}, numAccounts, nil)
 }
 
 func TestBackupRestoreSingleNodeLocal(t *testing.T) {
@@ -182,7 +184,7 @@ func TestBackupRestoreSingleNodeLocal(t *testing.T) {
 	tc, _, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 
-	backupAndRestore(ctx, t, tc, []string{localFoo}, []string{localFoo}, numAccounts)
+	backupAndRestore(ctx, t, tc, []string{localFoo}, []string{localFoo}, numAccounts, nil)
 }
 
 func TestBackupRestoreMultiNodeLocal(t *testing.T) {
@@ -194,7 +196,7 @@ func TestBackupRestoreMultiNodeLocal(t *testing.T) {
 	tc, _, _, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 
-	backupAndRestore(ctx, t, tc, []string{localFoo}, []string{localFoo}, numAccounts)
+	backupAndRestore(ctx, t, tc, []string{localFoo}, []string{localFoo}, numAccounts, nil)
 }
 
 func TestBackupRestoreMultiNodeRemote(t *testing.T) {
@@ -208,7 +210,7 @@ func TestBackupRestoreMultiNodeRemote(t *testing.T) {
 	// Backing up to node2's local file system
 	remoteFoo := "nodelocal://2/foo"
 
-	backupAndRestore(ctx, t, tc, []string{remoteFoo}, []string{localFoo}, numAccounts)
+	backupAndRestore(ctx, t, tc, []string{remoteFoo}, []string{localFoo}, numAccounts, nil)
 }
 
 // TestBackupRestoreJobTagAndLabel runs a backup and restore and verifies that
@@ -270,8 +272,10 @@ func TestBackupRestoreJobTagAndLabel(t *testing.T) {
 	)
 	defer cleanupFn()
 
-	backupAndRestore(ctx, t, tc, []string{localFoo}, []string{localFoo}, numAccounts)
+	backupAndRestore(ctx, t, tc, []string{localFoo}, []string{localFoo}, numAccounts, nil)
 
+	mu.Lock()
+	defer mu.Unlock()
 	require.True(t, found)
 }
 
@@ -381,7 +385,7 @@ func TestBackupRestorePartitioned(t *testing.T) {
 	}
 
 	runBackupRestore := func(t *testing.T, sqlDB *sqlutils.SQLRunner, backupURIs []string) {
-		locationFmtString, locationURIArgs := uriFmtStringAndArgs(backupURIs)
+		locationFmtString, locationURIArgs := uriFmtStringAndArgs(backupURIs, 0)
 		backupQuery := fmt.Sprintf("BACKUP DATABASE data TO %s", locationFmtString)
 		sqlDB.Exec(t, backupQuery, locationURIArgs...)
 
@@ -475,7 +479,7 @@ func TestBackupRestorePartitioned(t *testing.T) {
 		}
 
 		// Specifying multiple tiers is not supported.
-		locationFmtString, locationURIArgs := uriFmtStringAndArgs(backupURIs)
+		locationFmtString, locationURIArgs := uriFmtStringAndArgs(backupURIs, 0)
 		backupQuery := fmt.Sprintf("BACKUP DATABASE data TO %s", locationFmtString)
 		sqlDB.ExpectErr(t, `tier must be in the form "key=value" not "region=east,az=az1"`, backupQuery, locationURIArgs...)
 	})
@@ -643,9 +647,7 @@ func TestBackupRestoreAppend(t *testing.T) {
 				tc.Servers[0].ClusterSettings(),
 				blobs.TestEmptyBlobClientFactory,
 				username.RootUserName(),
-				tc.Servers[0].InternalExecutor().(*sql.InternalExecutor),
-				tc.Servers[0].InternalExecutorFactory().(sqlutil.InternalExecutorFactory),
-				tc.Servers[0].DB(),
+				tc.Servers[0].InternalDB().(isql.DB),
 				nil, /* limiters */
 				cloud.NilMetrics,
 			)
@@ -839,7 +841,7 @@ func TestBackupRestorePartitionedMergeDirectories(t *testing.T) {
 	restoreURIs := []string{
 		localFoo1,
 	}
-	backupAndRestore(ctx, t, tc, backupURIs, restoreURIs, numAccounts)
+	backupAndRestore(ctx, t, tc, backupURIs, restoreURIs, numAccounts, nil)
 }
 
 func TestBackupRestoreEmpty(t *testing.T) {
@@ -851,7 +853,7 @@ func TestBackupRestoreEmpty(t *testing.T) {
 	tc, _, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 
-	backupAndRestore(ctx, t, tc, []string{localFoo}, []string{localFoo}, numAccounts)
+	backupAndRestore(ctx, t, tc, []string{localFoo}, []string{localFoo}, numAccounts, nil)
 }
 
 // Regression test for #16008. In short, the way RESTORE constructed split keys
@@ -876,7 +878,7 @@ func TestBackupRestoreNegativePrimaryKey(t *testing.T) {
 		-numAccounts/2, numAccounts/backupRestoreDefaultRanges/2,
 	)
 
-	backupAndRestore(ctx, t, tc, []string{localFoo}, []string{localFoo}, numAccounts)
+	backupAndRestore(ctx, t, tc, []string{localFoo}, []string{localFoo}, numAccounts, nil)
 
 	sqlDB.Exec(t, `CREATE UNIQUE INDEX id2 ON data.bank (id)`)
 
@@ -901,6 +903,7 @@ func backupAndRestore(
 	backupURIs []string,
 	restoreURIs []string,
 	numAccounts int,
+	kmsURIs []string,
 ) {
 	conn := tc.Conns[0]
 	sqlDB := sqlutils.MakeSQLRunner(conn)
@@ -923,9 +926,16 @@ func backupAndRestore(
 			rows, idx, bytes int64
 		}
 
-		backupURIFmtString, backupURIArgs := uriFmtStringAndArgs(backupURIs)
+		backupURIFmtString, backupURIArgs := uriFmtStringAndArgs(backupURIs, 0)
 		backupQuery := fmt.Sprintf("BACKUP DATABASE data INTO %s", backupURIFmtString)
-		sqlDB.QueryRow(t, backupQuery, backupURIArgs...).Scan(
+		kmsURIArgs := make([]interface{}, 0)
+		var kmsURIFmtString string
+		if len(kmsURIs) > 0 {
+			kmsURIFmtString, kmsURIArgs = uriFmtStringAndArgs(kmsURIs, len(backupURIs))
+			backupQuery = fmt.Sprintf("%s WITH kms = %s", backupQuery, kmsURIFmtString)
+		}
+		queryArgs := append(backupURIArgs, kmsURIArgs...)
+		sqlDB.QueryRow(t, backupQuery, queryArgs...).Scan(
 			&unused, &unused, &unused, &exported.rows, &exported.idx, &exported.bytes,
 		)
 		// When numAccounts == 0, our approxBytes formula breaks down because
@@ -980,8 +990,13 @@ func backupAndRestore(
 		// Create an incremental backup to exercise incremental destination code that captures a new
 		// table
 		sqlDB.Exec(t, `CREATE TABLE data.empty (a INT PRIMARY KEY)`)
-		sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data INTO LATEST IN %s`, backupURIFmtString),
-			backupURIArgs...)
+
+		incBackupQuery := fmt.Sprintf(`BACKUP DATABASE data INTO LATEST IN %s`, backupURIFmtString)
+		if len(kmsURIs) > 0 {
+			incBackupQuery = fmt.Sprintf("%s WITH kms = %s", incBackupQuery, kmsURIFmtString)
+		}
+
+		sqlDB.Exec(t, incBackupQuery, queryArgs...)
 	}
 
 	sqlDB.Exec(t, `DROP DATABASE data CASCADE`)
@@ -994,9 +1009,16 @@ func backupAndRestore(
 	// Force the ID of the restored bank table to be different.
 	sqlDB.Exec(t, `CREATE TABLE other.empty (a INT PRIMARY KEY)`)
 
-	restoreURIFmtString, restoreURIArgs := uriFmtStringAndArgs(restoreURIs)
+	restoreURIFmtString, restoreURIArgs := uriFmtStringAndArgs(restoreURIs, 0)
 	restoreQuery := fmt.Sprintf("RESTORE DATABASE DATA FROM LATEST IN %s", restoreURIFmtString)
-	verifyRestoreData(t, sqlDB, storageSQLDB, restoreQuery, restoreURIArgs, numAccounts)
+	kmsURIArgs := make([]interface{}, 0)
+	if len(kmsURIs) > 0 {
+		var kmsURIFmtString string
+		kmsURIFmtString, kmsURIArgs = uriFmtStringAndArgs(kmsURIs, len(backupURIs))
+		restoreQuery = fmt.Sprintf("%s WITH kms = %s", restoreQuery, kmsURIFmtString)
+	}
+	queryArgs := append(restoreURIArgs, kmsURIArgs...)
+	verifyRestoreData(t, sqlDB, storageSQLDB, restoreQuery, queryArgs, numAccounts)
 }
 
 func verifyRestoreData(
@@ -1227,19 +1249,16 @@ func TestEncryptedBackupRestoreSystemJobs(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var encryptionOption string
-			var sanitizedEncryptionOption1 string
-			var sanitizedEncryptionOption2 string
+			var sanitizedEncryptionOption string
 			if tc.useKMS {
 				correctKMSURI, _ := getAWSKMSURI(t, regionEnvVariable, keyIDEnvVariable)
 				encryptionOption = fmt.Sprintf("kms = '%s'", correctKMSURI)
 				sanitizedURI, err := redactTestKMSURI(correctKMSURI)
 				require.NoError(t, err)
-				sanitizedEncryptionOption1 = fmt.Sprintf("kms = '%s'", sanitizedURI)
-				sanitizedEncryptionOption2 = sanitizedEncryptionOption1
+				sanitizedEncryptionOption = fmt.Sprintf("kms = '%s'", sanitizedURI)
 			} else {
 				encryptionOption = "encryption_passphrase = 'abcdefg'"
-				sanitizedEncryptionOption1 = "encryption_passphrase = '*****'"
-				sanitizedEncryptionOption2 = "encryption_passphrase = 'redacted'"
+				sanitizedEncryptionOption = "encryption_passphrase = '*****'"
 			}
 			_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, multiNode, 3, InitManualReplication)
 			conn := sqlDB.DB.(*gosql.DB)
@@ -1262,7 +1281,7 @@ func TestEncryptedBackupRestoreSystemJobs(t *testing.T) {
 					Username: username.RootUserName(),
 					Description: fmt.Sprintf(
 						`BACKUP DATABASE data TO '%s' WITH %s`,
-						backupLoc1, sanitizedEncryptionOption1),
+						backupLoc1, sanitizedEncryptionOption),
 					DescriptorIDs: descpb.IDs{
 						descpb.ID(backupDatabaseID),
 						descpb.ID(backupSchemaID),
@@ -1281,7 +1300,7 @@ into_db='restoredb', %s)`, encryptionOption), backupLoc1)
 				Username: username.RootUserName(),
 				Description: fmt.Sprintf(
 					`RESTORE TABLE data.bank FROM '%s' WITH %s, into_db = 'restoredb'`,
-					backupLoc1, sanitizedEncryptionOption2,
+					backupLoc1, sanitizedEncryptionOption,
 				),
 				DescriptorIDs: descpb.IDs{
 					descpb.ID(restoreDatabaseID + 1),
@@ -1386,7 +1405,7 @@ WITH
 					AS prev_lease_holder,
 				lease_holder
 			FROM
-				[SHOW RANGES FROM TABLE data.bank]
+				[SHOW RANGES FROM TABLE data.bank WITH DETAILS]
 		)
 SELECT
 	count(*)
@@ -2794,7 +2813,16 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 
 	_, origDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
-	args := base.TestServerArgs{ExternalIODir: dir}
+	args := base.TestServerArgs{
+		ExternalIODir: dir,
+		Knobs: base.TestingKnobs{
+			TenantCapabilitiesTestingKnobs: &tenantcapabilities.TestingKnobs{
+				// TODO(arul): This can be removed once
+				// https://github.com/cockroachdb/cockroach/issues/96736  is fixed.
+				AuthorizerSkipAdminSplitCapabilityChecks: true,
+			},
+		},
+	}
 
 	// Generate some testdata and back it up.
 	{
@@ -4257,9 +4285,8 @@ func TestEncryptedBackup(t *testing.T) {
 
 			sqlDB.Exec(t, fmt.Sprintf(`SHOW BACKUP $1 WITH %s`, encryptionOption), backupLoc1)
 
-			sqlDB.Exec(t, fmt.Sprintf(`SHOW BACKUP $1 WITH %s,encryption_info_dir='%s'`,
-				encryptionOption,
-				backupLoc1),
+			sqlDB.Exec(t, fmt.Sprintf(`SHOW BACKUP $1 WITH %s, encryption_info_dir = '%s'`,
+				encryptionOption, backupLoc1),
 				backupLoc1inc)
 
 			var expectedShowError string
@@ -4331,7 +4358,7 @@ func TestRegionalKMSEncryptedBackup(t *testing.T) {
 		backupLoc1 := localFoo + "/x?COCKROACH_LOCALITY=default"
 		backupLoc2 := localFoo + "/x2?COCKROACH_LOCALITY=" + url.QueryEscape("dc=dc1")
 
-		sqlDB.Exec(t, fmt.Sprintf(`BACKUP TO ($1, $2) WITH %s`,
+		sqlDB.Exec(t, fmt.Sprintf(`BACKUP INTO ($1, $2) WITH %s`,
 			concatMultiRegionKMSURIs(multiRegionKMSURIs)), backupLoc1,
 			backupLoc2)
 
@@ -4343,14 +4370,18 @@ func TestRegionalKMSEncryptedBackup(t *testing.T) {
 
 		checkBackupFilesEncrypted(t, rawDir)
 
-		sqlDB.Exec(t, fmt.Sprintf(`SHOW BACKUP $1 WITH KMS='%s'`, multiRegionKMSURIs[0]),
+		// check that SHOW BACKUP is valid when a single kms uri is provided and when multiple are
+		sqlDB.Exec(t, fmt.Sprintf(`SHOW BACKUP FROM LATEST IN $1 WITH KMS='%s'`, multiRegionKMSURIs[0]),
 			backupLoc1)
+
+		sqlDB.Exec(t, fmt.Sprintf(`SHOW BACKUP FROM LATEST IN ($1, $2) WITH %s`,
+			concatMultiRegionKMSURIs(multiRegionKMSURIs)), backupLoc1, backupLoc2)
 
 		// Attempt to RESTORE using each of the regional KMSs independently.
 		for _, uri := range multiRegionKMSURIs {
 			sqlDB.Exec(t, `DROP DATABASE neverappears CASCADE`)
 
-			sqlDB.Exec(t, fmt.Sprintf(`RESTORE DATABASE neverappears FROM ($1, $2) WITH %s`,
+			sqlDB.Exec(t, fmt.Sprintf(`RESTORE DATABASE neverappears FROM LATEST IN ($1, $2) WITH %s`,
 				concatMultiRegionKMSURIs([]string{uri})), backupLoc1, backupLoc2)
 
 			sqlDB.CheckQueryResults(t, `SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE neverappears.neverappears`, before)
@@ -4361,9 +4392,8 @@ func TestRegionalKMSEncryptedBackup(t *testing.T) {
 type testKMSEnv struct {
 	settings         *cluster.Settings
 	externalIOConfig *base.ExternalIODirConfig
-	db               *kv.DB
+	db               isql.DB
 	user             username.SQLUsername
-	ie               sqlutil.InternalExecutor
 }
 
 var _ cloud.KMSEnv = &testKMSEnv{}
@@ -4376,16 +4406,12 @@ func (e *testKMSEnv) KMSConfig() *base.ExternalIODirConfig {
 	return e.externalIOConfig
 }
 
-func (e *testKMSEnv) DBHandle() *kv.DB {
+func (e *testKMSEnv) DBHandle() isql.DB {
 	return e.db
 }
 
 func (e *testKMSEnv) User() username.SQLUsername {
 	return e.user
-}
-
-func (e *testKMSEnv) InternalExecutor() sqlutil.InternalExecutor {
-	return e.ie
 }
 
 type testKMS struct {
@@ -4502,7 +4528,6 @@ func TestValidateKMSURIsAgainstFullBackup(t *testing.T) {
 			externalIOConfig: &base.ExternalIODirConfig{},
 			db:               nil,
 			user:             username.RootUserName(),
-			ie:               nil,
 		}
 		kmsInfo, err := backupencryption.ValidateKMSURIsAgainstFullBackup(
 			ctx, tc.incrementalBackupURIs, masterKeyIDToDataKey, kmsEnv)
@@ -5135,7 +5160,16 @@ func TestBackupRestoreSequence(t *testing.T) {
 	const numAccounts = 1
 	_, origDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
-	args := base.TestServerArgs{ExternalIODir: dir}
+	args := base.TestServerArgs{
+		ExternalIODir: dir,
+		Knobs: base.TestingKnobs{
+			TenantCapabilitiesTestingKnobs: &tenantcapabilities.TestingKnobs{
+				// TODO(arul): This can be removed once
+				// https://github.com/cockroachdb/cockroach/issues/96736  is fixed.
+				AuthorizerSkipAdminSplitCapabilityChecks: true,
+			},
+		},
+	}
 
 	backupLoc := localFoo
 
@@ -5748,6 +5782,7 @@ func TestBatchedInsertStats(t *testing.T) {
 			// RestoreDetails.
 			Details:  jobspb.RestoreDetails{},
 			Progress: jobspb.RestoreProgress{},
+			Username: username.TestUserName(),
 		}, id, nil /* txn */)
 		require.NoError(t, err)
 		return job
@@ -5840,9 +5875,8 @@ func TestBackupRestoreCorruptedStatsIgnored(t *testing.T) {
 	kmsEnv := &testKMSEnv{
 		settings:         execCfg.Settings,
 		externalIOConfig: &execCfg.ExternalIODirConfig,
-		db:               execCfg.DB,
+		db:               execCfg.InternalDB,
 		user:             username.RootUserName(),
-		ie:               execCfg.InternalExecutor,
 	}
 	require.NoError(t, backupinfo.WriteTableStatistics(ctx, store, nil, /* encryption */
 		kmsEnv, &statsTable))
@@ -5938,7 +5972,7 @@ func TestProtectedTimestampsDuringBackup(t *testing.T) {
 
 	conn := tc.ServerConn(0)
 	systemTenantRunner := sqlutils.MakeSQLRunner(conn)
-	setAndWaitForTenantReadOnlyClusterSetting(t, sql.SecondaryTenantsZoneConfigsEnabledSettingName,
+	setAndWaitForTenantReadOnlyClusterSetting(t, sql.SecondaryTenantZoneConfigsEnabled.Key(),
 		systemTenantRunner, ttSQLDB, tenantID, "true")
 
 	// Run the test as the system tenant, and as the secondary tenant.
@@ -6889,15 +6923,30 @@ func TestBackupRestoreTenant(t *testing.T) {
 		defer restoreTC.Stopper().Stop(ctx)
 		restoreDB := sqlutils.MakeSQLRunner(restoreTC.Conns[0])
 
-		restoreDB.CheckQueryResults(t, `select id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) from system.tenants`, [][]string{
-			{`1`, `true`, `system`, `{"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}`},
+		restoreDB.CheckQueryResults(t, `select id, active, name, data_state, service_mode, crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info) from system.tenants`, [][]string{
+			{
+				`1`, `true`, `system`,
+				strconv.Itoa(int(mtinfopb.DataStateReady)),
+				strconv.Itoa(int(mtinfopb.ServiceModeShared)),
+				`{"capabilities": {}, "deprecatedId": "1"}`,
+			},
 		})
 		restoreDB.Exec(t, `RESTORE TENANT 10 FROM 'nodelocal://1/t10'`)
 		restoreDB.CheckQueryResults(t,
-			`SELECT id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) FROM system.tenants`,
+			`SELECT id, active, name, data_state, service_mode, crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info) FROM system.tenants`,
 			[][]string{
-				{`1`, `true`, `system`, `{"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}`},
-				{`10`, `true`, `NULL`, `{"droppedName": "", "id": "10", "name": "", "state": "ACTIVE", "tenantReplicationJobId": "0"}`},
+				{
+					`1`, `true`, `system`,
+					strconv.Itoa(int(mtinfopb.DataStateReady)),
+					strconv.Itoa(int(mtinfopb.ServiceModeShared)),
+					`{"capabilities": {}, "deprecatedId": "1"}`,
+				},
+				{
+					`10`, `true`, `tenant-10`,
+					strconv.Itoa(int(mtinfopb.DataStateReady)),
+					strconv.Itoa(int(mtinfopb.ServiceModeNone)),
+					`{"capabilities": {}, "deprecatedId": "10"}`,
+				},
 			},
 		)
 		restoreDB.CheckQueryResults(t,
@@ -6922,16 +6971,26 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreConn10 = nil
 
 		// Mark tenant as DROP.
-		restoreDB.Exec(t, `SELECT crdb_internal.destroy_tenant(10)`)
+		restoreDB.Exec(t, `DROP TENANT [10]`)
 		restoreDB.CheckQueryResults(t,
-			`select id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) from system.tenants`,
+			`select id, active, name, data_state, service_mode, crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info) from system.tenants`,
 			[][]string{
-				{`1`, `true`, `system`, `{"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}`},
-				{`10`, `false`, `NULL`, `{"droppedName": "", "id": "10", "name": "", "state": "DROP", "tenantReplicationJobId": "0"}`},
+				{
+					`1`, `true`, `system`,
+					strconv.Itoa(int(mtinfopb.DataStateReady)),
+					strconv.Itoa(int(mtinfopb.ServiceModeShared)),
+					`{"capabilities": {}, "deprecatedId": "1"}`,
+				},
+				{
+					`10`, `false`, `NULL`,
+					strconv.Itoa(int(mtinfopb.DataStateDrop)),
+					strconv.Itoa(int(mtinfopb.ServiceModeNone)),
+					`{"capabilities": {}, "deprecatedDataState": "DROP", "deprecatedId": "10", "droppedName": "tenant-10"}`,
+				},
 			},
 		)
 
-		// Make GC job scheduled by destroy_tenant run in 1 second.
+		// Make GC job scheduled by DROP TENANT run in 1 second.
 		restoreDB.Exec(t, "SET CLUSTER SETTING kv.range_merge.queue_enabled = false")
 		restoreDB.Exec(t, "ALTER RANGE tenants CONFIGURE ZONE USING gc.ttlseconds = 1;")
 		// Wait for tenant GC job to complete.
@@ -6949,10 +7008,20 @@ func TestBackupRestoreTenant(t *testing.T) {
 
 		restoreDB.Exec(t, `RESTORE TENANT 10 FROM 'nodelocal://1/t10'`)
 		restoreDB.CheckQueryResults(t,
-			`select id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) from system.tenants`,
+			`select id, active, name, data_state, service_mode, crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info) from system.tenants`,
 			[][]string{
-				{`1`, `true`, `system`, `{"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}`},
-				{`10`, `true`, `NULL`, `{"droppedName": "", "id": "10", "name": "", "state": "ACTIVE", "tenantReplicationJobId": "0"}`},
+				{
+					`1`, `true`, `system`,
+					strconv.Itoa(int(mtinfopb.DataStateReady)),
+					strconv.Itoa(int(mtinfopb.ServiceModeShared)),
+					`{"capabilities": {}, "deprecatedId": "1"}`,
+				},
+				{
+					`10`, `true`, `tenant-10`,
+					strconv.Itoa(int(mtinfopb.DataStateReady)),
+					strconv.Itoa(int(mtinfopb.ServiceModeNone)),
+					`{"capabilities": {}, "deprecatedId": "10"}`,
+				},
 			},
 		)
 
@@ -6965,7 +7034,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreTenant10.CheckQueryResults(t, `select * from foo.bar`, tenant10.QueryStr(t, `select * from foo.bar`))
 		restoreTenant10.CheckQueryResults(t, `select * from foo.bar2`, tenant10.QueryStr(t, `select * from foo.bar2`))
 
-		restoreDB.Exec(t, `SELECT crdb_internal.destroy_tenant(10)`)
+		restoreDB.Exec(t, `DROP TENANT [10]`)
 		// Wait for tenant GC job to complete.
 		restoreDB.CheckQueryResultsRetry(
 			t,
@@ -6974,16 +7043,31 @@ func TestBackupRestoreTenant(t *testing.T) {
 		)
 
 		restoreDB.CheckQueryResults(t,
-			`select id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) from system.tenants`,
+			`select id, active, name, data_state, service_mode, crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info) from system.tenants`,
 			[][]string{
-				{`1`, `true`, `system`, `{"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}`},
+				{
+					`1`, `true`, `system`,
+					strconv.Itoa(int(mtinfopb.DataStateReady)),
+					strconv.Itoa(int(mtinfopb.ServiceModeShared)),
+					`{"capabilities": {}, "deprecatedId": "1"}`,
+				},
 			})
 		restoreDB.Exec(t, `RESTORE TENANT 10 FROM 'nodelocal://1/t10'`)
 		restoreDB.CheckQueryResults(t,
-			`select id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) from system.tenants`,
+			`select id, active, name, data_state, service_mode, crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info) from system.tenants`,
 			[][]string{
-				{`1`, `true`, `system`, `{"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}`},
-				{`10`, `true`, `NULL`, `{"droppedName": "", "id": "10", "name": "", "state": "ACTIVE", "tenantReplicationJobId": "0"}`},
+				{
+					`1`, `true`, `system`,
+					strconv.Itoa(int(mtinfopb.DataStateReady)),
+					strconv.Itoa(int(mtinfopb.ServiceModeShared)),
+					`{"capabilities": {}, "deprecatedId": "1"}`,
+				},
+				{
+					`10`, `true`, `tenant-10`,
+					strconv.Itoa(int(mtinfopb.DataStateReady)),
+					strconv.Itoa(int(mtinfopb.ServiceModeNone)),
+					`{"capabilities": {}, "deprecatedId": "10"}`,
+				},
 			},
 		)
 	})
@@ -7003,16 +7087,31 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreDB := sqlutils.MakeSQLRunner(restoreTC.Conns[0])
 
 		restoreDB.CheckQueryResults(t,
-			`select id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) from system.tenants`,
+			`select id, active, name, data_state, service_mode, crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info) from system.tenants`,
 			[][]string{
-				{`1`, `true`, `system`, `{"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}`},
+				{
+					`1`, `true`, `system`,
+					strconv.Itoa(int(mtinfopb.DataStateReady)),
+					strconv.Itoa(int(mtinfopb.ServiceModeShared)),
+					`{"capabilities": {}, "deprecatedId": "1"}`,
+				},
 			})
 		restoreDB.Exec(t, `RESTORE TENANT 10 FROM 'nodelocal://1/clusterwide'`)
 		restoreDB.CheckQueryResults(t,
-			`select id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) from system.tenants`,
+			`select id, active, name, data_state, service_mode, crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info) from system.tenants`,
 			[][]string{
-				{`1`, `true`, `system`, `{"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}`},
-				{`10`, `true`, `NULL`, `{"droppedName": "", "id": "10", "name": "", "state": "ACTIVE", "tenantReplicationJobId": "0"}`},
+				{
+					`1`, `true`, `system`,
+					strconv.Itoa(int(mtinfopb.DataStateReady)),
+					strconv.Itoa(int(mtinfopb.ServiceModeShared)),
+					`{"capabilities": {}, "deprecatedId": "1"}`,
+				},
+				{
+					`10`, `true`, `tenant-10`,
+					strconv.Itoa(int(mtinfopb.DataStateReady)),
+					strconv.Itoa(int(mtinfopb.ServiceModeNone)),
+					`{"capabilities": {}, "deprecatedId": "10"}`,
+				},
 			},
 		)
 
@@ -7043,18 +7142,43 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreDB := sqlutils.MakeSQLRunner(restoreTC.Conns[0])
 
 		restoreDB.CheckQueryResults(t,
-			`select id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) from system.tenants`,
+			`select id, active, name, data_state, service_mode, crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info) from system.tenants`,
 			[][]string{
-				{`1`, `true`, `system`, `{"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}`},
+				{
+					`1`, `true`, `system`,
+					strconv.Itoa(int(mtinfopb.DataStateReady)),
+					strconv.Itoa(int(mtinfopb.ServiceModeShared)),
+					`{"capabilities": {}, "deprecatedId": "1"}`,
+				},
 			})
 		restoreDB.Exec(t, `RESTORE FROM 'nodelocal://1/clusterwide'`)
 		restoreDB.CheckQueryResults(t,
-			`select id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) from system.tenants`,
+			`select id, active, name, data_state, service_mode, crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info) from system.tenants`,
 			[][]string{
-				{`1`, `true`, `system`, `{"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}`},
-				{`10`, `true`, `NULL`, `{"droppedName": "", "id": "10", "name": "", "state": "ACTIVE", "tenantReplicationJobId": "0"}`},
-				{`11`, `true`, `NULL`, `{"droppedName": "", "id": "11", "name": "", "state": "ACTIVE", "tenantReplicationJobId": "0"}`},
-				{`20`, `true`, `NULL`, `{"droppedName": "", "id": "20", "name": "", "state": "ACTIVE", "tenantReplicationJobId": "0"}`},
+				{
+					`1`, `true`, `system`,
+					strconv.Itoa(int(mtinfopb.DataStateReady)),
+					strconv.Itoa(int(mtinfopb.ServiceModeShared)),
+					`{"capabilities": {}, "deprecatedId": "1"}`,
+				},
+				{
+					`10`, `true`, `tenant-10`,
+					strconv.Itoa(int(mtinfopb.DataStateReady)),
+					strconv.Itoa(int(mtinfopb.ServiceModeNone)),
+					`{"capabilities": {}, "deprecatedId": "10"}`,
+				},
+				{
+					`11`, `true`, `tenant-11`,
+					strconv.Itoa(int(mtinfopb.DataStateReady)),
+					strconv.Itoa(int(mtinfopb.ServiceModeNone)),
+					`{"capabilities": {}, "deprecatedId": "11"}`,
+				},
+				{
+					`20`, `true`, `tenant-20`,
+					strconv.Itoa(int(mtinfopb.DataStateReady)),
+					strconv.Itoa(int(mtinfopb.ServiceModeNone)),
+					`{"capabilities": {}, "deprecatedId": "20"}`,
+				},
 			},
 		)
 
@@ -7082,11 +7206,11 @@ func TestBackupRestoreTenant(t *testing.T) {
 		// Check the all-tenant override.
 		restoreTenant11.CheckQueryResults(t, `SHOW CLUSTER SETTING tenant_cost_model.read_payload_cost_per_mebibyte`, [][]string{{"123"}})
 
-		restoreDB.Exec(t, `SELECT crdb_internal.destroy_tenant(20, true)`)
+		restoreDB.Exec(t, `DROP TENANT [20] IMMEDIATE`)
 
-		restoreDB.Exec(t, `RESTORE TENANT 11 FROM 'nodelocal://1/clusterwide' WITH tenant = '20'`)
+		restoreDB.Exec(t, `RESTORE TENANT 11 FROM 'nodelocal://1/clusterwide' WITH tenant_name = 'tenant-20'`)
 		_, restoreConn20 := serverutils.StartTenant(
-			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(20), DisableCreateTenant: true},
+			t, restoreTC.Server(0), base.TestTenantArgs{TenantName: "tenant-20", DisableCreateTenant: true},
 		)
 		defer restoreConn20.Close()
 		restoreTenant20 := sqlutils.MakeSQLRunner(restoreConn20)
@@ -7097,8 +7221,8 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreTenant20.CheckQueryResults(t, `SHOW CLUSTER SETTING tenant_cost_model.read_payload_cost_per_mebibyte`, [][]string{{"123"}})
 
 		// Remove tenant 11, then confirm restoring 11 over 10 fails.
-		restoreDB.Exec(t, `SELECT crdb_internal.destroy_tenant(11, true)`)
-		restoreDB.ExpectErr(t, `exists`, `RESTORE TENANT 11 FROM 'nodelocal://1/clusterwide' WITH tenant = '10'`)
+		restoreDB.Exec(t, `DROP TENANT [11] IMMEDIATE`)
+		restoreDB.ExpectErr(t, `exists`, `RESTORE TENANT 11 FROM 'nodelocal://1/clusterwide' WITH tenant_name = 'tenant-10'`)
 
 		// Verify tenant 20 is still unaffected.
 		restoreTenant20.CheckQueryResults(t, `select * from foo.baz`, tenant11.QueryStr(t, `select * from foo.baz`))
@@ -8116,9 +8240,7 @@ func TestReadBackupManifestMemoryMonitoring(t *testing.T) {
 		st,
 		blobs.TestBlobServiceClient(dir),
 		username.RootUserName(),
-		nil, /* ie */
-		nil, /* ief */
-		nil, /* kvDB */
+		nil, /* db */
 		nil, /* limiters */
 		cloud.NilMetrics,
 	)
@@ -8141,7 +8263,6 @@ func TestReadBackupManifestMemoryMonitoring(t *testing.T) {
 		externalIOConfig: &base.ExternalIODirConfig{},
 		db:               nil,
 		user:             username.RootUserName(),
-		ie:               nil,
 	}
 	require.NoError(t, backupinfo.WriteBackupManifest(ctx, storage, "testmanifest", encOpts,
 		&kmsEnv, desc))
@@ -8150,6 +8271,51 @@ func TestReadBackupManifestMemoryMonitoring(t *testing.T) {
 	require.NoError(t, err)
 	mem.Shrink(ctx, sz)
 	mem.Close(ctx)
+}
+
+// TestIncorrectAccessOfFilesInBackupMetadata ensures that an accidental use of
+// the `Descriptors` field (instead of its dedicated SST) on the
+// `BACKUP_METADATA` results in an error on restore and show.
+func TestIncorrectAccessOfFilesInBackupMetadata(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	_, sqlDB, rawDir, cleanupFn := backupRestoreTestSetup(t, singleNode, 1, InitManualReplication)
+	defer cleanupFn()
+	sqlDB.Exec(t, `CREATE DATABASE r1`)
+	sqlDB.Exec(t, `CREATE TABLE r1.foo ( id INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `INSERT INTO r1.foo VALUES (1)`)
+	sqlDB.Exec(t, `BACKUP DATABASE r1 INTO 'nodelocal://0/test'`)
+
+	// Load/deserialize the manifest so we can mess with it.
+	matches, err := filepath.Glob(filepath.Join(rawDir, "test", "*/*/*", backupbase.BackupMetadataName))
+	require.NoError(t, err)
+	require.Len(t, matches, 1)
+	manifestPath := matches[0]
+	manifestData, err := os.ReadFile(manifestPath)
+	require.NoError(t, err)
+	manifestData, err = backupinfo.DecompressData(context.Background(), nil, manifestData)
+	require.NoError(t, err)
+	var backupManifest backuppb.BackupManifest
+	require.NoError(t, protoutil.Unmarshal(manifestData, &backupManifest))
+
+	// The manifest should have `HasExternalManifestSSTs` set to true.
+	require.True(t, backupManifest.HasExternalManifestSSTs)
+
+	// Set it to false, so that any operation that resolves the metadata treats
+	// this manifest as a pre-23.1 BACKUP_MANIFEST, and directly accesses the
+	// `Descriptors` field, instead of reading from the external SST.
+	backupManifest.HasExternalManifestSSTs = false
+	manifestData, err = protoutil.Marshal(&backupManifest)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(manifestPath, manifestData, 0644 /* perm */))
+	// Also write the checksum file to match the new manifest.
+	checksum, err := backupinfo.GetChecksum(manifestData)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(manifestPath+backupinfo.BackupManifestChecksumSuffix, checksum, 0644 /* perm */))
+
+	// Expect an error on restore.
+	sqlDB.ExpectErr(t, "assertion: this placeholder legacy Descriptor entry should never be used", `RESTORE DATABASE r1 FROM LATEST IN 'nodelocal://0/test' WITH new_db_name = 'r2'`)
 }
 
 func TestManifestTooNew(t *testing.T) {
@@ -8165,7 +8331,7 @@ func TestManifestTooNew(t *testing.T) {
 	sqlDB.Exec(t, `DROP DATABASE r1`)
 
 	// Load/deserialize the manifest so we can mess with it.
-	manifestPath := filepath.Join(rawDir, "too_new", backupbase.BackupManifestName)
+	manifestPath := filepath.Join(rawDir, "too_new", backupbase.BackupMetadataName)
 	manifestData, err := os.ReadFile(manifestPath)
 	require.NoError(t, err)
 	manifestData, err = backupinfo.DecompressData(context.Background(), nil, manifestData)
@@ -8247,7 +8413,7 @@ func flipBitInManifests(t *testing.T, rawDir string) {
 	foundManifest := false
 	err := filepath.Walk(rawDir, func(path string, info os.FileInfo, err error) error {
 		log.Infof(context.Background(), "visiting %s", path)
-		if filepath.Base(path) == backupbase.BackupManifestName {
+		if filepath.Base(path) == backupbase.BackupMetadataName {
 			foundManifest = true
 			data, err := os.ReadFile(path)
 			require.NoError(t, err)
@@ -8298,6 +8464,7 @@ func TestRestoreJobEventLogging(t *testing.T) {
 
 	sqlDB.Exec(t, `CREATE DATABASE r1`)
 	sqlDB.Exec(t, `CREATE TABLE r1.foo (id INT)`)
+	sqlDB.Exec(t, `INSERT INTO r1.foo VALUES (1), (2), (3)`)
 	sqlDB.Exec(t, `BACKUP DATABASE r1 TO 'nodelocal://0/eventlogging'`)
 	sqlDB.Exec(t, `DROP DATABASE r1`)
 
@@ -8310,8 +8477,12 @@ func TestRestoreJobEventLogging(t *testing.T) {
 		&unused)
 
 	expectedStatus := []string{string(jobs.StatusSucceeded), string(jobs.StatusRunning)}
-	jobstest.CheckEmittedEvents(t, expectedStatus, beforeRestore.UnixNano(), jobID, `"EventType":"restore"`,
-		"RESTORE")
+	expectedRecoveryEvent := eventpb.RecoveryEvent{
+		RecoveryType: restoreJobEventType,
+		NumRows:      int64(3),
+	}
+	jobstest.CheckEmittedEvents(t, expectedStatus, beforeRestore.UnixNano(), jobID, "restore",
+		"RESTORE", expectedRecoveryEvent)
 
 	sqlDB.Exec(t, `DROP DATABASE r1`)
 
@@ -8327,8 +8498,12 @@ func TestRestoreJobEventLogging(t *testing.T) {
 		string(jobs.StatusFailed), string(jobs.StatusReverting),
 		string(jobs.StatusRunning),
 	}
+	expectedRecoveryEvent = eventpb.RecoveryEvent{
+		RecoveryType: restoreJobEventType,
+		NumRows:      int64(0),
+	}
 	jobstest.CheckEmittedEvents(t, expectedStatus, beforeSecondRestore.UnixNano(), jobID,
-		`"EventType":"restore"`, "RESTORE")
+		"restore", "RESTORE", expectedRecoveryEvent)
 }
 
 func TestBackupOnlyPublicIndexes(t *testing.T) {
@@ -8357,7 +8532,7 @@ func TestBackupOnlyPublicIndexes(t *testing.T) {
 	var chunkCount int32
 	// Disable running within a tenant because expected index span is not received.
 	// More investigation is necessary.
-	// https://github.com/cockroachdb/cockroach/issues/88633
+	// https://github.com/cockroachdb/cockroach/issues/88633F
 	serverArgs := base.TestServerArgs{DisableDefaultTestTenant: true}
 	serverArgs.Knobs = base.TestingKnobs{
 		// Configure knobs to block the index backfills.
@@ -9129,17 +9304,21 @@ func TestExcludeDataFromBackupAndRestore(t *testing.T) {
 	// Set foo to exclude_data_from_backup and back it up. The ExportRequest
 	// should be a noop and backup no data.
 	sqlDB.Exec(t, `ALTER TABLE data.foo SET (exclude_data_from_backup = true)`)
-	waitForTableSplit(t, conn, "foo", "data")
 	waitForReplicaFieldToBeSet(t, tc, conn, "foo", "data", func(r *kvserver.Replica) (bool, error) {
 		if !r.ExcludeDataFromBackup() {
-			return false, errors.New("waiting for exclude_data_from_backup to be applied")
+			return false, errors.New("waiting for the range containing table data.foo to split")
 		}
 		return true, nil
 	})
-	waitForTableSplit(t, conn, "bar", "data")
-	sqlDB.Exec(t, `BACKUP DATABASE data TO $1`, localFoo)
+	waitForReplicaFieldToBeSet(t, tc, conn, "bar", "data", func(r *kvserver.Replica) (bool, error) {
+		if r.ExcludeDataFromBackup() {
+			return false, errors.New("waiting for the range containing table data.bar to split")
+		}
+		return true, nil
+	})
+	sqlDB.Exec(t, `BACKUP DATABASE data INTO $1`, localFoo)
 
-	restoreDB.Exec(t, `RESTORE DATABASE data FROM $1`, localFoo)
+	restoreDB.Exec(t, `RESTORE DATABASE data FROM LATEST IN $1`, localFoo)
 	require.Len(t, restoreDB.QueryStr(t, `SELECT * FROM data.foo`), 0)
 	require.Len(t, restoreDB.QueryStr(t, `SELECT * FROM data.bar`), 10)
 }
@@ -9373,7 +9552,11 @@ func TestProtectRestoreTargets(t *testing.T) {
 	}{
 		{
 			name:        "tenant",
-			restoreStmt: `RESTORE TENANT 10 FROM LATEST IN $1 WITH detached, tenant = '20'`,
+			restoreStmt: `RESTORE TENANT 10 FROM LATEST IN $1 WITH detached, tenant_name = 'tenant-20'`,
+		},
+		{
+			name:        "tenantid",
+			restoreStmt: `RESTORE TENANT 10 FROM LATEST IN $1 WITH detached, tenant = '20', tenant_name = 'othername'`,
 		},
 		{
 			name:        "database",
@@ -9388,7 +9571,7 @@ func TestProtectRestoreTargets(t *testing.T) {
 			restoreStmt: `RESTORE FROM LATEST IN $1 WITH detached`,
 		},
 	} {
-		if tc.StartedDefaultTestTenant() && subtest.name == "tenant" {
+		if tc.StartedDefaultTestTenant() && strings.HasPrefix(subtest.name, "tenant") {
 			// Cannot run a restore of a tenant within a tenant
 			continue
 		}
@@ -9414,6 +9597,9 @@ func TestProtectRestoreTargets(t *testing.T) {
 				// so just assert that the right type was instantiated.
 				require.NotNil(t, target.GetCluster())
 			case "tenant":
+				targetIDs := target.GetTenants()
+				require.Equal(t, roachpb.TenantID{InternalValue: 2}, targetIDs.IDs[0])
+			case "tenantid":
 				targetIDs := target.GetTenants()
 				require.Equal(t, roachpb.TenantID{InternalValue: 20}, targetIDs.IDs[0])
 			case "database":
@@ -9477,18 +9663,18 @@ func TestBackupRestoreSystemUsers(t *testing.T) {
 			{"test_role", "NULL", "true", "103"},
 		})
 		sqlDBRestore.CheckQueryResults(t, "SELECT * FROM system.role_members", [][]string{
-			{"admin", "app", "false", "NULL", "NULL"},
+			{"admin", "app", "false", "2", "101"},
 			{"admin", "root", "true", "2", "1"},
-			{"app_role", "app", "false", "NULL", "NULL"},
-			{"app_role", "test_role", "false", "NULL", "NULL"},
+			{"app_role", "app", "false", "102", "101"},
+			{"app_role", "test_role", "false", "102", "103"},
 		})
 		sqlDBRestore.CheckQueryResults(t, "SHOW USERS", [][]string{
 			{"admin", "", "{}"},
 			{"app", "", "{admin,app_role}"},
-			{"app_role", "", "{}"},
+			{"app_role", "NOLOGIN", "{}"},
 			{"root", "", "{admin}"},
 			{"test", "", "{}"},
-			{"test_role", "", "{app_role}"},
+			{"test_role", "NOLOGIN", "{app_role}"},
 		})
 	})
 
@@ -9763,18 +9949,13 @@ func TestBackupRestoreSeparateExplicitIsDefault(t *testing.T) {
 			sqlDB.Exec(t, fmt.Sprintf("SHOW BACKUPS IN %s", dest))
 			sqlDB.Exec(t, fmt.Sprintf("SHOW BACKUP FROM LATEST IN %s", dest))
 
+			// Locality aware show backups will eventually fail if not all localities are provided,
+			// but for now, they're ok.
 			if len(br.dest) > 1 {
-				// Locality aware show backups will eventually fail if not all localities are provided,
-				// but for now, they're ok.
 				sqlDB.Exec(t, fmt.Sprintf("SHOW BACKUP FROM LATEST IN %s", br.dest[1]))
-
-				errorMsg := "SHOW BACKUP on locality aware backups using incremental_location is not" +
-					" supported yet"
-				sqlDB.ExpectErr(t, errorMsg, fmt.Sprintf("SHOW BACKUP FROM LATEST IN %s WITH incremental_location= %s", dest, br.inc[0]))
-			} else {
-				// non locality aware show backup with incremental_location should work!
-				sqlDB.Exec(t, fmt.Sprintf("SHOW BACKUP FROM LATEST IN %s WITH incremental_location= %s", dest, inc))
 			}
+
+			sqlDB.Exec(t, fmt.Sprintf("SHOW BACKUP FROM LATEST IN %s WITH incremental_location= %s", dest, inc))
 		}
 		sir := fmt.Sprintf("RESTORE DATABASE fkdb FROM LATEST IN %s WITH new_db_name = 'inc_fkdb', incremental_location = %s", dest, inc)
 		sqlDB.Exec(t, sir)
@@ -10358,35 +10539,31 @@ $$;
 	require.Equal(t, 1, len(rows[0]))
 	udfID, err := strconv.Atoi(rows[0][0])
 	require.NoError(t, err)
-	err = sql.TestingDescsTxn(ctx, srcServer, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		dbDesc, err := col.GetImmutableDatabaseByName(ctx, txn, "db1", tree.DatabaseLookupFlags{Required: true})
+	err = sql.TestingDescsTxn(ctx, srcServer, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		dbDesc, err := col.ByNameWithLeased(txn.KV()).Get().Database(ctx, "db1")
 		require.NoError(t, err)
 		require.Equal(t, 104, int(dbDesc.GetID()))
 
-		scDesc, err := col.GetImmutableSchemaByName(ctx, txn, dbDesc, "sc1", tree.SchemaLookupFlags{Required: true})
+		scDesc, err := col.ByNameWithLeased(txn.KV()).Get().Schema(ctx, dbDesc, "sc1")
 		require.NoError(t, err)
 		require.Equal(t, 106, int(scDesc.GetID()))
 
 		tbName := tree.MakeTableNameWithSchema("db1", "sc1", "tbl1")
-		_, tbDesc, err := col.GetImmutableTableByName(
-			ctx, txn, &tbName, tree.ObjectLookupFlagsWithRequired(),
-		)
+		_, tbDesc, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).Get(), &tbName)
 		require.NoError(t, err)
 		require.Equal(t, 107, int(tbDesc.GetID()))
 
 		typName := tree.MakeQualifiedTypeName("db1", "sc1", "enum1")
-		_, typDesc, err := col.GetImmutableTypeByName(ctx, txn, &typName, tree.ObjectLookupFlagsWithRequired())
+		_, typDesc, err := descs.PrefixAndType(ctx, col.ByNameWithLeased(txn.KV()).Get(), &typName)
 		require.NoError(t, err)
 		require.Equal(t, 108, int(typDesc.GetID()))
 
 		tbName = tree.MakeTableNameWithSchema("db1", "sc1", "sq1")
-		_, tbDesc, err = col.GetImmutableTableByName(
-			ctx, txn, &tbName, tree.ObjectLookupFlagsWithRequired(),
-		)
+		_, tbDesc, err = descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).Get(), &tbName)
 		require.NoError(t, err)
 		require.Equal(t, 110, int(tbDesc.GetID()))
 
-		fnDesc, err := col.GetImmutableFunctionByID(ctx, txn, descpb.ID(udfID), tree.ObjectLookupFlagsWithRequired())
+		fnDesc, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, descpb.ID(udfID))
 		require.NoError(t, err)
 		require.Equal(t, 111, int(fnDesc.GetID()))
 		require.Equal(t, 104, int(fnDesc.GetParentID()))
@@ -10397,8 +10574,8 @@ $$;
 		require.Equal(t, []descpb.ID{108, 109}, fnDesc.GetDependsOnTypes())
 
 		fnDef, _ := scDesc.GetFunction("f1")
-		require.Equal(t, 111, int(fnDef.Overloads[0].ID))
-		require.Equal(t, 100108, int(fnDef.Overloads[0].ArgTypes[0].Oid()))
+		require.Equal(t, 111, int(fnDef.Signatures[0].ID))
+		require.Equal(t, 100108, int(fnDef.Signatures[0].ArgTypes[0].Oid()))
 		return nil
 	})
 	require.NoError(t, err)
@@ -10414,35 +10591,31 @@ $$;
 	require.Equal(t, 1, len(rows[0]))
 	udfID, err = strconv.Atoi(rows[0][0])
 	require.NoError(t, err)
-	err = sql.TestingDescsTxn(ctx, srcServer, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		dbDesc, err := col.GetImmutableDatabaseByName(ctx, txn, "db1_new", tree.DatabaseLookupFlags{Required: true})
+	err = sql.TestingDescsTxn(ctx, srcServer, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		dbDesc, err := col.ByNameWithLeased(txn.KV()).Get().Database(ctx, "db1_new")
 		require.NoError(t, err)
 		require.Equal(t, 112, int(dbDesc.GetID()))
 
-		scDesc, err := col.GetImmutableSchemaByName(ctx, txn, dbDesc, "sc1", tree.SchemaLookupFlags{Required: true})
+		scDesc, err := col.ByNameWithLeased(txn.KV()).Get().Schema(ctx, dbDesc, "sc1")
 		require.NoError(t, err)
 		require.Equal(t, 114, int(scDesc.GetID()))
 
 		tbName := tree.MakeTableNameWithSchema("db1_new", "sc1", "tbl1")
-		_, tbDesc, err := col.GetImmutableTableByName(
-			ctx, txn, &tbName, tree.ObjectLookupFlagsWithRequired(),
-		)
+		_, tbDesc, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).Get(), &tbName)
 		require.NoError(t, err)
 		require.Equal(t, 115, int(tbDesc.GetID()))
 
 		typName := tree.MakeQualifiedTypeName("db1_new", "sc1", "enum1")
-		_, typDesc, err := col.GetImmutableTypeByName(ctx, txn, &typName, tree.ObjectLookupFlagsWithRequired())
+		_, typDesc, err := descs.PrefixAndType(ctx, col.ByNameWithLeased(txn.KV()).Get(), &typName)
 		require.NoError(t, err)
 		require.Equal(t, 116, int(typDesc.GetID()))
 
 		tbName = tree.MakeTableNameWithSchema("db1_new", "sc1", "sq1")
-		_, tbDesc, err = col.GetImmutableTableByName(
-			ctx, txn, &tbName, tree.ObjectLookupFlagsWithRequired(),
-		)
+		_, tbDesc, err = descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).Get(), &tbName)
 		require.NoError(t, err)
 		require.Equal(t, 118, int(tbDesc.GetID()))
 
-		fnDesc, err := col.GetImmutableFunctionByID(ctx, txn, descpb.ID(udfID), tree.ObjectLookupFlagsWithRequired())
+		fnDesc, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, descpb.ID(udfID))
 		require.NoError(t, err)
 		require.Equal(t, 119, int(fnDesc.GetID()))
 		require.Equal(t, 112, int(fnDesc.GetParentID()))
@@ -10454,8 +10627,8 @@ $$;
 		require.Equal(t, []descpb.ID{116, 117}, fnDesc.GetDependsOnTypes())
 
 		fnDef, _ := scDesc.GetFunction("f1")
-		require.Equal(t, 119, int(fnDef.Overloads[0].ID))
-		require.Equal(t, 100116, int(fnDef.Overloads[0].ArgTypes[0].Oid()))
+		require.Equal(t, 119, int(fnDef.Signatures[0].ID))
+		require.Equal(t, 100116, int(fnDef.Signatures[0].ArgTypes[0].Oid()))
 		return nil
 	})
 
@@ -10505,35 +10678,31 @@ $$;
 	require.Equal(t, 1, len(rows[0]))
 	udfID, err := strconv.Atoi(rows[0][0])
 	require.NoError(t, err)
-	err = sql.TestingDescsTxn(ctx, srcServer, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		dbDesc, err := col.GetImmutableDatabaseByName(ctx, txn, "db1", tree.DatabaseLookupFlags{Required: true})
+	err = sql.TestingDescsTxn(ctx, srcServer, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		dbDesc, err := col.ByNameWithLeased(txn.KV()).Get().Database(ctx, "db1")
 		require.NoError(t, err)
 		require.Equal(t, 104, int(dbDesc.GetID()))
 
-		scDesc, err := col.GetImmutableSchemaByName(ctx, txn, dbDesc, "sc1", tree.SchemaLookupFlags{Required: true})
+		scDesc, err := col.ByNameWithLeased(txn.KV()).Get().Schema(ctx, dbDesc, "sc1")
 		require.NoError(t, err)
 		require.Equal(t, 106, int(scDesc.GetID()))
 
 		tbName := tree.MakeTableNameWithSchema("db1", "sc1", "tbl1")
-		_, tbDesc, err := col.GetImmutableTableByName(
-			ctx, txn, &tbName, tree.ObjectLookupFlagsWithRequired(),
-		)
+		_, tbDesc, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).Get(), &tbName)
 		require.NoError(t, err)
 		require.Equal(t, 107, int(tbDesc.GetID()))
 
 		typName := tree.MakeQualifiedTypeName("db1", "sc1", "enum1")
-		_, typDesc, err := col.GetImmutableTypeByName(ctx, txn, &typName, tree.ObjectLookupFlagsWithRequired())
+		_, typDesc, err := descs.PrefixAndType(ctx, col.ByNameWithLeased(txn.KV()).Get(), &typName)
 		require.NoError(t, err)
 		require.Equal(t, 108, int(typDesc.GetID()))
 
 		tbName = tree.MakeTableNameWithSchema("db1", "sc1", "sq1")
-		_, tbDesc, err = col.GetImmutableTableByName(
-			ctx, txn, &tbName, tree.ObjectLookupFlagsWithRequired(),
-		)
+		_, tbDesc, err = descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).Get(), &tbName)
 		require.NoError(t, err)
 		require.Equal(t, 110, int(tbDesc.GetID()))
 
-		fnDesc, err := col.GetImmutableFunctionByID(ctx, txn, descpb.ID(udfID), tree.ObjectLookupFlagsWithRequired())
+		fnDesc, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, descpb.ID(udfID))
 		require.NoError(t, err)
 		require.Equal(t, 111, int(fnDesc.GetID()))
 		require.Equal(t, 104, int(fnDesc.GetParentID()))
@@ -10544,8 +10713,8 @@ $$;
 		require.Equal(t, []descpb.ID{108, 109}, fnDesc.GetDependsOnTypes())
 
 		fnDef, _ := scDesc.GetFunction("f1")
-		require.Equal(t, 111, int(fnDef.Overloads[0].ID))
-		require.Equal(t, 100108, int(fnDef.Overloads[0].ArgTypes[0].Oid()))
+		require.Equal(t, 111, int(fnDef.Signatures[0].ID))
+		require.Equal(t, 100108, int(fnDef.Signatures[0].ArgTypes[0].Oid()))
 		return nil
 	})
 	require.NoError(t, err)
@@ -10563,35 +10732,31 @@ $$;
 	require.Equal(t, 1, len(rows[0]))
 	udfID, err = strconv.Atoi(rows[0][0])
 	require.NoError(t, err)
-	err = sql.TestingDescsTxn(ctx, tgtServer, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		dbDesc, err := col.GetImmutableDatabaseByName(ctx, txn, "db1", tree.DatabaseLookupFlags{Required: true})
+	err = sql.TestingDescsTxn(ctx, tgtServer, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		dbDesc, err := col.ByNameWithLeased(txn.KV()).Get().Database(ctx, "db1")
 		require.NoError(t, err)
 		require.Equal(t, 107, int(dbDesc.GetID()))
 
-		scDesc, err := col.GetImmutableSchemaByName(ctx, txn, dbDesc, "sc1", tree.SchemaLookupFlags{Required: true})
+		scDesc, err := col.ByNameWithLeased(txn.KV()).Get().Schema(ctx, dbDesc, "sc1")
 		require.NoError(t, err)
 		require.Equal(t, 125, int(scDesc.GetID()))
 
 		tbName := tree.MakeTableNameWithSchema("db1", "sc1", "tbl1")
-		_, tbDesc, err := col.GetImmutableTableByName(
-			ctx, txn, &tbName, tree.ObjectLookupFlagsWithRequired(),
-		)
+		_, tbDesc, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).Get(), &tbName)
 		require.NoError(t, err)
 		require.Equal(t, 126, int(tbDesc.GetID()))
 
 		typName := tree.MakeQualifiedTypeName("db1", "sc1", "enum1")
-		_, typDesc, err := col.GetImmutableTypeByName(ctx, txn, &typName, tree.ObjectLookupFlagsWithRequired())
+		_, typDesc, err := descs.PrefixAndType(ctx, col.ByNameWithLeased(txn.KV()).Get(), &typName)
 		require.NoError(t, err)
 		require.Equal(t, 127, int(typDesc.GetID()))
 
 		tbName = tree.MakeTableNameWithSchema("db1", "sc1", "sq1")
-		_, tbDesc, err = col.GetImmutableTableByName(
-			ctx, txn, &tbName, tree.ObjectLookupFlagsWithRequired(),
-		)
+		_, tbDesc, err = descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).Get(), &tbName)
 		require.NoError(t, err)
 		require.Equal(t, 129, int(tbDesc.GetID()))
 
-		fnDesc, err := col.GetImmutableFunctionByID(ctx, txn, descpb.ID(udfID), tree.ObjectLookupFlagsWithRequired())
+		fnDesc, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, descpb.ID(udfID))
 		require.NoError(t, err)
 		require.Equal(t, 130, int(fnDesc.GetID()))
 		require.Equal(t, 107, int(fnDesc.GetParentID()))
@@ -10603,8 +10768,8 @@ $$;
 		require.Equal(t, []descpb.ID{127, 128}, fnDesc.GetDependsOnTypes())
 
 		fnDef, _ := scDesc.GetFunction("f1")
-		require.Equal(t, 130, int(fnDef.Overloads[0].ID))
-		require.Equal(t, 100127, int(fnDef.Overloads[0].ArgTypes[0].Oid()))
+		require.Equal(t, 130, int(fnDef.Signatures[0].ID))
+		require.Equal(t, 100127, int(fnDef.Signatures[0].ArgTypes[0].Oid()))
 		return nil
 	})
 	require.NoError(t, err)
@@ -10616,4 +10781,50 @@ $$;
 	require.Equal(t, "1", rows[0][0])
 	require.NoError(t, err)
 
+}
+
+func localityFromStr(t *testing.T, s string) roachpb.Locality {
+	var l roachpb.Locality
+	require.NoError(t, l.Set(s))
+	return l
+}
+
+func TestBackupInLocality(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 1000
+
+	// Disabled to run within tenant as certain MR features are not available to tenants.
+	args := base.TestClusterArgs{ServerArgsPerNode: map[int]base.TestServerArgs{
+		0: {Locality: localityFromStr(t, "region=east,dc=1,az=1")},
+		1: {Locality: localityFromStr(t, "region=east,dc=2,az=2")},
+		2: {Locality: localityFromStr(t, "region=west,dc=1,az=1")},
+	}}
+
+	cluster, _, _, cleanupFn := backupRestoreTestSetupWithParams(t, 3 /* nodes */, numAccounts, InitManualReplication, args)
+	defer cleanupFn()
+
+	for i, tc := range []struct {
+		node        int
+		filter, err string
+	}{
+		{node: 1, filter: "region=east", err: ""},
+		{node: 1, filter: "region=east,dc=1", err: ""},
+		{node: 1, filter: "region=east,dc=6", err: "no instances found"},
+		{node: 1, filter: "region=central", err: "no instances found"},
+		{node: 1, filter: "region=east,dc=2", err: "relocated"},
+		{node: 1, filter: "region=west,dc=1", err: "relocated"},
+
+		{node: 2, filter: "region=east", err: ""},
+		{node: 2, filter: "region=east,az=2", err: ""},
+		{node: 2, filter: "region=east,dc=1", err: "relocated"},
+		{node: 2, filter: "region=east,az=1", err: "relocated"},
+
+		{node: 3, filter: "region=east", err: "relocated"},
+		{node: 3, filter: "region=central,dc=1", err: "no instances found"},
+	} {
+		db := sqlutils.MakeSQLRunner(cluster.ServerConn(tc.node - 1))
+		db.ExpectErr(t, tc.err, "BACKUP system.users INTO $1 WITH coordinator_locality = $2", fmt.Sprintf("userfile:///tc%d", i), tc.filter)
+	}
 }

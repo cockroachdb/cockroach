@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -71,8 +71,13 @@ func printEngContents(b *strings.Builder, eng Engine) {
 			fmt.Fprintf(b, "error: %s\n", err.Error())
 			break
 		}
+		v, err := iter.UnsafeValue()
+		if err != nil {
+			fmt.Fprintf(b, "error: %s\n", err.Error())
+			break
+		}
 		var meta enginepb.MVCCMetadata
-		if err := protoutil.Unmarshal(iter.UnsafeValue(), &meta); err != nil {
+		if err := protoutil.Unmarshal(v, &meta); err != nil {
 			fmt.Fprintf(b, "error: %s\n", err.Error())
 			break
 		}
@@ -91,6 +96,7 @@ func printEngContents(b *strings.Builder, eng Engine) {
 			}
 			fmt.Fprintf(b, "k: %s, v: %s\n", printLTKey(k), printMeta(&meta))
 		}
+		//lint:ignore SA4006 this value of err is never used
 		valid, err = iter.NextEngineKey()
 	}
 }
@@ -193,7 +199,7 @@ func TestIntentDemuxWriter(t *testing.T) {
 	var w intentDemuxWriter
 	var scratch []byte
 	var err error
-	datadriven.RunTest(t, testutils.TestDataPath(t, "intent_demux_writer"),
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "intent_demux_writer"),
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "new-writer":

@@ -20,6 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -50,85 +53,194 @@ func TestEvaluatesCDCFunctionOverloads(t *testing.T) {
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 
 	semaCtx := tree.MakeSemaContext()
-	testRow := makeEventRow(t, desc, s.Clock().Now(), false, hlc.Timestamp{})
-	defer configSemaForCDC(&semaCtx, testRow.EventDescriptor)()
+	defer configSemaForCDC(&semaCtx)()
 
 	t.Run("time", func(t *testing.T) {
-		// We'll run tests against some future time stamp to ensure
-		// that time functions use correct values.
-		futureTS := s.Clock().Now().Add(int64(60*time.Minute), 0)
-		expectTSTZ := func(ts hlc.Timestamp) string {
+		expectTSTZ := func(ts hlc.Timestamp) tree.Datum {
 			t.Helper()
 			d, err := tree.MakeDTimestampTZ(ts.GoTime(), time.Microsecond)
 			require.NoError(t, err)
-			return tree.AsStringWithFlags(d, tree.FmtExport)
+			return d
+		}
+		expectTS := func(ts hlc.Timestamp) tree.Datum {
+			t.Helper()
+			d, err := tree.MakeDTimestamp(ts.GoTime(), time.Microsecond)
+			require.NoError(t, err)
+			return d
+		}
+		expectHLC := func(ts hlc.Timestamp) tree.Datum {
+			t.Helper()
+			return eval.TimestampToDecimalDatum(ts)
 		}
 
-		for _, tc := range []struct {
-			fn     string
-			expect string
-		}{
-			{fn: "statement_timestamp", expect: expectTSTZ(futureTS)},
-			{fn: "transaction_timestamp", expect: expectTSTZ(futureTS)},
+		type preferredFn func(ts hlc.Timestamp) tree.Datum
+		for fn, preferredOverload := range map[string]preferredFn{
+			"statement_timestamp":           expectTSTZ,
+			"transaction_timestamp":         expectTSTZ,
+			"event_schema_timestamp":        expectHLC,
+			"changefeed_creation_timestamp": expectHLC,
 		} {
-			t.Run(tc.fn, func(t *testing.T) {
-				testRow := makeEventRow(t, desc, s.Clock().Now(), false, futureTS)
-				e, err := newEvaluator(&execCfg, &semaCtx, testRow.EventDescriptor,
-					fmt.Sprintf("SELECT %s() FROM foo", tc.fn))
+			t.Run(fn, func(t *testing.T) {
+				createTS := s.Clock().Now().Add(-int64(60*time.Minute), 0)
+				schemaTS := s.Clock().Now()
+				rowTS := schemaTS.Add(int64(60*time.Minute), 0)
+
+				targetTS := rowTS
+				switch fn {
+				case "event_schema_timestamp":
+					targetTS = schemaTS
+				case "changefeed_creation_timestamp":
+					targetTS = createTS
+				}
+				// We'll run tests against some future time stamp to ensure
+				// that time functions use correct values.
+				testRow := makeEventRow(t, desc, schemaTS, false, rowTS, false)
+				e, err := newEvaluator(&execCfg, &semaCtx, testRow.EventDescriptor, false, fmt.Sprintf("SELECT "+
+					"%[1]s() AS preferred,"+ // Preferred overload.
+					"%[1]s():::TIMESTAMPTZ  AS tstz,"+ // Force timestamptz overload.
+					"%[1]s():::TIMESTAMP AS ts,"+ // Force timestamp overload.
+					"%[1]s():::DECIMAL AS dec,"+ // Force decimal overload.
+					"%[1]s()::STRING AS str"+ // Casts preferred overload to string.
+					" FROM foo", fn))
 				require.NoError(t, err)
 				defer e.Close()
+				e.statementTS = createTS
 
-				p, err := e.Eval(ctx, testRow, testRow)
+				p, err := e.Eval(ctx, testRow, cdcevent.Row{})
 				require.NoError(t, err)
-				require.Equal(t, map[string]string{tc.fn: tc.expect}, slurpValues(t, p))
 
-				// Emit again, this time advancing MVCC timestamp of the row.
-				// We want to make sure that optimizer did not constant fold the call
-				// to the function, even though this function is marked stable.
+				initialExpectations := map[string]string{
+					"preferred": tree.AsStringWithFlags(preferredOverload(targetTS), tree.FmtExport),
+					"tstz":      tree.AsStringWithFlags(expectTSTZ(targetTS), tree.FmtExport),
+					"ts":        tree.AsStringWithFlags(expectTS(targetTS), tree.FmtExport),
+					"dec":       tree.AsStringWithFlags(eval.TimestampToDecimalDatum(targetTS), tree.FmtExport),
+					"str":       tree.AsStringWithFlags(preferredOverload(targetTS), tree.FmtExport),
+				}
+				require.Equal(t, initialExpectations, slurpValues(t, p))
+
+				// Modify row/schema timestamps, and evaluate again.
 				testRow.MvccTimestamp = testRow.MvccTimestamp.Add(int64(time.Hour), 0)
-				p, err = e.Eval(ctx, testRow, testRow)
+				targetTS = testRow.MvccTimestamp
+				testRow.SchemaTS = schemaTS.Add(1, 0)
+				e.statementTS = e.statementTS.Add(-1, 0)
+				p, err = e.Eval(ctx, testRow, cdcevent.Row{})
 				require.NoError(t, err)
-				require.Equal(t, map[string]string{tc.fn: expectTSTZ(testRow.MvccTimestamp)}, slurpValues(t, p))
+
+				var updatedExpectations map[string]string
+				switch fn {
+				case "changefeed_creation_timestamp":
+					// this function is stable; So, advancing evaluator timestamp
+					// should have no bearing on the returned values -- we should see
+					// the same thing we saw before.
+					updatedExpectations = initialExpectations
+				case "event_schema_timestamp":
+					targetTS = testRow.SchemaTS
+					fallthrough
+				default:
+					updatedExpectations = map[string]string{
+						"preferred": tree.AsStringWithFlags(preferredOverload(targetTS), tree.FmtExport),
+						"tstz":      tree.AsStringWithFlags(expectTSTZ(targetTS), tree.FmtExport),
+						"ts":        tree.AsStringWithFlags(expectTS(targetTS), tree.FmtExport),
+						"dec":       tree.AsStringWithFlags(eval.TimestampToDecimalDatum(targetTS), tree.FmtExport),
+						"str":       tree.AsStringWithFlags(preferredOverload(targetTS), tree.FmtExport),
+					}
+				}
+				require.Equal(t, updatedExpectations, slurpValues(t, p))
 			})
 		}
 
 		t.Run("timezone", func(t *testing.T) {
+			// We'll run tests against some future time stamp to ensure
+			// that time functions use correct values.
+			futureTS := s.Clock().Now().Add(int64(60*time.Minute), 0)
+
 			// Timezone has many overrides, some are immutable, and some are Stable.
 			// Call "stable" overload which relies on session data containing
 			// timezone. Since we don't do any special setup with session data, the
 			// default timezone is UTC. We'll use a "strange" timezone of -1h33m from
 			// UTC to test conversion.
-			testRow := makeEventRow(t, desc, s.Clock().Now(), false, futureTS)
-			e, err := newEvaluator(&execCfg, &semaCtx, testRow.EventDescriptor,
-				fmt.Sprintf("SELECT timezone('+01:33:00', '%s'::time) FROM foo",
-					futureTS.GoTime().Format("15:04:05")))
+			testRow := makeEventRow(t, desc, s.Clock().Now(), false, futureTS, false)
+			e, err := newEvaluator(&execCfg, &semaCtx, testRow.EventDescriptor, false, fmt.Sprintf("SELECT timezone('+01:33:00', '%s'::time) FROM foo",
+				futureTS.GoTime().Format("15:04:05")))
 			require.NoError(t, err)
 			defer e.Close()
 
-			p, err := e.Eval(ctx, testRow, testRow)
+			p, err := e.Eval(ctx, testRow, cdcevent.Row{})
 			require.NoError(t, err)
 
-			expectedTZ := fmt.Sprintf("%s-01:33:00",
+			expectedTZ := fmt.Sprintf("%s-01:33",
 				futureTS.GoTime().Add(-93*time.Minute).Format("15:04:05"))
 			require.Equal(t, map[string]string{"timezone": expectedTZ}, slurpValues(t, p))
 		})
 	})
 
-	t.Run("cdc_is_delete", func(t *testing.T) {
+	t.Run("event_op", func(t *testing.T) {
 		schemaTS := s.Clock().Now()
-		testRow := makeEventRow(t, desc, schemaTS, false, s.Clock().Now())
-		e, err := newEvaluator(&execCfg, &semaCtx, testRow.EventDescriptor,
-			"SELECT cdc_is_delete() FROM foo")
-		require.NoError(t, err)
-		defer e.Close()
+		row := makeEventRow(t, desc, schemaTS, false, s.Clock().Now(), true)
+		deletedRow := makeEventRow(t, desc, schemaTS, true, s.Clock().Now(), true)
+		nilRow := cdcevent.Row{}
 
-		for _, expectDelete := range []bool{true, false} {
-			testRow := makeEventRow(t, desc, schemaTS, expectDelete, s.Clock().Now())
-			p, err := e.Eval(ctx, testRow, testRow)
-			require.NoError(t, err)
-			require.Equal(t,
-				map[string]string{"cdc_is_delete": fmt.Sprintf("%t", expectDelete)},
-				slurpValues(t, p))
+		for _, tc := range []struct {
+			op       string
+			row      cdcevent.Row
+			prevRow  cdcevent.Row
+			withDiff bool
+			expect   string
+		}{
+			{
+				op:       "insert",
+				row:      row,
+				prevRow:  nilRow,
+				withDiff: true,
+				expect:   "insert",
+			},
+			{
+				op:       "update",
+				row:      row,
+				prevRow:  row,
+				withDiff: true,
+				expect:   "update",
+			},
+			{
+				// Without diff, we can't tell an update from insert, so we emit upsert.
+				op:       "insert",
+				row:      row,
+				prevRow:  nilRow,
+				withDiff: false,
+				expect:   "upsert",
+			},
+			{
+				// Without diff, we can't tell an update from insert, so we emit upsert.
+				op:       "update",
+				row:      row,
+				prevRow:  nilRow,
+				withDiff: false,
+				expect:   "upsert",
+			},
+			{
+				op:       "delete",
+				row:      deletedRow,
+				prevRow:  row,
+				withDiff: true,
+				expect:   "delete",
+			},
+			{
+				op:       "delete",
+				row:      deletedRow,
+				prevRow:  row,
+				withDiff: false,
+				expect:   "delete",
+			},
+		} {
+			t.Run(fmt.Sprintf("%s/diff=%t", tc.op, tc.withDiff), func(t *testing.T) {
+				e, err := newEvaluator(&execCfg, &semaCtx, tc.row.EventDescriptor, tc.withDiff, "SELECT event_op() FROM foo")
+				require.NoError(t, err)
+				defer e.Close()
+
+				p, err := e.Eval(ctx, tc.row, tc.prevRow)
+				require.NoError(t, err)
+				require.Equal(t, map[string]string{"event_op": tc.expect}, slurpValues(t, p))
+			})
 		}
 	})
 
@@ -139,51 +251,24 @@ func TestEvaluatesCDCFunctionOverloads(t *testing.T) {
 		return j
 	}
 
-	t.Run("cdc_{mvcc,updated}_timestamp", func(t *testing.T) {
-		for _, cast := range []string{"", "::decimal", "::string"} {
-			t.Run(cast, func(t *testing.T) {
-				schemaTS := s.Clock().Now()
-				mvccTS := schemaTS.Add(int64(30*time.Minute), 0)
-				testRow := makeEventRow(t, desc, schemaTS, false, mvccTS)
-				e, err := newEvaluator(&execCfg, &semaCtx, testRow.EventDescriptor, fmt.Sprintf(
-					"SELECT cdc_mvcc_timestamp()%[1]s as mvcc, cdc_updated_timestamp()%[1]s as updated FROM foo", cast,
-				))
-				require.NoError(t, err)
-				defer e.Close()
-
-				p, err := e.Eval(ctx, testRow, testRow)
-				require.NoError(t, err)
-				require.Equal(t,
-					map[string]string{
-						"mvcc":    eval.TimestampToDecimalDatum(mvccTS).String(),
-						"updated": eval.TimestampToDecimalDatum(schemaTS).String(),
-					},
-					slurpValues(t, p),
-				)
-			})
-		}
-	})
-
 	t.Run("pg_collation_for", func(t *testing.T) {
-		testRow := makeEventRow(t, desc, s.Clock().Now(), false, s.Clock().Now())
+		testRow := makeEventRow(t, desc, s.Clock().Now(), false, s.Clock().Now(), false)
 
-		e, err := newEvaluator(&execCfg, &semaCtx, testRow.EventDescriptor,
-			`SELECT pg_collation_for('hello' COLLATE de_DE) AS col FROM foo`)
+		e, err := newEvaluator(&execCfg, &semaCtx, testRow.EventDescriptor, false, `SELECT pg_collation_for('hello' COLLATE de_DE) AS col FROM foo`)
 		require.NoError(t, err)
 		defer e.Close()
 
-		p, err := e.Eval(ctx, testRow, testRow)
+		p, err := e.Eval(ctx, testRow, cdcevent.Row{})
 		require.NoError(t, err)
 		require.Equal(t, map[string]string{"col": "\"de_DE\""}, slurpValues(t, p))
 	})
 
 	for _, fn := range []string{"to_json", "to_jsonb"} {
 		t.Run(fn, func(t *testing.T) {
-			testRow := makeEventRow(t, desc, s.Clock().Now(), false, s.Clock().Now())
+			testRow := makeEventRow(t, desc, s.Clock().Now(), false, s.Clock().Now(), false)
 			rowDatums := testRow.EncDatums()
 
-			e, err := newEvaluator(&execCfg, &semaCtx, testRow.EventDescriptor,
-				fmt.Sprintf("SELECT %s(a) FROM foo", fn))
+			e, err := newEvaluator(&execCfg, &semaCtx, testRow.EventDescriptor, false, fmt.Sprintf("SELECT %s(a) FROM foo", fn))
 			require.NoError(t, err)
 			defer e.Close()
 
@@ -196,11 +281,10 @@ func TestEvaluatesCDCFunctionOverloads(t *testing.T) {
 	}
 
 	t.Run("row_to_json", func(t *testing.T) {
-		testRow := makeEventRow(t, desc, s.Clock().Now(), false, s.Clock().Now())
+		testRow := makeEventRow(t, desc, s.Clock().Now(), false, s.Clock().Now(), false)
 
 		rowDatums := testRow.EncDatums()
-		e, err := newEvaluator(&execCfg, &semaCtx, testRow.EventDescriptor,
-			"SELECT row_to_json(row(a, b, c)) FROM foo")
+		e, err := newEvaluator(&execCfg, &semaCtx, testRow.EventDescriptor, false, "SELECT row_to_json(row(a, b, c)) FROM foo")
 		require.NoError(t, err)
 		defer e.Close()
 
@@ -216,10 +300,9 @@ func TestEvaluatesCDCFunctionOverloads(t *testing.T) {
 	})
 
 	t.Run("jsonb_build_array", func(t *testing.T) {
-		testRow := makeEventRow(t, desc, s.Clock().Now(), false, s.Clock().Now())
+		testRow := makeEventRow(t, desc, s.Clock().Now(), false, s.Clock().Now(), false)
 		rowDatums := testRow.EncDatums()
-		e, err := newEvaluator(&execCfg, &semaCtx, testRow.EventDescriptor,
-			"SELECT jsonb_build_array(a, a, 42) AS three_ints FROM foo")
+		e, err := newEvaluator(&execCfg, &semaCtx, testRow.EventDescriptor, false, "SELECT jsonb_build_array(a, a, 42) AS three_ints FROM foo")
 		require.NoError(t, err)
 		defer e.Close()
 
@@ -236,10 +319,9 @@ func TestEvaluatesCDCFunctionOverloads(t *testing.T) {
 	})
 
 	t.Run("jsonb_build_object", func(t *testing.T) {
-		testRow := makeEventRow(t, desc, s.Clock().Now(), false, s.Clock().Now())
+		testRow := makeEventRow(t, desc, s.Clock().Now(), false, s.Clock().Now(), false)
 		rowDatums := testRow.EncDatums()
-		e, err := newEvaluator(&execCfg, &semaCtx, testRow.EventDescriptor,
-			"SELECT jsonb_build_object('a', a, 'b', b, 'c', c) AS obj FROM foo")
+		e, err := newEvaluator(&execCfg, &semaCtx, testRow.EventDescriptor, false, "SELECT jsonb_build_object('a', a, 'b', b, 'c', c) AS obj FROM foo")
 		require.NoError(t, err)
 		defer e.Close()
 
@@ -258,9 +340,8 @@ func TestEvaluatesCDCFunctionOverloads(t *testing.T) {
 		// These functions have overloads; call the one that's stable overload
 		// (i.e. one that needs to convert types.Any to string).
 		t.Run(fn, func(t *testing.T) {
-			testRow := makeEventRow(t, desc, s.Clock().Now(), false, s.Clock().Now())
-			e, err := newEvaluator(&execCfg, &semaCtx, testRow.EventDescriptor,
-				fmt.Sprintf("SELECT %s(42) FROM foo", fn))
+			testRow := makeEventRow(t, desc, s.Clock().Now(), false, s.Clock().Now(), false)
+			e, err := newEvaluator(&execCfg, &semaCtx, testRow.EventDescriptor, false, fmt.Sprintf("SELECT %s(42) FROM foo", fn))
 			require.NoError(t, err)
 			defer e.Close()
 
@@ -274,10 +355,9 @@ func TestEvaluatesCDCFunctionOverloads(t *testing.T) {
 
 	// overlaps has many overloads; most of them are immutable, but 1 is stable.
 	t.Run("overlaps", func(t *testing.T) {
-		testRow := makeEventRow(t, desc, s.Clock().Now(), false, s.Clock().Now())
+		testRow := makeEventRow(t, desc, s.Clock().Now(), false, s.Clock().Now(), false)
 
-		e, err := newEvaluator(&execCfg, &semaCtx, testRow.EventDescriptor,
-			`SELECT  overlaps(transaction_timestamp(), interval '0', transaction_timestamp(), interval '-1s') FROM foo`)
+		e, err := newEvaluator(&execCfg, &semaCtx, testRow.EventDescriptor, false, `SELECT  overlaps(transaction_timestamp(), interval '0', transaction_timestamp(), interval '-1s') FROM foo`)
 		require.NoError(t, err)
 		defer e.Close()
 
@@ -289,7 +369,7 @@ func TestEvaluatesCDCFunctionOverloads(t *testing.T) {
 	// Test that cdc specific functions correctly resolve overload, and that an
 	// error is returned when cdc function called with wrong arguments.
 	t.Run("cdc function errors", func(t *testing.T) {
-		testRow := makeEventRow(t, desc, s.Clock().Now(), false, s.Clock().Now())
+		testRow := makeEventRow(t, desc, s.Clock().Now(), false, s.Clock().Now(), false)
 		// currently, all cdc functions take no args, so call these functions with
 		// some arguments.
 		rng, _ := randutil.NewTestRand()
@@ -308,8 +388,7 @@ func TestEvaluatesCDCFunctionOverloads(t *testing.T) {
 			// Run this test only for CDC specific functions.
 			if def != useDefaultBuiltin && def.Overloads[0].FunctionProperties.Category == cdcFnCategory {
 				t.Run(fn, func(t *testing.T) {
-					e, err := newEvaluator(&execCfg, &semaCtx, testRow.EventDescriptor,
-						fmt.Sprintf("SELECT %s(%s) FROM foo", fn, fnArgs()))
+					e, err := newEvaluator(&execCfg, &semaCtx, testRow.EventDescriptor, false, fmt.Sprintf("SELECT %s(%s) FROM foo", fn, fnArgs()))
 					require.NoError(t, err)
 					_, err = e.Eval(ctx, testRow, testRow)
 					require.Regexp(t, "unknown signature", err)
@@ -325,9 +404,15 @@ func makeEventRow(
 	schemaTS hlc.Timestamp,
 	deleted bool,
 	mvccTS hlc.Timestamp,
+	includeMVCCCol bool,
 ) cdcevent.Row {
 	t.Helper()
-	datums := randEncDatumPrimaryFamily(t, desc)
+	rng, _ := randutil.NewTestRand()
+
+	datums := randEncDatumPrimaryFamily(t, rng, desc)
+	if includeMVCCCol {
+		datums = append(datums, rowenc.EncDatum{Datum: randgen.RandDatum(rng, colinfo.MVCCTimestampColumnType, false)})
+	}
 	r := cdcevent.TestingMakeEventRow(desc, 0, datums, deleted)
 	r.SchemaTS = schemaTS
 	r.MvccTimestamp = mvccTS
@@ -335,16 +420,22 @@ func makeEventRow(
 }
 
 func newEvaluator(
-	execCfg *sql.ExecutorConfig, semaCtx *tree.SemaContext, ed *cdcevent.EventDescriptor, expr string,
+	execCfg *sql.ExecutorConfig,
+	semaCtx *tree.SemaContext,
+	ed *cdcevent.EventDescriptor,
+	withDiff bool,
+	expr string,
 ) (*Evaluator, error) {
 	sc, err := ParseChangefeedExpression(expr)
 	if err != nil {
 		return nil, err
 	}
 
+	defer configSemaForCDC(semaCtx)()
 	norm, err := normalizeSelectClause(context.Background(), semaCtx, sc, ed)
 	if err != nil {
 		return nil, err
 	}
-	return NewEvaluator(norm.SelectClause, execCfg, username.RootUserName())
+	return NewEvaluator(norm.SelectClause, execCfg, username.RootUserName(),
+		defaultDBSessionData, execCfg.Clock.Now(), withDiff), nil
 }

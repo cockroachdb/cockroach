@@ -22,15 +22,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
-	"github.com/cockroachdb/errors"
 )
 
 // alterRoleNode represents an ALTER ROLE ... [WITH] OPTION... statement.
@@ -95,6 +96,10 @@ func (p *planner) AlterRoleNode(
 	}
 	if err := roleOptions.CheckRoleOptionConflicts(); err != nil {
 		return nil, err
+	}
+
+	if roleOptions.Contains(roleoption.CONTROLCHANGEFEED) {
+		p.BufferClientNotice(ctx, pgnotice.Newf(roleoption.ControlChangefeedDeprecationNoticeMsg))
 	}
 
 	roleName, err := decodeusername.FromRoleSpec(
@@ -185,7 +190,7 @@ func (n *alterRoleNode) startExec(params runParams) error {
 	}
 
 	// Check if role exists.
-	row, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryRowEx(
+	row, err := params.p.InternalSQLTxn().QueryRowEx(
 		params.ctx,
 		opName,
 		params.p.txn,
@@ -200,7 +205,7 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		if n.ifExists {
 			return nil
 		}
-		return pgerror.Newf(pgcode.UndefinedObject, "role/user %s does not exist", n.roleName)
+		return sqlerrors.NewUndefinedUserError(n.roleName)
 	}
 
 	isAdmin, err := params.p.UserHasAdminRole(params.ctx, n.roleName)
@@ -220,10 +225,11 @@ func (n *alterRoleNode) startExec(params runParams) error {
 	if hasPasswordOpt {
 		// Updating PASSWORD is a special case since PASSWORD lives in system.users
 		// while the rest of the role options lives in system.role_options.
-		rowAffected, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
+		rowAffected, err := params.p.InternalSQLTxn().ExecEx(
 			params.ctx,
 			opName,
 			params.p.txn,
+			sessiondata.NodeUserSessionDataOverride,
 			`UPDATE system.users SET "hashedPassword" = $2 WHERE username = $1`,
 			n.roleName,
 			hashedPassword,
@@ -301,8 +307,7 @@ func (p *planner) AlterRoleSet(ctx context.Context, n *tree.AlterRoleSet) (planN
 
 	dbDescID := descpb.ID(0)
 	if n.DatabaseName != "" {
-		dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn, string(n.DatabaseName),
-			tree.DatabaseLookupFlags{Required: true})
+		dbDesc, err := p.Descriptors().ByNameWithLeased(p.txn).Get().Database(ctx, string(n.DatabaseName))
 		if err != nil {
 			return nil, err
 		}
@@ -431,7 +436,7 @@ func (n *alterRoleSetNode) startExec(params runParams) error {
 		var rowsAffected int
 		var internalExecErr error
 		if newSettings == nil {
-			rowsAffected, internalExecErr = params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+			rowsAffected, internalExecErr = params.p.InternalSQLTxn().ExecEx(
 				params.ctx,
 				opName,
 				params.p.txn,
@@ -441,7 +446,7 @@ func (n *alterRoleSetNode) startExec(params runParams) error {
 				roleName,
 			)
 		} else {
-			rowsAffected, internalExecErr = params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+			rowsAffected, internalExecErr = params.p.InternalSQLTxn().ExecEx(
 				params.ctx,
 				opName,
 				params.p.txn,
@@ -546,7 +551,7 @@ func (n *alterRoleSetNode) getRoleName(
 		return false, username.SQLUsername{}, pgerror.Newf(pgcode.InsufficientPrivilege, "cannot edit public role")
 	}
 	// Check if role exists.
-	row, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryRowEx(
+	row, err := params.p.InternalSQLTxn().QueryRowEx(
 		params.ctx,
 		opName,
 		params.p.txn,
@@ -561,7 +566,7 @@ func (n *alterRoleSetNode) getRoleName(
 		if n.ifExists {
 			return false, username.SQLUsername{}, nil
 		}
-		return false, username.SQLUsername{}, errors.Newf("role/user %s does not exist", n.roleName)
+		return false, username.SQLUsername{}, sqlerrors.NewUndefinedUserError(n.roleName)
 	}
 	isAdmin, err := params.p.UserHasAdminRole(params.ctx, n.roleName)
 	if err != nil {
@@ -597,7 +602,7 @@ func (n *alterRoleSetNode) makeNewSettings(
 		`SELECT settings FROM %s WHERE database_id = $1 AND role_name = $2`,
 		sessioninit.DatabaseRoleSettingsTableName,
 	)
-	datums, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryRowEx(
+	datums, err := params.p.InternalSQLTxn().QueryRowEx(
 		params.ctx,
 		opName,
 		params.p.txn,

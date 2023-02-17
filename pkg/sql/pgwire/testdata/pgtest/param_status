@@ -7,8 +7,8 @@ Query {"String": "SET application_name = 'pgtest'"}
 until
 ReadyForQuery
 ----
-{"Type":"ParameterStatus","Name":"application_name","Value":"pgtest"}
 {"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ParameterStatus","Name":"application_name","Value":"pgtest"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # Change the time zone using an offset.
@@ -20,12 +20,12 @@ Query {"String": "SET TIME ZONE +6"}
 until
 ParameterStatus
 ----
+{"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ParameterStatus","Name":"TimeZone","Value":"\u003c+06\u003e-06"}
 
 until
 ReadyForQuery
 ----
-{"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 send
@@ -35,12 +35,12 @@ Query {"String": "SET TIME ZONE -11.5"}
 until
 ParameterStatus
 ----
+{"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ParameterStatus","Name":"TimeZone","Value":"\u003c-11:30\u003e+11:30"}
 
 until
 ReadyForQuery
 ----
-{"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # Change the time zone using a real string.
@@ -52,8 +52,8 @@ Query {"String": "SET TIME ZONE 'America/New_York'"}
 until
 ReadyForQuery
 ----
-{"Type":"ParameterStatus","Name":"TimeZone","Value":"America/New_York"}
 {"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ParameterStatus","Name":"TimeZone","Value":"America/New_York"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # Change interval style.
@@ -65,8 +65,8 @@ Query {"String": "SET IntervalStyle = 'ISO_8601'"}
 until
 ReadyForQuery
 ----
-{"Type":"ParameterStatus","Name":"IntervalStyle","Value":"iso_8601"}
 {"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ParameterStatus","Name":"IntervalStyle","Value":"iso_8601"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 
@@ -77,8 +77,8 @@ Query {"String": "SET DateStyle = 'YMD, ISO'"}
 until
 ReadyForQuery
 ----
-{"Type":"ParameterStatus","Name":"DateStyle","Value":"ISO, YMD"}
 {"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ParameterStatus","Name":"DateStyle","Value":"ISO, YMD"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 send
@@ -109,8 +109,8 @@ Query {"String": "SET ROLE testuser"}
 until
 ReadyForQuery
 ----
-{"Type":"ParameterStatus","Name":"is_superuser","Value":"off"}
 {"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ParameterStatus","Name":"is_superuser","Value":"off"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 send
@@ -120,7 +120,6 @@ Query {"String": "SET ROLE testuser"}
 until
 ReadyForQuery
 ----
-{"Type":"ParameterStatus","Name":"is_superuser","Value":"off"}
 {"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
@@ -131,8 +130,8 @@ Query {"String": "RESET ROLE"}
 until
 ReadyForQuery
 ----
-{"Type":"ParameterStatus","Name":"is_superuser","Value":"on"}
 {"Type":"CommandComplete","CommandTag":"RESET"}
+{"Type":"ParameterStatus","Name":"is_superuser","Value":"on"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # Test for SET LOCAL.
@@ -144,8 +143,8 @@ Query {"String": "SET TIME ZONE 'Australia/Sydney'"}
 until
 ReadyForQuery
 ----
-{"Type":"ParameterStatus","Name":"TimeZone","Value":"Australia/Sydney"}
 {"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ParameterStatus","Name":"TimeZone","Value":"Australia/Sydney"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 send
@@ -167,20 +166,20 @@ ReadyForQuery
 ----
 {"Type":"CommandComplete","CommandTag":"BEGIN"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ParameterStatus","Name":"TimeZone","Value":"Australia/Adelaide"}
-{"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ParameterStatus","Name":"IntervalStyle","Value":"sql_standard"}
-{"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ParameterStatus","Name":"DateStyle","Value":"ISO, DMY"}
-{"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ParameterStatus","Name":"application_name","Value":"bobby"}
-{"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
-{"Type":"ParameterStatus","Name":"is_superuser","Value":"off"}
 {"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ParameterStatus","Name":"is_superuser","Value":"off"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
 
 send
@@ -196,11 +195,11 @@ ReadyForQuery
 ----
 {"Type":"CommandComplete","CommandTag":"SAVEPOINT"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ParameterStatus","Name":"TimeZone","Value":"Australia/Perth"}
-{"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
-{"Type":"ParameterStatus","Name":"IntervalStyle","Value":"postgres"}
 {"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ParameterStatus","Name":"IntervalStyle","Value":"postgres"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
 
 send
@@ -210,9 +209,9 @@ Query {"String": "ROLLBACK TO SAVEPOINT s1"}
 until
 ReadyForQuery
 ----
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
 {"Type":"ParameterStatus","Name":"IntervalStyle","Value":"sql_standard"}
 {"Type":"ParameterStatus","Name":"TimeZone","Value":"Australia/Adelaide"}
-{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
 
 send
@@ -222,12 +221,12 @@ Query {"String": "ROLLBACK"}
 until
 ReadyForQuery
 ----
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
 {"Type":"ParameterStatus","Name":"application_name","Value":"pgtest"}
 {"Type":"ParameterStatus","Name":"DateStyle","Value":"ISO, YMD"}
 {"Type":"ParameterStatus","Name":"IntervalStyle","Value":"iso_8601"}
 {"Type":"ParameterStatus","Name":"is_superuser","Value":"on"}
 {"Type":"ParameterStatus","Name":"TimeZone","Value":"Australia/Sydney"}
-{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 
@@ -255,20 +254,20 @@ ReadyForQuery
 {"Type":"ReadyForQuery","TxStatus":"T"}
 {"Type":"CommandComplete","CommandTag":"SAVEPOINT"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ParameterStatus","Name":"TimeZone","Value":"Australia/Adelaide"}
-{"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ParameterStatus","Name":"IntervalStyle","Value":"sql_standard"}
-{"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ParameterStatus","Name":"DateStyle","Value":"ISO, DMY"}
-{"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ParameterStatus","Name":"application_name","Value":"bobby"}
-{"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
-{"Type":"ParameterStatus","Name":"is_superuser","Value":"off"}
 {"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ParameterStatus","Name":"is_superuser","Value":"off"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
 
 # Releasing the special savepoint commits the transaction, but a COMMIT is
@@ -299,12 +298,12 @@ Query {"String": "COMMIT"}
 until
 ReadyForQuery
 ----
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
 {"Type":"ParameterStatus","Name":"application_name","Value":"pgtest"}
 {"Type":"ParameterStatus","Name":"DateStyle","Value":"ISO, YMD"}
 {"Type":"ParameterStatus","Name":"IntervalStyle","Value":"iso_8601"}
 {"Type":"ParameterStatus","Name":"is_superuser","Value":"on"}
 {"Type":"ParameterStatus","Name":"TimeZone","Value":"Australia/Sydney"}
-{"Type":"CommandComplete","CommandTag":"COMMIT"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 
@@ -338,20 +337,20 @@ ReadyForQuery
 {"Type":"ReadyForQuery","TxStatus":"T"}
 {"Type":"CommandComplete","CommandTag":"SAVEPOINT"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ParameterStatus","Name":"TimeZone","Value":"Australia/Adelaide"}
-{"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ParameterStatus","Name":"IntervalStyle","Value":"sql_standard"}
-{"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ParameterStatus","Name":"DateStyle","Value":"ISO, DMY"}
-{"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ParameterStatus","Name":"application_name","Value":"bobby"}
-{"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
-{"Type":"ParameterStatus","Name":"is_superuser","Value":"off"}
 {"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ParameterStatus","Name":"is_superuser","Value":"off"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
 {"Type":"ErrorResponse","Code":"22012"}
 {"Type":"ParameterStatus","Name":"application_name","Value":"pgtest"}
@@ -376,20 +375,20 @@ ReadyForQuery
 {"Type":"ReadyForQuery","TxStatus":"T"}
 {"Type":"CommandComplete","CommandTag":"SAVEPOINT"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ParameterStatus","Name":"TimeZone","Value":"Australia/Adelaide"}
-{"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ParameterStatus","Name":"IntervalStyle","Value":"sql_standard"}
-{"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ParameterStatus","Name":"DateStyle","Value":"ISO, DMY"}
-{"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ParameterStatus","Name":"application_name","Value":"bobby"}
-{"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
-{"Type":"ParameterStatus","Name":"is_superuser","Value":"off"}
 {"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ParameterStatus","Name":"is_superuser","Value":"off"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
 {"Type":"ErrorResponse","Code":"22012"}
 {"Type":"ReadyForQuery","TxStatus":"E"}
@@ -408,10 +407,10 @@ ReadyForQuery
 until crdb_only
 ReadyForQuery
 ----
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
 {"Type":"ParameterStatus","Name":"application_name","Value":"pgtest"}
 {"Type":"ParameterStatus","Name":"DateStyle","Value":"ISO, YMD"}
 {"Type":"ParameterStatus","Name":"IntervalStyle","Value":"iso_8601"}
 {"Type":"ParameterStatus","Name":"is_superuser","Value":"on"}
 {"Type":"ParameterStatus","Name":"TimeZone","Value":"Australia/Sydney"}
-{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
 {"Type":"ReadyForQuery","TxStatus":"I"}

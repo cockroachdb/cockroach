@@ -577,17 +577,44 @@ func TestForecastColumnStatistics(t *testing.T) {
 				hist: testHistogram{{20, 0, 0, 50}, {20, 0, 0, 301}},
 			},
 		},
+		// Histogram, rounded counts.
+		{
+			observed: []*testStat{
+				{
+					at: 2, row: 13, dist: 7, null: 3, size: 1,
+					hist: testHistogram{{5, 0, 0, 100}, {0, 5, 5, 200}},
+				},
+				{
+					at: 4, row: 26, dist: 12, null: 6, size: 4,
+					hist: testHistogram{{10, 0, 0, 200}, {0, 10, 10, 300}},
+				},
+				{
+					at: 6, row: 39, dist: 17, null: 9, size: 7,
+					hist: testHistogram{{15, 0, 0, 300}, {0, 15, 15, 400}},
+				},
+				{
+					at: 8, row: 52, dist: 22, null: 12, size: 10,
+					hist: testHistogram{{20, 0, 0, 400}, {0, 20, 20, 500}},
+				},
+			},
+			at: 9,
+			forecast: &testStat{
+				at: 9, row: 59, dist: 25, null: 14, size: 12,
+				hist: testHistogram{{22, 0, 0, 450}, {0, 23, 23, 550}},
+			},
+		},
 	}
 	ctx := context.Background()
+	var fullStatID, partialStatID uint64
 	for i, tc := range testCases {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 
 			// Set up observed TableStatistics in CreatedAt desc order.
 			observed := make([]*TableStatistic, len(tc.observed))
 			for j := range tc.observed {
-				observed[len(observed)-j-1] = tc.observed[j].toTableStatistic("testStat", i)
+				observed[len(observed)-j-1] = tc.observed[j].toTableStatistic("testStat", i, descpb.ColumnIDs{1}, fullStatID, partialStatID)
 			}
-			expected := tc.forecast.toTableStatistic(jobspb.ForecastStatsName, i)
+			expected := tc.forecast.toTableStatistic(jobspb.ForecastStatsName, i, descpb.ColumnIDs{1}, fullStatID, partialStatID)
 			at := testStatTime(tc.at)
 
 			forecast, err := forecastColumnStatistics(ctx, observed, at, 1)
@@ -611,23 +638,27 @@ func TestForecastColumnStatistics(t *testing.T) {
 type testStat struct {
 	at, row, dist, null, size uint64
 	hist                      testHistogram
+	colID                     uint32
 }
 
-func (ts *testStat) toTableStatistic(name string, tableID int) *TableStatistic {
+func (ts *testStat) toTableStatistic(
+	name string, tableID int, columnIDs descpb.ColumnIDs, statID uint64, fullStatID uint64,
+) *TableStatistic {
 	if ts == nil {
 		return nil
 	}
 	stat := &TableStatistic{
 		TableStatisticProto: TableStatisticProto{
-			TableID:       catid.DescID(tableID),
-			StatisticID:   0,
-			Name:          name,
-			ColumnIDs:     []descpb.ColumnID{1},
-			CreatedAt:     testStatTime(ts.at),
-			RowCount:      ts.row,
-			DistinctCount: ts.dist,
-			NullCount:     ts.null,
-			AvgSize:       ts.size,
+			TableID:         catid.DescID(tableID),
+			StatisticID:     statID,
+			Name:            name,
+			ColumnIDs:       columnIDs,
+			CreatedAt:       testStatTime(ts.at),
+			RowCount:        ts.row,
+			DistinctCount:   ts.dist,
+			NullCount:       ts.null,
+			AvgSize:         ts.size,
+			FullStatisticID: fullStatID,
 		},
 	}
 	if ts.hist != nil {

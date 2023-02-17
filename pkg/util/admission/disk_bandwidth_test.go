@@ -15,7 +15,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
@@ -33,7 +33,7 @@ func TestDiskLoadWatcher(t *testing.T) {
 			diskLoadLevelString(level))
 	}
 
-	datadriven.RunTest(t, testutils.TestDataPath(t, "disk_load_watcher"),
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "disk_load_watcher"),
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "init":
@@ -67,7 +67,7 @@ func TestDiskBandwidthLimiter(t *testing.T) {
 		return string(redact.Sprint(&dbl))
 	}
 
-	datadriven.RunTest(t, testutils.TestDataPath(t, "disk_bandwidth_limiter"),
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "disk_bandwidth_limiter"),
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "init":

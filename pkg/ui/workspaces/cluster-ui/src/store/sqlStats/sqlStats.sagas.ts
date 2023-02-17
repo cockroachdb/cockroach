@@ -10,8 +10,6 @@
 
 import { PayloadAction } from "@reduxjs/toolkit";
 import { all, call, put, takeLatest, takeEvery } from "redux-saga/effects";
-import Long from "long";
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import {
   getCombinedStatements,
   StatementsRequest,
@@ -23,7 +21,8 @@ import {
   UpdateTimeScalePayload,
 } from "./sqlStats.reducer";
 import { actions as sqlDetailsStatsActions } from "../statementDetails/statementDetails.reducer";
-import { toRoundedDateRange } from "../../timeScaleDropdown";
+import { actions as stmtInsightActions } from "../insights/statementInsights";
+import { actions as txnInsightActions } from "../insights/transactionInsights";
 
 export function* refreshSQLStatsSaga(action: PayloadAction<StatementsRequest>) {
   yield put(sqlStatsActions.request(action.payload));
@@ -50,14 +49,11 @@ export function* updateSQLStatsTimeScaleSaga(
       value: ts,
     }),
   );
-  const [start, end] = toRoundedDateRange(ts);
-  const req = new cockroach.server.serverpb.StatementsRequest({
-    combined: true,
-    start: Long.fromNumber(start.unix()),
-    end: Long.fromNumber(end.unix()),
-  });
-  yield put(sqlStatsActions.invalidated());
-  yield put(sqlStatsActions.refresh(req));
+  yield all([
+    put(sqlStatsActions.invalidated()),
+    put(stmtInsightActions.invalidated()),
+    put(txnInsightActions.invalidated()),
+  ]);
 }
 
 export function* resetSQLStatsSaga(action: PayloadAction<StatementsRequest>) {

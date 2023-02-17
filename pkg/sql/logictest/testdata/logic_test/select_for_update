@@ -466,3 +466,22 @@ statement ok
 ROLLBACK
 
 user root
+
+# Regression test for not propagating lock spans with leaf txns (#94290).
+statement ok
+CREATE TABLE t94290 (a INT, b INT, c INT, PRIMARY KEY(a), UNIQUE INDEX(b));
+INSERT INTO t94290 VALUES (1,2,3);
+
+# If the lock spans are not propagated, then the second query would take almost
+# 5 seconds.
+statement ok
+SET statement_timeout = '2s';
+
+statement ok
+SELECT * FROM t94290 WHERE b = 2 FOR UPDATE;
+
+statement ok
+SELECT * FROM t94290 WHERE b = 2 FOR UPDATE;
+
+statement ok
+RESET statement_timeout;

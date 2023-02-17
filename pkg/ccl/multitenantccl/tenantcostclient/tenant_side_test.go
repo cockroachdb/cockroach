@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -67,7 +68,7 @@ import (
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	datadriven.Walk(t, testutils.TestDataPath(t), func(t *testing.T, path string) {
+	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 		defer leaktest.AfterTest(t)()
 		defer log.Scope(t).Close(t)
 
@@ -163,11 +164,12 @@ func (ts *testState) stop() {
 }
 
 type cmdArgs struct {
-	count  int64
-	bytes  int64
-	repeat int64
-	label  string
-	wait   bool
+	count        int64
+	bytes        int64
+	repeat       int64
+	label        string
+	wait         bool
+	ruMultiplier float64
 }
 
 func parseBytesVal(arg datadriven.CmdArg) (int64, error) {
@@ -230,6 +232,16 @@ func parseArgs(t *testing.T, d *datadriven.TestData) cmdArgs {
 			default:
 				d.Fatalf(t, "invalid wait value")
 			}
+
+		case "ruMultiplier":
+			if len(args.Vals) != 1 {
+				d.Fatalf(t, "expected one value for ruMultiplier")
+			}
+			val, err := strconv.ParseFloat(args.Vals[0], 64)
+			if err != nil {
+				d.Fatalf(t, "invalid ruMultiplier value")
+			}
+			res.ruMultiplier = val
 		}
 	}
 	return res
@@ -299,17 +311,27 @@ func (ts *testState) request(
 		repeat = 1
 	}
 
-	for ; repeat > 0; repeat-- {
-		var writeCount, readCount, writeBytes, readBytes int64
-		if isWrite {
-			writeCount = args.count
-			writeBytes = args.bytes
-		} else {
-			readCount = args.count
-			readBytes = args.bytes
+	var writeCount, readCount, writeBytes, readBytes int64
+	var writeRUMultiplier, readRUMultiplier tenantcostmodel.RUMultiplier
+	if isWrite {
+		writeCount = args.count
+		writeBytes = args.bytes
+		writeRUMultiplier = tenantcostmodel.RUMultiplier(args.ruMultiplier)
+		if writeRUMultiplier == 0 {
+			writeRUMultiplier = 1
 		}
-		reqInfo := tenantcostmodel.TestingRequestInfo(1, writeCount, writeBytes)
-		respInfo := tenantcostmodel.TestingResponseInfo(!isWrite, readCount, readBytes)
+	} else {
+		readCount = args.count
+		readBytes = args.bytes
+		readRUMultiplier = tenantcostmodel.RUMultiplier(args.ruMultiplier)
+		if readRUMultiplier == 0 {
+			readRUMultiplier = 1
+		}
+	}
+	reqInfo := tenantcostmodel.TestingRequestInfo(1, writeCount, writeBytes, writeRUMultiplier)
+	respInfo := tenantcostmodel.TestingResponseInfo(!isWrite, readCount, readBytes, readRUMultiplier)
+
+	for ; repeat > 0; repeat-- {
 		ts.runOperation(t, d, args.label, func() {
 			if err := ts.controller.OnRequestWait(ctx); err != nil {
 				t.Errorf("OnRequestWait error: %v", err)
@@ -765,7 +787,7 @@ func TestWaitingRU(t *testing.T) {
 
 	// Immediately consume the initial 10K RUs.
 	require.NoError(t, ctrl.OnResponseWait(ctx,
-		tenantcostmodel.TestingRequestInfo(1, 1, 10237952), tenantcostmodel.ResponseInfo{}))
+		tenantcostmodel.TestingRequestInfo(1, 1, 10237952, 1), tenantcostmodel.ResponseInfo{}))
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
@@ -783,8 +805,8 @@ func TestWaitingRU(t *testing.T) {
 	// Send 20 KV requests for 1K RU each.
 	const count = 20
 	const fillRate = 100
-	req := tenantcostmodel.TestingRequestInfo(1, 1, 1021952)
-	resp := tenantcostmodel.TestingResponseInfo(false, 0, 0)
+	req := tenantcostmodel.TestingRequestInfo(1, 1, 1021952, 1)
+	resp := tenantcostmodel.TestingResponseInfo(false, 0, 0, 0)
 
 	testutils.SucceedsSoon(t, func() error {
 		tenantcostclient.TestingSetRate(ctrl, fillRate)
@@ -830,9 +852,10 @@ func TestWaitingRU(t *testing.T) {
 				timeSource.Now(), timesToString(timeSource.Timers()))
 		}, timeout)
 
+		const allowedDelta = 0.01
 		available := tenantcostclient.TestingAvailableRU(ctrl)
 		if succeeded {
-			require.Equal(t, tenantcostmodel.RU(0), available)
+			require.InDelta(t, 0, float64(available), allowedDelta)
 			return nil
 		}
 

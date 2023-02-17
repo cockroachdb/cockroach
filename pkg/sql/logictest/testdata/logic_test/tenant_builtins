@@ -3,7 +3,7 @@ query IBIT colnames
 SELECT id, active, length(info), name FROM system.tenants ORDER BY id
 ----
 id  active  length  name
-1   true    16      system
+1   true    10      system
 
 # Create three tenants.
 
@@ -11,6 +11,11 @@ query I
 SELECT crdb_internal.create_tenant(5)
 ----
 5
+
+# create_tenant auto-sets the service for backward-compatibility.
+# Reset it here so the tests below don't get confused.
+statement ok
+ALTER TENANT [5] STOP SERVICE
 
 query error invalid tenant name
 SELECT crdb_internal.create_tenant(10, 'ABC')
@@ -31,22 +36,21 @@ SELECT crdb_internal.create_tenant('tenant-number-eleven')
 ----
 2
 
-query IBTT colnames
-SELECT id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true)
+query IBTIIT colnames
+SELECT id, active, name, data_state, service_mode,
+       crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true)
 FROM system.tenants
 ORDER BY id
 ----
-id  active  name                  crdb_internal.pb_to_json
-1   true    system                {"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-2   true    tenant-number-eleven  {"droppedName": "", "id": "2", "name": "tenant-number-eleven", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-5   true    NULL                  {"droppedName": "", "id": "5", "name": "", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-10  true    tenant-number-ten     {"droppedName": "", "id": "10", "name": "tenant-number-ten", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+id  active  name                  data_state  service_mode  crdb_internal.pb_to_json
+1   true    system                1           2             {"capabilities": {"canAdminSplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false}, "deprecatedDataState": "READY", "deprecatedId": "1", "droppedName": "", "tenantReplicationJobId": "0"}
+2   true    tenant-number-eleven  1           0             {"capabilities": {"canAdminSplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false}, "deprecatedDataState": "READY", "deprecatedId": "2", "droppedName": "", "tenantReplicationJobId": "0"}
+5   true    tenant-5              1           0             {"capabilities": {"canAdminSplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false}, "deprecatedDataState": "READY", "deprecatedId": "5", "droppedName": "", "tenantReplicationJobId": "0"}
+10  true    tenant-number-ten     1           0             {"capabilities": {"canAdminSplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false}, "deprecatedDataState": "READY", "deprecatedId": "10", "droppedName": "", "tenantReplicationJobId": "0"}
 
 # Check we can add a name where none existed before.
-query I
-SELECT crdb_internal.rename_tenant(5, 'my-tenant')
-----
-5
+statement ok
+ALTER TENANT [5] RENAME TO "my-tenant"
 
 query IBT colnames
 SELECT id, active, name FROM system.tenants ORDER BY id
@@ -59,29 +63,27 @@ id  active  name
 
 
 # Check we can change the name when there was one before.
-query I
-SELECT crdb_internal.rename_tenant(5, 'my-new-tenant-name')
-----
-5
+statement ok
+ALTER TENANT [5] RENAME TO "my-new-tenant-name"
 
-query error invalid tenant name
-SELECT crdb_internal.rename_tenant(5, 'AAA')
+statement error invalid tenant name
+ALTER TENANT [5] RENAME TO 'AAA'
 
-query error invalid tenant name
-SELECT crdb_internal.rename_tenant(5, '-a-')
+statement error invalid tenant name
+ALTER TENANT [5] RENAME TO '-a-'
 
-query error invalid tenant name
-SELECT crdb_internal.rename_tenant(5, '11111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111')
+statement error invalid tenant name
+ALTER TENANT [5] RENAME TO '11111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111'
 
-query error invalid tenant name
-SELECT crdb_internal.rename_tenant(5, 'invalid_name')
+statement error invalid tenant name
+ALTER TENANT [5] RENAME TO 'invalid_name'
 
-query error invalid tenant name
-SELECT crdb_internal.rename_tenant(5, 'invalid.name')
+statement error invalid tenant name
+ALTER TENANT [5] RENAME TO 'invalid.name'
 
 # Check for duplicate names.
-query error name "tenant-number-ten" is already taken
-SELECT crdb_internal.rename_tenant(5, 'tenant-number-ten')
+statement error name "tenant-number-ten" is already taken
+ALTER TENANT [5] RENAME TO 'tenant-number-ten'
 
 query error tenant with name "tenant-number-eleven" already exists
 SELECT crdb_internal.create_tenant('tenant-number-eleven')
@@ -97,37 +99,36 @@ id  active  name
 
 # Garbage collect a non-drop tenant fails.
 
-query error tenant 5 is not in state DROP
+query error tenant 5 is not in data state DROP
 SELECT crdb_internal.gc_tenant(5)
 
 # Note this just marks the tenant as dropped but does not call GC.
 
-query I
-SELECT crdb_internal.destroy_tenant(5)
-----
-5
+statement ok
+DROP TENANT [5]
 
-query IBTT colnames
-SELECT id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true)
+query IBTIIT colnames
+SELECT id, active, name, data_state, service_mode,
+       crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true)
 FROM system.tenants
 ORDER BY id
 ----
-id  active  name                  crdb_internal.pb_to_json
-1   true    system                {"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-2   true    tenant-number-eleven  {"droppedName": "", "id": "2", "name": "tenant-number-eleven", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-5   false   NULL                  {"droppedName": "my-new-tenant-name", "id": "5", "name": "", "state": "DROP", "tenantReplicationJobId": "0"}
-10  true    tenant-number-ten     {"droppedName": "", "id": "10", "name": "tenant-number-ten", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+id  active  name                  data_state  service_mode  crdb_internal.pb_to_json
+1   true    system                1           2             {"capabilities": {"canAdminSplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false}, "deprecatedDataState": "READY", "deprecatedId": "1", "droppedName": "", "tenantReplicationJobId": "0"}
+2   true    tenant-number-eleven  1           0             {"capabilities": {"canAdminSplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false}, "deprecatedDataState": "READY", "deprecatedId": "2", "droppedName": "", "tenantReplicationJobId": "0"}
+5   false   NULL                  2           0             {"capabilities": {"canAdminSplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false}, "deprecatedDataState": "DROP", "deprecatedId": "5", "droppedName": "my-new-tenant-name", "tenantReplicationJobId": "0"}
+10  true    tenant-number-ten     1           0             {"capabilities": {"canAdminSplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false}, "deprecatedDataState": "READY", "deprecatedId": "10", "droppedName": "", "tenantReplicationJobId": "0"}
 
 
 # Try to recreate an existing tenant.
 # GC job for tenant 5 has not run yet.
-query error pgcode 42710 tenant "5" already exists
+query error pgcode 42710 a tenant with ID 5 or with name "tenant-5" already exists
 SELECT crdb_internal.create_tenant(5)
 
-query error pgcode 42710 tenant "10" already exists
+query error pgcode 42710 a tenant with ID 10 or with name "tenant-10" already exists
 SELECT crdb_internal.create_tenant(10)
 
-query error pgcode 42710 tenant "11" with name "tenant-number-ten" already exists
+query error pgcode 42710 a tenant with ID 11 or with name "tenant-number-ten" already exists
 SELECT crdb_internal.create_tenant(11, 'tenant-number-ten')
 
 # Try to manipulate system.tenants directly as the root user.
@@ -149,11 +150,11 @@ DELETE FROM system.tenants WHERE id = 10
 query error pgcode 22023 cannot create tenant "1", ID assigned to system tenant
 SELECT crdb_internal.create_tenant(1)
 
-query error pgcode 22023 cannot rename tenant "1", ID assigned to system tenant
-SELECT crdb_internal.rename_tenant(1, 'hello')
+statement error pgcode 22023 cannot rename tenant "1", ID assigned to system tenant
+ALTER TENANT [1] RENAME TO hello
 
-query error pgcode 22023 cannot destroy tenant "1", ID assigned to system tenant
-SELECT crdb_internal.destroy_tenant(1)
+statement error pgcode 22023 cannot destroy tenant "1", ID assigned to system tenant
+DROP TENANT [1]
 
 # Verify that tenants are able to set in-memory cluster settings in logic tests.
 
@@ -179,12 +180,12 @@ query TT
 SHOW ZONE CONFIGURATION FOR RANGE tenants
 ----
 RANGE default  ALTER RANGE default CONFIGURE ZONE USING
-               range_min_bytes = 134217728,
-               range_max_bytes = 536870912,
-               gc.ttlseconds = 90000,
-               num_replicas = 3,
-               constraints = '[]',
-               lease_preferences = '[]'
+                 range_min_bytes = 134217728,
+                 range_max_bytes = 536870912,
+                 gc.ttlseconds = 14400,
+                 num_replicas = 3,
+                 constraints = '[]',
+                 lease_preferences = '[]'
 
 statement ok
 ALTER RANGE tenants CONFIGURE ZONE USING gc.ttlseconds = 1
@@ -214,18 +215,19 @@ SELECT status FROM [
 ----
 succeeded
 
-query error pgcode 42704 tenant "5" does not exist
-SELECT crdb_internal.destroy_tenant(5)
+statement error pgcode 42704 tenant "5" does not exist
+DROP TENANT [5]
 
-query IBT colnames
-SELECT id, active, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true)
+query IBTIIT colnames
+SELECT id, active, name, data_state, service_mode,
+       crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true)
 FROM system.tenants
 ORDER BY id
 ----
-id  active  crdb_internal.pb_to_json
-1   true    {"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-2   true    {"droppedName": "", "id": "2", "name": "tenant-number-eleven", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-10  true    {"droppedName": "", "id": "10", "name": "tenant-number-ten", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+id  active  name                  data_state  service_mode  crdb_internal.pb_to_json
+1   true    system                1           2             {"capabilities": {"canAdminSplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false}, "deprecatedDataState": "READY", "deprecatedId": "1", "droppedName": "", "tenantReplicationJobId": "0"}
+2   true    tenant-number-eleven  1           0             {"capabilities": {"canAdminSplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false}, "deprecatedDataState": "READY", "deprecatedId": "2", "droppedName": "", "tenantReplicationJobId": "0"}
+10  true    tenant-number-ten     1           0             {"capabilities": {"canAdminSplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false}, "deprecatedDataState": "READY", "deprecatedId": "10", "droppedName": "", "tenantReplicationJobId": "0"}
 
 query error tenant resource limits require a CCL binary
 SELECT crdb_internal.update_tenant_resource_limits(10, 1000, 100, 0, now(), 0)
@@ -238,8 +240,8 @@ SELECT crdb_internal.create_tenant(314)
 statement error only users with the admin role are allowed to create tenant
 SELECT crdb_internal.create_tenant('not-allowed')
 
-statement error only users with the admin role are allowed to destroy tenant
-SELECT crdb_internal.destroy_tenant(314)
+statement error only users with the admin role are allowed to drop tenant
+DROP TENANT [1]
 
 statement error only users with the admin role are allowed to gc tenant
 SELECT crdb_internal.gc_tenant(314)

@@ -12,7 +12,6 @@ go_library(
         "ambiguous_result_error.go",
         "api.go",
         "api_requestheader.go",
-        "app_stats.go",
         "batch.go",
         "data.go",
         "errors.go",
@@ -35,9 +34,11 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/roachpb",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/base/serverident",
         "//pkg/geo/geopb",
         "//pkg/keysbase",
         "//pkg/kv/kvnemesis/kvnemesisutil",
+        "//pkg/kv/kvserver/allocator/load",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/storage/enginepb",
         "//pkg/util",
@@ -51,6 +52,7 @@ go_library(
         "//pkg/util/interval",
         "//pkg/util/log",
         "//pkg/util/protoutil",
+        "//pkg/util/syncutil",
         "//pkg/util/timetz",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_apd_v3//:apd",
@@ -70,7 +72,6 @@ go_test(
     size = "small",
     srcs = [
         "api_test.go",
-        "app_stats_test.go",
         "batch_test.go",
         "data_test.go",
         "errors_test.go",
@@ -80,6 +81,7 @@ go_test(
         "metadata_replicas_test.go",
         "metadata_test.go",
         "replica_unavailable_error_test.go",
+        "span_config_conformance_report_test.go",
         "span_group_test.go",
         "string_test.go",
         "tenant_test.go",
@@ -131,7 +133,6 @@ proto_library(
     name = "roachpb_proto",
     srcs = [
         "api.proto",
-        "app_stats.proto",
         "data.proto",
         "errors.proto",
         "index_usage_stats.proto",
@@ -140,6 +141,7 @@ proto_library(
         "io-formats.proto",
         "metadata.proto",
         "span_config.proto",
+        "span_stats.proto",
     ],
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
@@ -147,6 +149,7 @@ proto_library(
         "//pkg/kv/kvserver/concurrency/lock:lock_proto",
         "//pkg/kv/kvserver/readsummary/rspb:rspb_proto",
         "//pkg/settings:settings_proto",
+        "//pkg/sql/catalog/fetchpb:fetchpb_proto",
         "//pkg/storage/enginepb:enginepb_proto",
         "//pkg/util:util_proto",
         "//pkg/util/admission/admissionpb:admissionpb_proto",
@@ -156,6 +159,7 @@ proto_library(
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
         "@com_google_protobuf//:duration_proto",
         "@com_google_protobuf//:timestamp_proto",
+        "@go_googleapis//google/api:annotations_proto",
     ],
 )
 
@@ -169,6 +173,7 @@ go_proto_library(
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/readsummary/rspb",
         "//pkg/settings",
+        "//pkg/sql/catalog/fetchpb",
         "//pkg/storage/enginepb",
         "//pkg/util",
         "//pkg/util/admission/admissionpb",
@@ -176,6 +181,7 @@ go_proto_library(
         "//pkg/util/tracing/tracingpb",
         "@com_github_cockroachdb_errors//errorspb",
         "@com_github_gogo_protobuf//gogoproto",
+        "@org_golang_google_genproto//googleapis/api/annotations:go_default_library",
     ],
 )
 

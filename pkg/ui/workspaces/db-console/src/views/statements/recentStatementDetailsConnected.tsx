@@ -21,6 +21,7 @@ import {
   selectRecentStatement,
   selectContentionDetailsForStatement,
 } from "src/selectors";
+import { selectHasAdminRole } from "src/redux/user";
 
 export default withRouter(
   connect<
@@ -32,6 +33,7 @@ export default withRouter(
       match: props.match,
       statement: selectRecentStatement(state, props),
       contentionDetails: selectContentionDetailsForStatement(state, props),
+      hasAdminRole: selectHasAdminRole(state),
     }),
     { refreshLiveWorkload },
   )(RecentStatementDetails),

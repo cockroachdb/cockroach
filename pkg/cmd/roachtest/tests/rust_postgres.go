@@ -126,7 +126,10 @@ func registerRustPostgres(r registry.Registry) {
 		// We stop the cluster and restart with a port of 5433 since Rust postgres
 		// has all of it's test hardcoded to use that port.
 		c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.All())
-		startOpts := option.DefaultStartOpts()
+
+		// Don't restart the cluster with automatic scheduled backups because roachprod's internal sql
+		// interface, through which the scheduled backup executes, is naive to the port change.
+		startOpts := option.DefaultStartOptsNoBackups()
 		startOpts.RoachprodOpts.ExtraArgs = []string{"--port=5433"}
 		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.All())
 
@@ -163,7 +166,7 @@ func registerRustPostgres(r registry.Registry) {
 
 	r.Add(registry.TestSpec{
 		Name:    "rust-postgres",
-		Owner:   registry.OwnerSQLExperience,
+		Owner:   registry.OwnerSQLSessions,
 		Cluster: r.MakeClusterSpec(1, spec.CPU(16)),
 		Tags:    []string{`default`, `orm`},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

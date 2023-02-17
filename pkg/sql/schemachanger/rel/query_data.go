@@ -13,7 +13,7 @@ package rel
 import (
 	"reflect"
 
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 )
 
 type slotIdx uint16
@@ -129,7 +129,7 @@ func (s *slot) reset() {
 }
 
 func maybeSet(
-	slots []slot, idx slotIdx, tv typedValue, set *util.FastIntSet,
+	slots []slot, idx slotIdx, tv typedValue, set *intsets.Fast,
 ) (foundContradiction bool) {
 	s := &slots[idx]
 

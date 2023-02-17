@@ -16,7 +16,7 @@ DEST="$2"
 BAZEL_BIN=$(bazel info bazel-bin --config ci)
 
 bazel run @go_sdk//:bin/go get "github.com/cockroachdb/pebble@$PEBBLE_BRANCH"
-NEW_DEPS_BZL_CONTENT=$(bazel run //pkg/cmd/mirror)
+NEW_DEPS_BZL_CONTENT=$(bazel run //pkg/cmd/mirror/go:mirror)
 echo "$NEW_DEPS_BZL_CONTENT" > DEPS.bzl
 
 # Use the Pebble SHA from the version in the modified go.mod file.

@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -121,8 +122,7 @@ func Split(ctx context.Context, db *gosql.DB, table workload.Table, concurrency 
 
 	// Test that we can actually perform a scatter.
 	if _, err := db.Exec("ALTER TABLE system.jobs SCATTER"); err != nil {
-		if strings.Contains(err.Error(), "not fully contained in tenant") ||
-			strings.Contains(err.Error(), "request [1 AdmScatter] not permitted") {
+		if strings.Contains(err.Error(), "tenant cluster setting sql.scatter.allow_for_secondary_tenant.enabled disabled") {
 			log.Infof(ctx, `skipping workload splits; can't scatter on tenants'`)
 			//nolint:returnerrcheck
 			return nil
@@ -165,7 +165,7 @@ func Split(ctx context.Context, db *gosql.DB, table workload.Table, concurrency 
 					split := strings.Join(StringTuple(splitPoints[m]), `,`)
 
 					buf.Reset()
-					fmt.Fprintf(&buf, `ALTER TABLE %s SPLIT AT VALUES (%s)`, table.Name, split)
+					fmt.Fprintf(&buf, `ALTER TABLE %s SPLIT AT VALUES (%s)`, tree.NameString(table.Name), split)
 					// If you're investigating an error coming out of this Exec, see the
 					// HACK comment in ColBatchToRows for some context that may (or may
 					// not) help you.
@@ -181,7 +181,7 @@ func Split(ctx context.Context, db *gosql.DB, table workload.Table, concurrency 
 
 					buf.Reset()
 					fmt.Fprintf(&buf, `ALTER TABLE %s SCATTER FROM (%s) TO (%s)`,
-						table.Name, split, split)
+						tree.NameString(table.Name), split, split)
 					stmt = buf.String()
 					if _, err := db.Exec(stmt); err != nil {
 						// SCATTER can collide with normal replicate queue

@@ -18,9 +18,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention/txnidcache"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -46,13 +46,13 @@ func TestTransactionIDCache(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 
 	appName := "txnIDCacheTest"
-	expectedTxnIDToUUIDMapping := make(map[uuid.UUID]roachpb.TransactionFingerprintID)
+	expectedTxnIDToUUIDMapping := make(map[uuid.UUID]appstatspb.TransactionFingerprintID)
 	injector := runtimeHookInjector{}
 
 	injector.setHook(func(
 		sessionData *sessiondata.SessionData,
 		txnID uuid.UUID,
-		txnFingerprintID roachpb.TransactionFingerprintID,
+		txnFingerprintID appstatspb.TransactionFingerprintID,
 	) {
 		if strings.Contains(sessionData.ApplicationName, appName) {
 			expectedTxnIDToUUIDMapping[txnID] = txnFingerprintID
@@ -216,9 +216,9 @@ func TestTransactionIDCache(t *testing.T) {
 		injector.setHook(func(
 			sessionData *sessiondata.SessionData,
 			txnID uuid.UUID,
-			txnFingerprintID roachpb.TransactionFingerprintID) {
+			txnFingerprintID appstatspb.TransactionFingerprintID) {
 			if strings.Contains(sessionData.ApplicationName, appName) {
-				if txnFingerprintID != roachpb.InvalidTransactionFingerprintID {
+				if txnFingerprintID != appstatspb.InvalidTransactionFingerprintID {
 					txnIDCache.DrainWriteBuffer()
 
 					testutils.SucceedsWithin(t, func() error {
@@ -227,7 +227,7 @@ func TestTransactionIDCache(t *testing.T) {
 							return errors.Newf("expected provision txn fingerprint id to be found for "+
 								"txn(%s), but it was not", txnID)
 						}
-						if existingTxnFingerprintID != roachpb.InvalidTransactionFingerprintID {
+						if existingTxnFingerprintID != appstatspb.InvalidTransactionFingerprintID {
 							return errors.Newf("expected txn (%s) to have a provisional"+
 								"txn fingerprint id, but this txn already has a resolved "+
 								"txn fingerprint id: %d", txnID, existingTxnFingerprintID)
@@ -268,11 +268,11 @@ func TestInvalidTxnID(t *testing.T) {
 	inputData := []contentionpb.ResolvedTxnID{
 		{
 			TxnID:            uuid.FastMakeV4(),
-			TxnFingerprintID: roachpb.TransactionFingerprintID(1),
+			TxnFingerprintID: appstatspb.TransactionFingerprintID(1),
 		},
 		{
 			TxnID:            uuid.FastMakeV4(),
-			TxnFingerprintID: roachpb.TransactionFingerprintID(2),
+			TxnFingerprintID: appstatspb.TransactionFingerprintID(2),
 		},
 	}
 
@@ -316,14 +316,14 @@ type runtimeHookInjector struct {
 	op func(
 		sessionData *sessiondata.SessionData,
 		txnID uuid.UUID,
-		txnFingerprintID roachpb.TransactionFingerprintID,
+		txnFingerprintID appstatspb.TransactionFingerprintID,
 	)
 }
 
 func (s *runtimeHookInjector) hook(
 	sessionData *sessiondata.SessionData,
 	txnID uuid.UUID,
-	txnFingerprintID roachpb.TransactionFingerprintID,
+	txnFingerprintID appstatspb.TransactionFingerprintID,
 ) {
 	s.RLock()
 	defer s.RUnlock()
@@ -334,7 +334,7 @@ func (s *runtimeHookInjector) setHook(
 	op func(
 		sessionData *sessiondata.SessionData,
 		txnID uuid.UUID,
-		txnFingerprintID roachpb.TransactionFingerprintID,
+		txnFingerprintID appstatspb.TransactionFingerprintID,
 	),
 ) {
 	s.Lock()

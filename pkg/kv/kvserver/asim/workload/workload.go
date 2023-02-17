@@ -11,6 +11,7 @@
 package workload
 
 import (
+	"fmt"
 	"math/rand"
 	"sort"
 	"time"
@@ -172,25 +173,29 @@ type KeyGenerator interface {
 // do not necessarily need to be written before they may have a read issued
 // against them.
 type uniformGenerator struct {
-	cycle  int64
-	random *rand.Rand
+	min, max int64
+	random   *rand.Rand
 }
 
 // NewUniformKeyGen returns a key generator that generates keys with a
 // uniform distribution.
-func NewUniformKeyGen(cycle int64, rand *rand.Rand) KeyGenerator {
+func NewUniformKeyGen(min, max int64, rand *rand.Rand) KeyGenerator {
+	if max <= min {
+		panic(fmt.Sprintf("max (%d) must be greater than min (%d)", max, min))
+	}
 	return &uniformGenerator{
-		cycle:  cycle,
+		min:    min,
+		max:    max,
 		random: rand,
 	}
 }
 
 func (g *uniformGenerator) writeKey() int64 {
-	return g.random.Int63n(g.cycle)
+	return g.random.Int63n(g.max-g.min) + g.min
 }
 
 func (g *uniformGenerator) readKey() int64 {
-	return g.random.Int63n(g.cycle)
+	return g.random.Int63n(g.max-g.min) + g.min
 }
 
 func (g *uniformGenerator) rand() *rand.Rand {
@@ -201,32 +206,58 @@ func (g *uniformGenerator) rand() *rand.Rand {
 // do not necessarily need to be written before they may have a read issued
 // against them.
 type zipfianGenerator struct {
-	cycle  int64
-	random *rand.Rand
-	zipf   *rand.Zipf
+	min, max int64
+	random   *rand.Rand
+	zipf     *rand.Zipf
 }
 
 // NewZipfianKeyGen returns a key generator that generates reads and writes
 // following a Zipfian distribution. Where few keys are relatively frequent,
-// whilst the others are infrequently accessed. The generator generates values
-// k ∈ [0, cycle] such that P(k) is proportional to (v + k) ** (-s).
+// whilst the others are infrequently accessed. Cycle is defined as max-min.
+// The generator generates values k ∈ [0, cycle] such that P(k) is proportional
+// to (v + k) ** (-s).
 // Requirements: cycle > 0, s > 1, and v >= 1
-func NewZipfianKeyGen(cycle int64, s float64, v float64, random *rand.Rand) KeyGenerator {
+func NewZipfianKeyGen(min, max int64, s float64, v float64, random *rand.Rand) KeyGenerator {
+	if max <= min {
+		panic(fmt.Sprintf("max (%d) must be greater than min (%d)", max, min))
+	}
 	return &zipfianGenerator{
-		cycle:  cycle,
+		min:    min,
+		max:    max,
 		random: random,
-		zipf:   rand.NewZipf(random, s, v, uint64(cycle)),
+		zipf:   rand.NewZipf(random, s, v, uint64(max-min)),
 	}
 }
 
 func (g *zipfianGenerator) writeKey() int64 {
-	return int64(g.zipf.Uint64())
+	return int64(g.zipf.Uint64()) + g.min
 }
 
 func (g *zipfianGenerator) readKey() int64 {
-	return int64(g.zipf.Uint64())
+	return int64(g.zipf.Uint64()) + g.min
 }
 
 func (g *zipfianGenerator) rand() *rand.Rand {
 	return g.random
+}
+
+// TestCreateWorkloadGenerator creates a simple uniform workload generator that
+// will generate load events at the rate given. The read ratio is fixed to
+// 0.95.
+func TestCreateWorkloadGenerator(seed int64, start time.Time, rate int, keySpan int64) Generator {
+	readRatio := 0.95
+	minWriteSize := 128
+	maxWriteSize := 256
+	workloadRate := float64(rate)
+	r := rand.New(rand.NewSource(seed))
+
+	return NewRandomGenerator(
+		start,
+		seed,
+		NewUniformKeyGen(0, keySpan, r),
+		workloadRate,
+		readRatio,
+		maxWriteSize,
+		minWriteSize,
+	)
 }

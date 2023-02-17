@@ -16,7 +16,7 @@ import React from "react";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 
 import { ContendedExecution, ExecutionType } from "src/recentExecutions";
-import { capitalize, Duration } from "../util";
+import { capitalize, Duration, NO_SAMPLES_FOUND } from "../util";
 
 import { Heading } from "@cockroachlabs/ui-components";
 import { ExecutionContentionTable } from "../recentExecutions/recentTransactionsTable/execContentionTable";
@@ -89,7 +89,7 @@ export const WaitTimeInsightsPanel: React.FC<WaitTimeInsightsPanelProps> = ({
                     value={
                       waitTime
                         ? Duration(waitTime.asMilliseconds() * 1e6)
-                        : "no samples"
+                        : NO_SAMPLES_FOUND
                     }
                   />
                   {schemaName && (

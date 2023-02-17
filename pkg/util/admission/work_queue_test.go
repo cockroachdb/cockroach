@@ -21,7 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -181,7 +181,7 @@ func TestWorkQueueBasic(t *testing.T) {
 	var st *cluster.Settings
 	registry := metric.NewRegistry()
 	metrics := makeWorkQueueMetrics("", registry)
-	datadriven.RunTest(t, testutils.TestDataPath(t, "work_queue"),
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "work_queue"),
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "init":
@@ -454,13 +454,13 @@ func TestPriorityStates(t *testing.T) {
 		})
 }
 
-func tryScanWorkClass(t *testing.T, d *datadriven.TestData) workClass {
-	wc := regularWorkClass
+func tryScanWorkClass(t *testing.T, d *datadriven.TestData) admissionpb.WorkClass {
+	wc := admissionpb.RegularWorkClass
 	if d.HasArg("elastic") {
 		var b bool
 		d.ScanArgs(t, "elastic", &b)
 		if b {
-			wc = elasticWorkClass
+			wc = admissionpb.ElasticWorkClass
 		}
 	}
 	return wc
@@ -487,7 +487,7 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 		}
 	}
 	defer closeFn()
-	var tg [numWorkClasses]*testGranter
+	var tg [admissionpb.NumWorkClasses]*testGranter
 	var wrkMap workMap
 	var buf builderWithMu
 	var st *cluster.Settings
@@ -495,29 +495,29 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 		q.mu.Lock()
 		defer q.mu.Unlock()
 		return fmt.Sprintf("regular workqueue: %s\nelastic workqueue: %s\nstats:%+v\nestimates:%+v",
-			q.q[regularWorkClass].String(), q.q[elasticWorkClass].String(), q.mu.stats,
+			q.q[admissionpb.RegularWorkClass].String(), q.q[admissionpb.ElasticWorkClass].String(), q.mu.stats,
 			q.mu.estimates)
 	}
 
 	registry := metric.NewRegistry()
 	metrics := makeWorkQueueMetrics("", registry)
-	datadriven.RunTest(t, testutils.TestDataPath(t, "store_work_queue"),
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "store_work_queue"),
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "init":
 				closeFn()
-				tg[regularWorkClass] = &testGranter{name: " regular", buf: &buf}
-				tg[elasticWorkClass] = &testGranter{name: " elastic", buf: &buf}
+				tg[admissionpb.RegularWorkClass] = &testGranter{name: " regular", buf: &buf}
+				tg[admissionpb.ElasticWorkClass] = &testGranter{name: " elastic", buf: &buf}
 				opts := makeWorkQueueOptions(KVWork)
 				opts.usesTokens = true
 				opts.timeSource = timeutil.NewManualTime(timeutil.FromUnixMicros(0))
 				opts.disableEpochClosingGoroutine = true
 				st = cluster.MakeTestingClusterSettings()
 				q = makeStoreWorkQueue(log.MakeTestingAmbientContext(tracing.NewTracer()),
-					[numWorkClasses]granterWithStoreWriteDone{tg[regularWorkClass], tg[elasticWorkClass]},
+					[admissionpb.NumWorkClasses]granterWithStoreWriteDone{tg[admissionpb.RegularWorkClass], tg[admissionpb.ElasticWorkClass]},
 					st, metrics, opts).(*StoreWorkQueue)
-				tg[regularWorkClass].r = q.getRequesters()[regularWorkClass]
-				tg[elasticWorkClass].r = q.getRequesters()[elasticWorkClass]
+				tg[admissionpb.RegularWorkClass].r = q.getRequesters()[admissionpb.RegularWorkClass]
+				tg[admissionpb.ElasticWorkClass].r = q.getRequesters()[admissionpb.ElasticWorkClass]
 				wrkMap.resetMap()
 				return ""
 

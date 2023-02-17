@@ -79,6 +79,7 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 					},
 					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock": {
 						"Durability": {},
+						"Mode":       {},
 						"Strength":   {},
 						"WaitPolicy": {},
 					},
@@ -105,11 +106,9 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"ConnectionClass": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb": {
-						"ForeignKeyAction": {},
-						"JobID":            {},
+						"JobID": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb": {
-						"ConstraintType":               {},
 						"ConstraintValidity":           {},
 						"DescriptorMutation_Direction": {},
 						"DescriptorMutation_State":     {},
@@ -117,6 +116,12 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"DescriptorVersion":            {},
 						"IndexDescriptorVersion":       {},
 						"MutationID":                   {},
+					},
+					"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants": {
+						"ConstraintType": {},
+					},
+					"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb": {
+						"ForeignKeyAction": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph": {
 						"RuleName": {},

@@ -314,7 +314,7 @@ func (m *movr) Ops(
 	}
 	worker := movrWorker{
 		db:           db,
-		rng:          rand.New(rand.NewSource(m.seed)),
+		rng:          rand.New(rand.NewSource(RandomSeed.Seed())),
 		faker:        m.faker,
 		creationTime: m.creationTime,
 		activeRides:  []rideInfo{},

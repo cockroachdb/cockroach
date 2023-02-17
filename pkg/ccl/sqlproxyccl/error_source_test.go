@@ -24,11 +24,11 @@ type fakeConn struct {
 	writeError error
 }
 
-func (conn *fakeConn) Read(b []byte) (n int, err error) {
+func (conn *fakeConn) Read(_ []byte) (n int, err error) {
 	return conn.size, conn.readError
 }
 
-func (conn *fakeConn) Write(b []byte) (n int, err error) {
+func (conn *fakeConn) Write(_ []byte) (n int, err error) {
 	return conn.size, conn.writeError
 }
 
@@ -43,17 +43,11 @@ func TestWrapConnectionError(t *testing.T) {
 		{errClientWrite, codeClientWriteFailed},
 		{errServerRead, codeBackendReadFailed},
 		{errServerWrite, codeBackendWriteFailed},
-		{errors.New("some random error"), 0},
+		{errors.New("some random error"), codeNone},
 	}
 	for _, tc := range tests {
-		var code errorCode
 		err := wrapConnectionError(errors.Mark(errors.New("some inner error"), tc.marker))
-		if err != nil {
-			codeErr := &codeError{}
-			require.True(t, errors.As(err, &codeErr))
-			code = codeErr.code
-		}
-		require.Equal(t, code, tc.code)
+		require.Equal(t, tc.code, getErrorCode(err))
 	}
 }
 

@@ -60,6 +60,8 @@ type PrettyCfg struct {
 	// JSONFmt, when set, pretty-prints strings that are asserted or cast
 	// to JSON.
 	JSONFmt bool
+	// ValueRedaction, when set, surrounds literal values with redaction markers.
+	ValueRedaction bool
 }
 
 // DefaultPrettyCfg returns a PrettyCfg with the default
@@ -177,7 +179,10 @@ func (p *PrettyCfg) Doc(f NodeFormatter) pretty.Doc {
 }
 
 func (p *PrettyCfg) docAsString(f NodeFormatter) pretty.Doc {
-	const prettyFlags = FmtShowPasswords | FmtParsable
+	prettyFlags := FmtShowPasswords | FmtParsable
+	if p.ValueRedaction {
+		prettyFlags |= FmtMarkRedactionNode | FmtOmitNameRedaction
+	}
 	txt := AsStringWithFlags(f, prettyFlags)
 	return pretty.Text(strings.TrimSpace(txt))
 }
@@ -651,11 +656,11 @@ func (node *With) docRow(p *PrettyCfg) pretty.TableRow {
 	d := make([]pretty.Doc, len(node.CTEList))
 	for i, cte := range node.CTEList {
 		asString := "AS"
-		if cte.Mtr.Set {
-			if !cte.Mtr.Materialize {
-				asString += " NOT"
-			}
+		switch cte.Mtr {
+		case CTEMaterializeAlways:
 			asString += " MATERIALIZED"
+		case CTEMaterializeNever:
+			asString += " NOT MATERIALIZED"
 		}
 		d[i] = p.nestUnder(
 			p.Doc(&cte.Name),
@@ -1005,8 +1010,8 @@ func (node *Insert) doc(p *PrettyCfg) pretty.Doc {
 
 func (node *NameList) doc(p *PrettyCfg) pretty.Doc {
 	d := make([]pretty.Doc, len(*node))
-	for i, n := range *node {
-		d[i] = p.Doc(&n)
+	for i := range *node {
+		d[i] = p.Doc(&(*node)[i])
 	}
 	return p.commaSeparated(d...)
 }
@@ -1116,8 +1121,9 @@ func (node *Tuple) doc(p *PrettyCfg) pretty.Doc {
 	d := p.bracket("(", exprDoc, ")")
 	if len(node.Labels) > 0 {
 		labels := make([]pretty.Doc, len(node.Labels))
-		for i, n := range node.Labels {
-			labels[i] = p.Doc((*Name)(&n))
+		for i := range node.Labels {
+			n := &node.Labels[i]
+			labels[i] = p.Doc((*Name)(n))
 		}
 		d = p.bracket("(", pretty.Stack(
 			d,

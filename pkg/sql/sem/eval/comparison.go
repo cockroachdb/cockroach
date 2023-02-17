@@ -21,7 +21,7 @@ import (
 )
 
 // ComparisonExprWithSubOperator evaluates a comparison expression that has
-// sub-operator.
+// sub-operator (which are ANY, SOME, and ALL).
 func ComparisonExprWithSubOperator(
 	ctx context.Context, evalCtx *Context, expr *tree.ComparisonExpr, left, right tree.Datum,
 ) (tree.Datum, error) {
@@ -84,7 +84,7 @@ func evalDatumsCmp(
 	any := !all
 	sawNull := false
 	for _, elem := range right {
-		if elem == tree.DNull {
+		if left == tree.DNull || elem == tree.DNull {
 			sawNull = true
 			continue
 		}
@@ -137,7 +137,7 @@ func boolFromCmp(cmp int, op treecmp.ComparisonOperator) *tree.DBool {
 
 func cmpOpTupleFn(
 	ctx tree.CompareContext, left, right tree.DTuple, op treecmp.ComparisonOperator,
-) tree.Datum {
+) (tree.Datum, error) {
 	cmp := 0
 	sawNull := false
 	for i, leftElem := range left.D {
@@ -157,7 +157,7 @@ func cmpOpTupleFn(
 			case treecmp.IsNotDistinctFrom:
 				// For IS NOT DISTINCT FROM, NULLs are "equal".
 				if leftElem != tree.DNull || rightElem != tree.DNull {
-					return tree.DBoolFalse
+					return tree.DBoolFalse, nil
 				}
 
 			default:
@@ -166,10 +166,14 @@ func cmpOpTupleFn(
 				// NULL. This is because NULL is thought of as "unknown" and tuple
 				// inequality is defined lexicographically, so once a NULL comparison is
 				// seen, the result of the entire tuple comparison is unknown.
-				return tree.DNull
+				return tree.DNull, nil
 			}
 		} else {
-			cmp = leftElem.Compare(ctx, rightElem)
+			var err error
+			cmp, err = leftElem.CompareError(ctx, rightElem)
+			if err != nil {
+				return tree.DNull, err
+			}
 			if cmp != 0 {
 				break
 			}
@@ -180,7 +184,7 @@ func cmpOpTupleFn(
 		// The op is EQ and all non-NULL elements are equal, but we saw at least
 		// one NULL element. Since NULL comparisons are treated as unknown, the
 		// result of the comparison becomes unknown (NULL).
-		return tree.DNull
+		return tree.DNull, nil
 	}
-	return b
+	return b, nil
 }

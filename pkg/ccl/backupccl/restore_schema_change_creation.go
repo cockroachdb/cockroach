@@ -16,12 +16,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	descpb "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -121,7 +121,7 @@ func createTypeChangeJobFromDesc(
 	ctx context.Context,
 	jr *jobs.Registry,
 	codec keys.SQLCodec,
-	txn *kv.Txn,
+	txn isql.Txn,
 	user username.SQLUsername,
 	typ catalog.TypeDescriptor,
 ) error {
@@ -162,7 +162,7 @@ func createSchemaChangeJobsFromMutations(
 	ctx context.Context,
 	jr *jobs.Registry,
 	codec keys.SQLCodec,
-	txn *kv.Txn,
+	txn isql.Txn,
 	username username.SQLUsername,
 	tableDesc *tabledesc.Mutable,
 ) error {

@@ -30,11 +30,11 @@ import (
 	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/blobs/blobspb"
+	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -63,20 +63,19 @@ func (s *Service) GetStream(req *blobspb.GetRequest, stream blobspb.Blob_GetStre
 
 // PutStream implements the gRPC service.
 func (s *Service) PutStream(stream blobspb.Blob_PutStreamServer) error {
-	md, ok := metadata.FromIncomingContext(stream.Context())
+	filename, ok := grpcutil.FastFirstValueFromIncomingContext(stream.Context(), "filename")
 	if !ok {
-		return errors.New("could not fetch metadata")
+		return errors.New("could not fetch metadata or no filename in metadata")
 	}
-	filename := md.Get("filename")
-	if len(filename) < 1 || filename[0] == "" {
-		return errors.New("no filename in metadata")
+	if filename == "" {
+		return errors.New("invalid filename in metadata")
 	}
 	reader := newPutStreamReader(stream)
 	defer reader.Close(stream.Context())
 	ctx, cancel := context.WithCancel(stream.Context())
 	defer cancel()
 
-	w, err := s.localStorage.Writer(ctx, filename[0])
+	w, err := s.localStorage.Writer(ctx, filename)
 	if err != nil {
 		cancel()
 		return err

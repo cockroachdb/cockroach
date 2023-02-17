@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -55,7 +56,15 @@ func newDatumVec(t *types.T, n int, evalCtx *eval.Context) coldata.DatumVec {
 // Note that the method is named differently from "Compare" so that we do not
 // overload tree.Datum.Compare method.
 func CompareDatum(d, dVec, other interface{}) int {
-	return d.(tree.Datum).Compare(dVec.(*datumVec).evalCtx, convertToDatum(other))
+	// Note that it's not strictly necessary to use CompareError here instead of
+	// just Compare since pkg/sql/sem/eval is in the allow-list of paths that
+	// colexecerror catches panics from. Still, it seems nicer to be explicit
+	// about this.
+	res, err := d.(tree.Datum).CompareError(dVec.(*datumVec).evalCtx, convertToDatum(other))
+	if err != nil {
+		colexecerror.InternalError(err)
+	}
+	return res
 }
 
 // Hash returns the hash of the datum as a byte slice.
@@ -82,7 +91,9 @@ func (dv *datumVec) Get(i int) coldata.Datum {
 // Set implements coldata.DatumVec interface.
 func (dv *datumVec) Set(i int, v coldata.Datum) {
 	datum := convertToDatum(v)
-	dv.assertValidDatum(datum)
+	if buildutil.CrdbTestBuild {
+		dv.assertValidDatum(datum)
+	}
 	dv.data[i] = datum
 }
 
@@ -98,21 +109,27 @@ func (dv *datumVec) Window(start, end int) coldata.DatumVec {
 // CopySlice implements coldata.DatumVec interface.
 func (dv *datumVec) CopySlice(src coldata.DatumVec, destIdx, srcStartIdx, srcEndIdx int) {
 	castSrc := src.(*datumVec)
-	dv.assertSameTypeFamily(castSrc.t)
+	if buildutil.CrdbTestBuild {
+		dv.assertSameTypeFamily(castSrc.t)
+	}
 	copy(dv.data[destIdx:], castSrc.data[srcStartIdx:srcEndIdx])
 }
 
 // AppendSlice implements coldata.DatumVec interface.
 func (dv *datumVec) AppendSlice(src coldata.DatumVec, destIdx, srcStartIdx, srcEndIdx int) {
 	castSrc := src.(*datumVec)
-	dv.assertSameTypeFamily(castSrc.t)
+	if buildutil.CrdbTestBuild {
+		dv.assertSameTypeFamily(castSrc.t)
+	}
 	dv.data = append(dv.data[:destIdx], castSrc.data[srcStartIdx:srcEndIdx]...)
 }
 
 // AppendVal implements coldata.DatumVec interface.
 func (dv *datumVec) AppendVal(v coldata.Datum) {
 	datum := convertToDatum(v)
-	dv.assertValidDatum(datum)
+	if buildutil.CrdbTestBuild {
+		dv.assertValidDatum(datum)
+	}
 	dv.data = append(dv.data, datum)
 }
 

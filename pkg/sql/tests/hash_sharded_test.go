@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -30,11 +29,11 @@ import (
 func getShardColumnID(
 	t *testing.T, tableDesc catalog.TableDescriptor, shardedIndexName string,
 ) descpb.ColumnID {
-	idx, err := tableDesc.FindIndexWithName(shardedIndexName)
+	idx, err := catalog.MustFindIndexByName(tableDesc, shardedIndexName)
 	if err != nil {
 		t.Fatal(err)
 	}
-	shardCol, err := tableDesc.FindColumnWithName(tree.Name(idx.GetShardColumnName()))
+	shardCol, err := catalog.MustFindColumnByName(tableDesc, idx.GetShardColumnName())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +48,7 @@ func getShardColumnID(
 func verifyTableDescriptorState(
 	t *testing.T, tableDesc catalog.TableDescriptor, shardedIndexName string,
 ) {
-	idx, err := tableDesc.FindIndexWithName(shardedIndexName)
+	idx, err := catalog.MustFindIndexByName(tableDesc, shardedIndexName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,11 +60,7 @@ func verifyTableDescriptorState(
 	shardColID := getShardColumnID(t, tableDesc, shardedIndexName)
 	foundCheckConstraint := false
 	for _, check := range tableDesc.CheckConstraints() {
-		usesShard, err := tableDesc.CheckConstraintUsesColumn(check.CheckDesc(), shardColID)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if usesShard && check.IsHashShardingConstraint() {
+		if check.CollectReferencedColumnIDs().Contains(shardColID) && check.IsHashShardingConstraint() {
 			foundCheckConstraint = true
 			break
 		}
@@ -110,7 +105,7 @@ func TestBasicHashShardedIndexes(t *testing.T) {
 
 		// Ensure that secondary indexes on table `kv` have the shard column in their
 		// `KeySuffixColumnIDs` field so they can reconstruct the sharded primary key.
-		foo, err := tableDesc.FindIndexWithName("foo")
+		foo, err := catalog.MustFindIndexByName(tableDesc, "foo")
 		if err != nil {
 			t.Fatal(err)
 		}

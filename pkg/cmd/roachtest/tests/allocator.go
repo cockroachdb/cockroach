@@ -41,7 +41,9 @@ func registerAllocator(r registry.Registry) {
 
 		// Put away one node to be the stats collector.
 		nodes := c.Spec().NodeCount - 1
-		startOpts := option.DefaultStartOpts()
+
+		// Don't start scheduled backups in this perf sensitive test that reports to roachperf
+		startOpts := option.DefaultStartOptsNoBackups()
 		startOpts.RoachprodOpts.ExtraArgs = []string{"--vmodule=store_rebalancer=5,allocator=5,allocator_scorer=5,replicate_queue=5"}
 		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Range(1, start))
 		db := c.Conn(ctx, t.L(), 1)
@@ -122,12 +124,13 @@ func registerAllocator(r registry.Registry) {
 				return err
 			}
 			endTime := timeutil.Now()
-			err = statCollector.Exporter().Export(
+			_, err = statCollector.Exporter().Export(
 				ctx,
 				c,
 				t,
+				false, /* dryRun */
 				startTime, endTime,
-				joinSummaryQueries(actionsSummary, requestBalanceSummary, resourceBalanceSummary, snapshotCostSummary),
+				joinSummaryQueries(actionsSummary, requestBalanceSummary, resourceBalanceSummary, rebalanceCostSummary),
 				// NB: We record the time taken to reach balance, from when
 				// up-replication began, until the last rebalance action taken.
 				// The up replication time, is the time taken to up-replicate

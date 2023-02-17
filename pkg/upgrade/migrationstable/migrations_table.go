@@ -16,17 +16,15 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
 // MarkMigrationCompleted inserts a row in system.migrations.
-func MarkMigrationCompleted(
-	ctx context.Context, ie sqlutil.InternalExecutor, v roachpb.Version,
-) error {
+func MarkMigrationCompleted(ctx context.Context, ie isql.Executor, v roachpb.Version) error {
 	return markMigrationCompletedInner(ctx, ie, v, false /* ignoreExisting */)
 }
 
@@ -35,13 +33,13 @@ func MarkMigrationCompleted(
 // failing if the respective row already exists. If the row already exists, is
 // not changed.
 func MarkMigrationCompletedIdempotent(
-	ctx context.Context, ie sqlutil.InternalExecutor, v roachpb.Version,
+	ctx context.Context, ie isql.Executor, v roachpb.Version,
 ) error {
 	return markMigrationCompletedInner(ctx, ie, v, true /* ignoreExisting */)
 }
 
 func markMigrationCompletedInner(
-	ctx context.Context, ie sqlutil.InternalExecutor, v roachpb.Version, ignoreExisting bool,
+	ctx context.Context, ie isql.Executor, v roachpb.Version, ignoreExisting bool,
 ) error {
 	query := `
 	INSERT
@@ -93,7 +91,7 @@ func CheckIfMigrationCompleted(
 	ctx context.Context,
 	v roachpb.Version,
 	txn *kv.Txn,
-	ie sqlutil.InternalExecutor,
+	ex isql.Executor,
 	enterpriseEnabled bool,
 	staleOpt StaleReadOpt,
 ) (alreadyCompleted bool, _ error) {
@@ -117,7 +115,7 @@ SELECT count(*)
 		query = fmt.Sprintf(queryFormat, "")
 	}
 
-	row, err := ie.QueryRow(
+	row, err := ex.QueryRow(
 		ctx,
 		"migration-job-find-already-completed",
 		txn,

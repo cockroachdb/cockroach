@@ -72,7 +72,7 @@ func (r *Replica) executeReadOnlyBatch(
 	// TODO(irfansharif): It's unfortunate that in this read-only code path,
 	// we're stuck with a ReadWriter because of the way evaluateBatch is
 	// designed.
-	rw := r.store.Engine().NewReadOnly(storage.StandardDurability)
+	rw := r.store.TODOEngine().NewReadOnly(storage.StandardDurability)
 	if !rw.ConsistentIterators() {
 		// This is not currently needed for correctness, but future optimizations
 		// may start relying on this, so we assert here.
@@ -215,8 +215,8 @@ func (r *Replica) executeReadOnlyBatch(
 		log.VErrEventf(ctx, 3, "%v", pErr.String())
 	} else {
 		keysRead, bytesRead := getBatchResponseReadStats(br)
-		r.loadStats.readKeys.RecordCount(keysRead, 0)
-		r.loadStats.readBytes.RecordCount(bytesRead, 0)
+		r.loadStats.RecordReadKeys(keysRead)
+		r.loadStats.RecordReadBytes(bytesRead)
 		log.Event(ctx, "read completed")
 	}
 	return br, nil, nil, pErr
@@ -531,6 +531,9 @@ func (r *Replica) collectSpansRead(
 		resp := br.Responses[i].GetInner()
 
 		if ba.WaitPolicy == lock.WaitPolicy_SkipLocked && roachpb.CanSkipLocked(req) {
+			if ba.IndexFetchSpec != nil {
+				return nil, nil, errors.AssertionFailedf("unexpectedly IndexFetchSpec is set with SKIP LOCKED wait policy")
+			}
 			// If the request is using a SkipLocked wait policy, it behaves as if run
 			// at a lower isolation level for any keys that it skips over. If the read
 			// request did not return a key, it does not need to check for conflicts

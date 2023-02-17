@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -70,13 +71,14 @@ func TestRowDecoder(t *testing.T) {
 	rows, err := tc.Server(0).DB().Scan(ctx, k, k.PrefixEnd(), 0 /* maxRows */)
 	require.NoError(t, err)
 	dec := settingswatcher.MakeRowDecoder(keys.SystemSQLCodec)
+	var alloc *tree.DatumAlloc
 	for _, row := range rows {
 		kv := roachpb.KeyValue{
 			Key:   row.Key,
 			Value: *row.Value,
 		}
 
-		k, val, tombstone, err := dec.DecodeRow(kv)
+		k, val, tombstone, err := dec.DecodeRow(kv, alloc)
 		require.NoError(t, err)
 		require.False(t, tombstone)
 		if exp, ok := toSet[k]; ok {
@@ -88,7 +90,7 @@ func TestRowDecoder(t *testing.T) {
 		// Test the tombstone logic while we're here.
 		{
 			kv.Value.Reset()
-			tombstoneK, val, tombstone, err := dec.DecodeRow(kv)
+			tombstoneK, val, tombstone, err := dec.DecodeRow(kv, alloc)
 			require.NoError(t, err)
 			require.True(t, tombstone)
 			require.Equal(t, k, tombstoneK)

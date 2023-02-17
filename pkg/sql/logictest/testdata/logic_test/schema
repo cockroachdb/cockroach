@@ -37,6 +37,9 @@ CREATE SCHEMA information_schema
 statement error pq: unacceptable schema name \"pg_temp\"
 CREATE SCHEMA pg_temp
 
+statement error role/user "bob" does not exist
+CREATE SCHEMA sc AUTHORIZATION bob
+
 # Create some tables and types in a user defined schema, and resolve them.
 statement ok
 CREATE SCHEMA myschema;

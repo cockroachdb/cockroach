@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -145,11 +145,7 @@ RETURNING id;`).Scan(&secondID))
 	runErr := make(chan error)
 	go func() {
 		runErr <- tc.Server(0).JobRegistry().(*jobs.Registry).
-			Run(
-				ctx,
-				tc.Server(0).InternalExecutor().(sqlutil.InternalExecutor),
-				[]jobspb.JobID{secondID},
-			)
+			Run(ctx, []jobspb.JobID{secondID})
 	}()
 	fakeJobBlockChan := <-ch
 
@@ -174,7 +170,7 @@ RETURNING id;`).Scan(&secondID))
 	upgrade2Err := make(chan error, 1)
 	go func() {
 		// Use an internal executor to get access to the trace as it happens.
-		_, err := tc.Server(0).InternalExecutor().(sqlutil.InternalExecutor).Exec(
+		_, err := tc.Server(0).InternalExecutor().(isql.Executor).Exec(
 			recCtx, "test", nil /* txn */, `SET CLUSTER SETTING version = $1`, endCV.String())
 		upgrade2Err <- err
 	}()
@@ -234,7 +230,7 @@ func TestMigrateUpdatesReplicaVersion(t *testing.T) {
 						return upgrade.NewSystemUpgrade("test", cv, func(
 							ctx context.Context, version clusterversion.ClusterVersion, d upgrade.SystemDeps,
 						) error {
-							return d.DB.Migrate(ctx, desc.StartKey, desc.EndKey, cv)
+							return d.DB.KV().Migrate(ctx, desc.StartKey, desc.EndKey, cv)
 						}), true
 					},
 				},
@@ -305,23 +301,20 @@ func TestConcurrentMigrationAttempts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// We're going to be migrating from startKey to endKey. We end up needing
-	// to use real versions because the ListBetween uses the keys compiled into
-	// the clusterversion package.
-	const (
-		startMajor = 42
-		endMajor   = 48
-	)
-	migrationRunCounts := make(map[clusterversion.ClusterVersion]int)
+	// We're going to be migrating from the current version to imaginary future versions.
+	current := clusterversion.ByKey(clusterversion.BinaryVersionKey)
+	versions := []roachpb.Version{current}
+	for i := int32(1); i <= 6; i++ {
+		v := current
+		v.Major += i
+		versions = append(versions, v)
+	}
 
 	// RegisterKVMigration the upgrades to update the map with run counts.
 	// There should definitely not be any concurrency of execution, so the race
 	// detector should not fire.
-	var versions []roachpb.Version
+	migrationRunCounts := make(map[clusterversion.ClusterVersion]int)
 
-	for major := int32(startMajor); major <= endMajor; major++ {
-		versions = append(versions, roachpb.Version{Major: major})
-	}
 	ctx := context.Background()
 	var active int32 // used to detect races
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
@@ -516,7 +509,7 @@ func TestPrecondition(t *testing.T) {
 		version.Internal += 2
 		return version
 	}
-	v0 := clusterversion.ByKey(clusterversion.V22_1)
+	v0 := clusterversion.ByKey(clusterversion.TODODelete_V22_1)
 	v1 := next(v0)
 	v2 := next(v1)
 	versions := []roachpb.Version{v0, v1, v2}

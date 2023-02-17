@@ -82,7 +82,7 @@ message CommonChangefeedEventDetails {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
 
   // The description of that would show up in the job's description field, redacted
-  string description = 2 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) =  "redact:\"nonsensitive\""];
+  string description = 2 [(gogoproto.jsontag) = ",omitempty"];
 
   // The type of sink being emitted to (ex: kafka, nodelocal, webhook-https).
   string sink_type = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) =  "redact:\"nonsensitive\""];

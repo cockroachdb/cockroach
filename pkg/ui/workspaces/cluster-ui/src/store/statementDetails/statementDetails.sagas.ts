@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import { PayloadAction } from "@reduxjs/toolkit";
-import { all, call, put, delay, takeLatest } from "redux-saga/effects";
+import { all, call, put, takeLatest } from "redux-saga/effects";
 import {
   ErrorWithKey,
   getStatementDetails,
@@ -17,7 +17,6 @@ import {
   StatementDetailsResponseWithKey,
 } from "src/api/statementsApi";
 import { actions as sqlDetailsStatsActions } from "./statementDetails.reducer";
-import { CACHE_INVALIDATION_PERIOD } from "src/store/utils";
 import { generateStmtDetailsToID } from "../../util";
 
 export function* refreshSQLDetailsStatsSaga(
@@ -53,28 +52,9 @@ export function* requestSQLDetailsStatsSaga(
   }
 }
 
-export function receivedSQLDetailsStatsSagaFactory(delayMs: number) {
-  return function* receivedSQLDetailsStatsSaga(
-    action: PayloadAction<StatementDetailsResponseWithKey>,
-  ) {
-    yield delay(delayMs);
-    yield put(
-      sqlDetailsStatsActions.invalidated({
-        key: action?.payload.key,
-      }),
-    );
-  };
-}
-
-export function* sqlDetailsStatsSaga(
-  cacheInvalidationPeriod: number = CACHE_INVALIDATION_PERIOD,
-) {
+export function* sqlDetailsStatsSaga() {
   yield all([
     takeLatest(sqlDetailsStatsActions.refresh, refreshSQLDetailsStatsSaga),
     takeLatest(sqlDetailsStatsActions.request, requestSQLDetailsStatsSaga),
-    takeLatest(
-      sqlDetailsStatsActions.received,
-      receivedSQLDetailsStatsSagaFactory(cacheInvalidationPeriod),
-    ),
   ]);
 }

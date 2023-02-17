@@ -30,10 +30,10 @@ optimal plan:
 select
  ├── columns: k:1 i:2 s:3 geom1:4!null geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
  ├── immutable
- ├── cost: 1054.09
+ ├── cost: 1058.09
  ├── index-join t2
  │    ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
- │    ├── cost: 941.837778
+ │    ├── cost: 945.837778
  │    └── inverted-filter
  │         ├── columns: rowid:11!null
  │         ├── inverted expression: /14
@@ -72,7 +72,7 @@ select
  │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
  │         ├── pre-filterer expression
  │         │    └── st_coveredby('01010000C00000000000000000000000000000000000000000000000000000000000000000', geom1:4)
- │         ├── cost: 250.706667
+ │         ├── cost: 254.706667
  │         ├── key: (11)
  │         └── scan t2@_hyp_1
  │              ├── columns: rowid:11!null geom1_inverted_key:14!null
@@ -109,7 +109,7 @@ select
  │              │         ├── ["B\xfd\x10@\x00\x00\x00\x00\x00\x00", "B\xfd\x10@\x00\x00\x00\x00\x00\x00"]
  │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
  │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
- │              ├── cost: 249.575556
+ │              ├── cost: 253.575556
  │              ├── key: (11)
  │              └── fd: (11)-->(14)
  └── filters
@@ -130,10 +130,10 @@ optimal plan:
 select
  ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8!null geog2:9 inet1:10
  ├── immutable
- ├── cost: 1054.09
+ ├── cost: 1058.09
  ├── index-join t2
  │    ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
- │    ├── cost: 941.837778
+ │    ├── cost: 945.837778
  │    └── inverted-filter
  │         ├── columns: rowid:11!null
  │         ├── inverted expression: /14
@@ -172,7 +172,7 @@ select
  │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
  │         ├── pre-filterer expression
  │         │    └── st_covers('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', geom2:8)
- │         ├── cost: 250.706667
+ │         ├── cost: 254.706667
  │         ├── key: (11)
  │         └── scan t2@_hyp_1
  │              ├── columns: rowid:11!null geom2_inverted_key:14!null
@@ -209,7 +209,7 @@ select
  │              │         ├── ["B\xfd\x10@\x00\x00\x00\x00\x00\x00", "B\xfd\x10@\x00\x00\x00\x00\x00\x00"]
  │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
  │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
- │              ├── cost: 249.575556
+ │              ├── cost: 253.575556
  │              ├── key: (11)
  │              └── fd: (11)-->(14)
  └── filters
@@ -245,10 +245,10 @@ optimal plan:
 select
  ├── columns: k:1 i:2 s:3 geom1:4!null geog1:5 bbox1:6 bbox2:7 geom2:8!null geog2:9 inet1:10
  ├── immutable
- ├── cost: 2246.15
+ ├── cost: 2250.15
  ├── scan t2
  │    ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
- │    └── cost: 1236.12
+ │    └── cost: 1240.12
  └── filters
       └── st_coveredby(geom1:4, geom2:8) [outer=(4,8), immutable, constraints=(/4: (/NULL - ]; /8: (/NULL - ])]
 
@@ -274,10 +274,10 @@ optimal plan:
 select
  ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8!null geog2:9 inet1:10
  ├── immutable
- ├── cost: 12054.09
+ ├── cost: 12058.09
  ├── index-join t2
  │    ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
- │    ├── cost: 941.837778
+ │    ├── cost: 945.837778
  │    └── inverted-filter
  │         ├── columns: rowid:11!null
  │         ├── inverted expression: /14
@@ -316,7 +316,7 @@ select
  │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
  │         ├── pre-filterer expression
  │         │    └── st_coveredby('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', geom2:8)
- │         ├── cost: 250.706667
+ │         ├── cost: 254.706667
  │         ├── key: (11)
  │         └── scan t2@_hyp_1
  │              ├── columns: rowid:11!null geom2_inverted_key:14!null
@@ -353,7 +353,7 @@ select
  │              │         ├── ["B\xfd\x10@\x00\x00\x00\x00\x00\x00", "B\xfd\x10@\x00\x00\x00\x00\x00\x00"]
  │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
  │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
- │              ├── cost: 249.575556
+ │              ├── cost: 253.575556
  │              ├── key: (11)
  │              └── fd: (11)-->(14)
  └── filters
@@ -375,10 +375,10 @@ optimal plan:
 select
  ├── columns: k:1 i:2 s:3 geom1:4!null geog1:5 bbox1:6 bbox2:7 geom2:8!null geog2:9 inet1:10
  ├── immutable
- ├── cost: 101246.15
+ ├── cost: 101250.15
  ├── scan t2
  │    ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
- │    └── cost: 1236.12
+ │    └── cost: 1240.12
  └── filters
       └── st_containsproperly(geom1:4, geom2:8) [outer=(4,8), immutable, constraints=(/4: (/NULL - ]; /8: (/NULL - ])]
 
@@ -398,10 +398,10 @@ optimal plan:
 select
  ├── columns: k:1 i:2 s:3 geom1:4!null geog1:5 bbox1:6 bbox2:7 geom2:8!null geog2:9 inet1:10
  ├── immutable
- ├── cost: 101246.15
+ ├── cost: 101250.15
  ├── scan t2
  │    ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
- │    └── cost: 1236.12
+ │    └── cost: 1240.12
  └── filters
       └── st_crosses(geom1:4, geom2:8) [outer=(4,8), immutable, constraints=(/4: (/NULL - ]; /8: (/NULL - ])]
 
@@ -434,10 +434,10 @@ optimal plan:
 select
  ├── columns: k:1 i:2 s:3 geom1:4!null geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
  ├── immutable
- ├── cost: 12054.09
+ ├── cost: 12058.09
  ├── index-join t2
  │    ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
- │    ├── cost: 941.837778
+ │    ├── cost: 945.837778
  │    └── inverted-filter
  │         ├── columns: rowid:11!null
  │         ├── inverted expression: /14
@@ -476,7 +476,7 @@ select
  │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
  │         ├── pre-filterer expression
  │         │    └── st_intersects('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', geom1:4)
- │         ├── cost: 250.706667
+ │         ├── cost: 254.706667
  │         ├── key: (11)
  │         └── scan t2@_hyp_1
  │              ├── columns: rowid:11!null geom1_inverted_key:14!null
@@ -513,7 +513,7 @@ select
  │              │         ├── ["B\xfd\x10@\x00\x00\x00\x00\x00\x00", "B\xfd\x10@\x00\x00\x00\x00\x00\x00"]
  │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
  │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
- │              ├── cost: 249.575556
+ │              ├── cost: 253.575556
  │              ├── key: (11)
  │              └── fd: (11)-->(14)
  └── filters
@@ -534,10 +534,10 @@ optimal plan:
 select
  ├── columns: k:1 i:2 s:3 geom1:4!null geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
  ├── immutable
- ├── cost: 1058.09
+ ├── cost: 1062.09
  ├── index-join t2
  │    ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
- │    ├── cost: 945.837778
+ │    ├── cost: 949.837778
  │    └── inverted-filter
  │         ├── columns: rowid:11!null
  │         ├── inverted expression: /14
@@ -577,7 +577,7 @@ select
  │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
  │         ├── pre-filterer expression
  │         │    └── st_intersects('01030000000100000005000000000000000000F03F0000000000000040000000000000F03F00000000000010400000000000000840000000000000104000000000000008400000000000000040000000000000F03F0000000000000040', geom1:4)
- │         ├── cost: 254.706667
+ │         ├── cost: 258.706667
  │         ├── key: (11)
  │         └── scan t2@_hyp_1
  │              ├── columns: rowid:11!null geom1_inverted_key:14!null
@@ -615,7 +615,7 @@ select
  │              │         ├── ["B\xfd\x10@\x00\x00\x00\x00\x00\x00", "B\xfd\x10@\x00\x00\x00\x00\x00\x00"]
  │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
  │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
- │              ├── cost: 253.575556
+ │              ├── cost: 257.575556
  │              ├── key: (11)
  │              └── fd: (11)-->(14)
  └── filters
@@ -637,10 +637,10 @@ optimal plan:
 select
  ├── columns: k:1 i:2 s:3 geom1:4!null geog1:5 bbox1:6 bbox2:7 geom2:8!null geog2:9 inet1:10
  ├── immutable
- ├── cost: 101246.15
+ ├── cost: 101250.15
  ├── scan t2
  │    ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
- │    └── cost: 1236.12
+ │    └── cost: 1240.12
  └── filters
       └── st_overlaps(geom1:4, geom2:8) [outer=(4,8), immutable, constraints=(/4: (/NULL - ]; /8: (/NULL - ])]
 
@@ -679,10 +679,10 @@ optimal plan:
 select
  ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9!null inet1:10
  ├── immutable
- ├── cost: 926.978889
+ ├── cost: 930.978889
  ├── index-join t2
  │    ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
- │    ├── cost: 925.837778
+ │    ├── cost: 929.837778
  │    └── inverted-filter
  │         ├── columns: rowid:11!null
  │         ├── inverted expression: /14
@@ -717,7 +717,7 @@ select
  │         │         └── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
  │         ├── pre-filterer expression
  │         │    └── st_dwithinexclusive('0101000020E6100000A6272CF1807245C0A6B73F170DFC5240', geog2:9, 10.0, true)
- │         ├── cost: 234.706667
+ │         ├── cost: 238.706667
  │         ├── key: (11)
  │         └── scan t2@_hyp_1
  │              ├── columns: rowid:11!null geog2_inverted_key:14!null
@@ -750,7 +750,7 @@ select
  │              │         ├── ["B\xfdO\xb0\x00\x00\x00\x00\x00\x00", "B\xfdO\xb0\x00\x00\x00\x00\x00\x00"]
  │              │         ├── ["B\xfdO\xc0\x00\x00\x00\x00\x00\x00", "B\xfdO\xc0\x00\x00\x00\x00\x00\x00"]
  │              │         └── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
- │              ├── cost: 233.575556
+ │              ├── cost: 237.575556
  │              ├── key: (11)
  │              └── fd: (11)-->(14)
  └── filters
@@ -772,10 +772,10 @@ optimal plan:
 select
  ├── columns: k:1 i:2 s:3 geom1:4 geog1:5!null bbox1:6 bbox2:7 geom2:8 geog2:9!null inet1:10
  ├── immutable
- ├── cost: 1246.15
+ ├── cost: 1250.15
  ├── scan t2
  │    ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
- │    └── cost: 1236.12
+ │    └── cost: 1240.12
  └── filters
       └── st_dwithinexclusive(geog1:5, geog2:9, 10.0) [outer=(5,9), immutable, constraints=(/5: (/NULL - ]; /9: (/NULL - ])]
 
@@ -808,11 +808,11 @@ optimal plan:
 select
  ├── columns: k:1 i:2 s:3 geom1:4!null geog1:5 bbox1:6!null bbox2:7 geom2:8 geog2:9 inet1:10
  ├── immutable
- ├── cost: 1221.85
+ ├── cost: 1225.85
  ├── scan t2@_hyp_1
  │    ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6!null bbox2:7 geom2:8 geog2:9 inet1:10
  │    ├── constraint: /6/11: (/NULL - ]
- │    └── cost: 1211.92
+ │    └── cost: 1215.92
  └── filters
       └── bbox1:6 ~ geom1:4 [outer=(4,6), immutable, constraints=(/4: (/NULL - ]; /6: (/NULL - ])]
 
@@ -837,10 +837,10 @@ optimal plan:
 select
  ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6!null bbox2:7!null geom2:8 geog2:9 inet1:10
  ├── immutable
- ├── cost: 946.988889
+ ├── cost: 950.988889
  ├── index-join t2
  │    ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
- │    ├── cost: 945.837778
+ │    ├── cost: 949.837778
  │    └── inverted-filter
  │         ├── columns: rowid:11!null
  │         ├── inverted expression: /14
@@ -880,7 +880,7 @@ select
  │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
  │         ├── pre-filterer expression
  │         │    └── st_covers('01030000000100000005000000000000000000F03F0000000000000040000000000000F03F00000000000010400000000000000840000000000000104000000000000008400000000000000040000000000000F03F0000000000000040', geom1:4)
- │         ├── cost: 254.706667
+ │         ├── cost: 258.706667
  │         ├── key: (11)
  │         └── scan t2@_hyp_3
  │              ├── columns: rowid:11!null geom1_inverted_key:14!null
@@ -918,7 +918,7 @@ select
  │              │         ├── ["B\xfd\x10@\x00\x00\x00\x00\x00\x00", "B\xfd\x10@\x00\x00\x00\x00\x00\x00"]
  │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
  │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
- │              ├── cost: 253.575556
+ │              ├── cost: 257.575556
  │              ├── key: (11)
  │              └── fd: (11)-->(14)
  └── filters
@@ -940,10 +940,10 @@ optimal plan:
 select
  ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
  ├── immutable
- ├── cost: 1246.15
+ ├── cost: 1250.15
  ├── scan t2
  │    ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
- │    └── cost: 1236.12
+ │    └── cost: 1240.12
  └── filters
       └── inet1:10 && inet1:10 [outer=(10), immutable]
 
@@ -962,10 +962,10 @@ optimal plan:
 select
  ├── columns: k:1 i:2 s:3 geom1:4!null geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
  ├── immutable
- ├── cost: 2246.15
+ ├── cost: 2250.15
  ├── scan t2
  │    ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
- │    └── cost: 1236.12
+ │    └── cost: 1240.12
  └── filters
       └── st_hasarc(geom1:4) [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
@@ -1003,10 +1003,10 @@ optimal plan:
 select
  ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
  ├── immutable
- ├── cost: 1246.15
+ ├── cost: 1250.15
  ├── scan t2
  │    ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
- │    └── cost: 1236.12
+ │    └── cost: 1240.12
  └── filters
       └── family(inet1:10) = 6 [outer=(10), immutable]
 
@@ -1035,10 +1035,10 @@ optimal plan:
 select
  ├── columns: k:1 i:2 s:3 geom1:4!null geog1:5 bbox1:6 bbox2:7 geom2:8!null geog2:9 inet1:10
  ├── immutable
- ├── cost: 23165.2111
+ ├── cost: 23169.2111
  ├── index-join t2
  │    ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
- │    ├── cost: 941.837778
+ │    ├── cost: 945.837778
  │    └── inverted-filter
  │         ├── columns: rowid:11!null
  │         ├── inverted expression: /14
@@ -1077,7 +1077,7 @@ select
  │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
  │         ├── pre-filterer expression
  │         │    └── st_intersects('01010000C00000000000000000000000000000000000000000000000000000000000000000', geom1:4)
- │         ├── cost: 250.706667
+ │         ├── cost: 254.706667
  │         ├── key: (11)
  │         └── scan t2@_hyp_1
  │              ├── columns: rowid:11!null geom1_inverted_key:14!null
@@ -1114,7 +1114,7 @@ select
  │              │         ├── ["B\xfd\x10@\x00\x00\x00\x00\x00\x00", "B\xfd\x10@\x00\x00\x00\x00\x00\x00"]
  │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
  │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
- │              ├── cost: 249.575556
+ │              ├── cost: 253.575556
  │              ├── key: (11)
  │              └── fd: (11)-->(14)
  └── filters
@@ -1139,11 +1139,11 @@ optimal plan:
 select
  ├── columns: k:1!null i:2 s:3 geom1:4!null geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
  ├── immutable
- ├── cost: 133.301112
+ ├── cost: 137.301112
  ├── fd: ()-->(1)
  ├── index-join t2
  │    ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
- │    ├── cost: 22.148889
+ │    ├── cost: 26.148889
  │    └── inverted-filter
  │         ├── columns: rowid:11!null
  │         ├── inverted expression: /15
@@ -1182,7 +1182,7 @@ select
  │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
  │         ├── pre-filterer expression
  │         │    └── st_intersects('01010000C00000000000000000000000000000000000000000000000000000000000000000', geom1:4)
- │         ├── cost: 15.2177778
+ │         ├── cost: 19.2177778
  │         ├── key: (11)
  │         └── scan t2@_hyp_3
  │              ├── columns: rowid:11!null geom1_inverted_key:15!null
@@ -1220,7 +1220,7 @@ select
  │              │         ├── ["B\xfd\x10@\x00\x00\x00\x00\x00\x00", "B\xfd\x10@\x00\x00\x00\x00\x00\x00"]
  │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
  │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
- │              ├── cost: 15.1866667
+ │              ├── cost: 19.1866667
  │              ├── key: (11)
  │              └── fd: (11)-->(15)
  └── filters
@@ -1243,10 +1243,10 @@ optimal plan:
 select
  ├── columns: k:1!null i:2 s:3 geom1:4!null geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
  ├── immutable
- ├── cost: 12054.1
+ ├── cost: 12058.1
  ├── index-join t2
  │    ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
- │    ├── cost: 941.837778
+ │    ├── cost: 945.837778
  │    └── inverted-filter
  │         ├── columns: rowid:11!null
  │         ├── inverted expression: /14
@@ -1285,7 +1285,7 @@ select
  │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
  │         ├── pre-filterer expression
  │         │    └── st_intersects('01010000C00000000000000000000000000000000000000000000000000000000000000000', geom1:4)
- │         ├── cost: 250.706667
+ │         ├── cost: 254.706667
  │         ├── key: (11)
  │         └── scan t2@_hyp_2
  │              ├── columns: rowid:11!null geom1_inverted_key:14!null
@@ -1322,7 +1322,7 @@ select
  │              │         ├── ["B\xfd\x10@\x00\x00\x00\x00\x00\x00", "B\xfd\x10@\x00\x00\x00\x00\x00\x00"]
  │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
  │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
- │              ├── cost: 249.575556
+ │              ├── cost: 253.575556
  │              ├── key: (11)
  │              └── fd: (11)-->(14)
  └── filters
@@ -1382,10 +1382,10 @@ optimal plan:
 select
  ├── columns: k:1!null i:2!null s:3 geom1:4!null geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
  ├── immutable
- ├── cost: 12054.11
+ ├── cost: 12058.11
  ├── index-join t2
  │    ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
- │    ├── cost: 941.837778
+ │    ├── cost: 945.837778
  │    └── inverted-filter
  │         ├── columns: rowid:11!null
  │         ├── inverted expression: /14
@@ -1424,7 +1424,7 @@ select
  │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
  │         ├── pre-filterer expression
  │         │    └── st_intersects('01010000C00000000000000000000000000000000000000000000000000000000000000000', geom1:4)
- │         ├── cost: 250.706667
+ │         ├── cost: 254.706667
  │         ├── key: (11)
  │         └── scan t2@_hyp_3
  │              ├── columns: rowid:11!null geom1_inverted_key:14!null
@@ -1461,7 +1461,7 @@ select
  │              │         ├── ["B\xfd\x10@\x00\x00\x00\x00\x00\x00", "B\xfd\x10@\x00\x00\x00\x00\x00\x00"]
  │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
  │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
- │              ├── cost: 249.575556
+ │              ├── cost: 253.575556
  │              ├── key: (11)
  │              └── fd: (11)-->(14)
  └── filters
@@ -1575,11 +1575,11 @@ optimal plan:
 select
  ├── columns: k:1!null i:2 s:3 geom1:4!null geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
  ├── immutable
- ├── cost: 22.1900001
+ ├── cost: 26.1900001
  ├── fd: ()-->(1)
  ├── index-join t2
  │    ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
- │    ├── cost: 22.148889
+ │    ├── cost: 26.148889
  │    └── inverted-filter
  │         ├── columns: rowid:11!null
  │         ├── inverted expression: /15
@@ -1619,7 +1619,7 @@ select
  │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
  │         ├── pre-filterer expression
  │         │    └── st_intersects('01030000000100000005000000000000000000F03F0000000000000040000000000000F03F00000000000010400000000000000840000000000000104000000000000008400000000000000040000000000000F03F0000000000000040', geom1:4)
- │         ├── cost: 15.2177778
+ │         ├── cost: 19.2177778
  │         ├── key: (11)
  │         └── scan t2@_hyp_3
  │              ├── columns: rowid:11!null geom1_inverted_key:15!null
@@ -1658,7 +1658,7 @@ select
  │              │         ├── ["B\xfd\x10@\x00\x00\x00\x00\x00\x00", "B\xfd\x10@\x00\x00\x00\x00\x00\x00"]
  │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
  │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
- │              ├── cost: 15.1866667
+ │              ├── cost: 19.1866667
  │              ├── key: (11)
  │              └── fd: (11)-->(15)
  └── filters
@@ -1683,11 +1683,11 @@ optimal plan:
 select
  ├── columns: k:1!null i:2 s:3 geom1:4 geog1:5 bbox1:6!null bbox2:7!null geom2:8 geog2:9 inet1:10
  ├── immutable
- ├── cost: 420.726667
+ ├── cost: 424.726667
  ├── scan t2@_hyp_3
  │    ├── columns: k:1!null i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
  │    ├── constraint: /1/11: [/3 - ]
- │    └── cost: 417.353333
+ │    └── cost: 421.353333
  └── filters
       ├── bbox1:6 ~ bbox2:7 [outer=(6,7), immutable, constraints=(/6: (/NULL - ]; /7: (/NULL - ])]
       └── 'BOX(1 2,3 4)' && geom2:8 [outer=(8), immutable]
@@ -1710,10 +1710,10 @@ optimal plan:
 select
  ├── columns: k:1 i:2 s:3 geom1:4!null geog1:5 bbox1:6 bbox2:7 geom2:8!null geog2:9 inet1:10
  ├── immutable
- ├── cost: 2246.16
+ ├── cost: 2250.16
  ├── scan t2
  │    ├── columns: k:1 i:2 s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
- │    └── cost: 1236.12
+ │    └── cost: 1240.12
  └── filters
       ├── st_covers(geom1:4, geom2:8) [outer=(4,8), immutable, constraints=(/4: (/NULL - ]; /8: (/NULL - ])]
       └── (~k:1) = 1 [outer=(1), immutable]
@@ -1740,18 +1740,18 @@ optimal plan:
 inner-join (cross)
  ├── columns: k:1!null i:2 f:3 s:4!null k:8 i:9 s:10!null geom1:11 geog1:12 bbox1:13 bbox2:14 geom2:15 geog2:16 inet1:17
  ├── immutable
- ├── cost: 5657.48872
+ ├── cost: 5665.48872
  ├── scan t2
  │    ├── columns: t2.k:8 t2.i:9 t2.s:10 geom1:11 geog1:12 bbox1:13 bbox2:14 geom2:15 geog2:16 inet1:17
- │    └── cost: 1236.12
+ │    └── cost: 1240.12
  ├── select
  │    ├── columns: t1.k:1!null t1.i:2 f:3 t1.s:4
  │    ├── immutable
- │    ├── cost: 1103.05
+ │    ├── cost: 1107.05
  │    ├── scan t1@_hyp_1
  │    │    ├── columns: t1.k:1!null t1.i:2 f:3 t1.s:4
  │    │    ├── constraint: /1/5: (/NULL - ]
- │    │    └── cost: 1093.12
+ │    │    └── cost: 1097.12
  │    └── filters
  │         └── t1.k:1 = (~t1.k:1) [outer=(1), immutable, constraints=(/1: (/NULL - ])]
  └── filters
@@ -1789,10 +1789,10 @@ optimal plan:
 select
  ├── columns: k:1 geom1:2!null
  ├── immutable
- ├── cost: 924.312222
+ ├── cost: 928.312222
  ├── index-join t2
  │    ├── columns: k:1 geom1:2
- │    ├── cost: 812.06
+ │    ├── cost: 816.06
  │    └── inverted-filter
  │         ├── columns: rowid:3!null
  │         ├── inverted expression: /6
@@ -1803,7 +1803,7 @@ select
  │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
  │         ├── pre-filterer expression
  │         │    └── st_coveredby('01010000C00000000000000000000000000000000000000000000000000000000000000000', geom1:2)
- │         ├── cost: 138.706667
+ │         ├── cost: 142.706667
  │         ├── key: (3)
  │         └── scan t2@inverted_idx
  │              ├── columns: rowid:3!null t2.geom1_inverted_key:6!null
@@ -1812,7 +1812,7 @@ select
  │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
  │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
  │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
- │              ├── cost: 137.575556
+ │              ├── cost: 141.575556
  │              ├── key: (3)
  │              └── fd: (3)-->(6)
  └── filters
@@ -1837,10 +1837,10 @@ optimal plan:
 select
  ├── columns: k:1 geom1:2!null
  ├── immutable
- ├── cost: 1036.31222
+ ├── cost: 1040.31222
  ├── index-join t2
  │    ├── columns: k:1 geom1:2
- │    ├── cost: 924.06
+ │    ├── cost: 928.06
  │    └── inverted-filter
  │         ├── columns: rowid:3!null
  │         ├── inverted expression: /8
@@ -1879,7 +1879,7 @@ select
  │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
  │         ├── pre-filterer expression
  │         │    └── st_coveredby('01010000C00000000000000000000000000000000000000000000000000000000000000000', geom1:2)
- │         ├── cost: 250.706667
+ │         ├── cost: 254.706667
  │         ├── key: (3)
  │         └── scan t2@_hyp_2
  │              ├── columns: rowid:3!null geom1_inverted_key:8!null
@@ -1916,7 +1916,7 @@ select
  │              │         ├── ["B\xfd\x10@\x00\x00\x00\x00\x00\x00", "B\xfd\x10@\x00\x00\x00\x00\x00\x00"]
  │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
  │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
- │              ├── cost: 249.575556
+ │              ├── cost: 253.575556
  │              ├── key: (3)
  │              └── fd: (3)-->(8)
  └── filters
@@ -1936,10 +1936,10 @@ optimal plan:
 select
  ├── columns: k:1 geom1:2!null
  ├── immutable
- ├── cost: 924.312222
+ ├── cost: 928.312222
  ├── index-join t2
  │    ├── columns: k:1 geom1:2
- │    ├── cost: 812.06
+ │    ├── cost: 816.06
  │    └── inverted-filter
  │         ├── columns: rowid:3!null
  │         ├── inverted expression: /8
@@ -1950,7 +1950,7 @@ select
  │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
  │         ├── pre-filterer expression
  │         │    └── st_coveredby('01010000C00000000000000000000000000000000000000000000000000000000000000000', geom1:2)
- │         ├── cost: 138.706667
+ │         ├── cost: 142.706667
  │         ├── key: (3)
  │         └── scan t2@inverted_idx_visible
  │              ├── columns: rowid:3!null t2.geom1_inverted_key:8!null
@@ -1959,7 +1959,7 @@ select
  │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
  │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
  │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
- │              ├── cost: 137.575556
+ │              ├── cost: 141.575556
  │              ├── key: (3)
  │              └── fd: (3)-->(8)
  └── filters

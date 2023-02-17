@@ -23,6 +23,7 @@ LEFT OUTER JOIN system.public.comments sc
     ON d.oid = sc.object_id
    AND sc.type = 0
  WHERE left(datname, length($1:::STRING)) = $1::STRING
+ORDER BY 1,3,4,5
 --placeholders: []interface {}{"", 8, 8}
 
 comp at=8
@@ -44,6 +45,7 @@ LEFT OUTER JOIN system.public.comments sc
     ON d.oid = sc.object_id
    AND sc.type = 0
  WHERE left(datname, length($1:::STRING)) = $1::STRING
+ORDER BY 1,3,4,5
 --placeholders: []interface {}{"foo", 7, 10}
 
 comp at=8
@@ -65,6 +67,7 @@ LEFT OUTER JOIN system.public.comments sc
     ON d.oid = sc.object_id
    AND sc.type = 0
  WHERE left(datname, length($1:::STRING)) = $1::STRING
+ORDER BY 1,3,4,5
 --placeholders: []interface {}{"FOO", 7, 11}
 
 
@@ -91,6 +94,7 @@ LEFT OUTER JOIN system.public.comments sc
     ON d.oid = sc.object_id
    AND sc.type = 0
  WHERE left(datname, length($1:::STRING)) = $1::STRING
+ORDER BY 1,3,4,5
 --placeholders: []interface {}{"", 12, 12}
 
 comp at=10
@@ -112,6 +116,7 @@ LEFT OUTER JOIN system.public.comments sc
     ON d.oid = sc.object_id
    AND sc.type = 0
  WHERE left(datname, length($1:::STRING)) = $1::STRING
+ORDER BY 1,3,4,5
 --placeholders: []interface {}{"abc", 9, 12}
 
 subtest end

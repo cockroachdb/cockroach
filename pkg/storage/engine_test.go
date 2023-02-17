@@ -26,7 +26,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -158,8 +157,8 @@ func TestEngineBatchStaleCachedIterator(t *testing.T) {
 		if ok, err := iter.Valid(); err != nil {
 			t.Fatal(err)
 		} else if ok {
-			t.Fatalf("iterator unexpectedly valid: %v -> %v",
-				iter.UnsafeKey(), iter.UnsafeValue())
+			v, _ := iter.UnsafeValue()
+			t.Fatalf("iterator unexpectedly valid: %v -> %v", iter.UnsafeKey(), v)
 		}
 
 		iter.Close()
@@ -191,11 +190,11 @@ func TestEngineBatchStaleCachedIterator(t *testing.T) {
 		// invalidate the iterator's cache), and if it reports its cached
 		// result back, we'll see the (newly deleted) value (due to the
 		// failure mode above).
-		if v, _, err := MVCCGet(context.Background(), batch, key,
+		if valRes, err := MVCCGet(context.Background(), batch, key,
 			hlc.Timestamp{}, MVCCGetOptions{}); err != nil {
 			t.Fatal(err)
-		} else if v != nil {
-			t.Fatalf("expected no value, got %+v", v)
+		} else if valRes.Value != nil {
+			t.Fatalf("expected no value, got %+v", valRes.Value)
 		}
 	}
 }
@@ -523,11 +522,11 @@ func TestEngineMustExist(t *testing.T) {
 	tempDir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
 
-	_, err := Open(context.Background(), Filesystem(tempDir), MustExist)
+	_, err := Open(context.Background(), Filesystem(tempDir), cluster.MakeClusterSettings(), MustExist)
 	if err == nil {
 		t.Fatal("expected error related to missing directory")
 	}
-	if !strings.Contains(fmt.Sprint(err), "no such file or directory") {
+	if !strings.Contains(fmt.Sprint(err), "does not exist") {
 		t.Fatal(err)
 	}
 }
@@ -1001,19 +1000,19 @@ func TestCreateCheckpoint(t *testing.T) {
 	db, err := Open(
 		context.Background(),
 		Filesystem(dir),
-		Settings(cluster.MakeTestingClusterSettings()))
+		cluster.MakeTestingClusterSettings())
 	assert.NoError(t, err)
 	defer db.Close()
 
 	dir = filepath.Join(dir, "checkpoint")
 
 	assert.NoError(t, err)
-	assert.NoError(t, db.CreateCheckpoint(dir))
+	assert.NoError(t, db.CreateCheckpoint(dir, nil))
 	assert.DirExists(t, dir)
 	m, err := filepath.Glob(dir + "/*")
 	assert.NoError(t, err)
 	assert.True(t, len(m) > 0)
-	if err := db.CreateCheckpoint(dir); !testutils.IsError(err, "exists") {
+	if err := db.CreateCheckpoint(dir, nil); !testutils.IsError(err, "exists") {
 		t.Fatal(err)
 	}
 }
@@ -1219,7 +1218,7 @@ func TestEngineFSFileNotFoundError(t *testing.T) {
 
 	dir, dirCleanup := testutils.TempDir(t)
 	defer dirCleanup()
-	db, err := Open(context.Background(), Filesystem(dir), CacheSize(testCacheSize))
+	db, err := Open(context.Background(), Filesystem(dir), cluster.MakeClusterSettings(), CacheSize(testCacheSize))
 	require.NoError(t, err)
 	defer db.Close()
 
@@ -1283,7 +1282,7 @@ func TestFS(t *testing.T) {
 	}
 	for name, loc := range engineDest {
 		t.Run(name, func(t *testing.T) {
-			fs, err := Open(context.Background(), loc, CacheSize(testCacheSize), ForTesting)
+			fs, err := Open(context.Background(), loc, cluster.MakeClusterSettings(), CacheSize(testCacheSize), ForTesting)
 			require.NoError(t, err)
 			defer fs.Close()
 
@@ -1348,7 +1347,7 @@ func TestGetIntent(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	reader, err := Open(ctx, InMemory(), CacheSize(1<<20 /* 1 MiB */))
+	reader, err := Open(ctx, InMemory(), cluster.MakeClusterSettings(), CacheSize(1<<20 /* 1 MiB */))
 	require.NoError(t, err)
 	defer reader.Close()
 
@@ -1437,7 +1436,7 @@ func TestScanIntents(t *testing.T) {
 		"1000 bytes":      {keys[0], maxKey, 0, 1000, keys},
 	}
 
-	eng, err := Open(ctx, InMemory(), CacheSize(1<<20 /* 1 MiB */))
+	eng, err := Open(ctx, InMemory(), cluster.MakeClusterSettings(), CacheSize(1<<20 /* 1 MiB */))
 	require.NoError(t, err)
 	defer eng.Close()
 
@@ -1911,8 +1910,6 @@ func TestEngineRangeKeyMutations(t *testing.T) {
 			defer rw.Close()
 		}
 
-		require.True(t, rw.SupportsRangeKeys())
-
 		// Check errors for invalid, empty, and zero-length range keys. Not
 		// exhaustive, since we assume validation dispatches to
 		// MVCCRangeKey.Validate() which is tested separately.
@@ -2034,160 +2031,6 @@ func TestEngineRangeKeyMutations(t *testing.T) {
 	})
 }
 
-// TestEngineRangeKeysUnsupported tests that engines without range key
-// support behave as expected, i.e. writes fail but reads degrade gracefully.
-func TestEngineRangeKeysUnsupported(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	// Set up an engine with a version that doesn't support range keys.
-	version := clusterversion.ByKey(clusterversion.V22_2EnsurePebbleFormatVersionRangeKeys - 1)
-	st := cluster.MakeTestingClusterSettingsWithVersions(version, version, true)
-
-	eng := NewDefaultInMemForTesting(Settings(st))
-	defer eng.Close()
-
-	require.NoError(t, eng.PutMVCC(pointKey("a", 1), stringValue("a1")))
-
-	batch := eng.NewBatch()
-	defer batch.Close()
-	snapshot := eng.NewSnapshot()
-	defer snapshot.Close()
-	readOnly := eng.NewReadOnly(StandardDurability)
-	defer readOnly.Close()
-
-	writers := map[string]Writer{
-		"engine": eng,
-		"batch":  batch,
-	}
-	readers := map[string]Reader{
-		"engine":   eng,
-		"batch":    batch,
-		"snapshot": snapshot,
-		"readonly": readOnly,
-	}
-
-	// Range key puts should error, but clears are noops (since old databases
-	// cannot contain range keys by definition).
-	for name, w := range writers {
-		t.Run(fmt.Sprintf("write/%s", name), func(t *testing.T) {
-			rangeKey := rangeKey("a", "b", 2)
-
-			err := w.PutMVCCRangeKey(rangeKey, MVCCValue{})
-			require.Error(t, err)
-			require.Contains(t, err.Error(), "range keys not supported")
-
-			err = w.PutRawMVCCRangeKey(rangeKey, []byte{})
-			require.Error(t, err)
-			require.Contains(t, err.Error(), "range keys not supported")
-
-			err = w.PutEngineRangeKey(rangeKey.StartKey, rangeKey.EndKey, nil, nil)
-			require.Error(t, err)
-			require.Contains(t, err.Error(), "range keys not supported")
-
-			require.NoError(t, w.ClearMVCCRangeKey(rangeKey))
-			require.NoError(t, w.ClearEngineRangeKey(
-				rangeKey.StartKey, rangeKey.EndKey, EncodeMVCCTimestampSuffix(rangeKey.Timestamp)))
-			require.NoError(t, w.ClearRawRange(
-				rangeKey.StartKey, rangeKey.EndKey, false /* pointKeys */, true /* rangeKeys */))
-		})
-	}
-
-	// All range key iterators should degrade gracefully to point key iterators,
-	// and be empty for IterKeyTypeRangesOnly.
-	keyTypes := map[string]IterKeyType{
-		"PointsOnly":      IterKeyTypePointsOnly,
-		"PointsAndRanges": IterKeyTypePointsAndRanges,
-		"RangesOnly":      IterKeyTypeRangesOnly,
-	}
-	for name, r := range readers {
-		for keyTypeName, keyType := range keyTypes {
-			t.Run(fmt.Sprintf("read/%s/%s", name, keyTypeName), func(t *testing.T) {
-				require.False(t, r.SupportsRangeKeys())
-
-				t.Run("MVCCIterator", func(t *testing.T) {
-					iter := r.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
-						KeyTypes:             keyType,
-						UpperBound:           keys.MaxKey,
-						RangeKeyMaskingBelow: hlc.Timestamp{WallTime: 1}, // should get disabled when unsupported
-					})
-					defer iter.Close()
-
-					iter.SeekGE(pointKey("a", 0))
-
-					ok, err := iter.Valid()
-					require.NoError(t, err)
-
-					if keyType == IterKeyTypeRangesOnly {
-						// With RangesOnly, the iterator must be empty.
-						require.False(t, ok)
-						hasPoint, hasRange := iter.HasPointAndRange()
-						require.False(t, hasPoint)
-						require.False(t, hasRange)
-						return
-					}
-
-					require.True(t, ok)
-					require.Equal(t, pointKey("a", 1), iter.UnsafeKey())
-					require.Equal(t, stringValueRaw("a1"), iter.UnsafeValue())
-
-					hasPoint, hasRange := iter.HasPointAndRange()
-					require.True(t, hasPoint)
-					require.False(t, hasRange)
-					require.Empty(t, iter.RangeBounds())
-					require.Empty(t, iter.RangeKeys())
-
-					// Exhaust the iterator.
-					iter.Next()
-					ok, err = iter.Valid()
-					require.NoError(t, err)
-					require.False(t, ok)
-				})
-
-				t.Run("EngineIterator", func(t *testing.T) {
-					iter := r.NewEngineIterator(IterOptions{
-						KeyTypes:             keyType,
-						UpperBound:           keys.MaxKey,
-						RangeKeyMaskingBelow: hlc.Timestamp{WallTime: 1}, // should get disabled when unsupported
-					})
-					defer iter.Close()
-
-					ok, err := iter.SeekEngineKeyGE(engineKey("a", 0))
-					require.NoError(t, err)
-
-					if keyType == IterKeyTypeRangesOnly {
-						// With RangesOnly, the iterator must be empty.
-						require.False(t, ok)
-						hasPoint, hasRange := iter.HasPointAndRange()
-						require.False(t, hasPoint)
-						require.False(t, hasRange)
-						return
-					}
-
-					require.True(t, ok)
-					key, err := iter.UnsafeEngineKey()
-					require.NoError(t, err)
-					require.Equal(t, engineKey("a", 1), key)
-					require.Equal(t, stringValueRaw("a1"), iter.UnsafeValue())
-
-					hasPoint, hasRange := iter.HasPointAndRange()
-					require.True(t, hasPoint)
-					require.False(t, hasRange)
-					rangeBounds, err := iter.EngineRangeBounds()
-					require.NoError(t, err)
-					require.Empty(t, rangeBounds)
-					require.Empty(t, iter.EngineRangeKeys())
-
-					// Exhaust the iterator.
-					ok, err = iter.NextEngineKey()
-					require.NoError(t, err)
-					require.False(t, ok)
-				})
-			})
-		}
-	}
-}
-
 // TODO(erikgrinaker): The below test helpers should be moved to
 // testutils/storageutils instead, but that requires storage tests to be in the
 // storage_test package to avoid import cycles.
@@ -2278,9 +2121,11 @@ func scanIter(t *testing.T, iter SimpleMVCCIterator) []interface{} {
 			}
 		}
 		if hasPoint {
+			v, err := iter.UnsafeValue()
+			require.NoError(t, err)
 			keys = append(keys, MVCCKeyValue{
 				Key:   iter.UnsafeKey().Clone(),
-				Value: append([]byte{}, iter.UnsafeValue()...),
+				Value: append([]byte{}, v...),
 			})
 		}
 		iter.Next()

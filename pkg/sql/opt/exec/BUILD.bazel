@@ -20,7 +20,7 @@ go_library(
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
-        "//pkg/util",
+        "//pkg/util/intsets",
         "//pkg/util/optional",
     ],
 )

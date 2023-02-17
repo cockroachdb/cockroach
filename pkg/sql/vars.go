@@ -291,9 +291,7 @@ var varGen = map[string]sessionVar{
 
 			if len(dbName) != 0 {
 				// Verify database descriptor exists.
-				if _, err := evalCtx.Descs.GetImmutableDatabaseByName(
-					ctx, txn, dbName, tree.DatabaseLookupFlags{Required: true},
-				); err != nil {
+				if _, err := evalCtx.Descs.ByNameWithLeased(txn).Get().Database(ctx, dbName); err != nil {
 					return "", err
 				}
 			}
@@ -340,6 +338,10 @@ var varGen = map[string]sessionVar{
 			return a.GetDateStyle() == b.GetDateStyle()
 		},
 	},
+
+	// See https://www.postgresql.org/docs/15/datatype-datetime.html.
+	// We always log in UTC.
+	`log_timezone`: makeCompatStringVar(`log_timezone`, `UTC`),
 
 	// This is only kept for backwards compatibility and no longer has any effect.
 	`datestyle_enabled`: makeBackwardsCompatBoolVar(
@@ -468,6 +470,25 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().DefaultTxnUseFollowerReads), nil
 		},
 		GlobalDefault: globalFalse,
+	},
+
+	// CockroachDB extension.
+	`direct_columnar_scans_enabled`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`direct_columnar_scans_enabled`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar(`direct_columnar_scans_enabled`, s)
+			if err != nil {
+				return err
+			}
+			m.SetDirectColumnarScansEnabled(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().DirectColumnarScansEnabled), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(colfetcher.DirectScansEnabled.Get(sv))
+		},
 	},
 
 	// CockroachDB extension.
@@ -1287,6 +1308,15 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
+	// See https://www.postgresql.org/docs/9.4/runtime-config-connection.html
+	`ssl`: {
+		Hidden: true,
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			insecure := evalCtx.ExecCfg.RPCContext.Config.Insecure || evalCtx.ExecCfg.RPCContext.Config.AcceptSQLWithoutTLS
+			return formatBoolAsPostgresSetting(!insecure), nil
+		},
+	},
+
 	// CockroachDB extension.
 	`crdb_version`: makeReadOnlyVarWithFn(func() string {
 		return build.GetInfo().Short()
@@ -1721,24 +1751,6 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: func(sv *settings.Values) string {
 			return sessiondatapb.DescriptorValidationOn.String()
-		},
-	},
-
-	`enable_experimental_stream_replication`: {
-		GetStringVal: makePostgresBoolGetStringValFn(`enable_experimental_stream_replication`),
-		Set: func(_ context.Context, m sessionDataMutator, s string) error {
-			b, err := paramparse.ParseBoolVar(`enable_experimental_stream_replication`, s)
-			if err != nil {
-				return err
-			}
-			m.SetStreamReplicationEnabled(b)
-			return nil
-		},
-		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
-			return formatBoolAsPostgresSetting(evalCtx.SessionData().EnableStreamReplication), nil
-		},
-		GlobalDefault: func(sv *settings.Values) string {
-			return formatBoolAsPostgresSetting(experimentalStreamReplicationEnabled.Get(sv))
 		},
 	},
 
@@ -2321,6 +2333,40 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`copy_from_retries_enabled`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`copy_from_retries_enabled`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("copy_from_retries_enabled", s)
+			if err != nil {
+				return err
+			}
+			m.SetCopyFromRetriesEnabled(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().CopyFromRetriesEnabled), nil
+		},
+		GlobalDefault: globalFalse,
+	},
+
+	// CockroachDB extension.
+	`declare_cursor_statement_timeout_enabled`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`declare_cursor_statement_timeout_enabled`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("declare_cursor_statement_timeout_enabled", s)
+			if err != nil {
+				return err
+			}
+			m.SetDeclareCursorStatementTimeoutEnabled(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().DeclareCursorStatementTimeoutEnabled), nil
+		},
+		GlobalDefault: globalTrue,
+	},
+
+	// CockroachDB extension.
 	`enforce_home_region`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`enforce_home_region`),
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {
@@ -2369,6 +2415,53 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().ExperimentalHashGroupJoinEnabled), nil
 		},
 		GlobalDefault: globalFalse,
+	},
+	`allow_ordinal_column_references`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`allow_ordinal_column_references`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("allow_ordinal_column_references", s)
+			if err != nil {
+				return err
+			}
+			m.SetAllowOrdinalColumnReference(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().AllowOrdinalColumnReferences), nil
+		},
+		GlobalDefault: globalFalse,
+	},
+	`optimizer_use_improved_disjunction_stats`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_use_improved_disjunction_stats`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("optimizer_use_improved_disjunction_stats", s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerUseImprovedDisjunctionStats(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerUseImprovedDisjunctionStats), nil
+		},
+		GlobalDefault: globalTrue,
+	},
+
+	// CockroachDB extension.
+	`optimizer_use_limit_ordering_for_streaming_group_by`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_use_limit_ordering_for_streaming_group_by`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("optimizer_use_limit_ordering_for_streaming_group_by", s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerUseLimitOrderingForStreamingGroupBy(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerUseLimitOrderingForStreamingGroupBy), nil
+		},
+		GlobalDefault: globalTrue,
 	},
 }
 

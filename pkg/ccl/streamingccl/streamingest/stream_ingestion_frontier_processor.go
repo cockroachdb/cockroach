@@ -17,12 +17,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -400,7 +400,6 @@ func (sf *streamIngestionFrontier) maybeUpdatePartitionProgress() error {
 	f := sf.frontier
 	registry := sf.flowCtx.Cfg.JobRegistry
 	jobID := jobspb.JobID(sf.spec.JobID)
-	ptp := sf.flowCtx.Cfg.ProtectedTimestampProvider
 
 	frontierResolvedSpans := make([]jobspb.ResolvedSpan, 0)
 	f.Entries(func(sp roachpb.Span, ts hlc.Timestamp) (done span.OpResult) {
@@ -414,7 +413,7 @@ func (sf *streamIngestionFrontier) maybeUpdatePartitionProgress() error {
 	sf.lastPartitionUpdate = timeutil.Now()
 
 	if err := registry.UpdateJobWithTxn(ctx, jobID, nil, false, func(
-		txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+		txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 	) error {
 		if err := md.CheckRunningOrReverting(); err != nil {
 			return err
@@ -451,14 +450,15 @@ func (sf *streamIngestionFrontier) maybeUpdatePartitionProgress() error {
 			return errors.AssertionFailedf("expected replication job to have a protected timestamp " +
 				"record over the destination tenant's keyspan")
 		}
-		record, err := ptp.GetRecord(ctx, txn, *replicationDetails.ProtectedTimestampRecordID)
+		ptp := sf.flowCtx.Cfg.ProtectedTimestampProvider.WithTxn(txn)
+		record, err := ptp.GetRecord(ctx, *replicationDetails.ProtectedTimestampRecordID)
 		if err != nil {
 			return err
 		}
 		newProtectAbove := highWatermark.Add(
 			-int64(replicationDetails.ReplicationTTLSeconds)*time.Second.Nanoseconds(), 0)
 		if record.Timestamp.Less(newProtectAbove) {
-			return ptp.UpdateTimestamp(ctx, txn, *replicationDetails.ProtectedTimestampRecordID, newProtectAbove)
+			return ptp.UpdateTimestamp(ctx, *replicationDetails.ProtectedTimestampRecordID, newProtectAbove)
 		}
 		return nil
 	}); err != nil {
@@ -467,6 +467,7 @@ func (sf *streamIngestionFrontier) maybeUpdatePartitionProgress() error {
 	sf.metrics.JobProgressUpdates.Inc(1)
 	sf.persistedHighWater = f.Frontier()
 	sf.metrics.FrontierCheckpointSpanCount.Update(int64(len(frontierResolvedSpans)))
+	sf.metrics.FrontierLagSeconds.Update(timeutil.Since(sf.persistedHighWater.GoTime()).Seconds())
 
 	return nil
 }

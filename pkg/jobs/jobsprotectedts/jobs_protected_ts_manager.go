@@ -18,11 +18,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -37,9 +37,9 @@ const timedProtectTimeStampGCPct = 0.8
 // install protected timestamps after a certain percentage of the GC interval
 // is hit.
 type Manager struct {
-	db                  *kv.DB
+	db                  isql.DB
 	codec               keys.SQLCodec
-	protectedTSProvider protectedts.Provider
+	protectedTSProvider protectedts.Manager
 	systemConfig        config.SystemConfigProvider
 	jr                  *jobs.Registry
 }
@@ -80,9 +80,9 @@ func getProtectedTSOnJob(details jobspb.Details) *uuid.UUID {
 // NewManager creates a new protected timestamp manager
 // for jobs.
 func NewManager(
-	db *kv.DB,
+	db isql.DB,
 	codec keys.SQLCodec,
-	protectedTSProvider protectedts.Provider,
+	protectedTSProvider protectedts.Manager,
 	systemConfig config.SystemConfigProvider,
 	jr *jobs.Registry,
 ) *Manager {
@@ -170,10 +170,11 @@ func (p *Manager) Protect(
 		return nil, nil
 	}
 	// Set up a new protected timestamp ID and install it on the job.
-	err := job.Update(ctx, nil, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	err := job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 		// Check if the protected timestamp is visible in the txn.
 		protectedtsID := getProtectedTSOnJob(md.Payload.UnwrapDetails())
 		// If it's been removed lets create a new one.
+		pts := p.protectedTSProvider.WithTxn(txn)
 		if protectedtsID == nil {
 			newID := uuid.MakeV4()
 			protectedtsID = &newID
@@ -182,10 +183,10 @@ func (p *Manager) Protect(
 			ju.UpdatePayload(md.Payload)
 			rec := MakeRecord(*protectedtsID,
 				int64(job.ID()), readAsOf, nil, Jobs, target)
-			return p.protectedTSProvider.Protect(ctx, txn, rec)
+			return pts.Protect(ctx, rec)
 		}
 		// Refresh the existing timestamp, otherwise.
-		return p.protectedTSProvider.UpdateTimestamp(ctx, txn, *protectedtsID, readAsOf)
+		return pts.UpdateTimestamp(ctx, *protectedtsID, readAsOf)
 	})
 	if err != nil {
 		return nil, err
@@ -207,7 +208,7 @@ func (p *Manager) Unprotect(ctx context.Context, job *jobs.Job) error {
 	}
 	// If we do find one then we need to clean up the protected timestamp,
 	// and remove it from the job.
-	return job.Update(ctx, nil, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	return job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 		// The job will get refreshed, so check one more time the protected
 		// timestamp still exists. The callback returned from Protect works
 		// on a previously cached copy.
@@ -218,6 +219,6 @@ func (p *Manager) Unprotect(ctx context.Context, job *jobs.Job) error {
 		updatedDetails := setProtectedTSOnJob(md.Payload.UnwrapDetails(), nil)
 		md.Payload.Details = jobspb.WrapPayloadDetails(updatedDetails)
 		ju.UpdatePayload(md.Payload)
-		return p.protectedTSProvider.Release(ctx, txn, *protectedtsID)
+		return p.protectedTSProvider.WithTxn(txn).Release(ctx, *protectedtsID)
 	})
 }

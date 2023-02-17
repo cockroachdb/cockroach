@@ -87,6 +87,15 @@ func (tc *TestCluster) Server(idx int) serverutils.TestServerInterface {
 	return tc.Servers[idx]
 }
 
+// NodeIDs is part of TestClusterInterface.
+func (tc *TestCluster) NodeIDs() []roachpb.NodeID {
+	nodeIds := make([]roachpb.NodeID, len(tc.Servers))
+	for i, s := range tc.Servers {
+		nodeIds[i] = s.NodeID()
+	}
+	return nodeIds
+}
+
 // ServerTyped is like Server, but returns the right type.
 func (tc *TestCluster) ServerTyped(idx int) *server.TestServer {
 	return tc.Servers[idx]
@@ -182,15 +191,14 @@ func (tc *TestCluster) stopServers(ctx context.Context) {
 			var ids []uint64
 			for _, sp := range sps {
 				trace := sp.GetFullRecording(tracingpb.RecordingVerbose)
-				rec := trace.Flatten()
-				for _, rs := range rec {
+				for _, rs := range trace.Flatten() {
 					// NB: it would be a sight easier to just include these in the output of
 					// the string formatted recording, but making a change there presumably requires
 					// lots of changes across various testdata in the codebase and the author is
 					// trying to be nimble.
 					ids = append(ids, rs.GoroutineID)
 				}
-				fmt.Fprintln(&buf, rec)
+				fmt.Fprintln(&buf, trace)
 				fmt.Fprintln(&buf)
 			}
 			sl := make([]byte, 5<<20 /* 5mb */)
@@ -1465,16 +1473,16 @@ func (tc *TestCluster) ReadIntFromStores(key roachpb.Key) []int64 {
 	results := make([]int64, len(tc.Servers))
 	for i, server := range tc.Servers {
 		err := server.Stores().VisitStores(func(s *kvserver.Store) error {
-			val, _, err := storage.MVCCGet(context.Background(), s.Engine(), key,
+			valRes, err := storage.MVCCGet(context.Background(), s.TODOEngine(), key,
 				server.Clock().Now(), storage.MVCCGetOptions{})
 			if err != nil {
 				log.VEventf(context.Background(), 1, "store %d: error reading from key %s: %s", s.StoreID(), key, err)
-			} else if val == nil {
+			} else if valRes.Value == nil {
 				log.VEventf(context.Background(), 1, "store %d: missing key %s", s.StoreID(), key)
 			} else {
-				results[i], err = val.GetInt()
+				results[i], err = valRes.Value.GetInt()
 				if err != nil {
-					log.Errorf(context.Background(), "store %d: error decoding %s from key %s: %+v", s.StoreID(), val, key, err)
+					log.Errorf(context.Background(), "store %d: error decoding %s from key %s: %+v", s.StoreID(), valRes.Value, key, err)
 				}
 			}
 			return nil
@@ -1538,21 +1546,23 @@ func (tc *TestCluster) RestartServerWithInspect(idx int, inspect func(s *server.
 	}
 	serverArgs := tc.serverArgs[idx]
 
-	if idx == 0 {
-		// If it's the first server, then we need to restart the RPC listener by hand.
-		// Look at NewTestCluster for more details.
-		listener, err := net.Listen("tcp", serverArgs.Listener.Addr().String())
-		if err != nil {
-			return err
-		}
-		serverArgs.Listener = listener
-		serverArgs.Knobs.Server.(*server.TestingKnobs).RPCListener = serverArgs.Listener
-	} else {
-		serverArgs.Addr = ""
-		// Try and point the server to a live server in the cluster to join.
-		for i := range tc.Servers {
-			if !tc.ServerStopped(i) {
-				serverArgs.JoinAddr = tc.Servers[i].ServingRPCAddr()
+	if !tc.clusterArgs.ReusableListeners {
+		if idx == 0 {
+			// If it's the first server, then we need to restart the RPC listener by hand.
+			// Look at NewTestCluster for more details.
+			listener, err := net.Listen("tcp", serverArgs.Listener.Addr().String())
+			if err != nil {
+				return err
+			}
+			serverArgs.Listener = listener
+			serverArgs.Knobs.Server.(*server.TestingKnobs).RPCListener = serverArgs.Listener
+		} else {
+			serverArgs.Addr = ""
+			// Try and point the server to a live server in the cluster to join.
+			for i := range tc.Servers {
+				if !tc.ServerStopped(i) {
+					serverArgs.JoinAddr = tc.Servers[i].ServingRPCAddr()
+				}
 			}
 		}
 	}

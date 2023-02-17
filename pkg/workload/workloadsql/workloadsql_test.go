@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -61,7 +62,7 @@ func TestSetup(t *testing.T) {
 
 			for _, table := range gen.Tables() {
 				var c int
-				sqlDB.QueryRow(t, fmt.Sprintf(`SELECT count(*) FROM %s`, table.Name)).Scan(&c)
+				sqlDB.QueryRow(t, fmt.Sprintf(`SELECT count(*) FROM %s`, tree.NameString(table.Name))).Scan(&c)
 				// There happens to be 1 row per batch in bank.
 				if c != table.InitialRows.NumBatches {
 					t.Errorf(`%s: got %d rows expected %d`,
@@ -127,8 +128,8 @@ func TestSplits(t *testing.T) {
 		t.Run(fmt.Sprintf("ranges=%d", ranges), func(t *testing.T) {
 			sqlDB := sqlutils.MakeSQLRunner(db)
 			for _, table := range tables {
-				sqlDB.Exec(t, fmt.Sprintf(`DROP TABLE IF EXISTS %s`, table.Name))
-				sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE %s %s`, table.Name, table.Schema))
+				sqlDB.Exec(t, fmt.Sprintf(`DROP TABLE IF EXISTS %s`, tree.NameString(table.Name)))
+				sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE %s %s`, tree.NameString(table.Name), table.Schema))
 
 				const concurrency = 10
 				if err := Split(ctx, db, table, concurrency); err != nil {
@@ -136,7 +137,7 @@ func TestSplits(t *testing.T) {
 				}
 
 				countRangesQ := fmt.Sprintf(
-					`SELECT count(*) FROM [SHOW RANGES FROM TABLE test.%s]`, table.Name,
+					`SELECT count(*) FROM [SHOW RANGES FROM TABLE test.%s]`, tree.NameString(table.Name),
 				)
 				var actual int
 				sqlDB.QueryRow(t, countRangesQ).Scan(&actual)

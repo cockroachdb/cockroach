@@ -10,7 +10,11 @@
 
 import React from "react";
 import classNames from "classnames/bind";
-import { SortSetting } from "src/sortedtable";
+import {
+  ISortedTablePagination,
+  SortedTable,
+  SortSetting,
+} from "src/sortedtable";
 
 import styles from "./indexDetailsPage.module.scss";
 import { baseHeadingClasses } from "src/transactionsPage/transactionsPageClasses";
@@ -26,9 +30,54 @@ import { SummaryCard } from "../summaryCard";
 import moment, { Moment } from "moment";
 import { Heading } from "@cockroachlabs/ui-components";
 import { Anchor } from "../anchor";
-import { Count, DATE_FORMAT_24_UTC, performanceTuningRecipes } from "../util";
+import {
+  calculateTotalWorkload,
+  Count,
+  DATE_FORMAT_24_UTC,
+  EncodeDatabaseTableIndexUri,
+  EncodeDatabaseTableUri,
+  EncodeDatabaseUri,
+  performanceTuningRecipes,
+  unique,
+  unset,
+} from "../util";
+import {
+  getStatementsUsingIndex,
+  StatementsListRequestFromDetails,
+  StatementsUsingIndexRequest,
+} from "../api/indexDetailsApi";
+import {
+  AggregateStatistics,
+  makeStatementsColumns,
+  populateRegionNodeForStatements,
+} from "../statementsTable";
+import { UIConfigState } from "../store";
+import statementsStyles from "../statementsPage/statementsPage.module.scss";
+import { Pagination } from "../pagination";
+import { TableStatistics } from "../tableStatistics";
+import { EmptyStatementsPlaceholder } from "../statementsPage/emptyStatementsPlaceholder";
+import { StatementViewType } from "../statementsPage/statementPageTypes";
+import { PageConfig, PageConfigItem } from "src/pageConfig";
+import {
+  TimeScale,
+  timeScale1hMinOptions,
+  TimeScaleDropdown,
+} from "../timeScaleDropdown";
+import { Search } from "../search";
+import {
+  calculateActiveFilters,
+  defaultFilters,
+  Filter,
+  Filters,
+} from "../queryFilter";
+import { commonStyles } from "../common";
+import { Loading } from "src";
+import LoadingError from "../sqlActivity/errorComponent";
+import { INTERNAL_APP_NAME_PREFIX } from "../recentExecutions/recentStatementUtils";
+import { filteredStatementsData } from "../sqlActivity/util";
 
 const cx = classNames.bind(styles);
+const stmtCx = classNames.bind(statementsStyles);
 
 // We break out separate interfaces for some of the nested objects in our data
 // so that we can make (typed) test assertions on narrower slices of the data.
@@ -45,6 +94,8 @@ const cx = classNames.bind(styles);
 //     details: { // IndexDetails;
 //       loading: boolean;
 //       loaded: boolean;
+//       tableID: string;
+//       indexID: string;
 //       createStatement: string;
 //       totalReads: number;
 //       lastRead: Moment;
@@ -58,11 +109,18 @@ export interface IndexDetailsPageData {
   indexName: string;
   details: IndexDetails;
   breadcrumbItems: BreadcrumbItem[];
+  isTenant: UIConfigState["isTenant"];
+  hasViewActivityRedactedRole?: UIConfigState["hasViewActivityRedactedRole"];
+  hasAdminRole?: UIConfigState["hasAdminRole"];
+  nodeRegions: { [nodeId: string]: string };
+  timeScale: TimeScale;
 }
 
 interface IndexDetails {
   loading: boolean;
   loaded: boolean;
+  tableID: string;
+  indexID: string;
   createStatement: string;
   totalReads: number;
   lastRead: Moment;
@@ -81,38 +139,125 @@ export interface IndexDetailPageActions {
   refreshIndexStats?: (database: string, table: string) => void;
   resetIndexUsageStats?: (database: string, table: string) => void;
   refreshNodes?: () => void;
+  refreshUserSQLRoles: () => void;
+  onTimeScaleChange: (ts: TimeScale) => void;
 }
 
 export type IndexDetailsPageProps = IndexDetailsPageData &
   IndexDetailPageActions;
 
 interface IndexDetailsPageState {
-  sortSetting: SortSetting;
+  activeFilters: number;
+  filters?: Filters;
+  search: string;
+  lastStatementsError: Error | null;
+  lastStatementsUpdated: moment.Moment | null;
+  statements: AggregateStatistics[];
+  stmtPagination: ISortedTablePagination;
+  stmtSortSetting: SortSetting;
 }
 
 export class IndexDetailsPage extends React.Component<
   IndexDetailsPageProps,
   IndexDetailsPageState
 > {
+  refreshDataInterval: NodeJS.Timeout;
   constructor(props: IndexDetailsPageProps) {
     super(props);
 
     this.state = {
-      sortSetting: {
+      stmtSortSetting: {
         ascending: true,
+        columnTitle: "time",
       },
+      stmtPagination: {
+        pageSize: 10,
+        current: 1,
+      },
+      statements: [],
+      lastStatementsUpdated: null,
+      lastStatementsError: null,
+      search: null,
+      activeFilters: 0,
+      filters: defaultFilters,
     };
   }
 
   componentDidMount(): void {
     this.refresh();
+
+    this.refreshDataInterval = setInterval(() => {
+      this.refreshStatementsList();
+    }, 100);
+  }
+
+  componentWillUnmount(): void {
+    if (this.refreshDataInterval) {
+      clearInterval(this.refreshDataInterval);
+    }
   }
 
   componentDidUpdate(): void {
     this.refresh();
   }
 
+  onChangeSortSetting = (ss: SortSetting): void => {
+    this.setState({
+      stmtSortSetting: ss,
+    });
+  };
+
+  onChangePage = (current: number): void => {
+    const { stmtPagination } = this.state;
+    this.setState({ stmtPagination: { ...stmtPagination, current } });
+  };
+
+  resetPagination = (): void => {
+    this.setState({
+      stmtPagination: {
+        current: 1,
+        pageSize: 10,
+      },
+    });
+  };
+
+  onSubmitSearchField = (search: string): void => {
+    this.setState({ search: search });
+    this.resetPagination();
+  };
+
+  onClearSearchField = (): void => {
+    this.onSubmitSearchField("");
+  };
+
+  onSubmitFilters = (filters: Filters): void => {
+    this.setState({
+      filters: filters,
+      activeFilters: calculateActiveFilters(filters),
+    });
+
+    this.resetPagination();
+  };
+
+  onClearFilters = (): void => {
+    this.setState({
+      filters: defaultFilters,
+      activeFilters: 0,
+    });
+
+    this.resetPagination();
+  };
+
+  changeTimeScale = (ts: TimeScale): void => {
+    if (this.props.onTimeScaleChange) {
+      this.props.onTimeScaleChange(ts);
+    }
+    this.setState({ lastStatementsUpdated: null });
+    this.refresh();
+  };
+
   private refresh() {
+    this.props.refreshUserSQLRoles();
     if (this.props.refreshNodes != null) {
       this.props.refreshNodes();
     }
@@ -124,6 +269,39 @@ export class IndexDetailsPage extends React.Component<
     }
   }
 
+  private refreshStatementsList(): void {
+    const noData = this.state.lastStatementsUpdated == null;
+    const movingTimeScaleWithPeriodPassed =
+      this.props.timeScale.key !== "Custom" &&
+      moment().diff(this.state.lastStatementsUpdated, "minutes") >= 5;
+    if (
+      (noData || movingTimeScaleWithPeriodPassed) &&
+      this.props.details.loaded
+    ) {
+      const req: StatementsUsingIndexRequest = StatementsListRequestFromDetails(
+        this.props.details.tableID,
+        this.props.details.indexID,
+        this.props.databaseName,
+        this.props.timeScale,
+      );
+      getStatementsUsingIndex(req)
+        .then(res => {
+          populateRegionNodeForStatements(res, this.props.nodeRegions);
+          this.setState({
+            statements: res,
+            lastStatementsUpdated: moment(),
+            lastStatementsError: null,
+          });
+        })
+        .catch(error => {
+          this.setState({
+            lastStatementsUpdated: moment(),
+            lastStatementsError: error,
+          });
+        });
+    }
+  }
+
   private getTimestampString(timestamp: Moment): string {
     const minDate = moment.utc("0001-01-01"); // minimum value as per UTC
     if (timestamp.isSame(minDate)) {
@@ -131,6 +309,26 @@ export class IndexDetailsPage extends React.Component<
     } else {
       return timestamp.format(DATE_FORMAT_24_UTC);
     }
+  }
+
+  private getApps(): string[] {
+    const { statements } = this.state;
+    let sawBlank = false;
+    let sawInternal = false;
+    const apps: { [app: string]: boolean } = {};
+    statements.forEach((statement: AggregateStatistics) => {
+      if (statement.applicationName.startsWith(INTERNAL_APP_NAME_PREFIX)) {
+        sawInternal = true;
+      } else if (statement.applicationName) {
+        apps[statement.applicationName] = true;
+      } else {
+        sawBlank = true;
+      }
+    });
+    return []
+      .concat(sawInternal ? [INTERNAL_APP_NAME_PREFIX] : [])
+      .concat(sawBlank ? [unset] : [])
+      .concat(Object.keys(apps).sort());
   }
 
   private renderIndexRecommendations(
@@ -192,15 +390,22 @@ export class IndexDetailsPage extends React.Component<
         items={[
           { link: "/databases", name: "Databases" },
           {
-            link: `/database/${this.props.databaseName}`,
+            link: EncodeDatabaseUri(this.props.databaseName),
             name: "Tables",
           },
           {
-            link: `/database/${this.props.databaseName}/table/${this.props.tableName}`,
+            link: EncodeDatabaseTableUri(
+              this.props.databaseName,
+              this.props.tableName,
+            ),
             name: `Table: ${this.props.tableName}`,
           },
           {
-            link: `/database/${this.props.databaseName}/table/${this.props.tableName}/index/${this.props.indexName}`,
+            link: EncodeDatabaseTableIndexUri(
+              this.props.databaseName,
+              this.props.tableName,
+              this.props.indexName,
+            ),
             name: `Index: ${this.props.indexName}`,
           },
         ]}
@@ -209,7 +414,59 @@ export class IndexDetailsPage extends React.Component<
     );
   }
 
+  private filteredStatements = (): AggregateStatistics[] => {
+    const { filters, search, statements } = this.state;
+    const { nodeRegions, isTenant } = this.props;
+    let filteredStatements = statements;
+    const isInternal = (statement: AggregateStatistics) =>
+      statement.applicationName.startsWith(INTERNAL_APP_NAME_PREFIX);
+
+    if (filters.app && filters.app !== "All") {
+      const criteria = decodeURIComponent(filters.app).split(",");
+      let showInternal = false;
+      if (criteria.includes(INTERNAL_APP_NAME_PREFIX)) {
+        showInternal = true;
+      }
+      if (criteria.includes(unset)) {
+        criteria.push("");
+      }
+
+      filteredStatements = statements.filter(
+        (statement: AggregateStatistics) =>
+          (showInternal && isInternal(statement)) ||
+          criteria.includes(statement.applicationName),
+      );
+    }
+    return filteredStatementsData(
+      filters,
+      search,
+      filteredStatements,
+      nodeRegions,
+      isTenant,
+    );
+  };
+
   render(): React.ReactElement {
+    const {
+      statements,
+      stmtSortSetting,
+      stmtPagination,
+      search,
+      activeFilters,
+      filters,
+    } = this.state;
+    const { nodeRegions, isTenant, hasViewActivityRedactedRole, hasAdminRole } =
+      this.props;
+    const apps = this.getApps();
+    const nodes = Object.keys(nodeRegions)
+      .map(n => Number(n))
+      .sort();
+    const regions = unique(
+      nodes.map(node => nodeRegions[node.toString()]),
+    ).sort();
+
+    const filteredStmts = this.filteredStatements();
+
     return (
       <div className={cx("page-container")}>
         <div className="root table-area">
@@ -235,23 +492,25 @@ export class IndexDetailsPage extends React.Component<
                   {this.getTimestampString(this.props.details.lastReset)}
                 </div>
               </Tooltip>
-              <div>
-                <a
-                  className={cx(
-                    "action",
-                    "separator",
-                    "index-stats__reset-btn",
-                  )}
-                  onClick={() =>
-                    this.props.resetIndexUsageStats(
-                      this.props.databaseName,
-                      this.props.tableName,
-                    )
-                  }
-                >
-                  Reset all index stats
-                </a>
-              </div>
+              {hasAdminRole && (
+                <div>
+                  <a
+                    className={cx(
+                      "action",
+                      "separator",
+                      "index-stats__reset-btn",
+                    )}
+                    onClick={() =>
+                      this.props.resetIndexUsageStats(
+                        this.props.databaseName,
+                        this.props.tableName,
+                      )
+                    }
+                  >
+                    Reset all index stats
+                  </a>
+                </div>
+              )}
             </div>
           </div>
           <section className={baseHeadingClasses.wrapper}>
@@ -312,7 +571,7 @@ export class IndexDetailsPage extends React.Component<
             <Row gutter={18} className={cx("row-spaced")}>
               <Col className="gutter-row" span={18}>
                 <SummaryCard className={cx("summary-card--row")}>
-                  <Heading type="h5">Index recommendations</Heading>
+                  <Heading type="h5">Index Recommendations</Heading>
                   <table>
                     <tbody>
                       {this.renderIndexRecommendations(
@@ -323,6 +582,101 @@ export class IndexDetailsPage extends React.Component<
                 </SummaryCard>
               </Col>
             </Row>
+            {hasAdminRole && (
+              <Row gutter={24} className={cx("row-spaced", "bottom-space")}>
+                <Col className="gutter-row" span={24}>
+                  <SummaryCard className={cx("summary-card--row")}>
+                    <Heading type="h5">Index Usage</Heading>
+                    <PageConfig whiteBkg={true}>
+                      <PageConfigItem>
+                        <Search
+                          onSubmit={this.onSubmitSearchField}
+                          onClear={this.onClearSearchField}
+                          defaultValue={search}
+                        />
+                      </PageConfigItem>
+                      <PageConfigItem>
+                        <Filter
+                          onSubmitFilters={this.onSubmitFilters}
+                          appNames={apps}
+                          regions={regions}
+                          nodes={nodes.map(n => "n" + n)}
+                          activeFilters={activeFilters}
+                          filters={filters}
+                          hideTimeLabel={true}
+                          showDB={false}
+                          showSqlType={true}
+                          showScan={true}
+                          showRegions={regions.length > 1}
+                          showNodes={!isTenant && nodes.length > 1}
+                        />
+                      </PageConfigItem>
+                      <PageConfigItem className={commonStyles("separator")}>
+                        <TimeScaleDropdown
+                          options={timeScale1hMinOptions}
+                          currentScale={this.props.timeScale}
+                          setTimeScale={this.changeTimeScale}
+                        />
+                      </PageConfigItem>
+                    </PageConfig>
+                    <Loading
+                      loading={statements == null}
+                      page="index details"
+                      error={this.state.lastStatementsError}
+                      renderError={() =>
+                        LoadingError({
+                          statsType: "statements",
+                          timeout: this.state.lastStatementsError?.message
+                            ?.toLowerCase()
+                            .includes("timeout"),
+                        })
+                      }
+                    >
+                      <TableStatistics
+                        pagination={stmtPagination}
+                        totalCount={filteredStmts.length}
+                        arrayItemName={
+                          "most executed statement fingerprints using this index"
+                        }
+                        activeFilters={activeFilters}
+                        onClearFilters={this.onClearFilters}
+                      />
+                      <SortedTable
+                        data={filteredStmts}
+                        columns={makeStatementsColumns(
+                          statements,
+                          [],
+                          calculateTotalWorkload(statements),
+                          "statement",
+                          isTenant,
+                          hasViewActivityRedactedRole,
+                        ).filter(c => !(isTenant && c.hideIfTenant))}
+                        className={stmtCx("statements-table")}
+                        tableWrapperClassName={cx("table-scroll")}
+                        sortSetting={stmtSortSetting}
+                        onChangeSortSetting={this.onChangeSortSetting}
+                        pagination={stmtPagination}
+                        renderNoResult={
+                          <EmptyStatementsPlaceholder
+                            isEmptySearchResults={
+                              (search?.length > 0 || activeFilters > 0) &&
+                              filteredStmts?.length === 0
+                            }
+                            statementView={StatementViewType.USING_INDEX}
+                          />
+                        }
+                      />
+                      <Pagination
+                        pageSize={stmtPagination.pageSize}
+                        current={stmtPagination.current}
+                        total={filteredStmts.length}
+                        onChange={this.onChangePage}
+                      />
+                    </Loading>
+                  </SummaryCard>
+                </Col>
+              </Row>
+            )}
           </section>
         </div>
       </div>

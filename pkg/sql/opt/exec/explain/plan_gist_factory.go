@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
 
@@ -110,6 +111,11 @@ type PlanGistFactory struct {
 }
 
 var _ exec.Factory = &PlanGistFactory{}
+
+// Ctx implements the Factory interface.
+func (f *PlanGistFactory) Ctx() context.Context {
+	return f.wrappedFactory.Ctx()
+}
 
 // writeAndHash writes an arbitrary slice of bytes to the buffer and hashes each
 // byte.
@@ -369,7 +375,7 @@ func (f *PlanGistFactory) decodeBool() bool {
 	return val != 0
 }
 
-func (f *PlanGistFactory) encodeFastIntSet(s util.FastIntSet) {
+func (f *PlanGistFactory) encodeFastIntSet(s intsets.Fast) {
 	lenBefore := f.buffer.Len()
 	if err := s.Encode(&f.buffer); err != nil {
 		panic(err)
@@ -414,7 +420,7 @@ func (f *PlanGistFactory) encodeScanParams(params exec.ScanParams) {
 }
 
 func (f *PlanGistFactory) decodeScanParams() exec.ScanParams {
-	neededCols := util.FastIntSet{}
+	neededCols := intsets.Fast{}
 	err := neededCols.Decode(&f.buffer)
 	if err != nil {
 		panic(err)

@@ -67,7 +67,11 @@ func (s *Store) FindTargetAndTransferLease(
 func (s *Store) AddReplica(repl *Replica) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if err := s.addReplicaInternalLocked(repl); err != nil {
+	repl.mu.RLock()
+	defer repl.mu.RUnlock()
+	if err := s.addToReplicasByRangeIDLocked(repl); err != nil {
+		return err
+	} else if err := s.addToReplicasByKeyLockedReplicaRLocked(repl); err != nil {
 		return err
 	}
 	s.metrics.ReplicaCount.Inc(1)
@@ -84,7 +88,7 @@ func (s *Store) ComputeMVCCStats() (enginepb.MVCCStats, error) {
 	now := s.Clock().PhysicalNow()
 	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
 		var stats enginepb.MVCCStats
-		stats, err = rditer.ComputeStatsForRange(r.Desc(), s.Engine(), now)
+		stats, err = rditer.ComputeStatsForRange(r.Desc(), s.TODOEngine(), now)
 		if err != nil {
 			return false
 		}
@@ -203,7 +207,7 @@ func (s *Store) ManualRaftSnapshot(repl *Replica, target roachpb.ReplicaID) erro
 // ReservationCount counts the number of outstanding reservations that are not
 // running.
 func (s *Store) ReservationCount() int {
-	return int(s.cfg.SnapshotApplyLimit) - s.snapshotApplyQueue.Len()
+	return int(s.cfg.SnapshotApplyLimit) - s.snapshotApplyQueue.AvailableLen()
 }
 
 // RaftSchedulerPriorityID returns the Raft scheduler's prioritized range.
@@ -227,6 +231,10 @@ func NewTestStorePool(cfg StoreConfig) *storepool.StorePool {
 		},
 		/* deterministic */ false,
 	)
+}
+
+func (r *Replica) Store() *Store {
+	return r.store
 }
 
 func (r *Replica) Breaker() *circuit2.Breaker {
@@ -353,7 +361,7 @@ func (r *Replica) GetRaftLogSize() (int64, bool) {
 func (r *Replica) GetCachedLastTerm() uint64 {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.mu.lastTerm
+	return r.mu.lastTermNotDurable
 }
 
 func (r *Replica) IsRaftGroupInitialized() bool {

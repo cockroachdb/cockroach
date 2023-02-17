@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -488,12 +489,13 @@ func TestStaleRowsDoNotCauseSettingsToRegress(t *testing.T) {
 		rows, err := s.DB().Scan(ctx, k, k.PrefixEnd(), 0 /* maxRows */)
 		require.NoError(t, err)
 		dec := settingswatcher.MakeRowDecoder(codec)
+		var alloc tree.DatumAlloc
 		for _, r := range rows {
 			rkv := roachpb.KeyValue{Key: r.Key}
 			if r.Value != nil {
 				rkv.Value = *r.Value
 			}
-			name, _, _, err := dec.DecodeRow(rkv)
+			name, _, _, err := dec.DecodeRow(rkv, &alloc)
 			require.NoError(t, err)
 			if name == fakeSettingName {
 				rkv.Key, err = codec.StripTenantPrefix(rkv.Key)

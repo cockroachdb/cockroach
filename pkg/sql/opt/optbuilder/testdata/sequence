@@ -101,6 +101,11 @@ sequence-select x
 build
 SELECT @1 FROM x
 ----
+error (01P01): invalid syntax @1
+
+build set=allow_ordinal_column_references=true
+SELECT @1 FROM x
+----
 project
  ├── columns: "?column?":4!null
  ├── sequence-select x

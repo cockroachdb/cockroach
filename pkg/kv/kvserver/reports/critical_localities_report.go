@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -83,7 +83,7 @@ func (r LocalityReport) CountRangeAtRisk(zKey ZoneKey, loc LocalityRepr) {
 }
 
 func (r *replicationCriticalLocalitiesReportSaver) loadPreviousVersion(
-	ctx context.Context, ex sqlutil.InternalExecutor, txn *kv.Txn,
+	ctx context.Context, ex isql.Executor, txn *kv.Txn,
 ) error {
 	// The data for the previous save needs to be loaded if:
 	// - this is the first time that we call this method and lastUpdatedAt has never been set
@@ -124,7 +124,7 @@ func (r *replicationCriticalLocalitiesReportSaver) loadPreviousVersion(
 }
 
 func (r *replicationCriticalLocalitiesReportSaver) updateTimestamp(
-	ctx context.Context, ex sqlutil.InternalExecutor, txn *kv.Txn, reportTS time.Time,
+	ctx context.Context, ex isql.Executor, txn *kv.Txn, reportTS time.Time,
 ) error {
 	if !r.lastGenerated.IsZero() && reportTS == r.lastGenerated {
 		return errors.Errorf(
@@ -151,11 +151,7 @@ func (r *replicationCriticalLocalitiesReportSaver) updateTimestamp(
 // takes ownership.
 // reportTS is the time that will be set in the updated_at column for every row.
 func (r *replicationCriticalLocalitiesReportSaver) Save(
-	ctx context.Context,
-	report LocalityReport,
-	reportTS time.Time,
-	db *kv.DB,
-	ex sqlutil.InternalExecutor,
+	ctx context.Context, report LocalityReport, reportTS time.Time, db *kv.DB, ex isql.Executor,
 ) error {
 	r.lastUpdatedRowCount = 0
 	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -218,7 +214,7 @@ func (r *replicationCriticalLocalitiesReportSaver) upsertLocality(
 	key localityKey,
 	status localityStatus,
 	db *kv.DB,
-	ex sqlutil.InternalExecutor,
+	ex isql.Executor,
 ) error {
 	var err error
 	previousStatus, hasOldVersion := r.previousVersion[key]

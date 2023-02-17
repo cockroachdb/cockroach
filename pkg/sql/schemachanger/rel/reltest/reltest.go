@@ -18,7 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 )
@@ -91,7 +91,7 @@ func (s Suite) Run(t *testing.T) {
 func (s Suite) writeYAML(t *testing.T) {
 	out, err := yaml.Marshal(s.toYAML(t))
 	require.NoError(t, err)
-	tdp := testutils.TestDataPath(t, s.Name)
+	tdp := datapathutils.TestDataPath(t, s.Name)
 	if rewrite {
 		require.NoError(t, os.WriteFile(tdp, out, 0777))
 	} else {

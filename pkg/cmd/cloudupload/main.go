@@ -39,10 +39,6 @@ func main() {
 		Body: handler,
 	}
 	switch parsedDst.provider {
-	case "s3":
-		if err := s3Upload(parsedDst.bucket, dstObj); err != nil {
-			log.Fatalf("failed to upload %s to %s: %s", src, dst, err)
-		}
 	case "gs":
 		if err := gcsUpload(parsedDst.bucket, dstObj); err != nil {
 			log.Fatalf("failed to upload %s to %s: %s", src, dst, err)
@@ -68,25 +64,6 @@ func parseURL(dst string) (target, error) {
 		bucket:   parsed.Host,
 		key:      strings.TrimPrefix(parsed.Path, "/"),
 	}, nil
-}
-
-func s3Upload(bucket string, dstObj release.PutObjectInput) error {
-	if _, ok := os.LookupEnv("AWS_ACCESS_KEY_ID"); !ok {
-		return fmt.Errorf("AWS_ACCESS_KEY_ID environment variable is not set")
-	}
-	if _, ok := os.LookupEnv("AWS_SECRET_ACCESS_KEY"); !ok {
-		return fmt.Errorf("AWS_SECRET_ACCESS_KEY environment variable is not set")
-	}
-	s3, err := release.NewS3("us-east-1", bucket)
-	if err != nil {
-		return fmt.Errorf("creating AWS S3 session: %w", err)
-	}
-	// Make sure the object doesn't exist. Potentially can race.
-	obj := release.GetObjectInput{Key: dstObj.Key}
-	if _, err := s3.GetObject(&obj); err == nil {
-		return fmt.Errorf("cannot overwrite %s in bucket %s", *dstObj.Key, bucket)
-	}
-	return s3.PutObject(&dstObj)
 }
 
 func gcsUpload(bucket string, dstObj release.PutObjectInput) error {

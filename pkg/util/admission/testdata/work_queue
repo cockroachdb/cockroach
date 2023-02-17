@@ -26,7 +26,7 @@ tryGet: returning false
 print
 ----
 closed epoch: 0 tenantHeap len: 1 top tenant: 53
- tenant-id: 53 used: 1, w: 1, fifo: -128 waiting work heap: [0: pri: 0, ct: 3, epoch: 0, qt: 100]
+ tenant-id: 53 used: 1, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 3, epoch: 0, qt: 100]
 
 admit id=3 tenant=53 priority=0 create-time-millis=2 bypass=false
 ----
@@ -36,7 +36,7 @@ admit id=3 tenant=53 priority=0 create-time-millis=2 bypass=false
 print
 ----
 closed epoch: 0 tenantHeap len: 1 top tenant: 53
- tenant-id: 53 used: 1, w: 1, fifo: -128 waiting work heap: [0: pri: 0, ct: 2, epoch: 0, qt: 100] [1: pri: 0, ct: 3, epoch: 0, qt: 100]
+ tenant-id: 53 used: 1, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 2, epoch: 0, qt: 100] [1: pri: normal-pri, ct: 3, epoch: 0, qt: 100]
 
 # Request from tenant 71.
 admit id=4 tenant=71 priority=-128 create-time-millis=4 bypass=false
@@ -51,8 +51,8 @@ admit id=5 tenant=71 priority=0 create-time-millis=5 bypass=false
 print
 ----
 closed epoch: 0 tenantHeap len: 2 top tenant: 71
- tenant-id: 53 used: 1, w: 1, fifo: -128 waiting work heap: [0: pri: 0, ct: 2, epoch: 0, qt: 100] [1: pri: 0, ct: 3, epoch: 0, qt: 100]
- tenant-id: 71 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: 0, ct: 5, epoch: 0, qt: 100] [1: pri: -128, ct: 4, epoch: 0, qt: 100]
+ tenant-id: 53 used: 1, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 2, epoch: 0, qt: 100] [1: pri: normal-pri, ct: 3, epoch: 0, qt: 100]
+ tenant-id: 71 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 5, epoch: 0, qt: 100] [1: pri: low-pri, ct: 4, epoch: 0, qt: 100]
 
 granted chain-id=5
 ----
@@ -65,8 +65,8 @@ granted: returned 1
 print
 ----
 closed epoch: 0 tenantHeap len: 2 top tenant: 71
- tenant-id: 53 used: 1, w: 1, fifo: -128 waiting work heap: [0: pri: 0, ct: 2, epoch: 0, qt: 100] [1: pri: 0, ct: 3, epoch: 0, qt: 100]
- tenant-id: 71 used: 1, w: 1, fifo: -128 waiting work heap: [0: pri: -128, ct: 4, epoch: 0, qt: 100]
+ tenant-id: 53 used: 1, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 2, epoch: 0, qt: 100] [1: pri: normal-pri, ct: 3, epoch: 0, qt: 100]
+ tenant-id: 71 used: 1, w: 1, fifo: -128 waiting work heap: [0: pri: low-pri, ct: 4, epoch: 0, qt: 100]
 
 # Cancel a request from tenant 53.
 cancel-work id=3
@@ -76,8 +76,8 @@ id 3: admit failed
 print
 ----
 closed epoch: 0 tenantHeap len: 2 top tenant: 71
- tenant-id: 53 used: 1, w: 1, fifo: -128 waiting work heap: [0: pri: 0, ct: 3, epoch: 0, qt: 100]
- tenant-id: 71 used: 1, w: 1, fifo: -128 waiting work heap: [0: pri: -128, ct: 4, epoch: 0, qt: 100]
+ tenant-id: 53 used: 1, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 3, epoch: 0, qt: 100]
+ tenant-id: 71 used: 1, w: 1, fifo: -128 waiting work heap: [0: pri: low-pri, ct: 4, epoch: 0, qt: 100]
 
 # The work admitted for tenant 53 is done.
 work-done id=1
@@ -88,8 +88,8 @@ returnGrant 1
 print
 ----
 closed epoch: 0 tenantHeap len: 2 top tenant: 53
- tenant-id: 53 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: 0, ct: 3, epoch: 0, qt: 100]
- tenant-id: 71 used: 1, w: 1, fifo: -128 waiting work heap: [0: pri: -128, ct: 4, epoch: 0, qt: 100]
+ tenant-id: 53 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 3, epoch: 0, qt: 100]
+ tenant-id: 71 used: 1, w: 1, fifo: -128 waiting work heap: [0: pri: low-pri, ct: 4, epoch: 0, qt: 100]
 
 # A request from the system tenant bypasses admission control, but is
 # reflected in the WorkQueue state.
@@ -102,8 +102,8 @@ print
 ----
 closed epoch: 0 tenantHeap len: 2 top tenant: 53
  tenant-id: 1 used: 1, w: 1, fifo: -128
- tenant-id: 53 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: 0, ct: 3, epoch: 0, qt: 100]
- tenant-id: 71 used: 1, w: 1, fifo: -128 waiting work heap: [0: pri: -128, ct: 4, epoch: 0, qt: 100]
+ tenant-id: 53 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 3, epoch: 0, qt: 100]
+ tenant-id: 71 used: 1, w: 1, fifo: -128 waiting work heap: [0: pri: low-pri, ct: 4, epoch: 0, qt: 100]
 
 granted chain-id=7
 ----
@@ -151,12 +151,12 @@ tryGet: returning false
 advance-time millis=205
 ----
 closed epoch: 2 tenantHeap len: 1 top tenant: 53
- tenant-id: 53 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: 0, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 53 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
 
 print
 ----
 closed epoch: 2 tenantHeap len: 1 top tenant: 53
- tenant-id: 53 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: 0, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 53 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
 
 granted chain-id=5
 ----
@@ -189,7 +189,7 @@ admit id=4 tenant=53 priority=0 create-time-millis=400 bypass=false
 print
 ----
 closed epoch: 3 tenantHeap len: 1 top tenant: 53
- tenant-id: 53 used: 1, w: 1, fifo: 1 waiting work heap: [0: pri: 0, ct: 399, epoch: 3, qt: 405, lifo-ordering] [1: pri: 0, ct: 50, epoch: 0, qt: 405, lifo-ordering] open epochs heap: [0: pri: 0, ct: 400, epoch: 4, qt: 405]
+ tenant-id: 53 used: 1, w: 1, fifo: 1 waiting work heap: [0: pri: normal-pri, ct: 399, epoch: 3, qt: 405, lifo-ordering] [1: pri: normal-pri, ct: 50, epoch: 0, qt: 405, lifo-ordering] open epochs heap: [0: pri: normal-pri, ct: 400, epoch: 4, qt: 405]
 
 # Latest request in closed epoch is granted.
 granted chain-id=6
@@ -209,7 +209,7 @@ granted: returned 1
 print
 ----
 closed epoch: 3 tenantHeap len: 1 top tenant: 53
- tenant-id: 53 used: 3, w: 1, fifo: 1 open epochs heap: [0: pri: 0, ct: 400, epoch: 4, qt: 405]
+ tenant-id: 53 used: 3, w: 1, fifo: 1 open epochs heap: [0: pri: normal-pri, ct: 400, epoch: 4, qt: 405]
 
 # Add request to closed epoch.
 admit id=5 tenant=53 priority=0 create-time-millis=300 bypass=false
@@ -224,7 +224,7 @@ admit id=6 tenant=53 priority=0 create-time-millis=500 bypass=false
 print
 ----
 closed epoch: 3 tenantHeap len: 1 top tenant: 53
- tenant-id: 53 used: 3, w: 1, fifo: 1 waiting work heap: [0: pri: 0, ct: 300, epoch: 3, qt: 405, lifo-ordering] open epochs heap: [0: pri: 0, ct: 400, epoch: 4, qt: 405] [1: pri: 0, ct: 500, epoch: 5, qt: 405]
+ tenant-id: 53 used: 3, w: 1, fifo: 1 waiting work heap: [0: pri: normal-pri, ct: 300, epoch: 3, qt: 405, lifo-ordering] open epochs heap: [0: pri: normal-pri, ct: 400, epoch: 4, qt: 405] [1: pri: normal-pri, ct: 500, epoch: 5, qt: 405]
 
 # Add high priority request in open epoch 5.
 admit id=7 tenant=53 priority=127 create-time-millis=550 bypass=false
@@ -235,13 +235,13 @@ admit id=7 tenant=53 priority=127 create-time-millis=550 bypass=false
 print
 ----
 closed epoch: 3 tenantHeap len: 1 top tenant: 53
- tenant-id: 53 used: 3, w: 1, fifo: 1 waiting work heap: [0: pri: 127, ct: 550, epoch: 5, qt: 405] [1: pri: 0, ct: 300, epoch: 3, qt: 405, lifo-ordering] open epochs heap: [0: pri: 0, ct: 400, epoch: 4, qt: 405] [1: pri: 0, ct: 500, epoch: 5, qt: 405]
+ tenant-id: 53 used: 3, w: 1, fifo: 1 waiting work heap: [0: pri: high-pri, ct: 550, epoch: 5, qt: 405] [1: pri: normal-pri, ct: 300, epoch: 3, qt: 405, lifo-ordering] open epochs heap: [0: pri: normal-pri, ct: 400, epoch: 4, qt: 405] [1: pri: normal-pri, ct: 500, epoch: 5, qt: 405]
 
 # Make the request wait for 60ms so we don't switch back to fifo.
 advance-time millis=60
 ----
 closed epoch: 3 tenantHeap len: 1 top tenant: 53
- tenant-id: 53 used: 3, w: 1, fifo: 1 waiting work heap: [0: pri: 127, ct: 550, epoch: 5, qt: 405] [1: pri: 0, ct: 300, epoch: 3, qt: 405, lifo-ordering] open epochs heap: [0: pri: 0, ct: 400, epoch: 4, qt: 405] [1: pri: 0, ct: 500, epoch: 5, qt: 405]
+ tenant-id: 53 used: 3, w: 1, fifo: 1 waiting work heap: [0: pri: high-pri, ct: 550, epoch: 5, qt: 405] [1: pri: normal-pri, ct: 300, epoch: 3, qt: 405, lifo-ordering] open epochs heap: [0: pri: normal-pri, ct: 400, epoch: 4, qt: 405] [1: pri: normal-pri, ct: 500, epoch: 5, qt: 405]
 
 granted chain-id=8
 ----
@@ -262,13 +262,13 @@ admit id=8 tenant=53 priority=0 create-time-millis=350 bypass=false
 print
 ----
 closed epoch: 3 tenantHeap len: 1 top tenant: 53
- tenant-id: 53 used: 5, w: 1, fifo: 1 waiting work heap: [0: pri: 0, ct: 350, epoch: 3, qt: 465, lifo-ordering] open epochs heap: [0: pri: 0, ct: 400, epoch: 4, qt: 405] [1: pri: 0, ct: 500, epoch: 5, qt: 405]
+ tenant-id: 53 used: 5, w: 1, fifo: 1 waiting work heap: [0: pri: normal-pri, ct: 350, epoch: 3, qt: 465, lifo-ordering] open epochs heap: [0: pri: normal-pri, ct: 400, epoch: 4, qt: 405] [1: pri: normal-pri, ct: 500, epoch: 5, qt: 405]
 
 # One request moved from open to closed epoch heap.
 advance-time millis=40
 ----
 closed epoch: 4 tenantHeap len: 1 top tenant: 53
- tenant-id: 53 used: 5, w: 1, fifo: 1 waiting work heap: [0: pri: 0, ct: 400, epoch: 4, qt: 405, lifo-ordering] [1: pri: 0, ct: 350, epoch: 3, qt: 465, lifo-ordering] open epochs heap: [0: pri: 0, ct: 500, epoch: 5, qt: 405]
+ tenant-id: 53 used: 5, w: 1, fifo: 1 waiting work heap: [0: pri: normal-pri, ct: 400, epoch: 4, qt: 405, lifo-ordering] [1: pri: normal-pri, ct: 350, epoch: 3, qt: 465, lifo-ordering] open epochs heap: [0: pri: normal-pri, ct: 500, epoch: 5, qt: 405]
 
 granted chain-id=10
 ----
@@ -279,7 +279,7 @@ granted: returned 1
 print
 ----
 closed epoch: 4 tenantHeap len: 1 top tenant: 53
- tenant-id: 53 used: 6, w: 1, fifo: 1 waiting work heap: [0: pri: 0, ct: 350, epoch: 3, qt: 465, lifo-ordering] open epochs heap: [0: pri: 0, ct: 500, epoch: 5, qt: 405]
+ tenant-id: 53 used: 6, w: 1, fifo: 1 waiting work heap: [0: pri: normal-pri, ct: 350, epoch: 3, qt: 465, lifo-ordering] open epochs heap: [0: pri: normal-pri, ct: 500, epoch: 5, qt: 405]
 
 granted chain-id=11
 ----
@@ -290,7 +290,7 @@ granted: returned 1
 print
 ----
 closed epoch: 4 tenantHeap len: 1 top tenant: 53
- tenant-id: 53 used: 7, w: 1, fifo: 1 open epochs heap: [0: pri: 0, ct: 500, epoch: 5, qt: 405]
+ tenant-id: 53 used: 7, w: 1, fifo: 1 open epochs heap: [0: pri: normal-pri, ct: 500, epoch: 5, qt: 405]
 
 # Can dequeue from the open epochs heap if nothing else is remaining.
 granted chain-id=12
@@ -312,13 +312,13 @@ tryGet: returning false
 print
 ----
 closed epoch: 4 tenantHeap len: 1 top tenant: 53
- tenant-id: 53 used: 8, w: 1, fifo: 1 waiting work heap: [0: pri: 0, ct: 380, epoch: 3, qt: 505, lifo-ordering]
+ tenant-id: 53 used: 8, w: 1, fifo: 1 waiting work heap: [0: pri: normal-pri, ct: 380, epoch: 3, qt: 505, lifo-ordering]
 
 # This time advance means the previous request will see significant queueing.
 advance-time millis=100
 ----
 closed epoch: 5 tenantHeap len: 1 top tenant: 53
- tenant-id: 53 used: 8, w: 1, fifo: 1 waiting work heap: [0: pri: 0, ct: 380, epoch: 3, qt: 505, lifo-ordering]
+ tenant-id: 53 used: 8, w: 1, fifo: 1 waiting work heap: [0: pri: normal-pri, ct: 380, epoch: 3, qt: 505, lifo-ordering]
 
 # This request in an already closed epoch gets ahead because of higher
 # create-time-millis.
@@ -328,7 +328,7 @@ admit id=10 tenant=53 priority=0 create-time-millis=390 bypass=false
 print
 ----
 closed epoch: 5 tenantHeap len: 1 top tenant: 53
- tenant-id: 53 used: 8, w: 1, fifo: 1 waiting work heap: [0: pri: 0, ct: 390, epoch: 3, qt: 605, lifo-ordering] [1: pri: 0, ct: 380, epoch: 3, qt: 505, lifo-ordering]
+ tenant-id: 53 used: 8, w: 1, fifo: 1 waiting work heap: [0: pri: normal-pri, ct: 390, epoch: 3, qt: 605, lifo-ordering] [1: pri: normal-pri, ct: 380, epoch: 3, qt: 505, lifo-ordering]
 
 granted chain-id=12
 ----
@@ -339,13 +339,13 @@ granted: returned 1
 print
 ----
 closed epoch: 5 tenantHeap len: 1 top tenant: 53
- tenant-id: 53 used: 9, w: 1, fifo: 1 waiting work heap: [0: pri: 0, ct: 380, epoch: 3, qt: 505, lifo-ordering]
+ tenant-id: 53 used: 9, w: 1, fifo: 1 waiting work heap: [0: pri: normal-pri, ct: 380, epoch: 3, qt: 505, lifo-ordering]
 
 # This advance will switch all priorities back to FIFO.
 advance-time millis=100
 ----
 closed epoch: 6 tenantHeap len: 1 top tenant: 53
- tenant-id: 53 used: 9, w: 1, fifo: -128 waiting work heap: [0: pri: 0, ct: 380, epoch: 3, qt: 505, lifo-ordering]
+ tenant-id: 53 used: 9, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 380, epoch: 3, qt: 505, lifo-ordering]
 
 admit id=11 tenant=53 priority=0 create-time-millis=610 bypass=false
 ----
@@ -359,7 +359,7 @@ admit id=12 tenant=53 priority=-128 create-time-millis=615 bypass=false
 print
 ----
 closed epoch: 6 tenantHeap len: 1 top tenant: 53
- tenant-id: 53 used: 9, w: 1, fifo: -128 waiting work heap: [0: pri: 0, ct: 610, epoch: 6, qt: 705] [1: pri: 0, ct: 380, epoch: 3, qt: 505, lifo-ordering] [2: pri: -128, ct: 615, epoch: 6, qt: 705]
+ tenant-id: 53 used: 9, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 610, epoch: 6, qt: 705] [1: pri: normal-pri, ct: 380, epoch: 3, qt: 505, lifo-ordering] [2: pri: low-pri, ct: 615, epoch: 6, qt: 705]
 
 granted chain-id=13
 ----
@@ -372,7 +372,7 @@ granted: returned 1
 print
 ----
 closed epoch: 6 tenantHeap len: 1 top tenant: 53
- tenant-id: 53 used: 10, w: 1, fifo: -128 waiting work heap: [0: pri: 0, ct: 380, epoch: 3, qt: 505, lifo-ordering] [1: pri: -128, ct: 615, epoch: 6, qt: 705]
+ tenant-id: 53 used: 10, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 380, epoch: 3, qt: 505, lifo-ordering] [1: pri: low-pri, ct: 615, epoch: 6, qt: 705]
 
 granted chain-id=14
 ----
@@ -401,7 +401,7 @@ tryGet: returning false
 print
 ----
 closed epoch: 7 tenantHeap len: 1 top tenant: 53
- tenant-id: 53 used: 12, w: 1, fifo: 1 open epochs heap: [0: pri: 0, ct: 810, epoch: 8, qt: 805]
+ tenant-id: 53 used: 12, w: 1, fifo: 1 open epochs heap: [0: pri: normal-pri, ct: 810, epoch: 8, qt: 805]
 
 # Cancel that request.
 cancel-work id=13
@@ -446,19 +446,19 @@ tryGet: returning false
 print
 ----
 closed epoch: 0 tenantHeap len: 1 top tenant: 5
- tenant-id: 5 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: 0, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 5 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
 
 # Weight is unchanged for tenant 5.
 set-tenant-weights weights=10:11
 ----
 closed epoch: 0 tenantHeap len: 1 top tenant: 5
- tenant-id: 5 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: 0, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 5 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
 
 # Now tenant 5 has a new weight.
 set-tenant-weights weights=5:6,10:11
 ----
 closed epoch: 0 tenantHeap len: 1 top tenant: 5
- tenant-id: 5 used: 0, w: 6, fifo: -128 waiting work heap: [0: pri: 0, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 5 used: 0, w: 6, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
 
 admit id=2 tenant=10 priority=0 create-time-millis=1 bypass=false
 ----
@@ -466,8 +466,8 @@ admit id=2 tenant=10 priority=0 create-time-millis=1 bypass=false
 print
 ----
 closed epoch: 0 tenantHeap len: 2 top tenant: 5
- tenant-id: 5 used: 0, w: 6, fifo: -128 waiting work heap: [0: pri: 0, ct: 1, epoch: 0, qt: 100]
- tenant-id: 10 used: 0, w: 11, fifo: -128 waiting work heap: [0: pri: 0, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 5 used: 0, w: 6, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 10 used: 0, w: 11, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
 
 granted chain-id=1
 ----
@@ -500,8 +500,8 @@ admit id=4 tenant=10 priority=0 create-time-millis=1 bypass=false
 print
 ----
 closed epoch: 0 tenantHeap len: 2 top tenant: 10
- tenant-id: 5 used: 1, w: 6, fifo: -128 waiting work heap: [0: pri: 0, ct: 1, epoch: 0, qt: 100]
- tenant-id: 10 used: 1, w: 11, fifo: -128 waiting work heap: [0: pri: 0, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 5 used: 1, w: 6, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 10 used: 1, w: 11, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
 
 # Grant to tenant 10 so it is using 2 slots.
 granted chain-id=3
@@ -513,7 +513,7 @@ granted: returned 1
 print
 ----
 closed epoch: 0 tenantHeap len: 1 top tenant: 5
- tenant-id: 5 used: 1, w: 6, fifo: -128 waiting work heap: [0: pri: 0, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 5 used: 1, w: 6, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
  tenant-id: 10 used: 2, w: 11, fifo: -128
 
 # Another request from tenant 10.
@@ -524,8 +524,8 @@ admit id=5 tenant=10 priority=0 create-time-millis=1 bypass=false
 print
 ----
 closed epoch: 0 tenantHeap len: 2 top tenant: 5
- tenant-id: 5 used: 1, w: 6, fifo: -128 waiting work heap: [0: pri: 0, ct: 1, epoch: 0, qt: 100]
- tenant-id: 10 used: 2, w: 11, fifo: -128 waiting work heap: [0: pri: 0, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 5 used: 1, w: 6, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 10 used: 2, w: 11, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
 
 # Increase tenant 10's weight so it becomes the top of the heap. Weight
 # scaling is also applied here to make the max weight 20, and reduce tenant
@@ -533,22 +533,22 @@ closed epoch: 0 tenantHeap len: 2 top tenant: 5
 set-tenant-weights weights=5:6,10:30
 ----
 closed epoch: 0 tenantHeap len: 2 top tenant: 10
- tenant-id: 5 used: 1, w: 4, fifo: -128 waiting work heap: [0: pri: 0, ct: 1, epoch: 0, qt: 100]
- tenant-id: 10 used: 2, w: 20, fifo: -128 waiting work heap: [0: pri: 0, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 5 used: 1, w: 4, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 10 used: 2, w: 20, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
 
 # Restore all weights to 1. Tenant 5 is now top of the heap.
 set-tenant-weights weights=5:1,10:1
 ----
 closed epoch: 0 tenantHeap len: 2 top tenant: 5
- tenant-id: 5 used: 1, w: 1, fifo: -128 waiting work heap: [0: pri: 0, ct: 1, epoch: 0, qt: 100]
- tenant-id: 10 used: 2, w: 1, fifo: -128 waiting work heap: [0: pri: 0, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 5 used: 1, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 10 used: 2, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
 
 # Adjust weights to make tenant 10 just slightly preferable over tenant 5.
 set-tenant-weights weights=5:6,10:13
 ----
 closed epoch: 0 tenantHeap len: 2 top tenant: 10
- tenant-id: 5 used: 1, w: 6, fifo: -128 waiting work heap: [0: pri: 0, ct: 1, epoch: 0, qt: 100]
- tenant-id: 10 used: 2, w: 13, fifo: -128 waiting work heap: [0: pri: 0, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 5 used: 1, w: 6, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 10 used: 2, w: 13, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
 
 # Add another request for tenant 10.
 admit id=6 tenant=10 priority=0 create-time-millis=1 bypass=false
@@ -565,16 +565,16 @@ granted: returned 1
 print
 ----
 closed epoch: 0 tenantHeap len: 2 top tenant: 5
- tenant-id: 5 used: 1, w: 6, fifo: -128 waiting work heap: [0: pri: 0, ct: 1, epoch: 0, qt: 100]
- tenant-id: 10 used: 3, w: 13, fifo: -128 waiting work heap: [0: pri: 0, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 5 used: 1, w: 6, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 10 used: 3, w: 13, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
 
 # Bump up tenant 10's weight to a huge value. Tenant 5's weight is not scaled
 # down to 0, since the minimum weight is 1.
 set-tenant-weights weights=5:1,10:100000
 ----
 closed epoch: 0 tenantHeap len: 2 top tenant: 10
- tenant-id: 5 used: 1, w: 1, fifo: -128 waiting work heap: [0: pri: 0, ct: 1, epoch: 0, qt: 100]
- tenant-id: 10 used: 3, w: 20, fifo: -128 waiting work heap: [0: pri: 0, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 5 used: 1, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 10 used: 3, w: 20, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
 
 granted chain-id=5
 ----
@@ -623,27 +623,27 @@ admit id=8 tenant=8 priority=0 create-time-millis=1 bypass=false
 print
 ----
 closed epoch: 0 tenantHeap len: 8 top tenant: 1
- tenant-id: 1 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: 0, ct: 1, epoch: 0, qt: 100]
- tenant-id: 2 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: 0, ct: 1, epoch: 0, qt: 100]
- tenant-id: 3 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: 0, ct: 1, epoch: 0, qt: 100]
- tenant-id: 4 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: 0, ct: 1, epoch: 0, qt: 100]
- tenant-id: 5 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: 0, ct: 1, epoch: 0, qt: 100]
- tenant-id: 6 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: 0, ct: 1, epoch: 0, qt: 100]
- tenant-id: 7 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: 0, ct: 1, epoch: 0, qt: 100]
- tenant-id: 8 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: 0, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 1 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 2 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 3 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 4 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 5 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 6 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 7 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 8 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
 
 # Set weights for 7 out of the 8 tenants.
 set-tenant-weights weights=1:2,2:3,3:4,4:5,5:6,7:8,8:9
 ----
 closed epoch: 0 tenantHeap len: 8 top tenant: 1
- tenant-id: 1 used: 0, w: 2, fifo: -128 waiting work heap: [0: pri: 0, ct: 1, epoch: 0, qt: 100]
- tenant-id: 2 used: 0, w: 3, fifo: -128 waiting work heap: [0: pri: 0, ct: 1, epoch: 0, qt: 100]
- tenant-id: 3 used: 0, w: 4, fifo: -128 waiting work heap: [0: pri: 0, ct: 1, epoch: 0, qt: 100]
- tenant-id: 4 used: 0, w: 5, fifo: -128 waiting work heap: [0: pri: 0, ct: 1, epoch: 0, qt: 100]
- tenant-id: 5 used: 0, w: 6, fifo: -128 waiting work heap: [0: pri: 0, ct: 1, epoch: 0, qt: 100]
- tenant-id: 6 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: 0, ct: 1, epoch: 0, qt: 100]
- tenant-id: 7 used: 0, w: 8, fifo: -128 waiting work heap: [0: pri: 0, ct: 1, epoch: 0, qt: 100]
- tenant-id: 8 used: 0, w: 9, fifo: -128 waiting work heap: [0: pri: 0, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 1 used: 0, w: 2, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 2 used: 0, w: 3, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 3 used: 0, w: 4, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 4 used: 0, w: 5, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 5 used: 0, w: 6, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 6 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 7 used: 0, w: 8, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 8 used: 0, w: 9, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
 
 granted chain-id=1
 ----

@@ -45,7 +45,7 @@ Setting up a batch of seven log entries:
 	}
 
 	fmt.Println("\nAckCommittedEntriesBeforeApplication:")
-	if err := t.AckCommittedEntriesBeforeApplication(ctx, 10 /* maxIndex */); err != nil {
+	if err := t.AckCommittedEntriesBeforeApplication(ctx); err != nil {
 		panic(err)
 	}
 	fmt.Print(`

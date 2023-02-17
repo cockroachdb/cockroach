@@ -174,13 +174,20 @@ func EvalAddSSTable(
 	// and closed timestamp, i.e. by not writing to timestamps that have already
 	// been observed or closed.
 	var sstReqStatsDelta enginepb.MVCCStats
-	if sstToReqTS.IsSet() && (h.Timestamp != sstToReqTS || forceRewrite) {
-		st := cArgs.EvalCtx.ClusterSettings()
-		// TODO(dt): use a quotapool.
-		conc := int(AddSSTableRewriteConcurrency.Get(&cArgs.EvalCtx.ClusterSettings().SV))
-		sst, sstReqStatsDelta, err = storage.UpdateSSTTimestamps(ctx, st, sst, sstToReqTS, h.Timestamp, conc, args.MVCCStats)
-		if err != nil {
-			return result.Result{}, errors.Wrap(err, "updating SST timestamps")
+	var sstTimestamp hlc.Timestamp
+	if sstToReqTS.IsSet() {
+		sstTimestamp = h.Timestamp
+		if h.Timestamp != sstToReqTS || forceRewrite {
+			st := cArgs.EvalCtx.ClusterSettings()
+			// TODO(dt): use a quotapool.
+			conc := int(AddSSTableRewriteConcurrency.Get(&cArgs.EvalCtx.ClusterSettings().SV))
+			log.VEventf(ctx, 2, "rewriting timestamps for SSTable [%s,%s) from %s to %s",
+				start.Key, end.Key, sstToReqTS, h.Timestamp)
+			sst, sstReqStatsDelta, err = storage.UpdateSSTTimestamps(
+				ctx, st, sst, sstToReqTS, h.Timestamp, conc, args.MVCCStats)
+			if err != nil {
+				return result.Result{}, errors.Wrap(err, "updating SST timestamps")
+			}
 		}
 	}
 
@@ -218,8 +225,10 @@ func EvalAddSSTable(
 		desc := cArgs.EvalCtx.Desc()
 		leftPeekBound, rightPeekBound := rangeTombstonePeekBounds(
 			args.Key, args.EndKey, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey())
+
+		log.VEventf(ctx, 2, "checking conflicts for SSTable [%s,%s)", start.Key, end.Key)
 		statsDelta, err = storage.CheckSSTConflicts(ctx, sst, readWriter, start, end, leftPeekBound, rightPeekBound,
-			args.DisallowShadowing, args.DisallowShadowingBelow, sstToReqTS, maxIntents, usePrefixSeek)
+			args.DisallowShadowing, args.DisallowShadowingBelow, sstTimestamp, maxIntents, usePrefixSeek)
 		statsDelta.Add(sstReqStatsDelta)
 		if err != nil {
 			return result.Result{}, errors.Wrap(err, "checking for key collisions")
@@ -229,6 +238,7 @@ func EvalAddSSTable(
 		// If not checking for MVCC conflicts, at least check for separated intents.
 		// The caller is expected to make sure there are no writers across the span,
 		// and thus no or few intents, so this is cheap in the common case.
+		log.VEventf(ctx, 2, "checking conflicting intents for SSTable [%s,%s)", start.Key, end.Key)
 		intents, err := storage.ScanIntents(ctx, readWriter, start.Key, end.Key, maxIntents, 0)
 		if err != nil {
 			return result.Result{}, errors.Wrap(err, "scanning intents")
@@ -411,12 +421,16 @@ func EvalAddSSTable(
 				break
 			}
 			key := pointIter.UnsafeKey()
+			v, err := pointIter.UnsafeValue()
+			if err != nil {
+				return result.Result{}, err
+			}
 			if key.Timestamp.IsEmpty() {
-				if err := readWriter.PutUnversioned(key.Key, pointIter.UnsafeValue()); err != nil {
+				if err := readWriter.PutUnversioned(key.Key, v); err != nil {
 					return result.Result{}, err
 				}
 			} else {
-				if err := readWriter.PutRawMVCC(key, pointIter.UnsafeValue()); err != nil {
+				if err := readWriter.PutRawMVCC(key, v); err != nil {
 					return result.Result{}, err
 				}
 			}
@@ -518,7 +532,7 @@ func assertSSTContents(sst []byte, sstTimestamp hlc.Timestamp, stats *enginepb.M
 			return errors.AssertionFailedf("SST has unexpected timestamp %s (expected %s) for key %s",
 				key.Timestamp, sstTimestamp, key.Key)
 		}
-		value, err := storage.DecodeMVCCValue(iter.UnsafeValue())
+		value, err := storage.DecodeMVCCValueAndErr(iter.UnsafeValue())
 		if err != nil {
 			return errors.NewAssertionErrorWithWrappedErrf(err,
 				"SST contains invalid value for key %s", key)

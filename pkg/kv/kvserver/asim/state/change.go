@@ -47,31 +47,33 @@ type Changer interface {
 // ReplicaChange contains information necessary to add, remove or move (both) a
 // replica for a range.
 type ReplicaChange struct {
-	RangeID     RangeID
-	Add, Remove StoreID
-	Wait        time.Duration
+	RangeID             RangeID
+	Add, Remove, Author StoreID
+	Wait                time.Duration
 }
 
 // RangeSplitChange contains information necessary to split a range at a given
 // key. It implements the change interface.
 type RangeSplitChange struct {
-	RangeID     RangeID
-	Leaseholder StoreID
-	SplitKey    Key
-	Wait        time.Duration
+	RangeID             RangeID
+	Leaseholder, Author StoreID
+	SplitKey            Key
+	Wait                time.Duration
 }
 
 // LeaseTransferChange contains information necessary to transfer the lease for a
 // range to a an existing replica, on the target store.
 type LeaseTransferChange struct {
-	RangeID        RangeID
-	TransferTarget StoreID
-	Wait           time.Duration
+	RangeID                RangeID
+	TransferTarget, Author StoreID
+	Wait                   time.Duration
 }
 
 // Apply applies a change to the state.
 func (lt *LeaseTransferChange) Apply(s State) {
-	s.TransferLease(lt.RangeID, lt.TransferTarget)
+	if s.TransferLease(lt.RangeID, lt.TransferTarget) {
+		s.ClusterUsageInfo().storeRef(lt.Author).LeaseTransfers++
+	}
 }
 
 // Target returns the recipient store of the change.
@@ -98,7 +100,9 @@ func (lt *LeaseTransferChange) Blocking() bool {
 
 // Apply applies a change to the state.
 func (rsc *RangeSplitChange) Apply(s State) {
-	s.SplitRange(rsc.SplitKey)
+	if _, _, ok := s.SplitRange(rsc.SplitKey); ok {
+		s.ClusterUsageInfo().storeRef(rsc.Author).RangeSplits++
+	}
 }
 
 // Target returns the recipient store of the change.
@@ -151,14 +155,27 @@ func (rc *ReplicaChange) Apply(s State) {
 				return
 			}
 			s.TransferLease(rc.RangeID, rc.Add)
+			// NB: We don't update the usage info for lease transfer here
+			// despite the transfer occurring. In the real cluster, lease
+			// transfers due to joint config removing the current leaseholder
+			// do not bump the lease transfer metric.
 		}
 
 		// A rebalance is allowed.
 		s.RemoveReplica(rc.RangeID, rc.Remove)
 
 		r, _ := s.Range(rc.RangeID)
-		s.ClusterUsageInfo().BytesRebalanced += r.Size()
-		s.ClusterUsageInfo().Rebalances++
+		// Update the rebalancing usage info for the author store.
+		if rc.Author == 0 {
+			panic("no author set on replica change")
+		}
+
+		authorUsageInfo := s.ClusterUsageInfo().storeRef(rc.Author)
+		authorUsageInfo.RebalanceSentBytes += r.Size()
+		authorUsageInfo.Rebalances++
+
+		// Update the rebalancing recieved bytes for the receiving store.
+		s.ClusterUsageInfo().storeRef(rc.Add).RebalanceRcvdBytes += r.Size()
 	default:
 		panic("unknown change")
 	}

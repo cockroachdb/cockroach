@@ -273,7 +273,9 @@ export const generateRegion = (
       });
   });
 
-  return Array.from(regions).sort();
+  return Array.from(regions)
+    .filter(r => r) // Remove undefined / unknown regions.
+    .sort();
 };
 
 /**

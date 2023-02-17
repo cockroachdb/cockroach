@@ -15,11 +15,11 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 )
 
 func TestWalk(t *testing.T) {
-	w := NewWalker(t, testutils.TestDataPath(t))
+	w := NewWalker(t, datapathutils.TestDataPath(t))
 
 	// NB: a desirable property here is that in Goland you can click on the
 	// subtest to navigate to the entry in the slice. This requires that `t.Run`

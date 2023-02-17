@@ -26,8 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -356,7 +356,7 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 
 	// We'll accumulate all the nodes we need to connect to in order to check if
 	// we need to open new connections or close existing ones.
-	nodesWithFollowers := util.MakeFastIntSet()
+	nodesWithFollowers := intsets.MakeFast()
 
 	// If there's any tracked ranges for which we're not the leaseholder any more,
 	// we need to untrack them and tell the connections about it.

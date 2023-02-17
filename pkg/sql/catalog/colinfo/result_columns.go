@@ -273,23 +273,64 @@ var ExportColumns = ResultColumns{
 	{Name: "bytes", Typ: types.Int},
 }
 
+// TenantColumns appear in all SHOW TENANT queries.
 var TenantColumns = ResultColumns{
 	{Name: "id", Typ: types.Int},
 	{Name: "name", Typ: types.String},
-	{Name: "status", Typ: types.String},
+	{Name: "data_state", Typ: types.String},
+	{Name: "service_mode", Typ: types.String},
 }
 
+// TenantColumnsWithReplication is appended to TenantColumns for
+// SHOW TENANT ... WITH REPLICATION STATUS queries.
 var TenantColumnsWithReplication = ResultColumns{
-	{Name: "id", Typ: types.Int},
-	{Name: "name", Typ: types.String},
-	{Name: "status", Typ: types.String},
 	{Name: "source_tenant_name", Typ: types.String},
 	{Name: "source_cluster_uri", Typ: types.String},
 	{Name: "replication_job_id", Typ: types.Int},
 	// The latest fully replicated time.
-	{Name: "replicated_time", Typ: types.Timestamp},
+	{Name: "replicated_time", Typ: types.TimestampTZ},
 	// The protected timestamp on the destination cluster, meaning we cannot
 	// cutover to before this time.
-	{Name: "retained_time", Typ: types.Timestamp},
-	{Name: "replication_start_time", Typ: types.Timestamp},
+	{Name: "retained_time", Typ: types.TimestampTZ},
+	{Name: "cutover_time", Typ: types.Decimal},
 }
+
+// TenantColumnsWithCapabilities is appended to TenantColumns for
+// SHOW TENANT ... WITH CAPABILITIES queries.
+var TenantColumnsWithCapabilities = ResultColumns{
+	{Name: "capability_name", Typ: types.String},
+	{Name: "capability_value", Typ: types.String},
+}
+
+// RangesNoLeases is the schema for crdb_internal.ranges_no_leases.
+var RangesNoLeases = ResultColumns{
+	{Name: "range_id", Typ: types.Int},
+	{Name: "start_key", Typ: types.Bytes},
+	{Name: "start_pretty", Typ: types.String},
+	{Name: "end_key", Typ: types.Bytes},
+	{Name: "end_pretty", Typ: types.String},
+	{Name: "replicas", Typ: types.IntArray},
+	{Name: "replica_localities", Typ: types.StringArray},
+	{Name: "voting_replicas", Typ: types.IntArray},
+	{Name: "non_voting_replicas", Typ: types.IntArray},
+	{Name: "learner_replicas", Typ: types.IntArray},
+	{Name: "split_enforced_until", Typ: types.Timestamp},
+}
+
+// Ranges is the schema for crdb_internal.ranges.
+var Ranges = append(
+	RangesNoLeases,
+	// The following columns are computed by RangesExtraRenders below.
+	ResultColumn{Name: "lease_holder", Typ: types.Int},
+	ResultColumn{Name: "range_size", Typ: types.Int},
+)
+
+// RangesExtraRenders describes the extra projections in
+// crdb_internal.ranges not included in crdb_internal.ranges_no_leases.
+const RangesExtraRenders = `
+	crdb_internal.lease_holder(start_key) AS lease_holder,
+	(crdb_internal.range_stats(start_key)->>'key_bytes')::INT +
+	(crdb_internal.range_stats(start_key)->>'val_bytes')::INT +
+	coalesce((crdb_internal.range_stats(start_key)->>'range_key_bytes')::INT, 0) +
+	coalesce((crdb_internal.range_stats(start_key)->>'range_val_bytes')::INT, 0) AS range_size
+`

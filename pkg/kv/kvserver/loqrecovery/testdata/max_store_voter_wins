@@ -14,7 +14,7 @@ replication-data
   - { NodeID: 2, StoreID: 2, ReplicaID: 2}
   - { NodeID: 3, StoreID: 3, ReplicaID: 3}
   - { NodeID: 4, StoreID: 4, ReplicaID: 4}
-  - { NodeID: 5, StoreID: 5, ReplicaID: 5}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 5, Leaseholder: true}
   RangeAppliedIndex: 10
   RaftCommittedIndex: 13
 - StoreID: 2
@@ -26,7 +26,7 @@ replication-data
   - { NodeID: 2, StoreID: 2, ReplicaID: 2}  # this replica has the same state n1 but has higher storeID so it wins
   - { NodeID: 3, StoreID: 3, ReplicaID: 3}
   - { NodeID: 4, StoreID: 4, ReplicaID: 4}
-  - { NodeID: 5, StoreID: 5, ReplicaID: 5}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 5, Leaseholder: true}
   RangeAppliedIndex: 10
   RaftCommittedIndex: 13
 ----
@@ -38,6 +38,7 @@ ok
 
 make-plan
 ----
+Replica updates:
 - RangeID: 1
   StartKey: /Min
   OldReplicaID: 2
@@ -46,6 +47,99 @@ make-plan
     StoreID: 2
     ReplicaID: 16
   NextReplicaID: 17
+Decommissioned nodes:
+[n3, n4, n5]
+
+apply-plan stores=(1,2)
+----
+ok
+
+dump-store stores=(1,2)
+----
+- NodeID: 1
+  StoreID: 1
+  Descriptors:
+  - RangeID: 1
+    StartKey: /Min
+    Replicas:
+    - Replica: {NodeID: 1, StoreID: 1, ReplicaID: 1}
+    - Replica: {NodeID: 2, StoreID: 2, ReplicaID: 2}
+    - Replica: {NodeID: 3, StoreID: 3, ReplicaID: 3}
+    - Replica: {NodeID: 4, StoreID: 4, ReplicaID: 4}
+    - Replica: {NodeID: 5, StoreID: 5, ReplicaID: 5}
+  LocalData:
+  - RangeID: 1
+    RaftReplicaID: 1
+- NodeID: 2
+  StoreID: 2
+  Descriptors:
+  - RangeID: 1
+    StartKey: /Min
+    Replicas:
+    - Replica: {NodeID: 2, StoreID: 2, ReplicaID: 16}
+  LocalData:
+  - RangeID: 1
+    RaftReplicaID: 16
+
+# This case is checking that highest store rule still holds when we have
+# range metadata available.
+replication-data
+- StoreID: 1
+  RangeID: 1
+  StartKey: /Min
+  EndKey: /Max
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}  # this replica is identical to one in store 2 but has lower storeID 1
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  - { NodeID: 4, StoreID: 4, ReplicaID: 4}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 5, Leaseholder: true}
+  RangeAppliedIndex: 10
+  RaftCommittedIndex: 13
+- StoreID: 2
+  RangeID: 1
+  StartKey: /Min
+  EndKey: /Max
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}  # this replica has the same state n1 but has higher storeID so it wins
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  - { NodeID: 4, StoreID: 4, ReplicaID: 4}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 5, Leaseholder: true}
+  RangeAppliedIndex: 10
+  RaftCommittedIndex: 13
+----
+ok
+
+descriptor-data
+- RangeID: 1
+  StartKey: /Min
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  - { NodeID: 4, StoreID: 4, ReplicaID: 4}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 5}
+----
+ok
+
+collect-replica-info stores=(1,2)
+----
+ok
+
+make-plan
+----
+Replica updates:
+- RangeID: 1
+  StartKey: /Min
+  OldReplicaID: 2
+  NewReplica:
+    NodeID: 2
+    StoreID: 2
+    ReplicaID: 16
+  NextReplicaID: 17
+Decommissioned nodes:
+[n3, n4, n5]
 
 apply-plan stores=(1,2)
 ----

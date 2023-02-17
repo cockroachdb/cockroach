@@ -18,13 +18,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -155,13 +155,18 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 	expirationTime := func(record jobs.Record) time.Time {
 		return record.Progress.(jobspb.StreamReplicationProgress).Expiration
 	}
+	insqlDB := source.InternalDB().(isql.DB)
 	runJobWithProtectedTimestamp := func(ptsID uuid.UUID, ts hlc.Timestamp, jr jobs.Record) error {
-		return source.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		return insqlDB.Txn(ctx, func(
+			ctx context.Context, txn isql.Txn,
+		) error {
 			deprecatedTenantSpan := roachpb.Spans{*makeTenantSpan(30)}
 			tenantTarget := ptpb.MakeTenantsTarget([]roachpb.TenantID{roachpb.MustMakeTenantID(30)})
-			if err := ptp.Protect(ctx, txn,
-				jobsprotectedts.MakeRecord(ptsID, int64(jr.JobID), ts,
-					deprecatedTenantSpan, jobsprotectedts.Jobs, tenantTarget)); err != nil {
+			record := jobsprotectedts.MakeRecord(
+				ptsID, int64(jr.JobID), ts, deprecatedTenantSpan,
+				jobsprotectedts.Jobs, tenantTarget,
+			)
+			if err := ptp.WithTxn(txn).Protect(ctx, record); err != nil {
 				return err
 			}
 			_, err := registry.CreateAdoptableJobWithTxn(ctx, jr, jr.JobID, txn)
@@ -169,8 +174,8 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 		})
 	}
 	getPTSRecord := func(ptsID uuid.UUID) (r *ptpb.Record, err error) {
-		err = source.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			r, err = ptp.GetRecord(ctx, txn, ptsID)
+		err = insqlDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			r, err = ptp.WithTxn(txn).GetRecord(ctx, ptsID)
 			return err
 		})
 		return r, err
@@ -199,7 +204,7 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 			require.True(t, testutils.IsError(err, "protected timestamp record does not exist"), err)
 
 			var status streampb.StreamReplicationStatus
-			require.NoError(t, source.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			require.NoError(t, insqlDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 				status, err = updateReplicationStreamProgress(
 					ctx, timeutil.Now(), ptp, registry, streampb.StreamID(jr.JobID),
 					hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}, txn)
@@ -235,7 +240,7 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 			var streamStatus streampb.StreamReplicationStatus
 			var err error
 			expire := expirationTime(jr).Add(10 * time.Millisecond)
-			require.NoError(t, source.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			require.NoError(t, insqlDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 				streamStatus, err = updateReplicationStreamProgress(
 					ctx, expire, ptp, registry, streampb.StreamID(jr.JobID), updatedFrontier, txn)
 				return err

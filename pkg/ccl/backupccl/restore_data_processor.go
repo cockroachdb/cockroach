@@ -172,7 +172,7 @@ func (rd *restoreDataProcessor) Start(ctx context.Context) {
 		_ = rd.phaseGroup.Wait()
 	}
 	rd.phaseGroup = ctxgroup.WithContext(ctx)
-	log.Infof(ctx, "starting restore data")
+	log.Infof(ctx, "starting restore data processor")
 
 	entries := make(chan execinfrapb.RestoreSpanEntry, rd.numWorkers)
 	rd.sstCh = make(chan mergedSST, rd.numWorkers)
@@ -444,7 +444,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		var err error
 		batcher, err = bulk.MakeSSTBatcher(ctx,
 			"restore",
-			db,
+			db.KV(),
 			evalCtx.Settings,
 			disallowShadowingBelow,
 			writeAtBatchTS,
@@ -476,7 +476,11 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		key := iter.UnsafeKey()
 		keyScratch = append(keyScratch[:0], key.Key...)
 		key.Key = keyScratch
-		valueScratch = append(valueScratch[:0], iter.UnsafeValue()...)
+		v, err := iter.UnsafeValue()
+		if err != nil {
+			return summary, err
+		}
+		valueScratch = append(valueScratch[:0], v...)
 		value := roachpb.Value{RawBytes: valueScratch}
 
 		key.Key, ok, err = kr.RewriteKey(key.Key, key.Timestamp.WallTime)

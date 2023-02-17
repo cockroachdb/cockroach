@@ -13,7 +13,7 @@ package ssmemstorage
 import (
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 )
 
@@ -27,7 +27,7 @@ type baseIterator struct {
 type StmtStatsIterator struct {
 	baseIterator
 	stmtKeys     stmtList
-	currentValue *roachpb.CollectedStatementStatistics
+	currentValue *appstatspb.CollectedStatementStatistics
 }
 
 // NewStmtStatsIterator returns a StmtStatsIterator.
@@ -83,8 +83,8 @@ func (s *StmtStatsIterator) Next() bool {
 	querySummary := statementStats.mu.querySummary
 	statementStats.mu.Unlock()
 
-	s.currentValue = &roachpb.CollectedStatementStatistics{
-		Key: roachpb.StatementStatisticsKey{
+	s.currentValue = &appstatspb.CollectedStatementStatistics{
+		Key: appstatspb.StatementStatisticsKey{
 			Query:                    stmtKey.stmtNoConstants,
 			QuerySummary:             querySummary,
 			DistSQL:                  distSQLUsed,
@@ -104,9 +104,9 @@ func (s *StmtStatsIterator) Next() bool {
 	return true
 }
 
-// Cur returns the roachpb.CollectedStatementStatistics at the current internal
+// Cur returns the appstatspb.CollectedStatementStatistics at the current internal
 // counter.
-func (s *StmtStatsIterator) Cur() *roachpb.CollectedStatementStatistics {
+func (s *StmtStatsIterator) Cur() *appstatspb.CollectedStatementStatistics {
 	return s.currentValue
 }
 
@@ -115,7 +115,7 @@ func (s *StmtStatsIterator) Cur() *roachpb.CollectedStatementStatistics {
 type TxnStatsIterator struct {
 	baseIterator
 	txnKeys  txnList
-	curValue *roachpb.CollectedTransactionStatistics
+	curValue *appstatspb.CollectedTransactionStatistics
 }
 
 // NewTxnStatsIterator returns a new instance of TxnStatsIterator.
@@ -166,7 +166,7 @@ func (t *TxnStatsIterator) Next() bool {
 	txnStats.mu.Lock()
 	defer txnStats.mu.Unlock()
 
-	t.curValue = &roachpb.CollectedTransactionStatistics{
+	t.curValue = &appstatspb.CollectedTransactionStatistics{
 		StatementFingerprintIDs:  txnStats.statementFingerprintIDs,
 		App:                      t.container.appName,
 		Stats:                    txnStats.mu.data,
@@ -176,8 +176,8 @@ func (t *TxnStatsIterator) Next() bool {
 	return true
 }
 
-// Cur returns the roachpb.CollectedTransactionStatistics at the current internal
+// Cur returns the appstatspb.CollectedTransactionStatistics at the current internal
 // counter.
-func (t *TxnStatsIterator) Cur() *roachpb.CollectedTransactionStatistics {
+func (t *TxnStatsIterator) Cur() *appstatspb.CollectedTransactionStatistics {
 	return t.curValue
 }

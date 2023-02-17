@@ -16,6 +16,7 @@ RUN apt-get update \
     gnupg2 \
     libncurses-dev \
     libtinfo-dev \
+    llvm \
     lsof \
     make \
     netbase \
@@ -107,6 +108,10 @@ RUN case ${TARGETPLATFORM} in \
  && echo "$SHASUM /tmp/bazelisk" | sha256sum -c - \
  && chmod +x /tmp/bazelisk \
  && mv /tmp/bazelisk /usr/bin/bazel
+
+# Replace the nm command with LLVM's version, llvm-nm, which knows how to read
+# binaries build for platforms others than Linux.
+RUN ln -sf /usr/bin/llvm-nm /usr/bin/nm
 
 RUN rm -rf /tmp/* /var/lib/apt/lists/*
 

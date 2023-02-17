@@ -16,7 +16,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/jackc/pgconn"
@@ -82,7 +82,7 @@ func TestFrontendAdmitWithClientSSLRequire(t *testing.T) {
 	go func() {
 		cfg, err := pgconn.ParseConfig(fmt.Sprintf(
 			"postgres://localhost?sslmode=require&sslrootcert=%s",
-			testutils.TestDataPath(t, "testserver.crt"),
+			datapathutils.TestDataPath(t, "testserver.crt"),
 		))
 		cfg.TLSConfig.ServerName = "test"
 		require.NoError(t, err)

@@ -64,6 +64,7 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/settings/cluster",
+        "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/colcontainer",
         "//pkg/sql/colexec",

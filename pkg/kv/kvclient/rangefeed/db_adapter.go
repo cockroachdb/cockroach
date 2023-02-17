@@ -187,6 +187,7 @@ func (dbc *dbAdapter) scanSpan(
 	return dbc.db.TxnWithAdmissionControl(ctx,
 		roachpb.AdmissionHeader_ROOT_KV,
 		admissionPri,
+		kv.SteppingDisabled,
 		func(ctx context.Context, txn *kv.Txn) error {
 			if err := txn.SetFixedTimestamp(ctx, asOf); err != nil {
 				return err

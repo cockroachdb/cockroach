@@ -369,6 +369,10 @@ func (f *vectorizedFlow) MemUsage() int64 {
 
 // Cleanup is part of the flowinfra.Flow interface.
 func (f *vectorizedFlow) Cleanup(ctx context.Context) {
+	startCleanup, endCleanup := f.FlowBase.GetOnCleanupFns()
+	startCleanup()
+	defer endCleanup()
+
 	// This cleans up all the memory and disk monitoring of the vectorized flow
 	// as well as closes all the closers.
 	f.creator.cleanup(ctx)
@@ -409,7 +413,7 @@ func (s *vectorizedFlowCreator) wrapWithVectorizedStatsCollectorBase(
 	component execinfrapb.ComponentID,
 	monitors []*mon.BytesMonitor,
 ) error {
-	inputWatch := timeutil.NewStopWatch()
+	inputWatch := timeutil.NewStopWatchWithCPU()
 	var memMonitors, diskMonitors []*mon.BytesMonitor
 	for _, m := range monitors {
 		if m.Resource() == mon.DiskResource {
@@ -523,6 +527,7 @@ type admissionOptions struct {
 type remoteComponentCreator interface {
 	newOutbox(
 		allocator *colmem.Allocator,
+		converterMemAcc *mon.BoundAccount,
 		input colexecargs.OpWithMetaInfo,
 		typs []*types.T,
 		getStats func(context.Context) []*execinfrapb.ComponentStats,
@@ -540,11 +545,12 @@ type vectorizedRemoteComponentCreator struct{}
 
 func (vectorizedRemoteComponentCreator) newOutbox(
 	allocator *colmem.Allocator,
+	converterMemAcc *mon.BoundAccount,
 	input colexecargs.OpWithMetaInfo,
 	typs []*types.T,
 	getStats func(context.Context) []*execinfrapb.ComponentStats,
 ) (*colrpc.Outbox, error) {
-	return colrpc.NewOutbox(allocator, input, typs, getStats)
+	return colrpc.NewOutbox(allocator, converterMemAcc, input, typs, getStats)
 }
 
 func (vectorizedRemoteComponentCreator) newInbox(
@@ -727,10 +733,10 @@ func (s *vectorizedFlowCreator) Release() {
 	vectorizedFlowCreatorPool.Put(s)
 }
 
-// setupRemoteOutputStream sets up an Outbox that will operate according to
-// the given StreamEndpointSpec. It will also drain all MetadataSources in the
-// metadataSources.
-// NOTE: The caller must not reuse the metadataSources and toClose.
+// setupRemoteOutputStream sets up a colrpc.Outbox that will operate according
+// to the given execinfrapb.StreamEndpointSpec. It will also drain all
+// MetadataSources in op.
+// NOTE: The caller must not reuse the metadata sources.
 func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
@@ -742,6 +748,7 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 ) (execopnode.OpNode, error) {
 	outbox, err := s.remoteComponentCreator.newOutbox(
 		colmem.NewAllocator(ctx, s.monitorRegistry.NewStreamingMemAccount(flowCtx), factory),
+		s.monitorRegistry.NewStreamingMemAccount(flowCtx),
 		op, outputTyps, getStats,
 	)
 	if err != nil {
@@ -765,14 +772,11 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 }
 
 // setupRouter sets up a vectorized hash router according to the output router
-// spec. If the outputs are local, these are added to s.streamIDToInputOp to be
-// used as inputs in further planning. metadataSources is passed along to any
-// outboxes created to be drained, or stored in streamIDToInputOp for any local
-// outputs to pass that responsibility along. In any case, metadataSources will
-// always be fully consumed.
+// spec. The router takes the responsibility of draining the metadata sources
+// from input.MetadataSources.
 // NOTE: This method supports only BY_HASH routers. Callers should handle
 // PASS_THROUGH routers separately.
-// NOTE: The caller must not reuse the metadataSources and toClose.
+// NOTE: The caller must not reuse the metadata sources.
 func (s *vectorizedFlowCreator) setupRouter(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
@@ -795,15 +799,21 @@ func (s *vectorizedFlowCreator) setupRouter(
 	}
 	mmName := "hash-router-[" + streamIDs + "]"
 
-	hashRouterMemMonitor, accounts := s.monitorRegistry.CreateUnlimitedMemAccountsWithName(ctx, flowCtx, mmName, len(output.Streams))
-	allocators := make([]*colmem.Allocator, len(output.Streams))
+	numOutputs := len(output.Streams)
+	// We need to create two memory accounts for each output (one for the
+	// allocator and another one for the converter).
+	hashRouterMemMonitor, accounts := s.monitorRegistry.CreateUnlimitedMemAccountsWithName(
+		ctx, flowCtx, mmName, 2*numOutputs,
+	)
+	allocatorAccounts, converterAccounts := accounts[:numOutputs], accounts[numOutputs:]
+	allocators := make([]*colmem.Allocator, numOutputs)
 	for i := range allocators {
-		allocators[i] = colmem.NewAllocator(ctx, accounts[i], factory)
+		allocators[i] = colmem.NewAllocator(ctx, allocatorAccounts[i], factory)
 	}
-	diskMon, diskAccounts := s.monitorRegistry.CreateDiskAccounts(ctx, flowCtx, mmName, len(output.Streams))
+	diskMon, diskAccounts := s.monitorRegistry.CreateDiskAccounts(ctx, flowCtx, mmName, numOutputs)
 	router, outputs := NewHashRouter(
 		allocators, input, outputTyps, output.HashColumns, execinfra.GetWorkMemLimit(flowCtx),
-		s.diskQueueCfg, s.fdSemaphore, diskAccounts,
+		s.diskQueueCfg, s.fdSemaphore, diskAccounts, converterAccounts,
 	)
 	runRouter := func(ctx context.Context, _ context.CancelFunc) {
 		router.Run(logtags.AddTag(ctx, "hashRouterID", streamIDs))
@@ -821,8 +831,6 @@ func (s *vectorizedFlowCreator) setupRouter(
 		case execinfrapb.StreamEndpointSpec_SYNC_RESPONSE:
 			return errors.Errorf("unexpected sync response output when setting up router")
 		case execinfrapb.StreamEndpointSpec_REMOTE:
-			// Note that here we pass in nil 'toClose' slice because hash
-			// router is responsible for closing all of the idempotent closers.
 			if _, err := s.setupRemoteOutputStream(
 				ctx, flowCtx, colexecargs.OpWithMetaInfo{
 					Root:            op,
@@ -957,7 +965,11 @@ func (s *vectorizedFlowCreator) setupInput(
 			}
 			s.closers = append(s.closers, os)
 		} else if input.Type == execinfrapb.InputSyncSpec_SERIAL_UNORDERED || opt == flowinfra.FuseAggressively {
-			sync := colexec.NewSerialUnorderedSynchronizer(inputStreamOps)
+			var err error
+			if input.EnforceHomeRegionError != nil {
+				err = input.EnforceHomeRegionError.ErrorDetail(ctx)
+			}
+			sync := colexec.NewSerialUnorderedSynchronizer(inputStreamOps, input.EnforceHomeRegionStreamExclusiveUpperBound, err)
 			opWithMetaInfo = colexecargs.OpWithMetaInfo{
 				Root:            sync,
 				MetadataSources: colexecop.MetadataSources{sync},
@@ -1004,10 +1016,10 @@ func (s *vectorizedFlowCreator) setupInput(
 }
 
 // setupOutput sets up any necessary infrastructure according to the output spec
-// of pspec. The metadataSources and toClose slices are fully consumed by either
-// passing them to an outbox or HashRouter to be drained/closed, or storing them
-// in streamIDToInputOp with the given op to be processed later.
-// NOTE: The caller must not reuse the metadataSources and toClose.
+// of pspec. The metadata sources are fully consumed by either passing them to
+// an outbox or HashRouter to be drained, or storing them in streamIDToInputOp
+// with the given op to be processed later.
+// NOTE: The caller must not reuse the metadata sources.
 func (s *vectorizedFlowCreator) setupOutput(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,

@@ -111,7 +111,7 @@ func TestFingerprint(t *testing.T) {
 
 	store, err := s.Stores().GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
-	eng := store.Engine()
+	eng := store.TODOEngine()
 
 	// Insert some point keys.
 	txn := db.NewTxn(ctx, "test-point-keys")
@@ -206,7 +206,7 @@ func TestFingerprint(t *testing.T) {
 	require.Equal(t, 1, numSSTsInExportResponses)
 	require.Equal(t, 1, numExportResponses)
 
-	require.NoError(t, db.AdminSplit(ctx, "c", hlc.MaxTimestamp, roachpb.AdminSplitRequest_INGESTION))
+	require.NoError(t, db.AdminSplit(ctx, "c", hlc.MaxTimestamp))
 
 	resetVars()
 	fingerprintPostSplit := fingerprint(t, "a", "z", pointKeysTS.Add(int64(-time.Microsecond), 0),

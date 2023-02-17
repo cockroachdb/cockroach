@@ -107,3 +107,95 @@ func TestBuildProvided(t *testing.T) {
 		})
 	}
 }
+
+// TestGetDistributions checks that the output of method GetDistributions is
+// correct for several cases.
+func TestGetDistributions(t *testing.T) {
+	tc := testcat.New()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := eval.NewTestingEvalContext(st)
+	var f norm.Factory
+	f.Init(context.Background(), evalCtx, tc)
+
+	testCases := []struct {
+		leftDist  []string
+		rightDist []string
+		expected  bool
+	}{
+		{
+			leftDist:  []string{},
+			rightDist: []string{},
+			expected:  true,
+		},
+		{
+			leftDist: []string{},
+			expected: false,
+		},
+		{
+			rightDist: []string{},
+			expected:  false,
+		},
+		{
+			leftDist:  []string{},
+			rightDist: []string{"west"},
+			expected:  true,
+		},
+		{
+			leftDist: []string{"east", "west"},
+			expected: false,
+		},
+		{
+			leftDist:  []string{"east"},
+			rightDist: []string{"east"},
+			expected:  true,
+		},
+		{
+			leftDist:  []string{"west"},
+			rightDist: []string{"east"},
+			expected:  true,
+		},
+		{
+			leftDist:  []string{"central", "east", "west"},
+			rightDist: []string{"central", "west"},
+			expected:  true,
+		},
+	}
+	for tcIdx, tc := range testCases {
+		t.Run(fmt.Sprintf("case%d", tcIdx+1), func(t *testing.T) {
+			var parentProvided, childProvided *physical.Provided
+
+			if tc.leftDist != nil {
+				parentProvided = &physical.Provided{}
+				parentProvided.Distribution = physical.Distribution{Regions: tc.leftDist}
+			}
+			if tc.rightDist != nil {
+				childProvided = &physical.Provided{}
+				childProvided.Distribution = physical.Distribution{Regions: tc.rightDist}
+			}
+			childInput := &memo.SortExpr{}
+
+			var distributeRel memo.RelExpr
+			inputRel := childInput
+			distributeExpr := &memo.DistributeExpr{Input: childInput}
+			distributeRel = distributeExpr
+			f.Memo().SetBestProps(distributeRel, &physical.Required{}, parentProvided, 0)
+			f.Memo().SetBestProps(inputRel, &physical.Required{}, childProvided, 0)
+
+			targetDist, sourceDist, ok := distributeExpr.GetDistributions()
+			// Check if we got distributions when expected.
+			if ok != tc.expected {
+				t.Errorf("expected '%t', got '%t'", tc.expected, ok)
+			}
+			if ok {
+				// Test that the returned distributions match those in the Distribute
+				// expression and its input.
+				if !targetDist.Equals(parentProvided.Distribution) {
+					t.Errorf("expected target distribution '%v', got '%v'", targetDist, parentProvided.Distribution)
+				}
+				if !sourceDist.Equals(childProvided.Distribution) {
+					t.Errorf("expected source distribution '%v', got '%v'", sourceDist, childProvided.Distribution)
+				}
+			}
+		})
+	}
+}

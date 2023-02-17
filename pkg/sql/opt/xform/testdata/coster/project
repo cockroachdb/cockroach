@@ -9,13 +9,13 @@ project
  ├── columns: k:1!null i:2 "?column?":7
  ├── immutable
  ├── stats: [rows=1000]
- ├── cost: 1114.74
+ ├── cost: 1118.74
  ├── key: (1)
  ├── fd: (1)-->(2,7)
  ├── scan a
  │    ├── columns: k:1!null i:2 s:3
  │    ├── stats: [rows=1000]
- │    ├── cost: 1094.72
+ │    ├── cost: 1098.72
  │    ├── key: (1)
  │    └── fd: (1)-->(2,3)
  └── projections
@@ -28,13 +28,13 @@ project
  ├── columns: k:1!null "?column?":7!null "?column?":8
  ├── immutable
  ├── stats: [rows=1000]
- ├── cost: 1124.74
+ ├── cost: 1128.74
  ├── key: (1)
  ├── fd: (1)-->(7,8)
  ├── scan a
  │    ├── columns: k:1!null i:2 d:4!null
  │    ├── stats: [rows=1000]
- │    ├── cost: 1094.72
+ │    ├── cost: 1098.72
  │    ├── key: (1)
  │    └── fd: (1)-->(2,4)
  └── projections

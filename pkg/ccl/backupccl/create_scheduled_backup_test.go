@@ -26,10 +26,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs/schedulebase"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -62,6 +64,10 @@ type testHelper struct {
 	cfg              *scheduledjobs.JobExecutionConfig
 	sqlDB            *sqlutils.SQLRunner
 	executeSchedules func() error
+}
+
+func (th *testHelper) protectedTimestamps() protectedts.Manager {
+	return th.server.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
 }
 
 // newTestHelper creates and initializes appropriate state for a test,
@@ -114,8 +120,8 @@ func newTestHelper(t *testing.T) (*testHelper, func()) {
 func (h *testHelper) loadSchedule(t *testing.T, scheduleID int64) *jobs.ScheduledJob {
 	t.Helper()
 
-	loaded, err := jobs.LoadScheduledJob(
-		context.Background(), h.env, scheduleID, h.cfg.InternalExecutor, nil)
+	loaded, err := jobs.ScheduledJobDB(h.internalDB()).
+		Load(context.Background(), h.env, scheduleID)
 	require.NoError(t, err)
 	return loaded
 }
@@ -157,7 +163,7 @@ func (h *testHelper) createBackupSchedule(
 		var id int64
 		require.NoError(t, rows.Scan(&id, &unusedStr, &unusedStr, &unusedTS, &unusedStr, &unusedStr))
 		// Query system.scheduled_job table and load those schedules.
-		datums, cols, err := h.cfg.InternalExecutor.QueryRowExWithCols(
+		datums, cols, err := h.cfg.DB.Executor().QueryRowExWithCols(
 			context.Background(), "sched-load", nil,
 			sessiondata.RootUserSessionDataOverride,
 			"SELECT * FROM system.scheduled_jobs WHERE schedule_id = $1",
@@ -175,6 +181,10 @@ func (h *testHelper) createBackupSchedule(
 	}
 
 	return schedules, nil
+}
+
+func (th *testHelper) internalDB() descs.DB {
+	return th.server.InternalDB().(descs.DB)
 }
 
 func getScheduledBackupStatement(t *testing.T, arg *jobspb.ExecutionArguments) string {
@@ -564,6 +574,28 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 			},
 		},
 		{
+			name:      "full-cluster-with-revision-history-arg",
+			query:     `CREATE SCHEDULE my_backup_name FOR BACKUP INTO 'nodelocal://0/backup' WITH revision_history = $1 RECURRING '@hourly'`,
+			queryArgs: []interface{}{true},
+			user:      enterpriseUser,
+			expectedSchedules: []expectedSchedule{
+				{
+					nameRe:                        "my_backup_name",
+					backupStmt:                    "BACKUP INTO LATEST IN 'nodelocal://0/backup' WITH revision_history = true, detached",
+					period:                        time.Hour,
+					paused:                        true,
+					chainProtectedTimestampRecord: true,
+				},
+				{
+					nameRe:                        "my_backup_name",
+					backupStmt:                    "BACKUP INTO 'nodelocal://0/backup' WITH revision_history = true, detached",
+					period:                        24 * time.Hour,
+					runsNow:                       true,
+					chainProtectedTimestampRecord: true,
+				},
+			},
+		},
+		{
 			name: "multiple-tables-with-encryption",
 			user: enterpriseUser,
 			query: `
@@ -709,7 +741,7 @@ INSERT INTO t1 values (-1), (10), (-100);
 	// We'll be manipulating schedule time via th.env, but we can't fool actual backup
 	// when it comes to AsOf time.  So, override AsOf backup clause to be the current time.
 	th.cfg.TestingKnobs.(*jobs.TestingKnobs).OverrideAsOfClause = func(clause *tree.AsOfClause, _ time.Time) {
-		expr, err := tree.MakeDTimestampTZ(th.cfg.DB.Clock().PhysicalTime(), time.Microsecond)
+		expr, err := tree.MakeDTimestampTZ(th.cfg.DB.KV().Clock().PhysicalTime(), time.Microsecond)
 		require.NoError(t, err)
 		clause.Expr = expr
 	}
@@ -810,9 +842,10 @@ INSERT INTO t1 values (-1), (10), (-100);
 
 				if inc != nil {
 					// Once the full backup completes, the incremental one should no longer be paused.
-					loadedInc, err := jobs.LoadScheduledJob(
-						context.Background(), th.env, inc.ScheduleID(), th.cfg.InternalExecutor, nil)
+					loadedInc, err := jobs.ScheduledJobDB(th.internalDB()).
+						Load(context.Background(), th.env, inc.ScheduleID())
 					require.NoError(t, err)
+
 					require.False(t, loadedInc.IsPaused())
 				}
 
@@ -899,7 +932,7 @@ func TestCreateBackupScheduleIfNotExists(t *testing.T) {
 
 	const selectQuery = "SELECT label FROM [SHOW SCHEDULES] WHERE command->>'backup_statement' LIKE 'BACKUP%';"
 
-	rows, err := th.cfg.InternalExecutor.QueryBufferedEx(
+	rows, err := th.cfg.DB.Executor().QueryBufferedEx(
 		context.Background(), "check-sched", nil,
 		sessiondata.RootUserSessionDataOverride,
 		selectQuery)
@@ -912,7 +945,7 @@ func TestCreateBackupScheduleIfNotExists(t *testing.T) {
 
 	th.sqlDB.Exec(t, fmt.Sprintf(createQuery, newScheduleLabel, collectionLocation))
 
-	rows, err = th.cfg.InternalExecutor.QueryBufferedEx(
+	rows, err = th.cfg.DB.Executor().QueryBufferedEx(
 		context.Background(), "check-sched2", nil,
 		sessiondata.RootUserSessionDataOverride,
 		selectQuery)
@@ -963,7 +996,8 @@ INSERT INTO t values (1), (10), (100);
 		// Adjust next run by the specified delta (which maybe negative).
 		s := th.loadSchedule(t, id)
 		s.SetNextRun(th.env.Now().Add(delta))
-		require.NoError(t, s.Update(context.Background(), th.cfg.InternalExecutor, nil))
+		schedules := jobs.ScheduledJobDB(th.internalDB())
+		require.NoError(t, schedules.Update(context.Background(), s))
 	}
 
 	// We'll be manipulating schedule time via th.env, but we can't fool actual backup
@@ -971,7 +1005,7 @@ INSERT INTO t values (1), (10), (100);
 	useRealTimeAOST := func() func() {
 		knobs := th.cfg.TestingKnobs.(*jobs.TestingKnobs)
 		knobs.OverrideAsOfClause = func(clause *tree.AsOfClause, _ time.Time) {
-			expr, err := tree.MakeDTimestampTZ(th.cfg.DB.Clock().PhysicalTime(), time.Microsecond)
+			expr, err := tree.MakeDTimestampTZ(th.cfg.DB.KV().Clock().PhysicalTime(), time.Microsecond)
 			require.NoError(t, err)
 			clause.Expr = expr
 		}
@@ -1031,7 +1065,8 @@ INSERT INTO t values (1), (10), (100);
 			s.SetScheduleDetails(jobspb.ScheduleDetails{
 				OnError: onError,
 			})
-			require.NoError(t, s.Update(context.Background(), th.cfg.InternalExecutor, nil))
+			schedules := jobs.ScheduledJobDB(th.internalDB())
+			require.NoError(t, schedules.Update(context.Background(), s))
 		}
 	}
 
@@ -1293,7 +1328,7 @@ func TestCreateScheduledBackupTelemetry(t *testing.T) {
 	useRealTimeAOST := func() func() {
 		knobs := th.cfg.TestingKnobs.(*jobs.TestingKnobs)
 		knobs.OverrideAsOfClause = func(clause *tree.AsOfClause, stmtTimestamp time.Time) {
-			expr, err := tree.MakeDTimestampTZ(th.cfg.DB.Clock().PhysicalTime(), time.Microsecond)
+			expr, err := tree.MakeDTimestampTZ(th.cfg.DB.KV().Clock().PhysicalTime(), time.Microsecond)
 			asOfInterval = expr.Time.UnixNano() - stmtTimestamp.UnixNano()
 			require.NoError(t, err)
 			clause.Expr = expr
@@ -1305,7 +1340,7 @@ func TestCreateScheduledBackupTelemetry(t *testing.T) {
 	defer useRealTimeAOST()()
 
 	// Create a schedule and verify that the correct telemetry event was logged.
-	query := `CREATE SCHEDULE FOR BACKUP INTO $1 RECURRING '@hourly' FULL BACKUP '@daily' 
+	query := `CREATE SCHEDULE FOR BACKUP INTO $1 RECURRING '@hourly' FULL BACKUP '@daily'
 WITH SCHEDULE OPTIONS on_execution_failure = 'pause', ignore_existing_backups, first_run=$2`
 	loc := "userfile:///logging"
 

@@ -65,9 +65,6 @@ var ForceWriterParallelism ConfigOption = func(cfg *engineConfig) error {
 // ForTesting configures the engine for use in testing. It may randomize some
 // config options to improve test coverage.
 var ForTesting ConfigOption = func(cfg *engineConfig) error {
-	if cfg.Settings == nil {
-		cfg.Settings = cluster.MakeTestingClusterSettings()
-	}
 	return nil
 }
 
@@ -78,9 +75,6 @@ var ForTesting ConfigOption = func(cfg *engineConfig) error {
 // we know there are only separated intents, this sidesteps any test issues
 // due to inconsistencies.
 var ForStickyEngineTesting ConfigOption = func(cfg *engineConfig) error {
-	if cfg.Settings == nil {
-		cfg.Settings = cluster.MakeTestingClusterSettings()
-	}
 	return nil
 }
 
@@ -132,14 +126,6 @@ func MaxOpenFiles(count int) ConfigOption {
 
 }
 
-// Settings sets the cluster settings to use.
-func Settings(settings *cluster.Settings) ConfigOption {
-	return func(cfg *engineConfig) error {
-		cfg.Settings = settings
-		return nil
-	}
-}
-
 // CacheSize configures the size of the block cache.
 func CacheSize(size int64) ConfigOption {
 	return func(cfg *engineConfig) error {
@@ -179,14 +165,6 @@ func Hook(hookFunc func(*base.StorageConfig) error) ConfigOption {
 		}
 		return hookFunc(&cfg.PebbleConfig.StorageConfig)
 	}
-}
-
-// LatestReleaseFormatMajorVersion opens the database already upgraded to the
-// latest release's format major version.
-var LatestReleaseFormatMajorVersion ConfigOption = func(cfg *engineConfig) error {
-	// TODO(jackson): Tie the below to the mapping in SetMinVersion.
-	cfg.PebbleConfig.Opts.FormatMajorVersion = pebble.FormatPrePebblev1Marked // v22.2
-	return nil
 }
 
 // If enables the given option if enable is true.
@@ -233,9 +211,12 @@ type engineConfig struct {
 
 // Open opens a new Pebble storage engine, reading and writing data to the
 // provided Location, configured with the provided options.
-func Open(ctx context.Context, loc Location, opts ...ConfigOption) (*Pebble, error) {
+func Open(
+	ctx context.Context, loc Location, settings *cluster.Settings, opts ...ConfigOption,
+) (*Pebble, error) {
 	var cfg engineConfig
 	cfg.Dir = loc.dir
+	cfg.Settings = settings
 	cfg.Opts = DefaultPebbleOptions()
 	cfg.Opts.FS = loc.fs
 	for _, opt := range opts {
@@ -247,9 +228,6 @@ func Open(ctx context.Context, loc Location, opts ...ConfigOption) (*Pebble, err
 		cfg.Opts.Cache = pebble.NewCache(*cfg.cacheSize)
 		defer cfg.Opts.Cache.Unref()
 	}
-	if cfg.Settings == nil {
-		cfg.Settings = cluster.MakeClusterSettings()
-	}
 	p, err := NewPebble(ctx, cfg.PebbleConfig)
 	if err != nil {
 		return nil, err
@@ -257,7 +235,7 @@ func Open(ctx context.Context, loc Location, opts ...ConfigOption) (*Pebble, err
 	// Set the active cluster version, ensuring the engine's format
 	// major version is ratcheted sufficiently high to match the
 	// settings cluster version.
-	if v := p.settings.Version.ActiveVersionOrEmpty(ctx).Version; v != (roachpb.Version{}) {
+	if v := settings.Version.ActiveVersionOrEmpty(ctx).Version; v != (roachpb.Version{}) {
 		if err := p.SetMinVersion(v); err != nil {
 			p.Close()
 			return nil, err

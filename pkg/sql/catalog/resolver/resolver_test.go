@@ -16,7 +16,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -26,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -613,10 +613,10 @@ CREATE TABLE c (a INT, INDEX idx2(a));`,
 		require.NoError(t, protoutil.Unmarshal(sessionSerialized, &sessionData))
 	}
 
-	err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+	err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 		execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 		planner, cleanup := sql.NewInternalPlanner(
-			"resolve-index", txn, username.RootUserName(), &sql.MemoryMetrics{}, &execCfg, sessionData,
+			"resolve-index", txn.KV(), username.RootUserName(), &sql.MemoryMetrics{}, &execCfg, sessionData,
 		)
 		defer cleanup()
 
@@ -627,7 +627,7 @@ CREATE TABLE c (a INT, INDEX idx2(a));`,
 		searchPath := ec.SessionData().SearchPath.GetPathArray()
 		ec.SessionData().SearchPath = ec.SessionData().SearchPath.UpdatePaths(append([]string{"test_sc"}, searchPath...))
 		schemaResolver := sql.NewSkippingCacheSchemaResolver(
-			col, ec.SessionDataStack, txn, planner.(scbuild.AuthorizationAccessor),
+			col, ec.SessionDataStack, txn.KV(), planner.(scbuild.AuthorizationAccessor),
 		)
 
 		// Make sure we're looking at correct default db and search path.
@@ -637,7 +637,7 @@ CREATE TABLE c (a INT, INDEX idx2(a));`,
 		for _, tc := range testCases {
 			t.Run(tc.testName, func(t *testing.T) {
 				_, prefix, tblDesc, idxDesc, err := resolver.ResolveIndex(
-					ctx, schemaResolver, tc.name, true, false)
+					ctx, schemaResolver, tc.name, tree.IndexLookupFlags{Required: true, IncludeNonActiveIndex: true})
 				var res string
 				if err != nil {
 					res = fmt.Sprintf("error: %s", err.Error())
@@ -647,7 +647,7 @@ CREATE TABLE c (a INT, INDEX idx2(a));`,
 				require.Equal(t, tc.expected, res)
 
 				_, _, _, _, err = resolver.ResolveIndex(
-					ctx, schemaResolver, tc.name, false, false)
+					ctx, schemaResolver, tc.name, tree.IndexLookupFlags{Required: false, IncludeNonActiveIndex: true})
 				if tc.errIfNotRequired {
 					require.Error(t, err)
 				} else {
@@ -660,7 +660,7 @@ CREATE TABLE c (a INT, INDEX idx2(a));`,
 	require.NoError(t, err)
 }
 
-func TestResolveIndexSkipOfflineTable(t *testing.T) {
+func TestResolveIndexWithOfflineTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -676,16 +676,12 @@ CREATE TABLE baz (i INT PRIMARY KEY, s STRING);
 CREATE INDEX baz_idx ON baz (s);
 `)
 
-	err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		found, tbl, err := col.GetMutableTableByName(
-			ctx, txn,
-			tree.NewTableNameWithSchema("defaultdb", "public", "baz"),
-			tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireTableDesc),
-		)
-		require.True(t, found)
+	err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		tn := tree.NewTableNameWithSchema("defaultdb", "public", "baz")
+		_, tbl, err := descs.PrefixAndMutableTable(ctx, col.MutableByName(txn.KV()), tn)
 		require.NoError(t, err)
 		tbl.SetOffline("testing-index-resolving")
-		err = col.WriteDesc(ctx, false, tbl, txn)
+		err = col.WriteDesc(ctx, false, tbl, txn.KV())
 		require.NoError(t, err)
 		return nil
 	})
@@ -698,10 +694,10 @@ CREATE INDEX baz_idx ON baz (s);
 		require.NoError(t, protoutil.Unmarshal(sessionSerialized, &sessionData))
 	}
 
-	err = sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+	err = sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 		execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 		planner, cleanup := sql.NewInternalPlanner(
-			"resolve-index", txn, username.RootUserName(), &sql.MemoryMetrics{}, &execCfg, sessionData,
+			"resolve-index", txn.KV(), username.RootUserName(), &sql.MemoryMetrics{}, &execCfg, sessionData,
 		)
 		defer cleanup()
 
@@ -709,32 +705,54 @@ CREATE INDEX baz_idx ON baz (s);
 		// Set "defaultdb" as current database.
 		ec.SessionData().Database = "defaultdb"
 		schemaResolver := sql.NewSkippingCacheSchemaResolver(
-			col, ec.SessionDataStack, txn, planner.(scbuild.AuthorizationAccessor),
+			col, ec.SessionDataStack, txn.KV(), planner.(scbuild.AuthorizationAccessor),
 		)
 		// Make sure we're looking at correct default db and search path.
 		require.Equal(t, "defaultdb", schemaResolver.CurrentDatabase())
 		require.Equal(t, []string{"$user", "public"}, schemaResolver.CurrentSearchPath().GetPathArray())
 
-		// Make sure that baz table is skipped so that index baz_idx cannot be found.
+		// Make sure that baz table is skipped when `IncludeOfflineTable` flag is
+		// false, so that index baz_idx cannot be found.
 		found, _, _, _, err := resolver.ResolveIndex(
 			ctx,
 			schemaResolver,
 			newTableIndexName("", "", "", "baz_idx"),
-			false,
-			false,
+			tree.IndexLookupFlags{
+				Required:              false,
+				IncludeNonActiveIndex: false,
+				IncludeOfflineTable:   false,
+			},
 		)
 		require.NoError(t, err)
 		require.False(t, found)
 
-		// Make sure that baz table is skipped so that it does not error out when
-		// resolving index on other tables. Note that because table name is not
+		// Make sure that baz table is considered when `IncludeOfflineTable` flag is
+		// true, so that index baz_idx can be found.
+		found, _, _, _, err = resolver.ResolveIndex(
+			ctx,
+			schemaResolver,
+			newTableIndexName("", "", "", "baz_idx"),
+			tree.IndexLookupFlags{
+				Required:              true,
+				IncludeNonActiveIndex: true,
+				IncludeOfflineTable:   true,
+			},
+		)
+		require.NoError(t, err)
+		require.True(t, found)
+
+		// Make sure that baz table is taken care of so that it does not error out
+		// when resolving index on other tables. Note that because table name is not
 		// given, all tables on current search path are searched.
 		found, _, _, _, err = resolver.ResolveIndex(
 			ctx,
 			schemaResolver,
 			newTableIndexName("", "", "", "foo_idx"),
-			false,
-			false,
+			tree.IndexLookupFlags{
+				Required:              true,
+				IncludeNonActiveIndex: false,
+				IncludeOfflineTable:   false,
+			},
 		)
 		require.NoError(t, err)
 		require.True(t, found)

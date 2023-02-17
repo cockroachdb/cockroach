@@ -14,9 +14,9 @@ go_library(
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
+        "//pkg/sql/isql",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
-        "//pkg/sql/sqlutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

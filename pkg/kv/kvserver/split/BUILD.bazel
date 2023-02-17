@@ -5,7 +5,8 @@ go_library(
     name = "split",
     srcs = [
         "decider.go",
-        "finder.go",
+        "unweighted_finder.go",
+        "weighted_finder.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/split",
     visibility = ["//visibility:public"],
@@ -15,7 +16,6 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/syncutil",
-        "@org_golang_x_exp//rand",
     ],
 )
 
@@ -24,8 +24,9 @@ go_test(
     size = "small",
     srcs = [
         "decider_test.go",
-        "finder_test.go",
         "load_based_splitter_test.go",
+        "unweighted_finder_test.go",
+        "weighted_finder_test.go",
     ],
     args = ["-test.timeout=55s"],
     embed = [":split"],

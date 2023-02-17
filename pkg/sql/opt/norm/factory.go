@@ -22,9 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -102,7 +102,7 @@ type Factory struct {
 
 	// disabledRules is a set of rules that are not allowed to run, used when
 	// rules are disabled during testing to prevent rule cycles.
-	disabledRules util.FastIntSet
+	disabledRules intsets.Fast
 }
 
 // maxConstructorStackDepth is the maximum allowed depth of a constructor call
@@ -186,6 +186,24 @@ func (f *Factory) DisableOptimizations() {
 	f.NotifyOnMatchedRule(func(opt.RuleName) bool { return false })
 }
 
+// DisableOptimizationRules disables a specific set of transformation rules.
+func (f *Factory) DisableOptimizationRules(disabledRules intsets.Fast) {
+	f.NotifyOnMatchedRule(func(rule opt.RuleName) bool {
+		return !disabledRules.Contains(int(rule))
+	})
+}
+
+// DisableOptimizationRulesTemporarily disables a specific set transformation
+// rules during the execution of the given function fn. A MatchedRuleFunc
+// previously set by NotifyOnMatchedRule is not invoked during execution of fn,
+// but will be invoked for future rule matches after fn returns.
+func (f *Factory) DisableOptimizationRulesTemporarily(disabledRules intsets.Fast, fn func()) {
+	originalMatchedRule := f.matchedRule
+	f.DisableOptimizationRules(disabledRules)
+	fn()
+	f.matchedRule = originalMatchedRule
+}
+
 // DisableOptimizationsTemporarily disables all transformation rules during the
 // execution of the given function fn. A MatchedRuleFunc previously set by
 // NotifyOnMatchedRule is not invoked during execution of fn, but will be
@@ -217,7 +235,7 @@ func (f *Factory) NotifyOnAppliedRule(appliedRule AppliedRuleFunc) {
 // disabled during testing. SetDisabledRules does not prevent rules from
 // matching - rather, it notifies the Factory that rules have been prevented
 // from matching using NotifyOnMatchedRule.
-func (f *Factory) SetDisabledRules(disabledRules util.FastIntSet) {
+func (f *Factory) SetDisabledRules(disabledRules intsets.Fast) {
 	f.disabledRules = disabledRules
 }
 

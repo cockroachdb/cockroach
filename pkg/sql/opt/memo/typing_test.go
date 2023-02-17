@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	tu "github.com/cockroachdb/cockroach/pkg/testutils"
+	tu "github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 )
 
 func TestTyping(t *testing.T) {

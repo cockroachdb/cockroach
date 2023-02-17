@@ -35,8 +35,8 @@ func setupMVCCPebble(b testing.TB, dir string) Engine {
 	peb, err := Open(
 		context.Background(),
 		Filesystem(dir),
-		CacheSize(testCacheSize),
-		Settings(cluster.MakeTestingClusterSettings()))
+		cluster.MakeTestingClusterSettings(),
+		CacheSize(testCacheSize))
 	if err != nil {
 		b.Fatalf("could not create new pebble instance at %s: %+v", dir, err)
 	}
@@ -51,6 +51,7 @@ func setupMVCCInMemPebbleWithSeparatedIntents(b testing.TB) Engine {
 	peb, err := Open(
 		context.Background(),
 		InMemory(),
+		cluster.MakeClusterSettings(),
 		CacheSize(testCacheSize))
 	if err != nil {
 		b.Fatalf("could not create new in-mem pebble instance: %+v", err)
@@ -66,7 +67,7 @@ func setupPebbleInMemPebbleForLatestRelease(b testing.TB, _ string) Engine {
 		b.Fatalf("failed to set current cluster version: %+v", err)
 	}
 
-	peb, err := Open(ctx, InMemory(), CacheSize(testCacheSize), Settings(s))
+	peb, err := Open(ctx, InMemory(), s, CacheSize(testCacheSize))
 	if err != nil {
 		b.Fatalf("could not create new in-mem pebble instance: %+v", err)
 	}

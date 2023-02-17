@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/stretchr/testify/require"
 )
@@ -65,8 +66,8 @@ func TestRangeSplit(t *testing.T) {
 	// Assert that the lhs now has half the previous load counters.
 	lhsLoad := s.load[lhs.RangeID()].(*ReplicaLoadCounter)
 	rhsLoad := s.load[rhs.RangeID()].(*ReplicaLoadCounter)
-	lhsQPS, _ := lhsLoad.QPS.SumLocked()
-	rhsQPS, _ := rhsLoad.QPS.SumLocked()
+	lhsQPS := lhsLoad.loadStats.TestingGetSum(load.Queries)
+	rhsQPS := rhsLoad.loadStats.TestingGetSum(load.Queries)
 	require.Equal(t, int64(50), lhsLoad.ReadKeys)
 	require.Equal(t, int64(50), lhsLoad.WriteKeys)
 	require.Equal(t, int64(50), lhsLoad.WriteBytes)
@@ -289,8 +290,9 @@ func TestWorkloadApply(t *testing.T) {
 // TestReplicaLoadQPS asserts that the rated replica load accounting maintains
 // the average per second corresponding to the tick clock.
 func TestReplicaLoadQPS(t *testing.T) {
-	s := NewState(config.DefaultSimulationSettings())
-	start := TestingStartTime()
+	settings := config.DefaultSimulationSettings()
+	s := NewState(settings)
+	start := settings.StartTime
 
 	n1 := s.AddNode()
 	k1 := Key(100)
@@ -368,21 +370,23 @@ func TestOrderedStateLists(t *testing.T) {
 			)
 		}
 	}
+	settings := config.DefaultSimulationSettings()
 
 	// Test an empty state, where there should be nothing.
-	s := NewState(config.DefaultSimulationSettings())
+	s := NewState(settings)
 	assertListsOrdered(s)
 	// Test an even distribution with 100 stores, 10k ranges and 1m keyspace.
-	s = NewTestStateEvenDistribution(100, 10000, 3, 1000000)
+	s = NewStateEvenDistribution(100, 10000, 3, 1000000, settings)
 	assertListsOrdered(s)
 	// Test a skewed distribution with 100 stores, 10k ranges and 1m keyspace.
-	s = NewTestStateSkewedDistribution(100, 10000, 3, 1000000)
+	s = NewStateSkewedDistribution(100, 10000, 3, 1000000, settings)
 	assertListsOrdered(s)
 }
 
 // TestNewStateDeterministic asserts that the state returned from the new state
 // utility functions is deterministic.
 func TestNewStateDeterministic(t *testing.T) {
+	settings := config.DefaultSimulationSettings()
 
 	testCases := []struct {
 		desc       string
@@ -390,15 +394,17 @@ func TestNewStateDeterministic(t *testing.T) {
 	}{
 		{
 			desc:       "even distribution",
-			newStateFn: func() State { return NewTestStateEvenDistribution(7, 1400, 3, 10000) },
+			newStateFn: func() State { return NewStateEvenDistribution(7, 1400, 3, 10000, settings) },
 		},
 		{
 			desc:       "skewed distribution",
-			newStateFn: func() State { return NewTestStateSkewedDistribution(7, 1400, 3, 10000) },
+			newStateFn: func() State { return NewStateSkewedDistribution(7, 1400, 3, 10000, settings) },
 		},
 		{
-			desc:       "replica distribution raw ",
-			newStateFn: func() State { return NewTestStateReplDistribution([]float64{0.2, 0.2, 0.2, 0.2, 0.2}, 5, 3, 10000) },
+			desc: "replica distribution raw ",
+			newStateFn: func() State {
+				return NewStateWithDistribution([]float64{0.2, 0.2, 0.2, 0.2, 0.2}, 5, 3, 10000, settings)
+			},
 		},
 	}
 
@@ -414,8 +420,15 @@ func TestNewStateDeterministic(t *testing.T) {
 
 // TestSplitRangeDeterministic asserts that range splits are deterministic.
 func TestSplitRangeDeterministic(t *testing.T) {
+	settings := config.DefaultSimulationSettings()
 	run := func() (State, func(key Key) (Range, Range, bool)) {
-		s := NewTestStateReplDistribution([]float64{0.2, 0.2, 0.2, 0.2, 0.2}, 5, 3, 10000)
+		s := NewStateWithDistribution(
+			[]float64{0.2, 0.2, 0.2, 0.2, 0.2},
+			5,
+			3,
+			10000,
+			settings,
+		)
 		return s, func(key Key) (Range, Range, bool) {
 			return s.SplitRange(key)
 		}

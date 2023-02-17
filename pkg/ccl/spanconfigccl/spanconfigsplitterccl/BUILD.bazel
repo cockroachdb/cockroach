@@ -22,7 +22,7 @@ go_test(
         "//pkg/spanconfig/spanconfigsplitter",
         "//pkg/spanconfig/spanconfigtestutils/spanconfigtestcluster",
         "//pkg/sql/catalog/descpb",
-        "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",

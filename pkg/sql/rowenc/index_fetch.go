@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
@@ -27,15 +28,15 @@ import (
 // inverted and we fetch the inverted key, the corresponding Column contains the
 // inverted column type.
 func InitIndexFetchSpec(
-	s *descpb.IndexFetchSpec,
+	s *fetchpb.IndexFetchSpec,
 	codec keys.SQLCodec,
 	table catalog.TableDescriptor,
 	index catalog.Index,
 	fetchColumnIDs []descpb.ColumnID,
 ) error {
 	oldFetchedCols := s.FetchedColumns
-	*s = descpb.IndexFetchSpec{
-		Version:             descpb.IndexFetchSpecVersionInitial,
+	*s = fetchpb.IndexFetchSpec{
+		Version:             fetchpb.IndexFetchSpecVersionInitial,
 		TableID:             table.GetID(),
 		TableName:           table.GetName(),
 		IndexID:             index.GetID(),
@@ -72,10 +73,10 @@ func InitIndexFetchSpec(
 	if cap(oldFetchedCols) >= len(fetchColumnIDs) {
 		s.FetchedColumns = oldFetchedCols[:len(fetchColumnIDs)]
 	} else {
-		s.FetchedColumns = make([]descpb.IndexFetchSpec_Column, len(fetchColumnIDs))
+		s.FetchedColumns = make([]fetchpb.IndexFetchSpec_Column, len(fetchColumnIDs))
 	}
 	for i, colID := range fetchColumnIDs {
-		col, err := table.FindColumnWithID(colID)
+		col, err := catalog.MustFindColumnByID(table, colID)
 		if err != nil {
 			return err
 		}
@@ -83,7 +84,7 @@ func InitIndexFetchSpec(
 		if colID == invertedColumnID {
 			typ = index.InvertedColumnKeyType()
 		}
-		s.FetchedColumns[i] = descpb.IndexFetchSpec_Column{
+		s.FetchedColumns[i] = fetchpb.IndexFetchSpec_Column{
 			Name:          col.GetName(),
 			ColumnID:      colID,
 			Type:          typ,

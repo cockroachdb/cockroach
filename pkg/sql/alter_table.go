@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -39,11 +38,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/tablestorageparam"
@@ -99,7 +98,7 @@ func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode,
 
 	// This check for CREATE privilege is kept for backwards compatibility.
 	if err := p.CheckPrivilege(ctx, tableDesc, privilege.CREATE); err != nil {
-		return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
+		return nil, pgerror.Wrapf(err, pgcode.InsufficientPrivilege,
 			"must be owner of table %s or have CREATE privilege on table %s",
 			tree.Name(tableDesc.GetName()), tree.Name(tableDesc.GetName()))
 	}
@@ -277,7 +276,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 							"cannot create a unique constraint on an expression, use UNIQUE INDEX instead",
 						)
 					}
-					_, err := n.tableDesc.FindColumnWithName(column.Column)
+					_, err := catalog.MustFindColumnByTreeName(n.tableDesc, column.Column)
 					if err != nil {
 						return err
 					}
@@ -312,12 +311,10 @@ func (n *alterTableNode) startExec(params runParams) error {
 				if err != nil {
 					return err
 				}
-				foundIndex, err := n.tableDesc.FindIndexWithName(string(d.Name))
-				if err == nil {
-					if foundIndex.Dropped() {
-						return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-							"index %q being dropped, try again later", d.Name)
-					}
+				foundIndex := catalog.FindIndexByName(n.tableDesc, string(d.Name))
+				if foundIndex != nil && foundIndex.Dropped() {
+					return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+						"index %q being dropped, try again later", d.Name)
 				}
 				if err := n.tableDesc.AddIndexMutationMaybeWithTempIndex(
 					&idx, descpb.DescriptorMutation_ADD,
@@ -502,13 +499,12 @@ func (n *alterTableNode) startExec(params runParams) error {
 			droppedViews = append(droppedViews, colDroppedViews...)
 		case *tree.AlterTableDropConstraint:
 			name := string(t.Constraint)
-			c, _ := n.tableDesc.FindConstraintWithName(name)
+			c := catalog.FindConstraintByName(n.tableDesc, name)
 			if c == nil {
 				if t.IfExists {
 					continue
 				}
-				return pgerror.Newf(pgcode.UndefinedObject,
-					"constraint %q of relation %q does not exist", t.Constraint, n.tableDesc.Name)
+				return sqlerrors.NewUndefinedConstraintError(string(t.Constraint), n.tableDesc.Name)
 			}
 			if err := n.tableDesc.DropConstraint(c, func(backRef catalog.ForeignKeyConstraint) error {
 				return params.p.removeFKBackReference(params.ctx, n.tableDesc, backRef.ForeignKeyDesc())
@@ -522,10 +518,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 		case *tree.AlterTableValidateConstraint:
 			name := string(t.Constraint)
-			c, _ := n.tableDesc.FindConstraintWithName(name)
+			c := catalog.FindConstraintByName(n.tableDesc, name)
 			if c == nil {
-				return pgerror.Newf(pgcode.UndefinedObject,
-					"constraint %q of relation %q does not exist", t.Constraint, n.tableDesc.Name)
+				return sqlerrors.NewUndefinedConstraintError(string(t.Constraint), n.tableDesc.Name)
 			}
 			switch c.GetConstraintValidity() {
 			case descpb.ConstraintValidity_Validated:
@@ -535,34 +530,31 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 					"constraint %q in the middle of being added, try again later", t.Constraint)
 			case descpb.ConstraintValidity_Dropping:
-				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-					"constraint %q in the middle of being dropped", t.Constraint)
+				return sqlerrors.NewUndefinedConstraintError(string(t.Constraint), n.tableDesc.Name)
 			}
 			if ck := c.AsCheck(); ck != nil {
-				if err := params.p.WithInternalExecutor(params.ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
-					return validateCheckInTxn(ctx, &params.p.semaCtx, params.p.SessionData(), n.tableDesc, txn, ie, ck.GetExpr())
-				}); err != nil {
+				if err := validateCheckInTxn(
+					params.ctx, params.p.InternalSQLTxn(), &params.p.semaCtx,
+					params.p.SessionData(), n.tableDesc, ck.GetExpr(),
+				); err != nil {
 					return err
 				}
 				ck.CheckDesc().Validity = descpb.ConstraintValidity_Validated
 			} else if fk := c.AsForeignKey(); fk != nil {
-				if err := params.p.WithInternalExecutor(params.ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
-					return validateFkInTxn(ctx, n.tableDesc, txn, ie, params.p.descCollection, name)
-				}); err != nil {
+				if err := validateFkInTxn(
+					params.ctx, params.p.InternalSQLTxn(), n.tableDesc, name,
+				); err != nil {
 					return err
 				}
 				fk.ForeignKeyDesc().Validity = descpb.ConstraintValidity_Validated
 			} else if uwoi := c.AsUniqueWithoutIndex(); uwoi != nil {
-				if err := params.p.WithInternalExecutor(params.ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
-					return validateUniqueWithoutIndexConstraintInTxn(
-						params.ctx,
-						n.tableDesc,
-						txn,
-						ie,
-						params.p.User(),
-						name,
-					)
-				}); err != nil {
+				if err := validateUniqueWithoutIndexConstraintInTxn(
+					params.ctx,
+					params.p.InternalSQLTxn(),
+					n.tableDesc,
+					params.p.User(),
+					name,
+				); err != nil {
 					return err
 				}
 				uwoi.UniqueWithoutIndexDesc().Validity = descpb.ConstraintValidity_Validated
@@ -576,7 +568,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 		case tree.ColumnMutationCmd:
 			// Column mutations
 			tableDesc := n.tableDesc
-			col, err := tableDesc.FindColumnWithName(t.GetColumn())
+			col, err := catalog.MustFindColumnByTreeName(tableDesc, t.GetColumn())
 			if err != nil {
 				return err
 			}
@@ -652,7 +644,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				descriptorChanged = true
 				if err := deleteRemovedPartitionZoneConfigs(
 					params.ctx,
-					params.p.txn,
+					params.p.InternalSQLTxn(),
 					n.tableDesc,
 					params.p.Descriptors(),
 					n.tableDesc.GetPrimaryIndexID(),
@@ -748,10 +740,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 			descriptorChanged = descriptorChanged || descChanged
 
 		case *tree.AlterTableRenameConstraint:
-			constraint, _ := n.tableDesc.FindConstraintWithName(string(t.Constraint))
+			constraint := catalog.FindConstraintByName(n.tableDesc, string(t.Constraint))
 			if constraint == nil {
-				return pgerror.Newf(pgcode.UndefinedObject,
-					"constraint %q of relation %q does not exist", tree.ErrString(&t.Constraint), n.tableDesc.Name)
+				return sqlerrors.NewUndefinedConstraintError(tree.ErrString(&t.Constraint), n.tableDesc.Name)
 			}
 			if t.Constraint == t.NewName {
 				// Nothing to do.
@@ -765,7 +756,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 					"constraint %q in the middle of being dropped", t.Constraint)
 			}
-			if other, _ := n.tableDesc.FindConstraintWithName(string(t.NewName)); other != nil {
+			if other := catalog.FindConstraintByName(n.tableDesc, string(t.NewName)); other != nil {
 				return pgerror.Newf(pgcode.DuplicateObject,
 					"duplicate constraint name: %q", tree.ErrString(&t.NewName))
 			}
@@ -863,7 +854,10 @@ func (p *planner) setAuditMode(
 	}
 	if !hasAdmin {
 		// Check for system privilege first, otherwise fall back to role options.
-		hasModify := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYCLUSTERSETTING) == nil
+		hasModify, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYCLUSTERSETTING, p.User())
+		if err != nil {
+			return false, err
+		}
 		if !hasModify {
 			hasModify, err = p.HasRoleOption(ctx, roleoption.MODIFYCLUSTERSETTING)
 			if err != nil {
@@ -923,8 +917,8 @@ func applyColumnMutation(
 		for _, fk := range tableDesc.OutboundFKs {
 			for _, colID := range fk.OriginColumnIDs {
 				if colID == col.GetID() &&
-					fk.OnUpdate != catpb.ForeignKeyAction_NO_ACTION &&
-					fk.OnUpdate != catpb.ForeignKeyAction_RESTRICT {
+					fk.OnUpdate != semenumpb.ForeignKeyAction_NO_ACTION &&
+					fk.OnUpdate != semenumpb.ForeignKeyAction_RESTRICT {
 					return pgerror.Newf(
 						pgcode.InvalidColumnDefinition,
 						"column %s(%d) cannot have both an ON UPDATE expression and a foreign"+
@@ -1004,7 +998,8 @@ func applyColumnMutation(
 
 		// Add a check constraint equivalent to the non-null constraint and drop
 		// it in the schema changer.
-		check := tabledesc.MakeNotNullCheckConstraint(tableDesc, col, descpb.ConstraintValidity_Dropping)
+		check := tabledesc.MakeNotNullCheckConstraint(tableDesc, col,
+			descpb.ConstraintValidity_Dropping, tableDesc.GetNextConstraintID())
 		tableDesc.Checks = append(tableDesc.Checks, check)
 		tableDesc.NextConstraintID++
 		tableDesc.AddNotNullMutation(check, descpb.DescriptorMutation_DROP)
@@ -1024,7 +1019,8 @@ func applyColumnMutation(
 }
 
 func addNotNullConstraintMutationForCol(tableDesc *tabledesc.Mutable, col catalog.Column) error {
-	check := tabledesc.MakeNotNullCheckConstraint(tableDesc, col, descpb.ConstraintValidity_Validating)
+	check := tabledesc.MakeNotNullCheckConstraint(tableDesc, col,
+		descpb.ConstraintValidity_Validating, tableDesc.GetNextConstraintID())
 	tableDesc.AddNotNullMutation(check, descpb.DescriptorMutation_ADD)
 	tableDesc.NextConstraintID++
 	return nil
@@ -1222,7 +1218,7 @@ func injectTableStats(
 	}
 
 	// First, delete all statistics for the table.
-	if _ /* rows */, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
+	if _ /* rows */, err := params.p.InternalSQLTxn().Exec(
 		params.ctx,
 		"delete-stats",
 		params.p.Txn(),
@@ -1251,8 +1247,8 @@ StatsLoop:
 
 		columnIDs := tree.NewDArray(types.Int)
 		for _, colName := range s.Columns {
-			col, err := desc.FindColumnWithName(tree.Name(colName))
-			if err != nil {
+			col := catalog.FindColumnByName(desc, colName)
+			if col == nil {
 				params.p.BufferClientNotice(
 					params.ctx,
 					pgnotice.Newf("column %q does not exist", colName),
@@ -1286,8 +1282,7 @@ func insertJSONStatistic(
 ) error {
 	var (
 		ctx      = params.ctx
-		ie       = params.ExecCfg().InternalExecutor
-		txn      = params.p.Txn()
+		txn      = params.p.InternalSQLTxn()
 		settings = params.ExecCfg().Settings
 	)
 
@@ -1302,10 +1297,10 @@ func insertJSONStatistic(
 			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState, "statistic for columns %v with collection time %s to insert is partial but cluster version is below 23.1", s.Columns, s.CreatedAt)
 		}
 
-		_ /* rows */, err := ie.Exec(
+		_ /* rows */, err := txn.Exec(
 			ctx,
 			"insert-stats",
-			txn,
+			txn.KV(),
 			`INSERT INTO system.table_statistics (
 					"tableID",
 					"name",
@@ -1339,10 +1334,10 @@ func insertJSONStatistic(
 		fullStatisticIDValue = s.FullStatisticID
 	}
 
-	_ /* rows */, err := ie.Exec(
+	_ /* rows */, err := txn.Exec(
 		ctx,
 		"insert-stats",
-		txn,
+		txn.KV(),
 		`INSERT INTO system.table_statistics (
 					"tableID",
 					"name",
@@ -1432,7 +1427,7 @@ func validateConstraintNameIsNotUsed(
 		if name == "" {
 			return false, nil
 		}
-		idx, _ := tableDesc.FindIndexWithName(string(name))
+		idx := catalog.FindIndexByName(tableDesc, string(name))
 		// If an index is found and its disabled, then we know it will be dropped
 		// later on.
 		if idx == nil {
@@ -1454,7 +1449,7 @@ func validateConstraintNameIsNotUsed(
 	if name == "" {
 		return false, nil
 	}
-	constraint, _ := tableDesc.FindConstraintWithName(string(name))
+	constraint := catalog.FindConstraintByName(tableDesc, string(name))
 	if constraint == nil {
 		return false, nil
 	}
@@ -1493,7 +1488,7 @@ func (p *planner) updateFKBackReferenceName(
 	if tableDesc.ID == ref.ReferencedTableID {
 		referencedTableDesc = tableDesc
 	} else {
-		lookup, err := p.Descriptors().GetMutableTableVersionByID(ctx, ref.ReferencedTableID, p.txn)
+		lookup, err := p.Descriptors().MutableByID(p.txn).Table(ctx, ref.ReferencedTableID)
 		if err != nil {
 			return errors.Wrapf(err, "error resolving referenced table ID %d", ref.ReferencedTableID)
 		}
@@ -1541,7 +1536,7 @@ func dropColumnImpl(
 		}
 	}
 
-	colToDrop, err := tableDesc.FindColumnWithName(t.Column)
+	colToDrop, err := catalog.MustFindColumnByTreeName(tableDesc, t.Column)
 	if err != nil {
 		if t.IfExists {
 			// Noop.
@@ -1705,9 +1700,7 @@ func dropColumnImpl(
 		if check.Dropped() {
 			continue
 		}
-		if used, err := tableDesc.CheckConstraintUsesColumn(check.CheckDesc(), colToDrop.GetID()); err != nil {
-			return nil, err
-		} else if !used {
+		if !check.CollectReferencedColumnIDs().Contains(colToDrop.GetID()) {
 			continue
 		}
 		if err := tableDesc.DropConstraint(check, nil /* removeFKBackRef */); err != nil {
@@ -1769,13 +1762,12 @@ func handleTTLStorageParamChange(
 
 		// Update cron schedule if required.
 		if before.DeletionCron != after.DeletionCron {
-			env := JobSchedulerEnv(params.ExecCfg())
-			s, err := jobs.LoadScheduledJob(
+			env := JobSchedulerEnv(params.ExecCfg().JobsKnobs())
+			schedules := jobs.ScheduledJobTxn(params.p.InternalSQLTxn())
+			s, err := schedules.Load(
 				params.ctx,
 				env,
 				after.ScheduleID,
-				params.ExecCfg().InternalExecutor,
-				params.p.txn,
 			)
 			if err != nil {
 				return false, err
@@ -1783,14 +1775,14 @@ func handleTTLStorageParamChange(
 			if err := s.SetSchedule(after.DeletionCronOrDefault()); err != nil {
 				return false, err
 			}
-			if err := s.Update(params.ctx, params.ExecCfg().InternalExecutor, params.p.txn); err != nil {
+			if err := schedules.Update(params.ctx, s); err != nil {
 				return false, err
 			}
 		}
 
 		// Update default expression on automated column if required.
 		if before.HasDurationExpr() && after.HasDurationExpr() && before.DurationExpr != after.DurationExpr {
-			col, err := tableDesc.FindColumnWithName(colinfo.TTLDefaultExpirationColumnName)
+			col, err := catalog.MustFindColumnByName(tableDesc, colinfo.TTLDefaultExpirationColumnName)
 			if err != nil {
 				return false, err
 			}
@@ -1832,7 +1824,7 @@ func handleTTLStorageParamChange(
 		// Adding a TTL requires adding the automatic column and deferring the TTL
 		// addition to after the column is successfully added.
 		addTTLMutation = true
-		if _, err := tableDesc.FindColumnWithName(colinfo.TTLDefaultExpirationColumnName); err == nil {
+		if catalog.FindColumnByName(tableDesc, colinfo.TTLDefaultExpirationColumnName) != nil {
 			return false, pgerror.Newf(
 				pgcode.InvalidTableDefinition,
 				"cannot add TTL to table with the %s column already defined",

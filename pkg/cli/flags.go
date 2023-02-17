@@ -476,7 +476,9 @@ func init() {
 
 			cliflagcfg.VarFlag(f, &storeSpecs, cliflags.Store)
 			cliflagcfg.VarFlag(f, &serverCfg.StorageEngine, cliflags.StorageEngine)
+			cliflagcfg.StringFlag(f, &serverCfg.SharedStorage, cliflags.SharedStorage)
 			cliflagcfg.VarFlag(f, &serverCfg.MaxOffset, cliflags.MaxOffset)
+			cliflagcfg.BoolFlag(f, &serverCfg.DisableMaxOffsetCheck, cliflags.DisableMaxOffsetCheck)
 			cliflagcfg.StringFlag(f, &serverCfg.ClockDevicePath, cliflags.ClockDevice)
 
 			cliflagcfg.StringFlag(f, &startCtx.listeningURLFile, cliflags.ListeningURLFile)
@@ -541,6 +543,10 @@ func init() {
 	telemetryEnabledCmds := append(serverCmds, demoCmd, statementBundleRecreateCmd)
 	telemetryEnabledCmds = append(telemetryEnabledCmds, demoCmd.Commands()...)
 	for _, cmd := range telemetryEnabledCmds {
+		f := cmd.Flags()
+		cliflagcfg.StringFlag(f, &serverCfg.ObsServiceAddr, cliflags.ObsServiceAddr)
+		_ = f.MarkHidden(cliflags.ObsServiceAddr.Name)
+
 		// Report flag usage for server commands in telemetry. We do this
 		// only for server commands, as there is no point in accumulating
 		// telemetry if there's no telemetry reporting loop being started.
@@ -618,6 +624,7 @@ func init() {
 	clientCmds = append(clientCmds, userFileCmds...)
 	clientCmds = append(clientCmds, stmtDiagCmds...)
 	clientCmds = append(clientCmds, debugResetQuorumCmd)
+	clientCmds = append(clientCmds, recoverCommands...)
 	for _, cmd := range clientCmds {
 		clientflags.AddBaseFlags(cmd, &cliCtx.clientOpts, &baseCfg.Insecure, &baseCfg.SSLCertsDir)
 
@@ -781,6 +788,8 @@ func init() {
 
 		cliflagcfg.IntFlag(f, &demoCtx.NumNodes, cliflags.DemoNodes)
 		cliflagcfg.BoolFlag(f, &demoCtx.RunWorkload, cliflags.RunDemoWorkload)
+		cliflagcfg.IntFlag(f, &demoCtx.ExpandSchema, cliflags.ExpandDemoSchema)
+		cliflagcfg.StringFlag(f, &demoCtx.NameGenOptions, cliflags.DemoNameGenOpts)
 		cliflagcfg.IntFlag(f, &demoCtx.WorkloadMaxQPS, cliflags.DemoWorkloadMaxQPS)
 		cliflagcfg.VarFlag(f, &demoCtx.Localities, cliflags.DemoNodeLocality)
 		cliflagcfg.BoolFlag(f, &demoCtx.GeoPartitionedReplicas, cliflags.DemoGeoPartitionedReplicas)
@@ -793,9 +802,11 @@ func init() {
 		cliflagcfg.BoolFlag(f, &demoCtx.DefaultEnableRangefeeds, cliflags.DemoEnableRangefeeds)
 
 		cliflagcfg.BoolFlag(f, &demoCtx.Multitenant, cliflags.DemoMultitenant)
+		cliflagcfg.BoolFlag(f, &demoCtx.DisableServerController, cliflags.DemoDisableServerController)
 		// TODO(knz): Currently the multitenant UX for 'demo' is not
 		// satisfying for end-users. Let's not advertise it too much.
 		_ = f.MarkHidden(cliflags.DemoMultitenant.Name)
+		_ = f.MarkHidden(cliflags.DemoDisableServerController.Name)
 
 		cliflagcfg.BoolFlag(f, &demoCtx.SimulateLatency, cliflags.Global)
 		// We also support overriding the GEOS library path for 'demo'.
@@ -1118,6 +1129,42 @@ func extraStoreFlagInit(cmd *cobra.Command) error {
 	fs := cliflagcfg.FlagSetForCmd(cmd)
 	if fs.Changed(cliflags.Store.Name) {
 		serverCfg.Stores = storeSpecs
+	}
+	// Convert all the store paths to absolute paths. We want this to
+	// ensure canonical directories across invocations; and also to
+	// benefit from the check in GetAbsoluteStorePath() that the user
+	// didn't mistakenly assume a heading '~' would get translated by
+	// CockroachDB. (The shell should be responsible for that.)
+	for i, ss := range serverCfg.Stores.Specs {
+		if ss.InMemory {
+			continue
+		}
+		absPath, err := base.GetAbsoluteStorePath("path", ss.Path)
+		if err != nil {
+			return err
+		}
+		ss.Path = absPath
+		serverCfg.Stores.Specs[i] = ss
+	}
+
+	// Configure the external I/O directory.
+	if !fs.Changed(cliflags.ExternalIODir.Name) {
+		// Try to find a directory from the store configuration.
+		for _, ss := range serverCfg.Stores.Specs {
+			if ss.InMemory {
+				continue
+			}
+			startCtx.externalIODir = filepath.Join(ss.Path, "extern")
+			break
+		}
+	}
+	if startCtx.externalIODir != "" {
+		// Make the directory name absolute.
+		var err error
+		startCtx.externalIODir, err = base.GetAbsoluteStorePath(cliflags.ExternalIODir.Name, startCtx.externalIODir)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }

@@ -1,0 +1,174 @@
+# Tests verifying that voter with max StoreID would be designated survivor.
+
+# First use case where we can successfully resolve replicas by leaseholder
+# status.
+# With two out of five replicas remaining, check that replica that thinks
+# it was/is a leaseholder is chosen if everything else is the same.
+
+replication-data
+- StoreID: 1
+  RangeID: 1
+  StartKey: /Min
+  EndKey: /Max
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1, Leaseholder: true}  # this replica is identical to one in store 2 but thinks its a leaseholder
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  - { NodeID: 4, StoreID: 4, ReplicaID: 4}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 5}
+  RangeAppliedIndex: 10
+  RaftCommittedIndex: 13
+- StoreID: 2
+  RangeID: 1
+  StartKey: /Min
+  EndKey: /Max
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1, Leaseholder: true}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}  # this replica has the same state n1 but has higher storeID but not a leaseholder
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  - { NodeID: 4, StoreID: 4, ReplicaID: 4}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 5}
+  RangeAppliedIndex: 10
+  RaftCommittedIndex: 13
+----
+ok
+
+collect-replica-info stores=(1,2)
+----
+ok
+
+make-plan
+----
+Replica updates:
+- RangeID: 1
+  StartKey: /Min
+  OldReplicaID: 1
+  NewReplica:
+    NodeID: 1
+    StoreID: 1
+    ReplicaID: 16
+  NextReplicaID: 17
+Decommissioned nodes:
+[n3, n4, n5]
+
+apply-plan stores=(1,2)
+----
+ok
+
+dump-store stores=(1,2)
+----
+- NodeID: 1
+  StoreID: 1
+  Descriptors:
+  - RangeID: 1
+    StartKey: /Min
+    Replicas:
+    - Replica: {NodeID: 1, StoreID: 1, ReplicaID: 16}
+  LocalData:
+  - RangeID: 1
+    RaftReplicaID: 16
+- NodeID: 2
+  StoreID: 2
+  Descriptors:
+  - RangeID: 1
+    StartKey: /Min
+    Replicas:
+    - Replica: {NodeID: 1, StoreID: 1, ReplicaID: 1}
+    - Replica: {NodeID: 2, StoreID: 2, ReplicaID: 2}
+    - Replica: {NodeID: 3, StoreID: 3, ReplicaID: 3}
+    - Replica: {NodeID: 4, StoreID: 4, ReplicaID: 4}
+    - Replica: {NodeID: 5, StoreID: 5, ReplicaID: 5}
+  LocalData:
+  - RangeID: 1
+    RaftReplicaID: 2
+
+# This case is checking that leaseholder rule still holds when we have
+# range metadata available.
+replication-data
+- StoreID: 1
+  RangeID: 1
+  StartKey: /Min
+  EndKey: /Max
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1, Leaseholder: true}  # this replica is identical to one in store 2 but thinks its a leaseholder
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  - { NodeID: 4, StoreID: 4, ReplicaID: 4}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 5}
+  RangeAppliedIndex: 10
+  RaftCommittedIndex: 13
+- StoreID: 2
+  RangeID: 1
+  StartKey: /Min
+  EndKey: /Max
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1, Leaseholder: true}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}  # this replica has the same state n1 but has higher storeID but not a leaseholder
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  - { NodeID: 4, StoreID: 4, ReplicaID: 4}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 5}
+  RangeAppliedIndex: 10
+  RaftCommittedIndex: 13
+----
+ok
+
+descriptor-data
+- RangeID: 1
+  StartKey: /Min
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  - { NodeID: 4, StoreID: 4, ReplicaID: 4}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 5}
+----
+ok
+
+collect-replica-info stores=(1,2)
+----
+ok
+
+make-plan
+----
+Replica updates:
+- RangeID: 1
+  StartKey: /Min
+  OldReplicaID: 1
+  NewReplica:
+    NodeID: 1
+    StoreID: 1
+    ReplicaID: 16
+  NextReplicaID: 17
+Decommissioned nodes:
+[n3, n4, n5]
+
+apply-plan stores=(1,2)
+----
+ok
+
+dump-store stores=(1,2)
+----
+- NodeID: 1
+  StoreID: 1
+  Descriptors:
+  - RangeID: 1
+    StartKey: /Min
+    Replicas:
+    - Replica: {NodeID: 1, StoreID: 1, ReplicaID: 16}
+  LocalData:
+  - RangeID: 1
+    RaftReplicaID: 16
+- NodeID: 2
+  StoreID: 2
+  Descriptors:
+  - RangeID: 1
+    StartKey: /Min
+    Replicas:
+    - Replica: {NodeID: 1, StoreID: 1, ReplicaID: 1}
+    - Replica: {NodeID: 2, StoreID: 2, ReplicaID: 2}
+    - Replica: {NodeID: 3, StoreID: 3, ReplicaID: 3}
+    - Replica: {NodeID: 4, StoreID: 4, ReplicaID: 4}
+    - Replica: {NodeID: 5, StoreID: 5, ReplicaID: 5}
+  LocalData:
+  - RangeID: 1
+    RaftReplicaID: 2

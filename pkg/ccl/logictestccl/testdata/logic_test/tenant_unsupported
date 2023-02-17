@@ -45,16 +45,16 @@ SELECT * FROM crdb_internal.kv_node_status
 
 # Cannot perform operations that issue Admin requests.
 
-statement error pq: rpc error: code = Unauthenticated desc = request \[1 AdmSplit\] not permitted
+statement error tenant cluster setting sql.split_at.allow_for_secondary_tenant.enabled disabled
 ALTER TABLE kv SPLIT AT VALUES ('foo')
 
-statement error pq: could not UNSPLIT AT \('foo'\): rpc error: code = Unauthenticated desc = request \[1 AdmUnsplit\] not permitted
+statement error operation is unsupported in multi-tenancy mode
 ALTER TABLE kv UNSPLIT AT VALUES ('foo')
 
-statement ok
+statement error operation is unsupported in multi-tenancy mode
 ALTER TABLE kv UNSPLIT ALL
 
-statement error pq: rpc error: code = Unauthenticated desc = request \[1 AdmScatter\] not permitted
+statement error tenant cluster setting sql.scatter.allow_for_secondary_tenant.enabled disabled
 ALTER TABLE kv SCATTER
 
 statement error operation is unsupported in multi-tenancy mode
@@ -70,10 +70,10 @@ statement error operation is unsupported in multi-tenancy mode
 ALTER RANGE 1 RELOCATE LEASE TO 2
 
 statement error operation is unsupported in multi-tenancy mode
-ALTER RANGE RELOCATE LEASE TO 2 FOR SELECT range_id from crdb_internal.ranges where table_name = 'kv'
+ALTER RANGE RELOCATE LEASE TO 2 FOR SELECT range_id FROM [SHOW RANGES FROM TABLE kv]
 
 statement error operation is unsupported in multi-tenancy mode
 ALTER RANGE 1 RELOCATE FROM 1 TO 2
 
 statement error operation is unsupported in multi-tenancy mode
-ALTER RANGE RELOCATE FROM 1 TO 2 FOR SELECT range_id from crdb_internal.ranges where table_name = 'kv'
+ALTER RANGE RELOCATE FROM 1 TO 2 FOR SELECT range_id FROM [SHOW RANGES FROM TABLE kv]

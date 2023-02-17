@@ -20551,25 +20551,24 @@ EXPLAIN (VEC) SELECT s_acctbal, s_name, n_name, p_partkey, p_mfgr, s_address, s_
 │
 └ Node 1
   └ *colexec.topKSorter
-    └ *colexecsel.selEQFloat64Float64Op
-      └ *colexec.hashAggregator
-        └ *colexecjoin.hashJoiner
-          ├ *rowexec.joinReader
-          │ └ *colexecjoin.hashJoiner
-          │   ├ *rowexec.joinReader
-          │   │ └ *colexecsel.selSuffixBytesBytesConstOp
-          │   │   └ *colexecsel.selEQInt64Int64ConstOp
-          │   │     └ *colfetcher.ColBatchScan
-          │   └ *rowexec.joinReader
-          │     └ *rowexec.joinReader
-          │       └ *rowexec.joinReader
-          │         └ *rowexec.joinReader
-          │           └ *colexecsel.selEQBytesBytesConstOp
-          │             └ *colfetcher.ColBatchScan
-          └ *rowexec.joinReader
-            └ *rowexec.joinReader
-              └ *colexecsel.selEQBytesBytesConstOp
-                └ *colfetcher.ColBatchScan
+    └ *rowexec.joinReader
+      └ *colexecsel.selEQFloat64Float64Op
+        └ *colexec.hashAggregator
+          └ *colexecjoin.hashJoiner
+            ├ *colexecjoin.hashJoiner
+            │ ├ *colfetcher.ColBatchScan
+            │ └ *rowexec.joinReader
+            │   └ *rowexec.joinReader
+            │     └ *rowexec.joinReader
+            │       └ *rowexec.joinReader
+            │         └ *colexecsel.selEQBytesBytesConstOp
+            │           └ *colfetcher.ColBatchScan
+            └ *colexecjoin.hashJoiner
+              ├ *colfetcher.ColBatchScan
+              └ *rowexec.joinReader
+                └ *rowexec.joinReader
+                  └ *colexecsel.selEQBytesBytesConstOp
+                    └ *colfetcher.ColBatchScan
 
 # Query 3
 query T
@@ -20906,17 +20905,16 @@ EXPLAIN (VEC) SELECT c_name, c_custkey, o_orderkey, o_orderdate, o_totalprice, s
 ----
 │
 └ Node 1
-  └ *colexec.topKSorter
+  └ *colexec.limitOp
     └ *colexec.hashAggregator
-      └ *colexecjoin.hashJoiner
-        ├ *colexecjoin.mergeJoinInnerOp
-        │ ├ *colfetcher.ColBatchScan
-        │ └ *colexecjoin.mergeJoinLeftSemiOp
-        │   ├ *colfetcher.ColBatchScan
-        │   └ *colexecsel.selGTFloat64Float64ConstOp
-        │     └ *colexec.orderedAggregator
-        │       └ *colfetcher.ColBatchScan
-        └ *colfetcher.ColBatchScan
+      └ *rowexec.joinReader
+        └ *rowexec.joinReader
+          └ *colexec.sortOp
+            └ *colexecjoin.mergeJoinLeftSemiOp
+              ├ *colfetcher.ColBatchScan
+              └ *colexecsel.selGTFloat64Float64ConstOp
+                └ *colexec.orderedAggregator
+                  └ *colfetcher.ColBatchScan
 
 # Query 19
 query T

@@ -15,13 +15,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gossip"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/op"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/queue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/storerebalancer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // Simulator simulates an entire cluster, and runs the allocator of each store
@@ -33,17 +33,11 @@ type Simulator struct {
 	// as the queues, store rebalancer and state changers. It should be set
 	// lower than the bgInterval, as updated occur more frequently.
 	interval time.Duration
-	// bgInterval is the step between ticks for background simulation
-	// components, such as the metrics, state exchange and workload generators.
-	// It should be set higher than the interval, as it is generally more
-	// costly and requires less frequent updates.
-	bgInterval time.Duration
-	bgLastTick time.Time
 
 	// The simulator can run multiple workload Generators in parallel.
 	generators []workload.Generator
 
-	pacers map[state.StoreID]ReplicaPacer
+	pacers map[state.StoreID]queue.ReplicaPacer
 
 	// Store replicate queues.
 	rqs map[state.StoreID]queue.RangeQueue
@@ -56,31 +50,43 @@ type Simulator struct {
 
 	state    state.State
 	changer  state.Changer
-	exchange state.Exchange
+	gossip   gossip.Gossip
 	shuffler func(n int, swap func(i, j int))
 
-	metrics *MetricsTracker
+	metrics *metrics.Tracker
+	history History
+}
+
+// History contains recorded information that summarizes a simulation run.
+// Currently it only contains the store metrics of the run.
+// TODO(kvoli): Add a range log like structure to the history.
+type History struct {
+	Recorded [][]metrics.StoreMetrics
+}
+
+// Listen implements the metrics.StoreMetricListener interface.
+func (h *History) Listen(ctx context.Context, sms []metrics.StoreMetrics) {
+	h.Recorded = append(h.Recorded, sms)
 }
 
 // NewSimulator constructs a valid Simulator.
 func NewSimulator(
-	start, end time.Time,
-	interval, bgInterval time.Duration,
+	duration time.Duration,
 	wgs []workload.Generator,
 	initialState state.State,
-	exchange state.Exchange,
-	changer state.Changer,
 	settings *config.SimulationSettings,
-	metrics *MetricsTracker,
+	m *metrics.Tracker,
 ) *Simulator {
-	pacers := make(map[state.StoreID]ReplicaPacer)
+	pacers := make(map[state.StoreID]queue.ReplicaPacer)
 	rqs := make(map[state.StoreID]queue.RangeQueue)
 	sqs := make(map[state.StoreID]queue.RangeQueue)
 	srs := make(map[state.StoreID]storerebalancer.StoreRebalancer)
+	changer := state.NewReplicaChanger()
 	controllers := make(map[state.StoreID]op.Controller)
 	for _, store := range initialState.Stores() {
 		storeID := store.StoreID()
 		allocator := initialState.MakeAllocator(storeID)
+		storePool := initialState.StorePool(storeID)
 		// TODO(kvoli): Instead of passing in individual settings to construct
 		// the each ticking component, pass a pointer to the simulation
 		// settings struct. That way, the settings may be adjusted dynamically
@@ -90,16 +96,17 @@ func NewSimulator(
 			changer,
 			settings.ReplicaChangeDelayFn(),
 			allocator,
-			start,
+			storePool,
+			settings.StartTime,
 		)
 		sqs[storeID] = queue.NewSplitQueue(
 			storeID,
 			changer,
 			settings.RangeSplitDelayFn(),
 			settings.RangeSizeSplitThreshold,
-			start,
+			settings.StartTime,
 		)
-		pacers[storeID] = NewScannerReplicaPacer(
+		pacers[storeID] = queue.NewScannerReplicaPacer(
 			initialState.NextReplicasFn(storeID),
 			settings.PacerLoopInterval,
 			settings.PacerMinIterInterval,
@@ -109,23 +116,25 @@ func NewSimulator(
 		controllers[storeID] = op.NewController(
 			changer,
 			allocator,
+			storePool,
 			settings,
+			storeID,
 		)
 		srs[storeID] = storerebalancer.NewStoreRebalancer(
-			start,
+			settings.StartTime,
 			storeID,
 			controllers[storeID],
 			allocator,
+			storePool,
 			settings,
 			storerebalancer.GetStateRaftStatusFn(initialState),
 		)
 	}
 
-	return &Simulator{
-		curr:        start,
-		end:         end,
-		interval:    interval,
-		bgInterval:  bgInterval,
+	s := &Simulator{
+		curr:        settings.StartTime,
+		end:         settings.StartTime.Add(duration),
+		interval:    settings.TickInterval,
 		generators:  wgs,
 		state:       initialState,
 		changer:     changer,
@@ -134,10 +143,13 @@ func NewSimulator(
 		controllers: controllers,
 		srs:         srs,
 		pacers:      pacers,
-		exchange:    exchange,
-		metrics:     metrics,
+		gossip:      gossip.NewGossip(initialState, settings),
+		metrics:     m,
 		shuffler:    state.NewShuffler(settings.Seed),
+		history:     History{Recorded: [][]metrics.StoreMetrics{}},
 	}
+	m.Register(&s.history)
+	return s
 }
 
 // GetNextTickTime returns a simulated tick time, or an indication that the
@@ -148,6 +160,12 @@ func (s *Simulator) GetNextTickTime() (done bool, tick time.Time) {
 		return true, time.Time{}
 	}
 	return false, s.curr
+}
+
+// History returns the current recorded history of a simulation run. Calling
+// this on a Simulator that has not begun will return an empty history.
+func (s *Simulator) History() History {
+	return s.history
 }
 
 // RunSim runs a simulation until GetNextTickTime() is done. A simulation is
@@ -164,11 +182,15 @@ func (s *Simulator) GetNextTickTime() (done bool, tick time.Time) {
 // TODO: simulation run settings should be loaded from a config such as a yaml
 // file or a "datadriven" style file.
 func (s *Simulator) RunSim(ctx context.Context) {
+
 	for {
 		done, tick := s.GetNextTickTime()
 		if done {
 			break
 		}
+
+		// Update the store clocks with the current tick time.
+		s.tickStoreClocks(tick)
 
 		// Update the state with generated load.
 		s.tickWorkload(ctx, tick)
@@ -177,10 +199,7 @@ func (s *Simulator) RunSim(ctx context.Context) {
 		s.tickStateChanges(ctx, tick)
 
 		// Update each allocators view of the stores in the cluster.
-		s.tickStateExchange(tick)
-
-		// Update the store clocks with the current tick time.
-		s.tickStoreClocks(tick)
+		s.tickGossip(ctx, tick)
 
 		// Done with config and load updates, the state is ready for the
 		// allocators.
@@ -194,28 +213,18 @@ func (s *Simulator) RunSim(ctx context.Context) {
 
 		// Print tick metrics.
 		s.tickMetrics(ctx, tick)
-
-		// If we ticked the background tickable components, update the last
-		// tick time.
-		// TODO(kvoli): Variable component tick rates requires a proper
-		// abstraction.
-		if !s.bgLastTick.Add(s.bgInterval).After(tick) {
-			s.bgLastTick = tick
-		}
 	}
 }
 
 // tickWorkload gets the next workload events and applies them to state.
 func (s *Simulator) tickWorkload(ctx context.Context, tick time.Time) {
-	if !s.bgLastTick.Add(s.bgInterval).After(tick) {
-		s.shuffler(
-			len(s.generators),
-			func(i, j int) { s.generators[i], s.generators[j] = s.generators[j], s.generators[i] },
-		)
-		for _, generator := range s.generators {
-			event := generator.Tick(tick)
-			s.state.ApplyLoad(event)
-		}
+	s.shuffler(
+		len(s.generators),
+		func(i, j int) { s.generators[i], s.generators[j] = s.generators[j], s.generators[i] },
+	)
+	for _, generator := range s.generators {
+		event := generator.Tick(tick)
+		s.state.ApplyLoad(event)
 	}
 }
 
@@ -231,19 +240,11 @@ func (s *Simulator) tickStateChanges(ctx context.Context, tick time.Time) {
 	}
 }
 
-// tickStateExchange puts the current tick store descriptors into the state
+// tickGossip puts the current tick store descriptors into the state
 // exchange. It then updates the exchanged descriptors for each store's store
 // pool.
-func (s *Simulator) tickStateExchange(tick time.Time) {
-	if s.bgLastTick.Add(s.bgInterval).After(tick) {
-		return
-	}
-	storeDescriptors := s.state.StoreDescriptors()
-	s.exchange.Put(tick, storeDescriptors...)
-	for _, store := range s.state.Stores() {
-		storeID := store.StoreID()
-		s.state.UpdateStorePool(storeID, s.exchange.Get(tick, roachpb.StoreID(storeID)))
-	}
+func (s *Simulator) tickGossip(ctx context.Context, tick time.Time) {
+	s.gossip.Tick(ctx, tick, s.state)
 }
 
 func (s *Simulator) tickStoreClocks(tick time.Time) {
@@ -308,9 +309,5 @@ func (s *Simulator) tickStoreRebalancers(ctx context.Context, tick time.Time, st
 
 // tickMetrics prints the metrics up to the given tick.
 func (s *Simulator) tickMetrics(ctx context.Context, tick time.Time) {
-	if !s.bgLastTick.Add(s.bgInterval).After(tick) {
-		if err := s.metrics.Tick(tick, s.state); err != nil {
-			log.Errorf(ctx, "error writing to csv: %v", err)
-		}
-	}
+	s.metrics.Tick(ctx, tick, s.state)
 }

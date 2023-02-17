@@ -17,6 +17,7 @@ import { actions as statementDiagnosticsActions } from "src/store/statementDiagn
 import { actions as analyticsActions } from "src/store/analytics";
 import { actions as localStorageActions } from "src/store/localStorage";
 import { actions as sqlStatsActions } from "src/store/sqlStats";
+import { actions as databasesListActions } from "src/store/databasesList";
 import { actions as nodesActions } from "../store/nodes";
 import {
   StatementsPageDispatchProps,
@@ -27,18 +28,20 @@ import {
   selectDatabases,
   selectLastReset,
   selectStatements,
+  selectStatementsDataValid,
   selectStatementsLastError,
   selectTotalFingerprints,
   selectColumns,
-  selectTimeScale,
   selectSortSetting,
   selectFilters,
   selectSearch,
   selectStatementsLastUpdated,
 } from "./statementsPage.selectors";
+import { selectTimeScale } from "../store/utils/selectors";
 import {
   selectIsTenant,
   selectHasViewActivityRedactedRole,
+  selectHasAdminRole,
 } from "../store/uiConfig";
 import { nodeRegionsByIDSelector } from "../store/nodes";
 import { StatementsRequest } from "src/api/statementsApi";
@@ -87,11 +90,13 @@ export const ConnectedStatementsPage = withRouter(
         filters: selectFilters(state),
         isTenant: selectIsTenant(state),
         hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),
+        hasAdminRole: selectHasAdminRole(state),
         lastReset: selectLastReset(state),
         nodeRegions: nodeRegionsByIDSelector(state),
         search: selectSearch(state),
         sortSetting: selectSortSetting(state),
         statements: selectStatements(state, props),
+        isDataValid: selectStatementsDataValid(state),
         lastUpdated: selectStatementsLastUpdated(state),
         statementsError: selectStatementsLastError(state),
         totalFingerprints: selectTotalFingerprints(state),
@@ -100,6 +105,7 @@ export const ConnectedStatementsPage = withRouter(
     }),
     (dispatch: Dispatch) => ({
       fingerprintsPageProps: {
+        refreshDatabases: () => dispatch(databasesListActions.refresh()),
         refreshStatements: (req: StatementsRequest) =>
           dispatch(sqlStatsActions.refresh(req)),
         onTimeScaleChange: (ts: TimeScale) => {
@@ -184,7 +190,7 @@ export const ConnectedStatementsPage = withRouter(
             analyticsActions.track({
               name: "Filter Clicked",
               page: "Statements",
-              filterName: "app",
+              filterName: "filters",
               value: value.toString(),
             }),
           );

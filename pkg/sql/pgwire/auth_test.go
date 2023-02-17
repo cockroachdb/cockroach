@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -175,7 +176,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 		httpScheme = "https://"
 	}
 
-	datadriven.Walk(t, testutils.TestDataPath(t, "auth"), func(t *testing.T, path string) {
+	datadriven.Walk(t, datapathutils.TestDataPath(t, "auth"), func(t *testing.T, path string) {
 		defer leaktest.AfterTest(t)()
 
 		maybeSocketDir, maybeSocketFile, cleanup := makeSocketFile(t)
@@ -197,7 +198,14 @@ func hbaRunTest(t *testing.T, insecure bool) {
 					CommonSinkConfig: logconfig.CommonSinkConfig{Auditable: &bt},
 				},
 				Channels: logconfig.SelectChannels(channel.SESSIONS),
-			}}
+			},
+			"dev": {
+				FileDefaults: logconfig.FileDefaults{
+					CommonSinkConfig: logconfig.CommonSinkConfig{Auditable: &bt},
+				},
+				Channels: logconfig.SelectChannels(channel.DEV),
+			},
+		}
 		dir := sc.GetDirectory()
 		if err := cfg.Validate(&dir); err != nil {
 			t.Fatal(err)
@@ -216,9 +224,10 @@ func hbaRunTest(t *testing.T, insecure bool) {
 		// We can't use the cluster settings to do this, because
 		// cluster settings propagate asynchronously.
 		testServer := s.(*server.TestServer)
-		pgServer := s.(*server.TestServer).PGServer().(*pgwire.Server)
+		pgServer := testServer.PGServer().(*pgwire.Server)
 		pgServer.TestingEnableConnLogging()
 		pgServer.TestingEnableAuthLogging()
+		testServer.PGPreServer().TestingAcceptSystemIdentityOption(true)
 
 		httpClient, err := s.GetAdminHTTPClient()
 		if err != nil {
@@ -430,6 +439,17 @@ func hbaRunTest(t *testing.T, insecure bool) {
 						return td.Expected, nil
 					}
 
+					// We use rmArg to prevent test-only connection parameters to
+					// leak to the session var option parser.
+					rmArg := func(key string) {
+						for i, a := range td.CmdArgs {
+							if a.Key == key {
+								td.CmdArgs = append(td.CmdArgs[:i], td.CmdArgs[i+1:]...)
+								return
+							}
+						}
+					}
+
 					// Prepare a connection string using the server's default.
 					// What is the user requested by the test?
 					user := username.RootUser
@@ -441,20 +461,31 @@ func hbaRunTest(t *testing.T, insecure bool) {
 					// use of client certificates.
 					forceCerts := false
 					if td.HasArg("force_certs") {
+						rmArg("force_certs")
 						forceCerts = true
 					}
 
 					// Whether to display the system identity as well (to test remappings).
 					showSystemIdentity := false
 					if td.HasArg("show_system_identity") {
+						rmArg("show_system_identity")
 						showSystemIdentity = true
+					}
+
+					systemIdentity := user
+					explicitSystemIdentity := td.HasArg("system_identity")
+					if explicitSystemIdentity {
+						td.ScanArgs(t, "system_identity", &systemIdentity)
+						rmArg("system_identity")
 					}
 
 					// We want the certs to be present in the filesystem for this test.
 					// However, certs are only generated for users "root" and "testuser" specifically.
 					sqlURL, cleanupFn := sqlutils.PGUrlWithOptionalClientCerts(
-						t, s.ServingSQLAddr(), t.Name(), url.User(user),
-						forceCerts || user == username.RootUser || user == username.TestUser /* withClientCerts */)
+						t, s.ServingSQLAddr(), t.Name(), url.User(systemIdentity),
+						forceCerts ||
+							systemIdentity == username.RootUser ||
+							systemIdentity == username.TestUser /* withClientCerts */)
 					defer cleanupFn()
 
 					var host, port string
@@ -491,6 +522,12 @@ func hbaRunTest(t *testing.T, insecure bool) {
 						args = append(args,
 							datadriven.CmdArg{Key: key, Vals: []string{options.Get(key)}})
 					}
+
+					if explicitSystemIdentity {
+						args = append(args,
+							datadriven.CmdArg{Key: "options", Vals: []string{"-csystem_identity=" + systemIdentity}})
+					}
+
 					// Now turn the cmdargs into a dsn.
 					var dsnBuf strings.Builder
 					sp := ""
@@ -604,6 +641,7 @@ func TestClientAddrOverride(t *testing.T) {
 	testServer := s.(*server.TestServer)
 	pgServer := testServer.PGServer().(*pgwire.Server)
 	pgServer.TestingEnableAuthLogging()
+	pgPreServer := testServer.PGPreServer()
 
 	testCases := []struct {
 		specialAddr string
@@ -659,7 +697,7 @@ func TestClientAddrOverride(t *testing.T) {
 			t.Run("check-server-reject-override", func(t *testing.T) {
 				// Connect a first time, with trust override disabled. In that case,
 				// the server will complain that the remote override is not supported.
-				_ = pgServer.TestingSetTrustClientProvidedRemoteAddr(false)
+				_ = pgPreServer.TestingSetTrustClientProvidedRemoteAddr(false)
 
 				testDB, err := gosql.Open("postgres", pgURL.String())
 				if err != nil {
@@ -680,7 +718,7 @@ func TestClientAddrOverride(t *testing.T) {
 			t.Run("check-server-hba-uses-override", func(t *testing.T) {
 				// Now recognize the override. Now we're expecting the connection
 				// to hit the HBA rule and fail with an authentication error.
-				_ = pgServer.TestingSetTrustClientProvidedRemoteAddr(true)
+				_ = pgPreServer.TestingSetTrustClientProvidedRemoteAddr(true)
 
 				testDB, err := gosql.Open("postgres", pgURL.String())
 				if err != nil {

@@ -176,7 +176,7 @@ func (ro *routerOutput) popRowsLocked(ctx context.Context) ([]rowenc.EncDatumRow
 				} else if !ok {
 					break
 				}
-				row, err := i.Row()
+				row, err := i.EncRow()
 				if err != nil {
 					return err
 				}

@@ -16,8 +16,10 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
@@ -36,6 +38,8 @@ func (op Operation) Result() *Result {
 	case *DeleteRangeOperation:
 		return &o.Result
 	case *DeleteRangeUsingTombstoneOperation:
+		return &o.Result
+	case *AddSSTableOperation:
 		return &o.Result
 	case *SplitOperation:
 		return &o.Result
@@ -124,6 +128,8 @@ func (op Operation) format(w *strings.Builder, fctx formatCtx) {
 	case *DeleteRangeOperation:
 		o.format(w, fctx)
 	case *DeleteRangeUsingTombstoneOperation:
+		o.format(w, fctx)
+	case *AddSSTableOperation:
 		o.format(w, fctx)
 	case *SplitOperation:
 		o.format(w, fctx)
@@ -248,6 +254,61 @@ func (op DeleteRangeOperation) format(w *strings.Builder, fctx formatCtx) {
 func (op DeleteRangeUsingTombstoneOperation) format(w *strings.Builder, fctx formatCtx) {
 	fmt.Fprintf(w, `%s.DelRangeUsingTombstone(ctx, %s, %s /* @%s */)`, fctx.receiver, fmtKey(op.Key), fmtKey(op.EndKey), op.Seq)
 	op.Result.format(w)
+}
+
+func (op AddSSTableOperation) format(w *strings.Builder, fctx formatCtx) {
+	fmt.Fprintf(w, `%s.AddSSTable(%s%s, %s, ... /* @%s */) // %d bytes`,
+		fctx.receiver, fctx.maybeCtx(), fmtKey(op.Span.Key), fmtKey(op.Span.EndKey), op.Seq, len(op.Data))
+	if op.AsWrites {
+		fmt.Fprintf(w, ` (as writes)`)
+	}
+
+	iter, err := storage.NewMemSSTIterator(op.Data, false /* verify */, storage.IterOptions{
+		KeyTypes:   storage.IterKeyTypePointsAndRanges,
+		LowerBound: keys.MinKey,
+		UpperBound: keys.MaxKey,
+	})
+	if err != nil {
+		panic(err)
+	}
+	defer iter.Close()
+	for iter.SeekGE(storage.MVCCKey{Key: keys.MinKey}); ; iter.Next() {
+		if ok, err := iter.Valid(); err != nil {
+			panic(err)
+		} else if !ok {
+			break
+		}
+		if iter.RangeKeyChanged() {
+			hasPoint, hasRange := iter.HasPointAndRange()
+			if hasRange {
+				for _, rkv := range iter.RangeKeys().AsRangeKeyValues() {
+					mvccValue, err := storage.DecodeMVCCValue(rkv.Value)
+					if err != nil {
+						panic(err)
+					}
+					seq := mvccValue.KVNemesisSeq.Get()
+					fmt.Fprintf(w, "\n%s// ^-- [%s, %s) -> sv(%s): %s -> %s", fctx.indent,
+						fmtKey(rkv.RangeKey.StartKey), fmtKey(rkv.RangeKey.EndKey), seq,
+						rkv.RangeKey.Bounds(), mvccValue.Value.PrettyPrint())
+				}
+			}
+			if !hasPoint {
+				continue
+			}
+		}
+		rawValue, err := iter.UnsafeValue()
+		if err != nil {
+			panic(err)
+		}
+		key := iter.UnsafeKey()
+		mvccValue, err := storage.DecodeMVCCValue(rawValue)
+		if err != nil {
+			panic(err)
+		}
+		seq := mvccValue.KVNemesisSeq.Get()
+		fmt.Fprintf(w, "\n%s// ^-- %s -> sv(%s): %s -> %s", fctx.indent,
+			fmtKey(key.Key), seq, key, mvccValue.Value.PrettyPrint())
+	}
 }
 
 func (op SplitOperation) format(w *strings.Builder, fctx formatCtx) {

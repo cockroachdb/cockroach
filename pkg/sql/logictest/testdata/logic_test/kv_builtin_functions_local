@@ -9,7 +9,7 @@ ALTER TABLE t SPLIT AT VALUES (0)
 
 # Get the range that contains this table.
 let $rangeid
-SELECT range_id FROM crdb_internal.ranges WHERE table_name = 't'
+SELECT range_id FROM [SHOW RANGES FROM TABLE t] LIMIT 1
 
 query B
 SELECT crdb_internal.kv_enqueue_replica($rangeid, 'mvccGC', true);

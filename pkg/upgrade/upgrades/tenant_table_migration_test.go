@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/stretchr/testify/require"
 )
 
 func TestUpdateTenantsTable(t *testing.T) {
@@ -41,7 +43,7 @@ func TestUpdateTenantsTable(t *testing.T) {
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
 					BinaryVersionOverride: clusterversion.ByKey(
-						clusterversion.V23_1TenantNames - 1),
+						clusterversion.V23_1TenantNamesStateAndServiceMode - 1),
 				},
 			},
 		},
@@ -59,9 +61,26 @@ func TestUpdateTenantsTable(t *testing.T) {
 	var (
 		validationSchemas = []upgrades.Schema{
 			{Name: "name", ValidationFn: upgrades.HasColumn},
+			{Name: "data_state", ValidationFn: upgrades.HasColumn},
+			{Name: "service_mode", ValidationFn: upgrades.HasColumn},
 			{Name: "tenants_name_idx", ValidationFn: upgrades.HasIndex},
+			{Name: "tenants_service_mode_idx", ValidationFn: upgrades.HasIndex},
 		}
 	)
+
+	// Clear the initial KV pairs set up for the system tenant entry. We
+	// need to do this because the bootstrap keyspace is initialized in
+	// the new version and that includes the latest system tenant entry.
+	// The proper way to do this is to initialize the keyspace in the
+	// pre-migration state.
+	// TODO(sql-schema): Bootstrap in the old version so that this
+	// DelRange is not necessary.
+	_, err := s.DB().DelRange(ctx,
+		keys.SystemSQLCodec.TablePrefix(keys.TenantsTableID),
+		keys.SystemSQLCodec.TablePrefix(keys.TenantsTableID).PrefixEnd(),
+		false, /* returnKeys */
+	)
+	require.NoError(t, err)
 
 	// Inject the old copy of the descriptor.
 	upgrades.InjectLegacyTable(ctx, t, s, systemschema.TenantsTable, getDeprecatedTenantsDescriptor)
@@ -81,7 +100,7 @@ func TestUpdateTenantsTable(t *testing.T) {
 	upgrades.Upgrade(
 		t,
 		sqlDB,
-		clusterversion.V23_1TenantNames,
+		clusterversion.V23_1TenantNamesStateAndServiceMode,
 		nil,   /* done */
 		false, /* expectError */
 	)
@@ -97,6 +116,12 @@ func TestUpdateTenantsTable(t *testing.T) {
 		validationSchemas,
 		true, /* expectExists */
 	)
+
+	// Verify that we can do simple operations with the new schema.
+	_, err = sqlDB.Exec("CREATE TENANT foo")
+	require.NoError(t, err)
+	_, err = sqlDB.Exec("ALTER TENANT foo START SERVICE SHARED")
+	require.NoError(t, err)
 }
 
 // getDeprecatedTenantsDescriptor returns the system.tenants
@@ -131,7 +156,7 @@ func getDeprecatedTenantsDescriptor() *descpb.TableDescriptor {
 			ConstraintID:        1,
 			Unique:              true,
 			KeyColumnNames:      []string{"id"},
-			KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
+			KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
 			KeyColumnIDs:        []descpb.ColumnID{1},
 		},
 		NextIndexID:      2,

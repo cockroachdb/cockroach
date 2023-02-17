@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// Writer implements kvserver.RangeLogWriter using the InternalExecutor.
+// Writer implements kvserver.RangeLogWriter using the Executor.
 type Writer struct {
 	generateUniqueID IDGen
 	w                bootstrap.KVWriter

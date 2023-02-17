@@ -27,9 +27,16 @@ enum ConnectionProvider {
   // KMS providers.
   gcp_kms = 2;
   aws_kms = 8;
+  azure_kms = 15;
 
   // Sink providers.
   kafka = 3;
+  http = 9;
+  https = 10;
+  sql = 11;
+  webhookhttp = 12;
+  webhookhttps = 13;
+  gcpubsub = 14;
 }
 
 // ConnectionType is the type of the External Connection object.
@@ -39,6 +46,7 @@ enum ConnectionType {
   UNSPECIFIED = 0 [(gogoproto.enumvalue_customname) = "TypeUnspecified"];
   STORAGE = 1 [(gogoproto.enumvalue_customname) = "TypeStorage"];
   KMS = 2 [(gogoproto.enumvalue_customname) = "TypeKMS"];
+  FOREIGNDATA = 3 [(gogoproto.enumvalue_customname) = "TypeForeignData"];
 }
 
 // SimpleURI encapsulates the information that represents an External Connection

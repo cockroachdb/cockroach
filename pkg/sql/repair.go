@@ -15,9 +15,11 @@ import (
 	"context"
 	"encoding/hex"
 	"sort"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -31,12 +33,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/zone"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -163,7 +166,7 @@ func (p *planner) UnsafeUpsertDescriptor(
 			return pgerror.Newf(pgcode.InvalidObjectDefinition,
 				"descriptor ID %d must be less than the descriptor ID sequence value %d", id, maxDescID)
 		}
-		if err := p.ExecCfg().DescIDGenerator.IncrementDescID(ctx, int64(id-maxDescID+1)); err != nil {
+		if _, err := p.ExecCfg().DescIDGenerator.IncrementDescID(ctx, int64(id-maxDescID+1)); err != nil {
 			return err
 		}
 	}
@@ -418,11 +421,8 @@ func (p *planner) UnsafeUpsertNamespaceEntry(
 	if val.Value != nil {
 		existingID = descpb.ID(val.ValueInt())
 	}
-	flags := p.CommonLookupFlagsRequired()
-	flags.IncludeDropped = true
-	flags.IncludeOffline = true
 	validateDescriptor := func() error {
-		desc, err := p.Descriptors().GetImmutableDescriptorByID(ctx, p.Txn(), descID, flags)
+		desc, err := p.byIDGetterBuilder().Get().Desc(ctx, descID)
 		if err != nil && descID != keys.PublicSchemaID {
 			return errors.Wrapf(err, "failed to retrieve descriptor %d", descID)
 		}
@@ -456,7 +456,7 @@ func (p *planner) UnsafeUpsertNamespaceEntry(
 		if parentID == descpb.InvalidID {
 			return nil
 		}
-		parent, err := p.Descriptors().GetImmutableDescriptorByID(ctx, p.Txn(), parentID, flags)
+		parent, err := p.byIDGetterBuilder().Get().Desc(ctx, parentID)
 		if err != nil {
 			return errors.Wrapf(err, "failed to look up parent %d", parentID)
 		}
@@ -470,7 +470,7 @@ func (p *planner) UnsafeUpsertNamespaceEntry(
 		if parentSchemaID == descpb.InvalidID || parentSchemaID == keys.PublicSchemaID {
 			return nil
 		}
-		schema, err := p.Descriptors().GetImmutableDescriptorByID(ctx, p.Txn(), parentSchemaID, flags)
+		schema, err := p.byIDGetterBuilder().Get().Desc(ctx, parentSchemaID)
 		if err != nil {
 			return err
 		}
@@ -666,7 +666,7 @@ func (p *planner) UnsafeDeleteDescriptor(ctx context.Context, descID int64, forc
 func unsafeReadDescriptor(
 	ctx context.Context, p *planner, id descpb.ID, force bool,
 ) (mut catalog.MutableDescriptor, notice error, err error) {
-	mut, err = p.Descriptors().GetMutableDescriptorByID(ctx, p.txn, id)
+	mut, err = p.Descriptors().MutableByID(p.txn).Desc(ctx, id)
 	if mut != nil {
 		return mut, nil, nil
 	}
@@ -718,14 +718,7 @@ func (p *planner) ForceDeleteTableData(ctx context.Context, descID int64) error 
 
 	// Validate no descriptor exists for this table
 	id := descpb.ID(descID)
-	desc, err := p.Descriptors().GetImmutableTableByID(ctx, p.txn, id,
-		tree.ObjectLookupFlags{
-			CommonLookupFlags: tree.CommonLookupFlags{
-				Required:    true,
-				AvoidLeased: true,
-			},
-			DesiredTableDescKind: tree.ResolveRequireTableDesc,
-		})
+	desc, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().Get().Table(ctx, id)
 	if err != nil && pgerror.GetPGCode(err) != pgcode.UndefinedTable {
 		return err
 	}
@@ -748,7 +741,7 @@ func (p *planner) ForceDeleteTableData(ctx context.Context, descID int64) error 
 		Key: tableSpan.Key, EndKey: tableSpan.EndKey,
 	}
 	b := &kv.Batch{}
-	if p.execCfg.Settings.Version.IsActive(ctx, clusterversion.V22_2UseDelRangeInGCJob) &&
+	if p.execCfg.Settings.Version.IsActive(ctx, clusterversion.TODODelete_V22_2UseDelRangeInGCJob) &&
 		storage.CanUseMVCCRangeTombstones(ctx, p.execCfg.Settings) {
 		b.AddRawRequest(&roachpb.DeleteRangeRequest{
 			RequestHeader:           requestHeader,
@@ -798,4 +791,49 @@ func (p *planner) ExternalWriteFile(ctx context.Context, uri string, content []b
 		return err
 	}
 	return cloud.WriteFile(ctx, conn, "", bytes.NewReader(content))
+}
+
+// UpsertDroppedRelationGCTTL is part of the Planner interface.
+func (p *planner) UpsertDroppedRelationGCTTL(
+	ctx context.Context, id int64, ttl duration.Duration,
+) error {
+	// Privilege check.
+	const method = "crdb_internal.upsert_dropped_relation_gc_ttl()"
+	err := checkPlannerStateForRepairFunctions(ctx, p, method)
+	if err != nil {
+		return err
+	}
+
+	// Fetch the descriptor and check that it's a dropped table.
+	tbl, err := p.Descriptors().ByID(p.txn).Get().Table(ctx, descpb.ID(id))
+	if err != nil {
+		return err
+	}
+	if !tbl.Dropped() {
+		return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState, "relation %q (%d) is not dropped")
+	}
+
+	// Build the new or updated zone config.
+	zc, err := p.Descriptors().GetZoneConfig(ctx, p.txn, tbl.GetID())
+	if err != nil {
+		return err
+	}
+	if zc == nil {
+		zc = zone.NewZoneConfigWithRawBytes(&zonepb.ZoneConfig{}, nil /* expected raw bytes */)
+	} else {
+		zc = zc.Clone()
+	}
+	if gc := zc.ZoneConfigProto().GC; gc == nil {
+		zc.ZoneConfigProto().GC = &zonepb.GCPolicy{}
+	}
+	zc.ZoneConfigProto().GC.TTLSeconds = int32(ttl.Nanos() / int64(time.Second))
+
+	// Write the new or updated zone config.
+	b := p.txn.NewBatch()
+	if err := p.Descriptors().WriteZoneConfigToBatch(
+		ctx, p.extendedEvalCtx.Tracing.KVTracingEnabled(), b, tbl.GetID(), zc,
+	); err != nil {
+		return err
+	}
+	return p.txn.Run(ctx, b)
 }

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -41,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -56,18 +58,21 @@ func runImport(
 	kvCh := make(chan row.KVBatch, 10)
 
 	// Install type metadata in all of the import tables.
+	spec = protoutil.Clone(spec).(*execinfrapb.ReadImportDataSpec)
 	importResolver := newImportTypeResolver(spec.Types)
 	for _, table := range spec.Tables {
-		if err := typedesc.HydrateTypesInTableDescriptor(ctx, table.Desc, importResolver); err != nil {
+		cpy := tabledesc.NewBuilder(table.Desc).BuildCreatedMutableTable()
+		if err := typedesc.HydrateTypesInDescriptor(ctx, cpy, importResolver); err != nil {
 			return nil, err
 		}
+		table.Desc = cpy.TableDesc()
 	}
 
 	evalCtx := flowCtx.NewEvalCtx()
 	evalCtx.Regions = makeImportRegionOperator(spec.DatabasePrimaryRegion)
 	semaCtx := tree.MakeSemaContext()
 	semaCtx.TypeResolver = importResolver
-	conv, err := makeInputConverter(ctx, &semaCtx, spec, evalCtx, kvCh, seqChunkProvider, flowCtx.Cfg.DB)
+	conv, err := makeInputConverter(ctx, &semaCtx, spec, evalCtx, kvCh, seqChunkProvider, flowCtx.Cfg.DB.KV())
 	if err != nil {
 		return nil, err
 	}

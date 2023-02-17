@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -101,7 +102,7 @@ func runTestClusterFlow(
 	txn := kv.NewTxnFromProto(ctx, kvDB, roachpb.NodeID(servers[0].SQLInstanceID()), now, kv.RootTxn, &txnProto)
 	leafInputState := txn.GetLeafTxnInputState(ctx)
 
-	var spec descpb.IndexFetchSpec
+	var spec fetchpb.IndexFetchSpec
 	if err := rowenc.InitIndexFetchSpec(&spec, codec, desc, desc.ActiveIndexes()[1], []descpb.ColumnID{1, 2}); err != nil {
 		t.Fatal(err)
 	}
@@ -161,7 +162,7 @@ func runTestClusterFlow(
 		},
 	}
 
-	var pkSpec descpb.IndexFetchSpec
+	var pkSpec fetchpb.IndexFetchSpec
 	if err := rowenc.InitIndexFetchSpec(
 		&pkSpec, codec, desc, desc.GetPrimaryIndex(), []descpb.ColumnID{1, 2, 3},
 	); err != nil {
@@ -306,7 +307,7 @@ func TestTenantClusterFlow(t *testing.T) {
 		})
 		defer podConns[i].Close()
 		pod := pods[i]
-		conn, err := pod.RPCContext().GRPCDialPod(pod.SQLAddr(), pod.SQLInstanceID(), rpc.DefaultClass).Connect(ctx)
+		conn, err := pod.RPCContext().GRPCDialPod(pod.RPCAddr(), pod.SQLInstanceID(), rpc.DefaultClass).Connect(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}

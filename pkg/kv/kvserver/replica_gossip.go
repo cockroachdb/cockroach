@@ -93,7 +93,7 @@ func (r *Replica) MaybeGossipNodeLivenessRaftMuLocked(
 		ctx, r, todoSpanSet, false, /* requiresClosedTSOlderThanStorageSnap */
 	)
 	defer rec.Release()
-	rw := r.Engine().NewReadOnly(storage.StandardDurability)
+	rw := r.store.TODOEngine().NewReadOnly(storage.StandardDurability)
 	defer rw.Close()
 
 	br, result, pErr :=

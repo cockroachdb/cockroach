@@ -16,13 +16,8 @@ import (
 	"io"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -34,10 +29,9 @@ const markerFile = "crdb_external_storage_location"
 // back. This serves as a sanity check that the external connection represents
 // an ExternalStorage resource that can be connected and interacted with.
 func CheckExternalStorageConnection(
-	ctx context.Context, execCfg interface{}, user username.SQLUsername, uri string,
+	ctx context.Context, env externalconn.ExternalConnEnv, uri string,
 ) error {
-	cfg := execCfg.(*sql.ExecutorConfig)
-	es, err := cfg.DistSQLSrv.ExternalStorageFromURI(ctx, uri, user)
+	es, err := env.ExternalStorageFromURIFactory(ctx, uri, env.Username)
 	if err != nil {
 		return err
 	}
@@ -47,11 +41,8 @@ func CheckExternalStorageConnection(
 		}
 	}()
 
-	if cfg.ExternalConnectionTestingKnobs != nil &&
-		cfg.ExternalConnectionTestingKnobs.SkipCheckingExternalStorageConnection != nil {
-		if cfg.ExternalConnectionTestingKnobs.SkipCheckingExternalStorageConnection() {
-			return nil
-		}
+	if env.SkipCheckingExternalStorageConnection {
+		return nil
 	}
 
 	// Write a sentinel file.
@@ -92,50 +83,11 @@ func CheckExternalStorageConnection(
 	return nil
 }
 
-type externalConnectionKMSEnv struct {
-	execCfg *sql.ExecutorConfig
-	user    username.SQLUsername
-}
-
-// ClusterSettings implements the KMSEnv interface.
-func (e *externalConnectionKMSEnv) ClusterSettings() *cluster.Settings {
-	return e.execCfg.Settings
-}
-
-// KMSConfig implements the KMSEnv interface.
-func (e *externalConnectionKMSEnv) KMSConfig() *base.ExternalIODirConfig {
-	return &e.execCfg.ExternalIODirConfig
-}
-
-// DBHandle implements the KMSEnv interface.
-func (e *externalConnectionKMSEnv) DBHandle() *kv.DB {
-	return e.execCfg.DB
-}
-
-// User implements the KMSEnv interface.
-func (e *externalConnectionKMSEnv) User() username.SQLUsername {
-	return e.user
-}
-
-// InternalExecutor implements the KMSEnv interface.
-func (e *externalConnectionKMSEnv) InternalExecutor() sqlutil.InternalExecutor {
-	return e.execCfg.InternalExecutor
-}
-
-var _ cloud.KMSEnv = &externalConnectionKMSEnv{}
-
 // CheckKMSConnection encrypts, decrypts and matches the contents of a sentinel
 // file. This serves as a sanity check that the external connection represents a
 // KMS resource that can be connected and interacted with.
-func CheckKMSConnection(
-	ctx context.Context, execCfg interface{}, user username.SQLUsername, uri string,
-) error {
-	cfg := execCfg.(*sql.ExecutorConfig)
-	kmsEnv := &externalConnectionKMSEnv{
-		execCfg: cfg,
-		user:    user,
-	}
-	kms, err := cloud.KMSFromURI(ctx, uri, kmsEnv)
+func CheckKMSConnection(ctx context.Context, env externalconn.ExternalConnEnv, uri string) error {
+	kms, err := cloud.KMSFromURI(ctx, uri, &env)
 	if err != nil {
 		return err
 	}
@@ -145,11 +97,8 @@ func CheckKMSConnection(
 		}
 	}()
 
-	if cfg.ExternalConnectionTestingKnobs != nil &&
-		cfg.ExternalConnectionTestingKnobs.SkipCheckingKMSConnection != nil {
-		if cfg.ExternalConnectionTestingKnobs.SkipCheckingKMSConnection() {
-			return nil
-		}
+	if env.SkipCheckingKMSConnection {
+		return nil
 	}
 
 	// Encrypt and decrypt a sentinel file.

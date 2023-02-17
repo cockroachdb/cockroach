@@ -181,7 +181,7 @@ func (m mvccGetOp) run(ctx context.Context) string {
 	// TODO(itsbilal): Specify these bools as operands instead of having a
 	// separate operation for inconsistent cases. This increases visibility for
 	// anyone reading the output file.
-	val, intent, err := storage.MVCCGet(ctx, reader, m.key, m.ts, storage.MVCCGetOptions{
+	res, err := storage.MVCCGet(ctx, reader, m.key, m.ts, storage.MVCCGetOptions{
 		Inconsistent: m.inconsistent,
 		Tombstones:   true,
 		Txn:          txn,
@@ -189,7 +189,7 @@ func (m mvccGetOp) run(ctx context.Context) string {
 	if err != nil {
 		return fmt.Sprintf("error: %s", err)
 	}
-	return fmt.Sprintf("val = %v, intent = %v", val, intent)
+	return fmt.Sprintf("val = %v, intent = %v", res.Value, res.Intent)
 }
 
 type mvccPutOp struct {
@@ -485,7 +485,7 @@ func (t txnCommitOp) run(ctx context.Context) string {
 	for _, span := range txn.LockSpans {
 		intent := roachpb.MakeLockUpdate(txn, span)
 		intent.Status = roachpb.COMMITTED
-		_, err := storage.MVCCResolveWriteIntent(context.TODO(), t.m.engine, nil, intent)
+		_, _, _, err := storage.MVCCResolveWriteIntent(context.TODO(), t.m.engine, nil, intent, storage.MVCCResolveWriteIntentOptions{})
 		if err != nil {
 			panic(err)
 		}
@@ -508,7 +508,7 @@ func (t txnAbortOp) run(ctx context.Context) string {
 	for _, span := range txn.LockSpans {
 		intent := roachpb.MakeLockUpdate(txn, span)
 		intent.Status = roachpb.ABORTED
-		_, err := storage.MVCCResolveWriteIntent(context.TODO(), t.m.engine, nil, intent)
+		_, _, _, err := storage.MVCCResolveWriteIntent(context.TODO(), t.m.engine, nil, intent, storage.MVCCResolveWriteIntentOptions{})
 		if err != nil {
 			panic(err)
 		}

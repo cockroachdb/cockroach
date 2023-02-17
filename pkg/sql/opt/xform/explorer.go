@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 )
 
 // explorer generates alternate expressions that are logically equivalent to
@@ -157,7 +157,7 @@ func (e *explorer) init(o *Optimizer) {
 //	    for e3 in memo-exprs($right):
 //	      if ordinal(e3) >= state.start:
 //	        ... explore (e1, e2, e3) combo ...
-func (e *explorer) exploreGroup(grp memo.RelExpr) *exploreState {
+func (e *explorer) exploreGroup(grp memo.RelExpr, required *physical.Required) *exploreState {
 	// Do nothing if this group has already been fully explored.
 	state := e.ensureExploreState(grp)
 	if state.fullyExplored {
@@ -182,7 +182,7 @@ func (e *explorer) exploreGroup(grp memo.RelExpr) *exploreState {
 			continue
 		}
 
-		if memberExplored := e.exploreGroupMember(state, member, i); memberExplored {
+		if memberExplored := e.exploreGroupMember(state, member, i, required); memberExplored {
 			// No more rules can ever match this expression, so skip it in
 			// future passes.
 			state.markMemberAsFullyExplored(i)
@@ -239,7 +239,7 @@ type exploreState struct {
 	// fullyExploredMembers is a set of ordinal positions of members within the
 	// memo group. Once a member expression has been fully explored, its ordinal
 	// is added to this set.
-	fullyExploredMembers util.FastIntSet
+	fullyExploredMembers intsets.Fast
 }
 
 // isMemberFullyExplored is true if the member at the given ordinal position

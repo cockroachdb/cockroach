@@ -12,6 +12,7 @@ package colserde_test
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -30,6 +31,7 @@ func TestFileRoundtrip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	typs, b := randomBatch(testAllocator)
 	rng, _ := randutil.NewTestRand()
+	ctx := context.Background()
 
 	t.Run(`mem`, func(t *testing.T) {
 		// Make copies of the original batch because the converter modifies and
@@ -38,12 +40,13 @@ func TestFileRoundtrip(t *testing.T) {
 		bCopy := coldatatestutils.CopyBatch(b, typs, testColumnFactory)
 
 		var buf bytes.Buffer
-		s, err := colserde.NewFileSerializer(&buf, typs)
+		s, err := colserde.NewFileSerializer(&buf, typs, testMemAcc)
 		require.NoError(t, err)
-		require.NoError(t, s.AppendBatch(b))
+		require.NoError(t, s.AppendBatch(ctx, b))
 		// Append the same batch again.
-		require.NoError(t, s.AppendBatch(bCopy))
+		require.NoError(t, s.AppendBatch(ctx, bCopy))
 		require.NoError(t, s.Finish())
+		s.Close(ctx)
 
 		// Parts of the deserialization modify things (null bitmaps) in place, so
 		// run it twice to make sure those modifications don't leak back to the
@@ -53,7 +56,7 @@ func TestFileRoundtrip(t *testing.T) {
 				roundtrip := testAllocator.NewMemBatchWithFixedCapacity(typs, b.Length())
 				d, err := colserde.NewFileDeserializerFromBytes(typs, buf.Bytes())
 				require.NoError(t, err)
-				defer func() { require.NoError(t, d.Close()) }()
+				defer func() { require.NoError(t, d.Close(ctx)) }()
 				require.Equal(t, typs, d.Typs())
 				require.Equal(t, 2, d.NumBatches())
 
@@ -65,7 +68,8 @@ func TestFileRoundtrip(t *testing.T) {
 				// batch) to make sure that the second serialized batch is
 				// unchanged.
 				length := rng.Intn(original.Length()) + 1
-				r := coldatatestutils.RandomBatch(testAllocator, rng, typs, length, length, rng.Float64())
+				args := coldatatestutils.RandomVecArgs{Rand: rng, NullProbability: rng.Float64()}
+				r := coldatatestutils.RandomBatch(testAllocator, args, typs, length, length)
 				for vecIdx, vec := range roundtrip.ColVecs() {
 					vec.Append(coldata.SliceArgs{
 						Src:       r.ColVec(vecIdx),
@@ -94,10 +98,11 @@ func TestFileRoundtrip(t *testing.T) {
 		f, err := os.Create(path)
 		require.NoError(t, err)
 		defer func() { require.NoError(t, f.Close()) }()
-		s, err := colserde.NewFileSerializer(f, typs)
+		s, err := colserde.NewFileSerializer(f, typs, testMemAcc)
 		require.NoError(t, err)
-		require.NoError(t, s.AppendBatch(b))
+		require.NoError(t, s.AppendBatch(ctx, b))
 		require.NoError(t, s.Finish())
+		s.Close(ctx)
 		require.NoError(t, f.Sync())
 
 		// Parts of the deserialization modify things (null bitmaps) in place, so
@@ -106,9 +111,9 @@ func TestFileRoundtrip(t *testing.T) {
 		for i := 0; i < 2; i++ {
 			func() {
 				roundtrip := testAllocator.NewMemBatchWithFixedCapacity(typs, b.Length())
-				d, err := colserde.NewFileDeserializerFromPath(typs, path)
+				d, err := colserde.NewTestFileDeserializerFromPath(typs, path)
 				require.NoError(t, err)
-				defer func() { require.NoError(t, d.Close()) }()
+				defer func() { require.NoError(t, d.Close(ctx)) }()
 				require.Equal(t, typs, d.Typs())
 				require.Equal(t, 1, d.NumBatches())
 				require.NoError(t, d.GetBatch(0, roundtrip))
@@ -122,25 +127,26 @@ func TestFileRoundtrip(t *testing.T) {
 func TestFileIndexing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	ctx := context.Background()
 	const numInts = 10
 	typs := []*types.T{types.Int}
 	batchSize := 1
 
 	var buf bytes.Buffer
-	s, err := colserde.NewFileSerializer(&buf, typs)
+	s, err := colserde.NewFileSerializer(&buf, typs, testMemAcc)
 	require.NoError(t, err)
 
 	for i := 0; i < numInts; i++ {
 		b := testAllocator.NewMemBatchWithFixedCapacity(typs, batchSize)
 		b.SetLength(batchSize)
 		b.ColVec(0).Int64()[0] = int64(i)
-		require.NoError(t, s.AppendBatch(b))
+		require.NoError(t, s.AppendBatch(ctx, b))
 	}
 	require.NoError(t, s.Finish())
 
 	d, err := colserde.NewFileDeserializerFromBytes(typs, buf.Bytes())
 	require.NoError(t, err)
-	defer func() { require.NoError(t, d.Close()) }()
+	defer func() { require.NoError(t, d.Close(ctx)) }()
 	require.Equal(t, typs, d.Typs())
 	require.Equal(t, numInts, d.NumBatches())
 	for batchIdx := numInts - 1; batchIdx >= 0; batchIdx-- {

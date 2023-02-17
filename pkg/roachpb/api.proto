@@ -20,6 +20,7 @@ import "roachpb/errors.proto";
 import "roachpb/metadata.proto";
 import "roachpb/span_config.proto";
 import "settings/encoding.proto";
+import "sql/catalog/fetchpb/index_fetch.proto";
 import "storage/enginepb/mvcc.proto";
 import "storage/enginepb/mvcc3.proto";
 import "util/hlc/timestamp.proto";
@@ -557,6 +558,10 @@ enum ScanFormat {
   // The batch_response format: a byte slice of alternating keys and values,
   // each prefixed by their length as a varint.
   BATCH_RESPONSE = 1;
+  // The serialized (in the Apache Arrow format) representation of
+  // coldata.Batch'es that contain only necessary (according to the
+  // fetchpb.IndexFetchSpec) columns.
+  COL_BATCH_RESPONSE = 2;
 }
 
 
@@ -568,9 +573,9 @@ message ScanRequest {
 
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 
-  // The desired format for the response. If set to BATCH_RESPONSE, the server
-  // will set the batch_responses field in the ScanResponse instead of the rows
-  // field.
+  // The desired format for the response. If set to BATCH_RESPONSE or
+  // COL_BATCH_RESPONSE, the server will set the batch_responses field in the
+  // ScanResponse instead of the rows field.
   ScanFormat scan_format = 4;
 
   // The desired key-level locking mode used during this scan. When set to None
@@ -601,12 +606,19 @@ message ScanResponse {
   // revisit this decision if this ever becomes a problem.
   repeated KeyValue intent_rows = 3 [(gogoproto.nullable) = false];
 
-  // If set, each item in this repeated bytes field contains part of the results
-  // in batch format - the key/value pairs are a buffer of varint-prefixed
-  // slices, alternating from key to value. Each entry in this field is
-  // complete - there are no key/value pairs that are split across more than one
-  // entry. There are num_keys total pairs across all entries, as defined by the
-  // ResponseHeader. If set, rows will not be set and vice versa.
+  // If set, then depending on the ScanFormat, each item in this repeated bytes
+  // field contains part of the results in batch format:
+  // - for BATCH_RESPONSE - the key/value pairs are a buffer of varint-prefixed
+  // slices, alternating from key to value. Each entry in this field is complete
+  // (i.e. there are no key/value pairs that are split across more than one
+  // entry). There are num_keys total pairs across all entries, as defined by
+  // the ResponseHeader.
+  // - for COL_BATCH_RESPONSE - each []byte is a single serialized (in the
+  // Apache Arrow format) coldata.Batch. Each SQL row in that coldata.Batch is
+  // complete. num_keys total key-value pairs were used to populate all of the
+  // coldata.Batch'es in this field.
+  //
+  // If set, rows will not be set and vice versa.
   repeated bytes batch_responses = 4;
 }
 
@@ -618,9 +630,9 @@ message ReverseScanRequest {
 
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 
-  // The desired format for the response. If set to BATCH_RESPONSE, the server
-  // will set the batch_responses field in the ScanResponse instead of the rows
-  // field.
+  // The desired format for the response. If set to BATCH_RESPONSE or
+  // COL_BATCH_RESPONSE, the server will set the batch_responses field in the
+  // ScanResponse instead of the rows field.
   ScanFormat scan_format = 4;
 
   // The desired key-level locking mode used during this scan. When set to None
@@ -651,12 +663,19 @@ message ReverseScanResponse {
   // revisit this decision if this ever becomes a problem.
   repeated KeyValue intent_rows = 3 [(gogoproto.nullable) = false];
 
-  // If set, each item in this repeated bytes field contains part of the results
-  // in batch format - the key/value pairs are a buffer of varint-prefixed
-  // slices, alternating from key to value. Each entry in this field is
-  // complete - there are no key/value pairs that are split across more than one
-  // entry. There are num_keys total pairs across all entries, as defined by the
-  // ResponseHeader. If set, rows will not be set and vice versa.
+  // If set, then depending on the ScanFormat, each item in this repeated bytes
+  // field contains part of the results in batch format:
+  // - for BATCH_RESPONSE - the key/value pairs are a buffer of varint-prefixed
+  // slices, alternating from key to value. Each entry in this field is complete
+  // (i.e. there are no key/value pairs that are split across more than one
+  // entry). There are num_keys total pairs across all entries, as defined by
+  // the ResponseHeader.
+  // - for COL_BATCH_RESPONSE - each []byte is a single serialized (in the
+  // Apache Arrow format) coldata.Batch. Each SQL row in that coldata.Batch is
+  // complete. num_keys total key-value pairs were used to populate all of the
+  // coldata.Batch'es in this field.
+  //
+  // If set, rows will not be set and vice versa.
   repeated bytes batch_responses = 4;
 }
 
@@ -873,13 +892,6 @@ message EndTxnResponse {
 // of hlc.Timestamp{} (I.E. The zero timestamp so they are always eligible for
 // automatic merging).
 message AdminSplitRequest {
-
-  enum Class {
-    ARBITRARY = 0;
-    INGESTION = 1;
-    ORGANIZATION = 2;
-  }
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   bytes split_key = 2 [(gogoproto.casttype) = "Key"];
   reserved 3;
@@ -889,8 +901,6 @@ message AdminSplitRequest {
   // cause the split to be rejected. This can be used by a caller to effectively
   // send a "conditional split" request, i.e. a split if not already split.
   repeated bytes predicate_keys = 5 [(gogoproto.casttype) = "Key"];
-
-  Class class = 6;
 }
 
 // An AdminSplitResponse is the return value from the AdminSplit()
@@ -906,15 +916,7 @@ message AdminSplitResponse {
 // Ranges that do not have the sticky bit set are eligible for
 // automatic merging.
 message AdminUnsplitRequest {
-
-  enum Class {
-    ARBITRARY = 0;
-    ORGANIZATION = 1;
-  }
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-
-  Class class = 2;
 }
 
 // An AdminUnsplitResponse is the return value from the
@@ -1658,6 +1660,8 @@ message ExportRequest {
 message BulkOpSummary {
   // DataSize is the sum of key and value lengths.
   int64 data_size = 1;
+  // SSTDataSize is the size of the SST, post compression, sent to KV.
+  int64 sst_data_size = 6 [(gogoproto.customname) = "SSTDataSize"];
   // DeprecatedRows contained the row count when "rows" were always defined as
   // entries in the index with ID 1, however since 20.1 and the introduction of
   // PK changes, the low-level counters that produce BulkOpSummaries are unable
@@ -1719,20 +1723,12 @@ message ExportResponse {
 // ranges that cannot be moved will include an error detail in the response and
 // won't fail the request.
 message AdminScatterRequest {
-
-  enum Class {
-    ARBITRARY = 0;
-    INGESTION = 1;
-  }
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   bool randomize_leases = 2;
 
   // max_size, if > 0, specifies a range's size above with it should reject
   // this scatter request, allowing a "scatter-if-not-full" conditional request.
   int64 max_size = 3;
-
-  Class class = 4;
 }
 
 // ScatterResponse is the response to a Scatter() operation.
@@ -1805,11 +1801,6 @@ message AdminVerifyProtectedTimestampResponse {
 // committed versioned values with non-zero MVCC timestamps (no intents or
 // inline values). It cannot be used in a transaction, cannot be split across
 // ranges, and must be alone in a batch.
-//
-// In 22.1, AddSSTable does not support MVCC point tombstones in SSTs, and may
-// return an error when given these. 22.2 does allow this, but check the
-// AddSSTableTombstones version gate first to make sure there are no 22.1 nodes
-// left in the cluster.
 //
 // MVCC range tombstones are supported in 22.2, but check the
 // MVCCRangeTombstones version gate before writing them.
@@ -2108,13 +2099,6 @@ message RangeStatsResponse {
     (gogoproto.customname) = "MVCCStats"
   ];
 
-  // DeprecatedLastQueriesPerSecond is the most recent rate of request/s or QPS
-  // for the range. The field is deprecated in favor of MaxQueriesPerSecond.
-  //
-  // TODO(nvanbenschoten): remove this field in v22.1 when all nodes in the
-  // cluster are guaranteed to return MaxQueriesPerSecond.
-  double deprecated_last_queries_per_second = 3;
-
   // MaxQueriesPerSecond is the maximum rate of request/s or QPS that the range
   // has served over a configured measurement period. Set to -1 if the replica
   // serving the RangeStats request has not been the leaseholder long enough to
@@ -2127,15 +2111,23 @@ message RangeStatsResponse {
   // by the server. Used to distinguish 0 qps set by a new server from the field
   // not being set at all by an old server.
   //
-  // TODO(nvanbenschoten): stop consulting this field on the receiver in v22.1
-  // when all nodes in the cluster are guaranteed to return MaxQueriesPerSecond.
-  //
-  // TODO(nvanbenschoten): stop setting this field and remove it in v22.2 when
+  // TODO(kvoli): stop setting this field and remove it in v23.2 when
   // no nodes in the cluster consult this field.
   bool max_queries_per_second_set = 6;
 
+
+  // MaxCPUPerSecond is the maximum rate of cpu/s that the range has used at
+  // the leaseholder over a configured measurement period. Set to -1 if the
+  // replica serving the RangeStats request has not been the leaseholder long
+  // enough to have recorded CPU rates for at least a full measurement period.
+  // In such cases, the recipient should not consider the CPU value reliable
+  // enough to base important decisions off of.
+  double max_cpu_per_second = 7 [(gogoproto.customname) = "MaxCPUPerSecond"];
+
   // range_info contains descriptor and lease information.
   RangeInfo range_info = 4 [(gogoproto.nullable) = false];
+
+  reserved 3;
 }
 
 // MigrateRequest is used instruct all ranges overlapping with it to exercise
@@ -2517,11 +2509,22 @@ message Header {
   // complications discussed in "Unordered requests". For now, that's a good
   // enough reason to disallow such batches.
   int64 max_span_request_keys = 8;
+  // TargetBytes will have different behaviour depending on the request type.
+  //
+  // Forward and Reverse Scans:
   // If set to a non-zero value, sets a target (in bytes) for how large the
-  // response may grow. This is only supported for (forward and reverse) scans
-  // and limits the number of rows scanned (and returned). The target will only
-  // be overshot when the first result is larger than the target, unless
+  // response may grow. For forward and reverse scans, TargetBytes limits the
+  // number of rows scanned (and returned). The target will only be overshot
+  // when the first result is larger than the target, unless
   // target_bytes_allow_empty is set. A suitable resume span will be returned.
+  //
+  // Resolve Intent and Resolve Intent Range:
+  // If set to a non-zero value, sets a target (in bytes) for how large the
+  // write batch from intent resolution may grow. For resolve intent and resolve
+  // intent range: TargetBytes limits the number of intents resolved. We will
+  // resolve intents until the number of bytes added to the write batch by
+  // intent resolution exceeds the TargetBytes limit. A suitable resume span
+  // will be returned.
   //
   // The semantics around overlapping requests, unordered requests, and
   // supported requests from max_span_request_keys apply to the target_bytes
@@ -2537,8 +2540,6 @@ message Header {
   // The given value specifies the maximum number of keys in a row (i.e. the
   // number of column families). If any larger rows are found at the end of the
   // result, an error is returned.
-  //
-  // Added in 22.1, callers must check the ScanWholeRows version gate first.
   int32 whole_rows_of_size = 26;
   // If true, allow returning an empty result when the first result exceeds a
   // limit (e.g. TargetBytes). Only supported by Get, Scan, and ReverseScan.
@@ -2611,7 +2612,20 @@ message Header {
   // Requests with a non-zero timestamp are not allowed to set this field.
   BoundedStalenessHeader bounded_staleness = 22;
 
+  // trace_info gives the server information about the trace that the RPC is
+  // part of. This is not set for local RPCs that don't go through gRPC.
+  //
+  // If a recording mode is set, the response will have collect_spans filled in.
   util.tracing.tracingpb.TraceInfo trace_info = 25;
+
+  // index_fetch_spec, if set, is used for ScanRequests and ReverseScanRequests
+  // with COL_BATCH_RESPONSE ScanFormat.
+  //
+  // The rationale for having this as a single "global" field on the
+  // BatchRequest is that SQL never issues requests touching different indexes
+  // in a single BatchRequest, so it would be redundant to copy this field into
+  // each Scan and ReverseScan.
+  sql.sqlbase.IndexFetchSpec index_fetch_spec = 29;
 
   reserved 7, 10, 12, 14, 20;
 }
@@ -2764,7 +2778,13 @@ message BatchResponse {
     util.hlc.Timestamp now = 5 [(gogoproto.nullable) = false,
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
     // collected_spans stores trace spans recorded during the execution of this
-    // request.
+    // request, if recording is requested through trace_info on the request.
+    //
+    // The server fills in reply.CollectedSpans only when the client asked for
+    // it by setting trace_info on the request, and specifying a recording mode.
+    // Notably, the client does not set trace_info on local RPCs which don't go
+    // through gRPC; for local RPCs, the Tracer is shared between the client and
+    // the server, and the server span is a child of the server span.
     repeated util.tracing.tracingpb.RecordedSpan collected_spans = 6 [(gogoproto.nullable) = false];
     // Range used to execute the request. The server only populates this if the
     // server detects the client's client_range_info to be stale. Otherwise, it
@@ -3200,4 +3220,10 @@ message ScanStats {
   uint64 value_bytes = 8;
   uint64 point_count = 9;
   uint64 points_covered_by_range_tombstones = 10;
+  uint64 range_key_count = 11;
+  uint64 range_key_contained_points = 12;
+  uint64 range_key_skipped_points = 13;
+  uint64 separated_point_count = 14;
+  uint64 separated_point_value_bytes = 15;
+  uint64 separated_point_value_bytes_fetched = 16;
 }

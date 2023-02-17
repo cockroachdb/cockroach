@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -105,7 +106,7 @@ func refreshUDT(
 		if err != nil {
 			return err
 		}
-		tableDesc, err = collection.GetImmutableTableByID(ctx, txn, tableID, tree.ObjectLookupFlags{})
+		tableDesc, err = collection.ByIDWithLeased(txn).WithoutNonPublic().Get().Table(ctx, tableID)
 		return err
 	}); err != nil {
 		// Manager can return all kinds of errors during chaos, but based on
@@ -150,7 +151,7 @@ func (c *rowFetcherCache) tableDescForKey(
 	// Immediately release the lease, since we only need it for the exact
 	// timestamp requested.
 	desc.Release(ctx)
-	if tableDesc.ContainsUserDefinedTypes() {
+	if catalog.MaybeRequiresHydration(tableDesc) {
 		tableDesc, err = refreshUDT(ctx, tableID, c.db, c.collection, ts)
 		if err != nil {
 			return nil, family, err
@@ -176,7 +177,10 @@ var ErrUnwatchedFamily = errors.New("watched table but unwatched family")
 // RowFetcherForColumnFamily returns row.Fetcher for the specified column family.
 // Returns ErrUnwatchedFamily error if family is not watched.
 func (c *rowFetcherCache) RowFetcherForColumnFamily(
-	tableDesc catalog.TableDescriptor, family descpb.FamilyID, keyOnly bool,
+	tableDesc catalog.TableDescriptor,
+	family descpb.FamilyID,
+	sysCols []descpb.ColumnDescriptor,
+	keyOnly bool,
 ) (*row.Fetcher, *descpb.ColumnFamilyDescriptor, error) {
 	idVer := CacheKey{ID: tableDesc.GetID(), Version: tableDesc.GetVersion(), FamilyID: family}
 	if v, ok := c.fetchers.Get(idVer); ok {
@@ -188,7 +192,7 @@ func (c *rowFetcherCache) RowFetcherForColumnFamily(
 		// version and the desired version to use the cache. It is safe to use
 		// UserDefinedTypeColsHaveSameVersion if we have a hit because we are
 		// guaranteed that the tables have the same version. Additionally, these
-		// fetchers are always initialized with a single tabledesc.Immutable.
+		// fetchers are always initialized with a single tabledesc.Get.
 		if safe, err := catalog.UserDefinedTypeColsInFamilyHaveSameVersion(tableDesc, f.tableDesc, family); err != nil {
 			return nil, nil, err
 		} else if safe {
@@ -196,7 +200,7 @@ func (c *rowFetcherCache) RowFetcherForColumnFamily(
 		}
 	}
 
-	familyDesc, err := tableDesc.FindFamilyByID(family)
+	familyDesc, err := catalog.MustFindFamilyByID(tableDesc, family)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -216,7 +220,7 @@ func (c *rowFetcherCache) RowFetcherForColumnFamily(
 		}
 	}
 
-	var spec descpb.IndexFetchSpec
+	var spec fetchpb.IndexFetchSpec
 
 	var relevantColumns descpb.ColumnIDs
 	if keyOnly {
@@ -232,6 +236,16 @@ func (c *rowFetcherCache) RowFetcherForColumnFamily(
 		&spec, c.codec, tableDesc, tableDesc.GetPrimaryIndex(), relevantColumns,
 	); err != nil {
 		return nil, nil, err
+	}
+
+	// Add system columns.
+	for _, sc := range sysCols {
+		spec.FetchedColumns = append(spec.FetchedColumns, fetchpb.IndexFetchSpec_Column{
+			ColumnID:      sc.ID,
+			Name:          sc.Name,
+			Type:          sc.Type,
+			IsNonNullable: !sc.Nullable,
+		})
 	}
 
 	if err := rf.Init(

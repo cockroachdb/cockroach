@@ -96,15 +96,157 @@ query T kvtrace
 SELECT fetch_a_of_2_strict(1, NULL::INT)
 ----
 
+
+subtest subquery
+
+statement ok
+CREATE TABLE sub1 (a INT PRIMARY KEY);
+CREATE TABLE sub2 (a INT PRIMARY KEY);
+CREATE TABLE sub3 (a INT PRIMARY KEY);
+INSERT INTO sub1 VALUES (1), (2), (3);
+INSERT INTO sub2 VALUES (10), (20), (30);
+
+statement ok
+CREATE FUNCTION sub_fn() RETURNS INT LANGUAGE SQL AS 'SELECT a FROM sub1 WHERE a = (SELECT max(a) FROM sub2)'
+
+# A query with a subquery and a subquery inside a UDF.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM sub3 WHERE sub_fn() = 3 AND (SELECT max(a) FROM sub2) = a
+----
+distribution: local
+vectorized: true
+·
+• root
+│ columns: (a)
+│
+├── • filter
+│   │ columns: (a)
+│   │ estimated row count: 111 (missing stats)
+│   │ filter: (sub_fn() = 3) AND (a = @S1)
+│   │
+│   └── • scan
+│         columns: (a)
+│         estimated row count: 1,000 (missing stats)
+│         table: sub3@sub3_pkey
+│         spans: FULL SCAN
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: (SELECT max(a) FROM sub2)
+    │ exec mode: one row
+    │
+    └── • group (scalar)
+        │ columns: (any_not_null)
+        │ estimated row count: 1 (missing stats)
+        │ aggregate 0: any_not_null(a)
+        │
+        └── • revscan
+              columns: (a)
+              estimated row count: 1 (missing stats)
+              table: sub2@sub2_pkey
+              spans: LIMITED SCAN
+              limit: 1
+
+# The uncorrelated subquery in the UDF body is executed only once.
+query T kvtrace
+SELECT sub_fn()
+----
+Scan /Table/112/{1-2}
+Scan /Table/113/{1-2}
+
+# The uncorrelated subquery in the UDF body is executed only once per row
+# produced by generate_series.
+query T kvtrace
+SELECT sub_fn() FROM generate_series(1, 3)
+----
+Scan /Table/112/{1-2}
+Scan /Table/113/{1-2}
+Scan /Table/112/{1-2}
+Scan /Table/113/{1-2}
+Scan /Table/112/{1-2}
+Scan /Table/113/{1-2}
+
+statement ok
+CREATE FUNCTION sub_fn2() RETURNS INT LANGUAGE SQL AS 'SELECT a FROM sub1 WHERE a = (SELECT a FROM sub2 WHERE a = 30)'
+
+# The uncorrelated subquery in the UDF body is fully optimized - it performs
+# a constrained scan of sub2.
+query T kvtrace
+SELECT sub_fn2() FROM generate_series(1, 3)
+----
+Scan /Table/112/{1-2}
+Scan /Table/113/1/30/0
+Scan /Table/112/{1-2}
+Scan /Table/113/1/30/0
+Scan /Table/112/{1-2}
+Scan /Table/113/1/30/0
+
+statement ok
+CREATE FUNCTION sub_fn3() RETURNS INT LANGUAGE SQL AS 'SELECT a FROM sub1 WHERE EXISTS (SELECT a FROM sub2 WHERE a = 30)'
+
+# A query with an uncorrelated EXISTS within a UDF.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM sub3 WHERE sub_fn3() = 3
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (a)
+│ estimated row count: 333 (missing stats)
+│ filter: sub_fn3() = 3
+│
+└── • scan
+      columns: (a)
+      estimated row count: 1,000 (missing stats)
+      table: sub3@sub3_pkey
+      spans: FULL SCAN
+
+statement ok
+CREATE FUNCTION sub_fn4() RETURNS INT LANGUAGE SQL AS $$
+  SELECT a FROM sub1 WHERE CASE
+    WHEN a > 0 THEN EXISTS (SELECT 1 FROM sub2 WHERE a/10 = sub1.a)
+    ELSE false
+  END
+$$
+
+# A query with a correlated EXISTS within a UDF.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM sub3 WHERE sub_fn4() = 3
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (a)
+│ estimated row count: 333 (missing stats)
+│ filter: sub_fn4() = 3
+│
+└── • scan
+      columns: (a)
+      estimated row count: 1,000 (missing stats)
+      table: sub3@sub3_pkey
+      spans: FULL SCAN
+
+query I
+SELECT sub_fn4() FROM generate_series(1, 3)
+----
+1
+1
+1
+
+
+subtest regressions
+
 # Regression test for #93210. Do not plan unnecessary assignment casts on the
 # return values of UDFs.
 statement ok
 CREATE TABLE t93210 (
   a INT PRIMARY KEY
 );
-CREATE FUNCTION fn93210() RETURNS INT STABLE LANGUAGE SQL AS 'SELECT a FROM t93210';
+CREATE FUNCTION fn93210() RETURNS INT VOLATILE LANGUAGE SQL AS 'SELECT a FROM t93210';
 
-# The body of the UDF should have no assignment cast expressions.
+# The query plan should have no assignment cast expressions.
 query T
 EXPLAIN (OPT, TYPES)
 SELECT fn93210()
@@ -112,7 +254,7 @@ SELECT fn93210()
 values
  ├── columns: fn93210:4(int)
  ├── cardinality: [1 - 1]
- ├── stable
+ ├── volatile
  ├── stats: [rows=1]
  ├── cost: 0.02
  ├── key: ()
@@ -138,7 +280,7 @@ values
 # Regression test for #88259. Arguments to UDFs should be formatted correctly in
 # EXPLAIN output.
 statement ok
-CREATE FUNCTION f88259(a INT, b INT) RETURNS INT LANGUAGE SQL IMMUTABLE STRICT AS $$
+CREATE FUNCTION f88259(a INT, b INT) RETURNS INT LANGUAGE SQL VOLATILE STRICT AS $$
   SELECT a + b
 $$
 

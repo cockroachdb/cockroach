@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -143,8 +143,16 @@ func checkAndOutputIter(iter MVCCIterator, b *strings.Builder) {
 		}
 	}
 
-	v1 := iter.UnsafeValue()
-	v2 := iter.Value()
+	v1, err := iter.UnsafeValue()
+	if err != nil {
+		fmt.Fprintf(b, "output: unable to fetch value: %s\n", err.Error())
+		return
+	}
+	v2, err := iter.Value()
+	if err != nil {
+		fmt.Fprintf(b, "output: unable to fetch value: %s\n", err.Error())
+		return
+	}
 	if !bytes.Equal(v1, v2) {
 		fmt.Fprintf(b, "output: value: %x != %x\n", v1, v2)
 		return
@@ -215,7 +223,7 @@ func TestIntentInterleavingIter(t *testing.T) {
 		}
 	}()
 
-	datadriven.Walk(t, testutils.TestDataPath(t, "intent_interleaving_iter"), func(t *testing.T, path string) {
+	datadriven.Walk(t, datapathutils.TestDataPath(t, "intent_interleaving_iter"), func(t *testing.T, path string) {
 		if (util.RaceEnabled && strings.HasSuffix(path, "race_off")) ||
 			(!util.RaceEnabled && strings.HasSuffix(path, "race")) {
 			return

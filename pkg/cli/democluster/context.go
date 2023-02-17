@@ -43,6 +43,15 @@ type Context struct {
 	// after the demo cluster has been initialized.
 	RunWorkload bool
 
+	// ExpandSchema indicates whether to expand the schema of the
+	// workload. The expansion stops when this number of extra
+	// descriptors has been reached.
+	ExpandSchema int
+
+	// NameGenOptions configures the name generation options to use
+	// during schema expansion.
+	NameGenOptions string
+
 	// WorkloadGenerator is the desired workload generator.
 	WorkloadGenerator workload.Generator
 
@@ -97,6 +106,10 @@ type Context struct {
 	// DefaultEnableRangefeeds is true if rangefeeds should start
 	// out enabled.
 	DefaultEnableRangefeeds bool
+
+	// DisableServerController is true if we want to avoid the server
+	// controller to instantiate tenant secondary servers.
+	DisableServerController bool
 }
 
 // IsInteractive returns true if the demo cluster configuration

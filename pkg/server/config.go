@@ -23,18 +23,20 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/base/serverident"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -73,6 +75,12 @@ const (
 	defaultEventLogEnabled = true
 
 	maximumMaxClockOffset = 5 * time.Second
+
+	// toleratedOffsetMultiplier is the MaxOffset multiplier used for
+	// ToleratedOffset, which determines the tolerated clock skew between this
+	// node and the cluster before self-terminating. It is conservatively set to
+	// 80% to avoid exceeding MaxOffset.
+	toleratedOffsetMultiplier = 0.8
 
 	minimumNetworkFileDescriptors     = 256
 	recommendedNetworkFileDescriptors = 5000
@@ -122,8 +130,7 @@ type BaseConfig struct {
 
 	Tracer *tracing.Tracer
 
-	// idProvider is an interface that makes the logging package
-	// able to peek into the server IDs defined by this configuration.
+	// idProvider contains the tenant and server identity.
 	idProvider *idProvider
 
 	// IDContainer is the Node ID / SQL Instance ID container
@@ -137,23 +144,40 @@ type BaseConfig struct {
 	// AmbientCtx is used to annotate contexts used inside the server.
 	AmbientCtx log.AmbientContext
 
-	// Maximum allowed clock offset for the cluster. If observed clock
-	// offsets exceed this limit, inconsistency may result, and servers
-	// will panic to minimize the likelihood of inconsistent data.
-	// Increasing this value will increase time to recovery after
-	// failures, and increase the frequency and impact of
-	// ReadWithinUncertaintyIntervalError.
+	// MaxOffset is the maximum clock offset for the cluster. If real clock skew
+	// exceeds this limit, it may result in linearizability violations. Increasing
+	// this will increase the frequency of ReadWithinUncertaintyIntervalError and
+	// the write latency of global tables.
+	//
+	// Nodes will self-terminate if they detect that their clock skew with other
+	// nodes is too large, see ToleratedOffset().
 	MaxOffset MaxOffsetType
 
+	// DisableMaxOffsetCheck disables the MaxOffset check with other cluster nodes.
+	// The operator assumes responsibility for ensuring real clock skew never
+	// exceeds MaxOffset. See also ToleratedOffset().
+	DisableMaxOffsetCheck bool
+
+	// DisableRuntimeStatsMonitor prevents this server from starting the
+	// async task that collects runtime stats and triggers
+	// heap/goroutine dumps under high load.
+	DisableRuntimeStatsMonitor bool
+
+	// RuntimeStatSampler, if non-nil, will be used as source for
+	// run-time metrics instead of constructing a fresh one.
+	RuntimeStatSampler *status.RuntimeStatSampler
+
 	// GoroutineDumpDirName is the directory name for goroutine dumps using
-	// goroutinedumper.
+	// goroutinedumper. Only used if DisableRuntimeStatsMonitor is false.
 	GoroutineDumpDirName string
 
 	// HeapProfileDirName is the directory name for heap profiles using
-	// heapprofiler. If empty, no heap profiles will be collected.
+	// heapprofiler. If empty, no heap profiles will be collected. Only
+	// used if DisableRuntimeStatsMonitor is false.
 	HeapProfileDirName string
 
 	// CPUProfileDirName is the directory name for CPU profile dumps.
+	// Only used if DisableRuntimeStatsMonitor is false.
 	CPUProfileDirName string
 
 	// InflightTraceDirName is the directory name for job traces.
@@ -183,9 +207,11 @@ type BaseConfig struct {
 	// TestingKnobs is used for internal test controls only.
 	TestingKnobs base.TestingKnobs
 
-	// EnableWebSessionAuthentication enables session-based authentication for
-	// the Admin API's HTTP endpoints.
-	EnableWebSessionAuthentication bool
+	// TestingInsecureWebAccess enables uses of the HTTP and UI
+	// endpoints without a valid authentication token. This should be
+	// used only in tests what want a secure cluster with RPC
+	// auth but no auth in HTTP.
+	TestingInsecureWebAccess bool
 
 	// EnableDemoLoginEndpoint enables the HTTP GET endpoint for user logins,
 	// which a feature unique to the demo shell.
@@ -205,6 +231,9 @@ type BaseConfig struct {
 	// Stores is specified to enable durable key-value storage.
 	Stores base.StoreSpecList
 
+	// SharedStorage is specified to enable disaggregated shared storage.
+	SharedStorage string
+
 	// StartDiagnosticsReporting starts the asynchronous goroutine that
 	// checks for CockroachDB upgrades and periodically reports
 	// diagnostics to Cockroach Labs.
@@ -216,6 +245,17 @@ type BaseConfig struct {
 	// other service (typically, the serverController) will accept and
 	// route requests instead.
 	DisableHTTPListener bool
+
+	// DisableSQLListener prevents this server from starting a TCP
+	// listener for the SQL service. Instead, it is expected that some
+	// other service (typically, the serverController) will accept and
+	// route SQL connections instead.
+	DisableSQLListener bool
+
+	// ObsServiceAddr is the address of the OTLP sink to send events to, if any.
+	// These events are meant for the Observability Service, but they might pass
+	// through an OpenTelemetry Collector.
+	ObsServiceAddr string
 }
 
 // MakeBaseConfig returns a BaseConfig with default values.
@@ -248,9 +288,10 @@ func (cfg *BaseConfig) SetDefaults(
 	cfg.ClusterIDContainer = idsProvider.clusterID
 	cfg.AmbientCtx = log.MakeServerAmbientContext(tr, idsProvider)
 	cfg.MaxOffset = MaxOffsetType(base.DefaultMaxClockOffset)
+	cfg.DisableMaxOffsetCheck = false
 	cfg.DefaultZoneConfig = zonepb.DefaultZoneConfig()
 	cfg.StorageEngine = storage.DefaultStorageEngine
-	cfg.EnableWebSessionAuthentication = !disableWebLogin
+	cfg.TestingInsecureWebAccess = disableWebLogin
 	cfg.Stores = base.StoreSpecList{
 		Specs: []base.StoreSpec{storeSpec},
 	}
@@ -298,6 +339,15 @@ func (cfg *BaseConfig) InitTestingKnobs() {
 	}
 }
 
+// ToleratedOffset returns the tolerated clock offset with other cluster nodes
+// as measured via RPC heartbeats, or 0 to disable clock offset checks.
+func (cfg *BaseConfig) ToleratedOffset() time.Duration {
+	if cfg.DisableMaxOffsetCheck {
+		return 0
+	}
+	return time.Duration(toleratedOffsetMultiplier * float64(cfg.MaxOffset))
+}
+
 // Config holds the parameters needed to set up a combined KV and SQL server.
 type Config struct {
 	BaseConfig
@@ -333,10 +383,6 @@ type KVConfig struct {
 	// CacheSize is the amount of memory in bytes to use for caching data.
 	// The value is split evenly between the stores if there are more than one.
 	CacheSize int64
-
-	// SoftSlotGranter can be optionally passed into a store to allow the store
-	// to perform additional CPU bound work.
-	SoftSlotGranter *admission.SoftSlotGranter
 
 	// TimeSeriesServerConfig contains configuration specific to the time series
 	// server.
@@ -466,6 +512,19 @@ type SQLConfig struct {
 	// node clocks have necessarily passed it.
 	// Environment Variable: COCKROACH_EXPERIMENTAL_LINEARIZABLE
 	Linearizable bool
+
+	// LocalKVServerInfo is set in configs for shared-process tenants. It contains
+	// info for making Batch requests to the local KV server without using gRPC.
+	LocalKVServerInfo *LocalKVServerInfo
+}
+
+// LocalKVServerInfo is used to group information about the local KV server
+// necessary for creating the internalClientAdapter for an in-process tenant
+// talking to that server.
+type LocalKVServerInfo struct {
+	InternalServer     roachpb.InternalServer
+	ServerInterceptors rpc.ServerInterceptorInfo
+	Tracer             *tracing.Tracer
 }
 
 // MakeSQLConfig returns a SQLConfig with default values.
@@ -610,19 +669,6 @@ func (e *Engines) Close() {
 	*e = nil
 }
 
-// cpuWorkPermissionGranter implements the pebble.CPUWorkPermissionGranter
-// interface.
-//type cpuWorkPermissionGranter struct {
-//*admission.SoftSlotGranter
-//}
-
-//func (c *cpuWorkPermissionGranter) TryGetProcs(count int) int {
-//return c.TryGetSlots(count)
-//}
-//func (c *cpuWorkPermissionGranter) ReturnProcs(count int) {
-//c.ReturnSlots(count)
-//}
-
 // CreateEngines creates Engines based on the specs in cfg.Stores.
 func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 	engines := Engines(nil)
@@ -635,6 +681,19 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 	details := []redact.RedactableString{redact.Sprintf("Pebble cache size: %s", humanizeutil.IBytes(cfg.CacheSize))}
 	pebbleCache := pebble.NewCache(cfg.CacheSize)
 	defer pebbleCache.Unref()
+
+	var sharedStorage cloud.ExternalStorage
+	if cfg.SharedStorage != "" {
+		var err error
+		// Note that we don't pass an io interceptor here. Instead, we record shared
+		// storage metrics on a per-store basis; see storage.Metrics.
+		sharedStorage, err = cloud.ExternalStorageFromURI(ctx, cfg.SharedStorage,
+			base.ExternalIODirConfig{}, cfg.Settings, nil, cfg.User, nil,
+			nil, cloud.NilMetrics)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	var physicalStores int
 	for _, spec := range cfg.Stores.Specs {
@@ -702,7 +761,6 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 					storage.CacheSize(cfg.CacheSize),
 					storage.MaxSize(sizeInBytes),
 					storage.EncryptionAtRest(spec.EncryptionOptions),
-					storage.Settings(cfg.Settings),
 					storage.If(storeKnobs.SmallEngineBlocks, storage.BlockSize(1)),
 				}
 				if len(storeKnobs.EngineKnobs) > 0 {
@@ -710,6 +768,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				}
 				e, err := storage.Open(ctx,
 					storage.InMemory(),
+					cfg.Settings,
 					storageConfigs...,
 				)
 				if err != nil {
@@ -748,16 +807,12 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			pebbleConfig := storage.PebbleConfig{
 				StorageConfig: storageConfig,
 				Opts:          storage.DefaultPebbleOptions(),
+				SharedStorage: sharedStorage,
 			}
 			pebbleConfig.Opts.Cache = pebbleCache
 			pebbleConfig.Opts.TableCache = tableCache
 			pebbleConfig.Opts.MaxOpenFiles = int(openFileLimitPerStore)
 			pebbleConfig.Opts.Experimental.MaxWriterConcurrency = 2
-			// TODO(jackson): Implement the new pebble.CPUWorkPermissionGranter
-			// interface.
-			//pebbleConfig.Opts.Experimental.CPUWorkPermissionGranter = &cpuWorkPermissionGranter{
-			//cfg.SoftSlotGranter,
-			//}
 			if storeKnobs.SmallEngineBlocks {
 				for i := range pebbleConfig.Opts.Levels {
 					pebbleConfig.Opts.Levels[i].BlockSize = 1
@@ -865,10 +920,10 @@ func (cfg *Config) FilterGossipBootstrapAddresses(ctx context.Context) []util.Un
 	return filtered
 }
 
-// RequireWebSession indicates whether the server should require authentication
-// sessions when serving admin API requests.
-func (cfg *BaseConfig) RequireWebSession() bool {
-	return !cfg.Insecure && cfg.EnableWebSessionAuthentication
+// InsecureWebAccess indicates whether the server should allow
+// access to the HTTP endpoints without a valid auth cookie.
+func (cfg *BaseConfig) InsecureWebAccess() bool {
+	return cfg.Insecure || cfg.TestingInsecureWebAccess
 }
 
 func (cfg *Config) readSQLEnvironmentVariables() {
@@ -948,7 +1003,7 @@ func parseAttributes(attrsStr string) roachpb.Attributes {
 //
 // For each of the "main" data items, it also memoizes its
 // representation as a string (the one needed by the
-// log.ServerIdentificationPayload interface) as soon as the value is
+// serverident.ServerIdentificationPayload interface) as soon as the value is
 // initialized. This saves on conversion costs.
 type idProvider struct {
 	// clusterID contains the cluster ID (initialized late).
@@ -969,12 +1024,17 @@ type idProvider struct {
 	serverStr atomic.Value
 }
 
-var _ log.ServerIdentificationPayload = (*idProvider)(nil)
+var _ serverident.ServerIdentificationPayload = (*idProvider)(nil)
 
-// ServerIdentityString implements the log.ServerIdentificationPayload interface.
-func (s *idProvider) ServerIdentityString(key log.ServerIdentificationKey) string {
+// TenantID is part of the serverident.ServerIdentificationPayload interface.
+func (s *idProvider) TenantID() interface{} {
+	return s.tenantID
+}
+
+// ServerIdentityString implements the serverident.ServerIdentificationPayload interface.
+func (s *idProvider) ServerIdentityString(key serverident.ServerIdentificationKey) string {
 	switch key {
-	case log.IdentifyClusterID:
+	case serverident.IdentifyClusterID:
 		c := s.clusterStr.Load()
 		cs, ok := c.(string)
 		if !ok {
@@ -986,7 +1046,7 @@ func (s *idProvider) ServerIdentityString(key log.ServerIdentificationKey) strin
 		}
 		return cs
 
-	case log.IdentifyTenantID:
+	case serverident.IdentifyTenantID:
 		t := s.tenantStr.Load()
 		ts, ok := t.(string)
 		if !ok {
@@ -998,7 +1058,7 @@ func (s *idProvider) ServerIdentityString(key log.ServerIdentificationKey) strin
 		}
 		return ts
 
-	case log.IdentifyInstanceID:
+	case serverident.IdentifyInstanceID:
 		// If tenantID is not set, this is a KV node and it has no SQL
 		// instance ID.
 		if !s.tenantID.IsSet() {
@@ -1006,7 +1066,7 @@ func (s *idProvider) ServerIdentityString(key log.ServerIdentificationKey) strin
 		}
 		return s.maybeMemoizeServerID()
 
-	case log.IdentifyKVNodeID:
+	case serverident.IdentifyKVNodeID:
 		// If tenantID is set, this is a SQL-only server and it has no
 		// node ID.
 		if s.tenantID.IsSet() {
@@ -1022,7 +1082,7 @@ func (s *idProvider) ServerIdentityString(key log.ServerIdentificationKey) strin
 // a SQL server.
 //
 // Note: this should not be called concurrently with logging which may
-// invoke the method from the log.ServerIdentificationPayload
+// invoke the method from the serverident.ServerIdentificationPayload
 // interface.
 func (s *idProvider) SetTenant(tenantID roachpb.TenantID) {
 	if !tenantID.IsSet() {

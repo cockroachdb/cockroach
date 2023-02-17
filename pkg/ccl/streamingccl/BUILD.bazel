@@ -1,5 +1,5 @@
 load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
-load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "streamingccl",
@@ -8,7 +8,6 @@ go_library(
         "errors.go",
         "event.go",
         "settings.go",
-        "utils.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl",
     visibility = ["//visibility:public"],
@@ -17,28 +16,6 @@ go_library(
         "//pkg/repstream/streampb",
         "//pkg/roachpb",
         "//pkg/settings",
-        "//pkg/storage",
-        "//pkg/util/hlc",
-        "@com_github_cockroachdb_errors//:errors",
-    ],
-)
-
-go_test(
-    name = "streamingccl_test",
-    srcs = ["utils_test.go"],
-    args = ["-test.timeout=295s"],
-    embed = [":streamingccl"],
-    deps = [
-        "//pkg/clusterversion",
-        "//pkg/roachpb",
-        "//pkg/settings/cluster",
-        "//pkg/storage",
-        "//pkg/testutils/storageutils",
-        "//pkg/util/hlc",
-        "//pkg/util/leaktest",
-        "//pkg/util/log",
-        "//pkg/util/timeutil",
-        "@com_github_stretchr_testify//require",
     ],
 )
 

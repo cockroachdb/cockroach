@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/oppurpose"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -112,7 +111,7 @@ func distImport(
 
 		p.PlanToStreamColMap = []int{0, 1}
 
-		dsp.FinalizePlan(planCtx, p)
+		sql.FinalizePlan(ctx, planCtx, p)
 		return p, planCtx, nil
 	}
 
@@ -136,20 +135,21 @@ func distImport(
 	importDetails := job.Progress().Details.(*jobspb.Progress_Import).Import
 	if importDetails.ReadProgress == nil {
 		// Initialize the progress metrics on the first attempt.
-		if err := job.FractionProgressed(ctx, nil, /* txn */
-			func(ctx context.Context, details jobspb.ProgressDetails) float32 {
-				prog := details.(*jobspb.Progress_Import).Import
-				prog.ReadProgress = make([]float32, len(from))
-				prog.ResumePos = make([]int64, len(from))
-				if prog.SequenceDetails == nil {
-					prog.SequenceDetails = make([]*jobspb.SequenceDetails, len(from))
-					for i := range prog.SequenceDetails {
-						prog.SequenceDetails[i] = &jobspb.SequenceDetails{}
-					}
+		if err := job.NoTxn().FractionProgressed(ctx, func(
+			ctx context.Context, details jobspb.ProgressDetails,
+		) float32 {
+			prog := details.(*jobspb.Progress_Import).Import
+			prog.ReadProgress = make([]float32, len(from))
+			prog.ResumePos = make([]int64, len(from))
+			if prog.SequenceDetails == nil {
+				prog.SequenceDetails = make([]*jobspb.SequenceDetails, len(from))
+				for i := range prog.SequenceDetails {
+					prog.SequenceDetails[i] = &jobspb.SequenceDetails{}
 				}
+			}
 
-				return 0.0
-			},
+			return 0.0
+		},
 		); err != nil {
 			return roachpb.BulkOpSummary{}, err
 		}
@@ -159,25 +159,26 @@ func distImport(
 	fractionProgress := make([]uint32, len(from))
 
 	updateJobProgress := func() error {
-		return job.FractionProgressed(ctx, nil, /* txn */
-			func(ctx context.Context, details jobspb.ProgressDetails) float32 {
-				var overall float32
-				prog := details.(*jobspb.Progress_Import).Import
-				for i := range rowProgress {
-					prog.ResumePos[i] = atomic.LoadInt64(&rowProgress[i])
-				}
-				for i := range fractionProgress {
-					fileProgress := math.Float32frombits(atomic.LoadUint32(&fractionProgress[i]))
-					prog.ReadProgress[i] = fileProgress
-					overall += fileProgress
-				}
+		return job.NoTxn().FractionProgressed(ctx, func(
+			ctx context.Context, details jobspb.ProgressDetails,
+		) float32 {
+			var overall float32
+			prog := details.(*jobspb.Progress_Import).Import
+			for i := range rowProgress {
+				prog.ResumePos[i] = atomic.LoadInt64(&rowProgress[i])
+			}
+			for i := range fractionProgress {
+				fileProgress := math.Float32frombits(atomic.LoadUint32(&fractionProgress[i]))
+				prog.ReadProgress[i] = fileProgress
+				overall += fileProgress
+			}
 
-				accumulatedBulkSummary.Lock()
-				prog.Summary.Add(accumulatedBulkSummary.BulkOpSummary)
-				accumulatedBulkSummary.Reset()
-				accumulatedBulkSummary.Unlock()
-				return overall / float32(len(from))
-			},
+			accumulatedBulkSummary.Lock()
+			prog.Summary.Add(accumulatedBulkSummary.BulkOpSummary)
+			accumulatedBulkSummary.Reset()
+			accumulatedBulkSummary.Unlock()
+			return overall / float32(len(from))
+		},
 		)
 	}
 
@@ -225,7 +226,6 @@ func distImport(
 		nil, /* txn - the flow does not read or write the database */
 		nil, /* clockUpdater */
 		evalCtx.Tracing,
-		evalCtx.ExecCfg.ContentionRegistry,
 	)
 	defer recv.Release()
 
@@ -354,7 +354,7 @@ func presplitTableBoundaries(
 		// TODO(ajwerner): Consider passing in the wrapped descriptors.
 		tblDesc := tabledesc.NewBuilder(tbl.Desc).BuildImmutableTable()
 		for _, span := range tblDesc.AllIndexSpans(cfg.Codec) {
-			if err := cfg.DB.AdminSplit(ctx, span.Key, expirationTime, oppurpose.SplitImport); err != nil {
+			if err := cfg.DB.AdminSplit(ctx, span.Key, expirationTime); err != nil {
 				return err
 			}
 		}

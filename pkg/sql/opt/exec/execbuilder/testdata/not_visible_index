@@ -75,12 +75,12 @@ t1_pkey          v  true
 t1_pkey          i  true
 
 # Check System Descriptor.
-query TTBITTBBB colnames
+query TTBITTTBBB colnames
 SELECT * FROM [SHOW INDEX FROM system.descriptor]
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit  visible
-descriptor  primary     false       1             id           ASC        false    false     true
-descriptor  primary     false       2             descriptor   N/A        true     false     true
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible
+descriptor  primary     false       1             id           id          ASC        false    false     true
+descriptor  primary     false       2             descriptor   descriptor  N/A        true     false     true
 
 query TT
 SELECT cols.desc->>'name', cols.desc->>'notVisible' FROM (
@@ -1198,16 +1198,16 @@ CREATE TABLE t1 (
   INDEX idx_invisible (other) NOT VISIBLE
 )
 
-query TTBITTBBB colnames
+query TTBITTTBBB colnames
 SELECT * FROM [SHOW INDEX FROM t1]
 ----
-table_name  index_name     non_unique  seq_in_index  column_name  direction  storing  implicit  visible
-t1          t1_pkey        false       1             c            ASC        false    false     true
-t1          t1_pkey        false       2             other        N/A        true     false     true
-t1          idx_visible    true        1             other        ASC        false    false     true
-t1          idx_visible    true        2             c            ASC        false    true      true
-t1          idx_invisible  true        1             other        ASC        false    false     false
-t1          idx_invisible  true        2             c            ASC        false    true      false
+table_name  index_name     non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible
+t1          t1_pkey        false       1             c            c           ASC        false    false     true
+t1          t1_pkey        false       2             other        other       N/A        true     false     true
+t1          idx_visible    true        1             other        other       ASC        false    false     true
+t1          idx_visible    true        2             c            c           ASC        false    true      true
+t1          idx_invisible  true        1             other        other       ASC        false    false     false
+t1          idx_invisible  true        2             c            c           ASC        false    true      false
 
 # Primary index cannot be invisible.
 statement error pq: primary index cannot be invisible
@@ -1228,16 +1228,16 @@ ALTER TABLE t1 ALTER PRIMARY KEY USING COLUMNS (other);
 # A new primary index t1_pkey is created on the column other. The old primary
 # index becomes a secondary index t1_c_key on c. idx_invisible remains
 # invisible.
-query TTBITTBBB colnames
+query TTBITTTBBB colnames
 SELECT * FROM [SHOW INDEX FROM t1]
 ----
-table_name  index_name     non_unique  seq_in_index  column_name  direction  storing  implicit  visible
-t1          t1_pkey        false       1             other        ASC        false    false     true
-t1          t1_pkey        false       2             c            N/A        true     false     true
-t1          t1_c_key       false       1             c            ASC        false    false     true
-t1          t1_c_key       false       2             other        ASC        true     true      true
-t1          idx_visible    true        1             other        ASC        false    false     true
-t1          idx_invisible  true        1             other        ASC        false    false     false
+table_name  index_name     non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible
+t1          t1_pkey        false       1             other        other       ASC        false    false     true
+t1          t1_pkey        false       2             c            c           N/A        true     false     true
+t1          t1_c_key       false       1             c            c           ASC        false    false     true
+t1          t1_c_key       false       2             other        other       ASC        true     true      true
+t1          idx_visible    true        1             other        other       ASC        false    false     true
+t1          idx_invisible  true        1             other        other       ASC        false    false     false
 
 # Changing the old primary key index t1_c_key (secondary index now) to invisible
 # is fine.
@@ -1531,15 +1531,15 @@ statement ok
 CREATE INDEX v_idx on t(k);
 ALTER INDEX v_idx INVISIBLE
 
-query TTBITTBBB colnames
+query TTBITTTBBB colnames
 SELECT * FROM [SHOW INDEX FROM t]
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit  visible
-t           t_pkey      false       1             p            ASC        false    false     true
-t           t_pkey      false       2             k            N/A        true     false     true
-t           t_pkey      false       3             v            N/A        true     false     true
-t           p_idx       true        1             p            ASC        false    false     false
-t           k_idx       true        1             k            ASC        false    false     false
-t           k_idx       true        2             p            ASC        false    true      false
-t           v_idx       true        1             k            ASC        false    false     false
-t           v_idx       true        2             p            ASC        false    true      false
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible
+t           t_pkey      false       1             p            p           ASC        false    false     true
+t           t_pkey      false       2             k            k           N/A        true     false     true
+t           t_pkey      false       3             v            v           N/A        true     false     true
+t           p_idx       true        1             p            p           ASC        false    false     false
+t           k_idx       true        1             k            k           ASC        false    false     false
+t           k_idx       true        2             p            p           ASC        false    true      false
+t           v_idx       true        1             k            k           ASC        false    false     false
+t           v_idx       true        2             p            p           ASC        false    true      false

@@ -23,7 +23,7 @@ type Type int
 
 const (
 	_ Type = iota
-	// MutationType represents descriptor changes.
+	// MutationType represents metadata changes.
 	MutationType
 	// BackfillType represents index backfills.
 	BackfillType

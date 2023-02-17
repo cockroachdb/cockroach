@@ -5,7 +5,7 @@ CREATE TABLE t (i INT PRIMARY KEY, j INT, k INT DEFAULT 32 ON UPDATE 42, INDEX((
 ALTER TABLE t DROP COLUMN j CASCADE;
 EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
 ----
-• Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j› CASCADE; ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹k› CASCADE; 
+• Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹k› CASCADE; following ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j› CASCADE;
 │
 ├── • StatementPhase
 │   │
@@ -16,7 +16,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
 │       │   ├── • Column:{DescID: 104, ColumnID: 3}
 │       │   │   │ PUBLIC → WRITE_ONLY
 │       │   │   │
-│       │   │   ├── • PreviousTransactionPrecedence dependency from PUBLIC Column:{DescID: 104, ColumnID: 3}
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC Column:{DescID: 104, ColumnID: 3}
 │       │   │   │     rule: "Column transitions to ABSENT uphold 2-version invariant: PUBLIC->WRITE_ONLY"
 │       │   │   │
 │       │   │   └── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
@@ -28,28 +28,11 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
 │       │       └── • Precedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 3}
 │       │             rule: "column no longer public before dependents"
 │       │
-│       └── • 3 Mutation operations
+│       └── • 2 Mutation operations
 │           │
 │           ├── • MakePublicColumnWriteOnly
 │           │     ColumnID: 3
 │           │     TableID: 104
-│           │
-│           ├── • LogEvent
-│           │     Element:
-│           │       Column:
-│           │         columnId: 3
-│           │         pgAttributeNum: 3
-│           │         tableId: 104
-│           │     EventBase:
-│           │       Authorization:
-│           │         UserName: root
-│           │       Statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹k› CASCADE
-│           │       StatementTag: ALTER TABLE
-│           │       TargetMetadata:
-│           │         SourceElementID: 1
-│           │         StatementID: 1
-│           │         SubWorkID: 1
-│           │     TargetStatus: 1
 │           │
 │           └── • SetColumnName
 │                 ColumnID: 3
@@ -58,9 +41,208 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
 │
 ├── • PreCommitPhase
 │   │
-│   └── • Stage 1 of 1 in PreCommitPhase
+│   ├── • Stage 1 of 2 in PreCommitPhase
+│   │   │
+│   │   ├── • 3 elements transitioning toward PUBLIC
+│   │   │   │
+│   │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
+│   │   │   │     PUBLIC → ABSENT
+│   │   │   │
+│   │   │   ├── • IndexData:{DescID: 104, IndexID: 3}
+│   │   │   │     PUBLIC → ABSENT
+│   │   │   │
+│   │   │   └── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
+│   │   │         BACKFILL_ONLY → ABSENT
+│   │   │
+│   │   ├── • 2 elements transitioning toward TRANSIENT_ABSENT
+│   │   │   │
+│   │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
+│   │   │   │     PUBLIC → ABSENT
+│   │   │   │
+│   │   │   └── • TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
+│   │   │         DELETE_ONLY → ABSENT
+│   │   │
+│   │   ├── • 7 elements transitioning toward ABSENT
+│   │   │   │
+│   │   │   ├── • Column:{DescID: 104, ColumnID: 3}
+│   │   │   │     WRITE_ONLY → PUBLIC
+│   │   │   │
+│   │   │   ├── • ColumnName:{DescID: 104, Name: k, ColumnID: 3}
+│   │   │   │     ABSENT → PUBLIC
+│   │   │   │
+│   │   │   ├── • Column:{DescID: 104, ColumnID: 2}
+│   │   │   │     WRITE_ONLY → PUBLIC
+│   │   │   │
+│   │   │   ├── • Column:{DescID: 104, ColumnID: 4}
+│   │   │   │     WRITE_ONLY → PUBLIC
+│   │   │   │
+│   │   │   ├── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+│   │   │   │     VALIDATED → PUBLIC
+│   │   │   │
+│   │   │   ├── • ColumnName:{DescID: 104, Name: j, ColumnID: 2}
+│   │   │   │     ABSENT → PUBLIC
+│   │   │   │
+│   │   │   └── • ColumnName:{DescID: 104, Name: crdb_internal_idx_expr, ColumnID: 4}
+│   │   │         ABSENT → PUBLIC
+│   │   │
+│   │   └── • 1 Mutation operation
+│   │       │
+│   │       └── • UndoAllInTxnImmediateMutationOpSideEffects
+│   │             {}
+│   │
+│   └── • Stage 2 of 2 in PreCommitPhase
 │       │
-│       └── • 2 Mutation operations
+│       ├── • 3 elements transitioning toward PUBLIC
+│       │   │
+│       │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
+│       │   │         rule: "index existence precedes index dependents"
+│       │   │
+│       │   ├── • IndexData:{DescID: 104, IndexID: 3}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   └── • SameStagePrecedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
+│       │   │         rule: "index data exists as soon as index accepts backfills"
+│       │   │
+│       │   └── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
+│       │       │ ABSENT → BACKFILL_ONLY
+│       │       │
+│       │       └── • PreviousStagePrecedence dependency from ABSENT PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
+│       │             rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: ABSENT->BACKFILL_ONLY"
+│       │
+│       ├── • 2 elements transitioning toward TRANSIENT_ABSENT
+│       │   │
+│       │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
+│       │   │         rule: "temp index existence precedes index dependents"
+│       │   │
+│       │   └── • TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
+│       │       │ ABSENT → DELETE_ONLY
+│       │       │
+│       │       └── • PreviousStagePrecedence dependency from ABSENT TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
+│       │             rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: ABSENT->DELETE_ONLY"
+│       │
+│       ├── • 7 elements transitioning toward ABSENT
+│       │   │
+│       │   ├── • Column:{DescID: 104, ColumnID: 3}
+│       │   │   │ PUBLIC → WRITE_ONLY
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC Column:{DescID: 104, ColumnID: 3}
+│       │   │   │     rule: "Column transitions to ABSENT uphold 2-version invariant: PUBLIC->WRITE_ONLY"
+│       │   │   │
+│       │   │   └── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+│       │   │         rule: "secondary indexes containing column as key reach write-only before column"
+│       │   │
+│       │   ├── • ColumnName:{DescID: 104, Name: k, ColumnID: 3}
+│       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 3}
+│       │   │         rule: "column no longer public before dependents"
+│       │   │
+│       │   ├── • Column:{DescID: 104, ColumnID: 2}
+│       │   │   │ PUBLIC → WRITE_ONLY
+│       │   │   │
+│       │   │   └── • PreviousStagePrecedence dependency from PUBLIC Column:{DescID: 104, ColumnID: 2}
+│       │   │         rule: "Column transitions to ABSENT uphold 2-version invariant: PUBLIC->WRITE_ONLY"
+│       │   │
+│       │   ├── • Column:{DescID: 104, ColumnID: 4}
+│       │   │   │ PUBLIC → WRITE_ONLY
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC Column:{DescID: 104, ColumnID: 4}
+│       │   │   │     rule: "Column transitions to ABSENT uphold 2-version invariant: PUBLIC->WRITE_ONLY"
+│       │   │   │
+│       │   │   └── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+│       │   │         rule: "secondary indexes containing column as key reach write-only before column"
+│       │   │
+│       │   ├── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+│       │   │   │ PUBLIC → VALIDATED
+│       │   │   │
+│       │   │   └── • PreviousStagePrecedence dependency from PUBLIC SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+│       │   │         rule: "SecondaryIndex transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED"
+│       │   │
+│       │   ├── • ColumnName:{DescID: 104, Name: j, ColumnID: 2}
+│       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 2}
+│       │   │         rule: "column no longer public before dependents"
+│       │   │
+│       │   └── • ColumnName:{DescID: 104, Name: crdb_internal_idx_expr, ColumnID: 4}
+│       │       │ PUBLIC → ABSENT
+│       │       │
+│       │       └── • Precedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 4}
+│       │             rule: "column no longer public before dependents"
+│       │
+│       └── • 15 Mutation operations
+│           │
+│           ├── • MakePublicColumnWriteOnly
+│           │     ColumnID: 2
+│           │     TableID: 104
+│           │
+│           ├── • MakePublicSecondaryIndexWriteOnly
+│           │     IndexID: 2
+│           │     TableID: 104
+│           │
+│           ├── • SetColumnName
+│           │     ColumnID: 2
+│           │     Name: crdb_internal_column_2_name_placeholder
+│           │     TableID: 104
+│           │
+│           ├── • MakeAbsentIndexBackfilling
+│           │     Index:
+│           │       ConstraintID: 2
+│           │       IndexID: 3
+│           │       IsUnique: true
+│           │       SourceIndexID: 1
+│           │       TableID: 104
+│           │       TemporaryIndexID: 4
+│           │
+│           ├── • MaybeAddSplitForIndex
+│           │     IndexID: 3
+│           │     TableID: 104
+│           │
+│           ├── • MakeAbsentTempIndexDeleteOnly
+│           │     Index:
+│           │       ConstraintID: 3
+│           │       IndexID: 4
+│           │       IsUnique: true
+│           │       SourceIndexID: 1
+│           │       TableID: 104
+│           │
+│           ├── • MaybeAddSplitForIndex
+│           │     IndexID: 4
+│           │     TableID: 104
+│           │
+│           ├── • MakePublicColumnWriteOnly
+│           │     ColumnID: 3
+│           │     TableID: 104
+│           │
+│           ├── • SetColumnName
+│           │     ColumnID: 3
+│           │     Name: crdb_internal_column_3_name_placeholder
+│           │     TableID: 104
+│           │
+│           ├── • MakePublicColumnWriteOnly
+│           │     ColumnID: 4
+│           │     TableID: 104
+│           │
+│           ├── • AddColumnToIndex
+│           │     ColumnID: 1
+│           │     IndexID: 3
+│           │     TableID: 104
+│           │
+│           ├── • AddColumnToIndex
+│           │     ColumnID: 1
+│           │     IndexID: 4
+│           │     TableID: 104
+│           │
+│           ├── • SetColumnName
+│           │     ColumnID: 4
+│           │     Name: crdb_internal_column_4_name_placeholder
+│           │     TableID: 104
 │           │
 │           ├── • SetJobStateOnDescriptor
 │           │     DescriptorID: 104
@@ -99,7 +281,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
 │   │   │       ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
 │   │   │       │     rule: "index-column added to index before temp index receives writes"
 │   │   │       │
-│   │   │       └── • PreviousTransactionPrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
+│   │   │       └── • PreviousStagePrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
 │   │   │             rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: DELETE_ONLY->WRITE_ONLY"
 │   │   │
 │   │   └── • 3 Mutation operations
@@ -125,7 +307,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
 │   │   │       ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
 │   │   │       │     rule: "index-column added to index before index is backfilled"
 │   │   │       │
-│   │   │       ├── • PreviousTransactionPrecedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
+│   │   │       ├── • PreviousStagePrecedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
 │   │   │       │     rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: BACKFILL_ONLY->BACKFILLED"
 │   │   │       │
 │   │   │       └── • Precedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
@@ -145,7 +327,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
 │   │   │   └── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
 │   │   │       │ BACKFILLED → DELETE_ONLY
 │   │   │       │
-│   │   │       └── • PreviousTransactionPrecedence dependency from BACKFILLED PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
+│   │   │       └── • PreviousStagePrecedence dependency from BACKFILLED PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
 │   │   │             rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: BACKFILLED->DELETE_ONLY"
 │   │   │
 │   │   └── • 3 Mutation operations
@@ -168,7 +350,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
 │   │   │   └── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
 │   │   │       │ DELETE_ONLY → MERGE_ONLY
 │   │   │       │
-│   │   │       └── • PreviousTransactionPrecedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
+│   │   │       └── • PreviousStagePrecedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
 │   │   │             rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: DELETE_ONLY->MERGE_ONLY"
 │   │   │
 │   │   └── • 3 Mutation operations
@@ -191,7 +373,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
 │   │   │   └── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
 │   │   │       │ MERGE_ONLY → MERGED
 │   │   │       │
-│   │   │       └── • PreviousTransactionPrecedence dependency from MERGE_ONLY PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
+│   │   │       └── • PreviousStagePrecedence dependency from MERGE_ONLY PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
 │   │   │             rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: MERGE_ONLY->MERGED"
 │   │   │
 │   │   └── • 1 Backfill operation
@@ -208,7 +390,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
 │   │   │   └── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
 │   │   │       │ MERGED → WRITE_ONLY
 │   │   │       │
-│   │   │       └── • PreviousTransactionPrecedence dependency from MERGED PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
+│   │   │       └── • PreviousStagePrecedence dependency from MERGED PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
 │   │   │             rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: MERGED->WRITE_ONLY"
 │   │   │
 │   │   └── • 3 Mutation operations
@@ -231,7 +413,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
 │       │   └── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
 │       │       │ WRITE_ONLY → VALIDATED
 │       │       │
-│       │       └── • PreviousTransactionPrecedence dependency from WRITE_ONLY PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
+│       │       └── • PreviousStagePrecedence dependency from WRITE_ONLY PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
 │       │             rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED"
 │       │
 │       └── • 1 Validation operation
@@ -255,7 +437,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
     │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
     │   │   │   │     rule: "index dependents exist before index becomes public"
     │   │   │   │
-    │   │   │   ├── • PreviousTransactionPrecedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
+    │   │   │   ├── • PreviousStagePrecedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
     │   │   │   │     rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC"
     │   │   │   │
     │   │   │   └── • SameStagePrecedence dependency from PUBLIC IndexName:{DescID: 104, Name: t_pkey, IndexID: 3}
@@ -273,79 +455,46 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
     │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
     │   │   │   │ PUBLIC → TRANSIENT_ABSENT
     │   │   │   │
-    │   │   │   └── • skip PUBLIC → TRANSIENT_ABSENT operations
-    │   │   │         rule: "skip index-column removal ops on index removal"
+    │   │   │   └── • Precedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
+    │   │   │         rule: "index drop mutation visible before cleaning up index columns"
     │   │   │
     │   │   └── • TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
     │   │       │ WRITE_ONLY → TRANSIENT_DELETE_ONLY
     │   │       │
-    │   │       └── • PreviousTransactionPrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
+    │   │       └── • PreviousStagePrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
     │   │             rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: WRITE_ONLY->TRANSIENT_DELETE_ONLY"
     │   │
-    │   ├── • 15 elements transitioning toward ABSENT
+    │   ├── • 10 elements transitioning toward ABSENT
     │   │   │
     │   │   ├── • Column:{DescID: 104, ColumnID: 3}
     │   │   │   │ WRITE_ONLY → DELETE_ONLY
     │   │   │   │
-    │   │   │   └── • PreviousTransactionPrecedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 3}
+    │   │   │   └── • PreviousStagePrecedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 3}
     │   │   │         rule: "Column transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY"
     │   │   │
     │   │   ├── • Column:{DescID: 104, ColumnID: 2}
     │   │   │   │ WRITE_ONLY → DELETE_ONLY
     │   │   │   │
-    │   │   │   └── • PreviousTransactionPrecedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 2}
+    │   │   │   └── • PreviousStagePrecedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 2}
     │   │   │         rule: "Column transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY"
     │   │   │
     │   │   ├── • Column:{DescID: 104, ColumnID: 4}
     │   │   │   │ WRITE_ONLY → DELETE_ONLY
     │   │   │   │
-    │   │   │   └── • PreviousTransactionPrecedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 4}
+    │   │   │   └── • PreviousStagePrecedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 4}
     │   │   │         rule: "Column transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY"
-    │   │   │
-    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}
-    │   │   │   │ PUBLIC → ABSENT
-    │   │   │   │
-    │   │   │   ├── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
-    │   │   │   │     rule: "index no longer public before dependents"
-    │   │   │   │
-    │   │   │   └── • skip PUBLIC → ABSENT operations
-    │   │   │         rule: "skip index-column removal ops on index removal"
-    │   │   │
-    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 1}
-    │   │   │   │ PUBLIC → ABSENT
-    │   │   │   │
-    │   │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 2}
-    │   │   │   │     rule: "column no longer public before dependents"
-    │   │   │   │
-    │   │   │   ├── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
-    │   │   │   │     rule: "index no longer public before dependents"
-    │   │   │   │
-    │   │   │   └── • skip PUBLIC → ABSENT operations
-    │   │   │         rule: "skip index-column removal ops on index removal"
-    │   │   │
-    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 1}
-    │   │   │   │ PUBLIC → ABSENT
-    │   │   │   │
-    │   │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 3}
-    │   │   │   │     rule: "column no longer public before dependents"
-    │   │   │   │
-    │   │   │   ├── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
-    │   │   │   │     rule: "index no longer public before dependents"
-    │   │   │   │
-    │   │   │   └── • skip PUBLIC → ABSENT operations
-    │   │   │         rule: "skip index-column removal ops on index removal"
     │   │   │
     │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
     │   │   │   │ PUBLIC → VALIDATED
     │   │   │   │
-    │   │   │   └── • PreviousTransactionPrecedence dependency from PUBLIC PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
+    │   │   │   └── • PreviousStagePrecedence dependency from PUBLIC PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
     │   │   │         rule: "PrimaryIndex transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED"
     │   │   │
     │   │   ├── • IndexName:{DescID: 104, Name: t_pkey, IndexID: 1}
     │   │   │   │ PUBLIC → ABSENT
     │   │   │   │
     │   │   │   └── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
-    │   │   │         rule: "index no longer public before dependents"
+    │   │   │         rule: "index no longer public before dependents, excluding columns"
     │   │   │
     │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 4, IndexID: 2}
     │   │   │   │ PUBLIC → ABSENT
@@ -353,11 +502,8 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
     │   │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 4}
     │   │   │   │     rule: "column no longer public before dependents"
     │   │   │   │
-    │   │   │   ├── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
-    │   │   │   │     rule: "index no longer public before dependents"
-    │   │   │   │
-    │   │   │   └── • skip PUBLIC → ABSENT operations
-    │   │   │         rule: "skip index-column removal ops on index removal"
+    │   │   │   └── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+    │   │   │         rule: "index drop mutation visible before cleaning up index columns"
     │   │   │
     │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}
     │   │   │   │ PUBLIC → ABSENT
@@ -365,52 +511,31 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
     │   │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 3}
     │   │   │   │     rule: "column no longer public before dependents"
     │   │   │   │
-    │   │   │   ├── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
-    │   │   │   │     rule: "index no longer public before dependents"
-    │   │   │   │
-    │   │   │   └── • skip PUBLIC → ABSENT operations
-    │   │   │         rule: "skip index-column removal ops on index removal"
+    │   │   │   └── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+    │   │   │         rule: "index drop mutation visible before cleaning up index columns"
     │   │   │
     │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
     │   │   │   │ PUBLIC → ABSENT
     │   │   │   │
-    │   │   │   ├── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
-    │   │   │   │     rule: "index no longer public before dependents"
-    │   │   │   │
-    │   │   │   └── • skip PUBLIC → ABSENT operations
-    │   │   │         rule: "skip index-column removal ops on index removal"
+    │   │   │   └── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+    │   │   │         rule: "index drop mutation visible before cleaning up index columns"
     │   │   │
     │   │   ├── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
     │   │   │   │ VALIDATED → DELETE_ONLY
     │   │   │   │
-    │   │   │   └── • PreviousTransactionPrecedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+    │   │   │   └── • PreviousStagePrecedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
     │   │   │         rule: "SecondaryIndex transitions to ABSENT uphold 2-version invariant: VALIDATED->WRITE_ONLY"
     │   │   │
-    │   │   ├── • IndexName:{DescID: 104, Name: t_expr_k_idx, IndexID: 2}
-    │   │   │   │ PUBLIC → ABSENT
-    │   │   │   │
-    │   │   │   ├── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
-    │   │   │   │     rule: "index no longer public before index name"
-    │   │   │   │
-    │   │   │   └── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
-    │   │   │         rule: "index no longer public before dependents"
-    │   │   │
-    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}
-    │   │   │   │ PUBLIC → ABSENT
-    │   │   │   │
-    │   │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 3}
-    │   │   │         rule: "column no longer public before dependents"
-    │   │   │
-    │   │   └── • IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 4}
+    │   │   └── • IndexName:{DescID: 104, Name: t_expr_k_idx, IndexID: 2}
     │   │       │ PUBLIC → ABSENT
     │   │       │
-    │   │       ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 3}
-    │   │       │     rule: "column no longer public before dependents"
+    │   │       ├── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+    │   │       │     rule: "index no longer public before index name"
     │   │       │
-    │   │       └── • skip PUBLIC → ABSENT operations
-    │   │             rule: "skip index-column removal ops on index removal"
+    │   │       └── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+    │   │             rule: "index no longer public before dependents, excluding columns"
     │   │
-    │   └── • 14 Mutation operations
+    │   └── • 16 Mutation operations
     │       │
     │       ├── • MakeWriteOnlyColumnDeleteOnly
     │       │     ColumnID: 3
@@ -433,12 +558,6 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
     │       │     Name: crdb_internal_index_1_name_placeholder
     │       │     TableID: 104
     │       │
-    │       ├── • RemoveColumnFromIndex
-    │       │     ColumnID: 3
-    │       │     IndexID: 3
-    │       │     Kind: 2
-    │       │     TableID: 104
-    │       │
     │       ├── • SetIndexName
     │       │     IndexID: 3
     │       │     Name: t_pkey
@@ -447,21 +566,6 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
     │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 4
     │       │     TableID: 104
-    │       │
-    │       ├── • LogEvent
-    │       │     Element:
-    │       │       SecondaryIndex:
-    │       │         indexId: 2
-    │       │         tableId: 104
-    │       │     EventBase:
-    │       │       Authorization:
-    │       │         UserName: root
-    │       │       Statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j› CASCADE
-    │       │       StatementTag: ALTER TABLE
-    │       │       TargetMetadata:
-    │       │         SourceElementID: 1
-    │       │         SubWorkID: 1
-    │       │     TargetStatus: 1
     │       │
     │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 2
@@ -472,16 +576,30 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
     │       │     Name: crdb_internal_index_2_name_placeholder
     │       │     TableID: 104
     │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 1
+    │       │     IndexID: 4
+    │       │     TableID: 104
+    │       │
     │       ├── • MakeValidatedPrimaryIndexPublic
-    │       │     EventBase:
-    │       │       Authorization:
-    │       │         UserName: root
-    │       │       Statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j› CASCADE
-    │       │       StatementTag: ALTER TABLE
-    │       │       TargetMetadata:
-    │       │         SourceElementID: 1
-    │       │         SubWorkID: 1
     │       │     IndexID: 3
+    │       │     TableID: 104
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 4
+    │       │     IndexID: 2
+    │       │     TableID: 104
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 3
+    │       │     IndexID: 2
+    │       │     Ordinal: 1
+    │       │     TableID: 104
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 1
+    │       │     IndexID: 2
+    │       │     Kind: 1
     │       │     TableID: 104
     │       │
     │       ├── • SetJobStateOnDescriptor
@@ -490,7 +608,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
     │       └── • UpdateSchemaChangerJob
     │             IsNonCancelable: true
     │             JobID: 1
-    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 3 with 4 MutationType ops pending
+    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 3 with 7 MutationType ops pending
     │
     ├── • Stage 2 of 3 in PostCommitNonRevertiblePhase
     │   │
@@ -502,18 +620,15 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
     │   │       ├── • Precedence dependency from TRANSIENT_ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
     │   │       │     rule: "dependents removed before index"
     │   │       │
-    │   │       ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 4}
-    │   │       │     rule: "dependents removed before index"
-    │   │       │
-    │   │       └── • PreviousTransactionPrecedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
+    │   │       └── • PreviousStagePrecedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
     │   │             rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT"
     │   │
-    │   ├── • 4 elements transitioning toward ABSENT
+    │   ├── • 7 elements transitioning toward ABSENT
     │   │   │
     │   │   ├── • Column:{DescID: 104, ColumnID: 4}
     │   │   │   │ DELETE_ONLY → ABSENT
     │   │   │   │
-    │   │   │   ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY Column:{DescID: 104, ColumnID: 4}
+    │   │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY Column:{DescID: 104, ColumnID: 4}
     │   │   │   │     rule: "Column transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
     │   │   │   │
     │   │   │   ├── • SameStagePrecedence dependency from ABSENT ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 4}
@@ -535,10 +650,34 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
     │   │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 4}
     │   │   │         rule: "column no longer public before dependents"
     │   │   │
+    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
+    │   │   │         rule: "index drop mutation visible before cleaning up index columns"
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 1}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 2}
+    │   │   │   │     rule: "column no longer public before dependents"
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
+    │   │   │         rule: "index drop mutation visible before cleaning up index columns"
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 1}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 3}
+    │   │   │   │     rule: "column no longer public before dependents"
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
+    │   │   │         rule: "index drop mutation visible before cleaning up index columns"
+    │   │   │
     │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
     │   │   │   │ VALIDATED → DELETE_ONLY
     │   │   │   │
-    │   │   │   └── • PreviousTransactionPrecedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
+    │   │   │   └── • PreviousStagePrecedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
     │   │   │         rule: "PrimaryIndex transitions to ABSENT uphold 2-version invariant: VALIDATED->WRITE_ONLY"
     │   │   │
     │   │   └── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
@@ -553,13 +692,13 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
     │   │       ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
     │   │       │     rule: "dependents removed before index"
     │   │       │
-    │   │       ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+    │   │       ├── • PreviousStagePrecedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
     │   │       │     rule: "SecondaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
     │   │       │
     │   │       └── • Precedence dependency from ABSENT IndexName:{DescID: 104, Name: t_expr_k_idx, IndexID: 2}
     │   │             rule: "dependents removed before index"
     │   │
-    │   └── • 6 Mutation operations
+    │   └── • 9 Mutation operations
     │       │
     │       ├── • MakeIndexAbsent
     │       │     IndexID: 2
@@ -571,18 +710,28 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
     │       │
     │       ├── • MakeDeleteOnlyColumnAbsent
     │       │     ColumnID: 4
-    │       │     EventBase:
-    │       │       Authorization:
-    │       │         UserName: root
-    │       │       Statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j› CASCADE
-    │       │       StatementTag: ALTER TABLE
-    │       │       TargetMetadata:
-    │       │         SourceElementID: 1
-    │       │         SubWorkID: 1
     │       │     TableID: 104
     │       │
     │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 1
+    │       │     TableID: 104
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 1
+    │       │     IndexID: 1
+    │       │     TableID: 104
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 2
+    │       │     IndexID: 1
+    │       │     Kind: 2
+    │       │     TableID: 104
+    │       │
+    │       ├── • RemoveColumnFromIndex
+    │       │     ColumnID: 3
+    │       │     IndexID: 1
+    │       │     Kind: 2
+    │       │     Ordinal: 1
     │       │     TableID: 104
     │       │
     │       ├── • SetJobStateOnDescriptor
@@ -614,7 +763,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
         │   ├── • Column:{DescID: 104, ColumnID: 3}
         │   │   │ DELETE_ONLY → ABSENT
         │   │   │
-        │   │   ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY Column:{DescID: 104, ColumnID: 3}
+        │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY Column:{DescID: 104, ColumnID: 3}
         │   │   │     rule: "Column transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
         │   │   │
         │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 104, Name: k, ColumnID: 3}
@@ -639,14 +788,8 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
         │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}
         │   │   │     rule: "dependents removed before column"
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
-        │   │   │     rule: "indexes containing column reach absent before column"
-        │   │   │
-        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}
-        │   │   │     rule: "dependents removed before column"
-        │   │   │
-        │   │   └── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 4}
-        │   │         rule: "dependents removed before column"
+        │   │   └── • Precedence dependency from ABSENT SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+        │   │         rule: "indexes containing column reach absent before column"
         │   │
         │   ├── • ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3}
         │   │   │ PUBLIC → ABSENT
@@ -675,7 +818,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
         │   ├── • Column:{DescID: 104, ColumnID: 2}
         │   │   │ DELETE_ONLY → ABSENT
         │   │   │
-        │   │   ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY Column:{DescID: 104, ColumnID: 2}
+        │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY Column:{DescID: 104, ColumnID: 2}
         │   │   │     rule: "Column transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
         │   │   │
         │   │   ├── • SameStagePrecedence dependency from ABSENT ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}
@@ -709,7 +852,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
         │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 1}
         │   │   │     rule: "dependents removed before index"
         │   │   │
-        │   │   ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
+        │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
         │   │   │     rule: "PrimaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
         │   │   │
         │   │   └── • Precedence dependency from ABSENT IndexName:{DescID: 104, Name: t_pkey, IndexID: 1}
@@ -741,14 +884,6 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
             │     TableID: 104
             │
             ├── • MakeIndexAbsent
-            │     EventBase:
-            │       Authorization:
-            │         UserName: root
-            │       Statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j› CASCADE
-            │       StatementTag: ALTER TABLE
-            │       TargetMetadata:
-            │         SourceElementID: 1
-            │         SubWorkID: 1
             │     IndexID: 1
             │     TableID: 104
             │
@@ -772,27 +907,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
             │
             ├── • MakeDeleteOnlyColumnAbsent
             │     ColumnID: 2
-            │     EventBase:
-            │       Authorization:
-            │         UserName: root
-            │       Statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j› CASCADE
-            │       StatementTag: ALTER TABLE
-            │       TargetMetadata:
-            │         SourceElementID: 1
-            │         SubWorkID: 1
             │     TableID: 104
             │
             ├── • MakeDeleteOnlyColumnAbsent
             │     ColumnID: 3
-            │     EventBase:
-            │       Authorization:
-            │         UserName: root
-            │       Statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹k› CASCADE
-            │       StatementTag: ALTER TABLE
-            │       TargetMetadata:
-            │         SourceElementID: 1
-            │         StatementID: 1
-            │         SubWorkID: 1
             │     TableID: 104
             │
             ├── • RemoveJobStateFromDescriptor

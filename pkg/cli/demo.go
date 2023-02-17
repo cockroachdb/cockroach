@@ -82,13 +82,14 @@ func init() {
 		genDemoCmd := &cobra.Command{
 			Use:   meta.Name,
 			Short: meta.Description,
+			Long:  meta.Description + meta.Details,
 			Args:  cobra.ArbitraryArgs,
 			RunE: clierrorplus.MaybeDecorateError(func(cmd *cobra.Command, _ []string) error {
 				return runDemo(cmd, gen)
 			}),
 		}
-		if !meta.PublicFacing {
-			genDemoCmd.Hidden = true
+		if meta.TestInfraOnly {
+			demoCmd.Long = "THIS COMMAND WAS DEVELOPED FOR INTERNAL TESTING ONLY.\n\n" + demoCmd.Long
 		}
 		demoCmd.AddCommand(genDemoCmd)
 		genDemoCmd.Flags().AddFlagSet(genFlags)
@@ -265,9 +266,9 @@ func runDemoInternal(
 
 		if demoCtx.Multitenant {
 			cliCtx.PrintfUnlessEmbedded(`#
-# You are connected to tenant 1, but can connect to the system tenant with
-# \connect and the SQL url below.
-`)
+# You are connected to tenant %q, but can connect to the system tenant with
+# '\connect' and the SQL url printed via '\demo ls'.
+`, c.TenantName())
 		}
 
 		if demoCtx.SimulateLatency {
@@ -319,7 +320,7 @@ func runDemoInternal(
 # Reminder: your changes to data stored in the demo session will not be saved!`)
 
 		var nodeList strings.Builder
-		c.ListDemoNodes(&nodeList, stderr, true /* justOne */)
+		c.ListDemoNodes(&nodeList, stderr, true /* justOne */, false /* verbose */)
 		cliCtx.PrintlnUnlessEmbedded(
 			// Only print the server details when the shell is not embedded;
 			// if embedded, the embedding platform owns the network
@@ -337,6 +338,8 @@ func runDemoInternal(
 
 			fmt.Printf(`#   - Username: %q, password: %q
 #   - Directory with certificate files (for certain SQL drivers/tools): %s
+#
+# You can enter \info to print these details again.
 #
 `,
 				adminUser,
@@ -371,6 +374,9 @@ func runDemoInternal(
 		c.SetSimulatedLatency(true /* on */)
 		defer c.SetSimulatedLatency(false /* on */)
 	}
+
+	// Ensure the last few entries in the log files are flushed at the end.
+	defer log.Flush()
 
 	return sqlCtx.Run(ctx, conn)
 }

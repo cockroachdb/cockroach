@@ -259,13 +259,6 @@ func (c *client) handleResponse(ctx context.Context, g *Gossip, reply *Response)
 				"received forward from n%d to n%d (%s); already have active connection, skipping",
 				reply.NodeID, reply.AlternateNodeID, reply.AlternateAddr)
 		}
-		// We try to resolve the address, but don't actually use the result.
-		// The certificates (if any) may only be valid for the unresolved
-		// address.
-		if _, err := reply.AlternateAddr.Resolve(); err != nil {
-			return errors.Wrapf(err, "unable to resolve alternate address %s for n%d",
-				reply.AlternateAddr, reply.AlternateNodeID)
-		}
 		c.forwardAddr = reply.AlternateAddr
 		return errors.Errorf("received forward from n%d to n%d (%s)",
 			reply.NodeID, reply.AlternateNodeID, reply.AlternateAddr)
@@ -333,7 +326,6 @@ func (c *client) gossip(
 				}
 				if peerID == 0 && c.peerID != 0 {
 					peerID = c.peerID
-					g.updateClients()
 				}
 			}
 		}()

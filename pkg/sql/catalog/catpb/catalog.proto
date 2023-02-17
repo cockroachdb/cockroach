@@ -18,17 +18,6 @@ option go_package = "catpb";
 
 import "gogoproto/gogo.proto";
 
-// ForeignKeyAction describes the action which should be taken when a foreign
-// key constraint reference is acted upon.
-enum ForeignKeyAction {
-  option (gogoproto.goproto_enum_stringer) = false;
-  NO_ACTION = 0;
-  RESTRICT = 1;
-  SET_NULL = 2;
-  SET_DEFAULT = 3;
-  CASCADE = 4;
-}
-
 // LocalityConfig is used to figure the locality of a table.
 message LocalityConfig {
   option (gogoproto.equal) = true;
@@ -64,18 +53,6 @@ message LocalityConfig {
     RegionalByTable regional_by_table = 2;
     RegionalByRow regional_by_row = 3;
   }
-}
-
-// SystemColumnKind is an enum representing the different kind of system
-// columns that can be synthesized by the execution engine.
-enum SystemColumnKind {
-  // Default value, unused.
-  NONE = 0;
-  // A system column containing the value of the MVCC timestamp associated
-  // with the kv's corresponding to the row.
-  MVCCTIMESTAMP = 1;
-  // A system column containing the OID of the table that the row came from.
-  TABLEOID = 2;
 }
 
 // GeneratedAsIdentityType is an enum representing how the creation of
@@ -233,24 +210,4 @@ message AutoStatsSettings {
   optional int64 min_stale_rows = 2;
   // FractionStaleRows is table setting sql_stats_automatic_collection_fraction_stale_rows.
   optional double fraction_stale_rows = 3;
-}
-
-// InvertedIndexColumnKind is the kind of the inverted index on a column. The
-// reason this needs to be stored is that we need to be able to check that the
-// "opclass" passed into an inverted index declaration (for example,
-// gin_trgm_ops) is compatible with the datatype of a particular column
-// (gin_tgrm_ops is only valid on text). A future reason is that it's possible
-// to desire having more than one type of inverted index on a particular
-// datatype - for example, you might want to create a "stemming" inverted index
-// on text. And without this extra kind, it wouldn't be possible to distinguish
-// a text inverted index that uses trigrams, vs a text inverted index that uses
-// stemming.
-enum InvertedIndexColumnKind {
-  // DEFAULT is the default kind of inverted index column. JSON, Array, and
-  // geo inverted indexes all are DEFAULT, though prior to 22.2 they had no
-  // kind at all.
-  DEFAULT = 0;
-  // TRIGRAM is the trigram kind of inverted index column. It's only valid on
-  // text columns.
-  TRIGRAM = 1;
 }

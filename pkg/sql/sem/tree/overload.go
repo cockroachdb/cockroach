@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/lib/pq/oid"
@@ -86,6 +86,32 @@ type SQLFnOverload interface {
 	SQLFn()
 }
 
+// FunctionClass specifies the class of the builtin function.
+type FunctionClass int
+
+const (
+	// NormalClass is a standard builtin function.
+	NormalClass FunctionClass = iota
+	// AggregateClass is a builtin aggregate function.
+	AggregateClass
+	// WindowClass is a builtin window function.
+	WindowClass
+	// GeneratorClass is a builtin generator function.
+	GeneratorClass
+	// SQLClass is a builtin function that executes a SQL statement as a side
+	// effect of the function call.
+	//
+	// For example, AddGeometryColumn is a SQLClass function that executes an
+	// ALTER TABLE ... ADD COLUMN statement to add a geometry column to an
+	// existing table. It returns metadata about the column added.
+	//
+	// All builtin functions of this class should include a definition for
+	// Overload.SQLFn, which returns the SQL statement to be executed. They
+	// should also include a definition for Overload.Fn, which is executed
+	// like a NormalClass function and returns a Datum.
+	SQLClass
+)
+
 // Overload is one of the overloads of a built-in function.
 // Each FunctionDefinition may contain one or more overloads.
 type Overload struct {
@@ -115,6 +141,9 @@ type Overload struct {
 
 	// Only one of the "Fn", "FnWithExprs", "Generate", "GeneratorWithExprs",
 	// "SQLFn" and "Body" attributes can be set.
+
+	// Class is the kind of built-in function (normal/aggregate/window/etc.)
+	Class FunctionClass
 
 	// Fn is the normal builtin implementation function. It's for functions that
 	// take in Datums and return a Datum.
@@ -564,9 +593,9 @@ type overloadTypeChecker struct {
 	overloadIdxs    []uint8 // index into overloads
 	exprs           []Expr
 	typedExprs      []TypedExpr
-	resolvableIdxs  util.FastIntSet // index into exprs/typedExprs
-	constIdxs       util.FastIntSet // index into exprs/typedExprs
-	placeholderIdxs util.FastIntSet // index into exprs/typedExprs
+	resolvableIdxs  intsets.Fast // index into exprs/typedExprs
+	constIdxs       intsets.Fast // index into exprs/typedExprs
+	placeholderIdxs intsets.Fast // index into exprs/typedExprs
 	overloadsIdxArr [16]uint8
 }
 
@@ -617,9 +646,9 @@ func (s *overloadTypeChecker) release() {
 	}
 	s.typedExprs = s.typedExprs[:0]
 	s.overloadIdxs = s.overloadIdxs[:0]
-	s.resolvableIdxs = util.FastIntSet{}
-	s.constIdxs = util.FastIntSet{}
-	s.placeholderIdxs = util.FastIntSet{}
+	s.resolvableIdxs = intsets.Fast{}
+	s.constIdxs = intsets.Fast{}
+	s.placeholderIdxs = intsets.Fast{}
 	overloadTypeCheckerPool.Put(s)
 }
 
@@ -720,7 +749,7 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 
 	// Filter out overloads on resolved types. This includes resolved placeholders
 	// and any other resolvable exprs.
-	var typeableIdxs = util.FastIntSet{}
+	var typeableIdxs intsets.Fast
 	for i, ok := s.resolvableIdxs.Next(0); ok; i, ok = s.resolvableIdxs.Next(i + 1) {
 		typeableIdxs.Add(i)
 	}

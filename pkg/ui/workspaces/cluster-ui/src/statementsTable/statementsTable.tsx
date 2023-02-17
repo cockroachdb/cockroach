@@ -20,13 +20,15 @@ import {
   TimestampToNumber,
   TimestampToMoment,
   unset,
+  DurationCheckSample,
 } from "src/util";
-import { DATE_FORMAT } from "src/util/format";
+import { DATE_FORMAT, Duration } from "src/util/format";
 import {
   countBarChart,
   bytesReadBarChart,
   latencyBarChart,
   contentionBarChart,
+  cpuBarChart,
   maxMemUsageBarChart,
   networkBytesBarChart,
   retryBarChart,
@@ -135,6 +137,7 @@ export function makeStatementsColumns(
     statements,
     sampledExecStatsBarChartOptions,
   );
+  const cpuBar = cpuBarChart(statements, sampledExecStatsBarChartOptions);
   const maxMemUsageBar = maxMemUsageBarChart(
     statements,
     sampledExecStatsBarChartOptions,
@@ -216,6 +219,56 @@ export function makeStatementsColumns(
       cell: contentionBar,
       sort: (stmt: AggregateStatistics) =>
         FixLong(Number(stmt.stats.exec_stats.contention_time.mean)),
+    },
+    {
+      name: "cpu",
+      title: statisticsTableTitles.cpu(statType),
+      cell: cpuBar,
+      sort: (stmt: AggregateStatistics) =>
+        FixLong(Number(stmt.stats.exec_stats.cpu_sql_nanos?.mean)),
+    },
+    {
+      name: "latencyP50",
+      title: statisticsTableTitles.latencyP50(statType),
+      cell: (stmt: AggregateStatistics) =>
+        DurationCheckSample(stmt.stats.latency_info?.p50 * 1e9),
+      sort: (stmt: AggregateStatistics) =>
+        FixLong(Number(stmt.stats.latency_info?.p50)),
+      showByDefault: false,
+    },
+    {
+      name: "latencyP90",
+      title: statisticsTableTitles.latencyP90(statType),
+      cell: (stmt: AggregateStatistics) =>
+        DurationCheckSample(stmt.stats.latency_info?.p90 * 1e9),
+      sort: (stmt: AggregateStatistics) =>
+        FixLong(Number(stmt.stats.latency_info?.p90)),
+      showByDefault: false,
+    },
+    {
+      name: "latencyP99",
+      title: statisticsTableTitles.latencyP99(statType),
+      cell: (stmt: AggregateStatistics) =>
+        DurationCheckSample(stmt.stats.latency_info?.p99 * 1e9),
+      sort: (stmt: AggregateStatistics) =>
+        FixLong(Number(stmt.stats.latency_info?.p99)),
+    },
+    {
+      name: "latencyMin",
+      title: statisticsTableTitles.latencyMin(statType),
+      cell: (stmt: AggregateStatistics) =>
+        Duration(stmt.stats.latency_info?.min * 1e9),
+      sort: (stmt: AggregateStatistics) =>
+        FixLong(Number(stmt.stats.latency_info?.min)),
+      showByDefault: false,
+    },
+    {
+      name: "latencyMax",
+      title: statisticsTableTitles.latencyMax(statType),
+      cell: (stmt: AggregateStatistics) =>
+        Duration(stmt.stats.latency_info?.max * 1e9),
+      sort: (stmt: AggregateStatistics) =>
+        FixLong(Number(stmt.stats.latency_info?.max)),
     },
     {
       name: "maxMemUsage",
@@ -341,10 +394,13 @@ export function populateRegionNodeForStatements(
     // E.g. {"gcp-us-east1" : [1,3,4]}
     if (stmt.stats.nodes) {
       stmt.stats.nodes.forEach(node => {
-        if (Object.keys(regions).includes(nodeRegions[node.toString()])) {
-          regions[nodeRegions[node.toString()]].add(longToInt(node));
-        } else {
-          regions[nodeRegions[node.toString()]] = new Set([longToInt(node)]);
+        const region = nodeRegions[node.toString()];
+        if (region) {
+          if (Object.keys(regions).includes(region)) {
+            regions[region].add(longToInt(node));
+          } else {
+            regions[region] = new Set([longToInt(node)]);
+          }
         }
       });
     }

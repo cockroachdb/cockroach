@@ -1122,19 +1122,12 @@ func runBenchmarkWideTable(b *testing.B, db *sqlutils.SQLRunner, count int, bigC
 	b.StopTimer()
 }
 
-// BenchmarkVecSkipScan benchmarks the vectorized engine's performance
-// when skipping unneeded key values in the decoding process.
-func BenchmarkVecSkipScan(b *testing.B) {
+// BenchmarkSkipScan benchmarks the scan performance when skipping unneeded
+// columns in the decoding process.
+func BenchmarkSkipScan(b *testing.B) {
 	defer log.Scope(b).Close(b)
-	benchmarkCockroach(b, func(b *testing.B, db *sqlutils.SQLRunner) {
-		create := `
-CREATE TABLE bench.scan(
-	x INT, y INT, z INT, 
-	a INT, w INT, v INT, 
-	PRIMARY KEY (x, y, z, a, w, v)
-)
-`
-		db.Exec(b, create)
+	ForEachDB(b, func(b *testing.B, db *sqlutils.SQLRunner) {
+		db.Exec(b, "CREATE TABLE bench.scan(pk INT PRIMARY KEY, val1 INT, val2 INT, val3 INT, val4 INT, val5 INT)")
 		const count = 1000
 		for i := 0; i < count; i++ {
 			db.Exec(
@@ -1145,12 +1138,22 @@ CREATE TABLE bench.scan(
 				),
 			)
 		}
-		b.ResetTimer()
-		b.Run("Bench scan with skip", func(b *testing.B) {
-			for i := 0; i < b.N; i++ {
-				db.Exec(b, `SET vectorize=on; SELECT y FROM bench.scan`)
-			}
-		})
+		for _, tc := range []struct {
+			name   string
+			toScan string
+		}{
+			{name: "OnlyKey", toScan: "pk"},
+			{name: "OnlyValue", toScan: "val3"},
+			{name: "Both", toScan: "pk, val3"},
+		} {
+			b.Run(tc.name, func(b *testing.B) {
+				query := fmt.Sprintf("SELECT %s FROM bench.scan", tc.toScan)
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					db.Exec(b, query)
+				}
+			})
+		}
 	})
 }
 

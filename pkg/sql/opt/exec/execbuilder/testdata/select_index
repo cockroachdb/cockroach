@@ -753,15 +753,15 @@ vectorized: true
 # Check that primary key definitions can indicate index ordering,
 # and this information is subsequently used during index selection
 # and span generation. #13882
-query TTBITTBBB
+query TTBITTTBBB
 CREATE TABLE abz(a INT, b INT, c INT, PRIMARY KEY (a DESC, b ASC), UNIQUE(c DESC, b ASC)); SHOW INDEX FROM abz
 ----
-abz  abz_c_b_key  false  1  c  DESC  false  false  true
-abz  abz_c_b_key  false  2  b  ASC   false  false  true
-abz  abz_c_b_key  false  3  a  ASC   true   true   true
-abz  abz_pkey     false  1  a  DESC  false  false  true
-abz  abz_pkey     false  2  b  ASC   false  false  true
-abz  abz_pkey     false  3  c  N/A   true   false  true
+abz  abz_c_b_key  false  1  c  c  DESC  false  false  true
+abz  abz_c_b_key  false  2  b  b  ASC   false  false  true
+abz  abz_c_b_key  false  3  a  a  ASC   true   true   true
+abz  abz_pkey     false  1  a  a  DESC  false  false  true
+abz  abz_pkey     false  2  b  b  ASC   false  false  true
+abz  abz_pkey     false  3  c  c  N/A   true   false  true
 
 query T
 EXPLAIN (VERBOSE) SELECT a FROM abz ORDER BY a DESC LIMIT 1

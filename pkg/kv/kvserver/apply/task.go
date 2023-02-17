@@ -25,6 +25,8 @@ import (
 // All state transitions performed by the state machine are expected to be
 // deterministic, which ensures that if each instance is driven from the
 // same consistent shared log, they will all stay in sync.
+//
+// The implementation may not be and commonly is not thread safe.
 type StateMachine interface {
 	// NewEphemeralBatch creates an EphemeralBatch. This kind of batch is not able
 	// to make changes to the StateMachine, but can be used for the purpose of
@@ -39,6 +41,9 @@ type StateMachine interface {
 	// that a group of Commands will have on the replicated state machine.
 	// Commands are staged in the batch one-by-one and then the entire batch is
 	// applied to the StateMachine at once via its ApplyToStateMachine method.
+	//
+	// There must only be a single EphemeralBatch *or* Batch open at any given
+	// point in time.
 	NewBatch() Batch
 	// ApplySideEffects applies the in-memory side-effects of a Command to
 	// the replicated state machine. The method will be called in the order
@@ -66,6 +71,10 @@ var ErrRemoved = errors.New("replica removed")
 type EphemeralBatch interface {
 	// Stage inserts a Command into the Batch. In doing so, the Command is
 	// checked for rejection and a CheckedCommand is returned.
+	//
+	// TODO(tbg): consider renaming this to Add, so that in implementations
+	// of this we less unambiguously refer to "staging" commands into the
+	// pebble batch.
 	Stage(context.Context, Command) (CheckedCommand, error)
 	// Close closes the batch and releases any resources that it holds.
 	Close()
@@ -188,13 +197,7 @@ func (t *Task) assertDecoded() {
 //     it is applied. Because of this, the client can be informed of the success of
 //     a write at this point, but we cannot release that write's latches until the
 //     write has applied. See ProposalData.signalProposalResult/finishApplication.
-//
-//  4. Note that when catching up a follower that is behind, the (etcd/raft)
-//     leader will emit an MsgApp with a commit index that encompasses the entries
-//     in the MsgApp, and Ready() will expose these as present in both the Entries
-//     and CommittedEntries slices (i.e. append and apply). We don't ack these
-//     early - the caller will pass the "old" last index in.
-func (t *Task) AckCommittedEntriesBeforeApplication(ctx context.Context, maxIndex uint64) error {
+func (t *Task) AckCommittedEntriesBeforeApplication(ctx context.Context) error {
 	t.assertDecoded()
 	if !t.anyLocal {
 		return nil // fast-path
@@ -209,11 +212,8 @@ func (t *Task) AckCommittedEntriesBeforeApplication(ctx context.Context, maxInde
 	defer iter.Close()
 
 	// Collect a batch of trivial commands from the applier. Stop at the first
-	// non-trivial command or at the first command with an index above maxIndex.
+	// non-trivial command.
 	batchIter := takeWhileCmdIter(iter, func(cmd Command) bool {
-		if cmd.Index() > maxIndex {
-			return false
-		}
 		return cmd.IsTrivial()
 	})
 
@@ -248,15 +248,30 @@ func (t *Task) ApplyCommittedEntries(ctx context.Context) error {
 
 	iter := t.dec.NewCommandIter()
 	for iter.Valid() {
-		if err := t.applyOneBatch(ctx, iter); err != nil {
-			// If the batch threw an error, reject all remaining commands in the
-			// iterator to avoid leaking resources or leaving a proposer hanging.
-			//
-			// NOTE: forEachCmdIter closes iter.
-			if rejectErr := forEachCmdIter(ctx, iter, func(cmd Command, ctx context.Context) error {
-				return cmd.AckErrAndFinish(ctx, err)
-			}); rejectErr != nil {
-				return rejectErr
+		err := t.applyOneBatch(ctx, iter)
+		if err != nil {
+			if errors.Is(err, ErrRemoved) {
+				// On ErrRemoved, we know that the replica has been destroyed and in
+				// particular, the Replica's proposals map has already been cleared out.
+				// But there may be unfinished proposals that are only known to the
+				// current Task (because we remove proposals we're about to apply from the
+				// map). To avoid leaking resources and/or leaving proposers hanging,
+				// finish them here. Note that it is important that we know that the
+				// proposals map is (and always will be, due to replicaGC setting the
+				// destroy status) empty at this point, since there is an invariant
+				// that all proposals in the map are unfinished, and the Task has only
+				// removed a subset[^1] of the proposals that might be finished below.
+				// But since it's empty, we can finish them all without having to
+				// check which ones are no longer in the map.
+				//
+				// NOTE: forEachCmdIter closes iter.
+				//
+				// [^1]: (*replicaDecoder).retrieveLocalProposals
+				if rejectErr := forEachCmdIter(ctx, iter, func(cmd Command, ctx context.Context) error {
+					return cmd.AckErrAndFinish(ctx, err)
+				}); rejectErr != nil {
+					return rejectErr
+				}
 			}
 			return err
 		}

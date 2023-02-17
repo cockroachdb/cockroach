@@ -37,6 +37,7 @@ ok
 
 make-plan
 ----
+Replica updates:
 - RangeID: 1
   StartKey: /Min
   OldReplicaID: 1
@@ -45,6 +46,8 @@ make-plan
     StoreID: 1
     ReplicaID: 16
   NextReplicaID: 17
+Decommissioned nodes:
+[n3, n4, n5]
 
 apply-plan stores=(1,2)
 ----
@@ -79,7 +82,8 @@ dump-store stores=(1,2)
 
 dump-events stores=(1,2)
 ----
-Updated range r1, Key:/Min, Store:s1 ReplicaID:16
+Events:
+updated range r1, Key:/Min, Store:s1 ReplicaID:16
 
 
 # Second use case where stale replica which remained from before split
@@ -167,7 +171,7 @@ ok
 
 make-plan
 ----
-[]
+ok
 
 apply-plan stores=(1,2,5,6)
 ----
@@ -247,3 +251,99 @@ dump-store stores=(1,2,5,6)
     RaftReplicaID: 7
   - RangeID: 2
     RaftReplicaID: 7
+
+# Third case tests if max applied voter rule stands if we have range metadata
+# otherwise it is identical to the first case.
+replication-data
+- StoreID: 1
+  RangeID: 1
+  StartKey: /Min
+  EndKey: /Max
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}  # replicas 3-5 are located on unavailable stores
+  - { NodeID: 4, StoreID: 4, ReplicaID: 4}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 5}
+  RangeAppliedIndex: 11  # this replica has higher applied index so is preferred over the other one
+  RaftCommittedIndex: 13
+- StoreID: 2
+  RangeID: 1
+  StartKey: /Min
+  EndKey: /Max
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}  # replicas 3-5 are located on unavailable stores
+  - { NodeID: 4, StoreID: 4, ReplicaID: 4}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 5}
+  RangeAppliedIndex: 10    # applied index takes precedence over store ID so this replica loses
+  RaftCommittedIndex: 14   # committed index while higher, should not confuse planner and use applied index
+----
+ok
+
+descriptor-data
+- RangeID: 1
+  StartKey: /Min
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  - { NodeID: 4, StoreID: 4, ReplicaID: 4}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 5}
+----
+ok
+
+collect-replica-info stores=(1,2)
+----
+ok
+
+make-plan
+----
+Replica updates:
+- RangeID: 1
+  StartKey: /Min
+  OldReplicaID: 1
+  NewReplica:
+    NodeID: 1
+    StoreID: 1
+    ReplicaID: 16
+  NextReplicaID: 17
+Decommissioned nodes:
+[n3, n4, n5]
+
+apply-plan stores=(1,2)
+----
+ok
+
+dump-store stores=(1,2)
+----
+- NodeID: 1
+  StoreID: 1
+  Descriptors:
+  - RangeID: 1
+    StartKey: /Min
+    Replicas:
+    - Replica: {NodeID: 1, StoreID: 1, ReplicaID: 16}
+  LocalData:
+  - RangeID: 1
+    RaftReplicaID: 16
+- NodeID: 2
+  StoreID: 2
+  Descriptors:
+  - RangeID: 1
+    StartKey: /Min
+    Replicas:
+    - Replica: {NodeID: 1, StoreID: 1, ReplicaID: 1}
+    - Replica: {NodeID: 2, StoreID: 2, ReplicaID: 2}
+    - Replica: {NodeID: 3, StoreID: 3, ReplicaID: 3}
+    - Replica: {NodeID: 4, StoreID: 4, ReplicaID: 4}
+    - Replica: {NodeID: 5, StoreID: 5, ReplicaID: 5}
+  LocalData:
+  - RangeID: 1
+    RaftReplicaID: 2
+
+dump-events stores=(1,2)
+----
+Events:
+updated range r1, Key:/Min, Store:s1 ReplicaID:16

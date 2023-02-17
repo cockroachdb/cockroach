@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -64,7 +65,7 @@ func TestRestoreMidSchemaChange(t *testing.T) {
 	skip.UnderRaceWithIssue(t, 56584)
 
 	var (
-		testdataBase = testutils.TestDataPath(t, "restore_mid_schema_change")
+		testdataBase = datapathutils.TestDataPath(t, "restore_mid_schema_change")
 		exportDirs   = testdataBase + "/exports"
 	)
 	for _, isSchemaOnly := range []bool{true, false} {

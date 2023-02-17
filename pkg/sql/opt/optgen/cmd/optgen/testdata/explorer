@@ -77,6 +77,7 @@ package xform
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -84,12 +85,13 @@ func (_e *explorer) exploreGroupMember(
 	state *exploreState,
 	member memo.RelExpr,
 	ordinal int,
+	required *physical.Required,
 ) (_fullyExplored bool) {
 	switch t := member.(type) {
 	case *memo.LimitExpr:
-		return _e.exploreLimit(state, t, ordinal)
+		return _e.exploreLimit(state, t, ordinal, required)
 	case *memo.InnerJoinExpr:
-		return _e.exploreInnerJoin(state, t, ordinal)
+		return _e.exploreInnerJoin(state, t, ordinal, required)
 	}
 
 	// No rules for other operator types.
@@ -100,6 +102,7 @@ func (_e *explorer) exploreLimit(
 	_rootState *exploreState,
 	_root *memo.LimitExpr,
 	_rootOrd int,
+	_required *physical.Required,
 ) (_fullyExplored bool) {
 	_fullyExplored = true
 
@@ -175,6 +178,7 @@ func (_e *explorer) exploreInnerJoin(
 	_rootState *exploreState,
 	_root *memo.InnerJoinExpr,
 	_rootOrd int,
+	_required *physical.Required,
 ) (_fullyExplored bool) {
 	_fullyExplored = true
 
@@ -201,7 +205,7 @@ func (_e *explorer) exploreInnerJoin(
 							if _e.o.appliedRule != nil {
 								_last = memo.LastGroupMember(_root)
 							}
-							_e.funcs.ReorderJoins(_root, _root)
+							_e.funcs.ReorderJoins(_root, _required, _root)
 							if _e.o.appliedRule != nil {
 								_e.o.appliedRule(opt.TestRootAccess, _root, _last.NextExpr())
 							}
@@ -263,6 +267,7 @@ package xform
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -270,10 +275,11 @@ func (_e *explorer) exploreGroupMember(
 	state *exploreState,
 	member memo.RelExpr,
 	ordinal int,
+	required *physical.Required,
 ) (_fullyExplored bool) {
 	switch t := member.(type) {
 	case *memo.LimitExpr:
-		return _e.exploreLimit(state, t, ordinal)
+		return _e.exploreLimit(state, t, ordinal, required)
 	}
 
 	// No rules for other operator types.
@@ -284,6 +290,7 @@ func (_e *explorer) exploreLimit(
 	_rootState *exploreState,
 	_root *memo.LimitExpr,
 	_rootOrd int,
+	_required *physical.Required,
 ) (_fullyExplored bool) {
 	_fullyExplored = true
 
@@ -302,6 +309,7 @@ func (_e *explorer) exploreLimit(
 			} else {
 				_member = _member.NextExpr()
 			}
+			scan = _member
 			if !_partlyExplored || _ord >= _state.start {
 				_scan, _ := _member.(*memo.ScanExpr)
 				if _scan != nil {
@@ -381,6 +389,7 @@ package xform
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -388,10 +397,11 @@ func (_e *explorer) exploreGroupMember(
 	state *exploreState,
 	member memo.RelExpr,
 	ordinal int,
+	required *physical.Required,
 ) (_fullyExplored bool) {
 	switch t := member.(type) {
 	case *memo.LimitExpr:
-		return _e.exploreLimit(state, t, ordinal)
+		return _e.exploreLimit(state, t, ordinal, required)
 	}
 
 	// No rules for other operator types.
@@ -402,6 +412,7 @@ func (_e *explorer) exploreLimit(
 	_rootState *exploreState,
 	_root *memo.LimitExpr,
 	_rootOrd int,
+	_required *physical.Required,
 ) (_fullyExplored bool) {
 	_fullyExplored = true
 
@@ -420,6 +431,7 @@ func (_e *explorer) exploreLimit(
 			} else {
 				_member = _member.NextExpr()
 			}
+			input = _member
 			if !_partlyExplored || _ord >= _state.start {
 				_scan, _ := _member.(*memo.ScanExpr)
 				if _scan == nil {
@@ -533,6 +545,7 @@ package xform
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -540,10 +553,11 @@ func (_e *explorer) exploreGroupMember(
 	state *exploreState,
 	member memo.RelExpr,
 	ordinal int,
+	required *physical.Required,
 ) (_fullyExplored bool) {
 	switch t := member.(type) {
 	case *memo.UnionExpr:
-		return _e.exploreUnion(state, t, ordinal)
+		return _e.exploreUnion(state, t, ordinal, required)
 	}
 
 	// No rules for other operator types.
@@ -554,6 +568,7 @@ func (_e *explorer) exploreUnion(
 	_rootState *exploreState,
 	_root *memo.UnionExpr,
 	_rootOrd int,
+	_required *physical.Required,
 ) (_fullyExplored bool) {
 	_fullyExplored = true
 
@@ -652,6 +667,7 @@ func (_e *explorer) exploreUnion(
 			} else {
 				_member = _member.NextExpr()
 			}
+			left = _member
 			if !_partlyExplored || _ord >= _state.start {
 				_union, _ := _member.(*memo.UnionExpr)
 				if _union != nil {

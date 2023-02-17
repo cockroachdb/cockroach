@@ -34,8 +34,8 @@ func init() {
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
 				revertible(false),
-				emit(func(this *scpb.ColumnFamily) *scop.NotImplemented {
-					return notImplemented(this)
+				emit(func(this *scpb.ColumnFamily) *scop.NotImplementedForPublicObjects {
+					return notImplementedForPublicObjects(this)
 				}),
 			),
 		),

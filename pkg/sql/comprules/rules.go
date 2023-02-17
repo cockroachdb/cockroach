@@ -25,7 +25,7 @@ import (
 func GetCompMethods() []compengine.Method {
 	return []compengine.Method{
 		method("keywords", completeKeyword),
-		method("builtins", completeBuiltin),
+		method("functions", completeFunction),
 		method("objects", completeObjectInCurrentDatabase),
 		method("schemas", completeSchemaInCurrentDatabase),
 		method("dbs", completeDatabase),
@@ -67,7 +67,7 @@ func completeKeyword(ctx context.Context, c compengine.Context) (compengine.Rows
 		start = c.QueryPos()
 		end = start
 
-	case c.AtWord() && !curTok.Quoted:
+	case c.AtWordOrInSpaceFollowingWord() && !curTok.Quoted:
 		prefix = curTok.Str
 		start = int(curTok.Start)
 		end = int(curTok.End)
@@ -90,47 +90,33 @@ SELECT upper(word),
 	return iter, err
 }
 
-// A surely not qualified possible builtin name.
-var compNotQualProcRe = regexp.MustCompile(`[^.](i'|_)`)
+// A surely not qualified possible function name.
+// Also, function names cannot appear directly after a semicolon.
+var compNotQualProcRe = regexp.MustCompile(`[^.;](i'|_)`)
 
-// A qualified possible builtin name.
-var compMaybeQualProcRe = regexp.MustCompile(`i\.['_]|i\.i'`)
+// A schema-qualified possible builtin name.
+// Also, function names cannot appear directly after a semicolon.
+var compMaybeQualProcRe = regexp.MustCompile(`[^.;]i\.(['_]|i')`)
 
-var compVSchemaRe = regexp.MustCompile(`pg_catalog|crdb_internal|information_schema`)
-
-func completeBuiltin(ctx context.Context, c compengine.Context) (compengine.Rows, error) {
-	// Complete builtin names:
+func completeFunction(ctx context.Context, c compengine.Context) (compengine.Rows, error) {
+	// Complete function names:
 	//
 	// - at whitespace after keywords.
-	// - after a period, if the identifier before the period is a vschema.
+	// - after a period.
 	//
 	var prefix string
 	var start, end int
-	var extraPrefix string
-	atWord := c.AtWord()
+	var schemaName string
+	atWord := c.AtWordOrInSpaceFollowingWord()
 	sketch := c.Sketch()
 	switch {
-	case compMaybeQualProcRe.MatchString(sketch) &&
-		((!atWord && compVSchemaRe.MatchString(c.RelToken(-1).Str)) ||
-			(atWord && compVSchemaRe.MatchString(c.RelToken(-2).Str))):
+	case compMaybeQualProcRe.MatchString(sketch):
 		start = int(c.RelToken(-1).Start)
-		prefix = c.RelToken(-1).Str + "."
+		schemaName = c.RelToken(-1).Str
 		if atWord {
 			start = int(c.RelToken(-2).Start)
-			prefix = c.RelToken(-2).Str + "."
-		}
-		// crdb has this weird thing where every unqualified built-in "X"
-		// also exists as "pg_catalog.X". So when we search for
-		// completions after "pg_catalog.", we can strip that prefix from
-		// the search. However, we must be careful to add it back in the
-		// completion results, so that the prefix does not get stripped
-		// when the completion occurs.
-		if prefix == "pg_catalog." {
-			prefix = ""
-			extraPrefix = "pg_catalog."
-		}
-		if atWord {
-			prefix += c.RelToken(0).Str
+			schemaName = c.RelToken(-2).Str
+			prefix = c.RelToken(0).Str
 		}
 		end = int(c.RelToken(0).End)
 
@@ -152,28 +138,41 @@ func completeBuiltin(ctx context.Context, c compengine.Context) (compengine.Rows
 		return nil, nil
 	}
 
-	c.Trace("completing for %q (%d,%d)", prefix, start, end)
-	// TODO(knz): use the comment extraction functions from pg_catalog
-	// instead of crdb_internal. This requires exposing comments for
-	// built-in functions through pg_catalog.
+	c.Trace("completing for %q (%d,%d) with schema %q", prefix, start, end, schemaName)
+	// Note: we use min(p.oid) ... GROUP BY p.proname to cover the case
+	// there are multiple overloads. This ensures we have only one entry
+	// in the completion results for that function. Its reported
+	// description will also be the description for the first overload.
+	// Separately, we GROUP BY n.nspname to ensure that a UDF with
+	// the same name as a pg_catalog function gets reported as a
+	// separate completion entry.
 	const query = `
-WITH p AS (SELECT DISTINCT proname FROM pg_catalog.pg_proc)
-SELECT $4:::STRING || proname || '(' AS completion,
+WITH p AS (
+SELECT min(p.oid) AS oid, p.proname, n.nspname
+  FROM pg_catalog.pg_proc p
+  JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+ WHERE left(p.proname, length($1:::STRING)) = $1:::STRING
+ AND ((length($4) > 0 AND $4 = n.nspname)
+   OR (length($4) = 0 AND n.nspname = ANY current_schemas(true)))
+GROUP BY p.proname, n.nspname
+)
+SELECT DISTINCT
+       IF(length($4) > 0, pg_catalog.quote_ident($4:::STRING) || '.', '') ||
+       pg_catalog.quote_ident(proname) || '(' AS completion,
        'functions' AS category,
-       substr(COALESCE((SELECT details
-          FROM "".crdb_internal.builtin_functions f2
-         WHERE f2.function = p.proname
-         LIMIT 1), ''), e'[^\n]{0,80}') AS description,
+       IF(length($4) = 0, '(from schema '||nspname||') ', '') ||
+       substr(COALESCE(pg_catalog.obj_description(oid, 'pg_proc'),''), e'[^.\n]{0,80}') AS description,
        $2:::INT AS start,
        $3:::INT AS end
   FROM p
- WHERE left(proname, length($1:::STRING)) = $1:::STRING`
-	iter, err := c.Query(ctx, query, prefix, start, end, extraPrefix)
+ORDER BY 1,3,4,5
+`
+	iter, err := c.Query(ctx, query, prefix, start, end, schemaName)
 	return iter, err
 }
 
 // A database name can only occur after a keyword or a comma (,).
-var compDbRe = regexp.MustCompile(`i(i'|_)|,(_|i')`)
+var compDbRe = regexp.MustCompile(`[i,](i'|_)`)
 
 func completeDatabase(ctx context.Context, c compengine.Context) (compengine.Rows, error) {
 	var prefix string
@@ -184,7 +183,7 @@ func completeDatabase(ctx context.Context, c compengine.Context) (compengine.Row
 		c.Trace("not completing")
 		return nil, nil
 
-	case c.CursorInToken() && c.AtWord():
+	case c.CursorInToken() && c.AtWordOrInSpaceFollowingWord():
 		curTok := c.RelToken(0)
 		prefix = curTok.Str
 		start = int(curTok.Start)
@@ -209,6 +208,7 @@ LEFT OUTER JOIN system.public.comments sc
     ON d.oid = sc.object_id
    AND sc.type = 0
  WHERE left(datname, length($1:::STRING)) = $1::STRING
+ORDER BY 1,3,4,5
 `
 	iter, err := c.Query(ctx, query, prefix, start, end)
 	return iter, err
@@ -225,8 +225,9 @@ func completeObjectInCurrentDatabase(
 	ctx context.Context, c compengine.Context,
 ) (compengine.Rows, error) {
 	var schema string
-	atWord := c.AtWord()
+	atWord := c.AtWordOrInSpaceFollowingWord()
 	sketch := c.Sketch()
+	hasSchemaPrefix := false
 	switch {
 	case compLocalTableRe.MatchString(sketch):
 		schema = "IN (TABLE unnest(current_schemas(true)))"
@@ -237,6 +238,7 @@ func completeObjectInCurrentDatabase(
 			schemaTok = c.RelToken(-2)
 		}
 		schema = "= " + lexbase.EscapeSQLString(schemaTok.Str)
+		hasSchemaPrefix = true
 
 	default:
 		c.Trace("not completing")
@@ -246,7 +248,7 @@ func completeObjectInCurrentDatabase(
 	var prefix string
 	var start, end int
 	switch {
-	case atWord:
+	case c.CursorInToken() && atWord:
 		curTok := c.RelToken(0)
 		prefix = curTok.Str
 		start = int(curTok.Start)
@@ -257,9 +259,19 @@ func completeObjectInCurrentDatabase(
 	}
 
 	c.Trace("completing for %q (%d,%d), schema: %s", prefix, start, end, schema)
+	// We only include pg_catalog relations in the following cases:
+	//
+	//    - when the cursor is position after an explicit schema qualification;
+	//      in which case we're going to filter to that schema anyway.
+	//    - when the completion prefix already includes the `pg_` prefix,
+	//      in which case we can assume the user wants to see these tables.
 	const queryT = `
-WITH n AS (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname %s),
-     t AS (SELECT oid, relname FROM pg_catalog.pg_class WHERE reltype != 0 AND relnamespace IN (TABLE n))
+WITH n AS (SELECT oid, nspname FROM pg_catalog.pg_namespace WHERE nspname %s),
+     t AS (SELECT c.oid, relname FROM pg_catalog.pg_class c
+             JOIN n ON n.oid = c.relnamespace
+            WHERE reltype != 0
+              AND left(relname, length($1:::STRING)) = $1::STRING
+              AND (nspname != 'pg_catalog' OR $4:::BOOL OR left($1:::STRING, 3) = 'pg_'))
 SELECT relname AS completion,
        'relation' AS category,
        substr(COALESCE(cc.comment, ''), e'[^\n]{0,80}') as description,
@@ -268,10 +280,10 @@ SELECT relname AS completion,
   FROM t
 LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
     ON t.oid = cc.object_id AND cc.type = 'TableCommentType'
- WHERE left(relname, length($1:::STRING)) = $1::STRING
+ORDER BY 1,3,4,5
 `
 	query := fmt.Sprintf(queryT, schema)
-	iter, err := c.Query(ctx, query, prefix, start, end)
+	iter, err := c.Query(ctx, query, prefix, start, end, hasSchemaPrefix)
 	return iter, err
 }
 
@@ -288,14 +300,14 @@ func completeSchemaInCurrentDatabase(
 	var prefix string
 	var start, end int
 	switch {
-	case c.CursorInSpace():
-		start = c.QueryPos()
-		end = start
-	default:
+	case c.CursorInToken() && c.AtWordOrInSpaceFollowingWord():
 		curTok := c.RelToken(0)
 		prefix = curTok.Str
 		start = int(curTok.Start)
 		end = int(curTok.End)
+	default:
+		start = c.QueryPos()
+		end = start
 	}
 
 	c.Trace("completing for %q (%d,%d)", prefix, start, end)
@@ -309,6 +321,7 @@ SELECT nspname AS completion,
 LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
     ON t.oid = cc.object_id AND cc.type = 'SchemaCommentType'
  WHERE left(nspname, length($1:::STRING)) = $1::STRING
+ORDER BY 1,3,4,5
 `
 	iter, err := c.Query(ctx, query, prefix, start, end)
 	return iter, err
@@ -318,7 +331,7 @@ func completeSchemaInOtherDatabase(
 	ctx context.Context, c compengine.Context,
 ) (compengine.Rows, error) {
 	var dbname string
-	atWord := c.AtWord()
+	atWord := c.AtWordOrInSpaceFollowingWord()
 	switch {
 	case compOneQualPrefixRe.MatchString(c.Sketch()):
 		dbTok := c.RelToken(-1)
@@ -359,6 +372,7 @@ SELECT schema_name AS completion,
   FROM "".information_schema.schemata
  WHERE catalog_name = $4:::STRING
    AND left(schema_name, length($1:::STRING)) = $1:::STRING
+ORDER BY 1,3,4,5
 `
 	iter, err := c.Query(ctx, query, prefix, start, end, dbname)
 	return iter, err
@@ -371,16 +385,23 @@ func completeObjectInOtherDatabase(
 	ctx context.Context, c compengine.Context,
 ) (compengine.Rows, error) {
 	var schema string
-	atWord := c.AtWord()
+	atWord := c.AtWordOrInSpaceFollowingWord()
 	sketch := c.Sketch()
+	var dbTok scanner.InspectToken
 	switch {
 	case compOneQualPrefixRe.MatchString(sketch):
 		schema = "public"
+		dbTok = c.RelToken(-1)
+		if atWord {
+			dbTok = c.RelToken(-2)
+		}
 
 	case compTwoQualPrefixRe.MatchString(sketch):
 		schemaTok := c.RelToken(-1)
+		dbTok = c.RelToken(-3)
 		if atWord {
 			schemaTok = c.RelToken(-2)
+			dbTok = c.RelToken(-4)
 		}
 		schema = schemaTok.Str
 
@@ -388,27 +409,12 @@ func completeObjectInOtherDatabase(
 		c.Trace("not completing")
 		return nil, nil
 	}
-
-	var dbTok scanner.InspectToken
-	switch {
-	case compOneQualPrefixRe.MatchString(sketch):
-		dbTok = c.RelToken(-1)
-		if atWord {
-			dbTok = c.RelToken(-2)
-		}
-
-	case compTwoQualPrefixRe.MatchString(sketch):
-		dbTok = c.RelToken(-3)
-		if atWord {
-			dbTok = c.RelToken(-4)
-		}
-	}
 	dbname := dbTok.Str
 
 	var prefix string
 	var start, end int
 	switch {
-	case atWord:
+	case c.CursorInToken() && atWord:
 		curTok := c.RelToken(0)
 		prefix = curTok.Str
 		start = int(curTok.Start)
@@ -435,6 +441,7 @@ SELECT name AS completion,
   FROM t
 LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
     ON t.table_id = cc.object_id AND cc.type = 'TableCommentType'
+ORDER BY 1,3,4,5
 `
 	iter, err := c.Query(ctx, query, prefix, start, end, dbname, schema)
 	return iter, err

@@ -283,7 +283,6 @@ func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 		context.Background(),
 		splitKey,
 		hlc.MaxTimestamp, /* expirationTime */
-		roachpb.AdminSplitRequest_INGESTION,
 	); err != nil {
 		t.Fatal(err)
 	}

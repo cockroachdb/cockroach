@@ -20,6 +20,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/randident"
+	"github.com/cockroachdb/cockroach/pkg/util/randident/randidentcfg"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -65,7 +67,8 @@ type Smither struct {
 	tables           []*tableRef
 	columns          map[tree.TableName]map[tree.Name]*tree.ColumnTableDef
 	indexes          map[tree.TableName]map[tree.Name]*tree.CreateIndex
-	nameCounts       map[string]int
+	nameGens         map[string]*nameGenInfo
+	nameGenCfg       randidentcfg.Config
 	activeSavepoints []string
 	types            *typeInfo
 
@@ -93,6 +96,7 @@ type Smither struct {
 	unlikelyConstantPredicate  bool
 	favorCommonData            bool
 	unlikelyRandomNulls        bool
+	disableJoins               bool
 	disableCrossJoins          bool
 	disableIndexHints          bool
 	lowProbWhereWithJoinTables bool
@@ -119,7 +123,8 @@ func NewSmither(db *gosql.DB, rnd *rand.Rand, opts ...SmitherOption) (*Smither, 
 	s := &Smither{
 		rnd:        rnd,
 		db:         db,
-		nameCounts: map[string]int{},
+		nameGens:   map[string]*nameGenInfo{},
+		nameGenCfg: randident.DefaultNameGeneratorConfig(),
 
 		stmtWeights:       allStatements,
 		alterWeights:      alters,
@@ -131,6 +136,7 @@ func NewSmither(db *gosql.DB, rnd *rand.Rand, opts ...SmitherOption) (*Smither, 
 		complexity:       0.2,
 		scalarComplexity: 0.2,
 	}
+	s.nameGenCfg.Finalize()
 	for _, opt := range opts {
 		opt.Apply(s)
 	}
@@ -187,12 +193,23 @@ func (s *Smither) GenerateExpr() tree.TypedExpr {
 	return makeScalar(s, s.randScalarType(), nil)
 }
 
+type nameGenInfo struct {
+	g     randident.NameGenerator
+	count int
+}
+
 func (s *Smither) name(prefix string) tree.Name {
 	s.lock.Lock()
 	defer s.lock.Unlock()
-	s.nameCounts[prefix]++
-	count := s.nameCounts[prefix]
-	return tree.Name(fmt.Sprintf("%s_%d", prefix, count))
+	g := s.nameGens[prefix]
+	if g == nil {
+		g = &nameGenInfo{
+			g: randident.NewNameGenerator(&s.nameGenCfg, s.rnd, prefix),
+		}
+		s.nameGens[prefix] = g
+	}
+	g.count++
+	return tree.Name(g.g.GenerateOne(g.count))
 }
 
 // SmitherOption is an option for the Smither client.
@@ -416,6 +433,11 @@ var FavorCommonData = simpleOption("favor common data", func(s *Smither) {
 // values much less likely than generation of random non-null data.
 var UnlikelyRandomNulls = simpleOption("unlikely random nulls", func(s *Smither) {
 	s.unlikelyRandomNulls = true
+})
+
+// DisableJoins causes the Smither to disable joins.
+var DisableJoins = simpleOption("disable joins", func(s *Smither) {
+	s.disableJoins = true
 })
 
 // DisableCrossJoins causes the Smither to disable cross joins.

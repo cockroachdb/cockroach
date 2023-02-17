@@ -95,7 +95,7 @@ func (p *tupleParseState) gobbleString() (out string, err error) {
 type tupleParseState struct {
 	s                string
 	tupleIdx         int
-	ctx              ParseTimeContext
+	ctx              ParseContext
 	dependsOnContext bool
 	result           *DTuple
 	t                *types.T
@@ -174,9 +174,9 @@ func (p *tupleParseState) parseElement() error {
 // tuple to parse.
 //
 // The dependsOnContext return value indicates if we had to consult the
-// ParseTimeContext (either for the time or the local timezone).
+// ParseContext (either for the time or the local timezone).
 func ParseDTupleFromString(
-	ctx ParseTimeContext, s string, t *types.T,
+	ctx ParseContext, s string, t *types.T,
 ) (_ *DTuple, dependsOnContext bool, _ error) {
 	ret, dependsOnContext, err := doParseDTupleFromString(ctx, s, t)
 	if err != nil {
@@ -189,9 +189,9 @@ func ParseDTupleFromString(
 // except the error it returns isn't prettified as a parsing error.
 //
 // The dependsOnContext return value indicates if we had to consult the
-// ParseTimeContext (either for the time or the local timezone).
+// ParseContext (either for the time or the local timezone).
 func doParseDTupleFromString(
-	ctx ParseTimeContext, s string, t *types.T,
+	ctx ParseContext, s string, t *types.T,
 ) (_ *DTuple, dependsOnContext bool, _ error) {
 	if t.TupleContents() == nil {
 		return nil, false, errors.AssertionFailedf("not a tuple type %s (%T)", t, t)

@@ -17,21 +17,21 @@ expr
 inner-join (hash)
  ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int) t.public.abc.c:3(int) t.public.def.d:7(int!null) t.public.def.e:8(int) t.public.def.f:9(int)
  ├── stats: [rows=9801, distinct(1)=99, null(1)=0, distinct(7)=99, null(7)=0]
- ├── cost: 2317.61625
+ ├── cost: 2325.61625
  ├── fd: (1)==(7), (7)==(1)
  ├── prune: (2,3,8,9)
  ├── interesting orderings: (+1,+2)
  ├── scan t.public.abc
  │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
  │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
- │    ├── cost: 1094.72
+ │    ├── cost: 1098.72
  │    ├── prune: (1-3)
  │    ├── interesting orderings: (+1,+2)
  │    └── unfiltered-cols: (1-6)
  ├── scan t.public.def
  │    ├── columns: t.public.def.d:7(int) t.public.def.e:8(int) t.public.def.f:9(int)
  │    ├── stats: [rows=1000, distinct(7)=100, null(7)=10]
- │    ├── cost: 1094.72
+ │    ├── cost: 1098.72
  │    ├── prune: (7-9)
  │    └── unfiltered-cols: (7-12)
  └── filters
@@ -50,11 +50,11 @@ left-join (lookup t.public.abc@ab)
  ├── columns: t.public.abc.a:7(int) t.public.abc.b:8(int)
  ├── key columns: [7] = [7]
  ├── stats: [rows=3333.333, distinct(7)=100, null(7)=33.3333]
- ├── cost: 41684.65
+ ├── cost: 41692.65
  ├── scan t.public.def
  │    ├── columns: t.public.def.d:1(int) t.public.def.e:2(int)
  │    ├── stats: [rows=1000, distinct(2)=100, null(2)=10]
- │    ├── cost: 1084.62
+ │    ├── cost: 1088.62
  │    └── prune: (1,2)
  └── filters
       └── gt [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
@@ -80,31 +80,31 @@ inner-join (merge)
  ├── left ordering: +1
  ├── right ordering: +7
  ├── stats: [rows=9801, distinct(1)=99, null(1)=0, distinct(7)=99, null(7)=0]
- ├── cost: 2806.43387
+ ├── cost: 2814.43387
  ├── fd: (1)==(7), (7)==(1)
  ├── sort
  │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
  │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
- │    ├── cost: 1344.20194
+ │    ├── cost: 1348.20194
  │    ├── ordering: +1
  │    ├── prune: (1-3)
  │    ├── interesting orderings: (+1,+2)
  │    └── scan t.public.abc
  │         ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
  │         ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
- │         ├── cost: 1094.72
+ │         ├── cost: 1098.72
  │         ├── prune: (1-3)
  │         └── interesting orderings: (+1,+2)
  ├── sort
  │    ├── columns: t.public.def.d:7(int) t.public.def.e:8(int) t.public.def.f:9(int)
  │    ├── stats: [rows=1000, distinct(7)=100, null(7)=10]
- │    ├── cost: 1344.20194
+ │    ├── cost: 1348.20194
  │    ├── ordering: +7
  │    ├── prune: (7-9)
  │    └── scan t.public.def
  │         ├── columns: t.public.def.d:7(int) t.public.def.e:8(int) t.public.def.f:9(int)
  │         ├── stats: [rows=1000, distinct(7)=100, null(7)=10]
- │         ├── cost: 1094.72
+ │         ├── cost: 1098.72
  │         └── prune: (7-9)
  └── filters (true)
 
@@ -123,30 +123,30 @@ inner-join-apply
  ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int) t.public.def.d:7(int) t.public.def.e:8(int) t.public.def.f:9(int)
  ├── immutable
  ├── stats: [rows=333333.3]
- ├── cost: 5690.99479
+ ├── cost: 5698.99479
  ├── prune: (9)
  ├── interesting orderings: (+1,+2)
  ├── sort
  │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
  │    ├── stats: [rows=1000]
- │    ├── cost: 1234.54409
+ │    ├── cost: 1238.54409
  │    ├── interesting orderings: (+1,+2)
  │    └── scan t.public.abc
  │         ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
  │         ├── stats: [rows=1000]
- │         ├── cost: 1094.72
+ │         ├── cost: 1098.72
  │         └── interesting orderings: (+1,+2)
  ├── select
  │    ├── columns: t.public.def.d:7(int) t.public.def.e:8(int) t.public.def.f:9(int)
  │    ├── outer: (1)
  │    ├── immutable
  │    ├── stats: [rows=333.3333, distinct(1)=1, null(1)=0]
- │    ├── cost: 1104.75
+ │    ├── cost: 1108.75
  │    ├── prune: (9)
  │    ├── scan t.public.def
  │    │    ├── columns: t.public.def.d:7(int) t.public.def.e:8(int) t.public.def.f:9(int)
  │    │    ├── stats: [rows=1000]
- │    │    ├── cost: 1094.72
+ │    │    ├── cost: 1098.72
  │    │    └── prune: (7-9)
  │    └── filters
  │         └── eq [type=bool, outer=(1,7,8), immutable, constraints=(/1: (/NULL - ]), fd=(7,8)-->(1)]
@@ -176,12 +176,12 @@ index-join abc
  ├── columns: t.public.abc.c:3(int)
  ├── cardinality: [0 - 10]
  ├── stats: [rows=10]
- ├── cost: 75.02
+ ├── cost: 79.02
  ├── interesting orderings: (+1)
  └── scan t.public.abc@ab
       ├── columns: t.public.abc.a:1(int)
       ├── limit: 10
       ├── stats: [rows=10]
-      ├── cost: 14.41
+      ├── cost: 18.41
       ├── prune: (1)
       └── interesting orderings: (+1)

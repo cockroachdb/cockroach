@@ -13,12 +13,14 @@ package bulkpb
 import (
 	"context"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/bulk"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/redact"
@@ -29,7 +31,10 @@ var _ bulk.TracingAggregatorEvent = (*IngestionPerformanceStats)(nil)
 
 // Identity implements the TracingAggregatorEvent interface.
 func (s *IngestionPerformanceStats) Identity() bulk.TracingAggregatorEvent {
-	stats := IngestionPerformanceStats{}
+	stats := IngestionPerformanceStats{
+		LastFlushTime:    hlc.Timestamp{WallTime: math.MaxInt64},
+		CurrentFlushTime: hlc.Timestamp{WallTime: math.MinInt64},
+	}
 	stats.SendWaitByStore = make(map[roachpb.StoreID]time.Duration)
 	return &stats
 }
@@ -41,7 +46,8 @@ func (s *IngestionPerformanceStats) Combine(other bulk.TracingAggregatorEvent) {
 		panic(fmt.Sprintf("`other` is not of type IngestionPerformanceStats: %T", other))
 	}
 
-	s.DataSize += otherStats.DataSize
+	s.LogicalDataSize += otherStats.LogicalDataSize
+	s.SSTDataSize += otherStats.SSTDataSize
 	s.BufferFlushes += otherStats.BufferFlushes
 	s.FlushesDueToSize += otherStats.FlushesDueToSize
 	s.Batches += otherStats.Batches
@@ -59,7 +65,21 @@ func (s *IngestionPerformanceStats) Combine(other bulk.TracingAggregatorEvent) {
 	s.SplitWait += otherStats.SplitWait
 	s.ScatterWait += otherStats.ScatterWait
 	s.CommitWait += otherStats.CommitWait
+
+	// Duration should not be used in throughput calculations as adding durations
+	// of multiple flushes does not account for concurrent execution of these
+	// flushes.
 	s.Duration += otherStats.Duration
+
+	// We want to store the earliest of the FlushTimes.
+	if otherStats.LastFlushTime.Less(s.LastFlushTime) {
+		s.LastFlushTime = otherStats.LastFlushTime
+	}
+
+	// We want to store the latest of the FlushTimes.
+	if s.CurrentFlushTime.Less(otherStats.CurrentFlushTime) {
+		s.CurrentFlushTime = otherStats.CurrentFlushTime
+	}
 
 	for k, v := range otherStats.SendWaitByStore {
 		s.SendWaitByStore[k] += v
@@ -109,17 +129,35 @@ func (s *IngestionPerformanceStats) Render() []attribute.KeyValue {
 		)
 	}
 
-	if s.DataSize > 0 {
-		dataSizeMB := float64(s.DataSize) / mb
+	if s.LogicalDataSize > 0 {
+		logicalDataSizeMB := float64(s.LogicalDataSize) / mb
 		tags = append(tags, attribute.KeyValue{
-			Key:   "data_size",
-			Value: attribute.StringValue(fmt.Sprintf("%.2f MB", dataSizeMB)),
+			Key:   "logical_data_size",
+			Value: attribute.StringValue(fmt.Sprintf("%.2f MB", logicalDataSizeMB)),
 		})
 
-		if s.Duration > 0 {
-			throughput := dataSizeMB / s.Duration.Seconds()
+		if !s.CurrentFlushTime.IsEmpty() && !s.LastFlushTime.IsEmpty() {
+			duration := s.CurrentFlushTime.GoTime().Sub(s.LastFlushTime.GoTime())
+			throughput := logicalDataSizeMB / duration.Seconds()
 			tags = append(tags, attribute.KeyValue{
-				Key:   "throughput",
+				Key:   "logical_throughput",
+				Value: attribute.StringValue(fmt.Sprintf("%.2f MB/s", throughput)),
+			})
+		}
+	}
+
+	if s.SSTDataSize > 0 {
+		sstDataSizeMB := float64(s.SSTDataSize) / mb
+		tags = append(tags, attribute.KeyValue{
+			Key:   "sst_data_size",
+			Value: attribute.StringValue(fmt.Sprintf("%.2f MB", sstDataSizeMB)),
+		})
+
+		if !s.CurrentFlushTime.IsEmpty() && !s.LastFlushTime.IsEmpty() {
+			duration := s.CurrentFlushTime.GoTime().Sub(s.LastFlushTime.GoTime())
+			throughput := sstDataSizeMB / duration.Seconds()
+			tags = append(tags, attribute.KeyValue{
+				Key:   "sst_throughput",
 				Value: attribute.StringValue(fmt.Sprintf("%.2f MB/s", throughput)),
 			})
 		}
@@ -165,7 +203,7 @@ func (s *IngestionPerformanceStats) LogTimings(ctx context.Context, name, action
 		"%s adder %s; ingested %s: %s filling; %v sorting; %v / %v flushing; %v sending; %v splitting; %d; %v scattering, %d, %v; %v commit-wait",
 		name,
 		redact.Safe(action),
-		sz(s.DataSize),
+		sz(s.LogicalDataSize),
 		timing(s.FillWait),
 		timing(s.SortWait),
 		timing(s.FlushWait),

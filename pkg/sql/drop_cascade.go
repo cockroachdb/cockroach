@@ -71,10 +71,8 @@ func (d *dropCascadeState) collectObjectsInSchema(
 	// have namespace records. So function names are not included in
 	// objectNamesToDelete. Instead, we need to go through each schema descriptor
 	// to collect function descriptors by function ids.
-	err = schema.ForEachFunctionOverload(func(overload descpb.SchemaDescriptor_FunctionOverload) error {
-		fnDesc, err := p.Descriptors().GetMutableFunctionByID(
-			ctx, p.txn, overload.ID, tree.ObjectLookupFlagsWithRequired(),
-		)
+	err = schema.ForEachFunctionSignature(func(sig descpb.SchemaDescriptor_FunctionSignature) error {
+		fnDesc, err := p.Descriptors().MutableByID(p.txn).Function(ctx, sig.ID)
 		if err != nil {
 			return err
 		}
@@ -102,11 +100,9 @@ func (d *dropCascadeState) resolveCollectedObjects(ctx context.Context, p *plann
 			tree.ObjectLookupFlags{
 				// Note we set required to be false here in order to not error out
 				// if we don't find the object.
-				CommonLookupFlags: tree.CommonLookupFlags{
-					Required:       false,
-					RequireMutable: true,
-					IncludeOffline: true,
-				},
+				Required:          false,
+				RequireMutable:    true,
+				IncludeOffline:    true,
 				DesiredObjectKind: tree.TableObject,
 			},
 			objName.Catalog(),
@@ -120,7 +116,7 @@ func (d *dropCascadeState) resolveCollectedObjects(ctx context.Context, p *plann
 			tbDesc, ok := desc.(*tabledesc.Mutable)
 			if !ok {
 				return errors.AssertionFailedf(
-					"descriptor for %q is not Mutable",
+					"table descriptor for %q is not Mutable",
 					objName.Object(),
 				)
 			}
@@ -157,11 +153,9 @@ func (d *dropCascadeState) resolveCollectedObjects(ctx context.Context, p *plann
 			found, _, desc, err := p.LookupObject(
 				ctx,
 				tree.ObjectLookupFlags{
-					CommonLookupFlags: tree.CommonLookupFlags{
-						Required:       true,
-						RequireMutable: true,
-						IncludeOffline: true,
-					},
+					Required:          true,
+					RequireMutable:    true,
+					IncludeOffline:    true,
 					DesiredObjectKind: tree.TypeObject,
 				},
 				objName.Catalog(),
@@ -178,7 +172,7 @@ func (d *dropCascadeState) resolveCollectedObjects(ctx context.Context, p *plann
 			typDesc, ok := desc.(*typedesc.Mutable)
 			if !ok {
 				return errors.AssertionFailedf(
-					"descriptor for %q is not Mutable",
+					"type descriptor for %q is not Mutable",
 					objName.Object(),
 				)
 			}

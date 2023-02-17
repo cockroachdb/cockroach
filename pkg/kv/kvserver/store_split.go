@@ -14,6 +14,8 @@ import (
 	"bytes"
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -65,29 +67,18 @@ func splitPreApply(
 		// If rightRepl is not nil, we are *not* holding raftMu.
 		//
 		// To apply the split, we need to "throw away" the data that would belong to
-		// the RHS, i.e. we clear the user data the RHS would have inherited from the
-		// LHS due to the split and additionally clear all of the range ID local state
-		// that the split trigger writes into the RHS.
-		//
-		// We know we've never processed a snapshot for the right range because the
-		// LHS prevents any incoming snapshots until the split has executed (i.e. now).
-		// It is important to preserve the HardState because we might however have
-		// already voted at a higher term. In general this shouldn't happen because
-		// we add learners and then promote them only after we snapshot but we're
+		// the RHS, i.e. we clear the user data the RHS would have inherited from
+		// the LHS due to the split and additionally clear all of the range ID local
+		// state that the split trigger writes into the RHS. At the time of writing,
+		// unfortunately that means that we'll also delete any data that might
+		// already be present in the RHS: the HardState and RaftReplicaID. It is
+		// important to preserve the HardState because we might however have already
+		// voted at a higher term. In general this shouldn't happen because we add
+		// learners and then promote them only after they apply a snapshot but we're
 		// going to be extra careful in case future versions of cockroach somehow
-		// promote replicas without ensuring that a snapshot has been received.
-		//
-		// Rather than specifically deleting around the data we want to preserve
-		// we read the HardState to preserve it, clear everything and write back
-		// the HardState and tombstone. Note that we only do this if rightRepl
-		// exists; if it doesn't, there's no Raft state to massage (when rightRepl
-		// was removed, a tombstone was written instead).
-		//
-		// TODO(tbg): it would be cleaner to teach clearRangeData to only remove
-		// the replicated state if rightRepl != nil, as opposed to writing back
-		// internal raft state. As is, it's going to break with any new piece of
-		// local state that we add, and it introduces locking between two Replicas
-		// that don't ever need to interact.
+		// promote replicas without ensuring that a snapshot has been received. So
+		// we write it back (and the RaftReplicaID too, since it's an invariant that
+		// it's always present).
 		var hs raftpb.HardState
 		if rightRepl != nil {
 			rightRepl.raftMu.Lock()
@@ -104,19 +95,36 @@ func splitPreApply(
 				log.Fatalf(ctx, "failed to load hard state for removed rhs: %v", err)
 			}
 		}
-		const rangeIDLocalOnly = false
-		const mustUseClearRange = false
-		if err := clearRangeData(&split.RightDesc, readWriter, readWriter, rangeIDLocalOnly, mustUseClearRange); err != nil {
+		if err := kvstorage.ClearRangeData(split.RightDesc.RangeID, readWriter, readWriter, kvstorage.ClearRangeDataOptions{
+			// We know there isn't anything in these two replicated spans below in the
+			// right-hand side (before the current batch), so setting these options
+			// will in effect only clear the writes to the RHS replicated state we have
+			// staged in this batch, which is what we're after.
+			ClearReplicatedBySpan:    split.RightDesc.RSpan(),
+			ClearReplicatedByRangeID: true,
+			// See the HardState write-back dance above and below.
+			//
+			// TODO(tbg): we don't actually want to touch the raft state of the right
+			// hand side replica since it's absent or a more recent replica than the
+			// split. Now that we have a boolean targeting the unreplicated
+			// RangeID-based keyspace, we can set this to false and remove the
+			// HardState+ReplicaID write-back. (The WriteBatch does not contain
+			// any writes to the unreplicated RangeID keyspace for the RHS, see
+			// splitTriggerHelper[^1]).
+			//
+			// [^1]: https://github.com/cockroachdb/cockroach/blob/f263a765d750e41f2701da0a923a6e92d09159fa/pkg/kv/kvserver/batcheval/cmd_end_transaction.go#L1109-L1149
+			//
+			// See also:
+			//
+			// https://github.com/cockroachdb/cockroach/issues/94933
+			ClearUnreplicatedByRangeID: true,
+		}); err != nil {
 			log.Fatalf(ctx, "failed to clear range data for removed rhs: %v", err)
 		}
 		if rightRepl != nil {
-			// Cleared the HardState and RaftReplicaID, so rewrite them to the
-			// current values.
-			// TODO(sumeer): we know HardState.Commit cannot advance since the RHS
-			// cannot apply a snapshot yet. But there could be a concurrent change
-			// to HardState.{Term,Vote} that we would accidentally undo here,
-			// because we are not actually holding the appropriate mutex. See
-			// https://github.com/cockroachdb/cockroach/issues/75918.
+			// Cleared the HardState and RaftReplicaID, so rewrite them to the current
+			// values. NB: rightRepl.raftMu is still locked since HardState was read,
+			// so it can't have been rewritten in the meantime (fixed in #75918).
 			if err := rightRepl.raftMu.stateLoader.SetHardState(ctx, readWriter, hs); err != nil {
 				log.Fatalf(ctx, "failed to set hard state with 0 commit index for removed rhs: %v", err)
 			}
@@ -181,14 +189,7 @@ func splitPostApply(
 
 	// Update store stats with difference in stats before and after split.
 	if rightReplOrNil != nil {
-		if _, ok := rightReplOrNil.TenantID(); ok {
-			// TODO(tbg): why this check to get here? Is this really checking if the RHS
-			// is already initialized? But isn't it always, at this point?
-			rightReplOrNil.store.metrics.addMVCCStats(ctx, rightReplOrNil.tenantMetricsRef, deltaMS)
-		} else {
-			log.Fatalf(ctx, "%s: found replica which is RHS of a split "+
-				"without a valid tenant ID", rightReplOrNil)
-		}
+		rightReplOrNil.store.metrics.addMVCCStats(ctx, rightReplOrNil.tenantMetricsRef, deltaMS)
 	}
 
 	now := r.store.Clock().NowAsClockTimestamp()
@@ -231,31 +232,29 @@ func prepareRightReplicaForSplit(
 	minValidObservedTS := r.mu.minValidObservedTimestamp
 	r.mu.RUnlock()
 
-	// The right hand side of the split was already created (and its raftMu
-	// acquired) in Replica.acquireSplitLock. It must be present here.
+	// If the RHS replica of the split is not removed, then it has been obtained
+	// (and its raftMu acquired) in Replica.acquireSplitLock.
 	rightRepl := r.store.GetReplicaIfExists(split.RightDesc.RangeID)
-	// If the RHS replica at the point of the split was known to be removed
-	// during the application of the split then we may not find it here. That's
-	// fine, carry on. See also:
+	// If the RHS replica of the split has been removed then we either not find it
+	// here, or find a one with a later replica ID. In this case we also know that
+	// its data has already been removed by splitPreApply, so we skip initializing
+	// this replica. See also:
 	_, _ = r.acquireSplitLock, splitPostApply
-	if rightRepl == nil {
+	if rightRepl == nil || rightRepl.isNewerThanSplit(split) {
 		return nil
+	}
+	// Finish initialization of the RHS replica.
+
+	state, err := kvstorage.LoadReplicaState(
+		ctx, r.store.TODOEngine(), r.StoreID(), &split.RightDesc, rightRepl.replicaID)
+	if err != nil {
+		log.Fatalf(ctx, "%v", err)
 	}
 
 	// Already holding raftMu, see above.
 	rightRepl.mu.Lock()
 	defer rightRepl.mu.Unlock()
-
-	// If we know that the RHS has already been removed at this replica ID
-	// then we also know that its data has already been removed by the preApply
-	// so we skip initializing it as the RHS of the split.
-	if rightRepl.isNewerThanSplitRLocked(split) {
-		return nil
-	}
-
-	// Finish initialization of the RHS.
-	err := rightRepl.loadRaftMuLockedReplicaMuLocked(&split.RightDesc)
-	if err != nil {
+	if err := rightRepl.initRaftMuLockedReplicaMuLocked(state); err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}
 
@@ -284,10 +283,9 @@ func prepareRightReplicaForSplit(
 	// until it receives a Raft message addressed to the right-hand range. But
 	// since new replicas start out quiesced, unless we explicitly awaken the
 	// Raft group, there might not be any Raft traffic for quite a while.
-	err = rightRepl.withRaftGroupLocked(true, func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error) {
+	if err := rightRepl.withRaftGroupLocked(true, func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error) {
 		return true, nil
-	})
-	if err != nil {
+	}); err != nil {
 		log.Fatalf(ctx, "unable to create raft group for right-hand range in split: %+v", err)
 	}
 
@@ -314,17 +312,6 @@ func (s *Store) SplitRange(
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if exRng, ok := s.mu.uninitReplicas[rightDesc.RangeID]; rightReplOrNil != nil && ok {
-		// If we have an uninitialized replica of the new range we require pointer
-		// equivalence with rightRepl. See Store.splitTriggerPostApply().
-		if exRng != rightReplOrNil {
-			log.Fatalf(ctx, "found unexpected uninitialized replica: %s vs %s", exRng, rightReplOrNil)
-		}
-		// NB: We only remove from uninitReplicas here so that we don't leave open a
-		// window where a replica is temporarily not present in Store.mu.replicas.
-		delete(s.mu.uninitReplicas, rightDesc.RangeID)
-	}
-
 	leftRepl.setDescRaftMuLocked(ctx, newLeftDesc)
 
 	// Clear the LHS lock and txn wait-queues, to redirect to the RHS if
@@ -334,31 +321,27 @@ func (s *Store) SplitRange(
 	leftRepl.concMgr.OnRangeSplit()
 
 	if rightReplOrNil == nil {
-		// There is no rhs replica, so instead halve the load of the lhs
-		// replica.
-		throwawayRightStats := NewReplicaLoad(s.Clock(), nil)
-		leftRepl.loadStats.split(throwawayRightStats)
-	} else {
-		rightRepl := rightReplOrNil
-		// Split the replica load of the lhs evenly (50:50) with the rhs. NB:
-		// that this ignores the split point and makes as simplifying
-		// assumption that distribution across all tracked load stats is
-		// identical.
-		leftRepl.loadStats.split(rightRepl.loadStats)
-		if err := s.addReplicaInternalLocked(rightRepl); err != nil {
-			return errors.Wrapf(err, "unable to add replica %v", rightRepl)
-		}
+		// There is no RHS replica, so (heuristically) halve the load stats for the
+		// LHS, instead of splitting it between LHS and RHS.
+		throwawayRightStats := load.NewReplicaLoad(s.Clock(), nil)
+		leftRepl.loadStats.Split(throwawayRightStats)
+		return nil
+	}
+	rightRepl := rightReplOrNil
 
-		// Update the replica's cached byte thresholds. This is a no-op if the system
-		// config is not available, in which case we rely on the next gossip update
-		// to perform the update.
-		if err := rightRepl.updateRangeInfo(ctx, rightRepl.Desc()); err != nil {
-			return err
-		}
-		// Add the range to metrics and maybe gossip on capacity change.
-		s.metrics.ReplicaCount.Inc(1)
-		s.maybeGossipOnCapacityChange(ctx, rangeAddEvent)
+	// Split the replica load of the LHS evenly (50:50) with the RHS. NB: this
+	// ignores the split point, and makes as simplifying assumption that
+	// distribution across all tracked load stats is identical.
+	leftRepl.loadStats.Split(rightRepl.loadStats)
+
+	// Update the replica's cached byte thresholds. This is a no-op if the system
+	// config is not available, in which case we rely on the next gossip update to
+	// perform the update.
+	if err := rightRepl.updateRangeInfo(ctx, rightDesc); err != nil {
+		return err
 	}
 
-	return nil
+	rightRepl.mu.RLock()
+	defer rightRepl.mu.RUnlock()
+	return s.markReplicaInitializedLockedReplLocked(ctx, rightRepl)
 }

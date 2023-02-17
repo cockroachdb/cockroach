@@ -15,8 +15,9 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -34,7 +35,7 @@ var (
 
 	// ErrExecStatsFingerprintFlushed is returned from the Container when the
 	// stats object for the fingerprint has been flushed to system table before
-	// the roachpb.ExecStats can be recorded.
+	// the appstatspb.ExecStats can be recorded.
 	ErrExecStatsFingerprintFlushed = errors.New("stmtStats flushed before execution stats can be recorded")
 )
 
@@ -66,8 +67,8 @@ func getStatus(statementError error) insights.Statement_Status {
 // statistics into in-memory structs. It is unrelated to the stmtErr in the
 // arguments.
 func (s *Container) RecordStatement(
-	ctx context.Context, key roachpb.StatementStatisticsKey, value sqlstats.RecordedStmtStats,
-) (roachpb.StmtFingerprintID, error) {
+	ctx context.Context, key appstatspb.StatementStatisticsKey, value sqlstats.RecordedStmtStats,
+) (appstatspb.StmtFingerprintID, error) {
 	createIfNonExistent := true
 	// If the statement is below the latency threshold, or stats aren't being
 	// recorded we don't need to create an entry in the stmts map for it. We do
@@ -109,6 +110,7 @@ func (s *Container) RecordStatement(
 	stats.mu.data.Count++
 	if key.Failed {
 		stats.mu.data.SensitiveInfo.LastErr = value.StatementError.Error()
+		stats.mu.data.LastErrorCode = pgerror.GetPGCode(value.StatementError).String()
 	}
 	// Only update MostRecentPlanDescription if we sampled a new PlanDescription.
 	if value.Plan != nil {
@@ -139,6 +141,18 @@ func (s *Container) RecordStatement(
 	stats.mu.data.IndexRecommendations = value.IndexRecommendations
 	stats.mu.data.Indexes = util.CombineUniqueString(stats.mu.data.Indexes, value.Indexes)
 
+	// Percentile latencies are only being sampled if the latency was above the
+	// AnomalyDetectionLatencyThreshold.
+	latencies := s.latencyInformation.GetPercentileValues(stmtFingerprintID)
+	latencyInfo := appstatspb.LatencyInfo{
+		Min: value.ServiceLatency,
+		Max: value.ServiceLatency,
+		P50: latencies.P50,
+		P90: latencies.P90,
+		P99: latencies.P99,
+	}
+	stats.mu.data.LatencyInfo.Add(latencyInfo)
+
 	// Note that some fields derived from tracing statements (such as
 	// BytesSentOverNetwork) are not updated here because they are collected
 	// on-demand.
@@ -154,7 +168,7 @@ func (s *Container) RecordStatement(
 		// stats size + stmtKey size + hash of the statementKey
 		estimatedMemoryAllocBytes := stats.sizeUnsafe() + statementKey.size() + 8
 
-		// We also accounts for the memory used for s.sampledPlanMetadataCache.
+		// We also account for the memory used for s.sampledPlanMetadataCache.
 		// timestamp size + key size + hash.
 		estimatedMemoryAllocBytes += timestampSize + statementKey.sampledPlanKey.size() + 8
 		s.mu.Lock()
@@ -179,10 +193,10 @@ func (s *Container) RecordStatement(
 	}
 
 	var contention *time.Duration
-	var contentionEvents []roachpb.ContentionEvent
+	var cpuSQLNanos int64
 	if value.ExecStats != nil {
 		contention = &value.ExecStats.ContentionTime
-		contentionEvents = value.ExecStats.ContentionEvents
+		cpuSQLNanos = value.ExecStats.CPUTime.Nanoseconds()
 	}
 
 	s.insights.ObserveStatement(value.SessionID, &insights.Statement{
@@ -201,9 +215,9 @@ func (s *Container) RecordStatement(
 		RowsWritten:          value.RowsWritten,
 		Nodes:                value.Nodes,
 		Contention:           contention,
-		ContentionEvents:     contentionEvents,
 		IndexRecommendations: value.IndexRecommendations,
 		Database:             value.Database,
+		CPUSQLNanos:          cpuSQLNanos,
 	})
 
 	return stats.ID, nil
@@ -211,7 +225,7 @@ func (s *Container) RecordStatement(
 
 // RecordStatementExecStats implements sqlstats.Writer interface.
 func (s *Container) RecordStatementExecStats(
-	key roachpb.StatementStatisticsKey, stats execstats.QueryLevelStats,
+	key appstatspb.StatementStatisticsKey, stats execstats.QueryLevelStats,
 ) error {
 	stmtStats, _, _, _, _ :=
 		s.getStatsForStmt(
@@ -246,7 +260,7 @@ func (s *Container) ShouldSample(
 // RecordTransaction implements sqlstats.Writer interface and saves
 // per-transaction statistics.
 func (s *Container) RecordTransaction(
-	ctx context.Context, key roachpb.TransactionFingerprintID, value sqlstats.RecordedTxnStats,
+	ctx context.Context, key appstatspb.TransactionFingerprintID, value sqlstats.RecordedTxnStats,
 ) error {
 	s.recordTransactionHighLevelStats(value.TransactionTimeSec, value.Committed, value.ImplicitTxn)
 
@@ -314,11 +328,31 @@ func (s *Container) RecordTransaction(
 		stats.mu.data.ExecStats.ContentionTime.Record(stats.mu.data.ExecStats.Count, value.ExecStats.ContentionTime.Seconds())
 		stats.mu.data.ExecStats.NetworkMessages.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.NetworkMessages))
 		stats.mu.data.ExecStats.MaxDiskUsage.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MaxDiskUsage))
+		stats.mu.data.ExecStats.CPUSQLNanos.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.CPUTime.Nanoseconds()))
+
+		stats.mu.data.ExecStats.MVCCIteratorStats.StepCount.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccSteps))
+		stats.mu.data.ExecStats.MVCCIteratorStats.StepCountInternal.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccStepsInternal))
+		stats.mu.data.ExecStats.MVCCIteratorStats.SeekCount.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccSeeks))
+		stats.mu.data.ExecStats.MVCCIteratorStats.SeekCountInternal.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccSeeksInternal))
+		stats.mu.data.ExecStats.MVCCIteratorStats.BlockBytes.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccBlockBytes))
+		stats.mu.data.ExecStats.MVCCIteratorStats.BlockBytesInCache.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccBlockBytesInCache))
+		stats.mu.data.ExecStats.MVCCIteratorStats.KeyBytes.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccKeyBytes))
+		stats.mu.data.ExecStats.MVCCIteratorStats.ValueBytes.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccValueBytes))
+		stats.mu.data.ExecStats.MVCCIteratorStats.PointCount.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccPointCount))
+		stats.mu.data.ExecStats.MVCCIteratorStats.PointsCoveredByRangeTombstones.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccPointsCoveredByRangeTombstones))
+		stats.mu.data.ExecStats.MVCCIteratorStats.RangeKeyCount.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccRangeKeyCount))
+		stats.mu.data.ExecStats.MVCCIteratorStats.RangeKeyContainedPoints.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccRangeKeyContainedPoints))
+		stats.mu.data.ExecStats.MVCCIteratorStats.RangeKeySkippedPoints.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccRangeKeySkippedPoints))
 	}
 
 	var retryReason string
 	if value.AutoRetryReason != nil {
 		retryReason = value.AutoRetryReason.Error()
+	}
+
+	var cpuSQLNanos int64
+	if value.ExecStats.CPUTime.Nanoseconds() >= 0 {
+		cpuSQLNanos = value.ExecStats.CPUTime.Nanoseconds()
 	}
 
 	s.insights.ObserveTransaction(value.SessionID, &insights.Transaction{
@@ -335,6 +369,7 @@ func (s *Container) RecordTransaction(
 		RowsWritten:     value.RowsWritten,
 		RetryCount:      value.RetryCount,
 		AutoRetryReason: retryReason,
+		CPUSQLNanos:     cpuSQLNanos,
 	})
 	return nil
 }

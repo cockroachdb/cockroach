@@ -65,6 +65,10 @@ var (
 		catconstants.SystemPrivilegeTableName,
 		catconstants.SystemExternalConnectionsTableName,
 		catconstants.SystemJobInfoTableName,
+		catconstants.SpanStatsUniqueKeys,
+		catconstants.SpanStatsBuckets,
+		catconstants.SpanStatsSamples,
+		catconstants.SpanStatsTenantBoundaries,
 	}
 
 	readWriteSystemSequences = []catconstants.SystemTableName{

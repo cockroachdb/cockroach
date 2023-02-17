@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -98,6 +99,8 @@ type Connector struct {
 type client struct {
 	roachpb.InternalClient
 	serverpb.StatusClient
+	serverpb.AdminClient
+	tspb.TimeSeriesClient
 }
 
 // Connector is capable of providing information on each of the KV nodes in the
@@ -123,6 +126,13 @@ var _ config.SystemConfigProvider = (*Connector)(nil)
 // tenant within the cluster. This is necessary for things such as
 // debug zip and range reports.
 var _ serverpb.TenantStatusServer = (*Connector)(nil)
+
+// Connector is capable of finding debug information about the cluster
+// the tenant belongs to. This is necessary for proper functioning of
+// the DB Console in cases where the tenant has privileges allowing it
+// to access system-level information.
+var _ serverpb.TenantAdminServer = (*Connector)(nil)
+var _ tspb.TenantTimeSeriesServer = (*Connector)(nil)
 
 // Connector is capable of accessing span configurations for secondary tenants.
 var _ spanconfig.KVAccessor = (*Connector)(nil)
@@ -203,6 +213,9 @@ func (c *Connector) Start(ctx context.Context) error {
 			settingsStartupCh = nil
 		case <-ctx.Done():
 			return ctx.Err()
+		case <-c.rpcContext.Stopper.ShouldQuiesce():
+			log.Infof(ctx, "kv connector asked to shut down before full start")
+			return errors.New("request to shut down early")
 		}
 	}
 	return nil
@@ -448,7 +461,18 @@ func (c *Connector) RangeLookup(
 		}
 		return resp.Descriptors, resp.PrefetchedDescriptors, nil
 	}
-	return nil, nil, ctx.Err()
+	return nil, nil, errors.Wrap(ctx.Err(), "range lookup")
+}
+
+// Nodes implements the serverpb.TenantStatusServer interface
+func (c *Connector) Nodes(
+	ctx context.Context, req *serverpb.NodesRequest,
+) (resp *serverpb.NodesResponse, retErr error) {
+	retErr = c.withClient(ctx, func(ctx context.Context, client *client) (err error) {
+		resp, err = client.Nodes(ctx, req)
+		return
+	})
+	return
 }
 
 // Regions implements the serverpb.TenantStatusServer interface
@@ -520,7 +544,7 @@ func (c *Connector) NewIterator(
 			rangeDescriptors = append(rangeDescriptors, e.RangeDescriptors...)
 		}
 	}
-	return nil, ctx.Err()
+	return nil, errors.Wrap(ctx.Err(), "new iterator")
 }
 
 // TokenBucket implements the kvtenant.TokenBucketProvider interface.
@@ -551,7 +575,7 @@ func (c *Connector) TokenBucket(
 		}
 		return resp, nil
 	}
-	return nil, ctx.Err()
+	return nil, errors.Wrap(ctx.Err(), "token bucket")
 }
 
 // GetSpanConfigRecords implements the spanconfig.KVAccessor interface.
@@ -563,7 +587,7 @@ func (c *Connector) GetSpanConfigRecords(
 			Targets: spanconfig.TargetsToProtos(targets),
 		})
 		if err != nil {
-			return err
+			return errors.Wrap(err, "get span configs error")
 		}
 
 		records, err = spanconfig.EntriesToRecords(resp.SpanConfigEntries)
@@ -593,7 +617,7 @@ func (c *Connector) UpdateSpanConfigRecords(
 			MaxCommitTimestamp: maxCommitTS,
 		})
 		if err != nil {
-			return err
+			return errors.Wrap(err, "update span configs error")
 		}
 		if resp.Error.IsSet() {
 			// Logical error; propagate as such.
@@ -624,6 +648,22 @@ func (c *Connector) SpanConfigConformance(
 	return report, nil
 }
 
+// SpanStats implements the serverpb.TenantStatusServer interface.
+func (c *Connector) SpanStats(
+	ctx context.Context, req *roachpb.SpanStatsRequest,
+) (*roachpb.SpanStatsResponse, error) {
+	var response *roachpb.SpanStatsResponse
+	err := c.withClient(ctx, func(ctx context.Context, c *client) error {
+		stats, err := c.SpanStats(ctx, req)
+		if err != nil {
+			return err
+		}
+		response = stats
+		return nil
+	})
+	return response, err
+}
+
 // GetAllSystemSpanConfigsThatApply implements the spanconfig.KVAccessor
 // interface.
 func (c *Connector) GetAllSystemSpanConfigsThatApply(
@@ -631,13 +671,12 @@ func (c *Connector) GetAllSystemSpanConfigsThatApply(
 ) ([]roachpb.SpanConfig, error) {
 	var spanConfigs []roachpb.SpanConfig
 	if err := c.withClient(ctx, func(ctx context.Context, c *client) error {
-		var err error
 		resp, err := c.GetAllSystemSpanConfigsThatApply(
 			ctx, &roachpb.GetAllSystemSpanConfigsThatApplyRequest{
 				TenantID: id,
 			})
 		if err != nil {
-			return err
+			return errors.Wrap(err, "get all system span configs that apply error")
 		}
 
 		spanConfigs = resp.SpanConfigs
@@ -646,6 +685,29 @@ func (c *Connector) GetAllSystemSpanConfigsThatApply(
 		return nil, err
 	}
 	return spanConfigs, nil
+}
+
+// HotRangesV2 implements the serverpb.HotRangesV2 interface
+func (c *Connector) HotRangesV2(
+	ctx context.Context, req *serverpb.HotRangesRequest,
+) (*serverpb.HotRangesResponseV2, error) {
+	var resp *serverpb.HotRangesResponseV2
+	r := *req
+	// Force to assign tenant ID in request to be the same as requested tenant
+	if len(req.TenantID) == 0 {
+		r.TenantID = c.tenantID.String()
+		log.Warningf(ctx, "tenant ID is set to %s", c.tenantID)
+	} else if c.tenantID.String() != req.TenantID {
+		return nil, status.Error(codes.PermissionDenied, "cannot request hot ranges for another tenant")
+	}
+	if err := c.withClient(ctx, func(ctx context.Context, c *client) error {
+		var err error
+		resp, err = c.HotRangesV2(ctx, &r)
+		return err
+	}); err != nil {
+		return nil, err
+	}
+	return resp, nil
 }
 
 // WithTxn implements the spanconfig.KVAccessor interface.
@@ -666,7 +728,7 @@ func (c *Connector) withClient(
 		}
 		return f(ctx, c)
 	}
-	return ctx.Err()
+	return errors.Wrap(ctx.Err(), "with client")
 }
 
 // getClient returns the singleton InternalClient if one is currently active. If
@@ -724,12 +786,14 @@ func (c *Connector) dialAddrs(ctx context.Context) (*client, error) {
 				continue
 			}
 			return &client{
-				InternalClient: roachpb.NewInternalClient(conn),
-				StatusClient:   serverpb.NewStatusClient(conn),
+				InternalClient:   roachpb.NewInternalClient(conn),
+				StatusClient:     serverpb.NewStatusClient(conn),
+				AdminClient:      serverpb.NewAdminClient(conn),
+				TimeSeriesClient: tspb.NewTimeSeriesClient(conn),
 			}, nil
 		}
 	}
-	return nil, ctx.Err()
+	return nil, errors.Wrap(ctx.Err(), "dial addrs")
 }
 
 func (c *Connector) dialAddr(ctx context.Context, addr string) (conn *grpc.ClientConn, err error) {
@@ -754,4 +818,26 @@ func (c *Connector) tryForgetClient(ctx context.Context, client roachpb.Internal
 	if c.mu.client == client {
 		c.mu.client = nil
 	}
+}
+
+// Liveness implements the serverpb.TenantAdminServer interface
+func (c *Connector) Liveness(
+	ctx context.Context, req *serverpb.LivenessRequest,
+) (resp *serverpb.LivenessResponse, retErr error) {
+	retErr = c.withClient(ctx, func(ctx context.Context, client *client) (err error) {
+		resp, err = client.Liveness(ctx, req)
+		return
+	})
+	return
+}
+
+// Query implements the serverpb.TenantTimeSeriesServer interface
+func (c *Connector) Query(
+	ctx context.Context, req *tspb.TimeSeriesQueryRequest,
+) (resp *tspb.TimeSeriesQueryResponse, retErr error) {
+	retErr = c.withClient(ctx, func(ctx context.Context, client *client) (err error) {
+		resp, err = client.Query(ctx, req)
+		return
+	})
+	return
 }

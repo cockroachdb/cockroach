@@ -16,6 +16,8 @@ sql
 CREATE USER trusted;
 CREATE USER usernologin WITH NOLOGIN PASSWORD '123';
 CREATE USER usernosqllogin WITH NOSQLLOGIN PASSWORD '123';
+CREATE USER userglobalnosqllogin WITH NOSQLLOGIN PASSWORD '123';
+CREATE USER userinheritsnosqllogin WITH NOSQLLOGIN PASSWORD '123';
 CREATE USER userexpired WITH PASSWORD '123' VALID UNTIL '2000-01-01'
 ----
 ok
@@ -28,6 +30,7 @@ local all all         password      # built-in CockroachDB default
 ----
 # Active authentication configuration on this node:
 # Original configuration:
+# loopback all all all trust       # built-in CockroachDB default
 # host  all root all cert-password # CockroachDB mandatory rule
 # host  all trusted all trust         # custom
 # host  all all     all cert-password # built-in CockroachDB default
@@ -35,12 +38,13 @@ local all all         password      # built-in CockroachDB default
 # local all all         password      # built-in CockroachDB default
 #
 # Interpreted configuration:
-# TYPE DATABASE USER    ADDRESS METHOD        OPTIONS
-host   all      root    all     cert-password
-host   all      trusted all     trust
-host   all      all     all     cert-password
-local  all      trusted         reject
-local  all      all             password
+# TYPE   DATABASE USER    ADDRESS METHOD        OPTIONS
+loopback all      all     all     trust
+host     all      root    all     cert-password
+host     all      trusted all     trust
+host     all      all     all     cert-password
+local    all      trusted         reject
+local    all      all             password
 
 subtest conn_tls
 
@@ -278,6 +282,29 @@ authlog 4
 88 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","Timestamp":"XXX"}
 89 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","Timestamp":"XXX"}
 
+connect_unix user=userglobalnosqllogin password=123
+----
+ERROR: userglobalnosqllogin does not have login privilege (SQLSTATE 28000)
+
+authlog 4
+.*client_connection_end
+----
+91 {"EventType":"client_authentication_info","Info":"HBA rule: local all all         password      # built-in CockroachDB default","InstanceID":1,"Method":"password","Network":"unix","RemoteAddress":"XXX","SystemIdentity":"userglobalnosqllogin","Timestamp":"XXX","Transport":"local"}
+92 {"EventType":"client_authentication_failed","InstanceID":1,"Method":"password","Network":"unix","Reason":3,"RemoteAddress":"XXX","SystemIdentity":"userglobalnosqllogin","Timestamp":"XXX","Transport":"local","User":"userglobalnosqllogin"}
+93 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","Timestamp":"XXX"}
+94 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","Timestamp":"XXX"}
+
+connect_unix user=userinheritsnosqllogin password=123
+----
+ERROR: userinheritsnosqllogin does not have login privilege (SQLSTATE 28000)
+
+authlog 4
+.*client_connection_end
+----
+96 {"EventType":"client_authentication_info","Info":"HBA rule: local all all         password      # built-in CockroachDB default","InstanceID":1,"Method":"password","Network":"unix","RemoteAddress":"XXX","SystemIdentity":"userinheritsnosqllogin","Timestamp":"XXX","Transport":"local"}
+97 {"EventType":"client_authentication_failed","InstanceID":1,"Method":"password","Network":"unix","Reason":3,"RemoteAddress":"XXX","SystemIdentity":"userinheritsnosqllogin","Timestamp":"XXX","Transport":"local","User":"userinheritsnosqllogin"}
+98 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","Timestamp":"XXX"}
+99 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","Timestamp":"XXX"}
 
 connect_unix user=userexpired password=123
 ----
@@ -286,12 +313,12 @@ ERROR: password is expired (SQLSTATE 28000)
 authlog 6
 .*client_connection_end
 ----
-90 {"EventType":"client_connection_start","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","Timestamp":"XXX"}
-91 {"EventType":"client_authentication_info","Info":"HBA rule: local all all         password      # built-in CockroachDB default","InstanceID":1,"Method":"password","Network":"unix","RemoteAddress":"XXX","SystemIdentity":"userexpired","Timestamp":"XXX","Transport":"local"}
-92 {"EventType":"client_authentication_failed","InstanceID":1,"Method":"password","Network":"unix","Reason":7,"RemoteAddress":"XXX","SystemIdentity":"userexpired","Timestamp":"XXX","Transport":"local","User":"userexpired"}
-93 {"Detail":"password is expired","EventType":"client_authentication_failed","InstanceID":1,"Method":"password","Network":"unix","Reason":6,"RemoteAddress":"XXX","SystemIdentity":"userexpired","Timestamp":"XXX","Transport":"local","User":"userexpired"}
-94 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","Timestamp":"XXX"}
-95 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","Timestamp":"XXX"}
+100 {"EventType":"client_connection_start","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","Timestamp":"XXX"}
+101 {"EventType":"client_authentication_info","Info":"HBA rule: local all all         password      # built-in CockroachDB default","InstanceID":1,"Method":"password","Network":"unix","RemoteAddress":"XXX","SystemIdentity":"userexpired","Timestamp":"XXX","Transport":"local"}
+102 {"EventType":"client_authentication_failed","InstanceID":1,"Method":"password","Network":"unix","Reason":7,"RemoteAddress":"XXX","SystemIdentity":"userexpired","Timestamp":"XXX","Transport":"local","User":"userexpired"}
+103 {"Detail":"password is expired","EventType":"client_authentication_failed","InstanceID":1,"Method":"password","Network":"unix","Reason":6,"RemoteAddress":"XXX","SystemIdentity":"userexpired","Timestamp":"XXX","Transport":"local","User":"userexpired"}
+104 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","Timestamp":"XXX"}
+105 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","Timestamp":"XXX"}
 
 subtest end
 

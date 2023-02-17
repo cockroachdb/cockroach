@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 )
 
 // This file contains the two major components to name resolution:
@@ -156,40 +155,6 @@ func newInvTableNameError(n fmt.Stringer) error {
 		"invalid table name: %s", n)
 }
 
-// CommonLookupFlags is the common set of flags for the various accessor interfaces.
-type CommonLookupFlags struct {
-	// if required is set, lookup will return an error if the item is not found.
-	Required bool
-	// RequireMutable specifies whether to return a mutable descriptor.
-	RequireMutable bool
-	// AvoidLeased, if set, avoid the leased (possibly stale) version of the
-	// descriptor. It must be set when callers want consistent reads.
-	AvoidLeased bool
-	// AvoidCommittedAdding specifies if committed descriptors in the adding state
-	// will be ignored.
-	AvoidCommittedAdding bool
-	// IncludeOffline specifies if offline descriptors should be visible.
-	IncludeOffline bool
-	// IncludeOffline specifies if dropped descriptors should be visible.
-	IncludeDropped bool
-	// AvoidSynthetic specifies if the synthetic descriptors will be ignored.
-	AvoidSynthetic bool
-	// AvoidStorage specifies if the descriptors in storage will be ignored.
-	AvoidStorage bool
-	// ParentID enforces that the resolved descriptor exist with this parent
-	// ID if non-zero.
-	ParentID catid.DescID
-}
-
-// SchemaLookupFlags is the flag struct suitable for GetSchemaByName().
-type SchemaLookupFlags = CommonLookupFlags
-
-// DatabaseLookupFlags is the flag struct suitable for GetImmutableDatabaseByName().
-type DatabaseLookupFlags = CommonLookupFlags
-
-// DatabaseListFlags is the flag struct suitable for GetObjectNamesAndIDs().
-type DatabaseListFlags = CommonLookupFlags
-
 // DesiredObjectKind represents what kind of object is desired in a name
 // resolution attempt.
 type DesiredObjectKind byte
@@ -200,21 +165,6 @@ const (
 	// TypeObject is used when a type-like object is desired from resolution.
 	TypeObject
 )
-
-// NewQualifiedObjectName returns an ObjectName of the corresponding kind.
-// It is used mainly for constructing appropriate error messages depending
-// on what kind of object was requested.
-func NewQualifiedObjectName(catalog, schema, object string, kind DesiredObjectKind) ObjectName {
-	switch kind {
-	case TableObject:
-		name := MakeTableNameWithSchema(Name(catalog), Name(schema), Name(object))
-		return &name
-	case TypeObject:
-		name := MakeQualifiedTypeName(catalog, schema, object)
-		return &name
-	}
-	return nil
-}
 
 // RequiredTableKind controls what kind of TableDescriptor backed object is
 // requested to be resolved.
@@ -243,7 +193,17 @@ func (r RequiredTableKind) String() string {
 
 // ObjectLookupFlags is the flag struct suitable for GetObjectByName().
 type ObjectLookupFlags struct {
-	CommonLookupFlags
+	// Required specifies that the lookup will return an error if the item is
+	// not found.
+	Required bool
+	// RequireMutable specifies whether to return a mutable descriptor.
+	RequireMutable bool
+	// AvoidLeased, if set, avoid the leased (possibly stale) version of the
+	// descriptor. It must be set when callers want consistent reads.
+	AvoidLeased bool
+	// IncludeOffline specifies if offline descriptors should be visible.
+	IncludeOffline bool
+	// AllowWithoutPrimaryKey specifies if tables without PKs can be resolved.
 	AllowWithoutPrimaryKey bool
 	// Control what type of object is being requested.
 	DesiredObjectKind DesiredObjectKind
@@ -252,21 +212,16 @@ type ObjectLookupFlags struct {
 	DesiredTableDescKind RequiredTableKind
 }
 
-// ObjectLookupFlagsWithRequired returns a default ObjectLookupFlags object
-// with just the Required flag true. This is a common configuration of the
-// flags.
-func ObjectLookupFlagsWithRequired() ObjectLookupFlags {
-	return ObjectLookupFlags{
-		CommonLookupFlags: CommonLookupFlags{Required: true},
-	}
-}
-
-// ObjectLookupFlagsWithRequiredTableKind returns an ObjectLookupFlags with
-// Required set to true, and the DesiredTableDescKind set to the input kind.
-func ObjectLookupFlagsWithRequiredTableKind(kind RequiredTableKind) ObjectLookupFlags {
-	return ObjectLookupFlags{
-		CommonLookupFlags:    CommonLookupFlags{Required: true},
-		DesiredObjectKind:    TableObject,
-		DesiredTableDescKind: kind,
-	}
+// IndexLookupFlags is the flag struct used for resolver.ResolveIndex() only.
+type IndexLookupFlags struct {
+	// Required, if true, indicates lookup can return nil index without
+	// returning an error if the index does not exist.
+	Required bool
+	// IncludeNonActiveIndex expands the lookup to also consider
+	// non-active indexes. By default, only active indexes are
+	// considered.
+	IncludeNonActiveIndex bool
+	// IncludeOfflineTable expands the lookup to also consider offline
+	// tables. By default, only online tables are considered.
+	IncludeOfflineTable bool
 }

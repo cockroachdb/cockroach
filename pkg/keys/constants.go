@@ -30,13 +30,6 @@ const (
 	tenantPrefixByte = '\xfe'
 )
 
-// Constants to subdivide unsafe loss of quorum recovery data into groups.
-// Currently we only store keys as they are applied, but might benefit from
-// archiving them to make them more "durable".
-const (
-	appliedUnsafeReplicaRecoveryPrefix = "applied"
-)
-
 // Constants for system-reserved keys in the KV map.
 //
 // Note: Preserve group-wise ordering when adding new constants.
@@ -181,18 +174,31 @@ var (
 	// localStoreIdentSuffix stores an immutable identifier for this
 	// store, created when the store is first bootstrapped.
 	localStoreIdentSuffix = []byte("iden")
+	// localStoreLossOfQuorumRecoveryInfix is an infix for the group of keys used
+	// by loss of quorum recovery operations to track progress and outcome.
+	// This infix is followed by the suffix defining type of recovery key.
+	localStoreLossOfQuorumRecoveryInfix = []byte("loqr")
 	// LocalStoreUnsafeReplicaRecoverySuffix is a suffix for temporary record
 	// entries put when loss of quorum recovery operations are performed offline
 	// on the store.
 	// See StoreUnsafeReplicaRecoveryKey for details.
-	localStoreUnsafeReplicaRecoverySuffix = makeKey([]byte("loqr"),
-		[]byte(appliedUnsafeReplicaRecoveryPrefix))
+	localStoreUnsafeReplicaRecoverySuffix = makeKey(localStoreLossOfQuorumRecoveryInfix,
+		[]byte("applied"))
 	// LocalStoreUnsafeReplicaRecoveryKeyMin is the start of keyspace used to store
 	// loss of quorum recovery record entries.
 	LocalStoreUnsafeReplicaRecoveryKeyMin = MakeStoreKey(localStoreUnsafeReplicaRecoverySuffix, nil)
 	// LocalStoreUnsafeReplicaRecoveryKeyMax is the end of keyspace used to store
 	// loss of quorum recovery record entries.
 	LocalStoreUnsafeReplicaRecoveryKeyMax = LocalStoreUnsafeReplicaRecoveryKeyMin.PrefixEnd()
+	// localStoreLossOfQuorumRecoveryStatusSuffix is a local key store suffix to
+	// store results of loss of quorum recovery plan application.
+	localStoreLossOfQuorumRecoveryStatusSuffix = makeKey(localStoreLossOfQuorumRecoveryInfix,
+		[]byte("status"))
+	// localStoreLossOfQuorumRecoveryCleanupActionsSuffix is a local key store
+	// suffix to store information for loss of quorum recovery cleanup actions
+	// performed after node restart.
+	localStoreLossOfQuorumRecoveryCleanupActionsSuffix = makeKey(localStoreLossOfQuorumRecoveryInfix,
+		[]byte("cleanup"))
 	// localStoreNodeTombstoneSuffix stores key value pairs that map
 	// nodeIDs to time of removal from cluster.
 	localStoreNodeTombstoneSuffix = []byte("ntmb")

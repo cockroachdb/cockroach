@@ -40,7 +40,7 @@ import (
 
 func writeTxnRecord(ctx context.Context, tc *testContext, txn *roachpb.Transaction) error {
 	key := keys.TransactionKey(txn.Key, txn.ID)
-	return storage.MVCCPutProto(ctx, tc.store.Engine(), nil, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, txn)
+	return storage.MVCCPutProto(ctx, tc.store.TODOEngine(), nil, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, txn)
 }
 
 // createTxnForPushQueue creates a txn struct and writes a "fake"
@@ -490,7 +490,7 @@ func TestTxnWaitQueuePusheeExpires(t *testing.T) {
 	var queryTxnCount int32
 
 	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
-	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(manual)
 	txn := newTransaction("txn", roachpb.Key("a"), 1, clock)
 	// Move the clock forward so that when the PushTxn is sent, the txn appears
 	// expired.

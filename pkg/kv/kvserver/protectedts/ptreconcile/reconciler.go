@@ -17,11 +17,11 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -41,7 +41,7 @@ var ReconcileInterval = settings.RegisterDurationSetting(
 // StatusFunc is used to check on the status of a Record based on its Meta
 // field.
 type StatusFunc func(
-	ctx context.Context, txn *kv.Txn, meta []byte,
+	ctx context.Context, txn isql.Txn, meta []byte,
 ) (shouldRemove bool, _ error)
 
 // StatusFuncs maps from MetaType to a StatusFunc.
@@ -52,15 +52,15 @@ type StatusFuncs map[string]StatusFunc
 // meta in conjunction with the configured StatusFunc.
 type Reconciler struct {
 	settings    *cluster.Settings
-	db          *kv.DB
-	pts         protectedts.Storage
+	db          isql.DB
+	pts         protectedts.Manager
 	metrics     Metrics
 	statusFuncs StatusFuncs
 }
 
 // New constructs a Reconciler.
 func New(
-	st *cluster.Settings, db *kv.DB, storage protectedts.Storage, statusFuncs StatusFuncs,
+	st *cluster.Settings, db isql.DB, storage protectedts.Manager, statusFuncs StatusFuncs,
 ) *Reconciler {
 	return &Reconciler{
 		settings:    st,
@@ -119,9 +119,9 @@ func (r *Reconciler) run(ctx context.Context, stopper *stop.Stopper) {
 func (r *Reconciler) reconcile(ctx context.Context) {
 	// Load protected timestamp records.
 	var state ptpb.State
-	if err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	if err := r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		var err error
-		state, err = r.pts.GetState(ctx, txn)
+		state, err = r.pts.WithTxn(txn).GetState(ctx)
 		return err
 	}); err != nil {
 		r.metrics.ReconciliationErrors.Inc(1)
@@ -135,7 +135,7 @@ func (r *Reconciler) reconcile(ctx context.Context) {
 			continue
 		}
 		var didRemove bool
-		if err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+		if err := r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
 			didRemove = false // reset for retries
 			shouldRemove, err := task(ctx, txn, rec.Meta)
 			if err != nil {
@@ -144,7 +144,7 @@ func (r *Reconciler) reconcile(ctx context.Context) {
 			if !shouldRemove {
 				return nil
 			}
-			err = r.pts.Release(ctx, txn, rec.ID.GetUUID())
+			err = r.pts.WithTxn(txn).Release(ctx, rec.ID.GetUUID())
 			if err != nil && !errors.Is(err, protectedts.ErrNotExists) {
 				return err
 			}

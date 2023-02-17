@@ -37,10 +37,10 @@ func TestMultiQueueAddTwiceSameQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	queue := NewMultiQueue(1)
-	blocker := queue.Add(0, 0)
+	blocker, _ := queue.Add(0, 0, -1)
 
-	chan1 := queue.Add(7, 1.0)
-	chan2 := queue.Add(7, 2.0)
+	chan1, _ := queue.Add(7, 1.0, -1)
+	chan2, _ := queue.Add(7, 2.0, -1)
 
 	permit := <-blocker.GetWaitChan()
 	queue.Release(permit)
@@ -56,13 +56,13 @@ func TestMultiQueueTwoQueues(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	queue := NewMultiQueue(1)
-	blocker := queue.Add(0, 0)
+	blocker, _ := queue.Add(0, 0, -1)
 
-	a1 := queue.Add(5, 4.0)
-	a2 := queue.Add(5, 5.0)
+	a1, _ := queue.Add(5, 4.0, -1)
+	a2, _ := queue.Add(5, 5.0, -1)
 
-	b1 := queue.Add(6, 1.0)
-	b2 := queue.Add(6, 2.0)
+	b1, _ := queue.Add(6, 1.0, -1)
+	b2, _ := queue.Add(6, 2.0, -1)
 
 	permit := <-blocker.GetWaitChan()
 	queue.Release(permit)
@@ -79,15 +79,15 @@ func TestMultiQueueComplex(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	queue := NewMultiQueue(1)
-	blocker := queue.Add(0, 0)
+	blocker, _ := queue.Add(0, 0, -1)
 
-	a2 := queue.Add(1, 4.0)
-	b1 := queue.Add(2, 1.1)
-	b2 := queue.Add(2, 2.1)
-	c2 := queue.Add(3, 1.2)
-	c3 := queue.Add(3, 2.2)
-	a3 := queue.Add(1, 5.0)
-	b3 := queue.Add(2, 6.1)
+	a2, _ := queue.Add(1, 4.0, -1)
+	b1, _ := queue.Add(2, 1.1, -1)
+	b2, _ := queue.Add(2, 2.1, -1)
+	c2, _ := queue.Add(3, 1.2, -1)
+	c3, _ := queue.Add(3, 2.2, -1)
+	a3, _ := queue.Add(1, 5.0, -1)
+	b3, _ := queue.Add(2, 6.1, -1)
 
 	permit := <-blocker.GetWaitChan()
 	queue.Release(permit)
@@ -99,15 +99,15 @@ func TestMultiQueueRemove(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	queue := NewMultiQueue(1)
-	blocker := queue.Add(0, 0)
+	blocker, _ := queue.Add(0, 0, -1)
 
-	a2 := queue.Add(1, 4.0)
-	b1 := queue.Add(2, 1.1)
-	b2 := queue.Add(2, 2.1)
-	c2 := queue.Add(3, 1.2)
-	c3 := queue.Add(3, 2.2)
-	a3 := queue.Add(1, 5.0)
-	b3 := queue.Add(2, 6.1)
+	a2, _ := queue.Add(1, 4.0, -1)
+	b1, _ := queue.Add(2, 1.1, -1)
+	b2, _ := queue.Add(2, 2.1, -1)
+	c2, _ := queue.Add(3, 1.2, -1)
+	c3, _ := queue.Add(3, 2.2, -1)
+	a3, _ := queue.Add(1, 5.0, -1)
+	b3, _ := queue.Add(2, 6.1, -1)
 
 	fmt.Println("Beginning cancel")
 
@@ -125,7 +125,7 @@ func TestMultiQueueCancelOne(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	queue := NewMultiQueue(1)
-	task := queue.Add(1, 1)
+	task, _ := queue.Add(1, 1, -1)
 	queue.Cancel(task)
 }
 
@@ -139,12 +139,12 @@ func TestMultiQueueCancelInProgress(t *testing.T) {
 	const b = 2
 	const c = 3
 
-	a3 := queue.Add(a, 5.0)
-	a2 := queue.Add(a, 4.0)
-	b1 := queue.Add(b, 1.1)
-	b2 := queue.Add(b, 2.1)
-	c3 := queue.Add(c, 2.2)
-	b3 := queue.Add(b, 6.1)
+	a3, _ := queue.Add(a, 5.0, -1)
+	a2, _ := queue.Add(a, 4.0, -1)
+	b1, _ := queue.Add(b, 1.1, -1)
+	b2, _ := queue.Add(b, 2.1, -1)
+	c3, _ := queue.Add(c, 2.2, -1)
+	b3, _ := queue.Add(b, 6.1, -1)
 
 	queue.Cancel(b2)
 	queue.Cancel(b1)
@@ -237,7 +237,7 @@ func TestMultiQueueStress(t *testing.T) {
 			for i := 0; i < numThreads; i++ {
 				go func(name int) {
 					for j := 0; j < numRequests; j++ {
-						curTask := queue.Add(name, float64(j))
+						curTask, _ := queue.Add(name, float64(j), -1)
 						if alsoCancel && j%99 == 0 {
 							queue.Cancel(curTask)
 						} else {
@@ -271,7 +271,7 @@ func TestMultiQueueReleaseTwice(t *testing.T) {
 
 	queue := NewMultiQueue(1)
 
-	task := queue.Add(1, 1)
+	task, _ := queue.Add(1, 1, -1)
 	p := <-task.GetWaitChan()
 	queue.Release(p)
 	require.Panics(t, func() { queue.Release(p) })
@@ -283,7 +283,7 @@ func TestMultiQueueReleaseAfterCancel(t *testing.T) {
 
 	queue := NewMultiQueue(1)
 
-	task := queue.Add(1, 1)
+	task, _ := queue.Add(1, 1, -1)
 	p := <-task.GetWaitChan()
 	queue.Cancel(task)
 	queue.Release(p)
@@ -294,31 +294,84 @@ func TestMultiQueueLen(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	queue := NewMultiQueue(2)
-	require.Equal(t, 2, queue.Len())
+	require.Equal(t, 2, queue.AvailableLen())
+	require.Equal(t, 0, queue.QueueLen())
 
-	task1 := queue.Add(1, 1)
-	require.Equal(t, 1, queue.Len())
-	task2 := queue.Add(1, 1)
-	require.Equal(t, 0, queue.Len())
-	task3 := queue.Add(1, 1)
-	require.Equal(t, 0, queue.Len())
+	task1, _ := queue.Add(1, 1, -1)
+	require.Equal(t, 1, queue.AvailableLen())
+	require.Equal(t, 0, queue.QueueLen())
+	task2, _ := queue.Add(1, 1, -1)
+	require.Equal(t, 0, queue.AvailableLen())
+	require.Equal(t, 1, queue.QueueLen())
+	task3, _ := queue.Add(1, 1, -1)
+	require.Equal(t, 0, queue.AvailableLen())
+	require.Equal(t, 2, queue.QueueLen())
 
 	queue.Cancel(task1)
 	// Finish task 1, but immediately start task3.
-	require.Equal(t, 0, queue.Len())
+	require.Equal(t, 0, queue.AvailableLen())
+	require.Equal(t, 1, queue.QueueLen())
 
 	p := <-task2.GetWaitChan()
 	queue.Release(p)
-	require.Equal(t, 1, queue.Len())
+	require.Equal(t, 1, queue.AvailableLen())
+	require.Equal(t, 0, queue.QueueLen())
 
 	queue.Cancel(task3)
-	require.Equal(t, 2, queue.Len())
+	require.Equal(t, 2, queue.AvailableLen())
+	require.Equal(t, 0, queue.QueueLen())
+}
+
+func TestMultiQueueFull(t *testing.T) {
+	queue := NewMultiQueue(2)
+	require.Equal(t, 2, queue.AvailableLen())
+	require.Equal(t, 0, queue.QueueLen())
+
+	// Task 1 starts immediately since there is no queue.
+	task1, err := queue.Add(1, 1, 0)
+	require.NoError(t, err)
+	require.Equal(t, 1, queue.AvailableLen())
+	require.Equal(t, 0, queue.QueueLen())
+	// Task 2 also starts immediately as the queue supports 2 concurrent.
+	task2, err := queue.Add(1, 1, 0)
+	require.NoError(t, err)
+	require.Equal(t, 0, queue.AvailableLen())
+	require.Equal(t, 1, queue.QueueLen())
+	// Task 3 would be queued so should not be added.
+	task3, err := queue.Add(1, 1, 0)
+	require.Error(t, err)
+	require.Nil(t, task3)
+	require.Equal(t, 0, queue.AvailableLen())
+	require.Equal(t, 1, queue.QueueLen())
+	// Task 4 uses a longer max queue length so should be added.
+	task4, err := queue.Add(1, 1, 1)
+	require.NoError(t, err)
+	require.Equal(t, 0, queue.AvailableLen())
+	require.Equal(t, 2, queue.QueueLen())
+
+	queue.Cancel(task1)
+	queue.Cancel(task2)
+	require.Equal(t, 1, queue.AvailableLen())
+	require.Equal(t, 0, queue.QueueLen())
+	// After these tasks are done, make sure we can add another one.
+	task5, err := queue.Add(1, 1, 0)
+	require.NoError(t, err)
+	require.Equal(t, 0, queue.AvailableLen())
+	require.Equal(t, 1, queue.QueueLen())
+
+	// Cancel all the remaining tasks.
+	queue.Cancel(task4)
+	queue.Cancel(task5)
 }
 
 // verifyOrder makes sure that the chans are called in the specified order.
 func verifyOrder(t *testing.T, queue *MultiQueue, tasks ...*Task) {
 	// each time, verify that the only available channel is the "next" one in order
 	for i, task := range tasks {
+		if task == nil {
+			require.Fail(t, "Task is nil", "%d", task)
+		}
+
 		var found *Permit
 		for j, t2 := range tasks[i+1:] {
 			select {

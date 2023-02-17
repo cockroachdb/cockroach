@@ -17,8 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
@@ -33,7 +34,7 @@ import (
 func NewColSpanAssembler(
 	codec keys.SQLCodec,
 	allocator *colmem.Allocator,
-	fetchSpec *descpb.IndexFetchSpec,
+	fetchSpec *fetchpb.IndexFetchSpec,
 	splitFamilyIDs []descpb.FamilyID,
 	inputTypes []*types.T,
 ) ColSpanAssembler {
@@ -59,7 +60,7 @@ func NewColSpanAssembler(
 	// ColSpanAssembler will later append these together to form valid spans.
 	keyColumns := fetchSpec.KeyColumns()
 	for i := range keyColumns {
-		asc := keyColumns[i].Direction == catpb.IndexColumn_ASC
+		asc := keyColumns[i].Direction == catenumpb.IndexColumn_ASC
 		sa.spanEncoders = append(sa.spanEncoders, newSpanEncoder(allocator, inputTypes[i], asc, i))
 	}
 	if cap(sa.spanCols) < len(sa.spanEncoders) {

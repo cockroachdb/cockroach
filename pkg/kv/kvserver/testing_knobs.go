@@ -43,6 +43,7 @@ type StoreTestingKnobs struct {
 	TenantRateKnobs         tenantrate.TestingKnobs
 	EngineKnobs             []storage.ConfigOption
 	AllocatorKnobs          *allocator.TestingKnobs
+	GossipTestingKnobs      StoreGossipTestingKnobs
 
 	// TestingRequestFilter is called before evaluating each request on a
 	// replica. The filter is run before the request acquires latches, so
@@ -252,11 +253,6 @@ type StoreTestingKnobs struct {
 	// SkipMinSizeCheck, if set, makes the store creation process skip the check
 	// for a minimum size.
 	SkipMinSizeCheck bool
-	// DisableLeaseCapacityGossip disables the ability of a changing number of
-	// leases to trigger the store to gossip its capacity. With this enabled,
-	// only changes in the number of replicas can cause the store to gossip its
-	// capacity.
-	DisableLeaseCapacityGossip bool
 	// SystemLogsGCPeriod is used to override the period of GC of system logs.
 	SystemLogsGCPeriod time.Duration
 	// SystemLogsGCGCDone is used to notify when system logs GC is done.
@@ -284,7 +280,7 @@ type StoreTestingKnobs struct {
 
 	// SendSnapshot is run after receiving a DelegateRaftSnapshot request but
 	// before any throttling or sending logic.
-	SendSnapshot func()
+	SendSnapshot func(*kvserverpb.DelegateSendSnapshotRequest)
 	// ReceiveSnapshot is run after receiving a snapshot header but before
 	// acquiring snapshot quota or doing shouldAcceptSnapshotData checks. If an
 	// error is returned from the hook, it's sent as an ERROR SnapshotResponse.
@@ -383,10 +379,6 @@ type StoreTestingKnobs struct {
 	// bootstrapping ranges. This is used for testing the migration
 	// infrastructure.
 	InitialReplicaVersionOverride *roachpb.Version
-	// GossipWhenCapacityDeltaExceedsFraction specifies the fraction from the last
-	// gossiped store capacity values which need be exceeded before the store will
-	// gossip immediately without waiting for the periodic gossip interval.
-	GossipWhenCapacityDeltaExceedsFraction float64
 	// TimeSeriesDataStore is an interface used by the store's time series
 	// maintenance queue to dispatch individual maintenance tasks.
 	TimeSeriesDataStore TimeSeriesDataStore
@@ -420,6 +412,8 @@ type StoreTestingKnobs struct {
 	// TODO(irfansharif): Get rid of this knob, maybe by first moving
 	// DisableSpanConfigs into a testing knob instead of a server arg.
 	UseSystemConfigSpanForQueues bool
+	// ConfReaderInterceptor intercepts calls to get a span config reader.
+	ConfReaderInterceptor func() spanconfig.StoreReader
 	// IgnoreStrictGCEnforcement is used by tests to op out of strict GC
 	// enforcement.
 	IgnoreStrictGCEnforcement bool
@@ -431,10 +425,9 @@ type StoreTestingKnobs struct {
 	// AfterSendSnapshotThrottle intercepts replicas after receiving a spot in the
 	// send snapshot semaphore.
 	AfterSendSnapshotThrottle func()
-
-	// This method, if set, gets to see (and mutate, if desired) any local
-	// StoreDescriptor before it is being sent out on the Gossip network.
-	StoreGossipIntercept func(descriptor *roachpb.StoreDescriptor)
+	// SelectDelegateSnapshotSender returns an ordered list of replica which will
+	// be used as delegates for sending a snapshot.
+	SelectDelegateSnapshotSender func(*roachpb.RangeDescriptor) []roachpb.ReplicaDescriptor
 
 	// EnqueueReplicaInterceptor intercepts calls to `store.Enqueue()`.
 	EnqueueReplicaInterceptor func(queueName string, replica *Replica)

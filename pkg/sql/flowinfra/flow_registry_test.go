@@ -247,13 +247,10 @@ func TestStreamConnectionTimeout(t *testing.T) {
 	})
 
 	// Create a dummy server stream to pass to ConnectInboundStream.
-	serverStream, _ /* clientStream */, cleanup, err := createDummyStream()
-	if err != nil {
-		t.Fatal(err)
-	}
+	serverStream, _ /* clientStream */, cleanup := createDummyStream(t)
 	defer cleanup()
 
-	_, _, _, err = reg.ConnectInboundStream(context.Background(), id1, streamID1, serverStream, jiffy)
+	_, _, _, err := reg.ConnectInboundStream(context.Background(), id1, streamID1, serverStream, jiffy)
 	if !testutils.IsError(err, "came too late") {
 		t.Fatalf("expected %q, got: %v", "came too late", err)
 	}
@@ -295,10 +292,7 @@ func TestHandshake(t *testing.T) {
 			flowID := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 			streamID := execinfrapb.StreamID(1)
 
-			serverStream, clientStream, cleanup, err := createDummyStream()
-			if err != nil {
-				t.Fatal(err)
-			}
+			serverStream, clientStream, cleanup := createDummyStream(t)
 			defer cleanup()
 
 			connectProducer := func() {

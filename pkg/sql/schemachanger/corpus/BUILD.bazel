@@ -28,6 +28,7 @@ go_test(
         "//pkg/clusterversion",
         "//pkg/jobs/jobspb",
         "//pkg/sql/schemachanger/scop",
+        "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/schemachanger/scplan",
         "//pkg/testutils/skip",
         "@com_github_stretchr_testify//require",

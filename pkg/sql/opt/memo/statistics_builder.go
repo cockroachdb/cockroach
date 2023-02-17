@@ -614,12 +614,12 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 	// Make now and annotate the metadata table with it for next time.
 	stats = &props.Statistics{}
 
-	// Find the most recent statistic. (Stats are ordered with most recent first.)
+	// Find the most recent full statistic. (Stats are ordered with most recent first.)
 	var first int
-	if !sb.evalCtx.SessionData().OptimizerUseForecasts {
-		for first < tab.StatisticCount() && tab.Statistic(first).IsForecast() {
-			first++
-		}
+	for first < tab.StatisticCount() &&
+		(tab.Statistic(first).IsPartial() ||
+			tab.Statistic(first).IsForecast() && !sb.evalCtx.SessionData().OptimizerUseForecasts) {
+		first++
 	}
 
 	if first >= tab.StatisticCount() {
@@ -639,6 +639,9 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 		// column set. Stats are ordered with most recent first.
 		for i := first; i < tab.StatisticCount(); i++ {
 			stat := tab.Statistic(i)
+			if stat.IsPartial() {
+				continue
+			}
 			if stat.IsForecast() && !sb.evalCtx.SessionData().OptimizerUseForecasts {
 				continue
 			}
@@ -3081,14 +3084,12 @@ func (sb *statisticsBuilder) filterRelExpr(
 func (sb *statisticsBuilder) applyFilters(
 	filters FiltersExpr, e RelExpr, relProps *props.Relational, skipOrTermAccounting bool,
 ) (numUnappliedConjuncts float64, constrainedCols, histCols opt.ColSet) {
-	// Special hack for lookup and inverted joins. Add constant filters from the
-	// equality conditions.
+	// Special hack for inverted joins. Add constant filters from the equality
+	// conditions.
 	// TODO(rytaft): the correct way to do this is probably to fully implement
 	// histograms in Project and Join expressions, and use them in
 	// selectivityFromEquivalencies. See Issue #38082.
 	switch t := e.(type) {
-	case *LookupJoinExpr:
-		filters = append(filters, t.ConstFilters...)
 	case *InvertedJoinExpr:
 		filters = append(filters, t.ConstFilters...)
 	}
@@ -3193,30 +3194,55 @@ func (sb *statisticsBuilder) applyFiltersItem(
 			}
 		}
 	} else if constraintUnion, numUnappliedDisjuncts := sb.buildDisjunctionConstraints(filter); len(constraintUnion) > 0 {
-		// The filters are one or more disjuncts and tight constraint sets could be
-		// built for at least one disjunct. numUnappliedDisjuncts contains the count
-		// of disjuncts which are not tight constraints.
-		var tmpStats props.Statistics
+		if sb.evalCtx.SessionData().OptimizerUseImprovedDisjunctionStats {
+			// The filters are one or more disjuncts and tight constraint sets
+			// could be built for at least one disjunct. numUnappliedDisjuncts
+			// contains the count of disjuncts which are not tight constraints.
+			var tmpStats props.Statistics
 
-		selectivities := make([]props.Selectivity, 0, len(constraintUnion)+numUnappliedDisjuncts)
-		// Get the stats for each constraint set, apply the selectivity to a
-		// temporary stats struct, and combine the disjunct selectivities.
-		// union the selectivity and row counts.
-		for i := 0; i < len(constraintUnion); i++ {
-			tmpStats.CopyFrom(s)
-			sb.constrainExpr(e, constraintUnion[i], relProps, &tmpStats)
-			selectivities = append(selectivities, tmpStats.Selectivity)
-		}
-		defaultSelectivity := props.MakeSelectivity(unknownFilterSelectivity)
-		for i := 0; i < numUnappliedDisjuncts; i++ {
-			selectivities = append(selectivities, defaultSelectivity)
-		}
+			selectivities := make([]props.Selectivity, 0, len(constraintUnion)+numUnappliedDisjuncts)
+			// Get the stats for each constraint set, apply the selectivity to a
+			// temporary stats struct, and combine the disjunct selectivities.
+			// union the selectivity and row counts.
+			for i := 0; i < len(constraintUnion); i++ {
+				tmpStats.CopyFrom(s)
+				sb.constrainExpr(e, constraintUnion[i], relProps, &tmpStats)
+				selectivities = append(selectivities, tmpStats.Selectivity)
+			}
+			defaultSelectivity := props.MakeSelectivity(unknownFilterSelectivity)
+			for i := 0; i < numUnappliedDisjuncts; i++ {
+				selectivities = append(selectivities, defaultSelectivity)
+			}
 
-		// TODO(mgartner): Calculate and set the column statistics based on
-		// constraintUnion.
-		disjunctionSelectivity := combineOredSelectivities(selectivities)
-		s.RowCount *= disjunctionSelectivity.AsFloat()
-		s.Selectivity.Multiply(disjunctionSelectivity)
+			// TODO(mgartner): Calculate and set the column statistics based on
+			// constraintUnion.
+			disjunctionSelectivity := combineOredSelectivities(selectivities)
+			s.RowCount *= disjunctionSelectivity.AsFloat()
+			s.Selectivity.Multiply(disjunctionSelectivity)
+		} else if numUnappliedDisjuncts == 0 {
+			// The filters are one or more disjunctions and tight constraint
+			// sets could be built for each.
+			var tmpStats, unionStats props.Statistics
+			unionStats.CopyFrom(s)
+
+			// Get the stats for each constraint set, apply the selectivity to a
+			// temporary stats struct, and union the selectivity and row counts.
+			sb.constrainExpr(e, constraintUnion[0], relProps, &unionStats)
+			for i := 1; i < len(constraintUnion); i++ {
+				tmpStats.CopyFrom(s)
+				sb.constrainExpr(e, constraintUnion[i], relProps, &tmpStats)
+				unionStats.UnionWith(&tmpStats)
+			}
+
+			// The stats are unioned naively; the selectivity may be greater
+			// than 1 and the row count may be greater than the row count of the
+			// input stats. We use the minimum selectivity and row count of the
+			// unioned stats and the input stats.
+			s.Selectivity = props.MinSelectivity(s.Selectivity, unionStats.Selectivity)
+			s.RowCount = min(s.RowCount, unionStats.RowCount)
+		} else {
+			numUnappliedConjuncts++
+		}
 	} else {
 		numUnappliedConjuncts++
 	}

@@ -91,7 +91,7 @@ func (s *Store) SendWithWriteBytes(
 	// local node's clock to a high water mark from all nodes with which it has
 	// interacted.
 	baClockTS := ba.Now
-	if baClockTS.IsEmpty() && !s.ClusterSettings().Version.IsActive(ctx, clusterversion.V22_2LocalTimestamps) {
+	if baClockTS.IsEmpty() && !s.ClusterSettings().Version.IsActive(ctx, clusterversion.TODODelete_V22_2LocalTimestamps) {
 		// TODO(nvanbenschoten): remove this in v23.1. v21.2 nodes will still send
 		// requests without a Now field. This is not necessary for correctness now
 		// that local timestamps pulled from the leaseholder's own HLC are used in
@@ -349,7 +349,8 @@ func (s *Store) maybeThrottleBatch(
 		}
 
 		beforeEngineDelay := timeutil.Now()
-		s.engine.PreIngestDelay(ctx)
+		// TODO(sep-raft-log): can we get rid of this?
+		s.TODOEngine().PreIngestDelay(ctx)
 		after := timeutil.Now()
 
 		waited, waitedEngine := after.Sub(before), after.Sub(beforeEngineDelay)

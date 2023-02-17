@@ -22,9 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -40,7 +40,7 @@ type MatchedRuleFunc = norm.MatchedRuleFunc
 type AppliedRuleFunc = norm.AppliedRuleFunc
 
 // RuleSet efficiently stores an unordered set of RuleNames.
-type RuleSet = util.FastIntSet
+type RuleSet = intsets.Fast
 
 // Optimizer transforms an input expression tree into the logically equivalent
 // output expression tree with the lowest possible execution cost.
@@ -153,7 +153,7 @@ func (o *Optimizer) Init(ctx context.Context, evalCtx *eval.Context, catalog cat
 		// unoptimized-query-oracle roachtest.
 		disableRuleProbability = p
 	}
-	o.defaultCoster.Init(ctx, evalCtx, o.mem, costPerturbation, o.rng)
+	o.defaultCoster.Init(ctx, evalCtx, o.mem, costPerturbation, o.rng, o)
 	o.coster = &o.defaultCoster
 	if disableRuleProbability > 0 {
 		o.disableRulesRandom(disableRuleProbability)
@@ -533,7 +533,7 @@ func (o *Optimizer) optimizeGroup(grp memo.RelExpr, required *physical.Required)
 
 		// Now try to generate new expressions that are logically equivalent to
 		// other expressions in this group.
-		if o.shouldExplore(required) && !o.explorer.exploreGroup(grp).fullyExplored {
+		if o.shouldExplore(required) && !o.explorer.exploreGroup(grp, required).fullyExplored {
 			fullyOptimized = false
 		}
 
@@ -578,7 +578,20 @@ func (o *Optimizer) optimizeGroupMember(
 			childCost, childOptimized := o.optimizeExpr(member.Child(i), childRequired)
 
 			// Accumulate cost of children.
-			cost += childCost
+			if member.Op() == opt.LocalityOptimizedSearchOp && i > 0 {
+				// If the child ops are locality optimized, distribution costs are added
+				// to the remote branch, but not the local branch. Scale the remote
+				// branch costs by a factor reflecting the likelihood of executing that
+				// branch. Right now this probability is not estimated, so just use a
+				// default probability of 1/10.
+				// TODO(msirek): Add an estimation of the probability of executing the
+				//               remote branch, e.g., compare the size of the limit hint
+				//               with the expected row count of the local branch.
+				//               Is there a better approach?
+				cost += childCost / 10
+			} else {
+				cost += childCost
+			}
 
 			// If any child expression is not fully optimized, then the parent
 			// expression is also not fully optimized.
@@ -834,6 +847,25 @@ func (o *Optimizer) getScratchSort() *memo.SortExpr {
 	return o.scratchSort
 }
 
+// MaybeGetBestCostRelation returns the best-cost relation for the given memo
+// group if the group has been fully optimized for the `required` physical
+// properties.
+func (o *Optimizer) MaybeGetBestCostRelation(
+	grp memo.RelExpr, required *physical.Required,
+) (best memo.RelExpr, ok bool) {
+	if o == nil {
+		return nil, false
+	}
+	state := o.lookupOptState(grp, required)
+	if state == nil {
+		return nil, false
+	}
+	if state.best == nil || !state.fullyOptimized {
+		return nil, false
+	}
+	return state.best, true
+}
+
 // lookupOptState looks up the state associated with the given group and
 // properties. If no state exists yet, then lookupOptState returns nil.
 func (o *Optimizer) lookupOptState(grp memo.RelExpr, required *physical.Required) *groupState {
@@ -950,7 +982,7 @@ type groupState struct {
 	// expression in the group that has been fully optimized for the required
 	// properties. These never need to be recosted, no matter how many additional
 	// optimization passes are made.
-	fullyOptimizedExprs util.FastIntSet
+	fullyOptimizedExprs intsets.Fast
 
 	// explore is used by the explorer to store intermediate state so that
 	// redundant work is minimized.
@@ -1004,7 +1036,7 @@ func (a *groupStateAlloc) allocate() *groupState {
 
 // disableRulesRandom disables rules with the given probability for testing.
 func (o *Optimizer) disableRulesRandom(probability float64) {
-	essentialRules := util.MakeFastIntSet(
+	essentialRules := intsets.MakeFast(
 		// Needed to prevent constraint building from failing.
 		int(opt.NormalizeInConst),
 		// Needed when an index is forced.
@@ -1046,6 +1078,9 @@ func (o *Optimizer) disableRulesRandom(probability float64) {
 		int(opt.PruneScanCols),
 		// Needed to ensure that the input of a RangeExpr is always an AndExpr.
 		int(opt.SimplifyRange),
+		// Needed to ensure that all uncorrelated EXISTS subqueries are
+		// converted to COALESCE+subquery expressions.
+		int(opt.ConvertUncorrelatedExistsToCoalesceSubquery),
 	)
 
 	var disabledRules RuleSet
@@ -1089,7 +1124,7 @@ func (o *Optimizer) FormatMemo(flags FmtFlags) string {
 // the real computed cost, not the perturbed cost.
 func (o *Optimizer) RecomputeCost() {
 	var c coster
-	c.Init(o.ctx, o.evalCtx, o.mem, 0 /* perturbation */, nil /* rng */)
+	c.Init(o.ctx, o.evalCtx, o.mem, 0 /* perturbation */, nil /* rng */, o /* o */)
 
 	root := o.mem.RootExpr()
 	rootProps := o.mem.RootProps()

@@ -24,8 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	kvstorage "github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -76,7 +76,7 @@ func TestKVWriterMatchesIEWriter(t *testing.T) {
 	lease1ID := makeTable("lease1")
 	lease2ID := makeTable("lease2")
 
-	ie := s.InternalExecutor().(sqlutil.InternalExecutor)
+	ie := s.InternalExecutor().(isql.Executor)
 	codec := s.LeaseManager().(*Manager).Codec()
 	w := teeWriter{
 		a: newInternalExecutorWriter(ie, "defaultdb.public.lease1"),
@@ -159,10 +159,12 @@ func getRawHistoryKVs(
 				k := it.Key()
 				suffix, _, err := codec.DecodeTablePrefix(k.Key)
 				require.NoError(t, err)
+				v, err := it.Value()
+				require.NoError(t, err)
 				row := roachpb.KeyValue{
 					Key: suffix,
 					Value: roachpb.Value{
-						RawBytes: it.Value(),
+						RawBytes: v,
 					},
 				}
 				row.Value.ClearChecksum()

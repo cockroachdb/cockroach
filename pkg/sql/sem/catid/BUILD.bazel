@@ -11,8 +11,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/sql/oidext",
-        "//pkg/util",
-        "@com_github_cockroachdb_errors//:errors",
+        "//pkg/util/intsets",
         "@com_github_lib_pq//oid",
     ],
 )

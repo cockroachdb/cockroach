@@ -15,7 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 )
 
 // This registry is the central object in the insights subsystem. It observes
@@ -62,6 +62,30 @@ var statementsBufPool = sync.Pool{
 	},
 }
 
+// Instead of creating and allocating a map to track duplicate
+// causes each time, we just iterate through the array since
+// we don't expect it to be very large.
+func addCause(arr []Cause, n Cause) []Cause {
+	for i := range arr {
+		if arr[i] == n {
+			return arr
+		}
+	}
+	return append(arr, n)
+}
+
+// Instead of creating and allocating a map to track duplicate
+// problems each time, we just iterate through the array since
+// we don't expect it to be very large.
+func addProblem(arr []Problem, n Problem) []Problem {
+	for i := range arr {
+		if arr[i] == n {
+			return arr
+		}
+	}
+	return append(arr, n)
+}
+
 func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transaction *Transaction) {
 	if !r.enabled() {
 		return
@@ -73,32 +97,58 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 	delete(r.statements, sessionID)
 	defer statements.release()
 
-	var slowStatements util.FastIntSet
+	// Mark statements which are detected as slow or have a failed status.
+	var slowOrFailedStatements intsets.Fast
 	for i, s := range *statements {
-		if r.detector.isSlow(s) {
-			slowStatements.Add(i)
+		if r.detector.isSlow(s) || isFailed(s) {
+			slowOrFailedStatements.Add(i)
 		}
 	}
-	if slowStatements.Empty() {
+
+	// So far this is the only case when a transaction is considered slow.
+	// In the future, we may want to make a detector for transactions if there
+	// are more cases.
+	highContention := false
+	if transaction.Contention != nil {
+		highContention = transaction.Contention.Seconds() >= LatencyThreshold.Get(&r.causes.st.SV).Seconds()
+	}
+
+	if slowOrFailedStatements.Empty() && !highContention {
+		// We only record an insight if we have slow or failed statements or high txn contention.
 		return
 	}
+
 	// Note that we'll record insights for every statement, not just for
 	// the slow ones.
+	insight := makeInsight(sessionID, transaction)
+
+	if highContention {
+		insight.Transaction.Problems = addProblem(insight.Transaction.Problems, Problem_SlowExecution)
+		insight.Transaction.Causes = addCause(insight.Transaction.Causes, Cause_HighContention)
+	}
+
 	for i, s := range *statements {
-		insight := makeInsight(sessionID, transaction, s)
-		if slowStatements.Contains(i) {
+		if slowOrFailedStatements.Contains(i) {
 			switch s.Status {
 			case Statement_Completed:
-				insight.Problem = Problem_SlowExecution
-				insight.Causes = r.causes.examine(insight.Causes, s)
+				s.Problem = Problem_SlowExecution
+				s.Causes = r.causes.examine(s.Causes, s)
 			case Statement_Failed:
-				// Note that we'll be building better failure support for 23.1.
-				// For now, we only mark failed statements that were also slow.
-				insight.Problem = Problem_FailedExecution
+				s.Problem = Problem_FailedExecution
 			}
+
+			// Bubble up stmt problems and causes.
+			for i := range s.Causes {
+				insight.Transaction.Causes = addCause(insight.Transaction.Causes, s.Causes[i])
+			}
+			insight.Transaction.Problems = addProblem(insight.Transaction.Problems, s.Problem)
 		}
-		r.sink.AddInsight(insight)
+
+		insight.Transaction.StmtExecutionIDs = append(insight.Transaction.StmtExecutionIDs, s.ID)
+		insight.Statements = append(insight.Statements, s)
 	}
+
+	r.sink.AddInsight(insight)
 }
 
 // TODO(todd):

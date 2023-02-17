@@ -17,10 +17,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -131,7 +133,7 @@ func (p *planner) AlterPrimaryKey(
 				"use columns instead",
 			)
 		}
-		col, err := tableDesc.FindColumnWithName(elem.Column)
+		col, err := catalog.MustFindColumnByTreeName(tableDesc, elem.Column)
 		if err != nil {
 			return err
 		}
@@ -161,8 +163,7 @@ func (p *planner) AlterPrimaryKey(
 	}
 
 	nameExists := func(name string) bool {
-		_, err := tableDesc.FindIndexWithName(name)
-		return err == nil
+		return catalog.FindIndexByName(tableDesc, name) != nil
 	}
 
 	// Make a new index that is suitable to be a primary index.
@@ -180,7 +181,7 @@ func (p *planner) AlterPrimaryKey(
 		Name:              name,
 		Unique:            true,
 		CreatedExplicitly: true,
-		EncodingType:      descpb.PrimaryIndexEncoding,
+		EncodingType:      catenumpb.PrimaryIndexEncoding,
 		Type:              descpb.IndexDescriptor_FORWARD,
 		// TODO(postamar): bump version to LatestIndexDescriptorVersion in 22.2
 		// This is not possible until then because of a limitation in 21.2 which
@@ -295,7 +296,7 @@ func (p *planner) AlterPrimaryKey(
 			if err != nil {
 				return err
 			}
-			partitionAllBy = partitionByForRegionalByRow(
+			partitionAllBy = multiregion.PartitionByForRegionalByRow(
 				regionConfig,
 				colName,
 			)
@@ -346,7 +347,29 @@ func (p *planner) AlterPrimaryKey(
 		if err != nil {
 			return err
 		}
-		tabledesc.UpdateIndexPartitioning(newPrimaryIndexDesc, true /* isIndexPrimary */, newImplicitCols, newPartitioning)
+		tabledesc.UpdateIndexPartitioning(
+			newPrimaryIndexDesc, true, /* isIndexPrimary */
+			newImplicitCols, newPartitioning,
+		)
+
+		// We need to now also update the partitioning for the new temp primary
+		// index. If we didn't, it wouldn't be partitioned, and writes which
+		// were merged into the new primary index will be wrong.
+		//
+		// We know that the temp index will have the subsequent index ID.
+		// This is hacky, sure, but it's about as good of an invariant
+		// as most of this code relies upon for correctness. This code will
+		// all be replaced by code in the declarative schema changer before
+		// too long where we'll model this all correctly.
+		newTempPrimaryIndex, err := catalog.MustFindIndexByID(tableDesc, newPrimaryIndexDesc.ID+1)
+		if err != nil {
+			return errors.NewAssertionErrorWithWrappedErrf(err,
+				"failed to find newly created temporary index for backfill")
+		}
+		tabledesc.UpdateIndexPartitioning(
+			newTempPrimaryIndex.IndexDesc(), true, /* isIndexPrimary */
+			newImplicitCols, newPartitioning,
+		)
 	}
 
 	// Create a new index that indexes everything the old primary index
@@ -367,7 +390,7 @@ func (p *planner) AlterPrimaryKey(
 		// This is not possible until then because of a limitation in 21.2 which
 		// affects mixed-21.2-22.1-version clusters (issue #78426).
 		newUniqueIdx.Version = descpb.StrictIndexColumnIDGuaranteesVersion
-		newUniqueIdx.EncodingType = descpb.SecondaryIndexEncoding
+		newUniqueIdx.EncodingType = catenumpb.SecondaryIndexEncoding
 		if err := addIndexMutationWithSpecificPrimaryKey(ctx, tableDesc, &newUniqueIdx, newPrimaryIndexDesc, p.ExecCfg().Settings); err != nil {
 			return err
 		}
@@ -409,7 +432,7 @@ func (p *planner) AlterPrimaryKey(
 		if idx.IsUnique() {
 			for i := 0; i < idx.NumKeyColumns(); i++ {
 				colID := idx.GetKeyColumnID(i)
-				col, err := tableDesc.FindColumnWithID(colID)
+				col, err := catalog.MustFindColumnByID(tableDesc, colID)
 				if err != nil {
 					return false, err
 				}
@@ -427,7 +450,7 @@ func (p *planner) AlterPrimaryKey(
 			newPrimaryKeyColIDs := catalog.MakeTableColSet(newPrimaryIndexDesc.KeyColumnIDs...)
 			for i := 0; i < idx.NumKeySuffixColumns(); i++ {
 				colID := idx.GetKeySuffixColumnID(i)
-				col, err := tableDesc.FindColumnWithID(colID)
+				col, err := catalog.MustFindColumnByID(tableDesc, colID)
 				if err != nil {
 					return false, err
 				}
@@ -502,7 +525,7 @@ func (p *planner) AlterPrimaryKey(
 		// This is not possible until then because of a limitation in 21.2 which
 		// affects mixed-21.2-22.1-version clusters (issue #78426).
 		newIndex.Version = descpb.StrictIndexColumnIDGuaranteesVersion
-		newIndex.EncodingType = descpb.SecondaryIndexEncoding
+		newIndex.EncodingType = catenumpb.SecondaryIndexEncoding
 		if err := addIndexMutationWithSpecificPrimaryKey(ctx, tableDesc, &newIndex, newPrimaryIndexDesc, p.ExecCfg().Settings); err != nil {
 			return err
 		}
@@ -605,7 +628,7 @@ func (p *planner) shouldCreateIndexes(
 
 	// Validate the columns on the indexes
 	for idx, elem := range alterPKNode.Columns {
-		col, err := desc.FindColumnWithName(elem.Column)
+		col, err := catalog.MustFindColumnByTreeName(desc, elem.Column)
 		if err != nil {
 			return true, err
 		}
@@ -614,9 +637,9 @@ func (p *planner) shouldCreateIndexes(
 			return true, nil
 		}
 		if (elem.Direction == tree.Ascending &&
-			oldPK.GetKeyColumnDirection(idx) != catpb.IndexColumn_ASC) ||
+			oldPK.GetKeyColumnDirection(idx) != catenumpb.IndexColumn_ASC) ||
 			(elem.Direction == tree.Descending &&
-				oldPK.GetKeyColumnDirection(idx) != catpb.IndexColumn_DESC) {
+				oldPK.GetKeyColumnDirection(idx) != catenumpb.IndexColumn_DESC) {
 			return true, nil
 		}
 	}
@@ -654,7 +677,7 @@ func shouldCopyPrimaryKey(
 
 	columnIDsAndDirsWithoutSharded := func(idx *descpb.IndexDescriptor) (
 		columnIDs descpb.ColumnIDs,
-		columnDirs []catpb.IndexColumn_Direction,
+		columnDirs []catenumpb.IndexColumn_Direction,
 	) {
 		for i, colName := range idx.KeyColumnNames {
 			if colName != idx.Sharded.Name {
@@ -769,7 +792,7 @@ func setKeySuffixColumnIDsFromPrimary(
 			// toAdd.KeySuffixColumnIDs = append(toAdd.KeySuffixColumnIDs, colID)
 			// However, this functionality is not supported by the execution engine,
 			// so prevent it by returning an error.
-			col, err := table.FindColumnWithID(colID)
+			col, err := catalog.MustFindColumnByID(table, colID)
 			if err != nil {
 				return err
 			}

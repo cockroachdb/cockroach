@@ -21,15 +21,15 @@ export function QueriesCell(
   textLimit: number,
 ): React.ReactElement {
   if (
-    !transactionQueries.length ||
+    !transactionQueries?.length ||
     (transactionQueries.length === 1 &&
-      transactionQueries[0].length < textLimit)
+      transactionQueries[0]?.length < textLimit)
   ) {
     const query = transactionQueries?.length ? transactionQueries[0] : "";
     return <div>{query}</div>;
   }
 
-  const combinedQuery = transactionQueries.map((query, idx, arr) => (
+  const combinedQuery = transactionQueries?.map((query, idx, arr) => (
     <div key={idx}>
       {idx != 0 && <br />}
       {query}

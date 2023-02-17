@@ -1561,7 +1561,7 @@ type workQueueMetricsSingle struct {
 	Requested       *metric.Counter
 	Admitted        *metric.Counter
 	Errored         *metric.Counter
-	WaitDurations   *metric.Histogram
+	WaitDurations   metric.IHistogram
 	WaitQueueLength *metric.Gauge
 }
 
@@ -1622,9 +1622,12 @@ func makeWorkQueueMetricsSingle(name string) workQueueMetricsSingle {
 		Requested: metric.NewCounter(addName(name, requestedMeta)),
 		Admitted:  metric.NewCounter(addName(name, admittedMeta)),
 		Errored:   metric.NewCounter(addName(name, erroredMeta)),
-		WaitDurations: metric.NewHistogram(
-			addName(name, waitDurationsMeta), base.DefaultHistogramWindowInterval(), metric.IOLatencyBuckets,
-		),
+		WaitDurations: metric.NewHistogram(metric.HistogramOptions{
+			Mode:     metric.HistogramModePreferHdrLatency,
+			Metadata: addName(name, waitDurationsMeta),
+			Duration: base.DefaultHistogramWindowInterval(),
+			Buckets:  metric.IOLatencyBuckets,
+		}),
 		WaitQueueLength: metric.NewGauge(addName(name, waitQueueLengthMeta)),
 	}
 }
@@ -1644,10 +1647,10 @@ type StoreWriteWorkInfo struct {
 
 // StoreWorkQueue is responsible for admission to a store.
 type StoreWorkQueue struct {
-	q [numWorkClasses]WorkQueue
+	q [admissionpb.NumWorkClasses]WorkQueue
 	// Only calls storeWriteDone. The rest of the interface is used by
 	// WorkQueue.
-	granters [numWorkClasses]granterWithStoreWriteDone
+	granters [admissionpb.NumWorkClasses]granterWithStoreWriteDone
 	mu       struct {
 		syncutil.RWMutex
 		estimates storeRequestEstimates
@@ -1662,7 +1665,7 @@ type StoreWorkHandle struct {
 	tenantID roachpb.TenantID
 	// The writeTokens acquired by this request. Must be > 0.
 	writeTokens      int64
-	workClass        workClass
+	workClass        admissionpb.WorkClass
 	admissionEnabled bool
 }
 
@@ -1680,10 +1683,7 @@ func (q *StoreWorkQueue) Admit(
 	ctx context.Context, info StoreWriteWorkInfo,
 ) (handle StoreWorkHandle, err error) {
 	// For now, we compute a workClass based on priority.
-	wc := regularWorkClass
-	if info.Priority < admissionpb.NormalPri {
-		wc = elasticWorkClass
-	}
+	wc := admissionpb.WorkClassFromPri(info.Priority)
 	h := StoreWorkHandle{
 		tenantID:  info.TenantID,
 		workClass: wc,
@@ -1732,7 +1732,7 @@ func (q *StoreWorkQueue) BypassedWorkDone(workCount int64, doneInfo StoreWorkDon
 	q.updateStoreAdmissionStats(uint64(workCount), doneInfo, true)
 	// Since we have no control over such work, we choose to count it as
 	// regularWorkClass.
-	_ = q.granters[regularWorkClass].storeWriteDone(0, doneInfo)
+	_ = q.granters[admissionpb.RegularWorkClass].storeWriteDone(0, doneInfo)
 }
 
 // StatsToIgnore is called for range snapshot ingestion -- see the comment in
@@ -1767,8 +1767,8 @@ func (q *StoreWorkQueue) SetTenantWeights(tenantWeights map[uint64]uint32) {
 }
 
 // getRequesters implements storeRequester.
-func (q *StoreWorkQueue) getRequesters() [numWorkClasses]requester {
-	var result [numWorkClasses]requester
+func (q *StoreWorkQueue) getRequesters() [admissionpb.NumWorkClasses]requester {
+	var result [admissionpb.NumWorkClasses]requester
 	for i := range q.q {
 		result[i] = &q.q[i]
 	}
@@ -1795,7 +1795,7 @@ func (q *StoreWorkQueue) setStoreRequestEstimates(estimates storeRequestEstimate
 
 func makeStoreWorkQueue(
 	ambientCtx log.AmbientContext,
-	granters [numWorkClasses]granterWithStoreWriteDone,
+	granters [admissionpb.NumWorkClasses]granterWithStoreWriteDone,
 	settings *cluster.Settings,
 	metrics *WorkQueueMetrics,
 	opts workQueueOptions,

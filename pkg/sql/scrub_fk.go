@@ -16,8 +16,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -65,17 +65,13 @@ func newSQLForeignKeyCheckOperation(
 func (o *sqlForeignKeyCheckOperation) Start(params runParams) error {
 	ctx := params.ctx
 
-	checkQuery, _, err := nonMatchingRowQuery(
-		o.tableDesc,
-		o.constraint.ForeignKeyDesc(),
-		o.referencedTableDesc,
-		false, /* limitResults */
-	)
+	checkQuery, _, err := nonMatchingRowQuery(o.tableDesc, o.constraint.ForeignKeyDesc(), o.referencedTableDesc,
+		0 /* indexIDForValidation */, false)
 	if err != nil {
 		return err
 	}
 
-	rows, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryBuffered(
+	rows, err := params.p.InternalSQLTxn().QueryBuffered(
 		ctx, "scrub-fk", params.p.txn, checkQuery,
 	)
 	if err != nil {
@@ -83,7 +79,7 @@ func (o *sqlForeignKeyCheckOperation) Start(params runParams) error {
 	}
 	o.run.rows = rows
 
-	if o.constraint.NumOriginColumns() > 1 && o.constraint.Match() == descpb.ForeignKeyReference_FULL {
+	if o.constraint.NumOriginColumns() > 1 && o.constraint.Match() == semenumpb.Match_FULL {
 		// Check if there are any disallowed references where some columns are NULL
 		// and some aren't.
 		checkNullsQuery, _, err := matchFullUnacceptableKeyQuery(
@@ -94,7 +90,7 @@ func (o *sqlForeignKeyCheckOperation) Start(params runParams) error {
 		if err != nil {
 			return err
 		}
-		rows, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryBuffered(
+		rows, err := params.p.InternalSQLTxn().QueryBuffered(
 			ctx, "scrub-fk", params.p.txn, checkNullsQuery,
 		)
 		if err != nil {
@@ -145,7 +141,7 @@ func (o *sqlForeignKeyCheckOperation) Next(params runParams) (tree.Datums, error
 	for i, n := 0, o.constraint.NumOriginColumns(); i < n; i++ {
 		id := o.constraint.GetOriginColumnID(i)
 		idx := o.colIDToRowIdx.GetDefault(id)
-		col, err := tabledesc.FindPublicColumnWithID(o.tableDesc, id)
+		col, err := catalog.MustFindPublicColumnByID(o.tableDesc, id)
 		if err != nil {
 			return nil, err
 		}
@@ -156,7 +152,7 @@ func (o *sqlForeignKeyCheckOperation) Next(params runParams) (tree.Datums, error
 		id := o.tableDesc.GetPrimaryIndex().GetKeyColumnID(i)
 		if !originColumnIDs.Contains(id) {
 			idx := o.colIDToRowIdx.GetDefault(id)
-			col, err := tabledesc.FindPublicColumnWithID(o.tableDesc, id)
+			col, err := catalog.MustFindPublicColumnByID(o.tableDesc, id)
 			if err != nil {
 				return nil, err
 			}

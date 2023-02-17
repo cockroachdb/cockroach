@@ -301,7 +301,7 @@ func TestStoreMetrics(t *testing.T) {
 	// This is useful, because most of the stats we track don't apply to
 	// memtables.
 	for i := range tc.Servers {
-		if err := tc.GetFirstStoreFromServer(t, i).Engine().Flush(); err != nil {
+		if err := tc.GetFirstStoreFromServer(t, i).TODOEngine().Flush(); err != nil {
 			t.Fatal(err)
 		}
 	}

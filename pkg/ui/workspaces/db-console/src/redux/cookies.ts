@@ -39,6 +39,17 @@ export const selectTenantsFromMultitenantSessionCookie = (): string[] => {
     : [];
 };
 
+// maybeClearTenantCookie clears the tenant cookie if there are multiple tenants
+// found in the multitenant-session cookie.
+export const maybeClearTenantCookie = () => {
+  const tenants = selectTenantsFromMultitenantSessionCookie();
+  // If in multi-tenant environment, we need to clear the tenant cookie so that
+  // we can do a multi-tenant logout.
+  if (tenants.length > 1) {
+    setCookie("tenant", "");
+  }
+};
+
 export const setCookie = (
   key: string,
   val: string,

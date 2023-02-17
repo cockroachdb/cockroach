@@ -17,7 +17,7 @@ import (
 	"testing"
 	"text/tabwriter"
 
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
 	"github.com/robfig/cron/v3"
@@ -25,7 +25,7 @@ import (
 )
 
 func TestCronRewrite(t *testing.T) {
-	datadriven.RunTest(t, testutils.TestDataPath(t, "cron_rewrites"), func(
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "cron_rewrites"), func(
 		t *testing.T, d *datadriven.TestData,
 	) string {
 		switch d.Cmd {

@@ -14,7 +14,11 @@ import {
   defaultFilters,
   SortSetting,
 } from "@cockroachlabs/cluster-ui";
-import { selectAppName, selectRecentTransactions } from "src/selectors";
+import {
+  selectAppName,
+  selectRecentTransactions,
+  selectExecutionStatus,
+} from "src/selectors";
 import { refreshLiveWorkload } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
@@ -28,7 +32,10 @@ const transactionsColumnsLocalSetting = new LocalSetting<
   null,
 );
 
-const defaultActiveTxnFilters = { app: defaultFilters.app };
+const defaultActiveTxnFilters = {
+  app: defaultFilters.app,
+  executionStatus: defaultFilters.executionStatus,
+};
 
 const filtersLocalSetting = new LocalSetting<
   AdminUIState,
@@ -50,6 +57,7 @@ export const mapStateToRecentTransactionsPageProps = (state: AdminUIState) => ({
   transactions: selectRecentTransactions(state),
   sessionsError: state.cachedData?.sessions.lastError,
   filters: filtersLocalSetting.selector(state),
+  executionStatus: selectExecutionStatus(),
   sortSetting: sortSettingLocalSetting.selector(state),
   internalAppNamePrefix: selectAppName(state),
 });

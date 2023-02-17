@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -38,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -78,7 +80,7 @@ var localityCfgs = map[string]roachpb.Locality{
 }
 
 var clusterVersionKeys = map[string]clusterversion.Key{
-	"Start22_2": clusterversion.V22_2Start,
+	"Start22_2": clusterversion.TODODelete_V22_2Start,
 }
 
 type sqlDBKey struct {
@@ -150,6 +152,14 @@ func (d *datadrivenTestState) addCluster(t *testing.T, cfg clusterCfg) error {
 	params.ServerArgs.DisableDefaultTestTenant = cfg.disableTenant
 	params.ServerArgs.Knobs = base.TestingKnobs{
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+	}
+	// Backups issue splits underneath the hood, and as such, will fail capability
+	// checks for tests that run as secondary tenants. Skip these checks at a
+	// global level using a testing knob.
+	params.ServerArgs.Knobs.TenantCapabilitiesTestingKnobs = &tenantcapabilities.TestingKnobs{
+		// TODO(arul): This can be removed once
+		// https://github.com/cockroachdb/cockroach/issues/96736  is fixed.
+		AuthorizerSkipAdminSplitCapabilityChecks: true,
 	}
 
 	settings := cluster.MakeTestingClusterSettings()
@@ -403,7 +413,7 @@ func TestDataDriven(t *testing.T) {
 	defer httpServerCleanup()
 
 	ctx := context.Background()
-	datadriven.Walk(t, testutils.TestDataPath(t, "backup-restore"), func(t *testing.T, path string) {
+	datadriven.Walk(t, datapathutils.TestDataPath(t, "backup-restore"), func(t *testing.T, path string) {
 		var lastCreatedCluster string
 		ds := newDatadrivenTestState()
 		defer ds.cleanup(ctx, t)
@@ -861,7 +871,7 @@ func TestDataDriven(t *testing.T) {
 				d.ScanArgs(t, "src-path", &sourceRelativePath)
 				d.ScanArgs(t, "dest-path", &destRelativePath)
 				splitSrcPath := strings.Split(sourceRelativePath, ",")
-				sourcePath, err := filepath.Abs(testutils.TestDataPath(t, splitSrcPath...))
+				sourcePath, err := filepath.Abs(datapathutils.TestDataPath(t, splitSrcPath...))
 				require.NoError(t, err)
 				splitDestPath := strings.Split(destRelativePath, ",")
 				destPath := filepath.Join(ioDir, filepath.Join(splitDestPath...))

@@ -102,6 +102,13 @@ type Builder struct {
 	// by scans. See forUpdateLocking.
 	forceForUpdateLocking bool
 
+	// planLazySubqueries is true if the builder should plan subqueries that are
+	// lazily evaluated as routines instead of a subquery which is evaluated
+	// eagerly before the main query. This is required in cases that cannot be
+	// handled by the subquery execution machinery, e.g., when building
+	// subqueries for statements inside a UDF.
+	planLazySubqueries bool
+
 	// -- output --
 
 	// IsDDL is set to true if the statement contains DDL.
@@ -133,6 +140,10 @@ type Builder struct {
 
 	// ContainsMutation is set to true if the whole plan contains any mutations.
 	ContainsMutation bool
+
+	// ContainsNonDefaultKeyLocking is set to true if at least one node in the
+	// plan uses non-default key locking strength.
+	ContainsNonDefaultKeyLocking bool
 
 	// MaxFullScanRows is the maximum number of rows scanned by a full scan, as
 	// estimated by the optimizer.
@@ -316,6 +327,10 @@ func (b *Builder) BuildScalar() (tree.TypedExpr, error) {
 
 func (b *Builder) decorrelationError() error {
 	return errors.Errorf("could not decorrelate subquery")
+}
+
+func (b *Builder) decorrelationMutationError() error {
+	return errors.Errorf("could not decorrelate subquery with mutation")
 }
 
 // builtWithExpr is metadata regarding a With expression which has already been

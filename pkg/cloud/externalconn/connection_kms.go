@@ -16,7 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/errors"
 )
 
@@ -38,9 +38,9 @@ func makeExternalConnectionKMS(
 
 	// Retrieve the external connection object from the system table.
 	var ec ExternalConnection
-	if err := env.DBHandle().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	if err := env.DBHandle().Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		var err error
-		ec, err = LoadExternalConnection(ctx, externalConnectionName, env.InternalExecutor(), txn)
+		ec, err = LoadExternalConnection(ctx, externalConnectionName, txn)
 		return err
 	}); err != nil {
 		return nil, errors.Wrap(err, "failed to load external connection object")

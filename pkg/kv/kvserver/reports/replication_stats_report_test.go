@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -38,7 +38,7 @@ func TestRangeReport(t *testing.T) {
 	// doesn't interfere with the test.
 	ReporterInterval.Override(ctx, &st.SV, 0)
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{Settings: st})
-	con := s.InternalExecutor().(sqlutil.InternalExecutor)
+	con := s.InternalExecutor().(isql.Executor)
 	defer s.Stopper().Stop(ctx)
 
 	// Verify that tables are empty.
@@ -89,7 +89,7 @@ func TestRangeReport(t *testing.T) {
 		{"2", "4", "3", "1", "0", "1", "0"},
 	})
 	require.ElementsMatch(t, TableData(ctx, "system.reports_meta", con), [][]string{
-		{"3", "'2001-01-01 10:00:00+00:00'"},
+		{"3", "'2001-01-01 10:00:00+00'"},
 	})
 	require.Equal(t, 3, r.LastUpdatedRowCount())
 
@@ -120,7 +120,7 @@ func TestRangeReport(t *testing.T) {
 		{"4", "4", "3", "1", "0", "1", "1"},
 	})
 	require.ElementsMatch(t, TableData(ctx, "system.reports_meta", con), [][]string{
-		{"3", "'2001-01-01 11:00:00+00:00'"},
+		{"3", "'2001-01-01 11:00:00+00'"},
 	})
 	require.Equal(t, 3, r.LastUpdatedRowCount())
 
@@ -170,7 +170,7 @@ func TestRangeReport(t *testing.T) {
 		{"4", "4", "3", "1", "0", "1", "1"},
 	})
 	require.ElementsMatch(t, TableData(ctx, "system.reports_meta", con), [][]string{
-		{"3", "'2001-01-01 12:00:00+00:00'"},
+		{"3", "'2001-01-01 12:00:00+00'"},
 	})
 	require.Equal(t, 3, r.LastUpdatedRowCount())
 
@@ -189,7 +189,7 @@ func TestRangeReport(t *testing.T) {
 		{"1", "3", "3", "1", "0", "1", "1"},
 	})
 	require.ElementsMatch(t, TableData(ctx, "system.reports_meta", con), [][]string{
-		{"3", "'2001-01-01 12:30:00+00:00'"},
+		{"3", "'2001-01-01 12:30:00+00'"},
 	})
 	require.Equal(t, 2, r.LastUpdatedRowCount())
 }

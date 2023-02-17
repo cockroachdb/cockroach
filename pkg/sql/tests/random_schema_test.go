@@ -62,14 +62,14 @@ func TestCreateRandomSchema(t *testing.T) {
 			t.Fatal(createTable, err)
 		}
 
-		var tabName, tabStmt, secondTabStmt string
+		var quotedTabName, tabStmt, secondTabStmt string
 		if err := db.QueryRow(fmt.Sprintf("SHOW CREATE TABLE %s",
-			createTable.Table.String())).Scan(&tabName, &tabStmt); err != nil {
+			createTable.Table.String())).Scan(&quotedTabName, &tabStmt); err != nil {
 			t.Fatal(err)
 		}
 
-		if tabName != createTable.Table.String() {
-			t.Fatalf("found table name %s, expected %s", tabName, createTable.Table.String())
+		if quotedTabName != createTable.Table.String() {
+			t.Fatalf("found table name %s, expected %s", quotedTabName, createTable.Table.String())
 		}
 
 		// Reparse the show create table statement that's stored in the database.
@@ -88,12 +88,12 @@ func TestCreateRandomSchema(t *testing.T) {
 		}
 
 		if err := db.QueryRow(fmt.Sprintf("SHOW CREATE TABLE %s",
-			tabName)).Scan(&tabName, &secondTabStmt); err != nil {
+			quotedTabName)).Scan(&quotedTabName, &secondTabStmt); err != nil {
 			t.Fatal(err)
 		}
 
-		if tabName != createTable.Table.String() {
-			t.Fatalf("found table name %s, expected %s", tabName, createTable.Table.String())
+		if quotedTabName != createTable.Table.String() {
+			t.Fatalf("found table name %s, expected %s", quotedTabName, createTable.Table.String())
 		}
 		// Reparse the show create table statement that's stored in the database.
 		secondParsed, err := parser.ParseOne(secondTabStmt)

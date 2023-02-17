@@ -303,8 +303,8 @@ func (so *importSequenceOperators) SchemaExists(
 	return false, errSequenceOperators
 }
 
-// HasAnyPrivilege is part of the eval.DatabaseCatalog interface.
-func (so *importSequenceOperators) HasAnyPrivilege(
+// HasAnyPrivilegeForSpecifier is part of the eval.DatabaseCatalog interface.
+func (so *importSequenceOperators) HasAnyPrivilegeForSpecifier(
 	ctx context.Context,
 	specifier eval.HasPrivilegeSpecifier,
 	user username.SQLUsername,
@@ -431,6 +431,6 @@ func (r fkResolver) ResolveFunction(
 // ResolveFunctionByOID implements the resolver.SchemaResolver interface.
 func (r fkResolver) ResolveFunctionByOID(
 	ctx context.Context, oid oid.Oid,
-) (string, *tree.Overload, error) {
-	return "", nil, errSchemaResolver
+) (*tree.FunctionName, *tree.Overload, error) {
+	return nil, nil, errSchemaResolver
 }

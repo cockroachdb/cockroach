@@ -75,7 +75,7 @@ func validatePartialIndexExprColsArePublic(
 			return
 		}
 		var col catalog.Column
-		col, err = desc.FindColumnWithID(colID)
+		col, err = catalog.MustFindColumnByID(desc, colID)
 		if err != nil {
 			return
 		}

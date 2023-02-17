@@ -131,6 +131,7 @@ package admission
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 )
@@ -273,7 +274,7 @@ type granterWithIOTokens interface {
 	setAvailableElasticDiskBandwidthTokensLocked(tokens int64)
 	// getDiskTokensUsedAndResetLocked returns the disk bandwidth tokens used
 	// since the last such call.
-	getDiskTokensUsedAndResetLocked() [numWorkClasses]int64
+	getDiskTokensUsedAndResetLocked() [admissionpb.NumWorkClasses]int64
 	// setAdmittedDoneModelsLocked supplies the models to use when
 	// storeWriteDone is called, to adjust token consumption. Note that these
 	// models are not used for token adjustment at admission time -- that is
@@ -320,7 +321,7 @@ type CPULoadListener interface {
 // storeRequester is used to abstract *StoreWorkQueue for testing.
 type storeRequester interface {
 	requesterClose
-	getRequesters() [numWorkClasses]requester
+	getRequesters() [admissionpb.NumWorkClasses]requester
 	getStoreAdmissionStats() storeAdmissionStats
 	setStoreRequestEstimates(estimates storeRequestEstimates)
 }

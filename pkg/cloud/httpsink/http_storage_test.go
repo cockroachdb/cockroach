@@ -122,9 +122,7 @@ func TestPutHttp(t *testing.T) {
 		srv, files, cleanup := makeServer()
 		defer cleanup()
 		cloudtestutils.CheckExportStore(t, srv.String(), false, user,
-			nil, /* ie */
-			nil, /* ief */
-			nil, /* kvDB */
+			nil, /* db */
 			testSettings,
 		)
 		if expected, actual := 14, files(); expected != actual {
@@ -144,9 +142,7 @@ func TestPutHttp(t *testing.T) {
 		combined.Host = strings.Join([]string{srv1.Host, srv2.Host, srv3.Host}, ",")
 
 		cloudtestutils.CheckExportStore(t, combined.String(), true, user,
-			nil, /* ie */
-			nil, /* ief */
-			nil, /* kvDB */
+			nil, /* db */
 			testSettings,
 		)
 		if expected, actual := 3, files1(); expected != actual {
@@ -172,9 +168,7 @@ func TestPutHttp(t *testing.T) {
 			t.Fatal(err)
 		}
 		s, err := cloud.MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{}, testSettings, blobs.TestEmptyBlobClientFactory,
-			nil, /* ie */
-			nil, /* ief */
-			nil, /* kvDB */
+			nil, /* db */
 			nil, /* limiters */
 			cloud.NilMetrics,
 		)
@@ -332,9 +326,7 @@ func TestCanDisableHttp(t *testing.T) {
 	testSettings := cluster.MakeTestingClusterSettings()
 
 	s, err := cloud.MakeExternalStorage(context.Background(), cloudpb.ExternalStorage{Provider: cloudpb.ExternalStorageProvider_http}, conf, testSettings, blobs.TestEmptyBlobClientFactory,
-		nil, /* ie */
-		nil, /* ief */
-		nil, /* kvDB */
+		nil, /* db */
 		nil, /* limiters */
 		cloud.NilMetrics,
 	)
@@ -356,9 +348,7 @@ func TestCanDisableOutbound(t *testing.T) {
 		cloudpb.ExternalStorageProvider_nodelocal,
 	} {
 		s, err := cloud.MakeExternalStorage(context.Background(), cloudpb.ExternalStorage{Provider: provider}, conf, testSettings, blobs.TestEmptyBlobClientFactory,
-			nil, /* ie */
-			nil, /* ief */
-			nil, /* kvDB */
+			nil, /* db */
 			nil, /* limiters */
 			cloud.NilMetrics,
 		)
@@ -391,9 +381,7 @@ func TestExternalStorageCanUseHTTPProxy(t *testing.T) {
 	conf, err := cloud.ExternalStorageConfFromURI("http://my-server", username.RootUserName())
 	require.NoError(t, err)
 	s, err := cloud.MakeExternalStorage(context.Background(), conf, base.ExternalIODirConfig{}, testSettings, nil,
-		nil, /* ie */
-		nil, /* ief */
-		nil, /* kvDB */
+		nil, /* db */
 		nil, /* limiters */
 		cloud.NilMetrics,
 	)

@@ -18,10 +18,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -65,6 +67,7 @@ func createMockImportJob(
 			SequenceDetails: seqDetails,
 			ResumePos:       []int64{resumePos},
 		},
+		Username: username.TestUserName(),
 	}
 	mockImportJob, err := registry.CreateJobWithTxn(ctx, mockImportRecord, registry.MakeJobID(), nil)
 	require.NoError(t, err)
@@ -79,7 +82,7 @@ func TestJobBackedSeqChunkProvider(t *testing.T) {
 
 	ctx := context.Background()
 
-	s, sqlDB, db := serverutils.StartServer(t, base.TestServerArgs{})
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
 	evalCtx := &eval.Context{
@@ -190,7 +193,7 @@ func TestJobBackedSeqChunkProvider(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			job := createMockImportJob(ctx, t, registry, test.allocatedChunks, test.resumePos)
 			j := &row.SeqChunkProvider{
-				Registry: registry, JobID: job.ID(), DB: db,
+				Registry: registry, JobID: job.ID(), DB: s.InternalDB().(isql.DB),
 			}
 			annot := &row.CellInfoAnnotation{
 				SourceID: 0,
@@ -199,7 +202,7 @@ func TestJobBackedSeqChunkProvider(t *testing.T) {
 
 			for id, val := range test.seqIDToExpectedVal {
 				seqDesc := createAndIncrementSeqDescriptor(ctx, t, id, keys.TODOSQLCodec,
-					test.incrementBy, test.seqIDToOpts[id], db)
+					test.incrementBy, test.seqIDToOpts[id], kvDB)
 				seqMetadata := &row.SequenceMetadata{
 					SeqDesc:         seqDesc,
 					InstancesPerRow: test.instancesPerRow,

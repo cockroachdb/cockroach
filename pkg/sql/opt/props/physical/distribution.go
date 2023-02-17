@@ -34,7 +34,7 @@ type Distribution struct {
 	// TODO(rytaft): Consider abstracting this to a list of "neighborhoods" to
 	// support more different types of localities.
 	// TODO(rytaft): Consider mapping the region strings to integers and storing
-	// this as a FastIntSet.
+	// this as a intsets.Fast.
 	Regions []string
 }
 
@@ -189,7 +189,7 @@ func (d *Distribution) FromIndexScan(
 			// If the above methods failed to find a distribution, then the
 			// distribution is all regions in the database.
 			regionsNames, ok := tabMeta.GetRegionsInDatabase(ctx, evalCtx.Planner)
-			if !ok && evalCtx.SessionData().EnforceHomeRegion && evalCtx.Planner.IsANSIDML() {
+			if !ok && evalCtx.SessionData().EnforceHomeRegion && evalCtx.Planner != nil && evalCtx.Planner.IsANSIDML() {
 				err := pgerror.New(pgcode.QueryHasNoHomeRegion,
 					"Query has no home region. Try accessing only tables defined in multi-region databases.")
 				panic(err)

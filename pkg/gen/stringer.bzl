@@ -44,7 +44,6 @@ STRINGER_SRCS = [
     "//pkg/sql:nodestatus_string.go",
     "//pkg/sql:txneventtype_string.go",
     "//pkg/sql:txntype_string.go",
-    "//pkg/storage:resourcelimitreached_string.go",
     "//pkg/util/encoding:type_string.go",
     "//pkg/util/timeutil/pgdate:field_string.go",
     "//pkg/workload/schemachange:optype_string.go",

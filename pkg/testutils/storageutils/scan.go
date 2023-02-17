@@ -57,13 +57,15 @@ func ScanIter(t *testing.T, iter storage.SimpleMVCCIterator) KVs {
 		}
 		if hasPoint {
 			var value []byte
+			v, err := iter.UnsafeValue()
+			require.NoError(t, err)
 			if iter.UnsafeKey().IsValue() {
-				if v := iter.UnsafeValue(); len(v) > 0 {
-					value = append(value, iter.UnsafeValue()...)
+				if len(v) > 0 {
+					value = append(value, v...)
 				}
 			} else {
 				var meta enginepb.MVCCMetadata
-				require.NoError(t, protoutil.Unmarshal(iter.UnsafeValue(), &meta))
+				require.NoError(t, protoutil.Unmarshal(v, &meta))
 				if meta.RawBytes == nil {
 					// Skip intent metadata records; we're only interested in the provisional value.
 					continue

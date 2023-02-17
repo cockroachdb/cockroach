@@ -66,14 +66,12 @@ type Cluster interface {
 
 	// SQL connection strings.
 
-	InternalPGUrl(ctx context.Context, l *logger.Logger, node option.NodeListOption) ([]string, error)
-	ExternalPGUrl(ctx context.Context, l *logger.Logger, node option.NodeListOption) ([]string, error)
+	InternalPGUrl(ctx context.Context, l *logger.Logger, node option.NodeListOption, tenant string) ([]string, error)
+	ExternalPGUrl(ctx context.Context, l *logger.Logger, node option.NodeListOption, tenant string) ([]string, error)
 
 	// SQL clients to nodes.
-
-	Conn(ctx context.Context, l *logger.Logger, node int) *gosql.DB
-	ConnE(ctx context.Context, l *logger.Logger, node int) (*gosql.DB, error)
-	ConnEAsUser(ctx context.Context, l *logger.Logger, node int, user string) (*gosql.DB, error)
+	Conn(ctx context.Context, l *logger.Logger, node int, opts ...func(*option.ConnOption)) *gosql.DB
+	ConnE(ctx context.Context, l *logger.Logger, node int, opts ...func(*option.ConnOption)) (*gosql.DB, error)
 
 	// URLs for the Admin UI.
 

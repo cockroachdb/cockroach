@@ -26,7 +26,6 @@ import (
 // SSTWriter writes SSTables.
 type SSTWriter struct {
 	fw *sstable.Writer
-	f  io.Writer
 	// DataSize tracks the total key and value bytes added so far.
 	DataSize int64
 	scratch  []byte
@@ -63,9 +62,10 @@ func MakeIngestionWriterOptions(ctx context.Context, cs *cluster.Settings) sstab
 	// By default, take a conservative approach and assume we don't have newer
 	// table features available. Upgrade to an appropriate version only if the
 	// cluster supports it.
-	format := sstable.TableFormatPebblev1 // Block properties.
-	if cs.Version.IsActive(ctx, clusterversion.V22_2EnablePebbleFormatVersionRangeKeys) {
-		format = sstable.TableFormatPebblev2 // Range keys.
+	format := sstable.TableFormatPebblev2
+	if cs.Version.IsActive(ctx, clusterversion.V23_1EnablePebbleFormatSSTableValueBlocks) &&
+		ValueBlocksEnabled.Get(&cs.SV) {
+		format = sstable.TableFormatPebblev3
 	}
 	opts := DefaultPebbleOptions().MakeWriterOptions(0, format)
 	opts.MergerName = "nullptr"
@@ -78,24 +78,23 @@ func MakeBackupSSTWriter(ctx context.Context, cs *cluster.Settings, f io.Writer)
 	// By default, take a conservative approach and assume we don't have newer
 	// table features available. Upgrade to an appropriate version only if the
 	// cluster supports it.
-	opts := DefaultPebbleOptions().MakeWriterOptions(0, sstable.TableFormatPebblev1)
-	if cs.Version.IsActive(ctx, clusterversion.V22_2EnablePebbleFormatVersionRangeKeys) {
-		opts.TableFormat = sstable.TableFormatPebblev2 // Range keys.
-	}
+	format := sstable.TableFormatPebblev2
+
+	// TODO(sumeer): add code to use TableFormatPebblev3 after confirming that
+	// we won't run afoul of any stale tooling that reads backup ssts.
+	opts := DefaultPebbleOptions().MakeWriterOptions(0, format)
+
 	// Don't need BlockPropertyCollectors for backups.
 	opts.BlockPropertyCollectors = nil
-
 	// Disable bloom filters since we only ever iterate backups.
 	opts.FilterPolicy = nil
 	// Bump up block size, since we almost never seek or do point lookups, so more
 	// block checksums and more index entries are just overhead and smaller blocks
 	// reduce compression ratio.
 	opts.BlockSize = 128 << 10
-
 	opts.MergerName = "nullptr"
 	return SSTWriter{
 		fw:                sstable.NewWriter(noopSyncCloser{f}, opts),
-		f:                 f,
 		supportsRangeKeys: opts.TableFormat >= sstable.TableFormatPebblev2,
 	}
 }
@@ -109,7 +108,6 @@ func MakeIngestionSSTWriter(
 	opts := MakeIngestionWriterOptions(ctx, cs)
 	return SSTWriter{
 		fw:                sstable.NewWriter(f, opts),
-		f:                 f,
 		supportsRangeKeys: opts.TableFormat >= sstable.TableFormatPebblev2,
 	}
 }
@@ -417,6 +415,11 @@ func (fw *SSTWriter) Close() {
 // ShouldWriteLocalTimestamps implements the Writer interface.
 func (fw *SSTWriter) ShouldWriteLocalTimestamps(context.Context) bool {
 	return false
+}
+
+// BufferedSize implements the Writer interface.
+func (fw *SSTWriter) BufferedSize() int {
+	return 0
 }
 
 // MemFile is a file-like struct that buffers all data written to it in memory.

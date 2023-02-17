@@ -38,7 +38,9 @@ func registerLedger(r registry.Registry) {
 
 			c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload", loadNode)
-			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), roachNodes)
+
+			// Don't start a scheduled backup on this perf sensitive roachtest that reports to roachperf.
+			c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings(), roachNodes)
 
 			t.Status("running workload")
 			m := c.NewMonitor(ctx, roachNodes)
@@ -46,7 +48,8 @@ func registerLedger(r registry.Registry) {
 				concurrency := ifLocal(c, "", " --concurrency="+fmt.Sprint(nodes*32))
 				duration := " --duration=" + ifLocal(c, "10s", "10m")
 
-				cmd := fmt.Sprintf("./workload run ledger --init --histograms="+t.PerfArtifactsDir()+"/stats.json"+
+				// See https://github.com/cockroachdb/cockroach/issues/94062 for the --data-loader.
+				cmd := fmt.Sprintf("./workload run ledger --init --data-loader=INSERT --histograms="+t.PerfArtifactsDir()+"/stats.json"+
 					concurrency+duration+" {pgurl%s}", gatewayNodes)
 				c.Run(ctx, loadNode, cmd)
 				return nil

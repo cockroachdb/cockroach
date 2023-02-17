@@ -34,8 +34,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
@@ -55,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -67,6 +68,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob/gcjobnotifier"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
@@ -99,6 +101,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -198,19 +201,34 @@ var allowCrossDatabaseSeqReferences = settings.RegisterBoolSetting(
 	false,
 ).WithPublic()
 
-// SecondaryTenantsZoneConfigsEnabledSettingName controls if secondary tenants
-// are allowed to set zone configurations. It has no effect for the system
-// tenant.
-const SecondaryTenantsZoneConfigsEnabledSettingName = "sql.zone_configs.allow_for_secondary_tenant.enabled"
-
 // SecondaryTenantZoneConfigsEnabled controls if secondary tenants are allowed
 // to set zone configurations. It has no effect for the system tenant.
 //
 // This setting has no effect on zone configurations that have already been set.
 var SecondaryTenantZoneConfigsEnabled = settings.RegisterBoolSetting(
 	settings.TenantReadOnly,
-	SecondaryTenantsZoneConfigsEnabledSettingName,
+	"sql.zone_configs.allow_for_secondary_tenant.enabled",
 	"allow secondary tenants to set zone configurations; does not affect the system tenant",
+	false,
+)
+
+// SecondaryTenantSplitAtEnabled controls if secondary tenants are allowed to
+// run ALTER TABLE/INDEX ... SPLIT AT statements. It has no effect for the
+// system tenant.
+var SecondaryTenantSplitAtEnabled = settings.RegisterBoolSetting(
+	settings.TenantReadOnly,
+	"sql.split_at.allow_for_secondary_tenant.enabled",
+	"allow secondary tenants to run ALTER TABLE/INDEX ... SPLIT AT commands; does not affect the system tenant",
+	false,
+)
+
+// SecondaryTenantScatterEnabled controls if secondary tenants are allowed to
+// run ALTER TABLE/INDEX ... SCATTER statements. It has no effect for the
+// system tenant.
+var SecondaryTenantScatterEnabled = settings.RegisterBoolSetting(
+	settings.TenantReadOnly,
+	"sql.scatter.allow_for_secondary_tenant.enabled",
+	"allow secondary tenants to run ALTER TABLE/INDEX ... SCATTER commands; does not affect the system tenant",
 	false,
 )
 
@@ -492,14 +510,6 @@ var experimentalUseNewSchemaChanger = settings.RegisterEnumSetting(
 		int64(sessiondatapb.UseNewSchemaChangerUnsafe):       "unsafe",
 		int64(sessiondatapb.UseNewSchemaChangerUnsafeAlways): "unsafe_always",
 	},
-).WithPublic()
-
-var experimentalStreamReplicationEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
-	"sql.defaults.experimental_stream_replication.enabled",
-	"default value for experimental_stream_replication session setting;"+
-		"enables the ability to setup a replication stream",
-	false,
 ).WithPublic()
 
 var stubCatalogTablesEnabledClusterValue = settings.RegisterBoolSetting(
@@ -918,6 +928,12 @@ var (
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}
+	MetaCopyNonAtomicStarted = metric.Metadata{
+		Name:        "sql.copy.nonatomic.started.count",
+		Help:        "Number of non-atomic COPY SQL statements started",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
 	MetaMiscStarted = metric.Metadata{
 		Name:        "sql.misc.started.count",
 		Help:        "Number of other SQL statements started",
@@ -1019,6 +1035,12 @@ var (
 	MetaCopyExecuted = metric.Metadata{
 		Name:        "sql.copy.count",
 		Help:        "Number of COPY SQL statements successfully executed",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaCopyNonAtomicExecuted = metric.Metadata{
+		Name:        "sql.copy.nonatomic.count",
+		Help:        "Number of non-atomic COPY SQL statements successfully executed",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -1187,7 +1209,6 @@ type ExecutorConfig struct {
 	DistSQLPlanner     *DistSQLPlanner
 	TableStatsCache    *stats.TableStatisticsCache
 	StatsRefresher     *stats.Refresher
-	InternalExecutor   *InternalExecutor
 	QueryCache         *querycache.C
 
 	SchemaChangerMetrics *SchemaChangerMetrics
@@ -1258,6 +1279,9 @@ type ExecutorConfig struct {
 	// IndexMerger is also used to backfill indexes and is also rather circular.
 	IndexMerger *IndexBackfillerMergePlanner
 
+	// IndexSpanSplitter is used to split and scatter indexes before backfill.
+	IndexSpanSplitter scexec.IndexSpanSplitter
+
 	// Validator is used to validate indexes and check constraints.
 	Validator scexec.Validator
 
@@ -1271,7 +1295,7 @@ type ExecutorConfig struct {
 
 	// RootMemoryMonitor is the root memory monitor of the entire server. Do not
 	// use this for normal purposes. It is to be used to establish any new
-	// root-level memory accounts that are not related to a user sessions.
+	// root-level memory accounts that are not related to a user session.
 	RootMemoryMonitor *mon.BytesMonitor
 
 	// CompactEngineSpanFunc is used to inform a storage engine of the need to
@@ -1319,9 +1343,12 @@ type ExecutorConfig struct {
 	// records.
 	SpanConfigKVAccessor spanconfig.KVAccessor
 
-	// InternalExecutorFactory is used to create an InternalExecutor bound with
-	// SessionData and other ExtraTxnState.
-	InternalExecutorFactory descs.TxnManager
+	// InternalDB is used to create an isql.Executor bound with SessionData and
+	// other ExtraTxnState.
+	InternalDB *InternalDB
+
+	// SpanStatsConsumer is used by the key visualizer job.
+	SpanStatsConsumer keyvisualizer.SpanStatsConsumer
 
 	// ConsistencyChecker is to generate the results in calls to
 	// crdb_internal.check_consistency.
@@ -1340,7 +1367,7 @@ type ExecutorConfig struct {
 	RangeStatsFetcher eval.RangeStatsFetcher
 
 	// EventsExporter is the client for the Observability Service.
-	EventsExporter obs.EventsExporter
+	EventsExporter obs.EventsExporterInterface
 
 	// NodeDescs stores {Store,Node}Descriptors in an in-memory cache.
 	NodeDescs kvcoord.NodeDescStore
@@ -1380,6 +1407,11 @@ func (cfg *ExecutorConfig) GetFeatureFlagMetrics() *featureflag.DenialMetrics {
 // SV returns the setting values.
 func (cfg *ExecutorConfig) SV() *settings.Values {
 	return &cfg.Settings.SV
+}
+
+func (cfg *ExecutorConfig) JobsKnobs() *jobs.TestingKnobs {
+	knobs, _ := cfg.DistSQLSrv.TestingKnobs.JobsTestingKnobs.(*jobs.TestingKnobs)
+	return knobs
 }
 
 var _ base.ModuleTestingKnobs = &ExecutorTestingKnobs{}
@@ -1463,7 +1495,7 @@ type ExecutorTestingKnobs struct {
 	// query (i.e. no subqueries). The physical plan is only safe for use for the
 	// lifetime of this function. Note that returning a nil function is
 	// unsupported and will lead to a panic.
-	TestingSaveFlows func(stmt string) func(map[base.SQLInstanceID]*execinfrapb.FlowSpec, execopnode.OpChains) error
+	TestingSaveFlows func(stmt string) func(map[base.SQLInstanceID]*execinfrapb.FlowSpec, execopnode.OpChains, bool) error
 
 	// DeterministicExplain, if set, will result in overriding fields in EXPLAIN
 	// and EXPLAIN ANALYZE that can vary between runs (like elapsed times).
@@ -1494,7 +1526,7 @@ type ExecutorTestingKnobs struct {
 	BeforeTxnStatsRecorded func(
 		sessionData *sessiondata.SessionData,
 		txnID uuid.UUID,
-		txnFingerprintID roachpb.TransactionFingerprintID,
+		txnFingerprintID appstatspb.TransactionFingerprintID,
 	)
 
 	// AfterBackupCheckpoint if set will be called after a BACKUP-CHECKPOINT
@@ -1509,6 +1541,9 @@ type ExecutorTestingKnobs struct {
 	// to use a transaction, and, in doing so, more deterministically allocate
 	// descriptor IDs at the cost of decreased parallelism.
 	UseTransactionalDescIDGenerator bool
+
+	// BeforeCopyFromInsert, if set, will be called during a COPY FROM insert statement.
+	BeforeCopyFromInsert func() error
 }
 
 // PGWireTestingKnobs contains knobs for the pgwire module.
@@ -1543,12 +1578,8 @@ type TenantTestingKnobs struct {
 	// can optionally forward requests to the real provider).
 	OverrideTokenBucketProvider func(origProvider kvtenant.TokenBucketProvider) kvtenant.TokenBucketProvider
 
-	// AllowSplitAndScatter, if set, allows secondary tenants to execute ALTER
-	// TABLE ... SPLIT AT and SCATTER SQL commands.
-	AllowSplitAndScatter bool
-
 	// SkipSQLSystemTentantCheck is a temporary knob to test which admin functions fail for secondary tenants.
-	// TODO(ewall): Remove when https://github.com/cockroachdb/cockroach/issues/91434 is fixed.
+	// TODO(ewall): Remove when usages in multitenant_admin_function_test.go are removed.
 	SkipSQLSystemTentantCheck bool
 
 	// BeforeCheckingForDescriptorIDSequence, if set, is called before
@@ -1601,6 +1632,10 @@ type BackupRestoreTestingKnobs struct {
 	// execution.
 	CaptureResolvedTableDescSpans func([]roachpb.Span)
 
+	// RunAfterSplitAndScatteringEntry allows blocking the RESTORE job after a
+	// single RestoreSpanEntry has been split and scattered.
+	RunAfterSplitAndScatteringEntry func(ctx context.Context)
+
 	// RunAfterProcessingRestoreSpanEntry allows blocking the RESTORE job after a
 	// single RestoreSpanEntry has been processed and added to the SSTBatcher.
 	RunAfterProcessingRestoreSpanEntry func(ctx context.Context)
@@ -1639,9 +1674,12 @@ type StreamingTestingKnobs struct {
 	AfterReplicationFlowPlan func([]*execinfrapb.StreamIngestionDataSpec,
 		*execinfrapb.StreamIngestionFrontierSpec)
 
-	// OverrideReplicationTTLSeconds will override the default value of the
-	// `ReplicationTTLSeconds` field on the StreamIngestion job details.
-	OverrideReplicationTTLSeconds int
+	// OverrideRevertRangeBatchSize allows overriding the `MaxSpanRequestKeys`
+	// used when sending a RevertRange request.
+	OverrideRevertRangeBatchSize int64
+
+	// AfterCutoverStarted allows blocking after the cutover has started.
+	AfterCutoverStarted func()
 }
 
 var _ base.ModuleTestingKnobs = &StreamingTestingKnobs{}
@@ -1679,8 +1717,7 @@ func shouldDistributeGivenRecAndMode(
 // completed but is quite annoying to do at the moment.
 func getPlanDistribution(
 	ctx context.Context,
-	p *planner,
-	nodeID *base.SQLIDContainer,
+	txnHasUncommittedTypes bool,
 	distSQLMode sessiondatapb.DistSQLExecMode,
 	plan planMaybePhysical,
 ) physicalplan.PlanDistribution {
@@ -1691,7 +1728,7 @@ func getPlanDistribution(
 	// If this transaction has modified or created any types, it is not safe to
 	// distribute due to limitations around leasing descriptors modified in the
 	// current transaction.
-	if p.Descriptors().HasUncommittedTypes() {
+	if txnHasUncommittedTypes {
 		return physicalplan.LocalPlan
 	}
 
@@ -1996,12 +2033,6 @@ type queryMeta struct {
 	database string
 }
 
-// cancel cancels the query associated with this queryMeta, by closing the
-// associated stmt context.
-func (q *queryMeta) cancel() {
-	q.cancelQuery()
-}
-
 // SessionDefaults mirrors fields in Session, for restoring default
 // configuration values in SET ... TO DEFAULT (or RESET ...) statements.
 type SessionDefaults map[string]string
@@ -2030,141 +2061,104 @@ type SessionArgs struct {
 // SessionRegistry stores a set of all sessions on this node.
 // Use register() and deregister() to modify this registry.
 type SessionRegistry struct {
-	syncutil.Mutex
-	sessions            map[clusterunique.ID]registrySession
-	sessionsByCancelKey map[pgwirecancel.BackendKeyData]registrySession
+	mu struct {
+		syncutil.RWMutex
+		sessionsByID        map[clusterunique.ID]RegistrySession
+		sessionsByCancelKey map[pgwirecancel.BackendKeyData]RegistrySession
+	}
 }
 
 // NewSessionRegistry creates a new SessionRegistry with an empty set
 // of sessions.
 func NewSessionRegistry() *SessionRegistry {
-	return &SessionRegistry{
-		sessions:            make(map[clusterunique.ID]registrySession),
-		sessionsByCancelKey: make(map[pgwirecancel.BackendKeyData]registrySession),
+	r := SessionRegistry{}
+	r.mu.sessionsByID = make(map[clusterunique.ID]RegistrySession)
+	r.mu.sessionsByCancelKey = make(map[pgwirecancel.BackendKeyData]RegistrySession)
+	return &r
+}
+
+func (r *SessionRegistry) GetSessionByID(sessionID clusterunique.ID) (RegistrySession, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	session, ok := r.mu.sessionsByID[sessionID]
+	return session, ok
+}
+
+func (r *SessionRegistry) GetSessionByQueryID(queryID clusterunique.ID) (RegistrySession, bool) {
+	for _, session := range r.getSessions() {
+		if session.hasQuery(queryID) {
+			return session, true
+		}
 	}
+	return nil, false
+}
+
+func (r *SessionRegistry) GetSessionByCancelKey(
+	cancelKey pgwirecancel.BackendKeyData,
+) (RegistrySession, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	session, ok := r.mu.sessionsByCancelKey[cancelKey]
+	return session, ok
+}
+
+func (r *SessionRegistry) getSessions() []RegistrySession {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	sessions := make([]RegistrySession, 0, len(r.mu.sessionsByID))
+	for _, session := range r.mu.sessionsByID {
+		sessions = append(sessions, session)
+	}
+	return sessions
 }
 
 func (r *SessionRegistry) register(
-	id clusterunique.ID, queryCancelKey pgwirecancel.BackendKeyData, s registrySession,
+	id clusterunique.ID, queryCancelKey pgwirecancel.BackendKeyData, s RegistrySession,
 ) {
-	r.Lock()
-	defer r.Unlock()
-	r.sessions[id] = s
-	r.sessionsByCancelKey[queryCancelKey] = s
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.mu.sessionsByID[id] = s
+	r.mu.sessionsByCancelKey[queryCancelKey] = s
 }
 
 func (r *SessionRegistry) deregister(
 	id clusterunique.ID, queryCancelKey pgwirecancel.BackendKeyData,
 ) {
-	r.Lock()
-	defer r.Unlock()
-	delete(r.sessions, id)
-	delete(r.sessionsByCancelKey, queryCancelKey)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.mu.sessionsByID, id)
+	delete(r.mu.sessionsByCancelKey, queryCancelKey)
 }
 
-type registrySession interface {
-	user() username.SQLUsername
-	cancelQuery(queryID clusterunique.ID) bool
-	cancelCurrentQueries() bool
-	cancelSession()
+type RegistrySession interface {
+	// SessionUser returns the session user's username.
+	SessionUser() username.SQLUsername
+	hasQuery(queryID clusterunique.ID) bool
+	// CancelQuery cancels the query specified by queryID if it exists.
+	CancelQuery(queryID clusterunique.ID) bool
+	// CancelActiveQueries cancels all currently active queries.
+	CancelActiveQueries() bool
+	// CancelSession cancels the session.
+	CancelSession()
 	// serialize serializes a Session into a serverpb.Session
 	// that can be served over RPC.
 	serialize() serverpb.Session
 }
 
-// CancelQuery looks up the associated query in the session registry and cancels
-// it. The caller is responsible for all permission checks.
-func (r *SessionRegistry) CancelQuery(queryIDStr string) (bool, error) {
-	queryID, err := clusterunique.IDFromString(queryIDStr)
-	if err != nil {
-		return false, errors.Wrapf(err, "query ID %s malformed", queryID)
-	}
-
-	r.Lock()
-	defer r.Unlock()
-
-	for _, session := range r.sessions {
-		if session.cancelQuery(queryID) {
-			return true, nil
-		}
-	}
-
-	return false, fmt.Errorf("query ID %s not found", queryID)
-}
-
-// CancelQueryByKey looks up the associated query in the session registry and
-// cancels it.
-func (r *SessionRegistry) CancelQueryByKey(
-	queryCancelKey pgwirecancel.BackendKeyData,
-) (canceled bool, err error) {
-	r.Lock()
-	defer r.Unlock()
-	if session, ok := r.sessionsByCancelKey[queryCancelKey]; ok {
-		if session.cancelCurrentQueries() {
-			return true, nil
-		}
-		return false, nil
-	}
-	return false, fmt.Errorf("session for cancel key %d not found", queryCancelKey)
-}
-
-// CancelSession looks up the specified session in the session registry and
-// cancels it. The caller is responsible for all permission checks.
-func (r *SessionRegistry) CancelSession(
-	sessionIDBytes []byte,
-) (*serverpb.CancelSessionResponse, error) {
-	if len(sessionIDBytes) != 16 {
-		return nil, errors.Errorf("invalid non-16-byte UUID %v", sessionIDBytes)
-	}
-	sessionID := clusterunique.IDFromBytes(sessionIDBytes)
-
-	r.Lock()
-	defer r.Unlock()
-
-	for id, session := range r.sessions {
-		if id == sessionID {
-			session.cancelSession()
-			return &serverpb.CancelSessionResponse{Canceled: true}, nil
-		}
-	}
-
-	return &serverpb.CancelSessionResponse{
-		Error: fmt.Sprintf("session ID %s not found", sessionID),
-	}, nil
-}
-
-// SerializeAll returns a slice of all sessions in the registry, converted to serverpb.Sessions.
+// SerializeAll returns a slice of all sessions in the registry converted to
+// serverpb.Sessions.
 func (r *SessionRegistry) SerializeAll() []serverpb.Session {
-	r.Lock()
-	defer r.Unlock()
-
-	return r.SerializeAllLocked()
-}
-
-// SerializeAllLocked is like SerializeAll but assumes SessionRegistry's mutex is locked.
-func (r *SessionRegistry) SerializeAllLocked() []serverpb.Session {
-	response := make([]serverpb.Session, 0, len(r.sessions))
-
-	for _, s := range r.sessions {
+	sessions := r.getSessions()
+	response := make([]serverpb.Session, 0, len(sessions))
+	for _, s := range sessions {
 		response = append(response, s.serialize())
 	}
-
 	return response
 }
 
 // MaxSQLBytes is the maximum length in bytes of SQL statements serialized
 // into a serverpb.Session. Exported for testing.
 const MaxSQLBytes = 1000
-
-type jobsCollection []jobspb.JobID
-
-func (jc *jobsCollection) add(ids ...jobspb.JobID) {
-	*jc = append(*jc, ids...)
-}
-
-func (jc *jobsCollection) reset() {
-	*jc = nil
-}
 
 // truncateStatementStringForTelemetry truncates the string
 // representation of a statement to a maximum length, so as to not
@@ -2935,11 +2929,14 @@ func (m *sessionDataMutator) bufferParamStatusUpdate(param string, status string
 
 // SetApplicationName sets the application name.
 func (m *sessionDataMutator) SetApplicationName(appName string) {
+	oldName := m.data.ApplicationName
 	m.data.ApplicationName = appName
 	if m.onApplicationNameChange != nil {
 		m.onApplicationNameChange(appName)
 	}
-	m.bufferParamStatusUpdate("application_name", appName)
+	if oldName != appName {
+		m.bufferParamStatusUpdate("application_name", appName)
+	}
 }
 
 // SetAvoidBuffering sets avoid buffering option.
@@ -2998,6 +2995,10 @@ func (m *sessionDataMutator) SetEnableSeqScan(val bool) {
 
 func (m *sessionDataMutator) SetSynchronousCommit(val bool) {
 	m.data.SynchronousCommit = val
+}
+
+func (m *sessionDataMutator) SetDirectColumnarScansEnabled(b bool) {
+	m.data.DirectColumnarScansEnabled = b
 }
 
 func (m *sessionDataMutator) SetDisablePlanGists(val bool) {
@@ -3103,8 +3104,11 @@ func (m *sessionDataMutator) UpdateSearchPath(paths []string) {
 }
 
 func (m *sessionDataMutator) SetLocation(loc *time.Location) {
+	oldLocation := sessionDataTimeZoneFormat(m.data.Location)
 	m.data.Location = loc
-	m.bufferParamStatusUpdate("TimeZone", sessionDataTimeZoneFormat(loc))
+	if formatted := sessionDataTimeZoneFormat(loc); oldLocation != formatted {
+		m.bufferParamStatusUpdate("TimeZone", formatted)
+	}
 }
 
 func (m *sessionDataMutator) SetCustomOption(name, val string) {
@@ -3240,14 +3244,20 @@ func (m *sessionDataMutator) initSequenceCache() {
 
 // SetIntervalStyle sets the IntervalStyle for the given session.
 func (m *sessionDataMutator) SetIntervalStyle(style duration.IntervalStyle) {
+	oldStyle := m.data.DataConversionConfig.IntervalStyle
 	m.data.DataConversionConfig.IntervalStyle = style
-	m.bufferParamStatusUpdate("IntervalStyle", strings.ToLower(style.String()))
+	if oldStyle != style {
+		m.bufferParamStatusUpdate("IntervalStyle", strings.ToLower(style.String()))
+	}
 }
 
 // SetDateStyle sets the DateStyle for the given session.
 func (m *sessionDataMutator) SetDateStyle(style pgdate.DateStyle) {
+	oldStyle := m.data.DataConversionConfig.DateStyle
 	m.data.DataConversionConfig.DateStyle = style
-	m.bufferParamStatusUpdate("DateStyle", style.SQLString())
+	if oldStyle != style {
+		m.bufferParamStatusUpdate("DateStyle", style.SQLString())
+	}
 }
 
 // SetStubCatalogTablesEnabled sets default value for stub_catalog_tables.
@@ -3369,6 +3379,14 @@ func (m *sessionDataMutator) SetCopyFromAtomicEnabled(val bool) {
 	m.data.CopyFromAtomicEnabled = val
 }
 
+func (m *sessionDataMutator) SetCopyFromRetriesEnabled(val bool) {
+	m.data.CopyFromRetriesEnabled = val
+}
+
+func (m *sessionDataMutator) SetDeclareCursorStatementTimeoutEnabled(val bool) {
+	m.data.DeclareCursorStatementTimeoutEnabled = val
+}
+
 func (m *sessionDataMutator) SetEnforceHomeRegion(val bool) {
 	m.data.EnforceHomeRegion = val
 }
@@ -3381,12 +3399,24 @@ func (m *sessionDataMutator) SetExperimentalHashGroupJoinEnabled(val bool) {
 	m.data.ExperimentalHashGroupJoinEnabled = val
 }
 
+func (m *sessionDataMutator) SetAllowOrdinalColumnReference(val bool) {
+	m.data.AllowOrdinalColumnReferences = val
+}
+
+func (m *sessionDataMutator) SetOptimizerUseImprovedDisjunctionStats(val bool) {
+	m.data.OptimizerUseImprovedDisjunctionStats = val
+}
+
+func (m *sessionDataMutator) SetOptimizerUseLimitOrderingForStreamingGroupBy(val bool) {
+	m.data.OptimizerUseLimitOrderingForStreamingGroupBy = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
-// roachpb.StatementStatistics is bucketed to the order of magnitude base 10s
+// appstatspb.StatementStatistics is bucketed to the order of magnitude base 10s
 // and recomputes the squared differences using the new Count value.
-func quantizeCounts(d *roachpb.StatementStatistics) {
+func quantizeCounts(d *appstatspb.StatementStatistics) {
 	oldCount := d.Count
 	newCount := telemetry.Bucket10(oldCount)
 	d.Count = newCount
@@ -3482,12 +3512,16 @@ func formatStatementSummary(ast tree.Statement) string {
 
 // DescsTxn is a convenient method for running a transaction on descriptors
 // when you have an ExecutorConfig.
+//
+// TODO(ajwerner): Remove this now that it is such a thin shim.
 func DescsTxn(
 	ctx context.Context,
 	execCfg *ExecutorConfig,
-	f func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error,
+	f func(ctx context.Context, txn isql.Txn, col *descs.Collection) error,
 ) error {
-	return execCfg.InternalExecutorFactory.DescsTxn(ctx, execCfg.DB, f)
+	return execCfg.InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		return f(ctx, txn, txn.Descriptors())
+	})
 }
 
 // TestingDescsTxn is a convenience function for running a transaction on
@@ -3495,7 +3529,7 @@ func DescsTxn(
 func TestingDescsTxn(
 	ctx context.Context,
 	s serverutils.TestServerInterface,
-	f func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error,
+	f func(ctx context.Context, txn isql.Txn, col *descs.Collection) error,
 ) error {
 	execCfg := s.ExecutorConfig().(ExecutorConfig)
 	return DescsTxn(ctx, &execCfg, f)
@@ -3519,12 +3553,28 @@ func (cfg *ExecutorConfig) GetRowMetrics(internal bool) *rowinfra.Metrics {
 	return cfg.RowMetrics
 }
 
-// IsSystemTenant returns true either if TenantTestingKnobs.SkipSQLSystemTentantCheck is true
-// or if the ExecutorConfig tenant is the system tenant.
-func (cfg *ExecutorConfig) IsSystemTenant() bool {
+// RequireSystemTenant returns an unsupported error if executed from inside a
+// secondary tenant. Tests may circumvent this check using a testing knob.
+// TODO(ewall): Replace usages of this with tenant capability checks in KV.
+func (cfg *ExecutorConfig) RequireSystemTenant() error {
+	if cfg.Codec.ForSystemTenant() {
+		return nil
+	}
 	knobs := cfg.TenantTestingKnobs
 	if knobs != nil && knobs.SkipSQLSystemTentantCheck {
-		return true
+		return nil
 	}
-	return cfg.Codec.ForSystemTenant()
+	return errorutil.UnsupportedWithMultiTenancy(errorutil.FeatureNotAvailableToNonSystemTenantsIssue)
+}
+
+// RequireSystemTenantOrClusterSetting returns a setting disabled error if
+// executed from inside a secondary tenant that does not have the specified
+// cluster setting.
+func (cfg *ExecutorConfig) RequireSystemTenantOrClusterSetting(
+	setting *settings.BoolSetting,
+) error {
+	if cfg.Codec.ForSystemTenant() || setting.Get(&cfg.Settings.SV) {
+		return nil
+	}
+	return errors.Newf("tenant cluster setting %s disabled", setting.Key())
 }

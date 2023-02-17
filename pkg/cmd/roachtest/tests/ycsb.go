@@ -67,7 +67,7 @@ func registerYCSB(r registry.Registry) {
 
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
-		c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.Range(1, nodes))
+		c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), settings, c.Range(1, nodes))
 		err := WaitFor3XReplication(ctx, t, c.Conn(ctx, t.L(), 1))
 		require.NoError(t, err)
 

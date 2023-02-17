@@ -21,19 +21,23 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/colfetcher"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/memzipper"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 const noPlan = "no plan"
@@ -124,17 +128,21 @@ type diagnosticsBundle struct {
 // system.statement_diagnostics.
 func buildStatementBundle(
 	ctx context.Context,
+	explainFlags explain.Flags,
 	db *kv.DB,
 	ie *InternalExecutor,
+	stmtRawSQL string,
 	plan *planTop,
 	planString string,
 	trace tracingpb.Recording,
 	placeholders *tree.PlaceholderInfo,
+	queryErr, payloadErr, commErr error,
+	sv *settings.Values,
 ) diagnosticsBundle {
 	if plan == nil {
 		return diagnosticsBundle{collectionErr: errors.AssertionFailedf("execution terminated early")}
 	}
-	b := makeStmtBundleBuilder(db, ie, plan, trace, placeholders)
+	b := makeStmtBundleBuilder(explainFlags, db, ie, stmtRawSQL, plan, trace, placeholders, sv)
 
 	b.addStatement()
 	b.addOptPlans(ctx)
@@ -143,6 +151,7 @@ func buildStatementBundle(
 	b.addExplainVec()
 	b.addTrace()
 	b.addEnv(ctx)
+	b.addErrors(queryErr, payloadErr, commErr)
 
 	buf, err := b.finalize()
 	if err != nil {
@@ -184,54 +193,86 @@ func (bundle *diagnosticsBundle) insert(
 
 // stmtBundleBuilder is a helper for building a statement bundle.
 type stmtBundleBuilder struct {
+	flags explain.Flags
+
 	db *kv.DB
 	ie *InternalExecutor
 
+	stmt         string
 	plan         *planTop
 	trace        tracingpb.Recording
 	placeholders *tree.PlaceholderInfo
+	sv           *settings.Values
 
 	z memzipper.Zipper
 }
 
 func makeStmtBundleBuilder(
+	flags explain.Flags,
 	db *kv.DB,
 	ie *InternalExecutor,
+	stmtRawSQL string,
 	plan *planTop,
 	trace tracingpb.Recording,
 	placeholders *tree.PlaceholderInfo,
+	sv *settings.Values,
 ) stmtBundleBuilder {
-	b := stmtBundleBuilder{db: db, ie: ie, plan: plan, trace: trace, placeholders: placeholders}
+	b := stmtBundleBuilder{
+		flags: flags, db: db, ie: ie, plan: plan, trace: trace, placeholders: placeholders, sv: sv,
+	}
+	b.buildPrettyStatement(stmtRawSQL)
 	b.z.Init()
 	return b
 }
 
-// addStatement adds the pretty-printed statement as file statement.txt.
-func (b *stmtBundleBuilder) addStatement() {
-	cfg := tree.DefaultPrettyCfg()
-	cfg.UseTabs = false
-	cfg.LineWidth = 100
-	cfg.TabWidth = 2
-	cfg.Simplify = true
-	cfg.Align = tree.PrettyNoAlign
-	cfg.JSONFmt = true
-	var output string
-	// If we hit an early error, stmt or stmt.AST might not be initialized yet.
-	switch {
-	case b.plan.stmt == nil:
-		output = "-- No Statement."
-	case b.plan.stmt.AST == nil:
-		output = "-- No AST."
-	default:
-		output = cfg.Pretty(b.plan.stmt.AST)
+// buildPrettyStatement saves the pretty-printed statement (without any
+// placeholder arguments).
+func (b *stmtBundleBuilder) buildPrettyStatement(stmtRawSQL string) {
+	// If we hit an early error, stmt or stmt.AST might not be initialized yet. In
+	// this case use the original raw SQL.
+	if b.plan.stmt == nil || b.plan.stmt.AST == nil {
+		b.stmt = stmtRawSQL
+		// If we're collecting a redacted bundle, redact the raw SQL completely.
+		if b.flags.RedactValues && b.stmt != "" {
+			b.stmt = string(redact.RedactedMarker())
+		}
+	} else {
+		cfg := tree.DefaultPrettyCfg()
+		cfg.UseTabs = false
+		cfg.LineWidth = 100
+		cfg.TabWidth = 2
+		cfg.Simplify = true
+		cfg.Align = tree.PrettyNoAlign
+		cfg.JSONFmt = true
+		cfg.ValueRedaction = b.flags.RedactValues
+		b.stmt = cfg.Pretty(b.plan.stmt.AST)
+
+		// If we had ValueRedaction set, Pretty surrounded all constants with
+		// redaction markers. We must call Redact to fully redact them.
+		if b.flags.RedactValues {
+			b.stmt = string(redact.RedactableString(b.stmt).Redact())
+		}
 	}
+	if b.stmt == "" {
+		b.stmt = "-- no statement"
+	}
+}
+
+// addStatement adds the pretty-printed statement in b.stmt as file
+// statement.txt.
+func (b *stmtBundleBuilder) addStatement() {
+	output := b.stmt
 
 	if b.placeholders != nil && len(b.placeholders.Values) != 0 {
 		var buf bytes.Buffer
 		buf.WriteString(output)
 		buf.WriteString("\n\n-- Arguments:\n")
 		for i, v := range b.placeholders.Values {
-			fmt.Fprintf(&buf, "--  %s: %v\n", tree.PlaceholderIdx(i), v)
+			if b.flags.RedactValues {
+				fmt.Fprintf(&buf, "--  %s: %s\n", tree.PlaceholderIdx(i), redact.RedactedMarker())
+			} else {
+				fmt.Fprintf(&buf, "--  %s: %v\n", tree.PlaceholderIdx(i), v)
+			}
 		}
 		output = buf.String()
 	}
@@ -242,6 +283,10 @@ func (b *stmtBundleBuilder) addStatement() {
 // addOptPlans adds the EXPLAIN (OPT) variants as files opt.txt, opt-v.txt,
 // opt-vv.txt.
 func (b *stmtBundleBuilder) addOptPlans(ctx context.Context) {
+	if b.flags.RedactValues {
+		return
+	}
+
 	if b.plan.mem == nil || b.plan.mem.RootExpr() == nil {
 		// No optimizer plans; an error must have occurred during planning.
 		b.z.AddFile("opt.txt", noPlan)
@@ -265,6 +310,10 @@ func (b *stmtBundleBuilder) addOptPlans(ctx context.Context) {
 
 // addExecPlan adds the EXPLAIN (VERBOSE) plan as file plan.txt.
 func (b *stmtBundleBuilder) addExecPlan(plan string) {
+	if b.flags.RedactValues {
+		return
+	}
+
 	if plan == "" {
 		plan = "no plan"
 	}
@@ -272,6 +321,10 @@ func (b *stmtBundleBuilder) addExecPlan(plan string) {
 }
 
 func (b *stmtBundleBuilder) addDistSQLDiagrams() {
+	if b.flags.RedactValues {
+		return
+	}
+
 	for i, d := range b.plan.distSQLFlowInfos {
 		d.diagram.AddSpans(b.trace)
 		_, url, err := d.diagram.ToURL()
@@ -317,6 +370,10 @@ func (b *stmtBundleBuilder) addExplainVec() {
 // trace (the default and the jaeger formats), the third one is a human-readable
 // representation.
 func (b *stmtBundleBuilder) addTrace() {
+	if b.flags.RedactValues {
+		return
+	}
+
 	traceJSONStr, err := tracing.TraceToJSON(b.trace)
 	if err != nil {
 		b.z.AddFile("trace.json", err.Error())
@@ -324,25 +381,16 @@ func (b *stmtBundleBuilder) addTrace() {
 		b.z.AddFile("trace.json", traceJSONStr)
 	}
 
-	cfg := tree.DefaultPrettyCfg()
-	cfg.UseTabs = false
-	cfg.LineWidth = 100
-	cfg.TabWidth = 2
-	cfg.Simplify = true
-	cfg.Align = tree.PrettyNoAlign
-	cfg.JSONFmt = true
-	stmt := cfg.Pretty(b.plan.stmt.AST)
-
 	// The JSON is not very human-readable, so we include another format too.
-	b.z.AddFile("trace.txt", fmt.Sprintf("%s\n\n\n\n%s", stmt, b.trace.String()))
+	b.z.AddFile("trace.txt", fmt.Sprintf("%s\n\n\n\n%s", b.stmt, b.trace.String()))
 
 	// Note that we're going to include the non-anonymized statement in the trace.
 	// But then again, nothing in the trace is anonymized.
 	comment := fmt.Sprintf(`This is a trace for SQL statement: %s
 This trace can be imported into Jaeger for visualization. From the Jaeger Search screen, select the JSON File.
 Jaeger can be started using docker with: docker run -d --name jaeger -p 16686:16686 jaegertracing/all-in-one:1.17
-The UI can then be accessed at http://localhost:16686/search`, stmt)
-	jaegerJSON, err := b.trace.ToJaegerJSON(stmt, comment, "")
+The UI can then be accessed at http://localhost:16686/search`, b.stmt)
+	jaegerJSON, err := b.trace.ToJaegerJSON(b.stmt, comment, "")
 	if err != nil {
 		b.z.AddFile("trace-jaeger.txt", err.Error())
 	} else {
@@ -360,7 +408,7 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 	fmt.Fprintf(&buf, "\n")
 
 	// Show the values of session variables that can impact planning decisions.
-	if err := c.PrintSessionSettings(&buf); err != nil {
+	if err := c.PrintSessionSettings(&buf, b.sv); err != nil {
 		fmt.Fprintf(&buf, "-- error getting session settings: %v\n", err)
 	}
 
@@ -371,6 +419,11 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 	}
 
 	b.z.AddFile("env.sql", buf.String())
+
+	if b.flags.RedactValues {
+		b.z.AddFile("schema.sql", "-- schema redacted\n")
+		return
+	}
 
 	mem := b.plan.mem
 	if mem == nil {
@@ -438,6 +491,21 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 		}
 		b.z.AddFile(fmt.Sprintf("stats-%s.sql", tables[i].String()), buf.String())
 	}
+}
+
+func (b *stmtBundleBuilder) addErrors(queryErr, payloadErr, commErr error) {
+	if b.flags.RedactValues {
+		return
+	}
+
+	if queryErr == nil && payloadErr == nil && commErr == nil {
+		return
+	}
+	output := fmt.Sprintf(
+		"query error:\n%v\n\npayload error:\n%v\n\ncomm error:\n%v\n",
+		queryErr, payloadErr, commErr,
+	)
+	b.z.AddFile("errors.txt", output)
 }
 
 // finalize generates the zipped bundle and returns it as a buffer.
@@ -550,7 +618,7 @@ func (c *stmtEnvCollector) PrintVersion(w io.Writer) error {
 
 // PrintSessionSettings appends information about session settings that can
 // impact planning decisions.
-func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer) error {
+func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer, sv *settings.Values) error {
 	// Cluster setting encoded default value to session setting value conversion
 	// functions.
 	boolToOnOff := func(boolStr string) string {
@@ -610,6 +678,7 @@ func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer) error {
 		{sessionSetting: "default_transaction_quality_of_service"},
 		{sessionSetting: "default_transaction_read_only"},
 		{sessionSetting: "default_transaction_use_follower_reads"},
+		{sessionSetting: "direct_columnar_scans_enabled", clusterSetting: colfetcher.DirectScansEnabled, convFunc: boolToOnOff},
 		{sessionSetting: "disallow_full_table_scans", clusterSetting: disallowFullTableScans, convFunc: boolToOnOff},
 		{sessionSetting: "distsql", clusterSetting: DistSQLClusterExecMode, convFunc: distsqlConv},
 		{sessionSetting: "enable_implicit_select_for_update", clusterSetting: implicitSelectForUpdateClusterMode, convFunc: boolToOnOff},
@@ -651,11 +720,19 @@ func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer) error {
 		if s.clusterSetting == nil {
 			if ok, v, _ := getSessionVar(s.sessionSetting, true); ok {
 				if v.GlobalDefault != nil {
-					def = v.GlobalDefault(nil /* *settings.Values */)
+					def = v.GlobalDefault(sv)
 				}
 			}
 		} else {
 			def = s.clusterSetting.EncodedDefault()
+			if buildutil.CrdbTestBuild {
+				// In test builds we might randomize some setting defaults, so
+				// we need to override them to make the tests deterministic.
+				switch s.sessionSetting {
+				case "direct_columnar_scans_enabled":
+					def = "false"
+				}
+			}
 		}
 		if s.convFunc != nil {
 			// If necessary, convert the encoded cluster setting to a session setting

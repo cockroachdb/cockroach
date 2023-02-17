@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -43,9 +44,12 @@ import (
 // The creation of the database is time consuming, so the caller can choose
 // whether to use a temporary or permanent location.
 func loadTestData(
-	dir string, numKeys, numBatches, batchTimeSpan, valueBytes int,
+	dirPrefix string, numKeys, numBatches, batchTimeSpan, valueBytes int,
 ) (storage.Engine, error) {
 	ctx := context.Background()
+
+	verStr := fmt.Sprintf("v%s", clusterversion.TestingBinaryVersion.String())
+	dir := fmt.Sprintf("%s_v%s_%d_%d_%d_%d", dirPrefix, verStr, numKeys, numBatches, batchTimeSpan, valueBytes)
 
 	exists := true
 	if _, err := os.Stat(dir); oserror.IsNotExist(err) {
@@ -55,17 +59,23 @@ func loadTestData(
 	eng, err := storage.Open(
 		ctx,
 		storage.Filesystem(dir),
-		storage.Settings(cluster.MakeTestingClusterSettings()))
+		cluster.MakeTestingClusterSettings())
 	if err != nil {
 		return nil, err
 	}
 
+	absPath, err := filepath.Abs(dir)
+	if err != nil {
+		absPath = dir
+	}
+
 	if exists {
+		log.Infof(context.Background(), "using existing test data: %s", absPath)
 		testutils.ReadAllFiles(filepath.Join(dir, "*"))
 		return eng, nil
 	}
 
-	log.Infof(context.Background(), "creating test data: %s", dir)
+	log.Infof(context.Background(), "creating test data: %s", absPath)
 
 	// Generate the same data every time.
 	rng := rand.New(rand.NewSource(1449168817))

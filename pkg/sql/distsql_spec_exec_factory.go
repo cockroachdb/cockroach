@@ -293,6 +293,11 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	return makePlanMaybePhysical(p, nil /* planNodesToClose */), err
 }
 
+// Ctx implements the Factory interface.
+func (e *distSQLSpecExecFactory) Ctx() context.Context {
+	return e.ctx
+}
+
 // checkExprsAndMaybeMergeLastStage is a helper method that returns a
 // recommendation about exprs' distribution. If one of the expressions cannot
 // be distributed, then all expressions cannot be distributed either. In such
@@ -315,7 +320,7 @@ func (e *distSQLSpecExecFactory) checkExprsAndMaybeMergeLastStage(
 				// make sure that there is a single stream on a node. We could
 				// do so on one of the nodes that streams originate from, but
 				// for now we choose the gateway.
-				physPlan.EnsureSingleStreamOnGateway()
+				physPlan.EnsureSingleStreamOnGateway(e.ctx)
 			}
 			break
 		}
@@ -373,7 +378,7 @@ func (e *distSQLSpecExecFactory) ConstructSerializingProject(
 	n exec.Node, cols []exec.NodeColumnOrdinal, colNames []string,
 ) (exec.Node, error) {
 	physPlan, plan := getPhysPlan(n)
-	physPlan.EnsureSingleStreamOnGateway()
+	physPlan.EnsureSingleStreamOnGateway(e.ctx)
 	projection := make([]uint32, len(cols))
 	for i, col := range cols {
 		projection[i] = uint32(physPlan.PlanToStreamColMap[col])
@@ -594,7 +599,7 @@ func (e *distSQLSpecExecFactory) ConstructDistinct(
 		errorOnDup,
 		e.dsp.convertOrdering(ReqOrdering(reqOrdering), physPlan.PlanToStreamColMap),
 	)
-	e.dsp.addDistinctProcessors(physPlan, spec)
+	e.dsp.addDistinctProcessors(e.ctx, physPlan, spec)
 	// Since addition of distinct processors doesn't change any properties of
 	// the physical plan, we don't need to update any of those.
 	return plan, nil
@@ -620,7 +625,7 @@ func (e *distSQLSpecExecFactory) ConstructStreamingSetOp(
 
 // ConstructUnionAll is part of the exec.Factory interface.
 func (e *distSQLSpecExecFactory) ConstructUnionAll(
-	left, right exec.Node, reqOrdering exec.OutputOrdering, hardLimit uint64,
+	left, right exec.Node, reqOrdering exec.OutputOrdering, hardLimit uint64, enforceHomeRegion bool,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: union all")
 }
@@ -629,7 +634,7 @@ func (e *distSQLSpecExecFactory) ConstructSort(
 	input exec.Node, ordering exec.OutputOrdering, alreadyOrderedPrefix int,
 ) (exec.Node, error) {
 	physPlan, plan := getPhysPlan(input)
-	e.dsp.addSorters(physPlan, colinfo.ColumnOrdering(ordering), alreadyOrderedPrefix, 0 /* limit */)
+	e.dsp.addSorters(e.ctx, physPlan, colinfo.ColumnOrdering(ordering), alreadyOrderedPrefix, 0 /* limit */)
 	// Since addition of sorters doesn't change any properties of the physical
 	// plan, we don't need to update any of those.
 	return plan, nil
@@ -669,6 +674,7 @@ func (e *distSQLSpecExecFactory) ConstructLookupJoin(
 	reqOrdering exec.OutputOrdering,
 	locking opt.Locking,
 	limitHint int64,
+	remoteOnlyLookups bool,
 ) (exec.Node, error) {
 	// TODO (rohany): Implement production of system columns by the underlying scan here.
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: lookup join")
@@ -810,7 +816,7 @@ func (e *distSQLSpecExecFactory) ConstructTopK(
 		return nil, errors.New("negative or zero value for LIMIT")
 	}
 	// No already ordered prefix.
-	e.dsp.addSorters(physPlan, colinfo.ColumnOrdering(ordering), alreadyOrderedPrefix, k)
+	e.dsp.addSorters(e.ctx, physPlan, colinfo.ColumnOrdering(ordering), alreadyOrderedPrefix, k)
 	// Since addition of topk doesn't change any properties of
 	// the physical plan, we don't need to update any of those.
 	return plan, nil
@@ -1234,7 +1240,7 @@ func (e *distSQLSpecExecFactory) constructHashOrMergeJoin(
 		rightPlanDistribution:    rightPhysPlan.Distribution,
 		allowPartialDistribution: e.planningMode != distSQLLocalOnlyPlanning,
 	}
-	p := e.dsp.planJoiners(planCtx, &info, ReqOrdering(reqOrdering))
+	p := e.dsp.planJoiners(e.ctx, planCtx, &info, ReqOrdering(reqOrdering))
 	p.ResultColumns = resultColumns
 	return makePlanMaybePhysical(p, append(leftPlan.physPlan.planNodesToClose, rightPlan.physPlan.planNodesToClose...)), nil
 }

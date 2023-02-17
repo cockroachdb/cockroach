@@ -18,6 +18,7 @@ go_library(
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/allocator/storepool",
         "//pkg/kv/kvserver/closedts/sidetransport",
+        "//pkg/kv/kvserver/kvstorage",
         "//pkg/kv/kvserver/liveness",
         "//pkg/roachpb",
         "//pkg/rpc",

@@ -1,4 +1,4 @@
-# tenant-cluster-setting-override-opt: allow-multi-region-abstractions-for-secondary-tenants
+# tenant-cluster-setting-override-opt: sql.multi_region.allow_abstractions_for_secondary_tenants.enabled=true
 # LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-vec-off multiregion-9node-3region-3azs-no-los
 
 statement error PLACEMENT requires that the session setting enable_multiregion_placement_policy is enabled

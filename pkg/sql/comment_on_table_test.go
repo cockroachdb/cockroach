@@ -39,17 +39,17 @@ func TestCommentOnTable(t *testing.T) {
 		}{
 			{
 				`COMMENT ON TABLE t IS 'foo'`,
-				`SELECT obj_description('t'::regclass)`,
+				`SELECT obj_description('t'::regclass, 'pg_class')`,
 				gosql.NullString{String: `foo`, Valid: true},
 			},
 			{
 				`TRUNCATE t`,
-				`SELECT obj_description('t'::regclass)`,
+				`SELECT obj_description('t'::regclass, 'pg_class')`,
 				gosql.NullString{String: `foo`, Valid: true},
 			},
 			{
 				`COMMENT ON TABLE t IS NULL`,
-				`SELECT obj_description('t'::regclass)`,
+				`SELECT obj_description('t'::regclass, 'pg_class')`,
 				gosql.NullString{Valid: false},
 			},
 		}

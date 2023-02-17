@@ -126,8 +126,7 @@ type SQLTranslator interface {
 	// that don't exist.
 	// Additionally, if `generateSystemSpanConfigurations` is set to true,
 	// Translate will generate all the span configurations that apply to
-	// `spanconfig.SystemTargets`. The timestamp at which the translation is valid
-	// is also returned.
+	// `spanconfig.SystemTargets`.
 	//
 	// For every ID we first descend the zone configuration hierarchy with the
 	// ID as the root to accumulate IDs of all leaf objects. Leaf objects are
@@ -137,14 +136,17 @@ type SQLTranslator interface {
 	// for each one of these accumulated IDs, we generate <span, config> tuples
 	// by following up the inheritance chain to fully hydrate the span
 	// configuration. Translate also accounts for and negotiates subzone spans.
-	Translate(ctx context.Context, ids descpb.IDs,
-		generateSystemSpanConfigurations bool) ([]Record, hlc.Timestamp, error)
+	Translate(
+		ctx context.Context,
+		ids descpb.IDs,
+		generateSystemSpanConfigurations bool,
+	) ([]Record, error)
 }
 
 // FullTranslate translates the entire SQL zone configuration state to the span
 // configuration state. The timestamp at which such a translation is valid is
 // also returned.
-func FullTranslate(ctx context.Context, s SQLTranslator) ([]Record, hlc.Timestamp, error) {
+func FullTranslate(ctx context.Context, s SQLTranslator) ([]Record, error) {
 	// As RANGE DEFAULT is the root of all zone configurations (including other
 	// named zones for the system tenant), we can construct the entire span
 	// configuration state by starting from RANGE DEFAULT.

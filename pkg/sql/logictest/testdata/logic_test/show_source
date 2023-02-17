@@ -23,9 +23,10 @@ UTF8                1
 query TT colnames
 SELECT *
 FROM [SHOW ALL]
-WHERE variable NOT IN ('optimizer', 'crdb_version', 'session_id', 'distsql_workmem', 'copy_fast_path_enabled')
+WHERE variable NOT IN ('optimizer', 'crdb_version', 'session_id', 'distsql_workmem', 'copy_fast_path_enabled', 'direct_columnar_scans_enabled')
 ----
 variable                                              value
+allow_ordinal_column_references                       off
 alter_primary_region_super_region_override            off
 application_name                                      ·
 avoid_buffering                                       off
@@ -35,9 +36,11 @@ check_function_bodies                                 on
 client_encoding                                       UTF8
 client_min_messages                                   notice
 copy_from_atomic_enabled                              on
+copy_from_retries_enabled                             off
 cost_scans_with_default_col_size                      off
 database                                              test
 datestyle                                             ISO, MDY
+declare_cursor_statement_timeout_enabled              on
 default_int_size                                      8
 default_table_access_method                           heap
 default_tablespace                                    ·
@@ -55,7 +58,6 @@ disallow_full_table_scans                             off
 distsql                                               off
 enable_auto_rehoming                                  off
 enable_experimental_alter_column_type_general         off
-enable_experimental_stream_replication                off
 enable_implicit_select_for_update                     on
 enable_implicit_transaction_for_batch_statements      on
 enable_insert_fast_path                               on
@@ -98,6 +100,7 @@ lc_time                                               C.UTF-8
 locality                                              region=test,dc=dc1
 locality_optimized_partitioned_index_scan             on
 lock_timeout                                          0
+log_timezone                                          UTC
 max_identifier_length                                 128
 max_index_keys                                        32
 node_id                                               1
@@ -106,6 +109,8 @@ on_update_rehome_row_enabled                          on
 opt_split_scan_limit                                  2048
 optimizer_use_forecasts                               on
 optimizer_use_histograms                              on
+optimizer_use_improved_disjunction_stats              on
+optimizer_use_limit_ordering_for_streaming_group_by   on
 optimizer_use_multicol_stats                          on
 optimizer_use_not_visible_indexes                     off
 override_multi_region_zone_config                     off
@@ -217,12 +222,12 @@ database_name  schema_name  table_name  grantee  privilege_type  is_grantable
 system         public       descriptor  admin    SELECT          true
 system         public       descriptor  root     SELECT          true
 
-query TTBITTBBB colnames
+query TTBITTTBBB colnames
 SELECT * FROM [SHOW INDEX FROM system.descriptor]
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit  visible
-descriptor  primary     false       1             id           ASC        false    false     true
-descriptor  primary     false       2             descriptor   N/A        true     false     true
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible
+descriptor  primary     false       1             id           id          ASC        false    false     true
+descriptor  primary     false       2             descriptor   descriptor  N/A        true     false     true
 
 query TTTTB colnames
 SELECT * FROM [SHOW CONSTRAINT FROM system.descriptor]
@@ -230,12 +235,12 @@ SELECT * FROM [SHOW CONSTRAINT FROM system.descriptor]
 table_name  constraint_name  constraint_type  details               validated
 descriptor  primary          PRIMARY KEY      PRIMARY KEY (id ASC)  true
 
-query TTBITTBBB colnames
+query TTBITTTBBB colnames
 SELECT * FROM [SHOW KEYS FROM system.descriptor]
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit  visible
-descriptor  primary     false       1             id           ASC        false    false     true
-descriptor  primary     false       2             descriptor   N/A        true     false     true
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible
+descriptor  primary     false       1             id           id          ASC        false    false     true
+descriptor  primary     false       2             descriptor   descriptor  N/A        true     false     true
 
 query TT colnames,rowsort
 SELECT * FROM [SHOW SCHEMAS FROM system]
@@ -259,6 +264,10 @@ SELECT schema_name, table_name, type, owner, locality FROM [SHOW TABLES FROM sys
 ----
 schema_name  table_name                       type      owner  locality
 public       descriptor                       table     NULL   NULL
+public       span_stats_tenant_boundaries     table     NULL   NULL
+public       span_stats_samples               table     NULL   NULL
+public       span_stats_buckets               table     NULL   NULL
+public       span_stats_unique_keys           table     NULL   NULL
 public       job_info                         table     NULL   NULL
 public       external_connections             table     NULL   NULL
 public       privileges                       table     NULL   NULL
@@ -305,48 +314,52 @@ query TTTTTT colnames,rowsort
 SELECT schema_name, table_name, type, owner, locality, comment FROM [SHOW TABLES FROM system WITH COMMENT]
 ----
 schema_name  table_name                       type      owner  locality  comment
-public       descriptor                       table     NULL   NULL      ·
-public       job_info                         table     NULL   NULL      ·
-public       external_connections             table     NULL   NULL      ·
-public       privileges                       table     NULL   NULL      ·
-public       tenant_settings                  table     NULL   NULL      ·
-public       role_id_seq                      sequence  NULL   NULL      ·
-public       span_configurations              table     NULL   NULL      ·
-public       sql_instances                    table     NULL   NULL      ·
-public       tenant_usage                     table     NULL   NULL      ·
-public       database_role_settings           table     NULL   NULL      ·
-public       transaction_statistics           table     NULL   NULL      ·
-public       statement_statistics             table     NULL   NULL      ·
-public       join_tokens                      table     NULL   NULL      ·
-public       migrations                       table     NULL   NULL      ·
-public       sqlliveness                      table     NULL   NULL      ·
-public       scheduled_jobs                   table     NULL   NULL      ·
-public       statement_diagnostics            table     NULL   NULL      ·
-public       statement_diagnostics_requests   table     NULL   NULL      ·
-public       statement_bundle_chunks          table     NULL   NULL      ·
-public       role_options                     table     NULL   NULL      ·
-public       protected_ts_records             table     NULL   NULL      ·
-public       protected_ts_meta                table     NULL   NULL      ·
-public       namespace                        table     NULL   NULL      ·
-public       reports_meta                     table     NULL   NULL      ·
-public       replication_stats                table     NULL   NULL      ·
-public       replication_critical_localities  table     NULL   NULL      ·
-public       replication_constraint_stats     table     NULL   NULL      ·
-public       comments                         table     NULL   NULL      ·
-public       role_members                     table     NULL   NULL      ·
-public       locations                        table     NULL   NULL      ·
 public       table_statistics                 table     NULL   NULL      ·
-public       web_sessions                     table     NULL   NULL      ·
+public       span_stats_samples               table     NULL   NULL      ·
+public       span_configurations              table     NULL   NULL      ·
+public       database_role_settings           table     NULL   NULL      ·
+public       join_tokens                      table     NULL   NULL      ·
+public       scheduled_jobs                   table     NULL   NULL      ·
+public       locations                        table     NULL   NULL      ·
 public       jobs                             table     NULL   NULL      ·
 public       ui                               table     NULL   NULL      ·
-public       rangelog                         table     NULL   NULL      ·
 public       eventlog                         table     NULL   NULL      ·
-public       lease                            table     NULL   NULL      ·
 public       tenants                          table     NULL   NULL      ·
 public       descriptor_id_seq                sequence  NULL   NULL      ·
 public       settings                         table     NULL   NULL      ·
 public       zones                            table     NULL   NULL      ·
 public       users                            table     NULL   NULL      ·
+public       descriptor                       table     NULL   NULL      ·
+public       span_stats_buckets               table     NULL   NULL      ·
+public       external_connections             table     NULL   NULL      ·
+public       role_id_seq                      sequence  NULL   NULL      ·
+public       tenant_usage                     table     NULL   NULL      ·
+public       statement_diagnostics_requests   table     NULL   NULL      ·
+public       role_options                     table     NULL   NULL      ·
+public       protected_ts_records             table     NULL   NULL      ·
+public       namespace                        table     NULL   NULL      ·
+public       replication_critical_localities  table     NULL   NULL      ·
+public       web_sessions                     table     NULL   NULL      ·
+public       rangelog                         table     NULL   NULL      ·
+public       span_stats_tenant_boundaries     table     NULL   NULL      ·
+public       span_stats_unique_keys           table     NULL   NULL      ·
+public       privileges                       table     NULL   NULL      ·
+public       sql_instances                    table     NULL   NULL      ·
+public       transaction_statistics           table     NULL   NULL      ·
+public       statement_statistics             table     NULL   NULL      ·
+public       migrations                       table     NULL   NULL      ·
+public       sqlliveness                      table     NULL   NULL      ·
+public       statement_diagnostics            table     NULL   NULL      ·
+public       statement_bundle_chunks          table     NULL   NULL      ·
+public       protected_ts_meta                table     NULL   NULL      ·
+public       replication_constraint_stats     table     NULL   NULL      ·
+public       comments                         table     NULL   NULL      ·
+public       role_members                     table     NULL   NULL      ·
+public       lease                            table     NULL   NULL      ·
+public       job_info                         table     NULL   NULL      ·
+public       tenant_settings                  table     NULL   NULL      ·
+public       reports_meta                     table     NULL   NULL      ·
+public       replication_stats                table     NULL   NULL      ·
 
 query ITTT colnames
 SELECT node_id, user_name, application_name, active_queries
@@ -450,19 +463,25 @@ testuser  ·        {}
 
 
 query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE system.descriptor]
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM CURRENT_CATALOG WITH DETAILS]
 ----
 start_key  end_key  replicas  lease_holder
-NULL       NULL     {1}       1
+/Table/57  /Max     {1}       1
+
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE system.descriptor WITH DETAILS]
+----
+start_key     end_key       replicas  lease_holder
+…/<TableMin>  …/<TableMax>  {1}       1
 
 statement ok
 CREATE INDEX ix ON foo(x)
 
 query TTTI colnames
-SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX foo@ix]
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX foo@ix WITH DETAILS]
 ----
-start_key  end_key  replicas  lease_holder
-NULL       NULL     {1}       1
+start_key     end_key       replicas  lease_holder
+…/<IndexMin>  <after:/Max>  {1}       1
 
 query TTTTTTT colnames
 SELECT * FROM [SHOW TRACE FOR SESSION] LIMIT 0
@@ -516,11 +535,11 @@ CREATE TABLE showdbindexestest.table1 (key1 INT PRIMARY KEY);
 statement ok
 CREATE TABLE showdbindexestest.table2 (key2 INT PRIMARY KEY);
 
-query TTBITTBBB
+query TTTBITTTBBB
 SHOW INDEXES FROM DATABASE showdbindexestest;
 ----
-table1  table1_pkey  false  1  key1  ASC  false  false  true
-table2  table2_pkey  false  1  key2  ASC  false  false  true
+table1  table1_pkey  public  false  1  key1  key1  ASC  false  false  true
+table2  table2_pkey  public  false  1  key2  key2  ASC  false  false  true
 
 statement ok
 CREATE DATABASE "$peci@l";
@@ -531,11 +550,11 @@ CREATE TABLE "$peci@l".table1 (key1 INT PRIMARY KEY);
 statement ok
 CREATE TABLE "$peci@l".table2 (key2 INT PRIMARY KEY);
 
-query TTBITTBBB
+query TTTBITTTBBB
 SHOW INDEXES FROM DATABASE "$peci@l";
 ----
-table1  table1_pkey  false  1  key1  ASC  false  false  true
-table2  table2_pkey  false  1  key2  ASC  false  false  true
+table1  table1_pkey  public  false  1  key1  key1  ASC  false  false  true
+table2  table2_pkey  public  false  1  key2  key2  ASC  false  false  true
 
 # Test SHOW LOCALITY telemetry.
 query T
@@ -607,30 +626,30 @@ CREATE TABLE t (
 COMMENT ON COLUMN t.z IS 'comm"en"t2';
 COMMENT ON INDEX t@i2 IS 'comm''ent3'
 
-query TTBITTBBBT
+query TTBITTTBBBT
 SHOW INDEXES FROM t WITH COMMENT
 ----
-t  i1      true   1  x      ASC  false  false  true  NULL
-t  i1      true   2  rowid  ASC  false  true   true  NULL
-t  i2      true   1  y      ASC  false  false  true  comm'ent3
-t  i2      true   2  rowid  ASC  false  true   true  comm'ent3
-t  i3      true   1  z      ASC  false  false  true  NULL
-t  i3      true   2  rowid  ASC  false  true   true  NULL
-t  t_pkey  false  1  rowid  ASC  false  false  true  NULL
-t  t_pkey  false  2  x      N/A  true   false  true  NULL
-t  t_pkey  false  3  y      N/A  true   false  true  NULL
-t  t_pkey  false  4  z      N/A  true   false  true  NULL
+t  i1      true   1  x      x      ASC  false  false  true  NULL
+t  i1      true   2  rowid  rowid  ASC  false  true   true  NULL
+t  i2      true   1  y      y      ASC  false  false  true  comm'ent3
+t  i2      true   2  rowid  rowid  ASC  false  true   true  comm'ent3
+t  i3      true   1  z      z      ASC  false  false  true  NULL
+t  i3      true   2  rowid  rowid  ASC  false  true   true  NULL
+t  t_pkey  false  1  rowid  rowid  ASC  false  false  true  NULL
+t  t_pkey  false  2  x      x      N/A  true   false  true  NULL
+t  t_pkey  false  3  y      y      N/A  true   false  true  NULL
+t  t_pkey  false  4  z      z      N/A  true   false  true  NULL
 
-query TTBITTBBBT
+query TTBITTTBBBT
 SHOW INDEXES FROM t2 WITH COMMENT
 ----
-t2  i1       true   1  x      ASC  false  false  true  NULL
-t2  i1       true   2  rowid  ASC  false  true   true  NULL
-t2  i2       true   1  y      ASC  false  false  true  NULL
-t2  i2       true   2  rowid  ASC  false  true   true  NULL
-t2  i3       true   1  z      ASC  false  false  true  NULL
-t2  i3       true   2  rowid  ASC  false  true   true  NULL
-t2  t2_pkey  false  1  rowid  ASC  false  false  true  NULL
-t2  t2_pkey  false  2  x      N/A  true   false  true  NULL
-t2  t2_pkey  false  3  y      N/A  true   false  true  NULL
-t2  t2_pkey  false  4  z      N/A  true   false  true  NULL
+t2  i1       true   1  x      x      ASC  false  false  true  NULL
+t2  i1       true   2  rowid  rowid  ASC  false  true   true  NULL
+t2  i2       true   1  y      y      ASC  false  false  true  NULL
+t2  i2       true   2  rowid  rowid  ASC  false  true   true  NULL
+t2  i3       true   1  z      z      ASC  false  false  true  NULL
+t2  i3       true   2  rowid  rowid  ASC  false  true   true  NULL
+t2  t2_pkey  false  1  rowid  rowid  ASC  false  false  true  NULL
+t2  t2_pkey  false  2  x      x      N/A  true   false  true  NULL
+t2  t2_pkey  false  3  y      y      N/A  true   false  true  NULL
+t2  t2_pkey  false  4  z      z      N/A  true   false  true  NULL

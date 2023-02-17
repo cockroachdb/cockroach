@@ -57,12 +57,12 @@ rowid
 rowid_1
 rowid_2
 
-query TT
+query TT rowsort
 SELECT index_name, column_name FROM [SHOW INDEXES FROM t]
 ----
 t_pkey  rowid_2
-t_pkey  rowid
 t_pkey  rowid_1
+t_pkey  rowid
 
 query TT
 SHOW CREATE t
@@ -847,7 +847,7 @@ CREATE TABLE t_good_hash_indexes_1 (
 );
 
 query T
-SELECT @2 FROM [SHOW CREATE TABLE t_good_hash_indexes_1];
+SELECT create_statement FROM [SHOW CREATE TABLE t_good_hash_indexes_1];
 ----
 CREATE TABLE public.t_good_hash_indexes_1 (
   crdb_internal_a_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 5:::INT8)) VIRTUAL,
@@ -866,7 +866,7 @@ CREATE TABLE t_good_hash_indexes_2 (
 );
 
 query T
-SELECT @2 FROM [SHOW CREATE TABLE t_good_hash_indexes_2];
+SELECT create_statement FROM [SHOW CREATE TABLE t_good_hash_indexes_2];
 ----
 CREATE TABLE public.t_good_hash_indexes_2 (
   a INT8 NOT NULL,

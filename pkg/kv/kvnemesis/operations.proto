@@ -78,6 +78,15 @@ message DeleteRangeUsingTombstoneOperation {
   Result result = 4 [(gogoproto.nullable) = false];
 }
 
+message AddSSTableOperation {
+  bytes data = 1;
+  roachpb.Span span = 2 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp sst_timestamp = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "SSTTimestamp"];
+  uint32 seq = 4 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil.Seq"];
+  bool as_writes = 5;
+  Result result = 6 [(gogoproto.nullable) = false];
+}
+
 message SplitOperation {
   bytes key = 1;
   Result result = 2 [(gogoproto.nullable) = false];
@@ -132,6 +141,7 @@ message Operation {
   ChangeReplicasOperation change_replicas = 15;
   TransferLeaseOperation transfer_lease = 16;
   ChangeZoneOperation change_zone = 17;
+  AddSSTableOperation add_sstable = 18 [(gogoproto.customname) = "AddSSTable"];
 }
 
 enum ResultType {

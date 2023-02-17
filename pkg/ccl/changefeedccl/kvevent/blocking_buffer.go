@@ -227,6 +227,28 @@ func (b *blockingBuffer) enqueue(ctx context.Context, e Event) (err error) {
 	return nil
 }
 
+// AcquireMemory acquires specified number of bytes form the memory monitor,
+// blocking acquisition if needed.
+func (b *blockingBuffer) AcquireMemory(ctx context.Context, n int64) (alloc Alloc, _ error) {
+	if l := changefeedbase.PerChangefeedMemLimit.Get(b.sv); n > l {
+		return alloc, errors.Newf("event size %d exceeds per changefeed limit %d", alloc, l)
+	}
+	alloc.init(n, &b.qp)
+	if err := func() error {
+		b.req.Lock()
+		defer b.req.Unlock()
+		b.req.memRequest = memRequest(n)
+		if err := b.qp.Acquire(ctx, &b.req); err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		return alloc, err
+	}
+	b.metrics.BufferEntriesMemAcquired.Inc(n)
+	return alloc, nil
+}
+
 // Add implements Writer interface.
 func (b *blockingBuffer) Add(ctx context.Context, e Event) error {
 	// Immediately enqueue event if it already has allocation,
@@ -237,24 +259,13 @@ func (b *blockingBuffer) Add(ctx context.Context, e Event) error {
 	}
 
 	// Acquire the quota first.
-	alloc := int64(changefeedbase.EventMemoryMultiplier.Get(b.sv) * float64(e.ApproximateSize()))
-	if l := changefeedbase.PerChangefeedMemLimit.Get(b.sv); alloc > l {
-		return errors.Newf("event size %d exceeds per changefeed limit %d", alloc, l)
-	}
-	e.alloc.init(alloc, &b.qp)
+	n := int64(changefeedbase.EventMemoryMultiplier.Get(b.sv) * float64(e.ApproximateSize()))
 	e.bufferAddTimestamp = timeutil.Now()
-	if err := func() error {
-		b.req.Lock()
-		defer b.req.Unlock()
-		b.req.memRequest = memRequest(alloc)
-		if err := b.qp.Acquire(ctx, &b.req); err != nil {
-			return err
-		}
-		return nil
-	}(); err != nil {
+	alloc, err := b.AcquireMemory(ctx, n)
+	if err != nil {
 		return err
 	}
-	b.metrics.BufferEntriesMemAcquired.Inc(alloc)
+	e.alloc = alloc
 	return b.enqueue(ctx, e)
 }
 

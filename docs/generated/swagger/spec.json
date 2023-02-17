@@ -2104,6 +2104,31 @@
           "format": "double",
           "x-go-name": "QPS"
         },
+        "writes_per_second": {
+          "type": "number",
+          "format": "double",
+          "x-go-name": "WritesPerSecond"
+        },
+        "reads_per_second": {
+          "type": "number",
+          "format": "double",
+          "x-go-name": "ReadsPerSecond"
+        },
+        "write_bytes_per_second": {
+          "type": "number",
+          "format": "double",
+          "x-go-name": "WriteBytesPerSecond"
+        },
+        "read_bytes_per_second": {
+          "type": "number",
+          "format": "double",
+          "x-go-name": "ReadBytesPerSecond"
+        },
+        "cpu_time_per_second": {
+          "type": "number",
+          "format": "double",
+          "x-go-name": "CPUTimePerSecond"
+        },
         "range_id": {
           "$ref": "#/definitions/RangeID"
         },

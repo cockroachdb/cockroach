@@ -838,6 +838,9 @@ vectorized: true
 statement ok
 CREATE TABLE foo(a INT, b CHAR)
 
+statement ok
+SET allow_ordinal_column_references=true
+
 # Check that sort by ordinal picks up the existing render.
 query T
 EXPLAIN (VERBOSE) SELECT b, a FROM foo ORDER BY @1
@@ -894,6 +897,9 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: foo@foo_pkey
               spans: FULL SCAN
+
+statement ok
+SET allow_ordinal_column_references=false
 
 # ------------------------------------------------------------------------------
 # Check star expansion in ORDER BY.

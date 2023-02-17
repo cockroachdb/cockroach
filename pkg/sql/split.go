@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/oppurpose"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -30,12 +29,11 @@ import (
 type splitNode struct {
 	optColumnsSlot
 
-	tableDesc                catalog.TableDescriptor
-	index                    catalog.Index
-	rows                     planNode
-	run                      splitRun
-	expirationTime           hlc.Timestamp
-	testAllowSplitAndScatter bool
+	tableDesc      catalog.TableDescriptor
+	index          catalog.Index
+	rows           planNode
+	run            splitRun
+	expirationTime hlc.Timestamp
 }
 
 // splitRun contains the run-time state of splitNode during local execution.
@@ -44,7 +42,7 @@ type splitRun struct {
 	lastExpirationTime hlc.Timestamp
 }
 
-func (n *splitNode) startExec(params runParams) error {
+func (n *splitNode) startExec(runParams) error {
 	return nil
 }
 
@@ -57,16 +55,13 @@ func (n *splitNode) Next(params runParams) (bool, error) {
 		return ok, err
 	}
 
-	rowKey, err := getRowKey(params.ExecCfg().Codec, n.tableDesc, n.index, n.rows.Values())
+	execCfg := params.ExecCfg()
+	rowKey, err := getRowKey(execCfg.Codec, n.tableDesc, n.index, n.rows.Values())
 	if err != nil {
 		return false, err
 	}
 
-	purpose := oppurpose.SplitManual
-	if n.testAllowSplitAndScatter {
-		purpose = oppurpose.SplitManualTest
-	}
-	if err := params.ExecCfg().DB.AdminSplit(params.ctx, rowKey, n.expirationTime, purpose); err != nil {
+	if err := execCfg.DB.AdminSplit(params.ctx, rowKey, n.expirationTime); err != nil {
 		return false, err
 	}
 

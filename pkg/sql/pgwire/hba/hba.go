@@ -74,9 +74,13 @@ const (
 	// ConnHostAny matches TCP connections with or without SSL/TLS.
 	ConnHostAny = ConnHostNoSSL | ConnHostSSL
 
+	// ConnInternalLoopback matches internal connections running over the loopback
+	// interface.
+	ConnInternalLoopback = 8
+
 	// ConnAny matches any connection type. Used when registering auth
 	// methods.
-	ConnAny = ConnHostAny | ConnLocal
+	ConnAny = ConnHostAny | ConnLocal | ConnInternalLoopback
 )
 
 // String implements the fmt.Stringer interface.
@@ -90,6 +94,8 @@ func (t ConnType) String() string {
 		return "hostssl"
 	case ConnHostAny:
 		return "host"
+	case ConnInternalLoopback:
+		return "loopback"
 	default:
 		panic(errors.Newf("unimplemented conn type: %v", int(t)))
 	}
@@ -188,6 +194,8 @@ func (h Entry) ConnTypeMatches(clientConn ConnType) bool {
 	case ConnHostNoSSL:
 		// A non-SSL connection matches both "hostnossl" and "host".
 		return h.ConnType&ConnHostNoSSL != 0
+	case ConnInternalLoopback:
+		return h.ConnType&ConnInternalLoopback != 0
 	default:
 		panic("unimplemented")
 	}

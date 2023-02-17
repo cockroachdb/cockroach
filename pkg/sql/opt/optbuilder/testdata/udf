@@ -1029,3 +1029,303 @@ project
                      └── projections
                           └── assignment-cast: CHAR [as=column3:3]
                                └── variable: s:2
+
+
+# --------------------------------------------------
+# UDFs that are STRICT/RETURNS NULL ON NULL INPUT.
+# --------------------------------------------------
+
+exec-ddl
+CREATE FUNCTION strict_fn(i INT, t TEXT, b BOOl) RETURNS INT STRICT LANGUAGE SQL AS 'SELECT i'
+----
+
+build format=show-scalars
+SELECT strict_fn(1, 'foo', false)
+----
+project
+ ├── columns: strict_fn:5
+ ├── values
+ │    └── tuple
+ └── projections
+      └── case [as=strict_fn:5]
+           ├── true
+           ├── when
+           │    ├── or
+           │    │    ├── is
+           │    │    │    ├── false
+           │    │    │    └── null
+           │    │    └── or
+           │    │         ├── is
+           │    │         │    ├── const: 'foo'
+           │    │         │    └── null
+           │    │         └── is
+           │    │              ├── const: 1
+           │    │              └── null
+           │    └── null
+           └── udf: strict_fn
+                ├── params: i:1 t:2 b:3
+                ├── args
+                │    ├── const: 1
+                │    ├── const: 'foo'
+                │    └── false
+                └── body
+                     └── limit
+                          ├── columns: i:4
+                          ├── project
+                          │    ├── columns: i:4
+                          │    ├── values
+                          │    │    └── tuple
+                          │    └── projections
+                          │         └── variable: i:1 [as=i:4]
+                          └── const: 1
+
+build format=show-scalars
+SELECT strict_fn(a, b::TEXT, false) FROM abc WHERE strict_fn(a+1+2, b::TEXT, false) = 10
+----
+project
+ ├── columns: strict_fn:14
+ ├── select
+ │    ├── columns: a:1!null abc.b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+ │    ├── scan abc
+ │    │    └── columns: a:1!null abc.b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+ │    └── filters
+ │         └── eq
+ │              ├── case
+ │              │    ├── true
+ │              │    ├── when
+ │              │    │    ├── or
+ │              │    │    │    ├── is
+ │              │    │    │    │    ├── false
+ │              │    │    │    │    └── null
+ │              │    │    │    └── or
+ │              │    │    │         ├── is
+ │              │    │    │         │    ├── cast: STRING
+ │              │    │    │         │    │    └── variable: abc.b:2
+ │              │    │    │         │    └── null
+ │              │    │    │         └── is
+ │              │    │    │              ├── plus
+ │              │    │    │              │    ├── plus
+ │              │    │    │              │    │    ├── variable: a:1
+ │              │    │    │              │    │    └── const: 1
+ │              │    │    │              │    └── const: 2
+ │              │    │    │              └── null
+ │              │    │    └── null
+ │              │    └── udf: strict_fn
+ │              │         ├── params: i:6 t:7 b:8
+ │              │         ├── args
+ │              │         │    ├── plus
+ │              │         │    │    ├── plus
+ │              │         │    │    │    ├── variable: a:1
+ │              │         │    │    │    └── const: 1
+ │              │         │    │    └── const: 2
+ │              │         │    ├── cast: STRING
+ │              │         │    │    └── variable: abc.b:2
+ │              │         │    └── false
+ │              │         └── body
+ │              │              └── limit
+ │              │                   ├── columns: i:9
+ │              │                   ├── project
+ │              │                   │    ├── columns: i:9
+ │              │                   │    ├── values
+ │              │                   │    │    └── tuple
+ │              │                   │    └── projections
+ │              │                   │         └── variable: i:6 [as=i:9]
+ │              │                   └── const: 1
+ │              └── const: 10
+ └── projections
+      └── case [as=strict_fn:14]
+           ├── true
+           ├── when
+           │    ├── or
+           │    │    ├── is
+           │    │    │    ├── false
+           │    │    │    └── null
+           │    │    └── or
+           │    │         ├── is
+           │    │         │    ├── cast: STRING
+           │    │         │    │    └── variable: abc.b:2
+           │    │         │    └── null
+           │    │         └── is
+           │    │              ├── variable: a:1
+           │    │              └── null
+           │    └── null
+           └── udf: strict_fn
+                ├── params: i:10 t:11 b:12
+                ├── args
+                │    ├── variable: a:1
+                │    ├── cast: STRING
+                │    │    └── variable: abc.b:2
+                │    └── false
+                └── body
+                     └── limit
+                          ├── columns: i:13
+                          ├── project
+                          │    ├── columns: i:13
+                          │    ├── values
+                          │    │    └── tuple
+                          │    └── projections
+                          │         └── variable: i:10 [as=i:13]
+                          └── const: 1
+
+
+# --------------------------------------------------
+# UDFs with * expressions.
+# --------------------------------------------------
+
+exec-ddl
+CREATE TABLE tstar (
+  a INT
+)
+----
+
+exec-ddl
+CREATE FUNCTION fn_star() RETURNS INT LANGUAGE SQL AS 'SELECT * FROM tstar'
+----
+
+build format=show-scalars
+SELECT fn_star()
+----
+project
+ ├── columns: fn_star:5
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: fn_star [as=fn_star:5]
+           └── body
+                └── limit
+                     ├── columns: a:1
+                     ├── project
+                     │    ├── columns: a:1
+                     │    └── scan tstar
+                     │         └── columns: a:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+                     └── const: 1
+
+exec-ddl
+CREATE TABLE tstar2 (
+  a INT,
+  b INT
+)
+----
+
+exec-ddl
+CREATE FUNCTION fn_star2() RETURNS INT LANGUAGE SQL AS 'SELECT * FROM tstar, tstar2 WHERE tstar.a = tstar2.b'
+----
+
+build format=show-scalars
+SELECT fn_star2()
+----
+project
+ ├── columns: fn_star2:11
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: fn_star2 [as=fn_star2:11]
+           └── body
+                └── project
+                     ├── columns: column10:10
+                     ├── limit
+                     │    ├── columns: tstar.a:1!null tstar2.a:5 b:6!null
+                     │    ├── project
+                     │    │    ├── columns: tstar.a:1!null tstar2.a:5 b:6!null
+                     │    │    └── select
+                     │    │         ├── columns: tstar.a:1!null tstar.rowid:2!null tstar.crdb_internal_mvcc_timestamp:3 tstar.tableoid:4 tstar2.a:5 b:6!null tstar2.rowid:7!null tstar2.crdb_internal_mvcc_timestamp:8 tstar2.tableoid:9
+                     │    │         ├── inner-join (cross)
+                     │    │         │    ├── columns: tstar.a:1 tstar.rowid:2!null tstar.crdb_internal_mvcc_timestamp:3 tstar.tableoid:4 tstar2.a:5 b:6 tstar2.rowid:7!null tstar2.crdb_internal_mvcc_timestamp:8 tstar2.tableoid:9
+                     │    │         │    ├── scan tstar
+                     │    │         │    │    └── columns: tstar.a:1 tstar.rowid:2!null tstar.crdb_internal_mvcc_timestamp:3 tstar.tableoid:4
+                     │    │         │    ├── scan tstar2
+                     │    │         │    │    └── columns: tstar2.a:5 b:6 tstar2.rowid:7!null tstar2.crdb_internal_mvcc_timestamp:8 tstar2.tableoid:9
+                     │    │         │    └── filters (true)
+                     │    │         └── filters
+                     │    │              └── eq
+                     │    │                   ├── variable: tstar.a:1
+                     │    │                   └── variable: b:6
+                     │    └── const: 1
+                     └── projections
+                          └── tuple [as=column10:10]
+                               ├── variable: tstar.a:1
+                               ├── variable: tstar2.a:5
+                               └── variable: b:6
+
+
+# --------------------------------------------------
+# Set-returning UDFs.
+# --------------------------------------------------
+
+exec-ddl
+CREATE FUNCTION set_fn(i INT) RETURNS SETOF INT LANGUAGE SQL AS 'SELECT b FROM abc WHERE a > i'
+----
+
+build format=show-scalars
+SELECT set_fn(1)
+----
+project-set
+ ├── columns: set_fn:7
+ ├── values
+ │    └── tuple
+ └── zip
+      └── udf: set_fn
+           ├── params: i:1
+           ├── args
+           │    └── const: 1
+           └── body
+                └── project
+                     ├── columns: b:3
+                     └── select
+                          ├── columns: a:2!null b:3 c:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+                          ├── scan abc
+                          │    └── columns: a:2!null b:3 c:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+                          └── filters
+                               └── gt
+                                    ├── variable: a:2
+                                    └── variable: i:1
+
+build format=show-scalars
+SELECT * FROM set_fn(1)
+----
+project-set
+ ├── columns: set_fn:7
+ ├── values
+ │    └── tuple
+ └── zip
+      └── udf: set_fn
+           ├── params: i:1
+           ├── args
+           │    └── const: 1
+           └── body
+                └── project
+                     ├── columns: b:3
+                     └── select
+                          ├── columns: a:2!null b:3 c:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+                          ├── scan abc
+                          │    └── columns: a:2!null b:3 c:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+                          └── filters
+                               └── gt
+                                    ├── variable: a:2
+                                    └── variable: i:1
+
+build format=show-scalars
+SELECT a, set_fn(a) FROM abc
+----
+project
+ ├── columns: a:1!null set_fn:12
+ └── project-set
+      ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5 set_fn:12
+      ├── scan abc
+      │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      └── zip
+           └── udf: set_fn
+                ├── params: i:6
+                ├── args
+                │    └── variable: a:1
+                └── body
+                     └── project
+                          ├── columns: b:8
+                          └── select
+                               ├── columns: a:7!null b:8 c:9 crdb_internal_mvcc_timestamp:10 tableoid:11
+                               ├── scan abc
+                               │    └── columns: a:7!null b:8 c:9 crdb_internal_mvcc_timestamp:10 tableoid:11
+                               └── filters
+                                    └── gt
+                                         ├── variable: a:7
+                                         └── variable: i:6

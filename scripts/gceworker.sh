@@ -34,6 +34,10 @@ case "${cmd}" in
       read COCKROACH_DEV_LICENSE
     fi
 
+    gsuite_account_for_label="$(gcloud auth list | \
+        grep '^\*' | \
+        sed -e 's/\* *//' -e 's/@/__at__/g' -e 's/\./__dot__/g'\
+        )"
     gcloud compute instances \
            create "${NAME}" \
            --machine-type "n2-custom-24-32768" \
@@ -44,7 +48,8 @@ case "${cmd}" in
            --boot-disk-size "100" \
            --boot-disk-type "pd-ssd" \
            --boot-disk-device-name "${NAME}" \
-           --scopes "cloud-platform"
+           --scopes "cloud-platform" \
+           --labels "created-by=${gsuite_account_for_label:0:63}"
     gcloud compute firewall-rules create "${NAME}-mosh" --allow udp:60000-61000
 
     # wait a bit to let gcloud create the instance before retrying
@@ -71,7 +76,19 @@ case "${cmd}" in
     fi
 
     # SSH into the node, since that's probably why we started it.
-    $0 ssh
+    echo "****************************************"
+    echo "Hint: you should also be able to directly invoke:"
+    echo "ssh ${FQNAME}"
+    echo "  or"
+    echo "mosh ${FQNAME}"
+    echo "instead of '$0 ssh'."
+    echo
+    if [ -z "${GCEWORKER_START_SSH_COMMAND-}" ]; then
+	echo "Connecting via SSH."
+	echo "Set GCEWORKER_START_SSH_COMMAND=mosh to use mosh instead"
+    fi
+    echo "****************************************"
+    $0 ${GCEWORKER_START_SSH_COMMAND-ssh}
     ;;
     stop)
     read -r -p "This will stop the VM. Are you sure? [yes] " response
@@ -130,13 +147,6 @@ case "${cmd}" in
     exit ${status}
     ;;
     ssh)
-    echo "****************************************"
-    echo "Hint: you should also be able to directly invoke:"
-    echo "ssh ${FQNAME}"
-    echo "  or"
-    echo "mosh ${FQNAME}"
-    echo "instead of '$0 ssh'."
-    echo "****************************************"
     gcloud compute ssh "${NAME}" --ssh-flag="-A" "$@"
     ;;
     mosh)

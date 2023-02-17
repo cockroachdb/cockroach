@@ -440,7 +440,7 @@ vectorized: true
 
 # Check that simple computations using RETURNING get their spool pulled up.
 query T
-EXPLAIN SELECT * FROM [INSERT INTO t SELECT * FROM t2 RETURNING x+10] WHERE @1 < 3 LIMIT 10
+EXPLAIN SELECT * FROM [INSERT INTO t SELECT * FROM t2 RETURNING x+10 AS r] WHERE r < 3 LIMIT 10
 ----
 distribution: local
 vectorized: true
@@ -451,14 +451,14 @@ vectorized: true
 │   │ count: 10
 │   │
 │   └── • filter
-│       │ filter: "?column?" < 3
+│       │ filter: r < 3
 │       │
 │       └── • scan buffer
 │             label: buffer 1
 │
 └── • subquery
     │ id: @S1
-    │ original sql: INSERT INTO t SELECT * FROM t2 RETURNING x + 10
+    │ original sql: INSERT INTO t SELECT * FROM t2 RETURNING x + 10 AS r
     │ exec mode: all rows
     │
     └── • buffer
@@ -476,7 +476,7 @@ vectorized: true
 
 # Check that a pulled up spool gets elided at the top level.
 query T
-EXPLAIN SELECT * FROM [INSERT INTO t SELECT * FROM t2 RETURNING x+10] WHERE @1 < 3
+EXPLAIN SELECT * FROM [INSERT INTO t SELECT * FROM t2 RETURNING x+10 AS r] WHERE r < 3
 ----
 distribution: local
 vectorized: true
@@ -484,14 +484,14 @@ vectorized: true
 • root
 │
 ├── • filter
-│   │ filter: "?column?" < 3
+│   │ filter: r < 3
 │   │
 │   └── • scan buffer
 │         label: buffer 1
 │
 └── • subquery
     │ id: @S1
-    │ original sql: INSERT INTO t SELECT * FROM t2 RETURNING x + 10
+    │ original sql: INSERT INTO t SELECT * FROM t2 RETURNING x + 10 AS r
     │ exec mode: all rows
     │
     └── • buffer

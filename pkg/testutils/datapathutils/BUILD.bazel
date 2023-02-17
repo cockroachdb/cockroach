@@ -1,0 +1,16 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "datapathutils",
+    srcs = ["data_path.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/datapathutils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/build/bazel",
+        "//pkg/util/envutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+get_x_data(name = "get_x_data")
