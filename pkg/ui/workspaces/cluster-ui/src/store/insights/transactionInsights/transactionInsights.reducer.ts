@@ -12,10 +12,10 @@ import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { DOMAIN_NAME } from "../../utils";
 import { TxnInsightEvent } from "src/insights";
 import moment, { Moment } from "moment";
-import { TxnInsightsRequest } from "src/api";
+import { SqlApiResponse, TxnInsightsRequest } from "src/api";
 
 export type TxnInsightsState = {
-  data: TxnInsightEvent[];
+  data: SqlApiResponse<TxnInsightEvent[]>;
   lastError: Error;
   valid: boolean;
   inFlight: boolean;
@@ -34,7 +34,10 @@ const txnInsightsSlice = createSlice({
   name: `${DOMAIN_NAME}/txnInsightsSlice`,
   initialState,
   reducers: {
-    received: (state, action: PayloadAction<TxnInsightEvent[]>) => {
+    received: (
+      state,
+      action: PayloadAction<SqlApiResponse<TxnInsightEvent[]>>,
+    ) => {
       state.data = action.payload;
       state.valid = true;
       state.lastError = null;

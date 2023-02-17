@@ -558,13 +558,17 @@ export interface APIReducersState {
   hotRanges: PaginatedCachedDataReducerState<api.HotRangesV2ResponseMessage>;
   clusterLocks: CachedDataReducerState<clusterUiApi.ClusterLocksResponse>;
   stmtInsights: CachedDataReducerState<
-    clusterUiApi.ApiResponse<StmtInsightEvent>
+    clusterUiApi.SqlApiResponse<StmtInsightEvent[]>
   >;
-  txnInsightDetails: KeyedCachedDataReducerState<clusterUiApi.TxnInsightDetailsResponse>;
-  txnInsights: CachedDataReducerState<TxnInsightEvent[]>;
+  txnInsightDetails: KeyedCachedDataReducerState<
+    clusterUiApi.SqlApiResponse<clusterUiApi.TxnInsightDetailsResponse>
+  >;
+  txnInsights: CachedDataReducerState<
+    clusterUiApi.SqlApiResponse<TxnInsightEvent[]>
+  >;
   schemaInsights: CachedDataReducerState<clusterUiApi.InsightRecommendation[]>;
   statementFingerprintInsights: KeyedCachedDataReducerState<
-    clusterUiApi.ApiResponse<StmtInsightEvent>
+    clusterUiApi.SqlApiResponse<StmtInsightEvent[]>
   >;
   schedules: KeyedCachedDataReducerState<clusterUiApi.Schedules>;
   schedule: KeyedCachedDataReducerState<clusterUiApi.Schedule>;

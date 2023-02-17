@@ -17,13 +17,14 @@ import {
   TxnInsightDetailsResponse,
 } from "src/api/txnInsightsApi";
 import { TxnInsightDetails } from "src/insights";
-import { TxnInsightDetailsReqErrs } from "src/api";
+import { SqlApiResponse, TxnInsightDetailsReqErrs } from "src/api";
 
 export type TxnInsightDetailsState = {
   data: TxnInsightDetails | null;
   lastUpdated: Moment | null;
   errors: TxnInsightDetailsReqErrs | null;
   valid: boolean;
+  maxSizeReached: boolean;
 };
 
 export type TxnInsightDetailsCachedState = {
@@ -38,12 +39,16 @@ const transactionInsightDetailsSlice = createSlice({
   name: `${DOMAIN_NAME}/transactionInsightDetailsSlice`,
   initialState,
   reducers: {
-    received: (state, action: PayloadAction<TxnInsightDetailsResponse>) => {
-      state.cachedData[action.payload.txnExecutionID] = {
-        data: action.payload.result,
+    received: (
+      state,
+      action: PayloadAction<SqlApiResponse<TxnInsightDetailsResponse>>,
+    ) => {
+      state.cachedData[action.payload.results.txnExecutionID] = {
+        data: action.payload.results.result,
         valid: true,
-        errors: action.payload.errors,
+        errors: action.payload.results.errors,
         lastUpdated: moment.utc(),
+        maxSizeReached: action.payload.maxSizeReached,
       };
     },
     failed: (state, action: PayloadAction<ErrorWithKey>) => {
@@ -56,6 +61,7 @@ const transactionInsightDetailsSlice = createSlice({
           statementsErr: action.payload.err,
         },
         lastUpdated: null,
+        maxSizeReached: false,
       };
     },
     invalidated: (state, action: PayloadAction<{ key: string }>) => {
