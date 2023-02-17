@@ -57,7 +57,7 @@ func (t *textCopyToTranslater) translateRow(
 			continue
 		}
 		t.fmtCtx.FormatNode(d)
-		if err := encodeCopy(&t.rowBuffer, t.fmtCtx.Buffer.Bytes(), t.delimiter); err != nil {
+		if err := EncodeCopy(&t.rowBuffer, t.fmtCtx.Buffer.Bytes(), t.delimiter); err != nil {
 			return nil, err
 		}
 		t.fmtCtx.Buffer.Reset()
@@ -250,11 +250,11 @@ var encodeMap = func() map[byte]byte {
 	return ret
 }()
 
-// encodeCopy escapes a single COPY field.
+// EncodeCopy escapes a single COPY field.
 //
 // See: https://www.postgresql.org/docs/9.5/static/sql-copy.html#AEN74432
 // NOTE: we don't have to worry about hex in COPY TO.
-func encodeCopy(w io.Writer, in []byte, delimiter byte) error {
+func EncodeCopy(w io.Writer, in []byte, delimiter byte) error {
 	lastIndex := 0
 	for i, r := range in {
 		if escapeChar, ok := encodeMap[r]; ok || r == delimiter {

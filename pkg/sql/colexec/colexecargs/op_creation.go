@@ -64,6 +64,7 @@ type NewColOperatorArgs struct {
 	StreamingMemAccount  *mon.BoundAccount
 	ProcessorConstructor execinfra.ProcessorConstructor
 	LocalProcessors      []execinfra.LocalProcessor
+	LocalVectorSources   map[int32]any
 	DiskQueueCfg         colcontainer.DiskQueueCfg
 	FDSemaphore          semaphore.Semaphore
 	ExprHelper           *ExprHelper
