@@ -56,10 +56,16 @@ func (c *serverController) httpMux(w http.ResponseWriter, r *http.Request) {
 		case loginPath, DemoLoginPath:
 			c.attemptLoginToAllTenants().ServeHTTP(w, r)
 			return
-		case logoutPath:
-			c.attemptLogoutFromAllTenants().ServeHTTP(w, r)
-			return
 		}
+	}
+	// Since we do not support per-tenant logout until
+	// https://github.com/cockroachdb/cockroach/issues/92855
+	// is completed, we should always fanout a logout
+	// request in order to clear the multi-tenant session
+	// cookies properly.
+	if r.URL.Path == logoutPath {
+		c.attemptLogoutFromAllTenants().ServeHTTP(w, r)
+		return
 	}
 	s, err := c.getServer(ctx, tenantName)
 	if err != nil {
@@ -285,6 +291,14 @@ func (c *serverController) attemptLogoutFromAllTenants() http.Handler {
 		http.SetCookie(w, &cookie)
 		cookie = http.Cookie{
 			Name:     TenantSelectCookieName,
+			Value:    "",
+			Path:     "/",
+			HttpOnly: false,
+			Expires:  timeutil.Unix(0, 0),
+		}
+		http.SetCookie(w, &cookie)
+		cookie = http.Cookie{
+			Name:     SessionCookieName,
 			Value:    "",
 			Path:     "/",
 			HttpOnly: false,
