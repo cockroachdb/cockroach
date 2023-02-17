@@ -91,8 +91,8 @@ func (d *anomalyDetector) isSlow(stmt *Statement) (decision bool) {
 }
 
 func (d *anomalyDetector) GetPercentileValues(id appstatspb.StmtFingerprintID) PercentileValues {
-	d.mu.RLock()
-	defer d.mu.RUnlock()
+	d.mu.Lock()
+	defer d.mu.Unlock()
 	latencies := PercentileValues{}
 	if entry, ok := d.mu.index[id]; ok {
 		latencySummary := entry.Value.(latencySummaryEntry).value
