@@ -16,9 +16,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/apache/arrow/go/arrow/array"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
@@ -58,9 +56,8 @@ type Inbox struct {
 
 	typs []*types.T
 
-	allocator  *colmem.Allocator
-	converter  *colserde.ArrowBatchConverter
-	serializer *colserde.RecordBatchSerializer
+	allocator    *colmem.Allocator
+	deserializer colexecutils.Deserializer
 
 	// streamID is used to overwrite a caller's streamID
 	// in the ctx argument of Next and DrainMeta.
@@ -121,11 +118,6 @@ type Inbox struct {
 	// batches. Note that the stop watch is safe for concurrent use, so it
 	// doesn't have to have an explicit synchronization like fields above.
 	deserializationStopWatch *timeutil.StopWatch
-
-	scratch struct {
-		data []array.Data
-		b    coldata.Batch
-	}
 }
 
 var _ colexecop.Operator = &Inbox{}
@@ -134,19 +126,9 @@ var _ colexecop.Operator = &Inbox{}
 func NewInbox(
 	allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID,
 ) (*Inbox, error) {
-	c, err := colserde.NewArrowBatchConverter(typs, colserde.ArrowToBatchOnly, nil /* acc */)
-	if err != nil {
-		return nil, err
-	}
-	s, err := colserde.NewRecordBatchSerializer(typs)
-	if err != nil {
-		return nil, err
-	}
 	i := &Inbox{
 		typs:                     typs,
 		allocator:                allocator,
-		converter:                c,
-		serializer:               s,
 		streamID:                 streamID,
 		streamCh:                 make(chan flowStreamServer, 1),
 		contextCh:                make(chan context.Context, 1),
@@ -154,8 +136,8 @@ func NewInbox(
 		errCh:                    make(chan error, 1),
 		deserializationStopWatch: timeutil.NewStopWatch(),
 	}
-	i.scratch.data = make([]array.Data, len(typs))
-	return i, nil
+	err := i.deserializer.Init(allocator, typs, false /* alwaysReallocate */)
+	return i, err
 }
 
 // NewInboxWithFlowCtxDone creates a new Inbox when the done channel of the flow
@@ -421,28 +403,15 @@ func (i *Inbox) Next() coldata.Batch {
 				colexecerror.ExpectedError(err)
 			}
 		}
-		i.scratch.data = i.scratch.data[:0]
-		batchLength, err := i.serializer.Deserialize(&i.scratch.data, m.Data.RawBytes)
+		batch := i.deserializer.Deserialize(m.Data.RawBytes)
 		// Eagerly throw away the RawBytes memory.
 		m.Data.RawBytes = nil
-		if err != nil {
-			colexecerror.InternalError(err)
-		}
-		// We rely on the outboxes to produce reasonably sized batches.
-		i.scratch.b, _ = i.allocator.ResetMaybeReallocateNoMemLimit(
-			i.typs, i.scratch.b, batchLength,
-		)
-		i.allocator.PerformOperation(i.scratch.b.ColVecs(), func() {
-			if err := i.converter.ArrowToBatch(i.scratch.data, batchLength, i.scratch.b); err != nil {
-				colexecerror.InternalError(err)
-			}
-		})
 		// At this point, we have lost all references to the serialized bytes
 		// (because ArrowToBatch nils out elements in i.scratch.data once
 		// processed), so we update the allocator accordingly.
 		i.allocator.AdjustMemoryUsage(-numSerializedBytes)
-		atomic.AddInt64(&i.statsAtomics.rowsRead, int64(i.scratch.b.Length()))
-		return i.scratch.b
+		atomic.AddInt64(&i.statsAtomics.rowsRead, int64(batch.Length()))
+		return batch
 	}
 }
 
@@ -485,10 +454,8 @@ func (i *Inbox) DrainMeta() []execinfrapb.ProducerMetadata {
 	// Eagerly lose the reference to the metadata since it might be of
 	// non-trivial footprint.
 	i.bufferedMeta = nil
-	// We also no longer need the scratch batch nor the arrow-to-batch
-	// converter.
-	i.scratch.b = nil
-	i.converter.Release(i.Ctx)
+	// We also no longer need the deserializer.
+	i.deserializer.Close(i.Ctx)
 	// The allocator tracks the memory usage for a few things (the scratch batch
 	// as well as the metadata), and when this function returns, we no longer
 	// reference any of those, so we can release all of the allocations.

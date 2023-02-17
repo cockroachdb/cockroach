@@ -1082,7 +1082,7 @@ func (ds *DistSender) divideAndSendParallelCommit(
 	copy(resps, br.Responses)
 	resps[swapIdx], resps[lastIdx] = resps[lastIdx], resps[swapIdx]
 	br.Responses = resps
-	if err := br.Combine(qiReply.reply, qiReply.positions); err != nil {
+	if err := br.Combine(ctx, qiReply.reply, qiReply.positions, ba); err != nil {
 		return nil, kvpb.NewError(err)
 	}
 	return br, nil
@@ -1340,7 +1340,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 			// Combine the new response with the existing one (including updating
 			// the headers) if we haven't yet seen an error.
 			if pErr == nil {
-				if err := br.Combine(resp.reply, resp.positions); err != nil {
+				if err := br.Combine(ctx, resp.reply, resp.positions, ba); err != nil {
 					pErr = kvpb.NewError(err)
 				}
 			} else {
