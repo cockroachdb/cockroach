@@ -54,6 +54,8 @@ type Cluster interface {
 	Start(ctx context.Context, l *logger.Logger, startOpts option.StartOpts, settings install.ClusterSettings, opts ...option.Option)
 	StopE(ctx context.Context, l *logger.Logger, stopOpts option.StopOpts, opts ...option.Option) error
 	Stop(ctx context.Context, l *logger.Logger, stopOpts option.StopOpts, opts ...option.Option)
+	SignalE(ctx context.Context, l *logger.Logger, sig int, opts ...option.Option) error
+	Signal(ctx context.Context, l *logger.Logger, sig int, opts ...option.Option)
 	StopCockroachGracefullyOnNode(ctx context.Context, l *logger.Logger, node int) error
 	NewMonitor(context.Context, ...option.Option) Monitor
 

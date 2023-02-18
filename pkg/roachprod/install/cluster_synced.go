@@ -388,6 +388,39 @@ fi`,
 	}, nil) // Disable SSH Retries
 }
 
+// Signal sends a signal to the CockroachDB process.
+func (c *SyncedCluster) Signal(ctx context.Context, l *logger.Logger, sig int) error {
+	display := fmt.Sprintf("%s: sending signal %d", c.Name, sig)
+	return c.Parallel(l, display, len(c.Nodes), 0, func(i int) (*RunResultDetails, error) {
+		node := c.Nodes[i]
+
+		// NB: the awkward-looking `awk` invocation serves to avoid having the
+		// awk process match its own output from `ps`.
+		cmd := fmt.Sprintf(`
+mkdir -p %[1]s
+echo ">>> roachprod signal %[3]d: $(date)" >> %[1]s/roachprod.log
+ps axeww -o pid -o command >> %[1]s/roachprod.log
+pids=$(ps axeww -o pid -o command | \
+  sed 's/export ROACHPROD=//g' | \
+  awk '/%[2]s/ { print $1 }')
+if [ -n "${pids}" ]; then
+  kill -%[3]d ${pids}
+fi`,
+			c.LogDir(node),            // [1]
+			c.roachprodEnvRegex(node), // [2]
+			sig,                       // [3]
+		)
+
+		sess := c.newSession(l, node, cmd, withDebugName("node-signal"))
+		defer sess.Close()
+
+		out, cmdErr := sess.CombinedOutput(ctx)
+		res := newRunResultDetails(node, cmdErr)
+		res.CombinedOut = out
+		return res, res.Err
+	}, nil) // Disable SSH Retries
+}
+
 // Wipe TODO(peter): document
 func (c *SyncedCluster) Wipe(ctx context.Context, l *logger.Logger, preserveCerts bool) error {
 	display := fmt.Sprintf("%s: wiping", c.Name)

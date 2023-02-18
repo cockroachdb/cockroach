@@ -1907,6 +1907,33 @@ func (c *clusterImpl) Stop(
 	}
 }
 
+// SignalE sends a signal to the given nodes.
+func (c *clusterImpl) SignalE(
+	ctx context.Context, l *logger.Logger, sig int, nodes ...option.Option,
+) error {
+	if ctx.Err() != nil {
+		return errors.Wrap(ctx.Err(), "cluster.Signal")
+	}
+	if c.spec.NodeCount == 0 {
+		return nil // unit tests
+	}
+	return errors.Wrap(roachprod.Signal(ctx, l, c.MakeNodes(nodes...), sig), "cluster.Signal")
+}
+
+// Signal is like SignalE, except instead of returning an error, it does
+// c.t.Fatal(). c.t needs to be set.
+func (c *clusterImpl) Signal(
+	ctx context.Context, l *logger.Logger, sig int, nodes ...option.Option,
+) {
+	if c.t.Failed() {
+		// If the test has failed, don't try to limp along.
+		return
+	}
+	if err := c.SignalE(ctx, l, sig, nodes...); err != nil {
+		c.t.Fatal(err)
+	}
+}
+
 // WipeE wipes a subset of the nodes in a cluster. See cluster.Start() for a
 // description of the nodes parameter.
 func (c *clusterImpl) WipeE(ctx context.Context, l *logger.Logger, nodes ...option.Option) error {
