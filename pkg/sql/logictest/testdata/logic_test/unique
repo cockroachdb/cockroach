@@ -361,10 +361,10 @@ NULL  5
 statement ok
 INSERT INTO uniq_computed_pk (i, s, d) VALUES (1, 'a', 1.0), (2, 'b', 2.0)
 
-statement error pgcode 23505 pq: duplicate key value violates unique constraint "uniq_computed_pk_pkey"\nDETAIL: Key \(c_i_expr,i\)=\('bar',1\) already exists\.
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "uniq_computed_pk_pkey"\nDETAIL: Key \(c_i_expr, i\)=\('bar', 1\) already exists\.
 INSERT INTO uniq_computed_pk (i, s, d) VALUES (1, 'c', 3.0)
 
-statement error pgcode 23505 pq: duplicate key value violates unique constraint "uniq_computed_pk_c_s_s_key"\nDETAIL: Key \(c_s,s\)=\('b','b'\) already exists\.
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "uniq_computed_pk_c_s_s_key"\nDETAIL: Key \(c_s, s\)=\('b', 'b'\) already exists\.
 INSERT INTO uniq_computed_pk (i, s, d) VALUES (3, 'b', 3.0)
 
 statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_d"\nDETAIL: Key \(d\)=\(1\.00\) already exists\.
@@ -542,10 +542,10 @@ NULL  10
 # Check that uniqueness violations are detected in a table with UNIQUE indexes
 # containing computed columns that are dependent on UNIQUE WITHOUT INDEX
 # columns.
-statement error pgcode 23505 pq: duplicate key value violates unique constraint "uniq_computed_pk_pkey"\nDETAIL: Key \(c_i_expr,i\)=\('bar',1\) already exists\.
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "uniq_computed_pk_pkey"\nDETAIL: Key \(c_i_expr, i\)=\('bar', 1\) already exists\.
 UPDATE uniq_computed_pk SET i = 1 WHERE i = 2
 
-statement error pgcode 23505 pq: duplicate key value violates unique constraint "uniq_computed_pk_c_s_s_key"\nDETAIL: Key \(c_s,s\)=\('a','a'\) already exists\.
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "uniq_computed_pk_c_s_s_key"\nDETAIL: Key \(c_s, s\)=\('a', 'a'\) already exists\.
 UPDATE uniq_computed_pk SET s = 'a' WHERE i = 2
 
 statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_d"\nDETAIL: Key \(d\)=\(1\.00\) already exists\.
@@ -825,10 +825,10 @@ i
 # Check that uniqueness violations are detected in a table with UNIQUE indexes
 # containing computed columns that are dependent on UNIQUE WITHOUT INDEX
 # columns.
-statement error pgcode 23505 pq: duplicate key value violates unique constraint "uniq_computed_pk_pkey"\nDETAIL: Key \(c_i_expr,i\)=\('bar',2\) already exists\.
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "uniq_computed_pk_pkey"\nDETAIL: Key \(c_i_expr, i\)=\('bar', 2\) already exists\.
 INSERT INTO uniq_computed_pk (i, s, d) VALUES (1, 'a', 1.0) ON CONFLICT (s) DO UPDATE SET i = 2
 
-statement error pgcode 23505 pq: duplicate key value violates unique constraint "uniq_computed_pk_c_s_s_key"\nDETAIL: Key \(c_s,s\)=\('b','b'\) already exists\.
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "uniq_computed_pk_c_s_s_key"\nDETAIL: Key \(c_s, s\)=\('b', 'b'\) already exists\.
 UPSERT INTO uniq_computed_pk (i, s, d) VALUES (3, 'b', 3.0)
 
 statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_d"\nDETAIL: Key \(d\)=\(2\.00\) already exists\.

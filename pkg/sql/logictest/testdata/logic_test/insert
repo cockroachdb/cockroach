@@ -335,7 +335,7 @@ INSERT INTO abc VALUES (1, 2, 10)
 
 # Verify we get the correct message, even though internally the ConditionalPut
 # for the index key will also fail.
-statement error pgcode 23505 duplicate key value violates unique constraint "abc_pkey"\nDETAIL: Key \(a,b\)=\(1,2\) already exists\.
+statement error pgcode 23505 duplicate key value violates unique constraint "abc_pkey"\nDETAIL: Key \(a, b\)=\(1, 2\) already exists\.
 INSERT INTO abc VALUES (1, 2, 20)
 
 statement ok
