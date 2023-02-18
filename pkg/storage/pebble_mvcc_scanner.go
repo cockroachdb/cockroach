@@ -546,7 +546,7 @@ func (p *pebbleMVCCScanner) get(ctx context.Context) {
 		return
 	}
 	var added bool
-	if p.processRangeKeys(true /* seeked */, false /* reverse */) {
+	if p.processRangeKeys(true /* seeked */, false /* reverse */, p.tombstones /* savePrev */) {
 		if p.updateCurrent() {
 			_, added = p.getOne(ctx)
 		}
@@ -556,6 +556,10 @@ func (p *pebbleMVCCScanner) get(ctx context.Context) {
 	// MVCC range tombstones even if there is no existing point key below it.
 	// These are often needed for e.g. conflict checks.
 	if p.tombstones && !added && p.err == nil {
+		// processRangeKeys() saved the range keys at the previous position to
+		// p.savedRangeKeys before exhausting the iterator, so we put them in
+		// curRangeKeys to pretend like they're at the current position.
+		p.curRangeKeys = p.savedRangeKeys
 		if rkv, ok := p.coveredByRangeKey(hlc.MinTimestamp); ok {
 			p.addSynthetic(ctx, p.curRangeKeys.Bounds.Key, rkv)
 		}
@@ -1052,7 +1056,7 @@ func (p *pebbleMVCCScanner) nextKey() bool {
 	if !p.iterValid() {
 		return false
 	}
-	if !p.processRangeKeys(false /* seeked */, false /* reverse */) {
+	if !p.processRangeKeys(false /* seeked */, false /* reverse */, false /* savePrev */) {
 		return false
 	}
 	return p.updateCurrent()
@@ -1142,7 +1146,7 @@ func (p *pebbleMVCCScanner) advanceKeyAtEndReverse() bool {
 	if !p.iterValid() {
 		return false
 	}
-	if !p.processRangeKeys(true /* seeked */, true /* reverse */) {
+	if !p.processRangeKeys(true /* seeked */, true /* reverse */, false /* savePrev */) {
 		return false
 	}
 	if !p.updateCurrent() {
@@ -1455,7 +1459,12 @@ func (p *pebbleMVCCScanner) doCoveredByRangeKey(ts hlc.Timestamp) (MVCCRangeKeyV
 // operation (SeekLT or Prev). This determines the direction to skip in, and
 // also requires checking for bare range keys after every step, since we'll
 // land on them last.
-func (p *pebbleMVCCScanner) processRangeKeys(seeked bool, reverse bool) bool {
+//
+// savePrev will save the previous range keys to p.savedRangeKeys before
+// stepping the iterator. This is primarily used for point gets with tombstones
+// when there is no overlapping point key: the step will exhaust the prefix
+// iterator but the get needs to synthesize a tombstone for a bare range key.
+func (p *pebbleMVCCScanner) processRangeKeys(seeked bool, reverse bool, savePrev bool) bool {
 
 	// Look for new range keys to process, and step across bare range keys until
 	// we land on a point key (or exhaust the iterator).
@@ -1521,12 +1530,19 @@ func (p *pebbleMVCCScanner) processRangeKeys(seeked bool, reverse bool) bool {
 		if hasPoint {
 			return true
 		}
+
+		// If requested, save the previous range keys before stepping.
+		if savePrev {
+			p.curRangeKeys.CloneInto(&p.savedRangeKeys)
+		}
+
 		if !reverse {
 			p.parent.Next()
 		} else {
 			p.parent.Prev()
 		}
 		if !p.iterValid() {
+			p.curRangeKeys = MVCCRangeKeyStack{}
 			return false
 		}
 	}
@@ -1617,7 +1633,7 @@ func (p *pebbleMVCCScanner) iterSeek(key MVCCKey) bool {
 	if !p.iterValid() {
 		return false
 	}
-	if !p.processRangeKeys(true /* seeked */, false /* reverse */) {
+	if !p.processRangeKeys(true /* seeked */, false /* reverse */, false /* savePrev */) {
 		return false
 	}
 	return p.updateCurrent()
@@ -1630,7 +1646,7 @@ func (p *pebbleMVCCScanner) iterSeekReverse(key MVCCKey) bool {
 	if !p.iterValid() {
 		return false
 	}
-	if !p.processRangeKeys(true /* seeked */, true /* reverse */) {
+	if !p.processRangeKeys(true /* seeked */, true /* reverse */, false /* savePrev */) {
 		return false
 	}
 	if !p.updateCurrent() {
@@ -1666,7 +1682,7 @@ func (p *pebbleMVCCScanner) iterNext() bool {
 	if !p.iterValid() {
 		return false
 	}
-	if !p.processRangeKeys(false /* seeked */, false /* reverse */) {
+	if !p.processRangeKeys(false /* seeked */, false /* reverse */, false /* savePrev */) {
 		return false
 	}
 	return p.updateCurrent()
@@ -1682,7 +1698,7 @@ func (p *pebbleMVCCScanner) iterPrev() bool {
 	if !p.iterValid() {
 		return false
 	}
-	if !p.processRangeKeys(false /* seeked */, true /* reverse */) {
+	if !p.processRangeKeys(false /* seeked */, true /* reverse */, false /* savePrev */) {
 		return false
 	}
 	return p.updateCurrent()
