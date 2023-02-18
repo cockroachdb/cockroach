@@ -61,8 +61,11 @@ func StoreGossipKey() roachpb.Key {
 	return MakeStoreKey(localStoreGossipSuffix, nil)
 }
 
-// StoreClusterVersionKey returns a store-local key for the cluster version.
-func StoreClusterVersionKey() roachpb.Key {
+// DeprecatedStoreClusterVersionKey returns a store-local key for the cluster version.
+//
+// We no longer use this key, but still write it out for interoperability with
+// older versions.
+func DeprecatedStoreClusterVersionKey() roachpb.Key {
 	return MakeStoreKey(localStoreClusterVersionSuffix, nil)
 }
 

@@ -1303,3 +1303,40 @@ func TestIncompatibleVersion(t *testing.T) {
 	_, err = Open(ctx, loc, cluster.MakeTestingClusterSettings())
 	require.ErrorContains(t, err, "is too old for running version")
 }
+
+func TestNoMinVerFile(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	loc := Location{
+		dir: "",
+		fs:  vfs.NewMem(),
+	}
+
+	st := cluster.MakeTestingClusterSettings()
+	p, err := Open(ctx, loc, st)
+	require.NoError(t, err)
+	p.Close()
+
+	// Remove the min version filename.
+	require.NoError(t, loc.fs.Remove(loc.fs.PathJoin(loc.dir, MinVersionFilename)))
+
+	// We are still allowed the open the store if we haven't written anything to it.
+	// This is useful in case the initial Open crashes right before writinng the
+	// min version file.
+	p, err = Open(ctx, loc, st)
+	require.NoError(t, err)
+
+	// Now write something to the store.
+	k := MVCCKey{Key: []byte("a"), Timestamp: hlc.Timestamp{WallTime: 1}}
+	v := MVCCValue{Value: roachpb.MakeValueFromString("a1")}
+	require.NoError(t, p.PutMVCC(k, v))
+	p.Close()
+
+	// Remove the min version filename.
+	require.NoError(t, loc.fs.Remove(loc.fs.PathJoin(loc.dir, MinVersionFilename)))
+
+	_, err = Open(ctx, loc, st)
+	require.ErrorContains(t, err, "store has no min-version file")
+}
