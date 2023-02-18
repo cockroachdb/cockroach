@@ -950,6 +950,12 @@ type Engine interface {
 	// SSTs that don't overlap with any of these key spans.
 	CreateCheckpoint(dir string, spans []roachpb.Span) error
 
+	// MinVersion is the minimum CockroachDB version that is compatible with this
+	// store. For newly created stores, this matches the currently active cluster
+	// version.
+	// Must never return an empty version.
+	MinVersion() roachpb.Version
+
 	// SetMinVersion is used to signal to the engine the current minimum
 	// version that it must maintain compatibility with.
 	SetMinVersion(version roachpb.Version) error

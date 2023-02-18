@@ -751,6 +751,9 @@ type Pebble struct {
 	}
 	asyncDone sync.WaitGroup
 
+	// minVersion is the minimum CockroachDB version that can open this store.
+	minVersion roachpb.Version
+
 	// closer is populated when the database is opened. The closer is associated
 	// with the filesyetem
 	closer io.Closer
@@ -1037,7 +1040,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 
 	if cfg.SharedStorage != nil {
 		esWrapper := &externalStorageWrapper{p: p, es: cfg.SharedStorage, ctx: ctx}
-		cfg.Opts.Experimental.SharedStorage = esWrapper
+		opts.Experimental.SharedStorage = esWrapper
 	}
 
 	// Read the current store cluster version.
@@ -1055,14 +1058,6 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		// sequence (so now some stores have v21.2, but others v22.1) you are
 		// expected to run v22.1 again (hopefully without the crash this time) which
 		// would then rewrite all the stores.
-		//
-		// If the version file does not exist, we will fail a similar check later,
-		// when we set the min version on all the stores.
-		//
-		// TODO(radu): investigate always requiring the existence of the min version
-		// file (unless we are creating a new store). Note that checkpoints don't
-		// have the min version file and some tests expect to be able to open
-		// checkpoints.
 		if v := cfg.Settings.Version; storeClusterVersion.Less(v.BinaryMinSupportedVersion()) {
 			return nil, errors.Errorf(
 				"store last used with cockroach version v%s "+
@@ -1070,6 +1065,17 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 				storeClusterVersion, v.BinaryVersion(), v.BinaryMinSupportedVersion(),
 			)
 		}
+		opts.ErrorIfNotExists = true
+	} else {
+		if opts.ErrorIfNotExists {
+			return nil, errors.Errorf("pebble: database %q does not exist", cfg.StorageConfig.Dir)
+		}
+		// If there is no min version file, there should be no store. If there is
+		// one, it's either 1) a store from a very old version (which we don't want
+		// to open) or 2) an empty store that was created from a previous bootstrap
+		// attempt that failed right before writing out the min version file. We set
+		// a flag to disallow the open in case 1.
+		opts.ErrorIfNotPristine = true
 	}
 
 	if WorkloadCollectorEnabled {
@@ -1078,30 +1084,45 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 
 	db, err := pebble.Open(cfg.StorageConfig.Dir, opts)
 	if err != nil {
+		// Decorate the errors caused by the flags we set above.
+		if minVerFileExists && errors.Is(err, pebble.ErrDBDoesNotExist) {
+			err = errors.Wrap(err, "min version file exists but store doesn't")
+		}
+		if !minVerFileExists && errors.Is(err, pebble.ErrDBNotPristine) {
+			err = errors.Wrap(err, "store has no min-version file; this can "+
+				"happen if the store was created by an old CockroachDB version that is no "+
+				"longer supported")
+		}
 		return nil, err
 	}
 	p.db = db
 
-	if minVerFileExists {
-		// The storage engine performs its own internal migrations
-		// through the setting of the store cluster version. When
-		// storage's min version is set, SetMinVersion writes to disk to
-		// commit to the new store cluster version. Then it idempotently
-		// applies any internal storage engine migrations necessitated
-		// or enabled by the new store cluster version. If we crash
-		// after committing the new store cluster version but before
-		// applying the internal migrations, we're left in an in-between
-		// state.
-		//
-		// To account for this, after the engine is open,
-		// unconditionally set the min cluster version again. If any
-		// storage engine state has not been updated, the call to
-		// SetMinVersion will update it.  If all storage engine state is
-		// already updated, SetMinVersion is a noop.
-		if err := p.SetMinVersion(storeClusterVersion); err != nil {
-			p.Close()
-			return nil, err
+	if !minVerFileExists {
+		storeClusterVersion = cfg.Settings.Version.ActiveVersionOrEmpty(ctx).Version
+		if storeClusterVersion == (roachpb.Version{}) {
+			// If there is no active version, use the minimum supported version.
+			storeClusterVersion = cfg.Settings.Version.BinaryMinSupportedVersion()
 		}
+	}
+
+	// The storage engine performs its own internal migrations
+	// through the setting of the store cluster version. When
+	// storage's min version is set, SetMinVersion writes to disk to
+	// commit to the new store cluster version. Then it idempotently
+	// applies any internal storage engine migrations necessitated
+	// or enabled by the new store cluster version. If we crash
+	// after committing the new store cluster version but before
+	// applying the internal migrations, we're left in an in-between
+	// state.
+	//
+	// To account for this, after the engine is open,
+	// unconditionally set the min cluster version again. If any
+	// storage engine state has not been updated, the call to
+	// SetMinVersion will update it.  If all storage engine state is
+	// already updated, SetMinVersion is a noop.
+	if err := p.SetMinVersion(storeClusterVersion); err != nil {
+		p.Close()
+		return nil, err
 	}
 
 	return p, nil
@@ -1933,6 +1954,13 @@ func (p *Pebble) CreateCheckpoint(dir string, spans []roachpb.Span) error {
 
 // SetMinVersion implements the Engine interface.
 func (p *Pebble) SetMinVersion(version roachpb.Version) error {
+	p.minVersion = version
+
+	if p.readOnly {
+		// Don't make any on-disk changes.
+		return nil
+	}
+
 	// NB: SetMinVersion must be idempotent. It may called multiple
 	// times with the same version.
 
@@ -1986,6 +2014,11 @@ func (p *Pebble) SetMinVersion(version roachpb.Version) error {
 		}
 	}
 	return nil
+}
+
+// MinVersion implements the Engine interface.
+func (p *Pebble) MinVersion() roachpb.Version {
+	return p.minVersion
 }
 
 // BufferedSize implements the Engine interface.

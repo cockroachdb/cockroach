@@ -24,17 +24,21 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// WriteClusterVersion writes the given cluster version to the store-local
-// cluster version key. We only accept a raw engine to ensure we're persisting
-// the write durably.
+// WriteClusterVersion writes the given cluster version to the min version file
+// and to the store-local cluster version key. We only accept a raw engine to
+// ensure we're persisting the write durably.
 func WriteClusterVersion(
 	ctx context.Context, eng storage.Engine, cv clusterversion.ClusterVersion,
 ) error {
+	// We no longer read this key, but v22.2 still does. We continue writing the key
+	// for interoperability.
+	// TODO(radu): Remove this when we are no longer compatible with 22.2 (keeping
+	// just the SetMinVersion call).
 	err := storage.MVCCPutProto(
 		ctx,
 		eng,
 		nil,
-		keys.StoreClusterVersionKey(),
+		keys.DeprecatedStoreClusterVersionKey(),
 		hlc.Timestamp{},
 		hlc.ClockTimestamp{},
 		nil,
@@ -43,36 +47,7 @@ func WriteClusterVersion(
 	if err != nil {
 		return err
 	}
-
-	// The storage engine sometimes must make backwards incompatible
-	// changes. However, the store cluster version key is a key stored
-	// within the storage engine, so it's unavailable when the store is
-	// opened.
-	//
-	// The storage engine maintains its own minimum version on disk that
-	// it may consult it before opening the Engine. This version is
-	// stored in a separate file on the filesystem. For now, write to
-	// this file in combination with the store cluster version key.
-	//
-	// This parallel version state is a bit of a wart and an eventual
-	// goal is to replace the store cluster version key with the storage
-	// engine's flat file. This requires that there are no writes to the
-	// engine until either bootstrapping or joining an existing cluster.
-	// Writing the version to this file would happen before opening the
-	// engine for completing the rest of bootstrapping/joining the
-	// cluster.
 	return eng.SetMinVersion(cv.Version)
-}
-
-// ReadClusterVersion reads the cluster version from the store-local version
-// key. Returns an empty version if the key is not found.
-func ReadClusterVersion(
-	ctx context.Context, reader storage.Reader,
-) (clusterversion.ClusterVersion, error) {
-	var cv clusterversion.ClusterVersion
-	_, err := storage.MVCCGetProto(ctx, reader, keys.StoreClusterVersionKey(), hlc.Timestamp{},
-		&cv, storage.MVCCGetOptions{})
-	return cv, err
 }
 
 // WriteClusterVersionToEngines writes the given version to the given engines,
@@ -128,30 +103,22 @@ func SynthesizeClusterVersionFromEngines(
 	// constraints, which at the latest the second loop will achieve (because
 	// then minStoreVersion don't change any more).
 	for _, eng := range engines {
-		eng := eng.(storage.Reader) // we're read only
-		var cv clusterversion.ClusterVersion
-		cv, err := ReadClusterVersion(ctx, eng)
-		if err != nil {
-			return clusterversion.ClusterVersion{}, err
-		}
-		if cv.Version == (roachpb.Version{}) {
-			// This is needed when a node first joins an existing cluster, in
-			// which case it won't know what version to use until the first
-			// Gossip update comes in.
-			cv.Version = binaryMinSupportedVersion
+		engVer := eng.MinVersion()
+		if engVer == (roachpb.Version{}) {
+			return clusterversion.ClusterVersion{}, errors.AssertionFailedf("store %s has no version", eng)
 		}
 
 		// Avoid running a binary with a store that is too new. For example,
 		// restarting into 1.1 after having upgraded to 1.2 doesn't work.
-		if binaryVersion.Less(cv.Version) {
+		if binaryVersion.Less(engVer) {
 			return clusterversion.ClusterVersion{}, errors.Errorf(
 				"cockroach version v%s is incompatible with data in store %s; use version v%s or later",
-				binaryVersion, eng, cv.Version)
+				binaryVersion, eng, engVer)
 		}
 
 		// Track smallest use version encountered.
-		if cv.Version.Less(minStoreVersion.Version) {
-			minStoreVersion.Version = cv.Version
+		if engVer.Less(minStoreVersion.Version) {
+			minStoreVersion.Version = engVer
 			minStoreVersion.origin = fmt.Sprint(eng)
 		}
 	}
@@ -168,11 +135,10 @@ func SynthesizeClusterVersionFromEngines(
 	}
 	log.Eventf(ctx, "read clusterVersion %+v", cv)
 
-	// We now check for old versions up front when we open the database. We leave
-	// this older check for the case where a store is so old that it doesn't have
-	// a min version file.
 	if minStoreVersion.Version.Less(binaryMinSupportedVersion) {
-		return clusterversion.ClusterVersion{}, errors.Errorf("store %s, last used with cockroach version v%s, "+
+		// We now check for old versions before opening the store. This case should
+		// no longer be possible.
+		return clusterversion.ClusterVersion{}, errors.AssertionFailedf("store %s, last used with cockroach version v%s, "+
 			"is too old for running version v%s (which requires data from v%s or later)",
 			minStoreVersion.origin, minStoreVersion.Version, binaryVersion, binaryMinSupportedVersion)
 	}

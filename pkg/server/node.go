@@ -311,17 +311,15 @@ func bootstrapCluster(
 	// other than the first one, and let regular node startup code deal with them.
 	var bootstrapVersion clusterversion.ClusterVersion
 	for i, eng := range engines {
-		cv, err := kvstorage.ReadClusterVersion(ctx, eng)
-		if err != nil {
-			return nil, errors.Wrapf(err, "reading cluster version of %s", eng)
-		} else if cv.Major == 0 {
+		cv := eng.MinVersion()
+		if cv.Major == 0 {
 			return nil, errors.Errorf("missing bootstrap version")
 		}
 
 		// bootstrapCluster requires matching cluster versions on all engines.
 		if i == 0 {
-			bootstrapVersion = cv
-		} else if bootstrapVersion != cv {
+			bootstrapVersion.Version = cv
+		} else if bootstrapVersion.Version != cv {
 			return nil, errors.Errorf("found cluster versions %s and %s", bootstrapVersion, cv)
 		}
 
@@ -629,11 +627,8 @@ func (n *Node) SetHLCUpperBound(ctx context.Context, hlcUpperBound int64) error 
 }
 
 func (n *Node) addStore(ctx context.Context, store *kvserver.Store) {
-	cv, err := kvstorage.ReadClusterVersion(context.TODO(), store.TODOEngine())
-	if err != nil {
-		log.Fatalf(ctx, "%v", err)
-	}
-	if cv == (clusterversion.ClusterVersion{}) {
+	cv := store.TODOEngine().MinVersion()
+	if cv == (roachpb.Version{}) {
 		// The store should have had a version written to it during the store
 		// initialization process.
 		log.Fatal(ctx, "attempting to add a store without a version")

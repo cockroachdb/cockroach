@@ -233,7 +233,7 @@ func TestPrettyPrint(t *testing.T) {
 		// local
 		{keys.StoreIdentKey(), "/Local/Store/storeIdent", revertSupportUnknown},
 		{keys.StoreGossipKey(), "/Local/Store/gossipBootstrap", revertSupportUnknown},
-		{keys.StoreClusterVersionKey(), "/Local/Store/clusterVersion", revertSupportUnknown},
+		{keys.DeprecatedStoreClusterVersionKey(), "/Local/Store/clusterVersion", revertSupportUnknown},
 		{keys.StoreNodeTombstoneKey(123), "/Local/Store/nodeTombstone/n123", revertSupportUnknown},
 		{keys.StoreCachedSettingsKey(roachpb.Key("a")), `/Local/Store/cachedSettings/"a"`, revertSupportUnknown},
 		{keys.StoreUnsafeReplicaRecoveryKey(loqRecoveryID), fmt.Sprintf(`/Local/Store/lossOfQuorumRecovery/applied/%s`, loqRecoveryID), revertSupportUnknown},
