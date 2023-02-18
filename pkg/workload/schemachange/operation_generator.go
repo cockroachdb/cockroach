@@ -1249,6 +1249,7 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 	// fully transaction aware.
 	codesWithConditions{
 		{code: pgcode.Syntax, condition: hasUnsupportedTSQuery},
+		{code: pgcode.FeatureNotSupported, condition: hasUnsupportedTSQuery},
 	}.add(opStmt.potentialExecErrors)
 	opStmt.sql = tree.Serialize(stmt)
 	return opStmt, nil
