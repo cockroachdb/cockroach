@@ -103,6 +103,11 @@ func (m ExplainMode) String() string {
 	return explainModeStrings[m]
 }
 
+// ExplainModes returns a map from EXPLAIN mode strings to ExplainMode.
+func ExplainModes() map[string]ExplainMode {
+	return explainModeStringMap
+}
+
 // ExplainFlag is a modifier in an EXPLAIN statement (like VERBOSE).
 type ExplainFlag uint8
 
@@ -145,6 +150,11 @@ func (f ExplainFlag) String() string {
 		panic(errors.AssertionFailedf("invalid ExplainFlag %d", f))
 	}
 	return explainFlagStrings[f]
+}
+
+// ExplainFlags returns a map from EXPLAIN flag strings to ExplainFlag.
+func ExplainFlags() map[string]ExplainFlag {
+	return explainFlagStringMap
 }
 
 // Format implements the NodeFormatter interface.
@@ -263,11 +273,21 @@ func MakeExplain(options []string, stmt Statement) (Statement, error) {
 		}
 	}
 
+	if opts.Flags[ExplainFlagEnv] {
+		if opts.Mode != ExplainOpt {
+			return nil, pgerror.Newf(pgcode.Syntax, "the ENV flag can only be used with OPT")
+		}
+	}
+
 	if opts.Flags[ExplainFlagRedact] {
-		// TODO(michae2): Support redaction of other EXPLAIN variants.
-		if !analyze || opts.Mode != ExplainDebug {
-			return nil, unimplemented.New(
-				"EXPLAIN (REDACT)", "the REDACT flag can only be used with EXPLAIN ANALYZE (DEBUG)",
+		// TODO(michae2): Support redaction of other EXPLAIN modes.
+		switch opts.Mode {
+		case ExplainPlan:
+		case ExplainVec:
+		case ExplainDebug:
+		default:
+			return nil, unimplemented.Newf(
+				"EXPLAIN (REDACT)", "the REDACT flag cannot be used with %s", opts.Mode,
 			)
 		}
 	}

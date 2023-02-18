@@ -76,7 +76,14 @@ func Emit(plan *Plan, ob *OutputBuilder, spanFormatFn SpanFormatFn) error {
 		// This field contains the original subquery (which could have been modified
 		// by optimizer transformations).
 		if s.ExprNode != nil {
-			ob.Attr("original sql", tree.AsStringWithFlags(s.ExprNode, tree.FmtSimple))
+			flags := tree.FmtSimple
+			if e.ob.flags.HideValues {
+				flags |= tree.FmtHideConstants
+			}
+			if e.ob.flags.RedactValues {
+				flags |= tree.FmtMarkRedactionNode | tree.FmtOmitNameRedaction
+			}
+			ob.Attr("original sql", tree.AsStringWithFlags(s.ExprNode, flags))
 		}
 		var mode string
 		switch s.Mode {
@@ -387,10 +394,10 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 	if stats, ok := n.annotations[exec.ExecutionStatsID]; ok && !omitStats(n) {
 		s := stats.(*exec.ExecutionStats)
 		if len(s.Nodes) > 0 {
-			e.ob.AddRedactableField(RedactNodes, "nodes", strings.Join(s.Nodes, ", "))
+			e.ob.AddFlakyField(DeflakeNodes, "nodes", strings.Join(s.Nodes, ", "))
 		}
 		if len(s.Regions) > 0 {
-			e.ob.AddRedactableField(RedactNodes, "regions", strings.Join(s.Regions, ", "))
+			e.ob.AddFlakyField(DeflakeNodes, "regions", strings.Join(s.Regions, ", "))
 		}
 		if s.RowCount.HasValue() {
 			actualRowCount = s.RowCount.Value()
@@ -490,7 +497,7 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 					}
 
 					var duration string
-					if e.ob.flags.Redact.Has(RedactVolatile) {
+					if e.ob.flags.Deflake.Has(DeflakeVolatile) {
 						duration = "<hidden>"
 					} else {
 						timeSinceStats := timeutil.Since(s.TableStatsCreatedAt)
@@ -502,7 +509,7 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 
 					var forecastStr string
 					if s.Forecast {
-						if e.ob.flags.Redact.Has(RedactVolatile) {
+						if e.ob.flags.Deflake.Has(DeflakeVolatile) {
 							forecastStr = "; using stats forecast"
 						} else {
 							timeSinceStats := timeutil.Since(s.ForecastAt)
@@ -1006,7 +1013,8 @@ func (e *emitter) spansStr(table cat.Table, index cat.Index, scanParams exec.Sca
 	}
 
 	// In verbose mode show the physical spans, unless the table is virtual.
-	if e.ob.flags.Verbose && !table.IsVirtualTable() {
+	if e.ob.flags.Verbose && !e.ob.flags.HideValues && !e.ob.flags.RedactValues &&
+		!table.IsVirtualTable() {
 		return e.spanFormatFn(table, index, scanParams)
 	}
 
@@ -1017,8 +1025,8 @@ func (e *emitter) spansStr(table cat.Table, index cat.Index, scanParams exec.Sca
 		return fmt.Sprintf("%d span%s", n, util.Pluralize(int64(n)))
 	}
 
-	// If we must hide values, only show the count.
-	if e.ob.flags.HideValues {
+	// If we must hide or redact values, only show the count.
+	if e.ob.flags.HideValues || e.ob.flags.RedactValues {
 		n := scanParams.IndexConstraint.Spans.Count()
 		return fmt.Sprintf("%d span%s", n, util.Pluralize(int64(n)))
 	}

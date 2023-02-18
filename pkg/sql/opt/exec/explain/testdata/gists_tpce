@@ -220,7 +220,7 @@ explain(shape):
 │
 ├── • subquery
 │   │ id: @S1
-│   │ original sql: UPDATE last_trade SET lt_vol = lt_vol + 10, lt_price = 100.0::DECIMAL, lt_dts = '2020-06-15 22:27:42.148484+00:00'::TIMESTAMP WHERE lt_s_symb = 'ROACH' RETURNING NULL
+│   │ original sql: UPDATE last_trade SET lt_vol = lt_vol + _, lt_price = _::DECIMAL, lt_dts = '_'::TIMESTAMP WHERE lt_s_symb = '_' RETURNING _
 │   │ exec mode: all rows
 │   │
 │   └── • buffer
@@ -240,7 +240,7 @@ explain(shape):
 │
 ├── • subquery
 │   │ id: @S2
-│   │ original sql: SELECT tr_t_id, tr_bid_price::FLOAT8, tr_tt_id, tr_qty FROM trade_request WHERE (tr_s_symb = 'ROACH') AND ((((tr_tt_id = 'TMB'::VARCHAR(3)) AND (tr_bid_price >= 100.0::DECIMAL)) OR ((tr_tt_id = 'TMS'::VARCHAR(3)) AND (tr_bid_price <= 100.0::DECIMAL))) OR ((tr_tt_id = 'TLS'::VARCHAR(3)) AND (tr_bid_price >= 100.0::DECIMAL)))
+│   │ original sql: SELECT tr_t_id, tr_bid_price::FLOAT8, tr_tt_id, tr_qty FROM trade_request WHERE (tr_s_symb = '_') AND ((((tr_tt_id = _::VARCHAR(3)) AND (tr_bid_price >= _::DECIMAL)) OR ((tr_tt_id = _::VARCHAR(3)) AND (tr_bid_price <= _::DECIMAL))) OR ((tr_tt_id = _::VARCHAR(3)) AND (tr_bid_price >= _::DECIMAL)))
 │   │ exec mode: all rows
 │   │
 │   └── • buffer
@@ -257,7 +257,7 @@ explain(shape):
 │
 ├── • subquery
 │   │ id: @S3
-│   │ original sql: DELETE FROM trade_request WHERE tr_t_id IN (SELECT tr_t_id FROM request_list) RETURNING NULL
+│   │ original sql: DELETE FROM trade_request WHERE tr_t_id IN (SELECT tr_t_id FROM request_list) RETURNING _
 │   │ exec mode: all rows
 │   │
 │   └── • buffer
@@ -280,7 +280,7 @@ explain(shape):
 │
 ├── • subquery
 │   │ id: @S4
-│   │ original sql: INSERT INTO trade_history(th_t_id, th_st_id, th_dts) (SELECT tr_t_id, 'SBMT', '2020-06-15 22:27:42.148484+00:00'::TIMESTAMP FROM request_list) RETURNING NULL
+│   │ original sql: INSERT INTO trade_history(th_t_id, th_st_id, th_dts) (SELECT tr_t_id, '_', '_'::TIMESTAMP FROM request_list) RETURNING _
 │   │ exec mode: all rows
 │   │
 │   └── • buffer
@@ -301,7 +301,7 @@ explain(shape):
 │
 ├── • subquery
 │   │ id: @S5
-│   │ original sql: UPDATE trade SET t_st_id = 'SBMT', t_dts = '2020-06-15 22:27:42.148484+00:00'::TIMESTAMP WHERE t_id IN (SELECT tr_t_id FROM request_list) RETURNING NULL
+│   │ original sql: UPDATE trade SET t_st_id = '_', t_dts = '_'::TIMESTAMP WHERE t_id IN (SELECT tr_t_id FROM request_list) RETURNING _
 │   │ exec mode: all rows
 │   │
 │   └── • buffer

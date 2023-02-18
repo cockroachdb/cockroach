@@ -176,7 +176,7 @@ func DecodePlanGistToRows(gist string, catalog cat.Catalog) (_ []string, retErr 
 		}
 	}()
 
-	flags := Flags{HideValues: true, Redact: RedactAll, OnlyShape: true}
+	flags := Flags{HideValues: true, Deflake: DeflakeAll, OnlyShape: true}
 	ob := NewOutputBuilder(flags)
 	explainPlan, err := DecodePlanGistToPlan(gist, catalog)
 	if err != nil {
