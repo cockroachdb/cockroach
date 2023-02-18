@@ -930,6 +930,18 @@ func (node *Exprs) Format(ctx *FmtCtx) {
 // because it's not parenthesized.
 type TypedExprs []TypedExpr
 
+var _ NodeFormatter = &TypedExprs{}
+
+// Format implements the NodeFormatter interface.
+func (node *TypedExprs) Format(ctx *FmtCtx) {
+	for i, n := range *node {
+		if i > 0 {
+			ctx.WriteString(", ")
+		}
+		ctx.FormatNode(n)
+	}
+}
+
 func (node *TypedExprs) String() string {
 	var prefix string
 	var buf bytes.Buffer
