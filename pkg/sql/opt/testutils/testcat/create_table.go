@@ -627,7 +627,7 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 			append(targetCols, targetTable.FindOrdinal(string(targetTable.implicitRBRIndexElem.Column)))
 		targetCols = append(targetCols, toCols...)
 	}
-	for _, idx := range targetTable.Indexes {
+	for _, idx := range targetTable.indexes {
 		if indexMatches(idx, targetCols, true /* strict */) {
 			targetIndex = idx
 			break
@@ -650,9 +650,10 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 	}
 
 	if createFKIndexes {
-		// 2. Search for an existing index in the source table; add it if necessary.
+		// 2. Search for an existing public index in the source table; add it if
+		// necessary.
 		found := false
-		for _, idx := range tab.Indexes {
+		for _, idx := range tab.indexes {
 			if indexMatches(idx, fromCols, false /* strict */) {
 				found = true
 				break
@@ -863,12 +864,14 @@ func (tt *Table) addIndexWithVersion(
 	}
 
 	// Look for name suffixes indicating this is a mutation index.
+	writeOnly := false
+	deleteOnly := false
 	if name, ok := extractWriteOnlyIndex(def); ok {
 		idx.IdxName = name
-		tt.writeOnlyIdxCount++
+		writeOnly = true
 	} else if name, ok := extractDeleteOnlyIndex(def); ok {
 		idx.IdxName = name
-		tt.deleteOnlyIdxCount++
+		deleteOnly = true
 	}
 
 	// Add explicit columns. Primary key columns definitions have already been
@@ -991,16 +994,15 @@ func (tt *Table) addIndexWithVersion(
 				idx.addColumnByOrdinal(tt, i, tree.Ascending, nonKeyCol)
 			}
 		}
-		if len(tt.Indexes) != 0 {
+		if tt.DeletableIndexCount() != 0 {
 			panic("primary index should always be 0th index")
 		}
-		idx.ordinal = len(tt.Indexes)
-		tt.Indexes = append(tt.Indexes, idx)
+		tt.indexes = append(tt.indexes, idx)
 		return idx
 	}
 
 	// Add implicit key columns from primary index.
-	pkCols := tt.Indexes[cat.PrimaryIndex].Columns[:tt.Indexes[cat.PrimaryIndex].KeyCount]
+	pkCols := tt.indexes[cat.PrimaryIndex].Columns[:tt.indexes[cat.PrimaryIndex].KeyCount]
 	for _, pkCol := range pkCols {
 		// Only add columns that aren't already part of index.
 		found := false
@@ -1082,8 +1084,13 @@ func (tt *Table) addIndexWithVersion(
 		idx.predicate = tree.Serialize(def.Predicate)
 	}
 
-	idx.ordinal = len(tt.Indexes)
-	tt.Indexes = append(tt.Indexes, idx)
+	if writeOnly {
+		tt.writeOnlyIndexes = append(tt.writeOnlyIndexes, idx)
+	} else if deleteOnly {
+		tt.deleteOnlyIndexes = append(tt.deleteOnlyIndexes, idx)
+	} else {
+		tt.indexes = append(tt.indexes, idx)
+	}
 
 	return idx
 }
@@ -1121,8 +1128,9 @@ func (tt *Table) makeIndexName(defName tree.Name, cols tree.IndexElemList, typ i
 	}
 
 	idxNameExists := func(idxName string) bool {
-		for _, idx := range tt.Indexes {
-			if idx.IdxName == idxName {
+		for i, n := 0, tt.DeletableIndexCount(); i < n; i++ {
+			idx := tt.Index(i)
+			if string(idx.Name()) == idxName {
 				return true
 			}
 		}

@@ -198,3 +198,107 @@ TABLE t_invisible
  └── INDEX idx_v_invisible NOT VISIBLE
       ├── v int
       └── k int not null
+
+exec-ddl
+CREATE TABLE mutations (
+  p INT,
+  w INT,
+  d INT,
+  INDEX "w1:write-only" (w),
+  INDEX "d1:delete-only" (d),
+  INDEX "w2:write-only" (w),
+  INDEX "d2:delete-only" (d),
+  INDEX p1 (p)
+)
+----
+
+exec-ddl
+CREATE INDEX "w3:write-only" ON mutations(w)
+----
+
+exec-ddl
+CREATE INDEX "d3:delete-only" ON mutations(d)
+----
+
+exec-ddl
+CREATE INDEX p2 ON mutations(p)
+----
+
+# Indexes should be ordered canonically: public, then write-only, then
+# delete-only.
+exec-ddl
+SHOW CREATE mutations
+----
+TABLE mutations
+ ├── p int
+ ├── w int
+ ├── d int
+ ├── rowid int not null default (unique_rowid()) [hidden]
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── PRIMARY INDEX mutations_pkey
+ │    └── rowid int not null default (unique_rowid()) [hidden]
+ ├── INDEX p1
+ │    ├── p int
+ │    └── rowid int not null default (unique_rowid()) [hidden]
+ ├── INDEX p2
+ │    ├── p int
+ │    └── rowid int not null default (unique_rowid()) [hidden]
+ ├── INDEX w1 (mutation)
+ │    ├── w int
+ │    └── rowid int not null default (unique_rowid()) [hidden]
+ ├── INDEX w2 (mutation)
+ │    ├── w int
+ │    └── rowid int not null default (unique_rowid()) [hidden]
+ ├── INDEX w3 (mutation)
+ │    ├── w int
+ │    └── rowid int not null default (unique_rowid()) [hidden]
+ ├── INDEX d1 (mutation)
+ │    ├── d int
+ │    └── rowid int not null default (unique_rowid()) [hidden]
+ ├── INDEX d2 (mutation)
+ │    ├── d int
+ │    └── rowid int not null default (unique_rowid()) [hidden]
+ └── INDEX d3 (mutation)
+      ├── d int
+      └── rowid int not null default (unique_rowid()) [hidden]
+
+exec-ddl
+DROP INDEX p2
+----
+
+exec-ddl
+DROP INDEX w2
+----
+
+exec-ddl
+DROP INDEX d2
+----
+
+exec-ddl
+SHOW CREATE mutations
+----
+TABLE mutations
+ ├── p int
+ ├── w int
+ ├── d int
+ ├── rowid int not null default (unique_rowid()) [hidden]
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── PRIMARY INDEX mutations_pkey
+ │    └── rowid int not null default (unique_rowid()) [hidden]
+ ├── INDEX p1
+ │    ├── p int
+ │    └── rowid int not null default (unique_rowid()) [hidden]
+ ├── INDEX w1 (mutation)
+ │    ├── w int
+ │    └── rowid int not null default (unique_rowid()) [hidden]
+ ├── INDEX w3 (mutation)
+ │    ├── w int
+ │    └── rowid int not null default (unique_rowid()) [hidden]
+ ├── INDEX d1 (mutation)
+ │    ├── d int
+ │    └── rowid int not null default (unique_rowid()) [hidden]
+ └── INDEX d3 (mutation)
+      ├── d int
+      └── rowid int not null default (unique_rowid()) [hidden]

@@ -61,9 +61,9 @@ project
            ├── partial_indexes_c_idx: filters
            │    └── (a:1 > b:2) AND (c:3 = 'bar')
            ├── b: filters
-           │    └── c:3 = 'delete-only'
+           │    └── c:3 = 'write-only'
            └── b: filters
-                └── c:3 = 'write-only'
+                └── c:3 = 'delete-only'
 
 # Inline virtual computed column expressions in partial index predicates in
 # table metadata. Do not inline stored computed column expressions.
@@ -109,8 +109,8 @@ insert partial_indexes
       └── projections
            ├── column3:8 = 'foo' [as=partial_index_put1:9]
            ├── (column1:6 > column2:7) AND (column3:8 = 'bar') [as=partial_index_put2:10]
-           ├── column3:8 = 'delete-only' [as=partial_index_put3:11]
-           └── column3:8 = 'write-only' [as=partial_index_put4:12]
+           ├── column3:8 = 'write-only' [as=partial_index_put3:11]
+           └── column3:8 = 'delete-only' [as=partial_index_put4:12]
 
 # Do not error with "column reference is ambiguous" when table column names
 # match synthesized column names.
@@ -214,14 +214,14 @@ delete partial_indexes
       │         ├── partial_indexes_c_idx: filters
       │         │    └── (a:6 > b:7) AND (c:8 = 'bar')
       │         ├── b: filters
-      │         │    └── c:8 = 'delete-only'
+      │         │    └── c:8 = 'write-only'
       │         └── b: filters
-      │              └── c:8 = 'write-only'
+      │              └── c:8 = 'delete-only'
       └── projections
            ├── c:8 = 'foo' [as=partial_index_del1:11]
            ├── (a:6 > b:7) AND (c:8 = 'bar') [as=partial_index_del2:12]
-           ├── c:8 = 'delete-only' [as=partial_index_del3:13]
-           └── c:8 = 'write-only' [as=partial_index_del4:14]
+           ├── c:8 = 'write-only' [as=partial_index_del3:13]
+           └── c:8 = 'delete-only' [as=partial_index_del4:14]
 
 # Do not error with "column reference is ambiguous" when table column names
 # match synthesized column names.
@@ -305,17 +305,17 @@ update partial_indexes
       │    │         ├── partial_indexes_c_idx: filters
       │    │         │    └── (a:6 > b:7) AND (c:8 = 'bar')
       │    │         ├── b: filters
-      │    │         │    └── c:8 = 'delete-only'
+      │    │         │    └── c:8 = 'write-only'
       │    │         └── b: filters
-      │    │              └── c:8 = 'write-only'
+      │    │              └── c:8 = 'delete-only'
       │    └── projections
       │         └── 1 [as=a_new:11]
       └── projections
            ├── c:8 = 'foo' [as=partial_index_put1:12]
            ├── (a_new:11 > b:7) AND (c:8 = 'bar') [as=partial_index_put2:13]
            ├── (a:6 > b:7) AND (c:8 = 'bar') [as=partial_index_del2:14]
-           ├── c:8 = 'delete-only' [as=partial_index_put3:15]
-           └── c:8 = 'write-only' [as=partial_index_put4:16]
+           ├── c:8 = 'write-only' [as=partial_index_put3:15]
+           └── c:8 = 'delete-only' [as=partial_index_put4:16]
 
 build
 UPDATE partial_indexes SET a = a + 5 RETURNING *
@@ -343,17 +343,17 @@ update partial_indexes
       │    │         ├── partial_indexes_c_idx: filters
       │    │         │    └── (a:6 > b:7) AND (c:8 = 'bar')
       │    │         ├── b: filters
-      │    │         │    └── c:8 = 'delete-only'
+      │    │         │    └── c:8 = 'write-only'
       │    │         └── b: filters
-      │    │              └── c:8 = 'write-only'
+      │    │              └── c:8 = 'delete-only'
       │    └── projections
       │         └── a:6 + 5 [as=a_new:11]
       └── projections
            ├── c:8 = 'foo' [as=partial_index_put1:12]
            ├── (a_new:11 > b:7) AND (c:8 = 'bar') [as=partial_index_put2:13]
            ├── (a:6 > b:7) AND (c:8 = 'bar') [as=partial_index_del2:14]
-           ├── c:8 = 'delete-only' [as=partial_index_put3:15]
-           └── c:8 = 'write-only' [as=partial_index_put4:16]
+           ├── c:8 = 'write-only' [as=partial_index_put3:15]
+           └── c:8 = 'delete-only' [as=partial_index_put4:16]
 
 build
 UPDATE partial_indexes SET a = v.a FROM (VALUES (1), (2)) AS v(a) WHERE partial_indexes.a = v.a
@@ -383,9 +383,9 @@ update partial_indexes
       │    │    │    │         ├── partial_indexes_c_idx: filters
       │    │    │    │         │    └── (a:6 > b:7) AND (c:8 = 'bar')
       │    │    │    │         ├── b: filters
-      │    │    │    │         │    └── c:8 = 'delete-only'
+      │    │    │    │         │    └── c:8 = 'write-only'
       │    │    │    │         └── b: filters
-      │    │    │    │              └── c:8 = 'write-only'
+      │    │    │    │              └── c:8 = 'delete-only'
       │    │    │    ├── values
       │    │    │    │    ├── columns: column1:11!null
       │    │    │    │    ├── (1,)
@@ -408,8 +408,8 @@ update partial_indexes
            ├── c:8 = 'foo' [as=partial_index_put1:12]
            ├── (column1:11 > b:7) AND (c:8 = 'bar') [as=partial_index_put2:13]
            ├── (a:6 > b:7) AND (c:8 = 'bar') [as=partial_index_del2:14]
-           ├── c:8 = 'delete-only' [as=partial_index_put3:15]
-           └── c:8 = 'write-only' [as=partial_index_put4:16]
+           ├── c:8 = 'write-only' [as=partial_index_put3:15]
+           └── c:8 = 'delete-only' [as=partial_index_put4:16]
 
 # Do not error with "column reference is ambiguous" when table column names
 # match synthesized column names.
@@ -643,9 +643,9 @@ insert partial_indexes
       │    │    │    │    │    │    ├── partial_indexes_c_idx: filters
       │    │    │    │    │    │    │    └── (a:9 > b:10) AND (c:11 = 'bar')
       │    │    │    │    │    │    ├── b: filters
-      │    │    │    │    │    │    │    └── c:11 = 'delete-only'
+      │    │    │    │    │    │    │    └── c:11 = 'write-only'
       │    │    │    │    │    │    └── b: filters
-      │    │    │    │    │    │         └── c:11 = 'write-only'
+      │    │    │    │    │    │         └── c:11 = 'delete-only'
       │    │    │    │    │    └── flags: disabled not visible index feature
       │    │    │    │    └── filters
       │    │    │    │         └── column1:6 = a:9
@@ -657,9 +657,9 @@ insert partial_indexes
       │    │    │    │    │    ├── partial_indexes_c_idx: filters
       │    │    │    │    │    │    └── (a:14 > b:15) AND (c:16 = 'bar')
       │    │    │    │    │    ├── b: filters
-      │    │    │    │    │    │    └── c:16 = 'delete-only'
+      │    │    │    │    │    │    └── c:16 = 'write-only'
       │    │    │    │    │    └── b: filters
-      │    │    │    │    │         └── c:16 = 'write-only'
+      │    │    │    │    │         └── c:16 = 'delete-only'
       │    │    │    │    └── flags: disabled not visible index feature
       │    │    │    └── filters
       │    │    │         ├── column2:7 = b:15
@@ -675,8 +675,8 @@ insert partial_indexes
       └── projections
            ├── column3:8 = 'foo' [as=partial_index_put1:19]
            ├── (column1:6 > column2:7) AND (column3:8 = 'bar') [as=partial_index_put2:20]
-           ├── column3:8 = 'delete-only' [as=partial_index_put3:21]
-           └── column3:8 = 'write-only' [as=partial_index_put4:22]
+           ├── column3:8 = 'write-only' [as=partial_index_put3:21]
+           └── column3:8 = 'delete-only' [as=partial_index_put4:22]
 
 build
 INSERT INTO partial_indexes VALUES (2, 1, 'bar') ON CONFLICT (b, c) DO UPDATE SET b = partial_indexes.b + 1, c = 'baz'
@@ -720,9 +720,9 @@ upsert partial_indexes
       │    │    │    │    │    ├── partial_indexes_c_idx: filters
       │    │    │    │    │    │    └── (a:9 > b:10) AND (c:11 = 'bar')
       │    │    │    │    │    ├── b: filters
-      │    │    │    │    │    │    └── c:11 = 'delete-only'
+      │    │    │    │    │    │    └── c:11 = 'write-only'
       │    │    │    │    │    └── b: filters
-      │    │    │    │    │         └── c:11 = 'write-only'
+      │    │    │    │    │         └── c:11 = 'delete-only'
       │    │    │    │    └── flags: disabled not visible index feature
       │    │    │    └── filters
       │    │    │         ├── column2:7 = b:10
@@ -739,10 +739,10 @@ upsert partial_indexes
            ├── c:11 = 'foo' [as=partial_index_del1:20]
            ├── (upsert_a:16 > upsert_b:17) AND (upsert_c:18 = 'bar') [as=partial_index_put2:21]
            ├── (a:9 > b:10) AND (c:11 = 'bar') [as=partial_index_del2:22]
-           ├── upsert_c:18 = 'delete-only' [as=partial_index_put3:23]
-           ├── c:11 = 'delete-only' [as=partial_index_del3:24]
-           ├── upsert_c:18 = 'write-only' [as=partial_index_put4:25]
-           └── c:11 = 'write-only' [as=partial_index_del4:26]
+           ├── upsert_c:18 = 'write-only' [as=partial_index_put3:23]
+           ├── c:11 = 'write-only' [as=partial_index_del3:24]
+           ├── upsert_c:18 = 'delete-only' [as=partial_index_put4:25]
+           └── c:11 = 'delete-only' [as=partial_index_del4:26]
 
 build
 UPSERT INTO partial_indexes VALUES (2, 1, 'bar')
@@ -786,9 +786,9 @@ upsert partial_indexes
       │    │    │    │    ├── partial_indexes_c_idx: filters
       │    │    │    │    │    └── (a:9 > b:10) AND (c:11 = 'bar')
       │    │    │    │    ├── b: filters
-      │    │    │    │    │    └── c:11 = 'delete-only'
+      │    │    │    │    │    └── c:11 = 'write-only'
       │    │    │    │    └── b: filters
-      │    │    │    │         └── c:11 = 'write-only'
+      │    │    │    │         └── c:11 = 'delete-only'
       │    │    │    └── flags: disabled not visible index feature
       │    │    └── filters
       │    │         └── column1:6 = a:9
@@ -799,10 +799,10 @@ upsert partial_indexes
            ├── c:11 = 'foo' [as=partial_index_del1:16]
            ├── (upsert_a:14 > column2:7) AND (column3:8 = 'bar') [as=partial_index_put2:17]
            ├── (a:9 > b:10) AND (c:11 = 'bar') [as=partial_index_del2:18]
-           ├── column3:8 = 'delete-only' [as=partial_index_put3:19]
-           ├── c:11 = 'delete-only' [as=partial_index_del3:20]
-           ├── column3:8 = 'write-only' [as=partial_index_put4:21]
-           └── c:11 = 'write-only' [as=partial_index_del4:22]
+           ├── column3:8 = 'write-only' [as=partial_index_put3:19]
+           ├── c:11 = 'write-only' [as=partial_index_del3:20]
+           ├── column3:8 = 'delete-only' [as=partial_index_put4:21]
+           └── c:11 = 'delete-only' [as=partial_index_del4:22]
 
 # Columns referenced in the SET expression are ambiguous without a table name.
 # Is it the value of the column being inserted or the value of the column

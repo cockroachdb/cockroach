@@ -670,7 +670,6 @@ type Table struct {
 	TabVersion int
 	TabName    tree.TableName
 	Columns    []cat.Column
-	Indexes    []*Index
 	Stats      TableStats
 	Checks     []cat.CheckConstraint
 	Families   []*Family
@@ -681,8 +680,9 @@ type Table struct {
 	// If Revoked is true, then the user has had privileges on the table revoked.
 	Revoked bool
 
-	writeOnlyIdxCount  int
-	deleteOnlyIdxCount int
+	indexes           []*Index
+	writeOnlyIndexes  []*Index
+	deleteOnlyIndexes []*Index
 
 	outboundFKs []ForeignKeyConstraint
 	inboundFKs  []ForeignKeyConstraint
@@ -771,22 +771,28 @@ func (tt *Table) Column(i int) *cat.Column {
 
 // IndexCount is part of the cat.Table interface.
 func (tt *Table) IndexCount() int {
-	return len(tt.Indexes) - tt.writeOnlyIdxCount - tt.deleteOnlyIdxCount
+	return len(tt.indexes)
 }
 
 // WritableIndexCount is part of the cat.Table interface.
 func (tt *Table) WritableIndexCount() int {
-	return len(tt.Indexes) - tt.deleteOnlyIdxCount
+	return len(tt.indexes) + len(tt.writeOnlyIndexes)
 }
 
 // DeletableIndexCount is part of the cat.Table interface.
 func (tt *Table) DeletableIndexCount() int {
-	return len(tt.Indexes)
+	return len(tt.indexes) + len(tt.writeOnlyIndexes) + len(tt.deleteOnlyIndexes)
 }
 
 // Index is part of the cat.Table interface.
 func (tt *Table) Index(i cat.IndexOrdinal) cat.Index {
-	return tt.Indexes[i]
+	if i < tt.IndexCount() {
+		return tt.indexes[i]
+	}
+	if i < tt.WritableIndexCount() {
+		return tt.writeOnlyIndexes[i-tt.IndexCount()]
+	}
+	return tt.deleteOnlyIndexes[i-tt.WritableIndexCount()]
 }
 
 // StatisticCount is part of the cat.Table interface.
@@ -990,9 +996,6 @@ type Index struct {
 	// the parent table, database, or even the default zone.
 	IdxZone cat.Zone
 
-	// Ordinal is the ordinal of this index in the table.
-	ordinal int
-
 	// table is a back reference to the table this index is on.
 	table *Table
 
@@ -1021,7 +1024,7 @@ type Index struct {
 
 // ID is part of the cat.Index interface.
 func (ti *Index) ID() cat.StableID {
-	return 1 + cat.StableID(ti.ordinal)
+	return 1 + cat.StableID(ti.Ordinal())
 }
 
 // Name is part of the cat.Index interface.
@@ -1036,7 +1039,13 @@ func (ti *Index) Table() cat.Table {
 
 // Ordinal is part of the cat.Index interface.
 func (ti *Index) Ordinal() cat.IndexOrdinal {
-	return ti.ordinal
+	tt := ti.Table()
+	for i, n := 0, tt.DeletableIndexCount(); i < n; i++ {
+		if tt.Index(i).(*Index) == ti {
+			return i
+		}
+	}
+	panic(errors.AssertionFailedf("index ordinal could not be determined"))
 }
 
 // IsUnique is part of the cat.Index interface.
