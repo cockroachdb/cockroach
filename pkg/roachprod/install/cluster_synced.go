@@ -416,13 +416,29 @@ func (c *SyncedCluster) newSession(
 func (c *SyncedCluster) Stop(
 	ctx context.Context, l *logger.Logger, sig int, wait bool, maxWait int,
 ) error {
-	if sig == 9 {
-		// `kill -9` without wait is never what a caller wants. See #77334.
-		wait = true
-	}
 	display := fmt.Sprintf("%s: stopping", c.Name)
 	if wait {
 		display += " and waiting"
+	}
+	return c.kill(ctx, l, "stop", display, sig, wait, maxWait)
+}
+
+// Signal sends a signal to the CockroachDB process.
+func (c *SyncedCluster) Signal(ctx context.Context, l *logger.Logger, sig int) error {
+	display := fmt.Sprintf("%s: sending signal %d", c.Name, sig)
+	return c.kill(ctx, l, "signal", display, sig, false /* wait */, 0 /* maxWait */)
+}
+
+// kill sends the signal sig to all nodes in the cluster using the kill command.
+// cmdName and display specify the roachprod subcommand and a status message,
+// for output/logging. If wait is true, the command will wait for the processes
+// to exit, up to maxWait seconds.
+func (c *SyncedCluster) kill(
+	ctx context.Context, l *logger.Logger, cmdName, display string, sig int, wait bool, maxWait int,
+) error {
+	if sig == 9 {
+		// `kill -9` without wait is never what a caller wants. See #77334.
+		wait = true
 	}
 	return c.Parallel(ctx, l, display, len(c.Nodes), 0, func(ctx context.Context, i int) (*RunResultDetails, error) {
 		node := c.Nodes[i]
@@ -455,22 +471,23 @@ func (c *SyncedCluster) Stop(
 		// awk process match its own output from `ps`.
 		cmd := fmt.Sprintf(`
 mkdir -p %[1]s
-echo ">>> roachprod stop: $(date)" >> %[1]s/roachprod.log
-ps axeww -o pid -o command >> %[1]s/roachprod.log
+echo ">>> roachprod %[1]s: $(date)" >> %[2]s/roachprod.log
+ps axeww -o pid -o command >> %[2]s/roachprod.log
 pids=$(ps axeww -o pid -o command | \
   sed 's/export ROACHPROD=//g' | \
-  awk '/%[2]s/ { print $1 }')
+  awk '/%[3]s/ { print $1 }')
 if [ -n "${pids}" ]; then
-  kill -%[3]d ${pids}
-%[4]s
+  kill -%[4]d ${pids}
+%[5]s
 fi`,
-			c.LogDir(node),            // [1]
-			c.roachprodEnvRegex(node), // [2]
-			sig,                       // [3]
-			waitCmd,                   // [4]
+			cmdName,                   // [1]
+			c.LogDir(node),            // [2]
+			c.roachprodEnvRegex(node), // [3]
+			sig,                       // [4]
+			waitCmd,                   // [5]
 		)
 
-		sess := c.newSession(l, node, cmd, withDebugName("node-stop"))
+		sess := c.newSession(l, node, cmd, withDebugName("node-"+cmdName))
 		defer sess.Close()
 
 		out, cmdErr := sess.CombinedOutput(ctx)
