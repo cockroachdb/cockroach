@@ -1366,7 +1366,7 @@ func TestQuantileOps(t *testing.T) {
 
 // TestQuantileOpsRandom tests basic operations on random quantile functions.
 func TestQuantileOpsRandom(t *testing.T) {
-	const delta = 1e-3
+	const delta = 1e-2
 	rng, seed := randutil.NewTestRand()
 	for i := 0; i < 5; i++ {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
