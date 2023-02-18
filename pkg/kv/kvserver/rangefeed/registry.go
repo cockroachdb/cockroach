@@ -13,7 +13,6 @@ package rangefeed
 import (
 	"context"
 	"fmt"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"sync"
 	"time"
 
@@ -21,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/queue"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -96,7 +97,10 @@ type registration struct {
 	// Internal.
 	id   int64
 	keys interval.Range
-	buf  chan *sharedEvent
+
+	maxBufSz     int
+	scheduler    *Scheduler
+	onDisconnect func()
 
 	mu struct {
 		sync.Locker
@@ -106,15 +110,15 @@ type registration struct {
 		overflowed bool
 		// Boolean indicating if all events have been output to stream. Used only
 		// for testing.
-		caughtUp bool
-		// Management of the output loop goroutine, used to ensure proper teardown.
-		outputLoopCancelFn func()
-		disconnected       bool
+		caughtUp     bool
+		disconnected bool
 
 		// catchUpIter is populated on the Processor's goroutine while the
 		// Replica.raftMu is still held. If it is non-nil at the time that
 		// disconnect is called, it is closed by disconnect.
 		catchUpIter *CatchUpIterator
+
+		buf queue.Queue[*sharedEvent]
 	}
 }
 
@@ -126,6 +130,7 @@ func newRegistration(
 	bufferSz int,
 	metrics *Metrics,
 	stream Stream,
+	scheduler *Scheduler,
 	errC chan<- *roachpb.Error,
 ) registration {
 	r := registration{
@@ -136,7 +141,8 @@ func newRegistration(
 		metrics:                metrics,
 		stream:                 stream,
 		errC:                   errC,
-		buf:                    make(chan *sharedEvent, bufferSz),
+		maxBufSz:               bufferSz,
+		scheduler:              scheduler,
 	}
 	r.mu.Locker = &syncutil.Mutex{}
 	r.mu.caughtUp = true
@@ -160,10 +166,13 @@ func (r *registration) publish(
 		return
 	}
 	alloc.Use()
-	select {
-	case r.buf <- e:
-		r.mu.caughtUp = false
-	default:
+	if r.mu.buf.Len() < r.maxBufSz {
+		r.mu.buf.Push(e)
+		if r.mu.buf.Len() == 1 {
+			// First event notifies scheduler about non-empty registration.
+			r.scheduler.schedule(r)
+		}
+	} else {
 		// Buffer exceeded and we are dropping this event. Registration will need
 		// a catch-up scan.
 		r.mu.overflowed = true
@@ -279,9 +288,6 @@ func (r *registration) disconnect(pErr *roachpb.Error) {
 			r.mu.catchUpIter.Close()
 			r.mu.catchUpIter = nil
 		}
-		if r.mu.outputLoopCancelFn != nil {
-			r.mu.outputLoopCancelFn()
-		}
 		r.mu.disconnected = true
 		r.errC <- pErr
 	}
@@ -308,20 +314,47 @@ func (r *registration) outputLoop(ctx context.Context) error {
 	}
 
 	// Normal buffered output loop.
-	for {
-		overflowed := false
-		r.mu.Lock()
-		if len(r.buf) == 0 {
-			overflowed = r.mu.overflowed
-			r.mu.caughtUp = true
-		}
+	overflowed := false
+	r.mu.Lock()
+	if r.mu.disconnected {
+		// The registration has already been disconnected.
 		r.mu.Unlock()
-		if overflowed {
-			return newErrBufferCapacityExceeded().GoError()
+		return nil
+	}
+
+	if r.mu.buf.Empty() {
+		overflowed = r.mu.overflowed
+		r.mu.caughtUp = true
+	}
+
+	var eventQ queue.Queue[*sharedEvent]
+	// TODO(yevgeniy): This immediately frees up buffer for more events to be added,
+	// thus, it is possible, at least in theory, to have 2x buffer capacity events in flight.
+	// Determine if this is too much and if something needs to be done about that.
+	r.mu.buf.DrainInto(&eventQ)
+	r.mu.Unlock()
+
+	if overflowed {
+		return newErrBufferCapacityExceeded().GoError()
+	}
+
+	if log.V(2) {
+		log.Infof(ctx, "rangefeed IO: emitting %d events", eventQ.Len())
+	}
+
+	defer func(start time.Time, n int) {
+		r.metrics.EventsPerBatch.RecordValue(int64(n))
+		r.metrics.BatchIOTime.RecordValue(timeutil.Since(start).Nanoseconds())
+	}(timeutil.Now(), eventQ.Len())
+
+	for !eventQ.Empty() {
+		nextEvent, ok := eventQ.PopFront()
+		if !ok {
+			return errors.AssertionFailedf("expected event, got none")
 		}
 
 		select {
-		case nextEvent := <-r.buf:
+		default:
 			err := r.stream.Send(nextEvent.event)
 			nextEvent.alloc.Release(ctx)
 			putPooledSharedEvent(nextEvent)
@@ -334,35 +367,21 @@ func (r *registration) outputLoop(ctx context.Context) error {
 			return r.stream.Context().Err()
 		}
 	}
-}
-
-func (r *registration) runOutputLoop(ctx context.Context, _forStacks roachpb.RangeID) {
-	r.mu.Lock()
-	if r.mu.disconnected {
-		// The registration has already been disconnected.
-		r.mu.Unlock()
-		return
-	}
-	ctx, r.mu.outputLoopCancelFn = context.WithCancel(ctx)
-	r.mu.Unlock()
-	err := r.outputLoop(ctx)
-	r.disconnect(roachpb.NewError(err))
+	return nil
 }
 
 // drainAllocations should be done after registration is disconnected from
 // processor to release all memory budget that its pending events hold.
 func (r *registration) drainAllocations(ctx context.Context) {
-	for {
-		select {
-		case e, ok := <-r.buf:
-			if !ok {
-				return
-			}
-			e.alloc.Release(ctx)
-			putPooledSharedEvent(e)
-		default:
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for !r.mu.buf.Empty() {
+		e, ok := r.mu.buf.PopFront()
+		if !ok {
 			return
 		}
+		e.alloc.Release(ctx)
+		putPooledSharedEvent(e)
 	}
 }
 
@@ -560,7 +579,7 @@ func (r *registration) waitForCaughtUp() error {
 	}
 	for re := retry.Start(opts); re.Next(); {
 		r.mu.Lock()
-		caughtUp := len(r.buf) == 0 && r.mu.caughtUp
+		caughtUp := r.mu.buf.Empty() && r.mu.caughtUp
 		r.mu.Unlock()
 		if caughtUp {
 			return nil
@@ -588,6 +607,9 @@ func (r *registration) maybeConstructCatchUpIter() {
 func (r *registration) detachCatchUpIter() *CatchUpIterator {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.mu.disconnected {
+		return nil
+	}
 	catchUpIter := r.mu.catchUpIter
 	r.mu.catchUpIter = nil
 	return catchUpIter

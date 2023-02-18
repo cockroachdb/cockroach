@@ -79,6 +79,8 @@ type Config struct {
 
 	// Optional Processor memory budget.
 	MemBudget *FeedBudget
+
+	IOScheduler *Scheduler
 }
 
 // SetDefaults initializes unset fields in Config to values
@@ -97,6 +99,9 @@ func (sc *Config) SetDefaults() {
 		}
 		if sc.PushTxnsAge == 0 {
 			sc.PushTxnsAge = defaultPushTxnsAge
+		}
+		if sc.IOScheduler == nil {
+			sc.IOScheduler = NewScheduler(16, sc.Metrics) // TODO(yevgeniy): this should be a test only thing.
 		}
 	}
 	if sc.CheckStreamsInterval == 0 {
@@ -303,6 +308,13 @@ func (p *Processor) run(
 			// Add the new registration to the registry.
 			p.reg.Register(&r)
 
+			r.onDisconnect = func() {
+				select {
+				case p.unregC <- &r:
+				case <-p.stoppedC:
+				}
+			}
+
 			// Publish an updated filter that includes the new registration.
 			p.filterResC <- p.reg.NewFilter()
 
@@ -312,19 +324,6 @@ func (p *Processor) run(
 			// catch-up scan has completed. This allows clients to rely on stronger ordering semantics
 			// once they observe the first checkpoint event.
 			r.publish(ctx, p.newCheckpointEvent(), nil)
-
-			// Run an output loop for the registry.
-			runOutputLoop := func(ctx context.Context) {
-				r.runOutputLoop(ctx, p.RangeID)
-				select {
-				case p.unregC <- &r:
-				case <-p.stoppedC:
-				}
-			}
-			if err := stopper.RunAsyncTask(ctx, "rangefeed: output loop", runOutputLoop); err != nil {
-				r.disconnect(roachpb.NewError(err))
-				p.reg.Unregister(ctx, &r)
-			}
 
 		// Respond to unregistration requests; these come from registrations that
 		// encounter an error during their output loop.
@@ -482,7 +481,7 @@ func (p *Processor) Register(
 
 	r := newRegistration(
 		span.AsRawSpanWithNoLocals(), startTS, catchUpIterConstructor, withDiff,
-		p.Config.EventChanCap, p.Metrics, stream, errC,
+		p.Config.EventChanCap, p.Metrics, stream, p.IOScheduler, errC,
 	)
 	select {
 	case p.regC <- r:

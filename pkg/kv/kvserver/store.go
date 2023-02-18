@@ -986,6 +986,7 @@ type Store struct {
 	spanConfigUpdateQueueRateLimiter   *quotapool.RateLimiter
 
 	rangeFeedSlowClosedTimestampNudge *singleflight.Group
+	rangefeedIOSched                  *rangefeed.Scheduler
 }
 
 var _ kv.Sender = &Store{}
@@ -1219,6 +1220,7 @@ func NewStore(
 		ioThresholds:                      &iot,
 		rangeFeedSlowClosedTimestampNudge: singleflight.NewGroup("rangfeed-ct-nudge", "range"),
 	}
+	s.rangefeedIOSched = rangefeed.NewScheduler(96, s.metrics.RangeFeedMetrics)
 	s.ioThreshold.t = &admissionpb.IOThreshold{}
 	var allocatorStorePool storepool.AllocatorStorePool
 	var storePoolIsDeterministic bool
@@ -2050,6 +2052,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		s.consistencyLimiter.UpdateLimit(quotapool.Limit(rate), rate*consistencyCheckRateBurstFactor)
 	})
 
+	s.rangefeedIOSched.Start(ctx, s.stopper)
 	// Set the started flag (for unittests).
 	atomic.StoreInt32(&s.started, 1)
 
@@ -2783,7 +2786,7 @@ func (s *Store) RangeFeed(
 
 	tenID, _ := repl.TenantID()
 	pacer := s.cfg.KVAdmissionController.AdmitRangefeedRequest(tenID, args)
-	return repl.RangeFeed(args, stream, pacer)
+	return repl.RangeFeed(args, stream, pacer, s.rangefeedIOSched)
 }
 
 // updateReplicationGauges counts a number of simple replication statistics for

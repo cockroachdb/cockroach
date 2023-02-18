@@ -87,6 +87,17 @@ func (q *Queue[T]) PopFront() (v T, ok bool) {
 	return v, true
 }
 
+// DrainInto quickly drains this queue into another queue.
+func (q *Queue[T]) DrainInto(other *Queue[T]) {
+	other.head = q.head
+	other.tail = q.tail
+	other.len = q.len
+	other.chunkPool = q.chunkPool
+	q.head = nil
+	q.tail = nil
+	q.len = 0
+}
+
 // Release releases whatever chunks maybe held by this queue back into the pool.
 func (q *Queue[T]) Release() {
 	for q.head != nil {

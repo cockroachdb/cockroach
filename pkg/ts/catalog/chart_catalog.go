@@ -610,9 +610,28 @@ var charts = []sectionDescription{
 				},
 			},
 			{
-				Title: "Rangefeed Scheduler",
+				Title: "Rangefeed",
 				Metrics: []string{
 					"kv.rangefeed.registrations",
+				},
+			},
+			{
+				Title: "Scheduler",
+				Metrics: []string{
+					"kv.rangefeed.scheduler.admit.latency",
+					"kv.rangefeed.scheduler.batch_io_time",
+				},
+			},
+			{
+				Title: "Scheduler Batch Events",
+				Metrics: []string{
+					"kv.rangefeed.scheduler.batch_events",
+				},
+			},
+			{
+				Title: "Scheduler Queue Depth",
+				Metrics: []string{
+					"kv.rangefeed.scheduler.queue_depth",
 				},
 			},
 			{

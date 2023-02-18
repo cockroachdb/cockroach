@@ -42,6 +42,30 @@ var (
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaSchedulerBatchDelay = metric.Metadata{
+		Name:        "kv.rangefeed.scheduler.admit.latency",
+		Help:        `Latency histogram for delay in processing rangefeed IO batches`,
+		Measurement: "Latency",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaSchedulerQueueDepth = metric.Metadata{
+		Name:        "kv.rangefeed.scheduler.queue_depth",
+		Help:        "Number of rangefeed registrations waiting for IO",
+		Measurement: "Events",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaBatchIOTime = metric.Metadata{
+		Name:        "kv.rangefeed.scheduler.batch_io_time",
+		Help:        `Histogram measuring amount of time to processrangefeed IO batch.`,
+		Measurement: "Latency",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaEventsPerBatch = metric.Metadata{
+		Name:        "kv.rangefeed.scheduler.batch_events",
+		Help:        `Histogram measuring amount of time to processrangefeed IO batch.`,
+		Measurement: "Events",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // Metrics are for production monitoring of RangeFeeds.
@@ -50,6 +74,10 @@ type Metrics struct {
 	RangeFeedBudgetExhausted         *metric.Counter
 	RangeFeedBudgetBlocked           *metric.Counter
 	RangeFeedRegistrations           *metric.Gauge
+	SchedulerQueueDepth              *metric.Gauge
+	SchedulerBatchDelay              metric.IHistogram
+	EventsPerBatch                   metric.IHistogram
+	BatchIOTime                      metric.IHistogram
 	RangeFeedSlowClosedTimestampLogN log.EveryN
 	// RangeFeedSlowClosedTimestampNudgeSem bounds the amount of work that can be
 	// spun up on behalf of the RangeFeed nudger. We don't expect to hit this
@@ -62,12 +90,31 @@ type Metrics struct {
 func (*Metrics) MetricStruct() {}
 
 // NewMetrics makes the metrics for RangeFeeds monitoring.
-func NewMetrics() *Metrics {
+func NewMetrics(histogramWindow time.Duration) *Metrics {
 	return &Metrics{
-		RangeFeedCatchUpScanNanos:            metric.NewCounter(metaRangeFeedCatchUpScanNanos),
-		RangeFeedBudgetExhausted:             metric.NewCounter(metaRangeFeedExhausted),
-		RangeFeedBudgetBlocked:               metric.NewCounter(metaRangeFeedBudgetBlocked),
-		RangeFeedRegistrations:               metric.NewGauge(metaRangeFeedRegistrations),
+		RangeFeedCatchUpScanNanos: metric.NewCounter(metaRangeFeedCatchUpScanNanos),
+		RangeFeedBudgetExhausted:  metric.NewCounter(metaRangeFeedExhausted),
+		RangeFeedBudgetBlocked:    metric.NewCounter(metaRangeFeedBudgetBlocked),
+		RangeFeedRegistrations:    metric.NewGauge(metaRangeFeedRegistrations),
+		SchedulerQueueDepth:       metric.NewGauge(metaSchedulerQueueDepth),
+		SchedulerBatchDelay: metric.NewHistogram(metric.HistogramOptions{
+			Mode:     metric.HistogramModePreferHdrLatency,
+			Metadata: metaSchedulerBatchDelay,
+			Duration: histogramWindow,
+			Buckets:  metric.IOLatencyBuckets,
+		}),
+		BatchIOTime: metric.NewHistogram(metric.HistogramOptions{
+			Mode:     metric.HistogramModePreferHdrLatency,
+			Metadata: metaBatchIOTime,
+			Duration: histogramWindow,
+			Buckets:  metric.IOLatencyBuckets,
+		}),
+		EventsPerBatch: metric.NewHistogram(metric.HistogramOptions{
+			Mode:     metric.HistogramModePreferHdrLatency,
+			Metadata: metaEventsPerBatch,
+			Duration: histogramWindow,
+			Buckets:  append(metric.Count1KBuckets, 2048.0, 4096),
+		}),
 		RangeFeedSlowClosedTimestampLogN:     log.Every(5 * time.Second),
 		RangeFeedSlowClosedTimestampNudgeSem: make(chan struct{}, 1024),
 	}

@@ -135,9 +135,12 @@ func (tp *rangefeedTxnPusher) ResolveIntents(
 // complete. The surrounding store's ConcurrentRequestLimiter is used to limit
 // the number of rangefeeds using catch-up iterators at the same time.
 func (r *Replica) RangeFeed(
-	args *roachpb.RangeFeedRequest, stream roachpb.RangeFeedEventSink, pacer *admission.Pacer,
+	args *roachpb.RangeFeedRequest,
+	stream roachpb.RangeFeedEventSink,
+	pacer *admission.Pacer,
+	scheduler *rangefeed.Scheduler,
 ) *roachpb.Error {
-	return r.rangeFeedWithRangeID(r.RangeID, args, stream, pacer)
+	return r.rangeFeedWithRangeID(r.RangeID, args, stream, pacer, scheduler)
 }
 
 func (r *Replica) rangeFeedWithRangeID(
@@ -145,6 +148,7 @@ func (r *Replica) rangeFeedWithRangeID(
 	args *roachpb.RangeFeedRequest,
 	stream roachpb.RangeFeedEventSink,
 	pacer *admission.Pacer,
+	scheduler *rangefeed.Scheduler,
 ) *roachpb.Error {
 	if !r.isRangefeedEnabled() && !RangefeedEnabled.Get(&r.store.cfg.Settings.SV) {
 		return roachpb.NewErrorf("rangefeeds require the kv.rangefeed.enabled setting. See %s",
@@ -234,7 +238,7 @@ func (r *Replica) rangeFeedWithRangeID(
 		}
 	}
 	p := r.registerWithRangefeedRaftMuLocked(
-		ctx, rSpan, args.Timestamp, catchUpIterFunc, args.WithDiff, lockedStream, errC,
+		ctx, rSpan, args.Timestamp, catchUpIterFunc, args.WithDiff, lockedStream, scheduler, errC,
 	)
 	r.raftMu.Unlock()
 
@@ -335,6 +339,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	catchUpIter rangefeed.CatchUpIteratorConstructor,
 	withDiff bool,
 	stream rangefeed.Stream,
+	scheduler *rangefeed.Scheduler,
 	errC chan<- *roachpb.Error,
 ) *rangefeed.Processor {
 	defer logSlowRangefeedRegistration(ctx)()
@@ -379,6 +384,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 		EventChanTimeout: 50 * time.Millisecond,
 		Metrics:          r.store.metrics.RangeFeedMetrics,
 		MemBudget:        feedBudget,
+		IOScheduler:      scheduler,
 	}
 	p = rangefeed.NewProcessor(cfg)
 
