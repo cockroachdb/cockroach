@@ -739,6 +739,18 @@ func Stop(ctx context.Context, l *logger.Logger, clusterName string, opts StopOp
 	return c.Stop(ctx, l, opts.Sig, opts.Wait, opts.MaxWait)
 }
 
+// Signal sends a signal to nodes in the cluster.
+func Signal(ctx context.Context, l *logger.Logger, clusterName string, sig int) error {
+	if err := LoadClusters(); err != nil {
+		return err
+	}
+	c, err := newCluster(l, clusterName)
+	if err != nil {
+		return err
+	}
+	return c.Signal(ctx, l, sig)
+}
+
 // Init initializes the cluster.
 func Init(ctx context.Context, l *logger.Logger, clusterName string, opts install.StartOpts) error {
 	if err := LoadClusters(); err != nil {
