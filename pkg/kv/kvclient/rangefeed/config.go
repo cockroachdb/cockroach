@@ -13,6 +13,7 @@ package rangefeed
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -150,7 +151,7 @@ func WithRetry(options retry.Options) Option {
 }
 
 // OnCheckpoint is called when a rangefeed checkpoint occurs.
-type OnCheckpoint func(ctx context.Context, checkpoint *roachpb.RangeFeedCheckpoint)
+type OnCheckpoint func(ctx context.Context, checkpoint *kvpb.RangeFeedCheckpoint)
 
 // WithOnCheckpoint sets up a callback that's invoked whenever a check point
 // event is emitted.
@@ -179,7 +180,7 @@ func WithOnCheckpoint(f OnCheckpoint) Option {
 // callers to ensure this.
 type OnSSTable func(
 	ctx context.Context,
-	sst *roachpb.RangeFeedSSTable,
+	sst *kvpb.RangeFeedSSTable,
 	registeredSpan roachpb.Span,
 )
 
@@ -199,7 +200,7 @@ func WithOnSSTable(f OnSSTable) Option {
 // MVCC range tombstones are currently experimental, and requires the
 // MVCCRangeTombstones version gate. They are only expected during certain
 // operations like schema GC and IMPORT INTO (i.e. not across live tables).
-type OnDeleteRange func(ctx context.Context, value *roachpb.RangeFeedDeleteRange)
+type OnDeleteRange func(ctx context.Context, value *kvpb.RangeFeedDeleteRange)
 
 // WithOnDeleteRange sets up a callback that's invoked whenever an MVCC range
 // deletion tombstone is written.

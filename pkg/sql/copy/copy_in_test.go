@@ -22,7 +22,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
@@ -438,7 +438,7 @@ func TestCopyFromRetries(t *testing.T) {
 			retriesEnabled: true,
 			hook: func(attemptNum int) error {
 				if attemptNum == 1 {
-					return &roachpb.TransactionRetryWithProtoRefreshError{}
+					return &kvpb.TransactionRetryWithProtoRefreshError{}
 				}
 				return nil
 			},
@@ -450,7 +450,7 @@ func TestCopyFromRetries(t *testing.T) {
 			retriesEnabled: false,
 			hook: func(attemptNum int) error {
 				if attemptNum == 1 {
-					return &roachpb.TransactionRetryWithProtoRefreshError{}
+					return &kvpb.TransactionRetryWithProtoRefreshError{}
 				}
 				return nil
 			},
@@ -463,7 +463,7 @@ func TestCopyFromRetries(t *testing.T) {
 			inTxn:          true,
 			hook: func(attemptNum int) error {
 				if attemptNum == 1 {
-					return &roachpb.TransactionRetryWithProtoRefreshError{}
+					return &kvpb.TransactionRetryWithProtoRefreshError{}
 				}
 				return nil
 			},
@@ -475,7 +475,7 @@ func TestCopyFromRetries(t *testing.T) {
 			retriesEnabled: true,
 			hook: func(attemptNum int) error {
 				if attemptNum%2 == 1 {
-					return &roachpb.TransactionRetryWithProtoRefreshError{}
+					return &kvpb.TransactionRetryWithProtoRefreshError{}
 				}
 				return nil
 			},
@@ -486,7 +486,7 @@ func TestCopyFromRetries(t *testing.T) {
 			atomicEnabled:  false,
 			retriesEnabled: true,
 			hook: func(attemptNum int) error {
-				return &roachpb.TransactionRetryWithProtoRefreshError{}
+				return &kvpb.TransactionRetryWithProtoRefreshError{}
 			},
 			expectedErr: true,
 		},

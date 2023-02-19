@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -185,7 +186,7 @@ func IsPermanentSchemaChangeError(err error) bool {
 	// Ignore error thrown because of a read at a very old timestamp.
 	// The Backfill will grab a new timestamp to read at for the rest
 	// of the backfill.
-	if errors.HasType(err, (*roachpb.BatchTimestampBeforeGCError)(nil)) {
+	if errors.HasType(err, (*kvpb.BatchTimestampBeforeGCError)(nil)) {
 		return false
 	}
 
@@ -308,11 +309,11 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 		}
 		defer localPlanner.curPlan.close(ctx)
 
-		res := roachpb.BulkOpSummary{}
+		res := kvpb.BulkOpSummary{}
 		rw := NewCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
 			// TODO(adityamaru): Use the BulkOpSummary for either telemetry or to
 			// return to user.
-			var counts roachpb.BulkOpSummary
+			var counts kvpb.BulkOpSummary
 			if err := protoutil.Unmarshal([]byte(*row[0].(*tree.DBytes)), &counts); err != nil {
 				return err
 			}

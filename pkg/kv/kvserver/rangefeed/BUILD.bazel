@@ -17,6 +17,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/keys",
+        "//pkg/kv/kvpb",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/storage",
@@ -57,6 +58,7 @@ go_test(
         "//pkg/base",
         "//pkg/clusterversion",
         "//pkg/keys",
+        "//pkg/kv/kvpb",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/storage",

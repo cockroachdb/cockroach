@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
+	kvpb "github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -161,21 +162,21 @@ func (w *Watcher) processEvents(ctx context.Context, eventC chan kvcoord.RangeFe
 			return nil
 		case event := <-eventC:
 			switch e := event.GetValue().(type) {
-			case *roachpb.RangeFeedError:
+			case *kvpb.RangeFeedError:
 				return e.Error.GoError()
-			case *roachpb.RangeFeedValue:
+			case *kvpb.RangeFeedValue:
 				if err := w.handleValue(ctx, roachpb.Span{Key: e.Key}, e.Value, &e.PrevValue); err != nil {
 					return err
 				}
-			case *roachpb.RangeFeedDeleteRange:
+			case *kvpb.RangeFeedDeleteRange:
 				if err := w.handleValue(ctx, e.Span, roachpb.Value{Timestamp: e.Timestamp}, nil /* prevV */); err != nil {
 					return err
 				}
-			case *roachpb.RangeFeedCheckpoint:
+			case *kvpb.RangeFeedCheckpoint:
 				if err := w.handleCheckpoint(ctx, e.Span, e.ResolvedTS); err != nil {
 					return err
 				}
-			case *roachpb.RangeFeedSSTable:
+			case *kvpb.RangeFeedSSTable:
 				if err := w.handleSSTable(ctx, e.Data); err != nil {
 					return err
 				}

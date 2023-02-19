@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -103,7 +104,7 @@ func (r LoadedReplicaState) check(storeID roachpb.StoreID) error {
 }
 
 // CreateUninitializedReplica creates an uninitialized replica in storage.
-// Returns roachpb.RaftGroupDeletedError if this replica can not be created
+// Returns kvpb.RaftGroupDeletedError if this replica can not be created
 // because it has been deleted.
 func CreateUninitializedReplica(
 	ctx context.Context,
@@ -121,7 +122,7 @@ func CreateUninitializedReplica(
 	); err != nil {
 		return err
 	} else if ok && replicaID < tombstone.NextReplicaID {
-		return &roachpb.RaftGroupDeletedError{}
+		return &kvpb.RaftGroupDeletedError{}
 	}
 
 	// Write the RaftReplicaID for this replica. This is the only place in the

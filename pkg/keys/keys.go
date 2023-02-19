@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -949,13 +950,13 @@ func EnsureSafeSplitKey(key roachpb.Key) (roachpb.Key, error) {
 }
 
 // Range returns a key range encompassing the key ranges of all requests.
-func Range(reqs []roachpb.RequestUnion) (roachpb.RSpan, error) {
+func Range(reqs []kvpb.RequestUnion) (roachpb.RSpan, error) {
 	from := roachpb.RKeyMax
 	to := roachpb.RKeyMin
 	for _, arg := range reqs {
 		req := arg.GetInner()
 		h := req.Header()
-		if !roachpb.IsRange(req) && len(h.EndKey) != 0 {
+		if !kvpb.IsRange(req) && len(h.EndKey) != 0 {
 			return roachpb.RSpan{}, errors.Errorf("end key specified for non-range operation: %s", req)
 		}
 

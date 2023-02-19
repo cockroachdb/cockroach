@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -60,7 +61,7 @@ func newChannelServer(bufSize int, maxSleep time.Duration) channelServer {
 
 func (s channelServer) HandleRaftRequest(
 	ctx context.Context, req *kvserverpb.RaftMessageRequest, _ kvserver.RaftMessageResponseStream,
-) *roachpb.Error {
+) *kvpb.Error {
 	if s.maxSleep != 0 {
 		// maxSleep simulates goroutine scheduling delays that could
 		// result in messages being processed out of order (in previous
@@ -68,7 +69,7 @@ func (s channelServer) HandleRaftRequest(
 		time.Sleep(time.Duration(rand.Int63n(int64(s.maxSleep))))
 	}
 	if s.brokenRange != 0 && s.brokenRange == req.RangeID {
-		return roachpb.NewErrorf(channelServerBrokenRangeMessage)
+		return kvpb.NewErrorf(channelServerBrokenRangeMessage)
 	}
 	s.ch <- req
 	return nil
@@ -79,8 +80,8 @@ func (s channelServer) HandleRaftResponse(
 ) error {
 	// Mimic the logic in (*Store).HandleRaftResponse without requiring an
 	// entire Store object to be pulled into these tests.
-	if val, ok := resp.Union.GetValue().(*roachpb.Error); ok {
-		if err, ok := val.GetDetail().(*roachpb.StoreNotFoundError); ok {
+	if val, ok := resp.Union.GetValue().(*kvpb.Error); ok {
+		if err, ok := val.GetDetail().(*kvpb.StoreNotFoundError); ok {
 			return err
 		}
 	}

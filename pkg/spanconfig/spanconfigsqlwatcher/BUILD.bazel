@@ -15,6 +15,7 @@ go_library(
         "//pkg/keys",
         "//pkg/kv/kvclient/rangefeed",
         "//pkg/kv/kvclient/rangefeed/rangefeedbuffer",
+        "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/protectedts/ptpb",
         "//pkg/roachpb",
         "//pkg/settings/cluster",

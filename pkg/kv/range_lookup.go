@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -166,7 +167,7 @@ func RangeLookup(
 	ctx context.Context,
 	sender Sender,
 	key roachpb.Key,
-	rc roachpb.ReadConsistencyType,
+	rc kvpb.ReadConsistencyType,
 	prefetchNum int64,
 	prefetchReverse bool,
 ) (rs, preRs []roachpb.RangeDescriptor, err error) {
@@ -250,7 +251,7 @@ func RangeLookup(
 		// If we're doing an inconsistent scan and do not find any matching
 		// descriptors, return to the caller so that it can retry by reading
 		// from the leaseholder.
-		if rc == roachpb.INCONSISTENT {
+		if rc == kvpb.INCONSISTENT {
 			return nil, nil, nil
 		}
 		log.Warningf(ctx, "range lookup of key %s found only non-matching ranges %v; retrying",
@@ -268,7 +269,7 @@ func lookupRangeFwdScan(
 	ctx context.Context,
 	sender Sender,
 	key roachpb.RKey,
-	rc roachpb.ReadConsistencyType,
+	rc kvpb.ReadConsistencyType,
 	prefetchNum int64,
 	prefetchReverse bool,
 ) (rs, preRs []roachpb.RangeDescriptor, err error) {
@@ -288,12 +289,12 @@ func lookupRangeFwdScan(
 		return nil, nil, errors.Wrap(err, "could not create scan bounds for range lookup")
 	}
 
-	ba := &roachpb.BatchRequest{}
+	ba := &kvpb.BatchRequest{}
 	ba.ReadConsistency = rc
 	// If the caller is asking for a potentially stale result, we want to route
 	// the request to the nearest replica rather than the leaseholder.
-	if rc == roachpb.INCONSISTENT {
-		ba.RoutingPolicy = roachpb.RoutingPolicy_NEAREST
+	if rc == kvpb.INCONSISTENT {
+		ba.RoutingPolicy = kvpb.RoutingPolicy_NEAREST
 	}
 	if prefetchReverse {
 		// Even if we're prefetching in the reverse direction, we still scan
@@ -320,8 +321,8 @@ func lookupRangeFwdScan(
 	} else {
 		ba.MaxSpanRequestKeys = prefetchNum + 1
 	}
-	ba.Add(&roachpb.ScanRequest{
-		RequestHeader: roachpb.RequestHeaderFromSpan(bounds.AsRawSpanWithNoLocals()),
+	ba.Add(&kvpb.ScanRequest{
+		RequestHeader: kvpb.RequestHeaderFromSpan(bounds.AsRawSpanWithNoLocals()),
 	})
 	if !TestingIsRangeLookup(ba) {
 		log.Fatalf(ctx, "BatchRequest %v not detectable as RangeLookup", ba)
@@ -331,7 +332,7 @@ func lookupRangeFwdScan(
 	if pErr != nil {
 		return nil, nil, pErr.GoError()
 	}
-	scanRes := br.Responses[0].GetInner().(*roachpb.ScanResponse)
+	scanRes := br.Responses[0].GetInner().(*kvpb.ScanResponse)
 
 	descs, err := kvsToRangeDescriptors(scanRes.Rows)
 	if err != nil {
@@ -361,7 +362,7 @@ func lookupRangeRevScan(
 	ctx context.Context,
 	sender Sender,
 	key roachpb.RKey,
-	rc roachpb.ReadConsistencyType,
+	rc kvpb.ReadConsistencyType,
 	prefetchNum int64,
 	prefetchReverse bool,
 	fwdDescs, fwdIntentDescs []roachpb.RangeDescriptor,
@@ -386,16 +387,16 @@ func lookupRangeRevScan(
 		return nil, nil, errors.Wrap(err, "could not create scan bounds for reverse range lookup")
 	}
 
-	ba := &roachpb.BatchRequest{}
+	ba := &kvpb.BatchRequest{}
 	ba.ReadConsistency = rc
 	// If the caller is asking for a potentially stale result, we want to route
 	// the request to the nearest replica rather than the leaseholder.
-	if rc == roachpb.INCONSISTENT {
-		ba.RoutingPolicy = roachpb.RoutingPolicy_NEAREST
+	if rc == kvpb.INCONSISTENT {
+		ba.RoutingPolicy = kvpb.RoutingPolicy_NEAREST
 	}
 	ba.MaxSpanRequestKeys = maxKeys
-	ba.Add(&roachpb.ReverseScanRequest{
-		RequestHeader: roachpb.RequestHeaderFromSpan(revBounds.AsRawSpanWithNoLocals()),
+	ba.Add(&kvpb.ReverseScanRequest{
+		RequestHeader: kvpb.RequestHeaderFromSpan(revBounds.AsRawSpanWithNoLocals()),
 	})
 	if !TestingIsRangeLookup(ba) {
 		log.Fatalf(ctx, "BatchRequest %v not detectable as RangeLookup", ba)
@@ -405,7 +406,7 @@ func lookupRangeRevScan(
 	if pErr != nil {
 		return nil, nil, pErr.GoError()
 	}
-	revScanRes := br.Responses[0].GetInner().(*roachpb.ReverseScanResponse)
+	revScanRes := br.Responses[0].GetInner().(*kvpb.ReverseScanResponse)
 
 	revDescs, err := kvsToRangeDescriptors(revScanRes.Rows)
 	if err != nil {
@@ -453,7 +454,7 @@ func kvsToRangeDescriptors(kvs []roachpb.KeyValue) ([]roachpb.RangeDescriptor, e
 // TestingIsRangeLookup returns if the provided BatchRequest looks like a single
 // RangeLookup scan. It can return false positives and should only be used in
 // tests.
-func TestingIsRangeLookup(ba *roachpb.BatchRequest) bool {
+func TestingIsRangeLookup(ba *kvpb.BatchRequest) bool {
 	if ba.IsSingleRequest() {
 		return TestingIsRangeLookupRequest(ba.Requests[0].GetInner())
 	}
@@ -475,10 +476,10 @@ var rangeLookupEndKeyBounds = roachpb.Span{
 // TestingIsRangeLookupRequest returns if the provided Request looks like a single
 // RangeLookup scan. It can return false positives and should only be used in
 // tests.
-func TestingIsRangeLookupRequest(req roachpb.Request) bool {
+func TestingIsRangeLookupRequest(req kvpb.Request) bool {
 	switch req.(type) {
-	case *roachpb.ScanRequest:
-	case *roachpb.ReverseScanRequest:
+	case *kvpb.ScanRequest:
+	case *kvpb.ReverseScanRequest:
 	default:
 		return false
 	}

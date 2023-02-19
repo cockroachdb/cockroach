@@ -1022,6 +1022,35 @@ func (t *Transaction) AssertInitialized(ctx context.Context) {
 	}
 }
 
+// UserPriority is a custom type for transaction's user priority.
+type UserPriority float64
+
+func (up UserPriority) String() string {
+	switch up {
+	case MinUserPriority:
+		return "low"
+	case UnspecifiedUserPriority, NormalUserPriority:
+		return "normal"
+	case MaxUserPriority:
+		return "high"
+	default:
+		return fmt.Sprintf("%g", float64(up))
+	}
+}
+
+const (
+	// MinUserPriority is the minimum allowed user priority.
+	MinUserPriority UserPriority = 0.001
+	// UnspecifiedUserPriority means NormalUserPriority.
+	UnspecifiedUserPriority UserPriority = 0
+	// NormalUserPriority is set to 1, meaning ops run through the database
+	// are all given equal weight when a random priority is chosen. This can
+	// be set specifically via client.NewDBWithPriority().
+	NormalUserPriority UserPriority = 1
+	// MaxUserPriority is the maximum allowed user priority.
+	MaxUserPriority UserPriority = 1000
+)
+
 // MakePriority generates a random priority value, biased by the specified
 // userPriority. If userPriority=100, the random priority will be 100x more
 // likely to be greater than if userPriority=1. If userPriority = 0.1, the
@@ -1421,132 +1450,6 @@ func (tr *TransactionRecord) AsTransaction() Transaction {
 	t.InFlightWrites = tr.InFlightWrites
 	t.IgnoredSeqNums = tr.IgnoredSeqNums
 	return t
-}
-
-// PrepareTransactionForRetry returns a new Transaction to be used for retrying
-// the original Transaction. Depending on the error, this might return an
-// already-existing Transaction with an incremented epoch, or a completely new
-// Transaction.
-//
-// The caller should generally check that the error was meant for this
-// Transaction before calling this.
-//
-// pri is the priority that should be used when giving the restarted transaction
-// the chance to get a higher priority. Not used when the transaction is being
-// aborted.
-//
-// In case retryErr tells us that a new Transaction needs to be created,
-// isolation and name help initialize this new transaction.
-func PrepareTransactionForRetry(
-	ctx context.Context, pErr *Error, pri UserPriority, clock *hlc.Clock,
-) Transaction {
-	if pErr.TransactionRestart() == TransactionRestart_NONE {
-		log.Fatalf(ctx, "invalid retryable err (%T): %s", pErr.GetDetail(), pErr)
-	}
-
-	if pErr.GetTxn() == nil {
-		log.Fatalf(ctx, "missing txn for retryable error: %s", pErr)
-	}
-
-	txn := *pErr.GetTxn()
-	aborted := false
-	switch tErr := pErr.GetDetail().(type) {
-	case *TransactionAbortedError:
-		// The txn coming with a TransactionAbortedError is not supposed to be used
-		// for the restart. Instead, a brand new transaction is created.
-		aborted = true
-		// TODO(andrei): Should we preserve the ObservedTimestamps across the
-		// restart?
-		errTxnPri := txn.Priority
-		// Start the new transaction at the current time from the local clock.
-		// The local hlc should have been advanced to at least the error's
-		// timestamp already.
-		now := clock.NowAsClockTimestamp()
-		txn = MakeTransaction(
-			txn.Name,
-			nil, // baseKey
-			// We have errTxnPri, but this wants a UserPriority. So we're going to
-			// overwrite the priority below.
-			NormalUserPriority,
-			now.ToTimestamp(),
-			clock.MaxOffset().Nanoseconds(),
-			txn.CoordinatorNodeID,
-		)
-		// Use the priority communicated back by the server.
-		txn.Priority = errTxnPri
-	case *ReadWithinUncertaintyIntervalError:
-		txn.WriteTimestamp.Forward(tErr.RetryTimestamp())
-	case *TransactionPushError:
-		// Increase timestamp if applicable, ensuring that we're just ahead of
-		// the pushee.
-		txn.WriteTimestamp.Forward(tErr.PusheeTxn.WriteTimestamp)
-		txn.UpgradePriority(tErr.PusheeTxn.Priority - 1)
-	case *TransactionRetryError:
-		// Transaction.Timestamp has already been forwarded to be ahead of any
-		// timestamp cache entries or newer versions which caused the restart.
-		if tErr.Reason == RETRY_SERIALIZABLE {
-			// For RETRY_SERIALIZABLE case, we want to bump timestamp further than
-			// timestamp cache.
-			// This helps transactions that had their commit timestamp fixed (See
-			// roachpb.Transaction.CommitTimestampFixed for details on when it happens)
-			// or transactions that hit read-write contention and can't bump
-			// read timestamp because of later writes.
-			// Upon retry, we want those transactions to restart on now() instead of
-			// closed ts to give them some time to complete without a need to refresh
-			// read spans yet again and possibly fail.
-			// The tradeoff here is that transactions that failed because they were
-			// waiting on locks or were slowed down in their first epoch for any other
-			// reason (e.g. lease transfers, network congestion, node failure, etc.)
-			// would have a chance to retry and succeed, but transactions that are
-			// just slow would still retry indefinitely and delay transactions that
-			// try to write to the keys this transaction reads because reads are not
-			// in the past anymore.
-			now := clock.Now()
-			txn.WriteTimestamp.Forward(now)
-		}
-	case *WriteTooOldError:
-		// Increase the timestamp to the ts at which we've actually written.
-		txn.WriteTimestamp.Forward(tErr.RetryTimestamp())
-	default:
-		log.Fatalf(ctx, "invalid retryable err (%T): %s", pErr.GetDetail(), pErr)
-	}
-	if !aborted {
-		if txn.Status.IsFinalized() {
-			log.Fatalf(ctx, "transaction unexpectedly finalized in (%T): %s", pErr.GetDetail(), pErr)
-		}
-		txn.Restart(pri, txn.Priority, txn.WriteTimestamp)
-	}
-	return txn
-}
-
-// TransactionRefreshTimestamp returns whether the supplied error is a retry
-// error that can be discarded if the transaction in the error is refreshed. If
-// true, the function returns the timestamp that the Transaction object should
-// be refreshed at in order to discard the error and avoid a restart.
-func TransactionRefreshTimestamp(pErr *Error) (bool, hlc.Timestamp) {
-	txn := pErr.GetTxn()
-	if txn == nil {
-		return false, hlc.Timestamp{}
-	}
-	timestamp := txn.WriteTimestamp
-	switch err := pErr.GetDetail().(type) {
-	case *TransactionRetryError:
-		if err.Reason != RETRY_SERIALIZABLE && err.Reason != RETRY_WRITE_TOO_OLD {
-			return false, hlc.Timestamp{}
-		}
-	case *WriteTooOldError:
-		// TODO(andrei): Chances of success for on write-too-old conditions might be
-		// usually small: if our txn previously read the key that generated this
-		// error, obviously the refresh will fail. It might be worth trying to
-		// detect these cases and save the futile attempt; we'd need to have access
-		// to the key that generated the error.
-		timestamp.Forward(err.RetryTimestamp())
-	case *ReadWithinUncertaintyIntervalError:
-		timestamp.Forward(err.RetryTimestamp())
-	default:
-		return false, hlc.Timestamp{}
-	}
-	return true, timestamp
 }
 
 // Replicas returns all of the replicas present in the descriptor after this

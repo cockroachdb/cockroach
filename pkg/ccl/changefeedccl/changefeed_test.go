@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
@@ -1714,7 +1715,7 @@ func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
 	// Rangefeed will skip some of the checkpoints to simulate lagging spans.
 	var laggingSpans roachpb.SpanGroup
 	numLagging := 0
-	knobs.FeedKnobs.ShouldSkipCheckpoint = func(checkpoint *roachpb.RangeFeedCheckpoint) bool {
+	knobs.FeedKnobs.ShouldSkipCheckpoint = func(checkpoint *kvpb.RangeFeedCheckpoint) bool {
 		// Skip spans that were skipped before; otherwise skip some spans.
 		seenBefore := laggingSpans.Encloses(checkpoint.Span)
 		if seenBefore || (numLagging < 5 && rnd.Int()%3 == 0) {
@@ -2289,23 +2290,23 @@ func fetchDescVersionModificationTime(
 	t testing.TB, s TestServerWithSystem, tableName string, version int,
 ) hlc.Timestamp {
 	tblKey := s.Codec.TablePrefix(keys.DescriptorTableID)
-	header := roachpb.RequestHeader{
+	header := kvpb.RequestHeader{
 		Key:    tblKey,
 		EndKey: tblKey.PrefixEnd(),
 	}
 	dropColTblID := sqlutils.QueryTableID(t, s.DB, `d`, "public", tableName)
-	req := &roachpb.ExportRequest{
+	req := &kvpb.ExportRequest{
 		RequestHeader: header,
-		MVCCFilter:    roachpb.MVCCFilter_All,
+		MVCCFilter:    kvpb.MVCCFilter_All,
 		StartTime:     hlc.Timestamp{},
 	}
-	hh := roachpb.Header{Timestamp: hlc.NewClockForTesting(nil).Now()}
+	hh := kvpb.Header{Timestamp: hlc.NewClockForTesting(nil).Now()}
 	res, pErr := kv.SendWrappedWith(context.Background(),
 		s.SystemServer.DB().NonTransactionalSender(), hh, req)
 	if pErr != nil {
 		t.Fatal(pErr.GoError())
 	}
-	for _, file := range res.(*roachpb.ExportResponse).Files {
+	for _, file := range res.(*kvpb.ExportResponse).Files {
 		it, err := storage.NewMemSSTIterator(file.SST, false /* verify */, storage.IterOptions{
 			KeyTypes:   storage.IterKeyTypePointsAndRanges,
 			LowerBound: keys.MinKey,
@@ -5186,12 +5187,12 @@ func TestChangefeedProtectedTimestamps(t *testing.T) {
 			}
 		}
 		requestFilter = kvserverbase.ReplicaRequestFilter(func(
-			ctx context.Context, ba *roachpb.BatchRequest,
-		) *roachpb.Error {
+			ctx context.Context, ba *kvpb.BatchRequest,
+		) *kvpb.Error {
 			if ba.Txn == nil || ba.Txn.Name != "changefeed backfill" {
 				return nil
 			}
-			scanReq, ok := ba.GetArg(roachpb.Scan)
+			scanReq, ok := ba.GetArg(kvpb.Scan)
 			if !ok {
 				return nil
 			}

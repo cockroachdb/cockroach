@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -55,19 +56,19 @@ func TestTxnSpanRefresherCollectsSpans(t *testing.T) {
 	keyC, keyD := roachpb.Key("c"), roachpb.Key("d")
 
 	// Basic case.
-	ba := &roachpb.BatchRequest{}
-	ba.Header = roachpb.Header{Txn: &txn}
-	getArgs := roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}}
-	putArgs := roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}}
-	delRangeArgs := roachpb.DeleteRangeRequest{RequestHeader: roachpb.RequestHeader{Key: keyA, EndKey: keyB}}
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	getArgs := kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}}
+	putArgs := kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}}
+	delRangeArgs := kvpb.DeleteRangeRequest{RequestHeader: kvpb.RequestHeader{Key: keyA, EndKey: keyB}}
 	ba.Add(&getArgs, &putArgs, &delRangeArgs)
 
-	mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 3)
 		require.True(t, ba.CanForwardReadTimestamp)
-		require.IsType(t, &roachpb.GetRequest{}, ba.Requests[0].GetInner())
-		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[1].GetInner())
-		require.IsType(t, &roachpb.DeleteRangeRequest{}, ba.Requests[2].GetInner())
+		require.IsType(t, &kvpb.GetRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &kvpb.PutRequest{}, ba.Requests[1].GetInner())
+		require.IsType(t, &kvpb.DeleteRangeRequest{}, ba.Requests[2].GetInner())
 
 		br := ba.CreateReply()
 		br.Txn = ba.Txn
@@ -86,13 +87,13 @@ func TestTxnSpanRefresherCollectsSpans(t *testing.T) {
 
 	// Scan with limit. Only the scanned keys are added to the refresh spans.
 	ba.Requests = nil
-	scanArgs := roachpb.ScanRequest{RequestHeader: roachpb.RequestHeader{Key: keyB, EndKey: keyD}}
+	scanArgs := kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyB, EndKey: keyD}}
 	ba.Add(&scanArgs)
 
-	mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 1)
 		require.False(t, ba.CanForwardReadTimestamp)
-		require.IsType(t, &roachpb.ScanRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &kvpb.ScanRequest{}, ba.Requests[0].GetInner())
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
@@ -126,39 +127,39 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 		name string
 		// OnFirstSend, if set, is invoked to evaluate the batch. If not set, pErr()
 		// will be used to provide an error.
-		onFirstSend  func(*roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
-		pErr         func() *roachpb.Error
+		onFirstSend  func(*kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error)
+		pErr         func() *kvpb.Error
 		expRefresh   bool
 		expRefreshTS hlc.Timestamp
 	}{
 		{
-			pErr: func() *roachpb.Error {
-				return roachpb.NewError(
-					&roachpb.TransactionRetryError{Reason: roachpb.RETRY_SERIALIZABLE})
+			pErr: func() *kvpb.Error {
+				return kvpb.NewError(
+					&kvpb.TransactionRetryError{Reason: kvpb.RETRY_SERIALIZABLE})
 			},
 			expRefresh:   true,
 			expRefreshTS: txn.WriteTimestamp,
 		},
 		{
-			pErr: func() *roachpb.Error {
-				return roachpb.NewError(
-					&roachpb.TransactionRetryError{Reason: roachpb.RETRY_WRITE_TOO_OLD})
+			pErr: func() *kvpb.Error {
+				return kvpb.NewError(
+					&kvpb.TransactionRetryError{Reason: kvpb.RETRY_WRITE_TOO_OLD})
 			},
 			expRefresh:   true,
 			expRefreshTS: txn.WriteTimestamp,
 		},
 		{
-			pErr: func() *roachpb.Error {
-				return roachpb.NewError(
-					&roachpb.WriteTooOldError{ActualTimestamp: txn.WriteTimestamp.Add(15, 0)})
+			pErr: func() *kvpb.Error {
+				return kvpb.NewError(
+					&kvpb.WriteTooOldError{ActualTimestamp: txn.WriteTimestamp.Add(15, 0)})
 			},
 			expRefresh:   true,
 			expRefreshTS: txn.WriteTimestamp.Add(15, 0),
 		},
 		{
-			pErr: func() *roachpb.Error {
-				return roachpb.NewError(
-					&roachpb.ReadWithinUncertaintyIntervalError{
+			pErr: func() *kvpb.Error {
+				return kvpb.NewError(
+					&kvpb.ReadWithinUncertaintyIntervalError{
 						ValueTimestamp: txn.WriteTimestamp.Add(25, 0),
 					})
 			},
@@ -166,9 +167,9 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 			expRefreshTS: txn.WriteTimestamp.Add(25, 1), // see ExistingTimestamp
 		},
 		{
-			pErr: func() *roachpb.Error {
-				return roachpb.NewError(
-					&roachpb.ReadWithinUncertaintyIntervalError{
+			pErr: func() *kvpb.Error {
+				return kvpb.NewError(
+					&kvpb.ReadWithinUncertaintyIntervalError{
 						ValueTimestamp:        txn.WriteTimestamp.Add(25, 0),
 						LocalUncertaintyLimit: hlc.ClockTimestamp(txn.WriteTimestamp.Add(30, 0)),
 					})
@@ -177,14 +178,14 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 			expRefreshTS: txn.WriteTimestamp.Add(30, 0), // see LocalUncertaintyLimit
 		},
 		{
-			pErr: func() *roachpb.Error {
-				return roachpb.NewErrorf("no refresh")
+			pErr: func() *kvpb.Error {
+				return kvpb.NewErrorf("no refresh")
 			},
 			expRefresh: false,
 		},
 		{
 			name: "write_too_old flag",
-			onFirstSend: func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			onFirstSend: func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 				br := ba.CreateReply()
 				br.Txn = ba.Txn.Clone()
 				br.Txn.WriteTooOld = true
@@ -208,10 +209,10 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 			tsr, mockSender := makeMockTxnSpanRefresher()
 
 			// Collect some refresh spans.
-			ba := &roachpb.BatchRequest{}
-			ba.Header = roachpb.Header{Txn: txn.Clone()} // clone txn since it's shared between subtests
-			getArgs := roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}}
-			delRangeArgs := roachpb.DeleteRangeRequest{RequestHeader: roachpb.RequestHeader{Key: keyA, EndKey: keyB}}
+			ba := &kvpb.BatchRequest{}
+			ba.Header = kvpb.Header{Txn: txn.Clone()} // clone txn since it's shared between subtests
+			getArgs := kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}}
+			delRangeArgs := kvpb.DeleteRangeRequest{RequestHeader: kvpb.RequestHeader{Key: keyA, EndKey: keyB}}
 			ba.Add(&getArgs, &delRangeArgs)
 
 			br, pErr := tsr.SendLocked(ctx, ba)
@@ -223,9 +224,9 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 			require.Zero(t, tsr.refreshedTimestamp)
 
 			// Hook up a chain of mocking functions.
-			onFirstSend := func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			onFirstSend := func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 				require.Len(t, ba.Requests, 1)
-				require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
+				require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
 
 				// Return a transaction retry error.
 				if tc.onFirstSend != nil {
@@ -235,26 +236,26 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 				pErr.SetTxn(ba.Txn)
 				return nil, pErr
 			}
-			onSecondSend := func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			onSecondSend := func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 				// Should not be called if !expRefresh.
 				require.True(t, tc.expRefresh)
 
 				require.Len(t, ba.Requests, 1)
-				require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
+				require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
 
 				// Don't return an error.
 				br = ba.CreateReply()
 				br.Txn = ba.Txn
 				return br, nil
 			}
-			onRefresh := func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			onRefresh := func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 				// Should not be called if !expRefresh.
 				require.True(t, tc.expRefresh)
 
 				require.Len(t, ba.Requests, 2)
 				require.Equal(t, tc.expRefreshTS, ba.Txn.ReadTimestamp)
-				require.IsType(t, &roachpb.RefreshRequest{}, ba.Requests[0].GetInner())
-				require.IsType(t, &roachpb.RefreshRangeRequest{}, ba.Requests[1].GetInner())
+				require.IsType(t, &kvpb.RefreshRequest{}, ba.Requests[0].GetInner())
+				require.IsType(t, &kvpb.RefreshRangeRequest{}, ba.Requests[1].GetInner())
 
 				refReq := ba.Requests[0].GetRefresh()
 				require.Equal(t, getArgs.Span(), refReq.Span())
@@ -273,7 +274,7 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 			// Send a request that will hit a retry error. Depending on the
 			// error type, we may or may not perform a refresh.
 			ba.Requests = nil
-			putArgs := roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}}
+			putArgs := kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}}
 			ba.Add(&putArgs)
 
 			br, pErr = tsr.SendLocked(ctx, ba)
@@ -315,9 +316,9 @@ func TestTxnSpanRefresherMaxRefreshAttempts(t *testing.T) {
 	tsr.knobs.MaxTxnRefreshAttempts = 2
 
 	// Collect some refresh spans.
-	ba := &roachpb.BatchRequest{}
-	ba.Header = roachpb.Header{Txn: &txn}
-	scanArgs := roachpb.ScanRequest{RequestHeader: roachpb.RequestHeader{Key: keyA, EndKey: keyB}}
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	scanArgs := kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyA, EndKey: keyB}}
 	ba.Add(&scanArgs)
 
 	br, pErr := tsr.SendLocked(ctx, ba)
@@ -328,20 +329,20 @@ func TestTxnSpanRefresherMaxRefreshAttempts(t *testing.T) {
 	require.Zero(t, tsr.refreshedTimestamp)
 
 	// Hook up a chain of mocking functions.
-	onPut := func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	onPut := func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 1)
-		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
 
 		// Return a transaction retry error.
-		return nil, roachpb.NewErrorWithTxn(
-			roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE, ""), ba.Txn)
+		return nil, kvpb.NewErrorWithTxn(
+			kvpb.NewTransactionRetryError(kvpb.RETRY_SERIALIZABLE, ""), ba.Txn)
 	}
 	refreshes := 0
-	onRefresh := func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	onRefresh := func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		refreshes++
 		require.Len(t, ba.Requests, 1)
 		require.Equal(t, txn.WriteTimestamp, ba.Txn.ReadTimestamp)
-		require.IsType(t, &roachpb.RefreshRangeRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &kvpb.RefreshRangeRequest{}, ba.Requests[0].GetInner())
 
 		refReq := ba.Requests[0].GetRefreshRange()
 		require.Equal(t, scanArgs.Span(), refReq.Span())
@@ -351,7 +352,7 @@ func TestTxnSpanRefresherMaxRefreshAttempts(t *testing.T) {
 		br.Txn = ba.Txn
 		return br, nil
 	}
-	unexpected := func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	unexpected := func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Fail(t, "unexpected")
 		return nil, nil
 	}
@@ -361,13 +362,13 @@ func TestTxnSpanRefresherMaxRefreshAttempts(t *testing.T) {
 	// but continue to hit a retry error each time it is attempted. Eventually,
 	// the txnSpanRefresher should give up and propagate the error.
 	ba.Requests = nil
-	putArgs := roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyB}}
+	putArgs := kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyB}}
 	ba.Add(&putArgs)
 
 	br, pErr = tsr.SendLocked(ctx, ba)
 	require.Nil(t, br)
 	require.NotNil(t, pErr)
-	exp := roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE, "")
+	exp := kvpb.NewTransactionRetryError(kvpb.RETRY_SERIALIZABLE, "")
 	require.Equal(t, exp, pErr.GetDetail())
 	require.Equal(t, tsr.knobs.MaxTxnRefreshAttempts, refreshes)
 }
@@ -393,15 +394,15 @@ func TestTxnSpanRefresherPreemptiveRefresh(t *testing.T) {
 	// Send an EndTxn request that will need a refresh to succeed. Because
 	// no refresh spans have been recorded, the preemptive refresh should be
 	// free, so the txnSpanRefresher should do so.
-	ba := &roachpb.BatchRequest{}
-	ba.Header = roachpb.Header{Txn: &txn}
-	etArgs := roachpb.EndTxnRequest{Commit: true}
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	etArgs := kvpb.EndTxnRequest{Commit: true}
 	ba.Add(&etArgs)
 
-	mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 1)
 		require.True(t, ba.CanForwardReadTimestamp)
-		require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[0].GetInner())
 
 		// The transaction should be refreshed.
 		require.NotEqual(t, origReadTs, ba.Txn.ReadTimestamp)
@@ -429,13 +430,13 @@ func TestTxnSpanRefresherPreemptiveRefresh(t *testing.T) {
 	// the txnSpanRefresher should do so. NOTE: This inhibits a server-side
 	// refreshes when we issue EndTxn requests through the rest of this test.
 	ba.Requests = nil
-	scanArgs := roachpb.ScanRequest{RequestHeader: roachpb.RequestHeader{Key: keyA, EndKey: keyB}}
+	scanArgs := kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyA, EndKey: keyB}}
 	ba.Add(&scanArgs)
 
-	mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 1)
 		require.True(t, ba.CanForwardReadTimestamp)
-		require.IsType(t, &roachpb.ScanRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &kvpb.ScanRequest{}, ba.Requests[0].GetInner())
 
 		// The transaction should be refreshed.
 		require.NotEqual(t, origReadTs, ba.Txn.ReadTimestamp)
@@ -468,19 +469,19 @@ func TestTxnSpanRefresherPreemptiveRefresh(t *testing.T) {
 	ba.Requests = nil
 	ba.Add(&etArgs)
 
-	onRefresh := func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	onRefresh := func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 1)
 		require.Equal(t, pushedWriteTs, ba.Txn.ReadTimestamp)
-		require.IsType(t, &roachpb.RefreshRangeRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &kvpb.RefreshRangeRequest{}, ba.Requests[0].GetInner())
 
 		refReq := ba.Requests[0].GetRefreshRange()
 		require.Equal(t, scanArgs.Span(), refReq.Span())
 		require.Equal(t, origReadTs, refReq.RefreshFrom)
 
-		return nil, roachpb.NewError(roachpb.NewRefreshFailedError(
-			roachpb.RefreshFailedError_REASON_COMMITTED_VALUE, roachpb.Key("a"), hlc.Timestamp{WallTime: 1}))
+		return nil, kvpb.NewError(kvpb.NewRefreshFailedError(
+			kvpb.RefreshFailedError_REASON_COMMITTED_VALUE, roachpb.Key("a"), hlc.Timestamp{WallTime: 1}))
 	}
-	unexpected := func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	unexpected := func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Fail(t, "unexpected")
 		return nil, nil
 	}
@@ -499,10 +500,10 @@ func TestTxnSpanRefresherPreemptiveRefresh(t *testing.T) {
 	require.False(t, tsr.refreshInvalid)
 
 	// Try again, but this time let the refresh succeed.
-	onRefresh = func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	onRefresh = func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 1)
 		require.Equal(t, pushedWriteTs, ba.Txn.ReadTimestamp)
-		require.IsType(t, &roachpb.RefreshRangeRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &kvpb.RefreshRangeRequest{}, ba.Requests[0].GetInner())
 
 		refReq := ba.Requests[0].GetRefreshRange()
 		require.Equal(t, scanArgs.Span(), refReq.Span())
@@ -512,10 +513,10 @@ func TestTxnSpanRefresherPreemptiveRefresh(t *testing.T) {
 		br.Txn = ba.Txn
 		return br, nil
 	}
-	onEndTxn := func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	onEndTxn := func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 1)
 		require.False(t, ba.CanForwardReadTimestamp)
-		require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[0].GetInner())
 
 		// The transaction should be refreshed.
 		require.NotEqual(t, origReadTs, ba.Txn.ReadTimestamp)
@@ -551,16 +552,16 @@ func TestTxnSpanRefresherSplitEndTxnOnAutoRetry(t *testing.T) {
 	pushedTs2 := txn.ReadTimestamp.Add(2, 0)
 	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
 
-	scanArgs := roachpb.ScanRequest{RequestHeader: roachpb.RequestHeader{Key: keyA, EndKey: keyB}}
-	putArgs := roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyB}}
-	etArgs := roachpb.EndTxnRequest{Commit: true}
+	scanArgs := kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyA, EndKey: keyB}}
+	putArgs := kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyB}}
+	etArgs := kvpb.EndTxnRequest{Commit: true}
 
 	// Run the test with two slightly different configurations. When priorReads
 	// is true, issue a {Put, EndTxn} batch after having previously accumulated
 	// refresh spans due to a Scan. When priorReads is false, issue a {Scan,
 	// Put, EndTxn} batch with no previously accumulated refresh spans.
 	testutils.RunTrueAndFalse(t, "prior_reads", func(t *testing.T, priorReads bool) {
-		var mockFns []func(*roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
+		var mockFns []func(*kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error)
 		if priorReads {
 			// Hook up a chain of mocking functions. Expected order of requests:
 			// 1. {Put, EndTxn} -> retry error with pushed timestamp
@@ -568,21 +569,21 @@ func TestTxnSpanRefresherSplitEndTxnOnAutoRetry(t *testing.T) {
 			// 3. {Put}         -> successful with pushed timestamp
 			// 4. {Refresh}     -> successful
 			// 5. {EndTxn}      -> successful
-			onPutAndEndTxn := func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			onPutAndEndTxn := func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 				require.Len(t, ba.Requests, 2)
 				require.False(t, ba.CanForwardReadTimestamp)
-				require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
-				require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[1].GetInner())
+				require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
+				require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[1].GetInner())
 
 				pushedTxn := ba.Txn.Clone()
 				pushedTxn.WriteTimestamp = pushedTs1
-				return nil, roachpb.NewErrorWithTxn(
-					roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE, ""), pushedTxn)
+				return nil, kvpb.NewErrorWithTxn(
+					kvpb.NewTransactionRetryError(kvpb.RETRY_SERIALIZABLE, ""), pushedTxn)
 			}
-			onRefresh1 := func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			onRefresh1 := func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 				require.Len(t, ba.Requests, 1)
 				require.Equal(t, pushedTs1, ba.Txn.ReadTimestamp)
-				require.IsType(t, &roachpb.RefreshRangeRequest{}, ba.Requests[0].GetInner())
+				require.IsType(t, &kvpb.RefreshRangeRequest{}, ba.Requests[0].GetInner())
 
 				refReq := ba.Requests[0].GetRefreshRange()
 				require.Equal(t, scanArgs.Span(), refReq.Span())
@@ -592,21 +593,21 @@ func TestTxnSpanRefresherSplitEndTxnOnAutoRetry(t *testing.T) {
 				br.Txn = ba.Txn
 				return br, nil
 			}
-			onPut := func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			onPut := func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 				require.Len(t, ba.Requests, 1)
 				require.False(t, ba.CanForwardReadTimestamp)
 				require.Equal(t, pushedTs1, ba.Txn.ReadTimestamp)
-				require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
+				require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
 
 				br := ba.CreateReply()
 				br.Txn = ba.Txn.Clone()
 				br.Txn.WriteTimestamp = pushedTs2
 				return br, nil
 			}
-			onRefresh2 := func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			onRefresh2 := func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 				require.Len(t, ba.Requests, 1)
 				require.Equal(t, pushedTs2, ba.Txn.ReadTimestamp)
-				require.IsType(t, &roachpb.RefreshRangeRequest{}, ba.Requests[0].GetInner())
+				require.IsType(t, &kvpb.RefreshRangeRequest{}, ba.Requests[0].GetInner())
 
 				refReq := ba.Requests[0].GetRefreshRange()
 				require.Equal(t, scanArgs.Span(), refReq.Span())
@@ -616,11 +617,11 @@ func TestTxnSpanRefresherSplitEndTxnOnAutoRetry(t *testing.T) {
 				br.Txn = ba.Txn
 				return br, nil
 			}
-			onEndTxn := func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			onEndTxn := func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 				require.Len(t, ba.Requests, 1)
 				require.False(t, ba.CanForwardReadTimestamp)
 				require.Equal(t, pushedTs2, ba.Txn.ReadTimestamp)
-				require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[0].GetInner())
+				require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[0].GetInner())
 
 				br := ba.CreateReply()
 				br.Txn = ba.Txn.Clone()
@@ -634,34 +635,34 @@ func TestTxnSpanRefresherSplitEndTxnOnAutoRetry(t *testing.T) {
 			// 3. {Scan, Put}         -> successful with pushed timestamp
 			// 4. {Refresh}           -> successful
 			// 5. {EndTxn}            -> successful
-			onScanPutAndEndTxn := func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			onScanPutAndEndTxn := func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 				require.Len(t, ba.Requests, 3)
 				require.True(t, ba.CanForwardReadTimestamp)
-				require.IsType(t, &roachpb.ScanRequest{}, ba.Requests[0].GetInner())
-				require.IsType(t, &roachpb.PutRequest{}, ba.Requests[1].GetInner())
-				require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[2].GetInner())
+				require.IsType(t, &kvpb.ScanRequest{}, ba.Requests[0].GetInner())
+				require.IsType(t, &kvpb.PutRequest{}, ba.Requests[1].GetInner())
+				require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[2].GetInner())
 
 				pushedTxn := ba.Txn.Clone()
 				pushedTxn.WriteTimestamp = pushedTs1
-				return nil, roachpb.NewErrorWithTxn(
-					roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE, ""), pushedTxn)
+				return nil, kvpb.NewErrorWithTxn(
+					kvpb.NewTransactionRetryError(kvpb.RETRY_SERIALIZABLE, ""), pushedTxn)
 			}
-			onScanAndPut := func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			onScanAndPut := func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 				require.Len(t, ba.Requests, 2)
 				require.True(t, ba.CanForwardReadTimestamp)
 				require.Equal(t, pushedTs1, ba.Txn.ReadTimestamp)
-				require.IsType(t, &roachpb.ScanRequest{}, ba.Requests[0].GetInner())
-				require.IsType(t, &roachpb.PutRequest{}, ba.Requests[1].GetInner())
+				require.IsType(t, &kvpb.ScanRequest{}, ba.Requests[0].GetInner())
+				require.IsType(t, &kvpb.PutRequest{}, ba.Requests[1].GetInner())
 
 				br := ba.CreateReply()
 				br.Txn = ba.Txn.Clone()
 				br.Txn.WriteTimestamp = pushedTs2
 				return br, nil
 			}
-			onRefresh := func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			onRefresh := func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 				require.Len(t, ba.Requests, 1)
 				require.Equal(t, pushedTs2, ba.Txn.ReadTimestamp)
-				require.IsType(t, &roachpb.RefreshRangeRequest{}, ba.Requests[0].GetInner())
+				require.IsType(t, &kvpb.RefreshRangeRequest{}, ba.Requests[0].GetInner())
 
 				refReq := ba.Requests[0].GetRefreshRange()
 				require.Equal(t, scanArgs.Span(), refReq.Span())
@@ -671,14 +672,14 @@ func TestTxnSpanRefresherSplitEndTxnOnAutoRetry(t *testing.T) {
 				br.Txn = ba.Txn
 				return br, nil
 			}
-			onEndTxn := func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			onEndTxn := func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 				require.Len(t, ba.Requests, 1)
 				// IMPORTANT! CanForwardReadTimestamp should no longer be set
 				// for EndTxn batch, because the Scan in the earlier batch needs
 				// to be refreshed if the read timestamp changes.
 				require.False(t, ba.CanForwardReadTimestamp)
 				require.Equal(t, pushedTs2, ba.Txn.ReadTimestamp)
-				require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[0].GetInner())
+				require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[0].GetInner())
 
 				br := ba.CreateReply()
 				br.Txn = ba.Txn.Clone()
@@ -700,10 +701,10 @@ func TestTxnSpanRefresherSplitEndTxnOnAutoRetry(t *testing.T) {
 				ctx := context.Background()
 				tsr, mockSender := makeMockTxnSpanRefresher()
 
-				ba := &roachpb.BatchRequest{}
+				ba := &kvpb.BatchRequest{}
 				if priorReads {
 					// Collect some refresh spans first.
-					ba.Header = roachpb.Header{Txn: &txn}
+					ba.Header = kvpb.Header{Txn: &txn}
 					ba.Add(&scanArgs)
 
 					br, pErr := tsr.SendLocked(ctx, ba)
@@ -719,23 +720,23 @@ func TestTxnSpanRefresherSplitEndTxnOnAutoRetry(t *testing.T) {
 					// No refresh spans to begin with.
 					require.Equal(t, []roachpb.Span(nil), tsr.refreshFootprint.asSlice())
 
-					ba.Header = roachpb.Header{Txn: &txn}
+					ba.Header = kvpb.Header{Txn: &txn}
 					ba.Add(&scanArgs, &putArgs, &etArgs)
 				}
 
 				// Construct the mock sender chain, injecting an error where
 				// appropriate. Make a copy of mockFns to avoid sharing state
 				// between subtests.
-				mockFnsCpy := append([]func(*roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)(nil), mockFns...)
+				mockFnsCpy := append([]func(*kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error)(nil), mockFns...)
 				if errIdx < len(mockFnsCpy) {
 					errFn := mockFnsCpy[errIdx]
-					newErrFn := func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+					newErrFn := func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 						_, _ = errFn(ba)
-						return nil, roachpb.NewErrorf("error")
+						return nil, kvpb.NewErrorf("error")
 					}
 					mockFnsCpy[errIdx] = newErrFn
 				}
-				unexpected := func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+				unexpected := func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 					require.Fail(t, "unexpected")
 					return nil, nil
 				}
@@ -750,8 +751,8 @@ func TestTxnSpanRefresherSplitEndTxnOnAutoRetry(t *testing.T) {
 						require.Nil(t, pErr)
 						require.NotNil(t, br)
 						require.Len(t, br.Responses, 2)
-						require.IsType(t, &roachpb.PutResponse{}, br.Responses[0].GetInner())
-						require.IsType(t, &roachpb.EndTxnResponse{}, br.Responses[1].GetInner())
+						require.IsType(t, &kvpb.PutResponse{}, br.Responses[0].GetInner())
+						require.IsType(t, &kvpb.EndTxnResponse{}, br.Responses[1].GetInner())
 						require.Equal(t, roachpb.COMMITTED, br.Txn.Status)
 						require.Equal(t, pushedTs2, br.Txn.ReadTimestamp)
 						require.Equal(t, pushedTs2, br.Txn.WriteTimestamp)
@@ -786,9 +787,9 @@ func TestTxnSpanRefresherSplitEndTxnOnAutoRetry(t *testing.T) {
 						require.Nil(t, pErr)
 						require.NotNil(t, br)
 						require.Len(t, br.Responses, 3)
-						require.IsType(t, &roachpb.ScanResponse{}, br.Responses[0].GetInner())
-						require.IsType(t, &roachpb.PutResponse{}, br.Responses[1].GetInner())
-						require.IsType(t, &roachpb.EndTxnResponse{}, br.Responses[2].GetInner())
+						require.IsType(t, &kvpb.ScanResponse{}, br.Responses[0].GetInner())
+						require.IsType(t, &kvpb.PutResponse{}, br.Responses[1].GetInner())
+						require.IsType(t, &kvpb.EndTxnResponse{}, br.Responses[2].GetInner())
 						require.Equal(t, roachpb.COMMITTED, br.Txn.Status)
 						require.Equal(t, pushedTs2, br.Txn.ReadTimestamp)
 						require.Equal(t, pushedTs2, br.Txn.WriteTimestamp)
@@ -866,9 +867,9 @@ func TestTxnSpanRefresherMaxTxnRefreshSpansBytes(t *testing.T) {
 	MaxTxnRefreshSpansBytes.Override(ctx, &tsr.st.SV, 3+roachpb.SpanOverhead)
 
 	// Send a batch below the limit.
-	ba := &roachpb.BatchRequest{}
-	ba.Header = roachpb.Header{Txn: &txn}
-	scanArgs := roachpb.ScanRequest{RequestHeader: roachpb.RequestHeader{Key: keyA, EndKey: keyB}}
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	scanArgs := kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyA, EndKey: keyB}}
 	ba.Add(&scanArgs)
 
 	br, pErr := tsr.SendLocked(ctx, ba)
@@ -883,7 +884,7 @@ func TestTxnSpanRefresherMaxTxnRefreshSpansBytes(t *testing.T) {
 	// Send another batch that pushes us above the limit. The tracked spans are
 	// adjacent so the spans will be merged, but not condensed.
 	ba.Requests = nil
-	scanArgs2 := roachpb.ScanRequest{RequestHeader: roachpb.RequestHeader{Key: keyB, EndKey: keyC}}
+	scanArgs2 := kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyB, EndKey: keyC}}
 	ba.Add(&scanArgs2)
 
 	br, pErr = tsr.SendLocked(ctx, ba)
@@ -900,7 +901,7 @@ func TestTxnSpanRefresherMaxTxnRefreshSpansBytes(t *testing.T) {
 	// Exceed the limit again, this time with a non-adjacent span such that
 	// condensing needs to occur.
 	ba.Requests = nil
-	scanArgs3 := roachpb.ScanRequest{RequestHeader: roachpb.RequestHeader{Key: keyD, EndKey: keyE}}
+	scanArgs3 := kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyD, EndKey: keyE}}
 	ba.Add(&scanArgs3)
 
 	br, pErr = tsr.SendLocked(ctx, ba)
@@ -916,13 +917,13 @@ func TestTxnSpanRefresherMaxTxnRefreshSpansBytes(t *testing.T) {
 
 	// Return a transaction retry error and make sure the metric indicating that
 	// we did not retry due to the refresh span bytes is incremented.
-	mockSender.MockSend(func(ba *roachpb.BatchRequest) (batchResponse *roachpb.BatchResponse, r *roachpb.Error) {
-		return nil, roachpb.NewErrorWithTxn(
-			roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE, ""), ba.Txn)
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (batchResponse *kvpb.BatchResponse, r *kvpb.Error) {
+		return nil, kvpb.NewErrorWithTxn(
+			kvpb.NewTransactionRetryError(kvpb.RETRY_SERIALIZABLE, ""), ba.Txn)
 	})
 
 	br, pErr = tsr.SendLocked(ctx, ba)
-	exp := roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE, "")
+	exp := kvpb.NewTransactionRetryError(kvpb.RETRY_SERIALIZABLE, "")
 	require.Equal(t, exp, pErr.GetDetail())
 	require.Nil(t, br)
 	require.Equal(t, int64(1), tsr.refreshFailWithCondensedSpans.Count())
@@ -943,14 +944,14 @@ func TestTxnSpanRefresherAssignsCanForwardReadTimestamp(t *testing.T) {
 
 	// Send a Put request. Should set CanForwardReadTimestamp flag. Should not
 	// collect refresh spans.
-	ba := &roachpb.BatchRequest{}
-	ba.Header = roachpb.Header{Txn: &txn}
-	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	ba.Add(&kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
 
-	mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 1)
 		require.True(t, ba.CanForwardReadTimestamp)
-		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
 
 		br := ba.CreateReply()
 		br.Txn = ba.Txn
@@ -967,14 +968,14 @@ func TestTxnSpanRefresherAssignsCanForwardReadTimestamp(t *testing.T) {
 	// Should NOT set CanForwardReadTimestamp flag.
 	txnFixed := txn.Clone()
 	txnFixed.CommitTimestampFixed = true
-	baFixed := &roachpb.BatchRequest{}
-	baFixed.Header = roachpb.Header{Txn: txnFixed}
-	baFixed.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
+	baFixed := &kvpb.BatchRequest{}
+	baFixed.Header = kvpb.Header{Txn: txnFixed}
+	baFixed.Add(&kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
 
-	mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 1)
 		require.False(t, ba.CanForwardReadTimestamp)
-		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
@@ -990,13 +991,13 @@ func TestTxnSpanRefresherAssignsCanForwardReadTimestamp(t *testing.T) {
 	// Send a Scan request. Should set CanForwardReadTimestamp flag. Should
 	// collect refresh spans.
 	ba.Requests = nil
-	scanArgs := roachpb.ScanRequest{RequestHeader: roachpb.RequestHeader{Key: keyA, EndKey: keyB}}
+	scanArgs := kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyA, EndKey: keyB}}
 	ba.Add(&scanArgs)
 
-	mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 1)
 		require.True(t, ba.CanForwardReadTimestamp)
-		require.IsType(t, &roachpb.ScanRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &kvpb.ScanRequest{}, ba.Requests[0].GetInner())
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
@@ -1011,13 +1012,13 @@ func TestTxnSpanRefresherAssignsCanForwardReadTimestamp(t *testing.T) {
 
 	// Send another Scan request. Should NOT set CanForwardReadTimestamp flag.
 	ba.Requests = nil
-	scanArgs2 := roachpb.ScanRequest{RequestHeader: roachpb.RequestHeader{Key: keyC, EndKey: keyD}}
+	scanArgs2 := kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyC, EndKey: keyD}}
 	ba.Add(&scanArgs2)
 
-	mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 1)
 		require.False(t, ba.CanForwardReadTimestamp)
-		require.IsType(t, &roachpb.ScanRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &kvpb.ScanRequest{}, ba.Requests[0].GetInner())
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
@@ -1032,12 +1033,12 @@ func TestTxnSpanRefresherAssignsCanForwardReadTimestamp(t *testing.T) {
 
 	// Send another Put request. Still should NOT set CanForwardReadTimestamp flag.
 	ba.Requests = nil
-	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyB}})
+	ba.Add(&kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyB}})
 
-	mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 1)
 		require.False(t, ba.CanForwardReadTimestamp)
-		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
@@ -1053,12 +1054,12 @@ func TestTxnSpanRefresherAssignsCanForwardReadTimestamp(t *testing.T) {
 	// Increment the transaction's epoch and send another Put request. Should
 	// set CanForwardReadTimestamp flag.
 	ba.Requests = nil
-	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyB}})
+	ba.Add(&kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyB}})
 
-	mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 1)
 		require.True(t, ba.CanForwardReadTimestamp)
-		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
@@ -1091,9 +1092,9 @@ func TestTxnSpanRefresherEpochIncrement(t *testing.T) {
 	MaxTxnRefreshSpansBytes.Override(ctx, &tsr.st.SV, 3+roachpb.SpanOverhead)
 
 	// Send a batch below the limit.
-	ba := &roachpb.BatchRequest{}
-	ba.Header = roachpb.Header{Txn: &txn}
-	scanArgs := roachpb.ScanRequest{RequestHeader: roachpb.RequestHeader{Key: keyA, EndKey: keyB}}
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	scanArgs := kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyA, EndKey: keyB}}
 	ba.Add(&scanArgs)
 
 	br, pErr := tsr.SendLocked(ctx, ba)
@@ -1114,7 +1115,7 @@ func TestTxnSpanRefresherEpochIncrement(t *testing.T) {
 
 	// Send a batch above the limit.
 	ba.Requests = nil
-	scanArgs2 := roachpb.ScanRequest{RequestHeader: roachpb.RequestHeader{Key: keyC, EndKey: keyD}}
+	scanArgs2 := kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyC, EndKey: keyD}}
 	ba.Add(&scanArgs, &scanArgs2)
 
 	br, pErr = tsr.SendLocked(ctx, ba)
@@ -1146,13 +1147,13 @@ func TestTxnSpanRefresherSavepoint(t *testing.T) {
 	txn := makeTxnProto()
 
 	read := func(key roachpb.Key) {
-		ba := &roachpb.BatchRequest{}
-		ba.Header = roachpb.Header{Txn: &txn}
-		getArgs := roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: key}}
+		ba := &kvpb.BatchRequest{}
+		ba.Header = kvpb.Header{Txn: &txn}
+		getArgs := kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: key}}
 		ba.Add(&getArgs)
-		mockSender.MockSend(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 			require.Len(t, ba.Requests, 1)
-			require.IsType(t, &roachpb.GetRequest{}, ba.Requests[0].GetInner())
+			require.IsType(t, &kvpb.GetRequest{}, ba.Requests[0].GetInner())
 
 			br := ba.CreateReply()
 			br.Txn = ba.Txn

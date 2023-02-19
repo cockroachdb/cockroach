@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk/bulkpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -60,7 +61,7 @@ type BufferingAdder struct {
 	bulkMon *mon.BytesMonitor
 	memAcc  mon.BoundAccount
 
-	onFlush func(summary roachpb.BulkOpSummary)
+	onFlush func(summary kvpb.BulkOpSummary)
 	// underfill tracks how much capacity was remaining in curBuf when it was
 	// flushed due to size, e.g. how much its mis-allocated entries vs slab.
 	underfill sz
@@ -130,7 +131,7 @@ func MakeBulkAdder(
 }
 
 // SetOnFlush sets a callback to run after the buffering adder flushes.
-func (b *BufferingAdder) SetOnFlush(fn func(summary roachpb.BulkOpSummary)) {
+func (b *BufferingAdder) SetOnFlush(fn func(summary kvpb.BulkOpSummary)) {
 	b.onFlush = fn
 }
 
@@ -446,6 +447,6 @@ func (b *BufferingAdder) createInitialSplits(ctx context.Context) error {
 }
 
 // GetSummary returns this batcher's total added rows/bytes/etc.
-func (b *BufferingAdder) GetSummary() roachpb.BulkOpSummary {
+func (b *BufferingAdder) GetSummary() kvpb.BulkOpSummary {
 	return b.sink.GetSummary()
 }

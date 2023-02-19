@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -136,7 +136,7 @@ func (ev *boundedStalenessTraceEvent) EventOutput() string {
 // transaction as a result of a nearest_only bounded staleness restart.
 type boundedStalenessRetryEvent struct {
 	nodeIdx int
-	*roachpb.MinTimestampBoundUnsatisfiableError
+	*kvpb.MinTimestampBoundUnsatisfiableError
 	asOf eval.AsOfSystemTime
 }
 
@@ -224,7 +224,7 @@ func (bse *boundedStalenessEvents) onTxnRetry(
 	if bse.mu.stmt == "" {
 		return
 	}
-	var minTSErr *roachpb.MinTimestampBoundUnsatisfiableError
+	var minTSErr *kvpb.MinTimestampBoundUnsatisfiableError
 	if autoRetryReason != nil && errors.As(autoRetryReason, &minTSErr) {
 		ev := &boundedStalenessRetryEvent{
 			nodeIdx:                             nodeIdx,

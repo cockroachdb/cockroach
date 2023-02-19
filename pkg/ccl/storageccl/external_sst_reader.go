@@ -16,7 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
@@ -73,7 +73,7 @@ type StoreFile struct {
 func newMemPebbleSSTReader(
 	ctx context.Context,
 	storeFiles []StoreFile,
-	encryption *roachpb.FileEncryptionOptions,
+	encryption *kvpb.FileEncryptionOptions,
 	iterOps storage.IterOptions,
 ) (storage.SimpleMVCCIterator, error) {
 
@@ -112,7 +112,7 @@ func newMemPebbleSSTReader(
 func ExternalSSTReader(
 	ctx context.Context,
 	storeFiles []StoreFile,
-	encryption *roachpb.FileEncryptionOptions,
+	encryption *kvpb.FileEncryptionOptions,
 	iterOpts storage.IterOptions,
 ) (storage.SimpleMVCCIterator, error) {
 	// TODO(jackson): Change the interface to accept a two-dimensional

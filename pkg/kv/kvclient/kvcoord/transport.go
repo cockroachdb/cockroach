@@ -17,6 +17,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -64,7 +65,7 @@ type Transport interface {
 	//
 	// SendNext is also in charge of importing the remotely collected spans (if
 	// any) into the local trace.
-	SendNext(context.Context, *roachpb.BatchRequest) (*roachpb.BatchResponse, error)
+	SendNext(context.Context, *kvpb.BatchRequest) (*kvpb.BatchResponse, error)
 
 	// NextInternalClient returns the InternalClient to use for making RPC
 	// calls.
@@ -178,8 +179,8 @@ func (gt *grpcTransport) IsExhausted() bool {
 // client is ready. On success, the reply is sent on the channel;
 // otherwise an error is sent.
 func (gt *grpcTransport) SendNext(
-	ctx context.Context, ba *roachpb.BatchRequest,
-) (*roachpb.BatchResponse, error) {
+	ctx context.Context, ba *kvpb.BatchRequest,
+) (*kvpb.BatchResponse, error) {
 	r := gt.replicas[gt.nextReplicaIdx]
 	iface, err := gt.NextInternalClient(ctx)
 	if err != nil {
@@ -193,8 +194,8 @@ func (gt *grpcTransport) sendBatch(
 	ctx context.Context,
 	nodeID roachpb.NodeID,
 	iface rpc.RestrictedInternalClient,
-	ba *roachpb.BatchRequest,
-) (*roachpb.BatchResponse, error) {
+	ba *kvpb.BatchRequest,
+) (*kvpb.BatchResponse, error) {
 	// Bail out early if the context is already canceled. (GRPC will
 	// detect this pretty quickly, but the first check of the context
 	// in the local server comes pretty late)
@@ -339,8 +340,8 @@ func (s *senderTransport) IsExhausted() bool {
 }
 
 func (s *senderTransport) SendNext(
-	ctx context.Context, ba *roachpb.BatchRequest,
-) (*roachpb.BatchResponse, error) {
+	ctx context.Context, ba *kvpb.BatchRequest,
+) (*kvpb.BatchResponse, error) {
 	if s.called {
 		panic("called an exhausted transport")
 	}
@@ -351,10 +352,10 @@ func (s *senderTransport) SendNext(
 	log.Eventf(ctx, "%v", ba.String())
 	br, pErr := s.sender.Send(ctx, ba)
 	if br == nil {
-		br = &roachpb.BatchResponse{}
+		br = &kvpb.BatchResponse{}
 	}
 	if br.Error != nil {
-		panic(roachpb.ErrorUnexpectedlySet(s.sender, br))
+		panic(kvpb.ErrorUnexpectedlySet(s.sender, br))
 	}
 	br.Error = pErr
 	if pErr != nil {

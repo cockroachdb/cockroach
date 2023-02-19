@@ -24,7 +24,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/build/bazel",
-        "//pkg/roachpb",
+        "//pkg/kv/kvpb",
         "//pkg/security/certnames",
         "//pkg/security/username",
         "//pkg/sql/pgwire/pgerror",

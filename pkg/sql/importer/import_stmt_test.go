@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -7238,10 +7239,10 @@ func TestUDTChangeDuringImport(t *testing.T) {
 						JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 						Store: &kvserver.StoreTestingKnobs{
 							TestingResponseFilter: jobutils.BulkOpResponseFilter(&allowResponse),
-							TestingRequestFilter: func(ctx context.Context, br *roachpb.BatchRequest) *roachpb.Error {
+							TestingRequestFilter: func(ctx context.Context, br *kvpb.BatchRequest) *kvpb.Error {
 								for _, ru := range br.Requests {
 									switch ru.GetInner().(type) {
-									case *roachpb.AddSSTableRequest:
+									case *kvpb.AddSSTableRequest:
 										<-requestReceived
 									}
 								}

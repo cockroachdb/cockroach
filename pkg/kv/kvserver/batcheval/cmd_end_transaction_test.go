@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -1021,8 +1022,8 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			}
 
 			// Issue an EndTxn request.
-			req := roachpb.EndTxnRequest{
-				RequestHeader: roachpb.RequestHeader{Key: txn.Key},
+			req := kvpb.EndTxnRequest{
+				RequestHeader: kvpb.RequestHeader{Key: txn.Key},
 				Commit:        c.commit,
 
 				InFlightWrites: c.inFlightWrites,
@@ -1031,23 +1032,23 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			if !c.noLockSpans {
 				req.LockSpans = intents
 			}
-			var resp roachpb.EndTxnResponse
+			var resp kvpb.EndTxnResponse
 			_, err := EndTxn(ctx, batch, CommandArgs{
 				EvalCtx: (&MockEvalCtx{
 					Desc:      &desc,
 					AbortSpan: as,
-					CanCreateTxnRecordFn: func() (bool, roachpb.TransactionAbortedReason) {
+					CanCreateTxnRecordFn: func() (bool, kvpb.TransactionAbortedReason) {
 						if c.canCreateTxn {
 							return true, 0
 						}
-						return false, roachpb.ABORT_REASON_ABORTED_RECORD_FOUND
+						return false, kvpb.ABORT_REASON_ABORTED_RECORD_FOUND
 					},
 					MinTxnCommitTSFn: func() hlc.Timestamp {
 						return c.minTxnCommitTS
 					},
 				}).EvalContext(),
 				Args: &req,
-				Header: roachpb.Header{
+				Header: kvpb.Header{
 					Timestamp: ts,
 					Txn:       c.headerTxn,
 				},
@@ -1140,18 +1141,18 @@ func TestPartialRollbackOnEndTransaction(t *testing.T) {
 		}
 
 		// Issue the end txn command.
-		req := roachpb.EndTxnRequest{
-			RequestHeader: roachpb.RequestHeader{Key: txn.Key},
+		req := kvpb.EndTxnRequest{
+			RequestHeader: kvpb.RequestHeader{Key: txn.Key},
 			Commit:        true,
 			LockSpans:     intents,
 		}
-		var resp roachpb.EndTxnResponse
+		var resp kvpb.EndTxnResponse
 		if _, err := EndTxn(ctx, batch, CommandArgs{
 			EvalCtx: (&MockEvalCtx{
 				Desc: &desc,
 			}).EvalContext(),
 			Args: &req,
-			Header: roachpb.Header{
+			Header: kvpb.Header{
 				Timestamp: ts,
 				Txn:       &txn,
 			},
@@ -1247,8 +1248,8 @@ func TestCommitWaitBeforeIntentResolutionIfCommitTrigger(t *testing.T) {
 				txn.WriteTimestamp = commitTS
 
 				// Issue the end txn command.
-				req := roachpb.EndTxnRequest{
-					RequestHeader: roachpb.RequestHeader{Key: txn.Key},
+				req := kvpb.EndTxnRequest{
+					RequestHeader: kvpb.RequestHeader{Key: txn.Key},
 					Commit:        true,
 				}
 				if commitTrigger {
@@ -1256,14 +1257,14 @@ func TestCommitWaitBeforeIntentResolutionIfCommitTrigger(t *testing.T) {
 						ModifiedSpanTrigger: &roachpb.ModifiedSpanTrigger{NodeLivenessSpan: &roachpb.Span{}},
 					}
 				}
-				var resp roachpb.EndTxnResponse
+				var resp kvpb.EndTxnResponse
 				_, err := EndTxn(ctx, batch, CommandArgs{
 					EvalCtx: (&MockEvalCtx{
 						Desc:  &desc,
 						Clock: clock,
 					}).EvalContext(),
 					Args: &req,
-					Header: roachpb.Header{
+					Header: kvpb.Header{
 						Timestamp: commitTS,
 						Txn:       &txn,
 					},

@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -40,9 +41,9 @@ const (
 // newErrBufferCapacityExceeded creates an error that is returned to subscribers
 // if the rangefeed processor is not able to keep up with the flow of incoming
 // events and is forced to drop events in order to not block.
-func newErrBufferCapacityExceeded() *roachpb.Error {
-	return roachpb.NewError(
-		roachpb.NewRangeFeedRetryError(roachpb.RangeFeedRetryError_REASON_SLOW_CONSUMER),
+func newErrBufferCapacityExceeded() *kvpb.Error {
+	return kvpb.NewError(
+		kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_SLOW_CONSUMER),
 	)
 }
 
@@ -123,7 +124,7 @@ type Processor struct {
 	filterResC chan *Filter
 	eventC     chan *event
 	spanErrC   chan spanErr
-	stopC      chan *roachpb.Error
+	stopC      chan *kvpb.Error
 	stoppedC   chan struct{}
 }
 
@@ -185,7 +186,7 @@ type syncEvent struct {
 // registrations.
 type spanErr struct {
 	span roachpb.Span
-	pErr *roachpb.Error
+	pErr *kvpb.Error
 }
 
 // NewProcessor creates a new rangefeed Processor. The corresponding goroutine
@@ -206,7 +207,7 @@ func NewProcessor(cfg Config) *Processor {
 		filterResC: make(chan *Filter),
 		eventC:     make(chan *event, cfg.EventChanCap),
 		spanErrC:   make(chan spanErr),
-		stopC:      make(chan *roachpb.Error, 1),
+		stopC:      make(chan *kvpb.Error, 1),
 		stoppedC:   make(chan struct{}),
 	}
 	return p
@@ -237,7 +238,7 @@ func (p *Processor) Start(stopper *stop.Stopper, rtsIterFunc IntentScannerConstr
 	if err := stopper.RunAsyncTask(ctx, "rangefeed.Processor", func(ctx context.Context) {
 		p.run(ctx, p.RangeID, rtsIterFunc, stopper)
 	}); err != nil {
-		p.reg.DisconnectWithErr(all, roachpb.NewError(err))
+		p.reg.DisconnectWithErr(all, kvpb.NewError(err))
 		close(p.stoppedC)
 		return err
 	}
@@ -322,7 +323,7 @@ func (p *Processor) run(
 				}
 			}
 			if err := stopper.RunAsyncTask(ctx, "rangefeed: output loop", runOutputLoop); err != nil {
-				r.disconnect(roachpb.NewError(err))
+				r.disconnect(kvpb.NewError(err))
 				p.reg.Unregister(ctx, &r)
 			}
 
@@ -399,7 +400,7 @@ func (p *Processor) run(
 
 		// Exit on stopper.
 		case <-stopper.ShouldQuiesce():
-			pErr := roachpb.NewError(&roachpb.NodeUnavailableError{})
+			pErr := kvpb.NewError(&kvpb.NodeUnavailableError{})
 			p.reg.DisconnectWithErr(all, pErr)
 			return
 		}
@@ -416,7 +417,7 @@ func (p *Processor) Stop() {
 // StopWithErr shuts down the processor and closes all registrations with the
 // specified error. Safe to call on nil Processor. It is not valid to restart a
 // processor after it has been stopped.
-func (p *Processor) StopWithErr(pErr *roachpb.Error) {
+func (p *Processor) StopWithErr(pErr *kvpb.Error) {
 	if p == nil {
 		return
 	}
@@ -428,7 +429,7 @@ func (p *Processor) StopWithErr(pErr *roachpb.Error) {
 
 // DisconnectSpanWithErr disconnects all rangefeed registrations that overlap
 // the given span with the given error.
-func (p *Processor) DisconnectSpanWithErr(span roachpb.Span, pErr *roachpb.Error) {
+func (p *Processor) DisconnectSpanWithErr(span roachpb.Span, pErr *kvpb.Error) {
 	if p == nil {
 		return
 	}
@@ -439,7 +440,7 @@ func (p *Processor) DisconnectSpanWithErr(span roachpb.Span, pErr *roachpb.Error
 	}
 }
 
-func (p *Processor) sendStop(pErr *roachpb.Error) {
+func (p *Processor) sendStop(pErr *kvpb.Error) {
 	select {
 	case p.stopC <- pErr:
 		// stopC has non-zero capacity so this should not block unless
@@ -473,7 +474,7 @@ func (p *Processor) Register(
 	catchUpIterConstructor CatchUpIteratorConstructor,
 	withDiff bool,
 	stream Stream,
-	errC chan<- *roachpb.Error,
+	errC chan<- *kvpb.Error,
 ) (bool, *Filter) {
 	// Synchronize the event channel so that this registration doesn't see any
 	// events that were consumed before this registration was called. Instead,
@@ -797,8 +798,8 @@ func (p *Processor) publishValue(
 	if prevValue != nil {
 		prevVal.RawBytes = prevValue
 	}
-	var event roachpb.RangeFeedEvent
-	event.MustSetValue(&roachpb.RangeFeedValue{
+	var event kvpb.RangeFeedEvent
+	event.MustSetValue(&kvpb.RangeFeedValue{
 		Key: key,
 		Value: roachpb.Value{
 			RawBytes:  value,
@@ -820,8 +821,8 @@ func (p *Processor) publishDeleteRange(
 		log.Fatalf(ctx, "span %s not in Processor's key range %v", span, p.Span)
 	}
 
-	var event roachpb.RangeFeedEvent
-	event.MustSetValue(&roachpb.RangeFeedDeleteRange{
+	var event kvpb.RangeFeedEvent
+	event.MustSetValue(&kvpb.RangeFeedDeleteRange{
 		Span:      span,
 		Timestamp: timestamp,
 	})
@@ -841,8 +842,8 @@ func (p *Processor) publishSSTable(
 	if sstWTS.IsEmpty() {
 		panic(errors.AssertionFailedf("received SSTable without write timestamp"))
 	}
-	p.reg.PublishToOverlapping(ctx, sstSpan, &roachpb.RangeFeedEvent{
-		SST: &roachpb.RangeFeedSSTable{
+	p.reg.PublishToOverlapping(ctx, sstSpan, &kvpb.RangeFeedEvent{
+		SST: &kvpb.RangeFeedSSTable{
 			Data:    sst,
 			Span:    sstSpan,
 			WriteTS: sstWTS,
@@ -858,12 +859,12 @@ func (p *Processor) publishCheckpoint(ctx context.Context) {
 	p.reg.PublishToOverlapping(ctx, all, event, nil)
 }
 
-func (p *Processor) newCheckpointEvent() *roachpb.RangeFeedEvent {
+func (p *Processor) newCheckpointEvent() *kvpb.RangeFeedEvent {
 	// Create a RangeFeedCheckpoint over the Processor's entire span. Each
 	// individual registration will trim this down to just the key span that
 	// it is listening on in registration.maybeStripEvent before publishing.
-	var event roachpb.RangeFeedEvent
-	event.MustSetValue(&roachpb.RangeFeedCheckpoint{
+	var event kvpb.RangeFeedEvent
+	event.MustSetValue(&kvpb.RangeFeedCheckpoint{
 		Span:       p.Span.AsRawSpanWithNoLocals(),
 		ResolvedTS: p.rts.Get(),
 	})

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -57,20 +58,20 @@ func TestDuplicateHandling(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	expectRevisionCount := func(startKey roachpb.Key, endKey roachpb.Key, count int) {
-		req := &roachpb.ExportRequest{
-			RequestHeader: roachpb.RequestHeader{
+		req := &kvpb.ExportRequest{
+			RequestHeader: kvpb.RequestHeader{
 				Key:    startKey,
 				EndKey: endKey,
 			},
-			MVCCFilter: roachpb.MVCCFilter_All,
+			MVCCFilter: kvpb.MVCCFilter_All,
 			StartTime:  hlc.Timestamp{},
 		}
-		header := roachpb.Header{Timestamp: s.Clock().Now()}
+		header := kvpb.Header{Timestamp: s.Clock().Now()}
 		resp, err := kv.SendWrappedWith(ctx,
 			kvDB.NonTransactionalSender(), header, req)
 		require.NoError(t, err.GoError())
 		keyCount := 0
-		for _, file := range resp.(*roachpb.ExportResponse).Files {
+		for _, file := range resp.(*kvpb.ExportResponse).Files {
 			iterOpts := storage.IterOptions{
 				KeyTypes:   storage.IterKeyTypePointsOnly,
 				LowerBound: keys.LocalMax,

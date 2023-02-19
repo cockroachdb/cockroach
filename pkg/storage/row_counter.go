@@ -14,6 +14,7 @@ import (
 	"bytes"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
@@ -21,7 +22,7 @@ import (
 // that is is shown via `Count`. Note: the `DataSize` field of the BulkOpSummary
 // is *not* populated by this and should be set separately.
 type RowCounter struct {
-	roachpb.BulkOpSummary
+	kvpb.BulkOpSummary
 	prev roachpb.Key
 }
 
@@ -63,7 +64,7 @@ func (r *RowCounter) Count(key roachpb.Key) error {
 	if r.EntryCounts == nil {
 		r.EntryCounts = make(map[uint64]int64)
 	}
-	r.EntryCounts[roachpb.BulkOpSummaryID(uint64(tableID), uint64(indexID))]++
+	r.EntryCounts[kvpb.BulkOpSummaryID(uint64(tableID), uint64(indexID))]++
 
 	if indexID == 1 {
 		r.DeprecatedRows++

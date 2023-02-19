@@ -16,6 +16,7 @@ go_library(
         "//pkg/kv/kvclient/rangefeed",
         "//pkg/kv/kvclient/rangefeed/rangefeedbuffer",
         "//pkg/kv/kvclient/rangefeed/rangefeedcache",
+        "//pkg/kv/kvpb",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
@@ -46,6 +47,7 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/keys",
+        "//pkg/kv/kvpb",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",

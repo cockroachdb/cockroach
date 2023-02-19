@@ -15,7 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -38,8 +38,8 @@ import (
 // @bdarnell remarks: Corruption errors should be rare so we may want the store
 // to just recompute its stats in the background when one occurs.
 func (r *Replica) setCorruptRaftMuLocked(
-	ctx context.Context, cErr *roachpb.ReplicaCorruptionError,
-) *roachpb.Error {
+	ctx context.Context, cErr *kvpb.ReplicaCorruptionError,
+) *kvpb.Error {
 	r.readOnlyCmdMu.Lock()
 	defer r.readOnlyCmdMu.Unlock()
 	r.mu.Lock()
@@ -68,5 +68,5 @@ A file preventing this node from restarting was placed at:
 	}
 
 	log.FatalfDepth(ctx, 1, "replica is corrupted: %s", cErr)
-	return roachpb.NewError(cErr)
+	return kvpb.NewError(cErr)
 }

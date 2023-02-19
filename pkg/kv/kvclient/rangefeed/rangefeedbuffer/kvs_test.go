@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -44,9 +45,9 @@ func TestMergeKVs(t *testing.T) {
 		kv.Value.InitChecksum(kv.Key)
 		return kv
 	}
-	toRangeFeedEvent := func(r row) *roachpb.RangeFeedValue {
+	toRangeFeedEvent := func(r row) *kvpb.RangeFeedValue {
 		kv := toKeyValue(r)
-		return &roachpb.RangeFeedValue{
+		return &kvpb.RangeFeedValue{
 			Key:   kv.Key,
 			Value: kv.Value,
 		}

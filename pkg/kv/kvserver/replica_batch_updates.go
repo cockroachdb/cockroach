@@ -13,6 +13,7 @@ package kvserver
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -38,13 +39,13 @@ import (
 // entirely. This is possible if the function removes all of the in-flight
 // writes from an EndTxn request that was committing in parallel with writes
 // which all happened to be on the same range as the transaction record.
-func maybeStripInFlightWrites(ba *roachpb.BatchRequest) (*roachpb.BatchRequest, error) {
-	args, hasET := ba.GetArg(roachpb.EndTxn)
+func maybeStripInFlightWrites(ba *kvpb.BatchRequest) (*kvpb.BatchRequest, error) {
+	args, hasET := ba.GetArg(kvpb.EndTxn)
 	if !hasET {
 		return ba, nil
 	}
 
-	et := args.(*roachpb.EndTxnRequest)
+	et := args.(*kvpb.EndTxnRequest)
 	otherReqs := ba.Requests[:len(ba.Requests)-1]
 	if !et.IsParallelCommit() || len(otherReqs) == 0 {
 		return ba, nil
@@ -56,8 +57,8 @@ func maybeStripInFlightWrites(ba *roachpb.BatchRequest) (*roachpb.BatchRequest, 
 	// any elements remain in it.
 	origET := et
 	etAlloc := new(struct {
-		et    roachpb.EndTxnRequest
-		union roachpb.RequestUnion_EndTxn
+		et    kvpb.EndTxnRequest
+		union kvpb.RequestUnion_EndTxn
 	})
 	etAlloc.et = *origET // shallow copy
 	etAlloc.union.EndTxn = &etAlloc.et
@@ -65,7 +66,7 @@ func maybeStripInFlightWrites(ba *roachpb.BatchRequest) (*roachpb.BatchRequest, 
 	et.InFlightWrites = nil
 	et.LockSpans = et.LockSpans[:len(et.LockSpans):len(et.LockSpans)] // immutable
 	ba = ba.ShallowCopy()
-	ba.Requests = append([]roachpb.RequestUnion(nil), ba.Requests...)
+	ba.Requests = append([]kvpb.RequestUnion(nil), ba.Requests...)
 	ba.Requests[len(ba.Requests)-1].Value = &etAlloc.union
 
 	// Fast-path: If we know that this batch contains all of the transaction's
@@ -77,10 +78,10 @@ func maybeStripInFlightWrites(ba *roachpb.BatchRequest) (*roachpb.BatchRequest, 
 		for _, ru := range otherReqs {
 			req := ru.GetInner()
 			switch {
-			case roachpb.IsIntentWrite(req) && !roachpb.IsRange(req):
+			case kvpb.IsIntentWrite(req) && !kvpb.IsRange(req):
 				// Concurrent point write.
 				writes++
-			case req.Method() == roachpb.QueryIntent:
+			case req.Method() == kvpb.QueryIntent:
 				// Earlier pipelined point write that hasn't been proven yet.
 				writes++
 			default:
@@ -108,9 +109,9 @@ func maybeStripInFlightWrites(ba *roachpb.BatchRequest) (*roachpb.BatchRequest, 
 		req := ru.GetInner()
 		seq := req.Header().Sequence
 		switch {
-		case roachpb.IsIntentWrite(req) && !roachpb.IsRange(req):
+		case kvpb.IsIntentWrite(req) && !kvpb.IsRange(req):
 			// Concurrent point write.
-		case req.Method() == roachpb.QueryIntent:
+		case req.Method() == kvpb.QueryIntent:
 			// Earlier pipelined point write that hasn't been proven yet. We
 			// could remove from the in-flight writes set when we see these,
 			// but doing so would prevent us from using the optimization we
@@ -184,7 +185,7 @@ func maybeStripInFlightWrites(ba *roachpb.BatchRequest) (*roachpb.BatchRequest, 
 // works for batches that exclusively contain writes; reads cannot be bumped
 // like this because they've already acquired timestamp-aware latches.
 func maybeBumpReadTimestampToWriteTimestamp(
-	ctx context.Context, ba *roachpb.BatchRequest, g *concurrency.Guard,
+	ctx context.Context, ba *kvpb.BatchRequest, g *concurrency.Guard,
 ) bool {
 	if ba.Txn == nil {
 		return false
@@ -195,11 +196,11 @@ func maybeBumpReadTimestampToWriteTimestamp(
 	if ba.Txn.ReadTimestamp == ba.Txn.WriteTimestamp {
 		return false
 	}
-	arg, ok := ba.GetArg(roachpb.EndTxn)
+	arg, ok := ba.GetArg(kvpb.EndTxn)
 	if !ok {
 		return false
 	}
-	et := arg.(*roachpb.EndTxnRequest)
+	et := arg.(*kvpb.EndTxnRequest)
 	if batcheval.IsEndTxnExceedingDeadline(ba.Txn.WriteTimestamp, et.Deadline) {
 		return false
 	}
@@ -219,7 +220,7 @@ func maybeBumpReadTimestampToWriteTimestamp(
 // Returns true if the timestamp was bumped. Returns false if the timestamp could
 // not be bumped.
 func tryBumpBatchTimestamp(
-	ctx context.Context, ba *roachpb.BatchRequest, g *concurrency.Guard, ts hlc.Timestamp,
+	ctx context.Context, ba *kvpb.BatchRequest, g *concurrency.Guard, ts hlc.Timestamp,
 ) bool {
 	if g != nil && !g.IsolatedAtLaterTimestamps() {
 		return false

@@ -25,6 +25,7 @@ import (
 
 	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -731,13 +732,13 @@ func (rpcCtx *Context) GetLocalInternalClientForAddr(
 	return nil
 }
 
-// internalClientAdapter is an implementation of roachpb.InternalClient that
+// internalClientAdapter is an implementation of kvpb.InternalClient that
 // bypasses gRPC, calling the wrapped local server directly.
 //
 // Even though the calls don't go through gRPC, the internalClientAdapter runs
 // the configured gRPC client-side and server-side interceptors.
 type internalClientAdapter struct {
-	server roachpb.InternalServer
+	server kvpb.InternalServer
 
 	// clientTenantID is the tenant ID for the client (caller) side
 	// of the call. (The server/callee side is
@@ -751,7 +752,7 @@ type internalClientAdapter struct {
 	// batchHandler is the RPC handler for Batch(). This includes both the chain
 	// of client-side and server-side gRPC interceptors, and bottoms out by
 	// calling server.Batch().
-	batchHandler func(ctx context.Context, ba *roachpb.BatchRequest, opts ...grpc.CallOption) (*roachpb.BatchResponse, error)
+	batchHandler func(ctx context.Context, ba *kvpb.BatchRequest, opts ...grpc.CallOption) (*kvpb.BatchResponse, error)
 
 	// The streaming interceptors. These cannot be chained together at
 	// construction time like the unary interceptors.
@@ -772,7 +773,7 @@ var _ RestrictedInternalClient = internalClientAdapter{}
 // caller and callee use separate tracers, so we can't
 // use a child tracing span directly.
 func makeInternalClientAdapter(
-	server roachpb.InternalServer,
+	server kvpb.InternalServer,
 	clientTenantID roachpb.TenantID,
 	separateTracers bool,
 	clientUnaryInterceptors []grpc.UnaryClientInterceptor,
@@ -798,7 +799,7 @@ func makeInternalClientAdapter(
 		},
 		serverUnaryInterceptors,
 		func(ctx context.Context, req interface{}) (interface{}, error) {
-			br, err := server.Batch(ctx, req.(*roachpb.BatchRequest))
+			br, err := server.Batch(ctx, req.(*kvpb.BatchRequest))
 			return br, err
 		},
 	)
@@ -810,9 +811,9 @@ func makeInternalClientAdapter(
 		func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
 			resp, err := batchServerHandler(ctx, req)
 			if resp != nil {
-				br := resp.(*roachpb.BatchResponse)
+				br := resp.(*kvpb.BatchResponse)
 				if br != nil {
-					*(reply.(*roachpb.BatchResponse)) = *br
+					*(reply.(*kvpb.BatchResponse)) = *br
 				}
 			}
 			return err
@@ -824,11 +825,11 @@ func makeInternalClientAdapter(
 		separateTracers:          separateTracers,
 		clientStreamInterceptors: clientStreamInterceptors,
 		serverStreamInterceptors: serverStreamInterceptors,
-		batchHandler: func(ctx context.Context, ba *roachpb.BatchRequest, opts ...grpc.CallOption) (*roachpb.BatchResponse, error) {
+		batchHandler: func(ctx context.Context, ba *kvpb.BatchRequest, opts ...grpc.CallOption) (*kvpb.BatchResponse, error) {
 			ba = ba.ShallowCopy()
 			// Mark this as originating locally, which is useful for the decision about
 			// memory allocation tracking.
-			ba.AdmissionHeader.SourceLocation = roachpb.AdmissionHeader_LOCAL
+			ba.AdmissionHeader.SourceLocation = kvpb.AdmissionHeader_LOCAL
 			// reply serves to communicate the RPC response from the RPC handler (through
 			// the server interceptors) to the client interceptors. The client
 			// interceptors will have a chance to modify it, and ultimately it will be
@@ -837,7 +838,7 @@ func makeInternalClientAdapter(
 			// a result from the next interceptor (and eventually from the server);
 			// instead, the result is allocated by the client. We'll copy the
 			// server-side result into reply in batchHandler().
-			reply := new(roachpb.BatchResponse)
+			reply := new(kvpb.BatchResponse)
 
 			// Create a new context from the existing one with the "local request"
 			// field set. This tells the handler that this is an in-process request,
@@ -997,10 +998,10 @@ func getChainUnaryInvoker(
 	}
 }
 
-// Batch implements the roachpb.InternalClient interface.
+// Batch implements the kvpb.InternalClient interface.
 func (a internalClientAdapter) Batch(
-	ctx context.Context, ba *roachpb.BatchRequest, opts ...grpc.CallOption,
-) (*roachpb.BatchResponse, error) {
+	ctx context.Context, ba *kvpb.BatchRequest, opts ...grpc.CallOption,
+) (*kvpb.BatchResponse, error) {
 	return a.batchHandler(ctx, ba, opts...)
 }
 
@@ -1033,8 +1034,8 @@ var muxRangefeedStreamInfo = &grpc.StreamServerInfo{
 
 // RangeFeed implements the RestrictedInternalClient interface.
 func (a internalClientAdapter) RangeFeed(
-	ctx context.Context, args *roachpb.RangeFeedRequest, opts ...grpc.CallOption,
-) (roachpb.Internal_RangeFeedClient, error) {
+	ctx context.Context, args *kvpb.RangeFeedRequest, opts ...grpc.CallOption,
+) (kvpb.Internal_RangeFeedClient, error) {
 	// RangeFeed is a server-streaming RPC, so we'll use a pipe between the
 	// server-side sender and the client-side receiver. The two ends of this pipe
 	// are wrapped in a client stream (rawClientStream) and a server stream
@@ -1065,7 +1066,7 @@ func (a internalClientAdapter) RangeFeed(
 	//    -> rawClientStream
 	//    -> RPC caller
 	writer, reader := makePipe(func(dst interface{}, src interface{}) {
-		*dst.(*roachpb.RangeFeedEvent) = *src.(*roachpb.RangeFeedEvent)
+		*dst.(*kvpb.RangeFeedEvent) = *src.(*kvpb.RangeFeedEvent)
 	})
 	rawClientStream := &clientStream{
 		ctx:      ctx,
@@ -1092,7 +1093,7 @@ func (a internalClientAdapter) RangeFeed(
 	}
 
 	// Mark this request as originating locally.
-	args.AdmissionHeader.SourceLocation = roachpb.AdmissionHeader_LOCAL
+	args.AdmissionHeader.SourceLocation = kvpb.AdmissionHeader_LOCAL
 
 	// Spawn a goroutine running the server-side handler. This goroutine
 	// communicates with the client stream through rfPipe.
@@ -1142,15 +1143,15 @@ func (a internalClientAdapter) RangeFeed(
 }
 
 // rangeFeedClientAdapter adapts an untyped ClientStream to the typed
-// roachpb.Internal_RangeFeedClient used by the rangefeed RPC client.
+// kvpb.Internal_RangeFeedClient used by the rangefeed RPC client.
 type rangeFeedClientAdapter struct {
 	grpc.ClientStream
 }
 
-var _ roachpb.Internal_RangeFeedClient = rangeFeedClientAdapter{}
+var _ kvpb.Internal_RangeFeedClient = rangeFeedClientAdapter{}
 
-func (x rangeFeedClientAdapter) Recv() (*roachpb.RangeFeedEvent, error) {
-	m := new(roachpb.RangeFeedEvent)
+func (x rangeFeedClientAdapter) Recv() (*kvpb.RangeFeedEvent, error) {
+	m := new(kvpb.RangeFeedEvent)
 	if err := x.ClientStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
@@ -1163,7 +1164,7 @@ func (x rangeFeedClientAdapter) Recv() (*roachpb.RangeFeedEvent, error) {
 // uni-directional. This is why this implementation is a bit different.
 func (a internalClientAdapter) MuxRangeFeed(
 	ctx context.Context, opts ...grpc.CallOption,
-) (roachpb.Internal_MuxRangeFeedClient, error) {
+) (kvpb.Internal_MuxRangeFeedClient, error) {
 	// MuxRangeFeed is a bi-directional RPC, so we have to deal with two streams:
 	// the client stream and the server stream. The client stream sends
 	// RangeFeedRequests and receives MuxRangeFeedEvents, whereas the server
@@ -1189,10 +1190,10 @@ func (a internalClientAdapter) MuxRangeFeed(
 	//    -> RPC caller
 
 	eventWriter, eventReader := makePipe(func(dst interface{}, src interface{}) {
-		*dst.(*roachpb.MuxRangeFeedEvent) = *src.(*roachpb.MuxRangeFeedEvent)
+		*dst.(*kvpb.MuxRangeFeedEvent) = *src.(*kvpb.MuxRangeFeedEvent)
 	})
 	requestWriter, requestReader := makePipe(func(dst interface{}, src interface{}) {
-		*dst.(*roachpb.RangeFeedRequest) = *src.(*roachpb.RangeFeedRequest)
+		*dst.(*kvpb.RangeFeedRequest) = *src.(*kvpb.RangeFeedRequest)
 	})
 	rawClientStream := &clientStream{
 		ctx:      ctx,
@@ -1268,16 +1269,16 @@ type muxRangeFeedClientAdapter struct {
 	grpc.ClientStream
 }
 
-var _ roachpb.Internal_MuxRangeFeedClient = muxRangeFeedClientAdapter{}
+var _ kvpb.Internal_MuxRangeFeedClient = muxRangeFeedClientAdapter{}
 
-func (a muxRangeFeedClientAdapter) Send(request *roachpb.RangeFeedRequest) error {
+func (a muxRangeFeedClientAdapter) Send(request *kvpb.RangeFeedRequest) error {
 	// Mark this request as originating locally.
-	request.AdmissionHeader.SourceLocation = roachpb.AdmissionHeader_LOCAL
+	request.AdmissionHeader.SourceLocation = kvpb.AdmissionHeader_LOCAL
 	return a.SendMsg(request)
 }
 
-func (a muxRangeFeedClientAdapter) Recv() (*roachpb.MuxRangeFeedEvent, error) {
-	m := new(roachpb.MuxRangeFeedEvent)
+func (a muxRangeFeedClientAdapter) Recv() (*kvpb.MuxRangeFeedEvent, error) {
+	m := new(kvpb.MuxRangeFeedEvent)
 	if err := a.ClientStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
@@ -1288,14 +1289,14 @@ type muxRangeFeedServerAdapter struct {
 	grpc.ServerStream
 }
 
-var _ roachpb.Internal_MuxRangeFeedServer = muxRangeFeedServerAdapter{}
+var _ kvpb.Internal_MuxRangeFeedServer = muxRangeFeedServerAdapter{}
 
-func (a muxRangeFeedServerAdapter) Send(event *roachpb.MuxRangeFeedEvent) error {
+func (a muxRangeFeedServerAdapter) Send(event *kvpb.MuxRangeFeedEvent) error {
 	return a.SendMsg(event)
 }
 
-func (a muxRangeFeedServerAdapter) Recv() (*roachpb.RangeFeedRequest, error) {
-	m := new(roachpb.RangeFeedRequest)
+func (a muxRangeFeedServerAdapter) Recv() (*kvpb.RangeFeedRequest, error) {
+	m := new(kvpb.RangeFeedRequest)
 	if err := a.RecvMsg(m); err != nil {
 		return nil, err
 	}
@@ -1472,17 +1473,17 @@ func (s serverStream) sendError(err error) {
 var _ grpc.ServerStream = serverStream{}
 
 // rangeFeedServerAdapter adapts an untyped ServerStream to the typed
-// roachpb.Internal_RangeFeedServer interface, expected by the RangeFeed RPC
+// kvpb.Internal_RangeFeedServer interface, expected by the RangeFeed RPC
 // handler.
 type rangeFeedServerAdapter struct {
 	grpc.ServerStream
 }
 
-var _ roachpb.Internal_RangeFeedServer = rangeFeedServerAdapter{}
+var _ kvpb.Internal_RangeFeedServer = rangeFeedServerAdapter{}
 
-// roachpb.Internal_RangeFeedServer methods.
-func (a rangeFeedServerAdapter) Recv() (*roachpb.RangeFeedEvent, error) {
-	out := &roachpb.RangeFeedEvent{}
+// kvpb.Internal_RangeFeedServer methods.
+func (a rangeFeedServerAdapter) Recv() (*kvpb.RangeFeedEvent, error) {
+	out := &kvpb.RangeFeedEvent{}
 	err := a.RecvMsg(out)
 	if err != nil {
 		return nil, err
@@ -1490,8 +1491,8 @@ func (a rangeFeedServerAdapter) Recv() (*roachpb.RangeFeedEvent, error) {
 	return out, nil
 }
 
-// Send implement the roachpb.Internal_RangeFeedServer interface.
-func (a rangeFeedServerAdapter) Send(e *roachpb.RangeFeedEvent) error {
+// Send implement the kvpb.Internal_RangeFeedServer interface.
+func (a rangeFeedServerAdapter) Send(e *kvpb.RangeFeedEvent) error {
 	return a.ServerStream.SendMsg(e)
 }
 
@@ -1507,7 +1508,7 @@ func IsLocal(iface RestrictedInternalClient) bool {
 // serverInterceptors lists the interceptors that will be run on RPCs done
 // through this local server.
 func (rpcCtx *Context) SetLocalInternalServer(
-	internalServer roachpb.InternalServer,
+	internalServer kvpb.InternalServer,
 	serverInterceptors ServerInterceptorInfo,
 	clientInterceptors ClientInterceptorInfo,
 ) {
@@ -1837,7 +1838,7 @@ type growStackCodec struct {
 // Unmarshal detects BatchRequests and calls growstack.Grow before calling
 // through to the underlying codec.
 func (c growStackCodec) Unmarshal(data []byte, v interface{}) error {
-	if _, ok := v.(*roachpb.BatchRequest); ok {
+	if _, ok := v.(*kvpb.BatchRequest); ok {
 		growstack.Grow()
 	}
 	return c.Codec.Unmarshal(data, v)

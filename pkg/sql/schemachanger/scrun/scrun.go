@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -188,7 +188,7 @@ func executeStage(
 	if err := scexec.ExecuteStage(ctx, deps, stage.Phase, stage.Ops()); err != nil {
 		// Don't go through the effort to wrap the error if it's a retry or it's a
 		// cancelation.
-		if !errors.HasType(err, (*roachpb.TransactionRetryWithProtoRefreshError)(nil)) &&
+		if !errors.HasType(err, (*kvpb.TransactionRetryWithProtoRefreshError)(nil)) &&
 			!errors.Is(err, context.Canceled) &&
 			!scerrors.HasSchemaChangerUserError(err) {
 			err = p.DecorateErrorWithPlanDetails(err)

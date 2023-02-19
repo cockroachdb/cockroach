@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -24,13 +25,13 @@ import (
 )
 
 func init() {
-	RegisterReadWriteCommand(roachpb.Migrate, declareKeysMigrate, Migrate)
+	RegisterReadWriteCommand(kvpb.Migrate, declareKeysMigrate, Migrate)
 }
 
 func declareKeysMigrate(
 	rs ImmutableRangeState,
-	_ *roachpb.Header,
-	_ roachpb.Request,
+	_ *kvpb.Header,
+	_ kvpb.Request,
 	latchSpans, _ *spanset.SpanSet,
 	_ time.Duration,
 ) {
@@ -52,11 +53,11 @@ var migrationRegistry = make(map[roachpb.Version]migration)
 type migration func(context.Context, storage.ReadWriter, CommandArgs) (result.Result, error)
 
 // Migrate executes the below-raft migration corresponding to the given version.
-// See roachpb.MigrateRequest for more details.
+// See kvpb.MigrateRequest for more details.
 func Migrate(
-	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, _ roachpb.Response,
+	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, _ kvpb.Response,
 ) (result.Result, error) {
-	args := cArgs.Args.(*roachpb.MigrateRequest)
+	args := cArgs.Args.(*kvpb.MigrateRequest)
 	migrationVersion := args.Version
 
 	fn, ok := migrationRegistry[migrationVersion]

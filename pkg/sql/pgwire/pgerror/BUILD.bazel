@@ -44,6 +44,7 @@ go_test(
     args = ["-test.timeout=55s"],
     embed = [":pgerror"],
     deps = [
+        "//pkg/kv/kvpb",
         "//pkg/roachpb",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/util/errorutil/unimplemented",

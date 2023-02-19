@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
@@ -518,7 +519,7 @@ transaction, and so the transaction record will be created on the affected
 range. This allows us to establish a helpful invariant:
 
 INVARIANT: an intent on keys.RangeDescriptorKey is resolved atomically with
-the (application of the) roachpb.EndTxnRequest committing the transaction.
+the (application of the) kvpb.EndTxnRequest committing the transaction.
 
 A Replica's active configuration is dictated by its visible version of the
 RangeDescriptor, and the above invariant simplifies this. Without the invariant,
@@ -704,7 +705,7 @@ descriptor that removes it, or it may be destroyed by the application of a merge
 on its left neighboring Replica, which may also occur through a snapshot. Merges
 are the single most complex reconfiguration operation and can only be touched
 upon here. At their core, they will at some point "freeze" the right-hand side
-Replicas (via roachpb.SubsumeRequest) to prevent additional read or write
+Replicas (via kvpb.SubsumeRequest) to prevent additional read or write
 activity, and also ensure that the two sets of Ranges to be merged are
 co-located on the same Stores as well as are all initialized.
 
@@ -1143,7 +1144,7 @@ type ConsistencyTestingKnobs struct {
 	// checksum, instead of log.Fatal.
 	OnBadChecksumFatal func(roachpb.StoreIdent)
 
-	ConsistencyQueueResultHook func(response roachpb.CheckConsistencyResponse)
+	ConsistencyQueueResultHook func(response kvpb.CheckConsistencyResponse)
 }
 
 // Valid returns true if the StoreConfig is populated correctly.
@@ -2120,7 +2121,7 @@ func (s *Store) startLeaseRenewer(ctx context.Context) {
 				repl := (*Replica)(v)
 				annotatedCtx := repl.AnnotateCtx(ctx)
 				if _, pErr := repl.redirectOnOrAcquireLease(annotatedCtx); pErr != nil {
-					if _, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); !ok {
+					if _, ok := pErr.GetDetail().(*kvpb.NotLeaseHolderError); !ok {
 						log.Warningf(annotatedCtx, "failed to proactively renew lease: %s", pErr)
 					}
 					s.renewableLeases.Delete(k)
@@ -2487,7 +2488,7 @@ func (s *Store) GetReplica(rangeID roachpb.RangeID) (*Replica, error) {
 	if r := s.GetReplicaIfExists(rangeID); r != nil {
 		return r, nil
 	}
-	return nil, roachpb.NewRangeNotFoundError(rangeID, s.StoreID())
+	return nil, kvpb.NewRangeNotFoundError(rangeID, s.StoreID())
 }
 
 // GetReplicaIfExists returns the replica with the given RangeID or nil.
@@ -2754,9 +2755,7 @@ func (s *Store) Descriptor(ctx context.Context, useCached bool) (*roachpb.StoreD
 // RangeFeed registers a rangefeed over the specified span. It sends updates to
 // the provided stream and returns with an optional error when the rangefeed is
 // complete.
-func (s *Store) RangeFeed(
-	args *roachpb.RangeFeedRequest, stream roachpb.RangeFeedEventSink,
-) *roachpb.Error {
+func (s *Store) RangeFeed(args *kvpb.RangeFeedRequest, stream kvpb.RangeFeedEventSink) *kvpb.Error {
 
 	if filter := s.TestingKnobs().TestingRangefeedFilter; filter != nil {
 		if pErr := filter(args, stream); pErr != nil {
@@ -2765,13 +2764,13 @@ func (s *Store) RangeFeed(
 	}
 
 	if err := verifyKeys(args.Span.Key, args.Span.EndKey, true); err != nil {
-		return roachpb.NewError(err)
+		return kvpb.NewError(err)
 	}
 
 	// Get range and add command to the range for execution.
 	repl, err := s.GetReplica(args.RangeID)
 	if err != nil {
-		return roachpb.NewError(err)
+		return kvpb.NewError(err)
 	}
 	if !repl.IsInitialized() {
 		// (*Store).Send has an optimization for uninitialized replicas to send back
@@ -2779,7 +2778,7 @@ func (s *Store) RangeFeed(
 		// be found. RangeFeeds can always be served from followers and so don't
 		// otherwise return NotLeaseHolderError. For simplicity we also don't return
 		// one here.
-		return roachpb.NewError(roachpb.NewRangeNotFoundError(args.RangeID, s.StoreID()))
+		return kvpb.NewError(kvpb.NewRangeNotFoundError(args.RangeID, s.StoreID()))
 	}
 
 	tenID, _ := repl.TenantID()
@@ -3553,7 +3552,7 @@ func (s *storeForTruncatorImpl) acquireReplicaForTruncator(
 ) replicaForTruncator {
 	r, err := (*Store)(s).GetReplica(rangeID)
 	if err != nil || r == nil {
-		// The only error we can see here is roachpb.NewRangeNotFoundError, so we
+		// The only error we can see here is kvpb.NewRangeNotFoundError, so we
 		// can ignore it.
 		return nil
 	}

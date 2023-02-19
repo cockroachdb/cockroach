@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedbuffer"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -103,7 +104,7 @@ func (u UpdateType) String() string {
 // TranslateEventFunc is used by the client to translate a low-level event
 // into an event for buffering. If nil is returned, the event is skipped.
 type TranslateEventFunc func(
-	context.Context, *roachpb.RangeFeedValue,
+	context.Context, *kvpb.RangeFeedValue,
 ) rangefeedbuffer.Event
 
 // OnUpdateFunc is used by the client to receive an Update, which is a batch
@@ -256,7 +257,7 @@ func (s *Watcher) Run(ctx context.Context) error {
 		mu.Unlock()
 	}()
 
-	onValue := func(ctx context.Context, ev *roachpb.RangeFeedValue) {
+	onValue := func(ctx context.Context, ev *kvpb.RangeFeedValue) {
 		bEv := s.translateEvent(ctx, ev)
 		if bEv == nil {
 			return

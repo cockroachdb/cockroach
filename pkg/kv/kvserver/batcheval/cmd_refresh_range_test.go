@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -53,23 +54,23 @@ func TestRefreshRange(t *testing.T) {
 		"above all": {"a", "z", 8, 10, nil},
 		"between":   {"a", "z", 4, 4, nil},
 		"beside":    {"x", "z", 1, 10, nil},
-		"point key": {"a", "z", 2, 4, &roachpb.RefreshFailedError{
-			Reason:    roachpb.RefreshFailedError_REASON_COMMITTED_VALUE,
+		"point key": {"a", "z", 2, 4, &kvpb.RefreshFailedError{
+			Reason:    kvpb.RefreshFailedError_REASON_COMMITTED_VALUE,
 			Key:       roachpb.Key("b"),
 			Timestamp: hlc.Timestamp{WallTime: 3},
 		}},
-		"point tombstone": {"a", "z", 4, 6, &roachpb.RefreshFailedError{
-			Reason:    roachpb.RefreshFailedError_REASON_COMMITTED_VALUE,
+		"point tombstone": {"a", "z", 4, 6, &kvpb.RefreshFailedError{
+			Reason:    kvpb.RefreshFailedError_REASON_COMMITTED_VALUE,
 			Key:       roachpb.Key("c"),
 			Timestamp: hlc.Timestamp{WallTime: 5},
 		}},
-		"range tombstone": {"a", "z", 6, 8, &roachpb.RefreshFailedError{
-			Reason:    roachpb.RefreshFailedError_REASON_COMMITTED_VALUE,
+		"range tombstone": {"a", "z", 6, 8, &kvpb.RefreshFailedError{
+			Reason:    kvpb.RefreshFailedError_REASON_COMMITTED_VALUE,
 			Key:       roachpb.Key("d"),
 			Timestamp: hlc.Timestamp{WallTime: 7},
 		}},
-		"to is inclusive": {"a", "z", 1, 3, &roachpb.RefreshFailedError{
-			Reason:    roachpb.RefreshFailedError_REASON_COMMITTED_VALUE,
+		"to is inclusive": {"a", "z", 1, 3, &kvpb.RefreshFailedError{
+			Reason:    kvpb.RefreshFailedError_REASON_COMMITTED_VALUE,
 			Key:       roachpb.Key("b"),
 			Timestamp: hlc.Timestamp{WallTime: 3},
 		}},
@@ -81,14 +82,14 @@ func TestRefreshRange(t *testing.T) {
 				EvalCtx: (&MockEvalCtx{
 					ClusterSettings: cluster.MakeTestingClusterSettings(),
 				}).EvalContext(),
-				Args: &roachpb.RefreshRangeRequest{
-					RequestHeader: roachpb.RequestHeader{
+				Args: &kvpb.RefreshRangeRequest{
+					RequestHeader: kvpb.RequestHeader{
 						Key:    roachpb.Key(tc.start),
 						EndKey: roachpb.Key(tc.end),
 					},
 					RefreshFrom: hlc.Timestamp{WallTime: tc.from},
 				},
-				Header: roachpb.Header{
+				Header: kvpb.Header{
 					Timestamp: hlc.Timestamp{WallTime: tc.to},
 					Txn: &roachpb.Transaction{
 						TxnMeta: enginepb.TxnMeta{
@@ -97,12 +98,12 @@ func TestRefreshRange(t *testing.T) {
 						ReadTimestamp: hlc.Timestamp{WallTime: tc.to},
 					},
 				},
-			}, &roachpb.RefreshRangeResponse{})
+			}, &kvpb.RefreshRangeResponse{})
 
 			if tc.expectErr == nil {
 				require.NoError(t, err)
 			} else {
-				var refreshErr *roachpb.RefreshFailedError
+				var refreshErr *kvpb.RefreshFailedError
 				require.Error(t, err)
 				require.ErrorAs(t, err, &refreshErr)
 				require.Equal(t, tc.expectErr, refreshErr)
@@ -204,19 +205,19 @@ func TestRefreshRangeTimeBoundIterator(t *testing.T) {
 	// time-bound iterator meant that we would see the first sstable but
 	// not the second and incorrectly report the intent as pending,
 	// resulting in an error from RefreshRange.
-	var resp roachpb.RefreshRangeResponse
+	var resp kvpb.RefreshRangeResponse
 	_, err := RefreshRange(ctx, db, CommandArgs{
 		EvalCtx: (&MockEvalCtx{
 			ClusterSettings: cluster.MakeTestingClusterSettings(),
 		}).EvalContext(),
-		Args: &roachpb.RefreshRangeRequest{
-			RequestHeader: roachpb.RequestHeader{
+		Args: &kvpb.RefreshRangeRequest{
+			RequestHeader: kvpb.RequestHeader{
 				Key:    k,
 				EndKey: keys.MaxKey,
 			},
 			RefreshFrom: ts2,
 		},
-		Header: roachpb.Header{
+		Header: kvpb.Header{
 			Txn: &roachpb.Transaction{
 				TxnMeta: enginepb.TxnMeta{
 					WriteTimestamp: ts3,
@@ -279,19 +280,19 @@ func TestRefreshRangeError(t *testing.T) {
 
 		// We are trying to refresh from time 1 to 3, but the key was written at time
 		// 2, therefore the refresh should fail.
-		var resp roachpb.RefreshRangeResponse
+		var resp kvpb.RefreshRangeResponse
 		_, err := RefreshRange(ctx, db, CommandArgs{
 			EvalCtx: (&MockEvalCtx{
 				ClusterSettings: cluster.MakeTestingClusterSettings(),
 			}).EvalContext(),
-			Args: &roachpb.RefreshRangeRequest{
-				RequestHeader: roachpb.RequestHeader{
+			Args: &kvpb.RefreshRangeRequest{
+				RequestHeader: kvpb.RequestHeader{
 					Key:    k,
 					EndKey: keys.MaxKey,
 				},
 				RefreshFrom: ts1,
 			},
-			Header: roachpb.Header{
+			Header: kvpb.Header{
 				Txn: &roachpb.Transaction{
 					TxnMeta: enginepb.TxnMeta{
 						WriteTimestamp: ts3,
@@ -301,7 +302,7 @@ func TestRefreshRangeError(t *testing.T) {
 				Timestamp: ts3,
 			},
 		}, &resp)
-		require.IsType(t, &roachpb.RefreshFailedError{}, err)
+		require.IsType(t, &kvpb.RefreshFailedError{}, err)
 		if resolveIntent {
 			require.Equal(t, "encountered recently written committed value \"resolved_key\" @0.000000002,0",
 				err.Error())

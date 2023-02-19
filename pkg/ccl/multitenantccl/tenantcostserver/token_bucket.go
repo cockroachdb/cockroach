@@ -12,6 +12,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -23,21 +24,21 @@ import (
 // runs on the host cluster to service requests coming from tenants (through the
 // kvtenant.Connector).
 func (s *instance) TokenBucketRequest(
-	ctx context.Context, tenantID roachpb.TenantID, in *roachpb.TokenBucketRequest,
-) *roachpb.TokenBucketResponse {
+	ctx context.Context, tenantID roachpb.TenantID, in *kvpb.TokenBucketRequest,
+) *kvpb.TokenBucketResponse {
 	if tenantID == roachpb.SystemTenantID {
-		return &roachpb.TokenBucketResponse{
+		return &kvpb.TokenBucketResponse{
 			Error: errors.EncodeError(ctx, errors.New("token bucket request for system tenant")),
 		}
 	}
 	instanceID := base.SQLInstanceID(in.InstanceID)
 	if instanceID < 1 {
-		return &roachpb.TokenBucketResponse{
+		return &kvpb.TokenBucketResponse{
 			Error: errors.EncodeError(ctx, errors.Errorf("invalid instance ID %d", instanceID)),
 		}
 	}
 	if in.RequestedRU < 0 {
-		return &roachpb.TokenBucketResponse{
+		return &kvpb.TokenBucketResponse{
 			Error: errors.EncodeError(ctx, errors.Errorf("negative requested RUs")),
 		}
 	}
@@ -50,10 +51,10 @@ func (s *instance) TokenBucketRequest(
 	metrics.mutex.Lock()
 	defer metrics.mutex.Unlock()
 
-	result := &roachpb.TokenBucketResponse{}
-	var consumption roachpb.TenantConsumption
+	result := &kvpb.TokenBucketResponse{}
+	var consumption kvpb.TenantConsumption
 	if err := s.ief.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		*result = roachpb.TokenBucketResponse{}
+		*result = kvpb.TokenBucketResponse{}
 
 		h := makeSysTableHelper(ctx, tenantID)
 		tenant, instance, err := h.readTenantAndInstanceState(txn, instanceID)
@@ -116,7 +117,7 @@ func (s *instance) TokenBucketRequest(
 		consumption = tenant.Consumption
 		return nil
 	}); err != nil {
-		return &roachpb.TokenBucketResponse{
+		return &kvpb.TokenBucketResponse{
 			Error: errors.EncodeError(ctx, err),
 		}
 	}

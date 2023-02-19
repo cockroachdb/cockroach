@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/tenantsettingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -55,7 +56,7 @@ func TestWatcher(t *testing.T) {
 	err = w.WaitForStart(ctx)
 	require.NoError(t, err)
 
-	expect := func(overrides []roachpb.TenantSetting, expected string) {
+	expect := func(overrides []kvpb.TenantSetting, expected string) {
 		t.Helper()
 		var vals []string
 		for _, s := range overrides {

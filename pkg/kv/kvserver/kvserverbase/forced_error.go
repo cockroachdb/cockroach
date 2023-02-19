@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -36,17 +37,17 @@ const (
 
 // noopOnEmptyRaftCommandErr is returned from CheckForcedErr when an empty raft
 // command is received. See the comment near its use.
-var noopOnEmptyRaftCommandErr = roachpb.NewErrorf("no-op on empty Raft entry")
+var noopOnEmptyRaftCommandErr = kvpb.NewErrorf("no-op on empty Raft entry")
 
 // NoopOnProbeCommandErr is returned from CheckForcedErr when a raft command
 // corresponding to a ProbeRequest is handled.
-var NoopOnProbeCommandErr = roachpb.NewErrorf("no-op on ProbeRequest")
+var NoopOnProbeCommandErr = kvpb.NewErrorf("no-op on ProbeRequest")
 
 // ForcedErrResult is the output from CheckForcedErr.
 type ForcedErrResult struct {
 	LeaseIndex  uint64
 	Rejection   ProposalRejectionType
-	ForcedError *roachpb.Error
+	ForcedError *kvpb.Error
 }
 
 // CheckForcedErr determines whether or not a command should be applied to the
@@ -179,7 +180,7 @@ func CheckForcedErr(
 			return ForcedErrResult{
 				LeaseIndex: leaseIndex,
 				Rejection:  ProposalRejectionPermanent,
-				ForcedError: roachpb.NewError(&roachpb.LeaseRejectedError{
+				ForcedError: kvpb.NewError(&kvpb.LeaseRejectedError{
 					Existing:  *replicaState.Lease,
 					Requested: requestedLease,
 					Message:   "proposed under invalid lease",
@@ -189,7 +190,7 @@ func CheckForcedErr(
 		// We return a NotLeaseHolderError so that the DistSender retries.
 		// NB: we set proposerStoreID to 0 because we don't know who proposed the
 		// Raft command. This is ok, as this is only used for debug information.
-		nlhe := roachpb.NewNotLeaseHolderError(
+		nlhe := kvpb.NewNotLeaseHolderError(
 			*replicaState.Lease, 0 /* proposerStoreID */, replicaState.Desc,
 			fmt.Sprintf(
 				"stale proposal: command was proposed under lease #%d but is being applied "+
@@ -197,7 +198,7 @@ func CheckForcedErr(
 		return ForcedErrResult{
 			LeaseIndex:  leaseIndex,
 			Rejection:   ProposalRejectionPermanent,
-			ForcedError: roachpb.NewError(nlhe),
+			ForcedError: kvpb.NewError(nlhe),
 		}
 	}
 
@@ -213,7 +214,7 @@ func CheckForcedErr(
 			return ForcedErrResult{
 				LeaseIndex: leaseIndex,
 				Rejection:  ProposalRejectionPermanent,
-				ForcedError: roachpb.NewError(&roachpb.LeaseRejectedError{
+				ForcedError: kvpb.NewError(&kvpb.LeaseRejectedError{
 					Existing:  *replicaState.Lease,
 					Requested: requestedLease,
 					Message:   "replica not part of range",
@@ -248,7 +249,7 @@ func CheckForcedErr(
 		return ForcedErrResult{
 			LeaseIndex: leaseIndex,
 			Rejection:  retry,
-			ForcedError: roachpb.NewErrorf(
+			ForcedError: kvpb.NewErrorf(
 				"command observed at lease index %d, but required < %d", leaseIndex, raftCmd.MaxLeaseIndex,
 			)}
 	}
@@ -267,7 +268,7 @@ func CheckForcedErr(
 		return ForcedErrResult{
 			LeaseIndex: leaseIndex,
 			Rejection:  ProposalRejectionPermanent,
-			ForcedError: roachpb.NewError(&roachpb.BatchTimestampBeforeGCError{
+			ForcedError: kvpb.NewError(&kvpb.BatchTimestampBeforeGCError{
 				Timestamp: wts,
 				Threshold: *replicaState.GCThreshold,
 			}),

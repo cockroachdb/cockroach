@@ -18,8 +18,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -59,7 +59,7 @@ func TestGetUserTimeout(t *testing.T) {
 		close(closedCh)
 		unavailableCh.Store(closedCh)
 		knobs := &kvserver.StoreTestingKnobs{
-			TestingRequestFilter: func(ctx context.Context, _ *roachpb.BatchRequest) *roachpb.Error {
+			TestingRequestFilter: func(ctx context.Context, _ *kvpb.BatchRequest) *kvpb.Error {
 				select {
 				case <-unavailableCh.Load().(chan struct{}):
 				case <-ctx.Done():

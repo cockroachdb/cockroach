@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -23,13 +24,13 @@ import (
 )
 
 func init() {
-	RegisterReadOnlyCommand(roachpb.QueryLocks, declareKeysQueryLocks, QueryLocks)
+	RegisterReadOnlyCommand(kvpb.QueryLocks, declareKeysQueryLocks, QueryLocks)
 }
 
 func declareKeysQueryLocks(
 	rs ImmutableRangeState,
-	_ *roachpb.Header,
-	_ roachpb.Request,
+	_ *kvpb.Header,
+	_ kvpb.Request,
 	latchSpans, _ *spanset.SpanSet,
 	_ time.Duration,
 ) {
@@ -45,11 +46,11 @@ func declareKeysQueryLocks(
 // response will include one result if at least one lock is found, ensuring
 // that we do not allow empty responses due to byte limits.
 func QueryLocks(
-	ctx context.Context, _ storage.Reader, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, _ storage.Reader, cArgs CommandArgs, resp kvpb.Response,
 ) (result.Result, error) {
-	args := cArgs.Args.(*roachpb.QueryLocksRequest)
+	args := cArgs.Args.(*kvpb.QueryLocksRequest)
 	h := cArgs.Header
-	reply := resp.(*roachpb.QueryLocksResponse)
+	reply := resp.(*kvpb.QueryLocksResponse)
 
 	concurrencyManager := cArgs.EvalCtx.GetConcurrencyManager()
 	keyScope := spanset.SpanGlobal

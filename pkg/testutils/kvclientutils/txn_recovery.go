@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -62,18 +63,18 @@ func CheckPushResult(
 	expResolution ExpectedTxnResolution,
 	pushExpectation PushExpectation,
 ) error {
-	pushReq := roachpb.PushTxnRequest{
-		RequestHeader: roachpb.RequestHeader{
+	pushReq := kvpb.PushTxnRequest{
+		RequestHeader: kvpb.RequestHeader{
 			Key: txn.Key,
 		},
 		PusheeTxn: txn.TxnMeta,
 		PushTo:    hlc.Timestamp{},
-		PushType:  roachpb.PUSH_ABORT,
+		PushType:  kvpb.PUSH_ABORT,
 		// We're going to Force the push in order to not wait for the pushee to
 		// expire.
 		Force: true,
 	}
-	ba := &roachpb.BatchRequest{}
+	ba := &kvpb.BatchRequest{}
 	ba.Add(&pushReq)
 
 	recCtx, collectRecAndFinish := tracing.ContextWithRecordingSpan(ctx, tr, "test trace")

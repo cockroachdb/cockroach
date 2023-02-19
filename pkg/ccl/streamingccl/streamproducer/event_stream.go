@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -226,24 +227,24 @@ func (s *eventStream) Close(ctx context.Context) {
 	s.sp.Finish()
 }
 
-func (s *eventStream) onValue(ctx context.Context, value *roachpb.RangeFeedValue) {
+func (s *eventStream) onValue(ctx context.Context, value *kvpb.RangeFeedValue) {
 	select {
 	case <-ctx.Done():
-	case s.eventsCh <- kvcoord.RangeFeedMessage{RangeFeedEvent: &roachpb.RangeFeedEvent{Val: value}}:
+	case s.eventsCh <- kvcoord.RangeFeedMessage{RangeFeedEvent: &kvpb.RangeFeedEvent{Val: value}}:
 		log.VInfof(ctx, 1, "onValue: %s@%s", value.Key, value.Value.Timestamp)
 	}
 }
 
-func (s *eventStream) onCheckpoint(ctx context.Context, checkpoint *roachpb.RangeFeedCheckpoint) {
+func (s *eventStream) onCheckpoint(ctx context.Context, checkpoint *kvpb.RangeFeedCheckpoint) {
 	select {
 	case <-ctx.Done():
-	case s.eventsCh <- kvcoord.RangeFeedMessage{RangeFeedEvent: &roachpb.RangeFeedEvent{Checkpoint: checkpoint}}:
+	case s.eventsCh <- kvcoord.RangeFeedMessage{RangeFeedEvent: &kvpb.RangeFeedEvent{Checkpoint: checkpoint}}:
 		log.VInfof(ctx, 1, "onCheckpoint: %s@%s", checkpoint.Span, checkpoint.ResolvedTS)
 	}
 }
 
 func (s *eventStream) onInitialScanSpanCompleted(ctx context.Context, sp roachpb.Span) error {
-	checkpoint := roachpb.RangeFeedCheckpoint{
+	checkpoint := kvpb.RangeFeedCheckpoint{
 		Span:       sp,
 		ResolvedTS: s.spec.InitialScanTimestamp,
 	}
@@ -251,7 +252,7 @@ func (s *eventStream) onInitialScanSpanCompleted(ctx context.Context, sp roachpb
 	case <-ctx.Done():
 		return ctx.Err()
 	case s.eventsCh <- kvcoord.RangeFeedMessage{
-		RangeFeedEvent: &roachpb.RangeFeedEvent{Checkpoint: &checkpoint},
+		RangeFeedEvent: &kvpb.RangeFeedEvent{Checkpoint: &checkpoint},
 	}:
 		log.VInfof(ctx, 1, "onSpanCompleted: %s@%s", checkpoint.Span, checkpoint.ResolvedTS)
 		return nil
@@ -259,12 +260,12 @@ func (s *eventStream) onInitialScanSpanCompleted(ctx context.Context, sp roachpb
 }
 
 func (s *eventStream) onSSTable(
-	ctx context.Context, sst *roachpb.RangeFeedSSTable, registeredSpan roachpb.Span,
+	ctx context.Context, sst *kvpb.RangeFeedSSTable, registeredSpan roachpb.Span,
 ) {
 	select {
 	case <-ctx.Done():
 	case s.eventsCh <- kvcoord.RangeFeedMessage{
-		RangeFeedEvent: &roachpb.RangeFeedEvent{SST: sst},
+		RangeFeedEvent: &kvpb.RangeFeedEvent{SST: sst},
 		RegisteredSpan: registeredSpan,
 	}:
 		log.VInfof(ctx, 1, "onSSTable: %s@%s with registered span %s",
@@ -272,10 +273,10 @@ func (s *eventStream) onSSTable(
 	}
 }
 
-func (s *eventStream) onDeleteRange(ctx context.Context, delRange *roachpb.RangeFeedDeleteRange) {
+func (s *eventStream) onDeleteRange(ctx context.Context, delRange *kvpb.RangeFeedDeleteRange) {
 	select {
 	case <-ctx.Done():
-	case s.eventsCh <- kvcoord.RangeFeedMessage{RangeFeedEvent: &roachpb.RangeFeedEvent{DeleteRange: delRange}}:
+	case s.eventsCh <- kvcoord.RangeFeedMessage{RangeFeedEvent: &kvpb.RangeFeedEvent{DeleteRange: delRange}}:
 		log.VInfof(ctx, 1, "onDeleteRange: %s@%s", delRange.Span, delRange.Timestamp)
 	}
 }
@@ -356,7 +357,7 @@ func (p *checkpointPacer) shouldCheckpoint(
 
 // Add a RangeFeedSSTable into current batch and return number of bytes added.
 func (s *eventStream) addSST(
-	sst *roachpb.RangeFeedSSTable, registeredSpan roachpb.Span, batch *streampb.StreamEvent_Batch,
+	sst *kvpb.RangeFeedSSTable, registeredSpan roachpb.Span, batch *streampb.StreamEvent_Batch,
 ) (int, error) {
 	// We send over the whole SSTable if the sst span is within
 	// the registered span boundaries.
@@ -384,7 +385,7 @@ func (s *eventStream) addSST(
 			size += batch.KeyValues[len(batch.KeyValues)-1].Size()
 			return nil
 		}, func(rangeKeyVal storage.MVCCRangeKeyValue) error {
-			batch.DelRanges = append(batch.DelRanges, roachpb.RangeFeedDeleteRange{
+			batch.DelRanges = append(batch.DelRanges, kvpb.RangeFeedDeleteRange{
 				Span: roachpb.Span{
 					Key:    rangeKeyVal.RangeKey.StartKey,
 					EndKey: rangeKeyVal.RangeKey.EndKey,
@@ -406,7 +407,7 @@ func (s *eventStream) streamLoop(ctx context.Context, frontier *span.Frontier) e
 
 	var batch streampb.StreamEvent_Batch
 	batchSize := 0
-	addValue := func(v *roachpb.RangeFeedValue) {
+	addValue := func(v *kvpb.RangeFeedValue) {
 		keyValue := roachpb.KeyValue{
 			Key:   v.Key,
 			Value: v.Value,
@@ -415,7 +416,7 @@ func (s *eventStream) streamLoop(ctx context.Context, frontier *span.Frontier) e
 		batchSize += keyValue.Size()
 	}
 
-	addDelRange := func(delRange *roachpb.RangeFeedDeleteRange) error {
+	addDelRange := func(delRange *kvpb.RangeFeedDeleteRange) error {
 		// DelRange's span is already trimmed to enclosed within
 		// the subscribed span, just emit it.
 		batch.DelRanges = append(batch.DelRanges, *delRange)

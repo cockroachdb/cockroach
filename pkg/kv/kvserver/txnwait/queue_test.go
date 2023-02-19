@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -38,112 +39,112 @@ func TestShouldPushImmediately(t *testing.T) {
 	mid2 := enginepb.TxnPriority(2)
 	testCases := []struct {
 		force      bool
-		typ        roachpb.PushTxnType
+		typ        kvpb.PushTxnType
 		pusherPri  enginepb.TxnPriority
 		pusheePri  enginepb.TxnPriority
 		shouldPush bool
 	}{
-		{false, roachpb.PUSH_ABORT, min, min, false},
-		{false, roachpb.PUSH_ABORT, min, mid1, false},
-		{false, roachpb.PUSH_ABORT, min, mid2, false},
-		{false, roachpb.PUSH_ABORT, min, max, false},
-		{false, roachpb.PUSH_ABORT, mid1, min, true},
-		{false, roachpb.PUSH_ABORT, mid1, mid1, false},
-		{false, roachpb.PUSH_ABORT, mid1, mid2, false},
-		{false, roachpb.PUSH_ABORT, mid1, max, false},
-		{false, roachpb.PUSH_ABORT, mid2, min, true},
-		{false, roachpb.PUSH_ABORT, mid2, mid1, false},
-		{false, roachpb.PUSH_ABORT, mid2, mid2, false},
-		{false, roachpb.PUSH_ABORT, mid2, max, false},
-		{false, roachpb.PUSH_ABORT, max, min, true},
-		{false, roachpb.PUSH_ABORT, max, mid1, true},
-		{false, roachpb.PUSH_ABORT, max, mid2, true},
-		{false, roachpb.PUSH_ABORT, max, max, false},
-		{false, roachpb.PUSH_TIMESTAMP, min, min, false},
-		{false, roachpb.PUSH_TIMESTAMP, min, mid1, false},
-		{false, roachpb.PUSH_TIMESTAMP, min, mid2, false},
-		{false, roachpb.PUSH_TIMESTAMP, min, max, false},
-		{false, roachpb.PUSH_TIMESTAMP, mid1, min, true},
-		{false, roachpb.PUSH_TIMESTAMP, mid1, mid1, false},
-		{false, roachpb.PUSH_TIMESTAMP, mid1, mid2, false},
-		{false, roachpb.PUSH_TIMESTAMP, mid1, max, false},
-		{false, roachpb.PUSH_TIMESTAMP, mid2, min, true},
-		{false, roachpb.PUSH_TIMESTAMP, mid2, mid1, false},
-		{false, roachpb.PUSH_TIMESTAMP, mid2, mid2, false},
-		{false, roachpb.PUSH_TIMESTAMP, mid2, max, false},
-		{false, roachpb.PUSH_TIMESTAMP, max, min, true},
-		{false, roachpb.PUSH_TIMESTAMP, max, mid1, true},
-		{false, roachpb.PUSH_TIMESTAMP, max, mid2, true},
-		{false, roachpb.PUSH_TIMESTAMP, max, max, false},
-		{false, roachpb.PUSH_TOUCH, min, min, true},
-		{false, roachpb.PUSH_TOUCH, min, mid1, true},
-		{false, roachpb.PUSH_TOUCH, min, mid2, true},
-		{false, roachpb.PUSH_TOUCH, min, max, true},
-		{false, roachpb.PUSH_TOUCH, mid1, min, true},
-		{false, roachpb.PUSH_TOUCH, mid1, mid1, true},
-		{false, roachpb.PUSH_TOUCH, mid1, mid2, true},
-		{false, roachpb.PUSH_TOUCH, mid1, max, true},
-		{false, roachpb.PUSH_TOUCH, mid2, min, true},
-		{false, roachpb.PUSH_TOUCH, mid2, mid1, true},
-		{false, roachpb.PUSH_TOUCH, mid2, mid2, true},
-		{false, roachpb.PUSH_TOUCH, mid2, max, true},
-		{false, roachpb.PUSH_TOUCH, max, min, true},
-		{false, roachpb.PUSH_TOUCH, max, mid1, true},
-		{false, roachpb.PUSH_TOUCH, max, mid2, true},
-		{false, roachpb.PUSH_TOUCH, max, max, true},
+		{false, kvpb.PUSH_ABORT, min, min, false},
+		{false, kvpb.PUSH_ABORT, min, mid1, false},
+		{false, kvpb.PUSH_ABORT, min, mid2, false},
+		{false, kvpb.PUSH_ABORT, min, max, false},
+		{false, kvpb.PUSH_ABORT, mid1, min, true},
+		{false, kvpb.PUSH_ABORT, mid1, mid1, false},
+		{false, kvpb.PUSH_ABORT, mid1, mid2, false},
+		{false, kvpb.PUSH_ABORT, mid1, max, false},
+		{false, kvpb.PUSH_ABORT, mid2, min, true},
+		{false, kvpb.PUSH_ABORT, mid2, mid1, false},
+		{false, kvpb.PUSH_ABORT, mid2, mid2, false},
+		{false, kvpb.PUSH_ABORT, mid2, max, false},
+		{false, kvpb.PUSH_ABORT, max, min, true},
+		{false, kvpb.PUSH_ABORT, max, mid1, true},
+		{false, kvpb.PUSH_ABORT, max, mid2, true},
+		{false, kvpb.PUSH_ABORT, max, max, false},
+		{false, kvpb.PUSH_TIMESTAMP, min, min, false},
+		{false, kvpb.PUSH_TIMESTAMP, min, mid1, false},
+		{false, kvpb.PUSH_TIMESTAMP, min, mid2, false},
+		{false, kvpb.PUSH_TIMESTAMP, min, max, false},
+		{false, kvpb.PUSH_TIMESTAMP, mid1, min, true},
+		{false, kvpb.PUSH_TIMESTAMP, mid1, mid1, false},
+		{false, kvpb.PUSH_TIMESTAMP, mid1, mid2, false},
+		{false, kvpb.PUSH_TIMESTAMP, mid1, max, false},
+		{false, kvpb.PUSH_TIMESTAMP, mid2, min, true},
+		{false, kvpb.PUSH_TIMESTAMP, mid2, mid1, false},
+		{false, kvpb.PUSH_TIMESTAMP, mid2, mid2, false},
+		{false, kvpb.PUSH_TIMESTAMP, mid2, max, false},
+		{false, kvpb.PUSH_TIMESTAMP, max, min, true},
+		{false, kvpb.PUSH_TIMESTAMP, max, mid1, true},
+		{false, kvpb.PUSH_TIMESTAMP, max, mid2, true},
+		{false, kvpb.PUSH_TIMESTAMP, max, max, false},
+		{false, kvpb.PUSH_TOUCH, min, min, true},
+		{false, kvpb.PUSH_TOUCH, min, mid1, true},
+		{false, kvpb.PUSH_TOUCH, min, mid2, true},
+		{false, kvpb.PUSH_TOUCH, min, max, true},
+		{false, kvpb.PUSH_TOUCH, mid1, min, true},
+		{false, kvpb.PUSH_TOUCH, mid1, mid1, true},
+		{false, kvpb.PUSH_TOUCH, mid1, mid2, true},
+		{false, kvpb.PUSH_TOUCH, mid1, max, true},
+		{false, kvpb.PUSH_TOUCH, mid2, min, true},
+		{false, kvpb.PUSH_TOUCH, mid2, mid1, true},
+		{false, kvpb.PUSH_TOUCH, mid2, mid2, true},
+		{false, kvpb.PUSH_TOUCH, mid2, max, true},
+		{false, kvpb.PUSH_TOUCH, max, min, true},
+		{false, kvpb.PUSH_TOUCH, max, mid1, true},
+		{false, kvpb.PUSH_TOUCH, max, mid2, true},
+		{false, kvpb.PUSH_TOUCH, max, max, true},
 		// Force pushes always push immediately.
-		{true, roachpb.PUSH_ABORT, min, min, true},
-		{true, roachpb.PUSH_ABORT, min, mid1, true},
-		{true, roachpb.PUSH_ABORT, min, mid2, true},
-		{true, roachpb.PUSH_ABORT, min, max, true},
-		{true, roachpb.PUSH_ABORT, mid1, min, true},
-		{true, roachpb.PUSH_ABORT, mid1, mid1, true},
-		{true, roachpb.PUSH_ABORT, mid1, mid2, true},
-		{true, roachpb.PUSH_ABORT, mid1, max, true},
-		{true, roachpb.PUSH_ABORT, mid2, min, true},
-		{true, roachpb.PUSH_ABORT, mid2, mid1, true},
-		{true, roachpb.PUSH_ABORT, mid2, mid2, true},
-		{true, roachpb.PUSH_ABORT, mid2, max, true},
-		{true, roachpb.PUSH_ABORT, max, min, true},
-		{true, roachpb.PUSH_ABORT, max, mid1, true},
-		{true, roachpb.PUSH_ABORT, max, mid2, true},
-		{true, roachpb.PUSH_ABORT, max, max, true},
-		{true, roachpb.PUSH_TIMESTAMP, min, min, true},
-		{true, roachpb.PUSH_TIMESTAMP, min, mid1, true},
-		{true, roachpb.PUSH_TIMESTAMP, min, mid2, true},
-		{true, roachpb.PUSH_TIMESTAMP, min, max, true},
-		{true, roachpb.PUSH_TIMESTAMP, mid1, min, true},
-		{true, roachpb.PUSH_TIMESTAMP, mid1, mid1, true},
-		{true, roachpb.PUSH_TIMESTAMP, mid1, mid2, true},
-		{true, roachpb.PUSH_TIMESTAMP, mid1, max, true},
-		{true, roachpb.PUSH_TIMESTAMP, mid2, min, true},
-		{true, roachpb.PUSH_TIMESTAMP, mid2, mid1, true},
-		{true, roachpb.PUSH_TIMESTAMP, mid2, mid2, true},
-		{true, roachpb.PUSH_TIMESTAMP, mid2, max, true},
-		{true, roachpb.PUSH_TIMESTAMP, max, min, true},
-		{true, roachpb.PUSH_TIMESTAMP, max, mid1, true},
-		{true, roachpb.PUSH_TIMESTAMP, max, mid2, true},
-		{true, roachpb.PUSH_TIMESTAMP, max, max, true},
-		{true, roachpb.PUSH_TOUCH, min, min, true},
-		{true, roachpb.PUSH_TOUCH, min, mid1, true},
-		{true, roachpb.PUSH_TOUCH, min, mid2, true},
-		{true, roachpb.PUSH_TOUCH, min, max, true},
-		{true, roachpb.PUSH_TOUCH, mid1, min, true},
-		{true, roachpb.PUSH_TOUCH, mid1, mid1, true},
-		{true, roachpb.PUSH_TOUCH, mid1, mid2, true},
-		{true, roachpb.PUSH_TOUCH, mid1, max, true},
-		{true, roachpb.PUSH_TOUCH, mid2, min, true},
-		{true, roachpb.PUSH_TOUCH, mid2, mid1, true},
-		{true, roachpb.PUSH_TOUCH, mid2, mid2, true},
-		{true, roachpb.PUSH_TOUCH, mid2, max, true},
-		{true, roachpb.PUSH_TOUCH, max, min, true},
-		{true, roachpb.PUSH_TOUCH, max, mid1, true},
-		{true, roachpb.PUSH_TOUCH, max, mid2, true},
-		{true, roachpb.PUSH_TOUCH, max, max, true},
+		{true, kvpb.PUSH_ABORT, min, min, true},
+		{true, kvpb.PUSH_ABORT, min, mid1, true},
+		{true, kvpb.PUSH_ABORT, min, mid2, true},
+		{true, kvpb.PUSH_ABORT, min, max, true},
+		{true, kvpb.PUSH_ABORT, mid1, min, true},
+		{true, kvpb.PUSH_ABORT, mid1, mid1, true},
+		{true, kvpb.PUSH_ABORT, mid1, mid2, true},
+		{true, kvpb.PUSH_ABORT, mid1, max, true},
+		{true, kvpb.PUSH_ABORT, mid2, min, true},
+		{true, kvpb.PUSH_ABORT, mid2, mid1, true},
+		{true, kvpb.PUSH_ABORT, mid2, mid2, true},
+		{true, kvpb.PUSH_ABORT, mid2, max, true},
+		{true, kvpb.PUSH_ABORT, max, min, true},
+		{true, kvpb.PUSH_ABORT, max, mid1, true},
+		{true, kvpb.PUSH_ABORT, max, mid2, true},
+		{true, kvpb.PUSH_ABORT, max, max, true},
+		{true, kvpb.PUSH_TIMESTAMP, min, min, true},
+		{true, kvpb.PUSH_TIMESTAMP, min, mid1, true},
+		{true, kvpb.PUSH_TIMESTAMP, min, mid2, true},
+		{true, kvpb.PUSH_TIMESTAMP, min, max, true},
+		{true, kvpb.PUSH_TIMESTAMP, mid1, min, true},
+		{true, kvpb.PUSH_TIMESTAMP, mid1, mid1, true},
+		{true, kvpb.PUSH_TIMESTAMP, mid1, mid2, true},
+		{true, kvpb.PUSH_TIMESTAMP, mid1, max, true},
+		{true, kvpb.PUSH_TIMESTAMP, mid2, min, true},
+		{true, kvpb.PUSH_TIMESTAMP, mid2, mid1, true},
+		{true, kvpb.PUSH_TIMESTAMP, mid2, mid2, true},
+		{true, kvpb.PUSH_TIMESTAMP, mid2, max, true},
+		{true, kvpb.PUSH_TIMESTAMP, max, min, true},
+		{true, kvpb.PUSH_TIMESTAMP, max, mid1, true},
+		{true, kvpb.PUSH_TIMESTAMP, max, mid2, true},
+		{true, kvpb.PUSH_TIMESTAMP, max, max, true},
+		{true, kvpb.PUSH_TOUCH, min, min, true},
+		{true, kvpb.PUSH_TOUCH, min, mid1, true},
+		{true, kvpb.PUSH_TOUCH, min, mid2, true},
+		{true, kvpb.PUSH_TOUCH, min, max, true},
+		{true, kvpb.PUSH_TOUCH, mid1, min, true},
+		{true, kvpb.PUSH_TOUCH, mid1, mid1, true},
+		{true, kvpb.PUSH_TOUCH, mid1, mid2, true},
+		{true, kvpb.PUSH_TOUCH, mid1, max, true},
+		{true, kvpb.PUSH_TOUCH, mid2, min, true},
+		{true, kvpb.PUSH_TOUCH, mid2, mid1, true},
+		{true, kvpb.PUSH_TOUCH, mid2, mid2, true},
+		{true, kvpb.PUSH_TOUCH, mid2, max, true},
+		{true, kvpb.PUSH_TOUCH, max, min, true},
+		{true, kvpb.PUSH_TOUCH, max, mid1, true},
+		{true, kvpb.PUSH_TOUCH, max, mid2, true},
+		{true, kvpb.PUSH_TOUCH, max, max, true},
 	}
 	for _, test := range testCases {
 		t.Run("", func(t *testing.T) {
-			req := roachpb.PushTxnRequest{
+			req := kvpb.PushTxnRequest{
 				Force:    test.force,
 				PushType: test.typ,
 				PusherTxn: roachpb.Transaction{
@@ -206,30 +207,30 @@ func makeTS(w int64, l int32) hlc.Timestamp {
 func TestIsPushed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testCases := []struct {
-		typ          roachpb.PushTxnType
+		typ          kvpb.PushTxnType
 		pushTo       hlc.Timestamp
 		txnStatus    roachpb.TransactionStatus
 		txnTimestamp hlc.Timestamp
 		isPushed     bool
 	}{
-		{roachpb.PUSH_ABORT, hlc.Timestamp{}, roachpb.PENDING, hlc.Timestamp{}, false},
-		{roachpb.PUSH_ABORT, hlc.Timestamp{}, roachpb.STAGING, hlc.Timestamp{}, false},
-		{roachpb.PUSH_ABORT, hlc.Timestamp{}, roachpb.ABORTED, hlc.Timestamp{}, true},
-		{roachpb.PUSH_ABORT, hlc.Timestamp{}, roachpb.COMMITTED, hlc.Timestamp{}, true},
-		{roachpb.PUSH_TIMESTAMP, makeTS(10, 1), roachpb.PENDING, hlc.Timestamp{}, false},
-		{roachpb.PUSH_TIMESTAMP, makeTS(10, 1), roachpb.STAGING, hlc.Timestamp{}, false},
-		{roachpb.PUSH_TIMESTAMP, makeTS(10, 1), roachpb.ABORTED, hlc.Timestamp{}, true},
-		{roachpb.PUSH_TIMESTAMP, makeTS(10, 1), roachpb.COMMITTED, hlc.Timestamp{}, true},
-		{roachpb.PUSH_TIMESTAMP, makeTS(10, 1), roachpb.PENDING, makeTS(10, 0), false},
-		{roachpb.PUSH_TIMESTAMP, makeTS(10, 1), roachpb.PENDING, makeTS(10, 1), true},
-		{roachpb.PUSH_TIMESTAMP, makeTS(10, 1), roachpb.PENDING, makeTS(10, 2), true},
-		{roachpb.PUSH_TIMESTAMP, makeTS(10, 1), roachpb.STAGING, makeTS(10, 0), false},
-		{roachpb.PUSH_TIMESTAMP, makeTS(10, 1), roachpb.STAGING, makeTS(10, 1), true},
-		{roachpb.PUSH_TIMESTAMP, makeTS(10, 1), roachpb.STAGING, makeTS(10, 2), true},
+		{kvpb.PUSH_ABORT, hlc.Timestamp{}, roachpb.PENDING, hlc.Timestamp{}, false},
+		{kvpb.PUSH_ABORT, hlc.Timestamp{}, roachpb.STAGING, hlc.Timestamp{}, false},
+		{kvpb.PUSH_ABORT, hlc.Timestamp{}, roachpb.ABORTED, hlc.Timestamp{}, true},
+		{kvpb.PUSH_ABORT, hlc.Timestamp{}, roachpb.COMMITTED, hlc.Timestamp{}, true},
+		{kvpb.PUSH_TIMESTAMP, makeTS(10, 1), roachpb.PENDING, hlc.Timestamp{}, false},
+		{kvpb.PUSH_TIMESTAMP, makeTS(10, 1), roachpb.STAGING, hlc.Timestamp{}, false},
+		{kvpb.PUSH_TIMESTAMP, makeTS(10, 1), roachpb.ABORTED, hlc.Timestamp{}, true},
+		{kvpb.PUSH_TIMESTAMP, makeTS(10, 1), roachpb.COMMITTED, hlc.Timestamp{}, true},
+		{kvpb.PUSH_TIMESTAMP, makeTS(10, 1), roachpb.PENDING, makeTS(10, 0), false},
+		{kvpb.PUSH_TIMESTAMP, makeTS(10, 1), roachpb.PENDING, makeTS(10, 1), true},
+		{kvpb.PUSH_TIMESTAMP, makeTS(10, 1), roachpb.PENDING, makeTS(10, 2), true},
+		{kvpb.PUSH_TIMESTAMP, makeTS(10, 1), roachpb.STAGING, makeTS(10, 0), false},
+		{kvpb.PUSH_TIMESTAMP, makeTS(10, 1), roachpb.STAGING, makeTS(10, 1), true},
+		{kvpb.PUSH_TIMESTAMP, makeTS(10, 1), roachpb.STAGING, makeTS(10, 2), true},
 	}
 	for _, test := range testCases {
 		t.Run("", func(t *testing.T) {
-			req := roachpb.PushTxnRequest{
+			req := kvpb.PushTxnRequest{
 				PushType: test.typ,
 				PushTo:   test.pushTo,
 			}
@@ -270,8 +271,8 @@ func TestMaybeWaitForPushWithContextCancellation(t *testing.T) {
 
 	var mockSender kv.SenderFunc
 	cfg := makeConfig(func(
-		ctx context.Context, ba *roachpb.BatchRequest,
-	) (*roachpb.BatchResponse, *roachpb.Error) {
+		ctx context.Context, ba *kvpb.BatchRequest,
+	) (*kvpb.BatchResponse, *kvpb.Error) {
 		return mockSender(ctx, ba)
 	}, stopper)
 	q := NewQueue(cfg)
@@ -283,18 +284,18 @@ func TestMaybeWaitForPushWithContextCancellation(t *testing.T) {
 
 	// Mock out responses to any QueryTxn requests.
 	mockSender = func(
-		ctx context.Context, ba *roachpb.BatchRequest,
-	) (*roachpb.BatchResponse, *roachpb.Error) {
+		ctx context.Context, ba *kvpb.BatchRequest,
+	) (*kvpb.BatchResponse, *kvpb.Error) {
 		br := ba.CreateReply()
-		resp := br.Responses[0].GetInner().(*roachpb.QueryTxnResponse)
+		resp := br.Responses[0].GetInner().(*kvpb.QueryTxnResponse)
 		resp.QueriedTxn = txn
 		return br, nil
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	waitingRes := make(chan *roachpb.Error)
+	waitingRes := make(chan *kvpb.Error)
 	go func() {
-		req := roachpb.PushTxnRequest{PusheeTxn: txn.TxnMeta, PushType: roachpb.PUSH_ABORT}
+		req := kvpb.PushTxnRequest{PusheeTxn: txn.TxnMeta, PushType: kvpb.PUSH_ABORT}
 		_, err := q.MaybeWaitForPush(ctx, &req)
 		waitingRes <- err
 	}()
@@ -328,9 +329,9 @@ func TestMaybeWaitForQueryWithContextCancellation(t *testing.T) {
 	q.Enable(1 /* leaseSeq */)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	waitingRes := make(chan *roachpb.Error)
+	waitingRes := make(chan *kvpb.Error)
 	go func() {
-		req := &roachpb.QueryTxnRequest{WaitForUpdate: true}
+		req := &kvpb.QueryTxnRequest{WaitForUpdate: true}
 		waitingRes <- q.MaybeWaitForQuery(ctx, req)
 	}()
 
@@ -357,8 +358,8 @@ func TestPushersReleasedAfterAnyQueryTxnFindsAbortedTxn(t *testing.T) {
 	defer stopper.Stop(context.Background())
 	var mockSender kv.SenderFunc
 	cfg := makeConfig(func(
-		ctx context.Context, ba *roachpb.BatchRequest,
-	) (*roachpb.BatchResponse, *roachpb.Error) {
+		ctx context.Context, ba *kvpb.BatchRequest,
+	) (*kvpb.BatchResponse, *kvpb.Error) {
 		return mockSender(ctx, ba)
 	}, stopper)
 	q := NewQueue(cfg)
@@ -375,10 +376,10 @@ func TestPushersReleasedAfterAnyQueryTxnFindsAbortedTxn(t *testing.T) {
 	const numPushees = 3
 	var queryTxnCount int32
 	mockSender = func(
-		ctx context.Context, ba *roachpb.BatchRequest,
-	) (*roachpb.BatchResponse, *roachpb.Error) {
+		ctx context.Context, ba *kvpb.BatchRequest,
+	) (*kvpb.BatchResponse, *kvpb.Error) {
 		br := ba.CreateReply()
-		resp := br.Responses[0].GetInner().(*roachpb.QueryTxnResponse)
+		resp := br.Responses[0].GetInner().(*kvpb.QueryTxnResponse)
 		resp.QueriedTxn = txn
 		if atomic.AddInt32(&queryTxnCount, 1) == numPushees {
 			// Only the last pusher's query observes an ABORTED transaction. As
@@ -398,7 +399,7 @@ func TestPushersReleasedAfterAnyQueryTxnFindsAbortedTxn(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			ctx := context.Background()
-			req := roachpb.PushTxnRequest{PusheeTxn: txn.TxnMeta, PushType: roachpb.PUSH_ABORT}
+			req := kvpb.PushTxnRequest{PusheeTxn: txn.TxnMeta, PushType: kvpb.PUSH_ABORT}
 			res, err := q.MaybeWaitForPush(ctx, &req)
 			require.Nil(t, err)
 			require.NotNil(t, res)

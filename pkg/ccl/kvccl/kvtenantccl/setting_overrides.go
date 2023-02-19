@@ -12,7 +12,7 @@ import (
 	"context"
 	"io"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -28,7 +28,7 @@ func (c *Connector) runTenantSettingsSubscription(ctx context.Context, startupCh
 		if err != nil {
 			continue
 		}
-		stream, err := client.TenantSettings(ctx, &roachpb.TenantSettingsRequest{
+		stream, err := client.TenantSettings(ctx, &kvpb.TenantSettingsRequest{
 			TenantID: c.tenantID,
 		})
 		if err != nil {
@@ -71,7 +71,7 @@ func (c *Connector) runTenantSettingsSubscription(ctx context.Context, startupCh
 
 // processSettingsEvent updates the setting overrides based on the event.
 func (c *Connector) processSettingsEvent(
-	e *roachpb.TenantSettingsEvent, firstEventInStream bool,
+	e *kvpb.TenantSettingsEvent, firstEventInStream bool,
 ) error {
 	if firstEventInStream && e.Incremental {
 		return errors.Newf("first event must not be Incremental")
@@ -81,9 +81,9 @@ func (c *Connector) processSettingsEvent(
 
 	var m map[string]settings.EncodedValue
 	switch e.Precedence {
-	case roachpb.AllTenantsOverrides:
+	case kvpb.AllTenantsOverrides:
 		m = c.settingsMu.allTenantOverrides
-	case roachpb.SpecificTenantOverrides:
+	case kvpb.SpecificTenantOverrides:
 		m = c.settingsMu.specificOverrides
 	default:
 		return errors.Newf("unknown precedence value %d", e.Precedence)

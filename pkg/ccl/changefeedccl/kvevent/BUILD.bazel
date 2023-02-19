@@ -18,6 +18,7 @@ go_library(
         "//pkg/ccl/changefeedccl/cdcutils",
         "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/jobs/jobspb",
+        "//pkg/kv/kvpb",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/util/hlc",
@@ -45,6 +46,7 @@ go_test(
     deps = [
         "//pkg/jobs/jobspb",
         "//pkg/keys",
+        "//pkg/kv/kvpb",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/sql/randgen",

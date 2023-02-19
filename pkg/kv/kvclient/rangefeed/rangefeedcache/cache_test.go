@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -66,13 +67,13 @@ func TestCache(t *testing.T) {
 	readRowsAt := func(t *testing.T, ts hlc.Timestamp) []roachpb.KeyValue {
 		txn := kvDB.NewTxn(ctx, "test")
 		require.NoError(t, txn.SetFixedTimestamp(ctx, ts))
-		ba := &roachpb.BatchRequest{}
-		ba.Add(&roachpb.ScanRequest{
-			RequestHeader: roachpb.RequestHeader{
+		ba := &kvpb.BatchRequest{}
+		ba.Add(&kvpb.ScanRequest{
+			RequestHeader: kvpb.RequestHeader{
 				Key:    scratch,
 				EndKey: scratchSpan.EndKey,
 			},
-			ScanFormat: roachpb.KEY_VALUES,
+			ScanFormat: kvpb.KEY_VALUES,
 		})
 		br, pErr := txn.Send(ctx, ba)
 		require.NoError(t, pErr.GoError())

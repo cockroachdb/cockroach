@@ -196,6 +196,7 @@ go_library(
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/kv",
+        "//pkg/kv/kvpb",
         "//pkg/multitenant/mtinfopb",
         "//pkg/roachpb",
         "//pkg/roachprod",

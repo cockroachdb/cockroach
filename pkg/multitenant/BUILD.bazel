@@ -13,6 +13,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
+        "//pkg/kv/kvpb",
         "//pkg/multitenant/tenantcostmodel",
         "//pkg/roachpb",
         "//pkg/settings",
