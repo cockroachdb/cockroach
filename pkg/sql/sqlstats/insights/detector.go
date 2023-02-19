@@ -91,8 +91,9 @@ func (d *anomalyDetector) isSlow(stmt *Statement) (decision bool) {
 }
 
 func (d *anomalyDetector) GetPercentileValues(id appstatspb.StmtFingerprintID) PercentileValues {
-	d.mu.RLock()
-	defer d.mu.RUnlock()
+	// latencySummary.Query might modify its own state (Stream.flush), so a read-write lock is necessary.
+	d.mu.Lock()
+	defer d.mu.Unlock()
 	latencies := PercentileValues{}
 	if entry, ok := d.mu.index[id]; ok {
 		latencySummary := entry.Value.(latencySummaryEntry).value
