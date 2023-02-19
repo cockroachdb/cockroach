@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
@@ -68,10 +69,10 @@ var sendSnapshotTimeout = envutil.EnvOrDefaultDuration(
 
 // AdminSplit divides the range into into two ranges using args.SplitKey.
 func (r *Replica) AdminSplit(
-	ctx context.Context, args roachpb.AdminSplitRequest, reason string,
-) (reply roachpb.AdminSplitResponse, _ *roachpb.Error) {
+	ctx context.Context, args kvpb.AdminSplitRequest, reason string,
+) (reply kvpb.AdminSplitResponse, _ *kvpb.Error) {
 	if len(args.SplitKey) == 0 {
-		return roachpb.AdminSplitResponse{}, roachpb.NewErrorf("cannot split range with no key provided")
+		return kvpb.AdminSplitResponse{}, kvpb.NewErrorf("cannot split range with no key provided")
 	}
 
 	err := r.executeAdminCommandWithDescriptor(ctx, func(desc *roachpb.RangeDescriptor) error {
@@ -85,7 +86,7 @@ func (r *Replica) AdminSplit(
 func maybeDescriptorChangedError(
 	desc *roachpb.RangeDescriptor, err error,
 ) (ok bool, expectedDesc *roachpb.RangeDescriptor) {
-	if detail := (*roachpb.ConditionFailedError)(nil); errors.As(err, &detail) {
+	if detail := (*kvpb.ConditionFailedError)(nil); errors.As(err, &detail) {
 		// Provide a better message in the common case that the range being changed
 		// was already changed by a concurrent transaction.
 		var actualDesc roachpb.RangeDescriptor
@@ -227,7 +228,7 @@ func splitTxnAttempt(
 
 	// End the transaction manually, instead of letting RunTransaction
 	// loop do it, in order to provide a split trigger.
-	b.AddRawRequest(&roachpb.EndTxnRequest{
+	b.AddRawRequest(&kvpb.EndTxnRequest{
 		Commit: true,
 		InternalCommitTrigger: &roachpb.InternalCommitTrigger{
 			SplitTrigger: &roachpb.SplitTrigger{
@@ -263,7 +264,7 @@ func splitTxnStickyUpdateAttempt(
 	}
 	// End the transaction manually, instead of letting RunTransaction loop
 	// do it, in order to provide a sticky bit trigger.
-	b.AddRawRequest(&roachpb.EndTxnRequest{
+	b.AddRawRequest(&kvpb.EndTxnRequest{
 		Commit: true,
 		InternalCommitTrigger: &roachpb.InternalCommitTrigger{
 			StickyBitTrigger: &roachpb.StickyBitTrigger{
@@ -294,13 +295,13 @@ func splitTxnStickyUpdateAttempt(
 // See the comment on splitTrigger for details on the complexities.
 func (r *Replica) adminSplitWithDescriptor(
 	ctx context.Context,
-	args roachpb.AdminSplitRequest,
+	args kvpb.AdminSplitRequest,
 	desc *roachpb.RangeDescriptor,
 	delayable bool,
 	reason string,
-) (roachpb.AdminSplitResponse, error) {
+) (kvpb.AdminSplitResponse, error) {
 	var err error
-	var reply roachpb.AdminSplitResponse
+	var reply kvpb.AdminSplitResponse
 
 	// The split queue doesn't care about the set of replicas, so if we somehow
 	// are being handed one that's in a joint state, finalize that before
@@ -336,7 +337,7 @@ func (r *Replica) adminSplitWithDescriptor(
 			// correct range.
 			if !kvserverbase.ContainsKey(desc, args.Key) {
 				ri := r.GetRangeInfo(ctx)
-				return reply, roachpb.NewRangeKeyMismatchErrorWithCTPolicy(ctx, args.Key, args.Key, desc, &ri.Lease, ri.ClosedTimestampPolicy)
+				return reply, kvpb.NewRangeKeyMismatchErrorWithCTPolicy(ctx, args.Key, args.Key, desc, &ri.Lease, ri.ClosedTimestampPolicy)
 			}
 			foundSplitKey = args.SplitKey
 		}
@@ -430,9 +431,9 @@ func (r *Replica) adminSplitWithDescriptor(
 // AdminUnsplit removes the sticky bit of the range specified by the
 // args.Key.
 func (r *Replica) AdminUnsplit(
-	ctx context.Context, args roachpb.AdminUnsplitRequest, reason string,
-) (roachpb.AdminUnsplitResponse, *roachpb.Error) {
-	var reply roachpb.AdminUnsplitResponse
+	ctx context.Context, args kvpb.AdminUnsplitRequest, reason string,
+) (kvpb.AdminUnsplitResponse, *kvpb.Error) {
+	var reply kvpb.AdminUnsplitResponse
 	err := r.executeAdminCommandWithDescriptor(ctx, func(desc *roachpb.RangeDescriptor) error {
 		var err error
 		reply, err = r.adminUnsplitWithDescriptor(ctx, args, desc, reason)
@@ -442,12 +443,9 @@ func (r *Replica) AdminUnsplit(
 }
 
 func (r *Replica) adminUnsplitWithDescriptor(
-	ctx context.Context,
-	args roachpb.AdminUnsplitRequest,
-	desc *roachpb.RangeDescriptor,
-	reason string,
-) (roachpb.AdminUnsplitResponse, error) {
-	var reply roachpb.AdminUnsplitResponse
+	ctx context.Context, args kvpb.AdminUnsplitRequest, desc *roachpb.RangeDescriptor, reason string,
+) (kvpb.AdminUnsplitResponse, error) {
+	var reply kvpb.AdminUnsplitResponse
 	if !bytes.Equal(desc.StartKey.AsRawKey(), args.Header().Key) {
 		return reply, errors.Errorf("key %s is not the start of a range", args.Header().Key)
 	}
@@ -480,7 +478,7 @@ func (r *Replica) adminUnsplitWithDescriptor(
 			return err
 		}
 		// End the transaction manually in order to provide a sticky bit trigger.
-		b.AddRawRequest(&roachpb.EndTxnRequest{
+		b.AddRawRequest(&kvpb.EndTxnRequest{
 			Commit: true,
 			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
 				StickyBitTrigger: &roachpb.StickyBitTrigger{
@@ -510,7 +508,7 @@ func (r *Replica) adminUnsplitWithDescriptor(
 // retry loop.
 func (r *Replica) executeAdminCommandWithDescriptor(
 	ctx context.Context, updateDesc func(*roachpb.RangeDescriptor) error,
-) *roachpb.Error {
+) *kvpb.Error {
 	// Retry forever as long as we see errors we know will resolve.
 	retryOpts := base.DefaultRetryOptions()
 	// Randomize quite a lot just in case someone else also interferes with us
@@ -527,7 +525,7 @@ func (r *Replica) executeAdminCommandWithDescriptor(
 		// (i.e., the lease we have in r.mu.state.Lease) can remain valid
 		// indefinitely.
 		if _, err := r.IsDestroyed(); err != nil {
-			return roachpb.NewError(err)
+			return kvpb.NewError(err)
 		}
 
 		// Admin commands always require the range lease to begin (see
@@ -543,14 +541,14 @@ func (r *Replica) executeAdminCommandWithDescriptor(
 		// On seeing a retryable replication change or an AmbiguousResultError,
 		// retry the command with the updated descriptor.
 		if !IsRetriableReplicationChangeError(lastErr) &&
-			!errors.HasType(lastErr, (*roachpb.AmbiguousResultError)(nil)) {
+			!errors.HasType(lastErr, (*kvpb.AmbiguousResultError)(nil)) {
 			break
 		}
 		if splitRetryLogLimiter.ShouldLog() {
 			log.Warningf(ctx, "retrying split after err: %v", lastErr)
 		}
 	}
-	return roachpb.NewError(lastErr)
+	return kvpb.NewError(lastErr)
 }
 
 // AdminMerge extends this range to subsume the range that comes next
@@ -567,9 +565,9 @@ func (r *Replica) executeAdminCommandWithDescriptor(
 // The supplied RangeDescriptor is used as a form of optimistic lock. See the
 // comment of "AdminSplit" for more information on this pattern.
 func (r *Replica) AdminMerge(
-	ctx context.Context, args roachpb.AdminMergeRequest, reason string,
-) (roachpb.AdminMergeResponse, *roachpb.Error) {
-	var reply roachpb.AdminMergeResponse
+	ctx context.Context, args kvpb.AdminMergeRequest, reason string,
+) (kvpb.AdminMergeResponse, *kvpb.Error) {
+	var reply kvpb.AdminMergeResponse
 
 	runMergeTxn := func(txn *kv.Txn) error {
 		log.Event(ctx, "merge txn begins")
@@ -736,15 +734,15 @@ func (r *Replica) AdminMerge(
 		// commits, we'll write this data to the left-hand range in the merge
 		// trigger.
 		br, pErr := kv.SendWrapped(ctx, r.store.DB().NonTransactionalSender(),
-			&roachpb.SubsumeRequest{
-				RequestHeader: roachpb.RequestHeader{Key: rightDesc.StartKey.AsRawKey()},
+			&kvpb.SubsumeRequest{
+				RequestHeader: kvpb.RequestHeader{Key: rightDesc.StartKey.AsRawKey()},
 				LeftDesc:      *origLeftDesc,
 				RightDesc:     rightDesc,
 			})
 		if pErr != nil {
 			return pErr.GoError()
 		}
-		rhsSnapshotRes := br.(*roachpb.SubsumeResponse)
+		rhsSnapshotRes := br.(*kvpb.SubsumeResponse)
 
 		err = contextutil.RunWithTimeout(ctx, "waiting for merge application", mergeApplicationTimeout,
 			func(ctx context.Context) error {
@@ -762,7 +760,7 @@ func (r *Replica) AdminMerge(
 		// not serve another request unless this transaction aborts. End the
 		// transaction manually in order to provide a merge trigger.
 		b = txn.NewBatch()
-		b.AddRawRequest(&roachpb.EndTxnRequest{
+		b.AddRawRequest(&kvpb.EndTxnRequest{
 			Commit: true,
 			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
 				MergeTrigger: &roachpb.MergeTrigger{
@@ -804,9 +802,9 @@ func (r *Replica) AdminMerge(
 				log.VEventf(ctx, 2, "merge txn rollback failed: %s", rollbackErr)
 			}
 		}
-		if !errors.HasType(err, (*roachpb.TransactionRetryWithProtoRefreshError)(nil)) {
+		if !errors.HasType(err, (*kvpb.TransactionRetryWithProtoRefreshError)(nil)) {
 			if err != nil {
-				return reply, roachpb.NewErrorf("merge failed: %s", err)
+				return reply, kvpb.NewErrorf("merge failed: %s", err)
 			}
 			return reply, nil
 		}
@@ -961,7 +959,7 @@ func (r *Replica) ChangeReplicas(
 	priority kvserverpb.SnapshotRequest_Priority,
 	reason kvserverpb.RangeLogEventReason,
 	details string,
-	chgs roachpb.ReplicationChanges,
+	chgs kvpb.ReplicationChanges,
 ) (updatedDesc *roachpb.RangeDescriptor, _ error) {
 	if desc == nil {
 		// TODO(tbg): is this check just FUD?
@@ -993,7 +991,7 @@ func (r *Replica) changeReplicasImpl(
 	senderQueuePriority float64,
 	reason kvserverpb.RangeLogEventReason,
 	details string,
-	chgs roachpb.ReplicationChanges,
+	chgs kvpb.ReplicationChanges,
 ) (updatedDesc *roachpb.RangeDescriptor, _ error) {
 	var err error
 	// If in a joint config, clean up. The assumption here is that the caller
@@ -1156,7 +1154,7 @@ type targetsForReplicationChanges struct {
 // demotions of voters into non-voters. The rest of the changes are handled
 // distinctly and are thus segregated in the return result.
 func synthesizeTargetsByChangeType(
-	chgs roachpb.ReplicationChanges,
+	chgs kvpb.ReplicationChanges,
 ) (result targetsForReplicationChanges) {
 	// Isolate the promotions to voters and the demotions to non-voters from the
 	// rest of the changes, since we want to handle these together and execute
@@ -1608,9 +1606,7 @@ func validateOneReplicaPerNode(desc *roachpb.RangeDescriptor, chgsByNodeID chang
 // 5. We're not removing a replica that doesn't exist.
 // 6. Additions to stores that already contain a replica are strictly the ones
 // that correspond to a voter demotion and/or a non-voter promotion
-func validateReplicationChanges(
-	desc *roachpb.RangeDescriptor, chgs roachpb.ReplicationChanges,
-) error {
+func validateReplicationChanges(desc *roachpb.RangeDescriptor, chgs kvpb.ReplicationChanges) error {
 	chgsByStoreID := getChangesByStoreID(chgs)
 	chgsByNodeID := getChangesByNodeID(chgs)
 
@@ -1632,28 +1628,28 @@ func validateReplicationChanges(
 
 // changesByStoreID represents a map from StoreID to a slice of replication
 // changes on that store.
-type changesByStoreID map[roachpb.StoreID][]roachpb.ReplicationChange
+type changesByStoreID map[roachpb.StoreID][]kvpb.ReplicationChange
 
 // changesByNodeID represents a map from NodeID to a slice of replication
 // changes on that node.
-type changesByNodeID map[roachpb.NodeID][]roachpb.ReplicationChange
+type changesByNodeID map[roachpb.NodeID][]kvpb.ReplicationChange
 
-func getChangesByStoreID(chgs roachpb.ReplicationChanges) changesByStoreID {
-	chgsByStoreID := make(map[roachpb.StoreID][]roachpb.ReplicationChange, len(chgs))
+func getChangesByStoreID(chgs kvpb.ReplicationChanges) changesByStoreID {
+	chgsByStoreID := make(map[roachpb.StoreID][]kvpb.ReplicationChange, len(chgs))
 	for _, chg := range chgs {
 		if _, ok := chgsByStoreID[chg.Target.StoreID]; !ok {
-			chgsByStoreID[chg.Target.StoreID] = make([]roachpb.ReplicationChange, 0, 2)
+			chgsByStoreID[chg.Target.StoreID] = make([]kvpb.ReplicationChange, 0, 2)
 		}
 		chgsByStoreID[chg.Target.StoreID] = append(chgsByStoreID[chg.Target.StoreID], chg)
 	}
 	return chgsByStoreID
 }
 
-func getChangesByNodeID(chgs roachpb.ReplicationChanges) changesByNodeID {
-	chgsByNodeID := make(map[roachpb.NodeID][]roachpb.ReplicationChange, len(chgs))
+func getChangesByNodeID(chgs kvpb.ReplicationChanges) changesByNodeID {
+	chgsByNodeID := make(map[roachpb.NodeID][]kvpb.ReplicationChange, len(chgs))
 	for _, chg := range chgs {
 		if _, ok := chgsByNodeID[chg.Target.NodeID]; !ok {
-			chgsByNodeID[chg.Target.NodeID] = make([]roachpb.ReplicationChange, 0, 2)
+			chgsByNodeID[chg.Target.NodeID] = make([]kvpb.ReplicationChange, 0, 2)
 		}
 		chgsByNodeID[chg.Target.NodeID] = append(chgsByNodeID[chg.Target.NodeID], chg)
 	}
@@ -2414,7 +2410,7 @@ func execChangeReplicasTxn(
 				return err
 			}
 
-			b.AddRawRequest(&roachpb.EndTxnRequest{
+			b.AddRawRequest(&kvpb.EndTxnRequest{
 				Commit: true,
 				InternalCommitTrigger: &roachpb.InternalCommitTrigger{
 					ChangeReplicasTrigger: crt,
@@ -3237,7 +3233,7 @@ func conditionalGetDescValueFromDB(
 		return existingDesc, existingDescKV.Value.TagAndDataBytes(), true /* skip */, nil
 	}
 	if !matched {
-		return nil, nil, false /* skip */, &roachpb.ConditionFailedError{ActualValue: existingDescKV.Value}
+		return nil, nil, false /* skip */, &kvpb.ConditionFailedError{ActualValue: existingDescKV.Value}
 	}
 	return existingDesc, existingDescKV.Value.TagAndDataBytes(), false /* skip */, nil
 }
@@ -3398,7 +3394,7 @@ func (r *Replica) relocateReplicas(
 				return rangeDesc, ctx.Err()
 			}
 
-			opss := [][]roachpb.ReplicationChange{ops}
+			opss := [][]kvpb.ReplicationChange{ops}
 			success := true
 			for _, ops := range opss {
 				newDesc, err := r.store.DB().AdminChangeReplicas(ctx, startKey, rangeDesc, ops)
@@ -3515,7 +3511,7 @@ func (roo *replicaRelocateOneOptions) Leaseholder(
 	ctx context.Context, startKey roachpb.RKey,
 ) (roachpb.ReplicaDescriptor, error) {
 	var b kv.Batch
-	liReq := &roachpb.LeaseInfoRequest{}
+	liReq := &kvpb.LeaseInfoRequest{}
 	liReq.Key = startKey.AsRawKey()
 	b.AddRawRequest(liReq)
 	if err := roo.store.DB().Run(ctx, &b); err != nil {
@@ -3535,7 +3531,7 @@ func RelocateOne(
 	voterTargets, nonVoterTargets []roachpb.ReplicationTarget,
 	transferLeaseToFirstVoter bool,
 	options RelocateOneOptions,
-) ([]roachpb.ReplicationChange, *roachpb.ReplicationTarget, error) {
+) ([]kvpb.ReplicationChange, *roachpb.ReplicationTarget, error) {
 	if repls := desc.Replicas(); len(repls.VoterFullAndNonVoterDescriptors()) != len(repls.Descriptors()) {
 		// The caller removed all the learners and left the joint config, so there
 		// shouldn't be anything but voters and non_voters.
@@ -3740,7 +3736,7 @@ func RelocateOne(
 		}
 	}
 
-	var ops []roachpb.ReplicationChange
+	var ops []kvpb.ReplicationChange
 	if shouldAdd && shouldRemove {
 		ops, _, err = replicationChangesForRebalance(
 			ctx, desc, len(existingVoters), additionTarget, removalTarget, args.targetType,
@@ -3750,9 +3746,9 @@ func RelocateOne(
 		}
 	} else if shouldAdd {
 		if canPromoteNonVoter {
-			ops = roachpb.ReplicationChangesForPromotion(additionTarget)
+			ops = kvpb.ReplicationChangesForPromotion(additionTarget)
 		} else {
-			ops = roachpb.MakeReplicationChanges(args.targetType.AddChangeType(), additionTarget)
+			ops = kvpb.MakeReplicationChanges(args.targetType.AddChangeType(), additionTarget)
 		}
 	} else if shouldRemove {
 		// Carry out the removal only if there was no lease problem above. If there
@@ -3760,9 +3756,9 @@ func RelocateOne(
 		// (Note that !shouldRemove implies that we're trying to remove the last
 		// replica left in the descriptor which is illegal).
 		if canDemoteVoter {
-			ops = roachpb.ReplicationChangesForDemotion(removalTarget)
+			ops = kvpb.ReplicationChangesForDemotion(removalTarget)
 		} else {
-			ops = roachpb.MakeReplicationChanges(args.targetType.RemoveChangeType(), removalTarget)
+			ops = kvpb.MakeReplicationChanges(args.targetType.RemoveChangeType(), removalTarget)
 		}
 	}
 
@@ -3867,8 +3863,8 @@ func intersectTargets(
 
 // adminScatter moves replicas and leaseholders for a selection of ranges.
 func (r *Replica) adminScatter(
-	ctx context.Context, args roachpb.AdminScatterRequest,
-) (roachpb.AdminScatterResponse, error) {
+	ctx context.Context, args kvpb.AdminScatterRequest,
+) (kvpb.AdminScatterResponse, error) {
 	rq := r.store.replicateQueue
 	retryOpts := retry.Options{
 		InitialBackoff: 50 * time.Millisecond,
@@ -3891,7 +3887,7 @@ func (r *Replica) adminScatter(
 
 	if args.MaxSize > 0 {
 		if existing, limit := r.GetMVCCStats().Total(), args.MaxSize; existing > limit {
-			return roachpb.AdminScatterResponse{}, errors.Errorf("existing range size %d exceeds specified limit %d", existing, limit)
+			return kvpb.AdminScatterResponse{}, errors.Errorf("existing range size %d exceeds specified limit %d", existing, limit)
 		}
 	}
 
@@ -3964,7 +3960,7 @@ func (r *Replica) adminScatter(
 
 	ri := r.GetRangeInfo(ctx)
 	stats := r.GetMVCCStats()
-	return roachpb.AdminScatterResponse{
+	return kvpb.AdminScatterResponse{
 		RangeInfos: []roachpb.RangeInfo{ri},
 		MVCCStats:  stats,
 		// Note, we use this replica's MVCCStats to estimate the size of the replicas
@@ -3977,8 +3973,8 @@ func (r *Replica) adminScatter(
 // TODO(arul): AdminVerifyProtectedTimestampRequest can entirely go away in
 // 22.2.
 func (r *Replica) adminVerifyProtectedTimestamp(
-	ctx context.Context, _ roachpb.AdminVerifyProtectedTimestampRequest,
-) (resp roachpb.AdminVerifyProtectedTimestampResponse, err error) {
+	ctx context.Context, _ kvpb.AdminVerifyProtectedTimestampRequest,
+) (resp kvpb.AdminVerifyProtectedTimestampResponse, err error) {
 	// AdminVerifyProtectedTimestampRequest is not supported starting from the
 	// 22.1 release. We expect nodes running a 22.1 binary to still service this
 	// request in a {21.2, 22.1} mixed version cluster. This can happen if the

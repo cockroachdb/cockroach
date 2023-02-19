@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -26,13 +27,13 @@ import (
 )
 
 func init() {
-	RegisterReadOnlyCommand(roachpb.RecomputeStats, declareKeysRecomputeStats, RecomputeStats)
+	RegisterReadOnlyCommand(kvpb.RecomputeStats, declareKeysRecomputeStats, RecomputeStats)
 }
 
 func declareKeysRecomputeStats(
 	rs ImmutableRangeState,
-	_ *roachpb.Header,
-	_ roachpb.Request,
+	_ *kvpb.Header,
+	_ kvpb.Request,
 	latchSpans, _ *spanset.SpanSet,
 	_ time.Duration,
 ) {
@@ -60,10 +61,10 @@ func declareKeysRecomputeStats(
 // RecomputeStats recomputes the MVCCStats stored for this range and adjust them accordingly,
 // returning the MVCCStats delta obtained in the process.
 func RecomputeStats(
-	ctx context.Context, reader storage.Reader, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, reader storage.Reader, cArgs CommandArgs, resp kvpb.Response,
 ) (result.Result, error) {
 	desc := cArgs.EvalCtx.Desc()
-	args := cArgs.Args.(*roachpb.RecomputeStatsRequest)
+	args := cArgs.Args.(*kvpb.RecomputeStatsRequest)
 	if !desc.StartKey.AsRawKey().Equal(args.Key) {
 		return result.Result{}, errors.New("descriptor mismatch; range likely merged")
 	}
@@ -93,6 +94,6 @@ func RecomputeStats(
 		cArgs.Stats.Add(delta)
 	}
 
-	resp.(*roachpb.RecomputeStatsResponse).AddedDelta = enginepb.MVCCStatsDelta(delta)
+	resp.(*kvpb.RecomputeStatsResponse).AddedDelta = enginepb.MVCCStatsDelta(delta)
 	return result.Result{}, nil
 }

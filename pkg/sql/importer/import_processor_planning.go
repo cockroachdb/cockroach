@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -66,7 +67,7 @@ func distImport(
 	walltime int64,
 	testingKnobs importTestingKnobs,
 	procsPerNode int,
-) (roachpb.BulkOpSummary, error) {
+) (kvpb.BulkOpSummary, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "importer.distImport")
 	defer sp.Finish()
 
@@ -117,7 +118,7 @@ func distImport(
 
 	p, planCtx, err := makePlan(ctx, dsp)
 	if err != nil {
-		return roachpb.BulkOpSummary{}, err
+		return kvpb.BulkOpSummary{}, err
 	}
 	evalCtx := planCtx.ExtendedEvalCtx
 
@@ -126,7 +127,7 @@ func distImport(
 	// data written since the last time we update the job progress.
 	accumulatedBulkSummary := struct {
 		syncutil.Mutex
-		roachpb.BulkOpSummary
+		kvpb.BulkOpSummary
 	}{}
 	accumulatedBulkSummary.Lock()
 	accumulatedBulkSummary.BulkOpSummary = getLastImportSummary(job)
@@ -151,7 +152,7 @@ func distImport(
 			return 0.0
 		},
 		); err != nil {
-			return roachpb.BulkOpSummary{}, err
+			return kvpb.BulkOpSummary{}, err
 		}
 	}
 
@@ -202,9 +203,9 @@ func distImport(
 		return nil
 	}
 
-	var res roachpb.BulkOpSummary
+	var res kvpb.BulkOpSummary
 	rowResultWriter := sql.NewCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
-		var counts roachpb.BulkOpSummary
+		var counts kvpb.BulkOpSummary
 		if err := protoutil.Unmarshal([]byte(*row[0].(*tree.DBytes)), &counts); err != nil {
 			return err
 		}
@@ -214,7 +215,7 @@ func distImport(
 
 	if evalCtx.Codec.ForSystemTenant() {
 		if err := presplitTableBoundaries(ctx, execCtx.ExecCfg(), tables); err != nil {
-			return roachpb.BulkOpSummary{}, err
+			return kvpb.BulkOpSummary{}, err
 		}
 	}
 
@@ -276,13 +277,13 @@ func distImport(
 	g.GoCtx(replanChecker)
 
 	if err := g.Wait(); err != nil {
-		return roachpb.BulkOpSummary{}, err
+		return kvpb.BulkOpSummary{}, err
 	}
 
 	return res, nil
 }
 
-func getLastImportSummary(job *jobs.Job) roachpb.BulkOpSummary {
+func getLastImportSummary(job *jobs.Job) kvpb.BulkOpSummary {
 	progress := job.Progress()
 	importProgress := progress.GetImport()
 	return importProgress.Summary

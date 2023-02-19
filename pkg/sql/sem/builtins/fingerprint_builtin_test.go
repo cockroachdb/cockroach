@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -45,12 +46,12 @@ func TestFingerprint(t *testing.T) {
 	serv, sqlDB, db := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
-				TestingResponseFilter: func(ctx context.Context, ba *roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
+				TestingResponseFilter: func(ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse) *kvpb.Error {
 					mu.Lock()
 					defer mu.Unlock()
 					for i, ru := range br.Responses {
-						if _, ok := ba.Requests[i].GetInner().(*roachpb.ExportRequest); ok {
-							exportResponse := ru.GetInner().(*roachpb.ExportResponse)
+						if _, ok := ba.Requests[i].GetInner().(*kvpb.ExportRequest); ok {
+							exportResponse := ru.GetInner().(*kvpb.ExportResponse)
 							numExportResponses++
 							numSSTsInExportResponses += len(exportResponse.Files)
 						}

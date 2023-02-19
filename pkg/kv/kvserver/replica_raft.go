@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
@@ -105,7 +106,7 @@ func makeIDKey() kvserverbase.CmdIDKey {
 //     which case the other returned values are zero.
 func (r *Replica) evalAndPropose(
 	ctx context.Context,
-	ba *roachpb.BatchRequest,
+	ba *kvpb.BatchRequest,
 	g *concurrency.Guard,
 	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
@@ -115,7 +116,7 @@ func (r *Replica) evalAndPropose(
 	func(),
 	kvserverbase.CmdIDKey,
 	*kvadmission.StoreWriteBytes,
-	*roachpb.Error,
+	*kvpb.Error,
 ) {
 	defer tok.DoneIfNotMoved(ctx)
 	idKey := makeIDKey()
@@ -127,7 +128,7 @@ func (r *Replica) evalAndPropose(
 	if isConcurrencyRetryError(pErr) {
 		pErr = maybeAttachLease(pErr, &st.Lease)
 		return nil, nil, "", nil, pErr
-	} else if _, ok := pErr.GetDetail().(*roachpb.ReplicaCorruptionError); ok {
+	} else if _, ok := pErr.GetDetail().(*kvpb.ReplicaCorruptionError); ok {
 		return nil, nil, "", nil, pErr
 	}
 
@@ -147,7 +148,7 @@ func (r *Replica) evalAndPropose(
 	//    in an error.
 	if proposal.command == nil {
 		if proposal.Local.RequiresRaft() {
-			return nil, nil, "", nil, roachpb.NewError(errors.AssertionFailedf(
+			return nil, nil, "", nil, kvpb.NewError(errors.AssertionFailedf(
 				"proposal resulting from batch %s erroneously bypassed Raft", ba))
 		}
 		intents := proposal.Local.DetachEncounteredIntents()
@@ -192,7 +193,7 @@ func (r *Replica) evalAndPropose(
 			// Disallow async consensus for commands with EndTxnIntents because
 			// any !Always EndTxnIntent can't be cleaned up until after the
 			// command succeeds.
-			return nil, nil, "", writeBytes, roachpb.NewErrorf("cannot perform consensus asynchronously for "+
+			return nil, nil, "", writeBytes, kvpb.NewErrorf("cannot perform consensus asynchronously for "+
 				"proposal with EndTxnIntents=%v; %v", ets, ba)
 		}
 
@@ -202,7 +203,7 @@ func (r *Replica) evalAndPropose(
 
 		// Signal the proposal's response channel immediately.
 		reply := *proposal.Local.Reply
-		reply.Responses = append([]roachpb.ResponseUnion(nil), reply.Responses...)
+		reply.Responses = append([]kvpb.ResponseUnion(nil), reply.Responses...)
 		pr := proposalResult{
 			Reply:              &reply,
 			EncounteredIntents: proposal.Local.DetachEncounteredIntents(),
@@ -226,9 +227,9 @@ func (r *Replica) evalAndPropose(
 		// to mutate state.
 		var seq roachpb.LeaseSequence
 		switch t := ba.Requests[0].GetInner().(type) {
-		case *roachpb.RequestLeaseRequest:
+		case *kvpb.RequestLeaseRequest:
 			seq = t.PrevLease.Sequence
-		case *roachpb.TransferLeaseRequest:
+		case *kvpb.TransferLeaseRequest:
 			seq = t.PrevLease.Sequence
 		default:
 		}
@@ -256,14 +257,14 @@ func (r *Replica) evalAndPropose(
 	// behavior.
 	quotaSize := uint64(proposal.command.Size())
 	if maxSize := uint64(kvserverbase.MaxCommandSize.Get(&r.store.cfg.Settings.SV)); quotaSize > maxSize {
-		return nil, nil, "", nil, roachpb.NewError(errors.Errorf(
+		return nil, nil, "", nil, kvpb.NewError(errors.Errorf(
 			"command is too large: %d bytes (max: %d)", quotaSize, maxSize,
 		))
 	}
 	var err error
 	proposal.quotaAlloc, err = r.maybeAcquireProposalQuota(ctx, quotaSize)
 	if err != nil {
-		return nil, nil, "", nil, roachpb.NewError(err)
+		return nil, nil, "", nil, kvpb.NewError(err)
 	}
 	// Make sure we clean up the proposal if we fail to insert it into the
 	// proposal buffer successfully. This ensures that we always release any
@@ -334,7 +335,7 @@ func (r *Replica) evalAndPropose(
 // for details.
 func (r *Replica) propose(
 	ctx context.Context, p *ProposalData, tok TrackedRequestToken,
-) (pErr *roachpb.Error) {
+) (pErr *kvpb.Error) {
 	defer tok.DoneIfNotMoved(ctx)
 
 	defer func() {
@@ -347,13 +348,13 @@ func (r *Replica) propose(
 	if p.command.MaxLeaseIndex > 0 {
 		// MaxLeaseIndex should not be populated now. It is set only when the proposal buffer
 		// flushes this proposal into the local raft instance.
-		return roachpb.NewError(errors.AssertionFailedf("MaxLeaseIndex set: %+v", p))
+		return kvpb.NewError(errors.AssertionFailedf("MaxLeaseIndex set: %+v", p))
 	}
 	if p.encodedCommand != nil {
 		// This indicates someone took an existing proposal and handed it to this method
 		// again. The caller needs to properly reset the proposal if they're going to do
 		// that.
-		return roachpb.NewError(errors.AssertionFailedf("encodedCommand set: %+v", p))
+		return kvpb.NewError(errors.AssertionFailedf("encodedCommand set: %+v", p))
 	}
 
 	// Determine the encoding style for the Raft command.
@@ -409,7 +410,7 @@ func (r *Replica) propose(
 		// See also https://github.com/cockroachdb/cockroach/issues/67740.
 		lhDesc, err := r.GetReplicaDescriptor()
 		if err != nil {
-			return roachpb.NewError(err)
+			return kvpb.NewError(err)
 		}
 		proposedDesc := p.command.ReplicatedEvalResult.State.Desc
 		// This is a reconfiguration command, we make sure the proposed
@@ -426,7 +427,7 @@ func (r *Replica) propose(
 				"remove self (leaseholder); lhRemovalAllowed: %v; current desc: %v; proposed desc: %v",
 				lhDesc, crt, true /* lhRemovalAllowed */, r.Desc(), proposedDesc), errMarkInvalidReplicationChange)
 			log.Errorf(p.ctx, "%v", e)
-			return roachpb.NewError(e)
+			return kvpb.NewError(e)
 		}
 	} else if p.command.ReplicatedEvalResult.AddSSTable != nil {
 		log.VEvent(p.ctx, 4, "sideloadable proposal detected")
@@ -434,7 +435,7 @@ func (r *Replica) propose(
 		r.store.metrics.AddSSTableProposals.Inc(1)
 
 		if p.command.ReplicatedEvalResult.AddSSTable.Data == nil {
-			return roachpb.NewErrorf("cannot sideload empty SSTable")
+			return kvpb.NewErrorf("cannot sideload empty SSTable")
 		}
 	} else if log.V(4) {
 		log.Infof(p.ctx, "proposing command %x: %s", p.idKey, p.Request.Summary())
@@ -457,7 +458,7 @@ func (r *Replica) propose(
 	// Encode body of command.
 	data = data[:preLen+cmdLen]
 	if _, err := protoutil.MarshalTo(p.command, data[preLen:]); err != nil {
-		return roachpb.NewError(err)
+		return kvpb.NewError(err)
 	}
 	p.encodedCommand = data
 
@@ -492,7 +493,7 @@ func (r *Replica) propose(
 	// on the field.
 	err := r.mu.proposalBuf.Insert(ctx, p, tok.Move(ctx))
 	if err != nil {
-		return roachpb.NewError(err)
+		return kvpb.NewError(err)
 	}
 	return nil
 }
@@ -1270,7 +1271,7 @@ func (r *Replica) hasRaftReadyRLocked() bool {
 // replicated commands should be considered "stuck" and should trip the
 // per-Replica circuit breaker. The boolean indicates whether this
 // mechanism is enabled; if it isn't no action should be taken.
-func (r *Replica) slowReplicationThreshold(ba *roachpb.BatchRequest) (time.Duration, bool) {
+func (r *Replica) slowReplicationThreshold(ba *kvpb.BatchRequest) (time.Duration, bool) {
 	if knobs := r.store.TestingKnobs(); knobs != nil && knobs.SlowReplicationThresholdOverride != nil {
 		if dur := knobs.SlowReplicationThresholdOverride(ba); dur > 0 {
 			return dur, true
@@ -1316,7 +1317,7 @@ func (r *Replica) refreshProposalsLocked(
 		log.Fatalf(ctx, "refreshAtDelta specified for reason %s != reasonTicks", reason)
 	}
 
-	var maxSlowProposalDurationRequest *roachpb.BatchRequest
+	var maxSlowProposalDurationRequest *kvpb.BatchRequest
 	// TODO(tbg): don't track exempt requests for tripping the breaker?
 	var maxSlowProposalDuration time.Duration
 	var slowProposalCount int64
@@ -1354,8 +1355,8 @@ func (r *Replica) refreshProposalsLocked(
 				r.cleanupFailedProposalLocked(p)
 				log.Eventf(p.ctx, "retry proposal %x: %s", p.idKey, reason)
 				p.finishApplication(ctx, proposalResult{
-					Err: roachpb.NewError(
-						roachpb.NewAmbiguousResultErrorf(
+					Err: kvpb.NewError(
+						kvpb.NewAmbiguousResultErrorf(
 							"unable to determine whether command was applied via snapshot",
 						),
 					),
@@ -1423,7 +1424,7 @@ func (r *Replica) refreshProposalsLocked(
 		if err := r.mu.proposalBuf.ReinsertLocked(ctx, p); err != nil {
 			r.cleanupFailedProposalLocked(p)
 			p.finishApplication(ctx, proposalResult{
-				Err: roachpb.NewError(roachpb.NewAmbiguousResultError(err)),
+				Err: kvpb.NewError(kvpb.NewAmbiguousResultError(err)),
 			})
 		}
 	}
@@ -1439,10 +1440,10 @@ func (r *Replica) poisonInflightLatches(err error) {
 		// TODO(tbg): find out how `p.ec.done()` can have been called at this point,
 		// See: https://github.com/cockroachdb/cockroach/issues/86547
 		if p.ec.g != nil && p.ec.g.Req.PoisonPolicy == poison.Policy_Error {
-			aErr := roachpb.NewAmbiguousResultError(err)
+			aErr := kvpb.NewAmbiguousResultError(err)
 			// NB: this does not release the request's latches. It's important that
 			// the latches stay in place, since the command could still apply.
-			p.signalProposalResult(proposalResult{Err: roachpb.NewError(aErr)})
+			p.signalProposalResult(proposalResult{Err: kvpb.NewError(aErr)})
 		}
 	}
 }
@@ -2246,7 +2247,7 @@ func (r *Replica) acquireSplitLock(
 	)
 	// If getOrCreateReplica returns RaftGroupDeletedError we know that the RHS
 	// has already been removed. This case is handled properly in splitPostApply.
-	if errors.HasType(err, (*roachpb.RaftGroupDeletedError)(nil)) {
+	if errors.HasType(err, (*kvpb.RaftGroupDeletedError)(nil)) {
 		return func() {}, nil
 	}
 	if err != nil {

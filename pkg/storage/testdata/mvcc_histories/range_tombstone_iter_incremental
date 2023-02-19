@@ -923,7 +923,7 @@ iter_scan
 ----
 iter_seek_ge: err=conflicting intents on "a"
 iter_scan: err=conflicting intents on "a"
-error: (*roachpb.WriteIntentError:) conflicting intents on "a"
+error: (*kvpb.WriteIntentError:) conflicting intents on "a"
 
 run error
 iter_new_incremental types=pointsAndRanges k=a end=z intents=aggregate
@@ -959,7 +959,7 @@ iter_scan: {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>] !
 iter_scan: "m"/8.000000000,0=/BYTES/m8 {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
 iter_scan: "o"/7.000000000,0=/BYTES/o7 !
 iter_scan: .
-error: (*roachpb.WriteIntentError:) conflicting intents on "a", "d", "j", "l", "m", "o"
+error: (*kvpb.WriteIntentError:) conflicting intents on "a", "d", "j", "l", "m", "o"
 
 run error
 iter_new_incremental types=pointsAndRanges k=a end=z endTs=7 intents=aggregate
@@ -993,7 +993,7 @@ iter_scan: "l"/7.000000000,0=/BYTES/l7
 iter_scan: {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>] !
 iter_scan: "o"/7.000000000,0=/BYTES/o7 !
 iter_scan: .
-error: (*roachpb.WriteIntentError:) conflicting intents on "a", "j", "l", "o"
+error: (*kvpb.WriteIntentError:) conflicting intents on "a", "j", "l", "o"
 
 run ok
 iter_new_incremental types=pointsAndRanges k=a end=z endTs=6 intents=aggregate
@@ -1061,7 +1061,7 @@ iter_next_ignoring_time
 ----
 iter_seek_ge: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>] !
 iter_next_ignoring_time: err=conflicting intents on "d"
-error: (*roachpb.WriteIntentError:) conflicting intents on "d"
+error: (*kvpb.WriteIntentError:) conflicting intents on "d"
 
 run ok
 iter_new_incremental types=pointsAndRanges k=a end=z startTs=2 endTs=4 intents=error
@@ -1078,7 +1078,7 @@ iter_next_key_ignoring_time
 ----
 iter_seek_ge: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>] !
 iter_next_key_ignoring_time: err=conflicting intents on "d"
-error: (*roachpb.WriteIntentError:) conflicting intents on "d"
+error: (*kvpb.WriteIntentError:) conflicting intents on "d"
 
 # rangesOnly doesn't care about intents.
 run ok

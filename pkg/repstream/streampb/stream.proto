@@ -14,7 +14,7 @@ package cockroach.repstream.streampb;
 option go_package = "streampb";
 
 
-import "roachpb/api.proto";
+import "kv/kvpb/api.proto";
 import "roachpb/data.proto";
 import "jobs/jobspb/jobs.proto";
 import "roachpb/metadata.proto";

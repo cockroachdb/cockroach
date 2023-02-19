@@ -13,6 +13,7 @@ package kv
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -47,11 +48,11 @@ type Batch struct {
 	Results []Result
 	// The Header which will be used to send the resulting BatchRequest.
 	// To be modified directly.
-	Header roachpb.Header
+	Header kvpb.Header
 	// The AdmissionHeader which will be used when sending the resulting
 	// BatchRequest. To be modified directly.
-	AdmissionHeader roachpb.AdmissionHeader
-	reqs            []roachpb.RequestUnion
+	AdmissionHeader kvpb.AdmissionHeader
+	reqs            []kvpb.RequestUnion
 
 	// approxMutationReqBytes tracks the approximate size of keys and values in
 	// mutations added to this batch via Put, CPut, InitPut, Del, etc.
@@ -60,9 +61,9 @@ type Batch struct {
 	// operations renders the batch unusable.
 	raw bool
 	// Once received, the response from a successful batch.
-	response *roachpb.BatchResponse
+	response *kvpb.BatchResponse
 	// Once received, any error encountered sending the batch.
-	pErr *roachpb.Error
+	pErr *kvpb.Error
 
 	// We use pre-allocated buffers to avoid dynamic allocations for small batches.
 	resultsBuf    [8]Result
@@ -79,19 +80,19 @@ func (b *Batch) ApproximateMutationBytes() int {
 }
 
 // Requests exposes the requests stashed in the batch thus far.
-func (b *Batch) Requests() []roachpb.RequestUnion {
+func (b *Batch) Requests() []kvpb.RequestUnion {
 	return b.reqs
 }
 
 // RawResponse returns the BatchResponse which was the result of a successful
 // execution of the batch, and nil otherwise.
-func (b *Batch) RawResponse() *roachpb.BatchResponse {
+func (b *Batch) RawResponse() *kvpb.BatchResponse {
 	return b.response
 }
 
 // MustPErr returns the structured error resulting from a failed execution of
 // the batch, asserting that that error is non-nil.
-func (b *Batch) MustPErr() *roachpb.Error {
+func (b *Batch) MustPErr() *kvpb.Error {
 	if b.pErr == nil {
 		panic(errors.Errorf("expected non-nil pErr for batch %+v", b))
 	}
@@ -104,7 +105,7 @@ func (b *Batch) validate() error {
 	if err != nil {
 		// Set pErr just as sendAndFill does, so that higher layers can find it
 		// using MustPErr.
-		b.pErr = roachpb.NewError(err)
+		b.pErr = kvpb.NewError(err)
 	}
 	return err
 }
@@ -165,7 +166,7 @@ func (b *Batch) fillResults(ctx context.Context) {
 		for k := 0; k < result.calls; k++ {
 			args := b.reqs[offset+k].GetInner()
 
-			var reply roachpb.Response
+			var reply kvpb.Response
 			// It's possible that result.Err was populated early, for example
 			// when PutProto is called and the proto marshaling errored out.
 			// In that case, we don't want to mutate this result's error
@@ -178,7 +179,7 @@ func (b *Batch) fillResults(ctx context.Context) {
 					// this pass.
 					if b.response != nil && offset+k < len(b.response.Responses) {
 						reply = b.response.Responses[offset+k].GetInner()
-					} else if args.Method() != roachpb.EndTxn {
+					} else if args.Method() != kvpb.EndTxn {
 						// TODO(tschottdorf): EndTxn is special-cased here
 						// because it may be elided (r/o txns). Might prefer to
 						// simulate an EndTxn response instead; this effectively
@@ -191,41 +192,41 @@ func (b *Batch) fillResults(ctx context.Context) {
 			}
 
 			switch req := args.(type) {
-			case *roachpb.GetRequest:
+			case *kvpb.GetRequest:
 				row := &result.Rows[k]
 				row.Key = []byte(req.Key)
 				if result.Err == nil {
-					row.Value = reply.(*roachpb.GetResponse).Value
+					row.Value = reply.(*kvpb.GetResponse).Value
 				}
-			case *roachpb.PutRequest:
+			case *kvpb.PutRequest:
 				row := &result.Rows[k]
 				row.Key = []byte(req.Key)
 				if result.Err == nil {
 					row.Value = &req.Value
 				}
-			case *roachpb.ConditionalPutRequest:
+			case *kvpb.ConditionalPutRequest:
 				row := &result.Rows[k]
 				row.Key = []byte(req.Key)
 				if result.Err == nil {
 					row.Value = &req.Value
 				}
-			case *roachpb.InitPutRequest:
+			case *kvpb.InitPutRequest:
 				row := &result.Rows[k]
 				row.Key = []byte(req.Key)
 				if result.Err == nil {
 					row.Value = &req.Value
 				}
-			case *roachpb.IncrementRequest:
+			case *kvpb.IncrementRequest:
 				row := &result.Rows[k]
 				row.Key = []byte(req.Key)
 				if result.Err == nil {
-					t := reply.(*roachpb.IncrementResponse)
+					t := reply.(*kvpb.IncrementResponse)
 					row.Value = &roachpb.Value{}
 					row.Value.SetInt(t.NewValue)
 				}
-			case *roachpb.ScanRequest:
+			case *kvpb.ScanRequest:
 				if result.Err == nil {
-					t := reply.(*roachpb.ScanResponse)
+					t := reply.(*kvpb.ScanResponse)
 					result.Rows = make([]KeyValue, len(t.Rows))
 					for j := range t.Rows {
 						src := &t.Rows[j]
@@ -234,9 +235,9 @@ func (b *Batch) fillResults(ctx context.Context) {
 						dst.Value = &src.Value
 					}
 				}
-			case *roachpb.ReverseScanRequest:
+			case *kvpb.ReverseScanRequest:
 				if result.Err == nil {
-					t := reply.(*roachpb.ReverseScanResponse)
+					t := reply.(*kvpb.ReverseScanResponse)
 					result.Rows = make([]KeyValue, len(t.Rows))
 					for j := range t.Rows {
 						src := &t.Rows[j]
@@ -245,45 +246,45 @@ func (b *Batch) fillResults(ctx context.Context) {
 						dst.Value = &src.Value
 					}
 				}
-			case *roachpb.DeleteRequest:
+			case *kvpb.DeleteRequest:
 				if result.Err == nil {
-					resp := reply.(*roachpb.DeleteResponse)
+					resp := reply.(*kvpb.DeleteResponse)
 					if resp.FoundKey {
 						// Accumulate all keys that were deleted as part of a
 						// single Del() operation.
-						result.Keys = append(result.Keys, args.(*roachpb.DeleteRequest).Key)
+						result.Keys = append(result.Keys, args.(*kvpb.DeleteRequest).Key)
 					}
 				}
-			case *roachpb.DeleteRangeRequest:
+			case *kvpb.DeleteRangeRequest:
 				if result.Err == nil {
-					result.Keys = reply.(*roachpb.DeleteRangeResponse).Keys
+					result.Keys = reply.(*kvpb.DeleteRangeResponse).Keys
 				}
 			// Nothing to do for all methods below as they do not generate
 			// any rows.
-			case *roachpb.EndTxnRequest:
-			case *roachpb.AdminMergeRequest:
-			case *roachpb.AdminSplitRequest:
-			case *roachpb.AdminUnsplitRequest:
-			case *roachpb.AdminTransferLeaseRequest:
-			case *roachpb.AdminChangeReplicasRequest:
-			case *roachpb.AdminRelocateRangeRequest:
-			case *roachpb.HeartbeatTxnRequest:
-			case *roachpb.GCRequest:
-			case *roachpb.LeaseInfoRequest:
-			case *roachpb.PushTxnRequest:
-			case *roachpb.QueryTxnRequest:
-			case *roachpb.QueryIntentRequest:
-			case *roachpb.ResolveIntentRequest:
-			case *roachpb.ResolveIntentRangeRequest:
-			case *roachpb.MergeRequest:
-			case *roachpb.TruncateLogRequest:
-			case *roachpb.RequestLeaseRequest:
-			case *roachpb.CheckConsistencyRequest:
-			case *roachpb.AdminScatterRequest:
-			case *roachpb.AddSSTableRequest:
-			case *roachpb.MigrateRequest:
-			case *roachpb.QueryResolvedTimestampRequest:
-			case *roachpb.BarrierRequest:
+			case *kvpb.EndTxnRequest:
+			case *kvpb.AdminMergeRequest:
+			case *kvpb.AdminSplitRequest:
+			case *kvpb.AdminUnsplitRequest:
+			case *kvpb.AdminTransferLeaseRequest:
+			case *kvpb.AdminChangeReplicasRequest:
+			case *kvpb.AdminRelocateRangeRequest:
+			case *kvpb.HeartbeatTxnRequest:
+			case *kvpb.GCRequest:
+			case *kvpb.LeaseInfoRequest:
+			case *kvpb.PushTxnRequest:
+			case *kvpb.QueryTxnRequest:
+			case *kvpb.QueryIntentRequest:
+			case *kvpb.ResolveIntentRequest:
+			case *kvpb.ResolveIntentRangeRequest:
+			case *kvpb.MergeRequest:
+			case *kvpb.TruncateLogRequest:
+			case *kvpb.RequestLeaseRequest:
+			case *kvpb.CheckConsistencyRequest:
+			case *kvpb.AdminScatterRequest:
+			case *kvpb.AddSSTableRequest:
+			case *kvpb.MigrateRequest:
+			case *kvpb.QueryResolvedTimestampRequest:
+			case *kvpb.BarrierRequest:
 			default:
 				if result.Err == nil {
 					result.Err = errors.Errorf("unsupported reply: %T for %T",
@@ -323,14 +324,14 @@ func (b *Batch) growReqs(n int) {
 		for newSize < len(b.reqs)+n {
 			newSize *= 2
 		}
-		newReqs := make([]roachpb.RequestUnion, len(b.reqs), newSize)
+		newReqs := make([]kvpb.RequestUnion, len(b.reqs), newSize)
 		copy(newReqs, b.reqs)
 		b.reqs = newReqs
 	}
 	b.reqs = b.reqs[:len(b.reqs)+n]
 }
 
-func (b *Batch) appendReqs(args ...roachpb.Request) {
+func (b *Batch) appendReqs(args ...kvpb.Request) {
 	n := len(b.reqs)
 	b.growReqs(len(args))
 	for i := range args {
@@ -341,16 +342,16 @@ func (b *Batch) appendReqs(args ...roachpb.Request) {
 // AddRawRequest adds the specified requests to the batch. No responses will
 // be allocated for them, and using any of the non-raw operations will result
 // in an error when running the batch.
-func (b *Batch) AddRawRequest(reqs ...roachpb.Request) {
+func (b *Batch) AddRawRequest(reqs ...kvpb.Request) {
 	b.raw = true
 	for _, args := range reqs {
 		numRows := 0
 		switch args.(type) {
-		case *roachpb.GetRequest,
-			*roachpb.PutRequest,
-			*roachpb.ConditionalPutRequest,
-			*roachpb.IncrementRequest,
-			*roachpb.DeleteRequest:
+		case *kvpb.GetRequest,
+			*kvpb.PutRequest,
+			*kvpb.ConditionalPutRequest,
+			*kvpb.IncrementRequest,
+			*kvpb.DeleteRequest:
 			numRows = 1
 		}
 		b.appendReqs(args)
@@ -364,7 +365,7 @@ func (b *Batch) get(key interface{}, forUpdate bool) {
 		b.initResult(0, 1, notRaw, err)
 		return
 	}
-	b.appendReqs(roachpb.NewGet(k, forUpdate))
+	b.appendReqs(kvpb.NewGet(k, forUpdate))
 	b.initResult(1, 1, notRaw, nil)
 }
 
@@ -403,9 +404,9 @@ func (b *Batch) put(key, value interface{}, inline bool) {
 		return
 	}
 	if inline {
-		b.appendReqs(roachpb.NewPutInline(k, v))
+		b.appendReqs(kvpb.NewPutInline(k, v))
 	} else {
-		b.appendReqs(roachpb.NewPut(k, v))
+		b.appendReqs(kvpb.NewPut(k, v))
 	}
 	b.approxMutationReqBytes += len(k) + len(v.RawBytes)
 	b.initResult(1, 1, notRaw, nil)
@@ -502,9 +503,9 @@ func (b *Batch) cputInternal(
 		return
 	}
 	if inline {
-		b.appendReqs(roachpb.NewConditionalPutInline(k, v, expValue, allowNotExist))
+		b.appendReqs(kvpb.NewConditionalPutInline(k, v, expValue, allowNotExist))
 	} else {
-		b.appendReqs(roachpb.NewConditionalPut(k, v, expValue, allowNotExist))
+		b.appendReqs(kvpb.NewConditionalPut(k, v, expValue, allowNotExist))
 	}
 	b.approxMutationReqBytes += len(k) + len(v.RawBytes)
 	b.initResult(1, 1, notRaw, nil)
@@ -529,7 +530,7 @@ func (b *Batch) InitPut(key, value interface{}, failOnTombstones bool) {
 		b.initResult(0, 1, notRaw, err)
 		return
 	}
-	b.appendReqs(roachpb.NewInitPut(k, v, failOnTombstones))
+	b.appendReqs(kvpb.NewInitPut(k, v, failOnTombstones))
 	b.approxMutationReqBytes += len(k) + len(v.RawBytes)
 	b.initResult(1, 1, notRaw, nil)
 }
@@ -548,7 +549,7 @@ func (b *Batch) Inc(key interface{}, value int64) {
 		b.initResult(0, 1, notRaw, err)
 		return
 	}
-	b.appendReqs(roachpb.NewIncrement(k, value))
+	b.appendReqs(kvpb.NewIncrement(k, value))
 	b.initResult(1, 1, notRaw, nil)
 }
 
@@ -564,9 +565,9 @@ func (b *Batch) scan(s, e interface{}, isReverse, forUpdate bool) {
 		return
 	}
 	if !isReverse {
-		b.appendReqs(roachpb.NewScan(begin, end, forUpdate))
+		b.appendReqs(kvpb.NewScan(begin, end, forUpdate))
 	} else {
-		b.appendReqs(roachpb.NewReverseScan(begin, end, forUpdate))
+		b.appendReqs(kvpb.NewReverseScan(begin, end, forUpdate))
 	}
 	b.initResult(1, 0, notRaw, nil)
 }
@@ -625,14 +626,14 @@ func (b *Batch) ReverseScanForUpdate(s, e interface{}) {
 //
 // key can be either a byte slice or a string.
 func (b *Batch) Del(keys ...interface{}) {
-	reqs := make([]roachpb.Request, 0, len(keys))
+	reqs := make([]kvpb.Request, 0, len(keys))
 	for _, key := range keys {
 		k, err := marshalKey(key)
 		if err != nil {
 			b.initResult(len(keys), 0, notRaw, err)
 			return
 		}
-		reqs = append(reqs, roachpb.NewDelete(k))
+		reqs = append(reqs, kvpb.NewDelete(k))
 		b.approxMutationReqBytes += len(k)
 	}
 	b.appendReqs(reqs...)
@@ -656,7 +657,7 @@ func (b *Batch) DelRange(s, e interface{}, returnKeys bool) {
 		b.initResult(0, 0, notRaw, err)
 		return
 	}
-	b.appendReqs(roachpb.NewDeleteRange(begin, end, returnKeys))
+	b.appendReqs(kvpb.NewDeleteRange(begin, end, returnKeys))
 	b.initResult(1, 0, notRaw, nil)
 }
 
@@ -674,8 +675,8 @@ func (b *Batch) DelRangeUsingTombstone(s, e interface{}) {
 		b.initResult(0, 0, notRaw, err)
 		return
 	}
-	b.appendReqs(&roachpb.DeleteRangeRequest{
-		RequestHeader: roachpb.RequestHeader{
+	b.appendReqs(&kvpb.DeleteRangeRequest{
+		RequestHeader: kvpb.RequestHeader{
 			Key:    start,
 			EndKey: end,
 		},
@@ -692,8 +693,8 @@ func (b *Batch) adminMerge(key interface{}) {
 		b.initResult(0, 0, notRaw, err)
 		return
 	}
-	req := &roachpb.AdminMergeRequest{
-		RequestHeader: roachpb.RequestHeader{
+	req := &kvpb.AdminMergeRequest{
+		RequestHeader: kvpb.RequestHeader{
 			Key: k,
 		},
 	}
@@ -711,8 +712,8 @@ func (b *Batch) adminSplit(
 		b.initResult(0, 0, notRaw, err)
 		return
 	}
-	req := &roachpb.AdminSplitRequest{
-		RequestHeader: roachpb.RequestHeader{
+	req := &kvpb.AdminSplitRequest{
+		RequestHeader: kvpb.RequestHeader{
 			Key: splitKey,
 		},
 		SplitKey:       splitKey,
@@ -728,8 +729,8 @@ func (b *Batch) adminUnsplit(splitKeyIn interface{}) {
 	if err != nil {
 		b.initResult(0, 0, notRaw, err)
 	}
-	req := &roachpb.AdminUnsplitRequest{
-		RequestHeader: roachpb.RequestHeader{
+	req := &kvpb.AdminUnsplitRequest{
+		RequestHeader: kvpb.RequestHeader{
 			Key: splitKey,
 		},
 	}
@@ -747,8 +748,8 @@ func (b *Batch) adminTransferLease(
 		b.initResult(0, 0, notRaw, err)
 		return
 	}
-	req := &roachpb.AdminTransferLeaseRequest{
-		RequestHeader: roachpb.RequestHeader{
+	req := &kvpb.AdminTransferLeaseRequest{
+		RequestHeader: kvpb.RequestHeader{
 			Key: k,
 		},
 		Target:             target,
@@ -761,15 +762,15 @@ func (b *Batch) adminTransferLease(
 // adminChangeReplicas is only exported on DB. It is here for symmetry with the
 // other operations.
 func (b *Batch) adminChangeReplicas(
-	key interface{}, expDesc roachpb.RangeDescriptor, chgs []roachpb.ReplicationChange,
+	key interface{}, expDesc roachpb.RangeDescriptor, chgs []kvpb.ReplicationChange,
 ) {
 	k, err := marshalKey(key)
 	if err != nil {
 		b.initResult(0, 0, notRaw, err)
 		return
 	}
-	req := &roachpb.AdminChangeReplicasRequest{
-		RequestHeader: roachpb.RequestHeader{
+	req := &kvpb.AdminChangeReplicasRequest{
+		RequestHeader: kvpb.RequestHeader{
 			Key: k,
 		},
 		ExpDesc: expDesc,
@@ -792,8 +793,8 @@ func (b *Batch) adminRelocateRange(
 		b.initResult(0, 0, notRaw, err)
 		return
 	}
-	req := &roachpb.AdminRelocateRangeRequest{
-		RequestHeader: roachpb.RequestHeader{
+	req := &kvpb.AdminRelocateRangeRequest{
+		RequestHeader: kvpb.RequestHeader{
 			Key: k,
 		},
 		VoterTargets:                      voterTargets,
@@ -826,8 +827,8 @@ func (b *Batch) addSSTable(
 		b.initResult(0, 0, notRaw, err)
 		return
 	}
-	req := &roachpb.AddSSTableRequest{
-		RequestHeader: roachpb.RequestHeader{
+	req := &kvpb.AddSSTableRequest{
+		RequestHeader: kvpb.RequestHeader{
 			Key:    begin,
 			EndKey: end,
 		},
@@ -855,8 +856,8 @@ func (b *Batch) migrate(s, e interface{}, version roachpb.Version) {
 		b.initResult(0, 0, notRaw, err)
 		return
 	}
-	req := &roachpb.MigrateRequest{
-		RequestHeader: roachpb.RequestHeader{
+	req := &kvpb.MigrateRequest{
+		RequestHeader: kvpb.RequestHeader{
 			Key:    begin,
 			EndKey: end,
 		},
@@ -878,8 +879,8 @@ func (b *Batch) queryResolvedTimestamp(s, e interface{}) {
 		b.initResult(0, 0, notRaw, err)
 		return
 	}
-	req := &roachpb.QueryResolvedTimestampRequest{
-		RequestHeader: roachpb.RequestHeader{
+	req := &kvpb.QueryResolvedTimestampRequest{
+		RequestHeader: kvpb.RequestHeader{
 			Key:    begin,
 			EndKey: end,
 		},
@@ -899,8 +900,8 @@ func (b *Batch) barrier(s, e interface{}) {
 		b.initResult(0, 0, notRaw, err)
 		return
 	}
-	req := &roachpb.BarrierRequest{
-		RequestHeader: roachpb.RequestHeader{
+	req := &kvpb.BarrierRequest{
+		RequestHeader: kvpb.RequestHeader{
 			Key:    begin,
 			EndKey: end,
 		},

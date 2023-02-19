@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -146,19 +147,19 @@ func TestDeleteRangeTombstone(t *testing.T) {
 			start:     "i",
 			end:       "j",
 			ts:        10e9,
-			expectErr: &roachpb.WriteIntentError{},
+			expectErr: &kvpb.WriteIntentError{},
 		},
 		"below point errors with WriteTooOldError": {
 			start:     "a",
 			end:       "d",
 			ts:        1e9,
-			expectErr: &roachpb.WriteTooOldError{},
+			expectErr: &kvpb.WriteTooOldError{},
 		},
 		"below range tombstone errors with WriteTooOldError": {
 			start:     "f",
 			end:       "h",
 			ts:        1e9,
-			expectErr: &roachpb.WriteTooOldError{},
+			expectErr: &kvpb.WriteTooOldError{},
 		},
 		"predicate without UsingRangeTombstone error": {
 			start:              "a",
@@ -210,29 +211,29 @@ func TestDeleteRangeTombstone(t *testing.T) {
 						},
 					}
 
-					h := roachpb.Header{
+					h := kvpb.Header{
 						Timestamp: rangeKey.Timestamp,
 					}
 					if tc.txn {
 						txn := roachpb.MakeTransaction("txn", nil /* baseKey */, roachpb.NormalUserPriority, rangeKey.Timestamp, 0, 0)
 						h.Txn = &txn
 					}
-					var predicates roachpb.DeleteRangePredicates
+					var predicates kvpb.DeleteRangePredicates
 					if runWithPredicates {
-						predicates = roachpb.DeleteRangePredicates{
+						predicates = kvpb.DeleteRangePredicates{
 							StartTime: hlc.Timestamp{WallTime: 1},
 						}
 						h.MaxSpanRequestKeys = math.MaxInt64
 					}
 					if tc.predicateStartTime > 0 {
-						predicates = roachpb.DeleteRangePredicates{
+						predicates = kvpb.DeleteRangePredicates{
 							StartTime: hlc.Timestamp{WallTime: tc.predicateStartTime},
 						}
 						h.MaxSpanRequestKeys = tc.maxBatchSize
 					}
 
-					req := &roachpb.DeleteRangeRequest{
-						RequestHeader: roachpb.RequestHeader{
+					req := &kvpb.DeleteRangeRequest{
+						RequestHeader: kvpb.RequestHeader{
 							Key:    rangeKey.StartKey,
 							EndKey: rangeKey.EndKey,
 						},
@@ -255,7 +256,7 @@ func TestDeleteRangeTombstone(t *testing.T) {
 					defer batch.Close()
 
 					// Run the request.
-					resp := &roachpb.DeleteRangeResponse{}
+					resp := &kvpb.DeleteRangeResponse{}
 					_, err := DeleteRange(ctx, batch, CommandArgs{
 						EvalCtx: evalCtx.EvalContext(),
 						Stats:   &ms,

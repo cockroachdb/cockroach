@@ -113,14 +113,14 @@ func ComputeDefaultCode(err error) pgcode.Code {
 	return pgcode.Code{}
 }
 
-// ClientVisibleRetryError mirrors roachpb.ClientVisibleRetryError but
+// ClientVisibleRetryError mirrors kvpb.ClientVisibleRetryError but
 // is defined here to avoid an import cycle.
 type ClientVisibleRetryError interface {
 	ClientVisibleRetryError()
 }
 
 // ClientVisibleAmbiguousError mirrors
-// roachpb.ClientVisibleAmbiguousError but is defined here to avoid an
+// kvpb.ClientVisibleAmbiguousError but is defined here to avoid an
 // import cycle.
 type ClientVisibleAmbiguousError interface {
 	ClientVisibleAmbiguousError()

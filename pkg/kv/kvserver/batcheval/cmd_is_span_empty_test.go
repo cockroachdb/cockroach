@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -33,8 +34,8 @@ func TestIsSpanEmpty(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
-					TestingRequestFilter: func(ctx context.Context, request *roachpb.BatchRequest) *roachpb.Error {
-						if _, exists := request.GetArg(roachpb.IsSpanEmpty); exists {
+					TestingRequestFilter: func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error {
+						if _, exists := request.GetArg(kvpb.IsSpanEmpty); exists {
 							atomic.AddInt64(&sentIsSpanEmptyRequests, 1)
 						}
 						return nil
@@ -54,8 +55,8 @@ func TestIsSpanEmpty(t *testing.T) {
 	checkIsEmpty := func(t *testing.T, exp bool, from, to roachpb.Key) {
 		var ba kv.Batch
 		ba.Header.MaxSpanRequestKeys = 1
-		ba.AddRawRequest(&roachpb.IsSpanEmptyRequest{
-			RequestHeader: roachpb.RequestHeader{
+		ba.AddRawRequest(&kvpb.IsSpanEmptyRequest{
+			RequestHeader: kvpb.RequestHeader{
 				Key: from, EndKey: to,
 			},
 		})

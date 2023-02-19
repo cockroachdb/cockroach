@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -291,7 +292,7 @@ type activeRangeFeed struct {
 }
 
 func (a *activeRangeFeed) onRangeEvent(
-	nodeID roachpb.NodeID, rangeID roachpb.RangeID, event *roachpb.RangeFeedEvent,
+	nodeID roachpb.NodeID, rangeID roachpb.RangeID, event *kvpb.RangeFeedEvent,
 ) {
 	a.Lock()
 	defer a.Unlock()
@@ -435,8 +436,8 @@ func (ds *DistSender) partialRangeFeed(
 					span, startAfter, timeutil.Since(startAfter.GoTime()), err)
 			}
 			switch {
-			case errors.HasType(err, (*roachpb.StoreNotFoundError)(nil)) ||
-				errors.HasType(err, (*roachpb.NodeUnavailableError)(nil)):
+			case errors.HasType(err, (*kvpb.StoreNotFoundError)(nil)) ||
+				errors.HasType(err, (*kvpb.NodeUnavailableError)(nil)):
 			// These errors are likely to be unique to the replica that
 			// reported them, so no action is required before the next
 			// retry.
@@ -451,31 +452,31 @@ func (ds *DistSender) partialRangeFeed(
 				token.Evict(ctx)
 				token = rangecache.EvictionToken{}
 				continue
-			case IsSendError(err), errors.HasType(err, (*roachpb.RangeNotFoundError)(nil)):
+			case IsSendError(err), errors.HasType(err, (*kvpb.RangeNotFoundError)(nil)):
 				// Evict the descriptor from the cache and reload on next attempt.
 				token.Evict(ctx)
 				token = rangecache.EvictionToken{}
 				continue
-			case errors.HasType(err, (*roachpb.RangeKeyMismatchError)(nil)):
+			case errors.HasType(err, (*kvpb.RangeKeyMismatchError)(nil)):
 				// Evict the descriptor from the cache.
 				token.Evict(ctx)
 				return ds.divideAndSendRangeFeedToRanges(ctx, rs, startAfter, rangeCh)
-			case errors.HasType(err, (*roachpb.RangeFeedRetryError)(nil)):
-				var t *roachpb.RangeFeedRetryError
+			case errors.HasType(err, (*kvpb.RangeFeedRetryError)(nil)):
+				var t *kvpb.RangeFeedRetryError
 				if ok := errors.As(err, &t); !ok {
 					return errors.AssertionFailedf("wrong error type: %T", err)
 				}
 				switch t.Reason {
-				case roachpb.RangeFeedRetryError_REASON_REPLICA_REMOVED,
-					roachpb.RangeFeedRetryError_REASON_RAFT_SNAPSHOT,
-					roachpb.RangeFeedRetryError_REASON_LOGICAL_OPS_MISSING,
-					roachpb.RangeFeedRetryError_REASON_SLOW_CONSUMER:
+				case kvpb.RangeFeedRetryError_REASON_REPLICA_REMOVED,
+					kvpb.RangeFeedRetryError_REASON_RAFT_SNAPSHOT,
+					kvpb.RangeFeedRetryError_REASON_LOGICAL_OPS_MISSING,
+					kvpb.RangeFeedRetryError_REASON_SLOW_CONSUMER:
 					// Try again with same descriptor. These are transient
 					// errors that should not show up again.
 					continue
-				case roachpb.RangeFeedRetryError_REASON_RANGE_SPLIT,
-					roachpb.RangeFeedRetryError_REASON_RANGE_MERGED,
-					roachpb.RangeFeedRetryError_REASON_NO_LEASEHOLDER:
+				case kvpb.RangeFeedRetryError_REASON_RANGE_SPLIT,
+					kvpb.RangeFeedRetryError_REASON_RANGE_MERGED,
+					kvpb.RangeFeedRetryError_REASON_NO_LEASEHOLDER:
 					// Evict the descriptor from the cache.
 					token.Evict(ctx)
 					return ds.divideAndSendRangeFeedToRanges(ctx, rs, startAfter, rangeCh)
@@ -492,7 +493,7 @@ func (ds *DistSender) partialRangeFeed(
 
 // onRangeEventCb is invoked for each non-error range event.
 // nodeID identifies the node ID which generated the event.
-type onRangeEventCb func(nodeID roachpb.NodeID, rangeID roachpb.RangeID, event *roachpb.RangeFeedEvent)
+type onRangeEventCb func(nodeID roachpb.NodeID, rangeID roachpb.RangeID, event *kvpb.RangeFeedEvent)
 
 // singleRangeFeed gathers and rearranges the replicas, and makes a RangeFeed
 // RPC call. Results will be sent on the provided channel. Returns the timestamp
@@ -525,19 +526,19 @@ func (ds *DistSender) singleRangeFeed(
 	if cfg.overSystemTable {
 		admissionPri = admissionpb.NormalPri
 	}
-	args := roachpb.RangeFeedRequest{
+	args := kvpb.RangeFeedRequest{
 		Span: span,
-		Header: roachpb.Header{
+		Header: kvpb.Header{
 			Timestamp: startAfter,
 			RangeID:   desc.RangeID,
 		},
 		WithDiff: withDiff,
-		AdmissionHeader: roachpb.AdmissionHeader{
+		AdmissionHeader: kvpb.AdmissionHeader{
 			// NB: AdmissionHeader is used only at the start of the range feed
 			// stream since the initial catch-up scan is expensive.
 			Priority:                 int32(admissionPri),
 			CreateTime:               timeutil.Now().UnixNano(),
-			Source:                   roachpb.AdmissionHeader_FROM_SQL,
+			Source:                   kvpb.AdmissionHeader_FROM_SQL,
 			NoMemoryReservedAtSource: true,
 		},
 	}
@@ -624,7 +625,7 @@ func (ds *DistSender) singleRangeFeed(
 		ctx = logtags.AddTag(ctx, "dest_r", args.RangeID)
 		ctx, restore := pprofutil.SetProfilerLabelsFromCtxTags(ctx)
 
-		var stream roachpb.RangeFeedEventProducer
+		var stream kvpb.RangeFeedEventProducer
 		stream, streamCleanup, err = streamProducerFactory(ctx, client, &args)
 		if err != nil {
 			restore()
@@ -643,7 +644,7 @@ func (ds *DistSender) singleRangeFeed(
 			}
 		}
 
-		var event *roachpb.RangeFeedEvent
+		var event *kvpb.RangeFeedEvent
 		for {
 			if err := stuckWatcher.do(func() (err error) {
 				event, err = stream.Recv()
@@ -662,7 +663,7 @@ func (ds *DistSender) singleRangeFeed(
 
 			msg := RangeFeedMessage{RangeFeedEvent: event, RegisteredSpan: span}
 			switch t := event.GetValue().(type) {
-			case *roachpb.RangeFeedCheckpoint:
+			case *kvpb.RangeFeedCheckpoint:
 				if t.Span.Contains(args.Span) {
 					// If we see the first non-empty checkpoint, we know we're done with the catchup scan.
 					if !t.ResolvedTS.IsEmpty() && catchupRes != nil {
@@ -675,8 +676,8 @@ func (ds *DistSender) singleRangeFeed(
 					// that timestamp.
 					args.Timestamp.Forward(t.ResolvedTS)
 				}
-			case *roachpb.RangeFeedSSTable:
-			case *roachpb.RangeFeedError:
+			case *kvpb.RangeFeedSSTable:
+			case *kvpb.RangeFeedError:
 				log.VErrEventf(ctx, 2, "RangeFeedError: %s", t.Error.GoError())
 				if catchupRes != nil {
 					ds.metrics.RangefeedErrorCatchup.Inc(1)
@@ -711,21 +712,21 @@ func connectionClass(sv *settings.Values) rpc.ConnectionClass {
 type rangeFeedEventProducerFactory func(
 	ctx context.Context,
 	client rpc.RestrictedInternalClient,
-	req *roachpb.RangeFeedRequest,
-) (roachpb.RangeFeedEventProducer, func(), error)
+	req *kvpb.RangeFeedRequest,
+) (kvpb.RangeFeedEventProducer, func(), error)
 
 // legacyRangeFeedEventProducer is a rangeFeedEventProducerFactory using
 // legacy RangeFeed RPC.
 func legacyRangeFeedEventProducer(
-	ctx context.Context, client rpc.RestrictedInternalClient, req *roachpb.RangeFeedRequest,
-) (producer roachpb.RangeFeedEventProducer, cleanup func(), err error) {
+	ctx context.Context, client rpc.RestrictedInternalClient, req *kvpb.RangeFeedRequest,
+) (producer kvpb.RangeFeedEventProducer, cleanup func(), err error) {
 	cleanup = func() {}
 	producer, err = client.RangeFeed(ctx, req)
 	return producer, cleanup, err
 }
 
 func (ds *DistSender) handleStuckEvent(
-	args *roachpb.RangeFeedRequest, afterCatchupScan bool, threshold time.Duration,
+	args *kvpb.RangeFeedRequest, afterCatchupScan bool, threshold time.Duration,
 ) error {
 	ds.metrics.RangefeedRestartStuck.Inc(1)
 	if afterCatchupScan {

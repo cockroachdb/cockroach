@@ -58,18 +58,18 @@ exports_files([
 # gazelle:resolve go google.golang.org/genproto/googleapis/pubsub/v1 @org_golang_google_genproto//googleapis/pubsub/v1:pubsub
 # gazelle:resolve go google.golang.org/genproto/googleapis/cloud/kms/v1 @org_golang_google_genproto//googleapis/cloud/kms/v1:kms
 
-# See pkg/roachpb/gen/BUILD.bazel for more details.
+# See pkg/kv/kvpb/gen/BUILD.bazel for more details.
 #
-# gazelle:resolve proto go roachpb/api.proto //pkg/roachpb
+# gazelle:resolve proto go kv/kvpb/api.proto //pkg/kv/kvpb
+# gazelle:resolve proto go kv/kvpb/errors.proto //pkg/kv/kvpb
 # gazelle:resolve proto go roachpb/data.proto //pkg/roachpb
-# gazelle:resolve proto go roachpb/errors.proto //pkg/roachpb
 # gazelle:resolve proto go roachpb/index_usage_stats.proto //pkg/roachpb
 # gazelle:resolve proto go roachpb/internal.proto //pkg/roachpb
 # gazelle:resolve proto go roachpb/internal_raft.proto //pkg/roachpb
 # gazelle:resolve proto go roachpb/io-formats.proto //pkg/roachpb
 # gazelle:resolve proto go roachpb/metadata.proto //pkg/roachpb
 # gazelle:resolve proto go roachpb/span_config.proto //pkg/roachpb
-# gazelle:exclude pkg/roachpb/batch_generated.go
+# gazelle:exclude pkg/kv/kvpb/batch_generated.go
 
 # See pkg/sql/opt/optgen/cmd/langgen/BUILD.bazel for more details.
 #

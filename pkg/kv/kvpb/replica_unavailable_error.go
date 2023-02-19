@@ -8,12 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package roachpb
+package kvpb
 
 import (
 	context "context"
 	"fmt"
+	"reflect"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 )
@@ -22,7 +24,7 @@ import (
 // provided with the range descriptor known to the replica, and the relevant
 // replica descriptor within.
 func NewReplicaUnavailableError(
-	cause error, desc *RangeDescriptor, replDesc ReplicaDescriptor,
+	cause error, desc *roachpb.RangeDescriptor, replDesc roachpb.ReplicaDescriptor,
 ) error {
 	return &ReplicaUnavailableError{
 		Desc:    *desc,
@@ -55,6 +57,12 @@ func (e *ReplicaUnavailableError) Unwrap() error {
 }
 
 func init() {
+	// Register the migration of the error that used to be in the roachpb
+	// package and is now in the kv/kvpb package.
+	roachpbPath := reflect.TypeOf(roachpb.Key("")).PkgPath()
+	errors.RegisterTypeMigration(roachpbPath, "*roachpb.ReplicaUnavailableError", &ReplicaUnavailableError{})
+	// Note that it is important that these wrapper methods are registered
+	// _after_ the type migration above.
 	encode := func(ctx context.Context, err error) (msgPrefix string, safeDetails []string, payload proto.Message) {
 		errors.As(err, &payload) // payload = err.(proto.Message)
 		return "", nil, payload

@@ -20,7 +20,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
@@ -40,7 +40,7 @@ var ErrThrottled = errors.New("throttled on async limiting semaphore")
 
 // ErrUnavailable indicates that the server is quiescing and is unable to
 // process new work.
-var ErrUnavailable = &roachpb.NodeUnavailableError{}
+var ErrUnavailable = &kvpb.NodeUnavailableError{}
 
 func register(s *Stopper) {
 	trackedStoppers.Lock()

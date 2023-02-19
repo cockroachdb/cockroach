@@ -19,6 +19,7 @@ import (
 
 	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -138,7 +139,7 @@ func (n *Dialer) DialNoBreaker(
 }
 
 // DialInternalClient is a specialization of DialClass for callers that
-// want a roachpb.InternalClient. This supports an optimization to bypass the
+// want a kvpb.InternalClient. This supports an optimization to bypass the
 // network for the local node.
 //
 // For a more contextualized explanation, see the comment that decorates
@@ -167,7 +168,7 @@ func (n *Dialer) DialInternalClient(
 	if err != nil {
 		return nil, err
 	}
-	return TracingInternalClient{InternalClient: roachpb.NewInternalClient(conn)}, nil
+	return TracingInternalClient{InternalClient: kvpb.NewInternalClient(conn)}, nil
 }
 
 // dial performs the dialing of the remote connection. If breaker is nil,
@@ -305,13 +306,13 @@ func (n *Dialer) Latency(nodeID roachpb.NodeID) (time.Duration, error) {
 // Note that TracingInternalClient is not used to wrap the internalClientAdapter
 // - local RPCs don't need this tracing functionality.
 type TracingInternalClient struct {
-	roachpb.InternalClient
+	kvpb.InternalClient
 }
 
 // Batch overrides the Batch RPC client method and fills in tracing information.
 func (tic TracingInternalClient) Batch(
-	ctx context.Context, ba *roachpb.BatchRequest, opts ...grpc.CallOption,
-) (*roachpb.BatchResponse, error) {
+	ctx context.Context, ba *kvpb.BatchRequest, opts ...grpc.CallOption,
+) (*kvpb.BatchResponse, error) {
 	sp := tracing.SpanFromContext(ctx)
 	if sp != nil && !sp.IsNoop() {
 		ba = ba.ShallowCopy()

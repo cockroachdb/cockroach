@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -260,7 +261,7 @@ type replicaInQueue interface {
 	IsDestroyed() (DestroyReason, error)
 	Desc() *roachpb.RangeDescriptor
 	maybeInitializeRaftGroup(context.Context)
-	redirectOnOrAcquireLease(context.Context) (kvserverpb.LeaseStatus, *roachpb.Error)
+	redirectOnOrAcquireLease(context.Context) (kvserverpb.LeaseStatus, *kvpb.Error)
 	LeaseStatusAt(context.Context, hlc.ClockTimestamp) kvserverpb.LeaseStatus
 }
 
@@ -979,7 +980,7 @@ func (bq *baseQueue) processReplica(ctx context.Context, repl replicaInQueue) er
 			if bq.needsLease {
 				if _, pErr := repl.redirectOnOrAcquireLease(ctx); pErr != nil {
 					switch v := pErr.GetDetail().(type) {
-					case *roachpb.NotLeaseHolderError, *roachpb.RangeNotFoundError:
+					case *kvpb.NotLeaseHolderError, *kvpb.RangeNotFoundError:
 						log.VEventf(ctx, 3, "%s; skipping", v)
 						return nil
 					default:

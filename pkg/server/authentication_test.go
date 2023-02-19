@@ -26,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -117,7 +118,7 @@ func TestSSLEnforcement(t *testing.T) {
 	plainHTTPCfg.Insecure = true
 	insecureContext := newRPCContext(plainHTTPCfg)
 
-	kvGet := &roachpb.GetRequest{}
+	kvGet := &kvpb.GetRequest{}
 	kvGet.Key = roachpb.Key("/")
 
 	for _, tc := range []struct {
@@ -758,7 +759,7 @@ func TestGRPCAuthentication(t *testing.T) {
 			return err
 		}},
 		{"internal", func(ctx context.Context, conn *grpc.ClientConn) error {
-			_, err := roachpb.NewInternalClient(conn).Batch(ctx, &roachpb.BatchRequest{})
+			_, err := kvpb.NewInternalClient(conn).Batch(ctx, &kvpb.BatchRequest{})
 			return err
 		}},
 		{"perReplica", func(ctx context.Context, conn *grpc.ClientConn) error {

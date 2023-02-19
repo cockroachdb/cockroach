@@ -17,7 +17,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -57,7 +57,7 @@ Requires the admin role. The request is logged to the system event log.
 This command can modify internal system state. Incorrect use can cause severe
 irreversible damage including permanent data loss.
 
-For more information on requests, see roachpb/api.proto. Unknown or invalid
+For more information on requests, see kv/kvpb/api.proto. Unknown or invalid
 fields will error. Binary fields ([]byte) are base64-encoded. Requests spanning
 multiple ranges are wrapped in a transaction.
 
@@ -89,9 +89,9 @@ This would yield the following response:
 To generate JSON requests with Go (see also debug_send_kv_batch_test.go):
 
 func TestSendKVBatchExample(t *testing.T) {
-	var ba roachpb.BatchRequest
-	ba.Add(roachpb.NewPut(roachpb.Key("foo"), roachpb.MakeValueFromString("bar")))
-	ba.Add(roachpb.NewGet(roachpb.Key("foo"), false /* forUpdate */))
+	var ba kvpb.BatchRequest
+	ba.Add(kvpb.NewPut(roachpb.Key("foo"), roachpb.MakeValueFromString("bar")))
+	ba.Add(kvpb.NewGet(roachpb.Key("foo"), false /* forUpdate */))
 
 	jsonpb := protoutil.JSONPb{}
 	jsonProto, err := jsonpb.Marshal(&ba)
@@ -159,7 +159,7 @@ func runSendKVBatch(cmd *cobra.Command, args []string) error {
 		return errors.Wrapf(err, "failed to read input")
 	}
 
-	var ba roachpb.BatchRequest
+	var ba kvpb.BatchRequest
 	if err := jsonpb.Unmarshal(baJSON, &ba); err != nil {
 		return errors.Wrap(err, "invalid JSON")
 	}
@@ -226,8 +226,8 @@ func runSendKVBatch(cmd *cobra.Command, args []string) error {
 }
 
 func sendKVBatchRequestWithTracingOption(
-	ctx context.Context, verboseTrace bool, admin serverpb.AdminClient, ba *roachpb.BatchRequest,
-) (br *roachpb.BatchResponse, rec tracingpb.Recording, err error) {
+	ctx context.Context, verboseTrace bool, admin serverpb.AdminClient, ba *kvpb.BatchRequest,
+) (br *kvpb.BatchResponse, rec tracingpb.Recording, err error) {
 	var sp *tracing.Span
 	if verboseTrace {
 		// Set up a tracing span and enable verbose tracing if requested by

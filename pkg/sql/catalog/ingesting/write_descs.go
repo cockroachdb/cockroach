@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -228,7 +229,7 @@ func WriteDescriptors(
 		b.InitPut(kv.Key, &kv.Value, false)
 	}
 	if err := txn.Run(ctx, b); err != nil {
-		if errors.HasType(err, (*roachpb.ConditionFailedError)(nil)) {
+		if errors.HasType(err, (*kvpb.ConditionFailedError)(nil)) {
 			return pgerror.Newf(pgcode.DuplicateObject, "table already exists")
 		}
 		return err

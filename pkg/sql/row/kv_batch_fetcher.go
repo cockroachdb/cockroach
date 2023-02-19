@@ -17,6 +17,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -57,8 +58,8 @@ var defaultKVBatchSize = rowinfra.KeyLimit(util.ConstantWithMetamorphicTestValue
 // sendFunc is the function used to execute a KV batch; normally
 // wraps (*client.Txn).Send.
 type sendFunc func(
-	ctx context.Context, ba *roachpb.BatchRequest,
-) (*roachpb.BatchResponse, error)
+	ctx context.Context, ba *kvpb.BatchRequest,
+) (*kvpb.BatchResponse, error)
 
 // identifiableSpans is a helper for keeping track of the roachpb.Spans with the
 // corresponding spanIDs (when necessary).
@@ -141,7 +142,7 @@ type txnKVFetcher struct {
 	// scanFormat indicates the scan format that should be used for Scans and
 	// ReverseScans. With COL_BATCH_RESPONSE scan format, indexFetchSpec must be
 	// set.
-	scanFormat     roachpb.ScanFormat
+	scanFormat     kvpb.ScanFormat
 	indexFetchSpec *fetchpb.IndexFetchSpec
 
 	reverse bool
@@ -159,9 +160,9 @@ type txnKVFetcher struct {
 	// least once.
 	alreadyFetched bool
 	batchIdx       int
-	reqsScratch    []roachpb.RequestUnion
+	reqsScratch    []kvpb.RequestUnion
 
-	responses        []roachpb.ResponseUnion
+	responses        []kvpb.ResponseUnion
 	remainingBatches [][]byte
 
 	// getResponseScratch is reused to return the result of Get requests.
@@ -179,7 +180,7 @@ type txnKVFetcher struct {
 	forceProductionKVBatchSize bool
 
 	// For request and response admission control.
-	requestAdmissionHeader roachpb.AdmissionHeader
+	requestAdmissionHeader kvpb.AdmissionHeader
 	responseAdmissionQ     *admission.WorkQueue
 }
 
@@ -238,8 +239,8 @@ func (f *txnKVFetcher) getBatchKeyLimitForIdx(batchIdx int) rowinfra.KeyLimit {
 func makeTxnKVFetcherDefaultSendFunc(txn *kv.Txn, batchRequestsIssued *int64) sendFunc {
 	return func(
 		ctx context.Context,
-		ba *roachpb.BatchRequest,
-	) (*roachpb.BatchResponse, error) {
+		ba *kvpb.BatchRequest,
+	) (*kvpb.BatchResponse, error) {
 		res, err := txn.Send(ctx, ba)
 		if err != nil {
 			return nil, err.GoError()
@@ -258,7 +259,7 @@ type newTxnKVFetcherArgs struct {
 	acc                        *mon.BoundAccount
 	forceProductionKVBatchSize bool
 	batchRequestsIssued        *int64
-	requestAdmissionHeader     roachpb.AdmissionHeader
+	requestAdmissionHeader     kvpb.AdmissionHeader
 	responseAdmissionQ         *admission.WorkQueue
 }
 
@@ -271,7 +272,7 @@ func newTxnKVFetcherInternal(args newTxnKVFetcherArgs) *txnKVFetcher {
 	f := &txnKVFetcher{
 		sendFn: args.sendFn,
 		// Default to BATCH_RESPONSE. The caller will override if needed.
-		scanFormat:                 roachpb.BATCH_RESPONSE,
+		scanFormat:                 kvpb.BATCH_RESPONSE,
 		reverse:                    args.reverse,
 		lockStrength:               GetKeyLockingStrength(args.lockStrength),
 		lockWaitPolicy:             getWaitPolicy(args.lockWaitPolicy),
@@ -409,13 +410,13 @@ func (f *txnKVFetcher) SetupNextFetch(
 
 // fetch retrieves spans from the kv layer.
 func (f *txnKVFetcher) fetch(ctx context.Context) error {
-	ba := &roachpb.BatchRequest{}
+	ba := &kvpb.BatchRequest{}
 	ba.Header.WaitPolicy = f.lockWaitPolicy
 	ba.Header.LockTimeout = f.lockTimeout
 	ba.Header.TargetBytes = int64(f.batchBytesLimit)
 	ba.Header.MaxSpanRequestKeys = int64(f.getBatchKeyLimit())
 	if buildutil.CrdbTestBuild {
-		if f.scanFormat == roachpb.COL_BATCH_RESPONSE && f.indexFetchSpec == nil {
+		if f.scanFormat == kvpb.COL_BATCH_RESPONSE && f.indexFetchSpec == nil {
 			return errors.AssertionFailedf("IndexFetchSpec not provided with COL_BATCH_RESPONSE scan format")
 		}
 	}
@@ -511,7 +512,7 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	// alive.
 	f.reqsScratch = ba.Requests
 	for i := range f.reqsScratch {
-		f.reqsScratch[i] = roachpb.RequestUnion{}
+		f.reqsScratch[i] = kvpb.RequestUnion{}
 	}
 	if monitoring {
 		reqsScratchMemUsage := requestUnionOverhead * int64(cap(f.reqsScratch))
@@ -562,7 +563,7 @@ func (f *txnKVFetcher) nextBatch(ctx context.Context) (resp KVBatchFetcherRespon
 	// and process it.
 	for len(f.responses) > 0 {
 		reply := f.responses[0].GetInner()
-		f.responses[0] = roachpb.ResponseUnion{}
+		f.responses[0] = kvpb.ResponseUnion{}
 		f.responses = f.responses[1:]
 		// Get the original span right away since we might overwrite it with the
 		// resume span below.
@@ -590,7 +591,7 @@ func (f *txnKVFetcher) nextBatch(ctx context.Context) (resp KVBatchFetcherRespon
 		}
 
 		switch t := reply.(type) {
-		case *roachpb.ScanResponse:
+		case *kvpb.ScanResponse:
 			if len(t.BatchResponses) > 0 {
 				ret.BatchResponse, f.remainingBatches = popBatch(t.BatchResponses)
 			}
@@ -607,7 +608,7 @@ func (f *txnKVFetcher) nextBatch(ctx context.Context) (resp KVBatchFetcherRespon
 			// Note that ret.BatchResponse might be nil when the ScanResponse is
 			// empty, and the caller (the KVFetcher) will skip over it.
 			return ret, nil
-		case *roachpb.ReverseScanResponse:
+		case *kvpb.ReverseScanResponse:
 			if len(t.BatchResponses) > 0 {
 				ret.BatchResponse, f.remainingBatches = popBatch(t.BatchResponses)
 			}
@@ -624,7 +625,7 @@ func (f *txnKVFetcher) nextBatch(ctx context.Context) (resp KVBatchFetcherRespon
 			// Note that ret.BatchResponse might be nil when the ScanResponse is
 			// empty, and the caller (the KVFetcher) will skip over it.
 			return ret, nil
-		case *roachpb.GetResponse:
+		case *kvpb.GetResponse:
 			if t.IntentValue != nil {
 				return KVBatchFetcherResponse{}, errors.AssertionFailedf("unexpectedly got an IntentValue back from a SQL GetRequest %v", *t.IntentValue)
 			}
@@ -682,7 +683,7 @@ func (f *txnKVFetcher) Close(ctx context.Context) {
 	f.reset(ctx)
 }
 
-const requestUnionOverhead = int64(unsafe.Sizeof(roachpb.RequestUnion{}))
+const requestUnionOverhead = int64(unsafe.Sizeof(kvpb.RequestUnion{}))
 
 // spansToRequests converts the provided spans to the corresponding requests. If
 // a span doesn't have the EndKey set, then a Get request is used for it;
@@ -693,16 +694,16 @@ const requestUnionOverhead = int64(unsafe.Sizeof(roachpb.RequestUnion{}))
 // if not, a new slice is allocated.
 func spansToRequests(
 	spans roachpb.Spans,
-	scanFormat roachpb.ScanFormat,
+	scanFormat kvpb.ScanFormat,
 	reverse bool,
 	keyLocking lock.Strength,
-	reqsScratch []roachpb.RequestUnion,
-) []roachpb.RequestUnion {
-	var reqs []roachpb.RequestUnion
+	reqsScratch []kvpb.RequestUnion,
+) []kvpb.RequestUnion {
+	var reqs []kvpb.RequestUnion
 	if cap(reqsScratch) >= len(spans) {
 		reqs = reqsScratch[:len(spans)]
 	} else {
-		reqs = make([]roachpb.RequestUnion, len(spans))
+		reqs = make([]kvpb.RequestUnion, len(spans))
 	}
 	// Detect the number of gets vs scans, so we can batch allocate all of the
 	// requests precisely.
@@ -713,16 +714,16 @@ func spansToRequests(
 		}
 	}
 	gets := make([]struct {
-		req   roachpb.GetRequest
-		union roachpb.RequestUnion_Get
+		req   kvpb.GetRequest
+		union kvpb.RequestUnion_Get
 	}, nGets)
 
 	// curGet is incremented each time we fill in a GetRequest.
 	curGet := 0
 	if reverse {
 		scans := make([]struct {
-			req   roachpb.ReverseScanRequest
-			union roachpb.RequestUnion_ReverseScan
+			req   kvpb.ReverseScanRequest
+			union kvpb.RequestUnion_ReverseScan
 		}, len(spans)-nGets)
 		for i := range spans {
 			if spans[i].EndKey == nil {
@@ -744,8 +745,8 @@ func spansToRequests(
 		}
 	} else {
 		scans := make([]struct {
-			req   roachpb.ScanRequest
-			union roachpb.RequestUnion_Scan
+			req   kvpb.ScanRequest
+			union kvpb.RequestUnion_Scan
 		}, len(spans)-nGets)
 		for i := range spans {
 			if spans[i].EndKey == nil {

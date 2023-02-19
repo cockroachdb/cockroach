@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
+	kvpb "github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -563,7 +564,7 @@ func (v *validator) processOp(op Operation) {
 			v.checkAtomic(`deleteRangeUsingTombstone`, t.Result)
 		}
 	case *AddSSTableOperation:
-		if resultHasErrorType(t.Result, &roachpb.RangeKeyMismatchError{}) {
+		if resultHasErrorType(t.Result, &kvpb.RangeKeyMismatchError{}) {
 			// The AddSSTable may race with a range split. It's not possible to ingest
 			// an SST spanning multiple ranges, but the generator will optimistically
 			// try to fit the SST inside one of the current ranges, so we ignore the
@@ -696,7 +697,7 @@ func (v *validator) processOp(op Operation) {
 		} else if resultIsErrorStr(t.Result, `merge failed: unexpected value`) {
 			// TODO(dan): If this error is going to remain a part of the kv API, we
 			// should make it sniffable with errors.As. Currently this seems to be
-			// broken by wrapping it with `roachpb.NewErrorf("merge failed: %s",
+			// broken by wrapping it with `kvpb.NewErrorf("merge failed: %s",
 			// err)`.
 			//
 			// However, I think the right thing to do is sniff this inside the
@@ -1220,7 +1221,7 @@ func exceptLivenessCacheMiss(err error) bool {
 
 func resultIsAmbiguous(r Result) bool {
 	resErr := errorFromResult(r)
-	hasClientVisibleAE := errors.HasInterface(resErr, (*roachpb.ClientVisibleAmbiguousError)(nil))
+	hasClientVisibleAE := errors.HasInterface(resErr, (*kvpb.ClientVisibleAmbiguousError)(nil))
 	return hasClientVisibleAE
 }
 

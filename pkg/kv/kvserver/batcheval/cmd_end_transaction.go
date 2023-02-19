@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
@@ -38,13 +39,13 @@ import (
 )
 
 func init() {
-	RegisterReadWriteCommand(roachpb.EndTxn, declareKeysEndTxn, EndTxn)
+	RegisterReadWriteCommand(kvpb.EndTxn, declareKeysEndTxn, EndTxn)
 }
 
 // declareKeysWriteTransaction is the shared portion of
 // declareKeys{End,Heartbeat}Transaction.
 func declareKeysWriteTransaction(
-	_ ImmutableRangeState, header *roachpb.Header, req roachpb.Request, latchSpans *spanset.SpanSet,
+	_ ImmutableRangeState, header *kvpb.Header, req kvpb.Request, latchSpans *spanset.SpanSet,
 ) {
 	if header.Txn != nil {
 		header.Txn.AssertInitialized(context.TODO())
@@ -56,12 +57,12 @@ func declareKeysWriteTransaction(
 
 func declareKeysEndTxn(
 	rs ImmutableRangeState,
-	header *roachpb.Header,
-	req roachpb.Request,
+	header *kvpb.Header,
+	req kvpb.Request,
 	latchSpans, _ *spanset.SpanSet,
 	_ time.Duration,
 ) {
-	et := req.(*roachpb.EndTxnRequest)
+	et := req.(*kvpb.EndTxnRequest)
 	declareKeysWriteTransaction(rs, header, req, latchSpans)
 	var minTxnTS hlc.Timestamp
 	if header.Txn != nil {
@@ -211,12 +212,12 @@ func declareKeysEndTxn(
 // TODO(nvanbenschoten): rename this file to cmd_end_txn.go once some of andrei's
 // recent PRs have landed.
 func EndTxn(
-	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp kvpb.Response,
 ) (result.Result, error) {
-	args := cArgs.Args.(*roachpb.EndTxnRequest)
+	args := cArgs.Args.(*kvpb.EndTxnRequest)
 	h := cArgs.Header
 	ms := cArgs.Stats
-	reply := resp.(*roachpb.EndTxnResponse)
+	reply := resp.(*kvpb.EndTxnResponse)
 
 	if err := VerifyTransaction(h, args, roachpb.PENDING, roachpb.STAGING, roachpb.ABORTED); err != nil {
 		return result.Result{}, err
@@ -272,8 +273,8 @@ func EndTxn(
 			// meantime. The TransactionStatusError is going to be handled by the
 			// txnCommitter interceptor.
 			log.VEventf(ctx, 2, "transaction found to be already committed")
-			return result.Result{}, roachpb.NewTransactionStatusError(
-				roachpb.TransactionStatusError_REASON_TXN_COMMITTED,
+			return result.Result{}, kvpb.NewTransactionStatusError(
+				kvpb.TransactionStatusError_REASON_TXN_COMMITTED,
 				"already committed")
 
 		case roachpb.ABORTED:
@@ -307,7 +308,7 @@ func EndTxn(
 			// can go.
 			reply.Txn.LockSpans = args.LockSpans
 			return result.FromEndTxn(reply.Txn, true /* alwaysReturn */, args.Poison),
-				roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_ABORTED_RECORD_FOUND)
+				kvpb.NewTransactionAbortedError(kvpb.ABORT_REASON_ABORTED_RECORD_FOUND)
 
 		case roachpb.PENDING:
 			if h.Txn.Epoch < reply.Txn.Epoch {
@@ -360,7 +361,7 @@ func EndTxn(
 		// request is marking the commit as explicit, this check must succeed. We
 		// assert this in txnCommitter.makeTxnCommitExplicitAsync.
 		if retry, reason, extraMsg := IsEndTxnTriggeringRetryError(reply.Txn, args); retry {
-			return result.Result{}, roachpb.NewTransactionRetryError(reason, extraMsg)
+			return result.Result{}, kvpb.NewTransactionRetryError(reason, extraMsg)
 		}
 
 		// If the transaction needs to be staged as part of an implicit commit
@@ -416,7 +417,7 @@ func EndTxn(
 		// committed. Doing so is only possible if we can guarantee that under no
 		// circumstances can an implicitly committed transaction be rolled back.
 		if reply.Txn.Status == roachpb.STAGING {
-			err := roachpb.NewIndeterminateCommitError(*reply.Txn)
+			err := kvpb.NewIndeterminateCommitError(*reply.Txn)
 			log.VEventf(ctx, 1, "%v", err)
 			return result.Result{}, err
 		}
@@ -493,12 +494,12 @@ func IsEndTxnExceedingDeadline(commitTS hlc.Timestamp, deadline hlc.Timestamp) b
 // committed and needs to return a TransactionRetryError. It also returns the
 // reason and possibly an extra message to be used for the error.
 func IsEndTxnTriggeringRetryError(
-	txn *roachpb.Transaction, args *roachpb.EndTxnRequest,
-) (retry bool, reason roachpb.TransactionRetryReason, extraMsg redact.RedactableString) {
+	txn *roachpb.Transaction, args *kvpb.EndTxnRequest,
+) (retry bool, reason kvpb.TransactionRetryReason, extraMsg redact.RedactableString) {
 	// If we saw any WriteTooOldErrors, we must restart to avoid lost
 	// update anomalies.
 	if txn.WriteTooOld {
-		retry, reason = true, roachpb.RETRY_WRITE_TOO_OLD
+		retry, reason = true, kvpb.RETRY_WRITE_TOO_OLD
 	} else {
 		readTimestamp := txn.ReadTimestamp
 		isTxnPushed := txn.WriteTimestamp != readTimestamp
@@ -506,7 +507,7 @@ func IsEndTxnTriggeringRetryError(
 		// Return a transaction retry error if the commit timestamp isn't equal to
 		// the txn timestamp.
 		if isTxnPushed {
-			retry, reason = true, roachpb.RETRY_SERIALIZABLE
+			retry, reason = true, kvpb.RETRY_SERIALIZABLE
 		}
 	}
 
@@ -516,7 +517,7 @@ func IsEndTxnTriggeringRetryError(
 		extraMsg = redact.Sprintf(
 			"txn timestamp pushed too much; deadline exceeded by %s (%s > %s)",
 			exceededBy, txn.WriteTimestamp, args.Deadline)
-		retry, reason = true, roachpb.RETRY_COMMIT_DEADLINE_EXCEEDED
+		retry, reason = true, kvpb.RETRY_COMMIT_DEADLINE_EXCEEDED
 	}
 	return retry, reason, extraMsg
 }
@@ -535,7 +536,7 @@ func resolveLocalLocks(
 	desc *roachpb.RangeDescriptor,
 	readWriter storage.ReadWriter,
 	ms *enginepb.MVCCStats,
-	args *roachpb.EndTxnRequest,
+	args *kvpb.EndTxnRequest,
 	txn *roachpb.Transaction,
 	evalCtx EvalContext,
 ) (resolvedLocks []roachpb.LockUpdate, externalLocks []roachpb.Span, _ error) {
@@ -652,7 +653,7 @@ func updateStagingTxn(
 	readWriter storage.ReadWriter,
 	ms *enginepb.MVCCStats,
 	key []byte,
-	args *roachpb.EndTxnRequest,
+	args *kvpb.EndTxnRequest,
 	txn *roachpb.Transaction,
 ) error {
 	txn.LockSpans = args.LockSpans
@@ -670,7 +671,7 @@ func updateFinalizedTxn(
 	readWriter storage.ReadWriter,
 	ms *enginepb.MVCCStats,
 	key []byte,
-	args *roachpb.EndTxnRequest,
+	args *kvpb.EndTxnRequest,
 	txn *roachpb.Transaction,
 	recordAlreadyExisted bool,
 	externalLocks []roachpb.Span,
@@ -700,7 +701,7 @@ func RunCommitTrigger(
 	rec EvalContext,
 	batch storage.Batch,
 	ms *enginepb.MVCCStats,
-	args *roachpb.EndTxnRequest,
+	args *kvpb.EndTxnRequest,
 	txn *roachpb.Transaction,
 ) (result.Result, error) {
 	ct := args.InternalCommitTrigger
@@ -729,7 +730,7 @@ func RunCommitTrigger(
 			ctx, rec, batch, *ms, ct.SplitTrigger, txn.WriteTimestamp,
 		)
 		if err != nil {
-			return result.Result{}, roachpb.NewReplicaCorruptionError(err)
+			return result.Result{}, kvpb.NewReplicaCorruptionError(err)
 		}
 		*ms = newMS
 		return res, nil
@@ -737,7 +738,7 @@ func RunCommitTrigger(
 	if mt := ct.GetMergeTrigger(); mt != nil {
 		res, err := mergeTrigger(ctx, rec, batch, ms, mt, txn.WriteTimestamp)
 		if err != nil {
-			return result.Result{}, roachpb.NewReplicaCorruptionError(err)
+			return result.Result{}, kvpb.NewReplicaCorruptionError(err)
 		}
 		return res, nil
 	}

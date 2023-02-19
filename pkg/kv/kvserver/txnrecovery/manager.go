@@ -15,6 +15,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -36,7 +37,7 @@ type Manager interface {
 	// The method may also return a transaction in any other state if it is
 	// discovered to still be live and undergoing state transitions.
 	ResolveIndeterminateCommit(
-		context.Context, *roachpb.IndeterminateCommitError,
+		context.Context, *kvpb.IndeterminateCommitError,
 	) (*roachpb.Transaction, error)
 
 	// Metrics returns the Manager's metrics struct.
@@ -83,7 +84,7 @@ func NewManager(ac log.AmbientContext, clock *hlc.Clock, db *kv.DB, stopper *sto
 
 // ResolveIndeterminateCommit implements the Manager interface.
 func (m *manager) ResolveIndeterminateCommit(
-	ctx context.Context, ice *roachpb.IndeterminateCommitError,
+	ctx context.Context, ice *kvpb.IndeterminateCommitError,
 ) (*roachpb.Transaction, error) {
 	txn := &ice.StagingTxn
 	if txn.Status != roachpb.STAGING {
@@ -163,8 +164,8 @@ func (m *manager) resolveIndeterminateCommitForTxnProbe(
 ) (preventedIntent bool, changedTxn *roachpb.Transaction, err error) {
 	// Create a QueryTxnRequest that we will periodically send to the
 	// transaction's record during recovery processing.
-	queryTxnReq := roachpb.QueryTxnRequest{
-		RequestHeader: roachpb.RequestHeader{
+	queryTxnReq := kvpb.QueryTxnRequest{
+		RequestHeader: kvpb.RequestHeader{
 			Key: txn.Key,
 		},
 		Txn:           txn.TxnMeta,
@@ -196,12 +197,12 @@ func (m *manager) resolveIndeterminateCommitForTxnProbe(
 	//    record (e.g. if the record has been abandoned). However, it can fail if
 	//    the transaction has already refreshed at a higher timestamp in the
 	//    current epoch or restarted at a higher epoch.
-	queryIntentReqs := make([]roachpb.QueryIntentRequest, 0, len(txn.InFlightWrites))
+	queryIntentReqs := make([]kvpb.QueryIntentRequest, 0, len(txn.InFlightWrites))
 	for _, w := range txn.InFlightWrites {
 		meta := txn.TxnMeta
 		meta.Sequence = w.Sequence
-		queryIntentReqs = append(queryIntentReqs, roachpb.QueryIntentRequest{
-			RequestHeader: roachpb.RequestHeader{
+		queryIntentReqs = append(queryIntentReqs, kvpb.QueryIntentRequest{
+			RequestHeader: kvpb.RequestHeader{
 				Key: w.Key,
 			},
 			Txn: meta,
@@ -244,7 +245,7 @@ func (m *manager) resolveIndeterminateCommitForTxnProbe(
 		// state of the transaction record has changed since we began
 		// the recovery process.
 		resps := b.RawResponse().Responses
-		queryTxnResp := resps[0].GetInner().(*roachpb.QueryTxnResponse)
+		queryTxnResp := resps[0].GetInner().(*kvpb.QueryTxnResponse)
 		queriedTxn := &queryTxnResp.QueriedTxn
 		if queriedTxn.Status.IsFinalized() ||
 			txn.Epoch < queriedTxn.Epoch ||
@@ -258,7 +259,7 @@ func (m *manager) resolveIndeterminateCommitForTxnProbe(
 		// Next, look through the QueryIntentResponses to check whether
 		// any of the in-flight writes failed.
 		for _, ru := range resps[1:] {
-			queryIntentResp := ru.GetInner().(*roachpb.QueryIntentResponse)
+			queryIntentResp := ru.GetInner().(*kvpb.QueryIntentResponse)
 			if !queryIntentResp.FoundIntent {
 				return true /* preventedIntent */, nil, nil
 			}
@@ -282,8 +283,8 @@ func (m *manager) resolveIndeterminateCommitForTxnRecover(
 ) (*roachpb.Transaction, error) {
 	var b kv.Batch
 	b.Header.Timestamp = m.batchTimestamp(txn)
-	b.AddRawRequest(&roachpb.RecoverTxnRequest{
-		RequestHeader: roachpb.RequestHeader{
+	b.AddRawRequest(&kvpb.RecoverTxnRequest{
+		RequestHeader: kvpb.RequestHeader{
 			Key: txn.Key,
 		},
 		Txn:                 txn.TxnMeta,
@@ -295,7 +296,7 @@ func (m *manager) resolveIndeterminateCommitForTxnRecover(
 	}
 
 	resps := b.RawResponse().Responses
-	recTxnResp := resps[0].GetInner().(*roachpb.RecoverTxnResponse)
+	recTxnResp := resps[0].GetInner().(*kvpb.RecoverTxnResponse)
 	return &recTxnResp.RecoveredTxn, nil
 }
 

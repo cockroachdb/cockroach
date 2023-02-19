@@ -15,6 +15,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvclient/kvstreamer",
+        "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/diskmap",
         "//pkg/roachpb",
         "//pkg/sql/catalog/catenumpb",
@@ -56,6 +57,7 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/kv/kvclient/kvstreamer",
+        "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/diskmap",
         "//pkg/roachpb",
         "//pkg/settings/cluster",

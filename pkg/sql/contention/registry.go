@@ -20,6 +20,7 @@ import (
 
 	"github.com/biogo/store/llrb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -123,7 +124,7 @@ type indexMapValue struct {
 
 // newIndexMapValue creates a new indexMapValue for a contention event
 // initialized with that event's data.
-func newIndexMapValue(c roachpb.ContentionEvent) *indexMapValue {
+func newIndexMapValue(c kvpb.ContentionEvent) *indexMapValue {
 	txnCache := cache.NewUnorderedCache(txnCacheCfg)
 	txnCache.Add(c.TxnMeta.ID, uint64(1))
 	keyMap := cache.NewOrderedCache(orderedKeyMapCfg)
@@ -137,7 +138,7 @@ func newIndexMapValue(c roachpb.ContentionEvent) *indexMapValue {
 
 // addContentionEvent adds the given contention event to previously aggregated
 // contention data. It assumes that c.Key is a SQL key.
-func (v *indexMapValue) addContentionEvent(c roachpb.ContentionEvent) {
+func (v *indexMapValue) addContentionEvent(c kvpb.ContentionEvent) {
 	v.numContentionEvents++
 	v.cumulativeContentionTime += c.Duration
 	var numTimesThisTxnWasEncountered uint64
@@ -208,7 +209,7 @@ type nonSQLKeyMapValue struct {
 
 // newNonSQLKeyMapValue creates a new nonSQLKeyMapValue for a contention event
 // initialized with that event's data.
-func newNonSQLKeyMapValue(c roachpb.ContentionEvent) *nonSQLKeyMapValue {
+func newNonSQLKeyMapValue(c kvpb.ContentionEvent) *nonSQLKeyMapValue {
 	txnCache := cache.NewUnorderedCache(txnCacheCfg)
 	txnCache.Add(c.TxnMeta.ID, uint64(1))
 	return &nonSQLKeyMapValue{
@@ -220,7 +221,7 @@ func newNonSQLKeyMapValue(c roachpb.ContentionEvent) *nonSQLKeyMapValue {
 
 // addContentionEvent adds the given contention event to previously aggregated
 // contention data. It assumes that c.Key is a non-SQL key.
-func (v *nonSQLKeyMapValue) addContentionEvent(c roachpb.ContentionEvent) {
+func (v *nonSQLKeyMapValue) addContentionEvent(c kvpb.ContentionEvent) {
 	v.numContentionEvents++
 	v.cumulativeContentionTime += c.Duration
 	var numTimesThisTxnWasEncountered uint64

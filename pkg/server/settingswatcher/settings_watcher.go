@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedbuffer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -196,7 +197,7 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 		bufferSize,
 		[]roachpb.Span{settingsTableSpan},
 		false, // withPrevValue
-		func(ctx context.Context, kv *roachpb.RangeFeedValue) rangefeedbuffer.Event {
+		func(ctx context.Context, kv *kvpb.RangeFeedValue) rangefeedbuffer.Event {
 			return s.handleKV(ctx, kv)
 		},
 		func(ctx context.Context, update rangefeedcache.Update) {
@@ -233,7 +234,7 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 }
 
 func (s *SettingsWatcher) handleKV(
-	ctx context.Context, kv *roachpb.RangeFeedValue,
+	ctx context.Context, kv *kvpb.RangeFeedValue,
 ) rangefeedbuffer.Event {
 	var alloc tree.DatumAlloc
 	name, val, tombstone, err := s.dec.DecodeRow(roachpb.KeyValue{

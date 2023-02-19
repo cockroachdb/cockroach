@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -782,7 +783,7 @@ func TestMVCCGCQueueProcess(t *testing.T) {
 		if len(datum.endKey) > 0 {
 			drArgs := deleteRangeArgs(datum.key, datum.endKey)
 			drArgs.UseRangeTombstone = true
-			if _, err := tc.SendWrappedWith(roachpb.Header{
+			if _, err := tc.SendWrappedWith(kvpb.Header{
 				Timestamp: datum.ts,
 			}, &drArgs); err != nil {
 				t.Fatalf("%d: could not delete data: %+v", i, err)
@@ -800,7 +801,7 @@ func TestMVCCGCQueueProcess(t *testing.T) {
 				txn.MinTimestamp = datum.ts
 				assignSeqNumsForReqs(txn, &dArgs)
 			}
-			if _, err := tc.SendWrappedWith(roachpb.Header{
+			if _, err := tc.SendWrappedWith(kvpb.Header{
 				Timestamp: datum.ts,
 				Txn:       txn,
 			}, &dArgs); err != nil {
@@ -818,7 +819,7 @@ func TestMVCCGCQueueProcess(t *testing.T) {
 			txn.MinTimestamp = datum.ts
 			assignSeqNumsForReqs(txn, &pArgs)
 		}
-		if _, err := tc.SendWrappedWith(roachpb.Header{
+		if _, err := tc.SendWrappedWith(kvpb.Header{
 			Timestamp: datum.ts,
 			Txn:       txn,
 		}, &pArgs); err != nil {
@@ -1080,8 +1081,8 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 	// intent resolution.
 	tsc.TestingKnobs.IntentResolverKnobs.MaxIntentResolutionBatchSize = 1
 	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
-		func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
-			if resArgs, ok := filterArgs.Req.(*roachpb.ResolveIntentRequest); ok {
+		func(filterArgs kvserverbase.FilterArgs) *kvpb.Error {
+			if resArgs, ok := filterArgs.Req.(*kvpb.ResolveIntentRequest); ok {
 				id := string(resArgs.IntentTxn.Key)
 				// Only count finalizing intent resolution attempts in `resolved`.
 				if resArgs.Status != roachpb.PENDING {
@@ -1099,7 +1100,7 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 				// We've special cased one test case. Note that the intent is still
 				// counted in `resolved`.
 				if testCases[id].failResolve {
-					return roachpb.NewErrorWithTxn(errors.Errorf("boom"), filterArgs.Hdr.Txn)
+					return kvpb.NewErrorWithTxn(errors.Errorf("boom"), filterArgs.Hdr.Txn)
 				}
 			}
 			return nil
@@ -1263,7 +1264,7 @@ func TestMVCCGCQueueIntentResolution(t *testing.T) {
 		for j := 0; j < 5; j++ {
 			pArgs := putArgs(roachpb.Key(fmt.Sprintf("%d-%d", i, j)), []byte("value"))
 			assignSeqNumsForReqs(txns[i], &pArgs)
-			if _, err := tc.SendWrappedWith(roachpb.Header{
+			if _, err := tc.SendWrappedWith(kvpb.Header{
 				Txn: txns[i],
 			}, &pArgs); err != nil {
 				t.Fatalf("%d: could not put data: %+v", i, err)
@@ -1376,8 +1377,8 @@ func TestMVCCGCQueueChunkRequests(t *testing.T) {
 	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
 	tsc := TestStoreConfig(hlc.NewClockForTesting(manual))
 	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
-		func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
-			if _, ok := filterArgs.Req.(*roachpb.GCRequest); ok {
+		func(filterArgs kvserverbase.FilterArgs) *kvpb.Error {
+			if _, ok := filterArgs.Req.(*kvpb.GCRequest); ok {
 				atomic.AddInt32(&gcRequests, 1)
 				return nil
 			}
@@ -1400,7 +1401,7 @@ func TestMVCCGCQueueChunkRequests(t *testing.T) {
 	fmtStr := fmt.Sprintf("%%0%dd", keySize)
 
 	// First write 2 * gcKeyVersionChunkBytes different keys (each with two versions).
-	ba1, ba2 := &roachpb.BatchRequest{}, &roachpb.BatchRequest{}
+	ba1, ba2 := &kvpb.BatchRequest{}, &kvpb.BatchRequest{}
 	for i := 0; i < 2*keyCount; i++ {
 		// Create keys which are
 		key := roachpb.Key(fmt.Sprintf(fmtStr, i))
@@ -1409,11 +1410,11 @@ func TestMVCCGCQueueChunkRequests(t *testing.T) {
 		pArgs = putArgs(key, []byte("value2"))
 		ba2.Add(&pArgs)
 	}
-	ba1.Header = roachpb.Header{Timestamp: tc.Clock().Now()}
+	ba1.Header = kvpb.Header{Timestamp: tc.Clock().Now()}
 	if _, pErr := tc.Sender().Send(ctx, ba1); pErr != nil {
 		t.Fatal(pErr)
 	}
-	ba2.Header = roachpb.Header{Timestamp: tc.Clock().Now()}
+	ba2.Header = kvpb.Header{Timestamp: tc.Clock().Now()}
 	if _, pErr := tc.Sender().Send(ctx, ba2); pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -1423,7 +1424,7 @@ func TestMVCCGCQueueChunkRequests(t *testing.T) {
 	key1 := roachpb.Key(fmt.Sprintf(fmtStr, 2*keyCount))
 	key2 := roachpb.Key(fmt.Sprintf(fmtStr, 2*keyCount+1))
 	for i := 0; i < 2*keyCount+1; i++ {
-		ba := &roachpb.BatchRequest{}
+		ba := &kvpb.BatchRequest{}
 		// Only write keyCount+1 versions of key1.
 		if i < keyCount+1 {
 			pArgs1 := putArgs(key1, []byte(fmt.Sprintf("value%04d", i)))
@@ -1433,7 +1434,7 @@ func TestMVCCGCQueueChunkRequests(t *testing.T) {
 		// tackle key2 in two separate batches.
 		pArgs2 := putArgs(key2, []byte(fmt.Sprintf("value%04d", i)))
 		ba.Add(&pArgs2)
-		ba.Header = roachpb.Header{Timestamp: tc.Clock().Now()}
+		ba.Header = kvpb.Header{Timestamp: tc.Clock().Now()}
 		if _, pErr := tc.Sender().Send(ctx, ba); pErr != nil {
 			t.Fatal(pErr)
 		}

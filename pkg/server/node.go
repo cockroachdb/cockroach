@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
@@ -173,7 +174,7 @@ type nodeMetrics struct {
 	DiskStalls *metric.Counter
 
 	BatchCount   *metric.Counter
-	MethodCounts [roachpb.NumMethods]*metric.Counter
+	MethodCounts [kvpb.NumMethods]*metric.Counter
 }
 
 func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) nodeMetrics {
@@ -191,7 +192,7 @@ func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) nodeMe
 	}
 
 	for i := range nm.MethodCounts {
-		method := roachpb.Method(i).String()
+		method := kvpb.Method(i).String()
 		meta := metaInternalBatchRPCMethodCount
 		meta.Name = fmt.Sprintf(meta.Name, strings.ToLower(method))
 		meta.Help = fmt.Sprintf(meta.Help, method)
@@ -205,8 +206,8 @@ func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) nodeMe
 // callComplete records very high-level metrics about the number of completed
 // calls and their latency. Currently, this only records statistics at the batch
 // level; stats on specific lower-level kv operations are not recorded.
-func (nm nodeMetrics) callComplete(d time.Duration, pErr *roachpb.Error) {
-	if pErr != nil && pErr.TransactionRestart() == roachpb.TransactionRestart_NONE {
+func (nm nodeMetrics) callComplete(d time.Duration, pErr *kvpb.Error) {
+	if pErr != nil && pErr.TransactionRestart() == kvpb.TransactionRestart_NONE {
 		nm.Err.Inc(1)
 	} else {
 		nm.Success.Inc(1)
@@ -256,13 +257,13 @@ type Node struct {
 
 	diskStatsMap diskStatsMap
 
-	testingErrorEvent func(context.Context, *roachpb.BatchRequest, error)
+	testingErrorEvent func(context.Context, *kvpb.BatchRequest, error)
 
 	// Used to collect samples for the key visualizer.
 	spanStatsCollector *spanstatscollector.SpanStatsCollector
 }
 
-var _ roachpb.InternalServer = &Node{}
+var _ kvpb.InternalServer = &Node{}
 
 // allocateNodeID increments the node id generator key to allocate
 // a new, unique node id.
@@ -1092,29 +1093,29 @@ func (n *Node) logStructuredEvent(ctx context.Context, event logpb.EventPayload)
 	)
 }
 
-// If we receive a (proto-marshaled) roachpb.BatchRequest whose Requests contain
+// If we receive a (proto-marshaled) kvpb.BatchRequest whose Requests contain
 // a message type unknown to this node, we will end up with a zero entry in the
 // slice. If we don't error out early, this breaks all sorts of assumptions and
 // usually ends in a panic.
-func checkNoUnknownRequest(reqs []roachpb.RequestUnion) *roachpb.UnsupportedRequestError {
+func checkNoUnknownRequest(reqs []kvpb.RequestUnion) *kvpb.UnsupportedRequestError {
 	for _, req := range reqs {
 		if req.GetValue() == nil {
-			return &roachpb.UnsupportedRequestError{}
+			return &kvpb.UnsupportedRequestError{}
 		}
 	}
 	return nil
 }
 
 func (n *Node) batchInternal(
-	ctx context.Context, tenID roachpb.TenantID, args *roachpb.BatchRequest,
-) (*roachpb.BatchResponse, error) {
+	ctx context.Context, tenID roachpb.TenantID, args *kvpb.BatchRequest,
+) (*kvpb.BatchResponse, error) {
 	if detail := checkNoUnknownRequest(args.Requests); detail != nil {
-		var br roachpb.BatchResponse
-		br.Error = roachpb.NewError(detail)
+		var br kvpb.BatchResponse
+		br.Error = kvpb.NewError(detail)
 		return &br, nil
 	}
 
-	var br *roachpb.BatchResponse
+	var br *kvpb.BatchResponse
 	var reqSp spanForRequest
 	ctx, reqSp = n.setupSpanForIncomingRPC(ctx, tenID, args)
 	// NB: wrapped to delay br evaluation to its value when returning.
@@ -1145,10 +1146,10 @@ func (n *Node) batchInternal(
 		n.storeCfg.KVAdmissionController.AdmittedKVWorkDone(handle, writeBytes)
 		writeBytes.Release()
 	}()
-	var pErr *roachpb.Error
+	var pErr *kvpb.Error
 	br, writeBytes, pErr = n.stores.SendWithWriteBytes(ctx, args)
 	if pErr != nil {
-		br = &roachpb.BatchResponse{}
+		br = &kvpb.BatchResponse{}
 		if pErr.Index != nil && keyvissettings.Enabled.Get(&n.storeCfg.Settings.SV) {
 			// Tell the SpanStatsCollector about the requests in this BatchRequest,
 			// but stop when we reach the requests that were not attempted
@@ -1172,7 +1173,7 @@ func (n *Node) batchInternal(
 		}
 	}
 	if br.Error != nil {
-		panic(roachpb.ErrorUnexpectedlySet(n.stores, br))
+		panic(kvpb.ErrorUnexpectedlySet(n.stores, br))
 	}
 	n.metrics.callComplete(timeutil.Since(tStart), pErr)
 	br.Error = pErr
@@ -1182,7 +1183,7 @@ func (n *Node) batchInternal(
 
 // incrementBatchCounters increments counters to track the batch and composite
 // request methods.
-func (n *Node) incrementBatchCounters(ba *roachpb.BatchRequest) {
+func (n *Node) incrementBatchCounters(ba *kvpb.BatchRequest) {
 	n.metrics.BatchCount.Inc(1)
 	for _, ru := range ba.Requests {
 		m := ru.GetInner().Method()
@@ -1190,10 +1191,8 @@ func (n *Node) incrementBatchCounters(ba *roachpb.BatchRequest) {
 	}
 }
 
-// Batch implements the roachpb.InternalServer interface.
-func (n *Node) Batch(
-	ctx context.Context, args *roachpb.BatchRequest,
-) (*roachpb.BatchResponse, error) {
+// Batch implements the kvpb.InternalServer interface.
+func (n *Node) Batch(ctx context.Context, args *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
 	n.incrementBatchCounters(args)
 
 	// NB: Node.Batch is called directly for "local" calls. We don't want to
@@ -1225,14 +1224,14 @@ func (n *Node) Batch(
 	// framework and not from cockroach.
 	if err != nil {
 		if br == nil {
-			br = &roachpb.BatchResponse{}
+			br = &kvpb.BatchResponse{}
 		}
 		if br.Error != nil {
 			log.Fatalf(
-				ctx, "attempting to return both a plain error (%s) and roachpb.Error (%s)", err, br.Error,
+				ctx, "attempting to return both a plain error (%s) and kvpb.Error (%s)", err, br.Error,
 			)
 		}
-		br.Error = roachpb.NewError(err)
+		br.Error = kvpb.NewError(err)
 	}
 	if buildutil.CrdbTestBuild && br.Error != nil && n.testingErrorEvent != nil {
 		n.testingErrorEvent(ctx, args, errors.DecodeError(ctx, br.Error.EncodedError))
@@ -1259,7 +1258,7 @@ const (
 
 // finish finishes the span. If the span was recording and br is not nil, the
 // recording is written to br.CollectedSpans.
-func (sp *spanForRequest) finish(br *roachpb.BatchResponse, redactOpt redactOpt) {
+func (sp *spanForRequest) finish(br *kvpb.BatchResponse, redactOpt redactOpt) {
 	var rec tracingpb.Recording
 	// If we don't have a response, there's nothing to attach a trace to.
 	// Nothing more for us to do.
@@ -1301,13 +1300,13 @@ func (sp *spanForRequest) finish(br *roachpb.BatchResponse, redactOpt redactOpt)
 // in which the response is to serialized. The BatchResponse can
 // be nil in case no response is to be returned to the rpc caller.
 func (n *Node) setupSpanForIncomingRPC(
-	ctx context.Context, tenID roachpb.TenantID, ba *roachpb.BatchRequest,
+	ctx context.Context, tenID roachpb.TenantID, ba *kvpb.BatchRequest,
 ) (context.Context, spanForRequest) {
 	return setupSpanForIncomingRPC(ctx, tenID, ba, n.storeCfg.AmbientCtx.Tracer)
 }
 
 func setupSpanForIncomingRPC(
-	ctx context.Context, tenID roachpb.TenantID, ba *roachpb.BatchRequest, tr *tracing.Tracer,
+	ctx context.Context, tenID roachpb.TenantID, ba *kvpb.BatchRequest, tr *tracing.Tracer,
 ) (context.Context, spanForRequest) {
 	var newSpan *tracing.Span
 	remoteParent := !ba.TraceInfo.Empty()
@@ -1378,10 +1377,10 @@ func filterRangeLookupResponseForTenant(
 	return truncated
 }
 
-// RangeLookup implements the roachpb.InternalServer interface.
+// RangeLookup implements the kvpb.InternalServer interface.
 func (n *Node) RangeLookup(
-	ctx context.Context, req *roachpb.RangeLookupRequest,
-) (*roachpb.RangeLookupResponse, error) {
+	ctx context.Context, req *kvpb.RangeLookupRequest,
+) (*kvpb.RangeLookupResponse, error) {
 	ctx = n.storeCfg.AmbientCtx.AnnotateCtx(ctx)
 
 	// Proxy the RangeLookup through the local DB. Note that this does not use
@@ -1399,9 +1398,9 @@ func (n *Node) RangeLookup(
 		req.PrefetchNum,
 		req.PrefetchReverse,
 	)
-	resp := new(roachpb.RangeLookupResponse)
+	resp := new(kvpb.RangeLookupResponse)
 	if err != nil {
-		resp.Error = roachpb.NewError(err)
+		resp.Error = kvpb.NewError(err)
 	} else {
 		resp.Descriptors = rs
 		resp.PrefetchedDescriptors = filterRangeLookupResponseForTenant(ctx, preRs)
@@ -1409,20 +1408,16 @@ func (n *Node) RangeLookup(
 	return resp, nil
 }
 
-// RangeFeed implements the roachpb.InternalServer interface.
-func (n *Node) RangeFeed(
-	args *roachpb.RangeFeedRequest, stream roachpb.Internal_RangeFeedServer,
-) error {
+// RangeFeed implements the kvpb.InternalServer interface.
+func (n *Node) RangeFeed(args *kvpb.RangeFeedRequest, stream kvpb.Internal_RangeFeedServer) error {
 	return n.singleRangeFeed(args, stream)
 }
 
-func (n *Node) singleRangeFeed(
-	args *roachpb.RangeFeedRequest, stream roachpb.RangeFeedEventSink,
-) error {
+func (n *Node) singleRangeFeed(args *kvpb.RangeFeedRequest, stream kvpb.RangeFeedEventSink) error {
 	pErr := n.stores.RangeFeed(args, stream)
 	if pErr != nil {
-		var event roachpb.RangeFeedEvent
-		event.SetValue(&roachpb.RangeFeedError{
+		var event kvpb.RangeFeedEvent
+		event.SetValue(&kvpb.RangeFeedError{
 			Error: *pErr,
 		})
 		return stream.Send(&event)
@@ -1445,8 +1440,8 @@ func (s *setRangeIDEventSink) Context() context.Context {
 	return s.ctx
 }
 
-func (s *setRangeIDEventSink) Send(event *roachpb.RangeFeedEvent) error {
-	response := &roachpb.MuxRangeFeedEvent{
+func (s *setRangeIDEventSink) Send(event *kvpb.RangeFeedEvent) error {
+	response := &kvpb.MuxRangeFeedEvent{
 		RangeFeedEvent: *event,
 		RangeID:        s.rangeID,
 		StreamID:       s.streamID,
@@ -1454,12 +1449,12 @@ func (s *setRangeIDEventSink) Send(event *roachpb.RangeFeedEvent) error {
 	return s.wrapped.Send(response)
 }
 
-var _ roachpb.RangeFeedEventSink = (*setRangeIDEventSink)(nil)
+var _ kvpb.RangeFeedEventSink = (*setRangeIDEventSink)(nil)
 
 // lockedMuxStream provides support for concurrent calls to Send.
 // The underlying MuxRangeFeedServer is not safe for concurrent calls to Send.
 type lockedMuxStream struct {
-	wrapped roachpb.Internal_MuxRangeFeedServer
+	wrapped kvpb.Internal_MuxRangeFeedServer
 	sendMu  syncutil.Mutex
 }
 
@@ -1467,14 +1462,14 @@ func (s *lockedMuxStream) Context() context.Context {
 	return s.wrapped.Context()
 }
 
-func (s *lockedMuxStream) Send(e *roachpb.MuxRangeFeedEvent) error {
+func (s *lockedMuxStream) Send(e *kvpb.MuxRangeFeedEvent) error {
 	s.sendMu.Lock()
 	defer s.sendMu.Unlock()
 	return s.wrapped.Send(e)
 }
 
-// MuxRangeFeed implements the roachpb.InternalServer interface.
-func (n *Node) MuxRangeFeed(stream roachpb.Internal_MuxRangeFeedServer) error {
+// MuxRangeFeed implements the kvpb.InternalServer interface.
+func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 	ctx, cancelFeeds := n.stopper.WithCancelOnQuiesce(stream.Context())
 	defer cancelFeeds()
 	rfGrp := ctxgroup.WithContext(ctx)
@@ -1507,10 +1502,10 @@ func (n *Node) MuxRangeFeed(stream roachpb.Internal_MuxRangeFeedServer) error {
 	}
 }
 
-// ResetQuorum implements the roachpb.InternalServer interface.
+// ResetQuorum implements the kvpb.InternalServer interface.
 func (n *Node) ResetQuorum(
-	ctx context.Context, req *roachpb.ResetQuorumRequest,
-) (_ *roachpb.ResetQuorumResponse, rErr error) {
+	ctx context.Context, req *kvpb.ResetQuorumRequest,
+) (_ *kvpb.ResetQuorumResponse, rErr error) {
 	// Get range descriptor and save original value of the descriptor for the input range id.
 	var desc roachpb.RangeDescriptor
 	var expValue roachpb.Value
@@ -1613,12 +1608,12 @@ func (n *Node) ResetQuorum(
 	}
 	log.Infof(ctx, "sent empty snapshot to %s", toReplicaDescriptor)
 
-	return &roachpb.ResetQuorumResponse{}, nil
+	return &kvpb.ResetQuorumResponse{}, nil
 }
 
-// GossipSubscription implements the roachpb.InternalServer interface.
+// GossipSubscription implements the kvpb.InternalServer interface.
 func (n *Node) GossipSubscription(
-	args *roachpb.GossipSubscriptionRequest, stream roachpb.Internal_GossipSubscriptionServer,
+	args *kvpb.GossipSubscriptionRequest, stream kvpb.Internal_GossipSubscriptionServer,
 ) error {
 	ctx := n.storeCfg.AmbientCtx.AnnotateCtx(stream.Context())
 	ctxDone := ctx.Done()
@@ -1632,7 +1627,7 @@ func (n *Node) GossipSubscription(
 	// feels fragile, though, especially during the initial information dump.
 	// Instead, we say that if the channel ever blocks for more than some
 	// duration, terminate the subscription.
-	entC := make(chan *roachpb.GossipSubscriptionEvent, 256)
+	entC := make(chan *kvpb.GossipSubscriptionEvent, 256)
 	entCClosed := false
 	var callbackMu syncutil.Mutex
 	var systemConfigUpdateCh <-chan struct{}
@@ -1662,7 +1657,7 @@ func (n *Node) GossipSubscription(
 				if entCClosed {
 					return
 				}
-				var event roachpb.GossipSubscriptionEvent
+				var event kvpb.GossipSubscriptionEvent
 				event.Key = key
 				event.Content = content
 				event.PatternMatched = pattern
@@ -1690,10 +1685,10 @@ func (n *Node) GossipSubscription(
 		if isSecondaryTenant {
 			ents = kvtenant.GossipSubscriptionSystemConfigMask.Apply(ents)
 		}
-		var event roachpb.GossipSubscriptionEvent
+		var event kvpb.GossipSubscriptionEvent
 		var content roachpb.Value
 		if err := content.SetProto(&ents); err != nil {
-			event.Error = roachpb.NewError(errors.Wrap(err, "could not marshal system config"))
+			event.Error = kvpb.NewError(errors.Wrap(err, "could not marshal system config"))
 		} else {
 			event.Key = gossip.KeyDeprecatedSystemConfig
 			event.Content = content
@@ -1711,9 +1706,9 @@ func (n *Node) GossipSubscription(
 			if !ok {
 				// The consumer was not keeping up with gossip updates, so its
 				// subscription was terminated to avoid blocking gossip.
-				err := roachpb.NewErrorf("subscription terminated due to slow consumption")
+				err := kvpb.NewErrorf("subscription terminated due to slow consumption")
 				log.Warningf(ctx, "%v", err)
-				e = &roachpb.GossipSubscriptionEvent{Error: err}
+				e = &kvpb.GossipSubscriptionEvent{Error: err}
 			}
 			if err := stream.Send(e); err != nil {
 				return err
@@ -1726,23 +1721,23 @@ func (n *Node) GossipSubscription(
 	}
 }
 
-// TenantSettings implements the roachpb.InternalServer interface.
+// TenantSettings implements the kvpb.InternalServer interface.
 func (n *Node) TenantSettings(
-	args *roachpb.TenantSettingsRequest, stream roachpb.Internal_TenantSettingsServer,
+	args *kvpb.TenantSettingsRequest, stream kvpb.Internal_TenantSettingsServer,
 ) error {
 	ctx := n.storeCfg.AmbientCtx.AnnotateCtx(stream.Context())
 	ctxDone := ctx.Done()
 
 	w := n.tenantSettingsWatcher
 	if err := w.WaitForStart(ctx); err != nil {
-		return stream.Send(&roachpb.TenantSettingsEvent{
+		return stream.Send(&kvpb.TenantSettingsEvent{
 			Error: errors.EncodeError(ctx, err),
 		})
 	}
 
-	send := func(precedence roachpb.TenantSettingsPrecedence, overrides []roachpb.TenantSetting) error {
+	send := func(precedence kvpb.TenantSettingsPrecedence, overrides []kvpb.TenantSetting) error {
 		log.VInfof(ctx, 1, "sending precedence %d: %v", precedence, overrides)
-		return stream.Send(&roachpb.TenantSettingsEvent{
+		return stream.Send(&kvpb.TenantSettingsEvent{
 			Precedence:  precedence,
 			Incremental: false,
 			Overrides:   overrides,
@@ -1750,12 +1745,12 @@ func (n *Node) TenantSettings(
 	}
 
 	allOverrides, allCh := w.GetAllTenantOverrides()
-	if err := send(roachpb.AllTenantsOverrides, allOverrides); err != nil {
+	if err := send(kvpb.AllTenantsOverrides, allOverrides); err != nil {
 		return err
 	}
 
 	tenantOverrides, tenantCh := w.GetTenantOverrides(args.TenantID)
-	if err := send(roachpb.SpecificTenantOverrides, tenantOverrides); err != nil {
+	if err := send(kvpb.SpecificTenantOverrides, tenantOverrides); err != nil {
 		return err
 	}
 
@@ -1764,14 +1759,14 @@ func (n *Node) TenantSettings(
 		case <-allCh:
 			// All-tenant overrides have changed, send them again.
 			allOverrides, allCh = w.GetAllTenantOverrides()
-			if err := send(roachpb.AllTenantsOverrides, allOverrides); err != nil {
+			if err := send(kvpb.AllTenantsOverrides, allOverrides); err != nil {
 				return err
 			}
 
 		case <-tenantCh:
 			// Tenant-specific overrides have changed, send them again.
 			tenantOverrides, tenantCh = w.GetTenantOverrides(args.TenantID)
-			if err := send(roachpb.SpecificTenantOverrides, tenantOverrides); err != nil {
+			if err := send(kvpb.SpecificTenantOverrides, tenantOverrides); err != nil {
 				return err
 			}
 
@@ -1784,12 +1779,12 @@ func (n *Node) TenantSettings(
 	}
 }
 
-// Join implements the roachpb.InternalServer service. This is the
+// Join implements the kvpb.InternalServer service. This is the
 // "connectivity" API; individual CRDB servers are passed in a --join list and
 // the join targets are addressed through this API.
 func (n *Node) Join(
-	ctx context.Context, req *roachpb.JoinNodeRequest,
-) (*roachpb.JoinNodeResponse, error) {
+	ctx context.Context, req *kvpb.JoinNodeRequest,
+) (*kvpb.JoinNodeResponse, error) {
 	ctx, span := n.AnnotateCtxWithSpan(ctx, "alloc-{node,store}-id")
 	defer span.Finish()
 
@@ -1822,7 +1817,7 @@ func (n *Node) Join(
 
 	log.Infof(ctx, "allocated IDs: n%d, s%d", nodeID, storeID)
 
-	return &roachpb.JoinNodeResponse{
+	return &kvpb.JoinNodeResponse{
 		ClusterID:     n.clusterID.Get().GetBytes(),
 		NodeID:        int32(nodeID),
 		StoreID:       int32(storeID),
@@ -1830,14 +1825,14 @@ func (n *Node) Join(
 	}, nil
 }
 
-// TokenBucket is part of the roachpb.InternalServer service.
+// TokenBucket is part of the kvpb.InternalServer service.
 func (n *Node) TokenBucket(
-	ctx context.Context, in *roachpb.TokenBucketRequest,
-) (*roachpb.TokenBucketResponse, error) {
+	ctx context.Context, in *kvpb.TokenBucketRequest,
+) (*kvpb.TokenBucketResponse, error) {
 	// Check tenant ID. Note that in production configuration, the tenant ID has
 	// already been checked in the RPC layer (see rpc.tenantAuthorizer).
 	if in.TenantID == 0 || in.TenantID == roachpb.SystemTenantID.ToUint64() {
-		return &roachpb.TokenBucketResponse{
+		return &kvpb.TokenBucketResponse{
 			Error: errors.EncodeError(ctx, errors.Errorf(
 				"token bucket request with invalid tenant ID %d", in.TenantID,
 			)),
@@ -1863,9 +1858,9 @@ type dummyTenantUsageServer struct{}
 
 // TokenBucketRequest is defined in the TenantUsageServer interface.
 func (dummyTenantUsageServer) TokenBucketRequest(
-	ctx context.Context, tenantID roachpb.TenantID, in *roachpb.TokenBucketRequest,
-) *roachpb.TokenBucketResponse {
-	return &roachpb.TokenBucketResponse{
+	ctx context.Context, tenantID roachpb.TenantID, in *kvpb.TokenBucketRequest,
+) *kvpb.TokenBucketResponse {
+	return &kvpb.TokenBucketResponse{
 		Error: errors.EncodeError(ctx, errors.New("tenant usage requires a CCL binary")),
 	}
 }
@@ -1895,7 +1890,7 @@ var _ metric.Struct = emptyMetricStruct{}
 
 func (emptyMetricStruct) MetricStruct() {}
 
-// GetSpanConfigs implements the roachpb.InternalServer interface.
+// GetSpanConfigs implements the kvpb.InternalServer interface.
 func (n *Node) GetSpanConfigs(
 	ctx context.Context, req *roachpb.GetSpanConfigsRequest,
 ) (*roachpb.GetSpanConfigsResponse, error) {
@@ -1913,7 +1908,7 @@ func (n *Node) GetSpanConfigs(
 	}, nil
 }
 
-// GetAllSystemSpanConfigsThatApply implements the roachpb.InternalServer
+// GetAllSystemSpanConfigsThatApply implements the kvpb.InternalServer
 // interface.
 func (n *Node) GetAllSystemSpanConfigsThatApply(
 	ctx context.Context, req *roachpb.GetAllSystemSpanConfigsThatApplyRequest,
@@ -1928,7 +1923,7 @@ func (n *Node) GetAllSystemSpanConfigsThatApply(
 	}, nil
 }
 
-// UpdateSpanConfigs implements the roachpb.InternalServer interface.
+// UpdateSpanConfigs implements the kvpb.InternalServer interface.
 func (n *Node) UpdateSpanConfigs(
 	ctx context.Context, req *roachpb.UpdateSpanConfigsRequest,
 ) (*roachpb.UpdateSpanConfigsResponse, error) {
@@ -1950,7 +1945,7 @@ func (n *Node) UpdateSpanConfigs(
 	return &roachpb.UpdateSpanConfigsResponse{}, nil
 }
 
-// SpanConfigConformance implements the roachpb.InternalServer interface.
+// SpanConfigConformance implements the kvpb.InternalServer interface.
 func (n *Node) SpanConfigConformance(
 	ctx context.Context, req *roachpb.SpanConfigConformanceRequest,
 ) (*roachpb.SpanConfigConformanceResponse, error) {
@@ -1965,9 +1960,9 @@ func (n *Node) SpanConfigConformance(
 	return &roachpb.SpanConfigConformanceResponse{Report: report}, nil
 }
 
-// GetRangeDescriptors implements the roachpb.InternalServer interface.
+// GetRangeDescriptors implements the kvpb.InternalServer interface.
 func (n *Node) GetRangeDescriptors(
-	args *roachpb.GetRangeDescriptorsRequest, stream roachpb.Internal_GetRangeDescriptorsServer,
+	args *kvpb.GetRangeDescriptorsRequest, stream kvpb.Internal_GetRangeDescriptorsServer,
 ) error {
 	iter, err := n.execCfg.RangeDescIteratorFactory.NewIterator(stream.Context(), args.Span)
 	if err != nil {
@@ -1980,7 +1975,7 @@ func (n *Node) GetRangeDescriptors(
 		iter.Next()
 	}
 
-	return stream.Send(&roachpb.GetRangeDescriptorsResponse{
+	return stream.Send(&kvpb.GetRangeDescriptorsResponse{
 		RangeDescriptors: rangeDescriptors,
 	})
 }

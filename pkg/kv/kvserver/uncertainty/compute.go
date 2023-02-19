@@ -13,6 +13,7 @@ package uncertainty
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
@@ -71,7 +72,7 @@ import (
 //     is guaranteed to be greater than any write which occurred on the
 //     right-hand side.
 func ComputeInterval(
-	h *roachpb.Header, status kvserverpb.LeaseStatus, maxOffset time.Duration,
+	h *kvpb.Header, status kvserverpb.LeaseStatus, maxOffset time.Duration,
 ) Interval {
 	if h.Txn != nil {
 		return computeIntervalForTxn(h.Txn, status)
@@ -121,9 +122,9 @@ func computeIntervalForTxn(txn *roachpb.Transaction, status kvserverpb.LeaseStat
 }
 
 func computeIntervalForNonTxn(
-	h *roachpb.Header, status kvserverpb.LeaseStatus, maxOffset time.Duration,
+	h *kvpb.Header, status kvserverpb.LeaseStatus, maxOffset time.Duration,
 ) Interval {
-	if h.TimestampFromServerClock == nil || h.ReadConsistency != roachpb.CONSISTENT {
+	if h.TimestampFromServerClock == nil || h.ReadConsistency != kvpb.CONSISTENT {
 		// Non-transactional requests with client-provided timestamps do not
 		// guarantee linearizability. Neither do entirely inconsistent requests.
 		// As a result, they do not have uncertainty intervals.

@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
@@ -83,11 +84,11 @@ func (r *Replica) MaybeGossipNodeLivenessRaftMuLocked(
 		return nil
 	}
 
-	ba := roachpb.BatchRequest{}
+	ba := kvpb.BatchRequest{}
 	// Read at the maximum timestamp to ensure that we see the most recent
 	// liveness record, regardless of what timestamp it is written at.
 	ba.Timestamp = hlc.MaxTimestamp
-	ba.Add(&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeaderFromSpan(span)})
+	ba.Add(&kvpb.ScanRequest{RequestHeader: kvpb.RequestHeaderFromSpan(span)})
 	// Call evaluateBatch instead of Send to avoid reacquiring latches.
 	rec := NewReplicaEvalContext(
 		ctx, r, todoSpanSet, false, /* requiresClosedTSOlderThanStorageSnap */
@@ -107,7 +108,7 @@ func (r *Replica) MaybeGossipNodeLivenessRaftMuLocked(
 	if len(result.Local.EncounteredIntents) > 0 {
 		return errors.Errorf("unexpected intents on node liveness span %s: %+v", span, result.Local.EncounteredIntents)
 	}
-	kvs := br.Responses[0].GetInner().(*roachpb.ScanResponse).Rows
+	kvs := br.Responses[0].GetInner().(*kvpb.ScanResponse).Rows
 	log.VEventf(ctx, 2, "gossiping %d node liveness record(s) from span %s", len(kvs), span)
 	for _, kv := range kvs {
 		var kvLiveness, gossipLiveness livenesspb.Liveness
@@ -130,13 +131,13 @@ func (r *Replica) MaybeGossipNodeLivenessRaftMuLocked(
 
 // getLeaseForGossip tries to obtain a range lease. Only one of the replicas
 // should gossip; the bool returned indicates whether it's us.
-func (r *Replica) getLeaseForGossip(ctx context.Context) (bool, *roachpb.Error) {
+func (r *Replica) getLeaseForGossip(ctx context.Context) (bool, *kvpb.Error) {
 	// If no Gossip available (some tests) or range too fresh, noop.
 	if r.store.Gossip() == nil || !r.IsInitialized() {
-		return false, roachpb.NewErrorf("no gossip or range not initialized")
+		return false, kvpb.NewErrorf("no gossip or range not initialized")
 	}
 	var hasLease bool
-	var pErr *roachpb.Error
+	var pErr *kvpb.Error
 	if err := r.store.Stopper().RunTask(
 		ctx, "storage.Replica: acquiring lease to gossip",
 		func(ctx context.Context) {
@@ -145,7 +146,7 @@ func (r *Replica) getLeaseForGossip(ctx context.Context) (bool, *roachpb.Error) 
 			hasLease = pErr == nil
 			if pErr != nil {
 				switch e := pErr.GetDetail().(type) {
-				case *roachpb.NotLeaseHolderError:
+				case *kvpb.NotLeaseHolderError:
 					// NotLeaseHolderError means there is an active lease, but only if
 					// the lease is non-empty; otherwise, it's likely a timeout.
 					if !e.Lease.Empty() {
@@ -157,7 +158,7 @@ func (r *Replica) getLeaseForGossip(ctx context.Context) (bool, *roachpb.Error) 
 				}
 			}
 		}); err != nil {
-		pErr = roachpb.NewError(err)
+		pErr = kvpb.NewError(err)
 	}
 	return hasLease, pErr
 }
@@ -165,7 +166,7 @@ func (r *Replica) getLeaseForGossip(ctx context.Context) (bool, *roachpb.Error) 
 // maybeGossipFirstRange adds the sentinel and first range metadata to gossip
 // if this is the first range and a range lease can be obtained. The Store
 // calls this periodically on first range replicas.
-func (r *Replica) maybeGossipFirstRange(ctx context.Context) *roachpb.Error {
+func (r *Replica) maybeGossipFirstRange(ctx context.Context) *kvpb.Error {
 	if !r.IsFirstRange() {
 		return nil
 	}

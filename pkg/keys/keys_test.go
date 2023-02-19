@@ -17,6 +17,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -541,9 +542,9 @@ func TestBatchRange(t *testing.T) {
 	}
 
 	for i, c := range testCases {
-		var ba roachpb.BatchRequest
+		var ba kvpb.BatchRequest
 		for _, pair := range c.req {
-			ba.Add(&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeader{
+			ba.Add(&kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{
 				Key: roachpb.Key(pair[0]), EndKey: roachpb.Key(pair[1]),
 			}})
 		}
@@ -572,8 +573,8 @@ func TestBatchError(t *testing.T) {
 	}
 
 	for i, c := range testCases {
-		var ba roachpb.BatchRequest
-		ba.Add(&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeader{
+		var ba kvpb.BatchRequest
+		ba.Add(&kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{
 			Key: roachpb.Key(c.req[0]), EndKey: roachpb.Key(c.req[1]),
 		}})
 		if _, err := Range(ba.Requests); !testutils.IsError(err, c.errMsg) {
@@ -582,8 +583,8 @@ func TestBatchError(t *testing.T) {
 	}
 
 	// Test a case where a non-range request has an end key.
-	var ba roachpb.BatchRequest
-	ba.Add(&roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{
+	var ba kvpb.BatchRequest
+	ba.Add(&kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{
 		Key: roachpb.Key("a"), EndKey: roachpb.Key("b"),
 	}})
 	if _, err := Range(ba.Requests); !testutils.IsError(err, "end key specified for non-range operation") {

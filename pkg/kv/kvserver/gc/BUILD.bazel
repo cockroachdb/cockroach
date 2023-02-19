@@ -12,6 +12,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/keys",
+        "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/abortspan",
         "//pkg/kv/kvserver/rditer",
         "//pkg/roachpb",
@@ -48,6 +49,7 @@ go_test(
         "//pkg/base",
         "//pkg/keys",
         "//pkg/kv",
+        "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/rditer",
         "//pkg/roachpb",

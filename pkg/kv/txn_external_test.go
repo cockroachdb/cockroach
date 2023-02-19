@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -121,34 +122,34 @@ func TestRollbackAfterAmbiguousCommit(t *testing.T) {
 			var key roachpb.Key
 			commitBlocked := make(chan struct{})
 			onCommitReqFilter := func(
-				ba *roachpb.BatchRequest, fn func(et *roachpb.EndTxnRequest) *roachpb.Error,
-			) *roachpb.Error {
+				ba *kvpb.BatchRequest, fn func(et *kvpb.EndTxnRequest) *kvpb.Error,
+			) *kvpb.Error {
 				if atomic.LoadInt64(&filterSet) == 0 {
 					return nil
 				}
-				req, ok := ba.GetArg(roachpb.EndTxn)
+				req, ok := ba.GetArg(kvpb.EndTxn)
 				if !ok {
 					return nil
 				}
-				et := req.(*roachpb.EndTxnRequest)
+				et := req.(*kvpb.EndTxnRequest)
 				if et.Key.Equal(key) && et.Commit {
 					return fn(et)
 				}
 				return nil
 			}
-			blockCommitReqFilter := func(ctx context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
-				return onCommitReqFilter(ba, func(et *roachpb.EndTxnRequest) *roachpb.Error {
+			blockCommitReqFilter := func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
+				return onCommitReqFilter(ba, func(et *kvpb.EndTxnRequest) *kvpb.Error {
 					// Inform the test that the commit is blocked.
 					commitBlocked <- struct{}{}
 					// Block until the client interrupts the commit. The client will
 					// cancel its context, at which point gRPC will return an error
 					// to the client and marshall the cancelation to the server.
 					<-ctx.Done()
-					return roachpb.NewError(ctx.Err())
+					return kvpb.NewError(ctx.Err())
 				})
 			}
-			addInFlightWriteToCommitReqFilter := func(ctx context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
-				return onCommitReqFilter(ba, func(et *roachpb.EndTxnRequest) *roachpb.Error {
+			addInFlightWriteToCommitReqFilter := func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
+				return onCommitReqFilter(ba, func(et *kvpb.EndTxnRequest) *kvpb.Error {
 					// Add a fake in-flight write.
 					et.InFlightWrites = append(et.InFlightWrites, roachpb.SequencedWrite{
 						Key: key.Next(), Sequence: et.Sequence,
@@ -167,7 +168,7 @@ func TestRollbackAfterAmbiguousCommit(t *testing.T) {
 						// do this either before or after the request completes, depending
 						// on the status that the test wants the txn record to be in when
 						// the rollback is performed.
-						TestingRequestFilter: func(ctx context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
+						TestingRequestFilter: func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
 							if testCase.txnStatus == roachpb.PENDING {
 								// Block and reject before the request writes the txn record.
 								return blockCommitReqFilter(ctx, ba)
@@ -181,7 +182,7 @@ func TestRollbackAfterAmbiguousCommit(t *testing.T) {
 							}
 							return nil
 						},
-						TestingResponseFilter: func(ctx context.Context, ba *roachpb.BatchRequest, _ *roachpb.BatchResponse) *roachpb.Error {
+						TestingResponseFilter: func(ctx context.Context, ba *kvpb.BatchRequest, _ *kvpb.BatchResponse) *kvpb.Error {
 							if testCase.txnStatus != roachpb.PENDING {
 								// Block and reject after the request writes the txn record.
 								return blockCommitReqFilter(ctx, ba)
@@ -252,7 +253,7 @@ func TestRollbackAfterAmbiguousCommit(t *testing.T) {
 
 			cancelCommit()
 			commitErr := <-commitCh
-			require.IsType(t, &roachpb.AmbiguousResultError{}, commitErr)
+			require.IsType(t, &kvpb.AmbiguousResultError{}, commitErr)
 
 			// If the test wants the upcoming rollback to find a COMMITTED record,
 			// we'll perform transaction recovery. This will leave the transaction in
@@ -260,8 +261,8 @@ func TestRollbackAfterAmbiguousCommit(t *testing.T) {
 			if testCase.txnStatus == roachpb.COMMITTED && !testCase.txnRecordCleanedUp {
 				// Sanity check - verify that the txn is STAGING.
 				txnProto := txn.TestingCloneTxn()
-				queryTxn := roachpb.QueryTxnRequest{
-					RequestHeader: roachpb.RequestHeader{
+				queryTxn := kvpb.QueryTxnRequest{
+					RequestHeader: kvpb.RequestHeader{
 						Key: txnProto.Key,
 					},
 					Txn: txnProto.TxnMeta,
@@ -428,26 +429,26 @@ func testTxnNegotiateAndSendDoesNotBlock(t *testing.T, multiRange, strict, route
 					// error (WriteIntentError) under conditions that would otherwise
 					// cause us to block on an intent. Otherwise, allow the request to be
 					// redirected to the leaseholder and to block on intents.
-					ba := &roachpb.BatchRequest{}
+					ba := &kvpb.BatchRequest{}
 					if strict {
-						ba.BoundedStaleness = &roachpb.BoundedStalenessHeader{
+						ba.BoundedStaleness = &kvpb.BoundedStalenessHeader{
 							MinTimestampBound:       minTSBound,
 							MinTimestampBoundStrict: true,
 						}
 						ba.WaitPolicy = lock.WaitPolicy_Error
 					} else {
-						ba.BoundedStaleness = &roachpb.BoundedStalenessHeader{
+						ba.BoundedStaleness = &kvpb.BoundedStalenessHeader{
 							MinTimestampBound:       store.Clock().Now(),
 							MinTimestampBoundStrict: false,
 						}
 						ba.WaitPolicy = lock.WaitPolicy_Block
 					}
-					ba.RoutingPolicy = roachpb.RoutingPolicy_LEASEHOLDER
+					ba.RoutingPolicy = kvpb.RoutingPolicy_LEASEHOLDER
 					if routeNearest {
-						ba.RoutingPolicy = roachpb.RoutingPolicy_NEAREST
+						ba.RoutingPolicy = kvpb.RoutingPolicy_NEAREST
 					}
-					ba.Add(&roachpb.ScanRequest{
-						RequestHeader: roachpb.RequestHeaderFromSpan(keySpan),
+					ba.Add(&kvpb.ScanRequest{
+						RequestHeader: kvpb.RequestHeaderFromSpan(keySpan),
 					})
 
 					// Trace the request so we can determine whether it was served as a

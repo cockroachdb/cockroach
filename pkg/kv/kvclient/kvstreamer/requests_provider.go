@@ -14,6 +14,7 @@ import (
 	"sort"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -24,7 +25,7 @@ import (
 // been truncated to be within a single range. All requests within the
 // singleRangeBatch will be issued as a single BatchRequest.
 type singleRangeBatch struct {
-	reqs []roachpb.RequestUnion
+	reqs []kvpb.RequestUnion
 	// reqsKeys stores the start key of the corresponding request in reqs. It is
 	// only set prior to sorting reqs within this object (currently, this is
 	// done only in the OutOfOrder mode for the original requests - resume
@@ -78,7 +79,7 @@ type singleRangeBatch struct {
 	// the memory usage of reqs, excluding the overhead.
 	reqsReservedBytes int64
 	// overheadAccountedFor tracks the memory reservation against the budget for
-	// the overhead of the reqs slice (i.e. of roachpb.RequestUnion objects) as
+	// the overhead of the reqs slice (i.e. of kvpb.RequestUnion objects) as
 	// well as the positions and the subRequestIdx slices. Since we reuse these
 	// slices for the resume requests, this can be released only when the
 	// BatchResponse doesn't have any resume spans.

@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -152,7 +152,7 @@ type QueryLevelStats struct {
 	MvccRangeKeySkippedPoints          int64
 	NetworkMessages                    int64
 	ContentionTime                     time.Duration
-	ContentionEvents                   []roachpb.ContentionEvent
+	ContentionEvents                   []kvpb.ContentionEvent
 	RUEstimate                         int64
 	CPUTime                            time.Duration
 }
@@ -297,7 +297,7 @@ func (a *TraceAnalyzer) ProcessStats() error {
 	}
 	var errs error
 
-	var allContentionEvents []roachpb.ContentionEvent
+	var allContentionEvents []kvpb.ContentionEvent
 	// Process processorStats.
 	for _, stats := range a.processorStats {
 		if stats == nil {

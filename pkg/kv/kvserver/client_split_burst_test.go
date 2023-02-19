@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -74,7 +75,7 @@ func setupSplitBurstTest(t *testing.T, delay time.Duration) *splitBurstTest {
 	numSplitsSeenOnSlowFollower := new(int32) // atomic
 	var quiesceCh <-chan struct{}
 	knobs := base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
-		TestingApplyCalledTwiceFilter: func(args kvserverbase.ApplyFilterArgs) (int, *roachpb.Error) {
+		TestingApplyCalledTwiceFilter: func(args kvserverbase.ApplyFilterArgs) (int, *kvpb.Error) {
 			if args.Split == nil || delay == 0 {
 				return 0, nil
 			}

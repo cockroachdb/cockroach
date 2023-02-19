@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -205,12 +206,12 @@ func TestPriorityRatchetOnAbortOrPush(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	s := createTestDBWithKnobs(t, &kvserver.StoreTestingKnobs{
-		TestingRequestFilter: func(_ context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
+		TestingRequestFilter: func(_ context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
 			// Reject transaction heartbeats, which can make the test flaky when they
 			// detect an aborted transaction before the Get operation does. See #68584
 			// for an explanation.
 			if ba.IsSingleHeartbeatTxnRequest() {
-				return roachpb.NewErrorf("rejected")
+				return kvpb.NewErrorf("rejected")
 			}
 			return nil
 		},
@@ -638,21 +639,21 @@ func TestTxnCommitTimestampAdvancedByRefresh(t *testing.T) {
 	var refreshTS hlc.Timestamp
 	errKey := roachpb.Key("inject_err")
 	s := createTestDBWithKnobs(t, &kvserver.StoreTestingKnobs{
-		TestingRequestFilter: func(_ context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
-			if g, ok := ba.GetArg(roachpb.Get); ok && g.(*roachpb.GetRequest).Key.Equal(errKey) {
+		TestingRequestFilter: func(_ context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
+			if g, ok := ba.GetArg(kvpb.Get); ok && g.(*kvpb.GetRequest).Key.Equal(errKey) {
 				if injected {
 					return nil
 				}
 				injected = true
 				txn := ba.Txn.Clone()
 				refreshTS = txn.WriteTimestamp.Add(0, 1)
-				pErr := roachpb.NewReadWithinUncertaintyIntervalError(
+				pErr := kvpb.NewReadWithinUncertaintyIntervalError(
 					txn.ReadTimestamp,
 					hlc.ClockTimestamp{},
 					txn,
 					refreshTS,
 					hlc.ClockTimestamp{})
-				return roachpb.NewErrorWithTxn(pErr, txn)
+				return kvpb.NewErrorWithTxn(pErr, txn)
 			}
 			return nil
 		},
@@ -701,12 +702,12 @@ func TestTxnLeavesIntentBehindAfterWriteTooOldError(t *testing.T) {
 	// Now we write and expect a WriteTooOld.
 	intentVal := []byte("test")
 	err = txn.Put(ctx, key, intentVal)
-	require.IsType(t, &roachpb.TransactionRetryWithProtoRefreshError{}, err)
+	require.IsType(t, &kvpb.TransactionRetryWithProtoRefreshError{}, err)
 	require.Regexp(t, "WriteTooOld", err)
 
 	// Check that the intent was left behind.
 	b := kv.Batch{}
-	b.Header.ReadConsistency = roachpb.READ_UNCOMMITTED
+	b.Header.ReadConsistency = kvpb.READ_UNCOMMITTED
 	b.Get(key)
 	require.NoError(t, s.DB.Run(ctx, &b))
 	getResp := b.RawResponse().Responses[0].GetGet()
@@ -736,7 +737,7 @@ func TestTxnContinueAfterCputError(t *testing.T) {
 	// StrToCPutExistingValue() is not actually necessary.
 	expVal := kvclientutils.StrToCPutExistingValue("dummy")
 	err := txn.CPut(ctx, "a", "val", expVal)
-	require.IsType(t, &roachpb.ConditionFailedError{}, err)
+	require.IsType(t, &kvpb.ConditionFailedError{}, err)
 
 	require.NoError(t, txn.Put(ctx, "a", "b'"))
 	require.NoError(t, txn.Commit(ctx))
@@ -761,7 +762,7 @@ func TestTxnContinueAfterWriteIntentError(t *testing.T) {
 	b.Header.WaitPolicy = lock.WaitPolicy_Error
 	b.Put("a", "c")
 	err := txn.Run(ctx, b)
-	require.IsType(t, &roachpb.WriteIntentError{}, err)
+	require.IsType(t, &kvpb.WriteIntentError{}, err)
 
 	require.NoError(t, txn.Put(ctx, "a'", "c"))
 	require.NoError(t, txn.Commit(ctx))
@@ -822,9 +823,9 @@ func TestTxnWaitPolicies(t *testing.T) {
 		// Priority does not matter.
 		err := <-errorC
 		require.NotNil(t, err)
-		wiErr := new(roachpb.WriteIntentError)
+		wiErr := new(kvpb.WriteIntentError)
 		require.True(t, errors.As(err, &wiErr))
-		require.Equal(t, roachpb.WriteIntentError_REASON_WAIT_POLICY, wiErr.Reason)
+		require.Equal(t, kvpb.WriteIntentError_REASON_WAIT_POLICY, wiErr.Reason)
 
 		// SkipLocked wait policy.
 		type skipRes struct {
@@ -874,9 +875,9 @@ func TestTxnLockTimeout(t *testing.T) {
 	b.Get(key)
 	err := s.DB.Run(ctx, &b)
 	require.NotNil(t, err)
-	wiErr := new(roachpb.WriteIntentError)
+	wiErr := new(kvpb.WriteIntentError)
 	require.True(t, errors.As(err, &wiErr))
-	require.Equal(t, roachpb.WriteIntentError_REASON_LOCK_TIMEOUT, wiErr.Reason)
+	require.Equal(t, kvpb.WriteIntentError_REASON_LOCK_TIMEOUT, wiErr.Reason)
 }
 
 // TestTxnReturnsWriteTooOldErrorOnConflictingDeleteRange tests that if two
@@ -1024,7 +1025,7 @@ func TestTxnRetryWithLatchesDroppedEarly(t *testing.T) {
 		}
 
 		// Ensure no rows were returned as part of the scan.
-		require.Equal(t, 0, len(b.RawResponse().Responses[0].GetInner().(*roachpb.ScanResponse).Rows))
+		require.Equal(t, 0, len(b.RawResponse().Responses[0].GetInner().(*kvpb.ScanResponse).Rows))
 		return nil
 	})
 	if err != nil {

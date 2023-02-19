@@ -15,6 +15,7 @@ import (
 	"runtime/debug"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -113,11 +114,11 @@ type TxnCoordSender struct {
 
 		// storedRetryableErr is set when txnState == txnRetryableError. This
 		// storedRetryableErr is returned to clients on Send().
-		storedRetryableErr *roachpb.TransactionRetryWithProtoRefreshError
+		storedRetryableErr *kvpb.TransactionRetryWithProtoRefreshError
 
 		// storedErr is set when txnState == txnError. This storedErr is returned to
 		// clients on Send().
-		storedErr *roachpb.Error
+		storedErr *kvpb.Error
 
 		// active is set whenever the transaction has sent any requests. Rolling
 		// back to a savepoint taken before the TxnCoordSender became active resets
@@ -420,15 +421,13 @@ func (tc *TxnCoordSender) DisablePipelining() error {
 	return nil
 }
 
-func generateTxnDeadlineExceededErr(
-	txn *roachpb.Transaction, deadline hlc.Timestamp,
-) *roachpb.Error {
+func generateTxnDeadlineExceededErr(txn *roachpb.Transaction, deadline hlc.Timestamp) *kvpb.Error {
 	exceededBy := txn.WriteTimestamp.GoTime().Sub(deadline.GoTime())
 	extraMsg := redact.Sprintf(
 		"txn timestamp pushed too much; deadline exceeded by %s (%s > %s)",
 		exceededBy, txn.WriteTimestamp, deadline)
-	return roachpb.NewErrorWithTxn(
-		roachpb.NewTransactionRetryError(roachpb.RETRY_COMMIT_DEADLINE_EXCEEDED, extraMsg), txn)
+	return kvpb.NewErrorWithTxn(
+		kvpb.NewTransactionRetryError(kvpb.RETRY_COMMIT_DEADLINE_EXCEEDED, extraMsg), txn)
 }
 
 // finalizeNonLockingTxnLocked finalizes a non-locking txn, either marking it as
@@ -442,8 +441,8 @@ func generateTxnDeadlineExceededErr(
 // sendLockedWithElidedEndTxn method, but we would want to confirm
 // that doing so doesn't cut into the speed-up we see from this fast-path.
 func (tc *TxnCoordSender) finalizeNonLockingTxnLocked(
-	ctx context.Context, ba *roachpb.BatchRequest,
-) *roachpb.Error {
+	ctx context.Context, ba *kvpb.BatchRequest,
+) *kvpb.Error {
 	et := ba.Requests[0].GetEndTxn()
 	if et.Commit {
 		deadline := et.Deadline
@@ -464,7 +463,7 @@ func (tc *TxnCoordSender) finalizeNonLockingTxnLocked(
 	tc.finalizeAndCleanupTxnLocked(ctx)
 	if et.Commit {
 		if err := tc.maybeCommitWait(ctx, false /* deferred */); err != nil {
-			return roachpb.NewError(err)
+			return kvpb.NewError(err)
 		}
 	}
 	return nil
@@ -472,8 +471,8 @@ func (tc *TxnCoordSender) finalizeNonLockingTxnLocked(
 
 // Send is part of the client.TxnSender interface.
 func (tc *TxnCoordSender) Send(
-	ctx context.Context, ba *roachpb.BatchRequest,
-) (*roachpb.BatchResponse, *roachpb.Error) {
+	ctx context.Context, ba *kvpb.BatchRequest,
+) (*kvpb.BatchResponse, *kvpb.Error) {
 	// NOTE: The locking here is unusual. Although it might look like it, we are
 	// NOT holding the lock continuously for the duration of the Send. We lock
 	// here, and unlock at the botton of the interceptor stack, in the
@@ -508,8 +507,8 @@ func (tc *TxnCoordSender) Send(
 
 	// It doesn't make sense to use inconsistent reads in a transaction. However,
 	// we still need to accept it as a parameter for this to compile.
-	if ba.ReadConsistency != roachpb.CONSISTENT {
-		return nil, roachpb.NewErrorf("cannot use %s ReadConsistency in txn",
+	if ba.ReadConsistency != kvpb.CONSISTENT {
+		return nil, kvpb.NewErrorf("cannot use %s ReadConsistency in txn",
 			ba.ReadConsistency)
 	}
 
@@ -529,13 +528,13 @@ func (tc *TxnCoordSender) Send(
 
 	// If we succeeded to commit, or we attempted to rollback, we move to
 	// txnFinalized.
-	if req, ok := ba.GetArg(roachpb.EndTxn); ok {
-		et := req.(*roachpb.EndTxnRequest)
+	if req, ok := ba.GetArg(kvpb.EndTxn); ok {
+		et := req.(*kvpb.EndTxnRequest)
 		if (et.Commit && pErr == nil) || !et.Commit {
 			tc.finalizeAndCleanupTxnLocked(ctx)
 			if et.Commit {
 				if err := tc.maybeCommitWait(ctx, false /* deferred */); err != nil {
-					return nil, roachpb.NewError(err)
+					return nil, kvpb.NewError(err)
 				}
 			}
 		}
@@ -546,7 +545,7 @@ func (tc *TxnCoordSender) Send(
 	}
 
 	if br != nil && br.Error != nil {
-		panic(roachpb.ErrorUnexpectedlySet(nil /* culprit */, br))
+		panic(kvpb.ErrorUnexpectedlySet(nil /* culprit */, br))
 	}
 
 	return br, nil
@@ -675,8 +674,8 @@ func (tc *TxnCoordSender) maybeCommitWait(ctx context.Context, deferred bool) er
 // ba is the batch that the client is trying to send. It's inspected because
 // rollbacks are always allowed. Can be nil.
 func (tc *TxnCoordSender) maybeRejectClientLocked(
-	ctx context.Context, ba *roachpb.BatchRequest,
-) *roachpb.Error {
+	ctx context.Context, ba *kvpb.BatchRequest,
+) *kvpb.Error {
 	if ba != nil && ba.IsSingleAbortTxnRequest() && tc.mu.txn.Status != roachpb.COMMITTED {
 		// As a special case, we allow rollbacks to be sent at any time. Any
 		// rollback attempt moves the TxnCoordSender state to txnFinalized, but higher
@@ -695,7 +694,7 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 	case txnPending:
 		// All good.
 	case txnRetryableError:
-		return roachpb.NewError(tc.mu.storedRetryableErr)
+		return kvpb.NewError(tc.mu.storedRetryableErr)
 	case txnError:
 		return tc.mu.storedErr
 	case txnFinalized:
@@ -703,11 +702,11 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 			"Trying to execute: %s", ba.Summary())
 		stack := string(debug.Stack())
 		log.Errorf(ctx, "%s. stack:\n%s", msg, stack)
-		reason := roachpb.TransactionStatusError_REASON_UNKNOWN
+		reason := kvpb.TransactionStatusError_REASON_UNKNOWN
 		if tc.mu.txn.Status == roachpb.COMMITTED {
-			reason = roachpb.TransactionStatusError_REASON_TXN_COMMITTED
+			reason = kvpb.TransactionStatusError_REASON_TXN_COMMITTED
 		}
-		return roachpb.NewErrorWithTxn(roachpb.NewTransactionStatusError(reason, msg), &tc.mu.txn)
+		return kvpb.NewErrorWithTxn(kvpb.NewTransactionStatusError(reason, msg), &tc.mu.txn)
 	}
 
 	// Check the transaction proto state, along with any finalized transaction
@@ -723,12 +722,12 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 		// this was not due to a synchronous transaction commit and transaction
 		// record garbage collection.
 		// See the comment on txnHeartbeater.mu.finalObservedStatus for more details.
-		abortedErr := roachpb.NewErrorWithTxn(
-			roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_CLIENT_REJECT), &tc.mu.txn)
-		return roachpb.NewError(tc.handleRetryableErrLocked(ctx, abortedErr))
+		abortedErr := kvpb.NewErrorWithTxn(
+			kvpb.NewTransactionAbortedError(kvpb.ABORT_REASON_CLIENT_REJECT), &tc.mu.txn)
+		return kvpb.NewError(tc.handleRetryableErrLocked(ctx, abortedErr))
 	case protoStatus != roachpb.PENDING || hbObservedStatus != roachpb.PENDING:
 		// The transaction proto is in an unexpected state.
-		return roachpb.NewErrorf(
+		return kvpb.NewErrorf(
 			"unexpected txn state: %s; heartbeat observed status: %s", tc.mu.txn, hbObservedStatus)
 	default:
 		// All good.
@@ -757,11 +756,11 @@ func (tc *TxnCoordSender) cleanupTxnLocked(ctx context.Context) {
 
 // UpdateStateOnRemoteRetryableErr is part of the TxnSender interface.
 func (tc *TxnCoordSender) UpdateStateOnRemoteRetryableErr(
-	ctx context.Context, pErr *roachpb.Error,
-) *roachpb.Error {
+	ctx context.Context, pErr *kvpb.Error,
+) *kvpb.Error {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
-	return roachpb.NewError(tc.handleRetryableErrLocked(ctx, pErr))
+	return kvpb.NewError(tc.handleRetryableErrLocked(ctx, pErr))
 }
 
 // handleRetryableErrLocked takes a retriable error and creates a
@@ -772,47 +771,47 @@ func (tc *TxnCoordSender) UpdateStateOnRemoteRetryableErr(
 // expected to check the ID of the resulting transaction. If the TxnCoordSender
 // can still be used, it will have been prepared for a new epoch.
 func (tc *TxnCoordSender) handleRetryableErrLocked(
-	ctx context.Context, pErr *roachpb.Error,
-) *roachpb.TransactionRetryWithProtoRefreshError {
+	ctx context.Context, pErr *kvpb.Error,
+) *kvpb.TransactionRetryWithProtoRefreshError {
 	// If the error is a transaction retry error, update metrics to
 	// reflect the reason for the restart. More details about the
 	// different error types are documented above on the metaRestart
 	// variables.
 	switch tErr := pErr.GetDetail().(type) {
-	case *roachpb.TransactionRetryError:
+	case *kvpb.TransactionRetryError:
 		switch tErr.Reason {
-		case roachpb.RETRY_WRITE_TOO_OLD:
+		case kvpb.RETRY_WRITE_TOO_OLD:
 			tc.metrics.RestartsWriteTooOld.Inc()
-		case roachpb.RETRY_SERIALIZABLE:
+		case kvpb.RETRY_SERIALIZABLE:
 			tc.metrics.RestartsSerializable.Inc()
-		case roachpb.RETRY_ASYNC_WRITE_FAILURE:
+		case kvpb.RETRY_ASYNC_WRITE_FAILURE:
 			tc.metrics.RestartsAsyncWriteFailure.Inc()
-		case roachpb.RETRY_COMMIT_DEADLINE_EXCEEDED:
+		case kvpb.RETRY_COMMIT_DEADLINE_EXCEEDED:
 			tc.metrics.RestartsCommitDeadlineExceeded.Inc()
 		default:
 			tc.metrics.RestartsUnknown.Inc()
 		}
 
-	case *roachpb.WriteTooOldError:
+	case *kvpb.WriteTooOldError:
 		tc.metrics.RestartsWriteTooOldMulti.Inc()
 
-	case *roachpb.ReadWithinUncertaintyIntervalError:
+	case *kvpb.ReadWithinUncertaintyIntervalError:
 		tc.metrics.RestartsReadWithinUncertainty.Inc()
 
-	case *roachpb.TransactionAbortedError:
+	case *kvpb.TransactionAbortedError:
 		tc.metrics.RestartsTxnAborted.Inc()
 
-	case *roachpb.TransactionPushError:
+	case *kvpb.TransactionPushError:
 		tc.metrics.RestartsTxnPush.Inc()
 
 	default:
 		tc.metrics.RestartsUnknown.Inc()
 	}
 	errTxnID := pErr.GetTxn().ID
-	newTxn := roachpb.PrepareTransactionForRetry(ctx, pErr, tc.mu.userPriority, tc.clock)
+	newTxn := kvpb.PrepareTransactionForRetry(ctx, pErr, tc.mu.userPriority, tc.clock)
 
 	// We'll pass a TransactionRetryWithProtoRefreshError up to the next layer.
-	retErr := roachpb.NewTransactionRetryWithProtoRefreshError(
+	retErr := kvpb.NewTransactionRetryWithProtoRefreshError(
 		redact.Sprint(pErr),
 		errTxnID, // the id of the transaction that encountered the error
 		newTxn)
@@ -852,8 +851,8 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(
 // cases. It also updates retryable errors with the updated transaction for use
 // by client restarts.
 func (tc *TxnCoordSender) updateStateLocked(
-	ctx context.Context, ba *roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error,
-) *roachpb.Error {
+	ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse, pErr *kvpb.Error,
+) *kvpb.Error {
 
 	// We handle a couple of different cases:
 	// 1) A successful response. If that response carries a transaction proto,
@@ -878,7 +877,7 @@ func (tc *TxnCoordSender) updateStateLocked(
 		return nil
 	}
 
-	if pErr.TransactionRestart() != roachpb.TransactionRestart_NONE {
+	if pErr.TransactionRestart() != kvpb.TransactionRestart_NONE {
 		if tc.typ == kv.LeafTxn {
 			// Leaves handle retriable errors differently than roots. The leaf
 			// transaction is not supposed to be used any more after a retriable
@@ -904,7 +903,7 @@ func (tc *TxnCoordSender) updateStateLocked(
 			log.Fatalf(ctx, "retryable error for the wrong txn. ba.Txn: %s. pErr: %s",
 				ba.Txn, pErr)
 		}
-		return roachpb.NewError(tc.handleRetryableErrLocked(ctx, pErr))
+		return kvpb.NewError(tc.handleRetryableErrLocked(ctx, pErr))
 	}
 
 	// This is the non-retriable error case.
@@ -913,9 +912,9 @@ func (tc *TxnCoordSender) updateStateLocked(
 	// rollback), but some errors are safe to allow continuing (in particular
 	// ConditionFailedError). In particular, SQL can recover by rolling back to a
 	// savepoint.
-	if roachpb.ErrPriority(pErr.GoError()) != roachpb.ErrorScoreUnambiguousError {
+	if kvpb.ErrPriority(pErr.GoError()) != kvpb.ErrorScoreUnambiguousError {
 		tc.mu.txnState = txnError
-		tc.mu.storedErr = roachpb.NewError(&roachpb.TxnAlreadyEncounteredErrorError{
+		tc.mu.storedErr = kvpb.NewError(&kvpb.TxnAlreadyEncounteredErrorError{
 			PrevError: pErr.String(),
 		})
 	}
@@ -923,7 +922,7 @@ func (tc *TxnCoordSender) updateStateLocked(
 	// Update our transaction with any information the error has.
 	if errTxn := pErr.GetTxn(); errTxn != nil {
 		if err := sanityCheckErrWithTxn(ctx, pErr, ba, &tc.testingKnobs); err != nil {
-			return roachpb.NewError(err)
+			return kvpb.NewError(err)
 		}
 		tc.mu.txn.Update(errTxn)
 	}
@@ -941,10 +940,7 @@ func (tc *TxnCoordSender) updateStateLocked(
 // The assertion is known to have failed in the wild, see:
 // https://github.com/cockroachdb/cockroach/issues/67765
 func sanityCheckErrWithTxn(
-	ctx context.Context,
-	pErrWithTxn *roachpb.Error,
-	ba *roachpb.BatchRequest,
-	knobs *ClientTestingKnobs,
+	ctx context.Context, pErrWithTxn *kvpb.Error, ba *kvpb.BatchRequest, knobs *ClientTestingKnobs,
 ) error {
 	txn := pErrWithTxn.GetTxn()
 	if txn.Status != roachpb.COMMITTED {
@@ -1278,7 +1274,7 @@ func (tc *TxnCoordSender) PrepareRetryableError(
 	if tc.mu.txnState != txnPending {
 		return errors.AssertionFailedf("cannot set a retryable error. current state: %s", tc.mu.txnState)
 	}
-	pErr := roachpb.NewTransactionRetryWithProtoRefreshError(
+	pErr := kvpb.NewTransactionRetryWithProtoRefreshError(
 		msg, tc.mu.txn.ID, tc.mu.txn)
 	tc.mu.storedRetryableErr = pErr
 	tc.mu.txnState = txnRetryableError
@@ -1333,14 +1329,14 @@ func (tc *TxnCoordSender) ManualRefresh(ctx context.Context) error {
 	// needs the transaction proto. The function then returns a BatchRequest
 	// with the updated transaction proto. We use this updated proto to call
 	// into updateStateLocked directly.
-	ba := &roachpb.BatchRequest{}
+	ba := &kvpb.BatchRequest{}
 	ba.Txn = tc.mu.txn.Clone()
 	const force = true
 	refreshedBa, pErr := tc.interceptorAlloc.txnSpanRefresher.maybeRefreshPreemptivelyLocked(ctx, ba, force)
 	if pErr != nil {
 		pErr = tc.updateStateLocked(ctx, ba, nil, pErr)
 	} else {
-		var br roachpb.BatchResponse
+		var br kvpb.BatchResponse
 		br.Txn = refreshedBa.Txn
 		pErr = tc.updateStateLocked(ctx, ba, &br, nil)
 	}
@@ -1366,7 +1362,7 @@ func (tc *TxnCoordSender) DeferCommitWait(ctx context.Context) func(context.Cont
 // GetTxnRetryableErr is part of the TxnSender interface.
 func (tc *TxnCoordSender) GetTxnRetryableErr(
 	ctx context.Context,
-) *roachpb.TransactionRetryWithProtoRefreshError {
+) *kvpb.TransactionRetryWithProtoRefreshError {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	if tc.mu.txnState == txnRetryableError {

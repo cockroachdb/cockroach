@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary"
@@ -66,7 +67,7 @@ func evalNewLease(
 		(lease.Type() == roachpb.LeaseEpoch && lease.Expiration != nil) {
 		// This amounts to a bug.
 		return newFailedLeaseTrigger(isTransfer),
-			&roachpb.LeaseRejectedError{
+			&kvpb.LeaseRejectedError{
 				Existing:  prevLease,
 				Requested: lease,
 				Message: fmt.Sprintf("illegal lease: epoch=%d, interval=[%s, %s)",
@@ -78,7 +79,7 @@ func evalNewLease(
 	desc := rec.Desc()
 	if _, ok := desc.GetReplicaDescriptor(lease.Replica.StoreID); !ok {
 		return newFailedLeaseTrigger(isTransfer),
-			&roachpb.LeaseRejectedError{
+			&kvpb.LeaseRejectedError{
 				Existing:  prevLease,
 				Requested: lease,
 				Message:   "replica not found",
@@ -90,7 +91,7 @@ func evalNewLease(
 	// succeeding.
 	if lease.Sequence != 0 {
 		return newFailedLeaseTrigger(isTransfer),
-			&roachpb.LeaseRejectedError{
+			&kvpb.LeaseRejectedError{
 				Existing:  prevLease,
 				Requested: lease,
 				Message:   "sequence number should not be set",

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/joberror"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -293,7 +294,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 	pkIDs := make(map[uint64]struct{}, len(details.Tables))
 	for _, t := range details.Tables {
-		pkIDs[roachpb.BulkOpSummaryID(uint64(t.Desc.ID), uint64(t.Desc.PrimaryIndex.ID))] = struct{}{}
+		pkIDs[kvpb.BulkOpSummaryID(uint64(t.Desc.ID), uint64(t.Desc.PrimaryIndex.ID))] = struct{}{}
 	}
 	r.res.DataSize = res.DataSize
 	for id, count := range res.EntryCounts {
@@ -930,7 +931,7 @@ func parseAndCreateBundleTableDescs(
 
 // publishTables updates the status of imported tables from OFFLINE to PUBLIC.
 func (r *importResumer) publishTables(
-	ctx context.Context, execCfg *sql.ExecutorConfig, res roachpb.BulkOpSummary,
+	ctx context.Context, execCfg *sql.ExecutorConfig, res kvpb.BulkOpSummary,
 ) error {
 	details := r.job.Details().(jobspb.ImportDetails)
 	// Tables should only be published once.
@@ -1018,13 +1019,13 @@ func (r *importResumer) publishTables(
 // writeStubStatisticsForImportedTables writes "stub" statistics for new tables
 // created during an import.
 func (r *importResumer) writeStubStatisticsForImportedTables(
-	ctx context.Context, execCfg *sql.ExecutorConfig, res roachpb.BulkOpSummary,
+	ctx context.Context, execCfg *sql.ExecutorConfig, res kvpb.BulkOpSummary,
 ) {
 	details := r.job.Details().(jobspb.ImportDetails)
 	for _, tbl := range details.Tables {
 		if tbl.IsNew {
 			desc := tabledesc.NewBuilder(tbl.Desc).BuildImmutableTable()
-			id := roachpb.BulkOpSummaryID(uint64(desc.GetID()), uint64(desc.GetPrimaryIndexID()))
+			id := kvpb.BulkOpSummaryID(uint64(desc.GetID()), uint64(desc.GetPrimaryIndexID()))
 			rowCount := uint64(res.EntryCounts[id])
 			// TODO(michae2): collect distinct and null counts during import.
 			distinctCount := uint64(float64(rowCount) * memo.UnknownDistinctCountRatio)
@@ -1234,7 +1235,7 @@ func ingestWithRetry(
 	walltime int64,
 	testingKnobs importTestingKnobs,
 	procsPerNode int,
-) (roachpb.BulkOpSummary, error) {
+) (kvpb.BulkOpSummary, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "importer.ingestWithRetry")
 	defer sp.Finish()
 
@@ -1249,7 +1250,7 @@ func ingestWithRetry(
 	// We want to retry an import if there are transient failures (i.e. worker
 	// nodes dying), so if we receive a retryable error, re-plan and retry the
 	// import.
-	var res roachpb.BulkOpSummary
+	var res kvpb.BulkOpSummary
 	var err error
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		for {
@@ -1264,7 +1265,7 @@ func ingestWithRetry(
 			break
 		}
 
-		if errors.HasType(err, &roachpb.InsufficientSpaceError{}) {
+		if errors.HasType(err, &kvpb.InsufficientSpaceError{}) {
 			return res, jobs.MarkPauseRequestError(errors.UnwrapAll(err))
 		}
 
@@ -1502,7 +1503,7 @@ func (r *importResumer) dropTables(
 		// admin knob (e.g. ALTER TABLE REVERT TO SYSTEM TIME) if anything goes wrong.
 		ts := hlc.Timestamp{WallTime: details.Walltime}.Prev()
 		if useDeleteRange {
-			predicates := roachpb.DeleteRangePredicates{StartTime: ts}
+			predicates := kvpb.DeleteRangePredicates{StartTime: ts}
 			if err := sql.DeleteTableWithPredicate(
 				ctx,
 				execCfg.DB,

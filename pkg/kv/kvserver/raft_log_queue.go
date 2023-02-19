@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -724,8 +725,8 @@ func (rlq *raftLogQueue) process(
 		log.VEventf(ctx, 1, "%v", redact.Safe(decision.String()))
 	}
 	b := &kv.Batch{}
-	truncRequest := &roachpb.TruncateLogRequest{
-		RequestHeader: roachpb.RequestHeader{Key: r.Desc().StartKey.AsRawKey()},
+	truncRequest := &kvpb.TruncateLogRequest{
+		RequestHeader: kvpb.RequestHeader{Key: r.Desc().StartKey.AsRawKey()},
 		Index:         decision.NewFirstIndex,
 		RangeID:       r.RangeID,
 	}

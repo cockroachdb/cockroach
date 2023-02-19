@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -84,7 +85,7 @@ var backpressurableSpans = []roachpb.Span{
 
 // canBackpressureBatch returns whether the provided BatchRequest is eligible
 // for backpressure.
-func canBackpressureBatch(ba *roachpb.BatchRequest) bool {
+func canBackpressureBatch(ba *kvpb.BatchRequest) bool {
 	// Don't backpressure splits themselves.
 	if ba.Txn != nil && ba.Txn.Name == splitTxnName {
 		return false
@@ -94,7 +95,7 @@ func canBackpressureBatch(ba *roachpb.BatchRequest) bool {
 	// method that is within a "backpressurable" key span.
 	for _, ru := range ba.Requests {
 		req := ru.GetInner()
-		if !roachpb.CanBackpressure(req) {
+		if !kvpb.CanBackpressure(req) {
 			continue
 		}
 
@@ -112,10 +113,10 @@ func canBackpressureBatch(ba *roachpb.BatchRequest) bool {
 // poison.Policy_Wait, in which case it's a neverTripSignaller. In particular,
 // `(signaller).C() == nil` signals that the request bypasses the circuit
 // breakers.
-func (r *Replica) signallerForBatch(ba *roachpb.BatchRequest) signaller {
+func (r *Replica) signallerForBatch(ba *kvpb.BatchRequest) signaller {
 	for _, ru := range ba.Requests {
 		req := ru.GetInner()
-		if roachpb.BypassesReplicaCircuitBreaker(req) {
+		if kvpb.BypassesReplicaCircuitBreaker(req) {
 			return neverTripSignaller{}
 		}
 	}
@@ -149,7 +150,7 @@ func (r *Replica) shouldBackpressureWrites() bool {
 
 // maybeBackpressureBatch blocks to apply backpressure if the replica deems
 // that backpressure is necessary.
-func (r *Replica) maybeBackpressureBatch(ctx context.Context, ba *roachpb.BatchRequest) error {
+func (r *Replica) maybeBackpressureBatch(ctx context.Context, ba *kvpb.BatchRequest) error {
 	if !canBackpressureBatch(ba) {
 		return nil
 	}

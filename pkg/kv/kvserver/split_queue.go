@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -204,7 +205,7 @@ func (sq *splitQueue) process(
 	ctx context.Context, r *Replica, confReader spanconfig.StoreReader,
 ) (processed bool, err error) {
 	processed, err = sq.processAttempt(ctx, r, confReader)
-	if errors.HasType(err, (*roachpb.ConditionFailedError)(nil)) {
+	if errors.HasType(err, (*kvpb.ConditionFailedError)(nil)) {
 		// ConditionFailedErrors are an expected outcome for range split
 		// attempts because splits can race with other descriptor modifications.
 		// On seeing a ConditionFailedError, don't return an error and enqueue
@@ -225,8 +226,8 @@ func (sq *splitQueue) processAttempt(
 	if splitKey := confReader.ComputeSplitKey(ctx, desc.StartKey, desc.EndKey); splitKey != nil {
 		if _, err := r.adminSplitWithDescriptor(
 			ctx,
-			roachpb.AdminSplitRequest{
-				RequestHeader: roachpb.RequestHeader{
+			kvpb.AdminSplitRequest{
+				RequestHeader: kvpb.RequestHeader{
 					Key: splitKey.AsRawKey(),
 				},
 				SplitKey:       splitKey.AsRawKey(),
@@ -250,7 +251,7 @@ func (sq *splitQueue) processAttempt(
 	if maxBytes > 0 && size > maxBytes {
 		if _, err := r.adminSplitWithDescriptor(
 			ctx,
-			roachpb.AdminSplitRequest{},
+			kvpb.AdminSplitRequest{},
 			desc,
 			false, /* delayable */
 			fmt.Sprintf("%s above threshold size %s", humanizeutil.IBytes(size), humanizeutil.IBytes(maxBytes)),
@@ -291,8 +292,8 @@ func (sq *splitQueue) processAttempt(
 		}
 		if _, pErr := r.adminSplitWithDescriptor(
 			ctx,
-			roachpb.AdminSplitRequest{
-				RequestHeader: roachpb.RequestHeader{
+			kvpb.AdminSplitRequest{
+				RequestHeader: kvpb.RequestHeader{
 					Key: splitByLoadKey,
 				},
 				SplitKey:       splitByLoadKey,

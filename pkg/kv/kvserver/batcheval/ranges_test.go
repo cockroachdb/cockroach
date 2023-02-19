@@ -13,6 +13,7 @@ package batcheval
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
@@ -21,8 +22,8 @@ import (
 func TestMergeGCRangeBoundaries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	gcr := func(start, end roachpb.Key) roachpb.GCRequest_GCRangeKey {
-		return roachpb.GCRequest_GCRangeKey{
+	gcr := func(start, end roachpb.Key) kvpb.GCRequest_GCRangeKey {
+		return kvpb.GCRequest_GCRangeKey{
 			StartKey: start,
 			EndKey:   end,
 		}
@@ -49,21 +50,21 @@ func TestMergeGCRangeBoundaries(t *testing.T) {
 		name       string
 		rangeStart roachpb.Key
 		rangeEnd   roachpb.Key
-		rangeKeys  []roachpb.GCRequest_GCRangeKey
+		rangeKeys  []kvpb.GCRequest_GCRangeKey
 		spans      []roachpb.Span
 	}{
 		{
 			name:       "empty",
 			rangeStart: key("a"),
 			rangeEnd:   key("b"),
-			rangeKeys:  []roachpb.GCRequest_GCRangeKey{},
+			rangeKeys:  []kvpb.GCRequest_GCRangeKey{},
 			spans:      nil,
 		},
 		{
 			name:       "full range",
 			rangeStart: key("a"),
 			rangeEnd:   key("b"),
-			rangeKeys: []roachpb.GCRequest_GCRangeKey{
+			rangeKeys: []kvpb.GCRequest_GCRangeKey{
 				gcr(key("a"), key("b")),
 			},
 			spans: []roachpb.Span{
@@ -74,7 +75,7 @@ func TestMergeGCRangeBoundaries(t *testing.T) {
 			name:       "sub range",
 			rangeStart: key("a"),
 			rangeEnd:   key("z"),
-			rangeKeys: []roachpb.GCRequest_GCRangeKey{
+			rangeKeys: []kvpb.GCRequest_GCRangeKey{
 				gcr(key("c"), key("d")),
 			},
 			spans: []roachpb.Span{
@@ -85,7 +86,7 @@ func TestMergeGCRangeBoundaries(t *testing.T) {
 			name:       "non adjacent",
 			rangeStart: key("a"),
 			rangeEnd:   key("z"),
-			rangeKeys: []roachpb.GCRequest_GCRangeKey{
+			rangeKeys: []kvpb.GCRequest_GCRangeKey{
 				gcr(key("c"), key("d")),
 				gcr(key("e"), key("f")),
 			},
@@ -98,7 +99,7 @@ func TestMergeGCRangeBoundaries(t *testing.T) {
 			name:       "merge adjacent",
 			rangeStart: key("a"),
 			rangeEnd:   key("z"),
-			rangeKeys: []roachpb.GCRequest_GCRangeKey{
+			rangeKeys: []kvpb.GCRequest_GCRangeKey{
 				gcr(key("a"), key("b")),
 				gcr(key("b"), key("c")),
 				gcr(key("c"), key("d")),

@@ -31,6 +31,7 @@ go_library(
         "//pkg/kv",
         "//pkg/kv/kvclient/kvcoord",
         "//pkg/kv/kvclient/kvstreamer",
+        "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/roachpb",

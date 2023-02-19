@@ -13,6 +13,7 @@ package rangefeed
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -30,7 +31,7 @@ func (f *RangeFeed) runInitialScan(
 	ctx context.Context, n *log.EveryN, r *retry.Retry,
 ) (canceled bool) {
 	onValue := func(kv roachpb.KeyValue) {
-		v := roachpb.RangeFeedValue{
+		v := kvpb.RangeFeedValue{
 			Key:   kv.Key,
 			Value: kv.Value,
 		}

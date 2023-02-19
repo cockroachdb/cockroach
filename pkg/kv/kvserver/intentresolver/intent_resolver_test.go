@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -365,16 +366,16 @@ func TestCleanupMultipleIntentsAsync(t *testing.T) {
 		pushed   []string
 		resolved []string
 	}
-	pushOrResolveFunc := func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	pushOrResolveFunc := func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		switch ba.Requests[0].GetInner().Method() {
-		case roachpb.PushTxn:
+		case kvpb.PushTxn:
 			for _, ru := range ba.Requests {
 				reqs.Lock()
 				reqs.pushed = append(reqs.pushed, string(ru.GetPushTxn().Key))
 				reqs.Unlock()
 			}
 			return pushTxnSendFunc(t, len(ba.Requests))(ba)
-		case roachpb.ResolveIntent:
+		case kvpb.ResolveIntent:
 			for _, ru := range ba.Requests {
 				reqs.Lock()
 				reqs.resolved = append(reqs.resolved, string(ru.GetResolveIntent().Key))
@@ -382,7 +383,7 @@ func TestCleanupMultipleIntentsAsync(t *testing.T) {
 			}
 			return resolveIntentsSendFunc(t)(ba)
 		default:
-			return nil, roachpb.NewErrorf("unexpected")
+			return nil, kvpb.NewErrorf("unexpected")
 		}
 	}
 	sf := newSendFuncs(t, repeat(pushOrResolveFunc, 5)...)
@@ -469,14 +470,14 @@ func TestCleanupTxnIntentsAsyncWithPartialRollback(t *testing.T) {
 	txn.IgnoredSeqNums = []enginepb.IgnoredSeqNumRange{{Start: 1, End: 1}}
 
 	var gotResolveIntent, gotResolveIntentRange int32
-	check := func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	check := func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		for _, r := range ba.Requests {
-			if ri, ok := r.GetInner().(*roachpb.ResolveIntentRequest); ok {
+			if ri, ok := r.GetInner().(*kvpb.ResolveIntentRequest); ok {
 				atomic.StoreInt32(&gotResolveIntent, 1)
 				if !reflect.DeepEqual(ri.IgnoredSeqNums, txn.IgnoredSeqNums) {
 					t.Errorf("expected ignored list %v, got %v", txn.IgnoredSeqNums, ri.IgnoredSeqNums)
 				}
-			} else if rir, ok := r.GetInner().(*roachpb.ResolveIntentRangeRequest); ok {
+			} else if rir, ok := r.GetInner().(*kvpb.ResolveIntentRangeRequest); ok {
 				atomic.StoreInt32(&gotResolveIntentRange, 1)
 				if !reflect.DeepEqual(rir.IgnoredSeqNums, txn.IgnoredSeqNums) {
 					t.Errorf("expected ignored list %v, got %v", txn.IgnoredSeqNums, rir.IgnoredSeqNums)
@@ -627,31 +628,31 @@ func TestCleanupMultipleTxnIntentsAsync(t *testing.T) {
 		resolved []string
 		gced     []string
 	}
-	resolveOrGCFunc := func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	resolveOrGCFunc := func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		if len(ba.Requests) != 1 {
-			return nil, roachpb.NewErrorf("unexpected")
+			return nil, kvpb.NewErrorf("unexpected")
 		}
 		ru := ba.Requests[0]
 		switch ru.GetInner().Method() {
-		case roachpb.ResolveIntent:
+		case kvpb.ResolveIntent:
 			reqs.Lock()
 			reqs.resolved = append(reqs.resolved, string(ru.GetResolveIntent().Key))
 			reqs.Unlock()
 			return resolveIntentsSendFunc(t)(ba)
-		case roachpb.ResolveIntentRange:
+		case kvpb.ResolveIntentRange:
 			reqs.Lock()
 			req := ru.GetResolveIntentRange()
 			reqs.resolved = append(reqs.resolved,
 				fmt.Sprintf("%s-%s", string(req.Key), string(req.EndKey)))
 			reqs.Unlock()
 			return resolveIntentsSendFunc(t)(ba)
-		case roachpb.GC:
+		case kvpb.GC:
 			reqs.Lock()
 			reqs.gced = append(reqs.gced, string(ru.GetGc().Key))
 			reqs.Unlock()
 			return gcSendFunc(t)(ba)
 		default:
-			return nil, roachpb.NewErrorf("unexpected")
+			return nil, kvpb.NewErrorf("unexpected")
 		}
 	}
 	sf := newSendFuncs(t, repeat(resolveOrGCFunc, 8)...)
@@ -748,7 +749,7 @@ func TestCleanupIntents(t *testing.T) {
 			c.cfg.Stopper = stopper
 			c.cfg.Clock = clock
 			ir := newIntentResolverWithSendFuncs(c.cfg, c.sendFuncs, stopper)
-			num, err := ir.CleanupIntents(context.Background(), c.intents, clock.Now(), roachpb.PUSH_ABORT)
+			num, err := ir.CleanupIntents(context.Background(), c.intents, clock.Now(), kvpb.PUSH_ABORT)
 			assert.Equal(t, num, c.expectedNum, "number of resolved intents")
 			assert.Equal(t, err != nil, c.expectedErr, "error during CleanupIntents: %v", err)
 		})
@@ -783,13 +784,13 @@ func makeTxnIntents(t *testing.T, clock *hlc.Clock, numIntents int) []roachpb.In
 // the IntentResolver tries to send. They are used in conjunction with the below
 // function to create an IntentResolver with a slice of sendFuncs.
 // A library of useful sendFuncs are defined below.
-type sendFunc func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
+type sendFunc func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error)
 
 func newIntentResolverWithSendFuncs(
 	c Config, sf *sendFuncs, stopper *stop.Stopper,
 ) *IntentResolver {
 	txnSenderFactory := kv.NonTransactionalFactoryFunc(
-		func(_ context.Context, ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		func(_ context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 			sf.mu.Lock()
 			defer sf.mu.Unlock()
 			f := sf.popLocked()
@@ -805,7 +806,7 @@ func newIntentResolverWithSendFuncs(
 func pushTxnSendFuncs(sf *sendFuncs, N int) sendFunc {
 	toPush := int64(N)
 	var f sendFunc
-	f = func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	f = func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		if remaining := atomic.LoadInt64(&toPush); len(ba.Requests) > int(remaining) {
 			sf.t.Errorf("expected at most %d PushTxnRequests in batch, got %d",
 				remaining, len(ba.Requests))
@@ -820,7 +821,7 @@ func pushTxnSendFuncs(sf *sendFuncs, N int) sendFunc {
 }
 
 func pushTxnSendFunc(t *testing.T, numPushes int) sendFunc {
-	return func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	return func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		if len(ba.Requests) != numPushes {
 			t.Errorf("expected %d PushTxnRequests in batch, got %d",
 				numPushes, len(ba.Requests))
@@ -856,7 +857,7 @@ func resolveIntentsSendFuncsEx(
 	toResolve := int64(numIntents)
 	reqsSeen := int64(0)
 	var f sendFunc
-	f = func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	f = func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		if remaining := atomic.LoadInt64(&toResolve); len(ba.Requests) > int(remaining) {
 			sf.t.Errorf("expected at most %d ResolveIntentRequests in batch, got %d",
 				remaining, len(ba.Requests))
@@ -875,7 +876,7 @@ func resolveIntentsSendFuncsEx(
 }
 
 func resolveIntentsSendFuncEx(t *testing.T, checkTxnStatusOpt checkTxnStatusOpt) sendFunc {
-	return func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	return func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		return respForResolveIntentBatch(t, ba, checkTxnStatusOpt), nil
 	}
 }
@@ -892,33 +893,33 @@ func resolveIntentsSendFunc(t *testing.T) sendFunc {
 	return resolveIntentsSendFuncEx(t, dontCheckTxnStatus)
 }
 
-func failSendFunc(*roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-	return nil, roachpb.NewError(fmt.Errorf("boom"))
+func failSendFunc(*kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+	return nil, kvpb.NewError(fmt.Errorf("boom"))
 }
 
 func gcSendFunc(t *testing.T) sendFunc {
-	return func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		resp := &roachpb.BatchResponse{}
+	return func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		resp := &kvpb.BatchResponse{}
 		for _, r := range ba.Requests {
-			if _, ok := r.GetInner().(*roachpb.GCRequest); !ok {
+			if _, ok := r.GetInner().(*kvpb.GCRequest); !ok {
 				t.Errorf("Unexpected request type %T, expected GCRequest", r.GetInner())
 			}
-			resp.Add(&roachpb.GCResponse{})
+			resp.Add(&kvpb.GCResponse{})
 		}
 		return resp, nil
 	}
 }
 
-func respForPushTxnBatch(t *testing.T, ba *roachpb.BatchRequest) *roachpb.BatchResponse {
-	resp := &roachpb.BatchResponse{}
+func respForPushTxnBatch(t *testing.T, ba *kvpb.BatchRequest) *kvpb.BatchResponse {
+	resp := &kvpb.BatchResponse{}
 	for _, r := range ba.Requests {
 		var txn enginepb.TxnMeta
-		if req, ok := r.GetInner().(*roachpb.PushTxnRequest); ok {
+		if req, ok := r.GetInner().(*kvpb.PushTxnRequest); ok {
 			txn = req.PusheeTxn
 		} else {
 			t.Errorf("Unexpected request type %T, expected PushTxnRequest", r.GetInner())
 		}
-		resp.Add(&roachpb.PushTxnResponse{
+		resp.Add(&kvpb.PushTxnResponse{
 			PusheeTxn: roachpb.Transaction{
 				Status:  roachpb.ABORTED,
 				TxnMeta: txn,
@@ -929,17 +930,17 @@ func respForPushTxnBatch(t *testing.T, ba *roachpb.BatchRequest) *roachpb.BatchR
 }
 
 func respForResolveIntentBatch(
-	t *testing.T, ba *roachpb.BatchRequest, checkTxnStatusOpt checkTxnStatusOpt,
-) *roachpb.BatchResponse {
-	resp := &roachpb.BatchResponse{}
+	t *testing.T, ba *kvpb.BatchRequest, checkTxnStatusOpt checkTxnStatusOpt,
+) *kvpb.BatchResponse {
+	resp := &kvpb.BatchResponse{}
 	var status roachpb.TransactionStatus
 	for _, r := range ba.Requests {
-		if rir, ok := r.GetInner().(*roachpb.ResolveIntentRequest); ok {
+		if rir, ok := r.GetInner().(*kvpb.ResolveIntentRequest); ok {
 			status = rir.AsLockUpdate().Status
-			resp.Add(&roachpb.ResolveIntentResponse{})
-		} else if rirr, ok := r.GetInner().(*roachpb.ResolveIntentRangeRequest); ok {
+			resp.Add(&kvpb.ResolveIntentResponse{})
+		} else if rirr, ok := r.GetInner().(*kvpb.ResolveIntentRangeRequest); ok {
 			status = rirr.AsLockUpdate().Status
-			resp.Add(&roachpb.ResolveIntentRangeResponse{})
+			resp.Add(&kvpb.ResolveIntentRangeResponse{})
 		} else {
 			t.Errorf("Unexpected request in batch for intent resolution: %T", r.GetInner())
 		}

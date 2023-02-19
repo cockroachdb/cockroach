@@ -21,7 +21,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multitenantccl/tenantcostclient"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multitenantccl/tenantcostserver"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -152,7 +152,7 @@ func TestEstimateQueryRUConsumption(t *testing.T) {
 		// tenant_usage table.
 		time.Sleep(time.Second)
 		var consumptionBytes []byte
-		var consumption roachpb.TenantConsumption
+		var consumption kvpb.TenantConsumption
 		var tenantRUs float64
 		rows := sysDB.Query(t,
 			fmt.Sprintf(

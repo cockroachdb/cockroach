@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -168,7 +169,7 @@ func (q *consistencyQueue) process(
 		log.VErrEventf(ctx, 2, "failed to update last processed time: %v", err)
 	}
 
-	req := roachpb.CheckConsistencyRequest{
+	req := kvpb.CheckConsistencyRequest{
 		// Tell CheckConsistency that the caller is the queue. This triggers
 		// code to handle inconsistencies by recomputing with a diff and
 		// instructing the nodes in the minority to terminate with a fatal
@@ -176,7 +177,7 @@ func (q *consistencyQueue) process(
 		// inconsistency but the persisted stats are found to disagree with
 		// those reflected in the data. All of this really ought to be lifted
 		// into the queue in the future.
-		Mode: roachpb.ChecksumMode_CHECK_VIA_QUEUE,
+		Mode: kvpb.ChecksumMode_CHECK_VIA_QUEUE,
 	}
 	resp, pErr := repl.CheckConsistency(ctx, req)
 	if pErr != nil {

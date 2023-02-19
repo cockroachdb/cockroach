@@ -13,6 +13,7 @@ package tenantsettingswatcher
 import (
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -46,14 +47,14 @@ type overridesStore struct {
 // all-tenant overrides). It is an immutable data structure.
 type tenantOverrides struct {
 	// overrides, ordered by Name.
-	overrides []roachpb.TenantSetting
+	overrides []kvpb.TenantSetting
 
 	// changeCh is a channel that is closed when the tenant overrides change (in
 	// which case a new tenantOverrides object will contain the updated settings).
 	changeCh chan struct{}
 }
 
-func newTenantOverrides(overrides []roachpb.TenantSetting) *tenantOverrides {
+func newTenantOverrides(overrides []kvpb.TenantSetting) *tenantOverrides {
 	return &tenantOverrides{
 		overrides: overrides,
 		changeCh:  make(chan struct{}),
@@ -72,7 +73,7 @@ func (s *overridesStore) Init() {
 //
 // This method is called once we complete a full initial scan of the
 // tenant_setting table.
-func (s *overridesStore) SetAll(allOverrides map[roachpb.TenantID][]roachpb.TenantSetting) {
+func (s *overridesStore) SetAll(allOverrides map[roachpb.TenantID][]kvpb.TenantSetting) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -123,17 +124,15 @@ func (s *overridesStore) GetTenantOverrides(tenantID roachpb.TenantID) *tenantOv
 // SetTenantOverride changes an override for the given tenant. If the setting
 // has an empty value, the existing override is removed; otherwise a new
 // override is added.
-func (s *overridesStore) SetTenantOverride(
-	tenantID roachpb.TenantID, setting roachpb.TenantSetting,
-) {
+func (s *overridesStore) SetTenantOverride(tenantID roachpb.TenantID, setting kvpb.TenantSetting) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	var before []roachpb.TenantSetting
+	var before []kvpb.TenantSetting
 	if existing, ok := s.mu.tenants[tenantID]; ok {
 		before = existing.overrides
 		close(existing.changeCh)
 	}
-	after := make([]roachpb.TenantSetting, 0, len(before)+1)
+	after := make([]kvpb.TenantSetting, 0, len(before)+1)
 	// 1. Add all settings up to setting.Name.
 	for len(before) > 0 && before[0].Name < setting.Name {
 		after = append(after, before[0])

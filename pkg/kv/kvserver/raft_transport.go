@@ -18,6 +18,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -106,7 +107,7 @@ type RaftMessageHandler interface {
 	// If an error is encountered during asynchronous processing, it will be
 	// streamed back to the sender of the message as a RaftMessageResponse.
 	HandleRaftRequest(ctx context.Context, req *kvserverpb.RaftMessageRequest,
-		respStream RaftMessageResponseStream) *roachpb.Error
+		respStream RaftMessageResponseStream) *kvpb.Error
 
 	// HandleRaftResponse is called for each raft response. Note that
 	// not all messages receive a response. An error is returned if and only if
@@ -233,12 +234,12 @@ func (t *RaftTransport) getHandler(storeID roachpb.StoreID) (RaftMessageHandler,
 // handleRaftRequest proxies a request to the listening server interface.
 func (t *RaftTransport) handleRaftRequest(
 	ctx context.Context, req *kvserverpb.RaftMessageRequest, respStream RaftMessageResponseStream,
-) *roachpb.Error {
+) *kvpb.Error {
 	handler, ok := t.getHandler(req.ToReplica.StoreID)
 	if !ok {
 		log.Warningf(ctx, "unable to accept Raft message from %+v: no handler registered for %+v",
 			req.FromReplica, req.ToReplica)
-		return roachpb.NewError(roachpb.NewStoreNotFoundError(req.ToReplica.StoreID))
+		return kvpb.NewError(kvpb.NewStoreNotFoundError(req.ToReplica.StoreID))
 	}
 
 	return handler.HandleRaftRequest(ctx, req, respStream)
@@ -247,7 +248,7 @@ func (t *RaftTransport) handleRaftRequest(
 // newRaftMessageResponse constructs a RaftMessageResponse from the
 // given request and error.
 func newRaftMessageResponse(
-	req *kvserverpb.RaftMessageRequest, pErr *roachpb.Error,
+	req *kvserverpb.RaftMessageRequest, pErr *kvpb.Error,
 ) *kvserverpb.RaftMessageResponse {
 	resp := &kvserverpb.RaftMessageResponse{
 		RangeID: req.RangeID,
@@ -376,7 +377,7 @@ func (t *RaftTransport) RaftSnapshot(stream MultiRaft_RaftSnapshotServer) error 
 	if !ok {
 		log.Warningf(ctx, "unable to accept Raft message from %+v: no handler registered for %+v",
 			rmr.FromReplica, rmr.ToReplica)
-		return roachpb.NewStoreNotFoundError(rmr.ToReplica.StoreID)
+		return kvpb.NewStoreNotFoundError(rmr.ToReplica.StoreID)
 	}
 	return handler.HandleSnapshot(ctx, req.Header, stream)
 }

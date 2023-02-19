@@ -24,6 +24,7 @@ go_library(
         "//pkg/base",
         "//pkg/config",
         "//pkg/config/zonepb",
+        "//pkg/kv/kvpb",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",

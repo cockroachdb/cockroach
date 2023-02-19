@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -22,13 +23,13 @@ import (
 )
 
 func init() {
-	RegisterReadOnlyCommand(roachpb.RangeStats, declareKeysRangeStats, RangeStats)
+	RegisterReadOnlyCommand(kvpb.RangeStats, declareKeysRangeStats, RangeStats)
 }
 
 func declareKeysRangeStats(
 	rs ImmutableRangeState,
-	header *roachpb.Header,
-	req roachpb.Request,
+	header *kvpb.Header,
+	req kvpb.Request,
 	latchSpans, lockSpans *spanset.SpanSet,
 	maxOffset time.Duration,
 ) {
@@ -40,9 +41,9 @@ func declareKeysRangeStats(
 
 // RangeStats returns the MVCC statistics for a range.
 func RangeStats(
-	ctx context.Context, _ storage.Reader, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, _ storage.Reader, cArgs CommandArgs, resp kvpb.Response,
 ) (result.Result, error) {
-	reply := resp.(*roachpb.RangeStatsResponse)
+	reply := resp.(*kvpb.RangeStatsResponse)
 	reply.MVCCStats = cArgs.EvalCtx.GetMVCCStats()
 
 	maxQPS, qpsOK := cArgs.EvalCtx.GetMaxSplitQPS(ctx)

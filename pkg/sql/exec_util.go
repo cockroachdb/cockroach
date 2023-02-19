@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
@@ -1642,7 +1643,7 @@ type BackupRestoreTestingKnobs struct {
 
 	// RunAfterExportingSpanEntry allows blocking the BACKUP job after a single
 	// span has been exported.
-	RunAfterExportingSpanEntry func(ctx context.Context, response *roachpb.ExportResponse)
+	RunAfterExportingSpanEntry func(ctx context.Context, response *kvpb.ExportResponse)
 
 	// BackupMonitor is used to overwrite the monitor used by backup during
 	// testing. This is typically the bulk mem monitor if not

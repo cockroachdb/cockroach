@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -170,7 +171,7 @@ func newTenantSideCostController(
 		settings:        st,
 		tenantID:        tenantID,
 		provider:        provider,
-		responseChan:    make(chan *roachpb.TokenBucketResponse, 1),
+		responseChan:    make(chan *kvpb.TokenBucketResponse, 1),
 		lowRUNotifyChan: make(chan struct{}, 1),
 	}
 	c.limiter.Init(timeSource, c.lowRUNotifyChan)
@@ -264,7 +265,7 @@ type tenantSideCostController struct {
 		// consumption records the amount of resources consumed by the tenant.
 		// It is read and written on multiple goroutines and so must be protected
 		// by a mutex.
-		consumption roachpb.TenantConsumption
+		consumption kvpb.TenantConsumption
 
 		// avgCPUPerSec is an exponentially-weighted moving average of the CPU usage
 		// per second; used to estimate the CPU usage of a query. It is only written
@@ -278,7 +279,7 @@ type tenantSideCostController struct {
 
 	// responseChan is used to receive results from token bucket requests, which
 	// are run in a separate goroutine. A nil response indicates an error.
-	responseChan chan *roachpb.TokenBucketResponse
+	responseChan chan *kvpb.TokenBucketResponse
 
 	// run contains the state that is updated by the main loop. It doesn't need a
 	// mutex since the main loop runs on a single goroutine.
@@ -289,7 +290,7 @@ type tenantSideCostController struct {
 		// externalUsage stores the last value returned by externalUsageFn.
 		externalUsage multitenant.ExternalUsage
 		// consumption stores the last value of mu.consumption.
-		consumption roachpb.TenantConsumption
+		consumption kvpb.TenantConsumption
 		// targetPeriod stores the value of the TargetPeriodSetting setting at the
 		// last update.
 		targetPeriod time.Duration
@@ -303,7 +304,7 @@ type tenantSideCostController struct {
 		// requestInProgress is the token bucket request that is in progress, or
 		// nil if there is no call in progress. It gets set to nil when we process
 		// the response (in the main loop), even in error cases.
-		requestInProgress *roachpb.TokenBucketRequest
+		requestInProgress *kvpb.TokenBucketRequest
 		// shouldSendRequest is set if the last token bucket request encountered an
 		// error. This triggers a retry attempt on the next tick.
 		//
@@ -316,7 +317,7 @@ type tenantSideCostController struct {
 		lastRequestTime time.Time
 		// lastReportedConsumption is the set of tenant resource consumption
 		// metrics last sent to the token bucket server.
-		lastReportedConsumption roachpb.TenantConsumption
+		lastReportedConsumption kvpb.TenantConsumption
 		// lastRate is the token bucket fill rate that was last configured.
 		lastRate float64
 
@@ -523,7 +524,7 @@ func (c *tenantSideCostController) sendTokenBucketRequest(ctx context.Context) {
 		}
 	}
 
-	req := &roachpb.TokenBucketRequest{
+	req := &kvpb.TokenBucketRequest{
 		TenantID:                    c.tenantID.ToUint64(),
 		InstanceID:                  uint32(c.instanceID),
 		InstanceLease:               c.sessionID.UnsafeBytes(),
@@ -567,7 +568,7 @@ func (c *tenantSideCostController) sendTokenBucketRequest(ctx context.Context) {
 }
 
 func (c *tenantSideCostController) handleTokenBucketResponse(
-	ctx context.Context, req *roachpb.TokenBucketRequest, resp *roachpb.TokenBucketResponse,
+	ctx context.Context, req *kvpb.TokenBucketRequest, resp *kvpb.TokenBucketResponse,
 ) {
 	if log.ExpensiveLogEnabled(ctx, 1) {
 		log.Infof(
@@ -793,7 +794,7 @@ func (c *tenantSideCostController) OnResponseWait(
 	if multitenant.TenantRUEstimateEnabled.Get(&c.settings.SV) {
 		if sp := tracing.SpanFromContext(ctx); sp != nil &&
 			sp.RecordingType() != tracingpb.RecordingOff {
-			sp.RecordStructured(&roachpb.TenantConsumption{
+			sp.RecordStructured(&kvpb.TenantConsumption{
 				RU: float64(totalRU),
 			})
 		}

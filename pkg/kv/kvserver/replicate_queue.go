@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
@@ -1190,7 +1191,7 @@ func (rq *replicateQueue) addOrReplaceVoters(
 
 	// Figure out whether we should be promoting an existing non-voting replica to
 	// a voting replica or if we ought to be adding a voter afresh.
-	var ops []roachpb.ReplicationChange
+	var ops []kvpb.ReplicationChange
 	replDesc, found := desc.GetReplicaDescriptor(newVoter.StoreID)
 	if found {
 		if replDesc.Type != roachpb.NON_VOTER {
@@ -1202,12 +1203,12 @@ func (rq *replicateQueue) addOrReplaceVoters(
 		effects = effects.add(func() {
 			rq.metrics.NonVoterPromotionsCount.Inc(1)
 		})
-		ops = roachpb.ReplicationChangesForPromotion(newVoter)
+		ops = kvpb.ReplicationChangesForPromotion(newVoter)
 	} else {
 		effects = effects.add(func() {
 			rq.metrics.trackAddReplicaCount(allocatorimpl.VoterTarget)
 		})
-		ops = roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, newVoter)
+		ops = kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, newVoter)
 	}
 	if !isReplace {
 		log.KvDistribution.Infof(ctx, "adding voter %+v: %s",
@@ -1227,7 +1228,7 @@ func (rq *replicateQueue) addOrReplaceVoters(
 		// this allocation is executed, we could be one non-voter short. This will
 		// be handled by the replicateQueue's next attempt at this range.
 		ops = append(ops,
-			roachpb.MakeReplicationChanges(roachpb.REMOVE_VOTER, roachpb.ReplicationTarget{
+			kvpb.MakeReplicationChanges(roachpb.REMOVE_VOTER, roachpb.ReplicationTarget{
 				StoreID: removeVoter.StoreID,
 				NodeID:  removeVoter.NodeID,
 			})...)
@@ -1273,7 +1274,7 @@ func (rq *replicateQueue) addOrReplaceNonVoters(
 		rq.metrics.trackAddReplicaCount(allocatorimpl.NonVoterTarget)
 	})
 
-	ops := roachpb.MakeReplicationChanges(roachpb.ADD_NON_VOTER, newNonVoter)
+	ops := kvpb.MakeReplicationChanges(roachpb.ADD_NON_VOTER, newNonVoter)
 	if removeIdx < 0 {
 		log.KvDistribution.Infof(ctx, "adding non-voter %+v: %s",
 			newNonVoter, rangeRaftProgress(repl.RaftStatus(), existingNonVoters))
@@ -1285,7 +1286,7 @@ func (rq *replicateQueue) addOrReplaceNonVoters(
 		log.KvDistribution.Infof(ctx, "replacing non-voter %s with %+v: %s",
 			removeNonVoter, newNonVoter, rangeRaftProgress(repl.RaftStatus(), existingNonVoters))
 		ops = append(ops,
-			roachpb.MakeReplicationChanges(roachpb.REMOVE_NON_VOTER, roachpb.ReplicationTarget{
+			kvpb.MakeReplicationChanges(roachpb.REMOVE_NON_VOTER, roachpb.ReplicationTarget{
 				StoreID: removeNonVoter.StoreID,
 				NodeID:  removeNonVoter.NodeID,
 			})...)
@@ -1493,7 +1494,7 @@ func (rq *replicateQueue) removeVoter(
 		lhStore:           repl.StoreID(),
 		sideEffects:       effects.f(),
 		usage:             RangeUsageInfoForRepl(repl),
-		chgs:              roachpb.MakeReplicationChanges(roachpb.REMOVE_VOTER, removeVoter),
+		chgs:              kvpb.MakeReplicationChanges(roachpb.REMOVE_VOTER, removeVoter),
 		priority:          kvserverpb.SnapshotRequest_UNKNOWN, // unused
 		allocatorPriority: 0.0,                                // unused
 		reason:            kvserverpb.ReasonRangeOverReplicated,
@@ -1535,7 +1536,7 @@ func (rq *replicateQueue) removeNonVoter(
 		lhStore:           repl.StoreID(),
 		sideEffects:       effects.f(),
 		usage:             RangeUsageInfoForRepl(repl),
-		chgs:              roachpb.MakeReplicationChanges(roachpb.REMOVE_NON_VOTER, target),
+		chgs:              kvpb.MakeReplicationChanges(roachpb.REMOVE_NON_VOTER, target),
 		priority:          kvserverpb.SnapshotRequest_UNKNOWN, // unused
 		allocatorPriority: 0.0,                                // unused
 		reason:            kvserverpb.ReasonRangeOverReplicated,
@@ -1593,7 +1594,7 @@ func (rq *replicateQueue) removeDecommissioning(
 		lhStore:           repl.StoreID(),
 		sideEffects:       effects.f(),
 		usage:             RangeUsageInfoForRepl(repl),
-		chgs:              roachpb.MakeReplicationChanges(targetType.RemoveChangeType(), target),
+		chgs:              kvpb.MakeReplicationChanges(targetType.RemoveChangeType(), target),
 		priority:          kvserverpb.SnapshotRequest_UNKNOWN, // unused
 		allocatorPriority: 0.0,                                // unused
 		reason:            kvserverpb.ReasonStoreDecommissioning,
@@ -1636,7 +1637,7 @@ func (rq *replicateQueue) removeDead(
 		lhStore:           repl.StoreID(),
 		sideEffects:       effects.f(),
 		usage:             RangeUsageInfoForRepl(repl),
-		chgs:              roachpb.MakeReplicationChanges(targetType.RemoveChangeType(), target),
+		chgs:              kvpb.MakeReplicationChanges(targetType.RemoveChangeType(), target),
 		priority:          kvserverpb.SnapshotRequest_UNKNOWN, // unused
 		allocatorPriority: 0.0,                                // unused
 		reason:            kvserverpb.ReasonStoreDead,
@@ -1785,7 +1786,7 @@ func replicationChangesForRebalance(
 	numExistingVoters int,
 	addTarget, removeTarget roachpb.ReplicationTarget,
 	rebalanceTargetType allocatorimpl.TargetReplicaType,
-) (chgs []roachpb.ReplicationChange, performingSwap bool, err error) {
+) (chgs []kvpb.ReplicationChange, performingSwap bool, err error) {
 	if rebalanceTargetType == allocatorimpl.VoterTarget && numExistingVoters == 1 {
 		// If there's only one replica, the removal target is the
 		// leaseholder and this is unsupported and will fail. However,
@@ -1808,7 +1809,7 @@ func replicationChangesForRebalance(
 		// when we know it's necessary, picking the smaller of two evils.
 		//
 		// See https://github.com/cockroachdb/cockroach/issues/40333.
-		chgs = []roachpb.ReplicationChange{
+		chgs = []kvpb.ReplicationChange{
 			{ChangeType: roachpb.ADD_VOTER, Target: addTarget},
 		}
 		log.KvDistribution.Infof(ctx, "can't swap replica due to lease; falling back to add")
@@ -1837,8 +1838,8 @@ func replicationChangesForRebalance(
 			// replica into the replicateQueue. So we expect the replicateQueue's next
 			// attempt at rebalancing this range to rebalance the non-voter if it ends
 			// up being in violation of the range's constraints.
-			promo := roachpb.ReplicationChangesForPromotion(addTarget)
-			demo := roachpb.ReplicationChangesForDemotion(removeTarget)
+			promo := kvpb.ReplicationChangesForPromotion(addTarget)
+			demo := kvpb.ReplicationChangesForDemotion(removeTarget)
 			chgs = append(promo, demo...)
 			performingSwap = true
 		} else if found {
@@ -1848,7 +1849,7 @@ func replicationChangesForRebalance(
 			)
 		} else {
 			// We have a replica to remove and one we can add, so let's swap them out.
-			chgs = []roachpb.ReplicationChange{
+			chgs = []kvpb.ReplicationChange{
 				{ChangeType: roachpb.ADD_VOTER, Target: addTarget},
 				{ChangeType: roachpb.REMOVE_VOTER, Target: removeTarget},
 			}
@@ -1863,7 +1864,7 @@ func replicationChangesForRebalance(
 					" move non-voter to a store that already has a replica %s for the range", rdesc,
 			)
 		}
-		chgs = []roachpb.ReplicationChange{
+		chgs = []kvpb.ReplicationChange{
 			{ChangeType: roachpb.ADD_NON_VOTER, Target: addTarget},
 			{ChangeType: roachpb.REMOVE_NON_VOTER, Target: removeTarget},
 		}
@@ -2021,7 +2022,7 @@ func (rq *replicateQueue) RelocateRange(
 func (rq *replicateQueue) changeReplicas(
 	ctx context.Context,
 	repl *Replica,
-	chgs roachpb.ReplicationChanges,
+	chgs kvpb.ReplicationChanges,
 	desc *roachpb.RangeDescriptor,
 	priority kvserverpb.SnapshotRequest_Priority,
 	allocatorPriority float64,

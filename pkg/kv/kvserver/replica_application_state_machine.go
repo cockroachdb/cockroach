@@ -13,6 +13,7 @@ package kvserver
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
@@ -446,7 +447,7 @@ type closedTimestampSetterInfo struct {
 	// NOTE: We only keep track of lease requests because keeping track of all
 	// requests would be too expensive: cloning the request is expensive and also
 	// requests can be large in memory.
-	leaseReq *roachpb.RequestLeaseRequest
+	leaseReq *kvpb.RequestLeaseRequest
 	// split and merge are set if the request was an EndTxn with the respective
 	// commit trigger set.
 	split, merge bool
@@ -462,9 +463,9 @@ func (s *closedTimestampSetterInfo) record(cmd *replicatedCmd, lease *roachpb.Le
 		return
 	}
 	req := cmd.proposal.Request
-	et, ok := req.GetArg(roachpb.EndTxn)
+	et, ok := req.GetArg(kvpb.EndTxn)
 	if ok {
-		endTxn := et.(*roachpb.EndTxnRequest)
+		endTxn := et.(*kvpb.EndTxnRequest)
 		if trig := endTxn.InternalCommitTrigger; trig != nil {
 			if trig.SplitTrigger != nil {
 				s.split = true
@@ -475,7 +476,7 @@ func (s *closedTimestampSetterInfo) record(cmd *replicatedCmd, lease *roachpb.Le
 	} else if req.IsSingleRequestLeaseRequest() {
 		// Make a deep copy since we're not allowed to hold on to request
 		// memory.
-		lr, _ := req.GetArg(roachpb.RequestLease)
-		s.leaseReq = protoutil.Clone(lr).(*roachpb.RequestLeaseRequest)
+		lr, _ := req.GetArg(kvpb.RequestLease)
+		s.leaseReq = protoutil.Clone(lr).(*kvpb.RequestLeaseRequest)
 	}
 }

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedbuffer"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -193,7 +194,7 @@ func (s *SQLWatcher) watchForDescriptorUpdates(
 		Key:    descriptorTableStart,
 		EndKey: descriptorTableStart.PrefixEnd(),
 	}
-	handleEvent := func(ctx context.Context, ev *roachpb.RangeFeedValue) {
+	handleEvent := func(ctx context.Context, ev *kvpb.RangeFeedValue) {
 		if !ev.Value.IsPresent() && !ev.PrevValue.IsPresent() {
 			// Event for a tombstone on a tombstone -- nothing for us to do here.
 			return
@@ -261,7 +262,7 @@ func (s *SQLWatcher) watchForZoneConfigUpdates(
 		EndKey: zoneTableStart.PrefixEnd(),
 	}
 	decoder := newZonesDecoder(s.codec)
-	handleEvent := func(ctx context.Context, ev *roachpb.RangeFeedValue) {
+	handleEvent := func(ctx context.Context, ev *kvpb.RangeFeedValue) {
 		var descID descpb.ID
 		var err error
 		if keys.SystemZonesTableSpan.Key.Equal(ev.Key) {
@@ -321,7 +322,7 @@ func (s *SQLWatcher) watchForProtectedTimestampUpdates(
 	}
 
 	decoder := newProtectedTimestampDecoder()
-	handleEvent := func(ctx context.Context, ev *roachpb.RangeFeedValue) {
+	handleEvent := func(ctx context.Context, ev *kvpb.RangeFeedValue) {
 		if !ev.Value.IsPresent() && !ev.PrevValue.IsPresent() {
 			// Event for a tombstone on a tombstone -- nothing for us to do here.
 			return

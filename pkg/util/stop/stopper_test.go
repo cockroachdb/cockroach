@@ -19,7 +19,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -182,7 +182,7 @@ func TestStopperQuiesce(t *testing.T) {
 			// Wait until Quiesce() is called.
 			<-qc
 			err := thisStopper.RunTask(ctx, "inner", func(context.Context) {})
-			if !errors.HasType(err, (*roachpb.NodeUnavailableError)(nil)) {
+			if !errors.HasType(err, (*kvpb.NodeUnavailableError)(nil)) {
 				t.Error(err)
 			}
 			// Make the stoppers call Stop().

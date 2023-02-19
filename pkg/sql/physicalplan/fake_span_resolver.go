@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan/replicaoracle"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -88,7 +89,7 @@ func (fit *fakeSpanResolverIterator) Seek(
 	// read_uncommitted scan outside of the txn to avoid undesired side effects
 	// like breaking tracing and blocking on locks.
 	var b kv.Batch
-	b.Header.ReadConsistency = roachpb.READ_UNCOMMITTED
+	b.Header.ReadConsistency = kvpb.READ_UNCOMMITTED
 	if len(span.EndKey) == 0 {
 		// If the EndKey is omitted, then the span represents a point request.
 		// In such case we manually set the EndKey so that the Scan below

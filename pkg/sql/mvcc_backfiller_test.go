@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
@@ -86,8 +87,8 @@ func TestIndexBackfillMergeRetry(t *testing.T) {
 			if rand.Intn(2) == 0 {
 				return context.DeadlineExceeded
 			} else {
-				errAmbiguous := &roachpb.AmbiguousResultError{}
-				return roachpb.NewError(errAmbiguous).GoError()
+				errAmbiguous := &kvpb.AmbiguousResultError{}
+				return kvpb.NewError(errAmbiguous).GoError()
 			}
 		}
 

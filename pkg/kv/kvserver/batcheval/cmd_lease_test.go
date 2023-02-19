@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -111,7 +112,7 @@ func TestLeaseTransferWithPipelinedWrite(t *testing.T) {
 				// We allow the transaction to run into an aborted error due to a lease
 				// transfer when it attempts to create its transaction record. This it
 				// outside of the focus of this test.
-				okErr := testutils.IsError(err, roachpb.ABORT_REASON_NEW_LEASE_PREVENTS_TXN.String())
+				okErr := testutils.IsError(err, kvpb.ABORT_REASON_NEW_LEASE_PREVENTS_TXN.String())
 				if !okErr {
 					t.Fatalf("worker failed: %+v", err)
 				}
@@ -140,7 +141,7 @@ func TestLeaseCommandLearnerReplica(t *testing.T) {
 			Desc:            &desc,
 			Clock:           clock,
 		}).EvalContext(),
-		Args: &roachpb.TransferLeaseRequest{
+		Args: &kvpb.TransferLeaseRequest{
 			Lease: roachpb.Lease{
 				Replica: replicas[1],
 			},
@@ -152,14 +153,14 @@ func TestLeaseCommandLearnerReplica(t *testing.T) {
 	_, err := TransferLease(ctx, nil, cArgs, nil)
 	require.EqualError(t, err, `replica cannot hold lease`)
 
-	cArgs.Args = &roachpb.RequestLeaseRequest{}
+	cArgs.Args = &kvpb.RequestLeaseRequest{}
 	_, err = RequestLease(ctx, nil, cArgs, nil)
 
 	const expForUnknown = `cannot replace lease <empty> with <empty>: ` +
 		`replica not found in RangeDescriptor`
 	require.EqualError(t, err, expForUnknown)
 
-	cArgs.Args = &roachpb.RequestLeaseRequest{
+	cArgs.Args = &kvpb.RequestLeaseRequest{
 		Lease: roachpb.Lease{
 			Replica: replicas[1],
 		},
@@ -229,7 +230,7 @@ func TestLeaseTransferForwardsStartTime(t *testing.T) {
 			}
 			cArgs := CommandArgs{
 				EvalCtx: evalCtx.EvalContext(),
-				Args: &roachpb.TransferLeaseRequest{
+				Args: &kvpb.TransferLeaseRequest{
 					Lease:     nextLease,
 					PrevLease: prevLease,
 				},

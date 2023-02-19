@@ -13,6 +13,7 @@ package tenantcapabilitiesauthorizer
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -48,7 +49,7 @@ func New(settings *cluster.Settings, knobs *tenantcapabilities.TestingKnobs) *Au
 
 // HasCapabilityForBatch implements the tenantcapabilities.Authorizer interface.
 func (a *Authorizer) HasCapabilityForBatch(
-	ctx context.Context, tenID roachpb.TenantID, ba *roachpb.BatchRequest,
+	ctx context.Context, tenID roachpb.TenantID, ba *kvpb.BatchRequest,
 ) error {
 	if tenID.IsSystem() {
 		return nil // the system tenant is allowed to do as it pleases
@@ -70,7 +71,7 @@ func (a *Authorizer) HasCapabilityForBatch(
 
 	for _, ru := range ba.Requests {
 		switch ru.GetInner().(type) {
-		case *roachpb.AdminSplitRequest:
+		case *kvpb.AdminSplitRequest:
 			if !cp.CanAdminSplit && !a.knobs.AuthorizerSkipAdminSplitCapabilityChecks {
 				return errors.Newf("tenant %s does not have admin split capability", tenID)
 			}

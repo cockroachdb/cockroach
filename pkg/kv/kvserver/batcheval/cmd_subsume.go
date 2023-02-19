@@ -16,23 +16,23 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
 
 func init() {
-	RegisterReadWriteCommand(roachpb.Subsume, declareKeysSubsume, Subsume)
+	RegisterReadWriteCommand(kvpb.Subsume, declareKeysSubsume, Subsume)
 }
 
 func declareKeysSubsume(
 	_ ImmutableRangeState,
-	_ *roachpb.Header,
-	_ roachpb.Request,
+	_ *kvpb.Header,
+	_ kvpb.Request,
 	latchSpans, _ *spanset.SpanSet,
 	_ time.Duration,
 ) {
@@ -73,10 +73,10 @@ func declareKeysSubsume(
 // The period of time after intents have been placed but before the merge
 // transaction is complete is called the merge's "critical phase".
 func Subsume(
-	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp kvpb.Response,
 ) (result.Result, error) {
-	args := cArgs.Args.(*roachpb.SubsumeRequest)
-	reply := resp.(*roachpb.SubsumeResponse)
+	args := cArgs.Args.(*kvpb.SubsumeRequest)
+	reply := resp.(*kvpb.SubsumeResponse)
 
 	// Verify that the Subsume request was sent to the correct range and that
 	// the range's bounds have not changed during the merge transaction.

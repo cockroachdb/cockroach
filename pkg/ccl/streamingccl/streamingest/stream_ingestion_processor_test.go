@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -487,7 +488,7 @@ func TestRandomClientGeneration(t *testing.T) {
 	streamValidator := newStreamClientValidator(rekeyer)
 
 	randomStreamClient.ClearInterceptors()
-	randomStreamClient.RegisterSSTableGenerator(func(keyValues []roachpb.KeyValue) roachpb.RangeFeedSSTable {
+	randomStreamClient.RegisterSSTableGenerator(func(keyValues []roachpb.KeyValue) kvpb.RangeFeedSSTable {
 		return sstMaker(t, keyValues)
 	})
 	randomStreamClient.RegisterInterception(cancelAfterCheckpoints)

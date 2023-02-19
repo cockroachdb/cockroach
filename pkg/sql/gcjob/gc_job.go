@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -408,8 +409,8 @@ func waitForEmptyPrefix(
 func checkForEmptySpan(ctx context.Context, db *kv.DB, from, to roachpb.Key) (empty bool, _ error) {
 	var ba kv.Batch
 	ba.Header.MaxSpanRequestKeys = 1
-	ba.AddRawRequest(&roachpb.IsSpanEmptyRequest{
-		RequestHeader: roachpb.RequestHeader{
+	ba.AddRawRequest(&kvpb.IsSpanEmptyRequest{
+		RequestHeader: kvpb.RequestHeader{
 			Key: from, EndKey: to,
 		},
 	})

@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -48,7 +49,7 @@ func TestReplicaChecksumVersion(t *testing.T) {
 	testutils.RunTrueAndFalse(t, "matchingVersion", func(t *testing.T, matchingVersion bool) {
 		cc := kvserverpb.ComputeChecksum{
 			ChecksumID: uuid.FastMakeV4(),
-			Mode:       roachpb.ChecksumMode_CHECK_FULL,
+			Mode:       kvpb.ChecksumMode_CHECK_FULL,
 		}
 		if matchingVersion {
 			cc.Version = batcheval.ReplicaChecksumVersion
@@ -183,7 +184,7 @@ func TestGetChecksumNotSuccessfulExitConditions(t *testing.T) {
 	startChecksumTask := func(ctx context.Context, id uuid.UUID) error {
 		return tc.repl.computeChecksumPostApply(ctx, kvserverpb.ComputeChecksum{
 			ChecksumID: id,
-			Mode:       roachpb.ChecksumMode_CHECK_FULL,
+			Mode:       kvpb.ChecksumMode_CHECK_FULL,
 			Version:    batcheval.ReplicaChecksumVersion,
 		})
 	}
@@ -274,7 +275,7 @@ func TestReplicaChecksumSHA512(t *testing.T) {
 
 	// Hash the empty state.
 	unlim := quotapool.NewRateLimiter("test", quotapool.Inf(), 0)
-	rd, err := CalcReplicaDigest(ctx, desc, eng, roachpb.ChecksumMode_CHECK_FULL, unlim)
+	rd, err := CalcReplicaDigest(ctx, desc, eng, kvpb.ChecksumMode_CHECK_FULL, unlim)
 	require.NoError(t, err)
 	fmt.Fprintf(sb, "checksum0: %x\n", rd.SHA512)
 
@@ -312,13 +313,13 @@ func TestReplicaChecksumSHA512(t *testing.T) {
 			require.NoError(t, storage.MVCCPut(ctx, eng, nil, key, ts, localTS, value, nil))
 		}
 
-		rd, err = CalcReplicaDigest(ctx, desc, eng, roachpb.ChecksumMode_CHECK_FULL, unlim)
+		rd, err = CalcReplicaDigest(ctx, desc, eng, kvpb.ChecksumMode_CHECK_FULL, unlim)
 		require.NoError(t, err)
 		fmt.Fprintf(sb, "checksum%d: %x\n", i+1, rd.SHA512)
 	}
 
 	// Run another check to obtain stats for the final state.
-	rd, err = CalcReplicaDigest(ctx, desc, eng, roachpb.ChecksumMode_CHECK_FULL, unlim)
+	rd, err = CalcReplicaDigest(ctx, desc, eng, kvpb.ChecksumMode_CHECK_FULL, unlim)
 	require.NoError(t, err)
 	jsonpb := protoutil.JSONPb{Indent: "  "}
 	json, err := jsonpb.Marshal(&rd.RecomputedMS)

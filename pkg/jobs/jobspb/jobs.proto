@@ -14,7 +14,7 @@ option go_package = "jobspb";
 
 import "errorspb/errors.proto";
 import "gogoproto/gogo.proto";
-import "roachpb/api.proto";
+import "kv/kvpb/api.proto";
 import "roachpb/data.proto";
 import "roachpb/metadata.proto";
 import "roachpb/io-formats.proto";

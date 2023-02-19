@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -56,7 +57,7 @@ func TestAtomicReplicationChange(t *testing.T) {
 	desc, err := tc.AddVoters(k, tc.Target(2))
 	require.NoError(t, err)
 
-	runChange := func(expDesc roachpb.RangeDescriptor, chgs []roachpb.ReplicationChange) roachpb.RangeDescriptor {
+	runChange := func(expDesc roachpb.RangeDescriptor, chgs []kvpb.ReplicationChange) roachpb.RangeDescriptor {
 		t.Helper()
 		desc, err := tc.Servers[0].DB().AdminChangeReplicas(ctx, k, expDesc, chgs)
 		require.NoError(t, err)
@@ -101,7 +102,7 @@ func TestAtomicReplicationChange(t *testing.T) {
 	}
 
 	// Run a fairly general change.
-	desc = runChange(desc, []roachpb.ReplicationChange{
+	desc = runChange(desc, []kvpb.ReplicationChange{
 		{ChangeType: roachpb.ADD_VOTER, Target: tc.Target(3)},
 		{ChangeType: roachpb.ADD_VOTER, Target: tc.Target(5)},
 		{ChangeType: roachpb.REMOVE_VOTER, Target: tc.Target(2)},
@@ -115,7 +116,7 @@ func TestAtomicReplicationChange(t *testing.T) {
 	require.NoError(t, tc.TransferRangeLease(desc, tc.Target(4)))
 
 	// Rebalance back down all the way.
-	desc = runChange(desc, []roachpb.ReplicationChange{
+	desc = runChange(desc, []kvpb.ReplicationChange{
 		{ChangeType: roachpb.REMOVE_VOTER, Target: tc.Target(0)},
 		{ChangeType: roachpb.REMOVE_VOTER, Target: tc.Target(1)},
 		{ChangeType: roachpb.REMOVE_VOTER, Target: tc.Target(3)},

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -24,21 +25,21 @@ import (
 )
 
 func init() {
-	RegisterReadWriteCommand(roachpb.ResolveIntent, declareKeysResolveIntent, ResolveIntent)
+	RegisterReadWriteCommand(kvpb.ResolveIntent, declareKeysResolveIntent, ResolveIntent)
 }
 
 func declareKeysResolveIntentCombined(
-	rs ImmutableRangeState, req roachpb.Request, latchSpans *spanset.SpanSet,
+	rs ImmutableRangeState, req kvpb.Request, latchSpans *spanset.SpanSet,
 ) {
 	var status roachpb.TransactionStatus
 	var txnID uuid.UUID
 	var minTxnTS hlc.Timestamp
 	switch t := req.(type) {
-	case *roachpb.ResolveIntentRequest:
+	case *kvpb.ResolveIntentRequest:
 		status = t.Status
 		txnID = t.IntentTxn.ID
 		minTxnTS = t.IntentTxn.MinTimestamp
-	case *roachpb.ResolveIntentRangeRequest:
+	case *kvpb.ResolveIntentRangeRequest:
 		status = t.Status
 		txnID = t.IntentTxn.ID
 		minTxnTS = t.IntentTxn.MinTimestamp
@@ -53,8 +54,8 @@ func declareKeysResolveIntentCombined(
 
 func declareKeysResolveIntent(
 	rs ImmutableRangeState,
-	_ *roachpb.Header,
-	req roachpb.Request,
+	_ *kvpb.Header,
+	req kvpb.Request,
 	latchSpans, _ *spanset.SpanSet,
 	_ time.Duration,
 ) {
@@ -78,9 +79,9 @@ func resolveToMetricType(status roachpb.TransactionStatus, poison bool) *result.
 // ResolveIntent resolves a write intent from the specified key
 // according to the status of the transaction which created it.
 func ResolveIntent(
-	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp kvpb.Response,
 ) (result.Result, error) {
-	args := cArgs.Args.(*roachpb.ResolveIntentRequest)
+	args := cArgs.Args.(*kvpb.ResolveIntentRequest)
 	h := cArgs.Header
 	ms := cArgs.Stats
 
@@ -98,11 +99,11 @@ func ResolveIntent(
 	if err != nil {
 		return result.Result{}, err
 	}
-	reply := resp.(*roachpb.ResolveIntentResponse)
+	reply := resp.(*kvpb.ResolveIntentResponse)
 	reply.NumBytes = numBytes
 	if resumeSpan != nil {
 		reply.ResumeSpan = resumeSpan
-		reply.ResumeReason = roachpb.RESUME_BYTE_LIMIT
+		reply.ResumeReason = kvpb.RESUME_BYTE_LIMIT
 		return result.Result{}, nil
 	}
 

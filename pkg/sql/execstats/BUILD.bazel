@@ -12,7 +12,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
-        "//pkg/roachpb",
+        "//pkg/kv/kvpb",
         "//pkg/sql/execinfrapb",
         "//pkg/util/buildutil",
         "//pkg/util/optional",
@@ -35,7 +35,7 @@ go_test(
     embed = [":execstats"],
     deps = [
         "//pkg/base",
-        "//pkg/roachpb",
+        "//pkg/kv/kvpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",

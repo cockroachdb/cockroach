@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -110,8 +111,8 @@ type Connector interface {
 // token bucket.
 type TokenBucketProvider interface {
 	TokenBucket(
-		ctx context.Context, in *roachpb.TokenBucketRequest,
-	) (*roachpb.TokenBucketResponse, error)
+		ctx context.Context, in *kvpb.TokenBucketRequest,
+	) (*kvpb.TokenBucketResponse, error)
 }
 
 // ConnectorConfig encompasses the configuration required to create a Connector.

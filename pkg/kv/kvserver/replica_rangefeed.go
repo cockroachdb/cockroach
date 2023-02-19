@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -63,7 +64,7 @@ var RangeFeedRefreshInterval = settings.RegisterDurationSetting(
 // support for concurrent calls to Send. Note that the default implementation of
 // grpc.Stream is not safe for concurrent calls to Send.
 type lockedRangefeedStream struct {
-	wrapped roachpb.RangeFeedEventSink
+	wrapped kvpb.RangeFeedEventSink
 	sendMu  syncutil.Mutex
 }
 
@@ -71,7 +72,7 @@ func (s *lockedRangefeedStream) Context() context.Context {
 	return s.wrapped.Context()
 }
 
-func (s *lockedRangefeedStream) Send(e *roachpb.RangeFeedEvent) error {
+func (s *lockedRangefeedStream) Send(e *kvpb.RangeFeedEvent) error {
 	s.sendMu.Lock()
 	defer s.sendMu.Unlock()
 	return s.wrapped.Send(e)
@@ -96,7 +97,7 @@ func (tp *rangefeedTxnPusher) PushTxns(
 		pushTxnMap[txn.ID] = txn
 	}
 
-	h := roachpb.Header{
+	h := kvpb.Header{
 		Timestamp: ts,
 		Txn: &roachpb.Transaction{
 			TxnMeta: enginepb.TxnMeta{
@@ -106,7 +107,7 @@ func (tp *rangefeedTxnPusher) PushTxns(
 	}
 
 	pushedTxnMap, pErr := tp.ir.MaybePushTransactions(
-		ctx, pushTxnMap, h, roachpb.PUSH_TIMESTAMP, false, /* skipIfInFlight */
+		ctx, pushTxnMap, h, kvpb.PUSH_TIMESTAMP, false, /* skipIfInFlight */
 	)
 	if pErr != nil {
 		return nil, pErr.GoError()
@@ -134,29 +135,29 @@ func (tp *rangefeedTxnPusher) ResolveIntents(
 // complete. The surrounding store's ConcurrentRequestLimiter is used to limit
 // the number of rangefeeds using catch-up iterators at the same time.
 func (r *Replica) RangeFeed(
-	args *roachpb.RangeFeedRequest, stream roachpb.RangeFeedEventSink, pacer *admission.Pacer,
-) *roachpb.Error {
+	args *kvpb.RangeFeedRequest, stream kvpb.RangeFeedEventSink, pacer *admission.Pacer,
+) *kvpb.Error {
 	return r.rangeFeedWithRangeID(r.RangeID, args, stream, pacer)
 }
 
 func (r *Replica) rangeFeedWithRangeID(
 	_forStacks roachpb.RangeID,
-	args *roachpb.RangeFeedRequest,
-	stream roachpb.RangeFeedEventSink,
+	args *kvpb.RangeFeedRequest,
+	stream kvpb.RangeFeedEventSink,
 	pacer *admission.Pacer,
-) *roachpb.Error {
+) *kvpb.Error {
 	ctx := r.AnnotateCtx(stream.Context())
 
 	rSpan, err := keys.SpanAddr(args.Span)
 	if err != nil {
-		return roachpb.NewError(err)
+		return kvpb.NewError(err)
 	}
 
 	if err := r.ensureClosedTimestampStarted(ctx); err != nil {
-		if err := stream.Send(&roachpb.RangeFeedEvent{Error: &roachpb.RangeFeedError{
+		if err := stream.Send(&kvpb.RangeFeedEvent{Error: &kvpb.RangeFeedError{
 			Error: *err,
 		}}); err != nil {
-			return roachpb.NewError(err)
+			return kvpb.NewError(err)
 		}
 		return nil
 	}
@@ -177,7 +178,7 @@ func (r *Replica) rangeFeedWithRangeID(
 	}
 
 	lockedStream := &lockedRangefeedStream{wrapped: stream}
-	errC := make(chan *roachpb.Error, 1)
+	errC := make(chan *kvpb.Error, 1)
 
 	// If we will be using a catch-up iterator, wait for the limiter here before
 	// locking raftMu.
@@ -187,7 +188,7 @@ func (r *Replica) rangeFeedWithRangeID(
 		usingCatchUpIter = true
 		alloc, err := r.store.limiters.ConcurrentRangefeedIters.Begin(ctx)
 		if err != nil {
-			return roachpb.NewError(err)
+			return kvpb.NewError(err)
 		}
 		// Finish the iterator limit if we exit before the iterator finishes.
 		// The release function will be hooked into the Close method on the
@@ -211,7 +212,7 @@ func (r *Replica) rangeFeedWithRangeID(
 	r.raftMu.Lock()
 	if err := r.checkExecutionCanProceedForRangeFeed(ctx, rSpan, checkTS); err != nil {
 		r.raftMu.Unlock()
-		return roachpb.NewError(err)
+		return kvpb.NewError(err)
 	}
 
 	// Register the stream with a catch-up iterator.
@@ -330,7 +331,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	catchUpIter rangefeed.CatchUpIteratorConstructor,
 	withDiff bool,
 	stream rangefeed.Stream,
-	errC chan<- *roachpb.Error,
+	errC chan<- *kvpb.Error,
 ) *rangefeed.Processor {
 	defer logSlowRangefeedRegistration(ctx)()
 
@@ -400,7 +401,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	// due to stopping, but before it enters the quiescing state, then the select
 	// below will fall through to the panic.
 	if err := p.Start(r.store.Stopper(), rtsIter); err != nil {
-		errC <- roachpb.NewError(err)
+		errC <- kvpb.NewError(err)
 		return nil
 	}
 
@@ -413,7 +414,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	if !reg {
 		select {
 		case <-r.store.Stopper().ShouldQuiesce():
-			errC <- roachpb.NewError(&roachpb.NodeUnavailableError{})
+			errC <- kvpb.NewError(&kvpb.NodeUnavailableError{})
 			return nil
 		default:
 			panic("unexpected Stopped processor")
@@ -452,7 +453,7 @@ func (r *Replica) maybeDisconnectEmptyRangefeed(p *rangefeed.Processor) {
 
 // disconnectRangefeedWithErr broadcasts the provided error to all rangefeed
 // registrations and tears down the provided rangefeed Processor.
-func (r *Replica) disconnectRangefeedWithErr(p *rangefeed.Processor, pErr *roachpb.Error) {
+func (r *Replica) disconnectRangefeedWithErr(p *rangefeed.Processor, pErr *kvpb.Error) {
 	p.StopWithErr(pErr)
 	r.unsetRangefeedProcessor(p)
 }
@@ -460,7 +461,7 @@ func (r *Replica) disconnectRangefeedWithErr(p *rangefeed.Processor, pErr *roach
 // disconnectRangefeedSpanWithErr broadcasts the provided error to all rangefeed
 // registrations that overlap the given span. Tears down the rangefeed Processor
 // if it has no remaining registrations.
-func (r *Replica) disconnectRangefeedSpanWithErr(span roachpb.Span, pErr *roachpb.Error) {
+func (r *Replica) disconnectRangefeedSpanWithErr(span roachpb.Span, pErr *kvpb.Error) {
 	p := r.getRangefeedProcessor()
 	if p == nil {
 		return
@@ -472,12 +473,12 @@ func (r *Replica) disconnectRangefeedSpanWithErr(span roachpb.Span, pErr *roachp
 // disconnectRangefeedWithReason broadcasts the provided rangefeed retry reason
 // to all rangefeed registrations and tears down the active rangefeed Processor.
 // No-op if a rangefeed is not active.
-func (r *Replica) disconnectRangefeedWithReason(reason roachpb.RangeFeedRetryError_Reason) {
+func (r *Replica) disconnectRangefeedWithReason(reason kvpb.RangeFeedRetryError_Reason) {
 	p := r.getRangefeedProcessor()
 	if p == nil {
 		return
 	}
-	pErr := roachpb.NewError(roachpb.NewRangeFeedRetryError(reason))
+	pErr := kvpb.NewError(kvpb.NewRangeFeedRetryError(reason))
 	r.disconnectRangefeedWithErr(p, pErr)
 }
 
@@ -566,7 +567,7 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 		// registrations, we're forced to throw an error. The rangefeed clients
 		// can reconnect at a later time, at which point all new Raft commands
 		// should have logical op logs.
-		r.disconnectRangefeedWithReason(roachpb.RangeFeedRetryError_REASON_LOGICAL_OPS_MISSING)
+		r.disconnectRangefeedWithReason(kvpb.RangeFeedRetryError_REASON_LOGICAL_OPS_MISSING)
 		return
 	}
 	if len(ops.Ops) == 0 {
@@ -631,7 +632,7 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 			err = errors.New("value missing in reader")
 		}
 		if err != nil {
-			r.disconnectRangefeedWithErr(p, roachpb.NewErrorf(
+			r.disconnectRangefeedWithErr(p, kvpb.NewErrorf(
 				"error consuming %T for key %v @ ts %v: %v", op, key, ts, err,
 			))
 			return
@@ -753,7 +754,7 @@ func (r *Replica) handleClosedTimestampUpdateRaftMuLocked(
 // receiving closed timestamp updates for this replica's range. Note that this
 // forces a valid lease to exist on the range and so can be reasonably expensive
 // if there is not already a valid lease.
-func (r *Replica) ensureClosedTimestampStarted(ctx context.Context) *roachpb.Error {
+func (r *Replica) ensureClosedTimestampStarted(ctx context.Context) *kvpb.Error {
 	// Make sure there's a valid lease. If there's no lease, nobody's sending
 	// closed timestamp updates.
 	lease := r.CurrentLeaseStatus(ctx)
@@ -770,18 +771,18 @@ func (r *Replica) ensureClosedTimestampStarted(ctx context.Context) *roachpb.Err
 		err := contextutil.RunWithTimeout(ctx, "read forcing lease acquisition", 5*time.Second,
 			func(ctx context.Context) error {
 				var b kv.Batch
-				liReq := &roachpb.LeaseInfoRequest{}
+				liReq := &kvpb.LeaseInfoRequest{}
 				liReq.Key = r.Desc().StartKey.AsRawKey()
 				b.AddRawRequest(liReq)
 				return r.store.DB().Run(ctx, &b)
 			})
 		if err != nil {
 			if errors.HasType(err, (*contextutil.TimeoutError)(nil)) {
-				err = &roachpb.RangeFeedRetryError{
-					Reason: roachpb.RangeFeedRetryError_REASON_NO_LEASEHOLDER,
+				err = &kvpb.RangeFeedRetryError{
+					Reason: kvpb.RangeFeedRetryError_REASON_NO_LEASEHOLDER,
 				}
 			}
-			return roachpb.NewError(err)
+			return kvpb.NewError(err)
 		}
 	}
 	return nil

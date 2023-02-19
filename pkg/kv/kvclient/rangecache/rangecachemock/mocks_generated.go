@@ -8,6 +8,7 @@ import (
 	context "context"
 	reflect "reflect"
 
+	kvpb "github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 	gomock "github.com/golang/mock/gomock"
 )
@@ -51,7 +52,7 @@ func (mr *MockRangeDescriptorDBMockRecorder) FirstRange() *gomock.Call {
 }
 
 // RangeLookup mocks base method.
-func (m *MockRangeDescriptorDB) RangeLookup(arg0 context.Context, arg1 roachpb.RKey, arg2 roachpb.ReadConsistencyType, arg3 bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
+func (m *MockRangeDescriptorDB) RangeLookup(arg0 context.Context, arg1 roachpb.RKey, arg2 kvpb.ReadConsistencyType, arg3 bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RangeLookup", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].([]roachpb.RangeDescriptor)

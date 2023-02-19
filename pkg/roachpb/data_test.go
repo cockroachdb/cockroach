@@ -1251,6 +1251,13 @@ func TestSpanCombine(t *testing.T) {
 // or key range is contained within the span.
 func TestSpanContains(t *testing.T) {
 	s := Span{Key: []byte("a"), EndKey: []byte("b")}
+	sp := func(start, end string) Span {
+		res := Span{Key: Key(start)}
+		if end != "" {
+			res.EndKey = Key(end)
+		}
+		return res
+	}
 
 	testData := []struct {
 		start, end string
@@ -1317,8 +1324,8 @@ func TestSpanSplitOnKey(t *testing.T) {
 		// Simple split.
 		{
 			[]byte("bb"),
-			sp("b", "bb"),
-			sp("bb", "c"),
+			Span{Key: Key("b"), EndKey: Key("bb")},
+			Span{Key: Key("bb"), EndKey: Key("c")},
 		},
 	}
 	for testIdx, test := range testData {

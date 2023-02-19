@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -102,7 +103,7 @@ type HeartbeatInterceptFn func(timestamp hlc.Timestamp)
 
 // SSTableMakerFn is a function that generates RangeFeedSSTable event
 // with a given list of roachpb.KeyValue.
-type SSTableMakerFn func(keyValues []roachpb.KeyValue) roachpb.RangeFeedSSTable
+type SSTableMakerFn func(keyValues []roachpb.KeyValue) kvpb.RangeFeedSSTable
 
 // randomStreamConfig specifies the variables that controls the rate and type of
 // events that the generated stream emits.
@@ -638,7 +639,7 @@ func duplicateEvent(event streamingccl.Event) streamingccl.Event {
 		sst := event.GetSSTable()
 		dataCopy := make([]byte, len(sst.Data))
 		copy(dataCopy, sst.Data)
-		dup = streamingccl.MakeSSTableEvent(roachpb.RangeFeedSSTable{
+		dup = streamingccl.MakeSSTableEvent(kvpb.RangeFeedSSTable{
 			Data:    dataCopy,
 			Span:    sst.Span.Clone(),
 			WriteTS: sst.WriteTS,

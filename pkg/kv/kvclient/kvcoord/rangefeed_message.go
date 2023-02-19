@@ -10,13 +10,16 @@
 
 package kvcoord
 
-import "github.com/cockroachdb/cockroach/pkg/roachpb"
+import (
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+)
 
-// RangeFeedMessage is a type that encapsulates the roachpb.RangeFeedEvent.
+// RangeFeedMessage is a type that encapsulates the kvpb.RangeFeedEvent.
 type RangeFeedMessage struct {
 
 	// RangeFeed event this message holds.
-	*roachpb.RangeFeedEvent
+	*kvpb.RangeFeedEvent
 
 	// The span of the rangefeed registration that overlaps with the key or span
 	// in the RangeFeed event.

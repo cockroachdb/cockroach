@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -101,9 +102,9 @@ func distRestore(
 	}
 	// Wrap the relevant BackupEncryptionOptions to be used by the Restore
 	// processor.
-	var fileEncryption *roachpb.FileEncryptionOptions
+	var fileEncryption *kvpb.FileEncryptionOptions
 	if encryption != nil {
-		fileEncryption = &roachpb.FileEncryptionOptions{Key: encryption.Key}
+		fileEncryption = &kvpb.FileEncryptionOptions{Key: encryption.Key}
 	}
 
 	makePlan := func(ctx context.Context, dsp *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {

@@ -15,6 +15,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/tracker"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -1263,8 +1264,8 @@ func (rp *replicaProposer) rejectProposalWithRedirectLocked(
 	r.store.metrics.LeaseRequestErrorCount.Inc(1)
 	redirectRep, _ /* ok */ := rangeDesc.GetReplicaDescriptorByID(redirectTo)
 	log.VEventf(ctx, 2, "redirecting proposal to node %s; request: %s", redirectRep.NodeID, prop.Request)
-	rp.rejectProposalWithErrLocked(ctx, prop, roachpb.NewError(
-		roachpb.NewNotLeaseHolderErrorWithSpeculativeLease(
+	rp.rejectProposalWithErrLocked(ctx, prop, kvpb.NewError(
+		kvpb.NewNotLeaseHolderErrorWithSpeculativeLease(
 			redirectRep,
 			storeID,
 			rangeDesc,
@@ -1282,11 +1283,11 @@ func (rp *replicaProposer) rejectProposalWithLeaseTransferRejectedLocked(
 	log.VEventf(ctx, 2, "not proposing lease transfer because the target %s may "+
 		"need a snapshot: %s", lease.Replica, reason)
 	err := NewLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(lease.Replica, reason)
-	rp.rejectProposalWithErrLocked(ctx, prop, roachpb.NewError(err))
+	rp.rejectProposalWithErrLocked(ctx, prop, kvpb.NewError(err))
 }
 
 func (rp *replicaProposer) rejectProposalWithErrLocked(
-	ctx context.Context, prop *ProposalData, pErr *roachpb.Error,
+	ctx context.Context, prop *ProposalData, pErr *kvpb.Error,
 ) {
 	(*Replica)(rp).cleanupFailedProposalLocked(prop)
 	prop.finishApplication(ctx, proposalResult{Err: pErr})

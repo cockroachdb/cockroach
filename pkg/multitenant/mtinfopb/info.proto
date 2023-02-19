@@ -13,7 +13,7 @@ package cockroach.multitenant;
 option go_package = "mtinfopb";
 
 import "gogoproto/gogo.proto";
-import "roachpb/api.proto";
+import "kv/kvpb/api.proto";
 import "multitenant/tenantcapabilities/tenantcapabilitiespb/capabilities.proto";
 
 // ProtoInfo represents the metadata for a tenant as

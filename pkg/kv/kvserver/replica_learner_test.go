@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
@@ -294,7 +295,7 @@ func TestAddReplicaWithReceiverThrottling(t *testing.T) {
 				return err
 			}
 			_, err = tc.Servers[0].DB().AdminChangeReplicas(ctx, scratch, desc,
-				roachpb.MakeReplicationChanges(roachpb.ADD_NON_VOTER, tc.Target(2)),
+				kvpb.MakeReplicationChanges(roachpb.ADD_NON_VOTER, tc.Target(2)),
 			)
 			replicationChange <- err
 			return err
@@ -318,7 +319,7 @@ func TestAddReplicaWithReceiverThrottling(t *testing.T) {
 				return err
 			}
 			_, err = tc.Servers[0].DB().AdminChangeReplicas(
-				ctx, scratch, desc, roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(1)),
+				ctx, scratch, desc, kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(1)),
 			)
 			replicationChange <- err
 			return err
@@ -473,7 +474,7 @@ func TestDelegateSnapshotFails(t *testing.T) {
 		require.NoError(t, err)
 
 		_, err = tc.Servers[0].DB().AdminChangeReplicas(
-			ctx, scratchKey, desc, roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(1)),
+			ctx, scratchKey, desc, kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(1)),
 		)
 
 		require.True(t, testutils.IsError(err, "partitioned"), `expected partitioned error got: %+v`, err)
@@ -502,7 +503,7 @@ func TestDelegateSnapshotFails(t *testing.T) {
 		require.NoError(t, err)
 
 		_, err = tc.Servers[0].DB().AdminChangeReplicas(
-			ctx, scratchKey, desc, roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(1)),
+			ctx, scratchKey, desc, kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(1)),
 		)
 		log.Infof(ctx, "Err=%v", err)
 		require.True(t, testutils.IsError(err, "partitioned"), `expected partitioned error got: %+v`, err)
@@ -532,7 +533,7 @@ func TestDelegateSnapshotFails(t *testing.T) {
 		require.NoError(t, err)
 
 		_, err = tc.Servers[0].DB().AdminChangeReplicas(
-			ctx, scratchKey, desc, roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(1)),
+			ctx, scratchKey, desc, kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(1)),
 		)
 		require.NoError(t, err)
 	})
@@ -950,14 +951,14 @@ func TestSplitRetriesOnFailedExitOfJointConfig(t *testing.T) {
 	var rangeIDAtomic int64
 	var rejectedCount int
 	const maxRejects = 3
-	reqFilter := func(ctx context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
+	reqFilter := func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
 		rangeID := roachpb.RangeID(atomic.LoadInt64(&rangeIDAtomic))
 		if ba.RangeID == rangeID && ba.IsSingleTransferLeaseRequest() && rejectedCount < maxRejects {
 			rejectedCount++
 			repl := ba.Requests[0].GetTransferLease().Lease.Replica
 			status := raftutil.ReplicaStateProbe
 			err := kvserver.NewLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(repl, status)
-			return roachpb.NewError(err)
+			return kvpb.NewError(err)
 		}
 		return nil
 	}
@@ -1205,7 +1206,7 @@ func TestLearnerAdminChangeReplicasRace(t *testing.T) {
 			return err
 		}
 		_, err = tc.Servers[0].DB().AdminChangeReplicas(
-			ctx, scratchStartKey, desc, roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(1)),
+			ctx, scratchStartKey, desc, kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(1)),
 		)
 		return err
 	})
@@ -1408,12 +1409,12 @@ func TestLearnerAndVoterOutgoingFollowerRead(t *testing.T) {
 	check := func() {
 		ts := tc.Server(0).Clock().Now()
 		txn := roachpb.MakeTransaction("txn", nil, 0, ts, 0, int32(tc.Server(0).SQLInstanceID()))
-		req := &roachpb.BatchRequest{Header: roachpb.Header{
+		req := &kvpb.BatchRequest{Header: kvpb.Header{
 			RangeID:   scratchDesc.RangeID,
 			Timestamp: ts,
 			Txn:       &txn,
 		}}
-		req.Add(&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeader{
+		req.Add(&kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{
 			Key: scratchDesc.StartKey.AsRawKey(), EndKey: scratchDesc.EndKey.AsRawKey(),
 		}})
 

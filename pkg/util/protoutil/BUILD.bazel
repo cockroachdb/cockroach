@@ -32,6 +32,7 @@ go_test(
         ":protoutil",
         "//pkg/config/zonepb",
         "//pkg/gossip",
+        "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/kv/kvserver/protectedts/ptpb",
         "//pkg/roachpb",

@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -21,13 +22,13 @@ import (
 )
 
 func init() {
-	RegisterReadWriteCommand(roachpb.ResolveIntentRange, declareKeysResolveIntentRange, ResolveIntentRange)
+	RegisterReadWriteCommand(kvpb.ResolveIntentRange, declareKeysResolveIntentRange, ResolveIntentRange)
 }
 
 func declareKeysResolveIntentRange(
 	rs ImmutableRangeState,
-	_ *roachpb.Header,
-	req roachpb.Request,
+	_ *kvpb.Header,
+	req kvpb.Request,
 	latchSpans, _ *spanset.SpanSet,
 	_ time.Duration,
 ) {
@@ -37,9 +38,9 @@ func declareKeysResolveIntentRange(
 // ResolveIntentRange resolves write intents in the specified
 // key range according to the status of the transaction which created it.
 func ResolveIntentRange(
-	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp kvpb.Response,
 ) (result.Result, error) {
-	args := cArgs.Args.(*roachpb.ResolveIntentRangeRequest)
+	args := cArgs.Args.(*kvpb.ResolveIntentRangeRequest)
 	h := cArgs.Header
 	ms := cArgs.Stats
 
@@ -57,7 +58,7 @@ func ResolveIntentRange(
 	if err != nil {
 		return result.Result{}, err
 	}
-	reply := resp.(*roachpb.ResolveIntentRangeResponse)
+	reply := resp.(*kvpb.ResolveIntentRangeResponse)
 	reply.NumKeys = numKeys
 	reply.NumBytes = numBytes
 	if resumeSpan != nil {

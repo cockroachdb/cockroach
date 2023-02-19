@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -39,10 +40,10 @@ func TestReplicaProbeRequest(t *testing.T) {
 	var seen struct {
 		syncutil.Mutex
 		m           map[roachpb.StoreID]int
-		injectedErr *roachpb.Error
+		injectedErr *kvpb.Error
 	}
 	seen.m = map[roachpb.StoreID]int{}
-	filter := func(args kvserverbase.ApplyFilterArgs) (int, *roachpb.Error) {
+	filter := func(args kvserverbase.ApplyFilterArgs) (int, *kvpb.Error) {
 		if !args.IsProbe {
 			return 0, args.ForcedError
 		}
@@ -111,8 +112,8 @@ func TestReplicaProbeRequest(t *testing.T) {
 	tc.AddVotersOrFatal(t, k, tc.Target(1))
 	tc.AddNonVotersOrFatal(t, k, tc.Target(2))
 
-	probeReq := &roachpb.ProbeRequest{
-		RequestHeader: roachpb.RequestHeader{
+	probeReq := &kvpb.ProbeRequest{
+		RequestHeader: kvpb.RequestHeader{
 			Key: k,
 		},
 	}
@@ -120,15 +121,15 @@ func TestReplicaProbeRequest(t *testing.T) {
 	// stack, with both routing policies.
 	for _, srv := range tc.Servers {
 		db := srv.DB()
-		for _, policy := range []roachpb.RoutingPolicy{
-			roachpb.RoutingPolicy_LEASEHOLDER,
-			roachpb.RoutingPolicy_NEAREST,
+		for _, policy := range []kvpb.RoutingPolicy{
+			kvpb.RoutingPolicy_LEASEHOLDER,
+			kvpb.RoutingPolicy_NEAREST,
 		} {
 			var b kv.Batch
 			b.AddRawRequest(probeReq)
 			b.Header.RoutingPolicy = policy
 			err := db.Run(ctx, &b)
-			if errors.HasType(err, (*roachpb.AmbiguousResultError)(nil)) {
+			if errors.HasType(err, (*kvpb.AmbiguousResultError)(nil)) {
 				// Rare but it can happen that we're proposing on a replica
 				// that is just about to get a snapshot. In that case we'll
 				// get:
@@ -170,7 +171,7 @@ func TestReplicaProbeRequest(t *testing.T) {
 	for _, srv := range tc.Servers {
 		repl, _, err := srv.Stores().GetReplicaForRangeID(ctx, desc.RangeID)
 		require.NoError(t, err)
-		ba := &roachpb.BatchRequest{}
+		ba := &kvpb.BatchRequest{}
 		ba.Add(probeReq)
 		ba.Timestamp = srv.Clock().Now()
 		_, pErr := repl.Send(ctx, ba)
@@ -181,14 +182,14 @@ func TestReplicaProbeRequest(t *testing.T) {
 	// back. Not sure what other error might occur in practice, but checking this
 	// anyway gives us extra confidence in the implementation mechanics of this
 	// request.
-	injErr := roachpb.NewErrorf("bang")
+	injErr := kvpb.NewErrorf("bang")
 	seen.Lock()
 	seen.injectedErr = injErr
 	seen.Unlock()
 	for _, srv := range tc.Servers {
 		repl, _, err := srv.Stores().GetReplicaForRangeID(ctx, desc.RangeID)
 		require.NoError(t, err)
-		ba := &roachpb.BatchRequest{}
+		ba := &kvpb.BatchRequest{}
 		ba.Timestamp = srv.Clock().Now()
 		ba.Add(probeReq)
 		_, pErr := repl.Send(ctx, ba)

@@ -17,7 +17,7 @@ go_library(
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv",
-        "//pkg/roachpb",
+        "//pkg/kv/kvpb",
         "//pkg/security/username",
         "//pkg/server",
         "//pkg/sql",

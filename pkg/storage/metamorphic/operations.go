@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -207,7 +208,7 @@ func (m mvccPutOp) run(ctx context.Context) string {
 
 	err := storage.MVCCPut(ctx, writer, nil, m.key, txn.ReadTimestamp, hlc.ClockTimestamp{}, m.value, txn)
 	if err != nil {
-		if writeTooOldErr := (*roachpb.WriteTooOldError)(nil); errors.As(err, &writeTooOldErr) {
+		if writeTooOldErr := (*kvpb.WriteTooOldError)(nil); errors.As(err, &writeTooOldErr) {
 			txn.WriteTimestamp.Forward(writeTooOldErr.ActualTimestamp)
 			// Update the txn's lock spans to account for this intent being written.
 			addKeyToLockSpans(txn, m.key)
@@ -237,7 +238,7 @@ func (m mvccCPutOp) run(ctx context.Context) string {
 	err := storage.MVCCConditionalPut(ctx, writer, nil, m.key,
 		txn.ReadTimestamp, hlc.ClockTimestamp{}, m.value, m.expVal, true, txn)
 	if err != nil {
-		if writeTooOldErr := (*roachpb.WriteTooOldError)(nil); errors.As(err, &writeTooOldErr) {
+		if writeTooOldErr := (*kvpb.WriteTooOldError)(nil); errors.As(err, &writeTooOldErr) {
 			txn.WriteTimestamp.Forward(writeTooOldErr.ActualTimestamp)
 			// Update the txn's lock spans to account for this intent being written.
 			addKeyToLockSpans(txn, m.key)
@@ -265,7 +266,7 @@ func (m mvccInitPutOp) run(ctx context.Context) string {
 
 	err := storage.MVCCInitPut(ctx, writer, nil, m.key, txn.ReadTimestamp, hlc.ClockTimestamp{}, m.value, false, txn)
 	if err != nil {
-		if writeTooOldErr := (*roachpb.WriteTooOldError)(nil); errors.As(err, &writeTooOldErr) {
+		if writeTooOldErr := (*kvpb.WriteTooOldError)(nil); errors.As(err, &writeTooOldErr) {
 			txn.WriteTimestamp.Forward(writeTooOldErr.ActualTimestamp)
 			// Update the txn's lock spans to account for this intent being written.
 			addKeyToLockSpans(txn, m.key)
@@ -377,7 +378,7 @@ func (m mvccDeleteOp) run(ctx context.Context) string {
 
 	_, err := storage.MVCCDelete(ctx, writer, nil, m.key, txn.ReadTimestamp, hlc.ClockTimestamp{}, txn)
 	if err != nil {
-		if writeTooOldErr := (*roachpb.WriteTooOldError)(nil); errors.As(err, &writeTooOldErr) {
+		if writeTooOldErr := (*kvpb.WriteTooOldError)(nil); errors.As(err, &writeTooOldErr) {
 			txn.WriteTimestamp.Forward(writeTooOldErr.ActualTimestamp)
 			// Update the txn's lock spans to account for this intent being written.
 			addKeyToLockSpans(txn, m.key)

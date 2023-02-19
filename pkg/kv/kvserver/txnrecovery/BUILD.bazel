@@ -11,6 +11,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv",
+        "//pkg/kv/kvpb",
         "//pkg/roachpb",
         "//pkg/util/hlc",
         "//pkg/util/log",
@@ -29,6 +30,7 @@ go_test(
     embed = [":txnrecovery"],
     deps = [
         "//pkg/kv",
+        "//pkg/kv/kvpb",
         "//pkg/roachpb",
         "//pkg/testutils",
         "//pkg/util/hlc",

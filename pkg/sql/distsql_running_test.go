@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
@@ -224,14 +225,14 @@ func TestDistSQLReceiverErrorRanking(t *testing.T) {
 		&SessionTracing{},
 	)
 
-	retryErr := roachpb.NewErrorWithTxn(
-		roachpb.NewTransactionRetryError(
-			roachpb.RETRY_SERIALIZABLE, "test err"),
+	retryErr := kvpb.NewErrorWithTxn(
+		kvpb.NewTransactionRetryError(
+			kvpb.RETRY_SERIALIZABLE, "test err"),
 		txn.TestingCloneTxn()).GoError()
 
-	abortErr := roachpb.NewErrorWithTxn(
-		roachpb.NewTransactionAbortedError(
-			roachpb.ABORT_REASON_ABORTED_RECORD_FOUND),
+	abortErr := kvpb.NewErrorWithTxn(
+		kvpb.NewTransactionAbortedError(
+			kvpb.ABORT_REASON_ABORTED_RECORD_FOUND),
 		txn.TestingCloneTxn()).GoError()
 
 	errs := []struct {

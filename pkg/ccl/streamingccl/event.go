@@ -10,6 +10,7 @@ package streamingccl
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
@@ -43,10 +44,10 @@ type Event interface {
 	GetKV() *roachpb.KeyValue
 
 	// GetSSTable returns a AddSSTable event if the EventType is SSTableEvent.
-	GetSSTable() *roachpb.RangeFeedSSTable
+	GetSSTable() *kvpb.RangeFeedSSTable
 
 	// GetDeleteRange returns a DeleteRange event if the EventType is DeleteRangeEvent.
-	GetDeleteRange() *roachpb.RangeFeedDeleteRange
+	GetDeleteRange() *kvpb.RangeFeedDeleteRange
 
 	// GetResolvedSpans returns a list of span-time pairs indicating the time for
 	// which all KV events within that span has been emitted.
@@ -71,12 +72,12 @@ func (kve kvEvent) GetKV() *roachpb.KeyValue {
 }
 
 // GetSSTable implements the Event interface.
-func (kve kvEvent) GetSSTable() *roachpb.RangeFeedSSTable {
+func (kve kvEvent) GetSSTable() *kvpb.RangeFeedSSTable {
 	return nil
 }
 
 // GetDeleteRange implements the Event interface.
-func (kve kvEvent) GetDeleteRange() *roachpb.RangeFeedDeleteRange {
+func (kve kvEvent) GetDeleteRange() *kvpb.RangeFeedDeleteRange {
 	return nil
 }
 
@@ -87,7 +88,7 @@ func (kve kvEvent) GetResolvedSpans() []jobspb.ResolvedSpan {
 
 // sstableEvent is a sstable that needs to be ingested.
 type sstableEvent struct {
-	sst roachpb.RangeFeedSSTable
+	sst kvpb.RangeFeedSSTable
 }
 
 // Type implements the Event interface.
@@ -101,12 +102,12 @@ func (sste sstableEvent) GetKV() *roachpb.KeyValue {
 }
 
 // GetSSTable implements the Event interface.
-func (sste sstableEvent) GetSSTable() *roachpb.RangeFeedSSTable {
+func (sste sstableEvent) GetSSTable() *kvpb.RangeFeedSSTable {
 	return &sste.sst
 }
 
 // GetDeleteRange implements the Event interface.
-func (sste sstableEvent) GetDeleteRange() *roachpb.RangeFeedDeleteRange {
+func (sste sstableEvent) GetDeleteRange() *kvpb.RangeFeedDeleteRange {
 	return nil
 }
 
@@ -119,7 +120,7 @@ var _ Event = sstableEvent{}
 
 // delRangeEvent is a DeleteRange event that needs to be ingested.
 type delRangeEvent struct {
-	delRange roachpb.RangeFeedDeleteRange
+	delRange kvpb.RangeFeedDeleteRange
 }
 
 // Type implements the Event interface.
@@ -133,12 +134,12 @@ func (dre delRangeEvent) GetKV() *roachpb.KeyValue {
 }
 
 // GetSSTable implements the Event interface.
-func (dre delRangeEvent) GetSSTable() *roachpb.RangeFeedSSTable {
+func (dre delRangeEvent) GetSSTable() *kvpb.RangeFeedSSTable {
 	return nil
 }
 
 // GetDeleteRange implements the Event interface.
-func (dre delRangeEvent) GetDeleteRange() *roachpb.RangeFeedDeleteRange {
+func (dre delRangeEvent) GetDeleteRange() *kvpb.RangeFeedDeleteRange {
 	return &dre.delRange
 }
 
@@ -168,12 +169,12 @@ func (ce checkpointEvent) GetKV() *roachpb.KeyValue {
 }
 
 // GetSSTable implements the Event interface.
-func (ce checkpointEvent) GetSSTable() *roachpb.RangeFeedSSTable {
+func (ce checkpointEvent) GetSSTable() *kvpb.RangeFeedSSTable {
 	return nil
 }
 
 // GetDeleteRange implements the Event interface.
-func (ce checkpointEvent) GetDeleteRange() *roachpb.RangeFeedDeleteRange {
+func (ce checkpointEvent) GetDeleteRange() *kvpb.RangeFeedDeleteRange {
 	return nil
 }
 
@@ -188,12 +189,12 @@ func MakeKVEvent(kv roachpb.KeyValue) Event {
 }
 
 // MakeSSTableEvent creates an Event from a SSTable.
-func MakeSSTableEvent(sst roachpb.RangeFeedSSTable) Event {
+func MakeSSTableEvent(sst kvpb.RangeFeedSSTable) Event {
 	return sstableEvent{sst: sst}
 }
 
 // MakeDeleteRangeEvent creates an Event from a DeleteRange.
-func MakeDeleteRangeEvent(delRange roachpb.RangeFeedDeleteRange) Event {
+func MakeDeleteRangeEvent(delRange kvpb.RangeFeedDeleteRange) Event {
 	return delRangeEvent{delRange: delRange}
 }
 

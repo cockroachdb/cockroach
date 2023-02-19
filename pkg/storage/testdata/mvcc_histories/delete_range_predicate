@@ -94,7 +94,7 @@ data: "h"/4.000000000,0 -> /BYTES/h4
 meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
 stats: key_count=8 key_bytes=160 val_count=12 val_bytes=111 range_key_count=2 range_key_bytes=27 range_val_count=2 live_count=3 live_bytes=111 gc_bytes_age=17863 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=93
-error: (*roachpb.WriteIntentError:) conflicting intents on "i"
+error: (*kvpb.WriteIntentError:) conflicting intents on "i"
 
 run stats error
 del_range_pred k=i end=+i ts=6 startTime=1
@@ -118,7 +118,7 @@ data: "h"/4.000000000,0 -> /BYTES/h4
 meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
 stats: key_count=8 key_bytes=160 val_count=12 val_bytes=111 range_key_count=2 range_key_bytes=27 range_val_count=2 live_count=3 live_bytes=111 gc_bytes_age=17863 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=93
-error: (*roachpb.WriteIntentError:) conflicting intents on "i"
+error: (*kvpb.WriteIntentError:) conflicting intents on "i"
 
 # error encountering point key at d5.
 # a tombstone should not get written at c5 or e5, since
@@ -149,7 +149,7 @@ data: "h"/4.000000000,0 -> /BYTES/h4
 meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
 stats: key_count=9 key_bytes=174 val_count=13 val_bytes=118 range_key_count=2 range_key_bytes=27 range_val_count=2 live_count=4 live_bytes=132 gc_bytes_age=17863 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=93
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "d" at timestamp 5.000000000,0 too old; wrote at 5.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "d" at timestamp 5.000000000,0 too old; wrote at 5.000000000,1
 
 # error encountering range key at k4.
 # a tombstones should not get written to j4 or q4 since
@@ -185,7 +185,7 @@ data: "i"/7.000000000,0 -> /BYTES/i7
 data: "j"/2.000000000,0 -> /BYTES/j2
 data: "q"/2.000000000,0 -> /BYTES/q2
 stats: key_count=11 key_bytes=202 val_count=15 val_bytes=132 range_key_count=2 range_key_bytes=27 range_val_count=2 live_count=6 live_bytes=174 gc_bytes_age=17863 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=93
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k" at timestamp 4.000000000,0 too old; wrote at 4.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k" at timestamp 4.000000000,0 too old; wrote at 4.000000000,1
 
 # At this point the keyspace looks like this:
 # 7                                [i7]

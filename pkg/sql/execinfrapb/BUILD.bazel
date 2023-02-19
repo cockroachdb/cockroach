@@ -115,6 +115,7 @@ proto_library(
     deps = [
         "//pkg/cloud/cloudpb:cloudpb_proto",
         "//pkg/jobs/jobspb:jobspb_proto",
+        "//pkg/kv/kvpb:kvpb_proto",
         "//pkg/roachpb:roachpb_proto",
         "//pkg/sql/catalog/catenumpb:catenumpb_proto",
         "//pkg/sql/catalog/descpb:descpb_proto",
@@ -142,6 +143,7 @@ go_proto_library(
     deps = [
         "//pkg/cloud/cloudpb",
         "//pkg/jobs/jobspb",
+        "//pkg/kv/kvpb",
         "//pkg/roachpb",
         "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/catalog/catpb",  # keep

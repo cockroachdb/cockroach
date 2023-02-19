@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -142,7 +143,7 @@ func (sc *TableStatisticsCache) Start(
 	var lastTableID descpb.ID
 	var lastTS hlc.Timestamp
 
-	handleEvent := func(ctx context.Context, kv *roachpb.RangeFeedValue) {
+	handleEvent := func(ctx context.Context, kv *kvpb.RangeFeedValue) {
 		tableID, err := decodeTableStatisticsKV(codec, kv, &sc.datumAlloc)
 		if err != nil {
 			log.Warningf(ctx, "failed to decode table statistics row %v: %v", kv.Key, err)
@@ -179,7 +180,7 @@ func (sc *TableStatisticsCache) Start(
 // decodeTableStatisticsKV decodes the table ID from a range feed event on
 // system.table_statistics.
 func decodeTableStatisticsKV(
-	codec keys.SQLCodec, kv *roachpb.RangeFeedValue, da *tree.DatumAlloc,
+	codec keys.SQLCodec, kv *kvpb.RangeFeedValue, da *tree.DatumAlloc,
 ) (tableDesc descpb.ID, err error) {
 	// The primary key of table_statistics is (tableID INT, statisticID INT).
 	types := []*types.T{types.Int, types.Int}

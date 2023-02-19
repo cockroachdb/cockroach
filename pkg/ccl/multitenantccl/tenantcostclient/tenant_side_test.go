@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/multitenantio"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
@@ -632,7 +633,7 @@ func (ew *eventWaiter) WaitForEvent(typ tenantcostclient.TestEventType) bool {
 type testProvider struct {
 	mu struct {
 		syncutil.Mutex
-		consumption roachpb.TenantConsumption
+		consumption kvpb.TenantConsumption
 
 		lastSeqNum int64
 
@@ -685,7 +686,7 @@ func (tp *testProvider) waitForRequest(t *testing.T) {
 	}
 }
 
-func (tp *testProvider) consumption() roachpb.TenantConsumption {
+func (tp *testProvider) consumption() kvpb.TenantConsumption {
 	tp.mu.Lock()
 	defer tp.mu.Unlock()
 	return tp.mu.consumption
@@ -693,7 +694,7 @@ func (tp *testProvider) consumption() roachpb.TenantConsumption {
 
 // waitForConsumption waits for the next TokenBucket request and returns the
 // total consumption.
-func (tp *testProvider) waitForConsumption(t *testing.T) roachpb.TenantConsumption {
+func (tp *testProvider) waitForConsumption(t *testing.T) kvpb.TenantConsumption {
 	tp.waitForRequest(t)
 	// it is possible that the TokenBucket request was in the process of being
 	// prepared; we have to wait for another one to make sure the latest
@@ -717,8 +718,8 @@ func (tp *testProvider) unblockRequest(t *testing.T) {
 
 // TokenBucket implements the kvtenant.TokenBucketProvider interface.
 func (tp *testProvider) TokenBucket(
-	_ context.Context, in *roachpb.TokenBucketRequest,
-) (*roachpb.TokenBucketResponse, error) {
+	_ context.Context, in *kvpb.TokenBucketRequest,
+) (*kvpb.TokenBucketResponse, error) {
 	tp.mu.Lock()
 	defer tp.mu.Unlock()
 	select {
@@ -744,7 +745,7 @@ func (tp *testProvider) TokenBucket(
 	}
 
 	tp.mu.consumption.Add(&in.ConsumptionSinceLastRequest)
-	res := &roachpb.TokenBucketResponse{}
+	res := &kvpb.TokenBucketResponse{}
 
 	rate := tp.mu.cfg.Throttle
 	if rate >= 0 {

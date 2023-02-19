@@ -15,7 +15,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/errorspb"
 	"github.com/gogo/protobuf/proto"
@@ -31,7 +31,7 @@ type lockSpansOverBudgetError struct {
 }
 
 func newLockSpansOverBudgetError(
-	lockSpansBytes, limitBytes int64, ba *roachpb.BatchRequest,
+	lockSpansBytes, limitBytes int64, ba *kvpb.BatchRequest,
 ) lockSpansOverBudgetError {
 	return lockSpansOverBudgetError{
 		lockSpansBytes: lockSpansBytes,

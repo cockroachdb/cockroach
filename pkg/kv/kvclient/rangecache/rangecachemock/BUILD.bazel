@@ -25,6 +25,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache/rangecachemock",  # keep
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/kv/kvpb",  # keep
         "//pkg/roachpb",  # keep
         "@com_github_golang_mock//gomock",  # keep
     ],

@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -31,32 +32,32 @@ import (
 type batchResp struct {
 	// TODO(ajwerner): we never actually test that this result is what we expect
 	// it to be. We should add a test that does so.
-	br *roachpb.BatchResponse
-	pe *roachpb.Error
+	br *kvpb.BatchResponse
+	pe *kvpb.Error
 }
 
 type batchSend struct {
 	ctx      context.Context
-	ba       *roachpb.BatchRequest
+	ba       *kvpb.BatchRequest
 	respChan chan<- batchResp
 }
 
 type chanSender chan batchSend
 
 func (c chanSender) Send(
-	ctx context.Context, ba *roachpb.BatchRequest,
-) (*roachpb.BatchResponse, *roachpb.Error) {
+	ctx context.Context, ba *kvpb.BatchRequest,
+) (*kvpb.BatchResponse, *kvpb.Error) {
 	respChan := make(chan batchResp, 1)
 	select {
 	case c <- batchSend{ctx: ctx, ba: ba, respChan: respChan}:
 	case <-ctx.Done():
-		return nil, roachpb.NewError(ctx.Err())
+		return nil, kvpb.NewError(ctx.Err())
 	}
 	select {
 	case resp := <-respChan:
 		return resp.br, resp.pe
 	case <-ctx.Done():
-		return nil, roachpb.NewError(ctx.Err())
+		return nil, kvpb.NewError(ctx.Err())
 	}
 }
 
@@ -65,7 +66,7 @@ type senderGroup struct {
 	g errgroup.Group
 }
 
-func (g *senderGroup) Send(rangeID roachpb.RangeID, request roachpb.Request) {
+func (g *senderGroup) Send(rangeID roachpb.RangeID, request kvpb.Request) {
 	g.g.Go(func() error {
 		_, err := g.b.Send(context.Background(), rangeID, request)
 		return err
@@ -103,8 +104,8 @@ func TestBatcherSendOnSizeWithReset(t *testing.T) {
 		Stopper:         stopper,
 	})
 	g := senderGroup{b: b}
-	g.Send(1, &roachpb.GetRequest{})
-	g.Send(1, &roachpb.GetRequest{})
+	g.Send(1, &kvpb.GetRequest{})
+	g.Send(1, &kvpb.GetRequest{})
 	s := <-sc
 	s.respChan <- batchResp{}
 	// See the comment above wait. In rare cases the batch will be sent before the
@@ -145,7 +146,7 @@ func TestBatchesAtTheSameTime(t *testing.T) {
 	const N = 20
 	sendChan := make(chan Response, N)
 	for i := 0; i < N; i++ {
-		assert.Nil(t, b.SendWithChan(context.Background(), sendChan, roachpb.RangeID(i), &roachpb.GetRequest{}))
+		assert.Nil(t, b.SendWithChan(context.Background(), sendChan, roachpb.RangeID(i), &kvpb.GetRequest{}))
 	}
 	for i := 0; i < N; i++ {
 		bs := <-sc
@@ -170,12 +171,12 @@ func TestBackpressure(t *testing.T) {
 	// These 3 should all send without blocking but should put the batcher into
 	// back pressure.
 	sendChan := make(chan Response, 6)
-	assert.Nil(t, b.SendWithChan(context.Background(), sendChan, 1, &roachpb.GetRequest{}))
-	assert.Nil(t, b.SendWithChan(context.Background(), sendChan, 2, &roachpb.GetRequest{}))
-	assert.Nil(t, b.SendWithChan(context.Background(), sendChan, 3, &roachpb.GetRequest{}))
+	assert.Nil(t, b.SendWithChan(context.Background(), sendChan, 1, &kvpb.GetRequest{}))
+	assert.Nil(t, b.SendWithChan(context.Background(), sendChan, 2, &kvpb.GetRequest{}))
+	assert.Nil(t, b.SendWithChan(context.Background(), sendChan, 3, &kvpb.GetRequest{}))
 	var sent int64
 	send := func() {
-		assert.Nil(t, b.SendWithChan(context.Background(), sendChan, 4, &roachpb.GetRequest{}))
+		assert.Nil(t, b.SendWithChan(context.Background(), sendChan, 4, &kvpb.GetRequest{}))
 		atomic.AddInt64(&sent, 1)
 	}
 	go send()
@@ -229,11 +230,11 @@ func TestBatcherSend(t *testing.T) {
 	// MaxMsgsPerBatch configuration. The range 1 batch will be sent after the
 	// MaxWait timeout expires.
 	g := senderGroup{b: b}
-	g.Send(1, &roachpb.GetRequest{})
-	g.Send(2, &roachpb.GetRequest{})
-	g.Send(1, &roachpb.GetRequest{})
-	g.Send(2, &roachpb.GetRequest{})
-	g.Send(2, &roachpb.GetRequest{})
+	g.Send(1, &kvpb.GetRequest{})
+	g.Send(2, &kvpb.GetRequest{})
+	g.Send(1, &kvpb.GetRequest{})
+	g.Send(2, &kvpb.GetRequest{})
+	g.Send(2, &kvpb.GetRequest{})
 	// Wait for the range 2 request and ensure it contains 3 requests.
 	s := <-sc
 	assert.Len(t, s.ba.Requests, 3)
@@ -257,7 +258,7 @@ func TestSendAfterStopped(t *testing.T) {
 		Stopper: stopper,
 	})
 	stopper.Stop(context.Background())
-	_, err := b.Send(context.Background(), 1, &roachpb.GetRequest{})
+	_, err := b.Send(context.Background(), 1, &kvpb.GetRequest{})
 	assert.Equal(t, err, stop.ErrUnavailable)
 }
 
@@ -272,7 +273,7 @@ func TestSendAfterCanceled(t *testing.T) {
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, err := b.Send(ctx, 1, &roachpb.GetRequest{})
+	_, err := b.Send(ctx, 1, &kvpb.GetRequest{})
 	assert.Equal(t, err, ctx.Err())
 }
 
@@ -289,7 +290,7 @@ func TestStopDuringSend(t *testing.T) {
 	})
 	errChan := make(chan error)
 	go func() {
-		_, err := b.Send(context.Background(), 1, &roachpb.GetRequest{})
+		_, err := b.Send(context.Background(), 1, &kvpb.GetRequest{})
 		errChan <- err
 	}()
 	// Wait for the request to get sent.
@@ -337,7 +338,7 @@ func TestBatchTimeout(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
 		respChan := make(chan Response, 1)
-		if err := b.SendWithChan(ctx, respChan, 1, &roachpb.GetRequest{}); err != nil {
+		if err := b.SendWithChan(ctx, respChan, 1, &kvpb.GetRequest{}); err != nil {
 			testutils.IsError(err, context.DeadlineExceeded.Error())
 			return
 		}
@@ -375,11 +376,11 @@ func TestBatchTimeout(t *testing.T) {
 		var err1, err2 error
 		err1Chan := make(chan error, 1)
 		go func() {
-			_, err1 = b.Send(ctx1, 1, &roachpb.GetRequest{})
+			_, err1 = b.Send(ctx1, 1, &kvpb.GetRequest{})
 			err1Chan <- err1
 			wg.Done()
 		}()
-		go func() { _, err2 = b.Send(ctx2, 1, &roachpb.GetRequest{}); wg.Done() }()
+		go func() { _, err2 = b.Send(ctx2, 1, &kvpb.GetRequest{}); wg.Done() }()
 		select {
 		case s := <-sc:
 			assert.Len(t, s.ba.Requests, 2)
@@ -415,13 +416,13 @@ func TestIdleAndMaxTimeoutDisabled(t *testing.T) {
 	// the requests, they should only be sent when the MaxMsgsPerBatch limit is
 	// reached, because no MaxWait timeout is configured.
 	g := senderGroup{b: b}
-	g.Send(1, &roachpb.GetRequest{})
+	g.Send(1, &kvpb.GetRequest{})
 	select {
 	case <-sc:
 		t.Fatalf("RequestBatcher should not sent based on time")
 	case <-time.After(10 * time.Millisecond):
 	}
-	g.Send(1, &roachpb.GetRequest{})
+	g.Send(1, &kvpb.GetRequest{})
 	s := <-sc
 	assert.Len(t, s.ba.Requests, 2)
 	s.respChan <- batchResp{}
@@ -465,13 +466,13 @@ func TestMaxKeysPerBatchReq(t *testing.T) {
 	type span [2]string // [key, endKey]
 	type spanMap map[span]span
 	var nilResumeSpan span
-	makeReq := func(sp span) *roachpb.ResolveIntentRangeRequest {
-		var req roachpb.ResolveIntentRangeRequest
+	makeReq := func(sp span) *kvpb.ResolveIntentRangeRequest {
+		var req kvpb.ResolveIntentRangeRequest
 		req.Key = roachpb.Key(sp[0])
 		req.EndKey = roachpb.Key(sp[1])
 		return &req
 	}
-	makeResp := func(ba *roachpb.BatchRequest, resumeSpans spanMap) *roachpb.BatchResponse {
+	makeResp := func(ba *kvpb.BatchRequest, resumeSpans spanMap) *kvpb.BatchResponse {
 		br := ba.CreateReply()
 		for i, ru := range ba.Requests {
 			req := ru.GetResolveIntentRange()
@@ -487,7 +488,7 @@ func TestMaxKeysPerBatchReq(t *testing.T) {
 			resp.ResumeSpan = &roachpb.Span{
 				Key: roachpb.Key(resumeSp[0]), EndKey: roachpb.Key(resumeSp[1]),
 			}
-			resp.ResumeReason = roachpb.RESUME_KEY_LIMIT
+			resp.ResumeReason = kvpb.RESUME_KEY_LIMIT
 		}
 		return br
 	}

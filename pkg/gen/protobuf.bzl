@@ -27,6 +27,7 @@ PROTOBUF_SRCS = [
     "//pkg/keyvisualizer/keyvispb:keyvispb_go_proto",
     "//pkg/kv/bulk/bulkpb:bulkpb_go_proto",
     "//pkg/kv/kvnemesis:kvnemesis_go_proto",
+    "//pkg/kv/kvpb:kvpb_go_proto",
     "//pkg/kv/kvserver/closedts/ctpb:ctpb_go_proto",
     "//pkg/kv/kvserver/concurrency/lock:lock_go_proto",
     "//pkg/kv/kvserver/concurrency/poison:poison_go_proto",

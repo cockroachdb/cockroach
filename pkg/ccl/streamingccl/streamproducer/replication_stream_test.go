@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -364,8 +365,8 @@ USE d;
 		// Send a ClearRange to trigger rows cursor to return internal error from rangefeed.
 		// Choose 't2' so that it doesn't trigger error on other registered span in rangefeeds,
 		// affecting other tests.
-		_, err := kv.SendWrapped(ctx, h.SysServer.DB().NonTransactionalSender(), &roachpb.ClearRangeRequest{
-			RequestHeader: roachpb.RequestHeader{
+		_, err := kv.SendWrapped(ctx, h.SysServer.DB().NonTransactionalSender(), &kvpb.ClearRangeRequest{
+			RequestHeader: kvpb.RequestHeader{
 				Key:    subscribedSpan.Key,
 				EndKey: subscribedSpan.EndKey,
 			},
@@ -631,7 +632,7 @@ func TestCompleteStreamReplication(t *testing.T) {
 	}
 }
 
-func sortDelRanges(receivedDelRanges []roachpb.RangeFeedDeleteRange) {
+func sortDelRanges(receivedDelRanges []kvpb.RangeFeedDeleteRange) {
 	sort.Slice(receivedDelRanges, func(i, j int) bool {
 		if !receivedDelRanges[i].Timestamp.Equal(receivedDelRanges[j].Timestamp) {
 			return receivedDelRanges[i].Timestamp.Compare(receivedDelRanges[j].Timestamp) < 0
@@ -699,7 +700,7 @@ USE d;
 	expectedDelRangeSpan3 := roachpb.Span{Key: t2Span.Key, EndKey: t2Span.Key.Next()}
 
 	codec := source.mu.codec.(*partitionStreamDecoder)
-	receivedDelRanges := make([]roachpb.RangeFeedDeleteRange, 0, 3)
+	receivedDelRanges := make([]kvpb.RangeFeedDeleteRange, 0, 3)
 	for {
 		source.mu.Lock()
 		require.True(t, source.mu.rows.Next())
@@ -733,8 +734,8 @@ USE d;
 		// Delete range for t3s - t3e, emitting nothing.
 		storageutils.RangeKV(string(t3Span.Key), string(t3Span.EndKey), ts, ""),
 	})
-	expectedDelRange1 := roachpb.RangeFeedDeleteRange{Span: t1Span, Timestamp: batchHLCTime}
-	expectedDelRange2 := roachpb.RangeFeedDeleteRange{Span: t2Span, Timestamp: batchHLCTime}
+	expectedDelRange1 := kvpb.RangeFeedDeleteRange{Span: t1Span, Timestamp: batchHLCTime}
+	expectedDelRange2 := kvpb.RangeFeedDeleteRange{Span: t2Span, Timestamp: batchHLCTime}
 	require.Equal(t, t1Span.Key, start)
 	require.Equal(t, t3Span.EndKey, end)
 

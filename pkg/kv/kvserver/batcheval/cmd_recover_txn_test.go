@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -53,14 +54,14 @@ func TestRecoverTxn(t *testing.T) {
 		}
 
 		// Issue a RecoverTxn request.
-		var resp roachpb.RecoverTxnResponse
+		var resp kvpb.RecoverTxnResponse
 		if _, err := RecoverTxn(ctx, db, CommandArgs{
-			Args: &roachpb.RecoverTxnRequest{
-				RequestHeader:       roachpb.RequestHeader{Key: txn.Key},
+			Args: &kvpb.RecoverTxnRequest{
+				RequestHeader:       kvpb.RequestHeader{Key: txn.Key},
 				Txn:                 txn.TxnMeta,
 				ImplicitlyCommitted: !missingWrite,
 			},
-			Header: roachpb.Header{
+			Header: kvpb.Header{
 				Timestamp: ts,
 			},
 		}, &resp); err != nil {
@@ -229,14 +230,14 @@ func TestRecoverTxnRecordChanged(t *testing.T) {
 			}
 
 			// Issue a RecoverTxn request.
-			var resp roachpb.RecoverTxnResponse
+			var resp kvpb.RecoverTxnResponse
 			_, err := RecoverTxn(ctx, db, CommandArgs{
-				Args: &roachpb.RecoverTxnRequest{
-					RequestHeader:       roachpb.RequestHeader{Key: txn.Key},
+				Args: &kvpb.RecoverTxnRequest{
+					RequestHeader:       kvpb.RequestHeader{Key: txn.Key},
 					Txn:                 txn.TxnMeta,
 					ImplicitlyCommitted: c.implicitlyCommitted,
 				},
-				Header: roachpb.Header{
+				Header: kvpb.Header{
 					Timestamp: ts,
 				},
 			}, &resp)

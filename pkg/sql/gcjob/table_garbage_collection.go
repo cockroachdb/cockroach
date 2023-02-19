@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -160,8 +161,8 @@ func clearSpanData(
 				endKey = span.EndKey
 			}
 			var b kv.Batch
-			b.AddRawRequest(&roachpb.ClearRangeRequest{
-				RequestHeader: roachpb.RequestHeader{
+			b.AddRawRequest(&kvpb.ClearRangeRequest{
+				RequestHeader: kvpb.RequestHeader{
 					Key:    lastKey.AsRawKey(),
 					EndKey: endKey.AsRawKey(),
 				},
@@ -242,14 +243,14 @@ func deleteAllSpanData(
 				endKey = span.EndKey
 			}
 			var b kv.Batch
-			b.AdmissionHeader = roachpb.AdmissionHeader{
+			b.AdmissionHeader = kvpb.AdmissionHeader{
 				Priority:                 int32(admissionpb.BulkNormalPri),
 				CreateTime:               timeutil.Now().UnixNano(),
-				Source:                   roachpb.AdmissionHeader_FROM_SQL,
+				Source:                   kvpb.AdmissionHeader_FROM_SQL,
 				NoMemoryReservedAtSource: true,
 			}
-			b.AddRawRequest(&roachpb.DeleteRangeRequest{
-				RequestHeader: roachpb.RequestHeader{
+			b.AddRawRequest(&kvpb.DeleteRangeRequest{
+				RequestHeader: kvpb.RequestHeader{
 					Key:    lastKey.AsRawKey(),
 					EndKey: endKey.AsRawKey(),
 				},

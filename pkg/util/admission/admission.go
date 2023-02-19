@@ -110,7 +110,7 @@
 //   registry.AddMetricStruct(metrics[i])
 // }
 // kvQueue := coord.GetWorkQueue(admission.KVWork)
-// // Pass kvQueue to server.Node that implements roachpb.InternalServer.
+// // Pass kvQueue to server.Node that implements kvpb.InternalServer.
 // ...
 // // Do similar things with the other WorkQueues.
 //

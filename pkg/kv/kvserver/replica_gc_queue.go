@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -233,7 +234,7 @@ func (rgcq *replicaGCQueue) process(
 	// considering one of the metadata ranges: we must not do an inconsistent
 	// lookup in our own copy of the range.
 	rs, _, err := kv.RangeLookup(ctx, rgcq.db.NonTransactionalSender(), desc.StartKey.AsRawKey(),
-		roachpb.CONSISTENT, 0 /* prefetchNum */, false /* reverse */)
+		kvpb.CONSISTENT, 0 /* prefetchNum */, false /* reverse */)
 	if err != nil {
 		return false, err
 	}
@@ -338,7 +339,7 @@ func (rgcq *replicaGCQueue) process(
 		if leftRepl != nil {
 			leftDesc := leftRepl.Desc()
 			rs, _, err := kv.RangeLookup(ctx, rgcq.db.NonTransactionalSender(), leftDesc.StartKey.AsRawKey(),
-				roachpb.CONSISTENT, 0 /* prefetchNum */, false /* reverse */)
+				kvpb.CONSISTENT, 0 /* prefetchNum */, false /* reverse */)
 			if err != nil {
 				return false, err
 			}

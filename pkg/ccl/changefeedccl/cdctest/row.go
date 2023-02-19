@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -27,22 +28,22 @@ import (
 )
 
 // MakeRangeFeedValueReader starts rangefeed on the specified table and returns a function
-// that returns the next *roachpb.RangeFeedValue from the table.
+// that returns the next *kvpb.RangeFeedValue from the table.
 // This funciton is intended to be used in tests that wish to read low level roachpb.KeyValue(s).
 // Instead of trying to generate KVs ourselves (subject to encoding restrictions, etc), it is
 // simpler to just "INSERT ..." into the table, and then use this function to read next value.
 func MakeRangeFeedValueReader(
 	t *testing.T, execCfgI interface{}, desc catalog.TableDescriptor,
-) (func(t *testing.T) *roachpb.RangeFeedValue, func()) {
+) (func(t *testing.T) *kvpb.RangeFeedValue, func()) {
 	t.Helper()
 	execCfg := execCfgI.(sql.ExecutorConfig)
-	rows := make(chan *roachpb.RangeFeedValue)
+	rows := make(chan *kvpb.RangeFeedValue)
 	ctx, cleanup := context.WithCancel(context.Background())
 
 	_, err := execCfg.RangeFeedFactory.RangeFeed(ctx, "feed-"+desc.GetName(),
 		[]roachpb.Span{desc.PrimaryIndexSpan(keys.SystemSQLCodec)},
 		execCfg.Clock.Now(),
-		func(ctx context.Context, value *roachpb.RangeFeedValue) {
+		func(ctx context.Context, value *kvpb.RangeFeedValue) {
 			select {
 			case <-ctx.Done():
 			case rows <- value:
@@ -59,7 +60,7 @@ func MakeRangeFeedValueReader(
 
 	// Helper to read next rangefeed value.
 	dups := make(map[string]struct{})
-	return func(t *testing.T) *roachpb.RangeFeedValue {
+	return func(t *testing.T) *kvpb.RangeFeedValue {
 		t.Helper()
 		for {
 			select {

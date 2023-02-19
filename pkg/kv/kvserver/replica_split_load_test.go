@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/assert"
@@ -23,35 +24,35 @@ func roachpbKey(key uint32) roachpb.Key {
 	return keys.SystemSQLCodec.TablePrefix(key)
 }
 
-func requestHeaderWithNilEndKey(key uint32) roachpb.RequestHeader {
-	return roachpb.RequestHeader{
+func requestHeaderWithNilEndKey(key uint32) kvpb.RequestHeader {
+	return kvpb.RequestHeader{
 		Key: roachpbKey(key),
 	}
 }
 
-func requestHeader(key uint32, endKey uint32) roachpb.RequestHeader {
-	return roachpb.RequestHeader{
+func requestHeader(key uint32, endKey uint32) kvpb.RequestHeader {
+	return kvpb.RequestHeader{
 		Key:    roachpbKey(key),
 		EndKey: roachpbKey(endKey),
 	}
 }
 
-func responseHeaderWithNilResumeSpan() roachpb.ResponseHeader {
-	return roachpb.ResponseHeader{
+func responseHeaderWithNilResumeSpan() kvpb.ResponseHeader {
+	return kvpb.ResponseHeader{
 		ResumeSpan: nil,
 	}
 }
 
-func responseHeaderWithNilEndKey(key uint32) roachpb.ResponseHeader {
-	return roachpb.ResponseHeader{
+func responseHeaderWithNilEndKey(key uint32) kvpb.ResponseHeader {
+	return kvpb.ResponseHeader{
 		ResumeSpan: &roachpb.Span{
 			Key: roachpbKey(key),
 		},
 	}
 }
 
-func responseHeader(key uint32, endKey uint32) roachpb.ResponseHeader {
-	return roachpb.ResponseHeader{
+func responseHeader(key uint32, endKey uint32) kvpb.ResponseHeader {
+	return kvpb.ResponseHeader{
 		ResumeSpan: &roachpb.Span{
 			Key:    roachpbKey(key),
 			EndKey: roachpbKey(endKey),
@@ -59,80 +60,80 @@ func responseHeader(key uint32, endKey uint32) roachpb.ResponseHeader {
 	}
 }
 
-func requestUnionGet(requestHeader roachpb.RequestHeader) roachpb.RequestUnion {
-	return roachpb.RequestUnion{
-		Value: &roachpb.RequestUnion_Get{
-			Get: &roachpb.GetRequest{
+func requestUnionGet(requestHeader kvpb.RequestHeader) kvpb.RequestUnion {
+	return kvpb.RequestUnion{
+		Value: &kvpb.RequestUnion_Get{
+			Get: &kvpb.GetRequest{
 				RequestHeader: requestHeader,
 			},
 		},
 	}
 }
 
-func responseUnionGet(responseHeader roachpb.ResponseHeader) roachpb.ResponseUnion {
-	return roachpb.ResponseUnion{
-		Value: &roachpb.ResponseUnion_Get{
-			Get: &roachpb.GetResponse{
+func responseUnionGet(responseHeader kvpb.ResponseHeader) kvpb.ResponseUnion {
+	return kvpb.ResponseUnion{
+		Value: &kvpb.ResponseUnion_Get{
+			Get: &kvpb.GetResponse{
 				ResponseHeader: responseHeader,
 			},
 		},
 	}
 }
 
-func requestUnionScan(requestHeader roachpb.RequestHeader) roachpb.RequestUnion {
-	return roachpb.RequestUnion{
-		Value: &roachpb.RequestUnion_Scan{
-			Scan: &roachpb.ScanRequest{
+func requestUnionScan(requestHeader kvpb.RequestHeader) kvpb.RequestUnion {
+	return kvpb.RequestUnion{
+		Value: &kvpb.RequestUnion_Scan{
+			Scan: &kvpb.ScanRequest{
 				RequestHeader: requestHeader,
 			},
 		},
 	}
 }
 
-func responseUnionScan(responseHeader roachpb.ResponseHeader) roachpb.ResponseUnion {
-	return roachpb.ResponseUnion{
-		Value: &roachpb.ResponseUnion_Scan{
-			Scan: &roachpb.ScanResponse{
+func responseUnionScan(responseHeader kvpb.ResponseHeader) kvpb.ResponseUnion {
+	return kvpb.ResponseUnion{
+		Value: &kvpb.ResponseUnion_Scan{
+			Scan: &kvpb.ScanResponse{
 				ResponseHeader: responseHeader,
 			},
 		},
 	}
 }
 
-func requestUnionReverseScan(requestHeader roachpb.RequestHeader) roachpb.RequestUnion {
-	return roachpb.RequestUnion{
-		Value: &roachpb.RequestUnion_ReverseScan{
-			ReverseScan: &roachpb.ReverseScanRequest{
+func requestUnionReverseScan(requestHeader kvpb.RequestHeader) kvpb.RequestUnion {
+	return kvpb.RequestUnion{
+		Value: &kvpb.RequestUnion_ReverseScan{
+			ReverseScan: &kvpb.ReverseScanRequest{
 				RequestHeader: requestHeader,
 			},
 		},
 	}
 }
 
-func responseUnionReverseScan(responseHeader roachpb.ResponseHeader) roachpb.ResponseUnion {
-	return roachpb.ResponseUnion{
-		Value: &roachpb.ResponseUnion_ReverseScan{
-			ReverseScan: &roachpb.ReverseScanResponse{
+func responseUnionReverseScan(responseHeader kvpb.ResponseHeader) kvpb.ResponseUnion {
+	return kvpb.ResponseUnion{
+		Value: &kvpb.ResponseUnion_ReverseScan{
+			ReverseScan: &kvpb.ReverseScanResponse{
 				ResponseHeader: responseHeader,
 			},
 		},
 	}
 }
 
-func requestUnionDeleteRange(requestHeader roachpb.RequestHeader) roachpb.RequestUnion {
-	return roachpb.RequestUnion{
-		Value: &roachpb.RequestUnion_DeleteRange{
-			DeleteRange: &roachpb.DeleteRangeRequest{
+func requestUnionDeleteRange(requestHeader kvpb.RequestHeader) kvpb.RequestUnion {
+	return kvpb.RequestUnion{
+		Value: &kvpb.RequestUnion_DeleteRange{
+			DeleteRange: &kvpb.DeleteRangeRequest{
 				RequestHeader: requestHeader,
 			},
 		},
 	}
 }
 
-func responseUnionDeleteRange(responseHeader roachpb.ResponseHeader) roachpb.ResponseUnion {
-	return roachpb.ResponseUnion{
-		Value: &roachpb.ResponseUnion_DeleteRange{
-			DeleteRange: &roachpb.DeleteRangeResponse{
+func responseUnionDeleteRange(responseHeader kvpb.ResponseHeader) kvpb.ResponseUnion {
+	return kvpb.ResponseUnion{
+		Value: &kvpb.ResponseUnion_DeleteRange{
+			DeleteRange: &kvpb.DeleteRangeResponse{
 				ResponseHeader: responseHeader,
 			},
 		},
@@ -142,18 +143,18 @@ func responseUnionDeleteRange(responseHeader roachpb.ResponseHeader) roachpb.Res
 func TestGetResponseBoundarySpan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testCases := []struct {
-		ba                           *roachpb.BatchRequest
-		br                           *roachpb.BatchResponse
+		ba                           *kvpb.BatchRequest
+		br                           *kvpb.BatchResponse
 		expectedResponseBoundarySpan roachpb.Span
 	}{
 		{
-			ba: &roachpb.BatchRequest{
-				Requests: []roachpb.RequestUnion{
+			ba: &kvpb.BatchRequest{
+				Requests: []kvpb.RequestUnion{
 					requestUnionGet(requestHeaderWithNilEndKey(100)),
 				},
 			},
-			br: &roachpb.BatchResponse{
-				Responses: []roachpb.ResponseUnion{
+			br: &kvpb.BatchResponse{
+				Responses: []kvpb.ResponseUnion{
 					responseUnionGet(responseHeaderWithNilResumeSpan()),
 				},
 			},
@@ -162,13 +163,13 @@ func TestGetResponseBoundarySpan(t *testing.T) {
 			},
 		},
 		{
-			ba: &roachpb.BatchRequest{
-				Requests: []roachpb.RequestUnion{
+			ba: &kvpb.BatchRequest{
+				Requests: []kvpb.RequestUnion{
 					requestUnionScan(requestHeader(100, 900)),
 				},
 			},
-			br: &roachpb.BatchResponse{
-				Responses: []roachpb.ResponseUnion{
+			br: &kvpb.BatchResponse{
+				Responses: []kvpb.ResponseUnion{
 					responseUnionScan(responseHeaderWithNilResumeSpan()),
 				},
 			},
@@ -178,13 +179,13 @@ func TestGetResponseBoundarySpan(t *testing.T) {
 			},
 		},
 		{
-			ba: &roachpb.BatchRequest{
-				Requests: []roachpb.RequestUnion{
+			ba: &kvpb.BatchRequest{
+				Requests: []kvpb.RequestUnion{
 					requestUnionScan(requestHeader(100, 900)),
 				},
 			},
-			br: &roachpb.BatchResponse{
-				Responses: []roachpb.ResponseUnion{
+			br: &kvpb.BatchResponse{
+				Responses: []kvpb.ResponseUnion{
 					responseUnionScan(responseHeader(113, 900)),
 				},
 			},
@@ -194,13 +195,13 @@ func TestGetResponseBoundarySpan(t *testing.T) {
 			},
 		},
 		{
-			ba: &roachpb.BatchRequest{
-				Requests: []roachpb.RequestUnion{
+			ba: &kvpb.BatchRequest{
+				Requests: []kvpb.RequestUnion{
 					requestUnionReverseScan(requestHeader(100, 900)),
 				},
 			},
-			br: &roachpb.BatchResponse{
-				Responses: []roachpb.ResponseUnion{
+			br: &kvpb.BatchResponse{
+				Responses: []kvpb.ResponseUnion{
 					responseUnionReverseScan(responseHeader(100, 879)),
 				},
 			},
@@ -210,13 +211,13 @@ func TestGetResponseBoundarySpan(t *testing.T) {
 			},
 		},
 		{
-			ba: &roachpb.BatchRequest{
-				Requests: []roachpb.RequestUnion{
+			ba: &kvpb.BatchRequest{
+				Requests: []kvpb.RequestUnion{
 					requestUnionDeleteRange(requestHeader(100, 900)),
 				},
 			},
-			br: &roachpb.BatchResponse{
-				Responses: []roachpb.ResponseUnion{
+			br: &kvpb.BatchResponse{
+				Responses: []kvpb.ResponseUnion{
 					responseUnionDeleteRange(responseHeader(113, 900)),
 				},
 			},
@@ -226,47 +227,47 @@ func TestGetResponseBoundarySpan(t *testing.T) {
 			},
 		},
 		{
-			ba: &roachpb.BatchRequest{
-				Requests: []roachpb.RequestUnion{
+			ba: &kvpb.BatchRequest{
+				Requests: []kvpb.RequestUnion{
 					requestUnionGet(requestHeaderWithNilEndKey(100)),
 				},
 			},
-			br: &roachpb.BatchResponse{
-				Responses: []roachpb.ResponseUnion{
+			br: &kvpb.BatchResponse{
+				Responses: []kvpb.ResponseUnion{
 					responseUnionGet(responseHeaderWithNilEndKey(100)),
 				},
 			},
 			expectedResponseBoundarySpan: roachpb.Span{},
 		},
 		{
-			ba: &roachpb.BatchRequest{
-				Requests: []roachpb.RequestUnion{
+			ba: &kvpb.BatchRequest{
+				Requests: []kvpb.RequestUnion{
 					requestUnionScan(requestHeader(100, 900)),
 				},
 			},
-			br: &roachpb.BatchResponse{
-				Responses: []roachpb.ResponseUnion{
+			br: &kvpb.BatchResponse{
+				Responses: []kvpb.ResponseUnion{
 					responseUnionScan(responseHeader(100, 900)),
 				},
 			},
 			expectedResponseBoundarySpan: roachpb.Span{},
 		},
 		{
-			ba: &roachpb.BatchRequest{
-				Requests: []roachpb.RequestUnion{
+			ba: &kvpb.BatchRequest{
+				Requests: []kvpb.RequestUnion{
 					requestUnionReverseScan(requestHeader(100, 900)),
 				},
 			},
-			br: &roachpb.BatchResponse{
-				Responses: []roachpb.ResponseUnion{
+			br: &kvpb.BatchResponse{
+				Responses: []kvpb.ResponseUnion{
 					responseUnionReverseScan(responseHeader(100, 900)),
 				},
 			},
 			expectedResponseBoundarySpan: roachpb.Span{},
 		},
 		{
-			ba: &roachpb.BatchRequest{
-				Requests: []roachpb.RequestUnion{
+			ba: &kvpb.BatchRequest{
+				Requests: []kvpb.RequestUnion{
 					requestUnionScan(requestHeader(500, 600)),
 					requestUnionReverseScan(requestHeader(475, 625)),
 					requestUnionGet(requestHeaderWithNilEndKey(480)),
@@ -274,8 +275,8 @@ func TestGetResponseBoundarySpan(t *testing.T) {
 					requestUnionScan(requestHeader(700, 800)),
 				},
 			},
-			br: &roachpb.BatchResponse{
-				Responses: []roachpb.ResponseUnion{
+			br: &kvpb.BatchResponse{
+				Responses: []kvpb.ResponseUnion{
 					responseUnionScan(responseHeader(550, 600)),
 					responseUnionReverseScan(responseHeader(475, 525)),
 					responseUnionGet(responseHeaderWithNilResumeSpan()),

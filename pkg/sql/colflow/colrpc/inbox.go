@@ -391,7 +391,7 @@ func (i *Inbox) Next() coldata.Batch {
 					//
 					// We choose this way of handling multiple errors rather
 					// than something like errors.CombineErrors() since we want
-					// to keep errors unchanged (e.g. roachpb.ErrPriority() will
+					// to keep errors unchanged (e.g. kvpb.ErrPriority() will
 					// be called on each error in the DistSQLReceiver).
 					i.bufferedMeta = append(i.bufferedMeta, meta)
 					colexecutils.AccountForMetadata(i.allocator, i.bufferedMeta[len(i.bufferedMeta)-1:])

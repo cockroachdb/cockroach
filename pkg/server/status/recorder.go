@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -511,7 +512,7 @@ func (mr *MetricsRecorder) WriteNodeStatus(
 			return errors.New("status entry not found, node may have been decommissioned")
 		}
 		err = db.CPutInline(ctx, key, &nodeStatus, entry.Value.TagAndDataBytes())
-		if detail := (*roachpb.ConditionFailedError)(nil); errors.As(err, &detail) {
+		if detail := (*kvpb.ConditionFailedError)(nil); errors.As(err, &detail) {
 			if detail.ActualValue == nil {
 				return errors.New("status entry not found, node may have been decommissioned")
 			}

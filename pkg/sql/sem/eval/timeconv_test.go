@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -47,8 +48,8 @@ func TestClusterTimestampConversion(t *testing.T) {
 
 	clock := hlc.NewClockForTesting(nil)
 	senderFactory := kv.MakeMockTxnSenderFactory(
-		func(context.Context, *roachpb.Transaction, *roachpb.BatchRequest,
-		) (*roachpb.BatchResponse, *roachpb.Error) {
+		func(context.Context, *roachpb.Transaction, *kvpb.BatchRequest,
+		) (*kvpb.BatchResponse, *kvpb.Error) {
 			panic("unused")
 		})
 	db := kv.NewDB(log.MakeTestingAmbientCtxWithNewTracer(), senderFactory, clock, stopper)

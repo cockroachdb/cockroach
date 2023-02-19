@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -37,17 +38,17 @@ func init() {
 	// could instead iterate over the SST and take out point latches/locks, but
 	// the cost is likely not worth it since AddSSTable is often used with
 	// unpopulated spans.
-	RegisterReadWriteCommand(roachpb.AddSSTable, declareKeysAddSSTable, EvalAddSSTable)
+	RegisterReadWriteCommand(kvpb.AddSSTable, declareKeysAddSSTable, EvalAddSSTable)
 }
 
 func declareKeysAddSSTable(
 	rs ImmutableRangeState,
-	header *roachpb.Header,
-	req roachpb.Request,
+	header *kvpb.Header,
+	req kvpb.Request,
 	latchSpans, lockSpans *spanset.SpanSet,
 	maxOffset time.Duration,
 ) {
-	args := req.(*roachpb.AddSSTableRequest)
+	args := req.(*kvpb.AddSSTableRequest)
 	DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
 	// We look up the range descriptor key to return its span.
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(rs.GetStartKey())})
@@ -123,9 +124,9 @@ var forceRewrite = util.ConstantWithMetamorphicTestBool("addsst-rewrite-forced",
 // EvalAddSSTable evaluates an AddSSTable command. For details, see doc comment
 // on AddSSTableRequest.
 func EvalAddSSTable(
-	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp kvpb.Response,
 ) (result.Result, error) {
-	args := cArgs.Args.(*roachpb.AddSSTableRequest)
+	args := cArgs.Args.(*kvpb.AddSSTableRequest)
 	h := cArgs.Header
 	ms := cArgs.Stats
 	start, end := storage.MVCCKey{Key: args.Key}, storage.MVCCKey{Key: args.EndKey}
@@ -144,7 +145,7 @@ func EvalAddSSTable(
 			return result.Result{}, err
 		}
 		if remaining := float64(cap.Available) / float64(cap.Capacity); remaining < min {
-			return result.Result{}, &roachpb.InsufficientSpaceError{
+			return result.Result{}, &kvpb.InsufficientSpaceError{
 				StoreID:   cArgs.EvalCtx.StoreID(),
 				Op:        "ingest data",
 				Available: cap.Available,
@@ -243,7 +244,7 @@ func EvalAddSSTable(
 		if err != nil {
 			return result.Result{}, errors.Wrap(err, "scanning intents")
 		} else if len(intents) > 0 {
-			return result.Result{}, &roachpb.WriteIntentError{Intents: intents}
+			return result.Result{}, &kvpb.WriteIntentError{Intents: intents}
 		}
 	}
 
@@ -362,7 +363,7 @@ func EvalAddSSTable(
 		}
 	}
 
-	reply := resp.(*roachpb.AddSSTableResponse)
+	reply := resp.(*kvpb.AddSSTableResponse)
 	reply.RangeSpan = cArgs.EvalCtx.Desc().KeySpan().AsRawSpanWithNoLocals()
 	reply.AvailableBytes = cArgs.EvalCtx.GetMaxBytes() - cArgs.EvalCtx.GetMVCCStats().Total() - stats.Total()
 

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -217,9 +218,9 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 	remainingAmbiguousSubReqs := int64(initialAmbiguousSubReqs)
 	knobs := base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
 		EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
-			TestingEvalFilter: func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
+			TestingEvalFilter: func(filterArgs kvserverbase.FilterArgs) *kvpb.Error {
 				switch filterArgs.Req.(type) {
-				case *roachpb.AddSSTableRequest:
+				case *kvpb.AddSSTableRequest:
 				// No-op.
 				default:
 					return nil
@@ -228,7 +229,7 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 				if r < 0 {
 					return nil
 				}
-				return roachpb.NewError(roachpb.NewAmbiguousResultErrorf("%d", r))
+				return kvpb.NewError(kvpb.NewAmbiguousResultErrorf("%d", r))
 			},
 		},
 	}}

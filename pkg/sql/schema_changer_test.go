@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -1335,8 +1336,8 @@ func TestSchemaChangeRetry(t *testing.T) {
 			if rand.Intn(2) == 0 {
 				return context.DeadlineExceeded
 			} else {
-				errAmbiguous := &roachpb.AmbiguousResultError{}
-				return roachpb.NewError(errAmbiguous).GoError()
+				errAmbiguous := &kvpb.AmbiguousResultError{}
+				return kvpb.NewError(errAmbiguous).GoError()
 			}
 		}
 		if sp.Key != nil && seenSpan.Key != nil {
@@ -1457,8 +1458,8 @@ func TestSchemaChangeRetryOnVersionChange(t *testing.T) {
 					// version and retry the backfill. Since, the new index backfiller
 					// does not repeat this DistSQL setup step unless retried, we must
 					// force a retry.
-					errAmbiguous := &roachpb.AmbiguousResultError{}
-					return roachpb.NewError(errAmbiguous).GoError()
+					errAmbiguous := &kvpb.AmbiguousResultError{}
+					return kvpb.NewError(errAmbiguous).GoError()
 				}
 				if seenSpan.Key != nil {
 					if !seenSpan.EndKey.Equal(sp.EndKey) {
@@ -4534,8 +4535,8 @@ func TestIndexBackfillAfterGC(t *testing.T) {
 			return nil
 		}
 		gcAt = tc.Server(0).Clock().Now()
-		gcr := roachpb.GCRequest{
-			RequestHeader: roachpb.RequestHeaderFromSpan(sp),
+		gcr := kvpb.GCRequest{
+			RequestHeader: kvpb.RequestHeaderFromSpan(sp),
 			Threshold:     gcAt,
 		}
 		_, err := kv.SendWrapped(ctx, tc.Server(0).DistSenderI().(*kvcoord.DistSender), &gcr)

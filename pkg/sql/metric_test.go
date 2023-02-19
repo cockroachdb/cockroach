@@ -17,8 +17,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -192,15 +192,15 @@ func TestAbortCountConflictingWrites(t *testing.T) {
 
 		// Inject errors on the INSERT below.
 		restarted := false
-		cmdFilters.AppendFilter(func(args kvserverbase.FilterArgs) *roachpb.Error {
+		cmdFilters.AppendFilter(func(args kvserverbase.FilterArgs) *kvpb.Error {
 			switch req := args.Req.(type) {
 			// SQL INSERT generates ConditionalPuts for unique indexes (such as the PK).
-			case *roachpb.ConditionalPutRequest:
+			case *kvpb.ConditionalPutRequest:
 				if bytes.Contains(req.Value.RawBytes, []byte("marker")) && !restarted {
 					restarted = true
-					return roachpb.NewErrorWithTxn(
-						roachpb.NewTransactionAbortedError(
-							roachpb.ABORT_REASON_ABORTED_RECORD_FOUND), args.Hdr.Txn)
+					return kvpb.NewErrorWithTxn(
+						kvpb.NewTransactionAbortedError(
+							kvpb.ABORT_REASON_ABORTED_RECORD_FOUND), args.Hdr.Txn)
 				}
 			}
 			return nil

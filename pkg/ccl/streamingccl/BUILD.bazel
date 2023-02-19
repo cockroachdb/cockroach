@@ -13,6 +13,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/jobs/jobspb",
+        "//pkg/kv/kvpb",
         "//pkg/repstream/streampb",
         "//pkg/roachpb",
         "//pkg/settings",

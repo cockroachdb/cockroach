@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
@@ -33,9 +34,9 @@ import (
 func (r *Replica) addToTSCacheChecked(
 	ctx context.Context,
 	st *kvserverpb.LeaseStatus,
-	ba *roachpb.BatchRequest,
-	br *roachpb.BatchResponse,
-	pErr *roachpb.Error,
+	ba *kvpb.BatchRequest,
+	br *kvpb.BatchResponse,
+	pErr *kvpb.Error,
 	start, end roachpb.Key,
 	ts hlc.Timestamp,
 	txnID uuid.UUID,
@@ -60,9 +61,9 @@ func (r *Replica) addToTSCacheChecked(
 func (r *Replica) updateTimestampCache(
 	ctx context.Context,
 	st *kvserverpb.LeaseStatus,
-	ba *roachpb.BatchRequest,
-	br *roachpb.BatchResponse,
-	pErr *roachpb.Error,
+	ba *kvpb.BatchRequest,
+	br *kvpb.BatchResponse,
+	pErr *kvpb.Error,
 ) {
 	addToTSCache := func(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUID) {
 		r.addToTSCacheChecked(ctx, st, ba, br, pErr, start, end, ts, txnID)
@@ -81,17 +82,17 @@ func (r *Replica) updateTimestampCache(
 	beforeEval := br == nil && pErr == nil
 	for i, union := range ba.Requests {
 		req := union.GetInner()
-		if !roachpb.UpdatesTimestampCache(req) {
+		if !kvpb.UpdatesTimestampCache(req) {
 			continue
 		}
-		var resp roachpb.Response
+		var resp kvpb.Response
 		if br != nil {
 			resp = br.Responses[i].GetInner()
 		}
 		// Skip update if there's an error and it's not for this index
 		// or the request doesn't update the timestamp cache on errors.
 		if pErr != nil {
-			if index := pErr.Index; !roachpb.UpdatesTimestampCacheOnError(req) ||
+			if index := pErr.Index; !kvpb.UpdatesTimestampCacheOnError(req) ||
 				index == nil || int32(i) != index.Index {
 				continue
 			}
@@ -99,7 +100,7 @@ func (r *Replica) updateTimestampCache(
 		header := req.Header()
 		start, end := header.Key, header.EndKey
 
-		if ba.WaitPolicy == lock.WaitPolicy_SkipLocked && roachpb.CanSkipLocked(req) {
+		if ba.WaitPolicy == lock.WaitPolicy_SkipLocked && kvpb.CanSkipLocked(req) {
 			if ba.IndexFetchSpec != nil {
 				log.Errorf(ctx, "%v", errors.AssertionFailedf("unexpectedly IndexFetchSpec is set with SKIP LOCKED wait policy"))
 			}
@@ -117,7 +118,7 @@ func (r *Replica) updateTimestampCache(
 			//  [Scan("a", "e")] -> returning ["a", "c"]
 			// to that of a set of point read requests like:
 			//  [Get("a"), Get("c")]
-			if err := roachpb.ResponseKeyIterate(req, resp, func(key roachpb.Key) {
+			if err := kvpb.ResponseKeyIterate(req, resp, func(key roachpb.Key) {
 				addToTSCache(key, nil, ts, txnID)
 			}); err != nil {
 				log.Errorf(ctx, "error iterating over response keys while "+
@@ -127,7 +128,7 @@ func (r *Replica) updateTimestampCache(
 		}
 
 		switch t := req.(type) {
-		case *roachpb.EndTxnRequest:
+		case *kvpb.EndTxnRequest:
 			// EndTxn requests record a tombstone in the timestamp cache to ensure
 			// replays and concurrent requests aren't able to recreate the transaction
 			// record.
@@ -137,13 +138,13 @@ func (r *Replica) updateTimestampCache(
 			// transaction's MinTimestamp, which is consulted in CanCreateTxnRecord.
 			key := transactionTombstoneMarker(start, txnID)
 			addToTSCache(key, nil, ts, txnID)
-		case *roachpb.HeartbeatTxnRequest:
+		case *kvpb.HeartbeatTxnRequest:
 			// HeartbeatTxn requests record a tombstone entry when the record is
 			// initially written. This is used when considering potential 1PC
 			// evaluation, avoiding checking for a transaction record on disk.
 			key := transactionTombstoneMarker(start, txnID)
 			addToTSCache(key, nil, ts, txnID)
-		case *roachpb.RecoverTxnRequest:
+		case *kvpb.RecoverTxnRequest:
 			// A successful RecoverTxn request may or may not have finalized the
 			// transaction that it was trying to recover. If so, then we record
 			// a tombstone to the timestamp cache to ensure that replays and
@@ -153,12 +154,12 @@ func (r *Replica) updateTimestampCache(
 			// Insert the timestamp of the batch, which we asserted during
 			// command evaluation was equal to or greater than the transaction's
 			// MinTimestamp.
-			recovered := resp.(*roachpb.RecoverTxnResponse).RecoveredTxn
+			recovered := resp.(*kvpb.RecoverTxnResponse).RecoveredTxn
 			if recovered.Status.IsFinalized() {
 				key := transactionTombstoneMarker(start, recovered.ID)
 				addToTSCache(key, nil, ts, recovered.ID)
 			}
-		case *roachpb.PushTxnRequest:
+		case *kvpb.PushTxnRequest:
 			// A successful PushTxn request bumps the timestamp cache for the
 			// pushee's transaction key. The pushee will consult the timestamp
 			// cache when creating its record - see CanCreateTxnRecord.
@@ -174,7 +175,7 @@ func (r *Replica) updateTimestampCache(
 			// then we add a "tombstone" marker to the timestamp cache wth the
 			// pushee's minimum timestamp. This will prevent the creation of the
 			// transaction record entirely.
-			pushee := resp.(*roachpb.PushTxnResponse).PusheeTxn
+			pushee := resp.(*kvpb.PushTxnResponse).PusheeTxn
 
 			var tombstone bool
 			switch pushee.Status {
@@ -212,29 +213,29 @@ func (r *Replica) updateTimestampCache(
 				pushTS = pushee.WriteTimestamp
 			}
 			addToTSCache(key, nil, pushTS, t.PusherTxn.ID)
-		case *roachpb.ConditionalPutRequest:
+		case *kvpb.ConditionalPutRequest:
 			// ConditionalPut only updates on ConditionFailedErrors. On other
 			// errors, no information is returned. On successful writes, the
 			// intent already protects against writes underneath the read.
-			if _, ok := pErr.GetDetail().(*roachpb.ConditionFailedError); ok {
+			if _, ok := pErr.GetDetail().(*kvpb.ConditionFailedError); ok {
 				addToTSCache(start, end, ts, txnID)
 			}
-		case *roachpb.InitPutRequest:
+		case *kvpb.InitPutRequest:
 			// InitPut only updates on ConditionFailedErrors. On other errors,
 			// no information is returned. On successful writes, the intent
 			// already protects against writes underneath the read.
-			if _, ok := pErr.GetDetail().(*roachpb.ConditionFailedError); ok {
+			if _, ok := pErr.GetDetail().(*kvpb.ConditionFailedError); ok {
 				addToTSCache(start, end, ts, txnID)
 			}
-		case *roachpb.GetRequest:
-			if !beforeEval && resp.(*roachpb.GetResponse).ResumeSpan != nil {
+		case *kvpb.GetRequest:
+			if !beforeEval && resp.(*kvpb.GetResponse).ResumeSpan != nil {
 				// The request did not evaluate. Ignore it.
 				continue
 			}
 			addToTSCache(start, end, ts, txnID)
-		case *roachpb.ScanRequest:
-			if !beforeEval && resp.(*roachpb.ScanResponse).ResumeSpan != nil {
-				resume := resp.(*roachpb.ScanResponse).ResumeSpan
+		case *kvpb.ScanRequest:
+			if !beforeEval && resp.(*kvpb.ScanResponse).ResumeSpan != nil {
+				resume := resp.(*kvpb.ScanResponse).ResumeSpan
 				if start.Equal(resume.Key) {
 					// The request did not evaluate. Ignore it.
 					continue
@@ -245,9 +246,9 @@ func (r *Replica) updateTimestampCache(
 				end = resume.Key
 			}
 			addToTSCache(start, end, ts, txnID)
-		case *roachpb.ReverseScanRequest:
-			if !beforeEval && resp.(*roachpb.ReverseScanResponse).ResumeSpan != nil {
-				resume := resp.(*roachpb.ReverseScanResponse).ResumeSpan
+		case *kvpb.ReverseScanRequest:
+			if !beforeEval && resp.(*kvpb.ReverseScanResponse).ResumeSpan != nil {
+				resume := resp.(*kvpb.ReverseScanResponse).ResumeSpan
 				if end.Equal(resume.EndKey) {
 					// The request did not evaluate. Ignore it.
 					continue
@@ -259,13 +260,13 @@ func (r *Replica) updateTimestampCache(
 				start = resume.EndKey
 			}
 			addToTSCache(start, end, ts, txnID)
-		case *roachpb.QueryIntentRequest:
+		case *kvpb.QueryIntentRequest:
 			missing := false
 			if pErr != nil {
 				switch t := pErr.GetDetail().(type) {
-				case *roachpb.IntentMissingError:
+				case *kvpb.IntentMissingError:
 					missing = true
-				case *roachpb.TransactionRetryError:
+				case *kvpb.TransactionRetryError:
 					// QueryIntent will return a TxnRetry(SERIALIZABLE) error
 					// if a transaction is querying its own intent and finds
 					// it pushed.
@@ -275,10 +276,10 @@ func (r *Replica) updateTimestampCache(
 					// from the QueryIntent request. However, bumping the
 					// timestamp cache wouldn't cause a correctness issue
 					// if we found the intent.
-					missing = t.Reason == roachpb.RETRY_SERIALIZABLE
+					missing = t.Reason == kvpb.RETRY_SERIALIZABLE
 				}
 			} else {
-				missing = !resp.(*roachpb.QueryIntentResponse).FoundIntent
+				missing = !resp.(*kvpb.QueryIntentResponse).FoundIntent
 			}
 			if missing {
 				// If the QueryIntent determined that the intent is missing
@@ -324,7 +325,7 @@ func init() {
 // minReadTS, minReadTS (without an associated txn id) will be used instead to
 // adjust the batch's timestamp.
 func (r *Replica) applyTimestampCache(
-	ctx context.Context, ba *roachpb.BatchRequest, minReadTS hlc.Timestamp,
+	ctx context.Context, ba *kvpb.BatchRequest, minReadTS hlc.Timestamp,
 ) bool {
 	// bumpedDueToMinReadTS is set to true if the highest timestamp bump encountered
 	// below is due to the minReadTS.
@@ -334,7 +335,7 @@ func (r *Replica) applyTimestampCache(
 
 	for _, union := range ba.Requests {
 		args := union.GetInner()
-		if roachpb.AppliesTimestampCache(args) {
+		if kvpb.AppliesTimestampCache(args) {
 			header := args.Header()
 
 			// Forward the timestamp if there's been a more recent read (by someone else).
@@ -520,7 +521,7 @@ func (r *Replica) applyTimestampCache(
 // system.
 func (r *Replica) CanCreateTxnRecord(
 	ctx context.Context, txnID uuid.UUID, txnKey []byte, txnMinTS hlc.Timestamp,
-) (ok bool, reason roachpb.TransactionAbortedReason) {
+) (ok bool, reason kvpb.TransactionAbortedReason) {
 	// Consult the timestamp cache with the transaction's key. The timestamp cache
 	// is used to abort transactions that don't have transaction records.
 	//
@@ -553,22 +554,22 @@ func (r *Replica) CanCreateTxnRecord(
 			// If there were other requests in the EndTxn batch, then the client would
 			// still have trouble reconstructing the result, but at least it could
 			// provide a non-ambiguous error to the application.
-			return false, roachpb.ABORT_REASON_RECORD_ALREADY_WRITTEN_POSSIBLE_REPLAY
+			return false, kvpb.ABORT_REASON_RECORD_ALREADY_WRITTEN_POSSIBLE_REPLAY
 		case uuid.Nil:
 			lease, _ /* nextLease */ := r.GetLease()
 			// Recognize the case where a lease started recently. Lease transfers bump
 			// the ts cache low water mark.
 			if tombstoneTimestamp == lease.Start.ToTimestamp() {
-				return false, roachpb.ABORT_REASON_NEW_LEASE_PREVENTS_TXN
+				return false, kvpb.ABORT_REASON_NEW_LEASE_PREVENTS_TXN
 			}
-			return false, roachpb.ABORT_REASON_TIMESTAMP_CACHE_REJECTED
+			return false, kvpb.ABORT_REASON_TIMESTAMP_CACHE_REJECTED
 		default:
 			// If we find another transaction's ID then that transaction has
 			// aborted us before our transaction record was written. It obeyed
 			// the restriction that it couldn't create a transaction record for
 			// us, so it recorded a tombstone cache instead to prevent us
 			// from ever creating a transaction record.
-			return false, roachpb.ABORT_REASON_ABORTED_RECORD_FOUND
+			return false, kvpb.ABORT_REASON_ABORTED_RECORD_FOUND
 		}
 	}
 

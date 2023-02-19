@@ -14,19 +14,15 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 )
 
 func declareKeysProbe(
-	_ ImmutableRangeState,
-	_ *roachpb.Header,
-	_ roachpb.Request,
-	_, _ *spanset.SpanSet,
-	_ time.Duration,
+	_ ImmutableRangeState, _ *kvpb.Header, _ kvpb.Request, _, _ *spanset.SpanSet, _ time.Duration,
 ) {
 	// Declare no keys. This means that we're not even serializing with splits
 	// (i.e. a probe could be directed at a key that will become the right-hand
@@ -37,14 +33,14 @@ func declareKeysProbe(
 }
 
 func init() {
-	RegisterReadWriteCommand(roachpb.Probe, declareKeysProbe, Probe)
+	RegisterReadWriteCommand(kvpb.Probe, declareKeysProbe, Probe)
 }
 
 // Probe causes an effectless round-trip through the replication layer,
 // i.e. it is a write that does not change any kv pair. It declares a
 // write on the targeted key (but no lock).
 func Probe(
-	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp kvpb.Response,
 ) (result.Result, error) {
 	return result.Result{
 		Replicated: kvserverpb.ReplicatedEvalResult{

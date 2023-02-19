@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -132,7 +133,7 @@ func canSendToFollower(
 	st *cluster.Settings,
 	clock *hlc.Clock,
 	ctPolicy roachpb.RangeClosedTimestampPolicy,
-	ba *roachpb.BatchRequest,
+	ba *kvpb.BatchRequest,
 ) bool {
 	return kvserver.BatchCanBeEvaluatedOnFollower(ba) &&
 		closedTimestampLikelySufficient(st, clock, ctPolicy, ba.RequiredFrontier()) &&
@@ -180,7 +181,7 @@ func (o *followerReadOracle) useClosestOracle(
 	txn *kv.Txn, ctPolicy roachpb.RangeClosedTimestampPolicy,
 ) bool {
 	// NOTE: this logic is almost identical to canSendToFollower, except that it
-	// operates on a *kv.Txn instead of a roachpb.BatchRequest. As a result, the
+	// operates on a *kv.Txn instead of a kvpb.BatchRequest. As a result, the
 	// function does not check batchCanBeEvaluatedOnFollower. This is because we
 	// assume that if a request is going to be executed in a distributed DistSQL
 	// flow (which is why it is consulting a replicaoracle.Oracle), then all of

@@ -12,6 +12,7 @@ package tenantsettingswatcher
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -45,22 +46,22 @@ func MakeRowDecoder() RowDecoder {
 // set.
 func (d *RowDecoder) DecodeRow(
 	kv roachpb.KeyValue,
-) (_ roachpb.TenantID, _ roachpb.TenantSetting, tombstone bool, _ error) {
+) (_ roachpb.TenantID, _ kvpb.TenantSetting, tombstone bool, _ error) {
 	// First we need to decode the setting name field from the index key.
 	keyTypes := []*types.T{d.columns[0].GetType(), d.columns[1].GetType()}
 	keyVals := make([]rowenc.EncDatum, 2)
 	_, _, err := rowenc.DecodeIndexKey(keys.SystemSQLCodec, keyTypes, keyVals, nil, kv.Key)
 	if err != nil {
-		return roachpb.TenantID{}, roachpb.TenantSetting{}, false, errors.Wrap(err, "failed to decode key")
+		return roachpb.TenantID{}, kvpb.TenantSetting{}, false, errors.Wrap(err, "failed to decode key")
 	}
 	for i := range keyVals {
 		if err := keyVals[i].EnsureDecoded(keyTypes[i], &d.alloc); err != nil {
-			return roachpb.TenantID{}, roachpb.TenantSetting{}, false, err
+			return roachpb.TenantID{}, kvpb.TenantSetting{}, false, err
 		}
 	}
 	// We do not use MustMakeTenantID because we want to tolerate the 0 value.
 	tenantID := roachpb.TenantID{InternalValue: uint64(tree.MustBeDInt(keyVals[0].Datum))}
-	var setting roachpb.TenantSetting
+	var setting kvpb.TenantSetting
 	setting.Name = string(tree.MustBeDString(keyVals[1].Datum))
 	if !kv.Value.IsPresent() {
 		return tenantID, setting, true, nil
@@ -69,12 +70,12 @@ func (d *RowDecoder) DecodeRow(
 	// The rest of the columns are stored as a family.
 	bytes, err := kv.Value.GetTuple()
 	if err != nil {
-		return roachpb.TenantID{}, roachpb.TenantSetting{}, false, err
+		return roachpb.TenantID{}, kvpb.TenantSetting{}, false, err
 	}
 
 	datums, err := d.decoder.Decode(&d.alloc, bytes)
 	if err != nil {
-		return roachpb.TenantID{}, roachpb.TenantSetting{}, false, err
+		return roachpb.TenantID{}, kvpb.TenantSetting{}, false, err
 	}
 
 	if value := datums[2]; value != tree.DNull {

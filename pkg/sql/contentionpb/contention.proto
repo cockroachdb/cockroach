@@ -12,7 +12,7 @@ syntax = "proto3";
 package cockroach.sql.contentionpb;
 option go_package = "contentionpb";
 
-import "roachpb/api.proto";
+import "kv/kvpb/api.proto";
 import "gogoproto/gogo.proto";
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";

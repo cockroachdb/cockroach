@@ -13,23 +13,23 @@ package batcheval
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
 func init() {
-	RegisterReadOnlyCommand(roachpb.Refresh, DefaultDeclareKeys, Refresh)
+	RegisterReadOnlyCommand(kvpb.Refresh, DefaultDeclareKeys, Refresh)
 }
 
 // Refresh checks whether the key has any values written in the interval
 // (args.RefreshFrom, header.Timestamp].
 func Refresh(
-	ctx context.Context, reader storage.Reader, cArgs CommandArgs, resp roachpb.Response,
+	ctx context.Context, reader storage.Reader, cArgs CommandArgs, resp kvpb.Response,
 ) (result.Result, error) {
-	args := cArgs.Args.(*roachpb.RefreshRequest)
+	args := cArgs.Args.(*kvpb.RefreshRequest)
 	h := cArgs.Header
 
 	if h.Txn == nil {
@@ -64,14 +64,14 @@ func Refresh(
 	} else if res.Value != nil {
 		if ts := res.Value.Timestamp; refreshFrom.Less(ts) {
 			return result.Result{},
-				roachpb.NewRefreshFailedError(roachpb.RefreshFailedError_REASON_COMMITTED_VALUE, args.Key, ts)
+				kvpb.NewRefreshFailedError(kvpb.RefreshFailedError_REASON_COMMITTED_VALUE, args.Key, ts)
 		}
 	}
 
 	// Check if an intent which is not owned by this transaction was written
 	// at or beneath the refresh timestamp.
 	if res.Intent != nil && res.Intent.Txn.ID != h.Txn.ID {
-		return result.Result{}, roachpb.NewRefreshFailedError(roachpb.RefreshFailedError_REASON_INTENT,
+		return result.Result{}, kvpb.NewRefreshFailedError(kvpb.RefreshFailedError_REASON_INTENT,
 			res.Intent.Key, res.Intent.Txn.WriteTimestamp)
 	}
 

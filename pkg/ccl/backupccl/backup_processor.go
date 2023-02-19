@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -364,8 +365,8 @@ func runBackupProcessor(
 						splitMidKey = true
 					}
 
-					req := &roachpb.ExportRequest{
-						RequestHeader:  roachpb.RequestHeaderFromSpan(span.span),
+					req := &kvpb.ExportRequest{
+						RequestHeader:  kvpb.RequestHeaderFromSpan(span.span),
 						ResumeKeyTS:    span.firstKeyTS,
 						StartTime:      span.start,
 						MVCCFilter:     spec.MVCCFilter,
@@ -394,7 +395,7 @@ func runBackupProcessor(
 						priority = timeutil.Since(readTime) > priorityAfter.Get(&clusterSettings.SV)
 					}
 
-					header := roachpb.Header{
+					header := kvpb.Header{
 						// We set the DistSender response target bytes field to a sentinel
 						// value. The sentinel value of 1 forces the ExportRequest to paginate
 						// after creating a single SST.
@@ -416,19 +417,19 @@ func runBackupProcessor(
 						header.WaitPolicy = lock.WaitPolicy_Error
 					}
 
-					admissionHeader := roachpb.AdmissionHeader{
+					admissionHeader := kvpb.AdmissionHeader{
 						// Export requests are currently assigned BulkNormalPri.
 						//
 						// TODO(dt): Consider linking this to/from the UserPriority field.
 						Priority:                 int32(admissionpb.BulkNormalPri),
 						CreateTime:               timeutil.Now().UnixNano(),
-						Source:                   roachpb.AdmissionHeader_FROM_SQL,
+						Source:                   kvpb.AdmissionHeader_FROM_SQL,
 						NoMemoryReservedAtSource: true,
 					}
 					log.VEventf(ctx, 1, "sending ExportRequest for span %s (attempt %d, priority %s)",
 						span.span, span.attempts+1, header.UserPriority.String())
-					var rawResp roachpb.Response
-					var pErr *roachpb.Error
+					var rawResp kvpb.Response
+					var pErr *kvpb.Error
 					requestSentAt := timeutil.Now()
 					exportRequestErr := contextutil.RunWithTimeout(ctx,
 						fmt.Sprintf("ExportRequest for span %s", span.span),
@@ -441,7 +442,7 @@ func runBackupProcessor(
 							return nil
 						})
 					if exportRequestErr != nil {
-						if intentErr, ok := pErr.GetDetail().(*roachpb.WriteIntentError); ok {
+						if intentErr, ok := pErr.GetDetail().(*kvpb.WriteIntentError); ok {
 							span.lastTried = timeutil.Now()
 							span.attempts++
 							todo <- span
@@ -458,7 +459,7 @@ func runBackupProcessor(
 						}
 						// BatchTimestampBeforeGCError is returned if the ExportRequest
 						// attempts to read below the range's GC threshold.
-						if batchTimestampBeforeGCError, ok := pErr.GetDetail().(*roachpb.BatchTimestampBeforeGCError); ok {
+						if batchTimestampBeforeGCError, ok := pErr.GetDetail().(*kvpb.BatchTimestampBeforeGCError); ok {
 							// If the range we are exporting is marked to be excluded from
 							// backup, it is safe to ignore the error. It is likely that the
 							// table has been configured with a low GC TTL, and so the data
@@ -471,7 +472,7 @@ func runBackupProcessor(
 						return errors.Wrapf(exportRequestErr, "exporting %s", span.span)
 					}
 
-					resp := rawResp.(*roachpb.ExportResponse)
+					resp := rawResp.(*kvpb.ExportResponse)
 
 					// If the reply has a resume span, we process it immediately.
 					var resumeSpan spanAndTime
@@ -558,7 +559,7 @@ func runBackupProcessor(
 
 // recordExportStats emits a StructuredEvent containing the stats about the
 // evaluated ExportRequest.
-func recordExportStats(sp *tracing.Span, resp *roachpb.ExportResponse, requestSentAt time.Time) {
+func recordExportStats(sp *tracing.Span, resp *kvpb.ExportResponse, requestSentAt time.Time) {
 	if sp == nil {
 		return
 	}
