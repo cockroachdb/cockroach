@@ -4480,12 +4480,23 @@ func TestDistSenderSlowLogMessage(t *testing.T) {
 	ba.Add(get)
 	br := &roachpb.BatchResponse{}
 	br.Error = roachpb.NewError(errors.New("boom"))
-	desc := &roachpb.RangeDescriptor{RangeID: 9, StartKey: roachpb.RKey("x"), EndKey: roachpb.RKey("z")}
+	repl := roachpb.ReplicaDescriptor{
+		NodeID:    20,
+		StoreID:   20,
+		ReplicaID: 5,
+	}
+	desc := &roachpb.RangeDescriptor{
+		RangeID:          9,
+		StartKey:         roachpb.RKey("x"),
+		EndKey:           roachpb.RKey("z"),
+		InternalReplicas: []roachpb.ReplicaDescriptor{repl},
+	}
+	lease := &roachpb.Lease{Replica: repl}
 	{
 		exp := `have been waiting 8.16s (120 attempts) for RPC Get [‹"a"›,/Min) to` +
-			` r9:‹{x-z}› [<no replicas>, next=0, gen=0]; resp: ‹(err: boom)›`
+			` r9:‹{x-z}› [(n20,s20):5, next=0, gen=0] (leaseholder: (n20,s20):5); resp: ‹(err: boom)›`
 		var s redact.StringBuilder
-		slowRangeRPCWarningStr(&s, ba, dur, attempts, desc, nil /* err */, br)
+		slowRangeRPCWarningStr(&s, ba, dur, attempts, desc, lease, nil /* err */, br)
 		act := s.RedactableString()
 		require.EqualValues(t, exp, act)
 	}

@@ -1554,6 +1554,7 @@ func slowRangeRPCWarningStr(
 	dur time.Duration,
 	attempts int64,
 	desc *roachpb.RangeDescriptor,
+	lease *roachpb.Lease,
 	err error,
 	br *roachpb.BatchResponse,
 ) {
@@ -1561,8 +1562,10 @@ func slowRangeRPCWarningStr(
 	if resp == nil {
 		resp = br
 	}
-	s.Printf("have been waiting %.2fs (%d attempts) for RPC %s to %s; resp: %s",
-		dur.Seconds(), attempts, ba, desc, resp)
+	s.Printf(
+		"have been waiting %.2fs (%d attempts) for RPC %s to %s (leaseholder: %s); resp: %s",
+		dur.Seconds(), attempts, ba, desc, lease.Replica, resp,
+	)
 }
 
 func slowRangeRPCReturnWarningStr(s *redact.StringBuilder, dur time.Duration, attempts int64) {
@@ -1671,11 +1674,11 @@ func (ds *DistSender) sendPartialBatch(
 		if dur := timeutil.Since(tBegin); dur > slowDistSenderThreshold && !tBegin.IsZero() {
 			{
 				var s redact.StringBuilder
-				slowRangeRPCWarningStr(&s, ba, dur, attempts, routingTok.Desc(), err, reply)
+				slowRangeRPCWarningStr(&s, ba, dur, attempts, routingTok.Desc(), routingTok.Lease(), err, reply)
 				log.Warningf(ctx, "slow range RPC: %v", &s)
 			}
 			// If the RPC wasn't successful, defer the logging of a message once the
-			// RPC is not retried any more.
+			// RPC is not retried anymore.
 			if err != nil || reply.Error != nil {
 				ds.metrics.SlowRPCs.Inc(1)
 				defer func(tBegin time.Time, attempts int64) {
