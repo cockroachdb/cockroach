@@ -12,6 +12,7 @@ package kvserver
 
 import (
 	"context"
+	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -257,7 +258,7 @@ func tryReproposeWithNewLeaseIndex(
 	}
 
 	if rand.Intn(10) == 5 {
-		return roachpb.NewError(r.newNotLeaseHolderError("reproposal failure injected"))
+		return kvpb.NewError(r.newNotLeaseHolderError("reproposal failure injected"))
 	}
 
 	// Some tests check for this log message in the trace.
