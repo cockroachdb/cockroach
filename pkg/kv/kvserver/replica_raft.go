@@ -1406,12 +1406,14 @@ func (r *Replica) refreshProposalsLocked(
 		r.breaker.TripAsync(err)
 	}
 
-	if log.V(1) && len(reproposals) > 0 {
-		log.Infof(ctx,
-			"pending commands: reproposing %d (at %d.%d) %s",
-			len(reproposals), r.mu.state.RaftAppliedIndex,
-			r.mu.state.LeaseAppliedIndex, reason)
+	if len(reproposals) == 0 {
+		return
 	}
+
+	log.VInfof(ctx, 1,
+		"pending commands: reproposing %d (at applied index %d, lease applied index %d) %s",
+		len(reproposals), r.mu.state.RaftAppliedIndex,
+		r.mu.state.LeaseAppliedIndex, reason)
 
 	// Reproposals are those commands which we weren't able to send back to the
 	// client (since we're not sure that another copy of them could apply at
@@ -1420,7 +1422,8 @@ func (r *Replica) refreshProposalsLocked(
 	// definitely required, however.
 	sort.Sort(reproposals)
 	for _, p := range reproposals {
-		log.Eventf(p.ctx, "re-submitting command %x to Raft: %s", p.idKey, reason)
+		log.Eventf(p.ctx, "re-submitting command %x (MLI %d, CT %s): %s",
+			p.idKey, p.command.MaxLeaseIndex, p.command.ClosedTimestamp, reason)
 		if err := r.mu.proposalBuf.ReinsertLocked(ctx, p); err != nil {
 			r.cleanupFailedProposalLocked(p)
 			p.finishApplication(ctx, proposalResult{
