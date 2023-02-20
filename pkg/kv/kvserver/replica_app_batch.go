@@ -115,7 +115,9 @@ func (b *replicaAppBatch) Stage(
 
 	// TODO(tbg): these assertions should be pushed into
 	// (*appBatch).assertAndCheckCommand.
-	if err := b.assertNoCmdClosedTimestampRegression(ctx, cmd); err != nil {
+	if err := assertNoCmdClosedTimestampRegression(
+		b.r.RangeID, b.r.store.TODOEngine(), cmd, b.state, b.closedTimestampSetter,
+	); err != nil {
 		return nil, err
 	}
 	if err := b.assertNoWriteBelowClosedTimestamp(cmd); err != nil {
@@ -704,47 +706,65 @@ func (b *replicaAppBatch) assertNoWriteBelowClosedTimestamp(cmd *replicatedCmd) 
 
 // Assert that the closed timestamp carried by the command is not below one from
 // previous commands.
-func (b *replicaAppBatch) assertNoCmdClosedTimestampRegression(
-	ctx context.Context, cmd *replicatedCmd,
+func assertNoCmdClosedTimestampRegression(
+	rangeID roachpb.RangeID,
+	eng storage.Engine,
+	cmd *replicatedCmd,
+	state kvserverpb.ReplicaState,
+	ctSetter closedTimestampSetterInfo,
 ) error {
 	if !raftClosedTimestampAssertionsEnabled {
 		return nil
 	}
-	existingClosed := &b.state.RaftClosedTimestamp
+
+	existingClosed := &state.RaftClosedTimestamp
 	newClosed := cmd.Cmd.ClosedTimestamp
-	if newClosed != nil && !newClosed.IsEmpty() && newClosed.Less(*existingClosed) {
-		var req redact.StringBuilder
-		if cmd.IsLocal() {
-			req.Print(cmd.proposal.Request)
-		} else {
-			req.SafeString("<unknown; not leaseholder>")
-		}
-		var prevReq redact.StringBuilder
-		if req := b.closedTimestampSetter.leaseReq; req != nil {
-			prevReq.Printf("lease acquisition: %s (prev: %s)", req.Lease, req.PrevLease)
-		} else {
-			prevReq.SafeString("<unknown; not leaseholder or not lease request>")
-		}
-
-		logTail, err := b.r.printRaftTail(ctx, 100 /* maxEntries */, 2000 /* maxCharsPerEntry */)
-		if err != nil {
-			if logTail != "" {
-				logTail = logTail + "\n; error printing log: " + err.Error()
-			} else {
-				logTail = "error printing log: " + err.Error()
-			}
-		}
-
-		return errors.AssertionFailedf(
-			"raft closed timestamp regression in cmd: %x (term: %d, index: %d); batch state: %s, command: %s, lease: %s, req: %s, applying at LAI: %d.\n"+
-				"Closed timestamp was set by req: %s under lease: %s; applied at LAI: %d. Batch idx: %d.\n"+
-				"This assertion will fire again on restart; to ignore run with env var COCKROACH_RAFT_CLOSEDTS_ASSERTIONS_ENABLED=false\n"+
-				"Raft log tail:\n%s",
-			cmd.ID, cmd.Term, cmd.Index(), existingClosed, newClosed, b.state.Lease, req, cmd.LeaseIndex,
-			prevReq, b.closedTimestampSetter.lease, b.closedTimestampSetter.leaseIdx, b.ab.numEntriesProcessed,
-			logTail)
+	if newClosed == nil || newClosed.IsEmpty() || !newClosed.Less(*existingClosed) {
+		return nil
 	}
-	return nil
+
+	var req redact.StringBuilder
+	if cmd.IsLocal() {
+		req.Print(cmd.proposal.Request)
+	} else {
+		req.SafeString("<unknown; not leaseholder>")
+	}
+	var prevReq redact.StringBuilder
+	if req := ctSetter.leaseReq; req != nil {
+		prevReq.Printf("lease acquisition: %s (prev: %s)", req.Lease, req.PrevLease)
+	} else {
+		prevReq.SafeString("<unknown; not leaseholder or not lease request>")
+	}
+
+	logTail, err := printRaftTail(eng, rangeID, 100 /* maxEntries */, 2000 /* maxCharsPerEntry */)
+	if err != nil {
+		if logTail != "" {
+			logTail = logTail + "\n; error printing log: " + err.Error()
+		} else {
+			logTail = "error printing log: " + err.Error()
+		}
+	}
+
+	return errors.AssertionFailedf(
+		`raft closed timestamp regression at Index %d Term %d ID %x LeaseIndex %d:
+Batch CT: %s > Command CT: %s
+Lease: %s, Req: %s
+
+Closed timestamp set by req: %s under lease: %s at LAI: %d.
+
+Command:
+%s
+
+Raft log tail:
+%s
+
+This assertion will fire again on restart; to ignore run with env var COCKROACH_RAFT_CLOSEDTS_ASSERTIONS_ENABLED=false`,
+		cmd.Index(), cmd.Term, cmd.ID, cmd.LeaseIndex,
+		existingClosed, newClosed,
+		state.Lease, req,
+		prevReq, ctSetter.lease, ctSetter.leaseIdx,
+		formatReplicatedCmd(cmd),
+		logTail)
 }
 
 // ephemeralReplicaAppBatch implements the apply.Batch interface.

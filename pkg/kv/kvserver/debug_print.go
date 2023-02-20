@@ -348,7 +348,7 @@ func tryRaftLogEntry(kv storage.MVCCKeyValue) (string, error) {
 	defer e.Release()
 
 	if len(e.Data) == 0 {
-		return fmt.Sprintf("%s: EMPTY\n", &e.Entry), nil
+		return fmt.Sprintf("%s: EMPTY\n", (*raftpb.Entry)(&e.RaftEntry)), nil
 	}
 	e.Data = nil
 	cmd := e.Cmd
@@ -366,7 +366,7 @@ func tryRaftLogEntry(kv storage.MVCCKeyValue) (string, error) {
 	}
 	cmd.WriteBatch = nil
 
-	return fmt.Sprintf("%s (ID %s) by %s\n%s\nwrite batch:\n%s", &e.Entry, e.ID, leaseStr, &cmd, wbStr), nil
+	return fmt.Sprintf("%s (ID %s) by %s\n%s\nwrite batch:\n%s", (*raftpb.Entry)(&e.RaftEntry), e.ID, leaseStr, &cmd, wbStr), nil
 }
 
 func tryTxn(kv storage.MVCCKeyValue) (string, error) {
