@@ -878,6 +878,11 @@ func (b *propBuf) marshallLAIAndClosedTimestampToProposalLocked(
 	// (p.command.ClosedTimestamp) because that would cause an allocation (see
 	// comments on the proto field about why it needs to be nullable). It'd be
 	// nice to assign to it, for consistency, but nobody needs it.
+	// TODO(tbg): need this to avoid closed ts regression when assigning fake
+	// LAIs, see: https://github.com/cockroachdb/cockroach/issues/70894#issuecomment-1433244880.
+	// With this, when refreshProposalsLocked is called, it can sort by (lease, lai, ct)
+	// and avoid the reorderings tripping the assertion.
+	p.command.ClosedTimestamp = &closedTimestamp
 
 	if log.ExpensiveLogEnabled(ctx, 4) {
 		log.VEventf(ctx, 4, "attaching closed timestamp %s to proposal %x",

@@ -1419,7 +1419,8 @@ func (r *Replica) refreshProposalsLocked(
 	// definitely required, however.
 	sort.Sort(reproposals)
 	for _, p := range reproposals {
-		log.Eventf(p.ctx, "re-submitting command %x to Raft: %s", p.idKey, reason)
+		log.Infof(p.ctx, "re-submitting command %x (MLI %d, CT %s): %s",
+			p.idKey, p.command.MaxLeaseIndex, p.command.ClosedTimestamp, reason)
 		if err := r.mu.proposalBuf.ReinsertLocked(ctx, p); err != nil {
 			r.cleanupFailedProposalLocked(p)
 			p.finishApplication(ctx, proposalResult{
@@ -1887,7 +1888,30 @@ type pendingCmdSlice []*ProposalData
 func (s pendingCmdSlice) Len() int      { return len(s) }
 func (s pendingCmdSlice) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
 func (s pendingCmdSlice) Less(i, j int) bool {
-	return s[i].command.MaxLeaseIndex < s[j].command.MaxLeaseIndex
+	// First compare lease sequence.
+
+	l, r := s[i].command, s[j].command
+	if l.ProposerLeaseSequence != r.ProposerLeaseSequence {
+		return l.ProposerLeaseSequence < r.ProposerLeaseSequence
+	}
+
+	// Then compare MLI.
+
+	if l.MaxLeaseIndex != r.MaxLeaseIndex {
+		return l.MaxLeaseIndex < r.MaxLeaseIndex
+	}
+
+	// Then compare CT.
+
+	var c, d hlc.Timestamp
+	if p := s[i].command.ClosedTimestamp; p != nil {
+		c = *p
+	}
+	if p := s[j].command.ClosedTimestamp; p != nil {
+		d = *p
+	}
+
+	return c.Less(d)
 }
 
 // withRaftGroupLocked calls the supplied function with the (lazily

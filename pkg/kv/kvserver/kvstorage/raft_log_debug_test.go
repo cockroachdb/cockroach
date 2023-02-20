@@ -17,7 +17,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -26,31 +28,42 @@ import (
 )
 
 func TestDebugRaftLog(t *testing.T) {
-	const rangeID = 59
 	ctx := context.Background()
 	st := cluster.MakeClusterSettings()
 	var opts []storage.ConfigOption
 	opts = append(opts, storage.ReadOnly)
+
+	const rangeID = 60 // @ 1144401
 	eng, err := storage.Open(
 		ctx,
 		storage.Filesystem(filepath.Join(
-			os.ExpandEnv("$HOME"), "go", "src", "github.com", "cockroachdb", "cockroach", "data",
-			//os.ExpandEnv("$HOME"), "local", "2", "data",
+			// os.ExpandEnv("$HOME"), "go", "src", "github.com", "cockroachdb", "cockroach", "data",
+			os.ExpandEnv("$HOME"), "local", "2", "data",
 		)), st, opts...)
 	require.NoError(t, err)
+	var lastSeq roachpb.LeaseSequence
 	var lastCT hlc.Timestamp
+	m := map[kvserverbase.CmdIDKey]struct{}{}
 	require.NoError(t, raftlog.Visit(eng, rangeID, 0, math.MaxUint64, func(entry raftpb.Entry) error {
 		e, err := raftlog.NewEntry(entry)
 		if err != nil {
 			return err
 		}
-		t.Logf("idx %d: %s: LAI %d, CT %s", e.Index, e.ID, e.Cmd.MaxLeaseIndex, e.Cmd.ClosedTimestamp)
+		seq := e.Cmd.ProposerLeaseSequence
+		t.Logf("idx %d: %s: LAI %d, CT %s, Lease %d", e.Index, e.ID, e.Cmd.MaxLeaseIndex, e.Cmd.ClosedTimestamp, seq)
+		if lastSeq > 0 && seq != lastSeq {
+			t.Logf("^----- lease seq change")
+		}
 		if e.Cmd.ClosedTimestamp != nil {
 			if lastCT.IsSet() && e.Cmd.ClosedTimestamp.Less(lastCT) {
 				t.Logf("^----- closedts regression")
 			}
 			lastCT = *e.Cmd.ClosedTimestamp
 		}
+		if _, ok := m[e.ID]; ok {
+			t.Logf("^----- reproposal")
+		}
+		m[e.ID] = struct{}{}
 		return nil
 	}))
 }

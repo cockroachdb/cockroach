@@ -135,8 +135,7 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 				_, inMap := r.mu.proposals[cmd.ID]
 				if inMap {
 					// NB: intentionally still holding lock, or access to `cmd.proposal` is unsafe.
-					log.Warningf(ctx, "failed reproposal unexpectedly in proposals map: %s", dumpCmdInfo(ctx, r.store.TODOEngine(), cmd))
-					os.Exit(123)
+					log.Fatalf(ctx, "failed reproposal unexpectedly in proposals map: %s", dumpCmdInfo(ctx, r.store.TODOEngine(), cmd))
 				}
 				r.mu.RUnlock()
 			} else {

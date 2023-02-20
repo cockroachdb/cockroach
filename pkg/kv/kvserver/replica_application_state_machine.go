@@ -172,6 +172,7 @@ func init() {
 func dumpCmdInfo(ctx context.Context, eng storage.Engine, cmd *replicatedCmd) (s string) {
 	defer time.AfterFunc(5*time.Second, func() {
 		fmt.Fprintln(os.Stderr, "timed out during assertion")
+		log.Flush()
 		os.Exit(123)
 	}).Stop()
 	defer func() {
