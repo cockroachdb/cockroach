@@ -1,0 +1,48 @@
+echo
+----
+----
+raft closed timestamp regression at Index 2 Term 1 ID 6465616462656566 LeaseIndex 0:
+Batch CT: 0.000000002,0 > Command CT: 0.000000001,0
+Lease: <nil>, Req: <unknown; not leaseholder>
+
+Closed timestamp set by req: <unknown; not leaseholder or not lease request> under lease: <nil> at LAI: 0.
+
+Command:
+cmd:?raftlog.ReplicatedCmd{?
+?    Entry: &raftlog.Entry{?
+?        Entry: raftpb.Entry{?
+?            Term:  0x1,?
+?            Index: 0x2,?
+?            Type:  3,?
+?            Data:  nil,?
+?        },?
+?        ID:  "deadbeef",?
+?        Cmd: kvserverpb.RaftCommand{?
+?            ProposerLeaseSequence:   0,?
+?            DeprecatedProposerLease: (*roachpb.Lease)(nil),?
+?            MaxLeaseIndex:           0x0,?
+?            ClosedTimestamp:         &hlc.Timestamp{WallTime:1, Logical:0, Synthetic:false},?
+?            ReplicatedEvalResult:    kvserverpb.ReplicatedEvalResult{},?
+?            WriteBatch:              (*kvserverpb.WriteBatch)(nil),?
+?            LogicalOpLog:            (*kvserverpb.LogicalOpLog)(nil),?
+?            TraceData:               {},?
+?            AdmissionPriority:       0,?
+?            AdmissionCreateTime:     0,?
+?            AdmissionOriginNode:     0,?
+?        },?
+?        ConfChangeV1:          (*raftpb.ConfChange)(nil),?
+?        ConfChangeV2:          (*raftpb.ConfChangeV2)(nil),?
+?        ConfChangeContext:     (*kvserverpb.ConfChangeContext)(nil),?
+?        ApplyAdmissionControl: false,?
+?    },?
+?    ForcedErrResult: kvserverbase.ForcedErrResult{},?
+?}?
+
+proposal: ?kvserver.ProposalData{}?
+
+Raft log tail:
+error printing log: iterator invalid but no error
+
+This assertion will fire again on restart; to ignore run with env var COCKROACH_RAFT_CLOSEDTS_ASSERTIONS_ENABLED=false
+----
+----

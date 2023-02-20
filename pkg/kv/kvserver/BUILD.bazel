@@ -275,6 +275,7 @@ go_test(
         "raft_transport_unit_test.go",
         "range_log_test.go",
         "rebalance_objective_test.go",
+        "replica_app_batch_test.go",
         "replica_application_cmd_buf_test.go",
         "replica_application_state_machine_test.go",
         "replica_batch_updates_test.go",
