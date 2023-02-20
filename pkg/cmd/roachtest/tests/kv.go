@@ -382,20 +382,7 @@ func registerKVQuiescenceDead(r registry.Registry) {
 			c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
 			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, nodes))
-
-			run := func(cmd string, lastDown bool) {
-				n := nodes
-				if lastDown {
-					n--
-				}
-				m := c.NewMonitor(ctx, c.Range(1, n))
-				m.Go(func(ctx context.Context) error {
-					t.WorkerStatus(cmd)
-					defer t.WorkerStatus()
-					return c.RunE(ctx, c.Node(nodes+1), cmd)
-				})
-				m.Wait()
-			}
+			m := c.NewMonitor(ctx, c.Range(1, nodes))
 
 			db := c.Conn(ctx, t.L(), 1)
 			defer db.Close()
@@ -426,13 +413,14 @@ func registerKVQuiescenceDead(r registry.Registry) {
 
 			// Initialize the database with ~10k ranges so that the absence of
 			// quiescence hits hard once a node goes down.
-			run("./workload run kv --init --max-ops=1 --splits 10000 --concurrency 100 {pgurl:1}", false)
-			run(kv+" --seed 0 {pgurl:1}", true) // warm-up
+			c.Run(ctx, c.Node(nodes+1), "./workload run kv --init --max-ops=1 --splits 10000 --concurrency 100 {pgurl:1}")
+			c.Run(ctx, c.Node(nodes+1), kv+" --seed 0 {pgurl:1}")
 			// Measure qps with all nodes up (i.e. with quiescence).
 			qpsAllUp := qps(func() {
-				run(kv+" --seed 1 {pgurl:1}", true)
+				c.Run(ctx, c.Node(nodes+1), kv+" --seed 1 {pgurl:1}")
 			})
 			// Graceful shut down third node.
+			m.ExpectDeath()
 			gracefulOpts := option.DefaultStopOpts()
 			gracefulOpts.RoachprodOpts.Sig = 15 // SIGTERM
 			gracefulOpts.RoachprodOpts.Wait = true
@@ -444,9 +432,8 @@ func registerKVQuiescenceDead(r registry.Registry) {
 			qpsOneDown := qps(func() {
 				// Use a different seed to make sure it's not just stepping into the
 				// other earlier kv invocation's footsteps.
-				run(kv+" --seed 2 {pgurl:1}", true)
+				c.Run(ctx, c.Node(nodes+1), kv+" --seed 2 {pgurl:1}")
 			})
-			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(nodes)) // satisfy dead node detector, even if test fails below
 
 			if minFrac, actFrac := 0.8, qpsOneDown/qpsAllUp; actFrac < minFrac {
 				t.Fatalf(
