@@ -119,14 +119,14 @@ func TestUpgradeSchemaChangerElements(t *testing.T) {
 				jobIsPaused                   chan struct{}
 				readyToQuery                  int64
 			)
-			scJobID := jobspb.InvalidJobID
+			scJobID := int64(jobspb.InvalidJobID)
 			params.Knobs.SQLDeclarativeSchemaChanger = &scexec.TestingKnobs{
 				BeforeStage: func(p scplan.Plan, stageIdx int) error {
 					if waitedForJob == nil {
 						return nil
 					}
 					if p.Stages[stageIdx].Phase == scop.PreCommitPhase {
-						scJobID = p.JobID
+						atomic.StoreInt64(&scJobID, int64(p.JobID))
 					} else if p.Stages[stageIdx].Phase > scop.PreCommitPhase {
 						<-waitedForJob
 						waitedForJob = nil
@@ -139,11 +139,11 @@ func TestUpgradeSchemaChangerElements(t *testing.T) {
 			jobKnobs.IntervalOverrides.WaitForJobsInitialDelay = shortInterval()
 			jobKnobs.IntervalOverrides.WaitForJobsMaxDelay = shortInterval()
 			jobKnobs.BeforeWaitForJobsQuery = func(jobs []jobspb.JobID) {
-				if scJobID != jobspb.InvalidJobID {
+				if targetJobID := jobspb.JobID(atomic.LoadInt64(&scJobID)); targetJobID != jobspb.InvalidJobID {
 					for _, j := range jobs {
 						// The upgrade is waiting for the job...
-						if j == scJobID && atomic.LoadInt64(&readyToQuery) > 0 {
-							scJobID = jobspb.InvalidJobID
+						if j == targetJobID && atomic.LoadInt64(&readyToQuery) > 0 {
+							atomic.StoreInt64(&scJobID, int64(jobspb.InvalidJobID))
 							atomic.StoreInt64(&readyToQuery, 0)
 							waitedForJob <- struct{}{}
 						}
@@ -180,7 +180,7 @@ func TestUpgradeSchemaChangerElements(t *testing.T) {
 				if tc.unpauseJob {
 					_, err = sqlDB.Exec("SET CLUSTER SETTING jobs.debug.pausepoints=''")
 					require.NoError(t, err)
-					_, err = sqlDB.Exec("RESUME JOB $1", scJobID)
+					_, err = sqlDB.Exec("RESUME JOB $1", jobspb.JobID(atomic.LoadInt64(&scJobID)))
 					require.NoError(t, err)
 				}
 				_, err = sqlDB.Exec("SET CLUSTER SETTING version = crdb_internal.node_executable_version()")
