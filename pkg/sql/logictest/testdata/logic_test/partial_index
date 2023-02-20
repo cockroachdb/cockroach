@@ -186,7 +186,8 @@ CREATE TABLE t8 (
     FAMILY (a, b, c)
 )
 
-statement ok
+# TODO(mgartner): Lift this restriction. See #96924.
+statement error column "c" cannot be dropped because it is referenced by partial index "t8_a_idx1"
 ALTER TABLE t8 DROP COLUMN c
 
 query TT
@@ -1911,3 +1912,73 @@ BEGIN;
 COMMIT;
 SELECT * FROM t79613;
 DROP TABLE t79613;
+
+# Regression test for #96924 to disallow dropping a column that is referenced in
+# a partial index predicate.
+subtest column_dropped_referenced_in_partial_index
+
+# TODO(mgartner): Add UNIQUE WITHOUT INDEX.
+statement ok
+CREATE TABLE t96924 (
+  a INT,
+  b INT,
+  c INT,
+  d INT,
+  e INT,
+  f INT,
+  g INT,
+  j JSON,
+  INDEX (a) WHERE c > 0,
+  INDEX (b) WHERE c > 0,
+  INDEX (c) WHERE c > 0,
+  UNIQUE INDEX (d) WHERE d > 0,
+  UNIQUE (e) WHERE e > 0,
+  UNIQUE WITHOUT INDEX (f) WHERE f > 0,
+  INVERTED INDEX (g, j) WHERE g > 0
+)
+
+statement ok
+SET use_declarative_schema_changer = off;
+
+# Column `a` can be dropped because it is not referenced in any partial index
+# predicates.
+statement ok
+ALTER TABLE t96924 DROP COLUMN a
+
+statement error column "c" cannot be dropped because it is referenced by partial index "t96924_b_idx"
+ALTER TABLE t96924 DROP COLUMN c
+
+statement error column "d" cannot be dropped because it is referenced by partial index "t96924_d_key"
+ALTER TABLE t96924 DROP COLUMN d
+
+statement error column "e" cannot be dropped because it is referenced by partial index "t96924_e_key"
+ALTER TABLE t96924 DROP COLUMN e
+
+statement error column "f" cannot be dropped because it is referenced by partial unique constraint "unique_f"
+ALTER TABLE t96924 DROP COLUMN f
+
+statement error column "g" cannot be dropped because it is referenced by partial index "t96924_g_j_idx"
+ALTER TABLE t96924 DROP COLUMN g
+
+statement ok
+SET use_declarative_schema_changer = on;
+
+# Column `b` can be dropped because it is not referenced in any partial index
+# predicates.
+statement ok
+ALTER TABLE t96924 DROP COLUMN b
+
+statement error column "c" cannot be dropped because it is referenced by partial index "t96924_b_idx"
+ALTER TABLE t96924 DROP COLUMN c
+
+statement error column "d" cannot be dropped because it is referenced by partial index "t96924_d_key"
+ALTER TABLE t96924 DROP COLUMN d
+
+statement error column "e" cannot be dropped because it is referenced by partial index "t96924_e_key"
+ALTER TABLE t96924 DROP COLUMN e
+
+statement error column "f" cannot be dropped because it is referenced by partial unique constraint "unique_f"
+ALTER TABLE t96924 DROP COLUMN f
+
+statement error column "g" cannot be dropped because it is referenced by partial index "t96924_g_j_idx"
+ALTER TABLE t96924 DROP COLUMN g

@@ -353,7 +353,18 @@ func walkDropColumnDependencies(b BuildCtx, col *scpb.Column, fn func(e scpb.Ele
 			} else if elt.EmbeddedExpr != nil {
 				for _, columnID := range elt.EmbeddedExpr.ReferencedColumnIDs {
 					if columnID == col.ColumnID {
-						fn(e)
+						indexElts := b.QueryByID(elt.TableID).Filter(hasIndexIDAttrFilter(elt.IndexID))
+						_, _, indexName := scpb.FindIndexName(indexElts.Filter(publicTargetFilter))
+						colElts := b.QueryByID(elt.TableID).Filter(hasColumnIDAttrFilter(col.ColumnID))
+						_, _, cn := scpb.FindColumnName(colElts)
+						panic(errors.WithHint(
+							pgerror.Newf(
+								pgcode.InvalidColumnReference,
+								"column %q cannot be dropped because it is referenced by partial index %q",
+								cn.Name, indexName.Name,
+							),
+							"drop the partial index first, then drop the column",
+						))
 					}
 				}
 			}
