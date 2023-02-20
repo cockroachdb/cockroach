@@ -2327,6 +2327,7 @@ func (rpcCtx *Context) grpcDialNodeInternal(
 		// Someone else won the race.
 		return conn
 	}
+	nm := rpcCtx.metrics.loadNodeMetrics(remoteNodeID)
 
 	// We made a connection and registered it. Others might already be accessing
 	// it now, but it's our job to kick off the async goroutine that will do the
@@ -2337,7 +2338,7 @@ func (rpcCtx *Context) grpcDialNodeInternal(
 	if err := rpcCtx.Stopper.RunAsyncTask(
 		ctx,
 		"rpc.Context: heartbeat", func(ctx context.Context) {
-			rpcCtx.metrics.HeartbeatLoopsStarted.Inc(1)
+			nm.HeartbeatLoopsStarted.Inc(1)
 
 			// Run the heartbeat; this will block until the connection breaks for
 			// whatever reason. We don't actually have to do anything with the error,
@@ -2353,7 +2354,7 @@ func (rpcCtx *Context) grpcDialNodeInternal(
 			// the connection is removed from the pool. No strong reason but feels
 			// nicer that way and makes for fewer test flakes.
 			if ctx.Err() == nil {
-				rpcCtx.metrics.HeartbeatLoopsExited.Inc(1)
+				nm.HeartbeatConnectionFailures.Inc(1)
 			}
 		}); err != nil {
 		// If node is draining (`err` will always equal stop.ErrUnavailable
@@ -2389,6 +2390,7 @@ var ErrNoConnection = errors.New("no connection found")
 // connection. The ctx passed as argument must be derived from rpcCtx.masterCtx,
 // so that it respects the same cancellation policy.
 func (rpcCtx *Context) runHeartbeat(ctx context.Context, conn *Connection, k connKey) (retErr error) {
+	nm := rpcCtx.metrics.loadNodeMetrics(k.nodeID)
 	defer func() {
 		var initialHeartbeatDone bool
 		select {
@@ -2426,7 +2428,7 @@ func (rpcCtx *Context) runHeartbeat(ctx context.Context, conn *Connection, k con
 			_ = grpcConn.Close() // nolint:grpcconnclose
 		}
 		if initialHeartbeatDone {
-			rpcCtx.metrics.HeartbeatsNominal.Dec(1)
+			nm.HeartbeatsNominal.Dec(1)
 		} else {
 			close(conn.initialHeartbeatDone) // unblock any waiters
 		}
@@ -2552,17 +2554,20 @@ func (rpcCtx *Context) runHeartbeat(ctx context.Context, conn *Connection, k con
 			pc.mu.disconnected = time.Time{}
 			pc.mu.Unlock()
 
+			receiveTime := rpcCtx.Clock.Now()
+			pingDuration := receiveTime.Sub(sendTime)
+
+			nm.HeartbeatRoundTripLatency.ma.Add(float64(pingDuration.Nanoseconds()))
+			nm.HeartbeatRoundTripLatency.RecordValue(int64(nm.HeartbeatRoundTripLatency.ma.Value()))
+
 			// Only a server connecting to another server needs to check
 			// clock offsets. A CLI command does not need to update its
 			// local HLC, nor does it care that strictly about
 			// client-server latency, nor does it need to track the
 			// offsets.
 			if rpcCtx.RemoteClocks != nil {
-				receiveTime := rpcCtx.Clock.Now()
-
 				// Only update the clock offset measurement if we actually got a
 				// successful response from the server.
-				pingDuration := receiveTime.Sub(sendTime)
 				if pingDuration > maximumPingDurationMult*rpcCtx.ToleratedOffset {
 					request.Offset.Reset()
 				} else {
@@ -2590,7 +2595,7 @@ func (rpcCtx *Context) runHeartbeat(ctx context.Context, conn *Connection, k con
 
 		if i == 0 {
 			// First heartbeat succeeded.
-			rpcCtx.metrics.HeartbeatsNominal.Inc(1)
+			nm.HeartbeatsNominal.Inc(1)
 			log.Health.Infof(ctx, "connection is now ready")
 			close(conn.initialHeartbeatDone)
 			// The connection should be `Ready` now since we just used it for a

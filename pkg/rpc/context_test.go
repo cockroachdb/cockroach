@@ -1264,7 +1264,7 @@ func TestHeartbeatHealth(t *testing.T) {
 	netutil.FatalIfUnexpected(lisNonExistentConnection.Close())
 	netutil.FatalIfUnexpected(lisNotLocalServer.Close())
 	testutils.SucceedsSoon(t, func() error {
-		started, exited := m.HeartbeatLoopsStarted.Count(), m.HeartbeatLoopsExited.Count()
+		started, exited := m.HeartbeatLoopsStarted.Count(), m.HeartbeatConnectionFailures.Count()
 		if started != exited {
 			return errors.Errorf("started(%d) != exited(%d)", started, exited)
 		}
