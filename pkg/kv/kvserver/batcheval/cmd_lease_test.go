@@ -201,9 +201,11 @@ func TestLeaseTransferForwardsStartTime(t *testing.T) {
 				Replica:  replicas[0],
 				Sequence: 1,
 			}
+			now := clock.NowAsClockTimestamp()
 			nextLease := roachpb.Lease{
-				Replica: replicas[1],
-				Start:   clock.NowAsClockTimestamp(),
+				ProposedTS: &now,
+				Replica:    replicas[1],
+				Start:      now,
 			}
 			if epoch {
 				nextLease.Epoch = 1
