@@ -342,7 +342,8 @@ func (r *Replica) leasePostApplyLocked(
 
 	// NB: ProposedTS is non-nil in practice, but we never fully migrated it
 	// in so we need to assume that it can be nil.
-	if iAmTheLeaseHolder && leaseChangingHands && newLease.ProposedTS != nil {
+	const slowLeaseWarningEnabled = false // see https://github.com/cockroachdb/cockroach/issues/97209
+	if slowLeaseWarningEnabled && iAmTheLeaseHolder && leaseChangingHands && newLease.ProposedTS != nil {
 		maybeLogSlowLeaseApplyWarning(ctx, time.Duration(now.WallTime-newLease.ProposedTS.WallTime), prevLease, newLease)
 	}
 
