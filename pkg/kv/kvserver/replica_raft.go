@@ -2454,14 +2454,14 @@ func shouldCampaignAfterConfChange(
 //
 // If an error is returned, it's possible that a string with some entries is
 // still returned.
-func (r *Replica) printRaftTail(
-	ctx context.Context, maxEntries, maxCharsPerEntry int,
+func printRaftTail(
+	eng storage.Engine, rangeID roachpb.RangeID, maxEntries, maxCharsPerEntry int,
 ) (string, error) {
-	start := keys.RaftLogPrefix(r.RangeID)
-	end := keys.RaftLogPrefix(r.RangeID).PrefixEnd()
+	start := keys.RaftLogPrefix(rangeID)
+	end := keys.RaftLogPrefix(rangeID).PrefixEnd()
 
 	// NB: raft log does not have intents.
-	it := r.store.TODOEngine().NewEngineIterator(storage.IterOptions{LowerBound: start, UpperBound: end})
+	it := eng.NewEngineIterator(storage.IterOptions{LowerBound: start, UpperBound: end})
 	valid, err := it.SeekEngineKeyLT(storage.EngineKey{Key: end})
 	if err != nil {
 		return "", err

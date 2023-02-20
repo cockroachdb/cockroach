@@ -726,7 +726,7 @@ func (b *replicaAppBatch) assertNoCmdClosedTimestampRegression(
 			prevReq.SafeString("<unknown; not leaseholder or not lease request>")
 		}
 
-		logTail, err := b.r.printRaftTail(ctx, 100 /* maxEntries */, 2000 /* maxCharsPerEntry */)
+		logTail, err := printRaftTail(b.r.store.TODOEngine(), b.r.RangeID, 100 /* maxEntries */, 2000 /* maxCharsPerEntry */)
 		if err != nil {
 			if logTail != "" {
 				logTail = logTail + "\n; error printing log: " + err.Error()
