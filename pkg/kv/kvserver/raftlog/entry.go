@@ -67,11 +67,17 @@ func DecomposeRaftEncodingStandardOrSideloaded(data []byte) (kvserverbase.CmdIDK
 	return kvserverbase.CmdIDKey(data[1 : 1+RaftCommandIDLen]), data[1+RaftCommandIDLen:]
 }
 
+// RaftEntry is structurally identical to raftpb.Entry but does not implement any
+// of its methods (and in particular fmt.Stringer). This avoids leaking the String
+// method into structs that embed an Entry, where it would produce poor results
+// since it wouldn't reflect any additional fields.
+type RaftEntry raftpb.Entry
+
 // Entry contains data related to a raft log entry. This is the raftpb.Entry
 // itself but also all encapsulated data relevant for command application and
 // admission control.
 type Entry struct {
-	raftpb.Entry
+	RaftEntry
 	ID                kvserverbase.CmdIDKey // may be empty for zero Entry
 	Cmd               kvserverpb.RaftCommand
 	ConfChangeV1      *raftpb.ConfChange            // only set for config change
@@ -92,7 +98,7 @@ var entryPool = sync.Pool{
 // NewEntry populates an Entry from the provided raftpb.Entry.
 func NewEntry(ent raftpb.Entry) (*Entry, error) {
 	e := entryPool.Get().(*Entry)
-	*e = Entry{Entry: ent}
+	*e = Entry{RaftEntry: RaftEntry(ent)}
 	if err := e.load(); err != nil {
 		return nil, err
 	}
@@ -109,7 +115,7 @@ func NewEntryFromRawValue(b []byte) (*Entry, error) {
 
 	e := entryPool.Get().(*Entry)
 
-	if err := storage.MakeValue(meta).GetProto(&e.Entry); err != nil {
+	if err := storage.MakeValue(meta).GetProto((*raftpb.Entry)(&e.RaftEntry)); err != nil {
 		return nil, errors.Wrap(err, "unmarshalling raft Entry")
 	}
 
@@ -137,7 +143,7 @@ func raftEntryFromRawValue(b []byte) (raftpb.Entry, error) {
 }
 
 func (e *Entry) load() error {
-	typ, err := EncodingOf(e.Entry)
+	typ, err := EncodingOf(raftpb.Entry(e.RaftEntry))
 	if err != nil {
 		return err
 	}
@@ -154,10 +160,10 @@ func (e *Entry) load() error {
 	}
 	switch typ {
 	case EntryEncodingStandardWithAC, EntryEncodingSideloadedWithAC:
-		e.ID, raftCmdBytes = DecomposeRaftEncodingStandardOrSideloaded(e.Entry.Data)
+		e.ID, raftCmdBytes = DecomposeRaftEncodingStandardOrSideloaded(e.RaftEntry.Data)
 		e.ApplyAdmissionControl = true
 	case EntryEncodingStandardWithoutAC, EntryEncodingSideloadedWithoutAC:
-		e.ID, raftCmdBytes = DecomposeRaftEncodingStandardOrSideloaded(e.Entry.Data)
+		e.ID, raftCmdBytes = DecomposeRaftEncodingStandardOrSideloaded(e.RaftEntry.Data)
 	case EntryEncodingEmpty:
 		// Nothing to load, the empty raftpb.Entry is represented by a trivial
 		// Entry.
@@ -174,7 +180,7 @@ func (e *Entry) load() error {
 
 	if ccTarget != nil {
 		// Conf change - more unmarshaling to do.
-		if err := protoutil.Unmarshal(e.Entry.Data, ccTarget); err != nil {
+		if err := protoutil.Unmarshal(e.RaftEntry.Data, ccTarget); err != nil {
 			return errors.Wrap(err, "unmarshalling ConfChange")
 		}
 		e.ConfChangeContext = &kvserverpb.ConfChangeContext{}
@@ -207,7 +213,7 @@ func (e *Entry) ConfChange() raftpb.ConfChangeI {
 // log, i.e. it is the inverse to NewEntryFromRawBytes.
 func (e *Entry) ToRawBytes() ([]byte, error) {
 	var value roachpb.Value
-	if err := value.SetProto(&e.Entry); err != nil {
+	if err := value.SetProto((*raftpb.Entry)(&e.RaftEntry)); err != nil {
 		return nil, err
 	}
 
