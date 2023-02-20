@@ -87,6 +87,18 @@ func (c *AggCounter) AddChild(labelVals ...string) *Counter {
 	return child
 }
 
+func (c *AggCounter) GetChild(labelVals ...string) (*Counter, bool) {
+	child := &Counter{
+		parent:           c,
+		labelValuesSlice: labelValuesSlice(labelVals),
+	}
+	cm, exists := c.get(child)
+	if !exists {
+		return nil, exists
+	}
+	return cm.(*Counter), exists
+}
+
 // Counter is a child of a AggCounter. When it is incremented, so too is the
 // parent. When metrics are collected by prometheus, each of the children will
 // appear with a distinct label, however, when cockroach internally collects
@@ -194,6 +206,18 @@ func (c *AggCounterFloat64) AddChild(labelVals ...string) *CounterFloat64 {
 	}
 	c.add(child)
 	return child
+}
+
+func (c *AggCounterFloat64) GetChild(labelVals ...string) (*CounterFloat64, bool) {
+	child := &CounterFloat64{
+		parent:           c,
+		labelValuesSlice: labelValuesSlice(labelVals),
+	}
+	cm, exists := c.get(child)
+	if !exists {
+		return nil, exists
+	}
+	return cm.(*CounterFloat64), exists
 }
 
 // CounterFloat64 is a child of a AggCounter. When it is incremented, so too is the

@@ -158,6 +158,24 @@ func TestAggMetric(t *testing.T) {
 		require.Panics(t, func() { d.AddChild() })
 		require.Panics(t, func() { g.AddChild("", "") })
 	})
+
+	t.Run("get child metric", func(t *testing.T) {
+		// Counter
+		cm, exist := c.GetChild(tenant2.String())
+		require.True(t, exist)
+		require.True(t, cm == c2)
+		cm, exist = c.GetChild("unknown_label")
+		require.False(t, exist)
+		require.Nil(t, cm)
+
+		// CounterFloat64
+		cmf, exist := d.GetChild(tenant2.String())
+		require.True(t, exist)
+		require.True(t, cmf == d2)
+		cmf, exist = d.GetChild("unknown_label")
+		require.False(t, exist)
+		require.Nil(t, cmf)
+	})
 }
 
 type Eacher interface {

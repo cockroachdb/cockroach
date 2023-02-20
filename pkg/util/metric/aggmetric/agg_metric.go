@@ -118,6 +118,22 @@ func (cs *childSet) remove(metric childMetric) {
 	}
 }
 
+func (cs *childSet) get(metric childMetric) (childMetric, bool) {
+	lvs := metric.labelValues()
+	if len(lvs) != len(cs.labels) {
+		panic(errors.AssertionFailedf(
+			"cannot get child with %d label values %v from a metric with %d labels %v",
+			len(lvs), lvs, len(cs.labels), cs.labels))
+	}
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	m := cs.mu.tree.Get(metric)
+	if m == nil {
+		return nil, false
+	}
+	return m.(childMetric), m != nil
+}
+
 type childMetric interface {
 	btree.Item
 	labelValuer
