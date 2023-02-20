@@ -390,9 +390,9 @@ func (mb *mutationBuilder) buildLeftJoinForUpsertArbiter(
 	// the scan on the right side of the left outer join with the partial index
 	// predicate expression as the filter.
 	if pred != nil {
-		// TODO(mgartner): Use the predicate expression in the table metadata here,
-		// replacing column references with fetch column references, rather than
-		// re-building the expression.
+		// TODO(mgartner): Use the predicate expression in the table metadata
+		// here, replacing column references with fetch column references,
+		// rather than re-building the expression.
 		texpr := mb.fetchScope.resolveAndRequireType(pred, types.Bool)
 		predScalar := mb.b.buildScalar(texpr, mb.fetchScope, nil, nil, nil)
 		mb.fetchScope.expr = mb.b.factory.ConstructSelect(
@@ -423,6 +423,9 @@ func (mb *mutationBuilder) buildLeftJoinForUpsertArbiter(
 	// the unique partial index. Therefore, the partial index predicate
 	// expression is added to the ON filters.
 	if pred != nil {
+		// TODO(mgartner): Use the predicate expression in the table metadata
+		// here, replacing column references with fetch column references,
+		// rather than re-building the expression.
 		texpr := mb.outScope.resolveAndRequireType(pred, types.Bool)
 		predScalar := mb.b.buildScalar(texpr, mb.outScope, nil, nil, nil)
 		on = append(on, mb.b.factory.ConstructFiltersItem(predScalar))

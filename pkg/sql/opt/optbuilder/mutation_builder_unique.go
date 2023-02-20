@@ -166,6 +166,9 @@ func (mb *mutationBuilder) uniqueColsUpdated(uniqueOrdinal cat.UniqueOrdinal) bo
 
 		var predCols opt.ColSet
 		mb.b.buildScalar(typedPred, mb.fetchScope, nil, nil, &predCols)
+		// TODO(mgartner): Use the predicate expression in the table metadata
+		// here, replacing column references with fetch column references,
+		// rather than re-building the expression.
 		for colID, ok := predCols.Next(0); ok; colID, ok = predCols.Next(colID + 1) {
 			ord := mb.md.ColumnMeta(colID).Table.ColumnOrdinal(colID)
 			if mb.updateColIDs[ord] != 0 {
@@ -343,6 +346,9 @@ func (h *uniqueCheckHelper) buildInsertionCheck() memo.UniqueChecksItem {
 	if isPartial {
 		pred := h.mb.parseUniqueConstraintPredicateExpr(h.uniqueOrdinal)
 
+		// TODO(mgartner): Use the predicate expression in the table metadata
+		// here, replacing column references with fetch column references,
+		// rather than re-building the expression.
 		typedPred := withScanScope.resolveAndRequireType(pred, types.Bool)
 		withScanPred := h.mb.b.buildScalar(typedPred, withScanScope, nil, nil, nil)
 		semiJoinFilters = append(semiJoinFilters, f.ConstructFiltersItem(withScanPred))

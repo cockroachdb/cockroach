@@ -437,6 +437,12 @@ func (tm *TableMeta) PartialIndexPredicate(ord cat.IndexOrdinal) (pred ScalarExp
 	return pred, true
 }
 
+// PartialIndexPredicatesAdded returns true if partial index predicates have
+// already been added to the table metadata.
+func (tm *TableMeta) PartialIndexPredicatesAdded() bool {
+	return tm.partialIndexPredicates != nil
+}
+
 // PartialIndexPredicatesUnsafe returns the partialIndexPredicates map.
 //
 // WARNING: The returned map is NOT a source-of-truth for determining if an

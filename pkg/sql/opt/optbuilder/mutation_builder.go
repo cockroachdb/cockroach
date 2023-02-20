@@ -59,6 +59,9 @@ type mutationBuilder struct {
 	outScope *scope
 
 	// fetchScope contains the set of columns fetched from the target table.
+	// TODO(mgartner): Get rid of fetchScope once we stop building partial index
+	// predicate expressions with a fetchScope, and reuse the predicate in the
+	// table metadata instead.
 	fetchScope *scope
 
 	// insertExpr is the expression that produces the values which will be

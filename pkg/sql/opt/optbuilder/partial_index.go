@@ -32,6 +32,12 @@ import (
 // scan. A scan and its logical properties are required in order to fully
 // normalize the partial index predicates.
 func (b *Builder) addPartialIndexPredicatesForTable(tabMeta *opt.TableMeta, scan memo.RelExpr) {
+	// Do nothing if partial index predicates have already been added to the
+	// table metadata.
+	if tabMeta.PartialIndexPredicatesAdded() {
+		return
+	}
+
 	// We do not want to track view/function deps here, otherwise a view/function
 	// depending on a table with a partial index predicate using an UDT will
 	// result in a type dependency being added between the view/function and the
@@ -59,10 +65,11 @@ func (b *Builder) addPartialIndexPredicatesForTable(tabMeta *opt.TableMeta, scan
 		return
 	}
 
-	// Construct a scan as the tableScope expr so that logical properties of the
-	// scan can be used to fully normalize the index predicate.
+	// Create a scope that includes all the columns in the table as visible
+	// columns so that write-only and delete-only columns in partial index
+	// predicates can be resolved.
 	tableScope := b.allocScope()
-	tableScope.appendOrdinaryColumnsFromTable(tabMeta, &tabMeta.Alias)
+	tableScope.appendAllColumnsAsVisibleFromTable(tabMeta, &tabMeta.Alias)
 
 	// If the optional scan argument was provided and it outputs all of the
 	// ordinary table columns, we use it as tableScope.expr. Otherwise, we must
@@ -112,16 +119,6 @@ func (b *Builder) addPartialIndexPredicatesForTable(tabMeta *opt.TableMeta, scan
 // buildPartialIndexPredicate builds a memo.FiltersExpr from the given
 // tree.Expr. Virtual computed columns are inlined as their expressions in the
 // resulting filter. Returns an error if any non-immutable operators are found.
-//
-// Note: This function should only be used to build partial index or arbiter
-// predicate expressions that have only a table's ordinary columns in scope and
-// that are not part of the relational expression tree. For example, this is
-// used to populate the partial index predicates map in TableMeta and for
-// determining arbiter indexes in UPSERT and INSERT ON CONFLICT mutations. But
-// it is not used for building synthesized mutation columns that determine
-// whether to issue PUT or DEL operations on a partial index for a mutated row;
-// these synthesized columns are projected as part of the opt expression tree
-// and they can reference columns not part of a table's ordinary columns.
 func (b *Builder) buildPartialIndexPredicate(
 	tabMeta *opt.TableMeta, tableScope *scope, expr tree.Expr, context string,
 ) (memo.FiltersExpr, error) {
