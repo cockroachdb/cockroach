@@ -87,6 +87,8 @@ func (g fixtureTestGen) Tables() []workload.Table {
 
 func TestFixture(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
 
 	// This test is brittle and requires manual intervention to run.
@@ -169,6 +171,7 @@ func TestFixture(t *testing.T) {
 
 func TestImportFixture(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 
@@ -224,6 +227,8 @@ func TestImportFixture(t *testing.T) {
 
 func TestImportFixtureCSVServer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
 	ts := httptest.NewServer(workload.CSVMux(workload.Registered()))
 	defer ts.Close()
