@@ -10,7 +10,14 @@
 
 package rpc
 
-import "github.com/cockroachdb/cockroach/pkg/util/metric"
+import (
+	"github.com/VividCortex/ewma"
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+)
 
 var (
 	// The below gauges store the current state of running heartbeat loops.
@@ -34,8 +41,8 @@ var (
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaHeartbeatLoopsExited = metric.Metadata{
-		Name: "rpc.heartbeats.loops.exited",
+	metaHeartbeatConnectionFailures = metric.Metadata{
+		Name: "rpc.heartbeats.connection_failures",
 		Help: `Counter of failed connections.
 
 This includes both healthy connections that then terminated as well
@@ -46,20 +53,88 @@ Connections that are terminated as part of shutdown are excluded.
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaHeartbeatRoundTripLatency = metric.Metadata{
+		Name:        "rpc.heartbeats.round-trip.latency",
+		Unit:        metric.Unit_NANOSECONDS,
+		Help:        "Moving average of round-trip latencies between nodes.",
+		Measurement: "Latency",
+	}
 )
 
 func makeMetrics() Metrics {
 	return Metrics{
-		HeartbeatLoopsStarted: metric.NewCounter(metaHeartbeatLoopsStarted),
-		HeartbeatLoopsExited:  metric.NewCounter(metaHeartbeatLoopsExited),
-		HeartbeatsNominal:     metric.NewGauge(metaHeartbeatsNominal),
+		HeartbeatLoopsStarted:       aggmetric.NewCounter(metaHeartbeatLoopsStarted, "dst"),
+		HeartbeatConnectionFailures: aggmetric.NewCounter(metaHeartbeatConnectionFailures, "dst"),
+		HeartbeatsNominal:           aggmetric.NewGauge(metaHeartbeatsNominal, "dst"),
+		HeartbeatRoundTripLatency: aggmetric.NewHistogram(metric.HistogramOptions{
+			Mode:     metric.HistogramModePrometheus,
+			Metadata: metaHeartbeatRoundTripLatency,
+			Duration: base.DefaultHistogramWindowInterval(),
+			Buckets:  metric.IOLatencyBuckets,
+		}, "dst"),
 	}
 }
 
 // Metrics is a metrics struct for Context metrics.
 // Field X is documented in metaX.
 type Metrics struct {
-	HeartbeatLoopsStarted *metric.Counter
-	HeartbeatLoopsExited  *metric.Counter
-	HeartbeatsNominal     *metric.Gauge
+	HeartbeatLoopsStarted       *aggmetric.AggCounter
+	HeartbeatConnectionFailures *aggmetric.AggCounter
+	HeartbeatsNominal           *aggmetric.AggGauge
+	HeartbeatRoundTripLatency   *aggmetric.AggHistogram
+
+	mu struct {
+		syncutil.Mutex
+		nm map[roachpb.NodeID]NodeMetrics
+	}
+}
+
+type NodeMetrics struct {
+	HeartbeatLoopsStarted       *aggmetric.Counter
+	HeartbeatConnectionFailures *aggmetric.Counter
+	HeartbeatsNominal           *aggmetric.Gauge
+	HeartbeatRoundTripLatency   struct {
+		*aggmetric.Histogram
+		ma ewma.MovingAverage
+	}
+}
+
+func (m *Metrics) loadNodeMetrics(nodeID roachpb.NodeID) NodeMetrics {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if nm, ok := m.mu.nm[nodeID]; ok {
+		return nm
+	}
+	if m.mu.nm == nil {
+		m.mu.nm = map[roachpb.NodeID]NodeMetrics{}
+	}
+	nm := NodeMetrics{
+		HeartbeatLoopsStarted:       m.HeartbeatLoopsStarted.AddChild(nodeID.String()),
+		HeartbeatConnectionFailures: m.HeartbeatConnectionFailures.AddChild(nodeID.String()),
+		HeartbeatsNominal:           m.HeartbeatsNominal.AddChild(nodeID.String()),
+		HeartbeatRoundTripLatency: struct {
+			*aggmetric.Histogram
+			ma ewma.MovingAverage
+		}{
+			Histogram: m.HeartbeatRoundTripLatency.AddChild(nodeID.String()),
+			ma:        ewma.NewMovingAverage(),
+		},
+	}
+	m.mu.nm[nodeID] = nm
+	return nm
+}
+
+func (m *Metrics) unlinkNodeMetrics(nodeID roachpb.NodeID) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.mu.nm == nil {
+		return
+	}
+	if nm, ok := m.mu.nm[nodeID]; !ok {
+		nm.HeartbeatLoopsStarted.Unlink()
+		nm.HeartbeatConnectionFailures.Unlink()
+		nm.HeartbeatsNominal.Unlink()
+		nm.HeartbeatRoundTripLatency.Unlink()
+		delete(m.mu.nm, nodeID)
+	}
 }
