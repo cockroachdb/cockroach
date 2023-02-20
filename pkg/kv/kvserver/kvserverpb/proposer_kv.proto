@@ -131,7 +131,6 @@ message ReplicatedEvalResult {
   util.hlc.Timestamp write_timestamp = 8 [(gogoproto.nullable) = false];
   // The stats delta corresponding to the data in this WriteBatch. On
   // a split, contains only the contributions to the left-hand side.
-  storage.enginepb.MVCCStats deprecated_delta = 10; // See #18828
   storage.enginepb.MVCCStatsDelta delta = 18 [(gogoproto.nullable) = false];
   ChangeReplicas change_replicas = 12;
 
@@ -230,7 +229,7 @@ message ReplicatedEvalResult {
   // is applied on the new leaseholder through a Raft snapshot.
   kv.kvserver.readsummary.ReadSummary prior_read_summary = 22;
 
-  reserved 1, 5, 7, 9, 14, 15, 16, 19, 10001 to 10013;
+  reserved 1, 5, 7, 9, 10, 14, 15, 16, 19, 10001 to 10013;
 }
 
 // WriteBatch is the serialized representation of a RocksDB write
