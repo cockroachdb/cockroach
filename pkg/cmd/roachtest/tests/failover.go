@@ -14,20 +14,16 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -272,27 +268,9 @@ func runFailoverLiveness(
 	conn := c.Conn(ctx, t.L(), 1)
 	defer conn.Close()
 
-	// Setup the prometheus instance and client. We don't collect metrics from n4
-	// (the failing node) because it's occasionally offline, and StatsCollector
-	// doesn't like it when the time series are missing data points.
-	promCfg := (&prometheus.Config{}).
-		WithCluster(c.Range(1, 3).InstallNodes()).
-		WithPrometheusNode(5)
-
-	require.NoError(t, c.StartGrafana(ctx, t.L(), promCfg))
-	defer func() {
-		if err := c.StopGrafana(ctx, t.L(), t.ArtifactsDir()); err != nil {
-			t.L().ErrorfCtx(ctx, "Error(s) shutting down prom/grafana %s", err)
-		}
-	}()
-
-	promClient, err := clusterstats.SetupCollectorPromClient(ctx, c, t.L(), promCfg)
-	require.NoError(t, err)
-	statsCollector := clusterstats.NewStatsCollector(ctx, promClient)
-
 	// Configure cluster. This test controls the ranges manually.
 	t.Status("configuring cluster")
-	_, err = conn.ExecContext(ctx, `SET CLUSTER SETTING kv.range_split.by_load_enabled = 'false'`)
+	_, err := conn.ExecContext(ctx, `SET CLUSTER SETTING kv.range_split.by_load_enabled = 'false'`)
 	require.NoError(t, err)
 
 	// Constrain all existing zone configs to n1-n3.
@@ -346,7 +324,6 @@ func runFailoverLiveness(
 			`{pgurl:1-3}`)
 		return nil
 	})
-	startTime := timeutil.Now()
 
 	// Start a worker to fail and recover n4.
 	failer.Ready(ctx, m)
@@ -395,33 +372,6 @@ func runFailoverLiveness(
 		return nil
 	})
 	m.Wait()
-
-	// Export roachperf metrics from Prometheus.
-	_, err = statsCollector.Exporter().Export(ctx, c, t, false /* dryRun */, startTime, timeutil.Now(),
-		[]clusterstats.AggQuery{
-			{
-				Stat: clusterstats.ClusterStat{
-					LabelName: "node",
-					Query:     "replicas_leaders_invalid_lease",
-				},
-				Query: "sum(replicas_leaders_invalid_lease)",
-				Tag:   "Invalid Leases",
-			},
-		},
-		func(stats map[string]clusterstats.StatSummary) (string, float64) {
-			summary, ok := stats["replicas_leaders_invalid_lease"]
-			require.True(t, ok, "stat summary for replicas_leaders_invalid_lease not found")
-			var max float64
-			for _, v := range summary.Value {
-				if v > max {
-					max = v
-				}
-			}
-			t.Status(fmt.Sprintf("Max invalid leases: %d", int64(max)))
-			return "Max invalid leases", max
-		},
-	)
-	require.NoError(t, err)
 }
 
 // runFailoverSystemNonLiveness benchmarks the maximum duration of range
@@ -791,7 +741,9 @@ func relocateRanges(
 				_, err := conn.ExecContext(ctx, `ALTER RANGE RELOCATE FROM $1::int TO $2::int FOR `+
 					`SELECT DISTINCT range_id FROM [SHOW CLUSTER RANGES WITH TABLES] WHERE `+where,
 					source, target)
-				require.NoError(t, err)
+				if err != nil {
+					t.Status(fmt.Sprintf("failed to move ranges: %s", err))
+				}
 			}
 			time.Sleep(time.Second)
 		}
@@ -815,9 +767,8 @@ func relocateLeases(t test.Test, ctx context.Context, conn *gosql.DB, predicate 
 		t.Status(fmt.Sprintf("moving %d leases to n%d (%s)", count, to, predicate))
 		_, err := conn.ExecContext(ctx, `ALTER RANGE RELOCATE LEASE TO $1::int FOR `+
 			`SELECT DISTINCT range_id FROM [SHOW CLUSTER RANGES WITH TABLES, DETAILS] WHERE `+where, to)
-		// When a node recovers, it may not have gossiped its store key yet.
-		if err != nil && !strings.Contains(err.Error(), "KeyNotPresentError") {
-			require.NoError(t, err)
+		if err != nil {
+			t.Status(fmt.Sprintf("failed to move leases: %s", err))
 		}
 		time.Sleep(time.Second)
 	}
