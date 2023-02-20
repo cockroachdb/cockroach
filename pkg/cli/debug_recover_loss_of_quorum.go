@@ -80,6 +80,32 @@ func (l *confirmActionFlag) Set(value string) error {
 	return nil
 }
 
+type outputFormatHelper struct {
+	maxPrintedKeyLength uint
+}
+
+func (o outputFormatHelper) formatKey(key roachpb.Key) string {
+	return o.truncateStr(key.String())
+}
+
+func (o outputFormatHelper) formatSpan(span roachpb.Span) string {
+	return o.truncateStr(span.String())
+}
+
+func (o outputFormatHelper) truncateStr(str string) string {
+	if o.maxPrintedKeyLength < 1 || uint(len(str)) <= o.maxPrintedKeyLength {
+		return str
+	}
+	if o.maxPrintedKeyLength > 3 {
+		return str[:o.maxPrintedKeyLength-3] + "..."
+	}
+	return str[:o.maxPrintedKeyLength]
+}
+
+var formatHelper = outputFormatHelper{
+	maxPrintedKeyLength: 80,
+}
+
 // debugRecoverCmd is the root of all recover quorum commands
 var debugRecoverCmd = &cobra.Command{
 	Use:   "recover [command]",
@@ -450,7 +476,7 @@ Discarded live replicas: %d
 	for _, r := range report.PlannedUpdates {
 		_, _ = fmt.Fprintf(stderr, "  range r%d:%s updating replica %s to %s. "+
 			"Discarding available replicas: [%s], discarding dead replicas: [%s].\n",
-			r.RangeID, r.StartKey, r.OldReplica, r.NewReplica,
+			r.RangeID, formatHelper.formatKey(r.StartKey.AsRawKey()), r.OldReplica, r.NewReplica,
 			r.DiscardedAvailableReplicas, r.DiscardedDeadReplicas)
 	}
 
@@ -557,7 +583,7 @@ Discarded live replicas: %d
 	_, _ = fmt.Fprintf(stderr, `Plan created.
 To stage recovery application in half-online mode invoke:
 
-'cockroach debug recover apply-plan %s %s'
+cockroach debug recover apply-plan %s %s
 
 Alternatively distribute plan to below nodes and invoke 'debug recover apply-plan --store=<store-dir> %s' on:
 `, remoteArgs, planFile, planFile)
@@ -670,7 +696,7 @@ func stageRecoveryOntoCluster(
 	_, _ = fmt.Fprintf(stderr, "Proposed changes in plan %s:\n", plan.PlanID)
 	for _, u := range plan.Updates {
 		_, _ = fmt.Fprintf(stderr, "  range r%d:%s updating replica %s to %s on node n%d and discarding all others.\n",
-			u.RangeID, roachpb.Key(u.StartKey), u.OldReplicaID, u.NextReplicaID, u.NodeID())
+			u.RangeID, formatHelper.formatKey(roachpb.Key(u.StartKey)), u.OldReplicaID, u.NextReplicaID, u.NodeID())
 	}
 	_, _ = fmt.Fprintf(stderr, "\nNodes %s will be marked as decommissioned.\n", strutil.JoinIDs("n", plan.DecommissionedNodeIDs))
 
@@ -744,7 +770,7 @@ func stageRecoveryOntoCluster(
 
 To verify recovery status invoke:
 
-'cockroach debug recover verify %s %s'
+cockroach debug recover verify %s %s
 `, strutil.JoinIDs("n", sortedKeys(nodeSet)), remoteArgs, planFile)
 	return nil
 }
@@ -918,7 +944,7 @@ func runDebugVerify(cmd *cobra.Command, args []string) error {
 		_, _ = fmt.Fprintf(stderr, "Unavailable ranges:\n")
 		for _, d := range res.UnavailableRanges.Ranges {
 			_, _ = fmt.Fprintf(stderr, " r%d : %s, key span %s\n",
-				d.RangeID, d.Health.Name(), d.Span)
+				d.RangeID, d.Health.Name(), formatHelper.formatSpan(d.Span))
 		}
 	}
 	if res.UnavailableRanges.Error != "" {

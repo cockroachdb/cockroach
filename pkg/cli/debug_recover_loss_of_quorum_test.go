@@ -760,3 +760,72 @@ func TestUpdatePlanVsClusterDiff(t *testing.T) {
 		})
 	}
 }
+
+func TestTruncateKeyOutput(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	for _, d := range []struct {
+		len    uint
+		result string
+	}{
+		{
+			len:    13,
+			result: "/System/No...",
+		},
+		{
+			len:    30,
+			result: "/System/NodeLiveness",
+		},
+		{
+			len:    3,
+			result: "/Sy",
+		},
+		{
+			len:    4,
+			result: "/...",
+		},
+	} {
+		t.Run("", func(t *testing.T) {
+			helper := outputFormatHelper{
+				maxPrintedKeyLength: d.len,
+			}
+			require.Equal(t, d.result, helper.formatKey(keys.NodeLivenessPrefix))
+		})
+	}
+}
+
+func TestTruncateSpanOutput(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	for _, d := range []struct {
+		len    uint
+		result string
+	}{
+		{
+			len:    30,
+			result: "/System/{NodeLiveness-Syste...",
+		},
+		{
+			len:    90,
+			result: "/System/{NodeLiveness-SystemSpanConfigKeys}",
+		},
+		{
+			len:    3,
+			result: "/Sy",
+		},
+		{
+			len:    4,
+			result: "/...",
+		},
+	} {
+		t.Run("", func(t *testing.T) {
+			helper := outputFormatHelper{
+				maxPrintedKeyLength: d.len,
+			}
+			require.Equal(t, d.result, helper.formatSpan(roachpb.Span{
+				Key:    keys.NodeLivenessPrefix,
+				EndKey: keys.SystemSpanConfigPrefix,
+			}))
+		})
+	}
+}
