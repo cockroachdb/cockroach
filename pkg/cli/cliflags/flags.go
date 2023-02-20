@@ -1877,4 +1877,11 @@ p - prompt interactively for a confirmation
 </PRE>
 `,
 	}
+
+	PrintKeyLength = FlagInfo{
+		Name: "print-key-max-length",
+		Description: `
+Maximum number of characters in printed keys and spans. If key representation
+exceeds this value, it is truncated. Set to 0 to disable truncation.`,
+	}
 )
