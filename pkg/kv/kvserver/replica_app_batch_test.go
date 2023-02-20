@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/redact"
-	"go.etcd.io/raft/v3/raftpb"
 )
 
 func TestAssertNoCmdClosedTimestampRegression(t *testing.T) {
@@ -51,7 +50,7 @@ func TestAssertNoCmdClosedTimestampRegression(t *testing.T) {
 			eng := storage.NewDefaultInMemForTesting()
 			defer eng.Close()
 			cmd := &replicatedCmd{ReplicatedCmd: raftlog.ReplicatedCmd{Entry: &raftlog.Entry{
-				Entry: raftpb.Entry{
+				RaftEntry: raftlog.RaftEntry{
 					Term:  1,
 					Index: 2,
 					Type:  3,
