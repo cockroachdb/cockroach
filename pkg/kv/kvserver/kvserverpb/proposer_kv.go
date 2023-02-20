@@ -73,7 +73,6 @@ func (r *ReplicatedEvalResult) IsTrivial() bool {
 	allowlist := *r
 	allowlist.Delta = enginepb.MVCCStatsDelta{}
 	allowlist.WriteTimestamp = hlc.Timestamp{}
-	allowlist.DeprecatedDelta = nil
 	allowlist.PrevLeaseProposal = nil
 	allowlist.State = nil
 	return allowlist.IsZero()
