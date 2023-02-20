@@ -329,7 +329,7 @@ func (l ImportDataLoader) InitialDataLoad(
 // Specify an explicit empty prefix for crdb_internal to avoid an error if
 // the database we're connected to does not exist.
 const numNodesQuery = `SELECT count(node_id) FROM "".crdb_internal.gossip_liveness`
-const numNodesQuerySQLInstances = `SELECT count(1) FROM system.sql_instances`
+const numNodesQuerySQLInstances = `SELECT count(1) FROM system.sql_instances WHERE addr IS NOT NULL`
 
 func getNodeCount(ctx context.Context, sqlDB *gosql.DB) (int, error) {
 	var numNodes int
