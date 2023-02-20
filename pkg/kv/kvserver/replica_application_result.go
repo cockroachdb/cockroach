@@ -249,6 +249,11 @@ func tryReproposeWithNewLeaseIndex(
 		// will go back to DistSender, so send something it can digest.
 		return kvpb.NewError(r.newNotLeaseHolderError("reproposal failed due to closed timestamp"))
 	}
+
+	if rand.Intn(10) == 5 {
+		return roachpb.NewError(r.newNotLeaseHolderError("reproposal failure injected"))
+	}
+
 	// Some tests check for this log message in the trace.
 	log.VEventf(ctx, 2, "retry: proposalIllegalLeaseIndex")
 
