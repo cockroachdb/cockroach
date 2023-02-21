@@ -1,0 +1,18 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "grafana",
+    srcs = ["dashboards.go"],
+    embedsrcs = [
+        "configs/backup-admission-control-grafana.json",
+        "configs/changefeed-admission-control-grafana.json",
+        "configs/changefeed-roachtest-grafana-dashboard.json",
+        "configs/multi-tenant-fairness-grafana.json",
+        "configs/snapshot-admission-control-grafana.json",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/grafana",
+    visibility = ["//visibility:public"],
+)
+
+get_x_data(name = "get_x_data")
