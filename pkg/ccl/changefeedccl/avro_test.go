@@ -177,7 +177,7 @@ func avroFieldMetadataToColDesc(
 	def := parsed.AST.(*tree.AlterTable).Cmds[0].(*tree.AlterTableAddColumn).ColumnDef
 	ctx := context.Background()
 	semaCtx := makeTestSemaCtx()
-	cdd, err := tabledesc.MakeColumnDefDescs(ctx, def, &semaCtx, evalCtx)
+	cdd, err := tabledesc.MakeColumnDefDescs(ctx, def, &semaCtx, evalCtx, tree.ColumnDefaultExprInAddColumn)
 	if err != nil {
 		return nil, err
 	}

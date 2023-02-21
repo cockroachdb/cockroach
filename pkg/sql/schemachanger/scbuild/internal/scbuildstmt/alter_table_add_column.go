@@ -108,7 +108,7 @@ func alterTableAddColumn(
 				"regional by row partitioning is not supported"))
 		}
 	}
-	cdd, err := tabledesc.MakeColumnDefDescs(b, d, b.SemaCtx(), b.EvalCtx())
+	cdd, err := tabledesc.MakeColumnDefDescs(b, d, b.SemaCtx(), b.EvalCtx(), tree.ColumnDefaultExprInAddColumn)
 	if err != nil {
 		panic(err)
 	}

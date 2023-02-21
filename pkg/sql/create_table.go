@@ -1579,7 +1579,7 @@ func NewTableDesc(
 				return nil, pgerror.Newf(pgcode.Syntax, "virtual columns cannot have family specifications")
 			}
 
-			cdd[i], err = tabledesc.MakeColumnDefDescs(ctx, d, semaCtx, evalCtx)
+			cdd[i], err = tabledesc.MakeColumnDefDescs(ctx, d, semaCtx, evalCtx, tree.ColumnDefaultExprInNewTable)
 			if err != nil {
 				return nil, err
 			}
