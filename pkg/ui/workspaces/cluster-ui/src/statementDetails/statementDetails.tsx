@@ -665,7 +665,8 @@ export class StatementDetails extends React.Component<
     const insightsColumns = makeInsightsColumns(
       isCockroachCloud,
       this.props.hasAdminRole,
-      false,
+      true,
+      true,
     );
     const tableData: InsightRecommendation[] = [];
     if (statementFingerprintInsights) {
