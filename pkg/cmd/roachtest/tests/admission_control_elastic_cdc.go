@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/grafana"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
@@ -50,7 +51,7 @@ func registerElasticControlForCDC(r registry.Registry) {
 			promCfg.WithPrometheusNode(c.Node(workloadNode).InstallNodes()[0]).
 				WithNodeExporter(c.Range(1, c.Spec().NodeCount-1).InstallNodes()).
 				WithCluster(c.Range(1, c.Spec().NodeCount-1).InstallNodes()).
-				WithGrafanaDashboard("http://go.crdb.dev/p/changefeed-admission-control-grafana").
+				WithGrafanaDashboardJSON(grafana.ChangefeedAdmissionControlGrafana).
 				WithScrapeConfigs(
 					prometheus.MakeWorkloadScrapeConfig("workload", "/",
 						makeWorkloadScrapeNodes(
