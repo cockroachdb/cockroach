@@ -95,6 +95,9 @@ type JSON interface {
 	// Size returns the size of the JSON document in bytes.
 	Size() uintptr
 
+	// EncodeForwardIndex implements forward indexing for JSONB values.
+	EncodeForwardIndex(buf []byte, dir encoding.Direction) ([]byte, error)
+
 	// encodeInvertedIndexKeys takes in a key prefix and returns a slice of
 	// inverted index keys, one per path through the receiver.
 	encodeInvertedIndexKeys(b []byte) ([][]byte, error)
@@ -1855,6 +1858,85 @@ func (j jsonObject) FetchValKey(key string) (JSON, error) {
 		return j[i].v, nil
 	}
 	return nil, nil
+}
+
+func (j jsonNull) EncodeForwardIndex(buf []byte, dir encoding.Direction) ([]byte, error) {
+	buf = encoding.EncodeJSONNullKeyMarker(buf, dir)
+	return buf, nil
+}
+
+func (j jsonString) EncodeForwardIndex(buf []byte, dir encoding.Direction) ([]byte, error) {
+	buf = encoding.EncodeJSONStringKeyMarker(buf, dir)
+
+	switch dir {
+	case encoding.Ascending:
+		buf = encoding.EncodeStringAscending(buf, string(j))
+	case encoding.Descending:
+		buf = encoding.EncodeStringDescending(buf, string(j))
+	default:
+		return nil, errors.AssertionFailedf("invalid direction")
+	}
+	buf = encoding.EncodeJSONKeyTerminator(buf, dir)
+	return buf, nil
+}
+
+func (j jsonNumber) EncodeForwardIndex(buf []byte, dir encoding.Direction) ([]byte, error) {
+	buf = encoding.EncodeJSONNumberKeyMarker(buf, dir)
+	var dec = apd.Decimal(j)
+	switch dir {
+	case encoding.Ascending:
+		buf = encoding.EncodeDecimalAscending(buf, &dec)
+	case encoding.Descending:
+		buf = encoding.EncodeDecimalDescending(buf, &dec)
+	default:
+		return nil, errors.AssertionFailedf("invalid direction")
+	}
+	buf = encoding.EncodeJSONKeyTerminator(buf, dir)
+	return buf, nil
+}
+
+func (j jsonFalse) EncodeForwardIndex(buf []byte, dir encoding.Direction) ([]byte, error) {
+	buf = encoding.EncodeJSONFalseKeyMarker(buf, dir)
+	return buf, nil
+}
+
+func (j jsonTrue) EncodeForwardIndex(buf []byte, dir encoding.Direction) ([]byte, error) {
+	buf = encoding.EncodeJSONTrueKeyMarker(buf, dir)
+	return buf, nil
+}
+
+func (j jsonArray) EncodeForwardIndex(buf []byte, dir encoding.Direction) ([]byte, error) {
+	buf = encoding.EncodeJSONArrayKeyMarker(buf, dir)
+	buf = encoding.EncodeJSONValueLength(buf, dir, int64(len(j)))
+
+	var err error
+	for _, a := range j {
+		buf, err = a.EncodeForwardIndex(buf, dir)
+		if err != nil {
+			return nil, err
+		}
+	}
+	buf = encoding.EncodeJSONKeyTerminator(buf, dir)
+	return buf, nil
+}
+
+func (j jsonObject) EncodeForwardIndex(buf []byte, dir encoding.Direction) ([]byte, error) {
+	buf = encoding.EncodeJSONObjectKeyMarker(buf, dir)
+	buf = encoding.EncodeJSONValueLength(buf, dir, int64(len(j)))
+
+	var err error
+	for _, a := range j {
+		buf, err = a.k.EncodeForwardIndex(buf, dir)
+		if err != nil {
+			return nil, err
+		}
+		buf, err = a.v.EncodeForwardIndex(buf, dir)
+		if err != nil {
+			return nil, err
+		}
+	}
+	buf = encoding.EncodeJSONKeyTerminator(buf, dir)
+	return buf, nil
 }
 
 func (jsonNull) FetchValKey(string) (JSON, error)   { return nil, nil }
