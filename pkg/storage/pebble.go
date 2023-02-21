@@ -867,6 +867,7 @@ func ResolveEncryptedEnvOptions(
 }
 
 // NewPebble creates a new Pebble instance, at the specified path.
+// Do not use directly (except in test); use Open instead.
 func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 	if cfg.Settings == nil {
 		return nil, errors.AssertionFailedf("NewPebble requires cfg.Settings to be set")

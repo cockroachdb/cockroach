@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/pebble"
@@ -134,12 +135,48 @@ func CacheSize(size int64) ConfigOption {
 	}
 }
 
+// Caches sets the block and table caches. Useful when multiple stores share
+// the same caches.
+func Caches(cache *pebble.Cache, tableCache *pebble.TableCache) ConfigOption {
+	return func(cfg *engineConfig) error {
+		cfg.Opts.Cache = cache
+		cfg.Opts.TableCache = tableCache
+		return nil
+	}
+}
+
+// BallastSize sets the amount reserved by a ballast file for manual
+// out-of-disk recovery.
+func BallastSize(size int64) ConfigOption {
+	return func(cfg *engineConfig) error {
+		cfg.BallastSize = size
+		return nil
+	}
+}
+
+// SharedStorage enables use of shared storage (experimental).
+func SharedStorage(sharedStorage cloud.ExternalStorage) ConfigOption {
+	return func(cfg *engineConfig) error {
+		cfg.SharedStorage = sharedStorage
+		return nil
+	}
+}
+
 // MaxConcurrentCompactions configures the maximum number of concurrent
 // compactions an Engine will execute.
 func MaxConcurrentCompactions(n int) ConfigOption {
 	return func(cfg *engineConfig) error {
 		cfg.Opts.MaxConcurrentCompactions = func() int { return n }
 		return nil
+	}
+}
+
+// PebbleOptions configures Pebble-specific options in the same format as a
+// Pebble OPTIONS file but treating any whitespace as a newline:
+// (Eg, "[Options] delete_range_flush_delay=2s flush_split_bytes=4096")
+func PebbleOptions(pebbleOptions string, parseHooks *pebble.ParseHooks) ConfigOption {
+	return func(cfg *engineConfig) error {
+		return cfg.Opts.Parse(pebbleOptions, parseHooks)
 	}
 }
 
@@ -224,7 +261,7 @@ func Open(
 			return nil, err
 		}
 	}
-	if cfg.cacheSize != nil {
+	if cfg.cacheSize != nil && cfg.Opts.Cache == nil {
 		cfg.Opts.Cache = pebble.NewCache(*cfg.cacheSize)
 		defer cfg.Opts.Cache.Unref()
 	}
