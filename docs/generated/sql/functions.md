@@ -1260,6 +1260,10 @@ the locality flag on node startup. Returns an error if no region is set.</p>
 <tbody>
 <tr><td><a name="aclexplode"></a><code>aclexplode(aclitems: <a href="string.html">string</a>[]) &rarr; tuple{oid AS grantor, oid AS grantee, string AS privilege_type, bool AS is_grantable}</code></td><td><span class="funcdesc"><p>Produces a virtual table containing aclitem stuff (returns no rows as this feature is unsupported in CockroachDB)</p>
 </span></td><td>Stable</td></tr>
+<tr><td><a name="crdb_internal.ranges_in_span"></a><code>crdb_internal.ranges_in_span(span_keys: <a href="bytes.html">bytes</a>[]) &rarr; tuple{int AS range_id, bytes AS start_key, bytes AS end_key}</code></td><td><span class="funcdesc"><p>Returns ranges (id, start key, end key) within the provided span.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="crdb_internal.ranges_in_span"></a><code>crdb_internal.ranges_in_span(start_key: <a href="bytes.html">bytes</a>, end_key: <a href="bytes.html">bytes</a>) &rarr; tuple{int AS range_id, bytes AS start_key, bytes AS end_key}</code></td><td><span class="funcdesc"><p>Returns ranges (id, start key, end key) within the provided span.</p>
+</span></td><td>Stable</td></tr>
 <tr><td><a name="crdb_internal.scan"></a><code>crdb_internal.scan(span: <a href="bytes.html">bytes</a>[]) &rarr; tuple{bytes AS key, bytes AS value, string AS ts}</code></td><td><span class="funcdesc"><p>Returns the raw keys and values from the specified span</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="crdb_internal.scan"></a><code>crdb_internal.scan(start_key: <a href="bytes.html">bytes</a>, end_key: <a href="bytes.html">bytes</a>) &rarr; tuple{bytes AS key, bytes AS value, string AS ts}</code></td><td><span class="funcdesc"><p>Returns the raw keys and values with their timestamp from the specified span</p>
