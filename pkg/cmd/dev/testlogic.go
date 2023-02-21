@@ -30,6 +30,7 @@ const (
 	showSQLFlag   = "show-sql"
 	noGenFlag     = "no-gen"
 	flexTypesFlag = "flex-types"
+	workmemFlag   = "default-workmem"
 )
 
 func makeTestLogicCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Command {
@@ -63,6 +64,7 @@ func makeTestLogicCmd(runE func(cmd *cobra.Command, args []string) error) *cobra
 	testLogicCmd.Flags().String(testArgsFlag, "", "additional arguments to pass to go test binary")
 	testLogicCmd.Flags().Bool(showDiffFlag, false, "generate a diff for expectation mismatches when possible")
 	testLogicCmd.Flags().Bool(flexTypesFlag, false, "tolerate when a result column is produced with a different numeric type")
+	testLogicCmd.Flags().Bool(workmemFlag, false, "disable randomization of sql.distsql.temp_storage.workmem")
 
 	addCommonBuildFlags(testLogicCmd)
 	return testLogicCmd
@@ -73,24 +75,25 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 	ctx := cmd.Context()
 
 	var (
-		bigtest       = mustGetFlagBool(cmd, bigtestFlag)
-		configs       = mustGetFlagStringSlice(cmd, configsFlag)
-		files         = mustGetFlagString(cmd, filesFlag)
-		ignoreCache   = mustGetFlagBool(cmd, ignoreCacheFlag)
-		rewrite       = mustGetFlagBool(cmd, rewriteFlag)
-		streamOutput  = mustGetFlagBool(cmd, streamOutputFlag)
-		showLogs      = mustGetFlagBool(cmd, showLogsFlag)
-		subtests      = mustGetFlagString(cmd, subtestsFlag)
-		timeout       = mustGetFlagDuration(cmd, timeoutFlag)
-		verbose       = mustGetFlagBool(cmd, vFlag)
-		noGen         = mustGetFlagBool(cmd, noGenFlag)
-		showSQL       = mustGetFlagBool(cmd, showSQLFlag)
-		count         = mustGetFlagInt(cmd, countFlag)
-		stress        = mustGetFlagBool(cmd, stressFlag)
-		stressCmdArgs = mustGetFlagString(cmd, stressArgsFlag)
-		testArgs      = mustGetFlagString(cmd, testArgsFlag)
-		showDiff      = mustGetFlagBool(cmd, showDiffFlag)
-		flexTypes     = mustGetFlagBool(cmd, flexTypesFlag)
+		bigtest        = mustGetFlagBool(cmd, bigtestFlag)
+		configs        = mustGetFlagStringSlice(cmd, configsFlag)
+		files          = mustGetFlagString(cmd, filesFlag)
+		ignoreCache    = mustGetFlagBool(cmd, ignoreCacheFlag)
+		rewrite        = mustGetFlagBool(cmd, rewriteFlag)
+		streamOutput   = mustGetFlagBool(cmd, streamOutputFlag)
+		showLogs       = mustGetFlagBool(cmd, showLogsFlag)
+		subtests       = mustGetFlagString(cmd, subtestsFlag)
+		timeout        = mustGetFlagDuration(cmd, timeoutFlag)
+		verbose        = mustGetFlagBool(cmd, vFlag)
+		noGen          = mustGetFlagBool(cmd, noGenFlag)
+		showSQL        = mustGetFlagBool(cmd, showSQLFlag)
+		count          = mustGetFlagInt(cmd, countFlag)
+		stress         = mustGetFlagBool(cmd, stressFlag)
+		stressCmdArgs  = mustGetFlagString(cmd, stressArgsFlag)
+		testArgs       = mustGetFlagString(cmd, testArgsFlag)
+		showDiff       = mustGetFlagBool(cmd, showDiffFlag)
+		flexTypes      = mustGetFlagBool(cmd, flexTypesFlag)
+		defaultWorkmem = mustGetFlagBool(cmd, workmemFlag)
 	)
 	if rewrite {
 		ignoreCache = true
@@ -230,6 +233,9 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 	}
 	if flexTypes {
 		args = append(args, "--test_arg", "-flex-types")
+	}
+	if defaultWorkmem {
+		args = append(args, "--test_arg", "-default-workmem")
 	}
 
 	if rewrite {

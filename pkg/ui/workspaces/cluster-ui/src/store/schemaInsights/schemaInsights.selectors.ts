@@ -24,7 +24,7 @@ export const selectSchemaInsights = createSelector(
   selectSchemaInsightState,
   schemaInsightState => {
     if (!schemaInsightState.data) return null;
-    return schemaInsightState.data;
+    return schemaInsightState.data?.results;
   },
 );
 
@@ -33,6 +33,14 @@ export const selectSchemaInsightsError = createSelector(
   schemaInsightState => {
     if (!schemaInsightState) return null;
     return schemaInsightState.lastError;
+  },
+);
+
+export const selectSchemaInsightsMaxApiSizeReached = createSelector(
+  selectSchemaInsightState,
+  schemaInsightState => {
+    if (!schemaInsightState.data) return false;
+    return schemaInsightState.data?.maxSizeReached;
   },
 );
 

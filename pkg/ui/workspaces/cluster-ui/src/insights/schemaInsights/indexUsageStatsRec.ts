@@ -39,19 +39,15 @@ export function recommendDropUnusedIndex(
     return { recommend: true, reason: indexNeverUsedReason };
   }
 
-  const duration = moment.duration(moment().diff(lastActive));
   const unusedThreshold = moment.duration(
     "PT" + clusterIndexUsageStat.unused_threshold.toUpperCase(),
   );
-  if (duration >= unusedThreshold) {
-    return {
-      recommend: true,
-      reason: `This index has not been used in over ${formatMomentDuration(
-        unusedThreshold,
-      )} and can be removed for better write performance.`,
-    };
-  }
-  return { recommend: false, reason: "" };
+  return {
+    recommend: true,
+    reason: `This index has not been used in over ${formatMomentDuration(
+      unusedThreshold,
+    )} and can be removed for better write performance.`,
+  };
 }
 
 export function formatMomentDuration(duration: moment.Duration): string {

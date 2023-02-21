@@ -577,6 +577,9 @@ var (
 		"declarative-corpus", "",
 		"enables generation and storage of a declarative schema changer	corpus",
 	)
+	defaultWorkmem = flag.Bool("default-workmem", false,
+		"disable randomization of sql.distsql.temp_storage.workmem",
+	)
 	// globalMVCCRangeTombstone will write a global MVCC range tombstone across
 	// the entire user keyspace during cluster bootstrapping. This should not
 	// semantically affect the test data written above it, but will activate MVCC
@@ -4120,6 +4123,10 @@ func RunLogicTest(
 				t.Fatalf("failed writing decalarative schema changer corpus: %v", err)
 			}
 		}()
+	}
+
+	if *defaultWorkmem {
+		serverArgs.DisableWorkmemRandomization = true
 	}
 
 	rng, _ := randutil.NewTestRand()
