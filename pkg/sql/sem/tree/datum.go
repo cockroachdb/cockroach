@@ -3612,6 +3612,40 @@ func NewDJSON(j json.JSON) *DJSON {
 	return &DJSON{j}
 }
 
+// DJSON implements the CompositeDatum interface
+func (d *DJSON) IsComposite() bool {
+	switch d.JSON.Type() {
+	case json.NumberJSONType:
+		dec, _ := d.JSON.AsDecimal()
+		DDec := DDecimal{Decimal: *dec}
+		return DDec.IsComposite()
+	case json.ArrayJSONType:
+		jsonArray, _ := d.AsArray()
+		for _, elem := range jsonArray {
+			dJsonVal := DJSON{elem}
+			if dJsonVal.IsComposite() {
+				return true
+			}
+		}
+	case json.ObjectJSONType:
+		if it, _ := d.ObjectIter(); it != nil {
+			for it.Next() {
+				keyJSON, err := json.MakeJSON(it.Key())
+				keyDJSON := DJSON{keyJSON}
+				if err != nil {
+					panic("could not create a JSON " +
+						"object from the key")
+				}
+				valDJSON := NewDJSON(it.Value())
+				if valDJSON.IsComposite() || keyDJSON.IsComposite() {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
 // ParseDJSON takes a string of JSON and returns a DJSON value.
 func ParseDJSON(s string) (Datum, error) {
 	j, err := json.ParseJSON(s)
