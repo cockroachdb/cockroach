@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -117,13 +118,13 @@ func Decode(
 		d, err := a.NewDCollatedString(r, valType.Locale())
 		return d, rkey, err
 	case types.JsonFamily:
-		// Don't attempt to decode the JSON value. Instead, just return the
-		// remaining bytes of the key.
-		jsonLen, err := encoding.PeekLength(key)
+		var json json.JSON
+		json, rkey, err = decodeJSONKey(key, dir)
 		if err != nil {
 			return nil, nil, err
 		}
-		return tree.DNull, key[jsonLen:], nil
+		d := a.NewDJSON(tree.DJSON{JSON: json})
+		return d, rkey, err
 	case types.BytesFamily:
 		var r []byte
 		if dir == encoding.Ascending {

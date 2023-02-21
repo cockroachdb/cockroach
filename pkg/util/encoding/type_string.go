@@ -36,11 +36,25 @@ func _() {
 	_ = x[Void-25]
 	_ = x[TSQuery-26]
 	_ = x[TSVector-27]
+	_ = x[JSONNull-28]
+	_ = x[JSONNullDesc-29]
+	_ = x[JSONString-30]
+	_ = x[JSONStringDesc-31]
+	_ = x[JSONNumber-32]
+	_ = x[JSONNumberDesc-33]
+	_ = x[JSONFalse-34]
+	_ = x[JSONFalseDesc-35]
+	_ = x[JSONTrue-36]
+	_ = x[JSONTrueDesc-37]
+	_ = x[JSONArray-38]
+	_ = x[JSONArrayDesc-39]
+	_ = x[JSONObject-40]
+	_ = x[JSONObjectDesc-41]
 }
 
-const _Type_name = "UnknownNullNotNullIntFloatDecimalBytesBytesDescTimeDurationTrueFalseUUIDArrayIPAddrJSONTupleBitArrayBitArrayDescTimeTZGeoGeoDescArrayKeyAscArrayKeyDescBox2DVoidTSQueryTSVector"
+const _Type_name = "UnknownNullNotNullIntFloatDecimalBytesBytesDescTimeDurationTrueFalseUUIDArrayIPAddrJSONTupleBitArrayBitArrayDescTimeTZGeoGeoDescArrayKeyAscArrayKeyDescBox2DVoidTSQueryTSVectorJSONNullJSONNullDescJSONStringJSONStringDescJSONNumberJSONNumberDescJSONFalseJSONFalseDescJSONTrueJSONTrueDescJSONArrayJSONArrayDescJSONObjectJSONObjectDesc"
 
-var _Type_index = [...]uint8{0, 7, 11, 18, 21, 26, 33, 38, 47, 51, 59, 63, 68, 72, 77, 83, 87, 92, 100, 112, 118, 121, 128, 139, 151, 156, 160, 167, 175}
+var _Type_index = [...]uint16{0, 7, 11, 18, 21, 26, 33, 38, 47, 51, 59, 63, 68, 72, 77, 83, 87, 92, 100, 112, 118, 121, 128, 139, 151, 156, 160, 167, 175, 183, 195, 205, 219, 229, 243, 252, 265, 273, 285, 294, 307, 317, 331}
 
 func (i Type) String() string {
 	if i < 0 || i >= Type(len(_Type_index)-1) {
