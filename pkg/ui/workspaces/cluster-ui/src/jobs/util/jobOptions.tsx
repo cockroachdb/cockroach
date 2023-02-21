@@ -33,12 +33,8 @@ export function jobToVisual(job: Job): JobStatusVisual {
       return JobStatusVisual.BadgeWithErrorMessage;
     case JOB_STATUS_RUNNING:
       return JobStatusVisual.ProgressBarWithDuration;
-    case JOB_STATUS_RETRY_RUNNING:
-      return JobStatusVisual.ProgressBarWithDuration;
     case JOB_STATUS_PENDING:
       return JobStatusVisual.BadgeWithMessage;
-    case JOB_STATUS_RETRY_REVERTING:
-      return JobStatusVisual.BadgeWithRetrying;
     case JOB_STATUS_CANCELED:
     case JOB_STATUS_CANCEL_REQUESTED:
     case JOB_STATUS_PAUSED:
@@ -59,19 +55,12 @@ export const JOB_STATUS_CANCEL_REQUESTED = "cancel-requested";
 export const JOB_STATUS_PAUSED = "paused";
 export const JOB_STATUS_PAUSE_REQUESTED = "paused-requested";
 export const JOB_STATUS_RUNNING = "running";
-export const JOB_STATUS_RETRY_RUNNING = "retry-running";
 export const JOB_STATUS_PENDING = "pending";
 export const JOB_STATUS_REVERTING = "reverting";
 export const JOB_STATUS_REVERT_FAILED = "revert-failed";
-export const JOB_STATUS_RETRY_REVERTING = "retry-reverting";
 
-export function isRetrying(status: string): boolean {
-  return [JOB_STATUS_RETRY_RUNNING, JOB_STATUS_RETRY_REVERTING].includes(
-    status,
-  );
-}
 export function isRunning(status: string): boolean {
-  return [JOB_STATUS_RUNNING, JOB_STATUS_RETRY_RUNNING].includes(status);
+  return status.includes(JOB_STATUS_RUNNING, JOB_STATUS_REVERTING);
 }
 export function isTerminalState(status: string): boolean {
   return [JOB_STATUS_SUCCEEDED, JOB_STATUS_FAILED].includes(status);
@@ -79,15 +68,27 @@ export function isTerminalState(status: string): boolean {
 
 export const statusOptions = [
   { value: "", name: "All" },
-  { value: "succeeded", name: "Succeeded" },
-  { value: "failed", name: "Failed" },
-  { value: "paused", name: "Paused" },
-  { value: "canceled", name: "Canceled" },
-  { value: "running", name: "Running" },
-  { value: "pending", name: "Pending" },
-  { value: "reverting", name: "Reverting" },
-  { value: "retrying", name: "Retrying" },
+  { value: JOB_STATUS_SUCCEEDED, name: "Succeeded" },
+  { value: JOB_STATUS_FAILED, name: "Failed" },
+  { value: JOB_STATUS_PAUSED, name: "Paused" },
+  { value: JOB_STATUS_PAUSE_REQUESTED, name: "Pause Requested" },
+  { value: JOB_STATUS_CANCELED, name: "Canceled" },
+  { value: JOB_STATUS_CANCEL_REQUESTED, name: "Cancel Requested" },
+  { value: JOB_STATUS_RUNNING, name: "Running" },
+  { value: JOB_STATUS_PENDING, name: "Pending" },
+  { value: JOB_STATUS_REVERTING, name: "Reverting" },
+  { value: JOB_STATUS_REVERT_FAILED, name: "Revert Failed" },
 ];
+
+const ALL_JOB_STATUSES = new Set(statusOptions.map(option => option.value));
+
+/**
+ * @param jobStatus job status - any string
+ * @returns Returns true if the job status string is a valid status.
+ */
+export function isValidJobStatus(jobStatus: string): boolean {
+  return ALL_JOB_STATUSES.has(jobStatus);
+}
 
 export function jobHasOneOfStatuses(job: Job, ...statuses: string[]): boolean {
   return statuses.indexOf(job.status) !== -1;
@@ -110,19 +111,8 @@ export const jobStatusToBadgeStatus = (status: string): BadgeStatus => {
     case JOB_STATUS_PAUSED:
     case JOB_STATUS_PAUSE_REQUESTED:
     case JOB_STATUS_REVERTING:
-    case JOB_STATUS_RETRY_REVERTING:
     default:
       return "default";
-  }
-};
-export const jobStatusToBadgeText = (status: string): string => {
-  switch (status) {
-    case JOB_STATUS_RETRY_REVERTING:
-      return JOB_STATUS_REVERTING;
-    case JOB_STATUS_RETRY_RUNNING:
-      return JOB_STATUS_RUNNING;
-    default:
-      return status;
   }
 };
 
@@ -215,6 +205,10 @@ export const typeOptions = [
     key: jobTypeKeys[JobType.ROW_LEVEL_TTL],
   },
 ];
+
+export function isValidJobType(jobType: number): boolean {
+  return jobType >= 0 && jobType < jobTypeKeys.length;
+}
 
 export const showOptions = [
   { value: "50", name: "Latest 50" },
