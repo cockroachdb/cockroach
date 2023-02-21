@@ -13,6 +13,23 @@ SELECT clock_timestamp()::timestamp::string
 wait-until-high-watermark ts=$start
 ----
 
+# The job description should be redacted.
+#
+# The substring business in this test is to extract the hostname which has a random port it in.
+exec-sql as=destination-system
+CREATE FUNCTION strip_host(s string) returns string language sql AS $$ select concat(substring(s FOR position('@' IN s)), substring(s FROM position('?' IN s))) $$
+----
+
+query-sql as=destination-system
+SELECT strip_host(description) FROM [SHOW JOBS] WHERE job_type='STREAM INGESTION'
+----
+CREATE TENANT destination FROM REPLICATION OF source ON 'postgres://root@?sslcert=redacted&sslkey=redacted&sslmode=verify-full&sslrootcert=redacted'
+
+query-sql as=destination-system
+SELECT strip_host(source_cluster_uri) FROM [SHOW TENANT destination WITH REPLICATION STATUS]
+----
+postgres://root@?sslcert=redacted&sslkey=redacted&sslmode=verify-full&sslrootcert=redacted
+
 exec-sql as=source-tenant
 CREATE TABLE d.x (id INT PRIMARY KEY, n INT);
 ----
