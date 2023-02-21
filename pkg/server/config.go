@@ -672,14 +672,19 @@ func (e *Engines) Close() {
 
 // CreateEngines creates Engines based on the specs in cfg.Stores.
 func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
-	engines := Engines(nil)
+	var engines Engines
 	defer engines.Close()
 
 	if cfg.enginesCreated {
 		return Engines{}, errors.Errorf("engines already created")
 	}
 	cfg.enginesCreated = true
-	details := []redact.RedactableString{redact.Sprintf("Pebble cache size: %s", humanizeutil.IBytes(cfg.CacheSize))}
+
+	var details []redact.RedactableString
+	detail := func(msg redact.RedactableString) {
+		details = append(details, msg)
+	}
+	detail(redact.Sprintf("Pebble cache size: %s", humanizeutil.IBytes(cfg.CacheSize)))
 	pebbleCache := pebble.NewCache(cfg.CacheSize)
 	defer pebbleCache.Unref()
 
@@ -710,6 +715,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 	log.Event(ctx, "initializing engines")
 
 	var tableCache *pebble.TableCache
+	// TODO(radu): use the tableCache for in-memory stores as well.
 	if physicalStores > 0 {
 		perStoreLimit := pebble.TableCacheSize(int(openFileLimitPerStore))
 		totalFileLimit := perStoreLimit * physicalStores
@@ -723,8 +729,44 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 
 	for i, spec := range cfg.Stores.Specs {
 		log.Eventf(ctx, "initializing %+v", spec)
-		var sizeInBytes = spec.Size.InBytes
+
+		if spec.InMemory && spec.StickyInMemoryEngineID != "" {
+			if cfg.TestingKnobs.Server == nil {
+				return Engines{}, errors.AssertionFailedf("Could not create a sticky " +
+					"engine no server knobs available to get a registry. " +
+					"Please use Knobs.Server.StickyEngineRegistry to provide one.")
+			}
+			knobs := cfg.TestingKnobs.Server.(*TestingKnobs)
+			if knobs.StickyEngineRegistry == nil {
+				return Engines{}, errors.Errorf("Could not create a sticky " +
+					"engine no registry available. Please use " +
+					"Knobs.Server.StickyEngineRegistry to provide one.")
+			}
+			eng, err := knobs.StickyEngineRegistry.GetOrCreateStickyInMemEngine(ctx, cfg, spec)
+			if err != nil {
+				return Engines{}, err
+			}
+			detail(redact.Sprintf("store %d: %+v", i, eng.Properties()))
+			engines = append(engines, eng)
+			continue
+		}
+
+		var location storage.Location
+		storageConfigOpts := []storage.ConfigOption{
+			storage.Attributes(spec.Attributes),
+			storage.EncryptionAtRest(spec.EncryptionOptions),
+			storage.If(storeKnobs.SmallEngineBlocks, storage.BlockSize(1)),
+		}
+		if len(storeKnobs.EngineKnobs) > 0 {
+			storageConfigOpts = append(storageConfigOpts, storeKnobs.EngineKnobs...)
+		}
+		addCfgOpt := func(opt storage.ConfigOption) {
+			storageConfigOpts = append(storageConfigOpts, opt)
+		}
+
 		if spec.InMemory {
+			location = storage.InMemory()
+			var sizeInBytes = spec.Size.InBytes
 			if spec.Size.Percent > 0 {
 				sysMem, err := status.GetTotalMemory(ctx)
 				if err != nil {
@@ -736,48 +778,12 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				return Engines{}, errors.Errorf("%f%% of memory is only %s bytes, which is below the minimum requirement of %s",
 					spec.Size.Percent, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
 			}
-			details = append(details, redact.Sprintf("store %d: in-memory, size %s",
-				i, humanizeutil.IBytes(sizeInBytes)))
-			if spec.StickyInMemoryEngineID != "" {
-				if cfg.TestingKnobs.Server == nil {
-					return Engines{}, errors.AssertionFailedf("Could not create a sticky " +
-						"engine no server knobs available to get a registry. " +
-						"Please use Knobs.Server.StickyEngineRegistry to provide one.")
-				}
-				knobs := cfg.TestingKnobs.Server.(*TestingKnobs)
-				if knobs.StickyEngineRegistry == nil {
-					return Engines{}, errors.Errorf("Could not create a sticky " +
-						"engine no registry available. Please use " +
-						"Knobs.Server.StickyEngineRegistry to provide one.")
-				}
-				e, err := knobs.StickyEngineRegistry.GetOrCreateStickyInMemEngine(ctx, cfg, spec)
-				if err != nil {
-					return Engines{}, err
-				}
-				details = append(details, redact.Sprintf("store %d: %+v", i, e.Properties()))
-				engines = append(engines, e)
-			} else {
-				storageConfigs := []storage.ConfigOption{
-					storage.Attributes(spec.Attributes),
-					storage.CacheSize(cfg.CacheSize),
-					storage.MaxSize(sizeInBytes),
-					storage.EncryptionAtRest(spec.EncryptionOptions),
-					storage.If(storeKnobs.SmallEngineBlocks, storage.BlockSize(1)),
-				}
-				if len(storeKnobs.EngineKnobs) > 0 {
-					storageConfigs = append(storageConfigs, storeKnobs.EngineKnobs...)
-				}
-				e, err := storage.Open(ctx,
-					storage.InMemory(),
-					cfg.Settings,
-					storageConfigs...,
-				)
-				if err != nil {
-					return Engines{}, err
-				}
-				engines = append(engines, e)
-			}
+			addCfgOpt(storage.MaxSize(sizeInBytes))
+			addCfgOpt(storage.CacheSize(cfg.CacheSize))
+
+			detail(redact.Sprintf("store %d: in-memory, size %s", i, humanizeutil.IBytes(sizeInBytes)))
 		} else {
+			location = storage.Filesystem(spec.Path)
 			if err := vfs.Default.MkdirAll(spec.Path, 0755); err != nil {
 				return Engines{}, errors.Wrap(err, "creating store directory")
 			}
@@ -785,6 +791,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			if err != nil {
 				return Engines{}, errors.Wrap(err, "retrieving disk usage")
 			}
+			var sizeInBytes = spec.Size.InBytes
 			if spec.Size.Percent > 0 {
 				sizeInBytes = int64(float64(du.TotalBytes) * spec.Size.Percent / 100)
 			}
@@ -793,36 +800,20 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 					spec.Size.Percent, spec.Path, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
 			}
 
-			details = append(details, redact.Sprintf("store %d: max size %s, max open file limit %d",
-				i, humanizeutil.IBytes(sizeInBytes), openFileLimitPerStore))
+			detail(redact.Sprintf("store %d: max size %s, max open file limit %d", i, humanizeutil.IBytes(sizeInBytes), openFileLimitPerStore))
 
-			storageConfig := base.StorageConfig{
-				Attrs:             spec.Attributes,
-				Dir:               spec.Path,
-				MaxSize:           sizeInBytes,
-				BallastSize:       storage.BallastSizeBytes(spec, du),
-				Settings:          cfg.Settings,
-				UseFileRegistry:   spec.UseFileRegistry,
-				EncryptionOptions: spec.EncryptionOptions,
-			}
-			pebbleConfig := storage.PebbleConfig{
-				StorageConfig: storageConfig,
-				Opts:          storage.DefaultPebbleOptions(),
-				SharedStorage: sharedStorage,
-			}
-			pebbleConfig.Opts.Cache = pebbleCache
-			pebbleConfig.Opts.TableCache = tableCache
-			pebbleConfig.Opts.MaxOpenFiles = int(openFileLimitPerStore)
-			pebbleConfig.Opts.Experimental.MaxWriterConcurrency = 2
-			if storeKnobs.SmallEngineBlocks {
-				for i := range pebbleConfig.Opts.Levels {
-					pebbleConfig.Opts.Levels[i].BlockSize = 1
-					pebbleConfig.Opts.Levels[i].IndexBlockSize = 1
-				}
+			addCfgOpt(storage.MaxSize(sizeInBytes))
+			addCfgOpt(storage.BallastSize(sizeInBytes))
+			addCfgOpt(storage.Caches(pebbleCache, tableCache))
+			// TODO(radu): move up all remaining settings below so they apply to in-memory stores as well.
+			addCfgOpt(storage.MaxOpenFiles(int(openFileLimitPerStore)))
+			addCfgOpt(storage.MaxWriterConcurrency(2))
+			if sharedStorage != nil {
+				addCfgOpt(storage.SharedStorage(sharedStorage))
 			}
 			// If the spec contains Pebble options, set those too.
-			if len(spec.PebbleOptions) > 0 {
-				err := pebbleConfig.Opts.Parse(spec.PebbleOptions, &pebble.ParseHooks{
+			if spec.PebbleOptions != "" {
+				addCfgOpt(storage.PebbleOptions(spec.PebbleOptions, &pebble.ParseHooks{
 					NewFilterPolicy: func(name string) (pebble.FilterPolicy, error) {
 						switch name {
 						case "none":
@@ -832,21 +823,18 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 						}
 						return nil, nil
 					},
-				})
-				if err != nil {
-					return nil, err
-				}
+				}))
 			}
 			if len(spec.RocksDBOptions) > 0 {
 				return nil, errors.Errorf("store %d: using Pebble storage engine but StoreSpec provides RocksDB options", i)
 			}
-			eng, err := storage.NewPebble(ctx, pebbleConfig)
-			if err != nil {
-				return Engines{}, err
-			}
-			details = append(details, redact.Sprintf("store %d: %+v", i, eng.Properties()))
-			engines = append(engines, eng)
 		}
+		eng, err := storage.Open(ctx, location, cfg.Settings, storageConfigOpts...)
+		if err != nil {
+			return Engines{}, err
+		}
+		detail(redact.Sprintf("store %d: %+v", i, eng.Properties()))
+		engines = append(engines, eng)
 	}
 
 	if tableCache != nil {
@@ -861,6 +849,8 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 	for _, s := range details {
 		log.Infof(ctx, "%v", s)
 	}
+
+	// Clear out engines because we have deferred engines.Close().
 	enginesCopy := engines
 	engines = nil
 	return enginesCopy, nil

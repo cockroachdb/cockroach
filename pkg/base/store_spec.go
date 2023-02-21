@@ -262,8 +262,10 @@ type StoreSpec struct {
 	// separated key-value syntax ("key1=value1; key2=value2").
 	RocksDBOptions string
 	// PebbleOptions contains Pebble-specific options in the same format as a
-	// Pebble OPTIONS file but treating any whitespace as a newline:
-	// (Eg, "[Options] delete_range_flush_delay=2s flush_split_bytes=4096")
+	// Pebble OPTIONS file. For example:
+	// [Options]
+	// delete_range_flush_delay=2s
+	// flush_split_bytes=4096
 	PebbleOptions string
 	// EncryptionOptions is a serialized protobuf set by Go CCL code and passed
 	// through to C CCL code to set up encryption-at-rest.  Must be set if and
