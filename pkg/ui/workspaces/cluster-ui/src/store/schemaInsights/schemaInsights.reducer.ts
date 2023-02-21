@@ -12,9 +12,10 @@ import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { DOMAIN_NAME, noopReducer } from "../utils";
 import moment, { Moment } from "moment";
 import { InsightRecommendation } from "../../insights";
+import { SqlApiResponse } from "src/api";
 
 export type SchemaInsightsState = {
-  data: InsightRecommendation[];
+  data: SqlApiResponse<InsightRecommendation[]>;
   lastUpdated: Moment;
   lastError: Error;
   valid: boolean;
@@ -31,7 +32,10 @@ const schemaInsightsSlice = createSlice({
   name: `${DOMAIN_NAME}/schemaInsightsSlice`,
   initialState,
   reducers: {
-    received: (state, action: PayloadAction<InsightRecommendation[]>) => {
+    received: (
+      state,
+      action: PayloadAction<SqlApiResponse<InsightRecommendation[]>>,
+    ) => {
       state.data = action.payload;
       state.valid = true;
       state.lastError = null;

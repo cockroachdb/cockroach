@@ -566,7 +566,9 @@ export interface APIReducersState {
   txnInsights: CachedDataReducerState<
     clusterUiApi.SqlApiResponse<TxnInsightEvent[]>
   >;
-  schemaInsights: CachedDataReducerState<clusterUiApi.InsightRecommendation[]>;
+  schemaInsights: CachedDataReducerState<
+    clusterUiApi.SqlApiResponse<clusterUiApi.InsightRecommendation[]>
+  >;
   statementFingerprintInsights: KeyedCachedDataReducerState<
     clusterUiApi.SqlApiResponse<StmtInsightEvent[]>
   >;
