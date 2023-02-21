@@ -25,6 +25,9 @@ const (
 	requestUnionOverhead      = int64(unsafe.Sizeof(roachpb.RequestUnion{}))
 	requestOverhead           = int64(unsafe.Sizeof(roachpb.RequestUnion_Get{}) +
 		unsafe.Sizeof(roachpb.GetRequest{}))
+	responseUnionOverhead = int64(unsafe.Sizeof(roachpb.ResponseUnion_Get{}))
+	getResponseOverhead   = int64(unsafe.Sizeof(roachpb.GetResponse{}))
+	scanResponseOverhead  = int64(unsafe.Sizeof(roachpb.ScanResponse{}))
 )
 
 var zeroInt32Slice []int32
@@ -34,6 +37,10 @@ func init() {
 		unsafe.Sizeof(roachpb.ScanRequest{}))
 	if requestOverhead != scanRequestOverhead {
 		panic("GetRequest and ScanRequest have different overheads")
+	}
+	scanResponseUnionOverhead := int64(unsafe.Sizeof(roachpb.ResponseUnion_Scan{}))
+	if responseUnionOverhead != scanResponseUnionOverhead {
+		panic("ResponseUnion_Get and ResponseUnion_Scan have different overheads")
 	}
 	zeroInt32Slice = make([]int32, 1<<10)
 }
