@@ -105,7 +105,7 @@ func newSQLStats(
 }
 
 // GetTotalFingerprintCount returns total number of unique statement and
-// transaction fingerprints stored in the currnet SQLStats.
+// transaction fingerprints stored in the current SQLStats.
 func (s *SQLStats) GetTotalFingerprintCount() int64 {
 	return atomic.LoadInt64(&s.atomic.uniqueStmtFingerprintCount) + atomic.LoadInt64(&s.atomic.uniqueTxnFingerprintCount)
 }
@@ -189,4 +189,9 @@ func (s *SQLStats) resetAndMaybeDumpStats(ctx context.Context, target Sink) (err
 	s.mu.lastReset = timeutil.Now()
 
 	return err
+}
+
+// GetClusterSettings returns the cluster settings.
+func (s *SQLStats) GetClusterSettings() *cluster.Settings {
+	return s.st
 }
