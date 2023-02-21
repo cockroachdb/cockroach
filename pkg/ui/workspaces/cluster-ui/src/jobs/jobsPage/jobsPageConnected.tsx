@@ -43,8 +43,8 @@ const mapStateToProps = (
   const columns = selectColumns(state);
   const jobsState = selectJobsState(state);
   const jobs = jobsState ? jobsState.data : null;
-  const jobsLoading = jobsState ? jobsState.inFlight : false;
   const jobsError = jobsState ? jobsState.lastError : null;
+  const lastUpdated = jobsState?.lastUpdated;
   return {
     sort,
     status,
@@ -52,13 +52,16 @@ const mapStateToProps = (
     type,
     columns,
     jobs,
-    jobsLoading,
+    reqInFlight: jobsState?.inFlight,
+    isDataValid: jobsState?.valid,
     jobsError,
+    lastUpdated,
   };
 };
 
 const mapDispatchToProps = (dispatch: Dispatch): JobsPageDispatchProps => ({
   setShow: (showValue: string) => {
+    dispatch(jobsActions.invalidated());
     dispatch(
       localStorageActions.update({
         key: "showSetting/JobsPage",
@@ -83,6 +86,7 @@ const mapDispatchToProps = (dispatch: Dispatch): JobsPageDispatchProps => ({
     );
   },
   setStatus: (statusValue: string) => {
+    dispatch(jobsActions.invalidated());
     dispatch(
       localStorageActions.update({
         key: "statusSetting/JobsPage",
@@ -91,6 +95,7 @@ const mapDispatchToProps = (dispatch: Dispatch): JobsPageDispatchProps => ({
     );
   },
   setType: (jobValue: number) => {
+    dispatch(jobsActions.invalidated());
     dispatch(
       localStorageActions.update({
         key: "typeSetting/JobsPage",
