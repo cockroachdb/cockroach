@@ -583,6 +583,12 @@ ALTER TABLE test_tbl_t ADD COLUMN c int DEFAULT (test_tbl_f());
 statement error pq: unimplemented: usage of user-defined function from relations not supported
 ALTER TABLE test_tbl_t ADD COLUMN c int ON UPDATE (test_tbl_f());
 
+statement error pq: unimplemented: usage of user-defined function from relations not supported
+ALTER TABLE test_tbl_t ALTER COLUMN b SET DEFAULT (test_tbl_f());
+
+statement error pq: unimplemented: usage of user-defined function from relations not supported
+ALTER TABLE test_tbl_t ALTER COLUMN b SET ON UPDATE (test_tbl_f());
+
 subtest disallow_udf_in_views_and_udf
 
 statement ok
