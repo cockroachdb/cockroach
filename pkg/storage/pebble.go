@@ -1067,8 +1067,14 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		}
 		opts.ErrorIfNotExists = true
 	} else {
-		if opts.ErrorIfNotExists {
-			return nil, errors.Errorf("pebble: database %q does not exist", cfg.StorageConfig.Dir)
+		if opts.ErrorIfNotExists || opts.ReadOnly {
+			// Make sure the message is not confusing if the store does exist but
+			// there is no min version file.
+			filename := unencryptedFS.PathJoin(cfg.Dir, MinVersionFilename)
+			return nil, errors.Errorf(
+				"pebble: database %q does not exist (missing required file %q)",
+				cfg.StorageConfig.Dir, filename,
+			)
 		}
 		// If there is no min version file, there should be no store. If there is
 		// one, it's either 1) a store from a very old version (which we don't want
