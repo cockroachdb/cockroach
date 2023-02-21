@@ -26,7 +26,14 @@ import { Pagination, ResultsPerPageLabel } from "src/pagination";
 import { isSelectedColumn } from "src/columnsSelector/utils";
 import { DATE_FORMAT_24_UTC, syncHistory, TimestampToMoment } from "src/util";
 import { jobsColumnLabels, JobsTable, makeJobsColumns } from "./jobsTable";
-import { showOptions, statusOptions, typeOptions } from "../util";
+import {
+  showOptions,
+  statusOptions,
+  typeOptions,
+  isValidJobStatus,
+  defaultRequestOptions,
+  isValidJobType,
+} from "../util";
 
 import { commonStyles } from "src/common";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
@@ -108,8 +115,8 @@ export class JobsPage extends React.Component<JobsPageProps, PageState> {
     }
 
     // Filter Status.
-    const status = searchParams.get("status") || undefined;
-    if (this.props.setStatus && status && status != this.props.status) {
+    const status = searchParams.get("status");
+    if (this.props.setStatus && status && status !== this.props.status) {
       this.props.setStatus(status);
     }
 
@@ -145,6 +152,17 @@ export class JobsPage extends React.Component<JobsPageProps, PageState> {
   }
 
   componentDidUpdate(prevProps: JobsPageProps): void {
+    // (xzhang) Because we removed the retrying status, we add this check
+    // just in case there exists an app that attempts to load a non-existent
+    // status.
+    if (!isValidJobStatus(this.props.status)) {
+      this.onStatusSelected(defaultRequestOptions.status);
+    }
+
+    if (!isValidJobType(this.props.type)) {
+      this.onTypeSelected(defaultRequestOptions.type.toString());
+    }
+
     if (
       prevProps.lastUpdated !== this.props.lastUpdated ||
       prevProps.show !== this.props.show ||
@@ -274,27 +292,21 @@ export class JobsPage extends React.Component<JobsPageProps, PageState> {
             <PageConfigItem>
               <Dropdown items={statusOptions} onChange={this.onStatusSelected}>
                 Status:{" "}
-                {
-                  statusOptions.find(option => option["value"] === status)[
-                    "name"
-                  ]
-                }
+                {statusOptions.find(option => option.value === status)?.name}
               </Dropdown>
             </PageConfigItem>
             <PageConfigItem>
               <Dropdown items={typeOptions} onChange={this.onTypeSelected}>
                 Type:{" "}
                 {
-                  typeOptions.find(
-                    option => option["value"] === type.toString(),
-                  )["name"]
+                  typeOptions.find(option => option.value === type.toString())
+                    ?.name
                 }
               </Dropdown>
             </PageConfigItem>
             <PageConfigItem>
               <Dropdown items={showOptions} onChange={this.onShowSelected}>
-                Show:{" "}
-                {showOptions.find(option => option["value"] === show)["name"]}
+                Show: {showOptions.find(option => option.value === show)?.name}
               </Dropdown>
             </PageConfigItem>
           </PageConfig>
