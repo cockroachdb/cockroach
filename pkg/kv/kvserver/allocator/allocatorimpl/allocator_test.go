@@ -1226,27 +1226,30 @@ func TestAllocatorRebalanceBasedOnRangeCount(t *testing.T) {
 			Capacity: roachpb.StoreCapacity{Capacity: 100, Available: 50, RangeCount: 1},
 		},
 		{
+			// This store has less than the avg number of ranges, it should not be
+			// rebalanced away from.
 			StoreID: 3,
 			Node:    roachpb.NodeDescriptor{NodeID: 3},
 			Capacity: roachpb.StoreCapacity{
 				Capacity:   100,
-				Available:  100 - int64(100*float64(allocator.MaxFractionUsedThreshold)),
+				Available:  100 - int64(100*float64(defaultMaxDiskUtilizationThreshold)),
 				RangeCount: 5,
 			},
 		},
 		{
-			// This store must not be rebalanced to, because it's too full.
+			// This store must not be rebalanced to, because it's too full. it should
+			// be rebalanced away from as the disk utilization is greater than the
+			// max disk utilization.
 			StoreID: 4,
 			Node:    roachpb.NodeDescriptor{NodeID: 4},
 			Capacity: roachpb.StoreCapacity{
 				Capacity:   100,
-				Available:  (100 - int64(100*float64(allocator.MaxFractionUsedThreshold))) / 2,
+				Available:  (100 - int64(100*float64(defaultMaxDiskUtilizationThreshold))) / 2,
 				RangeCount: 10,
 			},
 		},
 		{
-			// This store will not be rebalanced to, because it already has more
-			// replicas than the mean range count.
+			// Same as the above store (4).
 			StoreID: 5,
 			Node:    roachpb.NodeDescriptor{NodeID: 5},
 			Capacity: roachpb.StoreCapacity{
@@ -1304,7 +1307,7 @@ func TestAllocatorRebalanceBasedOnRangeCount(t *testing.T) {
 			eqClass,
 			a.Metrics,
 		)
-		if expResult := (i >= 2); expResult != result {
+		if expResult := (i >= 3); expResult != result {
 			t.Errorf("%d: expected rebalance %t; got %t; desc %+v; sl: %+v", i, expResult, result, desc, sl)
 		}
 	}
@@ -3719,7 +3722,8 @@ func TestAllocateCandidatesNumReplicasConstraints(t *testing.T) {
 	stopper, g, sp, a, _ := CreateTestAllocator(ctx, 10, false /* deterministic */)
 	defer stopper.Stop(ctx)
 	sg := gossiputil.NewStoreGossiper(g)
-	sg.GossipStores(multiDiversityDCStores, t)
+	stores := multiDiversityDCStores
+	sg.GossipStores(stores, t)
 	sl, _, _ := sp.GetStoreList(storepool.StoreFilterThrottled)
 
 	// Given a set of existing replicas for a range, rank which of the remaining
@@ -3952,8 +3956,8 @@ func TestAllocateCandidatesNumReplicasConstraints(t *testing.T) {
 			}
 		}
 		if !match {
-			t.Errorf("%d: expected rankedCandidateListForAllocation(%v) = %v, but got %v",
-				testIdx, tc.existing, tc.expected, candidates)
+			t.Errorf("%d: expected rankedCandidateListForAllocation(%v) = %v constraints = %v but got %v",
+				testIdx, tc.existing, tc.expected, tc.constraints, candidates)
 		}
 	}
 }
@@ -8259,14 +8263,14 @@ func (ts *testStore) add(bytes int64, qps float64) {
 	ts.Capacity.QueriesPerSecond += qps
 }
 
-func (ts *testStore) rebalance(ots *testStore, bytes int64, qps float64) {
+func (ts *testStore) rebalance(ots *testStore, bytes int64, qps float64, do DiskOptions) {
 	if ts.Capacity.RangeCount == 0 || (ts.Capacity.Capacity-ts.Capacity.Available) < bytes {
 		return
 	}
 	// Mimic a real Store's behavior of not considering target stores that are
 	// almost out of disk. (In a real allocator this is, for example, in
 	// rankedCandidateListFor{Allocation,Rebalancing}).
-	if !allocator.MaxCapacityCheck(ots.StoreDescriptor) {
+	if !do.maxCapacityCheck(ots.StoreDescriptor) {
 		log.Infof(
 			context.Background(),
 			"s%d too full to accept snapshot from s%d: %v", ots.StoreID, ts.StoreID, ots.Capacity,
@@ -8336,7 +8340,9 @@ func TestAllocatorFullDisks(t *testing.T) {
 		// Redundant callbacks are required by this test.
 		gossip.Redundant)
 
-	rangesPerNode := int(math.Floor(capacity * rebalanceToMaxFractionUsedThreshold / rangeSize))
+	do := makeDiskOptions(&st.SV)
+
+	rangesPerNode := int(math.Floor(capacity * do.MaxThreshold / rangeSize))
 	rangesToAdd := rangesPerNode * nodes
 
 	// Initialize testStores.
@@ -8405,7 +8411,7 @@ func TestAllocatorFullDisks(t *testing.T) {
 						if log.V(1) {
 							log.Infof(ctx, "rebalancing to %v; details: %s", target, details)
 						}
-						testStores[k].rebalance(&testStores[int(target.StoreID)], rangeSize, 0 /* qps */)
+						testStores[k].rebalance(&testStores[int(target.StoreID)], rangeSize, 0 /* qps */, do)
 					}
 				}
 				// Gossip occasionally, as real Stores do when replicas move around.
@@ -8450,7 +8456,7 @@ func Example_rangeCountRebalancing() {
 		)
 		if ok {
 			log.Infof(ctx, "rebalancing to %v; details: %s", target, details)
-			ts.rebalance(&testStores[int(target.StoreID)], alloc.randGen.Int63n(1<<20), 0 /* qps */)
+			ts.rebalance(&testStores[int(target.StoreID)], alloc.randGen.Int63n(1<<20), 0 /* qps */, alloc.ScorerOptions(ctx).DiskOptions)
 		}
 	}
 
@@ -8546,6 +8552,7 @@ func qpsBasedRebalanceFn(
 
 	opts := TestingQPSLoadScorerOptions(jitteredQPS, 0.2)
 	opts.StoreHealthOptions = StoreHealthOptions{EnforcementLevel: IOOverloadThresholdNoAction}
+	opts.DiskOptions = makeDiskOptions(&alloc.st.SV)
 	opts.Deterministic = false
 	var rangeUsageInfo allocator.RangeUsageInfo
 	add, remove, details, ok := alloc.RebalanceVoter(
@@ -8561,7 +8568,7 @@ func qpsBasedRebalanceFn(
 	)
 	if ok {
 		log.Infof(ctx, "rebalancing from %v to %v; details: %s", remove, add, details)
-		candidate.rebalance(&testStores[int(add.StoreID)], alloc.randGen.Int63n(1<<20), jitteredQPS)
+		candidate.rebalance(&testStores[int(add.StoreID)], alloc.randGen.Int63n(1<<20), jitteredQPS, opts.DiskOptions)
 	}
 }
 
@@ -8971,6 +8978,7 @@ func TestingQPSLoadScorerOptions(
 	qpsPerReplica float64, qpsRebalanceThreshold float64,
 ) *LoadScorerOptions {
 	options := &LoadScorerOptions{
+		DiskOptions:                  defaultDiskOptions(),
 		Deterministic:                true,
 		LoadDims:                     []load.Dimension{load.Queries},
 		LoadThreshold:                MakeQPSOnlyDim(qpsRebalanceThreshold),

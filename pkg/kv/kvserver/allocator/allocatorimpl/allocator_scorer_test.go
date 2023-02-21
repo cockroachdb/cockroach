@@ -1096,7 +1096,10 @@ func TestShouldRebalanceDiversity(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	options := &RangeCountScorerOptions{StoreHealthOptions: StoreHealthOptions{EnforcementLevel: IOOverloadThresholdNoAction}}
+	options := &RangeCountScorerOptions{
+		DiskOptions:        defaultDiskOptions(),
+		StoreHealthOptions: StoreHealthOptions{EnforcementLevel: IOOverloadThresholdNoAction},
+	}
 	newStore := func(id int, locality roachpb.Locality) roachpb.StoreDescriptor {
 		return roachpb.StoreDescriptor{
 			StoreID: roachpb.StoreID(id),
@@ -1528,6 +1531,7 @@ func TestBalanceScoreByRangeCount(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	options := RangeCountScorerOptions{
+		DiskOptions:             defaultDiskOptions(),
 		rangeRebalanceThreshold: 0.1,
 	}
 	storeList := storepool.StoreList{
@@ -1612,7 +1616,9 @@ func TestRebalanceConvergesRangeCountOnMean(t *testing.T) {
 		{2000, false, true},
 	}
 
-	options := RangeCountScorerOptions{}
+	options := RangeCountScorerOptions{
+		DiskOptions: defaultDiskOptions(),
+	}
 	eqClass := equivalenceClass{
 		candidateSL: storeList,
 	}
@@ -1646,8 +1652,13 @@ func TestMaxCapacity(t *testing.T) {
 		testStoreEurope: true,
 	}
 
+	do := DiskOptions{
+		RebalanceToThreshold: 0.925,
+		MaxThreshold:         0.95,
+	}
+
 	for _, s := range testStores {
-		if e, a := expectedCheck[s.StoreID], allocator.MaxCapacityCheck(s); e != a {
+		if e, a := expectedCheck[s.StoreID], do.maxCapacityCheck(s); e != a {
 			t.Errorf("store %d expected max capacity check: %t, actual %t", s.StoreID, e, a)
 		}
 	}

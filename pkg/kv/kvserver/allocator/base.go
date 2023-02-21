@@ -23,12 +23,6 @@ import (
 )
 
 const (
-	// MaxFractionUsedThreshold controls the point at which the store cedes having
-	// room for new replicas. If the fraction used of a store descriptor capacity
-	// is greater than this value, it will never be used as a rebalance or
-	// allocate target and we will actively try to move replicas off of it.
-	MaxFractionUsedThreshold = 0.95
-
 	// MinQPSThresholdDifference is the minimum QPS difference from the cluster
 	// mean that this system should care about. In other words, we won't worry
 	// about rebalancing for QPS reasons if a store's QPS differs from the mean by
@@ -71,11 +65,6 @@ const (
 type AllocationError interface {
 	error
 	AllocationErrorMarker() // dummy method for unique interface
-}
-
-// MaxCapacityCheck returns true if the store has room for a new replica.
-func MaxCapacityCheck(store roachpb.StoreDescriptor) bool {
-	return store.Capacity.FractionUsed() < MaxFractionUsedThreshold
 }
 
 // IsStoreValid returns true iff the provided store would be a valid in a

@@ -1912,6 +1912,7 @@ func (a Allocator) RebalanceNonVoter(
 // machinery to achieve range count convergence.
 func (a *Allocator) ScorerOptions(ctx context.Context) *RangeCountScorerOptions {
 	return &RangeCountScorerOptions{
+		DiskOptions:             a.DiskOptions(),
 		StoreHealthOptions:      a.StoreHealthOptions(ctx),
 		deterministic:           a.deterministic,
 		rangeRebalanceThreshold: RangeRebalanceThreshold.Get(&a.st.SV),
@@ -1922,6 +1923,7 @@ func (a *Allocator) ScorerOptions(ctx context.Context) *RangeCountScorerOptions 
 func (a *Allocator) ScorerOptionsForScatter(ctx context.Context) *ScatterScorerOptions {
 	return &ScatterScorerOptions{
 		RangeCountScorerOptions: RangeCountScorerOptions{
+			DiskOptions:             a.DiskOptions(),
 			StoreHealthOptions:      a.StoreHealthOptions(ctx),
 			deterministic:           a.deterministic,
 			rangeRebalanceThreshold: 0,
@@ -2082,6 +2084,13 @@ func (a *Allocator) leaseholderShouldMoveDueToPreferences(
 		}
 	}
 	return true
+}
+
+// DiskOptions returns the disk options. The disk options are used to determine
+// whether a store has disk capacity for additional replicas; or whether the
+// disk is over capacity and should shed replicas.
+func (a *Allocator) DiskOptions() DiskOptions {
+	return makeDiskOptions(&a.st.SV)
 }
 
 // StoreHealthOptions returns the store health options, currently only
@@ -2262,6 +2271,7 @@ func (a *Allocator) TransferLeaseTarget(
 			candidates,
 			storeDescMap,
 			&LoadScorerOptions{
+				DiskOptions:                  a.DiskOptions(),
 				StoreHealthOptions:           a.StoreHealthOptions(ctx),
 				Deterministic:                a.deterministic,
 				LoadDims:                     opts.LoadDimensions,

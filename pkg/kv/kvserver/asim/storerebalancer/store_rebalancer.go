@@ -134,6 +134,7 @@ func (s simRebalanceObjectiveProvider) Objective() kvserver.LBRebalancingObjecti
 
 func (src *storeRebalancerControl) scorerOptions() *allocatorimpl.LoadScorerOptions {
 	return &allocatorimpl.LoadScorerOptions{
+		DiskOptions:                  src.allocator.DiskOptions(),
 		StoreHealthOptions:           allocatorimpl.StoreHealthOptions{},
 		Deterministic:                true,
 		LoadDims:                     []load.Dimension{load.Queries},
