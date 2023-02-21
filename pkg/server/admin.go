@@ -2250,16 +2250,33 @@ func jobsHelper(
 
 	q := makeSQLQuery()
 	q.Append(`
-      SELECT job_id, job_type, description, statement, user_name, descriptor_ids,
-            case
-              when ` + retryRunningCondition + ` then 'retry-running' 
-              when ` + retryRevertingCondition + ` then 'retry-reverting' 
-              else status
-            end as status, running_status, created, started, finished, modified, fraction_completed,
-            high_water_timestamp, error, last_run, next_run, num_runs, execution_events::string, coordinator_id
-        FROM crdb_internal.jobs
-       WHERE true
-	`)
+SELECT
+  job_id,
+  job_type,
+  description,
+  statement,
+  user_name,
+  descriptor_ids,
+  case
+    when ` + retryRunningCondition + ` then 'retry-running'
+    when ` + retryRevertingCondition + ` then 'retry-reverting'
+    else status
+  end as status,
+  running_status,
+  created,
+  started,
+  finished,
+  modified,
+  fraction_completed,
+  high_water_timestamp,
+  error,
+  last_run,
+  next_run,
+  num_runs,
+  execution_events::string,
+  coordinator_id
+FROM crdb_internal.jobs
+WHERE true`) // Simplifies filter construction below.
 	if req.Status == "retrying" {
 		q.Append(" AND ( ( " + retryRunningCondition + " ) OR ( " + retryRevertingCondition + " ) )")
 	} else if req.Status != "" {
