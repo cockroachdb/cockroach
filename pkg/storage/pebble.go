@@ -1950,11 +1950,21 @@ func (p *Pebble) CreateCheckpoint(dir string, spans []roachpb.Span) error {
 		return err
 	}
 
+	// Write out the min version file.
+	if err := writeMinVersionFile(p.unencryptedFS, dir, p.MinVersion()); err != nil {
+		return errors.Wrapf(err, "writing min version file for checkpoint")
+	}
+
 	// TODO(#90543, cockroachdb/pebble#2285): move spans info to Pebble manifest.
 	if len(spans) > 0 {
-		return fs.SafeWriteToFile(p.fs, dir, p.fs.PathJoin(dir, "checkpoint.txt"),
-			checkpointSpansNote(spans))
+		if err := fs.SafeWriteToFile(
+			p.fs, dir, p.fs.PathJoin(dir, "checkpoint.txt"),
+			checkpointSpansNote(spans),
+		); err != nil {
+			return err
+		}
 	}
+
 	return nil
 }
 
