@@ -82,3 +82,54 @@ func (d DescriptorIDSet) Difference(o DescriptorIDSet) DescriptorIDSet {
 func (d DescriptorIDSet) Union(o DescriptorIDSet) DescriptorIDSet {
 	return DescriptorIDSet{set: d.set.Union(o.set)}
 }
+
+// ConstraintIDSet stores an unordered set of descriptor ids.
+type ConstraintIDSet struct {
+	set intsets.Fast
+}
+
+// MakeConstraintIDSet returns a set initialized with the given values.
+func MakeConstraintIDSet(ids ...descpb.ConstraintID) ConstraintIDSet {
+	s := ConstraintIDSet{}
+	for _, id := range ids {
+		s.Add(id)
+	}
+	return s
+}
+
+// Add adds an id to the set. No-op if the id is already in the set.
+func (s *ConstraintIDSet) Add(id descpb.ConstraintID) {
+	s.set.Add(int(id))
+}
+
+// Remove removes the ID from the set.
+func (s *ConstraintIDSet) Remove(id descpb.ConstraintID) {
+	s.set.Remove(int(id))
+}
+
+// Empty returns true if the set is empty.
+func (s *ConstraintIDSet) Empty() bool {
+	return s.set.Empty()
+}
+
+// Len returns the number of ids in the set.
+func (s *ConstraintIDSet) Len() int {
+	return s.set.Len()
+}
+
+// Contains checks if the set contains the given id.
+func (s *ConstraintIDSet) Contains(id descpb.ConstraintID) bool {
+	return s.set.Contains(int(id))
+}
+
+// Ordered returns all ids as a ordered slice.
+func (s *ConstraintIDSet) Ordered() []descpb.ConstraintID {
+	if s.Empty() {
+		return nil
+	}
+	result := make([]descpb.ConstraintID, 0, s.Len())
+	s.set.ForEach(func(i int) {
+		result = append(result, descpb.ConstraintID(i))
+	})
+	return result
+}

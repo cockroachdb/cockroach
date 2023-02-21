@@ -190,7 +190,7 @@ func formatQuerySequencesForDisplay(
 	ctx context.Context, semaCtx *tree.SemaContext, queries string, multiStmt bool,
 ) (string, error) {
 	replaceFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
-		newExpr, err = schemaexpr.ReplaceIDsWithFQNames(ctx, expr, semaCtx)
+		newExpr, err = schemaexpr.ReplaceSequenceIDsWithFQNames(ctx, expr, semaCtx)
 		if err != nil {
 			return false, expr, err
 		}

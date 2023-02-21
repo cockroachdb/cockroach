@@ -14,6 +14,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -87,6 +88,7 @@ func TestValidateExpr(t *testing.T) {
 				&semaCtx,
 				d.maxVolatility,
 				&tn,
+				clusterversion.TestingClusterVersion,
 			)
 
 			if !d.expectedValid {

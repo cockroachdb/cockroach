@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -76,7 +77,7 @@ func (b *CheckConstraintBuilder) MarkNameInUse(name string) {
 // Note that mutable functions are currently allowed, unlike in partial index
 // predicates, but using them can lead to unexpected behavior.
 func (b *CheckConstraintBuilder) Build(
-	c *tree.CheckConstraintTableDef,
+	c *tree.CheckConstraintTableDef, version clusterversion.ClusterVersion,
 ) (*descpb.TableDescriptor_CheckConstraint, error) {
 	name := string(c.Name)
 
@@ -95,10 +96,11 @@ func (b *CheckConstraintBuilder) Build(
 		b.desc,
 		c.Expr,
 		types.Bool,
-		"CHECK",
+		tree.CheckConstraintExpr,
 		b.semaCtx,
 		volatility.Volatile,
 		&b.tableName,
+		version,
 	)
 	if err != nil {
 		return nil, err

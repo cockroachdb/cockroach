@@ -498,6 +498,24 @@ type RemoveBackReferencesInRelations struct {
 	RelationIDs      []descpb.ID
 }
 
+// AddTableConstraintBackReferencesInFunctions adds back references to CHECK
+// constraint to referenced functions.
+type AddTableConstraintBackReferencesInFunctions struct {
+	immediateMutationOp
+	BackReferencedTableID      descpb.ID
+	BackReferencedConstraintID descpb.ConstraintID
+	FunctionIDs                []descpb.ID
+}
+
+// RemoveTableConstraintBackReferencesFromFunctions removes back references to
+// CHECK constraint from referenced functions.
+type RemoveTableConstraintBackReferencesFromFunctions struct {
+	immediateMutationOp
+	BackReferencedTableID      descpb.ID
+	BackReferencedConstraintID descpb.ConstraintID
+	FunctionIDs                []descpb.ID
+}
+
 // SetColumnName renames a column.
 type SetColumnName struct {
 	immediateMutationOp

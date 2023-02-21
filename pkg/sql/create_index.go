@@ -112,7 +112,7 @@ func (p *planner) maybeSetupConstraintForShard(
 		return err
 	}
 	ckBuilder := schemaexpr.MakeCheckConstraintBuilder(ctx, p.tableName, tableDesc, &p.semaCtx)
-	ckDesc, err := ckBuilder.Build(ckDef)
+	ckDesc, err := ckBuilder.Build(ckDef, p.ExecCfg().Settings.Version.ActiveVersion(ctx))
 	if err != nil {
 		return err
 	}
@@ -170,6 +170,7 @@ func makeIndexDescriptor(
 		n.Inverted,
 		false, /* isNewTable */
 		params.p.SemaCtx(),
+		params.ExecCfg().Settings.Version.ActiveVersion(params.ctx),
 	); err != nil {
 		return nil, err
 	}
@@ -255,6 +256,7 @@ func makeIndexDescriptor(
 	if n.Predicate != nil {
 		expr, err := schemaexpr.ValidatePartialIndexPredicate(
 			params.ctx, tableDesc, n.Predicate, &n.Table, params.p.SemaCtx(),
+			params.ExecCfg().Settings.Version.ActiveVersion(params.ctx),
 		)
 		if err != nil {
 			return nil, err
@@ -474,6 +476,7 @@ func replaceExpressionElemsWithVirtualCols(
 	isInverted bool,
 	isNewTable bool,
 	semaCtx *tree.SemaContext,
+	version clusterversion.ClusterVersion,
 ) error {
 	findExistingExprIndexCol := func(expr string) (colName string, ok bool) {
 		for _, col := range desc.AllColumns() {
@@ -504,8 +507,9 @@ func replaceExpressionElemsWithVirtualCols(
 				desc,
 				colDef,
 				tn,
-				"index element",
+				tree.ExpressionIndexElementExpr,
 				semaCtx,
+				version,
 			)
 			if err != nil {
 				return err

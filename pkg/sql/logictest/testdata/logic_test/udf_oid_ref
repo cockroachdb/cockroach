@@ -59,7 +59,7 @@ hello world
 
 # Make sure that argument types are still checked even we know which function
 # overload to use.
-statement error pq: unknown signature: f2\(int\)
+statement error pq: unknown signature: public.f2\(int\)
 SELECT [FUNCTION $fn_oid](123)
 
 # Make sure that renaming does not break the reference.

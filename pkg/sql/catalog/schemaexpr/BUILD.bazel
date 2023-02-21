@@ -21,10 +21,12 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/clusterversion",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/funcdesc",
         "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
@@ -59,6 +61,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":schemaexpr"],
     deps = [
+        "//pkg/clusterversion",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/descpb",

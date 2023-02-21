@@ -785,7 +785,7 @@ a  b   v   x  y   z
 2  20  22  3  21  22
 3  30  33  4  31  33
 
-statement error computed column expression cannot reference computed columns
+statement error VIRTUAL COMPUTED COLUMN expression cannot reference computed columns
 ALTER TABLE sc ADD COLUMN u INT AS (a+v) VIRTUAL
 
 statement ok

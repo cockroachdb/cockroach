@@ -810,7 +810,7 @@ func (p *planner) resetPlanner(
 	p.semaCtx.Annotations = nil
 	p.semaCtx.TypeResolver = p
 	p.semaCtx.FunctionResolver = p
-	p.semaCtx.TableNameResolver = p
+	p.semaCtx.NameResolver = p
 	p.semaCtx.DateStyle = sd.GetDateStyle()
 	p.semaCtx.IntervalStyle = sd.GetIntervalStyle()
 
