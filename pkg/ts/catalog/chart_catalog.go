@@ -3029,6 +3029,10 @@ var charts = []sectionDescription{
 				Title:   "Range Key Set Count",
 				Metrics: []string{"storage.keys.range-key-set.count"},
 			},
+			{
+				Title:   "Tombstone Count",
+				Metrics: []string{"storage.keys.tombstone.count"},
+			},
 		},
 	},
 	{
