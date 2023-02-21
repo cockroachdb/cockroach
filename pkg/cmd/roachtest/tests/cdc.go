@@ -1000,6 +1000,22 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
+		Name:            "cdc/parquet",
+		Owner:           registry.OwnerCDC,
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
+		RequiresLicense: true,
+		Tags:            []string{"manual"},
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			ct := newCDCTester(ctx, t, c)
+			defer ct.Close()
+
+			ct.runTPCCWorkload(tpccArgs{warehouses: 100})
+
+			feed := ct.newChangefeed(feedArgs{sinkType: cloudStorageSink, targets: allTpccTargets, opts: map[string]string{"format": "parquet", "initial_scan": "'only'"}})
+			feed.waitForCompletion()
+		},
+	})
+	r.Add(registry.TestSpec{
 		Name:            "cdc/sink-chaos",
 		Owner:           `cdc`,
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
