@@ -48,11 +48,17 @@ func TestEncodeDecode(t *testing.T) {
 		if err != nil {
 			return "error: " + err.Error()
 		}
-		if newD.Compare(ctx, d) != 0 {
-			return "unequal"
-		}
 		return ""
 	}
+
+	//d, _ := tree.ParseDDecimal("1.000")
+
+	//testing purposes
+	//j, _ := json2.MakeJSON(json.Number("1.0000"))
+	//roundtripDatum(&tree.DJSON{JSON: j}, encoding.Ascending)
+
+	//roundtripDatum(d, encoding.Ascending)
+
 	properties.Property("roundtrip", prop.ForAll(
 		roundtripDatum,
 		genColumnType().

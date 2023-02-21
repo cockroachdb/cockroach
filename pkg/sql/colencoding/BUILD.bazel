@@ -16,6 +16,8 @@ go_library(
         "//pkg/sql/catalog/fetchpb",
         "//pkg/sql/rowenc/keyside",
         "//pkg/sql/rowenc/valueside",
+        "//pkg/sql/sessiondatapb",
+        "//pkg/util/json",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/util/buildutil",

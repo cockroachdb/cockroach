@@ -297,8 +297,6 @@ func ensureColumnOrderable(e tree.TypedExpr) {
 		typ = typ.ArrayContents()
 	}
 	switch typ.Family() {
-	case types.JsonFamily:
-		panic(unimplementedWithIssueDetailf(35706, "", "can't order by column type jsonb"))
 	case types.TSQueryFamily, types.TSVectorFamily:
 		panic(unimplementedWithIssueDetailf(92165, "", "can't order by column type %s", typ.SQLString()))
 	}

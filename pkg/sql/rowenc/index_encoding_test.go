@@ -118,8 +118,13 @@ func decodeIndex(
 func TestIndexKey(t *testing.T) {
 	rng, _ := randutil.NewTestRand()
 	var a tree.DatumAlloc
-
+	j, _ := json.MakeJSON("a")
 	tests := []indexKeyTest{
+		{
+			50,
+			[]tree.Datum{tree.NewDJSON(j)},
+			[]tree.Datum{tree.NewDInt(20)},
+		},
 		{
 			50,
 			[]tree.Datum{tree.NewDInt(10)},

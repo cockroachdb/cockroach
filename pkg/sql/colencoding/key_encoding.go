@@ -21,11 +21,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -187,12 +189,18 @@ func decodeTableKeyToCol(
 		}
 		vecs.IntervalCols[colIdx][rowIdx] = d
 	case types.JsonFamily:
-		// Don't attempt to decode the JSON value. Instead, just return the
-		// remaining bytes of the key.
-		var jsonLen int
-		jsonLen, err = encoding.PeekLength(key)
-		vecs.JSONCols[colIdx].Bytes.Set(rowIdx, key[:jsonLen])
-		rkey = key[jsonLen:]
+
+		// Decode the JSON, and then store the bytes in the
+		// vector in the value-encoded format.
+		var d tree.Datum
+		var json json.JSON
+		encDir := encoding.Ascending
+		if dir == catenumpb.IndexColumn_DESC {
+			encDir = encoding.Descending
+		}
+		d, rkey, err = keyside.Decode(da, valType, key, encDir)
+		json, _ = tree.AsJSON(d, sessiondatapb.DataConversionConfig{}, time.UTC)
+		vecs.JSONCols[colIdx].Set(rowIdx, json)
 	case types.EncodedKeyFamily:
 		// Don't attempt to decode the inverted key.
 		keyLen, err := encoding.PeekLength(key)

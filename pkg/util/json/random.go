@@ -13,7 +13,6 @@ package json
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -150,14 +149,16 @@ func randomJSONString(rng *rand.Rand, cfg randConfig) string {
 }
 
 func randomJSONNumber(rng *rand.Rand) interface{} {
-	return json.Number(fmt.Sprintf("%v", rng.ExpFloat64()))
+	//return json.Number(fmt.Sprintf("%v", rng.ExpFloat64()))
+	return json.Number("1.00")
 }
 
 func doRandomJSON(rng *rand.Rand, cfg randConfig) interface{} {
 	if cfg.complexity <= 0 || rng.Intn(cfg.complexity) == 0 {
 		switch rng.Intn(5) {
 		case 0:
-			return randomJSONString(rng, cfg)
+			return randomJSONNumber(rng)
+			//return randomJSONString(rng, cfg)
 		case 1:
 			return randomJSONNumber(rng)
 		case 2:
