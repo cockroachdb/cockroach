@@ -1004,15 +1004,26 @@ func TestCreateCheckpoint(t *testing.T) {
 	assert.NoError(t, err)
 	defer db.Close()
 
-	dir = filepath.Join(dir, "checkpoint")
+	checkpointDir := filepath.Join(dir, "checkpoint")
 
 	assert.NoError(t, err)
-	assert.NoError(t, db.CreateCheckpoint(dir, nil))
-	assert.DirExists(t, dir)
-	m, err := filepath.Glob(dir + "/*")
+	assert.NoError(t, db.CreateCheckpoint(checkpointDir, nil))
+	assert.DirExists(t, checkpointDir)
+	m, err := filepath.Glob(checkpointDir + "/*")
 	assert.NoError(t, err)
 	assert.True(t, len(m) > 0)
-	if err := db.CreateCheckpoint(dir, nil); !testutils.IsError(err, "exists") {
+
+	// Verify that we can open the checkpoint.
+	db2, err := Open(
+		context.Background(),
+		Filesystem(checkpointDir),
+		cluster.MakeTestingClusterSettings(),
+		MustExist)
+	require.NoError(t, err)
+	db2.Close()
+
+	// Verify that creating another checkpoint in the same directory fails.
+	if err := db.CreateCheckpoint(checkpointDir, nil); !testutils.IsError(err, "exists") {
 		t.Fatal(err)
 	}
 }
