@@ -250,7 +250,7 @@ Default is "RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS
 		"cluster", "", "print hosts matching cluster")
 
 	grafanaStartCmd.Flags().StringVar(&grafanaConfig,
-		"grafana-config", "", "URL to grafana json config")
+		"grafana-config", "", "URI to grafana json config, supports local and http(s) schemes")
 
 	grafanaURLCmd.Flags().BoolVar(&grafanaurlOpen,
 		"open", false, "open the grafana dashboard url on the browser")
