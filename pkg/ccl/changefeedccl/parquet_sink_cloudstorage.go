@@ -46,7 +46,7 @@ const (
 // parquet encoder should have access to the buffer object inside
 // cloudStorageSinkFile file. This means that the parquet writer has to be
 // embedded in the cloudStorageSinkFile file. If we wanted to maintain the
-// existing separation between encoder and the sync, then we would need to
+// existing separation between encoder and the sink, then we would need to
 // figure out a way to get the embedded parquet writer in the
 // cloudStorageSinkFile and pass it to the encode function in the encoder.
 // Instead of this it logically made sense to have a single sink for parquet
@@ -237,10 +237,10 @@ func makeParquetWriterWrapper(
 	)
 
 	pqww := &parquetFileWriter{
-		pqw,
-		schema,
-		parquetColumns,
-		len(parquetColumns),
+		parquetWriter:  pqw,
+		schema:         schema,
+		parquetColumns: parquetColumns,
+		numCols:        len(parquetColumns),
 	}
 	return pqww, nil
 }
