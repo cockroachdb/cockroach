@@ -1853,10 +1853,6 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 		// We place a sequence point before every cascade, so
 		// that each subsequent cascade can observe the writes
 		// by the previous step.
-		// TODO(radu): the cascades themselves can have more cascades; if any of
-		// those fall back to legacy cascades code, it will disable stepping. So we
-		// have to reenable stepping each time.
-		_ = planner.Txn().ConfigureStepping(ctx, kv.SteppingEnabled)
 		if err := planner.Txn().Step(ctx); err != nil {
 			recv.SetError(err)
 			return false
@@ -1927,10 +1923,6 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 
 	// We place a sequence point before the checks, so that they observe the
 	// writes of the main query and/or any cascades.
-	// TODO(radu): the cascades themselves can have more cascades; if any of
-	// those fall back to legacy cascades code, it will disable stepping. So we
-	// have to reenable stepping each time.
-	_ = planner.Txn().ConfigureStepping(ctx, kv.SteppingEnabled)
 	if err := planner.Txn().Step(ctx); err != nil {
 		recv.SetError(err)
 		return false
