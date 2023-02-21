@@ -151,7 +151,7 @@ func TestCrdbInternalDatumsToBytesIllegalType(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 	for _, val := range []string{
-		"'{\"a\": 1}'::JSONB",
+		"'foo:1,2 bar:3'::tsvector",
 	} {
 		t.Run(val, func(t *testing.T) {
 			tdb.ExpectErr(t, ".*illegal argument.*",
