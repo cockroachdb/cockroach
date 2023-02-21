@@ -104,6 +104,13 @@ const (
 	emptyArray = geoInvertedIndexMarker + 1
 	voidMarker = emptyArray + 1
 
+	jsonNullKeyMarker    = voidMarker + 1
+	jsonStringKeyMarker  = jsonNullKeyMarker + 1
+	jsonNumberKeyMarker  = jsonStringKeyMarker + 1
+	jsonBooleanKeyMarker = jsonNumberKeyMarker + 1
+	jsonArrayKeyMarker   = jsonBooleanKeyMarker + 1
+	jsonObjectKeyMarker  = jsonArrayKeyMarker + 1
+
 	arrayKeyTerminator           byte = 0x00
 	arrayKeyDescendingTerminator byte = 0xFF
 	// We use different null encodings for nulls within key arrays. Doing this
@@ -3296,6 +3303,18 @@ func getGeoInvertedIndexKeyLength(buf []byte) (int, error) {
 	}
 	return 1 + cellLen + 1 + floatsLen, nil
 }
+
+// EncodeJSONNullKeyMarker adds a JSON Object key encoding marker
+// to buf and returns the new buffer.
+//func EncodeJSONNullKeyMarker(buf []byte, dir direction) []byte {
+//	return append(buf, jsonNullKeyMarker)
+//}
+
+// EncodeJSONObjectKeyMarker adds a JSON Object key encoding marker
+// to buf and returns the new buffer.
+//func EncodeJSONObjectKeyMarker(buf []byte, dir direction) []byte {
+//	return buf
+//}
 
 // EncodeArrayKeyMarker adds the array key encoding marker to buf and
 // returns the new buffer.
