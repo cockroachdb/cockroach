@@ -57,6 +57,7 @@ export type StatementInsightsViewStateProps = {
   sortSetting: SortSetting;
   selectedColumnNames: string[];
   dropDownSelect?: React.ReactElement;
+  isTenant?: boolean;
 };
 
 export type StatementInsightsViewDispatchProps = {
@@ -88,6 +89,7 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
     setTimeScale,
     selectedColumnNames,
     dropDownSelect,
+    isTenant,
   } = props;
 
   const [pagination, setPagination] = useState<ISortedTablePagination>({
@@ -219,7 +221,7 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
   return (
     <div className={cx("root")}>
       <PageConfig>
-        <PageConfigItem>{dropDownSelect}</PageConfigItem>
+        {!isTenant && <PageConfigItem>{dropDownSelect}</PageConfigItem>}
         <PageConfigItem>
           <Search
             placeholder="Search Statements"
