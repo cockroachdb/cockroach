@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -737,6 +738,15 @@ func (j *jsonEncoded) Len() int {
 		return 0
 	}
 	return j.containerLen
+}
+
+// EncodeForwardIndex implements the JSON interface.
+func (j *jsonEncoded) EncodeForwardIndex(buf []byte, dir encoding.Direction) ([]byte, error) {
+	decoded, err := j.decode()
+	if err != nil {
+		return nil, err
+	}
+	return decoded.EncodeForwardIndex(buf, dir)
 }
 
 // EncodeInvertedIndexKeys implements the JSON interface.
