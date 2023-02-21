@@ -982,24 +982,6 @@ var regularBuiltins = map[string]builtinDefinition{
 		},
 	),
 
-	"text": makeBuiltin(defProps(),
-		tree.Overload{
-			Types:      tree.ParamTypes{{Name: "val", Typ: types.INet}},
-			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-				dIPAddr := tree.MustBeDIPAddr(args[0])
-				s := dIPAddr.IPAddr.String()
-				// Ensure the string has a "/mask" suffix.
-				if strings.IndexByte(s, '/') == -1 {
-					s += "/" + strconv.Itoa(int(dIPAddr.Mask))
-				}
-				return tree.NewDString(s), nil
-			},
-			Info:       "Converts the IP address and prefix length to text.",
-			Volatility: volatility.Immutable,
-		},
-	),
-
 	"inet_same_family": makeBuiltin(defProps(),
 		tree.Overload{
 			Types: tree.ParamTypes{
@@ -1049,22 +1031,6 @@ var regularBuiltins = map[string]builtinDefinition{
 			},
 			Info: "Test for subnet inclusion or equality, using only the network parts of the addresses. " +
 				"The host part of the addresses is ignored.",
-			Volatility: volatility.Immutable,
-		},
-	),
-
-	"inet": makeBuiltin(defProps(),
-		tree.Overload{
-			Types:      tree.ParamTypes{{Name: "val", Typ: types.String}},
-			ReturnType: tree.FixedReturnType(types.INet),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				inet, err := eval.PerformCast(ctx, evalCtx, args[0], types.INet)
-				if err != nil {
-					return nil, pgerror.WithCandidateCode(err, pgcode.InvalidTextRepresentation)
-				}
-				return inet, nil
-			},
-			Info:       "If possible, converts input to that of type inet.",
 			Volatility: volatility.Immutable,
 		},
 	),

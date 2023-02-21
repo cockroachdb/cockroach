@@ -1098,3 +1098,8 @@ func init() {
 		}
 	}
 }
+
+// CastMap returns all supported casts.
+func CastMap() map[oid.Oid]map[oid.Oid]Cast {
+	return castMap
+}

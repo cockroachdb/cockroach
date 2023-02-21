@@ -137,6 +137,9 @@ func TestLint(t *testing.T) {
 
 		var names []string
 		for _, name := range builtins.AllBuiltinNames() {
+			if _, ok := builtins.CastBuiltinNames[name]; ok {
+				continue
+			}
 			switch name {
 			case "extract", "trim", "overlay", "position", "substring", "st_x", "st_y":
 				// Exempt special forms: EXTRACT(... FROM ...), etc.

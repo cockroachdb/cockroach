@@ -39,6 +39,7 @@ const (
 	CategoryArray               = "Array"
 	CategoryComparison          = "Comparison"
 	CategoryCompatibility       = "Compatibility"
+	CategoryCast                = "Cast"
 	CategoryCrypto              = "Cryptographic"
 	CategoryDateAndTime         = "Date and time"
 	CategoryEnum                = "Enum"
