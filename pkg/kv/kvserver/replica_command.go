@@ -2968,11 +2968,12 @@ func (r *Replica) validateSnapshotDelegationRequest(
 var NumDelegateLimit = func() *settings.IntSetting {
 	s := settings.RegisterIntSetting(
 		settings.SystemOnly,
-		"kv.snapshot_delegation.num_follower",
-		"the number of delegates to try when sending snapshots, before falling back to sending from the leaseholder",
+		"kv.snapshot_delegation.max_delegation_attempts",
+		"the max number of delegates to attempt for sending snapshots, "+
+			"before falling back to sending from the leaseholder. "+
+			"set to 0 to disable delegated snapshots.",
 		1,
 	)
-	s.SetVisibility(settings.Public)
 	return s
 }()
 
@@ -2985,11 +2986,11 @@ var NumDelegateLimit = func() *settings.IntSetting {
 var MaxQueueOnDelegateLimit = func() *settings.IntSetting {
 	s := settings.RegisterIntSetting(
 		settings.SystemOnly,
-		"kv.snapshot_delegation.num_requests",
-		"how many queued requests are allowed on a delegate before the request is rejected",
+		"kv.snapshot_delegations.queue_limit",
+		"the max requests a delegate can queue before rejecting an additional delegation request. "+
+			"set to -1 to allow unlimited requests",
 		3,
 	)
-	s.SetVisibility(settings.Public)
 	return s
 }()
 
