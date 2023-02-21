@@ -159,7 +159,9 @@ type resultsBufferBase struct {
 	hasResults chan struct{}
 	// overheadAccountedFor tracks how much overhead space for the Results in
 	// this results buffer has been consumed from the budget. Note that this
-	// does not include the footprint of Get and Scan responses.
+	// does not include the memory usage of Get and Scan responses (i.e. neither
+	// the footprint nor the overhead of a response is tracked by
+	// overheadAccountedFor).
 	overheadAccountedFor int64
 	err                  error
 }
