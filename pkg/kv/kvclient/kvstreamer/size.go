@@ -26,6 +26,9 @@ const (
 	requestUnionOverhead      = int64(unsafe.Sizeof(kvpb.RequestUnion{}))
 	requestOverhead           = int64(unsafe.Sizeof(kvpb.RequestUnion_Get{}) +
 		unsafe.Sizeof(kvpb.GetRequest{}))
+	responseUnionOverhead = int64(unsafe.Sizeof(kvpb.ResponseUnion_Get{}))
+	getResponseOverhead   = int64(unsafe.Sizeof(kvpb.GetResponse{}))
+	scanResponseOverhead  = int64(unsafe.Sizeof(kvpb.ScanResponse{}))
 )
 
 var zeroInt32Slice []int32
@@ -35,6 +38,10 @@ func init() {
 		unsafe.Sizeof(kvpb.ScanRequest{}))
 	if requestOverhead != scanRequestOverhead {
 		panic("GetRequest and ScanRequest have different overheads")
+	}
+	scanResponseUnionOverhead := int64(unsafe.Sizeof(kvpb.ResponseUnion_Get{}))
+	if responseUnionOverhead != scanResponseUnionOverhead {
+		panic("ResponseUnion_Get and ResponseUnion_Scan have different overheads")
 	}
 	zeroInt32Slice = make([]int32, 1<<10)
 }
