@@ -37,11 +37,11 @@ import { actions as analyticsActions } from "src/store/analytics";
 import { actions as localStorageActions } from "src/store/localStorage";
 import { actions as nodesActions } from "../store/nodes";
 import { actions as nodeLivenessActions } from "../store/liveness";
-import { selectTimeScale } from "../store/utils/selectors";
 import {
-  actions as statementFingerprintInsightActions,
-  selectStatementFingerprintInsights,
-} from "src/store/insights/statementFingerprintInsights";
+  actions as statementInsightActions,
+  selectInsightsByFingerprint,
+} from "../store/insights/statementInsights";
+import { selectTimeScale } from "../store/utils/selectors";
 import {
   StmtInsightsReq,
   InsertStmtDiagnosticRequest,
@@ -76,10 +76,7 @@ const mapStateToProps = (state: AppState, props: RouteComponentProps) => {
     isTenant: selectIsTenant(state),
     hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),
     hasAdminRole: selectHasAdminRole(state),
-    statementFingerprintInsights: selectStatementFingerprintInsights(
-      state,
-      props,
-    ),
+    statementInsights: selectInsightsByFingerprint(state, props),
   };
 };
 
@@ -93,8 +90,8 @@ const mapDispatchToProps = (
   refreshNodes: () => dispatch(nodesActions.refresh()),
   refreshNodesLiveness: () => dispatch(nodeLivenessActions.refresh()),
   refreshUserSQLRoles: () => dispatch(uiConfigActions.refreshUserSQLRoles()),
-  refreshStatementFingerprintInsights: (req: StmtInsightsReq) =>
-    dispatch(statementFingerprintInsightActions.refresh(req)),
+  refreshStatementInsights: (req: StmtInsightsReq) =>
+    dispatch(statementInsightActions.refresh(req)),
   onTimeScaleChange: (ts: TimeScale) => {
     dispatch(
       sqlStatsActions.updateTimeScale({

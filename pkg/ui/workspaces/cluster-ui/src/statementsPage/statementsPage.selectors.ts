@@ -31,8 +31,15 @@ import { selectDiagnosticsReportsPerStatement } from "../store/statementDiagnost
 import { AggregateStatistics } from "../statementsTable";
 import { sqlStatsSelector } from "../store/sqlStats/sqlStats.selector";
 import { SQLStatsState } from "../store/sqlStats";
-import { localStorageSelector } from "../store/utils/selectors";
+import {
+  adminUISelector,
+  localStorageSelector,
+} from "../store/utils/selectors";
 import { databasesListSelector } from "src/store/databasesList/databasesList.selectors";
+import {
+  ExecutionInsightCount,
+  getStmtFingerprintInsightCounts,
+} from "../insights";
 
 type ICollectedStatementStatistics =
   cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
@@ -242,4 +249,11 @@ export const selectFilters = createSelector(
 export const selectSearch = createSelector(
   localStorageSelector,
   localStorage => localStorage["search/StatementsPage"],
+);
+
+export const selectStatementInsightCounts = createSelector(
+  adminUISelector,
+  (state): ExecutionInsightCount[] => {
+    return getStmtFingerprintInsightCounts(state?.stmtInsights?.data?.results);
+  },
 );

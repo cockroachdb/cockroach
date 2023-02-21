@@ -59,10 +59,6 @@ import {
 } from "./terminateQuery";
 import { reducer as uiConfig, UIConfigState } from "./uiConfig";
 import { DOMAIN_NAME } from "./utils";
-import {
-  reducer as statementFingerprintInsights,
-  StatementFingerprintInsightsCachedState,
-} from "./insights/statementFingerprintInsights";
 
 export type AdminUiState = {
   statementDiagnostics: StatementDiagnosticsState;
@@ -83,7 +79,6 @@ export type AdminUiState = {
   txnInsightDetails: TxnInsightDetailsCachedState;
   txnInsights: TxnInsightsState;
   schemaInsights: SchemaInsightsState;
-  statementFingerprintInsights: StatementFingerprintInsightsCachedState;
 };
 
 export type AppState = {
@@ -109,7 +104,6 @@ export const reducers = combineReducers<AdminUiState>({
   clusterLocks,
   databasesList,
   schemaInsights,
-  statementFingerprintInsights,
 });
 
 export const rootActions = {

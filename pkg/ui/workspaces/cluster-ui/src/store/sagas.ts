@@ -30,7 +30,6 @@ import { transactionInsightDetailsSaga } from "./insightDetails/transactionInsig
 import { statementInsightsSaga } from "./insights/statementInsights";
 import { schemaInsightsSaga } from "./schemaInsights";
 import { uiConfigSaga } from "./uiConfig";
-import { statementFingerprintInsightsSaga } from "./insights/statementFingerprintInsights";
 
 export function* sagas(cacheInvalidationPeriod?: number): SagaIterator {
   yield all([
@@ -53,6 +52,5 @@ export function* sagas(cacheInvalidationPeriod?: number): SagaIterator {
     fork(clusterLocksSaga),
     fork(schemaInsightsSaga),
     fork(uiConfigSaga, cacheInvalidationPeriod),
-    fork(statementFingerprintInsightsSaga),
   ]);
 }

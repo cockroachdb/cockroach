@@ -233,8 +233,10 @@ export class TransactionDetails extends React.Component<
   }
 
   refreshData = (prevTransactionFingerprintId: string): void => {
-    const insightsReq = timeScaleRangeToObj(this.props.timeScale);
-    this.props.refreshTransactionInsights(insightsReq);
+    if (!this.props.transactionInsights) {
+      const insightsReq = timeScaleRangeToObj(this.props.timeScale);
+      this.props.refreshTransactionInsights(insightsReq);
+    }
     const req = statementsRequestFromProps(this.props);
     this.props.refreshData(req);
     this.getTransactionStateInfo(prevTransactionFingerprintId);
