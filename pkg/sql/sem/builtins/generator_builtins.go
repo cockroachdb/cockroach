@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	gojson "encoding/json"
+	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"math/rand"
 	"strings"
 	"time"
@@ -463,6 +464,18 @@ var generators = map[string]builtinDefinition{
 			makePayloadsForTraceGenerator,
 			"Returns the payload(s) of the requested trace.",
 			volatility.Volatile,
+		),
+	),
+	"crdb_internal.ranges_in_span": makeBuiltin(genProps(),
+		makeGeneratorOverload(
+			tree.ParamTypes{
+				{Name: "start_key", Typ: types.Bytes},
+				{Name: "end_key", Typ: types.Bytes},
+			},
+			rangesInSpanGeneratorType,
+			makeRangesInSpanGenerator,
+			"Returns ranges (id, start key, end key) within the provided span.",
+			volatility.Stable,
 		),
 	),
 	"crdb_internal.show_create_all_schemas": makeBuiltin(
@@ -2894,4 +2907,81 @@ func makeIdentGenerator(
 		acc:   evalCtx.Planner.Mon().MakeBoundAccount(),
 		count: count,
 	}, nil
+}
+
+// rangeSpanIterator is a ValueGenerator that iterates over all
+// ranges of a target span.
+type rangeSpanIterator struct {
+	// The span to iterate
+	span          roachpb.Span
+	p             eval.Planner
+	currRangeDesc roachpb.RangeDescriptor
+	rangeIter     rangedesc.Iterator
+
+	// A buffer to avoid allocating an array on every call to Values().
+	buf [3]tree.Datum
+}
+
+func newRangeSpanIterator(eval *eval.Context, span roachpb.Span) *rangeSpanIterator {
+	return &rangeSpanIterator{span: span, p: eval.Planner}
+}
+
+// Start implements the tree.ValueGenerator interface.
+func (rs *rangeSpanIterator) Start(ctx context.Context, _ *kv.Txn) error {
+	var err error
+	rs.rangeIter, err = rs.p.GetRangeIteratorWithinSpan(ctx, rs.span)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// Next implements the tree.ValueGenerator interface.
+func (rs *rangeSpanIterator) Next(_ context.Context) (bool, error) {
+	exists := rs.rangeIter.Valid()
+	if exists {
+		rs.currRangeDesc = rs.rangeIter.CurRangeDescriptor()
+		rs.rangeIter.Next()
+	}
+	return exists, nil
+}
+
+// Values implements the tree.ValueGenerator interface.
+func (rs *rangeSpanIterator) Values() (tree.Datums, error) {
+	rs.buf[0] = tree.NewDInt(tree.DInt(rs.currRangeDesc.RangeID))
+	rs.buf[1] = tree.NewDBytes(tree.DBytes(rs.currRangeDesc.StartKey))
+	rs.buf[2] = tree.NewDBytes(tree.DBytes(rs.currRangeDesc.EndKey))
+	return rs.buf[:], nil
+}
+
+// Close implements the tree.ValueGenerator interface.
+func (rs *rangeSpanIterator) Close(_ context.Context) {}
+
+// ResolvedType implements the tree.ValueGenerator interface.
+func (rs *rangeSpanIterator) ResolvedType() *types.T {
+	return rangesInSpanGeneratorType
+}
+
+var rangesInSpanGeneratorType = types.MakeLabeledTuple(
+	[]*types.T{types.Int, types.Bytes, types.Bytes},
+	[]string{"range_id", "start_key", "end_key"},
+)
+
+func makeRangesInSpanGenerator(
+	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
+) (eval.ValueGenerator, error) {
+	// The user must be an admin to use this builtin.
+	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !isAdmin {
+		return nil, pgerror.Newf(pgcode.InsufficientPrivilege, "user needs the admin role to view range data")
+	}
+	startKey := []byte(tree.MustBeDBytes(args[0]))
+	endKey := []byte(tree.MustBeDBytes(args[1]))
+	return newRangeSpanIterator(evalCtx, roachpb.Span{
+		Key:    startKey,
+		EndKey: endKey,
+	}), nil
 }

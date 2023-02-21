@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/repstream"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -51,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 	"github.com/lib/pq/oid"
@@ -833,4 +835,15 @@ func (p *planner) GetReplicationStreamManager(
 // GetStreamIngestManager returns a StreamIngestManager.
 func (p *planner) GetStreamIngestManager(ctx context.Context) (eval.StreamIngestManager, error) {
 	return repstream.GetStreamIngestManager(ctx, p.EvalContext(), p.InternalSQLTxn())
+}
+
+// GetRangeIteratorWithinSpan is part of the eval.Planner interface.
+func (p *planner) GetRangeIteratorWithinSpan(
+	ctx context.Context, span roachpb.Span,
+) (rangedesc.Iterator, error) {
+	rangeDescIterator, err := p.execCfg.RangeDescIteratorFactory.NewIterator(ctx, span)
+	if err != nil {
+		return nil, err
+	}
+	return rangeDescIterator, nil
 }

@@ -116,6 +116,7 @@ go_library(
         "//pkg/util/randident",
         "//pkg/util/randident/randidentcfg",
         "//pkg/util/randutil",
+        "//pkg/util/rangedesc",
         "//pkg/util/ring",
         "//pkg/util/syncutil",
         "//pkg/util/timeofday",
