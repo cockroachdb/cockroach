@@ -1913,6 +1913,7 @@ func (a Allocator) RebalanceNonVoter(
 func (a *Allocator) ScorerOptions(ctx context.Context) *RangeCountScorerOptions {
 	return &RangeCountScorerOptions{
 		IOOverloadOptions:       a.IOOverloadOptions(),
+		DiskCapacityOptions:     a.DiskOptions(),
 		deterministic:           a.deterministic,
 		rangeRebalanceThreshold: RangeRebalanceThreshold.Get(&a.st.SV),
 	}
@@ -1923,6 +1924,7 @@ func (a *Allocator) ScorerOptionsForScatter(ctx context.Context) *ScatterScorerO
 	return &ScatterScorerOptions{
 		RangeCountScorerOptions: RangeCountScorerOptions{
 			IOOverloadOptions:       a.IOOverloadOptions(),
+			DiskCapacityOptions:     a.DiskOptions(),
 			deterministic:           a.deterministic,
 			rangeRebalanceThreshold: 0,
 		},
@@ -2172,6 +2174,13 @@ func (a *Allocator) leaseholderShouldMoveDueToPreferences(
 	return true
 }
 
+// DiskOptions returns the disk options. The disk options are used to determine
+// whether a store has disk capacity for additional replicas; or whether the
+// disk is over capacity and should shed replicas.
+func (a *Allocator) DiskOptions() DiskCapacityOptions {
+	return makeDiskCapacityOptions(&a.st.SV)
+}
+
 // IOOverloadOptions returns the store IO overload options. It is used to
 // filter and score candidates based on their level of IO overload and
 // enforcement level.
@@ -2352,6 +2361,7 @@ func (a *Allocator) TransferLeaseTarget(
 			storeDescMap,
 			&LoadScorerOptions{
 				IOOverloadOptions:            a.IOOverloadOptions(),
+				DiskOptions:                  a.DiskOptions(),
 				Deterministic:                a.deterministic,
 				LoadDims:                     opts.LoadDimensions,
 				LoadThreshold:                LoadThresholds(&a.st.SV, opts.LoadDimensions...),
