@@ -139,13 +139,26 @@ type SSTBatcher struct {
 	disableScatters bool
 
 	// The rest of the fields accumulated state as opposed to configuration. Some,
-	// like totalRows, are accumulated _across_ batches and are not reset between
+	// like totalBulkOpSummary, are accumulated _across_ batches and are not reset between
 	// batches when Reset() is called.
 	//
 	// currentStats contain the stats since the last flush. After each flush,
 	// currentStats is reset back to the empty value after being combined into
 	// totalStats.
 	currentStats bulkpb.IngestionPerformanceStats
+
+	// Summary of the rows written in the current batch.
+	//
+	// NB: It is not advisable to use this field directly to consume per batch
+	// summaries. This field is reset when the batcher is reset after each flush.
+	// Under certain conditions the batcher can internally trigger a flush and a
+	// reset while adding KVs i.e. without the caller explicilty calling Flush.
+	// Furthermore, the batcher may reset the row counter before the async flush
+	// has actually completed.
+	//
+	// If the caller requires a BulkOpSummary after each flush, they must register
+	// a callback `onFlush`.
+	batchRowCounter storage.RowCounter
 
 	// span tracks the total span into which this batcher has flushed. It is
 	// only maintained if log.V(1), so if vmodule is upped mid-ingest it may be
@@ -172,16 +185,15 @@ type SSTBatcher struct {
 
 	// stores on-the-fly stats for the SST if disallowShadowingBelow is set.
 	ms enginepb.MVCCStats
-	// rows written in the current batch.
-	rowCounter storage.RowCounter
 
 	asyncAddSSTs ctxgroup.Group
 
 	mu struct {
 		syncutil.Mutex
 
-		maxWriteTS hlc.Timestamp
-		totalRows  kvpb.BulkOpSummary
+		maxWriteTS         hlc.Timestamp
+		totalBulkOpSummary kvpb.BulkOpSummary
+
 		// totalStats contain the stats over the entire lifetime of the SST Batcher.
 		// As rows accumulate, the corresponding stats initially start out in
 		// currentStats. After each flush, the contents of currentStats are combined
@@ -189,6 +201,10 @@ type SSTBatcher struct {
 		totalStats  bulkpb.IngestionPerformanceStats
 		lastFlush   time.Time
 		tracingSpan *tracing.Span
+
+		// onFlush is the callback called after the current batch has been
+		// successfully ingested.
+		onFlush func(summary kvpb.BulkOpSummary)
 	}
 }
 
@@ -228,8 +244,10 @@ func MakeStreamSSTBatcher(
 	settings *cluster.Settings,
 	mem mon.BoundAccount,
 	sendLimiter limit.ConcurrentRequestLimiter,
+	onFlush func(summary kvpb.BulkOpSummary),
 ) (*SSTBatcher, error) {
 	b := &SSTBatcher{db: db, settings: settings, ingestAll: true, mem: mem, limiter: sendLimiter}
+	b.SetOnFlush(onFlush)
 	err := b.Reset(ctx)
 	return b, err
 }
@@ -271,6 +289,13 @@ func (b *SSTBatcher) updateMVCCStats(key storage.MVCCKey, value []byte) {
 	b.ms.KeyBytes += storage.MVCCVersionTimestampSize
 	b.ms.ValBytes += int64(len(value))
 	b.ms.ValCount++
+}
+
+// SetOnFlush sets a callback to run after the SSTBatcher flushes.
+func (b *SSTBatcher) SetOnFlush(onFlush func(summary kvpb.BulkOpSummary)) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.mu.onFlush = onFlush
 }
 
 // AddMVCCKey adds a key+timestamp/value pair to the batch (flushing if needed).
@@ -322,7 +347,7 @@ func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key storage.MVCCKey, value 
 	b.batchEndKey = append(b.batchEndKey[:0], key.Key...)
 	b.batchEndValue = append(b.batchEndValue[:0], value...)
 
-	if err := b.rowCounter.Count(key.Key); err != nil {
+	if err := b.batchRowCounter.Count(key.Key); err != nil {
 		return err
 	}
 
@@ -357,7 +382,7 @@ func (b *SSTBatcher) Reset(ctx context.Context) error {
 		b.batchTS = hlc.Timestamp{}
 	}
 
-	b.rowCounter.BulkOpSummary.Reset()
+	b.batchRowCounter.BulkOpSummary.Reset()
 
 	if b.currentStats.SendWaitByStore == nil {
 		b.currentStats.SendWaitByStore = make(map[roachpb.StoreID]time.Duration)
@@ -572,11 +597,12 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 		b.ms.LastUpdateNanos = timeutil.Now().UnixNano()
 	}
 
+	// Take a copy of the fields that can be captured by the call to addSSTable
+	// below, that could occur asynchronously.
 	stats := b.ms
-	summary := b.rowCounter.BulkOpSummary
 	data := b.sstFile.Data()
 	batchTS := b.batchTS
-
+	currentBatchSummary := b.batchRowCounter.BulkOpSummary
 	res, err := b.limiter.Begin(ctx)
 	if err != nil {
 		return err
@@ -622,20 +648,37 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 			return err
 		}
 
+		// Now that we have completed ingesting the SSTables we take a lock and
+		// update the statistics on the SSTBatcher.
 		b.mu.Lock()
 		defer b.mu.Unlock()
-		summary.DataSize += int64(size)
-		summary.SSTDataSize += int64(len(data))
+
+		// Update the statistics associated with the current batch. We do this on
+		// our captured copy of the currentBatchSummary instead of the
+		// b.batchRowCounter since the caller may have reset the batcher by the time
+		// this flush completes. This is possible in the case of an async flush.
+		currentBatchSummary.DataSize += int64(size)
+		currentBatchSummary.SSTDataSize += int64(len(data))
+
+		// Check if the caller has registered a callback to consume a per batch
+		// summary.
+		if b.mu.onFlush != nil {
+			b.mu.onFlush(currentBatchSummary)
+		}
+
 		currentBatchStatsCopy.LogicalDataSize += int64(size)
 		currentBatchStatsCopy.SSTDataSize += int64(len(data))
-		b.mu.totalRows.Add(summary)
-
 		afterFlush := timeutil.Now()
 		currentBatchStatsCopy.BatchWait += afterFlush.Sub(beforeFlush)
 		currentBatchStatsCopy.Duration = afterFlush.Sub(b.mu.lastFlush)
 		currentBatchStatsCopy.LastFlushTime = hlc.Timestamp{WallTime: b.mu.lastFlush.UnixNano()}
 		currentBatchStatsCopy.CurrentFlushTime = hlc.Timestamp{WallTime: afterFlush.UnixNano()}
+
+		// Combine the statistics of this batch into the running aggregate
+		// maintained by the SSTBatcher.
+		b.mu.totalBulkOpSummary.Add(currentBatchSummary)
 		b.mu.totalStats.Combine(currentBatchStatsCopy)
+
 		b.mu.lastFlush = afterFlush
 		if b.mu.tracingSpan != nil {
 			b.mu.tracingSpan.RecordStructured(currentBatchStatsCopy)
@@ -663,16 +706,11 @@ func (b *SSTBatcher) Close(ctx context.Context) {
 	b.mem.Close(ctx)
 }
 
-// GetBatchSummary returns this batcher's total added rows/bytes/etc.
-func (b *SSTBatcher) GetBatchSummary() kvpb.BulkOpSummary {
-	return b.rowCounter.BulkOpSummary
-}
-
 // GetSummary returns this batcher's total added rows/bytes/etc.
 func (b *SSTBatcher) GetSummary() kvpb.BulkOpSummary {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return b.mu.totalRows
+	return b.mu.totalBulkOpSummary
 }
 
 type sstSpan struct {
