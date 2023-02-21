@@ -145,7 +145,7 @@ func TestRouteToNode(t *testing.T) {
 			require.Equal(t, rt.sourceServerID+1, int(s.NodeID()))
 			client, err := s.GetUnauthenticatedHTTPClient()
 			if rt.requireAuth {
-				client, err = s.GetAuthenticatedHTTPClient(rt.requireAdmin)
+				client, err = s.GetAuthenticatedHTTPClient(rt.requireAdmin, serverutils.SingleTenantSession)
 			}
 			require.NoError(t, err)
 
