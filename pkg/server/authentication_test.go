@@ -579,7 +579,7 @@ func TestLogoutClearsCookies(t *testing.T) {
 	ts := s.(*TestServer)
 
 	// Log in.
-	authHTTPClient, _, err := ts.getAuthenticatedHTTPClientAndCookie(authenticatedUserName(), true)
+	authHTTPClient, _, err := ts.getAuthenticatedHTTPClientAndCookie(authenticatedUserName(), true, false)
 	require.NoError(t, err)
 
 	// Log out.
@@ -604,7 +604,9 @@ func TestLogout(t *testing.T) {
 	ts := s.(*TestServer)
 
 	// Log in.
-	authHTTPClient, cookie, err := ts.getAuthenticatedHTTPClientAndCookie(authenticatedUserName(), true)
+	authHTTPClient, cookie, err := ts.getAuthenticatedHTTPClientAndCookie(
+		authenticatedUserName(), true, false,
+	)
 	if err != nil {
 		t.Fatal("error opening HTTP client", err)
 	}
