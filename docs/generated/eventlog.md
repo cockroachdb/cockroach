@@ -2643,6 +2643,38 @@ An event of type `level_stats` contains per-level statistics for an LSM.
 
 
 
+### `replica_stats`
+
+An event of type `replica_stats` contains stats about the replicas in a store.
+These stats are also known as MVCCStats.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `RangeId` | The range_id associated with the replica. | no |
+| `ReplicaId` | replica_id is the id of the replica | no |
+| `ContainsEstimates` | contains_estimates indicates whether stats in the object are estimated or not. See pkg/storage/enginepb/mvcc.pb.go for more details. | no |
+| `LastUpdatedNanos` | last_update_nanos is a timestamp at which the ages were last updated. | no |
+| `IntentAge` | intent_age is the cumulative age of the tracked intents. | no |
+| `GcBytesAge` | gc_bytes_age is the cumulative age of the non-live data | no |
+| `LiveBytes` | live_bytes is the number of bytes stored in keys and values which can in principle be read by means of a Scan or Get in the far future, including intents but not deletion tombstones (or their intents). | no |
+| `LiveCount` | live_count is the number of meta keys tracked under live_bytes. | no |
+| `KeyBytes` | key_bytes is the number of bytes stored in all non-system point keys, including live, meta, old, and deleted keys. | no |
+| `KeyCount` | key_count is the number of meta keys tracked under key_bytes. | no |
+| `ValueBytes` | value_bytes is the number of bytes in all non-system version values, including meta values. | no |
+| `ValueCount` | val_count is the number of meta values tracked under val_bytes. | no |
+| `IntentCount` | intent_count is the number of keys tracked under intent_bytes. It is equal to the number of meta keys in the system with a non-empty Transaction proto. | no |
+| `SeparatedIntentCount` | separated_intent_count is the number of intents that are in the separated lock table. It is <= intent_count. | no |
+| `RangeKeyCount` | range_key_count is the number of range keys tracked under range_key_bytes. | no |
+| `RangeKeyBytes` | range_key_bytes is the encoded size of range keys. | no |
+| `RangeValCount` | range_val_count is the number of range key values tracked under range_val_bytes, i.e. the number of range key versions. | no |
+| `RangeValBytes` | range_val_bytes is the number of bytes stored in range keys. | no |
+| `SysBytes` | sys_bytes is the number of bytes stored in system-local kv-pairs. | no |
+| `SysCount` | sys_count is the number of meta keys tracked under sys_bytes. | no |
+| `AbortSpanBytes` | abort_span_bytes is the number of bytes stored in a range's abort span. These bytes are a subset of sys_bytes. | no |
+
+
+
 ### `store_stats`
 
 An event of type `store_stats` contains per store stats.
@@ -2685,6 +2717,7 @@ Note that because stats are scoped to the lifetime of the process, counters
 | `TableZombieCount` | table_zombie_count is the number of tables no longer referenced by the current DB state, but are still in use by an open iterator (gauge). | no |
 | `TableZombieSize` | table_zombie_size is the size, in bytes, of zombie tables (gauge). | no |
 | `RangeKeySetsCount` | range_key_sets_count is the approximate count of internal range key sets in the store. | no |
+| `Replicas` | replicas is a nested message containing containing statistics about the store's replicas. | yes |
 
 
 #### Common fields

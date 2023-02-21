@@ -3772,6 +3772,201 @@ func (m *RenameType) AppendJSONFields(printComma bool, b redact.RedactableBytes)
 }
 
 // AppendJSONFields implements the EventPayload interface.
+func (m *ReplicaStats) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	if m.RangeId != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"RangeId\":"...)
+		b = strconv.AppendInt(b, int64(m.RangeId), 10)
+	}
+
+	if m.ReplicaId != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"ReplicaId\":"...)
+		b = strconv.AppendInt(b, int64(m.ReplicaId), 10)
+	}
+
+	if m.ContainsEstimates != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"ContainsEstimates\":"...)
+		b = strconv.AppendInt(b, int64(m.ContainsEstimates), 10)
+	}
+
+	if m.LastUpdatedNanos != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"LastUpdatedNanos\":"...)
+		b = strconv.AppendInt(b, int64(m.LastUpdatedNanos), 10)
+	}
+
+	if m.IntentAge != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"IntentAge\":"...)
+		b = strconv.AppendInt(b, int64(m.IntentAge), 10)
+	}
+
+	if m.GcBytesAge != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"GcBytesAge\":"...)
+		b = strconv.AppendInt(b, int64(m.GcBytesAge), 10)
+	}
+
+	if m.LiveBytes != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"LiveBytes\":"...)
+		b = strconv.AppendInt(b, int64(m.LiveBytes), 10)
+	}
+
+	if m.LiveCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"LiveCount\":"...)
+		b = strconv.AppendInt(b, int64(m.LiveCount), 10)
+	}
+
+	if m.KeyBytes != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"KeyBytes\":"...)
+		b = strconv.AppendInt(b, int64(m.KeyBytes), 10)
+	}
+
+	if m.KeyCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"KeyCount\":"...)
+		b = strconv.AppendInt(b, int64(m.KeyCount), 10)
+	}
+
+	if m.ValueBytes != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"ValueBytes\":"...)
+		b = strconv.AppendInt(b, int64(m.ValueBytes), 10)
+	}
+
+	if m.ValueCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"ValueCount\":"...)
+		b = strconv.AppendInt(b, int64(m.ValueCount), 10)
+	}
+
+	if m.IntentCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"IntentCount\":"...)
+		b = strconv.AppendInt(b, int64(m.IntentCount), 10)
+	}
+
+	if m.SeparatedIntentCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"SeparatedIntentCount\":"...)
+		b = strconv.AppendInt(b, int64(m.SeparatedIntentCount), 10)
+	}
+
+	if m.RangeKeyCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"RangeKeyCount\":"...)
+		b = strconv.AppendInt(b, int64(m.RangeKeyCount), 10)
+	}
+
+	if m.RangeKeyBytes != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"RangeKeyBytes\":"...)
+		b = strconv.AppendInt(b, int64(m.RangeKeyBytes), 10)
+	}
+
+	if m.RangeValCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"RangeValCount\":"...)
+		b = strconv.AppendInt(b, int64(m.RangeValCount), 10)
+	}
+
+	if m.RangeValBytes != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"RangeValBytes\":"...)
+		b = strconv.AppendInt(b, int64(m.RangeValBytes), 10)
+	}
+
+	if m.SysBytes != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"SysBytes\":"...)
+		b = strconv.AppendInt(b, int64(m.SysBytes), 10)
+	}
+
+	if m.SysCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"SysCount\":"...)
+		b = strconv.AppendInt(b, int64(m.SysCount), 10)
+	}
+
+	if m.AbortSpanBytes != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"AbortSpanBytes\":"...)
+		b = strconv.AppendInt(b, int64(m.AbortSpanBytes), 10)
+	}
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
 func (m *Restore) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
 
 	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
@@ -5065,6 +5260,23 @@ func (m *StoreStats) AppendJSONFields(printComma bool, b redact.RedactableBytes)
 		printComma = true
 		b = append(b, "\"RangeKeySetsCount\":"...)
 		b = strconv.AppendUint(b, uint64(m.RangeKeySetsCount), 10)
+	}
+
+	if len(m.Replicas) > 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"Replicas\":["...)
+		for i, l := range m.Replicas {
+			if i > 0 {
+				b = append(b, ',')
+			}
+			b = append(b, '{')
+			printComma, b = l.AppendJSONFields(false, b)
+			b = append(b, '}')
+		}
+		b = append(b, ']')
 	}
 
 	return printComma, b

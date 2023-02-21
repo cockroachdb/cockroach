@@ -62,8 +62,8 @@ func TestEventJSON(t *testing.T) {
 		// Primitive fields with an `includeempty` annotation will emit their zero
 		// value.
 		{
-			&StoreStats{Levels: []LevelStats{{Level: 0, NumFiles: 1}, {Level: 6, NumFiles: 2}}},
-			`"Levels":[{"Level":0,"NumFiles":1},{"Level":6,"NumFiles":2}]`,
+			&StoreStats{Levels: []LevelStats{{Level: 0, NumFiles: 1}, {Level: 6, NumFiles: 2}}, Replicas: []ReplicaStats{{RangeId: 1, ReplicaId: 1}, {RangeId: 2, ReplicaId: 1}}},
+			`"Levels":[{"Level":0,"NumFiles":1},{"Level":6,"NumFiles":2}],"Replicas":[{"RangeId":1,"ReplicaId":1},{"RangeId":2,"ReplicaId":1}]`,
 		},
 	}
 

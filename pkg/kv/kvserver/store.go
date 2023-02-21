@@ -74,6 +74,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -3142,6 +3143,7 @@ func (s *Store) ComputeMetricsPeriodically(
 		e := m.AsStoreStatsEvent()
 		e.NodeId = int32(s.NodeID())
 		e.StoreId = int32(s.StoreID())
+		e.Replicas = s.collectReplicaStats(ctx)
 		log.StructuredEvent(ctx, &e)
 	}
 	return m, nil
@@ -3584,4 +3586,38 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// collectReplicaStats collects the stats for each replica and
+// formats them into eventpb.ReplicaStats for logging to the
+// telemetry channel.
+func (s *Store) collectReplicaStats(ctx context.Context) []eventpb.ReplicaStats {
+	replicaStats := []eventpb.ReplicaStats{}
+	s.mu.replicasByRangeID.Range(func(r *Replica) {
+		stats := r.GetMVCCStats()
+		replicaStats = append(replicaStats, eventpb.ReplicaStats{
+			RangeId:              int32(r.GetRangeID()),
+			ReplicaId:            int32(r.ReplicaID()),
+			ContainsEstimates:    stats.ContainsEstimates,
+			LastUpdatedNanos:     stats.LastUpdateNanos,
+			IntentAge:            stats.IntentAge,
+			GcBytesAge:           stats.GCBytesAge,
+			LiveBytes:            stats.LiveBytes,
+			LiveCount:            stats.LiveCount,
+			KeyBytes:             stats.KeyBytes,
+			KeyCount:             stats.KeyCount,
+			ValueBytes:           stats.ValBytes,
+			ValueCount:           stats.ValCount,
+			IntentCount:          stats.IntentCount,
+			SeparatedIntentCount: stats.SeparatedIntentCount,
+			RangeKeyCount:        stats.RangeKeyCount,
+			RangeKeyBytes:        stats.RangeKeyBytes,
+			RangeValCount:        stats.RangeValCount,
+			RangeValBytes:        stats.RangeValBytes,
+			SysCount:             stats.SysCount,
+			SysBytes:             stats.SysBytes,
+			AbortSpanBytes:       stats.AbortSpanBytes,
+		})
+	})
+	return replicaStats
 }
