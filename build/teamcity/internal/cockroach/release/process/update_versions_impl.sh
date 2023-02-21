@@ -22,7 +22,8 @@ bazel build --config=crosslinux //pkg/cmd/release
 
 $(bazel info --config=crosslinux bazel-bin)/pkg/cmd/release/release_/release \
   update-versions \
-  --version=$VERSION \
+  --released-version=$RELEASED_VERSION \
+  --next-version=$NEXT_VERSION \
   --template-dir=pkg/cmd/release/templates \
   --smtp-user=cronjob@cockroachlabs.com \
   --smtp-host=smtp.gmail.com \
