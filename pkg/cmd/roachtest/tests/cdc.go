@@ -1658,7 +1658,11 @@ type latencyVerifier struct {
 	logger                   *logger.Logger
 	setTestStatus            func(...interface{})
 
+	initialScanHighwater time.Time
 	initialScanLatency   time.Duration
+
+	catchupScanEveryN log.EveryN
+
 	maxSeenSteadyLatency time.Duration
 	maxSeenSteadyEveryN  log.EveryN
 	latencyBecameSteady  bool
@@ -1683,20 +1687,44 @@ func makeLatencyVerifier(
 		latencyHist:              hist,
 		tolerateErrors:           tolerateErrors,
 		maxSeenSteadyEveryN:      log.Every(10 * time.Second),
+		catchupScanEveryN:        log.Every(2 * time.Second),
 	}
 }
 
 func (lv *latencyVerifier) noteHighwater(highwaterTime time.Time) {
+	// Highwater timestamps received before the statement time indicate an initial
+	// scan is taking place.
 	if highwaterTime.Before(lv.statementTime) {
 		return
 	}
 	if lv.initialScanLatency == 0 {
 		lv.initialScanLatency = timeutil.Since(lv.statementTime)
-		lv.logger.Printf("initial scan completed: latency %s\n", lv.initialScanLatency)
+		lv.initialScanHighwater = highwaterTime
+		lv.logger.Printf("initial scan completed: latency %s, highwater %s\n", lv.initialScanLatency, lv.initialScanHighwater)
 		return
 	}
 
 	latency := timeutil.Since(highwaterTime)
+	// We assume that the highwater starts far behind and eventually catches up to
+	// within lv.targetSteadyLatency of the present time, which is valid. We
+	// assert that the lag between then highwater and present decreases until it
+	// is below lv.targetSteadyLatency and remains below lv.targetSteadyLatency.
+	// This has the implicit assumption of the lag decreasing, which is only valid
+	// if the highwater progresses faster than real time. If we measure the lag at
+	// two different times without updating the highwater, we will observe an
+	// increase in lag.
+	//
+	// Catchup scans do not update the highwater. If a catchup scan takes longer
+	// than lv.initialScanHighwater, we will observe that the lag is higher than
+	// lv.targetSteadyLatency, violating the above assertion. For this reason, we
+	// wait for catchup scans to finish before asserting latency.
+	if highwaterTime.Equal(lv.initialScanHighwater) {
+		if lv.catchupScanEveryN.ShouldLog() {
+			lv.logger.Printf("catchup scan: latency %s\n", latency.Truncate(time.Millisecond))
+		}
+		return
+	}
+
 	if latency < lv.targetSteadyLatency/2 {
 		lv.latencyBecameSteady = true
 	}
@@ -1708,8 +1736,8 @@ func (lv *latencyVerifier) noteHighwater(highwaterTime time.Time) {
 		// of the test that this happens at some point.
 		if lv.maxSeenSteadyEveryN.ShouldLog() {
 			lv.setTestStatus(fmt.Sprintf(
-				"watching changefeed: end-to-end latency %s not yet below target steady latency %s",
-				latency.Truncate(time.Millisecond), lv.targetSteadyLatency.Truncate(time.Millisecond)))
+				"watching changefeed: end-to-end latency %s not yet below target steady latency %s; highwater %s",
+				latency.Truncate(time.Millisecond), lv.targetSteadyLatency.Truncate(time.Millisecond), highwaterTime))
 		}
 		return
 	}
