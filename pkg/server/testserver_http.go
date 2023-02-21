@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
@@ -88,17 +89,21 @@ func (ts *httpTestServer) GetUnauthenticatedHTTPClient() (http.Client, error) {
 
 // GetAdminHTTPClient implements the TestServerInterface.
 func (ts *httpTestServer) GetAdminHTTPClient() (http.Client, error) {
-	httpClient, _, err := ts.getAuthenticatedHTTPClientAndCookie(authenticatedUserName(), true)
+	httpClient, _, err := ts.getAuthenticatedHTTPClientAndCookie(
+		authenticatedUserName(), true, serverutils.SingleTenantSession,
+	)
 	return httpClient, err
 }
 
 // GetAuthenticatedHTTPClient implements the TestServerInterface.
-func (ts *httpTestServer) GetAuthenticatedHTTPClient(isAdmin bool) (http.Client, error) {
+func (ts *httpTestServer) GetAuthenticatedHTTPClient(
+	isAdmin bool, session serverutils.SessionType,
+) (http.Client, error) {
 	authUser := authenticatedUserName()
 	if !isAdmin {
 		authUser = authenticatedUserNameNoAdmin()
 	}
-	httpClient, _, err := ts.getAuthenticatedHTTPClientAndCookie(authUser, isAdmin)
+	httpClient, _, err := ts.getAuthenticatedHTTPClientAndCookie(authUser, isAdmin, session)
 	return httpClient, err
 }
 
@@ -108,12 +113,12 @@ func (ts *httpTestServer) GetAuthSession(isAdmin bool) (*serverpb.SessionCookie,
 	if !isAdmin {
 		authUser = authenticatedUserNameNoAdmin()
 	}
-	_, cookie, err := ts.getAuthenticatedHTTPClientAndCookie(authUser, isAdmin)
+	_, cookie, err := ts.getAuthenticatedHTTPClientAndCookie(authUser, isAdmin, serverutils.SingleTenantSession)
 	return cookie, err
 }
 
 func (ts *httpTestServer) getAuthenticatedHTTPClientAndCookie(
-	authUser username.SQLUsername, isAdmin bool,
+	authUser username.SQLUsername, isAdmin bool, session serverutils.SessionType,
 ) (http.Client, *serverpb.SessionCookie, error) {
 	authIdx := 0
 	if isAdmin {
@@ -148,6 +153,10 @@ func (ts *httpTestServer) getAuthenticatedHTTPClientAndCookie(
 			url, err := url.Parse(ts.t.sqlServer.execCfg.RPCContext.Config.AdminURL().String())
 			if err != nil {
 				return err
+			}
+			if session == serverutils.MultiTenantSession {
+				cookie.Name = MultitenantSessionCookieName
+				cookie.Value = fmt.Sprintf("%s,%s", cookie.Value, ts.t.tenantName)
 			}
 			cookieJar.SetCookies(url, []*http.Cookie{cookie})
 			// Create an httpClient and attach the cookie jar to the client.

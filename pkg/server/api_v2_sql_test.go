@@ -44,7 +44,7 @@ func TestExecSQL(t *testing.T) {
 	adminClient, err := server.GetAdminHTTPClient()
 	require.NoError(t, err)
 
-	nonAdminClient, err := server.GetAuthenticatedHTTPClient(false)
+	nonAdminClient, err := server.GetAuthenticatedHTTPClient(false, serverutils.SingleTenantSession)
 	require.NoError(t, err)
 
 	datadriven.RunTest(t, "testdata/api_v2_sql",
