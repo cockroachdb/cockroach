@@ -910,7 +910,7 @@ func applyColumnMutation(
 			col,
 			t.Default,
 			&col.ColumnDesc().DefaultExpr,
-			tree.ColumnDefaultExpr,
+			tree.ColumnDefaultExprInSetDefault,
 		); err != nil {
 			return err
 		}
@@ -1086,7 +1086,7 @@ func updateNonComputedColExpr(
 		*exprField = &s
 	}
 
-	if err := updateSequenceDependencies(params, tab, col); err != nil {
+	if err := updateSequenceDependencies(params, tab, col, op); err != nil {
 		return err
 	}
 
@@ -1114,7 +1114,10 @@ func sanitizeColumnExpression(
 // updateSequenceDependencies checks for sequence dependencies on the provided
 // DEFAULT and ON UPDATE expressions and adds any dependencies to the tableDesc.
 func updateSequenceDependencies(
-	params runParams, tableDesc *tabledesc.Mutable, colDesc catalog.Column,
+	params runParams,
+	tableDesc *tabledesc.Mutable,
+	colDesc catalog.Column,
+	defaultExprCtx tree.SchemaExprContext,
 ) error {
 	var seqDescsToUpdate []*tabledesc.Mutable
 	mergeNewSeqDescs := func(toAdd []*tabledesc.Mutable) {
@@ -1139,7 +1142,7 @@ func updateSequenceDependencies(
 	}{
 		{
 			colExprKind:    tabledesc.DefaultExpr,
-			colExprContext: tree.ColumnDefaultExpr,
+			colExprContext: defaultExprCtx,
 			exists:         colDesc.HasDefault,
 			get:            colDesc.GetDefaultExpr,
 		},

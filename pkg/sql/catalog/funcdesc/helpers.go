@@ -81,7 +81,9 @@ func ParamClassToProto(v tree.FuncParamClass) (catpb.Function_Param_Class, error
 }
 
 var schemaExprContextAllowingUDF = map[tree.SchemaExprContext]clusterversion.Key{
-	tree.CheckConstraintExpr: clusterversion.V23_1,
+	tree.CheckConstraintExpr:           clusterversion.V23_1,
+	tree.ColumnDefaultExprInNewTable:   clusterversion.V23_1,
+	tree.ColumnDefaultExprInSetDefault: clusterversion.V23_1,
 }
 
 // MaybeFailOnUDFUsage returns an error if the given expression or any
