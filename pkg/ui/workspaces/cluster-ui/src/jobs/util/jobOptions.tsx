@@ -126,91 +126,93 @@ export const jobStatusToBadgeText = (status: string): string => {
   }
 };
 
+const jobTypeKeys = Object.keys(JobType);
+
 export const typeOptions = [
   {
     value: JobType.UNSPECIFIED.toString(),
     name: "All",
-    key: Object.keys(JobType)[JobType.UNSPECIFIED],
+    key: jobTypeKeys[JobType.UNSPECIFIED],
   },
   {
     value: JobType.BACKUP.toString(),
     name: "Backups",
-    key: Object.keys(JobType)[JobType.BACKUP],
+    key: jobTypeKeys[JobType.BACKUP],
   },
   {
     value: JobType.RESTORE.toString(),
     name: "Restores",
-    key: Object.keys(JobType)[JobType.RESTORE],
+    key: jobTypeKeys[JobType.RESTORE],
   },
   {
     value: JobType.IMPORT.toString(),
     name: "Imports",
-    key: Object.keys(JobType)[JobType.IMPORT],
+    key: jobTypeKeys[JobType.IMPORT],
   },
   {
     value: JobType.SCHEMA_CHANGE.toString(),
     name: "Schema Changes",
-    key: Object.keys(JobType)[JobType.SCHEMA_CHANGE],
+    key: jobTypeKeys[JobType.SCHEMA_CHANGE],
   },
   {
     value: JobType.CHANGEFEED.toString(),
     name: "Changefeed",
-    key: Object.keys(JobType)[JobType.CHANGEFEED],
+    key: jobTypeKeys[JobType.CHANGEFEED],
   },
   {
     value: JobType.CREATE_STATS.toString(),
     name: "Statistics Creation",
-    key: Object.keys(JobType)[JobType.CREATE_STATS],
+    key: jobTypeKeys[JobType.CREATE_STATS],
   },
   {
     value: JobType.AUTO_CREATE_STATS.toString(),
     name: "Auto-Statistics Creation",
-    key: Object.keys(JobType)[JobType.AUTO_CREATE_STATS],
+    key: jobTypeKeys[JobType.AUTO_CREATE_STATS],
   },
   {
     value: JobType.SCHEMA_CHANGE_GC.toString(),
     name: "Schema Change GC",
-    key: Object.keys(JobType)[JobType.SCHEMA_CHANGE_GC],
+    key: jobTypeKeys[JobType.SCHEMA_CHANGE_GC],
   },
   {
     value: JobType.TYPEDESC_SCHEMA_CHANGE.toString(),
     name: "Type Descriptor Schema Changes",
-    key: Object.keys(JobType)[JobType.TYPEDESC_SCHEMA_CHANGE],
+    key: jobTypeKeys[JobType.TYPEDESC_SCHEMA_CHANGE],
   },
   {
     value: JobType.STREAM_INGESTION.toString(),
     name: "Stream Ingestion",
-    key: Object.keys(JobType)[JobType.STREAM_INGESTION],
+    key: jobTypeKeys[JobType.STREAM_INGESTION],
   },
   {
     value: JobType.NEW_SCHEMA_CHANGE.toString(),
     name: "New Schema Changes",
-    key: Object.keys(JobType)[JobType.NEW_SCHEMA_CHANGE],
+    key: jobTypeKeys[JobType.NEW_SCHEMA_CHANGE],
   },
   {
     value: JobType.MIGRATION.toString(),
     name: "Migrations",
-    key: Object.keys(JobType)[JobType.MIGRATION],
+    key: jobTypeKeys[JobType.MIGRATION],
   },
   {
     value: JobType.AUTO_SPAN_CONFIG_RECONCILIATION.toString(),
     name: "Span Config Reconciliation",
-    key: Object.keys(JobType)[JobType.AUTO_SPAN_CONFIG_RECONCILIATION],
+    key: jobTypeKeys[JobType.AUTO_SPAN_CONFIG_RECONCILIATION],
   },
   {
     value: JobType.AUTO_SQL_STATS_COMPACTION.toString(),
     name: "SQL Stats Compactions",
-    key: Object.keys(JobType)[JobType.AUTO_SQL_STATS_COMPACTION],
+    key: jobTypeKeys[JobType.AUTO_SQL_STATS_COMPACTION],
   },
   {
     value: JobType.STREAM_REPLICATION.toString(),
     name: "Stream Replication",
-    key: Object.keys(JobType)[JobType.STREAM_REPLICATION],
+    key: jobTypeKeys[JobType.STREAM_REPLICATION],
   },
   {
     value: JobType.ROW_LEVEL_TTL.toString(),
     name: "Time-to-live Deletions",
-    key: Object.keys(JobType)[JobType.ROW_LEVEL_TTL],
+    key: jobTypeKeys[JobType.ROW_LEVEL_TTL],
   },
 ];
 

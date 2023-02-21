@@ -15,7 +15,7 @@ import { Helmet } from "react-helmet";
 import { RouteComponentProps } from "react-router-dom";
 import { JobsRequest, JobsResponse } from "src/api/jobsApi";
 import { Delayed } from "src/delayed";
-import { Dropdown, DropdownOption } from "src/dropdown";
+import { Dropdown } from "src/dropdown";
 import { Loading } from "src/loading";
 import { PageConfig, PageConfigItem } from "src/pageConfig";
 import { ISortedTablePagination, SortSetting } from "src/sortedtable";
@@ -26,12 +26,7 @@ import { Pagination, ResultsPerPageLabel } from "src/pagination";
 import { isSelectedColumn } from "src/columnsSelector/utils";
 import { DATE_FORMAT_24_UTC, syncHistory, TimestampToMoment } from "src/util";
 import { jobsColumnLabels, JobsTable, makeJobsColumns } from "./jobsTable";
-import {
-  defaultRequestOptions,
-  showOptions,
-  statusOptions,
-  typeOptions,
-} from "../util";
+import { showOptions, statusOptions, typeOptions } from "../util";
 
 import { commonStyles } from "src/common";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
@@ -43,13 +38,6 @@ const sortableTableCx = classNames.bind(sortableTableStyles);
 
 type ITimestamp = google.protobuf.ITimestamp;
 type JobType = cockroach.sql.jobs.jobspb.Type;
-type Job = cockroach.server.serverpb.IJobResponse;
-
-export const DEFAULT_JOBS_REQUEST = new cockroach.server.serverpb.JobsRequest({
-  limit: defaultRequestOptions.limit,
-  status: defaultRequestOptions.status,
-  type: defaultRequestOptions.type,
-});
 
 export interface JobsPageStateProps {
   sort: SortSetting;
@@ -58,8 +46,10 @@ export interface JobsPageStateProps {
   type: number;
   jobs: JobsResponse;
   jobsError: Error | null;
-  jobsLoading: boolean;
+  reqInFlight: boolean;
+  isDataValid: boolean;
   columns: string[];
+  lastUpdated: moment.Moment | null;
 }
 
 export interface JobsPageDispatchProps {
@@ -78,6 +68,17 @@ interface PageState {
 export type JobsPageProps = JobsPageStateProps &
   JobsPageDispatchProps &
   RouteComponentProps;
+
+const reqFromProps = (
+  props: JobsPageStateProps,
+): cockroach.server.serverpb.JobsRequest => {
+  const showAsInt = parseInt(props.show, 10);
+  return new cockroach.server.serverpb.JobsRequest({
+    limit: isNaN(showAsInt) ? 0 : showAsInt,
+    status: props.status,
+    type: props.type,
+  });
+};
 
 export class JobsPage extends React.Component<JobsPageProps, PageState> {
   refreshDataInterval: NodeJS.Timeout;
@@ -125,19 +126,37 @@ export class JobsPage extends React.Component<JobsPageProps, PageState> {
     }
   }
 
-  refresh(): void {
-    this.props.refreshJobs(DEFAULT_JOBS_REQUEST);
+  scheduleFetch(): void {
+    clearTimeout(this.refreshDataInterval);
+    const now = moment.utc();
+    const nextRefresh =
+      !this.props.isDataValid && !this.props.jobsError
+        ? now
+        : this.props.lastUpdated?.clone().add(10, "seconds") ?? now;
+    const msToNextRefresh = Math.max(0, nextRefresh.diff(now, "millisecond"));
+    this.refreshDataInterval = setTimeout(() => {
+      const req = reqFromProps(this.props);
+      this.props.refreshJobs(req);
+    }, msToNextRefresh);
   }
 
   componentDidMount(): void {
-    // Refresh every 10 seconds
-    this.refresh();
-    this.refreshDataInterval = setInterval(() => this.refresh(), 10 * 1000);
+    this.scheduleFetch();
+  }
+
+  componentDidUpdate(prevProps: JobsPageProps): void {
+    if (
+      prevProps.lastUpdated !== this.props.lastUpdated ||
+      prevProps.show !== this.props.show ||
+      prevProps.status !== this.props.status ||
+      prevProps.type !== this.props.type
+    ) {
+      this.scheduleFetch();
+    }
   }
 
   componentWillUnmount(): void {
-    if (!this.refreshDataInterval) return;
-    clearInterval(this.refreshDataInterval);
+    clearTimeout(this.refreshDataInterval);
   }
 
   onChangePage = (current: number): void => {
@@ -167,8 +186,6 @@ export class JobsPage extends React.Component<JobsPageProps, PageState> {
     );
   };
 
-  statusMenuItems: DropdownOption[] = statusOptions;
-
   onTypeSelected = (item: string): void => {
     const type = parseInt(item, 10);
     this.props.setType(type);
@@ -181,9 +198,7 @@ export class JobsPage extends React.Component<JobsPageProps, PageState> {
     );
   };
 
-  typeMenuItems: DropdownOption[] = typeOptions;
-
-  onShowSelected = (item: string) => {
+  onShowSelected = (item: string): void => {
     this.props.setShow(item);
     this.resetPagination();
     syncHistory(
@@ -193,8 +208,6 @@ export class JobsPage extends React.Component<JobsPageProps, PageState> {
       this.props.history,
     );
   };
-
-  showMenuItems: DropdownOption[] = showOptions;
 
   changeSortSetting = (ss: SortSetting): void => {
     if (this.props.setSort) {
@@ -216,42 +229,23 @@ export class JobsPage extends React.Component<JobsPageProps, PageState> {
     )}`;
   };
 
-  getFilteredJobs = (): Job[] => {
-    const { jobs, status, type, show } = this.props;
-    if (jobs) {
-      const filtered = jobs.jobs.filter(
-        job =>
-          (job.status === status || status === "") &&
-          (typeOptions.find(
-            option => option["key"].replace("_", " ") === job.type,
-          )?.value === type.toString() ||
-            type === 0),
-      );
-      const limit = parseInt(show, 10);
-      if (limit !== 0) {
-        return filtered.slice(0, limit);
-      }
-      return filtered;
-    }
-    return [];
-  };
-
   render(): React.ReactElement {
     const {
       jobs,
-      jobsLoading,
       jobsError,
       sort,
       status,
+      reqInFlight,
+      isDataValid,
       type,
       show,
       columns: columnsToDisplay,
       onColumnsChange,
     } = this.props;
-    const isLoading = !jobs || jobsLoading;
+    const isLoading = reqInFlight && (!isDataValid || !jobs);
     const error = jobs && jobsError;
     const { pagination } = this.state;
-    const filteredJobs = this.getFilteredJobs();
+    const filteredJobs = jobs?.jobs ?? [];
     const columns = makeJobsColumns();
     // Iterate over all available columns and create list of SelectOptions with initial selection
     // values based on stored user selections in local storage and default column configs.
@@ -278,10 +272,7 @@ export class JobsPage extends React.Component<JobsPageProps, PageState> {
         <div>
           <PageConfig>
             <PageConfigItem>
-              <Dropdown
-                items={this.statusMenuItems}
-                onChange={this.onStatusSelected}
-              >
+              <Dropdown items={statusOptions} onChange={this.onStatusSelected}>
                 Status:{" "}
                 {
                   statusOptions.find(option => option["value"] === status)[
@@ -291,10 +282,7 @@ export class JobsPage extends React.Component<JobsPageProps, PageState> {
               </Dropdown>
             </PageConfigItem>
             <PageConfigItem>
-              <Dropdown
-                items={this.typeMenuItems}
-                onChange={this.onTypeSelected}
-              >
+              <Dropdown items={typeOptions} onChange={this.onTypeSelected}>
                 Type:{" "}
                 {
                   typeOptions.find(
@@ -304,10 +292,7 @@ export class JobsPage extends React.Component<JobsPageProps, PageState> {
               </Dropdown>
             </PageConfigItem>
             <PageConfigItem>
-              <Dropdown
-                items={this.showMenuItems}
-                onChange={this.onShowSelected}
-              >
+              <Dropdown items={showOptions} onChange={this.onShowSelected}>
                 Show:{" "}
                 {showOptions.find(option => option["value"] === show)["name"]}
               </Dropdown>
