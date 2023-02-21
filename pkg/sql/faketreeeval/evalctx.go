@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -473,6 +474,13 @@ func (ep *DummyEvalPlanner) IsANSIDML() bool {
 func (ep *DummyEvalPlanner) GetRangeDescByID(
 	context.Context, roachpb.RangeID,
 ) (rangeDesc roachpb.RangeDescriptor, err error) {
+	return
+}
+
+// GetRangeDescIterator is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) GetRangeDescIterator(
+	context.Context, roachpb.Span,
+) (it rangedesc.Iterator, err error) {
 	return
 }
 

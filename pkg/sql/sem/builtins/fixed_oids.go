@@ -2045,6 +2045,8 @@ var builtinOidsArray = []string{
 	2069: `crdb_internal.create_tenant(parameters: jsonb) -> int`,
 	2070: `crdb_internal.num_inverted_index_entries(val: tsvector, version: int) -> int`,
 	2072: `crdb_internal.upsert_dropped_relation_gc_ttl(desc_id: int, gc_ttl: interval) -> bool`,
+	2073: `crdb_internal.ranges_in_span(start_key: bytes, end_key: bytes) -> tuple{int AS range_id, bytes AS start_key, bytes AS end_key}`,
+	2074: `crdb_internal.ranges_in_span(span_keys: bytes[]) -> tuple{int AS range_id, bytes AS start_key, bytes AS end_key}`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
