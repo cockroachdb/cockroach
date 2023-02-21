@@ -778,7 +778,7 @@ command line tools like diff. For example:
 
 $ cockroach debug range-data --replicated data/auxiliary/checkpoints/rN_at_M N
 `
-		attentionArgs := []any{r, desc.Replicas(), auxDir, path}
+		attentionArgs := []any{r, desc.Replicas(), redact.Safe(auxDir), redact.Safe(path)}
 		preventStartupMsg := fmt.Sprintf(attentionFmt, attentionArgs...)
 		if err := fs.WriteFile(r.store.TODOEngine(), path, []byte(preventStartupMsg)); err != nil {
 			log.Warningf(ctx, "%v", err)
