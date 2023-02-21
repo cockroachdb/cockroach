@@ -668,14 +668,12 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		}
 	}
 
-	// We have exhausted retries, but we have not seen a "PermanentBulkJobError" so
-	// it is possible that this is a transient error that is taking longer than
-	// our configured retry to go away.
-	//
-	// Let's pause the job instead of failing it so that the user can decide
-	// whether to resume it or cancel it.
+	// We have exhausted retries without getting a "PermanentBulkJobError", but
+	// something must be wrong if we keep seeing errors so give up and fail to
+	// ensure that any alerting on failures is triggered and that any subsequent
+	// schedule runs are not blocked.
 	if err != nil {
-		return jobs.MarkPauseRequestError(errors.Wrap(err, "exhausted retries"))
+		return errors.Wrap(err, "exhausted retries")
 	}
 
 	var backupDetails jobspb.BackupDetails
