@@ -1643,7 +1643,7 @@ var charts = []sectionDescription{
 			},
 			{
 				Title:   "Frontier Lag",
-				Metrics: []string{"replication.frontier_lag_seconds"},
+				Metrics: []string{"replication.frontier_lag_nanos"},
 			},
 			{
 				Title:   "Job Progress Updates",

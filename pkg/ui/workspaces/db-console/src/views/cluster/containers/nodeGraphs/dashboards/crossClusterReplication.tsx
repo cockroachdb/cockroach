@@ -23,12 +23,12 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Replication Lag"
       sources={storeSources}
-      tooltip={`The time between the wall clock and replicated time of the replication stream. 
+      tooltip={`The time between the wall clock and replicated time of the replication stream.
           This metric tracks how far behind the replication stream is relative to now.`}
     >
       <Axis units={AxisUnits.Duration} label="time">
         <Metric
-          name="cr.node.replication.frontier_lag_seconds"
+          name="cr.node.replication.frontier_lag_nanos"
           title="Replication Lag"
         />
       </Axis>
