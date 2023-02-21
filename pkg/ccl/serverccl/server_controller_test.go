@@ -313,3 +313,36 @@ func TestServerStartStop(t *testing.T) {
 		return errors.New("server still alive")
 	})
 }
+
+func TestServerControllerLoginLogout(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	client, err := s.GetAuthenticatedHTTPClient(false, false)
+	require.NoError(t, err)
+
+	resp, err := client.Post(s.AdminURL()+"/logout", "", nil)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.Equal(t, 200, resp.StatusCode)
+
+	// Need a new server because the HTTP Client is memoized.
+	s2, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s2.Stopper().Stop(ctx)
+
+	clientMT, err := s2.GetAuthenticatedHTTPClient(false, true)
+	require.NoError(t, err)
+
+	respMT, err := clientMT.Post(s.AdminURL()+"/logout", "", nil)
+	require.NoError(t, err)
+	defer respMT.Body.Close()
+
+	require.Equal(t, 200, respMT.StatusCode)
+
+}

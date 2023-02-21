@@ -88,17 +88,19 @@ func (ts *httpTestServer) GetUnauthenticatedHTTPClient() (http.Client, error) {
 
 // GetAdminHTTPClient implements the TestServerInterface.
 func (ts *httpTestServer) GetAdminHTTPClient() (http.Client, error) {
-	httpClient, _, err := ts.getAuthenticatedHTTPClientAndCookie(authenticatedUserName(), true)
+	httpClient, _, err := ts.getAuthenticatedHTTPClientAndCookie(authenticatedUserName(), true, false)
 	return httpClient, err
 }
 
 // GetAuthenticatedHTTPClient implements the TestServerInterface.
-func (ts *httpTestServer) GetAuthenticatedHTTPClient(isAdmin bool) (http.Client, error) {
+func (ts *httpTestServer) GetAuthenticatedHTTPClient(
+	isAdmin bool, multiTenantSession bool,
+) (http.Client, error) {
 	authUser := authenticatedUserName()
 	if !isAdmin {
 		authUser = authenticatedUserNameNoAdmin()
 	}
-	httpClient, _, err := ts.getAuthenticatedHTTPClientAndCookie(authUser, isAdmin)
+	httpClient, _, err := ts.getAuthenticatedHTTPClientAndCookie(authUser, isAdmin, multiTenantSession)
 	return httpClient, err
 }
 
@@ -108,12 +110,12 @@ func (ts *httpTestServer) GetAuthSession(isAdmin bool) (*serverpb.SessionCookie,
 	if !isAdmin {
 		authUser = authenticatedUserNameNoAdmin()
 	}
-	_, cookie, err := ts.getAuthenticatedHTTPClientAndCookie(authUser, isAdmin)
+	_, cookie, err := ts.getAuthenticatedHTTPClientAndCookie(authUser, isAdmin, false)
 	return cookie, err
 }
 
 func (ts *httpTestServer) getAuthenticatedHTTPClientAndCookie(
-	authUser username.SQLUsername, isAdmin bool,
+	authUser username.SQLUsername, isAdmin bool, multitenantSession bool,
 ) (http.Client, *serverpb.SessionCookie, error) {
 	authIdx := 0
 	if isAdmin {
@@ -148,6 +150,10 @@ func (ts *httpTestServer) getAuthenticatedHTTPClientAndCookie(
 			url, err := url.Parse(ts.t.sqlServer.execCfg.RPCContext.Config.AdminURL().String())
 			if err != nil {
 				return err
+			}
+			if multitenantSession {
+				cookie.Name = MultitenantSessionCookieName
+				cookie.Value = fmt.Sprintf("%s,%s", cookie.Value, ts.t.tenantName)
 			}
 			cookieJar.SetCookies(url, []*http.Cookie{cookie})
 			// Create an httpClient and attach the cookie jar to the client.

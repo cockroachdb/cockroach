@@ -238,9 +238,17 @@ func (c *serverController) attemptLogoutFromAllTenants() http.Handler {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		sessionCookie, err := r.Cookie(SessionCookieName)
+		sessionCookie, err := r.Cookie(MultitenantSessionCookieName)
+		if errors.Is(err, http.ErrNoCookie) {
+			sessionCookie, err = r.Cookie(SessionCookieName)
+			if err != nil {
+				log.Warningf(ctx, "unable to find session cookie: %v", err)
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+		}
 		if err != nil {
-			log.Warning(ctx, "unable to find session cookie")
+			log.Warningf(ctx, "unable to find multi-tenant session cookie: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}

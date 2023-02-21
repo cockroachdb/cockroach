@@ -147,7 +147,7 @@ type TestTenantInterface interface {
 	GetAdminHTTPClient() (http.Client, error)
 	// GetAuthenticatedHTTPClient returns an http client which has been
 	// authenticated to access Admin API methods (via a cookie).
-	GetAuthenticatedHTTPClient(isAdmin bool) (http.Client, error)
+	GetAuthenticatedHTTPClient(isAdmin bool, multitenantSession bool) (http.Client, error)
 	// GetEncodedSession returns a byte array containing a valid auth
 	// session.
 	GetAuthSession(isAdmin bool) (*serverpb.SessionCookie, error)
