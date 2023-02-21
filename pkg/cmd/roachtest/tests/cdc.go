@@ -1175,7 +1175,7 @@ func registerCDC(r registry.Registry) {
 			})
 			ct.runFeedLatencyVerifier(feed, latencyTargets{
 				initialScanLatency: 30 * time.Minute,
-				steadyLatency:      time.Minute,
+				steadyLatency:      90 * time.Second,
 			})
 			ct.waitForWorkload()
 		},
