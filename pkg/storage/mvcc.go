@@ -62,6 +62,7 @@ var minWALSyncInterval = settings.RegisterDurationSetting(
 	"rocksdb.min_wal_sync_interval",
 	"minimum duration between syncs of the RocksDB WAL",
 	0*time.Millisecond,
+	settings.NonNegativeDurationWithMaximum(1*time.Second),
 )
 
 // MaxIntentsPerWriteIntentError sets maximum number of intents returned in
