@@ -397,13 +397,12 @@ func (i *immediateVisitor) AddColumnToIndex(ctx context.Context, op scop.AddColu
 		// We don't need to track the composite column IDs for stored columns.
 		op.Kind != scpb.IndexColumn_STORED {
 
-		index.NumKeyColumns()
 		var colOrdMap catalog.TableColMap
 		for i := 0; i < index.NumKeyColumns(); i++ {
 			colOrdMap.Set(index.GetKeyColumnID(i), i)
 		}
 		for i := 0; i < index.NumKeySuffixColumns(); i++ {
-			colOrdMap.Set(index.GetKeyColumnID(i), i+index.NumKeyColumns())
+			colOrdMap.Set(index.GetKeySuffixColumnID(i), i+index.NumKeyColumns())
 		}
 		indexDesc.CompositeColumnIDs = append(indexDesc.CompositeColumnIDs, column.GetID())
 		cids := indexDesc.CompositeColumnIDs

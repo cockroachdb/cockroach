@@ -1845,3 +1845,18 @@ CREATE TABLE t_90836(a INT NOT NULL, b INT NOT NULL, CONSTRAINT "constraint" PRI
 
 statement ok
 ALTER TABLE t_90836 DROP CONSTRAINT "constraint"; ALTER TABLE t_90836 ADD CONSTRAINT "constraint" PRIMARY KEY (b);
+
+
+# The following sub test validates a primary key swap,
+# where the recreated secondary indexes will have suffix
+# columns.
+subtest regression_97296
+
+statement ok
+CREATE TABLE t_97296 (a DECIMAL PRIMARY KEY, b INT NOT NULL, c INT NOT NULL, INDEX i4(c));
+
+statement ok
+INSERT INTO t_97296 VALUES (0.0, 5, 32);
+
+statement ok
+ALTER TABLE t_97296 ALTER PRIMARY KEY USING COLUMNS (b, a);
