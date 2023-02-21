@@ -100,7 +100,7 @@ var LoadBasedRebalancingObjective = settings.RegisterEnumSetting(
 	"what objective does the cluster use to rebalance; if set to `qps` "+
 		"the cluster will attempt to balance qps among stores, if set to "+
 		"`cpu` the cluster will attempt to balance cpu usage among stores",
-	"qps",
+	"cpu",
 	map[int64]string{
 		int64(LBRebalancingQueries): "qps",
 		int64(LBRebalancingCPU):     "cpu",
