@@ -176,6 +176,8 @@ message ColumnDescriptor {
   repeated uint32 uses_sequence_ids = 10 [(gogoproto.casttype) = "ID"];
   // Ids of sequences that the column owns.
   repeated uint32 owns_sequence_ids = 12 [(gogoproto.casttype) = "ID"];
+  // Ids of functions used in the column's DEFAULT and ON UPDATE expressions.
+  repeated uint32 uses_function_ids = 21 [(gogoproto.casttype) = "ID"];
   // Expression to use to compute the value of this column if this is a
   // computed column. Note that it is not correct to use ComputeExpr
   // as output to display to a user. User defined types within ComputeExpr
@@ -202,6 +204,8 @@ message ColumnDescriptor {
   // SystemColumnKind represents what kind of system column this column
   // descriptor represents, if any.
   optional cockroach.sql.catalog.catpb.SystemColumnKind system_column_kind = 15 [(gogoproto.nullable) = false];
+
+  // Next id: 22
 }
 
 // ColumnFamilyDescriptor is set of columns stored together in one kv entry.

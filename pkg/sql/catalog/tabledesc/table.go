@@ -100,7 +100,11 @@ func (cdd *ColumnDefDescs) ForEachTypedExpr(
 //
 // See the ColumnDefDescs definition for a description of the return values.
 func MakeColumnDefDescs(
-	ctx context.Context, d *tree.ColumnTableDef, semaCtx *tree.SemaContext, evalCtx *eval.Context,
+	ctx context.Context,
+	d *tree.ColumnTableDef,
+	semaCtx *tree.SemaContext,
+	evalCtx *eval.Context,
+	defaultExprCtx tree.SchemaExprContext,
 ) (*ColumnDefDescs, error) {
 	if d.IsSerial {
 		// To the reader of this code: if control arrives here, this means
@@ -162,12 +166,12 @@ func MakeColumnDefDescs(
 		// Verify the default expression type is compatible with the column type
 		// and does not contain invalid functions.
 		ret.DefaultExpr, err = schemaexpr.SanitizeVarFreeExpr(
-			ctx, d.DefaultExpr.Expr, resType, "DEFAULT", semaCtx, volatility.Volatile, true, /*allowAssignmentCast*/
+			ctx, d.DefaultExpr.Expr, resType, defaultExprCtx, semaCtx, volatility.Volatile, true, /*allowAssignmentCast*/
 		)
 		if err != nil {
 			return nil, err
 		}
-		if err := funcdesc.MaybeFailOnUDFUsage(ret.DefaultExpr, tree.ColumnDefaultExpr, evalCtx.Settings.Version.ActiveVersion(ctx)); err != nil {
+		if err := funcdesc.MaybeFailOnUDFUsage(ret.DefaultExpr, defaultExprCtx, evalCtx.Settings.Version.ActiveVersion(ctx)); err != nil {
 			return nil, err
 		}
 
@@ -185,7 +189,7 @@ func MakeColumnDefDescs(
 		// Verify the on update expression type is compatible with the column type
 		// and does not contain invalid functions.
 		ret.OnUpdateExpr, err = schemaexpr.SanitizeVarFreeExpr(
-			ctx, d.OnUpdateExpr.Expr, resType, "ON UPDATE", semaCtx, volatility.Volatile, true, /*allowAssignmentCast*/
+			ctx, d.OnUpdateExpr.Expr, resType, tree.ColumnOnUpdateExpr, semaCtx, volatility.Volatile, true, /*allowAssignmentCast*/
 		)
 		if err != nil {
 			return nil, err
