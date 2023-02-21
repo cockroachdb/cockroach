@@ -946,51 +946,79 @@ func TestSplitWithLearnerOrJointConfig(t *testing.T) {
 func TestSplitRetriesOnFailedExitOfJointConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ctx := context.Background()
 
-	var rangeIDAtomic int64
-	var rejectedCount int
-	const maxRejects = 3
-	reqFilter := func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
-		rangeID := roachpb.RangeID(atomic.LoadInt64(&rangeIDAtomic))
-		if ba.RangeID == rangeID && ba.IsSingleTransferLeaseRequest() && rejectedCount < maxRejects {
-			rejectedCount++
-			repl := ba.Requests[0].GetTransferLease().Lease.Replica
-			status := raftutil.ReplicaStateProbe
-			err := kvserver.NewLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(repl, status)
-			return kvpb.NewError(err)
-		}
-		return nil
+	testCases := []struct {
+		name  string
+		errFn func(*kvpb.TransferLeaseRequest) error
+	}{
+		{
+			name: "targetMayNeedSnapshot",
+			errFn: func(req *kvpb.TransferLeaseRequest) error {
+				repl := req.Lease.Replica
+				status := raftutil.ReplicaStateProbe
+				return kvserver.NewLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(repl, status)
+			},
+		},
+		{
+			name: "replicaNotFound",
+			errFn: func(_ *kvpb.TransferLeaseRequest) error {
+				return roachpb.ErrReplicaNotFound
+			},
+		},
+		{
+			name: "replicaCannotHoldLease",
+			errFn: func(_ *kvpb.TransferLeaseRequest) error {
+				return roachpb.ErrReplicaCannotHoldLease
+			},
+		},
 	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var rangeIDAtomic int64
+			var rejectedCount int
+			const maxRejects = 3
+			reqFilter := func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
+				rangeID := roachpb.RangeID(atomic.LoadInt64(&rangeIDAtomic))
+				if ba.RangeID == rangeID && ba.IsSingleTransferLeaseRequest() && rejectedCount < maxRejects {
+					rejectedCount++
+					req := ba.Requests[0].GetTransferLease()
+					err := tc.errFn(req)
+					return kvpb.NewError(err)
+				}
+				return nil
+			}
 
-	knobs, ltk := makeReplicationTestKnobs()
-	knobs.Store.(*kvserver.StoreTestingKnobs).TestingRequestFilter = reqFilter
-	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
-		ServerArgs:      base.TestServerArgs{Knobs: knobs},
-		ReplicationMode: base.ReplicationManual,
-	})
-	defer tc.Stopper().Stop(ctx)
+			ctx := context.Background()
+			knobs, ltk := makeReplicationTestKnobs()
+			knobs.Store.(*kvserver.StoreTestingKnobs).TestingRequestFilter = reqFilter
+			tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
+				ServerArgs:      base.TestServerArgs{Knobs: knobs},
+				ReplicationMode: base.ReplicationManual,
+			})
+			defer tc.Stopper().Stop(ctx)
 
-	scratchStartKey := tc.ScratchRange(t)
-	scratchDesc := tc.LookupRangeOrFatal(t, scratchStartKey)
-	atomic.StoreInt64(&rangeIDAtomic, int64(scratchDesc.RangeID))
+			scratchStartKey := tc.ScratchRange(t)
+			scratchDesc := tc.LookupRangeOrFatal(t, scratchStartKey)
+			atomic.StoreInt64(&rangeIDAtomic, int64(scratchDesc.RangeID))
 
-	// Rebalance the range from one store to the other. This will enter a joint
-	// configuration and then stop because of the testing knobs.
-	atomic.StoreInt64(&ltk.replicationAlwaysUseJointConfig, 1)
-	atomic.StoreInt64(&ltk.replicaAddStopAfterJointConfig, 1)
-	tc.RebalanceVoterOrFatal(ctx, t, scratchStartKey, tc.Target(0), tc.Target(1))
+			// Rebalance the range from one store to the other. This will enter a joint
+			// configuration and then stop because of the testing knobs.
+			atomic.StoreInt64(&ltk.replicationAlwaysUseJointConfig, 1)
+			atomic.StoreInt64(&ltk.replicaAddStopAfterJointConfig, 1)
+			tc.RebalanceVoterOrFatal(ctx, t, scratchStartKey, tc.Target(0), tc.Target(1))
 
-	// Perform a split of the range. This will auto-transitions us out of the
-	// joint conf before doing work. However, because of the filter we installed
-	// above, this will first run into a series of retryable errors when
-	// attempting to perform a lease transfer. The split should retry until the
-	// join configuration completes.
-	left, right := tc.SplitRangeOrFatal(t, scratchStartKey.Next())
-	require.False(t, left.Replicas().InAtomicReplicationChange(), left)
-	require.False(t, right.Replicas().InAtomicReplicationChange(), right)
+			// Perform a split of the range. This will auto-transitions us out of the
+			// joint conf before doing work. However, because of the filter we installed
+			// above, this will first run into a series of retryable errors when
+			// attempting to perform a lease transfer. The split should retry until the
+			// joint configuration completes.
+			left, right := tc.SplitRangeOrFatal(t, scratchStartKey.Next())
+			require.False(t, left.Replicas().InAtomicReplicationChange(), left)
+			require.False(t, right.Replicas().InAtomicReplicationChange(), right)
 
-	require.Equal(t, maxRejects, rejectedCount)
+			require.Equal(t, maxRejects, rejectedCount)
+		})
+	}
 }
 
 func TestReplicateQueueSeesLearnerOrJointConfig(t *testing.T) {

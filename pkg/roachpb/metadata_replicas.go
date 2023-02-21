@@ -507,12 +507,15 @@ func (c ReplicaChangeType) IsRemoval() bool {
 	}
 }
 
-var errReplicaNotFound = errors.Errorf(`replica not found in RangeDescriptor`)
+// ErrReplicaNotFound can be returned from CheckCanReceiveLease.
+//
+// See: https://github.com/cockroachdb/cockroach/issues/93163.
+var ErrReplicaNotFound = errors.New(`lease target replica not found in RangeDescriptor`)
 
 // ErrReplicaCannotHoldLease can be returned from CheckCanReceiveLease.
 //
-// See: https://github.com/cockroachdb/cockroach/issues/93163
-var ErrReplicaCannotHoldLease = errors.Errorf("replica cannot hold lease")
+// See: https://github.com/cockroachdb/cockroach/issues/93163.
+var ErrReplicaCannotHoldLease = errors.New(`lease target replica cannot hold lease`)
 
 // CheckCanReceiveLease checks whether `wouldbeLeaseholder` can receive a lease.
 // Returns an error if the respective replica is not eligible.
@@ -543,7 +546,7 @@ func CheckCanReceiveLease(
 ) error {
 	repDesc, ok := replDescs.GetReplicaDescriptorByID(wouldbeLeaseholder.ReplicaID)
 	if !ok {
-		return errReplicaNotFound
+		return ErrReplicaNotFound
 	}
 	if !(repDesc.IsVoterNewConfig() ||
 		(repDesc.IsVoterOldConfig() && replDescs.containsVoterIncoming() && wasLastLeaseholder)) {

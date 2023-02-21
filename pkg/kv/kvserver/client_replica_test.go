@@ -1636,7 +1636,7 @@ func TestLeaseExpirationBasedRangeTransfer(t *testing.T) {
 
 	{
 		// An invalid target should result in an error.
-		const expected = "unable to find store .* in range"
+		const expected = "lease target replica not found in RangeDescriptor"
 		if err := l.replica0.AdminTransferLease(ctx, 1000, false /* bypassSafetyChecks */); !testutils.IsError(err, expected) {
 			t.Fatalf("expected %s, but found %v", expected, err)
 		}

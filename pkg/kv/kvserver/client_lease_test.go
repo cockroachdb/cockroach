@@ -243,21 +243,10 @@ func TestCannotTransferLeaseToVoterDemoting(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			err := tc.Server(0).DB().AdminTransferLease(context.Background(),
+			err := tc.Server(0).DB().AdminTransferLease(ctx,
 				scratchStartKey, tc.Target(2).StoreID)
 			require.Error(t, err)
-			require.Regexp(t,
-				// The error generated during evaluation.
-				"replica cannot hold lease|"+
-					// If the lease transfer request has not yet made it to the latching
-					// phase by the time we close(ch) below, we can receive the following
-					// error due to the sanity checking which happens in
-					// AdminTransferLease before attempting to evaluate the lease
-					// transfer.
-					// We have a sleep loop below to try to encourage the lease transfer
-					// to make it past that sanity check prior to letting the change
-					// of replicas proceed.
-					"cannot transfer lease to replica of type VOTER_DEMOTING_LEARNER", err.Error())
+			require.True(t, errors.Is(err, roachpb.ErrReplicaCannotHoldLease))
 		}()
 		// Try really hard to make sure that our request makes it past the
 		// sanity check error to the evaluation error.
@@ -356,7 +345,8 @@ func TestTransferLeaseToVoterDemotingFails(t *testing.T) {
 			// (wasLastLeaseholder = false in CheckCanReceiveLease).
 			err = tc.Server(0).DB().AdminTransferLease(context.Background(),
 				scratchStartKey, tc.Target(2).StoreID)
-			require.EqualError(t, err, `replica cannot hold lease`)
+			require.Error(t, err)
+			require.True(t, errors.Is(err, roachpb.ErrReplicaCannotHoldLease))
 			// Make sure the lease is still on n1.
 			leaseHolder, err = tc.FindRangeLeaseHolder(desc, nil)
 			require.NoError(t, err)

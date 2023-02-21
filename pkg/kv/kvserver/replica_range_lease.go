@@ -879,7 +879,7 @@ func (r *Replica) AdminTransferLease(
 		// Verify the target is a replica of the range.
 		var ok bool
 		if nextLeaseHolder, ok = desc.GetReplicaDescriptor(target); !ok {
-			return nil, nil, errors.Errorf("unable to find store %d in range %+v", target, desc)
+			return nil, nil, roachpb.ErrReplicaNotFound
 		}
 
 		if nextLease, ok := r.mu.pendingLeaseRequest.RequestPending(); ok &&

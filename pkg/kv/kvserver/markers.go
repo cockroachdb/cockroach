@@ -38,6 +38,7 @@ var errMarkCanRetryReplicationChangeWithUpdatedDesc = errors.New("should retry w
 func IsRetriableReplicationChangeError(err error) bool {
 	return errors.Is(err, errMarkCanRetryReplicationChangeWithUpdatedDesc) ||
 		IsLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(err) ||
+		IsLeaseTransferRejectedBecauseTargetCannotReceiveLease(err) ||
 		isSnapshotError(err)
 }
 
@@ -105,4 +106,15 @@ var errMarkLeaseTransferRejectedBecauseTargetMayNeedSnapshot = errors.New(
 // periodically requested in maybeTransferRaftLeadershipToLeaseholderLocked.
 func IsLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(err error) bool {
 	return errors.Is(err, errMarkLeaseTransferRejectedBecauseTargetMayNeedSnapshot)
+}
+
+// IsLeaseTransferRejectedBecauseTargetCannotReceiveLease detects whether an
+// error (assumed to have been emitted by a lease transfer request) indicates
+// that the lease transfer failed because the current leaseholder determined
+// that the lease transfer target cannot is not qualified to receive the lease.
+// This can be an indication that the current leaseholder has an outdated view
+// of the lease transfer target's state.
+func IsLeaseTransferRejectedBecauseTargetCannotReceiveLease(err error) bool {
+	return errors.Is(err, roachpb.ErrReplicaNotFound) ||
+		errors.Is(err, roachpb.ErrReplicaCannotHoldLease)
 }

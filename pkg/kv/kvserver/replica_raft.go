@@ -423,11 +423,13 @@ func (r *Replica) propose(
 		if err := roachpb.CheckCanReceiveLease(
 			lhDesc, proposedDesc.Replicas(), true, /* wasLastLeaseholder */
 		); err != nil {
-			e := errors.Mark(errors.Wrapf(err, "%v received invalid ChangeReplicasTrigger %s to "+
+			err = errors.Handled(err)
+			err = errors.Mark(err, errMarkInvalidReplicationChange)
+			err = errors.Wrapf(err, "%v received invalid ChangeReplicasTrigger %s to "+
 				"remove self (leaseholder); lhRemovalAllowed: %v; current desc: %v; proposed desc: %v",
-				lhDesc, crt, true /* lhRemovalAllowed */, r.Desc(), proposedDesc), errMarkInvalidReplicationChange)
-			log.Errorf(p.ctx, "%v", e)
-			return kvpb.NewError(e)
+				lhDesc, crt, true /* lhRemovalAllowed */, r.Desc(), proposedDesc)
+			log.Errorf(p.ctx, "%v", err)
+			return kvpb.NewError(err)
 		}
 	} else if p.command.ReplicatedEvalResult.AddSSTable != nil {
 		log.VEvent(p.ctx, 4, "sideloadable proposal detected")

@@ -356,17 +356,7 @@ func transferLeaseResultIsIgnorable(res Result) bool {
 		return false
 	}
 	return kvserver.IsLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(err) ||
-		// Only VOTER (_FULL, _INCOMING, sometimes _OUTGOING) replicas can
-		// hold a range lease. Attempts to transfer to lease to any other
-		// replica type are rejected. See CheckCanReceiveLease.
-		resultIsErrorStr(res, `replica cannot hold lease`) ||
-		// Only replicas that are part of the range can be given
-		// the lease. This case is hit if a TransferLease op races
-		// with a ChangeReplicas op.
-		resultIsErrorStr(res, `replica not found in RangeDescriptor`) ||
-		// A lease transfer that races with a replica removal may find that
-		// the store it was targeting is no longer part of the range.
-		resultIsErrorStr(res, `unable to find store \d+ in range`) ||
+		kvserver.IsLeaseTransferRejectedBecauseTargetCannotReceiveLease(err) ||
 		// A lease transfer is not permitted while a range merge is in its
 		// critical phase.
 		resultIsErrorStr(res, `cannot transfer lease while merge in progress`) ||
@@ -730,7 +720,6 @@ func (v *validator) processOp(op Operation) {
 			ignore = kvserver.IsRetriableReplicationChangeError(err) ||
 				kvserver.IsIllegalReplicationChangeError(err) ||
 				kvserver.IsReplicationChangeInProgressError(err) ||
-				errors.Is(err, roachpb.ErrReplicaCannotHoldLease) ||
 				transferLeaseResultIsIgnorable(t.Result) // replication changes can transfer leases
 		}
 		if !ignore {
