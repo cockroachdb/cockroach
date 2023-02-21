@@ -1178,6 +1178,9 @@ func sanitizeColumnExpression(
 		return nil, "", pgerror.WithCandidateCode(err, pgcode.DatatypeMismatch)
 	}
 
+	if err := tree.MaybeFailOnUDFUsage(typedExpr); err != nil {
+		return nil, "", err
+	}
 	s := tree.Serialize(typedExpr)
 	return typedExpr, s, nil
 }
