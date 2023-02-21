@@ -1364,10 +1364,15 @@ bin/.go_protobuf_sources: $(GO_PROTOS) $(GOGOPROTO_PROTO) $(ERRORS_PROTO) bin/.b
 	gofmt -s -w $(GO_SOURCES)
 	touch $@
 
+
+# NOTE(ssd): The grpc-gateway doesn't produce the correct import for roachpb without this.
+# Another fix would be to set go_package to the full package path in span_stats.proto.
+HACKY_MAP_ARG := Mroachpb/span_stats.proto=github.com/cockroachdb/cockroach/pkg/roachpb
+
 bin/.gw_protobuf_sources: $(GW_SERVER_PROTOS) $(GW_TS_PROTOS) $(GO_PROTOS) $(GOGOPROTO_PROTO) $(ERRORS_PROTO) bin/.bootstrap c-deps/proto-rebuild vendor/modules.txt
 	$(FIND_RELEVANT) -type f -name '*.pb.gw.go' -exec rm {} +
-		buf protoc -Ipkg -I$(GOGO_PROTOBUF_PATH) -I$(ERRORS_PATH) -I$(COREOS_PATH) -I$(PROMETHEUS_PATH) -I$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --grpc-gateway_out=logtostderr=true,request_context=true:./pkg $(GW_SERVER_PROTOS)
-		buf protoc -Ipkg -I$(GOGO_PROTOBUF_PATH) -I$(ERRORS_PATH) -I$(COREOS_PATH) -I$(PROMETHEUS_PATH) -I$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --grpc-gateway_out=logtostderr=true,request_context=true:./pkg $(GW_TS_PROTOS)
+		buf protoc -Ipkg -I$(GOGO_PROTOBUF_PATH) -I$(ERRORS_PATH) -I$(COREOS_PATH) -I$(PROMETHEUS_PATH) -I$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --grpc-gateway_out=logtostderr=true,request_context=true,$(HACKY_MAP_ARG):./pkg $(GW_SERVER_PROTOS)
+		buf protoc -Ipkg -I$(GOGO_PROTOBUF_PATH) -I$(ERRORS_PATH) -I$(COREOS_PATH) -I$(PROMETHEUS_PATH) -I$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --grpc-gateway_out=logtostderr=true,request_context=true,$(HACKY_MAP_ARG):./pkg $(GW_TS_PROTOS)
 	gofmt -s -w $(GW_SOURCES)
 	@# TODO(jordan,benesch) This can be removed along with the above TODO.
 	goimports -w $(GW_SOURCES)
