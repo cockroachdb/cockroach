@@ -26,13 +26,19 @@ then
     EXTRA_TARGETS="$EXTRA_TARGETS //pkg/cmd/roachprod"
 fi
 
-bazel build //pkg/cmd/bazci --config=ci
-BAZEL_BIN=$(bazel info bazel-bin --config=ci)
-"$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci" -- build -c opt \
-		       --config "$CONFIG" --config ci --config with_ui \
-		       //pkg/cmd/cockroach-short //pkg/cmd/cockroach \
-		       //pkg/cmd/cockroach-sql \
-		       //pkg/cmd/cockroach-oss //c-deps:libgeos $EXTRA_TARGETS
+bazel build -c opt \
+      --config "$CONFIG" --config ci --config with_ui \
+      --bes_results_url=https://app.buildbuddy.io/invocation/ \
+      --bes_backend=grpcs://remote.buildbuddy.io \
+      --remote_cache=grpcs://remote.buildbuddy.io \
+      --remote_download_toplevel \
+      --remote_timeout=3600 \
+      --remote_header=x-buildbuddy-api-key=$BUILDBUDDY_API_KEY \
+      --experimental_remote_cache_compression \
+      --build_metadata=ROLE=CI \
+      //pkg/cmd/cockroach-short //pkg/cmd/cockroach \
+      //pkg/cmd/cockroach-sql \
+      //pkg/cmd/cockroach-oss //c-deps:libgeos $EXTRA_TARGETS
 
 if [[ $CONFIG == "crosslinuxfips" ]]; then
     for bin in cockroach cockroach-short cockroach-sql cockroach-oss; do

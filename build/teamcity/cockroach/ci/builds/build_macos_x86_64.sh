@@ -8,5 +8,6 @@ source "$dir/teamcity-support.sh"  # For $root
 source "$dir/teamcity-bazel-support.sh"  # For run_bazel
 
 tc_start_block "Run Bazel build"
-run_bazel build/teamcity/cockroach/ci/builds/build_impl.sh crossmacos
+BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e BUILDBUDDY_API_KEY" \
+                               run_bazel build/teamcity/cockroach/ci/builds/build_impl.sh crossmacos
 tc_end_block "Run Bazel build"
