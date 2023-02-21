@@ -1,0 +1,116 @@
+setup
+CREATE TABLE t (i INT PRIMARY KEY, b INT);
+CREATE FUNCTION f(b INT) RETURNS INT LANGUAGE SQL AS $$ SELECT b + 1 $$;
+----
+
+ops
+ALTER TABLE t ADD CONSTRAINT check_b CHECK (f(b) > 1);
+----
+StatementPhase stage 1 of 1 with 2 MutationType ops
+  transitions:
+    [[CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}, PUBLIC], ABSENT] -> WRITE_ONLY
+  ops:
+    *scop.AddCheckConstraint
+      CheckExpr: '[FUNCTION 100105](b) > 1:::INT8'
+      ColumnIDs:
+      - 2
+      ConstraintID: 2
+      TableID: 104
+      Validity: 2
+    *scop.AddTableConstraintBackReferencesInFunctions
+      BackReferencedConstraintID: 2
+      BackReferencedTableID: 104
+      FunctionIDs:
+      - 105
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}, PUBLIC], WRITE_ONLY] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 5 MutationType ops
+  transitions:
+    [[CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}, PUBLIC], ABSENT] -> WRITE_ONLY
+  ops:
+    *scop.AddCheckConstraint
+      CheckExpr: '[FUNCTION 100105](b) > 1:::INT8'
+      ColumnIDs:
+      - 2
+      ConstraintID: 2
+      TableID: 104
+      Validity: 2
+    *scop.AddTableConstraintBackReferencesInFunctions
+      BackReferencedConstraintID: 2
+      BackReferencedTableID: 104
+      FunctionIDs:
+      - 105
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 104
+      Initialize: true
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 105
+      Initialize: true
+    *scop.CreateSchemaChangerJob
+      Authorization:
+        UserName: root
+      DescriptorIDs:
+      - 104
+      - 105
+      JobID: 1
+      RunningStatus: PostCommitPhase stage 1 of 2 with 1 ValidationType op pending
+      Statements:
+      - statement: ALTER TABLE t ADD CONSTRAINT check_b CHECK (f(b) > 1)
+        redactedstatement: ALTER TABLE ‹defaultdb›.public.‹t› ADD CONSTRAINT ‹check_b› CHECK
+          (f(‹b›) > ‹1›)
+        statementtag: ALTER TABLE
+PostCommitPhase stage 1 of 2 with 1 ValidationType op
+  transitions:
+    [[CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}, PUBLIC], WRITE_ONLY] -> VALIDATED
+  ops:
+    *scop.ValidateConstraint
+      ConstraintID: 2
+      TableID: 104
+PostCommitPhase stage 2 of 2 with 5 MutationType ops
+  transitions:
+    [[CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}, PUBLIC], VALIDATED] -> PUBLIC
+    [[ConstraintWithoutIndexName:{DescID: 104, Name: check_b, ConstraintID: 2}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.SetConstraintName
+      ConstraintID: 2
+      Name: check_b
+      TableID: 104
+    *scop.MakeValidatedCheckConstraintPublic
+      ConstraintID: 2
+      TableID: 104
+    *scop.RemoveJobStateFromDescriptor
+      DescriptorID: 104
+      JobID: 1
+    *scop.RemoveJobStateFromDescriptor
+      DescriptorID: 105
+      JobID: 1
+    *scop.UpdateSchemaChangerJob
+      DescriptorIDsToRemove:
+      - 104
+      - 105
+      IsNonCancelable: true
+      JobID: 1
+
+deps
+ALTER TABLE t ADD CONSTRAINT check_b CHECK (f(b) > 1);
+----
+- from: [CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}, ABSENT]
+  to:   [CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}, WRITE_ONLY]
+  kind: PreviousStagePrecedence
+  rule: CheckConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY
+- from: [CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}, VALIDATED]
+  to:   [CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}, PUBLIC]
+  kind: PreviousStagePrecedence
+  rule: CheckConstraint transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC
+- from: [CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}, WRITE_ONLY]
+  to:   [CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}, VALIDATED]
+  kind: PreviousStagePrecedence
+  rule: CheckConstraint transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED
+- from: [ConstraintWithoutIndexName:{DescID: 104, Name: check_b, ConstraintID: 2}, PUBLIC]
+  to:   [CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}, PUBLIC]
+  kind: SameStagePrecedence
+  rule: constraint dependent public right before complex constraint

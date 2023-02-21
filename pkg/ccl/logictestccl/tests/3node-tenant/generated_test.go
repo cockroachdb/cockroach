@@ -2026,6 +2026,13 @@ func TestTenantLogic_udf(
 	runLogicTest(t, "udf")
 }
 
+func TestTenantLogic_udf_in_constraints(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_in_constraints")
+}
+
 func TestTenantLogic_udf_oid_ref(
 	t *testing.T,
 ) {

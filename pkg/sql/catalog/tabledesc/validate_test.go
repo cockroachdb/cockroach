@@ -109,6 +109,7 @@ var validationMap = []struct {
 			"RefreshViewRequired": {status: thisFieldReferencesNoObjects},
 			"DependsOn":           {status: iSolemnlySwearThisFieldIsValidated},
 			"DependsOnTypes":      {status: iSolemnlySwearThisFieldIsValidated},
+			"DependsOnFunctions":  {status: iSolemnlySwearThisFieldIsValidated},
 			"DependedOnBy":        {status: iSolemnlySwearThisFieldIsValidated},
 			"MutationJobs":        {status: thisFieldReferencesNoObjects},
 			"SequenceOpts": {status: todoIAmKnowinglyAddingTechDebt,
@@ -2441,6 +2442,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 		err        string
 		desc       descpb.TableDescriptor
 		otherDescs []descpb.TableDescriptor
+		fnDescs    []descpb.FunctionDescriptor
 	}{
 		// Foreign keys
 		{ // 0
@@ -2816,7 +2818,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 			}},
 		},
 		{ // 15
-			err: `depended-on-by function "f" (100) has no corresponding depends-on forward reference`,
+			err: `invalid depended-on-by relation back reference: referenced descriptor ID 100: referenced descriptor not found`,
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
 				ID:                      51,
@@ -2828,17 +2830,121 @@ func TestValidateCrossTableReferences(t *testing.T) {
 			},
 		},
 		{ // 16
+			err: `depended-on-by function "f" (100) has no corresponding depends-on forward reference`,
+			desc: descpb.TableDescriptor{
+				Name:                    "foo",
+				ID:                      51,
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				DependedOnBy: []descpb.TableDescriptor_Reference{
+					{ID: 100},
+				},
+			},
+			fnDescs: []descpb.FunctionDescriptor{
+				{ID: 100, Name: "f"},
+			},
+		},
+		{ // 17
 			err: `depends-on function "f" (100) has no corresponding depended-on-by back reference`,
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
 				ID:                      51,
 				ParentID:                1,
 				UnexposedParentSchemaID: keys.PublicSchemaID,
-				DependsOn:               []descpb.ID{100},
+				ViewQuery:               "some query",
+				DependsOnFunctions:      []descpb.ID{100},
+			},
+			fnDescs: []descpb.FunctionDescriptor{
+				{ID: 100, Name: "f"},
+			},
+		},
+		{ // 18
+			err: `invalid depends-on function back reference: referenced function ID 100: referenced descriptor not found`,
+			desc: descpb.TableDescriptor{
+				Name:                    "foo",
+				ID:                      51,
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				DependsOnFunctions:      []descpb.ID{100},
+				Checks: []*descpb.TableDescriptor_CheckConstraint{
+					{
+						Expr:         "[Function 100100]()",
+						ConstraintID: 1,
+					},
+				},
+			},
+		},
+		{ // 19
+			err: `depends-on function "f" (100) has no corresponding depended-on-by back reference`,
+			desc: descpb.TableDescriptor{
+				Name:                    "foo",
+				ID:                      51,
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				DependsOnFunctions:      []descpb.ID{100},
+				Checks: []*descpb.TableDescriptor_CheckConstraint{
+					{
+						Expr:         "[Function 100100]()",
+						ConstraintID: 1,
+					},
+				},
+			},
+			fnDescs: []descpb.FunctionDescriptor{
+				{ID: 100, Name: "f"},
+			},
+		},
+		{ // 20
+			err: `depends-on function "f" (100) has no corresponding depended-on-by back reference`,
+			desc: descpb.TableDescriptor{
+				Name:                    "foo",
+				ID:                      51,
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				DependsOnFunctions:      []descpb.ID{100},
+				Checks: []*descpb.TableDescriptor_CheckConstraint{
+					{
+						Expr:         "[Function 100100]()",
+						ConstraintID: 1,
+					},
+				},
+			},
+			fnDescs: []descpb.FunctionDescriptor{
+				{
+					ID:   100,
+					Name: "f",
+					DependedOnBy: []descpb.FunctionDescriptor_Reference{
+						{ID: 51},
+					},
+				},
+			},
+		},
+		{ // 21
+			err: ``,
+			desc: descpb.TableDescriptor{
+				Name:                    "foo",
+				ID:                      51,
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				DependsOnFunctions:      []descpb.ID{100},
+				Checks: []*descpb.TableDescriptor_CheckConstraint{
+					{
+						Expr:         "[Function 100100]()",
+						ConstraintID: 1,
+					},
+				},
+			},
+			fnDescs: []descpb.FunctionDescriptor{
+				{
+					ID:   100,
+					Name: "f",
+					DependedOnBy: []descpb.FunctionDescriptor_Reference{
+						{ID: 51, ConstraintIDs: []descpb.ConstraintID{1}},
+					},
+				},
 			},
 		},
 		// Composite types.
-		{ // 17
+		{ // 22
 			err: `referenced type ID 500: referenced descriptor not found`,
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
@@ -2870,8 +2976,10 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				otherDesc.Privileges = catpb.NewBasePrivilegeDescriptor(username.AdminRoleName())
 				cb.UpsertDescriptor(NewBuilder(&otherDesc).BuildImmutable())
 			}
+			for _, fnDesc := range test.fnDescs {
+				cb.UpsertDescriptor(funcdesc.NewBuilder(&fnDesc).BuildImmutable())
+			}
 			desc := NewBuilder(&test.desc).BuildImmutable()
-			cb.UpsertDescriptor(funcdesc.NewBuilder(&descpb.FunctionDescriptor{ID: 100, Name: "f"}).BuildImmutable())
 			expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), test.err)
 			const validateCrossReferencesOnly = catalog.ValidationLevelBackReferences &^ catalog.ValidationLevelSelfOnly
 			results := cb.Validate(ctx, clusterversion.TestingClusterVersion, catalog.NoValidationTelemetry, validateCrossReferencesOnly, desc)

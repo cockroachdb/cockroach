@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -166,7 +167,7 @@ func MakeColumnDefDescs(
 		if err != nil {
 			return nil, err
 		}
-		if err := tree.MaybeFailOnUDFUsage(ret.DefaultExpr); err != nil {
+		if err := funcdesc.MaybeFailOnUDFUsage(ret.DefaultExpr, tree.ColumnDefaultExpr, evalCtx.Settings.Version.ActiveVersion(ctx)); err != nil {
 			return nil, err
 		}
 
@@ -189,7 +190,7 @@ func MakeColumnDefDescs(
 		if err != nil {
 			return nil, err
 		}
-		if err := tree.MaybeFailOnUDFUsage(ret.OnUpdateExpr); err != nil {
+		if err := funcdesc.MaybeFailOnUDFUsage(ret.OnUpdateExpr, tree.ColumnOnUpdateExpr, evalCtx.Settings.Version.ActiveVersion(ctx)); err != nil {
 			return nil, err
 		}
 

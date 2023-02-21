@@ -79,13 +79,13 @@ SELECT * FROM (
 ----
 {"computeExpr": "a + 10:::INT8", "id": 3, "inaccessible": true, "name": "crdb_internal_idx_expr_1", "nullable": true, "type": {"family": "IntFamily", "oid": 20, "width": 64}, "virtual": true}
 
-statement error volatile functions are not allowed in index element
+statement error random\(\): volatile functions are not allowed in EXPRESSION INDEX ELEMENT
 CREATE TABLE err (a INT, INDEX ((a + random()::INT)))
 
 statement error column \"z\" does not exist
 CREATE TABLE err (a INT, INDEX ((a + z)))
 
-statement error index element expression cannot reference computed columns
+statement error EXPRESSION INDEX ELEMENT expression cannot reference computed columns
 CREATE TABLE err (a INT, comp INT AS (a + 10) STORED, INDEX ((comp + 100)))
 
 statement error type of index element NULL is ambiguous.*\nHINT: consider adding a type cast to the expression
@@ -112,13 +112,13 @@ CREATE TABLE err (a INT, b INT, INVERTED INDEX (a, (row(a, b))))
 statement error the last column in an inverted index cannot have the DESC option
 CREATE TABLE err (a INT, j JSON, INVERTED INDEX (a, (j->'a') DESC))
 
-statement error volatile functions are not allowed in index element
+statement error random\(\): volatile functions are not allowed in EXPRESSION INDEX ELEMENT
 CREATE TABLE err (a INT, INDEX ((a + random()::INT)))
 
 statement error column \"z\" does not exist
 CREATE TABLE err (a INT, INDEX ((a + z)))
 
-statement error index element expression cannot reference computed columns
+statement error EXPRESSION INDEX ELEMENT expression cannot reference computed columns
 CREATE TABLE err (a INT, comp INT AS (a + 10) STORED, INDEX ((comp + 10)))
 
 # TODO(mgartner): Postgres does not allow unique constraints with expressions,
@@ -306,13 +306,13 @@ ALTER TABLE t ADD COLUMN crdb_internal_idx_expr INT
 statement ok
 ALTER TABLE t DROP COLUMN crdb_internal_idx_expr
 
-statement error volatile functions are not allowed in index element
+statement error random\(\): volatile functions are not allowed in EXPRESSION INDEX ELEMENT
 CREATE INDEX err ON t ((a + random()::INT))
 
 statement error column \"z\" does not exist
 CREATE INDEX err ON t ((a + z))
 
-statement error index element expression cannot reference computed columns
+statement error EXPRESSION INDEX ELEMENT expression cannot reference computed columns
 CREATE INDEX err ON t ((comp + 10))
 
 statement error type of index element NULL is ambiguous.*\nHINT: consider adding a type cast to the expression
@@ -978,7 +978,7 @@ ALTER TABLE t72012 ALTER COLUMN col SET NOT NULL
 # between string types and reg* types.
 subtest 74216
 
-statement error context-dependent operators are not allowed in index element
+statement error regtype::string: context-dependent operators are not allowed in EXPRESSION INDEX ELEMENT
 CREATE TABLE t74216 (
     a REGTYPE,
     UNIQUE ((a::STRING))

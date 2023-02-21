@@ -304,6 +304,7 @@ ElementState:
     expr: nextval(104:::REGCLASS)
     referencedColumnIds: []
     tableId: 105
+    usesFunctionIds: []
     usesSequenceIds:
     - 104
     usesTypeIds: []
@@ -313,6 +314,7 @@ ElementState:
     expr: 123:::INT8
     referencedColumnIds: []
     tableId: 105
+    usesFunctionIds: []
     usesSequenceIds: []
     usesTypeIds: []
   Status: PUBLIC

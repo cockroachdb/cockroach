@@ -249,6 +249,13 @@ func (d *buildDeps) GetQualifiedTableNameByID(
 	return d.schemaResolver.GetQualifiedTableNameByID(ctx, id, requiredType)
 }
 
+// GetQualifiedTableNameByID implements the scbuild.CatalogReader interface.
+func (d *buildDeps) GetQualifiedFunctionNameByID(
+	ctx context.Context, id int64,
+) (*tree.FunctionName, error) {
+	return d.schemaResolver.GetQualifiedFunctionNameByID(ctx, id)
+}
+
 // CurrentDatabase implements the scbuild.CatalogReader interface.
 func (d *buildDeps) CurrentDatabase() string {
 	return d.schemaResolver.CurrentDatabase()

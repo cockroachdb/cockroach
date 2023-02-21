@@ -1762,32 +1762,32 @@ set datestyle = 'ymd'
 statement ok
 reset datestyle
 
-statement error context-dependent operators are not allowed in computed column\nHINT: TIMESTAMP to STRING casts are dependent on DateStyle; consider using to_char\(timestamp\) instead\.
+statement error context-dependent operators are not allowed in STORED COMPUTED COLUMN\nHINT: TIMESTAMP to STRING casts are dependent on DateStyle; consider using to_char\(timestamp\) instead\.
 CREATE TABLE invalid_table (
   invalid_col string AS ('2020-05-12 10:12:13'::timestamp::string) STORED
 )
 
-statement error context-dependent operators are not allowed in computed column\nHINT: DATE to STRING casts are dependent on DateStyle; consider using to_char\(date\) instead\.
+statement error context-dependent operators are not allowed in STORED COMPUTED COLUMN\nHINT: DATE to STRING casts are dependent on DateStyle; consider using to_char\(date\) instead\.
 CREATE TABLE invalid_table (
   invalid_col string AS ('2020-05-12 10:12:13'::date::string) STORED
 )
 
-statement error context-dependent operators are not allowed in computed column\nHINT: STRING to TIMESTAMP casts are context-dependent because of relative timestamp strings like 'now' and session settings such as DateStyle; use parse_timestamp\(string\) instead\.
+statement error context-dependent operators are not allowed in STORED COMPUTED COLUMN\nHINT: STRING to TIMESTAMP casts are context-dependent because of relative timestamp strings like 'now' and session settings such as DateStyle; use parse_timestamp\(string\) instead\.
 CREATE TABLE invalid_table (
   invalid_col timestamp AS ('2020-05-12 10:12:13'::string::timestamp) STORED
 )
 
-statement error context-dependent operators are not allowed in computed column\nHINT: STRING to DATE casts depend on session DateStyle; use parse_date\(string\) instead
+statement error context-dependent operators are not allowed in STORED COMPUTED COLUMN\nHINT: STRING to DATE casts depend on session DateStyle; use parse_date\(string\) instead
 CREATE TABLE invalid_table (
   invalid_col date AS ('2020-05-12 10:12:13'::string::date) STORED
 )
 
-statement error context-dependent operators are not allowed in computed column\nHINT: STRING to TIME casts depend on session DateStyle; use parse_time\(string\) instead
+statement error context-dependent operators are not allowed in STORED COMPUTED COLUMN\nHINT: STRING to TIME casts depend on session DateStyle; use parse_time\(string\) instead
 CREATE TABLE invalid_table (
   invalid_col time AS ('2020-05-12 10:12:13'::string::time) STORED
 )
 
-statement error context-dependent operators are not allowed in computed column\nHINT: STRING to TIMETZ casts depend on session DateStyle; use parse_timetz\(string\) instead
+statement error context-dependent operators are not allowed in STORED COMPUTED COLUMN\nHINT: STRING to TIMETZ casts depend on session DateStyle; use parse_timetz\(string\) instead
 CREATE TABLE invalid_table (
   invalid_col timetz AS ('2020-05-12 10:12:13'::string::timetz) STORED
 )

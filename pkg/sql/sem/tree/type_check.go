@@ -65,9 +65,9 @@ type SemaContext struct {
 	// *FunctionDefinitons.
 	FunctionResolver FunctionReferenceResolver
 
-	// TableNameResolver is used to resolve the fully qualified
+	// NameResolver is used to resolve the fully qualified
 	// name of a table given its ID.
-	TableNameResolver QualifiedNameResolver
+	NameResolver QualifiedNameResolver
 
 	Properties SemaProperties
 
@@ -1224,6 +1224,8 @@ func (expr *FuncExpr) TypeCheck(
 	for i, subExpr := range s.typedExprs {
 		expr.Exprs[i] = subExpr
 	}
+
+	expr.Func.FunctionReference = def
 	expr.fn = overloadImpl
 	expr.fnProps = &overloadImpl.FunctionProperties
 	expr.typ = overloadImpl.returnType()(s.typedExprs)

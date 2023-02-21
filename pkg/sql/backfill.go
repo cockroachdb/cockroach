@@ -464,6 +464,23 @@ func (sc *SchemaChanger) dropConstraints(
 						constraint,
 					)
 				}
+				// Either it's found or not we need to always try to remove the references.
+				// 1. If it's found, we should just remove reference.
+				// 2. If it's not found, which means it's in a rollback or job retry, we
+				// should remove the reference we added earlier before constraint
+				// validation's failure.
+				ck := constraint.AsCheck()
+				backrefFns, err := removeCheckBackReferenceInFunctions(
+					ctx, scTable, ck.CheckDesc(), txn.Descriptors(), txn.KV(),
+				)
+				if err != nil {
+					return err
+				}
+				for _, fn := range backrefFns {
+					if err := txn.Descriptors().WriteDescToBatch(ctx, true /* kvTrace */, fn, b); err != nil {
+						return err
+					}
+				}
 			} else if fk := constraint.AsForeignKey(); fk != nil {
 				var foundExisting bool
 				for j := range scTable.OutboundFKs {
@@ -603,6 +620,22 @@ func (sc *SchemaChanger) addConstraints(
 				}
 				if !found {
 					scTable.Checks = append(scTable.Checks, ck.CheckDesc())
+					fnIDs, err := scTable.GetAllReferencedFunctionIDsInConstraint(ck.GetConstraintID())
+					if err != nil {
+						return err
+					}
+					for _, fnID := range fnIDs.Ordered() {
+						fnDesc, err := txn.Descriptors().MutableByID(txn.KV()).Function(ctx, fnID)
+						if err != nil {
+							return err
+						}
+						if err := fnDesc.AddConstraintReference(scTable.GetID(), ck.GetConstraintID()); err != nil {
+							return err
+						}
+						if err := txn.Descriptors().WriteDescToBatch(ctx, true /* kvTrace */, fnDesc, b); err != nil {
+							return err
+						}
+					}
 				}
 			} else if fk := constraint.AsForeignKey(); fk != nil {
 				var foundExisting bool
@@ -760,6 +793,7 @@ func (sc *SchemaChanger) validateConstraints(
 				resolver := descs.NewDistSQLTypeResolver(collection, txn.KV())
 				semaCtx := tree.MakeSemaContext()
 				semaCtx.TypeResolver = &resolver
+				semaCtx.FunctionResolver = descs.NewDistSQLFunctionResolver(collection, txn.KV())
 				// TODO (rohany): When to release this? As of now this is only going to get released
 				//  after the check is validated.
 				defer func() { collection.ReleaseAll(ctx) }()
@@ -1530,7 +1564,8 @@ func ValidateConstraint(
 		resolver := NewSkippingCacheSchemaResolver(txn.Descriptors(), sessiondata.NewStack(sessionData), txn.KV(), nil /* authAccessor */)
 		semaCtx := tree.MakeSemaContext()
 		semaCtx.TypeResolver = resolver
-		semaCtx.TableNameResolver = resolver
+		semaCtx.NameResolver = resolver
+		semaCtx.FunctionResolver = descs.NewDistSQLFunctionResolver(txn.Descriptors(), txn.KV())
 		defer func() { txn.Descriptors().ReleaseAll(ctx) }()
 
 		switch catalog.GetConstraintType(constraint) {
@@ -2460,6 +2495,9 @@ func runSchemaChangesInTxn(
 					for i := range tableDesc.Checks {
 						if tableDesc.Checks[i].Name == c.GetName() {
 							tableDesc.Checks = append(tableDesc.Checks[:i], tableDesc.Checks[i+1:]...)
+							if err := planner.removeCheckBackReferenceInFunctions(ctx, tableDesc, c.AsCheck().CheckDesc()); err != nil {
+								return err
+							}
 							break
 						}
 					}

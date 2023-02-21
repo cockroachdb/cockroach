@@ -413,6 +413,14 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 	}
 
+	// Replace all UDF names with OIDs in check constraints and update back
+	// references in functions used.
+	for _, ck := range desc.CheckConstraints() {
+		if err := params.p.updateFunctionReferencesForCheck(params.ctx, desc, ck.CheckDesc()); err != nil {
+			return err
+		}
+	}
+
 	// Descriptor written to store here.
 	if err := params.p.createDescriptor(
 		params.ctx,
@@ -699,7 +707,7 @@ func addUniqueWithoutIndexTableDef(
 	if d.Predicate != nil {
 		var err error
 		predicate, err = schemaexpr.ValidateUniqueWithoutIndexPredicate(
-			ctx, tn, desc, d.Predicate, semaCtx,
+			ctx, tn, desc, d.Predicate, semaCtx, evalCtx.Settings.Version.ActiveVersionOrEmpty(ctx),
 		)
 		if err != nil {
 			return err
@@ -1285,6 +1293,8 @@ func NewTableDesc(
 	persistence tree.Persistence,
 	inOpts ...NewTableDescOption,
 ) (*tabledesc.Mutable, error) {
+
+	version := st.Version.ActiveVersionOrEmpty(ctx)
 	// Used to delay establishing Column/Sequence dependency until ColumnIDs have
 	// been populated.
 	cdd := make([]*tabledesc.ColumnDefDescs, len(n.Defs))
@@ -1689,18 +1699,17 @@ func NewTableDesc(
 		if err != nil {
 			return nil, err
 		}
-
 		// If there is an equivalent check constraint from the CREATE TABLE (should
 		// be rare since we hide the constraint of shard column), we don't create a
 		// duplicate one.
 		ckBuilder := schemaexpr.MakeCheckConstraintBuilder(ctx, n.Table, &desc, semaCtx)
-		checkConstraintDesc, err := ckBuilder.Build(checkConstraint)
+		checkConstraintDesc, err := ckBuilder.Build(checkConstraint, version)
 		if err != nil {
 			return nil, err
 		}
 		for _, def := range n.Defs {
 			if inputCheckConstraint, ok := def.(*tree.CheckConstraintTableDef); ok {
-				inputCheckConstraintDesc, err := ckBuilder.Build(inputCheckConstraint)
+				inputCheckConstraintDesc, err := ckBuilder.Build(inputCheckConstraint, version)
 				if err != nil {
 					return nil, err
 				}
@@ -1723,7 +1732,7 @@ func NewTableDesc(
 		case *tree.ColumnTableDef:
 			if d.IsComputed() {
 				serializedExpr, _, err := schemaexpr.ValidateComputedColumnExpression(
-					ctx, &desc, d, &n.Table, "computed column", semaCtx,
+					ctx, &desc, d, &n.Table, tree.ComputedColumnExprContext(d.IsVirtual()), semaCtx, version,
 				)
 				if err != nil {
 					return nil, err
@@ -1762,6 +1771,7 @@ func NewTableDesc(
 				d.Inverted,
 				true, /* isNewTable */
 				semaCtx,
+				version,
 			); err != nil {
 				return nil, err
 			}
@@ -1831,7 +1841,7 @@ func NewTableDesc(
 
 			if d.Predicate != nil {
 				expr, err := schemaexpr.ValidatePartialIndexPredicate(
-					ctx, &desc, d.Predicate, &n.Table, semaCtx,
+					ctx, &desc, d.Predicate, &n.Table, semaCtx, version,
 				)
 				if err != nil {
 					return nil, err
@@ -1875,6 +1885,7 @@ func NewTableDesc(
 				false, /* isInverted */
 				true,  /* isNewTable */
 				semaCtx,
+				version,
 			); err != nil {
 				return nil, err
 			}
@@ -1946,7 +1957,7 @@ func NewTableDesc(
 			}
 			if d.Predicate != nil {
 				expr, err := schemaexpr.ValidatePartialIndexPredicate(
-					ctx, &desc, d.Predicate, &n.Table, semaCtx,
+					ctx, &desc, d.Predicate, &n.Table, semaCtx, version,
 				)
 				if err != nil {
 					return nil, err
@@ -1997,7 +2008,6 @@ func NewTableDesc(
 			})
 		}
 	}
-	version := st.Version.ActiveVersionOrEmpty(ctx)
 	if err := desc.AllocateIDs(ctx, version); err != nil {
 		return nil, err
 	}
@@ -2138,7 +2148,7 @@ func NewTableDesc(
 			// Pass, handled above.
 
 		case *tree.CheckConstraintTableDef:
-			ck, err := ckBuilder.Build(d)
+			ck, err := ckBuilder.Build(d, version)
 			if err != nil {
 				return nil, err
 			}
@@ -2335,7 +2345,9 @@ func newTableDesc(
 	// Row level TTL tables require a scheduled job to be created as well.
 	if ret.HasRowLevelTTL() {
 		ttl := ret.GetRowLevelTTL()
-		if err := schemaexpr.ValidateTTLExpirationExpression(params.ctx, ret, params.p.SemaCtx(), &n.Table, ttl); err != nil {
+		if err := schemaexpr.ValidateTTLExpirationExpression(
+			params.ctx, ret, params.p.SemaCtx(), &n.Table, ttl, params.ExecCfg().Settings.Version.ActiveVersionOrEmpty(params.ctx),
+		); err != nil {
 			return nil, err
 		}
 

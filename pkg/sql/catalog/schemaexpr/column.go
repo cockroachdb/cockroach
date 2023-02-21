@@ -322,10 +322,10 @@ func replaceColumnVars(
 	return ReplaceColumnVars(rootExpr, lookupFn)
 }
 
-// ReplaceIDsWithFQNames walks the given expr and replaces occurrences
+// ReplaceSequenceIDsWithFQNames walks the given expr and replaces occurrences
 // of regclass IDs in the expr with the descriptor's fully qualified name.
 // For example, nextval(12345::REGCLASS) => nextval('foo.public.seq').
-func ReplaceIDsWithFQNames(
+func ReplaceSequenceIDsWithFQNames(
 	ctx context.Context, rootExpr tree.Expr, semaCtx *tree.SemaContext,
 ) (tree.Expr, error) {
 	replaceFn := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
@@ -334,13 +334,13 @@ func ReplaceIDsWithFQNames(
 			return true, expr, nil
 		}
 		// If it's not a sequence or the resolution fails, skip this node.
-		seqName, err := semaCtx.TableNameResolver.GetQualifiedTableNameByID(ctx, id, tree.ResolveRequireSequenceDesc)
+		seqName, err := semaCtx.NameResolver.GetQualifiedTableNameByID(ctx, id, tree.ResolveRequireSequenceDesc)
 		if err != nil {
 			return true, expr, nil //nolint:returnerrcheck
 		}
 
 		// Omit the database qualification if the sequence lives in the current database.
-		currDb := semaCtx.TableNameResolver.CurrentDatabase()
+		currDb := semaCtx.NameResolver.CurrentDatabase()
 		if seqName.Catalog() == currDb {
 			seqName.CatalogName = ""
 			seqName.ExplicitCatalog = false

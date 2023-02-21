@@ -11,6 +11,7 @@
 package funcdesc
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -77,4 +78,26 @@ func ParamClassToProto(v tree.FuncParamClass) (catpb.Function_Param_Class, error
 	}
 
 	return -1, pgerror.Newf(pgcode.InvalidParameterValue, "unknown function parameter class %q", v)
+}
+
+var schemaExprContextAllowingUDF = map[tree.SchemaExprContext]clusterversion.Key{
+	tree.CheckConstraintExpr: clusterversion.V23_1,
+}
+
+// MaybeFailOnUDFUsage returns an error if the given expression or any
+// sub-expression used a UDF unless it's explicitly listed as an allowed use
+// case.
+// TODO(chengxiong): remove this function when we start allowing UDF references.
+func MaybeFailOnUDFUsage(
+	expr tree.TypedExpr, exprContext tree.SchemaExprContext, version clusterversion.ClusterVersion,
+) error {
+	if supportedVersion, ok := schemaExprContextAllowingUDF[exprContext]; ok && version.IsActive(supportedVersion) {
+		return nil
+	}
+	visitor := &tree.UDFDisallowanceVisitor{}
+	tree.WalkExpr(visitor, expr)
+	if visitor.FoundUDF {
+		return unimplemented.NewWithIssue(83234, "usage of user-defined function from relations not supported")
+	}
+	return nil
 }

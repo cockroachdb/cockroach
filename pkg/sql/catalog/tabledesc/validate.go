@@ -81,6 +81,13 @@ func (desc *wrapper) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
 			ids.Add(col.GetUsesSequenceID(i))
 		}
 	}
+	for _, cst := range desc.Checks {
+		fnIDs, err := desc.GetAllReferencedFunctionIDsInConstraint(cst.ConstraintID)
+		if err != nil {
+			return catalog.DescriptorIDSet{}, err
+		}
+		fnIDs.ForEach(ids.Add)
+	}
 	// Collect user defined type IDs in expressions.
 	// All serialized expressions within a table descriptor are serialized
 	// with type annotations as IDs, so this visitor will collect them all.
@@ -104,6 +111,9 @@ func (desc *wrapper) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
 		ids.Add(id)
 	}
 	for _, id := range desc.GetDependsOnTypes() {
+		ids.Add(id)
+	}
+	for _, id := range desc.GetDependsOnFunctions() {
 		ids.Add(id)
 	}
 	for _, ref := range desc.GetDependedOnBy() {
@@ -167,22 +177,19 @@ func (desc *wrapper) ValidateForwardReferences(
 		for _, id := range desc.DependsOnTypes {
 			vea.Report(desc.validateOutboundTypeRef(id, vdg))
 		}
+		for _, id := range desc.DependsOnFunctions {
+			vea.Report(desc.validateOutboundFuncRef(id, vdg))
+		}
 	}
 
-	for _, id := range desc.DependsOn {
-		depDesc, err := vdg.GetDescriptor(id)
+	// Check all functions referenced by constraint exists.
+	for _, cst := range desc.Checks {
+		fnIDs, err := desc.GetAllReferencedFunctionIDsInConstraint(cst.ConstraintID)
 		if err != nil {
-			vea.Report(errors.NewAssertionErrorWithWrappedErrf(err, "invalid depends-on forward reference"))
-			continue
+			vea.Report(errors.Wrap(err, "invalid referenced functions IDs in constraint"))
 		}
-		switch depDesc.DescriptorType() {
-		case catalog.Table:
-			vea.Report(catalog.ValidateOutboundTableRef(id, vdg))
-		case catalog.Function:
-			vea.Report(desc.validateOutboundFuncRef(id, vdg))
-		default:
-			vea.Report(errors.AssertionFailedf("depends on unexpected %s %s (%d)",
-				depDesc.DescriptorType(), depDesc.GetName(), depDesc.GetID()))
+		for _, fnID := range fnIDs.Ordered() {
+			vea.Report(desc.validateOutboundFuncRef(fnID, vdg))
 		}
 	}
 
@@ -241,27 +248,42 @@ func (desc *wrapper) ValidateBackReferences(
 		vea.Report(desc.validateInboundFK(&desc.InboundFKs[i], vdg))
 	}
 
+	// Check all functions referenced by constraint exists.
+	for _, cst := range desc.Checks {
+		fnIDs, err := desc.GetAllReferencedFunctionIDsInConstraint(cst.ConstraintID)
+		if err != nil {
+			vea.Report(errors.Wrap(err, "invalid referenced functions IDs in constraint"))
+		}
+		for _, fnID := range fnIDs.Ordered() {
+			fn, err := vdg.GetFunctionDescriptor(fnID)
+			if err != nil {
+				vea.Report(err)
+				continue
+			}
+			vea.Report(desc.validateOutboundFuncRefBackReferenceForConstraint(fn, cst.ConstraintID))
+		}
+	}
+
 	// For views, check dependent relations.
 	if desc.IsView() {
 		for _, id := range desc.DependsOnTypes {
 			typ, _ := vdg.GetTypeDescriptor(id)
 			vea.Report(desc.validateOutboundTypeRefBackReference(typ))
 		}
+		for _, id := range desc.DependsOnFunctions {
+			fn, _ := vdg.GetFunctionDescriptor(id)
+			vea.Report(desc.validateOutboundFuncRefBackReference(fn))
+		}
 	}
 
 	for _, id := range desc.DependsOn {
-		ref, _ := vdg.GetDescriptor(id)
+		ref, _ := vdg.GetTableDescriptor(id)
 		if ref == nil {
 			// Don't follow up on backward references for invalid or irrelevant
 			// forward references.
 			continue
 		}
-		switch refDesc := ref.(type) {
-		case catalog.TableDescriptor:
-			vea.Report(catalog.ValidateOutboundTableRefBackReference(desc.GetID(), refDesc))
-		case catalog.FunctionDescriptor:
-			vea.Report(desc.validateOutboundFuncRefBackReference(refDesc))
-		}
+		vea.Report(catalog.ValidateOutboundTableRefBackReference(desc.GetID(), ref))
 	}
 
 	// Check relation back-references to relations and functions.
@@ -315,6 +337,23 @@ func (desc *wrapper) validateOutboundFuncRefBackReference(ref catalog.FunctionDe
 	for _, dep := range ref.GetDependedOnBy() {
 		if dep.ID == desc.GetID() {
 			return nil
+		}
+	}
+	return errors.AssertionFailedf("depends-on function %q (%d) has no corresponding depended-on-by back reference",
+		ref.GetName(), ref.GetID())
+}
+
+func (desc *wrapper) validateOutboundFuncRefBackReferenceForConstraint(
+	ref catalog.FunctionDescriptor, cstID descpb.ConstraintID,
+) error {
+	for _, dep := range ref.GetDependedOnBy() {
+		if dep.ID != desc.GetID() {
+			continue
+		}
+		for _, id := range dep.ConstraintIDs {
+			if id == cstID {
+				return nil
+			}
 		}
 	}
 	return errors.AssertionFailedf("depends-on function %q (%d) has no corresponding depended-on-by back reference",

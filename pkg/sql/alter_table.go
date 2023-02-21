@@ -264,6 +264,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					false, /* isInverted */
 					false, /* isNewTable */
 					params.p.SemaCtx(),
+					params.ExecCfg().Settings.Version.ActiveVersion(params.ctx),
 				); err != nil {
 					return err
 				}
@@ -295,6 +296,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				if d.Predicate != nil {
 					expr, err := schemaexpr.ValidatePartialIndexPredicate(
 						params.ctx, n.tableDesc, d.Predicate, tableName, params.p.SemaCtx(),
+						params.ExecCfg().Settings.Version.ActiveVersion(params.ctx),
 					)
 					if err != nil {
 						return err
@@ -352,7 +354,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					for _, c := range n.tableDesc.AllConstraints() {
 						ckBuilder.MarkNameInUse(c.GetName())
 					}
-					ck, buildErr := ckBuilder.Build(d)
+					ck, buildErr := ckBuilder.Build(d, params.ExecCfg().Settings.Version.ActiveVersion(params.ctx))
 					if buildErr != nil {
 						err = buildErr
 						return
@@ -506,9 +508,15 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 				return sqlerrors.NewUndefinedConstraintError(string(t.Constraint), n.tableDesc.Name)
 			}
-			if err := n.tableDesc.DropConstraint(c, func(backRef catalog.ForeignKeyConstraint) error {
-				return params.p.removeFKBackReference(params.ctx, n.tableDesc, backRef.ForeignKeyDesc())
-			}); err != nil {
+			if err := n.tableDesc.DropConstraint(
+				c,
+				func(backRef catalog.ForeignKeyConstraint) error {
+					return params.p.removeFKBackReference(params.ctx, n.tableDesc, backRef.ForeignKeyDesc())
+				},
+				func(ck *descpb.TableDescriptor_CheckConstraint) error {
+					return params.p.removeCheckBackReferenceInFunctions(params.ctx, n.tableDesc, ck)
+				},
+			); err != nil {
 				return err
 			}
 			descriptorChanged = true
@@ -902,7 +910,7 @@ func applyColumnMutation(
 			col,
 			t.Default,
 			&col.ColumnDesc().DefaultExpr,
-			"DEFAULT",
+			tree.ColumnDefaultExpr,
 		); err != nil {
 			return err
 		}
@@ -936,7 +944,7 @@ func applyColumnMutation(
 			col,
 			t.Expr,
 			&col.ColumnDesc().OnUpdateExpr,
-			"ON UPDATE",
+			tree.ColumnOnUpdateExpr,
 		); err != nil {
 			return err
 		}
@@ -1050,7 +1058,7 @@ func updateNonComputedColExpr(
 	col catalog.Column,
 	newExpr tree.Expr,
 	exprField **string,
-	op string,
+	op tree.SchemaExprContext,
 ) error {
 	// If a DEFAULT or ON UPDATE expression starts using a sequence and is then
 	// modified to not use that sequence, we need to drop the dependency from
@@ -1086,11 +1094,11 @@ func updateNonComputedColExpr(
 }
 
 func sanitizeColumnExpression(
-	p runParams, expr tree.Expr, col catalog.Column, opName string,
+	p runParams, expr tree.Expr, col catalog.Column, context tree.SchemaExprContext,
 ) (tree.TypedExpr, string, error) {
 	colDatumType := col.GetType()
 	typedExpr, err := schemaexpr.SanitizeVarFreeExpr(
-		p.ctx, expr, colDatumType, opName, &p.p.semaCtx, volatility.Volatile, false, /*allowAssignmentCast*/
+		p.ctx, expr, colDatumType, context, &p.p.semaCtx, volatility.Volatile, false, /*allowAssignmentCast*/
 	)
 	if err != nil {
 		return nil, "", pgerror.WithCandidateCode(err, pgcode.DatatypeMismatch)
@@ -1121,19 +1129,22 @@ func updateSequenceDependencies(
 		seqDescsToUpdate = truncated
 	}
 	for _, colExpr := range []struct {
-		colExprKind tabledesc.ColExprKind
-		exists      func() bool
-		get         func() string
+		colExprKind    tabledesc.ColExprKind
+		colExprContext tree.SchemaExprContext
+		exists         func() bool
+		get            func() string
 	}{
 		{
-			colExprKind: tabledesc.DefaultExpr,
-			exists:      colDesc.HasDefault,
-			get:         colDesc.GetDefaultExpr,
+			colExprKind:    tabledesc.DefaultExpr,
+			colExprContext: tree.ColumnDefaultExpr,
+			exists:         colDesc.HasDefault,
+			get:            colDesc.GetDefaultExpr,
 		},
 		{
-			colExprKind: tabledesc.OnUpdateExpr,
-			exists:      colDesc.HasOnUpdate,
-			get:         colDesc.GetOnUpdateExpr,
+			colExprKind:    tabledesc.OnUpdateExpr,
+			colExprContext: tree.ColumnOnUpdateExpr,
+			exists:         colDesc.HasOnUpdate,
+			get:            colDesc.GetOnUpdateExpr,
 		},
 	} {
 		if !colExpr.exists() {
@@ -1148,7 +1159,7 @@ func updateSequenceDependencies(
 			params,
 			untypedExpr,
 			colDesc,
-			string(colExpr.colExprKind),
+			colExpr.colExprContext,
 		)
 		if err != nil {
 			return err
@@ -1690,7 +1701,7 @@ func dropColumnImpl(
 		); err != nil {
 			return nil, err
 		}
-		if err := tableDesc.DropConstraint(uwoi, nil /* removeFKBackRef */); err != nil {
+		if err := tableDesc.DropConstraint(uwoi, nil /* removeFKBackRef */, nil /* removeFnBackRef */); err != nil {
 			return nil, err
 		}
 	}
@@ -1703,7 +1714,13 @@ func dropColumnImpl(
 		if !check.CollectReferencedColumnIDs().Contains(colToDrop.GetID()) {
 			continue
 		}
-		if err := tableDesc.DropConstraint(check, nil /* removeFKBackRef */); err != nil {
+		if err := tableDesc.DropConstraint(
+			check,
+			nil, /* removeFKBackRef */
+			func(ck *descpb.TableDescriptor_CheckConstraint) error {
+				return params.p.removeCheckBackReferenceInFunctions(params.ctx, tableDesc, ck)
+			},
+		); err != nil {
 			return nil, err
 		}
 	}
@@ -1798,7 +1815,7 @@ func handleTTLStorageParamChange(
 				col,
 				newExpr,
 				&col.ColumnDesc().DefaultExpr,
-				"TTL DEFAULT",
+				tree.TTLDefaultExpr,
 			); err != nil {
 				return false, err
 			}
@@ -1809,7 +1826,7 @@ func handleTTLStorageParamChange(
 				col,
 				newExpr,
 				&col.ColumnDesc().OnUpdateExpr,
-				"TTL UPDATE",
+				tree.TTLUpdateExpr,
 			); err != nil {
 				return false, err
 			}
@@ -1894,7 +1911,10 @@ func handleTTLStorageParamChange(
 
 	// Validate the type and volatility of ttl_expiration_expression.
 	if after != nil {
-		if err := schemaexpr.ValidateTTLExpirationExpression(params.ctx, tableDesc, params.p.SemaCtx(), tn, after); err != nil {
+		if err := schemaexpr.ValidateTTLExpirationExpression(
+			params.ctx, tableDesc, params.p.SemaCtx(), tn, after,
+			params.ExecCfg().Settings.Version.ActiveVersion(params.ctx),
+		); err != nil {
 			return false, err
 		}
 	}

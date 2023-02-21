@@ -33,7 +33,7 @@ func newSemaCtx(d Dependencies) *tree.SemaContext {
 	semaCtx.SearchPath = &d.SessionData().SearchPath
 	semaCtx.TypeResolver = d.CatalogReader()
 	semaCtx.FunctionResolver = d.CatalogReader()
-	semaCtx.TableNameResolver = d.CatalogReader()
+	semaCtx.NameResolver = d.CatalogReader()
 	semaCtx.DateStyle = d.SessionData().GetDateStyle()
 	semaCtx.IntervalStyle = d.SessionData().GetIntervalStyle()
 	return &semaCtx

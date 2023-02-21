@@ -20,6 +20,7 @@ import (
 	"go/constant"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -56,8 +57,19 @@ func GetSequenceFromFunc(funcExpr *tree.FuncExpr) (*SeqIdentifier, error) {
 	// the function should have already been resolved.
 	// TODO(chengxiong): Since we have funcExpr here, it's possible to narrow down
 	// overloads by using input types.
+	if ref, ok := funcExpr.Func.FunctionReference.(*tree.FunctionOID); ok && funcdesc.IsOIDUserDefinedFunc(ref.OID) {
+		// If it's a user defined function OID, then we know that it's not a
+		// sequence reference.
+		return nil, nil
+	}
 	def, err := funcExpr.Func.Resolve(context.Background(), tree.EmptySearchPath, nil /* resolver */)
 	if err != nil {
+		// We have expression sanitization and type checking to make sure functions
+		// exists and type is valid, so here if function is not found, it must be a
+		// user defined function. We don't need to get sequences reference from it.
+		if errors.Is(err, tree.ErrFunctionUndefined) {
+			return nil, nil
+		}
 		return nil, err
 	}
 
