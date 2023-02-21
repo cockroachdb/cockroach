@@ -341,7 +341,7 @@ func (s *Store) SplitRange(
 		return err
 	}
 
-	rightRepl.mu.RLock()
-	defer rightRepl.mu.RUnlock()
+	rightRepl.mu.Lock()
+	defer rightRepl.mu.Unlock()
 	return s.markReplicaInitializedLockedReplLocked(ctx, rightRepl)
 }
