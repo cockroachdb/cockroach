@@ -40,6 +40,7 @@ var (
 	extendLifetime        time.Duration
 	wipePreserveCerts     bool
 	grafanaConfig         string
+	grafanaConfigFile     string
 	grafanaurlOpen        bool
 	grafanaDumpDir        string
 	listDetails           bool
@@ -251,6 +252,9 @@ Default is "RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS
 
 	grafanaStartCmd.Flags().StringVar(&grafanaConfig,
 		"grafana-config", "", "URL to grafana json config")
+
+	grafanaStartCmd.Flags().StringVar(&grafanaConfigFile,
+		"grafana-config-file", "", "file path to grafana json config")
 
 	grafanaURLCmd.Flags().BoolVar(&grafanaurlOpen,
 		"open", false, "open the grafana dashboard url on the browser")

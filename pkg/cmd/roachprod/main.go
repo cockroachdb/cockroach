@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
@@ -907,8 +908,12 @@ var grafanaStartCmd = &cobra.Command{
 	Short: `spins up a prometheus and grafana instance on the last node in the cluster`,
 	Args:  cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		grafanaJSON, err := grafana.GetDashboards(grafanaConfigFile)
+		if err != nil {
+			return err
+		}
 		return roachprod.StartGrafana(context.Background(), roachprodLibraryLogger, args[0],
-			grafanaConfig, nil, nil)
+			grafanaConfig, grafanaJSON, nil)
 	}),
 }
 
