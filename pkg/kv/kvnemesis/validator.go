@@ -334,17 +334,7 @@ func leaseTransferResultIsIgnorable(r Result) (ignore bool) {
 		return false
 	}
 	return kvserver.IsLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(err) ||
-		// Only VOTER (_FULL, _INCOMING, sometimes _OUTGOING) replicas can
-		// hold a range lease. Attempts to transfer to lease to any other
-		// replica type are rejected. See CheckCanReceiveLease.
-		resultIsErrorStr(r, `replica cannot hold lease`) ||
-		// Only replicas that are part of the range can be given
-		// the lease. This case is hit if a TransferLease op races
-		// with a ChangeReplicas op.
-		resultIsErrorStr(r, `replica not found in RangeDescriptor`) ||
-		// A lease transfer that races with a replica removal may find that
-		// the store it was targeting is no longer part of the range.
-		resultIsErrorStr(r, `unable to find store \d+ in range`) ||
+		kvserver.IsLeaseTransferRejectedBecauseTargetCannotReceiveLease(err) ||
 		// A lease transfer is not permitted while a range merge is in its
 		// critical phase.
 		resultIsErrorStr(r, `cannot transfer lease while merge in progress`) ||
