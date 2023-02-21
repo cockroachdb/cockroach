@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
@@ -95,6 +96,8 @@ output.
 			w = cw
 		case tsDumpText:
 			w = defaultTSWriter{w: os.Stdout}
+		case tsDumpOpenMetrics:
+			w = &openMetricsWriter{out: os.Stdout}
 		default:
 			return errors.Newf("unknown output format: %v", debugTimeSeriesDumpOpts.format)
 		}
@@ -123,6 +126,39 @@ output.
 type tsWriter interface {
 	Emit(*tspb.TimeSeriesData) error
 	Flush() error
+}
+
+type openMetricsWriter struct {
+	out io.Writer
+}
+
+var reCrStoreNode = regexp.MustCompile(`^cr\.([^\.]+)\.(.*)$`)
+var rePromTSName = regexp.MustCompile(`[^a-z0-9]`)
+
+func (w *openMetricsWriter) Emit(data *tspb.TimeSeriesData) error {
+	name := data.Name
+	sl := reCrStoreNode.FindStringSubmatch(data.Name)
+	label := "node"
+	value := "0"
+	if len(sl) != 0 {
+		label = sl[1]
+		name = sl[2]
+		value = data.Source
+	}
+	name = rePromTSName.ReplaceAllLiteralString(name, `_`)
+	for _, pt := range data.Datapoints {
+		if _, err := fmt.Fprintf(
+			w.out, "%s{%s=%q} %f %d.%d\n", name, label, value, pt.Value, pt.TimestampNanos/1e9, pt.TimestampNanos%1e6,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (w *openMetricsWriter) Flush() error {
+	fmt.Fprintln(w.out, `# EOF`)
+	return nil
 }
 
 type csvTSWriter struct {
@@ -172,6 +208,7 @@ const (
 	tsDumpCSV
 	tsDumpTSV
 	tsDumpRaw
+	tsDumpOpenMetrics
 )
 
 // Type implements the pflag.Value interface.
@@ -188,6 +225,8 @@ func (m *tsDumpFormat) String() string {
 		return "text"
 	case tsDumpRaw:
 		return "raw"
+	case tsDumpOpenMetrics:
+		return "openmetrics"
 	}
 	return ""
 }
@@ -203,6 +242,8 @@ func (m *tsDumpFormat) Set(s string) error {
 		*m = tsDumpTSV
 	case "raw":
 		*m = tsDumpRaw
+	case "openmetrics":
+		*m = tsDumpOpenMetrics
 	default:
 		return fmt.Errorf("invalid value for --format: %s", s)
 	}
