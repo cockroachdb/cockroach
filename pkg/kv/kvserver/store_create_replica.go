@@ -252,12 +252,12 @@ func fromReplicaIsTooOldRLocked(toReplica *Replica, fromReplica *roachpb.Replica
 	return !found && fromReplica.ReplicaID < desc.NextReplicaID
 }
 
-// addToReplicasByKeyLockedReplicaRLocked adds the replica to the replicasByKey
-// btree. The replica must already be in replicasByRangeID. Returns an error if
-// a different replica with the same range ID, or an overlapping replica or
-// placeholder exists in this Store. Replica.mu must be at least read-locked.
-func (s *Store) addToReplicasByKeyLockedReplicaRLocked(repl *Replica) error {
-	desc := repl.descRLocked()
+// addToReplicasByKeyLocked adds the replica to the replicasByKey btree. The
+// replica must already be in replicasByRangeID. Returns an error if a different
+// replica with the same range ID, or an overlapping replica or placeholder
+// exists in this Store.
+func (s *Store) addToReplicasByKeyLocked(repl *Replica) error {
+	desc := repl.Desc()
 	if !desc.IsInitialized() {
 		return errors.Errorf("%s: attempted to add uninitialized replica %s", s, repl)
 	}
@@ -314,7 +314,12 @@ func (s *Store) markReplicaInitializedLockedReplLocked(ctx context.Context, r *R
 	}
 	delete(s.mu.uninitReplicas, r.RangeID)
 
-	if err := s.addToReplicasByKeyLockedReplicaRLocked(r); err != nil {
+	// NB: there is a risk that this func tries to lock an already locked r.mu
+	// while calling r.Desc() in getOverlappingKeyRangeLocked. This can only
+	// happen if r is already in replicasByKey, which must not be the case by the
+	// time we get here.
+	// TODO(pavelkalinnikov): make locking in replicasByKey less subtle.
+	if err := s.addToReplicasByKeyLocked(r); err != nil {
 		return err
 	}
 
