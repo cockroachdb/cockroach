@@ -122,6 +122,7 @@ message ProcessorCoreUnion {
   optional ExportSpec exporter = 37;
   optional IndexBackfillMergerSpec indexBackfillMerger = 38;
   optional TTLSpec ttl = 39;
+  optional GenerativeSplitAndScatterSpec generativeSplitAndScatter = 40;
 
   reserved 6, 12, 14, 17, 18, 19, 20;
 }

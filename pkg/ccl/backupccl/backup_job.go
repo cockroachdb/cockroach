@@ -140,14 +140,30 @@ func backup(
 	var lastCheckpoint time.Time
 
 	var completedSpans, completedIntroducedSpans []roachpb.Span
+	kmsEnv := backupencryption.MakeBackupKMSEnv(execCtx.ExecCfg().Settings,
+		&execCtx.ExecCfg().ExternalIODirConfig, execCtx.ExecCfg().DB, execCtx.User(),
+		execCtx.ExecCfg().InternalExecutor)
 	// TODO(benesch): verify these files, rather than accepting them as truth
 	// blindly.
 	// No concurrency yet, so these assignments are safe.
-	for _, file := range backupManifest.Files {
-		if file.StartTime.IsEmpty() && !file.EndTime.IsEmpty() {
-			completedIntroducedSpans = append(completedIntroducedSpans, file.Span)
+	iterFactory := backupinfo.NewIterFactory(backupManifest, defaultStore, encryption, &kmsEnv)
+	it, err := iterFactory.NewFileIter(ctx)
+	if err != nil {
+		return roachpb.RowCount{}, err
+	}
+	defer it.Close()
+	for ; ; it.Next() {
+		if ok, err := it.Valid(); err != nil {
+			return roachpb.RowCount{}, err
+		} else if !ok {
+			break
+		}
+
+		f := it.Value()
+		if f.StartTime.IsEmpty() && !f.EndTime.IsEmpty() {
+			completedIntroducedSpans = append(completedIntroducedSpans, f.Span)
 		} else {
-			completedSpans = append(completedSpans, file.Span)
+			completedSpans = append(completedSpans, f.Span)
 		}
 	}
 
@@ -171,10 +187,6 @@ func backup(
 	if err != nil {
 		return roachpb.RowCount{}, errors.Wrap(err, "failed to determine nodes on which to run")
 	}
-
-	kmsEnv := backupencryption.MakeBackupKMSEnv(execCtx.ExecCfg().Settings,
-		&execCtx.ExecCfg().ExternalIODirConfig, execCtx.ExecCfg().DB, execCtx.User(),
-		execCtx.ExecCfg().InternalExecutor)
 
 	backupSpecs, err := distBackupPlanSpecs(
 		ctx,
@@ -319,11 +331,26 @@ func backup(
 		}
 	}
 
-	resumerSpan.RecordStructured(&types.StringValue{Value: "writing backup manifest"})
+	// Write a `BACKUP_MANIFEST` file to support backups in mixed-version clusters
+	// with 22.2 nodes.
+	//
+	// TODO(adityamaru): We can stop writing `BACKUP_MANIFEST` in 23.2
+	// because a mixed-version cluster with 23.1 nodes will read the
+	// `BACKUP_METADATA` instead.
 	if err := backupinfo.WriteBackupManifest(ctx, defaultStore, backupbase.BackupManifestName,
 		encryption, &kmsEnv, backupManifest); err != nil {
 		return roachpb.RowCount{}, err
 	}
+
+	// Write a `BACKUP_METADATA` file along with SSTs for all the alloc heavy
+	// fields elided from the `BACKUP_MANIFEST`.
+	if backupinfo.WriteMetadataWithFilesSST.Get(&settings.SV) {
+		if err := backupinfo.WriteMetadataWithExternalSSTs(ctx, defaultStore, encryption,
+			&kmsEnv, backupManifest); err != nil {
+			return roachpb.RowCount{}, err
+		}
+	}
+
 	var tableStatistics []*stats.TableStatisticProto
 	for i := range backupManifest.Descriptors {
 		if tbl, _, _, _, _ := descpb.GetDescriptors(&backupManifest.Descriptors[i]); tbl != nil {
@@ -350,7 +377,6 @@ func backup(
 		Statistics: tableStatistics,
 	}
 
-	resumerSpan.RecordStructured(&types.StringValue{Value: "writing backup table statistics"})
 	if err := backupinfo.WriteTableStatistics(ctx, defaultStore, encryption, &kmsEnv, &statsTable); err != nil {
 		return roachpb.RowCount{}, err
 	}
@@ -895,12 +921,19 @@ func getBackupDetailAndManifest(
 		return jobspb.BackupDetails{}, backuppb.BackupManifest{}, err
 	}
 
+	layerToIterFactory, err := backupinfo.GetBackupManifestIterFactories(ctx, execCfg.DistSQLSrv.ExternalStorage, prevBackups, baseEncryptionOptions, &kmsEnv)
+	if err != nil {
+		return jobspb.BackupDetails{}, backuppb.BackupManifest{}, err
+	}
+
 	backupManifest, err := createBackupManifest(
 		ctx,
 		execCfg,
 		txn,
 		updatedDetails,
-		prevBackups)
+		prevBackups,
+		layerToIterFactory,
+	)
 	if err != nil {
 		return jobspb.BackupDetails{}, backuppb.BackupManifest{}, err
 	}

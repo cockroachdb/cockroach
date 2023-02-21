@@ -590,6 +590,12 @@ func (s *TTLSpec) summary() (string, []string) {
 	}
 }
 
+// summary implements the diagramCellType interface.
+func (g *GenerativeSplitAndScatterSpec) summary() (string, []string) {
+	detail := fmt.Sprintf("%d import spans", g.NumEntries)
+	return "GenerativeSplitAndScatterSpec", []string{detail}
+}
+
 type diagramCell struct {
 	Title   string   `json:"title"`
 	Details []string `json:"details"`

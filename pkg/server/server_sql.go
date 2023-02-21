@@ -678,6 +678,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 
 		ExternalStorage:        cfg.externalStorage,
 		ExternalStorageFromURI: cfg.externalStorageFromURI,
+		ExternalIODirConfig:    cfg.ExternalIODirConfig,
 
 		DistSender:               cfg.distSender,
 		RangeCache:               cfg.distSender.RangeDescriptorCache(),

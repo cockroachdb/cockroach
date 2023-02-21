@@ -86,3 +86,8 @@ func (m *ChangeAggregatorSpec) User() username.SQLUsername {
 func (m *ChangeFrontierSpec) User() username.SQLUsername {
 	return m.UserProto.Decode()
 }
+
+// User accesses the user field.
+func (m *GenerativeSplitAndScatterSpec) User() username.SQLUsername {
+	return m.UserProto.Decode()
+}
