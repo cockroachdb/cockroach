@@ -82,6 +82,7 @@ type runFlags struct {
 func run(providers []release.ObjectPutGetter, flags runFlags, execFn release.ExecFn) {
 	for _, platform := range []release.Platform{
 		release.PlatformLinux,
+		release.PlatformLinuxFIPS,
 		release.PlatformLinuxArm,
 		release.PlatformMacOS,
 		release.PlatformMacOSArm,
