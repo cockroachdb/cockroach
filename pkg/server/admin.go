@@ -2245,8 +2245,6 @@ func jobsHelper(
 	cfg *BaseConfig,
 	sv *settings.Values,
 ) (_ *serverpb.JobsResponse, retErr error) {
-	retryRunningCondition := "status='running' AND next_run > now() AND num_runs > 1"
-	retryRevertingCondition := "status='reverting' AND next_run > now() AND num_runs > 1"
 
 	q := makeSQLQuery()
 	q.Append(`
@@ -2257,11 +2255,7 @@ SELECT
   statement,
   user_name,
   descriptor_ids,
-  case
-    when ` + retryRunningCondition + ` then 'retry-running'
-    when ` + retryRevertingCondition + ` then 'retry-reverting'
-    else status
-  end as status,
+  status,
   running_status,
   created,
   started,
@@ -2277,25 +2271,23 @@ SELECT
   coordinator_id
 FROM crdb_internal.jobs
 WHERE true`) // Simplifies filter construction below.
-	if req.Status == "retrying" {
-		q.Append(" AND ( ( " + retryRunningCondition + " ) OR ( " + retryRevertingCondition + " ) )")
-	} else if req.Status != "" {
+	if req.Status != "" {
 		q.Append(" AND status = $", req.Status)
 	}
 	if req.Type != jobspb.TypeUnspecified {
 		q.Append(" AND job_type = $", req.Type.String())
 	} else {
 		// Don't show automatic jobs in the overview page.
-		q.Append(" AND (")
+		q.Append(" AND ( job_type NOT IN (")
 		for idx, jobType := range jobspb.AutomaticJobTypes {
-			q.Append("job_type != $", jobType.String())
-			if idx < len(jobspb.AutomaticJobTypes)-1 {
-				q.Append(" AND ")
+			if idx != 0 {
+				q.Append(", ")
 			}
+			q.Append("$", jobType.String())
 		}
-		q.Append(" OR job_type IS NULL)")
+		q.Append(" ) OR job_type IS NULL)")
 	}
-	q.Append("ORDER BY created DESC")
+	q.Append(" ORDER BY created DESC")
 	if req.Limit > 0 {
 		q.Append(" LIMIT $", tree.DInt(req.Limit))
 	}
