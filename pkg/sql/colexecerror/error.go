@@ -101,6 +101,7 @@ func CatchVectorizedRuntimeError(operation func()) (retErr error) {
 // defined below, but all of such packages are allowed to be caught from.
 const (
 	colPackagesPrefix      = "github.com/cockroachdb/cockroach/pkg/col"
+	encodingPackagePrefix  = "github.com/cockroachdb/cockroach/pkg/util/encoding"
 	execinfraPackagePrefix = "github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	sqlColPackagesPrefix   = "github.com/cockroachdb/cockroach/pkg/sql/col"
 	sqlRowPackagesPrefix   = "github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -130,6 +131,7 @@ func shouldCatchPanic(panicEmittedFrom string) bool {
 		return false
 	}
 	return strings.HasPrefix(panicEmittedFrom, colPackagesPrefix) ||
+		strings.HasPrefix(panicEmittedFrom, encodingPackagePrefix) ||
 		strings.HasPrefix(panicEmittedFrom, execinfraPackagePrefix) ||
 		strings.HasPrefix(panicEmittedFrom, sqlColPackagesPrefix) ||
 		strings.HasPrefix(panicEmittedFrom, sqlRowPackagesPrefix) ||
