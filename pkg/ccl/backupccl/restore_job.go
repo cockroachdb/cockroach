@@ -62,6 +62,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -1784,7 +1785,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 			telemetry.CountBucketed("restore.speed-mbps.over10mb", mbps)
 			telemetry.CountBucketed("restore.speed-mbps.over10mb.per-node", mbps/int64(numNodes))
 		}
-		logJobCompletion(ctx, restoreJobEventType, r.job.ID(), true, nil)
+		logutil.LogJobCompletion(ctx, restoreJobEventType, r.job.ID(), true, nil, resTotal.Rows)
 	}
 	return nil
 }
@@ -2276,7 +2277,7 @@ func (r *restoreResumer) OnFailOrCancel(
 		int64(timeutil.Since(timeutil.FromUnixMicros(r.job.Payload().StartedMicros)).Seconds()))
 
 	details := r.job.Details().(jobspb.RestoreDetails)
-	logJobCompletion(ctx, restoreJobEventType, r.job.ID(), false, jobErr)
+	logutil.LogJobCompletion(ctx, restoreJobEventType, r.job.ID(), false, jobErr, r.restoreStats.Rows)
 
 	execCfg := execCtx.(sql.JobExecContext).ExecCfg()
 	if err := execCfg.InternalExecutorFactory.DescsTxnWithExecutor(ctx, execCfg.DB, p.SessionData(), func(

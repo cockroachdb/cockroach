@@ -766,6 +766,10 @@ type RestrictedCommandResult interface {
 	// to this CommandResult, will be flushed immediately to the client.
 	// This is currently used for sinkless changefeeds.
 	DisableBuffering()
+
+	// GetBulkJobID returns the id of the job for the query, if the query is
+	// IMPORT, BACKUP or RESTORE.
+	GetBulkJobID() uint64
 }
 
 // DescribeResult represents the result of a Describe command (for either
@@ -972,6 +976,11 @@ func (r *streamingCommandResult) SetError(err error) {
 	// is present) since we might replace the error with another one later which
 	// is allowed by the interface. An example of this is queryDone() closure
 	// in execStmtInOpenState().
+}
+
+// GetEntryFromExtraInfo is part of the sql.RestrictedCommandResult interface.
+func (r *streamingCommandResult) GetBulkJobID() uint64 {
+	return 0
 }
 
 // Err is part of the RestrictedCommandResult interface.
