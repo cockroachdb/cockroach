@@ -12,7 +12,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/kv/kvpb",
-        "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb",
+        "//pkg/multitenant/tenantcapabilities/tenantcapabilitiesapi",
         "//pkg/roachpb",
     ],
 )
