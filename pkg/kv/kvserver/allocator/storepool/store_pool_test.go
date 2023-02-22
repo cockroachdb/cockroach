@@ -208,7 +208,6 @@ func TestStorePoolGetStoreList(t *testing.T) {
 	// Set declinedStore as throttled.
 	sp.DetailsMu.StoreDetails[declinedStore.StoreID].ThrottledUntil = sp.clock.Now().GoTime().Add(time.Hour)
 	// Set suspectedStore as suspected.
-	sp.DetailsMu.StoreDetails[suspectedStore.StoreID].LastAvailable = sp.clock.Now().GoTime()
 	sp.DetailsMu.StoreDetails[suspectedStore.StoreID].LastUnavailable = sp.clock.Now().GoTime()
 	sp.DetailsMu.Unlock()
 
@@ -629,7 +628,6 @@ func TestStorePoolSuspected(t *testing.T) {
 	s := detail.status(now, timeUntilStoreDead, sp.NodeLivenessFn, timeAfterStoreSuspect)
 	sp.DetailsMu.Unlock()
 	require.Equal(t, s, storeStatusAvailable)
-	require.False(t, detail.LastAvailable.IsZero())
 	require.True(t, detail.LastUnavailable.IsZero())
 
 	mnl.SetNodeStatus(store.Node.NodeID, livenesspb.NodeLivenessStatus_UNAVAILABLE)
@@ -637,7 +635,6 @@ func TestStorePoolSuspected(t *testing.T) {
 	s = detail.status(now, timeUntilStoreDead, sp.NodeLivenessFn, timeAfterStoreSuspect)
 	sp.DetailsMu.Unlock()
 	require.Equal(t, s, storeStatusUnknown)
-	require.False(t, detail.LastAvailable.IsZero())
 	require.False(t, detail.LastUnavailable.IsZero())
 
 	mnl.SetNodeStatus(store.Node.NodeID, livenesspb.NodeLivenessStatus_LIVE)
@@ -658,7 +655,6 @@ func TestStorePoolSuspected(t *testing.T) {
 		timeUntilStoreDead, sp.NodeLivenessFn, timeAfterStoreSuspect)
 	sp.DetailsMu.Unlock()
 	require.Equal(t, s, storeStatusDraining)
-	require.True(t, detail.LastAvailable.IsZero())
 
 	mnl.SetNodeStatus(store.Node.NodeID, livenesspb.NodeLivenessStatus_LIVE)
 	sp.DetailsMu.Lock()
@@ -666,7 +662,6 @@ func TestStorePoolSuspected(t *testing.T) {
 		timeUntilStoreDead, sp.NodeLivenessFn, timeAfterStoreSuspect)
 	sp.DetailsMu.Unlock()
 	require.Equal(t, s, storeStatusAvailable)
-	require.False(t, detail.LastAvailable.IsZero())
 }
 
 func TestGetLocalities(t *testing.T) {
