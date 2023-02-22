@@ -265,7 +265,6 @@ func (sm *replicaStateMachine) ApplySideEffects(
 			//   [lease seq is 1]
 			//   idx 99: unrelated cmd at LAI 10000, lease seq = 1
 			//   idx 100: cmd X at LAI 10000, lease seq = 1
-			//   idx 100: cmd X at LAI 10000, lease seq = 1
 			//
 			// Command `X` at log position 100 will get reproposed with a new lease
 			// index (as idx 99 consumed the LAI). But now the lease might also change
@@ -278,12 +277,12 @@ func (sm *replicaStateMachine) ApplySideEffects(
 			//   idx 102: cmd X at LAI 10000, lease seq = 1
 			//   idx 103: cmd X at LAI 20000, lease seq = 1
 			//
-			// When we apply index 102, we will see a permanent rejection but the
-			// proposal is local (since we don't unlink it if it is already superseded
-			// initially, see `retrieveLocalProposals`) and superseded (by idx 103). A
-			// permanent rejection dooms all reproposals (including the superseding
-			// one) to the same fate, so idx 103 will get rejected just like idx 102
-			// is.
+			// When we apply index 102, we will see a permanent rejection (because of
+			// the lease seq bump) but the proposal is local (since we don't unlink it
+			// if it is already superseded initially, see `retrieveLocalProposals`)
+			// and superseded (by idx 103). A permanent rejection dooms all
+			// reproposals (including the superseding one) to the same fate, so idx
+			// 103 will get rejected just like idx 102 is.
 			//
 			// [^1]: see (*replicaDecoder).retrieveLocalProposals()
 			sm.r.mu.RLock()
