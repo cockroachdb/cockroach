@@ -230,6 +230,12 @@ type TestClusterInterface interface {
 	// TODO(radu): we should verify that the queries in tests using SplitTable
 	// are indeed distributed as intended.
 	SplitTable(t *testing.T, desc catalog.TableDescriptor, sps []SplitPoint)
+
+	// WaitForTenantCapabilities waits until all servers have the specified
+	// tenant capabilities for the specified tenant ID.
+	// Only boolean capabilities are currently supported as we wait for the
+	// specified capabilities to have a "true" value.
+	WaitForTenantCapabilities(*testing.T, roachpb.TenantID, ...string)
 }
 
 // SplitPoint describes a split point that is passed to SplitTable.
