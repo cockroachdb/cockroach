@@ -1,0 +1,130 @@
+# LogicTest: 3node-tenant
+
+# Create a second database.
+statement ok
+CREATE DATABASE a
+
+# Create a table for database.
+statement ok
+CREATE TABLE a.b (id INT PRIMARY KEY)
+
+# Insert data into the table
+statement ok
+INSERT INTO a.b SELECT generate_series(1, 10)
+
+# Create a second table for database.
+statement ok
+CREATE TABLE a.c (id INT PRIMARY KEY)
+
+# SELECT * FROM crdb_internal.tenant_span_stats: span stats for all of the tenant's tables.
+# Assert the schema.
+query IIIIIIR colnames
+SELECT * FROM crdb_internal.tenant_span_stats() LIMIT 0
+----
+database_id table_id range_count approximate_disk_bytes live_bytes total_bytes live_percentage
+
+# SELECT DISTINCT(database_id) FROM crdb_internal.tenant_span_stats:
+# Assert that we are collecting span stats for tables across multiple databases.
+query I colnames
+SELECT DISTINCT(database_id) FROM crdb_internal.tenant_span_stats()
+----
+database_id
+1
+106
+
+# SELECT database_id, table_id FROM crdb_internal.tenant_span_stats(106):
+# Assert that we are collecting span stats scoped to the provided database id.
+query II colnames
+SELECT database_id, table_id FROM crdb_internal.tenant_span_stats(106)
+----
+database_id table_id
+106         108
+106         109
+
+# SELECT database_id, table_id FROM crdb_internal.tenant_span_stats(106, 108):
+# Assert that we are collecting span stats scoped to the provided database/table id combo.
+query II colnames
+SELECT database_id, table_id FROM crdb_internal.tenant_span_stats(106, 108)
+----
+database_id table_id
+106         108
+
+# Assert that we cannot provide an invalid database id.
+query error pq: provided database id must be greater than or equal to 1
+SELECT database_id, table_id FROM crdb_internal.tenant_span_stats(0)
+
+# Assert that we cannot provide an invalid table id.
+query error pq: provided table id must be greater than or equal to 1
+SELECT database_id, table_id FROM crdb_internal.tenant_span_stats(1, -1)
+
+# Assert that we cannot provide an invalid database id with a valid table id.
+query error pq: provided database id must be greater than or equal to 1
+SELECT database_id, table_id FROM crdb_internal.tenant_span_stats(-1, 1)
+
+# SELECT * FROM crdb_internal.tenant_span_stats(1000):
+# Assert that we get empty rows for a database id that does not correspond to a database.
+query IIIIIIR colnames
+SELECT * FROM crdb_internal.tenant_span_stats(1000)
+----
+database_id table_id range_count approximate_disk_bytes live_bytes total_bytes live_percentage
+
+# SELECT * FROM crdb_internal.tenant_span_stats(1, 1000):
+# Assert that we get empty rows for a table id that does not correspond to a table.
+query IIIIIIR colnames
+SELECT * FROM crdb_internal.tenant_span_stats(1, 1000)
+----
+database_id table_id range_count approximate_disk_bytes live_bytes total_bytes live_percentage
+
+# Select everything from a table to have 'live bytes'.
+statement ok
+SELECT * FROM a.b;
+
+# Assert that we are collecting non-zero span stats scoped to the provided database/table id combo.
+query IIBBBB colnames
+SELECT database_id, table_id, range_count > 0 as range_count, live_bytes > 0 as live_bytes, total_bytes > 0 as total_bytes, live_percentage > 0 as live_percentage FROM crdb_internal.tenant_span_stats(106, 108)
+----
+database_id table_id range_count live_bytes total_bytes live_percentage
+106         108      true        true       true        true
+
+# Create a second user without VIEWACTIVITY permission.
+statement ok
+CREATE USER testuser2
+
+# Switch to user2
+user testuser2
+
+# Assert that the user2 doesn't have permission to use this builtin.
+query error pq: user needs ADMIN role or the VIEWACTIVITY/VIEWACTIVITYREDACTED permission to view span statistics
+SELECT * FROM crdb_internal.tenant_span_stats() LIMIT 0
+
+# Switch to root
+user root
+
+# Grant VIEWACTIVITY permission to second user.
+statement ok
+ALTER ROLE testuser2 WITH VIEWACTIVITY
+
+user testuser2
+
+# Assert that the user2 has permission to use this builtin.
+query IIIIIIR colnames
+SELECT * FROM crdb_internal.tenant_span_stats() LIMIT 0
+----
+database_id table_id range_count approximate_disk_bytes live_bytes total_bytes live_percentage
+
+# Switch to root
+user root
+
+# Remove VIEWACTIVITY permission from second user.
+statement ok
+ALTER ROLE testuser2 WITH NOVIEWACTIVITY
+
+# Grant VIEWACTIVITYREDACTED permission to second user.
+statement ok
+ALTER ROLE testuser2 WITH VIEWACTIVITYREDACTED
+
+# Assert that the user2 has permission to use this builtin.
+query IIIIIIR colnames
+SELECT * FROM crdb_internal.tenant_span_stats() LIMIT 0
+----
+database_id table_id range_count approximate_disk_bytes live_bytes total_bytes live_percentage
