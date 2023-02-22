@@ -20,12 +20,7 @@ import (
 // table schema for a given database taking into consideration whether we're
 // configured for the MR schema.
 func GetTableSQLForDatabase(dbName string) string {
-	schema := systemschema.SQLInstancesTableSchema
-	if systemschema.TestSupportMultiRegion() {
-		schema = systemschema.MrSQLInstancesTableSchema
-	}
-	schema = strings.Replace(schema,
+	return strings.Replace(systemschema.SQLInstancesTableSchema,
 		`CREATE TABLE system.sql_instances`,
 		`CREATE TABLE "`+dbName+`".sql_instances`, 1)
-	return schema
 }

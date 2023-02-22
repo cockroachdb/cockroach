@@ -18,8 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -38,19 +38,14 @@ func TestRowCodec(t *testing.T) {
 	require.NoError(t, err)
 	codec := keys.MakeSQLCodec(tenantID)
 
-	t.Run("RegionalByRow", func(t *testing.T) {
-		defer envutil.TestSetEnv(t, "COCKROACH_MR_SYSTEM_DATABASE", "1")()
-		testEncoder(t, makeRowCodec(codec, systemschema.SQLInstancesTable()), tenantID)
-	})
-	t.Run("RegionalByTable", func(t *testing.T) {
-		defer envutil.TestSetEnv(t, "COCKROACH_MR_SYSTEM_DATABASE", "0")()
-		testEncoder(t, makeRowCodec(codec, systemschema.SQLInstancesTable()), tenantID)
+	testutils.RunTrueAndFalse(t, "useRegionalByRow", func(t *testing.T, useRegionalByRow bool) {
+		testEncoder(t, useRegionalByRow, makeRowCodec(codec, systemschema.SQLInstancesTable(), useRegionalByRow), tenantID)
 	})
 }
 
-func testEncoder(t *testing.T, codec rowCodec, expectedID roachpb.TenantID) {
+func testEncoder(t *testing.T, useRegionalByRow bool, codec rowCodec, expectedID roachpb.TenantID) {
 	region := []byte{103} /* 103 is an arbitrary value */
-	if !systemschema.TestSupportMultiRegion() {
+	if !useRegionalByRow {
 		// region is always enum.One if the system database is not configured
 		// for multi-region.
 		region = enum.One
@@ -67,7 +62,7 @@ func testEncoder(t *testing.T, codec rowCodec, expectedID roachpb.TenantID) {
 		require.NoError(t, err)
 		require.Equal(t, decodedTableID, uint32(tableID))
 
-		if systemschema.TestSupportMultiRegion() {
+		if useRegionalByRow {
 			require.Equal(t, indexID, uint32(2))
 		} else {
 			require.Equal(t, indexID, uint32(1))
@@ -85,7 +80,7 @@ func testEncoder(t *testing.T, codec rowCodec, expectedID roachpb.TenantID) {
 		require.NoError(t, err)
 		require.Equal(t, decodedTableID, uint32(tableID))
 
-		if systemschema.TestSupportMultiRegion() {
+		if useRegionalByRow {
 			require.Equal(t, indexID, uint32(2))
 			_, decodedRegion, err := encoding.DecodeBytesAscending(rem, nil)
 			require.Equal(t, region, decodedRegion)

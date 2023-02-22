@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
@@ -55,7 +56,12 @@ func TestGetAvailableInstanceIDForRegion(t *testing.T) {
 
 	getAvailableInstanceID := func(storage *Storage, region []byte) (id base.SQLInstanceID, err error) {
 		err = storage.db.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
-			id, err = storage.getAvailableInstanceIDForRegion(ctx, region, txn)
+			version, err := storage.versionGuard(ctx, txn)
+			if err != nil {
+				return err
+			}
+
+			id, err = storage.getAvailableInstanceIDForRegion(ctx, region, txn, &version)
 			return err
 		})
 		return
@@ -451,7 +457,7 @@ func setup(
 	stopper := stop.NewStopper()
 	slStorage := slstorage.NewFakeStorage()
 	f := s.RangeFeedFactory().(*rangefeed.Factory)
-	storage := NewTestingStorage(s.DB(), keys.SystemSQLCodec, table, slStorage, s.ClusterSettings(), clock, f)
+	storage := NewTestingStorage(s.DB(), keys.SystemSQLCodec, table, slStorage, s.ClusterSettings(), clock, f, s.SettingsWatcher().(*settingswatcher.SettingsWatcher))
 	return stopper, storage, slStorage, clock
 }
 

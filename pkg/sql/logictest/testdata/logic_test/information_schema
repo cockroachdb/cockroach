@@ -1673,6 +1673,7 @@ system              public             29_54_1_not_null                         
 system              public             primary                                                                                                         system         public        span_stats_unique_keys           PRIMARY KEY      NO             NO
 system              public             unique_keys_key_bytes_idx                                                                                       system         public        span_stats_unique_keys           UNIQUE           NO             NO
 system              public             29_46_1_not_null                                                                                                system         public        sql_instances                    CHECK            NO             NO
+system              public             29_46_6_not_null                                                                                                system         public        sql_instances                    CHECK            NO             NO
 system              public             primary                                                                                                         system         public        sql_instances                    PRIMARY KEY      NO             NO
 system              public             29_39_1_not_null                                                                                                system         public        sqlliveness                      CHECK            NO             NO
 system              public             29_39_2_not_null                                                                                                system         public        sqlliveness                      CHECK            NO             NO
@@ -1913,6 +1914,7 @@ system              public             29_45_2_not_null                         
 system              public             29_45_3_not_null                                                                                                next_instance_id IS NOT NULL
 system              public             29_45_4_not_null                                                                                                last_update IS NOT NULL
 system              public             29_46_1_not_null                                                                                                id IS NOT NULL
+system              public             29_46_6_not_null                                                                                                crdb_region IS NOT NULL
 system              public             29_47_1_not_null                                                                                                start_key IS NOT NULL
 system              public             29_47_2_not_null                                                                                                end_key IS NOT NULL
 system              public             29_47_3_not_null                                                                                                config IS NOT NULL
@@ -2035,6 +2037,7 @@ system         public        span_stats_samples               sample_time       
 system         public        span_stats_tenant_boundaries     tenant_id                                                                                                 system              public             primary
 system         public        span_stats_unique_keys           id                                                                                                        system              public             primary
 system         public        span_stats_unique_keys           key_bytes                                                                                                 system              public             unique_keys_key_bytes_idx
+system         public        sql_instances                    crdb_region                                                                                               system              public             primary
 system         public        sql_instances                    id                                                                                                        system              public             primary
 system         public        sqlliveness                      crdb_region                                                                                               system              public             primary
 system         public        sqlliveness                      session_id                                                                                                system              public             primary
@@ -2330,6 +2333,7 @@ system         pg_extension  spatial_ref_sys                  proj4text         
 system         pg_extension  spatial_ref_sys                  srid                                                                                                      1
 system         pg_extension  spatial_ref_sys                  srtext                                                                                                    4
 system         public        sql_instances                    addr                                                                                                      2
+system         public        sql_instances                    crdb_region                                                                                               6
 system         public        sql_instances                    id                                                                                                        1
 system         public        sql_instances                    locality                                                                                                  4
 system         public        sql_instances                    session_id                                                                                                3

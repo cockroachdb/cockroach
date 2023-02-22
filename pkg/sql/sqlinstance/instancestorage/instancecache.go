@@ -13,15 +13,20 @@ package instancestorage
 import (
 	"context"
 	"strings"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/logtags"
 )
 
 // instanceCache represents a cache over the contents of sql_instances table.
@@ -204,3 +209,142 @@ func (r *rangeFeedCache) updateInstanceMap(instance instancerow, deletionEvent b
 func (s *rangeFeedCache) Close() {
 	s.feed.Close()
 }
+
+type migrationCache struct {
+	mu struct {
+		syncutil.Mutex
+		cache instanceCache
+	}
+}
+
+// onVersionReached installs a callback that runs once the version is reached.
+// If the version was reached before installing the callback, the callback is run
+// synchronously.
+func onVersionReached(
+	ctx context.Context, settings *cluster.Settings, expect clusterversion.Key, do func(),
+) {
+	var once sync.Once
+
+	onVersionChanged := func(rpcContext context.Context, version clusterversion.ClusterVersion) {
+		if !version.IsActive(expect) {
+			return
+		}
+		once.Do(do)
+	}
+
+	settings.Version.SetOnChange(onVersionChanged)
+
+	onVersionChanged(ctx, settings.Version.ActiveVersion(ctx))
+}
+
+// newMigrationCache uses the oldCache and newCache functions to construct
+// instanceCaches. The cache registers a hook with the setting and switches
+// from the old implementation to the new implementation when the version
+// changes to V23_1_SystemRbrReadNew.
+func newMigrationCache(
+	ctx context.Context,
+	stopper *stop.Stopper,
+	settings *cluster.Settings,
+	oldCache, newCache func(ctx context.Context) (instanceCache, error),
+) (instanceCache, error) {
+	c := &migrationCache{}
+
+	// oldReady is signaled when the old cache finishes starting.
+	oldReady := make(chan error, 1)
+	err := stopper.RunAsyncTask(ctx, "start-old-cache-implementation", func(ctx context.Context) {
+		cache, err := oldCache(ctx)
+		if err != nil {
+			oldReady <- err
+		}
+
+		onVersionReached(ctx, settings, clusterversion.V23_1_SystemRbrReadNew, func() {
+			// Once the read new version gate is reached, close the original
+			// cache in order to clean up resources and prevent reading updates
+			// when the original index is deleted.
+			cache.Close()
+		})
+
+		// If the old cache is already stale, do not return it.
+		if settings.Version.IsActive(ctx, clusterversion.V23_1_SystemRbrReadNew) {
+			return
+		}
+
+		c.mu.Lock()
+		defer c.mu.Unlock()
+
+		// In the case of a race condition, if the new cache initialized first,
+		// do not ovewrwrite it.
+		if c.mu.cache != nil {
+			return
+		}
+
+		c.mu.cache = cache
+		oldReady <- nil
+	})
+	if err != nil {
+		oldReady <- err
+	}
+
+	// newReady is signaled when the new cache finishes starting.
+	newReady := make(chan error, 1)
+	newCacheCtx := logtags.AddTags(context.Background(), logtags.FromContext(ctx))
+	onVersionReached(ctx, settings, clusterversion.V23_1_SystemRbrReadNew, func() {
+		err := stopper.RunAsyncTask(newCacheCtx, "start-new-cache-implementation", func(ctx context.Context) {
+			// Rebuild the cancel signal since the goroutine has a  background
+			// context.
+			ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
+			defer cancel()
+
+			log.Ops.Info(ctx, "starting new system.sql_instance cache")
+
+			cache, err := newCache(ctx)
+			if err != nil {
+				log.Ops.Errorf(ctx, "error starting the new system.sql_instance cache: %s", err)
+				newReady <- err
+				return
+			}
+
+			log.Ops.Info(ctx, "new system.sql_instance cache is ready")
+
+			c.mu.Lock()
+			defer c.mu.Unlock()
+
+			c.mu.cache = cache
+			newReady <- nil
+		})
+		if err != nil {
+			log.Ops.Errorf(ctx, "unable to start new system.sql_instance cache: %s", err)
+			newReady <- err
+		}
+	})
+
+	// Wait for one of the caches to be ready or fail to start.
+	select {
+	case err = <-newReady:
+	case err = <-oldReady:
+	}
+	if err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+func (c *migrationCache) Close() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.mu.cache.Close()
+}
+
+func (c *migrationCache) getInstance(instanceID base.SQLInstanceID) (i instancerow, ok bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.mu.cache.getInstance(instanceID)
+}
+
+func (c *migrationCache) listInstances() []instancerow {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.mu.cache.listInstances()
+}
+
+var _ instanceCache = &migrationCache{}
