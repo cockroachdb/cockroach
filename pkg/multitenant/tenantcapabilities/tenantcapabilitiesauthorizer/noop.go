@@ -39,6 +39,11 @@ func (n *NoopAuthorizer) HasCapabilityForBatch(
 func (n *NoopAuthorizer) BindReader(tenantcapabilities.Reader) {
 }
 
+// HasCapabilities implements the tenantcapabilities.Authorizer interface.
+func (n *NoopAuthorizer) RequireCapabilities(roachpb.TenantID, ...string) error {
+	return nil
+}
+
 // HasNodeStatusCapability implements the tenantcapabilities.Authorizer interface
 func (n *NoopAuthorizer) HasNodeStatusCapability(
 	ctx context.Context, tenID roachpb.TenantID,

@@ -87,6 +87,7 @@ import (
 	"github.com/lib/pq"
 	"github.com/pmezard/go-difflib/difflib"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/maps"
 )
 
 // This file is home to TestLogic, a general-purpose engine for
@@ -1488,13 +1489,14 @@ func (t *logicTest) newCluster(
 	stats.DefaultAsOfTime = 10 * time.Millisecond
 	stats.DefaultRefreshInterval = time.Millisecond
 
-	t.cluster = serverutils.StartNewTestCluster(t.rootT, cfg.NumNodes, params)
+	testCluster := serverutils.StartNewTestCluster(t.rootT, cfg.NumNodes, params)
+	t.cluster = testCluster
 	if cfg.UseFakeSpanResolver {
-		fakeResolver := physicalplanutils.FakeResolverForTestCluster(t.cluster)
-		t.cluster.Server(t.nodeIdx).SetDistSQLSpanResolver(fakeResolver)
+		fakeResolver := physicalplanutils.FakeResolverForTestCluster(testCluster)
+		testCluster.Server(t.nodeIdx).SetDistSQLSpanResolver(fakeResolver)
 	}
 
-	connsForClusterSettingChanges := []*gosql.DB{t.cluster.ServerConn(0)}
+	connsForClusterSettingChanges := []*gosql.DB{testCluster.ServerConn(0)}
 	if cfg.UseTenant {
 		t.tenantAddrs = make([]string, cfg.NumNodes)
 		for i := 0; i < cfg.NumNodes; i++ {
@@ -1523,7 +1525,7 @@ func (t *logicTest) newCluster(
 				opt.apply(&tenantArgs.TestingKnobs)
 			}
 
-			tenant, err := t.cluster.Server(i).StartTenant(context.Background(), tenantArgs)
+			tenant, err := testCluster.Server(i).StartTenant(context.Background(), tenantArgs)
 			if err != nil {
 				t.rootT.Fatalf("%+v", err)
 			}
@@ -1548,7 +1550,7 @@ func (t *logicTest) newCluster(
 		connsForClusterSettingChanges = append(connsForClusterSettingChanges, db)
 
 		// Increase tenant rate limits for faster tests.
-		conn := t.cluster.ServerConn(0)
+		conn := testCluster.ServerConn(0)
 		if _, err := conn.Exec("SET CLUSTER SETTING kv.tenant_rate_limiter.rate_limit = 100000"); err != nil {
 			t.Fatal(err)
 		}
@@ -1564,9 +1566,9 @@ func (t *logicTest) newCluster(
 	// If we've created a tenant (either explicitly, or probabilistically and
 	// implicitly) set any necessary cluster settings to override blocked
 	// behavior.
-	if cfg.UseTenant || t.cluster.StartedDefaultTestTenant() {
+	if cfg.UseTenant || testCluster.StartedDefaultTestTenant() {
 
-		conn := t.cluster.StorageClusterConn()
+		conn := testCluster.StorageClusterConn()
 		clusterSettings := toa.clusterSettings
 		_, ok := clusterSettings[sql.SecondaryTenantZoneConfigsEnabled.Key()]
 		if ok {
@@ -1584,20 +1586,29 @@ func (t *logicTest) newCluster(
 			}
 		}
 
-		tenantID := serverutils.TestTenantID().ToUint64()
+		tenantID := serverutils.TestTenantID()
 		for name, value := range clusterSettings {
 			query := fmt.Sprintf("ALTER TENANT [$1] SET CLUSTER SETTING %s = $2", name)
-			if _, err := conn.Exec(query, tenantID, value); err != nil {
+			if _, err := conn.Exec(query, tenantID.ToUint64(), value); err != nil {
 				t.Fatal(err)
 			}
 		}
 
-		for name, value := range toa.capabilities {
+		capabilities := toa.capabilities
+		for name, value := range capabilities {
 			query := fmt.Sprintf("ALTER TENANT [$1] GRANT CAPABILITY %s = $2", name)
-			if _, err := conn.Exec(query, tenantID, value); err != nil {
+			if _, err := conn.Exec(query, tenantID.ToUint64(), value); err != nil {
 				t.Fatal(err)
 			}
 		}
+
+		for name, value := range clusterSettings {
+			t.waitForTenantReadOnlyClusterSettingToTakeEffectOrFatal(
+				name, value, params.ServerArgs.Insecure,
+			)
+		}
+
+		testCluster.WaitForTenantCapabilities(tenantID, maps.Keys(capabilities)...)
 	}
 
 	var randomWorkmem int
@@ -1709,9 +1720,9 @@ func (t *logicTest) newCluster(
 		}
 		// Wait until all servers are aware of the setting.
 		testutils.SucceedsSoon(t.rootT, func() error {
-			for i := 0; i < t.cluster.NumServers(); i++ {
+			for i := 0; i < testCluster.NumServers(); i++ {
 				var m string
-				err := t.cluster.ServerConn(i % t.cluster.NumServers()).QueryRow(
+				err := testCluster.ServerConn(i % testCluster.NumServers()).QueryRow(
 					"SHOW CLUSTER SETTING sql.defaults.distsql",
 				).Scan(&m)
 				if err != nil {
@@ -1725,12 +1736,6 @@ func (t *logicTest) newCluster(
 			}
 			return nil
 		})
-	}
-
-	for name, value := range toa.clusterSettings {
-		t.waitForTenantReadOnlyClusterSettingToTakeEffectOrFatal(
-			name, value, params.ServerArgs.Insecure,
-		)
 	}
 
 	t.setUser(username.RootUser, 0 /* nodeIdx */)
