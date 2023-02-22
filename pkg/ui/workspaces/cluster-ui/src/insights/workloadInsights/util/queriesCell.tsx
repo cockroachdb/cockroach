@@ -21,8 +21,8 @@ export function QueriesCell(
   textLimit: number,
 ): React.ReactElement {
   if (
-    transactionQueries.length < 2 &&
-    transactionQueries[0].length < textLimit
+    transactionQueries?.length < 2 &&
+    transactionQueries[0]?.length < textLimit
   ) {
     return <div>{transactionQueries[0]}</div>;
   }

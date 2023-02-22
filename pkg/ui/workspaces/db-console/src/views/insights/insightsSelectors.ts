@@ -61,13 +61,13 @@ export const selectStmtInsightsMaxApiReached = (
   state: AdminUIState,
 ): boolean => {
   return !!state.cachedData.statementInsights?.data?.maxSizeReached;
+};
 
 export const selectTxnInsightsMaxApiReached = (
   state: AdminUIState,
 ): boolean => {
   return !!state.cachedData.transactionInsights?.data?.maxSizeReached;
 };
-
 
 export const selectTransactionInsightDetailsError = createSelector(
   (state: AdminUIState) => state.cachedData.transactionInsightDetails,

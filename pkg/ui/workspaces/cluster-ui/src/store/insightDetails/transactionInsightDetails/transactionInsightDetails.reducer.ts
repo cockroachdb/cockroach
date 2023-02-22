@@ -31,6 +31,7 @@ const txnInitialState: TransactionInsightDetailsState = {
   lastUpdated: null,
   lastError: null,
   valid: true,
+  maxSizeReached: false,
 };
 
 export type TransactionInsightDetailsCachedState = {
@@ -49,7 +50,9 @@ const transactionInsightDetailsSlice = createSlice({
   reducers: {
     received: (
       state,
-      action: PayloadAction<SqlApiResponse<TransactionInsightEventDetailsResponse>>,
+      action: PayloadAction<
+        SqlApiResponse<TransactionInsightEventDetailsResponse>
+      >,
     ) => {
       if (action?.payload?.results?.executionID) {
         state.cachedData[action.payload.results.executionID] = {
@@ -57,6 +60,7 @@ const transactionInsightDetailsSlice = createSlice({
           valid: true,
           lastError: null,
           lastUpdated: moment.utc(),
+          maxSizeReached: action.payload.maxSizeReached,
         };
       }
     },

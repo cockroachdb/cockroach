@@ -32,7 +32,10 @@ const statementInsightsSlice = createSlice({
   name: `${DOMAIN_NAME}/statementInsightsSlice`,
   initialState,
   reducers: {
-    received: (state, action: PayloadAction<SqlApiResponse<StatementInsights>>) => {
+    received: (
+      state,
+      action: PayloadAction<SqlApiResponse<StatementInsights>>,
+    ) => {
       state.data = action.payload;
       state.valid = true;
       state.lastError = null;

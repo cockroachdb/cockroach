@@ -74,7 +74,6 @@ function insightsTableData(
     });
 }
 
-
 export interface TransactionInsightDetailsStateProps {
   insightEventDetails: TransactionInsightEventDetailsResponse;
   insightError: Error | null;
@@ -256,8 +255,8 @@ export const TransactionInsightDetails: React.FC<
               intent="info"
               title={
                 <>
-                  Not all statements are displayed because the maximum
-                  number of statements was reached in the console.&nbsp;
+                  Not all statements are displayed because the maximum number of
+                  statements was reached in the console.&nbsp;
                   <Anchor href={insights} target="_blank">
                     Learn more
                   </Anchor>
