@@ -29,7 +29,7 @@ type astAnnotator struct {
 
 func newAstAnnotator(original tree.Statement) (*astAnnotator, error) {
 	// Clone the original tree by re-parsing the input back into an AST.
-	statement, err := parser.ParseOne(original.String())
+	statement, err := parser.ParseOne(tree.AsStringWithFlags(original, tree.FmtParsable))
 	if err != nil {
 		return nil, err
 	}

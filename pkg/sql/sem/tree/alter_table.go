@@ -237,7 +237,7 @@ func (node *AlterTableAlterColumnType) Format(ctx *FmtCtx) {
 	ctx.WriteString(" ALTER COLUMN ")
 	ctx.FormatNode(&node.Column)
 	ctx.WriteString(" SET DATA TYPE ")
-	ctx.WriteString(node.ToType.SQLString())
+	ctx.FormatTypeReference(node.ToType)
 	if len(node.Collation) > 0 {
 		ctx.WriteString(" COLLATE ")
 		lex.EncodeLocaleName(&ctx.Buffer, node.Collation)
