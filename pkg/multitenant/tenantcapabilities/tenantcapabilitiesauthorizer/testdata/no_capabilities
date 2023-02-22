@@ -3,7 +3,7 @@
 
 has-capability-for-batch ten=10 cmds=(split, scan, cput)
 ----
-tenant 10 does not have admin split capability
+tenant 10 does not have capability "can_admin_split"
 
 # However, if there was no split in the batch, the batch should be allowed to
 # go through.
@@ -27,4 +27,4 @@ ok
 
 has-capability-for-batch ten=10 cmds=(split, scan, cput)
 ----
-tenant 10 does not have admin split capability
+tenant 10 does not have capability "can_admin_split"
