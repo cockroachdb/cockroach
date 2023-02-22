@@ -14,7 +14,7 @@ import { selectTxnInsightsCombiner } from "src/selectors/insightsCommon.selector
 import { localStorageSelector } from "src/store/utils/selectors";
 
 const selectTransactionInsightsData = (state: AppState) =>
-  state.adminUI.transactionInsights.data;
+  state.adminUI.transactionInsights.data?.results;
 
 export const selectTransactionInsights = createSelector(
   selectTransactionInsightsData,
@@ -23,6 +23,10 @@ export const selectTransactionInsights = createSelector(
 
 export const selectTransactionInsightsError = (state: AppState) =>
   state.adminUI.transactionInsights?.lastError;
+
+export const selectTransactionInsightsMaxApiReached = (
+  state: AppState,
+): boolean => !!state.adminUI.transactionInsights?.data?.maxSizeReached;
 
 export const selectSortSetting = createSelector(
   localStorageSelector,

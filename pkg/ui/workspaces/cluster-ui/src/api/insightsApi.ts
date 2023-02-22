@@ -10,10 +10,13 @@
 
 import {
   executeInternalSql,
+  formatApiResult,
   INTERNAL_SQL_API_APP,
+  isMaxSizeError,
   LARGE_RESULT_SIZE,
   LONG_TIMEOUT,
   sqlApiErrorMessage,
+  SqlApiResponse,
   SqlExecutionRequest,
   SqlExecutionResponse,
   sqlResultsAreEmpty,
@@ -201,7 +204,9 @@ const makeInsightsSqlRequest = (queries: string[]): SqlExecutionRequest => ({
 });
 
 // getTransactionInsightEventState is the API function that executes the queries and returns the results.
-export async function getTransactionInsightEventState(): Promise<TransactionInsightEventsResponse> {
+export async function getTransactionInsightEventState(): Promise<
+  SqlApiResponse<TransactionInsightEventsResponse>
+> {
   // Note that any errors encountered fetching these results are caught
   // earlier in the call stack.
 
@@ -211,7 +216,8 @@ export async function getTransactionInsightEventState(): Promise<TransactionInsi
     await executeInternalSql<TransactionContentionResponseColumns>(
       makeInsightsSqlRequest([txnContentionQuery]),
     );
-  if (contentionResults.error) {
+  const maxSizeReached = isMaxSizeError(contentionResults.error?.message);
+  if (contentionResults.error && !maxSizeReached) {
     throw new Error(
       `Error while retrieving contention information: ${sqlApiErrorMessage(
         contentionResults.error.message,
@@ -219,7 +225,11 @@ export async function getTransactionInsightEventState(): Promise<TransactionInsi
     );
   }
   if (sqlResultsAreEmpty(contentionResults)) {
-    return [];
+    return formatApiResult(
+      [],
+      contentionResults.error,
+      "retrieving contention information",
+    );
   }
 
   // Step 2: Fetch the stmt fingerprints in the contended transactions.
@@ -236,7 +246,10 @@ export async function getTransactionInsightEventState(): Promise<TransactionInsi
         txnStmtFingerprintsQuery(Array.from(txnFingerprintIDs)),
       ]),
     );
-  if (txnStmtFingerprintResults.error) {
+  const maxSizeTxnFingerprintReached = isMaxSizeError(
+    txnStmtFingerprintResults.error?.message,
+  );
+  if (txnStmtFingerprintResults.error && !maxSizeTxnFingerprintReached) {
     throw new Error(
       `Error while retrieving statements information: ${sqlApiErrorMessage(
         txnStmtFingerprintResults.error.message,
@@ -244,7 +257,11 @@ export async function getTransactionInsightEventState(): Promise<TransactionInsi
     );
   }
   if (sqlResultsAreEmpty(txnStmtFingerprintResults)) {
-    return [];
+    return formatApiResult(
+      [],
+      contentionResults.error,
+      "retrieving statements information",
+    );
   }
 
   // Step 3: Get all query strings for statement fingerprints.
@@ -259,7 +276,10 @@ export async function getTransactionInsightEventState(): Promise<TransactionInsi
     await executeInternalSql<FingerprintStmtsResponseColumns>(
       fingerprintStmtsRequest,
     );
-  if (fingerprintStmtResults.error) {
+  const maxSizeStmtFingerprintReached = isMaxSizeError(
+    fingerprintStmtResults.error?.message,
+  );
+  if (fingerprintStmtResults.error && !maxSizeStmtFingerprintReached) {
     throw new Error(
       `Error while retrieving statements information: ${sqlApiErrorMessage(
         fingerprintStmtResults.error.message,
@@ -271,6 +291,9 @@ export async function getTransactionInsightEventState(): Promise<TransactionInsi
     transactionContentionResultsToEventState(contentionResults),
     txnStmtFingerprintsResultsToEventState(txnStmtFingerprintResults),
     fingerprintStmtsResultsToEventState(fingerprintStmtResults),
+    maxSizeReached ||
+      maxSizeTxnFingerprintReached ||
+      maxSizeStmtFingerprintReached,
   );
 }
 
@@ -278,13 +301,17 @@ export function combineTransactionInsightEventState(
   txnContentionState: TransactionContentionEventsResponse,
   txnFingerprintState: TxnStmtFingerprintEventsResponse,
   fingerprintToQuery: StmtFingerprintToQueryRecord,
-): TransactionInsightEventState[] {
+  maxSizeReached: boolean,
+): SqlApiResponse<TransactionInsightEventState[]> {
   if (
     !txnContentionState.length ||
     !txnFingerprintState.length ||
     !fingerprintToQuery.size
   ) {
-    return [];
+    return {
+      maxSizeReached: maxSizeReached,
+      results: [],
+    };
   }
   const txnsWithStmtQueries = txnFingerprintState.map(txnRow => ({
     fingerprintID: txnRow.fingerprintID,
@@ -307,7 +334,10 @@ export function combineTransactionInsightEventState(
     }
   });
 
-  return res;
+  return {
+    maxSizeReached: maxSizeReached,
+    results: res,
+  };
 }
 
 // Transaction insight details.
@@ -455,7 +485,7 @@ function transactionContentionDetailsResultsToEventState(
 // getTransactionInsightEventState is the API function that executes the queries and returns the results.
 export async function getTransactionInsightEventDetailsState(
   req: TransactionInsightEventDetailsRequest,
-): Promise<TransactionInsightEventDetailsResponse> {
+): Promise<SqlApiResponse<TransactionInsightEventDetailsResponse>> {
   // Note that any errors encountered fetching these results are caught // earlier in the call stack.
   //
   // There are 3 api requests/queries in this process.
@@ -471,7 +501,8 @@ export async function getTransactionInsightEventDetailsState(
     await executeInternalSql<TxnContentionDetailsResponseColumns>(
       txnContentionDetailsRequest,
     );
-  if (contentionResults.error) {
+  const maxSizeReached = isMaxSizeError(contentionResults.error?.message);
+  if (contentionResults.error && !maxSizeReached) {
     throw new Error(
       `Error while retrieving contention information: ${sqlApiErrorMessage(
         contentionResults.error.message,
@@ -479,7 +510,11 @@ export async function getTransactionInsightEventDetailsState(
     );
   }
   if (sqlResultsAreEmpty(contentionResults)) {
-    return;
+    return formatApiResult(
+      [],
+      contentionResults.error,
+      "retrieving contention information",
+    );
   }
 
   // Collect all txn fingerprints involved.
@@ -504,7 +539,10 @@ export async function getTransactionInsightEventDetailsState(
     await executeInternalSql<TxnStmtFingerprintsResponseColumns>(
       makeInsightsSqlRequest([txnStmtFingerprintsQuery(txnFingerprintIDs)]),
     );
-  if (getStmtFingerprintsResponse.error) {
+  const maxSizeStmtFingerprintReached = isMaxSizeError(
+    getStmtFingerprintsResponse.error?.message,
+  );
+  if (getStmtFingerprintsResponse.error && !maxSizeStmtFingerprintReached) {
     throw new Error(
       `Error while retrieving statements information: ${sqlApiErrorMessage(
         getStmtFingerprintsResponse.error.message,
@@ -523,7 +561,10 @@ export async function getTransactionInsightEventDetailsState(
         fingerprintStmtsQuery(Array.from(stmtFingerprintIDs)),
       ]),
     );
-  if (stmtQueriesResponse.error) {
+  const maxSizeQueriesReached = isMaxSizeError(
+    stmtQueriesResponse.error?.message,
+  );
+  if (stmtQueriesResponse.error && !maxSizeQueriesReached) {
     throw new Error(
       `Error while retrieving statements information: ${sqlApiErrorMessage(
         stmtQueriesResponse.error.message,
@@ -535,6 +576,7 @@ export async function getTransactionInsightEventDetailsState(
     transactionContentionDetailsResultsToEventState(contentionResults),
     txnStmtFingerprintsResultsToEventState(getStmtFingerprintsResponse),
     fingerprintStmtsResultsToEventState(stmtQueriesResponse),
+    maxSizeReached || maxSizeStmtFingerprintReached || maxSizeQueriesReached,
   );
 }
 
@@ -542,13 +584,17 @@ export function combineTransactionInsightEventDetailsState(
   txnContentionDetailsState: TransactionContentionEventDetailsResponse,
   txnsWithStmtFingerprints: TxnStmtFingerprintEventsResponse,
   stmtFingerprintToQuery: StmtFingerprintToQueryRecord,
-): TransactionInsightEventDetailsState {
+  maxSizeReached: boolean,
+): SqlApiResponse<TransactionInsightEventDetailsState> {
   if (
     !txnContentionDetailsState &&
     !txnsWithStmtFingerprints.length &&
     !stmtFingerprintToQuery.size
   ) {
-    return null;
+    return {
+      maxSizeReached: maxSizeReached,
+      results: null,
+    };
   }
 
   txnContentionDetailsState.blockingContentionDetails.forEach(blockedRow => {
@@ -557,7 +603,10 @@ export function combineTransactionInsightEventDetailsState(
     );
 
     if (!currBlockedFingerprintStmts) {
-      return;
+      return {
+        maxSizeReached: maxSizeReached,
+        results: null,
+      };
     }
 
     blockedRow.blockingQueries = currBlockedFingerprintStmts.queryIDs.map(
@@ -575,7 +624,10 @@ export function combineTransactionInsightEventDetailsState(
     queries: waitingTxn.queryIDs.map(id => stmtFingerprintToQuery.get(id)),
   };
 
-  return res;
+  return {
+    maxSizeReached: maxSizeReached,
+    results: res,
+  };
 }
 
 // Statements
@@ -698,7 +750,9 @@ const statementInsightsQuery: InsightQuery<
   toState: getStatementInsightsFromClusterExecutionInsightsResponse,
 };
 
-export async function getStatementInsightsApi(): Promise<StatementInsights> {
+export async function getStatementInsightsApi(): Promise<
+  SqlApiResponse<StatementInsights>
+> {
   const request: SqlExecutionRequest = {
     statements: [
       {
@@ -712,13 +766,17 @@ export async function getStatementInsightsApi(): Promise<StatementInsights> {
   const result = await executeInternalSql<ExecutionInsightsResponseRow>(
     request,
   );
-  if (result.error) {
+  const maxSizeReached = isMaxSizeError(result.error?.message);
+  if (result.error && !maxSizeReached) {
     throw new Error(
       `Error while retrieving insights information: ${sqlApiErrorMessage(
         result.error.message,
       )}`,
     );
   }
-
-  return statementInsightsQuery.toState(result);
+  return formatApiResult(
+    statementInsightsQuery.toState(result),
+    result.error,
+    "retrieving insights information",
+  );
 }

@@ -38,6 +38,9 @@ import { InsightsError } from "../insightsErrorComponent";
 import { Pagination } from "../../pagination";
 import { EmptySchemaInsightsTablePlaceholder } from "./emptySchemaInsightsTablePlaceholder";
 import { CockroachCloudContext } from "../../contexts";
+import { InlineAlert } from "@cockroachlabs/ui-components";
+import { insights } from "src/util";
+import { Anchor } from "src/anchor";
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
 
@@ -49,6 +52,7 @@ export type SchemaInsightsViewStateProps = {
   filters: SchemaInsightEventFilters;
   sortSetting: SortSetting;
   hasAdminRole: boolean;
+  maxSizeApiReached?: boolean;
 };
 
 export type SchemaInsightsViewDispatchProps = {
@@ -75,6 +79,7 @@ export const SchemaInsightsView: React.FC<SchemaInsightsViewProps> = ({
   refreshUserSQLRoles,
   onFiltersChange,
   onSortChange,
+  maxSizeApiReached,
 }: SchemaInsightsViewProps) => {
   const isCockroachCloud = useContext(CockroachCloudContext);
   const [pagination, setPagination] = useState<ISortedTablePagination>({
@@ -252,6 +257,20 @@ export const SchemaInsightsView: React.FC<SchemaInsightsViewProps> = ({
               total={filteredSchemaInsights?.length}
               onChange={onChangePage}
             />
+            {maxSizeApiReached && (
+              <InlineAlert
+                intent="info"
+                title={
+                  <>
+                    Not all insights are displayed because the maximum number of
+                    insights was reached in the console.&nbsp;
+                    <Anchor href={insights} target="_blank">
+                      Learn more
+                    </Anchor>
+                  </>
+                }
+              />
+            )}
           </div>
         </Loading>
       </div>

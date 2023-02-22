@@ -15,6 +15,7 @@ import { Heading } from "@cockroachlabs/ui-components";
 import { Col, Row } from "antd";
 import "antd/lib/col/style";
 import "antd/lib/row/style";
+import "antd/lib/tabs/style";
 import { Button } from "src/button";
 import { Loading } from "src/loading";
 import { SqlBox, SqlBoxSize } from "src/sql";
@@ -48,6 +49,9 @@ import { InsightsError } from "../insightsErrorComponent";
 import { TransactionDetailsLink } from "../workloadInsights/util";
 import { TimeScale } from "../../timeScaleDropdown";
 import { idAttr } from "src/util";
+import { InlineAlert } from "@cockroachlabs/ui-components";
+import { insights } from "src/util";
+import { Anchor } from "src/anchor";
 
 const tableCx = classNames.bind(insightTableStyles);
 
@@ -74,6 +78,7 @@ export interface TransactionInsightDetailsStateProps {
   insightEventDetails: TransactionInsightEventDetailsResponse;
   insightError: Error | null;
   hasAdminRole: boolean;
+  maxSizeApiReached?: boolean;
 }
 
 export interface TransactionInsightDetailsDispatchProps {
@@ -100,6 +105,7 @@ export const TransactionInsightDetails: React.FC<
   match,
   hasAdminRole,
   refreshUserSQLRoles,
+  maxSizeApiReached,
 }) => {
   const [insightsSortSetting, setInsightsSortSetting] = useState<SortSetting>({
     ascending: false,
@@ -243,6 +249,20 @@ export const TransactionInsightDetails: React.FC<
                 </Col>
               </Row>
             </section>
+          )}
+          {maxSizeApiReached && (
+            <InlineAlert
+              intent="info"
+              title={
+                <>
+                  Not all statements are displayed because the maximum number of
+                  statements was reached in the console.&nbsp;
+                  <Anchor href={insights} target="_blank">
+                    Learn more
+                  </Anchor>
+                </>
+              }
+            />
           )}
         </Loading>
       </section>

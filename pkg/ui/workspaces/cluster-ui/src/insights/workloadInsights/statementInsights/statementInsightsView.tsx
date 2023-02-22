@@ -46,6 +46,9 @@ import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 import ColumnsSelector from "../../../columnsSelector/columnsSelector";
 import { SelectOption } from "../../../multiSelectCheckbox/multiSelectCheckbox";
 import { TimeScale } from "../../../timeScaleDropdown";
+import { InlineAlert } from "@cockroachlabs/ui-components";
+import { insights } from "src/util";
+import { Anchor } from "src/anchor";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -58,6 +61,7 @@ export type StatementInsightsViewStateProps = {
   selectedColumnNames: string[];
   dropDownSelect?: React.ReactElement;
   isTenant?: boolean;
+  maxSizeApiReached?: boolean;
 };
 
 export type StatementInsightsViewDispatchProps = {
@@ -90,6 +94,7 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
     selectedColumnNames,
     dropDownSelect,
     isTenant,
+    maxSizeApiReached,
   } = props;
 
   const [pagination, setPagination] = useState<ISortedTablePagination>({
@@ -283,6 +288,20 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
               total={statementInsights?.length}
               onChange={onChangePage}
             />
+            {maxSizeApiReached && (
+              <InlineAlert
+                intent="info"
+                title={
+                  <>
+                    Not all insights are displayed because the maximum number of
+                    insights was reached in the console.&nbsp;
+                    <Anchor href={insights} target="_blank">
+                      Learn more
+                    </Anchor>
+                  </>
+                }
+              />
+            )}
           </div>
         </Loading>
       </div>

@@ -30,6 +30,8 @@ import {
   selectStatementInsights,
   sortSettingLocalSetting,
   selectTransactionInsights,
+  selectStmtInsightsMaxApiReached,
+  selectTxnInsightsMaxApiReached,
 } from "src/views/insights/insightsSelectors";
 import { bindActionCreators } from "redux";
 import { LocalSetting } from "src/redux/localsettings";
@@ -52,6 +54,7 @@ const transactionMapStateToProps = (
   transactionsError: state.cachedData?.transactionInsights.lastError,
   filters: filtersLocalSetting.selector(state),
   sortSetting: sortSettingLocalSetting.selector(state),
+  maxSizeApiReached: selectTxnInsightsMaxApiReached(state),
 });
 
 const statementMapStateToProps = (
@@ -64,6 +67,7 @@ const statementMapStateToProps = (
   sortSetting: sortSettingLocalSetting.selector(state),
   selectedColumnNames:
     insightStatementColumnsLocalSetting.selectorToArray(state),
+  maxSizeApiReached: selectStmtInsightsMaxApiReached(state),
 });
 
 const TransactionDispatchProps = {

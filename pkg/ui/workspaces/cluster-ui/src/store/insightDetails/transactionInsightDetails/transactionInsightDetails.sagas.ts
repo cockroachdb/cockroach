@@ -17,7 +17,7 @@ import {
   TransactionInsightEventDetailsResponse,
 } from "src/api/insightsApi";
 import { PayloadAction } from "@reduxjs/toolkit";
-import { ErrorWithKey } from "src/api";
+import { ErrorWithKey, SqlApiResponse } from "src/api";
 
 export function* refreshTransactionInsightDetailsSaga(
   action: PayloadAction<TransactionInsightEventDetailsRequest>,
@@ -48,9 +48,9 @@ const CACHE_INVALIDATION_PERIOD = 5 * 60 * 1000; // 5 minutes in ms
 const timeoutsByExecID = new Map<string, NodeJS.Timeout>();
 
 export function receivedTxnInsightsDetailsSaga(
-  action: PayloadAction<TransactionInsightEventDetailsResponse>,
+  action: PayloadAction<SqlApiResponse<TransactionInsightEventDetailsResponse>>,
 ) {
-  const execID = action.payload.executionID;
+  const execID = action.payload.results.executionID;
   clearTimeout(timeoutsByExecID.get(execID));
   const id = setTimeout(() => {
     actions.invalidated({ key: execID });
