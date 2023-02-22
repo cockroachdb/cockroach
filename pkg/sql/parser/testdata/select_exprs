@@ -1927,3 +1927,19 @@ OVERLAPS
 (DATE '2000-01-03')
                   ^
 HINT: try \h SELECT
+
+parse
+SELECT NOT ('a' ~ ANY (ARRAY['x']:::STRING[]))
+----
+SELECT NOT ('a' = ANY (ARRAY['x']:::STRING[])) -- normalized!
+SELECT (NOT (((('a') = ANY ((((ARRAY[('x')]):::STRING[]))))))) -- fully parenthesized
+SELECT NOT ('_' = ANY (ARRAY['_']:::STRING[])) -- literals removed
+SELECT NOT ('a' = ANY (ARRAY['x']:::STRING[])) -- identifiers removed
+
+parse
+SELECT ('a' !~ ANY (ARRAY['x']:::STRING[]))
+----
+SELECT ('a' !~ ANY (ARRAY['x']:::STRING[]))
+SELECT (((('a') !~ ANY ((((ARRAY[('x')]):::STRING[])))))) -- fully parenthesized
+SELECT ('_' !~ ANY (ARRAY['_']:::STRING[])) -- literals removed
+SELECT ('a' !~ ANY (ARRAY['x']:::STRING[])) -- identifiers removed
