@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import { ClusterIndexUsageStatistic } from "../../api/schemaInsightsApi";
-import moment from "moment";
+import moment from "moment-timezone";
 
 export const indexNeverUsedReason =
   "This index has not been used and can be removed for better write performance.";

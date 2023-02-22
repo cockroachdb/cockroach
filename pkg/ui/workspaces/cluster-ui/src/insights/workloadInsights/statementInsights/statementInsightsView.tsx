@@ -50,7 +50,7 @@ import {
   timeScaleRangeToObj,
 } from "../../../timeScaleDropdown";
 import { StmtInsightsReq } from "src/api/stmtInsightsApi";
-import moment from "moment";
+import moment from "moment-timezone";
 
 import styles from "src/statementsPage/statementsPage.module.scss";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";

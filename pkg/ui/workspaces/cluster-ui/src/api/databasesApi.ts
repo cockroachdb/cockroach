@@ -16,7 +16,7 @@ import {
   sqlResultsAreEmpty,
 } from "./sqlApi";
 import { withTimeout } from "./util";
-import moment from "moment";
+import moment from "moment-timezone";
 
 export type DatabasesColumns = {
   database_name: string;

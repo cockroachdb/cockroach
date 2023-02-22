@@ -10,7 +10,7 @@
 
 import React from "react";
 import { Anchor } from "src/anchor";
-import moment from "moment";
+import moment from "moment-timezone";
 
 import { Tooltip } from "@cockroachlabs/ui-components";
 import {

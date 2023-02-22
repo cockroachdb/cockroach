@@ -72,7 +72,7 @@ import {
 import { InlineAlert } from "@cockroachlabs/ui-components";
 import { TransactionViewType } from "./transactionsPageTypes";
 import { isSelectedColumn } from "../columnsSelector/utils";
-import moment from "moment";
+import moment from "moment-timezone";
 
 type IStatementsResponse = protos.cockroach.server.serverpb.IStatementsResponse;
 

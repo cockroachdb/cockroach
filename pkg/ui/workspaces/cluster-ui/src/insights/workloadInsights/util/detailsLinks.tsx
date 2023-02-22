@@ -13,9 +13,8 @@ import React from "react";
 import { HexStringToInt64String } from "../../../util";
 import { Link } from "react-router-dom";
 import { StatementLinkTarget } from "../../../statementsTable";
-import moment from "moment/moment";
+import moment, { Moment } from "moment-timezone";
 import { TimeScale } from "../../../timeScaleDropdown";
-import { Moment } from "moment";
 
 export function TransactionDetailsLink(
   transactionFingerprintID: string,

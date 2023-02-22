@@ -33,6 +33,7 @@ import { sqlStatsSelector } from "../store/sqlStats/sqlStats.selector";
 import { SQLStatsState } from "../store/sqlStats";
 import { localStorageSelector } from "../store/utils/selectors";
 import { databasesListSelector } from "src/store/databasesList/databasesList.selectors";
+import moment from "moment-timezone";
 
 type ICollectedStatementStatistics =
   cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;

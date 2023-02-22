@@ -10,7 +10,7 @@
 
 import { deviation as d3Deviation, mean as d3Mean } from "d3";
 import _, { capitalize } from "lodash";
-import moment from "moment";
+import moment from "moment-timezone";
 import React, { Fragment } from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";

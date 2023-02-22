@@ -10,6 +10,7 @@
 
 import Long from "long";
 import { longToInt } from "./fixLong";
+import moment from "moment-timezone";
 
 // Remove duplicates and return an array with unique elements.
 export const unique = <T>(a: T[]): T[] => [...new Set([...a])];
@@ -26,3 +27,7 @@ export const uniqueLong = (a: Long[]): Long[] => {
 export const containAny = (a: string[], b: string[]): boolean => {
   return a.some(item => b.includes(item));
 };
+
+export function someTime(): moment.Moment{
+  return moment.tz("America/New_York");
+}

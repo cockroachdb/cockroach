@@ -57,7 +57,7 @@ import ColumnsSelector, {
   SelectOption,
 } from "../columnsSelector/columnsSelector";
 import { TimestampToMoment, unset } from "src/util";
-import moment from "moment";
+import moment from "moment-timezone";
 import {
   getLabel,
   StatisticTableColumnKeys,
