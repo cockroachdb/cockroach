@@ -56,12 +56,12 @@ type LoadBasedSplitter interface {
 type LoadSplitConfig interface {
 	// NewLoadBasedSplitter returns a new LoadBasedSplitter that may be used to
 	// find the midpoint based on recorded load.
-	NewLoadBasedSplitter(time.Time) LoadBasedSplitter
+	NewLoadBasedSplitter(time.Time, SplitObjective) LoadBasedSplitter
 	// StatRetention returns the duration that recorded load is to be retained.
 	StatRetention() time.Duration
 	// StatThreshold returns the threshold for load above which the range
 	// should be considered split.
-	StatThreshold() float64
+	StatThreshold(SplitObjective) float64
 }
 
 type RandSource interface {
@@ -95,17 +95,17 @@ func GlobalRandSource() RandSource {
 	return globalRandSource{}
 }
 
-// A Decider collects measurements about the activity (measured in qps) on a
-// Replica and, assuming that qps thresholds are exceeded, tries to determine a
+// A Decider collects measurements about the load activity on a
+// Replica and, assuming that load thresholds are exceeded, tries to determine a
 // split key that would approximately result in halving the load on each of the
 // resultant ranges. Similarly, these measurements are used to determine when a
 // range is serving sufficiently little load, such that it should be allowed to
 // merge with its left or right hand neighbor.
 //
 // Operations should call `Record` with a current timestamp. Operation counts
-// are aggregated over a second and a QPS is computed.
+// are aggregated over a second and a load-per-second is computed.
 //
-// If the QPS is above a threshold, a split finder is instantiated and the spans
+// If the load is above a threshold, a split finder is instantiated and the spans
 // supplied to Record are sampled for a duration (on the order of ten seconds).
 // Assuming that load consistently remains over threshold, and the workload
 // touches a diverse enough set of keys to benefit from a split, sampling will
@@ -114,12 +114,17 @@ func GlobalRandSource() RandSource {
 // (which may have disappeared either due to a drop in qps or a change in the
 // workload).
 //
-// These second-long QPS samples are also aggregated together to track the
-// maximum historical QPS over a configurable retention period. This maximum QPS
-// measurement, which is accessible through the MaxQPS method, can be used to
+// These second-long load samples are also aggregated together to track the
+// maximum historical load over a configurable retention period. This maximum load
+// measurement, which is accessible through the MaxStat method, can be used to
 // prevent load-based splits from being merged away until the resulting ranges
-// have consistently remained below a certain QPS threshold for a sufficiently
+// have consistently remained below a certain load threshold for a sufficiently
 // long period of time.
+//
+// The Decider also maintains ownership of the SplitObjective. The
+// SplitObjective controls which load stat threshold and split finder are used.
+// We keep the SplitObjective under the finder mutex to prevent inconsistency
+// that could result from separate calls to the decider, then split objective.
 
 // LoadSplitterMetrics consists of metrics for load-based splitter split key.
 type LoadSplitterMetrics struct {
@@ -127,15 +132,16 @@ type LoadSplitterMetrics struct {
 	NoSplitKeyCount *metric.Counter
 }
 
-// Decider tracks the latest QPS and if certain conditions are met, records
+// Decider tracks the latest load and if certain conditions are met, records
 // incoming requests to find potential split keys and checks if sampled
 // candidate split keys satisfy certain requirements.
 type Decider struct {
-	config              LoadSplitConfig      // supplied to Init
 	loadSplitterMetrics *LoadSplitterMetrics // supplied to Init
+	config              LoadSplitConfig      // supplied to Init
 
 	mu struct {
 		syncutil.Mutex
+		objective SplitObjective // supplied to Init
 
 		// Fields tracking the current qps sample.
 		lastStatRollover time.Time // most recent time recorded by requests.
@@ -158,9 +164,15 @@ type Decider struct {
 // embedding the Decider into a larger struct outside of the scope of this package
 // without incurring a pointer reference. This is relevant since many Deciders
 // may exist in the system at any given point in time.
-func Init(lbs *Decider, config LoadSplitConfig, loadSplitterMetrics *LoadSplitterMetrics) {
+func Init(
+	lbs *Decider,
+	config LoadSplitConfig,
+	loadSplitterMetrics *LoadSplitterMetrics,
+	objective SplitObjective,
+) {
 	lbs.loadSplitterMetrics = loadSplitterMetrics
 	lbs.config = config
+	lbs.mu.objective = objective
 }
 
 // Record notifies the Decider that 'n' operations are being carried out which
@@ -171,11 +183,13 @@ func Init(lbs *Decider, config LoadSplitConfig, loadSplitterMetrics *LoadSplitte
 // If the returned boolean is true, a split key is available (though it may
 // disappear as more keys are sampled) and should be initiated by the caller,
 // which can call MaybeSplitKey to retrieve the suggested key.
-func (d *Decider) Record(ctx context.Context, now time.Time, n int, span func() roachpb.Span) bool {
+func (d *Decider) Record(
+	ctx context.Context, now time.Time, load func(SplitObjective) int, span func() roachpb.Span,
+) bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	return d.recordLocked(ctx, now, n, span)
+	return d.recordLocked(ctx, now, load(d.mu.objective), span)
 }
 
 func (d *Decider) recordLocked(
@@ -203,9 +217,9 @@ func (d *Decider) recordLocked(
 		// begin to Record requests so it can find a split point. If a
 		// splitFinder already exists, we check if a split point is ready
 		// to be used.
-		if d.mu.lastStatVal >= d.config.StatThreshold() {
+		if d.mu.lastStatVal >= d.config.StatThreshold(d.mu.objective) {
 			if d.mu.splitFinder == nil {
-				d.mu.splitFinder = d.config.NewLoadBasedSplitter(now)
+				d.mu.splitFinder = d.config.NewLoadBasedSplitter(now, d.mu.objective)
 			}
 		} else {
 			d.mu.splitFinder = nil
@@ -253,22 +267,16 @@ func (d *Decider) RecordMax(now time.Time, qps float64) {
 	d.mu.maxStat.record(now, d.config.StatRetention(), qps)
 }
 
-// LastStat returns the most recent stat measurement.
-func (d *Decider) LastStat(ctx context.Context, now time.Time) float64 {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
+// lastStatLocked returns the most recent stat measurement.
+func (d *Decider) lastStatLocked(ctx context.Context, now time.Time) float64 {
 	d.recordLocked(ctx, now, 0, nil) // force stat computation
 	return d.mu.lastStatVal
 }
 
-// MaxStat returns the maximum stat measurement recorded over the retention
+// maxStatLocked returns the maximum stat measurement recorded over the retention
 // period. If the Decider has not been recording for a full retention period,
 // the method returns false.
-func (d *Decider) MaxStat(ctx context.Context, now time.Time) (float64, bool) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
+func (d *Decider) maxStatLocked(ctx context.Context, now time.Time) (float64, bool) {
 	d.recordLocked(ctx, now, 0, nil) // force stat computation
 	return d.mu.maxStat.max(now, d.config.StatRetention())
 }
@@ -332,6 +340,10 @@ func (d *Decider) Reset(now time.Time) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
+	d.resetLocked(now)
+}
+
+func (d *Decider) resetLocked(now time.Time) {
 	d.mu.lastStatRollover = time.Time{}
 	d.mu.lastStatVal = 0
 	d.mu.count = 0
@@ -339,6 +351,51 @@ func (d *Decider) Reset(now time.Time) {
 	d.mu.splitFinder = nil
 	d.mu.lastSplitSuggestion = time.Time{}
 	d.mu.lastNoSplitKeyLoggingMetrics = time.Time{}
+}
+
+// SetSplitObjective sets the decider split objective to the given value and
+// discards any existing state.
+func (d *Decider) SetSplitObjective(now time.Time, obj SplitObjective) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	d.mu.objective = obj
+	d.resetLocked(now)
+}
+
+// LoadSplitSnapshot contains a consistent snapshot of the decider state. It
+// should be used when comparing the threshold, last value, max value or split
+// objective; it is possible for inconsistent values otherwise e.g.
+//
+//	p1 max_stat = decider.MaxStat()
+//	p2 decider.SetSplitObjective(...)
+//	p1 threshold = decider.threshold(..) (doesn't exist for this reason)
+//
+//	p1 then asserts that max_stat < threshold, however the threhsold value
+//	will be in terms of the split objective set by p2; which could be widly
+//	wrong.
+type LoadSplitSnapshot struct {
+	SplitObjective       SplitObjective
+	Max, Last, Threshold float64
+	Ok                   bool
+}
+
+// Snapshot returns a consistent snapshot of the decider state.
+func (d *Decider) Snapshot(ctx context.Context, now time.Time) LoadSplitSnapshot {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	maxStat, ok := d.maxStatLocked(ctx, now)
+	lastStat := d.lastStatLocked(ctx, now)
+	threshold := d.config.StatThreshold(d.mu.objective)
+
+	return LoadSplitSnapshot{
+		SplitObjective: d.mu.objective,
+		Max:            maxStat,
+		Last:           lastStat,
+		Ok:             ok,
+		Threshold:      threshold,
+	}
 }
 
 // maxStatTracker collects a series of stat per-second measurement samples and

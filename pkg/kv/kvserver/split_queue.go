@@ -263,18 +263,19 @@ func (sq *splitQueue) processAttempt(
 	}
 
 	now := timeutil.Now()
-	if splitByLoadKey := r.loadBasedSplitter.MaybeSplitKey(ctx, now); splitByLoadKey != nil {
+	splitByLoadKey := r.loadBasedSplitter.MaybeSplitKey(ctx, now)
+	if splitByLoadKey != nil {
 		loadStats := r.loadStats.Stats()
 		batchHandledQPS := loadStats.QueriesPerSecond
 		raftAppliedQPS := loadStats.WriteKeysPerSecond
-		lastSplitStat := r.loadBasedSplitter.LastStat(ctx, now)
-		splitObj := sq.store.splitConfig.SplitObjective()
+		lbSplitSnap := r.loadBasedSplitter.Snapshot(ctx, now)
+		splitObj := lbSplitSnap.SplitObjective
 
 		reason := fmt.Sprintf(
 			"load at key %s (%s %s, %.2f batches/sec, %.2f raft mutations/sec)",
 			splitByLoadKey,
 			splitObj,
-			splitObj.Format(lastSplitStat),
+			splitObj.Format(lbSplitSnap.Last),
 			batchHandledQPS,
 			raftAppliedQPS,
 		)
@@ -313,6 +314,7 @@ func (sq *splitQueue) processAttempt(
 		r.loadBasedSplitter.Reset(sq.store.Clock().PhysicalTime())
 		return true, nil
 	}
+
 	return false, nil
 }
 
