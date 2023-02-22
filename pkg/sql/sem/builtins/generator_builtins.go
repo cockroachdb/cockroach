@@ -576,6 +576,37 @@ The last argument is a JSONB object containing the following optional fields:
 			volatility.Volatile,
 		),
 	),
+	"crdb_internal.tenant_span_stats": makeBuiltin(genProps(),
+		// Tenant overload
+		makeGeneratorOverload(
+			tree.ParamTypes{},
+			tableSpanStatsGeneratorType,
+			makeTableSpanStatsGenerator,
+			"Returns statistics (range count, disk size, live range bytes, total range bytes, live range byte percentage) for all of the tenant's tables.",
+			volatility.Stable,
+		),
+		// Database overload
+		makeGeneratorOverload(
+			tree.ParamTypes{
+				{Name: "database_id", Typ: types.Int},
+			},
+			tableSpanStatsGeneratorType,
+			makeTableSpanStatsGenerator,
+			"Returns statistics (range count, disk size, live range bytes, total range bytes, live range byte percentage) for tables of the provided database id.",
+			volatility.Stable,
+		),
+		// Table overload
+		makeGeneratorOverload(
+			tree.ParamTypes{
+				{Name: "database_id", Typ: types.Int},
+				{Name: "table_id", Typ: types.Int},
+			},
+			tableSpanStatsGeneratorType,
+			makeTableSpanStatsGenerator,
+			"Returns statistics (range count, disk size, live range bytes, total range bytes, live range byte percentage) for the provided table id.",
+			volatility.Stable,
+		),
+	),
 }
 
 var decodePlanGistGeneratorType = types.String
@@ -2894,4 +2925,114 @@ func makeIdentGenerator(
 		acc:   evalCtx.Planner.Mon().MakeBoundAccount(),
 		count: count,
 	}, nil
+}
+
+type tableSpanStatsIterator struct {
+	it                eval.InternalRows
+	codec             keys.SQLCodec
+	p                 eval.Planner
+	currDbId          int
+	currTableId       int
+	currStatsResponse *roachpb.SpanStatsResponse
+	singleTableReq    bool
+}
+
+func newTableSpanStatsIterator(eval *eval.Context, dbId int, tableId int) *tableSpanStatsIterator {
+	return &tableSpanStatsIterator{codec: eval.Codec, p: eval.Planner, currDbId: dbId, currTableId: tableId, singleTableReq: tableId != 0}
+}
+
+// Start implements the tree.ValueGenerator interface.
+func (tssi *tableSpanStatsIterator) Start(ctx context.Context, _ *kv.Txn) error {
+	var err error = nil
+	tssi.it, err = tssi.p.GetDetailsForSpanStats(ctx, tssi.currDbId, tssi.currTableId)
+	return err
+}
+
+// Next implements the tree.ValueGenerator interface.
+func (tssi *tableSpanStatsIterator) Next(ctx context.Context) (bool, error) {
+	if tssi.it == nil {
+		return false, errors.AssertionFailedf("Start must be called before Next")
+	}
+	var next bool
+	var err error
+	next, err = tssi.it.Next(ctx)
+	if err != nil || !next {
+		return false, err
+	}
+	// Pull the current row.
+	row := tssi.it.Cur()
+	tssi.currDbId = int(tree.MustBeDInt(row[0]))
+	tssi.currTableId = int(tree.MustBeDInt(row[1]))
+
+	// Set our current stats response.
+	startKey := roachpb.RKey(tssi.codec.TablePrefix(uint32(tssi.currTableId)))
+	tssi.currStatsResponse, err = tssi.p.SpanStats(ctx, startKey, startKey.PrefixEnd())
+	if err != nil {
+		return false, err
+	}
+	return next, err
+}
+
+// Values implements the tree.ValueGenerator interface.
+func (tssi *tableSpanStatsIterator) Values() (tree.Datums, error) {
+	liveBytes := tssi.currStatsResponse.TotalStats.LiveBytes
+	totalBytes := tssi.currStatsResponse.TotalStats.KeyBytes +
+		tssi.currStatsResponse.TotalStats.ValBytes +
+		tssi.currStatsResponse.TotalStats.RangeKeyBytes +
+		tssi.currStatsResponse.TotalStats.RangeValBytes
+	livePercentage := float64(0)
+	if totalBytes > 0 {
+		livePercentage = float64(liveBytes) / float64(totalBytes)
+	}
+	return []tree.Datum{
+		tree.NewDInt(tree.DInt(tssi.currDbId)),
+		tree.NewDInt(tree.DInt(tssi.currTableId)),
+		tree.NewDInt(tree.DInt(tssi.currStatsResponse.RangeCount)),
+		tree.NewDInt(tree.DInt(tssi.currStatsResponse.ApproximateDiskBytes)),
+		tree.NewDInt(tree.DInt(liveBytes)),
+		tree.NewDInt(tree.DInt(totalBytes)),
+		tree.NewDFloat(tree.DFloat(livePercentage)),
+	}, nil
+}
+
+// Close implements the tree.ValueGenerator interface.
+func (tssi *tableSpanStatsIterator) Close(_ context.Context) {}
+
+// ResolvedType implements the tree.ValueGenerator interface.
+func (tssi *tableSpanStatsIterator) ResolvedType() *types.T {
+	return tableSpanStatsGeneratorType
+}
+
+var tableSpanStatsGeneratorType = types.MakeLabeledTuple(
+	[]*types.T{types.Int, types.Int, types.Int, types.Int, types.Int, types.Int, types.Float},
+	[]string{"database_id", "table_id", "range_count", "approximate_disk_bytes", "live_bytes", "total_bytes", "live_percentage"},
+)
+
+func makeTableSpanStatsGenerator(
+	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
+) (eval.ValueGenerator, error) {
+	// The user must be an admin to use this builtin.
+	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !isAdmin {
+		return nil, pgerror.Newf(pgcode.InsufficientPrivilege, "user needs the admin role to view range data")
+	}
+	dbId := 0
+	tableId := 0
+	if len(args) > 0 {
+		dbId = int(tree.MustBeDInt(args[0]))
+		if dbId <= 0 {
+			return nil, errors.New("provided database id must be greater than or equal to 1")
+		}
+	}
+	if len(args) > 1 {
+		tableId = int(tree.MustBeDInt(args[1]))
+		if tableId <= 0 {
+			return nil, errors.New("provided table id must be greater than or equal to 1")
+		}
+	}
+
+	return newTableSpanStatsIterator(evalCtx, dbId, tableId), nil
 }
