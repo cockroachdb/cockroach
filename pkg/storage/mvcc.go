@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 )
@@ -890,6 +889,7 @@ type MVCCGetOptions struct {
 	Tombstones       bool
 	FailOnMoreRecent bool
 	Txn              *roachpb.Transaction
+	ScanStats        *roachpb.ScanStats
 	Uncertainty      uncertainty.Interval
 	// MemoryAccount is used for tracking memory allocations.
 	MemoryAccount *mon.BoundAccount
@@ -1030,8 +1030,11 @@ func mvccGet(
 	mvccScanner.init(opts.Txn, opts.Uncertainty, 0)
 	mvccScanner.get(ctx)
 
-	// If we have a trace, emit the scan stats that we produced.
-	recordIteratorStats(ctx, mvccScanner.parent)
+	// If we're tracking the ScanStats, include the stats from this Get.
+	if opts.ScanStats != nil {
+		recordIteratorStats(mvccScanner.parent, opts.ScanStats)
+		opts.ScanStats.NumGets++
+	}
 
 	if mvccScanner.err != nil {
 		return optionalValue{}, nil, mvccScanner.err
@@ -3468,33 +3471,28 @@ func MVCCDeleteRangeUsingTombstone(
 	return nil
 }
 
-func recordIteratorStats(ctx context.Context, iter MVCCIterator) {
-	sp := tracing.SpanFromContext(ctx)
-	if sp.RecordingType() == tracingpb.RecordingOff {
-		// Short-circuit before doing any work.
-		return
-	}
+// recordIteratorStats updates the provided ScanStats (which is assumed to be
+// non-nil) with the MVCC stats from iter.
+func recordIteratorStats(iter MVCCIterator, scanStats *roachpb.ScanStats) {
 	iteratorStats := iter.Stats()
 	stats := &iteratorStats.Stats
 	steps := stats.ReverseStepCount[pebble.InterfaceCall] + stats.ForwardStepCount[pebble.InterfaceCall]
 	seeks := stats.ReverseSeekCount[pebble.InterfaceCall] + stats.ForwardSeekCount[pebble.InterfaceCall]
 	internalSteps := stats.ReverseStepCount[pebble.InternalIterCall] + stats.ForwardStepCount[pebble.InternalIterCall]
 	internalSeeks := stats.ReverseSeekCount[pebble.InternalIterCall] + stats.ForwardSeekCount[pebble.InternalIterCall]
-	sp.RecordStructured(&roachpb.ScanStats{
-		NumInterfaceSeeks:              uint64(seeks),
-		NumInternalSeeks:               uint64(internalSeeks),
-		NumInterfaceSteps:              uint64(steps),
-		NumInternalSteps:               uint64(internalSteps),
-		BlockBytes:                     stats.InternalStats.BlockBytes,
-		BlockBytesInCache:              stats.InternalStats.BlockBytesInCache,
-		KeyBytes:                       stats.InternalStats.KeyBytes,
-		ValueBytes:                     stats.InternalStats.ValueBytes,
-		PointCount:                     stats.InternalStats.PointCount,
-		PointsCoveredByRangeTombstones: stats.InternalStats.PointsCoveredByRangeTombstones,
-		RangeKeyCount:                  uint64(stats.RangeKeyStats.Count),
-		RangeKeyContainedPoints:        uint64(stats.RangeKeyStats.ContainedPoints),
-		RangeKeySkippedPoints:          uint64(stats.RangeKeyStats.SkippedPoints),
-	})
+	scanStats.NumInterfaceSeeks += uint64(seeks)
+	scanStats.NumInternalSeeks += uint64(internalSeeks)
+	scanStats.NumInterfaceSteps += uint64(steps)
+	scanStats.NumInternalSteps += uint64(internalSteps)
+	scanStats.BlockBytes += stats.InternalStats.BlockBytes
+	scanStats.BlockBytesInCache += stats.InternalStats.BlockBytesInCache
+	scanStats.KeyBytes += stats.InternalStats.KeyBytes
+	scanStats.ValueBytes += stats.InternalStats.ValueBytes
+	scanStats.PointCount += stats.InternalStats.PointCount
+	scanStats.PointsCoveredByRangeTombstones += stats.InternalStats.PointsCoveredByRangeTombstones
+	scanStats.RangeKeyCount += uint64(stats.RangeKeyStats.Count)
+	scanStats.RangeKeyContainedPoints += uint64(stats.RangeKeyStats.ContainedPoints)
+	scanStats.RangeKeySkippedPoints += uint64(stats.RangeKeyStats.SkippedPoints)
 }
 
 func mvccScanToBytes(
@@ -3564,8 +3562,16 @@ func mvccScanToBytes(
 	res.NumKeys = mvccScanner.results.count
 	res.NumBytes = mvccScanner.results.bytes
 
-	// If we have a trace, emit the scan stats that we produced.
-	recordIteratorStats(ctx, mvccScanner.parent)
+	// If we're tracking the ScanStats, include the stats from this Scan or
+	// ReverseScan.
+	if opts.ScanStats != nil {
+		recordIteratorStats(mvccScanner.parent, opts.ScanStats)
+		if opts.Reverse {
+			opts.ScanStats.NumReverseScans++
+		} else {
+			opts.ScanStats.NumScans++
+		}
+	}
 
 	res.Intents, err = buildScanIntents(mvccScanner.intentsRepr())
 	if err != nil {
@@ -3649,6 +3655,7 @@ type MVCCScanOptions struct {
 	Reverse          bool
 	FailOnMoreRecent bool
 	Txn              *roachpb.Transaction
+	ScanStats        *roachpb.ScanStats
 	Uncertainty      uncertainty.Interval
 	// MaxKeys is the maximum number of kv pairs returned from this operation.
 	// The zero value represents an unbounded scan. If the limit stops the scan,
