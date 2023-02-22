@@ -232,6 +232,54 @@ func TestVersionGatingUDFInCheckConstraints(t *testing.T) {
 	})
 }
 
+func TestVersionGatingUDFInColumnDefault(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	t.Run("new_schema_changer_version_enabled", func(t *testing.T) {
+		params, _ := tests.CreateTestServerParams()
+		// Override binary version to be older.
+		params.Knobs.Server = &server.TestingKnobs{
+			DisableAutomaticVersionUpgrade: make(chan struct{}),
+			BinaryVersionOverride:          clusterversion.ByKey(clusterversion.V23_1),
+		}
+
+		s, sqlDB, _ := serverutils.StartServer(t, params)
+		defer s.Stopper().Stop(context.Background())
+
+		_, err := sqlDB.Exec(`CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$`)
+		require.NoError(t, err)
+		_, err = sqlDB.Exec(`CREATE TABLE t(a INT DEFAULT f());`)
+		require.NoError(t, err)
+		_, err = sqlDB.Exec(`ALTER TABLE t ALTER COLUMN a SET DEFAULT (f() + 1)`)
+		require.NoError(t, err)
+	})
+
+	t.Run("new_schema_changer_version_disabled", func(t *testing.T) {
+		params, _ := tests.CreateTestServerParams()
+		// Override binary version to be older.
+		params.Knobs.Server = &server.TestingKnobs{
+			DisableAutomaticVersionUpgrade: make(chan struct{}),
+			BinaryVersionOverride:          clusterversion.ByKey(clusterversion.V23_1 - 1),
+		}
+
+		s, sqlDB, _ := serverutils.StartServer(t, params)
+		defer s.Stopper().Stop(context.Background())
+
+		// Need to turn new schema changer off, because function related rules are
+		// only valid in 23.1.
+		_, err := sqlDB.Exec(`SET use_declarative_schema_changer = 'off'`)
+		require.NoError(t, err)
+		_, err = sqlDB.Exec(`CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$`)
+		require.NoError(t, err)
+		_, err = sqlDB.Exec(`CREATE TABLE t(a INT DEFAULT f());`)
+		require.Equal(t, "pq: unimplemented: usage of user-defined function from relations not supported", err.Error())
+		_, err = sqlDB.Exec(`CREATE TABLE t(a INT);`)
+		require.NoError(t, err)
+		_, err = sqlDB.Exec(`ALTER TABLE t ALTER COLUMN a SET DEFAULT (f() + 1)`)
+		require.Equal(t, "pq: unimplemented: usage of user-defined function from relations not supported", err.Error())
+	})
+}
+
 func TestCreateOrReplaceFunctionUpdateReferences(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

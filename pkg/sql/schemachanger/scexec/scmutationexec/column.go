@@ -285,7 +285,10 @@ func (i *immediateVisitor) RemoveColumnDefaultExpression(
 	}
 	d := col.ColumnDesc()
 	d.DefaultExpr = nil
-	return updateColumnExprSequenceUsage(d)
+	if err := updateColumnExprSequenceUsage(d); err != nil {
+		return err
+	}
+	return updateColumnExprFunctionsUsage(d)
 }
 
 func (i *immediateVisitor) AddColumnOnUpdateExpression(

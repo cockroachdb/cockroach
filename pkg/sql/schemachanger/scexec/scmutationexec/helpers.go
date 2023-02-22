@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -255,6 +256,22 @@ func updateColumnExprSequenceUsage(d *descpb.ColumnDescriptor) error {
 			continue
 		}
 		ids, err := sequenceIDsInExpr(*expr)
+		if err != nil {
+			return err
+		}
+		ids.ForEach(all.Add)
+	}
+	d.UsesSequenceIds = all.Ordered()
+	return nil
+}
+
+func updateColumnExprFunctionsUsage(d *descpb.ColumnDescriptor) error {
+	var all catalog.DescriptorIDSet
+	for _, expr := range [3]*string{d.ComputeExpr, d.DefaultExpr, d.OnUpdateExpr} {
+		if expr == nil {
+			continue
+		}
+		ids, err := schemaexpr.GetUDFIDsFromExprStr(*expr)
 		if err != nil {
 			return err
 		}

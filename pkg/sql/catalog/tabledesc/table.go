@@ -175,6 +175,11 @@ func MakeColumnDefDescs(
 			return nil, err
 		}
 
+		ret.DefaultExpr, err = schemaexpr.MaybeReplaceUDFNameWithOIDReferenceInTypedExpr(ret.DefaultExpr)
+		if err != nil {
+			return nil, err
+		}
+
 		// Keep the type checked expression so that the type annotation gets
 		// properly stored, only if the default expression is not NULL.
 		// Otherwise we want to keep the default expression nil.

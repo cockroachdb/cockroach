@@ -364,6 +364,13 @@ type Column interface {
 	// GetUsesSequenceID returns the ID of a sequence used by this column.
 	GetUsesSequenceID(usesSequenceOrdinal int) descpb.ID
 
+	// NumUsesFunctions returns the number of functions used by this column.
+	NumUsesFunctions() int
+
+	// GetUsesFunctionID returns the ID of a function used by this column at the
+	// given ordinal.
+	GetUsesFunctionID(ordinal int) descpb.ID
+
 	// NumOwnsSequences returns the number of sequences owned by this column.
 	NumOwnsSequences() int
 

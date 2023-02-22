@@ -182,6 +182,17 @@ func (w column) GetUsesSequenceID(usesSequenceOrdinal int) descpb.ID {
 	return w.desc.UsesSequenceIds[usesSequenceOrdinal]
 }
 
+// NumUsesFunctions returns the number of functions used by this column.
+func (w column) NumUsesFunctions() int {
+	return len(w.desc.UsesFunctionIds)
+}
+
+// GetUsesFunctionID returns the ID of a function used by this column at the
+// given ordinal.
+func (w column) GetUsesFunctionID(ordinal int) descpb.ID {
+	return w.desc.UsesSequenceIds[ordinal]
+}
+
 // NumOwnsSequences returns the number of sequences owned by this column.
 func (w column) NumOwnsSequences() int {
 	return len(w.desc.OwnsSequenceIds)
