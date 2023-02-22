@@ -912,7 +912,36 @@ func TestTxnContentionEventsTable(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	testTxnContentionEventsTableHelper(t, ctx, conn, sqlDB)
+}
 
+func TestTxnContentionEventsTableMultiTenant(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1,
+		base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				// Test is designed to run with explicit tenants. No need to
+				// implicitly create a tenant.
+				DisableDefaultTestTenant: true,
+			},
+		})
+	defer tc.Stopper().Stop(ctx)
+	_, tSQL := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{
+		TenantID: roachpb.MustMakeTenantID(10),
+	})
+
+	conn, err := tSQL.Conn(ctx)
+	require.NoError(t, err)
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+	defer tSQL.Close()
+
+	testTxnContentionEventsTableHelper(t, ctx, tSQL, sqlDB)
+}
+
+func testTxnContentionEventsTableHelper(t *testing.T, ctx context.Context, conn *gosql.DB, sqlDB *sqlutils.SQLRunner) {
 	sqlDB.Exec(
 		t,
 		`SET CLUSTER SETTING sql.metrics.statement_details.plan_collection.enabled = false;`)
