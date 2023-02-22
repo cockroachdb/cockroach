@@ -380,68 +380,170 @@ CREATE VIEW virt2 AS SELECT range_id, lease_holder FROM crdb_internal.ranges
 statement ok
 DROP VIEW virt2
 
-# Verify correct rejection of star expressions
-# TODO(a-robinson): Support star expressions as soon as we can (#10028)
-
-statement error views do not currently support \* expressions
-create view s1 AS SELECT * FROM t
-
-statement error views do not currently support \* expressions
-create view s1 AS SELECT t.* FROM t
-
-statement error views do not currently support \* expressions
-create view s1 AS SELECT a FROM t ORDER BY t.*
-
-statement error views do not currently support \* expressions
-create view s1 AS SELECT count(1) FROM t GROUP BY t.*
-
-statement error views do not currently support \* expressions
-create view s1 AS SELECT alias.* FROM t AS alias
-
-statement error views do not currently support \* expressions
-create view s1 AS TABLE t
-
-statement error views do not currently support \* expressions
-create view s1 AS SELECT a FROM (SELECT * FROM t)
-
-statement error views do not currently support \* expressions
-create view s1 AS SELECT a FROM t WHERE NOT a IN (SELECT a FROM (SELECT * FROM t))
-
-statement error views do not currently support \* expressions
-create view s1 AS SELECT a FROM t GROUP BY a HAVING a IN (SELECT a FROM (SELECT * FROM t))
-
-statement error views do not currently support \* expressions
-create view s1 AS SELECT t1.*, t2.a FROM t AS t1 JOIN t AS t2 ON t1.a = t2.a
-
-statement error views do not currently support \* expressions
-create view s1 AS SELECT t1.a, t2.* FROM t AS t1 JOIN t AS t2 ON t1.a = t2.a
-
-statement error views do not currently support \* expressions
-create view s1 AS SELECT t1.*, t2.* FROM t AS t1 JOIN t AS t2 ON t1.a = t2.a
-
-statement error views do not currently support \* expressions
-create view s1 AS SELECT * FROM t AS t1 JOIN t AS t2 ON t1.a = t2.a
-
-statement error views do not currently support \* expressions
-create view s1 AS SELECT t1.a, t2.a FROM (SELECT * FROM t) AS t1 JOIN t AS t2 ON t1.a = t2.a
-
-statement error views do not currently support \* expressions
-create view s1 AS SELECT t1.a, t2.a FROM t AS t1 JOIN (SELECT * FROM t) AS t2 ON t1.a = t2.a
-
-statement error views do not currently support \* expressions
-create view s1 AS SELECT t1.a, t2.a FROM t AS t1 JOIN t AS t2 ON t1.a IN (SELECT a FROM (SELECT * FROM t))
+statement ok
+CREATE VIEW star1 AS SELECT * FROM t
 
 statement ok
-create view s1 AS SELECT count(*) FROM t
+CREATE VIEW star2 AS SELECT t.* FROM t
 
 statement ok
-create view s2 AS SELECT a FROM t WHERE a IN (SELECT count(*) FROM t)
+CREATE VIEW star3 AS SELECT a FROM t ORDER BY t.*
 
 statement ok
-create view s3 AS SELECT a, count(*) FROM t GROUP BY a
+CREATE VIEW star4 AS SELECT count(1) FROM t GROUP BY t.*
 
 statement ok
-create view s4 AS SELECT a, count(*) FROM t GROUP BY a HAVING a > (SELECT count(*) FROM t)
+CREATE VIEW star5 AS SELECT alias.* FROM t AS alias
+
+statement ok
+CREATE VIEW star6 AS TABLE t
+
+statement ok
+CREATE VIEW star7 AS SELECT a FROM (SELECT * FROM t)
+
+statement ok
+CREATE VIEW star8 AS SELECT a FROM t WHERE NOT a IN (SELECT a FROM (SELECT * FROM t))
+
+statement ok
+CREATE VIEW star9 AS SELECT a FROM t GROUP BY a HAVING a IN (SELECT a FROM (SELECT * FROM t))
+
+# This error is the same as in postgres.
+statement error duplicate column name: "a"
+CREATE VIEW star10 AS SELECT t1.*, t2.a FROM t AS t1 JOIN t AS t2 ON t1.a = t2.a
+
+statement ok
+CREATE VIEW star10 AS SELECT t1.*, t2.a AS a2 FROM t AS t1 JOIN t AS t2 ON t1.a = t2.a
+
+# This error is the same as in postgres.
+statement error duplicate column name: "a"
+CREATE VIEW star11 AS SELECT t1.a, t2.* FROM t AS t1 JOIN t AS t2 ON t1.a = t2.a
+
+statement ok
+CREATE VIEW star11 AS SELECT t1.a AS a1, t2.* FROM t AS t1 JOIN t AS t2 ON t1.a = t2.a
+
+# This error is the same as in postgres.
+statement error duplicate column name: "a"
+CREATE VIEW star12 AS SELECT t1.*, t2.* FROM t AS t1 JOIN t AS t2 ON t1.a = t2.a
+
+# This error is the same as in postgres.
+statement error duplicate column name: "a"
+CREATE VIEW star13 AS SELECT * FROM t AS t1 JOIN t AS t2 ON t1.a = t2.a
+
+statement ok
+CREATE VIEW star14 AS SELECT t1.a, t2.a AS a2 FROM (SELECT * FROM t) AS t1 JOIN t AS t2 ON t1.a = t2.a
+
+statement ok
+CREATE VIEW star15 AS SELECT t1.a, t2.a AS a2 FROM t AS t1 JOIN (SELECT * FROM t) AS t2 ON t1.a = t2.a
+
+statement ok
+CREATE VIEW star16 AS SELECT t1.a, t2.a AS a2 FROM t AS t1 JOIN t AS t2 ON t1.a IN (SELECT a FROM (SELECT * FROM t))
+
+query TT
+SELECT descriptor_name, create_statement FROM crdb_internal.create_statements WHERE descriptor_name LIKE 'star%' ORDER BY 1
+----
+star1   CREATE VIEW public.star1 (
+          a,
+          b
+        ) AS SELECT t.a, t.b FROM test.public.t
+star10  CREATE VIEW public.star10 (
+          a,
+          b,
+          a2
+        ) AS SELECT t1.a, t1.b, t2.a AS a2 FROM test.public.t AS t1 JOIN test.public.t AS t2 ON t1.a = t2.a
+star11  CREATE VIEW public.star11 (
+          a1,
+          a,
+          b
+        ) AS SELECT t1.a AS a1, t2.a, t2.b FROM test.public.t AS t1 JOIN test.public.t AS t2 ON t1.a = t2.a
+star14  CREATE VIEW public.star14 (
+          a,
+          a2
+        ) AS SELECT
+            t1.a, t2.a AS a2
+          FROM
+            (SELECT t.a, t.b FROM test.public.t) AS t1 JOIN test.public.t AS t2 ON t1.a = t2.a
+star15  CREATE VIEW public.star15 (
+          a,
+          a2
+        ) AS SELECT
+            t1.a, t2.a AS a2
+          FROM
+            test.public.t AS t1 JOIN (SELECT t.a, t.b FROM test.public.t) AS t2 ON t1.a = t2.a
+star16  CREATE VIEW public.star16 (
+          a,
+          a2
+        ) AS SELECT
+            t1.a, t2.a AS a2
+          FROM
+            test.public.t AS t1
+            JOIN test.public.t AS t2 ON t1.a IN (SELECT a FROM (SELECT t.a, t.b FROM test.public.t))
+star2   CREATE VIEW public.star2 (
+          a,
+          b
+        ) AS SELECT t.a, t.b FROM test.public.t
+star3   CREATE VIEW public.star3 (
+          a
+        ) AS SELECT a FROM test.public.t ORDER BY t.*
+star4   CREATE VIEW public.star4 (
+          count
+        ) AS SELECT count(1:::INT8) FROM test.public.t GROUP BY t.*
+star5   CREATE VIEW public.star5 (
+          a,
+          b
+        ) AS SELECT alias.a, alias.b FROM test.public.t AS alias
+star6   CREATE VIEW public.star6 (
+          a,
+          b
+        ) AS TABLE test.public.t
+star7   CREATE VIEW public.star7 (
+          a
+        ) AS SELECT a FROM (SELECT t.a, t.b FROM test.public.t)
+star8   CREATE VIEW public.star8 (
+          a
+        ) AS SELECT
+            a
+          FROM
+            test.public.t
+          WHERE
+            NOT (a IN (SELECT a FROM (SELECT t.a, t.b FROM test.public.t)))
+star9   CREATE VIEW public.star9 (
+          a
+        ) AS SELECT
+            a
+          FROM
+            test.public.t
+          GROUP BY
+            a
+          HAVING
+            a IN (SELECT a FROM (SELECT t.a, t.b FROM test.public.t))
+
+statement ok
+DROP VIEW star1;
+DROP VIEW star2;
+DROP VIEW star3;
+DROP VIEW star4;
+DROP VIEW star5;
+DROP VIEW star6;
+DROP VIEW star7;
+DROP VIEW star8;
+DROP VIEW star9;
+DROP VIEW star10;
+DROP VIEW star11;
+DROP VIEW star14;
+DROP VIEW star15;
+DROP VIEW star16;
+
+statement ok
+CREATE VIEW s1 AS SELECT count(*) FROM t
+
+statement ok
+CREATE VIEW s2 AS SELECT a FROM t WHERE a IN (SELECT count(*) FROM t)
+
+statement ok
+CREATE VIEW s3 AS SELECT a, count(*) FROM t GROUP BY a
+
+statement ok
+CREATE VIEW s4 AS SELECT a, count(*) FROM t GROUP BY a HAVING a > (SELECT count(*) FROM t)
 
 statement ok
 DROP VIEW s4
@@ -1100,7 +1202,7 @@ CREATE VIEW v7_dep AS (SELECT i FROM t6@idx WHERE k < 'a'::typ6)
 statement error cannot drop type "typ6" because other objects \(\[db2.public.t6 db2.public.v7_dep\]\) still depend on it
 DROP TYPE typ6
 
-# Test we can create views from various data sources.
+# Test we can CREATE VIEWs from various data sources.
 statement ok
 CREATE SEQUENCE s
 
