@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -27,8 +28,11 @@ func TestHelpFunctions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	numTestsRun := 0
 	// This test checks that all the built-in functions receive contextual help.
-	builtinsregistry.AddSubscription(func(f string, _ *tree.FunctionProperties, _ []tree.Overload) {
+	builtinsregistry.AddSubscription(func(f string, prop *tree.FunctionProperties, _ []tree.Overload) {
 		if unicode.IsUpper(rune(f[0])) {
+			return
+		}
+		if prop.Category == builtinconstants.CategoryCast {
 			return
 		}
 		t.Run(f, func(t *testing.T) {

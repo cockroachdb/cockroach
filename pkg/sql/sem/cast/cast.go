@@ -189,6 +189,14 @@ func ValidCast(src, tgt *types.T, ctx Context) bool {
 	return false
 }
 
+// OIDInCastMap checks to see if the cast is in the cast map. This bypasses
+// a few false equivalences found in LookupCast.
+// You are more likely using to use LookupCast.
+func OIDInCastMap(src, tgt oid.Oid) bool {
+	_, ok := castMap[src][tgt]
+	return ok
+}
+
 // LookupCast returns a cast that describes the cast from src to tgt if it
 // exists. If it does not exist, ok=false is returned.
 func LookupCast(src, tgt *types.T) (Cast, bool) {
