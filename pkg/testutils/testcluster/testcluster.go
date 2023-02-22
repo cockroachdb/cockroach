@@ -1775,6 +1775,17 @@ func (tc *TestCluster) SplitTable(
 	}
 }
 
+func (tc *TestCluster) WaitForTenantCapabilities(
+	t *testing.T, tenID roachpb.TenantID, capabilityNames ...string,
+) {
+	for i, ts := range tc.Servers {
+		testutils.SucceedsSoon(t, func() error {
+			err := ts.RPCContext().TenantRPCAuthorizer.RequireCapabilities(tenID, capabilityNames...)
+			return errors.Wrapf(err, "server=%d", i)
+		})
+	}
+}
+
 type rangeAndKT struct {
 	rangeDesc roachpb.RangeDescriptor
 	kt        serverutils.KeyAndTargets

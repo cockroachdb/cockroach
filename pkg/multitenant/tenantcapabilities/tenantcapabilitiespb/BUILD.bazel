@@ -22,6 +22,7 @@ go_proto_library(
 
 go_library(
     name = "tenantcapabilitiespb",
+    srcs = ["capabilities.go"],
     embed = [":tenantcapabilitiespb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb",
     visibility = ["//visibility:public"],

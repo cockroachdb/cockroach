@@ -73,7 +73,7 @@ func ParseTenantCapabilityUpsert(
 			if err != nil {
 				return nil, err
 			}
-			cap.CanViewTsdbMetrics = b
+			cap.CanViewTSDBMetrics = b
 		}
 	}
 	update := tenantcapabilities.Update{

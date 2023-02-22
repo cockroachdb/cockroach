@@ -75,6 +75,7 @@ go_library(
         "@com_github_lib_pq//:pq",
         "@com_github_pmezard_go_difflib//difflib",
         "@com_github_stretchr_testify//require",
+        "@org_golang_x_exp//maps",
     ],
 )
 
