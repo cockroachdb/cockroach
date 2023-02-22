@@ -476,6 +476,20 @@ func (ep *DummyEvalPlanner) GetRangeDescByID(
 	return
 }
 
+// SpanStats is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) SpanStats(
+	context.Context, roachpb.RKey, roachpb.RKey,
+) (stats *roachpb.SpanStatsResponse, err error) {
+	return
+}
+
+// GetDetailsForSpanStats is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) GetDetailsForSpanStats(
+	context.Context, int, int,
+) (it eval.InternalRows, err error) {
+	return
+}
+
 // DummyPrivilegedAccessor implements the tree.PrivilegedAccessor interface by returning errors.
 type DummyPrivilegedAccessor struct{}
 
@@ -528,6 +542,13 @@ func (ep *DummySessionAccessor) HasAdminRole(_ context.Context) (bool, error) {
 // HasRoleOption is part of the eval.SessionAccessor interface.
 func (ep *DummySessionAccessor) HasRoleOption(
 	ctx context.Context, roleOption roleoption.Option,
+) (bool, error) {
+	return false, errors.WithStack(errEvalSessionVar)
+}
+
+// HasViewActivity is part of the eval.SessionAccessor interface.
+func (ep *DummySessionAccessor) HasViewActivity(
+	context.Context,
 ) (bool, error) {
 	return false, errors.WithStack(errEvalSessionVar)
 }

@@ -457,6 +457,31 @@ func (p *planner) HasAdminRole(ctx context.Context) (bool, error) {
 	return p.UserHasAdminRole(ctx, p.User())
 }
 
+// HasViewActivity implements the AuthorizationAccessor interface.
+// Requires a valid transaction to be open.
+func (p *planner) HasViewActivity(ctx context.Context) (bool, error) {
+	isAdmin, err := p.HasAdminRole(ctx)
+	if err != nil {
+		return false, err
+	}
+	if isAdmin {
+		return isAdmin, nil
+	}
+	user := p.User()
+	hasPrivilege, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWACTIVITY, user)
+	if err != nil {
+		return hasPrivilege, err
+	}
+	if hasPrivilege {
+		return hasPrivilege, nil
+	}
+	option, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITY)
+	if err != nil {
+		return option, err
+	}
+	return option, nil
+}
+
 // RequireAdminRole implements the AuthorizationAccessor interface.
 // Requires a valid transaction to be open.
 func (p *planner) RequireAdminRole(ctx context.Context, action string) error {

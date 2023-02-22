@@ -1928,6 +1928,13 @@ func TestTenantLogic_tenant_slow_repro(
 	runLogicTest(t, "tenant_slow_repro")
 }
 
+func TestTenantLogic_tenant_span_stats(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "tenant_span_stats")
+}
+
 func TestTenantLogic_time(
 	t *testing.T,
 ) {
