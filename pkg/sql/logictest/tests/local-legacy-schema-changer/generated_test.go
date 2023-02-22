@@ -1444,6 +1444,13 @@ func TestLogic_save_table(
 	runLogicTest(t, "save_table")
 }
 
+func TestLogic_savepoints(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "savepoints")
+}
+
 func TestLogic_scale(
 	t *testing.T,
 ) {

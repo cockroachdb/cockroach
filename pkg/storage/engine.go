@@ -1734,14 +1734,10 @@ func assertMVCCIteratorInvariants(iter MVCCIterator) error {
 // proceed until the intents are resolved. Intents that don't conflict with the
 // transaction referenced by txnID[1] at the supplied `ts` are ignored.
 //
-// The caller must supply the sequence number of the request on behalf of which
-// the intents are being scanned. This is used to determine if the caller needs
-// to consult intent history when performing a scan over the MVCC keyspace
-// (indicated by the `needIntentHistory` return parameter). Intent history is
-// required to read the correct provisional value when scanning if we encounter
-// an intent written by the `txn` at a higher sequence number than the one
-// supplied or at a higher timestamp than the `ts` supplied (regardless of the
-// sequence number of the intent).
+// The `needsIntentHistory` return value indicates whether the caller needs to
+// consult intent history when performing a scan over the MVCC keyspace to
+// read correct provisional values for at least one of the keys being scanned.
+// Typically, this applies to all transactions that read their own writes.
 //
 // [1] The supplied txnID may be empty (uuid.Nil) if the request on behalf of
 // which the scan is being performed is non-transactional.
@@ -1751,7 +1747,6 @@ func ScanConflictingIntentsForDroppingLatchesEarly(
 	txnID uuid.UUID,
 	ts hlc.Timestamp,
 	start, end roachpb.Key,
-	seq enginepb.TxnSeq,
 	intents *[]roachpb.Intent,
 	maxIntents int64,
 ) (needIntentHistory bool, err error) {
@@ -1794,14 +1789,36 @@ func ScanConflictingIntentsForDroppingLatchesEarly(
 		}
 		ownIntent := txnID != uuid.Nil && txnID == meta.Txn.ID
 		if ownIntent {
-			// If we ran into one of our own intents, check whether the intent has a
-			// higher (or equal) sequence number or a higher (or equal) timestamp. If
-			// either of these conditions is true, a corresponding scan over the MVCC
-			// key space will need access to the key's intent history in order to read
-			// the correct provisional value. So we set `needIntentHistory` to true.
-			if seq <= meta.Txn.Sequence || ts.LessEq(meta.Timestamp.ToTimestamp()) {
-				needIntentHistory = true
-			}
+			// If we ran into one of our own intents, a corresponding scan over the
+			// MVCC keyspace will need access to the key's intent history in order to
+			// read the correct provisional value. As such, we set `needsIntentHistory`
+			// to be true.
+			//
+			// This determination is more restrictive than it needs to be. A read
+			// request needs access to the intent history when performing a scan over
+			// the MVCC keyspace only if:
+			// 1. The request is reading at a lower sequence number than the intent's
+			// sequence number.
+			// 2. OR the request is reading at a (strictly) lower timestamp than the
+			// intent timestamp[1]. This can happen if the intent was pushed for some
+			// reason.
+			// 3. OR the found intent should be ignored because it was written as part
+			// of a savepoint which was subsequently rolled back.
+			// 4. OR the found intent and read request belong to different txn epochs.
+			//
+			// The conditions above mirror special case handling for intents by
+			// pebbleMVCCScanner's getOne method. If we find scanning the lock table
+			// twice (once during conflict resolution, and once when interleaving
+			// intents during the MVCC read) is too expensive for transactions that
+			// read their own writes, there's some optimizations to be had here by
+			// being smarter about when we decide to interleave intents or not to.
+			//
+			// [1] Only relevant if the intent has a sequence number less than or
+			// equal to the read request's sequence number. Otherwise, we need access
+			// to the intent history to read the correct provisional value -- one
+			// written at a lower or equal sequence number compared to the read
+			// request's.
+			needIntentHistory = true
 			continue
 		}
 		if conflictingIntent := meta.Timestamp.ToTimestamp().LessEq(ts); !conflictingIntent {

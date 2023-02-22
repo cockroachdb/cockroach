@@ -1,0 +1,28 @@
+# Regression test for https://github.com/cockroachdb/cockroach/issues/94337.
+statement ok
+CREATE TABLE a (id INT);
+
+statement ok
+BEGIN
+
+statement ok
+SELECT pg_sleep(1.5)
+
+statement ok
+SAVEPOINT s
+
+statement ok
+SELECT pg_sleep(1.5)
+
+statement ok
+INSERT INTO a(id) VALUES (0);
+
+statement ok
+ROLLBACK TO SAVEPOINT s
+
+query I
+SELECT * FROM a
+----
+
+statement ok
+COMMIT
