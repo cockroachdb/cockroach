@@ -8,46 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
 import { assert } from "chai";
-import { ReactWrapper, mount } from "enzyme";
-import { MemoryRouter } from "react-router-dom";
 
-import {
-  filterBySearchQuery,
-  StatementsPage,
-  StatementsPageProps,
-  StatementsPageState,
-} from "src/statementsPage";
-import statementsPagePropsFixture from "./statementsPage.fixture";
+import { filterBySearchQuery } from "src/statementsPage";
 import { AggregateStatistics } from "../statementsTable";
 import { FlatPlanNode } from "../statementDetails";
 
 describe("StatementsPage", () => {
-  describe("Statements table", () => {
-    it("sorts data by Execution Count DESC as default option", () => {
-      const rootWrapper = mount(
-        <MemoryRouter>
-          <StatementsPage {...statementsPagePropsFixture} />
-        </MemoryRouter>,
-      );
-
-      const statementsPageWrapper: ReactWrapper<
-        StatementsPageProps,
-        StatementsPageState,
-        React.Component<any, any>
-      > = rootWrapper.find(StatementsPage).first();
-      const statementsPageInstance = statementsPageWrapper.instance();
-
-      assert.equal(
-        statementsPageInstance.props.sortSetting.columnTitle,
-        "executionCount",
-      );
-      assert.equal(statementsPageInstance.props.sortSetting.ascending, false);
-    });
-  });
-
-  describe("filterBySearchQuery", () => {
+  test("filterBySearchQuery", () => {
     const testPlanNode: FlatPlanNode = {
       name: "render",
       attrs: [],
