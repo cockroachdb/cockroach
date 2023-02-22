@@ -2050,6 +2050,9 @@ var builtinOidsArray = []string{
 	2075: `phraseto_tsquery(config: string, text: string) -> tsquery`,
 	2076: `plainto_tsquery(config: string, text: string) -> tsquery`,
 	2077: `ts_parse(parser_name: string, document: string) -> tuple{int AS tokid, string AS token}`,
+	2078: `crdb_internal.tenant_span_stats() -> tuple{int AS database_id, int AS table_id, int AS range_count, int AS approximate_disk_bytes, int AS live_bytes, int AS total_bytes, float AS live_percentage}`,
+	2079: `crdb_internal.tenant_span_stats(database_id: int) -> tuple{int AS database_id, int AS table_id, int AS range_count, int AS approximate_disk_bytes, int AS live_bytes, int AS total_bytes, float AS live_percentage}`,
+	2080: `crdb_internal.tenant_span_stats(database_id: int, table_id: int) -> tuple{int AS database_id, int AS table_id, int AS range_count, int AS approximate_disk_bytes, int AS live_bytes, int AS total_bytes, float AS live_percentage}`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
