@@ -37,12 +37,31 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// getArgs returns a GetRequest and GetResponse pair addressed to
-// the default replica for the specified key.
+// getArgs returns a GetRequest for the specified key.
 func getArgs(key roachpb.Key) *kvpb.GetRequest {
 	return &kvpb.GetRequest{
 		RequestHeader: kvpb.RequestHeader{
 			Key: key,
+		},
+	}
+}
+
+// scanArgs returns a ScanRequest for the specified key and end key.
+func scanArgs(key, endKey roachpb.Key) *kvpb.ScanRequest {
+	return &kvpb.ScanRequest{
+		RequestHeader: kvpb.RequestHeader{
+			Key:    key,
+			EndKey: endKey,
+		},
+	}
+}
+
+// revScanArgs returns a ReverseScanRequest for the specified key and end key.
+func revScanArgs(key, endKey roachpb.Key) *kvpb.ReverseScanRequest {
+	return &kvpb.ReverseScanRequest{
+		RequestHeader: kvpb.RequestHeader{
+			Key:    key,
+			EndKey: endKey,
 		},
 	}
 }
