@@ -106,7 +106,7 @@ func (node *CreateFunction) Format(ctx *FmtCtx) {
 	if node.ReturnType.IsSet {
 		ctx.WriteString("SETOF ")
 	}
-	ctx.WriteString(node.ReturnType.Type.SQLString())
+	ctx.FormatTypeReference(node.ReturnType.Type)
 	ctx.WriteString("\n\t")
 	var funcBody FunctionBodyStr
 	for _, option := range node.Options {
@@ -316,7 +316,7 @@ func (node *FuncArg) Format(ctx *FmtCtx) {
 		ctx.FormatNode(&node.Name)
 		ctx.WriteString(" ")
 	}
-	ctx.WriteString(node.Type.SQLString())
+	ctx.FormatTypeReference(node.Type)
 	if node.DefaultVal != nil {
 		ctx.WriteString(" DEFAULT ")
 		ctx.FormatNode(node.DefaultVal)

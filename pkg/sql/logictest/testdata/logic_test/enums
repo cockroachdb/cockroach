@@ -1721,3 +1721,82 @@ INSERT INTO tab2 VALUES ('salud')
 
 statement ok
 ROLLBACK
+
+# This is a regression test for mixed case type references.
+subtest mixed_case_type_names
+
+statement ok
+DROP TABLE IF EXISTS t CASCADE;
+CREATE TABLE t (i INT PRIMARY KEY);
+CREATE TYPE "MixedCase" AS ENUM ('mixed', 'Case');
+CREATE TYPE "Emoji 😉" AS ENUM ('😊', '😔');
+
+statement ok
+ALTER TABLE t ADD COLUMN "MixedCase Column" "MixedCase" DEFAULT ('mixed');
+
+statement ok
+ALTER TABLE t ADD COLUMN "🙏" "Emoji 😉" DEFAULT ('😊'::"Emoji 😉") ON UPDATE ('😔':::"Emoji 😉");
+
+statement ok
+DROP TABLE t CASCADE;
+
+statement ok
+CREATE TABLE t ("🙏" "Emoji 😉" DEFAULT ('😊'::"Emoji 😉") ON UPDATE ('😔':::"Emoji 😉"));
+
+statement ok
+CREATE FUNCTION "🙏"("🙏" "Emoji 😉") RETURNS "MixedCase" LANGUAGE SQL AS $$
+   SELECT 'mixed'::"MixedCase" WHERE "🙏" IS NULL
+$$;
+
+query TT
+SELECT "🙏"('😊'), "🙏"(NULL:::"Emoji 😉")
+----
+NULL  NULL
+
+statement ok
+CREATE DATABASE "DB➕➕";
+USE "DB➕➕"
+
+statement ok
+CREATE SCHEMA "➖➖"
+
+
+statement ok
+CREATE TABLE t (i INT PRIMARY KEY);
+CREATE TYPE "➖➖"."MixedCase" AS ENUM ('mixed', 'Case');
+CREATE TYPE "Emoji 😉" AS ENUM ('😊', '😔');
+
+statement ok
+ALTER TABLE t ADD COLUMN "MixedCase Column" "➖➖"."MixedCase" DEFAULT ('mixed');
+
+statement ok
+ALTER TABLE t ADD COLUMN "🙏" "DB➕➕".public."Emoji 😉" DEFAULT ('😊'::"DB➕➕".public."Emoji 😉") ON UPDATE ('😔':::public."Emoji 😉");
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t]
+----
+CREATE TABLE public.t (
+  i INT8 NOT NULL,
+  "MixedCase Column" "DB➕➕".➖➖."MixedCase" NULL DEFAULT 'mixed':::"DB➕➕".➖➖."MixedCase",
+  🙏 "DB➕➕".public."Emoji 😉" NULL DEFAULT e'\U0001F60A':::"DB➕➕".public."Emoji 😉" ON UPDATE e'\U0001F614':::"DB➕➕".public."Emoji 😉",
+  CONSTRAINT t_pkey PRIMARY KEY (i ASC)
+)
+
+
+# Ensure that there's a database qualification on the enum type in
+# SHOW CREATE TABLE.
+subtest show_create_table_udf_qualification
+
+statement ok
+CREATE DATABASE db1;
+CREATE TYPE db1.mytype AS ENUM ('foo');
+CREATE TABLE db1.t (m db1.mytype)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE db1.public.t]
+----
+CREATE TABLE public.t (
+  m db1.public.mytype NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
+)
