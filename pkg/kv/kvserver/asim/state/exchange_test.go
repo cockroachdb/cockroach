@@ -156,7 +156,7 @@ func TestFixedDelayExchange(t *testing.T) {
 				for store := range storeMap {
 					storeDetailMap := stateExchange.Get(OffsetTick(start, tick), roachpb.StoreID(store))
 					for store, storeDetail := range storeDetailMap {
-						results[tick][int32(store)] = ReverseOffsetTick(start, storeDetail.LastAvailable)
+						results[tick][int32(store)] = ReverseOffsetTick(start, storeDetail.LastUpdatedTime)
 					}
 				}
 			}

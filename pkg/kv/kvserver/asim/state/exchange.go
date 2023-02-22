@@ -90,7 +90,6 @@ func (u *FixedDelayExchange) Put(tick time.Time, descs ...roachpb.StoreDescripto
 		desc := d
 		nextStoreDetail := storepool.StoreDetail{}
 		nextStoreDetail.Desc = &desc
-		nextStoreDetail.LastAvailable = tick
 		nextStoreDetail.LastUpdatedTime = tick
 		nextStoreDetail.Desc.Node = desc.Node
 
