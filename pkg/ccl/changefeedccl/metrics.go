@@ -15,25 +15,18 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcutils"
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/errors"
 )
-
-// allow creation of per changefeed SLI metrics.
-var enableSLIMetrics = envutil.EnvOrDefaultBool(
-	"COCKROACH_EXPERIMENTAL_ENABLE_PER_CHANGEFEED_METRICS", false)
 
 const (
 	changefeedCheckpointHistMaxLatency = 30 * time.Second
@@ -572,13 +565,6 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 	}
 
 	if scope != defaultSLIScope {
-		if !enableSLIMetrics {
-			return nil, changefeedbase.WithTerminalError(
-				errors.WithHint(
-					pgerror.Newf(pgcode.ConfigurationLimitExceeded, "cannot create metrics scope %q", scope),
-					"try restarting with COCKROACH_EXPERIMENTAL_ENABLE_PER_CHANGEFEED_METRICS=true",
-				))
-		}
 		const failSafeMax = 1024
 		if len(a.mu.sliMetrics) == failSafeMax {
 			return nil, pgerror.Newf(pgcode.ConfigurationLimitExceeded,

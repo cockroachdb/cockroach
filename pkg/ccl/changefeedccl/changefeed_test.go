@@ -3335,15 +3335,8 @@ func TestChangefeedMonitoring(t *testing.T) {
 			t.Errorf(`expected 0 got %d`, c)
 		}
 
-		enableSLIMetrics = false
 		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH metrics_label='tier0'`)
 		_, err := foo.Next()
-		require.Regexp(t, "cannot create metrics scope", err)
-		require.NoError(t, foo.Close())
-
-		enableSLIMetrics = true
-		foo = feed(t, f, `CREATE CHANGEFEED FOR foo WITH metrics_label='tier0'`)
-		_, err = foo.Next()
 		require.NoError(t, err)
 
 		testutils.SucceedsSoon(t, func() error {
