@@ -60,7 +60,7 @@ CREATE TABLE index (a mytype, index index, b myothertype)
 CREATE TABLE index (a mytype, index index, b myothertype)
 CREATE TABLE index (a mytype, index index, b myothertype) -- fully parenthesized
 CREATE TABLE index (a mytype, index index, b myothertype) -- literals removed
-CREATE TABLE _ (_ mytype, _ index, _ myothertype) -- identifiers removed
+CREATE TABLE _ (_ _, _ _, _ _) -- identifiers removed
 
 parse
 CREATE TABLE index (index, index) AS TABLE index

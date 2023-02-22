@@ -126,6 +126,28 @@ CREATE OR REPLACE FUNCTION _(IN _ INT8)
 	LANGUAGE SQL
 	BEGIN ATOMIC SELECT 1; SELECT _; END -- identifiers removed
 
+
+parse
+CREATE OR REPLACE FUNCTION f(a "cool Type") RETURNS "Hot Type 🔥" LANGUAGE SQL BEGIN ATOMIC SELECT NULL:::"Hot Type 🔥"; END
+----
+CREATE OR REPLACE FUNCTION f(IN a "cool Type")
+	RETURNS "Hot Type 🔥"
+	LANGUAGE SQL
+	BEGIN ATOMIC SELECT NULL:::"Hot Type 🔥"; END -- normalized!
+CREATE OR REPLACE FUNCTION f(IN a "cool Type")
+	RETURNS "Hot Type 🔥"
+	LANGUAGE SQL
+	BEGIN ATOMIC SELECT ((NULL):::"Hot Type 🔥"); END -- fully parenthesized
+CREATE OR REPLACE FUNCTION f(IN a "cool Type")
+	RETURNS "Hot Type 🔥"
+	LANGUAGE SQL
+	BEGIN ATOMIC SELECT _:::"Hot Type 🔥"; END -- literals removed
+CREATE OR REPLACE FUNCTION _(IN _ _)
+	RETURNS _
+	LANGUAGE SQL
+	BEGIN ATOMIC SELECT NULL:::_; END -- identifiers removed
+
+
 parse
 CREATE OR REPLACE FUNCTION f(a INT) RETURNS INT LANGUAGE SQL BEGIN ATOMIC SELECT 1; SELECT $1; END
 ----

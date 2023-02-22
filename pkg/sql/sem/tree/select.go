@@ -220,7 +220,7 @@ func (c *ColumnDef) Format(ctx *FmtCtx) {
 	ctx.FormatNode(&c.Name)
 	if c.Type != nil {
 		ctx.WriteByte(' ')
-		ctx.WriteString(c.Type.SQLString())
+		ctx.FormatTypeReference(c.Type)
 	}
 }
 
