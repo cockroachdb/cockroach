@@ -1912,7 +1912,7 @@ func (a Allocator) RebalanceNonVoter(
 // machinery to achieve range count convergence.
 func (a *Allocator) ScorerOptions(ctx context.Context) *RangeCountScorerOptions {
 	return &RangeCountScorerOptions{
-		StoreHealthOptions:      a.StoreHealthOptions(ctx),
+		StoreHealthOptions:      a.StoreHealthOptions(),
 		deterministic:           a.deterministic,
 		rangeRebalanceThreshold: RangeRebalanceThreshold.Get(&a.st.SV),
 	}
@@ -1922,7 +1922,7 @@ func (a *Allocator) ScorerOptions(ctx context.Context) *RangeCountScorerOptions 
 func (a *Allocator) ScorerOptionsForScatter(ctx context.Context) *ScatterScorerOptions {
 	return &ScatterScorerOptions{
 		RangeCountScorerOptions: RangeCountScorerOptions{
-			StoreHealthOptions:      a.StoreHealthOptions(ctx),
+			StoreHealthOptions:      a.StoreHealthOptions(),
 			deterministic:           a.deterministic,
 			rangeRebalanceThreshold: 0,
 		},
@@ -2032,6 +2032,51 @@ func (a *Allocator) ValidLeaseTargets(
 	return candidates
 }
 
+// healthyLeaseTargets returns a list of healthy replica targets and whether
+// the leaseholder replica should be replaced, given the existing replicas,
+// store health options and IO overload of existing replica stores.
+func (a *Allocator) healthyLeaseTargets(
+	ctx context.Context,
+	storePool storepool.AllocatorStorePool,
+	existingReplicas []roachpb.ReplicaDescriptor,
+	leaseStoreID roachpb.StoreID,
+	storeHealthOpts StoreHealthOptions,
+) (healthyTargets []roachpb.ReplicaDescriptor, excludeLeaseRepl bool) {
+	sl, _, _ := storePool.GetStoreListFromIDs(replDescsToStoreIDs(existingReplicas), storepool.StoreFilterSuspect)
+	avgIOOverload := sl.CandidateIOOverloadScores.Mean
+
+	for _, replDesc := range existingReplicas {
+		store, ok := sl.FindStoreByID(replDesc.StoreID)
+		// If the replica is the current leaseholder, don't include it as a
+		// candidate and additionally excludeLeaseRepl if it is filtered out of the
+		// store list due to being suspect; or the leaseholder store doesn't pass
+		// the leaseholder store health check.
+		//
+		// Note that the leaseholder store health check is less strict than the
+		// transfer target check below. We don't want to shed leases at the same
+		// point a candidate becomes ineligible as it could lead to thrashing.
+		// Instead, we create a buffer between the two to avoid leases moving back
+		// and forth.
+		if (replDesc.StoreID == leaseStoreID) &&
+			(!ok || !storeHealthOpts.leaseStoreIsHealthy(ctx, store, avgIOOverload)) {
+			excludeLeaseRepl = true
+			continue
+		}
+
+		// If the replica is not the leaseholder, don't include it as a candidate
+		// if it is filtered out similar to above, or the replica store doesn't
+		// pass the lease transfer store health check.
+		if replDesc.StoreID != leaseStoreID &&
+			(!ok || !storeHealthOpts.transferToStoreIsHealthy(ctx, store, avgIOOverload)) {
+			continue
+		}
+
+		healthyTargets = append(healthyTargets, replDesc)
+	}
+
+	return healthyTargets, excludeLeaseRepl
+}
+
 // leaseholderShouldMoveDueToPreferences returns true if the current leaseholder
 // is in violation of lease preferences _that can otherwise be satisfied_ by
 // some existing replica.
@@ -2088,13 +2133,14 @@ func (a *Allocator) leaseholderShouldMoveDueToPreferences(
 // considering the threshold for io overload. This threshold is not
 // considered in allocation or rebalancing decisions (excluding candidate
 // stores as targets) when enforcementLevel is set to storeHealthNoAction or
-// storeHealthLogOnly. By default storeHealthBlockRebalanceTo is the action taken. When
-// there is a mixed version cluster, storeHealthNoAction is set instead.
-func (a *Allocator) StoreHealthOptions(_ context.Context) StoreHealthOptions {
-	enforcementLevel := IOOverloadEnforcementLevel(IOOverloadThresholdEnforcement.Get(&a.st.SV))
+// storeHealthLogOnly. By default block_rebalance_to is the enforcement level
+// for replica allocation and shed for lease transfers.
+func (a *Allocator) StoreHealthOptions() StoreHealthOptions {
 	return StoreHealthOptions{
-		EnforcementLevel:    enforcementLevel,
-		IOOverloadThreshold: IOOverloadThreshold.Get(&a.st.SV),
+		EnforcementLevel:                   IOOverloadEnforcementLevel(IOOverloadThresholdEnforcement.Get(&a.st.SV)),
+		IOOverloadThreshold:                IOOverloadThreshold.Get(&a.st.SV),
+		LeaseEnforcementLevel:              LeaseIOOverloadEnforcementLevel(LeaseIOOverloadThresholdEnforcement.Get(&a.st.SV)),
+		LeaseIOOverloadThresholdShedBuffer: ShedIOOverloadThresholdBuffer.Get(&a.st.SV),
 	}
 }
 
@@ -2148,7 +2194,10 @@ func (a *Allocator) TransferLeaseTarget(
 		return roachpb.ReplicaDescriptor{}
 	}
 
+	var excludeLeaseReplForHealth bool
 	existing = a.ValidLeaseTargets(ctx, storePool, conf, existing, leaseRepl, opts)
+	existing, excludeLeaseReplForHealth = a.healthyLeaseTargets(ctx, storePool, existing, leaseRepl.StoreID(), a.StoreHealthOptions())
+	excludeLeaseRepl = excludeLeaseRepl || excludeLeaseReplForHealth
 	// Short-circuit if there are no valid targets out there.
 	if len(existing) == 0 || (len(existing) == 1 && existing[0].StoreID == leaseRepl.StoreID()) {
 		log.KvDistribution.VEventf(ctx, 2, "no lease transfer target found for r%d", leaseRepl.GetRangeID())
@@ -2262,7 +2311,7 @@ func (a *Allocator) TransferLeaseTarget(
 			candidates,
 			storeDescMap,
 			&LoadScorerOptions{
-				StoreHealthOptions:           a.StoreHealthOptions(ctx),
+				StoreHealthOptions:           a.StoreHealthOptions(),
 				Deterministic:                a.deterministic,
 				LoadDims:                     opts.LoadDimensions,
 				LoadThreshold:                LoadThresholds(&a.st.SV, opts.LoadDimensions...),
@@ -2860,4 +2909,12 @@ func maxReplicaID(replicas []roachpb.ReplicaDescriptor) roachpb.ReplicaID {
 		}
 	}
 	return max
+}
+
+func replDescsToStoreIDs(descs []roachpb.ReplicaDescriptor) []roachpb.StoreID {
+	ret := make([]roachpb.StoreID, len(descs))
+	for i, desc := range descs {
+		ret[i] = desc.StoreID
+	}
+	return ret
 }

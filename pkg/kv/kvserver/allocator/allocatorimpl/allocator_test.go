@@ -1976,6 +1976,141 @@ func TestAllocatorTransferLeaseTarget(t *testing.T) {
 	}
 }
 
+func TestAllocatorTransferLeaseTargetHealthCheck(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	floats := func(nums ...float64) []float64 {
+		return nums
+	}
+
+	// We want the shed threshold to be 0.9 and the overload threhsold to be 0.5
+	// i.e. block transfers at >=0.5 and block transfers + shed leases at >=0.9.
+	const shedBuffer = 0.4
+	const ioOverloadThreshold = 0.5
+
+	testCases := []struct {
+		name                  string
+		leaseCounts, IOScores []float64
+		leaseholder           roachpb.StoreID
+		excludeLeaseRepl      bool
+		expected              roachpb.StoreID
+		enforcement           LeaseIOOverloadEnforcementLevel
+	}{
+		{
+			name:        "don't move off of store with high io overload when block enforcement",
+			leaseCounts: floats(100, 100, 100, 100, 100),
+			IOScores:    floats(2.5, 1.5, 0.5, 0, 0),
+			leaseholder: 1,
+			expected:    0,
+			enforcement: LeaseIOOverloadThresholdBlock,
+		},
+		{
+			name:        "move off of store with high io overload when shed enforcement",
+			leaseCounts: floats(100, 100, 100, 100, 100),
+			IOScores:    floats(2.5, 1.5, 0.5, 0, 0),
+			leaseholder: 1,
+			// Store 3 is above the threshold (1.0 > 0.8), but equal to the avg (1.0), so
+			// it is still considered a healthy candidate.
+			expected:    3,
+			enforcement: LeaseIOOverloadThresholdShed,
+		},
+		{
+			name:        "don't transfer to io overloaded store when block enforcement",
+			leaseCounts: floats(0, 100, 100, 400, 400),
+			IOScores:    floats(2.5, 1.5, 0.5, 0, 0),
+			leaseholder: 5,
+			expected:    3,
+			enforcement: LeaseIOOverloadThresholdBlock,
+		},
+		{
+			name:        "don't transfer to io overloaded store when shed enforcement",
+			leaseCounts: floats(0, 100, 100, 400, 400),
+			IOScores:    floats(2.5, 1.5, 0.5, 0, 0),
+			leaseholder: 5,
+			expected:    3,
+			enforcement: LeaseIOOverloadThresholdShed,
+		},
+		{
+			name:        "still transfer to io overloaded store when no action enforcement",
+			leaseCounts: floats(0, 100, 100, 400, 400),
+			IOScores:    floats(2.5, 1.5, 0.5, 0, 0),
+			leaseholder: 5,
+			expected:    2,
+			enforcement: LeaseIOOverloadThresholdNoAction,
+		},
+		{
+			name:        "still transfer to io overloaded store when no action log enforcement",
+			leaseCounts: floats(0, 100, 100, 400, 400),
+			IOScores:    floats(2.5, 1.5, 0.5, 0, 0),
+			leaseholder: 5,
+			expected:    2,
+			enforcement: LeaseIOOverloadThresholdNoActionLogOnly,
+		},
+		{
+			name:        "move off of store with high io overload with skewed lease counts shed enforcement",
+			leaseCounts: floats(0, 0, 10000, 10000, 10000),
+			IOScores:    floats(2.5, 1.5, 0.5, 0, 0),
+			leaseholder: 1,
+			expected:    3,
+			enforcement: LeaseIOOverloadThresholdShed,
+		},
+		{
+			name:        "don't move off of store with high io overload but less than shed threshold with shed enforcement",
+			leaseCounts: floats(0, 0, 0, 0, 0),
+			IOScores:    floats(0.89, 0, 0, 0, 0),
+			leaseholder: 1,
+			expected:    0,
+			enforcement: LeaseIOOverloadThresholdShed,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			stopper, g, sp, a, _ := CreateTestAllocator(ctx, 10, true /* deterministic */)
+			defer stopper.Stop(ctx)
+			n := len(tc.leaseCounts)
+			stores := make([]*roachpb.StoreDescriptor, n)
+			existing := make([]roachpb.ReplicaDescriptor, 0, n)
+			for i := range tc.leaseCounts {
+				existing = append(existing, replicas(roachpb.StoreID(i+1))...)
+				stores[i] = &roachpb.StoreDescriptor{
+					StoreID: roachpb.StoreID(i + 1),
+					Node:    roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i + 1)},
+					Capacity: roachpb.StoreCapacity{
+						LeaseCount:  int32(tc.leaseCounts[i]),
+						IOThreshold: TestingIOThresholdWithScore(tc.IOScores[i]),
+					},
+				}
+			}
+
+			sg := gossiputil.NewStoreGossiper(g)
+			sg.GossipStores(stores, t)
+			LeaseIOOverloadThresholdEnforcement.Override(ctx, &a.st.SV, int64(tc.enforcement))
+			IOOverloadThreshold.Override(ctx, &a.st.SV, ioOverloadThreshold)
+			ShedIOOverloadThresholdBuffer.Override(ctx, &a.st.SV, shedBuffer)
+
+			target := a.TransferLeaseTarget(
+				ctx,
+				sp,
+				emptySpanConfig(),
+				existing,
+				&mockRepl{
+					replicationFactor: int32(n),
+					storeID:           tc.leaseholder,
+				},
+				allocator.RangeUsageInfo{}, /* stats */
+				false,                      /* forceDecisionWithoutStats */
+				allocator.TransferLeaseOptions{
+					CheckCandidateFullness: true,
+				},
+			)
+			require.Equal(t, tc.expected, target.StoreID)
+		})
+	}
+
+}
+
 func TestAllocatorTransferLeaseToReplicasNeedingSnapshot(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

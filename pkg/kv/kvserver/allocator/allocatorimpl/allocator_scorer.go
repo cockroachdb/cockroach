@@ -76,6 +76,11 @@ const (
 	// conjunction with IOOverloadMeanThreshold below.
 	DefaultIOOverloadThreshold = 0.5
 
+	// DefaultIOOverloadShedBuffer is used to shed leases from stores with an IO
+	// overload score greater than the threshold + buffer. This is typically used
+	// in conjunction with IOOverloadMeanThreshold below.
+	DefaultIOOverloadShedBuffer = 0.4
+
 	// IOOverloadMeanThreshold is the percentage above the mean after which a
 	// store could be conisdered unhealthy if also exceeding the threshold.
 	IOOverloadMeanThreshold = 1.1
@@ -95,7 +100,7 @@ const (
 	// as targets for any action regardless of the store IO overload.
 	IOOverloadThresholdNoAction IOOverloadEnforcementLevel = iota
 	// IOOverloadThresholdLogOnly will not exclude stores from being considered
-	// as targets for any action regarldess of the store IO overload. When a
+	// as targets for any action regardless of the store IO overload. When a
 	// store exceeds IOOverloadThreshold, an event is logged.
 	IOOverloadThresholdLogOnly
 	// IOOverloadThresholdBlockRebalanceTo excludes stores from being being
@@ -164,6 +169,69 @@ var IOOverloadThresholdEnforcement = settings.RegisterEnumSetting(
 		int64(IOOverloadThresholdLogOnly):          "block_none_log",
 		int64(IOOverloadThresholdBlockRebalanceTo): "block_rebalance_to",
 		int64(IOOverloadThresholdBlockAll):         "block_all",
+	},
+)
+
+// LeaseIOOverloadEnforcementLevel represents the level of action that may be
+// taken or excluded when a lease candidate disk is considered unhealthy.
+type LeaseIOOverloadEnforcementLevel int64
+
+const (
+	// LeaseIOOverloadThresholdBlock will not exclude stores from being
+	// considered as leaseholder targets for a range, regardless of the store IO
+	// overload.
+	LeaseIOOverloadThresholdNoAction LeaseIOOverloadEnforcementLevel = iota
+	// LeaseIOOverloadThresholdBlock will not exclude stores from being
+	// considered as leaseholder targets for a range, regardless of the store IO
+	// overload. When a store exceeds IOOverloadThreshold an event is logged.
+	LeaseIOOverloadThresholdNoActionLogOnly
+	// LeaseIOOverloadThresholdBlock excludes stores from being considered as
+	// leaseholder targets for a range if they exceed (a)
+	// kv.allocator.io_overload_threshold and (b) the mean IO overload among
+	// possible candidates. The current leaseholder store will NOT be excluded as
+	// a candidate for its current range leases.
+	LeaseIOOverloadThresholdBlock
+	// LeaseIOOverloadThresholdShed has the same behavior as block, however the
+	// current leaseholder store WILL BE excluded as a candidate for its current
+	// range leases i.e. The lease will always transfer to a healthy and valid
+	// store if one exists.
+	LeaseIOOverloadThresholdShed
+)
+
+// ShedIOOverloadThresholdBuffer added to IOOverloadThreshold is the maximum IO
+// overload score the current leaseholder store for a range may have before
+// considered unhealthy. If unhealthy and LeaseIOOverloadThresholdEnforcement
+// is set to 'shed', the store will shed its leases to other healthy stores.
+var ShedIOOverloadThresholdBuffer = settings.RegisterFloatSetting(
+	settings.SystemOnly,
+	"kv.allocator.io_overload_threshold_lease_shed_buffer",
+	"a store will shed its leases when its IO overload score is above this "+
+		"value added to `kv.allocator.io_overload_threshold` and "+
+		"`kv.allocator.io_overload_threshold_enforcement_leases` is `shed`",
+	DefaultIOOverloadShedBuffer,
+)
+
+// LeaseIOOverloadThresholdEnforcement defines the level of enforcement for
+// lease transfers when a candidate stores' IO overload exceeds the threshold
+// defined in IOOverloadThreshold, and additionally
+// ShedIOOverloadThresholdBuffer when shed is set.
+var LeaseIOOverloadThresholdEnforcement = settings.RegisterEnumSetting(
+	settings.SystemOnly,
+	"kv.allocator.io_overload_threshold_enforcement_leases",
+	"the level of enforcement on lease transfers when a candidate store has an"+
+		"io overload score exceeding `kv.allocator.io_overload_threshold` and above the "+
+		"average of comparable allocation candidates:`block_none` will exclude "+
+		"no candidate stores, `block_none_log` will exclude no candidates but log an "+
+		"event, `block` will exclude candidates stores from being "+
+		"targets of lease transfers, `shed` will exclude candidate stores "+
+		"from being targets of lease transfers and cause the existing "+
+		"leaseholder to transfer away its lease",
+	"block",
+	map[int64]string{
+		int64(LeaseIOOverloadThresholdNoAction):        "block_none",
+		int64(LeaseIOOverloadThresholdNoActionLogOnly): "block_none_log",
+		int64(LeaseIOOverloadThresholdBlock):           "block",
+		int64(LeaseIOOverloadThresholdShed):            "shed",
 	},
 )
 
@@ -2177,8 +2245,10 @@ func convergesOnMean(oldVal, newVal, mean float64) bool {
 // StoreHealthOptions is the scorer options for store health. It is
 // used to inform scoring based on the health of a store.
 type StoreHealthOptions struct {
-	EnforcementLevel    IOOverloadEnforcementLevel
-	IOOverloadThreshold float64
+	EnforcementLevel                   IOOverloadEnforcementLevel
+	LeaseEnforcementLevel              LeaseIOOverloadEnforcementLevel
+	IOOverloadThreshold                float64
+	LeaseIOOverloadThresholdShedBuffer float64
 }
 
 // storeIsHealthy returns true if the store IO overload does not exceed
@@ -2192,7 +2262,6 @@ func (o StoreHealthOptions) storeIsHealthy(
 		ioOverloadScore < o.IOOverloadThreshold {
 		return true
 	}
-
 	// Still log an event when the IO overload score exceeds the threshold, however
 	// does not exceed the cluster average. This is enabled to avoid confusion
 	// where candidate stores are still targets, despite exeeding the
@@ -2243,6 +2312,65 @@ func (o StoreHealthOptions) rebalanceToStoreIsHealthy(
 	// The store is only considered unhealthy when the enforcement level is
 	// storeHealthBlockRebalanceTo or storeHealthBlockAll.
 	return o.EnforcementLevel < IOOverloadThresholdBlockRebalanceTo
+}
+
+func (o StoreHealthOptions) transferToStoreIsHealthy(
+	ctx context.Context, store roachpb.StoreDescriptor, avg float64,
+) bool {
+	ioOverloadScore, _ := store.Capacity.IOThreshold.Score()
+	if o.LeaseEnforcementLevel == LeaseIOOverloadThresholdNoAction ||
+		ioOverloadScore < o.IOOverloadThreshold {
+		return true
+	}
+
+	if ioOverloadScore < avg*IOOverloadMeanThreshold {
+		log.KvDistribution.VEventf(ctx, 5,
+			"s%d, lease transfer check io overload %.2f exceeds threshold %.2f, but "+
+				"below average watermark: %.2f, action enabled %d",
+			store.StoreID, ioOverloadScore, o.IOOverloadThreshold,
+			avg*IOOverloadMeanThreshold, o.LeaseEnforcementLevel)
+		return true
+	}
+
+	log.KvDistribution.VEventf(ctx, 5,
+		"s%d, lease transfer check io overload %.2f exceeds threshold %.2f, above average "+
+			"watermark: %.2f, action enabled %d",
+		store.StoreID, ioOverloadScore, o.IOOverloadThreshold,
+		avg*IOOverloadMeanThreshold, o.LeaseEnforcementLevel)
+
+	// The store is only considered unhealthy when the enforcement level is
+	// LeaseIOOverloadThresholdNoAction.
+	return o.LeaseEnforcementLevel < LeaseIOOverloadThresholdBlock
+}
+
+func (o StoreHealthOptions) leaseStoreIsHealthy(
+	ctx context.Context, store roachpb.StoreDescriptor, avg float64,
+) bool {
+	threshold := o.IOOverloadThreshold + o.LeaseIOOverloadThresholdShedBuffer
+	ioOverloadScore, _ := store.Capacity.IOThreshold.Score()
+	if o.LeaseEnforcementLevel == LeaseIOOverloadThresholdNoAction ||
+		ioOverloadScore < threshold {
+		return true
+	}
+
+	if ioOverloadScore < avg*IOOverloadMeanThreshold {
+		log.KvDistribution.VEventf(ctx, 5,
+			"s%d, existing leaseholder check io overload %.2f exceeds threshold %.2f, but "+
+				"below average watermark: %.2f, action enabled %d",
+			store.StoreID, ioOverloadScore, o.IOOverloadThreshold,
+			avg*IOOverloadMeanThreshold, o.LeaseEnforcementLevel)
+		return true
+	}
+
+	log.KvDistribution.VEventf(ctx, 5,
+		"s%d, existing leaseholder check io overload %.2f exceeds threshold %.2f, above average "+
+			"watermark: %.2f, action enabled %d",
+		store.StoreID, ioOverloadScore, o.IOOverloadThreshold,
+		avg*IOOverloadMeanThreshold, o.LeaseEnforcementLevel)
+
+	// The existing leaseholder store is only considered unhealthy when the enforcement level is
+	// LeaseIOOverloadThresholdShed.
+	return o.LeaseEnforcementLevel < LeaseIOOverloadThresholdShed
 }
 
 // rebalanceToMaxCapacityCheck returns true if the store has enough room to
