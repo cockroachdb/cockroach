@@ -16,9 +16,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesapi"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -52,34 +54,22 @@ func ParseTenantCapabilityUpsert(
 	t *testing.T, d *datadriven.TestData,
 ) (*tenantcapabilities.Update, error) {
 	tID := GetTenantID(t, d)
-	cap := tenantcapabilitiespb.TenantCapabilities{}
+	caps := &tenantcapabilitiespb.TenantCapabilities{}
 	for _, arg := range d.CmdArgs {
-		if arg.Key == "can_admin_split" {
+		if capabilityName, ok := tenantcapabilitiesapi.BoolCapabilityNameFromString(arg.Key); ok {
 			b, err := strconv.ParseBool(arg.Vals[0])
 			if err != nil {
 				return nil, err
 			}
-			cap.CanAdminSplit = b
-		}
-		if arg.Key == "can_view_node_info" {
-			b, err := strconv.ParseBool(arg.Vals[0])
-			if err != nil {
-				return nil, err
-			}
-			cap.CanViewNodeInfo = b
-		}
-		if arg.Key == "can_view_tsdb_metrics" {
-			b, err := strconv.ParseBool(arg.Vals[0])
-			if err != nil {
-				return nil, err
-			}
-			cap.CanViewTSDBMetrics = b
+			caps.SetBoolCapability(capabilityName, b)
+		} else {
+			return nil, errors.Newf("unknown capability: %q", arg.Key)
 		}
 	}
 	update := tenantcapabilities.Update{
 		Entry: tenantcapabilities.Entry{
 			TenantID:           tID,
-			TenantCapabilities: cap,
+			TenantCapabilities: caps,
 		},
 	}
 	return &update, nil

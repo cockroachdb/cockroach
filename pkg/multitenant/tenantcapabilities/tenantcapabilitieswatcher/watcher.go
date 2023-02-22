@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedbuffer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesapi"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -42,7 +42,7 @@ type Watcher struct {
 	mu struct {
 		syncutil.RWMutex
 
-		store map[roachpb.TenantID]tenantcapabilitiespb.TenantCapabilities
+		store map[roachpb.TenantID]tenantcapabilitiesapi.TenantCapabilities
 	}
 }
 
@@ -70,14 +70,14 @@ func New(
 		bufferMemLimit:   bufferMemLimit,
 		knobs:            watcherKnobs,
 	}
-	w.mu.store = make(map[roachpb.TenantID]tenantcapabilitiespb.TenantCapabilities)
+	w.mu.store = make(map[roachpb.TenantID]tenantcapabilitiesapi.TenantCapabilities)
 	return w
 }
 
 // GetCapabilities implements the tenantcapabilities.Reader interface.
 func (w *Watcher) GetCapabilities(
 	id roachpb.TenantID,
-) (tenantcapabilitiespb.TenantCapabilities, bool) {
+) (tenantcapabilitiesapi.TenantCapabilities, bool) {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 
@@ -160,7 +160,7 @@ func (w *Watcher) handleCompleteUpdate(updates []tenantcapabilities.Update) {
 	// happens when the rangefeed is first established, or if it's restarted for
 	// some reason. Either way, we want to throw away any accumulated state so
 	// far, and reconstruct it using the result of the scan.
-	freshStore := make(map[roachpb.TenantID]tenantcapabilitiespb.TenantCapabilities)
+	freshStore := make(map[roachpb.TenantID]tenantcapabilitiesapi.TenantCapabilities)
 	for _, up := range updates {
 		freshStore[up.TenantID] = up.TenantCapabilities
 	}

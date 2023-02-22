@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesapi"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -70,13 +71,19 @@ func (a *Authorizer) HasCapabilityForBatch(
 	}
 
 	for _, ru := range ba.Requests {
+		var capabilityName tenantcapabilitiesapi.BoolCapabilityName
 		switch ru.GetInner().(type) {
 		case *kvpb.AdminSplitRequest:
-			if !cp.CanAdminSplit && !a.knobs.AuthorizerSkipAdminSplitCapabilityChecks {
-				return errors.Newf("tenant %s does not have admin split capability", tenID)
+			if a.knobs.AuthorizerSkipAdminSplitCapabilityChecks {
+				continue
 			}
+			capabilityName = tenantcapabilitiesapi.CanAdminSplit
 		default:
 			// No capability checks for any other type of request.
+			continue
+		}
+		if !found || !capabilityName.GetValue(cp) {
+			return errors.Newf("tenant %s does not have capability %q", tenID, capabilityName)
 		}
 	}
 	return nil
@@ -99,7 +106,7 @@ func (a *Authorizer) HasNodeStatusCapability(ctx context.Context, tenID roachpb.
 			tenID,
 		)
 	}
-	if !cp.CanViewNodeInfo {
+	if !found || !tenantcapabilitiesapi.CanViewNodeInfo.GetValue(cp) {
 		return errors.Newf("tenant %s does not have capability to query cluster node metadata", tenID)
 	}
 	return nil
@@ -117,7 +124,7 @@ func (a *Authorizer) HasTSDBQueryCapability(ctx context.Context, tenID roachpb.T
 			tenID,
 		)
 	}
-	if !cp.CanViewTSDBMetrics {
+	if !found || !tenantcapabilitiesapi.CanViewTSDBMetrics.GetValue(cp) {
 		return errors.Newf("tenant %s does not have capability to query timeseries data", tenID)
 	}
 	return nil

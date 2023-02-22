@@ -15,7 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesapi"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
@@ -33,8 +33,8 @@ type Watcher interface {
 // Reader provides access to the global tenant capability state. The global
 // tenant capability state may be arbitrarily stale.
 type Reader interface {
-	GetCapabilities(id roachpb.TenantID) (_ tenantcapabilitiespb.TenantCapabilities, found bool)
-	GetCapabilitiesMap() map[roachpb.TenantID]tenantcapabilitiespb.TenantCapabilities
+	GetCapabilities(id roachpb.TenantID) (_ tenantcapabilitiesapi.TenantCapabilities, found bool)
+	GetCapabilitiesMap() map[roachpb.TenantID]tenantcapabilitiesapi.TenantCapabilities
 }
 
 // Authorizer performs various kinds of capability checks for requests issued
@@ -75,7 +75,7 @@ type Authorizer interface {
 // Entry ties together a tenantID with its capabilities.
 type Entry struct {
 	TenantID           roachpb.TenantID
-	TenantCapabilities tenantcapabilitiespb.TenantCapabilities
+	TenantCapabilities tenantcapabilitiesapi.TenantCapabilities
 }
 
 // Update represents an update to the global tenant capability state.

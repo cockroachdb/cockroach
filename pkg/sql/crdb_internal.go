@@ -36,7 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesapi"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -7565,7 +7565,7 @@ CREATE TABLE crdb_internal.node_tenant_capabilities_cache (
 		}
 		type tenantCapabilitiesEntry struct {
 			tenantID           roachpb.TenantID
-			tenantCapabilities tenantcapabilitiespb.TenantCapabilities
+			tenantCapabilities tenantcapabilitiesapi.TenantCapabilities
 		}
 		tenantCapabilitiesMap := tenantCapabilitiesReader.GetCapabilitiesMap()
 		tenantCapabilitiesEntries := make([]tenantCapabilitiesEntry, 0, len(tenantCapabilitiesMap))
@@ -7584,26 +7584,15 @@ CREATE TABLE crdb_internal.node_tenant_capabilities_cache (
 		})
 		for _, tenantCapabilitiesEntry := range tenantCapabilitiesEntries {
 			tenantID := tree.NewDInt(tree.DInt(tenantCapabilitiesEntry.tenantID.ToUint64()))
-			if err := addRow(
-				tenantID,
-				tree.NewDString(tenantcapabilitiespb.CanAdminSplit.String()),
-				tree.NewDString(strconv.FormatBool(tenantCapabilitiesEntry.tenantCapabilities.CanAdminSplit)),
-			); err != nil {
-				return err
-			}
-			if err := addRow(
-				tenantID,
-				tree.NewDString(tenantcapabilitiespb.CanViewNodeInfo.String()),
-				tree.NewDString(strconv.FormatBool(tenantCapabilitiesEntry.tenantCapabilities.CanViewNodeInfo)),
-			); err != nil {
-				return err
-			}
-			if err := addRow(
-				tenantID,
-				tree.NewDString(tenantcapabilitiespb.CanViewTSDBMetrics.String()),
-				tree.NewDString(strconv.FormatBool(tenantCapabilitiesEntry.tenantCapabilities.CanViewTSDBMetrics)),
-			); err != nil {
-				return err
+			for _, capabilityName := range tenantcapabilitiesapi.BoolCapabilityNames {
+				capabilityValue := tenantCapabilitiesEntry.tenantCapabilities.GetBoolCapability(capabilityName)
+				if err := addRow(
+					tenantID,
+					tree.NewDString(capabilityName.String()),
+					tree.NewDString(strconv.FormatBool(capabilityValue)),
+				); err != nil {
+					return err
+				}
 			}
 		}
 		return nil
