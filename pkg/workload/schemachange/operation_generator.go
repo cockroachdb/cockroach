@@ -1222,7 +1222,7 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 		if !tsQueryNotSupported {
 			return false
 		}
-		// Check if any of the indexes have trigrams involved.
+		// Check if any of the indexes have text search types involved.
 		for _, def := range stmt.Defs {
 			if col, ok := def.(*tree.ColumnTableDef); ok &&
 				(col.Type.SQLString() == "TSQUERY" || col.Type.SQLString() == "TSVECTOR") {
@@ -1231,6 +1231,50 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 		}
 		return false
 	}()
+	// Forward indexes for arrays were added in 23.1, so check the index
+	// definitions for them in mixed version states.
+	forwardIndexesOnArraysNotSupported, err := isClusterVersionLessThan(
+		ctx,
+		tx,
+		clusterversion.ByKey(clusterversion.V23_1))
+	if err != nil {
+		return nil, err
+	}
+	hasUnsupportedForwardQueries, err := func() (bool, error) {
+		if !forwardIndexesOnArraysNotSupported {
+			return false, nil
+		}
+		colInfoMap := make(map[tree.Name]*tree.ColumnTableDef)
+		for _, def := range stmt.Defs {
+			if colDef, ok := def.(*tree.ColumnTableDef); ok {
+				colInfoMap[colDef.Name] = colDef
+			}
+			var idxDef *tree.IndexTableDef
+			if _, ok := def.(*tree.IndexTableDef); ok {
+				idxDef = def.(*tree.IndexTableDef)
+			} else if _, ok := def.(*tree.UniqueConstraintTableDef); ok {
+				idxDef = &(def.(*tree.UniqueConstraintTableDef)).IndexTableDef
+			}
+			if idxDef != nil {
+				for _, col := range idxDef.Columns {
+					if col.Column != "" {
+						colInfo := colInfoMap[col.Column]
+						typ, err := tree.ResolveType(ctx, colInfo.Type, &txTypeResolver{tx: tx})
+						if err != nil {
+							return false, err
+						}
+						if typ.Family() == types.ArrayFamily {
+							return true, err
+						}
+					}
+				}
+			}
+		}
+		return false, nil
+	}()
+	if err != nil {
+		return nil, err
+	}
 
 	tableExists, err := og.tableExists(ctx, tx, tableName)
 	if err != nil {
@@ -1250,6 +1294,7 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 	codesWithConditions{
 		{code: pgcode.Syntax, condition: hasUnsupportedTSQuery},
 		{code: pgcode.FeatureNotSupported, condition: hasUnsupportedTSQuery},
+		{code: pgcode.FeatureNotSupported, condition: hasUnsupportedForwardQueries},
 	}.add(opStmt.potentialExecErrors)
 	opStmt.sql = tree.Serialize(stmt)
 	return opStmt, nil
