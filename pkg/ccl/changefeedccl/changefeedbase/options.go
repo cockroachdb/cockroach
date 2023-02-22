@@ -606,7 +606,7 @@ func (s StatementOptions) GetInitialScanType() (InitialScanType, error) {
 
 	if noInitialScanSet && initialScanOnlySet {
 		return InitialScan, errors.Errorf(
-			`cannot specify both %s and %s`, OptInitialScanOnly,
+			`cannot specify both %s='only' and %s`, OptInitialScan,
 			OptNoInitialScan)
 	}
 
@@ -974,13 +974,13 @@ func (s StatementOptions) ValidateForCreateChangefeed(isPredicateChangefeed bool
 	validateInitialScanUnsupportedOptions := func(errMsg string) error {
 		for o := range InitialScanOnlyUnsupportedOptions {
 			if _, ok := s.m[o]; ok {
-				return errors.Newf(`cannot specify both %s and %s`, errMsg, o)
+				return errors.Newf(`cannot specify both %s='only' and %s`, OptInitialScan, o)
 			}
 		}
 		return nil
 	}
 	if scanType == OnlyInitialScan {
-		if err := validateInitialScanUnsupportedOptions(OptInitialScanOnly); err != nil {
+		if err := validateInitialScanUnsupportedOptions(fmt.Sprintf("%s='only'", OptInitialScan)); err != nil {
 			return err
 		}
 	} else {
