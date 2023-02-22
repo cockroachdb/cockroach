@@ -959,6 +959,17 @@ func describeEnum(strs ...string) string {
 	}
 }
 
+// InitialScanOnlyUnsupportedOptionErr is the error returned when initial_scan = 'only'
+// is passed alongside a conflicting option.
+type InitialScanOnlyUnsupportedOptionErr struct {
+	inner error
+}
+
+// Error implements the error interface.
+func (e *InitialScanOnlyUnsupportedOptionErr) Error() string {
+	return e.inner.Error()
+}
+
 // ValidateForCreateChangefeed checks that the provided options are
 // valid for a CREATE CHANGEFEED statement using the type assertions
 // in ChangefeedOptionExpectValues.
@@ -974,13 +985,13 @@ func (s StatementOptions) ValidateForCreateChangefeed(isPredicateChangefeed bool
 	validateInitialScanUnsupportedOptions := func(errMsg string) error {
 		for o := range InitialScanOnlyUnsupportedOptions {
 			if _, ok := s.m[o]; ok {
-				return errors.Newf(`cannot specify both %s and %s`, errMsg, o)
+				return &InitialScanOnlyUnsupportedOptionErr{errors.Newf(`cannot specify both %s and %s`, errMsg, o)}
 			}
 		}
 		return nil
 	}
 	if scanType == OnlyInitialScan {
-		if err := validateInitialScanUnsupportedOptions(OptInitialScanOnly); err != nil {
+		if err := validateInitialScanUnsupportedOptions(fmt.Sprintf("%s='yes'", OptInitialScan)); err != nil {
 			return err
 		}
 	} else {

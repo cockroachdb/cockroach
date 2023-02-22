@@ -503,7 +503,45 @@ INSERT INTO t2 VALUES (3, 'three'), (2, 'two'), (1, 'one');
 			assertPayloads(t, feed, test.expectedPayload)
 		})
 	}
+}
 
+// TestScheduledChangefeedErrors tests cases where a schedule changefeed statement will return an error.
+func TestScheduledChangefeedErrors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	th, cleanup := newTestHelper(t)
+	defer cleanup()
+
+	th.sqlDB.Exec(t, `
+		CREATE TABLE t1(a INT PRIMARY KEY, b STRING);
+	`)
+
+	testCases := []struct {
+		name    string
+		stmt    string
+		errRE   string
+		hintStr string
+	}{
+		{
+			name:    "implicit-conflict-with-initial-scan-only",
+			stmt:    "CREATE SCHEDULE test_schedule FOR CHANGEFEED t1 INTO 'null://sink' WITH resolved RECURRING '@daily';",
+			errRE:   "cannot specify both initial_scan='yes' and resolved",
+			hintStr: "scheduled changefeeds implicitly pass the option initial_scan='yes'",
+		},
+		{
+			name:    "explicit-conflict-with-initial-scan-only",
+			stmt:    "CREATE SCHEDULE test_schedule FOR CHANGEFEED t1 INTO 'null://sink' WITH resolved, initial_scan='only' RECURRING '@daily';",
+			errRE:   "cannot specify both initial_scan='yes' and resolved",
+			hintStr: "^$", // no hint
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			th.sqlDB.ExpectErrWithHint(t, tc.errRE, tc.hintStr, tc.stmt)
+		})
+	}
 }
 
 func extractChangefeedNode(sj *jobs.ScheduledJob) (*tree.CreateChangefeed, error) {

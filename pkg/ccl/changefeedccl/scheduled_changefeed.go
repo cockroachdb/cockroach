@@ -573,10 +573,12 @@ func doCreateChangefeedSchedule(
 	}
 
 	createChangefeedopts := changefeedbase.MakeStatementOptions(spec.createChangefeedOptions)
-	if !createChangefeedopts.IsInitialScanSpecified() {
+	initialScanSpecified := createChangefeedopts.IsInitialScanSpecified()
+	if !initialScanSpecified {
 		log.Infof(ctx, "Initial scan type not specified, forcing %s option", changefeedbase.OptInitialScanOnly)
 		spec.Options = append(spec.Options, tree.KVOption{
-			Key: changefeedbase.OptInitialScanOnly,
+			Key:   changefeedbase.OptInitialScan,
+			Value: tree.NewDString("only"),
 		})
 		spec.createChangefeedOptions[changefeedbase.OptInitialScanOnly] = ""
 	} else {
@@ -624,6 +626,9 @@ func doCreateChangefeedSchedule(
 	if err = dryRunCreateChangefeed(
 		ctx, p, es.ScheduleID(), createChangefeedNode,
 	); err != nil {
+		if errors.HasType(err, (*changefeedbase.InitialScanOnlyUnsupportedOptionErr)(nil)) && !initialScanSpecified {
+			err = errors.WithHintf(err, "scheduled changefeeds implicitly pass the option %s='yes'", changefeedbase.OptInitialScan)
+		}
 		return errors.Wrapf(err, "Failed to dry run create changefeed")
 	}
 
