@@ -10,7 +10,7 @@
 
 syntax = "proto3";
 package cockroach.pgerror;
-option go_package = "pgerror";
+option go_package = "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror";
 
 // Error contains all Postgres wire protocol error fields.
 // See https://www.postgresql.org/docs/current/static/protocol-error-fields.html

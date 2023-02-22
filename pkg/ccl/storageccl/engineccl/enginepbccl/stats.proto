@@ -8,7 +8,7 @@
 
 syntax = "proto3";
 package cockroach.ccl.storageccl.engineccl.enginepbccl;
-option go_package = "enginepbccl";
+option go_package = "github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl/enginepbccl";
 
 import "ccl/storageccl/engineccl/enginepbccl/key_registry.proto";
 

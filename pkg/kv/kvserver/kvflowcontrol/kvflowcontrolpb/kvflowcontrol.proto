@@ -10,7 +10,7 @@
 
 syntax = "proto3";
 package cockroach.kv.kvserver.kvflowcontrol.kvflowcontrolpb;
-option go_package = "kvflowcontrolpb";
+option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb";
 
 import "gogoproto/gogo.proto";
 

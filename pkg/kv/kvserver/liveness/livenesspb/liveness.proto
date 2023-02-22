@@ -10,7 +10,7 @@
 
 syntax = "proto3";
 package cockroach.kv.kvserver.liveness.livenesspb;
-option go_package = "livenesspb";
+option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb";
 
 import "util/hlc/legacy_timestamp.proto";
 import "gogoproto/gogo.proto";

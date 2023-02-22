@@ -11,7 +11,7 @@
 // metric.proto requires proto2 to import io.prometheus.client.MetricType.
 syntax = "proto2";
 package cockroach.util.metric;
-option go_package = "metric";
+option go_package = "github.com/cockroachdb/cockroach/pkg/util/metric";
 
 import "gogoproto/gogo.proto";
 import "io/prometheus/client/metrics.proto";

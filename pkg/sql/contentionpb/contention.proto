@@ -10,7 +10,7 @@
 
 syntax = "proto3";
 package cockroach.sql.contentionpb;
-option go_package = "contentionpb";
+option go_package = "github.com/cockroachdb/cockroach/pkg/sql/contentionpb";
 
 import "kv/kvpb/api.proto";
 import "gogoproto/gogo.proto";

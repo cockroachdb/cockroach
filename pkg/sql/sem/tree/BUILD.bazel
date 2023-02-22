@@ -121,6 +121,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/col/typeconv",  # keep
         "//pkg/geo",
         "//pkg/geo/geopb",
         "//pkg/sql/lex",
@@ -194,6 +195,7 @@ go_test(
         "operators_test.go",
         "overload_test.go",
         "parse_array_test.go",
+        "parse_string_test.go",
         "parse_tuple_test.go",
         "placeholders_test.go",
         "pretty_test.go",
@@ -211,10 +213,13 @@ go_test(
     embed = [":tree"],
     deps = [
         "//pkg/build/bazel",
+        "//pkg/col/coldata",
+        "//pkg/col/coldataext",
         "//pkg/internal/rsg",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/settings/cluster",
+        "//pkg/sql/colconv",
         "//pkg/sql/parser",
         "//pkg/sql/randgen",
         "//pkg/sql/sem/builtins",

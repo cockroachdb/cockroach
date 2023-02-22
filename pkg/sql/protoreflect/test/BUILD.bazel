@@ -13,7 +13,7 @@ proto_library(
 go_proto_library(
     name = "protoreflecttest_go_proto",
     compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler"],
-    importpath = "github.com/cockroachdb/cockroach/pkg/sql/protoreflect/test",
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/protoreflect/protoreflecttest",
     proto = ":protoreflecttest_proto",
     visibility = ["//visibility:public"],
 )
@@ -21,7 +21,7 @@ go_proto_library(
 go_library(
     name = "test",
     srcs = ["wrap.go"],
-    embed = [":protoreflecttest_go_proto"],
+    embed = [":protoreflecttest_go_proto"],  # keep
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/protoreflect/test",
     visibility = ["//visibility:public"],
     deps = [

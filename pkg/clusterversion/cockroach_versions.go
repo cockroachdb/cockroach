@@ -431,6 +431,10 @@ const (
 	// elements.
 	V23_1_SchemaChangerDeprecatedIndexPredicates
 
+	// V23_1AlterSystemPrivilegesAddIndexOnPathAndUsername adds a covering secondary index to
+	// system.privileges, on the path and username columns.
+	V23_1AlterSystemPrivilegesAddIndexOnPathAndUsername
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -743,6 +747,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1_SchemaChangerDeprecatedIndexPredicates,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 50},
+	},
+	{
+		Key:     V23_1AlterSystemPrivilegesAddIndexOnPathAndUsername,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 52},
 	},
 
 	// *************************************************

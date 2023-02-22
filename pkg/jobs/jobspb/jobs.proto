@@ -10,7 +10,7 @@
 
 syntax = "proto3";
 package cockroach.sql.jobs.jobspb;
-option go_package = "jobspb";
+option go_package = "github.com/cockroachdb/cockroach/pkg/jobs/jobspb";
 
 import "errorspb/errors.proto";
 import "gogoproto/gogo.proto";

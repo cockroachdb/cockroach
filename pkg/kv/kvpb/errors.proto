@@ -24,7 +24,7 @@ syntax = "proto2";
 // correct name, the files can be moved into a newly created `kvpb` package
 // at leisure.
 package cockroach.kv.kvpb;
-option go_package = "kvpb";
+option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvpb";
 
 import "errorspb/errors.proto";
 import "roachpb/data.proto";

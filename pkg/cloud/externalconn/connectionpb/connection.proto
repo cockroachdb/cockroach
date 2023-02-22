@@ -10,7 +10,7 @@
 
 syntax = "proto3";
 package cockroach.cloud.externalconn.connectionpb;
-option go_package = "connectionpb";
+option go_package = "github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb";
 
 import "gogoproto/gogo.proto";
 

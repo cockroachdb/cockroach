@@ -10,7 +10,7 @@
 
 syntax = "proto2";
 package cockroach.multitenant;
-option go_package = "mtinfopb";
+option go_package = "github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb";
 
 import "gogoproto/gogo.proto";
 import "kv/kvpb/api.proto";

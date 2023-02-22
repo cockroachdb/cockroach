@@ -1,6 +1,8 @@
 load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
+# gazelle:resolve go go github.com/cockroachdb/cockroach/pkg/sql/protoreflect/test //pkg/sql/protoreflect/test
+
 go_library(
     name = "protoreflect",
     srcs = [

@@ -11,7 +11,7 @@
 
 syntax = "proto3";
 package cockroach.repstream.streampb;
-option go_package = "streampb";
+option go_package = "github.com/cockroachdb/cockroach/pkg/repstream/streampb";
 
 
 import "kv/kvpb/api.proto";

@@ -6,6 +6,7 @@ go_library(
     srcs = [
         "datum_vec.go",
         "extended_column_factory.go",
+        "vec_handler.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/col/coldataext",
     visibility = ["//visibility:public"],
@@ -20,6 +21,11 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/util/buildutil",
+        "//pkg/util/duration",
+        "//pkg/util/encoding",
+        "//pkg/util/json",
+        "//pkg/util/timeutil/pgdate",
+        "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

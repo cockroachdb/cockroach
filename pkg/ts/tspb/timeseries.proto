@@ -10,7 +10,7 @@
 
 syntax = "proto2";
 package cockroach.ts.tspb;
-option go_package = "tspb";
+option go_package = "github.com/cockroachdb/cockroach/pkg/ts/tspb";
 
 import "roachpb/data.proto";
 import "gogoproto/gogo.proto";

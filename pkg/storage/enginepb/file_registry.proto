@@ -10,7 +10,7 @@
 
 syntax = "proto3";
 package cockroach.storage.enginepb;
-option go_package = "enginepb";
+option go_package = "github.com/cockroachdb/cockroach/pkg/storage/enginepb";
 
 // RegistryVersion defines the version of a registry. Newly added versions
 // should be larger than all currently and previously existing versions.
