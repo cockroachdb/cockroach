@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -185,7 +186,12 @@ var _ PurgatoryError = rangeMergePurgatoryError{}
 
 func (mq *mergeQueue) requestRangeStats(
 	ctx context.Context, key roachpb.Key,
-) (desc *roachpb.RangeDescriptor, stats enginepb.MVCCStats, ls loadSplitStat, err error) {
+) (
+	desc *roachpb.RangeDescriptor,
+	stats enginepb.MVCCStats,
+	lbSnap split.LoadSplitSnapshot,
+	err error,
+) {
 
 	ba := &kvpb.BatchRequest{}
 	ba.Add(&kvpb.RangeStatsRequest{
@@ -194,7 +200,7 @@ func (mq *mergeQueue) requestRangeStats(
 
 	br, pErr := mq.db.NonTransactionalSender().Send(ctx, ba)
 	if pErr != nil {
-		return nil, enginepb.MVCCStats{}, loadSplitStat{}, pErr.GoError()
+		return nil, enginepb.MVCCStats{}, lbSnap, pErr.GoError()
 	}
 	res := br.Responses[0].GetInner().(*kvpb.RangeStatsResponse)
 
@@ -202,23 +208,28 @@ func (mq *mergeQueue) requestRangeStats(
 	stats = res.MVCCStats
 
 	// The load based splitter will only track the max of at most one statistic
-	// at a time for load based splitting. This is either CPU or QPS. However
-	// we don't enforce that only one max stat is returned. If the split
-	// objective is currently CPU, it must be the case that every store in the
-	// cluster is running a version that populates MaxCPUPerSecond so we don't
-	// need to worry about it being 0 as default and passing the >= 0 check.
-	switch mq.store.splitConfig.SplitObjective() {
-	case SplitCPU:
-		ls.max = res.MaxCPUPerSecond
-		ls.ok = res.MaxCPUPerSecond >= 0
-		ls.typ = SplitCPU
-	case SplitQPS:
-		ls.max = res.MaxQueriesPerSecond
-		ls.ok = res.MaxQueriesPerSecond >= 0
-		ls.typ = SplitQPS
+	// at a time for load based splitting. This is either CPU or QPS. However we
+	// don't enforce that only one max stat is returned. We set QPS after CPU,
+	// possibly overwriting if both are set. A default value of 0 could be
+	// returned in the response if the rhs node is on a pre 23.1 version. To
+	// avoid merging the range due to low load (0 CPU), always overwrite the
+	// value if MaxQPS is set. If neither are >= 0, OK won't be set and the
+	// objective will be default value, QPS.
+	if res.MaxCPUPerSecond >= 0 {
+		lbSnap = split.LoadSplitSnapshot{
+			SplitObjective: split.SplitCPU,
+			Max:            res.MaxCPUPerSecond,
+			Ok:             true,
+		}
 	}
-
-	return desc, stats, ls, nil
+	if res.MaxQueriesPerSecond >= 0 {
+		lbSnap = split.LoadSplitSnapshot{
+			SplitObjective: split.SplitQPS,
+			Max:            res.MaxQueriesPerSecond,
+			Ok:             true,
+		}
+	}
+	return desc, stats, lbSnap, nil
 }
 
 func (mq *mergeQueue) process(
@@ -231,7 +242,6 @@ func (mq *mergeQueue) process(
 
 	lhsDesc := lhsRepl.Desc()
 	lhsStats := lhsRepl.GetMVCCStats()
-	lhsLoadSplitStat := lhsRepl.loadSplitStat(ctx)
 	minBytes := lhsRepl.GetMinBytes()
 	if lhsStats.Total() >= minBytes {
 		log.VEventf(ctx, 2, "skipping merge: LHS meets minimum size threshold %d with %d bytes",
@@ -239,7 +249,7 @@ func (mq *mergeQueue) process(
 		return false, nil
 	}
 
-	rhsDesc, rhsStats, rhsLoadSplitStat, err := mq.requestRangeStats(ctx, lhsDesc.EndKey.AsRawKey())
+	rhsDesc, rhsStats, rhsLoadSplitSnap, err := mq.requestRangeStats(ctx, lhsDesc.EndKey.AsRawKey())
 	if err != nil {
 		return false, err
 	}
@@ -265,11 +275,12 @@ func (mq *mergeQueue) process(
 	mergedStats := lhsStats
 	mergedStats.Add(rhsStats)
 
+	lhsLoadSplitSnap := lhsRepl.loadBasedSplitter.Snapshot(ctx, now.ToTimestamp().GoTime())
 	var loadMergeReason string
 	if lhsRepl.SplitByLoadEnabled() {
 		var canMergeLoad bool
 		if canMergeLoad, loadMergeReason = canMergeRangeLoad(
-			ctx, lhsLoadSplitStat, rhsLoadSplitStat, mq.store.splitConfig,
+			ctx, lhsLoadSplitSnap, rhsLoadSplitSnap,
 		); !canMergeLoad {
 			log.VEventf(ctx, 2, "skipping merge to avoid thrashing: merged range %s may split %s",
 				mergedDesc, loadMergeReason)
@@ -415,7 +426,7 @@ func (mq *mergeQueue) process(
 	// Adjust the splitter to account for the additional load from the RHS. We
 	// could just Reset the splitter, but then we'd need to wait out a full
 	// measurement period (default of 5m) before merging this range again.
-	if mergedLoadSplitStat := lhsLoadSplitStat.max + rhsLoadSplitStat.max; mergedLoadSplitStat != 0 {
+	if mergedLoadSplitStat := lhsLoadSplitSnap.Max + rhsLoadSplitSnap.Max; mergedLoadSplitStat != 0 {
 		lhsRepl.loadBasedSplitter.RecordMax(mq.store.Clock().PhysicalTime(), mergedLoadSplitStat)
 	}
 	return true, nil
@@ -439,7 +450,7 @@ func (mq *mergeQueue) updateChan() <-chan time.Time {
 }
 
 func canMergeRangeLoad(
-	ctx context.Context, lhs, rhs loadSplitStat, rsc *replicaSplitConfig,
+	ctx context.Context, lhs, rhs split.LoadSplitSnapshot,
 ) (can bool, reason string) {
 	// When load is a consideration for splits and, by extension, merges, the
 	// mergeQueue is fairly conservative. In an effort to avoid thrashing and to
@@ -451,10 +462,10 @@ func canMergeRangeLoad(
 	// maximum qps measurement from both sides to be sufficiently stable and
 	// reliable, meaning that it was a maximum measurement over some extended
 	// period of time.
-	if !lhs.ok {
+	if !lhs.Ok {
 		return false, "LHS load measurement not yet reliable"
 	}
-	if !rhs.ok {
+	if !rhs.Ok {
 		return false, "RHS load measurement not yet reliable"
 	}
 
@@ -462,36 +473,36 @@ func canMergeRangeLoad(
 	// the current split objective they cannot merge together. This could occur
 	// just after changing the split objective to a different value, where
 	// there is a mismatch.
-	splitObjective, splitThreshold := rsc.SplitObjective(), rsc.StatThreshold()
-	if lhs.typ != splitObjective {
-		return false, "LHS load measurement is a different type (%s) than current split objective (%s)"
-	}
-	if rhs.typ != splitObjective {
-		return false, "RHS load measurement is a different type (%s) than current split objective (%s)"
+	if lhs.SplitObjective != rhs.SplitObjective {
+		return false, fmt.Sprintf("LHS load measurement is a different type (%s) than the RHS (%s)",
+			lhs.SplitObjective,
+			rhs.SplitObjective,
+		)
 	}
 
+	obj := lhs.SplitObjective
 	// Check if the merged range would need to be split, if so, skip merge.
 	// Use a lower threshold for load based splitting so we don't find ourselves
 	// in a situation where we keep merging ranges that would be split soon after
 	// by a small increase in load.
-	merged := lhs.max + rhs.max
-	conservativeLoadBasedSplitThreshold := 0.5 * splitThreshold
+	merged := lhs.Max + rhs.Max
+	conservativeLoadBasedSplitThreshold := 0.5 * lhs.Threshold
 
 	if merged >= conservativeLoadBasedSplitThreshold {
 		return false, fmt.Sprintf("lhs+rhs %s (%s+%s=%s) above threshold (%s)",
-			splitObjective,
-			splitObjective.Format(lhs.max),
-			splitObjective.Format(lhs.max),
-			splitObjective.Format(merged),
-			splitObjective.Format(conservativeLoadBasedSplitThreshold),
+			obj,
+			obj.Format(lhs.Max),
+			obj.Format(rhs.Max),
+			obj.Format(merged),
+			obj.Format(conservativeLoadBasedSplitThreshold),
 		)
 	}
 
 	return true, fmt.Sprintf("lhs+rhs %s (%s+%s=%s) below threshold (%s)",
-		splitObjective,
-		splitObjective.Format(lhs.max),
-		splitObjective.Format(lhs.max),
-		splitObjective.Format(merged),
-		splitObjective.Format(conservativeLoadBasedSplitThreshold),
+		obj,
+		obj.Format(lhs.Max),
+		obj.Format(rhs.Max),
+		obj.Format(merged),
+		obj.Format(conservativeLoadBasedSplitThreshold),
 	)
 }

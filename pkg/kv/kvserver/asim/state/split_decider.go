@@ -46,7 +46,9 @@ type loadSplitConfig struct {
 
 // NewLoadBasedSplitter returns a new LoadBasedSplitter that may be used to
 // find the midpoint based on recorded load.
-func (lsc loadSplitConfig) NewLoadBasedSplitter(startTime time.Time) split.LoadBasedSplitter {
+func (lsc loadSplitConfig) NewLoadBasedSplitter(
+	startTime time.Time, _ split.SplitObjective,
+) split.LoadBasedSplitter {
 	return split.NewUnweightedFinder(startTime, lsc.randSource)
 }
 
@@ -57,7 +59,7 @@ func (lsc loadSplitConfig) StatRetention() time.Duration {
 
 // StatThreshold returns the threshold for load above which the range
 // should be considered split.
-func (lsc loadSplitConfig) StatThreshold() float64 {
+func (lsc loadSplitConfig) StatThreshold(_ split.SplitObjective) float64 {
 	return lsc.settings.SplitQPSThreshold
 }
 
@@ -85,7 +87,7 @@ func (s *SplitDecider) newDecider() *split.Decider {
 	split.Init(decider, s.splitConfig, &split.LoadSplitterMetrics{
 		PopularKeyCount: metric.NewCounter(metric.Metadata{}),
 		NoSplitKeyCount: metric.NewCounter(metric.Metadata{}),
-	})
+	}, split.SplitQPS)
 	return decider
 }
 
@@ -100,11 +102,13 @@ func (s *SplitDecider) Record(tick time.Time, rangeID RangeID, le workload.LoadE
 	}
 
 	qps := LoadEventQPS(le)
-	shouldSplit := decider.Record(context.Background(), tick, int(qps), func() roachpb.Span {
-		return roachpb.Span{
-			Key: Key(le.Key).ToRKey().AsRawKey(),
-		}
-	})
+	shouldSplit := decider.Record(
+		context.Background(),
+		tick,
+		func(_ split.SplitObjective) int { return int(qps) },
+		func() roachpb.Span {
+			return roachpb.Span{Key: Key(le.Key).ToRKey().AsRawKey()}
+		})
 
 	if shouldSplit {
 		s.suggestions = append(s.suggestions, rangeID)

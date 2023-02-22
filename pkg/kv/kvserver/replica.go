@@ -1301,10 +1301,12 @@ func (r *Replica) SetMVCCStatsForTesting(stats *enginepb.MVCCStats) {
 //
 // Use LoadStats.QueriesPerSecond for all other purposes.
 func (r *Replica) GetMaxSplitQPS(ctx context.Context) (float64, bool) {
-	if r.store.splitConfig.SplitObjective() != SplitQPS {
+	snap := r.loadBasedSplitter.Snapshot(ctx, r.Clock().PhysicalTime())
+
+	if snap.SplitObjective != split.SplitQPS {
 		return 0, false
 	}
-	return r.loadBasedSplitter.MaxStat(ctx, r.Clock().PhysicalTime())
+	return snap.Max, snap.Ok
 }
 
 // GetMaxSplitCPU returns the Replica's maximum CPU/s rate over a configured
@@ -1317,10 +1319,12 @@ func (r *Replica) GetMaxSplitQPS(ctx context.Context) (float64, bool) {
 // Use LoadStats.RaftCPUNanosPerSecond and RequestCPUNanosPerSecond for current
 // CPU stats for all other purposes.
 func (r *Replica) GetMaxSplitCPU(ctx context.Context) (float64, bool) {
-	if r.store.splitConfig.SplitObjective() != SplitCPU {
+	snap := r.loadBasedSplitter.Snapshot(ctx, r.Clock().PhysicalTime())
+
+	if snap.SplitObjective != split.SplitCPU {
 		return 0, false
 	}
-	return r.loadBasedSplitter.MaxStat(ctx, r.Clock().PhysicalTime())
+	return snap.Max, snap.Ok
 }
 
 // ContainsKey returns whether this range contains the specified key.
