@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -70,13 +71,19 @@ func (a *Authorizer) HasCapabilityForBatch(
 	}
 
 	for _, ru := range ba.Requests {
+		var capabilityName tenantcapabilitiespb.BoolCapabilityName
 		switch ru.GetInner().(type) {
 		case *kvpb.AdminSplitRequest:
-			if !cp.CanAdminSplit && !a.knobs.AuthorizerSkipAdminSplitCapabilityChecks {
-				return errors.Newf("tenant %s does not have admin split capability", tenID)
+			if a.knobs.AuthorizerSkipAdminSplitCapabilityChecks {
+				continue
 			}
+			capabilityName = tenantcapabilitiespb.CanAdminSplit
 		default:
 			// No capability checks for any other type of request.
+			continue
+		}
+		if !cp.GetBoolCapability(capabilityName) {
+			return errors.Newf("tenant %s does not have capability %q", tenID, capabilityName)
 		}
 	}
 	return nil

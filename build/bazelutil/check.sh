@@ -10,7 +10,7 @@ CONFIGS="-c grep.column=false -c grep.lineNumber=false -c grep.fullName=false"
 GIT_GREP="git $CONFIGS grep"
 
 EXISTING_GO_GENERATE_COMMENTS="
-pkg/multitenant/tenantcapabilities/tenantcapabilitiespb/capabilities.go://go:generate stringer -type=TenantCapabilityName -linecomment
+pkg/multitenant/tenantcapabilities/tenantcapabilitiespb/capabilities.go://go:generate stringer -type=BoolCapabilityName -linecomment
 pkg/roachprod/vm/aws/config.go://go:generate go-bindata -mode 0600 -modtime 1400000000 -pkg aws -o embedded.go config.json old.json
 pkg/roachprod/vm/aws/config.go://go:generate gofmt -s -w embedded.go
 pkg/roachprod/vm/aws/config.go://go:generate goimports -w embedded.go

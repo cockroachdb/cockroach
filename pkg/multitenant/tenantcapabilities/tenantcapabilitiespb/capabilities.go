@@ -10,56 +10,91 @@
 
 package tenantcapabilitiespb
 
-import "github.com/cockroachdb/errors"
-
-// TenantCapabilityName is a pseudo-enum of valid capability names.
-type TenantCapabilityName int32
+import (
+	"fmt"
+	"sort"
+)
 
 // valueOffset sets the iota offset to make sure the 0 value is not a valid
 // enum value.
 const valueOffset = 1
 
+func stringToCapabilityNameMap[T ~int32](index []uint8, constantString string) map[string]T {
+	numCapabilities := len(index) - 1
+	m := make(map[string]T, numCapabilities)
+	for i := 0; i < numCapabilities; i++ {
+		startIndex := index[i]
+		endIndex := index[i+1]
+		s := constantString[startIndex:endIndex]
+		m[s] = T(i + valueOffset)
+	}
+	return m
+}
+
+func capabilityNames[T ~int32](stringToCapabilityNameMap map[string]T) []T {
+	capabilityNames := make([]T, 0, len(stringToCapabilityNameMap))
+	for _, capabilityName := range stringToCapabilityNameMap {
+		capabilityNames = append(capabilityNames, capabilityName)
+	}
+	sort.Slice(capabilityNames, func(i, j int) bool {
+		return capabilityNames[i] < capabilityNames[j]
+	})
+	return capabilityNames
+}
+
+// BoolCapabilityName is a pseudo-enum of valid capability names.
+type BoolCapabilityName int32
+
 // IsSet returns true if the capability name has a non-zero value.
-func (t TenantCapabilityName) IsSet() bool {
+func (t BoolCapabilityName) IsSet() bool {
 	return t >= valueOffset
 }
 
-var stringToTenantCapabilityName = func() map[string]TenantCapabilityName {
-	numCapabilities := len(_TenantCapabilityName_index) - 1
-	m := make(map[string]TenantCapabilityName, numCapabilities)
-	for i := 0; i < numCapabilities; i++ {
-		startIndex := _TenantCapabilityName_index[i]
-		endIndex := _TenantCapabilityName_index[i+1]
-		s := _TenantCapabilityName_name[startIndex:endIndex]
-		m[s] = TenantCapabilityName(i + valueOffset)
-	}
-	return m
-}()
+var stringToBoolCapabilityNameMap = stringToCapabilityNameMap[BoolCapabilityName](
+	_BoolCapabilityName_index[:],
+	_BoolCapabilityName_name,
+)
 
-// TenantCapabilityNameFromString converts a string to a TenantCapabilityName
-// or returns an error if no conversion is possible.
-func TenantCapabilityNameFromString(s string) (TenantCapabilityName, error) {
-	tenantCapabilityName, ok := stringToTenantCapabilityName[s]
-	if !ok {
-		return 0, errors.Newf("unknown capability: %q", s)
-	}
-	return tenantCapabilityName, nil
+// BoolCapabilityNameFromString converts a string to a BoolCapabilityName.
+func BoolCapabilityNameFromString(s string) (BoolCapabilityName, bool) {
+	capabilityName, ok := stringToBoolCapabilityNameMap[s]
+	return capabilityName, ok
 }
 
-//go:generate stringer -type=TenantCapabilityName -linecomment
+// BoolCapabilityNames is a slice of all tenant capability names sorted lexicographically.
+var BoolCapabilityNames = capabilityNames(stringToBoolCapabilityNameMap)
+
+//go:generate stringer -type=BoolCapabilityName -linecomment
 const (
-	// CanAdminSplit if set to true, grants the tenant the ability to
-	// successfully perform `AdminSplit` requests.
-	CanAdminSplit TenantCapabilityName = iota + valueOffset // can_admin_split
-	// CanViewNodeInfo if set to true, grants the tenant the ability
-	// retrieve node-level observability data at endpoints such as `_status/nodes`
-	// and in the DB Console overview page.
+	// CanAdminSplit maps to TenantCapabilities.CanAdminSplit.
+	CanAdminSplit BoolCapabilityName = iota + valueOffset // can_admin_split
+	// CanViewNodeInfo maps to TenantCapabilities.CanViewNodeInfo.
 	CanViewNodeInfo // can_view_node_info
-	// CanViewTSDBMetrics if set to true, grants the tenant the ability to
-	// make arbitrary queries of the TSDB of the entire cluster. Currently,
-	// we do not store per-tenant metrics so this will surface system metrics
-	// to the tenant.
-	// TODO(davidh): Revise this once tenant-scoped metrics are implemented in
-	// https://github.com/cockroachdb/cockroach/issues/96438
+	// CanViewTSDBMetrics maps to TenantCapabilities.CanViewTSDBMetrics.
 	CanViewTSDBMetrics // can_view_tsdb_metrics
 )
+
+func (t *TenantCapabilities) getBoolFieldRef(capabilityName BoolCapabilityName) *bool {
+	switch capabilityName {
+	case CanAdminSplit:
+		return &t.CanAdminSplit
+	case CanViewNodeInfo:
+		return &t.CanViewNodeInfo
+	case CanViewTSDBMetrics:
+		return &t.CanViewTSDBMetrics
+	default:
+		panic(fmt.Sprintf("unknown capability: %q", capabilityName.String()))
+	}
+}
+
+// GetBoolCapability returns the value of the corresponding flag capability.
+func (t *TenantCapabilities) GetBoolCapability(capabilityName BoolCapabilityName) bool {
+	return *t.getBoolFieldRef(capabilityName)
+}
+
+// SetBoolCapability sets the value of the corresponding flag capability.
+func (t *TenantCapabilities) SetBoolCapability(
+	capabilityName BoolCapabilityName, capabilityValue bool,
+) {
+	*t.getBoolFieldRef(capabilityName) = capabilityValue
+}

@@ -23,12 +23,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-var capabilityTypes = map[tenantcapabilitiespb.TenantCapabilityName]*types.T{
-	tenantcapabilitiespb.CanAdminSplit:      types.Bool,
-	tenantcapabilitiespb.CanViewNodeInfo:    types.Bool,
-	tenantcapabilitiespb.CanViewTSDBMetrics: types.Bool,
-}
-
 const alterTenantCapabilityOp = "ALTER TENANT CAPABILITY"
 
 type alterTenantCapabilityNode struct {
@@ -55,39 +49,42 @@ func (p *planner) AlterTenantCapability(
 
 	exprs := make([]tree.TypedExpr, len(n.Capabilities))
 	for i, capability := range n.Capabilities {
-		capabilityName, err := tenantcapabilitiespb.TenantCapabilityNameFromString(capability.Name)
-		if err != nil {
-			return nil, err
-		}
-		desiredType, ok := capabilityTypes[capabilityName]
-		if !ok {
-			return nil, pgerror.Newf(pgcode.Syntax, "unknown capability: %q", capabilityName)
-		}
-
-		// In REVOKE, we do not support a value assignment.
+		capabilityNameString := capability.Name
 		capabilityValue := capability.Value
 		if n.IsRevoke {
+			// In REVOKE, we do not support a value assignment.
 			if capabilityValue != nil {
-				return nil, pgerror.Newf(pgcode.Syntax, "no value allowed in revoke: %q", capabilityName)
+				return nil, pgerror.Newf(pgcode.Syntax, "no value allowed in revoke: %q", capabilityNameString)
 			}
-			continue
-		}
-
-		// Type check the expression on the right-hand side of the
-		// assignment.
-		if capabilityValue != nil {
-			var dummyHelper tree.IndexedVarHelper
-			typedValue, err := p.analyzeExpr(
-				ctx,
-				capabilityValue,
-				nil, /* source */
-				dummyHelper,
-				desiredType,
-				true, /* requireType */
-				fmt.Sprintf("%s %s", alterTenantCapabilityOp, capabilityName),
-			)
-			if err != nil {
-				return nil, err
+		} else {
+			var desiredType *types.T
+			if _, ok := tenantcapabilitiespb.BoolCapabilityNameFromString(capabilityNameString); ok {
+				desiredType = types.Bool
+			} else {
+				return nil, errors.Newf("unknown capability: %q", capabilityNameString)
+			}
+			var typedValue tree.TypedExpr
+			if capabilityValue == nil {
+				if desiredType != types.Bool {
+					return nil, pgerror.Newf(pgcode.Syntax, "value required for capability: %q", capabilityNameString)
+				}
+				// Bool capabilities are a special case that default to true if no value is provided.
+				typedValue = tree.DBoolTrue
+			} else {
+				// Type check the expression on the right-hand side of the assignment.
+				var dummyHelper tree.IndexedVarHelper
+				typedValue, err = p.analyzeExpr(
+					ctx,
+					capabilityValue,
+					nil, /* source */
+					dummyHelper,
+					desiredType,
+					true, /* requireType */
+					fmt.Sprintf("%s %s", alterTenantCapabilityOp, capabilityNameString),
+				)
+				if err != nil {
+					return nil, err
+				}
 			}
 			exprs[i] = typedValue
 		}
@@ -126,57 +123,21 @@ func (n *alterTenantCapabilityNode) startExec(params runParams) error {
 	}
 
 	dst := &tenantInfo.Capabilities
-	for i, capability := range n.n.Capabilities {
-		capabilityName, err := tenantcapabilitiespb.TenantCapabilityNameFromString(capability.Name)
-		if err != nil {
-			return err
-		}
+	capabilities := n.n.Capabilities
+	for i, capability := range capabilities {
+		capabilityNameString := capability.Name
 		typedExpr := n.typedExprs[i]
-		switch capabilityName {
-		case tenantcapabilitiespb.CanAdminSplit:
-			if n.n.IsRevoke {
-				dst.CanAdminSplit = false
-			} else {
-				b := true
-				if typedExpr != nil {
-					b, err = paramparse.DatumAsBool(ctx, p.EvalContext(), capabilityName.String(), typedExpr)
-					if err != nil {
-						return err
-					}
+		if capabilityName, ok := tenantcapabilitiespb.BoolCapabilityNameFromString(capabilityNameString); ok {
+			capabilityValue := false
+			if !n.n.IsRevoke {
+				capabilityValue, err = paramparse.DatumAsBool(ctx, p.EvalContext(), capabilityNameString, typedExpr)
+				if err != nil {
+					return err
 				}
-				dst.CanAdminSplit = b
 			}
-
-		case tenantcapabilitiespb.CanViewNodeInfo:
-			if n.n.IsRevoke {
-				dst.CanViewNodeInfo = false
-			} else {
-				b := true
-				if typedExpr != nil {
-					b, err = paramparse.DatumAsBool(ctx, p.EvalContext(), capabilityName.String(), typedExpr)
-					if err != nil {
-						return err
-					}
-				}
-				dst.CanViewNodeInfo = b
-			}
-
-		case tenantcapabilitiespb.CanViewTSDBMetrics:
-			if n.n.IsRevoke {
-				dst.CanViewTSDBMetrics = false
-			} else {
-				b := true
-				if typedExpr != nil {
-					b, err = paramparse.DatumAsBool(ctx, p.EvalContext(), capabilityName.String(), typedExpr)
-					if err != nil {
-						return err
-					}
-				}
-				dst.CanViewTSDBMetrics = b
-			}
-
-		default:
-			return errors.AssertionFailedf("unhandled: %q", capabilityName)
+			dst.SetBoolCapability(capabilityName, capabilityValue)
+		} else {
+			return errors.Newf("unknown capability: %q", capabilityNameString)
 		}
 	}
 
