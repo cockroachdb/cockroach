@@ -152,10 +152,53 @@ ALTER ROLE other_admin RESET application_name
 user testuser
 
 # Verify that testuser can't edit their own defaults.
-statement error user testuser does not have CREATEROLE privilege
+statement error pq: ALTER ROLE ... SET requires MODIFYCLUSTERSETTING, MODIFYSQLCLUSTERSETTING or CREATEROLE
+ALTER ROLE testuser RESET application_name
+
+# Verify users with MODIFYCLUSTERSETTING can ALTER ROLE SET
+user root
+
+statement ok
+GRANT SYSTEM MODIFYCLUSTERSETTING TO testuser
+
+user testuser
+
+statement ok
 ALTER ROLE testuser RESET application_name
 
 user root
+
+statement ok
+REVOKE SYSTEM MODIFYCLUSTERSETTING FROM testuser
+
+# Verify users with MODIFYSQLCLUSTERSETTING can ALTER ROLE SET
+statement ok
+GRANT SYSTEM MODIFYSQLCLUSTERSETTING TO testuser
+
+user testuser
+
+statement ok
+ALTER ROLE testuser RESET application_name
+
+user root
+
+statement ok
+REVOKE SYSTEM MODIFYSQLCLUSTERSETTING FROM testuser
+
+
+# Verify users with the MODIFYCLUSTERSETTING role option can also ALTER ROLE SET
+statement ok
+ALTER ROLE testuser with MODIFYCLUSTERSETTING
+
+user testuser
+
+statement ok
+ALTER ROLE testuser RESET application_name
+
+user root
+
+statement ok
+ALTER ROLE testuser WITH NOMODIFYCLUSTERSETTING
 
 statement ok
 ALTER ROLE testuser WITH CREATEROLE
