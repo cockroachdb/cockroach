@@ -21,12 +21,16 @@ ALTER TENANT [5] REVOKE CAPABILITY can_admin_split=false
 query ITTTTT colnames
 SHOW TENANT 'five' WITH CAPABILITIES
 ----
-id  name  data_state  service_mode  capability_name    capability_value
-5   five  ready       none          can_admin_split    false
-5   five  ready       none          can_admin_unsplit  false
+id  name  data_state  service_mode  capability_name        capability_value
+5   five  ready       none          can_admin_split        false
 5   five  ready       none          can_view_node_info     false
 5   five  ready       none          can_view_tsdb_metrics  false
 
+# Check boolean capability without a value.
+statement ok
+ALTER TENANT [5] GRANT CAPABILITY can_admin_split
+
+# Check boolean capability with a value.
 statement ok
 ALTER TENANT [5] GRANT CAPABILITY can_admin_split=true
 
@@ -37,9 +41,8 @@ ALTER TENANT [5] GRANT CAPABILITY can_admin_split=(2=1+1)
 query ITTTTT colnames
 SHOW TENANT 'five' WITH CAPABILITIES
 ----
-id  name  data_state  service_mode  capability_name    capability_value
-5   five  ready       none          can_admin_split    true
-5   five  ready       none          can_admin_unsplit  false
+id  name  data_state  service_mode  capability_name        capability_value
+5   five  ready       none          can_admin_split        true
 5   five  ready       none          can_view_node_info     false
 5   five  ready       none          can_view_tsdb_metrics  false
 
@@ -49,8 +52,7 @@ ALTER TENANT [5] REVOKE CAPABILITY can_admin_split
 query ITTTTT colnames
 SHOW TENANT 'five' WITH CAPABILITIES
 ----
-id  name  data_state  service_mode  capability_name    capability_value
-5   five  ready       none          can_admin_split    false
-5   five  ready       none          can_admin_unsplit  false
+id  name  data_state  service_mode  capability_name        capability_value
+5   five  ready       none          can_admin_split        false
 5   five  ready       none          can_view_node_info     false
 5   five  ready       none          can_view_tsdb_metrics  false
