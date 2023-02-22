@@ -284,7 +284,7 @@ func (sr *StoreRebalancer) scorerOptions(
 	ctx context.Context, lbDimension load.Dimension,
 ) *allocatorimpl.LoadScorerOptions {
 	return &allocatorimpl.LoadScorerOptions{
-		StoreHealthOptions:           sr.allocator.StoreHealthOptions(ctx),
+		IOOverloadOptions:            sr.allocator.IOOverloadOptions(),
 		Deterministic:                sr.storePool.IsDeterministic(),
 		LoadDims:                     []load.Dimension{lbDimension},
 		LoadThreshold:                allocatorimpl.LoadThresholds(&sr.st.SV, lbDimension),

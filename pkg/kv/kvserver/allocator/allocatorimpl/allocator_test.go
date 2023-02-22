@@ -348,22 +348,22 @@ var oneStoreHighIOOverload = []*roachpb.StoreDescriptor{
 	{
 		StoreID:  1,
 		Node:     roachpb.NodeDescriptor{NodeID: 1},
-		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 600, IOThreshold: TestingIOThresholdWithScore(DefaultIOOverloadThreshold - 5)},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 600, IOThreshold: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold - 5)},
 	},
 	{
 		StoreID:  2,
 		Node:     roachpb.NodeDescriptor{NodeID: 2},
-		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 1800, IOThreshold: TestingIOThresholdWithScore(DefaultIOOverloadThreshold - 5)},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 1800, IOThreshold: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold - 5)},
 	},
 	{
 		StoreID:  3,
 		Node:     roachpb.NodeDescriptor{NodeID: 3},
-		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 600, IOThreshold: TestingIOThresholdWithScore(DefaultIOOverloadThreshold + 5)},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 600, IOThreshold: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 5)},
 	},
 	{
 		StoreID:  4,
 		Node:     roachpb.NodeDescriptor{NodeID: 4},
-		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 1200, IOThreshold: TestingIOThresholdWithScore(DefaultIOOverloadThreshold - 5)},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 1200, IOThreshold: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold - 5)},
 	},
 }
 
@@ -371,17 +371,17 @@ var allStoresHighIOOverload = []*roachpb.StoreDescriptor{
 	{
 		StoreID:  1,
 		Node:     roachpb.NodeDescriptor{NodeID: 1},
-		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 1200, IOThreshold: TestingIOThresholdWithScore(DefaultIOOverloadThreshold + 1)},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 1200, IOThreshold: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 1)},
 	},
 	{
 		StoreID:  2,
 		Node:     roachpb.NodeDescriptor{NodeID: 2},
-		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 800, IOThreshold: TestingIOThresholdWithScore(DefaultIOOverloadThreshold + 1)},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 800, IOThreshold: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 1)},
 	},
 	{
 		StoreID:  3,
 		Node:     roachpb.NodeDescriptor{NodeID: 3},
-		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 600, IOThreshold: TestingIOThresholdWithScore(DefaultIOOverloadThreshold + 1)},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 600, IOThreshold: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 1)},
 	},
 }
 
@@ -389,17 +389,17 @@ var allStoresHighIOOverloadSkewed = []*roachpb.StoreDescriptor{
 	{
 		StoreID:  1,
 		Node:     roachpb.NodeDescriptor{NodeID: 1},
-		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 1200, IOThreshold: TestingIOThresholdWithScore(DefaultIOOverloadThreshold + 1)},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 1200, IOThreshold: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 1)},
 	},
 	{
 		StoreID:  2,
 		Node:     roachpb.NodeDescriptor{NodeID: 2},
-		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 800, IOThreshold: TestingIOThresholdWithScore(DefaultIOOverloadThreshold + 50)},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 800, IOThreshold: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 50)},
 	},
 	{
 		StoreID:  3,
 		Node:     roachpb.NodeDescriptor{NodeID: 3},
-		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 600, IOThreshold: TestingIOThresholdWithScore(DefaultIOOverloadThreshold + 55)},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 600, IOThreshold: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 55)},
 	},
 }
 
@@ -407,27 +407,27 @@ var threeStoresHighIOOverloadAscRangeCount = []*roachpb.StoreDescriptor{
 	{
 		StoreID:  1,
 		Node:     roachpb.NodeDescriptor{NodeID: 1},
-		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 100, IOThreshold: TestingIOThresholdWithScore(DefaultIOOverloadThreshold + 10)},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 100, IOThreshold: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 10)},
 	},
 	{
 		StoreID:  2,
 		Node:     roachpb.NodeDescriptor{NodeID: 2},
-		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 400, IOThreshold: TestingIOThresholdWithScore(DefaultIOOverloadThreshold + 10)},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 400, IOThreshold: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 10)},
 	},
 	{
 		StoreID:  3,
 		Node:     roachpb.NodeDescriptor{NodeID: 3},
-		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 1600, IOThreshold: TestingIOThresholdWithScore(DefaultIOOverloadThreshold + 10)},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 1600, IOThreshold: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold + 10)},
 	},
 	{
 		StoreID:  4,
 		Node:     roachpb.NodeDescriptor{NodeID: 4},
-		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 6400, IOThreshold: TestingIOThresholdWithScore(DefaultIOOverloadThreshold - 10)},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 6400, IOThreshold: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold - 10)},
 	},
 	{
 		StoreID:  5,
 		Node:     roachpb.NodeDescriptor{NodeID: 5},
-		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 25000, IOThreshold: TestingIOThresholdWithScore(DefaultIOOverloadThreshold - 10)},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 25000, IOThreshold: TestingIOThresholdWithScore(DefaultReplicaIOOverloadThreshold - 10)},
 	},
 }
 
@@ -595,7 +595,7 @@ func TestAllocatorNoAvailableDisks(t *testing.T) {
 	}
 }
 
-func TestAllocatorIOOverloadCheck(t *testing.T) {
+func TestAllocatorAllocateVoterIOOverloadCheck(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -615,7 +615,7 @@ func TestAllocatorIOOverloadCheck(t *testing.T) {
 	}
 	tests := []testCase{
 		{
-			name:   "ignore io overload on allocation when StoreHealthNoAction enforcement",
+			name:   "ignore io overload on allocation when ignore enforcement",
 			stores: allStoresHighIOOverload,
 			conf:   emptySpanConfig(),
 			// NB: All stores have high io overload, this should be ignored and
@@ -624,10 +624,10 @@ func TestAllocatorIOOverloadCheck(t *testing.T) {
 			// Recovery of a dead node can pick any valid store, not necessarily the
 			// one with the lowest range count.
 			expectedTargetIfDead: roachpb.StoreID(2),
-			enforcement:          IOOverloadThresholdNoAction,
+			enforcement:          IOOverloadThresholdIgnore,
 		},
 		{
-			name: "ignore io overload on allocation when storeHealthLogOnly enforcement",
+			name: "ignore io overload on allocation when block rebalance to enforcement",
 			// NB: All stores have high io overload, this should be ignored and
 			// allocate to the store with the lowest range count.
 			stores:                allStoresHighIOOverload,
@@ -636,22 +636,10 @@ func TestAllocatorIOOverloadCheck(t *testing.T) {
 			// Recovery of a dead node can pick any valid store, not necessarily the
 			// one with the lowest range count.
 			expectedTargetIfDead: roachpb.StoreID(2),
-			enforcement:          IOOverloadThresholdLogOnly,
+			enforcement:          IOOverloadThresholdBlockTransfers,
 		},
 		{
-			name: "ignore io overload on allocation when StoreHealthBlockRebalanceTo enforcement",
-			// NB: All stores have high io overload, this should be ignored and
-			// allocate to the store with the lowest range count.
-			stores:                allStoresHighIOOverload,
-			conf:                  emptySpanConfig(),
-			expectedTargetIfAlive: roachpb.StoreID(3),
-			// Recovery of a dead node can pick any valid store, not necessarily the
-			// one with the lowest range count.
-			expectedTargetIfDead: roachpb.StoreID(2),
-			enforcement:          IOOverloadThresholdBlockRebalanceTo,
-		},
-		{
-			name: "don't allocate to stores when all have high io overload and StoreHealthBlockAll",
+			name: "don't allocate to stores when all have high io overload and block all enforcement",
 			// NB: All stores have high io overload (limit + 1), none are above the watermark, select the lowest range count.
 			stores:                allStoresHighIOOverload,
 			conf:                  emptySpanConfig(),
@@ -662,7 +650,7 @@ func TestAllocatorIOOverloadCheck(t *testing.T) {
 			enforcement:          IOOverloadThresholdBlockAll,
 		},
 		{
-			name: "allocate to store below the mean when all have high io overload and StoreHealthBlockAll",
+			name: "allocate to store below the mean when all have high io overload and block all enforcement",
 			// NB: All stores have high io overload, however store 1 is below the watermark mean io overload.
 			stores:                allStoresHighIOOverloadSkewed,
 			conf:                  emptySpanConfig(),
@@ -671,7 +659,7 @@ func TestAllocatorIOOverloadCheck(t *testing.T) {
 			enforcement:           IOOverloadThresholdBlockAll,
 		},
 		{
-			name: "allocate to lowest range count store without high io overload when StoreHealthBlockAll enforcement",
+			name: "allocate to lowest range count store without high io overload when block all enforcement",
 			// NB: Store 1, 2 and 3 have high io overload and are above the watermark, the lowest range count (4)
 			// should be selected.
 			stores:                threeStoresHighIOOverloadAscRangeCount,
@@ -692,9 +680,7 @@ func TestAllocatorIOOverloadCheck(t *testing.T) {
 			defer stopper.Stop(ctx)
 			sg := gossiputil.NewStoreGossiper(g)
 			sg.GossipStores(test.stores, t)
-
-			// Enable read disk health checking in candidate exclusion.
-			IOOverloadThresholdEnforcement.Override(ctx, &a.st.SV, int64(test.enforcement))
+			ReplicaIOOverloadThresholdEnforcement.Override(ctx, &a.st.SV, int64(test.enforcement))
 
 			// Allocate a voter where all replicas are alive (e.g. up-replicating a valid range).
 			add, _, err := a.AllocateVoter(
@@ -1654,7 +1640,7 @@ func TestAllocatorRebalanceByQPS(t *testing.T) {
 			gossiputil.NewStoreGossiper(g).GossipStores(subtest.testStores, t)
 			var rangeUsageInfo allocator.RangeUsageInfo
 			options := TestingQPSLoadScorerOptions(100, 0.2)
-			options.StoreHealthOptions = StoreHealthOptions{EnforcementLevel: IOOverloadThresholdNoAction}
+			options.IOOverloadOptions = IOOverloadOptions{ReplicaEnforcementLevel: IOOverloadThresholdIgnore}
 			add, remove, _, ok := a.RebalanceVoter(
 				ctx,
 				sp,
@@ -1768,7 +1754,7 @@ func TestAllocatorRemoveBasedOnQPS(t *testing.T) {
 		defer stopper.Stop(ctx)
 		gossiputil.NewStoreGossiper(g).GossipStores(subtest.testStores, t)
 		options := TestingQPSLoadScorerOptions(0, 0.1)
-		options.StoreHealthOptions = StoreHealthOptions{EnforcementLevel: IOOverloadThresholdNoAction}
+		options.IOOverloadOptions = IOOverloadOptions{ReplicaEnforcementLevel: IOOverloadThresholdIgnore}
 		remove, _, err := a.RemoveVoter(
 			ctx,
 			sp,
@@ -1974,6 +1960,133 @@ func TestAllocatorTransferLeaseTarget(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAllocatorTransferLeaseTargetIOOverloadCheck(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	floats := func(nums ...float64) []float64 {
+		return nums
+	}
+
+	// We want the shed threshold to be 0.9 and the overload threhsold to be 0.5
+	// i.e. block transfers at >=0.5 and block transfers + shed leases at >=0.9.
+	const shedThreshold = 0.9
+	const threshold = 0.5
+
+	testCases := []struct {
+		name                  string
+		leaseCounts, IOScores []float64
+		leaseholder           roachpb.StoreID
+		excludeLeaseRepl      bool
+		expected              roachpb.StoreID
+		enforcement           IOOverloadEnforcementLevel
+	}{
+		{
+			name:        "don't move off of store with high io overload when block enforcement",
+			leaseCounts: floats(100, 100, 100, 100, 100),
+			IOScores:    floats(2.5, 1.5, 0.5, 0, 0),
+			leaseholder: 1,
+			expected:    0,
+			enforcement: IOOverloadThresholdBlockTransfers,
+		},
+		{
+			name:        "move off of store with high io overload when shed enforcement",
+			leaseCounts: floats(100, 100, 100, 100, 100),
+			IOScores:    floats(2.5, 1.5, 0.5, 0, 0),
+			leaseholder: 1,
+			// Store 3 is above the threshold (1.0 > 0.8), but equal to the avg (1.0), so
+			// it is still considered a non-IO-overloaded candidate.
+			expected:    3,
+			enforcement: IOOverloadThresholdShed,
+		},
+		{
+			name:        "don't transfer to io overloaded store when block enforcement",
+			leaseCounts: floats(0, 100, 100, 400, 400),
+			IOScores:    floats(2.5, 1.5, 0.5, 0, 0),
+			leaseholder: 5,
+			expected:    3,
+			enforcement: IOOverloadThresholdBlockTransfers,
+		},
+		{
+			name:        "don't transfer to io overloaded store when shed enforcement",
+			leaseCounts: floats(0, 100, 100, 400, 400),
+			IOScores:    floats(2.5, 1.5, 0.5, 0, 0),
+			leaseholder: 5,
+			expected:    3,
+			enforcement: IOOverloadThresholdShed,
+		},
+		{
+			name:        "still transfer to io overloaded store when no action enforcement",
+			leaseCounts: floats(0, 100, 100, 400, 400),
+			IOScores:    floats(2.5, 1.5, 0.5, 0, 0),
+			leaseholder: 5,
+			expected:    2,
+			enforcement: IOOverloadThresholdIgnore,
+		},
+		{
+			name:        "move off of store with high io overload with skewed lease counts shed enforcement",
+			leaseCounts: floats(0, 0, 10000, 10000, 10000),
+			IOScores:    floats(2.5, 1.5, 0.5, 0, 0),
+			leaseholder: 1,
+			expected:    3,
+			enforcement: IOOverloadThresholdShed,
+		},
+		{
+			name:        "don't move off of store with high io overload but less than shed threshold with shed enforcement",
+			leaseCounts: floats(0, 0, 0, 0, 0),
+			IOScores:    floats(0.89, 0, 0, 0, 0),
+			leaseholder: 1,
+			expected:    0,
+			enforcement: IOOverloadThresholdShed,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			stopper, g, sp, a, _ := CreateTestAllocator(ctx, 10, true /* deterministic */)
+			defer stopper.Stop(ctx)
+			n := len(tc.leaseCounts)
+			stores := make([]*roachpb.StoreDescriptor, n)
+			existing := make([]roachpb.ReplicaDescriptor, 0, n)
+			for i := range tc.leaseCounts {
+				existing = append(existing, replicas(roachpb.StoreID(i+1))...)
+				stores[i] = &roachpb.StoreDescriptor{
+					StoreID: roachpb.StoreID(i + 1),
+					Node:    roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i + 1)},
+					Capacity: roachpb.StoreCapacity{
+						LeaseCount:  int32(tc.leaseCounts[i]),
+						IOThreshold: TestingIOThresholdWithScore(tc.IOScores[i]),
+					},
+				}
+			}
+
+			sg := gossiputil.NewStoreGossiper(g)
+			sg.GossipStores(stores, t)
+			LeaseIOOverloadThresholdEnforcement.Override(ctx, &a.st.SV, int64(tc.enforcement))
+			LeaseIOOverloadThreshold.Override(ctx, &a.st.SV, threshold)
+			LeaseIOOverloadShedThreshold.Override(ctx, &a.st.SV, shedThreshold)
+
+			target := a.TransferLeaseTarget(
+				ctx,
+				sp,
+				emptySpanConfig(),
+				existing,
+				&mockRepl{
+					replicationFactor: int32(n),
+					storeID:           tc.leaseholder,
+				},
+				allocator.RangeUsageInfo{}, /* stats */
+				false,                      /* forceDecisionWithoutStats */
+				allocator.TransferLeaseOptions{
+					CheckCandidateFullness: true,
+				},
+			)
+			require.Equal(t, tc.expected, target.StoreID)
+		})
+	}
+
 }
 
 func TestAllocatorTransferLeaseToReplicasNeedingSnapshot(t *testing.T) {
@@ -4346,14 +4459,14 @@ func TestAllocatorRebalanceNonVoters(t *testing.T) {
 	}
 }
 
-// TestAllocatorRebalanceStoreHealthCheck ensures that rebalancing voters:
-// (1) Respects storeHealthEnforcement setting, by ignoring IO overload in
-// rebalancing decisions when disabled or set to log only.
-// (2) Considers IO overload when set to rebalanceOnly or allocate in
+// TestAllocatorRebalanceIOOverloadCheck ensures that rebalancing voters:
+// (1) Respects replica IO overload enforcement setting, by ignoring IO
+// overload in rebalancing decisions when disabled or set to log only.
+// (2) Considers IO overload when set to block_rebalance_to or allocate in
 // conjunction with the mean.
 // (3) Does not attempt to rebalance off of the store when io overload
 // is high, as this setting is only used for filtering candidates.
-func TestAllocatorRebalanceStoreHealthCheck(t *testing.T) {
+func TestAllocatorRebalanceIOOverloadCheck(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
@@ -4368,7 +4481,7 @@ func TestAllocatorRebalanceStoreHealthCheck(t *testing.T) {
 	}
 	tests := []testCase{
 		{
-			name: "don't move off of nodes with high io overload when StoreHealthBlockRebalanceTo",
+			name: "don't move off of nodes with high io overload when block rebalance to",
 			// NB: Store 1,2, 4 have okay io overload. Store 3 has high io overload.
 			// We expect high io overload to only be considered for
 			// exlcuding targets, not for triggering rebalancing.
@@ -4376,10 +4489,10 @@ func TestAllocatorRebalanceStoreHealthCheck(t *testing.T) {
 			conf:           emptySpanConfig(),
 			existingVoters: replicas(3, 1),
 			expectNoAction: true,
-			enforcement:    IOOverloadThresholdBlockRebalanceTo,
+			enforcement:    IOOverloadThresholdBlockTransfers,
 		},
 		{
-			name: "don't move off of nodes with high io overload when StoreHealthBlockAll",
+			name: "don't move off of nodes with high io overload when block all",
 			// NB: Store 1,2, 4 have okay io overload. Store 3 has high io overload.
 			// We expect high io overload to only be considered for
 			// exlcuding targets, not for triggering rebalancing.
@@ -4390,7 +4503,7 @@ func TestAllocatorRebalanceStoreHealthCheck(t *testing.T) {
 			enforcement:    IOOverloadThresholdBlockAll,
 		},
 		{
-			name: "don't take action when enforcement is not StoreHealthNoAction",
+			name: "don't take action when enforcement is ignore",
 			// NB: Store 3 has IOOverload > threshold. Store 2 has 3 x higher
 			// ranges as other stores. Should move to candidate to 4, however
 			// enforcement for rebalancing is not enabled so will pick
@@ -4400,10 +4513,10 @@ func TestAllocatorRebalanceStoreHealthCheck(t *testing.T) {
 			existingVoters:        replicas(1, 2),
 			expectedRemoveTargets: []roachpb.StoreID{2},
 			expectedAddTargets:    []roachpb.StoreID{3},
-			enforcement:           IOOverloadThresholdNoAction,
+			enforcement:           IOOverloadThresholdIgnore,
 		},
 		{
-			name: "don't rebalance to nodes with high io overload when StoreHealthBlockRebalanceTo enforcement",
+			name: "don't rebalance to nodes with high io overload when block rebalance to",
 			// NB: Store 3 has IOOverload > threshold. Store 2 has 3 x higher
 			// ranges as other stores. Should move to candidate to 4, which
 			// doesn't have high io overload.
@@ -4412,10 +4525,10 @@ func TestAllocatorRebalanceStoreHealthCheck(t *testing.T) {
 			existingVoters:        replicas(1, 2),
 			expectedRemoveTargets: []roachpb.StoreID{2},
 			expectedAddTargets:    []roachpb.StoreID{4},
-			enforcement:           IOOverloadThresholdBlockRebalanceTo,
+			enforcement:           IOOverloadThresholdBlockTransfers,
 		},
 		{
-			name: "don't rebalance to nodes with high io overload when StoreHealthBlockAll enforcement",
+			name: "don't rebalance to nodes with high io overload when block all enforcement",
 			// NB: Store 3 has IOOverload > threshold. Store 2 has 3 x higher
 			// ranges as other stores. Should move to candidate to 4, which
 			// doesn't have high io overload.
@@ -4446,7 +4559,7 @@ func TestAllocatorRebalanceStoreHealthCheck(t *testing.T) {
 			sg.GossipStores(test.stores, t)
 			// Enable read disk health checking in candidate exclusion.
 			options := a.ScorerOptions(ctx)
-			options.StoreHealthOptions = StoreHealthOptions{EnforcementLevel: test.enforcement, IOOverloadThreshold: 1}
+			options.IOOverloadOptions = IOOverloadOptions{ReplicaEnforcementLevel: test.enforcement, ReplicaIOOverloadThreshold: 1}
 			add, remove, _, ok := a.RebalanceVoter(
 				ctx,
 				sp,
@@ -8545,7 +8658,6 @@ func qpsBasedRebalanceFn(
 	jitteredQPS := avgQPS * (1 + alloc.randGen.Float64())
 
 	opts := TestingQPSLoadScorerOptions(jitteredQPS, 0.2)
-	opts.StoreHealthOptions = StoreHealthOptions{EnforcementLevel: IOOverloadThresholdNoAction}
 	opts.Deterministic = false
 	var rangeUsageInfo allocator.RangeUsageInfo
 	add, remove, details, ok := alloc.RebalanceVoter(
