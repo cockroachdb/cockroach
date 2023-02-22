@@ -318,15 +318,14 @@ message StoreCapacity {
   // by ranges in the store. The stat is tracked over the time period defined
   // in storage/replica_stats.go, which as of July 2018 is 30 minutes.
   optional double writes_per_second = 5 [(gogoproto.nullable) = false];
-  // l0_sublevels tracks the current number of l0 sublevels in the store.
-  // TODO(kvoli): Use of this field will need to be version-gated, to avoid
-  // instances where overlapping node-binary versions within a cluster result
-  // in this this field missing.
-  optional int64 l0_sublevels = 12 [(gogoproto.nullable) = false];
   // cpu_per_second tracks the average store cpu use (ns) per second.
   // This is the sum of all the replica's cpu time on this store, which is
   // tracked in replica stats.
   optional double cpu_per_second = 14 [(gogoproto.nullable) = false, (gogoproto.customname) = "CPUPerSecond"];
+  // l0_sublevels tracks the current number of l0 sublevels in the store.
+  // TODO(kvoli): Remove this field in 23.2. The field is no longer consulted
+  // in 23.1
+  optional int64 l0_sublevels = 12 [(gogoproto.nullable) = false];
   optional cockroach.util.admission.admissionpb.IOThreshold io_threshold = 13 [(gogoproto.nullable) = false, (gogoproto.customname) = "IOThreshold" ];
   // bytes_per_replica and writes_per_replica contain percentiles for the
   // number of bytes and writes-per-second to each replica in the store.

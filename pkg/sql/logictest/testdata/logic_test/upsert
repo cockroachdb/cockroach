@@ -1080,7 +1080,7 @@ SELECT * FROM tdup@tdup_y_z_key
 3  2     NULL
 
 # Verify that duplicate secondary key fails with regular conflict error.
-statement error pq: duplicate key value violates unique constraint "tdup_y_z_key"\nDETAIL: Key \(y,z\)=\(1,2\) already exists\.
+statement error pq: duplicate key value violates unique constraint "tdup_y_z_key"\nDETAIL: Key \(y, z\)=\(1, 2\) already exists\.
 INSERT INTO tdup VALUES (6, 1, 1), (7, 1, 2) ON CONFLICT (y, z) DO UPDATE SET z=2
 
 # With constant grouping columns (no error).

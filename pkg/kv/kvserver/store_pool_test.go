@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/gossiputil"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -60,7 +61,12 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 				LogicalBytes:     30,
 				QueriesPerSecond: 100,
 				WritesPerSecond:  30,
-				L0Sublevels:      4,
+				IOThreshold: admissionpb.IOThreshold{
+					L0NumSubLevels:          5,
+					L0NumSubLevelsThreshold: 20,
+					L0NumFiles:              5,
+					L0NumFilesThreshold:     1000,
+				},
 			},
 		},
 		{
@@ -74,7 +80,12 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 				LogicalBytes:     25,
 				QueriesPerSecond: 50,
 				WritesPerSecond:  25,
-				L0Sublevels:      8,
+				IOThreshold: admissionpb.IOThreshold{
+					L0NumSubLevels:          10,
+					L0NumSubLevelsThreshold: 20,
+					L0NumFiles:              10,
+					L0NumFilesThreshold:     1000,
+				},
 			},
 		},
 	}
@@ -130,8 +141,8 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 	if expectedWPS := 30 + WPS; desc.Capacity.WritesPerSecond != expectedWPS {
 		t.Errorf("expected WritesPerSecond %f, but got %f", expectedWPS, desc.Capacity.WritesPerSecond)
 	}
-	if expectedL0Sublevels := int64(4); desc.Capacity.L0Sublevels != expectedL0Sublevels {
-		t.Errorf("expected L0 Sub-Levels %d, but got %d", expectedL0Sublevels, desc.Capacity.L0Sublevels)
+	if expectedNumL0Sublevels := int64(5); desc.Capacity.IOThreshold.L0NumSubLevels != expectedNumL0Sublevels {
+		t.Errorf("expected L0 Sub-Levels %d, but got %d", expectedNumL0Sublevels, desc.Capacity.IOThreshold.L0NumFiles)
 	}
 
 	sp.UpdateLocalStoreAfterRebalance(roachpb.StoreID(2), rangeUsageInfo, roachpb.REMOVE_VOTER)
@@ -151,8 +162,8 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 	if expectedWPS := 25 - WPS; desc.Capacity.WritesPerSecond != expectedWPS {
 		t.Errorf("expected WritesPerSecond %f, but got %f", expectedWPS, desc.Capacity.WritesPerSecond)
 	}
-	if expectedL0Sublevels := int64(8); desc.Capacity.L0Sublevels != expectedL0Sublevels {
-		t.Errorf("expected L0 Sub-Levels %d, but got %d", expectedL0Sublevels, desc.Capacity.L0Sublevels)
+	if expectedNumL0Sublevels := int64(10); desc.Capacity.IOThreshold.L0NumSubLevels != expectedNumL0Sublevels {
+		t.Errorf("expected L0 Sub-Levels %d, but got %d", expectedNumL0Sublevels, desc.Capacity.IOThreshold.L0NumFiles)
 	}
 
 	sp.UpdateLocalStoresAfterLeaseTransfer(roachpb.StoreID(1), roachpb.StoreID(2), rangeUsageInfo)

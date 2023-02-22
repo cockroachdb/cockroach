@@ -129,8 +129,8 @@ func NewUniquenessConstraintViolationError(
 		), indexName),
 		fmt.Sprintf(
 			"Key (%s)=(%s) already exists.",
-			strings.Join(names[skipCols:], ","),
-			strings.Join(values[skipCols:], ","),
+			strings.Join(names[skipCols:], ", "),
+			strings.Join(values[skipCols:], ", "),
 		),
 	)
 }

@@ -59,7 +59,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 3000,
 				CPUPerSecond:     3000 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold - 10,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold - 10),
 			},
 		},
 		{
@@ -78,7 +79,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 2800,
 				CPUPerSecond:     2800 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold - 5,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold - 5),
 			},
 		},
 		{
@@ -97,7 +99,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 2600,
 				CPUPerSecond:     2600 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold + 2,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold + 2),
 			},
 		},
 		{
@@ -116,7 +119,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 2400,
 				CPUPerSecond:     2400 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold - 10,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold - 10),
 			},
 		},
 		{
@@ -135,7 +139,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 2200,
 				CPUPerSecond:     2200 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold - 3,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold - 3),
 			},
 		},
 		{
@@ -154,7 +159,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 2000,
 				CPUPerSecond:     2000 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold + 2,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold + 2),
 			},
 		},
 		{
@@ -173,7 +179,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 1800,
 				CPUPerSecond:     1800 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold - 10,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold - 10),
 			},
 		},
 		{
@@ -192,7 +199,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 1600,
 				CPUPerSecond:     1600 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold - 5,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold - 5),
 			},
 		},
 		{
@@ -211,7 +219,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 1400,
 				CPUPerSecond:     1400 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold + 3,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold + 3),
 			},
 		},
 	}
@@ -263,9 +272,9 @@ var (
 	}
 
 	// noLocalityAscendingReadAmpStores specifies a set of stores identical to
-	// noLocalityStores, however they have ascending read
-	// amplification. Where store 1, store 2 and store 3 are below the
-	// threshold, whilst store 4 and store 5 are above.
+	// noLocalityStores, however they have ascending IO overload threshold
+	// scores. Where store 1, store 2 and store 3 are below the threshold, whilst
+	// store 4 and store 5 are above.
 	noLocalityAscendingReadAmpStores = []*roachpb.StoreDescriptor{
 		{
 			StoreID: 1,
@@ -273,7 +282,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 1500,
 				CPUPerSecond:     1500 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold - 15,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold - 15),
 			},
 		},
 		{
@@ -282,7 +292,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 1300,
 				CPUPerSecond:     1300 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold - 10,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold - 10),
 			},
 		},
 		{
@@ -291,7 +302,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 1000,
 				CPUPerSecond:     1000 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold - 5,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold - 5),
 			},
 		},
 		{
@@ -300,7 +312,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 900,
 				CPUPerSecond:     900 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold + 20,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold + 20),
 			},
 		},
 		{
@@ -309,13 +322,14 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 500,
 				CPUPerSecond:     500 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold + 25,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold + 25),
 			},
 		},
 	}
 
 	// noLocalityUniformQPSHighReadAmp specifies a set of stores that are
-	// identical, except store 1 and 2 have high read amp.
+	// identical, except store 1 and 2 have a high IO overload score.
 	noLocalityUniformQPSHighReadAmp = []*roachpb.StoreDescriptor{
 		{
 			StoreID: 1,
@@ -323,7 +337,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 1000,
 				CPUPerSecond:     1000 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold + 100,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold + 100),
 			},
 		},
 		{
@@ -332,7 +347,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 1000,
 				CPUPerSecond:     1000 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold - 15,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold - 15),
 			},
 		},
 		{
@@ -341,7 +357,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 1000,
 				CPUPerSecond:     1000 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold + 100,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold + 100),
 			},
 		},
 		{
@@ -350,7 +367,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 1000,
 				CPUPerSecond:     1000 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold - 15,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold - 15),
 			},
 		},
 		{
@@ -359,12 +377,13 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 1000,
 				CPUPerSecond:     1000 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold + 100,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold + 100),
 			},
 		},
 	}
 	// noLocalityHighReadAmpStores specifies a set of stores identical to
-	// noLocalityStores, however they all have read amplification that exceeds
+	// noLocalityStores, however they all have an IO overload score that exceeds
 	// the threshold.
 	noLocalityHighReadAmpStores = []*roachpb.StoreDescriptor{
 		{
@@ -373,7 +392,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 1500,
 				CPUPerSecond:     1500 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold + 1,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold + 1),
 			},
 		},
 		{
@@ -382,7 +402,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 1300,
 				CPUPerSecond:     1300 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold + 1,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold + 1),
 			},
 		},
 		{
@@ -391,7 +412,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 1000,
 				CPUPerSecond:     1000 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold + 1,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold + 1),
 			},
 		},
 		{
@@ -400,7 +422,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 900,
 				CPUPerSecond:     900 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold + 1,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold + 1),
 			},
 		},
 		{
@@ -409,12 +432,13 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 500,
 				CPUPerSecond:     500 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold + 1,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold + 1),
 			},
 		},
 	}
 	// noLocalityHighReadAmpSkewedStores specifies a set of stores identical to
-	// noLocalityStores, however they all have read amplification that exceeds
+	// noLocalityStores, however they all have an IO overload score that exceeds
 	// the threshold in ascending order.
 	noLocalityHighReadAmpSkewedStores = []*roachpb.StoreDescriptor{
 		{
@@ -423,7 +447,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 1500,
 				CPUPerSecond:     1500 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold + 1,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold + 1),
 			},
 		},
 		{
@@ -432,7 +457,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 1300,
 				CPUPerSecond:     1300 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold + 10,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold + 10),
 			},
 		},
 		{
@@ -441,7 +467,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 1000,
 				CPUPerSecond:     1000 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold + 50,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold + 50),
 			},
 		},
 		{
@@ -450,7 +477,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 900,
 				CPUPerSecond:     900 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold + 100,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold + 100),
 			},
 		},
 		{
@@ -459,7 +487,8 @@ var (
 			Capacity: roachpb.StoreCapacity{
 				QueriesPerSecond: 500,
 				CPUPerSecond:     500 * float64(time.Millisecond),
-				L0Sublevels:      allocatorimpl.MaxL0SublevelThreshold + 100,
+				IOThreshold: allocatorimpl.TestingIOThresholdWithScore(
+					allocatorimpl.DefaultIOOverloadThreshold + 100),
 			},
 		},
 	}
@@ -906,7 +935,7 @@ func TestChooseRangeToRebalanceRandom(t *testing.T) {
 			hottestRanges := sr.replicaRankings.TopLoad()
 			options := sr.scorerOptions(ctx, lbRebalanceDimension)
 			rctx := sr.NewRebalanceContext(ctx, options, hottestRanges, sr.RebalanceMode())
-			rctx.options.StoreHealthOptions = allocatorimpl.StoreHealthOptions{EnforcementLevel: allocatorimpl.StoreHealthNoAction}
+			rctx.options.StoreHealthOptions = allocatorimpl.StoreHealthOptions{EnforcementLevel: allocatorimpl.IOOverloadThresholdNoAction}
 			rctx.options.LoadThreshold = allocatorimpl.WithAllDims(rebalanceThreshold)
 
 			_, voterTargets, nonVoterTargets := sr.chooseRangeToRebalance(ctx, rctx)
@@ -1014,10 +1043,10 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 		// the first listed voter target is expected to be the leaseholder.
 		expRebalancedVoters, expRebalancedNonVoters []roachpb.StoreID
 	}{
-		// All the replicas are already on the best possible stores. No
-		// rebalancing should be attempted, note here that the high read
-		// amp of the current stores is ignored as it is not considered in
-		// moving a replica away from a store.
+		// All the replicas are already on the best possible stores. No rebalancing
+		// should be attempted, note here that the high IO overload score of the
+		// current stores is ignored as it is not considered in moving a replica
+		// away from a store.
 		{
 			name:                "no rebalance",
 			voters:              []roachpb.StoreID{3, 6, 9},
@@ -1027,18 +1056,18 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 		// A replica is in a heavily loaded region, on a relatively heavily
 		// loaded store. We expect it to be moved to a less busy store
 		// within the same region. However, it cannot be the least busy
-		// store as it has high read amp (3).
+		// store as it has a high IO overload score (3).
 		{
 			name:                "rebalance one replica within heavy region",
 			voters:              []roachpb.StoreID{1, 6, 9},
 			constraints:         oneReplicaPerRegion,
 			expRebalancedVoters: []roachpb.StoreID{9, 6, 2},
 		},
-		// A replica is in a heavily loaded region, on a relatively heavily
-		// loaded store. We expect it to be moved to a less busy store
-		// within the same region. However, it cannot be the least busy
-		// store as it has high read amp (3). The new replica in the heavy
-		// region must also get the lease due to preferences.
+		// A replica is in a heavily loaded region, on a relatively heavily loaded
+		// store. We expect it to be moved to a less busy store within the same
+		// region. However, it cannot be the least busy store as it has a high IO
+		// overload score (3). The new replica in the heavy region must also get
+		// the lease due to preferences.
 		{
 			name:                "rebalance one replica within heavy region, prefer lease in heavy region",
 			voters:              []roachpb.StoreID{1, 6, 9},
@@ -1085,23 +1114,21 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 		// maximized, replicas on hot stores are rebalanced to cooler stores within
 		// the same region.
 		{
-			// Within the hottest region, expect rebalance from the hottest
-			// node (n1) to the coolest node (n3), however since n3 has
-			// high read amp it should instead rebalance to n2. Within the
-			// least hot region, we don't expect a rebalance from n8 to n9
-			// because the qps difference between the two
-			// stores is too small.
+			// Within the hottest region, expect rebalance from the hottest node (n1)
+			// to the coolest node (n3), however since n3 has a high IO overload
+			// score it should instead rebalance to n2. Within the least hot region,
+			// we don't expect a rebalance from n8 to n9 because the qps difference
+			// between the two stores is too small.
 			name:                "QPS balance without constraints",
 			voters:              []roachpb.StoreID{1, 5, 8},
 			expRebalancedVoters: []roachpb.StoreID{8, 5, 2},
 		},
 		{
-			// Within the second hottest region, expect rebalance from the
-			// hottest node (n4) to the coolest node (n6), however since n6
-			// has high read amp instead expect n5 to be selected. Within
-			// the lease hot region, we don't expect a rebalance from n8 to
-			// n9 because the qps difference between the two stores is too
-			// small.
+			// Within the second hottest region, expect rebalance from the hottest
+			// node (n4) to the coolest node (n6), however since n6 has a high IO
+			// overload score, instead expect n5 to be selected. Within the lease hot
+			// region, we don't expect a rebalance from n8 to n9 because the qps
+			// difference between the two stores is too small.
 			name:                "QPS balance without constraints",
 			voters:              []roachpb.StoreID{8, 4, 3},
 			expRebalancedVoters: []roachpb.StoreID{8, 5, 3},
@@ -1120,7 +1147,7 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 			expRebalancedVoters: []roachpb.StoreID{3, 2, 1},
 			// NB: Expect the non-voter on node 4 (hottest node in region B) to
 			// move to node 5 (least hot region in region B), the least hot
-			// node without high read amp.
+			// node without a high IO overload score.
 			expRebalancedNonVoters: []roachpb.StoreID{5, 9},
 		},
 		{
@@ -1167,13 +1194,12 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 			// constraints require at least one replica per each region.
 			voterConstraints: twoReplicasInHotRegion,
 			constraints:      oneReplicaPerRegion,
-			// NB: We've got 3 voters in the hottest region, but we only need
-			// 2. We expect that one of the voters from the hottest region
-			// will be moved to the least hot region. Additionally, in
-			// region B, we've got one replica on store 4 (which is the
-			// hottest store in that region). We expect that replica to be
-			// moved to store 5, which is the least hot node without high
-			// read amp.
+			// NB: We've got 3 voters in the hottest region, but we only need 2. We
+			// expect that one of the voters from the hottest region will be moved to
+			// the least hot region. Additionally, in region B, we've got one replica
+			// on store 4 (which is the hottest store in that region). We expect that
+			// replica to be moved to store 5, which is the least hot node without a
+			// high IO overload score.
 			expRebalancedVoters: []roachpb.StoreID{9, 2, 5, 8, 3},
 		},
 		{
@@ -1246,7 +1272,7 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 			options := sr.scorerOptions(ctx, lbRebalanceDimension)
 			rctx := sr.NewRebalanceContext(ctx, options, hottestRanges, LBRebalancingLeasesAndReplicas)
 			rctx.options.StoreHealthOptions = allocatorimpl.StoreHealthOptions{
-				EnforcementLevel: allocatorimpl.StoreHealthBlockRebalanceTo}
+				EnforcementLevel: allocatorimpl.IOOverloadThresholdBlockRebalanceTo}
 			rctx.options.LoadThreshold = allocatorimpl.WithAllDims(0.05)
 
 			_, voterTargets, nonVoterTargets := sr.chooseRangeToRebalance(
@@ -1335,7 +1361,7 @@ func TestChooseRangeToRebalanceIgnoresRangeOnBestStores(t *testing.T) {
 		options := sr.scorerOptions(ctx, lbRebalanceDimension)
 		rctx := sr.NewRebalanceContext(ctx, options, hottestRanges, sr.RebalanceMode())
 		rctx.options.StoreHealthOptions = allocatorimpl.StoreHealthOptions{
-			EnforcementLevel: allocatorimpl.StoreHealthNoAction}
+			EnforcementLevel: allocatorimpl.IOOverloadThresholdNoAction}
 		rctx.options.LoadThreshold = allocatorimpl.WithAllDims(0.05)
 
 		sr.chooseRangeToRebalance(ctx, rctx)
@@ -1503,7 +1529,7 @@ func TestChooseRangeToRebalanceOffHotNodes(t *testing.T) {
 			options := sr.scorerOptions(ctx, lbRebalanceDimension)
 			rctx := sr.NewRebalanceContext(ctx, options, hottestRanges, sr.RebalanceMode())
 			rctx.options.StoreHealthOptions = allocatorimpl.StoreHealthOptions{
-				EnforcementLevel: allocatorimpl.StoreHealthNoAction}
+				EnforcementLevel: allocatorimpl.IOOverloadThresholdNoAction}
 			rctx.options.LoadThreshold = allocatorimpl.WithAllDims(tc.rebalanceThreshold)
 
 			_, voterTargets, _ := sr.chooseRangeToRebalance(ctx, rctx)
@@ -1612,7 +1638,7 @@ func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 		options = sr.scorerOptions(ctx, lbRebalanceDimension)
 		rctx = sr.NewRebalanceContext(ctx, options, hottestRanges, sr.RebalanceMode())
 		rctx.options.StoreHealthOptions = allocatorimpl.StoreHealthOptions{
-			EnforcementLevel: allocatorimpl.StoreHealthNoAction}
+			EnforcementLevel: allocatorimpl.IOOverloadThresholdNoAction}
 		rctx.options.LoadThreshold = allocatorimpl.WithAllDims(0.05)
 		rctx.options.Deterministic = true
 
@@ -1629,12 +1655,12 @@ func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 	})
 }
 
-// TestStoreRebalancerReadAmpCheck checks that:
+// TestStoreRebalancerIOOverloadCheck checks that:
 //   - Under (1) disabled and (2) log that rebalancing decisions are unaffected
-//     by high read amplification.
-//   - Under (3) rebalanceOnly and (4) allocate that rebalance decisions exclude
-//     stores with high readamplification as candidate targets.
-func TestStoreRebalancerReadAmpCheck(t *testing.T) {
+//     by a high IO overload score.
+//   - Under (3) block rebalance to and (4) block all that rebalance decisions exclude
+//     stores with a high IO overload score as targets.
+func TestStoreRebalancerIOOverloadCheck(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -1645,113 +1671,114 @@ func TestStoreRebalancerReadAmpCheck(t *testing.T) {
 		stores          []*roachpb.StoreDescriptor
 		conf            roachpb.SpanConfig
 		expectedTargets []roachpb.ReplicationTarget
-		enforcement     allocatorimpl.StoreHealthEnforcement
+		enforcement     allocatorimpl.IOOverloadEnforcementLevel
 	}
 	tests := []testCase{
 		{
-			name: "ignore read amp on allocation when storeHealthNoAction enforcement",
-			// NB: All stores have high read amp, this should be ignored.
+			name: "ignore io overload on allocation when no action enforcement",
+			// NB: All stores have a high IO overload score, this should be ignored.
 			stores: noLocalityHighReadAmpStores,
 			conf:   roachpb.SpanConfig{},
 			expectedTargets: []roachpb.ReplicationTarget{
 				{NodeID: 4, StoreID: 4}, {NodeID: 3, StoreID: 3}, {NodeID: 5, StoreID: 5},
 			},
-			enforcement: allocatorimpl.StoreHealthNoAction,
+			enforcement: allocatorimpl.IOOverloadThresholdNoAction,
 		},
 		{
-			name: "ignore read amp on allocation when storeHealthLogOnly enforcement",
-			// NB: All stores have high read amp, this should be ignored.
+			name: "ignore io overload on allocation when log only enforcement",
+			// NB: All stores have high io overload, this should be ignored.
 			stores: noLocalityHighReadAmpStores,
 			conf:   roachpb.SpanConfig{},
 			expectedTargets: []roachpb.ReplicationTarget{
 				{NodeID: 4, StoreID: 4}, {NodeID: 3, StoreID: 3}, {NodeID: 5, StoreID: 5},
 			},
-			enforcement: allocatorimpl.StoreHealthLogOnly,
+			enforcement: allocatorimpl.IOOverloadThresholdLogOnly,
 		},
 		{
-			name: "don't stop rebalancing when read amp uniformly above threshold and storeHealthBlockRebalanceTo enforcement",
-			// NB: All stores have high uniformly high read  (threshold+1) this should be ignored.
+			name: "don't stop rebalancing when the io overload score uniformly above threshold and block rebalance to enforcement",
+			// NB: All stores have a high uniformly high IO overload score (threshold+1) this should be ignored.
 			stores: noLocalityHighReadAmpStores,
 			conf:   roachpb.SpanConfig{},
 			expectedTargets: []roachpb.ReplicationTarget{
 				{NodeID: 4, StoreID: 4}, {NodeID: 3, StoreID: 3}, {NodeID: 5, StoreID: 5},
 			},
-			enforcement: allocatorimpl.StoreHealthBlockRebalanceTo,
+			enforcement: allocatorimpl.IOOverloadThresholdBlockRebalanceTo,
 		},
 		{
-			name: "don't stop rebalancing when read amp uniformly above threshold and storeHealthBlockRebalanceTo enforcement",
-			// NB: All stores have high uniformly high read  (threshold+1) this should be ignored.
+			name: "don't stop rebalancing when the io overload score is uniformly above threshold and block rebalance to enforcement",
+			// NB: All stores have a high uniformly high IO overload score (threshold+1) this should be ignored.
 			stores: noLocalityHighReadAmpStores,
 			conf:   roachpb.SpanConfig{},
 			expectedTargets: []roachpb.ReplicationTarget{
 				{NodeID: 4, StoreID: 4}, {NodeID: 3, StoreID: 3}, {NodeID: 5, StoreID: 5},
 			},
-			enforcement: allocatorimpl.StoreHealthBlockAll,
+			enforcement: allocatorimpl.IOOverloadThresholdBlockAll,
 		},
 		{
-			name: "rebalance should ignore stores with high read amp that are also above the mean when storeHealthBlockAll enforcement",
-			// NB: All stores have high read amp, however store 2 is below the mean read amp so is a viable candidate.
+			name: "rebalance should ignore stores with a high io overload score that are also above the mean when storeHealthBlockAll enforcement",
+			// NB: All stores have a high IO overload score, however store 2 is below
+			// the mean IO overload score so is a viable candidate.
 			stores: noLocalityHighReadAmpSkewedStores,
 			conf:   roachpb.SpanConfig{},
 			expectedTargets: []roachpb.ReplicationTarget{
 				{NodeID: 2, StoreID: 2}, {NodeID: 3, StoreID: 3}, {NodeID: 5, StoreID: 5},
 			},
-			enforcement: allocatorimpl.StoreHealthBlockAll,
+			enforcement: allocatorimpl.IOOverloadThresholdBlockAll,
 		},
 		{
-			name: "rebalance should ignore stores with high read amp that are also above the mean when storeHealthBlockRebalanceTo enforcement",
-			// NB: All stores have high read amp, however store 2 is below the mean read amp so is a viable candidate.
+			name: "rebalance should ignore stores with high IO overload scores that are also above the mean when block rebalance to enforcement",
+			// NB: All stores have a high IO overload score, however store 2 is below
+			// the mean IO overload so is a viable candidate.
 			stores: noLocalityHighReadAmpSkewedStores,
 			conf:   roachpb.SpanConfig{},
 			expectedTargets: []roachpb.ReplicationTarget{
 				{NodeID: 2, StoreID: 2}, {NodeID: 3, StoreID: 3}, {NodeID: 5, StoreID: 5},
 			},
-			enforcement: allocatorimpl.StoreHealthBlockRebalanceTo,
+			enforcement: allocatorimpl.IOOverloadThresholdBlockRebalanceTo,
 		},
 		{
-			name: "rebalance should ignore stores with high read amp when storeHealthBlockRebalanceTo enforcement",
-			// NB: Store 4, 5 have high read amp, they should not be rebalance
-			// targets. Only 1,2,3 are valid targets, yet only 2 is not already
-			// a voter. 1 should transfer it's lease to 2. 5 could also have
-			// transferred its lease to 2, However, high read amp does not
-			// affect removing replicas from stores, only in blocking new
-			// replicas.
+			name: "rebalance should ignore stores with high IO overload when block rebalance to enforcement",
+			// NB: Store 4, 5 have a high IO overload score, they should not be
+			// rebalance targets. Only 1,2,3 are valid targets, yet only 2 is not
+			// already a voter. 1 should transfer it's lease to 2. 5 could also have
+			// transferred its lease to 2, However, high a IO overload score does not
+			// affect removing replicas from stores, only in blocking new replicas.
 			stores: noLocalityAscendingReadAmpStores,
 			conf:   roachpb.SpanConfig{},
 			expectedTargets: []roachpb.ReplicationTarget{
 				{NodeID: 2, StoreID: 2}, {NodeID: 3, StoreID: 3}, {NodeID: 5, StoreID: 5},
 			},
-			enforcement: allocatorimpl.StoreHealthBlockRebalanceTo,
+			enforcement: allocatorimpl.IOOverloadThresholdBlockRebalanceTo,
 		},
 		{
-			name: "rebalance should ignore stores with high read amp when storeHealthBlockAll enforcement",
-			// NB: This scenario and result should be identical to storeHealthBlockRebalanceTo.
+			name: "rebalance should ignore stores with high IO overload scores when block all enforcement level",
+			// NB: This scenario and result should be identical to block rebalance to enforcement level.
 			stores: noLocalityAscendingReadAmpStores,
 			conf:   roachpb.SpanConfig{},
 			expectedTargets: []roachpb.ReplicationTarget{
 				{NodeID: 2, StoreID: 2}, {NodeID: 3, StoreID: 3}, {NodeID: 5, StoreID: 5},
 			},
-			enforcement: allocatorimpl.StoreHealthBlockAll,
+			enforcement: allocatorimpl.IOOverloadThresholdBlockAll,
 		},
 		{
-			name: "rebalance should not rebalance away from stores with high read amp when storeHealthBlockAll enforcement",
-			// NB: Node 1,3,5 all have extremely high read amp. However, since
-			// read amp does not trigger rebalancing away, only blocking
+			name: "rebalance should not rebalance away from stores with high IO overload scores when block all enforcement level",
+			// NB: Node 1,3,5 all have an extremely high IO overload score. However,
+			// since IO overload does not trigger rebalancing away, only blocking
 			// rebalancing to this should be ignored and no action taken.
 			stores:          noLocalityUniformQPSHighReadAmp,
 			conf:            roachpb.SpanConfig{},
 			expectedTargets: nil,
-			enforcement:     allocatorimpl.StoreHealthBlockAll,
+			enforcement:     allocatorimpl.IOOverloadThresholdBlockAll,
 		},
 		{
-			name: "rebalance should not rebalance away from stores with high read amp when storeHealthBlockRebalanceTo enforcement",
-			// NB: Node 1,3,5 all have extremely high read amp. However, since
-			// read amp does not trigger rebalancing away, only blocking
+			name: "rebalance should not rebalance away from stores with high IO overload scores when block rebalance to enforcement level",
+			// NB: Node 1,3,5 all have an extremely high IO overload score. However,
+			// since IO overload does not trigger rebalancing away, only blocking
 			// rebalancing to this should be ignored and no action taken.
 			stores:          noLocalityUniformQPSHighReadAmp,
 			conf:            roachpb.SpanConfig{},
 			expectedTargets: nil,
-			enforcement:     allocatorimpl.StoreHealthBlockRebalanceTo,
+			enforcement:     allocatorimpl.IOOverloadThresholdBlockRebalanceTo,
 		},
 	}
 
@@ -1783,7 +1810,7 @@ func TestStoreRebalancerReadAmpCheck(t *testing.T) {
 			require.Greater(t, len(rctx.hottestRanges), 0)
 
 			rctx.options.StoreHealthOptions = allocatorimpl.StoreHealthOptions{
-				EnforcementLevel: test.enforcement, L0SublevelThreshold: allocatorimpl.MaxL0SublevelThreshold}
+				EnforcementLevel: test.enforcement, IOOverloadThreshold: allocatorimpl.DefaultIOOverloadThreshold}
 			rctx.options.LoadThreshold = allocatorimpl.WithAllDims(0.05)
 
 			_, targetVoters, _ := sr.chooseRangeToRebalance(ctx, rctx)

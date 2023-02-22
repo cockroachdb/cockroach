@@ -372,3 +372,97 @@ subtest drop_primary_key
 
 statement error pgcode 0A000 cannot drop the primary index of a table using DROP INDEX
 CREATE TABLE drop_primary(); DROP INDEX drop_primary@drop_primary_pkey CASCADE;
+
+# This subtest tests that dropping a unique index that is serving
+# a inbound FK constraint works properly:
+#  - no cascade: return error
+#  - cascade AND:
+#    - there exists another unique index on the same columns: only drop the index
+#    - there exists another unique index but not on the same columns: drop the index and the FK constraint
+#    - there exists another unique without index constraint on the same columns: only drop the index
+#    - there exists another unique_without_index constraint but not on the same columns: drop the index and the FK constraint
+subtest drop_unique_index_serving_FK_96731
+
+statement ok
+CREATE TABLE t2_96731(i INT PRIMARY KEY, j INT);
+
+statement ok
+CREATE UNIQUE INDEX t2_96731_idx ON t2_96731(j);
+
+statement ok
+CREATE TABLE t1_96731(i INT PRIMARY KEY, j INT REFERENCES t2_96731(j));
+
+statement error pq: "t2_96731_idx" is referenced by foreign key from table "t1_96731"
+DROP INDEX t2_96731_idx;
+
+# Create another unique index on the same columns and ensure
+# dropping the index won't drop the FK constraint.
+statement ok
+CREATE UNIQUE INDEX t2_96731_idx2 ON t2_96731(j);
+
+statement ok
+DROP INDEX t2_96731_idx CASCADE;
+
+query TTTTB colnames
+SHOW CONSTRAINTS FROM t1_96731;
+----
+table_name  constraint_name  constraint_type  details                                 validated
+t1_96731    t1_96731_j_fkey  FOREIGN KEY      FOREIGN KEY (j) REFERENCES t2_96731(j)  true
+t1_96731    t1_96731_pkey    PRIMARY KEY      PRIMARY KEY (i ASC)                     true
+
+# Drop the last unique index will drop the FK as well this time.
+statement ok
+DROP INDEX t2_96731_idx2 CASCADE;
+
+query TTTTB colnames
+SHOW CONSTRAINTS FROM t1_96731;
+----
+table_name  constraint_name  constraint_type  details              validated
+t1_96731    t1_96731_pkey    PRIMARY KEY      PRIMARY KEY (i ASC)  true
+
+# Recreate the unique index and FK constraint.
+statement ok
+CREATE UNIQUE INDEX t2_96731_idx ON t2_96731(j);
+
+statement ok
+ALTER TABLE t1_96731 ADD FOREIGN KEY (j) REFERENCES t2_96731(j);
+
+# Create a unique_without_index constraint on the same columns and ensure
+# dropping the index won't drop the FK constraint.
+statement ok
+SET experimental_enable_unique_without_index_constraints = true;
+ALTER TABLE t2_96731 ADD CONSTRAINT unique_j UNIQUE WITHOUT INDEX (j);
+
+statement ok
+DROP INDEX t2_96731_idx CASCADE;
+
+query TTTTB colnames
+SHOW CONSTRAINTS FROM t1_96731;
+----
+table_name  constraint_name  constraint_type  details                                 validated
+t1_96731    t1_96731_j_fkey  FOREIGN KEY      FOREIGN KEY (j) REFERENCES t2_96731(j)  true
+t1_96731    t1_96731_pkey    PRIMARY KEY      PRIMARY KEY (i ASC)                     true
+
+# Recreate the unique index, drop the unique_without_index constraint,
+# and add another one on different columns.
+statement ok
+CREATE UNIQUE INDEX t2_96731_idx ON t2_96731(j);
+
+statement ok
+ALTER TABLE t2_96731 DROP CONSTRAINT unique_j
+
+statement ok
+ALTER TABLE t2_96731 ADD CONSTRAINT unique_i UNIQUE WITHOUT INDEX (i);
+
+# Now dropping the index will also drop the FK constraint.
+statement ok
+DROP INDEX t2_96731_idx CASCADE;
+
+query TTTTB colnames
+SHOW CONSTRAINTS FROM t1_96731;
+----
+table_name  constraint_name  constraint_type  details              validated
+t1_96731    t1_96731_pkey    PRIMARY KEY      PRIMARY KEY (i ASC)  true
+
+statement ok
+DROP TABLE t1_96731, t2_96731;

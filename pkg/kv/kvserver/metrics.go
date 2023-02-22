@@ -2607,9 +2607,9 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		// L0SublevelsMax. this is not exported to as metric.
 		sm.l0SublevelsTracker.swag = slidingwindow.NewMaxSwag(
 			timeutil.Now(),
-			allocatorimpl.L0SublevelInterval,
-			// 5 sliding windows, by the default interval (2 mins) will track the
-			// maximum for up to 10 minutes. Selected experimentally.
+			// Use 5 sliding windows, so the retention period is divided by 5 to
+			// calculate the interval of the sliding window buckets.
+			allocatorimpl.L0SublevelTrackerRetention/5,
 			5,
 		)
 	}
@@ -2693,7 +2693,9 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.DiskStalled.Update(m.DiskStallCount)
 	sm.SharedStorageBytesRead.Update(m.SharedStorageReadBytes)
 	sm.SharedStorageBytesWritten.Update(m.SharedStorageWriteBytes)
-
+	sm.RdbL0Sublevels.Update(int64(m.Levels[0].Sublevels))
+	sm.RdbL0NumFiles.Update(m.Levels[0].NumFiles)
+	sm.RdbL0BytesFlushed.Update(int64(m.Levels[0].BytesFlushed))
 	// Update the maximum number of L0 sub-levels seen.
 	sm.l0SublevelsTracker.Lock()
 	sm.l0SublevelsTracker.swag.Record(timeutil.Now(), float64(m.Levels[0].Sublevels))
@@ -2701,9 +2703,6 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.l0SublevelsTracker.Unlock()
 	syncutil.StoreFloat64(&sm.l0SublevelsWindowedMax, curMax)
 
-	sm.RdbL0Sublevels.Update(int64(m.Levels[0].Sublevels))
-	sm.RdbL0NumFiles.Update(m.Levels[0].NumFiles)
-	sm.RdbL0BytesFlushed.Update(int64(m.Levels[0].BytesFlushed))
 	for level, stats := range m.Levels {
 		sm.RdbBytesIngested[level].Update(int64(stats.BytesIngested))
 		sm.RdbLevelSize[level].Update(stats.Size)

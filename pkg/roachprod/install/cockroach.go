@@ -210,6 +210,8 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 			return res, nil
 		}
 
+		// For single node clusters, this can be skipped because during the c.StartNode call above,
+		// the `--start-single-node` flag will handle all of this for us.
 		shouldInit := !c.useStartSingleNode()
 		if shouldInit {
 			if err := c.initializeCluster(ctx, l, node); err != nil {
@@ -217,7 +219,6 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 				return res, errors.Wrap(err, "failed to initialize cluster")
 			}
 		}
-
 		if err := c.setClusterSettings(ctx, l, node); err != nil {
 			res.Err = err
 			return res, errors.Wrap(err, "failed to set cluster settings")
@@ -805,10 +806,6 @@ func (c *SyncedCluster) createFixedBackupSchedule(
 	ctx context.Context, l *logger.Logger, scheduledBackupArgs string,
 ) error {
 	externalStoragePath := `gs://cockroachdb-backup-testing`
-
-	if c.IsLocal() {
-		externalStoragePath = `nodelocal://1`
-	}
 	for _, cloud := range c.Clouds() {
 		if !strings.Contains(cloud, gce.ProviderName) {
 			l.Printf(`no scheduled backup created as there exists a vm not on google cloud`)
@@ -817,24 +814,27 @@ func (c *SyncedCluster) createFixedBackupSchedule(
 	}
 	l.Printf("%s: creating backup schedule", c.Name)
 	auth := "AUTH=implicit"
-
 	collectionPath := fmt.Sprintf(`%s/roachprod-scheduled-backups/%s/%v?%s`,
 		externalStoragePath, c.Name, timeutil.Now().UnixNano(), auth)
 
 	// Default scheduled backup runs a full backup every hour and an incremental
 	// every 15 minutes.
-	scheduleArgs := `RECURRING '*/15 * * * *'
-FULL BACKUP '@hourly'
-WITH SCHEDULE OPTIONS first_run = 'now'`
-
+	scheduleArgs := `RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS first_run = 'now'`
 	if scheduledBackupArgs != "" {
 		scheduleArgs = scheduledBackupArgs
 	}
-
-	createScheduleCmd := fmt.Sprintf(`-e
-CREATE SCHEDULE IF NOT EXISTS test_only_backup FOR BACKUP INTO '%s' %s`,
+	createScheduleCmd := fmt.Sprintf(`CREATE SCHEDULE IF NOT EXISTS test_only_backup FOR BACKUP INTO '%s' %s`,
 		collectionPath, scheduleArgs)
-	return c.ExecSQL(ctx, l, "" /*tenantName*/, []string{createScheduleCmd})
+
+	node := Node(1)
+	binary := cockroachNodeBinary(c, node)
+	url := c.NodeURL("localhost", c.NodePort(node), "" /* tenantName */)
+	fullCmd := fmt.Sprintf(`COCKROACH_CONNECT_TIMEOUT=0 %s sql --url %s -e %q`,
+		binary, url, createScheduleCmd)
+	// Instead of using `c.ExecSQL()`, use the more flexible c.Run(), which allows us to
+	// 1) prefix the schedule backup cmd with COCKROACH_CONNECT_TIMEOUT=0.
+	// 2) run the command against the first node on the cluster.
+	return c.Run(ctx, l, l.Stdout, l.Stderr, Nodes{node}, "init scheduled backup", fullCmd)
 }
 
 // getEnvVars returns all COCKROACH_* environment variables, in the form
