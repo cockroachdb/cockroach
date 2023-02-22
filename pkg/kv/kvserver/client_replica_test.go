@@ -217,26 +217,26 @@ func TestLeaseholdersRejectClockUpdateWithJump(t *testing.T) {
 // overrides an old value. The test uses a "Writer" and a "Reader"
 // to reproduce an out-of-order put.
 //
-// 1) The Writer executes a cput operation and writes a write intent with
-//    time T in a txn.
-// 2) Before the Writer's txn is committed, the Reader sends a high priority
-//    get operation with time T+100. This pushes the Writer txn timestamp to
-//    T+100. The Reader also writes to the same key the Writer did a cput to
-//    in order to trigger the restart of the Writer's txn. The original
-//    write intent timestamp is also updated to T+100.
-// 3) The Writer starts a new epoch of the txn, but before it writes, the
-//    Reader sends another high priority get operation with time T+200. This
-//    pushes the Writer txn timestamp to T+200 to trigger a restart of the
-//    Writer txn. The Writer will not actually restart until it tries to commit
-//    the current epoch of the transaction. The Reader updates the timestamp of
-//    the write intent to T+200. The test deliberately fails the Reader get
-//    operation, and cockroach doesn't update its timestamp cache.
-// 4) The Writer executes the put operation again. This put operation comes
-//    out-of-order since its timestamp is T+100, while the intent timestamp
-//    updated at Step 3 is T+200.
-// 5) The put operation overrides the old value using timestamp T+100.
-// 6) When the Writer attempts to commit its txn, the txn will be restarted
-//    again at a new epoch timestamp T+200, which will finally succeed.
+//  1. The Writer executes a cput operation and writes a write intent with
+//     time T in a txn.
+//  2. Before the Writer's txn is committed, the Reader sends a high priority
+//     get operation with time T+100. This pushes the Writer txn timestamp to
+//     T+100. The Reader also writes to the same key the Writer did a cput to
+//     in order to trigger the restart of the Writer's txn. The original
+//     write intent timestamp is also updated to T+100.
+//  3. The Writer starts a new epoch of the txn, but before it writes, the
+//     Reader sends another high priority get operation with time T+200. This
+//     pushes the Writer txn timestamp to T+200 to trigger a restart of the
+//     Writer txn. The Writer will not actually restart until it tries to commit
+//     the current epoch of the transaction. The Reader updates the timestamp of
+//     the write intent to T+200. The test deliberately fails the Reader get
+//     operation, and cockroach doesn't update its timestamp cache.
+//  4. The Writer executes the put operation again. This put operation comes
+//     out-of-order since its timestamp is T+100, while the intent timestamp
+//     updated at Step 3 is T+200.
+//  5. The put operation overrides the old value using timestamp T+100.
+//  6. When the Writer attempts to commit its txn, the txn will be restarted
+//     again at a new epoch timestamp T+200, which will finally succeed.
 func TestTxnPutOutOfOrder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -430,67 +430,88 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 // timestamp is below the committed value's timestamp. As a result, the
 // transaction observes the committed value in its certain future, allowing it
 // to avoid the ReadWithinUncertaintyIntervalError.
+//
+// Each test variant is run using the three different forms of transactional
+// read-only operations: Get, Scan, and ReverseScan.
 func TestTxnReadWithinUncertaintyInterval(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	testutils.RunTrueAndFalse(t, "observedTS", func(t *testing.T, observedTS bool) {
-		ctx := context.Background()
-		manual := hlc.NewHybridManualClock()
-		srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				Server: &server.TestingKnobs{
-					ClockSource: manual.UnixNano,
-				},
-			},
+		readOps := []interface{}{"get", "scan", "revScan"}
+		testutils.RunValues(t, "readOp", readOps, func(t *testing.T, readOp interface{}) {
+			testTxnReadWithinUncertaintyInterval(t, observedTS, readOp.(string))
 		})
-		s := srv.(*server.TestServer)
-		defer s.Stopper().Stop(ctx)
-		store, err := s.Stores().GetStore(s.GetFirstStoreID())
-		require.NoError(t, err)
-
-		// Split off a scratch range.
-		key, err := s.ScratchRange()
-		require.NoError(t, err)
-
-		// Pause the server's clocks going forward.
-		manual.Pause()
-
-		// Create a new transaction.
-		now := s.Clock().Now()
-		maxOffset := s.Clock().MaxOffset().Nanoseconds()
-		require.NotZero(t, maxOffset)
-		txn := roachpb.MakeTransaction("test", key, 1, now, maxOffset, int32(s.SQLInstanceID()))
-		require.True(t, txn.ReadTimestamp.Less(txn.GlobalUncertaintyLimit))
-		require.Len(t, txn.ObservedTimestamps, 0)
-
-		// If the test variant wants an observed timestamp from the server at a
-		// timestamp below the value, collect one now.
-		if observedTS {
-			get := getArgs(key)
-			resp, pErr := kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: &txn}, get)
-			require.Nil(t, pErr)
-			txn.Update(resp.Header().Txn)
-			require.Len(t, txn.ObservedTimestamps, 1)
-		}
-
-		// Perform a non-txn write. This will grab a timestamp from the clock.
-		put := putArgs(key, []byte("val"))
-		_, pErr := kv.SendWrapped(ctx, store.TestSender(), put)
-		require.Nil(t, pErr)
-
-		// Perform another read on the same key. Depending on whether or not the txn
-		// had collected an observed timestamp, it may or may not observe the value
-		// in its uncertainty interval and throw an error.
-		get := getArgs(key)
-		_, pErr = kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: &txn}, get)
-		if observedTS {
-			require.Nil(t, pErr)
-		} else {
-			require.NotNil(t, pErr)
-			require.IsType(t, &roachpb.ReadWithinUncertaintyIntervalError{}, pErr.GetDetail())
-		}
 	})
+}
+
+func testTxnReadWithinUncertaintyInterval(t *testing.T, observedTS bool, readOp string) {
+	ctx := context.Background()
+	manual := hlc.NewHybridManualClock()
+	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Server: &server.TestingKnobs{
+				ClockSource: manual.UnixNano,
+			},
+		},
+	})
+	s := srv.(*server.TestServer)
+	defer s.Stopper().Stop(ctx)
+	store, err := s.Stores().GetStore(s.GetFirstStoreID())
+	require.NoError(t, err)
+
+	// Split off a scratch range.
+	key, err := s.ScratchRange()
+	require.NoError(t, err)
+
+	// Pause the server's clocks going forward.
+	manual.Pause()
+
+	// Create a new transaction.
+	now := s.Clock().Now()
+	maxOffset := s.Clock().MaxOffset().Nanoseconds()
+	require.NotZero(t, maxOffset)
+	txn := roachpb.MakeTransaction("test", key, 1, now, maxOffset, int32(s.SQLInstanceID()))
+	require.True(t, txn.ReadTimestamp.Less(txn.GlobalUncertaintyLimit))
+	require.Len(t, txn.ObservedTimestamps, 0)
+
+	// If the test variant wants an observed timestamp from the server at a
+	// timestamp below the value, collect one now.
+	if observedTS {
+		get := getArgs(key)
+		resp, pErr := kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: &txn}, get)
+		require.Nil(t, pErr)
+		txn.Update(resp.Header().Txn)
+		require.Len(t, txn.ObservedTimestamps, 1)
+	}
+
+	// Perform a non-txn write. This will grab a timestamp from the clock.
+	put := putArgs(key, []byte("val"))
+	_, pErr := kv.SendWrapped(ctx, store.TestSender(), put)
+	require.Nil(t, pErr)
+
+	// Perform another read on the same key. Depending on whether or not the txn
+	// had collected an observed timestamp, it may or may not observe the value
+	// in its uncertainty interval and throw an error.
+
+	var read roachpb.Request
+	switch readOp {
+	case "get":
+		read = getArgs(key)
+	case "scan":
+		read = scanArgs(key, key.Next())
+	case "revScan":
+		read = revScanArgs(key, key.Next())
+	default:
+		t.Fatalf("unknown op: %q", readOp)
+	}
+	_, pErr = kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: &txn}, read)
+	if observedTS {
+		require.Nil(t, pErr)
+	} else {
+		require.NotNil(t, pErr)
+		require.IsType(t, &roachpb.ReadWithinUncertaintyIntervalError{}, pErr.GetDetail())
+	}
 }
 
 // TestTxnReadWithinUncertaintyIntervalAfterLeaseTransfer tests a case where a
@@ -2650,14 +2671,14 @@ func TestChangeReplicasSwapVoterWithNonVoter(t *testing.T) {
 // them to be. Tombstones are laid down when replicas are removed.
 // Replicas are removed for several reasons:
 //
-//  (1)   In response to a ChangeReplicasTrigger which removes it.
-//  (2)   In response to a ReplicaTooOldError from a sent raft message.
-//  (3)   Due to the replica GC queue detecting a replica is not in the range.
-//  (3.1) When the replica detects the range has been merged away.
-//  (4)   Due to a raft message addressed to a newer replica ID.
-//  (4.1) When the older replica is not initialized.
-//  (5)   Due to a merge.
-//  (6)   Due to snapshot which subsumes a range.
+//	(1)   In response to a ChangeReplicasTrigger which removes it.
+//	(2)   In response to a ReplicaTooOldError from a sent raft message.
+//	(3)   Due to the replica GC queue detecting a replica is not in the range.
+//	(3.1) When the replica detects the range has been merged away.
+//	(4)   Due to a raft message addressed to a newer replica ID.
+//	(4.1) When the older replica is not initialized.
+//	(5)   Due to a merge.
+//	(6)   Due to snapshot which subsumes a range.
 //
 // This test creates all of these scenarios and ensures that tombstones are
 // written at sane values.
@@ -3354,23 +3375,23 @@ func TestChangeReplicasLeaveAtomicRacesWithMerge(t *testing.T) {
 // At the time of writing this test were three hazardous cases which are now
 // avoided:
 //
-//  (1) The outgoing leaseholder learns about its removal before applying the
-//      lease transfer. This could happen if it has a lot left to apply but it
-//      does indeed know in its log that it is either no longer the leaseholder
-//      or that some of its commands will apply successfully.
+//	(1) The outgoing leaseholder learns about its removal before applying the
+//	    lease transfer. This could happen if it has a lot left to apply but it
+//	    does indeed know in its log that it is either no longer the leaseholder
+//	    or that some of its commands will apply successfully.
 //
-//  (2) The replica learns about its removal after applying the lease transfer
-//      but it potentially still has pending commands which it thinks might
-//      have been proposed. This can occur if there are commands which are
-//      proposed after the lease transfer has been proposed but before the lease
-//      transfer has applied. This can also occur if commands are re-ordered
-//      by raft due to a leadership change.
+//	(2) The replica learns about its removal after applying the lease transfer
+//	    but it potentially still has pending commands which it thinks might
+//	    have been proposed. This can occur if there are commands which are
+//	    proposed after the lease transfer has been proposed but before the lease
+//	    transfer has applied. This can also occur if commands are re-ordered
+//	    by raft due to a leadership change.
 //
-//  (3) The replica learns about its removal after applying the lease transfer
-//      but proposed a command evaluated under the old lease after the lease
-//      transfer has been applied. This can occur if there are commands evaluate
-//      before the lease transfer is proposed but are not inserted into the
-//      proposal buffer until after it has been applied.
+//	(3) The replica learns about its removal after applying the lease transfer
+//	    but proposed a command evaluated under the old lease after the lease
+//	    transfer has been applied. This can occur if there are commands evaluate
+//	    before the lease transfer is proposed but are not inserted into the
+//	    proposal buffer until after it has been applied.
 //
 // None of these cases are possible any longer as latches now prevent writes
 // from occurring concurrently with TransferLeaseRequests. (1) is prevented
@@ -3906,7 +3927,8 @@ func TestProposalOverhead(t *testing.T) {
 // hit an assertion failure. It used to.
 //
 // The test uses a TestCluster to mirror the setup from:
-//   concurrency/testdata/concurrency_manager/discover_lock_after_lease_race
+//
+//	concurrency/testdata/concurrency_manager/discover_lock_after_lease_race
 func TestDiscoverIntentAcrossLeaseTransferAwayAndBack(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -4074,10 +4096,10 @@ func makeReplicationTargets(ids ...int) (targets []roachpb.ReplicationTarget) {
 // TestTenantID tests that the tenant ID is properly set.
 // This test examines the following behaviors:
 //
-//  (1) When range is split off for a tenant, that it gets the right tenant ID.
-//  (2) When a replica is created with a raft message, it does not have a
-//     tenant ID, but then when it is initialized, it gets one.
-//  (3) When a store starts up, it assigns the right tenant ID.
+//	(1) When range is split off for a tenant, that it gets the right tenant ID.
+//	(2) When a replica is created with a raft message, it does not have a
+//	   tenant ID, but then when it is initialized, it gets one.
+//	(3) When a store starts up, it assigns the right tenant ID.
 func TestTenantID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -4629,9 +4651,9 @@ func BenchmarkOptimisticEvalForLocks(b *testing.B) {
 }
 
 // BenchmarkOptimisticEval benchmarks optimistic evaluation with
-// - potentially conflicting latches held by 1PC transactions doing writes.
-// - potentially conflicting latches or locks held by transactions doing
-//   writes.
+//   - potentially conflicting latches held by 1PC transactions doing writes.
+//   - potentially conflicting latches or locks held by transactions doing
+//     writes.
 func BenchmarkOptimisticEval(b *testing.B) {
 	defer log.Scope(b).Close(b)
 	ctx := context.Background()
