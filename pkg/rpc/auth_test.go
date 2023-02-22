@@ -963,6 +963,11 @@ func (m mockAuthorizer) BindReader(tenantcapabilities.Reader) {
 	panic("unimplemented")
 }
 
+// RequireCapabilities implements the tenantcapabilities.Authorizer interface.
+func (m mockAuthorizer) RequireCapabilities(roachpb.TenantID, ...string) error {
+	return nil
+}
+
 func (m mockAuthorizer) HasNodeStatusCapability(ctx context.Context, tenID roachpb.TenantID) error {
 	if m.hasNodestatusCapability {
 		return nil
