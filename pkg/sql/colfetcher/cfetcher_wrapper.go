@@ -33,7 +33,7 @@ var DirectScansEnabled = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"sql.distsql.direct_columnar_scans.enabled",
 	"set to true to enable the 'direct' columnar scans in the KV layer",
-	false,
+	true,
 )
 
 // cFetcherWrapper implements the storage.CFetcherWrapper interface. See a large
