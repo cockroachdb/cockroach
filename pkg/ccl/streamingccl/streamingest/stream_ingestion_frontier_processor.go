@@ -467,7 +467,10 @@ func (sf *streamIngestionFrontier) maybeUpdatePartitionProgress() error {
 	sf.metrics.JobProgressUpdates.Inc(1)
 	sf.persistedHighWater = f.Frontier()
 	sf.metrics.FrontierCheckpointSpanCount.Update(int64(len(frontierResolvedSpans)))
-	sf.metrics.FrontierLagNanos.Update(timeutil.Since(sf.persistedHighWater.GoTime()).Nanoseconds())
-
+	if !sf.persistedHighWater.IsEmpty() {
+		// Only update the frontier lag if the high water mark has been updated,
+		// implying the initial scan has completed.
+		sf.metrics.FrontierLagNanos.Update(timeutil.Since(sf.persistedHighWater.GoTime()).Nanoseconds())
+	}
 	return nil
 }
