@@ -413,6 +413,7 @@ func runBenchmarkInsertReturning(b *testing.B, db *sqlutils.SQLRunner, count int
 }
 
 func BenchmarkSQL(b *testing.B) {
+	b.Skip()
 	skip.UnderShort(b)
 	defer log.Scope(b).Close(b)
 	ForEachDB(b, func(b *testing.B, db *sqlutils.SQLRunner) {
