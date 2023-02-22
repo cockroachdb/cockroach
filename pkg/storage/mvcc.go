@@ -42,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 )
@@ -886,6 +885,7 @@ type MVCCGetOptions struct {
 	Tombstones       bool
 	FailOnMoreRecent bool
 	Txn              *roachpb.Transaction
+	ScanStats        *kvpb.ScanStats
 	Uncertainty      uncertainty.Interval
 	// MemoryAccount is used for tracking memory allocations.
 	MemoryAccount *mon.BoundAccount
@@ -1150,8 +1150,8 @@ func mvccGetWithValueHeader(
 	mvccScanner.init(opts.Txn, opts.Uncertainty, &results)
 	mvccScanner.get(ctx)
 
-	// If we have a trace, emit the scan stats that we produced.
-	recordIteratorStats(ctx, mvccScanner.parent)
+	// If we're tracking the ScanStats, include the stats from this Get.
+	recordIteratorStats(mvccScanner.parent, opts.ScanStats)
 
 	if mvccScanner.err != nil {
 		return optionalValue{}, nil, enginepb.MVCCValueHeader{}, mvccScanner.err
@@ -3616,10 +3616,9 @@ func MVCCDeleteRangeUsingTombstone(
 	return nil
 }
 
-func recordIteratorStats(ctx context.Context, iter MVCCIterator) {
-	sp := tracing.SpanFromContext(ctx)
-	if sp.RecordingType() == tracingpb.RecordingOff {
-		// Short-circuit before doing any work.
+func recordIteratorStats(iter MVCCIterator, scanStats *kvpb.ScanStats) {
+	if scanStats == nil {
+		// We're not tracking the ScanStats.
 		return
 	}
 	iteratorStats := iter.Stats()
@@ -3628,24 +3627,22 @@ func recordIteratorStats(ctx context.Context, iter MVCCIterator) {
 	seeks := stats.ReverseSeekCount[pebble.InterfaceCall] + stats.ForwardSeekCount[pebble.InterfaceCall]
 	internalSteps := stats.ReverseStepCount[pebble.InternalIterCall] + stats.ForwardStepCount[pebble.InternalIterCall]
 	internalSeeks := stats.ReverseSeekCount[pebble.InternalIterCall] + stats.ForwardSeekCount[pebble.InternalIterCall]
-	sp.RecordStructured(&kvpb.ScanStats{
-		NumInterfaceSeeks:               uint64(seeks),
-		NumInternalSeeks:                uint64(internalSeeks),
-		NumInterfaceSteps:               uint64(steps),
-		NumInternalSteps:                uint64(internalSteps),
-		BlockBytes:                      stats.InternalStats.BlockBytes,
-		BlockBytesInCache:               stats.InternalStats.BlockBytesInCache,
-		KeyBytes:                        stats.InternalStats.KeyBytes,
-		ValueBytes:                      stats.InternalStats.ValueBytes,
-		PointCount:                      stats.InternalStats.PointCount,
-		PointsCoveredByRangeTombstones:  stats.InternalStats.PointsCoveredByRangeTombstones,
-		RangeKeyCount:                   uint64(stats.RangeKeyStats.Count),
-		RangeKeyContainedPoints:         uint64(stats.RangeKeyStats.ContainedPoints),
-		RangeKeySkippedPoints:           uint64(stats.RangeKeyStats.SkippedPoints),
-		SeparatedPointCount:             stats.InternalStats.SeparatedPointValue.Count,
-		SeparatedPointValueBytes:        stats.InternalStats.SeparatedPointValue.ValueBytes,
-		SeparatedPointValueBytesFetched: stats.InternalStats.SeparatedPointValue.ValueBytesFetched,
-	})
+	scanStats.NumInterfaceSeeks += uint64(seeks)
+	scanStats.NumInternalSeeks += uint64(internalSeeks)
+	scanStats.NumInterfaceSteps += uint64(steps)
+	scanStats.NumInternalSteps += uint64(internalSteps)
+	scanStats.BlockBytes += stats.InternalStats.BlockBytes
+	scanStats.BlockBytesInCache += stats.InternalStats.BlockBytesInCache
+	scanStats.KeyBytes += stats.InternalStats.KeyBytes
+	scanStats.ValueBytes += stats.InternalStats.ValueBytes
+	scanStats.PointCount += stats.InternalStats.PointCount
+	scanStats.PointsCoveredByRangeTombstones += stats.InternalStats.PointsCoveredByRangeTombstones
+	scanStats.RangeKeyCount += uint64(stats.RangeKeyStats.Count)
+	scanStats.RangeKeyContainedPoints += uint64(stats.RangeKeyStats.ContainedPoints)
+	scanStats.RangeKeySkippedPoints += uint64(stats.RangeKeyStats.SkippedPoints)
+	scanStats.SeparatedPointCount += stats.InternalStats.SeparatedPointValue.Count
+	scanStats.SeparatedPointValueBytes += stats.InternalStats.SeparatedPointValue.ValueBytes
+	scanStats.SeparatedPointValueBytesFetched += stats.InternalStats.SeparatedPointValue.ValueBytesFetched
 }
 
 // mvccScanInit performs some preliminary checks on the validity of options for
@@ -3733,7 +3730,7 @@ func mvccScanToBytes(
 	}
 
 	res.KVData = results.finish()
-	if err = finalizeScanResult(ctx, mvccScanner, &res, opts.errOnIntents()); err != nil {
+	if err = finalizeScanResult(mvccScanner, &res, opts.ScanStats, opts.errOnIntents()); err != nil {
 		return MVCCScanResult{}, err
 	}
 	return res, nil
@@ -3743,12 +3740,13 @@ func mvccScanToBytes(
 // completed successfully. It also performs some additional auxiliary tasks
 // (like recording iterators stats).
 func finalizeScanResult(
-	ctx context.Context, mvccScanner *pebbleMVCCScanner, res *MVCCScanResult, errOnIntents bool,
+	mvccScanner *pebbleMVCCScanner, res *MVCCScanResult, scanStats *kvpb.ScanStats, errOnIntents bool,
 ) error {
 	res.NumKeys, res.NumBytes, _ = mvccScanner.results.sizeInfo(0 /* lenKey */, 0 /* lenValue */)
 
-	// If we have a trace, emit the scan stats that we produced.
-	recordIteratorStats(ctx, mvccScanner.parent)
+	// If we're tracking the ScanStats, include the stats from this Scan /
+	// ReverseScan.
+	recordIteratorStats(mvccScanner.parent, scanStats)
 
 	var err error
 	res.Intents, err = buildScanIntents(mvccScanner.intentsRepr())
@@ -3833,6 +3831,7 @@ type MVCCScanOptions struct {
 	Reverse          bool
 	FailOnMoreRecent bool
 	Txn              *roachpb.Transaction
+	ScanStats        *kvpb.ScanStats
 	Uncertainty      uncertainty.Interval
 	// MaxKeys is the maximum number of kv pairs returned from this operation.
 	// The zero value represents an unbounded scan. If the limit stops the scan,

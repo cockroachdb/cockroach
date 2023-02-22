@@ -29,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
 )
@@ -233,12 +235,37 @@ func evaluateBatch(
 		cantDeferWTOE bool
 	}
 
+	// Only collect the scan stats if the tracing is enabled.
+	var scanStats *kvpb.ScanStats
+	// foundGetOrScan indicates whether at least one Get, Scan, or ReverseScan
+	// was executed.
+	var foundGetOrScan bool
+	if sp := tracing.SpanFromContext(ctx); sp.RecordingType() != tracingpb.RecordingOff {
+		scanStats = &kvpb.ScanStats{}
+		defer func() {
+			if foundGetOrScan {
+				// TODO(feedback wanted): should we just unconditionally always
+				// record the scan stats for all batches, even if there are no
+				// Gets nor Scans? This will avoid the need to figure out the
+				// value of foundGetOrScan.
+				sp.RecordStructured(scanStats)
+			}
+		}()
+	}
+
 	// TODO(tbg): if we introduced an "executor" helper here that could carry state
 	// across the slots in the batch while we execute them, this code could come
 	// out a lot less ad-hoc.
 	for index, union := range baReqs {
 		// Execute the command.
 		args := union.GetInner()
+
+		if scanStats != nil && !foundGetOrScan {
+			switch args.Method() {
+			case kvpb.Get, kvpb.Scan, kvpb.ReverseScan:
+				foundGetOrScan = true
+			}
+		}
 
 		if baHeader.Txn != nil {
 			// Set the Request's sequence number on the TxnMeta for this
@@ -278,7 +305,7 @@ func evaluateBatch(
 		// may carry a response transaction and in the case of WriteTooOldError
 		// (which is sometimes deferred) it is fully populated.
 		curResult, err := evaluateCommand(
-			ctx, readWriter, rec, ms, baHeader, args, reply, g, st, ui, evalPath,
+			ctx, readWriter, rec, ms, scanStats, baHeader, args, reply, g, st, ui, evalPath,
 		)
 
 		if filter := rec.EvalKnobs().TestingPostEvalFilter; filter != nil {
@@ -479,6 +506,7 @@ func evaluateCommand(
 	readWriter storage.ReadWriter,
 	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
+	scanStats *kvpb.ScanStats,
 	h kvpb.Header,
 	args kvpb.Request,
 	reply kvpb.Response,
@@ -501,6 +529,7 @@ func evaluateCommand(
 			Args:                  args,
 			Now:                   now,
 			Stats:                 ms,
+			ScanStats:             scanStats,
 			Concurrency:           g,
 			Uncertainty:           ui,
 			DontInterleaveIntents: evalPath == readOnlyWithoutInterleavedIntents,
