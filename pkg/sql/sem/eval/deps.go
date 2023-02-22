@@ -371,6 +371,10 @@ type Planner interface {
 
 	// GetRangeDescByID gets the RangeDescriptor by the specified RangeID.
 	GetRangeDescByID(context.Context, roachpb.RangeID) (roachpb.RangeDescriptor, error)
+
+	SpanStats(context.Context, roachpb.RKey, roachpb.RKey) (*roachpb.SpanStatsResponse, error)
+
+	GetDetailsForSpanStats(ctx context.Context, dbId int, tableId int) (InternalRows, error)
 }
 
 // InternalRows is an iterator interface that's exposed by the internal
@@ -433,6 +437,10 @@ type SessionAccessor interface {
 	// HasRoleOption returns nil iff the current session user has the specified
 	// role option.
 	HasRoleOption(ctx context.Context, roleOption roleoption.Option) (bool, error)
+
+	// HasViewActivityOrViewActivityRedactedRole returns true iff the current session user has the
+	// VIEWACTIVITY or VIEWACTIVITYREDACTED permission.
+	HasViewActivityOrViewActivityRedactedRole(ctx context.Context) (bool, error)
 }
 
 // PreparedStatementState is a limited interface that exposes metadata about

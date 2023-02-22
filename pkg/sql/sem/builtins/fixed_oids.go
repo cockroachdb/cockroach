@@ -2335,6 +2335,9 @@ var builtinOidsArray = []string{
 	2361: `geography(geometry: geometry) -> geography`,
 	2362: `geography(geography: geography) -> geography`,
 	2363: `geography(bytes: bytes) -> geography`,
+	2364: `crdb_internal.tenant_span_stats() -> tuple{int AS database_id, int AS table_id, int AS range_count, int AS approximate_disk_bytes, int AS live_bytes, int AS total_bytes, float AS live_percentage}`,
+	2365: `crdb_internal.tenant_span_stats(database_id: int) -> tuple{int AS database_id, int AS table_id, int AS range_count, int AS approximate_disk_bytes, int AS live_bytes, int AS total_bytes, float AS live_percentage}`,
+	2366: `crdb_internal.tenant_span_stats(database_id: int, table_id: int) -> tuple{int AS database_id, int AS table_id, int AS range_count, int AS approximate_disk_bytes, int AS live_bytes, int AS total_bytes, float AS live_percentage}`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
