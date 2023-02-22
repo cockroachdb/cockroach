@@ -1914,6 +1914,14 @@ func TestEngineIteratorVisibility(t *testing.T) {
 // 2. Timestamps of the intent/read op.
 // 3. Epochs of the intent/read op.
 // 4. Whether any savepoints have been rolled back.
+//
+// NB: When scanning for conflicting intents to determine if latches can be
+// dropped early, we fallback to using the intent interleaving iterator in all
+// read-your-own-write cases. However, doing so is more restrictive than it
+// needs to be -- the in-line test expectations correspond to what an optimized
+// determination for `needsIntentHistory` would look like. However, for the
+// purposes of this test, we assert that we always fall back to using the intent
+// interleaving iterator in ALL read-your-own-write cases.
 func TestScanConflictingIntentsForDroppingLatchesEarlyReadYourOwnWrites(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1944,7 +1952,7 @@ func TestScanConflictingIntentsForDroppingLatchesEarlyReadYourOwnWrites(t *testi
 		intentTS              hlc.Timestamp
 		intentSequenceNumber  enginepb.TxnSeq
 		intentEpoch           enginepb.TxnEpoch
-		expNeedsIntentHistory bool
+		expNeedsIntentHistory bool // unused while testing
 		ignoredSeqNumbers     enginepb.IgnoredSeqNumRange
 	}{
 		{
@@ -1952,7 +1960,7 @@ func TestScanConflictingIntentsForDroppingLatchesEarlyReadYourOwnWrites(t *testi
 			intentTS:              readTS,
 			intentSequenceNumber:  readSeqNumber,
 			intentEpoch:           readTxnEpoch,
-			expNeedsIntentHistory: false, // fails
+			expNeedsIntentHistory: false,
 		},
 		{
 			name:                  "higher {intent seq number} equal {timestamp, epoch}",
@@ -2000,7 +2008,7 @@ func TestScanConflictingIntentsForDroppingLatchesEarlyReadYourOwnWrites(t *testi
 			intentTS:              readTS,
 			intentSequenceNumber:  belowReadSeqNumber,
 			intentEpoch:           readTxnEpoch,
-			expNeedsIntentHistory: false, // fails
+			expNeedsIntentHistory: false,
 		},
 		{
 			name:                  "equal {epoch} lower {intent timestamp, intent seq number}",
@@ -2014,7 +2022,7 @@ func TestScanConflictingIntentsForDroppingLatchesEarlyReadYourOwnWrites(t *testi
 			intentTS:              belowReadTS,
 			intentSequenceNumber:  readSeqNumber,
 			intentEpoch:           readTxnEpoch,
-			expNeedsIntentHistory: false, // fails
+			expNeedsIntentHistory: false,
 		},
 
 		// lower/higher epoch test cases aren't exhaustive.
@@ -2037,14 +2045,14 @@ func TestScanConflictingIntentsForDroppingLatchesEarlyReadYourOwnWrites(t *testi
 			intentTS:              belowReadTS,
 			intentSequenceNumber:  belowReadSeqNumber,
 			intentEpoch:           belowReadTxnEpoch,
-			expNeedsIntentHistory: true, // fails
+			expNeedsIntentHistory: true,
 		},
 		{
 			name:                  "higher {epoch} lower {intent timestamp, intent seq number}",
 			intentTS:              belowReadTS,
 			intentSequenceNumber:  belowReadSeqNumber,
 			intentEpoch:           aboveReadTxnEpoch,
-			expNeedsIntentHistory: true, // fails
+			expNeedsIntentHistory: true,
 		},
 		// Savepoint related tests.
 		{
@@ -2054,7 +2062,7 @@ func TestScanConflictingIntentsForDroppingLatchesEarlyReadYourOwnWrites(t *testi
 			intentSequenceNumber:  belowReadSeqNumber,
 			intentEpoch:           readTxnEpoch,
 			ignoredSeqNumbers:     enginepb.IgnoredSeqNumRange{Start: belowReadSeqNumber, End: belowReadSeqNumber},
-			expNeedsIntentHistory: true, // fails
+			expNeedsIntentHistory: true,
 		},
 		{
 			name:                  "intent not part of rolled back savepoint",
@@ -2101,12 +2109,11 @@ func TestScanConflictingIntentsForDroppingLatchesEarlyReadYourOwnWrites(t *testi
 				txn.ReadTimestamp,
 				keyA,
 				nil,
-				txn.Sequence,
 				&intents,
 				0, /* maxIntents */
 			)
 			require.NoError(t, err)
-			require.Equal(t, tc.expNeedsIntentHistory, needsIntentHistory)
+			require.Equal(t, true, needsIntentHistory)
 		})
 	}
 }
@@ -2231,7 +2238,6 @@ func TestScanConflictingIntentsForDroppingLatchesEarly(t *testing.T) {
 				txn.ReadTimestamp,
 				tc.start,
 				tc.end,
-				txn.Sequence,
 				&intents,
 				0, /* maxIntents */
 			)
