@@ -171,13 +171,20 @@ func (n *createFunctionNode) replaceFunction(udfDesc *funcdesc.Mutable, params r
 		}
 	}
 
-	// Make sure return type is the same.
+	// Make sure return type is the same. The signature of user-defined types may
+	// change, as long as the same type is referenced. If this is the case, we
+	// must update the return type.
 	retType, err := tree.ResolveType(params.ctx, n.cf.ReturnType.Type, params.p)
 	if err != nil {
 		return err
 	}
-	if n.cf.ReturnType.IsSet != udfDesc.ReturnType.ReturnSet || !retType.Equal(udfDesc.ReturnType.Type) {
+	isSameUDT := types.IsOIDUserDefinedType(retType.Oid()) && retType.Oid() ==
+		udfDesc.ReturnType.Type.Oid()
+	if n.cf.ReturnType.IsSet != udfDesc.ReturnType.ReturnSet || (!retType.Equal(udfDesc.ReturnType.Type) && !isSameUDT) {
 		return pgerror.Newf(pgcode.InvalidFunctionDefinition, "cannot change return type of existing function")
+	}
+	if isSameUDT {
+		udfDesc.ReturnType.Type = retType
 	}
 
 	resetFuncOption(udfDesc)

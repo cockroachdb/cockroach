@@ -3086,6 +3086,19 @@ SELECT f_rtbl();
 ----
 (1,2)
 
+statement ok
+ALTER TABLE t_alter ADD COLUMN c INT;
+
+statement error pq: return type mismatch in function declared to return record
+CREATE OR REPLACE FUNCTION f_rtbl() RETURNS t_alter LANGUAGE SQL AS 'SELECT 1, 2;'
+
+statement ok
+CREATE OR REPLACE FUNCTION f_rtbl() RETURNS t_alter LANGUAGE SQL AS 'SELECT 1, 2, 3;'
+
+query T
+SELECT f_rtbl();
+----
+(1,2,3)
 
 subtest regression_94146
 
