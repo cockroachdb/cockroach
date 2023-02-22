@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesapi"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -58,8 +58,8 @@ type testClusterCfg struct {
 	numNodes            int
 	setupClusterSetting *settings.BoolSetting
 	queryClusterSetting *settings.BoolSetting
-	setupCapability     tenantcapabilitiespb.TenantCapabilityName
-	queryCapability     tenantcapabilitiespb.TenantCapabilityName
+	setupCapability     tenantcapabilitiesapi.BoolCapabilityName
+	queryCapability     tenantcapabilitiesapi.BoolCapabilityName
 }
 
 func createTestClusterArgs(numReplicas, numVoters int32) base.TestClusterArgs {
@@ -242,9 +242,9 @@ type testCase struct {
 	queryClusterSetting *settings.BoolSetting
 	// Used for tests that have a capability prereq
 	// (eq SPLIT AT is required for UNSPLIT AT).
-	setupCapability tenantcapabilitiespb.TenantCapabilityName
+	setupCapability tenantcapabilitiesapi.BoolCapabilityName
 	// Capability required for secondary tenant query.
-	queryCapability tenantcapabilitiespb.TenantCapabilityName
+	queryCapability tenantcapabilitiesapi.BoolCapabilityName
 }
 
 func (tc testCase) runTest(
@@ -308,29 +308,29 @@ func (tc testCase) runTest(
 	var waitForTenantCapabilitiesFns []func()
 	setCapabilities := func(
 		tenantID roachpb.TenantID,
-		capabilities ...tenantcapabilitiespb.TenantCapabilityName,
+		capabilityNames ...tenantcapabilitiesapi.BoolCapabilityName,
 	) {
 		// Filter out empty capabilities.
-		var caps []tenantcapabilitiespb.TenantCapabilityName
-		for _, capability := range capabilities {
-			if capability.IsSet() {
-				caps = append(caps, capability)
+		var caps []tenantcapabilitiesapi.BoolCapabilityName
+		for _, capabilityName := range capabilityNames {
+			if capabilityName.IsSet() {
+				caps = append(caps, capabilityName)
 			}
 		}
-		capabilities = caps
-		if len(capabilities) > 0 {
+		capabilityNames = caps
+		if len(capabilityNames) > 0 {
 			var builder strings.Builder
-			for i, capability := range capabilities {
+			for i, capabilityName := range capabilityNames {
 				if i > 0 {
 					builder.WriteString(", ")
 				}
-				builder.WriteString(capability.String())
+				builder.WriteString(capabilityName.String())
 			}
 			query := fmt.Sprintf("ALTER TENANT [$1] GRANT CAPABILITY %s", builder.String())
 			_, err := systemDB.ExecContext(ctx, query, tenantID.ToUint64())
 			require.NoError(t, err, query)
 			waitForTenantCapabilitiesFns = append(waitForTenantCapabilitiesFns, func() {
-				testCluster.WaitForTenantCapabilities(t, tenantID, capabilities...)
+				testCluster.WaitForTenantCapabilities(t, tenantID, capabilityNames...)
 			})
 		}
 	}
@@ -463,10 +463,10 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 				errorMessage: "tenant cluster setting sql.split_at.allow_for_secondary_tenant.enabled disabled",
 			},
 			secondaryWithoutCapability: tenantExpected{
-				errorMessage: `does not have admin split capability`,
+				errorMessage: `does not have capability "can_admin_split"`,
 			},
 			queryClusterSetting: sql.SecondaryTenantSplitAtEnabled,
-			queryCapability:     tenantcapabilitiespb.CanAdminSplit,
+			queryCapability:     tenantcapabilitiesapi.CanAdminSplit,
 		},
 		{
 			desc:  "ALTER INDEX x SPLIT AT",
@@ -482,10 +482,10 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 				errorMessage: "tenant cluster setting sql.split_at.allow_for_secondary_tenant.enabled disabled",
 			},
 			secondaryWithoutCapability: tenantExpected{
-				errorMessage: `does not have admin split capability`,
+				errorMessage: `does not have capability "can_admin_split"`,
 			},
 			queryClusterSetting: sql.SecondaryTenantSplitAtEnabled,
-			queryCapability:     tenantcapabilitiespb.CanAdminSplit,
+			queryCapability:     tenantcapabilitiesapi.CanAdminSplit,
 		},
 		{
 			desc:  "ALTER TABLE x UNSPLIT AT",
@@ -501,7 +501,7 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 				errorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
 			},
 			setupClusterSetting: sql.SecondaryTenantSplitAtEnabled,
-			setupCapability:     tenantcapabilitiespb.CanAdminSplit,
+			setupCapability:     tenantcapabilitiesapi.CanAdminSplit,
 		},
 		{
 			desc: "ALTER INDEX x UNSPLIT AT",
@@ -520,7 +520,7 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 				errorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
 			},
 			setupClusterSetting: sql.SecondaryTenantSplitAtEnabled,
-			setupCapability:     tenantcapabilitiespb.CanAdminSplit,
+			setupCapability:     tenantcapabilitiesapi.CanAdminSplit,
 		},
 		{
 			desc:  "ALTER TABLE x UNSPLIT ALL",
@@ -536,7 +536,7 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 				errorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
 			},
 			setupClusterSetting: sql.SecondaryTenantSplitAtEnabled,
-			setupCapability:     tenantcapabilitiespb.CanAdminSplit,
+			setupCapability:     tenantcapabilitiesapi.CanAdminSplit,
 		},
 		{
 			desc: "ALTER INDEX x UNSPLIT ALL",
@@ -555,7 +555,7 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 				errorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
 			},
 			setupClusterSetting: sql.SecondaryTenantSplitAtEnabled,
-			setupCapability:     tenantcapabilitiespb.CanAdminSplit,
+			setupCapability:     tenantcapabilitiesapi.CanAdminSplit,
 		},
 		{
 			desc:  "ALTER TABLE x SCATTER",
@@ -661,7 +661,7 @@ func TestTruncateTable(t *testing.T) {
 					},
 				},
 				setupClusterSetting: sql.SecondaryTenantSplitAtEnabled,
-				setupCapability:     tenantcapabilitiespb.CanAdminSplit,
+				setupCapability:     tenantcapabilitiesapi.CanAdminSplit,
 			}
 		},
 		func(_ serverutils.TestClusterInterface, db *gosql.DB, tenant string, expected tenantExpected) {

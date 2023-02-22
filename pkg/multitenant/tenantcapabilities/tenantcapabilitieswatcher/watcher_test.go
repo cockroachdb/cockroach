@@ -201,17 +201,17 @@ func TestDataDriven(t *testing.T) {
 				return output.String()
 
 			case "upsert":
-				update, err := tenantcapabilitiestestutils.ParseTenantCapabilityUpsert(t, d)
+				tenID, caps, err := tenantcapabilitiestestutils.ParseTenantCapabilityUpsert(t, d)
 				require.NoError(t, err)
 				info := mtinfopb.ProtoInfo{
-					Capabilities: update.TenantCapabilities,
+					Capabilities: caps,
 				}
 				buf, err := protoutil.Marshal(&info)
 				require.NoError(t, err)
 				tdb.Exec(
 					t,
 					fmt.Sprintf("UPSERT INTO %s (id, active, info) VALUES ($1, $2, $3)", dummyTableName),
-					update.TenantID.ToUint64(),
+					tenID.ToUint64(),
 					true, /* active */
 					buf,
 				)

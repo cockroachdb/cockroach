@@ -1,0 +1,22 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("//build:STRINGER.bzl", "stringer")
+
+go_library(
+    name = "tenantcapabilitiesapi",
+    srcs = [
+        "api.go",
+        ":boolcapabilityname-stringer",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesapi",
+    visibility = ["//visibility:public"],
+)
+
+stringer(
+    name = "boolcapabilityname-stringer",
+    src = "api.go",
+    additional_args = ["--linecomment"],
+    typ = "BoolCapabilityName",
+)
+
+get_x_data(name = "get_x_data")

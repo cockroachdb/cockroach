@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesapi"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -36,7 +36,7 @@ type tenantValues struct {
 }
 
 type showTenantNodeCapability struct {
-	name  tenantcapabilitiespb.TenantCapabilityName
+	name  string
 	value string
 }
 
@@ -112,20 +112,14 @@ func (n *showTenantNode) getTenantValues(
 	// Add capabilities if requested.
 	if n.withCapabilities {
 		capabilities := tenantInfo.Capabilities
-		values.capabilities = []showTenantNodeCapability{
-			{
-				name:  tenantcapabilitiespb.CanAdminSplit,
-				value: strconv.FormatBool(capabilities.CanAdminSplit),
-			},
-			{
-				name:  tenantcapabilitiespb.CanViewNodeInfo,
-				value: strconv.FormatBool(capabilities.CanViewNodeInfo),
-			},
-			{
-				name:  tenantcapabilitiespb.CanViewTSDBMetrics,
-				value: strconv.FormatBool(capabilities.CanViewTSDBMetrics),
-			},
+		showTenantNodeCapabilities := make([]showTenantNodeCapability, 0, len(tenantcapabilitiesapi.BoolCapabilityNames))
+		for _, capabilityName := range tenantcapabilitiesapi.BoolCapabilityNames {
+			showTenantNodeCapabilities = append(showTenantNodeCapabilities, showTenantNodeCapability{
+				name:  capabilityName.String(),
+				value: strconv.FormatBool(capabilities.GetBoolCapability(capabilityName)),
+			})
 		}
+		values.capabilities = showTenantNodeCapabilities
 	}
 
 	// Tenant status + replication status fields.
@@ -266,7 +260,7 @@ func (n *showTenantNode) Values() tree.Datums {
 	if n.withCapabilities {
 		capability := n.capability
 		result = append(result,
-			tree.NewDString(capability.name.String()),
+			tree.NewDString(capability.name),
 			tree.NewDString(capability.value),
 		)
 	}
