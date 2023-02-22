@@ -14,6 +14,8 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"math/rand"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -28,6 +30,13 @@ import (
 )
 
 func registerFailover(r registry.Registry) {
+	r.Add(registry.TestSpec{
+		Name:    "failover/partial/lease-liveness",
+		Owner:   registry.OwnerKV,
+		Timeout: 30 * time.Minute,
+		Cluster: r.MakeClusterSpec(6, spec.CPU(4)),
+		Run:     runDisconnect,
+	})
 	for _, failureMode := range []failureMode{
 		failureModeBlackhole,
 		failureModeBlackholeRecv,
@@ -66,6 +75,97 @@ func registerFailover(r registry.Registry) {
 	}
 }
 
+func randSleep(ctx context.Context, rng *rand.Rand, max time.Duration) {
+	randTimer := time.After(randutil.RandDuration(rng, max))
+	// Randomly sleep up to the lease renewal interval, to vary the time
+	// between the last lease renewal and the failure. We start the timer
+	// before the range relocation above to run them concurrently.
+	select {
+	case <-randTimer:
+	case <-ctx.Done():
+	}
+}
+
+// 5 nodes fully connected. Break the connection between a pair of nodes 4 and 5
+// while running a workload against nodes 1 through 3. Before each disconnect,
+// move all the leases to nodes 4 and 5 in a different pattern.
+func runDisconnect(ctx context.Context, t test.Test, c cluster.Cluster) {
+	require.Equal(t, 6, c.Spec().NodeCount)
+
+	rng, _ := randutil.NewTestRand()
+	// Create cluster.
+	opts := option.DefaultStartOpts()
+	settings := install.MakeClusterSettings()
+
+	c.Put(ctx, t.Cockroach(), "./cockroach")
+	c.Start(ctx, t.L(), opts, settings, c.Range(1, 5))
+
+	conn := c.Conn(ctx, t.L(), 1)
+	defer conn.Close()
+
+	constrainAllConfig(t, ctx, conn, 3, []int{4, 5}, 0)
+	constrainConfig(t, ctx, conn, `RANGE liveness`, 3, []int{3, 5}, 4)
+	// Wait for upreplication.
+	require.NoError(t, WaitFor3XReplication(ctx, t, conn))
+
+	t.Status("creating workload database")
+	_, err := conn.ExecContext(ctx, `CREATE DATABASE kv`)
+	require.NoError(t, err)
+	constrainConfig(t, ctx, conn, `DATABASE kv`, 3, []int{2, 3, 5}, 0)
+
+	c.Run(ctx, c.Node(6), `./cockroach workload init kv --splits 100 {pgurl:1}`)
+
+	// Start workload on n6 using nodes 1-3 (not part of partition). We could
+	// additionally test the behavior of running SQL against nodes 4-5 however
+	// that complicates the analysis as we want to focus on KV behavior.
+	t.Status("running workload")
+	m := c.NewMonitor(ctx, c.Range(1, 3))
+	m.Go(func(ctx context.Context) error {
+		c.Run(ctx, c.Node(6), `./cockroach workload run kv --read-percent 50 `+
+			`--duration 10m --concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
+			`--histograms=`+t.PerfArtifactsDir()+`/stats.json `+
+			`{pgurl:1-3}`)
+		return nil
+	})
+	// Make sure we don't leave an outage if this test fails midway.
+	defer Cleanup(c, ctx)
+
+	// Start and stop partial between nodes 4 and 5 every 30 seconds.
+	m.Go(func(ctx context.Context) error {
+		var raftCfg base.RaftConfig
+		raftCfg.SetDefaults()
+
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+
+		// All the system ranges will be on all the nodes, so they will all move,
+		// plus many of the non-system ranges.
+		for i := 0; i < 9; i++ {
+			t.Status("Moving ranges to nodes 4 and 5 before partition", i)
+			relocateLeases(t, ctx, conn, `range_id = 2`, 4)
+			relocateLeases(t, ctx, conn, `voting_replicas @> ARRAY[5] AND range_id != 2`, 5)
+
+			randSleep(ctx, rng, raftCfg.RangeLeaseRenewalDuration())
+
+			t.Status("disconnecting n4 and n5")
+			Disconnect(t, c, ctx, []int{4, 5})
+
+			select {
+			case <-ticker.C:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+
+			qps := measureQPS(ctx, t, conn, 5*time.Second)
+			t.Status("Node 1 QPS after waiting is: ", qps, " recovering nodes")
+
+			Cleanup(c, ctx)
+		}
+		return nil
+	})
+	m.Wait()
+}
+
 // runFailoverNonSystem benchmarks the maximum duration of range unavailability
 // following a leaseholder failure with only non-system ranges.
 //
@@ -96,7 +196,6 @@ func runFailoverNonSystem(
 	ctx context.Context, t test.Test, c cluster.Cluster, failureMode failureMode,
 ) {
 	require.Equal(t, 7, c.Spec().NodeCount)
-	require.False(t, c.IsLocal(), "test can't use local cluster") // messes with iptables
 
 	rng, _ := randutil.NewTestRand()
 
@@ -120,17 +219,7 @@ func runFailoverNonSystem(
 	require.NoError(t, err)
 
 	// Constrain all existing zone configs to n1-n3.
-	rows, err := conn.QueryContext(ctx, `SELECT target FROM [SHOW ALL ZONE CONFIGURATIONS]`)
-	require.NoError(t, err)
-	for rows.Next() {
-		var target string
-		require.NoError(t, rows.Scan(&target))
-		_, err = conn.ExecContext(ctx, fmt.Sprintf(
-			`ALTER %s CONFIGURE ZONE USING num_replicas = 3, constraints = '[-node4, -node5, -node6]'`,
-			target))
-		require.NoError(t, err)
-	}
-	require.NoError(t, rows.Err())
+	constrainAllConfig(t, ctx, conn, 3, []int{4, 5, 6}, 0)
 
 	// Wait for upreplication.
 	require.NoError(t, WaitFor3XReplication(ctx, t, conn))
@@ -140,9 +229,7 @@ func runFailoverNonSystem(
 	t.Status("creating workload database")
 	_, err = conn.ExecContext(ctx, `CREATE DATABASE kv`)
 	require.NoError(t, err)
-	_, err = conn.ExecContext(ctx, `ALTER DATABASE kv CONFIGURE ZONE USING `+
-		`num_replicas = 3, constraints = '[-node1, -node2, -node3]'`)
-	require.NoError(t, err)
+	constrainConfig(t, ctx, conn, `DATABASE kv`, 3, []int{1, 2, 3}, 0)
 	c.Run(ctx, c.Node(7), `./cockroach workload init kv --splits 1000 {pgurl:1}`)
 
 	// The replicate queue takes forever to move the kv ranges from n1-n3 to
@@ -250,7 +337,6 @@ func runFailoverLiveness(
 	ctx context.Context, t test.Test, c cluster.Cluster, failureMode failureMode,
 ) {
 	require.Equal(t, 5, c.Spec().NodeCount)
-	require.False(t, c.IsLocal(), "test can't use local cluster") // messes with iptables
 
 	rng, _ := randutil.NewTestRand()
 
@@ -274,21 +360,10 @@ func runFailoverLiveness(
 	require.NoError(t, err)
 
 	// Constrain all existing zone configs to n1-n3.
-	rows, err := conn.QueryContext(ctx, `SELECT target FROM [SHOW ALL ZONE CONFIGURATIONS]`)
-	require.NoError(t, err)
-	for rows.Next() {
-		var target string
-		require.NoError(t, rows.Scan(&target))
-		_, err = conn.ExecContext(ctx, fmt.Sprintf(
-			`ALTER %s CONFIGURE ZONE USING num_replicas = 3, constraints = '[-node4]'`,
-			target))
-		require.NoError(t, err)
-	}
-	require.NoError(t, rows.Err())
+	constrainAllConfig(t, ctx, conn, 3, []int{4}, 0)
 
 	// Constrain the liveness range to n1-n4, with leaseholder preference on n4.
-	_, err = conn.ExecContext(ctx, `ALTER RANGE liveness CONFIGURE ZONE USING `+
-		`num_replicas = 4, constraints = '[]', lease_preferences = '[[+node4]]'`)
+	constrainConfig(t, ctx, conn, `RANGE liveness`, 4, nil, 4)
 	require.NoError(t, err)
 
 	// Wait for upreplication.
@@ -299,9 +374,7 @@ func runFailoverLiveness(
 	t.Status("creating workload database")
 	_, err = conn.ExecContext(ctx, `CREATE DATABASE kv`)
 	require.NoError(t, err)
-	_, err = conn.ExecContext(ctx, `ALTER DATABASE kv CONFIGURE ZONE USING `+
-		`num_replicas = 3, constraints = '[-node4]'`)
-	require.NoError(t, err)
+	constrainConfig(t, ctx, conn, `DATABASE kv`, 3, []int{4}, 0)
 	c.Run(ctx, c.Node(5), `./cockroach workload init kv --splits 1000 {pgurl:1}`)
 
 	// The replicate queue takes forever to move the other ranges off of n4 so we
@@ -404,7 +477,6 @@ func runFailoverSystemNonLiveness(
 	ctx context.Context, t test.Test, c cluster.Cluster, failureMode failureMode,
 ) {
 	require.Equal(t, 7, c.Spec().NodeCount)
-	require.False(t, c.IsLocal(), "test can't use local cluster") // messes with iptables
 
 	rng, _ := randutil.NewTestRand()
 
@@ -429,20 +501,8 @@ func runFailoverSystemNonLiveness(
 
 	// Constrain all existing zone configs to n4-n6, except liveness which is
 	// constrained to n1-n3.
-	rows, err := conn.QueryContext(ctx, `SELECT target FROM [SHOW ALL ZONE CONFIGURATIONS]`)
-	require.NoError(t, err)
-	for rows.Next() {
-		var target string
-		require.NoError(t, rows.Scan(&target))
-		_, err = conn.ExecContext(ctx, fmt.Sprintf(
-			`ALTER %s CONFIGURE ZONE USING num_replicas = 3, constraints = '[-node1, -node2, -node3]'`,
-			target))
-		require.NoError(t, err)
-	}
-	require.NoError(t, rows.Err())
-
-	_, err = conn.ExecContext(ctx, `ALTER RANGE liveness CONFIGURE ZONE USING `+
-		`num_replicas = 3, constraints = '[-node4, -node5, -node6]'`)
+	constrainAllConfig(t, ctx, conn, 3, []int{1, 2, 3}, 0)
+	constrainConfig(t, ctx, conn, `RANGE liveness`, 3, []int{4, 5, 6}, 0)
 	require.NoError(t, err)
 
 	// Wait for upreplication.
@@ -453,9 +513,7 @@ func runFailoverSystemNonLiveness(
 	t.Status("creating workload database")
 	_, err = conn.ExecContext(ctx, `CREATE DATABASE kv`)
 	require.NoError(t, err)
-	_, err = conn.ExecContext(ctx, `ALTER DATABASE kv CONFIGURE ZONE USING `+
-		`num_replicas = 3, constraints = '[-node4, -node5, -node6]'`)
-	require.NoError(t, err)
+	constrainConfig(t, ctx, conn, `DATABASE kv`, 3, []int{4, 5, 6}, 0)
 	c.Run(ctx, c.Node(7), `./cockroach workload init kv --splits 1000 {pgurl:1}`)
 
 	// The replicate queue takes forever to move the kv ranges from n4-n6 to
@@ -592,6 +650,36 @@ func makeFailer(
 	}
 }
 
+// Disconnect takes a set of nodes and each nodes internal ips. It disconnects
+// each node from all the others in the list.
+func Disconnect(t test.Test, c cluster.Cluster, ctx context.Context, nodes []int) {
+	if c.IsLocal() {
+		return
+	}
+
+	ips, err := c.InternalIP(ctx, t.L(), nodes)
+	require.NoError(t, err)
+
+	// disconnect each node from every other passed in node.
+	for n := 0; n < len(nodes); n++ {
+		for ip := 0; ip < len(ips); ip++ {
+			if n != ip {
+				c.Run(ctx, c.Node(nodes[n]), `sudo iptables -A INPUT -s `+ips[ip]+` -j DROP`)
+				c.Run(ctx, c.Node(nodes[n]), `sudo iptables -A OUTPUT -d `+ips[ip]+` -j DROP`)
+			}
+		}
+	}
+}
+
+// Cleanup takes a set of nodes and each nodes internal ips. It disconnects
+// each node from all the others in the list.
+func Cleanup(c cluster.Cluster, ctx context.Context) {
+	if c.IsLocal() {
+		return
+	}
+	c.Run(ctx, c.All(), `sudo iptables -F`)
+}
+
 // failer fails and recovers a given node in some particular way.
 type failer interface {
 	// Setup prepares the failer. It is called before the cluster is started.
@@ -624,14 +712,20 @@ type blackholeFailer struct {
 	output bool
 }
 
-func (f *blackholeFailer) Setup(ctx context.Context)                    {}
-func (f *blackholeFailer) Ready(ctx context.Context, m cluster.Monitor) {}
+func (f *blackholeFailer) Setup(_ context.Context)                    {}
+func (f *blackholeFailer) Ready(_ context.Context, _ cluster.Monitor) {}
 
 func (f *blackholeFailer) Cleanup(ctx context.Context) {
+	if f.c.IsLocal() {
+		return
+	}
 	f.c.Run(ctx, f.c.All(), `sudo iptables -F`)
 }
 
 func (f *blackholeFailer) Fail(ctx context.Context, nodeID int) {
+	if f.c.IsLocal() {
+		return
+	}
 	// When dropping both input and output, we use multiport to block traffic both
 	// to port 26257 and from port 26257 on either side of the connection, to
 	// avoid any spurious packets from making it through.
@@ -652,6 +746,9 @@ func (f *blackholeFailer) Fail(ctx context.Context, nodeID int) {
 }
 
 func (f *blackholeFailer) Recover(ctx context.Context, nodeID int) {
+	if f.c.IsLocal() {
+		return
+	}
 	f.c.Run(ctx, f.c.Node(nodeID), `sudo iptables -F`)
 }
 
@@ -665,9 +762,9 @@ type crashFailer struct {
 	startSettings install.ClusterSettings
 }
 
-func (f *crashFailer) Setup(ctx context.Context)                    {}
-func (f *crashFailer) Ready(ctx context.Context, m cluster.Monitor) { f.m = m }
-func (f *crashFailer) Cleanup(ctx context.Context)                  {}
+func (f *crashFailer) Setup(_ context.Context)                    {}
+func (f *crashFailer) Ready(_ context.Context, m cluster.Monitor) { f.m = m }
+func (f *crashFailer) Cleanup(_ context.Context)                  {}
 
 func (f *crashFailer) Fail(ctx context.Context, nodeID int) {
 	f.m.ExpectDeath()
@@ -693,7 +790,7 @@ func (f *diskStallFailer) Setup(ctx context.Context) {
 	f.staller.Setup(ctx)
 }
 
-func (f *diskStallFailer) Ready(ctx context.Context, m cluster.Monitor) {
+func (f *diskStallFailer) Ready(_ context.Context, m cluster.Monitor) {
 	f.m = m
 }
 
@@ -772,4 +869,53 @@ func relocateLeases(t test.Test, ctx context.Context, conn *gosql.DB, predicate 
 		}
 		time.Sleep(time.Second)
 	}
+}
+
+// constrainConfig will alter the zone config for the target to specify the
+// number of nodes the target can be on, the replicas it is prevented from being
+// on and an optional leaseholder.
+func constrainConfig(
+	t test.Test,
+	ctx context.Context,
+	conn *gosql.DB,
+	target string,
+	numNodes int,
+	constrainedReplicas []int,
+	lease int,
+) {
+	replica := make([]string, len(constrainedReplicas))
+	for i, n := range constrainedReplicas {
+		replica[i] = fmt.Sprintf("-node%d", n)
+	}
+	replicaStr := fmt.Sprintf(`'[%s]'`, strings.Join(replica, ","))
+
+	leaseStr := ""
+	if lease > 0 {
+		leaseStr = fmt.Sprintf(`[+node%d]`, lease)
+	}
+
+	str :=
+		fmt.Sprintf(
+			`ALTER %s CONFIGURE ZONE USING num_replicas = %d, constraints = %s, lease_preferences = '[%s]'`,
+			target, numNodes, replicaStr, leaseStr)
+	_, err := conn.ExecContext(ctx, str)
+	t.Status(str)
+	require.NoError(t, err)
+}
+
+// constrainAllConfig will alter the zone config for all zone configurations to
+// specify the number of nodes the target can be on, the replicas it is
+// prevented from being on and an optional leaseholder.
+func constrainAllConfig(
+	t test.Test, ctx context.Context, conn *gosql.DB, numNodes int, replicas []int, lease int,
+) {
+	rows, err := conn.QueryContext(ctx, `SELECT target FROM [SHOW ALL ZONE CONFIGURATIONS]`)
+	require.NoError(t, err)
+
+	for rows.Next() {
+		var target string
+		require.NoError(t, rows.Scan(&target))
+		constrainConfig(t, ctx, conn, target, numNodes, replicas, lease)
+	}
+	require.NoError(t, rows.Err())
 }
