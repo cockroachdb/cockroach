@@ -11,6 +11,7 @@ package changefeedccl
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
@@ -573,20 +574,24 @@ func doCreateChangefeedSchedule(
 	}
 
 	createChangefeedopts := changefeedbase.MakeStatementOptions(spec.createChangefeedOptions)
-	if !createChangefeedopts.IsInitialScanSpecified() {
+	initialScanSpecified := createChangefeedopts.IsInitialScanSpecified()
+	if !initialScanSpecified {
 		log.Infof(ctx, "Initial scan type not specified, forcing %s option", changefeedbase.OptInitialScanOnly)
 		spec.Options = append(spec.Options, tree.KVOption{
-			Key: changefeedbase.OptInitialScanOnly,
+			Key:   changefeedbase.OptInitialScan,
+			Value: tree.NewStrVal("only"),
 		})
-		spec.createChangefeedOptions[changefeedbase.OptInitialScanOnly] = ""
+		spec.createChangefeedOptions[changefeedbase.OptInitialScan] = "only"
+
+		p.BufferClientNotice(ctx, pgnotice.Newf("added missing initial_scan='only' option to schedule changefeed"))
 	} else {
 		initialScanType, err := createChangefeedopts.GetInitialScanType()
 		if err != nil {
 			return err
 		}
 		if initialScanType != changefeedbase.OnlyInitialScan {
-			return pgerror.Newf(pgcode.InvalidParameterValue, "%s must be `only` or %s must be specified for scheduled changefeeds",
-				changefeedbase.OptInitialScan, changefeedbase.OptInitialScanOnly)
+			return pgerror.Newf(pgcode.InvalidParameterValue, "%s must be `only` for scheduled changefeeds",
+				changefeedbase.OptInitialScan)
 		}
 	}
 
@@ -624,6 +629,10 @@ func doCreateChangefeedSchedule(
 	if err = dryRunCreateChangefeed(
 		ctx, p, es.ScheduleID(), createChangefeedNode,
 	); err != nil {
+		errStr := err.Error()
+		if strings.Contains(errStr, "both initial_scan='only' and") && !initialScanSpecified {
+			err = errors.WithHintf(err, "scheduled changefeeds implicitly pass the option %s='only'", changefeedbase.OptInitialScan)
+		}
 		return errors.Wrapf(err, "Failed to dry run create changefeed")
 	}
 
