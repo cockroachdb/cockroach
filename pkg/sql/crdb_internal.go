@@ -1981,6 +1981,11 @@ CREATE TABLE crdb_internal.cluster_settings (
 			} else if hasModify {
 				return true, nil
 			}
+			if hasSqlModify, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYSQLCLUSTERSETTING, p.User()); err != nil {
+				return false, err
+			} else if hasSqlModify {
+				return true, nil
+			}
 			if hasView, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERSETTING, p.User()); err != nil {
 				return false, err
 			} else if hasView {
@@ -2001,8 +2006,8 @@ CREATE TABLE crdb_internal.cluster_settings (
 			return err
 		} else if !hasPriv {
 			return pgerror.Newf(pgcode.InsufficientPrivilege,
-				"only users with either %s or %s system privileges are allowed to read "+
-					"crdb_internal.cluster_settings", privilege.MODIFYCLUSTERSETTING, privilege.VIEWCLUSTERSETTING)
+				"only users with %s, %s or %s system privileges are allowed to read "+
+					"crdb_internal.cluster_settings", privilege.MODIFYCLUSTERSETTING, privilege.MODIFYSQLCLUSTERSETTING, privilege.VIEWCLUSTERSETTING)
 		}
 		for _, k := range settings.Keys(p.ExecCfg().Codec.ForSystemTenant()) {
 			setting, _ := settings.Lookup(
