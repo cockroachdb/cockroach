@@ -243,7 +243,6 @@ export class JobsPage extends React.Component<JobsPageProps, PageState> {
       onColumnsChange,
     } = this.props;
     const isLoading = reqInFlight && (!isDataValid || !jobs);
-    const error = jobs && jobsError;
     const { pagination } = this.state;
     const filteredJobs = jobs?.jobs ?? [];
     const columns = makeJobsColumns();
@@ -300,7 +299,14 @@ export class JobsPage extends React.Component<JobsPageProps, PageState> {
           </PageConfig>
         </div>
         <div className={cx("table-area")}>
-          <Loading loading={isLoading} page={"jobs"} error={error}>
+          {jobsError && jobs && (
+            <InlineAlert intent="danger" title={jobsError.message} />
+          )}
+          <Loading
+            loading={isLoading}
+            page={"jobs"}
+            error={!jobs ? jobsError : null}
+          >
             <div>
               <section className={sortableTableCx("cl-table-container")}>
                 <div className={sortableTableCx("cl-table-statistic")}>
@@ -350,7 +356,7 @@ export class JobsPage extends React.Component<JobsPageProps, PageState> {
               />
             </div>
           </Loading>
-          {isLoading && !error && (
+          {isLoading && !jobsError && (
             <Delayed delay={moment.duration(2, "s")}>
               <InlineAlert
                 intent="info"
