@@ -22,22 +22,28 @@ export const usePrevious = <T>(value: T): T | undefined => {
 const MIN_REQUEST_DELAY_MS = 1000;
 
 /**
- * useFetchDataWithPolling allows the setup of making data requests with optional polling.
- * Data will automatically be fetched when the data is not valid or was never updated.
- * Requests will be made at most once per polling interval.
+ * useScheduleFunction allows the setup of scheduling a provided callback.
+ * The callback function will be rescheduled any time one of the provided parameters
+ * changes according to the pollingInterval, data validity and last updated time.
+ * It will be scheduled as follows:
+ * 1. Call immediately if 'scheduleNow' is true, or this is the first call (lastCompleted is null).
+ * 2. Otherwise, schedule the function to run based on the lastCompleted time and scheduleInterval
+ *    provided.
+ *
  * @param callbackFn The call back function to be called at the provided interval.
- * @param pollingIntervalMs interval in ms to fetch data
- * @param isDataValid whether the current dasta is valid, if the data is not valid we fetch immediately
- * @param shouldPoll whether we should setup polling
- * @param lastUpdated the time the data was last updated
+ * @param scheduleIntervalMs scheduling interval in millis
+ * @param scheduleNow schedule function immediately (adding a minimum delay of MIN_REQUEST_DELAY_MS
+ *                    from last request)
+ * @param shouldReschedule reschedule the function
+ * @param lastCompleted the time the function was last completed
  * @returns a function to stop polling
  */
-export const useFetchDataWithPolling = (
+export const useScheduleFunction = (
   callbackFn: () => void,
-  isDataValid: boolean,
-  lastUpdated: moment.Moment,
-  shouldPoll: boolean,
-  pollingIntervalMs: number | null,
+  scheduleNow: boolean,
+  lastCompleted: moment.Moment,
+  shouldReschedule: boolean,
+  scheduleIntervalMs: number | null,
 ): (() => void) => {
   const lastReqMade = useRef<moment.Moment>(null);
   const refreshDataTimeout = useRef<NodeJS.Timeout>(null);
@@ -52,32 +58,33 @@ export const useFetchDataWithPolling = (
     const now = moment();
     let nextRefresh = null;
 
-    if (!isDataValid || !lastUpdated) {
+    if (scheduleNow || !lastCompleted) {
       // At most we will make all reqs managed by this hook once every MIN_REQUEST_DELAY_MS.
       nextRefresh = lastReqMade.current
         ? lastReqMade.current.clone().add(MIN_REQUEST_DELAY_MS, "milliseconds")
         : now;
-    } else if (lastUpdated && pollingIntervalMs) {
-      nextRefresh = lastUpdated.clone().add(pollingIntervalMs, "milliseconds");
+    } else if (shouldReschedule && lastCompleted && scheduleIntervalMs >= 0) {
+      nextRefresh = lastCompleted
+        .clone()
+        .add(scheduleIntervalMs, "milliseconds");
     } else {
-      return;
+      // Invalid parameters, or we don't need to refresh this data (reschedule = false).
+      return clearRefreshDataTimeout;
     }
 
-    if (shouldPoll) {
-      refreshDataTimeout.current = setTimeout(() => {
-        lastReqMade.current = now;
-        callbackFn();
-      }, Math.max(0, nextRefresh.diff(now, "millisecond")));
-    }
+    refreshDataTimeout.current = setTimeout(() => {
+      lastReqMade.current = now;
+      callbackFn();
+    }, Math.max(0, nextRefresh.diff(now, "millisecond")));
 
     return clearRefreshDataTimeout;
   }, [
     callbackFn,
     clearRefreshDataTimeout,
-    isDataValid,
-    lastUpdated,
-    shouldPoll,
-    pollingIntervalMs,
+    scheduleNow,
+    lastCompleted,
+    shouldReschedule,
+    scheduleIntervalMs,
   ]);
 
   return clearRefreshDataTimeout;

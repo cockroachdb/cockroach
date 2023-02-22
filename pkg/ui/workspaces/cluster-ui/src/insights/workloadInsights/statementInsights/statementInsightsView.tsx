@@ -55,7 +55,7 @@ import moment from "moment";
 import styles from "src/statementsPage/statementsPage.module.scss";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 import { commonStyles } from "../../../common";
-import { useFetchDataWithPolling } from "src/util/hooks";
+import { useScheduleFunction } from "src/util/hooks";
 import { InlineAlert } from "@cockroachlabs/ui-components";
 import { insights } from "src/util";
 import { Anchor } from "src/anchor";
@@ -128,11 +128,11 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = ({
   }, [refreshStatementInsights, timeScale]);
 
   const shouldPoll = timeScale.key !== "Custom";
-  const clearPolling = useFetchDataWithPolling(
+  const clearPolling = useScheduleFunction(
     refresh,
-    isDataValid,
+    !isDataValid, // Schedule refresh immediately if not valid.
     lastUpdated,
-    shouldPoll,
+    shouldPoll, // Don't reschedule refresh if we have a custom time interval.
     10 * 1000, // 10s polling interval
   );
 
