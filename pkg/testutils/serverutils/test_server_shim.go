@@ -437,14 +437,14 @@ func TestTenantID3() roachpb.TenantID {
 
 // GetJSONProto uses the supplied client to GET the URL specified by the parameters
 // and unmarshals the result into response.
-func GetJSONProto(ts TestServerInterface, path string, response protoutil.Message) error {
+func GetJSONProto(ts TestTenantInterface, path string, response protoutil.Message) error {
 	return GetJSONProtoWithAdminOption(ts, path, response, true)
 }
 
 // GetJSONProtoWithAdminOption is like GetJSONProto but the caller can customize
 // whether the request is performed with admin privilege
 func GetJSONProtoWithAdminOption(
-	ts TestServerInterface, path string, response protoutil.Message, isAdmin bool,
+	ts TestTenantInterface, path string, response protoutil.Message, isAdmin bool,
 ) error {
 	httpClient, err := ts.GetAuthenticatedHTTPClient(isAdmin)
 	if err != nil {
@@ -455,7 +455,7 @@ func GetJSONProtoWithAdminOption(
 
 // PostJSONProto uses the supplied client to POST the URL specified by the parameters
 // and unmarshals the result into response.
-func PostJSONProto(ts TestServerInterface, path string, request, response protoutil.Message) error {
+func PostJSONProto(ts TestTenantInterface, path string, request, response protoutil.Message) error {
 	return PostJSONProtoWithAdminOption(ts, path, request, response, true)
 }
 
@@ -463,7 +463,7 @@ func PostJSONProto(ts TestServerInterface, path string, request, response protou
 // can customize whether the request is performed with admin
 // privilege.
 func PostJSONProtoWithAdminOption(
-	ts TestServerInterface, path string, request, response protoutil.Message, isAdmin bool,
+	ts TestTenantInterface, path string, request, response protoutil.Message, isAdmin bool,
 ) error {
 	httpClient, err := ts.GetAuthenticatedHTTPClient(isAdmin)
 	if err != nil {
