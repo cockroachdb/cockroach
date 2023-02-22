@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -218,8 +217,8 @@ func maybeDropDependentFunctions(
 
 // maybeDropDependentFKConstraints attempts to drop all FK constraints
 // that depend on the to be dropped index if CASCADE.
-// A FK constraint can only exist if there is `PRIMARY KEY` or `UNIQUE`
-// constraint on the referenced columns in the child table.
+// A FK constraint can only exist if there is `PRIMARY KEY`, `UNIQUE`,
+// or `UNIQUE WITHOUT INDEX` constraint on the referenced columns in the child table.
 // This is relevant if we're dropping a unique index whose `UNIQUE`
 // constraints serves some FK constraints from other tables. In this case,
 // we attempt to find a replacement constraint to serve this FK constraint.
@@ -237,7 +236,7 @@ func maybeDropDependentFKConstraints(
 		current scpb.Status, target scpb.TargetStatus, e *scpb.ForeignKeyConstraint,
 	) {
 		if !isIndexUniqueAndCanServeFK(b, &toBeDroppedIndex.Index, e.ReferencedColumnIDs) ||
-			uniqueConstraintHasReplacementCandidate(b, b.QueryByID(toBeDroppedIndex.TableID),
+			uniqueConstraintHasReplacementCandidate(b, toBeDroppedIndex.TableID,
 				toBeDroppedIndex, e.ReferencedColumnIDs) {
 			return
 		}
@@ -257,9 +256,12 @@ func maybeDropDependentFKConstraints(
 			panic(fmt.Errorf("%q is referenced by foreign key from table %q", toBeDroppedIndexName.Index, ns.Name))
 		}
 
-		// TODO (xiang): enable resolving and dropping FK constraint elements.
-		panic(scerrors.NotImplementedErrorf(nil, "dropping FK constraints"+
-			" as a result of `DROP INDEX CASCADE` is not supported yet."))
+		b.BackReferences(toBeDroppedIndex.TableID).Filter(hasConstraintIDAttrFilter(e.ConstraintID)).
+			ForEachElementStatus(func(
+				current scpb.Status, target scpb.TargetStatus, e scpb.Element,
+			) {
+				b.Drop(e)
+			})
 	})
 }
 
@@ -471,19 +473,22 @@ func isIndexUniqueAndCanServeFK(
 		allKeyColIDsWithoutShardCol.PermutationOf(fkReferencedColIDs)
 }
 
-// uniqueConstraintHasReplacementCandidate returns true if `elms` contains an index
-// that can serve as a replacement candidate for the to-be-dropped secondary index `sie`, which
-// references columns `referencedColumnIDs`.
+// uniqueConstraintHasReplacementCandidate returns true if table ensures
+// uniqueness on columns `referencedColumnIDs` through something other
+// than the unique secondary index `sie`.
+//
+// Uniqueness can be ensured through a unique primary index,
+// a unique secondary index, or a unique without index constraint.
 func uniqueConstraintHasReplacementCandidate(
-	b BuildCtx,
-	elms ElementResultSet,
-	sie *scpb.SecondaryIndex,
-	referencedColumnIDs []descpb.ColumnID,
+	b BuildCtx, tableID descpb.ID, sie *scpb.SecondaryIndex, referencedColumnIDs []descpb.ColumnID,
 ) bool {
 	result := false
 
 	// Check all indexes (both primary and secondary) to see if we can find a replacement candidate.
-	elms.ForEachElementStatus(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
+	// Also check all unique_without_indexes to see if we can find a replace
+	b.QueryByID(tableID).ForEachElementStatus(func(
+		current scpb.Status, target scpb.TargetStatus, e scpb.Element,
+	) {
 		if result {
 			return
 		}
@@ -497,6 +502,11 @@ func uniqueConstraintHasReplacementCandidate(
 			if isIndexUniqueAndCanServeFK(b, &t.Index, referencedColumnIDs) {
 				result = true
 			}
+		case *scpb.UniqueWithoutIndexConstraint:
+			if descpb.ColumnIDs(t.ColumnIDs).PermutationOf(referencedColumnIDs) {
+				result = true
+			}
+
 		}
 	})
 
