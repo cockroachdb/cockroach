@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -45,6 +46,50 @@ func New(settings *cluster.Settings, knobs *tenantcapabilities.TestingKnobs) *Au
 		// capabilitiesReader is set post construction, using BindReader.
 	}
 	return a
+}
+
+// BindReader implements the tenantcapabilities.Authorizer interface.
+func (a *Authorizer) BindReader(reader tenantcapabilities.Reader) {
+	a.capabilitiesReader = reader
+}
+
+func missingCapabilityError(tenID roachpb.TenantID, capabilityName string) error {
+	return errors.Newf("tenant %s does not have capability %q", tenID, capabilityName)
+}
+
+// RequireCapabilities implements the tenantcapabilities.Authorizer interface.
+func (a *Authorizer) RequireCapabilities(tenID roachpb.TenantID, capabilityNames ...string) error {
+	if tenID.IsSystem() {
+		return nil
+	}
+
+	if len(capabilityNames) > 0 {
+		capabilities, found := a.capabilitiesReader.GetCapabilities(tenID)
+		if !found {
+			return missingCapabilityError(tenID, capabilityNames[0])
+		}
+
+		for _, capabilityName := range capabilityNames {
+			switch capabilityName {
+			case tenantcapabilitiespb.CanAdminSplit:
+				if !capabilities.CanAdminSplit {
+					return missingCapabilityError(tenID, capabilityName)
+				}
+			case tenantcapabilitiespb.CanViewNodeInfo:
+				if !capabilities.CanViewNodeInfo {
+					return missingCapabilityError(tenID, capabilityName)
+				}
+			case tenantcapabilitiespb.CanViewTsdbMetrics:
+				if !capabilities.CanViewTsdbMetrics {
+					return missingCapabilityError(tenID, capabilityName)
+				}
+			default:
+				return errors.Newf("invalid capability %s", capabilityName)
+			}
+		}
+	}
+
+	return nil
 }
 
 // HasCapabilityForBatch implements the tenantcapabilities.Authorizer interface.
@@ -80,11 +125,6 @@ func (a *Authorizer) HasCapabilityForBatch(
 		}
 	}
 	return nil
-}
-
-// BindReader implements the tenantcapabilities.Authorizer interface.
-func (a *Authorizer) BindReader(reader tenantcapabilities.Reader) {
-	a.capabilitiesReader = reader
 }
 
 func (a *Authorizer) HasNodeStatusCapability(ctx context.Context, tenID roachpb.TenantID) error {

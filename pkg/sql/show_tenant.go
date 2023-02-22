@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -113,20 +114,15 @@ func (n *showTenantNode) getTenantValues(
 		capabilities := tenantInfo.Capabilities
 		values.capabilities = []showTenantNodeCapability{
 			{
-				name:  canAdminSplitCapabilityName,
+				name:  tenantcapabilitiespb.CanAdminSplit,
 				value: strconv.FormatBool(capabilities.CanAdminSplit),
 			},
 			{
-				name: canAdminUnsplitCapabilityName,
-				// TODO(sql-sessions): handle this capability.
-				value: strconv.FormatBool(false),
-			},
-			{
-				name:  canViewNodeInfoCapabilityName,
+				name:  tenantcapabilitiespb.CanViewNodeInfo,
 				value: strconv.FormatBool(capabilities.CanViewNodeInfo),
 			},
 			{
-				name:  canViewTsdbMetricsCapabilityName,
+				name:  tenantcapabilitiespb.CanViewTsdbMetrics,
 				value: strconv.FormatBool(capabilities.CanViewTsdbMetrics),
 			},
 		}
