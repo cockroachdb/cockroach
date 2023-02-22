@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -87,6 +88,45 @@ func (a *Authorizer) BindReader(reader tenantcapabilities.Reader) {
 	a.capabilitiesReader = reader
 }
 
+func missingCapabilityError(tenID roachpb.TenantID, capabilityName string) error {
+	return errors.Newf("tenant %s does not have capability %q", tenID, capabilityName)
+}
+
+// RequireCapabilities implements the tenantcapabilities.Authorizer interface.
+func (a *Authorizer) RequireCapabilities(tenID roachpb.TenantID, capabilityNames ...string) error {
+	if tenID.IsSystem() {
+		return nil
+	}
+
+	if len(capabilityNames) > 0 {
+		capabilities, found := a.capabilitiesReader.GetCapabilities(tenID)
+		if !found {
+			return missingCapabilityError(tenID, capabilityNames[0])
+		}
+
+		for _, capabilityName := range capabilityNames {
+			switch capabilityName {
+			case tenantcapabilitiespb.CanAdminSplit:
+				if !capabilities.CanAdminSplit {
+					return missingCapabilityError(tenID, capabilityName)
+				}
+			case tenantcapabilitiespb.CanViewNodeInfo:
+				if !capabilities.CanViewNodeInfo {
+					return missingCapabilityError(tenID, capabilityName)
+				}
+			case tenantcapabilitiespb.CanViewTSDBMetrics:
+				if !capabilities.CanViewTSDBMetrics {
+					return missingCapabilityError(tenID, capabilityName)
+				}
+			default:
+				return errors.Newf("invalid capability %s", capabilityName)
+			}
+		}
+	}
+
+	return nil
+}
+
 func (a *Authorizer) HasNodeStatusCapability(ctx context.Context, tenID roachpb.TenantID) error {
 	if tenID.IsSystem() {
 		return nil // the system tenant is allowed to do as it pleases
@@ -117,7 +157,7 @@ func (a *Authorizer) HasTSDBQueryCapability(ctx context.Context, tenID roachpb.T
 			tenID,
 		)
 	}
-	if !cp.CanViewTsdbMetrics {
+	if !cp.CanViewTSDBMetrics {
 		return errors.Newf("tenant %s does not have capability to query timeseries data", tenID)
 	}
 	return nil

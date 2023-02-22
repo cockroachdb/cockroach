@@ -62,6 +62,10 @@ type Authorizer interface {
 	// cycle.
 	BindReader(reader Reader)
 
+	// RequireCapabilities returns an error if the specified tenant does not have
+	// ALL specified capabilities.
+	RequireCapabilities(roachpb.TenantID, ...string) error
+
 	// HasNodeStatusCapability returns an error if a tenant, referenced by its ID,
 	// is not allowed to access cluster-level node metadata and liveness.
 	HasNodeStatusCapability(ctx context.Context, tenID roachpb.TenantID) error
