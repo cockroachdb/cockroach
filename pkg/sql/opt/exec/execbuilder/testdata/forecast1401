@@ -2,6 +2,13 @@
 
 # Test whether statistics forecasts help the query from case 1401.
 
+let $forecastsEnabledPrev
+SHOW CLUSTER SETTING sql.stats.forecasts.enabled
+
+# First: enable statistics forecasts.
+statement ok
+SET CLUSTER SETTING sql.stats.forecasts.enabled = true
+
 statement ok
 CREATE TABLE t1401 (
   a INT8 NOT NULL,
@@ -18481,3 +18488,7 @@ vectorized: true
               estimated row count: 101 - 632 (<0.01% of the table; stats collected <hidden> ago; using stats forecast)
               table: t1401@t1401_f_c_idx1 (partial index)
               spans: [/4458256 - /4458256/'2022-01-25 21:17:27.216095+00']
+
+# Finally, restore forecasts setting to its previous value.
+statement ok
+SET CLUSTER SETTING sql.stats.forecasts.enabled = $forecastsEnabledPrev
