@@ -111,11 +111,14 @@ CREATE VIEW v3 (x) AS SELECT a, b FROM ab
 ----
 error (42601): CREATE VIEW specifies 1 column name, but data source has 2 columns
 
-# Verify that we disallow * in view definitions (#10028).
 build
 CREATE VIEW v4 AS SELECT * FROM ab
 ----
-error (0A000): unimplemented: views do not currently support * expressions
+create-view t.public.v4
+ ├── SELECT ab.a, ab.b FROM t.public.ab
+ ├── columns: a:1 b:2
+ └── dependencies
+      └── ab [columns: a b]
 
 build
 CREATE VIEW v5 AS SELECT a FROM [53 AS t]
