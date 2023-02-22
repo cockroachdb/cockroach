@@ -458,8 +458,7 @@ func TestSQLStatsGatewayNodeSetting(t *testing.T) {
 }
 
 func TestSQLStatsPersistedLimitReached(t *testing.T) {
-	skip.UnderStress(t, "During stress, several flushes can be done at the same time, and we don't"+
-		"want to test this case for now, because the limit could be more than 1.5 * maxMemory")
+	skip.WithIssue(t, 97488)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
