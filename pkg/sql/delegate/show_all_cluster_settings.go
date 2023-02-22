@@ -25,12 +25,22 @@ func (d *delegator) delegateShowClusterSettingList(
 
 	// First check system privileges.
 	hasModify := false
+	hasSqlModify := false
 	hasView := false
 	if err := d.catalog.CheckPrivilege(d.ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYCLUSTERSETTING); err == nil {
 		hasModify = true
+		hasSqlModify = true
 		hasView = true
 	} else if pgerror.GetPGCode(err) != pgcode.InsufficientPrivilege {
 		return nil, err
+	}
+	if !hasSqlModify {
+		if err := d.catalog.CheckPrivilege(d.ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYSQLCLUSTERSETTING); err == nil {
+			hasSqlModify = true
+			hasView = true
+		} else if pgerror.GetPGCode(err) != pgcode.InsufficientPrivilege {
+			return nil, err
+		}
 	}
 	if !hasView {
 		if err := d.catalog.CheckPrivilege(d.ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERSETTING); err == nil {
@@ -59,10 +69,10 @@ func (d *delegator) delegateShowClusterSettingList(
 	}
 
 	// If user is not admin and has neither privilege, return an error.
-	if !hasView && !hasModify {
+	if !hasView && !hasModify && !hasSqlModify {
 		return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
-			"only users with either %s or %s privileges are allowed to SHOW CLUSTER SETTINGS",
-			privilege.MODIFYCLUSTERSETTING, privilege.VIEWCLUSTERSETTING)
+			"only users with %s, %s or %s privileges are allowed to SHOW CLUSTER SETTINGS",
+			privilege.MODIFYCLUSTERSETTING, privilege.MODIFYSQLCLUSTERSETTING, privilege.VIEWCLUSTERSETTING)
 	}
 
 	if stmt.All {
