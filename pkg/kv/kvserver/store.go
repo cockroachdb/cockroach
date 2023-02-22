@@ -775,7 +775,6 @@ type Store struct {
 	ctSender            *sidetransport.Sender
 	storeGossip         *StoreGossip
 	rebalanceObjManager *RebalanceObjectiveManager
-	splitConfig         *replicaSplitConfig
 
 	coalescedMu struct {
 		syncutil.Mutex
@@ -1234,14 +1233,16 @@ func NewStore(
 		s.rebalanceObjManager = newRebalanceObjectiveManager(ctx, s.cfg.Settings,
 			func(ctx context.Context, obj LBRebalancingObjective) {
 				s.VisitReplicas(func(r *Replica) (wantMore bool) {
-					r.loadBasedSplitter.Reset(s.Clock().PhysicalTime())
+					r.loadBasedSplitterMu.Lock()
+					r.loadBasedSplitterMu.splitConfig.splitObjective = rebalanceToSplitObjective(obj)
+					r.loadBasedSplitterMu.loadBasedSplitter.Reset(s.Clock().PhysicalTime())
+					r.loadBasedSplitterMu.Unlock()
 					return true
 				})
 			},
 			allocatorStorePool, /* storeDescProvider */
 			allocatorStorePool, /* capacityChangeNotifier */
 		)
-		s.splitConfig = newReplicaSplitConfig(s.cfg.Settings, s.rebalanceObjManager)
 	}
 	if cfg.RPCContext != nil {
 		s.allocator = allocatorimpl.MakeAllocator(

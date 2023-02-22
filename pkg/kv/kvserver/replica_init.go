@@ -107,11 +107,6 @@ func newUninitializedReplica(
 	r.mu.stateLoader = stateloader.Make(rangeID)
 	r.mu.quiescent = true
 	r.mu.conf = store.cfg.DefaultSpanConfig
-	split.Init(
-		&r.loadBasedSplitter,
-		store.splitConfig,
-		store.metrics.LoadSplitterMetrics,
-	)
 
 	r.mu.proposals = map[kvserverbase.CmdIDKey]*ProposalData{}
 	r.mu.checksums = map[uuid.UUID]*replicaChecksum{}
@@ -125,6 +120,15 @@ func newUninitializedReplica(
 	}
 	if store.cfg.StorePool != nil {
 		r.loadStats = load.NewReplicaLoad(store.Clock(), store.cfg.StorePool.GetNodeLocalityString)
+		r.loadBasedSplitterMu.splitConfig = newReplicaSplitConfig(
+			store.ClusterSettings(),
+			rebalanceToSplitObjective(store.rebalanceObjManager.Objective()),
+		)
+		split.Init(
+			&r.loadBasedSplitterMu.loadBasedSplitter,
+			r.loadBasedSplitterMu.splitConfig,
+			store.metrics.LoadSplitterMetrics,
+		)
 	}
 
 	// NB: the state will be loaded when the replica gets initialized.

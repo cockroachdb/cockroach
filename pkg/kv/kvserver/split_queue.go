@@ -183,7 +183,9 @@ func (sq *splitQueue) shouldQueue(
 		repl.GetMaxBytes(), repl.shouldBackpressureWrites(), confReader)
 
 	if !shouldQ && repl.SplitByLoadEnabled() {
-		if splitKey := repl.loadBasedSplitter.MaybeSplitKey(ctx, timeutil.Now()); splitKey != nil {
+		repl.loadBasedSplitterMu.Lock()
+		defer repl.loadBasedSplitterMu.Unlock()
+		if splitKey := repl.loadBasedSplitterMu.loadBasedSplitter.MaybeSplitKey(ctx, timeutil.Now()); splitKey != nil {
 			shouldQ, priority = true, 1.0 // default priority
 		}
 	}
@@ -262,13 +264,16 @@ func (sq *splitQueue) processAttempt(
 		return true, nil
 	}
 
+	r.loadBasedSplitterMu.Lock()
 	now := timeutil.Now()
-	if splitByLoadKey := r.loadBasedSplitter.MaybeSplitKey(ctx, now); splitByLoadKey != nil {
+	splitByLoadKey := r.loadBasedSplitterMu.loadBasedSplitter.MaybeSplitKey(ctx, now)
+	if splitByLoadKey != nil {
 		loadStats := r.loadStats.Stats()
 		batchHandledQPS := loadStats.QueriesPerSecond
 		raftAppliedQPS := loadStats.WriteKeysPerSecond
-		lastSplitStat := r.loadBasedSplitter.LastStat(ctx, now)
-		splitObj := sq.store.splitConfig.SplitObjective()
+		lastSplitStat := r.loadBasedSplitterMu.loadBasedSplitter.LastStat(ctx, now)
+		splitObj := r.loadBasedSplitterMu.splitConfig.SplitObjective()
+		r.loadBasedSplitterMu.Unlock()
 
 		reason := fmt.Sprintf(
 			"load at key %s (%s %s, %.2f batches/sec, %.2f raft mutations/sec)",
@@ -310,9 +315,13 @@ func (sq *splitQueue) processAttempt(
 		sq.metrics.LoadBasedSplitCount.Inc(1)
 
 		// Reset the splitter now that the bounds of the range changed.
-		r.loadBasedSplitter.Reset(sq.store.Clock().PhysicalTime())
+		r.loadBasedSplitterMu.Lock()
+		r.loadBasedSplitterMu.loadBasedSplitter.Reset(sq.store.Clock().PhysicalTime())
+		r.loadBasedSplitterMu.Unlock()
 		return true, nil
 	}
+
+	r.loadBasedSplitterMu.Unlock()
 	return false, nil
 }
 

@@ -388,7 +388,7 @@ func (r *Replica) LargestPreviousMaxRangeSizeBytes() int64 {
 // LoadBasedSplitter returns the replica's split.Decider, which is used to
 // assist load-based split (and merge) decisions.
 func (r *Replica) LoadBasedSplitter() *split.Decider {
-	return &r.loadBasedSplitter
+	return &r.loadBasedSplitterMu.loadBasedSplitter
 }
 
 func MakeSSTable(

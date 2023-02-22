@@ -819,8 +819,13 @@ type Replica struct {
 	// semaphores.
 	splitQueueThrottle, mergeQueueThrottle util.EveryN
 
-	// loadBasedSplitter keeps information about load-based splitting.
-	loadBasedSplitter split.Decider
+	// loadBasedSplitterMu protects access to the load based split decider and
+	// configuration.
+	loadBasedSplitterMu struct {
+		syncutil.Mutex
+		loadBasedSplitter split.Decider
+		splitConfig       *replicaSplitConfig
+	}
 
 	// unreachablesMu contains a set of remote ReplicaIDs that are to be reported
 	// as unreachable on the next raft tick.
@@ -1301,10 +1306,13 @@ func (r *Replica) SetMVCCStatsForTesting(stats *enginepb.MVCCStats) {
 //
 // Use LoadStats.QueriesPerSecond for all other purposes.
 func (r *Replica) GetMaxSplitQPS(ctx context.Context) (float64, bool) {
-	if r.store.splitConfig.SplitObjective() != SplitQPS {
+	r.loadBasedSplitterMu.Lock()
+	defer r.loadBasedSplitterMu.Unlock()
+
+	if r.loadBasedSplitterMu.splitConfig.SplitObjective() != SplitQPS {
 		return 0, false
 	}
-	return r.loadBasedSplitter.MaxStat(ctx, r.Clock().PhysicalTime())
+	return r.loadBasedSplitterMu.loadBasedSplitter.MaxStat(ctx, r.Clock().PhysicalTime())
 }
 
 // GetMaxSplitCPU returns the Replica's maximum CPU/s rate over a configured
@@ -1317,10 +1325,13 @@ func (r *Replica) GetMaxSplitQPS(ctx context.Context) (float64, bool) {
 // Use LoadStats.RaftCPUNanosPerSecond and RequestCPUNanosPerSecond for current
 // CPU stats for all other purposes.
 func (r *Replica) GetMaxSplitCPU(ctx context.Context) (float64, bool) {
-	if r.store.splitConfig.SplitObjective() != SplitCPU {
+	r.loadBasedSplitterMu.Lock()
+	defer r.loadBasedSplitterMu.Unlock()
+
+	if r.loadBasedSplitterMu.splitConfig.SplitObjective() != SplitCPU {
 		return 0, false
 	}
-	return r.loadBasedSplitter.MaxStat(ctx, r.Clock().PhysicalTime())
+	return r.loadBasedSplitterMu.loadBasedSplitter.MaxStat(ctx, r.Clock().PhysicalTime())
 }
 
 // ContainsKey returns whether this range contains the specified key.

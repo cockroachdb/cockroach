@@ -71,6 +71,17 @@ const (
 	SplitCPU
 )
 
+func rebalanceToSplitObjective(ro LBRebalancingObjective) SplitObjective {
+	switch ro {
+	case LBRebalancingQueries:
+		return SplitQPS
+	case LBRebalancingCPU:
+		return SplitCPU
+	default:
+		panic(fmt.Sprintf("unknown objective %d", ro))
+	}
+}
+
 // String returns a human readable string representation of the dimension.
 func (d SplitObjective) String() string {
 	switch d {
@@ -97,18 +108,18 @@ func (d SplitObjective) Format(value float64) string {
 
 // replicaSplitConfig implements the split.SplitConfig interface.
 type replicaSplitConfig struct {
-	randSource                 split.RandSource
-	rebalanceObjectiveProvider RebalanceObjectiveProvider
-	st                         *cluster.Settings
+	randSource     split.RandSource
+	splitObjective SplitObjective
+	st             *cluster.Settings
 }
 
 func newReplicaSplitConfig(
-	st *cluster.Settings, rebalanceObjectiveProvider RebalanceObjectiveProvider,
+	st *cluster.Settings, splitObjective SplitObjective,
 ) *replicaSplitConfig {
 	return &replicaSplitConfig{
-		randSource:                 split.GlobalRandSource(),
-		rebalanceObjectiveProvider: rebalanceObjectiveProvider,
-		st:                         st,
+		randSource:     split.GlobalRandSource(),
+		st:             st,
+		splitObjective: splitObjective,
 	}
 }
 
@@ -116,15 +127,7 @@ func newReplicaSplitConfig(
 // 1:1 to the rebalance objective e.g. balancing QPS means also load based
 // splitting on QPS.
 func (c *replicaSplitConfig) SplitObjective() SplitObjective {
-	obj := c.rebalanceObjectiveProvider.Objective()
-	switch obj {
-	case LBRebalancingQueries:
-		return SplitQPS
-	case LBRebalancingCPU:
-		return SplitCPU
-	default:
-		panic(errors.AssertionFailedf("Unkown split objective %d", obj))
-	}
+	return c.splitObjective
 }
 
 // NewLoadBasedSplitter returns a new LoadBasedSplitter that may be used to
@@ -175,11 +178,13 @@ type loadSplitStat struct {
 }
 
 func (r *Replica) loadSplitStat(ctx context.Context) loadSplitStat {
-	max, ok := r.loadBasedSplitter.MaxStat(ctx, r.Clock().PhysicalTime())
+	r.loadBasedSplitterMu.Lock()
+	defer r.loadBasedSplitterMu.Unlock()
+	max, ok := r.loadBasedSplitterMu.loadBasedSplitter.MaxStat(ctx, r.Clock().PhysicalTime())
 	lss := loadSplitStat{
 		max: max,
 		ok:  ok,
-		typ: r.store.splitConfig.SplitObjective(),
+		typ: r.loadBasedSplitterMu.splitConfig.SplitObjective(),
 	}
 	return lss
 }
@@ -278,15 +283,19 @@ func (r *Replica) recordBatchForLoadBasedSplitting(
 			len(ba.Requests), len(br.Responses))
 	}
 
+	r.loadBasedSplitterMu.Lock()
+	defer r.loadBasedSplitterMu.Unlock()
+
 	// When QPS splitting is enabled, use the number of requests rather than
 	// the given stat for recording load.
-	if r.store.splitConfig.SplitObjective() == SplitQPS {
+	if r.loadBasedSplitterMu.splitConfig.SplitObjective() == SplitQPS {
 		stat = len(ba.Requests)
 	}
 
-	shouldInitSplit := r.loadBasedSplitter.Record(ctx, timeutil.Now(), stat, func() roachpb.Span {
+	shouldInitSplit := r.loadBasedSplitterMu.loadBasedSplitter.Record(ctx, timeutil.Now(), stat, func() roachpb.Span {
 		return getResponseBoundarySpan(ba, br)
 	})
+
 	if shouldInitSplit {
 		r.store.splitQueue.MaybeAddAsync(ctx, r, r.store.Clock().NowAsClockTimestamp())
 	}

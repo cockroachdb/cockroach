@@ -185,7 +185,7 @@ var _ PurgatoryError = rangeMergePurgatoryError{}
 
 func (mq *mergeQueue) requestRangeStats(
 	ctx context.Context, key roachpb.Key,
-) (desc *roachpb.RangeDescriptor, stats enginepb.MVCCStats, ls loadSplitStat, err error) {
+) (desc *roachpb.RangeDescriptor, stats enginepb.MVCCStats, lss []loadSplitStat, err error) {
 
 	ba := &kvpb.BatchRequest{}
 	ba.Add(&kvpb.RangeStatsRequest{
@@ -194,7 +194,7 @@ func (mq *mergeQueue) requestRangeStats(
 
 	br, pErr := mq.db.NonTransactionalSender().Send(ctx, ba)
 	if pErr != nil {
-		return nil, enginepb.MVCCStats{}, loadSplitStat{}, pErr.GoError()
+		return nil, enginepb.MVCCStats{}, []loadSplitStat{}, pErr.GoError()
 	}
 	res := br.Responses[0].GetInner().(*kvpb.RangeStatsResponse)
 
@@ -207,18 +207,18 @@ func (mq *mergeQueue) requestRangeStats(
 	// objective is currently CPU, it must be the case that every store in the
 	// cluster is running a version that populates MaxCPUPerSecond so we don't
 	// need to worry about it being 0 as default and passing the >= 0 check.
-	switch mq.store.splitConfig.SplitObjective() {
-	case SplitCPU:
-		ls.max = res.MaxCPUPerSecond
-		ls.ok = res.MaxCPUPerSecond >= 0
-		ls.typ = SplitCPU
-	case SplitQPS:
-		ls.max = res.MaxQueriesPerSecond
-		ls.ok = res.MaxQueriesPerSecond >= 0
-		ls.typ = SplitQPS
-	}
-
-	return desc, stats, ls, nil
+	lss = append(lss,
+		loadSplitStat{
+			max: res.MaxCPUPerSecond,
+			ok:  res.MaxCPUPerSecond >= 0,
+			typ: SplitCPU,
+		},
+		loadSplitStat{
+			max: res.MaxQueriesPerSecond,
+			ok:  res.MaxQueriesPerSecond >= 0,
+			typ: SplitQPS,
+		})
+	return desc, stats, lss, nil
 }
 
 func (mq *mergeQueue) process(
@@ -231,7 +231,6 @@ func (mq *mergeQueue) process(
 
 	lhsDesc := lhsRepl.Desc()
 	lhsStats := lhsRepl.GetMVCCStats()
-	lhsLoadSplitStat := lhsRepl.loadSplitStat(ctx)
 	minBytes := lhsRepl.GetMinBytes()
 	if lhsStats.Total() >= minBytes {
 		log.VEventf(ctx, 2, "skipping merge: LHS meets minimum size threshold %d with %d bytes",
@@ -239,7 +238,7 @@ func (mq *mergeQueue) process(
 		return false, nil
 	}
 
-	rhsDesc, rhsStats, rhsLoadSplitStat, err := mq.requestRangeStats(ctx, lhsDesc.EndKey.AsRawKey())
+	rhsDesc, rhsStats, rhsLoadSplitStats, err := mq.requestRangeStats(ctx, lhsDesc.EndKey.AsRawKey())
 	if err != nil {
 		return false, err
 	}
@@ -265,11 +264,23 @@ func (mq *mergeQueue) process(
 	mergedStats := lhsStats
 	mergedStats.Add(rhsStats)
 
+	var rhsLoadSplitStat loadSplitStat
+	lhsLoadSplitStat := lhsRepl.loadSplitStat(ctx)
+	lhsRepl.loadBasedSplitterMu.Lock()
+	splitObjective := lhsRepl.loadBasedSplitterMu.splitConfig.SplitObjective()
+	splitThreshold := lhsRepl.loadBasedSplitterMu.splitConfig.StatThreshold()
+	lhsRepl.loadBasedSplitterMu.Unlock()
+	for _, splitStat := range rhsLoadSplitStats {
+		if splitStat.typ == splitObjective {
+			rhsLoadSplitStat = splitStat
+		}
+	}
+
 	var loadMergeReason string
 	if lhsRepl.SplitByLoadEnabled() {
 		var canMergeLoad bool
 		if canMergeLoad, loadMergeReason = canMergeRangeLoad(
-			ctx, lhsLoadSplitStat, rhsLoadSplitStat, mq.store.splitConfig,
+			ctx, lhsLoadSplitStat, rhsLoadSplitStat, splitObjective, splitThreshold,
 		); !canMergeLoad {
 			log.VEventf(ctx, 2, "skipping merge to avoid thrashing: merged range %s may split %s",
 				mergedDesc, loadMergeReason)
@@ -416,7 +427,9 @@ func (mq *mergeQueue) process(
 	// could just Reset the splitter, but then we'd need to wait out a full
 	// measurement period (default of 5m) before merging this range again.
 	if mergedLoadSplitStat := lhsLoadSplitStat.max + rhsLoadSplitStat.max; mergedLoadSplitStat != 0 {
-		lhsRepl.loadBasedSplitter.RecordMax(mq.store.Clock().PhysicalTime(), mergedLoadSplitStat)
+		lhsRepl.loadBasedSplitterMu.Lock()
+		lhsRepl.loadBasedSplitterMu.loadBasedSplitter.RecordMax(mq.store.Clock().PhysicalTime(), mergedLoadSplitStat)
+		lhsRepl.loadBasedSplitterMu.Unlock()
 	}
 	return true, nil
 }
@@ -439,7 +452,10 @@ func (mq *mergeQueue) updateChan() <-chan time.Time {
 }
 
 func canMergeRangeLoad(
-	ctx context.Context, lhs, rhs loadSplitStat, rsc *replicaSplitConfig,
+	ctx context.Context,
+	lhs, rhs loadSplitStat,
+	splitObjective SplitObjective,
+	splitThreshold float64,
 ) (can bool, reason string) {
 	// When load is a consideration for splits and, by extension, merges, the
 	// mergeQueue is fairly conservative. In an effort to avoid thrashing and to
@@ -462,7 +478,6 @@ func canMergeRangeLoad(
 	// the current split objective they cannot merge together. This could occur
 	// just after changing the split objective to a different value, where
 	// there is a mismatch.
-	splitObjective, splitThreshold := rsc.SplitObjective(), rsc.StatThreshold()
 	if lhs.typ != splitObjective {
 		return false, "LHS load measurement is a different type (%s) than current split objective (%s)"
 	}
