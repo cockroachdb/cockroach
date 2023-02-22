@@ -192,21 +192,32 @@ func TestEncryptDecryptAWSAssumeRole(t *testing.T) {
 		cloud.KMSEncryptDecrypt(t, uri, testEnv)
 	})
 
-	t.Run("role-chaining", func(t *testing.T) {
+	t.Run("role-chaining-external-id", func(t *testing.T) {
 		roleChainStr := os.Getenv("AWS_ROLE_ARN_CHAIN")
-		roleChain := strings.Split(roleChainStr, ",")
+		assumeRoleProvider, delegateRoleProviders := cloud.ParseRoleProvidersString(roleChainStr)
+		providerChain := append(delegateRoleProviders, assumeRoleProvider)
 
 		// First verify that none of the individual roles in the chain can be used
 		// to access the KMS.
-		for _, role := range roleChain {
-			q.Set(AssumeRoleParam, role)
+		for _, p := range providerChain {
+			q.Set(AssumeRoleParam, p.EncodeAsString())
 			roleURI := fmt.Sprintf("aws:///%s?%s", keyID, q.Encode())
 			cloud.CheckNoKMSAccess(t, roleURI, testEnv)
 		}
 
+		// Next check that the role chain without any external IDs cannot be used to
+		// access the KMS.
+		roleChainWithoutExternalID := make([]string, 0, len(providerChain))
+		for _, rp := range providerChain {
+			roleChainWithoutExternalID = append(roleChainWithoutExternalID, rp.Role)
+		}
+		q.Set(AssumeRoleParam, strings.Join(roleChainWithoutExternalID, ","))
+		uri := fmt.Sprintf("aws:///%s?%s", keyID, q.Encode())
+		cloud.CheckNoKMSAccess(t, uri, testEnv)
+
 		// Finally, check that the chain of roles can be used to access the KMS.
 		q.Set(AssumeRoleParam, roleChainStr)
-		uri := fmt.Sprintf("aws:///%s?%s", keyID, q.Encode())
+		uri = fmt.Sprintf("aws:///%s?%s", keyID, q.Encode())
 		cloud.KMSEncryptDecrypt(t, uri, testEnv)
 	})
 }

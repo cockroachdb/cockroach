@@ -149,30 +149,76 @@ var usePutObject = settings.RegisterBoolSetting(
 	false,
 )
 
+// roleProvider contains fields about the role that needs to be assumed
+// in order to access the external storage.
+type roleProvider struct {
+	// roleARN, if non-empty, is the ARN of the AWS Role being assumed.
+	roleARN string
+
+	// externalID, if non-empty, is the external ID that must be passed along
+	// with the role in order to assume it. Some additional information about
+	// the issues that external IDs can address can be found on the AWS docs:
+	// https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_create_for-user_externalid.html
+	externalID string
+}
+
+func makeRoleProvider(provider cloudpb.ExternalStorage_AssumeRoleProvider) roleProvider {
+	return roleProvider{
+		roleARN:    provider.Role,
+		externalID: provider.ExternalID,
+	}
+}
+
 // s3ClientConfig is the immutable config used to initialize an s3 session.
 // It contains values copied from corresponding fields in ExternalStorage_S3
 // which are used by the session (but not those that are only used by individual
 // requests).
 type s3ClientConfig struct {
 	// copied from ExternalStorage_S3.
-	endpoint, region, bucket, accessKey, secret, tempToken, auth, roleARN string
-	delegateRoleARNs                                                      []string
+	endpoint, region, bucket, accessKey, secret, tempToken, auth string
+	assumeRoleProvider                                           roleProvider
+	delegateRoleProviders                                        []roleProvider
+
 	// log.V(2) decides session init params so include it in key.
 	verbose bool
 }
 
 func clientConfig(conf *cloudpb.ExternalStorage_S3) s3ClientConfig {
+	var assumeRoleProvider roleProvider
+	var delegateRoleProviders []roleProvider
+
+	// In order to maintain backwards compatibility, parse both fields where roles
+	// are stored in ExternalStorage, preferring the provider fields.
+	if conf.AssumeRoleProvider.Role == "" && conf.RoleARN != "" {
+		assumeRoleProvider = roleProvider{
+			roleARN: conf.RoleARN,
+		}
+
+		delegateRoleProviders = make([]roleProvider, len(conf.DelegateRoleARNs))
+		for i := range conf.DelegateRoleARNs {
+			delegateRoleProviders[i] = roleProvider{
+				roleARN: conf.DelegateRoleARNs[i],
+			}
+		}
+	} else {
+		assumeRoleProvider = makeRoleProvider(conf.AssumeRoleProvider)
+		delegateRoleProviders = make([]roleProvider, len(conf.DelegateRoleProviders))
+		for i := range conf.DelegateRoleProviders {
+			delegateRoleProviders[i] = makeRoleProvider(conf.DelegateRoleProviders[i])
+		}
+	}
+
 	return s3ClientConfig{
-		endpoint:         conf.Endpoint,
-		region:           conf.Region,
-		bucket:           conf.Bucket,
-		accessKey:        conf.AccessKey,
-		secret:           conf.Secret,
-		tempToken:        conf.TempToken,
-		auth:             conf.Auth,
-		verbose:          log.V(2),
-		roleARN:          conf.RoleARN,
-		delegateRoleARNs: conf.DelegateRoleARNs,
+		endpoint:              conf.Endpoint,
+		region:                conf.Region,
+		bucket:                conf.Bucket,
+		accessKey:             conf.AccessKey,
+		secret:                conf.Secret,
+		tempToken:             conf.TempToken,
+		auth:                  conf.Auth,
+		verbose:               log.V(2),
+		assumeRoleProvider:    assumeRoleProvider,
+		delegateRoleProviders: delegateRoleProviders,
 	}
 }
 
@@ -209,9 +255,13 @@ func S3URI(bucket, path string, conf *cloudpb.ExternalStorage_S3) string {
 	setIf(AWSServerSideEncryptionMode, conf.ServerEncMode)
 	setIf(AWSServerSideEncryptionKMSID, conf.ServerKMSID)
 	setIf(S3StorageClassParam, conf.StorageClass)
-	if conf.RoleARN != "" {
-		roles := append(conf.DelegateRoleARNs, conf.RoleARN)
-		q.Set(AssumeRoleParam, strings.Join(roles, ","))
+	if conf.AssumeRoleProvider.Role != "" {
+		roleProviderStrings := make([]string, 0, len(conf.DelegateRoleProviders)+1)
+		for _, p := range conf.DelegateRoleProviders {
+			roleProviderStrings = append(roleProviderStrings, p.EncodeAsString())
+		}
+		roleProviderStrings = append(roleProviderStrings, conf.AssumeRoleProvider.EncodeAsString())
+		q.Set(AssumeRoleParam, strings.Join(roleProviderStrings, ","))
 	}
 
 	s3URL := url.URL{
@@ -232,21 +282,31 @@ func parseS3URL(_ cloud.ExternalStorageURIContext, uri *url.URL) (cloudpb.Extern
 	}
 
 	conf.Provider = cloudpb.ExternalStorageProvider_s3
-	assumeRole, delegateRoles := cloud.ParseRoleString(s3URL.ConsumeParam(AssumeRoleParam))
+
+	// TODO(rui): currently the value of AssumeRoleParam is written into both of
+	// the RoleARN fields and the RoleProvider fields in order to support a mixed
+	// version cluster with nodes on 22.2.0 and 22.2.1+. The logic around the
+	// RoleARN fields can be removed in 23.2.
+	assumeRoleValue := s3URL.ConsumeParam(AssumeRoleParam)
+	assumeRoleProvider, delegateRoleProviders := cloud.ParseRoleProvidersString(assumeRoleValue)
+	assumeRole, delegateRoles := cloud.ParseRoleString(assumeRoleValue)
+
 	conf.S3Config = &cloudpb.ExternalStorage_S3{
-		Bucket:           s3URL.Host,
-		Prefix:           s3URL.Path,
-		AccessKey:        s3URL.ConsumeParam(AWSAccessKeyParam),
-		Secret:           s3URL.ConsumeParam(AWSSecretParam),
-		TempToken:        s3URL.ConsumeParam(AWSTempTokenParam),
-		Endpoint:         s3URL.ConsumeParam(AWSEndpointParam),
-		Region:           s3URL.ConsumeParam(S3RegionParam),
-		Auth:             s3URL.ConsumeParam(cloud.AuthParam),
-		ServerEncMode:    s3URL.ConsumeParam(AWSServerSideEncryptionMode),
-		ServerKMSID:      s3URL.ConsumeParam(AWSServerSideEncryptionKMSID),
-		StorageClass:     s3URL.ConsumeParam(S3StorageClassParam),
-		RoleARN:          assumeRole,
-		DelegateRoleARNs: delegateRoles,
+		Bucket:                s3URL.Host,
+		Prefix:                s3URL.Path,
+		AccessKey:             s3URL.ConsumeParam(AWSAccessKeyParam),
+		Secret:                s3URL.ConsumeParam(AWSSecretParam),
+		TempToken:             s3URL.ConsumeParam(AWSTempTokenParam),
+		Endpoint:              s3URL.ConsumeParam(AWSEndpointParam),
+		Region:                s3URL.ConsumeParam(S3RegionParam),
+		Auth:                  s3URL.ConsumeParam(cloud.AuthParam),
+		ServerEncMode:         s3URL.ConsumeParam(AWSServerSideEncryptionMode),
+		ServerKMSID:           s3URL.ConsumeParam(AWSServerSideEncryptionKMSID),
+		StorageClass:          s3URL.ConsumeParam(S3StorageClassParam),
+		RoleARN:               assumeRole,
+		DelegateRoleARNs:      delegateRoles,
+		AssumeRoleProvider:    assumeRoleProvider,
+		DelegateRoleProviders: delegateRoleProviders,
 		/* NB: additions here should also update s3QueryParams() serializer */
 	}
 	conf.S3Config.Prefix = strings.TrimLeft(conf.S3Config.Prefix, "/")
@@ -487,13 +547,13 @@ func newClient(
 		}
 	}
 
-	if conf.roleARN != "" {
+	if conf.assumeRoleProvider.roleARN != "" {
 		if !settings.Version.IsActive(ctx, clusterversion.SupportAssumeRoleAuth) {
 			return s3Client{}, "", errors.New("cannot authenticate to cloud storage via assume role until cluster has fully upgraded to 22.2")
 		}
 
-		for _, role := range conf.delegateRoleARNs {
-			intermediateCreds := stscreds.NewCredentials(sess, role)
+		for _, delegateProvider := range conf.delegateRoleProviders {
+			intermediateCreds := stscreds.NewCredentials(sess, delegateProvider.roleARN, withExternalID(delegateProvider.externalID))
 			opts.Config.Credentials = intermediateCreds
 
 			sess, err = session.NewSessionWithOptions(opts)
@@ -502,7 +562,7 @@ func newClient(
 			}
 		}
 
-		creds := stscreds.NewCredentials(sess, conf.roleARN)
+		creds := stscreds.NewCredentials(sess, conf.assumeRoleProvider.roleARN, withExternalID(conf.assumeRoleProvider.externalID))
 		opts.Config.Credentials = creds
 		sess, err = session.NewSessionWithOptions(opts)
 		if err != nil {
@@ -830,6 +890,14 @@ func s3ErrDelay(err error) time.Duration {
 		}
 	}
 	return 0
+}
+
+func withExternalID(externalID string) func(*stscreds.AssumeRoleProvider) {
+	return func(p *stscreds.AssumeRoleProvider) {
+		if externalID != "" {
+			p.ExternalID = aws.String(externalID)
+		}
+	}
 }
 
 func init() {
