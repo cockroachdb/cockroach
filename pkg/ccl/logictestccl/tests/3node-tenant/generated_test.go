@@ -1886,6 +1886,13 @@ func TestTenantLogic_table(
 	runLogicTest(t, "table")
 }
 
+func TestTenantLogic_table_span_stats(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "table_span_stats")
+}
+
 func TestTenantLogic_target_names(
 	t *testing.T,
 ) {

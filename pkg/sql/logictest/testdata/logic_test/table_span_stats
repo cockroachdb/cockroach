@@ -1,0 +1,18 @@
+# LogicTest: 3node-tenant
+
+subtest select_all_table_span_stats
+
+# SELECT * FROM crdb_internal.table_span_stats: all statistics for the table's span.
+# Assert the schema, using 'system.descriptor' table span as parameter.
+query IIIII colnames
+SELECT * FROM crdb_internal.ranges_in_span('\x8b', '\x8c') LIMIT 0
+----
+range_count approximate_disk_bytes live_bytes total_bytes live_percentage
+
+# SELECT * FROM crdb_internal.table_span_stats: all statistics for the table's span.
+# Assert correct values, using 'system.descriptor' table id as parameter.
+query IIIII colnames
+SELECT * FROM crdb_internal.table_span_stats(3)
+----
+range_count approximate_disk_bytes live_bytes total_bytes live_percentage
+3           46718                  127761     195168      0.6545306448638347
