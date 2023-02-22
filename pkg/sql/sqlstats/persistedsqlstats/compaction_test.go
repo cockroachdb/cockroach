@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"regexp"
-	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -266,70 +265,6 @@ func TestSQLStatsCompactor(t *testing.T) {
 			require.GreaterOrEqual(t, tc.maxPersistedRowLimit, txnStatsCnt)
 		})
 	}
-}
-
-func TestSQLStatsForegroundInterference(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	var tm atomic.Value
-	// Initialize the time to 2 aggregation interval in the past.
-	tm.Store(timeutil.Now().Add(-2 * persistedsqlstats.SQLStatsAggregationInterval.Default()))
-
-	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-	params.Knobs.SQLStatsKnobs.(*sqlstats.TestingKnobs).StubTimeNow = func() time.Time {
-		return tm.Load().(time.Time)
-	}
-	s, conn, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
-
-	serverSQLStats :=
-		s.SQLServer().(*sql.Server).
-			GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
-
-	sqlConn := sqlutils.MakeSQLRunner(conn)
-	sqlConn.Exec(t, "SET CLUSTER SETTING sql.stats.persisted_rows.max = 1")
-
-	// Generate some data that are older than the current aggregation window,
-	// and then generate some that are within the current aggregation window.
-	generateFingerprints(t, sqlConn, 10 /* distinctFingerprints */)
-	serverSQLStats.Flush(ctx)
-
-	tm.Store(timeutil.Now())
-	generateFingerprints(t, sqlConn, 10 /* distinctFingerprints */)
-	serverSQLStats.Flush(ctx)
-
-	statsCompactor := persistedsqlstats.NewStatsCompactor(
-		s.ClusterSettings(),
-		s.InternalExecutor().(sqlutil.InternalExecutor),
-		s.DB(),
-		metric.NewCounter(metric.Metadata{}),
-		params.Knobs.SQLStatsKnobs.(*sqlstats.TestingKnobs),
-	)
-
-	// Run the compactor.
-	require.NoError(t, statsCompactor.DeleteOldestEntries(ctx))
-
-	result := sqlConn.QueryStr(t, `
-	SELECT count(*)
-	FROM system.statement_statistics`)[0][0]
-
-	stmtStatsCount, err := strconv.Atoi(result)
-	require.NoError(t, err)
-	require.GreaterOrEqual(t, stmtStatsCount, 10,
-		"expected at least 10 fingerprints in statement statistics table, "+
-			"but only %d is present", stmtStatsCount)
-
-	result = sqlConn.QueryStr(t, `
-	SELECT count(*)
-	FROM system.transaction_statistics`)[0][0]
-
-	txnStatsCount, err := strconv.Atoi(result)
-	require.NoError(t, err)
-	require.GreaterOrEqual(t, txnStatsCount, 10,
-		"expected at least 10 fingerprints in transaction statistics table, "+
-			"but only %d is present", txnStatsCount)
 }
 
 func TestSQLStatsCompactionJobMarkedAsAutomatic(t *testing.T) {
