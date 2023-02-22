@@ -1554,8 +1554,9 @@ func (l *leaseTransferTest) setFilter(setTo bool, extensionSem chan struct{}) {
 func (l *leaseTransferTest) forceLeaseExtension(
 	t *testing.T, storeIdx int, lease roachpb.Lease,
 ) error {
-	// Set the clock close to the lease's expiration.
-	l.manualClock.Increment(lease.Expiration.WallTime - l.manualClock.UnixNano() - 10)
+	// Set the clock far enough forward to cause a lease extension, but not far
+	// enough to make the node appear unhealthy.
+	l.manualClock.Increment((lease.Expiration.WallTime - l.manualClock.UnixNano()) / 2)
 	err := l.sendRead(t, storeIdx).GoError()
 	// We can sometimes receive an error from our renewal attempt because the
 	// lease transfer ends up causing the renewal to re-propose and second
