@@ -238,11 +238,11 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 	highWater := f.initialHighWater
 	for i := 0; ; i++ {
 		initialScan := i == 0
-		if err = f.scanIfShould(ctx, initialScan, highWater); err != nil {
+		initialScanOnly := f.endTime.EqOrdering(f.initialHighWater)
+		if err = f.scanIfShould(ctx, initialScan, initialScanOnly, highWater); err != nil {
 			return err
 		}
 
-		initialScanOnly := f.endTime.EqOrdering(f.initialHighWater)
 		if initialScanOnly {
 			if err := emitResolved(f.initialHighWater, jobspb.ResolvedSpan_EXIT); err != nil {
 				return err
@@ -304,7 +304,7 @@ func filterCheckpointSpans(spans []roachpb.Span, completed []roachpb.Span) []roa
 }
 
 func (f *kvFeed) scanIfShould(
-	ctx context.Context, initialScan bool, highWater hlc.Timestamp,
+	ctx context.Context, initialScan bool, initialScanOnly bool, highWater hlc.Timestamp,
 ) error {
 	scanTime := highWater.Next()
 
@@ -370,11 +370,16 @@ func (f *kvFeed) scanIfShould(
 		defer f.onBackfillCallback()()
 	}
 
+	boundaryType := jobspb.ResolvedSpan_NONE
+	if initialScanOnly {
+		boundaryType = jobspb.ResolvedSpan_EXIT
+	}
 	if err := f.scanner.Scan(ctx, f.writer, physicalConfig{
 		Spans:     spansToBackfill,
 		Timestamp: scanTime,
 		WithDiff:  !isInitialScan && f.withDiff,
 		Knobs:     f.knobs,
+		Boundary:  boundaryType,
 	}); err != nil {
 		return err
 	}

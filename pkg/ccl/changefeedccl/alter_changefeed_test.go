@@ -1095,15 +1095,16 @@ func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
 	skip.UnderRace(t)
 
 	rnd, _ := randutil.NewTestRand()
-	var maxCheckpointSize int64 = 100
+	const maxCheckpointSize = 1 << 20
+	const numRowsPerTable = 1000
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `CREATE TABLE foo(val INT PRIMARY KEY)`)
-		sqlDB.Exec(t, `INSERT INTO foo (val) SELECT * FROM generate_series(0, 999)`)
+		sqlDB.Exec(t, `INSERT INTO foo (val) SELECT * FROM generate_series(0, $1)`, numRowsPerTable-1)
 
 		sqlDB.Exec(t, `CREATE TABLE bar(val INT PRIMARY KEY)`)
-		sqlDB.Exec(t, `INSERT INTO bar (val) SELECT * FROM generate_series(0, 999)`)
+		sqlDB.Exec(t, `INSERT INTO bar (val) SELECT * FROM generate_series(0, $1)`, numRowsPerTable-1)
 
 		fooDesc := desctestutils.TestingGetPublicTableDescriptor(
 			f.Server().DB(), keys.SystemSQLCodec, "d", "foo")
@@ -1152,20 +1153,14 @@ func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
 		// Kafka feeds are not buffered, so we have to consume messages.
 		g := ctxgroup.WithContext(context.Background())
 		g.Go(func() error {
-			expectedValues := make([]string, 1000)
-			for j := 0; j <= 999; j++ {
+			// Kafka feeds are not buffered, so we have to consume messages.
+			// We just want to ensure that eventually, we get all the rows from foo and bar.
+			expectedValues := make([]string, 2*numRowsPerTable)
+			for j := 0; j < numRowsPerTable; j++ {
 				expectedValues[j] = fmt.Sprintf(`foo: [%d]->{"after": {"val": %d}}`, j, j)
+				expectedValues[j+numRowsPerTable] = fmt.Sprintf(`bar: [%d]->{"after": {"val": %d}}`, j, j)
 			}
-			err := assertPayloadsBaseErr(testFeed, expectedValues, false, false)
-			if err != nil {
-				return err
-			}
-
-			for j := 0; j <= 999; j++ {
-				expectedValues[j] = fmt.Sprintf(`bar: [%d]->{"after": {"val": %d}}`, j, j)
-			}
-			err = assertPayloadsBaseErr(testFeed, expectedValues, false, false)
-			return err
+			return assertPayloadsBaseErr(testFeed, expectedValues, false, false)
 		})
 
 		defer func() {
@@ -1231,6 +1226,8 @@ func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
 		progress = loadProgress()
 		require.NotNil(t, progress.GetChangefeed())
 		require.Equal(t, 0, len(progress.GetChangefeed().Checkpoint.Spans))
+
+		require.NoError(t, jobFeed.Pause())
 
 		// Verify that none of the resolvedFoo spans after resume were checkpointed.
 		for _, sp := range resolvedFoo {

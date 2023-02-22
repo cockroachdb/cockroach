@@ -97,7 +97,7 @@ func (p *scanRequestScanner) Scan(
 
 		g.GoCtx(func(ctx context.Context) error {
 			defer limAlloc.Release()
-			err := p.exportSpan(ctx, span, cfg.Timestamp, cfg.WithDiff, sink, cfg.Knobs)
+			err := p.exportSpan(ctx, span, cfg.Timestamp, cfg.Boundary, cfg.WithDiff, sink, cfg.Knobs)
 			finished := atomic.AddInt64(&atomicFinished, 1)
 			if backfillDec != nil {
 				backfillDec()
@@ -115,6 +115,7 @@ func (p *scanRequestScanner) exportSpan(
 	ctx context.Context,
 	span roachpb.Span,
 	ts hlc.Timestamp,
+	boundaryType jobspb.ResolvedSpan_BoundaryType,
 	withDiff bool,
 	sink kvevent.Writer,
 	knobs TestingKnobs,
@@ -159,7 +160,7 @@ func (p *scanRequestScanner) exportSpan(
 		if res.ResumeSpan != nil {
 			consumed := roachpb.Span{Key: remaining.Key, EndKey: res.ResumeSpan.Key}
 			if err := sink.Add(
-				ctx, kvevent.MakeResolvedEvent(consumed, ts, jobspb.ResolvedSpan_NONE),
+				ctx, kvevent.MakeResolvedEvent(consumed, ts, boundaryType),
 			); err != nil {
 				return err
 			}
@@ -168,7 +169,7 @@ func (p *scanRequestScanner) exportSpan(
 	}
 	// p.metrics.PollRequestNanosHist.RecordValue(scanDuration.Nanoseconds())
 	if err := sink.Add(
-		ctx, kvevent.MakeResolvedEvent(span, ts, jobspb.ResolvedSpan_NONE),
+		ctx, kvevent.MakeResolvedEvent(span, ts, boundaryType),
 	); err != nil {
 		return err
 	}
