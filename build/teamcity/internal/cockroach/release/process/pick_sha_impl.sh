@@ -23,7 +23,7 @@ log_into_gcloud
 export GOOGLE_APPLICATION_CREDENTIALS="$PWD/.google-credentials.json"
 
 # run git fetch in order to get all remote branches
-git fetch -q origin
+git fetch --tags -q origin
 bazel build --config=crosslinux //pkg/cmd/release
 
 $(bazel info --config=crosslinux bazel-bin)/pkg/cmd/release/release_/release \

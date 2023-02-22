@@ -10,7 +10,7 @@ if [[ -z "${DRY_RUN}" ]] ; then
 fi
 
 # run git fetch in order to get all remote branches
-git fetch -q origin
+git fetch --tags -q origin
 
 # install gh
 wget -O /tmp/gh.tar.gz https://github.com/cli/cli/releases/download/v2.13.0/gh_2.13.0_linux_amd64.tar.gz
