@@ -282,7 +282,7 @@ func (sm *replicaStateMachine) ApplySideEffects(
 			// proposal is local (since we don't unlink it if it is already superseded
 			// initially, see `retrieveLocalProposals`) and superseded (by idx 103). A
 			// permanent rejection dooms all reproposals (including the superseding
-			// one) to the same fate, so idx 103 will get rejected just like idx 102.
+			// one) to the same fate, so idx 103 will get rejected just like idx 102
 			// is.
 			//
 			// [^1]: see (*replicaDecoder).retrieveLocalProposals()
