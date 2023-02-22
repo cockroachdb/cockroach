@@ -4593,11 +4593,11 @@ func TestChangefeedErrors(t *testing.T) {
 
 	// WITH only_initial_scan and no_initial_scan disallowed
 	sqlDB.ExpectErr(
-		t, `cannot specify both initial_scan_only and no_initial_scan`,
+		t, `cannot specify both initial_scan='only' and no_initial_scan`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH initial_scan_only, no_initial_scan`, `kafka://nope`,
 	)
 	sqlDB.ExpectErr(
-		t, `cannot specify both initial_scan_only and no_initial_scan`,
+		t, `cannot specify both initial_scan='only' and no_initial_scan`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH no_initial_scan, initial_scan_only`, `kafka://nope`,
 	)
 
@@ -4613,40 +4613,40 @@ func TestChangefeedErrors(t *testing.T) {
 
 	// WITH only_initial_scan and end_time disallowed
 	sqlDB.ExpectErr(
-		t, `cannot specify both initial_scan_only and end_time`,
+		t, `cannot specify both initial_scan='only' and end_time`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH initial_scan_only, end_time = '1'`, `kafka://nope`,
 	)
 	sqlDB.ExpectErr(
-		t, `cannot specify both initial_scan_only and end_time`,
+		t, `cannot specify both initial_scan='only' and end_time`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH end_time = '1', initial_scan_only`, `kafka://nope`,
 	)
 
 	sqlDB.ExpectErr(
-		t, `cannot specify both initial_scan_only and end_time`,
+		t, `cannot specify both initial_scan='only' and end_time`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH end_time = '1', initial_scan = 'only'`, `kafka://nope`,
 	)
 	sqlDB.ExpectErr(
-		t, `cannot specify both initial_scan_only and end_time`,
+		t, `cannot specify both initial_scan='only' and end_time`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH initial_scan = 'only', end_time = '1'`, `kafka://nope`,
 	)
 
 	sqlDB.ExpectErr(
-		t, `cannot specify both initial_scan_only and resolved`,
+		t, `cannot specify both initial_scan='only' and resolved`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH resolved, initial_scan = 'only'`, `kafka://nope`,
 	)
 
 	sqlDB.ExpectErr(
-		t, `cannot specify both initial_scan_only and diff`,
+		t, `cannot specify both initial_scan='only' and diff`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH diff, initial_scan = 'only'`, `kafka://nope`,
 	)
 
 	sqlDB.ExpectErr(
-		t, `cannot specify both initial_scan_only and mvcc_timestamp`,
+		t, `cannot specify both initial_scan='only' and mvcc_timestamp`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH mvcc_timestamp, initial_scan = 'only'`, `kafka://nope`,
 	)
 
 	sqlDB.ExpectErr(
-		t, `cannot specify both initial_scan_only and updated`,
+		t, `cannot specify both initial_scan='only' and updated`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH updated, initial_scan = 'only'`, `kafka://nope`,
 	)
 
