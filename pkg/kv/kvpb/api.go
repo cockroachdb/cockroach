@@ -1761,7 +1761,8 @@ func (s *ScanStats) SafeFormat(w redact.SafePrinter, _ rune) {
 	w.Printf("scan stats: stepped %d times (%d internal); seeked %d times (%d internal); "+
 		"block-bytes: (total %s, cached %s); "+
 		"points: (count %s, key-bytes %s, value-bytes %s, tombstoned: %s) "+
-		"ranges: (count %s), (contained-points %s, skipped-points %s)",
+		"ranges: (count %s), (contained-points %s, skipped-points %s) "+
+		"evaluated requests: %d gets, %d scans, %d reverse scans",
 		s.NumInterfaceSteps, s.NumInternalSteps, s.NumInterfaceSeeks, s.NumInternalSeeks,
 		humanizeutil.IBytes(int64(s.BlockBytes)),
 		humanizeutil.IBytes(int64(s.BlockBytesInCache)),
@@ -1771,7 +1772,8 @@ func (s *ScanStats) SafeFormat(w redact.SafePrinter, _ rune) {
 		humanizePointCount(s.PointsCoveredByRangeTombstones),
 		humanizePointCount(s.RangeKeyCount),
 		humanizePointCount(s.RangeKeyContainedPoints),
-		humanizePointCount(s.RangeKeySkippedPoints))
+		humanizePointCount(s.RangeKeySkippedPoints),
+		s.NumGets, s.NumScans, s.NumReverseScans)
 	if s.SeparatedPointCount != 0 {
 		w.Printf(" separated: (count: %s, bytes: %s, bytes-fetched: %s)",
 			humanizePointCount(s.SeparatedPointCount),

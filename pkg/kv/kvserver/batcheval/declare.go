@@ -120,7 +120,10 @@ type CommandArgs struct {
 	Args    kvpb.Request
 	Now     hlc.ClockTimestamp
 	// *Stats should be mutated to reflect any writes made by the command.
-	Stats                 *enginepb.MVCCStats
+	Stats *enginepb.MVCCStats
+	// ScanStats should be mutated to reflect Get and Scan/ReverseScan reads
+	// made by the command.
+	ScanStats             *kvpb.ScanStats
 	Concurrency           *concurrency.Guard
 	Uncertainty           uncertainty.Interval
 	DontInterleaveIntents bool
