@@ -6,6 +6,7 @@ go_library(
     srcs = [
         "cast.go",
         "cast_map.go",
+        "type_name.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/cast",
     visibility = ["//visibility:public"],
