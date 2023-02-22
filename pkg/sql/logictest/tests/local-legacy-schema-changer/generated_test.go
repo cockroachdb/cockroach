@@ -1983,6 +1983,13 @@ func TestLogic_udf(
 	runLogicTest(t, "udf")
 }
 
+func TestLogic_udf_in_column_defaults(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_in_column_defaults")
+}
+
 func TestLogic_udf_in_constraints(
 	t *testing.T,
 ) {

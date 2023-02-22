@@ -24,6 +24,9 @@ COMMENT ON TABLE defaultdb.shipments IS 'shipment is important';
 COMMENT ON COLUMN defaultdb.shipments.tracking_number IS 'tracking_number is a must';
 COMMENT ON INDEX defaultdb.shipments@shipments_pkey IS 'pkey is good';
 COMMENT ON CONSTRAINT fk_customers ON defaultdb.shipments IS 'customer is not god';
+CREATE FUNCTION defaultdb.f1() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+ALTER TABLE shipments ADD COLUMN udfcol INT;
+ALTER TABLE shipments ALTER COLUMN udfcol SET DEFAULT f1();
 ----
 
 ops
@@ -152,7 +155,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 111 MutationType ops
+PreCommitPhase stage 2 of 2 with 119 MutationType ops
   transitions:
     [[Namespace:{DescID: 109, Name: shipments, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
@@ -182,6 +185,10 @@ PreCommitPhase stage 2 of 2 with 111 MutationType ops
     [[ColumnName:{DescID: 109, Name: randcol, ColumnID: 5}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 5}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnDefaultExpression:{DescID: 109, ColumnID: 5, ReferencedSequenceIDs: [106]}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 109, ColumnID: 6}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 109, Name: udfcol, ColumnID: 6}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 6}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnDefaultExpression:{DescID: 109, ColumnID: 6, ReferencedFunctionIDs: [112]}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 109, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 109, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
@@ -193,6 +200,7 @@ PreCommitPhase stage 2 of 2 with 111 MutationType ops
     [[IndexColumn:{DescID: 109, ColumnID: 3, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 109, ColumnID: 4, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 109, ColumnID: 5, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 109, ColumnID: 6, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[IndexName:{DescID: 109, Name: shipments_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[IndexComment:{DescID: 109, IndexID: 1, Comment: pkey is good}, ABSENT], PUBLIC] -> ABSENT
@@ -424,6 +432,21 @@ PreCommitPhase stage 2 of 2 with 111 MutationType ops
       SequenceIDs:
       - 106
     *scop.MakePublicColumnWriteOnly
+      ColumnID: 6
+      TableID: 109
+    *scop.SetColumnName
+      ColumnID: 6
+      Name: crdb_internal_column_6_name_placeholder
+      TableID: 109
+    *scop.RemoveColumnDefaultExpression
+      ColumnID: 6
+      TableID: 109
+    *scop.RemoveTableColumnBackReferencesInFunctions
+      BackReferencedColumnID: 6
+      BackReferencedTableID: 109
+      FunctionIDs:
+      - 112
+    *scop.MakePublicColumnWriteOnly
       ColumnID: 4294967295
       TableID: 109
     *scop.SetColumnName
@@ -493,6 +516,9 @@ PreCommitPhase stage 2 of 2 with 111 MutationType ops
       ColumnID: 5
       TableID: 109
     *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 6
+      TableID: 109
+    *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 4294967295
       TableID: 109
     *scop.MakeWriteOnlyColumnDeleteOnly
@@ -547,6 +573,12 @@ PreCommitPhase stage 2 of 2 with 111 MutationType ops
       Kind: 2
       Ordinal: 3
       TableID: 109
+    *scop.RemoveColumnFromIndex
+      ColumnID: 6
+      IndexID: 1
+      Kind: 2
+      Ordinal: 4
+      TableID: 109
     *scop.MakeIndexAbsent
       IndexID: 1
       TableID: 109
@@ -582,6 +614,9 @@ PreCommitPhase stage 2 of 2 with 111 MutationType ops
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 5
       TableID: 109
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 6
+      TableID: 109
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
       Initialize: true
@@ -606,6 +641,9 @@ PreCommitPhase stage 2 of 2 with 111 MutationType ops
     *scop.SetJobStateOnDescriptor
       DescriptorID: 111
       Initialize: true
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 112
+      Initialize: true
     *scop.CreateSchemaChangerJob
       Authorization:
         UserName: root
@@ -618,6 +656,7 @@ PreCommitPhase stage 2 of 2 with 111 MutationType ops
       - 109
       - 110
       - 111
+      - 112
       JobID: 1
       NonCancelable: true
       RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops pending
@@ -625,7 +664,7 @@ PreCommitPhase stage 2 of 2 with 111 MutationType ops
       - statement: DROP TABLE defaultdb.shipments CASCADE
         redactedstatement: DROP TABLE ‹defaultdb›.public.‹shipments› CASCADE
         statementtag: DROP TABLE
-PostCommitNonRevertiblePhase stage 1 of 1 with 14 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 1 with 15 MutationType ops
   transitions:
     [[Table:{DescID: 109}, ABSENT], DROPPED] -> ABSENT
     [[IndexData:{DescID: 109, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -681,6 +720,9 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 14 MutationType ops
     *scop.RemoveJobStateFromDescriptor
       DescriptorID: 111
       JobID: 1
+    *scop.RemoveJobStateFromDescriptor
+      DescriptorID: 112
+      JobID: 1
     *scop.UpdateSchemaChangerJob
       DescriptorIDsToRemove:
       - 104
@@ -691,6 +733,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 14 MutationType ops
       - 109
       - 110
       - 111
+      - 112
       IsNonCancelable: true
       JobID: 1
 
@@ -833,6 +876,26 @@ DROP TABLE defaultdb.shipments CASCADE;
   to:   [IndexColumn:{DescID: 109, ColumnID: 5, IndexID: 1}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
+- from: [Column:{DescID: 109, ColumnID: 6}, ABSENT]
+  to:   [Table:{DescID: 109}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Column:{DescID: 109, ColumnID: 6}, WRITE_ONLY]
+  to:   [ColumnDefaultExpression:{DescID: 109, ColumnID: 6, ReferencedFunctionIDs: [112]}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 109, ColumnID: 6}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 109, Name: udfcol, ColumnID: 6}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 109, ColumnID: 6}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 6}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 109, ColumnID: 6}, WRITE_ONLY]
+  to:   [IndexColumn:{DescID: 109, ColumnID: 6, IndexID: 1}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
 - from: [Column:{DescID: 111, ColumnID: 1}, ABSENT]
   to:   [View:{DescID: 111}, ABSENT]
   kind: Precedence
@@ -913,6 +976,18 @@ DROP TABLE defaultdb.shipments CASCADE;
   to:   [Table:{DescID: 109}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
+- from: [ColumnDefaultExpression:{DescID: 109, ColumnID: 6, ReferencedFunctionIDs: [112]}, ABSENT]
+  to:   [Column:{DescID: 109, ColumnID: 6}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnDefaultExpression:{DescID: 109, ColumnID: 6, ReferencedFunctionIDs: [112]}, ABSENT]
+  to:   [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 6}, ABSENT]
+  kind: SameStagePrecedence
+  rule: column type dependents removed right before column type
+- from: [ColumnDefaultExpression:{DescID: 109, ColumnID: 6, ReferencedFunctionIDs: [112]}, ABSENT]
+  to:   [Table:{DescID: 109}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [ColumnFamily:{DescID: 109, Name: primary, ColumnFamilyID: 0}, ABSENT]
   to:   [Table:{DescID: 109}, ABSENT]
   kind: Precedence
@@ -970,6 +1045,14 @@ DROP TABLE defaultdb.shipments CASCADE;
   kind: Precedence
   rule: dependents removed before column
 - from: [ColumnName:{DescID: 109, Name: tracking_number, ColumnID: 1}, ABSENT]
+  to:   [Table:{DescID: 109}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ColumnName:{DescID: 109, Name: udfcol, ColumnID: 6}, ABSENT]
+  to:   [Column:{DescID: 109, ColumnID: 6}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnName:{DescID: 109, Name: udfcol, ColumnID: 6}, ABSENT]
   to:   [Table:{DescID: 109}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
@@ -1062,6 +1145,14 @@ DROP TABLE defaultdb.shipments CASCADE;
   kind: Precedence
   rule: dependents removed before column
 - from: [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 5}, ABSENT]
+  to:   [Table:{DescID: 109}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 6}, ABSENT]
+  to:   [Column:{DescID: 109, ColumnID: 6}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 6}, ABSENT]
   to:   [Table:{DescID: 109}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
@@ -1253,6 +1344,18 @@ DROP TABLE defaultdb.shipments CASCADE;
   to:   [Table:{DescID: 109}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
+- from: [IndexColumn:{DescID: 109, ColumnID: 6, IndexID: 1}, ABSENT]
+  to:   [Column:{DescID: 109, ColumnID: 6}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [IndexColumn:{DescID: 109, ColumnID: 6, IndexID: 1}, ABSENT]
+  to:   [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before index
+- from: [IndexColumn:{DescID: 109, ColumnID: 6, IndexID: 1}, ABSENT]
+  to:   [Table:{DescID: 109}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [IndexComment:{DescID: 109, IndexID: 1, Comment: pkey is good}, ABSENT]
   to:   [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT]
   kind: Precedence
@@ -1343,6 +1446,10 @@ DROP TABLE defaultdb.shipments CASCADE;
   rule: index drop mutation visible before cleaning up index columns
 - from: [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 109, ColumnID: 5, IndexID: 1}, ABSENT]
+  kind: Precedence
+  rule: index drop mutation visible before cleaning up index columns
+- from: [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, DELETE_ONLY]
+  to:   [IndexColumn:{DescID: 109, ColumnID: 6, IndexID: 1}, ABSENT]
   kind: Precedence
   rule: index drop mutation visible before cleaning up index columns
 - from: [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, VALIDATED]
@@ -1458,6 +1565,10 @@ DROP TABLE defaultdb.shipments CASCADE;
   kind: Precedence
   rule: relation dropped before dependent column
 - from: [Table:{DescID: 109}, DROPPED]
+  to:   [Column:{DescID: 109, ColumnID: 6}, WRITE_ONLY]
+  kind: Precedence
+  rule: relation dropped before dependent column
+- from: [Table:{DescID: 109}, DROPPED]
   to:   [ColumnComment:{DescID: 109, ColumnID: 1, Comment: tracking_number is a must}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
@@ -1467,6 +1578,10 @@ DROP TABLE defaultdb.shipments CASCADE;
   rule: descriptor dropped before dependent element removal
 - from: [Table:{DescID: 109}, DROPPED]
   to:   [ColumnDefaultExpression:{DescID: 109, ColumnID: 5, ReferencedSequenceIDs: [106]}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 109}, DROPPED]
+  to:   [ColumnDefaultExpression:{DescID: 109, ColumnID: 6, ReferencedFunctionIDs: [112]}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [Table:{DescID: 109}, DROPPED]
@@ -1502,6 +1617,10 @@ DROP TABLE defaultdb.shipments CASCADE;
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [Table:{DescID: 109}, DROPPED]
+  to:   [ColumnName:{DescID: 109, Name: udfcol, ColumnID: 6}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 109}, DROPPED]
   to:   [ColumnNotNull:{DescID: 109, ColumnID: 1, IndexID: 0}, VALIDATED]
   kind: Precedence
   rule: relation dropped before dependent constraint
@@ -1527,6 +1646,10 @@ DROP TABLE defaultdb.shipments CASCADE;
   rule: descriptor dropped before dependent element removal
 - from: [Table:{DescID: 109}, DROPPED]
   to:   [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 5}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 109}, DROPPED]
+  to:   [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 6}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [Table:{DescID: 109}, DROPPED]
@@ -1563,6 +1686,10 @@ DROP TABLE defaultdb.shipments CASCADE;
   rule: descriptor dropped before dependent element removal
 - from: [Table:{DescID: 109}, DROPPED]
   to:   [IndexColumn:{DescID: 109, ColumnID: 5, IndexID: 1}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Table:{DescID: 109}, DROPPED]
+  to:   [IndexColumn:{DescID: 109, ColumnID: 6, IndexID: 1}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [Table:{DescID: 109}, DROPPED]
@@ -1741,271 +1868,271 @@ DROP TABLE defaultdb.greeter
 ----
 StatementPhase stage 1 of 1 with 2 MutationType ops
   transitions:
-    [[CheckConstraint:{DescID: 114, ReferencedTypeIDs: [112 113], IndexID: 0, ConstraintID: 2}, ABSENT], PUBLIC] -> VALIDATED
-    [[ConstraintWithoutIndexName:{DescID: 114, Name: check, ConstraintID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[CheckConstraint:{DescID: 115, ReferencedTypeIDs: [113 114], IndexID: 0, ConstraintID: 2}, ABSENT], PUBLIC] -> VALIDATED
+    [[ConstraintWithoutIndexName:{DescID: 115, Name: check, ConstraintID: 2}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MakePublicCheckConstraintValidated
       ConstraintID: 2
-      TableID: 114
+      TableID: 115
     *scop.SetConstraintName
       ConstraintID: 2
       Name: crdb_internal_constraint_2_name_placeholder
-      TableID: 114
+      TableID: 115
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
-    [[CheckConstraint:{DescID: 114, ReferencedTypeIDs: [112 113], IndexID: 0, ConstraintID: 2}, ABSENT], VALIDATED] -> PUBLIC
-    [[ConstraintWithoutIndexName:{DescID: 114, Name: check, ConstraintID: 2}, ABSENT], ABSENT] -> PUBLIC
+    [[CheckConstraint:{DescID: 115, ReferencedTypeIDs: [113 114], IndexID: 0, ConstraintID: 2}, ABSENT], VALIDATED] -> PUBLIC
+    [[ConstraintWithoutIndexName:{DescID: 115, Name: check, ConstraintID: 2}, ABSENT], ABSENT] -> PUBLIC
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
 PreCommitPhase stage 2 of 2 with 59 MutationType ops
   transitions:
-    [[Namespace:{DescID: 114, Name: greeter, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
-    [[Owner:{DescID: 114}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 114, Name: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 114, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[Table:{DescID: 114}, ABSENT], PUBLIC] -> DROPPED
-    [[ObjectParent:{DescID: 114, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnFamily:{DescID: 114, Name: primary, ColumnFamilyID: 0}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 114, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 114, Name: x, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnDefaultExpression:{DescID: 114, ReferencedTypeIDs: [112 113], ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 114, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 114, Name: y, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 114, ReferencedTypeIDs: [112 113], ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnNotNull:{DescID: 114, ColumnID: 2, IndexID: 0}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 114, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 114, Name: rowid, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnNotNull:{DescID: 114, ColumnID: 3, IndexID: 0}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnDefaultExpression:{DescID: 114, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 114, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 114, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 114, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 114, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
-    [[IndexColumn:{DescID: 114, ColumnID: 3, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[IndexColumn:{DescID: 114, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[IndexColumn:{DescID: 114, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[PrimaryIndex:{DescID: 114, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[IndexName:{DescID: 114, Name: greeter_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[IndexColumn:{DescID: 114, ColumnID: 2, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[IndexColumn:{DescID: 114, ColumnID: 3, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[SecondaryIndex:{DescID: 114, IndexID: 2, ConstraintID: 0}, ABSENT], PUBLIC] -> ABSENT
-    [[IndexName:{DescID: 114, Name: i, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[CheckConstraint:{DescID: 114, ReferencedTypeIDs: [112 113], IndexID: 0, ConstraintID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[ConstraintWithoutIndexName:{DescID: 114, Name: check, ConstraintID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 115, Name: greeter, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 115}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 115, Name: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 115, Name: root}, ABSENT], PUBLIC] -> ABSENT
+    [[Table:{DescID: 115}, ABSENT], PUBLIC] -> DROPPED
+    [[ObjectParent:{DescID: 115, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnFamily:{DescID: 115, Name: primary, ColumnFamilyID: 0}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 115, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 115, Name: x, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 115, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnDefaultExpression:{DescID: 115, ReferencedTypeIDs: [113 114], ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 115, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 115, Name: y, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 115, ReferencedTypeIDs: [113 114], ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnNotNull:{DescID: 115, ColumnID: 2, IndexID: 0}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 115, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 115, Name: rowid, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 115, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnNotNull:{DescID: 115, ColumnID: 3, IndexID: 0}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnDefaultExpression:{DescID: 115, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 115, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 115, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 115, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 115, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 115, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 115, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 115, ColumnID: 3, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 115, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 115, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[PrimaryIndex:{DescID: 115, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexName:{DescID: 115, Name: greeter_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 115, ColumnID: 2, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 115, ColumnID: 3, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[SecondaryIndex:{DescID: 115, IndexID: 2, ConstraintID: 0}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexName:{DescID: 115, Name: i, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[CheckConstraint:{DescID: 115, ReferencedTypeIDs: [113 114], IndexID: 0, ConstraintID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ConstraintWithoutIndexName:{DescID: 115, Name: check, ConstraintID: 2}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MakePublicCheckConstraintValidated
       ConstraintID: 2
-      TableID: 114
+      TableID: 115
     *scop.SetConstraintName
       ConstraintID: 2
       Name: crdb_internal_constraint_2_name_placeholder
-      TableID: 114
+      TableID: 115
     *scop.RemoveCheckConstraint
       ConstraintID: 2
-      TableID: 114
+      TableID: 115
     *scop.UpdateTableBackReferencesInTypes
-      BackReferencedTableID: 114
+      BackReferencedTableID: 115
       TypeIDs:
-      - 112
       - 113
+      - 114
     *scop.MarkDescriptorAsDropped
-      DescriptorID: 114
+      DescriptorID: 115
     *scop.RemoveObjectParent
-      ObjectID: 114
+      ObjectID: 115
       ParentSchemaID: 101
     *scop.NotImplementedForPublicObjects
-      DescID: 114
+      DescID: 115
       ElementType: scpb.ColumnFamily
     *scop.MakePublicColumnWriteOnly
       ColumnID: 1
-      TableID: 114
+      TableID: 115
     *scop.SetColumnName
       ColumnID: 1
       Name: crdb_internal_column_1_name_placeholder
-      TableID: 114
+      TableID: 115
     *scop.RemoveColumnDefaultExpression
       ColumnID: 1
-      TableID: 114
+      TableID: 115
     *scop.UpdateTableBackReferencesInTypes
-      BackReferencedTableID: 114
+      BackReferencedTableID: 115
       TypeIDs:
-      - 112
       - 113
+      - 114
     *scop.MakePublicColumnWriteOnly
       ColumnID: 2
-      TableID: 114
+      TableID: 115
     *scop.SetColumnName
       ColumnID: 2
       Name: crdb_internal_column_2_name_placeholder
-      TableID: 114
+      TableID: 115
     *scop.RemoveDroppedColumnType
       ColumnID: 2
-      TableID: 114
+      TableID: 115
     *scop.UpdateTableBackReferencesInTypes
-      BackReferencedTableID: 114
+      BackReferencedTableID: 115
       TypeIDs:
-      - 112
       - 113
+      - 114
     *scop.MakePublicColumnNotNullValidated
       ColumnID: 2
-      TableID: 114
+      TableID: 115
     *scop.MakePublicColumnWriteOnly
       ColumnID: 3
-      TableID: 114
+      TableID: 115
     *scop.SetColumnName
       ColumnID: 3
       Name: crdb_internal_column_3_name_placeholder
-      TableID: 114
+      TableID: 115
     *scop.MakePublicColumnNotNullValidated
       ColumnID: 3
-      TableID: 114
+      TableID: 115
     *scop.RemoveColumnDefaultExpression
       ColumnID: 3
-      TableID: 114
+      TableID: 115
     *scop.MakePublicColumnWriteOnly
       ColumnID: 4294967295
-      TableID: 114
+      TableID: 115
     *scop.SetColumnName
       ColumnID: 4294967295
       Name: crdb_internal_column_4294967295_name_placeholder
-      TableID: 114
+      TableID: 115
     *scop.MakePublicColumnWriteOnly
       ColumnID: 4294967294
-      TableID: 114
+      TableID: 115
     *scop.SetColumnName
       ColumnID: 4294967294
       Name: crdb_internal_column_4294967294_name_placeholder
-      TableID: 114
+      TableID: 115
     *scop.MakePublicPrimaryIndexWriteOnly
       IndexID: 1
-      TableID: 114
+      TableID: 115
     *scop.SetIndexName
       IndexID: 1
       Name: crdb_internal_index_1_name_placeholder
-      TableID: 114
+      TableID: 115
     *scop.MakePublicSecondaryIndexWriteOnly
       IndexID: 2
-      TableID: 114
+      TableID: 115
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
-        DescriptorID: 114
+        DescriptorID: 115
         Name: greeter
         SchemaID: 101
     *scop.NotImplementedForPublicObjects
-      DescID: 114
+      DescID: 115
       ElementType: scpb.Owner
     *scop.RemoveUserPrivileges
-      DescriptorID: 114
+      DescriptorID: 115
       User: admin
     *scop.RemoveUserPrivileges
-      DescriptorID: 114
+      DescriptorID: 115
       User: root
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 1
-      TableID: 114
+      TableID: 115
     *scop.RemoveColumnNotNull
       ColumnID: 2
-      TableID: 114
+      TableID: 115
     *scop.RemoveColumnNotNull
       ColumnID: 3
-      TableID: 114
+      TableID: 115
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 4294967295
-      TableID: 114
+      TableID: 115
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 4294967294
-      TableID: 114
+      TableID: 115
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 2
-      TableID: 114
+      TableID: 115
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 3
-      TableID: 114
+      TableID: 115
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967295
-      TableID: 114
+      TableID: 115
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
-      TableID: 114
+      TableID: 115
     *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 1
-      TableID: 114
+      TableID: 115
     *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 2
-      TableID: 114
+      TableID: 115
     *scop.RemoveDroppedIndexPartialPredicate
       IndexID: 2
-      TableID: 114
+      TableID: 115
     *scop.UpdateTableBackReferencesInTypes
-      BackReferencedTableID: 114
+      BackReferencedTableID: 115
       TypeIDs:
-      - 112
       - 113
+      - 114
     *scop.SetIndexName
       IndexID: 2
       Name: crdb_internal_index_2_name_placeholder
-      TableID: 114
+      TableID: 115
     *scop.RemoveColumnFromIndex
       ColumnID: 3
       IndexID: 1
-      TableID: 114
+      TableID: 115
     *scop.RemoveColumnFromIndex
       ColumnID: 1
       IndexID: 1
       Kind: 2
-      TableID: 114
+      TableID: 115
     *scop.RemoveColumnFromIndex
       ColumnID: 2
       IndexID: 1
       Kind: 2
       Ordinal: 1
-      TableID: 114
+      TableID: 115
     *scop.MakeIndexAbsent
       IndexID: 1
-      TableID: 114
+      TableID: 115
     *scop.RemoveColumnFromIndex
       ColumnID: 2
       IndexID: 2
-      TableID: 114
+      TableID: 115
     *scop.RemoveColumnFromIndex
       ColumnID: 3
       IndexID: 2
       Kind: 1
-      TableID: 114
+      TableID: 115
     *scop.MakeIndexAbsent
       IndexID: 2
-      TableID: 114
+      TableID: 115
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
-      TableID: 114
+      TableID: 115
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 2
-      TableID: 114
+      TableID: 115
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 3
-      TableID: 114
-    *scop.SetJobStateOnDescriptor
-      DescriptorID: 112
-      Initialize: true
+      TableID: 115
     *scop.SetJobStateOnDescriptor
       DescriptorID: 113
       Initialize: true
     *scop.SetJobStateOnDescriptor
       DescriptorID: 114
       Initialize: true
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 115
+      Initialize: true
     *scop.CreateSchemaChangerJob
       Authorization:
         UserName: root
       DescriptorIDs:
-      - 112
       - 113
       - 114
+      - 115
       JobID: 1
       NonCancelable: true
       RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 3 MutationType ops pending
@@ -2015,39 +2142,39 @@ PreCommitPhase stage 2 of 2 with 59 MutationType ops
         statementtag: DROP TABLE
 PostCommitNonRevertiblePhase stage 1 of 1 with 7 MutationType ops
   transitions:
-    [[Table:{DescID: 114}, ABSENT], DROPPED] -> ABSENT
-    [[IndexData:{DescID: 114, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[IndexData:{DescID: 114, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[TableData:{DescID: 114, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Table:{DescID: 115}, ABSENT], DROPPED] -> ABSENT
+    [[IndexData:{DescID: 115, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexData:{DescID: 115, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[TableData:{DescID: 115, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.CreateGCJobForTable
       DatabaseID: 100
       StatementForDropJob:
         Statement: DROP TABLE defaultdb.public.greeter
-      TableID: 114
+      TableID: 115
     *scop.CreateGCJobForIndex
       IndexID: 1
       StatementForDropJob:
         Statement: DROP TABLE defaultdb.public.greeter
-      TableID: 114
+      TableID: 115
     *scop.CreateGCJobForIndex
       IndexID: 2
       StatementForDropJob:
         Statement: DROP TABLE defaultdb.public.greeter
-      TableID: 114
-    *scop.RemoveJobStateFromDescriptor
-      DescriptorID: 112
-      JobID: 1
+      TableID: 115
     *scop.RemoveJobStateFromDescriptor
       DescriptorID: 113
       JobID: 1
     *scop.RemoveJobStateFromDescriptor
       DescriptorID: 114
       JobID: 1
+    *scop.RemoveJobStateFromDescriptor
+      DescriptorID: 115
+      JobID: 1
     *scop.UpdateSchemaChangerJob
       DescriptorIDsToRemove:
-      - 112
       - 113
       - 114
+      - 115
       IsNonCancelable: true
       JobID: 1

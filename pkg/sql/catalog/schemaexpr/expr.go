@@ -124,7 +124,7 @@ func DequalifyAndValidateExprImpl(
 	// We need to do the rewrite here before the expression is serialized because
 	// the serialization would drop the prefixes to functions.
 	//
-	typedExpr, err = maybeReplaceUDFNameWithOIDReferenceInTypedExpr(typedExpr)
+	typedExpr, err = MaybeReplaceUDFNameWithOIDReferenceInTypedExpr(typedExpr)
 	if err != nil {
 		return "", nil, colIDs, err
 	}
@@ -577,7 +577,7 @@ func ValidateTTLExpirationExpression(
 	return nil
 }
 
-func maybeReplaceUDFNameWithOIDReferenceInTypedExpr(
+func MaybeReplaceUDFNameWithOIDReferenceInTypedExpr(
 	typedExpr tree.TypedExpr,
 ) (tree.TypedExpr, error) {
 	replaceFunc := func(ex tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
@@ -622,4 +622,15 @@ func GetUDFIDs(e tree.Expr) (catalog.DescriptorIDSet, error) {
 		return catalog.DescriptorIDSet{}, err
 	}
 	return fnIDs, nil
+}
+
+// GetUDFIDsFromExprStr extracts all UDF descriptor ids from the given
+// expression string, assuming that the UDF names has been replaced with OID
+// references. It's a convenient wrapper of GetUDFIDs.
+func GetUDFIDsFromExprStr(exprStr string) (catalog.DescriptorIDSet, error) {
+	expr, err := parser.ParseExpr(exprStr)
+	if err != nil {
+		return catalog.DescriptorIDSet{}, err
+	}
+	return GetUDFIDs(expr)
 }
