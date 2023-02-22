@@ -4,7 +4,7 @@ CREATE TABLE t (x special.type)
 CREATE TABLE t (x special.type)
 CREATE TABLE t (x special.type) -- fully parenthesized
 CREATE TABLE t (x special.type) -- literals removed
-CREATE TABLE _ (_ special.type) -- identifiers removed
+CREATE TABLE _ (_ _._) -- identifiers removed
 
 parse
 CREATE TABLE t (x int4.type)
@@ -12,7 +12,7 @@ CREATE TABLE t (x int4.type)
 CREATE TABLE t (x int4.type)
 CREATE TABLE t (x int4.type) -- fully parenthesized
 CREATE TABLE t (x int4.type) -- literals removed
-CREATE TABLE _ (_ int4.type) -- identifiers removed
+CREATE TABLE _ (_ _._) -- identifiers removed
 
 parse
 CREATE TABLE t (x notatype)
@@ -20,7 +20,7 @@ CREATE TABLE t (x notatype)
 CREATE TABLE t (x notatype)
 CREATE TABLE t (x notatype) -- fully parenthesized
 CREATE TABLE t (x notatype) -- literals removed
-CREATE TABLE _ (_ notatype) -- identifiers removed
+CREATE TABLE _ (_ _) -- identifiers removed
 
 parse
 SELECT 1 IS OF (my.type, int4.type)
@@ -150,4 +150,4 @@ CREATE TABLE t (x int4.type array [1])
 CREATE TABLE t (x int4.type[]) -- normalized!
 CREATE TABLE t (x int4.type[]) -- fully parenthesized
 CREATE TABLE t (x int4.type[]) -- literals removed
-CREATE TABLE _ (_ int4.type[]) -- identifiers removed
+CREATE TABLE _ (_ _._[]) -- identifiers removed
