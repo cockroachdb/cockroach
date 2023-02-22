@@ -6144,16 +6144,6 @@ func DatumPrev(
 			return nil, false
 		}
 		return NewDString(prev), true
-	case *DCollatedString:
-		prev, ok := prevString(d.Contents)
-		if !ok {
-			return nil, false
-		}
-		c, err := NewDCollatedString(prev, d.Locale, collationEnv)
-		if err != nil {
-			return nil, false
-		}
-		return c, true
 	case *DBytes:
 		prev, ok := prevString(string(*d))
 		if !ok {
@@ -6166,8 +6156,8 @@ func DatumPrev(
 		return NewDInterval(prev, types.DefaultIntervalTypeMetadata), true
 	default:
 		// TODO(yuzefovich): consider adding support for other datums that don't
-		// have Datum.Prev implementation (DBitArray, DGeography, DGeometry,
-		// DBox2D, DJSON, DArray).
+		// have Datum.Prev implementation (DCollatedString, DBitArray,
+		// DGeography, DGeometry, DBox2D, DJSON, DArray).
 		return datum.Prev(cmpCtx)
 	}
 }

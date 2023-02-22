@@ -1345,6 +1345,12 @@ func eqColsForZigzag(
 	}
 
 	for i < leftCnt && j < rightCnt {
+		// The zigzag joiner cannot handle equality columns that are not in the
+		// same direction. See #97090.
+		if leftIndex.Column(i).Descending != rightIndex.Column(j).Descending {
+			break
+		}
+
 		leftColID := tabID.IndexColumnID(leftIndex, i)
 		rightColID := tabID.IndexColumnID(rightIndex, j)
 		i++
