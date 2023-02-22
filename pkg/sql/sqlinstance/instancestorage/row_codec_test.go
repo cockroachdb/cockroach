@@ -40,11 +40,11 @@ func TestRowCodec(t *testing.T) {
 
 	t.Run("RegionalByRow", func(t *testing.T) {
 		defer envutil.TestSetEnv(t, "COCKROACH_MR_SYSTEM_DATABASE", "1")()
-		testEncoder(t, makeRowCodec(codec, systemschema.SQLInstancesTable()), tenantID)
+		testEncoder(t, makeRowCodec(codec, systemschema.SQLInstancesTable(), true), tenantID)
 	})
 	t.Run("RegionalByTable", func(t *testing.T) {
 		defer envutil.TestSetEnv(t, "COCKROACH_MR_SYSTEM_DATABASE", "0")()
-		testEncoder(t, makeRowCodec(codec, systemschema.SQLInstancesTable()), tenantID)
+		testEncoder(t, makeRowCodec(codec, systemschema.SQLInstancesTable(), false), tenantID)
 	})
 }
 

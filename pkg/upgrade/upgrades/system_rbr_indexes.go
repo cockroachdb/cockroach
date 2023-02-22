@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -88,7 +89,7 @@ func migrations(codec keys.SQLCodec) (result []rbrMigration) {
 	// version gates for the sub systems interacting with the table..
 	return []rbrMigration{
 		// sqlLivenessMigration(codec),
-		// sqlInstanceMigration(codec),
+		sqlInstanceMigration(codec),
 		// leaseMigration(codec),
 	}
 }
@@ -103,15 +104,14 @@ func migrations(codec keys.SQLCodec) (result []rbrMigration) {
 //	}
 //}
 
-// TODO(jeffswenson): enable this migration
-//func sqlInstanceMigration(codec keys.SQLCodec) rbrMigration {
-//	descriptor := systemschema.SQLInstancesTable()
-//	return rbrMigration{
-//		tableName:       "sql_instances",
-//		keyMapper:       makeKeyMapper(codec, descriptor, 1),
-//		finalDescriptor: descriptor,
-//	}
-//}
+func sqlInstanceMigration(codec keys.SQLCodec) rbrMigration {
+	descriptor := systemschema.SQLInstancesTable()
+	return rbrMigration{
+		tableName:       "sql_instances",
+		keyMapper:       makeKeyMapper(codec, descriptor, 1),
+		finalDescriptor: descriptor,
+	}
+}
 
 // TODO(jeffswenson): enable this migration
 //func leaseMigration(codec keys.SQLCodec) rbrMigration {

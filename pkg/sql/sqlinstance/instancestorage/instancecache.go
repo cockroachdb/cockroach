@@ -15,12 +15,15 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -204,3 +207,127 @@ func (r *rangeFeedCache) updateInstanceMap(instance instancerow, deletionEvent b
 func (s *rangeFeedCache) Close() {
 	s.feed.Close()
 }
+
+type migrationCache struct {
+	mu struct {
+		syncutil.Mutex
+		versionChanged bool
+		cache          instanceCache
+	}
+}
+
+// newMigrationCache uses the oldCache and newCache functions to construct
+// instanceCaches. The cache registers a hook with the setting and switches
+// from the old implementation to the new implementation when the version
+// changes to V23_1_SystemRbrReadNew.
+func newMigrationCache(
+	ctx context.Context,
+	stopper *stop.Stopper,
+	setting *cluster.Settings,
+	oldCache, newCache func(ctx context.Context) (instanceCache, error),
+) (instanceCache, error) {
+	c := &migrationCache{}
+	oldReady := make(chan error, 1)
+	newReady := make(chan error, 1)
+
+	onVersionChange := func(ctx context.Context, version clusterversion.ClusterVersion) {
+		if !version.IsActive(clusterversion.V23_1_SystemRbrReadNew) {
+			return
+		}
+
+		c.mu.Lock()
+		defer c.mu.Unlock()
+
+		if c.mu.versionChanged {
+			return
+		}
+		c.mu.versionChanged = true
+
+		if c.mu.cache != nil {
+			log.Ops.Info(ctx, "closing old system.sql_instance cache")
+			c.mu.cache.Close()
+		}
+
+		// Use the background context because we don't want RPC cancellation to
+		// prevent starting the new range feed.
+		err := stopper.RunAsyncTask(context.Background(), "start-new-cache-implementation", func(ctx context.Context) {
+			log.Ops.Info(ctx, "starting new system.sql_instance cache")
+
+			cache, err := newCache(ctx)
+			if err != nil {
+				log.Ops.Errorf(ctx, "error starting the new system.sql_instance cache: %s", err)
+				newReady <- err
+				return
+			}
+
+			c.mu.Lock()
+			defer c.mu.Unlock()
+
+			log.Ops.Info(ctx, "new system.sql_instance cache is ready")
+
+			if c.mu.cache != nil {
+				c.mu.cache.Close()
+			}
+			c.mu.cache = cache
+			newReady <- nil
+		})
+		if err != nil {
+			log.Ops.Errorf(ctx, "unable to start new system.sql_instance cache: %s", err)
+		}
+	}
+
+	// Register the hook, then run it once in case the version is already
+	// active.
+	setting.Version.SetOnChange(onVersionChange)
+	onVersionChange(ctx, setting.Version.ActiveVersion(ctx))
+
+	err := stopper.RunAsyncTask(ctx, "start-old-cache-implementation", func(ctx context.Context) {
+		cache, err := oldCache(ctx)
+		if err != nil {
+			oldReady <- err
+		}
+
+		c.mu.Lock()
+		defer c.mu.Unlock()
+
+		if c.mu.versionChanged {
+			cache.Close()
+			return
+		}
+
+		c.mu.cache = cache
+		oldReady <- nil
+	})
+	if err != nil {
+		oldReady <- err
+	}
+
+	select {
+	case err = <-newReady:
+	case err = <-oldReady:
+	}
+	if err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+func (c *migrationCache) Close() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.mu.cache.Close()
+}
+
+func (c *migrationCache) getInstance(instanceID base.SQLInstanceID) (i instancerow, ok bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.mu.cache.getInstance(instanceID)
+}
+
+func (c *migrationCache) listInstances() []instancerow {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.mu.cache.listInstances()
+}
+
+var _ instanceCache = &migrationCache{}

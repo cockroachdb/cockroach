@@ -192,18 +192,18 @@ WHERE table_catalog = 'newdb2' AND table_schema = 'public'
 ORDER BY table_name, column_name
 LIMIT 20
 ----
-database_role_settings      "dataBase_ḯd"     oid
-database_role_settings      "r""ole_id"      oid
-database_role_settings      role_name         text
+database_role_settings      database_id       oid
+database_role_settings      "role\\u6CFA_id"  oid
+database_role_settings      "role_nam*e"      text
 database_role_settings      rowid             bigint
-database_role_settings      settings          ARRAY
+database_role_settings      "settings"       ARRAY
+ev̅entlog                   """uniqueID"      bytea
 ev̅entlog                   "eventType"       text
 ev̅entlog                   info              text
-ev̅entlog                   "reportingID"     bigint
+ev̅entlog                   "reporti%55ngID"  bigint
 ev̅entlog                   rowid             bigint
 ev̅entlog                   "targetID"        bigint
-ev̅entlog                   "uni̹queID"       bytea
-ev̅entlog                   "🙃t%vimestamp"    timestamp without time zone
+ev̅entlog                   "timestamp"       timestamp without time zone
 namespace                   "name "           text
 namespace                   "parent%42ID"     bigint
 namespace                   "parentSchemaID"  bigint
