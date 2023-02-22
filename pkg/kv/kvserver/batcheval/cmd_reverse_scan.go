@@ -43,6 +43,7 @@ func ReverseScan(
 		Inconsistent:     h.ReadConsistency != roachpb.CONSISTENT,
 		SkipLocked:       h.WaitPolicy == lock.WaitPolicy_SkipLocked,
 		Txn:              h.Txn,
+		Uncertainty:      cArgs.Uncertainty,
 		MaxKeys:          h.MaxSpanRequestKeys,
 		MaxIntents:       storage.MaxIntentsPerWriteIntentError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
 		TargetBytes:      h.TargetBytes,
