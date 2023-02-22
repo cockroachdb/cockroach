@@ -13,11 +13,22 @@ package tests
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+)
+
+var issueRegexp = regexp.MustCompile(`See: https://[^\s]+issue-v/(\d+)/[^\s]+`)
+
+type status int
+
+const (
+	statusPass status = iota
+	statusFail
+	statusSkip
 )
 
 // alterZoneConfigAndClusterSettings changes the zone configurations so that GC
