@@ -1798,21 +1798,9 @@ func (tc *TestCluster) WaitForTenantCapabilities(
 				}
 
 				for _, capabilityName := range capabilityNames {
-					switch capabilityName {
-					case tenantcapabilitiespb.CanAdminSplit:
-						if !capabilities.CanAdminSplit {
-							return missingCapabilityError(capabilityName)
-						}
-					case tenantcapabilitiespb.CanViewNodeInfo:
-						if !capabilities.CanViewNodeInfo {
-							return missingCapabilityError(capabilityName)
-						}
-					case tenantcapabilitiespb.CanViewTSDBMetrics:
-						if !capabilities.CanViewTSDBMetrics {
-							return missingCapabilityError(capabilityName)
-						}
-					default:
-						t.Fatalf("unrecognized capability: %q", capabilityName)
+					capabilityValue := capabilities.GetFlagCapability(capabilityName)
+					if !capabilityValue {
+						return missingCapabilityError(capabilityName)
 					}
 				}
 			}

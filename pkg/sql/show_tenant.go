@@ -112,20 +112,14 @@ func (n *showTenantNode) getTenantValues(
 	// Add capabilities if requested.
 	if n.withCapabilities {
 		capabilities := tenantInfo.Capabilities
-		values.capabilities = []showTenantNodeCapability{
-			{
-				name:  tenantcapabilitiespb.CanAdminSplit,
-				value: strconv.FormatBool(capabilities.CanAdminSplit),
-			},
-			{
-				name:  tenantcapabilitiespb.CanViewNodeInfo,
-				value: strconv.FormatBool(capabilities.CanViewNodeInfo),
-			},
-			{
-				name:  tenantcapabilitiespb.CanViewTSDBMetrics,
-				value: strconv.FormatBool(capabilities.CanViewTSDBMetrics),
-			},
+		showTenantNodeCapabilities := make([]showTenantNodeCapability, 0, len(tenantcapabilitiespb.TenantCapabilityNames))
+		for _, capabilityName := range tenantcapabilitiespb.TenantCapabilityNames {
+			showTenantNodeCapabilities = append(showTenantNodeCapabilities, showTenantNodeCapability{
+				name:  capabilityName,
+				value: strconv.FormatBool(capabilities.GetFlagCapability(capabilityName)),
+			})
 		}
+		values.capabilities = showTenantNodeCapabilities
 	}
 
 	// Tenant status + replication status fields.
