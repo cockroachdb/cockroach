@@ -220,8 +220,8 @@ func TestSerializesScheduledChangefeedExecutionArgs(t *testing.T) {
 			queryArgs: []interface{}{th.env.Now()},
 			es: expectedSchedule{
 				nameRe:         "foo-changefeed",
-				changefeedStmt: "CREATE CHANGEFEED FOR TABLE d.public.foo INTO 'webhook-https://0/changefeed?AWS_SECRET_ACCESS_KEY=nevershown' WITH format = 'JSON', initial_scan_only",
-				shownStmt:      "CREATE CHANGEFEED FOR TABLE d.public.foo INTO 'webhook-https://0/changefeed?AWS_SECRET_ACCESS_KEY=redacted' WITH format = 'JSON', initial_scan_only",
+				changefeedStmt: "CREATE CHANGEFEED FOR TABLE d.public.foo INTO 'webhook-https://0/changefeed?AWS_SECRET_ACCESS_KEY=nevershown' WITH format = 'JSON', initial_scan = 'only'",
+				shownStmt:      "CREATE CHANGEFEED FOR TABLE d.public.foo INTO 'webhook-https://0/changefeed?AWS_SECRET_ACCESS_KEY=redacted' WITH format = 'JSON', initial_scan = 'only'",
 				period:         time.Hour,
 				runsNow:        true,
 			},
@@ -229,12 +229,12 @@ func TestSerializesScheduledChangefeedExecutionArgs(t *testing.T) {
 		{
 			name: "changefeed-expressions",
 			query: `
-CREATE SCHEDULE 'foo-changefeed'
-FOR CHANGEFEED INTO 'webhook-https://0/changefeed?AWS_SECRET_ACCESS_KEY=nevershown'
-WITH format='JSON', initial_scan = 'only', schema_change_policy='stop'
-AS SELECT * FROM foo
-RECURRING '@hourly' WITH SCHEDULE OPTIONS on_execution_failure = 'pause', first_run=$1
-`,
+		CREATE SCHEDULE 'foo-changefeed'
+		FOR CHANGEFEED INTO 'webhook-https://0/changefeed?AWS_SECRET_ACCESS_KEY=nevershown'
+		WITH format='JSON', initial_scan = 'only', schema_change_policy='stop'
+		AS SELECT * FROM foo
+		RECURRING '@hourly' WITH SCHEDULE OPTIONS on_execution_failure = 'pause', first_run=$1
+		`,
 			queryArgs: []interface{}{th.env.Now()},
 			es: expectedSchedule{
 				nameRe:         "foo-changefeed",
@@ -503,7 +503,59 @@ INSERT INTO t2 VALUES (3, 'three'), (2, 'two'), (1, 'one');
 			assertPayloads(t, feed, test.expectedPayload)
 		})
 	}
+}
 
+// TestScheduledChangefeedErrors tests cases where a schedule changefeed statement will return an error.
+func TestScheduledChangefeedErrors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	th, cleanup := newTestHelper(t)
+	defer cleanup()
+
+	th.sqlDB.Exec(t, `
+		CREATE TABLE t1(a INT PRIMARY KEY, b STRING);
+	`)
+
+	testCases := []struct {
+		name    string
+		stmt    string
+		errRE   string
+		hintStr string
+	}{
+		{
+			name:    "implicit-conflict-with-initial-scan-only",
+			stmt:    "CREATE SCHEDULE test_schedule FOR CHANGEFEED t1 INTO 'null://sink' WITH resolved RECURRING '@daily';",
+			errRE:   "cannot specify both initial_scan='only' and resolved",
+			hintStr: "scheduled changefeeds implicitly pass the option initial_scan='only'",
+		},
+		{
+			name:  "explicit-conflict-with-initial-scan-only",
+			stmt:  "CREATE SCHEDULE test_schedule FOR CHANGEFEED t1 INTO 'null://sink' WITH resolved, initial_scan='only' RECURRING '@daily';",
+			errRE: "cannot specify both initial_scan='only' and resolved",
+		},
+		{
+			name:  "explicit-conflict-with-initial-scan-only",
+			stmt:  "CREATE SCHEDULE test_schedule FOR CHANGEFEED t1 INTO 'null://sink' WITH resolved, initial_scan='no' RECURRING '@daily';",
+			errRE: "initial_scan must be `only` for scheduled changefeeds",
+		},
+		{
+			name:  "explicit-conflict-with-initial-scan-only",
+			stmt:  "CREATE SCHEDULE test_schedule FOR CHANGEFEED t1 INTO 'null://sink' WITH initial_scan='no', initial_scan_only RECURRING '@daily';",
+			errRE: "cannot specify both initial_scan and initial_scan_only",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			hint := tc.hintStr
+			if hint == "" {
+				// Assert there is no hint when there shouldn't be by passing the regex for an empty string.
+				hint = "^$"
+			}
+			th.sqlDB.ExpectErrWithHint(t, tc.errRE, tc.hintStr, tc.stmt)
+		})
+	}
 }
 
 func extractChangefeedNode(sj *jobs.ScheduledJob) (*tree.CreateChangefeed, error) {

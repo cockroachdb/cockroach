@@ -36,6 +36,9 @@ func TestOptionsValidations(t *testing.T) {
 		{map[string]string{"diff": "", "format": "parquet"}, false, "cannot specify both"},
 		{map[string]string{"format": "txt"}, true, "unknown format"},
 		{map[string]string{"initial_scan": "", "no_initial_scan": ""}, true, "cannot specify both"},
+		// Verify that the returned error uses the syntax initial_scan='yes' instead of initial_scan_only. See #97008.
+		{map[string]string{"initial_scan_only": "", "resolved": ""}, true, "cannot specify both initial_scan='only'"},
+		{map[string]string{"initial_scan_only": "", "resolved": ""}, true, "cannot specify both initial_scan='only'"},
 		{map[string]string{"diff": "", "format": "parquet"}, true, ""},
 	}
 
