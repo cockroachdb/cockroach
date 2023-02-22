@@ -1931,11 +1931,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		// TODO(pavelkalinnikov): hide these in Store's replica create functions.
 		err = s.addToReplicasByRangeIDLocked(rep)
 		if err == nil {
-			// NB: no locking of the Replica is needed since it's being created, but
-			// it is asserted on in "Locked" methods.
-			rep.mu.RLock()
-			err = s.addToReplicasByKeyLockedReplicaRLocked(rep)
-			rep.mu.RUnlock()
+			err = s.addToReplicasByKeyLocked(rep, rep.Desc())
 		}
 		s.mu.Unlock()
 		if err != nil {
