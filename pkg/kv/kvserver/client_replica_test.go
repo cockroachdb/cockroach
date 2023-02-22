@@ -435,67 +435,88 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 // timestamp is below the committed value's timestamp. As a result, the
 // transaction observes the committed value in its certain future, allowing it
 // to avoid the ReadWithinUncertaintyIntervalError.
+//
+// Each test variant is run using the three different forms of transactional
+// read-only operations: Get, Scan, and ReverseScan.
 func TestTxnReadWithinUncertaintyInterval(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	testutils.RunTrueAndFalse(t, "observedTS", func(t *testing.T, observedTS bool) {
-		ctx := context.Background()
-		manual := hlc.NewHybridManualClock()
-		srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				Server: &server.TestingKnobs{
-					WallClock: manual,
-				},
-			},
+		readOps := []interface{}{"get", "scan", "revScan"}
+		testutils.RunValues(t, "readOp", readOps, func(t *testing.T, readOp interface{}) {
+			testTxnReadWithinUncertaintyInterval(t, observedTS, readOp.(string))
 		})
-		s := srv.(*server.TestServer)
-		defer s.Stopper().Stop(ctx)
-		store, err := s.Stores().GetStore(s.GetFirstStoreID())
-		require.NoError(t, err)
-
-		// Split off a scratch range.
-		key, err := s.ScratchRange()
-		require.NoError(t, err)
-
-		// Pause the server's clocks going forward.
-		manual.Pause()
-
-		// Create a new transaction.
-		now := s.Clock().Now()
-		maxOffset := s.Clock().MaxOffset().Nanoseconds()
-		require.NotZero(t, maxOffset)
-		txn := roachpb.MakeTransaction("test", key, 1, now, maxOffset, int32(s.SQLInstanceID()))
-		require.True(t, txn.ReadTimestamp.Less(txn.GlobalUncertaintyLimit))
-		require.Len(t, txn.ObservedTimestamps, 0)
-
-		// If the test variant wants an observed timestamp from the server at a
-		// timestamp below the value, collect one now.
-		if observedTS {
-			get := getArgs(key)
-			resp, pErr := kv.SendWrappedWith(ctx, store.TestSender(), kvpb.Header{Txn: &txn}, get)
-			require.Nil(t, pErr)
-			txn.Update(resp.Header().Txn)
-			require.Len(t, txn.ObservedTimestamps, 1)
-		}
-
-		// Perform a non-txn write. This will grab a timestamp from the clock.
-		put := putArgs(key, []byte("val"))
-		_, pErr := kv.SendWrapped(ctx, store.TestSender(), put)
-		require.Nil(t, pErr)
-
-		// Perform another read on the same key. Depending on whether or not the txn
-		// had collected an observed timestamp, it may or may not observe the value
-		// in its uncertainty interval and throw an error.
-		get := getArgs(key)
-		_, pErr = kv.SendWrappedWith(ctx, store.TestSender(), kvpb.Header{Txn: &txn}, get)
-		if observedTS {
-			require.Nil(t, pErr)
-		} else {
-			require.NotNil(t, pErr)
-			require.IsType(t, &kvpb.ReadWithinUncertaintyIntervalError{}, pErr.GetDetail())
-		}
 	})
+}
+
+func testTxnReadWithinUncertaintyInterval(t *testing.T, observedTS bool, readOp string) {
+	ctx := context.Background()
+	manual := hlc.NewHybridManualClock()
+	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Server: &server.TestingKnobs{
+				WallClock: manual,
+			},
+		},
+	})
+	s := srv.(*server.TestServer)
+	defer s.Stopper().Stop(ctx)
+	store, err := s.Stores().GetStore(s.GetFirstStoreID())
+	require.NoError(t, err)
+
+	// Split off a scratch range.
+	key, err := s.ScratchRange()
+	require.NoError(t, err)
+
+	// Pause the server's clocks going forward.
+	manual.Pause()
+
+	// Create a new transaction.
+	now := s.Clock().Now()
+	maxOffset := s.Clock().MaxOffset().Nanoseconds()
+	require.NotZero(t, maxOffset)
+	txn := roachpb.MakeTransaction("test", key, 1, now, maxOffset, int32(s.SQLInstanceID()))
+	require.True(t, txn.ReadTimestamp.Less(txn.GlobalUncertaintyLimit))
+	require.Len(t, txn.ObservedTimestamps, 0)
+
+	// If the test variant wants an observed timestamp from the server at a
+	// timestamp below the value, collect one now.
+	if observedTS {
+		get := getArgs(key)
+		resp, pErr := kv.SendWrappedWith(ctx, store.TestSender(), kvpb.Header{Txn: &txn}, get)
+		require.Nil(t, pErr)
+		txn.Update(resp.Header().Txn)
+		require.Len(t, txn.ObservedTimestamps, 1)
+	}
+
+	// Perform a non-txn write. This will grab a timestamp from the clock.
+	put := putArgs(key, []byte("val"))
+	_, pErr := kv.SendWrapped(ctx, store.TestSender(), put)
+	require.Nil(t, pErr)
+
+	// Perform another read on the same key. Depending on whether or not the txn
+	// had collected an observed timestamp, it may or may not observe the value
+	// in its uncertainty interval and throw an error.
+
+	var read kvpb.Request
+	switch readOp {
+	case "get":
+		read = getArgs(key)
+	case "scan":
+		read = scanArgs(key, key.Next())
+	case "revScan":
+		read = revScanArgs(key, key.Next())
+	default:
+		t.Fatalf("unknown op: %q", readOp)
+	}
+	_, pErr = kv.SendWrappedWith(ctx, store.TestSender(), kvpb.Header{Txn: &txn}, read)
+	if observedTS {
+		require.Nil(t, pErr)
+	} else {
+		require.NotNil(t, pErr)
+		require.IsType(t, &kvpb.ReadWithinUncertaintyIntervalError{}, pErr.GetDetail())
+	}
 }
 
 // TestTxnReadWithinUncertaintyIntervalAfterIntentResolution tests cases where a

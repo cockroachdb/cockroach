@@ -11,7 +11,7 @@
 syntax = "proto3";
 
 package cockroach.sql.catalog.catpb;
-option go_package = "catenumpb";
+option go_package = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb";
 
 import "gogoproto/gogo.proto";
 

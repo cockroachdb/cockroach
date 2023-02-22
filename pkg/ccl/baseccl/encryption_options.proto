@@ -8,7 +8,7 @@
 
 syntax = "proto3";
 package cockroach.ccl.baseccl;
-option go_package = "baseccl";
+option go_package = "github.com/cockroachdb/cockroach/pkg/ccl/baseccl";
 
 enum EncryptionKeySource {
   // Plain key files.

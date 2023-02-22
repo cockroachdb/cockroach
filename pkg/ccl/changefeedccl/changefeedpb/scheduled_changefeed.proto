@@ -8,7 +8,7 @@
 
 syntax = "proto3";
 package cockroach.ccl.changefeedccl;
-option go_package = "changefeedpb";
+option go_package = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedpb";
 
 // ScheduledExportExecutionArgs is the arguments to the scheduled backup executor.
 message ScheduledChangefeedExecutionArgs {

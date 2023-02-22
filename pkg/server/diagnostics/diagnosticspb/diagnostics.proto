@@ -10,7 +10,7 @@
 
 syntax = "proto3";
 package cockroach.server.diagnostics.diagnosticspb;
-option go_package = "diagnosticspb";
+option go_package = "github.com/cockroachdb/cockroach/pkg/server/diagnostics/diagnosticspb";
 
 import "build/info.proto";
 import "config/zonepb/zone.proto";

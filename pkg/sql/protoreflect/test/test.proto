@@ -10,7 +10,7 @@
 
 syntax = "proto3";
 package cockroach.sql.protoreflecttest;
-option go_package = "protoreflecttest";
+option go_package = "github.com/cockroachdb/cockroach/pkg/sql/protoreflect/protoreflecttest";
 
 message Inner {
   string value = 1;

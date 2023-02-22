@@ -14,7 +14,7 @@
 
 syntax = "proto3";
 package cockroach.util.optional;
-option go_package = "optional";
+option go_package = "github.com/cockroachdb/cockroach/pkg/util/optional";
 
 import "gogoproto/gogo.proto";
 import "google/protobuf/duration.proto";

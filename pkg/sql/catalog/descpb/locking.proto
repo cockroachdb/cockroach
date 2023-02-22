@@ -10,7 +10,7 @@
 
 syntax = "proto2";
 package cockroach.sql.sqlbase;
-option go_package = "descpb";
+option go_package = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb";
 
 // ScanLockingStrength controls the row-level locking mode used by scans.
 //

@@ -114,9 +114,13 @@ func TestMultiRegionDataDriven(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t, "flaky test")
-
 	ctx := context.Background()
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
+
+		if strings.Contains(path, "secondary_region") {
+			skip.UnderStressWithIssue(t, 92235, "flaky test")
+		}
+
 		ds := datadrivenTestState{}
 		defer ds.cleanup(ctx)
 		var mu syncutil.Mutex
