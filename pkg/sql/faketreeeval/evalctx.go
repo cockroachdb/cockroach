@@ -476,6 +476,20 @@ func (ep *DummyEvalPlanner) GetRangeDescByID(
 	return
 }
 
+// SpanStats is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) SpanStats(
+	context.Context, roachpb.RKey, roachpb.RKey,
+) (stats *roachpb.SpanStatsResponse, err error) {
+	return
+}
+
+// GetDetailsForSpanStats is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) GetDetailsForSpanStats(
+	context.Context, int, int,
+) (it eval.InternalRows, err error) {
+	return
+}
+
 // DummyPrivilegedAccessor implements the tree.PrivilegedAccessor interface by returning errors.
 type DummyPrivilegedAccessor struct{}
 
