@@ -42,6 +42,8 @@ func (e *avgResponseEstimator) init(sv *settings.Values) {
 	e.avgResponseSizeMultiple = streamerAvgResponseSizeMultiple.Get(sv)
 }
 
+// getAvgResponseSize returns the current estimate of a footprint of a single
+// response.
 func (e *avgResponseEstimator) getAvgResponseSize() int64 {
 	if e.numResponses == 0 {
 		return initialAvgResponseSize
@@ -78,8 +80,8 @@ func (e *avgResponseEstimator) getAvgResponseSize() int64 {
 }
 
 // update updates the actual information of the estimator based on numResponses
-// responses that took up responseBytes bytes and correspond to a single
-// BatchResponse.
+// responses that took up responseBytes bytes in footprint and correspond to a
+// single BatchResponse.
 func (e *avgResponseEstimator) update(responseBytes int64, numResponses int64) {
 	e.responseBytes += float64(responseBytes)
 	e.numResponses += float64(numResponses)
