@@ -60,7 +60,7 @@ CREATE TYPE foo AS (a INT, b x)
 CREATE TYPE foo AS (a INT8, b x) -- normalized!
 CREATE TYPE foo AS (a INT8, b x) -- fully parenthesized
 CREATE TYPE foo AS (a INT8, b x) -- literals removed
-CREATE TYPE _ AS (_ INT8, _ x) -- identifiers removed
+CREATE TYPE _ AS (_ INT8, _ _) -- identifiers removed
 
 parse
 CREATE TYPE foo AS ()
@@ -69,3 +69,11 @@ CREATE TYPE foo AS ()
 CREATE TYPE foo AS () -- fully parenthesized
 CREATE TYPE foo AS () -- literals removed
 CREATE TYPE _ AS () -- identifiers removed
+
+parse
+CREATE TYPE foo AS (a "What A wild Thing To Call A Type", b "🌟 ")
+----
+CREATE TYPE foo AS (a "What A wild Thing To Call A Type", b "🌟 ")
+CREATE TYPE foo AS (a "What A wild Thing To Call A Type", b "🌟 ") -- fully parenthesized
+CREATE TYPE foo AS (a "What A wild Thing To Call A Type", b "🌟 ") -- literals removed
+CREATE TYPE _ AS (_ _, _ _) -- identifiers removed
