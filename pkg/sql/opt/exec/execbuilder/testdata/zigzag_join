@@ -74,3 +74,17 @@ vectorized: true
   right table: t71271@t71271_d_idx
   right columns: (d, rowid)
   right fixed values: 1 column
+
+# Regression test for #97090. We should not plan a zigzag join when the
+# direction of the equality columns doesn't match.
+statement ok
+CREATE TABLE t97090 (
+  c INT NOT NULL,
+  l INT NOT NULL,
+  r INT NOT NULL,
+  INDEX (l ASC, c DESC),
+  INDEX (r ASC, c ASC)
+)
+
+statement error could not produce a query plan conforming to the FORCE_ZIGZAG hint
+EXPLAIN SELECT * FROM t97090@{FORCE_ZIGZAG} WHERE l = 1 AND r = -1
