@@ -117,7 +117,7 @@ func (a *Authorizer) HasTSDBQueryCapability(ctx context.Context, tenID roachpb.T
 			tenID,
 		)
 	}
-	if !cp.CanViewTsdbMetrics {
+	if !cp.CanViewTSDBMetrics {
 		return errors.Newf("tenant %s does not have capability to query timeseries data", tenID)
 	}
 	return nil

@@ -492,7 +492,7 @@ func TestGCTenant(t *testing.T) {
 			gcClosure(dropTenID, progress),
 			`GC state for tenant is DELETED yet the tenant row still exists: `+
 				`{ProtoInfo:{DeprecatedID:11 DeprecatedDataState:DROP DroppedName: TenantReplicationJobID:0 `+
-				`Capabilities:{CanAdminSplit:false CanViewNodeInfo:false CanViewTsdbMetrics:false}} `+
+				`Capabilities:{CanAdminSplit:false CanViewNodeInfo:false CanViewTSDBMetrics:false}} `+
 				`SQLInfo:{ID:11 Name:tenant-11 DataState:drop ServiceMode:none}}`,
 		)
 	})

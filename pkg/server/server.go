@@ -2102,6 +2102,10 @@ func (s *Server) Insecure() bool {
 	return s.cfg.Insecure
 }
 
+func (s *Server) TenantCapabilitiesReader() tenantcapabilities.Reader {
+	return s.tenantCapabilitiesWatcher
+}
+
 // Drain idempotently activates the draining mode.
 // Note: new code should not be taught to use this method
 // directly. Use the Drain() RPC instead with a suitably crafted

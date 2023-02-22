@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -1772,6 +1773,49 @@ func (tc *TestCluster) SplitTable(
 				t.Fatal(err)
 			}
 		}
+	}
+}
+
+func missingCapabilityError(serverIdx int, tenID roachpb.TenantID, capabilityName string) error {
+	return errors.Newf("server=%d tenant %s does not have capability %q", serverIdx, tenID, capabilityName)
+}
+
+func (tc *TestCluster) WaitForTenantCapabilities(
+	t *testing.T, tenID roachpb.TenantID, capabilityNames ...string,
+) {
+	for i, ts := range tc.Servers {
+		testutils.SucceedsSoon(t, func() error {
+			if tenID.IsSystem() {
+				return nil
+			}
+
+			if len(capabilityNames) > 0 {
+				capabilities, found := ts.Server.TenantCapabilitiesReader().GetCapabilities(tenID)
+				if !found {
+					return missingCapabilityError(i, tenID, capabilityNames[0])
+				}
+
+				for _, capabilityName := range capabilityNames {
+					switch capabilityName {
+					case tenantcapabilitiespb.CanAdminSplit:
+						if !capabilities.CanAdminSplit {
+							return missingCapabilityError(i, tenID, capabilityName)
+						}
+					case tenantcapabilitiespb.CanViewNodeInfo:
+						if !capabilities.CanViewNodeInfo {
+							return missingCapabilityError(i, tenID, capabilityName)
+						}
+					case tenantcapabilitiespb.CanViewTSDBMetrics:
+						if !capabilities.CanViewTSDBMetrics {
+							return missingCapabilityError(i, tenID, capabilityName)
+						}
+					default:
+						return errors.Newf("invalid capability %s", capabilityName)
+					}
+				}
+			}
+			return nil
+		})
 	}
 }
 
