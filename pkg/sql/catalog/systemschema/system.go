@@ -677,20 +677,9 @@ CREATE TABLE system.sql_instances (
     session_id   BYTES,
     locality     JSONB,
     sql_addr     STRING,
-    CONSTRAINT "primary" PRIMARY KEY (id),
-    FAMILY "primary" (id, addr, session_id, locality, sql_addr)
-)`
-
-	MrSQLInstancesTableSchema = `
-CREATE TABLE system.sql_instances (
-    id           INT NOT NULL,
-    addr         STRING,
-    session_id   BYTES,
-    locality     JSONB,
     crdb_region  BYTES NOT NULL,
-    sql_addr     STRING,
     CONSTRAINT "primary" PRIMARY KEY (crdb_region, id),
-    FAMILY "primary" (crdb_region, id, addr, session_id, locality, sql_addr)
+    FAMILY "primary" (id, addr, session_id, locality, sql_addr, crdb_region)
 )`
 
 	SpanConfigurationsTableSchema = `
@@ -2730,39 +2719,6 @@ var (
 	// TODO(jeffswenson): remove the function wrapper around the
 	// SQLInstanceTable descriptor. See TestSupportMultiRegion for context.
 	SQLInstancesTable = func() SystemTable {
-		if TestSupportMultiRegion() {
-			return makeSystemTable(
-				MrSQLInstancesTableSchema,
-				systemTable(
-					catconstants.SQLInstancesTableName,
-					keys.SQLInstancesTableID,
-					[]descpb.ColumnDescriptor{
-						{Name: "id", ID: 1, Type: types.Int, Nullable: false},
-						{Name: "addr", ID: 2, Type: types.String, Nullable: true},
-						{Name: "session_id", ID: 3, Type: types.Bytes, Nullable: true},
-						{Name: "locality", ID: 4, Type: types.Jsonb, Nullable: true},
-						{Name: "crdb_region", ID: 5, Type: types.Bytes, Nullable: false},
-						{Name: "sql_addr", ID: 6, Type: types.String, Nullable: true},
-					},
-					[]descpb.ColumnFamilyDescriptor{
-						{
-							Name:            "primary",
-							ID:              0,
-							ColumnNames:     []string{"id", "addr", "session_id", "locality", "crdb_region", "sql_addr"},
-							ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4, 5, 6},
-							DefaultColumnID: 0,
-						},
-					},
-					descpb.IndexDescriptor{
-						Name:                "primary",
-						ID:                  2,
-						Unique:              true,
-						KeyColumnNames:      []string{"crdb_region", "id"},
-						KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
-						KeyColumnIDs:        []descpb.ColumnID{5, 1},
-					},
-				))
-		}
 		return makeSystemTable(
 			SQLInstancesTableSchema,
 			systemTable(
@@ -2774,17 +2730,25 @@ var (
 					{Name: "session_id", ID: 3, Type: types.Bytes, Nullable: true},
 					{Name: "locality", ID: 4, Type: types.Jsonb, Nullable: true},
 					{Name: "sql_addr", ID: 5, Type: types.String, Nullable: true},
+					{Name: "crdb_region", ID: 6, Type: types.Bytes, Nullable: false},
 				},
 				[]descpb.ColumnFamilyDescriptor{
 					{
 						Name:            "primary",
 						ID:              0,
-						ColumnNames:     []string{"id", "addr", "session_id", "locality", "sql_addr"},
-						ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4, 5},
+						ColumnNames:     []string{"id", "addr", "session_id", "locality", "sql_addr", "crdb_region"},
+						ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4, 5, 6},
 						DefaultColumnID: 0,
 					},
 				},
-				pk("id"),
+				descpb.IndexDescriptor{
+					Name:                "primary",
+					ID:                  2,
+					Unique:              true,
+					KeyColumnNames:      []string{"crdb_region", "id"},
+					KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
+					KeyColumnIDs:        []descpb.ColumnID{6, 1},
+				},
 			))
 	}
 
