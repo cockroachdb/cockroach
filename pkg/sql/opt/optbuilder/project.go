@@ -148,7 +148,7 @@ func (b *Builder) analyzeSelectList(
 					}
 
 					aliases, exprs := b.expandStar(e.Expr, inScope)
-					if b.insideFuncDef {
+					if b.insideFuncDef || b.insideViewDef {
 						expanded = true
 						for _, expr := range exprs {
 							switch col := expr.(type) {
@@ -187,11 +187,11 @@ func (b *Builder) analyzeSelectList(
 		}
 		alias := b.getColName(e)
 		outScope.addColumn(scopeColName(tree.Name(alias)), texpr)
-		if b.insideFuncDef && !expanded {
+		if (b.insideViewDef || b.insideFuncDef) && !expanded {
 			expansions = append(expansions, e)
 		}
 	}
-	if b.insideFuncDef {
+	if b.insideFuncDef || b.insideViewDef {
 		*selects = expansions
 	}
 }
