@@ -150,16 +150,18 @@ func (c *rbtKeyCodec) decodeKey(key roachpb.Key) (region []byte, id base.SQLInst
 }
 
 // MakeRowCodec makes a new rowCodec for the sql_instances table.
-func makeRowCodec(codec keys.SQLCodec, table catalog.TableDescriptor) rowCodec {
+func makeRowCodec(codec keys.SQLCodec, table catalog.TableDescriptor, useRegionalByRow bool) rowCodec {
 	columns := table.PublicColumns()
 	var key keyCodec
-	if catalog.FindColumnByName(table, "crdb_region") != nil {
+	if useRegionalByRow {
 		key = &rbrKeyCodec{
 			indexPrefix: codec.IndexPrefix(uint32(table.GetID()), uint32(table.GetPrimaryIndexID())),
 		}
 	} else {
+		// TODO(jeffswenson): is there a better way to handle the rbtIndexID?
+		const rbtIndexID = 1
 		key = &rbtKeyCodec{
-			indexPrefix: codec.IndexPrefix(uint32(table.GetID()), uint32(table.GetPrimaryIndexID())),
+			indexPrefix: codec.IndexPrefix(uint32(table.GetID()), uint32(rbtIndexID)),
 		}
 	}
 	rc := rowCodec{

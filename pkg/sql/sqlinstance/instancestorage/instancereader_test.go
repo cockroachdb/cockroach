@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -138,7 +137,6 @@ func TestReader(t *testing.T) {
 		require.NoError(t, reader.WaitForStarted(ctx))
 
 		// Set up expected test data.
-		region := enum.One
 		instanceIDs := []base.SQLInstanceID{1, 2, 3}
 		rpcAddresses := []string{"addr1", "addr2", "addr3"}
 		sqlAddresses := []string{"addr4", "addr5", "addr6"}
@@ -244,10 +242,7 @@ func TestReader(t *testing.T) {
 
 		// Release an instance and verify only active instances are returned.
 		{
-			err := storage.ReleaseInstanceID(ctx, region, instanceIDs[0])
-			if err != nil {
-				t.Fatal(err)
-			}
+			tDB.Exec(t, `DELETE FROM "`+t.Name()+`".sql_instances WHERE instance_id = $1`, instanceIDs[0])
 			testutils.SucceedsSoon(t, func() error {
 				return verifyInstances(t, expectationsFromOffset(1))
 			})
@@ -298,7 +293,6 @@ func TestReader(t *testing.T) {
 		reader.Start(ctx, sqlinstance.InstanceInfo{})
 		require.NoError(t, reader.WaitForStarted(ctx))
 		// Create three instances and release one.
-		region := enum.One
 		instanceIDs := [...]base.SQLInstanceID{1, 2, 3}
 		rpcAddresses := [...]string{"addr1", "addr2", "addr3"}
 		sqlAddresses := [...]string{"addr4", "addr5", "addr6"}
@@ -345,12 +339,9 @@ func TestReader(t *testing.T) {
 
 		// Verify request for released instance data results in an error.
 		{
-			err := storage.ReleaseInstanceID(ctx, region, instanceIDs[0])
-			if err != nil {
-				t.Fatal(err)
-			}
+			tDB.Exec(t, `DELETE FROM "`+t.Name()+`".sql_instances WHERE instance_id = $1`, instanceIDs[0])
 			testutils.SucceedsSoon(t, func() error {
-				_, err = reader.GetInstance(ctx, instanceIDs[0])
+				_, err := reader.GetInstance(ctx, instanceIDs[0])
 				if !errors.Is(err, sqlinstance.NonExistentInstanceError) {
 					return errors.Newf("expected non existent instance error")
 				}

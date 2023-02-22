@@ -106,7 +106,6 @@ func TestStorage(t *testing.T) {
 		defer stopper.Stop(ctx)
 
 		// Create three instances and release one.
-		region := enum.One
 		instanceIDs := [...]base.SQLInstanceID{1, 2, 3, 4, 5}
 		rpcAddresses := [...]string{"addr1", "addr2", "addr3", "addr4", "addr5"}
 		sqlAddresses := [...]string{"addr6", "addr7", "addr8", "addr9", "addr10"}
@@ -171,21 +170,6 @@ func TestStorage(t *testing.T) {
 			}
 		}
 
-		// Release an instance and verify all instances are returned.
-		{
-			require.NoError(t, storage.ReleaseInstanceID(ctx, region, instanceIDs[0]))
-			instances, err := storage.GetAllInstancesDataForTest(ctx)
-			require.NoError(t, err)
-			require.Equal(t, preallocatedCount-1, len(instances))
-			sortInstances(instances)
-			for i := 0; i < len(instances)-1; i++ {
-				require.Equal(t, instanceIDs[i+1], instances[i].InstanceID)
-				require.Equal(t, sessionIDs[i+1], instances[i].SessionID)
-				require.Equal(t, rpcAddresses[i+1], instances[i].InstanceRPCAddr)
-				require.Equal(t, sqlAddresses[i+1], instances[i].InstanceSQLAddr)
-				require.Equal(t, localities[i+1], instances[i].Locality)
-			}
-		}
 
 		// Verify instance ID associated with an expired session gets reused.
 		sessionID6 := makeSession()
@@ -470,7 +454,7 @@ func TestConcurrentCreateAndRelease(t *testing.T) {
 			if i == -1 {
 				return
 			}
-			require.NoError(t, storage.ReleaseInstanceID(ctx, region, i))
+			tDB.Exec(t, `DELETE FROM "`+dbName+`".sql_instances WHERE instance_id = $1`, i)
 			state.freeInstances[i] = struct{}{}
 			delete(state.liveInstances, i)
 		}

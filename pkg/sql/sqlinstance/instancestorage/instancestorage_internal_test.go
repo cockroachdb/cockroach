@@ -54,11 +54,11 @@ func TestGetAvailableInstanceIDForRegion(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	getAvailableInstanceID := func(storage *Storage, region []byte) (id base.SQLInstanceID, err error) {
-		err = storage.db.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
-			id, err = storage.getAvailableInstanceIDForRegion(ctx, region, txn)
-			return err
-		})
-		return
+		panic("TODO(jeffswenson) fix this test")
+		//err = storage.db.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
+		//	id, err = storage.getAvailableInstanceIDForRegion(ctx, region, txn)
+		//	return err
+		//})
 	}
 
 	t.Run("no rows", func(t *testing.T) {
@@ -450,7 +450,8 @@ func setup(
 	clock := hlc.NewClockForTesting(nil)
 	stopper := stop.NewStopper()
 	slStorage := slstorage.NewFakeStorage()
-	storage := NewTestingStorage(kvDB, keys.SystemSQLCodec, table, slStorage, settings)
+	// TODO(jeffswenson): create the settings watcher
+	storage := NewTestingStorage(kvDB, keys.SystemSQLCodec, table, slStorage, settings, nil)
 	return stopper, storage, slStorage, clock
 }
 

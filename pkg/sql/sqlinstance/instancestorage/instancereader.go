@@ -42,7 +42,6 @@ type Reader struct {
 	codec    keys.SQLCodec
 	clock    *hlc.Clock
 	stopper  *stop.Stopper
-	rowcodec rowCodec
 	// Once initialScanDone is closed, the error (if any) while establishing the
 	// rangefeed can be found in initialScanErr.
 	initialScanDone chan struct{}
@@ -133,7 +132,6 @@ func NewTestingReader(
 		f:               f,
 		codec:           codec,
 		clock:           clock,
-		rowcodec:        makeRowCodec(codec, table),
 		initialScanDone: make(chan struct{}),
 		stopper:         stopper,
 	}
@@ -222,14 +220,20 @@ func makeInstanceInfos(rows []instancerow) []sqlinstance.InstanceInfo {
 func (r *Reader) GetAllInstancesUsingTxn(
 	ctx context.Context, txn *kv.Txn,
 ) ([]sqlinstance.InstanceInfo, error) {
-	instancesTablePrefix := r.rowcodec.codec.TablePrefix(uint32(r.rowcodec.tableID))
+	version, err := r.storage.versionGuard(ctx, txn)
+	if err != nil {
+		return nil, err
+	}
+	rowcodec := r.storage.getReadCodec(&version)
+
+	instancesTablePrefix := rowcodec.codec.TablePrefix(uint32(rowcodec.tableID))
 	rows, err := txn.Scan(ctx, instancesTablePrefix, instancesTablePrefix.PrefixEnd(), 0 /* maxRows */)
 	if err != nil {
 		return nil, err
 	}
 	decodedRows := make([]instancerow, 0, len(rows))
 	for _, row := range rows {
-		decodedRow, err := r.rowcodec.decodeRow(row.Key, row.Value)
+		decodedRow, err := rowcodec.decodeRow(row.Key, row.Value)
 		if err != nil {
 			return nil, err
 		}

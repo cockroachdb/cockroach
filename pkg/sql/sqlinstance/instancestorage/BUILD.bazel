@@ -13,6 +13,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
+        "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvclient/rangefeed",
@@ -20,6 +21,7 @@ go_library(
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/multitenant",
         "//pkg/roachpb",
+        "//pkg/server/settingswatcher",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql",
