@@ -554,9 +554,6 @@ statement ok
 CREATE FUNCTION test_tbl_f() RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$;
 
 statement error pq: unimplemented: usage of user-defined function from relations not supported
-CREATE TABLE test_tbl_t (a INT PRIMARY KEY, b INT DEFAULT (test_tbl_f() + 1));
-
-statement error pq: unimplemented: usage of user-defined function from relations not supported
 CREATE TABLE test_tbl_t (a INT PRIMARY KEY, b INT ON UPDATE (test_tbl_f() + 1));
 
 statement error pq: unimplemented: usage of user-defined function from relations not supported
@@ -582,9 +579,6 @@ ALTER TABLE test_tbl_t ADD COLUMN c int DEFAULT (test_tbl_f());
 
 statement error pq: unimplemented: usage of user-defined function from relations not supported
 ALTER TABLE test_tbl_t ADD COLUMN c int ON UPDATE (test_tbl_f());
-
-statement error pq: unimplemented: usage of user-defined function from relations not supported
-ALTER TABLE test_tbl_t ALTER COLUMN b SET DEFAULT (test_tbl_f());
 
 statement error pq: unimplemented: usage of user-defined function from relations not supported
 ALTER TABLE test_tbl_t ALTER COLUMN b SET ON UPDATE (test_tbl_f());

@@ -1090,6 +1090,10 @@ func updateNonComputedColExpr(
 		return err
 	}
 
+	if err := params.p.maybeUpdateFunctionReferencesForColumn(params.ctx, tab, col.ColumnDesc()); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -1107,6 +1111,12 @@ func sanitizeColumnExpression(
 	if err := funcdesc.MaybeFailOnUDFUsage(typedExpr, context, p.EvalContext().Settings.Version.ActiveVersionOrEmpty(p.ctx)); err != nil {
 		return nil, "", err
 	}
+
+	typedExpr, err = schemaexpr.MaybeReplaceUDFNameWithOIDReferenceInTypedExpr(typedExpr)
+	if err != nil {
+		return nil, "", err
+	}
+
 	s := tree.Serialize(typedExpr)
 	return typedExpr, s, nil
 }
@@ -1576,6 +1586,12 @@ func dropColumnImpl(
 	// If the dropped column uses a sequence, remove references to it from that sequence.
 	if colToDrop.NumUsesSequences() > 0 {
 		if err := params.p.removeSequenceDependencies(params.ctx, tableDesc, colToDrop); err != nil {
+			return nil, err
+		}
+	}
+
+	if colToDrop.NumUsesFunctions() > 0 {
+		if err := params.p.removeColumnBackReferenceInFunctions(params.ctx, tableDesc, colToDrop.ColumnDesc()); err != nil {
 			return nil, err
 		}
 	}

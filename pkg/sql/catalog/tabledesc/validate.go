@@ -81,13 +81,11 @@ func (desc *wrapper) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
 			ids.Add(col.GetUsesSequenceID(i))
 		}
 	}
-	for _, cst := range desc.Checks {
-		fnIDs, err := desc.GetAllReferencedFunctionIDsInConstraint(cst.ConstraintID)
-		if err != nil {
-			return catalog.DescriptorIDSet{}, err
-		}
-		fnIDs.ForEach(ids.Add)
+	fnIDs, err := desc.GetAllReferencedFunctionIDs()
+	if err != nil {
+		return catalog.DescriptorIDSet{}, err
 	}
+	fnIDs.ForEach(ids.Add)
 	// Collect user defined type IDs in expressions.
 	// All serialized expressions within a table descriptor are serialized
 	// with type annotations as IDs, so this visitor will collect them all.
@@ -193,6 +191,13 @@ func (desc *wrapper) ValidateForwardReferences(
 		}
 	}
 
+	// check all functions referenced by columns exists.
+	for _, col := range desc.Columns {
+		for _, fnID := range col.UsesFunctionIds {
+			vea.Report(desc.validateOutboundFuncRef(fnID, vdg))
+		}
+	}
+
 	// Row-level TTL is not compatible with foreign keys.
 	// This check should be in ValidateSelf but interferes with AllocateIDs.
 	if desc.HasRowLevelTTL() {
@@ -261,6 +266,18 @@ func (desc *wrapper) ValidateBackReferences(
 				continue
 			}
 			vea.Report(desc.validateOutboundFuncRefBackReferenceForConstraint(fn, cst.ConstraintID))
+		}
+	}
+
+	// Check back-references in functions referenced by columns.
+	for _, col := range desc.Columns {
+		for _, fnID := range col.UsesFunctionIds {
+			fn, err := vdg.GetFunctionDescriptor(fnID)
+			if err != nil {
+				vea.Report(err)
+				continue
+			}
+			vea.Report(desc.validateOutboundFuncRefBackReferenceForColumn(fn, col.ID))
 		}
 	}
 
@@ -352,6 +369,23 @@ func (desc *wrapper) validateOutboundFuncRefBackReferenceForConstraint(
 		}
 		for _, id := range dep.ConstraintIDs {
 			if id == cstID {
+				return nil
+			}
+		}
+	}
+	return errors.AssertionFailedf("depends-on function %q (%d) has no corresponding depended-on-by back reference",
+		ref.GetName(), ref.GetID())
+}
+
+func (desc *wrapper) validateOutboundFuncRefBackReferenceForColumn(
+	ref catalog.FunctionDescriptor, colID descpb.ColumnID,
+) error {
+	for _, dep := range ref.GetDependedOnBy() {
+		if dep.ID != desc.GetID() {
+			continue
+		}
+		for _, id := range dep.ColumnIDs {
+			if id == colID {
 				return nil
 			}
 		}

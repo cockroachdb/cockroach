@@ -155,6 +155,11 @@ func TestValidateMixedVersionElements_drop_column_with_partial_index(t *testing.
 	defer log.Scope(t).Close(t)
 	sctest.ValidateMixedVersionElements(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_column_with_partial_index", sctest.SingleNodeMixedCluster)
 }
+func TestValidateMixedVersionElements_drop_column_with_udf_default(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.ValidateMixedVersionElements(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_column_with_udf_default", sctest.SingleNodeMixedCluster)
+}
 func TestValidateMixedVersionElements_drop_function(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -194,4 +199,9 @@ func TestValidateMixedVersionElements_drop_table(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	sctest.ValidateMixedVersionElements(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_table", sctest.SingleNodeMixedCluster)
+}
+func TestValidateMixedVersionElements_drop_table_udf_default(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.ValidateMixedVersionElements(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_table_udf_default", sctest.SingleNodeMixedCluster)
 }

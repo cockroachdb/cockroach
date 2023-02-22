@@ -376,8 +376,13 @@ func (desc *wrapper) GetAllReferencedFunctionIDs() (catalog.DescriptorIDSet, err
 		}
 		ret = ret.Union(ids)
 	}
-	// TODO(chengxiong): add logic to extract references from columns and indexes
-	// when UDFs are allowed in them.
+	for _, c := range desc.AllColumns() {
+		for _, id := range c.ColumnDesc().UsesFunctionIds {
+			ret.Add(id)
+		}
+	}
+	// TODO(chengxiong): add logic to extract references from indexes when UDFs
+	// are allowed in them.
 	return ret.Union(catalog.MakeDescriptorIDSet(desc.DependsOnFunctions...)), nil
 }
 
@@ -391,14 +396,38 @@ func (desc *wrapper) GetAllReferencedFunctionIDsInConstraint(
 	if ck == nil {
 		return catalog.DescriptorIDSet{}, nil
 	}
-	ckExpr, err := parser.ParseExpr(ck.GetExpr())
+	ret, err := schemaexpr.GetUDFIDsFromExprStr(ck.GetExpr())
 	if err != nil {
 		return catalog.DescriptorIDSet{}, err
 	}
-	ret, err := schemaexpr.GetUDFIDs(ckExpr)
-	if err != nil {
-		return catalog.DescriptorIDSet{}, err
+	return ret, nil
+}
+
+// GetAllReferencedFunctionIDsInColumnExprs implements the TableDescriptor
+// interface.
+func (desc *wrapper) GetAllReferencedFunctionIDsInColumnExprs(
+	colID descpb.ColumnID,
+) (fnIDs catalog.DescriptorIDSet, err error) {
+	col := catalog.FindColumnByID(desc, colID)
+	if col == nil {
+		return catalog.DescriptorIDSet{}, nil
 	}
+
+	var ret catalog.DescriptorIDSet
+	// TODO(chengxiong): add support for computed columns when UDFs are allowed in
+	// them.
+	if !col.IsComputed() {
+		if col.HasDefault() {
+			ids, err := schemaexpr.GetUDFIDsFromExprStr(col.GetDefaultExpr())
+			if err != nil {
+				return catalog.DescriptorIDSet{}, err
+			}
+			ret = ret.Union(ids)
+		}
+		// TODO(chengxiong): add support for ON UPDATE expressions when UDFs are
+		// allowed in them.
+	}
+
 	return ret, nil
 }
 
