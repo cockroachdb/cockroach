@@ -963,8 +963,6 @@ available replica will error.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="set_masklen"></a><code>set_masklen(val: <a href="inet.html">inet</a>, prefixlen: <a href="int.html">int</a>) &rarr; <a href="inet.html">inet</a></code></td><td><span class="funcdesc"><p>Sets the prefix length of <code>val</code> to <code>prefixlen</code>.</p>
 <p>For example, <code>set_masklen('192.168.1.2', 16)</code> returns <code>'192.168.1.2/16'</code>.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="text"></a><code>text(val: <a href="inet.html">inet</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Converts the IP address and prefix length to text.</p>
 </span></td><td>Immutable</td></tr></tbody>
 </table>
 
@@ -2767,8 +2765,6 @@ The output can be used to recreate a database.’</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="get_byte"></a><code>get_byte(byte_string: <a href="bytes.html">bytes</a>, index: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Extracts a byte at the given index in the byte array.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="inet"></a><code>inet(val: <a href="string.html">string</a>) &rarr; <a href="inet.html">inet</a></code></td><td><span class="funcdesc"><p>If possible, converts input to that of type inet.</p>
-</span></td><td>Immutable</td></tr>
 <tr><td><a name="initcap"></a><code>initcap(val: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Capitalizes the first letter of <code>val</code>.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="left"></a><code>left(input: <a href="bytes.html">bytes</a>, return_set: <a href="int.html">int</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Returns the first <code>return_set</code> bytes from <code>input</code>.</p>
@@ -3520,8 +3516,6 @@ table. Returns an error if validation fails.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="obj_description"></a><code>obj_description(object_oid: oid, catalog_name: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the comment for a database object specified by its OID and the name of the containing system catalog. For example, obj_description(123456, ‘pg_class’) would retrieve the comment for the table with OID 123456.</p>
 </span></td><td>Stable</td></tr>
-<tr><td><a name="oid"></a><code>oid(int: <a href="int.html">int</a>) &rarr; oid</code></td><td><span class="funcdesc"><p>Converts an integer to an OID.</p>
-</span></td><td>Immutable</td></tr>
 <tr><td><a name="pg_backend_pid"></a><code>pg_backend_pid() &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns a numerical ID attached to this session. This ID is part of the query cancellation key used by the wire protocol. This function was only added for compatibility, and unlike in Postgres, the returned value does not correspond to a real process ID.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="pg_collation_for"></a><code>pg_collation_for(str: anyelement) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the collation of the argument</p>
