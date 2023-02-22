@@ -92,7 +92,10 @@ type ScanStats struct {
 	SeparatedPointValueBytesFetched uint64
 	// ConsumedRU is the number of RUs that were consumed during the course of a
 	// scan.
-	ConsumedRU uint64
+	ConsumedRU      uint64
+	NumGets         uint64
+	NumScans        uint64
+	NumReverseScans uint64
 }
 
 // PopulateKVMVCCStats adds data from the input ScanStats to the input KVStats.
@@ -110,6 +113,9 @@ func PopulateKVMVCCStats(kvStats *execinfrapb.KVStats, ss *ScanStats) {
 	kvStats.RangeKeyCount = optional.MakeUint(ss.RangeKeyCount)
 	kvStats.RangeKeyContainedPoints = optional.MakeUint(ss.RangeKeyContainedPoints)
 	kvStats.RangeKeySkippedPoints = optional.MakeUint(ss.RangeKeySkippedPoints)
+	kvStats.NumGets = optional.MakeUint(ss.NumGets)
+	kvStats.NumScans = optional.MakeUint(ss.NumScans)
+	kvStats.NumReverseScans = optional.MakeUint(ss.NumReverseScans)
 }
 
 // GetScanStats is a helper function to calculate scan stats from the given
@@ -143,6 +149,9 @@ func GetScanStats(ctx context.Context, recording tracingpb.Recording) (scanStats
 				scanStats.SeparatedPointCount += ss.SeparatedPointCount
 				scanStats.SeparatedPointValueBytes += ss.SeparatedPointValueBytes
 				scanStats.SeparatedPointValueBytesFetched += ss.SeparatedPointValueBytesFetched
+				scanStats.NumGets += ss.NumGets
+				scanStats.NumScans += ss.NumScans
+				scanStats.NumReverseScans += ss.NumReverseScans
 			} else if pbtypes.Is(any, &tc) {
 				if err := pbtypes.UnmarshalAny(any, &tc); err != nil {
 					return

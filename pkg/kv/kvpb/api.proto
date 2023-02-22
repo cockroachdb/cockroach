@@ -3208,8 +3208,8 @@ message ContentionEvent {
                                          (gogoproto.stdduration) = true];
 }
 
-// ScanStats is a message that will be attached to BatchResponses containing
-// information about what happened during each scan and get in the request.
+// ScanStats is a message that tracks miscellaneous statistics of all Gets,
+// Scans, and ReverseScans in a single BatchResponse.
 message ScanStats {
   option (gogoproto.goproto_stringer) = false;
 
@@ -3231,4 +3231,12 @@ message ScanStats {
   uint64 separated_point_count = 14;
   uint64 separated_point_value_bytes = 15;
   uint64 separated_point_value_bytes_fetched = 16;
+
+  // NumGets, NumScans, and NumReverseScans tracks the number of Gets, Scans,
+  // and ReverseScans, respectively, that were actually evaluated as part of the
+  // BatchResponse. These don't include requests that were not evaluated due to
+  // reaching the BatchResponse's limits or an error.
+  uint64 num_gets = 17;
+  uint64 num_scans = 18;
+  uint64 num_reverse_scans = 19;
 }

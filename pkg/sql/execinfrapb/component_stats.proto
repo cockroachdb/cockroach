@@ -162,6 +162,10 @@ message KVStats {
   // alongside total execution time for operators that perform KV work.
   optional util.optional.Duration kv_cpu_time = 11 [(gogoproto.nullable) = false,
     (gogoproto.customname) = "KVCPUTime"];
+
+  optional util.optional.Uint num_gets = 21 [(gogoproto.nullable) = false];
+  optional util.optional.Uint num_scans = 22 [(gogoproto.nullable) = false];
+  optional util.optional.Uint num_reverse_scans = 23 [(gogoproto.nullable) = false];
 }
 
 // ExecStats contains statistics about the execution of a component.
