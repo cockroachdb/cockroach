@@ -162,6 +162,14 @@ func MakeStorePoolNodeLivenessFunc(nodeLiveness *liveness.NodeLiveness) NodeLive
 func LivenessStatus(
 	l livenesspb.Liveness, now time.Time, deadThreshold time.Duration,
 ) livenesspb.NodeLivenessStatus {
+	// If we don't have a liveness expiration time, treat the status as unknown.
+	// This is different then unavailable as it doesn't contribute to the node
+	// being marked as suspect however we still won't transfer leases or replicas
+	// to it in this state.
+	if l.Expiration.WallTime == 0 {
+		return livenesspb.NodeLivenessStatus_UNKNOWN
+	}
+
 	if l.IsDead(now, deadThreshold) {
 		if !l.Membership.Active() {
 			return livenesspb.NodeLivenessStatus_DECOMMISSIONED
@@ -177,6 +185,7 @@ func LivenessStatus(
 		}
 		return livenesspb.NodeLivenessStatus_LIVE
 	}
+	// Not yet dead, but has not heartbeated recently enough to be alive either.
 	return livenesspb.NodeLivenessStatus_UNAVAILABLE
 }
 
@@ -195,21 +204,6 @@ type StoreDetail struct {
 	// LastUnavailable is set when it's detected that a store was unavailable,
 	// i.e. failed liveness.
 	LastUnavailable time.Time
-	// LastAvailable is set when it's detected that a store was available,
-	// i.e. we got a liveness heartbeat.
-	LastAvailable time.Time
-}
-
-// isThrottled returns whether the store is currently throttled.
-func (sd StoreDetail) isThrottled(now time.Time) bool {
-	return sd.ThrottledUntil.After(now)
-}
-
-// isSuspect returns whether the store is currently suspect. We measure that by
-// looking at the time it was last unavailable making sure we have not seen any
-// failures for a period of time defined by StoreSuspectDuration.
-func (sd StoreDetail) isSuspect(now time.Time, suspectDuration time.Duration) bool {
-	return sd.LastUnavailable.Add(suspectDuration).After(now)
 }
 
 // storeStatus is the current status of a store.
@@ -243,7 +237,7 @@ const (
 )
 
 func (sd *StoreDetail) status(
-	now time.Time, threshold time.Duration, nl NodeLivenessFunc, suspectDuration time.Duration,
+	now time.Time, deadThreshold time.Duration, nl NodeLivenessFunc, suspectDuration time.Duration,
 ) storeStatus {
 	// During normal operation, we expect the state transitions for stores to look like the following:
 	//
@@ -265,17 +259,6 @@ func (sd *StoreDetail) status(
 	//         +----------------------+          Successful liveness
 	//                                                heartbeat
 	//
-	// The store is considered dead if it hasn't been updated via gossip
-	// within the liveness threshold. Note that LastUpdatedTime is set
-	// when the store detail is created and will have a non-zero value
-	// even before the first gossip arrives for a store.
-	deadAsOf := sd.LastUpdatedTime.Add(threshold)
-	if now.After(deadAsOf) {
-		// Wipe out the lastAvailable timestamp, so that once a node comes back
-		// from the dead we dont consider it suspect.
-		sd.LastAvailable = time.Time{}
-		return storeStatusDead
-	}
 	// If there's no descriptor (meaning no gossip ever arrived for this
 	// store), return unavailable.
 	if sd.Desc == nil {
@@ -287,37 +270,33 @@ func (sd *StoreDetail) status(
 	//
 	// Store statuses checked in the following order:
 	// dead -> decommissioning -> unknown -> draining -> suspect -> available.
-	switch nl(sd.Desc.Node.NodeID, now, threshold) {
+	switch nl(sd.Desc.Node.NodeID, now, deadThreshold) {
 	case livenesspb.NodeLivenessStatus_DEAD, livenesspb.NodeLivenessStatus_DECOMMISSIONED:
+		sd.LastUnavailable = now
 		return storeStatusDead
 	case livenesspb.NodeLivenessStatus_DECOMMISSIONING:
 		return storeStatusDecommissioning
 	case livenesspb.NodeLivenessStatus_UNAVAILABLE:
-		// We don't want to suspect a node on startup or when it's first added to a
-		// cluster, because we dont know its liveness yet.
-		if !sd.LastAvailable.IsZero() {
-			sd.LastUnavailable = now
-		}
+		sd.LastUnavailable = now
 		return storeStatusUnknown
 	case livenesspb.NodeLivenessStatus_UNKNOWN:
 		return storeStatusUnknown
 	case livenesspb.NodeLivenessStatus_DRAINING:
-		// Wipe out the lastAvailable timestamp, so if this node comes back after a
-		// graceful restart it will not be considered as suspect. This is best effort
-		// and we may not see a store in this state. To help with that we perform
-		// a similar clear of lastAvailable on a DEAD store.
-		sd.LastAvailable = time.Time{}
 		return storeStatusDraining
 	}
 
-	if sd.isThrottled(now) {
+	// A store is throttled if it has missed receiving snapshots recently.
+	if sd.ThrottledUntil.After(now) {
 		return storeStatusThrottled
 	}
 
-	if sd.isSuspect(now, suspectDuration) {
+	// check whether the store is currently suspect. We measure that by
+	// looking at the time it was last unavailable making sure we have not seen any
+	// failures for a period of time defined by StoreSuspectDuration.
+	if sd.LastUnavailable.Add(suspectDuration).After(now) {
 		return storeStatusSuspect
 	}
-	sd.LastAvailable = now
+
 	return storeStatusAvailable
 }
 
