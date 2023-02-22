@@ -10,7 +10,12 @@
 
 package tenantcapabilitiespb
 
-import "github.com/cockroachdb/errors"
+import (
+	"fmt"
+	"sort"
+
+	"github.com/cockroachdb/errors"
+)
 
 // TenantCapabilityName is a pseudo-enum of valid capability names.
 type TenantCapabilityName int32
@@ -46,20 +51,49 @@ func TenantCapabilityNameFromString(s string) (TenantCapabilityName, error) {
 	return tenantCapabilityName, nil
 }
 
+// TenantCapabilityNames is a slice of all tenant capability names sorted lexicographically.
+var TenantCapabilityNames = func() []TenantCapabilityName {
+	capabilityNames := make([]TenantCapabilityName, 0, len(stringToTenantCapabilityName))
+	for _, capabilityName := range stringToTenantCapabilityName {
+		capabilityNames = append(capabilityNames, capabilityName)
+	}
+	sort.Slice(capabilityNames, func(i, j int) bool {
+		return capabilityNames[i] < capabilityNames[j]
+	})
+	return capabilityNames
+}()
+
 //go:generate stringer -type=TenantCapabilityName -linecomment
 const (
-	// CanAdminSplit if set to true, grants the tenant the ability to
-	// successfully perform `AdminSplit` requests.
+	// CanAdminSplit maps to TenantCapabilities.CanAdminSplit.
 	CanAdminSplit TenantCapabilityName = iota + valueOffset // can_admin_split
-	// CanViewNodeInfo if set to true, grants the tenant the ability
-	// retrieve node-level observability data at endpoints such as `_status/nodes`
-	// and in the DB Console overview page.
+	// CanViewNodeInfo maps to TenantCapabilities.CanViewNodeInfo.
 	CanViewNodeInfo // can_view_node_info
-	// CanViewTSDBMetrics if set to true, grants the tenant the ability to
-	// make arbitrary queries of the TSDB of the entire cluster. Currently,
-	// we do not store per-tenant metrics so this will surface system metrics
-	// to the tenant.
-	// TODO(davidh): Revise this once tenant-scoped metrics are implemented in
-	// https://github.com/cockroachdb/cockroach/issues/96438
+	// CanViewTSDBMetrics maps to TenantCapabilities.CanViewTSDBMetrics.
 	CanViewTSDBMetrics // can_view_tsdb_metrics
 )
+
+func (t *TenantCapabilities) getFlagFieldRef(capabilityName TenantCapabilityName) *bool {
+	switch capabilityName {
+	case CanAdminSplit:
+		return &t.CanAdminSplit
+	case CanViewNodeInfo:
+		return &t.CanViewNodeInfo
+	case CanViewTSDBMetrics:
+		return &t.CanViewTSDBMetrics
+	default:
+		panic(fmt.Sprintf("unknown capability: %q", capabilityName))
+	}
+}
+
+// GetFlagCapability returns the value of the corresponding flag capability.
+func (t *TenantCapabilities) GetFlagCapability(capabilityName TenantCapabilityName) bool {
+	return *t.getFlagFieldRef(capabilityName)
+}
+
+// SetFlagCapability sets the value of the corresponding flag capability.
+func (t *TenantCapabilities) SetFlagCapability(
+	capabilityName TenantCapabilityName, capabilityValue bool,
+) {
+	*t.getFlagFieldRef(capabilityName) = capabilityValue
+}

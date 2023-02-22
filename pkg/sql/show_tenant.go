@@ -36,7 +36,7 @@ type tenantValues struct {
 }
 
 type showTenantNodeCapability struct {
-	name  tenantcapabilitiespb.TenantCapabilityName
+	name  string
 	value string
 }
 
@@ -112,20 +112,14 @@ func (n *showTenantNode) getTenantValues(
 	// Add capabilities if requested.
 	if n.withCapabilities {
 		capabilities := tenantInfo.Capabilities
-		values.capabilities = []showTenantNodeCapability{
-			{
-				name:  tenantcapabilitiespb.CanAdminSplit,
-				value: strconv.FormatBool(capabilities.CanAdminSplit),
-			},
-			{
-				name:  tenantcapabilitiespb.CanViewNodeInfo,
-				value: strconv.FormatBool(capabilities.CanViewNodeInfo),
-			},
-			{
-				name:  tenantcapabilitiespb.CanViewTSDBMetrics,
-				value: strconv.FormatBool(capabilities.CanViewTSDBMetrics),
-			},
+		showTenantNodeCapabilities := make([]showTenantNodeCapability, 0, len(tenantcapabilitiespb.TenantCapabilityNames))
+		for _, capabilityName := range tenantcapabilitiespb.TenantCapabilityNames {
+			showTenantNodeCapabilities = append(showTenantNodeCapabilities, showTenantNodeCapability{
+				name:  capabilityName.String(),
+				value: strconv.FormatBool(capabilities.GetFlagCapability(capabilityName)),
+			})
 		}
+		values.capabilities = showTenantNodeCapabilities
 	}
 
 	// Tenant status + replication status fields.
@@ -192,17 +186,20 @@ func (n *showTenantNode) Next(params runParams) (bool, error) {
 
 	if n.withCapabilities {
 		capabilities := n.values.capabilities
-		n.capability = capabilities[n.capabilityIndex]
-		if n.capabilityIndex == len(capabilities)-1 {
-			n.capabilityIndex = 0
+		numCapabilities := len(capabilities)
+		if numCapabilities != 0 {
+			n.capability = capabilities[n.capabilityIndex]
+			if n.capabilityIndex == numCapabilities-1 {
+				n.capabilityIndex = 0
+				n.tenantIDIndex++
+				n.initTenantValues = true
+			} else {
+				n.capabilityIndex++
+			}
+		} else {
 			n.tenantIDIndex++
 			n.initTenantValues = true
-		} else {
-			n.capabilityIndex++
 		}
-	} else {
-		n.tenantIDIndex++
-		n.initTenantValues = true
 	}
 
 	return true, nil
@@ -266,7 +263,7 @@ func (n *showTenantNode) Values() tree.Datums {
 	if n.withCapabilities {
 		capability := n.capability
 		result = append(result,
-			tree.NewDString(capability.name.String()),
+			tree.NewDString(capability.name),
 			tree.NewDString(capability.value),
 		)
 	}
