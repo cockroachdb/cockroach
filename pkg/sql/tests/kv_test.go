@@ -33,6 +33,7 @@ import (
 )
 
 type kvInterface interface {
+	Get(rows, run int) error
 	Insert(rows, run int) error
 	Update(rows, run int) error
 	Delete(rows, run int) error
@@ -132,6 +133,23 @@ func (kv *kvNative) Delete(rows, run int) error {
 		return txn.CommitInBatch(ctx, b)
 	})
 	return err
+}
+
+func (kv *kvNative) Get(rows, run int) error {
+	return kv.db.Txn(context.Background(), func(ctx context.Context, txn *kv2.Txn) error {
+		b := txn.NewBatch()
+		for i := 0; i < rows; i++ {
+			b.Get(fmt.Sprintf("%s%08d", kv.prefix, i))
+		}
+		err := txn.Run(ctx, b)
+		if err != nil {
+			return err
+		}
+		if len(b.Results) != rows {
+			return errors.Errorf("expected %d rows; got %d", rows, len(b.Results))
+		}
+		return nil
+	})
 }
 
 func (kv *kvNative) Scan(rows, run int) error {
@@ -264,6 +282,35 @@ func (kv *kvSQL) Delete(rows, run int) error {
 	return nil
 }
 
+func (kv *kvSQL) Get(count, run int) error {
+	perm := rand.Perm(count)
+	defer kv.buf.Reset()
+	kv.buf.WriteString(`SELECT * FROM bench.kv WHERE k IN (`)
+	for j := 0; j < count; j++ {
+		if j > 0 {
+			kv.buf.WriteString(", ")
+		}
+		fmt.Fprintf(&kv.buf, `'%08d'`, perm[j])
+	}
+	kv.buf.WriteString(`)`)
+	rows, err := kv.db.Query(kv.buf.String())
+	if err != nil {
+		return err
+	}
+	n := 0
+	for rows.Next() {
+		n++
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if n != count {
+		return errors.Errorf("unexpected result count: %d (expected %d)", n, count)
+	}
+	return nil
+}
+
 func (kv *kvSQL) Scan(count, run int) error {
 	rows, err := kv.db.Query(fmt.Sprintf("SELECT * FROM bench.kv LIMIT %d", count))
 	if err != nil {
@@ -342,6 +389,7 @@ func BenchmarkKV(b *testing.B) {
 		kvInterface.Update,
 		kvInterface.Delete,
 		kvInterface.Scan,
+		kvInterface.Get,
 	} {
 		opName := runtime.FuncForPC(reflect.ValueOf(opFn).Pointer()).Name()
 		opName = strings.TrimPrefix(opName, "github.com/cockroachdb/cockroach/pkg/sql/tests_test.kvInterface.")
@@ -367,6 +415,8 @@ func BenchmarkKV(b *testing.B) {
 							case 2: // Delete
 								prepRows = rows * b.N
 							case 3: // Scan
+								prepRows = rows
+							case 4: // Get
 								prepRows = rows
 							default:
 								b.Fatal("unexpected op")
