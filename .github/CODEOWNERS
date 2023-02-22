@@ -84,7 +84,7 @@
 
 /pkg/ccl/schemachangerccl/   @cockroachdb/sql-schema
 /pkg/sql/catalog/            @cockroachdb/sql-schema
-/pkg/sql/catalog/multiregion @cockroachdb/multiregion
+/pkg/sql/catalog/multiregion @cockroachdb/sql-schema
 /pkg/sql/doctor/             @cockroachdb/sql-schema
 /pkg/sql/gcjob/              @cockroachdb/sql-schema
 /pkg/sql/gcjob_test/         @cockroachdb/sql-schema
@@ -288,10 +288,10 @@
 #!/pkg/ccl/upgradeccl/       @cockroachdb/unowned
 #!/pkg/ccl/logictestccl/       @cockroachdb/sql-queries-noreview
 #!/pkg/ccl/sqlitelogictestccl/ @cockroachdb/sql-queries-noreview
-/pkg/ccl/multiregionccl/     @cockroachdb/multiregion
+/pkg/ccl/multiregionccl/     @cockroachdb/sql-schema
 /pkg/ccl/multitenantccl/     @cockroachdb/multi-tenant
 #!/pkg/ccl/oidcccl/          @cockroachdb/unowned
-/pkg/ccl/partitionccl/       @cockroachdb/sql-schema @cockroachdb/multiregion
+/pkg/ccl/partitionccl/       @cockroachdb/sql-schema
 /pkg/ccl/serverccl/          @cockroachdb/server-prs
 /pkg/ccl/serverccl/server_sql* @cockroachdb/multi-tenant @cockroachdb/server-prs
 /pkg/ccl/serverccl/tenant_*  @cockroachdb/multi-tenant @cockroachdb/server-prs
