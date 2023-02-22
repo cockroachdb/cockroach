@@ -43,10 +43,6 @@ type Reader interface {
 // signals other than just the tenant capability state. For example, request
 // usage pattern over a timespan.
 type Authorizer interface {
-	// HasCapabilityForBatch returns an error if a tenant, referenced by its ID,
-	// is not allowed to execute the supplied batch request given the capabilities
-	// it possesses.
-	HasCapabilityForBatch(context.Context, roachpb.TenantID, *kvpb.BatchRequest) error
 
 	// BindReader is a mechanism by which the caller can bind a Reader[1] to the
 	// Authorizer post-creation. The Authorizer uses the Reader to consult the
@@ -61,6 +57,15 @@ type Authorizer interface {
 	// implementation. Binding the Reader late allows us to break this dependency
 	// cycle.
 	BindReader(reader Reader)
+
+	// RequireCapabilities returns an error if the specified tenant does not have
+	// ALL specified capabilities.
+	RequireCapabilities(roachpb.TenantID, ...string) error
+
+	// HasCapabilityForBatch returns an error if a tenant, referenced by its ID,
+	// is not allowed to execute the supplied batch request given the capabilities
+	// it possesses.
+	HasCapabilityForBatch(context.Context, roachpb.TenantID, *kvpb.BatchRequest) error
 
 	// HasNodeStatusCapability returns an error if a tenant, referenced by its ID,
 	// is not allowed to access cluster-level node metadata and liveness.

@@ -28,15 +28,20 @@ func NewNoopAuthorizer() *NoopAuthorizer {
 	return &NoopAuthorizer{}
 }
 
+// BindReader implements the tenantcapabilities.Authorizer interface.
+func (n *NoopAuthorizer) BindReader(tenantcapabilities.Reader) {
+}
+
+// HasCapabilities implements the tenantcapabilities.Authorizer interface.
+func (n *NoopAuthorizer) RequireCapabilities(roachpb.TenantID, ...string) error {
+	return nil
+}
+
 // HasCapabilityForBatch implements the tenantcapabilities.Authorizer interface.
 func (n *NoopAuthorizer) HasCapabilityForBatch(
 	context.Context, roachpb.TenantID, *kvpb.BatchRequest,
 ) error {
 	return nil
-}
-
-// BindReader implements the tenantcapabilities.Authorizer interface.
-func (n *NoopAuthorizer) BindReader(tenantcapabilities.Reader) {
 }
 
 // HasNodeStatusCapability implements the tenantcapabilities.Authorizer interface

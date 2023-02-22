@@ -948,6 +948,16 @@ type mockAuthorizer struct {
 
 var _ tenantcapabilities.Authorizer = &mockAuthorizer{}
 
+// BindReader implements the tenantcapabilities.Authorizer interface.
+func (m mockAuthorizer) BindReader(tenantcapabilities.Reader) {
+	panic("unimplemented")
+}
+
+// RequireCapabilities implements the tenantcapabilities.Authorizer interface.
+func (m mockAuthorizer) RequireCapabilities(roachpb.TenantID, ...string) error {
+	return nil
+}
+
 // HasCapabilityForBatch implements the tenantcapabilities.Authorizer interface.
 func (m mockAuthorizer) HasCapabilityForBatch(
 	context.Context, roachpb.TenantID, *kvpb.BatchRequest,
@@ -956,11 +966,6 @@ func (m mockAuthorizer) HasCapabilityForBatch(
 		return nil
 	}
 	return errors.New("tenant does not have capability")
-}
-
-// BindReader implements the tenantcapabilities.Authorizer interface.
-func (m mockAuthorizer) BindReader(tenantcapabilities.Reader) {
-	panic("unimplemented")
 }
 
 func (m mockAuthorizer) HasNodeStatusCapability(ctx context.Context, tenID roachpb.TenantID) error {
