@@ -794,6 +794,7 @@ CREATE TABLE system.span_stats_unique_keys (
 	-- key_bytes stores the raw bytes of a roachpb.Key.
 	key_bytes BYTES,
   	CONSTRAINT "primary" PRIMARY KEY (id),
+  	UNIQUE INDEX unique_keys_key_bytes_idx (key_bytes ASC),
 	FAMILY "primary" (id, key_bytes)
 );`
 
@@ -815,7 +816,8 @@ CREATE TABLE system.span_stats_buckets (
 	
 	-- The number of KV requests destined for this span. 
 	requests INT NOT NULL,
-  	CONSTRAINT "primary" PRIMARY KEY (id),
+	CONSTRAINT "primary" PRIMARY KEY (id),
+	INDEX buckets_sample_id_idx (sample_id ASC),
 	FAMILY "primary" (id, sample_id, start_key_id, end_key_id, requests)
 );`
 
@@ -830,6 +832,7 @@ CREATE TABLE system.span_stats_samples (
 	-- The sample's start time is therefore equal to sample_time - keyvissettings.SampleInterval.
 	sample_time TIMESTAMP NOT NULL DEFAULT now(),
 	CONSTRAINT "primary" PRIMARY KEY (id),
+	UNIQUE INDEX samples_sample_time_idx (sample_time ASC),
 	FAMILY "primary" (id, sample_time)
 );`
 
@@ -3066,6 +3069,16 @@ var (
 				},
 				KeyColumnIDs: []descpb.ColumnID{1},
 			},
+			descpb.IndexDescriptor{
+				Name:                "unique_keys_key_bytes_idx",
+				ID:                  2,
+				Unique:              true,
+				KeyColumnNames:      []string{"key_bytes"},
+				KeyColumnDirections: singleASC,
+				KeyColumnIDs:        []descpb.ColumnID{2},
+				KeySuffixColumnIDs:  []descpb.ColumnID{1},
+				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+			},
 		),
 	)
 
@@ -3100,6 +3113,16 @@ var (
 				},
 				KeyColumnIDs: []descpb.ColumnID{1},
 			},
+			descpb.IndexDescriptor{
+				Name:                "buckets_sample_id_idx",
+				ID:                  2,
+				Unique:              false,
+				KeyColumnNames:      []string{"sample_id"},
+				KeyColumnDirections: singleASC,
+				KeyColumnIDs:        []descpb.ColumnID{2},
+				KeySuffixColumnIDs:  []descpb.ColumnID{1},
+				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+			},
 		),
 	)
 
@@ -3130,6 +3153,16 @@ var (
 					catenumpb.IndexColumn_ASC,
 				},
 				KeyColumnIDs: []descpb.ColumnID{1},
+			},
+			descpb.IndexDescriptor{
+				Name:                "samples_sample_time_idx",
+				ID:                  2,
+				Unique:              true,
+				KeyColumnNames:      []string{"sample_time"},
+				KeyColumnDirections: singleASC,
+				KeyColumnIDs:        []descpb.ColumnID{2},
+				KeySuffixColumnIDs:  []descpb.ColumnID{1},
+				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 			},
 		),
 	)
