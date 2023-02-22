@@ -5,6 +5,12 @@
 # Verify that we create and use statistics forecasts for a simple table that
 # grows at a constant rate.
 
+let $forecastsEnabledPrev
+SHOW CLUSTER SETTING sql.stats.forecasts.enabled
+
+statement ok
+SET CLUSTER SETTING sql.stats.forecasts.enabled = true
+
 statement ok
 CREATE TABLE g (a INT PRIMARY KEY) WITH (sql_stats_automatic_collection_enabled = false)
 
@@ -1596,3 +1602,6 @@ RESET enable_zigzag_join
 
 statement ok
 RESET optimizer_use_forecasts
+
+statement ok
+SET CLUSTER SETTING sql.stats.forecasts.enabled = $forecastsEnabledPrev
