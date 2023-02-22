@@ -1274,8 +1274,8 @@ func TestCorruptPayloadError(t *testing.T) {
 		1, jobs.StatusRunning, timeutil.Now(), []byte("invalid payload"),
 	)
 
-	tdb.ExpectErrWithHint(t, "could not decode the payload for job 1. consider deleting this job from system.jobs", "SELECT * FROM crdb_internal.system_jobs")
-	tdb.ExpectErrWithHint(t, "could not decode the payload for job 1. consider deleting this job from system.jobs", "SELECT * FROM crdb_internal.jobs")
+	tdb.ExpectErrWithHint(t, "proto", "could not decode the payload for job 1. consider deleting this job from system.jobs", "SELECT * FROM crdb_internal.system_jobs")
+	tdb.ExpectErrWithHint(t, "proto", "could not decode the payload for job 1. consider deleting this job from system.jobs", "SELECT * FROM crdb_internal.jobs")
 }
 
 // TestInternalSystemJobsAccess asserts which entries a user can query
