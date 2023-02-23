@@ -119,6 +119,17 @@ create-function
       └── ab [columns: a b]
 
 build
+CREATE FUNCTION f() RETURNS ab LANGUAGE SQL AS $$ SELECT * FROM (SELECT * from ab) $$
+----
+create-function
+ ├── CREATE FUNCTION f()
+ │   	RETURNS ab
+ │   	LANGUAGE SQL
+ │   	AS $$SELECT "?subquery1?".a, "?subquery1?".b FROM (SELECT ab.a, ab.b FROM t.public.ab) AS "?subquery1?";$$
+ └── dependencies
+      └── ab [columns: a b]
+
+build
 CREATE FUNCTION f() RETURNS INT LANGUAGE SQL BEGIN ATOMIC SELECT 1; END;
 ----
 error (0A000): unimplemented: CREATE FUNCTION...sql_body unimplemented

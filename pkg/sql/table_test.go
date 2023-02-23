@@ -586,7 +586,7 @@ func TestSerializedUDTsInView(t *testing.T) {
 		// Test when a UDT is used in various parts of a view (subquery, CTE, etc.).
 		{
 			"SELECT k FROM (SELECT 'hello'::greeting AS k)",
-			`(SELECT k FROM (SELECT b'\x80':::@$OID AS k))`,
+			`(SELECT k FROM (SELECT b'\x80':::@$OID AS k) AS "?subquery1?")`,
 		},
 		{
 			"WITH w AS (SELECT 'hello':::greeting AS k) SELECT k FROM w",
