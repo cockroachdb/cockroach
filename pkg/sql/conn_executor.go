@@ -64,6 +64,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
@@ -2136,8 +2137,19 @@ func (ex *connExecutor) execCmd() error {
 		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionQueryReceived, tcmd.TimeReceived)
 		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionStartParse, tcmd.ParseStart)
 		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionEndParse, tcmd.ParseEnd)
-		res = ex.clientComm.CreateCopyInResult(pos)
-		ev, payload = ex.execCopyOut(ctx, tcmd)
+		res = ex.clientComm.CreateCopyOutResult(pos)
+
+		// Handle conn executor state transitions.
+		switch ex.machine.CurState().(type) {
+		case stateNoTxn:
+			ev, payload = ex.execStmtInNoTxnState(ctx, tcmd.Stmt, res.(CopyOutResult))
+		case stateOpen:
+			ev, payload = ex.execCopyOut(ctx, tcmd)
+		case stateAborted:
+			ev, payload = ex.execStmtInAbortedState(ctx, tcmd.Stmt, res.(CopyOutResult))
+		case stateCommitWait:
+			ev, payload = ex.execStmtInCommitWaitState(ctx, tcmd.Stmt, res.(CopyOutResult))
+		}
 		// Note: we write to ex.statsCollector.phaseTimes, instead of ex.phaseTimes,
 		// because:
 		// - stats use ex.statsCollector, not ex.phasetimes.
@@ -2476,19 +2488,17 @@ func (ex *connExecutor) execCopyOut(
 			)
 		}()
 
+		stmtTS := ex.server.cfg.Clock.PhysicalTime()
+		ex.resetPlanner(ctx, &ex.planner, ex.state.mu.txn, stmtTS)
+
 		return ex.execWithProfiling(ctx, cmd.Stmt, nil, func(ctx context.Context) error {
-			// Re-use the current transaction if available.
+			// We'll always have a txn on the planner since we called resetPlanner
+			// above.
 			txn := ex.planner.Txn()
-			if txn == nil || !txn.IsOpen() {
-				// Setup an implicit transaction for COPY TO.
-				txn = ex.server.cfg.DB.NewTxn(ctx, cmd.Stmt.String())
-				defer func(txn *kv.Txn, ctx context.Context) {
-					err := txn.Rollback(ctx)
-					if err != nil {
-						log.SqlExec.Errorf(ctx, "error rolling black implicit txn in %s: %+v", cmd, err)
-					}
-				}(txn, ctx)
-			}
+			var cancelQuery context.CancelFunc
+			ctx, cancelQuery = contextutil.WithCancel(ctx)
+			queryID := ex.generateID()
+			ex.addActiveQuery(cmd.ParsedStmt, nil /* placeholders */, queryID, cancelQuery)
 
 			var err error
 			if numOutputRows, err = runCopyTo(ctx, &ex.planner, txn, cmd); err != nil {
