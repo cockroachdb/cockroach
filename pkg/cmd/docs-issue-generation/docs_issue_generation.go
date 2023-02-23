@@ -109,6 +109,16 @@ type gqlDocsIssue struct {
 	} `json:"data"`
 }
 
+type gqlSingleIssue struct {
+	Data struct {
+		Repository struct {
+			Issue struct {
+				Body string `json:"body"`
+			} `json:"issue"`
+		} `json:"repository"`
+	} `json:"data"`
+}
+
 // gqlDocsRepoLabels contains details about the labels within the cockroach repo. In order to create issues using the
 // GraphQL API, we need to use the label IDs and no
 type gqlDocsRepoLabels struct {
@@ -160,13 +170,15 @@ type epicIssueRefInfo struct {
 
 // Regex components for finding and validating issue and epic references in a string
 var (
-	ghIssuePart     = `(#\d+)`                                                      // e.g., #12345
-	ghIssueRepoPart = `([\w.-]+[/][\w.-]+#\d+)`                                     // e.g., cockroachdb/cockroach#12345
-	ghURLPart       = `(https://github.com/[-a-z0-9]+/[-._a-z0-9/]+/issues/\d+)`    // e.g., https://github.com/cockroachdb/cockroach/issues/12345
-	jiraIssuePart   = `([[:alpha:]]+-\d+)`                                          // e.g., DOC-3456
-	jiraURLPart     = "https://cockroachlabs.atlassian.net/browse/" + jiraIssuePart // e.g., https://cockroachlabs.atlassian.net/browse/DOC-3456
-	issueRefPart    = ghIssuePart + "|" + ghIssueRepoPart + "|" + ghURLPart + "|" + jiraIssuePart + "|" + jiraURLPart
-	afterRefPart    = `[,.;]?(?:[ \t\n\r]+|$)`
+	ghIssuePart        = `(#\d+)`                                                   // e.g., #12345
+	ghIssueRepoPart    = `([\w.-]+[/][\w.-]+#\d+)`                                  // e.g., cockroachdb/cockroach#12345
+	ghURLPart          = `(https://github.com/[-a-z0-9]+/[-._a-z0-9/]+/issues/\d+)` // e.g., https://github.com/cockroachdb/cockroach/issues/12345
+	jiraIssuePart      = `([[:alpha:]]+-\d+)`                                       // e.g., DOC-3456
+	exalateJiraRefPart = `Jira issue: ` + jiraIssuePart                             // e.g., Jira issue: CRDB-54321
+	jiraBaseUrlPart    = "https://cockroachlabs.atlassian.net/browse/"
+	jiraURLPart        = jiraBaseUrlPart + jiraIssuePart // e.g., https://cockroachlabs.atlassian.net/browse/DOC-3456
+	issueRefPart       = ghIssuePart + "|" + ghIssueRepoPart + "|" + ghURLPart + "|" + jiraIssuePart + "|" + jiraURLPart
+	afterRefPart       = `[,.;]?(?:[ \t\n\r]+|$)`
 )
 
 // RegExes of each issue part
@@ -193,6 +205,7 @@ var (
 	releaseJustificationRE = regexp.MustCompile(`(?i)release justification:.*`)
 	prNumberRE             = regexp.MustCompile(`Related PR: \[?https://github.com/cockroachdb/cockroach/pull/(\d+)\D`)
 	commitShaRE            = regexp.MustCompile(`Commit: \[?https://github.com/cockroachdb/cockroach/commit/(\w+)\W`)
+	exalateJiraRefRE       = regexp.MustCompile(`\\n` + exalateJiraRefPart + `\\n`)
 )
 
 const (
@@ -656,7 +669,35 @@ func containsBugFix(message string) bool {
 	return false
 }
 
-func getUrlFromRef(ref string) string {
+// getJiraIssueFromGitHubIssue takes a GitHub issue and returns the appropriate Jira key from the issue body.
+func getJiraIssueFromGitHubIssue(org, repo string, issue int, token string) string {
+	query := `query ($org: String!, $repo: String!, $issue: Int!) {
+		repository(owner: $org, name: $repo) {
+			issue(number: $issue) {
+				body
+			}
+		}
+	}`
+	var search gqlSingleIssue
+	queryVariables := map[string]interface{}{
+		"org":   org,
+		"repo":  repo,
+		"issue": issue,
+	}
+	err := queryGraphQL(query, queryVariables, token, &search)
+	if err != nil {
+		fmt.Println(err)
+		return ""
+	}
+	var jiraIssue string
+	exalateRef := exalateJiraRefRE.FindString(search.Data.Repository.Issue.Body)
+	if len(exalateRef) > 0 {
+		jiraIssue = jiraIssuePartRE.FindString(exalateRef)
+	}
+	return jiraIssue
+}
+
+func getJiraIssueFromRef(ref string) string {
 	if ghURLPartRE.MatchString(ref) || jiraURLPartRE.MatchString(ref) {
 		return ref
 	} else if ghIssueRepoPartRE.MatchString(ref) {
@@ -673,31 +714,31 @@ func getUrlFromRef(ref string) string {
 
 func extractIssueEpicRefs(prBody, commitBody string) string {
 	refInfo := epicIssueRefInfo{
-		epicRefs:        extractEpicIDs(prBody + "\n" + commitBody),
-		epicNone:        containsEpicNone(prBody + "\n" + commitBody),
-		issueCloseRefs:  extractFixIssueIDs(prBody + "\n" + commitBody),
-		issueInformRefs: extractInformIssueIDs(prBody + "\n" + commitBody),
-		isBugFix:        containsBugFix(prBody + "\n" + commitBody),
+		epicRefs:        extractEpicIDs(commitBody + "\n" + prBody),
+		epicNone:        containsEpicNone(commitBody + "\n" + prBody),
+		issueCloseRefs:  extractFixIssueIDs(commitBody + "\n" + prBody),
+		issueInformRefs: extractInformIssueIDs(commitBody + "\n" + prBody),
+		isBugFix:        containsBugFix(commitBody + "\n" + prBody),
 	}
 	var builder strings.Builder
 	if len(refInfo.epicRefs) > 0 {
 		builder.WriteString("Epic:")
 		for x := range refInfo.epicRefs {
-			builder.WriteString(" " + getUrlFromRef(x))
+			builder.WriteString(" " + getJiraIssueFromRef(x))
 		}
 		builder.WriteString("\n")
 	}
 	if len(refInfo.issueCloseRefs) > 0 {
 		builder.WriteString("Fixes:")
 		for x := range refInfo.issueCloseRefs {
-			builder.WriteString(" " + getUrlFromRef(x))
+			builder.WriteString(" " + getJiraIssueFromRef(x))
 		}
 		builder.WriteString("\n")
 	}
 	if len(refInfo.issueInformRefs) > 0 {
 		builder.WriteString("Informs:")
 		for x := range refInfo.issueInformRefs {
-			builder.WriteString(" " + getUrlFromRef(x))
+			builder.WriteString(" " + getJiraIssueFromRef(x))
 		}
 		builder.WriteString("\n")
 	}
