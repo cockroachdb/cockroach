@@ -147,6 +147,13 @@ func runLoadSplits(ctx context.Context, t test.Test, c cluster.Cluster, params s
 			return err
 		}
 
+		// TODO(kvoli): Add load split tests which use CPU, similar to the current
+		// QPS ones. Tracked by #97540.
+		t.Status("setting split objective to QPS")
+		if err := setLoadBasedRebalancingObjective(ctx, db, "qps"); err != nil {
+			return err
+		}
+
 		t.Status("increasing range_max_bytes")
 		minBytes := 16 << 20 // 16 MB
 		setRangeMaxBytes := func(maxBytes int) {
@@ -438,4 +445,13 @@ func disableLoadBasedSplitting(ctx context.Context, db *gosql.DB) error {
 		}
 	}
 	return nil
+}
+
+func setLoadBasedRebalancingObjective(ctx context.Context, db *gosql.DB, obj string) error {
+	_, err := db.ExecContext(
+		ctx,
+		fmt.Sprintf(`SET CLUSTER SETTING kv.allocator.load_based_rebalancing.objective = '%s'`, obj),
+	)
+	return err
+
 }
