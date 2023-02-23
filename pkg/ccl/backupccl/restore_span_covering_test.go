@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -261,7 +262,26 @@ func makeImportSpans(
 		return nil
 	})
 
-	err := generateAndSendImportSpans(ctx, spans, backups, layerToIterFactory, nil, introducedSpanFrontier, nil, targetSize, spanCh, useSimpleImportSpans)
+	filter, err := makeSpanCoveringFilter(
+		spans,
+		[]jobspb.RestoreProgress_FrontierEntry{},
+		nil,
+		introducedSpanFrontier,
+		targetSize,
+		true)
+	if err != nil {
+		return nil, err
+	}
+
+	err = generateAndSendImportSpans(
+		ctx,
+		spans,
+		backups,
+		layerToIterFactory,
+		nil,
+		filter,
+		useSimpleImportSpans,
+		spanCh)
 	close(spanCh)
 
 	if err != nil {
@@ -496,6 +516,54 @@ func TestFileSpanStartKeyIterator(t *testing.T) {
 			require.Equal(t, expected, startEndKeyIt.value())
 			startEndKeyIt.next()
 		}
+	}
+}
+
+func TestCheckpointFilter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	c := makeCoverUtils(ctx, t, &execCfg)
+
+	requiredSpan := c.sp("b", "e")
+
+	endTime := hlc.Timestamp{WallTime: 1}
+
+	type testCase struct {
+		completedSpans    roachpb.Spans
+		expectedToDoSpans roachpb.Spans
+	}
+
+	for _, tc := range []testCase{
+		{
+			completedSpans:    roachpb.Spans{c.sp("a", "c")},
+			expectedToDoSpans: roachpb.Spans{c.sp("c", "e")},
+		},
+		{
+			completedSpans:    roachpb.Spans{c.sp("c", "d")},
+			expectedToDoSpans: roachpb.Spans{c.sp("b", "c"), c.sp("d", "e")},
+		},
+		{
+			completedSpans:    roachpb.Spans{c.sp("a", "c"), c.sp("d", "e")},
+			expectedToDoSpans: roachpb.Spans{c.sp("c", "d")},
+		},
+	} {
+		persistedSpans := make([]jobspb.RestoreProgress_FrontierEntry, 0, len(tc.completedSpans))
+		for _, sp := range tc.completedSpans {
+			persistedSpans = append(persistedSpans, jobspb.RestoreProgress_FrontierEntry{Span: sp, Timestamp: endTime})
+		}
+		f, err := makeSpanCoveringFilter(
+			[]roachpb.Span{requiredSpan},
+			persistedSpans,
+			nil,
+			nil,
+			0,
+			true)
+		require.NoError(t, err)
+		require.Equal(t, tc.expectedToDoSpans, f.filterCompleted(requiredSpan))
 	}
 }
 

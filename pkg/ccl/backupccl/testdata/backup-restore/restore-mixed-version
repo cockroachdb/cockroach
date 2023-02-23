@@ -1,3 +1,8 @@
+# mysteries: why is endtime not set during generative split and scatter processor?
+# can we create a general utility that says if something is mixed version?
+# refactor this pr so that 23.1 is the filter, not just mixed version
+
+
 new-cluster name=s1 beforeVersion=Start22_2 disable-tenant
 ----
 
