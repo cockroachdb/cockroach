@@ -10,6 +10,7 @@ package backupccl
 
 import (
 	"context"
+	"hash/fnv"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
@@ -68,7 +69,7 @@ type generativeSplitAndScatterProcessor struct {
 
 	doneScatterCh chan entryNode
 	// A cache for routing datums, so only 1 is allocated per node.
-	routingDatumCache map[roachpb.NodeID]rowenc.EncDatum
+	routingDatumCache routingDatumCache
 	scatterErr        error
 }
 
@@ -129,7 +130,7 @@ func newGenerativeSplitAndScatterProcessor(
 		chunkEntrySplitAndScatterers: chunkEntrySplitAndScatterers,
 		// Large enough so that it never blocks.
 		doneScatterCh:     make(chan entryNode, spec.NumEntries),
-		routingDatumCache: make(map[roachpb.NodeID]rowenc.EncDatum),
+		routingDatumCache: newRoutingDatumCache(),
 	}
 	if err := ssp.Init(ctx, ssp, post, generativeSplitAndScatterOutputTypes, flowCtx, processorID, output, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
@@ -161,7 +162,8 @@ func (gssp *generativeSplitAndScatterProcessor) Start(ctx context.Context) {
 		TaskName: "generativeSplitAndScatter-worker",
 		SpanOpt:  stop.ChildSpan,
 	}, func(ctx context.Context) {
-		gssp.scatterErr = runGenerativeSplitAndScatter(scatterCtx, gssp.flowCtx, &gssp.spec, gssp.chunkSplitAndScatterers, gssp.chunkEntrySplitAndScatterers, gssp.doneScatterCh)
+		gssp.scatterErr = runGenerativeSplitAndScatter(scatterCtx, gssp.flowCtx, &gssp.spec, gssp.chunkSplitAndScatterers, gssp.chunkEntrySplitAndScatterers, gssp.doneScatterCh,
+			&gssp.routingDatumCache)
 		cancel()
 		close(gssp.doneScatterCh)
 		close(workerDone)
@@ -191,10 +193,10 @@ func (gssp *generativeSplitAndScatterProcessor) Next() (
 		}
 
 		// The routing datums informs the router which output stream should be used.
-		routingDatum, ok := gssp.routingDatumCache[scatteredEntry.node]
+		routingDatum, ok := gssp.routingDatumCache.getRoutingDatum(scatteredEntry.node)
 		if !ok {
 			routingDatum, _ = routingDatumsForSQLInstance(base.SQLInstanceID(scatteredEntry.node))
-			gssp.routingDatumCache[scatteredEntry.node] = routingDatum
+			gssp.routingDatumCache.putRoutingDatum(scatteredEntry.node, routingDatum)
 		}
 
 		row := rowenc.EncDatumRow{
@@ -263,6 +265,7 @@ func runGenerativeSplitAndScatter(
 	chunkSplitAndScatterers []splitAndScatterer,
 	chunkEntrySplitAndScatterers []splitAndScatterer,
 	doneScatterCh chan<- entryNode,
+	cache *routingDatumCache,
 ) error {
 	log.Infof(ctx, "Running generative split and scatter with %d total spans, %d chunk size, %d nodes",
 		spec.NumEntries, spec.ChunkSize, spec.NumNodes)
@@ -367,12 +370,28 @@ func runGenerativeSplitAndScatter(
 					return err
 				}
 				if chunkDestination == 0 {
-					// If scatter failed to find a node for range ingestion, route the range
-					// to the node currently running the split and scatter processor.
+					// If scatter failed to find a node for range ingestion, route the
+					// range to a random node that has already been scattered to so far.
+					// The random node is chosen by hashing the scatter key.
 					if nodeID, ok := flowCtx.NodeID.OptionalNodeID(); ok {
+						cachedNodeIDs := cache.cachedNodeIDs()
+						if len(cachedNodeIDs) > 0 && len(importSpanChunk.entries) > 0 {
+							hash := fnv.New32a()
+							if _, err := hash.Write(scatterKey); err != nil {
+								log.Warningf(ctx, "scatter returned node 0. Route span starting at %s to current node %v because of hash error: %v",
+									scatterKey, nodeID, err)
+							} else {
+								randomNum := int(hash.Sum32())
+								nodeID = cachedNodeIDs[randomNum%len(cachedNodeIDs)]
+							}
+
+							log.Warningf(ctx, "scatter returned node 0. "+
+								"Random route span starting at %s node %v", scatterKey, nodeID)
+						} else {
+							log.Warningf(ctx, "scatter returned node 0. "+
+								"Route span starting at %s to current node %v", scatterKey, nodeID)
+						}
 						chunkDestination = nodeID
-						log.Warningf(ctx, "scatter returned node 0. "+
-							"Route span starting at %s to current node %v", scatterKey, nodeID)
 					} else {
 						log.Warningf(ctx, "scatter returned node 0. "+
 							"Route span starting at %s to default stream", scatterKey)
@@ -447,6 +466,33 @@ func runGenerativeSplitAndScatter(
 	}
 
 	return g.Wait()
+}
+
+type routingDatumCache struct {
+	cache   map[roachpb.NodeID]rowenc.EncDatum
+	nodeIDs []roachpb.NodeID
+}
+
+func (c *routingDatumCache) getRoutingDatum(nodeID roachpb.NodeID) (rowenc.EncDatum, bool) {
+	d, ok := c.cache[nodeID]
+	return d, ok
+}
+
+func (c *routingDatumCache) putRoutingDatum(nodeID roachpb.NodeID, datum rowenc.EncDatum) {
+	if _, ok := c.cache[nodeID]; !ok {
+		c.nodeIDs = append(c.nodeIDs, nodeID)
+	}
+	c.cache[nodeID] = datum
+}
+
+func (c *routingDatumCache) cachedNodeIDs() []roachpb.NodeID {
+	return c.nodeIDs
+}
+
+func newRoutingDatumCache() routingDatumCache {
+	return routingDatumCache{
+		cache: make(map[roachpb.NodeID]rowenc.EncDatum),
+	}
 }
 
 func init() {
