@@ -114,6 +114,9 @@ type FlowCtx struct {
 // EvalContext, since it stores that EvalContext in its exprHelpers and mutates
 // them at runtime to ensure expressions are evaluated with the correct indexed
 // var context.
+// TODO(yuzefovich): once we remove eval.Context.deprecatedContext, re-evaluate
+// this since many processors don't modify the eval context except for that
+// field.
 func (flowCtx *FlowCtx) NewEvalCtx() *eval.Context {
 	evalCopy := flowCtx.EvalCtx.Copy()
 	return evalCopy
