@@ -74,7 +74,7 @@ const (
 	// DefaultIOOverloadThreshold is used to avoid allocating to stores with an
 	// IO overload score greater than what's set. This is typically used in
 	// conjunction with IOOverloadMeanThreshold below.
-	DefaultIOOverloadThreshold = 0.8
+	DefaultIOOverloadThreshold = 0.5
 
 	// IOOverloadMeanThreshold is the percentage above the mean after which a
 	// store could be conisdered unhealthy if also exceeding the threshold.
