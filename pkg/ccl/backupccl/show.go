@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudcheck"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudprivilege"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -46,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -194,6 +196,7 @@ func showBackupTypeCheck(
 			backup.Path,
 			backup.Options.EncryptionPassphrase,
 			backup.Options.EncryptionInfoDir,
+			backup.Options.TransferSize,
 		},
 		exprutil.StringArrays{
 			tree.Exprs(backup.InCollection),
@@ -202,6 +205,9 @@ func showBackupTypeCheck(
 		},
 	); err != nil {
 		return false, nil, err
+	}
+	if backup.Details == tree.BackupConnectionTest {
+		return true, cloudcheck.Header, nil
 	}
 	infoReader := getBackupInfoReader(p, backup)
 	return true, infoReader.header(), nil
@@ -216,6 +222,28 @@ func showBackupPlanHook(
 		return nil, nil, nil, false, nil
 	}
 	exprEval := p.ExprEvaluator("SHOW BACKUP")
+
+	// TODO(dt): find move this to its own hook.
+	if showStmt.Details == tree.BackupConnectionTest {
+		loc, err := exprEval.String(ctx, showStmt.Path)
+		if err != nil {
+			return nil, nil, nil, false, err
+		}
+		var transferSize int64
+		if showStmt.Options.TransferSize != nil {
+			transferSizeStr, err := exprEval.String(ctx, showStmt.Options.TransferSize)
+			if err != nil {
+				return nil, nil, nil, false, err
+			}
+			parsed, err := humanizeutil.ParseBytes(transferSizeStr)
+			if err != nil {
+				return nil, nil, nil, false, err
+			}
+			transferSize = parsed
+		}
+		return cloudcheck.ShowCloudStorageTestPlanHook(ctx, p, loc, transferSize)
+	}
+
 	if showStmt.Path == nil && showStmt.InCollection != nil {
 		collection, err := exprEval.StringArray(
 			ctx, tree.Exprs(showStmt.InCollection),
