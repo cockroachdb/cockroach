@@ -58,8 +58,8 @@ type testClusterCfg struct {
 	numNodes            int
 	setupClusterSetting *settings.BoolSetting
 	queryClusterSetting *settings.BoolSetting
-	setupCapability     string
-	queryCapability     string
+	setupCapability     tenantcapabilitiespb.TenantCapabilityName
+	queryCapability     tenantcapabilitiespb.TenantCapabilityName
 }
 
 func createTestClusterArgs(numReplicas, numVoters int32) base.TestClusterArgs {
@@ -242,9 +242,9 @@ type testCase struct {
 	queryClusterSetting *settings.BoolSetting
 	// Used for tests that have a capability prereq
 	// (eq SPLIT AT is required for UNSPLIT AT).
-	setupCapability string
+	setupCapability tenantcapabilitiespb.TenantCapabilityName
 	// Capability required for secondary tenant query.
-	queryCapability string
+	queryCapability tenantcapabilitiespb.TenantCapabilityName
 }
 
 func (tc testCase) runTest(
@@ -308,12 +308,12 @@ func (tc testCase) runTest(
 	var waitForTenantCapabilitiesFns []func()
 	setCapabilities := func(
 		tenantID roachpb.TenantID,
-		capabilities ...string,
+		capabilities ...tenantcapabilitiespb.TenantCapabilityName,
 	) {
 		// Filter out empty capabilities.
-		var caps []string
+		var caps []tenantcapabilitiespb.TenantCapabilityName
 		for _, capability := range capabilities {
-			if capability != "" {
+			if capability.IsSet() {
 				caps = append(caps, capability)
 			}
 		}
@@ -324,7 +324,7 @@ func (tc testCase) runTest(
 				if i > 0 {
 					builder.WriteString(", ")
 				}
-				builder.WriteString(capability)
+				builder.WriteString(capability.String())
 			}
 			query := fmt.Sprintf("ALTER TENANT [$1] GRANT CAPABILITY %s", builder.String())
 			_, err := systemDB.ExecContext(ctx, query, tenantID.ToUint64())

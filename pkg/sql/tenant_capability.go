@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-var capabilityTypes = map[string]*types.T{
+var capabilityTypes = map[tenantcapabilitiespb.TenantCapabilityName]*types.T{
 	tenantcapabilitiespb.CanAdminSplit:      types.Bool,
 	tenantcapabilitiespb.CanViewNodeInfo:    types.Bool,
 	tenantcapabilitiespb.CanViewTSDBMetrics: types.Bool,
@@ -55,7 +55,10 @@ func (p *planner) AlterTenantCapability(
 
 	exprs := make([]tree.TypedExpr, len(n.Capabilities))
 	for i, capability := range n.Capabilities {
-		capabilityName := capability.Name
+		capabilityName, err := tenantcapabilitiespb.TenantCapabilityNameFromString(capability.Name)
+		if err != nil {
+			return nil, err
+		}
 		desiredType, ok := capabilityTypes[capabilityName]
 		if !ok {
 			return nil, pgerror.Newf(pgcode.Syntax, "unknown capability: %q", capabilityName)
@@ -75,7 +78,14 @@ func (p *planner) AlterTenantCapability(
 		if capabilityValue != nil {
 			var dummyHelper tree.IndexedVarHelper
 			typedValue, err := p.analyzeExpr(
-				ctx, capabilityValue, nil, dummyHelper, desiredType, true /* requireType */, fmt.Sprintf("%s %s", alterTenantCapabilityOp, capability.Name))
+				ctx,
+				capabilityValue,
+				nil, /* source */
+				dummyHelper,
+				desiredType,
+				true, /* requireType */
+				fmt.Sprintf("%s %s", alterTenantCapabilityOp, capabilityName),
+			)
 			if err != nil {
 				return nil, err
 			}
@@ -117,7 +127,10 @@ func (n *alterTenantCapabilityNode) startExec(params runParams) error {
 
 	dst := &tenantInfo.Capabilities
 	for i, capability := range n.n.Capabilities {
-		capabilityName := capability.Name
+		capabilityName, err := tenantcapabilitiespb.TenantCapabilityNameFromString(capability.Name)
+		if err != nil {
+			return err
+		}
 		typedExpr := n.typedExprs[i]
 		switch capabilityName {
 		case tenantcapabilitiespb.CanAdminSplit:
@@ -126,7 +139,7 @@ func (n *alterTenantCapabilityNode) startExec(params runParams) error {
 			} else {
 				b := true
 				if typedExpr != nil {
-					b, err = paramparse.DatumAsBool(ctx, p.EvalContext(), capabilityName, typedExpr)
+					b, err = paramparse.DatumAsBool(ctx, p.EvalContext(), capabilityName.String(), typedExpr)
 					if err != nil {
 						return err
 					}
@@ -140,7 +153,7 @@ func (n *alterTenantCapabilityNode) startExec(params runParams) error {
 			} else {
 				b := true
 				if typedExpr != nil {
-					b, err = paramparse.DatumAsBool(ctx, p.EvalContext(), capabilityName, typedExpr)
+					b, err = paramparse.DatumAsBool(ctx, p.EvalContext(), capabilityName.String(), typedExpr)
 					if err != nil {
 						return err
 					}
@@ -154,7 +167,7 @@ func (n *alterTenantCapabilityNode) startExec(params runParams) error {
 			} else {
 				b := true
 				if typedExpr != nil {
-					b, err = paramparse.DatumAsBool(ctx, p.EvalContext(), capabilityName, typedExpr)
+					b, err = paramparse.DatumAsBool(ctx, p.EvalContext(), capabilityName.String(), typedExpr)
 					if err != nil {
 						return err
 					}
