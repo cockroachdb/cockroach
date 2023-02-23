@@ -102,6 +102,9 @@ type RoutineExpr struct {
 	// Strict non-set-returning routines are not invoked when their arguments
 	// are NULL because optbuilder wraps them in a CASE expressions.
 	CalledOnNullInput bool
+
+	// MultiColOutput is true if the function may return multiple columns.
+	MultiColOutput bool
 }
 
 // NewTypedRoutineExpr returns a new RoutineExpr that is well-typed.
@@ -112,6 +115,7 @@ func NewTypedRoutineExpr(
 	typ *types.T,
 	enableStepping bool,
 	calledOnNullInput bool,
+	multiColOutput bool,
 ) *RoutineExpr {
 	return &RoutineExpr{
 		Args:              args,
@@ -120,6 +124,7 @@ func NewTypedRoutineExpr(
 		EnableStepping:    enableStepping,
 		Name:              name,
 		CalledOnNullInput: calledOnNullInput,
+		MultiColOutput:    multiColOutput,
 	}
 }
 

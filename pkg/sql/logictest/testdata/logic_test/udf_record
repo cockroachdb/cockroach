@@ -13,15 +13,13 @@ SELECT f_one();
 ----
 (1)
 
-# TODO(97059): The following query should require a column definition list.
-statement ok
+statement error pq: a column definition list is required for functions returning \"record\"
 SELECT * FROM f_one();
 
-# TODO(97059): The following query should produce a row, not a tuple.
-query T
+query I
 SELECT * FROM f_one() AS foo (a INT);
 ----
-(1)
+1
 
 statement ok
 CREATE FUNCTION f_const() RETURNS RECORD AS
@@ -130,3 +128,58 @@ query T
 SELECT f_table();
 ----
 (1,5)
+
+# subtest datasource
+
+statement ok
+CREATE FUNCTION f_tup() RETURNS RECORD AS
+$$
+  SELECT ROW(1, 2, 3);
+$$ LANGUAGE SQL;
+
+query T
+SELECT f_tup();
+----
+(1,2,3)
+
+statement error pq: a column definition list is required for functions returning \"record\"
+SELECT * FROM f_tup();
+
+query III colnames
+SELECT * FROM f_tup() as foo(a int, b int, c int);
+----
+a b c
+1 2 3
+
+statement ok
+CREATE FUNCTION f_col() RETURNS RECORD AS
+$$
+  SELECT 1, 2, 3;
+$$ LANGUAGE SQL;
+
+query T
+SELECT f_col();
+----
+(1,2,3)
+
+query III colnames
+SELECT * FROM f_col() as foo(a int, b int, c int);
+----
+a b c
+1 2 3
+
+statement ok
+CREATE TABLE t_imp (a INT PRIMARY KEY, b INT);
+INSERT INTO t_imp VALUES (1, 10), (2, 4), (3, 32);
+
+statement ok
+CREATE FUNCTION f_imp() RETURNS t_imp AS
+$$
+  SELECT * FROM t_imp ORDER BY a LIMIT 1;
+$$ LANGUAGE SQL;
+
+query II colnames
+SELECT * FROM f_imp();
+----
+a b
+1 10

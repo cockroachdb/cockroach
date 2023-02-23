@@ -125,6 +125,9 @@ type Builder struct {
 	// are disabled and only statements whitelisted are allowed.
 	insideFuncDef bool
 
+	// If set, we are processing a data source.
+	insideDataSource bool
+
 	// If set, we are collecting view dependencies in schemaDeps. This can only
 	// happen inside view/function definitions.
 	//

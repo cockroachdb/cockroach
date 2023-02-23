@@ -111,7 +111,9 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 		var outCol *scopeColumn
 		startCols := len(outScope.cols)
 
-		if def == nil || funcExpr.ResolvedOverload().Class != tree.GeneratorClass || b.shouldCreateDefaultColumn(texpr) {
+		isRecordReturningUDF := def != nil && funcExpr.ResolvedOverload().IsUDF && (texpr.ResolvedType().UserDefined() || types.IsRecordType(texpr.ResolvedType())) && b.insideDataSource
+
+		if def == nil || (funcExpr.ResolvedOverload().Class != tree.GeneratorClass && !isRecordReturningUDF) || (b.shouldCreateDefaultColumn(texpr) && !isRecordReturningUDF) {
 			if def != nil && len(funcExpr.ResolvedOverload().ReturnLabels) > 0 {
 				// Override the computed alias with the one defined in the ReturnLabels. This
 				// satisfies a Postgres quirk where some json functions use different labels
