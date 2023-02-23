@@ -682,7 +682,7 @@ func registerTPCC(r registry.Registry) {
 			tc := multiRegionTests[i]
 			r.Add(registry.TestSpec{
 				Name:  tc.name,
-				Owner: registry.OwnerMultiRegion,
+				Owner: registry.OwnerSQLSchema,
 				// Add an extra node which serves as the workload nodes.
 				Cluster:           r.MakeClusterSpec(len(regions)*nodesPerRegion+1, spec.Geo(), spec.Zones(strings.Join(zs, ","))),
 				EncryptionSupport: registry.EncryptionMetamorphic,
