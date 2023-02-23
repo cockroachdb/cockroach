@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -2522,7 +2523,7 @@ func createSchemaChangeEvalCtx(
 // NewFakeSessionData returns "fake" session data for use in internal queries
 // that are not run on behalf of a user session, such as those run during the
 // steps of background jobs and schema changes.
-func NewFakeSessionData(sv *settings.Values) *sessiondata.SessionData {
+func NewFakeSessionData(sv *settings.Values, opName string) *sessiondata.SessionData {
 	sd := &sessiondata.SessionData{
 		SessionData: sessiondatapb.SessionData{
 			// The database is not supposed to be needed in schema changes, as there
@@ -2544,6 +2545,11 @@ func NewFakeSessionData(sv *settings.Values) *sessiondata.SessionData {
 		SearchPath:    sessiondata.DefaultSearchPathForUser(username.NodeUserName()),
 		SequenceState: sessiondata.NewSequenceState(),
 		Location:      time.UTC,
+	}
+
+	sd.ApplicationName = catconstants.InternalAppNamePrefix
+	if opName != "" {
+		sd.ApplicationName = catconstants.InternalAppNamePrefix + "-" + opName
 	}
 
 	return sd

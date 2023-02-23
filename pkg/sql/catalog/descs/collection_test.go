@@ -856,7 +856,7 @@ parent schema name   id  kind     version dropped public
 `, formatCatalog(allDescs.OrderedDescriptors()))
 		return nil
 	}
-	sd := sql.NewFakeSessionData(&s0.ClusterSettings().SV)
+	sd := sql.NewFakeSessionData(&s0.ClusterSettings().SV, "TestGetAllDescriptorsInDatabase")
 	sd.Database = "db"
 	require.NoError(t, tm.DescsTxn(ctx, run, isql.WithSessionData(sd)))
 }

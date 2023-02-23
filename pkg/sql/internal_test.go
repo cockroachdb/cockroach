@@ -375,10 +375,10 @@ func TestInternalExecAppNameInitialization(t *testing.T) {
 		s, _, _ := serverutils.StartServer(t, params)
 		defer s.Stopper().Stop(context.Background())
 
-		testInternalExecutorAppNameInitialization(t, sem,
-			catconstants.InternalAppNamePrefix+"-test-query", // app name in SHOW
-			catconstants.InternalAppNamePrefix+"-test-query", // app name in stats
-			s.InternalExecutor().(*sql.InternalExecutor))
+		testInternalExecutorAppNameInitialization(
+			t, sem, catconstants.InternalAppNamePrefix+"-test-query",
+			s.InternalExecutor().(*sql.InternalExecutor),
+		)
 	})
 
 	// We are running the second test with a new server so
@@ -402,10 +402,7 @@ func TestInternalExecAppNameInitialization(t *testing.T) {
 				SequenceState: &sessiondata.SequenceState{},
 			})
 		testInternalExecutorAppNameInitialization(
-			t, sem,
-			"appname_findme", // app name in SHOW
-			catconstants.DelegatedAppNamePrefix+"appname_findme", // app name in stats
-			&ie,
+			t, sem, catconstants.DelegatedAppNamePrefix+"appname_findme", &ie,
 		)
 	})
 }
@@ -420,10 +417,7 @@ type testInternalExecutor interface {
 }
 
 func testInternalExecutorAppNameInitialization(
-	t *testing.T,
-	sem chan struct{},
-	expectedAppName, expectedAppNameInStats string,
-	ie testInternalExecutor,
+	t *testing.T, sem chan struct{}, expectedAppName string, ie testInternalExecutor,
 ) {
 	// Check that the application_name is set properly in the executor.
 	if row, err := ie.QueryRow(context.Background(), "test-query", nil,
@@ -511,8 +505,8 @@ func testInternalExecutorAppNameInitialization(
 		t.Fatal(err)
 	} else if row == nil {
 		t.Fatalf("expected 1 query, got 0")
-	} else if appName := string(*row[0].(*tree.DString)); appName != expectedAppNameInStats {
-		t.Fatalf("unexpected app name: expected %q, got %q", expectedAppNameInStats, appName)
+	} else if appName := string(*row[0].(*tree.DString)); appName != expectedAppName {
+		t.Fatalf("unexpected app name: expected %q, got %q", expectedAppName, appName)
 	}
 }
 
