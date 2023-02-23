@@ -11,6 +11,9 @@
 package clientflags
 
 import (
+	"fmt"
+	"os"
+
 	"github.com/cockroachdb/cockroach/pkg/cli/clienturl"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflagcfg"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
@@ -71,7 +74,10 @@ func AddSQLFlags(
 	_ = f.MarkHidden(cliflags.ClientHost.Name)
 
 	// --url.
-	cliflagcfg.VarFlagDepth(1, f, clienturl.NewURLParser(cmd, clientOpts, false /* strictTLS */, nil /* warnFn */), cliflags.URL)
+	warnFn := func(format string, args ...interface{}) {
+		fmt.Fprintf(os.Stderr, format, args...)
+	}
+	cliflagcfg.VarFlagDepth(1, f, clienturl.NewURLParser(cmd, clientOpts, false /* strictTLS */, warnFn), cliflags.URL)
 
 	// --user/-u
 	cliflagcfg.StringFlagDepth(1, f, &clientOpts.User, cliflags.User)

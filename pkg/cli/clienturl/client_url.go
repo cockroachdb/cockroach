@@ -13,6 +13,7 @@ package clienturl
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflagcfg"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
@@ -135,6 +136,8 @@ func (u *urlParser) Set(v string) error {
 		}
 		return fmt.Errorf("%s", msg)
 	}
+
+	u.checkMistakes(purl)
 
 	// Store the parsed URL for later.
 	u.clientOpts.ExplicitURL = purl
@@ -272,5 +275,39 @@ func MakeURLParserFn(
 			return nil, err
 		}
 		return clientOpts.ExplicitURL, nil
+	}
+}
+
+// checkMistakes reports likely mistakes to the user via warning messages.
+func (u *urlParser) checkMistakes(purl *pgurl.URL) {
+	if u.warnFn == nil {
+		return
+	}
+
+	// Check mistaken use of -c as direct option, instead of using
+	// options=-c...
+	opts := purl.GetExtraOptions()
+	for optName := range opts {
+		if strings.HasPrefix(optName, "-c") {
+			u.warnFn("\nwarning: found raw URL parameter \"%[1]s\"; "+
+				"are you sure you did not mean to use \"options=%[1]s\" instead?\n\n", optName)
+		}
+		if optName == "cluster" {
+			u.warnFn("\nwarning: found raw URL parameter \"%[1]s\"; "+
+				"are you sure you did not mean to use \"options=-c%[1]s\" instead?\n\n", optName)
+		}
+	}
+	// For tenant selection, the option is `-ccluster=`, not `-cluster=`.
+	if extraOpts := opts.Get("options"); extraOpts != "" {
+		opts, err := pgurl.ParseExtendedOptions(extraOpts)
+		if err != nil {
+			u.warnFn("\nwarning: invalid syntax in options: %v\n\n", err)
+		} else {
+			if opts.Has("luster") {
+				// User entered options=-cluster.
+				u.warnFn("\nwarning: found \"-cluster=\" in URL \"options\" field; " +
+					"are you sure you did not mean to use \"options=-ccluster=\" instead?\n\n")
+			}
+		}
 	}
 }
