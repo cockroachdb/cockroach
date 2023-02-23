@@ -1167,6 +1167,51 @@ project
                           │         └── variable: i:10 [as=i:13]
                           └── const: 1
 
+exec-ddl
+CREATE FUNCTION strict_fn_record(i INT, t TEXT, b BOOl) RETURNS RECORD STRICT LANGUAGE SQL AS 'SELECT i, t, b'
+----
+
+build format=show-scalars
+SELECT * FROM strict_fn_record(1, 'foo', false) as bar(i INT, t TEXT, b BOOl)
+----
+project-set
+ ├── columns: i:7 t:8 b:9
+ ├── values
+ │    └── tuple
+ └── zip
+      └── case
+           ├── true
+           ├── when
+           │    ├── or
+           │    │    ├── is
+           │    │    │    ├── false
+           │    │    │    └── null
+           │    │    └── or
+           │    │         ├── is
+           │    │         │    ├── const: 'foo'
+           │    │         │    └── null
+           │    │         └── is
+           │    │              ├── const: 1
+           │    │              └── null
+           │    └── null
+           └── udf: strict_fn_record
+                ├── params: i:1 t:2 b:3
+                ├── args
+                │    ├── const: 1
+                │    ├── const: 'foo'
+                │    └── false
+                └── body
+                     └── limit
+                          ├── columns: i:4 t:5 b:6
+                          ├── project
+                          │    ├── columns: i:4 t:5 b:6
+                          │    ├── values
+                          │    │    └── tuple
+                          │    └── projections
+                          │         ├── variable: i:1 [as=i:4]
+                          │         ├── variable: t:2 [as=t:5]
+                          │         └── variable: b:3 [as=b:6]
+                          └── const: 1
 
 # --------------------------------------------------
 # UDFs with * expressions.

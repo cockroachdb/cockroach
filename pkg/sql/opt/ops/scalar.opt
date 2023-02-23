@@ -1274,6 +1274,9 @@ define UDFPrivate {
     # inputs are NULL. If false, the function will not be evaluated in the
     # presence of NULL inputs, and will instead evaluate directly to NULL.
     CalledOnNullInput bool
+
+    # MultiColOutput is true if the function may return multiple columns.
+    MultiColOutput bool
 }
 
 # KVOptions is a set of KVOptionItems that specify arbitrary keys and values

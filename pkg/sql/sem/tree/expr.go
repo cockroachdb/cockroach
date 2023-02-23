@@ -1327,6 +1327,10 @@ func (node *FuncExpr) IsVectorizeStreaming() bool {
 	return node.fnProps != nil && node.fnProps.VectorizeStreaming
 }
 
+func (node *FuncExpr) SetTypeAnnotation(t *types.T) {
+	node.typ = t
+}
+
 type funcType int
 
 // FuncExpr.Type

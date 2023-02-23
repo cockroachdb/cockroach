@@ -692,6 +692,7 @@ func (b *Builder) buildUDF(
 	// We'll need to track the depth of the UDFs we are building expressions
 	// within.
 	b.insideUDF = true
+	isMultiColOutput := false
 	for i := range stmts {
 		stmtScope := b.buildStmt(stmts[i].AST, nil /* desiredTypes */, bodyScope)
 		expr := stmtScope.expr
@@ -712,34 +713,67 @@ func (b *Builder) buildUDF(
 				physProps.Ordering = props.OrderingChoice{}
 			}
 
-			// Replace the tuple contents of RECORD return types from Any to the
-			// result columns of the last statement. If the result column is a tuple,
-			// then use its tuple contents for the return instead.
+			// If returning a RECORD type, the function return type needs to be
+			// modified from a tuple containing Any types to a tuple with the types
+			// of the result columns or tuple of the last statement. This informs the
+			// types to decode during execution.
 			isSingleTupleResult := len(stmtScope.cols) == 1 && stmtScope.cols[0].typ.Family() == types.TupleFamily
-			if types.IsRecordType(f.ResolvedType()) {
+			if types.IsRecordType(rtyp) {
 				if isSingleTupleResult {
-					f.ResolvedType().InternalType.TupleContents = stmtScope.cols[0].typ.TupleContents()
+					// When the final statement returns a single tuple, we can use the
+					// tuple's types as the function return type.
+					rtyp = types.MakeLabeledTuple(stmtScope.cols[0].typ.TupleContents(), stmtScope.cols[0].typ.TupleLabels())
 				} else {
+					// Get the types from the individual columns of the last statement.
 					tc := make([]*types.T, len(stmtScope.cols))
+					tl := make([]string, len(stmtScope.cols))
 					for i, col := range stmtScope.cols {
 						tc[i] = col.typ
+						tl[i] = col.name.MetadataName()
 					}
-					f.ResolvedType().InternalType.TupleContents = tc
+					rtyp = types.MakeLabeledTuple(tc, tl)
 				}
+				f.SetTypeAnnotation(rtyp)
+				rtyp = f.ResolvedType()
 			}
 
-			// If there are multiple output columns or the output type is a record and
-			// the output column is not a tuple, we must combine them into a tuple -
-			// only a single column can be returned from a UDF.
+			// Only a single column can be returned from a UDF, unless it is used as a
+			// data source. Data sources may output multiple columns, and if the
+			// statement body produces a tuple it needs to be expanded into columns.
+			// When not used as a data source, statements producing multiple columns, combine them into a tuple. If the last statement is already returning a tuple
+			// and the function has a record return type, then do not need wrap the
+			// output in another tuple.
 			cols := physProps.Presentation
-			if len(cols) > 1 || (types.IsRecordType(f.ResolvedType()) && !isSingleTupleResult) {
+			if b.insideDataSource && rtyp.Family() == types.TupleFamily {
+				// When the UDF is used as a data source and expects to output a tuple
+				// type, its output needs to be a row of columns instead of the usual
+				// tuple. If the last statement output a tuple, we need to expand the
+				// tuple into individual columns.
+				isMultiColOutput = true
+				if isSingleTupleResult {
+					stmtScope = bodyScope.push()
+					elems := make([]scopeColumn, len(rtyp.TupleContents()))
+					for i := range rtyp.TupleContents() {
+						e := b.factory.ConstructColumnAccess(b.factory.ConstructVariable(cols[0].ID), memo.TupleOrdinal(i))
+						col := b.synthesizeColumn(stmtScope, scopeColName(""), rtyp.TupleContents()[i], nil, e)
+						elems[i] = *col
+					}
+					expr = b.constructProject(expr, elems)
+					physProps = stmtScope.makePhysicalProps()
+				}
+			} else if len(cols) > 1 || (types.IsRecordType(rtyp) && !isSingleTupleResult) {
+				// Only a single column can be returned from a UDF, unless it is used as a
+				// data source (see comment above). If there are multiple columns, combine
+				// them into a tuple. If the last statement is already returning a tuple
+				// and the function has a record return type, then do not need wrap the
+				// output in another tuple.
 				elems := make(memo.ScalarListExpr, len(cols))
 				for i := range cols {
 					elems[i] = b.factory.ConstructVariable(cols[i].ID)
 				}
-				tup := b.factory.ConstructTuple(elems, f.ResolvedType())
+				tup := b.factory.ConstructTuple(elems, rtyp)
 				stmtScope = bodyScope.push()
-				col := b.synthesizeColumn(stmtScope, scopeColName(""), f.ResolvedType(), nil /* expr */, tup)
+				col := b.synthesizeColumn(stmtScope, scopeColName(""), rtyp, nil /* expr */, tup)
 				expr = b.constructProject(expr, []scopeColumn{*col})
 				physProps = stmtScope.makePhysicalProps()
 			}
@@ -752,17 +786,17 @@ func (b *Builder) buildUDF(
 			// column is already a tuple.
 			returnCol := physProps.Presentation[0].ID
 			returnColMeta := b.factory.Metadata().ColumnMeta(returnCol)
-			if !types.IsRecordType(f.ResolvedType()) && !returnColMeta.Type.Identical(f.ResolvedType()) {
-				if !cast.ValidCast(returnColMeta.Type, f.ResolvedType(), cast.ContextAssignment) {
+			if !types.IsRecordType(rtyp) && !isMultiColOutput && !returnColMeta.Type.Identical(rtyp) {
+				if !cast.ValidCast(returnColMeta.Type, rtyp, cast.ContextAssignment) {
 					panic(sqlerrors.NewInvalidAssignmentCastError(
-						returnColMeta.Type, f.ResolvedType(), returnColMeta.Alias))
+						returnColMeta.Type, rtyp, returnColMeta.Alias))
 				}
 				cast := b.factory.ConstructAssignmentCast(
 					b.factory.ConstructVariable(physProps.Presentation[0].ID),
-					f.ResolvedType(),
+					rtyp,
 				)
 				stmtScope = bodyScope.push()
-				col := b.synthesizeColumn(stmtScope, scopeColName(""), f.ResolvedType(), nil /* expr */, cast)
+				col := b.synthesizeColumn(stmtScope, scopeColName(""), rtyp, nil /* expr */, cast)
 				expr = b.constructProject(expr, []scopeColumn{*col})
 				physProps = stmtScope.makePhysicalProps()
 			}
@@ -792,6 +826,7 @@ func (b *Builder) buildUDF(
 			SetReturning:      isSetReturning,
 			Volatility:        o.Volatility,
 			CalledOnNullInput: calledOnNullInput,
+			MultiColOutput:    isMultiColOutput,
 		},
 	)
 
@@ -833,10 +868,17 @@ func (b *Builder) buildUDF(
 		)
 	}
 
-	// Synthesize an output column for set-returning UDFs.
-	if isSetReturning && outCol == nil {
-		outCol = b.synthesizeColumn(outScope, scopeColName(""), f.ResolvedType(), nil /* expr */, out)
+	// Synthesize an output columns if necessary.
+	if outCol == nil {
+		if isMultiColOutput {
+			f.ResolvedOverload().ReturnsRecordType = types.IsRecordType(rtyp)
+			return b.finishBuildGeneratorFunction(f, f.ResolvedOverload(), out, inScope, outScope, outCol)
+		}
+		if outScope != nil {
+			outCol = b.synthesizeColumn(outScope, scopeColName(""), f.ResolvedType(), nil /* expr */, out)
+		}
 	}
+
 	return b.finishBuildScalar(f, out, inScope, outScope, outCol)
 }
 

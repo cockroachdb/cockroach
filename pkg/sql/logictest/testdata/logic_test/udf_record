@@ -13,15 +13,13 @@ SELECT f_one();
 ----
 (1)
 
-# TODO(97059): The following query should require a column definition list.
-statement ok
+statement error pq: a column definition list is required for functions returning \"record\"
 SELECT * FROM f_one();
 
-# TODO(97059): The following query should produce a row, not a tuple.
-query T
+query I
 SELECT * FROM f_one() AS foo (a INT);
 ----
-(1)
+1
 
 statement ok
 CREATE FUNCTION f_const() RETURNS RECORD AS
@@ -130,3 +128,167 @@ query T
 SELECT f_table();
 ----
 (1,5)
+
+# subtest datasource
+
+statement ok
+CREATE FUNCTION f_tup() RETURNS RECORD AS
+$$
+  SELECT ROW(1, 2, 3);
+$$ LANGUAGE SQL;
+
+query T
+SELECT f_tup();
+----
+(1,2,3)
+
+statement error pq: a column definition list is required for functions returning \"record\"
+SELECT * FROM f_tup();
+
+query III colnames
+SELECT * FROM f_tup() as foo(a int, b int, c int);
+----
+a b c
+1 2 3
+
+statement ok
+CREATE FUNCTION f_col() RETURNS RECORD AS
+$$
+  SELECT 1, 2, 3;
+$$ LANGUAGE SQL;
+
+query T
+SELECT f_col();
+----
+(1,2,3)
+
+query III colnames
+SELECT * FROM f_col() as foo(a int, b int, c int);
+----
+a b c
+1 2 3
+
+statement ok
+CREATE TABLE t_imp (a INT PRIMARY KEY, b INT);
+INSERT INTO t_imp VALUES (1, 10), (2, 4), (3, 32);
+
+statement ok
+CREATE FUNCTION f_imp() RETURNS t_imp AS
+$$
+  SELECT * FROM t_imp ORDER BY a LIMIT 1;
+$$ LANGUAGE SQL;
+
+query II colnames
+SELECT * FROM f_imp();
+----
+a b
+1 10
+
+statement ok
+CREATE TYPE udt AS ENUM ('a', 'b', 'c');
+
+statement ok
+CREATE FUNCTION f_udt() RETURNS udt AS
+$$
+  SELECT 'a'::udt;
+$$ LANGUAGE SQL;
+
+query T
+SELECT * FROM f_udt();
+----
+a
+
+statement ok
+CREATE FUNCTION f_udt_record() RETURNS RECORD AS
+$$
+  SELECT 'a'::udt;
+$$ LANGUAGE SQL;
+
+query T
+SELECT * FROM f_udt() AS foo(u udt);
+----
+a
+
+query II rowsort
+SELECT * FROM f_setof() AS foo(a INT, b INT);
+----
+1 5
+2 6
+3 7
+
+statement ok
+CREATE FUNCTION f_setof_imp() RETURNS SETOF t_imp AS
+$$
+  SELECT * FROM t_imp;
+$$ LANGUAGE SQL;
+
+query II rowsort
+SELECT * FROM f_setof_imp()
+----
+1 10
+2 4
+3 32
+
+statement ok
+CREATE FUNCTION f_strict() RETURNS RECORD STRICT AS
+$$
+  SELECT 1, 2, 3;
+$$ LANGUAGE SQL;
+
+query III
+SELECT * FROM f_strict() AS foo(a INT, b INT, c INT);
+----
+1 2 3
+
+statement ok
+CREATE FUNCTION f_setof_strict() RETURNS SETOF RECORD STRICT AS
+$$
+  SELECT * FROM t_imp;
+$$ LANGUAGE SQL;
+
+query II rowsort
+SELECT * FROM f_setof_strict() AS foo(a INT, b INT);
+----
+1 10
+2 4
+3 32
+
+statement ok
+CREATE FUNCTION f_strict_arg(IN a INT, IN b INT) RETURNS RECORD STRICT AS
+$$
+  SELECT a, b;
+$$ LANGUAGE SQL;
+
+query II colnames
+SELECT * FROM f_strict_arg(1,2) AS foo(a INT, b INT);
+----
+a b
+1 2
+
+# TODO(harding): The result should be NULL NULL, one for each column,
+# instead of NULL.
+statement error pq: source "foo" has 1 columns available but 2 columns specified
+SELECT * FROM f_strict_arg(NULL, 2) AS foo(a INT, b INT);
+
+statement ok
+CREATE FUNCTION f_strict_arg_setof(IN a INT, IN b INT) RETURNS SETOF RECORD STRICT AS
+$$
+  SELECT a, b FROM generate_series(1,3);
+$$ LANGUAGE SQL;
+
+# Strict SETOF UDF with NULL input returns 0 rows.
+query II colnames
+SELECT * FROM f_strict_arg_setof(NULL,2) AS foo(a INT, b INT);
+----
+a b
+
+statement ok
+CREATE FUNCTION f_arg(IN a INT8, IN b INT8) RETURNS RECORD AS
+$$
+  SELECT a, b;
+$$ LANGUAGE SQL;
+
+query II
+SELECT * FROM f_arg(1,2) AS foo(a INT, b INT);
+----
+1 2
