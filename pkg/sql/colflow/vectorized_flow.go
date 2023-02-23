@@ -1080,7 +1080,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 			// We need to use the row receiving output.
 			if input == nil {
 				// We couldn't remove the columnarizer.
-				input = colexec.NewMaterializerNoEvalCtxCopy(
+				input = colexec.NewMaterializer(
 					colmem.NewAllocator(ctx, s.monitorRegistry.NewStreamingMemAccount(flowCtx), factory),
 					flowCtx,
 					pspec.ProcessorID,
