@@ -1282,6 +1282,11 @@ define UDFPrivate {
     # operators. Non-scalar UDFs are always in a project-set operator, while
     # scalar UDFs can be if used as a data source (e.g. SELECT * FROM udf()).
     CalledOnNullInput bool
+
+    # MultiColDataSource is true if the function may return multiple columns. This
+    # is only the case if the UDF returns a RECORD type and is used as a data
+    # source.
+    MultiColDataSource bool
 }
 
 # KVOptions is a set of KVOptionItems that specify arbitrary keys and values

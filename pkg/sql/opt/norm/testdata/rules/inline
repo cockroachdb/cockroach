@@ -1327,7 +1327,7 @@ project
                 └── plus [type=int]
                      ├── variable: x:17 [type=int]
                      └── variable: y:18 [type=int]
-          ] [17 18] int false immutable true} [as=add:20, outer=(2), immutable, correlated-subquery, udf]
+          ] [17 18] int false immutable true false} [as=add:20, outer=(2), immutable, correlated-subquery, udf]
            ├── 10
            └── subquery
                 └── values
@@ -1579,7 +1579,7 @@ project
                      └── eq [type=bool]
                           ├── variable: y:10 [type=int]
                           └── const: 2 [type=int]
-          ] [9 10] bool false immutable true} [as=x_0_1_y_2:12, outer=(2), immutable, correlated-subquery, udf]
+          ] [9 10] bool false immutable true false} [as=x_0_1_y_2:12, outer=(2), immutable, correlated-subquery, udf]
            ├── subquery
            │    └── max1-row
            │         ├── columns: column1:8!null
@@ -1600,3 +1600,23 @@ project
            │              └── filters
            │                   └── column1:8 > i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
            └── 10
+
+exec-ddl
+CREATE FUNCTION x_y(x INT, y INT) RETURNS RECORD IMMUTABLE LANGUAGE SQL AS $$
+  SELECT x, y;
+$$
+----
+
+# Do not inline a UDF that outputs multiple columns.
+norm expect-not=InlineUDF
+SELECT * FROM x_y(1, 2) AS f(x INT, y INT);
+----
+project-set
+ ├── columns: x:5 y:6
+ ├── immutable
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── ()
+ └── zip
+      └── x_y(1, 2) [immutable, udf]
