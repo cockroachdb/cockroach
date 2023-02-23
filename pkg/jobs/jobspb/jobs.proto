@@ -469,6 +469,13 @@ message RestoreDetails {
 
 message RestoreProgress {
   bytes high_water = 1;
+
+  message FrontierEntry {
+    roachpb.Span span = 1 [(gogoproto.nullable) = false];
+    util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+  }
+
+  repeated FrontierEntry checkpoint = 2 [(gogoproto.nullable) = false];
 }
 
 message ImportDetails {
