@@ -163,7 +163,6 @@ func TestProjectionAndRendering(t *testing.T) {
 				); err != nil {
 					t.Fatal(err)
 				}
-
 			},
 
 			expPost: execinfrapb.PostProcessSpec{
@@ -171,6 +170,38 @@ func TestProjectionAndRendering(t *testing.T) {
 				OutputColumns: []uint32{1, 3, 2},
 			},
 			expResultTypes: "B,D,C",
+		},
+
+		// Rendering after projection.
+		{
+			post: execinfrapb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{3, 1, 4, 2},
+			},
+			resultTypes: "A,B,C,D",
+
+			action: func(p *PhysicalPlan) {
+				if err := p.AddRendering(
+					context.Background(),
+					[]tree.TypedExpr{
+						&tree.IndexedVar{Idx: 0},
+						&tree.IndexedVar{Idx: 1},
+						&tree.IndexedVar{Idx: 2},
+					},
+					fakeExprContext{},
+					[]int{2, 0, 3, 1},
+					[]*types.T{strToType("C"), strToType("A"), strToType("D")},
+					execinfrapb.Ordering{},
+				); err != nil {
+					t.Fatal(err)
+				}
+			},
+
+			expPost: execinfrapb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{4, 3, 2},
+			},
+			expResultTypes: "C,A,D",
 		},
 	}
 
