@@ -23,6 +23,7 @@ go_library(
         "//pkg/sql",
         "//pkg/sql/catalog",
         "//pkg/sql/parser",
+        "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/schemachanger/corpus",
         "//pkg/sql/schemachanger/scbuild",
         "//pkg/sql/schemachanger/scdecomp",
