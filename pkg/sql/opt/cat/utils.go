@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // ExpandDataSourceGlob is a utility function that expands a tree.TablePattern
@@ -55,8 +56,10 @@ func ResolveTableIndex(
 }
 
 // FormatTable nicely formats a catalog table using a treeprinter for debugging
-// and testing.
-func FormatTable(cat Catalog, tab Table, tp treeprinter.Node) {
+// and testing. With redactableValues set to true, all user-supplied constants
+// and literals (e.g. DEFAULT values, constants in generated column expressions,
+// etc.) are surrounded by redaction markers.
+func FormatTable(cat Catalog, tab Table, tp treeprinter.Node, redactableValues bool) {
 	child := tp.Childf("TABLE %s", tab.Name())
 	if tab.IsVirtualTable() {
 		child.Child("virtual table")
@@ -65,7 +68,7 @@ func FormatTable(cat Catalog, tab Table, tp treeprinter.Node) {
 	var buf bytes.Buffer
 	for i := 0; i < tab.ColumnCount(); i++ {
 		buf.Reset()
-		formatColumn(tab.Column(i), &buf)
+		formatColumn(tab.Column(i), &buf, redactableValues)
 		child.Child(buf.String())
 	}
 
@@ -79,11 +82,11 @@ func FormatTable(cat Catalog, tab Table, tp treeprinter.Node) {
 	}
 
 	for i := 0; i < tab.CheckCount(); i++ {
-		child.Childf("CHECK (%s)", tab.Check(i).Constraint)
+		child.Childf("CHECK (%s)", MaybeMarkRedactable(tab.Check(i).Constraint, redactableValues))
 	}
 
 	for i := 0; i < tab.DeletableIndexCount(); i++ {
-		formatCatalogIndex(tab, i, child)
+		formatCatalogIndex(tab, i, child, redactableValues)
 	}
 
 	for i := 0; i < tab.OutboundForeignKeyCount(); i++ {
@@ -106,7 +109,7 @@ func FormatTable(cat Catalog, tab Table, tp treeprinter.Node) {
 			formatCols(tab, tab.Unique(i).ColumnCount(), tab.Unique(i).ColumnOrdinal),
 		)
 		if pred, isPartial := uniq.Predicate(); isPartial {
-			c.Childf("WHERE %s", pred)
+			c.Childf("WHERE %s", MaybeMarkRedactable(pred, redactableValues))
 		}
 	}
 
@@ -115,7 +118,7 @@ func FormatTable(cat Catalog, tab Table, tp treeprinter.Node) {
 
 // formatCatalogIndex nicely formats a catalog index using a treeprinter for
 // debugging and testing.
-func formatCatalogIndex(tab Table, ord int, tp treeprinter.Node) {
+func formatCatalogIndex(tab Table, ord int, tp treeprinter.Node, redactableValues bool) {
 	idx := tab.Index(ord)
 	idxType := ""
 	if idx.Ordinal() == PrimaryIndex {
@@ -148,7 +151,7 @@ func formatCatalogIndex(tab Table, ord int, tp treeprinter.Node) {
 		buf.Reset()
 
 		idxCol := idx.Column(i)
-		formatColumn(idxCol.Column, &buf)
+		formatColumn(idxCol.Column, &buf, redactableValues)
 		if idxCol.Descending {
 			fmt.Fprintf(&buf, " desc")
 		}
@@ -173,13 +176,13 @@ func formatCatalogIndex(tab Table, ord int, tp treeprinter.Node) {
 			part := c.Child(p.Name())
 			prefixes := part.Child("partition by list prefixes")
 			for _, datums := range p.PartitionByListPrefixes() {
-				prefixes.Child(datums.String())
+				prefixes.Child(MaybeMarkRedactable(datums.String(), redactableValues))
 			}
 			FormatZone(p.Zone(), part)
 		}
 	}
 	if pred, isPartial := idx.Predicate(); isPartial {
-		child.Childf("WHERE %s", pred)
+		child.Childf("WHERE %s", MaybeMarkRedactable(pred, redactableValues))
 	}
 }
 
@@ -238,22 +241,23 @@ func formatCatalogFKRef(
 	)
 }
 
-func formatColumn(col *Column, buf *bytes.Buffer) {
+func formatColumn(col *Column, buf *bytes.Buffer, redactableValues bool) {
 	fmt.Fprintf(buf, "%s %s", col.ColName(), col.DatumType())
 	if !col.IsNullable() {
 		fmt.Fprintf(buf, " not null")
 	}
 	if col.IsComputed() {
+		exprStr := MaybeMarkRedactable(col.ComputedExprStr(), redactableValues)
 		if col.IsVirtualComputed() {
-			fmt.Fprintf(buf, " as (%s) virtual", col.ComputedExprStr())
+			fmt.Fprintf(buf, " as (%s) virtual", exprStr)
 		} else {
-			fmt.Fprintf(buf, " as (%s) stored", col.ComputedExprStr())
+			fmt.Fprintf(buf, " as (%s) stored", exprStr)
 		}
 	}
 	if col.HasDefault() {
 		generatedAsIdentityType := col.GeneratedAsIdentityType()
 		if generatedAsIdentityType == NotGeneratedAsIdentity {
-			fmt.Fprintf(buf, " default (%s)", col.DefaultExprStr())
+			fmt.Fprintf(buf, " default (%s)", MaybeMarkRedactable(col.DefaultExprStr(), redactableValues))
 		} else {
 			switch generatedAsIdentityType {
 			case GeneratedAlwaysAsIdentity:
@@ -267,7 +271,9 @@ func formatColumn(col *Column, buf *bytes.Buffer) {
 		}
 	}
 	if col.HasOnUpdate() {
-		fmt.Fprintf(buf, " on update (%s)", col.OnUpdateExprStr())
+		fmt.Fprintf(
+			buf, " on update (%s)", MaybeMarkRedactable(col.OnUpdateExprStr(), redactableValues),
+		)
 	}
 
 	kind := col.Kind()
@@ -307,4 +313,13 @@ func formatFamily(family Family, buf *bytes.Buffer) {
 		buf.WriteString(string(col.ColName()))
 	}
 	buf.WriteString(")")
+}
+
+// MaybeMarkRedactable surrounds an unsafe string with redaction markers if
+// markRedactable is true.
+func MaybeMarkRedactable(unsafe string, markRedactable bool) string {
+	if markRedactable {
+		return string(redact.Sprintf("%s", redact.Unsafe(unsafe)))
+	}
+	return unsafe
 }

@@ -283,10 +283,6 @@ func (b *stmtBundleBuilder) addStatement() {
 // addOptPlans adds the EXPLAIN (OPT) variants as files opt.txt, opt-v.txt,
 // opt-vv.txt.
 func (b *stmtBundleBuilder) addOptPlans(ctx context.Context) {
-	if b.flags.RedactValues {
-		return
-	}
-
 	if b.plan.mem == nil || b.plan.mem.RootExpr() == nil {
 		// No optimizer plans; an error must have occurred during planning.
 		b.z.AddFile("opt.txt", noPlan)
@@ -296,9 +292,13 @@ func (b *stmtBundleBuilder) addOptPlans(ctx context.Context) {
 	}
 
 	formatOptPlan := func(flags memo.ExprFmtFlags) string {
-		f := memo.MakeExprFmtCtx(ctx, flags, b.plan.mem, b.plan.catalog)
+		f := memo.MakeExprFmtCtx(ctx, flags, b.flags.RedactValues, b.plan.mem, b.plan.catalog)
 		f.FormatExpr(b.plan.mem.RootExpr())
-		return f.Buffer.String()
+		output := f.Buffer.String()
+		if b.flags.RedactValues {
+			output = string(redact.RedactableString(output).Redact())
+		}
+		return output
 	}
 
 	b.z.AddFile("opt.txt", formatOptPlan(memo.ExprFmtHideAll))

@@ -283,11 +283,18 @@ func MakeExplain(options []string, stmt Statement) (Statement, error) {
 		// TODO(michae2): Support redaction of other EXPLAIN modes.
 		switch opts.Mode {
 		case ExplainPlan:
+		case ExplainOpt:
 		case ExplainVec:
 		case ExplainDebug:
 		default:
 			return nil, unimplemented.Newf(
 				"EXPLAIN (REDACT)", "the REDACT flag cannot be used with %s", opts.Mode,
+			)
+		}
+
+		if opts.Flags[ExplainFlagEnv] {
+			return nil, unimplemented.Newf(
+				"EXPLAIN (REDACT)", "the REDACT flag cannot be used with %s, ENV", opts.Mode,
 			)
 		}
 	}
