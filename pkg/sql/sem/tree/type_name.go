@@ -172,6 +172,19 @@ func ResolveType(
 	}
 }
 
+// We need to inject the logic for formatting types into the types package.
+func init() {
+	types.FormatTypeName = func(name types.UserDefinedTypeName) string {
+		n := MakeTypeNameWithPrefix(ObjectNamePrefix{
+			CatalogName:     Name(name.Catalog),
+			SchemaName:      Name(name.Schema),
+			ExplicitCatalog: name.Catalog != "",
+			ExplicitSchema:  name.ExplicitSchema,
+		}, name.Name)
+		return AsString(&n)
+	}
+}
+
 // FormatTypeReference formats a ResolvableTypeReference.
 func (ctx *FmtCtx) FormatTypeReference(ref ResolvableTypeReference) {
 	switch t := ref.(type) {
