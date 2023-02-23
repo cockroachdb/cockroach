@@ -2940,3 +2940,60 @@ ALTER TABLE t_96648 DROP CONSTRAINT check_i, DROP CONSTRAINT check_i1;
 
 statement ok
 DROP TABLE t_96648
+
+# This subtests ensures that dropping unique and unique without index
+# constraints with dependent FKs works properly.
+subtest drop_constraint_with_dependent_FKs_97538
+
+statement ok
+CREATE TABLE t_97538_2 (i INT PRIMARY KEY, j INT);
+
+statement ok
+SET experimental_enable_unique_without_index_constraints = true
+
+statement ok
+ALTER TABLE t_97538_2 ADD UNIQUE WITHOUT INDEX (j);
+
+statement ok
+CREATE UNIQUE INDEX t_97538_2_j_key on t_97538_2(j);
+
+statement ok
+CREATE TABLE t_97538_1 (i INT PRIMARY KEY REFERENCES t_97538_2(j));
+
+statement ok
+DROP INDEX t_97538_2_j_key;
+
+# Ensure that only the unique index is dropped but not the FK
+# because we have replacement (the other unique without index constraint).
+query TTTTB colnames
+SHOW CONSTRAINTS FROM t_97538_1
+----
+table_name  constraint_name   constraint_type  details                                  validated
+t_97538_1   t_97538_1_i_fkey  FOREIGN KEY      FOREIGN KEY (i) REFERENCES t_97538_2(j)  true
+t_97538_1   t_97538_1_pkey    PRIMARY KEY      PRIMARY KEY (i ASC)                      true
+
+# Add back the unique index, and drop the unique without index constraint (without CASCADE) this time.
+statement ok
+CREATE UNIQUE INDEX t_97538_2_j_key on t_97538_2(j);
+
+statement ok
+ALTER TABLE t_97538_2 DROP CONSTRAINT unique_j;
+
+# Similarly, ensure that only the constraint is dropped but not the FK
+# because we have replacement (the other unique index).
+query TTTTB colnames
+SHOW CONSTRAINTS FROM t_97538_1
+----
+table_name  constraint_name   constraint_type  details                                  validated
+t_97538_1   t_97538_1_i_fkey  FOREIGN KEY      FOREIGN KEY (i) REFERENCES t_97538_2(j)  true
+t_97538_1   t_97538_1_pkey    PRIMARY KEY      PRIMARY KEY (i ASC)                      true
+
+statement ok
+DROP INDEX t_97538_2_j_key CASCADE;
+
+# Now ensure that the FK is dropped as a result of the cascade.
+query TTTTB colnames
+SHOW CONSTRAINTS FROM t_97538_1
+----
+table_name  constraint_name  constraint_type  details              validated
+t_97538_1   t_97538_1_pkey   PRIMARY KEY      PRIMARY KEY (i ASC)  true
