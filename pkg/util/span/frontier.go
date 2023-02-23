@@ -428,6 +428,10 @@ func (f *Frontier) Entries(fn Operation) {
 //
 // Note: neither [a-b) nor [m, q) will be emitted since they fall outside the spans
 // tracked by this frontier.
+//
+// It's worth noting that only spans in the frontier that intersect with the passed in span will
+// get surfaced. For example: if frontier contains [a-b), [d-f), and the caller passes [b,e),
+// only [d,e), will surface.
 func (f *Frontier) SpanEntries(span roachpb.Span, op Operation) {
 	f.Lock()
 	defer f.Unlock()

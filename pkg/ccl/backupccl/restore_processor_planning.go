@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
@@ -62,18 +61,13 @@ func distRestore(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
 	jobID int64,
-	pkIDs map[uint64]bool,
+	dataToRestore restorationData,
+	restoreTime hlc.Timestamp,
 	encryption *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
-	tableRekeys []execinfrapb.TableRekey,
-	tenantRekeys []execinfrapb.TenantRekey,
-	restoreTime hlc.Timestamp,
-	validateOnly bool,
 	uris []string,
-	requiredSpans []roachpb.Span,
 	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
-	lowWaterMark roachpb.Key,
-	targetSize int64,
+	spanFilter spanCoveringFilter,
 	numNodes int,
 	numImportSpans int,
 	useSimpleImportSpans bool,
@@ -120,10 +114,10 @@ func distRestore(
 			JobID:        jobID,
 			RestoreTime:  restoreTime,
 			Encryption:   fileEncryption,
-			TableRekeys:  tableRekeys,
-			TenantRekeys: tenantRekeys,
-			PKIDs:        pkIDs,
-			ValidateOnly: validateOnly,
+			TableRekeys:  dataToRestore.getRekeys(),
+			TenantRekeys: dataToRestore.getTenantRekeys(),
+			PKIDs:        dataToRestore.getPKIDs(),
+			ValidateOnly: dataToRestore.isValidateOnly(),
 		}
 
 		// Plan SplitAndScatter in a round-robin fashion.
@@ -174,22 +168,26 @@ func distRestore(
 		id := execCtx.ExecCfg().NodeInfo.NodeID.SQLInstanceID()
 
 		spec := &execinfrapb.GenerativeSplitAndScatterSpec{
-			TableRekeys:          tableRekeys,
-			TenantRekeys:         tenantRekeys,
-			ValidateOnly:         validateOnly,
-			URIs:                 uris,
-			Encryption:           encryption,
-			EndTime:              restoreTime,
-			Spans:                requiredSpans,
-			BackupLocalityInfo:   backupLocalityInfo,
-			HighWater:            lowWaterMark,
-			UserProto:            execCtx.User().EncodeProto(),
-			TargetSize:           targetSize,
-			ChunkSize:            int64(chunkSize),
-			NumEntries:           int64(numImportSpans),
-			NumNodes:             int64(numNodes),
-			UseSimpleImportSpans: useSimpleImportSpans,
-			JobID:                jobID,
+			TableRekeys:              dataToRestore.getRekeys(),
+			TenantRekeys:             dataToRestore.getTenantRekeys(),
+			ValidateOnly:             dataToRestore.isValidateOnly(),
+			URIs:                     uris,
+			Encryption:               encryption,
+			EndTime:                  restoreTime,
+			Spans:                    dataToRestore.getSpans(),
+			BackupLocalityInfo:       backupLocalityInfo,
+			HighWater:                spanFilter.highWaterMark,
+			UserProto:                execCtx.User().EncodeProto(),
+			TargetSize:               spanFilter.targetSize,
+			ChunkSize:                int64(chunkSize),
+			NumEntries:               int64(numImportSpans),
+			NumNodes:                 int64(numNodes),
+			UseSimpleImportSpans:     useSimpleImportSpans,
+			UseFrontierCheckpointing: spanFilter.useFrontierCheckpointing,
+			JobID:                    jobID,
+		}
+		if spanFilter.useFrontierCheckpointing {
+			spec.CheckpointedSpans = getSpansToPersist(spanFilter.checkpointFrontier)
 		}
 
 		proc := physicalplan.Processor{

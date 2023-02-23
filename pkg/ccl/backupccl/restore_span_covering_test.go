@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -249,6 +250,7 @@ func makeImportSpans(
 	layerToIterFactory backupinfo.LayerToBackupManifestFileIterFactory,
 	targetSize int64,
 	introducedSpanFrontier *spanUtils.Frontier,
+	completedSpans []jobspb.RestoreProgress_FrontierEntry,
 	useSimpleImportSpans bool,
 ) ([]execinfrapb.RestoreSpanEntry, error) {
 	var cover []execinfrapb.RestoreSpanEntry
@@ -261,7 +263,26 @@ func makeImportSpans(
 		return nil
 	})
 
-	err := generateAndSendImportSpans(ctx, spans, backups, layerToIterFactory, nil, introducedSpanFrontier, nil, targetSize, spanCh, useSimpleImportSpans)
+	filter, err := makeSpanCoveringFilter(
+		spans,
+		completedSpans,
+		nil,
+		introducedSpanFrontier,
+		targetSize,
+		true)
+	if err != nil {
+		return nil, err
+	}
+
+	err = generateAndSendImportSpans(
+		ctx,
+		spans,
+		backups,
+		layerToIterFactory,
+		nil,
+		filter,
+		useSimpleImportSpans,
+		spanCh)
 	close(spanCh)
 
 	if err != nil {
@@ -349,43 +370,116 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 	layerToIterFactory, err := backupinfo.GetBackupManifestIterFactories(ctx, execCfg.DistSQLSrv.ExternalStorage,
 		backups, nil, nil)
 	require.NoError(t, err)
-	cover, err := makeImportSpans(ctx, spans, backups, layerToIterFactory, noSpanTargetSize, emptySpanFrontier, false)
-	require.NoError(t, err)
-	require.Equal(t, []execinfrapb.RestoreSpanEntry{
-		{Span: c.sp("a", "b"), Files: c.paths("1", "6")},
-		{Span: c.sp("b", "c"), Files: c.paths("1", "4", "6")},
-		{Span: c.sp("c", "f"), Files: c.paths("2", "4", "6")},
-		{Span: c.sp("f", "g"), Files: c.paths("6")},
-		{Span: c.sp("g", "h"), Files: c.paths("5", "6")},
-		{Span: c.sp("h", "i"), Files: c.paths("3", "5", "8")},
-		{Span: c.sp("l", "m"), Files: c.paths("9")},
-	}, cover)
 
-	coverSized, err := makeImportSpans(ctx, spans, backups, layerToIterFactory, 2<<20, emptySpanFrontier, false)
-	require.NoError(t, err)
-	require.Equal(t, []execinfrapb.RestoreSpanEntry{
-		{Span: c.sp("a", "b"), Files: c.paths("1", "6")},
-		{Span: c.sp("b", "c"), Files: c.paths("1", "4", "6")},
-		{Span: c.sp("c", "f"), Files: c.paths("2", "4", "6")},
-		{Span: c.sp("f", "h"), Files: c.paths("5", "6")},
-		{Span: c.sp("h", "i"), Files: c.paths("3", "5", "8")},
-		{Span: c.sp("l", "m"), Files: c.paths("9")},
-	}, coverSized)
+	emptyCompletedSpans := []jobspb.RestoreProgress_FrontierEntry{}
 
-	// check that introduced spans are properly elided
-	backups[2].IntroducedSpans = []roachpb.Span{c.sp("a", "f")}
-	introducedSpanFrontier, err := createIntroducedSpanFrontier(backups, hlc.Timestamp{})
-	require.NoError(t, err)
+	type simpleRestoreSpanEntry struct {
+		span  roachpb.Span
+		paths []string
+	}
+	reduce := func(entries []execinfrapb.RestoreSpanEntry) []simpleRestoreSpanEntry {
+		reduced := make([]simpleRestoreSpanEntry, len(entries))
+		for i := range entries {
+			reduced[i].span = entries[i].Span
+			reduced[i].paths = make([]string, len(entries[i].Files))
+			for j := range entries[i].Files {
+				reduced[i].paths[j] = entries[i].Files[j].Path
+			}
+		}
+		return reduced
+	}
+	t.Run("base", func(t *testing.T) {
+		cover, err := makeImportSpans(
+			ctx,
+			spans,
+			backups,
+			layerToIterFactory,
+			noSpanTargetSize,
+			emptySpanFrontier,
+			emptyCompletedSpans,
+			false)
+		require.NoError(t, err)
+		require.Equal(t, reduce([]execinfrapb.RestoreSpanEntry{
+			{Span: c.sp("a", "b"), Files: c.paths("1", "6")},
+			{Span: c.sp("b", "c"), Files: c.paths("1", "4", "6")},
+			{Span: c.sp("c", "f"), Files: c.paths("2", "4", "6")},
+			{Span: c.sp("f", "g"), Files: c.paths("6")},
+			{Span: c.sp("g", "h"), Files: c.paths("5", "6")},
+			{Span: c.sp("h", "i"), Files: c.paths("3", "5", "8")},
+			{Span: c.sp("l", "m"), Files: c.paths("9")},
+		}), reduce(cover))
+	})
 
-	coverIntroduced, err := makeImportSpans(ctx, spans, backups, layerToIterFactory, noSpanTargetSize, introducedSpanFrontier, false)
-	require.NoError(t, err)
-	require.Equal(t, []execinfrapb.RestoreSpanEntry{
-		{Span: c.sp("a", "f"), Files: c.paths("6")},
-		{Span: c.sp("f", "g"), Files: c.paths("6")},
-		{Span: c.sp("g", "h"), Files: c.paths("5", "6")},
-		{Span: c.sp("h", "i"), Files: c.paths("3", "5", "8")},
-		{Span: c.sp("l", "m"), Files: c.paths("9")},
-	}, coverIntroduced)
+	t.Run("target-size", func(t *testing.T) {
+		coverSized, err := makeImportSpans(
+			ctx,
+			spans,
+			backups,
+			layerToIterFactory,
+			2<<20,
+			emptySpanFrontier,
+			emptyCompletedSpans,
+			false)
+		require.NoError(t, err)
+		require.Equal(t, reduce([]execinfrapb.RestoreSpanEntry{
+			{Span: c.sp("a", "b"), Files: c.paths("1", "6")},
+			{Span: c.sp("b", "c"), Files: c.paths("1", "4", "6")},
+			{Span: c.sp("c", "f"), Files: c.paths("2", "4", "6")},
+			{Span: c.sp("f", "h"), Files: c.paths("5", "6")},
+			{Span: c.sp("h", "i"), Files: c.paths("3", "5", "8")},
+			{Span: c.sp("l", "m"), Files: c.paths("9")},
+		}), reduce(coverSized))
+	})
+
+	t.Run("introduced-spans", func(t *testing.T) {
+		backups[2].IntroducedSpans = []roachpb.Span{c.sp("a", "f")}
+		introducedSpanFrontier, err := createIntroducedSpanFrontier(backups, hlc.Timestamp{})
+		require.NoError(t, err)
+		coverIntroduced, err := makeImportSpans(
+			ctx,
+			spans,
+			backups,
+			layerToIterFactory,
+			noSpanTargetSize,
+			introducedSpanFrontier,
+			emptyCompletedSpans,
+			false)
+		require.NoError(t, err)
+		require.Equal(t, reduce([]execinfrapb.RestoreSpanEntry{
+			{Span: c.sp("a", "f"), Files: c.paths("6")},
+			{Span: c.sp("f", "g"), Files: c.paths("6")},
+			{Span: c.sp("g", "h"), Files: c.paths("5", "6")},
+			{Span: c.sp("h", "i"), Files: c.paths("3", "5", "8")},
+			{Span: c.sp("l", "m"), Files: c.paths("9")},
+		}), reduce(coverIntroduced))
+	})
+	t.Run("completed-spans", func(t *testing.T) {
+
+		completedSpans := []roachpb.Span{
+			// log some progress on part of a restoreSpanEntry.
+			c.sp("b", "c"),
+
+			// Log some progress over multiple restoreSpanEntries.
+			c.sp("g", "i")}
+		frontier, err := spanUtils.MakeFrontierAt(completedSpanTime, completedSpans...)
+		require.NoError(t, err)
+		coverIntroduced, err := makeImportSpans(
+			ctx,
+			spans,
+			backups,
+			layerToIterFactory,
+			noSpanTargetSize,
+			emptySpanFrontier,
+			getSpansToPersist(frontier),
+			false)
+		require.NoError(t, err)
+		require.Equal(t, reduce([]execinfrapb.RestoreSpanEntry{
+			{Span: c.sp("a", "b"), Files: c.paths("1", "6")},
+			{Span: c.sp("c", "f"), Files: c.paths("2", "4", "6")},
+			{Span: c.sp("f", "g"), Files: c.paths("6")},
+			{Span: c.sp("l", "m"), Files: c.paths("9")},
+		}), reduce(coverIntroduced))
+	})
 }
 
 func TestFileSpanStartKeyIterator(t *testing.T) {
@@ -496,6 +590,52 @@ func TestFileSpanStartKeyIterator(t *testing.T) {
 			require.Equal(t, expected, startEndKeyIt.value())
 			startEndKeyIt.next()
 		}
+	}
+}
+
+func TestCheckpointFilter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	c := makeCoverUtils(ctx, t, &execCfg)
+
+	requiredSpan := c.sp("b", "e")
+
+	type testCase struct {
+		completedSpans    roachpb.Spans
+		expectedToDoSpans roachpb.Spans
+	}
+
+	for _, tc := range []testCase{
+		{
+			completedSpans:    roachpb.Spans{c.sp("a", "c")},
+			expectedToDoSpans: roachpb.Spans{c.sp("c", "e")},
+		},
+		{
+			completedSpans:    roachpb.Spans{c.sp("c", "d")},
+			expectedToDoSpans: roachpb.Spans{c.sp("b", "c"), c.sp("d", "e")},
+		},
+		{
+			completedSpans:    roachpb.Spans{c.sp("a", "c"), c.sp("d", "e")},
+			expectedToDoSpans: roachpb.Spans{c.sp("c", "d")},
+		},
+	} {
+
+		frontier, err := spanUtils.MakeFrontierAt(completedSpanTime, tc.completedSpans...)
+		require.NoError(t, err)
+
+		f, err := makeSpanCoveringFilter(
+			[]roachpb.Span{requiredSpan},
+			getSpansToPersist(frontier),
+			nil,
+			nil,
+			0,
+			true)
+		require.NoError(t, err)
+		require.Equal(t, tc.expectedToDoSpans, f.filterCompleted(requiredSpan))
 	}
 }
 
@@ -705,8 +845,15 @@ func TestRestoreEntryCoverReIntroducedSpans(t *testing.T) {
 			layerToIterFactory, err := backupinfo.GetBackupManifestIterFactories(ctx,
 				execCfg.DistSQLSrv.ExternalStorage, backups, nil, nil)
 			require.NoError(t, err)
-			cover, err := makeImportSpans(ctx, restoreSpans, backups, layerToIterFactory,
-				0, introducedSpanFrontier, false)
+			cover, err := makeImportSpans(
+				ctx,
+				restoreSpans,
+				backups,
+				layerToIterFactory,
+				0,
+				introducedSpanFrontier,
+				[]jobspb.RestoreProgress_FrontierEntry{},
+				false)
 			require.NoError(t, err)
 
 			for _, reIntroTable := range reIntroducedTables {
@@ -781,8 +928,15 @@ func TestRestoreEntryCover(t *testing.T) {
 								numBackups, spans, files, target, hasExternalFilesList, simpleImportSpans), func(t *testing.T) {
 								introducedSpanFrontier, err := createIntroducedSpanFrontier(backups, hlc.Timestamp{})
 								require.NoError(t, err)
-								cover, err := makeImportSpans(ctx, backups[numBackups-1].Spans, backups,
-									layerToIterFactory, target<<20, introducedSpanFrontier, simpleImportSpans)
+								cover, err := makeImportSpans(
+									ctx,
+									backups[numBackups-1].Spans,
+									backups,
+									layerToIterFactory,
+									target<<20,
+									introducedSpanFrontier,
+									[]jobspb.RestoreProgress_FrontierEntry{},
+									simpleImportSpans)
 								require.NoError(t, err)
 								require.NoError(t, checkRestoreCovering(ctx, backups, backups[numBackups-1].Spans,
 									cover, target != noSpanTargetSize, execCfg.DistSQLSrv.ExternalStorage))
