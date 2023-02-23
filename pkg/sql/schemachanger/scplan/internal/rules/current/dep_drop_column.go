@@ -116,7 +116,7 @@ func init() {
 		scpb.Status_ABSENT, scpb.Status_DELETE_ONLY,
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.Type((*scpb.ColumnNotNull)(nil)),
+				from.TypeFilter(rulesVersionKey, isNonIndexBackedConstraint, isSubjectTo2VersionInvariant),
 				to.Type((*scpb.Column)(nil)),
 				JoinOnColumnID(from, to, "table-id", "col-id"),
 			}

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/errors"
@@ -138,7 +139,10 @@ func dropSecondaryIndex(
 		// In this case, if we were to drop 'ui' and no other unique constraint can be
 		// found to replace 'uc' (to continue to serve 'fk'), we will require CASCADE
 		//and drop 'fk' as well.
-		maybeDropDependentFKConstraints(next, sie, indexName, dropBehavior)
+		maybeDropDependentFKConstraints(b, sie.TableID, sie.ConstraintID, string(indexName.Index), dropBehavior,
+			func(fkReferencedColIDs []catid.ColumnID) bool {
+				return isIndexUniqueAndCanServeFK(b, &sie.Index, fkReferencedColIDs)
+			})
 
 		// If shard index, also drop the shard column and all check constraints that
 		// uses this shard column if no other index uses the shard column.
