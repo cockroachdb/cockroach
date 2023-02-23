@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 )
 
 // EvalRoutineExpr returns the result of evaluating the routine. It calls the
@@ -111,7 +112,20 @@ func (g *routineGenerator) ResolvedType() *types.T {
 // is cache-able (i.e., there are no arguments to the routine and stepping is
 // disabled).
 func (g *routineGenerator) Start(ctx context.Context, txn *kv.Txn) (err error) {
-	retTypes := []*types.T{g.expr.ResolvedType()}
+	rt := g.expr.ResolvedType()
+	var retTypes []*types.T
+	if g.expr.MultiColOutput {
+		// A routine with multiple output column should have its types in a tuple.
+		if rt.Family() != types.TupleFamily {
+			panic(errors.AssertionFailedf("routine expected to return multiple columns"))
+		}
+		retTypes = make([]*types.T, len(rt.TupleContents()))
+		for i, c := range rt.TupleContents() {
+			retTypes[i] = c
+		}
+	} else {
+		retTypes = []*types.T{g.expr.ResolvedType()}
+	}
 	g.rch.Init(ctx, retTypes, g.p.ExtendedEvalContext(), "routine" /* opName */)
 
 	// Configure stepping for volatile routines so that mutations made by the
