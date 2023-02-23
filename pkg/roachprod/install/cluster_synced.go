@@ -1199,8 +1199,8 @@ func (c *SyncedCluster) DistributeCerts(ctx context.Context, l *logger.Logger) e
 rm -fr certs
 mkdir -p certs
 %[1]s cert create-ca --certs-dir=certs --ca-key=certs/ca.key
-%[1]s cert create-client root --certs-dir=certs --ca-key=certs/ca.key --tenant-scope 1,2,3,4
-%[1]s cert create-client testuser --certs-dir=certs --ca-key=certs/ca.key --tenant-scope 1,2,3,4
+%[1]s cert create-client root --certs-dir=certs --ca-key=certs/ca.key
+%[1]s cert create-client testuser --certs-dir=certs --ca-key=certs/ca.key
 %[1]s cert create-node %[2]s --certs-dir=certs --ca-key=certs/ca.key
 # Pre-create a few tenant-client
 %[1]s cert create-tenant-client 2 %[2]s --certs-dir=certs --ca-key=certs/ca.key
@@ -1284,9 +1284,6 @@ func (c *SyncedCluster) createTenantCertBundle(
 		node := c.Nodes[i]
 
 		var tenantScopeArg string
-		if c.cockroachBinSupportsTenantScope(l, ctx, node) {
-			tenantScopeArg = fmt.Sprintf("--tenant-scope %d", tenantID)
-		}
 
 		cmd := "set -e;"
 		if c.IsLocal() {
@@ -1325,23 +1322,6 @@ tar cvf %[5]s $CERT_DIR
 		}
 		return res, nil
 	}, DefaultSSHRetryOpts)
-}
-
-// cockroachBinSupportsTenantScope is a hack to figure out if the version of
-// cockroach on the node supports tenant scoped certificates. We can't use a
-// version comparison here because we need to compare alpha build versions which
-// are compared lexicographically. This is a problem because our alpha versions
-// contain an integer count of commits, which does not sort correctly.  Once
-// this feature ships in a release, it will be easier to do a version comparison
-// on whether this command line flag is supported.
-func (c *SyncedCluster) cockroachBinSupportsTenantScope(
-	l *logger.Logger, ctx context.Context, node Node,
-) bool {
-	cmd := fmt.Sprintf("%s cert create-client --help | grep '\\--tenant-scope'", cockroachNodeBinary(c, node))
-	sess := c.newSession(l, node, cmd)
-	defer sess.Close()
-
-	return sess.Run(ctx) == nil
 }
 
 // getFile retrieves the given file from the first node in the cluster. The

@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/stretchr/testify/require"
@@ -100,24 +99,8 @@ func createTenantNode(
 		node:       node,
 		sqlPort:    sqlPort,
 	}
-	if tn.cockroachBinSupportsTenantScope(ctx, c) {
-		err := tn.recreateClientCertsWithTenantScope(ctx, c, createOptions.otherTenantIDs)
-		require.NoError(t, err)
-	}
 	tn.createTenantCert(ctx, t, c, createOptions.certNodes)
 	return tn
-}
-
-// cockroachBinSupportsTenantScope is a hack to figure out if the version of
-// cockroach on the node supports tenant scoped certificates. We can't use a
-// version comparison here because we need to compare alpha build versions which
-// are compared lexicographically. This is a problem because our alpha versions
-// contain an integer count of commits, which does not sort correctly.  Once
-// this feature ships in a release, it will be easier to do a version comparison
-// on whether this command line flag is supported.
-func (tn *tenantNode) cockroachBinSupportsTenantScope(ctx context.Context, c cluster.Cluster) bool {
-	err := c.RunE(ctx, c.Node(tn.node), "./cockroach cert create-client --help | grep '\\--tenant-scope'")
-	return err == nil
 }
 
 func (tn *tenantNode) createTenantCert(
@@ -143,23 +126,6 @@ func (tn *tenantNode) createTenantCert(
 		"./cockroach cert create-tenant-client --certs-dir=certs --ca-key=certs/ca.key %d %s --overwrite",
 		tn.tenantID, strings.Join(names, " "))
 	c.Run(ctx, c.Node(tn.node), cmd)
-}
-
-func (tn *tenantNode) recreateClientCertsWithTenantScope(
-	ctx context.Context, c cluster.Cluster, otherIDs []int,
-) error {
-	tenantArgs := fmt.Sprintf("1,%d", tn.tenantID)
-	for _, id := range otherIDs {
-		tenantArgs = fmt.Sprintf("%s,%d", tenantArgs, id)
-	}
-
-	for _, user := range []username.SQLUsername{username.RootUserName(), username.TestUserName()} {
-		cmd := fmt.Sprintf(
-			"./cockroach cert create-client %s --certs-dir=certs --ca-key=certs/ca.key --tenant-scope %s --overwrite",
-			user.Normalized(), tenantArgs)
-		c.Run(ctx, c.Node(tn.node), cmd)
-	}
-	return c.RefetchCertsFromNode(ctx, tn.node)
 }
 
 func (tn *tenantNode) stop(ctx context.Context, t test.Test, c cluster.Cluster) {
