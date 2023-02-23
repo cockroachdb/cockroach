@@ -29,6 +29,12 @@ import (
 func (b *Builder) buildValuesClause(
 	values *tree.ValuesClause, desiredTypes []*types.T, inScope *scope,
 ) (outScope *scope) {
+	// The top level in a values clause is not considered a data source.
+	oldInsideDataSource := b.insideDataSource
+	defer func() {
+		b.insideDataSource = oldInsideDataSource
+	}()
+	b.insideDataSource = false
 	numRows := len(values.Rows)
 	numCols := 0
 	if numRows > 0 {
