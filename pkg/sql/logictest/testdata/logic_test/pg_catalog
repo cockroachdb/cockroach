@@ -4780,3 +4780,8 @@ WHERE
     AND t.typname LIKE 'myt%';
 ----
 0
+
+# Regression test for a panic after physical planning combined rendering steps
+# (#95633).
+statement ok
+SELECT d.datname, pg_catalog.pg_get_userbyid(d.datdba) FROM pg_catalog.pg_database d;
