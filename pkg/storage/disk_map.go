@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/pebbleiter"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -52,7 +53,7 @@ type pebbleMapBatchWriter struct {
 // pebbleMapIterator iterates over the keys of a pebbleMap in sorted order.
 type pebbleMapIterator struct {
 	allowDuplicates bool
-	iter            *pebble.Iterator
+	iter            pebbleiter.Iterator
 	// makeKey is a function that transforms a key into a byte slice with a prefix
 	// used to SeekGE() the underlying iterator.
 	makeKey func(k []byte) []byte
@@ -114,9 +115,9 @@ func (r *pebbleMap) makeKeyWithSequence(k []byte) []byte {
 func (r *pebbleMap) NewIterator() diskmap.SortedDiskMapIterator {
 	return &pebbleMapIterator{
 		allowDuplicates: r.allowDuplicates,
-		iter: r.store.NewIter(&pebble.IterOptions{
+		iter: pebbleiter.MaybeWrap(r.store.NewIter(&pebble.IterOptions{
 			UpperBound: roachpb.Key(r.prefix).PrefixEnd(),
-		}),
+		})),
 		makeKey: r.makeKey,
 		prefix:  r.prefix,
 	}
