@@ -70,11 +70,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	pbtypes "github.com/gogo/protobuf/types"
 )
 
 // restoreStatsInsertBatchSize is an arbitrarily chosen value of the number of
@@ -289,10 +287,28 @@ func restore(
 		return emptyRowCount, err
 	}
 
+	on231 := clusterversion.ByKey(clusterversion.V23_1Start).LessEq(job.Payload().CreationClusterVersion)
+	progressTracker, err := makeProgressTracker(
+		dataToRestore.getSpans(),
+		job.Progress().Details.(*jobspb.Progress_Restore).Restore.Checkpoint,
+		on231,
+		RestoreCheckpointMaxBytes.Get(&execCtx.ExecCfg().Settings.SV))
+	if err != nil {
+		return emptyRowCount, err
+	}
+
+	filter, err := makeSpanCoveringFilter(
+		progressTracker.checkpointFrontier,
+		job.Progress().Details.(*jobspb.Progress_Restore).Restore.HighWater,
+		introducedSpanFrontier,
+		targetRestoreSpanSize.Get(&execCtx.ExecCfg().Settings.SV),
+		progressTracker.useFrontier)
+	if err != nil {
+		return roachpb.RowCount{}, err
+	}
+
 	// Pivot the backups, which are grouped by time, into requests for import,
 	// which are grouped by keyrange.
-	highWaterMark := job.Progress().Details.(*jobspb.Progress_Restore).Restore.HighWater
-
 	layerToIterFactory, err := backupinfo.GetBackupManifestIterFactories(restoreCtx, execCtx.ExecCfg().DistSQLSrv.ExternalStorage, backupManifests, encryption, kmsEnv)
 	if err != nil {
 		return roachpb.RowCount{}, err
@@ -300,28 +316,6 @@ func restore(
 
 	simpleImportSpans := useSimpleImportSpans.Get(&execCtx.ExecCfg().Settings.SV)
 
-	mu := struct {
-		syncutil.Mutex
-		highWaterMark int64
-		ceiling       int64
-		res           roachpb.RowCount
-		// As part of job progress tracking, inFlightImportSpans tracks all the
-		// spans that have been generated are being processed by the processors in
-		// distRestore. requestsCompleleted tracks the spans from
-		// inFlightImportSpans that have completed its processing. Once all spans up
-		// to index N have been processed (and appear in requestsCompleted), then
-		// any spans with index < N will be removed from both inFlightImportSpans
-		// and requestsCompleted maps.
-		inFlightImportSpans map[int64]roachpb.Span
-		requestsCompleted   map[int64]bool
-	}{
-		highWaterMark:       -1,
-		ceiling:             0,
-		inFlightImportSpans: make(map[int64]roachpb.Span),
-		requestsCompleted:   make(map[int64]bool),
-	}
-
-	targetSize := targetRestoreSpanSize.Get(&execCtx.ExecCfg().Settings.SV)
 	countSpansCh := make(chan execinfrapb.RestoreSpanEntry, 1000)
 	genSpan := func(ctx context.Context, spanCh chan execinfrapb.RestoreSpanEntry) error {
 		defer close(spanCh)
@@ -331,14 +325,11 @@ func restore(
 			backupManifests,
 			layerToIterFactory,
 			backupLocalityMap,
-			introducedSpanFrontier,
-			highWaterMark,
-			targetSize,
-			spanCh,
+			filter,
 			simpleImportSpans,
+			spanCh,
 		)
 	}
-
 	// Count number of import spans.
 	var numImportSpans int
 	var countTasks []func(ctx context.Context) error
@@ -356,29 +347,15 @@ func restore(
 		return emptyRowCount, errors.Wrapf(err, "counting number of import spans")
 	}
 
-	importSpanCh := make(chan execinfrapb.RestoreSpanEntry, 1000)
 	requestFinishedCh := make(chan struct{}, numImportSpans) // enough buffer to never block
+
 	// tasks are the concurrent tasks that are run during the restore.
 	var tasks []func(ctx context.Context) error
 	if dataToRestore.isMainBundle() {
 		// Only update the job progress on the main data bundle. This should account
 		// for the bulk of the data to restore. Other data (e.g. zone configs in
-		// cluster restores) may be restored first. When restoring that data, we
-		// don't want to update the high-water mark key, so instead progress is just
-		// defined on the main data bundle (of which there should only be one).
-		progressLogger := jobs.NewChunkProgressLogger(job, numImportSpans, job.FractionCompleted(),
-			func(progressedCtx context.Context, details jobspb.ProgressDetails) {
-				switch d := details.(type) {
-				case *jobspb.Progress_Restore:
-					mu.Lock()
-					if mu.highWaterMark >= 0 {
-						d.Restore.HighWater = mu.inFlightImportSpans[mu.highWaterMark].Key
-					}
-					mu.Unlock()
-				default:
-					log.Errorf(progressedCtx, "job payload had unexpected type %T", d)
-				}
-			})
+		// cluster restores) may be restored first.
+		progressLogger := jobs.NewChunkProgressLogger(job, numImportSpans, job.FractionCompleted(), progressTracker.updateJobCallback)
 
 		jobProgressLoop := func(ctx context.Context) error {
 			ctx, progressSpan := tracing.ChildSpan(ctx, "progress-log")
@@ -387,54 +364,20 @@ func restore(
 		}
 		tasks = append(tasks, jobProgressLoop)
 	}
-
+	if !progressTracker.useFrontier {
+		// This goroutine feeds the deprecated high water mark variant of the
+		// generativeCheckpointLoop.
+		tasks = append(tasks, func(ctx context.Context) error {
+			return genSpan(ctx, progressTracker.inFlightSpanFeeder)
+		})
+	}
 	progCh := make(chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
-
 	generativeCheckpointLoop := func(ctx context.Context) error {
 		defer close(requestFinishedCh)
 		for progress := range progCh {
-			mu.Lock()
-			var progDetails backuppb.RestoreProgress
-			if err := pbtypes.UnmarshalAny(&progress.ProgressDetails, &progDetails); err != nil {
-				log.Errorf(ctx, "unable to unmarshal restore progress details: %+v", err)
+			if err := progressTracker.ingestUpdate(ctx, progress); err != nil {
+				return err
 			}
-
-			mu.res.Add(progDetails.Summary)
-			idx := progDetails.ProgressIdx
-
-			if idx >= mu.ceiling {
-				for i := mu.ceiling; i <= idx; i++ {
-					importSpan, ok := <-importSpanCh
-					if !ok {
-						// The channel has been closed, there is nothing left to do.
-						log.Infof(ctx, "exiting restore checkpoint loop as the import span channel has been closed")
-						return nil
-					}
-					mu.inFlightImportSpans[i] = importSpan.Span
-				}
-				mu.ceiling = idx + 1
-			}
-
-			if sp, ok := mu.inFlightImportSpans[idx]; ok {
-				// Assert that we're actually marking the correct span done. See #23977.
-				if !sp.Key.Equal(progDetails.DataSpan.Key) {
-					mu.Unlock()
-					return errors.Newf("request %d for span %v does not match import span for same idx: %v",
-						idx, progDetails.DataSpan, sp,
-					)
-				}
-				mu.requestsCompleted[idx] = true
-				prevHighWater := mu.highWaterMark
-				for j := mu.highWaterMark + 1; j < mu.ceiling && mu.requestsCompleted[j]; j++ {
-					mu.highWaterMark = j
-				}
-				for j := prevHighWater; j < mu.highWaterMark; j++ {
-					delete(mu.requestsCompleted, j)
-					delete(mu.inFlightImportSpans, j)
-				}
-			}
-			mu.Unlock()
-
 			// Signal that the processor has finished importing a span, to update job
 			// progress.
 			requestFinishedCh <- struct{}{}
@@ -442,27 +385,19 @@ func restore(
 		return nil
 	}
 	tasks = append(tasks, generativeCheckpointLoop)
-	tasks = append(tasks, func(ctx context.Context) error {
-		return genSpan(ctx, importSpanCh)
-	})
 
 	runRestore := func(ctx context.Context) error {
 		return distRestore(
 			ctx,
 			execCtx,
 			int64(job.ID()),
-			dataToRestore.getPKIDs(),
+			dataToRestore,
+			endTime,
 			encryption,
 			kmsEnv,
-			dataToRestore.getRekeys(),
-			dataToRestore.getTenantRekeys(),
-			endTime,
-			dataToRestore.isValidateOnly(),
 			details.URIs,
-			dataToRestore.getSpans(),
 			backupLocalityInfo,
-			highWaterMark,
-			targetSize,
+			filter,
 			numNodes,
 			numImportSpans,
 			simpleImportSpans,
@@ -478,7 +413,7 @@ func restore(
 		return emptyRowCount, errors.Wrapf(err, "importing %d ranges", numImportSpans)
 	}
 
-	return mu.res, nil
+	return progressTracker.res, nil
 }
 
 // loadBackupSQLDescs extracts the backup descriptors, the latest backup
@@ -1894,6 +1829,10 @@ func (r *restoreResumer) validateJobIsResumable(execConfig *sql.ExecutorConfig) 
 	// Validate that we aren't in the middle of an upgrade. To avoid unforseen
 	// issues, we want to avoid full cluster restores if it is possible that an
 	// upgrade is in progress. We also check this during planning.
+	//
+	// Note: If the cluster began in a mixed version state,
+	// the CreationClusterVersion may still be equal to binaryVersion,
+	// which means the cluster restore will proceed.
 	creationClusterVersion := r.job.Payload().CreationClusterVersion
 	binaryVersion := execConfig.Settings.Version.BinaryVersion()
 	isClusterRestore := details.DescriptorCoverage == tree.AllDescriptors
