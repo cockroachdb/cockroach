@@ -662,11 +662,11 @@ func (p *PhysicalPlan) AddRendering(
 	}
 
 	post := p.GetLastStagePost()
-	if len(post.RenderExprs) > 0 {
+	if len(post.RenderExprs) > 0 || len(post.OutputColumns) > 0 {
 		post = execinfrapb.PostProcessSpec{}
-		// The last stage contains render expressions. The new renders refer to
-		// the output of these, so we need to add another "no-op" stage to which
-		// to attach the new rendering.
+		// The last stage contains render expressions, or is projecting input columns.
+		// The new renders refer to the output of these in a particular order, so we
+		// need to add another "no-op" stage to which to attach the new rendering.
 		p.AddNoGroupingStage(
 			execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}},
 			post,
