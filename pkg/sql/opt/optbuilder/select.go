@@ -12,6 +12,7 @@ package optbuilder
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -58,16 +59,29 @@ func (b *Builder) buildDataSource(
 			telemetry.Inc(sqltelemetry.IndexHintSelectUseCounter)
 			indexFlags = source.IndexFlags
 		}
+
+		if source.As.Alias == "" {
+			// The alias is an empty string. If we are in a view or UDF
+			// definition, we are also expanding stars and for this we need
+			// to ensure all unnamed subqueries have a name. (unnamed
+			// subqueries are a CRDB extension, so the behavior in that case
+			// can be CRDB-specific.)
+			//
+			// We do not perform this name assignment in the common case
+			// (everything else besides CREATE VIEW/FUNCTION) so as to save
+			// the cost of the string alloc / name propagation.
+			if _, ok := source.Expr.(*tree.Subquery); ok && (b.insideFuncDef || b.insideViewDef) {
+				b.subqueryNameIdx++
+				// The structure of this name is analogous to the auto-generated
+				// names for anonymous scalar expressions.
+				source.As.Alias = tree.Name(fmt.Sprintf("?subquery%d?", b.subqueryNameIdx))
+			}
+		}
+
 		if source.As.Alias != "" {
 			inScope = inScope.push()
 			inScope.alias = &source.As
 			locking = locking.filter(source.As.Alias)
-		} else if b.insideFuncDef {
-			// TODO(96375): Allow non-aliased subexpressions in UDFs after ambiguous
-			// columns can be correctly identified.
-			if _, ok := source.Expr.(*tree.Subquery); ok {
-				panic(unimplemented.New("user-defined functions", "unaliased subquery inside a function definition"))
-			}
 		}
 
 		outScope = b.buildDataSource(source.Expr, indexFlags, locking, inScope)
