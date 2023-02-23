@@ -186,7 +186,10 @@ func NewBlobClientFactory(
 ) BlobClientFactory {
 	return func(ctx context.Context, dialing roachpb.NodeID) (BlobClient, error) {
 		localNodeID := localNodeIDContainer.Get()
-		if dialing == 0 || localNodeID == dialing {
+		if dialing == 0 {
+			dialing = localNodeID
+		}
+		if localNodeID == dialing {
 			return NewLocalClient(externalIODir)
 		}
 		conn, err := dialer.Dial(ctx, dialing, rpc.DefaultClass)
