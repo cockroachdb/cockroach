@@ -340,3 +340,21 @@ CREATE TABLE t71271(a INT, b INT, c INT, d INT, INDEX (c), INDEX (d))
 
 statement ok
 SELECT d FROM t71271 WHERE c = 3 AND d = 4
+
+# Regression test for #97090. We should not plan a zigzag join when the
+# direction of the equality columns doesn't match.
+statement ok
+CREATE TABLE t97090 (
+  c INT NOT NULL,
+  l INT NOT NULL,
+  r INT NOT NULL,
+  INDEX (l ASC, c DESC),
+  INDEX (r ASC, c ASC)
+);
+INSERT INTO t97090 VALUES (1, 1, -1), (2, 1, -2)
+
+# This query should return one row.
+query III
+SELECT * FROM t97090 WHERE l = 1 AND r = -1
+----
+1  1  -1
