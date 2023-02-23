@@ -103,6 +103,20 @@ func (u *URL) GetDatabase() string {
 // AddOptions adds key=value options to the URL.
 // Certain combinations are checked and an error is returned
 // if a combination is found invalid.
+//
+// Note that AddOptions supports the "main" client driver options like
+// "database", "host", "application_name" etc. Separately, certain
+// client drivers also support an extended "options" field with
+// additional key/value pairs, e.g. datestyle. To set those, use
+// either:
+//
+//	AddOptions(url.Values{"options":[]string{"--key=value"}})
+//
+// or
+//
+//	SetOption("options", "--key=value").
+//
+// See also ParseExtendedOptions() in the top level of this package.
 func (u *URL) AddOptions(opts url.Values) error {
 	return u.parseOptions(opts)
 }
@@ -112,6 +126,12 @@ func (u *URL) AddOptions(opts url.Values) error {
 // given option.
 // Certain combinations are checked and an error is returned
 // if a combination is found invalid.
+//
+// Note: this method only sets the "main" client-side parameters, such
+// as "database", "application_name" etc. To set the extended options
+// field, use SetOption("options", "--key=value") instead.
+//
+// See also ParseExtendedOptions() in the top level of this package.
 func (u *URL) SetOption(key, value string) error {
 	vals := []string{value}
 	opts := url.Values{key: vals}
@@ -129,7 +149,11 @@ func (u *URL) GetOption(opt string) string {
 	return getVal(u.extraOptions, opt)
 }
 
-// GetExtraOptions retrieves all of the extra options.
+// GetExtraOptions retrieves all of the extra options. These are all
+// top-level k=v client-side parameters. If the "options" extended
+// parameters are present, they will be returned as a _single_ pair
+// with the key equal to "options".
+// See also ParseExtendedOptions() at the top of this package.
 func (u *URL) GetExtraOptions() url.Values {
 	return u.extraOptions
 }
