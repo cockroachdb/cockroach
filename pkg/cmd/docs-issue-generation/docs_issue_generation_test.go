@@ -458,7 +458,7 @@ func TestGetUrlFromRef(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.ref, func(t *testing.T) {
-			result := getUrlFromRef(tc.ref)
+			result := getJiraIssueFromRef(tc.ref)
 			assert.Equal(t, tc.result, result)
 		})
 	}
