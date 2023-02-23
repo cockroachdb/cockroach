@@ -1788,6 +1788,10 @@ func (rpcCtx *Context) dialOptsNetwork(
 	}
 	dialOpts = append(dialOpts, grpc.WithContextDialer(dialerFunc))
 
+	// Don't retry on dial errors either, otherwise the onlyOnceDialer will get
+	// into a bad state for connection errors.
+	dialOpts = append(dialOpts, grpc.FailOnNonTempDialError(true))
+
 	return dialOpts, nil
 }
 
@@ -1904,7 +1908,7 @@ func (ood *onlyOnceDialer) dial(ctx context.Context, addr string) (net.Conn, err
 			// We set up onlyOnceDialer to avoid returning any errors that could look
 			// temporary to gRPC, and so we don't expect it to re-dial a connection
 			// twice (the first re-dial is supposed to surface the permanent error).
-			return nil, errors.NewAssertionErrorWithWrappedErrf(err, "gRPC connection unexpectedly re-dialed")
+			return nil, &notTemporaryError{errors.NewAssertionErrorWithWrappedErrf(err, "gRPC connection unexpectedly re-dialed")}
 		}
 		ood.mu.redialed = true
 		return nil, err
