@@ -1255,6 +1255,20 @@ func EmptyGenerator() eval.ValueGenerator {
 	return &arrayValueGenerator{array: tree.NewDArray(types.Any)}
 }
 
+// NullGenerator returns a new generator that returns a single row of nulls
+// corresponding to the types stored in the tuple typ.
+func NullGenerator(typ *types.T) eval.ValueGenerator {
+	if typ.Family() != types.TupleFamily {
+		return nil
+	}
+	arrs := make([]*tree.DArray, len(typ.TupleContents()))
+	for i := range typ.TupleContents() {
+		arrs[i] = &tree.DArray{}
+		arrs[i].Array = tree.Datums{tree.DNull}
+	}
+	return &multipleArrayValueGenerator{arrays: arrs}
+}
+
 // unaryValueGenerator supports the execution of crdb_internal.unary_table().
 type unaryValueGenerator struct {
 	done bool
