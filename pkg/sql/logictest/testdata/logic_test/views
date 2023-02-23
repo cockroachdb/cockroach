@@ -1185,7 +1185,7 @@ SHOW CREATE VIEW v12
 ----
 v12  CREATE VIEW public.v12 (
        k
-     ) AS (SELECT k FROM (SELECT 'a':::db2.public.view_type_new AS k))
+     ) AS (SELECT k FROM (SELECT 'a':::db2.public.view_type_new AS k) AS "?subquery1?")
 
 query T
 SELECT * FROM v12

@@ -430,7 +430,10 @@ SHOW CREATE VIEW v2
 ----
 v2  CREATE VIEW public.v2 (
       currval
-    ) AS SELECT currval FROM (SELECT currval('public.view_seq'::REGCLASS) FROM test.public.t3)
+    ) AS SELECT
+        currval
+      FROM
+        (SELECT currval('public.view_seq'::REGCLASS) FROM test.public.t3) AS "?subquery1?"
 
 # Union containing sequences.
 statement ok
