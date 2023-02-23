@@ -336,7 +336,7 @@ func (node *FuncParam) Format(ctx *FmtCtx) {
 		ctx.FormatNode(&node.Name)
 		ctx.WriteString(" ")
 	}
-	ctx.WriteString(node.Type.SQLString())
+	ctx.FormatTypeReference(node.Type)
 	if node.DefaultVal != nil {
 		ctx.WriteString(" DEFAULT ")
 		ctx.FormatNode(node.DefaultVal)

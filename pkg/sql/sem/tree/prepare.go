@@ -29,7 +29,7 @@ func (node *Prepare) Format(ctx *FmtCtx) {
 			if i > 0 {
 				ctx.WriteString(", ")
 			}
-			ctx.WriteString(t.SQLString())
+			ctx.FormatTypeReference(t)
 		}
 		ctx.WriteRune(')')
 	}

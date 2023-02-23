@@ -247,24 +247,7 @@ func (u UserDefinedTypeName) Basename() string {
 
 // FQName returns the fully qualified name.
 func (u UserDefinedTypeName) FQName() string {
-	var sb strings.Builder
-	// Even though cross-database type references are disabled, we still format
-	// the qualified name with the catalog. Consider the case where the current
-	// database is db1, and a statement like
-	// `CREATE VIEW db2.sc.v AS SELECT 'a'::db2.sc.typ`
-	// is executed. When parsing the inner view query, it's important to include
-	// the explicit catalog name, so the correct (non-cross-database) type is
-	// resolved.
-	if u.Catalog != "" {
-		sb.WriteString(u.Catalog)
-		sb.WriteString(".")
-	}
-	if u.ExplicitSchema {
-		sb.WriteString(u.Schema)
-		sb.WriteString(".")
-	}
-	sb.WriteString(u.Name)
-	return sb.String()
+	return FormatTypeName(u)
 }
 
 // Convenience list of pre-constructed types. Caller code can use any of these
@@ -1938,6 +1921,14 @@ func (t *T) SQLString() string {
 		return t.TypeMeta.Name.FQName()
 	}
 	return strings.ToUpper(t.Name())
+}
+
+// FormatTypeName is an injected dependency from tree to properly format a
+// type name. The logic for proper formatting lives in the tree package.
+var FormatTypeName = fallbackFormatTypeName
+
+func fallbackFormatTypeName(UserDefinedTypeName) string {
+	return "formatting logic has not been injected from tree"
 }
 
 // Equivalent returns true if this type is "equivalent" to the given type.

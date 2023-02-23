@@ -119,7 +119,7 @@ PreCommitPhase stage 2 of 2 with 9 MutationType ops
       RunningStatus: PostCommitPhase stage 1 of 1 with 1 MutationType op pending
       Statements:
       - statement: ALTER TABLE defaultdb.foo ADD COLUMN j defaultdb.footyp
-        redactedstatement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› defaultdb.footyp
+        redactedstatement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› ‹defaultdb›.‹footyp›
         statementtag: ALTER TABLE
 PostCommitPhase stage 1 of 1 with 5 MutationType ops
   transitions:
