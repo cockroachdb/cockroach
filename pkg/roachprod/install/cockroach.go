@@ -826,15 +826,26 @@ func (c *SyncedCluster) createFixedBackupSchedule(
 	createScheduleCmd := fmt.Sprintf(`CREATE SCHEDULE IF NOT EXISTS test_only_backup FOR BACKUP INTO '%s' %s`,
 		collectionPath, scheduleArgs)
 
-	node := Node(1)
+	node := c.Nodes[0]
 	binary := cockroachNodeBinary(c, node)
 	url := c.NodeURL("localhost", c.NodePort(node), "" /* tenantName */)
 	fullCmd := fmt.Sprintf(`COCKROACH_CONNECT_TIMEOUT=0 %s sql --url %s -e %q`,
 		binary, url, createScheduleCmd)
-	// Instead of using `c.ExecSQL()`, use the more flexible c.Run(), which allows us to
+	// Instead of using `c.ExecSQL()`, use the more flexible c.newSession(), which allows us to
 	// 1) prefix the schedule backup cmd with COCKROACH_CONNECT_TIMEOUT=0.
-	// 2) run the command against the first node on the cluster.
-	return c.Run(ctx, l, l.Stdout, l.Stderr, Nodes{node}, "init scheduled backup", fullCmd)
+	// 2) run the command against the first node in the cluster target.
+	sess := c.newSession(l, node, fullCmd, withDebugName("init-backup-schedule"))
+	defer sess.Close()
+
+	out, err := sess.CombinedOutput(ctx)
+	if err != nil {
+		return errors.Wrapf(err, "~ %s\n%s", fullCmd, out)
+	}
+
+	if out := strings.TrimSpace(string(out)); out != "" {
+		l.Printf(out)
+	}
+	return nil
 }
 
 // getEnvVars returns all COCKROACH_* environment variables, in the form
