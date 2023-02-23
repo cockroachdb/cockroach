@@ -24,6 +24,8 @@ import (
 	"strconv"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/errors"
 	"github.com/xdg-go/pbkdf2"
 	"github.com/xdg-go/scram"
@@ -344,7 +346,11 @@ func HashPassword(
 			}
 			defer alloc()
 		}
-		return bcrypt.GenerateFromPassword(AppendEmptySha256(password), cost)
+		ret, err := bcrypt.GenerateFromPassword(AppendEmptySha256(password), cost)
+		if errors.Is(err, bcrypt.ErrPasswordTooLong) {
+			err = pgerror.Wrap(err, pgcode.InvalidPassword, "")
+		}
+		return ret, err
 
 	case HashSCRAMSHA256:
 		return hashPasswordUsingSCRAM(ctx, cost, password, hashSem)
