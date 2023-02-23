@@ -1017,7 +1017,11 @@ func makeTenantSQLServerArgs(
 		},
 		ds,
 	)
-	db := kv.NewDB(baseCfg.AmbientCtx, tcsFactory, clock, stopper)
+
+	dbCtx := kv.DefaultDBContext(stopper)
+	dbCtx.NodeID = instanceIDContainer
+	db := kv.NewDBWithContext(baseCfg.AmbientCtx, tcsFactory, clock, dbCtx)
+
 	rangeFeedKnobs, _ := baseCfg.TestingKnobs.RangeFeed.(*rangefeed.TestingKnobs)
 	rangeFeedFactory, err := rangefeed.NewFactory(stopper, db, st, rangeFeedKnobs)
 	if err != nil {
