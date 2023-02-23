@@ -82,11 +82,12 @@ const (
 // See 'generateStartCmd' which sets 'ENV_VARS' for the systemd startup script (start.sh).
 func DefaultEnvVars() []string {
 	return []string{
-		// Allow upgrading a stable release data-dir to a dev version.
-		// N.B. many roachtests which perform upgrade scenarios require this env. var after changes in [1]; otherwise,
-		// the tests will fail even on release branches when attempting to upgrade previous (stable) release to an alpha.
-		// [1] https://github.com/cockroachdb/cockroach/pull/87468
-		"COCKROACH_UPGRADE_TO_DEV_VERSION=true",
+		// We set the following environment variable to pretend that the
+		// current development build is the next binary release (which
+		// disables version offsetting). In upgrade tests, we're interested
+		// in testing the upgrade logic that users would actually run when
+		// they upgrade from one release to another.
+		"COCKROACH_TESTING_FORCE_RELEASE_BRANCH=true",
 	}
 }
 
