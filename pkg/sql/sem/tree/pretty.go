@@ -177,9 +177,12 @@ func (p *PrettyCfg) Doc(f NodeFormatter) pretty.Doc {
 }
 
 func (p *PrettyCfg) docAsString(f NodeFormatter) pretty.Doc {
-	const prettyFlags = FmtShowPasswords | FmtParsable
-	txt := AsStringWithFlags(f, prettyFlags)
+	txt := AsStringWithFlags(f, p.fmtFlags())
 	return pretty.Text(strings.TrimSpace(txt))
+}
+
+func (p *PrettyCfg) fmtFlags() FmtFlags {
+	return FmtShowPasswords | FmtParsable
 }
 
 func (p *PrettyCfg) nestUnder(a, b pretty.Doc) pretty.Doc {
@@ -1012,7 +1015,7 @@ func (node *NameList) doc(p *PrettyCfg) pretty.Doc {
 }
 
 func (node *CastExpr) doc(p *PrettyCfg) pretty.Doc {
-	typ := pretty.Text(node.Type.SQLString())
+	typ := p.formatType(node.Type)
 
 	switch node.SyntaxMode {
 	case CastPrepend:
@@ -1880,7 +1883,12 @@ func (node *ColumnTableDef) docRow(p *PrettyCfg) pretty.TableRow {
 	// ColumnTableDef node type will not be specified if it represents a CREATE
 	// TABLE ... AS query.
 	if node.Type != nil {
-		clauses = append(clauses, pretty.Text(node.columnTypeString()))
+		clauses = append(clauses, func() pretty.Doc {
+			if name, replaced := node.replacedSerialTypeName(); replaced {
+				return pretty.Text(name)
+			}
+			return p.formatType(node.Type)
+		}())
 	}
 
 	// Compute expression (for computed columns).
@@ -2049,6 +2057,12 @@ func (node *ColumnTableDef) docRow(p *PrettyCfg) pretty.TableRow {
 	}
 
 	return tblRow
+}
+
+func (p *PrettyCfg) formatType(typ ResolvableTypeReference) pretty.Doc {
+	ctx := NewFmtCtx(p.fmtFlags())
+	ctx.FormatTypeReference(typ)
+	return pretty.Text(strings.TrimSpace(ctx.String()))
 }
 
 func (node *CheckConstraintTableDef) doc(p *PrettyCfg) pretty.Doc {
@@ -2320,7 +2334,7 @@ func (node *Prepare) docTable(p *PrettyCfg) []pretty.TableRow {
 	if len(node.Types) > 0 {
 		typs := make([]pretty.Doc, len(node.Types))
 		for i, t := range node.Types {
-			typs[i] = pretty.Text(t.SQLString())
+			typs[i] = p.formatType(t)
 		}
 		name = pretty.ConcatSpace(name,
 			p.bracket("(", p.commaSeparated(typs...), ")"),
@@ -2428,7 +2442,7 @@ func (p *PrettyCfg) jsonCast(sv *StrVal, op string, typ *types.T) pretty.Doc {
 	return pretty.Fold(pretty.Concat,
 		p.jsonString(sv.RawString()),
 		pretty.Text(op),
-		pretty.Text(typ.SQLString()),
+		p.formatType(typ),
 	)
 }
 

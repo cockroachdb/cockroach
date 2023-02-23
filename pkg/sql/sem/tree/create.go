@@ -721,7 +721,7 @@ func (node *ColumnTableDef) Format(ctx *FmtCtx) {
 	// TABLE ... AS query.
 	if node.Type != nil {
 		ctx.WriteByte(' ')
-		ctx.WriteString(node.columnTypeString())
+		node.formatColumnType(ctx)
 	}
 
 	if node.Nullable.Nullability != SilentNull && node.Nullable.ConstraintName != "" {
@@ -854,7 +854,15 @@ func (node *ColumnTableDef) Format(ctx *FmtCtx) {
 	}
 }
 
-func (node *ColumnTableDef) columnTypeString() string {
+func (node *ColumnTableDef) formatColumnType(ctx *FmtCtx) {
+	if replaced, ok := node.replacedSerialTypeName(); ok {
+		ctx.WriteString(replaced)
+	} else {
+		ctx.FormatTypeReference(node.Type)
+	}
+}
+
+func (node *ColumnTableDef) replacedSerialTypeName() (string, bool) {
 	if node.IsSerial {
 		// Map INT types to SERIAL keyword.
 		// TODO (rohany): This should be pushed until type resolution occurs.
@@ -862,13 +870,14 @@ func (node *ColumnTableDef) columnTypeString() string {
 		//  so we handle those cases here.
 		switch MustBeStaticallyKnownType(node.Type).Width() {
 		case 16:
-			return "SERIAL2"
+			return "SERIAL2", true
 		case 32:
-			return "SERIAL4"
+			return "SERIAL4", true
+		default:
+			return "SERIAL8", true
 		}
-		return "SERIAL8"
 	}
-	return node.Type.SQLString()
+	return "", false
 }
 
 // String implements the fmt.Stringer interface.

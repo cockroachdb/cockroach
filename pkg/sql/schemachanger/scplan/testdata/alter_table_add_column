@@ -27,7 +27,7 @@ StatementPhase stage 1 of 1 with 6 MutationType ops
       EventBase:
         Authorization:
           UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› defaultdb.footyp
+        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› ‹defaultdb›.‹footyp›
         StatementTag: ALTER TABLE
         TargetMetadata:
           SourceElementID: 1
@@ -84,7 +84,7 @@ PreCommitPhase stage 1 of 1 with 4 MutationType ops
       RunningStatus: PostCommitPhase stage 1 of 1 with 1 MutationType op pending
       Statements:
       - statement: ALTER TABLE defaultdb.foo ADD COLUMN j defaultdb.footyp
-        redactedstatement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› defaultdb.footyp
+        redactedstatement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› ‹defaultdb›.‹footyp›
         statementtag: ALTER TABLE
 PostCommitPhase stage 1 of 1 with 5 MutationType ops
   transitions:
@@ -111,7 +111,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 6 MutationType ops
       EventBase:
         Authorization:
           UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› defaultdb.footyp
+        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› ‹defaultdb›.‹footyp›
         StatementTag: ALTER TABLE
         TargetMetadata:
           SourceElementID: 1
