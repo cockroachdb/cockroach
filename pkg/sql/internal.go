@@ -210,23 +210,7 @@ func (ie *InternalExecutor) initConnEx(
 		sync:          syncCallback,
 	}
 
-	// When the connEx is serving an internal executor, it can inherit the
-	// application name from an outer session. This happens e.g. during ::regproc
-	// casts and built-in functions that use SQL internally. In that case, we do
-	// not want to record statistics against the outer application name directly;
-	// instead we want to use a separate bucket. However we will still want to
-	// have separate buckets for different applications so that we can measure
-	// their respective "pressure" on internal queries. Hence the choice here to
-	// add the delegate prefix to the current app name.
-	var appStatsBucketName string
-	if !strings.HasPrefix(sd.ApplicationName, catconstants.InternalAppNamePrefix) {
-		appStatsBucketName = catconstants.DelegatedAppNamePrefix + sd.ApplicationName
-	} else {
-		// If this is already an "internal app", don't put more prefix.
-		appStatsBucketName = sd.ApplicationName
-	}
-	applicationStats := ie.s.sqlStats.GetApplicationStats(appStatsBucketName, true /* internal */)
-
+	applicationStats := ie.s.sqlStats.GetApplicationStats(sd.ApplicationName, true /* internal */)
 	sds := sessiondata.NewStack(sd)
 	sdMutIterator := ie.s.makeSessionDataMutatorIterator(sds, nil /* sessionDefaults */)
 	var ex *connExecutor
@@ -806,8 +790,19 @@ func (ie *InternalExecutor) execInternal(
 	if sd.User().Undefined() {
 		return nil, errors.AssertionFailedf("no user specified for internal query")
 	}
-	if sd.ApplicationName == "" {
+	// When the connEx is serving an internal executor, it can inherit the
+	// application name from an outer session. This happens e.g. during ::regproc
+	// casts and built-in functions that use SQL internally. In that case, we do
+	// not want to record statistics against the outer application name directly;
+	// instead we want to use a separate bucket. However we will still want to
+	// have separate buckets for different applications so that we can measure
+	// their respective "pressure" on internal queries. Hence the choice here to
+	// add the delegate prefix to the current app name.
+	if sd.ApplicationName == "" || sd.ApplicationName == catconstants.InternalAppNamePrefix {
 		sd.ApplicationName = catconstants.InternalAppNamePrefix + "-" + opName
+	} else if !strings.HasPrefix(sd.ApplicationName, catconstants.InternalAppNamePrefix) {
+		// If this is already an "internal app", don't put more prefix.
+		sd.ApplicationName = catconstants.DelegatedAppNamePrefix + sd.ApplicationName
 	}
 	// If the caller has injected a mapping to temp schemas, install it, and
 	// leave it installed for the rest of the transaction.
@@ -1344,7 +1339,7 @@ func (ief *InternalDB) newInternalExecutorWithTxn(
 	// than the actual user, a security boundary should be added to the error
 	// handling of internal executor.
 	if sd == nil {
-		sd = NewFakeSessionData(sv)
+		sd = NewFakeSessionData(sv, "" /* opName */)
 		sd.UserProto = username.RootUserName().EncodeProto()
 	}
 
