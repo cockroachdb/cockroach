@@ -18,7 +18,7 @@ $$
   SELECT * FROM (SELECT a FROM (SELECT * FROM t_onecol) AS foo) AS bar;
 $$ LANGUAGE SQL;
 
-statement error pq: unimplemented: unaliased subquery inside a function definition
+statement ok
 CREATE FUNCTION f_subquery_unaliased() RETURNS INT AS
 $$
   SELECT * FROM (SELECT a FROM (SELECT * FROM t_onecol));
@@ -68,8 +68,8 @@ $$
   SELECT word FROM (SELECT (pg_get_keywords()).* ORDER BY word LIMIT 1) AS foo;
 $$ LANGUAGE SQL;
 
-statement error pq: unimplemented: unaliased subquery inside a function definition
-CREATE FUNCTION f_ambiguous() RETURNS INT AS
+statement ok
+CREATE FUNCTION f_anon_subqueries() RETURNS INT AS
 $$
   SELECT * FROM (SELECT a FROM t_onecol) JOIN (SELECT a FROM t_twocol) ON true;
   SELECT 1;
@@ -88,15 +88,18 @@ FROM pg_catalog.pg_proc WHERE proname LIKE 'f\_%' ORDER BY oid;
 ----
 100108  f_unqualified_onecol      SELECT t_onecol.a FROM test.public.t_onecol;
 100109  f_subquery                SELECT bar.a FROM (SELECT a FROM (SELECT t_onecol.a FROM test.public.t_onecol) AS foo) AS bar;
-100110  f_unqualified_twocol      SELECT t_twocol.a, t_twocol.b FROM test.public.t_twocol;
-100111  f_allcolsel               SELECT t_twocol.a, t_twocol.b FROM test.public.t_twocol;
-100112  f_allcolsel_alias         SELECT t1.a, t1.b FROM test.public.t_twocol AS t1, test.public.t_twocol AS t2 WHERE t1.a = t2.a;
-100113  f_tuplestar               SELECT t_twocol.a, t_twocol.b FROM test.public.t_twocol;
-100114  f_unqualified_multicol    SELECT t_onecol.a, a FROM test.public.t_onecol;
+100110  f_subquery_unaliased      SELECT "?subquery1?".a FROM (SELECT a FROM (SELECT t_onecol.a FROM test.public.t_onecol) AS "?subquery2?") AS "?subquery1?";
+100111  f_unqualified_twocol      SELECT t_twocol.a, t_twocol.b FROM test.public.t_twocol;
+100112  f_allcolsel               SELECT t_twocol.a, t_twocol.b FROM test.public.t_twocol;
+100113  f_allcolsel_alias         SELECT t1.a, t1.b FROM test.public.t_twocol AS t1, test.public.t_twocol AS t2 WHERE t1.a = t2.a;
+100114  f_tuplestar               SELECT t_twocol.a, t_twocol.b FROM test.public.t_twocol;
+100115  f_unqualified_multicol    SELECT t_onecol.a, a FROM test.public.t_onecol;
                                   SELECT 1;
-100115  f_unqualified_doublestar  SELECT t_onecol.a, t_onecol.a FROM test.public.t_onecol;
+100116  f_unqualified_doublestar  SELECT t_onecol.a, t_onecol.a FROM test.public.t_onecol;
                                   SELECT 1;
-100116  f_exprstar                SELECT word FROM (SELECT (pg_get_keywords()).word, (pg_get_keywords()).catcode, (pg_get_keywords()).catdesc ORDER BY word LIMIT 1) AS foo;
+100117  f_exprstar                SELECT word FROM (SELECT (pg_get_keywords()).word, (pg_get_keywords()).catcode, (pg_get_keywords()).catdesc ORDER BY word LIMIT 1) AS foo;
+100118  f_anon_subqueries         SELECT "?subquery1?".a, "?subquery2?".a FROM (SELECT a FROM test.public.t_onecol) AS "?subquery1?" JOIN (SELECT a FROM test.public.t_twocol) AS "?subquery2?" ON true;
+                                  SELECT 1;
 
 
 query TT
@@ -211,7 +214,10 @@ statement ok
 DROP FUNCTION f_tuplestar;
 DROP FUNCTION f_allcolsel_alias;
 
-# Dropping a column using CASCADE is ok.
+# Dropping a column using CASCADE is ok,
+# although the legacy schema changer has troubles with it,
+# see: https://github.com/cockroachdb/cockroach/issues/97546
+skipif config local-legacy-schema-changer
 statement ok
 ALTER TABLE t_twocol DROP COLUMN b CASCADE;
 
@@ -219,8 +225,20 @@ statement ok
 DROP TABLE t_onecol CASCADE;
 
 # The only remaining function should not reference the tables.
+# NB: remove the skipif directive when #97546 is resolved.
+skipif config local-legacy-schema-changer
 query TTT
 SELECT oid, proname, prosrc
 FROM pg_catalog.pg_proc WHERE proname LIKE 'f\_%' ORDER BY oid;
 ----
-100116  f_exprstar                SELECT word FROM (SELECT (pg_get_keywords()).word, (pg_get_keywords()).catcode, (pg_get_keywords()).catdesc ORDER BY word LIMIT 1) AS foo;
+100117  f_exprstar  SELECT word FROM (SELECT (pg_get_keywords()).word, (pg_get_keywords()).catcode, (pg_get_keywords()).catdesc ORDER BY word LIMIT 1) AS foo;
+
+# Remove this when #97546 is resolved.
+onlyif config local-legacy-schema-changer
+query TTT
+SELECT oid, proname, prosrc
+FROM pg_catalog.pg_proc WHERE proname LIKE 'f\_%' ORDER BY oid;
+----
+100111  f_unqualified_twocol  SELECT t_twocol.a, t_twocol.b FROM test.public.t_twocol;
+100112  f_allcolsel           SELECT t_twocol.a, t_twocol.b FROM test.public.t_twocol;
+100117  f_exprstar            SELECT word FROM (SELECT (pg_get_keywords()).word, (pg_get_keywords()).catcode, (pg_get_keywords()).catdesc ORDER BY word LIMIT 1) AS foo;
