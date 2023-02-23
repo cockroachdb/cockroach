@@ -412,10 +412,14 @@ func (c *CustomFuncs) InlineConstVar(f memo.FiltersExpr) memo.FiltersExpr {
 //  2. It has a single statement.
 //  3. Its arguments are non-volatile expressions.
 //  4. It is not a set-returning function.
+//  5. It is not a record-returning function.
 //
 // UDFs with mutations (INSERT, UPDATE, UPSERT, DELETE) cannot be inlined, but
 // we do not need an explicit check for this because immutable UDFs cannot
 // contain mutations.
+//
+// We cannot inline record-returning functions, because subqueries can only
+// return a single column.
 //
 // TODO(mgartner): We may be able to loosen (1) and (3). Subqueries are always
 // evaluated just once, so by converting a UDF to a subquery we effectively make
@@ -428,8 +432,11 @@ func (c *CustomFuncs) InlineConstVar(f memo.FiltersExpr) memo.FiltersExpr {
 // strict UDF that is not called when an argument is NULL. This presents a
 // challenge because we cannot wrap a set-returning function in a CASE
 // expression, like we do for strict, non-set-returning functions.
+//
+// TODO(harding): We could potentially loosen (5), since only record-returning
+// UDFs used as data sources return multiple columns.
 func (c *CustomFuncs) IsInlinableUDF(args memo.ScalarListExpr, udfp *memo.UDFPrivate) bool {
-	if udfp.Volatility == volatility.Volatile || len(udfp.Body) != 1 || udfp.SetReturning {
+	if udfp.Volatility == volatility.Volatile || len(udfp.Body) != 1 || udfp.SetReturning || udfp.MultiColOutput {
 		return false
 	}
 	for i := range args {
