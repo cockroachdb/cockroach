@@ -11,10 +11,12 @@
 package scbuildstmt
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
@@ -43,11 +45,36 @@ func alterTableDropConstraint(
 	// Dropping UNIQUE constraint: error out as not implemented.
 	droppingUniqueConstraintNotImplemented(constraintElems, t)
 
+	_, _, constraintNameElem := scpb.FindConstraintWithoutIndexName(constraintElems)
+	constraintID := constraintNameElem.ConstraintID
 	constraintElems.ForEachElementStatus(func(
 		_ scpb.Status, _ scpb.TargetStatus, e scpb.Element,
 	) {
 		b.Drop(e)
 	})
+
+	// UniqueWithoutIndex constraints can serve inbound FKs, and hence we might
+	// need to drop those dependent FKs if cascade.
+	maybeDropAdditionallyForUniqueWithoutIndexConstraint(b, tbl.TableID, constraintID,
+		constraintNameElem.Name, t.DropBehavior)
+}
+
+func maybeDropAdditionallyForUniqueWithoutIndexConstraint(
+	b BuildCtx,
+	tableID catid.DescID,
+	maybeUWIConstraintID catid.ConstraintID,
+	constraintName string,
+	behavior tree.DropBehavior,
+) {
+	uwiElem := retrieveUniqueWithoutIndexConstraintElem(b, tableID, maybeUWIConstraintID)
+	if uwiElem == nil {
+		return
+	}
+	maybeDropDependentFKConstraints(b, tableID, uwiElem.ConstraintID, constraintName, behavior,
+		func(fkReferencedColIDs []catid.ColumnID) bool {
+			return uwiElem.Predicate == nil &&
+				descpb.ColumnIDs(uwiElem.ColumnIDs).PermutationOf(fkReferencedColIDs)
+		})
 }
 
 func fallBackIfDroppingPrimaryKey(

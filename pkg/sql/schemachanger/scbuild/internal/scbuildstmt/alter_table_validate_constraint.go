@@ -80,6 +80,19 @@ func retrieveUniqueWithoutIndexConstraintUnvalidatedElem(
 	return UniqueWithoutIndexConstraintUnvalidatedElem
 }
 
+func retrieveUniqueWithoutIndexConstraintElem(
+	b BuildCtx, tableID catid.DescID, constraintID catid.ConstraintID,
+) (UniqueWithoutIndexConstraintElem *scpb.UniqueWithoutIndexConstraint) {
+	scpb.ForEachUniqueWithoutIndexConstraint(b.QueryByID(tableID), func(
+		current scpb.Status, target scpb.TargetStatus, e *scpb.UniqueWithoutIndexConstraint,
+	) {
+		if e.ConstraintID == constraintID {
+			UniqueWithoutIndexConstraintElem = e
+		}
+	})
+	return UniqueWithoutIndexConstraintElem
+}
+
 func retrieveForeignKeyConstraintUnvalidatedElem(
 	b BuildCtx, tableID catid.DescID, constraintID catid.ConstraintID,
 ) (ForeignKeyConstraintUnvalidatedElem *scpb.ForeignKeyConstraintUnvalidated) {
