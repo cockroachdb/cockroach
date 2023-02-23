@@ -18,17 +18,20 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
 )
 
@@ -161,4 +164,40 @@ func TestCancelQueryOtherNode(t *testing.T) {
 	// Check this after the previous goroutines finish to avoid a data race.
 	require.Truef(t, gotSecondConn, "expected cancel request to arrive on a different connection")
 
+}
+
+// TestCancelCopyTo uses the pgwire-level query cancellation protocol provided
+// by pgx to make sure that canceling COPY TO works correctly.
+func TestCancelCopyTo(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	skip.UnderStress(t, "flaky")
+
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	pgURL, cleanup := sqlutils.PGUrl(
+		t,
+		s.ServingSQLAddr(),
+		"TestCancelCopyTo",
+		url.User(username.RootUser),
+	)
+	defer cleanup()
+
+	conn, err := pgx.Connect(ctx, pgURL.String())
+	require.NoError(t, err)
+
+	g := ctxgroup.WithContext(ctx)
+	g.GoCtx(func(ctx context.Context) error {
+		_, err = conn.Exec(ctx, "COPY (SELECT pg_sleep(1) FROM ROWS FROM (generate_series(1, 60)) AS i) TO STDOUT")
+		return err
+	})
+
+	time.Sleep(1 * time.Second)
+	err = conn.PgConn().CancelRequest(ctx)
+	require.NoError(t, err)
+
+	err = g.Wait()
+	require.ErrorContains(t, err, "query execution canceled")
 }

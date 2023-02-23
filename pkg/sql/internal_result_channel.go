@@ -15,6 +15,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/errors"
 )
 
@@ -111,16 +112,22 @@ func newSyncIEResultChannel() *ieResultChannel {
 func (i *ieResultChannel) firstResult(
 	ctx context.Context,
 ) (_ ieIteratorResult, done bool, err error) {
-	// errors.Wrap returns nil if ctx.Err() is nil.
+	// errors.Wrap returns nil if err is nil.
 	const wrapMsg = "failed to read query result"
+	getCtxErr := func(ctx context.Context) error {
+		if ctx.Err() == nil {
+			return nil
+		}
+		return cancelchecker.QueryCanceledError
+	}
 	select {
 	case <-ctx.Done():
-		return ieIteratorResult{}, true, errors.Wrap(ctx.Err(), wrapMsg)
+		return ieIteratorResult{}, true, errors.Wrap(getCtxErr(ctx), wrapMsg)
 	case <-i.doneCh:
-		return ieIteratorResult{}, true, errors.Wrap(ctx.Err(), wrapMsg)
+		return ieIteratorResult{}, true, errors.Wrap(getCtxErr(ctx), wrapMsg)
 	case res, ok := <-i.dataCh:
 		if !ok {
-			return ieIteratorResult{}, true, errors.Wrap(ctx.Err(), wrapMsg)
+			return ieIteratorResult{}, true, errors.Wrap(getCtxErr(ctx), wrapMsg)
 		}
 		return res, false, nil
 	}
