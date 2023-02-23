@@ -36,7 +36,7 @@ type tenantValues struct {
 }
 
 type showTenantNodeCapability struct {
-	name  string
+	name  tenantcapabilitiespb.TenantCapabilityName
 	value string
 }
 
@@ -266,7 +266,7 @@ func (n *showTenantNode) Values() tree.Datums {
 	if n.withCapabilities {
 		capability := n.capability
 		result = append(result,
-			tree.NewDString(capability.name),
+			tree.NewDString(capability.name.String()),
 			tree.NewDString(capability.value),
 		)
 	}
