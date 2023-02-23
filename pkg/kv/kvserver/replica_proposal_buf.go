@@ -1192,6 +1192,9 @@ func (rp *replicaProposer) registerProposalLocked(p *ProposalData) {
 	if buildutil.CrdbTestBuild && (p.ec.repl == nil || p.ec.g == nil) {
 		log.Fatalf(rp.store.AnnotateCtx(context.Background()), "finished proposal inserted into map: %+v", p)
 	}
+	if prev := rp.mu.proposals[p.idKey]; prev != nil && prev != p {
+		log.Fatalf(rp.store.AnnotateCtx(context.Background()), "two proposals under same ID:\n%+v,\n%+v", prev, p)
+	}
 	rp.mu.proposals[p.idKey] = p
 }
 
