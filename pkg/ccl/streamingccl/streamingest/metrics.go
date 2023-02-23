@@ -104,12 +104,12 @@ var (
 		Measurement: "Resolved Spans",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaFrontierLagSeconds = metric.Metadata{
-		Name: "replication.frontier_lag_seconds",
+	metaFrontierLagNanos = metric.Metadata{
+		Name: "replication.frontier_lag_nanos",
 		Help: "Time between the wall clock and replicated time of the replication stream. " +
 			"This metric tracks how far behind the replication stream is relative to now",
-		Measurement: "Seconds",
-		Unit:        metric.Unit_SECONDS,
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
 	}
 	metaJobProgressUpdates = metric.Metadata{
 		Name:        "replication.job_progress_updates",
@@ -146,7 +146,7 @@ type Metrics struct {
 	LatestDataCheckpointSpan    *metric.Gauge
 	DataCheckpointSpanCount     *metric.Gauge
 	FrontierCheckpointSpanCount *metric.Gauge
-	FrontierLagSeconds          *metric.GaugeFloat64
+	FrontierLagNanos            *metric.Gauge
 	ReplicationCutoverProgress  *metric.Gauge
 }
 
@@ -188,7 +188,7 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 		LatestDataCheckpointSpan:    metric.NewGauge(metaLatestDataCheckpointSpan),
 		DataCheckpointSpanCount:     metric.NewGauge(metaDataCheckpointSpanCount),
 		FrontierCheckpointSpanCount: metric.NewGauge(metaFrontierCheckpointSpanCount),
-		FrontierLagSeconds:          metric.NewGaugeFloat64(metaFrontierLagSeconds),
+		FrontierLagNanos:            metric.NewGauge(metaFrontierLagNanos),
 		ReplicationCutoverProgress:  metric.NewGauge(metaReplicationCutoverProgress),
 	}
 	return m
