@@ -49,10 +49,12 @@ import (
 func (b *Builder) buildDataSource(
 	texpr tree.TableExpr, indexFlags *tree.IndexFlags, locking lockingSpec, inScope *scope,
 ) (outScope *scope) {
-	defer func(prevAtRoot bool) {
+	defer func(prevAtRoot bool, prevInsideDataSource bool) {
 		inScope.atRoot = prevAtRoot
-	}(inScope.atRoot)
+		b.insideDataSource = prevInsideDataSource
+	}(inScope.atRoot, b.insideDataSource)
 	inScope.atRoot = false
+	b.insideDataSource = true
 	// NB: The case statements are sorted lexicographically.
 	switch source := (texpr).(type) {
 	case *tree.AliasedTableExpr:

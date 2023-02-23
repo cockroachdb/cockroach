@@ -196,7 +196,6 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 			),
 		)
 	}
-
 	// Override the function body so that references are fully qualified.
 	for i, option := range cf.Options {
 		if _, ok := option.(tree.FunctionBodyStr); ok {

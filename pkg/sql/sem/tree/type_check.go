@@ -1082,12 +1082,17 @@ func (expr *FuncExpr) TypeCheck(
 		return nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue, "%s()", def.Name)
 	}
 
+	var hasUDFOverload bool
 	var calledOnNullInputFns, notCalledOnNullInputFns intsets.Fast
 	for _, idx := range s.overloadIdxs {
 		if def.Overloads[idx].CalledOnNullInput {
 			calledOnNullInputFns.Add(int(idx))
 		} else {
 			notCalledOnNullInputFns.Add(int(idx))
+		}
+		// TODO(harding): Check if this is a record-returning UDF instead.
+		if def.Overloads[idx].IsUDF {
+			hasUDFOverload = true
 		}
 	}
 
@@ -1134,8 +1139,10 @@ func (expr *FuncExpr) TypeCheck(
 	// Return NULL if at least one overload is possible, no overload accepts
 	// NULL arguments, the function isn't a generator or aggregate builtin, and
 	// NULL is given as an argument.
+	// TODO(harding): We want to resolve UDFs, but probably want to leave other use
+	// cases alone.
 	if len(s.overloadIdxs) > 0 && calledOnNullInputFns.Len() == 0 && funcCls != GeneratorClass &&
-		funcCls != AggregateClass {
+		funcCls != AggregateClass && !hasUDFOverload {
 		for _, expr := range s.typedExprs {
 			if expr.ResolvedType().Family() == types.UnknownFamily {
 				return DNull, nil

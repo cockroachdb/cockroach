@@ -188,7 +188,11 @@ func (ps *projectSetProcessor) nextInputRow() (
 				return nil, nil, err
 			}
 			if gen == nil {
-				gen = builtins.EmptyGenerator()
+				if t, ok := fn.(*tree.RoutineExpr); ok && t.MultiColOutput && !t.Generator {
+					gen = builtins.NullGenerator(t.ResolvedType())
+				} else {
+					gen = builtins.EmptyGenerator()
+				}
 			}
 			if aliasSetter, ok := gen.(eval.AliasAwareValueGenerator); ok {
 				if err := aliasSetter.SetAlias(ps.spec.GeneratedColumns, ps.spec.GeneratedColumnLabels); err != nil {
