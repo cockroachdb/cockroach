@@ -115,8 +115,14 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 				// entry is not superseded (i.e. we don't have a reproposal at a higher
 				// MaxLeaseIndex in the log).
 				//
-				// This implies that any additional copies of the command (which may be present
-				// in the log ahead of the current entry) will also fail.
+				// Commonly the error is an inability to repropose the command due to
+				// the closed timestamp having advanced past the write timestamp at
+				// which the command was originally evaluated, so this path is hit
+				// in practice.
+				//
+				// An error here implies that any additional copies of the command
+				// (which may be present in the log ahead of the current entry) will
+				// also fail.
 				//
 				// It is thus safe to signal the error back to the client, which is also
 				// the only sensible choice at this point.
@@ -126,7 +132,7 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 				// retrieveLocalProposals for removing from the map. So we're not leaking
 				// a map entry here, which we assert against below (and which has coverage,
 				// at time of writing, through TestReplicaReproposalWithNewLeaseIndexError).
-				log.Warningf(ctx, "failed to repropose with new lease index: %s", pErr)
+				log.Infof(ctx, "failed to repropose %s at idx %d with new lease index: %s", cmd.ID, cmd.Index(), pErr)
 				cmd.response.Err = pErr
 
 				r.mu.RLock()
