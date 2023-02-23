@@ -189,6 +189,13 @@ func TestExecBuild_explain_gist(
 	runExecBuildLogicTest(t, "explain_gist")
 }
 
+func TestExecBuild_explain_redact(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "explain_redact")
+}
+
 func TestExecBuild_explain_shape(
 	t *testing.T,
 ) {

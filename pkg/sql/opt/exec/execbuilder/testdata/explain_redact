@@ -1,0 +1,3864 @@
+# LogicTest: local
+
+# Redaction of column defaults.
+
+statement ok
+CREATE TABLE a (a INT DEFAULT 5)
+
+query T
+EXPLAIN (OPT, CATALOG, REDACT) SELECT * FROM a
+----
+TABLE a
+ ├── a int default (‹×›)
+ ├── rowid int not null default (‹×›) [hidden]
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ └── PRIMARY INDEX a_pkey
+      └── rowid int not null default (‹×›) [hidden]
+scan a
+
+# Redaction of column on update expressions.
+
+statement ok
+CREATE TABLE ab (a STRING PRIMARY KEY, b BOOL DEFAULT false ON UPDATE true, FAMILY (a, b))
+
+query T
+EXPLAIN (OPT, CATALOG, REDACT) SELECT * FROM ab
+----
+TABLE ab
+ ├── a string not null
+ ├── b bool default (‹×›) on update (‹×›)
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── FAMILY fam_0_a_b (a, b)
+ └── PRIMARY INDEX ab_pkey
+      └── a string not null
+scan ab
+
+# Redaction of constants in computed columns.
+
+statement ok
+CREATE TABLE bc (b FLOAT PRIMARY KEY, c FLOAT AS (b * 10.0) VIRTUAL)
+
+query T
+EXPLAIN (OPT, CATALOG, REDACT) SELECT * FROM bc
+----
+TABLE bc
+ ├── b float not null
+ ├── c float as (‹×›) virtual
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ └── PRIMARY INDEX bc_pkey
+      └── b float not null
+project
+ ├── scan bc
+ │    └── computed column expressions
+ │         └── c
+ │              └── b * ‹×›
+ └── projections
+      └── b * ‹×›
+
+statement ok
+CREATE TABLE cd (c CHAR, d CHAR AS ('d') STORED, FAMILY (rowid, c, d))
+
+query T
+EXPLAIN (OPT, CATALOG, REDACT) SELECT * FROM cd
+----
+TABLE cd
+ ├── c char
+ ├── d char as (‹×›) stored
+ ├── rowid int not null default (‹×›) [hidden]
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── FAMILY fam_0_rowid_c_d (rowid, c, d)
+ └── PRIMARY INDEX cd_pkey
+      └── rowid int not null default (‹×›) [hidden]
+scan cd
+ └── computed column expressions
+      └── d
+           └── ‹×›
+
+# Redaction of constants in check constraints.
+
+statement ok
+CREATE TABLE d (d DECIMAL PRIMARY KEY, CHECK (d > 2.0))
+
+query T
+EXPLAIN (OPT, CATALOG, REDACT) SELECT * FROM d
+----
+TABLE d
+ ├── d decimal not null
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── CHECK (‹×›)
+ └── PRIMARY INDEX d_pkey
+      └── d decimal not null
+scan d
+ └── check constraint expressions
+      └── d > ‹×›
+
+# Redaction of constants in expression indexes.
+
+statement ok
+CREATE TABLE e (e STRING, INDEX ((e || 'e')))
+
+query T
+EXPLAIN (OPT, CATALOG, REDACT) SELECT * FROM e
+----
+TABLE e
+ ├── e string
+ ├── crdb_internal_idx_expr string as (‹×›) virtual [inaccessible]
+ ├── rowid int not null default (‹×›) [hidden]
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── PRIMARY INDEX e_pkey
+ │    └── rowid int not null default (‹×›) [hidden]
+ └── INDEX e_expr_idx
+      ├── crdb_internal_idx_expr string as (‹×›) virtual [inaccessible]
+      └── rowid int not null default (‹×›) [hidden]
+scan e
+ └── computed column expressions
+      └── crdb_internal_idx_expr
+           └── e || ‹×›
+
+# Redaction of constants in partial indexes.
+
+statement ok
+CREATE TABLE f (f FLOAT, INDEX (f) WHERE f > 0.0)
+
+query T
+EXPLAIN (OPT, CATALOG, REDACT) SELECT * FROM f
+----
+TABLE f
+ ├── f float
+ ├── rowid int not null default (‹×›) [hidden]
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── PRIMARY INDEX f_pkey
+ │    └── rowid int not null default (‹×›) [hidden]
+ └── INDEX f_f_idx
+      ├── f float
+      ├── rowid int not null default (‹×›) [hidden]
+      └── WHERE ‹×›
+scan f
+ └── partial index predicates
+      └── f_f_idx: filters
+           └── f > ‹×›
+
+# Redaction of constants in inverted indexes.
+
+statement ok
+CREATE TABLE g (g STRING, INVERTED INDEX ((g || 'abc') gin_trgm_ops))
+
+query T
+EXPLAIN (OPT, CATALOG, REDACT) SELECT * FROM g
+----
+TABLE g
+ ├── g string
+ ├── crdb_internal_idx_expr string as (‹×›) virtual [inaccessible]
+ ├── rowid int not null default (‹×›) [hidden]
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── crdb_internal_idx_expr_inverted_key encodedkey not null [inverted]
+ ├── PRIMARY INDEX g_pkey
+ │    └── rowid int not null default (‹×›) [hidden]
+ └── INVERTED INDEX g_expr_idx
+      ├── crdb_internal_idx_expr_inverted_key encodedkey not null [inverted]
+      └── rowid int not null default (‹×›) [hidden]
+scan g
+ └── computed column expressions
+      └── crdb_internal_idx_expr
+           └── g || ‹×›
+
+# Redaction of constants in inserts.
+
+query T
+EXPLAIN (REDACT) INSERT INTO a VALUES (1)
+----
+distribution: local
+vectorized: true
+·
+• insert fast path
+  into: a(a, rowid)
+  auto commit
+  size: 2 columns, 1 row
+
+query T
+EXPLAIN (VERBOSE, REDACT) INSERT INTO a VALUES (1)
+----
+distribution: local
+vectorized: true
+·
+• insert fast path
+  columns: ()
+  estimated row count: 0 (missing stats)
+  into: a(a, rowid)
+  auto commit
+  size: 2 columns, 1 row
+  row 0, expr 0: ‹×›
+  row 0, expr 1: unique_rowid()
+
+query T
+EXPLAIN (OPT, REDACT) INSERT INTO a VALUES (1)
+----
+insert a
+ └── values
+      └── (‹×›, unique_rowid())
+
+query T
+EXPLAIN (OPT, VERBOSE, REDACT) INSERT INTO a VALUES (1)
+----
+insert a
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:5 => a:1
+ │    └── rowid_default:6 => rowid:2
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── stats: [rows=0]
+ ├── cost: 0.03
+ ├── distribution: test
+ └── values
+      ├── columns: column1:5 rowid_default:6
+      ├── cardinality: [1 - 1]
+      ├── volatile
+      ├── stats: [rows=1]
+      ├── cost: 0.02
+      ├── key: ()
+      ├── fd: ()-->(5,6)
+      ├── distribution: test
+      ├── prune: (5,6)
+      └── (‹×›, unique_rowid())
+
+query T
+EXPLAIN (OPT, TYPES, REDACT) INSERT INTO a VALUES (1)
+----
+insert a
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:5 => a:1
+ │    └── rowid_default:6 => rowid:2
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── stats: [rows=0]
+ ├── cost: 0.03
+ ├── distribution: test
+ └── values
+      ├── columns: column1:5(int!null) rowid_default:6(int)
+      ├── cardinality: [1 - 1]
+      ├── volatile
+      ├── stats: [rows=1]
+      ├── cost: 0.02
+      ├── key: ()
+      ├── fd: ()-->(5,6)
+      ├── distribution: test
+      ├── prune: (5,6)
+      └── tuple [type=tuple{int, int}]
+           ├── const: ‹×› [type=int]
+           └── function: unique_rowid [type=int]
+
+query T
+EXPLAIN (OPT, MEMO, REDACT) INSERT INTO a VALUES (1)
+----
+memo (optimized, ~5KB, required=[presentation: info:7] [distribution: test])
+ ├── G1: (explain G2 [distribution: test])
+ │    └── [presentation: info:7] [distribution: test]
+ │         ├── best: (explain G2="[distribution: test]" [distribution: test])
+ │         └── cost: 0.05
+ ├── G2: (insert G3 G4 G5 a)
+ │    ├── [distribution: test]
+ │    │    ├── best: (insert G3="[distribution: test]" G4 G5 a)
+ │    │    └── cost: 0.03
+ │    └── []
+ │         ├── best: (insert G3 G4 G5 a)
+ │         └── cost: 0.03
+ ├── G3: (values G6 id=v1)
+ │    ├── [distribution: test]
+ │    │    ├── best: (values G6 id=v1)
+ │    │    └── cost: 0.02
+ │    └── []
+ │         ├── best: (values G6 id=v1)
+ │         └── cost: 0.02
+ ├── G4: (unique-checks)
+ ├── G5: (f-k-checks)
+ ├── G6: (scalar-list G7)
+ ├── G7: (tuple G8)
+ ├── G8: (scalar-list G9 G10)
+ ├── G9: (const ‹×›)
+ ├── G10: (function G11 unique_rowid)
+ └── G11: (scalar-list)
+insert a
+ └── values
+      └── (‹×›, unique_rowid())
+
+query T
+EXPLAIN (REDACT) INSERT INTO bc SELECT a::float + 1 FROM a ON CONFLICT (b) DO UPDATE SET b = bc.b + 100
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ into: bc(b, c)
+│ auto commit
+│ arbiter indexes: bc_pkey
+│
+└── • render
+    │
+    └── • render
+        │
+        └── • hash join (left outer)
+            │ equality: (?column?) = (b)
+            │ right cols are key
+            │
+            ├── • distinct
+            │   │ distinct on: ?column?
+            │   │ nulls are distinct
+            │   │ error on duplicate
+            │   │
+            │   └── • render
+            │       │
+            │       └── • render
+            │           │
+            │           └── • scan
+            │                 missing stats
+            │                 table: a@a_pkey
+            │                 spans: FULL SCAN
+            │
+            └── • render
+                │
+                └── • scan
+                      missing stats
+                      table: bc@bc_pkey
+                      spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE, REDACT) INSERT INTO bc SELECT a::float + 1 FROM a ON CONFLICT (b) DO UPDATE SET b = bc.b + 100
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: bc(b, c)
+│ auto commit
+│ arbiter indexes: bc_pkey
+│
+└── • project
+    │ columns: ("?column?", c_comp, b, c, upsert_b, upsert_c, b)
+    │
+    └── • render
+        │ columns: (upsert_b, upsert_c, "?column?", c_comp, b, c)
+        │ render upsert_b: CASE WHEN b IS NULL THEN "?column?" ELSE b_new END
+        │ render upsert_c: CASE WHEN b IS NULL THEN c_comp ELSE b_new * ‹×› END
+        │ render ?column?: "?column?"
+        │ render c_comp: c_comp
+        │ render b: b
+        │ render c: c
+        │
+        └── • render
+            │ columns: (b_new, "?column?", c_comp, b, c)
+            │ render b_new: b + ‹×›
+            │ render ?column?: "?column?"
+            │ render c_comp: c_comp
+            │ render b: b
+            │ render c: c
+            │
+            └── • hash join (left outer)
+                │ columns: (c_comp, "?column?", c, b)
+                │ estimated row count: 1,000 (missing stats)
+                │ equality: (?column?) = (b)
+                │ right cols are key
+                │
+                ├── • distinct
+                │   │ columns: (c_comp, "?column?")
+                │   │ estimated row count: 1,000 (missing stats)
+                │   │ distinct on: ?column?
+                │   │ nulls are distinct
+                │   │ error on duplicate
+                │   │
+                │   └── • render
+                │       │ columns: (c_comp, "?column?")
+                │       │ render c_comp: "?column?" * ‹×›
+                │       │ render ?column?: "?column?"
+                │       │
+                │       └── • render
+                │           │ columns: ("?column?")
+                │           │ render ?column?: a::FLOAT8 + ‹×›
+                │           │
+                │           └── • scan
+                │                 columns: (a)
+                │                 estimated row count: 1,000 (missing stats)
+                │                 table: a@a_pkey
+                │                 spans: FULL SCAN
+                │
+                └── • render
+                    │ columns: (c, b)
+                    │ render c: b * ‹×›
+                    │ render b: b
+                    │
+                    └── • scan
+                          columns: (b)
+                          estimated row count: 1,000 (missing stats)
+                          table: bc@bc_pkey
+                          spans: FULL SCAN
+
+query T
+EXPLAIN (OPT, REDACT) INSERT INTO bc SELECT a::float + 1 FROM a ON CONFLICT (b) DO UPDATE SET b = bc.b + 100
+----
+upsert bc
+ ├── arbiter indexes: bc_pkey
+ └── project
+      ├── project
+      │    ├── left-join (hash)
+      │    │    ├── ensure-upsert-distinct-on
+      │    │    │    ├── project
+      │    │    │    │    ├── project
+      │    │    │    │    │    ├── scan a
+      │    │    │    │    │    └── projections
+      │    │    │    │    │         └── a::FLOAT8 + ‹×›
+      │    │    │    │    └── projections
+      │    │    │    │         └── "?column?" * ‹×›
+      │    │    │    └── aggregations
+      │    │    │         └── first-agg
+      │    │    │              └── c_comp
+      │    │    ├── project
+      │    │    │    ├── scan bc
+      │    │    │    │    └── computed column expressions
+      │    │    │    │         └── c
+      │    │    │    │              └── b * ‹×›
+      │    │    │    └── projections
+      │    │    │         └── b * ‹×›
+      │    │    └── filters
+      │    │         └── "?column?" = b
+      │    └── projections
+      │         └── b + ‹×›
+      └── projections
+           ├── CASE WHEN b IS NULL THEN "?column?" ELSE b_new END
+           └── CASE WHEN b IS NULL THEN c_comp ELSE b_new * ‹×› END
+
+query T
+EXPLAIN (OPT, VERBOSE, REDACT) INSERT INTO bc SELECT a::float + 1 FROM a ON CONFLICT (b) DO UPDATE SET b = bc.b + 100
+----
+upsert bc
+ ├── arbiter indexes: bc_pkey
+ ├── columns: <none>
+ ├── canary column: b:11
+ ├── fetch columns: b:11 c:12
+ ├── insert-mapping:
+ │    ├── "?column?":9 => b:1
+ │    └── c_comp:10 => c:2
+ ├── update-mapping:
+ │    ├── upsert_b:17 => b:1
+ │    └── upsert_c:18 => c:2
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── stats: [rows=0]
+ ├── cost: 2347.4925
+ ├── distribution: test
+ └── project
+      ├── columns: upsert_b:17 upsert_c:18 "?column?":9 c_comp:10 b:11 c:12
+      ├── immutable
+      ├── stats: [rows=1000]
+      ├── cost: 2347.4825
+      ├── lax-key: (9,11)
+      ├── fd: (9)-->(10), (11)-->(12), (9,11)~~>(17,18)
+      ├── distribution: test
+      ├── prune: (9-12,17,18)
+      ├── project
+      │    ├── columns: b_new:15 "?column?":9 c_comp:10 b:11 c:12
+      │    ├── immutable
+      │    ├── stats: [rows=1000]
+      │    ├── cost: 2317.4625
+      │    ├── lax-key: (9,11)
+      │    ├── fd: (9)-->(10), (11)-->(12,15)
+      │    ├── distribution: test
+      │    ├── prune: (9-12,15)
+      │    ├── left-join (hash)
+      │    │    ├── columns: "?column?":9 c_comp:10 b:11 c:12
+      │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+      │    │    ├── immutable
+      │    │    ├── stats: [rows=1000, distinct(11)=1000, null(11)=0]
+      │    │    ├── cost: 2297.4425
+      │    │    ├── lax-key: (9,11)
+      │    │    ├── fd: (9)-->(10), (11)-->(12)
+      │    │    ├── distribution: test
+      │    │    ├── ensure-upsert-distinct-on
+      │    │    │    ├── columns: "?column?":9 c_comp:10
+      │    │    │    ├── grouping columns: "?column?":9
+      │    │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
+      │    │    │    ├── immutable
+      │    │    │    ├── stats: [rows=1000, distinct(9)=1000, null(9)=0]
+      │    │    │    ├── cost: 1168.83625
+      │    │    │    ├── lax-key: (9)
+      │    │    │    ├── fd: (9)-->(10)
+      │    │    │    ├── distribution: test
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: c_comp:10 "?column?":9
+      │    │    │    │    ├── immutable
+      │    │    │    │    ├── stats: [rows=1000, distinct(9)=100, null(9)=0]
+      │    │    │    │    ├── cost: 1128.66
+      │    │    │    │    ├── fd: (9)-->(10)
+      │    │    │    │    ├── distribution: test
+      │    │    │    │    ├── project
+      │    │    │    │    │    ├── columns: "?column?":9
+      │    │    │    │    │    ├── immutable
+      │    │    │    │    │    ├── stats: [rows=1000, distinct(9)=100, null(9)=0]
+      │    │    │    │    │    ├── cost: 1108.64
+      │    │    │    │    │    ├── distribution: test
+      │    │    │    │    │    ├── prune: (9)
+      │    │    │    │    │    ├── scan a
+      │    │    │    │    │    │    ├── columns: a:5
+      │    │    │    │    │    │    ├── stats: [rows=1000, distinct(5)=100, null(5)=10]
+      │    │    │    │    │    │    ├── cost: 1088.62
+      │    │    │    │    │    │    ├── distribution: test
+      │    │    │    │    │    │    └── prune: (5)
+      │    │    │    │    │    └── projections
+      │    │    │    │    │         └── a:5::FLOAT8 + ‹×› [as="?column?":9, outer=(5), immutable]
+      │    │    │    │    └── projections
+      │    │    │    │         └── "?column?":9 * ‹×› [as=c_comp:10, outer=(9), immutable]
+      │    │    │    └── aggregations
+      │    │    │         └── first-agg [as=c_comp:10, outer=(10)]
+      │    │    │              └── c_comp:10
+      │    │    ├── project
+      │    │    │    ├── columns: c:12 b:11
+      │    │    │    ├── immutable
+      │    │    │    ├── stats: [rows=1000, distinct(11)=1000, null(11)=0]
+      │    │    │    ├── cost: 1088.44
+      │    │    │    ├── key: (11)
+      │    │    │    ├── fd: (11)-->(12)
+      │    │    │    ├── distribution: test
+      │    │    │    ├── prune: (11,12)
+      │    │    │    ├── interesting orderings: (+11)
+      │    │    │    ├── unfiltered-cols: (11-14)
+      │    │    │    ├── scan bc
+      │    │    │    │    ├── columns: b:11
+      │    │    │    │    ├── computed column expressions
+      │    │    │    │    │    └── c:12
+      │    │    │    │    │         └── b:11 * ‹×›
+      │    │    │    │    ├── stats: [rows=1000, distinct(11)=1000, null(11)=0]
+      │    │    │    │    ├── cost: 1068.42
+      │    │    │    │    ├── key: (11)
+      │    │    │    │    ├── distribution: test
+      │    │    │    │    ├── prune: (11)
+      │    │    │    │    ├── interesting orderings: (+11)
+      │    │    │    │    └── unfiltered-cols: (11-14)
+      │    │    │    └── projections
+      │    │    │         └── b:11 * ‹×› [as=c:12, outer=(11), immutable]
+      │    │    └── filters
+      │    │         └── "?column?":9 = b:11 [outer=(9,11), constraints=(‹×›), fd=(9)==(11), (11)==(9)]
+      │    └── projections
+      │         └── b:11 + ‹×› [as=b_new:15, outer=(11), immutable]
+      └── projections
+           ├── CASE WHEN b:11 IS NULL THEN "?column?":9 ELSE b_new:15 END [as=upsert_b:17, outer=(9,11,15)]
+           └── CASE WHEN b:11 IS NULL THEN c_comp:10 ELSE b_new:15 * ‹×› END [as=upsert_c:18, outer=(10,11,15), immutable]
+
+query T
+EXPLAIN (OPT, TYPES, REDACT) INSERT INTO bc SELECT a::float + 1 FROM a ON CONFLICT (b) DO UPDATE SET b = bc.b + 100
+----
+upsert bc
+ ├── arbiter indexes: bc_pkey
+ ├── columns: <none>
+ ├── canary column: b:11(float)
+ ├── fetch columns: b:11(float) c:12(float)
+ ├── insert-mapping:
+ │    ├── "?column?":9 => b:1
+ │    └── c_comp:10 => c:2
+ ├── update-mapping:
+ │    ├── upsert_b:17 => b:1
+ │    └── upsert_c:18 => c:2
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── stats: [rows=0]
+ ├── cost: 2347.4925
+ ├── distribution: test
+ └── project
+      ├── columns: upsert_b:17(float) upsert_c:18(float) "?column?":9(float) c_comp:10(float) b:11(float) c:12(float)
+      ├── immutable
+      ├── stats: [rows=1000]
+      ├── cost: 2347.4825
+      ├── lax-key: (9,11)
+      ├── fd: (9)-->(10), (11)-->(12), (9,11)~~>(17,18)
+      ├── distribution: test
+      ├── prune: (9-12,17,18)
+      ├── project
+      │    ├── columns: b_new:15(float) "?column?":9(float) c_comp:10(float) b:11(float) c:12(float)
+      │    ├── immutable
+      │    ├── stats: [rows=1000]
+      │    ├── cost: 2317.4625
+      │    ├── lax-key: (9,11)
+      │    ├── fd: (9)-->(10), (11)-->(12,15)
+      │    ├── distribution: test
+      │    ├── prune: (9-12,15)
+      │    ├── left-join (hash)
+      │    │    ├── columns: "?column?":9(float) c_comp:10(float) b:11(float) c:12(float)
+      │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+      │    │    ├── immutable
+      │    │    ├── stats: [rows=1000, distinct(11)=1000, null(11)=0]
+      │    │    ├── cost: 2297.4425
+      │    │    ├── lax-key: (9,11)
+      │    │    ├── fd: (9)-->(10), (11)-->(12)
+      │    │    ├── distribution: test
+      │    │    ├── ensure-upsert-distinct-on
+      │    │    │    ├── columns: "?column?":9(float) c_comp:10(float)
+      │    │    │    ├── grouping columns: "?column?":9(float)
+      │    │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
+      │    │    │    ├── immutable
+      │    │    │    ├── stats: [rows=1000, distinct(9)=1000, null(9)=0]
+      │    │    │    ├── cost: 1168.83625
+      │    │    │    ├── lax-key: (9)
+      │    │    │    ├── fd: (9)-->(10)
+      │    │    │    ├── distribution: test
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: c_comp:10(float) "?column?":9(float)
+      │    │    │    │    ├── immutable
+      │    │    │    │    ├── stats: [rows=1000, distinct(9)=100, null(9)=0]
+      │    │    │    │    ├── cost: 1128.66
+      │    │    │    │    ├── fd: (9)-->(10)
+      │    │    │    │    ├── distribution: test
+      │    │    │    │    ├── project
+      │    │    │    │    │    ├── columns: "?column?":9(float)
+      │    │    │    │    │    ├── immutable
+      │    │    │    │    │    ├── stats: [rows=1000, distinct(9)=100, null(9)=0]
+      │    │    │    │    │    ├── cost: 1108.64
+      │    │    │    │    │    ├── distribution: test
+      │    │    │    │    │    ├── prune: (9)
+      │    │    │    │    │    ├── scan a
+      │    │    │    │    │    │    ├── columns: a:5(int)
+      │    │    │    │    │    │    ├── stats: [rows=1000, distinct(5)=100, null(5)=10]
+      │    │    │    │    │    │    ├── cost: 1088.62
+      │    │    │    │    │    │    ├── distribution: test
+      │    │    │    │    │    │    └── prune: (5)
+      │    │    │    │    │    └── projections
+      │    │    │    │    │         └── plus [as="?column?":9, type=float, outer=(5), immutable]
+      │    │    │    │    │              ├── cast: ‹×› [type=float]
+      │    │    │    │    │              │    └── variable: a:5 [type=int]
+      │    │    │    │    │              └── const: ‹×› [type=float]
+      │    │    │    │    └── projections
+      │    │    │    │         └── mult [as=c_comp:10, type=float, outer=(9), immutable]
+      │    │    │    │              ├── variable: "?column?":9 [type=float]
+      │    │    │    │              └── const: ‹×› [type=float]
+      │    │    │    └── aggregations
+      │    │    │         └── first-agg [as=c_comp:10, type=float, outer=(10)]
+      │    │    │              └── variable: c_comp:10 [type=float]
+      │    │    ├── project
+      │    │    │    ├── columns: c:12(float!null) b:11(float!null)
+      │    │    │    ├── immutable
+      │    │    │    ├── stats: [rows=1000, distinct(11)=1000, null(11)=0]
+      │    │    │    ├── cost: 1088.44
+      │    │    │    ├── key: (11)
+      │    │    │    ├── fd: (11)-->(12)
+      │    │    │    ├── distribution: test
+      │    │    │    ├── prune: (11,12)
+      │    │    │    ├── interesting orderings: (+11)
+      │    │    │    ├── unfiltered-cols: (11-14)
+      │    │    │    ├── scan bc
+      │    │    │    │    ├── columns: b:11(float!null)
+      │    │    │    │    ├── computed column expressions
+      │    │    │    │    │    └── c:12
+      │    │    │    │    │         └── mult [type=float]
+      │    │    │    │    │              ├── variable: b:11 [type=float]
+      │    │    │    │    │              └── const: ‹×› [type=float]
+      │    │    │    │    ├── stats: [rows=1000, distinct(11)=1000, null(11)=0]
+      │    │    │    │    ├── cost: 1068.42
+      │    │    │    │    ├── key: (11)
+      │    │    │    │    ├── distribution: test
+      │    │    │    │    ├── prune: (11)
+      │    │    │    │    ├── interesting orderings: (+11)
+      │    │    │    │    └── unfiltered-cols: (11-14)
+      │    │    │    └── projections
+      │    │    │         └── mult [as=c:12, type=float, outer=(11), immutable]
+      │    │    │              ├── variable: b:11 [type=float]
+      │    │    │              └── const: ‹×› [type=float]
+      │    │    └── filters
+      │    │         └── eq [type=bool, outer=(9,11), constraints=(‹×›), fd=(9)==(11), (11)==(9)]
+      │    │              ├── variable: "?column?":9 [type=float]
+      │    │              └── variable: b:11 [type=float]
+      │    └── projections
+      │         └── plus [as=b_new:15, type=float, outer=(11), immutable]
+      │              ├── variable: b:11 [type=float]
+      │              └── const: ‹×› [type=float]
+      └── projections
+           ├── case [as=upsert_b:17, type=float, outer=(9,11,15)]
+           │    ├── true [type=bool]
+           │    ├── when [type=float]
+           │    │    ├── is [type=bool]
+           │    │    │    ├── variable: b:11 [type=float]
+           │    │    │    └── null [type=unknown]
+           │    │    └── variable: "?column?":9 [type=float]
+           │    └── variable: b_new:15 [type=float]
+           └── case [as=upsert_c:18, type=float, outer=(10,11,15), immutable]
+                ├── true [type=bool]
+                ├── when [type=float]
+                │    ├── is [type=bool]
+                │    │    ├── variable: b:11 [type=float]
+                │    │    └── null [type=unknown]
+                │    └── variable: c_comp:10 [type=float]
+                └── mult [type=float]
+                     ├── variable: b_new:15 [type=float]
+                     └── const: ‹×› [type=float]
+
+query T
+EXPLAIN (OPT, MEMO, REDACT) INSERT INTO bc SELECT a::float + 1 FROM a ON CONFLICT (b) DO UPDATE SET b = bc.b + 100
+----
+memo (optimized, ~32KB, required=[presentation: info:19] [distribution: test])
+ ├── G1: (explain G2 [distribution: test])
+ │    └── [presentation: info:19] [distribution: test]
+ │         ├── best: (explain G2="[distribution: test]" [distribution: test])
+ │         └── cost: 2347.51
+ ├── G2: (upsert G3 G4 G5 bc)
+ │    ├── [distribution: test]
+ │    │    ├── best: (upsert G3="[distribution: test]" G4 G5 bc)
+ │    │    └── cost: 2347.49
+ │    └── []
+ │         ├── best: (upsert G3 G4 G5 bc)
+ │         └── cost: 2347.49
+ ├── G3: (project G6 G7 ?column? c_comp b c)
+ │    ├── [distribution: test]
+ │    │    ├── best: (project G6="[distribution: test]" G7 ?column? c_comp b c)
+ │    │    └── cost: 2347.48
+ │    └── []
+ │         ├── best: (project G6 G7 ?column? c_comp b c)
+ │         └── cost: 2347.48
+ ├── G4: (unique-checks)
+ ├── G5: (f-k-checks)
+ ├── G6: (project G8 G9 ?column? c_comp b c)
+ │    ├── [distribution: test]
+ │    │    ├── best: (project G8="[distribution: test]" G9 ?column? c_comp b c)
+ │    │    └── cost: 2317.46
+ │    └── []
+ │         ├── best: (project G8 G9 ?column? c_comp b c)
+ │         └── cost: 2317.46
+ ├── G7: (projections G10 G11)
+ ├── G8: (left-join G12 G13 G14) (right-join G13 G12 G14) (project G15 G16 ?column? c_comp b) (merge-join G13 G12 G17 right-join,+11,+9)
+ │    ├── [distribution: test]
+ │    │    ├── best: (left-join G12="[distribution: test]" G13="[distribution: test]" G14)
+ │    │    └── cost: 2297.44
+ │    └── []
+ │         ├── best: (left-join G12 G13 G14)
+ │         └── cost: 2297.44
+ ├── G9: (projections G18)
+ ├── G10: (case G19 G20 G21)
+ ├── G11: (case G19 G22 G23)
+ ├── G12: (ensure-upsert-distinct-on G24 G25 cols=(9))
+ │    ├── [distribution: test]
+ │    │    ├── best: (ensure-upsert-distinct-on G24="[distribution: test]" G25 cols=(9))
+ │    │    └── cost: 1168.84
+ │    ├── [ordering: +9]
+ │    │    ├── best: (ensure-upsert-distinct-on G24="[ordering: +9]" G25 cols=(9))
+ │    │    └── cost: 1388.17
+ │    ├── [ordering: +9] [distribution: test]
+ │    │    ├── best: (distribute G12="[ordering: +9]")
+ │    │    └── cost: 1588.19
+ │    └── []
+ │         ├── best: (ensure-upsert-distinct-on G24 G25 cols=(9))
+ │         └── cost: 1168.84
+ ├── G13: (project G26 G27 b)
+ │    ├── [distribution: test]
+ │    │    ├── best: (project G26="[distribution: test]" G27 b)
+ │    │    └── cost: 1088.44
+ │    ├── [ordering: +11]
+ │    │    ├── best: (project G26="[ordering: +11]" G27 b)
+ │    │    └── cost: 1088.44
+ │    ├── [ordering: +11] [distribution: test]
+ │    │    ├── best: (project G26="[ordering: +11] [distribution: test]" G27 b)
+ │    │    └── cost: 1088.44
+ │    └── []
+ │         ├── best: (project G26 G27 b)
+ │         └── cost: 1088.44
+ ├── G14: (filters G28)
+ ├── G15: (left-join G12 G26 G14) (right-join G26 G12 G14) (lookup-join G12 G17 bc,keyCols=[9],outCols=(9-11)) (merge-join G26 G12 G17 right-join,+11,+9)
+ │    ├── [distribution: test]
+ │    │    ├── best: (left-join G12="[distribution: test]" G26="[distribution: test]" G14)
+ │    │    └── cost: 2277.42
+ │    └── []
+ │         ├── best: (left-join G12 G26 G14)
+ │         └── cost: 2277.42
+ ├── G16: (projections G29)
+ ├── G17: (filters)
+ ├── G18: (plus G30 G31)
+ ├── G19: (‹×›)
+ ├── G20: (scalar-list G32)
+ ├── G21: (variable b_new)
+ ├── G22: (scalar-list G33)
+ ├── G23: (mult G21 G34)
+ ├── G24: (project G35 G36 ?column?)
+ │    ├── [distribution: test]
+ │    │    ├── best: (project G35="[distribution: test]" G36 ?column?)
+ │    │    └── cost: 1128.66
+ │    ├── [ordering: +9]
+ │    │    ├── best: (project G35="[ordering: +9]" G36 ?column?)
+ │    │    └── cost: 1358.14
+ │    ├── [ordering: +9] [distribution: test]
+ │    │    ├── best: (distribute G24="[ordering: +9]")
+ │    │    └── cost: 1558.16
+ │    └── []
+ │         ├── best: (project G35 G36 ?column?)
+ │         └── cost: 1128.66
+ ├── G25: (aggregations G37)
+ ├── G26: (scan bc,cols=(11))
+ │    ├── [distribution: test]
+ │    │    ├── best: (scan bc,cols=(11))
+ │    │    └── cost: 1068.42
+ │    ├── [ordering: +11]
+ │    │    ├── best: (scan bc,cols=(11))
+ │    │    └── cost: 1068.42
+ │    ├── [ordering: +11] [distribution: test]
+ │    │    ├── best: (scan bc,cols=(11))
+ │    │    └── cost: 1068.42
+ │    └── []
+ │         ├── best: (scan bc,cols=(11))
+ │         └── cost: 1068.42
+ ├── G27: (projections G38)
+ ├── G28: (eq G39 G30)
+ ├── G29: (case G40 G41 G38)
+ ├── G30: (variable b)
+ ├── G31: (const ‹×›)
+ ├── G32: (when G40 G39)
+ ├── G33: (when G40 G42)
+ ├── G34: (const ‹×›)
+ ├── G35: (project G43 G44)
+ │    ├── [distribution: test]
+ │    │    ├── best: (project G43="[distribution: test]" G44)
+ │    │    └── cost: 1108.64
+ │    ├── [ordering: +9]
+ │    │    ├── best: (sort G35)
+ │    │    └── cost: 1338.12
+ │    ├── [ordering: +9] [distribution: test]
+ │    │    ├── best: (distribute G35="[ordering: +9]")
+ │    │    └── cost: 1538.14
+ │    └── []
+ │         ├── best: (project G43 G44)
+ │         └── cost: 1108.64
+ ├── G36: (projections G45)
+ ├── G37: (first-agg G42)
+ ├── G38: (mult G30 G34)
+ ├── G39: (variable "?column?")
+ ├── G40: (is G30 G46)
+ ├── G41: (scalar-list G47)
+ ├── G42: (variable c_comp)
+ ├── G43: (scan a,cols=(5))
+ │    ├── [distribution: test]
+ │    │    ├── best: (scan a,cols=(5))
+ │    │    └── cost: 1088.62
+ │    └── []
+ │         ├── best: (scan a,cols=(5))
+ │         └── cost: 1088.62
+ ├── G44: (projections G48)
+ ├── G45: (mult G39 G34)
+ ├── G46: (null)
+ ├── G47: (when G19 G49)
+ ├── G48: (plus G50 G51)
+ ├── G49: (null)
+ ├── G50: (cast G52 ‹×›)
+ ├── G51: (const ‹×›)
+ └── G52: (variable a)
+upsert bc
+ ├── arbiter indexes: bc_pkey
+ └── project
+      ├── project
+      │    ├── left-join (hash)
+      │    │    ├── ensure-upsert-distinct-on
+      │    │    │    ├── project
+      │    │    │    │    ├── project
+      │    │    │    │    │    ├── scan a
+      │    │    │    │    │    └── projections
+      │    │    │    │    │         └── a::FLOAT8 + ‹×›
+      │    │    │    │    └── projections
+      │    │    │    │         └── "?column?" * ‹×›
+      │    │    │    └── aggregations
+      │    │    │         └── first-agg
+      │    │    │              └── c_comp
+      │    │    ├── project
+      │    │    │    ├── scan bc
+      │    │    │    │    └── computed column expressions
+      │    │    │    │         └── c
+      │    │    │    │              └── b * ‹×›
+      │    │    │    └── projections
+      │    │    │         └── b * ‹×›
+      │    │    └── filters
+      │    │         └── "?column?" = b
+      │    └── projections
+      │         └── b + ‹×›
+      └── projections
+           ├── CASE WHEN b IS NULL THEN "?column?" ELSE b_new END
+           └── CASE WHEN b IS NULL THEN c_comp ELSE b_new * ‹×› END
+
+# Redaction of constants in upserts.
+
+query T
+EXPLAIN (REDACT) UPSERT INTO d VALUES (7.7)
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ into: d(d)
+│ auto commit
+│
+└── • values
+      size: 2 columns, 1 row
+
+query T
+EXPLAIN (VERBOSE, REDACT) UPSERT INTO d VALUES (7.7)
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: d(d)
+│ auto commit
+│
+└── • values
+      columns: (column1, check1)
+      size: 2 columns, 1 row
+      row 0, expr 0: ‹×›
+      row 0, expr 1: ‹×›
+
+query T
+EXPLAIN (OPT, REDACT) UPSERT INTO d VALUES (7.7)
+----
+upsert d
+ └── values
+      └── ‹(‹×›, ‹×›)›
+
+query T
+EXPLAIN (OPT, VERBOSE, REDACT) UPSERT INTO d VALUES (7.7)
+----
+upsert d
+ ├── columns: <none>
+ ├── upsert-mapping:
+ │    └── column1:4 => d:1
+ ├── check columns: check1:5
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── stats: [rows=0]
+ ├── cost: 0.03
+ ├── distribution: test
+ └── values
+      ├── columns: column1:4 check1:5
+      ├── cardinality: [1 - 1]
+      ├── stats: [rows=1]
+      ├── cost: 0.02
+      ├── key: ()
+      ├── fd: ()-->(4,5)
+      ├── distribution: test
+      ├── prune: (4,5)
+      └── ‹(‹×›, ‹×›)›
+
+query T
+EXPLAIN (OPT, TYPES, REDACT) UPSERT INTO d VALUES (7.7)
+----
+upsert d
+ ├── columns: <none>
+ ├── upsert-mapping:
+ │    └── column1:4 => d:1
+ ├── check columns: check1:5(bool)
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── stats: [rows=0]
+ ├── cost: 0.03
+ ├── distribution: test
+ └── values
+      ├── columns: column1:4(decimal!null) check1:5(bool!null)
+      ├── cardinality: [1 - 1]
+      ├── stats: [rows=1]
+      ├── cost: 0.02
+      ├── key: ()
+      ├── fd: ()-->(4,5)
+      ├── distribution: test
+      ├── prune: (4,5)
+      └── tuple [type=tuple{decimal, bool}]
+           ├── const: ‹×› [type=decimal]
+           └── true [type=bool]
+
+query T
+EXPLAIN (OPT, MEMO, REDACT) UPSERT INTO d VALUES (7.7)
+----
+memo (optimized, ~5KB, required=[presentation: info:6] [distribution: test])
+ ├── G1: (explain G2 [distribution: test])
+ │    └── [presentation: info:6] [distribution: test]
+ │         ├── best: (explain G2="[distribution: test]" [distribution: test])
+ │         └── cost: 0.05
+ ├── G2: (upsert G3 G4 G5 d)
+ │    ├── [distribution: test]
+ │    │    ├── best: (upsert G3="[distribution: test]" G4 G5 d)
+ │    │    └── cost: 0.03
+ │    └── []
+ │         ├── best: (upsert G3 G4 G5 d)
+ │         └── cost: 0.03
+ ├── G3: (values G6 id=v1)
+ │    ├── [distribution: test]
+ │    │    ├── best: (values G6 id=v1)
+ │    │    └── cost: 0.02
+ │    └── []
+ │         ├── best: (values G6 id=v1)
+ │         └── cost: 0.02
+ ├── G4: (unique-checks)
+ ├── G5: (f-k-checks)
+ ├── G6: (scalar-list G7)
+ ├── G7: (tuple G8)
+ ├── G8: (scalar-list G9 G10)
+ ├── G9: (const ‹×›)
+ └── G10: (‹×›)
+upsert d
+ └── values
+      └── ‹(‹×›, ‹×›)›
+
+# Redaction of constants in updates.
+
+query T
+EXPLAIN (REDACT) UPDATE ab SET a = a || 'ab' WHERE a > 'a'
+----
+distribution: local
+vectorized: true
+·
+• update
+│ table: ab
+│ set: a, b
+│ auto commit
+│
+└── • render
+    │
+    └── • scan
+          missing stats
+          table: ab@ab_pkey
+          spans: 1 span
+          locking strength: for update
+
+query T
+EXPLAIN (VERBOSE, REDACT) UPDATE ab SET a = a || 'ab' WHERE a > 'a'
+----
+distribution: local
+vectorized: true
+·
+• update
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ table: ab
+│ set: a, b
+│ auto commit
+│
+└── • render
+    │ columns: (a, b, a_new, b_on_update)
+    │ render b_on_update: ‹×›
+    │ render a_new: a || ‹×›
+    │ render a: a
+    │ render b: b
+    │
+    └── • scan
+          columns: (a, b)
+          estimated row count: 333 (missing stats)
+          table: ab@ab_pkey
+          spans: 1 span
+          locking strength: for update
+
+query T
+EXPLAIN (OPT, REDACT) UPDATE ab SET a = a || 'ab' WHERE a > 'a'
+----
+update ab
+ └── project
+      ├── scan ab
+      │    └── constraint: /5: ‹×›
+      └── projections
+           ├── ‹×›
+           └── a || ‹×›
+
+query T
+EXPLAIN (OPT, VERBOSE, REDACT) UPDATE ab SET a = a || 'ab' WHERE a > 'a'
+----
+update ab
+ ├── columns: <none>
+ ├── fetch columns: a:5 b:6
+ ├── update-mapping:
+ │    ├── a_new:9 => a:1
+ │    └── b_on_update:10 => b:2
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── stats: [rows=0]
+ ├── cost: 388.05
+ ├── distribution: test
+ └── project
+      ├── columns: b_on_update:10 a_new:9 a:5 b:6
+      ├── immutable
+      ├── stats: [rows=333.3333]
+      ├── cost: 388.04
+      ├── key: (5)
+      ├── fd: ()-->(10), (5)-->(6,9)
+      ├── distribution: test
+      ├── prune: (5,6,9,10)
+      ├── scan ab
+      │    ├── columns: a:5 b:6
+      │    ├── constraint: /5: ‹×›
+      │    ├── stats: [rows=333.3333, distinct(5)=333.333, null(5)=0]
+      │    ├── cost: 378.02
+      │    ├── key: (5)
+      │    ├── fd: (5)-->(6)
+      │    └── distribution: test
+      └── projections
+           ├── ‹×› [as=b_on_update:10]
+           └── a:5 || ‹×› [as=a_new:9, outer=(5), immutable]
+
+query T
+EXPLAIN (OPT, TYPES, REDACT) UPDATE ab SET a = a || 'ab' WHERE a > 'a'
+----
+update ab
+ ├── columns: <none>
+ ├── fetch columns: a:5(string) b:6(bool)
+ ├── update-mapping:
+ │    ├── a_new:9 => a:1
+ │    └── b_on_update:10 => b:2
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── stats: [rows=0]
+ ├── cost: 388.05
+ ├── distribution: test
+ └── project
+      ├── columns: b_on_update:10(bool!null) a_new:9(string!null) a:5(string!null) b:6(bool)
+      ├── immutable
+      ├── stats: [rows=333.3333]
+      ├── cost: 388.04
+      ├── key: (5)
+      ├── fd: ()-->(10), (5)-->(6,9)
+      ├── distribution: test
+      ├── prune: (5,6,9,10)
+      ├── scan ab
+      │    ├── columns: a:5(string!null) b:6(bool)
+      │    ├── constraint: /5: ‹×›
+      │    ├── stats: [rows=333.3333, distinct(5)=333.333, null(5)=0]
+      │    ├── cost: 378.02
+      │    ├── key: (5)
+      │    ├── fd: (5)-->(6)
+      │    └── distribution: test
+      └── projections
+           ├── true [as=b_on_update:10, type=bool]
+           └── concat [as=a_new:9, type=string, outer=(5), immutable]
+                ├── variable: a:5 [type=string]
+                └── const: ‹×› [type=string]
+
+query T
+EXPLAIN (OPT, MEMO, REDACT) UPDATE ab SET a = a || 'ab' WHERE a > 'a'
+----
+memo (optimized, ~13KB, required=[presentation: info:11] [distribution: test])
+ ├── G1: (explain G2 [distribution: test])
+ │    └── [presentation: info:11] [distribution: test]
+ │         ├── best: (explain G2="[distribution: test]" [distribution: test])
+ │         └── cost: 388.07
+ ├── G2: (update G3 G4 G5 ab)
+ │    ├── [distribution: test]
+ │    │    ├── best: (update G3="[distribution: test]" G4 G5 ab)
+ │    │    └── cost: 388.05
+ │    └── []
+ │         ├── best: (update G3 G4 G5 ab)
+ │         └── cost: 388.05
+ ├── G3: (project G6 G7 a b)
+ │    ├── [distribution: test]
+ │    │    ├── best: (project G6="[distribution: test]" G7 a b)
+ │    │    └── cost: 388.04
+ │    └── []
+ │         ├── best: (project G6 G7 a b)
+ │         └── cost: 388.04
+ ├── G4: (unique-checks)
+ ├── G5: (f-k-checks)
+ ├── G6: (select G8 G9) (scan ab,cols=(5,6),constrained)
+ │    ├── [distribution: test]
+ │    │    ├── best: (scan ab,cols=(5,6),constrained)
+ │    │    └── cost: 378.02
+ │    └── []
+ │         ├── best: (scan ab,cols=(5,6),constrained)
+ │         └── cost: 378.02
+ ├── G7: (projections G10 G11)
+ ├── G8: (scan ab,cols=(5,6))
+ │    ├── [distribution: test]
+ │    │    ├── best: (scan ab,cols=(5,6))
+ │    │    └── cost: 1108.82
+ │    └── []
+ │         ├── best: (scan ab,cols=(5,6))
+ │         └── cost: 1108.82
+ ├── G9: (filters G12)
+ ├── G10: (‹×›)
+ ├── G11: (concat G13 G14)
+ ├── G12: (gt G13 G15)
+ ├── G13: (variable a)
+ ├── G14: (const ‹×›)
+ └── G15: (const ‹×›)
+update ab
+ └── project
+      ├── scan ab
+      │    └── constraint: /5: ‹×›
+      └── projections
+           ├── ‹×›
+           └── a || ‹×›
+
+query T
+EXPLAIN (REDACT) UPDATE e SET e = 'eee' WHERE e > 'a'
+----
+distribution: local
+vectorized: true
+·
+• update
+│ table: e
+│ set: e, crdb_internal_idx_expr
+│ auto commit
+│
+└── • render
+    │
+    └── • filter
+        │ filter: e > ‹×›
+        │
+        └── • scan
+              missing stats
+              table: e@e_pkey
+              spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE, REDACT) UPDATE e SET e = 'eee' WHERE e > 'a'
+----
+distribution: local
+vectorized: true
+·
+• update
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ table: e
+│ set: e, crdb_internal_idx_expr
+│ auto commit
+│
+└── • render
+    │ columns: (e, crdb_internal_idx_expr, rowid, e_new, crdb_internal_idx_expr_comp)
+    │ render crdb_internal_idx_expr_comp: ‹×›
+    │ render e_new: ‹×›
+    │ render crdb_internal_idx_expr: e || ‹×›
+    │ render e: e
+    │ render rowid: rowid
+    │
+    └── • filter
+        │ columns: (e, rowid)
+        │ estimated row count: 333 (missing stats)
+        │ filter: e > ‹×›
+        │
+        └── • scan
+              columns: (e, rowid)
+              estimated row count: 1,000 (missing stats)
+              table: e@e_pkey
+              spans: FULL SCAN
+
+query T
+EXPLAIN (OPT, REDACT) UPDATE e SET e = 'eee' WHERE e > 'a'
+----
+update e
+ └── project
+      ├── select
+      │    ├── scan e
+      │    │    └── computed column expressions
+      │    │         └── crdb_internal_idx_expr
+      │    │              └── e || ‹×›
+      │    └── filters
+      │         └── e > ‹×›
+      └── projections
+           ├── ‹×›
+           ├── ‹×›
+           └── e || ‹×›
+
+query T
+EXPLAIN (OPT, VERBOSE, REDACT) UPDATE e SET e = 'eee' WHERE e > 'a'
+----
+update e
+ ├── columns: <none>
+ ├── fetch columns: e:6 crdb_internal_idx_expr:7 rowid:8
+ ├── update-mapping:
+ │    ├── e_new:11 => e:1
+ │    └── crdb_internal_idx_expr_comp:12 => crdb_internal_idx_expr:2
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── stats: [rows=0]
+ ├── cost: 1132.21333
+ ├── distribution: test
+ └── project
+      ├── columns: crdb_internal_idx_expr_comp:12 e_new:11 crdb_internal_idx_expr:7 e:6 rowid:8
+      ├── immutable
+      ├── stats: [rows=333.3333]
+      ├── cost: 1132.20333
+      ├── key: (8)
+      ├── fd: ()-->(11,12), (8)-->(6), (6)-->(7)
+      ├── distribution: test
+      ├── prune: (6-8,11,12)
+      ├── select
+      │    ├── columns: e:6 rowid:8
+      │    ├── stats: [rows=333.3333, distinct(6)=33.3333, null(6)=0]
+      │    ├── cost: 1118.85
+      │    ├── key: (8)
+      │    ├── fd: (8)-->(6)
+      │    ├── distribution: test
+      │    ├── scan e
+      │    │    ├── columns: e:6 rowid:8
+      │    │    ├── computed column expressions
+      │    │    │    └── crdb_internal_idx_expr:7
+      │    │    │         └── e:6 || ‹×›
+      │    │    ├── stats: [rows=1000, distinct(6)=100, null(6)=10, distinct(8)=1000, null(8)=0]
+      │    │    ├── cost: 1108.82
+      │    │    ├── key: (8)
+      │    │    ├── fd: (8)-->(6)
+      │    │    ├── distribution: test
+      │    │    └── prune: (6,8)
+      │    └── filters
+      │         └── e:6 > ‹×› [outer=(6), constraints=(‹×›; tight)]
+      └── projections
+           ├── ‹×› [as=crdb_internal_idx_expr_comp:12]
+           ├── ‹×› [as=e_new:11]
+           └── e:6 || ‹×› [as=crdb_internal_idx_expr:7, outer=(6), immutable]
+
+query T
+EXPLAIN (OPT, TYPES, REDACT) UPDATE e SET e = 'eee' WHERE e > 'a'
+----
+update e
+ ├── columns: <none>
+ ├── fetch columns: e:6(string) crdb_internal_idx_expr:7(string) rowid:8(int)
+ ├── update-mapping:
+ │    ├── e_new:11 => e:1
+ │    └── crdb_internal_idx_expr_comp:12 => crdb_internal_idx_expr:2
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── stats: [rows=0]
+ ├── cost: 1132.21333
+ ├── distribution: test
+ └── project
+      ├── columns: crdb_internal_idx_expr_comp:12(string!null) e_new:11(string!null) crdb_internal_idx_expr:7(string!null) e:6(string!null) rowid:8(int!null)
+      ├── immutable
+      ├── stats: [rows=333.3333]
+      ├── cost: 1132.20333
+      ├── key: (8)
+      ├── fd: ()-->(11,12), (8)-->(6), (6)-->(7)
+      ├── distribution: test
+      ├── prune: (6-8,11,12)
+      ├── select
+      │    ├── columns: e:6(string!null) rowid:8(int!null)
+      │    ├── stats: [rows=333.3333, distinct(6)=33.3333, null(6)=0]
+      │    ├── cost: 1118.85
+      │    ├── key: (8)
+      │    ├── fd: (8)-->(6)
+      │    ├── distribution: test
+      │    ├── scan e
+      │    │    ├── columns: e:6(string) rowid:8(int!null)
+      │    │    ├── computed column expressions
+      │    │    │    └── crdb_internal_idx_expr:7
+      │    │    │         └── concat [type=string]
+      │    │    │              ├── variable: e:6 [type=string]
+      │    │    │              └── const: ‹×› [type=string]
+      │    │    ├── stats: [rows=1000, distinct(6)=100, null(6)=10, distinct(8)=1000, null(8)=0]
+      │    │    ├── cost: 1108.82
+      │    │    ├── key: (8)
+      │    │    ├── fd: (8)-->(6)
+      │    │    ├── distribution: test
+      │    │    └── prune: (6,8)
+      │    └── filters
+      │         └── gt [type=bool, outer=(6), constraints=(‹×›; tight)]
+      │              ├── variable: e:6 [type=string]
+      │              └── const: ‹×› [type=string]
+      └── projections
+           ├── const: ‹×› [as=crdb_internal_idx_expr_comp:12, type=string]
+           ├── const: ‹×› [as=e_new:11, type=string]
+           └── concat [as=crdb_internal_idx_expr:7, type=string, outer=(6), immutable]
+                ├── variable: e:6 [type=string]
+                └── const: ‹×› [type=string]
+
+query T
+EXPLAIN (OPT, MEMO, REDACT) UPDATE e SET e = 'eee' WHERE e > 'a'
+----
+memo (optimized, ~15KB, required=[presentation: info:13] [distribution: test])
+ ├── G1: (explain G2 [distribution: test])
+ │    └── [presentation: info:13] [distribution: test]
+ │         ├── best: (explain G2="[distribution: test]" [distribution: test])
+ │         └── cost: 1132.23
+ ├── G2: (update G3 G4 G5 e)
+ │    ├── [distribution: test]
+ │    │    ├── best: (update G3="[distribution: test]" G4 G5 e)
+ │    │    └── cost: 1132.21
+ │    └── []
+ │         ├── best: (update G3 G4 G5 e)
+ │         └── cost: 1132.21
+ ├── G3: (project G6 G7 e rowid)
+ │    ├── [distribution: test]
+ │    │    ├── best: (project G6="[distribution: test]" G7 e rowid)
+ │    │    └── cost: 1132.20
+ │    └── []
+ │         ├── best: (project G6 G7 e rowid)
+ │         └── cost: 1132.20
+ ├── G4: (unique-checks)
+ ├── G5: (f-k-checks)
+ ├── G6: (select G8 G9)
+ │    ├── [distribution: test]
+ │    │    ├── best: (select G8="[distribution: test]" G9)
+ │    │    └── cost: 1118.85
+ │    └── []
+ │         ├── best: (select G8 G9)
+ │         └── cost: 1118.85
+ ├── G7: (projections G10 G11 G12)
+ ├── G8: (scan e,cols=(6,8))
+ │    ├── [distribution: test]
+ │    │    ├── best: (scan e,cols=(6,8))
+ │    │    └── cost: 1108.82
+ │    └── []
+ │         ├── best: (scan e,cols=(6,8))
+ │         └── cost: 1108.82
+ ├── G9: (filters G13)
+ ├── G10: (const ‹×›)
+ ├── G11: (const ‹×›)
+ ├── G12: (concat G14 G15)
+ ├── G13: (gt G14 G16)
+ ├── G14: (variable e)
+ ├── G15: (const ‹×›)
+ └── G16: (const ‹×›)
+update e
+ └── project
+      ├── select
+      │    ├── scan e
+      │    │    └── computed column expressions
+      │    │         └── crdb_internal_idx_expr
+      │    │              └── e || ‹×›
+      │    └── filters
+      │         └── e > ‹×›
+      └── projections
+           ├── ‹×›
+           ├── ‹×›
+           └── e || ‹×›
+
+# Redaction of constants in deletes.
+
+query T
+EXPLAIN (REDACT) DELETE FROM f WHERE f = 8.5
+----
+distribution: local
+vectorized: true
+·
+• delete
+│ from: f
+│ auto commit
+│
+└── • render
+    │
+    └── • scan
+          missing stats
+          table: f@f_f_idx (partial index)
+          spans: 1 span
+
+query T
+EXPLAIN (VERBOSE, REDACT) DELETE FROM f WHERE f = 8.5
+----
+distribution: local
+vectorized: true
+·
+• delete
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ from: f
+│ auto commit
+│
+└── • render
+    │ columns: (f, rowid, partial_index_del1)
+    │ render partial_index_del1: f > ‹×›
+    │ render f: f
+    │ render rowid: rowid
+    │
+    └── • scan
+          columns: (f, rowid)
+          estimated row count: 10 (missing stats)
+          table: f@f_f_idx (partial index)
+          spans: 1 span
+
+query T
+EXPLAIN (OPT, REDACT) DELETE FROM f WHERE f = 8.5
+----
+delete f
+ └── project
+      ├── scan f@f_f_idx,partial
+      │    └── constraint: /5/6: ‹×›
+      └── projections
+           └── f > ‹×›
+
+query T
+EXPLAIN (OPT, VERBOSE, REDACT) DELETE FROM f WHERE f = 8.5
+----
+delete f
+ ├── columns: <none>
+ ├── fetch columns: f:5 rowid:6
+ ├── partial index del columns: partial_index_del1:9
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── stats: [rows=0]
+ ├── cost: 29.0500001
+ ├── distribution: test
+ └── project
+      ├── columns: partial_index_del1:9 f:5 rowid:6
+      ├── stats: [rows=10]
+      ├── cost: 29.0400001
+      ├── key: (6)
+      ├── fd: ()-->(5,9)
+      ├── distribution: test
+      ├── prune: (5,6,9)
+      ├── scan f@f_f_idx,partial
+      │    ├── columns: f:5 rowid:6
+      │    ├── constraint: /5/6: ‹×›
+      │    ├── stats: [rows=10, distinct(5)=1, null(5)=0]
+      │    ├── cost: 28.8200001
+      │    ├── key: (6)
+      │    ├── fd: ()-->(5)
+      │    └── distribution: test
+      └── projections
+           └── f:5 > ‹×› [as=partial_index_del1:9, outer=(5)]
+
+query T
+EXPLAIN (OPT, TYPES, REDACT) DELETE FROM f WHERE f = 8.5
+----
+delete f
+ ├── columns: <none>
+ ├── fetch columns: f:5(float) rowid:6(int)
+ ├── partial index del columns: partial_index_del1:9(bool)
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── stats: [rows=0]
+ ├── cost: 29.0500001
+ ├── distribution: test
+ └── project
+      ├── columns: partial_index_del1:9(bool!null) f:5(float!null) rowid:6(int!null)
+      ├── stats: [rows=10]
+      ├── cost: 29.0400001
+      ├── key: (6)
+      ├── fd: ()-->(5,9)
+      ├── distribution: test
+      ├── prune: (5,6,9)
+      ├── scan f@f_f_idx,partial
+      │    ├── columns: f:5(float!null) rowid:6(int!null)
+      │    ├── constraint: /5/6: ‹×›
+      │    ├── stats: [rows=10, distinct(5)=1, null(5)=0]
+      │    ├── cost: 28.8200001
+      │    ├── key: (6)
+      │    ├── fd: ()-->(5)
+      │    └── distribution: test
+      └── projections
+           └── gt [as=partial_index_del1:9, type=bool, outer=(5)]
+                ├── variable: f:5 [type=float]
+                └── const: ‹×› [type=float]
+
+query T
+EXPLAIN (OPT, MEMO, REDACT) DELETE FROM f WHERE f = 8.5
+----
+memo (optimized, ~15KB, required=[presentation: info:10] [distribution: test])
+ ├── G1: (explain G2 [distribution: test])
+ │    └── [presentation: info:10] [distribution: test]
+ │         ├── best: (explain G2="[distribution: test]" [distribution: test])
+ │         └── cost: 29.07
+ ├── G2: (delete G3 G4 G5 f)
+ │    ├── [distribution: test]
+ │    │    ├── best: (delete G3="[distribution: test]" G4 G5 f)
+ │    │    └── cost: 29.05
+ │    └── []
+ │         ├── best: (delete G3 G4 G5 f)
+ │         └── cost: 29.05
+ ├── G3: (project G6 G7 f rowid)
+ │    ├── [distribution: test]
+ │    │    ├── best: (project G6="[distribution: test]" G7 f rowid)
+ │    │    └── cost: 29.04
+ │    └── []
+ │         ├── best: (project G6 G7 f rowid)
+ │         └── cost: 29.04
+ ├── G4: (unique-checks)
+ ├── G5: (f-k-checks)
+ ├── G6: (select G8 G9) (select G10 G9) (scan f@f_f_idx,partial,cols=(5,6),constrained)
+ │    ├── [distribution: test]
+ │    │    ├── best: (scan f@f_f_idx,partial,cols=(5,6),constrained)
+ │    │    └── cost: 28.82
+ │    └── []
+ │         ├── best: (scan f@f_f_idx,partial,cols=(5,6),constrained)
+ │         └── cost: 28.82
+ ├── G7: (projections G11)
+ ├── G8: (scan f,cols=(5,6))
+ │    ├── [distribution: test]
+ │    │    ├── best: (scan f,cols=(5,6))
+ │    │    └── cost: 1108.82
+ │    └── []
+ │         ├── best: (scan f,cols=(5,6))
+ │         └── cost: 1108.82
+ ├── G9: (filters G12)
+ ├── G10: (scan f@f_f_idx,partial,cols=(5,6))
+ │    ├── [distribution: test]
+ │    │    ├── best: (scan f@f_f_idx,partial,cols=(5,6))
+ │    │    └── cost: 378.02
+ │    └── []
+ │         ├── best: (scan f@f_f_idx,partial,cols=(5,6))
+ │         └── cost: 378.02
+ ├── G11: (gt G13 G14)
+ ├── G12: (eq G13 G15)
+ ├── G13: (variable f)
+ ├── G14: (const ‹×›)
+ └── G15: (const ‹×›)
+delete f
+ └── project
+      ├── scan f@f_f_idx,partial
+      │    └── constraint: /5/6: ‹×›
+      └── projections
+           └── f > ‹×›
+
+# Redaction of constants in constrained scans (spans).
+
+query T
+EXPLAIN (REDACT) SELECT * FROM bc WHERE b >= 1.0 AND b < 2.0
+----
+distribution: local
+vectorized: true
+·
+• render
+│
+└── • scan
+      missing stats
+      table: bc@bc_pkey
+      spans: 1 span
+
+query T
+EXPLAIN (VERBOSE, REDACT) SELECT * FROM bc WHERE b >= 1.0 AND b < 2.0
+----
+distribution: local
+vectorized: true
+·
+• render
+│ columns: (b, c)
+│ render c: b * ‹×›
+│ render b: b
+│
+└── • scan
+      columns: (b)
+      estimated row count: 111 (missing stats)
+      table: bc@bc_pkey
+      spans: 1 span
+
+query T
+EXPLAIN (OPT, REDACT) SELECT * FROM bc WHERE b >= 1.0 AND b < 2.0
+----
+project
+ ├── scan bc
+ │    └── constraint: /1: ‹×›
+ └── projections
+      └── b * ‹×›
+
+query T
+EXPLAIN (OPT, VERBOSE, REDACT) SELECT * FROM bc WHERE b >= 1.0 AND b < 2.0
+----
+project
+ ├── columns: b:1 c:2
+ ├── immutable
+ ├── stats: [rows=111.1111]
+ ├── cost: 135.817778
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── distribution: test
+ ├── prune: (1,2)
+ ├── scan bc
+ │    ├── columns: b:1
+ │    ├── constraint: /1: ‹×›
+ │    ├── stats: [rows=111.1111, distinct(1)=111.111, null(1)=0]
+ │    ├── cost: 133.575556
+ │    ├── key: (1)
+ │    └── distribution: test
+ └── projections
+      └── b:1 * ‹×› [as=c:2, outer=(1), immutable]
+
+query T
+EXPLAIN (OPT, TYPES, REDACT) SELECT * FROM bc WHERE b >= 1.0 AND b < 2.0
+----
+project
+ ├── columns: b:1(float!null) c:2(float!null)
+ ├── immutable
+ ├── stats: [rows=111.1111]
+ ├── cost: 135.817778
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── distribution: test
+ ├── prune: (1,2)
+ ├── scan bc
+ │    ├── columns: b:1(float!null)
+ │    ├── constraint: /1: ‹×›
+ │    ├── stats: [rows=111.1111, distinct(1)=111.111, null(1)=0]
+ │    ├── cost: 133.575556
+ │    ├── key: (1)
+ │    └── distribution: test
+ └── projections
+      └── mult [as=c:2, type=float, outer=(1), immutable]
+           ├── variable: b:1 [type=float]
+           └── const: ‹×› [type=float]
+
+query T
+EXPLAIN (OPT, MEMO, REDACT) SELECT * FROM bc WHERE b >= 1.0 AND b < 2.0
+----
+memo (optimized, ~11KB, required=[presentation: info:5] [distribution: test])
+ ├── G1: (explain G2 [presentation: b:1,c:2] [distribution: test])
+ │    └── [presentation: info:5] [distribution: test]
+ │         ├── best: (explain G2="[presentation: b:1,c:2] [distribution: test]" [presentation: b:1,c:2] [distribution: test])
+ │         └── cost: 135.84
+ ├── G2: (project G3 G4 b)
+ │    ├── [presentation: b:1,c:2] [distribution: test]
+ │    │    ├── best: (project G3="[distribution: test]" G4 b)
+ │    │    └── cost: 135.82
+ │    └── []
+ │         ├── best: (project G3 G4 b)
+ │         └── cost: 135.82
+ ├── G3: (select G5 G6) (scan bc,cols=(1),constrained)
+ │    ├── [distribution: test]
+ │    │    ├── best: (scan bc,cols=(1),constrained)
+ │    │    └── cost: 133.58
+ │    └── []
+ │         ├── best: (scan bc,cols=(1),constrained)
+ │         └── cost: 133.58
+ ├── G4: (projections G7)
+ ├── G5: (scan bc,cols=(1))
+ │    ├── [distribution: test]
+ │    │    ├── best: (scan bc,cols=(1))
+ │    │    └── cost: 1068.42
+ │    └── []
+ │         ├── best: (scan bc,cols=(1))
+ │         └── cost: 1068.42
+ ├── G6: (filters G8)
+ ├── G7: (mult G9 G10)
+ ├── G8: (range G11)
+ ├── G9: (variable b)
+ ├── G10: (const ‹×›)
+ ├── G11: (and G12 G13)
+ ├── G12: (ge G9 G14)
+ ├── G13: (lt G9 G15)
+ ├── G14: (const ‹×›)
+ └── G15: (const ‹×›)
+project
+ ├── scan bc
+ │    └── constraint: /1: ‹×›
+ └── projections
+      └── b * ‹×›
+
+query T
+EXPLAIN (REDACT) SELECT * FROM g WHERE (g || 'abc') LIKE '%ggg%'
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: (g || ‹×›) LIKE ‹×›
+│
+└── • index join
+    │ table: g@g_pkey
+    │
+    └── • scan
+          missing stats
+          table: g@g_expr_idx
+          spans: 1 span
+
+query T
+EXPLAIN (VERBOSE, REDACT) SELECT * FROM g WHERE (g || 'abc') LIKE '%ggg%'
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (g)
+│ estimated row count: 333 (missing stats)
+│ filter: (g || ‹×›) LIKE ‹×›
+│
+└── • index join
+    │ columns: (g)
+    │ estimated row count: 111 (missing stats)
+    │ table: g@g_pkey
+    │ key columns: rowid
+    │
+    └── • scan
+          columns: (rowid)
+          estimated row count: 111 (missing stats)
+          table: g@g_expr_idx
+          spans: 1 span
+
+query T
+EXPLAIN (OPT, REDACT) SELECT * FROM g WHERE (g || 'abc') LIKE '%ggg%'
+----
+select
+ ├── index-join g
+ │    └── scan g@g_expr_idx
+ │         └── inverted constraint: /6/3
+ │              └── spans: ‹×›
+ └── filters
+      └── (g || ‹×›) LIKE ‹×›
+
+query T
+EXPLAIN (OPT, VERBOSE, REDACT) SELECT * FROM g WHERE (g || 'abc') LIKE '%ggg%'
+----
+select
+ ├── columns: g:1
+ ├── immutable
+ ├── stats: [rows=333.3333]
+ ├── cost: 811.403333
+ ├── distribution: test
+ ├── index-join g
+ │    ├── columns: g:1
+ │    ├── stats: [rows=111.1111]
+ │    ├── cost: 810.262222
+ │    ├── distribution: test
+ │    └── scan g@g_expr_idx
+ │         ├── columns: rowid:3
+ │         ├── inverted constraint: /6/3
+ │         │    └── spans: ‹×›
+ │         ├── stats: [rows=111.1111, distinct(6)=100, null(6)=0]
+ │         ├── cost: 135.797778
+ │         ├── key: (3)
+ │         └── distribution: test
+ └── filters
+      └── (g:1 || ‹×›) LIKE ‹×› [outer=(1), immutable]
+
+query T
+EXPLAIN (OPT, TYPES, REDACT) SELECT * FROM g WHERE (g || 'abc') LIKE '%ggg%'
+----
+select
+ ├── columns: g:1(string)
+ ├── immutable
+ ├── stats: [rows=333.3333]
+ ├── cost: 811.403333
+ ├── distribution: test
+ ├── index-join g
+ │    ├── columns: g:1(string)
+ │    ├── stats: [rows=111.1111]
+ │    ├── cost: 810.262222
+ │    ├── distribution: test
+ │    └── scan g@g_expr_idx
+ │         ├── columns: rowid:3(int!null)
+ │         ├── inverted constraint: /6/3
+ │         │    └── spans: ‹×›
+ │         ├── stats: [rows=111.1111, distinct(6)=100, null(6)=0]
+ │         ├── cost: 135.797778
+ │         ├── key: (3)
+ │         └── distribution: test
+ └── filters
+      └── like [type=bool, outer=(1), immutable]
+           ├── concat [type=string]
+           │    ├── variable: g:1 [type=string]
+           │    └── const: ‹×› [type=string]
+           └── const: ‹×› [type=string]
+
+query T
+EXPLAIN (OPT, MEMO, REDACT) SELECT * FROM g WHERE (g || 'abc') LIKE '%ggg%'
+----
+memo (optimized, ~12KB, required=[presentation: info:7] [distribution: test])
+ ├── G1: (explain G2 [presentation: g:1] [distribution: test])
+ │    └── [presentation: info:7] [distribution: test]
+ │         ├── best: (explain G2="[presentation: g:1] [distribution: test]" [presentation: g:1] [distribution: test])
+ │         └── cost: 811.42
+ ├── G2: (select G3 G4) (select G5 G4)
+ │    ├── [presentation: g:1] [distribution: test]
+ │    │    ├── best: (select G5="[distribution: test]" G4)
+ │    │    └── cost: 811.40
+ │    └── []
+ │         ├── best: (select G5 G4)
+ │         └── cost: 811.40
+ ├── G3: (scan g,cols=(1))
+ │    ├── [distribution: test]
+ │    │    ├── best: (scan g,cols=(1))
+ │    │    └── cost: 1088.62
+ │    └── []
+ │         ├── best: (scan g,cols=(1))
+ │         └── cost: 1088.62
+ ├── G4: (filters G6)
+ ├── G5: (index-join G7 g,cols=(1))
+ │    ├── [distribution: test]
+ │    │    ├── best: (index-join G7="[distribution: test]" g,cols=(1))
+ │    │    └── cost: 810.26
+ │    └── []
+ │         ├── best: (index-join G7 g,cols=(1))
+ │         └── cost: 810.26
+ ├── G6: (like G8 G9)
+ ├── G7: (scan g@g_expr_idx,cols=(3),constrained inverted)
+ │    ├── [distribution: test]
+ │    │    ├── best: (scan g@g_expr_idx,cols=(3),constrained inverted)
+ │    │    └── cost: 135.80
+ │    └── []
+ │         ├── best: (scan g@g_expr_idx,cols=(3),constrained inverted)
+ │         └── cost: 135.80
+ ├── G8: (concat G10 G11)
+ ├── G9: (const ‹×›)
+ ├── G10: (variable g)
+ └── G11: (const ‹×›)
+select
+ ├── index-join g
+ │    └── scan g@g_expr_idx
+ │         └── inverted constraint: /6/3
+ │              └── spans: ‹×›
+ └── filters
+      └── (g || ‹×›) LIKE ‹×›
+
+# Redaction of constants in filters.
+
+query T
+EXPLAIN (REDACT) SELECT a FROM a WHERE a % 8 > 2
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: (a % ‹×›) > ‹×›
+│
+└── • scan
+      missing stats
+      table: a@a_pkey
+      spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE, REDACT) SELECT a FROM a WHERE a % 8 > 2
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (a)
+│ estimated row count: 333 (missing stats)
+│ filter: (a % ‹×›) > ‹×›
+│
+└── • scan
+      columns: (a)
+      estimated row count: 1,000 (missing stats)
+      table: a@a_pkey
+      spans: FULL SCAN
+
+query T
+EXPLAIN (OPT, REDACT) SELECT a FROM a WHERE a % 8 > 2
+----
+select
+ ├── scan a
+ └── filters
+      └── (a % ‹×›) > ‹×›
+
+query T
+EXPLAIN (OPT, VERBOSE, REDACT) SELECT a FROM a WHERE a % 8 > 2
+----
+select
+ ├── columns: a:1
+ ├── immutable
+ ├── stats: [rows=333.3333]
+ ├── cost: 1098.65
+ ├── distribution: test
+ ├── scan a
+ │    ├── columns: a:1
+ │    ├── stats: [rows=1000]
+ │    ├── cost: 1088.62
+ │    ├── distribution: test
+ │    └── prune: (1)
+ └── filters
+      └── (a:1 % ‹×›) > ‹×› [outer=(1), immutable]
+
+query T
+EXPLAIN (OPT, TYPES, REDACT) SELECT a FROM a WHERE a % 8 > 2
+----
+select
+ ├── columns: a:1(int)
+ ├── immutable
+ ├── stats: [rows=333.3333]
+ ├── cost: 1098.65
+ ├── distribution: test
+ ├── scan a
+ │    ├── columns: a:1(int)
+ │    ├── stats: [rows=1000]
+ │    ├── cost: 1088.62
+ │    ├── distribution: test
+ │    └── prune: (1)
+ └── filters
+      └── gt [type=bool, outer=(1), immutable]
+           ├── mod [type=int]
+           │    ├── variable: a:1 [type=int]
+           │    └── const: ‹×› [type=int]
+           └── const: ‹×› [type=int]
+
+query T
+EXPLAIN (OPT, MEMO, REDACT) SELECT a FROM a WHERE a % 8 > 2
+----
+memo (optimized, ~6KB, required=[presentation: info:5] [distribution: test])
+ ├── G1: (explain G2 [presentation: a:1] [distribution: test])
+ │    └── [presentation: info:5] [distribution: test]
+ │         ├── best: (explain G2="[presentation: a:1] [distribution: test]" [presentation: a:1] [distribution: test])
+ │         └── cost: 1098.67
+ ├── G2: (select G3 G4)
+ │    ├── [presentation: a:1] [distribution: test]
+ │    │    ├── best: (select G3="[distribution: test]" G4)
+ │    │    └── cost: 1098.65
+ │    └── []
+ │         ├── best: (select G3 G4)
+ │         └── cost: 1098.65
+ ├── G3: (scan a,cols=(1))
+ │    ├── [distribution: test]
+ │    │    ├── best: (scan a,cols=(1))
+ │    │    └── cost: 1088.62
+ │    └── []
+ │         ├── best: (scan a,cols=(1))
+ │         └── cost: 1088.62
+ ├── G4: (filters G5)
+ ├── G5: (gt G6 G7)
+ ├── G6: (mod G8 G9)
+ ├── G7: (const ‹×›)
+ ├── G8: (variable a)
+ └── G9: (const ‹×›)
+select
+ ├── scan a
+ └── filters
+      └── (a % ‹×›) > ‹×›
+
+# Redaction of constants in projections.
+
+query T
+EXPLAIN (REDACT) SELECT 100, if(e != '', 12.0, 13.0), 'abc', coalesce(e, 'eee'), row(e, e || 'a', now()), 'POINT (1 1)'::GEOMETRY, '[true]'::JSON, false, NULL, e FROM e
+----
+distribution: local
+vectorized: true
+·
+• render
+│
+└── • scan
+      missing stats
+      table: e@e_pkey
+      spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE, REDACT) SELECT 100, if(e != '', 12.0, 13.0), 'abc', coalesce(e, 'eee'), row(e, e || 'a', now()), 'POINT (1 1)'::GEOMETRY, '[true]'::JSON, false, NULL, e FROM e
+----
+distribution: local
+vectorized: true
+·
+• render
+│ columns: ("?column?", "if", "?column?", "coalesce", "row", "geometry", jsonb, bool, "?column?", e)
+│ render ?column?: ‹×›
+│ render if: CASE e != ‹×› WHEN ‹×› THEN ‹×› ELSE ‹×› END
+│ render ?column?: ‹×›
+│ render coalesce: COALESCE(e, ‹×›)
+│ render row: (e, e || ‹×›, ‹×›)
+│ render geometry: ‹×›
+│ render jsonb: ‹×›
+│ render bool: ‹×›
+│ render ?column?: ‹×›
+│ render e: e
+│
+└── • scan
+      columns: (e)
+      estimated row count: 1,000 (missing stats)
+      table: e@e_pkey
+      spans: FULL SCAN
+
+query T
+EXPLAIN (OPT, REDACT) SELECT 100, if(e != '', 12.0, 13.0), 'abc', coalesce(e, 'eee'), row(e, e || 'a', now()), 'POINT (1 1)'::GEOMETRY, '[true]'::JSON, false, NULL, e FROM e
+----
+project
+ ├── scan e
+ │    └── computed column expressions
+ │         └── crdb_internal_idx_expr
+ │              └── e || ‹×›
+ └── projections
+      ├── ‹×›
+      ├── CASE e != ‹×› WHEN ‹×› THEN ‹×› ELSE ‹×› END
+      ├── ‹×›
+      ├── COALESCE(e, ‹×›)
+      ├── (e, e || ‹×›, ‹×›)
+      ├── ‹×›
+      ├── ‹×›
+      ├── ‹×›
+      └── ‹×›
+
+query T
+EXPLAIN (OPT, VERBOSE, REDACT) SELECT 100, if(e != '', 12.0, 13.0), 'abc', coalesce(e, 'eee'), row(e, e || 'a', now()), 'POINT (1 1)'::GEOMETRY, '[true]'::JSON, false, NULL, e FROM e
+----
+project
+ ├── columns: "?column?":6 if:7 "?column?":8 coalesce:9 row:10 geometry:11 jsonb:12 bool:13 "?column?":14 e:1
+ ├── immutable
+ ├── stats: [rows=1000]
+ ├── cost: 1188.64
+ ├── fd: ()-->(6,8,11-14), (1)-->(7,9,10)
+ ├── distribution: test
+ ├── prune: (1,6-14)
+ ├── scan e
+ │    ├── columns: e:1
+ │    ├── computed column expressions
+ │    │    └── crdb_internal_idx_expr:2
+ │    │         └── e:1 || ‹×›
+ │    ├── stats: [rows=1000]
+ │    ├── cost: 1088.62
+ │    ├── distribution: test
+ │    └── prune: (1)
+ └── projections
+      ├── ‹×› [as="?column?":6]
+      ├── CASE e:1 != ‹×› WHEN ‹×› THEN ‹×› ELSE ‹×› END [as=if:7, outer=(1)]
+      ├── ‹×› [as="?column?":8]
+      ├── COALESCE(e:1, ‹×›) [as=coalesce:9, outer=(1)]
+      ├── (e:1, e:1 || ‹×›, ‹×›) [as=row:10, outer=(1), immutable]
+      ├── ‹×› [as=geometry:11]
+      ├── ‹×› [as=jsonb:12]
+      ├── ‹×› [as=bool:13]
+      └── ‹×› [as="?column?":14]
+
+query T
+EXPLAIN (OPT, TYPES, REDACT) SELECT 100, if(e != '', 12.0, 13.0), 'abc', coalesce(e, 'eee'), row(e, e || 'a', now()), 'POINT (1 1)'::GEOMETRY, '[true]'::JSON, false, NULL, e FROM e
+----
+project
+ ├── columns: "?column?":6(int!null) if:7(decimal) "?column?":8(string!null) coalesce:9(string) row:10(tuple{string, string, timestamptz}) geometry:11(geometry!null) jsonb:12(jsonb!null) bool:13(bool!null) "?column?":14(unknown) e:1(string)
+ ├── immutable
+ ├── stats: [rows=1000]
+ ├── cost: 1188.64
+ ├── fd: ()-->(6,8,11-14), (1)-->(7,9,10)
+ ├── distribution: test
+ ├── prune: (1,6-14)
+ ├── scan e
+ │    ├── columns: e:1(string)
+ │    ├── computed column expressions
+ │    │    └── crdb_internal_idx_expr:2
+ │    │         └── concat [type=string]
+ │    │              ├── variable: e:1 [type=string]
+ │    │              └── const: ‹×› [type=string]
+ │    ├── stats: [rows=1000]
+ │    ├── cost: 1088.62
+ │    ├── distribution: test
+ │    └── prune: (1)
+ └── projections
+      ├── const: ‹×› [as="?column?":6, type=int]
+      ├── case [as=if:7, type=decimal, outer=(1)]
+      │    ├── ne [type=bool]
+      │    │    ├── variable: e:1 [type=string]
+      │    │    └── const: ‹×› [type=string]
+      │    ├── when [type=decimal]
+      │    │    ├── true [type=bool]
+      │    │    └── const: ‹×› [type=decimal]
+      │    └── const: ‹×› [type=decimal]
+      ├── const: ‹×› [as="?column?":8, type=string]
+      ├── coalesce [as=coalesce:9, type=string, outer=(1)]
+      │    ├── variable: e:1 [type=string]
+      │    └── const: ‹×› [type=string]
+      ├── tuple [as=row:10, type=tuple{string, string, timestamptz}, outer=(1), immutable]
+      │    ├── variable: e:1 [type=string]
+      │    ├── concat [type=string]
+      │    │    ├── variable: e:1 [type=string]
+      │    │    └── const: ‹×› [type=string]
+      │    └── const: ‹×› [type=timestamptz]
+      ├── const: ‹×› [as=geometry:11, type=geometry]
+      ├── const: ‹×› [as=jsonb:12, type=jsonb]
+      ├── false [as=bool:13, type=bool]
+      └── null [as="?column?":14, type=unknown]
+
+query T
+EXPLAIN (OPT, MEMO, REDACT) SELECT 100, if(e != '', 12.0, 13.0), 'abc', coalesce(e, 'eee'), row(e, e || 'a', now()), 'POINT (1 1)'::GEOMETRY, '[true]'::JSON, false, NULL, e FROM e
+----
+memo (optimized, ~8KB, required=[presentation: info:15] [distribution: test])
+ ├── G1: (explain G2 [presentation: ?column?:6,if:7,?column?:8,coalesce:9,row:10,geometry:11,jsonb:12,bool:13,?column?:14,e:1] [distribution: test])
+ │    └── [presentation: info:15] [distribution: test]
+ │         ├── best: (explain G2="[presentation: ?column?:6,if:7,?column?:8,coalesce:9,row:10,geometry:11,jsonb:12,bool:13,?column?:14,e:1] [distribution: test]" [presentation: ?column?:6,if:7,?column?:8,coalesce:9,row:10,geometry:11,jsonb:12,bool:13,?column?:14,e:1] [distribution: test])
+ │         └── cost: 1188.66
+ ├── G2: (project G3 G4 e)
+ │    ├── [presentation: ?column?:6,if:7,?column?:8,coalesce:9,row:10,geometry:11,jsonb:12,bool:13,?column?:14,e:1] [distribution: test]
+ │    │    ├── best: (project G3="[distribution: test]" G4 e)
+ │    │    └── cost: 1188.64
+ │    └── []
+ │         ├── best: (project G3 G4 e)
+ │         └── cost: 1188.64
+ ├── G3: (scan e,cols=(1))
+ │    ├── [distribution: test]
+ │    │    ├── best: (scan e,cols=(1))
+ │    │    └── cost: 1088.62
+ │    └── []
+ │         ├── best: (scan e,cols=(1))
+ │         └── cost: 1088.62
+ ├── G4: (projections G5 G6 G7 G8 G9 G10 G11 G12 G13)
+ ├── G5: (const ‹×›)
+ ├── G6: (case G14 G15 G16)
+ ├── G7: (const ‹×›)
+ ├── G8: (coalesce G17)
+ ├── G9: (tuple G18)
+ ├── G10: (const ‹×›)
+ ├── G11: (const ‹×›)
+ ├── G12: (‹×›)
+ ├── G13: (null)
+ ├── G14: (ne G19 G20)
+ ├── G15: (scalar-list G21)
+ ├── G16: (const ‹×›)
+ ├── G17: (scalar-list G19 G22)
+ ├── G18: (scalar-list G19 G23 G24)
+ ├── G19: (variable e)
+ ├── G20: (const ‹×›)
+ ├── G21: (when G25 G26)
+ ├── G22: (const ‹×›)
+ ├── G23: (concat G19 G27)
+ ├── G24: (const ‹×›)
+ ├── G25: (‹×›)
+ ├── G26: (const ‹×›)
+ └── G27: (const ‹×›)
+project
+ ├── scan e
+ │    └── computed column expressions
+ │         └── crdb_internal_idx_expr
+ │              └── e || ‹×›
+ └── projections
+      ├── ‹×›
+      ├── CASE e != ‹×› WHEN ‹×› THEN ‹×› ELSE ‹×› END
+      ├── ‹×›
+      ├── COALESCE(e, ‹×›)
+      ├── (e, e || ‹×›, ‹×›)
+      ├── ‹×›
+      ├── ‹×›
+      ├── ‹×›
+      └── ‹×›
+
+# Redaction of constants in join predicates.
+
+query T
+EXPLAIN (REDACT) SELECT * FROM bc JOIN f ON b = f + 1
+----
+distribution: local
+vectorized: true
+·
+• hash join
+│ equality: (b) = (column9)
+│ left cols are key
+│
+├── • render
+│   │
+│   └── • scan
+│         missing stats
+│         table: bc@bc_pkey
+│         spans: FULL SCAN
+│
+└── • render
+    │
+    └── • scan
+          missing stats
+          table: f@f_pkey
+          spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE, REDACT) SELECT * FROM bc JOIN f ON b = f + 1
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (b, c, f)
+│
+└── • hash join (inner)
+    │ columns: (c, b, column9, f)
+    │ estimated row count: 1,000 (missing stats)
+    │ equality: (b) = (column9)
+    │ left cols are key
+    │
+    ├── • render
+    │   │ columns: (c, b)
+    │   │ render c: b * ‹×›
+    │   │ render b: b
+    │   │
+    │   └── • scan
+    │         columns: (b)
+    │         estimated row count: 1,000 (missing stats)
+    │         table: bc@bc_pkey
+    │         spans: FULL SCAN
+    │
+    └── • render
+        │ columns: (column9, f)
+        │ render column9: f + ‹×›
+        │ render f: f
+        │
+        └── • scan
+              columns: (f)
+              estimated row count: 1,000 (missing stats)
+              table: f@f_pkey
+              spans: FULL SCAN
+
+query T
+EXPLAIN (OPT, REDACT) SELECT * FROM bc JOIN f ON b = f + 1
+----
+project
+ └── inner-join (hash)
+      ├── project
+      │    ├── scan bc
+      │    │    └── computed column expressions
+      │    │         └── c
+      │    │              └── b * ‹×›
+      │    └── projections
+      │         └── b * ‹×›
+      ├── project
+      │    ├── scan f
+      │    │    └── partial index predicates
+      │    │         └── f_f_idx: filters
+      │    │              └── f > ‹×›
+      │    └── projections
+      │         └── f + ‹×›
+      └── filters
+           └── b = column9
+
+query T
+EXPLAIN (OPT, VERBOSE, REDACT) SELECT * FROM bc JOIN f ON b = f + 1
+----
+project
+ ├── columns: b:1 c:2 f:5
+ ├── immutable
+ ├── stats: [rows=1000]
+ ├── cost: 2247.26625
+ ├── fd: (1)-->(2), (5)-->(1,2)
+ ├── distribution: test
+ ├── prune: (1,2,5)
+ └── inner-join (hash)
+      ├── columns: b:1 c:2 f:5 column9:9
+      ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+      ├── immutable
+      ├── stats: [rows=1000, distinct(1)=100, null(1)=0, distinct(9)=100, null(9)=0]
+      ├── cost: 2237.24625
+      ├── fd: (1)-->(2), (5)-->(9), (1)==(9), (9)==(1)
+      ├── distribution: test
+      ├── project
+      │    ├── columns: c:2 b:1
+      │    ├── immutable
+      │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(2)=1000, null(2)=0]
+      │    ├── cost: 1088.44
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
+      │    ├── distribution: test
+      │    ├── prune: (1,2)
+      │    ├── interesting orderings: (+1)
+      │    ├── unfiltered-cols: (1-4)
+      │    ├── scan bc
+      │    │    ├── columns: b:1
+      │    │    ├── computed column expressions
+      │    │    │    └── c:2
+      │    │    │         └── b:1 * ‹×›
+      │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
+      │    │    ├── cost: 1068.42
+      │    │    ├── key: (1)
+      │    │    ├── distribution: test
+      │    │    ├── prune: (1)
+      │    │    ├── interesting orderings: (+1)
+      │    │    └── unfiltered-cols: (1-4)
+      │    └── projections
+      │         └── b:1 * ‹×› [as=c:2, outer=(1), immutable]
+      ├── project
+      │    ├── columns: column9:9 f:5
+      │    ├── immutable
+      │    ├── stats: [rows=1000, distinct(9)=100, null(9)=0]
+      │    ├── cost: 1108.64
+      │    ├── fd: (5)-->(9)
+      │    ├── distribution: test
+      │    ├── prune: (5,9)
+      │    ├── interesting orderings: (+5)
+      │    ├── unfiltered-cols: (5-8)
+      │    ├── scan f
+      │    │    ├── columns: f:5
+      │    │    ├── partial index predicates
+      │    │    │    └── f_f_idx: filters
+      │    │    │         └── f:5 > ‹×› [outer=(5), constraints=(‹×›; tight)]
+      │    │    ├── stats: [rows=1000, distinct(5)=100, null(5)=10]
+      │    │    ├── cost: 1088.62
+      │    │    ├── distribution: test
+      │    │    ├── prune: (5)
+      │    │    ├── interesting orderings: (+5)
+      │    │    └── unfiltered-cols: (5-8)
+      │    └── projections
+      │         └── f:5 + ‹×› [as=column9:9, outer=(5), immutable]
+      └── filters
+           └── b:1 = column9:9 [outer=(1,9), constraints=(‹×›), fd=(1)==(9), (9)==(1)]
+
+query T
+EXPLAIN (OPT, TYPES, REDACT) SELECT * FROM bc JOIN f ON b = f + 1
+----
+project
+ ├── columns: b:1(float!null) c:2(float!null) f:5(float)
+ ├── immutable
+ ├── stats: [rows=1000]
+ ├── cost: 2247.26625
+ ├── fd: (1)-->(2), (5)-->(1,2)
+ ├── distribution: test
+ ├── prune: (1,2,5)
+ └── inner-join (hash)
+      ├── columns: b:1(float!null) c:2(float!null) f:5(float) column9:9(float!null)
+      ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+      ├── immutable
+      ├── stats: [rows=1000, distinct(1)=100, null(1)=0, distinct(9)=100, null(9)=0]
+      ├── cost: 2237.24625
+      ├── fd: (1)-->(2), (5)-->(9), (1)==(9), (9)==(1)
+      ├── distribution: test
+      ├── project
+      │    ├── columns: c:2(float!null) b:1(float!null)
+      │    ├── immutable
+      │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(2)=1000, null(2)=0]
+      │    ├── cost: 1088.44
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
+      │    ├── distribution: test
+      │    ├── prune: (1,2)
+      │    ├── interesting orderings: (+1)
+      │    ├── unfiltered-cols: (1-4)
+      │    ├── scan bc
+      │    │    ├── columns: b:1(float!null)
+      │    │    ├── computed column expressions
+      │    │    │    └── c:2
+      │    │    │         └── mult [type=float]
+      │    │    │              ├── variable: b:1 [type=float]
+      │    │    │              └── const: ‹×› [type=float]
+      │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
+      │    │    ├── cost: 1068.42
+      │    │    ├── key: (1)
+      │    │    ├── distribution: test
+      │    │    ├── prune: (1)
+      │    │    ├── interesting orderings: (+1)
+      │    │    └── unfiltered-cols: (1-4)
+      │    └── projections
+      │         └── mult [as=c:2, type=float, outer=(1), immutable]
+      │              ├── variable: b:1 [type=float]
+      │              └── const: ‹×› [type=float]
+      ├── project
+      │    ├── columns: column9:9(float) f:5(float)
+      │    ├── immutable
+      │    ├── stats: [rows=1000, distinct(9)=100, null(9)=0]
+      │    ├── cost: 1108.64
+      │    ├── fd: (5)-->(9)
+      │    ├── distribution: test
+      │    ├── prune: (5,9)
+      │    ├── interesting orderings: (+5)
+      │    ├── unfiltered-cols: (5-8)
+      │    ├── scan f
+      │    │    ├── columns: f:5(float)
+      │    │    ├── partial index predicates
+      │    │    │    └── f_f_idx: filters
+      │    │    │         └── gt [type=bool, outer=(5), constraints=(‹×›; tight)]
+      │    │    │              ├── variable: f:5 [type=float]
+      │    │    │              └── const: ‹×› [type=float]
+      │    │    ├── stats: [rows=1000, distinct(5)=100, null(5)=10]
+      │    │    ├── cost: 1088.62
+      │    │    ├── distribution: test
+      │    │    ├── prune: (5)
+      │    │    ├── interesting orderings: (+5)
+      │    │    └── unfiltered-cols: (5-8)
+      │    └── projections
+      │         └── plus [as=column9:9, type=float, outer=(5), immutable]
+      │              ├── variable: f:5 [type=float]
+      │              └── const: ‹×› [type=float]
+      └── filters
+           └── eq [type=bool, outer=(1,9), constraints=(‹×›), fd=(1)==(9), (9)==(1)]
+                ├── variable: b:1 [type=float]
+                └── variable: column9:9 [type=float]
+
+query T
+EXPLAIN (OPT, MEMO, REDACT) SELECT * FROM bc JOIN f ON b = f + 1
+----
+memo (optimized, ~25KB, required=[presentation: info:10] [distribution: test])
+ ├── G1: (explain G2 [presentation: b:1,c:2,f:5] [distribution: test])
+ │    └── [presentation: info:10] [distribution: test]
+ │         ├── best: (explain G2="[presentation: b:1,c:2,f:5] [distribution: test]" [presentation: b:1,c:2,f:5] [distribution: test])
+ │         └── cost: 2247.29
+ ├── G2: (project G3 G4 b c f)
+ │    ├── [presentation: b:1,c:2,f:5] [distribution: test]
+ │    │    ├── best: (project G3="[distribution: test]" G4 b c f)
+ │    │    └── cost: 2247.27
+ │    └── []
+ │         ├── best: (project G3 G4 b c f)
+ │         └── cost: 2247.27
+ ├── G3: (inner-join G5 G6 G7) (inner-join G6 G5 G7) (merge-join G5 G6 G8 inner-join,+1,+9) (project G9 G10 b f column9)
+ │    ├── [distribution: test]
+ │    │    ├── best: (inner-join G5="[distribution: test]" G6="[distribution: test]" G7)
+ │    │    └── cost: 2237.25
+ │    └── []
+ │         ├── best: (inner-join G5 G6 G7)
+ │         └── cost: 2237.25
+ ├── G4: (projections)
+ ├── G5: (project G11 G10 b)
+ │    ├── [distribution: test]
+ │    │    ├── best: (project G11="[distribution: test]" G10 b)
+ │    │    └── cost: 1088.44
+ │    ├── [ordering: +1]
+ │    │    ├── best: (project G11="[ordering: +1]" G10 b)
+ │    │    └── cost: 1088.44
+ │    ├── [ordering: +1] [distribution: test]
+ │    │    ├── best: (project G11="[ordering: +1] [distribution: test]" G10 b)
+ │    │    └── cost: 1088.44
+ │    └── []
+ │         ├── best: (project G11 G10 b)
+ │         └── cost: 1088.44
+ ├── G6: (project G12 G13 f)
+ │    ├── [distribution: test]
+ │    │    ├── best: (project G12="[distribution: test]" G13 f)
+ │    │    └── cost: 1108.64
+ │    ├── [ordering: +9]
+ │    │    ├── best: (sort G6)
+ │    │    └── cost: 1348.12
+ │    ├── [ordering: +9] [distribution: test]
+ │    │    ├── best: (distribute G6="[ordering: +9]")
+ │    │    └── cost: 1548.14
+ │    └── []
+ │         ├── best: (project G12 G13 f)
+ │         └── cost: 1108.64
+ ├── G7: (filters G14)
+ ├── G8: (filters)
+ ├── G9: (inner-join G6 G11 G7) (lookup-join G6 G8 bc,keyCols=[9],outCols=(1,5,9))
+ │    ├── [distribution: test]
+ │    │    ├── best: (inner-join G6="[distribution: test]" G11="[distribution: test]" G7)
+ │    │    └── cost: 2217.23
+ │    └── []
+ │         ├── best: (inner-join G6 G11 G7)
+ │         └── cost: 2217.23
+ ├── G10: (projections G15)
+ ├── G11: (scan bc,cols=(1))
+ │    ├── [distribution: test]
+ │    │    ├── best: (scan bc,cols=(1))
+ │    │    └── cost: 1068.42
+ │    ├── [ordering: +1]
+ │    │    ├── best: (scan bc,cols=(1))
+ │    │    └── cost: 1068.42
+ │    ├── [ordering: +1] [distribution: test]
+ │    │    ├── best: (scan bc,cols=(1))
+ │    │    └── cost: 1068.42
+ │    └── []
+ │         ├── best: (scan bc,cols=(1))
+ │         └── cost: 1068.42
+ ├── G12: (scan f,cols=(5))
+ │    ├── [distribution: test]
+ │    │    ├── best: (scan f,cols=(5))
+ │    │    └── cost: 1088.62
+ │    └── []
+ │         ├── best: (scan f,cols=(5))
+ │         └── cost: 1088.62
+ ├── G13: (projections G16)
+ ├── G14: (eq G17 G18)
+ ├── G15: (mult G17 G19)
+ ├── G16: (plus G20 G21)
+ ├── G17: (variable b)
+ ├── G18: (variable column9)
+ ├── G19: (const ‹×›)
+ ├── G20: (variable f)
+ └── G21: (const ‹×›)
+project
+ └── inner-join (hash)
+      ├── project
+      │    ├── scan bc
+      │    │    └── computed column expressions
+      │    │         └── c
+      │    │              └── b * ‹×›
+      │    └── projections
+      │         └── b * ‹×›
+      ├── project
+      │    ├── scan f
+      │    │    └── partial index predicates
+      │    │         └── f_f_idx: filters
+      │    │              └── f > ‹×›
+      │    └── projections
+      │         └── f + ‹×›
+      └── filters
+           └── b = column9
+
+# Redaction of constants in apply joins.
+
+query T
+EXPLAIN (REDACT) SELECT f, g FROM f, LATERAL (SELECT count(DISTINCT c + f + 1) * 2 AS g FROM bc WHERE b * f < 10)
+----
+distribution: local
+vectorized: true
+·
+• render
+│
+└── • group (hash)
+    │ group by: rowid
+    │
+    └── • apply join (left outer)
+        │
+        └── • scan
+              missing stats
+              table: f@f_pkey
+              spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE, REDACT) SELECT f, g FROM f, LATERAL (SELECT count(DISTINCT c + f + 1) * 2 AS g FROM bc WHERE b * f < 10)
+----
+distribution: local
+vectorized: true
+·
+• render
+│ columns: (f, g)
+│ render g: count * ‹×›
+│ render f: any_not_null
+│
+└── • group (hash)
+    │ columns: (rowid, count, any_not_null)
+    │ estimated row count: 1,000 (missing stats)
+    │ aggregate 0: count(column9)
+    │ aggregate 1: any_not_null(f)
+    │ group by: rowid
+    │
+    └── • apply join (left outer)
+        │ columns: (f, rowid, column9)
+        │ estimated row count: 333,333 (missing stats)
+        │
+        └── • scan
+              columns: (f, rowid)
+              estimated row count: 1,000 (missing stats)
+              table: f@f_pkey
+              spans: FULL SCAN
+
+query T
+EXPLAIN (OPT, REDACT) SELECT f, g FROM f, LATERAL (SELECT count(DISTINCT c + f + 1) * 2 AS g FROM bc WHERE b * f < 10)
+----
+project
+ ├── group-by (hash)
+ │    ├── left-join-apply
+ │    │    ├── scan f
+ │    │    │    └── partial index predicates
+ │    │    │         └── f_f_idx: filters
+ │    │    │              └── f > ‹×›
+ │    │    ├── distinct-on
+ │    │    │    └── project
+ │    │    │         ├── select
+ │    │    │         │    ├── scan bc
+ │    │    │         │    │    └── computed column expressions
+ │    │    │         │    │         └── c
+ │    │    │         │    │              └── b * ‹×›
+ │    │    │         │    └── filters
+ │    │    │         │         └── (b * f) < ‹×›
+ │    │    │         └── projections
+ │    │    │              └── (f + (b * ‹×›)) + ‹×›
+ │    │    └── filters (true)
+ │    └── aggregations
+ │         ├── count
+ │         │    └── column9
+ │         └── const-agg
+ │              └── f
+ └── projections
+      └── count * ‹×›
+
+query T
+EXPLAIN (OPT, VERBOSE, REDACT) SELECT f, g FROM f, LATERAL (SELECT count(DISTINCT c + f + 1) * 2 AS g FROM bc WHERE b * f < 10)
+----
+project
+ ├── columns: f:1 g:11
+ ├── immutable
+ ├── stats: [rows=1000]
+ ├── cost: 18919.231
+ ├── distribution: test
+ ├── prune: (1,11)
+ ├── group-by (hash)
+ │    ├── columns: f:1 rowid:2 count:10
+ │    ├── grouping columns: rowid:2
+ │    ├── immutable
+ │    ├── stats: [rows=1000, distinct(2)=1000, null(2)=0]
+ │    ├── cost: 18899.211
+ │    ├── key: (2)
+ │    ├── fd: (2)-->(1,10)
+ │    ├── distribution: test
+ │    ├── left-join-apply
+ │    │    ├── columns: f:1 rowid:2 column9:9
+ │    │    ├── immutable
+ │    │    ├── stats: [rows=333333.3, distinct(2)=1000, null(2)=0]
+ │    │    ├── cost: 5555.70139
+ │    │    ├── key: (2,9)
+ │    │    ├── fd: (2)-->(1)
+ │    │    ├── distribution: test
+ │    │    ├── prune: (2)
+ │    │    ├── interesting orderings: (+2) (+1,+2)
+ │    │    ├── scan f
+ │    │    │    ├── columns: f:1 rowid:2
+ │    │    │    ├── partial index predicates
+ │    │    │    │    └── f_f_idx: filters
+ │    │    │    │         └── f:1 > ‹×› [outer=(1), constraints=(‹×›; tight)]
+ │    │    │    ├── stats: [rows=1000, distinct(2)=1000, null(2)=0]
+ │    │    │    ├── cost: 1108.82
+ │    │    │    ├── key: (2)
+ │    │    │    ├── fd: (2)-->(1)
+ │    │    │    ├── distribution: test
+ │    │    │    ├── prune: (1,2)
+ │    │    │    ├── interesting orderings: (+2) (+1,+2)
+ │    │    │    └── unfiltered-cols: (1-4)
+ │    │    ├── distinct-on
+ │    │    │    ├── columns: column9:9
+ │    │    │    ├── grouping columns: column9:9
+ │    │    │    ├── outer: (1)
+ │    │    │    ├── immutable
+ │    │    │    ├── stats: [rows=333.3333, distinct(9)=333.333, null(9)=0]
+ │    │    │    ├── cost: 1095.18069
+ │    │    │    ├── key: (9)
+ │    │    │    ├── distribution: test
+ │    │    │    └── project
+ │    │    │         ├── columns: column9:9
+ │    │    │         ├── outer: (1)
+ │    │    │         ├── immutable
+ │    │    │         ├── stats: [rows=333.3333, distinct(9)=333.333, null(9)=0]
+ │    │    │         ├── cost: 1085.13667
+ │    │    │         ├── distribution: test
+ │    │    │         ├── prune: (9)
+ │    │    │         ├── select
+ │    │    │         │    ├── columns: b:5
+ │    │    │         │    ├── outer: (1)
+ │    │    │         │    ├── immutable
+ │    │    │         │    ├── stats: [rows=333.3333, distinct(5)=333.333, null(5)=0]
+ │    │    │         │    ├── cost: 1078.45
+ │    │    │         │    ├── key: (5)
+ │    │    │         │    ├── distribution: test
+ │    │    │         │    ├── interesting orderings: (+5)
+ │    │    │         │    ├── scan bc
+ │    │    │         │    │    ├── columns: b:5
+ │    │    │         │    │    ├── computed column expressions
+ │    │    │         │    │    │    └── c:6
+ │    │    │         │    │    │         └── b:5 * ‹×›
+ │    │    │         │    │    ├── stats: [rows=1000, distinct(5)=1000, null(5)=0]
+ │    │    │         │    │    ├── cost: 1068.42
+ │    │    │         │    │    ├── key: (5)
+ │    │    │         │    │    ├── distribution: test
+ │    │    │         │    │    ├── prune: (5)
+ │    │    │         │    │    └── interesting orderings: (+5)
+ │    │    │         │    └── filters
+ │    │    │         │         └── (b:5 * f:1) < ‹×› [outer=(1,5), immutable]
+ │    │    │         └── projections
+ │    │    │              └── (f:1 + (b:5 * ‹×›)) + ‹×› [as=column9:9, outer=(1,5), immutable]
+ │    │    └── filters (true)
+ │    └── aggregations
+ │         ├── count [as=count:10, outer=(9)]
+ │         │    └── column9:9
+ │         └── const-agg [as=f:1, outer=(1)]
+ │              └── f:1
+ └── projections
+      └── count:10 * ‹×› [as=g:11, outer=(10), immutable]
+
+query T
+EXPLAIN (OPT, TYPES, REDACT) SELECT f, g FROM f, LATERAL (SELECT count(DISTINCT c + f + 1) * 2 AS g FROM bc WHERE b * f < 10)
+----
+project
+ ├── columns: f:1(float) g:11(int!null)
+ ├── immutable
+ ├── stats: [rows=1000]
+ ├── cost: 18919.231
+ ├── distribution: test
+ ├── prune: (1,11)
+ ├── group-by (hash)
+ │    ├── columns: f:1(float) rowid:2(int!null) count:10(int!null)
+ │    ├── grouping columns: rowid:2(int!null)
+ │    ├── immutable
+ │    ├── stats: [rows=1000, distinct(2)=1000, null(2)=0]
+ │    ├── cost: 18899.211
+ │    ├── key: (2)
+ │    ├── fd: (2)-->(1,10)
+ │    ├── distribution: test
+ │    ├── left-join-apply
+ │    │    ├── columns: f:1(float) rowid:2(int!null) column9:9(float)
+ │    │    ├── immutable
+ │    │    ├── stats: [rows=333333.3, distinct(2)=1000, null(2)=0]
+ │    │    ├── cost: 5555.70139
+ │    │    ├── key: (2,9)
+ │    │    ├── fd: (2)-->(1)
+ │    │    ├── distribution: test
+ │    │    ├── prune: (2)
+ │    │    ├── interesting orderings: (+2) (+1,+2)
+ │    │    ├── scan f
+ │    │    │    ├── columns: f:1(float) rowid:2(int!null)
+ │    │    │    ├── partial index predicates
+ │    │    │    │    └── f_f_idx: filters
+ │    │    │    │         └── gt [type=bool, outer=(1), constraints=(‹×›; tight)]
+ │    │    │    │              ├── variable: f:1 [type=float]
+ │    │    │    │              └── const: ‹×› [type=float]
+ │    │    │    ├── stats: [rows=1000, distinct(2)=1000, null(2)=0]
+ │    │    │    ├── cost: 1108.82
+ │    │    │    ├── key: (2)
+ │    │    │    ├── fd: (2)-->(1)
+ │    │    │    ├── distribution: test
+ │    │    │    ├── prune: (1,2)
+ │    │    │    ├── interesting orderings: (+2) (+1,+2)
+ │    │    │    └── unfiltered-cols: (1-4)
+ │    │    ├── distinct-on
+ │    │    │    ├── columns: column9:9(float)
+ │    │    │    ├── grouping columns: column9:9(float)
+ │    │    │    ├── outer: (1)
+ │    │    │    ├── immutable
+ │    │    │    ├── stats: [rows=333.3333, distinct(9)=333.333, null(9)=0]
+ │    │    │    ├── cost: 1095.18069
+ │    │    │    ├── key: (9)
+ │    │    │    ├── distribution: test
+ │    │    │    └── project
+ │    │    │         ├── columns: column9:9(float)
+ │    │    │         ├── outer: (1)
+ │    │    │         ├── immutable
+ │    │    │         ├── stats: [rows=333.3333, distinct(9)=333.333, null(9)=0]
+ │    │    │         ├── cost: 1085.13667
+ │    │    │         ├── distribution: test
+ │    │    │         ├── prune: (9)
+ │    │    │         ├── select
+ │    │    │         │    ├── columns: b:5(float!null)
+ │    │    │         │    ├── outer: (1)
+ │    │    │         │    ├── immutable
+ │    │    │         │    ├── stats: [rows=333.3333, distinct(5)=333.333, null(5)=0]
+ │    │    │         │    ├── cost: 1078.45
+ │    │    │         │    ├── key: (5)
+ │    │    │         │    ├── distribution: test
+ │    │    │         │    ├── interesting orderings: (+5)
+ │    │    │         │    ├── scan bc
+ │    │    │         │    │    ├── columns: b:5(float!null)
+ │    │    │         │    │    ├── computed column expressions
+ │    │    │         │    │    │    └── c:6
+ │    │    │         │    │    │         └── mult [type=float]
+ │    │    │         │    │    │              ├── variable: b:5 [type=float]
+ │    │    │         │    │    │              └── const: ‹×› [type=float]
+ │    │    │         │    │    ├── stats: [rows=1000, distinct(5)=1000, null(5)=0]
+ │    │    │         │    │    ├── cost: 1068.42
+ │    │    │         │    │    ├── key: (5)
+ │    │    │         │    │    ├── distribution: test
+ │    │    │         │    │    ├── prune: (5)
+ │    │    │         │    │    └── interesting orderings: (+5)
+ │    │    │         │    └── filters
+ │    │    │         │         └── lt [type=bool, outer=(1,5), immutable]
+ │    │    │         │              ├── mult [type=float]
+ │    │    │         │              │    ├── variable: b:5 [type=float]
+ │    │    │         │              │    └── variable: f:1 [type=float]
+ │    │    │         │              └── const: ‹×› [type=float]
+ │    │    │         └── projections
+ │    │    │              └── plus [as=column9:9, type=float, outer=(1,5), immutable]
+ │    │    │                   ├── plus [type=float]
+ │    │    │                   │    ├── variable: f:1 [type=float]
+ │    │    │                   │    └── mult [type=float]
+ │    │    │                   │         ├── variable: b:5 [type=float]
+ │    │    │                   │         └── const: ‹×› [type=float]
+ │    │    │                   └── const: ‹×› [type=float]
+ │    │    └── filters (true)
+ │    └── aggregations
+ │         ├── count [as=count:10, type=int, outer=(9)]
+ │         │    └── variable: column9:9 [type=float]
+ │         └── const-agg [as=f:1, type=float, outer=(1)]
+ │              └── variable: f:1 [type=float]
+ └── projections
+      └── mult [as=g:11, type=int, outer=(10), immutable]
+           ├── variable: count:10 [type=int]
+           └── const: ‹×› [type=int]
+
+query T
+EXPLAIN (OPT, MEMO, REDACT) SELECT f, g FROM f, LATERAL (SELECT count(DISTINCT c + f + 1) * 2 AS g FROM bc WHERE b * f < 10)
+----
+memo (optimized, ~31KB, required=[presentation: info:12] [distribution: test])
+ ├── G1: (explain G2 [presentation: f:1,g:11] [distribution: test])
+ │    └── [presentation: info:12] [distribution: test]
+ │         ├── best: (explain G2="[presentation: f:1,g:11] [distribution: test]" [presentation: f:1,g:11] [distribution: test])
+ │         └── cost: 18919.25
+ ├── G2: (project G3 G4 f)
+ │    ├── [presentation: f:1,g:11] [distribution: test]
+ │    │    ├── best: (project G3="[distribution: test]" G4 f)
+ │    │    └── cost: 18919.23
+ │    └── []
+ │         ├── best: (project G3 G4 f)
+ │         └── cost: 18919.23
+ ├── G3: (group-by G5 G6 cols=(2)) (group-by G5 G6 cols=(2),ordering=+2)
+ │    ├── [distribution: test]
+ │    │    ├── best: (group-by G5="[distribution: test]" G6 cols=(2))
+ │    │    └── cost: 18899.21
+ │    └── []
+ │         ├── best: (group-by G5 G6 cols=(2))
+ │         └── cost: 18899.21
+ ├── G4: (projections G7)
+ ├── G5: (left-join-apply G8 G9 G10)
+ │    ├── [distribution: test]
+ │    │    ├── best: (left-join-apply G8="[distribution: test]" G9="[distribution: test]" G10)
+ │    │    └── cost: 5555.70
+ │    ├── [ordering: +2]
+ │    │    ├── best: (sort G5)
+ │    │    └── cost: 161891.05
+ │    ├── [ordering: +2] [distribution: test]
+ │    │    ├── best: (distribute G5="[ordering: +2]")
+ │    │    └── cost: 162091.07
+ │    └── []
+ │         ├── best: (left-join-apply G8 G9 G10)
+ │         └── cost: 5555.70
+ ├── G6: (aggregations G11 G12)
+ ├── G7: (mult G13 G14)
+ ├── G8: (scan f,cols=(1,2))
+ │    ├── [distribution: test]
+ │    │    ├── best: (scan f,cols=(1,2))
+ │    │    └── cost: 1108.82
+ │    └── []
+ │         ├── best: (scan f,cols=(1,2))
+ │         └── cost: 1108.82
+ ├── G9: (distinct-on G15 G16 cols=(9))
+ │    ├── [distribution: test]
+ │    │    ├── best: (distinct-on G15="[distribution: test]" G16 cols=(9))
+ │    │    └── cost: 1095.18
+ │    └── []
+ │         ├── best: (distinct-on G15 G16 cols=(9))
+ │         └── cost: 1095.18
+ ├── G10: (filters)
+ ├── G11: (count G17)
+ ├── G12: (const-agg G18)
+ ├── G13: (variable count)
+ ├── G14: (const ‹×›)
+ ├── G15: (project G19 G20)
+ │    ├── [distribution: test]
+ │    │    ├── best: (project G19="[distribution: test]" G20)
+ │    │    └── cost: 1085.14
+ │    └── []
+ │         ├── best: (project G19 G20)
+ │         └── cost: 1085.14
+ ├── G16: (aggregations)
+ ├── G17: (variable column9)
+ ├── G18: (variable f)
+ ├── G19: (select G21 G22)
+ │    ├── [distribution: test]
+ │    │    ├── best: (select G21="[distribution: test]" G22)
+ │    │    └── cost: 1078.45
+ │    └── []
+ │         ├── best: (select G21 G22)
+ │         └── cost: 1078.45
+ ├── G20: (projections G23)
+ ├── G21: (scan bc,cols=(5))
+ │    ├── [distribution: test]
+ │    │    ├── best: (scan bc,cols=(5))
+ │    │    └── cost: 1068.42
+ │    └── []
+ │         ├── best: (scan bc,cols=(5))
+ │         └── cost: 1068.42
+ ├── G22: (filters G24)
+ ├── G23: (plus G25 G26)
+ ├── G24: (lt G27 G28)
+ ├── G25: (plus G18 G29)
+ ├── G26: (const ‹×›)
+ ├── G27: (mult G30 G18)
+ ├── G28: (const ‹×›)
+ ├── G29: (mult G30 G28)
+ └── G30: (variable b)
+project
+ ├── group-by (hash)
+ │    ├── left-join-apply
+ │    │    ├── scan f
+ │    │    │    └── partial index predicates
+ │    │    │         └── f_f_idx: filters
+ │    │    │              └── f > ‹×›
+ │    │    ├── distinct-on
+ │    │    │    └── project
+ │    │    │         ├── select
+ │    │    │         │    ├── scan bc
+ │    │    │         │    │    └── computed column expressions
+ │    │    │         │    │         └── c
+ │    │    │         │    │              └── b * ‹×›
+ │    │    │         │    └── filters
+ │    │    │         │         └── (b * f) < ‹×›
+ │    │    │         └── projections
+ │    │    │              └── (f + (b * ‹×›)) + ‹×›
+ │    │    └── filters (true)
+ │    └── aggregations
+ │         ├── count
+ │         │    └── column9
+ │         └── const-agg
+ │              └── f
+ └── projections
+      └── count * ‹×›
+
+query T
+EXPLAIN (REDACT) SELECT * FROM a WHERE a > ALL (SELECT c::int + 2 FROM bc WHERE b > a::float * 3)
+----
+distribution: local
+vectorized: true
+·
+• apply join (anti)
+│ pred: (a <= "?column?") IS NOT ‹×›
+│
+└── • scan
+      missing stats
+      table: a@a_pkey
+      spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE, REDACT) SELECT * FROM a WHERE a > ALL (SELECT c::int + 2 FROM bc WHERE b > a::float * 3)
+----
+distribution: local
+vectorized: true
+·
+• apply join (anti)
+│ columns: (a)
+│ estimated row count: 667 (missing stats)
+│ pred: (a <= "?column?") IS NOT ‹×›
+│
+└── • scan
+      columns: (a)
+      estimated row count: 1,000 (missing stats)
+      table: a@a_pkey
+      spans: FULL SCAN
+
+query T
+EXPLAIN (OPT, REDACT) SELECT * FROM a WHERE a > ALL (SELECT c::int + 2 FROM bc WHERE b > a::float * 3)
+----
+anti-join-apply
+ ├── scan a
+ ├── project
+ │    ├── select
+ │    │    ├── scan bc
+ │    │    │    └── computed column expressions
+ │    │    │         └── c
+ │    │    │              └── b * ‹×›
+ │    │    └── filters
+ │    │         └── b > (a::FLOAT8 * ‹×›)
+ │    └── projections
+ │         └── (b * ‹×›)::INT8 + ‹×›
+ └── filters
+      └── (a <= "?column?") IS NOT ‹×›
+
+query T
+EXPLAIN (OPT, VERBOSE, REDACT) SELECT * FROM a WHERE a > ALL (SELECT c::int + 2 FROM bc WHERE b > a::float * 3)
+----
+anti-join-apply
+ ├── columns: a:1
+ ├── immutable
+ ├── stats: [rows=666.6667]
+ ├── cost: 5525.46736
+ ├── distribution: test
+ ├── scan a
+ │    ├── columns: a:1
+ │    ├── stats: [rows=1000]
+ │    ├── cost: 1088.62
+ │    ├── distribution: test
+ │    └── prune: (1)
+ ├── project
+ │    ├── columns: "?column?":9
+ │    ├── outer: (1)
+ │    ├── immutable
+ │    ├── stats: [rows=333.3333]
+ │    ├── cost: 1085.13667
+ │    ├── distribution: test
+ │    ├── prune: (9)
+ │    ├── select
+ │    │    ├── columns: b:5
+ │    │    ├── outer: (1)
+ │    │    ├── immutable
+ │    │    ├── stats: [rows=333.3333, distinct(5)=333.333, null(5)=0]
+ │    │    ├── cost: 1078.45
+ │    │    ├── key: (5)
+ │    │    ├── distribution: test
+ │    │    ├── scan bc
+ │    │    │    ├── columns: b:5
+ │    │    │    ├── computed column expressions
+ │    │    │    │    └── c:6
+ │    │    │    │         └── b:5 * ‹×›
+ │    │    │    ├── stats: [rows=1000, distinct(5)=1000, null(5)=0]
+ │    │    │    ├── cost: 1068.42
+ │    │    │    ├── key: (5)
+ │    │    │    ├── distribution: test
+ │    │    │    └── prune: (5)
+ │    │    └── filters
+ │    │         └── b:5 > (a:1::FLOAT8 * ‹×›) [outer=(1,5), immutable, constraints=(‹×›)]
+ │    └── projections
+ │         └── (b:5 * ‹×›)::INT8 + ‹×› [as="?column?":9, outer=(5), immutable]
+ └── filters
+      └── (a:1 <= "?column?":9) IS NOT ‹×› [outer=(1,9)]
+
+query T
+EXPLAIN (OPT, TYPES, REDACT) SELECT * FROM a WHERE a > ALL (SELECT c::int + 2 FROM bc WHERE b > a::float * 3)
+----
+anti-join-apply
+ ├── columns: a:1(int)
+ ├── immutable
+ ├── stats: [rows=666.6667]
+ ├── cost: 5525.46736
+ ├── distribution: test
+ ├── scan a
+ │    ├── columns: a:1(int)
+ │    ├── stats: [rows=1000]
+ │    ├── cost: 1088.62
+ │    ├── distribution: test
+ │    └── prune: (1)
+ ├── project
+ │    ├── columns: "?column?":9(int!null)
+ │    ├── outer: (1)
+ │    ├── immutable
+ │    ├── stats: [rows=333.3333]
+ │    ├── cost: 1085.13667
+ │    ├── distribution: test
+ │    ├── prune: (9)
+ │    ├── select
+ │    │    ├── columns: b:5(float!null)
+ │    │    ├── outer: (1)
+ │    │    ├── immutable
+ │    │    ├── stats: [rows=333.3333, distinct(5)=333.333, null(5)=0]
+ │    │    ├── cost: 1078.45
+ │    │    ├── key: (5)
+ │    │    ├── distribution: test
+ │    │    ├── scan bc
+ │    │    │    ├── columns: b:5(float!null)
+ │    │    │    ├── computed column expressions
+ │    │    │    │    └── c:6
+ │    │    │    │         └── mult [type=float]
+ │    │    │    │              ├── variable: b:5 [type=float]
+ │    │    │    │              └── const: ‹×› [type=float]
+ │    │    │    ├── stats: [rows=1000, distinct(5)=1000, null(5)=0]
+ │    │    │    ├── cost: 1068.42
+ │    │    │    ├── key: (5)
+ │    │    │    ├── distribution: test
+ │    │    │    └── prune: (5)
+ │    │    └── filters
+ │    │         └── gt [type=bool, outer=(1,5), immutable, constraints=(‹×›)]
+ │    │              ├── variable: b:5 [type=float]
+ │    │              └── mult [type=float]
+ │    │                   ├── cast: ‹×› [type=float]
+ │    │                   │    └── variable: a:1 [type=int]
+ │    │                   └── const: ‹×› [type=float]
+ │    └── projections
+ │         └── plus [as="?column?":9, type=int, outer=(5), immutable]
+ │              ├── cast: ‹×› [type=int]
+ │              │    └── mult [type=float]
+ │              │         ├── variable: b:5 [type=float]
+ │              │         └── const: ‹×› [type=float]
+ │              └── const: ‹×› [type=int]
+ └── filters
+      └── is-not [type=bool, outer=(1,9)]
+           ├── le [type=bool]
+           │    ├── variable: a:1 [type=int]
+           │    └── variable: "?column?":9 [type=int]
+           └── false [type=bool]
+
+query T
+EXPLAIN (OPT, MEMO, REDACT) SELECT * FROM a WHERE a > ALL (SELECT c::int + 2 FROM bc WHERE b > a::float * 3)
+----
+memo (optimized, ~21KB, required=[presentation: info:10] [distribution: test])
+ ├── G1: (explain G2 [presentation: a:1] [distribution: test])
+ │    └── [presentation: info:10] [distribution: test]
+ │         ├── best: (explain G2="[presentation: a:1] [distribution: test]" [presentation: a:1] [distribution: test])
+ │         └── cost: 5525.49
+ ├── G2: (anti-join-apply G3 G4 G5)
+ │    ├── [presentation: a:1] [distribution: test]
+ │    │    ├── best: (anti-join-apply G3="[distribution: test]" G4="[distribution: test]" G5)
+ │    │    └── cost: 5525.47
+ │    └── []
+ │         ├── best: (anti-join-apply G3 G4 G5)
+ │         └── cost: 5525.47
+ ├── G3: (scan a,cols=(1))
+ │    ├── [distribution: test]
+ │    │    ├── best: (scan a,cols=(1))
+ │    │    └── cost: 1088.62
+ │    └── []
+ │         ├── best: (scan a,cols=(1))
+ │         └── cost: 1088.62
+ ├── G4: (project G6 G7)
+ │    ├── [distribution: test]
+ │    │    ├── best: (project G6="[distribution: test]" G7)
+ │    │    └── cost: 1085.14
+ │    └── []
+ │         ├── best: (project G6 G7)
+ │         └── cost: 1085.14
+ ├── G5: (filters G8)
+ ├── G6: (select G9 G10)
+ │    ├── [distribution: test]
+ │    │    ├── best: (select G9="[distribution: test]" G10)
+ │    │    └── cost: 1078.45
+ │    └── []
+ │         ├── best: (select G9 G10)
+ │         └── cost: 1078.45
+ ├── G7: (projections G11)
+ ├── G8: (is-not G12 G13)
+ ├── G9: (scan bc,cols=(5))
+ │    ├── [distribution: test]
+ │    │    ├── best: (scan bc,cols=(5))
+ │    │    └── cost: 1068.42
+ │    └── []
+ │         ├── best: (scan bc,cols=(5))
+ │         └── cost: 1068.42
+ ├── G10: (filters G14)
+ ├── G11: (plus G15 G16)
+ ├── G12: (le G17 G18)
+ ├── G13: (‹×›)
+ ├── G14: (gt G19 G20)
+ ├── G15: (cast G21 ‹×›)
+ ├── G16: (const ‹×›)
+ ├── G17: (variable a)
+ ├── G18: (variable "?column?")
+ ├── G19: (variable b)
+ ├── G20: (mult G22 G23)
+ ├── G21: (mult G19 G24)
+ ├── G22: (cast G17 ‹×›)
+ ├── G23: (const ‹×›)
+ └── G24: (const ‹×›)
+anti-join-apply
+ ├── scan a
+ ├── project
+ │    ├── select
+ │    │    ├── scan bc
+ │    │    │    └── computed column expressions
+ │    │    │         └── c
+ │    │    │              └── b * ‹×›
+ │    │    └── filters
+ │    │         └── b > (a::FLOAT8 * ‹×›)
+ │    └── projections
+ │         └── (b * ‹×›)::INT8 + ‹×›
+ └── filters
+      └── (a <= "?column?") IS NOT ‹×›
+
+# Redaction of constants in in-sets.
+
+query T
+EXPLAIN (REDACT) SELECT * FROM a WHERE a IN (2, 3, 4)
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: a IN ‹(‹×›, ‹×›, ‹×›)›
+│
+└── • scan
+      missing stats
+      table: a@a_pkey
+      spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE, REDACT) SELECT * FROM a WHERE a IN (2, 3, 4)
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (a)
+│ estimated row count: 30 (missing stats)
+│ filter: a IN ‹(‹×›, ‹×›, ‹×›)›
+│
+└── • scan
+      columns: (a)
+      estimated row count: 1,000 (missing stats)
+      table: a@a_pkey
+      spans: FULL SCAN
+
+query T
+EXPLAIN (OPT, REDACT) SELECT * FROM a WHERE a IN (2, 3, 4)
+----
+select
+ ├── scan a
+ └── filters
+      └── a IN ‹(‹×›, ‹×›, ‹×›)›
+
+query T
+EXPLAIN (OPT, VERBOSE, REDACT) SELECT * FROM a WHERE a IN (2, 3, 4)
+----
+select
+ ├── columns: a:1
+ ├── stats: [rows=30, distinct(1)=3, null(1)=0]
+ ├── cost: 1098.65
+ ├── distribution: test
+ ├── scan a
+ │    ├── columns: a:1
+ │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
+ │    ├── cost: 1088.62
+ │    ├── distribution: test
+ │    └── prune: (1)
+ └── filters
+      └── a:1 IN ‹(‹×›, ‹×›, ‹×›)› [outer=(1), constraints=(‹×›; tight)]
+
+query T
+EXPLAIN (OPT, TYPES, REDACT) SELECT * FROM a WHERE a IN (2, 3, 4)
+----
+select
+ ├── columns: a:1(int!null)
+ ├── stats: [rows=30, distinct(1)=3, null(1)=0]
+ ├── cost: 1098.65
+ ├── distribution: test
+ ├── scan a
+ │    ├── columns: a:1(int)
+ │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
+ │    ├── cost: 1088.62
+ │    ├── distribution: test
+ │    └── prune: (1)
+ └── filters
+      └── in [type=bool, outer=(1), constraints=(‹×›; tight)]
+           ├── variable: a:1 [type=int]
+           └── tuple [type=tuple{int, int, int}]
+                ├── const: ‹×› [type=int]
+                ├── const: ‹×› [type=int]
+                └── const: ‹×› [type=int]
+
+query T
+EXPLAIN (OPT, MEMO, REDACT) SELECT * FROM a WHERE a IN (2, 3, 4)
+----
+memo (optimized, ~6KB, required=[presentation: info:5] [distribution: test])
+ ├── G1: (explain G2 [presentation: a:1] [distribution: test])
+ │    └── [presentation: info:5] [distribution: test]
+ │         ├── best: (explain G2="[presentation: a:1] [distribution: test]" [presentation: a:1] [distribution: test])
+ │         └── cost: 1098.67
+ ├── G2: (select G3 G4)
+ │    ├── [presentation: a:1] [distribution: test]
+ │    │    ├── best: (select G3="[distribution: test]" G4)
+ │    │    └── cost: 1098.65
+ │    └── []
+ │         ├── best: (select G3 G4)
+ │         └── cost: 1098.65
+ ├── G3: (scan a,cols=(1))
+ │    ├── [distribution: test]
+ │    │    ├── best: (scan a,cols=(1))
+ │    │    └── cost: 1088.62
+ │    └── []
+ │         ├── best: (scan a,cols=(1))
+ │         └── cost: 1088.62
+ ├── G4: (filters G5)
+ ├── G5: (in G6 G7)
+ ├── G6: (variable a)
+ ├── G7: (tuple G8)
+ ├── G8: (scalar-list G9 G10 G11)
+ ├── G9: (const ‹×›)
+ ├── G10: (const ‹×›)
+ └── G11: (const ‹×›)
+select
+ ├── scan a
+ └── filters
+      └── a IN ‹(‹×›, ‹×›, ‹×›)›
+
+# Redaction of constants in order by.
+
+query T
+EXPLAIN (REDACT) SELECT * FROM cd ORDER BY regexp_replace(c, '[0-9]', 'd') LIMIT 3
+----
+distribution: local
+vectorized: true
+·
+• top-k
+│ order: +column6
+│ k: 3
+│
+└── • render
+    │
+    └── • scan
+          missing stats
+          table: cd@cd_pkey
+          spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE, REDACT) SELECT * FROM cd ORDER BY regexp_replace(c, '[0-9]', 'd') LIMIT 3
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (c, d)
+│
+└── • top-k
+    │ columns: (column6, c, d)
+    │ ordering: +column6
+    │ estimated row count: 3 (missing stats)
+    │ order: +column6
+    │ k: 3
+    │
+    └── • render
+        │ columns: (column6, c, d)
+        │ render column6: regexp_replace(c, ‹×›, ‹×›)
+        │ render c: c
+        │ render d: d
+        │
+        └── • scan
+              columns: (c, d)
+              estimated row count: 1,000 (missing stats)
+              table: cd@cd_pkey
+              spans: FULL SCAN
+
+query T
+EXPLAIN (OPT, REDACT) SELECT * FROM cd ORDER BY regexp_replace(c, '[0-9]', 'd') LIMIT 3
+----
+top-k
+ ├── k: 3
+ └── project
+      ├── scan cd
+      │    └── computed column expressions
+      │         └── d
+      │              └── ‹×›
+      └── projections
+           └── regexp_replace(c, ‹×›, ‹×›)
+
+query T
+EXPLAIN (OPT, VERBOSE, REDACT) SELECT * FROM cd ORDER BY regexp_replace(c, '[0-9]', 'd') LIMIT 3
+----
+top-k
+ ├── columns: c:1 d:2  [hidden: column6:6]
+ ├── internal-ordering: +6 opt(2)
+ ├── k: 3
+ ├── cardinality: [0 - 3]
+ ├── immutable
+ ├── stats: [rows=3]
+ ├── cost: 1200.83925
+ ├── fd: ()-->(2), (1)-->(6)
+ ├── ordering: +6 opt(2) [actual: +6]
+ ├── distribution: test
+ ├── prune: (1,2)
+ ├── interesting orderings: (+6 opt(2))
+ └── project
+      ├── columns: column6:6 c:1 d:2
+      ├── immutable
+      ├── stats: [rows=1000]
+      ├── cost: 1149.04
+      ├── fd: ()-->(2), (1)-->(6)
+      ├── distribution: test
+      ├── prune: (1,2,6)
+      ├── scan cd
+      │    ├── columns: c:1 d:2
+      │    ├── computed column expressions
+      │    │    └── d:2
+      │    │         └── ‹×›
+      │    ├── stats: [rows=1000]
+      │    ├── cost: 1129.02
+      │    ├── fd: ()-->(2)
+      │    ├── distribution: test
+      │    └── prune: (1,2)
+      └── projections
+           └── regexp_replace(c:1, ‹×›, ‹×›) [as=column6:6, outer=(1), immutable]
+
+query T
+EXPLAIN (OPT, TYPES, REDACT) SELECT * FROM cd ORDER BY regexp_replace(c, '[0-9]', 'd') LIMIT 3
+----
+top-k
+ ├── columns: c:1(char) d:2(char)  [hidden: column6:6(string)]
+ ├── internal-ordering: +6 opt(2)
+ ├── k: 3
+ ├── cardinality: [0 - 3]
+ ├── immutable
+ ├── stats: [rows=3]
+ ├── cost: 1200.83925
+ ├── fd: ()-->(2), (1)-->(6)
+ ├── ordering: +6 opt(2) [actual: +6]
+ ├── distribution: test
+ ├── prune: (1,2)
+ ├── interesting orderings: (+6 opt(2))
+ └── project
+      ├── columns: column6:6(string) c:1(char) d:2(char)
+      ├── immutable
+      ├── stats: [rows=1000]
+      ├── cost: 1149.04
+      ├── fd: ()-->(2), (1)-->(6)
+      ├── distribution: test
+      ├── prune: (1,2,6)
+      ├── scan cd
+      │    ├── columns: c:1(char) d:2(char)
+      │    ├── computed column expressions
+      │    │    └── d:2
+      │    │         └── const: ‹×› [type=string]
+      │    ├── stats: [rows=1000]
+      │    ├── cost: 1129.02
+      │    ├── fd: ()-->(2)
+      │    ├── distribution: test
+      │    └── prune: (1,2)
+      └── projections
+           └── function: regexp_replace [as=column6:6, type=string, outer=(1), immutable]
+                ├── variable: c:1 [type=char]
+                ├── const: ‹×› [type=string]
+                └── const: ‹×› [type=string]
+
+query T
+EXPLAIN (OPT, MEMO, REDACT) SELECT * FROM cd ORDER BY regexp_replace(c, '[0-9]', 'd') LIMIT 3
+----
+memo (optimized, ~7KB, required=[presentation: info:7] [distribution: test])
+ ├── G1: (explain G2 [presentation: c:1,d:2] [ordering: +6 opt(2)] [distribution: test])
+ │    └── [presentation: info:7] [distribution: test]
+ │         ├── best: (explain G2="[presentation: c:1,d:2] [ordering: +6 opt(2)] [distribution: test]" [presentation: c:1,d:2] [ordering: +6 opt(2)] [distribution: test])
+ │         └── cost: 1200.86
+ ├── G2: (limit G3 G4 ordering=+6 opt(2)) (top-k G3 &{3 ‹×› ‹×›})
+ │    ├── [presentation: c:1,d:2] [ordering: +6 opt(2)] [distribution: test]
+ │    │    ├── best: (top-k G3="[distribution: test]" &{3 ‹×› ‹×›})
+ │    │    └── cost: 1200.84
+ │    ├── [ordering: +6 opt(2)]
+ │    │    ├── best: (top-k G3 &{3 ‹×› ‹×›})
+ │    │    └── cost: 1200.84
+ │    └── []
+ │         ├── best: (top-k G3 &{3 ‹×› ‹×›})
+ │         └── cost: 1200.84
+ ├── G3: (project G5 G6 c d)
+ │    ├── [distribution: test]
+ │    │    ├── best: (project G5="[distribution: test]" G6 c d)
+ │    │    └── cost: 1149.04
+ │    ├── [ordering: +6 opt(2)]
+ │    │    ├── best: (sort G3)
+ │    │    └── cost: 1398.52
+ │    ├── [ordering: +6 opt(2)] [limit hint: 3.00]
+ │    │    ├── best: (sort G3)
+ │    │    └── cost: 1398.52
+ │    ├── [ordering: +6 opt(2)] [limit hint: 3.00] [distribution: test]
+ │    │    ├── best: (distribute G3="[ordering: +6 opt(2)]")
+ │    │    └── cost: 1598.54
+ │    └── []
+ │         ├── best: (project G5 G6 c d)
+ │         └── cost: 1149.04
+ ├── G4: (const ‹×›)
+ ├── G5: (scan cd,cols=(1,2))
+ │    ├── [distribution: test]
+ │    │    ├── best: (scan cd,cols=(1,2))
+ │    │    └── cost: 1129.02
+ │    └── []
+ │         ├── best: (scan cd,cols=(1,2))
+ │         └── cost: 1129.02
+ ├── G6: (projections G7)
+ ├── G7: (function G8 regexp_replace)
+ ├── G8: (scalar-list G9 G10 G11)
+ ├── G9: (variable c)
+ ├── G10: (const ‹×›)
+ └── G11: (const ‹×›)
+top-k
+ ├── k: 3
+ └── project
+      ├── scan cd
+      │    └── computed column expressions
+      │         └── d
+      │              └── ‹×›
+      └── projections
+           └── regexp_replace(c, ‹×›, ‹×›)
+
+# Redaction of constants in aggregations.
+
+query T
+EXPLAIN (REDACT) SELECT covar_pop(d, d + 1) FROM d
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│
+└── • render
+    │
+    └── • scan
+          missing stats
+          table: d@d_pkey
+          spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE, REDACT) SELECT covar_pop(d, d + 1) FROM d
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (covar_pop)
+│ estimated row count: 1 (missing stats)
+│ aggregate 0: covar_pop(d, column4)
+│
+└── • render
+    │ columns: (column4, d)
+    │ render column4: d + ‹×›
+    │ render d: d
+    │
+    └── • scan
+          columns: (d)
+          estimated row count: 1,000 (missing stats)
+          table: d@d_pkey
+          spans: FULL SCAN
+
+query T
+EXPLAIN (OPT, REDACT) SELECT covar_pop(d, d + 1) FROM d
+----
+scalar-group-by
+ ├── project
+ │    ├── scan d
+ │    │    └── check constraint expressions
+ │    │         └── d > ‹×›
+ │    └── projections
+ │         └── d + ‹×›
+ └── aggregations
+      └── covar-pop
+           ├── d
+           └── column4
+
+query T
+EXPLAIN (OPT, VERBOSE, REDACT) SELECT covar_pop(d, d + 1) FROM d
+----
+scalar-group-by
+ ├── columns: covar_pop:5
+ ├── cardinality: [1 - 1]
+ ├── immutable
+ ├── stats: [rows=1]
+ ├── cost: 1098.47
+ ├── key: ()
+ ├── fd: ()-->(5)
+ ├── distribution: test
+ ├── prune: (5)
+ ├── project
+ │    ├── columns: column4:4 d:1
+ │    ├── immutable
+ │    ├── stats: [rows=1000]
+ │    ├── cost: 1088.44
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(4)
+ │    ├── distribution: test
+ │    ├── prune: (1,4)
+ │    ├── scan d
+ │    │    ├── columns: d:1
+ │    │    ├── check constraint expressions
+ │    │    │    └── d:1 > ‹×› [outer=(1), immutable, constraints=(‹×›; tight)]
+ │    │    ├── stats: [rows=1000]
+ │    │    ├── cost: 1068.42
+ │    │    ├── key: (1)
+ │    │    ├── distribution: test
+ │    │    └── prune: (1)
+ │    └── projections
+ │         └── d:1 + ‹×› [as=column4:4, outer=(1), immutable]
+ └── aggregations
+      └── covar-pop [as=covar_pop:5, outer=(1,4)]
+           ├── d:1
+           └── column4:4
+
+query T
+EXPLAIN (OPT, TYPES, REDACT) SELECT covar_pop(d, d + 1) FROM d
+----
+scalar-group-by
+ ├── columns: covar_pop:5(float)
+ ├── cardinality: [1 - 1]
+ ├── immutable
+ ├── stats: [rows=1]
+ ├── cost: 1098.47
+ ├── key: ()
+ ├── fd: ()-->(5)
+ ├── distribution: test
+ ├── prune: (5)
+ ├── project
+ │    ├── columns: column4:4(decimal!null) d:1(decimal!null)
+ │    ├── immutable
+ │    ├── stats: [rows=1000]
+ │    ├── cost: 1088.44
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(4)
+ │    ├── distribution: test
+ │    ├── prune: (1,4)
+ │    ├── scan d
+ │    │    ├── columns: d:1(decimal!null)
+ │    │    ├── check constraint expressions
+ │    │    │    └── gt [type=bool, outer=(1), immutable, constraints=(‹×›; tight)]
+ │    │    │         ├── variable: d:1 [type=decimal]
+ │    │    │         └── const: ‹×› [type=decimal]
+ │    │    ├── stats: [rows=1000]
+ │    │    ├── cost: 1068.42
+ │    │    ├── key: (1)
+ │    │    ├── distribution: test
+ │    │    └── prune: (1)
+ │    └── projections
+ │         └── plus [as=column4:4, type=decimal, outer=(1), immutable]
+ │              ├── variable: d:1 [type=decimal]
+ │              └── const: ‹×› [type=decimal]
+ └── aggregations
+      └── covar-pop [as=covar_pop:5, type=float, outer=(1,4)]
+           ├── variable: d:1 [type=decimal]
+           └── variable: column4:4 [type=decimal]
+
+query T
+EXPLAIN (OPT, MEMO, REDACT) SELECT covar_pop(d, d + 1) FROM d
+----
+memo (optimized, ~7KB, required=[presentation: info:6] [distribution: test])
+ ├── G1: (explain G2 [presentation: covar_pop:5] [distribution: test])
+ │    └── [presentation: info:6] [distribution: test]
+ │         ├── best: (explain G2="[presentation: covar_pop:5] [distribution: test]" [presentation: covar_pop:5] [distribution: test])
+ │         └── cost: 1098.49
+ ├── G2: (scalar-group-by G3 G4 cols=())
+ │    ├── [presentation: covar_pop:5] [distribution: test]
+ │    │    ├── best: (scalar-group-by G3="[distribution: test]" G4 cols=())
+ │    │    └── cost: 1098.47
+ │    └── []
+ │         ├── best: (scalar-group-by G3 G4 cols=())
+ │         └── cost: 1098.47
+ ├── G3: (project G5 G6 d)
+ │    ├── [distribution: test]
+ │    │    ├── best: (project G5="[distribution: test]" G6 d)
+ │    │    └── cost: 1088.44
+ │    └── []
+ │         ├── best: (project G5 G6 d)
+ │         └── cost: 1088.44
+ ├── G4: (aggregations G7)
+ ├── G5: (scan d,cols=(1))
+ │    ├── [distribution: test]
+ │    │    ├── best: (scan d,cols=(1))
+ │    │    └── cost: 1068.42
+ │    └── []
+ │         ├── best: (scan d,cols=(1))
+ │         └── cost: 1068.42
+ ├── G6: (projections G8)
+ ├── G7: (covar-pop G9 G10)
+ ├── G8: (plus G9 G11)
+ ├── G9: (variable d)
+ ├── G10: (variable column4)
+ └── G11: (const ‹×›)
+scalar-group-by
+ ├── project
+ │    ├── scan d
+ │    │    └── check constraint expressions
+ │    │         └── d > ‹×›
+ │    └── projections
+ │         └── d + ‹×›
+ └── aggregations
+      └── covar-pop
+           ├── d
+           └── column4
+
+# Redaction of constants in window functions.
+
+query T
+EXPLAIN (REDACT) SELECT min(c || 'cccc') OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING EXCLUDE CURRENT ROW) FROM cd
+----
+distribution: local
+vectorized: true
+·
+• window
+│
+└── • render
+    │
+    └── • scan
+          missing stats
+          table: cd@cd_pkey
+          spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE, REDACT) SELECT min(c || 'cccc') OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING EXCLUDE CURRENT ROW) FROM cd
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (min)
+│
+└── • window
+    │ columns: (min_1_arg1, min)
+    │ estimated row count: 1,000 (missing stats)
+    │ window 0: min(min_1_arg1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING EXCLUDE CURRENT ROW)
+    │
+    └── • render
+        │ columns: (min_1_arg1)
+        │ render min_1_arg1: c || ‹×›
+        │
+        └── • scan
+              columns: (c)
+              estimated row count: 1,000 (missing stats)
+              table: cd@cd_pkey
+              spans: FULL SCAN
+
+query T
+EXPLAIN (OPT, REDACT) SELECT min(c || 'cccc') OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING EXCLUDE CURRENT ROW) FROM cd
+----
+project
+ └── window partition=()
+      ├── project
+      │    ├── scan cd
+      │    │    └── computed column expressions
+      │    │         └── d
+      │    │              └── ‹×›
+      │    └── projections
+      │         └── c || ‹×›
+      └── windows
+           └── min [frame="rows from unbounded to unbounded exclude current row"]
+                └── min_1_arg1
+
+query T
+EXPLAIN (OPT, VERBOSE, REDACT) SELECT min(c || 'cccc') OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING EXCLUDE CURRENT ROW) FROM cd
+----
+project
+ ├── columns: min:6
+ ├── immutable
+ ├── stats: [rows=1000]
+ ├── cost: 1138.88
+ ├── distribution: test
+ ├── prune: (6)
+ └── window partition=()
+      ├── columns: min:6 min_1_arg1:7
+      ├── immutable
+      ├── stats: [rows=1000]
+      ├── cost: 1128.86
+      ├── distribution: test
+      ├── prune: (6)
+      ├── project
+      │    ├── columns: min_1_arg1:7
+      │    ├── immutable
+      │    ├── stats: [rows=1000]
+      │    ├── cost: 1128.84
+      │    ├── distribution: test
+      │    ├── prune: (7)
+      │    ├── scan cd
+      │    │    ├── columns: c:1
+      │    │    ├── computed column expressions
+      │    │    │    └── d:2
+      │    │    │         └── ‹×›
+      │    │    ├── stats: [rows=1000]
+      │    │    ├── cost: 1108.82
+      │    │    ├── distribution: test
+      │    │    └── prune: (1)
+      │    └── projections
+      │         └── c:1 || ‹×› [as=min_1_arg1:7, outer=(1), immutable]
+      └── windows
+           └── min [as=min:6, frame="rows from unbounded to unbounded exclude current row", outer=(7)]
+                └── min_1_arg1:7
+
+query T
+EXPLAIN (OPT, TYPES, REDACT) SELECT min(c || 'cccc') OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING EXCLUDE CURRENT ROW) FROM cd
+----
+project
+ ├── columns: min:6(string)
+ ├── immutable
+ ├── stats: [rows=1000]
+ ├── cost: 1138.88
+ ├── distribution: test
+ ├── prune: (6)
+ └── window partition=()
+      ├── columns: min:6(string) min_1_arg1:7(string)
+      ├── immutable
+      ├── stats: [rows=1000]
+      ├── cost: 1128.86
+      ├── distribution: test
+      ├── prune: (6)
+      ├── project
+      │    ├── columns: min_1_arg1:7(string)
+      │    ├── immutable
+      │    ├── stats: [rows=1000]
+      │    ├── cost: 1128.84
+      │    ├── distribution: test
+      │    ├── prune: (7)
+      │    ├── scan cd
+      │    │    ├── columns: c:1(char)
+      │    │    ├── computed column expressions
+      │    │    │    └── d:2
+      │    │    │         └── const: ‹×› [type=string]
+      │    │    ├── stats: [rows=1000]
+      │    │    ├── cost: 1108.82
+      │    │    ├── distribution: test
+      │    │    └── prune: (1)
+      │    └── projections
+      │         └── concat [as=min_1_arg1:7, type=string, outer=(1), immutable]
+      │              ├── variable: c:1 [type=char]
+      │              └── const: ‹×› [type=string]
+      └── windows
+           └── min [as=min:6, frame="rows from unbounded to unbounded exclude current row", type=string, outer=(7)]
+                └── variable: min_1_arg1:7 [type=string]
+
+query T
+EXPLAIN (OPT, MEMO, REDACT) SELECT min(c || 'cccc') OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING EXCLUDE CURRENT ROW) FROM cd
+----
+memo (optimized, ~11KB, required=[presentation: info:8] [distribution: test])
+ ├── G1: (explain G2 [presentation: min:6] [distribution: test])
+ │    └── [presentation: info:8] [distribution: test]
+ │         ├── best: (explain G2="[presentation: min:6] [distribution: test]" [presentation: min:6] [distribution: test])
+ │         └── cost: 1138.90
+ ├── G2: (project G3 G4 min)
+ │    ├── [presentation: min:6] [distribution: test]
+ │    │    ├── best: (project G3="[distribution: test]" G4 min)
+ │    │    └── cost: 1138.88
+ │    └── []
+ │         ├── best: (project G3 G4 min)
+ │         └── cost: 1138.88
+ ├── G3: (window G5 G6 partition=())
+ │    ├── [distribution: test]
+ │    │    ├── best: (window G5="[distribution: test]" G6 partition=())
+ │    │    └── cost: 1128.86
+ │    └── []
+ │         ├── best: (window G5 G6 partition=())
+ │         └── cost: 1128.86
+ ├── G4: (projections)
+ ├── G5: (project G7 G8)
+ │    ├── [distribution: test]
+ │    │    ├── best: (project G7="[distribution: test]" G8)
+ │    │    └── cost: 1128.84
+ │    └── []
+ │         ├── best: (project G7 G8)
+ │         └── cost: 1128.84
+ ├── G6: (windows G9)
+ ├── G7: (scan cd,cols=(1))
+ │    ├── [distribution: test]
+ │    │    ├── best: (scan cd,cols=(1))
+ │    │    └── cost: 1108.82
+ │    └── []
+ │         ├── best: (scan cd,cols=(1))
+ │         └── cost: 1108.82
+ ├── G8: (projections G10)
+ ├── G9: (min G11)
+ ├── G10: (concat G12 G13)
+ ├── G11: (variable min_1_arg1)
+ ├── G12: (variable c)
+ └── G13: (const ‹×›)
+project
+ └── window partition=()
+      ├── project
+      │    ├── scan cd
+      │    │    └── computed column expressions
+      │    │         └── d
+      │    │              └── ‹×›
+      │    └── projections
+      │         └── c || ‹×›
+      └── windows
+           └── min [frame="rows from unbounded to unbounded exclude current row"]
+                └── min_1_arg1

@@ -597,8 +597,8 @@ func TestExplainRedact(t *testing.T) {
 									t.Error(err)
 									continue
 								}
-								// TODO(michae2): When it is supported, also check HTML returned by
-								// EXPLAIN (DISTSQL, REDACT).
+								// TODO(michae2): When they are supported, also check HTML returned by
+								// EXPLAIN (DISTSQL, REDACT) and EXPLAIN (OPT, ENV, REDACT).
 							}
 						})
 					}

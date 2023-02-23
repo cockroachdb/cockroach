@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
+	"github.com/cockroachdb/redact"
 )
 
 func (b *Builder) buildCreateTable(ct *memo.CreateTableExpr) (execPlan, error) {
@@ -96,6 +97,7 @@ func (b *Builder) buildExplainOpt(explain *memo.ExplainExpr) (execPlan, error) {
 	case explain.Options.Flags[tree.ExplainFlagTypes]:
 		fmtFlags = memo.ExprFmtHideQualifications | memo.ExprFmtHideNotVisibleIndexInfo
 	}
+	redactValues := explain.Options.Flags[tree.ExplainFlagRedact]
 
 	// Format the plan here and pass it through to the exec factory.
 
@@ -104,20 +106,32 @@ func (b *Builder) buildExplainOpt(explain *memo.ExplainExpr) (execPlan, error) {
 	if explain.Options.Flags[tree.ExplainFlagCatalog] {
 		for _, t := range b.mem.Metadata().AllTables() {
 			tp := treeprinter.New()
-			cat.FormatTable(b.catalog, t.Table, tp)
-			planText.WriteString(tp.String())
+			cat.FormatTable(b.catalog, t.Table, tp, redactValues)
+			catStr := tp.String()
+			if redactValues {
+				catStr = string(redact.RedactableString(catStr).Redact())
+			}
+			planText.WriteString(catStr)
 		}
 		// TODO(radu): add views, sequences
 	}
 
 	// If MEMO option was passed, show the memo.
 	if explain.Options.Flags[tree.ExplainFlagMemo] {
-		planText.WriteString(b.optimizer.FormatMemo(xform.FmtPretty))
+		memoStr := b.optimizer.FormatMemo(xform.FmtPretty, redactValues)
+		if redactValues {
+			memoStr = string(redact.RedactableString(memoStr).Redact())
+		}
+		planText.WriteString(memoStr)
 	}
 
-	f := memo.MakeExprFmtCtx(b.ctx, fmtFlags, b.mem, b.catalog)
+	f := memo.MakeExprFmtCtx(b.ctx, fmtFlags, redactValues, b.mem, b.catalog)
 	f.FormatExpr(explain.Input)
-	planText.WriteString(f.Buffer.String())
+	planStr := f.Buffer.String()
+	if redactValues {
+		planStr = string(redact.RedactableString(planStr).Redact())
+	}
+	planText.WriteString(planStr)
 
 	// If we're going to display the environment, there's a bunch of queries we
 	// need to run to get that information, and we can't run them from here, so

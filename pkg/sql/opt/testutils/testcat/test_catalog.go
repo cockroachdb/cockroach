@@ -704,7 +704,7 @@ var _ cat.Table = &Table{}
 
 func (tt *Table) String() string {
 	tp := treeprinter.New()
-	cat.FormatTable(tt.Catalog, tt, tp)
+	cat.FormatTable(tt.Catalog, tt, tp, false /* redactableValues */)
 	return tp.String()
 }
 
